@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00-mesa-mesa3d -stop-after=si-pre-allocate-wwm-regs -o %t.mir %s
-; RUN: llc -amdgpu-late-wave-transform=1 -run-pass=none -verify-machineinstrs %t.mir -o - | FileCheck %s
+; RUN: llc -mtriple=amdgpu6.00-mesa-mesa3d -stop-after=si-pre-allocate-wwm-regs -o %t.mir %s
+; RUN: llc -run-pass=none -verify-machineinstrs %t.mir -o - | FileCheck %s
 
 ; Test that SIMachineFunctionInfo can be round trip serialized through
 ; MIR.
@@ -55,7 +55,7 @@
 ; CHECK-NEXT: sgprForEXECCopy: '$sgpr100_sgpr101'
 ; CHECK-NEXT: longBranchReservedReg: ''
 ; CHECK-NEXT: hasInitWholeWave: false
-; CHECK-NEXT: isWaveCFG: false
+; CHECK-NEXT: isWaveCFG: true
 ; CHECK-NEXT: dynamicVGPRBlockSize: 0
 ; CHECK-NEXT: scratchReservedForDynamicVGPRs: 0
 ; CHECK-NEXT: numKernargPreloadSGPRs: 0
@@ -109,7 +109,7 @@ define amdgpu_kernel void @kernel(i32 %arg0, i64 %arg1, <16 x i32> %arg2) {
 ; CHECK-NEXT: sgprForEXECCopy: '$sgpr100_sgpr101'
 ; CHECK-NEXT: longBranchReservedReg: ''
 ; CHECK-NEXT: hasInitWholeWave: false
-; CHECK-NEXT: isWaveCFG: false
+; CHECK-NEXT: isWaveCFG: true
 ; CHECK-NEXT: dynamicVGPRBlockSize: 0
 ; CHECK-NEXT: scratchReservedForDynamicVGPRs: 0
 ; CHECK-NEXT: numKernargPreloadSGPRs: 0
@@ -187,7 +187,7 @@ define amdgpu_ps void @gds_size_shader(i32 %arg0, i32 inreg %arg1) #5 {
 ; CHECK-NEXT: sgprForEXECCopy: '$sgpr100_sgpr101'
 ; CHECK-NEXT: longBranchReservedReg: ''
 ; CHECK-NEXT: hasInitWholeWave: false
-; CHECK-NEXT: isWaveCFG: false
+; CHECK-NEXT: isWaveCFG: true
 ; CHECK-NEXT: dynamicVGPRBlockSize: 0
 ; CHECK-NEXT: scratchReservedForDynamicVGPRs: 0
 ; CHECK-NEXT: numKernargPreloadSGPRs: 0
@@ -247,7 +247,7 @@ define void @function() {
 ; CHECK-NEXT: sgprForEXECCopy: '$sgpr100_sgpr101'
 ; CHECK-NEXT: longBranchReservedReg: ''
 ; CHECK-NEXT: hasInitWholeWave: false
-; CHECK-NEXT: isWaveCFG: false
+; CHECK-NEXT: isWaveCFG: true
 ; CHECK-NEXT: dynamicVGPRBlockSize: 0
 ; CHECK-NEXT: scratchReservedForDynamicVGPRs: 0
 ; CHECK-NEXT: numKernargPreloadSGPRs: 0

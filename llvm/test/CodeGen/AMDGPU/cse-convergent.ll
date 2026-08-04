@@ -15,8 +15,8 @@ define i32 @test(i32 %val, i32 %cond) {
 ; GCN-NEXT:    v_mov_b32_e32 v3, 0
 ; GCN-NEXT:    v_mov_b32_dpp v3, v2 row_xmask:1 row_mask:0xf bank_mask:0xf
 ; GCN-NEXT:    s_mov_b32 exec_lo, s4
-; GCN-NEXT:    v_mov_b32_e32 v4, 0
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
+; GCN-NEXT:    v_mov_b32_e32 v4, 0
 ; GCN-NEXT:    v_mov_b32_e32 v1, v3
 ; GCN-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GCN-NEXT:    ; divergent control-flow edge

@@ -7,6 +7,8 @@ define amdgpu_gs void @f(i32 inreg %arg, i32 %arg1, i32 %arg2) {
 ; CHECK-NEXT:    v_mov_b32_e32 v2, v0
 ; CHECK-NEXT:    s_cmp_eq_u32 s0, 0
 ; CHECK-NEXT:    s_mov_b32 s0, 0
+; CHECK-NEXT:    ; implicit-def: $vgpr0
+; CHECK-NEXT:    ; implicit-def: $vgpr0
 ; CHECK-NEXT:    s_cbranch_scc0 .LBB0_2
 ; CHECK-NEXT:  ; %bb.1:
 ; CHECK-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v2, 1

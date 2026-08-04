@@ -107,9 +107,9 @@ define amdgpu_kernel void @loop_sgpr_spill_implicit_def_in_preheader(
   ; CHECK-NEXT:   $sgpr7 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 22
   ; CHECK-NEXT:   $sgpr6 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 21
   ; CHECK-NEXT:   renamable $sgpr6 = S_ADD_I32 killed renamable $sgpr6, killed renamable $sgpr7, implicit-def dead $scc
-  ; CHECK-NEXT:   $vgpr0 = V_MOV_B32_e32 0, implicit $exec
-  ; CHECK-NEXT:   $vgpr1 = COPY killed renamable $sgpr6
-  ; CHECK-NEXT:   GLOBAL_STORE_DWORD_SADDR killed $vgpr0, killed $vgpr1, killed renamable $sgpr4_sgpr5, 0, 0, implicit $exec :: (volatile store (s32) into %ir.out.load, addrspace 1)
+  ; CHECK-NEXT:   [[V_MOV_B32_e32_:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
+  ; CHECK-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY killed renamable $sgpr6
+  ; CHECK-NEXT:   GLOBAL_STORE_DWORD_SADDR [[V_MOV_B32_e32_]], [[COPY]], killed renamable $sgpr4_sgpr5, 0, 0, implicit $exec :: (volatile store (s32) into %ir.out.load, addrspace 1)
   ; CHECK-NEXT:   S_ENDPGM 0
     ptr addrspace(1) %out) local_unnamed_addr #0 {
 entry:

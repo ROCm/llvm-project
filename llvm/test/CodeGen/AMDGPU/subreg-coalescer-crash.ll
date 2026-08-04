@@ -51,6 +51,8 @@ for.inc.1:                                        ; preds = %do.body.1562.prehea
 define amdgpu_ps void @foo() #0 {
 ; GCN-LABEL: foo:
 ; GCN:       ; %bb.0: ; %bb
+; GCN-NEXT:    ; implicit-def: $vgpr0
+; GCN-NEXT:    ; implicit-def: $vgpr0
 ; GCN-NEXT:    s_cbranch_scc1 .LBB1_2
 ; GCN-NEXT:  ; %bb.1: ; %bb9
 ; GCN-NEXT:    image_sample v[0:1], v0, s[0:7], s[0:3] dmask:0xa

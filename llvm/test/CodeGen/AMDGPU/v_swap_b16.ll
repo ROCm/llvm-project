@@ -123,18 +123,17 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX11-TRUE16-LABEL: swap_B:
 ; GFX11-TRUE16:       ; %bb.0: ; %entry
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v0.l
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v1.l
+; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-TRUE16-NEXT:  .LBB1_1: ; %loop
 ; GFX11-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-TRUE16-NEXT:    v_add_nc_u32_e32 v3, -1, v3
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_3)
-; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.l
+; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.h
 ; GFX11-TRUE16-NEXT:    ;;#ASMSTART
-; GFX11-TRUE16-NEXT:    ; use v0.h
+; GFX11-TRUE16-NEXT:    ; use v0.l
 ; GFX11-TRUE16-NEXT:    ;;#ASMEND
-; GFX11-TRUE16-NEXT:    v_swap_b16 v0.l, v0.h
+; GFX11-TRUE16-NEXT:    v_swap_b16 v0.h, v0.l
 ; GFX11-TRUE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
 ; GFX11-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX11-TRUE16-NEXT:    ; use v1.l
@@ -151,6 +150,7 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX11-TRUE16-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX11-TRUE16-NEXT:  .LBB1_2: ; %ret
 ; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v0.h
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: swap_B:
@@ -160,10 +160,10 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX11-FAKE16-NEXT:  .LBB1_1: ; %loop
 ; GFX11-FAKE16-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-FAKE16-NEXT:    v_dual_mov_b32 v4, v1 :: v_dual_add_nc_u32 v3, -1, v3
-; GFX11-FAKE16-NEXT:    v_swap_b32 v1, v0
 ; GFX11-FAKE16-NEXT:    ;;#ASMSTART
-; GFX11-FAKE16-NEXT:    ; use v1
+; GFX11-FAKE16-NEXT:    ; use v0
 ; GFX11-FAKE16-NEXT:    ;;#ASMEND
+; GFX11-FAKE16-NEXT:    v_swap_b32 v1, v0
 ; GFX11-FAKE16-NEXT:    ;;#ASMSTART
 ; GFX11-FAKE16-NEXT:    ; use v4
 ; GFX11-FAKE16-NEXT:    ;;#ASMEND
@@ -190,18 +190,17 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX12-TRUE16-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v0.l
-; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v1.l
+; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v1.l
 ; GFX12-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX12-TRUE16-NEXT:  .LBB1_1: ; %loop
 ; GFX12-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-TRUE16-NEXT:    v_add_nc_u32_e32 v3, -1, v3
 ; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_3)
-; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.l
+; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.h
 ; GFX12-TRUE16-NEXT:    ;;#ASMSTART
-; GFX12-TRUE16-NEXT:    ; use v0.h
+; GFX12-TRUE16-NEXT:    ; use v0.l
 ; GFX12-TRUE16-NEXT:    ;;#ASMEND
-; GFX12-TRUE16-NEXT:    v_swap_b16 v0.l, v0.h
+; GFX12-TRUE16-NEXT:    v_swap_b16 v0.h, v0.l
 ; GFX12-TRUE16-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
 ; GFX12-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX12-TRUE16-NEXT:    ; use v1.l
@@ -219,6 +218,7 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX12-TRUE16-NEXT:  .LBB1_2: ; %ret
 ; GFX12-TRUE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v0.h
 ; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-LABEL: swap_B:
@@ -232,10 +232,10 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX12-FAKE16-NEXT:  .LBB1_1: ; %loop
 ; GFX12-FAKE16-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-FAKE16-NEXT:    v_dual_mov_b32 v4, v1 :: v_dual_add_nc_u32 v3, -1, v3
-; GFX12-FAKE16-NEXT:    v_swap_b32 v1, v0
 ; GFX12-FAKE16-NEXT:    ;;#ASMSTART
-; GFX12-FAKE16-NEXT:    ; use v1
+; GFX12-FAKE16-NEXT:    ; use v0
 ; GFX12-FAKE16-NEXT:    ;;#ASMEND
+; GFX12-FAKE16-NEXT:    v_swap_b32 v1, v0
 ; GFX12-FAKE16-NEXT:    ;;#ASMSTART
 ; GFX12-FAKE16-NEXT:    ; use v4
 ; GFX12-FAKE16-NEXT:    ;;#ASMEND

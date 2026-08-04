@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgpu9.08-amd-amdhsa < %s | FileCheck -check-prefix=ALL %s
-; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgpu9.0a-amd-amdhsa < %s | FileCheck -check-prefixes=ALL,GFX90A %s
+; RUN: llc -O0 -mtriple=amdgpu9.08-amd-amdhsa < %s | FileCheck -check-prefix=ALL %s
+; RUN: llc -O0 -mtriple=amdgpu9.0a-amd-amdhsa < %s | FileCheck -check-prefixes=ALL,GFX90A %s
 
 ; CallGraphAnalysis, which CodeGenSCC order depends on, does not look
 ; through aliases. If GlobalOpt is never run, we do not see direct
@@ -12,7 +12,7 @@
 ; ALL-NEXT:     .amdhsa_next_free_sgpr max(.Lkernel.numbered_sgpr+extrasgprs(.Lkernel.uses_vcc, .Lkernel.uses_flat_scratch, 1), 1, 0)-extrasgprs(.Lkernel.uses_vcc, .Lkernel.uses_flat_scratch, 1)
 ; GFX90A-NEXT:  .amdhsa_accum_offset (((((alignto(max(1, .Lkernel.num_vgpr), 4)/4)-1)&~65536)&63)+1)*4
 
-; ALL:       .set .Lkernel.num_vgpr, max(32, .Laliasee_default.num_vgpr)
+; ALL:       .set .Lkernel.num_vgpr, max(41, .Laliasee_default.num_vgpr)
 ; ALL-NEXT:  .set .Lkernel.num_agpr, max(0, .Laliasee_default.num_agpr)
 ; ALL-NEXT:  .set .Lkernel.numbered_sgpr, max(33, .Laliasee_default.numbered_sgpr)
 define amdgpu_kernel void @kernel() #0 {

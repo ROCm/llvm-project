@@ -162,7 +162,8 @@ define amdgpu_kernel void @min_long_forward_vbranch(ptr addrspace(1) %arg) #0 {
 ; GCN-NEXT:    v_add_i32_e64 v0, s[0:1], s0, v0
 ; GCN-NEXT:    v_addc_u32_e64 v1, s[0:1], 0, v1, s[0:1]
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB3_1
 ; GCN-NEXT:  .LBB3_3: ; %bb

@@ -62,45 +62,50 @@
 ; GCN-LABEL: {{^}}multi_divergent_region_exit_ret_ret:
 
 ; First divergent branch
-; GCN: v_cmp_lt_i32_e{{32|64}}
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
-; GCN: ; divergent control-flow edge
-; GCN: s_cbranch_execz
+; GCN-DAG:  v_cmp_lt_i32_e32    vcc, 1,
+; GCN-DAG:  s_mov_b64           [[EXIT0:s\[[0-9]+:[0-9]+\]]], 0
+; GCN-DAG:  s_mov_b64           [[EXIT1:s\[[0-9]+:[0-9]+\]]], 0
+; GCN:      s_xor_b64           {{s\[[0-9]+:[0-9]+\]}}, vcc, exec
+; GCN:      s_mov_b64           exec,
+; GCN-NEXT: ; divergent control-flow edge
+; GCN-NEXT: s_cbranch_execz
 
 ; GCN: ; %LeafBlock
-; GCN: v_cmp_eq_u32_e{{32|64}} {{vcc|s\[[0-9]+:[0-9]+\]}}, 1,
-; GCN: s_xor_b64
+; GCN-NEXT: v_cmp_eq_u32_e64    [[EXIT0]], 1, v0
+; GCN-NEXT: s_xor_b64           [[EXIT1]], [[EXIT0]], exec
 
 ; Second reconverge
-; GCN: s_or_b64 exec, exec
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
-; GCN: ; divergent control-flow edge
-; GCN: s_cbranch_execz
+; GCN:      s_or_b64            exec, exec, vcc
+; GCN-NEXT: s_xor_b64           [[SAVE1:s\[[0-9]+:[0-9]+\]]], exec, vcc
+; GCN-NEXT: s_mov_b64           exec, vcc
+; GCN-NEXT: ; divergent control-flow edge
+; GCN-NEXT: s_cbranch_execz
 
 ; GCN: ; %LeafBlock1
-; GCN: v_cmp_ne_u32_e32 vcc, 2,
+; GCN-NEXT: v_cmp_ne_u32_e32    vcc, 2, v0
+; GCN-NEXT: s_xor_b64           [[TMP0:s\[[0-9]+:[0-9]+\]]], vcc, exec
+; GCN-NEXT: s_or_b64            [[EXIT0]], [[EXIT0]], [[TMP0]]
+; GCN-NEXT: s_or_b64            [[EXIT1]], [[EXIT1]], vcc
 
 ; Third reconverge
-; GCN: s_or_b64 exec, exec
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
-; GCN: ; divergent control-flow edge
-; GCN: s_cbranch_execz
+; GCN:      s_or_b64            exec, exec, [[SAVE1]]
+; GCN-NEXT: s_xor_b64           [[SAVE2:s\[[0-9]+:[0-9]+\]]], exec, [[EXIT0]]
+; GCN-NEXT: s_mov_b64           exec, [[EXIT0]]
+; GCN-NEXT: ; divergent control-flow edge
+; GCN-NEXT: s_cbranch_execz
 
 ; GCN: ; %exit0
-; GCN: buffer_store_dword
+; GCN:      buffer_store_dword
 
 ; Fourth reconverge
-; GCN: s_or_b64 exec, exec
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
-; GCN: ; divergent control-flow edge
-; GCN: s_cbranch_execz
+; GCN:      s_or_b64            exec, exec, [[SAVE2]]
+; GCN-NEXT: s_xor_b64           {{s\[[0-9]+:[0-9]+\]}}, exec, [[EXIT1]]
+; GCN-NEXT: s_mov_b64           exec, [[EXIT1]]
+; GCN-NEXT: ; divergent control-flow edge
+; GCN-NEXT: s_cbranch_execz
 
 ; GCN: ; %exit1
-; GCN: ds_write_b32
+; GCN:      ds_write_b32
 
 ; GCN: ; %UnifiedReturnBlock
 ; GCN-NEXT: s_endpgm
@@ -155,10 +160,9 @@ exit1:                                     ; preds = %LeafBlock, %LeafBlock1
 ; IR-NEXT: unreachable
 
 
-; FIXME: Probably should insert an s_endpgm anyway.
 ; GCN-LABEL: {{^}}multi_divergent_region_exit_unreachable_unreachable:
+; GCN: ; %exit0
 ; GCN: ; %exit1
-; GCN: ds_write_b32
 ; GCN: .Lfunc_end
 define amdgpu_kernel void @multi_divergent_region_exit_unreachable_unreachable(ptr addrspace(1) nocapture %arg0, ptr addrspace(1) nocapture %arg1, ptr addrspace(1) nocapture %arg2) #0 {
 entry:
@@ -361,37 +365,26 @@ exit1:                                     ; preds = %LeafBlock, %LeafBlock1
 
 ; GCN-LABEL: {{^}}uniform_branch_to_multi_divergent_region_exit_ret_ret_return_value:
 ; GCN: s_cmp_gt_i32 s0, 1
-; GCN: s_cbranch_scc{{[01]}}
+; GCN: s_cbranch_scc1
 
 ; GCN: ; %LeafBlock
-; GCN: v_cmp_{{eq|ne}}_u32_e32 vcc, {{3|7}}, v0
+; GCN-NEXT: v_cmp_eq_u32_e32    vcc, 3, v{{[0-9]+}}
 
 ; GCN: ; %LeafBlock1
-; GCN: v_cmp_{{eq|ne}}_u32_e{{32|64}} {{vcc|s\[[0-9]+:[0-9]+\]}}, {{3|7}}, v0
-
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
-; GCN: ; divergent control-flow edge
-; GCN: s_cbranch_execz
+; GCN:      v_cmp_ne_u32_e64    {{s\[[0-9]+:[0-9]+\]}}, 7, v{{[0-9]+}}
 
 ; GCN: ; %exit0
-; GCN: buffer_store_dword
-; GCN: v_mov_b32_e32 v0, 1.0
-
-; GCN: s_or_b64 exec, exec
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
-; GCN: ; divergent control-flow edge
-; GCN: s_cbranch_execz
+; GCN:      buffer_store_dword
+; GCN:      v_mov_b32_e32 v0, 1.0
 
 ; GCN: ; %exit1
-; GCN: ds_write_b32
-; GCN: v_mov_b32_e32 v0, 2.0
+; GCN:      ds_write_b32
+; GCN-NEXT: v_mov_b32_e32 v0, 2.0
 
 ; GCN: ; %UnifiedReturnBlock
-; GCN-NEXT: s_or_b64 exec, exec
-; GCN: s_waitcnt vmcnt(0) lgkmcnt(0)
-; GCN: ; return
+; GCN-NEXT: s_or_b64 exec, exec,
+; GCN-NEXT: s_waitcnt vmcnt(0) lgkmcnt(0)
+; GCN-NEXT: ; return
 
 define amdgpu_ps float @uniform_branch_to_multi_divergent_region_exit_ret_ret_return_value(i32 inreg %sgpr, i32 %vgpr) #0 {
 entry:

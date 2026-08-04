@@ -120,7 +120,9 @@ define amdgpu_kernel void @add_i1_cf(ptr addrspace(1) %out, ptr addrspace(1) %a,
 ; GFX9-NEXT:    s_load_dwordx4 s[8:11], s[4:5], 0x24
 ; GFX9-NEXT:    s_load_dwordx2 s[2:3], s[4:5], 0x34
 ; GFX9-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; GFX9-NEXT:    ; implicit-def: $vgpr0
+; GFX9-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX9-NEXT:  .LBB2_1: ; %if
@@ -161,7 +163,9 @@ define amdgpu_kernel void @add_i1_cf(ptr addrspace(1) %out, ptr addrspace(1) %a,
 ; GFX10-NEXT:    s_load_dwordx4 s[8:11], s[4:5], 0x24
 ; GFX10-NEXT:    s_load_dwordx2 s[2:3], s[4:5], 0x34
 ; GFX10-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
-; GFX10-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-NEXT:    ; implicit-def: $vgpr0
+; GFX10-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
+; GFX10-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX10-NEXT:  .LBB2_1: ; %if
@@ -202,9 +206,11 @@ define amdgpu_kernel void @add_i1_cf(ptr addrspace(1) %out, ptr addrspace(1) %a,
 ; GFX11-NEXT:    s_load_b128 s[8:11], s[4:5], 0x24
 ; GFX11-NEXT:    s_load_b64 s[2:3], s[4:5], 0x34
 ; GFX11-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
-; GFX11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX11-NEXT:    ; implicit-def: $vgpr0
+; GFX11-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
+; GFX11-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX11-NEXT:  .LBB2_1: ; %if

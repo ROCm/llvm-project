@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -verify-machineinstrs -amdgpu-s-branch-bits=4 -stop-after=branch-relaxation -verify-machineinstrs %s -o - | FileCheck %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -verify-machineinstrs -amdgpu-s-branch-bits=4 -stop-after=branch-relaxation -verify-machineinstrs %s -o - | FileCheck %s
 
 ; Test that debug instructions do not change long branch reserved serialized through
 ; MIR.
@@ -43,7 +43,7 @@
 ; CHECK-NEXT: occupancy:       10
 ; CHECK-NEXT: vgprForAGPRCopy: ''
 ; CHECK-NEXT: sgprForEXECCopy: '$sgpr100_sgpr101'
-; CHECK-NEXT: longBranchReservedReg: '$sgpr6_sgpr7'
+; CHECK-NEXT: longBranchReservedReg: '$sgpr2_sgpr3'
 ; CHECK-NEXT: hasInitWholeWave: false
 ; CHECK-NEXT: isWaveCFG: true
 ; CHECK-NEXT: dynamicVGPRBlockSize: 0

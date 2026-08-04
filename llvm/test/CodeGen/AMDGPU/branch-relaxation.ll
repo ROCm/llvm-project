@@ -352,7 +352,8 @@ define amdgpu_kernel void @min_long_forward_vbranch(ptr addrspace(1) %arg) #0 {
 ; GCN-NEXT:    v_add_i32_e64 v0, s[0:1], s0, v0
 ; GCN-NEXT:    v_addc_u32_e64 v1, s[0:1], 0, v1, s[0:1]
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GCN-NEXT:    s_xor_b64 exec, vcc, exec
+; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB3_1
 ; GCN-NEXT:  .LBB3_3: ; %bb
@@ -941,14 +942,14 @@ define amdgpu_kernel void @uniform_inside_divergent(ptr addrspace(1) %out, i32 %
 ; GCN-NEXT:    s_addc_u32 s1, s1, (.LBB8_3-.Lpost_getpc9)>>32
 ; GCN-NEXT:    s_setpc_b64 s[0:1]
 ; GCN-NEXT:  .LBB8_1: ; %if
+; GCN-NEXT:    s_load_dword s6, s[4:5], 0xb
 ; GCN-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
-; GCN-NEXT:    s_load_dword s4, s[4:5], 0xb
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
 ; GCN-NEXT:    s_mov_b32 s2, -1
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
+; GCN-NEXT:    s_cmp_lg_u32 s6, 0
 ; GCN-NEXT:    buffer_store_dword v0, off, s[0:3], 0
-; GCN-NEXT:    s_cmp_lg_u32 s4, 0
 ; GCN-NEXT:    s_cbranch_scc1 .LBB8_3
 ; GCN-NEXT:  ; %bb.2: ; %if_uniform
 ; GCN-NEXT:    s_waitcnt expcnt(0)
@@ -1280,16 +1281,16 @@ define amdgpu_kernel void @long_branch_hang(ptr addrspace(1) nocapture %arg, i32
 ; GCN-NEXT:  .LBB10_4:
 ; GCN-NEXT:    ; implicit-def: $sgpr0
 ; GCN-NEXT:  .LBB10_5: ; %bb19
-; GCN-NEXT:    s_load_dwordx2 s[8:9], s[4:5], 0x9
 ; GCN-NEXT:    s_load_dwordx2 s[2:3], s[4:5], 0xf
-; GCN-NEXT:    s_mov_b32 s11, 0xf000
-; GCN-NEXT:    s_mov_b32 s10, 0
+; GCN-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x9
+; GCN-NEXT:    s_mov_b32 s7, 0xf000
+; GCN-NEXT:    s_mov_b32 s6, 0
 ; GCN-NEXT:    v_mov_b32_e32 v2, s0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_lshl_b64 s[2:3], s[2:3], 2
 ; GCN-NEXT:    v_mov_b32_e32 v0, s2
 ; GCN-NEXT:    v_mov_b32_e32 v1, s3
-; GCN-NEXT:    buffer_store_dword v2, v[0:1], s[8:11], 0 addr64
+; GCN-NEXT:    buffer_store_dword v2, v[0:1], s[4:7], 0 addr64
 ; GCN-NEXT:    s_endpgm
 ;
 ; GFX11-LABEL: long_branch_hang:
@@ -1363,9 +1364,9 @@ define amdgpu_kernel void @long_branch_hang(ptr addrspace(1) nocapture %arg, i32
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    s_lshl_b64 s[2:3], s[2:3], 2
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_add_u32 s2, s4, s2
-; GFX11-NEXT:    s_addc_u32 s3, s5, s3
-; GFX11-NEXT:    global_store_b32 v0, v1, s[2:3]
+; GFX11-NEXT:    s_add_u32 s0, s4, s2
+; GFX11-NEXT:    s_addc_u32 s1, s5, s3
+; GFX11-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; GFX11-NEXT:    s_endpgm
 ;
 ; GFX12-LABEL: long_branch_hang:

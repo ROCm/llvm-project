@@ -74,8 +74,9 @@ define void @test_sinkable_flat_small_offset_i32(ptr %out, ptr %in, i32 %cond) {
 ; GFX7:       ; %bb.0: ; %entry
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX7-NEXT:    v_mov_b32_e32 v4, 0
-; GFX7-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX7-NEXT:  .LBB0_1: ; %if
@@ -95,8 +96,9 @@ define void @test_sinkable_flat_small_offset_i32(ptr %out, ptr %in, i32 %cond) {
 ; GFX8:       ; %bb.0: ; %entry
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX8-NEXT:    v_mov_b32_e32 v4, 0
-; GFX8-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX8-NEXT:  .LBB0_1: ; %if
@@ -116,8 +118,9 @@ define void @test_sinkable_flat_small_offset_i32(ptr %out, ptr %in, i32 %cond) {
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX9-NEXT:  .LBB0_1: ; %if
@@ -233,8 +236,9 @@ define void @test_sink_noop_addrspacecast_flat_to_global_i32(ptr %out, ptr %in, 
 ; GFX7:       ; %bb.0: ; %entry
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX7-NEXT:    v_mov_b32_e32 v4, 0
-; GFX7-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX7-NEXT:  .LBB1_1: ; %if
@@ -256,8 +260,9 @@ define void @test_sink_noop_addrspacecast_flat_to_global_i32(ptr %out, ptr %in, 
 ; GFX8:       ; %bb.0: ; %entry
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX8-NEXT:    v_mov_b32_e32 v4, 0
-; GFX8-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX8-NEXT:  .LBB1_1: ; %if
@@ -277,8 +282,9 @@ define void @test_sink_noop_addrspacecast_flat_to_global_i32(ptr %out, ptr %in, 
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX9-NEXT:  .LBB1_1: ; %if
@@ -350,8 +356,9 @@ define void @test_sink_noop_addrspacecast_flat_to_constant_i32(ptr %out, ptr %in
 ; GFX7:       ; %bb.0: ; %entry
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX7-NEXT:    v_mov_b32_e32 v4, 0
-; GFX7-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX7-NEXT:  .LBB2_1: ; %if
@@ -373,8 +380,9 @@ define void @test_sink_noop_addrspacecast_flat_to_constant_i32(ptr %out, ptr %in
 ; GFX8:       ; %bb.0: ; %entry
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX8-NEXT:    v_mov_b32_e32 v4, 0
-; GFX8-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX8-NEXT:  .LBB2_1: ; %if
@@ -394,8 +402,9 @@ define void @test_sink_noop_addrspacecast_flat_to_constant_i32(ptr %out, ptr %in
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX9-NEXT:  .LBB2_1: ; %if
@@ -523,8 +532,9 @@ define void @test_sink_flat_small_max_flat_offset(ptr %out, ptr %in) #1 {
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v4, -1, 0
 ; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], 0, v4
+; GFX7-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; GFX7-NEXT:    v_mov_b32_e32 v4, 0
-; GFX7-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX7-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX7-NEXT:  .LBB3_1: ; %if
@@ -545,8 +555,9 @@ define void @test_sink_flat_small_max_flat_offset(ptr %out, ptr %in) #1 {
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    v_mbcnt_lo_u32_b32 v4, -1, 0
 ; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], 0, v4
+; GFX8-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; GFX8-NEXT:    v_mov_b32_e32 v4, 0
-; GFX8-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX8-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX8-NEXT:  .LBB3_1: ; %if
@@ -567,8 +578,9 @@ define void @test_sink_flat_small_max_flat_offset(ptr %out, ptr %in) #1 {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_mbcnt_lo_u32_b32 v4, -1, 0
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX9-NEXT:  .LBB3_1: ; %if
@@ -648,8 +660,9 @@ define void @test_sink_flat_small_max_plus_1_flat_offset(ptr %out, ptr %in) #1 {
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v4, -1, 0
 ; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], 0, v4
+; GFX7-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; GFX7-NEXT:    v_mov_b32_e32 v4, 0
-; GFX7-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX7-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB4_2
 ; GFX7-NEXT:  .LBB4_1: ; %if
@@ -670,8 +683,9 @@ define void @test_sink_flat_small_max_plus_1_flat_offset(ptr %out, ptr %in) #1 {
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    v_mbcnt_lo_u32_b32 v4, -1, 0
 ; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], 0, v4
+; GFX8-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; GFX8-NEXT:    v_mov_b32_e32 v4, 0
-; GFX8-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX8-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB4_2
 ; GFX8-NEXT:  .LBB4_1: ; %if
@@ -692,8 +706,9 @@ define void @test_sink_flat_small_max_plus_1_flat_offset(ptr %out, ptr %in) #1 {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_mbcnt_lo_u32_b32 v4, -1, 0
 ; GFX9-NEXT:    v_cmp_eq_u32_e64 s[4:5], 0, v4
+; GFX9-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
-; GFX9-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB4_2
 ; GFX9-NEXT:  .LBB4_1: ; %if
@@ -775,8 +790,9 @@ define void @test_sinkable_flat_reg_offset(ptr %out, ptr %in, i64 %reg) #1 {
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v6, -1, 0
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v6
+; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX7-NEXT:    v_mov_b32_e32 v6, 0
-; GFX7-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX7-NEXT:  .LBB5_1: ; %if
@@ -797,8 +813,9 @@ define void @test_sinkable_flat_reg_offset(ptr %out, ptr %in, i64 %reg) #1 {
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    v_mbcnt_lo_u32_b32 v6, -1, 0
 ; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v6
+; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX8-NEXT:    v_mov_b32_e32 v6, 0
-; GFX8-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX8-NEXT:  .LBB5_1: ; %if
@@ -819,8 +836,9 @@ define void @test_sinkable_flat_reg_offset(ptr %out, ptr %in, i64 %reg) #1 {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_mbcnt_lo_u32_b32 v6, -1, 0
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v6
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-NEXT:    v_mov_b32_e32 v6, 0
-; GFX9-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX9-NEXT:  .LBB5_1: ; %if

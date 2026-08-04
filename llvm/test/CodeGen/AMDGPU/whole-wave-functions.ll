@@ -1604,8 +1604,8 @@ define amdgpu_gfx_whole_wave <2 x half> @call_gfx_from_whole_wave(i1 %active, <2
 ; DAGISEL-NEXT:    v_writelane_b32 v40, s31, 2
 ; DAGISEL-NEXT:    v_mov_b32_e32 v2, v0
 ; DAGISEL-NEXT:    v_swap_b32 v0, v1
-; DAGISEL-NEXT:    s_mov_b32 s0, gfx_callee@abs32@lo
 ; DAGISEL-NEXT:    s_mov_b32 s1, gfx_callee@abs32@hi
+; DAGISEL-NEXT:    s_mov_b32 s0, gfx_callee@abs32@lo
 ; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; DAGISEL-NEXT:    v_readlane_b32 s30, v40, 1
@@ -2275,8 +2275,8 @@ define amdgpu_gfx_whole_wave <2 x half> @call_gfx_from_whole_wave(i1 %active, <2
 ; DAGISEL64-NEXT:    v_writelane_b32 v40, s31, 3
 ; DAGISEL64-NEXT:    v_mov_b32_e32 v2, v0
 ; DAGISEL64-NEXT:    v_swap_b32 v0, v1
-; DAGISEL64-NEXT:    s_mov_b32 s0, gfx_callee@abs32@lo
 ; DAGISEL64-NEXT:    s_mov_b32 s1, gfx_callee@abs32@hi
+; DAGISEL64-NEXT:    s_mov_b32 s0, gfx_callee@abs32@lo
 ; DAGISEL64-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL64-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; DAGISEL64-NEXT:    v_readlane_b32 s30, v40, 2
@@ -4840,8 +4840,8 @@ define amdgpu_gfx_whole_wave <2 x half> @tail_call_gfx_from_whole_wave(i1 %activ
 ; DAGISEL-NEXT:    scratch_store_b32 off, v247, s32 offset:572
 ; DAGISEL-NEXT:    s_mov_b32 exec_lo, -1
 ; DAGISEL-NEXT:    v_mov_b32_e32 v2, v0
-; DAGISEL-NEXT:    s_mov_b32 s36, gfx_callee@abs32@lo
 ; DAGISEL-NEXT:    s_mov_b32 s37, gfx_callee@abs32@hi
+; DAGISEL-NEXT:    s_mov_b32 s36, gfx_callee@abs32@lo
 ; DAGISEL-NEXT:    v_swap_b32 v0, v1
 ; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL-NEXT:    s_xor_b32 exec_lo, s0, -1
@@ -5472,8 +5472,8 @@ define amdgpu_gfx_whole_wave <2 x half> @tail_call_gfx_from_whole_wave(i1 %activ
 ; DAGISEL64-NEXT:    scratch_store_b32 off, v247, s32 offset:572
 ; DAGISEL64-NEXT:    s_mov_b64 exec, -1
 ; DAGISEL64-NEXT:    v_mov_b32_e32 v2, v0
-; DAGISEL64-NEXT:    s_mov_b32 s36, gfx_callee@abs32@lo
 ; DAGISEL64-NEXT:    s_mov_b32 s37, gfx_callee@abs32@hi
+; DAGISEL64-NEXT:    s_mov_b32 s36, gfx_callee@abs32@lo
 ; DAGISEL64-NEXT:    v_swap_b32 v0, v1
 ; DAGISEL64-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL64-NEXT:    s_xor_b64 exec, s[0:1], -1
@@ -7830,8 +7830,8 @@ declare amdgpu_gfx_whole_wave float @callee(i1 %active, <8 x float> %x)
 define amdgpu_cs void @call_from_entry(<8 x float> %x, ptr %p) #0 {
 ; DAGISEL-LABEL: call_from_entry:
 ; DAGISEL:       ; %bb.0:
-; DAGISEL-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; DAGISEL-NEXT:    s_mov_b32 s1, callee@abs32@hi
+; DAGISEL-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; DAGISEL-NEXT:    s_mov_b32 s32, 0
 ; DAGISEL-NEXT:    v_dual_mov_b32 v41, v9 :: v_dual_mov_b32 v40, v8
 ; DAGISEL-NEXT:    s_swappc_b64 s[30:31], s[0:1]
@@ -7850,8 +7850,8 @@ define amdgpu_cs void @call_from_entry(<8 x float> %x, ptr %p) #0 {
 ;
 ; DAGISEL64-LABEL: call_from_entry:
 ; DAGISEL64:       ; %bb.0:
-; DAGISEL64-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; DAGISEL64-NEXT:    s_mov_b32 s1, callee@abs32@hi
+; DAGISEL64-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; DAGISEL64-NEXT:    s_mov_b32 s32, 0
 ; DAGISEL64-NEXT:    v_mov_b32_e32 v41, v9
 ; DAGISEL64-NEXT:    v_mov_b32_e32 v40, v8
@@ -8057,8 +8057,8 @@ define amdgpu_gfx_whole_wave void @call_from_whole_wave(i1 %unused, <8 x float> 
 ; DAGISEL-NEXT:    v_writelane_b32 v42, s4, 0
 ; DAGISEL-NEXT:    v_writelane_b32 v42, s30, 1
 ; DAGISEL-NEXT:    v_writelane_b32 v42, s31, 2
-; DAGISEL-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; DAGISEL-NEXT:    s_mov_b32 s1, callee@abs32@hi
+; DAGISEL-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; DAGISEL-NEXT:    v_dual_mov_b32 v41, v9 :: v_dual_mov_b32 v40, v8
 ; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL-NEXT:    s_swappc_b64 s[30:31], s[0:1]
@@ -8740,8 +8740,8 @@ define amdgpu_gfx_whole_wave void @call_from_whole_wave(i1 %unused, <8 x float> 
 ; DAGISEL64-NEXT:    v_writelane_b32 v42, s5, 1
 ; DAGISEL64-NEXT:    v_writelane_b32 v42, s30, 2
 ; DAGISEL64-NEXT:    v_writelane_b32 v42, s31, 3
-; DAGISEL64-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; DAGISEL64-NEXT:    s_mov_b32 s1, callee@abs32@hi
+; DAGISEL64-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; DAGISEL64-NEXT:    v_mov_b32_e32 v41, v9
 ; DAGISEL64-NEXT:    v_mov_b32_e32 v40, v8
 ; DAGISEL64-NEXT:    s_wait_alu depctr_sa_sdst(0)

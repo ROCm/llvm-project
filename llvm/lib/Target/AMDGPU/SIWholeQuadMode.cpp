@@ -693,6 +693,14 @@ void SIWholeQuadMode::propagateInstruction(MachineInstr &MI,
 
 void SIWholeQuadMode::propagateBlock(MachineBasicBlock &MBB,
                                      std::vector<WorkItem>& Worklist) {
+  // If this block has no WQM/Exact instructions (pass-through, only control
+  // flow) but enters in WQM, propagate WQM to OutNeeds. This lets successor
+  // blocks handle their own WQM-to-Exact transitions instead of this block
+  // inserting them at potentially incorrect locations (e.g., inside
+  // wave-transform's atomic divergent branch idiom in merge blocks).
+  if (Blocks[&MBB].Needs == 0 && (Blocks[&MBB].InNeeds & StateWQM))
+    Blocks[&MBB].OutNeeds |= StateWQM;
+
   BlockInfo BI = Blocks[&MBB]; // Make a copy to prevent dangling references.
 
   // Propagate through instructions
@@ -1350,6 +1358,7 @@ void SIWholeQuadMode::processBlock(MachineBasicBlock &MBB, BlockInfo &BI,
     if (FirstStrict == IE)
       FirstStrict = II;
 
+    // Adjust needs if this is first instruction of WQM requiring shader.
     if (IsEntry && Idx == 0 && (BI.InNeeds & StateWQM))
       Needs = StateWQM;
 

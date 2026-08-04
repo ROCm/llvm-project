@@ -1,8 +1,8 @@
-# RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00-amd-amdhsa \
-# RUN:   -start-before=greedy,1 -stop-after=virtregrewriter,1 -pass-remarks='.*' -pass-remarks-output=%t.yaml -filetype=null %s
+# RUN: llc -mtriple=amdgpu9.00-amd-amdhsa \
+# RUN:   -start-before=greedy,0 -stop-after=virtregrewriter,0 -pass-remarks='.*' -pass-remarks-output=%t.yaml -filetype=null %s
 # RUN: FileCheck %s < %t.yaml
 
-# RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00-amd-amdhsa \
+# RUN: llc -mtriple=amdgpu9.00-amd-amdhsa \
 # RUN:   -passes='greedy<sgpr>,virt-reg-rewriter<no-clear-vregs>' -pass-remarks='.*' -pass-remarks-output=%t.yaml -filetype=null %s
 # RUN: FileCheck %s < %t.yaml
 

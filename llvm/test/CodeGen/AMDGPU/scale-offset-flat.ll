@@ -402,23 +402,24 @@ define amdgpu_ps <2 x float> @flat_atomicrmw_b64_rtn_idxprom(ptr align 8 inreg %
 ; SDAG-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; SDAG-NEXT:    v_ashrrev_i32_e32 v1, 31, v0
 ; SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 3, s[0:1]
-; SDAG-NEXT:    v_xor_b32_e32 v2, src_flat_scratch_base_hi, v1
+; SDAG-NEXT:    v_lshl_add_u64 v[2:3], v[0:1], 3, s[0:1]
+; SDAG-NEXT:    v_xor_b32_e32 v0, src_flat_scratch_base_hi, v3
 ; SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v2
+; SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v0
+; SDAG-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB21_2
 ; SDAG-NEXT:  .LBB21_1: ; %atomicrmw.private
-; SDAG-NEXT:    v_cmp_ne_u64_e32 vcc_lo, 0, v[0:1]
-; SDAG-NEXT:    v_subrev_nc_u32_e32 v2, src_flat_scratch_base_lo, v0
+; SDAG-NEXT:    v_cmp_ne_u64_e32 vcc_lo, 0, v[2:3]
+; SDAG-NEXT:    v_subrev_nc_u32_e32 v0, src_flat_scratch_base_lo, v2
 ; SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; SDAG-NEXT:    v_cndmask_b32_e32 v4, -1, v2, vcc_lo
-; SDAG-NEXT:    scratch_load_b64 v[0:1], v4, off
+; SDAG-NEXT:    v_cndmask_b32_e32 v6, -1, v0, vcc_lo
+; SDAG-NEXT:    scratch_load_b64 v[0:1], v6, off
 ; SDAG-NEXT:    s_wait_loadcnt 0x0
-; SDAG-NEXT:    v_add_nc_u64_e32 v[2:3], 1, v[0:1]
-; SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
+; SDAG-NEXT:    v_add_nc_u64_e32 v[4:5], 1, v[0:1]
+; SDAG-NEXT:    scratch_store_b64 v6, v[4:5], off
 ; SDAG-NEXT:  .LBB21_2:
 ; SDAG-NEXT:    s_wait_xcnt 0x0
 ; SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
@@ -428,8 +429,8 @@ define amdgpu_ps <2 x float> @flat_atomicrmw_b64_rtn_idxprom(ptr align 8 inreg %
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB21_4
 ; SDAG-NEXT:  .LBB21_3: ; %atomicrmw.global
-; SDAG-NEXT:    v_mov_b64_e32 v[2:3], 1
-; SDAG-NEXT:    flat_atomic_add_u64 v[0:1], v[0:1], v[2:3] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
+; SDAG-NEXT:    v_mov_b64_e32 v[0:1], 1
+; SDAG-NEXT:    flat_atomic_add_u64 v[0:1], v[2:3], v[0:1] th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; SDAG-NEXT:  .LBB21_4: ; %atomicrmw.phi
 ; SDAG-NEXT:    s_wait_xcnt 0x0
 ; SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1

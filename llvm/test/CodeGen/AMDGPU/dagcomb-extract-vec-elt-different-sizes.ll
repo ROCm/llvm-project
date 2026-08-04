@@ -10,6 +10,14 @@ define amdgpu_kernel void @eggs(i1 %arg, ptr addrspace(1) %arg1, ptr %arg2, ptr 
 ; CHECK-NEXT:    s_addc_u32 flat_scratch_hi, s13, 0
 ; CHECK-NEXT:    s_load_dword s0, s[8:9], 0x0
 ; CHECK-NEXT:    s_load_dwordx16 s[12:27], s[8:9], 0x8
+; CHECK-NEXT:    ; implicit-def: $vgpr0
+; CHECK-NEXT:    ; implicit-def: $vgpr0
+; CHECK-NEXT:    ; implicit-def: $vgpr0
+; CHECK-NEXT:    ; implicit-def: $vgpr0
+; CHECK-NEXT:    ; implicit-def: $vgpr0
+; CHECK-NEXT:    ; implicit-def: $vgpr0
+; CHECK-NEXT:    ; implicit-def: $vgpr0
+; CHECK-NEXT:    ; implicit-def: $vgpr0
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_bitcmp1_b32 s0, 0

@@ -1984,14 +1984,6 @@ void SIFrameLowering::determineCalleeSaves(MachineFunction &MF,
   }
 
   sort(SortedWWMVGPRs, std::greater<Register>());
-  // TODO-WAVETRANSFORM: In the late Wave transform flow, WWM regs are
-  // allocated from the lowest available VGPRs, which eliminates the need
-  // for this shift which this can be removed safely. So, this shift must be
-  // avoided after the structurizer-based flow is completely removed.
-  //
-  // Also, we need to update the CSR SGPR-spill VGPR selection to the lowest
-  // available VGPRs to match the WWM regs allocation, after the
-  // structurizer-based flow is completely removed
   MFI->shiftWwmVGPRsToLowestRange(MF, SortedWWMVGPRs, SavedVGPRs);
 
   if (MFI->isEntryFunction())

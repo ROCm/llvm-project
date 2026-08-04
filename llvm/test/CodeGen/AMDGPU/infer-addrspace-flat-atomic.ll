@@ -60,19 +60,19 @@ define protected amdgpu_kernel void @InferMixed(i32 %a, ptr addrspace(1) %b, dou
 ; CHECK-LABEL: InferMixed:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_load_dword s6, s[4:5], 0x24
-; CHECK-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x2c
 ; CHECK-NEXT:    s_load_dwordx2 s[8:9], s[4:5], 0x3c
+; CHECK-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x2c
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_ashr_i32 s7, s6, 31
-; CHECK-NEXT:    s_lshl_b64 s[4:5], s[6:7], 3
-; CHECK-NEXT:    s_add_u32 s0, s0, s4
-; CHECK-NEXT:    s_addc_u32 s1, s1, s5
+; CHECK-NEXT:    v_pk_mov_b32 v[0:1], s[8:9], s[8:9] op_sel:[0,1]
+; CHECK-NEXT:    v_pk_mov_b32 v[2:3], s[2:3], s[2:3] op_sel:[0,1]
+; CHECK-NEXT:    s_lshl_b64 s[2:3], s[6:7], 3
+; CHECK-NEXT:    s_add_u32 s0, s0, s2
+; CHECK-NEXT:    s_addc_u32 s1, s1, s3
 ; CHECK-NEXT:    s_add_u32 s0, s0, -8
 ; CHECK-NEXT:    s_addc_u32 s1, s1, -1
 ; CHECK-NEXT:    s_add_u32 s0, s0, 1
 ; CHECK-NEXT:    s_addc_u32 s1, s1, 0
-; CHECK-NEXT:    v_pk_mov_b32 v[0:1], s[8:9], s[8:9] op_sel:[0,1]
-; CHECK-NEXT:    v_pk_mov_b32 v[2:3], s[2:3], s[2:3] op_sel:[0,1]
 ; CHECK-NEXT:    flat_atomic_add_f64 v[0:1], v[2:3]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    buffer_wbinvl1_vol

@@ -93,9 +93,9 @@ define amdgpu_ps i32 @test_if(i1 inreg %cond) {
 ; GFX10-SDAG-LABEL: test_if:
 ; GFX10-SDAG:       ; %bb.0: ; %entry
 ; GFX10-SDAG-NEXT:    s_bitcmp1_b32 s0, 0
+; GFX10-SDAG-NEXT:    s_cselect_b32 s0, -1, 0
+; GFX10-SDAG-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
 ; GFX10-SDAG-NEXT:    s_mov_b32 s0, src_pops_exiting_wave_id
-; GFX10-SDAG-NEXT:    s_cselect_b32 s1, -1, 0
-; GFX10-SDAG-NEXT:    s_and_b32 vcc_lo, exec_lo, s1
 ; GFX10-SDAG-NEXT:    s_cbranch_vccz .LBB2_2
 ; GFX10-SDAG-NEXT:  ; %bb.1: ; %body
 ; GFX10-SDAG-NEXT:    s_mov_b32 s0, src_pops_exiting_wave_id

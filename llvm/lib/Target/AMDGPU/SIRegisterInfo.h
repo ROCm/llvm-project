@@ -355,14 +355,6 @@ public:
 
   ArrayRef<int16_t> getRegSplitParts(const TargetRegisterClass *RC,
                                      unsigned EltSize) const;
-  
-  bool shouldCoalesce(MachineInstr *MI,
-                    const TargetRegisterClass *SrcRC,
-                    unsigned SubReg,
-                    const TargetRegisterClass *DstRC,
-                    unsigned DstSubReg,
-                    const TargetRegisterClass *NewRC,
-                    LiveIntervals &LIS) const override;
 
   unsigned getRegPressureLimit(const TargetRegisterClass *RC,
                                MachineFunction &MF) const override;
@@ -426,9 +418,6 @@ public:
   const uint32_t *getAllAGPRRegMask() const;
   const uint32_t *getAllVectorRegMask() const;
   const uint32_t *getAllAllocatableSRegMask() const;
-
-  void determineVGPRsForWwmAlloc(MachineFunction &MF, BitVector &RegMask,
-                                 unsigned NumRegs) const;
 
   // \returns number of 32 bit registers covered by a \p LM
   static unsigned getNumCoveredRegs(LaneBitmask LM) {

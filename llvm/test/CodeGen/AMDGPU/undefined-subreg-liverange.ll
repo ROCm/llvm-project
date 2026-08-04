@@ -8,8 +8,8 @@
 define amdgpu_kernel void @func() #0 {
 ; CHECK-LABEL: func:
 ; CHECK:       ; %bb.0: ; %B0
-; CHECK-NEXT:    s_mov_b32 s0, 0
 ; CHECK-NEXT:    s_cmp_lg_u32 s8, 0
+; CHECK-NEXT:    s_mov_b32 s0, 0
 ; CHECK-NEXT:    s_cbranch_scc1 .LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %B30.1
 ; CHECK-NEXT:    s_mov_b32 s0, 0x7fc00000

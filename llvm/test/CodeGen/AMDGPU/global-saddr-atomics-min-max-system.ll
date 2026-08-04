@@ -14,7 +14,7 @@ define amdgpu_ps float @global_max_saddr_i32_rtn(ptr addrspace(1) inreg %sbase, 
 ; GFX9-LABEL: global_max_saddr_i32_rtn:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-NEXT:    global_load_dword v0, v2, s[2:3]
+; GFX9-NEXT:    global_load_dword v0, v0, s[2:3]
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
 ; GFX9-NEXT:    v_add_co_u32_e32 v2, vcc, s2, v2
 ; GFX9-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v3, vcc
@@ -41,7 +41,7 @@ define amdgpu_ps float @global_max_saddr_i32_rtn(ptr addrspace(1) inreg %sbase, 
 ; GFX10-LABEL: global_max_saddr_i32_rtn:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    global_load_dword v0, v2, s[2:3]
+; GFX10-NEXT:    global_load_dword v0, v0, s[2:3]
 ; GFX10-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX10-NEXT:    v_add_co_ci_u32_e64 v3, s[0:1], s3, 0, s[0:1]
 ; GFX10-NEXT:    s_mov_b64 s[0:1], 0
@@ -68,7 +68,7 @@ define amdgpu_ps float @global_max_saddr_i32_rtn(ptr addrspace(1) inreg %sbase, 
 ; GFX11-LABEL: global_max_saddr_i32_rtn:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_mov_b32_e32 v2, v0
-; GFX11-NEXT:    global_load_b32 v0, v2, s[2:3]
+; GFX11-NEXT:    global_load_b32 v0, v0, s[2:3]
 ; GFX11-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -99,7 +99,7 @@ define amdgpu_ps float @global_max_saddr_i32_rtn(ptr addrspace(1) inreg %sbase, 
 ; GFX12-LABEL: global_max_saddr_i32_rtn:
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    global_load_b32 v0, v2, s[2:3]
+; GFX12-NEXT:    global_load_b32 v0, v0, s[2:3]
 ; GFX12-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -139,7 +139,7 @@ define amdgpu_ps float @global_max_saddr_i32_rtn_neg128(ptr addrspace(1) inreg %
 ; GFX9-LABEL: global_max_saddr_i32_rtn_neg128:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-NEXT:    global_load_dword v0, v2, s[2:3] offset:-128
+; GFX9-NEXT:    global_load_dword v0, v0, s[2:3] offset:-128
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
 ; GFX9-NEXT:    v_add_co_u32_e32 v2, vcc, s2, v2
 ; GFX9-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v3, vcc
@@ -166,7 +166,7 @@ define amdgpu_ps float @global_max_saddr_i32_rtn_neg128(ptr addrspace(1) inreg %
 ; GFX10-LABEL: global_max_saddr_i32_rtn_neg128:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    global_load_dword v0, v2, s[2:3] offset:-128
+; GFX10-NEXT:    global_load_dword v0, v0, s[2:3] offset:-128
 ; GFX10-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX10-NEXT:    v_add_co_ci_u32_e64 v3, s[0:1], s3, 0, s[0:1]
 ; GFX10-NEXT:    s_mov_b64 s[0:1], 0
@@ -193,7 +193,7 @@ define amdgpu_ps float @global_max_saddr_i32_rtn_neg128(ptr addrspace(1) inreg %
 ; GFX11-LABEL: global_max_saddr_i32_rtn_neg128:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_mov_b32_e32 v2, v0
-; GFX11-NEXT:    global_load_b32 v0, v2, s[2:3] offset:-128
+; GFX11-NEXT:    global_load_b32 v0, v0, s[2:3] offset:-128
 ; GFX11-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -224,7 +224,7 @@ define amdgpu_ps float @global_max_saddr_i32_rtn_neg128(ptr addrspace(1) inreg %
 ; GFX12-LABEL: global_max_saddr_i32_rtn_neg128:
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    global_load_b32 v0, v2, s[2:3] offset:-128
+; GFX12-NEXT:    global_load_b32 v0, v0, s[2:3] offset:-128
 ; GFX12-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -1038,7 +1038,7 @@ define amdgpu_ps float @global_min_saddr_i32_rtn(ptr addrspace(1) inreg %sbase, 
 ; GFX9-LABEL: global_min_saddr_i32_rtn:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-NEXT:    global_load_dword v0, v2, s[2:3]
+; GFX9-NEXT:    global_load_dword v0, v0, s[2:3]
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
 ; GFX9-NEXT:    v_add_co_u32_e32 v2, vcc, s2, v2
 ; GFX9-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v3, vcc
@@ -1065,7 +1065,7 @@ define amdgpu_ps float @global_min_saddr_i32_rtn(ptr addrspace(1) inreg %sbase, 
 ; GFX10-LABEL: global_min_saddr_i32_rtn:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    global_load_dword v0, v2, s[2:3]
+; GFX10-NEXT:    global_load_dword v0, v0, s[2:3]
 ; GFX10-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX10-NEXT:    v_add_co_ci_u32_e64 v3, s[0:1], s3, 0, s[0:1]
 ; GFX10-NEXT:    s_mov_b64 s[0:1], 0
@@ -1092,7 +1092,7 @@ define amdgpu_ps float @global_min_saddr_i32_rtn(ptr addrspace(1) inreg %sbase, 
 ; GFX11-LABEL: global_min_saddr_i32_rtn:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_mov_b32_e32 v2, v0
-; GFX11-NEXT:    global_load_b32 v0, v2, s[2:3]
+; GFX11-NEXT:    global_load_b32 v0, v0, s[2:3]
 ; GFX11-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -1123,7 +1123,7 @@ define amdgpu_ps float @global_min_saddr_i32_rtn(ptr addrspace(1) inreg %sbase, 
 ; GFX12-LABEL: global_min_saddr_i32_rtn:
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    global_load_b32 v0, v2, s[2:3]
+; GFX12-NEXT:    global_load_b32 v0, v0, s[2:3]
 ; GFX12-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -1163,7 +1163,7 @@ define amdgpu_ps float @global_min_saddr_i32_rtn_neg128(ptr addrspace(1) inreg %
 ; GFX9-LABEL: global_min_saddr_i32_rtn_neg128:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-NEXT:    global_load_dword v0, v2, s[2:3] offset:-128
+; GFX9-NEXT:    global_load_dword v0, v0, s[2:3] offset:-128
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
 ; GFX9-NEXT:    v_add_co_u32_e32 v2, vcc, s2, v2
 ; GFX9-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v3, vcc
@@ -1190,7 +1190,7 @@ define amdgpu_ps float @global_min_saddr_i32_rtn_neg128(ptr addrspace(1) inreg %
 ; GFX10-LABEL: global_min_saddr_i32_rtn_neg128:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    global_load_dword v0, v2, s[2:3] offset:-128
+; GFX10-NEXT:    global_load_dword v0, v0, s[2:3] offset:-128
 ; GFX10-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX10-NEXT:    v_add_co_ci_u32_e64 v3, s[0:1], s3, 0, s[0:1]
 ; GFX10-NEXT:    s_mov_b64 s[0:1], 0
@@ -1217,7 +1217,7 @@ define amdgpu_ps float @global_min_saddr_i32_rtn_neg128(ptr addrspace(1) inreg %
 ; GFX11-LABEL: global_min_saddr_i32_rtn_neg128:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_mov_b32_e32 v2, v0
-; GFX11-NEXT:    global_load_b32 v0, v2, s[2:3] offset:-128
+; GFX11-NEXT:    global_load_b32 v0, v0, s[2:3] offset:-128
 ; GFX11-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -1248,7 +1248,7 @@ define amdgpu_ps float @global_min_saddr_i32_rtn_neg128(ptr addrspace(1) inreg %
 ; GFX12-LABEL: global_min_saddr_i32_rtn_neg128:
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    global_load_b32 v0, v2, s[2:3] offset:-128
+; GFX12-NEXT:    global_load_b32 v0, v0, s[2:3] offset:-128
 ; GFX12-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -2062,7 +2062,7 @@ define amdgpu_ps float @global_umax_saddr_i32_rtn(ptr addrspace(1) inreg %sbase,
 ; GFX9-LABEL: global_umax_saddr_i32_rtn:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-NEXT:    global_load_dword v0, v2, s[2:3]
+; GFX9-NEXT:    global_load_dword v0, v0, s[2:3]
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
 ; GFX9-NEXT:    v_add_co_u32_e32 v2, vcc, s2, v2
 ; GFX9-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v3, vcc
@@ -2089,7 +2089,7 @@ define amdgpu_ps float @global_umax_saddr_i32_rtn(ptr addrspace(1) inreg %sbase,
 ; GFX10-LABEL: global_umax_saddr_i32_rtn:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    global_load_dword v0, v2, s[2:3]
+; GFX10-NEXT:    global_load_dword v0, v0, s[2:3]
 ; GFX10-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX10-NEXT:    v_add_co_ci_u32_e64 v3, s[0:1], s3, 0, s[0:1]
 ; GFX10-NEXT:    s_mov_b64 s[0:1], 0
@@ -2116,7 +2116,7 @@ define amdgpu_ps float @global_umax_saddr_i32_rtn(ptr addrspace(1) inreg %sbase,
 ; GFX11-LABEL: global_umax_saddr_i32_rtn:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_mov_b32_e32 v2, v0
-; GFX11-NEXT:    global_load_b32 v0, v2, s[2:3]
+; GFX11-NEXT:    global_load_b32 v0, v0, s[2:3]
 ; GFX11-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -2147,7 +2147,7 @@ define amdgpu_ps float @global_umax_saddr_i32_rtn(ptr addrspace(1) inreg %sbase,
 ; GFX12-LABEL: global_umax_saddr_i32_rtn:
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    global_load_b32 v0, v2, s[2:3]
+; GFX12-NEXT:    global_load_b32 v0, v0, s[2:3]
 ; GFX12-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -2187,7 +2187,7 @@ define amdgpu_ps float @global_umax_saddr_i32_rtn_neg128(ptr addrspace(1) inreg 
 ; GFX9-LABEL: global_umax_saddr_i32_rtn_neg128:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-NEXT:    global_load_dword v0, v2, s[2:3] offset:-128
+; GFX9-NEXT:    global_load_dword v0, v0, s[2:3] offset:-128
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
 ; GFX9-NEXT:    v_add_co_u32_e32 v2, vcc, s2, v2
 ; GFX9-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v3, vcc
@@ -2214,7 +2214,7 @@ define amdgpu_ps float @global_umax_saddr_i32_rtn_neg128(ptr addrspace(1) inreg 
 ; GFX10-LABEL: global_umax_saddr_i32_rtn_neg128:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    global_load_dword v0, v2, s[2:3] offset:-128
+; GFX10-NEXT:    global_load_dword v0, v0, s[2:3] offset:-128
 ; GFX10-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX10-NEXT:    v_add_co_ci_u32_e64 v3, s[0:1], s3, 0, s[0:1]
 ; GFX10-NEXT:    s_mov_b64 s[0:1], 0
@@ -2241,7 +2241,7 @@ define amdgpu_ps float @global_umax_saddr_i32_rtn_neg128(ptr addrspace(1) inreg 
 ; GFX11-LABEL: global_umax_saddr_i32_rtn_neg128:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_mov_b32_e32 v2, v0
-; GFX11-NEXT:    global_load_b32 v0, v2, s[2:3] offset:-128
+; GFX11-NEXT:    global_load_b32 v0, v0, s[2:3] offset:-128
 ; GFX11-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -2272,7 +2272,7 @@ define amdgpu_ps float @global_umax_saddr_i32_rtn_neg128(ptr addrspace(1) inreg 
 ; GFX12-LABEL: global_umax_saddr_i32_rtn_neg128:
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    global_load_b32 v0, v2, s[2:3] offset:-128
+; GFX12-NEXT:    global_load_b32 v0, v0, s[2:3] offset:-128
 ; GFX12-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -3086,7 +3086,7 @@ define amdgpu_ps float @global_umin_saddr_i32_rtn(ptr addrspace(1) inreg %sbase,
 ; GFX9-LABEL: global_umin_saddr_i32_rtn:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-NEXT:    global_load_dword v0, v2, s[2:3]
+; GFX9-NEXT:    global_load_dword v0, v0, s[2:3]
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
 ; GFX9-NEXT:    v_add_co_u32_e32 v2, vcc, s2, v2
 ; GFX9-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v3, vcc
@@ -3113,7 +3113,7 @@ define amdgpu_ps float @global_umin_saddr_i32_rtn(ptr addrspace(1) inreg %sbase,
 ; GFX10-LABEL: global_umin_saddr_i32_rtn:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    global_load_dword v0, v2, s[2:3]
+; GFX10-NEXT:    global_load_dword v0, v0, s[2:3]
 ; GFX10-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX10-NEXT:    v_add_co_ci_u32_e64 v3, s[0:1], s3, 0, s[0:1]
 ; GFX10-NEXT:    s_mov_b64 s[0:1], 0
@@ -3140,7 +3140,7 @@ define amdgpu_ps float @global_umin_saddr_i32_rtn(ptr addrspace(1) inreg %sbase,
 ; GFX11-LABEL: global_umin_saddr_i32_rtn:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_mov_b32_e32 v2, v0
-; GFX11-NEXT:    global_load_b32 v0, v2, s[2:3]
+; GFX11-NEXT:    global_load_b32 v0, v0, s[2:3]
 ; GFX11-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -3171,7 +3171,7 @@ define amdgpu_ps float @global_umin_saddr_i32_rtn(ptr addrspace(1) inreg %sbase,
 ; GFX12-LABEL: global_umin_saddr_i32_rtn:
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    global_load_b32 v0, v2, s[2:3]
+; GFX12-NEXT:    global_load_b32 v0, v0, s[2:3]
 ; GFX12-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -3211,7 +3211,7 @@ define amdgpu_ps float @global_umin_saddr_i32_rtn_neg128(ptr addrspace(1) inreg 
 ; GFX9-LABEL: global_umin_saddr_i32_rtn_neg128:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-NEXT:    global_load_dword v0, v2, s[2:3] offset:-128
+; GFX9-NEXT:    global_load_dword v0, v0, s[2:3] offset:-128
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
 ; GFX9-NEXT:    v_add_co_u32_e32 v2, vcc, s2, v2
 ; GFX9-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v3, vcc
@@ -3238,7 +3238,7 @@ define amdgpu_ps float @global_umin_saddr_i32_rtn_neg128(ptr addrspace(1) inreg 
 ; GFX10-LABEL: global_umin_saddr_i32_rtn_neg128:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    global_load_dword v0, v2, s[2:3] offset:-128
+; GFX10-NEXT:    global_load_dword v0, v0, s[2:3] offset:-128
 ; GFX10-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX10-NEXT:    v_add_co_ci_u32_e64 v3, s[0:1], s3, 0, s[0:1]
 ; GFX10-NEXT:    s_mov_b64 s[0:1], 0
@@ -3265,7 +3265,7 @@ define amdgpu_ps float @global_umin_saddr_i32_rtn_neg128(ptr addrspace(1) inreg 
 ; GFX11-LABEL: global_umin_saddr_i32_rtn_neg128:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_mov_b32_e32 v2, v0
-; GFX11-NEXT:    global_load_b32 v0, v2, s[2:3] offset:-128
+; GFX11-NEXT:    global_load_b32 v0, v0, s[2:3] offset:-128
 ; GFX11-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]
@@ -3296,7 +3296,7 @@ define amdgpu_ps float @global_umin_saddr_i32_rtn_neg128(ptr addrspace(1) inreg 
 ; GFX12-LABEL: global_umin_saddr_i32_rtn_neg128:
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    global_load_b32 v0, v2, s[2:3] offset:-128
+; GFX12-NEXT:    global_load_b32 v0, v0, s[2:3] offset:-128
 ; GFX12-NEXT:    v_add_co_u32 v2, s[0:1], s2, v2
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v3, null, s3, 0, s[0:1]

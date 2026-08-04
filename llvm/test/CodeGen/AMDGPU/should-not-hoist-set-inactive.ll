@@ -37,11 +37,13 @@ define amdgpu_cs void @should_not_hoist_set_inactive(<4 x i32> inreg %i14, i32 i
 ; GCN-NEXT:    s_or_saveexec_b32 s8, -1
 ; GCN-NEXT:    v_cndmask_b32_e64 v3, 0, s4, s8
 ; GCN-NEXT:    v_mov_b32_e32 v4, 0
-; GCN-NEXT:    v_mov_b32_dpp v4, v3 row_xmask:1 row_mask:0xf bank_mask:0xf
 ; GCN-NEXT:    s_mov_b32 exec_lo, s8
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
-; GCN-NEXT:    v_mov_b32_e32 v5, v4
+; GCN-NEXT:    s_or_saveexec_b32 s8, -1
+; GCN-NEXT:    v_mov_b32_dpp v4, v3 row_xmask:1 row_mask:0xf bank_mask:0xf
+; GCN-NEXT:    s_mov_b32 exec_lo, s8
 ; GCN-NEXT:    s_or_b32 s6, s6, vcc_lo
+; GCN-NEXT:    v_mov_b32_e32 v5, v4
 ; GCN-NEXT:    s_xor_b32 s8, exec_lo, s6
 ; GCN-NEXT:    s_and_b32 s8, s8, exec_lo
 ; GCN-NEXT:    s_or_b32 s7, s7, s8

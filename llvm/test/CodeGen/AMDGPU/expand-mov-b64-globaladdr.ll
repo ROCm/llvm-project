@@ -64,27 +64,27 @@ define amdgpu_ps ptr addrspace(4) @s_mov_b64_imm_pseudo_globaladdr(i1 inreg %con
 ; GFX10-LABEL: s_mov_b64_imm_pseudo_globaladdr:
 ; GFX10:       ; %bb.0: ; %entry
 ; GFX10-NEXT:    s_bitcmp1_b32 s0, 0
+; GFX10-NEXT:    s_cselect_b32 s0, -1, 0
+; GFX10-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
 ; GFX10-NEXT:    s_mov_b64 s[0:1], 0
-; GFX10-NEXT:    s_cselect_b32 s2, -1, 0
-; GFX10-NEXT:    s_and_b32 vcc_lo, exec_lo, s2
 ; GFX10-NEXT:    s_cbranch_vccnz .LBB1_2
 ; GFX10-NEXT:  ; %bb.1: ; %other
-; GFX10-NEXT:    s_mov_b32 s0, gv@abs32@lo
 ; GFX10-NEXT:    s_mov_b32 s1, gv@abs32@hi
+; GFX10-NEXT:    s_mov_b32 s0, gv@abs32@lo
 ; GFX10-NEXT:  .LBB1_2: ; %join
 ; GFX10-NEXT:    ; return to shader part epilog
 ;
 ; GFX11-LABEL: s_mov_b64_imm_pseudo_globaladdr:
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_bitcmp1_b32 s0, 0
-; GFX11-NEXT:    s_mov_b64 s[0:1], 0
-; GFX11-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX11-NEXT:    s_cselect_b32 s0, -1, 0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_and_b32 vcc_lo, exec_lo, s2
+; GFX11-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
+; GFX11-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX11-NEXT:    s_cbranch_vccnz .LBB1_2
 ; GFX11-NEXT:  ; %bb.1: ; %other
-; GFX11-NEXT:    s_mov_b32 s0, gv@abs32@lo
 ; GFX11-NEXT:    s_mov_b32 s1, gv@abs32@hi
+; GFX11-NEXT:    s_mov_b32 s0, gv@abs32@lo
 ; GFX11-NEXT:  .LBB1_2: ; %join
 ; GFX11-NEXT:    ; return to shader part epilog
 entry:

@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.03--amdhsa < %s | FileCheck %s
+; RUN: llc -mtriple=amdgpu8.03--amdhsa < %s | FileCheck %s
 
 ; Exactly 1 wave per execution unit.
 ; CHECK-LABEL: {{^}}empty_exactly_1:
@@ -119,7 +119,7 @@ attributes #8 = {"amdgpu-waves-per-eu"="5,10"}
 ; CHECK: SGPRBlocks: 3
 ; CHECK: VGPRBlocks: 5
 ; CHECK: NumSGPRsForWavesPerEU: 30
-; CHECK: NumVGPRsForWavesPerEU: 21
+; CHECK: NumVGPRsForWavesPerEU: 24
 define amdgpu_kernel void @exactly_10() #9 {
   %val0 = load volatile float, ptr addrspace(1) @var
   %val1 = load volatile float, ptr addrspace(1) @var

@@ -1,11 +1,11 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 < %s | FileCheck -strict-whitespace -check-prefix=SI -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 -mattr=-flat-for-global < %s | FileCheck -strict-whitespace -check-prefix=VI -check-prefix=GCN %s
+; RUN: llc -mtriple=amdgpu6.00 < %s | FileCheck -strict-whitespace -check-prefix=SI -check-prefix=GCN %s
+; RUN: llc -mtriple=amdgpu8.02 -mattr=-flat-for-global < %s | FileCheck -strict-whitespace -check-prefix=VI -check-prefix=GCN %s
 
 ; Make sure there isn't an extra space between the instruction name and first operands.
 
 ; GCN-LABEL: {{^}}add_f32:
-; SI: s_load_dword [[SREGB:s[0-9]+]], s{{\[[0-9]+:[0-9]+\]}}, 0x13
 ; SI: s_load_dword [[SREGA:s[0-9]+]], s{{\[[0-9]+:[0-9]+\]}}, 0x1c
+; SI: s_load_dword [[SREGB:s[0-9]+]], s{{\[[0-9]+:[0-9]+\]}}, 0x13
 ; SI: v_mov_b32_e32 [[VREGA:v[0-9]+]], [[SREGA]]
 ; SI: v_add_f32_e32 [[RESULT:v[0-9]+]], [[SREGB]], [[VREGA]]
 

@@ -6,29 +6,29 @@ define amdgpu_ps float @uniform_kill(float %a, i32 %b, float %c) {
 ; SI-LABEL: uniform_kill:
 ; SI:       ; %bb.0: ; %entry
 ; SI-NEXT:    v_cvt_i32_f32_e32 v0, v0
-; SI-NEXT:    s_mov_b64 s[2:3], -1
+; SI-NEXT:    s_mov_b64 s[4:5], -1
 ; SI-NEXT:    s_mov_b64 s[0:1], exec
 ; SI-NEXT:    v_or_b32_e32 v0, v1, v0
 ; SI-NEXT:    v_and_b32_e32 v0, 1, v0
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[2:3]
 ; SI-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; SI-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[4:5]
 ; SI-NEXT:    s_mov_b64 exec, s[2:3]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB0_2
 ; SI-NEXT:  .LBB0_1: ; %if1
 ; SI-NEXT:    s_mov_b64 s[2:3], 0
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[2:3]
+; SI-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[2:3]
 ; SI-NEXT:  .LBB0_2: ; %endif1
 ; SI-NEXT:    s_or_b64 exec, exec, vcc
-; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; SI-NEXT:    s_wqm_b64 s[2:3], vcc
 ; SI-NEXT:    s_andn2_b64 s[2:3], exec, s[2:3]
 ; SI-NEXT:    s_andn2_b64 s[0:1], s[0:1], s[2:3]
 ; SI-NEXT:    s_cbranch_scc0 .LBB0_6
 ; SI-NEXT:  ; %bb.3: ; %endif1
 ; SI-NEXT:    s_and_b64 exec, exec, s[0:1]
-; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; SI-NEXT:    v_mov_b32_e32 v0, 0
 ; SI-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; SI-NEXT:    s_mov_b64 exec, vcc
@@ -57,29 +57,29 @@ define amdgpu_ps float @uniform_kill(float %a, i32 %b, float %c) {
 ; FLAT-LABEL: uniform_kill:
 ; FLAT:       ; %bb.0: ; %entry
 ; FLAT-NEXT:    v_cvt_i32_f32_e32 v0, v0
-; FLAT-NEXT:    s_mov_b64 s[2:3], -1
+; FLAT-NEXT:    s_mov_b64 s[4:5], -1
 ; FLAT-NEXT:    s_mov_b64 s[0:1], exec
 ; FLAT-NEXT:    v_or_b32_e32 v0, v1, v0
 ; FLAT-NEXT:    v_and_b32_e32 v0, 1, v0
 ; FLAT-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[2:3]
 ; FLAT-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; FLAT-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[4:5]
 ; FLAT-NEXT:    s_mov_b64 exec, s[2:3]
 ; FLAT-NEXT:    ; divergent control-flow edge
 ; FLAT-NEXT:    s_cbranch_execz .LBB0_2
 ; FLAT-NEXT:  .LBB0_1: ; %if1
 ; FLAT-NEXT:    s_mov_b64 s[2:3], 0
-; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[2:3]
+; FLAT-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[2:3]
 ; FLAT-NEXT:  .LBB0_2: ; %endif1
 ; FLAT-NEXT:    s_or_b64 exec, exec, vcc
-; FLAT-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+; FLAT-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; FLAT-NEXT:    s_wqm_b64 s[2:3], vcc
 ; FLAT-NEXT:    s_andn2_b64 s[2:3], exec, s[2:3]
 ; FLAT-NEXT:    s_andn2_b64 s[0:1], s[0:1], s[2:3]
 ; FLAT-NEXT:    s_cbranch_scc0 .LBB0_6
 ; FLAT-NEXT:  ; %bb.3: ; %endif1
 ; FLAT-NEXT:    s_and_b64 exec, exec, s[0:1]
-; FLAT-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+; FLAT-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; FLAT-NEXT:    v_mov_b32_e32 v0, 0
 ; FLAT-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; FLAT-NEXT:    s_mov_b64 exec, vcc

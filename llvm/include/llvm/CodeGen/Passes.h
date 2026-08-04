@@ -206,8 +206,7 @@ LLVM_ABI extern char &RABasicID;
 /// VirtRegRewriter pass. Rewrite virtual registers to physical registers as
 /// assigned in VirtRegMap.
 LLVM_ABI extern char &VirtRegRewriterID;
-LLVM_ABI FunctionPass *createVirtRegRewriter(bool ClearVirtRegs = true,
-                                             bool PreserveVRM = false);
+LLVM_ABI FunctionPass *createVirtRegRewriter(bool ClearVirtRegs = true);
 
 /// UnreachableMachineBlockElimination - This pass removes unreachable
 /// machine basic blocks.

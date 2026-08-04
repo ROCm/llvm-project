@@ -367,8 +367,8 @@ define i32 @needs_align1024_stack_args_used_inside_loop(ptr addrspace(5) nocaptu
 ; GCN-NEXT:    ; in Loop: Header=BB10_1 Depth=1
 ; GCN-NEXT:    s_add_i32 s6, s6, 1
 ; GCN-NEXT:    v_add_u32_e32 v1, vcc, 4, v1
-; GCN-NEXT:    v_mov_b32_e32 v0, 1
 ; GCN-NEXT:    s_cmp_eq_u32 s6, 9
+; GCN-NEXT:    v_mov_b32_e32 v0, 1
 ; GCN-NEXT:    s_cbranch_scc0 .LBB10_1
 ; GCN-NEXT:  .LBB10_3: ; %exit
 ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
@@ -680,5 +680,5 @@ attributes #1 = { noinline nounwind "stackrealign" }
 attributes #2 = { noinline nounwind alignstack=4 }
 attributes #3 = { noinline nounwind "no-realign-stack" }
 attributes #4 = { noinline nounwind "frame-pointer"="all"}
-attributes #5 = { noinline nounwind "amdgpu-waves-per-eu"="1,6" }
+attributes #5 = { noinline nounwind "amdgpu-waves-per-eu"="6,6" }
 attributes #6 = { nounwind }
