@@ -26,8 +26,8 @@ using namespace llvm;
 /// If Op is not a frame index and MI is already a DBG_VALUE_LIST, adds Reg
 /// as an additional operand.
 ///
-static MachineOperand *
-addOrReplaceFrameIndexOp(MachineInstr &MI, MachineOperand *Op, Register Reg) {
+static MachineOperand *ensureDebugRegOperand(MachineInstr &MI,
+                                             MachineOperand *Op, Register Reg) {
   if (Op->isFI()) {
     Op->ChangeToRegister(Reg, /*isDef=*/false);
     return Op;
@@ -157,7 +157,7 @@ void llvm::updateDbgValueForSISpill(MachineFunction &MF, MachineInstr &MI,
       const SIMachineFunctionInfo::VGPRSpillToAGPR &Spill =
           FuncInfo->getVGPRToAGPRSpill(MO->getIndex());
       for (MCPhysReg Reg : Spill.Lanes) {
-        MO = addOrReplaceFrameIndexOp(MI, MO, Reg);
+        MO = ensureDebugRegOperand(MI, MO, Reg);
         unsigned ArgNo = MI.getDebugOperandIndex(MO);
         Type *ArgTy = Spill.Lanes.size() == 1 ? TypeDeref : TypeIntLane;
         Builder.append(DIOp::Arg(ArgNo, ArgTy));
@@ -171,7 +171,7 @@ void llvm::updateDbgValueForSISpill(MachineFunction &MF, MachineInstr &MI,
       ArrayRef<SIRegisterInfo::SpilledReg> VGPRSpills =
           FuncInfo->getSGPRSpillToVirtualVGPRLanes(MO->getIndex());
       for (const SIRegisterInfo::SpilledReg &Spill : VGPRSpills) {
-        MO = addOrReplaceFrameIndexOp(MI, MO, Spill.VGPR);
+        MO = ensureDebugRegOperand(MI, MO, Spill.VGPR);
         unsigned ArgNo = MI.getDebugOperandIndex(MO);
         ConstantData *C =
             ConstantInt::get(TypeInt32, Spill.Lane * VGPRLaneSize / 8);
