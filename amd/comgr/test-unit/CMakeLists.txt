@@ -138,4 +138,13 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:LoggerTests>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapProfileTests
   RaiserScaffoldingTests DemangleSymbolNameTest LoggerTests)
+
+# DecoderTests builds only when the hotswap decoder library is present
+# (COMGR_ENABLE_HOTSWAP_TRANSPILE); run it under test-unit when it does.
+if(TARGET DecoderTests)
+  add_custom_command(TARGET test-unit POST_BUILD
+    COMMAND $<TARGET_FILE:DecoderTests>)
+  add_dependencies(test-unit DecoderTests)
+endif()
+
 add_dependencies(check-comgr test-unit)
