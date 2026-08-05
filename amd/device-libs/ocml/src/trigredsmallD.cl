@@ -30,7 +30,7 @@ MATH_PRIVATE(trigredsmall)(double x)
     struct redret ret;
     ret.hi = rh;
     ret.lo = rt;
-    ret.i = (int)dn & 0x3;
+    ret.i = BUILTIN_ISNAN_F64(dn) ? 0 : ((int)dn & 0x3);
     return ret;
 }
 

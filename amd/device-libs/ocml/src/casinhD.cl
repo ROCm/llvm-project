@@ -24,7 +24,7 @@ MATH_MANGLE(casinh)(double2 z)
     bool b = true;
 
     if (x < 0x1.0p+54 && y < 0x1.0p+54) {
-        if (y >= 1.0 || x >= 0x1.0p-53 || x > (1.0 - y)*0x1.0p-26f) {
+        if (y >= 1.0 || x >= 0x1.0p-53 || x > (1.0 - y)*0x1.0p-26) {
             double4 z2p1 = (double4)(add(mul(add(x,y), sub(x,y)), 1.0), mul(y,x)*2.0);
             double4 rz2p1 = MATH_PRIVATE(epcsqrtep)(z2p1);
             double4 s = (double4)(add(rz2p1.lo, x), add(rz2p1.hi, y));
@@ -58,6 +58,7 @@ MATH_MANGLE(casinh)(double2 z)
     if (!FINITE_ONLY_OPT()) {
         double i = BUILTIN_COPYSIGN_F64(PINF_F64, z.x);
         rr = (BUILTIN_ISINF_F64(z.x) | BUILTIN_ISINF_F64(z.y)) ? i : rr;
+        ri = (z.y == 0.0) ? z.y : ri;
     }
 
     return (double2)(rr, ri);

@@ -2238,6 +2238,7 @@ public:
   const TargetCodeGenInfo &getTargetHooks() const {
     return CGM.getTargetCodeGenInfo();
   }
+  const FunctionDecl *getCurrentFunctionDecl() const;
 
   //===--------------------------------------------------------------------===//
   //                                  Cleanups
@@ -4684,6 +4685,12 @@ public:
                   llvm::CallBase **CallOrInvoke = nullptr,
                   CGFunctionInfo const **ResolvedFnInfo = nullptr);
 
+  // Emits code for a direct call to the variadic function _emissary_exec:
+  // allocates an arg buffer, packs each _emissary_exec argument with its type,
+  // and calls the __llvm_emissary_rpc RPC utilities. Defined in
+  // CGEmitEmissaryExec.cpp.
+  RValue EmitEmissaryExec(const CallExpr *E);
+
   // If a Call or Invoke instruction was emitted for this CallExpr, this method
   // writes the pointer to `CallOrInvoke` if it's not null.
   RValue EmitCallExpr(const CallExpr *E,
@@ -4864,8 +4871,6 @@ public:
                                        ReturnValueSlot ReturnValue);
   RValue EmitAMDGPUDevicePrintfCallExpr(const CallExpr *E,
                                         ReturnValueSlot ReturnValue);
-
-  RValue EmitEmissaryExec(const CallExpr *E);
 
   RValue EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
                          const CallExpr *E, ReturnValueSlot ReturnValue);

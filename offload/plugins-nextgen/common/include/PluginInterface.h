@@ -69,6 +69,7 @@ struct GenericPluginTy;
 struct GenericKernelTy;
 struct GenericDeviceTy;
 struct KernelRunRecordTy;
+struct PluginContextTy;
 template <typename ResourceRef> class GenericDeviceResourceManagerTy;
 
 namespace Plugin {
@@ -431,7 +432,7 @@ public:
 /// implement the necessary virtual function members.
 struct GenericKernelTy {
   /// Construct a kernel with a name and a execution mode.
-  GenericKernelTy(const char *Name)
+  GenericKernelTy(StringRef Name)
       : Name(Name), PreferredNumThreads(0), MaxNumThreads(0) {}
 
   virtual ~GenericKernelTy() {}
@@ -924,6 +925,30 @@ public:
   }
 };
 
+/// A plugin-side context grouping a set of devices. Plugins that need to hold
+/// native context state (e.g. Level Zero's ze_context_handle_t) override this
+/// through GenericPluginTy::createPluginContext. The base class is a plain
+/// device set used by plugins that do not need native context state.
+struct PluginContextTy {
+  PluginContextTy(GenericPluginTy &Plugin,
+                  llvm::ArrayRef<GenericDeviceTy *> Devices)
+      : Plugin(Plugin), Devices(Devices.begin(), Devices.end()) {}
+
+  PluginContextTy(const PluginContextTy &) = delete;
+  PluginContextTy &operator=(const PluginContextTy &) = delete;
+  PluginContextTy(PluginContextTy &&) = delete;
+  PluginContextTy &operator=(PluginContextTy &&) = delete;
+
+  virtual ~PluginContextTy() = default;
+
+  llvm::ArrayRef<GenericDeviceTy *> getDevices() const { return Devices; }
+  GenericPluginTy &getPlugin() const { return Plugin; }
+
+protected:
+  GenericPluginTy &Plugin;
+  llvm::SmallVector<GenericDeviceTy *> Devices;
+};
+
 /// Class implementing common functionalities of offload devices. Each plugin
 /// should define the specific device class, derive from this generic one, and
 /// implement the necessary virtual function members.
@@ -1357,9 +1382,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   virtual Error getDeviceStackSize(uint64_t &V) = 0;
 
-  /// Allocate and construct a kernel object.
-  virtual Expected<GenericKernelTy &> constructKernel(const char *Name) = 0;
-
   virtual bool hasDeviceHeapSize() { return false; }
   virtual Error getDeviceHeapSize(uint64_t &V) {
     return Plugin::error(error::ErrorCode::UNSUPPORTED,
@@ -1415,6 +1437,9 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
                                                  interop_spec_t *Prefers) {
     return interop_spec_t{tgt_fr_none, {false, 0}, 0};
   }
+
+  /// Allocate and construct a kernel object.
+  virtual Expected<GenericKernelTy &> constructKernel(StringRef Name) = 0;
 
   /// Reference to the underlying plugin that created this device.
   GenericPluginTy &Plugin;
@@ -1903,6 +1928,15 @@ struct GenericPluginTy {
 
   /// Return a pointer to the profiler instance
   GenericProfilerTy *getProfiler() const { return Profiler.get(); }
+
+  /// Create a plugin-side context grouping the given devices. The default
+  /// implementation returns a plain PluginContextTy that only tracks the
+  /// device set. Plugins that own native context state (e.g. Level Zero)
+  /// override this to instantiate a plugin-specific subclass.
+  virtual Expected<std::unique_ptr<PluginContextTy>>
+  createPluginContext(llvm::ArrayRef<GenericDeviceTy *> Devices) {
+    return std::make_unique<PluginContextTy>(*this, Devices);
+  }
 
 protected:
   /// Indicate whether a device id is valid.

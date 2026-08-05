@@ -27,7 +27,6 @@ set(src_files
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Xteams.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/DeviceMemInit.cpp
-
 )
 # Only link AMD ockl/ocml device libraries when actually building for AMDGCN.
 # The previous condition checked LLVM_TARGETS_TO_BUILD which includes all backends

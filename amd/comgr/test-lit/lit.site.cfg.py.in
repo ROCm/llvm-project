@@ -11,7 +11,8 @@ config.comgr_spirv_backend_available = @COMGR_SPIRV_BACKEND_AVAILABLE@
 config.comgr_spirv_translator_available = @COMGR_SPIRV_TRANSLATOR_AVAILABLE@
 config.comgr_amdgpu_target_available = @COMGR_AMDGPU_TARGET_AVAILABLE@
 
-config.llvm_tools_dir = _fwd(r'@LLVM_TOOLS_BINARY_DIR@')
+config.llvm_tools_dir = _fwd(r'@COMGR_LIT_LLVM_TOOLS_DIR@')
+config.llvm_root = _fwd(os.path.dirname(config.llvm_tools_dir))
 config.comgr_obj_dir = config.my_obj_root
 config.comgr_lib_dir = _fwd(os.path.dirname(config.my_obj_root))
 
@@ -22,6 +23,13 @@ config.environment['PATH'] = os.pathsep.join([config.llvm_tools_dir,
 # Needed for amd_comgr shared library (DLL on Windows)
 config.environment['PATH'] = os.pathsep.join([config.comgr_lib_dir,
                                               config.environment['PATH']])
+if os.name != "nt":
+    config.environment['LD_LIBRARY_PATH'] = os.pathsep.join([
+        config.comgr_lib_dir, config.environment.get('LD_LIBRARY_PATH', '')])
+
+# Needed for Comgr resource-directory lookup.
+config.environment['LLVM_PATH'] = config.environment.get('LLVM_PATH',
+                                                         config.llvm_root)
 
 # Needed for Comgr test binaries
 config.environment['PATH'] = os.pathsep.join([config.comgr_obj_dir,

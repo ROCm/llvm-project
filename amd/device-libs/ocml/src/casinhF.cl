@@ -58,6 +58,7 @@ MATH_MANGLE(casinh)(float2 z)
     if (!FINITE_ONLY_OPT()) {
         float i = BUILTIN_COPYSIGN_F32(PINF_F32, z.x);
         rr = (BUILTIN_ISINF_F32(z.x) | BUILTIN_ISINF_F32(z.y)) ? i : rr;
+        ri = (z.y == 0.0f) ? z.y : ri;
     }
 
     return (float2)(rr, ri);

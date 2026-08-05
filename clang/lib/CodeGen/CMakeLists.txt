@@ -64,7 +64,6 @@ add_clang_library(clangCodeGen
   CGAtomic.cpp
   CGBlocks.cpp
   CGBuiltin.cpp
-  CGEmitEmissaryExec.cpp
   CGCUDANV.cpp
   CGCUDARuntime.cpp
   CGCXX.cpp
@@ -76,6 +75,7 @@ add_clang_library(clangCodeGen
   CGDebugInfo.cpp
   CGDecl.cpp
   CGDeclCXX.cpp
+  CGEmitEmissaryExec.cpp
   CGException.cpp
   CGExpr.cpp
   CGExprAgg.cpp
