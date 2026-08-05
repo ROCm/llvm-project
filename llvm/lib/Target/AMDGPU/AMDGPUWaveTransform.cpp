@@ -2152,11 +2152,12 @@ static void fixMissingDominatingDefs(MachineFunction &MF,
       if (UseMO.isUndef())
         continue;
 
-      MachineBasicBlock *UseBlock = UseMO.getParent()->getParent();
+      MachineInstr *UseMI = UseMO.getParent();
+      MachineBasicBlock *UseBlock = UseMI->getParent();
 
       bool AnyDefDominates =
-          llvm::any_of(DefBlocks, [&](MachineBasicBlock *DB) {
-            return DB == UseBlock || DomTree.dominates(DB, UseBlock);
+          llvm::any_of(MRI.def_operands(Reg), [&](MachineOperand &DefMO) {
+            return DomTree.dominates(DefMO.getParent(), UseMI);
           });
 
       if (!AnyDefDominates) {
