@@ -4089,10 +4089,6 @@ public:
     /// Return the number of elements in the operand (1 + args).
     LLVM_ABI unsigned getSize() const;
 
-    /// Return true if CodeGen handles this operand without adding bytes to the
-    /// DWARF expression.
-    LLVM_ABI bool isNonEmitting() const;
-
     /// Append the elements of this operand to \p V.
     void appendToVector(SmallVectorImpl<uint64_t> &V) const {
       V.append(get(), get() + getSize());
