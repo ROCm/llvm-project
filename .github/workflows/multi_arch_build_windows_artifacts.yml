@@ -47,11 +47,23 @@ on:
         required: true
         description: "ROCm package version string"
       release_type:
-        description: 'Release type: "" for CI, or "dev", "nightly", "prerelease". Controls artifact bucket and IAM role.'
+        description: 'Release type; controls artifact bucket and IAM role'
         type: string
         default: ci
       test_type:
+        type: string        
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
         type: string
+        default: ""
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+        default: ""
+      external_repo_config:
+        description: "JSON config for external repo checkout (repository, ref, checkout_path, source_package, fetch_sources_args)"
+        type: string
+        default: ""
 
 jobs:
   build_stage:
@@ -71,155 +83,30 @@ jobs:
       CACHE_DIR: ${{ github.workspace }}/.cache
       TEATIME_FORCE_INTERACTIVE: 0
       RELEASE_TYPE: ${{ inputs.release_type }}
+      EXTERNAL_FETCH_SOURCES_ARGS: ${{ inputs.external_repo_config != '' && fromJSON(inputs.external_repo_config).fetch_sources_args || '' }}
 
     steps:
+      # Enable git longpaths before checkout (needed for external repos with long paths)
+      - name: Enable git longpaths
+        if: ${{ inputs.external_repo_config != '' }}
+        run: git config --system core.longpaths true
+
       - name: Checkout Repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
-      
-      - name: Update Submodule Pointer to the PR
-        if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          git config --global --add safe.directory $PWD
-          # Fetch the latest commit SHA from the PR branch
-          PR_SHA=${{ github.event.pull_request.head.sha }}
-          # Update the submodule pointer using cacheinfo
-          git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
-          git commit -m "Update submodule reference for compiler/amd-llvm"
-          git submodule update --init --recursive compiler/amd-llvm
-          # Verify the pointer update
-          git submodule status
-          git submodule
 
-      - name: Update Submodule Pointer at compiler/amd-llvm for manual debug
-        if: ${{ github.event_name != 'pull_request' && github.workflow == 'ROCK CI Windows Debug Support' }}
-        run: |
-          git config --global --add safe.directory $PWD
-          echo "sha: $GITHUB_SHA"
-          # Update the submodule pointer using cacheinfo
-          git update-index --cacheinfo 160000,$GITHUB_SHA,compiler/amd-llvm
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
-          git commit -m "Update submodule reference for compiler/amd-llvm using branch SHA"
-          # Verify the pointer update
-          git submodule update --init --recursive compiler/amd-llvm          
-          git submodule status
-          git submodule
-
-      - name: Download LLVM, SPIRV and HIPIFY PR's stored in file
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        continue-on-error: true
-        uses: actions/download-artifact@v4
+      - name: Checkout external repository
+        if: ${{ inputs.external_repo_config != '' }}
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          name: multiple-pr-build-params
-          path: .
+          repository: ${{ fromJSON(inputs.external_repo_config).repository }}
+          ref: ${{ fromJSON(inputs.external_repo_config).ref }}
+          path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
-      - name: Check for parameterised PR trigger
-        id: check_parameterised_trigger
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          if [ -f "./${{ github.run_id }}_PR_params.env" ]; then
-            echo "parameterised_trigger=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "parameterised_trigger=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Source the multiple PR's of params
-        if: ${{ github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true' }}
-        run: |
-          set -a
-          source ./${{ github.run_id }}_PR_params.env
-          set +a
-          echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
-          echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
-          echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
-          echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
-
-      - name: Update submodule pointers from provided parameter PR values
-        if: ${{ github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true' }}
-        run: |
-          git config --global --add safe.directory "$PWD"
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
-
-          trim_sha() {
-             printf '%s' "$1" | tr -d '[:space:]'
-          }
-          # Function to get SHA with git-ls
-          get_pr_sha() {
-             local pr_url="$1"
-             local base_repo_url=$(echo "$pr_url" | sed 's|/pull/.*||')
-             local pr_num=$(echo "$pr_url" | sed 's|.*/pull/||')
-             sha=$(git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}')
-             trim_sha "$sha"
-          }
-
-          merge_upstream_prs() {
-             local pr_urls="$1"
-             local url repo num ref
-             git submodule update --init --jobs 1 compiler/amd-llvm
-             IFS=',' read -ra PR_URLS <<< "$pr_urls"
-             for url in "${PR_URLS[@]}"; do
-               url="$(echo "$url" | xargs)"
-               [[ -z "$url" ]] && continue
-               repo="$(echo "$url" | sed 's|/pull/.*||')"
-               num="$(echo "$url" | sed 's|.*/pull/||')"
-               ref="upstream-pr-${num}"
-               echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
-               git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
-               git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
-                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
-                 exit 1
-               }
-             done
-             MERGED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
-          }
-
-          LLVM_SHA=""
-
-          # LLVM PR based on if its ROCm or Trunk
-          if [[ -n "$LLVM_ROCm_PR_URL" ]]; then
-              LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
-              echo "ROCm LLVM head SHA: $LLVM_SHA"
-          elif [[ -n "$LLVM_PR_URL" ]]; then
-              merge_upstream_prs "$LLVM_PR_URL"
-              LLVM_SHA="$MERGED_LLVM_SHA"
-              echo "Final upstream LLVM SHA: $LLVM_SHA" >&2
-          fi
-
-          if [[ -n "$LLVM_SHA" ]]; then
-              git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
-          fi
-               
-          # SPIRV PR
-          if [[ -n "$SPIRV_PR_URL" ]]; then
-              SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
-              echo "SPIRV head SHA: $SPIRV_SHA"
-              git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
-          else
-              SPIRV_SHA="$(git ls-remote https://github.com/ROCm/SPIRV-LLVM-Translator.git refs/heads/amd-staging | awk '{print $1}')"
-              echo "SPIRV PR NOT Passed, defaulting to the amd-staging tip : $SPIRV_SHA"
-              git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
-          fi
-
-          # HIPIFY PR
-          if [[ -n "$HIPIFY_PR_URL" ]]; then
-              HIPIFY_SHA="$(get_pr_sha "$HIPIFY_PR_URL")"
-              echo "HIPIFY head SHA: $HIPIFY_SHA"
-              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
-          else
-              HIPIFY_SHA="$(git ls-remote https://github.com/ROCm/HIPIFY.git refs/heads/amd-staging | awk '{print $1}')"
-              echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
-              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
-          fi
-          git commit -m "Update submodule references from PR URLs"
-          git submodule update --init --recursive compiler/amd-llvm          
-          git submodule status
-          git submodule
+      - name: Submodule PR update (covers parameterised and PR creation)
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd-staging
 
       - name: "Map Current Directory to L Drive"
         id: subst
@@ -238,12 +125,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install python deps
-        run: |
-          pip install -r requirements.txt
-          pip install --upgrade \
-              "boto3>=1.42.79,<1.42.85" \
-              "botocore>=1.42.79,<1.42.85" \
-               "aiobotocore>=3.4.0"
+        run: pip install -r requirements.txt
 
       - name: Install requirements
         run: |
@@ -274,63 +156,19 @@ jobs:
         run: |
           python build_tools/health_status.py
 
-      - name: Remove unused existing patches
-        run: |
-          rm -fv patches/amd-mainline/llvm-project/0003-HACK-Handle-ROCM-installation-layout-of-lib-llvm-bin.patch
-          rm -fv patches/amd-mainline/llvm-project/0009-Add-gcc-toolset-13-prefix-detection.patch
-          rm -fv patches/amd-mainline/llvm-project/0001-Ensure-to-use-libamdhip64-with-major-version.patch
-
-      - name: Fix LLVM test variable mismatch
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-          sed -i 's/THEROCK_ENABLE_LLVM_TESTS/THEROCK_BUILD_LLVM_TESTS/g' \
-            cmake/therock_subproject.cmake compiler/CMakeLists.txt
-
-      - name: Auto-forward THEROCK_BUILD_COMGR_TESTS to subprojects
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-          sed -i '/^  THEROCK_BUILD_TESTING$/a\  THEROCK_BUILD_COMGR_TESTS' \
-            cmake/therock_subproject.cmake
-
-      - name: Enable COMGR tests via THEROCK_BUILD_TESTING fallback
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-          sed -i 's/if(THEROCK_BUILD_COMGR_TESTS)/if(THEROCK_BUILD_COMGR_TESTS OR THEROCK_BUILD_TESTING)/' \
-            compiler/pre_hook_amd-comgr.cmake
-
-      - name: Remove llvm-lit install/wrapper code (fails on Windows)
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-          sed -i '/Install llvm-lit script/,/^  ")/d' \
-            compiler/pre_hook_amd-llvm.cmake
-
-      - name: Skip hip-tests on Windows (ROCm root not available)
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-          sed -i '/^if(THEROCK_BUILD_TESTING)/,/^endif(THEROCK_BUILD_TESTING)/d' \
-            core/CMakeLists.txt
-
-      - name: Re-enable selective tool disable when only COMGR tests are on
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-          sed -i 's/ AND NOT THEROCK_BUILD_COMGR_TESTS//' \
-            compiler/pre_hook_amd-llvm.cmake
-
-      #- name: Setup ccache
-      #  run: |
-      #    ./build_tools/setup_ccache.py \
-      #      --release-type "${{ inputs.release_type }}" \
-      #      --dir "$(dirname $CCACHE_CONFIGPATH)" \
-      #      --local-path "$CACHE_DIR/ccache"
+      - name: Windows build and test hot fixes
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/windows-patches@amd-staging
+        with:
+          stage_name: ${{ inputs.stage_name }}
 
       - name: Setup ccache
         run: |
           python ./build_tools/setup_ccache.py \
-            --config-preset "github-oss-dev" \
+            --release-type "${{ inputs.release_type }}" \
             --dir "$(dirname $CCACHE_CONFIGPATH)" \
             --local-path "$CACHE_DIR/ccache" \
             --log-dir "${BUILD_DIR}/logs/ccache"
-          
+
       # Note: no AWS credentials should be needed here since our CI buckets
       # all currently have public read access.
       - name: Fetch inbound artifacts
@@ -348,11 +186,11 @@ jobs:
           cd L:
           git config fetch.parallel 10
           git config --global core.symlinks true
-          git config --global core.longpaths true          
-          python build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
+          git config --global core.longpaths true
+          python build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1 ${EXTERNAL_FETCH_SOURCES_ARGS}
 
       - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
+        if: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full')) && inputs.stage_name == 'compiler-runtime' }}
         run: |
              git config --global --add safe.directory $PWD
              git log --oneline -1
@@ -361,7 +199,7 @@ jobs:
              ls -l
              git log --oneline -3
              cd -
-
+ 
       - name: Get stage configuration
         id: stage_config
         run: |
@@ -386,7 +224,7 @@ jobs:
             Set-Content -Path $file -Value $updated -NoNewline
             Write-Host "Patched: $file"
           }
-          
+
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
@@ -399,10 +237,11 @@ jobs:
           cd L:
           ccache -z
           cmake -B 'B:\build' -S 'L:\' -GNinja \
+            --preset=${{ inputs.build_variant_cmake_preset }} \
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
+            ${{ inputs.external_repo_config != '' && format('-DTHEROCK_{0}_SOURCE_DIR={1}', fromJSON(inputs.external_repo_config).source_package, fromJSON(inputs.external_repo_config).checkout_path) || '' }} \
             ${{ steps.stage_config.outputs.cmake_args }} \
             ${{ env.extra_cmake_options }} \
             ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
@@ -419,20 +258,20 @@ jobs:
           cd L:
           ccache -z
           cmake -B 'B:\build' -S 'L:\' -GNinja \
+            --preset=${{ inputs.build_variant_cmake_preset }} \
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DTHEROCK_AMDGPU_FAMILIES=gfx1151 \
             -DTHEROCK_BACKGROUND_BUILD_JOBS=4 \
-            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
+            ${{ inputs.external_repo_config != '' && format('-DTHEROCK_{0}_SOURCE_DIR={1}', fromJSON(inputs.external_repo_config).source_package, fromJSON(inputs.external_repo_config).checkout_path) || '' }} \
             ${{ steps.stage_config.outputs.cmake_args }} \
             ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
 
       - name: Build stage
         run: |
           cd L:
-          python build_tools/memory_monitor.py --phase Build -- \
-            cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
+          cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
 
       - name: COMGR Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
@@ -443,8 +282,17 @@ jobs:
 
       - name: COMGR CTest
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         run: |
           ctest --test-dir "${BUILD_DIR}"/compiler/amd-comgr/build --output-on-failure
+ 
+      - name: Run build tests
+        if: ${{ !cancelled() && inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: true
+        env:
+          TEATIME_FORCE_INTERACTIVE: 1
+        run: |
+          cmake --build "${BUILD_DIR}" --target therock-build-tests -- -k 0
 
       - name: Report
         if: ${{ !cancelled() }}
@@ -454,29 +302,27 @@ jobs:
           echo "Artifacts:"
           ls -lh "${BUILD_DIR}"/artifacts/*.tar.xz 2>/dev/null || echo "No artifacts found"
 
+      # TODO(scotttodd): enable once these tests pass
+      #     therock-examples-cpp-sdk-user can't find hipsparselt-config.cmake
+      # - name: Test Packaging
+      #   run: |
+      #     ctest --test-dir ${BUILD_DIR} --output-on-failure
 
-      #- name: Configure AWS credentials for artifact uploads
-      #  if: ${{ always() }}
-      #  uses: ./.github/actions/configure_aws_artifacts_credentials
-      #  with:
-      #    release_type: ${{ inputs.release_type }}
-
-      - name: Configure AWS Credentials for artifact upload - temp
+      - name: Configure AWS credentials for artifact uploads
         if: ${{ github.repository == 'ROCm/TheRock' }}
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        uses: ./.github/actions/configure_aws_artifacts_credentials
         with:
-          aws-region: us-east-2
-          role-to-assume: arn:aws:iam::692859939525:role/therock-ci-external
-          
+          release_type: ${{ inputs.release_type }}
+
       # TODO(#3336): Attempt upload `always()`?
       #   * If some part of the build failed, partial artifacts may be useful for debugging.
       #   * This script fails if `build_dir / "artifacts"` does not exist. That's useful
       #     if the build succeeded but did not produce artifacts. That's _not_ useful
       #     if the workflow failed or was cancelled before the build even started though.
-
       - name: Push stage artifacts
         run: |
-          python build_tools/artifact_manager.py push --run-id ${{ github.run_id }} \
+          python build_tools/artifact_manager.py push \
+            --run-id ${{ github.run_id }} \
             --stage="${STAGE_NAME}" \
             --build-dir="${BUILD_DIR}"
 

@@ -747,7 +747,7 @@ private:
 /// generic kernel class.
 struct AMDGPUKernelTy : public GenericKernelTy {
   /// Create an AMDGPU kernel with a name and an execution mode.
-  AMDGPUKernelTy(const char *Name, GenericGlobalHandlerTy &Handler)
+  AMDGPUKernelTy(StringRef Name, GenericGlobalHandlerTy &Handler)
       : GenericKernelTy(Name),
         OMPX_SPMDOccupancyBasedOpt("OMPX_SPMD_OCCUPANCY_BASED_OPT", false),
         OMPX_GenericSPMDOccupancyBasedOpt(
@@ -3910,7 +3910,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   }
 
   /// Allocate and construct an AMDGPU kernel.
-  Expected<GenericKernelTy &> constructKernel(const char *Name) override {
+  Expected<GenericKernelTy &> constructKernel(StringRef Name) override {
     // Allocate and construct the AMDGPU kernel.
     AMDGPUKernelTy *AMDGPUKernel = Plugin.allocate<AMDGPUKernelTy>();
     if (!AMDGPUKernel)
@@ -4725,7 +4725,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     Status = getDeviceAttrRaw(HSA_AGENT_INFO_WAVEFRONT_SIZE, TmpUInt2);
     if (Status == HSA_STATUS_SUCCESS)
-      Info.add("Wavefront Size", TmpUInt2);
+      Info.add("Number of Lanes", TmpUInt2, "", DeviceInfo::NUM_LANES);
 
     Status = getDeviceAttrRaw(HSA_AGENT_INFO_WORKGROUP_MAX_SIZE, TmpUInt);
     if (Status == HSA_STATUS_SUCCESS)
@@ -5884,6 +5884,35 @@ struct AMDGPUGlobalHandlerTy final : public GenericGlobalHandlerTy {
     DeviceGlobal.setSize(SymbolSize);
 
     return Plugin::success();
+  }
+
+protected:
+  /// Kernels are represented by a kernel descriptor, which is an object named
+  /// after the function it describes with a '.kd' suffix.
+  std::optional<StringRef> matchSymbol(const ELFSymbolRef &Symbol,
+                                       StringRef Name,
+                                       SymbolKindTy Kind) override {
+    if (Symbol.getELFType() != ELF::STT_OBJECT)
+      return std::nullopt;
+
+    StringRef Function = Name;
+    bool IsDescriptor =
+        Function.consume_back(".kd") && isFunction(Symbol, Function);
+    if (IsDescriptor != (Kind == SymbolKindTy::Kernel))
+      return std::nullopt;
+
+    return IsDescriptor ? Function : Name;
+  }
+
+private:
+  /// Returns whether \p Name is a function in the image containing \p Symbol.
+  static bool isFunction(const ELFSymbolRef &Symbol, StringRef Name) {
+    auto SymbolOrErr = utils::elf::getSymbol(*Symbol.getObject(), Name);
+    if (!SymbolOrErr) {
+      consumeError(SymbolOrErr.takeError());
+      return false;
+    }
+    return *SymbolOrErr && (*SymbolOrErr)->getELFType() == ELF::STT_FUNC;
   }
 };
 

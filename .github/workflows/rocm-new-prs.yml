@@ -26,7 +26,6 @@ jobs:
     # notifications.
     if: >
       github.repository == 'ROCm/llvm-project' &&
-      github.event.pull_request.draft == false &&
       github.event.pull_request.commits < 10
     steps:
       - uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # v6.0.1
