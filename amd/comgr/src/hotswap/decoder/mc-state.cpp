@@ -86,7 +86,7 @@ llvm::Expected<MCState> initMCState(StringRef TargetIsa) {
   // today. But the disassembler here can emit diagnostics on malformed
   // instruction bytes, and any future reuse of this MCContext for an
   // MC emission path (e.g. an assembly-based post-rewrite pass or a
-  // new cross-widening lowering that goes through MC) would hit the
+  // new widening lowering that goes through MC) would hit the
   // same abort. Attaching an inline SourceMgr here keeps the failure
   // mode graceful for both current and future callers -- the cost is
   // one pointer and one default-constructed SourceMgr per MCState.
