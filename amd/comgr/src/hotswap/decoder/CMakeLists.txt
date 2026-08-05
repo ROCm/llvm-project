@@ -61,6 +61,7 @@ add_library(hotswap-decoder OBJECT
   mc-state.cpp
   amdgpu-formats.cpp
   canonical-op.cpp
+  isa-profile.cpp
 )
 
 if(NOT TARGET hotswap::decoder)
