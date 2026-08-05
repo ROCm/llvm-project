@@ -3,21 +3,33 @@
 # -- RaiserScaffoldingTests ---------------------------------------------------
 #
 # Pins the bare-bones raiser scaffolding contract (`hotswap/raiser/raiser.h`):
-# empty input produces a verifyModule-clean `llvm::Module` with a single
-# `AMDGPU_KERNEL` `ret void` function, plus the failure paths for missing
-# kernel descriptor / malformed ISA.
+# empty text with a valid ISA produces a verifyModule-clean `llvm::Module` with
+# a single `AMDGPU_KERNEL` `ret void` function, plus the failure path for a
+# non-AMDGPU source ISA.
 
+# standalone-init.cpp defines COMGR::ensureLLVMInitialized against the test's own
+# LLVM (comgr-object-utils references it), rather than the copy inside amd_comgr.
 add_executable(RaiserScaffoldingTests
-  RaiserScaffoldingTest.cpp)
+  RaiserScaffoldingTest.cpp
+  ${PROJECT_SOURCE_DIR}/test-shared/standalone-init.cpp)
 
-# The wave-projection objects require decoder symbols.
+# The raiser OBJECT library depends on its sibling hotswap libraries (decoder MC
+# helpers, common error/metadata types, loader code-object utilities) and on the
+# shared comgr metadata/symbol helpers (parseTargetIdentifier, getMetadataRoot,
+# lookupSymbolByName) in comgr-object-utils. Link the same set as
+# hotswap_transpile_cli; --gc-sections drops the object-utils code the raiser
+# never reaches.
 target_link_libraries(RaiserScaffoldingTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::raiser
   hotswap::decoder
+  hotswap::loader
   hotswap::common
-  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
+  comgr-object-utils
   ${LLVM_PTHREAD_LIB})
+if(NOT WIN32)
+  target_link_options(RaiserScaffoldingTests PRIVATE -Wl,--gc-sections)
+endif()
 
 target_include_directories(RaiserScaffoldingTests PRIVATE
   ${LLVM_INCLUDE_DIRS}
