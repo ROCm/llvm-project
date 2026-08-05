@@ -21,8 +21,7 @@ concurrency:
 jobs:
   build-freebsd:
     name: Build COMGR on FreeBSD
-    timeout-minutes: 120
-    runs-on: ubuntu-24.04
+    runs-on: aws-linux-scale-rocm-prod
 
     steps:
       - name: Checkout Repository
