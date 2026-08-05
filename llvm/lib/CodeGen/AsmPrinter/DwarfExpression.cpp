@@ -1035,6 +1035,11 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
     SubRegOffset /= 8;
     SubRegSize /= 8;
 
+    // FIXME: Need a better way of tracking divergence in DIExpression.
+    bool IsWholeReg = false;
+    if (auto *TET = dyn_cast<TargetExtType>(Arg.getResultType()))
+      IsWholeReg = TET->getName() == "amdgpu.debug.whole.vreg";
+
     auto focusThreadIfRequired = [this](int64_t DwarfRegNo) {
       // FIXME: This should be represented in the DIExpression.
       if (auto LaneSize = TRI->getDwarfRegLaneSize(DwarfRegNo, false)) {
@@ -1047,7 +1052,8 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
 
     if (Regs.size() == 1) {
       addReg(Regs[0].DwarfRegNo, Regs[0].Comment);
-      focusThreadIfRequired(Regs[0].DwarfRegNo);
+      if (!IsWholeReg)
+        focusThreadIfRequired(Regs[0].DwarfRegNo);
 
       if (SubRegOffset) {
         emitUserOp(dwarf::DW_OP_LLVM_offset_uconst);
@@ -1063,6 +1069,10 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
     assert(SubRegOffset == 0 && SubRegSize == 0 &&
            "register piece cannot apply to multiple registers");
 
+    // Whole reg sequences aren't currently supported.
+    if (IsWholeReg)
+      return std::nullopt;
+
     // When emitting fragments, the top element on the stack might be an
     // incomplete composite. Push/drop a lit0 so that we don't add the registers
     // to the larger composite.
@@ -1074,7 +1084,7 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
         return std::nullopt;
       if (Reg.DwarfRegNo >= 0) {
         addReg(Reg.DwarfRegNo, Reg.Comment);
-        focusThreadIfRequired(Regs[0].DwarfRegNo);
+        focusThreadIfRequired(Reg.DwarfRegNo);
       }
       emitOp(dwarf::DW_OP_piece);
       emitUnsigned(Reg.SubRegSize / 8);

@@ -8,11 +8,12 @@
   !2 = distinct !DISubprogram(name: "test", scope: !4, file: !4, line: 1, type: !3, isLocal: false, isDefinition: true, scopeLine: 2, flags: DIFlagPrototyped, isOptimized: true, unit: !0, retainedNodes: !5)
   !3 = !DISubroutineType(types: !4)
   !4 = !DIFile(filename: "dummy", directory: "/")
-  !5 = !{!1}
+  !5 = !{!1, !10}
   !6 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !7, size: 64, align: 32)
   !7 = !DIBasicType(name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
   !8 = !DIExpression()
   !9 = !DILocation(line: 10, column: 9, scope: !2)
+  !10 = !DILocalVariable(name: "b", scope: !2, file: !4, line: 126, type: !6)
 
 ...
 ---
@@ -22,8 +23,10 @@ frameInfo:
   maxAlignment:    4
 fixedStack:
   - { id: 0, type: default, offset: 4, size: 4, alignment: 4, stack-id: default }
+  - { id: 1, type: default, offset: 8, size: 8, alignment: 4, stack-id: default }
 stack:
   - { id: 0, type: spill-slot, size: 4, alignment: 4, stack-id: sgpr-spill }
+  - { id: 1, type: spill-slot, size: 8, alignment: 4, stack-id: sgpr-spill }
 machineFunctionInfo:
   maxKernArgAlign: 4
   isEntryFunction: true
@@ -45,11 +48,21 @@ body:             |
 
   bb.0:
     renamable $sgpr10 = IMPLICIT_DEF
+    renamable $sgpr12_sgpr13 = IMPLICIT_DEF
     SI_SPILL_S32_SAVE killed $sgpr10, %stack.0, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
+    SI_SPILL_S64_SAVE killed $sgpr12_sgpr13, %stack.1, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
+
     ; Test the path we expect to work (Arg followed immediately by Deref)
-    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, i32), DIOpConstant(i32 0), DIOpByteOffset(i32)), [[DEF]], 0, {{.*}}
+    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 0), DIOpByteOffset(i32)), [[DEF]], 0, {{.*}}
     DBG_VALUE_LIST !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), %stack.0, 0, debug-location !9
     S_NOP 0
+
+    ; Test that the constant offset is correct (assumes that sgpr12_sgpr13 gets
+    ; spilled to next lane).
+    ; CHECK:   DBG_VALUE [[DEF]], 0, <{{.*}}>, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 4), DIOpByteOffset(i32), DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 8), DIOpByteOffset(i32), DIOpComposite(2, i64)),
+    DBG_VALUE %stack.1, 0, !10, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), debug-location !9
+    S_NOP 0
+
     ; Test that we replace unhandled stack indexes with $noreg
     ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), $noreg, 0, {{.*}}
     DBG_VALUE_LIST !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), %stack.0, 0, debug-location !9
@@ -64,4 +77,5 @@ body:             |
 
   bb.1:
     renamable $sgpr10 = SI_SPILL_S32_RESTORE %stack.0, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
+    renamable $sgpr11 = SI_SPILL_S32_RESTORE %stack.1, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
     S_ENDPGM 0

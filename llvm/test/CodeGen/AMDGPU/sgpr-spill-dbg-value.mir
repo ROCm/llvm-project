@@ -5,6 +5,8 @@
 --- |
   define amdgpu_kernel void @test() { ret void }
 
+  %struct.pair = type { i32, i32 }
+
   !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !4, producer: "llvm", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, enums: !4, retainedTypes: !4)
   !1 = !DILocalVariable(name: "a", scope: !2, file: !4, line: 126, type: !6)
   !2 = distinct !DISubprogram(name: "test", scope: !4, file: !4, line: 1, type: !3, isLocal: false, isDefinition: true, scopeLine: 2, flags: DIFlagPrototyped, isOptimized: true, unit: !0, retainedNodes: !5)
@@ -15,6 +17,10 @@
   !7 = !DIBasicType(name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
   !8 = !DIExpression()
   !9 = !DILocation(line: 10, column: 9, scope: !2)
+  !10 = !DILocalVariable(name: "b", scope: !2, file: !4, line: 126, type: !11)
+  !11 = !DICompositeType(tag: DW_TAG_array_type, baseType: !7, size: 64, elements: !12)
+  !12 = !{!13}
+  !13 = !DISubrange(count: 2)
 
 ...
 ---
@@ -24,6 +30,7 @@ frameInfo:
   maxAlignment:    4
 stack:
   - { id: 0, type: spill-slot, size: 4, alignment: 4, stack-id: sgpr-spill }
+  - { id: 1, type: spill-slot, size: 8, alignment: 4, stack-id: sgpr-spill }
 machineFunctionInfo:
   maxKernArgAlign: 4
   isEntryFunction: true
@@ -42,12 +49,20 @@ body:             |
   ; SGPR_SPILL-LABEL: name: test
   ; SGPR_SPILL: bb.0:
   ; SGPR_SPILL:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr10, 0, [[DEF]]
-  ; SGPR_SPILL-NEXT:   DBG_VALUE [[DEF]], 0, {{.+}}, !DIExpression(DIOpArg(0, i32), DIOpConstant(i32 0), DIOpByteOffset(i32)), {{.+}}
+  ; SGPR_SPILL-NEXT:   DBG_VALUE [[DEF]], 0, {{.+}}, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 0), DIOpByteOffset(i32)), {{.+}}
+  ; SGPR_SPILL:   [[DEF]]:vgpr_32 = SI_SPILL_S32_TO_VGPR $sgpr12, 1, [[DEF]]
+  ; SGPR_SPILL-NEXT:   [[DEF]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr13, 2, [[DEF]]
+  ; SGPR_SPILL-NEXT:   DBG_VALUE [[DEF]], 0, <{{.*}}>, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 4), DIOpByteOffset(i32), DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 8), DIOpByteOffset(i32), DIOpComposite(2, %struct.pair)),
   bb.0:
     renamable $sgpr10 = IMPLICIT_DEF
     SI_SPILL_S32_SAVE killed $sgpr10, %stack.0, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
     DBG_VALUE %stack.0, 0, !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), debug-location !9
 
+    renamable $sgpr12_sgpr13 = IMPLICIT_DEF
+    SI_SPILL_S64_SAVE killed $sgpr12_sgpr13, %stack.1, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
+    DBG_VALUE %stack.1, 0, !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(%struct.pair)), debug-location !9
+
   bb.1:
     renamable $sgpr10 = SI_SPILL_S32_RESTORE %stack.0, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
+    renamable $sgpr12_sgpr13 = SI_SPILL_S64_RESTORE %stack.1, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
     S_ENDPGM 0

@@ -1733,15 +1733,14 @@ void SIFrameLowering::processFunctionBeforeFrameFinalized(
     // To track the spill frame indices handled in this pass.
     BitVector SpillFIs(MFI.getObjectIndexEnd(), false);
     BitVector NonVGPRSpillFIs(MFI.getObjectIndexEnd(), false);
-
-    bool SeenDbgInstr = false;
+    SmallVector<MachineInstr *> DbgInstrs;
 
     for (MachineBasicBlock &MBB : MF) {
       for (MachineInstr &MI : llvm::make_early_inc_range(MBB)) {
-        int FrameIndex;
-        if (MI.isDebugInstr())
-          SeenDbgInstr = true;
+        if (MI.isDebugValue())
+          DbgInstrs.push_back(&MI);
 
+        int FrameIndex;
         if (TII->isVGPRSpill(MI)) {
           // Try to eliminate stack used by VGPR spills before frame
           // finalization.
@@ -1780,10 +1779,11 @@ void SIFrameLowering::processFunctionBeforeFrameFinalized(
         MBB.addLiveIn(Reg);
 
       MBB.sortUniqueLiveIns();
-
-      if (!SpillFIs.empty() && SeenDbgInstr)
-        clearDebugInfoForSpillFIs(MFI, MBB, SpillFIs);
     }
+
+    if (!SpillFIs.empty() && !DbgInstrs.empty())
+      for (MachineInstr *MI : DbgInstrs)
+        updateDbgValueForSISpill(MF, *MI, SpillFIs, SISpillKind::VGPRToAGPR);
   }
 
   // At this point we've already allocated all spilled SGPRs to VGPRs if we
