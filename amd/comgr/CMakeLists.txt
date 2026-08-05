@@ -645,20 +645,6 @@ target_link_libraries(amd_comgr
     ${LLVM_LIBS}
     ${CLANG_LIBS})
 
-# hotswap link edges. These are OBJECT libraries with PRIVATE LLVM deps, so they
-# contribute only their objects and leave the curated LLVM set above unchanged;
-# keep them after that block regardless.
-#
-# The rewriter (byte-level rewrite path) backs the always-on
-# amd_comgr_hotswap_rewrite API, so it is linked unconditionally. The raiser
-# (IR transpiler path), the code-object loader, and the MC decoder are opt-in
-# behind COMGR_ENABLE_HOTSWAP_TRANSPILE.
-target_link_libraries(amd_comgr PRIVATE hotswap::rewriter)
-if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
-  target_link_libraries(amd_comgr
-    PRIVATE hotswap::common hotswap::loader hotswap::raiser hotswap::decoder)
-endif()
-
 if(TARGET embedded-resource-dir)
   target_link_libraries(amd_comgr PRIVATE embedded-resource-dir)
 endif()
@@ -684,12 +670,13 @@ if (NOT WIN32)
       ${CMAKE_DL_LIBS})
 endif()
 
-# Hotswap subproject — rewriter (byte-level) and raiser (IR transpiler)
-# OBJECT libraries. Always added so the libraries are available to the
-# test-unit suite. The rewriter is linked into amd_comgr unconditionally; the
-# raiser and code-object loader link edges are gated on
-# COMGR_ENABLE_HOTSWAP_TRANSPILE (see the hotswap link edges above).
+# Hotswap subproject. Builds the rewriter (byte-level rewrite path) plus, under
+# COMGR_ENABLE_HOTSWAP_TRANSPILE, the transpile-path OBJECT libraries, and
+# exports the set amd_comgr links as COMGR_HOTSWAP_LIBS. These OBJECT libraries
+# keep their LLVM deps PRIVATE, so they contribute only their objects and leave
+# the curated LLVM set linked above unchanged.
 add_subdirectory(src/hotswap)
+target_link_libraries(amd_comgr PRIVATE ${COMGR_HOTSWAP_LIBS})
 
 include(CTest)
 

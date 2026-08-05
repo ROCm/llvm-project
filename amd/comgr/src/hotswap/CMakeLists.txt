@@ -25,3 +25,14 @@ if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   add_subdirectory(loader)
   add_subdirectory(decoder)
 endif()
+
+# The OBJECT libraries amd_comgr links, exported to the parent scope so the
+# top-level CMakeLists links the set without naming each library: the rewriter
+# always, the transpile-path libraries only under COMGR_ENABLE_HOTSWAP_TRANSPILE.
+# Adding a hotswap library updates this list, not the top-level CMakeLists.
+set(COMGR_HOTSWAP_LIBS hotswap::rewriter)
+if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
+  list(APPEND COMGR_HOTSWAP_LIBS
+    hotswap::common hotswap::loader hotswap::raiser hotswap::decoder)
+endif()
+set(COMGR_HOTSWAP_LIBS "${COMGR_HOTSWAP_LIBS}" PARENT_SCOPE)
