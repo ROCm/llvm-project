@@ -128,15 +128,14 @@ define void @nested_inf_loop_callbr(i32 %0, i32 %1) {
 ; ISA-NEXT:    ;;#ASMSTART
 ; ISA-NEXT:    ;;#ASMEND
 ; ISA-NEXT:    s_mov_b64 s[4:5], -1
-; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[4:5]
-; ISA-NEXT:    s_mov_b64 s[4:5], 0
-; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[4:5]
+; ISA-NEXT:    s_mov_b64 s[8:9], 0
+; ISA-NEXT:    s_mov_b64 s[6:7], 0
 ; ISA-NEXT:  .LBB1_1: ; %BB1
 ; ISA-NEXT:    ; =>This Loop Header: Depth=1
 ; ISA-NEXT:    ; Child Loop BB1_4 Depth 2
 ; ISA-NEXT:    ;;#ASMSTART
 ; ISA-NEXT:    ;;#ASMEND
-; ISA-NEXT:    s_mov_b64 s[6:7], 0
+; ISA-NEXT:    s_mov_b64 s[10:11], 0
 ; ISA-NEXT:  .LBB1_2: ; %BB3
 ; ISA-NEXT:    ; in Loop: Header=BB1_1 Depth=1
 ; ISA-NEXT:    ;;#ASMSTART
@@ -153,31 +152,31 @@ define void @nested_inf_loop_callbr(i32 %0, i32 %1) {
 ; ISA-NEXT:    ; Parent Loop BB1_1 Depth=1
 ; ISA-NEXT:    ; => This Inner Loop Header: Depth=2
 ; ISA-NEXT:    ; Label of block must be emitted
-; ISA-NEXT:    ; implicit-def: $vgpr4
+; ISA-NEXT:    ; implicit-def: $vgpr2
 ; ISA-NEXT:  ; %bb.5: ; %TransitionBlock
 ; ISA-NEXT:    ; in Loop: Header=BB1_4 Depth=2
 ; ISA-NEXT:    ;;#ASMSTART
 ; ISA-NEXT:    ;;#ASMEND
 ; ISA-NEXT:  ; %bb.6: ; %TransitionBlock.target.BB3
 ; ISA-NEXT:    ; in Loop: Header=BB1_1 Depth=1
-; ISA-NEXT:    v_mov_b32_e32 v4, v3
+; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[8:9]
 ; ISA-NEXT:  .LBB1_7: ; %loop.exit.guard
 ; ISA-NEXT:    ; in Loop: Header=BB1_1 Depth=1
-; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; ISA-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; ISA-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; ISA-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; ISA-NEXT:    s_and_b64 s[8:9], s[8:9], exec
-; ISA-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; ISA-NEXT:    s_mov_b64 exec, s[6:7]
+; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; ISA-NEXT:    s_xor_b64 s[12:13], vcc, exec
+; ISA-NEXT:    s_or_b64 s[10:11], s[10:11], s[12:13]
+; ISA-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
+; ISA-NEXT:    s_and_b64 s[12:13], s[12:13], exec
+; ISA-NEXT:    s_or_b64 s[6:7], s[6:7], s[12:13]
+; ISA-NEXT:    s_mov_b64 exec, s[10:11]
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execnz .LBB1_2
 ; ISA-NEXT:    s_branch .LBB1_9
 ; ISA-NEXT:  ; %bb.8:
-; ISA-NEXT:    v_mov_b32_e32 v4, v2
+; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[4:5]
 ; ISA-NEXT:    s_branch .LBB1_7
 ; ISA-NEXT:  .LBB1_9: ; %DummyReturnBlock
-; ISA-NEXT:    s_or_b64 exec, exec, s[4:5]
+; ISA-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; ISA-NEXT:    s_setpc_b64 s[30:31]
 BB:
   callbr void asm "", ""() to label %BB1 []

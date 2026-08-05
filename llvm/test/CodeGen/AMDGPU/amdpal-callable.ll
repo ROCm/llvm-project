@@ -1,6 +1,6 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00--amdpal -mattr=-xnack -mattr=+dx10-clamp-and-ieee-mode < %s | FileCheck -check-prefixes=GCN,SDAG,GFX8 -enable-var-scope %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00--amdpal -mattr=-xnack < %s | FileCheck -check-prefixes=GCN,SDAG,GFX9 -enable-var-scope %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00--amdpal -mattr=-xnack < %s | FileCheck -check-prefixes=GCN,GISEL,GFX9 -enable-var-scope %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00--amdpal --amdgpu-xnack=false -mattr=+dx10-clamp-and-ieee-mode < %s | FileCheck -check-prefixes=GCN,SDAG,GFX8 -enable-var-scope %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00--amdpal --amdgpu-xnack=false < %s | FileCheck -check-prefixes=GCN,SDAG,GFX9 -enable-var-scope %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00--amdpal --amdgpu-xnack=false < %s | FileCheck -check-prefixes=GCN,GISEL,GFX9 -enable-var-scope %s
 
 declare amdgpu_gfx float @extern_func(float) #0
 declare amdgpu_gfx float @extern_func_many_args(<64 x float>) #0

@@ -1,6 +1,6 @@
-// RUN: %clang_cc1 %s -triple=amdgcn-amd-amdhsa -fcuda-is-device \
+// RUN: %clang_cc1 %s -triple=amdgpu9.0a-amd-amdhsa -fcuda-is-device \
 // RUN:   -mllvm -amdgpu-late-wave-transform=1 \
-// RUN:   -target-cpu gfx90a -Rpass=atomic-expand -S -o - 2>&1 | \
+// RUN: -Rpass=atomic-expand -S -o - 2>&1 | \
 // RUN:   FileCheck %s --check-prefix=GFX90A-CAS
 
 // REQUIRES: amdgpu-registered-target

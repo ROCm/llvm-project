@@ -100,62 +100,66 @@ define amdgpu_kernel void @test_loop_with_if( ptr %ptr, i1 %cond) #0 {
 ; GFX900:       ; %bb.0: ; %entry
 ; GFX900-NEXT:    s_load_dword s2, s[4:5], 0x2c
 ; GFX900-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; GFX900-NEXT:    v_mov_b32_e32 v5, 0
-; GFX900-NEXT:    s_movk_i32 s10, 0xff
-; GFX900-NEXT:    s_mov_b64 s[6:7], 0
+; GFX900-NEXT:    v_mov_b32_e32 v3, 0
+; GFX900-NEXT:    s_movk_i32 s12, 0xff
+; GFX900-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX900-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX900-NEXT:    s_bitcmp1_b32 s2, 0
-; GFX900-NEXT:    v_mov_b32_e32 v2, s1
-; GFX900-NEXT:    v_mov_b32_e32 v1, s0
-; GFX900-NEXT:    s_cselect_b64 s[0:1], -1, 0
-; GFX900-NEXT:    s_mov_b64 s[2:3], 0
+; GFX900-NEXT:    s_cselect_b64 s[2:3], -1, 0
 ; GFX900-NEXT:    s_mov_b64 s[8:9], 0
-; GFX900-NEXT:    s_mov_b64 s[4:5], 0
+; GFX900-NEXT:    s_mov_b64 s[10:11], 0
+; GFX900-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX900-NEXT:    s_branch .LBB2_3
 ; GFX900-NEXT:  .LBB2_1: ; %else
 ; GFX900-NEXT:    ; in Loop: Header=BB2_3 Depth=1
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    v_add_u32_e32 v3, v3, v4
+; GFX900-NEXT:    v_add_u32_e32 v1, v1, v2
 ; GFX900-NEXT:  .LBB2_2: ; %latch
 ; GFX900-NEXT:    ; in Loop: Header=BB2_3 Depth=1
-; GFX900-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX900-NEXT:    s_or_b64 exec, exec, s[10:11]
+; GFX900-NEXT:    v_mov_b32_e32 v3, s1
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    v_add_u32_e32 v5, 20, v3
-; GFX900-NEXT:    v_cmp_gt_i32_e32 vcc, s10, v5
-; GFX900-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GFX900-NEXT:    s_and_b64 s[8:9], s[8:9], exec
-; GFX900-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX900-NEXT:    flat_store_dword v[1:2], v3
+; GFX900-NEXT:    v_mov_b32_e32 v2, s0
+; GFX900-NEXT:    flat_store_dword v[2:3], v1
+; GFX900-NEXT:    v_add_u32_e32 v3, 20, v1
+; GFX900-NEXT:    v_cmp_gt_i32_e32 vcc, s12, v3
+; GFX900-NEXT:    s_xor_b64 s[10:11], exec, vcc
+; GFX900-NEXT:    s_and_b64 s[10:11], s[10:11], exec
+; GFX900-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
 ; GFX900-NEXT:    s_mov_b64 exec, vcc
-; GFX900-NEXT:    s_mov_b64 s[8:9], 0
+; GFX900-NEXT:    s_mov_b64 s[10:11], 0
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB2_7
 ; GFX900-NEXT:  .LBB2_3: ; %loop
 ; GFX900-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX900-NEXT:    flat_load_dwordx2 v[3:4], v[1:2]
-; GFX900-NEXT:    s_and_b64 vcc, exec, s[0:1]
+; GFX900-NEXT:    v_mov_b32_e32 v2, s1
+; GFX900-NEXT:    v_mov_b32_e32 v1, s0
+; GFX900-NEXT:    flat_load_dwordx2 v[1:2], v[1:2]
+; GFX900-NEXT:    s_and_b64 vcc, exec, s[2:3]
 ; GFX900-NEXT:    s_cbranch_vccz .LBB2_1
 ; GFX900-NEXT:  ; %bb.4: ; %if
 ; GFX900-NEXT:    ; in Loop: Header=BB2_3 Depth=1
-; GFX900-NEXT:    v_cmp_gt_i32_e32 vcc, 11, v5
-; GFX900-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX900-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
-; GFX900-NEXT:    s_xor_b64 s[8:9], exec, s[2:3]
-; GFX900-NEXT:    s_and_b64 s[8:9], s[8:9], exec
-; GFX900-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX900-NEXT:    s_mov_b64 exec, s[2:3]
-; GFX900-NEXT:    s_mov_b64 s[2:3], 0
+; GFX900-NEXT:    v_cmp_gt_i32_e32 vcc, 11, v3
+; GFX900-NEXT:    s_xor_b64 s[10:11], vcc, exec
+; GFX900-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX900-NEXT:    s_xor_b64 s[10:11], exec, s[4:5]
+; GFX900-NEXT:    s_and_b64 s[10:11], s[10:11], exec
+; GFX900-NEXT:    s_or_b64 s[8:9], s[8:9], s[10:11]
+; GFX900-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX900-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB2_6
 ; GFX900-NEXT:  .LBB2_5: ; %then
 ; GFX900-NEXT:    ; in Loop: Header=BB2_3 Depth=1
-; GFX900-NEXT:    flat_store_dword v[1:2], v0
+; GFX900-NEXT:    v_mov_b32_e32 v4, s1
+; GFX900-NEXT:    v_mov_b32_e32 v3, s0
+; GFX900-NEXT:    flat_store_dword v[3:4], v0
 ; GFX900-NEXT:  .LBB2_6: ; in Loop: Header=BB2_3 Depth=1
-; GFX900-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX900-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX900-NEXT:    s_and_b64 s[8:9], s[6:7], exec
+; GFX900-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX900-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX900-NEXT:    s_and_b64 s[10:11], s[8:9], exec
 ; GFX900-NEXT:    s_mov_b64 exec, vcc
-; GFX900-NEXT:    s_mov_b64 s[6:7], 0
+; GFX900-NEXT:    s_mov_b64 s[8:9], 0
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execnz .LBB2_1
 ; GFX900-NEXT:    s_branch .LBB2_2

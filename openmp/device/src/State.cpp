@@ -15,22 +15,11 @@
 #include "Debug.h"
 #include "DeviceTypes.h"
 #include "DeviceUtils.h"
-#include "EmissaryIds.h"
 #include "Interface.h"
 #include "LibC.h"
 #include "Mapping.h"
 #include "State.h"
 #include "Synchronization.h"
-
-extern "C" {
-__attribute__((noinline)) void *__alt_libc_malloc(size_t sz);
-__attribute__((noinline)) void __alt_libc_free(void *ptr);
-__attribute__((noinline)) void *__llvm_omp_emissary_premalloc64(size_t sz);
-__attribute__((noinline)) void *__llvm_omp_emissary_premalloc(uint32_t sz32);
-__attribute__((noinline)) void __llvm_omp_emissary_free(void *ptr);
-__attribute__((noinline)) void *internal_malloc(uint64_t Size);
-__attribute__((noinline)) void internal_free(void *Ptr);
-}
 
 using namespace ompx;
 

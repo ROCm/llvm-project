@@ -230,7 +230,6 @@ add_comgr_test(compile_source_with_device_libs_to_bc_test c)
 add_comgr_test(compile_source_with_device_libs_to_bc_with_vfs_test c)
 add_comgr_test(assemble_test c)
 add_comgr_test(link_test c)
-add_comgr_test(get_data_isa_name_test c)
 add_comgr_test(include_subdirectory_test c)
 add_comgr_test(fail_to_build_driver c)
 add_comgr_test(file_map c)
@@ -247,3 +246,13 @@ add_comgr_test(compile_hip_to_relocatable c)
 #add_comgr_test(compile_hip_with_libcxx_test c)
 add_comgr_test(mangled_names_hip_test c)
 #add_comgr_test(unbundle_hip_test c)
+
+add_test(
+  NAME comgr_hotswap_reduce_test
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/utils/test_hotswap_reduce.py")
+set_tests_properties(
+  comgr_hotswap_reduce_test
+  PROPERTIES
+    ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1"
+    TIMEOUT 120)

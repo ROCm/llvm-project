@@ -5,10 +5,28 @@ HotSwap is COMGR's AMDGPU code-object rewriting support. The public
 target ISA names, then returns a new executable code object with the applicable
 rewrite applied. The input code object is not modified.
 
-This directory contains COMGR's hotswap transpiler scaffolding, the raiser-based
-path for heavier cross-ISA transformations. The same-family stepping patches and
-entry trampolines are implemented in the surrounding COMGR source files and are
-exposed through `amd_comgr_hotswap_rewrite_with_options`.
+## Directory layout
+
+HotSwap has two transformation paths plus a small shared layer:
+
+```
+hotswap/
+  common/     Path-agnostic headers shared by both paths (header-only).
+  rewriter/   Byte-level rewrite path: in-place ELF/MC patching and entry
+              trampolines. Backs the always-on amd_comgr_hotswap_rewrite and
+              amd_comgr_hotswap_rewrite_with_options APIs. Built as the
+              hotswap::rewriter OBJECT library, linked into amd_comgr
+              unconditionally.
+  raiser/     IR transpiler path: raises a code object to LLVM IR, re-lowers it
+              through the stock AMDGPU backend for a different target ISA, and
+              relinks the result. Built as the hotswap::raiser OBJECT library,
+              opt-in behind COMGR_ENABLE_HOTSWAP_TRANSPILE.
+```
+
+Both paths are OBJECT libraries whose translation units land directly in
+`amd_comgr.so`, so they can call comgr helpers without a layering inversion.
+New same-family stepping patches belong in `rewriter/`; heavier cross-gen
+transforms belong in `raiser/`; utilities needed by both belong in `common/`.
 
 ## Supported transformations
 
@@ -61,7 +79,7 @@ the whole code object to the IR pipeline. It can be built standalone for
 development:
 
 ```bash
-cmake -S amd/comgr/hotswap -B build-hotswap \
+cmake -S amd/comgr/src/hotswap/raiser -B build-hotswap \
   -DLLVM_DIR=$PWD/build/lib/cmake/llvm
 ninja -C build-hotswap
 ctest --test-dir build-hotswap -L transpiler

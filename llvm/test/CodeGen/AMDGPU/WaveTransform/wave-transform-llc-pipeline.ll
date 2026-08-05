@@ -1,7 +1,7 @@
 ; UNSUPPORTED: expensive_checks
-; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgcn--amdhsa -disable-verify -debug-pass=Structure < %s 2>&1 \
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgpu7.00--amdhsa -disable-verify -debug-pass=Structure < %s 2>&1 \
 ; RUN:   | FileCheck -match-full-lines -strict-whitespace -check-prefix=GCN-O0 %s
-; RUN: llc -amdgpu-late-wave-transform=1 -O3 -mtriple=amdgcn--amdhsa -disable-verify -debug-pass=Structure < %s 2>&1 \
+; RUN: llc -amdgpu-late-wave-transform=1 -O3 -mtriple=amdgpu7.00--amdhsa -disable-verify -debug-pass=Structure < %s 2>&1 \
 ; RUN:   | FileCheck -match-full-lines -strict-whitespace -check-prefix=GCN-O3 %s
 
 ; REQUIRES: asserts
@@ -112,6 +112,7 @@
 ; GCN-O0-NEXT:        Live Interval Analysis
 ; GCN-O0-NEXT:        Virtual Register Map
 ; GCN-O0-NEXT:        Live Register Matrix
+; GCN-O0-NEXT:        Machine Register Class Info Analysis
 ; GCN-O0-NEXT:        SI Pre-allocate WWM Registers
 ; GCN-O0-NEXT:        Fast Register Allocator
 ; GCN-O0-NEXT:        SI Lower WWM Copies
@@ -211,6 +212,7 @@
 ; GCN-O3-NEXT:      Basic Alias Analysis (stateless AA impl)
 ; GCN-O3-NEXT:      Function Alias Analysis Results
 ; GCN-O3-NEXT:      Memory Dependence Analysis
+; GCN-O3-NEXT:      Cycle Info Analysis
 ; GCN-O3-NEXT:      Lazy Branch Probability Analysis
 ; GCN-O3-NEXT:      Lazy Block Frequency Analysis
 ; GCN-O3-NEXT:      Optimization Remark Emitter
@@ -228,6 +230,7 @@
 ; GCN-O3-NEXT:      LCSSA Verifier
 ; GCN-O3-NEXT:      Loop-Closed SSA Form Pass
 ; GCN-O3-NEXT:      Scalar Evolution Analysis
+; GCN-O3-NEXT:      Cycle Info Analysis
 ; GCN-O3-NEXT:      Lazy Branch Probability Analysis
 ; GCN-O3-NEXT:      Lazy Block Frequency Analysis
 ; GCN-O3-NEXT:      Loop Pass Manager
@@ -237,9 +240,10 @@
 ; GCN-O3-NEXT:        Induction Variable Users
 ; GCN-O3-NEXT:        Loop Strength Reduction
 ; GCN-O3-NEXT:      Remove unreachable blocks from the CFG
-; GCN-O3-NEXT:      Natural Loop Information
+; GCN-O3-NEXT:      Cycle Info Analysis
 ; GCN-O3-NEXT:      Post-Dominator Tree Construction
 ; GCN-O3-NEXT:      Branch Probability Analysis
+; GCN-O3-NEXT:      Natural Loop Information
 ; GCN-O3-NEXT:      Block Frequency Analysis
 ; GCN-O3-NEXT:      Constant Hoisting
 ; GCN-O3-NEXT:      Replace intrinsics with calls to vector library
@@ -254,6 +258,7 @@
 ; GCN-O3-NEXT:      Basic Alias Analysis (stateless AA impl)
 ; GCN-O3-NEXT:      Function Alias Analysis Results
 ; GCN-O3-NEXT:      Memory Dependence Analysis
+; GCN-O3-NEXT:      Cycle Info Analysis
 ; GCN-O3-NEXT:      Lazy Branch Probability Analysis
 ; GCN-O3-NEXT:      Lazy Block Frequency Analysis
 ; GCN-O3-NEXT:      Optimization Remark Emitter
@@ -263,6 +268,7 @@
 ; GCN-O3-NEXT:      Dominator Tree Construction
 ; GCN-O3-NEXT:      AMDGPU Lower Kernel Arguments
 ; GCN-O3-NEXT:      Natural Loop Information
+; GCN-O3-NEXT:      Cycle Info Analysis
 ; GCN-O3-NEXT:      Post-Dominator Tree Construction
 ; GCN-O3-NEXT:      Branch Probability Analysis
 ; GCN-O3-NEXT:      Block Frequency Analysis
@@ -325,11 +331,11 @@
 ; GCN-O3-NEXT:        Uniformity Analysis
 ; GCN-O3-NEXT:        Basic Alias Analysis (stateless AA impl)
 ; GCN-O3-NEXT:        Function Alias Analysis Results
-; GCN-O3-NEXT:        Natural Loop Information
 ; GCN-O3-NEXT:        Post-Dominator Tree Construction
 ; GCN-O3-NEXT:        Branch Probability Analysis
 ; GCN-O3-NEXT:        Assignment Tracking Analysis
 ; GCN-O3-NEXT:        Lazy Branch Probability Analysis
+; GCN-O3-NEXT:        Natural Loop Information
 ; GCN-O3-NEXT:        Lazy Block Frequency Analysis
 ; GCN-O3-NEXT:        AMDGPU DAG->DAG Pattern Instruction Selection
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
@@ -346,6 +352,7 @@
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
 ; GCN-O3-NEXT:        Machine Natural Loop Construction
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
+; GCN-O3-NEXT:        Machine Register Class Info Analysis
 ; GCN-O3-NEXT:        Early Machine Loop Invariant Code Motion
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
@@ -384,6 +391,7 @@
 ; GCN-O3-NEXT:        Slot index numbering
 ; GCN-O3-NEXT:        Live Interval Analysis
 ; GCN-O3-NEXT:        Machine Natural Loop Construction
+; GCN-O3-NEXT:        Machine Register Class Info Analysis
 ; GCN-O3-NEXT:        Register Coalescer
 ; GCN-O3-NEXT:        Rename Disconnected Subregister Components
 ; GCN-O3-NEXT:        Rewrite Partial Register Uses
@@ -411,6 +419,7 @@
 ; GCN-O3-NEXT:        SI lower SGPR spill instructions
 ; GCN-O3-NEXT:        Virtual Register Map
 ; GCN-O3-NEXT:        Live Register Matrix
+; GCN-O3-NEXT:        Machine Register Class Info Analysis
 ; GCN-O3-NEXT:        SI Pre-allocate WWM Registers
 ; GCN-O3-NEXT:        Live Stack Slot Analysis
 ; GCN-O3-NEXT:        Greedy Register Allocator

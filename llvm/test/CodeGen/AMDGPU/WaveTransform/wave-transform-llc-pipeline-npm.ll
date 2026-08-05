@@ -1,7 +1,7 @@
-; RUN: llc -amdgpu-late-wave-transform=1 -O0 -enable-new-pm -mtriple=amdgcn--amdhsa -mcpu=gfx700 -print-pipeline-passes=tree < %s 2>&1 \
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -enable-new-pm -mtriple=amdgpu7.00--amdhsa -print-pipeline-passes=tree < %s 2>&1 \
 ; RUN:   | FileCheck -check-prefix=GCN-O0 %s
 
-; RUN: llc -amdgpu-late-wave-transform=1 -O3 -enable-new-pm -mtriple=amdgcn--amdhsa -mcpu=gfx700 -print-pipeline-passes=tree < %s 2>&1 \
+; RUN: llc -amdgpu-late-wave-transform=1 -O3 -enable-new-pm -mtriple=amdgpu7.00--amdhsa -print-pipeline-passes=tree < %s 2>&1 \
 ; RUN:   | FileCheck -check-prefix=GCN-O3 %s
 
 ; GCN-O0: require<MachineModuleAnalysis>
@@ -44,7 +44,6 @@
 ; GCN-O0-NEXT:     unify-loop-exits
 ; GCN-O0-NEXT:     amdgpu-annotate-uniform
 ; GCN-O0-NEXT:     lcssa
-; GCN-O0-NEXT:     require<uniformity>
 ; GCN-O0-NEXT:     inline-asm-prepare
 ; GCN-O0-NEXT:     safe-stack
 ; GCN-O0-NEXT:     stack-protector
@@ -172,7 +171,6 @@
 ; GCN-O3-NEXT: amdgpu-perf-hint
 ; GCN-O3-NEXT: cgscc
 ; GCN-O3-NEXT:   function
-; GCN-O3-NEXT:     require<uniformity>
 ; GCN-O3-NEXT:     inline-asm-prepare
 ; GCN-O3-NEXT:     safe-stack
 ; GCN-O3-NEXT:     stack-protector

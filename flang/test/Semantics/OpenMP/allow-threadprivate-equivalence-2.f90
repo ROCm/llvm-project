@@ -3,7 +3,7 @@
 subroutine f
   integer, save :: y
   integer :: x
-  !WARNING: Variable 'x' appears a THREADPRIVATE directive and an EQUIVALENCE statement, which does not conform to the OpenMP API specification.
+  !WARNING: A variable in a THREADPRIVATE directive cannot appear in an EQUIVALENCE statement
   !$omp threadprivate(x)
   equivalence(x, y)
 end

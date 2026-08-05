@@ -31,7 +31,7 @@ program main
  end program main
 
 !CHECK: func.func {{.*}} @myinit(!fir.ref<i32>, !fir.ref<i32>)
-!CHECK-SAME: {{.*}}, omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>{{.*}}
+!CHECK-SAME: {{.*}}, omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}
 !CHECK-LABEL: func.func {{.*}} @mycombine(!fir.ref<i32>, !fir.ref<i32>)
-!CHECK-SAME: {{.*}}, omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to), automap = false>{{.*}}
+!CHECK-SAME: {{.*}}, omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}
 
