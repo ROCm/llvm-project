@@ -6,12 +6,12 @@
 program main
    integer :: tmp
 
+   ! Make sure to make all internal functions reachable. Otherwise, they could
+   ! be optimized out.
    call subr_target()
    tmp = implicitly_captured_one_twice_enter()
+   tmp = target_function_test_device()
    tmp = target_function_recurse()
-   !$omp target
-      tmp = target_function_test_device()
-   !$omp end target
 
    contains
    ! DEVICE-LABEL: llvm.func{{.*}} @_QFPimplicit_capture()

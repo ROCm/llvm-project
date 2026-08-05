@@ -16,6 +16,8 @@ program mb
 
    integer :: tmp
 
+   ! Make sure to make all internal functions reachable. Otherwise, they could
+   ! be optimized out.
    tmp = target_function(.true.)
    tmp = target_function_twice_host()
    tmp = target_function_test_host()

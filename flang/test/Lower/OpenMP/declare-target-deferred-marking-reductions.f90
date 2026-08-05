@@ -32,5 +32,5 @@ program main
 
 !CHECK: llvm.func @myinit(!llvm.ptr, !llvm.ptr)
 !CHECK-SAME: {{.*}}, omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}
-!CHECK: llvm.func @mycombine(!llvm.ptr, !llvm.ptr)
+!CHECK-LABEL: llvm.func @mycombine(!llvm.ptr, !llvm.ptr)
 !CHECK-SAME: {{.*}}, omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}

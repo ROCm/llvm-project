@@ -16,6 +16,8 @@ program mb
 
    integer :: tmp
 
+   ! Make sure to make all internal functions reachable. Otherwise, they could
+   ! be optimized out.
    tmp = target_function_twice_host()
    tmp = target_function_test_host()
    !$omp target
@@ -25,7 +27,7 @@ program mb
    !$omp end target
 
    contains
-   ! CHECK-LABEL: llvm.func{{.*}} @_QFPimplicitly_captured_twice()
+   ! CHECK-LABEL: llvm.func{{.*}} @_QFPimplicitly_captured_twice
    ! CHECK-SAME: {{.*}}attributes {{{.*}}omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to), automap = false>{{.*}}}
    function implicitly_captured_twice() result(k)
       integer :: i

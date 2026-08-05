@@ -14,6 +14,9 @@
 ! RUN: %if amdgpu-registered-target %{ bbc -target amdgcn-amd-amdhsa -fopenmp -fopenmp-version=52 -fopenmp-is-target-device -emit-hlfir %s -o - | tco -test-gen | FileCheck --check-prefixes=MLIR-ALL,MLIR-DEVICE %s %}
 
 program main
+    ! MLIR-ALL: llvm.func @{{.+}}main(
+    ! MLIR-ALL: omp.target
+    ! MLIR-ALL: llvm.return
     !$omp target
         call declaretarget()
         call declaretarget_enter()
@@ -49,9 +52,9 @@ program main
     subroutine no_declaretarget()
     end subroutine no_declaretarget
 
-    ! MLIR-HOST: llvm.func @main(
+    ! MLIR-HOST: llvm.func{{.*}} @main(
     ! MLIR-HOST: llvm.return
-    ! MLIR-DEVICE-NOT: llvm.func @main(
+    ! MLIR-DEVICE-NOT: llvm.func{{.*}} @main(
 
     ! LLVM-HOST: define {{.*}} @{{.*}}main{{.*}}(
     ! LLVM-HOST: {{.*}} @{{.*}}__omp_offloading{{.*}}main_{{.*}}(

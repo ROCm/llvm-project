@@ -9,6 +9,7 @@
 ! CHECK-NOT: llvm.func @_QQmain{{.*}}device_type = (any)
 ! CHECK-NOT: llvm.func @_QQmain{{.*}}device_type = (nohost)
 ! CHECK: llvm.func @_QPsub_a{{.*}}device_type = (any), {{.*}}sym_visibility = "private"
+
 program named_main
   interface
     subroutine sub_a(x)
