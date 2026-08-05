@@ -70,14 +70,14 @@ static Type *getWholeRegType(LLVMContext &Ctx, Type *TypeIntLane,
 }
 
 /// Update DBG_VALUE and DBG_VALUE_LIST instructions so that they correctly
-/// reflect performed stack to VGPR spills.
+/// reflect performed spills.
 /// Examples:
-///  DBG_VALUE  %stack.8, 0, !"next", !DIExpression(DIOpArg(0, ptr addrspace(5)),
-///                                                 DIOpDeref(i32))
+///  DBG_VALUE %stack.8, 0, !"next", !DIExpression(
+///            DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32))
 ///    --->
-///  DBG_VALUE  %249 : vgpr_32, 0, !"next", !DIExpression(DIOpArg(0, amdgpu.debug.whole.reg32),
-///                                                       DIOpConstant(i8 40),
-///                                                       DIOpByteOffset(i32))
+///  DBG_VALUE %249 : vgpr_32, 0, !"next", !DIExpression(
+///            DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 32)),
+///            DIOpConstant(i32 40), DIOpByteOffset(i32))
 ///
 ///
 ///  DBG_VALUE_LIST !"next", !DIExpression(DIOpArg(0, ptr addrspace(5)),
@@ -87,13 +87,11 @@ static Type *getWholeRegType(LLVMContext &Ctx, Type *TypeIntLane,
 ///                                        DIOpAdd()),
 ///                 %stack.9, %stack.5
 ///    --->
-///  DBG_VALUE_LIST !"next", !DIExpression(DIOpArg(0, amdgpu.debug.whole.reg32),
-///                                        DIOpConstant(i8 40),
-///                                        DIOpByteOffset(i32),
+///  DBG_VALUE_LIST !"next", !DIExpression(DIOpArg(0, i32),
 ///                                        DIOpArg(1, ptr addrspace(5)),
 ///                                        DIOpDeref(i32),
 ///                                        DIOpAdd()),
-///                 %14 : vgpr_32, %stack.5
+///                 %14 : agpr_32, %stack.5
 ///
 void llvm::updateDbgValueForSISpill(MachineFunction &MF, MachineInstr &MI,
                                     const BitVector &SpillFIs,
