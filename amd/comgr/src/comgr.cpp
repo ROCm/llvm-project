@@ -1286,149 +1286,130 @@ amd_comgr_status_t AMD_COMGR_API
   amd_comgr_status_t ActionStatus;
 
   // ensureLLVMInitialized() has its own internal mutex plus a one-time-init
-  // guard, so unlike the rest of this function it does not depend on
-  // ComgrMutex for thread safety and can run outside it.
+  // guard, so it's thread-safe on its own.
   ensureLLVMInitialized();
 
-  // Enclose core Comgr actions in a mutually exclusive region. This is
-  // currently required because:
-  //   - clearLLVMOptions() (called per-job from executeCommand()) mutates
-  //     the process-global LLVM cl::opt registry with no internal
-  //     synchronization of its own.
-  //   - The optional time-statistics profiler (time-stat.cpp) lazily
-  //     initializes and mutates a global PerfStats instance with no
-  //     internal synchronization.
-  //   - Signal handler save/restore (comgr-signal.cpp) reads/writes a
-  //     shared static array and must stay paired around the action.
-  // TODO: Narrowing this further is blocked on making LLVM's cl::opt
-  // registry thread-safe upstream (see AGENT_CONVENTIONS.md for filing
-  // upstream issues); until then, dispatchCompilerAction() below must stay
-  // inside this lock.
-  static std::mutex ComgrMutex;
-  {
-    std::scoped_lock<std::mutex> ComgrLock(ComgrMutex);
+  // Save signal handlers so that they can be restored after the action has
+  // completed. SigActions is thread_local, so this is per-thread and needs
+  // no external synchronization.
+  if (auto Status = signal::saveHandlers()) {
+    return Status;
+  }
 
-    // Save signal handlers so that they can be restored after the action has
-    // completed.
-    if (auto Status = signal::saveHandlers()) {
-      return Status;
-    }
+  // The normal log stream, used to return via a AMD_COMGR_DATA_KIND_LOG
+  // object.
+  std::string LogStr;
+  std::string PerfLog = "PerfStatsLog.txt";
+  raw_string_ostream LogS(LogStr);
 
-    // The normal log stream, used to return via a AMD_COMGR_DATA_KIND_LOG
-    // object.
-    std::string LogStr;
-    std::string PerfLog = "PerfStatsLog.txt";
-    raw_string_ostream LogS(LogStr);
+  // The log stream when redirecting to a file.
+  std::unique_ptr<raw_fd_ostream> LogF;
 
-    // The log stream when redirecting to a file.
-    std::unique_ptr<raw_fd_ostream> LogF;
+  // Pointer to the currently selected log stream.
+  raw_ostream *LogP = &LogS;
 
-    // Pointer to the currently selected log stream.
-    raw_ostream *LogP = &LogS;
-
-    if (std::optional<StringRef> RedirectLogs = env::getRedirectLogs()) {
-      StringRef RedirectLog = *RedirectLogs;
-      if (RedirectLog == "stdout") {
-        LogP = &outs();
-      } else if (RedirectLog == "stderr") {
-        LogP = &errs();
+  if (std::optional<StringRef> RedirectLogs = env::getRedirectLogs()) {
+    StringRef RedirectLog = *RedirectLogs;
+    if (RedirectLog == "stdout") {
+      LogP = &outs();
+    } else if (RedirectLog == "stderr") {
+      LogP = &errs();
+    } else {
+      std::error_code EC;
+      LogF.reset(new (std::nothrow) raw_fd_ostream(
+          RedirectLog, EC, sys::fs::OF_Text | sys::fs::OF_Append));
+      if (EC) {
+        LogF.reset();
+        *LogP << "Comgr unable to redirect log to file '" << RedirectLog
+              << "': " << EC.message() << "\n";
       } else {
-        std::error_code EC;
-        LogF.reset(new (std::nothrow) raw_fd_ostream(
-            RedirectLog, EC, sys::fs::OF_Text | sys::fs::OF_Append));
-        if (EC) {
-          LogF.reset();
-          *LogP << "Comgr unable to redirect log to file '" << RedirectLog
-                << "': " << EC.message() << "\n";
-        } else {
-          LogP = LogF.get();
-          PerfLog = RedirectLog.str();
-        }
+        LogP = LogF.get();
+        PerfLog = RedirectLog.str();
       }
     }
+  }
 
-    InitTimeStatistics(PerfLog);
+  InitTimeStatistics(PerfLog);
 
-    if (env::shouldEmitVerboseLogs()) {
-      *LogP << "amd_comgr_do_action:\n"
-            << "\t  ActionKind: " << getActionKindName(ActionKind) << '\n'
-            << "\t     IsaName: " << ActionInfoP->IsaName << '\n'
-            << "\t     Options:";
-      for (auto &Option : ActionInfoP->getOptions()) {
-        *LogP << ' ';
-        printQuotedOption(*LogP, Option);
-      }
-      *LogP << '\n'
-            << "\t        Path: " << ActionInfoP->Path << '\n'
-            << "\t    Language: " << getLanguageName(ActionInfoP->Language)
-            << '\n'
-            << " Comgr Branch-Commit: " << xstringify(AMD_COMGR_GIT_BRANCH)
-            << '-' << xstringify(AMD_COMGR_GIT_COMMIT) << '\n'
-            << "\t LLVM Commit: " << clang::getLLVMRevision() << '\n';
-      (*LogP).flush();
+  if (env::shouldEmitVerboseLogs()) {
+    *LogP << "amd_comgr_do_action:\n"
+          << "\t  ActionKind: " << getActionKindName(ActionKind) << '\n'
+          << "\t     IsaName: " << ActionInfoP->IsaName << '\n'
+          << "\t     Options:";
+    for (auto &Option : ActionInfoP->getOptions()) {
+      *LogP << ' ';
+      printQuotedOption(*LogP, Option);
     }
+    *LogP << '\n'
+          << "\t        Path: " << ActionInfoP->Path << '\n'
+          << "\t    Language: " << getLanguageName(ActionInfoP->Language)
+          << '\n'
+          << " Comgr Branch-Commit: " << xstringify(AMD_COMGR_GIT_BRANCH)
+          << '-' << xstringify(AMD_COMGR_GIT_COMMIT) << '\n'
+          << "\t LLVM Commit: " << clang::getLLVMRevision() << '\n';
+    (*LogP).flush();
+  }
 
-    ProfilePoint ProfileAction(getActionKindName(ActionKind));
-    switch (ActionKind) {
-    case AMD_COMGR_ACTION_SOURCE_TO_PREPROCESSOR:
-    case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC:
-    case AMD_COMGR_ACTION_UNBUNDLE:
-    case AMD_COMGR_ACTION_LINK_BC_TO_BC:
-    case AMD_COMGR_ACTION_CODEGEN_BC_TO_RELOCATABLE:
-    case AMD_COMGR_ACTION_CODEGEN_BC_TO_ASSEMBLY:
-    case AMD_COMGR_ACTION_ASSEMBLE_SOURCE_TO_RELOCATABLE:
-    case AMD_COMGR_ACTION_LINK_RELOCATABLE_TO_RELOCATABLE:
-    case AMD_COMGR_ACTION_LINK_RELOCATABLE_TO_EXECUTABLE:
-    case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_RELOCATABLE:
-    case AMD_COMGR_ACTION_COMPILE_SOURCE_WITH_DEVICE_LIBS_TO_BC:
-    case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_EXECUTABLE:
-    case AMD_COMGR_ACTION_COMPILE_SPIRV_TO_RELOCATABLE:
-    case AMD_COMGR_ACTION_TRANSLATE_SPIRV_TO_BC:
-    case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV:
-      ActionStatus = dispatchCompilerAction(ActionKind, ActionInfoP, InputSetP,
-                                            ResultSetP, *LogP);
-      break;
-    case AMD_COMGR_ACTION_ADD_PRECOMPILED_HEADERS:
-      // Redirect the input to the output.
-      // Deprecate and remove this action.
-      for (DataObject *Data : InputSetP->DataObjects) {
-        Data->RefCount++;
-        ResultSetP->DataObjects.insert(Data);
-      }
-      ActionStatus = AMD_COMGR_STATUS_SUCCESS;
-      break;
-    default:
-      ActionStatus = AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  ProfilePoint ProfileAction(getActionKindName(ActionKind));
+  switch (ActionKind) {
+  case AMD_COMGR_ACTION_SOURCE_TO_PREPROCESSOR:
+  case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC:
+  case AMD_COMGR_ACTION_UNBUNDLE:
+  case AMD_COMGR_ACTION_LINK_BC_TO_BC:
+  case AMD_COMGR_ACTION_CODEGEN_BC_TO_RELOCATABLE:
+  case AMD_COMGR_ACTION_CODEGEN_BC_TO_ASSEMBLY:
+  case AMD_COMGR_ACTION_ASSEMBLE_SOURCE_TO_RELOCATABLE:
+  case AMD_COMGR_ACTION_LINK_RELOCATABLE_TO_RELOCATABLE:
+  case AMD_COMGR_ACTION_LINK_RELOCATABLE_TO_EXECUTABLE:
+  case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_RELOCATABLE:
+  case AMD_COMGR_ACTION_COMPILE_SOURCE_WITH_DEVICE_LIBS_TO_BC:
+  case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_EXECUTABLE:
+  case AMD_COMGR_ACTION_COMPILE_SPIRV_TO_RELOCATABLE:
+  case AMD_COMGR_ACTION_TRANSLATE_SPIRV_TO_BC:
+  case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV:
+    ActionStatus = dispatchCompilerAction(ActionKind, ActionInfoP, InputSetP,
+                                          ResultSetP, *LogP);
+    break;
+  case AMD_COMGR_ACTION_ADD_PRECOMPILED_HEADERS:
+    // Redirect the input to the output.
+    // Deprecate and remove this action.
+    for (DataObject *Data : InputSetP->DataObjects) {
+      Data->RefCount++;
+      ResultSetP->DataObjects.insert(Data);
     }
-    ProfileAction.finish();
+    ActionStatus = AMD_COMGR_STATUS_SUCCESS;
+    break;
+  default:
+    ActionStatus = AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+  ProfileAction.finish();
 
-    // Restore signal handlers.
-    if (auto Status = signal::restoreHandlers()) {
+  // Restore signal handlers.
+  if (auto Status = signal::restoreHandlers()) {
+    return Status;
+  }
+
+  if (env::shouldEmitVerboseLogs()) {
+    *LogP << "\tReturnStatus: " << getStatusName(ActionStatus) << "\n\n";
+  }
+
+  if (ActionInfoP->Logging) {
+    amd_comgr_data_t LogT;
+    if (auto Status = amd_comgr_create_data(AMD_COMGR_DATA_KIND_LOG, &LogT)) {
       return Status;
     }
-
-    if (env::shouldEmitVerboseLogs()) {
-      *LogP << "\tReturnStatus: " << getStatusName(ActionStatus) << "\n\n";
+    ScopedDataObjectReleaser LogSDOR(LogT);
+    DataObject *Log = DataObject::convert(LogT);
+    if (auto Status = Log->setName("comgr.log")) {
+      return Status;
     }
-
-    if (ActionInfoP->Logging) {
-      amd_comgr_data_t LogT;
-      if (auto Status = amd_comgr_create_data(AMD_COMGR_DATA_KIND_LOG, &LogT)) {
-        return Status;
-      }
-      ScopedDataObjectReleaser LogSDOR(LogT);
-      DataObject *Log = DataObject::convert(LogT);
-      if (auto Status = Log->setName("comgr.log")) {
-        return Status;
-      }
-      if (auto Status = Log->setData(LogS.str())) {
-        return Status;
-      }
-      if (auto Status = amd_comgr_data_set_add(ResultSet, LogT)) {
-        return Status;
-      }
+    if (auto Status = Log->setData(LogS.str())) {
+      return Status;
     }
-  } // exit scoped_lock region
+    if (auto Status = amd_comgr_data_set_add(ResultSet, LogT)) {
+      return Status;
+    }
+  }
 
   return ActionStatus;
 }

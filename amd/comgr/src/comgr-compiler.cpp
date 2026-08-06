@@ -19,6 +19,7 @@
 #include "comgr-diagnostic-handler.h"
 #include "comgr-env.h"
 #include "comgr-libcxx-headers.h"
+#include "comgr-options-cache.h"
 #include "comgr-resource-directory.h"
 #include "comgr-spirv-command.h"
 #include "comgr-unbundle-command.h"
@@ -77,6 +78,7 @@
 #endif
 
 #include <csignal>
+#include <mutex>
 #include <sstream>
 
 LLD_HAS_DRIVER(elf)
@@ -543,7 +545,11 @@ void initializeCommandLineArgs(SmallVectorImpl<const char *> &Args) {
   Args.push_back("");
 }
 
-// Parse -mllvm options
+} // namespace
+
+// Parse -mllvm options. Needs external linkage (unlike the rest of this
+// anonymous-namespace block): comgr-options-cache.cpp, a separate
+// translation unit, calls it directly.
 amd_comgr_status_t parseLLVMOptions(const std::vector<std::string> &Options) {
   std::vector<const char *> LLVMArgs;
   for (auto Option : Options) {
@@ -558,9 +564,18 @@ amd_comgr_status_t parseLLVMOptions(const std::vector<std::string> &Options) {
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
+namespace {
+
 amd_comgr_status_t linkWithLLD(llvm::ArrayRef<const char *> Args,
                                llvm::raw_ostream &LogS,
                                llvm::raw_ostream &LogE) {
+  // LLD's statics (e.g. lld::CommonLinkerContext) are not audited for
+  // concurrent reentry -- the explicit destroy() call below implies a
+  // sequential-reentry design, not concurrent. Serialize all LLD invocations
+  // against each other until that's confirmed safe.
+  static std::mutex LLDMutex;
+  std::scoped_lock<std::mutex> LLDLock(LLDMutex);
+
   ArgStringList LLDArgs(llvm::iterator_range<ArrayRef<const char *>::iterator>(
       Args.begin(), Args.end()));
   LLDArgs.insert(LLDArgs.begin(), "ld.lld");
@@ -877,8 +892,6 @@ executeCommand(const Command &Job, raw_ostream &LogS,
   Argv.append(Arguments.begin(), Arguments.end());
   Argv.push_back(nullptr);
 
-  clearLLVMOptions();
-
   if (Argv[1] == StringRef("-cc1")) {
     if (env::shouldEmitVerboseLogs()) {
       logArgv(LogS, "clang", Argv);
@@ -895,6 +908,16 @@ executeCommand(const Command &Job, raw_ostream &LogS,
                                             Diags)) {
       return AMD_COMGR_STATUS_ERROR;
     }
+    // Capture the -mllvm options this invocation requested, then clear them
+    // from the invocation: acquireOptionsScope() below applies them to the
+    // registry itself, so without this, ExecuteCompilerInvocation()'s own
+    // internal cl::opt reparse (see
+    // clang/lib/FrontendTool/ExecuteCompilerInvocation.cpp) would race it.
+    std::vector<std::string> MLLVMArgs =
+        Clang->getInvocation().getFrontendOpts().LLVMArgs;
+    Clang->getInvocation().getFrontendOpts().LLVMArgs.clear();
+    OptionsScopeGuard Guard = acquireOptionsScope(MLLVMArgs);
+
     // Internally this call refers to the invocation created above, so at
     // this point the DiagnosticsEngine should accurately reflect all user
     // requested configuration from Argv.
@@ -917,9 +940,7 @@ executeCommand(const Command &Job, raw_ostream &LogS,
     if (!AssemblerInvocation::createFromArgs(Asm, Argv, Diags)) {
       return AMD_COMGR_STATUS_ERROR;
     }
-    if (auto Status = parseLLVMOptions(Asm.LLVMArgs)) {
-      return Status;
-    }
+    OptionsScopeGuard Guard = acquireOptionsScope(Asm.LLVMArgs);
     if (executeAssembler(Asm, Diags, LogS)) {
       return AMD_COMGR_STATUS_ERROR;
     }
@@ -927,6 +948,10 @@ executeCommand(const Command &Job, raw_ostream &LogS,
     if (env::shouldEmitVerboseLogs()) {
       logArgv(LogS, "lld", Argv);
     }
+    // LLD and its dependents don't consume -mllvm options directly, but the
+    // registry must still be reset to the default (empty) state before this
+    // job runs, in case a prior job left it holding a different set.
+    OptionsScopeGuard Guard = acquireOptionsScope({});
     if (auto Status = linkWithLLD(Arguments, LogS, LogS)) {
       return Status;
     }
@@ -934,6 +959,11 @@ executeCommand(const Command &Job, raw_ostream &LogS,
     // Check executable name for additional tools (e.g., from AMDGCN::Linker)
     StringRef Executable = Job.getExecutable();
     StringRef ExeName = sys::path::filename(Executable);
+
+    // Same rationale as the linker branch above: these tools don't consume
+    // -mllvm options directly, but the registry must be reset to empty
+    // before they run.
+    OptionsScopeGuard Guard = acquireOptionsScope({});
 
     if (ExeName.contains("llvm-link")) {
       if (env::shouldEmitVerboseLogs()) {

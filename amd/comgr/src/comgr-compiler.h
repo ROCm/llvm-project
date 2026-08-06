@@ -15,6 +15,11 @@
 
 namespace COMGR {
 
+/// Parse a list of `-mllvm` options into LLVM's global `cl::opt` registry.
+/// Callers are responsible for ensuring the registry is in the desired
+/// starting state first (see `clearLLVMOptions()`).
+amd_comgr_status_t parseLLVMOptions(const std::vector<std::string> &Options);
+
 /// Manages executing Compiler-related actions.
 ///
 /// @warning No more than one public method should be called on a constructed

@@ -15,6 +15,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <stdlib.h>
 #include <system_error>
 
@@ -43,7 +44,14 @@ namespace TimeStatistics {
 
 namespace {
 std::unique_ptr<PerfStats> PS = nullptr;
+// Guards PS and all access to it. Independent of OptionsMutex/ComgrMutex:
+// this is an opt-in, microsecond-scale profiling feature, so gating it on
+// the options-cache lock would needlessly serialize same-fingerprint
+// parallel compiles.
+std::mutex PerfStatsMutex;
+
 void dump() {
+  std::lock_guard<std::mutex> Lock(PerfStatsMutex);
   PS->dumpPerfStats();
   PS.reset();
 }
@@ -58,6 +66,7 @@ void getLogFile(std::string &PerfLog) {
 }
 
 bool InitTimeStatistics(std::string LogFile) {
+  std::lock_guard<std::mutex> Lock(PerfStatsMutex);
   if (!PS) {
     if (!env::needTimeStatistics()) {
       return false;
@@ -78,6 +87,7 @@ bool InitTimeStatistics(std::string LogFile) {
 }
 
 void ProfilePoint::finish() {
+  std::lock_guard<std::mutex> Lock(PerfStatsMutex);
   if (PS) {
     double End = PS->getCurrentTime();
     PS->AddToStats(Name, End - StartTime);
@@ -88,6 +98,7 @@ void ProfilePoint::finish() {
 
 ProfilePoint::ProfilePoint(StringRef Tag) : Name(Tag) {
   InitTimeStatistics("");
+  std::lock_guard<std::mutex> Lock(PerfStatsMutex);
   if (PS) {
     StartTime = PS->getCurrentTime();
   }

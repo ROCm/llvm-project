@@ -114,6 +114,7 @@ set(SOURCES
   src/comgr-hotswap-patch-wmma-split.cpp
   src/comgr-libcxx-headers.cpp
   src/comgr-metadata.cpp
+  src/comgr-options-cache.cpp
   src/comgr-signal.cpp
   src/comgr-spirv-command.cpp
   src/comgr-symbol.cpp

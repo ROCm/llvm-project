@@ -59,7 +59,10 @@ const int Signals[] = {SIGHUP,
 
 const unsigned NumSigs = std::size(Signals);
 
-struct sigaction SigActions[NumSigs];
+// thread_local: once ComgrMutex no longer serializes every call, concurrent
+// saveHandlers()/restoreHandlers() invocations on different threads must not
+// clobber each other's saved state.
+thread_local struct sigaction SigActions[NumSigs];
 #endif // _MSC_VER
 
 } // namespace

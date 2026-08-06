@@ -238,8 +238,9 @@ add_comgr_test(fail_to_build_driver c)
 add_comgr_test(file_map c)
 add_comgr_test(symbolize_test c)
 add_comgr_test(mangled_names_test c)
-# Disabled due to AddressSanitizer limitation with multithreaded programs
-# add_comgr_test(multithread_test cpp)
+# Re-enabled: the prior break was a bug in AddressSanitizer, since patched
+# upstream (https://github.com/llvm/llvm-project/pull/179000).
+add_comgr_test(multithread_test cpp)
 add_comgr_test(nested_kernel_test c)
 add_comgr_test(map_elf_virtual_address_test c)
 add_comgr_test(compile_source_to_executable c)

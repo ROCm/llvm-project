@@ -58,6 +58,15 @@ function(comgr_configure_test_target target)
       target_compile_options(${target} PRIVATE -fno-rtti)
     endif()
   endif()
+  if(MSVC)
+    # Clang's generated Options.inc relies on macro-heavy, standards-conforming
+    # preprocessing (e.g. LLVM_MAKE_OPT_ID(__VA_ARGS__)) that MSVC's legacy
+    # preprocessor mis-expands, corrupting every clang::options::ID enumerator.
+    # amd_comgr itself already sets this (see AMD_COMGR_PRIVATE_COMPILE_OPTIONS
+    # in the top-level CMakeLists.txt); any test-unit target that transitively
+    # includes clang/Options/Options.h needs it too.
+    target_compile_options(${target} PRIVATE "/Zc:preprocessor")
+  endif()
 endfunction()
 
 # -- HotswapElfTests ----------------------------------------------------------
@@ -218,14 +227,61 @@ if(HOTSWAP_BUILD_TOOL AND HOTSWAP_TOOL_HSA_INC)
 
   comgr_configure_test_target(HotswapToolLoaderTests)
 endif()
+
+# -- OptionsCacheTest ----------------------------------------------------------
+#
+# Exercises COMGR::acquireOptionsScope()'s locking/fingerprint semantics
+# (src/comgr-options-cache.cpp) in isolation from the real `-mllvm` reapply
+# machinery, which lives in the Clang-Driver-heavy comgr-compiler.cpp /
+# comgr.cpp. OptionsCacheTest.cpp supplies link-seam definitions for
+# COMGR::parseLLVMOptions() / COMGR::clearLLVMOptions() (instrumented fakes)
+# and for CachedCommandAdaptor::addUInt() / addString() (copied verbatim from
+# comgr-cache-command.cpp, which is not linked in), so the only comgr source
+# compiled here is comgr-options-cache.cpp itself. amd_comgr cannot be linked
+# against directly: it's built SHARED with no WINDOWS_EXPORT_ALL_SYMBOLS, so
+# internal COMGR:: C++ symbols like acquireOptionsScope() aren't exported.
+
+add_executable(OptionsCacheTest
+  OptionsCacheTest.cpp
+  ../src/comgr-options-cache.cpp)
+
+llvm_map_components_to_libnames(COMGR_TEST_UNIT_OPTIONS_LIBS Support)
+
+target_link_libraries(OptionsCacheTest PRIVATE
+  ${COMGR_GTEST_LIBS}
+  ${COMGR_TEST_UNIT_OPTIONS_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+target_include_directories(OptionsCacheTest PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CLANG_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+# comgr-options-cache.cpp transitively includes clang/Driver/Action.h (for a
+# typedef) and clang/Driver/Driver.h (via comgr-compiler.h, for the
+# parseLLVMOptions() declaration) -- compile-time only, nothing here links
+# against clang. CLANG_INCLUDE_DIRS above only gets populated in the
+# standalone find_package(Clang) build; mirror amd_comgr's own fallback (see
+# the top-level CMakeLists.txt) for the LLVM-monorepo-embedded build.
+if(LLVM_EXTERNAL_CLANG_SOURCE_DIR)
+  target_include_directories(OptionsCacheTest PRIVATE
+    ${LLVM_EXTERNAL_CLANG_SOURCE_DIR}/include
+    ${LLVM_BINARY_DIR}/tools/clang/include)
+endif()
+
+comgr_configure_test_target(OptionsCacheTest)
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
   COMMAND $<TARGET_FILE:HotswapMCTests>
   COMMAND $<TARGET_FILE:HotswapToolTests>
-  COMMAND $<TARGET_FILE:RaiserScaffoldingTests>)
+  COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
+  COMMAND $<TARGET_FILE:OptionsCacheTest>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapToolTests
-  RaiserScaffoldingTests)
+  RaiserScaffoldingTests OptionsCacheTest)
 if(TARGET HotswapToolLoaderTests)
   add_dependencies(test-unit HotswapToolLoaderTests)
   add_custom_command(TARGET test-unit POST_BUILD
