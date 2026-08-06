@@ -1691,6 +1691,17 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
         ptr_, info, alloc, num_agents_accessible, accessible);
     if (status == HSA_STATUS_SUCCESS && info) {
       static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
+      // Quarantine keeps the block allocated in ROCr so that use-after-free
+      // stays detectable, but the user allocation is gone. Report it as
+      // unowned, matching how ROCr reports a released fragment. Otherwise
+      // clients cannot tell a freed pointer from a live one. The acquire load
+      // pairs with the release store that publishes the header in Allocate(),
+      // ordering the UsedSize() read below.
+      if (atomic_load(&m->chunk_state, memory_order_acquire) !=
+          CHUNK_ALLOCATED) {
+        info->type = HSA_EXT_POINTER_TYPE_UNKNOWN;
+        return status;
+      }
       // Adjust base address of agent,host and sizeInBytes so as to return
       // the actual pointer information of user allocation rather than asan
       // allocation. Asan allocation pointer info can be acquired using internal
