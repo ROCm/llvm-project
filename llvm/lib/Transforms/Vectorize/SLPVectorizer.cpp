@@ -265,7 +265,7 @@ static cl::opt<bool> VectorizePoorThroughput(
              "standalone vectorization seeds."));
 
 static cl::opt<bool> VectorizeOnceUsed(
-    "slp-vectorize-once-used", cl::init(true), cl::Hidden,
+    "slp-vectorize-once-used", cl::init(false), cl::Hidden,
     cl::desc("Use instructions with the single user as standalone "
              "vectorization seeds."));
 
