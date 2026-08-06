@@ -99,7 +99,7 @@ private:
 /// generic kernel class.
 struct CUDAKernelTy : public GenericKernelTy {
   /// Create a CUDA kernel with a name and an execution mode.
-  CUDAKernelTy(const char *Name) : GenericKernelTy(Name), Func(nullptr) {}
+  CUDAKernelTy(StringRef Name) : GenericKernelTy(Name), Func(nullptr) {}
 
   /// Initialize the CUDA kernel.
   Error initImpl(GenericDeviceTy &GenericDevice,
@@ -515,7 +515,7 @@ struct CUDADeviceTy : public GenericDeviceTy {
   }
 
   /// Allocate and construct a CUDA kernel.
-  Expected<GenericKernelTy &> constructKernel(const char *Name) override {
+  Expected<GenericKernelTy &> constructKernel(StringRef Name) override {
     // Allocate and construct the CUDA kernel.
     CUDAKernelTy *CUDAKernel = Plugin.allocate<CUDAKernelTy>();
     if (!CUDAKernel)
@@ -842,6 +842,20 @@ struct CUDADeviceTy : public GenericDeviceTy {
 
     CUresult Res = cuMemcpyDtoHAsync(HstPtr, (CUdeviceptr)TgtPtr, Size, Stream);
     return Plugin::check(Res, "error in cuMemcpyDtoHAsync: %s");
+  }
+
+  Error dataMemcpyImpl(void *DstPtr, const void *SrcPtr, int64_t Size,
+                       AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+    if (auto Err = setContext())
+      return Err;
+
+    CUstream Stream;
+    if (auto Err = getStream(AsyncInfoWrapper, Stream))
+      return Err;
+
+    CUresult Res =
+        cuMemcpyAsync((CUdeviceptr)DstPtr, (CUdeviceptr)SrcPtr, Size, Stream);
+    return Plugin::check(Res, "error in cuMemcpyAsync: %s");
   }
 
   /// Exchange data between two devices directly. We may use peer access if
@@ -1189,7 +1203,7 @@ struct CUDADeviceTy : public GenericDeviceTy {
 
     Res = getDeviceAttrRaw(CU_DEVICE_ATTRIBUTE_WARP_SIZE, TmpInt);
     if (Res == CUDA_SUCCESS)
-      Info.add("Warp Size", TmpInt);
+      Info.add("Number of Lanes", TmpInt, "", DeviceInfo::NUM_LANES);
 
     Res = getDeviceAttrRaw(CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK, TmpInt);
     if (Res == CUDA_SUCCESS)

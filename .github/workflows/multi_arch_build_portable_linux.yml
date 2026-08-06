@@ -6,13 +6,13 @@
 # This workflow builds TheRock in stages:
 # 1. compiler-runtime (generic) - sysdeps, base, compiler, runtimes, profiler-core
 # 2. runtime-tests (generic) - hip-tests, rocrtst (parallel to math-libs)
-# 3. math-libs (per-arch) - BLAS, FFT, etc.
-# 4. comm-libs (per-arch) - RCCL, rocshmem (parallel to math-libs)
-# 5. debug-tools (generic) - amd-dbgapi, rocr-debug-agent, rocgdb (parallel to math-libs)
-# 6. dctools-core (generic) - RDC (parallel to math-libs)
-# 7. profiler-apps (generic) - rocprofiler-systems (parallel to math-libs) [DISABLED: see stage below]
-# 8. iree-compiler (generic) - IREE compiler (parallel to math-libs)
-# 9. fusilli-libs (generic) - Fusilli hipdnn provider (after math-libs + iree-compiler)
+# 3. wsl-rocdxg (generic) - WSL-only ROCDXG bridge library (after compiler-runtime)
+# 4. math-libs (per-arch) - BLAS, FFT, etc.
+# 5. comm-libs (per-arch) - RCCL, rocshmem (parallel to math-libs)
+# 6. storage-libs (generic) - hipfile (parallel to math-libs)
+# 7. debug-tools (generic) - amd-dbgapi, rocr-debug-agent, rocgdb (parallel to math-libs)
+# 8. dctools-core (generic) - RDC (parallel to math-libs)
+# 9. profiler-apps (generic) - rocprofiler-systems (parallel to math-libs)
 # 10. media-libs (generic) - sysdeps-amd-mesa, rocdecode, rocjpeg
 
 name: Multi-Arch Build (Linux)
@@ -34,23 +34,37 @@ on:
         type: string
       build_variant_suffix:
         type: string
-      expect_failure:
-        type: boolean
       rocm_package_version:
         type: string
       prebuilt_stages:
         type: string
         default: ""
         description: "Comma-separated build stages to skip (artifacts already copied by the orchestrator)"
+      build_runs_on:
+        type: string
+        default: "aws-linux-scale-rocm-prod"
+        description: "Build runner label (selected by configure script with weighted distribution)"
       release_type:
-        description: 'Release type: "" for CI, or "dev", "nightly", "prerelease".'
+        description: 'Release type: "ci", "dev", "nightly", or "prerelease"'
         type: string
         default: ci
       test_type:
-        type: string      # Temporary add until release_type is fixed
-
+        type: string   # Temp addiiton until release type is fixed          
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
+        default: ""
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+        default: ""
+      external_repo_config:
+        description: "JSON config for external repo checkout (repository, ref, checkout_path, source_package, fetch_sources_args)"
+        type: string
+        default: ""
 permissions:
   contents: read
+
 
 jobs:
   # ==========================================================================
@@ -67,8 +81,12 @@ jobs:
       dist_amdgpu_families: ${{ inputs.dist_amdgpu_families }}
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+      build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
       test_type: ${{ inputs.test_type }}
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      external_repo_config: ${{ inputs.external_repo_config }}
     permissions:
       contents: read
       id-token: write
@@ -88,8 +106,35 @@ jobs:
       dist_amdgpu_families: ${{ inputs.dist_amdgpu_families }}
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+      build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
-      test_type: ${{ inputs.test_type }}
+      test_type: ${{ inputs.test_type }}        
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      external_repo_config: ${{ inputs.external_repo_config }}
+    permissions:
+      contents: read
+      id-token: write
+
+  # ==========================================================================
+  # STAGE: wsl-rocdxg (generic)
+  # ==========================================================================
+  wsl-rocdxg:
+    needs: compiler-runtime
+    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'wsl-rocdxg') }}
+    uses: ./.github/workflows/multi_arch_build_wsl_rocdxg_artifacts.yml
+    secrets: inherit
+    with:
+      stage_name: wsl-rocdxg
+      stage_display_name: "Stage - WSL ROCDXG"
+      timeout_minutes: 120  # 2 hours
+      dist_amdgpu_families: ${{ inputs.dist_amdgpu_families }}
+      rocm_package_version: ${{ inputs.rocm_package_version }}
+      build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+      release_type: ${{ inputs.release_type }}
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      external_repo_config: ${{ inputs.external_repo_config }}
     permissions:
       contents: read
       id-token: write
@@ -99,7 +144,6 @@ jobs:
   # ==========================================================================
   math-libs:
     needs: compiler-runtime
-    #if: ${{ false }} #Temporary disable
     if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'math-libs') }}
     strategy:
       # `fail-fast: false` lets all families complete even if one fails.
@@ -120,13 +164,20 @@ jobs:
       dist_amdgpu_families: ${{ inputs.dist_amdgpu_families }}
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+      build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
-      test_type: ${{ inputs.test_type }}
+      test_type: ${{ inputs.test_type }}        
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      external_repo_config: ${{ inputs.external_repo_config }}
     permissions:
       contents: read
       id-token: write
 
   # ==========================================================================
+  # STAGE: comm-libs (generic, single job parallel to math-libs)
+  # RCCL and rocshmem are both TARGET_NEUTRAL artifacts. RCCL is built for
+  # Instinct/CDNA targets only (https://github.com/ROCm/TheRock/issues/2130).
   # Running as a single generic job avoids redundant per-arch builds.
   # ==========================================================================
   comm-libs:
@@ -142,11 +193,42 @@ jobs:
       dist_amdgpu_families: ${{ inputs.dist_amdgpu_families }}
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+      build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
       test_type: ${{ inputs.test_type }}        
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      external_repo_config: ${{ inputs.external_repo_config }}
     permissions:
       contents: read
-      id-token: write  
+      id-token: write
+
+  # ==========================================================================
+  # STAGE: storage-libs (generic, single job parallel to math-libs)
+  # hipFile is a TARGET_NEUTRAL artifact.
+  # ==========================================================================
+  storage-libs:
+    needs: compiler-runtime
+    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'storage-libs') }}
+    uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
+    secrets: inherit
+    with:
+      stage_name: storage-libs
+      stage_display_name: "Stage - Storage Libs"
+      timeout_minutes: 240  # 4 hours
+      amdgpu_family: ""
+      dist_amdgpu_families: ${{ inputs.dist_amdgpu_families }}
+      rocm_package_version: ${{ inputs.rocm_package_version }}
+      build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+      build_runs_on: ${{ inputs.build_runs_on }}
+      release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}        
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      external_repo_config: ${{ inputs.external_repo_config }}
+    permissions:
+      contents: read
+      id-token: write
 
   # ==========================================================================
   # STAGE: debug-tools (generic, parallel to math-libs)
@@ -163,8 +245,12 @@ jobs:
       dist_amdgpu_families: ${{ inputs.dist_amdgpu_families }}
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+      build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
-      test_type: ${{ inputs.test_type }}
+      test_type: ${{ inputs.test_type }}        
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      external_repo_config: ${{ inputs.external_repo_config }}
     permissions:
       contents: read
       id-token: write
@@ -184,8 +270,12 @@ jobs:
       dist_amdgpu_families: ${{ inputs.dist_amdgpu_families }}
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+      build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
-      test_type: ${{ inputs.test_type }}
+      test_type: ${{ inputs.test_type }}        
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      external_repo_config: ${{ inputs.external_repo_config }}
     permissions:
       contents: read
       id-token: write
@@ -210,8 +300,12 @@ jobs:
   #     dist_amdgpu_families: ${{ inputs.dist_amdgpu_families }}
   #     rocm_package_version: ${{ inputs.rocm_package_version }}
   #     build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+  #     build_runs_on: ${{ inputs.build_runs_on }}
   #     release_type: ${{ inputs.release_type }}
   #     test_type: ${{ inputs.test_type }}
+  #     repository: ${{ inputs.repository }}
+  #     ref: ${{ inputs.ref }}
+  #     external_repo_config: ${{ inputs.external_repo_config }}
   #   permissions:
   #     contents: read
   #     id-token: write
@@ -231,8 +325,12 @@ jobs:
       dist_amdgpu_families: ${{ inputs.dist_amdgpu_families }}
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+      build_runs_on: ${{ inputs.build_runs_on }}
       release_type: ${{ inputs.release_type }}
-      test_type: ${{ inputs.test_type }}
+      test_type: ${{ inputs.test_type }}        
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      external_repo_config: ${{ inputs.external_repo_config }}
     permissions:
       contents: read
       id-token: write
@@ -260,9 +358,7 @@ jobs:
 
           cat submodule-commit-*.txt | sort -u > manifest.txt
 
-          cat manifest.txt
-
       - uses: actions/upload-artifact@v4
         with:
           name: submodule-commit-all
-          path: manifest.txt
+          path: manifest.txt 

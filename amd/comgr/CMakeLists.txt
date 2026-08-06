@@ -101,42 +101,33 @@ set(SOURCES
   src/comgr-diagnostic-handler.cpp
   src/comgr-disassembly.cpp
   src/comgr-env.cpp
-  src/comgr-hotswap.cpp
-  src/comgr-hotswap-b0a0.cpp
-  src/comgr-hotswap-profile.cpp
-  src/comgr-hotswap-displacement.cpp
-  src/comgr-hotswap-entry-trampoline.cpp
-  src/comgr-hotswap-entry-trampoline-fast.cpp
-  src/comgr-hotswap-occupancy.cpp
-  src/comgr-hotswap-patch-trampoline.cpp
-  src/comgr-hotswap-elf.cpp
-  src/comgr-hotswap-llvm.cpp
-  src/comgr-hotswap-patch-f32-to-e5m3.cpp
-  src/comgr-hotswap-patch-inplace.cpp
-  src/comgr-hotswap-patch-vop3px2-src2.cpp
-  src/comgr-hotswap-patch-wmma-hazard.cpp
-  src/comgr-hotswap-patch-wmma-scale16.cpp
-  src/comgr-hotswap-patch-wmma-split.cpp
   src/comgr-libcxx-headers.cpp
   src/comgr-logger.cpp
-  src/comgr-metadata.cpp
   src/comgr-signal.cpp
   src/comgr-spirv-command.cpp
-  src/comgr-symbol.cpp
   src/comgr-symbolizer.cpp
   src/comgr-unbundle-command.cpp
   src/comgr-unpackage-command.cpp
   src/time-stat/time-stat.cpp)
 
-# Hotswap binary transpiler, opt-in. The hotswap project lives under
-# amd/comgr/src/hotswap as a private COMGR subproject. When enabled, we
-# link the hotswap OBJECT library into amd_comgr (its TUs land directly
+# Code-object metadata and symbol helpers, built once as an internal OBJECT
+# library so amd_comgr and the hotswap test drivers link the same objects
+# instead of recompiling these sources with divergent flags. The drivers need
+# the buffer-facing getMetadataRoot / getElfIsaName / lookupSymbolByName entry
+# points without the amd_comgr C API; sharing the objects keeps a single
+# definition and a single set of compile flags.
+set(COMGR_OBJECT_UTILS_SOURCES
+  src/comgr-metadata.cpp
+  src/comgr-symbol.cpp)
+
+# Hotswap IR transpiler (raiser), opt-in. The raiser lives under
+# amd/comgr/src/hotswap/raiser as a private COMGR subproject. When enabled, we
+# link the hotswap::raiser OBJECT library into amd_comgr (its TUs land directly
 # in amd_comgr.so so hotswap files can call comgr-metadata helpers
-# without a layering inversion) and compile the
-# comgr-hotswap-transpile.cpp entry point. When disabled, the
-# amd_comgr_hotswap_transpile API is simply not provided.
+# without a layering inversion) and compile the transpile entry point. When
+# disabled, the amd_comgr_hotswap_transpile API is simply not provided.
 option(COMGR_ENABLE_HOTSWAP_TRANSPILE
-  "Build the hotswap-transpiler-backed amd_comgr_hotswap_transpile entry point" OFF)
+  "Build the hotswap-raiser-backed amd_comgr_hotswap_transpile entry point" OFF)
 
 # Add Windows resource file for version info
 if(WIN32)
@@ -217,11 +208,11 @@ target_include_directories(amd_comgr
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # The hotswap subdirectory is added unconditionally below (around the
-# add_subdirectory(src/hotswap) line) so the OBJECT library is available
+# add_subdirectory(src/hotswap) line) so the OBJECT libraries are available
 # to the test-unit suite; here we opt amd_comgr into exposing the
-# `amd_comgr_hotswap_transpile` entry point. The transpiler link edge is
-# added after the curated LLVM/LLD link block below (see "hotswap transpiler
-# link edge"), not here.
+# `amd_comgr_hotswap_transpile` entry point. The hotswap link edges are
+# added after the curated LLVM/LLD link block below (see "hotswap link
+# edges"), not here.
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   target_compile_definitions(amd_comgr PRIVATE COMGR_ENABLE_HOTSWAP_TRANSPILE=1)
 endif()
@@ -340,9 +331,15 @@ if (UNIX)
     -fno-rtti -Wall -Wno-attributes -fms-extensions -fvisibility=hidden)
   # TODO: Confirm this is actually needed due to LLVM/Clang code
   list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS -fno-strict-aliasing)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS -fstack-protector-strong)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS _FORTIFY_SOURCE=2)
   list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS
     _GNU_SOURCE __STDC_LIMIT_MACROS __STDC_CONSTANT_MACROS AMD_COMGR_BUILD)
   list(APPEND AMD_COMGR_PUBLIC_LINKER_OPTIONS -pthread)
+  # Eager RELRO might cause severe performance regressions in situations
+  # that load many versions of comgr at once (i.e. in dozens or hundreds
+  # of processes), so we're using weak RELRO here
+  list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS -Wl,-z,relro)
   if (NOT APPLE AND COMGR_BUILD_SHARED_LIBS)
     configure_file(
       src/exportmap.in
@@ -440,6 +437,45 @@ target_include_directories(amd_comgr
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
     $<INSTALL_INTERFACE:include>)
+
+# Internal OBJECT library for the shared metadata / symbol helpers. Compiled
+# once with the same flags and include roots as amd_comgr, then linked into both
+# amd_comgr and the hotswap test drivers, so the drivers reuse the exact same
+# objects (and the buffer-facing getMetadataRoot / getElfIsaName /
+# lookupSymbolByName entry points) instead of recompiling the sources with
+# divergent flags. Per-function/data sections let a standalone driver drop the
+# parts of these translation units it does not reference (the amd_comgr build
+# keeps them); the GCC/Clang spelling is -ffunction-sections/-fdata-sections,
+# the MSVC equivalent is /Gy plus /Gw.
+add_library(comgr-object-utils OBJECT ${COMGR_OBJECT_UTILS_SOURCES})
+# These sources include LLVM headers that pull in TableGen-generated .inc files.
+# amd_comgr is ordered after those generators by its LLVM link libraries, but an
+# OBJECT library that links nothing needs the dependency spelled out. The
+# generator targets only exist in an in-tree build.
+foreach(comgr_tablegen_target intrinsics_gen target_parser_gen)
+  if(TARGET ${comgr_tablegen_target})
+    add_dependencies(comgr-object-utils ${comgr_tablegen_target})
+  endif()
+endforeach()
+set_target_properties(comgr-object-utils PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  POSITION_INDEPENDENT_CODE ON)
+target_include_directories(comgr-object-utils
+  PRIVATE
+    ${LLVM_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>)
+if(MSVC)
+  target_compile_options(comgr-object-utils
+    PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" /Gy /Gw)
+else()
+  target_compile_options(comgr-object-utils
+    PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" -ffunction-sections -fdata-sections)
+endif()
+target_compile_definitions(comgr-object-utils
+  PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS}")
+target_link_libraries(amd_comgr PRIVATE comgr-object-utils)
 
 configure_file(
   include/amd_comgr.h.in
@@ -609,13 +645,6 @@ target_link_libraries(amd_comgr
     ${LLVM_LIBS}
     ${CLANG_LIBS})
 
-# hotswap transpiler link edge — must come after the curated LLVM set above so
-# static-archive resolution pulls in the full set (incl. LLVMCodeGen's -mcpu
-# registration) before the transpiler's partial LLVM deps.
-if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
-  target_link_libraries(amd_comgr PRIVATE hotswap::transpiler)
-endif()
-
 if(TARGET embedded-resource-dir)
   target_link_libraries(amd_comgr PRIVATE embedded-resource-dir)
 endif()
@@ -641,13 +670,16 @@ if (NOT WIN32)
       ${CMAKE_DL_LIBS})
 endif()
 
-# Hotswap subproject — IR-level transpiler library + supporting tools.
-# Always added so the static library is available to the test-unit suite;
-# linking into amd_comgr happens in a later patch via the
-# COMGR_ENABLE_HOTSWAP_TRANSPILE option.
+# Hotswap subproject. Builds the rewriter (byte-level rewrite path) plus, under
+# COMGR_ENABLE_HOTSWAP_TRANSPILE, the transpile-path OBJECT libraries, and
+# exports the set amd_comgr links as COMGR_HOTSWAP_LIBS. These OBJECT libraries
+# keep their LLVM deps PRIVATE, so they contribute only their objects and leave
+# the curated LLVM set linked above unchanged.
 add_subdirectory(src/hotswap)
+target_link_libraries(amd_comgr PRIVATE ${COMGR_HOTSWAP_LIBS})
 
 include(CTest)
+
 if(BUILD_TESTING)
   add_custom_target(check-comgr COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS amd_comgr)
   if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)

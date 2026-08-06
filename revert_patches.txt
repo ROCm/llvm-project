@@ -17,3 +17,6 @@ Revert "Reland "[Clang] Enable -Wunused-template under -Wall" (#208001)
 needs SPIRv changes
 [DebugMetadata][DwarfDebug][CodeView] Support function-local static variables in lexical block scopes 
 ---
+breaks rocrand 4 tets
+[SLP]Vectorize single-user instructions as the last-attempt seeds
+---

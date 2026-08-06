@@ -17,11 +17,17 @@
 /amd/hipcc/ @david-salinas @lamb-j
 /amd/docs/ @ROCm/rocm-documentation
 
+# HotSwap specific
+/amd/comgr/src/hotswap/ @harsh-amd @ftynse
+/amd/comgr/test-unit/hotswap/ @harsh-amd @ftynse
+/amd/comgr/test-lit/hotswap/ @harsh-amd @ftynse
+
 /libc/ @llbm/reviewers-libc
+/bolt/ @llvm/reviewers-bolt
+/libc/ @llvm/reviewers-libc
 /libcxx/ @llvm/reviewers-libcxx
 /libcxxabi/ @llvm/reviewers-libcxxabi
 /libunwind/ @llvm/reviewers-libunwind
-/runtimes/ @llvm/reviewers-libcxx
 
 /llvm/lib/Analysis/BasicAliasAnalysis.cpp @nikic
 /llvm/lib/Analysis/HashRecognize.cpp @artagnon @pfusik
@@ -167,6 +173,9 @@
 /mlir/**/*shard* @fschlimb
 /mlir/**/*Shard* @fschlimb
 
+# MLIR WasmSSA Dialect
+/mlir/**/WasmSSA* @flemairen6 @lforg37
+
 # MLIR Python Bindings
 /mlir/test/python/ @ftynse @makslevental @stellaraccident @rolfmorel
 /mlir/python/ @ftynse @makslevental @stellaraccident @rolfmorel
@@ -185,6 +194,7 @@
 
 # Bazel build system.
 /utils/bazel/ @rupprecht @keith @aaronmondal @googlewalt
+/utils/bazel/llvm-project-overlay/libc/ @labath @kaladron
 
 # InstallAPI and TextAPI
 /llvm/**/TextAPI/ @cyndyishida
