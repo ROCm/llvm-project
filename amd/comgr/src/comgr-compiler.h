@@ -46,6 +46,29 @@ class AMDGPUCompiler {
 
   amd_comgr_status_t createTmpDirs();
   amd_comgr_status_t removeTmpDirs();
+  /// Construct the on-disk path for @p Object under @p Dir. When @p AllowVFS
+  /// is set and the action is using the VFS, the parent directory is not
+  /// created on real disk, since the path is only ever consumed through the
+  /// in-process Clang driver's overlay filesystem.
+  llvm::SmallString<128> getFilePath(DataObject *Object, llvm::StringRef Dir,
+                                     bool AllowVFS = false);
+  /// Populate @p Object's data from the real file at @p Path. Compiled
+  /// outputs are always written to real disk by the underlying tool (Clang's
+  /// -cc1, the assembler, LLD), even when the VFS is in use for inputs, since
+  /// LLVM's VFS abstraction is read-only, so this always reads back from real
+  /// disk.
+  amd_comgr_status_t inputFromFile(DataObject *Object, llvm::StringRef Path);
+  /// Write @p Data to @p Path. When @p AllowVFS is set and the action is
+  /// using the VFS, this writes into the in-memory filesystem instead of real
+  /// disk. Only pass AllowVFS for paths that are exclusively consumed by the
+  /// in-process Clang driver (e.g. -cc1 frontend jobs); tools that operate on
+  /// real files directly -- OffloadBundler, LLD (including linker jobs
+  /// spawned by the driver itself), and -save-temps debug dumps -- must
+  /// always use the default, real-disk behavior.
+  amd_comgr_status_t outputToFile(llvm::StringRef Data, llvm::StringRef Path,
+                                  bool AllowVFS = false);
+  amd_comgr_status_t outputToFile(DataObject *Object, llvm::StringRef Path,
+                                  bool AllowVFS = false);
   amd_comgr_status_t processFile(DataObject *Input, const char *InputFilePath,
                                  const char *OutputFilePath);
   /// Process each file in @c InSet individually, placing output in @c OutSet.

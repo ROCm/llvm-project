@@ -1285,15 +1285,28 @@ amd_comgr_status_t AMD_COMGR_API
 
   amd_comgr_status_t ActionStatus;
 
-  // Enclose core Comgr actions in a mutally excusive region to avoid
-  // multithreading issues stemming from concurrently maintaing multiple
-  // LLVM instances.
-  // TODO: Remove the scoped lock once updates to LLVM enable thread saftey
+  // ensureLLVMInitialized() has its own internal mutex plus a one-time-init
+  // guard, so unlike the rest of this function it does not depend on
+  // ComgrMutex for thread safety and can run outside it.
+  ensureLLVMInitialized();
+
+  // Enclose core Comgr actions in a mutually exclusive region. This is
+  // currently required because:
+  //   - clearLLVMOptions() (called per-job from executeCommand()) mutates
+  //     the process-global LLVM cl::opt registry with no internal
+  //     synchronization of its own.
+  //   - The optional time-statistics profiler (time-stat.cpp) lazily
+  //     initializes and mutates a global PerfStats instance with no
+  //     internal synchronization.
+  //   - Signal handler save/restore (comgr-signal.cpp) reads/writes a
+  //     shared static array and must stay paired around the action.
+  // TODO: Narrowing this further is blocked on making LLVM's cl::opt
+  // registry thread-safe upstream (see AGENT_CONVENTIONS.md for filing
+  // upstream issues); until then, dispatchCompilerAction() below must stay
+  // inside this lock.
   static std::mutex ComgrMutex;
   {
     std::scoped_lock<std::mutex> ComgrLock(ComgrMutex);
-
-    ensureLLVMInitialized();
 
     // Save signal handlers so that they can be restored after the action has
     // completed.

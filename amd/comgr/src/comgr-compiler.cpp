@@ -536,62 +536,6 @@ bool executeAssembler(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
   return Failed;
 }
 
-SmallString<128> getFilePath(DataObject *Object, StringRef Dir) {
-  SmallString<128> Path(Dir);
-  path::append(Path, Object->Name);
-
-  // Create directories specified in the File Path so that the in-process driver
-  // can successfully execute clang commands that use this file path as an
-  // output argument
-  if (fs::create_directories(path::parent_path(Path))) {
-    return SmallString<128>();
-  }
-
-  return Path;
-}
-
-// TODO: Move inputFromFile and outputToFile within AMDGPUCompiler
-//
-// Currently, we only invoke these two methods in the context of AMDGPUCompiler.
-// Moreover, member functions that deal with file I/O should not worry whether
-// the underlying filesystem being used is virtual or real.
-amd_comgr_status_t inputFromFile(DataObject *Object, StringRef Path) {
-  ProfilePoint Point("FileIO");
-  auto BufOrError = MemoryBuffer::getFile(Path);
-  if (std::error_code EC = BufOrError.getError()) {
-    return AMD_COMGR_STATUS_ERROR;
-  }
-  Object->setData(BufOrError.get()->getBuffer());
-  return AMD_COMGR_STATUS_SUCCESS;
-}
-
-amd_comgr_status_t outputToFile(StringRef Data, StringRef Path) {
-  SmallString<128> DirPath = Path;
-  path::remove_filename(DirPath);
-  {
-    ProfilePoint Point("CreateDir");
-    if (fs::create_directories(DirPath)) {
-      return AMD_COMGR_STATUS_ERROR;
-    }
-  }
-  std::error_code EC;
-  ProfilePoint Point("FileIO");
-  raw_fd_ostream OS(Path, EC, fs::OF_None);
-  if (EC) {
-    return AMD_COMGR_STATUS_ERROR;
-  }
-  OS << Data;
-  OS.close();
-  if (OS.has_error()) {
-    return AMD_COMGR_STATUS_ERROR;
-  }
-  return AMD_COMGR_STATUS_SUCCESS;
-}
-
-amd_comgr_status_t outputToFile(DataObject *Object, StringRef Path) {
-  return outputToFile(StringRef(Object->Data, Object->Size), Path);
-}
-
 void initializeCommandLineArgs(SmallVectorImpl<const char *> &Args) {
   // Workaround for flawed Driver::BuildCompilation(...) implementation,
   // which eliminates 1st argument, cause it actually awaits argv[0].
@@ -1183,6 +1127,75 @@ amd_comgr_status_t AMDGPUCompiler::removeTmpDirs() {
 #endif
 }
 
+SmallString<128> AMDGPUCompiler::getFilePath(DataObject *Object,
+                                             StringRef Dir, bool AllowVFS) {
+  SmallString<128> Path(Dir);
+  path::append(Path, Object->Name);
+
+  if (UseVFS && AllowVFS) {
+    return Path;
+  }
+
+  // Create directories specified in the File Path so that the in-process driver
+  // can successfully execute clang commands that use this file path as an
+  // output argument
+  if (fs::create_directories(path::parent_path(Path))) {
+    return SmallString<128>();
+  }
+
+  return Path;
+}
+
+amd_comgr_status_t AMDGPUCompiler::inputFromFile(DataObject *Object,
+                                                 StringRef Path) {
+  ProfilePoint Point("FileIO");
+  auto BufOrError = MemoryBuffer::getFile(Path);
+  if (std::error_code EC = BufOrError.getError()) {
+    return AMD_COMGR_STATUS_ERROR;
+  }
+  Object->setData(BufOrError.get()->getBuffer());
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMDGPUCompiler::outputToFile(StringRef Data, StringRef Path,
+                                                bool AllowVFS) {
+  if (UseVFS && AllowVFS) {
+    ProfilePoint Point("FileIO");
+    if (!InMemoryFS->addFile(Path, /* ModificationTime */ 0,
+                             MemoryBuffer::getMemBufferCopy(Data))) {
+      return AMD_COMGR_STATUS_ERROR;
+    }
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
+
+  SmallString<128> DirPath = Path;
+  path::remove_filename(DirPath);
+  {
+    ProfilePoint Point("CreateDir");
+    if (fs::create_directories(DirPath)) {
+      return AMD_COMGR_STATUS_ERROR;
+    }
+  }
+  std::error_code EC;
+  ProfilePoint Point("FileIO");
+  raw_fd_ostream OS(Path, EC, fs::OF_None);
+  if (EC) {
+    return AMD_COMGR_STATUS_ERROR;
+  }
+  OS << Data;
+  OS.close();
+  if (OS.has_error()) {
+    return AMD_COMGR_STATUS_ERROR;
+  }
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMDGPUCompiler::outputToFile(DataObject *Object,
+                                                StringRef Path,
+                                                bool AllowVFS) {
+  return outputToFile(StringRef(Object->Data, Object->Size), Path, AllowVFS);
+}
+
 amd_comgr_status_t AMDGPUCompiler::processFile(DataObject *Input,
                                                const char *InputFilePath,
                                                const char *OutputFilePath) {
@@ -1261,8 +1274,8 @@ AMDGPUCompiler::processFiles(amd_comgr_data_kind_t OutputKind,
     if (Input->DataKind != AMD_COMGR_DATA_KIND_INCLUDE) {
       continue;
     }
-    auto IncludeFilePath = getFilePath(Input, IncludeDir);
-    if (auto Status = outputToFile(Input, IncludeFilePath)) {
+    auto IncludeFilePath = getFilePath(Input, IncludeDir, /*AllowVFS=*/true);
+    if (auto Status = outputToFile(Input, IncludeFilePath, /*AllowVFS=*/true)) {
       return Status;
     }
   }
@@ -1275,8 +1288,8 @@ AMDGPUCompiler::processFiles(amd_comgr_data_kind_t OutputKind,
       continue;
     }
 
-    auto InputFilePath = getFilePath(Input, InputDir);
-    if (auto Status = outputToFile(Input, InputFilePath)) {
+    auto InputFilePath = getFilePath(Input, InputDir, /*AllowVFS=*/true);
+    if (auto Status = outputToFile(Input, InputFilePath, /*AllowVFS=*/true)) {
       return Status;
     }
 
@@ -1323,8 +1336,8 @@ amd_comgr_status_t AMDGPUCompiler::addIncludeFlags() {
   case AMD_COMGR_LANGUAGE_OPENCL_2_0: {
     SmallString<128> OpenCLCBasePath = IncludeDir;
     sys::path::append(OpenCLCBasePath, "opencl-c-base.h");
-    if (auto Status =
-            outputToFile(getOpenCLCBaseHeaderContents(), OpenCLCBasePath)) {
+    if (auto Status = outputToFile(getOpenCLCBaseHeaderContents(),
+                                   OpenCLCBasePath, /*AllowVFS=*/true)) {
       return Status;
     }
     Args.push_back("-include");
@@ -1349,9 +1362,11 @@ amd_comgr_status_t AMDGPUCompiler::addIncludeFlags() {
     if (Input->DataKind != AMD_COMGR_DATA_KIND_PRECOMPILED_HEADER) {
       continue;
     }
-    PrecompiledHeaders.push_back(getFilePath(Input, IncludeDir));
+    PrecompiledHeaders.push_back(
+        getFilePath(Input, IncludeDir, /*AllowVFS=*/true));
     auto &PrecompiledHeaderPath = PrecompiledHeaders.back();
-    if (auto Status = outputToFile(Input, PrecompiledHeaderPath)) {
+    if (auto Status =
+            outputToFile(Input, PrecompiledHeaderPath, /*AllowVFS=*/true)) {
       return Status;
     }
     Args.push_back("-include-pch");
@@ -1449,17 +1464,8 @@ amd_comgr_status_t AMDGPUCompiler::addCompilationFlags() {
 
 amd_comgr_status_t AMDGPUCompiler::outputResource(llvm::StringRef Path,
                                                   llvm::StringRef FileContent) {
-  // TODO: We should abstract the logic of deciding whether to use the VFS
-  // or the real file system within inputFromFile and outputToFile.
-  if (UseVFS) {
-    if (!InMemoryFS->addFile(Path, /* ModificationTime */ 0,
-                             llvm::MemoryBuffer::getMemBuffer(FileContent))) {
-      return AMD_COMGR_STATUS_ERROR;
-    }
-  } else {
-    if (auto Status = outputToFile(FileContent, Path)) {
-      return Status;
-    }
+  if (auto Status = outputToFile(FileContent, Path, /*AllowVFS=*/true)) {
+    return Status;
   }
 
   return AMD_COMGR_STATUS_SUCCESS;
