@@ -97,10 +97,6 @@ public:
     HasBFloat16 = true;
   }
 
-  // PowerPC uses the LLVM 'half' IR type for _Float16 throughout codegen;
-  // the backend soft-promotes via TypeSoftPromoteHalf.  Do not emit
-  // __gnu_h2f_ieee / __gnu_f2h_ieee conversion intrinsics.
-  bool useFP16ConversionIntrinsics() const override { return false; }
 
   // Set the language option for altivec based on our value.
   void adjust(DiagnosticsEngine &Diags, LangOptions &Opts,
