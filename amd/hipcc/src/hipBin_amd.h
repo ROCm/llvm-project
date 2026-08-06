@@ -652,6 +652,8 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
           } else if (arg == "--hipcc-no-func-supp") {
             std::cerr << "Warning: The --hipcc-no-func-supp option has been deprecated and will be removed in the future.\n";
             funcSupp = 0;
+          } else if (hipBinUtilPtr_->stringRegexMatch(arg, "^--hipcc-verbose=.*")) {
+            verbose = stoi(arg.substr(arg.find('=') + 1));
           }
         } else {
           options.push_back(arg);
