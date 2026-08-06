@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 #
+# gpurun version 2.0
+#
 # Copyright(C) 2025 Advanced Micro Devices, Inc. All rights reserved.
 #
 #   gpurun: Application process launch utility for GPUs.
