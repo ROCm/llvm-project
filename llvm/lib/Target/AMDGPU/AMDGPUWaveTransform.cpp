@@ -1667,16 +1667,6 @@ void ControlFlowRewriter::rewrite() {
   AMDGPULaneMaskAnalysis LMA(Function);
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
 
-  Register RegAllOnes;
-  auto getAllOnes = [&]() {
-    if (!RegAllOnes) {
-      RegAllOnes = LMU.createLaneMaskReg();
-      BuildMI(Function.front(), Function.front().getFirstTerminator(), {},
-              TII.get(LMC.MovOpc), RegAllOnes)
-          .addImm(-1);
-    }
-    return RegAllOnes;
-  };
   Register RegZero;
   auto getZero = [&]() {
     if (!RegZero) {
@@ -1812,7 +1802,6 @@ void ControlFlowRewriter::rewrite() {
            std::pair<Register, Register>>
       RegMap;
   AMDGPULaneMaskUpdater Updater(Function);
-  Updater.setLaneMaskAnalysis(&LMA);
 
   for (WaveNode *LaneTarget : NodeOrder) {
     CFGNodeInfo &LaneTargetInfo = NodeInfo.find(LaneTarget)->second;
@@ -1865,6 +1854,9 @@ void ControlFlowRewriter::rewrite() {
 
     for (const LaneOriginInfo &LaneOrigin : LaneTargetInfo.origins) {
       Register CondReg;
+      // Default: most producers below yield a subset of EXEC; EXEC/zero cases
+      // override this.
+      LaneMaskKind CondKind = LaneMaskKind::Subset;
       MachineBasicBlock::iterator MBBILaneOriginNodeFirstTerm =
           LaneOrigin.Node->Block->getFirstTerminator();
 
@@ -1872,22 +1864,28 @@ void ControlFlowRewriter::rewrite() {
         switch (LaneOrigin.ImplicitBranchOpc) {
         case 0: // Unconditional branch
           assert(!LaneOrigin.InvertCondition);
-          CondReg = getAllOnes();
+          CondReg = LMC.ExecReg;
+          CondKind = LaneMaskKind::Exec;
           break;
         case TargetOpcode::INLINEASM_BR:
           // Opaque callbr; exec assumed invariant. Conservatively
           // contribute all active lanes regardless of branch direction.
-          CondReg = getAllOnes();
+          CondReg = LMC.ExecReg;
+          CondKind = LaneMaskKind::Exec;
           break;
         // Uniform branch with implicit condition (VCC/EXEC/SCC), or
         // unconditional (ImplicitBranchOpc == 0).
         // All active lanes go the same direction, so the lane
         // contribution is either EXEC (all lanes) or 0 (no lanes).
         case AMDGPU::S_CBRANCH_EXECNZ:
-          CondReg = LaneOrigin.InvertCondition ? getZero() : getAllOnes();
+          CondReg = LaneOrigin.InvertCondition ? getZero() : LMC.ExecReg;
+          CondKind = LaneOrigin.InvertCondition ? LaneMaskKind::Zero
+                                                : LaneMaskKind::Exec;
           break;
         case AMDGPU::S_CBRANCH_EXECZ:
-          CondReg = LaneOrigin.InvertCondition ? getAllOnes() : getZero();
+          CondReg = LaneOrigin.InvertCondition ? LMC.ExecReg : getZero();
+          CondKind = LaneOrigin.InvertCondition ? LaneMaskKind::Exec
+                                                : LaneMaskKind::Zero;
           break;
         case AMDGPU::S_CBRANCH_SCC1: {
           CondReg = LMU.createLaneMaskReg();
@@ -1964,6 +1962,7 @@ void ControlFlowRewriter::rewrite() {
               .addReg(LMC.ExecReg);
         }
       } else {
+        assert(!LaneOrigin.CondIsUndef && "Lane mask is undef");
         CondReg = LaneOrigin.CondReg;
         if (!LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block,
                                 MBBILaneOriginNodeFirstTerm)) {
@@ -2007,7 +2006,7 @@ void ControlFlowRewriter::rewrite() {
       if (HasSingleDomOrigin)
         DirectCondReg = CondReg;
       else
-        Updater.addAvailable(*LaneOrigin.Node->Block, CondReg);
+        Updater.addAvailable(*LaneOrigin.Node->Block, CondReg, CondKind);
     }
 
     // Step 2.2: Synthesize EXEC updates and branch instructions.
@@ -2106,7 +2105,7 @@ void ControlFlowRewriter::rewrite() {
       if (HasSingleDivergentPred)
         DirectRejoin = Rejoin;
       else
-        Updater.addAvailable(*Pred->Block, Rejoin);
+        Updater.addAvailable(*Pred->Block, Rejoin, LaneMaskKind::Subset);
     }
 
     Register RejoinMask = HasSingleDivergentPred
@@ -2122,11 +2121,6 @@ void ControlFlowRewriter::rewrite() {
   Updater.cleanup();
 
   // remove unused virtual registers def
-  if (RegAllOnes && MRI.use_empty(RegAllOnes)) {
-    // getVRegDef can be used since RegAllOnes has a single def
-    MRI.getVRegDef(RegAllOnes)->eraseFromParent();
-    RegAllOnes = AMDGPU::NoRegister;
-  }
   if (RegZero && MRI.use_empty(RegZero)) {
     // getVRegDef can be used since RegZero has a single def
     MRI.getVRegDef(RegZero)->eraseFromParent();

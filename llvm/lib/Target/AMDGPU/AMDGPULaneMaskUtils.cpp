@@ -89,26 +89,44 @@ Register AMDGPULaneMaskUtils::createLaneMaskReg() const {
   return MRI.createVirtualRegister(LMC.LaneMaskRC);
 }
 
+/// Classify \p Reg by its relationship to EXEC; the all-ones constant (-1)
+/// maps to \ref LaneMaskKind::Exec since -1 & EXEC == EXEC.
+LaneMaskKind
+AMDGPULaneMaskUtils::classifyLaneMask(Register Reg, MachineBasicBlock &MBB,
+                                      MachineBasicBlock::iterator I,
+                                      AMDGPULaneMaskAnalysis *LMA) const {
+  if (Reg == LMC.ExecReg)
+    return LaneMaskKind::Exec;
+
+  bool Val = false;
+  if (isConstantLaneMask(Reg, Val, MBB, I))
+    return Val ? LaneMaskKind::Exec : LaneMaskKind::Zero;
+
+  if (LMA && LMA->isSubsetOfExec(Reg, MBB, I))
+    return LaneMaskKind::Subset;
+
+  return LaneMaskKind::NeedsMask;
+}
+
 /// Insert the moral equivalent of
 ///
 ///    DstReg = PrevReg | (CurReg & EXEC)
 ///
 /// before \p I in basic block \p MBB. Some simplifications are applied on the
-/// fly based on constant inputs and analysis via \p LMA
+/// fly based on how \p CurReg relates to EXEC (its \ref LaneMaskKind).
 ///
 /// \param DstReg The virtual register into which the merged mask is written.
 /// \param PrevReg The virtual register with the "previous" lane mask value;
 ///                may be ZeroReg or Accumulator.
 /// \param CurReg The virtual register with the "current" lane mask value to
 ///               be merged into "previous".
-/// \param LMA If non-null, used to test whether CurReg may already be a subset
-///            of EXEC.
+/// \param CurKind The class of CurReg (see \ref classifyLaneMask).
 /// \param isPrevZeroReg Indicates that PrevReg is a zero register.
 void AMDGPULaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
                                            MachineBasicBlock::iterator I,
                                            const DebugLoc &DL, Register DstReg,
                                            Register PrevReg, Register CurReg,
-                                           AMDGPULaneMaskAnalysis *LMA,
+                                           LaneMaskKind CurKind,
                                            bool isPrevZeroReg) const {
   const SIInstrInfo *TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
   assert(PrevReg &&
@@ -120,40 +138,49 @@ void AMDGPULaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
   auto buildBinOp = [&](unsigned Opc, Register Dst, Register A, Register B) {
     BuildMI(MBB, I, DL, TII->get(Opc), Dst).addReg(A).addReg(B);
   };
-
-  bool CurVal = false;
-  bool CurIsConstant = isConstantLaneMask(CurReg, CurVal, MBB, I);
+  auto buildMov0 = [&](Register Dst) {
+    BuildMI(MBB, I, DL, TII->get(LMC.MovOpc), Dst).addImm(0);
+  };
 
   // Case A -- previous is zero: DstReg = CurReg & EXEC.
   if (isPrevZeroReg) {
-    // Constant current: -1 & EXEC == EXEC, 0 & EXEC == 0.
-    if (CurIsConstant)
-      buildCopy(DstReg, CurVal ? LMC.ExecReg : CurReg);
-    else if (LMA && LMA->isSubsetOfExec(CurReg, MBB, I))
+    switch (CurKind) {
+    case LaneMaskKind::Zero:
+      buildMov0(DstReg);
+      break;
+    case LaneMaskKind::Exec:
+      buildCopy(DstReg, LMC.ExecReg);
+      break;
+    case LaneMaskKind::Subset:
       buildCopy(DstReg, CurReg);
-    else
+      break;
+    case LaneMaskKind::NeedsMask:
       buildBinOp(LMC.AndOpc, DstReg, CurReg, LMC.ExecReg);
+      break;
+    }
     return;
   }
 
   // Case B -- previous is a real accumulator:
   //   DstReg = PrevReg | (CurReg & EXEC).
-  if (CurIsConstant && !CurVal) {
-    // CurReg & EXEC == 0, so PrevReg | 0 == PrevReg.
-    buildCopy(DstReg, PrevReg);
-    return;
-  }
-
-  // Reduce (CurReg & EXEC) to a single OR operand.
+  // Reduce (CurReg & EXEC) to a single OR operand, or elide the merge.
   Register CurMasked;
-  if (CurIsConstant)
-    // CurVal is true here: -1 & EXEC == EXEC.
+  switch (CurKind) {
+  case LaneMaskKind::Zero:
+    // CurReg & EXEC == 0, so the merge is a no-op; copy only if Dst != Prev.
+    if (DstReg != PrevReg)
+      buildCopy(DstReg, PrevReg);
+    return;
+  case LaneMaskKind::Exec:
     CurMasked = LMC.ExecReg;
-  else if (LMA && LMA->isSubsetOfExec(CurReg, MBB, I))
+    break;
+  case LaneMaskKind::Subset:
     CurMasked = CurReg;
-  else {
+    break;
+  case LaneMaskKind::NeedsMask:
     CurMasked = createLaneMaskReg();
     buildBinOp(LMC.AndOpc, CurMasked, CurReg, LMC.ExecReg);
+    break;
   }
 
   buildBinOp(LMC.OrOpc, DstReg, PrevReg, CurMasked);
@@ -293,7 +320,7 @@ void AMDGPULaneMaskUpdater::addReset(MachineBasicBlock &Block,
 /// \param Value A virtual lane mask register; the lane bits are masked by the
 ///              block's effective EXEC.
 void AMDGPULaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
-                                         Register Value) {
+                                         Register Value, LaneMaskKind Kind) {
   auto BlockIt = findBlockInfo(Block);
   if (BlockIt == Blocks.end()) {
     Blocks.emplace_back(&Block);
@@ -308,7 +335,7 @@ void AMDGPULaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
   else
     Previous = ZeroReg;
   LMU.buildMergeLaneMasks(Block, getSaluInsertionAtEnd(Block), {}, Accumulator,
-                          Previous, Value, LMA, Previous == ZeroReg);
+                          Previous, Value, Kind, Previous == ZeroReg);
 }
 
 /// Return the accumulated lane mask after \p Block's merge: \ref Accumulator,
