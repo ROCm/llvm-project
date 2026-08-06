@@ -130,26 +130,25 @@ define void @my_func(i32 %0) {
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 ; GCN-NEXT:  .LBB0_5: ; %NodeBlock7
 ; GCN-NEXT:    v_cmp_gt_i32_e32 vcc, 2, v0
-; GCN-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    s_xor_b64 exec, vcc, exec
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_7
-; GCN-NEXT:  .LBB0_6: ; %LeafBlock3
-; GCN-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v0
-; GCN-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
+; GCN-NEXT:  .LBB0_6: ; %LeafBlock5
+; GCN-NEXT:    v_cmp_eq_u32_e64 s[6:7], 2, v0
+; GCN-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; GCN-NEXT:  .LBB0_7:
-; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
-; GCN-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GCN-NEXT:    s_mov_b64 exec, s[8:9]
+; GCN-NEXT:    s_or_b64 exec, exec, vcc
+; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_9
-; GCN-NEXT:  .LBB0_8: ; %LeafBlock5
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 2, v0
-; GCN-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
-; GCN-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GCN-NEXT:  .LBB0_8: ; %LeafBlock3
+; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+; GCN-NEXT:    s_xor_b64 s[10:11], vcc, exec
+; GCN-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GCN-NEXT:  .LBB0_9:
-; GCN-NEXT:    s_or_b64 exec, exec, s[10:11]
+; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GCN-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GCN-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GCN-NEXT:    s_mov_b64 exec, s[6:7]

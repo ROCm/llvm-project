@@ -1036,19 +1036,32 @@ define amdgpu_kernel void @analyze_mask_branch() #0 {
 ; GCN-NEXT:    ;;#ASMSTART
 ; GCN-NEXT:    v_mov_b32_e64 v0, 0
 ; GCN-NEXT:    ;;#ASMEND
-; GCN-NEXT:    v_cmp_nlt_f32_e64 s[0:1], 0, v0
-; GCN-NEXT:    s_xor_b64 exec, s[0:1], exec
+; GCN-NEXT:    v_cmp_nlt_f32_e32 vcc, 0, v0
+; GCN-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
-; GCN-NEXT:    s_cbranch_execnz .LBB9_1
-; GCN-NEXT:  .LBB9_6: ; %entry
-; GCN-NEXT:    s_getpc_b64 s[2:3]
+; GCN-NEXT:    s_cbranch_execz .LBB9_2
+; GCN-NEXT:  .LBB9_1: ; %ret
+; GCN-NEXT:    s_mov_b32 s3, 0xf000
+; GCN-NEXT:    s_mov_b32 s2, -1
+; GCN-NEXT:    v_mov_b32_e32 v0, 7
+; GCN-NEXT:    buffer_store_dword v0, off, s[0:3], 0
+; GCN-NEXT:    s_waitcnt vmcnt(0)
+; GCN-NEXT:  .LBB9_2:
+; GCN-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GCN-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GCN-NEXT:    s_mov_b64 exec, s[0:1]
+; GCN-NEXT:    ; divergent control-flow edge
+; GCN-NEXT:    s_cbranch_execnz .LBB9_3
+; GCN-NEXT:  .LBB9_6:
+; GCN-NEXT:    s_getpc_b64 s[0:1]
 ; GCN-NEXT:  .Lpost_getpc10:
-; GCN-NEXT:    s_add_u32 s2, s2, (.LBB9_3-.Lpost_getpc10)&4294967295
-; GCN-NEXT:    s_addc_u32 s3, s3, (.LBB9_3-.Lpost_getpc10)>>32
-; GCN-NEXT:    s_setpc_b64 s[2:3]
-; GCN-NEXT:  .LBB9_1: ; %loop.preheader
+; GCN-NEXT:    s_add_u32 s0, s0, (.LBB9_5-.Lpost_getpc10)&4294967295
+; GCN-NEXT:    s_addc_u32 s1, s1, (.LBB9_5-.Lpost_getpc10)>>32
+; GCN-NEXT:    s_setpc_b64 s[0:1]
+; GCN-NEXT:  .LBB9_3: ; %loop.preheader
 ; GCN-NEXT:    s_and_b64 vcc, exec, -1
-; GCN-NEXT:  .LBB9_2: ; %loop
+; GCN-NEXT:  .LBB9_4: ; %loop
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    ;;#ASMSTART
 ; GCN-NEXT:    v_nop_e64
@@ -1061,26 +1074,14 @@ define amdgpu_kernel void @analyze_mask_branch() #0 {
 ; GCN-NEXT:    v_nop_e64
 ; GCN-NEXT:    ;;#ASMEND
 ; GCN-NEXT:    s_mov_b64 vcc, vcc
-; GCN-NEXT:    s_cbranch_vccz .LBB9_3
+; GCN-NEXT:    s_cbranch_vccz .LBB9_5
 ; GCN-NEXT:  ; %bb.8: ; %loop
-; GCN-NEXT:    ; in Loop: Header=BB9_2 Depth=1
-; GCN-NEXT:    s_getpc_b64 s[2:3]
+; GCN-NEXT:    ; in Loop: Header=BB9_4 Depth=1
+; GCN-NEXT:    s_getpc_b64 s[0:1]
 ; GCN-NEXT:  .Lpost_getpc11:
-; GCN-NEXT:    s_add_u32 s2, s2, (.LBB9_2-.Lpost_getpc11)&4294967295
-; GCN-NEXT:    s_addc_u32 s3, s3, (.LBB9_2-.Lpost_getpc11)>>32
-; GCN-NEXT:    s_setpc_b64 s[2:3]
-; GCN-NEXT:  .LBB9_3:
-; GCN-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GCN-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GCN-NEXT:    s_mov_b64 exec, s[0:1]
-; GCN-NEXT:    ; divergent control-flow edge
-; GCN-NEXT:    s_cbranch_execz .LBB9_5
-; GCN-NEXT:  .LBB9_4: ; %ret
-; GCN-NEXT:    s_mov_b32 s3, 0xf000
-; GCN-NEXT:    s_mov_b32 s2, -1
-; GCN-NEXT:    v_mov_b32_e32 v0, 7
-; GCN-NEXT:    buffer_store_dword v0, off, s[0:3], 0
-; GCN-NEXT:    s_waitcnt vmcnt(0)
+; GCN-NEXT:    s_add_u32 s0, s0, (.LBB9_4-.Lpost_getpc11)&4294967295
+; GCN-NEXT:    s_addc_u32 s1, s1, (.LBB9_4-.Lpost_getpc11)>>32
+; GCN-NEXT:    s_setpc_b64 s[0:1]
 ; GCN-NEXT:  .LBB9_5: ; %UnifiedReturnBlock
 ; GCN-NEXT:    s_endpgm
 ;
@@ -1089,22 +1090,34 @@ define amdgpu_kernel void @analyze_mask_branch() #0 {
 ; GFX11-NEXT:    ;;#ASMSTART
 ; GFX11-NEXT:    v_mov_b32_e64 v0, 0
 ; GFX11-NEXT:    ;;#ASMEND
-; GFX11-NEXT:    v_cmp_nlt_f32_e64 s[0:1], 0, v0
-; GFX11-NEXT:    s_xor_b64 exec, s[0:1], exec
+; GFX11-NEXT:    v_cmp_nlt_f32_e32 vcc, 0, v0
+; GFX11-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; GFX11-NEXT:    s_mov_b64 exec, vcc
 ; GFX11-NEXT:    ; divergent control-flow edge
-; GFX11-NEXT:    s_cbranch_execnz .LBB9_1
-; GFX11-NEXT:  .LBB9_6: ; %entry
-; GFX11-NEXT:    s_getpc_b64 s[2:3]
+; GFX11-NEXT:    s_cbranch_execz .LBB9_2
+; GFX11-NEXT:  .LBB9_1: ; %ret
+; GFX11-NEXT:    v_mov_b32_e32 v0, 7
+; GFX11-NEXT:    global_store_b32 v[0:1], v0, off dlc
+; GFX11-NEXT:    s_waitcnt_vscnt null, 0x0
+; GFX11-NEXT:  .LBB9_2:
+; GFX11-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX11-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX11-NEXT:    ; divergent control-flow edge
+; GFX11-NEXT:    s_cbranch_execnz .LBB9_3
+; GFX11-NEXT:  .LBB9_6:
+; GFX11-NEXT:    s_getpc_b64 s[0:1]
 ; GFX11-NEXT:  .Lpost_getpc8:
 ; GFX11-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
-; GFX11-NEXT:    s_add_u32 s2, s2, (.LBB9_3-.Lpost_getpc8)&4294967295
-; GFX11-NEXT:    s_addc_u32 s3, s3, (.LBB9_3-.Lpost_getpc8)>>32
+; GFX11-NEXT:    s_add_u32 s0, s0, (.LBB9_5-.Lpost_getpc8)&4294967295
+; GFX11-NEXT:    s_addc_u32 s1, s1, (.LBB9_5-.Lpost_getpc8)>>32
 ; GFX11-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
-; GFX11-NEXT:    s_setpc_b64 s[2:3]
-; GFX11-NEXT:  .LBB9_1: ; %loop.preheader
+; GFX11-NEXT:    s_setpc_b64 s[0:1]
+; GFX11-NEXT:  .LBB9_3: ; %loop.preheader
 ; GFX11-NEXT:    s_and_b64 vcc, exec, -1
 ; GFX11-NEXT:    .p2align 6
-; GFX11-NEXT:  .LBB9_2: ; %loop
+; GFX11-NEXT:  .LBB9_4: ; %loop
 ; GFX11-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-NEXT:    ;;#ASMSTART
 ; GFX11-NEXT:    v_nop_e64
@@ -1116,27 +1129,16 @@ define amdgpu_kernel void @analyze_mask_branch() #0 {
 ; GFX11-NEXT:    v_nop_e64
 ; GFX11-NEXT:    v_nop_e64
 ; GFX11-NEXT:    ;;#ASMEND
-; GFX11-NEXT:    s_cbranch_vccz .LBB9_3
+; GFX11-NEXT:    s_cbranch_vccz .LBB9_5
 ; GFX11-NEXT:  ; %bb.8: ; %loop
-; GFX11-NEXT:    ; in Loop: Header=BB9_2 Depth=1
-; GFX11-NEXT:    s_getpc_b64 s[2:3]
+; GFX11-NEXT:    ; in Loop: Header=BB9_4 Depth=1
+; GFX11-NEXT:    s_getpc_b64 s[0:1]
 ; GFX11-NEXT:  .Lpost_getpc9:
 ; GFX11-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
-; GFX11-NEXT:    s_add_u32 s2, s2, (.LBB9_2-.Lpost_getpc9)&4294967295
-; GFX11-NEXT:    s_addc_u32 s3, s3, (.LBB9_2-.Lpost_getpc9)>>32
+; GFX11-NEXT:    s_add_u32 s0, s0, (.LBB9_4-.Lpost_getpc9)&4294967295
+; GFX11-NEXT:    s_addc_u32 s1, s1, (.LBB9_4-.Lpost_getpc9)>>32
 ; GFX11-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
-; GFX11-NEXT:    s_setpc_b64 s[2:3]
-; GFX11-NEXT:  .LBB9_3:
-; GFX11-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GFX11-NEXT:    s_mov_b64 exec, s[0:1]
-; GFX11-NEXT:    ; divergent control-flow edge
-; GFX11-NEXT:    s_cbranch_execz .LBB9_5
-; GFX11-NEXT:  .LBB9_4: ; %ret
-; GFX11-NEXT:    v_mov_b32_e32 v0, 7
-; GFX11-NEXT:    global_store_b32 v[0:1], v0, off dlc
-; GFX11-NEXT:    s_waitcnt_vscnt null, 0x0
+; GFX11-NEXT:    s_setpc_b64 s[0:1]
 ; GFX11-NEXT:  .LBB9_5: ; %UnifiedReturnBlock
 ; GFX11-NEXT:    s_endpgm
 ;
@@ -1145,21 +1147,33 @@ define amdgpu_kernel void @analyze_mask_branch() #0 {
 ; GFX12-NEXT:    ;;#ASMSTART
 ; GFX12-NEXT:    v_mov_b32_e64 v0, 0
 ; GFX12-NEXT:    ;;#ASMEND
-; GFX12-NEXT:    v_cmp_nlt_f32_e64 s0, 0, v0
-; GFX12-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
+; GFX12-NEXT:    v_cmp_nlt_f32_e32 vcc_lo, 0, v0
+; GFX12-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
+; GFX12-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX12-NEXT:    ; divergent control-flow edge
-; GFX12-NEXT:    s_cbranch_execnz .LBB9_1
-; GFX12-NEXT:  .LBB9_6: ; %entry
-; GFX12-NEXT:    s_getpc_b64 s[2:3]
+; GFX12-NEXT:    s_cbranch_execz .LBB9_2
+; GFX12-NEXT:  .LBB9_1: ; %ret
+; GFX12-NEXT:    v_mov_b32_e32 v0, 7
+; GFX12-NEXT:    global_store_b32 v[0:1], v0, off scope:SCOPE_SYS
+; GFX12-NEXT:    s_wait_storecnt 0x0
+; GFX12-NEXT:  .LBB9_2:
+; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX12-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX12-NEXT:    s_mov_b32 exec_lo, s0
+; GFX12-NEXT:    ; divergent control-flow edge
+; GFX12-NEXT:    s_cbranch_execnz .LBB9_3
+; GFX12-NEXT:  .LBB9_6:
+; GFX12-NEXT:    s_getpc_b64 s[0:1]
 ; GFX12-NEXT:  .Lpost_getpc8:
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_add_co_u32 s2, s2, (.LBB9_3-.Lpost_getpc8)&4294967295
-; GFX12-NEXT:    s_add_co_ci_u32 s3, s3, (.LBB9_3-.Lpost_getpc8)>>32
+; GFX12-NEXT:    s_add_co_u32 s0, s0, (.LBB9_5-.Lpost_getpc8)&4294967295
+; GFX12-NEXT:    s_add_co_ci_u32 s1, s1, (.LBB9_5-.Lpost_getpc8)>>32
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_setpc_b64 s[2:3]
-; GFX12-NEXT:  .LBB9_1: ; %loop.preheader
+; GFX12-NEXT:    s_setpc_b64 s[0:1]
+; GFX12-NEXT:  .LBB9_3: ; %loop.preheader
 ; GFX12-NEXT:    s_mov_b32 vcc_lo, exec_lo
-; GFX12-NEXT:  .LBB9_2: ; %loop
+; GFX12-NEXT:  .LBB9_4: ; %loop
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-NEXT:    ;;#ASMSTART
 ; GFX12-NEXT:    v_nop_e64
@@ -1171,27 +1185,16 @@ define amdgpu_kernel void @analyze_mask_branch() #0 {
 ; GFX12-NEXT:    v_nop_e64
 ; GFX12-NEXT:    v_nop_e64
 ; GFX12-NEXT:    ;;#ASMEND
-; GFX12-NEXT:    s_cbranch_vccz .LBB9_3
+; GFX12-NEXT:    s_cbranch_vccz .LBB9_5
 ; GFX12-NEXT:  ; %bb.8: ; %loop
-; GFX12-NEXT:    ; in Loop: Header=BB9_2 Depth=1
-; GFX12-NEXT:    s_getpc_b64 s[2:3]
+; GFX12-NEXT:    ; in Loop: Header=BB9_4 Depth=1
+; GFX12-NEXT:    s_getpc_b64 s[0:1]
 ; GFX12-NEXT:  .Lpost_getpc9:
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_add_co_u32 s2, s2, (.LBB9_2-.Lpost_getpc9)&4294967295
-; GFX12-NEXT:    s_add_co_ci_u32 s3, s3, (.LBB9_2-.Lpost_getpc9)>>32
+; GFX12-NEXT:    s_add_co_u32 s0, s0, (.LBB9_4-.Lpost_getpc9)&4294967295
+; GFX12-NEXT:    s_add_co_ci_u32 s1, s1, (.LBB9_4-.Lpost_getpc9)>>32
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_setpc_b64 s[2:3]
-; GFX12-NEXT:  .LBB9_3:
-; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX12-NEXT:    s_mov_b32 exec_lo, s0
-; GFX12-NEXT:    ; divergent control-flow edge
-; GFX12-NEXT:    s_cbranch_execz .LBB9_5
-; GFX12-NEXT:  .LBB9_4: ; %ret
-; GFX12-NEXT:    v_mov_b32_e32 v0, 7
-; GFX12-NEXT:    global_store_b32 v[0:1], v0, off scope:SCOPE_SYS
-; GFX12-NEXT:    s_wait_storecnt 0x0
+; GFX12-NEXT:    s_setpc_b64 s[0:1]
 ; GFX12-NEXT:  .LBB9_5: ; %UnifiedReturnBlock
 ; GFX12-NEXT:    s_endpgm
 entry:

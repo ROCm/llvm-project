@@ -8,7 +8,8 @@ define amdgpu_kernel void @test(i32 %N, ptr addrspace(1) %p) {
 ; CHECK-NEXT:    v_cmp_gt_i32_e32 vcc, 1, v0
 ; CHECK-NEXT:    s_xor_b64 s[0:1], vcc, -1
 ; CHECK-NEXT:    s_and_b64 s[0:1], exec, s[0:1]
-; CHECK-NEXT:    s_xor_b64 exec, s[0:1], exec
+; CHECK-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; CHECK-NEXT:    s_mov_b64 exec, s[0:1]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_endpgm
 entry:

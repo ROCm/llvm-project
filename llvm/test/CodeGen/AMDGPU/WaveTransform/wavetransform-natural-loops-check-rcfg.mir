@@ -118,15 +118,15 @@
 
 # CFG-LABEL: Wave CFG for multi_backedge_exits_divergent_divergent:
 # CFG-NEXT:    %bb.0 (#0) -> %bb.1(*)
-# CFG-NEXT:    %bb.1 (#2) -> %bb.2(*) <flow-3>(%bb.3) [LatestPostDom: <flow-4>] [divergent]
-# CFG-NEXT:    %bb.2 (#3) -> <flow-3>(%bb.1,%bb.4) [divergent]
-# CFG-NEXT:    <flow-3> (#4) -> %bb.3(*) <flow-4>(%bb.4,%bb.1) [LatestPostDom: <flow-4>] [divergent] [secondary]
-# CFG-NEXT:    %bb.3 (#4) -> <flow-4>(%bb.1,%bb.5) [divergent]
-# CFG-NEXT:    <flow-4> (#5) -> %bb.1(*) <flow-5>(%bb.4,%bb.5) [LatestPostDom: <flow-5>] [divergent] [secondary]
-# CFG-NEXT:    <flow-5> (#6) -> %bb.5(*) <flow-6>(%bb.4) [LatestPostDom: <flow-6>] [divergent] [secondary]
-# CFG-NEXT:    %bb.5 (#6) -> <flow-6>(%bb.6)
-# CFG-NEXT:    <flow-6> (#7) -> %bb.4(*) %bb.6(*) [LatestPostDom: %bb.6] [divergent] [secondary]
-# CFG-NEXT:    %bb.4 (#7) -> %bb.6(*)
+# CFG-NEXT:    %bb.1 (#2) -> %bb.3(*) <flow-3>(%bb.2) [LatestPostDom: <flow-4>] [divergent]
+# CFG-NEXT:    %bb.3 (#3) -> <flow-3>(%bb.1,%bb.5) [divergent]
+# CFG-NEXT:    <flow-3> (#4) -> %bb.2(*) <flow-4>(%bb.5,%bb.1) [LatestPostDom: <flow-4>] [divergent] [secondary]
+# CFG-NEXT:    %bb.2 (#4) -> <flow-4>(%bb.1,%bb.4) [divergent]
+# CFG-NEXT:    <flow-4> (#5) -> %bb.1(*) <flow-5>(%bb.5,%bb.4) [LatestPostDom: <flow-5>] [divergent] [secondary]
+# CFG-NEXT:    <flow-5> (#6) -> %bb.4(*) <flow-6>(%bb.5) [LatestPostDom: <flow-6>] [divergent] [secondary]
+# CFG-NEXT:    %bb.4 (#6) -> <flow-6>(%bb.6)
+# CFG-NEXT:    <flow-6> (#7) -> %bb.5(*) %bb.6(*) [LatestPostDom: %bb.6] [divergent] [secondary]
+# CFG-NEXT:    %bb.5 (#7) -> %bb.6(*)
 # CFG-NEXT:    %bb.6 (#8) [secondary]
 
 #
@@ -144,12 +144,12 @@
 # CFG-LABEL: Wave CFG for multi_backedge_exits_uniform_divergent:
 # CFG-NEXT:    %bb.0 (#0) -> %bb.1(*)
 # CFG-NEXT:    %bb.1 (#2) -> %bb.2(*) %bb.3(*)
-# CFG-NEXT:    %bb.2 (#3) -> %bb.1(*) <flow-3>(%bb.4) [divergent]
-# CFG-NEXT:    %bb.3 (#4) -> %bb.1(*) <flow-3>(%bb.5) [LatestPostDom: <flow-3>] [divergent]
-# CFG-NEXT:    <flow-3> (#6) -> %bb.5(*) <flow-4>(%bb.4) [LatestPostDom: <flow-4>] [divergent] [secondary]
-# CFG-NEXT:    %bb.5 (#6) -> <flow-4>(%bb.6)
-# CFG-NEXT:    <flow-4> (#7) -> %bb.4(*) %bb.6(*) [LatestPostDom: %bb.6] [divergent] [secondary]
-# CFG-NEXT:    %bb.4 (#7) -> %bb.6(*)
+# CFG-NEXT:    %bb.3 (#3) -> %bb.1(*) <flow-3>(%bb.5) [divergent]
+# CFG-NEXT:    %bb.2 (#4) -> %bb.1(*) <flow-3>(%bb.4) [LatestPostDom: <flow-3>] [divergent]
+# CFG-NEXT:    <flow-3> (#6) -> %bb.4(*) <flow-4>(%bb.5) [LatestPostDom: <flow-4>] [divergent] [secondary]
+# CFG-NEXT:    %bb.4 (#6) -> <flow-4>(%bb.6)
+# CFG-NEXT:    <flow-4> (#7) -> %bb.5(*) %bb.6(*) [LatestPostDom: %bb.6] [divergent] [secondary]
+# CFG-NEXT:    %bb.5 (#7) -> %bb.6(*)
 # CFG-NEXT:    %bb.6 (#8) [secondary]
 
 #
@@ -166,15 +166,15 @@
 
 # CFG-LABEL: Wave CFG for multi_backedge_exits_divergent_uniform:
 # CFG-NEXT:    %bb.0 (#0) -> %bb.1(*)
-# CFG-NEXT:    %bb.1 (#2) -> %bb.2(*) <flow-3>(%bb.3) [LatestPostDom: <flow-4>] [divergent]
-# CFG-NEXT:    %bb.2 (#3) -> <flow-3>(%bb.1,%bb.4)
-# CFG-NEXT:    <flow-3> (#4) -> %bb.3(*) <flow-4>(%bb.4,%bb.1) [LatestPostDom: <flow-4>] [divergent] [secondary]
-# CFG-NEXT:    %bb.3 (#4) -> <flow-4>(%bb.1,%bb.5)
-# CFG-NEXT:    <flow-4> (#5) -> %bb.1(*) <flow-5>(%bb.4,%bb.5) [LatestPostDom: <flow-5>] [divergent] [secondary]
-# CFG-NEXT:    <flow-5> (#6) -> %bb.5(*) <flow-6>(%bb.4) [LatestPostDom: <flow-6>] [divergent] [secondary]
-# CFG-NEXT:    %bb.5 (#6) -> <flow-6>(%bb.6)
-# CFG-NEXT:    <flow-6> (#7) -> %bb.4(*) %bb.6(*) [LatestPostDom: %bb.6] [divergent] [secondary]
-# CFG-NEXT:    %bb.4 (#7) -> %bb.6(*)
+# CFG-NEXT:    %bb.1 (#2) -> %bb.3(*) <flow-3>(%bb.2) [LatestPostDom: <flow-4>] [divergent]
+# CFG-NEXT:    %bb.3 (#3) -> <flow-3>(%bb.1,%bb.5)
+# CFG-NEXT:    <flow-3> (#4) -> %bb.2(*) <flow-4>(%bb.5,%bb.1) [LatestPostDom: <flow-4>] [divergent] [secondary]
+# CFG-NEXT:    %bb.2 (#4) -> <flow-4>(%bb.1,%bb.4)
+# CFG-NEXT:    <flow-4> (#5) -> %bb.1(*) <flow-5>(%bb.5,%bb.4) [LatestPostDom: <flow-5>] [divergent] [secondary]
+# CFG-NEXT:    <flow-5> (#6) -> %bb.4(*) <flow-6>(%bb.5) [LatestPostDom: <flow-6>] [divergent] [secondary]
+# CFG-NEXT:    %bb.4 (#6) -> <flow-6>(%bb.6)
+# CFG-NEXT:    <flow-6> (#7) -> %bb.5(*) %bb.6(*) [LatestPostDom: %bb.6] [divergent] [secondary]
+# CFG-NEXT:    %bb.5 (#7) -> %bb.6(*)
 # CFG-NEXT:    %bb.6 (#8) [secondary]
 
 #
@@ -192,9 +192,9 @@
 # CFG-LABEL: Wave CFG for multi_backedge_exits_uniform_uniform:
 # CFG-NEXT:    %bb.0 (#0) -> %bb.1(*)
 # CFG-NEXT:    %bb.1 (#2) -> %bb.2(*) %bb.3(*)
-# CFG-NEXT:    %bb.2 (#3) -> %bb.4(*) %bb.1(*)
-# CFG-NEXT:    %bb.3 (#4) -> %bb.5(*) %bb.1(*)
-# CFG-NEXT:    %bb.5 (#6) -> %bb.6(*)
-# CFG-NEXT:    %bb.4 (#7) -> %bb.6(*)
+# CFG-NEXT:    %bb.3 (#3) -> %bb.5(*) %bb.1(*)
+# CFG-NEXT:    %bb.2 (#4) -> %bb.4(*) %bb.1(*)
+# CFG-NEXT:    %bb.4 (#6) -> %bb.6(*)
+# CFG-NEXT:    %bb.5 (#7) -> %bb.6(*)
 # CFG-NEXT:    %bb.6 (#8)
 
