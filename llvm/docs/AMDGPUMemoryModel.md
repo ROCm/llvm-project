@@ -74,7 +74,7 @@ target-defined scopes and constraints:
 
 - *system scope* (same as LLVM)
 - "agent" scope
-- "cluster" scope
+- "cluster" scope (see {ref}`amdgpu-clusters`)
 - "workgroup" scope
 - "wavefront" scope
 - "singlethread" scope (same as LLVM)
@@ -194,6 +194,8 @@ details.
 An atomic operation that results in a read operation is a *load-visible*
 operation with scope `syncscope`.
 
+(amdgpu-memmodel-addrspace3)=
+
 ### addrspace(3) Accesses
 
 Any access to `addrspace(3)` (aka LDS or local) always results in a *store-available* or
@@ -209,6 +211,23 @@ a `store atomic` to `addrspace(3)` specifies a smaller `syncscope` such as "wave
 side-effects are made available at "workgroup" scope. In other words, the scope
 for atomicity is not always the same as the scope for availability/visibility.
 ```
+
+**Cluster broadcast DMA**: A
+{ref}`cluster broadcast DMA<amdgpu-dma-operations>`
+(`@llvm.amdgcn.cluster.load.async.to.lds.b<N>`) writes to the `addrspace(3)` memory of every
+workgroup selected by its broadcast mask, which may include workgroups other
+than the invoking one. Each such write is a *store-available* operation with
+scope "cluster" instead of "workgroup", so that its side-effects can be made
+visible to threads in the other workgroups of the cluster.
+
+Only the requesting wave is informed when the DMA completes (see
+{ref}`amdgpu-async-operations`); the waves of the destination workgroups receive
+no direct completion signal. The requesting wave is therefore responsible for
+propagating completion to the other workgroups of the cluster, for example by a
+cluster-scope barrier or a memory atomic that it initiates after the DMA has
+completed. A thread in a destination workgroup then observes the broadcast data
+by pairing that synchronization with a *load-visible* or *make-visible*
+operation at "cluster" scope.
 
 (amdgpu-av-metadata)=
 

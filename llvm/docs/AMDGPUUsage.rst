@@ -1360,6 +1360,54 @@ supported for the ``amdgcn`` target.
   accesses affect LGKMcnt. This is an internal address space used only by the
   compiler. Do not use this address space for IR pointers.
 
+.. _amdgpu-clusters:
+
+Clusters
+--------
+
+On targets that support workgroup clusters (for example ``gfx1250``), the
+work-groups of a grid can be grouped into *clusters*. A cluster is a fixed-size,
+rectangular block of work-groups that are co-scheduled so that they can
+cooperate more closely than work-groups in different clusters.
+
+The cluster dimensions are specified with the ``"amdgpu-cluster-dims"`` function
+attribute (see :ref:`amdgpu-llvm-ir-attributes-table`). A value of ``0,0,0``
+disables clustering for the function.
+
+The work-groups of a single cluster share the following capabilities:
+
+Cluster-shared LDS
+   Each work-group has its own LDS (``local``, ``addrspace(3)``), as usual.
+   Within a cluster, a work-group can additionally access the LDS of the other
+   work-groups in the same cluster. This lets the work-groups of a cluster share
+   data through LDS without going through global memory. The
+   :ref:`cluster broadcast DMA <amdgpu-cluster-broadcast-dma>` uses this to
+   populate the LDS of several work-groups with a single operation.
+
+Cluster memory scope
+   The ``cluster`` memory scope (see :ref:`amdgpu-memory-scopes`) synchronizes
+   operations performed by threads in work-groups of the same cluster. On
+   targets that do not support clusters, ``cluster`` scope behaves like
+   ``agent`` scope.
+
+A work-group can query its position within the grid and its cluster using the
+following intrinsics:
+
+* ``llvm.amdgcn.cluster.id.{x,y,z}`` -- the coordinates of this work-group's
+  cluster within the grid.
+* ``llvm.amdgcn.cluster.workgroup.id.{x,y,z}`` and
+  ``llvm.amdgcn.cluster.workgroup.flat.id`` -- the coordinates, and the
+  flattened index, of this work-group within its cluster.
+* ``llvm.amdgcn.cluster.workgroup.max.id.{x,y,z}`` and
+  ``llvm.amdgcn.cluster.workgroup.max.flat.id`` -- the largest work-group index
+  within the cluster in each dimension, and flattened (i.e. the cluster
+  dimensions minus one).
+
+The flattened work-group index within the cluster is the index used by the
+broadcast mask of a :ref:`cluster broadcast DMA <amdgpu-cluster-broadcast-dma>`:
+bit ``i`` of the mask (``M0[15:0]``) selects the work-group with flattened index
+``i``, so a cluster broadcast targets at most 16 work-groups.
+
 .. _amdgpu-memory-scopes:
 
 Memory Scopes

@@ -99,7 +99,7 @@ void @llvm.amdgcn.{global|cluster}.load.async.to.lds.b<N>(
     ptr addrspace(3) %lds_base, ; LDS base pointer (per-lane)
     i32 immarg %offset,         ; offset (immediate) applied to both global and LDS address
     i32 immarg %cpol,           ; cache policy (immediate)
-    [i32 %m0])                  ; workgroup broadcast mask, cluster variants only (in M0)
+    [i32 %mask])                ; workgroup broadcast mask, cluster variants only (wave-uniform, in M0)
 ```
 
 The bit-size encoded in the name can be 8, 32, 64 or 128.
@@ -107,8 +107,53 @@ The bit-size encoded in the name can be 8, 32, 64 or 128.
 Loads data from global memory to LDS. The `%offset` is applied to both the
 global and LDS addresses.
 
-The `cluster` variants add a `%m0` argument for workgroup broadcast. The
-broadcast mask selects which workgroups within a cluster participate in the load.
+(amdgpu-cluster-broadcast-dma)=
+
+**Cluster Broadcast**
+
+The `cluster` variants broadcast data into the LDS of several workgroups in a
+{ref}`workgroup cluster <amdgpu-clusters>`. Every workgroup in a cluster is
+assigned an index, and the LDS of each workgroup in the cluster is addressable
+from any workgroup in the same cluster.
+
+The `cluster` variants add a `%mask` argument, passed in `M0`, that selects the
+set of destination workgroups within the invoking workgroup's cluster and
+controls the request timeout. The mask is wave-uniform. Its bits are:
+
+- Bits `[15:0]` are the *workgroup broadcast mask*. Bit `i` corresponds to the
+  workgroup with cluster index `i`: if the bit is set, that workgroup receives a
+  copy of the loaded data in its LDS; if it is clear, that workgroup does not. A
+  cluster therefore contains at most 16 workgroups for the purpose of this
+  operation. The invoking workgroup receives the data only if its own bit is
+  set.
+- Bit `[16]` selects the timeout behavior. When clear, the standard timeout is
+  used. When set, an *early timeout* is used: as soon as the L2 cache supplies
+  the data it is returned to whichever waves have already issued their requests,
+  and any waves that issue their requests later generate a new L2 request.
+
+The operation performs a single load from global memory and writes a copy of the
+loaded data into the LDS of *every* workgroup selected by the workgroup
+broadcast mask. The data is written at the same LDS location (`%lds_base` plus
+`%offset`) in each destination workgroup. This makes it possible to broadcast a
+value from global memory into the LDS of multiple workgroups with one DMA
+operation.
+
+To be combined into a single broadcast, every destination workgroup selected by
+the mask is expected to issue the same request: exactly one wave per workgroup
+must perform the operation, and all such waves must supply the same `M0` value
+(the same broadcast mask and address). If these conditions are not met, the
+requests are not guaranteed to be combined and may instead be serviced
+individually, as ordinary per-workgroup loads.
+
+Because a *cluster broadcast* writes to the LDS of workgroups other than the
+invoking one, its side-effects become available at "cluster" scope rather than
+"workgroup" scope. See {ref}`amdgpu-memmodel-addrspace3` for details.
+
+The `cluster` variants are only available on targets that have the multicast
+load instructions (the `mcast-load-insts` subtarget feature, currently GFX1250).
+Using them on any other target is not supported. Note that this feature is
+distinct from workgroup cluster support itself: a target may support clusters
+without providing these broadcast DMA instructions.
 
 ```llvm
 void @llvm.amdgcn.global.store.async.from.lds.b<N>(
