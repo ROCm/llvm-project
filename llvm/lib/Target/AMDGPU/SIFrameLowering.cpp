@@ -1784,7 +1784,7 @@ void SIFrameLowering::processFunctionBeforeFrameFinalized(
   // can. Any remaining SGPR spills will go to memory, so move them back to the
   // default stack.
   bool HaveSGPRToVMemSpill =
-      FuncInfo->removeDeadFrameIndices(MF, /*ResetSGPRSpillStackIDs*/ true);
+      FuncInfo->removeDeadFrameIndices(MFI, /*ResetSGPRSpillStackIDs*/ true);
   assert(allSGPRSpillsAreDead(MF) &&
          "SGPR spill should have been removed in SILowerSGPRSpills");
 
