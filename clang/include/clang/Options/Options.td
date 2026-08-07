@@ -1277,6 +1277,10 @@ def offload_new_driver : Flag<["--"], "offload-new-driver">,
 def no_offload_new_driver : Flag<["--"], "no-offload-new-driver">,
   Visibility<[ClangOption, CC1Option]>, Group<f_Group>,
   HelpText<"Don't Use the new driver for offloading compilation.">;
+def cuda_emit_nvcc_abi : Flag<["--"], "cuda-emit-nvcc-abi">,
+  Visibility<[ClangOption, CC1Option]>, Group<f_Group>,
+  MarshallingInfoFlag<LangOpts<"CUDANVCCABI">>,
+  HelpText<"Emit the NVCC-compatible host registration ABI for CUDA.">;
 
 def offload_device_only : Flag<["--"], "offload-device-only">,
   Visibility<[ClangOption, FlangOption]>,
@@ -9919,9 +9923,6 @@ def _SLASH_ZW : CLJoined<"ZW">;
 
 
 
-def famd_allow_threadprivate_equivalence : Flag<["-"], "famd-allow-threadprivate-equivalence">,
-  Flags<[HelpHidden]>, Group<f_Group>, Visibility<[FlangOption, FC1Option]>,
-  HelpText<"Allow to use veriables in EQUIVALENCE statements with THREADPRIVATE">;
 
 //===----------------------------------------------------------------------===//
 // clang-dxc Options

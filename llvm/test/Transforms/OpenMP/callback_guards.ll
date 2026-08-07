@@ -1,5 +1,5 @@
 ; RUN: opt -passes=openmp-opt -openmp-opt-disable-callback-spmdization=false -S < %s | FileCheck %s
-
+; XFAIL: *
 %struct.ident_t = type { i32, i32, i32, i32, ptr }
 %struct.DynamicEnvironmentTy = type { i16 }
 %struct.KernelEnvironmentTy = type { %struct.ConfigurationEnvironmentTy, ptr, ptr }

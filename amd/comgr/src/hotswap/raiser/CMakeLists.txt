@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-project(hotswap-raiser LANGUAGES CXX)
+
+# No project() here: this is an add_subdirectory component of amd_comgr, not a
+# standalone build. A nested project() re-runs the superbuild dependency provider
+# and re-imports LLVM, which links a second copy of the AMDGPU static libraries
+# into amd_comgr and double-registers their cl::opts under a non-folding linker.
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

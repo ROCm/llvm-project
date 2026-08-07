@@ -1239,9 +1239,7 @@ LogicalResult ModuleTranslation::convertGlobalsAndAliases() {
 
     auto *var = new llvm::GlobalVariable(
         *llvmModule, type, op.getConstant(), linkage, cst, op.getSymName(),
-        /*InsertBefore=*/nullptr,
-        op.getThreadLocal_() ? llvm::GlobalValue::GeneralDynamicTLSModel
-                             : llvm::GlobalValue::NotThreadLocal,
+        /*InsertBefore=*/nullptr, convertThreadLocalModeToLLVM(op.getTlsMode()),
         op.getAddrSpace(), op.getExternallyInitialized());
 
     if (std::optional<mlir::SymbolRefAttr> comdat = op.getComdat()) {
@@ -1358,9 +1356,7 @@ LogicalResult ModuleTranslation::convertGlobalsAndAliases() {
         type, op.getAddrSpace(), linkage, op.getSymName(), /*placeholder*/ cst,
         &llvmMod);
 
-    var->setThreadLocalMode(op.getThreadLocal_()
-                                ? llvm::GlobalAlias::GeneralDynamicTLSModel
-                                : llvm::GlobalAlias::NotThreadLocal);
+    var->setThreadLocalMode(convertThreadLocalModeToLLVM(op.getTlsMode()));
 
     // Note there is no need to setup the comdat because GlobalAlias calls into
     // the aliasee comdat information automatically.

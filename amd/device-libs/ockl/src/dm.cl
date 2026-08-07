@@ -336,8 +336,8 @@ gcast(__global void *p, uint l)
 {
     uint2 p2 = AS_UINT2(p);
     uint2 r;
-    r.x = __builtin_amdgcn_ds_bpermute(l << 2, p2.x);
-    r.y = __builtin_amdgcn_ds_bpermute(l << 2, p2.y);
+    r.x = __builtin_amdgcn_wave_shuffle(p2.x, l);
+    r.y = __builtin_amdgcn_wave_shuffle(p2.y, l);
     return (__global void *)AS_ULONG(r);
 }
 
@@ -346,15 +346,15 @@ gcast(ulong v, uint l)
 {
     uint2 v2 = AS_UINT2(v);
     uint2 r;
-    r.x = __builtin_amdgcn_ds_bpermute(l << 2, v2.x);
-    r.y = __builtin_amdgcn_ds_bpermute(l << 2, v2.y);
+    r.x = __builtin_amdgcn_wave_shuffle(v2.x, l);
+    r.y = __builtin_amdgcn_wave_shuffle(v2.y, l);
     return AS_ULONG(r);
 }
 
 static __attribute__((overloadable)) uint
 gcast(uint v, uint l)
 {
-    return __builtin_amdgcn_ds_bpermute(l << 2, v);
+    return __builtin_amdgcn_wave_shuffle(v, l);
 }
 
 static uint
@@ -1080,12 +1080,12 @@ __ockl_dm_init_v1(ulong hp, ulong sp, uint hb, uint nis)
 // reverse local array, n <= wavesize
 // Expect this to be called by one full wave
 // TODO make this work on devices which can't permute full wave
-static void __attribute__((target("gfx8-insts")))
+static void
 reverse_la(__local uint *x, uint i, uint n)
 {
     if (i < n) {
         uint j = n - 1 - i;
-        x[i] = __builtin_amdgcn_ds_bpermute(j << 2, x[i]);
+        x[i] = __builtin_amdgcn_wave_shuffle(x[i], j);
     }
 }
 
