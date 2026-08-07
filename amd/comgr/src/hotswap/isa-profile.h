@@ -11,7 +11,9 @@
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h" // AMDGPU::Feature* enum
 #include "Utils/AMDGPUBaseInfo.h"            // AMDGPU::hasMAIInsts
+#include "fp8-convert.h"                     // Fp8Format
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/TargetParser/TargetParser.h"
 
 namespace COMGR::hotswap {
 
@@ -76,6 +78,14 @@ struct ISAProfile {
   // Distinct from HasMfma, which is set on every gfx9 MAI target -- gfx90a /
   // gfx940 have MAI but no FP8 MFMA pseudos.
   bool HasFP8Insts = false;
+  // How this target's fp8/bf8 hardware interprets an fp8 byte; None when it
+  // has no fp8 hardware at all, Unknown when it has some but the ISA version
+  // did not classify. FNUZ is the closed CDNA3 gfx9.4.x set, so it
+  // is matched by ISA version rather than inferred from a feature bit: a
+  // future MAI part carries its own FeatureGFX9xxInsts and would otherwise be
+  // classified FNUZ, shifting every fp8 operand by one exponent with no
+  // diagnostic.
+  Fp8Format Fp8Fmt = Fp8Format::None;
   // gfx125 widens compute_pgm_rsrc2.USER_SGPR_COUNT from the older 5-bit
   // GFX6-GFX120 field to a 6-bit field. Keep this as an ABI property rather
   // than deriving it from a string at each use site.
@@ -126,6 +136,14 @@ struct ISAProfile {
         STI.hasFeature(llvm::AMDGPU::FeatureFP8ConversionInsts);
     P.HasPrngInst = STI.hasFeature(llvm::AMDGPU::FeaturePrngInst);
     P.HasFP8Insts = STI.hasFeature(llvm::AMDGPU::FeatureFP8Insts);
+    if (P.HasFP8Insts || P.HasFP8ConversionInsts) {
+      llvm::AMDGPU::IsaVersion V = llvm::AMDGPU::getIsaVersion(STI.getCPU());
+      if (V.Major == 0) // getIsaVersion's unrecognised-CPU sentinel.
+        P.Fp8Fmt = Fp8Format::Unknown;
+      else
+        P.Fp8Fmt =
+            (V.Major == 9 && V.Minor == 4) ? Fp8Format::FNUZ : Fp8Format::OCP;
+    }
     P.HasGfx125UserSgprCountField = llvm::AMDGPU::isGFX1250Plus(STI);
     P.Has45BitNumRecordsBufferResource =
         STI.hasFeature(llvm::AMDGPU::Feature45BitNumRecordsBufferResource);

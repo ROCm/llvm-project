@@ -30,17 +30,18 @@ wmma_scale_f32_16x16x128_fp4_fp4_e4m3_kernel:
 	v_mov_b64_e32 v[20:21], s[48:49]
 	v_mov_b64_e32 v[22:23], s[50:51]
 	s_delay_alu instid0(VALU_DEP_1)
-; IR_GFX942-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_fp4_fp4_e4m3_kernel(
 
+; IR_GFX942-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_fp4_fp4_e4m3_kernel(
+; IR_GFX942: trunc <4 x i32> %{{[^ ]+}} to <4 x i8>
 ; IR_GFX942: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.fp8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 ; IR_GFX942-COUNT-7: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.fp8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
-
-; IR_GFX942-DAG: and i32 %{{[^,]+}}, 127
-; IR_GFX942-DAG: call float @llvm.amdgcn.cvt.f32.fp8(
-
-; IR_GFX942-DAG: fmul float
+; UE4M3 scales go through the shared fp8 decoder, reading the byte as OCP
+; (%fp8_dec_ocp) rather than through the target's FNUZ cvt_f32_fp8, which
+; would halve every scale.
+; IR_GFX942-DAG: %fp8_dec_ocp{{[0-9]*}} = select
+; IR_GFX942-DAG: %scale_factor{{[0-9]*}} = fmul float
 ; IR_GFX942-NOT: sub i32 %{{[^,]+}}, 254
-
+; IR_GFX942-NOT: @llvm.amdgcn.cvt.f32.fp8
 ; IR_GFX942-NOT: @__const.
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.f32.16x16x32.fp8.bf8
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.f32.16x16x32.bf8.fp8

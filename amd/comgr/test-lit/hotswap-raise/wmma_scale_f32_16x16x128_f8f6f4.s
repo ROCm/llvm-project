@@ -3,6 +3,7 @@
 
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx942 --disable-wave-native --emit-ir=wmma_scale_f32_16x16x128_f8f6f4_kernel | %FileCheck %s --check-prefix=IR_GFX942_MODREP
+; RUN: raise_cli %t.hsaco --target-isa=gfx942 --disable-wave-native --emit-ir=wmma_scale_f32_16x16x128_f8f6f4_kernel | %FileCheck %s --check-prefix=A_SCALE_ROWS
 
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && %not raise_cli %t.hsaco --target-isa=gfx90a --emit-ir=wmma_scale_f32_16x16x128_f8f6f4_kernel 2>&1 | %FileCheck %s --check-prefix=STDERR_GFX90A
@@ -50,43 +51,66 @@ wmma_scale_f32_16x16x128_f8f6f4_kernel:
 	v_mov_b64_e32 v[36:37], s[48:49]
 	v_mov_b64_e32 v[38:39], s[50:51]
 	s_delay_alu instid0(VALU_DEP_1)
-; IR_GFX942-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_f8f6f4_kernel(
 
+; IR_GFX942-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_f8f6f4_kernel(
+; Both scale operands are SGPRs (s42, s43), which supply bits[7:0] to every
+; K-block -- unlike a VGPR source, whose four bytes are K-blocks 0..3. Byte 0
+; must be broadcast before extractScaleByte indexes it per K-block, or three
+; quarters of the accumulation gets scaled by the wrong exponent.
+; IR_GFX942: %[[ASB:scale_byte0[0-9]*]] = and i32 %{{[^,]+}}, 255
+; IR_GFX942: %{{scale_bcast[0-9]*}} = mul i32 %[[ASB]], 16843009
+; IR_GFX942: %[[BSB:scale_byte0[0-9]*]] = and i32 %{{[^,]+}}, 255
+; IR_GFX942: %{{scale_bcast[0-9]*}} = mul i32 %[[BSB]], 16843009
+; IR_GFX942-DAG: trunc <4 x i32> %{{[^ ]+}} to <4 x i8>
 ; IR_GFX942: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.bf8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 ; IR_GFX942: sub i32 %{{[^,]+}}, 254
 ; IR_GFX942: call float @llvm.ldexp.f32.i32(float 1.000000e+00, i32 %{{[^)]+}})
 ; IR_GFX942: call <4 x float> @llvm.fmuladd.v4f32(
 ; IR_GFX942-COUNT-7: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.bf8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
-
-; IR_GFX942-DAG: icmp eq i32 %{{[^,]+}}, 255
-; IR_GFX942-DAG: select i1 %{{[^,]+}}, float +qnan, float %{{[^,]+}}
-
+; E8M0 has no reserved NaN encoding on real hardware: byte 0xFF is exponent
+; 128, which the `sub 254` + ldexp above overflows to +-Inf by construction.
+; Special-casing 0xFF to a qNaN would produce NaN where hardware produces Inf.
+; IR_GFX942-NOT: icmp eq i32 %{{[^,]+}}, 255
+; IR_GFX942-NOT: float +qnan
 ; IR_GFX942-NOT: fmul <4 x float>
 ; IR_GFX942-NOT: fadd <4 x float>
-
 ; IR_GFX942-DAG: icmp uge i32 %{{[^,]+}}, 32
 ; IR_GFX942-DAG: select i1 %{{[^,]+}}, i32 %{{[^,]+}}, i32 %{{[^,]+}}
-
 ; IR_GFX942-DAG: call i32 @llvm.amdgcn.ds.bpermute(
-
 ; IR_GFX942-NOT: @llvm.amdgcn.wmma.scale.f32.16x16x128.f8f6f4
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.scale.f32.16x16x128.f8f6f4
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.f32.16x16x32.fp8.fp8
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.f32.16x16x32.fp8.bf8
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.f32.16x16x32.bf8.bf8
-
 ; IR_GFX942_MODREP-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_f8f6f4_kernel(
 ; IR_GFX942_MODREP-COUNT-4: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.bf8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 ; IR_GFX942_MODREP-NOT: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.bf8.fp8(
 ; IR_GFX942_MODREP-NOT: @llvm.amdgcn.wmma.scale.f32.16x16x128.f8f6f4
 ; IR_GFX942_MODREP-NOT: @llvm.amdgcn.mfma.scale.f32.16x16x128.f8f6f4
 
+; Each lane's 4 MFMA accumulator elements cover output rows 4*(lane/16)+g
+; (g=0..3), so the A (row) scale is gathered per output row instead of from the
+; lane's own column-indexed operand. Pin the row address arithmetic and the four
+; distinct bpermutes of the SAME A-scale source.
+; A_SCALE_ROWS: %[[LG:[^ ]+]] = lshr i32 %{{[^,]+}}, 4
+; A_SCALE_ROWS: %[[ROW4:[^ ]+]] = shl i32 %[[LG]], 2
+; A_SCALE_ROWS: %[[R0:[^ ]+]] = add i32 %[[ROW4]], 0
+; A_SCALE_ROWS: %[[A0:[^ ]+]] = shl i32 %[[R0]], 2
+; A_SCALE_ROWS: call i32 @llvm.amdgcn.ds.bpermute(i32 %[[A0]], i32 %[[ASRC:[^)]+]])
+; A_SCALE_ROWS: %[[R1:[^ ]+]] = add i32 %[[ROW4]], 1
+; A_SCALE_ROWS: %[[A1:[^ ]+]] = shl i32 %[[R1]], 2
+; A_SCALE_ROWS: call i32 @llvm.amdgcn.ds.bpermute(i32 %[[A1]], i32 %[[ASRC]])
+; A_SCALE_ROWS: %[[R2:[^ ]+]] = add i32 %[[ROW4]], 2
+; A_SCALE_ROWS: %[[A2:[^ ]+]] = shl i32 %[[R2]], 2
+; A_SCALE_ROWS: call i32 @llvm.amdgcn.ds.bpermute(i32 %[[A2]], i32 %[[ASRC]])
+; A_SCALE_ROWS: %[[R3:[^ ]+]] = add i32 %[[ROW4]], 3
+; A_SCALE_ROWS: %[[A3:[^ ]+]] = shl i32 %[[R3]], 2
+; A_SCALE_ROWS: call i32 @llvm.amdgcn.ds.bpermute(i32 %[[A3]], i32 %[[ASRC]])
+
 ; STDERR_GFX90A: raise_cli: kernel 'wmma_scale_f32_16x16x128_f8f6f4_kernel' failed to raise:
 ; STDERR_GFX90A-SAME: v_wmma_scale_f32_16x16x128_f8f6f4
 ; STDERR_GFX90A-SAME: hasFP8Insts
-
 ; IR-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_f8f6f4_kernel(
-
 ; IR: %wmma_scale{{[0-9]*}} = call <8 x float> @llvm.amdgcn.wmma.scale.f32.16x16x128.f8f6f4.v8f32.v16i32.v16i32(
 ; IR-SAME: i32 1, <16 x i32> %{{[^,]+}},
 ; IR-SAME: i32 0, <16 x i32> %{{[^,]+}},
@@ -94,16 +118,13 @@ wmma_scale_f32_16x16x128_f8f6f4_kernel:
 ; IR-SAME: i32 0, i32 0, i32 %{{[^,]+}},
 ; IR-SAME: i32 0, i32 0, i32 %{{[^,]+}},
 ; IR-SAME: i1 false, i1 false)
-
 ; IR-NOT: @llvm.amdgcn.mfma.scale.
 ; IR-NOT: @llvm.amdgcn.wmma.f32.16x16x128.f8f6f4(
 ; IR-NOT: @llvm.amdgcn.wmma.f32.16x16x32.
 ; IR-NOT: @llvm.amdgcn.wmma.f32.16x16x64.
 ; IR-NOT: @llvm.amdgcn.wmma.f32.16x16x4.
-
 ; IR_GFX950-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_f8f6f4_kernel(
 ; IR_GFX950: call <4 x float> @llvm.amdgcn.mfma.scale.f32.16x16x128.f8f6f4.
-
 ; IR_GFX950-NOT: @llvm.amdgcn.wmma.scale.f32.16x16x128.f8f6f4
 ; IR_GFX950-NOT: @llvm.amdgcn.wmma.f32.16x16x
 	v_wmma_scale_f32_16x16x128_f8f6f4 v[32:39], v[0:15], v[16:31], v[32:39], s42, s43 matrix_a_fmt:MATRIX_FMT_BF8

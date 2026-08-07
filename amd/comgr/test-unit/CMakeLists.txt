@@ -329,6 +329,21 @@ target_include_directories(TranslationCacheTests PRIVATE
 
 comgr_configure_test_target(TranslationCacheTests)
 
+# -- Fp8ConvertTests -----------------------------------------------------------------
+
+add_executable(Fp8ConvertTests
+  Fp8ConvertTest.cpp)
+
+target_link_libraries(Fp8ConvertTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  ${LLVM_PTHREAD_LIB})
+comgr_link_hotswap_transpiler(Fp8ConvertTests)
+
+target_include_directories(Fp8ConvertTests PRIVATE
+  ${COMGR_GTEST_INCLUDE_DIRS})
+
+comgr_configure_test_target(Fp8ConvertTests)
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
@@ -341,7 +356,8 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:WaveProjectionTests>
   COMMAND $<TARGET_FILE:MXFP4DequantTests>
   COMMAND $<TARGET_FILE:C5PredicateChainTests>
-  COMMAND $<TARGET_FILE:TranslationCacheTests>)
+  COMMAND $<TARGET_FILE:TranslationCacheTests>
+  COMMAND $<TARGET_FILE:Fp8ConvertTests>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests
   RaiserScaffoldingTests
   CodeObjectUtilsTests
@@ -351,5 +367,6 @@ add_dependencies(test-unit HotswapElfTests HotswapMCTests
   WaveProjectionTests
   MXFP4DequantTests
   C5PredicateChainTests
-  TranslationCacheTests)
+  TranslationCacheTests
+  Fp8ConvertTests)
 add_dependencies(check-comgr test-unit)

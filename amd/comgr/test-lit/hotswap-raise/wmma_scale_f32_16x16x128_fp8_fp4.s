@@ -34,17 +34,17 @@ wmma_scale_f32_16x16x128_fp8_fp4_kernel:
 	v_mov_b64_e32 v[28:29], s[48:49]
 	v_mov_b64_e32 v[30:31], s[50:51]
 	s_delay_alu instid0(VALU_DEP_1)
-; IR_GFX942-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_fp8_fp4_kernel(
 
+; IR_GFX942-LABEL: define amdgpu_kernel void @wmma_scale_f32_16x16x128_fp8_fp4_kernel(
+; IR_GFX942: trunc <4 x i32> %{{[^ ]+}} to <4 x i8>
 ; IR_GFX942: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.fp8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 ; IR_GFX942-COUNT-7: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x32.fp8.fp8(i64 %{{[^,]+}}, i64 %{{[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
-
-; IR_GFX942-DAG: and i32 %{{[^,]+}}, 127
-; IR_GFX942-DAG: call float @llvm.amdgcn.cvt.f32.fp8(
-
+; Mixed E8M0 (A) x UE4M3 (B): the E8M0 side keeps its ldexp shortcut, the
+; UE4M3 side goes through the shared OCP fp8 decoder.
 ; IR_GFX942-DAG: sub i32 %{{[^,]+}}, 127
-; IR_GFX942-DAG: fmul float
-
+; IR_GFX942-DAG: %fp8_dec_ocp{{[0-9]*}} = select
+; IR_GFX942-DAG: %scale_factor{{[0-9]*}} = fmul float
+; IR_GFX942-NOT: @llvm.amdgcn.cvt.f32.fp8
 ; IR_GFX942-NOT: @__const.
 ; IR_GFX942-NOT: @llvm.amdgcn.wmma.scale.f32.16x16x128.f8f6f4
 ; IR_GFX942-NOT: @llvm.amdgcn.mfma.scale.f32.16x16x128.f8f6f4

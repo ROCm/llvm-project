@@ -8,9 +8,10 @@
 
 #include "handlers.h"
 
+#include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h" // AMDGPU::getNamedOperandIdx, AMDGPU::OpName
-#include "amdgpu-formats.h"       // SIInstrFlags
 #include "canonical-op.h"
+#include "fp8-convert.h"
 #include "hotswap/raise-failure.h"
 #include "opcode-map.h"
 #include "llvm/ADT/DenseMap.h"
@@ -209,6 +210,69 @@ Expected<HandlerResult> handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
   Value *A = Ctx.Regs.readRegVec(Ctx.B, SrcA, SrcTy);
   Value *B = Ctx.Regs.readRegVec(Ctx.B, SrcB, SrcTy);
   Value *C = Ctx.Regs.readRegVec(Ctx.B, SrcC, AccumTy);
+
+  // Which fp8/bf8 element formats the opcode gives its two operands; nullopt
+  // for any non-fp8 MFMA, i.e. nothing here to re-encode.
+  std::optional<Fp8AbFormat> AbFmt = [&]() -> std::optional<Fp8AbFormat> {
+    switch (Sop) {
+    case CanonicalOp::V_MFMA_F32_16x16x32_FP8_FP8:
+    case CanonicalOp::V_MFMA_F32_32x32x16_FP8_FP8:
+      return Fp8AbFormat::Fp8Fp8;
+    case CanonicalOp::V_MFMA_F32_16x16x32_FP8_BF8:
+    case CanonicalOp::V_MFMA_F32_32x32x16_FP8_BF8:
+      return Fp8AbFormat::Fp8Bf8;
+    case CanonicalOp::V_MFMA_F32_16x16x32_BF8_FP8:
+    case CanonicalOp::V_MFMA_F32_32x32x16_BF8_FP8:
+      return Fp8AbFormat::Bf8Fp8;
+    case CanonicalOp::V_MFMA_F32_16x16x32_BF8_BF8:
+    case CanonicalOp::V_MFMA_F32_32x32x16_BF8_BF8:
+      return Fp8AbFormat::Bf8Bf8;
+    default:
+      return std::nullopt;
+    }
+  }();
+  // The scaled F8F6F4 family carries fp8/bf8 bytes too, but which of its
+  // bytes are fp8/bf8 and which are fp6/fp4 is chosen per instruction by
+  // cbsz / blgp, so the table above cannot classify it.
+  Fp8Reencode Reenc = Fp8Reencode::None;
+  if (AbFmt || IsScaled) {
+    Expected<Fp8Reencode> R =
+        fp8Reencode(Ctx.Isa, Ctx.TargetIsa, Fp8Dir::SrcToTgt);
+    if (!R)
+      return RaiseFailure::unsupportedInstructionForm(Di, "MFMA",
+                                                      toString(R.takeError()));
+    Reenc = *R;
+  }
+  const bool ToFnuz = Reenc == Fp8Reencode::ToFnuz;
+  // Decoding cbsz / blgp and re-encoding only the fp8/bf8 fragments is the
+  // same work emitWMMAScaleF8F6F4toMFMA already does for the WMMA
+  // equivalent, but it is not wired up here -- so refuse rather than hand
+  // source-format bytes to hardware that reads them differently.
+  if (IsScaled && Reenc != Fp8Reencode::None)
+    return RaiseFailure::unsupportedInstructionForm(
+        Di, "MFMA",
+        "scaled F8F6F4 MFMA crosses an fp8/bf8 OCP<->FNUZ boundary; "
+        "per-operand re-encode driven by cbsz/blgp is not implemented");
+  if (AbFmt && Reenc != Fp8Reencode::None) {
+    const Fp8Sides Sides = fp8SidesOf(*AbFmt);
+    if (!SrcTy->isIntegerTy(64))
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "MFMA",
+          Twine("fp8 MFMA operand re-encode expects an i64 A/B operand for ") +
+              Di.Mnemonic);
+    auto Conv = [&](Value *V, bool IsBf8) -> Value * {
+      Value *Lo = Ctx.B.CreateTrunc(V, Ctx.I32Ty);
+      Value *Hi = Ctx.B.CreateTrunc(
+          Ctx.B.CreateLShr(V, ConstantInt::get(SrcTy, 32)), Ctx.I32Ty);
+      Lo = convertFp8Dword(Ctx.B, Lo, IsBf8, ToFnuz);
+      Hi = convertFp8Dword(Ctx.B, Hi, IsBf8, ToFnuz);
+      return Ctx.B.CreateOr(Ctx.B.CreateZExt(Lo, SrcTy),
+                            Ctx.B.CreateShl(Ctx.B.CreateZExt(Hi, SrcTy),
+                                            ConstantInt::get(SrcTy, 32)));
+    };
+    A = Conv(A, Sides.AIsBf8);
+    B = Conv(B, Sides.BIsBf8);
+  }
 
   // Immediate modifiers keyed off the authoritative named-operand table.
   // `cbsz` is common to both families; `abid` is non-scaled only; scaled

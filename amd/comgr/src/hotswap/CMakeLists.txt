@@ -184,6 +184,7 @@ add_library(hotswap-transpiler OBJECT
   handle-valu-vcmp.cpp
   handle-valu-vop3p.cpp
   wmma-lowering.cpp
+  fp8-convert.cpp
   mxfp4-dequant.cpp
   handle-mfma.cpp
   handle-vopd.cpp

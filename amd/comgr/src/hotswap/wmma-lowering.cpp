@@ -184,6 +184,7 @@
 // ============================================================================
 
 #include "wmma-lowering.h"
+#include "fp8-convert.h"
 #include "raise-context.h"
 
 #include "llvm/IR/Constants.h"
@@ -558,6 +559,35 @@ Expected<Value *> emitWMMAtoMFMA(RaiseContext &Ctx, Value *A, Value *Vb,
   unpackDwords(B, A, 8, Ctx.I32Ty, ADwords);
   unpackDwords(B, Vb, 8, Ctx.I32Ty, BDwords);
   unpackDwords(B, C, 8, Ctx.I32Ty, CDwords);
+
+  std::optional<Fp8AbFormat> AbFmt = [&]() -> std::optional<Fp8AbFormat> {
+    switch (InputType) {
+    case WMMAInputType::FP8_FP8:
+      return Fp8AbFormat::Fp8Fp8;
+    case WMMAInputType::FP8_BF8:
+      return Fp8AbFormat::Fp8Bf8;
+    case WMMAInputType::BF8_FP8:
+      return Fp8AbFormat::Bf8Fp8;
+    case WMMAInputType::BF8_BF8:
+      return Fp8AbFormat::Bf8Bf8;
+    default:
+      return std::nullopt; // F16/BF16/IU8 carry no fp8 byte
+    }
+  }();
+  if (AbFmt) {
+    Expected<Fp8Reencode> Reenc =
+        fp8Reencode(Ctx.Isa, Ctx.TargetIsa, Fp8Dir::SrcToTgt);
+    if (!Reenc)
+      return Reenc.takeError();
+    if (*Reenc != Fp8Reencode::None) {
+      const Fp8Sides Sides = fp8SidesOf(*AbFmt);
+      const bool ToFnuz = *Reenc == Fp8Reencode::ToFnuz;
+      for (unsigned I = 0; I < 8; ++I) {
+        ADwords[I] = convertFp8Dword(B, ADwords[I], Sides.AIsBf8, ToFnuz);
+        BDwords[I] = convertFp8Dword(B, BDwords[I], Sides.BIsBf8, ToFnuz);
+      }
+    }
+  }
 
   Value *LaneId = emitLaneId(B, M, Ctx.I32Ty);
 
@@ -1378,30 +1408,28 @@ Value *extractScaleByte(IRBuilder<> &B, Value *Scale32, unsigned k) {
   return B.CreateAnd(Shifted, B.getInt32(0xFF), "scale_byte");
 }
 
-// Decode one scale byte to f32. E8M0 via `ldexp(1.0, byte - 127)` with
-// 0xFF -> qNaN. E4M3 via hw `cvt_f32_fp8` (same bit layout as the FP8
-// E4M3 data format, including NaN). E5M3 not yet implemented.
+// Decode one scale byte to f32. E8M0 via `ldexp(1.0, byte - 127)` -- real
+// hardware has no reserved-NaN encoding for E8M0; byte 0xFF (exponent 128)
+// simply overflows the ldexp to +Inf, which this reproduces by construction
+// rather than special-casing 0xFF to a NaN. E4M3 is UE4M3, decoded by the
+// shared fp8 decoder as OCP (bias 7) -- not by the target's FNUZ
+// `cvt_f32_fp8`. E5M3 not yet implemented.
 Value *decodeScaleByte(IRBuilder<> &B, Module &M, Type *F32Ty, Value *Byte,
                        int Fmt) {
   switch (Fmt) {
   case ScaleFmtE8M0: {
-    Value *IsNaN = B.CreateICmpEQ(Byte, B.getInt32(0xFF), "e8m0_is_nan");
     Value *Biased = B.CreateSub(Byte, B.getInt32(127), "e8m0_exp");
     Function *LdexpFn = Intrinsic::getOrInsertDeclaration(
         &M, Intrinsic::ldexp, {F32Ty, B.getInt32Ty()});
-    Value *Finite = B.CreateCall(LdexpFn, {ConstantFP::get(F32Ty, 1.0), Biased},
-                                 "e8m0_finite");
-    return B.CreateSelect(IsNaN, ConstantFP::getQNaN(F32Ty), Finite,
-                          "e8m0_decoded");
+    return B.CreateCall(LdexpFn, {ConstantFP::get(F32Ty, 1.0), Biased},
+                        "e8m0_decoded");
   }
-  case ScaleFmtE4M3: {
-    // Scale format 2 is UE4M3 (unsigned). cvt.f32.fp8 decodes signed E4M3,
-    // so mask the sign bit; byte 0x7F still decodes as +NaN, matching UE4M3.
-    Value *Masked = B.CreateAnd(Byte, B.getInt32(0x7F), "ue4m3_byte_unsigned");
-    Function *CvtFn =
-        Intrinsic::getOrInsertDeclaration(&M, Intrinsic::amdgcn_cvt_f32_fp8);
-    return B.CreateCall(CvtFn, {Masked, B.getInt32(0)}, "ue4m3_decoded");
-  }
+  case ScaleFmtE4M3:
+    // Scale format 2 is UE4M3: the same field layout as an OCP E4M3 data byte
+    // with bit 7 unused, so masking the sign off makes the shared fp8 decoder
+    // read it exactly (including its exp==15 && mant==7 NaN).
+    return decodeFp8ByteToF32(B, B.CreateAnd(Byte, B.getInt32(0x7F)),
+                              /*IsBf8=*/false, Fp8Format::OCP);
   case ScaleFmtE5M3:
     return nullptr; // TODO
   }
@@ -1420,42 +1448,48 @@ bool isLegalScaleDataCombo(int aFmt, int aScaleFmt, int bFmt, int bScaleFmt) {
   return true;
 }
 
-// `<4 x float>` splat of factor_A * factor_B. E8M0 x E8M0 uses the
-// combined-exponent shortcut 2^(byteA + byteB - 254); other combinations
-// decode each side and fmul.
+// `<4 x float>` of per-output-row scale factors.  The MFMA accumulator holds 4
+// elements per Wave64 lane mapping to output rows 4*(lane/16) + g (g=0..3), all
+// sharing column `lane%16`.  So the B (column) scale byte is shared across the
+// 4 elements while the A (row) scale byte varies per element -- hence one
+// ScaleAByte per `g` but a single ScaleBByte.
 Value *buildScaleFactorVec(IRBuilder<> &B, Module &M, Type *F32Ty,
-                           Value *ScaleAByte, Value *ScaleBByte, int AScaleFmt,
-                           int BScaleFmt) {
-  Value *Factor = nullptr;
+                           Value *ScaleABytes[4], Value *ScaleBByte,
+                           int AScaleFmt, int BScaleFmt) {
+  Value *Vec = PoisonValue::get(FixedVectorType::get(F32Ty, 4));
+  auto Insert = [&](unsigned g, Value *Factor) {
+    Vec = B.CreateInsertElement(Vec, Factor, B.getInt32(g), "factor_g");
+  };
 
+  // E8M0 x E8M0 folds both exponents into one ldexp per row, so there is no
+  // separable B factor to hoist. Neither byte is special-cased for 0xFF:
+  // real hardware has no reserved E8M0 NaN encoding, so a 0xFF operand just
+  // pushes the summed exponent high enough that the ldexp itself overflows
+  // to +-Inf, matching hardware.
   if (AScaleFmt == ScaleFmtE8M0 && BScaleFmt == ScaleFmtE8M0) {
-    Value *AIsNaN =
-        B.CreateICmpEQ(ScaleAByte, B.getInt32(0xFF), "scale_a_is_nan");
-    Value *BIsNaN =
-        B.CreateICmpEQ(ScaleBByte, B.getInt32(0xFF), "scale_b_is_nan");
-    Value *AnyIsNaN = B.CreateOr(AIsNaN, BIsNaN, "scale_is_nan");
-
-    Value *Sum = B.CreateAdd(ScaleAByte, ScaleBByte, "scale_sum");
-    Value *Biased = B.CreateSub(Sum, B.getInt32(254), "scale_exp");
     Function *LdexpFn = Intrinsic::getOrInsertDeclaration(
         &M, Intrinsic::ldexp, {F32Ty, B.getInt32Ty()});
-    Value *FiniteFactor = B.CreateCall(
-        LdexpFn, {ConstantFP::get(F32Ty, 1.0), Biased}, "finite_factor");
-    Factor = B.CreateSelect(AnyIsNaN, ConstantFP::getQNaN(F32Ty), FiniteFactor,
-                            "scale_factor");
-  } else {
-    Value *FactorA = decodeScaleByte(B, M, F32Ty, ScaleAByte, AScaleFmt);
-    Value *FactorB = decodeScaleByte(B, M, F32Ty, ScaleBByte, BScaleFmt);
-    if (!FactorA || !FactorB)
-      return nullptr;
-    Factor = B.CreateFMul(FactorA, FactorB, "scale_factor");
+    for (unsigned g = 0; g < 4; ++g) {
+      Value *Sum = B.CreateAdd(ScaleABytes[g], ScaleBByte, "scale_sum");
+      Value *Biased = B.CreateSub(Sum, B.getInt32(254), "scale_exp");
+      Insert(g, B.CreateCall(LdexpFn, {ConstantFP::get(F32Ty, 1.0), Biased},
+                             "scale_factor"));
+    }
+    return Vec;
   }
 
-  auto *Vec4 = FixedVectorType::get(F32Ty, 4);
-  Value *Splat = B.CreateInsertElement(PoisonValue::get(Vec4), Factor,
-                                       B.getInt32(0), "factor_lane0");
-  return B.CreateShuffleVector(Splat, PoisonValue::get(Vec4),
-                               ArrayRef<int>{0, 0, 0, 0}, "factor_v4");
+  // Every other combination decodes each side and multiplies, so the shared B
+  // decode is built once.
+  Value *FactorB = decodeScaleByte(B, M, F32Ty, ScaleBByte, BScaleFmt);
+  if (!FactorB)
+    return nullptr;
+  for (unsigned g = 0; g < 4; ++g) {
+    Value *FactorA = decodeScaleByte(B, M, F32Ty, ScaleABytes[g], AScaleFmt);
+    if (!FactorA)
+      return nullptr;
+    Insert(g, B.CreateFMul(FactorA, FactorB, "scale_factor"));
+  }
+  return Vec;
 }
 
 } // namespace
@@ -1545,6 +1579,16 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
   assert(aDwordsArr.size() == 16 && bDwordsArr.size() == 16 &&
          "post-widen fragments must be 16 fp8 dwords / lane");
 
+  Expected<Fp8Reencode> Reenc =
+      fp8Reencode(ctx.Isa, ctx.TargetIsa, Fp8Dir::SrcToTgt);
+  if (!Reenc)
+    return Reenc.takeError();
+  if (*Reenc != Fp8Reencode::None) {
+    const bool ToFnuz = *Reenc == Fp8Reencode::ToFnuz;
+    convertFp8DwordsInPlace(B, aDwordsArr, /*IsBf8=*/aFmtEff == FmtBF8, ToFnuz);
+    convertFp8DwordsInPlace(B, bDwordsArr, /*IsBf8=*/bFmtEff == FmtBF8, ToFnuz);
+  }
+
   Value *LaneId = emitLaneId(B, M, ctx.I32Ty);
 
   // 1 wave (MODREP) or 2 (WaveNative cross-widen).
@@ -1567,27 +1611,47 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
   Value *W32Lane = B.CreateAnd(LaneId, B.getInt32(31), "w32_lane");
 
   // One pass per virtual W32 group (GroupBase 0 / 32).
-  auto runPass = [&](unsigned GroupBase, Value *Result[8]) {
+  auto runPass = [&](unsigned GroupBase, Value *Result[8]) -> Error {
     Value *LoLane = B.CreateAdd(LaneMod16, B.getInt32(GroupBase), "lo_lane");
     Value *HiLane =
         B.CreateAdd(LaneMod16, B.getInt32(GroupBase + 16), "hi_lane");
     Value *AddrLo = B.CreateShl(LoLane, B.getInt32(2), "addr_lo");
     Value *AddrHi = B.CreateShl(HiLane, B.getInt32(2), "addr_hi");
 
-    // All 4 K-block scale bytes ride in one i32, so one redistribution per src
-    // suffices. The scale must follow its A/B data: even lane groups (0,2) read
-    // the lower W32 half (AddrLo), odd groups (1,3) the upper (AddrHi).
-    // Constant sources are lane-uniform, so skip the bpermute.
-    Value *IsOddGroup = B.CreateTrunc(LaneGroup, B.getInt1Ty(), "lg_odd");
+    // The B (column) scale is indexed by column = lane%16, identical for all 4
+    // lane groups of a pass -- unlike the A/B operands, whose Lo/Hi split
+    // selects the K-block. The source packs Bsc[lane%16] into lanes 0..15 of
+    // its W32 (the SCL_OPSEL[0] == 0 / ROW0 layout; ROW1 is refused earlier),
+    // so every lane group reads AddrLo. All 4 K-block scale bytes ride in one
+    // i32, so one bpermute suffices; constant sources are lane-uniform.
     auto RedistributeScale = [&](Value *ScaleSrc) -> Value * {
       if (isa<Constant>(ScaleSrc))
         return ScaleSrc;
-      Value *Lo = emitDSBpermute(B, M, AddrLo, ScaleSrc);
-      Value *Hi = emitDSBpermute(B, M, AddrHi, ScaleSrc);
-      return B.CreateSelect(IsOddGroup, Hi, Lo, "scale_redist");
+      return emitDSBpermute(B, M, AddrLo, ScaleSrc);
     };
-    Value *ScaleSrc0Pass = RedistributeScale(scaleSrc0);
     Value *ScaleSrc1Pass = RedistributeScale(scaleSrc1);
+
+    // The A (row) scale is indexed by the OUTPUT row, not by the lane's own
+    // operand: each Wave64 lane's MFMA accumulator covers 4 output rows
+    // 4*(lane/16) + g (g=0..3), and scaleA[row] lives in this pass's source
+    // wave at lane `GroupBase + row` (the source packs Asc[lane%16]).  Gather
+    // one A-scale source per output row, carrying GroupBase so the second
+    // source wave (GroupBase 32) reads its own Asc rather than wave 0's.
+    Value *ScaleSrc0Row[4];
+    if (isa<Constant>(scaleSrc0)) {
+      // Constant A-scale is lane-uniform; every output row sees the same
+      // source.
+      for (Value *&Row : ScaleSrc0Row)
+        Row = scaleSrc0;
+    } else {
+      Value *Row4 = B.CreateShl(LaneGroup, B.getInt32(2), "row4");
+      for (unsigned g = 0; g < 4; ++g) {
+        Value *RowLane =
+            B.CreateAdd(Row4, B.getInt32(GroupBase + g), "row_lane");
+        Value *RowAddr = B.CreateShl(RowLane, B.getInt32(2), "row_addr");
+        ScaleSrc0Row[g] = emitDSBpermute(B, M, RowAddr, scaleSrc0);
+      }
+    }
 
     Value *MfmaC[4];
     redistributeAcc(B, M, cDwords, AddrLo, AddrHi, LaneGroup, MfmaC);
@@ -1621,10 +1685,17 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
                        "kblock_partial"),
           "kblock_partial_wwm");
 
-      Value *ScaleAByte = extractScaleByte(B, ScaleSrc0Pass, kBlock);
+      // The lane's 4 acc elements share column lane%16 but span rows
+      // 4*(lane/16)+g, so one B (column) scale byte but four A (row) bytes.
+      Value *ScaleABytes[4];
+      for (unsigned g = 0; g < 4; ++g)
+        ScaleABytes[g] = extractScaleByte(B, ScaleSrc0Row[g], kBlock);
       Value *ScaleBByte = extractScaleByte(B, ScaleSrc1Pass, kBlock);
-      Value *FactorVec = buildScaleFactorVec(B, M, ctx.F32Ty, ScaleAByte,
+      Value *FactorVec = buildScaleFactorVec(B, M, ctx.F32Ty, ScaleABytes,
                                              ScaleBByte, aScaleFmt, bScaleFmt);
+      if (!FactorVec)
+        return createStringError(
+            "unsupported matrix_*_scale_fmt in scaled WMMA lowering");
 
       Acc = B.CreateIntrinsic(Intrinsic::fmuladd, {AccTy},
                               {Partial, FactorVec, Acc}, nullptr,
@@ -1639,10 +1710,12 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
     for (unsigned i = 0; i < 8; ++i)
       Result[i] =
           ctx.Projection.wrapAsWWMValue(B, Result[i], "wmma_scale_collect_wwm");
+    return Error::success();
   };
 
   Value *Result0[8];
-  runPass(0, Result0);
+  if (Error E = runPass(0, Result0))
+    return std::move(E);
 
   Value *FinalDwords[8];
   if (numSrcWaves == 1) {
@@ -1650,7 +1723,8 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
       FinalDwords[i] = Result0[i];
   } else {
     Value *Result1[8];
-    runPass(32, Result1);
+    if (Error E = runPass(32, Result1))
+      return std::move(E);
     Value *IsGroup1 = B.CreateICmpUGE(LaneId, B.getInt32(32), "is_group1");
     for (unsigned i = 0; i < 8; ++i)
       FinalDwords[i] = B.CreateSelect(IsGroup1, Result1[i], Result0[i], "sel");

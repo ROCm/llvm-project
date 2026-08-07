@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "fp8-convert.h"
 #include "handle-valu-f16-utils.h"
 #include "handle-valu-internal.h"
 #include "handle-valu-output-mods.h"
@@ -544,6 +545,169 @@ static llvm::Value *emitCvtScalePk8Bf16Fp4CrossTargetExpansion(
         Vec, LaneBf, llvm::ConstantInt::get(I32Ty, Lane), "mxfp4_vec_insert");
   }
   return Vec;
+}
+
+// Build the two result dwords of v_cvt_scalef32_pk8_fp8_f32 from the eight
+// already-scaled f32 lanes. The OCP form encodes each pair straight to
+// source-format bytes so the target encoder's narrower FNUZ range never
+// truncates; the chained form is the plain same-format lowering, which walks
+// the hardware encoder's own word_sel.
+std::pair<llvm::Value *, llvm::Value *>
+emitPk8OcpDwords(RaiseContext &Ctx, llvm::Function *PkFn, llvm::Value *Scaled) {
+  auto Pair = [&](unsigned I) {
+    return encodeF32PairToOcpFp8(Ctx.B, PkFn,
+                                 Ctx.B.CreateExtractElement(Scaled, I),
+                                 Ctx.B.CreateExtractElement(Scaled, I + 1),
+                                 /*IsBf8=*/false);
+  };
+  auto Dword = [&](unsigned I) {
+    return Ctx.B.CreateOr(
+        Pair(I), Ctx.B.CreateShl(Pair(I + 2), ConstantInt::get(Ctx.I32Ty, 16)));
+  };
+  return {Dword(0), Dword(4)};
+}
+
+std::pair<llvm::Value *, llvm::Value *>
+emitPk8ChainedDwords(RaiseContext &Ctx, llvm::Function *PkFn,
+                     llvm::Value *Scaled) {
+  Value *Zero = ConstantInt::get(Ctx.I32Ty, 0);
+  auto E = [&](unsigned I) { return Ctx.B.CreateExtractElement(Scaled, I); };
+  auto Dword = [&](unsigned I) {
+    Value *Lo = Ctx.B.CreateCall(
+        PkFn, {E(I), E(I + 1), Zero, ConstantInt::get(Ctx.I1Ty, 0)},
+        "pk_fp8_lo");
+    return Ctx.B.CreateCall(
+        PkFn, {E(I + 2), E(I + 3), Lo, ConstantInt::get(Ctx.I1Ty, 1)},
+        "pk_fp8");
+  };
+  return {Dword(0), Dword(4)};
+}
+
+// gfx1250 reuses the CLAMP bit on the fp8 (E4M3) converts as a FORMAT select:
+// CLAMP=0 keeps OCP E4M3, CLAMP=1 reinterprets the byte as E5M3. That is a
+// third fp8 format with no gfx942 counterpart and no re-encode path, so refuse
+// rather than silently treating an E5M3 byte as E4M3. The bf8 (E5M2) opcodes
+// carry no such bit.
+//
+// gfx9 fp8 converts carry the same operand as an ordinary VOP3 output clamp,
+// so the reinterpretation is gated on the gfx1250 source profile.
+llvm::Error refuseE5M3FormatSelect(const RaiseContext &Ctx,
+                                   const DecodedInst &Di,
+                                   llvm::StringRef Name) {
+  if (!Ctx.Isa.HasTensorOps)
+    return llvm::Error::success();
+  int Idx =
+      AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::clamp);
+  if (Idx < 0)
+    return llvm::Error::success();
+  // A non-immediate clamp operand is not provably zero, so refuse it too.
+  if (Di.isImm(Idx) && Di.getImm(Idx) == 0)
+    return llvm::Error::success();
+  return RaiseFailure::unsupportedInstructionForm(
+      Di, "VOP3",
+      Name + " with clamp set selects the E5M3 fp8 format (gfx1250 "
+             "OPF_CLAMP_IS_CVT_FORMAT), which has no target-side equivalent "
+             "and is not lifted");
+}
+
+// Which 16-bit half of the destination v_cvt_pk_{fp8,bf8}_f32 writes. Three
+// encodings say this and only one is present at a time: a standalone `op_sel`
+// immediate (collectVOPModifiers packs the dst selector at bit 3, not bit 2,
+// which is src0); the DST_OP_SEL bit of `src0_modifiers`, the gfx9
+// disassembly, which has no op_sel operand and names a plain dst; and a _HI16
+// dst subreg (`v5.h`), the gfx1250 true16 disassembly.
+//
+// The unwritten half comes from the tied `vdst_in` operand, which buildSrcMap
+// deliberately drops -- so it is NOT Op.src(2), which lands on clamp or op_sel
+// depending on the subtarget. Reading the dst register is equivalent.
+bool cvtPkFp8DstIsHi(RaiseContext &Ctx, const DecodedInst &Di) {
+  constexpr int64_t OpSelDstBit = 1 << 3;
+  if ((readNamedImmOperand(Di, AMDGPU::OpName::op_sel).value_or(0) &
+       OpSelDstBit) != 0)
+    return true;
+  if ((readNamedImmOperand(Di, AMDGPU::OpName::src0_modifiers).value_or(0) &
+       SISrcMods::DST_OP_SEL) != 0)
+    return true;
+  const MCRegisterInfo &MRI = *Ctx.Mc.RegInfo;
+  return Di.isReg(0) && AMDGPU::isHi16Reg(Di.getReg(0), MRI);
+}
+
+// Prior value of a v_cvt_pk_{fp8,bf8}_f32 destination, whose unwritten half is
+// preserved. A never-written VGPR promotes to undef, which would let the
+// preserved half fold to 0 or -1 depending on pass order, so freeze it.
+llvm::Value *readCvtPkOldDst(RaiseContext &Ctx, ParsedReg Dst) {
+  return Ctx.B.CreateFreeze(Ctx.Regs.readReg32(Ctx.B, Dst), "cvt_pk_old");
+}
+
+// Decode \p N fp8/bf8 bytes of \p Src starting at bit \p FirstBit, reading
+// them as \p SrcFmt. Returns an f32 for N == 1, else a `<N x float>`.
+// Callers reach this only behind an fp8Reencode() guard, so SrcFmt is never
+// Fp8Format::None.
+//
+// The cvt handlers use this instead of the target's own decode hardware
+// whenever the formats differ: byte -> f32 is widening, so decoding the
+// source format directly is exact, where re-encoding into the target's format
+// first would clip anything the target cannot hold.
+llvm::Value *decodeFp8BytesInIR(RaiseContext &Ctx, llvm::Value *Src,
+                                unsigned FirstBit, unsigned N, bool IsBf8,
+                                Fp8Format SrcFmt) {
+  auto &B = Ctx.B;
+  auto Lane = [&](unsigned I) {
+    unsigned Shift = FirstBit + 8 * I;
+    Value *Bits =
+        Shift ? B.CreateLShr(Src, ConstantInt::get(Ctx.I32Ty, Shift)) : Src;
+    return decodeFp8ByteToF32(
+        B, B.CreateAnd(Bits, ConstantInt::get(Ctx.I32Ty, 0xFF)), IsBf8, SrcFmt);
+  };
+  if (N == 1)
+    return Lane(0);
+  Value *Vec = PoisonValue::get(FixedVectorType::get(Ctx.F32Ty, N));
+  for (unsigned I = 0; I < N; ++I)
+    Vec = B.CreateInsertElement(Vec, Lane(I), I);
+  return Vec;
+}
+
+// Emit v_cvt_pk_{fp8,bf8}_f32: pack two f32 into two fp8 bytes at the WordSel
+// half of OldVal, keeping the preserved half in the source format.
+//
+// When the source is OCP the pair is encoded straight to OCP bytes (the target
+// hardware still does the rounding -- see encodeF32PairToOcpFp8), so the
+// source's wider E4M3 range and its Inf survive. An FNUZ source has no such
+// shortcut, and falls back to encoding in the target's format and re-encoding
+// the bytes, which clips whatever FNUZ cannot hold.
+Expected<llvm::Value *> emitCvtPkFp8F32(RaiseContext &Ctx,
+                                        llvm::Function *CvtFn, llvm::Value *S0,
+                                        llvm::Value *S1, llvm::Value *OldVal,
+                                        bool WordSel, bool IsBf8) {
+  auto &B = Ctx.B;
+  Expected<Fp8Reencode> Reenc =
+      fp8Reencode(Ctx.Isa, Ctx.TargetIsa, Fp8Dir::TgtToSrc);
+  if (!Reenc)
+    return Reenc.takeError();
+  if (*Reenc == Fp8Reencode::None)
+    return B.CreateCall(
+        CvtFn, {S0, S1, OldVal, ConstantInt::get(Ctx.I1Ty, WordSel)}, "pk_fp8");
+  const bool ToFnuz = *Reenc == Fp8Reencode::ToFnuz;
+  Value *Lo;
+  if (!ToFnuz) {
+    Lo = encodeF32PairToOcpFp8(B, CvtFn, S0, S1, IsBf8);
+  } else {
+    // FNUZ source: no exact shortcut, so encode in the target's format and
+    // re-encode the bytes. This is the lossy path -- it clips whatever the
+    // target cannot hold -- and is unreachable for the ISA pairs in use
+    // today, every supported source being OCP.
+    Value *Fresh = B.CreateCall(CvtFn,
+                                {S0, S1, ConstantInt::get(Ctx.I32Ty, 0),
+                                 ConstantInt::get(Ctx.I1Ty, false)},
+                                "pk_fp8_raw");
+    Lo = B.CreateAnd(convertFp8Dword(B, Fresh, IsBf8, ToFnuz),
+                     ConstantInt::get(Ctx.I32Ty, 0xFFFF));
+  }
+  if (WordSel)
+    return B.CreateOr(B.CreateAnd(OldVal, ConstantInt::get(Ctx.I32Ty, 0xFFFF)),
+                      B.CreateShl(Lo, ConstantInt::get(Ctx.I32Ty, 16)));
+  return B.CreateOr(
+      B.CreateAnd(OldVal, ConstantInt::get(Ctx.I32Ty, 0xFFFF0000)), Lo);
 }
 
 } // namespace
@@ -3036,12 +3200,14 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
   // (Scale) Profile VOP_V2I32_V8F32_F32 (VOP3Instructions.td:1883):
   //   dst  = <2 x i32>           (8 Packed FP8 bytes)
   //   src0 = <8 x f32>            (8 consecutive VGPRs holding the f32 inputs)
-  //   src1 = f32                  (broadcast Scale multiplier)
-  // The intrinsic semantics: each output FP8[i] = cvt_fp8(src0[i] * src1).
+  //   src1 = f32                  (broadcast Scale exponent)
+  // Hardware uses only src1's E8M0 exponent field (bits[30:23]), not its full
+  // f32 value: `scale = 32'U(exponent(S1.f32))`, so the multiplier is
+  // 2^(e-127) with e==0 meaning 2^-127 and e==255 meaning NaN.
   //
   // Same-target gfx1250: emit `int_amdgcn_cvt_scalef32_pk8_fp8_f32` directly.
   // Cross-target targets with FP8 conversion support: software-emulate via:
-  //    Scaled = src0 * splat(src1)
+  //    Scaled = src0 * splat(2^(exponent(src1) - 127))
   //    dword0 = pk_fp8(Scaled[0..1]) | (pk_fp8(Scaled[2..3]) << 16)
   //    dword1 = pk_fp8(Scaled[4..5]) | (pk_fp8(Scaled[6..7]) << 16)
   // using `int_amdgcn_cvt_pk_fp8_f32`. The numeric differences vs the
@@ -3067,31 +3233,34 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
           &Ctx.M, Intrinsic::amdgcn_cvt_scalef32_pk8_fp8_f32);
       Result = Ctx.B.CreateCall(CvtFn, {Src8, Scale}, "cvt_scalef32_pk8_fp8");
     } else if (Ctx.TargetIsa.HasFP8ConversionInsts) {
-      // FP8 conversion emulation for targets such as gfx942/gfx950.
-      Value *ScaleSplat = Ctx.B.CreateVectorSplat(8, Scale, "scale_splat");
+      // FP8 conversion emulation for targets such as gfx942/gfx950. Masking
+      // bits[30:23] yields 2^(e-127) directly for 1 <= e <= 254; the two
+      // reserved E8M0 codes need their own values.
+      Value *ExpField =
+          Ctx.B.CreateAnd(Ctx.B.CreateBitCast(Scale, Ctx.I32Ty),
+                          ConstantInt::get(Ctx.I32Ty, 0x7F800000), "e8m0_exp");
+      Value *Factor = Ctx.B.CreateSelect(
+          Ctx.B.CreateIsNull(ExpField), ConstantFP::get(Ctx.F32Ty, 0x1p-127),
+          Ctx.B.CreateBitCast(ExpField, Ctx.F32Ty));
+      Factor = Ctx.B.CreateSelect(
+          Ctx.B.CreateICmpEQ(ExpField, ConstantInt::get(Ctx.I32Ty, 0x7F800000)),
+          ConstantFP::getQNaN(Ctx.F32Ty), Factor, "e8m0_scale");
+      Value *ScaleSplat = Ctx.B.CreateVectorSplat(8, Factor, "scale_splat");
       Value *Scaled = Ctx.B.CreateFMul(Src8, ScaleSplat, "scaled");
-      Value *ZeroI32 = ConstantInt::get(Ctx.I32Ty, 0);
       Function *PkFn = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_cvt_pk_fp8_f32);
-      auto ExtractF = [&](unsigned i) {
-        return Ctx.B.CreateExtractElement(Scaled, i);
-      };
-      Value *Dw0Lo = Ctx.B.CreateCall(
-          PkFn,
-          {ExtractF(0), ExtractF(1), ZeroI32, ConstantInt::get(Ctx.I1Ty, 0)},
-          "pk_fp8_01");
-      Value *Dw0 = Ctx.B.CreateCall(
-          PkFn,
-          {ExtractF(2), ExtractF(3), Dw0Lo, ConstantInt::get(Ctx.I1Ty, 1)},
-          "pk_fp8_23");
-      Value *Dw1Lo = Ctx.B.CreateCall(
-          PkFn,
-          {ExtractF(4), ExtractF(5), ZeroI32, ConstantInt::get(Ctx.I1Ty, 0)},
-          "pk_fp8_45");
-      Value *Dw1 = Ctx.B.CreateCall(
-          PkFn,
-          {ExtractF(6), ExtractF(7), Dw1Lo, ConstantInt::get(Ctx.I1Ty, 1)},
-          "pk_fp8_67");
+      Expected<Fp8Reencode> Reenc =
+          fp8Reencode(Ctx.Isa, Ctx.TargetIsa, Fp8Dir::TgtToSrc);
+      if (!Reenc)
+        return RaiseFailure::unsupportedInstructionForm(
+            Di, "VOP3", toString(Reenc.takeError()));
+      const bool OcpSource = *Reenc == Fp8Reencode::ToOcp;
+      auto [Dw0, Dw1] = OcpSource ? emitPk8OcpDwords(Ctx, PkFn, Scaled)
+                                  : emitPk8ChainedDwords(Ctx, PkFn, Scaled);
+      if (*Reenc == Fp8Reencode::ToFnuz) {
+        Dw0 = convertFp8Dword(Ctx.B, Dw0, /*IsBf8=*/false, /*ToFnuz=*/true);
+        Dw1 = convertFp8Dword(Ctx.B, Dw1, /*IsBf8=*/false, /*ToFnuz=*/true);
+      }
       auto *V2I32Ty = FixedVectorType::get(Ctx.I32Ty, 2);
       Value *Packed = PoisonValue::get(V2I32Ty);
       Packed = Ctx.B.CreateInsertElement(Packed, Dw0, (uint64_t)0);
@@ -3114,22 +3283,18 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
       S0 = Ctx.B.CreateBitCast(S0, Ctx.F32Ty);
     if (S1->getType() != Ctx.F32Ty)
       S1 = Ctx.B.CreateBitCast(S1, Ctx.F32Ty);
-    // v_cvt_pk_fp8_f32 packs two f32 into two fp8 values in the low 16 bits.
-    // The "old" value and word_sel determine where in the dest the result goes.
-    // src2 = old value, src3 (imm) = word_sel.
-    // Use the LLVM intrinsic which handles this correctly.
-    Value *OldVal =
-        (Op.nSrcs() >= 3) ? Op.src(2) : ConstantInt::get(Ctx.I32Ty, 0);
-    bool WordSel = (Op.nSrcs() >= 4 && Di.isImm(Op.srcIdx(3)))
-                       ? (Op.srcImm(3) != 0)
-                       : false;
+    if (Error Err = refuseE5M3FormatSelect(Ctx, Di, canonicalOpName(Sop)))
+      return std::move(Err);
+    Value *OldVal = readCvtPkOldDst(Ctx, Op.dst());
+    const bool WordSel = cvtPkFp8DstIsHi(Ctx, Di);
     Function *CvtFn = Intrinsic::getOrInsertDeclaration(
         &Ctx.M, Intrinsic::amdgcn_cvt_pk_fp8_f32);
-    Ctx.writeReg32(
-        Op.dst(),
-        Ctx.B.CreateCall(CvtFn,
-                         {S0, S1, OldVal, ConstantInt::get(Ctx.I1Ty, WordSel)},
-                         "pk_fp8"));
+    Expected<Value *> Pk = emitCvtPkFp8F32(Ctx, CvtFn, S0, S1, OldVal, WordSel,
+                                           /*IsBf8=*/false);
+    if (!Pk)
+      return RaiseFailure::unsupportedInstructionForm(Di, "VOP3",
+                                                      toString(Pk.takeError()));
+    Ctx.writeReg32(Op.dst(), *Pk);
     Hr.Handled = true;
     return Hr;
   }
@@ -3139,60 +3304,69 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
       S0 = Ctx.B.CreateBitCast(S0, Ctx.F32Ty);
     if (S1->getType() != Ctx.F32Ty)
       S1 = Ctx.B.CreateBitCast(S1, Ctx.F32Ty);
-    Value *OldVal =
-        (Op.nSrcs() >= 3) ? Op.src(2) : ConstantInt::get(Ctx.I32Ty, 0);
-    bool WordSel = (Op.nSrcs() >= 4 && Di.isImm(Op.srcIdx(3)))
-                       ? (Op.srcImm(3) != 0)
-                       : false;
+    if (Error Err = refuseE5M3FormatSelect(Ctx, Di, canonicalOpName(Sop)))
+      return std::move(Err);
+    Value *OldVal = readCvtPkOldDst(Ctx, Op.dst());
+    const bool WordSel = cvtPkFp8DstIsHi(Ctx, Di);
     Function *CvtFn = Intrinsic::getOrInsertDeclaration(
         &Ctx.M, Intrinsic::amdgcn_cvt_pk_bf8_f32);
-    Ctx.writeReg32(
-        Op.dst(),
-        Ctx.B.CreateCall(CvtFn,
-                         {S0, S1, OldVal, ConstantInt::get(Ctx.I1Ty, WordSel)},
-                         "pk_bf8"));
+    Expected<Value *> Pk = emitCvtPkFp8F32(Ctx, CvtFn, S0, S1, OldVal, WordSel,
+                                           /*IsBf8=*/true);
+    if (!Pk)
+      return RaiseFailure::unsupportedInstructionForm(Di, "VOP3",
+                                                      toString(Pk.takeError()));
+    Ctx.writeReg32(Op.dst(), *Pk);
     Hr.Handled = true;
     return Hr;
   }
   // VOP1 read-side companions: v_cvt_pk_f32_{fp8,bf8} expand 16 bits
-  // of the i32 src into a v2f32 written to the dst VGPR pair. The
-  // word selector (which 16-bit half of src to decode) lives in
-  // op_sel:[0] for the e64 / VOP3 form and is parsed from di.fullText
-  // -- we do not have a first-class modifier channel in OperandView.
-  // The dst op_sel slot (op_sel:[1]) is irrelevant: the destination
-  // is a v2f32 pair, not a half-register, so the assembler always
-  // prints `0` there. We refuse loudly if op_sel parsing produces a
-  // value outside {0,1} so corpus drift surfaces immediately rather
-  // than silently flipping the word selector. Lowering selects the
-  // matching `llvm.amdgcn.cvt.pk.f32.{fp8,bf8}` intrinsic and
-  // bitcasts its v2f32 result to i64 before writeReg64.
+  // of the i32 src into a v2f32 written to the dst VGPR pair. The word
+  // selector (which 16-bit half of src to decode) is SDWA `src0_sel` on gfx9
+  // and `op_sel:[0]` -- i.e. src0_modifiers OP_SEL_0 -- on gfx11+. The dst
+  // op_sel slot is irrelevant: the destination is a v2f32 pair, not a
+  // half-register. Lowering selects the matching
+  // `llvm.amdgcn.cvt.pk.f32.{fp8,bf8}` intrinsic and bitcasts its v2f32
+  // result to i64 before writeReg64.
   if (Sop == CanonicalOp::V_CVT_PK_F32_FP8 ||
       Sop == CanonicalOp::V_CVT_PK_F32_BF8) {
     int WordSelInt = 0;
-    StringRef Text(Di.FullText);
-    auto Pos = Text.find("op_sel:");
-    if (Pos != StringRef::npos) {
-      auto Brk = Text.find('[', Pos);
-      auto End = Text.find(']', Brk);
-      if (Brk != StringRef::npos && End != StringRef::npos) {
-        StringRef Inner = Text.slice(Brk + 1, End);
-        SmallVector<StringRef, 4> Parts;
-        Inner.split(Parts, ',');
-        if (!Parts.empty()) {
-          int Parsed = 0;
-          if (Parts[0].trim().getAsInteger(10, Parsed) ||
-              (Parsed != 0 && Parsed != 1)) {
-            return RaiseFailure::unsupportedInstructionForm(
-                Di, "VOP3",
-                "unparseable or out-of-range op_sel[0] (expected 0 or 1)");
-          }
-          WordSelInt = Parsed;
-        }
-      }
+    if (AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                   AMDGPU::OpName::src0_sel) >= 0) {
+      // Only the WORD selects are legal here; DWORD is the unencoded default
+      // and implies WORD_0. Anything else is not a word selector at all.
+      const int64_t Sel =
+          readNamedImmOperand(Di, AMDGPU::OpName::src0_sel).value_or(-1);
+      if (Sel == AMDGPU::SDWA::SdwaSel::WORD_1)
+        WordSelInt = 1;
+      else if (Sel != AMDGPU::SDWA::SdwaSel::WORD_0 &&
+               Sel != AMDGPU::SDWA::SdwaSel::DWORD)
+        return RaiseFailure::unsupportedInstructionForm(
+            Di, "SDWA",
+            "v_cvt_pk_f32_{fp8,bf8} requires a WORD src0_sel; byte selects "
+            "are not a legal word selector for this opcode");
+    } else if ((readNamedImmOperand(Di, AMDGPU::OpName::op_sel).value_or(0) &
+                1) != 0 ||
+               (readNamedImmOperand(Di, AMDGPU::OpName::src0_modifiers)
+                    .value_or(0) &
+                SISrcMods::OP_SEL_0) != 0) {
+      WordSelInt = 1;
     }
     Value *Src = Op.src(0);
     if (Src->getType() != Ctx.I32Ty)
       Src = Ctx.B.CreateBitOrPointerCast(Src, Ctx.I32Ty);
+    Expected<Fp8Reencode> Reenc =
+        fp8Reencode(Ctx.Isa, Ctx.TargetIsa, Fp8Dir::SrcToTgt);
+    if (!Reenc)
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP1", toString(Reenc.takeError()));
+    if (*Reenc != Fp8Reencode::None) {
+      Value *Vec = decodeFp8BytesInIR(
+          Ctx, Src, /*FirstBit=*/WordSelInt ? 16 : 0, /*N=*/2,
+          Sop == CanonicalOp::V_CVT_PK_F32_BF8, fp8FormatOf(Ctx.Isa));
+      Ctx.writeReg64(Op.dst(), Ctx.B.CreateBitCast(Vec, Ctx.I64Ty));
+      Hr.Handled = true;
+      return Hr;
+    }
     Intrinsic::ID Iid = (Sop == CanonicalOp::V_CVT_PK_F32_FP8)
                             ? Intrinsic::amdgcn_cvt_pk_f32_fp8
                             : Intrinsic::amdgcn_cvt_pk_f32_bf8;
@@ -3205,30 +3379,47 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
-  // VOP1 single-lane v_cvt_f32_{fp8,bf8}: decode one 8-bit lane of
-  // src into f32. The corpus only ever emits the e64 form with no
-  // op_sel (byte_sel=0) -- the SDWA / op_sel-bearing encodings, which
-  // would let LLVM's isel pick byte 1/2/3, are not present in any
-  // gfx1250 kernel today. We refuse loudly if disassembly carries an
-  // op_sel: marker so corpus drift surfaces instead of a silent
-  // byte-0 collapse.
+  // VOP1 single-lane v_cvt_f32_{fp8,bf8}: decode one 8-bit lane of src into
+  // f32. The lane is the `byte_sel` operand -- gfx1250 prints it as
+  // `byte_sel:N`, NOT `op_sel:`, so a textual op_sel guard never sees it.
+  // SDWA still has no first-class channel here, so that form stays refused.
   if (Sop == CanonicalOp::V_CVT_F32_FP8 || Sop == CanonicalOp::V_CVT_F32_BF8) {
-    StringRef Text(Di.FullText);
-    if (Text.contains("op_sel:") || Text.contains("_sdwa")) {
+    if (StringRef(Di.FullText).contains("_sdwa")) {
       return RaiseFailure::unsupportedInstructionForm(
           Di, "VOP1",
-          "non-default op_sel/sdwa byte_sel on v_cvt_f32_{fp8,bf8} "
-          "(only the byte_sel=0 e64 form is wired today)");
+          "sdwa v_cvt_f32_{fp8,bf8} is not lifted; its byte selector has no "
+          "modelled operand channel");
+    }
+    if (Error Err = refuseE5M3FormatSelect(Ctx, Di, canonicalOpName(Sop)))
+      return std::move(Err);
+    const int64_t ByteSel =
+        readNamedImmOperand(Di, AMDGPU::OpName::byte_sel).value_or(0);
+    if (ByteSel < 0 || ByteSel > 3) {
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP1", "byte_sel out of range on v_cvt_f32_{fp8,bf8}");
     }
     Value *Src = Op.src(0);
     if (Src->getType() != Ctx.I32Ty)
       Src = Ctx.B.CreateBitOrPointerCast(Src, Ctx.I32Ty);
+    Expected<Fp8Reencode> Reenc =
+        fp8Reencode(Ctx.Isa, Ctx.TargetIsa, Fp8Dir::SrcToTgt);
+    if (!Reenc)
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP1", toString(Reenc.takeError()));
+    if (*Reenc != Fp8Reencode::None) {
+      Value *Dec = decodeFp8BytesInIR(
+          Ctx, Src, /*FirstBit=*/8 * unsigned(ByteSel), /*N=*/1,
+          Sop == CanonicalOp::V_CVT_F32_BF8, fp8FormatOf(Ctx.Isa));
+      Ctx.writeReg32(Op.dst(), Ctx.B.CreateBitCast(Dec, Ctx.I32Ty));
+      Hr.Handled = true;
+      return Hr;
+    }
     Intrinsic::ID Iid = (Sop == CanonicalOp::V_CVT_F32_FP8)
                             ? Intrinsic::amdgcn_cvt_f32_fp8
                             : Intrinsic::amdgcn_cvt_f32_bf8;
     Function *CvtFn = Intrinsic::getOrInsertDeclaration(&Ctx.M, Iid);
     Value *F = Ctx.B.CreateCall(
-        CvtFn, {Src, ConstantInt::get(Ctx.I32Ty, 0)},
+        CvtFn, {Src, ConstantInt::get(Ctx.I32Ty, ByteSel)},
         Sop == CanonicalOp::V_CVT_F32_FP8 ? "cvt_f32_fp8" : "cvt_f32_bf8");
     Ctx.writeReg32(Op.dst(), Ctx.B.CreateBitCast(F, Ctx.I32Ty));
     Hr.Handled = true;

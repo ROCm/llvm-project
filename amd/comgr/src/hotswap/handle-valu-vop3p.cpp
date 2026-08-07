@@ -285,13 +285,28 @@ struct WmmaScaleInputs {
 
     const bool ScaleSrcIsI64 = isScale16(Di);
 
+    // Both paths below hand the rest of the pipeline a scale whose four (or
+    // eight) bytes are the same, so a K-block index picks the right one
+    // whatever the operand's provenance was.
+    IntegerType *ScaleTy = ScaleSrcIsI64 ? Ctx.I64Ty : Ctx.I32Ty;
+    const uint64_t ByteSplat =
+        ScaleSrcIsI64 ? 0x0101010101010101ULL : 0x01010101ULL;
+
     auto unitScalePacked = [&](int64_t ScaleFmt) -> ConstantInt * {
-      if (ScaleSrcIsI64) {
-        uint64_t Byte = ScaleFmt == 2 /*E4M3*/ ? 0x38u : 0x7fu;
-        return ConstantInt::get(Ctx.I64Ty, Byte * 0x0101010101010101ULL);
-      }
-      uint32_t Byte = ScaleFmt == 2 /*E4M3*/ ? 0x38u : 0x7fu;
-      return ConstantInt::get(Ctx.I32Ty, Byte * 0x01010101U);
+      uint64_t Byte = ScaleFmt == 2 /*E4M3*/ ? 0x38u : 0x7fu;
+      return ConstantInt::get(ScaleTy, Byte * ByteSplat);
+    };
+
+    // A scalar scale source supplies bits[7:0] to every K-block, where a
+    // vector source maps its four bytes to K-blocks 0..3. Replicate byte 0 so
+    // every consumer -- the native gfx1250 intrinsic, the gfx950 scaled MFMA,
+    // and the gfx942 per-K-block software scale -- reads what the source
+    // hardware read.
+    auto broadcastByte0 = [&](Value *Scale) -> Value * {
+      Value *Byte0 = Ctx.B.CreateAnd(Scale, ConstantInt::get(ScaleTy, 0xFF),
+                                     "scale_byte0");
+      return Ctx.B.CreateMul(Byte0, ConstantInt::get(ScaleTy, ByteSplat),
+                             "scale_bcast");
     };
 
     auto readScaleSrc = [&](AMDGPU::OpName Name, int64_t ScaleFmt) -> Value * {
@@ -300,9 +315,13 @@ struct WmmaScaleInputs {
         return unitScalePacked(ScaleFmt);
       if (Di.isReg(Idx)) {
         ParsedReg Pr = Ctx.parseReg(Di.getReg(Idx), Idx);
-        if (Pr.RegKind != ParsedReg::OTHER && Pr.RegKind != ParsedReg::NOREG)
-          return ScaleSrcIsI64 ? Ctx.Regs.readReg64(Ctx.B, Pr)
-                               : Ctx.Regs.readReg32(Ctx.B, Pr);
+        if (Pr.RegKind != ParsedReg::OTHER && Pr.RegKind != ParsedReg::NOREG) {
+          Value *Scale = ScaleSrcIsI64 ? Ctx.Regs.readReg64(Ctx.B, Pr)
+                                       : Ctx.Regs.readReg32(Ctx.B, Pr);
+          const bool IsVector =
+              Pr.RegKind == ParsedReg::VGPR || Pr.RegKind == ParsedReg::AGPR;
+          return IsVector ? Scale : broadcastByte0(Scale);
+        }
       }
       if (Di.isImm(Idx) && Di.getImm(Idx) == 0)
         return unitScalePacked(ScaleFmt);
