@@ -326,14 +326,12 @@ define void @recursive_phis(i1 %cond, ptr addrspace(5) %ptr) {
 ; DAGISEL-ASM-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc
 ; DAGISEL-ASM-NEXT:    v_lshrrev_b32_e64 v0, 6, s32
 ; DAGISEL-ASM-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; DAGISEL-ASM-NEXT:    s_mov_b64 s[8:9], -1
 ; DAGISEL-ASM-NEXT:    s_mov_b64 s[4:5], 0
 ; DAGISEL-ASM-NEXT:    s_mov_b64 exec, vcc
 ; DAGISEL-ASM-NEXT:    ; divergent control-flow edge
 ; DAGISEL-ASM-NEXT:    s_cbranch_execz .LBB11_2
 ; DAGISEL-ASM-NEXT:  .LBB11_1: ; %then
 ; DAGISEL-ASM-NEXT:    v_and_b32_e32 v0, 0xffff, v1
-; DAGISEL-ASM-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; DAGISEL-ASM-NEXT:  .LBB11_2: ; %finally
 ; DAGISEL-ASM-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; DAGISEL-ASM-NEXT:    s_or_b64 exec, exec, s[6:7]

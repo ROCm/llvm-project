@@ -18,7 +18,6 @@ define <3 x float> @liveout_undef_subrange(<3 x float> %arg) {
 ; CHECK-NEXT:    v_cmp_eq_f32_e64 s[6:7], 0, v2
 ; CHECK-NEXT:    s_xor_b64 s[10:11], s[6:7], exec
 ; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[10:11]
-; CHECK-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; CHECK-NEXT:    s_mov_b64 exec, s[10:11]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3
@@ -32,7 +31,6 @@ define <3 x float> @liveout_undef_subrange(<3 x float> %arg) {
 ; CHECK-NEXT:  .LBB0_3: ; in Loop: Header=BB0_1 Depth=1
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; CHECK-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge

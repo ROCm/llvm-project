@@ -739,13 +739,12 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX9-LABEL: pr176559:
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX9-NEXT:    v_and_b32_e32 v1, 1, v1
 ; GFX9-NEXT:    v_and_b32_e32 v0, 1, v2
+; GFX9-NEXT:    v_cmp_eq_u32_e64 s[4:5], 1, v1
+; GFX9-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; GFX9-NEXT:    v_and_b32_e32 v0, 1, v1
-; GFX9-NEXT:    v_cmp_eq_u32_e64 s[4:5], 1, v0
-; GFX9-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
-; GFX9-NEXT:    s_mov_b64 s[6:7], -1
-; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB27_3
 ; GFX9-NEXT:  .LBB27_1: ; %for.inc.preheader
@@ -757,11 +756,10 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX9-NEXT:    v_cndmask_b32_e64 v2, v1, 0, vcc
 ; GFX9-NEXT:    v_cndmask_b32_e64 v1, 0, 1, vcc
 ; GFX9-NEXT:    v_add_co_u32_e32 v3, vcc, -1, v1
-; GFX9-NEXT:    v_addc_co_u32_e64 v1, s[8:9], 0, -1, vcc
+; GFX9-NEXT:    v_addc_co_u32_e64 v1, s[6:7], 0, -1, vcc
 ; GFX9-NEXT:    v_or_b32_e32 v1, v0, v1
 ; GFX9-NEXT:    v_or_b32_e32 v0, v2, v3
 ; GFX9-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[0:1]
-; GFX9-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GFX9-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; GFX9-NEXT:  .LBB27_2: ; %for.inc
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -779,26 +777,25 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX942-LABEL: pr176559:
 ; GFX942:       ; %bb.0: ; %entry
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX942-NEXT:    v_and_b32_e32 v1, 1, v1
 ; GFX942-NEXT:    v_and_b32_e32 v0, 1, v2
+; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], 1, v1
+; GFX942-NEXT:    s_xor_b64 s[2:3], s[0:1], exec
 ; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; GFX942-NEXT:    v_and_b32_e32 v0, 1, v1
-; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], 1, v0
-; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
-; GFX942-NEXT:    s_mov_b64 s[2:3], -1
-; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX942-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB27_3
 ; GFX942-NEXT:  .LBB27_1: ; %for.inc.preheader
 ; GFX942-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
-; GFX942-NEXT:    s_mov_b32 s4, 0
+; GFX942-NEXT:    s_mov_b32 s2, 0
 ; GFX942-NEXT:    v_mov_b32_e32 v1, 0xfffff8aa
 ; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX942-NEXT:    v_mov_b32_e32 v0, 0x4ef41e1b
-; GFX942-NEXT:    s_and_b64 s[2:3], s[2:3], exec
+; GFX942-NEXT:    s_nop 0
 ; GFX942-NEXT:    v_cndmask_b32_e64 v2, v1, 0, vcc
 ; GFX942-NEXT:    v_cndmask_b32_e64 v3, v0, 0, vcc
 ; GFX942-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
-; GFX942-NEXT:    v_mov_b32_e32 v1, s4
+; GFX942-NEXT:    v_mov_b32_e32 v1, s2
 ; GFX942-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, -1
 ; GFX942-NEXT:    v_or_b32_e32 v1, v2, v1
 ; GFX942-NEXT:    v_or_b32_e32 v0, v3, v0

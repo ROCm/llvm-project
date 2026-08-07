@@ -3315,7 +3315,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX908-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v6, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB18_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX908-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
@@ -3378,7 +3378,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX8-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v7, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB18_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX8-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
@@ -3730,7 +3730,7 @@ define double @flat_agent_atomic_fmin_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    buffer_store_dword v2, v6, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v3, v6, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB19_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3793,7 +3793,7 @@ define double @flat_agent_atomic_fmin_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX8-NEXT:    buffer_store_dword v2, v6, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v3, v7, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB19_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4145,7 +4145,7 @@ define double @flat_agent_atomic_fmin_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    buffer_store_dword v2, v6, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v3, v6, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB20_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4208,7 +4208,7 @@ define double @flat_agent_atomic_fmin_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX8-NEXT:    buffer_store_dword v2, v6, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v3, v7, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB20_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4537,7 +4537,7 @@ define void @flat_agent_atomic_fmin_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX908-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v4, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB21_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4597,7 +4597,7 @@ define void @flat_agent_atomic_fmin_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX8-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB21_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4935,7 +4935,7 @@ define void @flat_agent_atomic_fmin_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v4, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB22_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4997,7 +4997,7 @@ define void @flat_agent_atomic_fmin_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX8-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB22_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -5339,7 +5339,7 @@ define void @flat_agent_atomic_fmin_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v4, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB23_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -5401,7 +5401,7 @@ define void @flat_agent_atomic_fmin_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX8-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB23_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -5723,7 +5723,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_remote_memory(ptr %ptr,
 ; GFX90A-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX90A-NEXT:    buffer_store_dword v1, v6, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:  .LBB24_5: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX90A-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
@@ -5780,7 +5780,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_remote_memory(ptr %ptr,
 ; GFX908-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v6, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB24_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX908-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
@@ -5843,7 +5843,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_remote_memory(ptr %ptr,
 ; GFX8-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v7, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB24_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX8-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
@@ -5906,7 +5906,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_remote_memory(ptr %ptr,
 ; GFX7-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v1, v7, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB24_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX7-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX7-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
@@ -6211,7 +6211,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_fine_grained_memory__am
 ; GFX908-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v6, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB25_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX908-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
@@ -6274,7 +6274,7 @@ define double @flat_agent_atomic_fmin_ret_f64__amdgpu_no_fine_grained_memory__am
 ; GFX8-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v7, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB25_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX8-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)

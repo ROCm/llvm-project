@@ -341,7 +341,7 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    s_and_b64 vcc, exec, 0
 ; GCN-NEXT:    s_and_b64 vcc, vcc, vcc
 ; GCN-NEXT:    s_cselect_b64 s[4:5], 0, exec
-; GCN-NEXT:    s_or_b64 s[80:81], s[80:81], s[4:5]
+; GCN-NEXT:    s_or_b64 s[70:71], s[70:71], s[4:5]
 ; GCN-NEXT:    buffer_store_dword v44, off, s[0:3], 0
 ; GCN-NEXT:  .LBB1_6: ; in Loop: Header=BB1_1 Depth=1
 ; GCN-NEXT:    s_or_b64 exec, exec, s[96:97]

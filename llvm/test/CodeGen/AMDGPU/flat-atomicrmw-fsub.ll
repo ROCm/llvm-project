@@ -3950,7 +3950,7 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX908-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v6, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB16_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX908-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
@@ -4009,7 +4009,7 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX8-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v7, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB16_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX8-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
@@ -4068,7 +4068,7 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX7-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v1, v7, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB16_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX7-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX7-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
@@ -4405,7 +4405,7 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX908-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v3, v4, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB17_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4464,7 +4464,7 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX8-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v3, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB17_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4523,7 +4523,7 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX7-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v3, v5, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB17_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr inbounds double, ptr %ptr, i64 255
@@ -4860,7 +4860,7 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX908-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v3, v4, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB18_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4919,7 +4919,7 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX8-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v3, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB18_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4978,7 +4978,7 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX7-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v3, v5, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB18_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr inbounds double, ptr %ptr, i64 -256
@@ -5350,7 +5350,7 @@ define void @flat_agent_atomic_fsub_noret_f64(ptr %ptr, double %val) #0 {
 ; GFX8-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB19_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -5406,7 +5406,7 @@ define void @flat_agent_atomic_fsub_noret_f64(ptr %ptr, double %val) #0 {
 ; GFX7-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB19_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
   %unused = atomicrmw fsub ptr %ptr, double %val syncscope("agent") seq_cst
@@ -5793,7 +5793,7 @@ define void @flat_agent_atomic_fsub_noret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX8-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB20_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -5851,7 +5851,7 @@ define void @flat_agent_atomic_fsub_noret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX7-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB20_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr inbounds double, ptr %ptr, i64 255
@@ -6240,7 +6240,7 @@ define void @flat_agent_atomic_fsub_noret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX8-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB21_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -6298,7 +6298,7 @@ define void @flat_agent_atomic_fsub_noret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX7-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB21_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr inbounds double, ptr %ptr, i64 -256

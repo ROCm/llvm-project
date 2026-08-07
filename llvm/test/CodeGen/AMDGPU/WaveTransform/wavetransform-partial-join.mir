@@ -695,8 +695,7 @@ body:             |
   ; POSTWT-NEXT: bb.7:
   ; POSTWT-NEXT:   successors: %bb.10(0x80000000)
   ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT:   [[S_AND_B32_:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_MOV_B32_2]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = COPY [[S_AND_B32_]]
+  ; POSTWT-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = COPY $exec_lo
   ; POSTWT-NEXT:   S_BRANCH %bb.10
   bb.0:
     successors: %bb.1, %bb.2

@@ -150,7 +150,6 @@ define void @my_func(i32 %0) {
 ; GCN-NEXT:  .LBB0_9:
 ; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GCN-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GCN-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_11
@@ -163,8 +162,7 @@ define void @my_func(i32 %0) {
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:  .LBB0_11:
 ; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GCN-NEXT:    s_and_b64 s[8:9], s[6:7], exec
+; GCN-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
 ; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]

@@ -157,9 +157,9 @@ define amdgpu_ps { <4 x float> } @test_return_to_epilog_with_optimized_kill(floa
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT: bb.6.end:
   ; GCN-NEXT:   successors: %bb.8(0x80000000)
-  ; GCN-NEXT:   liveins: $sgpr4_sgpr5
+  ; GCN-NEXT:   liveins: $sgpr0_sgpr1
   ; GCN-NEXT: {{  $}}
-  ; GCN-NEXT:   $exec = S_OR_B64 $exec, killed renamable $sgpr4_sgpr5, implicit-def $scc
+  ; GCN-NEXT:   $exec = S_OR_B64 $exec, killed renamable $sgpr0_sgpr1, implicit-def $scc
   ; GCN-NEXT:   S_BRANCH %bb.8
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT: bb.7:

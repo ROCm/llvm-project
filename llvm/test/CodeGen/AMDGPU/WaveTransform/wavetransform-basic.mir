@@ -99,6 +99,25 @@ body:             |
 
 ---
 
+bb0.
+...
+acc1 = 0
+
+bb1.
+condreg = V_CMP_...
+conregflip = condreg ^ exec
+acc1 = acc1 | conregflip
+exec = acc1    =>    exec = acc1 | condregflip
+
+
+
+
+
+Acc1 = mov %temp        [acc1 = temp]
+exec = Acc1   ==>   exec = %temp
+
+Acc1 = %12 XOR exec  [Acc1 = [OR, %12, exec]]
+exec = Acc1   ==>   exec = %temp
 
 name: if_then_divergent_with_no_terminator
 tracksRegLiveness: true
@@ -111,8 +130,11 @@ body:             |
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; POSTWT-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 [[COPY]], killed [[S_MOV_B32_]], implicit $exec
-  ; POSTWT-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 [[V_CMP_EQ_U32_e64_]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32_term [[S_XOR_B32_]]
+  ; POSTWT-NEXT:   ; [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_MOV %temp ;;S_XOR_B32 [[V_CMP_EQ_U32_e64_]], $exec_lo, implicit-def $scc
+  ; POSTWT-NEXT:   ; $exec_lo = S_MOV_B32_term %tmp   ;;[[S_XOR_B32_]]
+
+                   $exec_lo = S_XOR_B32 [[V_CMP_EQ_U32_e64_]], $exec_lo, implicit-def $scc
+
   ; POSTWT-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; POSTWT-NEXT:   S_CBRANCH_EXECZ %bb.2, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.1
