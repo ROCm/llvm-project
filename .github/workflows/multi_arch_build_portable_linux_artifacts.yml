@@ -75,8 +75,7 @@ on:
 jobs:
   build_stage:
     name: ${{ inputs.stage_display_name }}
-    runs-on: azure-linux-scale-rocm    #temp until aws access is provided
-    #runs-on: ${{ inputs.build_runs_on }}
+    runs-on: ${{ inputs.build_runs_on }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     permissions:
       id-token: write
