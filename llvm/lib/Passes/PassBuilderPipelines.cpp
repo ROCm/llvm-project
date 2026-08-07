@@ -1230,6 +1230,8 @@ ModulePassManager PassBuilder::buildModuleSimplificationPipeline(
                  PGOOpt->Action == PGOOptions::SampleUse))
     MPM.addPass(PGOForceFunctionAttrsPass(PGOOpt->ColdOptType));
 
+  MPM.addPass(AlwaysInlinerPass(/*InsertLifetimeIntrinsics=*/true));
+
   if (Opts.enable_module_inliner)
     MPM.addPass(buildModuleInlinerPipeline(Level, Phase));
   else

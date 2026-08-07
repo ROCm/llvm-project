@@ -2,69 +2,71 @@
 target datalayout = "e-m:o-i64:64-i128:128-n32:64-S128"
 target triple = "arm64e-apple-macosx13"
 
-; CHECK: remark: <unknown>:0:0: 'wobble' inlined into 'snork': always inline attribute
-; CHECK: remark: <unknown>:0:0: 'spam' inlined into 'snork' with (cost=65, threshold=75)
-; CHECK: remark: <unknown>:0:0: 'snork' inlined into 'blam': always inline attribute
+; CHECK: remark: <unknown>:0:0: 'wibble' inlined into 'bar.8' with (cost=always): always inline attribute
+; CHECK: remark: <unknown>:0:0: 'snork' inlined into 'blam' with (cost=always): always inline attribute
+; CHECK: remark: <unknown>:0:0: 'wobble' inlined into 'blam' with (cost=always): always inline attribute
+; CHECK: remark: <unknown>:0:0: 'spam' inlined into 'blam' with (cost=65, threshold=75)
 ; CHECK: remark: <unknown>:0:0: 'wibble.1' inlined into 'widget' with (cost=30, threshold=75)
+; CHECK: remark: <unknown>:0:0: 'widget' inlined into 'bar.8' with (cost=30, threshold=75)
 ; CHECK: remark: <unknown>:0:0: 'widget' inlined into 'wibble' with (cost=30, threshold=75)
-; CHECK: remark: <unknown>:0:0: 'wibble' inlined into 'bar.8': always inline attribute
 ; CHECK: remark: <unknown>:0:0: 'barney' inlined into 'wombat' with (cost=30, threshold=75)
+
 define linkonce_odr void @wombat(ptr %arg) #0 {
 bb:
-  call void @barney()
-  ret void
+ call void @barney()
+ ret void
 }
 
 define i1 @foo() {
 bb:
-  call void @wombat(ptr null)
-  unreachable
+ call void @wombat(ptr null)
+ unreachable
 }
 
 define linkonce_odr void @pluto() #1 !prof !38 {
 bb:
-  call void @wibble()
-  ret void
+ call void @wibble()
+ ret void
 }
 
 ; Function Attrs: alwaysinline
 define linkonce_odr void @wibble() #2 {
 bb:
-  call void @widget()
-  ret void
+ call void @widget()
+ ret void
 }
 
 define linkonce_odr void @widget() optsize {
 bb:
-  call void @wibble.1()
-  ret void
+ call void @wibble.1()
+ ret void
 }
 
 define linkonce_odr void @wibble.1() optsize {
 bb:
-  %0 = call i32 @foo.2()
-  call void @blam()
-  ret void
+ %0 = call i32 @foo.2()
+ call void @blam()
+ ret void
 }
 
 declare i32 @foo.2()
 
 define linkonce_odr void @blam() optsize {
 bb:
-  %tmp = call i32 @snork()
-  %tmpv1 = call ptr @wombat.3()
-  call void @eggs()
-  %tmpv2 = call ptr @wombat.3()
-  ret void
+ %tmp = call i32 @snork()
+ %tmpv1 = call ptr @wombat.3()
+ call void @eggs()
+ %tmpv2 = call ptr @wombat.3()
+ ret void
 }
 
 ; Function Attrs: alwaysinline
 define linkonce_odr i32 @snork() #2 {
 bb:
-  %tmpv1 = call i32 @spam()
-  %tmpv2 = call i32 @wobble()
-  call void @widget.4(i32 %tmpv2)
-  ret i32 0
+ %tmpv1 = call i32 @spam()
+ %tmpv2 = call i32 @wobble()
+ call void @widget.4(i32 %tmpv2)
+ ret i32 0
 }
 
 declare void @eggs()
@@ -73,23 +75,23 @@ declare ptr @wombat.3()
 
 define linkonce_odr i32 @spam() optsize {
 bb:
-  %tmpv1 = call i32 @wombat.6()
-  %tmpv2 = call i64 @wobble.5(i8 0)
-  %tmpv3 = call i64 @bar()
-  ret i32 0
+ %tmpv1 = call i32 @wombat.6()
+ %tmpv2 = call i64 @wobble.5(i8 0)
+ %tmpv3 = call i64 @bar()
+ ret i32 0
 }
 
 ; Function Attrs: alwaysinline
 define linkonce_odr i32 @wobble() #2 {
 bb:
-  %tmpv = call i64 @wobble.5(i8 0)
-  %tmpv1 = call i64 @eggs.7()
-  %tmpv2 = call i64 @wobble.5(i8 0)
-  %tmpv3 = call i64 @eggs.7()
-  %tmpv4 = lshr i64 %tmpv1, 1
-  %tmpv5 = trunc i64 %tmpv4 to i32
-  %tmpv6 = xor i32 %tmpv5, 23
-  ret i32 %tmpv6
+ %tmpv = call i64 @wobble.5(i8 0)
+ %tmpv1 = call i64 @eggs.7()
+ %tmpv2 = call i64 @wobble.5(i8 0)
+ %tmpv3 = call i64 @eggs.7()
+ %tmpv4 = lshr i64 %tmpv1, 1
+ %tmpv5 = trunc i64 %tmpv4 to i32
+ %tmpv6 = xor i32 %tmpv5, 23
+ ret i32 %tmpv6
 }
 
 declare void @widget.4(i32)
@@ -104,19 +106,19 @@ declare i64 @eggs.7()
 
 define linkonce_odr void @barney() optsize {
 bb:
-  call void @bar.8()
-  call void @pluto()
-  unreachable
+ call void @bar.8()
+ call void @pluto()
+ unreachable
 }
 
 define linkonce_odr void @bar.8() optsize {
 bb:
-  call void @wibble()
-  ret void
+ call void @wibble()
+ ret void
 }
 
 attributes #0 = { optsize "frame-pointer"="non-leaf" }
-attributes #1 = { optsize }
+attributes #1 = { optsize "target-cpu"="apple-m1" }
 attributes #2 = { optsize alwaysinline }
 
 !llvm.module.flags = !{!0, !1, !30, !31, !32, !36, !37}
