@@ -478,7 +478,8 @@ public:
       };
 
       for (MachineInstr &MI : MBB) {
-        if (MI.isMetaInstruction())
+        if (MI.isMetaInstruction() &&
+            MI.getOpcode() != AMDGPU::SI_WAVE_CF_EDGE)
           continue;
 
         if (MI.getOpcode() == AMDGPU::S_WAITCNT_DEPCTR &&
@@ -500,8 +501,9 @@ public:
           continue;
         }
 
-        // Do not optimize over branches
-        if (PrevWait && (MI.isCall() || MI.isReturn() || MI.isBranch())) {
+        // Do not optimize over branches or control-flow edge markers.
+        if (PrevWait && (MI.isCall() || MI.isReturn() || MI.isBranch() ||
+                         MI.getOpcode() == AMDGPU::SI_WAVE_CF_EDGE)) {
           PrevWait->moveBefore(&MI);
           PrevWait = nullptr;
           Changed = true;
