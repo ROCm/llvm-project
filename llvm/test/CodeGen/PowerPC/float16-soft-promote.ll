@@ -19,29 +19,19 @@
 ; ---------------------------------------------------------------------------
 
 define void @store_f16(half %x, ptr %p) nounwind {
-; P8-LABEL: store_f16:
-; P8:       # %bb.0:
-; P8-NEXT:    sth r3, 0(r4)
-; P8-NEXT:    blr
-;
-; P9-LABEL: store_f16:
-; P9:       # %bb.0:
-; P9-NEXT:    sth r3, 0(r4)
-; P9-NEXT:    blr
+; CHECK-LABEL: store_f16:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    sth r3, 0(r4)
+; CHECK-NEXT:    blr
   store half %x, ptr %p
   ret void
 }
 
 define half @load_f16(ptr %p) nounwind {
-; P8-LABEL: load_f16:
-; P8:       # %bb.0:
-; P8-NEXT:    lhz r3, 0(r3)
-; P8-NEXT:    blr
-;
-; P9-LABEL: load_f16:
-; P9:       # %bb.0:
-; P9-NEXT:    lhz r3, 0(r3)
-; P9-NEXT:    blr
+; CHECK-LABEL: load_f16:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lhz r3, 0(r3)
+; CHECK-NEXT:    blr
   %v = load half, ptr %p
   ret half %v
 }
@@ -54,20 +44,40 @@ define half @add_f16(half %a, half %b) nounwind {
 ; P8-LABEL: add_f16:
 ; P8:       # %bb.0:
 ; P8-NEXT:    mflr r0
-; P8-NEXT:    std r0, 16(r1)
-; P8-NEXT:    stdu r1, -32(r1)
-; P8-NEXT:    mr r4, r3
-; P8-NEXT:    srwi r3, r3, 16
+; P8-NEXT:    std r30, -24(r1) # 8-byte Folded Spill
+; P8-NEXT:    stfd f31, -8(r1) # 8-byte Folded Spill
+; P8-NEXT:    stdu r1, -64(r1)
+; P8-NEXT:    mr r30, r3
+; P8-NEXT:    clrldi r3, r4, 48
+; P8-NEXT:    std r0, 80(r1)
 ; P8-NEXT:    bl __extendhfsf2
-; P8-NEXT:    fmr f2, f1
-; P8-NEXT:    mr r3, r4
+; P8-NEXT:    nop
+; P8-NEXT:    clrldi r3, r30, 48
+; P8-NEXT:    fmr f31, f1
 ; P8-NEXT:    bl __extendhfsf2
-; P8-NEXT:    fadds f1, f1, f2
+; P8-NEXT:    nop
+; P8-NEXT:    xsaddsp f1, f1, f31
 ; P8-NEXT:    bl __truncsfhf2
-; P8-NEXT:    addi r1, r1, 32
+; P8-NEXT:    nop
+; P8-NEXT:    addi r1, r1, 64
 ; P8-NEXT:    ld r0, 16(r1)
+; P8-NEXT:    lfd f31, -8(r1) # 8-byte Folded Reload
+; P8-NEXT:    ld r30, -24(r1) # 8-byte Folded Reload
 ; P8-NEXT:    mtlr r0
 ; P8-NEXT:    blr
+;
+; P9-LABEL: add_f16:
+; P9:       # %bb.0:
+; P9-NEXT:    clrlwi r3, r3, 16
+; P9-NEXT:    clrlwi r4, r4, 16
+; P9-NEXT:    mtfprwz f0, r4
+; P9-NEXT:    mtfprwz f1, r3
+; P9-NEXT:    xscvhpdp f0, f0
+; P9-NEXT:    xscvhpdp f1, f1
+; P9-NEXT:    xsaddsp f0, f1, f0
+; P9-NEXT:    xscvdphp f0, f0
+; P9-NEXT:    mffprwz r3, f0
+; P9-NEXT:    blr
   %r = fadd half %a, %b
   ret half %r
 }
@@ -80,9 +90,11 @@ define float @extend_f16_to_f32(half %a) nounwind {
 ; P8-LABEL: extend_f16_to_f32:
 ; P8:       # %bb.0:
 ; P8-NEXT:    mflr r0
-; P8-NEXT:    std r0, 16(r1)
 ; P8-NEXT:    stdu r1, -32(r1)
+; P8-NEXT:    clrldi r3, r3, 48
+; P8-NEXT:    std r0, 48(r1)
 ; P8-NEXT:    bl __extendhfsf2
+; P8-NEXT:    nop
 ; P8-NEXT:    addi r1, r1, 32
 ; P8-NEXT:    ld r0, 16(r1)
 ; P8-NEXT:    mtlr r0
@@ -90,9 +102,9 @@ define float @extend_f16_to_f32(half %a) nounwind {
 ;
 ; P9-LABEL: extend_f16_to_f32:
 ; P9:       # %bb.0:
-; P9-NEXT:    mtvsrwz v2, r3
-; P9-NEXT:    xscvhpdp f1, v2
-; P9-NEXT:    frsp f1, f1
+; P9-NEXT:    clrlwi r3, r3, 16
+; P9-NEXT:    mtfprwz f0, r3
+; P9-NEXT:    xscvhpdp f1, f0
 ; P9-NEXT:    blr
   %r = fpext half %a to float
   ret float %r
@@ -106,9 +118,10 @@ define half @trunc_f32_to_f16(float %a) nounwind {
 ; P8-LABEL: trunc_f32_to_f16:
 ; P8:       # %bb.0:
 ; P8-NEXT:    mflr r0
-; P8-NEXT:    std r0, 16(r1)
 ; P8-NEXT:    stdu r1, -32(r1)
+; P8-NEXT:    std r0, 48(r1)
 ; P8-NEXT:    bl __truncsfhf2
+; P8-NEXT:    nop
 ; P8-NEXT:    addi r1, r1, 32
 ; P8-NEXT:    ld r0, 16(r1)
 ; P8-NEXT:    mtlr r0
@@ -116,8 +129,8 @@ define half @trunc_f32_to_f16(float %a) nounwind {
 ;
 ; P9-LABEL: trunc_f32_to_f16:
 ; P9:       # %bb.0:
-; P9-NEXT:    xscvdphp v2, f1
-; P9-NEXT:    mfvsrwz r3, v2
+; P9-NEXT:    xscvdphp f0, f1
+; P9-NEXT:    mffprwz r3, f0
 ; P9-NEXT:    blr
   %r = fptrunc float %a to half
   ret half %r
@@ -131,11 +144,11 @@ define double @extload_f16_to_f64(ptr %p) nounwind {
 ; P8-LABEL: extload_f16_to_f64:
 ; P8:       # %bb.0:
 ; P8-NEXT:    mflr r0
-; P8-NEXT:    std r0, 16(r1)
 ; P8-NEXT:    stdu r1, -32(r1)
+; P8-NEXT:    std r0, 48(r1)
 ; P8-NEXT:    lhz r3, 0(r3)
 ; P8-NEXT:    bl __extendhfsf2
-; P8-NEXT:    frsp f1, f1
+; P8-NEXT:    nop
 ; P8-NEXT:    addi r1, r1, 32
 ; P8-NEXT:    ld r0, 16(r1)
 ; P8-NEXT:    mtlr r0
@@ -143,8 +156,8 @@ define double @extload_f16_to_f64(ptr %p) nounwind {
 ;
 ; P9-LABEL: extload_f16_to_f64:
 ; P9:       # %bb.0:
-; P9-NEXT:    lxsihzx v2, 0, r3
-; P9-NEXT:    xscvhpdp f1, v2
+; P9-NEXT:    lxsihzx f0, 0, r3
+; P9-NEXT:    xscvhpdp f1, f0
 ; P9-NEXT:    blr
   %v = load half, ptr %p
   %r = fpext half %v to double
@@ -159,20 +172,23 @@ define void @truncstore_f64_to_f16(double %v, ptr %p) nounwind {
 ; P8-LABEL: truncstore_f64_to_f16:
 ; P8:       # %bb.0:
 ; P8-NEXT:    mflr r0
-; P8-NEXT:    std r0, 16(r1)
-; P8-NEXT:    stdu r1, -32(r1)
-; P8-NEXT:    frsp f1, f1
-; P8-NEXT:    bl __truncsfhf2
-; P8-NEXT:    sth r3, 0(r4)
-; P8-NEXT:    addi r1, r1, 32
+; P8-NEXT:    std r30, -16(r1) # 8-byte Folded Spill
+; P8-NEXT:    stdu r1, -48(r1)
+; P8-NEXT:    std r0, 64(r1)
+; P8-NEXT:    mr r30, r4
+; P8-NEXT:    bl __truncdfhf2
+; P8-NEXT:    nop
+; P8-NEXT:    sth r3, 0(r30)
+; P8-NEXT:    addi r1, r1, 48
 ; P8-NEXT:    ld r0, 16(r1)
+; P8-NEXT:    ld r30, -16(r1) # 8-byte Folded Reload
 ; P8-NEXT:    mtlr r0
 ; P8-NEXT:    blr
 ;
 ; P9-LABEL: truncstore_f64_to_f16:
 ; P9:       # %bb.0:
-; P9-NEXT:    xscvdphp v2, f1
-; P9-NEXT:    stxsihx v2, 0, r3
+; P9-NEXT:    xscvdphp f0, f1
+; P9-NEXT:    stxsihx f0, 0, r4
 ; P9-NEXT:    blr
   %t = fptrunc double %v to half
   store half %t, ptr %p
@@ -187,22 +203,43 @@ define i1 @cmp_f16(half %a, half %b) nounwind {
 ; P8-LABEL: cmp_f16:
 ; P8:       # %bb.0:
 ; P8-NEXT:    mflr r0
-; P8-NEXT:    std r0, 16(r1)
-; P8-NEXT:    stdu r1, -32(r1)
-; P8-NEXT:    mr r4, r3
-; P8-NEXT:    srwi r3, r3, 16
+; P8-NEXT:    std r30, -24(r1) # 8-byte Folded Spill
+; P8-NEXT:    stfd f31, -8(r1) # 8-byte Folded Spill
+; P8-NEXT:    stdu r1, -64(r1)
+; P8-NEXT:    mr r30, r3
+; P8-NEXT:    clrldi r3, r4, 48
+; P8-NEXT:    std r0, 80(r1)
 ; P8-NEXT:    bl __extendhfsf2
-; P8-NEXT:    fmr f2, f1
-; P8-NEXT:    mr r3, r4
+; P8-NEXT:    nop
+; P8-NEXT:    clrldi r3, r30, 48
+; P8-NEXT:    fmr f31, f1
 ; P8-NEXT:    bl __extendhfsf2
-; P8-NEXT:    fcmpu cr0, f1, f2
-; P8-NEXT:    mfocrf r3, 128
-; P8-NEXT:    rlwinm r3, r3, 29, 31, 31
-; P8-NEXT:    addi r1, r1, 32
+; P8-NEXT:    nop
+; P8-NEXT:    fcmpu cr0, f1, f31
+; P8-NEXT:    li r3, 0
+; P8-NEXT:    li r4, 1
+; P8-NEXT:    isellt r3, r4, r3
+; P8-NEXT:    addi r1, r1, 64
 ; P8-NEXT:    ld r0, 16(r1)
+; P8-NEXT:    lfd f31, -8(r1) # 8-byte Folded Reload
+; P8-NEXT:    ld r30, -24(r1) # 8-byte Folded Reload
 ; P8-NEXT:    mtlr r0
 ; P8-NEXT:    blr
-  %r = fcmp olt %a, %b
+;
+; P9-LABEL: cmp_f16:
+; P9:       # %bb.0:
+; P9-NEXT:    clrlwi r3, r3, 16
+; P9-NEXT:    clrlwi r4, r4, 16
+; P9-NEXT:    mtfprwz f0, r4
+; P9-NEXT:    mtfprwz f1, r3
+; P9-NEXT:    li r3, 0
+; P9-NEXT:    li r4, 1
+; P9-NEXT:    xscvhpdp f0, f0
+; P9-NEXT:    xscvhpdp f1, f1
+; P9-NEXT:    fcmpu cr0, f1, f0
+; P9-NEXT:    isellt r3, r4, r3
+; P9-NEXT:    blr
+  %r = fcmp olt half %a, %b
   ret i1 %r
 }
 
@@ -214,14 +251,24 @@ define half @sitofp_i32_to_f16(i32 %a) nounwind {
 ; P8-LABEL: sitofp_i32_to_f16:
 ; P8:       # %bb.0:
 ; P8-NEXT:    mflr r0
-; P8-NEXT:    std r0, 16(r1)
 ; P8-NEXT:    stdu r1, -32(r1)
-; P8-NEXT:    bl __floatsisf
+; P8-NEXT:    mtfprwa f0, r3
+; P8-NEXT:    std r0, 48(r1)
+; P8-NEXT:    xscvsxdsp f1, f0
 ; P8-NEXT:    bl __truncsfhf2
+; P8-NEXT:    nop
 ; P8-NEXT:    addi r1, r1, 32
 ; P8-NEXT:    ld r0, 16(r1)
 ; P8-NEXT:    mtlr r0
 ; P8-NEXT:    blr
+;
+; P9-LABEL: sitofp_i32_to_f16:
+; P9:       # %bb.0:
+; P9-NEXT:    mtfprwa f0, r3
+; P9-NEXT:    xscvsxdsp f0, f0
+; P9-NEXT:    xscvdphp f0, f0
+; P9-NEXT:    mffprwz r3, f0
+; P9-NEXT:    blr
   %r = sitofp i32 %a to half
   ret half %r
 }

@@ -19,29 +19,27 @@
 ; ---------------------------------------------------------------------------
 
 define void @store_bf16(bfloat %x, ptr %p) nounwind {
-; P8-LABEL: store_bf16:
-; P8:       # %bb.0:
-; P8-NEXT:    sth r3, 0(r4)
-; P8-NEXT:    blr
-;
-; P10-LABEL: store_bf16:
-; P10:       # %bb.0:
-; P10-NEXT:    sth r3, 0(r4)
-; P10-NEXT:    blr
+; CHECK-LABEL: store_bf16:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    xsmaxdp f0, f1, f1
+; CHECK-NEXT:    xscvdpspn vs0, f0
+; CHECK-NEXT:    mffprwz r3, f0
+; CHECK-NEXT:    srwi r3, r3, 16
+; CHECK-NEXT:    sth r3, 0(r4)
+; CHECK-NEXT:    blr
   store bfloat %x, ptr %p
   ret void
 }
 
 define bfloat @load_bf16(ptr %p) nounwind {
-; P8-LABEL: load_bf16:
-; P8:       # %bb.0:
-; P8-NEXT:    lhz r3, 0(r3)
-; P8-NEXT:    blr
-;
-; P10-LABEL: load_bf16:
-; P10:       # %bb.0:
-; P10-NEXT:    lhz r3, 0(r3)
-; P10-NEXT:    blr
+; CHECK-LABEL: load_bf16:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lhz r3, 0(r3)
+; CHECK-NEXT:    slwi r3, r3, 16
+; CHECK-NEXT:    mtfprd f0, r3
+; CHECK-NEXT:    xxsldwi vs0, vs0, vs0, 1
+; CHECK-NEXT:    xscvspdpn f1, vs0
+; CHECK-NEXT:    blr
   %v = load bfloat, ptr %p
   ret bfloat %v
 }
@@ -53,9 +51,6 @@ define bfloat @load_bf16(ptr %p) nounwind {
 define float @extend_bf16_to_f32(bfloat %a) nounwind {
 ; CHECK-LABEL: extend_bf16_to_f32:
 ; CHECK:       # %bb.0:
-; CHECK:         slwi r3, r3, 16
-; CHECK:         mtvsrwz
-; CHECK:         xscvspdpn
 ; CHECK-NEXT:    blr
   %r = fpext bfloat %a to float
   ret float %r
@@ -68,7 +63,14 @@ define float @extend_bf16_to_f32(bfloat %a) nounwind {
 define bfloat @trunc_f32_to_bf16(float %a) nounwind {
 ; CHECK-LABEL: trunc_f32_to_bf16:
 ; CHECK:       # %bb.0:
-; CHECK:         bl __truncsfbf2
+; CHECK-NEXT:    xsmaxdp f0, f1, f1
+; CHECK-NEXT:    xscvdpspn vs0, f0
+; CHECK-NEXT:    mffprwz r3, f0
+; CHECK-NEXT:    rlwinm r3, r3, 0, 0, 15
+; CHECK-NEXT:    mtfprd f0, r3
+; CHECK-NEXT:    xxsldwi vs0, vs0, vs0, 1
+; CHECK-NEXT:    xscvspdpn f1, vs0
+; CHECK-NEXT:    blr
   %r = fptrunc float %a to bfloat
   ret bfloat %r
 }
@@ -78,12 +80,55 @@ define bfloat @trunc_f32_to_bf16(float %a) nounwind {
 ; ---------------------------------------------------------------------------
 
 define bfloat @add_bf16(bfloat %a, bfloat %b) nounwind {
-; CHECK-LABEL: add_bf16:
-; CHECK:       # %bb.0:
-; CHECK:         slwi {{r[0-9]+}}, {{r[0-9]+}}, 16
-; CHECK:         slwi {{r[0-9]+}}, {{r[0-9]+}}, 16
-; CHECK:         fadds
-; CHECK:         bl __truncsfbf2
+; P8-LABEL: add_bf16:
+; P8:       # %bb.0:
+; P8-NEXT:    xsmaxdp f0, f1, f1
+; P8-NEXT:    xscvdpspn vs0, f0
+; P8-NEXT:    mffprwz r3, f0
+; P8-NEXT:    xsmaxdp f0, f2, f2
+; P8-NEXT:    xscvdpspn vs0, f0
+; P8-NEXT:    rlwinm r3, r3, 0, 0, 15
+; P8-NEXT:    mtfprd f1, r3
+; P8-NEXT:    mffprwz r4, f0
+; P8-NEXT:    rlwinm r4, r4, 0, 0, 15
+; P8-NEXT:    mtfprd f0, r4
+; P8-NEXT:    xxsldwi vs1, vs1, vs1, 1
+; P8-NEXT:    xscvspdpn f1, vs1
+; P8-NEXT:    xxsldwi vs0, vs0, vs0, 1
+; P8-NEXT:    xscvspdpn f0, vs0
+; P8-NEXT:    xsaddsp f0, f1, f0
+; P8-NEXT:    xscvdpspn vs0, f0
+; P8-NEXT:    mffprwz r3, f0
+; P8-NEXT:    rlwinm r3, r3, 0, 0, 15
+; P8-NEXT:    mtfprd f0, r3
+; P8-NEXT:    xxsldwi vs0, vs0, vs0, 1
+; P8-NEXT:    xscvspdpn f1, vs0
+; P8-NEXT:    blr
+;
+; P10-LABEL: add_bf16:
+; P10:       # %bb.0:
+; P10-NEXT:    xsmaxdp f0, f1, f1
+; P10-NEXT:    xscvdpspn vs0, f0
+; P10-NEXT:    mffprwz r3, f0
+; P10-NEXT:    xsmaxdp f0, f2, f2
+; P10-NEXT:    rlwinm r3, r3, 0, 0, 15
+; P10-NEXT:    xscvdpspn vs0, f0
+; P10-NEXT:    mtfprd f1, r3
+; P10-NEXT:    xxsldwi vs1, vs1, vs1, 1
+; P10-NEXT:    xscvspdpn f1, vs1
+; P10-NEXT:    mffprwz r4, f0
+; P10-NEXT:    rlwinm r4, r4, 0, 0, 15
+; P10-NEXT:    mtfprd f0, r4
+; P10-NEXT:    xxsldwi vs0, vs0, vs0, 1
+; P10-NEXT:    xscvspdpn f0, vs0
+; P10-NEXT:    xsaddsp f0, f1, f0
+; P10-NEXT:    xscvdpspn vs0, f0
+; P10-NEXT:    mffprwz r3, f0
+; P10-NEXT:    rlwinm r3, r3, 0, 0, 15
+; P10-NEXT:    mtfprd f0, r3
+; P10-NEXT:    xxsldwi vs0, vs0, vs0, 1
+; P10-NEXT:    xscvspdpn f1, vs0
+; P10-NEXT:    blr
   %r = fadd bfloat %a, %b
   ret bfloat %r
 }
@@ -93,11 +138,47 @@ define bfloat @add_bf16(bfloat %a, bfloat %b) nounwind {
 ; ---------------------------------------------------------------------------
 
 define i1 @cmp_bf16(bfloat %a, bfloat %b) nounwind {
-; CHECK-LABEL: cmp_bf16:
-; CHECK:       # %bb.0:
-; CHECK:         slwi {{r[0-9]+}}, {{r[0-9]+}}, 16
-; CHECK:         slwi {{r[0-9]+}}, {{r[0-9]+}}, 16
-; CHECK:         fcmpu
+; P8-LABEL: cmp_bf16:
+; P8:       # %bb.0:
+; P8-NEXT:    xsmaxdp f0, f1, f1
+; P8-NEXT:    xscvdpspn vs0, f0
+; P8-NEXT:    mffprwz r3, f0
+; P8-NEXT:    xsmaxdp f0, f2, f2
+; P8-NEXT:    xscvdpspn vs0, f0
+; P8-NEXT:    rlwinm r3, r3, 0, 0, 15
+; P8-NEXT:    mtfprd f1, r3
+; P8-NEXT:    li r3, 0
+; P8-NEXT:    mffprwz r4, f0
+; P8-NEXT:    rlwinm r4, r4, 0, 0, 15
+; P8-NEXT:    mtfprd f0, r4
+; P8-NEXT:    li r4, 1
+; P8-NEXT:    xxsldwi vs1, vs1, vs1, 1
+; P8-NEXT:    xscvspdpn f1, vs1
+; P8-NEXT:    xxsldwi vs0, vs0, vs0, 1
+; P8-NEXT:    xscvspdpn f0, vs0
+; P8-NEXT:    fcmpu cr0, f1, f0
+; P8-NEXT:    isellt r3, r4, r3
+; P8-NEXT:    blr
+;
+; P10-LABEL: cmp_bf16:
+; P10:       # %bb.0:
+; P10-NEXT:    xsmaxdp f0, f1, f1
+; P10-NEXT:    xscvdpspn vs0, f0
+; P10-NEXT:    mffprwz r3, f0
+; P10-NEXT:    xsmaxdp f0, f2, f2
+; P10-NEXT:    rlwinm r3, r3, 0, 0, 15
+; P10-NEXT:    xscvdpspn vs0, f0
+; P10-NEXT:    mtfprd f1, r3
+; P10-NEXT:    xxsldwi vs1, vs1, vs1, 1
+; P10-NEXT:    xscvspdpn f1, vs1
+; P10-NEXT:    mffprwz r4, f0
+; P10-NEXT:    rlwinm r4, r4, 0, 0, 15
+; P10-NEXT:    mtfprd f0, r4
+; P10-NEXT:    xxsldwi vs0, vs0, vs0, 1
+; P10-NEXT:    xscvspdpn f0, vs0
+; P10-NEXT:    fcmpu cr0, f1, f0
+; P10-NEXT:    setbc r3, lt
+; P10-NEXT:    blr
   %r = fcmp olt bfloat %a, %b
   ret i1 %r
 }
@@ -109,7 +190,15 @@ define i1 @cmp_bf16(bfloat %a, bfloat %b) nounwind {
 define bfloat @sitofp_i32_to_bf16(i32 %a) nounwind {
 ; CHECK-LABEL: sitofp_i32_to_bf16:
 ; CHECK:       # %bb.0:
-; CHECK:         bl __truncsfbf2
+; CHECK-NEXT:    mtfprwa f0, r3
+; CHECK-NEXT:    xscvsxdsp f0, f0
+; CHECK-NEXT:    xscvdpspn vs0, f0
+; CHECK-NEXT:    mffprwz r3, f0
+; CHECK-NEXT:    rlwinm r3, r3, 0, 0, 15
+; CHECK-NEXT:    mtfprd f0, r3
+; CHECK-NEXT:    xxsldwi vs0, vs0, vs0, 1
+; CHECK-NEXT:    xscvspdpn f1, vs0
+; CHECK-NEXT:    blr
   %r = sitofp i32 %a to bfloat
   ret bfloat %r
 }
