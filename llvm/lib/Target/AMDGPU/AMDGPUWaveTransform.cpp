@@ -1426,6 +1426,12 @@ private:
   std::vector<WaveNode *> NodeOrder;
   AccRegSet AccumulatorRegs;
 
+  /// Terminator anchor moves; demoted by demoteMovTermOpc().
+  SmallVector<MachineInstr *, 8> MovTermInstrs;
+
+  /// Demote \ref MovTermInstrs to non-terminator moves.
+  void demoteMovTermOpc();
+
 public:
   ControlFlowRewriter(MachineFunction &function,
                       ReconvergeCFGHelper &ReconvergeCfg)
@@ -2027,9 +2033,11 @@ void ControlFlowRewriter::rewrite() {
       // finding the right insertion point in other parts of the Wave Transform.
       // Since accumulator reset instructions may be added after this
       // instruction, this move operation cannot be a terminator.
-      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
-              TII.get(LMC.MovTermOpc), LMC.ExecReg)
-          .addReg(OriginCFGNodeInfo.PrimarySuccessorExec);
+      MachineInstr *MovTermMI =
+          BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
+                  TII.get(LMC.MovTermOpc), LMC.ExecReg)
+              .addReg(OriginCFGNodeInfo.PrimarySuccessorExec);
+      MovTermInstrs.push_back(MovTermMI);
       BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
               TII.get(AMDGPU::SI_WAVE_CF_EDGE));
       BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
@@ -2116,6 +2124,10 @@ void ControlFlowRewriter::rewrite() {
         .addReg(LMC.ExecReg)
         .addReg(RejoinMask);
   }
+
+  // Demote anchor moves before inserting resets after them.
+  demoteMovTermOpc();
+
   Updater.insertAccumulatorResets();
   AccumulatorRegs = std::move(Updater.getAllAccumulators());
   Updater.cleanup();
@@ -2125,6 +2137,16 @@ void ControlFlowRewriter::rewrite() {
     // getVRegDef can be used since RegZero has a single def
     MRI.getVRegDef(RegZero)->eraseFromParent();
     RegZero = AMDGPU::NoRegister;
+  }
+}
+
+void ControlFlowRewriter::demoteMovTermOpc() {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  for (MachineInstr *MI : MovTermInstrs) {
+    assert(MI->getOpcode() == LMC.MovTermOpc &&
+           MI->getOperand(0).getReg() == LMC.ExecReg &&
+           "expected an EXEC-writing terminator move");
+    MI->setDesc(TII.get(LMC.MovOpc));
   }
 }
 
