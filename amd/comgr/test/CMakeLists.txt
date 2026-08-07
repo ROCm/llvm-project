@@ -248,6 +248,21 @@ add_comgr_test(compile_hip_to_relocatable c)
 add_comgr_test(mangled_names_hip_test c)
 #add_comgr_test(unbundle_hip_test c)
 
+# The header materialization test, with the filesystem choice pinned both ways.
+foreach(UseVFS 0 1)
+  add_test(NAME comgr_include_subdirectory_test_vfs${UseVFS}
+    COMMAND include_subdirectory_test)
+  if (UNIX)
+    set_tests_properties(comgr_include_subdirectory_test_vfs${UseVFS}
+      PROPERTIES ENVIRONMENT
+      "AMD_COMGR_CACHE=0;AMD_COMGR_USE_VFS=${UseVFS}")
+  else()
+    set_tests_properties(comgr_include_subdirectory_test_vfs${UseVFS}
+      PROPERTIES ENVIRONMENT_MODIFICATION
+      "PATH=path_list_prepend:$<TARGET_LINKER_FILE_DIR:amd_comgr>;AMD_COMGR_CACHE=set:0;AMD_COMGR_USE_VFS=set:${UseVFS}")
+  endif()
+endforeach()
+
 add_test(
   NAME comgr_hotswap_reduce_test
   COMMAND "${Python3_EXECUTABLE}"
