@@ -413,6 +413,17 @@ WaveNativeProjection::WaveNativeProjection(const ISAProfile &SrcIsa,
          "future ThreadLoopProjection implementation. See hotswap/"
          "docs/wave-size-translation.md 2.2 for the projection "
          "ladder.");
+
+  // Widen EXEC storage to the target hardware mask and treat each half of
+  // the target wave as a distinct source wave. `emitInitialExec` emits
+  // `init_whole_wave` (HW EXEC=-1 kernel-wide), so mbcnt-derived EXEC writes
+  // project into independent target-width masks and a narrow EXEC_LO write
+  // broadcasts across both halves.
+  ExecStorageTy = WaveMaskTy;
+  NumSourceWavesPerTarget = 2;
+  BroadcastNarrowExecLoWrite = true;
+  ProvidesFullWaveExecInvariant = true;
+  PreservesMbcntDerivedExec = true;
 }
 
 Value *WaveNativeProjection::emitInitialExec(IRBuilder<> &B) const {
@@ -605,6 +616,10 @@ ThreadLoopProjection::ThreadLoopProjection(const ISAProfile &SrcIsa,
   assert((TgtIsa.WaveSize % SrcIsa.WaveSize) == 0 &&
          "ThreadLoopProjection requires target wave size to be an integer "
          "multiple of source wave size");
+
+  ExecStorageTy = WaveMaskTy;
+  NumSourceWavesPerTarget = TgtIsa.WaveSize / SrcIsa.WaveSize;
+  SourceWaveScopedLaneOps = true;
 }
 
 Value *ThreadLoopProjection::emitWorkitemIdX(IRBuilder<> &B) const {
@@ -690,10 +705,6 @@ Value *ThreadLoopProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
   Value *Bit =
       B.CreateAnd(Shifted, ConstantInt::get(TargetTy, 1), "tl_mask_lane_bit");
   return B.CreateICmpNE(Bit, ConstantInt::get(TargetTy, 0), "tl_mask_lane_i1");
-}
-
-unsigned ThreadLoopProjection::numSourceWavesPerTarget() const {
-  return Tgt.WaveSize / Src.WaveSize;
 }
 
 // ----------------------------------------------------------------------------

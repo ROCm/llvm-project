@@ -176,12 +176,6 @@ public:
                                            llvm::Value *) const override {
     return nullptr;  // unused by these tests
   }
-  // `numSourceWavesPerTarget` is pure virtual on the base — this
-  // subclass exists only to exercise the base-class defaults for the
-  // contract methods we test here.  Answer conservatively with 1 so
-  // the method has *some* well-defined return; the tests below do
-  // not consult this value for `DefaultTestProjection`.
-  unsigned numSourceWavesPerTarget() const override { return 1; }
 };
 } // namespace
 

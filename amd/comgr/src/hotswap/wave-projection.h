@@ -48,7 +48,8 @@ public:
   WaveProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
                  llvm::Type *I32Ty, llvm::Type *I64Ty)
       : Src(SrcIsa), Tgt(TgtIsa), I32Ty(I32Ty), I64Ty(I64Ty),
-        WaveMaskTy(TgtIsa.isWave32() ? I32Ty : I64Ty) {}
+        WaveMaskTy(TgtIsa.isWave32() ? I32Ty : I64Ty),
+        ExecStorageTy(SrcIsa.isWave32() ? I32Ty : I64Ty) {}
 
   virtual ~WaveProjection() = default;
 
@@ -87,7 +88,7 @@ public:
   // the alloca; operand read/write helpers in `RaiseContext` use
   // the same width to decide where a widen-by-replication or a
   // narrow-by-truncation is required on source-width scalars.
-  virtual llvm::Type *execStorageTy() const { return sourceWaveMaskTy(); }
+  llvm::Type *execStorageTy() const { return ExecStorageTy; }
 
   // Emit the initial value to store into the EXEC alloca at kernel
   // entry. Default is all-ones (every source lane active on entry),
@@ -138,7 +139,7 @@ public:
   // conceptually-whole-wave write must fan out to both halves of the
   // widened EXEC. Modulo-replication keeps this false because source
   // wave width matches EXEC storage width and no widening is needed.
-  virtual bool broadcastNarrowExecLoWrite() const { return false; }
+  bool broadcastNarrowExecLoWrite() const { return BroadcastNarrowExecLoWrite; }
 
   // Emit the current lane's linear index within the wavefront. Uses
   // amdgcn.mbcnt.lo (+ mbcnt.hi on wave64) with an all-ones mask: mbcnt
@@ -148,12 +149,10 @@ public:
   // runtime property of the hardware the raised IR runs on, independent
   // of the source ISA.
   //
-  // Provided as a non-virtual method on the base because every known
-  // projection derives lane id the same way (mbcnt against the target's
-  // hardware wave). Override only if a future projection changes what
-  // "the current lane" means (e.g. a thread-loop projection where a
-  // single target lane iterates over multiple source lanes).
-  virtual llvm::Value *emitLaneIdx(llvm::IRBuilder<> &B) const;
+  // Non-virtual: every projection derives lane id the same way (mbcnt
+  // against the target's hardware wave), so a single implementation on the
+  // base serves them all.
+  llvm::Value *emitLaneIdx(llvm::IRBuilder<> &B) const;
 
   // Emit the workitem-id-x value that source-ISA code should observe under
   // this projection.  The default is the target hardware value.  Projections
@@ -228,7 +227,9 @@ public:
   // cross-lane ops).  `WaveNativeProjection` returns true because its
   // `emitInitialExec` explicitly calls `@llvm.amdgcn.init_whole_wave`
   // to set HW EXEC=-1 for the kernel body.
-  virtual bool providesFullWaveExecInvariant() const { return false; }
+  bool providesFullWaveExecInvariant() const {
+    return ProvidesFullWaveExecInvariant;
+  }
 
   // True iff handlers should lower source-ISA lane-indexed primitives
   // (`readlane`, `writelane`, `readfirstlane`) as source-wave-scoped
@@ -236,16 +237,13 @@ public:
   // ThreadLoop route needs this because each target wave contains multiple
   // source-wave instances; a native target-wave `readlane(31)` or
   // `readfirstlane` would collapse those instances together.
-  virtual bool sourceWaveScopedLaneOps() const { return false; }
+  bool sourceWaveScopedLaneOps() const { return SourceWaveScopedLaneOps; }
 
-  // True when mbcnt-derived V_CMPX predicates remain independent for each
-  // packed source wave's EXEC mask.
-  virtual bool preservesMbcntDerivedVcmpxExec() const { return false; }
-
-  // True iff an mbcnt-derived `s_*_saveexec_b32` source mask can be projected
-  // into an independent target-width EXEC mask -- the scalar sibling of
-  // `preservesMbcntDerivedVcmpxExec`. Requires injective source-wave mapping.
-  virtual bool preservesMbcntDerivedSaveExec() const { return false; }
+  // True iff mbcnt-derived EXEC writes -- the vector `v_cmpx` and its scalar
+  // `s_*_saveexec_b32` sibling -- can be projected into an independent
+  // target-width EXEC mask per packed source wave. Requires an injective
+  // source-wave mapping.
+  bool preservesMbcntDerivedExec() const { return PreservesMbcntDerivedExec; }
 
   // True iff this projection expects the runtime to launch the block with a
   // `scaledDispatchFactor()`-scaled x extent, so that each target wave hosts
@@ -257,11 +255,12 @@ public:
   // true, the raiser widens the `amdgpu-flat-work-group-size` attribute by the
   // same factor, halves the in-kernel workgroup/grid-size query along x, and
   // emits a marker attribute so the launch shim scales the block's x extent.
-  virtual bool usesScaledDispatch() const { return false; }
+  // Equivalent to a scale factor above 1.
+  bool usesScaledDispatch() const { return ScaledDispatchFactor > 1; }
 
   // The integer factor by which the block's x extent is scaled (`W_t / W_s`,
   // i.e. 2 for wave32->wave64). 1 (the default) means no scaling.
-  virtual unsigned scaledDispatchFactor() const { return 1; }
+  unsigned scaledDispatchFactor() const { return ScaledDispatchFactor; }
 
   // Number of source waves whose per-lane fragment data is present in
   // each target wave under this projection's mapping.  Callers that
@@ -287,13 +286,7 @@ public:
   // classifier and other obstruction checks before any code is emitted. A
   // future projection (`ThreadLoopProjection`) would answer this based on its
   // wrap count.
-  //
-  // Pure virtual so every new projection must answer the question
-  // explicitly -- a silent default would let a new cross-widening
-  // projection pick the wrong pass count in `wmma-lowering.cpp` and
-  // emit a bogus second-source-wave MFMA that read undef from
-  // phantom lanes.
-  virtual unsigned numSourceWavesPerTarget() const = 0;
+  unsigned numSourceWavesPerTarget() const { return NumSourceWavesPerTarget; }
 
   // Return `v` wrapped in `@llvm.amdgcn.strict.wwm` iff the current
   // projection does NOT already guarantee HW EXEC=-1 kernel-wide.
@@ -349,14 +342,27 @@ protected:
 
   ISAProfile Src;
   ISAProfile Tgt;
-  // Retained on the base so subclass overrides of `sourceWaveMaskTy()`
-  // / `execStorageTy()` can return the canonical i32/i64 IR types
-  // without re-deriving them from the current IRBuilder's context
-  // (subclasses are constructed once per kernel and outlive any
-  // particular builder).
+  // Retained on the base so `sourceWaveMaskTy()` / `execStorageTy()` can
+  // return the canonical i32/i64 IR types without re-deriving them from the
+  // current IRBuilder's context (subclasses are constructed once per kernel
+  // and outlive any particular builder).
   llvm::Type *I32Ty;
   llvm::Type *I64Ty;
   llvm::Type *WaveMaskTy;
+
+  // Per-projection configuration, read through the like-named accessors
+  // above. The defaults describe the same-wave / modulo-replication policy;
+  // the cross-widening projections set the ones they change in their
+  // constructors, so a projection's behaviour is declared in one place
+  // rather than spread across virtual overrides.
+  llvm::Type *ExecStorageTy;
+  unsigned NumSourceWavesPerTarget = 1;
+  unsigned ScaledDispatchFactor = 1;
+  bool BroadcastNarrowExecLoWrite = false;
+  bool ProvidesFullWaveExecInvariant = false;
+  bool SourceWaveScopedLaneOps = false;
+  bool PreservesMbcntDerivedExec = false;
+
   // Source max_flat_workgroup_size; 0 until the raiser sets it.
   unsigned MaxFlatWG = 0;
   // Per-kernel cache for the function-invariant lane id. See `emitLaneIdx`.
@@ -401,12 +407,11 @@ public:
   llvm::Value *emitPackedWorkitemId(llvm::IRBuilder<> &B,
                                     unsigned NumDims) const override;
 
-  // MODREP in the cross-widening direction only instantiates when
-  // `raiser.cpp` routes phantom-lane kernels here as the fallback,
-  // and phantom-lane by definition has exactly one source wave per
-  // target wavefront.  Same-wave MODREP instantiations (source ==
-  // target wave width) are also one-source-wave-per-target.
-  unsigned numSourceWavesPerTarget() const override { return 1; }
+  // MODREP carries exactly one source wave per target wavefront: the
+  // cross-widening instantiation is the phantom-lane fallback (one source
+  // wave, replica lanes hardware-inactive) and same-wave instantiations are
+  // trivially one-to-one. This is the base default (`NumSourceWavesPerTarget
+  // == 1`), so no constructor override is needed.
 };
 
 // ============================================================================
@@ -455,7 +460,12 @@ public:
 class ScaledModuloReplicationProjection final
     : public ModuloReplicationProjection {
 public:
-  using ModuloReplicationProjection::ModuloReplicationProjection;
+  ScaledModuloReplicationProjection(const ISAProfile &SrcIsa,
+                                    const ISAProfile &TgtIsa, llvm::Type *I32Ty,
+                                    llvm::Type *I64Ty)
+      : ModuloReplicationProjection(SrcIsa, TgtIsa, I32Ty, I64Ty) {
+    ScaledDispatchFactor = TgtIsa.WaveSize / SrcIsa.WaveSize;
+  }
 
   // Remap hardware workitem-id.x to the logical source id so replica lanes
   // alias their originals. No phantom-lane clamp: under a scaled dispatch
@@ -467,11 +477,6 @@ public:
   // the base MODREP phantom-lane clamp.
   llvm::Value *emitPackedWorkitemId(llvm::IRBuilder<> &B,
                                     unsigned NumDims) const override;
-
-  bool usesScaledDispatch() const override { return true; }
-  unsigned scaledDispatchFactor() const override {
-    return Tgt.WaveSize / Src.WaveSize;
-  }
 };
 
 // ============================================================================
@@ -515,23 +520,13 @@ public:
 // the raiser's main loop.
 class WaveNativeProjection final : public WaveProjection {
 public:
+  // The constructor sets the projection configuration: target-width EXEC
+  // storage, full-wave-EXEC invariant (its `emitInitialExec` emits
+  // `init_whole_wave`), broadcast-on-narrow-EXEC-write, preserved
+  // mbcnt-derived EXEC, and two source waves per target wave (source wave 0
+  // -> target lanes 0..31, source wave 1 -> 32..63).
   WaveNativeProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
                        llvm::Type *I32Ty, llvm::Type *I64Ty);
-
-  llvm::Type *execStorageTy() const override { return WaveMaskTy; }
-  bool broadcastNarrowExecLoWrite() const override { return true; }
-  // `init_whole_wave` in `emitInitialExec` forces HW EXEC=-1 for the
-  // kernel body, so this projection does provide the full-wave-EXEC
-  // invariant that WMMA->MFMA lowering (and other
-  // all-lanes-must-participate collectives) require.
-  bool providesFullWaveExecInvariant() const override { return true; }
-  // Wave32 -> wave64 cross-widening: two source waves stack into one
-  // target wave (source wave 0 -> target lanes 0..31, source wave 1 ->
-  // target lanes 32..63).  Callers emitting per-source-wave passes
-  // run two iterations under this projection.
-  unsigned numSourceWavesPerTarget() const override { return 2; }
-  bool preservesMbcntDerivedVcmpxExec() const override { return true; }
-  bool preservesMbcntDerivedSaveExec() const override { return true; }
 
   llvm::Value *emitInitialExec(llvm::IRBuilder<> &B) const override;
   llvm::Value *emitLaneActiveBit(llvm::IRBuilder<> &B,
@@ -586,13 +581,11 @@ public:
 //      translation.md sec. 2.2.
 class ThreadLoopProjection final : public WaveProjection {
 public:
+  // The constructor sets the projection configuration: target-width EXEC
+  // storage, source-wave-scoped lane ops, and `W_t / W_s` source waves per
+  // target wave.
   ThreadLoopProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
                        llvm::Type *I32Ty, llvm::Type *I64Ty);
-
-  llvm::Type *execStorageTy() const override { return WaveMaskTy; }
-  bool broadcastNarrowExecLoWrite() const override { return false; }
-  bool providesFullWaveExecInvariant() const override { return false; }
-  bool sourceWaveScopedLaneOps() const override { return true; }
 
   void setIterationAlloca(llvm::AllocaInst *Iter) { IterationAlloca = Iter; }
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
@@ -604,8 +597,6 @@ public:
                   const llvm::Twine &Name = "ballot") const override;
   llvm::Value *extractLaneBitFromWaveMask(llvm::IRBuilder<> &B,
                                           llvm::Value *V) const override;
-
-  unsigned numSourceWavesPerTarget() const override;
 
 private:
   llvm::AllocaInst *IterationAlloca = nullptr;

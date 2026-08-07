@@ -458,7 +458,7 @@ findLanePredicatedExecSites(ArrayRef<DecodedInst> Insts,
       SccTainted = false;
     } else if (Sop == CanonicalOp::V_CMPX) {
       if (SourceTainted) {
-        if (Projection.preservesMbcntDerivedVcmpxExec()) {
+        if (Projection.preservesMbcntDerivedExec()) {
           Sites.push_back(
               {&Di, ObstructionKind::CmpxFromLaneId,
                RewriteId::WaveNativeMbcntCmpx, /*RewriteImplemented=*/true,
@@ -498,7 +498,7 @@ findLanePredicatedExecSites(ArrayRef<DecodedInst> Insts,
       SccTainted = false;
     } else if (isSaveExecB32(Sop)) {
       if (SourceTainted) {
-        if (Projection.preservesMbcntDerivedSaveExec()) {
+        if (Projection.preservesMbcntDerivedExec()) {
           // WaveNative packs two DISTINCT source waves into one target wave
           // (lanes L and L+W_s carry different work), so the saveexec mask
           // needs an independent target-width EXEC mask. Project the
