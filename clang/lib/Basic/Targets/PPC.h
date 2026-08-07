@@ -97,7 +97,6 @@ public:
     HasBFloat16 = true;
   }
 
-
   // Set the language option for altivec based on our value.
   void adjust(DiagnosticsEngine &Diags, LangOptions &Opts,
               const TargetInfo *Aux) override;
