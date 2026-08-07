@@ -163,6 +163,41 @@ if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
       $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:MetadataCacheTest>)
 endif()
 
+# -- SymbolIndexTest ----------------------------------------------------------
+#
+# The cached object-file parse and the symbol name index are only observable as
+# state on the DataObject, so this reaches into src/comgr.h rather than going
+# through the public API alone. Reads the code object straight out of the CTest
+# suite's source tree; it is checked in, so there is no build-order dependency
+# on that suite.
+
+add_executable(SymbolIndexTest
+  SymbolIndexTest.cpp)
+
+target_link_libraries(SymbolIndexTest PRIVATE
+  ${COMGR_GTEST_LIBS}
+  amd_comgr
+  ${COMGR_TEST_UNIT_SUPPORT_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+target_compile_definitions(SymbolIndexTest PRIVATE
+  GTEST_NO_LLVM_SUPPORT=true
+  TEST_CODE_OBJECT="${CMAKE_CURRENT_SOURCE_DIR}/../test/source/legacy/shared-v3.so")
+
+target_include_directories(SymbolIndexTest PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(SymbolIndexTest)
+
+if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
+  add_custom_command(TARGET SymbolIndexTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:SymbolIndexTest>)
+endif()
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
@@ -170,9 +205,10 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapProfileTests>
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
   COMMAND $<TARGET_FILE:LoggerTests>
-  COMMAND $<TARGET_FILE:MetadataCacheTest>)
+  COMMAND $<TARGET_FILE:MetadataCacheTest>
+  COMMAND $<TARGET_FILE:SymbolIndexTest>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapProfileTests
-  DemangleSymbolNameTest LoggerTests MetadataCacheTest)
+  DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest)
 
 # The transpile-path test binaries, exported by hotswap/CMakeLists.txt in
 # COMGR_HOTSWAP_TEST_TARGETS (empty unless COMGR_ENABLE_HOTSWAP_TRANSPILE is on).
