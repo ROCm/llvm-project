@@ -9923,9 +9923,6 @@ def _SLASH_ZW : CLJoined<"ZW">;
 
 
 
-def famd_allow_threadprivate_equivalence : Flag<["-"], "famd-allow-threadprivate-equivalence">,
-  Flags<[HelpHidden]>, Group<f_Group>, Visibility<[FlangOption, FC1Option]>,
-  HelpText<"Allow to use veriables in EQUIVALENCE statements with THREADPRIVATE">;
 
 //===----------------------------------------------------------------------===//
 // clang-dxc Options
