@@ -5202,16 +5202,10 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_for_static_loop_4u:
       case OMPRTL___kmpc_for_static_loop_8:
       case OMPRTL___kmpc_for_static_loop_8u:
-        // Parallel regions might be reached by these calls, as they take a
-        // callback argument potentially containing arbitrary user-provided
-        // code.
-        ReachedUnknownParallelRegions.insert(&CB);
-        // TODO: The presence of these calls on their own does not prevent a
-        // kernel from being SPMD-izable. We mark it as such because we need
-        // further changes in order to also consider the contents of the
-        // callbacks passed to them.
-        SPMDCompatibilityTracker.indicatePessimisticFixpoint();
-        SPMDCompatibilityTracker.insert(&CB);
+        if (DisableOpenMPOptCallbackSPMDization) {
+          SPMDCompatibilityTracker.indicatePessimisticFixpoint();
+          SPMDCompatibilityTracker.insert(&CB);
+        }
         break;
       default:
         // Unknown OpenMP runtime calls cannot be executed in SPMD-mode,

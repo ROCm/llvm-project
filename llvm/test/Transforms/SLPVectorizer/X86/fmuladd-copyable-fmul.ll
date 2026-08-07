@@ -23,10 +23,10 @@ define <4 x float> @buildvec_fmul_absorb(float %p, float %q, float %r, float %s,
 ; ENABLED-NEXT:    [[TMP9:%.*]] = insertelement <4 x float> [[TMP8]], float [[N]], i64 3
 ; ENABLED-NEXT:    [[TMP10:%.*]] = insertelement <4 x float> [[TMP9]], float [[A0]], i64 0
 ; ENABLED-NEXT:    [[TMP11:%.*]] = insertelement <4 x float> [[TMP10]], float [[A1]], i64 1
-; ENABLED-NEXT:    [[TMP12:%.*]] = insertelement <4 x float> poison, float [[U]], i64 2
-; ENABLED-NEXT:    [[TMP13:%.*]] = insertelement <4 x float> [[TMP12]], float [[M]], i64 3
+; ENABLED-NEXT:    [[TMP19:%.*]] = insertelement <4 x float> poison, float [[U]], i64 2
+; ENABLED-NEXT:    [[TMP20:%.*]] = insertelement <4 x float> [[TMP19]], float [[M]], i64 3
 ; ENABLED-NEXT:    [[TMP14:%.*]] = shufflevector <2 x float> [[TMP7]], <2 x float> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
-; ENABLED-NEXT:    [[TMP15:%.*]] = shufflevector <4 x float> [[TMP13]], <4 x float> [[TMP14]], <4 x i32> <i32 4, i32 5, i32 2, i32 3>
+; ENABLED-NEXT:    [[TMP15:%.*]] = shufflevector <4 x float> [[TMP20]], <4 x float> [[TMP14]], <4 x i32> <i32 4, i32 5, i32 2, i32 3>
 ; ENABLED-NEXT:    [[TMP16:%.*]] = shufflevector <2 x float> [[TMP6]], <2 x float> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
 ; ENABLED-NEXT:    [[TMP17:%.*]] = shufflevector <4 x float> <float poison, float poison, float -0.000000e+00, float -0.000000e+00>, <4 x float> [[TMP16]], <4 x i32> <i32 4, i32 5, i32 2, i32 3>
 ; ENABLED-NEXT:    [[TMP18:%.*]] = call <4 x float> @llvm.fmuladd.v4f32(<4 x float> [[TMP11]], <4 x float> [[TMP15]], <4 x float> [[TMP17]])
@@ -664,8 +664,15 @@ define i1 @copyable_fmul_self_dep() {
 ;
 ; COST-LABEL: define i1 @copyable_fmul_self_dep() {
 ; COST-NEXT:  [[ENTRY:.*:]]
-; COST-NEXT:    [[TMP0:%.*]] = call <2 x double> @llvm.fmuladd.v2f64(<2 x double> zeroinitializer, <2 x double> zeroinitializer, <2 x double> <double 0.000000e+00, double -0.000000e+00>)
-; COST-NEXT:    [[TMP1:%.*]] = call <2 x double> @llvm.fmuladd.v2f64(<2 x double> <double 0.000000e+00, double 1.000000e+00>, <2 x double> zeroinitializer, <2 x double> [[TMP0]])
+; COST-NEXT:    [[SUB241:%.*]] = add i32 0, 1
+; COST-NEXT:    [[CONV242:%.*]] = sitofp i32 [[SUB241]] to double
+; COST-NEXT:    [[CONV251:%.*]] = sitofp i32 0 to double
+; COST-NEXT:    [[MUL252:%.*]] = fmul double [[CONV251]], 0.000000e+00
+; COST-NEXT:    [[TMP0:%.*]] = insertelement <2 x double> <double 0.000000e+00, double poison>, double [[CONV242]], i64 1
+; COST-NEXT:    [[TMP6:%.*]] = insertelement <2 x double> <double 0.000000e+00, double poison>, double [[MUL252]], i64 1
+; COST-NEXT:    [[TMP1:%.*]] = call <2 x double> @llvm.fmuladd.v2f64(<2 x double> zeroinitializer, <2 x double> [[TMP0]], <2 x double> [[TMP6]])
+; COST-NEXT:    [[TMP7:%.*]] = extractelement <2 x double> [[TMP1]], i64 0
+; COST-NEXT:    [[TMP8:%.*]] = tail call double @llvm.fmuladd.f64(double [[CONV251]], double 0.000000e+00, double [[TMP7]])
 ; COST-NEXT:    [[TMP2:%.*]] = shufflevector <2 x double> <double 0.000000e+00, double poison>, <2 x double> [[TMP1]], <2 x i32> <i32 0, i32 3>
 ; COST-NEXT:    [[TMP3:%.*]] = fptosi <2 x double> [[TMP2]] to <2 x i32>
 ; COST-NEXT:    [[TMP4:%.*]] = icmp slt <2 x i32> [[TMP3]], zeroinitializer

@@ -1438,9 +1438,6 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
     }
   }
 
-  if (args.hasArg(clang::options::OPT_famd_allow_threadprivate_equivalence))
-    res.getLangOpts().AllowThreadprivateEquivalence = true;
-
   return !diags.hasUncompilableErrorOccurred();
 }
 
