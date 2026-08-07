@@ -207,9 +207,20 @@ Expected<HandlerResult> handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
     }
     if (isStore) {
       // Use the gfx942 buffer-store intrinsic directly, exactly
-      // mirroring the load path above. The hardware's BUFFER unit
-      // handles OOB silently (the write is dropped when the per-lane
-      // offset is >= num_records), so no software OOB sink is needed.
+      // mirroring the load path above.
+      //
+      // Target-hardware OOB drop is NOT reliable on gfx950. The source
+      // gfx1250 hardware drops a raw-buffer store whose per-lane offset is
+      // >= num_records (a no-op), and Triton's masked-store idiom relies on
+      // this: it encodes the per-lane store predicate directly in the vector
+      // offset, setting masked-out lanes to the 0x80000000 out-of-bounds
+      // sentinel so the source hardware silently drops them. gfx950 instead
+      // raises EXCP.MEM_VIOL on the same out-of-bounds raw-buffer store
+      // (register-pinned on the gemma _fwd_kernel BN=32 attention-output
+      // epilogue: `buffer_store_dwordx4 ... offen`, exec=-1, per-lane offset =
+      // the 0x80000000 sentinel, num_records = 0x7ffffffe -- #278). The store
+      // sentinel is restored below in software (see "OOB-sentinel store
+      // suppression").
       //
       // The earlier implementation lowered every BUFFER_STORE_* to a
       // generic `store` against an `addrspacecast(alloca i32, addrspace(5))`
@@ -278,10 +289,50 @@ Expected<HandlerResult> handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
       auto EmitStore = [&] {
         Ctx.B.CreateCall(BufSt, {Val, Srd, Voffset, Soffset, AuxFlags});
       };
-      if (Ctx.Projection.providesFullWaveExecInvariant())
+      // OOB-sentinel store suppression (gfx1250->gfx950 raw-buffer OOB gap).
+      //
+      // Restore the source hardware's per-lane OOB drop that gfx950 does not
+      // provide: a raw-buffer store whose per-lane offset is >= num_records
+      // must be a no-op on that lane. Wrap the store in a per-lane diamond
+      // predicated on `voffset < num_records`, so out-of-bounds lanes (the
+      // masked-out lanes the source pointed at the 0x80000000 sentinel) simply
+      // do not issue the store, while in-bounds lanes store normally.
+      //
+      // This predicate is the mirror image of the load-path offset clamp in
+      // mubuf-addr.cpp: same runtime `voffset >= NumRecords` test against the
+      // same descriptor bound. It is derived from the store's own per-lane
+      // address value, NOT from the raiser's modeled EXEC / lane-position
+      // (`emitLaneActiveBit`). That distinction is load-bearing:
+      //   - It cannot re-introduce the get_num_kv_splits_triton over-mask
+      //     (#278 discussion r3614081712): a whole-wave in-bounds store has
+      //     every lane's `voffset < num_records`, so no lane is suppressed.
+      //     Only genuinely out-of-bounds addresses -- the source's own
+      //     intentional-OOB sentinel lanes -- are dropped, exactly as the
+      //     source hardware would.
+      //   - It survives -O2 (unlike the folded lane-position guards of
+      //     #158/#159/#160): the compare is a runtime VGPR offset against a
+      //     runtime descriptor field, not a `lane < wave_size` tautology the
+      //     backend can prove always-true and eliminate.
+      // A store offset value clamp (as on the load) is not an option: it would
+      // redirect the write to element 0 and corrupt a real in-bounds datum.
+      // Suppression is the only correct restoration of the source no-op.
+      auto EmitStoreSuppressed = [&] {
+        Value *VoffWide = Ctx.B.CreateZExt(Voffset, Ctx.I64Ty, "st_voff_wide");
+        Value *InBounds =
+            Ctx.B.CreateICmpULT(VoffWide, Mbuf.NumRecords, "st_voff_in_bounds");
+        Function *F = Ctx.B.GetInsertBlock()->getParent();
+        BasicBlock *DoBb = BasicBlock::Create(Ctx.C, "st_oob_do", F);
+        BasicBlock *SkipBb = BasicBlock::Create(Ctx.C, "st_oob_skip", F);
+        Ctx.B.CreateCondBr(InBounds, DoBb, SkipBb);
+        Ctx.B.SetInsertPoint(DoBb);
         EmitStore();
+        Ctx.B.CreateBr(SkipBb);
+        Ctx.B.SetInsertPoint(SkipBb);
+      };
+      if (Ctx.Projection.providesFullWaveExecInvariant())
+        EmitStoreSuppressed();
       else
-        Ctx.emitUnderExec(EmitStore);
+        Ctx.emitUnderExec(EmitStoreSuppressed);
       Hr.Handled = true;
       return Hr;
     }

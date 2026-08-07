@@ -324,7 +324,6 @@ Expected<MubufAddr> decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
   if (M.ImmOff != 0)
     Voffset = Ctx.B.CreateAdd(
         Voffset, ConstantInt::get(Ctx.I32Ty, static_cast<int32_t>(M.ImmOff)));
-  Out.Voffset = Voffset;
 
   Out.Soffset = M.HaveSoff ? Ctx.Regs.readReg32(Ctx.B, M.Soff)
                            : ConstantInt::get(Ctx.I32Ty, 0);
@@ -370,6 +369,46 @@ Expected<MubufAddr> decodeMubufAddr(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.B.CreateZExt(Ctx.B.CreateSelect(IsSourceMax, TargetMax, Dw.Dw2),
                          Ctx.I64Ty, "mubuf_raw_num_records");
   }
+
+  // Out-of-bounds sentinel offset clamp (load path, gfx1250->gfx950).
+  //
+  // Triton's masked buffer-access idiom forms the per-lane offset as
+  // `select(in_bounds, real_offset, 0x80000000)`, where 0x80000000 is a
+  // deliberate out-of-bounds sentinel (>= NUM_RECORDS) for lanes the source
+  // masks off. On the source gfx1250 a raw buffer_load whose offset exceeds
+  // NUM_RECORDS is bounds-suppressed by hardware (returns 0, no fault) and the
+  // kernel relies on that: the sentinel-lane result is discarded downstream.
+  // gfx950 instead raises EXCP.MEM_VIOL + XNACK on the same out-of-bounds
+  // offset (register-pinned on the gemma _fwd_kernel BN=32 attention load,
+  // rocm-systems#159/#160 + #277). Neither wave projection removes it -- the
+  // sentinel is the source wave's own per-lane value, not a partner-wave
+  // artifact.
+  //
+  // Restore the source hardware's suppression at the offset value layer: for
+  // loads, redirect any per-lane offset that is >= NUM_RECORDS to 0. gfx950
+  // then reads in-bounds element 0 on those lanes (safe -- the value is dead
+  // downstream) instead of faulting, matching gfx1250's return-0 behaviour.
+  // Guarded on >= NUM_RECORDS so in-bounds traffic (the common path) is
+  // untouched. Stores and atomics are NOT clamped: redirecting a store offset
+  // to 0 would corrupt element 0. The store-side OOB sentinel is a separate,
+  // unfinished problem (gfx950 faults on the OOB store too, so it cannot be
+  // left as-is either) that needs per-lane store suppression rather than an
+  // offset value clamp. See hotswap/docs/mubuf-oob-sentinel-clamp.md.
+  if (!IsStore) {
+    Value *VoffWide = Ctx.B.CreateZExt(Voffset, Ctx.I64Ty, "voff_wide");
+    Value *IsOob =
+        Ctx.B.CreateICmpUGE(VoffWide, NumRecords, "voff_oob_sentinel");
+    Voffset = Ctx.B.CreateSelect(IsOob, ConstantInt::get(Ctx.I32Ty, 0), Voffset,
+                                 "voff_oob_clamped");
+  }
+  Out.Voffset = Voffset;
+  // Expose NumRecords so the store path can reconstruct the same
+  // `voffset >= NumRecords` out-of-bounds test the load clamp above uses (there
+  // it redirects the offset; for stores it suppresses the write -- see
+  // handle-mubuf.cpp). NumRecords is the runtime descriptor bound, not a source
+  // literal.
+  Out.NumRecords = NumRecords;
+
   Value *CleanDw1 =
       Ctx.B.CreateAnd(Dw.Dw1, ConstantInt::get(Ctx.I32Ty, 0xFFFF));
   Value *BaseLo = Ctx.B.CreateZExt(Dw.Dw0, Ctx.I64Ty);

@@ -50,6 +50,14 @@ struct MubufAddr {
   llvm::Value *Voffset = nullptr;
   llvm::Value *Soffset = nullptr;
   llvm::Value *AuxFlags = nullptr;
+  // Runtime byte extent of the buffer (i64), reconstructed from the SRSRC
+  // NUM_RECORDS field and clamped to the gfx942 raw-buffer max -- the same
+  // value handed to `llvm.amdgcn.make.buffer.rsrc`. Exposed so the store path
+  // can reconstruct the target hardware's own out-of-bounds drop rule
+  // (`voffset >= NumRecords` -> suppress the store) that gfx1250 applies but
+  // gfx950 does not; see the store OOB-sentinel suppression in
+  // handle-mubuf.cpp and hotswap/docs/mubuf-oob-sentinel-clamp.md.
+  llvm::Value *NumRecords = nullptr;
   ParsedReg StData;
 };
 
