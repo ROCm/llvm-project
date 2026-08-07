@@ -469,6 +469,7 @@ define amdgpu_cs_chain void @control_flow(<3 x i32> inreg %sgpr, ptr inreg %call
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL12-NEXT:    s_or_b32 exec_lo, exec_lo, s3
 ; DAGISEL12-NEXT:    v_cmp_lt_i32_e32 vcc_lo, v12, v13
+; DAGISEL12-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; DAGISEL12-NEXT:    ; implicit-def: $vgpr8
 ; DAGISEL12-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; DAGISEL12-NEXT:    s_mov_b32 exec_lo, vcc_lo
@@ -575,6 +576,7 @@ define amdgpu_cs_chain void @control_flow(<3 x i32> inreg %sgpr, ptr inreg %call
 ; DAGISEL10-NEXT:  .LBB3_4: ; %tail
 ; DAGISEL10-NEXT:    s_or_b32 exec_lo, exec_lo, s3
 ; DAGISEL10-NEXT:    v_cmp_lt_i32_e32 vcc_lo, v12, v13
+; DAGISEL10-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; DAGISEL10-NEXT:    ; implicit-def: $vgpr8
 ; DAGISEL10-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; DAGISEL10-NEXT:    s_mov_b32 exec_lo, vcc_lo

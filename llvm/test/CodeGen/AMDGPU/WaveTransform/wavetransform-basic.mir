@@ -18,7 +18,7 @@ body:             |
   ; POSTWT-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 [[COPY]], killed [[S_MOV_B32_]], implicit $exec
   ; POSTWT-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 [[V_CMP_EQ_U32_e64_]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32_term [[S_XOR_B32_]]
+  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_XOR_B32_]]
   ; POSTWT-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; POSTWT-NEXT:   S_CBRANCH_EXECZ %bb.2, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.1
@@ -65,7 +65,7 @@ body:             |
   ; POSTWT-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 [[COPY]], killed [[S_MOV_B32_]], implicit $exec
   ; POSTWT-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[V_CMP_EQ_U32_e64_]], implicit-def $scc
-  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32_term [[V_CMP_EQ_U32_e64_]]
+  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[V_CMP_EQ_U32_e64_]]
   ; POSTWT-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; POSTWT-NEXT:   S_CBRANCH_EXECZ %bb.2, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.1
@@ -732,7 +732,7 @@ body:             |
   ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 [[COPY]], [[S_MOV_B32_]], implicit $exec
   ; POSTWT-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 [[V_CMP_EQ_U32_e64_]], $exec_lo, implicit-def $scc
   ; POSTWT-NEXT:   [[COPY2:%[0-9]+]]:sreg_32 = COPY [[V_CMP_EQ_U32_e64_]]
-  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32_term [[S_XOR_B32_]]
+  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_XOR_B32_]]
   ; POSTWT-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; POSTWT-NEXT:   S_CBRANCH_EXECZ %bb.4, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.1
@@ -1055,7 +1055,7 @@ body:             |
   ; POSTWT-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 [[COPY]], killed [[S_MOV_B32_]], implicit $exec
   ; POSTWT-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 [[V_CMP_EQ_U32_e64_]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32_term [[S_XOR_B32_]]
+  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_XOR_B32_]]
   ; POSTWT-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; POSTWT-NEXT:   S_CBRANCH_EXECZ %bb.2, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.1

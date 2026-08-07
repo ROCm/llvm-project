@@ -81,6 +81,7 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    flat_store_dwordx2 v[56:57], v[60:61]
 ; CHECK-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 offen offset:4
 ; CHECK-NEXT:    buffer_store_dword v58, v0, s[0:3], 0 offen
+; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; implicit-def: $vgpr4
 ; CHECK-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3
 ; CHECK-NEXT:    s_mov_b64 exec, s[8:9]

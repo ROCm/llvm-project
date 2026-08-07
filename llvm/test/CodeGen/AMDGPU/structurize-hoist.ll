@@ -64,6 +64,7 @@ define void @test_extractvalue_else_then(ptr %ptr, i1 %cond) {
 ; GFX900-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX900-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX900-NEXT:    s_mov_b64 exec, vcc
+; GFX900-NEXT:    ; implicit-def: $vgpr2
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX900-NEXT:  .LBB1_1: ; %else
@@ -235,6 +236,7 @@ define void @test_nested_if(ptr %ptr, i32 %val, i1 %cond) {
 ; GFX900-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX900-NEXT:    ; implicit-def: $vgpr5
 ; GFX900-NEXT:    s_mov_b64 exec, vcc
+; GFX900-NEXT:    ; implicit-def: $vgpr3
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB3_8
 ; GFX900-NEXT:  .LBB3_6: ; %if_3

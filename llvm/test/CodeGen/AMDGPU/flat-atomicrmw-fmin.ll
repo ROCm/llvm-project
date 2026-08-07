@@ -3603,7 +3603,6 @@ define double @flat_agent_atomic_fmin_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX10-NEXT:    v_add_co_u32 v4, vcc_lo, 0x7f8, v0
 ; GFX10-NEXT:    v_add_co_ci_u32_e32 v5, vcc_lo, 0, v1, vcc_lo
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX10-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s5, v5
 ; GFX10-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s4
@@ -4018,7 +4017,6 @@ define double @flat_agent_atomic_fmin_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX10-NEXT:    v_add_co_u32 v4, vcc_lo, 0xfffff800, v0
 ; GFX10-NEXT:    v_add_co_ci_u32_e32 v5, vcc_lo, -1, v1, vcc_lo
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX10-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s5, v5
 ; GFX10-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s4

@@ -479,21 +479,21 @@ define amdgpu_kernel void @v8i8_phi_zeroinit(ptr addrspace(1) %src1, ptr addrspa
 ; GFX942-NEXT:    v_cmp_lt_u32_e64 s[0:1], 14, v2
 ; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX942-NEXT:    global_load_dwordx2 v[6:7], v0, s[8:9]
+; GFX942-NEXT:    global_load_dwordx2 v[4:5], v0, s[8:9]
 ; GFX942-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; GFX942-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX942-NEXT:    ; implicit-def: $vgpr6_vgpr7
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB9_2
 ; GFX942-NEXT:  .LBB9_1: ; %bb.1
 ; GFX942-NEXT:    v_lshlrev_b32_e32 v1, 3, v2
-; GFX942-NEXT:    global_load_dwordx2 v[4:5], v1, s[10:11]
+; GFX942-NEXT:    global_load_dwordx2 v[6:7], v1, s[10:11]
 ; GFX942-NEXT:    v_cmp_lt_u32_e32 vcc, 6, v2
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX942-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
-; GFX942-NEXT:    v_mov_b64_e32 v[6:7], v[0:1]
+; GFX942-NEXT:    v_mov_b64_e32 v[4:5], v[0:1]
 ; GFX942-NEXT:    s_or_b64 s[2:3], s[0:1], s[2:3]
 ; GFX942-NEXT:  .LBB9_2:
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
@@ -503,13 +503,13 @@ define amdgpu_kernel void @v8i8_phi_zeroinit(ptr addrspace(1) %src1, ptr addrspa
 ; GFX942-NEXT:    s_cbranch_execz .LBB9_4
 ; GFX942-NEXT:  .LBB9_3: ; %bb.2
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b64_e32 v[4:5], v[6:7]
-; GFX942-NEXT:    global_store_dwordx2 v0, v[6:7], s[12:13]
+; GFX942-NEXT:    v_mov_b64_e32 v[6:7], v[4:5]
+; GFX942-NEXT:    global_store_dwordx2 v0, v[4:5], s[12:13]
 ; GFX942-NEXT:  .LBB9_4: ; %bb.3
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX942-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    global_store_dwordx2 v0, v[4:5], s[14:15]
+; GFX942-NEXT:    global_store_dwordx2 v0, v[6:7], s[14:15]
 ; GFX942-NEXT:    s_endpgm
 entry:
   %idx = call i32 @llvm.amdgcn.workitem.id.x()
@@ -546,13 +546,6 @@ define amdgpu_kernel void @v8i8_phi_const(ptr addrspace(1) %src1, ptr addrspace(
 ; GFX942-NEXT:    global_load_dwordx2 v[0:1], v0, s[8:9]
 ; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
 ; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; GFX942-NEXT:    ; implicit-def: $vgpr2
-; GFX942-NEXT:    ; implicit-def: $vgpr12
-; GFX942-NEXT:    ; implicit-def: $vgpr13
-; GFX942-NEXT:    ; implicit-def: $vgpr14
-; GFX942-NEXT:    ; implicit-def: $vgpr16
-; GFX942-NEXT:    ; implicit-def: $vgpr15
-; GFX942-NEXT:    ; implicit-def: $vgpr17
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_lshrrev_b32_e32 v6, 24, v1
 ; GFX942-NEXT:    v_lshrrev_b32_e32 v7, 16, v1
@@ -561,6 +554,13 @@ define amdgpu_kernel void @v8i8_phi_const(ptr addrspace(1) %src1, ptr addrspace(
 ; GFX942-NEXT:    v_lshrrev_b32_e32 v10, 16, v0
 ; GFX942-NEXT:    v_lshrrev_b32_e32 v11, 8, v0
 ; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX942-NEXT:    ; implicit-def: $vgpr2
+; GFX942-NEXT:    ; implicit-def: $vgpr12
+; GFX942-NEXT:    ; implicit-def: $vgpr13
+; GFX942-NEXT:    ; implicit-def: $vgpr14
+; GFX942-NEXT:    ; implicit-def: $vgpr16
+; GFX942-NEXT:    ; implicit-def: $vgpr15
+; GFX942-NEXT:    ; implicit-def: $vgpr17
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB10_2
 ; GFX942-NEXT:  .LBB10_1: ; %bb.1

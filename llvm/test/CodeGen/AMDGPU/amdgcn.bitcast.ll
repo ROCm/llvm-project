@@ -2282,6 +2282,7 @@ define <2 x i64> @bitcast_v4f32_to_v2i64(<2 x i64> %arg) {
 ; GCN-NEXT:    v_mov_b32_e32 v3, v1
 ; GCN-NEXT:    v_mov_b32_e32 v2, v0
 ; GCN-NEXT:    s_buffer_load_dwordx4 s[8:11], s[4:7], 0x0
+; GCN-NEXT:    v_mov_b32_e32 v2, v1
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_or_b32_e32 v0, s9, v3
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
@@ -3119,6 +3120,7 @@ define <2 x i64> @bitcast_v4f32_to_v2i64(<2 x i64> %arg) {
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_or_b32_e32 v0, s5, v3
 ; GFX11-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
+; GFX11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX11-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX11-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-NEXT:    s_mov_b32 exec_lo, vcc_lo
@@ -3282,6 +3284,7 @@ define <2 x i64> @bitcast_v4f32_to_v2i64(<2 x i64> %arg) {
 ; GFX11-NEXT:    v_or_b32_e32 v2, s7, v5
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
+; GFX11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX11-NEXT:    ; implicit-def: $vgpr2_vgpr3
 ; GFX11-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-NEXT:    s_mov_b32 exec_lo, vcc_lo

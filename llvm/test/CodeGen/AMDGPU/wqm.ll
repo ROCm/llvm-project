@@ -1557,7 +1557,6 @@ define amdgpu_ps <4 x float> @test_control_flow_2(<8 x i32> inreg %rsrc, <4 x i3
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    buffer_store_dword v3, v0, s[0:3], 0 idxen
-; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    buffer_store_dword v4, v2, s[0:3], 0 idxen
@@ -1592,13 +1591,12 @@ define amdgpu_ps <4 x float> @test_control_flow_2(<8 x i32> inreg %rsrc, <4 x i3
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:    buffer_store_dword v3, v0, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    buffer_store_dword v4, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    v_cmp_nlt_f32_e32 vcc_lo, 0, v0
 ; GFX10-W32-NEXT:    s_xor_b32 s13, vcc_lo, exec_lo
-; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
-; GFX10-W32-NEXT:    buffer_store_dword v4, v2, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
 ; GFX10-W32-NEXT:    ; implicit-def: $vgpr0
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo

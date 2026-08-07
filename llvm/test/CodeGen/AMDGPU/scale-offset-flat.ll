@@ -429,7 +429,6 @@ define amdgpu_ps <2 x float> @flat_atomicrmw_b64_rtn_idxprom(ptr align 8 inreg %
 ; SDAG-NEXT:    v_xor_b32_e32 v0, src_flat_scratch_base_hi, v3
 ; SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v0
-; SDAG-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; SDAG-NEXT:    s_mov_b32 exec_lo, s0
 ; SDAG-NEXT:    ; divergent control-flow edge

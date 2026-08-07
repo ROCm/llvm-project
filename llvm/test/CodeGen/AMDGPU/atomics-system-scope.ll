@@ -728,7 +728,6 @@ define double @flat_system_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_mov_b64 s[0:1], src_shared_base
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
 ; GFX1250-NEXT:    s_xor_b32 s2, s0, exec_lo
@@ -794,7 +793,6 @@ define double @flat_one_as_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_mov_b64 s[0:1], src_shared_base
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
 ; GFX1250-NEXT:    s_xor_b32 s2, s0, exec_lo
@@ -886,7 +884,6 @@ define double @flat_system_atomic_fmin_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -930,7 +927,6 @@ define double @flat_one_as_atomic_fmin_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -998,7 +994,6 @@ define double @flat_system_atomic_fmax_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1042,7 +1037,6 @@ define double @flat_one_as_atomic_fmax_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1182,7 +1176,6 @@ define i64 @flat_one_as_atomic_min_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1225,7 +1218,6 @@ define i64 @flat_system_atomic_min_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1268,7 +1260,6 @@ define i64 @flat_one_as_atomic_max_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1311,7 +1302,6 @@ define i64 @flat_system_atomic_max_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1354,7 +1344,6 @@ define i64 @flat_one_as_atomic_umin_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1397,7 +1386,6 @@ define i64 @flat_system_atomic_umin_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1440,7 +1428,6 @@ define i64 @flat_one_as_atomic_umax_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -1483,7 +1470,6 @@ define i64 @flat_system_atomic_umax_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_xor_b32_e32 v4, src_flat_scratch_base_hi, v1
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
-; GFX1250-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1250-NEXT:    ; divergent control-flow edge

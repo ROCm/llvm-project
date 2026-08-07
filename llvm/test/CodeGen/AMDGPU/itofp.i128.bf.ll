@@ -41,6 +41,7 @@ define bfloat @sitofp_i128_to_bf16(i128 %x) {
 ; SDAG-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
 ; SDAG-NEXT:    ; implicit-def: $vgpr6
 ; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
+; SDAG-NEXT:    ; implicit-def: $vgpr6_vgpr7
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB0_11
 ; SDAG-NEXT:  .LBB0_2:
@@ -346,6 +347,7 @@ define bfloat @uitofp_i128_to_bf16(i128 %x) {
 ; SDAG-NEXT:    s_mov_b64 s[12:13], s[10:11]
 ; SDAG-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
+; SDAG-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB1_6
 ; SDAG-NEXT:  .LBB1_4: ; %LeafBlock

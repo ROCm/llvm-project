@@ -2419,7 +2419,7 @@ define void @divergent_cfg_float(ptr addrspace(1) %out, float %in, float %in2) #
 ; GFX8DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8DAGISEL-NEXT:    v_and_b32_e32 v4, 0x3ff, v31
 ; GFX8DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v4
-; GFX8DAGISEL-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX8DAGISEL-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX8DAGISEL-NEXT:    ; implicit-def: $vgpr4
 ; GFX8DAGISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX8DAGISEL-NEXT:    ; divergent control-flow edge
@@ -2516,7 +2516,7 @@ define void @divergent_cfg_float(ptr addrspace(1) %out, float %in, float %in2) #
 ; GFX9DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9DAGISEL-NEXT:    v_and_b32_e32 v4, 0x3ff, v31
 ; GFX9DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v4
-; GFX9DAGISEL-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9DAGISEL-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX9DAGISEL-NEXT:    ; implicit-def: $vgpr4
 ; GFX9DAGISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX9DAGISEL-NEXT:    ; divergent control-flow edge
@@ -2613,6 +2613,7 @@ define void @divergent_cfg_float(ptr addrspace(1) %out, float %in, float %in2) #
 ; GFX1064DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1064DAGISEL-NEXT:    v_and_b32_e32 v4, 0x3ff, v31
 ; GFX1064DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v4
+; GFX1064DAGISEL-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX1064DAGISEL-NEXT:    ; implicit-def: $vgpr4
 ; GFX1064DAGISEL-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX1064DAGISEL-NEXT:    s_mov_b64 exec, vcc
@@ -2704,6 +2705,7 @@ define void @divergent_cfg_float(ptr addrspace(1) %out, float %in, float %in2) #
 ; GFX1032DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1032DAGISEL-NEXT:    v_and_b32_e32 v4, 0x3ff, v31
 ; GFX1032DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v4
+; GFX1032DAGISEL-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1032DAGISEL-NEXT:    ; implicit-def: $vgpr4
 ; GFX1032DAGISEL-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; GFX1032DAGISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
@@ -2796,6 +2798,7 @@ define void @divergent_cfg_float(ptr addrspace(1) %out, float %in, float %in2) #
 ; GFX1164DAGISEL-NEXT:    v_and_b32_e32 v4, 0x3ff, v31
 ; GFX1164DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1164DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v4
+; GFX1164DAGISEL-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX1164DAGISEL-NEXT:    ; implicit-def: $vgpr4
 ; GFX1164DAGISEL-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX1164DAGISEL-NEXT:    s_mov_b64 exec, vcc
@@ -2898,6 +2901,7 @@ define void @divergent_cfg_float(ptr addrspace(1) %out, float %in, float %in2) #
 ; GFX1132DAGISEL-NEXT:    v_and_b32_e32 v4, 0x3ff, v31
 ; GFX1132DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1132DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v4
+; GFX1132DAGISEL-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1132DAGISEL-NEXT:    ; implicit-def: $vgpr4
 ; GFX1132DAGISEL-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX1132DAGISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
@@ -3004,6 +3008,7 @@ define void @divergent_cfg_float(ptr addrspace(1) %out, float %in, float %in2) #
 ; GFX12DAGISEL-NEXT:    v_and_b32_e32 v4, 0x3ff, v31
 ; GFX12DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v4
+; GFX12DAGISEL-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX12DAGISEL-NEXT:    ; implicit-def: $vgpr4
 ; GFX12DAGISEL-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX12DAGISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
@@ -3520,7 +3525,7 @@ define void @divergent_cfg_double(ptr addrspace(1) %out, double %in, double %in2
 ; GFX8DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8DAGISEL-NEXT:    v_and_b32_e32 v6, 0x3ff, v31
 ; GFX8DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v6
-; GFX8DAGISEL-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX8DAGISEL-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX8DAGISEL-NEXT:    ; implicit-def: $vgpr6_vgpr7
 ; GFX8DAGISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX8DAGISEL-NEXT:    ; divergent control-flow edge
@@ -3638,7 +3643,7 @@ define void @divergent_cfg_double(ptr addrspace(1) %out, double %in, double %in2
 ; GFX9DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9DAGISEL-NEXT:    v_and_b32_e32 v6, 0x3ff, v31
 ; GFX9DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v6
-; GFX9DAGISEL-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9DAGISEL-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX9DAGISEL-NEXT:    ; implicit-def: $vgpr6_vgpr7
 ; GFX9DAGISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX9DAGISEL-NEXT:    ; divergent control-flow edge
@@ -3756,6 +3761,7 @@ define void @divergent_cfg_double(ptr addrspace(1) %out, double %in, double %in2
 ; GFX1064DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1064DAGISEL-NEXT:    v_and_b32_e32 v6, 0x3ff, v31
 ; GFX1064DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v6
+; GFX1064DAGISEL-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX1064DAGISEL-NEXT:    ; implicit-def: $vgpr6_vgpr7
 ; GFX1064DAGISEL-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX1064DAGISEL-NEXT:    s_mov_b64 exec, vcc
@@ -3864,6 +3870,7 @@ define void @divergent_cfg_double(ptr addrspace(1) %out, double %in, double %in2
 ; GFX1032DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1032DAGISEL-NEXT:    v_and_b32_e32 v6, 0x3ff, v31
 ; GFX1032DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v6
+; GFX1032DAGISEL-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1032DAGISEL-NEXT:    ; implicit-def: $vgpr6_vgpr7
 ; GFX1032DAGISEL-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; GFX1032DAGISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
@@ -3973,6 +3980,7 @@ define void @divergent_cfg_double(ptr addrspace(1) %out, double %in, double %in2
 ; GFX1164DAGISEL-NEXT:    v_and_b32_e32 v6, 0x3ff, v31
 ; GFX1164DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1164DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v6
+; GFX1164DAGISEL-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX1164DAGISEL-NEXT:    ; implicit-def: $vgpr6_vgpr7
 ; GFX1164DAGISEL-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX1164DAGISEL-NEXT:    s_mov_b64 exec, vcc
@@ -4096,6 +4104,7 @@ define void @divergent_cfg_double(ptr addrspace(1) %out, double %in, double %in2
 ; GFX1132DAGISEL-NEXT:    v_and_b32_e32 v6, 0x3ff, v31
 ; GFX1132DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1132DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v6
+; GFX1132DAGISEL-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1132DAGISEL-NEXT:    ; implicit-def: $vgpr6_vgpr7
 ; GFX1132DAGISEL-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX1132DAGISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
@@ -4219,6 +4228,7 @@ define void @divergent_cfg_double(ptr addrspace(1) %out, double %in, double %in2
 ; GFX12DAGISEL-NEXT:    v_and_b32_e32 v6, 0x3ff, v31
 ; GFX12DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v6
+; GFX12DAGISEL-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX12DAGISEL-NEXT:    ; implicit-def: $vgpr6_vgpr7
 ; GFX12DAGISEL-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX12DAGISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
