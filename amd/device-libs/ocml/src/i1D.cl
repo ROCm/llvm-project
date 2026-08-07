@@ -41,10 +41,10 @@ MATH_MANGLE(i1)(double x)
                   -0x1.09f107ee0f7e2p-3), -0x1.d61631539fb0dp-5), -0x1.4f1e01d904ebap-5), -0x1.7efc0ced79c58p-5),
                   -0x1.32633e6e0f07ap-3), 0x1.9884533d43674p-2);
 
-        double xs = x - 709.0;
-        double e1 = MATH_MANGLE(exp)(x > 709.0 ? xs : x);
-        double e2 = x > 709.0 ? 0x1.d422d2be5dc9bp+1022 : 1.0;
-        ret = e1 * MATH_MANGLE(rsqrt)(x) * ret * e2;
+        double as = a - 709.0;
+        double e1 = MATH_MANGLE(exp)(a > 709.0 ? as : a);
+        double e2 = a > 709.0 ? 0x1.d422d2be5dc9bp+1022 : 1.0;
+        ret = e1 * MATH_MANGLE(rsqrt)(a) * ret * e2;
     }
 
     if  (!FINITE_ONLY_OPT()) {
