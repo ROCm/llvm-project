@@ -1485,6 +1485,11 @@ defm VOP3PX2IncrementsVaVdstTwice : AMDGPUSubtargetFeature<"vop3px2-increments-v
   "VOP3PX2 encoded instructions increment the VaVdst counter twice", GenPredicate=false
 >;
 
+defm NeedsTDMDrain : AMDGPUSubtargetFeature<"needs-tdm-drain",
+  "Needs to keep tensor count low",
+  /*GenPredicate=*/0
+>;
+
 //===----------------------------------------------------------------------===//
 
 class GCNSubtargetFeatureGeneration <string Value,
@@ -2295,6 +2300,7 @@ def FeatureISAVersion12_50 : FeatureSet<
    FeatureWMMACoexecutionHazards,
    FeatureDataCacheLineSize128,
    FeatureRequiresInitialUnclausedVmem,
+   FeatureNeedsTDMDrain,
    ])>;
 
 def FeatureISAVersion12_51 : FeatureSet<
@@ -2324,6 +2330,7 @@ def FeatureISAVersion12_51 : FeatureSet<
    FeatureWMMACoexecutionHazards,
    FeatureDataCacheLineSize128,
    FeatureRequiresInitialUnclausedVmem,
+   FeatureNeedsTDMDrain,
    ])>;
 
 def FeatureISAVersion12_Generic: FeatureSet<
@@ -2342,6 +2349,7 @@ def FeatureISAVersion12_5_Generic: FeatureSet<
    FeatureWMMACoexecutionHazards,
    FeatureDataCacheLineSize128,
    FeatureRequiresInitialUnclausedVmem,
+   FeatureNeedsTDMDrain,
    ])>;
 
 def FeatureISAVersion13 : FeatureSet<
