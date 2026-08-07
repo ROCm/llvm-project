@@ -10,24 +10,15 @@
 add_executable(RaiserScaffoldingTests
   RaiserScaffoldingTest.cpp)
 
-# hotswap::raiser keeps its LLVM dependencies PRIVATE, so name them here. It also
-# carries the wave-projection objects, which call into hotswap::decoder; link it
-# too and inherit its curated LLVM component set.
-# Match the hotswap libs' linkage: in a dylib build these components already
-# come in via libLLVM, so static archives here would double-register cl::opts.
-if(LLVM_LINK_LLVM_DYLIB)
-  set(COMGR_TEST_UNIT_RAISER_LIBS LLVM)
-else()
-  llvm_map_components_to_libnames(COMGR_TEST_UNIT_RAISER_LIBS
-    Core Support TargetParser)
-endif()
-
+# hotswap::raiser carries the wave-projection objects, which call into
+# hotswap::decoder; link both. Both keep their LLVM dependencies PRIVATE, so
+# name the LLVM components here (COMGR_HOTSWAP_TEST_LLVM_LIBS, ../CMakeLists.txt).
 target_link_libraries(RaiserScaffoldingTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::raiser
   hotswap::decoder
   hotswap::common
-  ${COMGR_TEST_UNIT_RAISER_LIBS}
+  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(RaiserScaffoldingTests PRIVATE
@@ -48,13 +39,15 @@ add_executable(WaveProjectionTests
   WaveProjectionTest.cpp)
 
 # The wave projection lives in hotswap::raiser and calls into hotswap::decoder
-# (ISAProfile and the AMDGPU register queries); link both. hotswap::decoder
-# carries the curated LLVM component set the projection needs.
+# (ISAProfile and the AMDGPU register queries); link both, plus the LLVM
+# components the OBJECT libraries keep PRIVATE (COMGR_HOTSWAP_TEST_LLVM_LIBS,
+# ../CMakeLists.txt).
 target_link_libraries(WaveProjectionTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(WaveProjectionTests PRIVATE

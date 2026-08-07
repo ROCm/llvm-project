@@ -3,9 +3,10 @@
 
 # -- DecoderTests -------------------------------------------------------------
 #
-# Links the hotswap::decoder OBJECT library, which carries the AMDGPU MC/CodeGen
-# LLVM components as PUBLIC usage requirements; initMCState registers the target
-# itself, so the test needs no separate target-init step.
+# Links the hotswap::decoder OBJECT library; initMCState registers the target
+# itself, so the test needs no separate target-init step. hotswap::decoder keeps
+# its LLVM dependencies PRIVATE, so name the LLVM components here
+# (COMGR_HOTSWAP_TEST_LLVM_LIBS, ../CMakeLists.txt).
 
 add_executable(DecoderTests
   DecoderTest.cpp)
@@ -14,6 +15,7 @@ target_link_libraries(DecoderTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::decoder
   hotswap::common
+  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(DecoderTests PRIVATE
