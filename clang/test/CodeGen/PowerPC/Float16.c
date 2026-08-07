@@ -2,33 +2,33 @@
 // RUN:   | FileCheck %s --check-prefix=PPC64LE
 // RUN: %clang_cc1 -triple powerpc-linux-gnu -emit-llvm -o - %s \
 // RUN:   | FileCheck %s --check-prefix=PPC32
-// RUN: %clang_cc1 -triple powerpc64le-linux-gnu -mcpu=pwr9 -emit-llvm -o - %s \
+// RUN: %clang_cc1 -triple powerpc64le-linux-gnu -target-cpu pwr9 -emit-llvm -o - %s \
 // RUN:   | FileCheck %s --check-prefix=PPC64LE
 //
 // Test that _Float16 is accepted on PowerPC targets and that the Clang
-// frontend emits the expected 'half' IR type with soft-promote libcall
-// references.  Actual instruction selection is tested separately in
+// frontend emits the expected 'half' IR type.  Arithmetic is soft-promoted
+// to float.  Actual instruction selection is tested separately in
 // llvm/test/CodeGen/PowerPC/float16-soft-promote.ll.
 
 // _Float16 must be accepted (no "not supported on this target" error).
 _Float16 global_h = 1.0f16;
 
-// PPC64LE: @global_h = {{.*}} half 0xH3C00
-// PPC32:   @global_h = {{.*}} half 0xH3C00
+// PPC64LE: @global_h = {{.*}} half {{.*}}, align 2
+// PPC32:   @global_h = {{.*}} half {{.*}}, align 2
 
-// Basic arithmetic produces 'half' typed IR; the backend soft-promotes.
+// Return type and parameters use 'half'; arithmetic is promoted to float.
 _Float16 add(_Float16 a, _Float16 b) {
   return a + b;
 // PPC64LE-LABEL: define {{.*}} half @add(half noundef %a, half noundef %b)
 // PPC32-LABEL:   define {{.*}} half @add(half noundef %a, half noundef %b)
-// PPC64LE: fadd half
-// PPC32:   fadd half
+// PPC64LE: fadd float
+// PPC32:   fadd float
 }
 
 _Float16 mul(_Float16 a, _Float16 b) {
   return a * b;
-// PPC64LE: fmul half
-// PPC32:   fmul half
+// PPC64LE: fmul float
+// PPC32:   fmul float
 }
 
 // Extend/truncate round-trips.
