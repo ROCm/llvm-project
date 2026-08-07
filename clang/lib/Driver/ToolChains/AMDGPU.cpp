@@ -705,27 +705,6 @@ void amdgpu::getAMDGPUTargetFeatures(const Driver &D,
                             options::OPT_m_amdgpu_Features_Group);
 }
 
-llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>
-amdgpu::dlr::getCommonDeviceLibNames(
-    const llvm::opt::ArgList &DriverArgs, const SanitizerArgs &SanArgs,
-    const Driver &D, const std::string &GPUArch, bool isOpenMP,
-    const RocmInstallationDetector &RocmInstallation,
-    const clang::driver::Action::OffloadKind DeviceOffloadingKind) {
-  auto Kind = llvm::AMDGPU::parseArchAMDGCN(GPUArch);
-  const StringRef CanonArch = llvm::AMDGPU::getArchNameAMDGCN(Kind);
-
-  StringRef LibDeviceFile = RocmInstallation.getLibDeviceFile(CanonArch);
-  auto ABIVer = DeviceLibABIVersion::fromCodeObjectVersion(
-      getAMDGPUCodeObjectVersion(D, DriverArgs));
-  if (!RocmInstallation.checkCommonBitcodeLibs(CanonArch, LibDeviceFile,
-                                               ABIVer))
-    return {};
-  
-  return RocmInstallation.getCommonBitcodeLibs(
-      DriverArgs, LibDeviceFile, GPUArch, DeviceOffloadingKind,
-      SanArgs.needsAsanRt());
-}
-
 /// AMDGPU Toolchain
 AMDGPUToolChain::AMDGPUToolChain(const Driver &D, const llvm::Triple &Triple,
                                  const ArgList &Args, const ToolChain *HostTC_,
