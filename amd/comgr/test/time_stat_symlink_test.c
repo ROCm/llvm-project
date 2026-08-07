@@ -15,6 +15,14 @@
 //
 // O_NOFOLLOW is POSIX-only, so on Windows this test is a no-op.
 
+// Expose POSIX.1-2008 declarations (mkdtemp, setenv/unsetenv, symlink,
+// lstat, PATH_MAX) under -std=c99, which otherwise builds in strict ISO
+// mode with no GNU/POSIX extensions visible. Must precede every header
+// include, since common.h transitively pulls in <sys/stat.h>/<unistd.h>.
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "amd_comgr.h"
 #include "common.h"
 
