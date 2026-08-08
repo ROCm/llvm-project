@@ -1,6 +1,8 @@
 # See for https://openmp.llvm.org/SupportAndFAQ.html for instructions on how
 # to build offload with CMake.
 
+message(STATUS, "GPURUN step0")
+
 cmake_minimum_required(VERSION 3.20.0)
 if("${CMAKE_VERSION}" VERSION_LESS "3.31.0")
   message(WARNING
@@ -11,3 +13,5 @@ if("${CMAKE_VERSION}" VERSION_LESS "3.31.0")
 endif()
 
 add_subdirectory(tools)
+message(STATUS, "GPURUN step1")
+
