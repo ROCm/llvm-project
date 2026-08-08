@@ -7,3 +7,4 @@ macro(add_openmp_util path)
      DESTINATION "${OPENMP_UTILS_INSTALL_DIR}")
 endmacro()
 
+add_subdirectory(gpurun)
