@@ -70,11 +70,11 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[54:55]
 ; CHECK-NEXT:    flat_load_dwordx2 v[0:1], v[46:47] glc
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_cmp_gt_i32_e32 vcc, 1, v42
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    v_cmp_gt_i32_e64 s[4:5], 1, v42
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    v_mov_b32_e32 v1, s67
 ; CHECK-NEXT:    v_mov_b32_e32 v0, s68
+; CHECK-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; CHECK-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; CHECK-NEXT:    flat_store_dwordx2 v[56:57], a[32:33]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
@@ -83,22 +83,23 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    buffer_store_dword v58, v0, s[0:3], 0 offen
 ; CHECK-NEXT:    ; implicit-def: $vgpr4
 ; CHECK-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3
-; CHECK-NEXT:    s_mov_b64 exec, vcc
-; CHECK-NEXT:    ; divergent control-flow edge
-; CHECK-NEXT:    s_cbranch_execz .LBB0_3
-; CHECK-NEXT:  .LBB0_1: ; %LeafBlock
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v42
-; CHECK-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; CHECK-NEXT:    v_mov_b32_e32 v4, 0
-; CHECK-NEXT:    v_pk_mov_b32 v[0:1], v[42:43], v[42:43] op_sel:[0,1]
-; CHECK-NEXT:    s_or_b64 s[6:7], s[4:5], vcc
-; CHECK-NEXT:    v_pk_mov_b32 v[2:3], v[44:45], v[44:45] op_sel:[0,1]
 ; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3
-; CHECK-NEXT:  .LBB0_2: ; %sw.bb.i.i.i.i
+; CHECK-NEXT:  .LBB0_1: ; %LeafBlock5
+; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v42
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; CHECK-NEXT:    v_mov_b32_e32 v4, 0
-; CHECK-NEXT:    v_mov_b32_e32 v0, 0
+; CHECK-NEXT:    v_pk_mov_b32 v[0:1], v[42:43], v[42:43] op_sel:[0,1]
+; CHECK-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; CHECK-NEXT:    v_pk_mov_b32 v[2:3], v[44:45], v[44:45] op_sel:[0,1]
+; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    ; divergent control-flow edge
+; CHECK-NEXT:    s_cbranch_execz .LBB0_3
+; CHECK-NEXT:  .LBB0_2: ; %sw.bb17.i.i.i.i
+; CHECK-NEXT:    v_mov_b32_e32 v4, 1
+; CHECK-NEXT:    v_pk_mov_b32 v[0:1], v[42:43], v[42:43] op_sel:[0,1]
+; CHECK-NEXT:    v_pk_mov_b32 v[2:3], v[44:45], v[44:45] op_sel:[0,1]
 ; CHECK-NEXT:  .LBB0_3:
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
@@ -106,20 +107,19 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_6
-; CHECK-NEXT:  .LBB0_4: ; %LeafBlock5
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v42
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; CHECK-NEXT:  .LBB0_4: ; %LeafBlock
+; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v42
+; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; CHECK-NEXT:    v_mov_b32_e32 v4, 0
 ; CHECK-NEXT:    v_pk_mov_b32 v[0:1], v[42:43], v[42:43] op_sel:[0,1]
-; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
+; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; CHECK-NEXT:    v_pk_mov_b32 v[2:3], v[44:45], v[44:45] op_sel:[0,1]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_6
-; CHECK-NEXT:  .LBB0_5: ; %sw.bb17.i.i.i.i
-; CHECK-NEXT:    v_mov_b32_e32 v4, 1
-; CHECK-NEXT:    v_pk_mov_b32 v[0:1], v[42:43], v[42:43] op_sel:[0,1]
-; CHECK-NEXT:    v_pk_mov_b32 v[2:3], v[44:45], v[44:45] op_sel:[0,1]
+; CHECK-NEXT:  .LBB0_5: ; %sw.bb.i.i.i.i
+; CHECK-NEXT:    v_mov_b32_e32 v4, 0
+; CHECK-NEXT:    v_mov_b32_e32 v0, 0
 ; CHECK-NEXT:  .LBB0_6: ; %bb.1
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4

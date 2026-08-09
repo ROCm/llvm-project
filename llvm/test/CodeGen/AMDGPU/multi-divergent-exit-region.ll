@@ -66,46 +66,46 @@
 ; GCN-DAG:  s_mov_b64           [[EXIT0:s\[[0-9]+:[0-9]+\]]], 0
 ; GCN-DAG:  s_mov_b64           [[EXIT1:s\[[0-9]+:[0-9]+\]]], 0
 ; GCN:      s_xor_b64           {{s\[[0-9]+:[0-9]+\]}}, vcc, exec
-; GCN:      s_mov_b64           exec,
-; GCN-NEXT: ; divergent control-flow edge
-; GCN-NEXT: s_cbranch_execz
-
-; GCN: ; %LeafBlock
-; GCN-NEXT: v_cmp_eq_u32_e64    [[EXIT0]], 1, v0
-; GCN-NEXT: s_xor_b64           [[EXIT1]], [[EXIT0]], exec
-
-; Second reconverge
-; GCN:      s_or_b64            exec, exec, vcc
-; GCN-NEXT: s_xor_b64           [[SAVE1:s\[[0-9]+:[0-9]+\]]], exec, vcc
-; GCN-NEXT: s_mov_b64           exec, vcc
+; GCN:      s_mov_b64           exec, vcc
 ; GCN-NEXT: ; divergent control-flow edge
 ; GCN-NEXT: s_cbranch_execz
 
 ; GCN: ; %LeafBlock1
-; GCN-NEXT: v_cmp_ne_u32_e32    vcc, 2, v0
+; GCN-NEXT: v_cmp_ne_u32_e64    [[EXIT0]], 2, v0
+; GCN-NEXT: s_xor_b64           [[EXIT1]], [[EXIT0]], exec
+
+; Second reconverge
+; GCN:      s_or_b64            exec, exec, [[SAVE1:s\[[0-9]+:[0-9]+\]]]
+; GCN-NEXT: s_xor_b64           [[SAVE2:s\[[0-9]+:[0-9]+\]]], exec, [[SAVE1]]
+; GCN-NEXT: s_mov_b64           exec, [[SAVE1]]
+; GCN-NEXT: ; divergent control-flow edge
+; GCN-NEXT: s_cbranch_execz
+
+; GCN: ; %LeafBlock
+; GCN-NEXT: v_cmp_eq_u32_e32    vcc, 1, v0
 ; GCN-NEXT: s_xor_b64           [[TMP0:s\[[0-9]+:[0-9]+\]]], vcc, exec
 ; GCN-NEXT: s_or_b64            [[EXIT0]], [[EXIT0]], [[TMP0]]
 ; GCN-NEXT: s_or_b64            [[EXIT1]], [[EXIT1]], vcc
 
 ; Third reconverge
-; GCN:      s_or_b64            exec, exec, [[SAVE1]]
-; GCN-NEXT: s_xor_b64           [[SAVE2:s\[[0-9]+:[0-9]+\]]], exec, [[EXIT0]]
-; GCN-NEXT: s_mov_b64           exec, [[EXIT0]]
-; GCN-NEXT: ; divergent control-flow edge
-; GCN-NEXT: s_cbranch_execz
-
-; GCN: ; %exit0
-; GCN:      buffer_store_dword
-
-; Fourth reconverge
 ; GCN:      s_or_b64            exec, exec, [[SAVE2]]
-; GCN-NEXT: s_xor_b64           {{s\[[0-9]+:[0-9]+\]}}, exec, [[EXIT1]]
-; GCN-NEXT: s_mov_b64           exec, [[EXIT1]]
+; GCN-NEXT: s_xor_b64           [[SAVE3:s\[[0-9]+:[0-9]+\]]], exec, [[EXIT0]]
+; GCN-NEXT: s_mov_b64           exec, [[EXIT0]]
 ; GCN-NEXT: ; divergent control-flow edge
 ; GCN-NEXT: s_cbranch_execz
 
 ; GCN: ; %exit1
 ; GCN:      ds_write_b32
+
+; Fourth reconverge
+; GCN:      s_or_b64            exec, exec, [[SAVE3]]
+; GCN-NEXT: s_xor_b64           {{s\[[0-9]+:[0-9]+\]}}, exec, [[EXIT1]]
+; GCN-NEXT: s_mov_b64           exec, [[EXIT1]]
+; GCN-NEXT: ; divergent control-flow edge
+; GCN-NEXT: s_cbranch_execz
+
+; GCN: ; %exit0
+; GCN:      buffer_store_dword
 
 ; GCN: ; %UnifiedReturnBlock
 ; GCN-NEXT: s_endpgm
@@ -368,18 +368,18 @@ exit1:                                     ; preds = %LeafBlock, %LeafBlock1
 ; GCN: s_cbranch_scc1
 
 ; GCN: ; %LeafBlock
-; GCN-NEXT: v_cmp_eq_u32_e32    vcc, 3, v{{[0-9]+}}
+; GCN-NEXT: v_cmp_eq_u32_e64    {{s\[[0-9]+:[0-9]+\]}}, 3, v{{[0-9]+}}
 
 ; GCN: ; %LeafBlock1
-; GCN:      v_cmp_ne_u32_e64    {{s\[[0-9]+:[0-9]+\]}}, 7, v{{[0-9]+}}
+; GCN:      v_cmp_ne_u32_e32    vcc, 7, v{{[0-9]+}}
+
+; GCN: ; %exit1
+; GCN:      ds_write_b32
+; GCN:      v_mov_b32_e32 v0, 2.0
 
 ; GCN: ; %exit0
 ; GCN:      buffer_store_dword
 ; GCN:      v_mov_b32_e32 v0, 1.0
-
-; GCN: ; %exit1
-; GCN:      ds_write_b32
-; GCN-NEXT: v_mov_b32_e32 v0, 2.0
 
 ; GCN: ; %UnifiedReturnBlock
 ; GCN-NEXT: s_or_b64 exec, exec,

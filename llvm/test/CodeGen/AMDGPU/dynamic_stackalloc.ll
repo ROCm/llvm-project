@@ -2695,46 +2695,14 @@ define void @test_dynamic_stackalloc_device_control_flow(i32 %n, i32 %m) #0 {
 ; GFX9-SDAG-NEXT:    buffer_store_dword v2, off, s[0:3], s33 ; 4-byte Folded Spill
 ; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-SDAG-NEXT:    s_mov_b32 s10, s34
-; GFX9-SDAG-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX9-SDAG-NEXT:    s_mov_b32 s34, s32
 ; GFX9-SDAG-NEXT:    s_addk_i32 s32, 0x2000
-; GFX9-SDAG-NEXT:    s_xor_b64 exec, vcc, exec
-; GFX9-SDAG-NEXT:    ; divergent control-flow edge
-; GFX9-SDAG-NEXT:    s_cbranch_execz .LBB15_2
-; GFX9-SDAG-NEXT:  .LBB15_1: ; %bb.0
-; GFX9-SDAG-NEXT:    v_and_b32_e32 v0, 0x3ff, v31
-; GFX9-SDAG-NEXT:    v_lshl_add_u32 v0, v0, 2, 15
-; GFX9-SDAG-NEXT:    v_and_b32_e32 v0, 0x1ff0, v0
-; GFX9-SDAG-NEXT:    s_or_saveexec_b64 s[4:5], -1
-; GFX9-SDAG-NEXT:    v_cndmask_b32_e64 v2, 0, v0, s[4:5]
-; GFX9-SDAG-NEXT:    s_nop 1
-; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:1 row_mask:0xf bank_mask:0xf
-; GFX9-SDAG-NEXT:    s_nop 1
-; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:2 row_mask:0xf bank_mask:0xf
-; GFX9-SDAG-NEXT:    s_nop 1
-; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:4 row_mask:0xf bank_mask:0xf
-; GFX9-SDAG-NEXT:    s_nop 1
-; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:8 row_mask:0xf bank_mask:0xf
-; GFX9-SDAG-NEXT:    s_nop 1
-; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_bcast:15 row_mask:0xf bank_mask:0xf
-; GFX9-SDAG-NEXT:    s_nop 1
-; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_bcast:31 row_mask:0xf bank_mask:0xf
-; GFX9-SDAG-NEXT:    v_readlane_b32 s6, v2, 63
-; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[4:5]
-; GFX9-SDAG-NEXT:    s_mov_b32 s4, s32
-; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, s4
-; GFX9-SDAG-NEXT:    v_lshl_add_u32 v0, s6, 6, v0
-; GFX9-SDAG-NEXT:    v_readfirstlane_b32 s32, v0
-; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, 1
-; GFX9-SDAG-NEXT:    buffer_store_dword v0, off, s[0:3], s4
-; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-SDAG-NEXT:  .LBB15_2:
-; GFX9-SDAG-NEXT:    s_or_b64 exec, exec, vcc
-; GFX9-SDAG-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; GFX9-SDAG-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+; GFX9-SDAG-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-SDAG-NEXT:    ; divergent control-flow edge
-; GFX9-SDAG-NEXT:    s_cbranch_execz .LBB15_4
-; GFX9-SDAG-NEXT:  .LBB15_3: ; %bb.1
+; GFX9-SDAG-NEXT:    s_cbranch_execz .LBB15_2
+; GFX9-SDAG-NEXT:  .LBB15_1: ; %bb.1
 ; GFX9-SDAG-NEXT:    v_lshl_add_u32 v1, v1, 2, 15
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, 2
 ; GFX9-SDAG-NEXT:    v_and_b32_e32 v1, -16, v1
@@ -2761,8 +2729,41 @@ define void @test_dynamic_stackalloc_device_control_flow(i32 %n, i32 %m) #0 {
 ; GFX9-SDAG-NEXT:    v_readfirstlane_b32 s32, v3
 ; GFX9-SDAG-NEXT:    buffer_store_dword v0, v1, s[0:3], 0 offen
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-SDAG-NEXT:  .LBB15_4: ; %bb.2
+; GFX9-SDAG-NEXT:  .LBB15_2:
 ; GFX9-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX9-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX9-SDAG-NEXT:    ; divergent control-flow edge
+; GFX9-SDAG-NEXT:    s_cbranch_execz .LBB15_4
+; GFX9-SDAG-NEXT:  .LBB15_3: ; %bb.0
+; GFX9-SDAG-NEXT:    v_and_b32_e32 v0, 0x3ff, v31
+; GFX9-SDAG-NEXT:    v_lshl_add_u32 v0, v0, 2, 15
+; GFX9-SDAG-NEXT:    v_and_b32_e32 v0, 0x1ff0, v0
+; GFX9-SDAG-NEXT:    s_or_saveexec_b64 s[4:5], -1
+; GFX9-SDAG-NEXT:    v_cndmask_b32_e64 v2, 0, v0, s[4:5]
+; GFX9-SDAG-NEXT:    s_nop 1
+; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:1 row_mask:0xf bank_mask:0xf
+; GFX9-SDAG-NEXT:    s_nop 1
+; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:2 row_mask:0xf bank_mask:0xf
+; GFX9-SDAG-NEXT:    s_nop 1
+; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:4 row_mask:0xf bank_mask:0xf
+; GFX9-SDAG-NEXT:    s_nop 1
+; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:8 row_mask:0xf bank_mask:0xf
+; GFX9-SDAG-NEXT:    s_nop 1
+; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_bcast:15 row_mask:0xf bank_mask:0xf
+; GFX9-SDAG-NEXT:    s_nop 1
+; GFX9-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_bcast:31 row_mask:0xf bank_mask:0xf
+; GFX9-SDAG-NEXT:    v_readlane_b32 s8, v2, 63
+; GFX9-SDAG-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX9-SDAG-NEXT:    s_mov_b32 s4, s32
+; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, s4
+; GFX9-SDAG-NEXT:    v_lshl_add_u32 v0, s8, 6, v0
+; GFX9-SDAG-NEXT:    v_readfirstlane_b32 s32, v0
+; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, 1
+; GFX9-SDAG-NEXT:    buffer_store_dword v0, off, s[0:3], s4
+; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
+; GFX9-SDAG-NEXT:  .LBB15_4: ; %bb.2
+; GFX9-SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX9-SDAG-NEXT:    s_mov_b32 s32, s34
 ; GFX9-SDAG-NEXT:    s_mov_b32 s34, s10
 ; GFX9-SDAG-NEXT:    s_xor_saveexec_b64 s[4:5], -1
@@ -2873,43 +2874,11 @@ define void @test_dynamic_stackalloc_device_control_flow(i32 %n, i32 %m) #0 {
 ; GFX11-SDAG-NEXT:    s_mov_b32 s4, s34
 ; GFX11-SDAG-NEXT:    s_mov_b32 s34, s32
 ; GFX11-SDAG-NEXT:    s_addk_i32 s32, 0x80
-; GFX11-SDAG-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
-; GFX11-SDAG-NEXT:    ; divergent control-flow edge
-; GFX11-SDAG-NEXT:    s_cbranch_execz .LBB15_2
-; GFX11-SDAG-NEXT:  .LBB15_1: ; %bb.0
-; GFX11-SDAG-NEXT:    v_and_b32_e32 v0, 0x3ff, v31
-; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX11-SDAG-NEXT:    v_lshl_add_u32 v0, v0, 2, 15
-; GFX11-SDAG-NEXT:    v_and_b32_e32 v0, 0x1ff0, v0
-; GFX11-SDAG-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instid1(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    v_cndmask_b32_e64 v2, 0, v0, s0
-; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX11-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:1 row_mask:0xf bank_mask:0xf
-; GFX11-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:2 row_mask:0xf bank_mask:0xf
-; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX11-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:4 row_mask:0xf bank_mask:0xf
-; GFX11-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:8 row_mask:0xf bank_mask:0xf
-; GFX11-SDAG-NEXT:    ds_swizzle_b32 v3, v2 offset:swizzle(BROADCAST,32,15)
-; GFX11-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX11-SDAG-NEXT:    v_max_u32_e32 v2, v2, v3
-; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-SDAG-NEXT:    v_readlane_b32 s1, v2, 31
-; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s0
-; GFX11-SDAG-NEXT:    s_mov_b32 s0, s32
-; GFX11-SDAG-NEXT:    v_mov_b32_e32 v4, 1
-; GFX11-SDAG-NEXT:    v_add_nc_u32_e64 v0, s0, s1
-; GFX11-SDAG-NEXT:    scratch_store_b32 off, v4, s0 dlc
-; GFX11-SDAG-NEXT:    s_waitcnt_vscnt null, 0x0
-; GFX11-SDAG-NEXT:    v_readfirstlane_b32 s32, v0
-; GFX11-SDAG-NEXT:  .LBB15_2:
-; GFX11-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
-; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-SDAG-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX11-SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX11-SDAG-NEXT:    ; divergent control-flow edge
-; GFX11-SDAG-NEXT:    s_cbranch_execz .LBB15_4
-; GFX11-SDAG-NEXT:  .LBB15_3: ; %bb.1
+; GFX11-SDAG-NEXT:    s_cbranch_execz .LBB15_2
+; GFX11-SDAG-NEXT:  .LBB15_1: ; %bb.1
 ; GFX11-SDAG-NEXT:    v_lshl_add_u32 v0, v1, 2, 15
 ; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-SDAG-NEXT:    v_and_b32_e32 v0, -16, v0
@@ -2935,8 +2904,41 @@ define void @test_dynamic_stackalloc_device_control_flow(i32 %n, i32 %m) #0 {
 ; GFX11-SDAG-NEXT:    scratch_store_b32 off, v1, s1 dlc
 ; GFX11-SDAG-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GFX11-SDAG-NEXT:    v_readfirstlane_b32 s32, v0
-; GFX11-SDAG-NEXT:  .LBB15_4: ; %bb.2
+; GFX11-SDAG-NEXT:  .LBB15_2:
 ; GFX11-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX11-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-SDAG-NEXT:    ; divergent control-flow edge
+; GFX11-SDAG-NEXT:    s_cbranch_execz .LBB15_4
+; GFX11-SDAG-NEXT:  .LBB15_3: ; %bb.0
+; GFX11-SDAG-NEXT:    v_and_b32_e32 v0, 0x3ff, v31
+; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX11-SDAG-NEXT:    v_lshl_add_u32 v0, v0, 2, 15
+; GFX11-SDAG-NEXT:    v_and_b32_e32 v0, 0x1ff0, v0
+; GFX11-SDAG-NEXT:    s_or_saveexec_b32 s0, -1
+; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instid1(SALU_CYCLE_1)
+; GFX11-SDAG-NEXT:    v_cndmask_b32_e64 v2, 0, v0, s0
+; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX11-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:1 row_mask:0xf bank_mask:0xf
+; GFX11-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:2 row_mask:0xf bank_mask:0xf
+; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX11-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:4 row_mask:0xf bank_mask:0xf
+; GFX11-SDAG-NEXT:    v_max_u32_dpp v2, v2, v2 row_shr:8 row_mask:0xf bank_mask:0xf
+; GFX11-SDAG-NEXT:    ds_swizzle_b32 v3, v2 offset:swizzle(BROADCAST,32,15)
+; GFX11-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX11-SDAG-NEXT:    v_max_u32_e32 v2, v2, v3
+; GFX11-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-SDAG-NEXT:    v_readlane_b32 s2, v2, 31
+; GFX11-SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-SDAG-NEXT:    s_mov_b32 s0, s32
+; GFX11-SDAG-NEXT:    v_mov_b32_e32 v1, 1
+; GFX11-SDAG-NEXT:    v_add_nc_u32_e64 v0, s0, s2
+; GFX11-SDAG-NEXT:    scratch_store_b32 off, v1, s0 dlc
+; GFX11-SDAG-NEXT:    s_waitcnt_vscnt null, 0x0
+; GFX11-SDAG-NEXT:    v_readfirstlane_b32 s32, v0
+; GFX11-SDAG-NEXT:  .LBB15_4: ; %bb.2
+; GFX11-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-SDAG-NEXT:    s_mov_b32 s32, s34
 ; GFX11-SDAG-NEXT:    s_mov_b32 s34, s4
 ; GFX11-SDAG-NEXT:    s_xor_saveexec_b32 s0, -1

@@ -401,7 +401,12 @@ public:
     // The entry block is not marked as a cycle header, so that we don't attempt
     // to pop the root cycle: it is handled at the very end after the loop.
     DoneIdxStack.emplace_back(BlockStack.size(), false);
-    llvm::append_range(BlockStack, successors(EntryBlock));
+    // Push successors in reverse order so that the DFS stack (LIFO) visits
+    // them in forward MBB-successor order. This makes the branch target
+    // (typically the lighter/passthrough side of an if-else) the primary
+    // successor in the reconvergence CFG, matching the legacy structurizer's
+    // block ordering and reducing register pressure for large vector types.
+    llvm::append_range(BlockStack, llvm::reverse(successors(EntryBlock)));
 
     do {
       MachineBasicBlock *Block = BlockStack.back();
@@ -459,7 +464,7 @@ public:
       if (BlockCycle == CurrentCycle ||
           (CurrentHeart && CurrentHeart == getHeartBlock(BlockCycle))) {
         DoneIdxStack.emplace_back(BlockStack.size(), false);
-        llvm::append_range(BlockStack, successors(Block));
+        llvm::append_range(BlockStack, llvm::reverse(successors(Block)));
         continue;
       }
 
@@ -488,7 +493,7 @@ public:
         }
 
         DoneIdxStack.emplace_back(BlockStack.size(), true);
-        llvm::append_range(BlockStack, successors(Block));
+        llvm::append_range(BlockStack, llvm::reverse(successors(Block)));
         continue;
       }
 

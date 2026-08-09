@@ -1312,107 +1312,107 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
 ; SI-NEXT:    s_xor_b64 s[34:35], vcc, exec
 ; SI-NEXT:    ; implicit-def: $vgpr4
-; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    s_mov_b64 exec, s[34:35]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB7_2
-; SI-NEXT:  .LBB7_1: ; %T
+; SI-NEXT:  .LBB7_1: ; %F
 ; SI-NEXT:    s_mov_b32 s38, 0
 ; SI-NEXT:    s_mov_b32 s39, 0xf000
 ; SI-NEXT:    s_mov_b32 s36, s38
 ; SI-NEXT:    s_mov_b32 s37, s38
-; SI-NEXT:    buffer_load_ushort v8, v[0:1], s[36:39], 0 addr64 glc
+; SI-NEXT:    buffer_load_ushort v8, v[2:3], s[36:39], 0 addr64 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v4, v[0:1], s[36:39], 0 addr64 offset:2 glc
+; SI-NEXT:    buffer_load_ushort v4, v[2:3], s[36:39], 0 addr64 offset:2 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v9, v[0:1], s[36:39], 0 addr64 offset:4 glc
+; SI-NEXT:    buffer_load_ushort v9, v[2:3], s[36:39], 0 addr64 offset:4 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v5, v[0:1], s[36:39], 0 addr64 offset:6 glc
+; SI-NEXT:    buffer_load_ushort v5, v[2:3], s[36:39], 0 addr64 offset:6 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:8 glc
+; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[36:39], 0 addr64 offset:8 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v6, v[0:1], s[36:39], 0 addr64 offset:10 glc
+; SI-NEXT:    buffer_load_ushort v6, v[2:3], s[36:39], 0 addr64 offset:10 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v11, v[0:1], s[36:39], 0 addr64 offset:12 glc
+; SI-NEXT:    buffer_load_ushort v11, v[2:3], s[36:39], 0 addr64 offset:12 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v7, v[0:1], s[36:39], 0 addr64 offset:14 glc
+; SI-NEXT:    buffer_load_ushort v7, v[2:3], s[36:39], 0 addr64 offset:14 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:16 glc
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:16 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:18 glc
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:18 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:20 glc
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:20 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:22 glc
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:22 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:24 glc
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:24 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:26 glc
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:26 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:28 glc
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:28 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v0, v[0:1], s[36:39], 0 addr64 offset:30 glc
+; SI-NEXT:    buffer_load_ushort v2, v[2:3], s[36:39], 0 addr64 offset:30 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_lshlrev_b32_e32 v13, 16, v4
 ; SI-NEXT:    v_or_b32_e32 v8, v8, v13
 ; SI-NEXT:    v_lshlrev_b32_e32 v12, 16, v5
 ; SI-NEXT:    v_or_b32_e32 v9, v9, v12
-; SI-NEXT:    v_lshlrev_b32_e32 v1, 16, v6
-; SI-NEXT:    v_or_b32_e32 v10, v10, v1
-; SI-NEXT:    v_lshlrev_b32_e32 v0, 16, v7
-; SI-NEXT:    v_or_b32_e32 v11, v11, v0
+; SI-NEXT:    v_lshlrev_b32_e32 v3, 16, v6
+; SI-NEXT:    v_or_b32_e32 v10, v10, v3
+; SI-NEXT:    v_lshlrev_b32_e32 v2, 16, v7
+; SI-NEXT:    v_or_b32_e32 v11, v11, v2
 ; SI-NEXT:  .LBB7_2:
-; SI-NEXT:    s_or_b64 exec, exec, s[34:35]
-; SI-NEXT:    s_xor_b64 s[36:37], exec, s[34:35]
-; SI-NEXT:    s_mov_b64 exec, s[34:35]
+; SI-NEXT:    s_or_b64 exec, exec, vcc
+; SI-NEXT:    s_xor_b64 s[34:35], exec, vcc
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB7_4
-; SI-NEXT:  .LBB7_3: ; %F
-; SI-NEXT:    s_mov_b32 s42, 0
-; SI-NEXT:    s_mov_b32 s43, 0xf000
-; SI-NEXT:    s_mov_b32 s40, s42
-; SI-NEXT:    s_mov_b32 s41, s42
-; SI-NEXT:    buffer_load_ushort v0, v[2:3], s[40:43], 0 addr64 glc
+; SI-NEXT:  .LBB7_3: ; %T
+; SI-NEXT:    s_mov_b32 s38, 0
+; SI-NEXT:    s_mov_b32 s39, 0xf000
+; SI-NEXT:    s_mov_b32 s36, s38
+; SI-NEXT:    s_mov_b32 s37, s38
+; SI-NEXT:    buffer_load_ushort v2, v[0:1], s[36:39], 0 addr64 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v4, v[2:3], s[40:43], 0 addr64 offset:2 glc
+; SI-NEXT:    buffer_load_ushort v4, v[0:1], s[36:39], 0 addr64 offset:2 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v1, v[2:3], s[40:43], 0 addr64 offset:4 glc
+; SI-NEXT:    buffer_load_ushort v3, v[0:1], s[36:39], 0 addr64 offset:4 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v5, v[2:3], s[40:43], 0 addr64 offset:6 glc
+; SI-NEXT:    buffer_load_ushort v5, v[0:1], s[36:39], 0 addr64 offset:6 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v8, v[2:3], s[40:43], 0 addr64 offset:8 glc
+; SI-NEXT:    buffer_load_ushort v8, v[0:1], s[36:39], 0 addr64 offset:8 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v6, v[2:3], s[40:43], 0 addr64 offset:10 glc
+; SI-NEXT:    buffer_load_ushort v6, v[0:1], s[36:39], 0 addr64 offset:10 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v9, v[2:3], s[40:43], 0 addr64 offset:12 glc
+; SI-NEXT:    buffer_load_ushort v9, v[0:1], s[36:39], 0 addr64 offset:12 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v7, v[2:3], s[40:43], 0 addr64 offset:14 glc
+; SI-NEXT:    buffer_load_ushort v7, v[0:1], s[36:39], 0 addr64 offset:14 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:16 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:16 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:18 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:18 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:20 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:20 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:22 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:22 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:24 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:24 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:26 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:26 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:28 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:28 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v2, v[2:3], s[40:43], 0 addr64 offset:30 glc
+; SI-NEXT:    buffer_load_ushort v0, v[0:1], s[36:39], 0 addr64 offset:30 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_lshlrev_b32_e32 v13, 16, v4
 ; SI-NEXT:    v_lshlrev_b32_e32 v12, 16, v5
-; SI-NEXT:    v_lshlrev_b32_e32 v3, 16, v6
-; SI-NEXT:    v_or_b32_e32 v10, v8, v3
-; SI-NEXT:    v_lshlrev_b32_e32 v2, 16, v7
-; SI-NEXT:    v_or_b32_e32 v11, v9, v2
-; SI-NEXT:    v_or_b32_e32 v9, v1, v12
-; SI-NEXT:    v_or_b32_e32 v8, v0, v13
+; SI-NEXT:    v_lshlrev_b32_e32 v1, 16, v6
+; SI-NEXT:    v_or_b32_e32 v10, v8, v1
+; SI-NEXT:    v_lshlrev_b32_e32 v0, 16, v7
+; SI-NEXT:    v_or_b32_e32 v11, v9, v0
+; SI-NEXT:    v_or_b32_e32 v9, v3, v12
+; SI-NEXT:    v_or_b32_e32 v8, v2, v13
 ; SI-NEXT:  .LBB7_4: ; %exit
-; SI-NEXT:    s_or_b64 exec, exec, s[36:37]
+; SI-NEXT:    s_or_b64 exec, exec, s[34:35]
 ; SI-NEXT:    v_and_b32_e32 v0, 0xffff, v11
 ; SI-NEXT:    s_movk_i32 s34, 0x3800
 ; SI-NEXT:    v_and_b32_e32 v1, 0xffff, v7
@@ -1457,29 +1457,29 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
 ; GFX9-NEXT:    s_xor_b64 s[34:35], vcc, exec
 ; GFX9-NEXT:    ; implicit-def: $vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11
-; GFX9-NEXT:    s_mov_b64 exec, vcc
-; GFX9-NEXT:    ; divergent control-flow edge
-; GFX9-NEXT:    s_cbranch_execz .LBB7_2
-; GFX9-NEXT:  .LBB7_1: ; %T
-; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[0:1], off offset:16 glc
-; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[0:1], off glc
-; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
-; GFX9-NEXT:  .LBB7_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, s[34:35]
-; GFX9-NEXT:    s_xor_b64 s[36:37], exec, s[34:35]
 ; GFX9-NEXT:    s_mov_b64 exec, s[34:35]
 ; GFX9-NEXT:    ; divergent control-flow edge
-; GFX9-NEXT:    s_cbranch_execz .LBB7_4
-; GFX9-NEXT:  .LBB7_3: ; %F
+; GFX9-NEXT:    s_cbranch_execz .LBB7_2
+; GFX9-NEXT:  .LBB7_1: ; %F
 ; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[2:3], off offset:16 glc
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[2:3], off glc
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    ; kill: killed $vgpr2 killed $vgpr3
+; GFX9-NEXT:  .LBB7_2:
+; GFX9-NEXT:    s_or_b64 exec, exec, vcc
+; GFX9-NEXT:    s_xor_b64 s[34:35], exec, vcc
+; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    ; divergent control-flow edge
+; GFX9-NEXT:    s_cbranch_execz .LBB7_4
+; GFX9-NEXT:  .LBB7_3: ; %T
+; GFX9-NEXT:    global_load_dwordx4 v[2:5], v[0:1], off offset:16 glc
+; GFX9-NEXT:    s_waitcnt vmcnt(0)
+; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[0:1], off glc
+; GFX9-NEXT:    s_waitcnt vmcnt(0)
+; GFX9-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
 ; GFX9-NEXT:  .LBB7_4: ; %exit
-; GFX9-NEXT:    s_or_b64 exec, exec, s[36:37]
+; GFX9-NEXT:    s_or_b64 exec, exec, s[34:35]
 ; GFX9-NEXT:    s_movk_i32 s35, 0x3801
 ; GFX9-NEXT:    s_movk_i32 s34, 0x3800
 ; GFX9-NEXT:    v_mov_b32_e32 v0, 0x3900
@@ -1513,32 +1513,32 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX11-TRUE16-NEXT:    scratch_load_u8 v4, off, s32
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_and_b32_e32 v4, 1, v4
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v4
 ; GFX11-TRUE16-NEXT:    ; implicit-def: $vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11
 ; GFX11-TRUE16-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
-; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
-; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB7_2
-; GFX11-TRUE16-NEXT:  .LBB7_1: ; %T
-; GFX11-TRUE16-NEXT:    global_load_b128 v[4:7], v[0:1], off offset:16 glc dlc
-; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-TRUE16-NEXT:    global_load_b128 v[4:7], v[0:1], off glc dlc
-; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-TRUE16-NEXT:  .LBB7_2:
-; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    s_xor_b32 s1, exec_lo, s0
 ; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
-; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB7_4
-; GFX11-TRUE16-NEXT:  .LBB7_3: ; %F
+; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB7_2
+; GFX11-TRUE16-NEXT:  .LBB7_1: ; %F
 ; GFX11-TRUE16-NEXT:    global_load_b128 v[4:7], v[2:3], off offset:16 glc dlc
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    global_load_b128 v[4:7], v[2:3], off glc dlc
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-TRUE16-NEXT:  .LBB7_2:
+; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
+; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB7_4
+; GFX11-TRUE16-NEXT:  .LBB7_3: ; %T
+; GFX11-TRUE16-NEXT:    global_load_b128 v[2:5], v[0:1], off offset:16 glc dlc
+; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-TRUE16-NEXT:    global_load_b128 v[4:7], v[0:1], off glc dlc
+; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:  .LBB7_4: ; %exit
-; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v0, 16, v4
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 16, v7
 ; GFX11-TRUE16-NEXT:    v_cmp_gt_u16_e32 vcc_lo, 0x3801, v7.l
@@ -1568,32 +1568,32 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX11-FAKE16-NEXT:    scratch_load_u8 v4, off, s32
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    v_and_b32_e32 v4, 1, v4
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v4
 ; GFX11-FAKE16-NEXT:    ; implicit-def: $vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11
 ; GFX11-FAKE16-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
-; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
-; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB7_2
-; GFX11-FAKE16-NEXT:  .LBB7_1: ; %T
-; GFX11-FAKE16-NEXT:    global_load_b128 v[4:7], v[0:1], off offset:16 glc dlc
-; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-FAKE16-NEXT:    global_load_b128 v[4:7], v[0:1], off glc dlc
-; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-FAKE16-NEXT:  .LBB7_2:
-; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    s_xor_b32 s1, exec_lo, s0
 ; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
-; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB7_4
-; GFX11-FAKE16-NEXT:  .LBB7_3: ; %F
+; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB7_2
+; GFX11-FAKE16-NEXT:  .LBB7_1: ; %F
 ; GFX11-FAKE16-NEXT:    global_load_b128 v[4:7], v[2:3], off offset:16 glc dlc
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    global_load_b128 v[4:7], v[2:3], off glc dlc
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-FAKE16-NEXT:  .LBB7_2:
+; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
+; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB7_4
+; GFX11-FAKE16-NEXT:  .LBB7_3: ; %T
+; GFX11-FAKE16-NEXT:    global_load_b128 v[2:5], v[0:1], off offset:16 glc dlc
+; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-FAKE16-NEXT:    global_load_b128 v[4:7], v[0:1], off glc dlc
+; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:  .LBB7_4: ; %exit
-; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-FAKE16-NEXT:    v_cmp_gt_u16_e32 vcc_lo, 0x3801, v7
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v9, 0x3900
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v1, 0x3d00
@@ -1658,19 +1658,70 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
 ; SI-NEXT:    s_xor_b64 s[34:35], vcc, exec
 ; SI-NEXT:    ; implicit-def: $vgpr4
-; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    s_mov_b64 exec, s[34:35]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB8_2
-; SI-NEXT:  .LBB8_1: ; %T
+; SI-NEXT:  .LBB8_1: ; %F
 ; SI-NEXT:    s_mov_b32 s38, 0
 ; SI-NEXT:    s_mov_b32 s39, 0xf000
 ; SI-NEXT:    s_mov_b32 s36, s38
 ; SI-NEXT:    s_mov_b32 s37, s38
-; SI-NEXT:    buffer_load_ushort v11, v[0:1], s[36:39], 0 addr64 glc
+; SI-NEXT:    buffer_load_ushort v11, v[2:3], s[36:39], 0 addr64 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v4, v[2:3], s[36:39], 0 addr64 offset:2 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[36:39], 0 addr64 offset:4 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v5, v[2:3], s[36:39], 0 addr64 offset:6 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v9, v[2:3], s[36:39], 0 addr64 offset:8 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v7, v[2:3], s[36:39], 0 addr64 offset:10 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v8, v[2:3], s[36:39], 0 addr64 offset:12 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v6, v[2:3], s[36:39], 0 addr64 offset:14 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:16 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:18 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:20 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:22 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:24 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:26 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v12, v[2:3], s[36:39], 0 addr64 offset:28 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_load_ushort v2, v[2:3], s[36:39], 0 addr64 offset:30 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    v_lshlrev_b32_e32 v13, 16, v4
+; SI-NEXT:    v_or_b32_e32 v11, v11, v13
+; SI-NEXT:    v_lshlrev_b32_e32 v12, 16, v5
+; SI-NEXT:    v_or_b32_e32 v10, v10, v12
+; SI-NEXT:    v_lshlrev_b32_e32 v3, 16, v7
+; SI-NEXT:    v_or_b32_e32 v9, v9, v3
+; SI-NEXT:    v_lshlrev_b32_e32 v2, 16, v6
+; SI-NEXT:    v_or_b32_e32 v8, v8, v2
+; SI-NEXT:  .LBB8_2:
+; SI-NEXT:    s_or_b64 exec, exec, vcc
+; SI-NEXT:    s_xor_b64 s[34:35], exec, vcc
+; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; divergent control-flow edge
+; SI-NEXT:    s_cbranch_execz .LBB8_4
+; SI-NEXT:  .LBB8_3: ; %T
+; SI-NEXT:    s_mov_b32 s38, 0
+; SI-NEXT:    s_mov_b32 s39, 0xf000
+; SI-NEXT:    s_mov_b32 s36, s38
+; SI-NEXT:    s_mov_b32 s37, s38
+; SI-NEXT:    buffer_load_ushort v2, v[0:1], s[36:39], 0 addr64 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_load_ushort v4, v[0:1], s[36:39], 0 addr64 offset:2 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:4 glc
+; SI-NEXT:    buffer_load_ushort v3, v[0:1], s[36:39], 0 addr64 offset:4 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_load_ushort v5, v[0:1], s[36:39], 0 addr64 offset:6 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
@@ -1682,83 +1733,32 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_load_ushort v6, v[0:1], s[36:39], 0 addr64 offset:14 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:16 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:16 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:18 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:18 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:20 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:20 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:22 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:22 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:24 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:24 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:26 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:26 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v12, v[0:1], s[36:39], 0 addr64 offset:28 glc
+; SI-NEXT:    buffer_load_ushort v10, v[0:1], s[36:39], 0 addr64 offset:28 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_load_ushort v0, v[0:1], s[36:39], 0 addr64 offset:30 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    v_lshlrev_b32_e32 v13, 16, v4
-; SI-NEXT:    v_or_b32_e32 v11, v11, v13
-; SI-NEXT:    v_lshlrev_b32_e32 v12, 16, v5
-; SI-NEXT:    v_or_b32_e32 v10, v10, v12
+; SI-NEXT:    v_lshlrev_b32_e32 v11, 16, v4
+; SI-NEXT:    v_or_b32_e32 v11, v2, v11
+; SI-NEXT:    v_lshlrev_b32_e32 v10, 16, v5
+; SI-NEXT:    v_or_b32_e32 v10, v3, v10
 ; SI-NEXT:    v_lshlrev_b32_e32 v1, 16, v7
 ; SI-NEXT:    v_or_b32_e32 v9, v9, v1
 ; SI-NEXT:    v_lshlrev_b32_e32 v0, 16, v6
 ; SI-NEXT:    v_or_b32_e32 v8, v8, v0
-; SI-NEXT:  .LBB8_2:
-; SI-NEXT:    s_or_b64 exec, exec, s[34:35]
-; SI-NEXT:    s_xor_b64 s[36:37], exec, s[34:35]
-; SI-NEXT:    s_mov_b64 exec, s[34:35]
-; SI-NEXT:    ; divergent control-flow edge
-; SI-NEXT:    s_cbranch_execz .LBB8_4
-; SI-NEXT:  .LBB8_3: ; %F
-; SI-NEXT:    s_mov_b32 s42, 0
-; SI-NEXT:    s_mov_b32 s43, 0xf000
-; SI-NEXT:    s_mov_b32 s40, s42
-; SI-NEXT:    s_mov_b32 s41, s42
-; SI-NEXT:    buffer_load_ushort v0, v[2:3], s[40:43], 0 addr64 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v4, v[2:3], s[40:43], 0 addr64 offset:2 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v1, v[2:3], s[40:43], 0 addr64 offset:4 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v5, v[2:3], s[40:43], 0 addr64 offset:6 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v9, v[2:3], s[40:43], 0 addr64 offset:8 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v7, v[2:3], s[40:43], 0 addr64 offset:10 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v8, v[2:3], s[40:43], 0 addr64 offset:12 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v6, v[2:3], s[40:43], 0 addr64 offset:14 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:16 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:18 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:20 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:22 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:24 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:26 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v10, v[2:3], s[40:43], 0 addr64 offset:28 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_load_ushort v2, v[2:3], s[40:43], 0 addr64 offset:30 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    v_lshlrev_b32_e32 v11, 16, v4
-; SI-NEXT:    v_or_b32_e32 v11, v0, v11
-; SI-NEXT:    v_lshlrev_b32_e32 v10, 16, v5
-; SI-NEXT:    v_or_b32_e32 v10, v1, v10
-; SI-NEXT:    v_lshlrev_b32_e32 v3, 16, v7
-; SI-NEXT:    v_or_b32_e32 v9, v9, v3
-; SI-NEXT:    v_lshlrev_b32_e32 v2, 16, v6
-; SI-NEXT:    v_or_b32_e32 v8, v8, v2
 ; SI-NEXT:  .LBB8_4: ; %exit
-; SI-NEXT:    s_or_b64 exec, exec, s[36:37]
+; SI-NEXT:    s_or_b64 exec, exec, s[34:35]
 ; SI-NEXT:    v_cvt_f32_f16_e32 v2, v7
 ; SI-NEXT:    v_cvt_f32_f16_e32 v7, v8
 ; SI-NEXT:    v_cvt_f32_f16_e32 v6, v6
@@ -1802,29 +1802,29 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v4
 ; GFX9-NEXT:    s_xor_b64 s[34:35], vcc, exec
 ; GFX9-NEXT:    ; implicit-def: $vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11
-; GFX9-NEXT:    s_mov_b64 exec, vcc
-; GFX9-NEXT:    ; divergent control-flow edge
-; GFX9-NEXT:    s_cbranch_execz .LBB8_2
-; GFX9-NEXT:  .LBB8_1: ; %T
-; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[0:1], off offset:16 glc
-; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[0:1], off glc
-; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
-; GFX9-NEXT:  .LBB8_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, s[34:35]
-; GFX9-NEXT:    s_xor_b64 s[36:37], exec, s[34:35]
 ; GFX9-NEXT:    s_mov_b64 exec, s[34:35]
 ; GFX9-NEXT:    ; divergent control-flow edge
-; GFX9-NEXT:    s_cbranch_execz .LBB8_4
-; GFX9-NEXT:  .LBB8_3: ; %F
+; GFX9-NEXT:    s_cbranch_execz .LBB8_2
+; GFX9-NEXT:  .LBB8_1: ; %F
 ; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[2:3], off offset:16 glc
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[2:3], off glc
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    ; kill: killed $vgpr2 killed $vgpr3
+; GFX9-NEXT:  .LBB8_2:
+; GFX9-NEXT:    s_or_b64 exec, exec, vcc
+; GFX9-NEXT:    s_xor_b64 s[34:35], exec, vcc
+; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    ; divergent control-flow edge
+; GFX9-NEXT:    s_cbranch_execz .LBB8_4
+; GFX9-NEXT:  .LBB8_3: ; %T
+; GFX9-NEXT:    global_load_dwordx4 v[2:5], v[0:1], off offset:16 glc
+; GFX9-NEXT:    s_waitcnt vmcnt(0)
+; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[0:1], off glc
+; GFX9-NEXT:    s_waitcnt vmcnt(0)
+; GFX9-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
 ; GFX9-NEXT:  .LBB8_4: ; %exit
-; GFX9-NEXT:    s_or_b64 exec, exec, s[36:37]
+; GFX9-NEXT:    s_or_b64 exec, exec, s[34:35]
 ; GFX9-NEXT:    v_mov_b32_e32 v0, 0x3800
 ; GFX9-NEXT:    v_mov_b32_e32 v1, 0x3900
 ; GFX9-NEXT:    v_mov_b32_e32 v2, 0x3d00
@@ -1856,32 +1856,32 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX11-TRUE16-NEXT:    scratch_load_u8 v4, off, s32
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_and_b32_e32 v4, 1, v4
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v4
 ; GFX11-TRUE16-NEXT:    ; implicit-def: $vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11
 ; GFX11-TRUE16-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
-; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
-; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB8_2
-; GFX11-TRUE16-NEXT:  .LBB8_1: ; %T
-; GFX11-TRUE16-NEXT:    global_load_b128 v[4:7], v[0:1], off offset:16 glc dlc
-; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-TRUE16-NEXT:    global_load_b128 v[4:7], v[0:1], off glc dlc
-; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-TRUE16-NEXT:  .LBB8_2:
-; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    s_xor_b32 s1, exec_lo, s0
 ; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
-; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB8_4
-; GFX11-TRUE16-NEXT:  .LBB8_3: ; %F
+; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB8_2
+; GFX11-TRUE16-NEXT:  .LBB8_1: ; %F
 ; GFX11-TRUE16-NEXT:    global_load_b128 v[4:7], v[2:3], off offset:16 glc dlc
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    global_load_b128 v[4:7], v[2:3], off glc dlc
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-TRUE16-NEXT:  .LBB8_2:
+; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
+; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB8_4
+; GFX11-TRUE16-NEXT:  .LBB8_3: ; %T
+; GFX11-TRUE16-NEXT:    global_load_b128 v[2:5], v[0:1], off offset:16 glc dlc
+; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-TRUE16-NEXT:    global_load_b128 v[4:7], v[0:1], off glc dlc
+; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:  .LBB8_4: ; %exit
-; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v0, 16, v4
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 16, v7
 ; GFX11-TRUE16-NEXT:    v_cmp_ge_f16_e32 vcc_lo, 0.5, v7.l
@@ -1911,32 +1911,32 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX11-FAKE16-NEXT:    scratch_load_u8 v4, off, s32
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    v_and_b32_e32 v4, 1, v4
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v4
 ; GFX11-FAKE16-NEXT:    ; implicit-def: $vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11
 ; GFX11-FAKE16-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
-; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
-; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB8_2
-; GFX11-FAKE16-NEXT:  .LBB8_1: ; %T
-; GFX11-FAKE16-NEXT:    global_load_b128 v[4:7], v[0:1], off offset:16 glc dlc
-; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-FAKE16-NEXT:    global_load_b128 v[4:7], v[0:1], off glc dlc
-; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-FAKE16-NEXT:  .LBB8_2:
-; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    s_xor_b32 s1, exec_lo, s0
 ; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
-; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB8_4
-; GFX11-FAKE16-NEXT:  .LBB8_3: ; %F
+; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB8_2
+; GFX11-FAKE16-NEXT:  .LBB8_1: ; %F
 ; GFX11-FAKE16-NEXT:    global_load_b128 v[4:7], v[2:3], off offset:16 glc dlc
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    global_load_b128 v[4:7], v[2:3], off glc dlc
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-FAKE16-NEXT:  .LBB8_2:
+; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
+; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB8_4
+; GFX11-FAKE16-NEXT:  .LBB8_3: ; %T
+; GFX11-FAKE16-NEXT:    global_load_b128 v[2:5], v[0:1], off offset:16 glc dlc
+; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
+; GFX11-FAKE16-NEXT:    global_load_b128 v[4:7], v[0:1], off glc dlc
+; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:  .LBB8_4: ; %exit
-; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-FAKE16-NEXT:    v_cmp_ge_f16_e32 vcc_lo, 0.5, v7
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v9, 0x3900
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v1, 0x3d00

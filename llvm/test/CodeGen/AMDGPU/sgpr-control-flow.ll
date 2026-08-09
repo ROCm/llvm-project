@@ -106,25 +106,25 @@ define amdgpu_kernel void @sgpr_if_else_valu_br(ptr addrspace(1) %out, float %a,
 ; SI-NEXT:    v_cmp_lg_f32_e32 vcc, 0, v0
 ; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; SI-NEXT:    ; implicit-def: $vgpr0
-; SI-NEXT:    s_mov_b64 exec, s[6:7]
-; SI-NEXT:    ; divergent control-flow edge
-; SI-NEXT:    s_cbranch_execz .LBB2_2
-; SI-NEXT:  .LBB2_1: ; %if
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    s_add_i32 s0, s0, s1
-; SI-NEXT:    v_mov_b32_e32 v0, s0
-; SI-NEXT:  .LBB2_2:
-; SI-NEXT:    s_or_b64 exec, exec, vcc
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
-; SI-NEXT:    s_cbranch_execz .LBB2_4
-; SI-NEXT:  .LBB2_3: ; %else
+; SI-NEXT:    s_cbranch_execz .LBB2_2
+; SI-NEXT:  .LBB2_1: ; %else
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_add_i32 s2, s2, s3
 ; SI-NEXT:    v_mov_b32_e32 v0, s2
+; SI-NEXT:  .LBB2_2:
+; SI-NEXT:    s_or_b64 exec, exec, s[6:7]
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    s_xor_b64 s[2:3], exec, s[6:7]
+; SI-NEXT:    s_mov_b64 exec, s[6:7]
+; SI-NEXT:    ; divergent control-flow edge
+; SI-NEXT:    s_cbranch_execz .LBB2_4
+; SI-NEXT:  .LBB2_3: ; %if
+; SI-NEXT:    s_add_i32 s0, s0, s1
+; SI-NEXT:    v_mov_b32_e32 v0, s0
 ; SI-NEXT:  .LBB2_4: ; %endif
-; SI-NEXT:    s_or_b64 exec, exec, s[0:1]
+; SI-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b32 s3, 0xf000
 ; SI-NEXT:    s_mov_b32 s2, -1
@@ -154,49 +154,48 @@ endif:
 define amdgpu_kernel void @sgpr_if_else_valu_cmp_phi_br(ptr addrspace(1) %out, ptr addrspace(1) %a, ptr addrspace(1) %b) {
 ; SI-LABEL: sgpr_if_else_valu_cmp_phi_br:
 ; SI:       ; %bb.0: ; %entry
-; SI-NEXT:    s_load_dwordx4 s[8:11], s[4:5], 0x9
+; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0xd
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; SI-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; SI-NEXT:    s_mov_b32 s2, 0
+; SI-NEXT:    s_mov_b32 s6, 0
+; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; SI-NEXT:    ; implicit-def: $vgpr1
-; SI-NEXT:    s_mov_b64 exec, s[0:1]
-; SI-NEXT:    ; divergent control-flow edge
-; SI-NEXT:    s_cbranch_execz .LBB3_2
-; SI-NEXT:  .LBB3_1: ; %if
-; SI-NEXT:    s_mov_b32 s3, 0xf000
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    s_mov_b64 s[0:1], s[10:11]
-; SI-NEXT:    v_lshlrev_b32_e32 v1, 2, v0
-; SI-NEXT:    v_mov_b32_e32 v2, 0
-; SI-NEXT:    buffer_load_dword v1, v[1:2], s[0:3], 0 addr64
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    v_cmp_eq_u32_e64 s[0:1], 0, v1
-; SI-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[0:1]
-; SI-NEXT:  .LBB3_2:
-; SI-NEXT:    s_or_b64 exec, exec, vcc
-; SI-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
+; SI-NEXT:    s_cbranch_execz .LBB3_2
+; SI-NEXT:  .LBB3_1: ; %else
+; SI-NEXT:    s_mov_b32 s7, 0xf000
+; SI-NEXT:    v_lshlrev_b32_e32 v1, 2, v0
+; SI-NEXT:    v_mov_b32_e32 v2, 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    buffer_load_dword v1, v[1:2], s[4:7], 0 addr64
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v1
+; SI-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
+; SI-NEXT:  .LBB3_2:
+; SI-NEXT:    s_or_b64 exec, exec, s[8:9]
+; SI-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; SI-NEXT:    s_mov_b64 exec, s[8:9]
+; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB3_4
-; SI-NEXT:  .LBB3_3: ; %else
-; SI-NEXT:    s_mov_b32 s3, 0xf000
-; SI-NEXT:    s_mov_b64 s[6:7], s[2:3]
+; SI-NEXT:  .LBB3_3: ; %if
+; SI-NEXT:    s_mov_b32 s7, 0xf000
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    s_mov_b64 s[4:5], s[2:3]
 ; SI-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; SI-NEXT:    v_mov_b32_e32 v1, 0
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    buffer_load_dword v0, v[0:1], s[4:7], 0 addr64
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v0
+; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; SI-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
 ; SI-NEXT:  .LBB3_4: ; %endif
-; SI-NEXT:    s_or_b64 exec, exec, s[0:1]
+; SI-NEXT:    s_or_b64 exec, exec, s[10:11]
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    s_mov_b32 s11, 0xf000
-; SI-NEXT:    s_mov_b32 s10, -1
+; SI-NEXT:    s_mov_b32 s3, 0xf000
+; SI-NEXT:    s_mov_b32 s2, -1
 ; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
-; SI-NEXT:    buffer_store_dword v0, off, s[8:11], 0
+; SI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; SI-NEXT:    s_endpgm
 entry:
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #0

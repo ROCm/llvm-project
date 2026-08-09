@@ -17,25 +17,25 @@ define amdgpu_kernel void @kernel() {
 ; CHECK-NEXT:    v_cmp_ne_u16_e32 vcc, 0, v0
 ; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; CHECK-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
-; CHECK-NEXT:    ; divergent control-flow edge
-; CHECK-NEXT:    s_cbranch_execz .LBB0_2
-; CHECK-NEXT:  .LBB0_1: ; %entry.end_crit_edge
-; CHECK-NEXT:    s_mov_b64 s[6:7], src_private_base
-; CHECK-NEXT:    s_mov_b32 s5, s7
-; CHECK-NEXT:    v_pk_mov_b32 v[0:1], s[4:5], s[4:5] op_sel:[0,1]
-; CHECK-NEXT:  .LBB0_2:
-; CHECK-NEXT:    s_or_b64 exec, exec, vcc
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
-; CHECK-NEXT:    s_cbranch_execz .LBB0_4
-; CHECK-NEXT:  .LBB0_3: ; %then
+; CHECK-NEXT:    s_cbranch_execz .LBB0_2
+; CHECK-NEXT:  .LBB0_1: ; %then
 ; CHECK-NEXT:    s_mov_b64 s[8:9], src_private_base
 ; CHECK-NEXT:    s_mov_b32 s5, s9
 ; CHECK-NEXT:    v_pk_mov_b32 v[0:1], s[4:5], s[4:5] op_sel:[0,1]
-; CHECK-NEXT:  .LBB0_4: ; %end
+; CHECK-NEXT:  .LBB0_2:
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
+; CHECK-NEXT:    ; divergent control-flow edge
+; CHECK-NEXT:    s_cbranch_execz .LBB0_4
+; CHECK-NEXT:  .LBB0_3: ; %entry.end_crit_edge
+; CHECK-NEXT:    s_mov_b64 s[6:7], src_private_base
+; CHECK-NEXT:    s_mov_b32 s5, s7
+; CHECK-NEXT:    v_pk_mov_b32 v[0:1], s[4:5], s[4:5] op_sel:[0,1]
+; CHECK-NEXT:  .LBB0_4: ; %end
+; CHECK-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; CHECK-NEXT:    buffer_store_dword v1, off, s[0:3], 0 offset:4
 ; CHECK-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; CHECK-NEXT:    s_endpgm
