@@ -53,10 +53,6 @@ on:
         type: boolean
         default: true
         description: "Build PyTorch wheels"
-      ref:
-        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
-        type: string
-        default: ""
 
   pull_request:
     branches: [amd-staging]
@@ -107,6 +103,7 @@ jobs:
       baseline_run_id: ${{ inputs.baseline_run_id || '' }}
       build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
       build_jax: false
+      ref: ${{ vars.THEROCK_CI_MAIN_REF || '' }}
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
@@ -126,6 +123,7 @@ jobs:
       rocm_rpm_package_version: ${{ needs.setup.outputs.rocm_rpm_package_version }}
       test_type: 'quick'
       changed_projects: ${{ inputs.changed_projects || '' }}
+      ref: ${{ needs.setup.outputs.ref }}
     permissions:
       contents: read
       id-token: write
@@ -146,6 +144,8 @@ jobs:
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: 'quick'
       changed_projects: ${{ inputs.changed_projects || '' }}
+      ref: ${{ needs.setup.outputs.ref }}
+      
     permissions:
       contents: read
       id-token: write
@@ -157,6 +157,8 @@ jobs:
     if: ${{ false }} 
     #if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'schedule' }}
     uses: ./.github/workflows/manifest-diff.yml
+    with:
+      ref: ${{ needs.setup.outputs.ref }}      
     permissions:
       contents: read
       id-token: write
@@ -172,7 +174,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: "ROCm/TheRock"
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.setup.outputs.ref }}
       - name: Evaluate workflow results
         env:
           GITHUB_TOKEN: ${{ github.token }}
