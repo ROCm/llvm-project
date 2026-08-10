@@ -17,10 +17,13 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Object/ObjectFile.h"
+#include <memory>
+#include <mutex>
 
 namespace COMGR {
 struct DataMeta;
 struct DataSymbol;
+struct MetaDocument;
 
 /// Update @p Dest to point to a newly allocated C-style (null terminated)
 /// string with the contents of @p Src, optionally updating @p Size with the
@@ -103,6 +106,10 @@ struct DataObject {
   size_t Size;
   int RefCount;
   DataSymbol *DataSym;
+  // Guards the caches below: the query entry points that populate them must
+  // stay safe to call concurrently on one handle.
+  std::mutex CacheMutex;
+  std::shared_ptr<MetaDocument> CachedMetaDoc;
   std::vector<std::string> MangledNames;
   std::map<std::string, std::string> NameExpressionMap;
   llvm::SmallVector<const char *, 128> SpirvFlags;
