@@ -258,12 +258,10 @@ bool llvm::applyDebugifyMetadata(
           if (DISize > IRSize)
             ExprBuilder.append<DIOp::ZExt>(IntegerType::get(Ctx, *DISize));
         }
-        DIB.insertDbgValueIntrinsic(V, LocalVar, ExprBuilder.intoExpression(),
-                                    Loc, InsertPt);
+        DIB.insertDbgValue(V, LocalVar, ExprBuilder.intoExpression(), Loc, InsertPt);
         return;
       }
-      DIB.insertDbgValueIntrinsic(V, LocalVar, DIB.createExpression(), Loc,
-                                  InsertPt);
+      DIB.insertDbgValue(V, LocalVar, DIB.createExpression(), Loc, InsertPt);
     };
 
     for (BasicBlock &BB : F) {
