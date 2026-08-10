@@ -1855,6 +1855,9 @@ void ControlFlowRewriter::rewrite() {
       Updater.init();
       Updater.addReset(*LaneTarget->Block, AMDGPULaneMaskUpdater::ResetInMiddle);
       for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
+        if (!NodeDivergentPair.getInt())
+          continue; // not a divergent branch
+
         Updater.addReset(*NodeDivergentPair.getPointer()->Block,
                          AMDGPULaneMaskUpdater::ResetAtEnd);
       }

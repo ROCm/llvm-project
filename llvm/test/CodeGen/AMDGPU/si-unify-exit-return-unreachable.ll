@@ -108,21 +108,21 @@ define void @my_func(i32 %0) {
 ; GCN-LABEL: my_func:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    s_mov_b64 s[4:5], 0
-; GCN-NEXT:    s_load_dword s4, s[4:5], 0x0
+; GCN-NEXT:    s_mov_b64 s[10:11], 0
+; GCN-NEXT:    s_load_dword s10, s[10:11], 0x0
 ; GCN-NEXT:    s_mov_b64 s[6:7], 0
+; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    s_mov_b64 s[8:9], 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
-; GCN-NEXT:    s_cmp_lt_i32 s4, 1
+; GCN-NEXT:    s_cmp_lt_i32 s10, 1
 ; GCN-NEXT:    s_cbranch_scc1 .LBB0_3
 ; GCN-NEXT:  ; %bb.1: ; %LeafBlock1
-; GCN-NEXT:    s_cmp_eq_u32 s4, 1
+; GCN-NEXT:    s_cmp_eq_u32 s10, 1
 ; GCN-NEXT:    s_cbranch_scc0 .LBB0_4
 ; GCN-NEXT:  ; %bb.2: ; %UnifiedReturnBlock
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 ; GCN-NEXT:  .LBB0_3: ; %LeafBlock
-; GCN-NEXT:    s_cmp_lg_u32 s4, 0
-; GCN-NEXT:    s_mov_b64 s[4:5], 0
+; GCN-NEXT:    s_cmp_lg_u32 s10, 0
 ; GCN-NEXT:    s_cbranch_scc0 .LBB0_5
 ; GCN-NEXT:  .LBB0_4: ; %UnifiedUnreachableBlock
 ; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
