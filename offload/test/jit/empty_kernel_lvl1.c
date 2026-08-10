@@ -30,6 +30,5 @@
 // clang-format on
 
 // REQUIRES: gpu
-// XFAIL: intelgpu
 
 #include "empty_kernel.inc"

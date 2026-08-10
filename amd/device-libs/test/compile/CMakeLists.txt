@@ -107,3 +107,7 @@ foreach(gpu gfx803 gfx900 gfx90a gfx1030 gfx1100 gfx1200)
     FILE_NAME ${CMAKE_CURRENT_SOURCE_DIR}/atomic_work_item_fence.cl
     COMPILE_FLAGS -emit-llvm)
 endforeach()
+
+foreach(gpu gfx90a gfx942 gfx950 gfx1200)
+  add_isa_test(trig_nan_guard ${gpu})
+endforeach()

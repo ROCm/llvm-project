@@ -1,4 +1,3 @@
-
 # See docs/CMake.html for instructions about how to build LLVM with CMake.
 cmake_minimum_required(VERSION 3.20.0)
 if("${CMAKE_VERSION}" VERSION_LESS "3.31.0")
@@ -269,19 +268,6 @@ if(LIBOMP_ENABLE_ARM64X)
     list(APPEND LLVM_RUNTIME_TARGETS "arm64ec-pc-windows-msvc")
   endif()
   set(RUNTIMES_arm64ec-pc-windows-msvc_LIBOMP_ENABLE_ARM64X ON)
-endif()
-
-foreach(_name ${LLVM_RUNTIME_TARGETS})
-  if("libc" IN_LIST RUNTIMES_${_name}_LLVM_ENABLE_RUNTIMES)
-    if("${_name}" STREQUAL "amdgpu-amd-amdhsa" OR "${_name}" STREQUAL "nvptx64-nvidia-cuda" OR "${_name}" STREQUAL "spirv64-intel-unknown")
-      set(LLVM_LIBC_GPU_BUILD ON)
-    endif()
-  endif()
-endforeach()
-if("${LIBC_TARGET_TRIPLE}" STREQUAL "amdgpu-amd-amdhsa" OR
-   "${LIBC_TARGET_TRIPLE}" STREQUAL "nvptx64-nvidia-cuda" OR
-   "${LIBC_TARGET_TRIPLE}" STREQUAL "spirv64-intel-unknown")
-  set(LLVM_LIBC_GPU_BUILD ON)
 endif()
 
 # LLVM_ENABLE_PROJECTS_USED is `ON` if the user has ever used the

@@ -5,7 +5,7 @@ define ptr @callbr_result_exit_value(ptr %a0) {
 ; CHECK-LABEL: define ptr @callbr_result_exit_value(
 ; CHECK-SAME: ptr [[A0:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    [[A02:%.*]] = ptrtoint ptr [[A0]] to i64
+; CHECK-NEXT:    [[A02:%.*]] = ptrtoaddr ptr [[A0]] to i64
 ; CHECK-NEXT:    [[OUT:%.*]] = callbr ptr asm "", "=r,!i"()
 ; CHECK-NEXT:            to label %[[D:.*]] [label %[[INDIRECT:.*]]]
 ; CHECK:       [[INDIRECT]]:
@@ -14,7 +14,7 @@ define ptr @callbr_result_exit_value(ptr %a0) {
 ; CHECK-NEXT:    [[CMP0:%.*]] = icmp eq ptr [[A0]], [[OUT]]
 ; CHECK-NEXT:    br i1 [[CMP0]], label %[[END:.*]], label %[[LOOP_PREHEADER:.*]]
 ; CHECK:       [[LOOP_PREHEADER]]:
-; CHECK-NEXT:    [[OUT1:%.*]] = ptrtoint ptr [[OUT]] to i64
+; CHECK-NEXT:    [[OUT1:%.*]] = ptrtoaddr ptr [[OUT]] to i64
 ; CHECK-NEXT:    [[DIFF:%.*]] = sub i64 [[OUT1]], [[A02]]
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:

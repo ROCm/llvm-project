@@ -30,7 +30,8 @@ subtrees:
       title: LLD documentation
     - url: http://rocm.docs.amd.com/projects/llvm-project/en/${branch}/LLVM/llvm/html/index.html
       title: LLVM documentation
-
+    - file: reference/amdgpu-ref.rst
+      title: AMDGPU instruction specifications
   - caption: About
     entries:
     - url: https://github.com/ROCm/llvm-project/blob/amd-staging/LICENSE.TXT

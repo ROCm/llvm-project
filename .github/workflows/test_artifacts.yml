@@ -18,6 +18,9 @@ on:
         default: ""
       test_runs_on:
         type: string
+      benchmark_runs_on:
+        type: string
+        default: ""
       sanity_check_only_for_family:
         type: boolean
         default: false
@@ -25,17 +28,36 @@ on:
         type: string
       test_labels:
         type: string
-      run_functional_tests:
-        type: boolean
-        default: false
-      release_type:
-        description: 'Release type: "" for CI, or "dev", "nightly", "prerelease".'
+      run_extended_tests:
         type: string
+        default: 'false'
+      windows_hip_rocr_tests:
+        type: string
+        default: 'false'
+      changed_projects:
+        description: 'Comma-separated list of projects to test (e.g., "rocblas,hipblas" or "projects/rocblas"). Empty = run all tests.'
+        type: string
+        default: ""
+      release_type:
+        description: 'Release type: "ci" or "dev".'
+        type: choice
+        options:
+          - ci
+          - dev
         default: ci
-      test_retry_count:
-        type: number
-        default: 2                  #It will perform one additional try if failed
-        required: false          
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+      build_variant:
+        description: "Build variant (e.g., release, asan)."
+        type: choice
+        options:
+          - release
+          - asan
+        default: release
   workflow_call:
     inputs:
       artifact_group:
@@ -50,6 +72,9 @@ on:
         default: ""
       test_runs_on:
         type: string
+      benchmark_runs_on:
+        type: string
+        default: ""
       sanity_check_only_for_family:
         type: boolean
         default: false
@@ -57,16 +82,29 @@ on:
         type: string
       test_labels:
         type: string
-      run_functional_tests:
-        type: boolean
-        default: false
+      run_extended_tests:
+        type: string
+        default: 'false'
+      windows_hip_rocr_tests:
+        type: string
+        default: 'false'
+      changed_projects:
+        description: 'Comma-separated list of projects to test (e.g., "rocblas,hipblas" or "projects/rocblas"). Empty = run all tests.'
+        type: string
+        default: ""
       release_type:
         type: string
         default: ci
-      test_retry_count:
-        type: number
-        default: 2
-        required: false          
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+      build_variant:
+        description: "Build variant (e.g., release, asan)."
+        type: string
+        default: "release"
   push:
     branches:
       - ADHOCBUILD
@@ -74,42 +112,48 @@ on:
 permissions:
   contents: read
 
+run-name: Test Artifacts (${{ inputs.amdgpu_families }}, ${{ inputs.release_type }}, ${{ inputs.test_type }}, ${{ inputs.test_runs_on }})
+
 jobs:
   configure_test_matrix:
     name: "Configure test matrix (${{ inputs.amdgpu_families }})"
     # if there is a test machine available
     if: ${{ inputs.test_runs_on != '' }}
-    runs-on: ${{ inputs.test_runs_on }}
+    runs-on: ubuntu-24.04
     outputs:
       sanity_component: ${{ steps.configure.outputs.sanity_component }}
       components: ${{ steps.configure.outputs.components }}
       platform: ${{ steps.configure.outputs.platform }}
       shard_arr: ${{ steps.configure.outputs.shard_arr }}
     steps:
-      - name: "Fetch 'build_tools' from repository"
-        if: ${{ runner.os == 'Windows' }}
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          sparse-checkout: build_tools
-          path: "prejob"
-
-      # Checkout failure is possible on Windows, as it's the first job on a GPU test runner.
-      # Post-job cleanup isn't necessary since no executables are launched in this job.
-      - name: Pre-job cleanup processes on Windows
-        if: ${{ runner.os == 'Windows' }}
-        shell: powershell
-        run: . '${{ github.workspace }}\prejob\build_tools\github_actions\cleanup_processes.ps1'
-
-      - name: "Checking out repository"
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Checking out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
-            
+
+      - name: Checkout CI config
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/therock-ci-config
+          ref: main
+          path: ci-config
+        continue-on-error: true
+
       - name: Setting up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: 3.12
+
+      - name: "Determine test dependencies"
+        id: test_deps
+        shell: bash
+        env:
+          CHANGED_PROJECTS: ${{ inputs.changed_projects }}
+        run: |
+          python ./test_tools/determine_rocm_test_dependencies.py \
+            --changed-projects "$CHANGED_PROJECTS" \
+            --gha-output
 
       - name: "Configuring CI options"
         id: configure
@@ -118,15 +162,18 @@ jobs:
           AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
           TEST_TYPE: ${{ inputs.test_type }}
           TEST_LABELS: ${{ inputs.test_labels }}
-          # TODO(#3901): Consolidate run_functional_tests and benchmark_runs_on into a single run_extended_tests input.
-          RUN_FUNCTIONAL_TESTS: ${{ inputs.run_functional_tests }}
+          RUN_EXTENDED_TESTS: ${{ inputs.run_extended_tests }}
+          WINDOWS_HIP_ROCR_TESTS: ${{ inputs.windows_hip_rocr_tests }}
+          PROJECTS_TO_TEST: ${{ steps.test_deps.outputs.projects_to_test }}
+          CI_CONFIG_PATH: ci-config
         run: |
           if [[ "${TEST_TYPE:-}" == "quick" ]]; then
-              PROJECTS_TO_TEST='rocroller,hipblas,hipblaslt,hipsolver,rocsolver,rocprim,hipcub,hipsparse,rocsparse,rocrand,hiprand,rocfft,hipfft,rocwmma'
-              export PROJECTS_TO_TEST
-              echo "PROJECTS_TO_TEST=$PROJECTS_TO_TEST" >> "$GITHUB_ENV"
-          fi
-          python ./build_tools/github_actions/fetch_test_configurations.py            
+               PROJECTS_TO_TEST='rocroller,hipblas,hipblaslt,hipsolver,rocsolver,rocprim,hipcub,hipsparse,rocsparse,rocrand,hiprand,rocfft,hipfft,rocwmma'
+               export PROJECTS_TO_TEST
+               echo "PROJECTS_TO_TEST=$PROJECTS_TO_TEST" >> "$GITHUB_ENV"
+          fi            
+          python ./build_tools/github_actions/fetch_test_configurations.py \
+            --platform=${{ contains(inputs.test_runs_on, 'windows') && 'windows' || 'linux' }}
 
   test_sanity_check:
     name: 'Test Sanity Check'
@@ -137,51 +184,103 @@ jobs:
       artifact_group: ${{ inputs.artifact_group }}
       amdgpu_families: ${{ inputs.amdgpu_families }}
       amdgpu_targets: ${{ inputs.amdgpu_targets }}
-      test_runs_on: ${{ inputs.test_runs_on }}
-      platform: 'linux'
+      # For workflow_dispatch, honor the explicit test_runs_on input if provided.
+      # Otherwise, use the runner selected by fetch_test_configurations.py.
+      test_runs_on: ${{ (github.event_name == 'workflow_dispatch' && inputs.test_runs_on) || fromJSON(needs.configure_test_matrix.outputs.sanity_component).test_runner }}
+      platform: 'linux' 
       component: ${{ needs.configure_test_matrix.outputs.sanity_component }}
       release_type: ${{ inputs.release_type }}
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      build_variant: ${{ inputs.build_variant }}
 
-  aomp_smoke_test:
-    name: 'AOMP smoke test'
+  aomp_smoke_tests:
+    name: 'AOMP smoke test (shard ${{ matrix.shard }}/6)'
     needs: test_sanity_check
     if: ${{ inputs.amdgpu_families == 'gfx94X-dcgpu' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: "1"
+            suite_list: smoke-limbo smoke-fort-limbo
+          - shard: "2"
+            suite_list: smoke
+          - shard: "3"
+            suite_list: smoke-dev
+          - shard: "4"
+            suite_list: smoke-fort
+          - shard: "5"
+            suite_list: nekbone babelstream  fortran-babelstream
+          - shard: "6"
+            suite_list: bldopenmpi openmpapps
     uses: './.github/workflows/test_aomp_smoke.yml'
     with:
       artifact_group: ${{ inputs.artifact_group }}
       artifact_run_id: ${{ inputs.artifact_run_id }}
       amdgpu_families: ${{ inputs.amdgpu_families }}
+      amdgpu_targets: ${{ inputs.amdgpu_targets }}
       test_runs_on: ${{ inputs.test_runs_on }}
       platform: 'linux'
       release_type: ${{ inputs.release_type }}
- 
+      suite_list: ${{ matrix.suite_list }}
+      shard: ${{ matrix.shard }}
+      total_shards: "6"
+
   test_components:
     name: 'Test ${{ matrix.components.job_name }}'
     needs: [test_sanity_check, configure_test_matrix]
-    # skip tests if no test matrix to run and sanity check only requested
-    if: ${{ needs.configure_test_matrix.outputs.components != '[]' && !inputs.sanity_check_only_for_family }}
+    # Run when:
+    #   - sanity check passed
+    #   - there are components to test
+    #   - sanity_check_only_for_family is not set
+    if: >-
+      ${{
+        !failure() &&
+        !cancelled() &&
+        needs.configure_test_matrix.outputs.components != '' &&
+        needs.configure_test_matrix.outputs.components != '[]' &&
+        !inputs.sanity_check_only_for_family
+      }}
     strategy:
       fail-fast: false
       matrix:
-        components: ${{ fromJSON(needs.configure_test_matrix.outputs.components) }}
+        components: ${{ fromJSON(needs.configure_test_matrix.outputs.components || '[]') }}
     uses: './.github/workflows/test_component.yml'
+    secrets: inherit
     with:
       artifact_run_id: ${{ inputs.artifact_run_id }}
       artifact_group: ${{ inputs.artifact_group }}
       amdgpu_families: ${{ inputs.amdgpu_families }}
       amdgpu_targets: ${{ inputs.amdgpu_targets }}
-      test_retry_count: ${{ inputs.test_retry_count }}
       # RCCL uses the family test-runs-on (1-GPU) instead of multi_gpu_runner (8-GPU).
       # Other components still use multi_gpu_runner when configured.
+      # Route to the appropriate runner:
+      #   0. For workflow_dispatch, honor the explicit test_runs_on input if provided
+      #   1. Benchmark components use the dedicated benchmark runner
+      #   2. Multi-GPU components use the multi-GPU runner
+      #   3. CPU-only components use standard GitHub runners (azure-linux-scale-rocm)
+      #   4. Per-component runner (set by fetch_test_configurations.py)
       test_runs_on: >-
         ${{
+          (github.event_name == 'workflow_dispatch' &&
+            inputs.test_runs_on != '' &&
+            inputs.test_runs_on) ||
+          (matrix.components.is_benchmark == true &&
+            inputs.benchmark_runs_on != '' &&
+            inputs.benchmark_runs_on) ||
           (matrix.components.job_name == 'rccl' ||
             contains(matrix.components.fetch_artifact_args, '--rccl')) &&
-            inputs.test_runs_on ||
+            inputs.test_runs_on ||            
           (matrix.components.multi_gpu_runner != '' &&
-            matrix.components.multi_gpu_runner ||
-            inputs.test_runs_on)
+            matrix.components.multi_gpu_runner) ||
+          (matrix.components.linux_cpu_runner == true &&
+            'azure-linux-scale-rocm') ||
+          matrix.components.test_runner
         }}
       platform: ${{ needs.configure_test_matrix.outputs.platform }}
       component: ${{ toJSON(matrix.components) }}
       release_type: ${{ inputs.release_type }}
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}
+      build_variant: ${{ inputs.build_variant }}

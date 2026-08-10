@@ -10,9 +10,9 @@
 #include "ockl.h"
 
 static uint
-bpermute_u32(uint l, uint v)
+shuffle_u32(uint v, uint l)
 {
-    return __builtin_amdgcn_ds_bpermute(l << 2, v);
+    return __builtin_amdgcn_wave_shuffle(v, l);
 }
 
 uint
@@ -25,14 +25,14 @@ OCKL_MANGLE_U32(alisa)(uint n)
         // Step 1
         ulong smask = __builtin_amdgcn_read_exec() & ~((0x2UL << l) - 0x1UL);
         int slid = (int)__ockl_ctz_u64(smask);
-        uint t = bpermute_u32(slid, n);
+        uint t = shuffle_u32(n, slid);
         ret += slid < 64 ? t : 0;
 
         smask &= smask - 1UL;
 
         // Step 2
         slid = (int)__ockl_ctz_u64(smask);
-        t = bpermute_u32(slid, ret);
+        t = shuffle_u32(ret, slid);
         ret += slid < 64 ? t : 0;
 
         smask &= smask - 1UL;
@@ -40,7 +40,7 @@ OCKL_MANGLE_U32(alisa)(uint n)
 
         // Step 3
         slid = __ockl_ctz_u64(smask);
-        t = bpermute_u32(slid, ret);
+        t = shuffle_u32(ret, slid);
         ret += slid < 64 ? t : 0;
 
         smask &= smask - 1UL;
@@ -50,7 +50,7 @@ OCKL_MANGLE_U32(alisa)(uint n)
 
         // Step 4
         slid = __ockl_ctz_u64(smask);
-        t = bpermute_u32(slid, ret);
+        t = shuffle_u32(ret, slid);
         ret += slid < 64 ? t : 0;
 
         smask &= smask - 1UL;
@@ -64,7 +64,7 @@ OCKL_MANGLE_U32(alisa)(uint n)
 
         // Step 5
         slid = __ockl_ctz_u64(smask);
-        t = bpermute_u32(slid, ret);
+        t = shuffle_u32(ret, slid);
         ret += slid < 64 ? t : 0;
 
         smask &= smask - 1UL;
@@ -86,20 +86,20 @@ OCKL_MANGLE_U32(alisa)(uint n)
 
         // Step 6
         slid = __ockl_ctz_u64(smask);
-        t = bpermute_u32(slid, ret);
+        t = shuffle_u32(ret, slid);
         ret += slid < 64 ? t : 0;
     } else {
         // Step 1
         uint smask = __builtin_amdgcn_read_exec_lo() & ~((0x2U << l) - 0x1U);
         int slid = (int)__ockl_ctz_u32(smask);
-        uint t = bpermute_u32(slid, n);
+        uint t = shuffle_u32(n, slid);
         ret += slid < 32 ? t : 0;
 
         smask &= smask - 1U;
 
         // Step 2
         slid = (int)__ockl_ctz_u32(smask);
-        t = bpermute_u32(slid, ret);
+        t = shuffle_u32(ret, slid);
         ret += slid < 32 ? t : 0;
 
         smask &= smask - 1U;
@@ -107,7 +107,7 @@ OCKL_MANGLE_U32(alisa)(uint n)
 
         // Step 3
         slid = __ockl_ctz_u32(smask);
-        t = bpermute_u32(slid, ret);
+        t = shuffle_u32(ret, slid);
         ret += slid < 32 ? t : 0;
 
         smask &= smask - 1U;
@@ -117,7 +117,7 @@ OCKL_MANGLE_U32(alisa)(uint n)
 
         // Step 4
         slid = __ockl_ctz_u32(smask);
-        t = bpermute_u32(slid, ret);
+        t = shuffle_u32(ret, slid);
         ret += slid < 32 ? t : 0;
 
         smask &= smask - 1U;
@@ -131,7 +131,7 @@ OCKL_MANGLE_U32(alisa)(uint n)
 
         // Step 5
         slid = __ockl_ctz_u32(smask);
-        t = bpermute_u32(slid, ret);
+        t = shuffle_u32(ret, slid);
         ret += slid < 32 ? t : 0;
     }
 

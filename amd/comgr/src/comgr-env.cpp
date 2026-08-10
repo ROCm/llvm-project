@@ -14,6 +14,7 @@
 
 #include "comgr-env.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/VirtualFileSystem.h"
 
 #include <cstdlib>
@@ -155,6 +156,18 @@ StringRef getCacheDirectory() {
 StringRef getDriverOptionsAppend() {
   static const char *Options = COMGR_GETENV("AMD_COMGR_DRIVER_OPTIONS_APPEND");
   return Options ? Options : "";
+}
+
+EmbeddedLibcxxMode getEmbeddedLibcxxMode() {
+  static const char *V = std::getenv("AMD_COMGR_USE_EMBEDDED_LIBCXX");
+  if (!V)
+    return EmbeddedLibcxxMode::Auto;
+  StringRef S(V);
+  if (S.equals_insensitive("force") || S == "1")
+    return EmbeddedLibcxxMode::Force;
+  if (S.equals_insensitive("disable") || S == "0")
+    return EmbeddedLibcxxMode::Disable;
+  return EmbeddedLibcxxMode::Auto;
 }
 
 } // namespace env

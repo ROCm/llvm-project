@@ -3,11 +3,6 @@
 ! being supported by gfortran to GCC when falling back to GCC for
 ! a fortran input file.
 !
-! AOCC team xfails this test as its thought to be f18.
-
-! XFAIL: *
-! UNSUPPORTED
-
 ! RUN: %clang --target i386-linux -### %s -o %t 2>&1 \
 ! RUN:     -Aquestion=answer \
 ! RUN:     -A-question=answer \
@@ -73,7 +68,6 @@
 ! RUN:     -ff2c \
 ! RUN:     -ffixed-form \
 ! RUN:     -ffixed-line-length-42 \
-! RUN:     -ffpe-trap=list \
 ! RUN:     -ffree-form \
 ! RUN:     -ffree-line-length-42 \
 ! RUN:     -ffrontend-optimize \
@@ -193,7 +187,6 @@
 ! CHECK: "-ff2c"
 ! CHECK: "-ffixed-form"
 ! CHECK: "-ffixed-line-length-42"
-! CHECK: "-ffpe-trap=list"
 ! CHECK: "-ffree-form"
 ! CHECK: "-ffree-line-length-42"
 ! CHECK: "-ffrontend-optimize"

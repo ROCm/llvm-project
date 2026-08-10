@@ -89,12 +89,12 @@ namespace {
     }
 
     const APFloat &getFpVal() const {
-      assert(IsFp && BufHasFpVal && "Incorret state");
+      assert(IsFp && BufHasFpVal && "Incorrect state");
       return *getFpValPtr();
     }
 
     APFloat &getFpVal() {
-      assert(IsFp && BufHasFpVal && "Incorret state");
+      assert(IsFp && BufHasFpVal && "Incorrect state");
       return *getFpValPtr();
     }
 
@@ -1809,6 +1809,19 @@ Instruction *InstCombinerImpl::visitAdd(BinaryOperator &I) {
         Builder.CreateAdd(A, Constant::getAllOnesValue(A->getType()), "",
                           I.hasNoUnsignedWrap(), I.hasNoSignedWrap());
     return BinaryOperator::CreateAnd(Add, A);
+  }
+
+  // Align-up idiom:
+  // X + ((-X) & (C - 1)) --> (X + C - 1) & -C, for a power-of-two C.
+  // Note -C == ~(C - 1), so the mask is simply the inverted low-bit mask.
+  {
+    const APInt *LowMask;
+    if (match(&I,
+              m_c_Add(m_OneUse(m_And(m_Neg(m_Value(A)), m_LowBitMask(LowMask))),
+                      m_Deferred(A)))) {
+      Value *NewAdd = Builder.CreateAdd(A, ConstantInt::get(Ty, *LowMask));
+      return BinaryOperator::CreateAnd(NewAdd, ConstantInt::get(Ty, ~*LowMask));
+    }
   }
 
   // Canonicalize ((A & -A) - 1) --> ((A - 1) & ~A)

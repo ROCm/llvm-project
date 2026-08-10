@@ -7130,21 +7130,6 @@ RValue CodeGenFunction::EmitCall(QualType CalleeType,
       StaticOperator = true;
   }
 
-  // Emit __llvm_omp_emissary_rpc for stubs of emissary APIs.
-  if ((CGM.getTriple().isAMDGCN() || CGM.getTriple().isNVPTX()) && FnType &&
-      dyn_cast<FunctionProtoType>(FnType) &&
-      dyn_cast<FunctionProtoType>(FnType)->isVariadic()) {
-    // This is a variadic function in a device compile
-    // if (emissary_exec || (openmp && (fprintf || printf))
-    if ((E->getDirectCallee()->getNameAsString() == "_emissary_exec") ||
-        // FIXME: do not call for fprintf or printf if device libc is active
-        (CGM.getLangOpts().OpenMP && 
-         ((E->getDirectCallee()->getNameAsString() == "fprintf") ||
-          (E->getDirectCallee()->getNameAsString() == "printf")))) {
-      return EmitEmissaryExec(E);
-    }
-  }
-
   auto Arguments = E->arguments();
   if (StaticOperator) {
     // If we're calling a static operator, we need to emit the object argument
@@ -7156,7 +7141,7 @@ RValue CodeGenFunction::EmitCall(QualType CalleeType,
                E->getDirectCallee(), /*ParamsToSkip=*/0, Order);
 
   const CGFunctionInfo &FnInfo = CGM.getTypes().arrangeFreeFunctionCall(
-      Args, FnType, /*ChainCall=*/Chain);
+      Args, FnType, /*ChainCall=*/Chain, getCurrentFunctionDecl());
 
   if (ResolvedFnInfo)
     *ResolvedFnInfo = &FnInfo;
