@@ -213,6 +213,7 @@ endif()
   endif()
 endmacro()
 
+add_comgr_test(api_contract_test c)
 add_comgr_test(data_test c)
 add_comgr_test(disasm_instr_test c)
 add_comgr_test(metadata_tp_test c)
