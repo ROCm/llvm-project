@@ -103,6 +103,7 @@ SymbolContext *SymbolHelper::createBinary(StringRef Ins, const char *Name,
 
   Expected<OwningBinary<Binary>> BinaryOrErr = createBinary(Ins);
   if (!BinaryOrErr) {
+    consumeError(BinaryOrErr.takeError());
     return NULL;
   }
 
@@ -218,6 +219,7 @@ amd_comgr_status_t SymbolHelper::iterateTable(
     void *UserData) {
   Expected<OwningBinary<Binary>> BinaryOrErr = createBinary(Ins);
   if (!BinaryOrErr) {
+    consumeError(BinaryOrErr.takeError());
     return AMD_COMGR_STATUS_ERROR;
   }
 
