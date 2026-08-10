@@ -18,6 +18,11 @@ on:
         type: string
       platform:
         type: string
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+        default: ""
+          
   workflow_call:
     inputs:
       artifact_group:
@@ -35,6 +40,11 @@ on:
         type: string
       platform:
         type: string
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+        default: ""
+          
   push:
     branches:
       - ADHOCBUILD
@@ -94,7 +104,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
+          ref: ${{ inputs.ref }}
 
       - name: Pre-job cleanup Docker containers on Linux
         if: ${{ runner.os == 'Linux' }}
