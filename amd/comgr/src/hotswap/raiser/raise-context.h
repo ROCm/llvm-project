@@ -44,21 +44,16 @@ struct RaiseContext {
   const ISAProfile &Isa; // source ISA (for disassembly / instruction semantics)
   ISAProfile
       TargetIsa; // compilation target ISA (for code generation decisions)
-  // Target hidden-arg offsets are code-object-version dependent; default to
-  // the backend's current emission contract and let the raiser override it.
+  // Target hidden-argument offsets depend on the code object version.
   unsigned TargetCodeObjectVersion = 6;
   KernargLayout &Kernargs;
-  // Source-ISA user-SGPR ABI derived from the kernel descriptor, used to
-  // identify a specific SGPR by its source-ABI role (e.g. which SGPR holds
-  // the kernarg-segment pointer). Owned by the raiser; non-null in production.
+  // Non-owning source user-SGPR layout derived from the kernel descriptor.
   const UserSgprLayout *Layout = nullptr;
   llvm::Function *Kernel;
   llvm::BasicBlock *ThreadLoopLatch = nullptr;
 
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb;
-  // Source code-object bytes used to materialise proven PC-relative literals.
-  // `SourceTextBytes` remains the disassembly image; `SourceImageSections`
-  // carries allocated sections addressable by source code-object address.
+  // Source sections used to materialize proven PC-relative literals.
   llvm::ArrayRef<uint8_t> SourceTextBytes;
   uint64_t SourceTextBaseAddress = 0;
   llvm::ArrayRef<TextSection::ImageSection> SourceImageSections;
@@ -77,48 +72,25 @@ struct RaiseContext {
                llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
                uint64_t KernelStartOffset, uint64_t KernelEndOffset);
 
-  // Source KD private/scratch allocation. Set when a `scratch_*` instruction
-  // is lowered; the on-demand private alloca is managed by LLVM's frame layout
-  // so target spills cannot overlap translated source scratch slots.
+  // Source scratch allocation. LLVM's frame layout keeps it disjoint from
+  // target spills.
   uint32_t SourcePrivateSegmentFixedSize = 0;
   uint32_t SourceComputePgmRsrc2 = 0;
   uint16_t SourceKernelCodeProperties = 0;
   bool UsesScratchPrivateSegment = false;
   llvm::AllocaInst *ScratchPrivateSegmentAlloca = nullptr;
 
-  // gfx1250 s_set_vgpr_msb state: only the LOW 8 bits of the instruction's
-  // 16-bit immediate carry runtime meaning.  They encode four 2-bit MSB
-  // fields, one per slot, that apply to subsequent instructions until the
-  // next s_set_vgpr_msb:
-  //
-  //   [1:0]  slot 0 MSB       [3:2]  slot 1 MSB
-  //   [5:4]  slot 2 MSB       [7:6]  slot 3 MSB
-  //
-  // Each 2-bit field adds (value * 256) to the corresponding operand's VGPR
-  // index. The slot->operand mapping is instruction-format-specific and is NOT
-  // VALU's positional src0/src1/src2/vdst order in general: VBUFFER maps slot 0
-  // to vaddr and slot 3 to vdata, VDS maps slots 0/1/2 to addr/data0/data1, and
-  // so on. `computeVGPRAdjust` resolves it via
-  // AMDGPU::getVGPRLoweringOperandTables (the same per-format tables the AMDGPU
-  // backend uses to lower VGPR encoding).
-  //
-  // The HIGH 8 bits record the previous mode value for compiler bookkeeping;
-  // hardware ignores them, so mask to 8 bits on store.
-  //
-  // VOPD dual-issue X-op and Y-op share the same MSB pair per operand slot, so
-  // applying the same 8-bit state to both halves is correct.
+  // Active low byte of S_SET_VGPR_MSB. Each two-bit field selects the high
+  // VGPR bank for a format-defined operand slot.
   uint8_t VgprMsBs = 0;
   bool AssumeHipGlobalOffsetZero = false;
 
-  // Per-instruction VGPR index adjustment, indexed by MCInst operand index.
-  // Computed from vgprMSBs before each instruction dispatch. computeVGPRAdjust
-  // returns an error if LLVM TableGen grows a VGPR-MSB-controlled operand
-  // beyond this bound; silently dropping such an adjustment would misdecode the
-  // source register bank.
+  // Per-instruction VGPR index adjustments, indexed by MC operand index.
+  // Exceeding this capacity is an error rather than a truncated register index.
   static constexpr unsigned KMaxOps = 16;
   unsigned CurrentVgprAdjust[KMaxOps] = {};
 
-  // Compute currentVGPRAdjust for the given instruction based on vgprMSBs.
+  // Compute VGPR bank adjustments for the instruction's format-defined slots.
   llvm::Error computeVGPRAdjust(const DecodedInst &Di);
 
   llvm::BasicBlock *lookupBB(uint64_t Addr);
@@ -129,6 +101,7 @@ struct RaiseContext {
   // the reg-file and immediates through the MC operand.
   llvm::Value *readOp32(const DecodedInst &Di, unsigned OpIdx);
   llvm::Value *readOp64(const DecodedInst &Di, unsigned OpIdx);
+  // Read a mask at target EXEC width, replicating narrower source-wave bits.
   llvm::Value *readOpExecWidth(const DecodedInst &Di, unsigned OpIdx);
   // Read the mask a source-wave instruction should see, e.g. for `v_mbcnt_lo`.
   // EXEC/VCC/SGPR-shadow masks are projected; scalars use readOp32.
@@ -137,68 +110,32 @@ struct RaiseContext {
   // Target-hardware lane id (i32), emitted once per kernel and reused.
   llvm::Value *emitLaneIdx();
 
-  // Neutralise a per-lane memory ADDRESS against poison on inactive lanes
-  // when widening wave32 -> wave64.
-  //
-  // A per-lane address VGPR is produced under one EXEC-gated `emitUnderExec`
-  // region and consumed by a memory op under a later, possibly different one.
-  // On lanes that were inactive when the address was produced, the alloca
-  // reg-file carries `undef` (the inactive arm of the first-def phi after
-  // mem2reg). Those lanes never commit the memory op -- the op is itself
-  // wrapped in `emitUnderExec` -- but feeding `undef`/poison through
-  // `inttoptr` into a load/store is UB, which the AMDGPU backend is entitled
-  // to exploit (it may drop the divergent branch and issue the access at the
-  // wave-native HW EXEC = -1 forced by `init_whole_wave`, faulting on the
-  // undef address). Freezing the address integer replaces poison with an
-  // arbitrary but well-defined value, removing the UB while leaving the
-  // per-lane `emitUnderExec` gate to keep the access off inactive lanes.
-  //
-  // Gated on widening (`Isa.isWave32() && !TargetIsa.isWave32()`) so
-  // same-wave and narrowing lifts keep byte-identical codegen. `Addr` is the
-  // integer address (returned unchanged when not widening).
+  // Freeze per-lane addresses when widening wave32 to wave64. New target lanes
+  // may hold poison from an earlier inactive definition, which would make even
+  // an EXEC-predicated memory operation undefined. Other wave-size directions
+  // return the address unchanged.
   llvm::Value *freezeMemAddr(llvm::Value *Addr);
 
-  // SIMT predicated-execution helpers.
-  //
-  // emitLaneActiveBit() returns an i1 true iff the current lane's bit in the
-  // EXEC-mask alloca is set. Wave-size-aware via targetIsa: the lane id is
-  // built from llvm.amdgcn.mbcnt.lo for wave32 and mbcnt.lo+mbcnt.hi for
-  // wave64. The alloca itself is the current SSA-tracked EXEC value, so
-  // uniform code (EXEC provably -1 by SROA) folds this to `true`.
-  //
-  // Caching: the result is memoised for one decoded instruction's dispatch, so
-  // handlers that emit multiple `emitUnderExec` diamonds reuse the same
-  // `lane_active` i1. Invalidated at every new source instruction, on an
-  // insertion-block change (the cached i1 no longer dominates), and on any
-  // EXEC write. The cache keeps the raw raised IR readable for lit tests that
-  // FileCheck the unoptimised output shape.
+  // Return whether the current target lane is active in the logical EXEC mask.
+  // The result is cached for one source instruction and invalidated by EXEC
+  // writes.
   llvm::Value *emitLaneActiveBit();
 
-  // Invalidate the lane_active memoisation. Called by the main raiser
-  // loop between instructions and by `storeExec`. Handlers that know
-  // they have mutated EXEC through a lower-level path (e.g. the few
-  // places that call `regs.storeExec` directly) must also invoke this.
+  // Invalidate cached lane activity after an EXEC write or instruction
+  // boundary.
   void resetLaneActiveCache() {
     CachedLaneActive = nullptr;
     CachedLaneActiveBb = nullptr;
   }
 
-  // Wrap `regs.storeExec` with cache invalidation. Handlers should prefer
-  // this over `regs.storeExec` so the lane_active memo is always
-  // consistent with the live EXEC value.
+  // Store EXEC and invalidate cached lane activity.
   void storeExec(llvm::Value *V) {
     Regs.storeExec(B, V);
     resetLaneActiveCache();
   }
 
-  // Predicated register-commit API. VGPR/AGPR writes are per-lane side
-  // effects and MUST be wrapped in an emitUnderExec diamond so inactive
-  // lanes keep their prior VGPR value; SGPR/VCC/SCC/EXEC/M0/FLAT_SCR/TTMP
-  // writes are wave-level and pass through unchanged. Handlers should
-  // call these instead of reaching into `regs.write*` directly.
-  //
-  // `storeVGPR32` / `storeVGPR64` / `storeAGPR32` are the direct-index
-  // variants used when the register index is already known.
+  // Predicate VGPR and AGPR writes on EXEC; commit scalar writes for the wave.
+  // The store methods accept an already resolved vector-register index.
   void writeReg32(ParsedReg Pr, llvm::Value *V);
   void writeReg64(ParsedReg Pr, llvm::Value *V);
   void writeRegVec(ParsedReg Pr, llvm::Value *V);
@@ -207,27 +144,14 @@ struct RaiseContext {
   void storeVGPR64(unsigned Idx, llvm::Value *V);
   void storeAGPR32(unsigned Idx, llvm::Value *V);
 
-  // Provenance fact for the physical SGPR pair that originally held the
-  // source-ABI kernarg-segment pointer.
-  //
-  //   LiveEntry - all incoming CFG paths carry the dispatch-provided entry
-  //               pointer plus EntryByteOffset. Both lanes must be LiveEntry
-  //               for the offset to be meaningful.
-  //   NonEntry  - all incoming CFG paths have overwritten the pair with a value
-  //               loaded from memory rather than the dispatch-provided entry
-  //               SGPR value. Constant rebases of such a value remain NonEntry.
-  //   Unknown   - paths disagree, are unreachable, include an unclassified
-  //               write, or carry different EntryByteOffset values.
+  // Provenance of one source kernarg pointer SGPR lane.
   enum class KernargPtrLaneProvenance {
     LiveEntry,
     NonEntry,
     Unknown,
   };
 
-  // Consumers classify the pair by combining the two lane facts: both LiveEntry
-  // permits source hidden-arg synthesis at EntryByteOffset + instruction
-  // offset, both NonEntry uses ordinary memory lowering, and any mixed/Unknown
-  // state is ambiguous in strict mode.
+  // Pair provenance used to decide whether hidden-argument synthesis is safe.
   struct KernargPtrProvenance {
     KernargPtrLaneProvenance Low = KernargPtrLaneProvenance::Unknown;
     KernargPtrLaneProvenance High = KernargPtrLaneProvenance::Unknown;
@@ -249,9 +173,7 @@ struct RaiseContext {
     }
   };
 
-  // Merge facts from two control-flow paths. Equal lane facts survive; any
-  // disagreement becomes Unknown. A LiveEntry pair keeps EntryByteOffset only
-  // when every incoming path has the same offset.
+  // Join lane facts, preserving only agreement.
   static KernargPtrLaneProvenance
   joinKernargPtrLaneProvenance(KernargPtrLaneProvenance Lhs,
                                KernargPtrLaneProvenance Rhs) {
@@ -260,7 +182,7 @@ struct RaiseContext {
     return KernargPtrLaneProvenance::Unknown;
   }
 
-  // Pair-wise control-flow join for provenance carried through IR diamonds.
+  // Join pair facts; unequal live-entry offsets become unknown.
   static KernargPtrProvenance
   joinKernargPtrProvenance(KernargPtrProvenance Lhs, KernargPtrProvenance Rhs) {
     KernargPtrProvenance Result = {
@@ -291,23 +213,21 @@ struct RaiseContext {
     return CurrentKernargPtrProvenance;
   }
 
-  // Restore a proven entry-pointer fact after a constant-preserving rebase.
+  // Record a proven constant offset from the entry kernarg pointer.
   void setKernargPtrLiveEntryByteOffset(int64_t ByteOffset) {
     CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::LiveEntry;
     CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::LiveEntry;
     CurrentKernargPtrProvenance.EntryByteOffset = ByteOffset;
   }
 
-  // Restore a proven non-entry pointer fact after a constant-preserving rebase.
+  // Record a proven non-entry pointer.
   void setKernargPtrNonEntry() {
     CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::NonEntry;
     CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::NonEntry;
     CurrentKernargPtrProvenance.EntryByteOffset = 0;
   }
 
-  // Update the current intra-BB provenance state after an ordinary SGPR write.
-  // Only writes to either kernarg-pointer lane change this fact. A generic
-  // register write kills LiveEntry but does not prove a non-entry value.
+  // Invalidate provenance for a written kernarg pointer lane.
   void noteSgprWriteForKernargProvenance(unsigned Idx) {
     assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
     std::optional<unsigned> KernargPtrSgpr = Layout->kernargSegmentPtrSgpr();
@@ -322,9 +242,8 @@ struct RaiseContext {
     CurrentKernargPtrProvenance.EntryByteOffset = 0;
   }
 
-  // Record that an SMEM-style load wrote one or more SGPR lanes from memory.
-  // This is stronger than a generic register write: any overlapped kernarg
-  // pointer lane no longer carries the dispatch-provided entry SGPR value.
+  // Mark kernarg pointer lanes overwritten by a scalar memory load as
+  // non-entry.
   void noteSgprMemoryLoadForKernargProvenance(unsigned BaseIdx,
                                               unsigned WidthDwords) {
     assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
@@ -340,13 +259,13 @@ struct RaiseContext {
     CurrentKernargPtrProvenance.EntryByteOffset = 0;
   }
 
-  // Record the prepass-computed entry fact for a recovered source BB.
+  // Record the precomputed provenance at a source basic-block entry.
   void setKernargPtrProvenanceForBlock(llvm::BasicBlock *BB,
                                        KernargPtrProvenance Provenance) {
     KernargSegmentPtrProvenanceByBB[BB] = Provenance;
   }
 
-  // Load the prepass entry fact when lowering reaches a recovered source BB.
+  // Enter a source basic block with its precomputed provenance.
   void enterKernargPtrProvenanceForBlock(llvm::BasicBlock *BB) {
     assert(BB && "cannot enter kernarg provenance for null basic block");
     if (!HasKernargPtrProvenanceByBB) {
@@ -359,97 +278,46 @@ struct RaiseContext {
     CurrentKernargPtrProvenance = It->second;
   }
 
-  // emitUnderExec(body) wraps `body()` in an `if (lane_active)` diamond:
-  //
-  //   %active = emitLaneActiveBit()
-  //   br i1 %active, label %exec_do, label %exec_skip
-  //   exec_do:
-  //     body()                 (whatever side-effectful IR the handler emits)
-  //     br label %exec_skip    (only if body() did not itself terminate)
-  //   exec_skip:
-  //     ...                    (insertion point on return)
-  //
-  // Because %active is data-dependent on workitem.id.x, LLVM's divergence
-  // analysis treats the branch as divergent and the AMDGPU backend
-  // rematerialises hardware-level v_cmpx around the do-block. Uniform code
-  // collapses: when %active folds to `true` the diamond vanishes, so this
-  // is a no-op in IR size + codegen terms for non-divergent sites.
-  //
-  // On return, the builder's insertion point is at the start of %exec_skip,
-  // so subsequent handler emission continues in the skip block (which is
-  // topologically the "after" of the wrapped op, exactly like before).
+  // Emit Body in a lane-active control-flow diamond and leave the builder at
+  // its merge block. This preserves inactive lanes for per-lane side effects.
   void emitUnderExec(llvm::function_ref<void()> Body);
 
-  // Memoised lane_active for this instruction's emission. Mutate only via
-  // `resetLaneActiveCache` / `emitLaneActiveBit`.
+  // Cached lane-active value and its defining block.
   llvm::Value *CachedLaneActive = nullptr;
   llvm::BasicBlock *CachedLaneActiveBb = nullptr;
 
-  // Per-BB cache of the per-lane i1 compare result produced by the
-  // most recent V_CMP_*_e64 writer targeting a given SGPR in this
-  // basic block. Keyed by source-ABI SGPR baseIdx (the low SGPR of
-  // an SGPR pair on wave64 source; the single SGPR on wave32
-  // source). `isPair` distinguishes a wave64-source pair entry
-  // (the value spans [baseIdx, baseIdx+1]) from a wave32-source
-  // single entry (baseIdx only), which matters for the adjacent-
-  // invalidation rule in `invalidateSgprWaveMaskI1`.
-  //
-  // A wave64-source V_CMP -> SGPR store truncates the full target-hardware
-  // ballot to the source SGPR's 32-bit width, losing lanes 32..63 under
-  // wave32 -> wave64 widening. A same-BB V_CNDMASK_B32 consumer cannot
-  // recover those bits from the narrow SGPR, so this cache carries the full
-  // per-lane i1 across to the consumer. When absent, the consumer takes the
-  // narrow-mask fallback. Entries are invalidated on any overlapping SGPR
-  // write and cleared at every BB boundary.
+  // Same-block per-lane values for V_CMP writes to SGPR destinations. Under
+  // widening, the stored SGPR mask can be narrower than target EXEC, so a
+  // consumer uses this value while it remains valid.
   struct WaveMaskEntry {
     llvm::Value *I1 = nullptr;
-    // True if this entry is a wave64-source V_CMP whose destination is the
-    // SGPR pair [baseIdx, baseIdx+1], false for a single wave32-source SGPR.
-    // A write to baseIdx+1 invalidates a pair entry at baseIdx.
+    // Whether the destination spans this SGPR and its successor.
     bool IsPair = false;
   };
 
   llvm::DenseMap<unsigned, WaveMaskEntry> LastSgprWaveMaskI1;
 
-  // Cross-BB, dominance-safe shadow storage for SGPR wave masks.
-  // Each SGPR base index has:
-  //   * sgprWaveMaskExecShadow[idx]  : EXEC-width mask value (i32/i64)
-  //   * sgprWaveMaskValidShadow[idx] : scalar i1 validity bit
-  //
-  // Record/write sites update both allocas; invalidation writes
-  // `valid=false`. Consumers can load-valid+load-mask and pick between
-  // shadow and fallback via `select`, avoiding SSA-dominance hazards.
+  // Cross-block SGPR wave-mask values and validity bits. Alloca storage avoids
+  // carrying non-dominating SSA values across recovered control flow.
   llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskExecShadow;
   llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskValidShadow;
   llvm::SmallVector<llvm::AllocaInst *> SourceWaveSgprPairShadow;
   llvm::SmallVector<llvm::AllocaInst *> SourceWaveSgprPairValidShadow;
-  // Same-BB source-image address facts for PC-relative literal loads. This is
-  // not a generic constant tracker: only s_get_pc_i64 seeds it, only constant
-  // s_add/sub_nc_u64 propagates it, and only SMEM literal materialisation reads
-  // it.
+  // Same-block source-image addresses proven for PC-relative literal loads.
   llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
 
-  // Raise-time constant shadow of M0; see updateM0Const / getM0Const.
+  // Block-local constant value last stored to M0.
   std::optional<uint64_t> M0Const;
 
-  // Conservative lane-wise kernarg-pointer provenance for the strict hidden-arg
-  // SMEM gate. Filled before instruction lowering by a fixed-point over the
-  // decoded CFG. Mixed incoming states become Unknown and keep strict mode
-  // loud. False means tracking is inactive and BB entry uses Unknown without
-  // lookup.
+  // Conservative kernarg pointer provenance at source basic-block entries.
+  // Disagreement remains unknown so strict hidden-argument handling fails
+  // loudly.
   bool HasKernargPtrProvenanceByBB = false;
   llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>
       KernargSegmentPtrProvenanceByBB;
   KernargPtrProvenance CurrentKernargPtrProvenance;
 
-  // Record the per-lane compare i1 produced by a V_CMP_*_e64 write
-  // to SGPR baseIdx in the current BB. Overwrites any prior entry
-  // (last-writer wins -- a later V_CMP obviates the earlier value
-  // for any consumer that reads after the write). `isPair` should
-  // be true iff the V_CMP's destination ParsedReg has `width >= 2`
-  // (a wave64-source SGPR pair), so subsequent writes to baseIdx+1
-  // correctly invalidate this entry via
-  // `invalidateSgprWaveMaskI1`'s pair-aware branch.
+  // Record the latest per-lane compare written to an SGPR destination.
   void recordSgprWaveMaskI1(unsigned BaseIdx, llvm::Value *CmpI1, bool IsPair) {
     LastSgprWaveMaskI1[BaseIdx] = WaveMaskEntry{CmpI1, IsPair};
     if (BaseIdx < SgprWaveMaskExecShadow.size()) {
@@ -486,8 +354,8 @@ struct RaiseContext {
                           "source_wave_active");
   }
 
-  // Record an SGPR-pair marker for the currently active source wave, preserving
-  // the old marker for inactive source waves.
+  // Record an SGPR-pair value for the active source wave while preserving the
+  // value for inactive source waves.
   void recordSourceWaveSgprPair(unsigned BaseIdx, llvm::Value *V) {
     if (!Projection.providesFullWaveExecInvariant())
       return;
@@ -502,8 +370,7 @@ struct RaiseContext {
     B.CreateStore(B.getTrue(), SourceWaveSgprPairValidShadow[BaseIdx]);
   }
 
-  // Load the source-wave marker when one was recorded; otherwise use the normal
-  // SGPR-pair value.
+  // Return the recorded source-wave value or Fallback.
   llvm::Value *materializeSourceWaveSgprPair(unsigned BaseIdx,
                                              llvm::Value *Fallback) {
     if (!Projection.providesFullWaveExecInvariant() ||
@@ -518,11 +385,7 @@ struct RaiseContext {
     return B.CreateSelect(Valid, Shadow, Fallback, "source_wave_sgpr_pair_sel");
   }
 
-  // Look up the cached per-lane i1 for SGPR baseIdx in the current
-  // BB, or null if none (either no V_CMP wrote it, or the entry
-  // was invalidated by a scalar write, or the BB boundary cleared
-  // the map). Callers treat null as "fall back to the standard
-  // extractLaneBitFromWaveMask".
+  // Return the current block's cached compare, or null when none is valid.
   llvm::Value *lookupSgprWaveMaskI1(unsigned BaseIdx) const {
     auto It = LastSgprWaveMaskI1.find(BaseIdx);
     return It == LastSgprWaveMaskI1.end() ? nullptr : It->second.I1;
@@ -542,23 +405,9 @@ struct RaiseContext {
                         "sgpr_mask_valid");
   }
 
-  // Invalidate the cached per-lane i1 for SGPR baseIdx. Called by
-  // AllocaRegFile on any SGPR write so the next consumer takes the
-  // narrow-mask fallback rather than a stale i1 whose bits no
-  // longer correspond to the scalar value just stored. Idempotent;
-  // safe to call on an SGPR that had no cached entry.
-  //
-  // Pair-aware adjacent invalidation. On wave64 source, V_CMP_e64
-  // writes an SGPR pair [baseIdx, baseIdx+1] but records a single
-  // entry keyed on baseIdx (via `recordSgprWaveMaskI1(..., /*isPair=*/true)`).
-  // If later code writes to baseIdx+1 alone (e.g.
-  // `s_mov_b32 sHi, imm`), the high half of the pair is clobbered
-  // but the entry at baseIdx would otherwise survive and silently
-  // return a cmp that no longer matches the pair's current value.
-  // So on invalidate(K), if entry at K-1 exists AND is flagged
-  // `isPair`, invalidate K-1 too. The guard on `isPair` avoids
-  // over-invalidation: a single-SGPR wave32 entry at K-1 is
-  // unrelated to a scalar write at K and must NOT be invalidated.
+  // Invalidate facts overlapping BaseIdx. A pair is keyed by its low SGPR, so
+  // writing its high SGPR also invalidates the preceding entry. Single-SGPR
+  // entries remain independent.
   void invalidateSgprWaveMaskI1(unsigned BaseIdx) {
     noteSgprWriteForKernargProvenance(BaseIdx);
     LastSgprWaveMaskI1.erase(BaseIdx);
@@ -580,25 +429,18 @@ struct RaiseContext {
     }
   }
 
-  // Drop every cached entry. Called at every BB boundary so cross-BB
-  // V_CMP / V_CNDMASK pairs conservatively fall back to the narrow extract
-  // rather than relying on an i1 that no longer dominates the consumer.
+  // Clear block-local facts whose SSA values cannot cross a block boundary.
   void clearSgprWaveMaskShadow() {
     LastSgprWaveMaskI1.clear();
     SourceImageSgprPairAddrShadow.clear();
   }
 
-  // Record that SGPR pair [BaseIdx:BaseIdx+1] currently holds a source
-  // code-object address, in the same address domain as s_get_pc_i64. This is
-  // used only for PC-relative literal-table sequences and is cleared on any
-  // overlapping SGPR write or BB boundary.
+  // Record a source code-object address held by an SGPR pair in this block.
   void recordSourceImageSgprPairAddr(unsigned BaseIdx, uint64_t Value) {
     SourceImageSgprPairAddrShadow[BaseIdx] = Value;
   }
 
-  // Return the source-image address fact for SGPR pair [BaseIdx:BaseIdx+1], if
-  // the current BB has proven one. Absence means the SMEM handler must use the
-  // ordinary runtime memory path or refuse according to its own operand rules.
+  // Return a proven source-image address for an SGPR pair, if present.
   std::optional<uint64_t>
   lookupSourceImageSgprPairAddr(unsigned BaseIdx) const {
     auto It = SourceImageSgprPairAddrShadow.find(BaseIdx);
@@ -607,13 +449,9 @@ struct RaiseContext {
     return It->second;
   }
 
-  // --- M0 raise-time constant shadow ---------------------------------------
-  // v_movrel* resolve their VGPR index from `base + M0`. Because the reg
-  // file promotes VGPRs to SSA by index, the index must be known at raise
-  // time. `M0Const` tracks the last constant stored to M0 within the
-  // current basic block; it is cleared on any non-constant M0 store and at
-  // every BB boundary (M0 is uniform, but a value written in a predecessor
-  // no longer dominates trivially, so we stay conservative).
+  // V_MOVREL resolves a VGPR index from base + M0, which must be known while
+  // constructing the indexed register file. Track constants only within a
+  // basic block.
   void updateM0Const(llvm::Value *V) {
     if (auto *CI = llvm::dyn_cast<llvm::ConstantInt>(V))
       M0Const = CI->getZExtValue();
@@ -631,25 +469,12 @@ struct RaiseContext {
     Out.append(SourceWaveSgprPairValidShadow);
   }
 
-  // Record an operand-read failure. Read paths cannot bail mid-handler (they
-  // must return a Value*), so they report the failure here and the dispatch
-  // loop promotes it to a structured kernel-raise failure at the next
-  // instruction boundary.
+  // Record a deferred operand-read failure for the instruction dispatcher.
   llvm::function_ref<void(llvm::Error Err)> recordReadFailure;
 };
 
-// Return value from every format handler, carried inside an
-// `llvm::Expected<HandlerResult>`.
-//
-// Handlers communicate back in three ways:
-//   * `Handled = true` -> the handler fully lowered the instruction.
-//   * `Handled = false` (no Error) -> this handler does not claim the
-//     instruction; the main loop falls through to the generic
-//     `UnsupportedOpcode` diagnostic.
-//   * an `llvm::Error` (a `RaiseFailure`) -> the handler recognised the
-//     instruction but refuses to lower it (e.g. operand shape
-//     unsupported); the main loop records the structured failure and
-//     aborts without consulting other handlers.
+// Result of a format handler. An unhandled result permits dispatch to fall
+// through; refusals are returned as llvm::Error.
 struct HandlerResult {
   bool Handled = false;
   llvm::Value *SccResult = nullptr;
