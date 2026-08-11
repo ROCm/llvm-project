@@ -249,6 +249,7 @@ TEST(UserSgprLayout, DecodesKernargPreload) {
       KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR;
   const unsigned PreloadLen = 3;
   const unsigned PreloadOffsetDwords = 2;
+  Meta.KernargSegmentSize = 20;
   Meta.KernargPreload = static_cast<uint16_t>(
       (PreloadLen << KERNARG_PRELOAD_SPEC_LENGTH_SHIFT) |
       (PreloadOffsetDwords << KERNARG_PRELOAD_SPEC_OFFSET_SHIFT));
@@ -269,7 +270,7 @@ TEST(UserSgprLayout, DecodesKernargPreload) {
   EXPECT_EQ(Layout.Entries[4].KernargByteOffset, (PreloadOffsetDwords + 2) * 4);
 }
 
-TEST(UserSgprLayout, InconsistentDescriptorIsRefused) {
+TEST(UserSgprLayout, ReservedUserSgprsRemainUnset) {
   Profile P("gfx942");
   ASSERT_TRUE(P.ok());
 
@@ -278,13 +279,78 @@ TEST(UserSgprLayout, InconsistentDescriptorIsRefused) {
   Meta.Name = "k";
   Meta.KernelCodeProperties =
       KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR;
-  // Enable bits imply 2 user SGPRs, but the descriptor claims 5.
-  Meta.ComputePgmRsrc2 = 5u
+  Meta.ComputePgmRsrc2 =
+      (5u << COMPUTE_PGM_RSRC2_GFX6_GFX120_USER_SGPR_COUNT_SHIFT) |
+      COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_X;
+
+  UserSgprLayout Layout;
+  ASSERT_TRUE(succeeded(
+      UserSgprLayout::tryFromKernelMeta(Meta, P.get(), "gfx942", Layout)));
+  EXPECT_EQ(Layout.UserSgprCount, 5u);
+  ASSERT_EQ(Layout.Entries.size(), 6u);
+  EXPECT_EQ(Layout.Entries[2].SrcKind, UserSgprLayout::Source::Unset);
+  EXPECT_EQ(Layout.Entries[4].SrcKind, UserSgprLayout::Source::Unset);
+  ASSERT_TRUE(Layout.workgroupIdXSgpr().has_value());
+  EXPECT_EQ(*Layout.workgroupIdXSgpr(), 5u);
+}
+
+TEST(UserSgprLayout, TooFewUserSgprsAreRefused) {
+  Profile P("gfx942");
+  ASSERT_TRUE(P.ok());
+
+  using namespace llvm::amdhsa;
+  KernelMeta Meta;
+  Meta.Name = "k";
+  Meta.KernelCodeProperties =
+      KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR;
+  Meta.ComputePgmRsrc2 = 1u
                          << COMPUTE_PGM_RSRC2_GFX6_GFX120_USER_SGPR_COUNT_SHIFT;
 
   UserSgprLayout Layout;
   Error E = UserSgprLayout::tryFromKernelMeta(Meta, P.get(), "gfx942", Layout);
   EXPECT_EQ(reasonOf(std::move(E)), RaiseFailureReason::UserSgprLayoutMismatch);
+}
+
+TEST(UserSgprLayout, KernargPreloadOutsideSegmentIsRefused) {
+  Profile P("gfx1250");
+  ASSERT_TRUE(P.ok());
+
+  using namespace llvm::amdhsa;
+  KernelMeta Meta;
+  Meta.Name = "k";
+  Meta.KernargSegmentSize = 4;
+  Meta.KernargPreload =
+      static_cast<uint16_t>((1u << KERNARG_PRELOAD_SPEC_LENGTH_SHIFT) |
+                            (1u << KERNARG_PRELOAD_SPEC_OFFSET_SHIFT));
+  Meta.ComputePgmRsrc2 = 1u << COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_SHIFT;
+
+  UserSgprLayout Layout;
+  Error E = UserSgprLayout::tryFromKernelMeta(Meta, P.get(), "gfx1250", Layout);
+  EXPECT_EQ(reasonOf(std::move(E)), RaiseFailureReason::UserSgprLayoutMismatch);
+}
+
+TEST(UserSgprLayout, ArchitectedWorkgroupIdsAreNotSequentialSgprs) {
+  Profile P("gfx1250");
+  ASSERT_TRUE(P.ok());
+
+  using namespace llvm::amdhsa;
+  KernelMeta Meta;
+  Meta.Name = "k";
+  Meta.ComputePgmRsrc2 = COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_X |
+                         COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_Y |
+                         COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_Z |
+                         COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_INFO;
+
+  UserSgprLayout Layout;
+  ASSERT_TRUE(succeeded(
+      UserSgprLayout::tryFromKernelMeta(Meta, P.get(), "gfx1250", Layout)));
+  EXPECT_FALSE(Layout.workgroupIdXSgpr().has_value());
+  EXPECT_FALSE(Layout.workgroupIdYSgpr().has_value());
+  EXPECT_FALSE(Layout.workgroupIdZSgpr().has_value());
+  ASSERT_TRUE(Layout.workgroupInfoSgpr().has_value());
+  EXPECT_EQ(*Layout.workgroupInfoSgpr(), 0u);
+  ASSERT_EQ(Layout.Entries.size(), 1u);
+  EXPECT_EQ(Layout.Entries[0].SrcKind, UserSgprLayout::Source::WorkgroupInfo);
 }
 
 TEST(UserSgprLayout, UserSgprCountFieldWidthIsIsaVersioned) {
@@ -294,26 +360,68 @@ TEST(UserSgprLayout, UserSgprCountFieldWidthIsIsaVersioned) {
   ASSERT_TRUE(Gfx1250.ok());
 
   using namespace llvm::amdhsa;
-  // A 33-entry layout: kernarg_segment_ptr (2) + 31 preloaded dwords. The
-  // descriptor stores USER_SGPR_COUNT=33, which needs the 6-bit gfx1250 field;
-  // the 5-bit gfx942 decode reads it as 33 & 0x1F == 1 and rejects the layout.
+  // Two pointer SGPRs and 30 preloaded dwords exercise count 32, which the
+  // gfx942 5-bit field decodes as zero.
   KernelMeta Meta;
   Meta.Name = "k";
   Meta.KernelCodeProperties =
       KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR;
   Meta.KernargPreload =
-      static_cast<uint16_t>(31u << KERNARG_PRELOAD_SPEC_LENGTH_SHIFT);
-  // Shift is identical for both field widths; only the width differs.
-  Meta.ComputePgmRsrc2 = 33u << COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_SHIFT;
+      static_cast<uint16_t>(30u << KERNARG_PRELOAD_SPEC_LENGTH_SHIFT);
+  Meta.KernargSegmentSize = 30 * 4;
+  Meta.ComputePgmRsrc2 = 32u << COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_SHIFT;
 
   UserSgprLayout OnGfx1250;
   EXPECT_TRUE(succeeded(UserSgprLayout::tryFromKernelMeta(
       Meta, Gfx1250.get(), "gfx1250", OnGfx1250)));
-  EXPECT_EQ(OnGfx1250.UserSgprCount, 33u);
+  EXPECT_EQ(OnGfx1250.UserSgprCount, 32u);
 
   UserSgprLayout OnGfx942;
   Error E =
       UserSgprLayout::tryFromKernelMeta(Meta, Gfx942.get(), "gfx942", OnGfx942);
+  EXPECT_EQ(reasonOf(std::move(E)), RaiseFailureReason::UserSgprLayoutMismatch);
+}
+
+TEST(UserSgprLayout, ExcessiveUserSgprCountIsRefused) {
+  Profile Gfx942("gfx942");
+  Profile Gfx1250("gfx1250");
+  ASSERT_TRUE(Gfx942.ok());
+  ASSERT_TRUE(Gfx1250.ok());
+
+  using namespace llvm::amdhsa;
+  KernelMeta Meta;
+  Meta.Name = "k";
+  UserSgprLayout Layout;
+
+  Meta.ComputePgmRsrc2 = 17u
+                         << COMPUTE_PGM_RSRC2_GFX6_GFX120_USER_SGPR_COUNT_SHIFT;
+  Error Gfx942Error =
+      UserSgprLayout::tryFromKernelMeta(Meta, Gfx942.get(), "gfx942", Layout);
+  EXPECT_EQ(reasonOf(std::move(Gfx942Error)),
+            RaiseFailureReason::UserSgprLayoutMismatch);
+
+  Meta.ComputePgmRsrc2 = 33u << COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_SHIFT;
+  Error Gfx1250Error =
+      UserSgprLayout::tryFromKernelMeta(Meta, Gfx1250.get(), "gfx1250", Layout);
+  EXPECT_EQ(reasonOf(std::move(Gfx1250Error)),
+            RaiseFailureReason::UserSgprLayoutMismatch);
+}
+
+TEST(UserSgprLayout, KernargPreloadOnUnsupportedIsaIsRefused) {
+  Profile P("gfx900");
+  ASSERT_TRUE(P.ok());
+
+  using namespace llvm::amdhsa;
+  KernelMeta Meta;
+  Meta.Name = "k";
+  Meta.KernargSegmentSize = 4;
+  Meta.KernargPreload =
+      static_cast<uint16_t>(1u << KERNARG_PRELOAD_SPEC_LENGTH_SHIFT);
+  Meta.ComputePgmRsrc2 = 1u
+                         << COMPUTE_PGM_RSRC2_GFX6_GFX120_USER_SGPR_COUNT_SHIFT;
+
+  UserSgprLayout Layout;
+  Error E = UserSgprLayout::tryFromKernelMeta(Meta, P.get(), "gfx900", Layout);
   EXPECT_EQ(reasonOf(std::move(E)), RaiseFailureReason::UserSgprLayoutMismatch);
 }
 
@@ -392,7 +500,29 @@ TEST(EmitSourceHidden, RegularArgReturnsNullWithoutError) {
 
 TEST(EmitSourceHidden, UnsupportedHiddenKindIsAnError) {
   HiddenArgHarness H;
-  std::vector<KernelArgMeta> Args = {arg("hidden_private_base", 0, 8)};
+  std::vector<KernelArgMeta> Args = {arg("hidden_private_base", 0, 4)};
+  SourceHiddenArgContext Ctx = H.context(Args);
+
+  Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
+  ASSERT_FALSE(static_cast<bool>(V));
+  EXPECT_EQ(reasonOf(V.takeError()),
+            RaiseFailureReason::UnsupportedSourceHiddenArg);
+}
+
+TEST(EmitSourceHidden, InvalidHiddenArgSizeIsAnError) {
+  HiddenArgHarness H;
+  std::vector<KernelArgMeta> Args = {arg("hidden_block_count_x", 0, 8)};
+  SourceHiddenArgContext Ctx = H.context(Args);
+
+  Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
+  ASSERT_FALSE(static_cast<bool>(V));
+  EXPECT_EQ(reasonOf(V.takeError()),
+            RaiseFailureReason::UnsupportedSourceHiddenArg);
+}
+
+TEST(EmitSourceHidden, ZeroSizedHiddenArgIsAnError) {
+  HiddenArgHarness H;
+  std::vector<KernelArgMeta> Args = {arg("hidden_block_count_x", 0, 0)};
   SourceHiddenArgContext Ctx = H.context(Args);
 
   Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
@@ -457,6 +587,18 @@ TEST(EmitSourceHidden, DwordSpanningNonHiddenByteIsAnError) {
   // starts hidden but runs into non-hidden memory.
   std::vector<KernelArgMeta> Args = {arg("hidden_grid_dims", 0, 2),
                                      arg("by_value", 2, 4)};
+  SourceHiddenArgContext Ctx = H.context(Args);
+
+  Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
+  ASSERT_FALSE(static_cast<bool>(V));
+  EXPECT_EQ(reasonOf(V.takeError()),
+            RaiseFailureReason::UnsupportedSourceHiddenArg);
+}
+
+TEST(EmitSourceHidden, DwordStartingBeforeHiddenArgIsAnError) {
+  HiddenArgHarness H;
+  std::vector<KernelArgMeta> Args = {arg("by_value", 0, 2),
+                                     arg("hidden_grid_dims", 2, 2)};
   SourceHiddenArgContext Ctx = H.context(Args);
 
   Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);

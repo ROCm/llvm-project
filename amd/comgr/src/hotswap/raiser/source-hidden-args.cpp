@@ -18,7 +18,9 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MathExtras.h"
 
+#include <cassert>
 #include <optional>
+#include <utility>
 
 using namespace llvm;
 
@@ -126,6 +128,8 @@ Value *loadTargetHiddenPointer(SourceHiddenArgContext &Ctx,
 Value *virtualizeScaledReplicationSize(SourceHiddenArgContext &Ctx,
                                        unsigned Dim, Value *Size,
                                        const Twine &Name) {
+  assert(llvm::isPowerOf2_32(Ctx.ScaledReplicationFactor) &&
+         "scaled replication factor must be a nonzero power of two");
   if (Dim != 0 || Ctx.ScaledReplicationFactor <= 1)
     return Size;
   unsigned ShiftBy = llvm::Log2_32(Ctx.ScaledReplicationFactor);
@@ -182,6 +186,55 @@ Error unsupportedHiddenKind(uint64_t ByteOffset, StringRef Kind) {
        "'; add explicit source-ABI synthesis instead of falling back to "
        "target implicitarg layout")
           .str());
+}
+
+std::optional<unsigned> expectedHiddenArgSize(SourceHiddenArgKind Kind) {
+  switch (Kind) {
+  case SourceHiddenArgKind::HiddenBlockCountX:
+  case SourceHiddenArgKind::HiddenBlockCountY:
+  case SourceHiddenArgKind::HiddenBlockCountZ:
+  case SourceHiddenArgKind::HiddenPrivateBase:
+  case SourceHiddenArgKind::HiddenSharedBase:
+    return 4;
+  case SourceHiddenArgKind::HiddenGroupSizeX:
+  case SourceHiddenArgKind::HiddenGroupSizeY:
+  case SourceHiddenArgKind::HiddenGroupSizeZ:
+  case SourceHiddenArgKind::HiddenRemainderX:
+  case SourceHiddenArgKind::HiddenRemainderY:
+  case SourceHiddenArgKind::HiddenRemainderZ:
+  case SourceHiddenArgKind::HiddenGridDims:
+    return 2;
+  case SourceHiddenArgKind::HiddenGlobalOffsetX:
+  case SourceHiddenArgKind::HiddenGlobalOffsetY:
+  case SourceHiddenArgKind::HiddenGlobalOffsetZ:
+  case SourceHiddenArgKind::HiddenDefaultQueue:
+  case SourceHiddenArgKind::HiddenCompletionAction:
+  case SourceHiddenArgKind::HiddenMultigridSyncArg:
+  case SourceHiddenArgKind::HiddenHostcallBuffer:
+  case SourceHiddenArgKind::HiddenHeapV1:
+    return 8;
+  case SourceHiddenArgKind::None:
+  case SourceHiddenArgKind::UnsupportedHidden:
+    return std::nullopt;
+  }
+  llvm_unreachable("unhandled SourceHiddenArgKind");
+}
+
+Error validateHiddenArgSizes(ArrayRef<KernelArgMeta> Args) {
+  for (const KernelArgMeta &Arg : Args) {
+    const SourceHiddenArgKind Kind = classifySourceHiddenArgKind(Arg.ValueKind);
+    const std::optional<unsigned> ExpectedSize = expectedHiddenArgSize(Kind);
+    if (!ExpectedSize || Arg.Size == *ExpectedSize)
+      continue;
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedSourceHiddenArg, "<source-hidden-arg>",
+        Arg.Offset, "hidden-arg",
+        formatv("source hidden argument at byte offset {0} has size {1}, "
+                "expected {2}",
+                Arg.Offset, Arg.Size, *ExpectedSize)
+            .str());
+  }
+  return Error::success();
 }
 
 // Emit the full source hidden argument value for one metadata kind, or an Error
@@ -295,24 +348,32 @@ Expected<Value *> emitSourceHiddenInteger(SourceHiddenArgContext &Ctx,
         formatv("unsupported source hidden integer byte width {0}", ByteWidth)
             .str());
 
+  if (Error E = validateHiddenArgSizes(Ctx.Args))
+    return std::move(E);
+
+  const bool StartsInHiddenArg =
+      classifySourceHiddenArgByte(Ctx.Args, ByteOffset).has_value();
+  for (unsigned I = 1; I < ByteWidth; ++I) {
+    const bool IsInHiddenArg =
+        classifySourceHiddenArgByte(Ctx.Args, ByteOffset + I).has_value();
+    if (IsInHiddenArg != StartsInHiddenArg)
+      return RaiseFailure::atInstruction(
+          RaiseFailureReason::UnsupportedSourceHiddenArg, "<source-hidden-arg>",
+          ByteOffset, "hidden-arg",
+          formatv("source integer at byte offset {0} spans hidden and "
+                  "non-hidden bytes",
+                  ByteOffset)
+              .str());
+  }
+  if (!StartsInHiddenArg)
+    return nullptr;
+
   Value *Acc = Ctx.B.getInt32(0);
   for (unsigned I = 0; I < ByteWidth; ++I) {
     Expected<Value *> Byte = emitSourceHiddenByte(Ctx, ByteOffset + I);
     if (!Byte)
       return Byte.takeError();
-    // The first byte decides whether this offset is a hidden arg at all; a
-    // subsequent unmatched byte means the field straddles non-hidden memory.
-    if (!*Byte) {
-      if (I == 0)
-        return nullptr;
-      return RaiseFailure::atInstruction(
-          RaiseFailureReason::UnsupportedSourceHiddenArg, "<source-hidden-arg>",
-          ByteOffset, "hidden-arg",
-          formatv("source hidden dword at byte offset {0} spans non-hidden "
-                  "byte {1}",
-                  ByteOffset, ByteOffset + I)
-              .str());
-    }
+    assert(*Byte && "hidden range must contain only hidden argument bytes");
 
     Value *Part = Ctx.B.CreateZExt(*Byte, Ctx.I32Ty, "source_hidden_byte_zext");
     if (I != 0)

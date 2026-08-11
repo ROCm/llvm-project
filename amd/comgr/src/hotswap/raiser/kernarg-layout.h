@@ -11,6 +11,7 @@
 
 #include "hotswap/common/kernel-meta.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
 
 #include <cstdint>
 #include <optional>
@@ -65,6 +66,10 @@ struct SourceHiddenArgByte {
 
   uint64_t byteIndexInArg() const { return ByteOffset - ArgOffset; }
 };
+
+// Classify an AMDHSA metadata value kind. Non-hidden kinds map to None and
+// unknown hidden kinds map to UnsupportedHidden.
+SourceHiddenArgKind classifySourceHiddenArgKind(llvm::StringRef ValueKind);
 
 // Resolve a byte offset in the source ABI's flat kernarg/hidden-arg metadata
 // view. Returns nullopt when the offset does not land in a hidden_* argument;

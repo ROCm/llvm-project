@@ -214,20 +214,30 @@ llvm::Error UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
     Layout.PrivateSegmentSizeSgpr =
         appendSource(Layout.Entries, Source::PrivateSegmentSize);
 
-  // Kernarg preload (gfx1250+): N dwords from kernarg memory at byte
-  // offset (preloadOffset * 4) get loaded into the user SGPRs immediately
-  // above the enable_sgpr_*-selected ones, before kernel entry. The
-  // sequence is little-endian dword-aligned: dword i goes into
-  // s[user_sgpr_count_so_far + i] and corresponds to kernarg bytes
-  // [(offset+i)*4 .. (offset+i+1)*4 - 1].
+  // Preloaded dwords follow the enable_sgpr_*-selected entries in the source
+  // ABI.
   const uint8_t PreloadLen = static_cast<uint8_t>(
       AMDHSA_BITS_GET(Meta.KernargPreload, KERNARG_PRELOAD_SPEC_LENGTH));
   const uint16_t PreloadOffsetDwords = static_cast<uint16_t>(
       AMDHSA_BITS_GET(Meta.KernargPreload, KERNARG_PRELOAD_SPEC_OFFSET));
+  if (Meta.KernargPreload != 0 && !SourceProfile.hasKernargPreload())
+    return RaiseFailure::inKernel(RaiseFailureReason::UserSgprLayoutMismatch,
+                                  Meta.Name,
+                                  llvm::Twine("source ISA '") + SourceIsa +
+                                      "' does not support kernarg preloading");
   Layout.PreloadedKernargLength = PreloadLen;
   Layout.PreloadedKernargByteOffset =
       static_cast<uint16_t>(PreloadOffsetDwords * 4);
   if (PreloadLen > 0) {
+    const uint64_t PreloadEnd =
+        (static_cast<uint64_t>(PreloadOffsetDwords) + PreloadLen) * 4;
+    if (PreloadEnd > Meta.KernargSegmentSize)
+      return RaiseFailure::inKernel(
+          RaiseFailureReason::UserSgprLayoutMismatch, Meta.Name,
+          llvm::Twine("kernarg preload ends at byte ") +
+              llvm::Twine(PreloadEnd) + " beyond kernarg segment size " +
+              llvm::Twine(Meta.KernargSegmentSize));
+
     Layout.FirstPreloadedKernargSgpr = Layout.Entries.size();
     for (unsigned I = 0; I < PreloadLen; ++I) {
       Entry Row;
@@ -242,15 +252,21 @@ llvm::Error UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
     }
   }
 
-  Layout.UserSgprCount = static_cast<uint8_t>(Layout.Entries.size());
+  const unsigned ImpliedUserSgprCount = Layout.Entries.size();
+  Layout.UserSgprCount = static_cast<uint8_t>(ImpliedUserSgprCount);
 
-  // Sanity-check against compute_pgm_rsrc2.USER_SGPR_COUNT. gfx125 widens
-  // this field to 6 bits; using the older 5-bit decode would read a valid
-  // count of 32 as zero and falsely reject Triton gfx1250 kernels.
+  // USER_SGPR_COUNT is 6 bits on gfx1250, where 32 is a valid count.
   const unsigned UserSgprCountWidth = userSgprCountFieldWidth(SourceProfile);
   const unsigned PgmRsrc2UserSgprCount =
       decodeUserSgprCount(Meta.ComputePgmRsrc2, SourceProfile);
-  if (PgmRsrc2UserSgprCount != Layout.UserSgprCount) {
+  if (PgmRsrc2UserSgprCount > SourceProfile.maxUserSgprs())
+    return RaiseFailure::inKernel(
+        RaiseFailureReason::UserSgprLayoutMismatch, Meta.Name,
+        llvm::Twine("compute_pgm_rsrc2.USER_SGPR_COUNT=") +
+            llvm::Twine(PgmRsrc2UserSgprCount) + " exceeds source ISA '" +
+            SourceIsa + "' maximum of " +
+            llvm::Twine(SourceProfile.maxUserSgprs()));
+  if (PgmRsrc2UserSgprCount < ImpliedUserSgprCount) {
     std::string Detail;
     llvm::raw_string_ostream Os(Detail);
     formatMetadataMismatch(Os, Meta, SourceIsa, Layout, PgmRsrc2UserSgprCount,
@@ -259,14 +275,20 @@ llvm::Error UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
                                   Meta.Name, Detail);
   }
 
-  // Workgroup ID SGPRs sit immediately above the user-SGPR region.
-  if (Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_X)
+  Layout.Entries.resize(PgmRsrc2UserSgprCount);
+  Layout.UserSgprCount = static_cast<uint8_t>(PgmRsrc2UserSgprCount);
+
+  // Architected workgroup IDs do not consume sequential SGPRs.
+  if (!SourceProfile.hasArchitectedSgprs() &&
+      Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_X)
     Layout.WorkgroupIdXSgpr =
         appendSource(Layout.Entries, Source::WorkgroupIdX);
-  if (Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_Y)
+  if (!SourceProfile.hasArchitectedSgprs() &&
+      Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_Y)
     Layout.WorkgroupIdYSgpr =
         appendSource(Layout.Entries, Source::WorkgroupIdY);
-  if (Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_Z)
+  if (!SourceProfile.hasArchitectedSgprs() &&
+      Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_Z)
     Layout.WorkgroupIdZSgpr =
         appendSource(Layout.Entries, Source::WorkgroupIdZ);
   if (Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_INFO)

@@ -40,4 +40,16 @@ bool ISAProfile::hasGfx125UserSgprCountField() const {
   return STI->hasFeature(llvm::AMDGPU::FeatureGFX1250Insts);
 }
 
+unsigned ISAProfile::maxUserSgprs() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureGFX1250Insts) ? 32 : 16;
+}
+
+bool ISAProfile::hasKernargPreload() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureKernargPreload);
+}
+
+bool ISAProfile::hasArchitectedSgprs() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureArchitectedSGPRs);
+}
+
 } // namespace COMGR::hotswap
