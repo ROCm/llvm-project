@@ -1035,10 +1035,9 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
     }
   }
 
-  // AMDGCN does not generate wrapper kernels properly, fails to launch kernel.
   // Xteam reduction does not use wrapper kernels.
   bool NeedWrapperFunction =
-      !CGM.getTriple().isAMDGCN() && !isXteamKernel &&
+      !isXteamKernel &&
       (getDebugInfo() && CGM.getCodeGenOpts().hasReducedDebugInfo());
 
   OpenMPDirectiveKind EKind = getEffectiveDirectiveKind(D);

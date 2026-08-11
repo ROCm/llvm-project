@@ -780,6 +780,10 @@ public:
     //
     //  PRIVATE | ATTACH | TARGET_PARAM
     //
+    // NOTE: Before extending to wider cases need to verify privatization
+    //  interaction  with:
+    //    1) use_device_ptr/addr
+    //    2) usm and the CLOSE map type
     if (privatizeDescriptor) {
       return mapFlags::priv | mapFlags::attach | mapFlags::descriptor |
              mapFlags::target_param | (mapTypeFlag & mapFlags::implicit);
@@ -787,15 +791,19 @@ public:
 
     if (llvm::isa_and_nonnull<mlir::omp::TargetExitDataOp,
                               mlir::omp::TargetUpdateOp>(target)) {
-      flags |= mapTypeFlag | mapFlags::descriptor;
-      return flags;
+      return mapTypeFlag | mapFlags::descriptor;
     }
 
-    flags |= mapFlags::to | mapFlags::descriptor | mapFlags::always |
+    flags |= mapFlags::to | mapFlags::descriptor |
              (mapTypeFlag & mapFlags::implicit);
 
-    if (moduleRequiresUSM(target->getParentOfType<mlir::ModuleOp>()))
-      flags |= mapFlags::close;
+    // TODO/FIXME: We currently cannot have MAP_CLOSE and MAP_ALWAYS on
+    // the descriptor at once, these are mutually exclusive and when
+    // both are applied the runtime will fail to map.
+    flags |= ((mapFlags(mapTypeFlag) & mapFlags::close) == mapFlags::close)
+                 ? mapFlags::close
+                 : mapFlags::always;
+
     return flags;
   }
 
