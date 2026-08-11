@@ -992,6 +992,9 @@ let Component = "Driver" in {
       : Error<"OBJECT_MODE setting %0 is not recognized and is not a valid "
               "setting">;
 
+  def err_drv_compile_mode_unsupported_aix : Error<
+    "32-bit compile mode is not supported. Use OBJECT_MODE=64, -maix64 or -m64">;
+
   def err_roptr_requires_data_sections
       : Error<"-mxcoff-roptr is supported only with -fdata-sections">;
   def err_roptr_cannot_build_shared

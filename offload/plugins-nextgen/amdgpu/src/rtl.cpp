@@ -848,7 +848,7 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   /// Launch the AMDGPU kernel function.
   Error launchImpl(GenericDeviceTy &GenericDevice, uint32_t NumThreads[3],
                    uint32_t NumBlocks[3], uint32_t DynBlockMemSize,
-                   KernelArgsTy &KernelArgs, KernelLaunchParamsTy LaunchParams,
+                   KernelLaunchArgsTy &LaunchArgs,
                    AsyncInfoWrapperTy &AsyncInfoWrapper) const override;
 
   /// Return maximum block size for maximum occupancy
@@ -863,12 +863,14 @@ struct AMDGPUKernelTy : public GenericKernelTy {
 
   /// Print more elaborate kernel launch info for AMDGPU
   Error printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
-                               KernelArgsTy &KernelArgs, uint32_t NumThreads[3],
+                               const KernelLaunchArgsTy &LaunchArgs,
+                               uint32_t NumThreads[3],
                                uint32_t NumBlocks[3]) const override;
   /// Print the "old" AMD KernelTrace single-line format
   void printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
-                                  KernelArgsTy &KernelArgs,
-                                  uint32_t NumThreads[3], uint32_t NumBlocks[3]) const;
+                                  const KernelLaunchArgsTy &LaunchArgs,
+                                  uint32_t NumThreads[3],
+                                  uint32_t NumBlocks[3]) const;
 
   /// Get group and private segment kernel size.
   uint32_t getGroupSize() const { return GroupSize; }
@@ -5137,11 +5139,11 @@ private:
 
     AsyncInfoWrapperTy AsyncInfoWrapper(*this, nullptr);
 
-    KernelArgsTy KernelArgs = {};
+    KernelLaunchArgsTy LaunchArgs = {};
     uint32_t NumBlocksAndThreads[3] = {1u, 1u, 1u};
-    auto Err = AMDGPUKernel.launchImpl(
-        *this, NumBlocksAndThreads, NumBlocksAndThreads, 0, KernelArgs,
-        KernelLaunchParamsTy{}, AsyncInfoWrapper);
+    auto Err =
+        AMDGPUKernel.launchImpl(*this, NumBlocksAndThreads, NumBlocksAndThreads,
+                                0, LaunchArgs, AsyncInfoWrapper);
 
     AsyncInfoWrapper.finalize(Err);
     return Err;
@@ -5646,10 +5648,9 @@ private:
 
     void *ArgPtrs[] = {&Args.HeapAddr, &Args.SlabAddr};
 
-    KernelArgsTy KernelArgs;
-    KernelLaunchParamsTy LaunchParams;
-    LaunchParams.NumArgs = 2;
-    LaunchParams.Args = ArgPtrs;
+    KernelLaunchArgsTy LaunchArgs;
+    LaunchArgs.NumArgs = 2;
+    LaunchArgs.Args = ArgPtrs;
 
     AsyncInfoWrapperTy AsyncInfo(*this, nullptr);
 
@@ -5658,7 +5659,7 @@ private:
 
     // Launch kernel with 256 threads and 1 block
     if (auto Err = DMInitKernel.launchImpl(*this, NumThreads, NumBlocks, 0,
-                                           KernelArgs, LaunchParams, AsyncInfo))
+                                           LaunchArgs, AsyncInfo))
       return Err;
 
     // Wait for completion
@@ -6283,11 +6284,10 @@ private:
 Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                                  uint32_t NumThreads[3], uint32_t NumBlocks[3],
                                  uint32_t DynBlockMemSize,
-                                 KernelArgsTy &KernelArgs,
-                                 KernelLaunchParamsTy LaunchParams,
+                                 KernelLaunchArgsTy &LaunchArgs,
                                  AsyncInfoWrapperTy &AsyncInfoWrapper) const {
   // Cooperative kernel launch is not yet supported for AMDGPU
-  if (KernelArgs.Flags.Cooperative)
+  if (LaunchArgs.Flags.Cooperative)
     return Plugin::error(ErrorCode::UNSUPPORTED,
                          "cooperative kernel launch not supported for AMDGPU");
 
@@ -6306,9 +6306,9 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
 
   // Copy explicit arguments.
   size_t ExplicitEnd = 0;
-  if (LaunchParams.Args) {
+  if (LaunchArgs.Args) {
     const auto &ArgMDs = KernelInfo.ArgMDs;
-    uint32_t NumArgs = LaunchParams.NumArgs;
+    uint32_t NumArgs = LaunchArgs.NumArgs;
 
     if (NumArgs > ArgMDs.size())
       return Plugin::error(
@@ -6319,8 +6319,7 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
 
     for (size_t I = 0; I < NumArgs; I++) {
       auto [Offset, Size] = ArgMDs[I];
-      std::memcpy(utils::advancePtr(AllArgs, Offset), LaunchParams.Args[I],
-                  Size);
+      std::memcpy(utils::advancePtr(AllArgs, Offset), LaunchArgs.Args[I], Size);
     }
 
     auto [Offset, Size] = ArgMDs[NumArgs - 1];
@@ -6365,7 +6364,7 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                                : 1 + (NumBlocks[1] * NumThreads[1] != 1));
 
     hsa_utils::initImplArg(ImplArgs, &ImplArgsTy::DynamicLdsSize, ImplArgsSize,
-                           KernelArgs.DynCGroupMem);
+                           LaunchArgs.DynCGroupMem);
   }
 
   // Get required OMPT-related data
@@ -6380,10 +6379,9 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
   // Push the kernel launch into the stream.
 }
 
-void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
-                                                KernelArgsTy &KernelArgs,
-                                                uint32_t NumThreads[3],
-                                                uint32_t NumBlocks[3]) const {
+void AMDGPUKernelTy::printAMDOneLineKernelTrace(
+    GenericDeviceTy &GenericDevice, const KernelLaunchArgsTy &LaunchArgs,
+    uint32_t NumThreads[3], uint32_t NumBlocks[3]) const {
   auto GroupSegmentSize = (KernelInfo).GroupSegmentList;
   auto SGPRCount = (KernelInfo).SGPRCount;
   auto VGPRCount = (KernelInfo).VGPRCount;
@@ -6407,9 +6405,9 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
         "Max Occupancy: %u Achieved Occupancy: "
         "%d%% n:%s\n",
         GenericDevice.getDeviceId(), LaunchId, getExecutionModeFlags(),
-        ConstWGSize, KernelArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0,
+        ConstWGSize, LaunchArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0,
         GroupSegmentSize, getPrivateSize(), SGPRCount, VGPRCount, AGPRCount,
-        SGPRSpillCount, VGPRSpillCount, KernelArgs.Tripcount, HasRPC,
+        SGPRSpillCount, VGPRSpillCount, LaunchArgs.Tripcount, HasRPC,
         MaxOccupancy, AchievedOccupancy, getName());
   } else {
 
@@ -6423,23 +6421,23 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
         "Max Occupancy: %u Achieved Occupancy: "
         "%d%% n:%s\n",
         GenericDevice.getDeviceId(), getExecutionModeFlags(), ConstWGSize,
-        KernelArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0, GroupSegmentSize,
+        LaunchArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0, GroupSegmentSize,
         getPrivateSize(), SGPRCount, VGPRCount, AGPRCount, SGPRSpillCount,
-        VGPRSpillCount, KernelArgs.Tripcount, HasRPC, MaxOccupancy, AchievedOccupancy,
-        getName());
+        VGPRSpillCount, LaunchArgs.Tripcount, HasRPC, MaxOccupancy,
+        AchievedOccupancy, getName());
   }
 }
 
-Error AMDGPUKernelTy::printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
-                                             KernelArgsTy &KernelArgs,
-                                             uint32_t NumThreads[3],
-                                             uint32_t NumBlocks[3]) const {
+Error AMDGPUKernelTy::printLaunchInfoDetails(
+    GenericDeviceTy &GenericDevice, const KernelLaunchArgsTy &LaunchArgs,
+    uint32_t NumThreads[3], uint32_t NumBlocks[3]) const {
   // When LIBOMPTARGET_KERNEL_TRACE is set, print the single-line kernel trace
   // info present in the old ASO plugin, and continue with the upstream 2-line
   // info, should LIBOMPTARGET_INFO be a meaningful value, otherwise return.
   if ((getInfoLevel() & OMP_INFOTYPE_AMD_KERNEL_TRACE) ||
       GenericDevice.enableKernelDurationTracing())
-    printAMDOneLineKernelTrace(GenericDevice, KernelArgs, NumThreads, NumBlocks);
+    printAMDOneLineKernelTrace(GenericDevice, LaunchArgs, NumThreads,
+                               NumBlocks);
 
   // Only do all this when the output is requested
   if (!(getInfoLevel() & OMP_INFOTYPE_PLUGIN_KERNEL))
@@ -6450,8 +6448,8 @@ Error AMDGPUKernelTy::printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
   auto *ThreadsPerGroup = NumThreads;
 
   // Kernel Arguments Info
-  auto ArgNum = KernelArgs.NumArgs;
-  auto LoopTripCount = KernelArgs.Tripcount;
+  auto ArgNum = LaunchArgs.NumArgs;
+  auto LoopTripCount = LaunchArgs.Tripcount;
 
   // Details for AMDGPU kernels (read from image)
   // https://www.llvm.org/docs/AMDGPUUsage.html#code-object-v4-metadata

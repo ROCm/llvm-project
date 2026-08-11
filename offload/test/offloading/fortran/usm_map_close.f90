@@ -25,7 +25,7 @@ program use_device_test
     end interface
     type(c_ptr) :: host_alloc, device_alloc
     integer, pointer :: a
-  !$omp requires unified_shared_memory
+   !$omp requires unified_shared_memory
 
     allocate(a)
     host_alloc = C_LOC(a)
