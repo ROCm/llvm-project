@@ -10,9 +10,7 @@
 add_executable(RaiserScaffoldingTests
   RaiserScaffoldingTest.cpp)
 
-# hotswap::raiser carries the wave-projection objects, which call into
-# hotswap::decoder; link both. Both keep their LLVM dependencies PRIVATE, so
-# name the LLVM components here (COMGR_HOTSWAP_TEST_LLVM_LIBS, ../CMakeLists.txt).
+# The wave-projection objects require decoder symbols.
 target_link_libraries(RaiserScaffoldingTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::raiser
@@ -38,10 +36,7 @@ comgr_configure_test_target(RaiserScaffoldingTests)
 add_executable(WaveProjectionTests
   WaveProjectionTest.cpp)
 
-# The wave projection lives in hotswap::raiser and calls into hotswap::decoder
-# (ISAProfile and the AMDGPU register queries); link both, plus the LLVM
-# components the OBJECT libraries keep PRIVATE (COMGR_HOTSWAP_TEST_LLVM_LIBS,
-# ../CMakeLists.txt).
+# The wave-projection objects require decoder symbols.
 target_link_libraries(WaveProjectionTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::raiser
@@ -73,6 +68,7 @@ target_link_libraries(RaiseFailureTests PRIVATE
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(RaiseFailureTests PRIVATE
@@ -86,27 +82,17 @@ comgr_configure_test_target(RaiseFailureTests)
 # -- RegFileTests -------------------------------------------------------------
 #
 # Round-trips values through AllocaRegFile's ParsedReg dispatch, then promotes
-# the allocas to SSA and constant-folds to confirm the value survives. Needs
-# TransformUtils (PromoteMemToReg) and Analysis (constant folding) on top of the
-# component set hotswap::decoder carries.
+# the allocas to SSA and constant-folds to confirm the value survives.
 
 add_executable(RegFileTests
   RegFileTest.cpp)
-
-# Dylib build: link libLLVM, not static archives (see RaiserScaffoldingTests).
-if(LLVM_LINK_LLVM_DYLIB)
-  set(COMGR_TEST_UNIT_REGFILE_LIBS LLVM)
-else()
-  llvm_map_components_to_libnames(COMGR_TEST_UNIT_REGFILE_LIBS
-    Analysis TransformUtils)
-endif()
 
 target_link_libraries(RegFileTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::raiser
   hotswap::decoder
   hotswap::common
-  ${COMGR_TEST_UNIT_REGFILE_LIBS}
+  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(RegFileTests PRIVATE
@@ -131,6 +117,7 @@ target_link_libraries(KernargAbiLayoutTests PRIVATE
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(KernargAbiLayoutTests PRIVATE

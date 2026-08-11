@@ -161,8 +161,7 @@ target_include_directories(hotswap-decoder PRIVATE
   "${HOTSWAP_COMGR_BINARY_DIR}/include"
 )
 
-# PRIVATE keeps these out of the link interface, but CMake still records them as
-# $<LINK_ONLY:> for an OBJECT library; clear the interface so consumers get the
-# objects only (see ../CMakeLists.txt).
+# Consumers choose their LLVM linkage, so do not propagate the OBJECT library's
+# private dependencies through $<LINK_ONLY:>.
 target_link_libraries(hotswap-decoder PRIVATE ${HOTSWAP_LLVM_LIBS})
 set_target_properties(hotswap-decoder PROPERTIES INTERFACE_LINK_LIBRARIES "")

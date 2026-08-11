@@ -2,11 +2,6 @@
 # ISA profile, and the decoded-instruction model).
 
 # -- DecoderTests -------------------------------------------------------------
-#
-# Links the hotswap::decoder OBJECT library; initMCState registers the target
-# itself, so the test needs no separate target-init step. hotswap::decoder keeps
-# its LLVM dependencies PRIVATE, so name the LLVM components here
-# (COMGR_HOTSWAP_TEST_LLVM_LIBS, ../CMakeLists.txt).
 
 add_executable(DecoderTests
   DecoderTest.cpp)

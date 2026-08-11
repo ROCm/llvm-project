@@ -3,12 +3,9 @@ add_subdirectory(rewriter)
 # The raiser and decoder unit tests link the transpile-path OBJECT libraries,
 # entered only under COMGR_ENABLE_HOTSWAP_TRANSPILE; skip them otherwise.
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
-  # The transpile OBJECT libraries keep their LLVM dependencies PRIVATE, so a
-  # test executable names its own. libLLVM does not export the AMDGPU
-  # target-private helpers the decoder and wave projection call (mc2PseudoReg,
-  # getNamedOperandIdx, the isGFXn predicates), so link the static AMDGPU
-  # components rather than the dylib; a static-plus-dylib link would also
-  # re-register the AMDGPU cl::opts and abort at startup.
+  # These tests require target-private AMDGPU helpers. Link only the static LLVM
+  # components to avoid unresolved symbols and duplicate command-line option
+  # registration.
   llvm_map_components_to_libnames(COMGR_HOTSWAP_TEST_LLVM_LIBS
     AMDGPU
     Analysis AsmPrinter BinaryFormat CodeGen Core MC MCDisassembler
