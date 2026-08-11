@@ -857,9 +857,8 @@ void CodeGenPrepare::removeAllAssertingVHReferences(Value *V) {
   DominatorTree NewDT(F);
   CycleInfo NewCI;
   NewCI.compute(F);
-  LoopInfo NewLI(NewDT);
   BranchProbabilityInfo NewBPI(F, NewCI, TLInfo);
-  BlockFrequencyInfo NewBFI(F, NewBPI, NewLI);
+  BlockFrequencyInfo NewBFI(F, NewBPI, NewCI);
   NewBFI.verifyMatch(*BFI);
 }
 

@@ -64,8 +64,8 @@ define <8 x float> @ceil_floor(<8 x float> %a) {
 ; AVX-NEXT:    [[TMP4:%.*]] = call <2 x float> @llvm.floor.v2f32(<2 x float> [[TMP10]])
 ; AVX-NEXT:    [[R0:%.*]] = insertelement <8 x float> zeroinitializer, float [[AB0]], i32 0
 ; AVX-NEXT:    [[R1:%.*]] = insertelement <8 x float> [[R0]], float [[AB1]], i32 1
-; AVX-NEXT:    [[R23:%.*]] = insertelement <8 x float> [[R1]], float [[AB2]], i32 2
-; AVX-NEXT:    [[R3:%.*]] = insertelement <8 x float> [[R23]], float [[AB3]], i32 3
+; AVX-NEXT:    [[R2:%.*]] = insertelement <8 x float> [[R1]], float [[AB2]], i32 2
+; AVX-NEXT:    [[R3:%.*]] = insertelement <8 x float> [[R2]], float [[AB3]], i32 3
 ; AVX-NEXT:    [[TMP5:%.*]] = shufflevector <2 x float> [[TMP2]], <2 x float> poison, <8 x i32> <i32 0, i32 1, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>
 ; AVX-NEXT:    [[R52:%.*]] = shufflevector <8 x float> [[R3]], <8 x float> [[TMP5]], <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 8, i32 9, i32 6, i32 7>
 ; AVX-NEXT:    [[TMP6:%.*]] = shufflevector <2 x float> [[TMP4]], <2 x float> poison, <8 x i32> <i32 0, i32 1, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison, i32 poison>

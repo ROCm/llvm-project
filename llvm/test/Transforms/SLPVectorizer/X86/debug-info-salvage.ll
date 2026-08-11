@@ -30,10 +30,10 @@ define void @test(i8 %a, i8 %b, ptr %p) {
 ; CHECK-NEXT:    [[TMP17:%.*]] = insertelement <2 x i1> <i1 false, i1 poison>, i1 [[CMP_I11_I_I_1_I]], i64 1
 ; CHECK-NEXT:    [[TMP19:%.*]] = select <2 x i1> [[TMP17]], <2 x i32> zeroinitializer, <2 x i32> [[TMP18]]
 ; CHECK-NEXT:    [[TMP20:%.*]] = shl <2 x i32> [[TMP19]], <i32 16, i32 0>
-; CHECK-NEXT:    [[TMP21:%.*]] = extractelement <2 x i32> [[TMP20]], i64 0
-; CHECK-NEXT:    [[OP_RDX2:%.*]] = or i32 0, [[TMP21]]
-; CHECK-NEXT:    [[TMP22:%.*]] = extractelement <2 x i32> [[TMP20]], i64 1
-; CHECK-NEXT:    [[OP_RDX3:%.*]] = or i32 [[OP_RDX2]], [[TMP22]]
+; CHECK-NEXT:    [[TMP6:%.*]] = extractelement <2 x i32> [[TMP20]], i64 0
+; CHECK-NEXT:    [[OP_RDX2:%.*]] = or i32 0, [[TMP6]]
+; CHECK-NEXT:    [[TMP7:%.*]] = extractelement <2 x i32> [[TMP20]], i64 1
+; CHECK-NEXT:    [[OP_RDX3:%.*]] = or i32 [[OP_RDX2]], [[TMP7]]
 ; CHECK-NEXT:    store i32 [[OP_RDX3]], ptr [[ARRAYIDX51_1_I]], align 4
 ; CHECK-NEXT:    ret void
 ;

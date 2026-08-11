@@ -431,12 +431,11 @@ void SILowerSGPRSpills::assignWWMRegs(MachineFunction &MF,
         "cannot find enough VGPRs for wwm-regalloc");
   }
 
-  BitVector NonWwmRegMask(WwmRegMask);
-  NonWwmRegMask.flip().clearBitsNotInMask(TRI->getAllVGPRRegMask());
+  BitVector PerLaneVGPRMask(WwmRegMask);
+  PerLaneVGPRMask.flip().clearBitsNotInMask(TRI->getAllVGPRRegMask());
 
-  // The complement set will be the registers for non-wwm (per-thread) vgpr
-  // allocation.
-  FuncInfo->updateNonWWMRegMask(NonWwmRegMask);
+  // The complement set will be the registers for per-lane VGPR allocation.
+  FuncInfo->updatePerLaneVGPRMask(PerLaneVGPRMask);
 }
 
 bool SILowerSGPRSpillsLegacy::runOnMachineFunction(MachineFunction &MF) {
@@ -718,7 +717,7 @@ bool SILowerSGPRSpills::run(MachineFunction &MF) {
     // free frame index ids by the later pass(es) like "stack slot coloring"
     // which in turn could mess-up with the book keeping of "frame index to VGPR
     // lane".
-    FuncInfo->removeDeadFrameIndices(MF, /*ResetSGPRSpillStackIDs*/ false);
+    FuncInfo->removeDeadFrameIndices(MFI, /*ResetSGPRSpillStackIDs*/ false);
 
     MadeChange = true;
   }

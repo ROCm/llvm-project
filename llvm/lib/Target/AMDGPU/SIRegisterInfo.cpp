@@ -752,13 +752,14 @@ BitVector SIRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
     reserveRegisterTuples(Reserved, MFI->getVGPRForAGPRCopy());
   }
 
-  // To mask off the VGPRs as per the VGPR partition strategy to ensure
-  // sufficient registers for the two vector regalloc pipelines.
-  BitVector RegMask = MFI->getNonWWMRegMask();
-  if (!RegMask.empty()) {
+  // During wwm-regalloc, reserve the registers for per-lane VGPR allocation.
+  // The MFI->getPerLaneVGPRMask() field will have a valid bitmask only during
+  // wwm-regalloc and it would be empty otherwise.
+  BitVector PerLaneVGPRMask = MFI->getPerLaneVGPRMask();
+  if (!PerLaneVGPRMask.empty()) {
     for (unsigned RegI = AMDGPU::VGPR0, RegE = AMDGPU::VGPR0 + MaxNumVGPRs;
          RegI < RegE; ++RegI) {
-      if (RegMask.test(RegI))
+      if (PerLaneVGPRMask.test(RegI))
         reserveRegisterTuples(Reserved, RegI);
     }
   }
