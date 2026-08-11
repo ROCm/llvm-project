@@ -29,7 +29,6 @@
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCRegister.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/ErrorHandling.h"
 
 #include <cassert>
 #include <map>
@@ -45,7 +44,7 @@ struct RaiseContext {
   llvm::IRBuilder<> &B;
   AllocaRegFile &Regs;
   const WaveProjection &Projection;
-  const MCState &Mc;
+  const MCState &MC;
   const ISAProfile &Isa; // source ISA (for disassembly / instruction semantics)
   ISAProfile
       TargetIsa; // compilation target ISA (for code generation decisions)
@@ -82,7 +81,7 @@ struct RaiseContext {
 
   RaiseContext(llvm::LLVMContext &C, llvm::Module &M, llvm::IRBuilder<> &B,
                AllocaRegFile &Regs, const WaveProjection &Projection,
-               const MCState &Mc, const ISAProfile &Isa, ISAProfile TargetIsa,
+               const MCState &MC, const ISAProfile &Isa, ISAProfile TargetIsa,
                unsigned TargetCodeObjectVersion, KernargLayout &Kernargs,
                const UserSgprLayout *Layout, llvm::Function *Kernel,
                llvm::BasicBlock *ThreadLoopLatch,
@@ -218,9 +217,9 @@ struct RaiseContext {
   void writeReg64(ParsedReg Pr, llvm::Value *V);
   void writeRegVec(ParsedReg Pr, llvm::Value *V);
   void writeRegExecWidth(ParsedReg Pr, llvm::Value *V);
-  void storeVGPR32(int Idx, llvm::Value *V);
-  void storeVGPR64(int Idx, llvm::Value *V);
-  void storeAGPR32(int Idx, llvm::Value *V);
+  void storeVGPR32(unsigned Idx, llvm::Value *V);
+  void storeVGPR64(unsigned Idx, llvm::Value *V);
+  void storeAGPR32(unsigned Idx, llvm::Value *V);
 
   // Provenance fact for the physical SGPR pair that originally held the
   // source-ABI kernarg-segment pointer.
@@ -323,16 +322,14 @@ struct RaiseContext {
   // Update the current intra-BB provenance state after an ordinary SGPR write.
   // Only writes to either kernarg-pointer lane change this fact. A generic
   // register write kills LiveEntry but does not prove a non-entry value.
-  void noteSgprWriteForKernargProvenance(int Idx) {
+  void noteSgprWriteForKernargProvenance(unsigned Idx) {
     assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
-    assert(Idx >= 0 && "SGPR write must have a valid register index");
-    unsigned SgprIdx = static_cast<unsigned>(Idx);
     std::optional<unsigned> KernargPtrSgpr = Layout->kernargSegmentPtrSgpr();
     if (!KernargPtrSgpr)
       return;
-    if (SgprIdx == *KernargPtrSgpr)
+    if (Idx == *KernargPtrSgpr)
       CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::Unknown;
-    else if (SgprIdx == *KernargPtrSgpr + 1)
+    else if (Idx == *KernargPtrSgpr + 1)
       CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::Unknown;
     else
       return;
@@ -342,18 +339,17 @@ struct RaiseContext {
   // Record that an SMEM-style load wrote one or more SGPR lanes from memory.
   // This is stronger than a generic register write: any overlapped kernarg
   // pointer lane no longer carries the dispatch-provided entry SGPR value.
-  void noteSgprMemoryLoadForKernargProvenance(int BaseIdx, int WidthDwords) {
+  void noteSgprMemoryLoadForKernargProvenance(unsigned BaseIdx,
+                                              unsigned WidthDwords) {
     assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
-    assert(BaseIdx >= 0 && "SMEM destination base must be a valid SGPR index");
     assert(WidthDwords > 0 && "SMEM destination width must be non-zero");
     std::optional<unsigned> KernargPtrSgpr = Layout->kernargSegmentPtrSgpr();
     if (!KernargPtrSgpr)
       return;
-    unsigned SgprBaseIdx = static_cast<unsigned>(BaseIdx);
-    unsigned EndIdx = SgprBaseIdx + static_cast<unsigned>(WidthDwords) - 1;
-    if (SgprBaseIdx <= *KernargPtrSgpr && EndIdx >= *KernargPtrSgpr)
+    unsigned EndIdx = BaseIdx + WidthDwords - 1;
+    if (BaseIdx <= *KernargPtrSgpr && EndIdx >= *KernargPtrSgpr)
       CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::NonEntry;
-    if (SgprBaseIdx <= *KernargPtrSgpr + 1 && EndIdx >= *KernargPtrSgpr + 1)
+    if (BaseIdx <= *KernargPtrSgpr + 1 && EndIdx >= *KernargPtrSgpr + 1)
       CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::NonEntry;
     CurrentKernargPtrProvenance.EntryByteOffset = 0;
   }
@@ -427,7 +423,7 @@ struct RaiseContext {
     bool IsPair = false;
   };
 
-  llvm::DenseMap<int, WaveMaskEntry> LastSgprWaveMaskI1;
+  llvm::DenseMap<unsigned, WaveMaskEntry> LastSgprWaveMaskI1;
 
   // Cross-BB, dominance-safe shadow storage for SGPR wave masks.
   // Each SGPR base index has:
@@ -445,7 +441,7 @@ struct RaiseContext {
   // not a generic constant tracker: only s_get_pc_i64 seeds it, only constant
   // s_add/sub_nc_u64 propagates it, and only SMEM literal materialisation reads
   // it.
-  llvm::DenseMap<int, uint64_t> SourceImageSgprPairAddrShadow;
+  llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
 
   // Raise-time constant shadow of M0; see updateM0Const / getM0Const.
   std::optional<uint64_t> M0Const;
@@ -468,10 +464,9 @@ struct RaiseContext {
   // (a wave64-source SGPR pair), so subsequent writes to baseIdx+1
   // correctly invalidate this entry via
   // `invalidateSgprWaveMaskI1`'s pair-aware branch.
-  void recordSgprWaveMaskI1(int BaseIdx, llvm::Value *CmpI1, bool IsPair) {
+  void recordSgprWaveMaskI1(unsigned BaseIdx, llvm::Value *CmpI1, bool IsPair) {
     LastSgprWaveMaskI1[BaseIdx] = WaveMaskEntry{CmpI1, IsPair};
-    if (BaseIdx >= 0 &&
-        static_cast<size_t>(BaseIdx) < SgprWaveMaskExecShadow.size()) {
+    if (BaseIdx < SgprWaveMaskExecShadow.size()) {
       llvm::Value *ExecMask = Projection.ballotI1ToWidth(
           B, CmpI1, Projection.execStorageTy(), "wm_shadow_exec");
       B.CreateStore(ExecMask, SgprWaveMaskExecShadow[BaseIdx]);
@@ -507,11 +502,10 @@ struct RaiseContext {
 
   // Record an SGPR-pair marker for the currently active source wave, preserving
   // the old marker for inactive source waves.
-  void recordSourceWaveSgprPair(int BaseIdx, llvm::Value *V) {
+  void recordSourceWaveSgprPair(unsigned BaseIdx, llvm::Value *V) {
     if (!Projection.providesFullWaveExecInvariant())
       return;
-    if (BaseIdx < 0 ||
-        static_cast<size_t>(BaseIdx) >= SourceWaveSgprPairShadow.size())
+    if (BaseIdx >= SourceWaveSgprPairShadow.size())
       return;
     llvm::Value *Old = B.CreateLoad(I64Ty, SourceWaveSgprPairShadow[BaseIdx],
                                     "source_wave_sgpr_pair_old");
@@ -523,10 +517,10 @@ struct RaiseContext {
 
   // Load the source-wave marker when one was recorded; otherwise use the normal
   // SGPR-pair value.
-  llvm::Value *materializeSourceWaveSgprPair(int BaseIdx,
+  llvm::Value *materializeSourceWaveSgprPair(unsigned BaseIdx,
                                              llvm::Value *Fallback) {
-    if (!Projection.providesFullWaveExecInvariant() || BaseIdx < 0 ||
-        static_cast<size_t>(BaseIdx) >= SourceWaveSgprPairShadow.size())
+    if (!Projection.providesFullWaveExecInvariant() ||
+        BaseIdx >= SourceWaveSgprPairShadow.size())
       return Fallback;
     llvm::Value *Shadow = B.CreateLoad(I64Ty, SourceWaveSgprPairShadow[BaseIdx],
                                        "source_wave_sgpr_pair");
@@ -541,22 +535,20 @@ struct RaiseContext {
   // was invalidated by a scalar write, or the BB boundary cleared
   // the map). Callers treat null as "fall back to the standard
   // extractLaneBitFromWaveMask".
-  llvm::Value *lookupSgprWaveMaskI1(int BaseIdx) const {
+  llvm::Value *lookupSgprWaveMaskI1(unsigned BaseIdx) const {
     auto It = LastSgprWaveMaskI1.find(BaseIdx);
     return It == LastSgprWaveMaskI1.end() ? nullptr : It->second.I1;
   }
 
-  llvm::Value *loadSgprWaveMaskExec(int BaseIdx) const {
-    if (BaseIdx < 0 ||
-        static_cast<size_t>(BaseIdx) >= SgprWaveMaskExecShadow.size())
+  llvm::Value *loadSgprWaveMaskExec(unsigned BaseIdx) const {
+    if (BaseIdx >= SgprWaveMaskExecShadow.size())
       return nullptr;
     return B.CreateLoad(Projection.execStorageTy(),
                         SgprWaveMaskExecShadow[BaseIdx], "sgpr_mask_exec");
   }
 
-  llvm::Value *loadSgprWaveMaskValid(int BaseIdx) const {
-    if (BaseIdx < 0 ||
-        static_cast<size_t>(BaseIdx) >= SgprWaveMaskValidShadow.size())
+  llvm::Value *loadSgprWaveMaskValid(unsigned BaseIdx) const {
+    if (BaseIdx >= SgprWaveMaskValidShadow.size())
       return nullptr;
     return B.CreateLoad(I1Ty, SgprWaveMaskValidShadow[BaseIdx],
                         "sgpr_mask_valid");
@@ -579,25 +571,22 @@ struct RaiseContext {
   // `isPair`, invalidate K-1 too. The guard on `isPair` avoids
   // over-invalidation: a single-SGPR wave32 entry at K-1 is
   // unrelated to a scalar write at K and must NOT be invalidated.
-  void invalidateSgprWaveMaskI1(int BaseIdx) {
+  void invalidateSgprWaveMaskI1(unsigned BaseIdx) {
     noteSgprWriteForKernargProvenance(BaseIdx);
     LastSgprWaveMaskI1.erase(BaseIdx);
     SourceImageSgprPairAddrShadow.erase(BaseIdx);
-    if (BaseIdx >= 0 &&
-        static_cast<size_t>(BaseIdx) < SgprWaveMaskValidShadow.size())
+    if (BaseIdx < SgprWaveMaskValidShadow.size())
       B.CreateStore(B.getFalse(), SgprWaveMaskValidShadow[BaseIdx]);
-    if (BaseIdx >= 0 &&
-        static_cast<size_t>(BaseIdx) < SourceWaveSgprPairValidShadow.size())
+    if (BaseIdx < SourceWaveSgprPairValidShadow.size())
       B.CreateStore(B.getFalse(), SourceWaveSgprPairValidShadow[BaseIdx]);
     if (BaseIdx > 0) {
       auto Prev = LastSgprWaveMaskI1.find(BaseIdx - 1);
       if (Prev != LastSgprWaveMaskI1.end() && Prev->second.IsPair) {
         LastSgprWaveMaskI1.erase(Prev);
-        if (static_cast<size_t>(BaseIdx - 1) < SgprWaveMaskValidShadow.size())
+        if (BaseIdx - 1 < SgprWaveMaskValidShadow.size())
           B.CreateStore(B.getFalse(), SgprWaveMaskValidShadow[BaseIdx - 1]);
       }
-      if (static_cast<size_t>(BaseIdx - 1) <
-          SourceWaveSgprPairValidShadow.size())
+      if (BaseIdx - 1 < SourceWaveSgprPairValidShadow.size())
         B.CreateStore(B.getFalse(), SourceWaveSgprPairValidShadow[BaseIdx - 1]);
       SourceImageSgprPairAddrShadow.erase(BaseIdx - 1);
     }
@@ -615,17 +604,15 @@ struct RaiseContext {
   // code-object address, in the same address domain as s_get_pc_i64. This is
   // used only for PC-relative literal-table sequences and is cleared on any
   // overlapping SGPR write or BB boundary.
-  void recordSourceImageSgprPairAddr(int BaseIdx, uint64_t Value) {
-    if (BaseIdx < 0)
-      llvm::report_fatal_error(
-          "transpiler: source-image SGPR pair record has invalid base index");
+  void recordSourceImageSgprPairAddr(unsigned BaseIdx, uint64_t Value) {
     SourceImageSgprPairAddrShadow[BaseIdx] = Value;
   }
 
   // Return the source-image address fact for SGPR pair [BaseIdx:BaseIdx+1], if
   // the current BB has proven one. Absence means the SMEM handler must use the
   // ordinary runtime memory path or refuse according to its own operand rules.
-  std::optional<uint64_t> lookupSourceImageSgprPairAddr(int BaseIdx) const {
+  std::optional<uint64_t>
+  lookupSourceImageSgprPairAddr(unsigned BaseIdx) const {
     auto It = SourceImageSgprPairAddrShadow.find(BaseIdx);
     if (It == SourceImageSgprPairAddrShadow.end())
       return std::nullopt;
@@ -650,12 +637,10 @@ struct RaiseContext {
 
   void collectSgprWaveMaskShadowAllocas(
       llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const {
-    Out.append(SgprWaveMaskExecShadow.begin(), SgprWaveMaskExecShadow.end());
-    Out.append(SgprWaveMaskValidShadow.begin(), SgprWaveMaskValidShadow.end());
-    Out.append(SourceWaveSgprPairShadow.begin(),
-               SourceWaveSgprPairShadow.end());
-    Out.append(SourceWaveSgprPairValidShadow.begin(),
-               SourceWaveSgprPairValidShadow.end());
+    Out.append(SgprWaveMaskExecShadow);
+    Out.append(SgprWaveMaskValidShadow);
+    Out.append(SourceWaveSgprPairShadow);
+    Out.append(SourceWaveSgprPairValidShadow);
   }
 
   // Record an operand-read failure. Read paths cannot bail mid-handler (they
