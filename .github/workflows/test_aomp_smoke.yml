@@ -20,7 +20,19 @@ on:
         type: string
       release_type:
         type: string
-        default: ""          
+        default: ""
+      suite_list:
+        description: Space-separated AOMP suite names for this shard
+        type: string
+        default: ""
+      shard:
+        description: Shard index (1-based)
+        type: string
+        default: "1"
+      total_shards:
+        description: Total number of AOMP shards
+        type: string
+        default: "6"          
   workflow_call:
     inputs:
       artifact_group:
@@ -40,7 +52,14 @@ on:
         type: string
       release_type:
         type: string
-        default: ""          
+        default: "" 
+      suite_list:
+        type: string
+      shard:
+        type: string
+      total_shards:
+        type: string
+        default: "6"          
   push:
     branches:
       - ADHOCBUILD
@@ -50,7 +69,7 @@ permissions:
 
 jobs:
   aomp_smoke_test:
-    name: "aomp smoke test"
+    name: "AOMP smoke test (shard ${{ inputs.shard }}/${{ inputs.total_shards }})"
     runs-on: ${{ inputs.test_runs_on }}
     # Running docker with cap-add and -v /lib/modiles, by recommendation of Github: https://rocm.docs.amd.com/projects/amdsmi/en/amd-staging/how-to/setup-docker-container.html
     container:
@@ -82,6 +101,7 @@ jobs:
       AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
       AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
       ARTIFACT_GROUP: ${{ inputs.artifact_group }}
+      SUITE_LIST: ${{ inputs.suite_list }}
     steps:
       - name: Fix Python shared library
         run: |
@@ -135,10 +155,12 @@ jobs:
           AMD_LOG_LEVEL: 4
         run: |
           set -x
+          echo "=== AOMP shard ${{ inputs.shard }}/${{ inputs.total_shards }}: SUITE_LIST=${SUITE_LIST} ==="          
           git clone https://github.com/ROCm/aomp -b amd-staging --depth 1
           cd aomp/bin
           export AOMP=${OUTPUT_ARTIFACTS_DIR}/llvm
           echo ${AOMP}
+          echo ${SUITE_LIST}          
           ./run_theRockCI.sh
 
       - name: Post-job cleanup processes on Windows

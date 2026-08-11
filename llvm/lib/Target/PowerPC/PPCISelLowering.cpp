@@ -241,12 +241,39 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
   setTruncStoreAction(MVT::f128, MVT::f16, Expand);
   setOperationAction(ISD::FP_TO_FP16, MVT::f128, Expand);
 
+  // bf16 is soft-promoted to f32 on all PowerPC targets.
+  // Loads/stores use the integer i16 path (lhz/sth) via TypeSoftPromoteHalf.
+  // BF16_TO_FP (extend) is done inline via left-shift-16.
+  // FP_TO_BF16 (truncate) is done via the __truncsfbf2 libcall.
+  // No hardware extending loads or truncating stores to/from bf16.
+  //
+  // BF16_TO_FP and FP_TO_BF16 must be explicitly marked Expand so that
+  // LegalizeDAG expands them to the shift+bitcast / libcall sequences before
+  // ISel.  Without this they default to Legal and reach ISel with no matching
+  // .td pattern, causing a "Cannot select" fatal error.
+  // BF16_TO_FP action is keyed on the result type; FP_TO_BF16 on the operand
+  // type (see LegalizeDAG.cpp action dispatch).
+  for (MVT VT : {MVT::f32, MVT::f64, MVT::f128}) {
+    setLoadExtAction(ISD::EXTLOAD, VT, MVT::bf16, Expand);
+    setTruncStoreAction(VT, MVT::bf16, Expand);
+    setOperationAction(ISD::BF16_TO_FP, VT, Expand);
+    setOperationAction(ISD::FP_TO_BF16, VT, Expand);
+  }
+
   if (Subtarget.isISA3_0()) {
     setLoadExtAction(ISD::EXTLOAD, MVT::f128, MVT::f16, Legal);
     setLoadExtAction(ISD::EXTLOAD, MVT::f64, MVT::f16, Legal);
     setLoadExtAction(ISD::EXTLOAD, MVT::f32, MVT::f16, Legal);
     setTruncStoreAction(MVT::f64, MVT::f16, Legal);
     setTruncStoreAction(MVT::f32, MVT::f16, Legal);
+    // ISA 3.0 (Power9) has XSCVHPDP/XSCVDPHP for scalar HP<->DP conversion.
+    // The .td patterns in PPCInstrVSX.td use f16_to_fp/fp_to_f16 ISD nodes;
+    // mark them Legal here so the soft-promote machinery uses hardware instead
+    // of __extendhfsf2/__truncsfhf2 libcalls for register-to-register converts.
+    setOperationAction(ISD::FP16_TO_FP, MVT::f64, Legal);
+    setOperationAction(ISD::FP16_TO_FP, MVT::f32, Legal);
+    setOperationAction(ISD::FP_TO_FP16, MVT::f64, Legal);
+    setOperationAction(ISD::FP_TO_FP16, MVT::f32, Legal);
   } else {
     // No extending loads from f16 or HW conversions back and forth.
     setLoadExtAction(ISD::EXTLOAD, MVT::f128, MVT::f16, Expand);
@@ -8593,7 +8620,8 @@ SDValue PPCTargetLowering::LowerFP_TO_INT(SDValue Op, SelectionDAG &DAG,
   LowerFP_TO_INTForReuse(Op, RLI, DAG, dl);
 
   return DAG.getLoad(Op.getValueType(), dl, RLI.Chain, RLI.Ptr, RLI.MPI,
-                     RLI.Alignment, RLI.MMOFlags(), RLI.AAInfo, RLI.Ranges);
+                     RLI.Alignment, RLI.MMOFlags(),
+                     MMOMetadata(RLI.AAInfo, RLI.Ranges));
 }
 
 // We're trying to insert a regular store, S, and then a load, L. If the
@@ -8921,15 +8949,16 @@ SDValue PPCTargetLowering::LowerINT_TO_FP(SDValue Op,
     if (canReuseLoadAddress(SINT, MVT::i64, RLI, DAG)) {
       // Drop range metadata, as this metadata becomes invalid for f64 bit
       // reinterpretation of i64 values.
-      Bits = DAG.getLoad(MVT::f64, dl, RLI.Chain, RLI.Ptr, RLI.MPI,
-                         RLI.Alignment, RLI.MMOFlags(), RLI.AAInfo, nullptr);
+      Bits =
+          DAG.getLoad(MVT::f64, dl, RLI.Chain, RLI.Ptr, RLI.MPI, RLI.Alignment,
+                      RLI.MMOFlags(), MMOMetadata(RLI.AAInfo));
       if (RLI.ResChain)
         DAG.makeEquivalentMemoryOrdering(RLI.ResChain, Bits.getValue(1));
     } else if (Subtarget.hasLFIWAX() &&
                canReuseLoadAddress(SINT, MVT::i32, RLI, DAG, ISD::SEXTLOAD)) {
-      MachineMemOperand *MMO =
-        MF.getMachineMemOperand(RLI.MPI, MachineMemOperand::MOLoad, 4,
-                                RLI.Alignment, RLI.AAInfo, RLI.Ranges);
+      MachineMemOperand *MMO = MF.getMachineMemOperand(
+          RLI.MPI, MachineMemOperand::MOLoad, 4, RLI.Alignment,
+          MMOMetadata(RLI.AAInfo, RLI.Ranges));
       SDValue Ops[] = { RLI.Chain, RLI.Ptr };
       Bits = DAG.getMemIntrinsicNode(PPCISD::LFIWAX, dl,
                                      DAG.getVTList(MVT::f64, MVT::Other),
@@ -8938,9 +8967,9 @@ SDValue PPCTargetLowering::LowerINT_TO_FP(SDValue Op,
         DAG.makeEquivalentMemoryOrdering(RLI.ResChain, Bits.getValue(1));
     } else if (Subtarget.hasFPCVT() &&
                canReuseLoadAddress(SINT, MVT::i32, RLI, DAG, ISD::ZEXTLOAD)) {
-      MachineMemOperand *MMO =
-        MF.getMachineMemOperand(RLI.MPI, MachineMemOperand::MOLoad, 4,
-                                RLI.Alignment, RLI.AAInfo, RLI.Ranges);
+      MachineMemOperand *MMO = MF.getMachineMemOperand(
+          RLI.MPI, MachineMemOperand::MOLoad, 4, RLI.Alignment,
+          MMOMetadata(RLI.AAInfo, RLI.Ranges));
       SDValue Ops[] = { RLI.Chain, RLI.Ptr };
       Bits = DAG.getMemIntrinsicNode(PPCISD::LFIWZX, dl,
                                      DAG.getVTList(MVT::f64, MVT::Other),
@@ -8972,9 +9001,9 @@ SDValue PPCTargetLowering::LowerINT_TO_FP(SDValue Op,
           MachinePointerInfo::getFixedStack(DAG.getMachineFunction(), FrameIdx);
       RLI.Alignment = Align(4);
 
-      MachineMemOperand *MMO =
-        MF.getMachineMemOperand(RLI.MPI, MachineMemOperand::MOLoad, 4,
-                                RLI.Alignment, RLI.AAInfo, RLI.Ranges);
+      MachineMemOperand *MMO = MF.getMachineMemOperand(
+          RLI.MPI, MachineMemOperand::MOLoad, 4, RLI.Alignment,
+          MMOMetadata(RLI.AAInfo, RLI.Ranges));
       SDValue Ops[] = { RLI.Chain, RLI.Ptr };
       Bits = DAG.getMemIntrinsicNode(SINT.getOpcode() == ISD::ZERO_EXTEND ?
                                      PPCISD::LFIWZX : PPCISD::LFIWAX,
@@ -9034,9 +9063,9 @@ SDValue PPCTargetLowering::LowerINT_TO_FP(SDValue Op,
       RLI.Alignment = Align(4);
     }
 
-    MachineMemOperand *MMO =
-      MF.getMachineMemOperand(RLI.MPI, MachineMemOperand::MOLoad, 4,
-                              RLI.Alignment, RLI.AAInfo, RLI.Ranges);
+    MachineMemOperand *MMO = MF.getMachineMemOperand(
+        RLI.MPI, MachineMemOperand::MOLoad, 4, RLI.Alignment,
+        MMOMetadata(RLI.AAInfo, RLI.Ranges));
     SDValue Ops[] = { RLI.Chain, RLI.Ptr };
     Ld = DAG.getMemIntrinsicNode(IsSigned ? PPCISD::LFIWAX : PPCISD::LFIWZX, dl,
                                  DAG.getVTList(MVT::f64, MVT::Other), Ops,
@@ -12076,9 +12105,9 @@ SDValue PPCTargetLowering::LowerSCALAR_TO_VECTOR(SDValue Op,
       Op0.getValueType() == MVT::i32 && Op0.hasOneUse() &&
       canReuseLoadAddress(Op0, MVT::i32, RLI, DAG, ISD::NON_EXTLOAD)) {
 
-    MachineMemOperand *MMO =
-        MF.getMachineMemOperand(RLI.MPI, MachineMemOperand::MOLoad, 4,
-                                RLI.Alignment, RLI.AAInfo, RLI.Ranges);
+    MachineMemOperand *MMO = MF.getMachineMemOperand(
+        RLI.MPI, MachineMemOperand::MOLoad, 4, RLI.Alignment,
+        MMOMetadata(RLI.AAInfo, RLI.Ranges));
     SDValue Ops[] = {RLI.Chain, RLI.Ptr, DAG.getValueType(Op.getValueType())};
     SDValue Bits = DAG.getMemIntrinsicNode(
         PPCISD::LD_SPLAT, dl, DAG.getVTList(MVT::v4i32, MVT::Other), Ops,
@@ -16023,8 +16052,8 @@ SDValue convertTwoLoadsAndCmpToVCMPEQUB(SelectionDAG &DAG, SDNode *N,
     MachineFunction &MF = DAG.getMachineFunction();
     MachineMemOperand *NewMMO = MF.getMachineMemOperand(
         MMO->getPointerInfo(), MMO->getFlags(), MMO->getSize(), MMO->getAlign(),
-        MMO->getAAInfo(), nullptr, MMO->getSyncScopeID(),
-        MMO->getSuccessOrdering(), MMO->getFailureOrdering());
+        MMO->getAAInfo(), MMO->getSyncScopeID(), MMO->getSuccessOrdering(),
+        MMO->getFailureOrdering());
     SDValue NewLoad = DAG.getLoad(MVT::v16i8, DL, LoadNode->getChain(),
                                   LoadNode->getBasePtr(), NewMMO);
     DAG.ReplaceAllUsesOfValueWith(SDValue(LoadNode, 1), NewLoad.getValue(1));

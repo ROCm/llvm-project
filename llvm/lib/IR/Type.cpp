@@ -46,8 +46,7 @@ Type *Type::getPrimitiveType(LLVMContext &C, TypeID IDNumber) {
   case FP128TyID     : return getFP128Ty(C);
   case PPC_FP128TyID : return getPPC_FP128Ty(C);
   case LabelTyID     : return getLabelTy(C);
-  case MetadataTyID:
-    return getMetadataTy(C);
+  case MetadataTyID  : return getMetadataTy(C);
   case X86_AMXTyID   : return getX86_AMXTy(C);
   case TokenTyID     : return getTokenTy(C);
   default:
@@ -909,14 +908,6 @@ ScalableVectorType *ScalableVectorType::get(Type *ElementType,
 //                         PointerType Implementation
 //===----------------------------------------------------------------------===//
 
-PointerType *PointerType::get(Type *EltTy, unsigned AddressSpace) {
-  assert(EltTy && "Can't get a pointer to <null> type!");
-  assert(isValidElementType(EltTy) && "Invalid type for pointer element!");
-
-  // Automatically convert typed pointers to opaque pointers.
-  return get(EltTy->getContext(), AddressSpace);
-}
-
 PointerType *PointerType::get(LLVMContext &C, unsigned AddressSpace) {
   LLVMContextImpl *CImpl = C.pImpl;
 
@@ -932,10 +923,6 @@ PointerType *PointerType::get(LLVMContext &C, unsigned AddressSpace) {
 PointerType::PointerType(LLVMContext &C, unsigned AddrSpace)
     : Type(C, PointerTyID) {
   setSubclassData(AddrSpace);
-}
-
-PointerType *Type::getPointerTo(unsigned AddrSpace) const {
-  return PointerType::get(getContext(), AddrSpace);
 }
 
 bool PointerType::isValidElementType(Type *ElemTy) {

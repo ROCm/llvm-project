@@ -1691,6 +1691,16 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
         ptr_, info, alloc, num_agents_accessible, accessible);
     if (status == HSA_STATUS_SUCCESS && info) {
       static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
+      // Quarantine keeps the block mapped in ROCr, but the user allocation is
+      // gone. Report it as unowned, as ROCr does for memory it does not own.
+      if (atomic_load(&m->chunk_state, memory_order_acquire) !=
+          CHUNK_ALLOCATED) {
+        const uint32_t info_size = info->size;
+        internal_memset(info, 0, info_size);
+        info->size = info_size;
+        info->type = HSA_EXT_POINTER_TYPE_UNKNOWN;
+        return status;
+      }
       // Adjust base address of agent,host and sizeInBytes so as to return
       // the actual pointer information of user allocation rather than asan
       // allocation. Asan allocation pointer info can be acquired using internal

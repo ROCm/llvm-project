@@ -1,0 +1,158 @@
+//===- raise_failure.h - Structured raise-failure values ----------------===//
+//
+// Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
+// amd/comgr/LICENSE.TXT in this repository for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef HOTSWAP_TRANSPILER_RAISE_FAILURE_H
+#define HOTSWAP_TRANSPILER_RAISE_FAILURE_H
+
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/Support/Error.h"
+
+#include <cstdint>
+#include <optional>
+#include <string>
+
+namespace llvm {
+class raw_ostream;
+} // namespace llvm
+
+namespace COMGR::hotswap {
+
+// Structured reason for a raise failure.
+enum class RaiseFailureReason : uint16_t {
+  None = 0,
+  // Caller-supplied input was rejected before any IR was built (e.g. an empty
+  // or non-AMDGPU source ISA string). `detail()` carries the offending input.
+  BadInput,
+  // Internal contract violation: a failure return path was reached with no
+  // structured failure to explain it. A Hotswap bug, not a source-kernel
+  // property.
+  InternalError,
+  // The instruction's opcode is not lifted.
+  UnsupportedOpcode,
+  // The instruction's opcode is lifted, but this operand shape or encoding
+  // variant is not. `detail()` carries shape-specific context when available.
+  UnsupportedInstructionForm,
+  // A source hidden kernarg was identified, but no synthesis exists for its
+  // `.value_kind` yet. Narrower than `UnsupportedInstructionForm`: only that
+  // hidden-argument kind is unsupported.
+  UnsupportedSourceHiddenArg,
+  // An instruction writes EXEC through a path the lift does not model.
+  SPEUnsafeExecWriter,
+  // `createTargetMachine` returned null.
+  TargetMachineCreationFailed,
+  // `verifyModule` rejected the emitted IR.
+  IRVerificationFailed,
+  // Control flow targets an offset outside the selected kernel symbol, or an
+  // in-extent target could not be decoded. Crossing the boundary would inspect
+  // neighboring symbols.
+  KernelBoundaryViolation,
+  // A helper or device-library bitcode link step failed. Distinct from a
+  // verifier failure: the module is intentionally incomplete until the linked
+  // body is inlined.
+  DeviceLibraryLinkFailed,
+  // Wave-size-obstruction refusals, split one enumerator per refusal so
+  // diagnostics can bucket them without parsing the message text.
+  CrossWaveLaneIdLeak,
+  CrossWaveUnrewritableShuffle,
+  CrossWaveShuffleRewritePending,
+  CrossWaveReplicaRace,
+  CrossWaveLanePredicatedExec,
+  // A lane-position value gates a side effect without being masked to the
+  // source wave width.
+  CrossWavePredicateChain,
+  // `HSA_HOTSWAP_STRICT=1` refusal: a lowering that would otherwise warn and
+  // continue is rejected as potentially miscompiling.
+  StrictUnsafeLowering,
+  // The kernel descriptor could not be read from `.rodata` via the `<name>.kd`
+  // symbol, so the user-SGPR layout cannot be derived.
+  MissingKernelDescriptor,
+  // The descriptor's USER_SGPR_COUNT disagrees with the layout implied by
+  // kernel_code_properties and kernarg preload for the source ISA.
+  UserSgprLayoutMismatch,
+  // The source object declares non-disabled workgroup cluster dimensions, so
+  // TTMP6 carries per-cluster state the Hotswap ABI model does not reconstruct.
+  UnsupportedSourceClusterDims,
+};
+
+// Human-readable name for a `RaiseFailureReason`. Stable enough for
+// diagnostics and tests to bucket on.
+llvm::StringRef reasonString(RaiseFailureReason R);
+
+// Payload of the `llvm::Error` the raiser produces on a refusal. Build one
+// through the shape factories below, which return the `llvm::Error` directly;
+// the constructor is exposed only because `make_error` needs it. The data
+// members are private, so a failure is always fully formed and cannot be
+// mutated field by field.
+struct RaiseFailure : public llvm::ErrorInfo<RaiseFailure> {
+  static char ID;
+
+  RaiseFailure(RaiseFailureReason Reason, std::string Mnemonic,
+               std::optional<std::string> Format,
+               std::optional<uint64_t> Offset, std::string Detail)
+      : Reason(Reason), Mnemonic(std::move(Mnemonic)),
+        Format(std::move(Format)), Offset(Offset), Detail(std::move(Detail)) {}
+
+  RaiseFailureReason reason() const { return Reason; }
+
+  // Offending instruction mnemonic (e.g. `global_store_dwordx4`); empty for a
+  // failure not tied to a decoded instruction.
+  llvm::StringRef mnemonic() const { return Mnemonic; }
+
+  // Encoding-format category of the offending instruction (e.g. `VALU`,
+  // `FLAT`); absent for a failure not tied to a decoded instruction. This is
+  // the instruction's format, distinct from the failure reason, which is
+  // `reason()`.
+  std::optional<llvm::StringRef> format() const {
+    if (Format)
+      return llvm::StringRef(*Format);
+    return std::nullopt;
+  }
+
+  // Byte offset of the offending instruction into the disassembled text
+  // section; absent for a failure not tied to a decoded instruction.
+  std::optional<uint64_t> offset() const { return Offset; }
+
+  // Optional human-readable context.
+  llvm::StringRef detail() const { return Detail; }
+
+  void log(llvm::raw_ostream &OS) const override;
+
+  std::error_code convertToErrorCode() const override {
+    return llvm::inconvertibleErrorCode();
+  }
+
+  // Failure tied to a decoded instruction, located by `Mnemonic` and `Offset`.
+  // `Format` is the encoding-format category of the offending instruction.
+  static llvm::Error atInstruction(RaiseFailureReason Reason,
+                                   llvm::StringRef Mnemonic, uint64_t Offset,
+                                   llvm::StringRef Format,
+                                   const llvm::Twine &Detail = {});
+
+  // Failure scoped to a whole kernel rather than one instruction. The rendered
+  // message is `kernel '<KernelName>': <Detail>`.
+  static llvm::Error inKernel(RaiseFailureReason Reason,
+                              llvm::StringRef KernelName,
+                              const llvm::Twine &Detail);
+
+  // Pipeline-level failure carrying only a detail string, with no instruction
+  // or kernel context.
+  static llvm::Error general(RaiseFailureReason Reason,
+                             const llvm::Twine &Detail);
+
+private:
+  RaiseFailureReason Reason;
+  std::string Mnemonic;
+  std::optional<std::string> Format;
+  std::optional<uint64_t> Offset;
+  std::string Detail;
+};
+
+} // namespace COMGR::hotswap
+
+#endif

@@ -626,6 +626,10 @@ public:
   /// True if the current statement has noconvergent attribute.
   bool InNoConvergentAttributedStmt = false;
 
+  /// The mode string from the amdgpu_av attribute on the current statement,
+  /// or empty if the attribute is not present.
+  StringRef AMDGPUAvailableVisibleMode;
+
   /// HLSL Branch attribute.
   HLSLControlFlowHintAttr::Spelling HLSLControlFlowAttr =
       HLSLControlFlowHintAttr::SpellingNotCalculated;
@@ -2238,6 +2242,7 @@ public:
   const TargetCodeGenInfo &getTargetHooks() const {
     return CGM.getTargetCodeGenInfo();
   }
+  const FunctionDecl *getCurrentFunctionDecl() const;
 
   //===--------------------------------------------------------------------===//
   //                                  Cleanups
@@ -4442,6 +4447,12 @@ public:
       llvm::SyncScope::ID SSID = llvm::SyncScope::System,
       const AtomicExpr *AE = nullptr);
 
+  /// Emit a fence instruction, applying relevant target-specific metadata when
+  /// applicable.
+  llvm::FenceInst *
+  emitAtomicFence(llvm::AtomicOrdering Order,
+                  llvm::SyncScope::ID SSID = llvm::SyncScope::System);
+
   void EmitAtomicUpdate(LValue LVal, llvm::AtomicOrdering AO,
                         const llvm::function_ref<RValue(RValue)> &UpdateOp,
                         bool IsVolatile);
@@ -4749,6 +4760,9 @@ public:
                                                  llvm::Value *Discriminator);
   CGPointerAuthInfo EmitPointerAuthInfo(const PointerAuthSchema &Schema,
                                         llvm::Value *StorageAddress,
+                                        llvm::ConstantInt *Discriminator);
+  CGPointerAuthInfo EmitPointerAuthInfo(const PointerAuthSchema &Schema,
+                                        llvm::Value *StorageAddress,
                                         GlobalDecl SchemaDecl,
                                         QualType SchemaType);
 
@@ -4864,8 +4878,6 @@ public:
                                        ReturnValueSlot ReturnValue);
   RValue EmitAMDGPUDevicePrintfCallExpr(const CallExpr *E,
                                         ReturnValueSlot ReturnValue);
-
-  RValue EmitEmissaryExec(const CallExpr *E);
 
   RValue EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
                          const CallExpr *E, ReturnValueSlot ReturnValue);
@@ -5066,6 +5078,9 @@ public:
 
   void AddAMDGPUFenceAddressSpaceMMRA(llvm::Instruction *Inst,
                                       const CallExpr *E);
+  /// Attach the AMDGPU availability/visibility MMRA to \p Inst when the
+  /// amdgpu_av attribute is active on the current statement.
+  void AddAMDGPUAvailableVisibleMMRA(llvm::Instruction *Inst);
   void ProcessOrderScopeAMDGCN(llvm::Value *Order, llvm::Value *Scope,
                                llvm::AtomicOrdering &AO,
                                llvm::SyncScope::ID &SSID);

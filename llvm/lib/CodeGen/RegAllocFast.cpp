@@ -1014,7 +1014,6 @@ void RegAllocFastImpl::allocVirtReg(MachineInstr &MI, LiveReg &LR,
 void RegAllocFastImpl::allocVirtRegUndef(MachineOperand &MO) {
   assert(MO.isUndef() && "expected undef use");
   Register VirtReg = MO.getReg();
-
   assert(VirtReg.isVirtual() && "Expected virtreg");
   if (!shouldAllocateRegister(VirtReg))
     return;

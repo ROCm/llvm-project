@@ -934,17 +934,6 @@ void GVNPass::salvageAndRemoveInstruction(Instruction *I) {
   removeInstruction(I);
 }
 
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-LLVM_DUMP_METHOD void GVNPass::dump(DenseMap<uint32_t, Value *> &Map) const {
-  errs() << "{\n";
-  for (const auto &[Num, Exp] : Map) {
-    errs() << Num << "\n";
-    Exp->dump();
-  }
-  errs() << "}\n";
-}
-#endif
-
 enum class AvailabilityState : char {
   /// We know the block *is not* fully available. This is a fixpoint.
   Unavailable = 0,
@@ -3103,6 +3092,7 @@ bool GVNPass::propagateEquality(
     Value *LHS, Value *RHS,
     const std::variant<BasicBlockEdge, Instruction *> &Root) {
   SmallVector<std::pair<Value*, Value*>, 4> Worklist;
+  SmallDenseSet<std::pair<Value *, Value *>, 4> Visited;
   Worklist.push_back(std::make_pair(LHS, RHS));
   bool Changed = false;
   SmallVector<const BasicBlock *> DominatedBlocks;
@@ -3153,6 +3143,9 @@ bool GVNPass::propagateEquality(
         LVN = RVN;
       }
     }
+
+    if (!Visited.insert({LHS, RHS}).second)
+      continue;
 
     // If value numbering later sees that an instruction in the scope is equal
     // to 'LHS' then ensure it will be turned into 'RHS'.  In order to preserve
