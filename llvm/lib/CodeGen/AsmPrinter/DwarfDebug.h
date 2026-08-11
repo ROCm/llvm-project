@@ -894,8 +894,7 @@ public:
     return HasHeterogeneousExtensionAttributes;
   }
 
-  /// Returns whether or not to change the current debug info for the
-  /// split dwarf proposal support.
+  /// Returns whether or not to change the current debug info for split DWARF.
   bool useSplitDwarf() const { return HasSplitDwarf; }
 
   /// Returns whether to generate a string offsets table with (possibly shared)

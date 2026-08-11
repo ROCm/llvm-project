@@ -5524,6 +5524,10 @@ def err_no_viable_destructor : Error<
 def err_ambiguous_destructor : Error<
   "destructor of class %0 is ambiguous">;
 
+def note_ovl_ms_allocation_fallback_failed : Note<
+  "Microsoft compatibility array allocation fallback to "
+  "'::operator new(size_t)' failed">;
+
 def err_ovl_no_viable_object_call : Error<
   "no matching function for call to object of type %0">;
 def err_ovl_ambiguous_object_call : Error<
@@ -11056,6 +11060,12 @@ def warn_lifetime_safety_dangling_field_moved
       "This could be a false positive as the storage may have been moved. "
       "Consider moving first and then aliasing later to resolve the issue">,
       InGroup<LifetimeSafetyDanglingFieldMoved>,
+      DefaultIgnore;
+def warn_lifetime_safety_dangling_field_lambda_capture
+    : Warning<"stack memory associated with %0 may escape to the %1 which will dangle. "
+      "This could be a false positive as the field was captured by a lambda and "
+      "may have been reset before escaping">,
+      InGroup<LifetimeSafetyDanglingFieldLambdaCapture>,
       DefaultIgnore;
 def warn_lifetime_safety_dangling_global
     : Warning<"stack memory associated with %0 escapes to the %1 which will dangle">,
