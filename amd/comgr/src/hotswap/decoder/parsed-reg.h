@@ -14,7 +14,7 @@
 
 namespace COMGR::hotswap {
 
-struct ISAProfile; // forward declaration
+class ISAProfile;
 
 struct ParsedReg {
   // Compact-predicate "source-only" registers (SIRegisterInfo.td:198-200):

@@ -30,6 +30,8 @@ add_definitions(${LLVM_DEFINITIONS})
 # or a separate static archive.
 add_library(hotswap-raiser OBJECT
   raiser.cpp
+  raise_failure.cpp
+  reg-file.cpp
   wave-projection.cpp
 )
 
@@ -42,6 +44,16 @@ endif()
 # RTTI-on TUs with RTTI-off LLVM libs produces undefined-reference errors
 # for `typeinfo` symbols on any class with a virtual method.
 llvm_update_compile_flags(hotswap-raiser)
+# llvm_update_compile_flags does not reliably carry LLVM's -fno-rtti to a
+# standalone find_package(LLVM) consumer. RaiseFailure derives from
+# llvm::ErrorInfo, so mirror LLVM_ENABLE_RTTI explicitly.
+if(NOT LLVM_ENABLE_RTTI)
+  if(MSVC)
+    target_compile_options(hotswap-raiser PRIVATE /GR-)
+  else()
+    target_compile_options(hotswap-raiser PRIVATE -fno-rtti)
+  endif()
+endif()
 
 set_target_properties(hotswap-raiser PROPERTIES POSITION_INDEPENDENT_CODE ON)
 

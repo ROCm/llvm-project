@@ -1937,8 +1937,7 @@ void PreRARematStage::finalizeGCNRegion() {
   // target there is no point in trying to re-schedule further regions.
   if (!TargetOcc)
     return;
-  RegionReverts.emplace_back(RegionIdx, Unsched, PressureBefore,
-                             ScheduleReverted);
+  RegionReverts.emplace_back(RegionIdx, Unsched, PressureBefore);
   if (DAG.MinOccupancy < *TargetOcc) {
     REMAT_DEBUG(dbgs() << "Region " << RegionIdx
                        << " cannot meet occupancy target, interrupting "
@@ -1949,7 +1948,6 @@ void PreRARematStage::finalizeGCNRegion() {
 
 void GCNSchedStage::checkScheduling() {
   // Check the results of scheduling.
-  ScheduleReverted = false;
   PressureAfter = DAG.getRealRegPressure(RegionIdx);
 
   LLVM_DEBUG(dbgs() << "Pressure after scheduling: " << print(PressureAfter));
@@ -3205,11 +3203,7 @@ void PreRARematStage::finalizeGCNSchedStage() {
     return;
 
   // Revert re-scheduling in all affected regions.
-  for (const auto &[RegionIdx, OrigMIOrder, MaxPressure, AlreadyReverted] :
-       RegionReverts) {
-    DAG.Pressure[RegionIdx] = MaxPressure;
-    if (AlreadyReverted)
-      continue;
+  for (const auto &[RegionIdx, OrigMIOrder, MaxPressure] : RegionReverts) {
     REMAT_DEBUG(dbgs() << "Reverting re-scheduling in region " << RegionIdx
                        << '\n');
     DAG.Pressure[RegionIdx] = MaxPressure;

@@ -162,4 +162,4 @@ target_include_directories(hotswap-decoder PRIVATE
   "${HOTSWAP_COMGR_BINARY_DIR}/include"
 )
 
-target_link_libraries(hotswap-decoder PUBLIC ${HOTSWAP_LLVM_LIBS})
+target_link_libraries(hotswap-decoder PRIVATE ${HOTSWAP_LLVM_LIBS})
