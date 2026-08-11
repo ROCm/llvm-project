@@ -32,14 +32,14 @@ namespace COMGR::hotswap {
 
 RaiseContext::RaiseContext(
     LLVMContext &C, Module &M, IRBuilder<> &B, AllocaRegFile &Regs,
-    const WaveProjection &Projection, const MCState &Mc, const ISAProfile &Isa,
+    const WaveProjection &Projection, const MCState &MC, const ISAProfile &Isa,
     ISAProfile TargetIsa, unsigned TargetCodeObjectVersion,
     KernargLayout &Kernargs, const UserSgprLayout *Layout, Function *Kernel,
     BasicBlock *ThreadLoopLatch, DenseMap<uint64_t, BasicBlock *> &OffsetToBb,
     ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset)
-    : C(C), M(M), B(B), Regs(Regs), Projection(Projection), Mc(Mc), Isa(Isa),
+    : C(C), M(M), B(B), Regs(Regs), Projection(Projection), MC(MC), Isa(Isa),
       TargetIsa(TargetIsa), TargetCodeObjectVersion(TargetCodeObjectVersion),
       Kernargs(Kernargs), Layout(Layout), Kernel(Kernel),
       ThreadLoopLatch(ThreadLoopLatch), OffsetToBb(OffsetToBb),
@@ -115,16 +115,16 @@ Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   // through getVGPRLoweringOperandTables. Only the single-issue (X) table is
   // consulted; VOPD dual-issue packets carry their MSBs separately.
   unsigned Opc = Di.Inst.getOpcode();
-  const MCInstrDesc &Desc = Mc.InstrInfo->get(Opc);
+  const MCInstrDesc &Desc = MC.InstrInfo->get(Opc);
   const AMDGPU::OpName *Ops = AMDGPU::getVGPRLoweringOperandTables(Desc).first;
   if (!Ops) {
-    if (ignoresVGPRMsb(Opc) || !hasVectorRegOperand(Di, *Mc.RegInfo) ||
+    if (ignoresVGPRMsb(Opc) || !hasVectorRegOperand(Di, *MC.RegInfo) ||
         Desc.isPseudo() || Desc.isMetaInstruction())
       return Error::success();
     return createStringError(
         Twine("transpiler: S_SET_VGPR_MSB has no "
               "operand-role table for vector instruction ") +
-        strippedMnemonic(Mc, Di.Inst));
+        strippedMnemonic(MC, Di.Inst));
   }
 
   for (unsigned Slot = 0; Slot != 4; ++Slot) {
@@ -148,7 +148,7 @@ Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
       return createStringError(
           "transpiler: S_SET_VGPR_MSB operand index " + Twine(OpIdx) +
           " exceeds CurrentVgprAdjust capacity " + Twine(KMaxOps) + " for " +
-          strippedMnemonic(Mc, Di.Inst));
+          strippedMnemonic(MC, Di.Inst));
     CurrentVgprAdjust[OpIdx] = Adjust;
   }
   return Error::success();
@@ -167,16 +167,13 @@ static unsigned computeRegWidth32(const MCRegisterInfo &MRI, MCRegister Reg) {
   return W ? W : 1;
 }
 
-// Locate `reg` inside `RC` and return its 0-based position. Used where the
-// hardware encoding is not what we want (TTMPs live at generation-specific
-// HW slots 108+ or 112+, but downstream we index a logical `ttmp[16]`
-// array). Relies only on TableGen's declared class membership -- no enum
-// arithmetic assumptions.
-static int findIndexInClass(const MCRegisterClass &RC, MCRegister Reg) {
+// Return Reg's position in RC, or std::nullopt if it is not a member.
+static std::optional<unsigned> findIndexInClass(const MCRegisterClass &RC,
+                                                MCRegister Reg) {
   for (unsigned I = 0, E = RC.getNumRegs(); I != E; ++I)
     if (RC.getRegister(I) == Reg)
-      return static_cast<int>(I);
-  return -1;
+      return I;
+  return std::nullopt;
 }
 
 ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
@@ -186,7 +183,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
     return Pr;
   }
 
-  const MCRegisterInfo &MRI = *Mc.RegInfo;
+  const MCRegisterInfo &MRI = *MC.RegInfo;
 
   // Width is computed on the as-decoded register: only the subtarget-
   // specific aliases (TTMPx_gfx9plus, FLAT_SCR_vi, ...) carry the correct
@@ -347,9 +344,9 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   // index. Locate the lane inside TTMP_32RegClass instead; the class is
   // defined as `(add (sequence "TTMP%u", 0, 15))` so position == index.
   const MCRegisterClass &TTMP32 = MRI.getRegClass(AMDGPU::TTMP_32RegClassID);
-  if (int Idx = findIndexInClass(TTMP32, Lane); Idx >= 0) {
+  if (std::optional<unsigned> Index = findIndexInClass(TTMP32, Lane)) {
     Pr.RegKind = ParsedReg::TTMP;
-    Pr.BaseIdx = Idx;
+    Pr.BaseIdx = *Index;
     Pr.WidthInDwords = Width;
     return Pr;
   }
@@ -422,20 +419,20 @@ Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
     if (Pr.RegKind == ParsedReg::OTHER) {
       recordReadFailure(RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedInstructionForm,
-          strippedMnemonic(Mc, Di.Inst), Di.Offset, "operand-read",
+          strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
           Twine("readOp32 saw unmodeled register '") +
-              Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-              strippedMnemonic(Mc, Di.Inst)));
+              MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
+              strippedMnemonic(MC, Di.Inst)));
       return UndefValue::get(I32Ty);
     }
     Value *V = Regs.readReg32(B, Pr);
     if (!V) {
       recordReadFailure(RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedInstructionForm,
-          strippedMnemonic(Mc, Di.Inst), Di.Offset, "operand-read",
+          strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
           Twine("readOp32 could not read register '") +
-              Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-              strippedMnemonic(Mc, Di.Inst)));
+              MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
+              strippedMnemonic(MC, Di.Inst)));
       return UndefValue::get(I32Ty);
     }
     return V;
@@ -445,9 +442,9 @@ Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
   }
   recordReadFailure(RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(Mc, Di.Inst), Di.Offset, "operand-read",
+      strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
       Twine("readOp32 could not resolve operand ") + Twine(OpIdx) + " in " +
-          strippedMnemonic(Mc, Di.Inst)));
+          strippedMnemonic(MC, Di.Inst)));
   return UndefValue::get(I32Ty);
 }
 
@@ -514,20 +511,20 @@ Value *RaiseContext::readOp64(const DecodedInst &Di, unsigned OpIdx) {
     if (Pr.RegKind == ParsedReg::OTHER) {
       recordReadFailure(RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedInstructionForm,
-          strippedMnemonic(Mc, Di.Inst), Di.Offset, "operand-read",
+          strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
           Twine("readOp64 saw unmodeled register '") +
-              Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-              strippedMnemonic(Mc, Di.Inst)));
+              MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
+              strippedMnemonic(MC, Di.Inst)));
       return UndefValue::get(I64Ty);
     }
     Value *V = Regs.readReg64(B, Pr);
     if (!V) {
       recordReadFailure(RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedInstructionForm,
-          strippedMnemonic(Mc, Di.Inst), Di.Offset, "operand-read",
+          strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
           Twine("readOp64 could not read register '") +
-              Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-              strippedMnemonic(Mc, Di.Inst)));
+              MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
+              strippedMnemonic(MC, Di.Inst)));
       return UndefValue::get(I64Ty);
     }
     return V;
@@ -537,9 +534,9 @@ Value *RaiseContext::readOp64(const DecodedInst &Di, unsigned OpIdx) {
   }
   recordReadFailure(RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(Mc, Di.Inst), Di.Offset, "operand-read",
+      strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
       Twine("readOp64 could not resolve operand ") + Twine(OpIdx) + " in " +
-          strippedMnemonic(Mc, Di.Inst)));
+          strippedMnemonic(MC, Di.Inst)));
   return UndefValue::get(I64Ty);
 }
 
@@ -614,15 +611,15 @@ void RaiseContext::writeRegExecWidth(ParsedReg Pr, Value *V) {
     resetLaneActiveCache();
 }
 
-void RaiseContext::storeVGPR32(int Idx, Value *V) {
+void RaiseContext::storeVGPR32(unsigned Idx, Value *V) {
   emitUnderExec([&] { Regs.storeVGPR32(B, Idx, V); });
 }
 
-void RaiseContext::storeVGPR64(int Idx, Value *V) {
+void RaiseContext::storeVGPR64(unsigned Idx, Value *V) {
   emitUnderExec([&] { Regs.storeVGPR64(B, Idx, V); });
 }
 
-void RaiseContext::storeAGPR32(int Idx, Value *V) {
+void RaiseContext::storeAGPR32(unsigned Idx, Value *V) {
   emitUnderExec([&] { Regs.storeAGPR32(B, Idx, V); });
 }
 
@@ -703,10 +700,10 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
     }
     recordReadFailure(RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedInstructionForm,
-        strippedMnemonic(Mc, Di.Inst), Di.Offset, "operand-read",
+        strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
         Twine("readOpExecWidth could not read register '") +
-            Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-            strippedMnemonic(Mc, Di.Inst)));
+            MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
+            strippedMnemonic(MC, Di.Inst)));
     return UndefValue::get(Projection.execStorageTy());
   }
   // Immediate and relocation-expression operands are always encoded at
@@ -731,9 +728,9 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
   }
   recordReadFailure(RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(Mc, Di.Inst), Di.Offset, "operand-read",
+      strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
       Twine("readOpExecWidth could not resolve operand ") + Twine(OpIdx) +
-          " in " + strippedMnemonic(Mc, Di.Inst)));
+          " in " + strippedMnemonic(MC, Di.Inst)));
   return UndefValue::get(Projection.execStorageTy());
 }
 
