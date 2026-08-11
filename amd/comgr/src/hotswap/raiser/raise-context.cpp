@@ -154,13 +154,11 @@ Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   return Error::success();
 }
 
-// Count how many 32-bit sub-registers make up `Reg`. A 32-bit register has
-// no sub0 and is reported as width 1; tuples (SGPR0_SGPR1, VReg_128, ...)
-// walk sub0, sub1, ... until exhausted. Bounded by the target's declared
-// sub-reg index count.
-static int computeRegWidth32(const MCRegisterInfo &MRI, MCRegister Reg) {
+// Return the register width in 32-bit subregisters. Scalar registers have no
+// sub0 and therefore have width one.
+static unsigned computeRegWidth32(const MCRegisterInfo &MRI, MCRegister Reg) {
   const unsigned MaxSubIdx = MRI.getNumSubRegIndices();
-  int W = 0;
+  unsigned W = 0;
   for (unsigned SubIdx = AMDGPU::sub0; SubIdx < MaxSubIdx; ++SubIdx) {
     if (!MRI.getSubReg(Reg, SubIdx))
       break;
@@ -193,7 +191,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   // Width is computed on the as-decoded register: only the subtarget-
   // specific aliases (TTMPx_gfx9plus, FLAT_SCR_vi, ...) carry the correct
   // sub0/sub1/... chain from the disassembler.
-  const int Width = computeRegWidth32(MRI, Reg);
+  const unsigned Width = computeRegWidth32(MRI, Reg);
 
   // Reduce everything to a canonical 32-bit pseudo for class/enum lookups:
   //   * sub0 on the as-decoded register picks the first 32-bit lane out
