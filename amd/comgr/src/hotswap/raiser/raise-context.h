@@ -10,12 +10,12 @@
 #define HOTSWAP_TRANSPILER_RAISE_CONTEXT_H
 
 #include "hotswap/common/kernel-meta.h"
-#include "hotswap/loader/code-object-utils.h"
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/decoder/isa-profile.h"
-#include "kernarg-layout.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/decoder/parsed-reg.h"
+#include "hotswap/loader/code-object-utils.h"
+#include "kernarg-layout.h"
 #include "raise_failure.h"
 #include "reg-file.h"
 #include "user-sgpr-layout.h"
@@ -99,13 +99,15 @@ struct RaiseContext {
 
   // Read the operand at OpIdx as a 32-bit value, resolving registers through
   // the reg-file and immediates through the MC operand.
-  llvm::Value *readOp32(const DecodedInst &Di, unsigned OpIdx);
-  llvm::Value *readOp64(const DecodedInst &Di, unsigned OpIdx);
+  llvm::Expected<llvm::Value *> readOp32(const DecodedInst &Di, unsigned OpIdx);
+  llvm::Expected<llvm::Value *> readOp64(const DecodedInst &Di, unsigned OpIdx);
   // Read a mask at target EXEC width, replicating narrower source-wave bits.
-  llvm::Value *readOpExecWidth(const DecodedInst &Di, unsigned OpIdx);
+  llvm::Expected<llvm::Value *> readOpExecWidth(const DecodedInst &Di,
+                                                unsigned OpIdx);
   // Read the mask a source-wave instruction should see, e.g. for `v_mbcnt_lo`.
   // EXEC/VCC/SGPR-shadow masks are projected; scalars use readOp32.
-  llvm::Value *readOpSourceWaveMask32(const DecodedInst &Di, unsigned OpIdx);
+  llvm::Expected<llvm::Value *> readOpSourceWaveMask32(const DecodedInst &Di,
+                                                       unsigned OpIdx);
 
   // Target-hardware lane id (i32), emitted once per kernel and reused.
   llvm::Value *emitLaneIdx();
@@ -468,9 +470,6 @@ struct RaiseContext {
     Out.append(SourceWaveSgprPairShadow);
     Out.append(SourceWaveSgprPairValidShadow);
   }
-
-  // Record a deferred operand-read failure for the instruction dispatcher.
-  llvm::function_ref<void(llvm::Error Err)> recordReadFailure;
 };
 
 // Result of a format handler. An unhandled result permits dispatch to fall
@@ -518,12 +517,19 @@ struct OpResolver {
     return V;
   }
 
-  llvm::Value *src(unsigned I) { return Ctx.readOp32(Di, srcIdx(I)); }
-  llvm::Value *srcF(unsigned I) {
-    return applyMods(I, Ctx.readOp32(Di, srcIdx(I)));
+  llvm::Expected<llvm::Value *> src(unsigned I) {
+    return Ctx.readOp32(Di, srcIdx(I));
   }
-  llvm::Value *src64(unsigned I) { return Ctx.readOp64(Di, srcIdx(I)); }
-  llvm::Value *srcExecWidth(unsigned I) {
+  llvm::Expected<llvm::Value *> srcF(unsigned I) {
+    llvm::Expected<llvm::Value *> V = Ctx.readOp32(Di, srcIdx(I));
+    if (!V)
+      return V.takeError();
+    return applyMods(I, *V);
+  }
+  llvm::Expected<llvm::Value *> src64(unsigned I) {
+    return Ctx.readOp64(Di, srcIdx(I));
+  }
+  llvm::Expected<llvm::Value *> srcExecWidth(unsigned I) {
     return Ctx.readOpExecWidth(Di, srcIdx(I));
   }
   int64_t srcImm(unsigned I) { return Di.getImm(srcIdx(I)); }

@@ -308,7 +308,8 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
                      ")");
 }
 
-Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
+Expected<Value *> RaiseContext::readOp32(const DecodedInst &Di,
+                                         unsigned OpIdx) {
   IntegerType *I32Ty = B.getInt32Ty();
   if (Di.isReg(OpIdx)) {
     ParsedReg Pr = parseReg(Di.getReg(OpIdx), OpIdx);
@@ -357,41 +358,35 @@ Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
       return ConstantInt::get(I32Ty, 0);
     if (Pr.RegKind == ParsedReg::MODE)
       return ConstantInt::get(I32Ty, 0);
-    // Defer unsupported-register failure until the handler finishes.
-    if (Pr.RegKind == ParsedReg::OTHER) {
-      recordReadFailure(RaiseFailure::atInstruction(
+    if (Pr.RegKind == ParsedReg::OTHER)
+      return RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedInstructionForm,
           strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
           Twine("readOp32 saw unmodeled register '") +
               MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-              strippedMnemonic(MC, Di.Inst)));
-      return UndefValue::get(I32Ty);
-    }
+              strippedMnemonic(MC, Di.Inst));
     Value *V = Regs.readReg32(B, Pr);
-    if (!V) {
-      recordReadFailure(RaiseFailure::atInstruction(
+    if (!V)
+      return RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedInstructionForm,
           strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
           Twine("readOp32 could not read register '") +
               MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-              strippedMnemonic(MC, Di.Inst)));
-      return UndefValue::get(I32Ty);
-    }
+              strippedMnemonic(MC, Di.Inst));
     return V;
   }
   if (std::optional<int64_t> Val = evalOperandAsConst(Di.Inst, OpIdx)) {
     return ConstantInt::get(I32Ty, static_cast<uint32_t>(*Val));
   }
-  recordReadFailure(RaiseFailure::atInstruction(
+  return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
       strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
       Twine("readOp32 could not resolve operand ") + Twine(OpIdx) + " in " +
-          strippedMnemonic(MC, Di.Inst)));
-  return UndefValue::get(I32Ty);
+          strippedMnemonic(MC, Di.Inst));
 }
 
-Value *RaiseContext::readOpSourceWaveMask32(const DecodedInst &Di,
-                                            unsigned OpIdx) {
+Expected<Value *> RaiseContext::readOpSourceWaveMask32(const DecodedInst &Di,
+                                                       unsigned OpIdx) {
   if (!Di.isReg(OpIdx))
     return readOp32(Di, OpIdx);
 
@@ -404,7 +399,9 @@ Value *RaiseContext::readOpSourceWaveMask32(const DecodedInst &Di,
         B, Regs.readVCCAsWaveMask(B, Projection.execStorageTy()),
         "vcc_srcwave_mask");
   if (Pr.RegKind == ParsedReg::SGPR && Pr.BaseIdx) {
-    Value *Fallback = readOp32(Di, OpIdx);
+    Expected<Value *> Fallback = readOp32(Di, OpIdx);
+    if (!Fallback)
+      return Fallback.takeError();
     if (Value *ShadowValid = loadSgprWaveMaskValid(*Pr.BaseIdx)) {
       Value *ShadowExec = loadSgprWaveMaskExec(*Pr.BaseIdx);
       if (ShadowExec->getType() != Projection.execStorageTy())
@@ -412,16 +409,17 @@ Value *RaiseContext::readOpSourceWaveMask32(const DecodedInst &Di,
                                          "sgpr_mask_exec_cast");
       Value *ShadowMask = Projection.emitCurrentSourceWaveMask(
           B, ShadowExec, "sgpr_srcwave_mask_shadow");
-      return B.CreateSelect(ShadowValid, ShadowMask, Fallback,
+      return B.CreateSelect(ShadowValid, ShadowMask, *Fallback,
                             "sgpr_srcwave_mask");
     }
-    return Fallback;
+    return *Fallback;
   }
 
   return readOp32(Di, OpIdx);
 }
 
-Value *RaiseContext::readOp64(const DecodedInst &Di, unsigned OpIdx) {
+Expected<Value *> RaiseContext::readOp64(const DecodedInst &Di,
+                                         unsigned OpIdx) {
   IntegerType *I64Ty = B.getInt64Ty();
   if (Di.isReg(OpIdx)) {
     ParsedReg Pr = parseReg(Di.getReg(OpIdx), OpIdx);
@@ -448,36 +446,31 @@ Value *RaiseContext::readOp64(const DecodedInst &Di, unsigned OpIdx) {
       Value *Zero = ConstantInt::get(Exec->getType(), 0);
       return B.CreateZExt(B.CreateICmpEQ(Exec, Zero, "execz"), I64Ty);
     }
-    if (Pr.RegKind == ParsedReg::OTHER) {
-      recordReadFailure(RaiseFailure::atInstruction(
+    if (Pr.RegKind == ParsedReg::OTHER)
+      return RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedInstructionForm,
           strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
           Twine("readOp64 saw unmodeled register '") +
               MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-              strippedMnemonic(MC, Di.Inst)));
-      return UndefValue::get(I64Ty);
-    }
+              strippedMnemonic(MC, Di.Inst));
     Value *V = Regs.readReg64(B, Pr);
-    if (!V) {
-      recordReadFailure(RaiseFailure::atInstruction(
+    if (!V)
+      return RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedInstructionForm,
           strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
           Twine("readOp64 could not read register '") +
               MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-              strippedMnemonic(MC, Di.Inst)));
-      return UndefValue::get(I64Ty);
-    }
+              strippedMnemonic(MC, Di.Inst));
     return V;
   }
   if (std::optional<int64_t> Val = evalOperandAsConst(Di.Inst, OpIdx)) {
     return ConstantInt::getSigned(I64Ty, *Val);
   }
-  recordReadFailure(RaiseFailure::atInstruction(
+  return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
       strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
       Twine("readOp64 could not resolve operand ") + Twine(OpIdx) + " in " +
-          strippedMnemonic(MC, Di.Inst)));
-  return UndefValue::get(I64Ty);
+          strippedMnemonic(MC, Di.Inst));
 }
 
 Value *RaiseContext::emitLaneIdx() { return Projection.emitLaneIdx(B); }
@@ -572,7 +565,8 @@ void RaiseContext::emitUnderExec(llvm::function_ref<void()> Body) {
   B.SetInsertPoint(SkipBb);
 }
 
-Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
+Expected<Value *> RaiseContext::readOpExecWidth(const DecodedInst &Di,
+                                                unsigned OpIdx) {
   auto WidenToExec = [&](Value *Narrow) -> Value * {
     Type *ExecTy = Projection.execStorageTy();
     if (Narrow->getType() == ExecTy)
@@ -615,13 +609,12 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
       }
       return Fallback;
     }
-    recordReadFailure(RaiseFailure::atInstruction(
+    return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedInstructionForm,
         strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
         Twine("readOpExecWidth could not read register '") +
             MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-            strippedMnemonic(MC, Di.Inst)));
-    return UndefValue::get(Projection.execStorageTy());
+            strippedMnemonic(MC, Di.Inst));
   }
   // Interpret immediate masks at source width and replicate them like SGPR
   // operands when widening.
@@ -632,12 +625,11 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
     Value *Narrow = ConstantInt::get(SrcTy, Bits, /*IsSigned=*/false);
     return WidenToExec(Narrow);
   }
-  recordReadFailure(RaiseFailure::atInstruction(
+  return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
       strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
       Twine("readOpExecWidth could not resolve operand ") + Twine(OpIdx) +
-          " in " + strippedMnemonic(MC, Di.Inst)));
-  return UndefValue::get(Projection.execStorageTy());
+          " in " + strippedMnemonic(MC, Di.Inst));
 }
 
 } // namespace COMGR::hotswap
