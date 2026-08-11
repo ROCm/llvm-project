@@ -24,9 +24,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
 #include "llvm/MC/MCRegister.h"
 #include "llvm/Support/Error.h"
 
@@ -39,8 +37,6 @@ namespace COMGR::hotswap {
 
 // Shared state threaded through every format handler.
 struct RaiseContext {
-  llvm::LLVMContext &C;
-  llvm::Module &M;
   llvm::IRBuilder<> &B;
   AllocaRegFile &Regs;
   const WaveProjection &Projection;
@@ -59,16 +55,6 @@ struct RaiseContext {
   llvm::Function *Kernel;
   llvm::BasicBlock *ThreadLoopLatch = nullptr;
 
-  llvm::IntegerType *I1Ty;
-  llvm::IntegerType *I8Ty;
-  llvm::IntegerType *I16Ty;
-  llvm::IntegerType *I32Ty;
-  llvm::IntegerType *I64Ty;
-  llvm::Type *F32Ty;
-  llvm::Type *F16Ty;
-  llvm::Type *F64Ty;
-  llvm::Type *PtrGlobalTy;
-
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb;
   // Source code-object bytes used to materialise proven PC-relative literals.
   // `SourceTextBytes` remains the disassembly image; `SourceImageSections`
@@ -79,9 +65,9 @@ struct RaiseContext {
   uint64_t KernelStartOffset = 0;
   uint64_t KernelEndOffset = 0;
 
-  RaiseContext(llvm::LLVMContext &C, llvm::Module &M, llvm::IRBuilder<> &B,
-               AllocaRegFile &Regs, const WaveProjection &Projection,
-               const MCState &MC, const ISAProfile &Isa, ISAProfile TargetIsa,
+  RaiseContext(llvm::IRBuilder<> &B, AllocaRegFile &Regs,
+               const WaveProjection &Projection, const MCState &MC,
+               const ISAProfile &Isa, ISAProfile TargetIsa,
                unsigned TargetCodeObjectVersion, KernargLayout &Kernargs,
                const UserSgprLayout *Layout, llvm::Function *Kernel,
                llvm::BasicBlock *ThreadLoopLatch,
@@ -507,8 +493,9 @@ struct RaiseContext {
       return;
     if (BaseIdx >= SourceWaveSgprPairShadow.size())
       return;
-    llvm::Value *Old = B.CreateLoad(I64Ty, SourceWaveSgprPairShadow[BaseIdx],
-                                    "source_wave_sgpr_pair_old");
+    llvm::Value *Old =
+        B.CreateLoad(B.getInt64Ty(), SourceWaveSgprPairShadow[BaseIdx],
+                     "source_wave_sgpr_pair_old");
     llvm::Value *Merged = B.CreateSelect(emitCurrentSourceWaveHasActiveLane(),
                                          V, Old, "source_wave_sgpr_pair");
     B.CreateStore(Merged, SourceWaveSgprPairShadow[BaseIdx]);
@@ -522,10 +509,11 @@ struct RaiseContext {
     if (!Projection.providesFullWaveExecInvariant() ||
         BaseIdx >= SourceWaveSgprPairShadow.size())
       return Fallback;
-    llvm::Value *Shadow = B.CreateLoad(I64Ty, SourceWaveSgprPairShadow[BaseIdx],
-                                       "source_wave_sgpr_pair");
+    llvm::Value *Shadow =
+        B.CreateLoad(B.getInt64Ty(), SourceWaveSgprPairShadow[BaseIdx],
+                     "source_wave_sgpr_pair");
     llvm::Value *Valid =
-        B.CreateLoad(I1Ty, SourceWaveSgprPairValidShadow[BaseIdx],
+        B.CreateLoad(B.getInt1Ty(), SourceWaveSgprPairValidShadow[BaseIdx],
                      "source_wave_sgpr_pair_valid");
     return B.CreateSelect(Valid, Shadow, Fallback, "source_wave_sgpr_pair_sel");
   }
@@ -550,7 +538,7 @@ struct RaiseContext {
   llvm::Value *loadSgprWaveMaskValid(unsigned BaseIdx) const {
     if (BaseIdx >= SgprWaveMaskValidShadow.size())
       return nullptr;
-    return B.CreateLoad(I1Ty, SgprWaveMaskValidShadow[BaseIdx],
+    return B.CreateLoad(B.getInt1Ty(), SgprWaveMaskValidShadow[BaseIdx],
                         "sgpr_mask_valid");
   }
 
@@ -693,15 +681,15 @@ struct OpResolver {
     unsigned Mods = srcMod(I);
     if (Mods == 0)
       return V;
-    bool IsI32 = (V->getType() == Ctx.I32Ty);
+    bool IsI32 = (V->getType() == Ctx.B.getInt32Ty());
     if (IsI32)
-      V = Ctx.B.CreateBitCast(V, Ctx.F32Ty);
+      V = Ctx.B.CreateBitCast(V, Ctx.B.getFloatTy());
     if (Mods & 2)
       V = Ctx.B.CreateUnaryIntrinsic(llvm::Intrinsic::fabs, V, nullptr, "abs");
     if (Mods & 1)
       V = Ctx.B.CreateFNeg(V, "neg");
     if (IsI32)
-      V = Ctx.B.CreateBitCast(V, Ctx.I32Ty);
+      V = Ctx.B.CreateBitCast(V, Ctx.B.getInt32Ty());
     return V;
   }
 

@@ -31,32 +31,22 @@ using namespace llvm;
 namespace COMGR::hotswap {
 
 RaiseContext::RaiseContext(
-    LLVMContext &C, Module &M, IRBuilder<> &B, AllocaRegFile &Regs,
-    const WaveProjection &Projection, const MCState &MC, const ISAProfile &Isa,
-    ISAProfile TargetIsa, unsigned TargetCodeObjectVersion,
-    KernargLayout &Kernargs, const UserSgprLayout *Layout, Function *Kernel,
-    BasicBlock *ThreadLoopLatch, DenseMap<uint64_t, BasicBlock *> &OffsetToBb,
+    IRBuilder<> &B, AllocaRegFile &Regs, const WaveProjection &Projection,
+    const MCState &MC, const ISAProfile &Isa, ISAProfile TargetIsa,
+    unsigned TargetCodeObjectVersion, KernargLayout &Kernargs,
+    const UserSgprLayout *Layout, Function *Kernel, BasicBlock *ThreadLoopLatch,
+    DenseMap<uint64_t, BasicBlock *> &OffsetToBb,
     ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset)
-    : C(C), M(M), B(B), Regs(Regs), Projection(Projection), MC(MC), Isa(Isa),
+    : B(B), Regs(Regs), Projection(Projection), MC(MC), Isa(Isa),
       TargetIsa(TargetIsa), TargetCodeObjectVersion(TargetCodeObjectVersion),
       Kernargs(Kernargs), Layout(Layout), Kernel(Kernel),
       ThreadLoopLatch(ThreadLoopLatch), OffsetToBb(OffsetToBb),
       SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
-      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {
-  I1Ty = Type::getInt1Ty(C);
-  I8Ty = Type::getInt8Ty(C);
-  I16Ty = Type::getInt16Ty(C);
-  I32Ty = Type::getInt32Ty(C);
-  I64Ty = Type::getInt64Ty(C);
-  F32Ty = Type::getFloatTy(C);
-  F16Ty = Type::getHalfTy(C);
-  F64Ty = Type::getDoubleTy(C);
-  PtrGlobalTy = PointerType::get(C, 1);
-}
+      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {}
 
 BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
   DenseMap<uint64_t, BasicBlock *>::iterator It = OffsetToBb.find(Addr);
@@ -367,6 +357,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
 }
 
 Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
+  IntegerType *I32Ty = B.getInt32Ty();
   if (Di.isReg(OpIdx)) {
     ParsedReg Pr = parseReg(Di.getReg(OpIdx), OpIdx);
     if (Pr.RegKind == ParsedReg::VCC) {
@@ -376,8 +367,9 @@ Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
         Value *Hi = B.CreateTrunc(B.CreateLShr(Mask, Isa.waveSize()), I32Ty,
                                   "vcc_src_wave_hi");
         Value *Lane = Projection.emitLaneIdx(B);
-        Value *Upper = B.CreateICmpUGE(
-            Lane, ConstantInt::get(I32Ty, Isa.waveSize()), "vcc_src_wave_upper");
+        Value *Upper =
+            B.CreateICmpUGE(Lane, ConstantInt::get(I32Ty, Isa.waveSize()),
+                            "vcc_src_wave_upper");
         return B.CreateSelect(Upper, Hi, Lo, "vcc_src_wave_mask");
       }
       // Reading VCC as an i32 (wave32 wave-mask, or low 32 bits on wave64) is
@@ -480,6 +472,7 @@ Value *RaiseContext::readOpSourceWaveMask32(const DecodedInst &Di,
 }
 
 Value *RaiseContext::readOp64(const DecodedInst &Di, unsigned OpIdx) {
+  IntegerType *I64Ty = B.getInt64Ty();
   if (Di.isReg(OpIdx)) {
     ParsedReg Pr = parseReg(Di.getReg(OpIdx), OpIdx);
     if (Pr.RegKind == ParsedReg::VCC)
@@ -627,8 +620,8 @@ void RaiseContext::emitUnderExec(llvm::function_ref<void()> Body) {
   Value *Active = emitLaneActiveBit();
   BasicBlock *PreBb = B.GetInsertBlock();
   Function *F = PreBb->getParent();
-  BasicBlock *DoBb = BasicBlock::Create(C, "spe_do", F);
-  BasicBlock *SkipBb = BasicBlock::Create(C, "spe_skip", F);
+  BasicBlock *DoBb = BasicBlock::Create(B.getContext(), "spe_do", F);
+  BasicBlock *SkipBb = BasicBlock::Create(B.getContext(), "spe_skip", F);
   KernargPtrProvenance PreProvenance = CurrentKernargPtrProvenance;
   B.CreateCondBr(Active, DoBb, SkipBb);
 
@@ -719,7 +712,7 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
   // interpretation would place outside the source-width signed range. Mask to
   // the source width first so ConstantInt::get with IsSigned=false still
   // asserts on a truly malformed literal instead of silently truncating.
-  Type *SrcTy = Isa.isWave32() ? I32Ty : I64Ty;
+  Type *SrcTy = Isa.isWave32() ? B.getInt32Ty() : B.getInt64Ty();
   uint64_t SrcMask = Isa.isWave32() ? 0xFFFFFFFFull : 0xFFFFFFFFFFFFFFFFull;
   if (std::optional<int64_t> Val = evalOperandAsConst(Di.Inst, OpIdx)) {
     uint64_t Bits = static_cast<uint64_t>(*Val) & SrcMask;
