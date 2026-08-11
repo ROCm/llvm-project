@@ -368,7 +368,7 @@ RocmInstallationDetector::RocmInstallationDetector(
   }
 
   if (DetectHIPRuntime)
-    detectHIPRuntime();
+    detectHIPRuntime(HostTriple);
 }
 
 void RocmInstallationDetector::detectDeviceLibrary() {
@@ -379,6 +379,7 @@ void RocmInstallationDetector::detectDeviceLibrary() {
   else if (std::optional<std::string> LibPathEnv =
                llvm::sys::Process::GetEnv("HIP_DEVICE_LIB_PATH"))
     LibDevicePath = std::move(*LibPathEnv);
+
   auto &FS = D.getVFS();
   if (!LibDevicePath.empty()) {
     // Maintain compatability with HIP flag/envvar pointing directly at the
@@ -421,16 +422,6 @@ void RocmInstallationDetector::detectDeviceLibrary() {
   if (HasDeviceLibrary)
     return;
 
-  // Find device libraries in <LLVM_DIR>/amdgcn/bitcode
-  auto &oROCmDirs = getInstallationPathCandidates();
-  for (const auto &Candidate : oROCmDirs) {
-    LibDevicePath = Candidate.Path;
-    llvm::sys::path::append(LibDevicePath, "amdgcn", "bitcode");
-    HasDeviceLibrary = CheckDeviceLib(LibDevicePath, true);
-    if (HasDeviceLibrary)
-      return;
-  }
-
   // Find device libraries in a legacy ROCm directory structure
   // ${ROCM_ROOT}/amdgcn/bitcode/*
   auto &ROCmDirs = getInstallationPathCandidates();
@@ -443,7 +434,8 @@ void RocmInstallationDetector::detectDeviceLibrary() {
   }
 }
 
-void RocmInstallationDetector::detectHIPRuntime() {
+void RocmInstallationDetector::detectHIPRuntime(
+    const llvm::Triple &HostTriple) {
   SmallVector<Candidate, 4> HIPSearchDirs;
   if (!HIPPathArg.empty())
     HIPSearchDirs.emplace_back(HIPPathArg.str());
@@ -465,8 +457,25 @@ void RocmInstallationDetector::detectHIPRuntime() {
     llvm::sys::path::append(BinPath, "bin");
     IncludePath = InstallPath;
     llvm::sys::path::append(IncludePath, "include");
-    LibPath = InstallPath;
-    llvm::sys::path::append(LibPath, "lib");
+
+    // ROCm's lib path is the place where the amdhsa64 library is located.
+    // Probe for it and fallback to /rocm/lib if we cannot find it.
+    StringRef LibAmdHip64 =
+        HostTriple.isOSMSVCRT() ? "amdhip64.lib" : "libamdhip64.so";
+    LibPath.clear();
+    for (StringRef LibPathSuffix : {"lib", "lib64"}) {
+      SmallString<0> LibAmdHip64Location;
+      llvm::sys::path::append(LibAmdHip64Location, InstallPath, LibPathSuffix,
+                              LibAmdHip64);
+      if (FS.exists(LibAmdHip64Location)) {
+        llvm::sys::path::append(LibPath, InstallPath, LibPathSuffix);
+        break;
+      }
+    }
+
+    if (LibPath.empty())
+      llvm::sys::path::append(LibPath, InstallPath, "lib");
+
     SharePath = InstallPath;
     llvm::sys::path::append(SharePath, "share");
 

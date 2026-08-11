@@ -20,7 +20,7 @@ define protected amdgpu_kernel void @func_int8(ptr addrspace(1) %p_a_grid.coerce
 ; CHECK-NEXT:    [[MIN_ITERS_CHECK:%.*]] = icmp ult i32 [[K]], 2
 ; CHECK-NEXT:    br i1 [[MIN_ITERS_CHECK]], label %[[SCALAR_PH:.*]], label %[[VECTOR_PH:.*]]
 ; CHECK:       [[VECTOR_PH]]:
-; CHECK-NEXT:    [[N_MOD_VF:%.*]] = urem i32 [[K]], 2
+; CHECK-NEXT:    [[N_MOD_VF:%.*]] = and i32 [[K]], 1
 ; CHECK-NEXT:    [[N_VEC:%.*]] = sub i32 [[K]], [[N_MOD_VF]]
 ; CHECK-NEXT:    br label %[[VECTOR_BODY:.*]]
 ; CHECK:       [[VECTOR_BODY]]:

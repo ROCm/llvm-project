@@ -66,7 +66,7 @@ Value *WaveProjection::emitLaneIdx(IRBuilder<> &B) const {
   Value *AllOnes = ConstantInt::getSigned(I32Ty, -1);
   Value *Zero32 = ConstantInt::get(I32Ty, 0);
   Value *LaneId = EB.CreateCall(MbcntLo, {AllOnes, Zero32}, "lane_lo");
-  if (WaveMaskTy != I32Ty) {
+  if (waveMaskTy() != I32Ty) {
     Function *MbcntHi =
         Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_mbcnt_hi);
     LaneId = EB.CreateCall(MbcntHi, {AllOnes, LaneId}, "lane_id");
@@ -242,7 +242,7 @@ Value *ReplicationProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
       M, Intrinsic::amdgcn_ballot, {waveMaskTy()});
   Value *WaveMask = B.CreateCall(Ballot, {Pred}, Name);
   unsigned WantedBits = ResultTy->getPrimitiveSizeInBits();
-  unsigned WaveBits = WaveMaskTy->getPrimitiveSizeInBits();
+  unsigned WaveBits = waveMaskTy()->getPrimitiveSizeInBits();
   assert(WantedBits <= WaveBits &&
          "ballotI1ToWidth: wantedBits > waveBits (wave64 source on wave32 "
          "target) has no replication projection; this direction needs "
@@ -267,7 +267,7 @@ Value *ReplicationProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
   Type *I64Ty = B.getInt64Ty();
   if (V->getType()->isPointerTy())
     V = B.CreatePtrToInt(V, I64Ty);
-  Type *TargetTy = WaveMaskTy;
+  Type *TargetTy = waveMaskTy();
   unsigned SrcBits = V->getType()->getPrimitiveSizeInBits();
   unsigned DstBits = TargetTy->getPrimitiveSizeInBits();
   if (SrcBits < DstBits) {
@@ -350,8 +350,8 @@ Value *ReplicationDoubledDispatchProjection::emitPackedWorkitemId(
 // ----------------------------------------------------------------------------
 // WaveNativeProjection -- widening (wave32 -> wave64).
 //
-// The target is wave64, so WaveMaskTy is i64; this projection uses it for both
-// the EXEC alloca storage and the ballot/lane-active arithmetic.
+// The target is wave64, so waveMaskTy() is i64; this projection uses it for
+// both the EXEC alloca storage and the ballot/lane-active arithmetic.
 // ----------------------------------------------------------------------------
 
 WaveNativeProjection::WaveNativeProjection(const ISAProfile &SrcIsa,
@@ -370,7 +370,7 @@ WaveNativeProjection::WaveNativeProjection(const ISAProfile &SrcIsa,
   // EXEC=-1 kernel-wide, so mbcnt-derived EXEC writes project into independent
   // target-width masks and a narrow EXEC_LO write broadcasts across both
   // halves.
-  ExecStorageTy = WaveMaskTy;
+  ExecStorageTy = waveMaskTy();
   NumSourceWavesPerTarget = 2;
   BroadcastNarrowExecLoWrite = true;
   ProvidesFullWaveExecInvariant = true;
@@ -389,17 +389,17 @@ Value *WaveNativeProjection::emitInitialExec(IRBuilder<> &B) const {
       Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_init_whole_wave);
   Value *OriginalActive = B.CreateCall(InitWw, {}, "orig_active");
   // Ballot the per-lane i1 into a wave-width mask via the projection's own
-  // ballot so the result type matches WaveMaskTy.
-  return ballotI1ToWidth(B, OriginalActive, WaveMaskTy, "saved_exec");
+  // ballot so the result type matches waveMaskTy().
+  return ballotI1ToWidth(B, OriginalActive, waveMaskTy(), "saved_exec");
 }
 
 Value *WaveNativeProjection::emitLaneActiveBit(IRBuilder<> &B,
                                                Value *ExecVal) const {
-  // Target lane L is active iff bit L of the widened EXEC (WaveMaskTy) is set;
-  // the shift index is the full target lane id, with no modulo fold.
+  // Target lane L is active iff bit L of the widened EXEC (waveMaskTy()) is
+  // set; the shift index is the full target lane id, with no modulo fold.
   Value *LaneId = emitLaneIdx(B);
   Type *ExecTy = ExecVal->getType();
-  assert(ExecTy == WaveMaskTy &&
+  assert(ExecTy == waveMaskTy() &&
          "WaveNativeProjection requires EXEC storage to match the "
          "target wave mask width; caller must size the alloca via "
          "execStorageTy()");
@@ -419,7 +419,7 @@ Value *WaveNativeProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
       M, Intrinsic::amdgcn_ballot, {waveMaskTy()});
   Value *WaveMask = B.CreateCall(Ballot, {Pred}, Name);
   unsigned WantedBits = ResultTy->getPrimitiveSizeInBits();
-  unsigned WaveBits = WaveMaskTy->getPrimitiveSizeInBits();
+  unsigned WaveBits = waveMaskTy()->getPrimitiveSizeInBits();
   assert(WantedBits <= WaveBits &&
          "WaveNativeProjection::ballotI1ToWidth: wantedBits > waveBits "
          "is not defined for wave32 source -> wave64 target cross-"
@@ -443,7 +443,7 @@ Value *WaveNativeProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
   Type *I64Ty = B.getInt64Ty();
   if (V->getType()->isPointerTy())
     V = B.CreatePtrToInt(V, I64Ty);
-  Type *TargetTy = WaveMaskTy;
+  Type *TargetTy = waveMaskTy();
   unsigned SrcBits = V->getType()->getPrimitiveSizeInBits();
   unsigned DstBits = TargetTy->getPrimitiveSizeInBits();
   if (SrcBits < DstBits) {
@@ -509,7 +509,7 @@ ThreadLoopProjection::ThreadLoopProjection(const ISAProfile &SrcIsa,
          "ThreadLoopProjection requires target wave size to be an integer "
          "multiple of source wave size");
 
-  ExecStorageTy = WaveMaskTy;
+  ExecStorageTy = waveMaskTy();
   NumSourceWavesPerTarget = TgtIsa.waveSize() / SrcIsa.waveSize();
   SourceWaveScopedLaneOps = true;
 }
@@ -559,7 +559,7 @@ Value *ThreadLoopProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
       M, Intrinsic::amdgcn_ballot, {waveMaskTy()});
   Value *WaveMask = B.CreateCall(Ballot, {Pred}, Name);
   const unsigned WantedBits = ResultTy->getPrimitiveSizeInBits();
-  const unsigned WaveBits = WaveMaskTy->getPrimitiveSizeInBits();
+  const unsigned WaveBits = waveMaskTy()->getPrimitiveSizeInBits();
   assert(WantedBits <= WaveBits &&
          "ThreadLoopProjection::ballotI1ToWidth requires resultTy <= target "
          "wave mask width");
@@ -574,7 +574,7 @@ Value *ThreadLoopProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
     return V;
   Type *TargetTy = V->getType()->getPrimitiveSizeInBits() >
                            sourceWaveMaskTy()->getPrimitiveSizeInBits()
-                       ? WaveMaskTy
+                       ? waveMaskTy()
                        : sourceWaveMaskTy();
   unsigned SrcBits = V->getType()->getPrimitiveSizeInBits();
   unsigned DstBits = TargetTy->getPrimitiveSizeInBits();
@@ -589,7 +589,7 @@ Value *ThreadLoopProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
   Value *LaneIdxExt =
       B.CreateZExtOrTrunc(LaneIdx, TargetTy, "tl_mask_lane_idx");
   Value *ShiftIdx =
-      (TargetTy == WaveMaskTy)
+      (TargetTy == waveMaskTy())
           ? LaneIdxExt
           : B.CreateAnd(LaneIdxExt, ConstantInt::get(TargetTy, DstBits - 1),
                         "tl_mask_lane_mod");

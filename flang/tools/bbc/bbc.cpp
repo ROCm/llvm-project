@@ -552,6 +552,8 @@ static llvm::LogicalResult convertFortranSourceToMLIR(
     mlir::omp::setOffloadModuleInterfaceAttributes(mlirModule,
                                                    offloadModuleOpts);
     mlir::omp::setOpenMPVersionAttribute(mlirModule, setOpenMPVersion);
+    if (!integerWrapAround)
+      setOpenMPIntegerWrapAround(mlirModule, false);
   }
   burnside.lower(parseTree, semanticsContext);
   std::error_code ec;

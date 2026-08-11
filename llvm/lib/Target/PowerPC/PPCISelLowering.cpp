@@ -241,12 +241,39 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
   setTruncStoreAction(MVT::f128, MVT::f16, Expand);
   setOperationAction(ISD::FP_TO_FP16, MVT::f128, Expand);
 
+  // bf16 is soft-promoted to f32 on all PowerPC targets.
+  // Loads/stores use the integer i16 path (lhz/sth) via TypeSoftPromoteHalf.
+  // BF16_TO_FP (extend) is done inline via left-shift-16.
+  // FP_TO_BF16 (truncate) is done via the __truncsfbf2 libcall.
+  // No hardware extending loads or truncating stores to/from bf16.
+  //
+  // BF16_TO_FP and FP_TO_BF16 must be explicitly marked Expand so that
+  // LegalizeDAG expands them to the shift+bitcast / libcall sequences before
+  // ISel.  Without this they default to Legal and reach ISel with no matching
+  // .td pattern, causing a "Cannot select" fatal error.
+  // BF16_TO_FP action is keyed on the result type; FP_TO_BF16 on the operand
+  // type (see LegalizeDAG.cpp action dispatch).
+  for (MVT VT : {MVT::f32, MVT::f64, MVT::f128}) {
+    setLoadExtAction(ISD::EXTLOAD, VT, MVT::bf16, Expand);
+    setTruncStoreAction(VT, MVT::bf16, Expand);
+    setOperationAction(ISD::BF16_TO_FP, VT, Expand);
+    setOperationAction(ISD::FP_TO_BF16, VT, Expand);
+  }
+
   if (Subtarget.isISA3_0()) {
     setLoadExtAction(ISD::EXTLOAD, MVT::f128, MVT::f16, Legal);
     setLoadExtAction(ISD::EXTLOAD, MVT::f64, MVT::f16, Legal);
     setLoadExtAction(ISD::EXTLOAD, MVT::f32, MVT::f16, Legal);
     setTruncStoreAction(MVT::f64, MVT::f16, Legal);
     setTruncStoreAction(MVT::f32, MVT::f16, Legal);
+    // ISA 3.0 (Power9) has XSCVHPDP/XSCVDPHP for scalar HP<->DP conversion.
+    // The .td patterns in PPCInstrVSX.td use f16_to_fp/fp_to_f16 ISD nodes;
+    // mark them Legal here so the soft-promote machinery uses hardware instead
+    // of __extendhfsf2/__truncsfhf2 libcalls for register-to-register converts.
+    setOperationAction(ISD::FP16_TO_FP, MVT::f64, Legal);
+    setOperationAction(ISD::FP16_TO_FP, MVT::f32, Legal);
+    setOperationAction(ISD::FP_TO_FP16, MVT::f64, Legal);
+    setOperationAction(ISD::FP_TO_FP16, MVT::f32, Legal);
   } else {
     // No extending loads from f16 or HW conversions back and forth.
     setLoadExtAction(ISD::EXTLOAD, MVT::f128, MVT::f16, Expand);
@@ -817,9 +844,6 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
     setOperationAction(ISD::FCANONICALIZE, MVT::f32, Legal);
   }
 
-  setOperationAction(ISD::IS_FPCLASS, MVT::f32, Custom);
-  setOperationAction(ISD::IS_FPCLASS, MVT::f64, Custom);
-
   if (Subtarget.hasAltivec()) {
     for (MVT VT : { MVT::v16i8, MVT::v8i16, MVT::v4i32 }) {
       setOperationAction(ISD::AVGCEILS, VT, Legal);
@@ -1261,8 +1285,11 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
     if (Subtarget.hasP9Vector()) {
       setOperationAction(ISD::INSERT_VECTOR_ELT, MVT::v4i32, Custom);
       setOperationAction(ISD::INSERT_VECTOR_ELT, MVT::v4f32, Custom);
+
       // Test data class instructions store results in CR bits.
       if (Subtarget.useCRBits()) {
+        setOperationAction(ISD::IS_FPCLASS, MVT::f32, Custom);
+        setOperationAction(ISD::IS_FPCLASS, MVT::f64, Custom);
         setOperationAction(ISD::IS_FPCLASS, MVT::f128, Custom);
         setOperationAction(ISD::IS_FPCLASS, MVT::ppcf128, Custom);
       }
@@ -11964,78 +11991,18 @@ static SDValue getDataClassTest(SDValue Op, FPClassTest Mask, const SDLoc &Dl,
 
 SDValue PPCTargetLowering::LowerIS_FPCLASS(SDValue Op,
                                            SelectionDAG &DAG) const {
+  assert(Subtarget.hasP9Vector() && "Test data class requires Power9");
   SDValue LHS = Op.getOperand(0);
   uint64_t RHSC = Op.getConstantOperandVal(1);
   SDLoc Dl(Op);
   FPClassTest Category = static_cast<FPClassTest>(RHSC);
-  EVT VT = LHS.getValueType();
-
-  assert((VT == MVT::f32 || VT == MVT::f64 ||
-          ((VT == MVT::f128 || VT == MVT::ppcf128) && Subtarget.hasVSX() &&
-           Subtarget.useCRBits())) &&
-         "invalid customize type for IS_FPCLASS.");
-  // Handle ppcf128 by extracting the higher part
-  if (VT == MVT::ppcf128) {
+  if (LHS.getValueType() == MVT::ppcf128) {
     // The higher part determines the value class.
     LHS = DAG.getNode(ISD::EXTRACT_ELEMENT, Dl, MVT::f64, LHS,
                       DAG.getConstant(1, Dl, MVT::i32));
-    VT = MVT::f64;
   }
 
-  // If we have P9Vector and useCRBits, use the data class test instructions
-  if (Subtarget.hasP9Vector() && Subtarget.useCRBits()) {
-    return getDataClassTest(LHS, Category, Dl, DAG, Subtarget);
-  }
-
-  // For non-P9Vector targets, we can only check for NaN using fcmpu/xscmpudp
-  // These instructions set CR bits based on comparison with itself:
-  // - If value is NaN, the comparison is unordered (FU bit set)
-  // - If value is not NaN, the comparison is equal (EQ bit set)
-
-  if ((Category != fcNan) && (Category != ~fcNan)) {
-    // If not checking for NaN or non-NaN, we can't handle this without P9Vector
-    return SDValue();
-  }
-
-  // Determine which comparison instruction to use based on vector support
-  unsigned CmpOp;
-
-  if (Subtarget.hasVSX()) {
-    // Use xscmpudp for VSX targets (both f32 and f64)
-    // For f32, extend to f64 first
-    if (VT == MVT::f32) {
-      LHS = DAG.getNode(ISD::FP_EXTEND, Dl, MVT::f64, LHS);
-    } else if (VT != MVT::f64) {
-      return SDValue();
-    }
-    CmpOp = PPC::XSCMPUDP;
-  } else {
-    // Use fcmpu for non-VSX targets
-    // FCMPUS and FCMPUD both map to the same fcmpu instruction,
-    // just with different register classes (f4rc vs f8rc)
-    if (VT == MVT::f64) {
-      CmpOp = PPC::FCMPUD;
-    } else if (VT == MVT::f32) {
-      CmpOp = PPC::FCMPUS;
-    } else {
-      return SDValue();
-    }
-  }
-
-  // Create the comparison: fcmpu/xscmpudp CR, LHS, LHS
-  // The CR field output will be allocated by the register allocator
-  SDValue Cmp = SDValue(DAG.getMachineNode(CmpOp, Dl, MVT::i32, LHS, LHS), 0);
-
-  // Extract the unordered bit (FU) from the CR field
-  // For NaN detection: FU bit is set if operands are unordered (i.e., NaN)
-  SDValue NanCheck = SDValue(
-      DAG.getMachineNode(
-          TargetOpcode::EXTRACT_SUBREG, Dl, MVT::i1, Cmp,
-          DAG.getTargetConstant(Category == ~fcNan ? PPC::sub_un : PPC::sub_eq,
-                                Dl, MVT::i32)),
-      0);
-
-  return DAG.getNOT(Dl, NanCheck, MVT::i1);
+  return getDataClassTest(LHS, Category, Dl, DAG, Subtarget);
 }
 
 // Adjust the length value for a load/store with length to account for the

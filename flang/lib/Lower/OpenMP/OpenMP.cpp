@@ -1447,22 +1447,27 @@ static void getDeclareTargetInfo(
               : (owningProc ? owningProc->getMainProgramSymbol() : nullptr);
 
       // A bare '!$omp declare target' may appear in the specification part of
-      // an interface body. In that case the PFT records the directive as an
+      // an interface body. In that case, the PFT records the directive as an
       // evaluation of the enclosing program unit rather than of the interface
       // body's subprogram, so eval.getOwningProcedure() points at the main
-      // program. Detect this by comparing the program unit lexically containing
+      // program.
+      //
+      // Detect this by comparing the program unit lexically containing
       // the directive with the procedure currently being lowered; when they
-      // differ, the directive belongs to the interface-body subprogram, which
-      // is the symbol we must capture.
+      // differ, it might be this case or it might be one of the entries of a
+      // multiple-entry subprogram. In the first case, the directive belongs to
+      // the interface-body subprogram; otherwise, the owning subprogram is the
+      // correct one.
       const semantics::Scope &progUnitScope =
           semantics::GetProgramUnitContaining(
               semaCtx.FindScope(construct.v.source));
       const semantics::Symbol *lexicalSym = progUnitScope.symbol();
 
       if (lexicalSym && lexicalSym != owningSym) {
-        // Interface subprogram capture.
+        // Interface subprogram capture or non-default subprogram entry.
         symbolAndClause.emplace_back(mlir::omp::DeclareTargetCaptureClause::to,
-                                     *lexicalSym);
+                                     owningProcNotMainProgram ? *owningSym
+                                                              : *lexicalSym);
       } else if (owningProcNotMainProgram) {
         // Main programs are never device routines, so skip those here.
         symbolAndClause.emplace_back(mlir::omp::DeclareTargetCaptureClause::to,
@@ -1798,11 +1803,13 @@ markDeclareTarget(mlir::Operation *op, lower::AbstractConverter &converter,
   if (declareTargetOp.isDeclareTarget()) {
     if (declareTargetOp.getDeclareTargetDeviceType() != deviceType)
       declareTargetOp.setDeclareTarget(mlir::omp::DeclareTargetDeviceType::any,
-                                       captureClause, automap);
+                                       captureClause, automap,
+                                       /*implicit=*/false);
     return;
   }
 
-  declareTargetOp.setDeclareTarget(deviceType, captureClause, automap);
+  declareTargetOp.setDeclareTarget(deviceType, captureClause, automap,
+                                   /*implicit=*/false);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2155,7 +2162,6 @@ static void createBodyOfOp(mlir::Operation &op, const OpWithBodyGenInfo &info,
     }
   }
 
-  // TODO: groupprivate is currently only materialised for `teams` constructs.
   if (info.dir == llvm::omp::Directive::OMPD_teams)
     groupprivatizeVars(info.converter, info.eval);
 
@@ -2408,6 +2414,22 @@ static void genBodyOfTargetOp(
 
   // Create the insertion point after the marker.
   firOpBuilder.setInsertionPointAfter(undefMarker.getDefiningOp());
+
+  bool immediatelyNestsTeams = false;
+  if (std::next(item) != queue.end()) {
+    immediatelyNestsTeams = llvm::omp::topTeamsSet.test(std::next(item)->id);
+  } else if (lower::pft::Evaluation *nestedEval =
+                 extractOnlyOmpNestedEval(eval)) {
+    const auto &ompEval = nestedEval->get<parser::OpenMPConstruct>();
+    llvm::omp::Directive nestedDir =
+        parser::omp::GetOmpDirectiveName(ompEval).v;
+    llvm::omp::Directive firstLeafDir =
+        llvm::omp::getLeafConstructsOrSelf(nestedDir).front();
+    immediatelyNestsTeams = llvm::omp::topTeamsSet.test(firstLeafDir);
+  }
+  // No enclosing teams: materialise the copy on the target itself
+  if (!immediatelyNestsTeams)
+    groupprivatizeVars(converter, eval);
 
   if (ConstructQueue::const_iterator next = std::next(item);
       next != queue.end()) {
@@ -3195,6 +3217,11 @@ static void genCanonicalLoopNest(
         converter.genExprValue(*semantics::GetExpr(bounds->Lower()), stmtCtx));
     mlir::Value loopUBVar = fir::getBase(
         converter.genExprValue(*semantics::GetExpr(bounds->Upper()), stmtCtx));
+
+    // Get the integer kind for the loop variable and cast the loop bounds.
+    size_t loopVarTypeSize = bounds->Name().thing.symbol->GetUltimate().size();
+    mlir::Type loopVarType = getLoopVarType(converter, loopVarTypeSize);
+    loopVarTypes.push_back(loopVarType);
     mlir::Value loopStepVar = [&]() {
       if (auto &step = bounds->Step()) {
         return fir::getBase(
@@ -3202,51 +3229,57 @@ static void genCanonicalLoopNest(
       }
 
       // If `step` is not present, assume it is `1`.
-      auto intTy = firOpBuilder.getI32Type();
-      return firOpBuilder.createIntegerConstant(loc, intTy, 1);
+      return firOpBuilder.createIntegerConstant(loc, loopVarType, 1);
     }();
 
-    // Get the integer kind for the loop variable and cast the loop bounds
-    size_t loopVarTypeSize = bounds->Name().thing.symbol->GetUltimate().size();
-    mlir::Type loopVarType = getLoopVarType(converter, loopVarTypeSize);
-    loopVarTypes.push_back(loopVarType);
-    loopLBVar = firOpBuilder.createConvert(loc, loopVarType, loopLBVar);
-    loopUBVar = firOpBuilder.createConvert(loc, loopVarType, loopUBVar);
-    loopStepVar = firOpBuilder.createConvert(loc, loopVarType, loopStepVar);
+    auto convertToLoopVarType = [&](mlir::Value value) -> mlir::Value {
+      if (value.getType() == loopVarType)
+        return value;
+      if (std::optional<llvm::APInt> constant = fir::getIntIfConstant(value)) {
+        unsigned width = mlir::cast<mlir::IntegerType>(loopVarType).getWidth();
+        llvm::APInt converted = constant->sextOrTrunc(width);
+        return mlir::arith::ConstantOp::create(
+            firOpBuilder, loc, loopVarType,
+            mlir::IntegerAttr::get(loopVarType, converted));
+      }
+      return firOpBuilder.createConvert(loc, loopVarType, value);
+    };
+    loopLBVar = convertToLoopVarType(loopLBVar);
+    loopUBVar = convertToLoopVarType(loopUBVar);
+    loopStepVar = convertToLoopVarType(loopStepVar);
     loopLBVars.push_back(loopLBVar);
     loopStepVars.push_back(loopStepVar);
 
     // Start lowering
     mlir::Value zero = firOpBuilder.createIntegerConstant(loc, loopVarType, 0);
     mlir::Value one = firOpBuilder.createIntegerConstant(loc, loopVarType, 1);
-    mlir::Value isDownwards = mlir::arith::CmpIOp::create(
-        firOpBuilder, loc, mlir::arith::CmpIPredicate::slt, loopStepVar, zero);
+    mlir::Value isDownwards = firOpBuilder.createOrFold<mlir::arith::CmpIOp>(
+        loc, mlir::arith::CmpIPredicate::slt, loopStepVar, zero);
 
     // Ensure we are counting upwards. If not, negate step and swap lb and ub.
     mlir::Value negStep =
-        mlir::arith::SubIOp::create(firOpBuilder, loc, zero, loopStepVar);
-    mlir::Value incr = mlir::arith::SelectOp::create(
-        firOpBuilder, loc, isDownwards, negStep, loopStepVar);
-    mlir::Value lb = mlir::arith::SelectOp::create(
-        firOpBuilder, loc, isDownwards, loopUBVar, loopLBVar);
-    mlir::Value ub = mlir::arith::SelectOp::create(
-        firOpBuilder, loc, isDownwards, loopLBVar, loopUBVar);
+        firOpBuilder.createOrFold<mlir::arith::SubIOp>(loc, zero, loopStepVar);
+    mlir::Value incr = firOpBuilder.createOrFold<mlir::arith::SelectOp>(
+        loc, isDownwards, negStep, loopStepVar);
+    mlir::Value lb = firOpBuilder.createOrFold<mlir::arith::SelectOp>(
+        loc, isDownwards, loopUBVar, loopLBVar);
+    mlir::Value ub = firOpBuilder.createOrFold<mlir::arith::SelectOp>(
+        loc, isDownwards, loopLBVar, loopUBVar);
 
     // Compute the trip count assuming lb <= ub. This guarantees that the result
     // is non-negative and we can use unsigned arithmetic.
-    mlir::Value span = mlir::arith::SubIOp::create(
-        firOpBuilder, loc, ub, lb, ::mlir::arith::IntegerOverflowFlags::nuw);
+    mlir::Value span = firOpBuilder.createOrFold<mlir::arith::SubIOp>(
+        loc, ub, lb, ::mlir::arith::IntegerOverflowFlags::nuw);
     mlir::Value tcMinusOne =
-        mlir::arith::DivUIOp::create(firOpBuilder, loc, span, incr);
-    mlir::Value tcIfLooping =
-        mlir::arith::AddIOp::create(firOpBuilder, loc, tcMinusOne, one,
-                                    ::mlir::arith::IntegerOverflowFlags::nuw);
+        firOpBuilder.createOrFold<mlir::arith::DivUIOp>(loc, span, incr);
+    mlir::Value tcIfLooping = firOpBuilder.createOrFold<mlir::arith::AddIOp>(
+        loc, tcMinusOne, one, ::mlir::arith::IntegerOverflowFlags::nuw);
 
     // Fall back to 0 if lb > ub
-    mlir::Value isZeroTC = mlir::arith::CmpIOp::create(
-        firOpBuilder, loc, mlir::arith::CmpIPredicate::slt, ub, lb);
-    mlir::Value tripcount = mlir::arith::SelectOp::create(
-        firOpBuilder, loc, isZeroTC, zero, tcIfLooping);
+    mlir::Value isZeroTC = firOpBuilder.createOrFold<mlir::arith::CmpIOp>(
+        loc, mlir::arith::CmpIPredicate::slt, ub, lb);
+    mlir::Value tripcount = firOpBuilder.createOrFold<mlir::arith::SelectOp>(
+        loc, isZeroTC, zero, tcIfLooping);
     tripcounts.push_back(tripcount);
 
     // Create the CLI handle.

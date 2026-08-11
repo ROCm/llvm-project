@@ -58,3 +58,57 @@ target_include_directories(WaveProjectionTests PRIVATE
   $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
 
 comgr_configure_test_target(WaveProjectionTests)
+
+# -- RaiseFailureTests --------------------------------------------------------
+#
+# Pins the RaiseFailure value type: the shape factories, the optional
+# format/offset accessors, and the stable reasonString / log diagnostic text.
+
+add_executable(RaiseFailureTests
+  RaiseFailureTest.cpp)
+
+# RaiseFailure lives in hotswap::raiser. That OBJECT library also carries the
+# reg file and wave projection, which reach into hotswap::decoder, so link both.
+target_link_libraries(RaiseFailureTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  hotswap::raiser
+  hotswap::decoder
+  hotswap::common
+  ${LLVM_PTHREAD_LIB})
+
+target_include_directories(RaiseFailureTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${PROJECT_SOURCE_DIR}/src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
+
+comgr_configure_test_target(RaiseFailureTests)
+
+# -- RegFileTests -------------------------------------------------------------
+#
+# Round-trips values through AllocaRegFile's ParsedReg dispatch, then promotes
+# the allocas to SSA and constant-folds to confirm the value survives. Needs
+# TransformUtils (PromoteMemToReg) and Analysis (constant folding) on top of the
+# component set hotswap::decoder carries.
+
+add_executable(RegFileTests
+  RegFileTest.cpp)
+
+llvm_map_components_to_libnames(COMGR_TEST_UNIT_REGFILE_LIBS
+  Analysis TransformUtils)
+
+target_link_libraries(RegFileTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  hotswap::raiser
+  hotswap::decoder
+  hotswap::common
+  ${COMGR_TEST_UNIT_REGFILE_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+target_include_directories(RegFileTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${PROJECT_SOURCE_DIR}/src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
+
+comgr_configure_test_target(RegFileTests)

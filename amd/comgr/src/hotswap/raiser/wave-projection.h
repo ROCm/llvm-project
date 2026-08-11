@@ -36,7 +36,6 @@ public:
   WaveProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
                  llvm::Type *I32Ty, llvm::Type *I64Ty)
       : Src(SrcIsa), Tgt(TgtIsa), I32Ty(I32Ty), I64Ty(I64Ty),
-        WaveMaskTy(TgtIsa.isWave32() ? I32Ty : I64Ty),
         ExecStorageTy(SrcIsa.isWave32() ? I32Ty : I64Ty) {}
 
   virtual ~WaveProjection() = default;
@@ -51,7 +50,7 @@ public:
   // Hardware-width wave mask (i32 on wave32 target, i64 on wave64 target).
   // Distinct from the EXEC alloca storage width returned by
   // `execStorageTy()`.
-  llvm::Type *waveMaskTy() const { return WaveMaskTy; }
+  llvm::Type *waveMaskTy() const { return Tgt.isWave32() ? I32Ty : I64Ty; }
 
   // Wave mask at the source ISA's width (i32 on wave32 source, i64 on wave64):
   // the width the source observes when reading or writing EXEC and SGPR wave
@@ -184,13 +183,12 @@ protected:
 
   ISAProfile Src;
   ISAProfile Tgt;
-  // Retained on the base so `sourceWaveMaskTy()` / `execStorageTy()` can
-  // return the canonical i32/i64 IR types without re-deriving them from the
-  // current IRBuilder's context (subclasses are constructed once per kernel
-  // and outlive any particular builder).
+  // Retained on the base so `waveMaskTy()` / `sourceWaveMaskTy()` /
+  // `execStorageTy()` can return the canonical i32/i64 IR types without
+  // re-deriving them from the current IRBuilder's context (subclasses are
+  // constructed once per kernel and outlive any particular builder).
   llvm::Type *I32Ty;
   llvm::Type *I64Ty;
-  llvm::Type *WaveMaskTy;
 
   // Per-projection configuration, read through the like-named accessors
   // above. The defaults describe the same-wave / replication policy;

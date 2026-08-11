@@ -6191,8 +6191,14 @@ convertOmpAtomicCompare(omp::AtomicCompareOp atomicCompareOp,
     llvm::Value *dInt =
         builder.CreateAlignedLoad(intTy, dAlloca, maxAlign, "cmplx.d.int");
 
+    // Honor the `fail` clause ordering when present (the verifier guarantees
+    // it is a valid cmpxchg failure ordering); otherwise derive it from the
+    // success ordering.
     llvm::AtomicOrdering failOrdering =
-        llvm::AtomicCmpXchgInst::getStrongestFailureOrdering(atomicOrdering);
+        atomicCompareOp.getFailMemoryOrder()
+            ? convertAtomicOrdering(atomicCompareOp.getFailMemoryOrder())
+            : llvm::AtomicCmpXchgInst::getStrongestFailureOrdering(
+                  atomicOrdering);
     auto *cmpXchg = builder.CreateAtomicCmpXchg(llvmX, eInt, dInt, maxAlign,
                                                 atomicOrdering, failOrdering);
     cmpXchg->setWeak(atomicCompareOp.getWeak());
@@ -6280,10 +6286,19 @@ convertOmpAtomicCompare(omp::AtomicCompareOp atomicCompareOp,
   bool isWeak = atomicCompareOp.getWeak();
 
   bool savedHandleFPNegZero = ompBuilder->setHandleFPNegZero(true);
-  llvm::OpenMPIRBuilder::InsertPointOrErrorTy afterIP =
-      ompBuilder->createAtomicCompare(ompLoc, llvmAtomicX, vOpVal, rOpVal, eVal,
-                                      dVal, atomicOrdering, compareOp,
-                                      isXBinopExpr, false, false, isWeak);
+  llvm::OpenMPIRBuilder::InsertPointOrErrorTy afterIP = [&]() {
+    if (auto failOrder = atomicCompareOp.getFailMemoryOrder()) {
+      llvm::AtomicOrdering failureOrdering = convertAtomicOrdering(*failOrder);
+      return ompBuilder->createAtomicCompare(
+          ompLoc, llvmAtomicX, vOpVal, rOpVal, eVal, dVal, atomicOrdering,
+          compareOp, isXBinopExpr, /*IsPostfixUpdate=*/false,
+          /*IsFailOnly=*/false, failureOrdering, isWeak);
+    }
+    return ompBuilder->createAtomicCompare(
+        ompLoc, llvmAtomicX, vOpVal, rOpVal, eVal, dVal, atomicOrdering,
+        compareOp, isXBinopExpr, /*IsPostfixUpdate=*/false,
+        /*IsFailOnly=*/false, isWeak);
+  }();
   ompBuilder->setHandleFPNegZero(savedHandleFPNegZero);
 
   if (failed(handleError(afterIP, *atomicCompareOp)))
@@ -9681,6 +9696,16 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::amendOperation(
                   else
                     return failure();
                 }
+                return success();
+              }
+              return failure();
+            })
+      .Case("omp.integer_wrap_around",
+            [&](Attribute attr) {
+              if (auto wrapAttr = dyn_cast<omp::IntegerWrapAroundAttr>(attr)) {
+                llvm::OpenMPIRBuilderConfig &config =
+                    moduleTranslation.getOpenMPBuilder()->Config;
+                config.setNoSignedWrap(!wrapAttr.getIntegerWrapAround());
                 return success();
               }
               return failure();
