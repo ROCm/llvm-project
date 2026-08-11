@@ -569,21 +569,6 @@ elseif(COMPILER_RT_HAS_G_FLAG)
   list(APPEND SANITIZER_COMMON_CFLAGS -g)
 endif()
 
-if(SANITIZER_AMDGPU)
-  # GPU sanitizer HSA support is 64-bit only.
-  list(APPEND SANITIZER_COMMON_CFLAGS -DSANITIZER_AMDHSA=__LP64__)
-  message(STATUS "Looking for 'amd_comgr' header")
-  find_path(COMgr_INCLUDE NAMES amd_comgr.h.in HINTS ${SANITIZER_COMGR_INCLUDE_PATH} PATH_SUFFIXES amd_comgr)
-  if(NOT COMgr_INCLUDE)
-    find_path(COMgr_INCLUDE NAMES amd_comgr.h HINTS /opt/rocm/include PATH_SUFFIXES amd_comgr)
-    if(NOT COMgr_INCLUDE)
-      message(FATAL_ERROR "Required header 'amd_comgr.h/amd_comgr.h.in' not found in path ${COMgr_INCLUDE}. Aborting SANITIZER_AMDGPU build")
-    endif()
-  endif()
-  message(STATUS "Found 'amd_comgr.h.in/amd_comgr.h' in ${COMgr_INCLUDE}")
-  include_directories(${COMgr_INCLUDE})
-endif()
-
 if(LLVM_ENABLE_MODULES)
   # Sanitizers cannot be built with -fmodules. The interceptors intentionally
   # don't include system headers, which is incompatible with modules.
