@@ -740,6 +740,7 @@ yaml::SIMachineFunctionInfo::SIMachineFunctionInfo(
       WaveLimiter(MFI.needsWaveLimiter()),
       HasSpilledSGPRs(MFI.hasSpilledSGPRs()),
       HasSpilledVGPRs(MFI.hasSpilledVGPRs()),
+      HasNoWWMPoolSGPRSpillFallback(MFI.hasNoWWMPoolSGPRSpillFallback()),
       NumWaveDispatchSGPRs(MFI.getNumWaveDispatchSGPRs()),
       NumWaveDispatchVGPRs(MFI.getNumWaveDispatchVGPRs()),
       HighBitsOf32BitAddress(MFI.get32BitAddressHighBits()),
@@ -799,6 +800,7 @@ bool SIMachineFunctionInfo::initializeBaseYamlFields(
   WaveLimiter = YamlMFI.WaveLimiter;
   HasSpilledSGPRs = YamlMFI.HasSpilledSGPRs;
   HasSpilledVGPRs = YamlMFI.HasSpilledVGPRs;
+  HasNoWWMPoolSGPRSpillFallback = YamlMFI.HasNoWWMPoolSGPRSpillFallback;
   NumWaveDispatchSGPRs = YamlMFI.NumWaveDispatchSGPRs;
   NumWaveDispatchVGPRs = YamlMFI.NumWaveDispatchVGPRs;
   BytesInStackArgArea = YamlMFI.BytesInStackArgArea;
