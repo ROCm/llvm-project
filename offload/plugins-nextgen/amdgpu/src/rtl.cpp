@@ -5657,12 +5657,10 @@ private:
     uint32_t NumBlocks[3] = {1u, 1u, 1u};
 
     // Launch kernel with 256 threads and 1 block
-    if (auto Err = DMInitKernel.launchImpl(*this, NumThreads, NumBlocks, 0,
-                                           KernelArgs, LaunchParams, AsyncInfo))
-      return Err;
+    auto Err = DMInitKernel.launchImpl(*this, NumThreads, NumBlocks, 0,
+                                       KernelArgs, LaunchParams, AsyncInfo);
 
     // Wait for completion
-    Error Err = Plugin::success();
     AsyncInfo.finalize(Err);
 
     // Mark as successfully initialized
