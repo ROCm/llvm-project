@@ -6757,8 +6757,27 @@ const char *Driver::GetNamedOutputPath(Compilation &C, const JobAction &JA,
         C.getArgs()
             .getLastArg(options::OPT__SLASH_Fo, options::OPT__SLASH_o)
             ->getValue();
-    NamedOutput =
-        MakeCLOutputFilename(C.getArgs(), Val, BaseName, JA.getType());
+    SmallString<128> Filename(
+        MakeCLOutputFilename(C.getArgs(), Val, BaseName, JA.getType()));
+    // When compiling for multiple GPU architectures, each arch produces a
+    // separate output. Append the arch suffix to avoid all arches writing to
+    // the same filename and overwriting each other. HIP offload actions only
+    // carry the arch via getOffloadingArch(); BA (used above for BoundArchStr)
+    // stays empty for HIP, only CUDA and other offload kinds set it.
+    BoundArch OffloadArch = JA.getOffloadingArch();
+    std::string SanitizedOffloadArch =
+        OffloadArch.empty() ? std::string()
+                            : sanitizeTargetIDInFileName(OffloadArch.ArchName);
+    StringRef ArchSuffix = OffloadArch.empty() ? StringRef(BoundArchStr)
+                                               : StringRef(SanitizedOffloadArch);
+    if (MultipleArchs && !ArchSuffix.empty()) {
+      std::string SavedExt = llvm::sys::path::extension(Filename).str();
+      llvm::sys::path::replace_extension(Filename, "");
+      Filename += "-";
+      Filename += ArchSuffix;
+      Filename += SavedExt;
+    }
+    NamedOutput = C.getArgs().MakeArgString(Filename);
   } else if (JA.getType() == types::TY_Image &&
              C.getArgs().hasArg(options::OPT__SLASH_Fe,
                                 options::OPT__SLASH_o)) {
