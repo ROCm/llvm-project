@@ -591,9 +591,9 @@ private:
   WWMSpillsMap WWMSpills;
 
   // Before allocation, the VGPR registers are partitioned into two distinct
-  // sets, one for WWM-values and the other for perlane-values. We should enable
-  // the appropriate mask before their allocation begins.
-  BitVector NonWWMRegMask;
+  // sets, the first one for WWM values and the second set for per-lane values.
+  // The latter set should be reserved during WWM-regalloc.
+  BitVector PerLaneVGPRMask;
 
   using ReservedRegSet = SmallSetVector<Register, 8>;
   // To track the VGPRs reserved for WWM instructions. They get stack slots
@@ -696,9 +696,9 @@ public:
                            : WWMReservedRegs.contains(Reg);
   }
 
-  void updateNonWWMRegMask(BitVector &RegMask) { NonWWMRegMask = RegMask; }
-  BitVector getNonWWMRegMask() const { return NonWWMRegMask; }
-  void clearNonWWMRegAllocMask() { NonWWMRegMask.clear(); }
+  void updatePerLaneVGPRMask(BitVector &RegMask) { PerLaneVGPRMask = RegMask; }
+  BitVector getPerLaneVGPRMask() const { return PerLaneVGPRMask; }
+  void clearPerLaneVGPRAllocMask() { PerLaneVGPRMask.clear(); }
 
   SIModeRegisterDefaults getMode() const { return Mode; }
 
@@ -872,7 +872,7 @@ public:
 
   /// If \p ResetSGPRSpillStackIDs is true, reset the stack ID from sgpr-spill
   /// to the default stack.
-  bool removeDeadFrameIndices(MachineFunction &MF,
+  bool removeDeadFrameIndices(MachineFrameInfo &MFI,
                               bool ResetSGPRSpillStackIDs);
 
   int getScavengeFI(MachineFrameInfo &MFI, const SIRegisterInfo &TRI);

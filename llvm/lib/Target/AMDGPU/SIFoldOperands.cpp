@@ -19,8 +19,10 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
+#include "llvm/InitializePasses.h"
 
 #define DEBUG_TYPE "si-fold-operands"
 using namespace llvm;
@@ -181,6 +183,7 @@ public:
   const SIRegisterInfo *TRI;
   const GCNSubtarget *ST;
   const SIMachineFunctionInfo *MFI;
+  const MachineLoopInfo *MLI;
 
   bool frameIndexMayFold(const MachineInstr &UseMI, int OpNo,
                          const FoldableDef &OpToFold) const;
@@ -221,6 +224,8 @@ public:
                         const FoldableDef &OpToFold) const;
   bool isUseSafeToFold(const MachineInstr &MI,
                        const MachineOperand &UseMO) const;
+  bool isTemporallyDivergentUse(const FoldableDef &OpToFold,
+                                const MachineInstr &UseMI) const;
 
   const TargetRegisterClass *getRegSeqInit(
       MachineInstr &RegSeq,
@@ -268,7 +273,7 @@ public:
 public:
   SIFoldOperandsImpl() = default;
 
-  bool run(MachineFunction &MF);
+  bool run(MachineFunction &MF, const MachineLoopInfo *MLI);
 };
 
 class SIFoldOperandsLegacy : public MachineFunctionPass {
@@ -280,13 +285,17 @@ public:
   bool runOnMachineFunction(MachineFunction &MF) override {
     if (skipFunction(MF.getFunction()))
       return false;
-    return SIFoldOperandsImpl().run(MF);
+    const MachineLoopInfo *MLI =
+        &getAnalysis<MachineLoopInfoWrapperPass>().getLI();
+    return SIFoldOperandsImpl().run(MF, MLI);
   }
 
   StringRef getPassName() const override { return "SI Fold Operands"; }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
+    AU.addRequired<MachineLoopInfoWrapperPass>();
+    AU.addPreserved<MachineLoopInfoWrapperPass>();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 
@@ -297,8 +306,11 @@ public:
 
 } // End anonymous namespace.
 
-INITIALIZE_PASS(SIFoldOperandsLegacy, DEBUG_TYPE, "SI Fold Operands", false,
-                false)
+INITIALIZE_PASS_BEGIN(SIFoldOperandsLegacy, DEBUG_TYPE, "SI Fold Operands",
+                      false, false)
+INITIALIZE_PASS_DEPENDENCY(MachineLoopInfoWrapperPass)
+INITIALIZE_PASS_END(SIFoldOperandsLegacy, DEBUG_TYPE, "SI Fold Operands", false,
+                    false)
 
 char SIFoldOperandsLegacy::ID = 0;
 
@@ -978,6 +990,32 @@ bool SIFoldOperandsImpl::isUseSafeToFold(const MachineInstr &MI,
   return !TII->isSDWA(MI);
 }
 
+// Returns true if any instruction in \p L modifies EXEC.
+static bool loopModifiesExec(const MachineLoop &L, const SIRegisterInfo &TRI) {
+  for (const MachineBasicBlock *MBB : L.getBlocks())
+    for (const MachineInstr &MI : *MBB)
+      if (MI.modifiesRegister(TRI.getExec(), &TRI))
+        return true;
+  return false;
+}
+
+// An SGPR->VGPR copy inside a divergent loop latches each lane value as it
+// exits. Folding its scalar source into a use after the loop would make every
+// lane read the same reconverged value, so do not fold across the loop exit.
+bool SIFoldOperandsImpl::isTemporallyDivergentUse(
+    const FoldableDef &OpToFold, const MachineInstr &UseMI) const {
+  if (!OpToFold.isReg())
+    return false;
+  const MachineInstr *DefMI = OpToFold.DefMI;
+  if (!DefMI || !DefMI->isCopy() ||
+      TRI->isSGPRReg(*MRI, DefMI->getOperand(0).getReg()) ||
+      !TRI->isSGPRReg(*MRI, OpToFold.getReg()))
+    return false;
+  const MachineLoop *DefLoop = MLI->getLoopFor(DefMI->getParent());
+  return DefLoop && !DefLoop->contains(UseMI.getParent()) &&
+         loopModifiesExec(*DefLoop, *TRI);
+}
+
 static MachineOperand *lookUpCopyChain(const SIInstrInfo &TII,
                                        const MachineRegisterInfo &MRI,
                                        Register SrcReg) {
@@ -1217,6 +1255,9 @@ bool SIFoldOperandsImpl::foldOperand(
   const MachineOperand *UseOp = &UseMI->getOperand(UseOpIdx);
 
   if (!isUseSafeToFold(*UseMI, *UseOp))
+    return Changed;
+
+  if (isTemporallyDivergentUse(OpToFold, *UseMI))
     return Changed;
 
   // FIXME: Fold operands with subregs.
@@ -2813,7 +2854,6 @@ bool SIFoldOperandsImpl::tryOptimizeAGPRPhis(MachineBasicBlock &MBB) {
   return Changed;
 }
 
-
 static bool isPhysRegDefBetween(const SIRegisterInfo *TRI, Register Reg,
                          const MachineInstr &Start, const MachineInstr &End) {
   if(Start.getParent() != End.getParent())
@@ -2947,13 +2987,14 @@ bool SIFoldOperandsImpl::tryOptimizeVcndVcmpPair(MachineInstr &MI) {
   return true;
 }
 
-bool SIFoldOperandsImpl::run(MachineFunction &MF) {
+bool SIFoldOperandsImpl::run(MachineFunction &MF, const MachineLoopInfo *MLI) {
   this->MF = &MF;
   MRI = &MF.getRegInfo();
   ST = &MF.getSubtarget<GCNSubtarget>();
   TII = ST->getInstrInfo();
   TRI = &TII->getRegisterInfo();
   MFI = MF.getInfo<SIMachineFunctionInfo>();
+  this->MLI = MLI;
 
   // omod is ignored by hardware if IEEE bit is enabled. omod also does not
   // correctly handle signed zeros.
@@ -3022,15 +3063,18 @@ bool SIFoldOperandsImpl::run(MachineFunction &MF) {
   return Changed;
 }
 
-PreservedAnalyses SIFoldOperandsPass::run(MachineFunction &MF,
-                                          MachineFunctionAnalysisManager &) {
+PreservedAnalyses
+SIFoldOperandsPass::run(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM) {
   MFPropsModifier _(*this, MF);
 
-  bool Changed = SIFoldOperandsImpl().run(MF);
+  const MachineLoopInfo *MLI = &MFAM.getResult<MachineLoopAnalysis>(MF);
+  bool Changed = SIFoldOperandsImpl().run(MF, MLI);
   if (!Changed) {
     return PreservedAnalyses::all();
   }
   auto PA = getMachineFunctionPassPreservedAnalyses();
   PA.preserveSet<CFGAnalyses>();
+  PA.preserve<MachineLoopAnalysis>();
   return PA;
 }

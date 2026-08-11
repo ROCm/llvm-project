@@ -8,6 +8,8 @@
 
 #include "raiser.h"
 
+#include "raise_failure.h"
+
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -31,50 +33,42 @@ constexpr llvm::StringLiteral AMDGPUTriple = "amdgcn-amd-amdhsa";
 // currently lives behind the comgr-metadata layer in `src/comgr.cpp` and
 // is not reachable from the hotswap subproject. As a stop-gap, validate
 // the AMDGPU processor name through `llvm::AMDGPU::parseArchAMDGCN`.
-RaiseFailure validateInputs(llvm::StringRef SourceISA,
-                            llvm::StringRef KernelName) {
-  RaiseFailure F;
-  if (SourceISA.empty()) {
-    F.Reason = RaiseFailureReason::BadInput;
-    F.Detail = "source ISA string is empty";
-    return F;
-  }
+llvm::Error validateInputs(llvm::StringRef SourceISA,
+                           llvm::StringRef KernelName) {
+  if (SourceISA.empty())
+    return RaiseFailure::general(RaiseFailureReason::BadInput,
+                                 "source ISA string is empty");
   // The disassembler-facing identifier is `<arch>-<vendor>-<os>-<env>-<gfx>`;
   // `parseArchAMDGCN` inspects the trailing component.
   llvm::StringRef GfxName = SourceISA.rsplit('-').second;
   if (GfxName.empty()) {
     GfxName = SourceISA;
   }
-  if (llvm::AMDGPU::parseArchAMDGCN(GfxName) == llvm::AMDGPU::GK_NONE) {
-    F.Reason = RaiseFailureReason::BadInput;
-    F.Detail =
-        ("source ISA '" + SourceISA + "' does not name an AMDGPU GPU").str();
-    return F;
-  }
-  if (KernelName.empty()) {
-    F.Reason = RaiseFailureReason::BadInput;
-    F.Detail = "kernel name is empty";
-    return F;
-  }
-  return F;
+  if (llvm::AMDGPU::parseArchAMDGCN(GfxName) == llvm::AMDGPU::GK_NONE)
+    return RaiseFailure::general(RaiseFailureReason::BadInput,
+                                 "source ISA '" + SourceISA +
+                                     "' does not name an AMDGPU GPU");
+  if (KernelName.empty())
+    return RaiseFailure::general(RaiseFailureReason::BadInput,
+                                 "kernel name is empty");
+  return llvm::Error::success();
 }
 
 } // namespace
 
-RaiseResult raiseToIR(llvm::StringRef SourceISA, llvm::StringRef KernelName,
-                      const KernelMeta &Meta) {
+llvm::Expected<RaiseResult> raiseToIR(llvm::StringRef SourceISA,
+                                      llvm::StringRef KernelName,
+                                      const KernelMeta &Meta) {
   using namespace llvm;
 
   // Meta becomes load-bearing once the decoder reconstructs the kernel
   // signature and ABI from it; the scaffolding only echoes the kernel name.
   (void)Meta;
 
-  RaiseResult Result;
-  Result.Failure = validateInputs(SourceISA, KernelName);
-  if (Result.Failure.hasFailed()) {
-    return Result;
-  }
+  if (Error E = validateInputs(SourceISA, KernelName))
+    return std::move(E);
 
+  RaiseResult Result;
   Result.Ctx = std::make_unique<LLVMContext>();
   LLVMContext &C = *Result.Ctx;
   Result.Module = std::make_unique<Module>("transpiler_module", C);
@@ -91,7 +85,6 @@ RaiseResult raiseToIR(llvm::StringRef SourceISA, llvm::StringRef KernelName,
   IRBuilder<> B(Entry);
   B.CreateRetVoid();
 
-  Result.Success = true;
   return Result;
 }
 

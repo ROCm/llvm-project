@@ -33,13 +33,13 @@ define void @test(i64 %arg0, i64 %arg1) {
 ; CHECK-NEXT:    br label [[REDUCE]]
 ; CHECK:       reduce:
 ; CHECK-NEXT:    [[PHI4:%.*]] = phi double [ [[LOAD4]], [[LOOP]] ], [ 0.000000e+00, [[DEAD:%.*]] ]
-; CHECK-NEXT:    [[PHI5:%.*]] = phi double [ [[LOAD5]], [[LOOP]] ], [ 0.000000e+00, [[DEAD]] ]
+; CHECK-NEXT:    [[TMP5:%.*]] = phi double [ [[LOAD5]], [[LOOP]] ], [ 0.000000e+00, [[DEAD]] ]
 ; CHECK-NEXT:    [[TMP1:%.*]] = phi <4 x double> [ [[TMP0]], [[LOOP]] ], [ poison, [[DEAD]] ]
 ; CHECK-NEXT:    [[TMP2:%.*]] = call double @llvm.vector.reduce.fminimum.v4f64(<4 x double> [[TMP1]])
 ; CHECK-NEXT:    [[TMP3:%.*]] = call double @llvm.minimum.f64(double [[TMP2]], double [[PHI4]])
-; CHECK-NEXT:    [[TMP4:%.*]] = call double @llvm.minimum.f64(double [[PHI5]], double 0.000000e+00)
-; CHECK-NEXT:    [[TMP5:%.*]] = call double @llvm.minimum.f64(double [[TMP3]], double [[TMP4]])
 ; CHECK-NEXT:    [[MIN6:%.*]] = call double @llvm.minimum.f64(double [[TMP5]], double 0.000000e+00)
+; CHECK-NEXT:    [[TMP6:%.*]] = call double @llvm.minimum.f64(double [[TMP3]], double [[MIN6]])
+; CHECK-NEXT:    [[MIN7:%.*]] = call double @llvm.minimum.f64(double [[TMP6]], double 0.000000e+00)
 ; CHECK-NEXT:    [[COUNTER_NEXT]] = add i64 [[COUNTER]], 1
 ; CHECK-NEXT:    [[IV_NEXT]] = add i64 [[COUNTER]], [[INIT]]
 ; CHECK-NEXT:    br label [[LOOP]]

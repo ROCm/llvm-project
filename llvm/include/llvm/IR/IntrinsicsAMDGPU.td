@@ -2094,8 +2094,11 @@ class AMDGPURawBufferLoadLDS : Intrinsic <
                               //           all: volatile op (bit 31, stripped at lowering)
   [IntrWillReturn, NoCapture<ArgIndex<1>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<5>>,
    ImmArg<ArgIndex<6>>, IntrNoCallback, IntrNoFree], "", [SDNPMemOperand]>, AMDGPURsrcIntrinsic<0>;
-def int_amdgcn_raw_buffer_load_lds : AMDGPURawBufferLoadLDS;
-def int_amdgcn_raw_buffer_load_async_lds : AMDGPURawBufferLoadLDS;
+
+let TargetFeatures = "vmem-to-lds-load-insts" in {
+  def int_amdgcn_raw_buffer_load_lds : AMDGPURawBufferLoadLDS;
+  def int_amdgcn_raw_buffer_load_async_lds : AMDGPURawBufferLoadLDS;
+} // End TargetFeatures = "vmem-to-lds-load-insts"
 
 class AMDGPURawPtrBufferLoadLDS :
   Intrinsic <
@@ -2118,10 +2121,13 @@ class AMDGPURawPtrBufferLoadLDS :
    WriteOnly<ArgIndex<1>>, NoCapture<ArgIndex<1>>,
    ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<5>>,
    ImmArg<ArgIndex<6>>, IntrNoCallback, IntrNoFree], "", [SDNPMemOperand]>, AMDGPURsrcIntrinsic<0>;
-def int_amdgcn_raw_ptr_buffer_load_lds : AMDGPURawPtrBufferLoadLDS,
-      ClangBuiltin<"__builtin_amdgcn_raw_ptr_buffer_load_lds">;
-def int_amdgcn_raw_ptr_buffer_load_async_lds : AMDGPURawPtrBufferLoadLDS,
-      ClangBuiltin<"__builtin_amdgcn_raw_ptr_buffer_load_async_lds">;
+
+let TargetFeatures = "vmem-to-lds-load-insts" in {
+  def int_amdgcn_raw_ptr_buffer_load_lds : AMDGPURawPtrBufferLoadLDS,
+        ClangBuiltin<"__builtin_amdgcn_raw_ptr_buffer_load_lds">;
+  def int_amdgcn_raw_ptr_buffer_load_async_lds : AMDGPURawPtrBufferLoadLDS,
+        ClangBuiltin<"__builtin_amdgcn_raw_ptr_buffer_load_async_lds">;
+} // End TargetFeatures = "vmem-to-lds-load-insts"
 
 
 class AMDGPUStructBufferLoadLDS : Intrinsic <
@@ -2142,8 +2148,11 @@ class AMDGPUStructBufferLoadLDS : Intrinsic <
                               //           all: volatile op (bit 31, stripped at lowering)
   [IntrWillReturn, NoCapture<ArgIndex<1>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<6>>,
    ImmArg<ArgIndex<7>>, IntrNoCallback, IntrNoFree], "", [SDNPMemOperand]>, AMDGPURsrcIntrinsic<0>;
-def int_amdgcn_struct_buffer_load_lds : AMDGPUStructBufferLoadLDS;
-def int_amdgcn_struct_buffer_load_async_lds : AMDGPUStructBufferLoadLDS;
+
+let TargetFeatures = "vmem-to-lds-load-insts" in {
+  def int_amdgcn_struct_buffer_load_lds : AMDGPUStructBufferLoadLDS;
+  def int_amdgcn_struct_buffer_load_async_lds : AMDGPUStructBufferLoadLDS;
+} // End TargetFeatures = "vmem-to-lds-load-insts"
 
 class AMDGPUStructPtrBufferLoadLDS :
   Intrinsic <
@@ -2167,10 +2176,13 @@ class AMDGPUStructPtrBufferLoadLDS :
    WriteOnly<ArgIndex<1>>, NoCapture<ArgIndex<1>>,
    ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<6>>,
    ImmArg<ArgIndex<7>>, IntrNoCallback, IntrNoFree], "", [SDNPMemOperand]>, AMDGPURsrcIntrinsic<0>;
-def int_amdgcn_struct_ptr_buffer_load_lds : AMDGPUStructPtrBufferLoadLDS,
-  ClangBuiltin<"__builtin_amdgcn_struct_ptr_buffer_load_lds">;
-def int_amdgcn_struct_ptr_buffer_load_async_lds : AMDGPUStructPtrBufferLoadLDS,
-  ClangBuiltin<"__builtin_amdgcn_struct_ptr_buffer_load_async_lds">;
+
+let TargetFeatures = "vmem-to-lds-load-insts" in {
+  def int_amdgcn_struct_ptr_buffer_load_lds : AMDGPUStructPtrBufferLoadLDS,
+    ClangBuiltin<"__builtin_amdgcn_struct_ptr_buffer_load_lds">;
+  def int_amdgcn_struct_ptr_buffer_load_async_lds : AMDGPUStructPtrBufferLoadLDS,
+    ClangBuiltin<"__builtin_amdgcn_struct_ptr_buffer_load_async_lds">;
+} // End TargetFeatures = "vmem-to-lds-load-insts"
 
 def int_amdgcn_s_buffer_prefetch_data : DefaultAttrsIntrinsic <
   [],

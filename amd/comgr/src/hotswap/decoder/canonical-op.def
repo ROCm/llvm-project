@@ -1,0 +1,15 @@
+//===- canonical-op.def - Hotswap transpiler ------------------------------===//
+//
+// Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
+// amd/comgr/LICENSE.TXT in this repository for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef CANONICAL_OP
+#error "define CANONICAL_OP(Name) before including canonical-op.def"
+#endif
+
+CANONICAL_OP(Unknown)
+CANONICAL_OP(S_MOV_B32)
+CANONICAL_OP(S_ENDPGM)

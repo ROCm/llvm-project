@@ -243,7 +243,6 @@
 ; GCN-O3-NEXT:      Cycle Info Analysis
 ; GCN-O3-NEXT:      Post-Dominator Tree Construction
 ; GCN-O3-NEXT:      Branch Probability Analysis
-; GCN-O3-NEXT:      Natural Loop Information
 ; GCN-O3-NEXT:      Block Frequency Analysis
 ; GCN-O3-NEXT:      Constant Hoisting
 ; GCN-O3-NEXT:      Replace intrinsics with calls to vector library
@@ -335,7 +334,6 @@
 ; GCN-O3-NEXT:        Branch Probability Analysis
 ; GCN-O3-NEXT:        Assignment Tracking Analysis
 ; GCN-O3-NEXT:        Lazy Branch Probability Analysis
-; GCN-O3-NEXT:        Natural Loop Information
 ; GCN-O3-NEXT:        Lazy Block Frequency Analysis
 ; GCN-O3-NEXT:        AMDGPU DAG->DAG Pattern Instruction Selection
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
@@ -351,14 +349,15 @@
 ; GCN-O3-NEXT:        Remove dead machine instructions
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
 ; GCN-O3-NEXT:        Machine Natural Loop Construction
+; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        Machine Register Class Info Analysis
 ; GCN-O3-NEXT:        Early Machine Loop Invariant Code Motion
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
+; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        Machine Common Subexpression Elimination
 ; GCN-O3-NEXT:        MachinePostDominator Tree Construction
-; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        Machine code sinking
 ; GCN-O3-NEXT:        Peephole Optimizations
 ; GCN-O3-NEXT:        Remove dead machine instructions
@@ -369,6 +368,7 @@
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
 ; GCN-O3-NEXT:        Early Machine Loop Invariant Code Motion
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
+; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        Machine Common Subexpression Elimination
 ; GCN-O3-NEXT:        SI Fold Operands
@@ -395,6 +395,7 @@
 ; GCN-O3-NEXT:        Register Coalescer
 ; GCN-O3-NEXT:        Rename Disconnected Subregister Components
 ; GCN-O3-NEXT:        Rewrite Partial Register Uses
+; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        Machine Instruction Scheduler
 ; GCN-O3-NEXT:        AMDGPU Pre-RA optimizations
@@ -402,10 +403,11 @@
 ; GCN-O3-NEXT:        SI optimize exec mask operations pre-RA
 ; GCN-O3-NEXT:        SI Form memory clauses
 ; GCN-O3-NEXT:        AMDGPU Pre-RA Long Branch Reg
-; GCN-O3-NEXT:        Machine Natural Loop Construction
+; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        Debug Variable Analysis
 ; GCN-O3-NEXT:        Live Stack Slot Analysis
+; GCN-O3-NEXT:        Machine Natural Loop Construction
 ; GCN-O3-NEXT:        Virtual Register Map
 ; GCN-O3-NEXT:        Live Register Matrix
 ; GCN-O3-NEXT:        Bundle Machine CFG Edges
@@ -415,7 +417,6 @@
 ; GCN-O3-NEXT:        Greedy Register Allocator
 ; GCN-O3-NEXT:        Virtual Register Rewriter
 ; GCN-O3-NEXT:        Stack Slot Coloring
-; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        SI lower SGPR spill instructions
 ; GCN-O3-NEXT:        Virtual Register Map
 ; GCN-O3-NEXT:        Live Register Matrix
@@ -441,6 +442,7 @@
 ; GCN-O3-NEXT:        Remove Redundant DEBUG_VALUE analysis
 ; GCN-O3-NEXT:        Fixup Statepoint Caller Saved
 ; GCN-O3-NEXT:        PostRA Machine Sink
+; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
 ; GCN-O3-NEXT:        MachinePostDominator Tree Construction
@@ -459,6 +461,7 @@
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
 ; GCN-O3-NEXT:        Machine Natural Loop Construction
 ; GCN-O3-NEXT:        PostRA Machine Instruction Scheduler
+; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        MachinePostDominator Tree Construction
 ; GCN-O3-NEXT:        Branch Probability Basic Block Placement
