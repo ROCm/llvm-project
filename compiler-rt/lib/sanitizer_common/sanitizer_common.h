@@ -1088,11 +1088,12 @@ struct StackDepotStats {
 // indicate that sanitizer allocator should not attempt to release memory to OS.
 const s32 kReleaseToOSIntervalNever = -1;
 
-#if SANITIZER_AMDHSA
-void PatchHsaRuntimeDlopenFlag(const char *filename, int &flag);
-#else
-inline void PatchHsaRuntimeDlopenFlag(const char *filename, int &flag) {}
-#endif
+// Host HSA interceptor path no longer forces RTLD_GLOBAL on ROCr dlopen;
+// keep this as an inert hook for existing INTERCEPT_FUNCTION wrappers.
+inline void PatchHsaRuntimeDlopenFlag(const char *filename, int &flag) {
+  (void)filename;
+  (void)flag;
+}
 
 // Platform hook invoked before dlopen. Performs platform-specific dlopen flag
 // checks (e.g. RTLD_DEEPBIND on Linux).
