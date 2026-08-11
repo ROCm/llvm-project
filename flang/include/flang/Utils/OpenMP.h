@@ -12,11 +12,12 @@
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/IR/IRMapping.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 
 #include <vector>
 
 namespace mlir {
-class ConversionPatternRewriter;
+class RewriterBase;
 } // namespace mlir
 
 namespace fir {
@@ -77,45 +78,81 @@ mlir::FlatSymbolRefAttr getOrGenImplicitDefaultDeclareMapper(
     fir::RecordType recordType, llvm::StringRef mapperNameStr,
     RecordMemberMapperMangler mangler = {});
 
-/// Shape information for a value that is live-in to a loop nest which will be
-/// mapped to a target region. It is recovered from the live-in's defining
-/// `hlfir.declare` (if any) so that a matching declare can be regenerated
-/// inside the target region.
-struct TargetDeclareShapeCreationInfo {
+/// Shape information for a value live-in to a region that will be mapped to a
+/// target device. Captured from the defining `hlfir.declare`/`fir.declare` (if
+/// any) so that a matching declare can be regenerated inside the target region.
+/// When the live-in is not a shaped declare (e.g. an array-section
+/// `hlfir.designate` result), the extents can instead be recovered from the
+/// value's FIR type by calling `materializeExtents`.
+struct LiveInShapeInfo {
   // Note: We use `std::vector` (rather than `llvm::SmallVector` as usual) to
   // interface more easily `ShapeShiftOp::getOrigins()` which returns
   // `std::vector`.
   std::vector<mlir::Value> startIndices;
   std::vector<mlir::Value> extents;
 
-  TargetDeclareShapeCreationInfo(mlir::Value liveIn);
+  /// Read shape info from the live-in's defining `hlfir.declare`/`fir.declare`
+  /// when it has an explicit `fir.shape`/`fir.shape_shift`. Side-effect free:
+  /// if no such shape exists, `startIndices`/`extents` are left empty.
+  explicit LiveInShapeInfo(mlir::Value liveIn);
+
+  /// If the constructor found no explicit shape, recover the array extents from
+  /// `liveIn`'s FIR type, emitting the ops needed to describe them via
+  /// `builder` (descriptor reads for boxes, integer constants for static
+  /// extents). No-op when extents are already populated or cannot be recovered
+  /// (e.g. dynamic raw arrays).
+  void materializeExtents(fir::FirOpBuilder &builder, mlir::Value liveIn);
 
   bool isShapedValue() const { return !extents.empty(); }
   bool isShapeShiftedValue() const { return !startIndices.empty(); }
 };
 
-using LiveInShapeInfoMap =
-    llvm::DenseMap<mlir::Value, TargetDeclareShapeCreationInfo>;
+using LiveInShapeInfoMap = llvm::DenseMap<mlir::Value, LiveInShapeInfo>;
 
 /// Build an `omp.map.info` op that maps a value defined outside a target
 /// region (a "live-in") into the region. Handles trivial scalars, character
-/// types, arrays, and Fortran derived types (using an implicit declare mapper
-/// for records with allocatable components).
+/// types, arrays, and Fortran derived types (using an implicit declare
+/// mapper for records with allocatable components).
 mlir::omp::MapInfoOp genMapInfoOpForLiveIn(fir::FirOpBuilder &builder,
     mlir::Value liveIn, bool isReductionVar = false);
 
-/// Create an `omp.target` op whose region maps the given `mappedVars` (matched
-/// 1:1 with `clauseOps.mapVars`) by regenerating a device-side `hlfir.declare`
-/// for each, populating `mapper` so uses of the live-ins inside the region see
-/// the device-side declares, and cloning/mapping any remaining outsiders.
+/// The two SSA handles a device-side declare exposes for a mapped live-in. For
+/// an `hlfir.declare` these are its two distinct results (`originalBase` and
+/// `base`); for a single-result declare such as `fir.declare` both fields alias
+/// that one result, so callers can treat either uniformly.
+struct LiveInDeclareResult {
+  mlir::Value originalBase;
+  mlir::Value base;
+};
+
+/// Factory that emits the device-side declare op for a mapped live-in inside
+/// the target region. `genTargetOpFromLiveIns` rebuilds the live-in's `shape`
+/// (with its extents/origins already mapped into the region) and hands it,
+/// along with the region block argument (`liveInArg`) and the live-in's `name`,
+/// to this callback -- which owns the choice of declare flavor. For example,
+/// `DoConcurrentConversion` (before HLFIR-to-FIR) emits `hlfir.declare`, while
+/// `LowerWorkdistribute` (after HLFIR-to-FIR) emits `fir.declare`; emitting
+/// `hlfir.declare` that late would leave HLFIR ops that fail FIR-to-LLVM
+/// legalization.
+using LiveInDeclareBuilder = llvm::function_ref<LiveInDeclareResult(
+    fir::FirOpBuilder &builder, mlir::Location loc, mlir::Value liveInArg,
+    llvm::StringRef name, mlir::Value shape)>;
+
+/// Create an `omp.target` op whose region maps the given `liveIns` (matched
+/// 1:1 with `clauseOps.mapVars`) by emitting a device-side declare for each via
+/// `declareBuilder`, populating `mapper` so users of the live-ins inside the
+/// region see the device-side declares, and cloning/mapping any remaining
+/// outsiders.
 ///
 /// `loopNestClauseOps`'s loop bounds/steps are also remapped through `mapper`.
-mlir::omp::TargetOp genTargetOp(mlir::Location loc,
-    mlir::ConversionPatternRewriter &rewriter, mlir::IRMapping &mapper,
-    llvm::ArrayRef<mlir::Value> mappedVars,
+mlir::omp::TargetOp genTargetOpFromLiveIns(mlir::Location loc,
+    mlir::RewriterBase &rewriter, mlir::IRMapping &mapper,
+    llvm::ArrayRef<mlir::Value> liveIns,
     mlir::omp::TargetExtOperands &clauseOps,
     mlir::omp::LoopNestOperands &loopNestClauseOps,
-    const LiveInShapeInfoMap &liveInShapeInfoMap);
+    const LiveInShapeInfoMap &liveInShapeInfoMap,
+    LiveInDeclareBuilder declareBuilder);
+
 } // namespace Fortran::utils::openmp
 
 #endif // FORTRAN_UTILS_OPENMP_H_

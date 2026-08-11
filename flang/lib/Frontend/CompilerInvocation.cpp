@@ -222,6 +222,32 @@ static bool parseDoConcurrentMapping(Fortran::frontend::CodeGenOptions &opts,
   return true;
 }
 
+static bool parseImplicitWorkdistribute(Fortran::frontend::CodeGenOptions &opts,
+                                        llvm::opt::ArgList &args,
+                                        clang::DiagnosticsEngine &diags) {
+  llvm::opt::Arg *arg =
+      args.getLastArg(clang::options::OPT_fopenmp_implicit_workdistribute_EQ);
+  if (!arg)
+    return true;
+
+  using Kind = Fortran::frontend::CodeGenOptions::ImplicitWorkdistributeKind;
+  std::optional<Kind> val =
+      llvm::StringSwitch<std::optional<Kind>>(arg->getValue())
+          .Case("none", Kind::IWK_None)
+          .Case("host", Kind::IWK_Host)
+          .Case("device", Kind::IWK_Device)
+          .Default(std::nullopt);
+
+  if (!val.has_value()) {
+    diags.Report(clang::diag::err_drv_invalid_value)
+        << arg->getAsString(args) << arg->getValue();
+    return false;
+  }
+
+  opts.setImplicitWorkdistribute(val.value());
+  return true;
+}
+
 static bool parseVectorLibArg(Fortran::frontend::CodeGenOptions &opts,
                               llvm::opt::ArgList &args,
                               clang::DiagnosticsEngine &diags) {
@@ -1829,6 +1855,7 @@ bool CompilerInvocation::createFromArgs(
   parsePreprocessorArgs(invoc.getPreprocessorOpts(), args);
   parseCodeGenArgs(invoc.getCodeGenOpts(), args, diags);
   success &= parseDoConcurrentMapping(invoc.getCodeGenOpts(), args, diags);
+  success &= parseImplicitWorkdistribute(invoc.getCodeGenOpts(), args, diags);
   success &= parseDebugArgs(invoc.getCodeGenOpts(), args, diags);
 
   // Enable USE statement preservation for debug info if debug level is above

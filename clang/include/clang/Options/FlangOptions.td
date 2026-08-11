@@ -303,6 +303,10 @@ def fdo_concurrent_EQ : Joined<["-"], "fdo-concurrent=">,
       Values<"none, host, device">;
 def fdo_concurrent_to_openmp_EQ : Joined<["-"], "fdo-concurrent-to-openmp=">, Flags<[HelpHidden]>, HelpText<"Alias for -fdo-concurrent">, Alias<fdo_concurrent_EQ>;
 
+def fopenmp_implicit_workdistribute_EQ : Joined<["-"], "fopenmp-implicit-workdistribute=">, 
+  HelpText<"Implicitly wrap array statements in OpenMP workdistribute [none|host|device]">,
+      Values<"none, host, device">;
+
 def fdefer_desc_map : Flag<["-"], "fdefer-desc-map">, Group<f_Group>,
   HelpText<"Enable deferred descriptor mapping, which puts off top-level descriptor "
     "mapping until target regions, this is the default behaviour">;
