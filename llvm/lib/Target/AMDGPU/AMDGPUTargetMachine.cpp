@@ -761,6 +761,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeGCNPreRALongBranchRegLegacyPass(*PR);
   initializeGCNRewritePartialRegUsesLegacyPass(*PR);
   initializeGCNRegPressurePrinterPass(*PR);
+  initializeGCNForwardRPAnalysisPass(*PR);
   initializeAMDGPUPreloadKernArgPrologLegacyPass(*PR);
   initializeAMDGPUWaitSGPRHazardsLegacyPass(*PR);
   initializeAMDGPUPreloadKernelArgumentsLegacyPass(*PR);
@@ -1996,6 +1997,8 @@ bool GCNPassConfig::addRegAssignAndRewriteFast() {
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
 
+    addPass(createGCNForwardRPAnalysisPass());
+
     // Lower WQM/Exact transitions post-WaveTransform so it sees the
     // wave-level CFG with flow blocks. This matches the legacy pipeline
     // where si-wqm runs after SILowerControlFlow.
@@ -2063,6 +2066,8 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     // that this custom allocation will always have enough registers.
     addPass(&SIPreAllocateWWMRegsLegacyID);
 
+    addPass(createGCNForwardRPAnalysisPass());
+
     // TODO-WAVETRANSFORM: If there are performance concerns, the current
     // partition strategy has to be improved.
     addPass(&AMDGPUPartitionVGPRsForRALegacyID);
@@ -2088,6 +2093,8 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
 
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
+
+//    addPass(createGCNForwardRPAnalysisPass());
 
     // Lower WQM/Exact transitions post-WaveTransform so it sees the
     // wave-level CFG with flow blocks. This matches the legacy pipeline

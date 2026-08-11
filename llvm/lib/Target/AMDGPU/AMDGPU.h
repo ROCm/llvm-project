@@ -274,6 +274,10 @@ extern char &AMDGPUPerfHintAnalysisLegacyID;
 void initializeGCNRegPressurePrinterPass(PassRegistry &);
 extern char &GCNRegPressurePrinterID;
 
+void initializeGCNForwardRPAnalysisPass(PassRegistry &);
+extern char &GCNForwardRPAnalysisID;
+FunctionPass *createGCNForwardRPAnalysisPass();
+
 void initializeAMDGPUPreloadKernArgPrologLegacyPass(PassRegistry &);
 extern char &AMDGPUPreloadKernArgPrologLegacyID;
 

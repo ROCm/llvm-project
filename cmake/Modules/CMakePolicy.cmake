@@ -22,7 +22,7 @@ endif()
 # CMP0147: Visual Studio Generators build custom commands in parallel.
 # New in CMake 3.27: https://cmake.org/cmake/help/latest/policy/CMP0147.html
 if(POLICY CMP0147)
-  cmake_policy(SET CMP0147 NEW)
+  cmake_policy(SET CMP0147 OLD)
 endif()
 
 # CMP0156: De-duplicate libraries on link lines based on linker capabilities.
