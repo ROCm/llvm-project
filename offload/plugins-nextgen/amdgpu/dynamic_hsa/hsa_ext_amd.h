@@ -6,13 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// The parts of the hsa api that are presently in use by the amdgpu plugin
+// Dependency-free subset of the AMD HSA extension API. See dynamic_hsa/hsa.h
+// for the sharing contract with compiler-rt. Add, do not repurpose.
 //
 //===----------------------------------------------------------------------===//
 #ifndef HSA_RUNTIME_EXT_AMD_H_
 #define HSA_RUNTIME_EXT_AMD_H_
 
 #include "hsa.h"
+
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
 
 /* Using this header means we do not know what version library will be linked.
    Until such point as a CMake level override is requested, default to the
@@ -155,6 +160,8 @@ hsa_status_t hsa_amd_memory_fill(void *ptr, uint32_t value, size_t count);
 
 typedef enum hsa_amd_event_type_s {
   HSA_AMD_GPU_MEMORY_FAULT_EVENT = 0,
+  HSA_AMD_GPU_MEMORY_ERROR_EVENT = 1,
+  HSA_AMD_SYSTEM_SHUTDOWN_EVENT = 2,
 } hsa_amd_event_type_t;
 
 typedef struct hsa_amd_gpu_memory_fault_info_s {
@@ -191,7 +198,11 @@ typedef enum {
 typedef enum {
   HSA_EXT_POINTER_TYPE_UNKNOWN = 0,
   HSA_EXT_POINTER_TYPE_HSA = 1,
-  HSA_EXT_POINTER_TYPE_LOCKED = 2
+  HSA_EXT_POINTER_TYPE_LOCKED = 2,
+  HSA_EXT_POINTER_TYPE_GRAPHICS = 3,
+  HSA_EXT_POINTER_TYPE_IPC = 4,
+  HSA_EXT_POINTER_TYPE_RESERVED_ADDR = 5,
+  HSA_EXT_POINTER_TYPE_HSA_VMEM = 6,
 } hsa_amd_pointer_type_t;
 
 typedef struct hsa_amd_pointer_info_s {
@@ -201,6 +212,14 @@ typedef struct hsa_amd_pointer_info_s {
   void* hostBaseAddress;
   size_t sizeInBytes;
 } hsa_amd_pointer_info_t;
+
+typedef struct hsa_amd_ipc_memory_s {
+  uint32_t handle[8];
+} hsa_amd_ipc_memory_t;
+
+typedef enum hsa_amd_vmem_address_reserve_flag_s {
+  HSA_AMD_VMEM_ADDRESS_NO_REGISTER = (1UL << 0),
+} hsa_amd_vmem_address_reserve_flag_t;
 
 typedef enum {
   MEMORY_TYPE_NONE,
@@ -221,6 +240,16 @@ hsa_status_t hsa_amd_pointer_info(const void* ptr,
                                           void* (*alloc)(size_t),
                                           uint32_t* num_agents_accessible,
                                           hsa_agent_t** accessible);
+
+hsa_status_t hsa_amd_ipc_memory_create(void *ptr, size_t len,
+                                       hsa_amd_ipc_memory_t *handle);
+
+hsa_status_t hsa_amd_ipc_memory_attach(const hsa_amd_ipc_memory_t *handle,
+                                       size_t len, uint32_t num_agents,
+                                       const hsa_agent_t *mapping_agents,
+                                       void **mapped_ptr);
+
+hsa_status_t hsa_amd_ipc_memory_detach(void *mapped_ptr);
 
 typedef struct hsa_amd_profiling_dispatch_time_s {
   uint64_t start;
@@ -246,6 +275,11 @@ hsa_status_t hsa_amd_profiling_get_async_copy_time(
 
 hsa_status_t hsa_amd_vmem_address_reserve(void **va, size_t size,
                                           uint64_t address, uint64_t flags);
+
+hsa_status_t hsa_amd_vmem_address_reserve_align(void **va, size_t size,
+                                                uint64_t address,
+                                                uint64_t alignment,
+                                                uint64_t flags);
 
 hsa_status_t hsa_amd_vmem_address_free(void *va, size_t size);
 

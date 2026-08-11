@@ -269,7 +269,14 @@ static const uptr kNumberOfSizeClasses = SizeClassMap::kNumClasses;
 
 template <typename AddressSpaceView>
 using AsanAllocatorASVT =
+#if SANITIZER_AMDHSA
+    DeviceCombinedAllocator<
+        CombinedAllocator<PrimaryAllocatorASVT<AddressSpaceView>>,
+        __sanitizer::AmdHsaDeviceAllocatorT<
+            PrimaryAllocatorASVT<AddressSpaceView>>>;
+#else
     CombinedAllocator<PrimaryAllocatorASVT<AddressSpaceView>>;
+#endif
 using AsanAllocator = AsanAllocatorASVT<LocalAddressSpaceView>;
 using AllocatorCache = AsanAllocator::AllocatorCache;
 
@@ -330,44 +337,21 @@ void asan_mz_force_unlock();
 void PrintInternalAllocatorStats();
 void AsanSoftRssLimitExceededCallback(bool exceeded);
 
+#if SANITIZER_AMDHSA
+// Hooks for asan_hsa_amd* wrappers.
+void* AsanHsaAllocate(uptr size, uptr alignment, BufferedStackTrace* stack,
+                      DeviceAllocationInfo* da_info);
+void AsanHsaDeallocate(void* ptr, BufferedStackTrace* stack);
+void* AsanHsaGetBlockBegin(const void* ptr);
+uptr AsanHsaGetActuallyAllocatedSize(void* ptr);
+bool AsanHsaTranslateIpcCreate(void* ptr, size_t len, void** out_ptr,
+                               size_t* out_len);
+bool AsanHsaIsVmemFreeValid(void* ptr, uptr size);
+bool AsanHsaGetLiveMappingInfo(const void* ptr, void** map_base,
+                               uptr* used_size, uptr* offset);
+bool AsanHsaIsFreedChunk(const void* ptr);
+#endif  // SANITIZER_AMDHSA
+
 }  // namespace __asan
-
-#if SANITIZER_AMDGPU
-#include <hsa.h>
-#include <hsa_ext_amd.h>
-
-namespace __asan {
-hsa_status_t asan_hsa_amd_memory_pool_allocate(
-  hsa_amd_memory_pool_t memory_pool, size_t size, uint32_t flags, void **ptr,
-  BufferedStackTrace *stack);
-hsa_status_t asan_hsa_amd_memory_pool_free(
-  void *ptr,
-  BufferedStackTrace *stack);
-hsa_status_t asan_hsa_amd_agents_allow_access(
-  uint32_t num_agents, const hsa_agent_t *agents, const uint32_t *flags,
-  const void *ptr,
-  BufferedStackTrace *stack);
-hsa_status_t asan_hsa_amd_ipc_memory_create(
-  void* ptr, size_t len, hsa_amd_ipc_memory_t* handle);
-hsa_status_t asan_hsa_amd_ipc_memory_attach(
-  const hsa_amd_ipc_memory_t* handle, size_t len, uint32_t num_agents,
-  const hsa_agent_t* mapping_agents, void** mapped_ptr);
-hsa_status_t asan_hsa_amd_ipc_memory_detach(
-  void* mapped_ptr);
-hsa_status_t asan_hsa_amd_vmem_address_reserve_align(void** ptr, size_t size,
-                                                     uint64_t address,
-                                                     uint64_t alignment,
-                                                     uint64_t flags,
-                                                     BufferedStackTrace* stack);
-hsa_status_t asan_hsa_amd_vmem_address_free(void* ptr, size_t size,
-                                            BufferedStackTrace* stack);
-hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
-                                       hsa_amd_pointer_info_t* info,
-                                       void* (*alloc)(size_t),
-                                       uint32_t* num_agents_accessible,
-                                       hsa_agent_t** accessible);
-hsa_status_t asan_hsa_init();
-} // namespace __asan
-#endif
 
 #endif  // ASAN_ALLOCATOR_H
