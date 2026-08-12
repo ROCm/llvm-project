@@ -103,6 +103,27 @@ target_include_directories(RegFileTests PRIVATE
 
 comgr_configure_test_target(RegFileTests)
 
+# -- RaiseContextTests --------------------------------------------------------
+
+add_executable(RaiseContextTests
+  RaiseContextTest.cpp)
+
+target_link_libraries(RaiseContextTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  hotswap::raiser
+  hotswap::decoder
+  hotswap::common
+  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+target_include_directories(RaiseContextTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${PROJECT_SOURCE_DIR}/src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
+
+comgr_configure_test_target(RaiseContextTests)
+
 # -- KernargAbiLayoutTests ----------------------------------------------------
 #
 # Covers the source kernel-argument ABI reconstruction: the user-SGPR layout

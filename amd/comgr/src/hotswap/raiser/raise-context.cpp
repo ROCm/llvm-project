@@ -94,8 +94,8 @@ Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   // backend's operand-role table to apply each two-bit VGPR bank field.
   unsigned Opc = Di.Inst.getOpcode();
   const MCInstrDesc &Desc = MC.InstrInfo->get(Opc);
-  const AMDGPU::OpName *Ops = AMDGPU::getVGPRLoweringOperandTables(Desc).first;
-  if (!Ops) {
+  auto [XOps, YOps] = AMDGPU::getVGPRLoweringOperandTables(Desc);
+  if (!XOps && !YOps) {
     if (ignoresVGPRMsb(Opc) || !hasVectorRegOperand(Di, *MC.RegInfo) ||
         Desc.isPseudo() || Desc.isMetaInstruction())
       return Error::success();
@@ -106,22 +106,28 @@ Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   }
 
   for (unsigned Slot = 0; Slot != 4; ++Slot) {
-    // NUM_OPERAND_NAMES marks an unused slot in this format.
-    if (Ops[Slot] == AMDGPU::OpName::NUM_OPERAND_NAMES)
-      continue;
     unsigned Adjust =
         ((static_cast<unsigned>(VgprMsBs) >> (Slot * 2)) & 0x3u) * 256u;
     if (Adjust == 0)
       continue;
-    int OpIdx = AMDGPU::getNamedOperandIdx(Opc, Ops[Slot]);
-    if (OpIdx < 0)
-      continue;
-    if (static_cast<unsigned>(OpIdx) >= KMaxOps)
-      return createStringError(
-          "transpiler: S_SET_VGPR_MSB operand index " + Twine(OpIdx) +
-          " exceeds CurrentVgprAdjust capacity " + Twine(KMaxOps) + " for " +
-          strippedMnemonic(MC, Di.Inst));
-    CurrentVgprAdjust[OpIdx] = Adjust;
+    auto RecordAdjustment = [&](const AMDGPU::OpName *Ops) -> Error {
+      if (!Ops || Ops[Slot] == AMDGPU::OpName::NUM_OPERAND_NAMES)
+        return Error::success();
+      int OpIdx = AMDGPU::getNamedOperandIdx(Opc, Ops[Slot]);
+      if (OpIdx < 0)
+        return Error::success();
+      if (static_cast<unsigned>(OpIdx) >= KMaxOps)
+        return createStringError(
+            "transpiler: S_SET_VGPR_MSB operand index " + Twine(OpIdx) +
+            " exceeds CurrentVgprAdjust capacity " + Twine(KMaxOps) + " for " +
+            strippedMnemonic(MC, Di.Inst));
+      CurrentVgprAdjust[OpIdx] = Adjust;
+      return Error::success();
+    };
+    if (Error Err = RecordAdjustment(XOps))
+      return Err;
+    if (Error Err = RecordAdjustment(YOps))
+      return Err;
   }
   return Error::success();
 }
@@ -160,6 +166,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   // Only the decoded subtarget-specific alias has the authoritative subregister
   // chain.
   const unsigned Width = computeRegWidth32(MRI, Reg);
+  const MCRegister CanonicalReg = AMDGPU::mc2PseudoReg(Reg);
 
   // Classify the first 32-bit lane through its canonical pseudo register.
   MCRegister Lane = MRI.getSubReg(Reg, AMDGPU::sub0);
@@ -178,7 +185,10 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
     [[fallthrough]];
   case AMDGPU::VCC_LO:
     Pr.RegKind = ParsedReg::VCC;
-    Pr.WidthInDwords = Isa.isWave32() ? 1 : 2;
+    Pr.BaseIdx = (Lane == AMDGPU::VCC_HI) ? 1 : 0;
+    Pr.WidthInDwords = CanonicalReg == AMDGPU::VCC
+                           ? static_cast<uint8_t>(Isa.waveSize() / 32)
+                           : 1;
     return Pr;
   case AMDGPU::EXEC_HI:
     // EXEC_HI is a scratch scalar, not part of EXEC, on wave32.
@@ -209,7 +219,8 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   case AMDGPU::FLAT_SCR_LO:
   case AMDGPU::FLAT_SCR_HI:
     Pr.RegKind = ParsedReg::FLAT_SCR;
-    Pr.WidthInDwords = Width;
+    Pr.BaseIdx = (Lane == AMDGPU::FLAT_SCR_HI) ? 1 : 0;
+    Pr.WidthInDwords = CanonicalReg == AMDGPU::FLAT_SCR ? 2 : 1;
     return Pr;
   // GFX11+ uses SGPR_NULL / SGPR_NULL_HI (and the 64-bit pair SGPR_NULL64)
   // as carry-discard sinks, e.g. `v_mad_co_u64_u32 ..., null, ...`. They
@@ -325,10 +336,7 @@ Expected<Value *> RaiseContext::readOp32(const DecodedInst &Di,
                             "vcc_src_wave_upper");
         return B.CreateSelect(Upper, Hi, Lo, "vcc_src_wave_mask");
       }
-      // Reading VCC as an i32 (wave32 wave-mask, or low 32 bits on wave64) is
-      // a cross-lane collection: emit amdgcn.ballot so each lane gets the same
-      // bit-mask assembled from all lanes' per-lane VCC bits.
-      return Regs.readVCCAsWaveMask(B, I32Ty);
+      return Regs.readReg32(B, Pr);
     }
     if (Pr.RegKind == ParsedReg::EXEC) {
       Value *V = Regs.loadExec(B);
