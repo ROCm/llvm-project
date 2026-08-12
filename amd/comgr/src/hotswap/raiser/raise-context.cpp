@@ -20,6 +20,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
@@ -89,19 +90,6 @@ void RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   }
 }
 
-// Return the register width in 32-bit subregisters. Scalar registers have no
-// sub0 and therefore have width one.
-static unsigned computeRegWidth32(const MCRegisterInfo &MRI, MCRegister Reg) {
-  const unsigned MaxSubIdx = MRI.getNumSubRegIndices();
-  unsigned W = 0;
-  for (unsigned SubIdx = AMDGPU::sub0; SubIdx < MaxSubIdx; ++SubIdx) {
-    if (!MRI.getSubReg(Reg, SubIdx))
-      break;
-    ++W;
-  }
-  return W ? W : 1;
-}
-
 // Return Reg's position in RC, or std::nullopt if it is not a member.
 static std::optional<unsigned> findIndexInClass(const MCRegisterClass &RC,
                                                 MCRegister Reg) {
@@ -123,17 +111,33 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   }
 
   const MCRegisterInfo &MRI = *MC.RegInfo;
-
-  // Only the decoded subtarget-specific alias has the authoritative subregister
-  // chain.
-  const unsigned Width = computeRegWidth32(MRI, Reg);
   const MCRegister CanonicalReg = AMDGPU::mc2PseudoReg(Reg);
-  auto UnsupportedRegister = [&]() -> Error {
+  const auto RegisterFailure = [&](const Twine &Detail) -> Error {
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedInstructionForm,
-        strippedMnemonic(MC, Di.Inst), Di.Offset, "register-decode",
-        Twine("unsupported register '") + MRI.getName(Reg) + "'");
+        strippedMnemonic(MC, Di.Inst), Di.Offset, "register-decode", Detail);
   };
+
+  const MCInstrDesc &Descriptor = MC.InstrInfo->get(Di.Inst.getOpcode());
+  if (OperandIndex >= Descriptor.getNumOperands())
+    llvm_unreachable("register operand has no instruction descriptor");
+  const MCOperandInfo &OperandInfo = Descriptor.operands()[OperandIndex];
+  if (OperandInfo.RegClass == -1)
+    llvm_unreachable("register operand has no register class");
+  const int16_t RegisterClassID = MC.InstrInfo->getOpRegClassID(
+      OperandInfo,
+      MC.SubtargetInfo->getHwMode(MCSubtargetInfo::HwMode_RegInfo));
+  if (RegisterClassID < 0)
+    llvm_unreachable("register class lookup failed");
+  const MCRegisterClass &RegisterClass =
+      MRI.getRegClass(static_cast<unsigned>(RegisterClassID));
+  if (!RegisterClass.contains(CanonicalReg) &&
+      !AMDGPU::isInlineValue(CanonicalReg))
+    return RegisterFailure(Twine("register '") + MRI.getName(Reg) +
+                           "' is not in operand register class '" +
+                           MRI.getRegClassName(&RegisterClass) + "'");
+  const unsigned WidthInDwords =
+      divideCeil(AMDGPU::getRegBitWidth(RegisterClass), 32u);
 
   MCRegister Lane = MRI.getSubReg(Reg, AMDGPU::sub0);
   if (!Lane)
@@ -168,7 +172,7 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   case AMDGPU::EXEC_LO:
     Pr.RegKind = ParsedReg::EXEC;
     Pr.BaseIdx = (Lane == AMDGPU::EXEC_HI) ? 1 : 0;
-    Pr.WidthInDwords = Width;
+    Pr.WidthInDwords = WidthInDwords;
     return Pr;
   case AMDGPU::SCC:
     Pr.RegKind = ParsedReg::SCC;
@@ -197,7 +201,8 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
     return Pr;
   case AMDGPU::XNACK_MASK_LO:
   case AMDGPU::XNACK_MASK_HI:
-    return UnsupportedRegister();
+    return RegisterFailure(Twine("unsupported register '") + MRI.getName(Reg) +
+                           "'");
   // LDS_DIRECT (src_lds_direct, enc 254): reads a dword from LDS at the
   // byte offset held in M0. Used as a VALU source after buffer_load_*_lds.
   case AMDGPU::LDS_DIRECT:
@@ -225,7 +230,8 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   case AMDGPU::SRC_POPS_EXITING_WAVE_ID:
   case AMDGPU::SRC_FLAT_SCRATCH_BASE_LO:
   case AMDGPU::SRC_FLAT_SCRATCH_BASE_HI:
-    return UnsupportedRegister();
+    return RegisterFailure(Twine("unsupported register '") + MRI.getName(Reg) +
+                           "'");
   default:
     break;
   }
@@ -236,7 +242,7 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
 
   if (Enc & AMDGPU::HWEncoding::IS_AGPR) {
     Pr.RegKind = ParsedReg::AGPR;
-    Pr.WidthInDwords = Width;
+    Pr.WidthInDwords = WidthInDwords;
     if (OperandIndex < CurrentVgprAdjust.size())
       HwIdx += CurrentVgprAdjust[OperandIndex];
     Pr.BaseIdx = HwIdx;
@@ -244,7 +250,7 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   }
   if (Enc & AMDGPU::HWEncoding::IS_VGPR) {
     Pr.RegKind = ParsedReg::VGPR;
-    Pr.WidthInDwords = Width;
+    Pr.WidthInDwords = WidthInDwords;
     if (OperandIndex < CurrentVgprAdjust.size())
       HwIdx += CurrentVgprAdjust[OperandIndex];
     Pr.BaseIdx = HwIdx;
@@ -256,7 +262,7 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   if (std::optional<unsigned> Index = findIndexInClass(TTMP32, Lane)) {
     Pr.RegKind = ParsedReg::TTMP;
     Pr.BaseIdx = *Index;
-    Pr.WidthInDwords = Width;
+    Pr.WidthInDwords = WidthInDwords;
     return Pr;
   }
 
@@ -265,7 +271,7 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   if (MRI.getRegClass(AMDGPU::SGPR_32RegClassID).contains(Lane)) {
     Pr.RegKind = ParsedReg::SGPR;
     Pr.BaseIdx = HwIdx;
-    Pr.WidthInDwords = Width;
+    Pr.WidthInDwords = WidthInDwords;
     return Pr;
   }
 
