@@ -72,8 +72,7 @@ struct RaiseContext {
                llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
                uint64_t KernelStartOffset, uint64_t KernelEndOffset);
 
-  // Source scratch allocation. LLVM's frame layout keeps it disjoint from
-  // target spills.
+  // Source scratch allocation, disjoint from target spills.
   uint32_t SourcePrivateSegmentFixedSize = 0;
   uint32_t SourceComputePgmRsrc2 = 0;
   uint16_t SourceKernelCodeProperties = 0;
@@ -288,9 +287,7 @@ struct RaiseContext {
   llvm::Value *CachedLaneActive = nullptr;
   llvm::BasicBlock *CachedLaneActiveBb = nullptr;
 
-  // Same-block per-lane values for V_CMP writes to SGPR destinations. Under
-  // widening, the stored SGPR mask can be narrower than target EXEC, so a
-  // consumer uses this value while it remains valid.
+  // Same-block V_CMP results retained while their SGPR masks remain valid.
   struct WaveMaskEntry {
     llvm::Value *I1 = nullptr;
     // Whether the destination spans this SGPR and its successor.
@@ -311,9 +308,8 @@ struct RaiseContext {
   // Block-local constant value last stored to M0.
   std::optional<uint64_t> M0Const;
 
-  // Conservative kernarg pointer provenance at source basic-block entries.
-  // Disagreement remains unknown so strict hidden-argument handling fails
-  // loudly.
+  // Kernarg pointer provenance at source basic-block entries; disagreements
+  // join to Unknown.
   bool HasKernargPtrProvenanceByBB = false;
   llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>
       KernargSegmentPtrProvenanceByBB;

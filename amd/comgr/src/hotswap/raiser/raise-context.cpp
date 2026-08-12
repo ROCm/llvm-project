@@ -168,7 +168,6 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   const unsigned Width = computeRegWidth32(MRI, Reg);
   const MCRegister CanonicalReg = AMDGPU::mc2PseudoReg(Reg);
 
-  // Classify the first 32-bit lane through its canonical pseudo register.
   MCRegister Lane = MRI.getSubReg(Reg, AMDGPU::sub0);
   if (!Lane)
     Lane = Reg;
@@ -200,7 +199,6 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
     [[fallthrough]];
   case AMDGPU::EXEC_LO:
     Pr.RegKind = ParsedReg::EXEC;
-    // Preserve which 32-bit half an explicitly named EXEC register denotes.
     Pr.BaseIdx = (Lane == AMDGPU::EXEC_HI) ? 1 : 0;
     Pr.WidthInDwords = Width;
     return Pr;
@@ -242,9 +240,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
     Pr.RegKind = ParsedReg::LDS_DIRECT;
     Pr.WidthInDwords = 1;
     return Pr;
-  // Source-only registers with no backing storage; their value at use time is
-  // a single i1 derived from VCC / EXEC / SCC, materialised (zext to width) by
-  // the read paths.
+  // Source-only predicates have no backing register-file slot.
   case AMDGPU::SRC_VCCZ:
     Pr.RegKind = ParsedReg::SRC_VCCZ;
     Pr.WidthInDwords = 1;
@@ -257,10 +253,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
     Pr.RegKind = ParsedReg::SRC_SCC;
     Pr.WidthInDwords = 1;
     return Pr;
-  // Aperture / runtime-defined source registers. Their values are set
-  // per-queue by the firmware and have no compile-time-knowable IR encoding,
-  // so classify as OTHER; the read paths surface a clean unsupported-form
-  // failure rather than crashing.
+  // Runtime-defined aperture registers have no static IR representation.
   case AMDGPU::SRC_SHARED_BASE_LO:
   case AMDGPU::SRC_SHARED_LIMIT_LO:
   case AMDGPU::SRC_PRIVATE_BASE_LO:
