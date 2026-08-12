@@ -224,8 +224,13 @@ void HipBinAmd::printCompilerInfo() const {
   const string& hipPath = getHipPath();
   string cmd = hipClangPath + "/clang++ --version";
   system(cmd.c_str());  // hipclang version
-  cmd = hipClangPath + "/llc --version";
-  system(cmd.c_str());  // llc version
+  // llc is not shipped in all ROCm packaging configurations.
+  fs::path llcPath = hipClangPath;
+  llcPath /= "llc";
+  if (fs::exists(llcPath)) {
+    cmd = llcPath.string() + " --version";
+    system(cmd.c_str());  // llc version
+  }
   cout << "hip-clang-cxxflags :" << endl;
   cmd = hipPath + "/bin/hipcc --cxxflags";
   system(cmd.c_str());  // cxx flags
