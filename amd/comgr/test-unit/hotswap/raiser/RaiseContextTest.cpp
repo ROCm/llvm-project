@@ -155,8 +155,7 @@ TEST_F(RaiseContextTest, AppliesVgprMsbsToBothVopdComponents) {
   DecodedInst Di;
   Di.Inst.setOpcode(Opc);
   Gfx1250.Ctx->VgprMsBs = 0xD5;
-  if (Error Err = Gfx1250.Ctx->computeVGPRAdjust(Di))
-    FAIL() << toString(std::move(Err));
+  Gfx1250.Ctx->computeVGPRAdjust(Di);
 
   EXPECT_EQ(Gfx1250.Ctx->CurrentVgprAdjust[0], 768u);
   EXPECT_EQ(Gfx1250.Ctx->CurrentVgprAdjust[1], 768u);
@@ -182,8 +181,7 @@ TEST_F(RaiseContextTest, SizesVgprAdjustmentsFromDescriptor) {
 
   DecodedInst Di;
   Di.Inst.setOpcode(Opcode);
-  if (Error Err = Env->Ctx->computeVGPRAdjust(Di))
-    FAIL() << toString(std::move(Err));
+  Env->Ctx->computeVGPRAdjust(Di);
   EXPECT_EQ(Env->Ctx->CurrentVgprAdjust.size(), MaxOperands);
 }
 
