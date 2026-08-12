@@ -15,6 +15,7 @@ set(amd_comgr_NAME "${PROJECT_NAME}")
 if(WIN32)
     option(COMGR_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS "Prepare amd_comgr for BinSkim Analyzer" OFF)
     option(COMGR_USE_SPECTRE_MITIGATED_LIBRARIES "Use Spectre-mitigated libraries" OFF)
+
     if (MSVC AND MSVC_VERSION GREATER_EQUAL 1900)
         if(COMGR_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS)
             message(STATUS "Control Flow Guard enabled")
@@ -34,6 +35,15 @@ if(WIN32)
         if(COMGR_USE_SPECTRE_MITIGATED_LIBRARIES)
             message(WARNING "Spectre-mitigated libraries are not yet available for Clang in this project.")
         endif()
+    endif()
+
+    option(COMGR_USE_MSVC_STATIC_RUNTIME "Link MSVC runtime library statically" OFF)
+
+    if(NOT COMGR_USE_MSVC_STATIC_RUNTIME)
+        set(COMGR_MSVC_RUNTIME_SUFFIX "DLL")
+    endif()
+    if(NOT CMAKE_MSVC_RUNTIME_LIBRARY)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>${COMGR_MSVC_RUNTIME_SUFFIX}")
     endif()
 endif()
 
