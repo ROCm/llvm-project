@@ -46,16 +46,17 @@ FunctionPass *createNVPTXISelDag(NVPTXTargetMachine &TM,
 ModulePass *createNVPTXAssignValidGlobalNamesLegacyPass();
 ModulePass *createGenericToNVVMLegacyPass();
 ModulePass *createNVPTXCtorDtorLoweringLegacyPass();
+FunctionPass *createNVPTXAtomicLowerLegacyPass();
 FunctionPass *createNVVMIntrRangePass();
 ModulePass *createNVVMReflectPass(unsigned int SmVersion);
 MachineFunctionPass *createNVPTXPrologEpilogPass();
 MachineFunctionPass *createNVPTXReplaceImageHandlesPass();
-FunctionPass *createNVPTXImageOptimizerPass();
+FunctionPass *createNVPTXImageOptimizerLegacyPass();
 ModulePass *createNVPTXLowerArgsPass();
 ModulePass *createNVPTXPromoteParamAlignPass();
 FunctionPass *createNVPTXLowerAllocaLegacyPass();
-FunctionPass *createNVPTXLowerUnreachablePass(bool TrapUnreachable,
-                                              bool NoTrapAfterNoreturn);
+FunctionPass *createNVPTXLowerUnreachableLegacyPass(bool TrapUnreachable,
+                                                    bool NoTrapAfterNoreturn);
 FunctionPass *createNVPTXMarkKernelPtrsGlobalPass();
 FunctionPass *createNVPTXTagInvariantLoadsPass();
 FunctionPass *createNVPTXIRPeepholePass();
@@ -69,11 +70,11 @@ void initializeGenericToNVVMLegacyPassPass(PassRegistry &);
 void initializeNVPTXAllocaHoistingPass(PassRegistry &);
 void initializeNVPTXAsmPrinterPass(PassRegistry &);
 void initializeNVPTXAssignValidGlobalNamesLegacyPassPass(PassRegistry &);
-void initializeNVPTXAtomicLowerPass(PassRegistry &);
+void initializeNVPTXAtomicLowerLegacyPassPass(PassRegistry &);
 void initializeNVPTXCtorDtorLoweringLegacyPass(PassRegistry &);
 void initializeNVPTXLowerAggrCopiesPass(PassRegistry &);
 void initializeNVPTXLowerAllocaLegacyPassPass(PassRegistry &);
-void initializeNVPTXLowerUnreachablePass(PassRegistry &);
+void initializeNVPTXLowerUnreachableLegacyPassPass(PassRegistry &);
 void initializeNVPTXLowerArgsLegacyPassPass(PassRegistry &);
 void initializeNVPTXPromoteParamAlignLegacyPassPass(PassRegistry &);
 void initializeNVPTXProxyRegErasurePass(PassRegistry &);
@@ -106,8 +107,20 @@ private:
   unsigned SmVersion;
 };
 
+class NVPTXAtomicLowerPass
+    : public RequiredPassInfoMixin<NVPTXAtomicLowerPass> {
+public:
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
+};
+
 struct GenericToNVVMPass : OptionalPassInfoMixin<GenericToNVVMPass> {
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+};
+
+class NVPTXImageOptimizerPass
+    : public OptionalPassInfoMixin<NVPTXImageOptimizerPass> {
+public:
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 struct NVPTXCopyByValArgsPass : OptionalPassInfoMixin<NVPTXCopyByValArgsPass> {
@@ -117,6 +130,18 @@ struct NVPTXCopyByValArgsPass : OptionalPassInfoMixin<NVPTXCopyByValArgsPass> {
 struct NVPTXPromoteParamAlignPass
     : OptionalPassInfoMixin<NVPTXPromoteParamAlignPass> {
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+};
+
+class NVPTXLowerUnreachablePass
+    : public OptionalPassInfoMixin<NVPTXLowerUnreachablePass> {
+  bool TrapUnreachable;
+  bool NoTrapAfterNoreturn;
+
+public:
+  NVPTXLowerUnreachablePass(bool TrapUnreachable, bool NoTrapAfterNoreturn)
+      : TrapUnreachable(TrapUnreachable),
+        NoTrapAfterNoreturn(NoTrapAfterNoreturn) {}
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 struct NVPTXLowerArgsPass : OptionalPassInfoMixin<NVPTXLowerArgsPass> {

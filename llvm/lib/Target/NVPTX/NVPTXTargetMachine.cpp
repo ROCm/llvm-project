@@ -15,7 +15,6 @@
 #include "NVPTXAliasAnalysis.h"
 #include "NVPTXAllocaHoisting.h"
 #include "NVPTXAsmPrinter.h"
-#include "NVPTXAtomicLower.h"
 #include "NVPTXCtorDtorLowering.h"
 #include "NVPTXLowerAggrCopies.h"
 #include "NVPTXMachineFunctionInfo.h"
@@ -104,12 +103,12 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeNVPTXTarget() {
   initializeNVPTXAllocaHoistingPass(PR);
   initializeNVPTXAsmPrinterPass(PR);
   initializeNVPTXAssignValidGlobalNamesLegacyPassPass(PR);
-  initializeNVPTXAtomicLowerPass(PR);
+  initializeNVPTXAtomicLowerLegacyPassPass(PR);
   initializeNVPTXLowerArgsLegacyPassPass(PR);
   initializeNVPTXPromoteParamAlignLegacyPassPass(PR);
   initializeNVPTXMarkKernelPtrsGlobalLegacyPassPass(PR);
   initializeNVPTXLowerAllocaLegacyPassPass(PR);
-  initializeNVPTXLowerUnreachablePass(PR);
+  initializeNVPTXLowerUnreachableLegacyPassPass(PR);
   initializeNVPTXCtorDtorLoweringLegacyPass(PR);
   initializeNVPTXLowerAggrCopiesPass(PR);
   initializeNVPTXProxyRegErasurePass(PR);
@@ -286,7 +285,7 @@ void NVPTXPassConfig::addAddressSpaceInferencePasses() {
   // TODO: Consider running InferAddressSpaces during opt, earlier in the
   // compilation flow.
   addPass(createInferAddressSpacesPass());
-  addPass(createNVPTXAtomicLowerPass());
+  addPass(createNVPTXAtomicLowerLegacyPass());
 }
 
 void NVPTXPassConfig::addStraightLineScalarOptimizationPasses() {
@@ -335,7 +334,7 @@ void NVPTXPassConfig::addIRPasses() {
   addPass(createNVVMReflectPass(ST.getSmVersion()));
 
   if (getOptLevel() != CodeGenOptLevel::None)
-    addPass(createNVPTXImageOptimizerPass());
+    addPass(createNVPTXImageOptimizerLegacyPass());
   addPass(createNVPTXAssignValidGlobalNamesLegacyPass());
   addPass(createGenericToNVVMLegacyPass());
 
@@ -388,8 +387,8 @@ void NVPTXPassConfig::addIRPasses() {
     // Run LowerUnreachable to WAR a ptxas bug. See the commit description of
     // 1ee4d880e8760256c606fe55b7af85a4f70d006d for more details.
     const auto &Options = getNVPTXTargetMachine().Options;
-    addPass(createNVPTXLowerUnreachablePass(Options.TrapUnreachable,
-                                            Options.NoTrapAfterNoreturn));
+    addPass(createNVPTXLowerUnreachableLegacyPass(Options.TrapUnreachable,
+                                                  Options.NoTrapAfterNoreturn));
   }
 }
 
