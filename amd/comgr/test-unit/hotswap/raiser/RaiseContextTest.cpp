@@ -278,4 +278,29 @@ TEST_F(RaiseContextTest, InvalidatesOverlappingPairShadows) {
   EXPECT_FALSE(Env->Ctx->lookupSourceImageSgprPairAddr(4));
 }
 
+TEST_F(RaiseContextTest, MaintainsStateOnRegisterWrites) {
+  ParsedReg Sgpr;
+  Sgpr.RegKind = ParsedReg::SGPR;
+  Sgpr.BaseIdx = 5;
+  Env->Ctx->recordSgprWaveMaskI1(4, ConstantInt::getTrue(Env->LLVMCtx), true);
+  Env->Ctx->recordSourceImageSgprPairAddr(4, 0x1000);
+  Env->Ctx->writeReg32(Sgpr, Env->B.getInt32(1));
+  EXPECT_EQ(Env->Ctx->lookupSgprWaveMaskI1(4), nullptr);
+  EXPECT_FALSE(Env->Ctx->lookupSourceImageSgprPairAddr(4));
+
+  ParsedReg M0;
+  M0.RegKind = ParsedReg::M0;
+  Env->Ctx->writeReg32(M0, Env->B.getInt32(7));
+  EXPECT_EQ(Env->Ctx->getM0Const(), 7u);
+  Env->Ctx->writeReg32(M0, UndefValue::get(Env->B.getInt32Ty()));
+  EXPECT_FALSE(Env->Ctx->getM0Const());
+
+  Value *OldLaneActive = Env->Ctx->emitLaneActiveBit();
+  ParsedReg Exec;
+  Exec.RegKind = ParsedReg::EXEC;
+  Exec.BaseIdx = 0;
+  Env->Ctx->writeReg32(Exec, Env->B.getInt32(1));
+  EXPECT_NE(Env->Ctx->emitLaneActiveBit(), OldLaneActive);
+}
+
 } // namespace
