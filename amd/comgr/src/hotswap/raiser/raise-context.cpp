@@ -58,9 +58,8 @@ BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
 void RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   unsigned Opc = Di.Inst.getOpcode();
   const MCInstrDesc &Desc = MC.InstrInfo->get(Opc);
-  CurrentVgprAdjust.assign(
-      std::max(Di.numOperands(), static_cast<unsigned>(Desc.getNumOperands())),
-      0u);
+  CurrentVgprAdjust.assign(std::max(Di.numOperands(), Desc.getNumOperands()),
+                           0u);
   if (VgprMsBs == 0)
     return;
 
