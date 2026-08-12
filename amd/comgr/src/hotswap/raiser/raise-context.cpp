@@ -516,6 +516,12 @@ void RaiseContext::writeReg32(ParsedReg Pr, Value *V) {
     Regs.writeReg32(B, Pr, V);
     if (Pr.RegKind == ParsedReg::EXEC)
       resetLaneActiveCache();
+    else if (Pr.RegKind == ParsedReg::SGPR) {
+      assert(Pr.BaseIdx && "SGPR must have a base register index");
+      invalidateSgprWaveMaskI1(*Pr.BaseIdx);
+    } else if (Pr.RegKind == ParsedReg::M0) {
+      updateM0Const(V);
+    }
   }
 }
 
@@ -528,6 +534,11 @@ void RaiseContext::writeReg64(ParsedReg Pr, Value *V) {
     Regs.writeReg64(B, Pr, V);
     if (Pr.RegKind == ParsedReg::EXEC)
       resetLaneActiveCache();
+    else if (Pr.RegKind == ParsedReg::SGPR) {
+      assert(Pr.BaseIdx && "SGPR must have a base register index");
+      invalidateSgprWaveMaskI1(*Pr.BaseIdx);
+      invalidateSgprWaveMaskI1(*Pr.BaseIdx + 1);
+    }
   }
 }
 
@@ -539,6 +550,11 @@ void RaiseContext::writeRegVec(ParsedReg Pr, Value *V) {
   } else {
     // Vector-valued scalar writes cannot target EXEC.
     Regs.writeRegVec(B, Pr, V);
+    if (Pr.RegKind == ParsedReg::SGPR) {
+      assert(Pr.BaseIdx && "SGPR must have a base register index");
+      for (unsigned I = 0; I != Pr.WidthInDwords; ++I)
+        invalidateSgprWaveMaskI1(*Pr.BaseIdx + I);
+    }
   }
 }
 
@@ -549,6 +565,15 @@ void RaiseContext::writeRegExecWidth(ParsedReg Pr, Value *V) {
   Regs.writeRegExecWidth(B, Pr, V);
   if (Pr.RegKind == ParsedReg::EXEC)
     resetLaneActiveCache();
+  else if (Pr.RegKind == ParsedReg::SGPR) {
+    assert(Pr.BaseIdx && "SGPR must have a base register index");
+    unsigned WidthInDwords = Projection.sourceWaveMaskTy()
+                                 ->getPrimitiveSizeInBits()
+                                 .getFixedValue() /
+                             32;
+    for (unsigned I = 0; I != WidthInDwords; ++I)
+      invalidateSgprWaveMaskI1(*Pr.BaseIdx + I);
+  }
 }
 
 void RaiseContext::storeVGPR32(unsigned Idx, Value *V) {

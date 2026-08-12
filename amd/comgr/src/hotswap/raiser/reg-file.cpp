@@ -220,9 +220,6 @@ void AllocaRegFile::init(IRBuilder<> &B, Type *I32Ty, Type *I1Ty,
 void AllocaRegFile::storeSGPR32(IRBuilder<> &B, unsigned Idx, Value *V) {
   assertInBank(Sgpr, Idx);
   B.CreateStore(asI32(B, V), Sgpr[Idx]);
-  // Notify the per-SGPR write hook, if installed.
-  if (OnSgprWritten)
-    OnSgprWritten(Idx);
 }
 
 Value *AllocaRegFile::loadSGPR32(IRBuilder<> &B, unsigned Idx) {
@@ -233,11 +230,6 @@ Value *AllocaRegFile::loadSGPR32(IRBuilder<> &B, unsigned Idx) {
 void AllocaRegFile::storeSGPR64(IRBuilder<> &B, unsigned Idx, Value *V) {
   assertPairInBank(Sgpr, Idx);
   storeLoHi(B, Sgpr, Idx, V);
-  // A pair write touches both halves, so notify the hook for each.
-  if (OnSgprWritten) {
-    OnSgprWritten(Idx);
-    OnSgprWritten(Idx + 1);
-  }
 }
 
 Value *AllocaRegFile::loadSGPR64(IRBuilder<> &B, unsigned Idx) {
@@ -304,8 +296,6 @@ void AllocaRegFile::storeExec(IRBuilder<> &B, Value *V) {
   if (V->getType() != ExecTy)
     V = B.CreateBitOrPointerCast(V, ExecTy);
   B.CreateStore(V, Exec);
-  if (OnExecWritten)
-    OnExecWritten();
 }
 
 Value *AllocaRegFile::readVCCAsWaveMask(IRBuilder<> &B, Type *ResultTy) {
@@ -498,8 +488,6 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
   if (Pr.RegKind == ParsedReg::M0) {
     V = asI32(B, V);
     B.CreateStore(V, M0);
-    if (OnM0Written)
-      OnM0Written(V);
     return;
   }
   if (Pr.RegKind == ParsedReg::FLAT_SCR) {
