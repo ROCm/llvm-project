@@ -86,23 +86,26 @@ static bool hasVectorRegOperand(const DecodedInst &Di,
 }
 
 Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
-  std::fill_n(CurrentVgprAdjust, KMaxOps, 0u);
+  unsigned Opc = Di.Inst.getOpcode();
+  const MCInstrDesc &Desc = MC.InstrInfo->get(Opc);
+  CurrentVgprAdjust.assign(
+      std::max(Di.numOperands(), static_cast<unsigned>(Desc.getNumOperands())),
+      0u);
   if (VgprMsBs == 0)
     return Error::success();
 
   // Operand slots are format-specific rather than positional, so use the
   // backend's operand-role table to apply each two-bit VGPR bank field.
-  unsigned Opc = Di.Inst.getOpcode();
-  const MCInstrDesc &Desc = MC.InstrInfo->get(Opc);
   auto [XOps, YOps] = AMDGPU::getVGPRLoweringOperandTables(Desc);
   if (!XOps && !YOps) {
     if (ignoresVGPRMsb(Opc) || !hasVectorRegOperand(Di, *MC.RegInfo) ||
         Desc.isPseudo() || Desc.isMetaInstruction())
       return Error::success();
-    return createStringError(
-        Twine("transpiler: S_SET_VGPR_MSB has no "
-              "operand-role table for vector instruction ") +
-        strippedMnemonic(MC, Di.Inst));
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedInstructionForm,
+        strippedMnemonic(MC, Di.Inst), Di.Offset, "vgpr-msb",
+        "S_SET_VGPR_MSB has no operand-role table for this vector "
+        "instruction");
   }
 
   for (unsigned Slot = 0; Slot != 4; ++Slot) {
@@ -115,12 +118,9 @@ Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
         return Error::success();
       int OpIdx = AMDGPU::getNamedOperandIdx(Opc, Ops[Slot]);
       if (OpIdx < 0)
-        return Error::success();
-      if (static_cast<unsigned>(OpIdx) >= KMaxOps)
-        return createStringError(
-            "transpiler: S_SET_VGPR_MSB operand index " + Twine(OpIdx) +
-            " exceeds CurrentVgprAdjust capacity " + Twine(KMaxOps) + " for " +
-            strippedMnemonic(MC, Di.Inst));
+        llvm_unreachable("VGPR operand table names a missing operand");
+      if (static_cast<unsigned>(OpIdx) >= CurrentVgprAdjust.size())
+        llvm_unreachable("VGPR operand index exceeds instruction operands");
       CurrentVgprAdjust[OpIdx] = Adjust;
       return Error::success();
     };
@@ -154,7 +154,11 @@ static std::optional<unsigned> findIndexInClass(const MCRegisterClass &RC,
   return std::nullopt;
 }
 
-ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
+Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
+                                           unsigned OperandIndex) const {
+  assert(OperandIndex < Di.numOperands() && "operand index out of range");
+  assert(Di.isReg(OperandIndex) && "operand must be a register");
+  MCRegister Reg = Di.getReg(OperandIndex);
   ParsedReg Pr;
   if (!Reg) {
     Pr.RegKind = ParsedReg::NOREG;
@@ -227,12 +231,10 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   case AMDGPU::SGPR_NULL_HI:
     Pr.RegKind = ParsedReg::NOREG;
     return Pr;
-  // XNACK_MASK controls per-lane page-fault retry masking, which is disabled
-  // and has no effect on compute semantics on the targeted GPUs, so treat it
-  // as NOREG (reads -> zero, writes -> nop).
   case AMDGPU::XNACK_MASK_LO:
   case AMDGPU::XNACK_MASK_HI:
-    Pr.RegKind = ParsedReg::NOREG;
+    Pr.RegKind = ParsedReg::OTHER;
+    Pr.WidthInDwords = Width;
     return Pr;
   // LDS_DIRECT (src_lds_direct, enc 254): reads a dword from LDS at the
   // byte offset held in M0. Used as a VALU source after buffer_load_*_lds.
@@ -275,16 +277,16 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   if (Enc & AMDGPU::HWEncoding::IS_AGPR) {
     Pr.RegKind = ParsedReg::AGPR;
     Pr.WidthInDwords = Width;
-    if (MciOpIdx >= 0 && static_cast<unsigned>(MciOpIdx) < KMaxOps)
-      HwIdx += CurrentVgprAdjust[MciOpIdx];
+    if (OperandIndex < CurrentVgprAdjust.size())
+      HwIdx += CurrentVgprAdjust[OperandIndex];
     Pr.BaseIdx = HwIdx;
     return Pr;
   }
   if (Enc & AMDGPU::HWEncoding::IS_VGPR) {
     Pr.RegKind = ParsedReg::VGPR;
     Pr.WidthInDwords = Width;
-    if (MciOpIdx >= 0 && static_cast<unsigned>(MciOpIdx) < KMaxOps)
-      HwIdx += CurrentVgprAdjust[MciOpIdx];
+    if (OperandIndex < CurrentVgprAdjust.size())
+      HwIdx += CurrentVgprAdjust[OperandIndex];
     Pr.BaseIdx = HwIdx;
     return Pr;
   }
@@ -307,16 +309,21 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
     return Pr;
   }
 
-  report_fatal_error(Twine("transpiler: parseReg could not classify '") +
-                     MRI.getName(Reg) + "' (enc=0x" + Twine::utohexstr(Enc) +
-                     ")");
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(MC, Di.Inst), Di.Offset, "register-decode",
+      Twine("could not classify register '") + MRI.getName(Reg) + "' (enc=0x" +
+          Twine::utohexstr(Enc) + ")");
 }
 
 Expected<Value *> RaiseContext::readOp32(const DecodedInst &Di,
                                          unsigned OpIdx) {
   IntegerType *I32Ty = B.getInt32Ty();
   if (Di.isReg(OpIdx)) {
-    ParsedReg Pr = parseReg(Di.getReg(OpIdx), OpIdx);
+    Expected<ParsedReg> Reg = parseReg(Di, OpIdx);
+    if (!Reg)
+      return Reg.takeError();
+    ParsedReg Pr = *Reg;
     if (Pr.RegKind == ParsedReg::VCC) {
       if (Projection.sourceWaveScopedLaneOps()) {
         Value *Mask = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
@@ -391,7 +398,10 @@ Expected<Value *> RaiseContext::readOpSourceWaveMask32(const DecodedInst &Di,
   if (!Di.isReg(OpIdx))
     return readOp32(Di, OpIdx);
 
-  ParsedReg Pr = parseReg(Di.getReg(OpIdx), OpIdx);
+  Expected<ParsedReg> Reg = parseReg(Di, OpIdx);
+  if (!Reg)
+    return Reg.takeError();
+  ParsedReg Pr = *Reg;
   if (Pr.RegKind == ParsedReg::EXEC)
     return Projection.emitCurrentSourceWaveMask(B, Regs.loadExec(B),
                                                 "exec_srcwave_mask");
@@ -423,7 +433,10 @@ Expected<Value *> RaiseContext::readOp64(const DecodedInst &Di,
                                          unsigned OpIdx) {
   IntegerType *I64Ty = B.getInt64Ty();
   if (Di.isReg(OpIdx)) {
-    ParsedReg Pr = parseReg(Di.getReg(OpIdx), OpIdx);
+    Expected<ParsedReg> Reg = parseReg(Di, OpIdx);
+    if (!Reg)
+      return Reg.takeError();
+    ParsedReg Pr = *Reg;
     if (Pr.RegKind == ParsedReg::VCC)
       return Regs.readVCCAsWaveMask(B, I64Ty);
     if (Pr.RegKind == ParsedReg::EXEC) {
@@ -495,6 +508,8 @@ Value *RaiseContext::emitLaneActiveBit() {
 }
 
 void RaiseContext::writeReg32(ParsedReg Pr, Value *V) {
+  if (Pr.RegKind == ParsedReg::NOREG)
+    return;
   if (Pr.RegKind == ParsedReg::VGPR || Pr.RegKind == ParsedReg::AGPR) {
     emitUnderExec([&] { Regs.writeReg32(B, Pr, V); });
   } else {
@@ -505,6 +520,8 @@ void RaiseContext::writeReg32(ParsedReg Pr, Value *V) {
 }
 
 void RaiseContext::writeReg64(ParsedReg Pr, Value *V) {
+  if (Pr.RegKind == ParsedReg::NOREG)
+    return;
   if (Pr.RegKind == ParsedReg::VGPR || Pr.RegKind == ParsedReg::AGPR) {
     emitUnderExec([&] { Regs.writeReg64(B, Pr, V); });
   } else {
@@ -515,6 +532,8 @@ void RaiseContext::writeReg64(ParsedReg Pr, Value *V) {
 }
 
 void RaiseContext::writeRegVec(ParsedReg Pr, Value *V) {
+  if (Pr.RegKind == ParsedReg::NOREG)
+    return;
   if (Pr.RegKind == ParsedReg::VGPR || Pr.RegKind == ParsedReg::AGPR) {
     emitUnderExec([&] { Regs.writeRegVec(B, Pr, V); });
   } else {
@@ -524,6 +543,8 @@ void RaiseContext::writeRegVec(ParsedReg Pr, Value *V) {
 }
 
 void RaiseContext::writeRegExecWidth(ParsedReg Pr, Value *V) {
+  if (Pr.RegKind == ParsedReg::NOREG)
+    return;
   // Wave-mask writes are wave-level effects and must not be EXEC-predicated.
   Regs.writeRegExecWidth(B, Pr, V);
   if (Pr.RegKind == ParsedReg::EXEC)
@@ -582,7 +603,10 @@ Expected<Value *> RaiseContext::readOpExecWidth(const DecodedInst &Di,
   };
 
   if (Di.isReg(OpIdx)) {
-    ParsedReg Pr = parseReg(Di.getReg(OpIdx), OpIdx);
+    Expected<ParsedReg> Reg = parseReg(Di, OpIdx);
+    if (!Reg)
+      return Reg.takeError();
+    ParsedReg Pr = *Reg;
     if (Pr.RegKind == ParsedReg::VCC)
       return Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
     if (Pr.RegKind == ParsedReg::EXEC)
