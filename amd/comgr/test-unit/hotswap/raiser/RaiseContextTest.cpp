@@ -93,9 +93,8 @@ protected:
       B.SetInsertPoint(Entry);
       Regs.init(B, B.getInt32Ty(), B.getInt1Ty(), Isa, *Mc.RegInfo, Projection);
       Ctx = std::make_unique<RaiseContext>(
-          B, Regs, Projection, Mc, Isa, Isa, 6, Kernargs, &Layout, Kernel,
-          nullptr, OffsetToBb, ArrayRef<uint8_t>(), 0,
-          ArrayRef<TextSection::ImageSection>(), 0, 0);
+          B, Regs, Projection, Mc, 6, Kernargs, Layout, nullptr, OffsetToBb,
+          ArrayRef<uint8_t>(), 0, ArrayRef<TextSection::ImageSection>(), 0, 0);
     }
   };
 
