@@ -230,7 +230,7 @@ TEST_F(RegFileTest, VccHalfWritesPreserveTheOtherHalf) {
     Fx.begin(Type::getInt1Ty(Fx.Ctx));
     Fx.RF.storeVCC(Fx.B, ConstantInt::getTrue(Fx.Ctx));
     Fx.RF.writeReg32(Fx.B, reg(ParsedReg::VCC, Half, 1),
-                     ConstantInt::getFalse(Fx.Ctx));
+                     ConstantInt::get(Type::getInt32Ty(Fx.Ctx), 0));
     Fx.B.CreateRet(Fx.RF.loadVCC(Fx.B));
 
     auto *Select = dyn_cast_or_null<SelectInst>(promoteAndFold(Fx));
@@ -241,8 +241,15 @@ TEST_F(RegFileTest, VccHalfWritesPreserveTheOtherHalf) {
     auto *Boundary = dyn_cast<ConstantInt>(WritesHalf->getOperand(1));
     ASSERT_NE(Boundary, nullptr);
     EXPECT_EQ(Boundary->getZExtValue(), 32u);
-    EXPECT_TRUE(cast<ConstantInt>(Select->getTrueValue())->isZero());
-    EXPECT_TRUE(cast<ConstantInt>(Select->getFalseValue())->isOne());
+    auto *NewBit = dyn_cast<ICmpInst>(Select->getTrueValue());
+    ASSERT_NE(NewBit, nullptr);
+    EXPECT_EQ(NewBit->getPredicate(), ICmpInst::ICMP_NE);
+    auto *Zero = dyn_cast<ConstantInt>(NewBit->getOperand(1));
+    ASSERT_NE(Zero, nullptr);
+    EXPECT_TRUE(Zero->isZero());
+    auto *Preserved = dyn_cast<ConstantInt>(Select->getFalseValue());
+    ASSERT_NE(Preserved, nullptr);
+    EXPECT_TRUE(Preserved->isOne());
   };
 
   Check(0, ICmpInst::ICMP_ULT);
