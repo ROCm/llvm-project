@@ -311,7 +311,7 @@ define amdgpu_ps void @test_cvt_sr_bf8_f16_byte0(half %a, i32 %sr, i32 %old, ptr
 define amdgpu_ps void @test_cvt_sr_bf8_f16_byte0_s(half inreg %a, i32 inreg %sr, i32 inreg %old, ptr addrspace(1) %out) {
 ; GFX1250-LABEL: test_cvt_sr_bf8_f16_byte0_s:
 ; GFX1250:       ; %bb.0:
-; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
+; GFX1250-NEXT:    global_prefetch_b8 v0, null scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    v_mov_b32_e32 v2, s2
@@ -559,7 +559,7 @@ define amdgpu_ps void @test_cvt_sr_fp8_f16_byte0(half %a, i32 %sr, i32 %old, ptr
 define amdgpu_ps void @test_cvt_sr_fp8_f16_byte0_s(half inreg %a, i32 inreg %sr, i32 inreg %old, ptr addrspace(1) %out) {
 ; GFX1250-LABEL: test_cvt_sr_fp8_f16_byte0_s:
 ; GFX1250:       ; %bb.0:
-; GFX1250-NEXT:    global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
+; GFX1250-NEXT:    global_prefetch_b8 v0, null scope:SCOPE_SE
 ; GFX1250-NEXT:    v_nop
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-NEXT:    v_mov_b32_e32 v2, s2
