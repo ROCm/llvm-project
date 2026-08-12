@@ -65,6 +65,7 @@ endif()
 if(WIN32)
     option(ROCM_DEVICE_LIBS_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS "Prepare AMDDeviceLibs for BinSkim Analyzer" OFF)
     option(ROCM_DEVICE_LIBS_USE_SPECTRE_MITIGATED_LIBRARIES "Use Spectre-mitigated libraries" OFF)
+
     if (MSVC AND MSVC_VERSION GREATER_EQUAL 1900)
         if(ROCM_DEVICE_LIBS_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS)
             message(STATUS "Control Flow Guard enabled")
@@ -85,8 +86,16 @@ if(WIN32)
             message(WARNING "Spectre-mitigated libraries are not yet available for Clang in this project.")
         endif()
     endif()
-endif()
 
+    option(ROCM_DEVICE_LIBS_USE_MSVC_STATIC_RUNTIME "Link MSVC runtime library statically" OFF)
+
+    if(NOT ROCM_DEVICE_LIBS_USE_MSVC_STATIC_RUNTIME)
+        set(ROCM_DEVICE_LIBS_MSVC_RUNTIME_SUFFIX "DLL")
+    endif()
+    if(NOT CMAKE_MSVC_RUNTIME_LIBRARY)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>${ROCM_DEVICE_LIBS_MSVC_RUNTIME_SUFFIX}")
+    endif()
+endif()
 
 # Following variables are required for ROCM backwards compatibility,
 # and should be removed in ROCM 7.0 release.
