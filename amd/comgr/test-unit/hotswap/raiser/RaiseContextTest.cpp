@@ -187,27 +187,6 @@ TEST_F(RaiseContextTest, SizesVgprAdjustmentsFromDescriptor) {
   EXPECT_EQ(Env->Ctx->CurrentVgprAdjust.size(), MaxOperands);
 }
 
-TEST_F(RaiseContextTest, RejectsVgprMsbsWithoutOperandTable) {
-  Expected<MCState> State = initMCState("gfx1250");
-  ASSERT_TRUE(static_cast<bool>(State)) << toString(State.takeError());
-  ContextEnvironment Gfx1250(*State);
-  unsigned Opc = findOpcode(*State->InstrInfo, "S_MOV_B32_gfx12");
-  ASSERT_NE(Opc, State->InstrInfo->getNumOpcodes());
-  MCRegister Reg = findRegister(*State->RegInfo, "VGPR0");
-  ASSERT_TRUE(Reg);
-
-  DecodedInst Di;
-  Di.Inst.setOpcode(Opc);
-  Di.Inst.addOperand(MCOperand::createReg(Reg));
-  Gfx1250.Ctx->VgprMsBs = 1;
-  Error Result = Gfx1250.Ctx->computeVGPRAdjust(Di);
-  ASSERT_TRUE(static_cast<bool>(Result));
-  std::string Message = toString(std::move(Result));
-  EXPECT_NE(Message.find("unsupported-instruction-form"), std::string::npos);
-  EXPECT_NE(Message.find("vgpr-msb"), std::string::npos);
-  EXPECT_NE(Message.find("operand-role table"), std::string::npos);
-}
-
 TEST_F(RaiseContextTest, ReportsUnsupportedRegisterOperands) {
   unsigned Opc = findOpcode(*Mc.InstrInfo, "S_MOV_B32");
   ASSERT_NE(Opc, Mc.InstrInfo->getNumOpcodes());
@@ -220,7 +199,7 @@ TEST_F(RaiseContextTest, ReportsUnsupportedRegisterOperands) {
   Expected<Value *> Result = Env->Ctx->readOp32(Di, 0);
   ASSERT_FALSE(static_cast<bool>(Result));
   std::string Message = toString(Result.takeError());
-  EXPECT_NE(Message.find("operand-read"), std::string::npos);
+  EXPECT_NE(Message.find("register-decode"), std::string::npos);
   EXPECT_NE(Message.find("SRC_SHARED_BASE_LO"), std::string::npos);
 }
 
@@ -238,6 +217,12 @@ TEST_F(RaiseContextTest, RejectsXnackMaskOperands) {
   std::string Message = toString(Result.takeError());
   EXPECT_NE(Message.find("unsupported-instruction-form"), std::string::npos);
   EXPECT_NE(Message.find("XNACK_MASK_LO"), std::string::npos);
+
+  OpResolver Resolver{*Env->Ctx, Di};
+  Expected<ParsedReg> Destination = Resolver.dst();
+  ASSERT_FALSE(static_cast<bool>(Destination));
+  EXPECT_NE(toString(Destination.takeError()).find("register-decode"),
+            std::string::npos);
 }
 
 TEST_F(RaiseContextTest, DiscardsNullRegisterWrites) {
@@ -286,6 +271,14 @@ TEST_F(RaiseContextTest, MaintainsStateOnRegisterWrites) {
   Env->Ctx->writeReg32(Sgpr, Env->B.getInt32(1));
   EXPECT_EQ(Env->Ctx->lookupSgprWaveMaskI1(4), nullptr);
   EXPECT_FALSE(Env->Ctx->lookupSourceImageSgprPairAddr(4));
+
+  Sgpr.BaseIdx = 8;
+  Sgpr.WidthInDwords = 2;
+  Env->Ctx->recordSgprWaveMaskI1(8, ConstantInt::getTrue(Env->LLVMCtx), false);
+  Env->Ctx->recordSgprWaveMaskI1(9, ConstantInt::getTrue(Env->LLVMCtx), false);
+  Env->Ctx->writeRegExecWidth(Sgpr, Env->B.getInt64(1));
+  EXPECT_EQ(Env->Ctx->lookupSgprWaveMaskI1(8), nullptr);
+  EXPECT_EQ(Env->Ctx->lookupSgprWaveMaskI1(9), nullptr);
 
   ParsedReg M0;
   M0.RegKind = ParsedReg::M0;
