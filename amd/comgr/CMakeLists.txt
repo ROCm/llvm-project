@@ -35,6 +35,15 @@ if(WIN32)
             message(WARNING "Spectre-mitigated libraries are not yet available for Clang in this project.")
         endif()
     endif()
+
+    option(COMGR_USE_MSVC_STATIC_RUNTIME "Link MSVC runtime library statically" OFF)
+
+    if(NOT COMGR_USE_MSVC_STATIC_RUNTIME)
+        set(COMGR_MSVC_RUNTIME_SUFFIX "DLL")
+    endif()
+    if(NOT CMAKE_MSVC_RUNTIME_LIBRARY)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>${COMGR_MSVC_RUNTIME_SUFFIX}")
+    endif()
 endif()
 
 # Static API consistency check: verify VERSION.txt, the public header

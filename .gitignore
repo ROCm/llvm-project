@@ -90,3 +90,4 @@ pythonenv*
 /lldb/docs/python_api/
 .depend*/
 depend*/
+CMakeUserPresets.json
