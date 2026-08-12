@@ -403,8 +403,8 @@ bool DivergenceS1WideningHelper::widenS1Phis() {
       if (!MUI->isDivergentAtDef(CondReg))
         continue;
 
-      auto ConstrainRC = IsWave32 ? &AMDGPU::SReg_32_XM0_XEXECRegClass
-                                  : &AMDGPU::SReg_64_XEXECRegClass;
+      auto ConstrainRC = ST->isWave32() ? &AMDGPU::SReg_32_XM0_XEXECRegClass
+                                        : &AMDGPU::SReg_64_XEXECRegClass;
 
       if (!MRI->getRegClassOrNull(CondReg))
         MRI->setRegClass(CondReg, ConstrainRC);
