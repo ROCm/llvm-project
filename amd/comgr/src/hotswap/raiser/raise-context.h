@@ -81,7 +81,7 @@ struct RaiseContext {
   llvm::SmallVector<unsigned> CurrentVgprAdjust;
 
   // Compute VGPR bank adjustments for the instruction's format-defined slots.
-  llvm::Error computeVGPRAdjust(const DecodedInst &Di);
+  void computeVGPRAdjust(const DecodedInst &Di);
 
   llvm::BasicBlock *lookupBB(uint64_t Addr);
 

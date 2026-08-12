@@ -54,43 +54,39 @@ BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
                      utohexstr(Addr));
 }
 
-Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
+void RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   unsigned Opc = Di.Inst.getOpcode();
   const MCInstrDesc &Desc = MC.InstrInfo->get(Opc);
   CurrentVgprAdjust.assign(
       std::max(Di.numOperands(), static_cast<unsigned>(Desc.getNumOperands())),
       0u);
   if (VgprMsBs == 0)
-    return Error::success();
+    return;
 
   // Operand slots are format-specific rather than positional, so use the
   // backend's operand-role table to apply each two-bit VGPR bank field.
   auto [XOps, YOps] = AMDGPU::getVGPRLoweringOperandTables(Desc);
   if (!XOps && !YOps)
-    return Error::success();
+    return;
 
   for (unsigned Slot = 0; Slot != 4; ++Slot) {
     unsigned Adjust =
         ((static_cast<unsigned>(VgprMsBs) >> (Slot * 2)) & 0x3u) * 256u;
     if (Adjust == 0)
       continue;
-    auto RecordAdjustment = [&](const AMDGPU::OpName *Ops) -> Error {
+    auto RecordAdjustment = [&](const AMDGPU::OpName *Ops) {
       if (!Ops || Ops[Slot] == AMDGPU::OpName::NUM_OPERAND_NAMES)
-        return Error::success();
+        return;
       int OpIdx = AMDGPU::getNamedOperandIdx(Opc, Ops[Slot]);
       if (OpIdx < 0)
         llvm_unreachable("VGPR operand table names a missing operand");
       if (static_cast<unsigned>(OpIdx) >= CurrentVgprAdjust.size())
         llvm_unreachable("VGPR operand index exceeds instruction operands");
       CurrentVgprAdjust[OpIdx] = Adjust;
-      return Error::success();
     };
-    if (Error Err = RecordAdjustment(XOps))
-      return Err;
-    if (Error Err = RecordAdjustment(YOps))
-      return Err;
+    RecordAdjustment(XOps);
+    RecordAdjustment(YOps);
   }
-  return Error::success();
 }
 
 // Return the register width in 32-bit subregisters. Scalar registers have no
