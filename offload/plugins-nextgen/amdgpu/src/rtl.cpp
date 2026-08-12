@@ -924,7 +924,7 @@ private:
   uint32_t ImplicitArgsSize;
 
   /// Additional Info for the AMD GPU Kernel
-  offloading::amdgpu::AMDGPUKernelMetaData KernelInfo;  
+  offloading::amdgpu::AMDGPUKernelMetaData KernelInfo;
   /// CodeGen generate WGSize
   uint16_t ConstWGSize;
 
@@ -3335,8 +3335,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         OMPX_APUPrefaultMemcopySize("LIBOMPTARGET_APU_PREFAULT_MEMCOPY_SIZE",
                                     1 * 1024 * 1024), // 1MB
         OMPX_DGPUMaps("OMPX_DGPU_MAPS", false),
-        OMPX_SharedDescriptorMaxSize("LIBOMPTARGET_SHARED_DESCRIPTOR_MAX_SIZE",
-                                     0),
         OMPX_EnableDevice2DeviceMemAccess(
             "OMPX_ENABLE_DEVICE_TO_DEVICE_MEM_ACCESS", false),
         AMDGPUStreamManager(*this, Agent), AMDGPUEventManager(*this),
@@ -5110,10 +5108,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
   bool useMultipleSdmaEngines() const { return OMPX_UseMultipleSdmaEngines; }
 
-  bool useSharedMemForDescriptor(int64_t Size) override {
-    return Size <= OMPX_SharedDescriptorMaxSize;
-  }
-
   bool useStrictSanityChecks() const { return OMPX_StrictSanityChecks; }
 
 private:
@@ -5421,10 +5415,6 @@ private:
   /// Value of OMPX_DGPU_MAPS. When enabled, it will always perform
   /// copy on APUs regardless of the setting of HSA_XNACK.
   BoolEnvar OMPX_DGPUMaps;
-
-  /// Descriptors of size <= to this value will be allocated using shared
-  /// memory. Default value is 48.
-  UInt32Envar OMPX_SharedDescriptorMaxSize;
 
   // Determines whether we call HSA API, upon device memory allocation,
   // for making the memory acceccible from other agents.

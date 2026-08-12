@@ -98,7 +98,8 @@ public:
   containsPath(const llvm::SmallVectorImpl<llvm::SmallVector<int64_t>> &paths,
                llvm::ArrayRef<int64_t> path) {
     return llvm::any_of(paths, [&](const llvm::SmallVector<int64_t> &p) {
-      return p.size() == path.size() && std::equal(p.begin(), p.end(), path.begin());
+      return p.size() == path.size() &&
+             std::equal(p.begin(), p.end(), path.begin());
     });
   }
 
@@ -772,8 +773,8 @@ public:
   mlir::omp::ClauseMapFlags
   getDescriptorMapType(mlir::omp::ClauseMapFlags mapTypeFlag,
                        mlir::Operation *target, bool privatizeDescriptor) {
-    using mapFlags = mlir::omp::ClauseMapFlags;
-    mapFlags flags = mapFlags::none;
+    using MapFlags = mlir::omp::ClauseMapFlags;
+    MapFlags flags = MapFlags::none;
 
     // Special runtime case for descriptor privatization requires the
     // following map types in synergy:
@@ -785,24 +786,23 @@ public:
     //    1) use_device_ptr/addr
     //    2) usm and the CLOSE map type
     if (privatizeDescriptor) {
-      return mapFlags::priv | mapFlags::attach | mapFlags::descriptor |
-             mapFlags::target_param | (mapTypeFlag & mapFlags::implicit);
+      return MapFlags::priv | MapFlags::attach | MapFlags::target_param |
+             (mapTypeFlag & MapFlags::implicit);
     }
 
     if (llvm::isa_and_nonnull<mlir::omp::TargetExitDataOp,
                               mlir::omp::TargetUpdateOp>(target)) {
-      return mapTypeFlag | mapFlags::descriptor;
+      return mapTypeFlag;
     }
 
-    flags |= mapFlags::to | mapFlags::descriptor |
-             (mapTypeFlag & mapFlags::implicit);
+    flags |= MapFlags::to | (mapTypeFlag & MapFlags::implicit);
 
     // TODO/FIXME: We currently cannot have MAP_CLOSE and MAP_ALWAYS on
     // the descriptor at once, these are mutually exclusive and when
     // both are applied the runtime will fail to map.
-    flags |= ((mapFlags(mapTypeFlag) & mapFlags::close) == mapFlags::close)
-                 ? mapFlags::close
-                 : mapFlags::always;
+    flags |= ((MapFlags(mapTypeFlag) & MapFlags::close) == MapFlags::close)
+                 ? MapFlags::close
+                 : MapFlags::always;
 
     return flags;
   }
@@ -1285,8 +1285,7 @@ public:
         builder, op->getLoc(), op.getResult().getType(), op.getVarPtr(),
         op.getVarPtrTypeAttr(),
         builder.getAttr<mlir::omp::ClauseMapFlagsAttr>(
-            mlir::omp::ClauseMapFlags::to | mlir::omp::ClauseMapFlags::always |
-            mlir::omp::ClauseMapFlags::descriptor),
+            mlir::omp::ClauseMapFlags::to | mlir::omp::ClauseMapFlags::always),
         op.getMapCaptureTypeAttr(), /*varPtrPtr=*/mlir::Value{},
         /*varPtrPtrType=*/mlir::TypeAttr{}, mlir::SmallVector<mlir::Value>{},
         mlir::ArrayAttr{},

@@ -1455,10 +1455,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   KernelRunRecordTy *getKernelRunRecords() const { return KernelRunRecords; }
 
-  /// Return true if a descriptor of size 'Size' should be allocated using
-  /// shared memory. Default implementation returns 'false',
-  virtual bool useSharedMemForDescriptor(int64_t Size);
-
   /// Returns true if the plugin can guarantee that the associated
   /// storage is accessible
   Expected<bool> isAccessiblePtr(const void *Ptr, size_t Size);
@@ -2177,10 +2173,6 @@ public:
                                            bool isUnifiedSharedMemory,
                                            bool isAutoZeroCopy,
                                            bool isEagerMaps);
-
-  /// Return true if a descriptor of size 'Size' should be allocated using
-  /// shared memory.
-  bool use_shared_mem_for_descriptor(int32_t DeviceId, int64_t Size);
 
   /// Return the interop specification that the plugin supports
   /// It might not be one of the user specified ones.

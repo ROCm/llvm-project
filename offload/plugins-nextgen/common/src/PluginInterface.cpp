@@ -1420,8 +1420,6 @@ Error GenericDeviceTy::zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
                                          isEagerMaps);
 }
 
-bool GenericDeviceTy::useSharedMemForDescriptor(int64_t Size) { return false; }
-
 Expected<bool> GenericDeviceTy::isAccessiblePtr(const void *Ptr, size_t Size) {
   return isAccessiblePtrImpl(Ptr, Size);
 }
@@ -2350,16 +2348,6 @@ int32_t GenericPluginTy::zero_copy_sanity_checks_and_diag(
     }
 
     return OFFLOAD_SUCCESS;
-  }();
-  T.res(R);
-  return R;
-}
-
-bool GenericPluginTy::use_shared_mem_for_descriptor(int32_t DeviceId,
-                                                    int64_t Size) {
-  auto T = logger::log<bool>(__func__, DeviceId);
-  auto R = [&]() {
-    return getDevice(DeviceId).useSharedMemForDescriptor(Size);
   }();
   T.res(R);
   return R;

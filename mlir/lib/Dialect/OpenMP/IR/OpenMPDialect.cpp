@@ -2254,9 +2254,6 @@ static ParseResult parseMapClause(OpAsmParser &parser,
     if (mapTypeMod == "present")
       mapTypeBits |= ClauseMapFlags::present;
 
-    if (mapTypeMod == "descriptor")
-      mapTypeBits |= ClauseMapFlags::descriptor;
-
     if (mapTypeMod == "to")
       mapTypeBits |= ClauseMapFlags::to;
 
@@ -2336,8 +2333,6 @@ static void printMapClause(OpAsmPrinter &p, Operation *op,
     mapTypeStrs.push_back("close");
   if (mapTypeToBool(mapFlags, ClauseMapFlags::present))
     mapTypeStrs.push_back("present");
-  if (mapTypeToBool(mapFlags, ClauseMapFlags::descriptor))
-    mapTypeStrs.push_back("descriptor");
   if (mapTypeToBool(mapFlags, ClauseMapFlags::target_param))
     mapTypeStrs.push_back("target_param");
 
