@@ -52,7 +52,7 @@ runs:
         fi
         
         git commit -m "Update compiler submodule references for llvm-project PR"
-        git submodule update --init --recursive \
+        git submodule update --init --depth 1 --jobs 4 \
           compiler/amd-llvm \
           compiler/spirv-llvm-translator \
           compiler/hipify
@@ -97,7 +97,7 @@ runs:
         fi
 
         git commit -m "Update compiler submodule references for llvm-project PR"
-        git submodule update --init --recursive \
+        git submodule update --init --depth 1 --jobs 4 \
           compiler/amd-llvm \
           compiler/spirv-llvm-translator \
           compiler/hipify
@@ -160,7 +160,7 @@ runs:
         merge_upstream_prs() {
           local pr_urls="$1"
           local url repo num ref
-          git submodule update --init --jobs 1 compiler/amd-llvm
+          git submodule update --init --depth 1 --jobs 1 compiler/amd-llvm
           IFS=',' read -ra PR_URLS <<< "$pr_urls"
           for url in "${PR_URLS[@]}"; do
             url="$(echo "$url" | xargs)"
@@ -224,7 +224,7 @@ runs:
         fi
 
         git commit -m "Update submodule references from PR URLs"
-        git submodule update --init --recursive \
+        git submodule update --init --depth 1 --jobs 4 \
           compiler/amd-llvm \
           compiler/spirv-llvm-translator \
           compiler/hipify
