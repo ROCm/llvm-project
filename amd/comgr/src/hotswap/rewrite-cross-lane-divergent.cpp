@@ -389,6 +389,8 @@ bool isIntrinsicVGPRSafeSink(Intrinsic::ID Id) {
   case Intrinsic::amdgcn_wmma_f32_16x16x64_fp8_fp8:
   case Intrinsic::amdgcn_wmma_i32_16x16x64_iu8:
   case Intrinsic::amdgcn_wmma_scale_f32_16x16x128_f8f6f4:
+  case Intrinsic::amdgcn_wmma_scale16_f32_16x16x128_f8f6f4:
+  case Intrinsic::amdgcn_wmma_scale16_f32_32x16x128_f4:
     return true;
   default:
     return false;

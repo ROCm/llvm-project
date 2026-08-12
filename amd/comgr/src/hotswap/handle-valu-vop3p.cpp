@@ -259,17 +259,28 @@ struct WmmaScaleInputs {
   parse(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     WmmaScaleInputs In;
 
-    int64_t MatrixAFmtImm = namedOperandImm(Di, AMDGPU::OpName::matrix_a_fmt);
-    int64_t MatrixBFmtImm = namedOperandImm(Di, AMDGPU::OpName::matrix_b_fmt);
-    In.ADwords = matrixFmtToDwords(MatrixAFmtImm);
-    In.BDwords = matrixFmtToDwords(MatrixBFmtImm);
-    if (In.ADwords == 0 || In.BDwords == 0)
-      return RaiseFailure::unsupportedInstructionForm(
-          Di, "VOP3P",
-          "unrecognised matrix_*_fmt "
-          "(expected FP8, BF8, FP6, BF6, or FP4)");
-
-    In.CdLanes = ScaleF32_16x16x128CdLanes;
+    int64_t MatrixAFmtImm = 0;
+    int64_t MatrixBFmtImm = 0;
+    if (hasMatrixFmt(Di)) {
+      MatrixAFmtImm = namedOperandImm(Di, AMDGPU::OpName::matrix_a_fmt);
+      MatrixBFmtImm = namedOperandImm(Di, AMDGPU::OpName::matrix_b_fmt);
+      In.ADwords = matrixFmtToDwords(MatrixAFmtImm);
+      In.BDwords = matrixFmtToDwords(MatrixBFmtImm);
+      if (In.ADwords == 0 || In.BDwords == 0)
+        return RaiseFailure::unsupportedInstructionForm(
+            Di, "VOP3P",
+            "unrecognised matrix_*_fmt "
+            "(expected FP8, BF8, FP6, BF6, or FP4)");
+      In.CdLanes = ScaleF32_16x16x128CdLanes;
+    } else {
+      assert(Di.CanonOp == CanonicalOp::V_WMMA_SCALE16_F32_32x16x128_F4 &&
+             "fixed dword layout without matrix_*_fmt");
+      MatrixAFmtImm = AMDGPU::WMMA::MATRIX_FMT_FP4;
+      MatrixBFmtImm = AMDGPU::WMMA::MATRIX_FMT_FP4;
+      In.ADwords = 16;
+      In.BDwords = 8;
+      In.CdLanes = ScaleF32_32x16x128CdLanes;
+    }
     In.ATy = FixedVectorType::get(Ctx.I32Ty, In.ADwords);
     In.BTy = FixedVectorType::get(Ctx.I32Ty, In.BDwords);
     In.CdTy = FixedVectorType::get(Ctx.F32Ty, In.CdLanes);
@@ -360,6 +371,7 @@ private:
   WmmaScaleInputs() = default;
 
   static constexpr unsigned ScaleF32_16x16x128CdLanes = 8;
+  static constexpr unsigned ScaleF32_32x16x128CdLanes = 16;
 
   static int64_t namedOperandImm(const DecodedInst &Di, AMDGPU::OpName Name) {
     int Idx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
@@ -370,10 +382,25 @@ private:
 
   static bool isScale16(const DecodedInst &Di) {
     switch (Di.CanonOp) {
+    case CanonicalOp::V_WMMA_SCALE16_F32_16x16x128_F8F6F4:
+    case CanonicalOp::V_WMMA_SCALE16_F32_32x16x128_F4:
+      return true;
     case CanonicalOp::V_WMMA_SCALE_F32_16x16x128_F8F6F4:
       return false;
     default:
       llvm_unreachable("isScale16 called on non-WMMA-scale instruction");
+    }
+  }
+
+  static bool hasMatrixFmt(const DecodedInst &Di) {
+    switch (Di.CanonOp) {
+    case CanonicalOp::V_WMMA_SCALE_F32_16x16x128_F8F6F4:
+    case CanonicalOp::V_WMMA_SCALE16_F32_16x16x128_F8F6F4:
+      return true;
+    case CanonicalOp::V_WMMA_SCALE16_F32_32x16x128_F4:
+      return false;
+    default:
+      llvm_unreachable("hasMatrixFmt called on non-WMMA-scale instruction");
     }
   }
 
@@ -1401,6 +1428,89 @@ Expected<HandlerResult> handleValuVoP3P(RaiseContext &Ctx,
           "MFMA F8F6F4 via emitWMMAScaleF8F6F4toScaledMFMA), or hasFP8Insts "
           "(gfx942 K-decomposed unscaled FP8 / BF8 MFMA via "
           "emitWMMAScaleF8F6F4toMFMA); this target has none.");
+    }
+
+    Ctx.writeRegVec(In.Dest, ResultVal);
+    Hr.Handled = true;
+    return Hr;
+  }
+
+  case CanonicalOp::V_WMMA_SCALE16_F32_16x16x128_F8F6F4: {
+    // Same mantissa-pair collapse as V_WMMA_SCALE_F32_16x16x128_F8F6F4 but
+    // scale_src0 / scale_src1 are i64 (8 packed bytes / side, K=16 scale
+    // granularity). gfx942 lowers via emitWMMAScale16F8F6F4toMFMA (unscaled
+    // FP8/BF8 MFMA + software scale; no mfma_scale16 hardware).
+    Expected<WmmaScaleInputs> MaybeIn = WmmaScaleInputs::parse(Ctx, Di, Op);
+    if (!MaybeIn)
+      return MaybeIn.takeError();
+    const WmmaScaleInputs &In = *MaybeIn;
+
+    Value *ResultVal = nullptr;
+
+    if (Ctx.TargetIsa.HasTensorOps) {
+      Function *WmmaFn = Intrinsic::getOrInsertDeclaration(
+          &Ctx.M, Intrinsic::amdgcn_wmma_scale16_f32_16x16x128_f8f6f4,
+          {In.CdTy, In.ATy, In.BTy});
+      ResultVal = Ctx.B.CreateCall(
+          WmmaFn,
+          {In.MatrixAFmt, In.A, In.MatrixBFmt, In.B, In.CMod, In.C,
+           In.MatrixAScale, In.MatrixAScaleFmt, In.ScaleSrc0, In.MatrixBScale,
+           In.MatrixBScaleFmt, In.ScaleSrc1, In.MatrixAReuse, In.MatrixBReuse},
+          "wmma_scale16");
+    } else if (Ctx.TargetIsa.HasFP8Insts) {
+      Expected<Value *> RV = emitWMMAScale16F8F6F4toMFMA(
+          Ctx, In.A, In.B, In.C, In.MatrixAFmt, In.MatrixBFmt, In.CMod,
+          In.MatrixAScale, In.MatrixAScaleFmt, In.ScaleSrc0, In.MatrixBScale,
+          In.MatrixBScaleFmt, In.ScaleSrc1, In.ADwords, In.BDwords);
+      if (!RV)
+        return RV.takeError();
+      ResultVal = *RV;
+    } else {
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP3P",
+          "v_wmma_scale16_f32_16x16x128_f8f6f4 requires one of: hasTensorOps "
+          "(gfx1250 native scaled WMMA), hasGfx950Insts or hasFP8Insts "
+          "(K-decomposed unscaled FP8 / BF8 MFMA via "
+          "emitWMMAScale16F8F6F4toMFMA); this target has none.");
+    }
+
+    Ctx.writeRegVec(In.Dest, ResultVal);
+    Hr.Handled = true;
+    return Hr;
+  }
+
+  case CanonicalOp::V_WMMA_SCALE16_F32_32x16x128_F4: {
+    Expected<WmmaScaleInputs> MaybeIn = WmmaScaleInputs::parse(Ctx, Di, Op);
+    if (!MaybeIn)
+      return MaybeIn.takeError();
+    const WmmaScaleInputs &In = *MaybeIn;
+
+    Value *ResultVal = nullptr;
+
+    if (Ctx.TargetIsa.HasTensorOps) {
+      Function *WmmaFn = Intrinsic::getOrInsertDeclaration(
+          &Ctx.M, Intrinsic::amdgcn_wmma_scale16_f32_32x16x128_f4,
+          {In.CdTy, In.ATy, In.BTy});
+      ResultVal = Ctx.B.CreateCall(
+          WmmaFn,
+          {In.A, In.B, In.CMod, In.C, In.MatrixAScale, In.MatrixAScaleFmt,
+           In.ScaleSrc0, In.MatrixBScale, In.MatrixBScaleFmt, In.ScaleSrc1,
+           In.MatrixAReuse, In.MatrixBReuse},
+          "wmma_scale16_32x16");
+    } else if (Ctx.TargetIsa.HasFP8Insts) {
+      Expected<Value *> RV = emitWMMAScale16F32_32x16x128_F4toMFMA(
+          Ctx, In.A, In.B, In.C, In.CMod, In.MatrixAScale, In.MatrixAScaleFmt,
+          In.ScaleSrc0, In.MatrixBScale, In.MatrixBScaleFmt, In.ScaleSrc1);
+      if (!RV)
+        return RV.takeError();
+      ResultVal = *RV;
+    } else {
+      return RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP3P",
+          "v_wmma_scale16_f32_32x16x128_f4 requires one of: hasTensorOps "
+          "(gfx1250 native scaled WMMA), hasGfx950Insts, or hasFP8Insts "
+          "(M-split 16x16x128_f8f6f4 scale16 via "
+          "emitWMMAScale16F32_32x16x128_F4toMFMA); this target has none.");
     }
 
     Ctx.writeRegVec(In.Dest, ResultVal);

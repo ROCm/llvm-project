@@ -262,6 +262,29 @@ llvm::Expected<llvm::Value *> emitWMMAScaleF8F6F4toMFMA(
     llvm::Value *matrixBScaleFmt, llvm::Value *scaleSrc1, unsigned aDwords,
     unsigned bDwords);
 
+/// Cross-target gfx1250 -> gfx942 lowering for
+/// `v_wmma_scale16_f32_16x16x128_f8f6f4`. Like `emitWMMAScaleF8F6F4toMFMA`
+/// but scale operands are i64 (8 packed bytes / side, K=16 granularity) and
+/// each K=16 slice uses one dword per side with unscaled FP8/BF8 MFMA plus
+/// software scale (no mfma_scale16 hardware). Returns `<8 x float>` in wave32
+/// D-layout or an error for unsupported configurations / invariant violations.
+llvm::Expected<llvm::Value *> emitWMMAScale16F8F6F4toMFMA(
+    RaiseContext &ctx, llvm::Value *a, llvm::Value *b, llvm::Value *c,
+    llvm::Value *matrixAFmt, llvm::Value *matrixBFmt, llvm::Value *cMod,
+    llvm::Value *matrixAScale, llvm::Value *matrixAScaleFmt,
+    llvm::Value *scaleSrc0, llvm::Value *matrixBScale,
+    llvm::Value *matrixBScaleFmt, llvm::Value *scaleSrc1, unsigned aDwords,
+    unsigned bDwords);
+
+/// Cross-target gfx1250 -> gfx942 lowering for
+/// `v_wmma_scale16_f32_32x16x128_f4` (M=32 FP4). Splits the M dimension into
+/// two `emitWMMAScale16F8F6F4toMFMA` passes with fmt=FP4.
+llvm::Expected<llvm::Value *> emitWMMAScale16F32_32x16x128_F4toMFMA(
+    RaiseContext &ctx, llvm::Value *a, llvm::Value *b, llvm::Value *c,
+    llvm::Value *cMod, llvm::Value *matrixAScale, llvm::Value *matrixAScaleFmt,
+    llvm::Value *scaleSrc0, llvm::Value *matrixBScale,
+    llvm::Value *matrixBScaleFmt, llvm::Value *scaleSrc1);
+
 } // namespace COMGR::hotswap
 
 #endif

@@ -1408,6 +1408,54 @@ Value *extractScaleByte(IRBuilder<> &B, Value *Scale32, unsigned k) {
   return B.CreateAnd(Shifted, B.getInt32(0xFF), "scale_byte");
 }
 
+// Per-K-block scale byte with LG1/LG3 swap for the first two K=32 blocks.
+static Value *extractScaleByteForKBlock(IRBuilder<> &B, Value *LaneGroup,
+                                        Value *Scale32, unsigned kBlock) {
+  Value *ByteK = extractScaleByte(B, Scale32, kBlock);
+  if (kBlock >= 2)
+    return ByteK;
+  Value *ByteAlt = extractScaleByte(B, Scale32, kBlock ^ 1u);
+  Value *IsLgOdd =
+      B.CreateOr(B.CreateICmpEQ(LaneGroup, B.getInt32(1)),
+                 B.CreateICmpEQ(LaneGroup, B.getInt32(3)), "scale_lg_odd");
+  return B.CreateSelect(IsLgOdd, ByteAlt, ByteK, "scale_byte_k32");
+}
+
+// Byte k of the 8-byte i64 scale source (SCALE16 form).
+static Value *extractScaleByte64(IRBuilder<> &B, Value *Scale64, unsigned k) {
+  assert(k < 8 && "SCALE16 carries 8 bytes per side");
+  Value *Half = k < 4 ? B.CreateTrunc(Scale64, B.getInt32Ty())
+                      : B.CreateTrunc(B.CreateLShr(Scale64, B.getInt64(32)),
+                                      B.getInt32Ty());
+  return extractScaleByte(B, Half, k % 4);
+}
+
+// SCALE16 i64 carries K=16 bytes (often k32[i] duplicated at 2i and 2i+1).
+// Re-pack the four logical K=32 scale bytes into one i32 for LG1/LG3 swap.
+static Value *buildK32ScaleWordFromI64(IRBuilder<> &B, Value *Scale64) {
+  Value *B0 = extractScaleByte64(B, Scale64, 0);
+  Value *B1 = extractScaleByte64(B, Scale64, 2);
+  Value *B2 = extractScaleByte64(B, Scale64, 4);
+  Value *B3 = extractScaleByte64(B, Scale64, 6);
+  Value *W = B.CreateOr(B0, B.CreateShl(B1, B.getInt32(8)), "k32_scale_w");
+  W = B.CreateOr(W, B.CreateShl(B2, B.getInt32(16)), "k32_scale_w");
+  W = B.CreateOr(W, B.CreateShl(B3, B.getInt32(24)), "k32_scale_w");
+  return W;
+}
+
+static Value *extractScaleByte64ForKBlock(IRBuilder<> &B, Value *LaneGroup,
+                                          Value *Scale64, unsigned kBlock) {
+  Value *Scale32Word = buildK32ScaleWordFromI64(B, Scale64);
+  return extractScaleByteForKBlock(B, LaneGroup, Scale32Word, kBlock / 2);
+}
+
+// Pack one dword into the low half of an i64 MFMA operand; high dword zero.
+static Value *packOneDwordAsI64(IRBuilder<> &B, Value *Dw, Type *I32Ty,
+                                Type *I64Ty) {
+  Value *Pair[2] = {Dw, ConstantInt::get(I32Ty, 0)};
+  return packDwords(B, Pair, 2, I32Ty, I64Ty);
+}
+
 // Decode one scale byte to f32. E8M0 via `ldexp(1.0, byte - 127)` -- real
 // hardware has no reserved-NaN encoding for E8M0; byte 0xFF (exponent 128)
 // simply overflows the ldexp to +Inf, which this reproduces by construction
@@ -1494,11 +1542,14 @@ Value *buildScaleFactorVec(IRBuilder<> &B, Module &M, Type *F32Ty,
 
 } // namespace
 
-Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
+// Shared gfx1250 scaled WMMA -> gfx942 unscaled FP8/BF8 MFMA decomposition.
+// `ScaleGroupIs16` selects K=16 (8 packed scale bytes, i64 scale_src) vs
+// K=32 (4 packed scale bytes, i32 scale_src). No mfma_scale hardware exists.
+Expected<Value *> emitWMMAScaleF8F6F4toMFMADecomposed(
     RaiseContext &ctx, Value *a, Value *b, Value *c, Value *matrixAFmt,
     Value *matrixBFmt, Value *cMod, Value *matrixAScale, Value *matrixAScaleFmt,
     Value *scaleSrc0, Value *matrixBScale, Value *matrixBScaleFmt,
-    Value *scaleSrc1, unsigned aDwords, unsigned bDwords) {
+    Value *scaleSrc1, unsigned aDwords, unsigned bDwords, bool ScaleGroupIs16) {
   IRBuilder<> &B = ctx.B;
   Module &M = ctx.M;
 
@@ -1622,14 +1673,26 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
     // lane groups of a pass -- unlike the A/B operands, whose Lo/Hi split
     // selects the K-block. The source packs Bsc[lane%16] into lanes 0..15 of
     // its W32 (the SCL_OPSEL[0] == 0 / ROW0 layout; ROW1 is refused earlier),
-    // so every lane group reads AddrLo. All 4 K-block scale bytes ride in one
-    // i32, so one bpermute suffices; constant sources are lane-uniform.
-    auto RedistributeScale = [&](Value *ScaleSrc) -> Value * {
+    // so every lane group reads AddrLo. AddrHi addresses those unused lanes --
+    // still inside this pass's source wave, just holding nothing. wmma_scale
+    // (K=32 i32) uses one AddrLo bpermute; scale16 (K=16 i64) redistributes
+    // each low/high dword the same way. Constant sources are lane-uniform.
+    auto RedistributeScaleSrc1 = [&](Value *ScaleSrc,
+                                     bool IsScale16Group) -> Value * {
       if (isa<Constant>(ScaleSrc))
         return ScaleSrc;
-      return emitDSBpermute(B, M, AddrLo, ScaleSrc);
+      if (!IsScale16Group)
+        return emitDSBpermute(B, M, AddrLo, ScaleSrc);
+      Value *Lo32 = B.CreateTrunc(ScaleSrc, ctx.I32Ty);
+      Value *Hi32 =
+          B.CreateTrunc(B.CreateLShr(ScaleSrc, B.getInt64(32)), ctx.I32Ty);
+      Value *LoR = emitDSBpermute(B, M, AddrLo, Lo32);
+      Value *HiR = emitDSBpermute(B, M, AddrLo, Hi32);
+      Value *Lo64 = B.CreateZExt(LoR, ctx.I64Ty);
+      Value *Hi64 = B.CreateShl(B.CreateZExt(HiR, ctx.I64Ty), B.getInt64(32));
+      return B.CreateOr(Lo64, Hi64, "scale64_redist");
     };
-    Value *ScaleSrc1Pass = RedistributeScale(scaleSrc1);
+    Value *ScaleSrc1Pass = RedistributeScaleSrc1(scaleSrc1, ScaleGroupIs16);
 
     // The A (row) scale is indexed by the OUTPUT row, not by the lane's own
     // operand: each Wave64 lane's MFMA accumulator covers 4 output rows
@@ -1643,7 +1706,7 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
       // source.
       for (Value *&Row : ScaleSrc0Row)
         Row = scaleSrc0;
-    } else {
+    } else if (!ScaleGroupIs16) {
       Value *Row4 = B.CreateShl(LaneGroup, B.getInt32(2), "row4");
       for (unsigned g = 0; g < 4; ++g) {
         Value *RowLane =
@@ -1651,8 +1714,22 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
         Value *RowAddr = B.CreateShl(RowLane, B.getInt32(2), "row_addr");
         ScaleSrc0Row[g] = emitDSBpermute(B, M, RowAddr, scaleSrc0);
       }
+    } else {
+      Value *ScaleLo = B.CreateTrunc(scaleSrc0, ctx.I32Ty);
+      Value *ScaleHi =
+          B.CreateTrunc(B.CreateLShr(scaleSrc0, B.getInt64(32)), ctx.I32Ty);
+      Value *Row4 = B.CreateShl(LaneGroup, B.getInt32(2), "row4");
+      for (unsigned g = 0; g < 4; ++g) {
+        Value *RowLane =
+            B.CreateAdd(Row4, B.getInt32(GroupBase + g), "row_lane");
+        Value *RowAddr = B.CreateShl(RowLane, B.getInt32(2), "row_addr");
+        Value *LoR = emitDSBpermute(B, M, RowAddr, ScaleLo);
+        Value *HiR = emitDSBpermute(B, M, RowAddr, ScaleHi);
+        Value *Lo64 = B.CreateZExt(LoR, ctx.I64Ty);
+        Value *Hi64 = B.CreateShl(B.CreateZExt(HiR, ctx.I64Ty), B.getInt64(32));
+        ScaleSrc0Row[g] = B.CreateOr(Lo64, Hi64, "scale_a_row64");
+      }
     }
-
     Value *MfmaC[4];
     redistributeAcc(B, M, cDwords, AddrLo, AddrHi, LaneGroup, MfmaC);
     Value *Acc = packDwords(B, MfmaC, 4, ctx.I32Ty, AccTy);
@@ -1663,34 +1740,70 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
     if (cModVal & 1)
       Acc = B.CreateFNeg(Acc, "c_neg");
 
-    // Redistribute A and B for all 4 K-blocks (each call covers 2 blocks).
-    Value *aPerKBlock[4][2];
-    Value *bPerKBlock[4][2];
-    redistributeInput(B, M, aDwordsArr.data(), AddrLo, AddrHi, LaneGroup,
-                      aPerKBlock[0], aPerKBlock[1]);
+    // Redistribute A and B for all K-blocks (each call covers 2 blocks).
+    Value *aLo[2], *aHi[2], *bLo[2], *bHi[2];
+    Value *aLo2[2], *aHi2[2], *bLo2[2], *bHi2[2];
+    redistributeInput(B, M, aDwordsArr.data(), AddrLo, AddrHi, LaneGroup, aLo,
+                      aHi);
     redistributeInput(B, M, aDwordsArr.data() + 8, AddrLo, AddrHi, LaneGroup,
-                      aPerKBlock[2], aPerKBlock[3]);
-    redistributeInput(B, M, bDwordsArr.data(), AddrLo, AddrHi, LaneGroup,
-                      bPerKBlock[0], bPerKBlock[1]);
+                      aLo2, aHi2);
+    redistributeInput(B, M, bDwordsArr.data(), AddrLo, AddrHi, LaneGroup, bLo,
+                      bHi);
     redistributeInput(B, M, bDwordsArr.data() + 8, AddrLo, AddrHi, LaneGroup,
-                      bPerKBlock[2], bPerKBlock[3]);
+                      bLo2, bHi2);
 
-    for (unsigned kBlock = 0; kBlock < 4; ++kBlock) {
-      Value *SrcA = packDwords(B, aPerKBlock[kBlock], 2, ctx.I32Ty, ctx.I64Ty);
-      Value *SrcB = packDwords(B, bPerKBlock[kBlock], 2, ctx.I32Ty, ctx.I64Ty);
-
-      Value *Partial = ctx.Projection.wrapAsWWMValue(
-          B,
-          B.CreateCall(MfmaFn, {SrcA, SrcB, ZeroAcc, Cbsz, Abid, Blgp},
-                       "kblock_partial"),
-          "kblock_partial_wwm");
+    const unsigned NumKBlocks = ScaleGroupIs16 ? 8u : 4u;
+    for (unsigned kBlock = 0; kBlock < NumKBlocks; ++kBlock) {
+      Value *Partial = nullptr;
+      if (ScaleGroupIs16) {
+        Value *aDw =
+            (kBlock < 4)
+                ? ((kBlock % 2 == 0) ? aLo[kBlock / 2] : aHi[kBlock / 2])
+                : ((kBlock % 2 == 0) ? aLo2[(kBlock - 4) / 2]
+                                     : aHi2[(kBlock - 4) / 2]);
+        Value *bDw =
+            (kBlock < 4)
+                ? ((kBlock % 2 == 0) ? bLo[kBlock / 2] : bHi[kBlock / 2])
+                : ((kBlock % 2 == 0) ? bLo2[(kBlock - 4) / 2]
+                                     : bHi2[(kBlock - 4) / 2]);
+        Value *SrcA = packOneDwordAsI64(B, aDw, ctx.I32Ty, ctx.I64Ty);
+        Value *SrcB = packOneDwordAsI64(B, bDw, ctx.I32Ty, ctx.I64Ty);
+        Partial = ctx.Projection.wrapAsWWMValue(
+            B,
+            B.CreateCall(MfmaFn, {SrcA, SrcB, ZeroAcc, Cbsz, Abid, Blgp},
+                         "kblock_partial"),
+            "kblock_partial_wwm");
+      } else {
+        Value **aPtr = (kBlock == 0)   ? aLo
+                       : (kBlock == 1) ? aHi
+                       : (kBlock == 2) ? aLo2
+                                       : aHi2;
+        Value **bPtr = (kBlock == 0)   ? bLo
+                       : (kBlock == 1) ? bHi
+                       : (kBlock == 2) ? bLo2
+                                       : bHi2;
+        Value *SrcA = packDwords(B, aPtr, 2, ctx.I32Ty, ctx.I64Ty);
+        Value *SrcB = packDwords(B, bPtr, 2, ctx.I32Ty, ctx.I64Ty);
+        Partial = ctx.Projection.wrapAsWWMValue(
+            B,
+            B.CreateCall(MfmaFn, {SrcA, SrcB, ZeroAcc, Cbsz, Abid, Blgp},
+                         "kblock_partial"),
+            "kblock_partial_wwm");
+      }
 
       // The lane's 4 acc elements share column lane%16 but span rows
       // 4*(lane/16)+g, so one B (column) scale byte but four A (row) bytes.
       Value *ScaleABytes[4];
-      for (unsigned g = 0; g < 4; ++g)
-        ScaleABytes[g] = extractScaleByte(B, ScaleSrc0Row[g], kBlock);
-      Value *ScaleBByte = extractScaleByte(B, ScaleSrc1Pass, kBlock);
+      for (unsigned g = 0; g < 4; ++g) {
+        ScaleABytes[g] = ScaleGroupIs16
+                             ? extractScaleByte64ForKBlock(
+                                   B, LaneGroup, ScaleSrc0Row[g], kBlock)
+                             : extractScaleByte(B, ScaleSrc0Row[g], kBlock);
+      }
+      Value *ScaleBByte =
+          ScaleGroupIs16
+              ? extractScaleByte64ForKBlock(B, LaneGroup, ScaleSrc1Pass, kBlock)
+              : extractScaleByte(B, ScaleSrc1Pass, kBlock);
       Value *FactorVec = buildScaleFactorVec(B, M, ctx.F32Ty, ScaleABytes,
                                              ScaleBByte, aScaleFmt, bScaleFmt);
       if (!FactorVec)
@@ -1732,6 +1845,74 @@ Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
 
   return packDwords(B, FinalDwords, 8, ctx.I32Ty,
                     FixedVectorType::get(ctx.F32Ty, 8));
+}
+
+Expected<Value *> emitWMMAScaleF8F6F4toMFMA(
+    RaiseContext &ctx, Value *a, Value *b, Value *c, Value *matrixAFmt,
+    Value *matrixBFmt, Value *cMod, Value *matrixAScale, Value *matrixAScaleFmt,
+    Value *scaleSrc0, Value *matrixBScale, Value *matrixBScaleFmt,
+    Value *scaleSrc1, unsigned aDwords, unsigned bDwords) {
+  return emitWMMAScaleF8F6F4toMFMADecomposed(
+      ctx, a, b, c, matrixAFmt, matrixBFmt, cMod, matrixAScale, matrixAScaleFmt,
+      scaleSrc0, matrixBScale, matrixBScaleFmt, scaleSrc1, aDwords, bDwords,
+      /*ScaleGroupIs16=*/false);
+}
+
+Expected<Value *> emitWMMAScale16F8F6F4toMFMA(
+    RaiseContext &ctx, Value *a, Value *b, Value *c, Value *matrixAFmt,
+    Value *matrixBFmt, Value *cMod, Value *matrixAScale, Value *matrixAScaleFmt,
+    Value *scaleSrc0, Value *matrixBScale, Value *matrixBScaleFmt,
+    Value *scaleSrc1, unsigned aDwords, unsigned bDwords) {
+  return emitWMMAScaleF8F6F4toMFMADecomposed(
+      ctx, a, b, c, matrixAFmt, matrixBFmt, cMod, matrixAScale, matrixAScaleFmt,
+      scaleSrc0, matrixBScale, matrixBScaleFmt, scaleSrc1, aDwords, bDwords,
+      /*ScaleGroupIs16=*/true);
+}
+
+static Value *extractFixedSubvector(RaiseContext &ctx, Value *vec,
+                                    unsigned start, unsigned count) {
+  IRBuilder<> &B = ctx.B;
+  SmallVector<int, 16> mask(count);
+  for (unsigned i = 0; i < count; ++i)
+    mask[i] = static_cast<int>(start + i);
+  return B.CreateShuffleVector(vec, mask, "wmma_subvec");
+}
+
+static Value *concatFixedVectors(RaiseContext &ctx, Value *lo, Value *hi) {
+  IRBuilder<> &B = ctx.B;
+  const unsigned loN = cast<FixedVectorType>(lo->getType())->getNumElements();
+  const unsigned hiN = cast<FixedVectorType>(hi->getType())->getNumElements();
+  SmallVector<int, 32> mask(loN + hiN);
+  std::iota(mask.begin(), mask.end(), 0);
+  return B.CreateShuffleVector(lo, hi, mask, "wmma_concat");
+}
+
+Expected<Value *> emitWMMAScale16F32_32x16x128_F4toMFMA(
+    RaiseContext &ctx, Value *a, Value *b, Value *c, Value *cMod,
+    Value *matrixAScale, Value *matrixAScaleFmt, Value *scaleSrc0,
+    Value *matrixBScale, Value *matrixBScaleFmt, Value *scaleSrc1) {
+  Value *matrixAFmt = ConstantInt::get(ctx.I32Ty, 4 /*MATRIX_FMT_FP4*/);
+  Value *matrixBFmt = ConstantInt::get(ctx.I32Ty, 4 /*MATRIX_FMT_FP4*/);
+  constexpr unsigned kFp4Dwords = 8u;
+
+  Value *aLo = extractFixedSubvector(ctx, a, 0, kFp4Dwords);
+  Value *aHi = extractFixedSubvector(ctx, a, kFp4Dwords, kFp4Dwords);
+  Value *cLo = extractFixedSubvector(ctx, c, 0, 8u);
+  Value *cHi = extractFixedSubvector(ctx, c, 8u, 8u);
+
+  Expected<Value *> lo = emitWMMAScale16F8F6F4toMFMA(
+      ctx, aLo, b, cLo, matrixAFmt, matrixBFmt, cMod, matrixAScale,
+      matrixAScaleFmt, scaleSrc0, matrixBScale, matrixBScaleFmt, scaleSrc1,
+      kFp4Dwords, kFp4Dwords);
+  if (!lo)
+    return lo.takeError();
+  Expected<Value *> hi = emitWMMAScale16F8F6F4toMFMA(
+      ctx, aHi, b, cHi, matrixAFmt, matrixBFmt, cMod, matrixAScale,
+      matrixAScaleFmt, scaleSrc0, matrixBScale, matrixBScaleFmt, scaleSrc1,
+      kFp4Dwords, kFp4Dwords);
+  if (!hi)
+    return hi.takeError();
+  return concatFixedVectors(ctx, *lo, *hi);
 }
 
 } // namespace COMGR::hotswap
