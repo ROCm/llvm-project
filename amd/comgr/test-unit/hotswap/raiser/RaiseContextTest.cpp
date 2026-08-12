@@ -103,12 +103,12 @@ protected:
 };
 
 TEST_F(RaiseContextTest, ParsesArchitecturalRegisterHalves) {
-  auto Check = [&](StringRef Name, ParsedReg::Kind Kind, unsigned Base,
-                   unsigned Width) {
+  auto Check = [&](StringRef OpcodeName, StringRef Name, ParsedReg::Kind Kind,
+                   unsigned Base, unsigned Width) {
     MCRegister Reg = findRegister(*Mc.RegInfo, Name);
     ASSERT_TRUE(Reg) << Name.str();
     DecodedInst Di;
-    Di.Inst.setOpcode(findOpcode(*Mc.InstrInfo, "S_MOV_B32"));
+    Di.Inst.setOpcode(findOpcode(*Mc.InstrInfo, OpcodeName));
     Di.Inst.addOperand(MCOperand::createReg(Reg));
     Expected<ParsedReg> Parsed = Env->Ctx->parseReg(Di, 0);
     ASSERT_TRUE(static_cast<bool>(Parsed)) << toString(Parsed.takeError());
@@ -119,12 +119,51 @@ TEST_F(RaiseContextTest, ParsesArchitecturalRegisterHalves) {
     EXPECT_EQ(Pr.WidthInDwords, Width) << Name.str();
   };
 
-  Check("VCC_LO", ParsedReg::VCC, 0, 1);
-  Check("VCC_HI", ParsedReg::VCC, 1, 1);
-  Check("VCC", ParsedReg::VCC, 0, 2);
-  Check("FLAT_SCR_LO", ParsedReg::FLAT_SCR, 0, 1);
-  Check("FLAT_SCR_HI", ParsedReg::FLAT_SCR, 1, 1);
-  Check("FLAT_SCR", ParsedReg::FLAT_SCR, 0, 2);
+  Check("S_MOV_B32", "VCC_LO", ParsedReg::VCC, 0, 1);
+  Check("S_MOV_B32", "VCC_HI", ParsedReg::VCC, 1, 1);
+  Check("S_MOV_B64", "VCC", ParsedReg::VCC, 0, 2);
+  Check("S_MOV_B32", "FLAT_SCR_LO", ParsedReg::FLAT_SCR, 0, 1);
+  Check("S_MOV_B32", "FLAT_SCR_HI", ParsedReg::FLAT_SCR, 1, 1);
+  Check("S_MOV_B64", "FLAT_SCR", ParsedReg::FLAT_SCR, 0, 2);
+}
+
+TEST_F(RaiseContextTest, ParsesWideRegisterOperands) {
+  const unsigned Opcode = findOpcode(*Mc.InstrInfo, "S_LOAD_DWORDX8_IMM");
+  ASSERT_NE(Opcode, Mc.InstrInfo->getNumOpcodes());
+  const MCInstrDesc &Descriptor = Mc.InstrInfo->get(Opcode);
+  ASSERT_GT(Descriptor.getNumOperands(), 0u);
+  const MCOperandInfo &OperandInfo = Descriptor.operands()[0];
+  const int16_t RegisterClassID = Mc.InstrInfo->getOpRegClassID(
+      OperandInfo,
+      Mc.SubtargetInfo->getHwMode(MCSubtargetInfo::HwMode_RegInfo));
+  ASSERT_GE(RegisterClassID, 0);
+  const MCRegisterClass &RegisterClass =
+      Mc.RegInfo->getRegClass(RegisterClassID);
+  ASSERT_GT(RegisterClass.getNumRegs(), 0u);
+
+  DecodedInst Di;
+  Di.Inst.setOpcode(Opcode);
+  Di.Inst.addOperand(MCOperand::createReg(RegisterClass.getRegister(0)));
+  Expected<ParsedReg> Parsed = Env->Ctx->parseReg(Di, 0);
+  ASSERT_TRUE(static_cast<bool>(Parsed)) << toString(Parsed.takeError());
+  EXPECT_EQ(Parsed->RegKind, ParsedReg::SGPR);
+  EXPECT_EQ(Parsed->WidthInDwords, 8u);
+}
+
+TEST_F(RaiseContextTest, RejectsRegistersOutsideOperandClass) {
+  const unsigned Opcode = findOpcode(*Mc.InstrInfo, "S_LOAD_DWORDX8_IMM");
+  ASSERT_NE(Opcode, Mc.InstrInfo->getNumOpcodes());
+  const MCRegister Register = findRegister(*Mc.RegInfo, "VGPR0");
+  ASSERT_TRUE(Register);
+
+  DecodedInst Di;
+  Di.Inst.setOpcode(Opcode);
+  Di.Inst.addOperand(MCOperand::createReg(Register));
+  Expected<ParsedReg> Parsed = Env->Ctx->parseReg(Di, 0);
+  ASSERT_FALSE(static_cast<bool>(Parsed));
+  std::string Message = toString(Parsed.takeError());
+  EXPECT_NE(Message.find("register-decode"), std::string::npos);
+  EXPECT_NE(Message.find("not in operand register class"), std::string::npos);
 }
 
 TEST_F(RaiseContextTest, KeepsWave32VccHighAsScratch) {
@@ -227,24 +266,26 @@ TEST_F(RaiseContextTest, DiscardsNullRegisterWrites) {
   Expected<MCState> State = initMCState("gfx1250");
   ASSERT_TRUE(static_cast<bool>(State)) << toString(State.takeError());
   ContextEnvironment Gfx1250(*State);
-  MCRegister Reg = findRegister(*State->RegInfo, "SGPR_NULL");
-  ASSERT_TRUE(Reg);
-
-  DecodedInst Di;
-  Di.Inst.setOpcode(findOpcode(*State->InstrInfo, "S_MOV_B32"));
-  Di.Inst.addOperand(MCOperand::createReg(Reg));
-  Expected<ParsedReg> Parsed = Gfx1250.Ctx->parseReg(Di, 0);
-  ASSERT_TRUE(static_cast<bool>(Parsed)) << toString(Parsed.takeError());
-  ASSERT_EQ(Parsed->RegKind, ParsedReg::NOREG);
-
   BasicBlock *Block = Gfx1250.B.GetInsertBlock();
   size_t InstructionCount = Block->size();
-  Gfx1250.Ctx->writeReg32(*Parsed, Gfx1250.B.getInt32(1));
-  Gfx1250.Ctx->writeReg64(*Parsed, Gfx1250.B.getInt64(1));
-  Gfx1250.Ctx->writeRegVec(*Parsed,
-                           ConstantVector::getSplat(ElementCount::getFixed(2),
-                                                    Gfx1250.B.getInt32(1)));
-  Gfx1250.Ctx->writeRegExecWidth(*Parsed, Gfx1250.B.getInt32(1));
+  for (StringRef Name : {"SGPR_NULL", "SGPR_NULL_HI"}) {
+    MCRegister Reg = findRegister(*State->RegInfo, Name);
+    ASSERT_TRUE(Reg) << Name.str();
+
+    DecodedInst Di;
+    Di.Inst.setOpcode(findOpcode(*State->InstrInfo, "S_MOV_B32"));
+    Di.Inst.addOperand(MCOperand::createReg(Reg));
+    Expected<ParsedReg> Parsed = Gfx1250.Ctx->parseReg(Di, 0);
+    ASSERT_TRUE(static_cast<bool>(Parsed)) << toString(Parsed.takeError());
+    ASSERT_EQ(Parsed->RegKind, ParsedReg::NOREG);
+
+    Gfx1250.Ctx->writeReg32(*Parsed, Gfx1250.B.getInt32(1));
+    Gfx1250.Ctx->writeReg64(*Parsed, Gfx1250.B.getInt64(1));
+    Gfx1250.Ctx->writeRegVec(*Parsed,
+                             ConstantVector::getSplat(ElementCount::getFixed(2),
+                                                      Gfx1250.B.getInt32(1)));
+    Gfx1250.Ctx->writeRegExecWidth(*Parsed, Gfx1250.B.getInt32(1));
+  }
   EXPECT_EQ(Block->size(), InstructionCount);
 }
 
