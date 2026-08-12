@@ -17,9 +17,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -56,33 +54,6 @@ BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
                      utohexstr(Addr));
 }
 
-// Return whether the opcode intentionally ignores S_SET_VGPR_MSB state.
-static bool ignoresVGPRMsb(unsigned Opc) {
-  switch (Opc) {
-  case AMDGPU::V_WMMA_LD_SCALE_PAIRED_B32:
-  case AMDGPU::V_WMMA_LD_SCALE_PAIRED_B32_gfx1250:
-  case AMDGPU::V_WMMA_LD_SCALE16_PAIRED_B64:
-  case AMDGPU::V_WMMA_LD_SCALE16_PAIRED_B64_gfx1250:
-    return true;
-  default:
-    return false;
-  }
-}
-
-// Return whether the decoded operands include a real VGPR or AGPR.
-static bool hasVectorRegOperand(const DecodedInst &Di,
-                                const MCRegisterInfo &MRI) {
-  for (unsigned I = 0, E = Di.Inst.getNumOperands(); I != E; ++I) {
-    const MCOperand &Op = Di.Inst.getOperand(I);
-    if (!Op.isReg() || !Op.getReg())
-      continue;
-    unsigned Enc = MRI.getEncodingValue(Op.getReg());
-    if (Enc & (AMDGPU::HWEncoding::IS_VGPR | AMDGPU::HWEncoding::IS_AGPR))
-      return true;
-  }
-  return false;
-}
-
 Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   unsigned Opc = Di.Inst.getOpcode();
   const MCInstrDesc &Desc = MC.InstrInfo->get(Opc);
@@ -95,16 +66,8 @@ Error RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   // Operand slots are format-specific rather than positional, so use the
   // backend's operand-role table to apply each two-bit VGPR bank field.
   auto [XOps, YOps] = AMDGPU::getVGPRLoweringOperandTables(Desc);
-  if (!XOps && !YOps) {
-    if (ignoresVGPRMsb(Opc) || !hasVectorRegOperand(Di, *MC.RegInfo) ||
-        Desc.isPseudo() || Desc.isMetaInstruction())
-      return Error::success();
-    return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedInstructionForm,
-        strippedMnemonic(MC, Di.Inst), Di.Offset, "vgpr-msb",
-        "S_SET_VGPR_MSB has no operand-role table for this vector "
-        "instruction");
-  }
+  if (!XOps && !YOps)
+    return Error::success();
 
   for (unsigned Slot = 0; Slot != 4; ++Slot) {
     unsigned Adjust =
@@ -169,6 +132,12 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   // chain.
   const unsigned Width = computeRegWidth32(MRI, Reg);
   const MCRegister CanonicalReg = AMDGPU::mc2PseudoReg(Reg);
+  auto UnsupportedRegister = [&]() -> Error {
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedInstructionForm,
+        strippedMnemonic(MC, Di.Inst), Di.Offset, "register-decode",
+        Twine("unsupported register '") + MRI.getName(Reg) + "'");
+  };
 
   MCRegister Lane = MRI.getSubReg(Reg, AMDGPU::sub0);
   if (!Lane)
@@ -232,9 +201,7 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
     return Pr;
   case AMDGPU::XNACK_MASK_LO:
   case AMDGPU::XNACK_MASK_HI:
-    Pr.RegKind = ParsedReg::OTHER;
-    Pr.WidthInDwords = Width;
-    return Pr;
+    return UnsupportedRegister();
   // LDS_DIRECT (src_lds_direct, enc 254): reads a dword from LDS at the
   // byte offset held in M0. Used as a VALU source after buffer_load_*_lds.
   case AMDGPU::LDS_DIRECT:
@@ -262,9 +229,7 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   case AMDGPU::SRC_POPS_EXITING_WAVE_ID:
   case AMDGPU::SRC_FLAT_SCRATCH_BASE_LO:
   case AMDGPU::SRC_FLAT_SCRATCH_BASE_HI:
-    Pr.RegKind = ParsedReg::OTHER;
-    Pr.WidthInDwords = Width;
-    return Pr;
+    return UnsupportedRegister();
   default:
     break;
   }
@@ -366,13 +331,6 @@ Expected<Value *> RaiseContext::readOp32(const DecodedInst &Di,
       return ConstantInt::get(I32Ty, 0);
     if (Pr.RegKind == ParsedReg::MODE)
       return ConstantInt::get(I32Ty, 0);
-    if (Pr.RegKind == ParsedReg::OTHER)
-      return RaiseFailure::atInstruction(
-          RaiseFailureReason::UnsupportedInstructionForm,
-          strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
-          Twine("readOp32 saw unmodeled register '") +
-              MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-              strippedMnemonic(MC, Di.Inst));
     Value *V = Regs.readReg32(B, Pr);
     if (!V)
       return RaiseFailure::atInstruction(
@@ -460,13 +418,6 @@ Expected<Value *> RaiseContext::readOp64(const DecodedInst &Di,
       Value *Zero = ConstantInt::get(Exec->getType(), 0);
       return B.CreateZExt(B.CreateICmpEQ(Exec, Zero, "execz"), I64Ty);
     }
-    if (Pr.RegKind == ParsedReg::OTHER)
-      return RaiseFailure::atInstruction(
-          RaiseFailureReason::UnsupportedInstructionForm,
-          strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
-          Twine("readOp64 saw unmodeled register '") +
-              MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
-              strippedMnemonic(MC, Di.Inst));
     Value *V = Regs.readReg64(B, Pr);
     if (!V)
       return RaiseFailure::atInstruction(
@@ -566,10 +517,13 @@ void RaiseContext::writeRegExecWidth(ParsedReg Pr, Value *V) {
     resetLaneActiveCache();
   else if (Pr.RegKind == ParsedReg::SGPR) {
     assert(Pr.BaseIdx && "SGPR must have a base register index");
-    unsigned WidthInDwords = Projection.sourceWaveMaskTy()
-                                 ->getPrimitiveSizeInBits()
-                                 .getFixedValue() /
-                             32;
+    unsigned WidthInDwords =
+        Projection.sourceWaveScopedLaneOps() && Pr.WidthInDwords >= 2
+            ? 2
+            : Projection.sourceWaveMaskTy()
+                      ->getPrimitiveSizeInBits()
+                      .getFixedValue() /
+                  32;
     for (unsigned I = 0; I != WidthInDwords; ++I)
       invalidateSgprWaveMaskI1(*Pr.BaseIdx + I);
   }

@@ -24,11 +24,11 @@
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/MC/MCRegister.h"
 #include "llvm/Support/Error.h"
 
 #include <cassert>
-#include <map>
+#include <climits>
+#include <cstdint>
 #include <optional>
 #include <utility>
 
