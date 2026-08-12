@@ -72,6 +72,7 @@ jobs:
       baseline_run_id: ${{ inputs.baseline_run_id || '' }}
       build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
       build_jax: false
+      repository: "ROCm/TheRock"
       ref: ${{ vars.THEROCK_CI_MAIN_REF || '' }}        
 
   linux_build_and_test:
@@ -92,6 +93,7 @@ jobs:
       rocm_rpm_package_version: ${{ needs.setup.outputs.rocm_rpm_package_version }}
       test_type: 'full'
       changed_projects: ${{ inputs.changed_projects || '' }}
+      repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}        
     permissions:
       contents: read
@@ -113,6 +115,7 @@ jobs:
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: 'full'
       changed_projects: ${{ inputs.changed_projects || '' }}
+      repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}        
     permissions:
       contents: read
