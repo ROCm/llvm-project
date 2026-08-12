@@ -493,6 +493,26 @@ private:
 
   bool usesValueFromCycle(const InstructionT &I, CycleRef DefCycle) const;
 
+  /// \brief Whether control can reach \p To from \p From. Returns false only
+  /// when \p From ends in a branch on a constant that always selects a
+  /// different successor, leaving every edge to \p To statically dead.
+  ///
+  /// This is a query about the block pair, not about an individual edge: if
+  /// \p From reaches \p To along several edges and any one of them is live,
+  /// this returns true. It is also not a reachability query, and says nothing
+  /// about whether \p From itself can execute.
+  ///
+  /// An implementation must return true whenever it cannot *prove* every edge
+  /// dead. Returning false for a live edge makes this analysis
+  /// under-approximate divergence, which is a miscompile. The MIR
+  /// specialization accordingly returns true unconditionally.
+  bool isEdgeFeasible(const BlockT *From, const BlockT *To) const;
+
+  /// \brief Whether \p Phi, in exit block \p Exit, can select a different
+  /// value depending on which edge out of \p DefCycle a thread left along.
+  bool hasMultipleValuesOnExitEdges(const InstructionT &Phi, CycleRef DefCycle,
+                                    const BlockT *Exit) const;
+
   /// \brief Whether \p Def is divergent when read in \p ObservingBlock.
   bool isTemporalDivergent(const BlockT &ObservingBlock,
                            const InstructionT &Def) const;
@@ -862,7 +882,55 @@ void GenericUniformityAnalysisImpl<ContextT>::addCustomUniformityCandidate(
   CustomUniformityCandidates.insert(I);
 }
 
-// Mark as divergent all external uses of values defined in \p DefCycle.
+// Whether \p Phi, which sits in exit block \p Exit, selects different values
+// along the edges that leave \p DefCycle into that block.
+//
+// A PHI carries one input per predecessor, so its own operand list already is
+// the list of edges reaching \p Exit; no separate walk is needed to recover
+// them. Two kinds of input are skipped:
+//
+// - Inputs from outside \p DefCycle. Such a value is reached without leaving
+//   the cycle at all, so it says nothing about which exit edge a thread took;
+//   any divergence it introduces is a join, and taintAndPushPhiNodes owns that.
+// - Inputs arriving on a statically dead edge. A branch on a constant
+//   condition leaves one behind, and no thread leaves the cycle along it.
+//
+// A block reaching \p Exit along several edges (a switch with repeated
+// targets) contributes several operands, but they carry equal values: in IR
+// the Verifier rejects a PHI with differing values for a repeated predecessor,
+// and in MIR the question cannot arise, because MachineVerifier rejects
+// duplicate entries in a block's successor and predecessor lists outright.
+template <typename ContextT>
+bool GenericUniformityAnalysisImpl<ContextT>::hasMultipleValuesOnExitEdges(
+    const InstructionT &Phi, CycleRef DefCycle, const BlockT *Exit) const {
+  SmallVector<ConstValueRefT> Values;
+  SmallVector<const BlockT *> Blocks;
+  Context.getPhiInputs(Phi, Values, Blocks);
+  assert(Values.size() == Blocks.size());
+
+  std::optional<ConstValueRefT> Common;
+  for (unsigned I = 0, E = Blocks.size(); I != E; ++I) {
+    // A null value is an undef input, taken to agree with every other input.
+    // This matches isConstantOrUndefValuePhi, whose interpretation of undef is
+    // itself questionable; see the FIXME in taintAndPushPhiNodes.
+    if (!Values[I] || !CI.contains(DefCycle, Blocks[I]) ||
+        !isEdgeFeasible(Blocks[I], Exit))
+      continue;
+    if (!Common)
+      Common = Values[I];
+    else if (Values[I] != *Common)
+      return true;
+  }
+
+  // Unlike isConstantOrUndefValuePhi, a self-reference is not ignored here. It
+  // only arises when the exit block is itself inside an enclosing cycle, and
+  // counting it errs towards divergent, which is the safe direction.
+  return false;
+}
+
+// Mark as divergent the values that leaving \p DefCycle makes per-thread:
+// external uses of values defined inside it, and PHIs in an exit block that
+// threads can reach along more than one edge out of the cycle.
 //
 // A value V defined by a block B inside \p DefCycle may be used outside the
 // cycle only if the use is a PHI in some exit block, or B dominates some exit
@@ -872,6 +940,14 @@ void GenericUniformityAnalysisImpl<ContextT>::addCustomUniformityCandidate(
 // - For every block B inside \p DefCycle that dominates at least one exit
 //   block, check all uses outside \p DefCycle.
 //
+// A PHI in an exit block is also divergent, independently of where its inputs
+// are defined, when more than one edge leaves \p DefCycle into that exit
+// block. Since \p DefCycle is divergently exited, threads leave it on
+// different iterations, and with more than one such edge they may leave along
+// different ones. The PHI then selects a different incoming value per thread,
+// unless it has a single reaching value to begin with, in which case which
+// edge a thread arrives on cannot be observed.
+//
 // FIXME: This function does not distinguish between divergent and uniform
 // exits. For each divergent exit, only the values that are live at that exit
 // need to be propagated as divergent at their use outside the cycle.
@@ -880,9 +956,11 @@ void GenericUniformityAnalysisImpl<ContextT>::analyzeCycleExitDivergence(
     CycleRef DefCycle) {
   SmallVector<BlockT *> Exits;
   CI.getExitBlocks(DefCycle, Exits);
+
   for (auto *Exit : Exits) {
     for (auto &Phi : Exit->phis()) {
-      if (usesValueFromCycle(Phi, DefCycle)) {
+      if (usesValueFromCycle(Phi, DefCycle) ||
+          hasMultipleValuesOnExitEdges(Phi, DefCycle, Exit)) {
         markDivergent(Phi);
       }
     }

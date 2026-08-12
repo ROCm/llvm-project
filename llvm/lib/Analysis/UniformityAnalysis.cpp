@@ -11,6 +11,7 @@
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/Analysis/CycleAnalysis.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
@@ -118,6 +119,28 @@ bool llvm::GenericUniformityAnalysisImpl<SSAContext>::usesValueFromCycle(
     }
   }
   return false;
+}
+
+template <>
+bool llvm::GenericUniformityAnalysisImpl<SSAContext>::isEdgeFeasible(
+    const BasicBlock *From, const BasicBlock *To) const {
+  const Instruction *Term = From->getTerminator();
+
+  if (const auto *Br = dyn_cast<CondBrInst>(Term)) {
+    const auto *Cond = dyn_cast<ConstantInt>(Br->getCondition());
+    if (!Cond)
+      return true;
+    return Br->getSuccessor(Cond->isZero() ? 1 : 0) == To;
+  }
+
+  if (const auto *Switch = dyn_cast<SwitchInst>(Term)) {
+    const auto *Cond = dyn_cast<ConstantInt>(Switch->getCondition());
+    if (!Cond)
+      return true;
+    return Switch->findCaseValue(Cond)->getCaseSuccessor() == To;
+  }
+
+  return true;
 }
 
 template <>

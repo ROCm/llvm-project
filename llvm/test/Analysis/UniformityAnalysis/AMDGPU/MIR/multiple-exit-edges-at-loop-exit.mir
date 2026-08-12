@@ -1,0 +1,114 @@
+# RUN: llc -mtriple=amdgpu10.30-- -run-pass=print-machine-uniformity -o - %s 2>&1 | FileCheck %s
+# RUN: llc -mtriple=amdgpu10.30-- -passes='print<machine-uniformity>' -filetype=null %s 2>&1 | FileCheck %s
+
+# Machine IR counterpart of the cycle-exit rule in
+# llvm/test/Analysis/UniformityAnalysis/AMDGPU/multiple-exit-edges-at-loop-exit.ll:
+# two edges leave the cycle {bb.1, bb.2} into bb.3, so the phi there is divergent
+# even though both incoming values are constants defined outside the cycle.
+
+---
+name:            two_exit_edges
+tracksRegLiveness: true
+body:             |
+  ; CHECK-LABEL: MachineUniformityInfo for function: @two_exit_edges{{$}}
+  bb.0:
+    successors: %bb.1
+
+    %0:_(s32) = G_INTRINSIC intrinsic(@llvm.amdgcn.workitem.id.x)
+    %1:_(s32) = G_CONSTANT i32 0
+    %2:_(s32) = G_CONSTANT i32 1
+
+  bb.1:
+    successors: %bb.2, %bb.3
+
+    %3:_(s32) = G_PHI %1(s32), %bb.0, %2(s32), %bb.2
+    %4:_(s1) = G_ICMP intpred(slt), %3(s32), %2
+    G_BRCOND %4(s1), %bb.2
+    G_BR %bb.3
+
+  bb.2:
+    successors: %bb.3, %bb.1
+
+    %5:_(s1) = G_ICMP intpred(eq), %0(s32), %1
+    G_BRCOND %5(s1), %bb.3
+    G_BR %bb.1
+
+  bb.3:
+    ; CHECK: DIVERGENT: %{{[0-9]+}}: %{{[0-9]+}}:_(s32) = G_PHI %{{[0-9]+}}:_(s32), %bb.2, %{{[0-9]+}}:_(s32), %bb.1
+    %6:_(s32) = G_PHI %2(s32), %bb.2, %1(s32), %bb.1
+    SI_RETURN
+
+...
+---
+name:            two_exit_edges_same_value
+tracksRegLiveness: true
+body:             |
+  ; The phi selects the same register along both exit edges, so it stays uniform.
+  ; CHECK-LABEL: MachineUniformityInfo for function: @two_exit_edges_same_value
+  bb.0:
+    successors: %bb.1
+
+    %0:_(s32) = G_INTRINSIC intrinsic(@llvm.amdgcn.workitem.id.x)
+    %1:_(s32) = G_CONSTANT i32 0
+    %2:_(s32) = G_CONSTANT i32 1
+
+  bb.1:
+    successors: %bb.2, %bb.3
+
+    %3:_(s32) = G_PHI %1(s32), %bb.0, %2(s32), %bb.2
+    %4:_(s1) = G_ICMP intpred(slt), %3(s32), %2
+    G_BRCOND %4(s1), %bb.2
+    G_BR %bb.3
+
+  bb.2:
+    successors: %bb.3, %bb.1
+
+    %5:_(s1) = G_ICMP intpred(eq), %0(s32), %1
+    G_BRCOND %5(s1), %bb.3
+    G_BR %bb.1
+
+  bb.3:
+    ; CHECK-NOT: DIVERGENT: %{{[0-9]+}}: %{{[0-9]+}}:_(s32) = G_PHI %{{[0-9]+}}:_(s32), %bb.2, %{{[0-9]+}}:_(s32), %bb.1
+    %6:_(s32) = G_PHI %2(s32), %bb.2, %2(s32), %bb.1
+    SI_RETURN
+
+...
+---
+name:            two_exit_edges_implicit_def
+tracksRegLiveness: true
+body:             |
+  ; G_IMPLICIT_DEF on one exit edge is mapped to the null value reference by
+  ; getPhiInputs, so it agrees with the constant on the other edge and the phi
+  ; has a single reaching value. This is the MIR half of @undef_on_exit_edge,
+  ; and the only behaviour that distinguishes this rule from comparing the
+  ; incoming registers directly.
+  ; CHECK-LABEL: MachineUniformityInfo for function: @two_exit_edges_implicit_def
+  bb.0:
+    successors: %bb.1
+
+    %0:_(s32) = G_INTRINSIC intrinsic(@llvm.amdgcn.workitem.id.x)
+    %1:_(s32) = G_CONSTANT i32 0
+    %2:_(s32) = G_CONSTANT i32 1
+    %7:_(s32) = G_IMPLICIT_DEF
+
+  bb.1:
+    successors: %bb.2, %bb.3
+
+    %3:_(s32) = G_PHI %1(s32), %bb.0, %2(s32), %bb.2
+    %4:_(s1) = G_ICMP intpred(slt), %3(s32), %2
+    G_BRCOND %4(s1), %bb.2
+    G_BR %bb.3
+
+  bb.2:
+    successors: %bb.3, %bb.1
+
+    %5:_(s1) = G_ICMP intpred(eq), %0(s32), %1
+    G_BRCOND %5(s1), %bb.3
+    G_BR %bb.1
+
+  bb.3:
+    ; CHECK-NOT: DIVERGENT: %{{[0-9]+}}: %{{[0-9]+}}:_(s32) = G_PHI %{{[0-9]+}}:_(s32), %bb.2, %{{[0-9]+}}:_(s32), %bb.1
+    %6:_(s32) = G_PHI %7(s32), %bb.2, %2(s32), %bb.1
+    SI_RETURN
+
+...

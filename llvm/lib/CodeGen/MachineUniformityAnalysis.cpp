@@ -129,6 +129,20 @@ bool llvm::GenericUniformityAnalysisImpl<MachineSSAContext>::usesValueFromCycle(
 }
 
 template <>
+bool llvm::GenericUniformityAnalysisImpl<MachineSSAContext>::isEdgeFeasible(
+    const MachineBasicBlock *, const MachineBasicBlock *) const {
+  // Machine IR terminators are target-specific, so deciding this would mean
+  // reasoning about target branch opcodes here. Treat every CFG edge as
+  // feasible, which is the conservative answer.
+  //
+  // This does mean the MIR instantiation keeps counting statically dead exit
+  // edges that the IR one discards, so the two can disagree on a program that
+  // still contains a branch on a constant. Over-marking never miscompiles, and
+  // such branches are normally folded well before instruction selection.
+  return true;
+}
+
+template <>
 void llvm::GenericUniformityAnalysisImpl<
     MachineSSAContext>::propagateTemporalDivergence(const MachineInstr &I,
                                                     CycleRef DefCycle) {

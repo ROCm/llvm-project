@@ -95,6 +95,13 @@ public:
 
   static bool isConstantOrUndefValuePhi(const InstructionT &Instr);
 
+  /// Append the incoming values of the PHI \p Instr and the predecessor block
+  /// each one arrives from, in matching order. An incoming value that is
+  /// undefined is reported as ValueRefNull.
+  void getPhiInputs(const InstructionT &Instr,
+                    SmallVectorImpl<ConstValueRefT> &Values,
+                    SmallVectorImpl<const BlockT *> &Blocks) const;
+
   /// Whether \p V is always uniform and will not be added to UniformValues.
   /// For IR this identifies constants and globals; for MIR it returns false
   /// (all registers are tracked).
