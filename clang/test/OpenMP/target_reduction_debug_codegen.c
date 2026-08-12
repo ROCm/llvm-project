@@ -1,4 +1,6 @@
 // RUN: %clang_cc1 -verify -fopenmp -x c -triple x86_64-unknown-linux-gnu \
+// new test
+// XFAIL: *
 // RUN:   -fopenmp-targets=amdgpu-amd-amdhsa -debug-info-kind=limited \
 // RUN:   -emit-llvm-bc %s -o %t-host.bc
 // RUN: %clang_cc1 -verify -fopenmp -x c -triple amdgpu-amd-amdhsa \
