@@ -42,8 +42,14 @@ add_llvm_library(
 
   LINK_COMPONENTS
   Support
-  Offload
   )
+
+# NOTE: LLVMOffload is a standalone shared library and is NOT part of the
+# aggregate libLLVM dylib. When building with -DLLVM_LINK_LLVM_DYLIB=ON, using
+# "LINK_COMPONENTS Offload" collapses to linking libLLVM only, which drops the
+# real libLLVMOffload dependency and leaves the ol* symbols undefined. Link it
+# explicitly to guarantee the dependency is always present.
+target_link_libraries(LLVMOffloadKernel PRIVATE LLVMOffload)
 
 if(LLVM_HAVE_LINK_VERSION_SCRIPT)
   target_link_libraries(LLVMOffloadKernel PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports")
