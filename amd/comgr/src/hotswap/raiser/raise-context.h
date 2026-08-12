@@ -11,7 +11,6 @@
 
 #include "hotswap/common/kernel-meta.h"
 #include "hotswap/decoder/decoded-inst.h"
-#include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/decoder/parsed-reg.h"
 #include "hotswap/loader/code-object-utils.h"
@@ -41,15 +40,11 @@ struct RaiseContext {
   AllocaRegFile &Regs;
   const WaveProjection &Projection;
   const MCState &MC;
-  const ISAProfile &Isa; // source ISA (for disassembly / instruction semantics)
-  ISAProfile
-      TargetIsa; // compilation target ISA (for code generation decisions)
   // Target hidden-argument offsets depend on the code object version.
   unsigned TargetCodeObjectVersion = 6;
   KernargLayout &Kernargs;
-  // Non-owning source user-SGPR layout derived from the kernel descriptor.
-  const UserSgprLayout *Layout = nullptr;
-  llvm::Function *Kernel;
+  // Source user-SGPR layout derived from the kernel descriptor.
+  const UserSgprLayout &Layout;
   llvm::BasicBlock *ThreadLoopLatch = nullptr;
 
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb;
@@ -62,10 +57,8 @@ struct RaiseContext {
 
   RaiseContext(llvm::IRBuilder<> &B, AllocaRegFile &Regs,
                const WaveProjection &Projection, const MCState &MC,
-               const ISAProfile &Isa, ISAProfile TargetIsa,
                unsigned TargetCodeObjectVersion, KernargLayout &Kernargs,
-               const UserSgprLayout *Layout, llvm::Function *Kernel,
-               llvm::BasicBlock *ThreadLoopLatch,
+               const UserSgprLayout &Layout, llvm::BasicBlock *ThreadLoopLatch,
                llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb,
                llvm::ArrayRef<uint8_t> SourceTextBytes,
                uint64_t SourceTextBaseAddress,
@@ -123,10 +116,7 @@ struct RaiseContext {
 
   // Invalidate cached lane activity after an EXEC write or instruction
   // boundary.
-  void resetLaneActiveCache() {
-    CachedLaneActive = nullptr;
-    CachedLaneActiveBb = nullptr;
-  }
+  void resetLaneActiveCache() { CachedLaneActive = nullptr; }
 
   // Store EXEC and invalidate cached lane activity.
   void storeExec(llvm::Value *V) {
@@ -201,11 +191,10 @@ struct RaiseContext {
   // True when `Base` names the descriptor-provided kernarg pointer SGPR pair.
   // Kernels that do not enable that user SGPR never match.
   bool isEntryKernargSegmentPtrSgpr(ParsedReg Base) const {
-    assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
     if (Base.RegKind != ParsedReg::SGPR)
       return false;
     assert(Base.BaseIdx && "SGPR must have a base register index");
-    std::optional<unsigned> KernargPtrSgpr = Layout->kernargSegmentPtrSgpr();
+    std::optional<unsigned> KernargPtrSgpr = Layout.kernargSegmentPtrSgpr();
     return KernargPtrSgpr && Base.BaseIdx == KernargPtrSgpr;
   }
 
@@ -229,8 +218,7 @@ struct RaiseContext {
 
   // Invalidate provenance for a written kernarg pointer lane.
   void noteSgprWriteForKernargProvenance(unsigned Idx) {
-    assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
-    std::optional<unsigned> KernargPtrSgpr = Layout->kernargSegmentPtrSgpr();
+    std::optional<unsigned> KernargPtrSgpr = Layout.kernargSegmentPtrSgpr();
     if (!KernargPtrSgpr)
       return;
     if (Idx == *KernargPtrSgpr)
@@ -246,9 +234,8 @@ struct RaiseContext {
   // non-entry.
   void noteSgprMemoryLoadForKernargProvenance(unsigned BaseIdx,
                                               unsigned WidthDwords) {
-    assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
     assert(WidthDwords > 0 && "SMEM destination width must be non-zero");
-    std::optional<unsigned> KernargPtrSgpr = Layout->kernargSegmentPtrSgpr();
+    std::optional<unsigned> KernargPtrSgpr = Layout.kernargSegmentPtrSgpr();
     if (!KernargPtrSgpr)
       return;
     unsigned EndIdx = BaseIdx + WidthDwords - 1;
@@ -268,7 +255,7 @@ struct RaiseContext {
   // Enter a source basic block with its precomputed provenance.
   void enterKernargPtrProvenanceForBlock(llvm::BasicBlock *BB) {
     assert(BB && "cannot enter kernarg provenance for null basic block");
-    if (!HasKernargPtrProvenanceByBB) {
+    if (KernargSegmentPtrProvenanceByBB.empty()) {
       CurrentKernargPtrProvenance = {};
       return;
     }
@@ -282,9 +269,8 @@ struct RaiseContext {
   // its merge block. This preserves inactive lanes for per-lane side effects.
   void emitUnderExec(llvm::function_ref<void()> Body);
 
-  // Cached lane-active value and its defining block.
+  // Cached lane-active value.
   llvm::Value *CachedLaneActive = nullptr;
-  llvm::BasicBlock *CachedLaneActiveBb = nullptr;
 
   // Same-block V_CMP results retained while their SGPR masks remain valid.
   struct WaveMaskEntry {
@@ -307,9 +293,7 @@ struct RaiseContext {
   // Block-local constant value last stored to M0.
   std::optional<uint64_t> M0Const;
 
-  // Kernarg pointer provenance at source basic-block entries; disagreements
-  // join to Unknown.
-  bool HasKernargPtrProvenanceByBB = false;
+  // Kernarg pointer provenance at source basic-block entries.
   llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>
       KernargSegmentPtrProvenanceByBB;
   KernargPtrProvenance CurrentKernargPtrProvenance;
@@ -331,8 +315,9 @@ struct RaiseContext {
     llvm::Value *Exec = Regs.loadExec(B);
     if (!Projection.providesFullWaveExecInvariant())
       return emitLaneActiveBit();
-    unsigned SourceBits = Isa.waveSize();
-    assert(Isa.hasValidWaveSize() && "source wave size must be 32 or 64");
+    const ISAProfile &SourceIsa = Projection.sourceIsa();
+    unsigned SourceBits = SourceIsa.waveSize();
+    assert(SourceIsa.hasValidWaveSize() && "source wave size must be 32 or 64");
     if (SourceBits >= 64)
       return B.CreateICmpNE(Exec, llvm::ConstantInt::get(Exec->getType(), 0),
                             "source_wave_active");
@@ -465,14 +450,6 @@ struct RaiseContext {
     Out.append(SourceWaveSgprPairShadow);
     Out.append(SourceWaveSgprPairValidShadow);
   }
-};
-
-// Result of a format handler. An unhandled result permits dispatch to fall
-// through; refusals are returned as llvm::Error.
-struct HandlerResult {
-  bool Handled = false;
-  llvm::Value *SccResult = nullptr;
-  bool SccHandled = false;
 };
 
 // Reads a handler's source operands via the decoded srcMap, applying VOP3

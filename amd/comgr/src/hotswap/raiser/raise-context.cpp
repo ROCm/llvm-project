@@ -32,17 +32,15 @@ namespace COMGR::hotswap {
 
 RaiseContext::RaiseContext(
     IRBuilder<> &B, AllocaRegFile &Regs, const WaveProjection &Projection,
-    const MCState &MC, const ISAProfile &Isa, ISAProfile TargetIsa,
-    unsigned TargetCodeObjectVersion, KernargLayout &Kernargs,
-    const UserSgprLayout *Layout, Function *Kernel, BasicBlock *ThreadLoopLatch,
-    DenseMap<uint64_t, BasicBlock *> &OffsetToBb,
+    const MCState &MC, unsigned TargetCodeObjectVersion,
+    KernargLayout &Kernargs, const UserSgprLayout &Layout,
+    BasicBlock *ThreadLoopLatch, DenseMap<uint64_t, BasicBlock *> &OffsetToBb,
     ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset)
-    : B(B), Regs(Regs), Projection(Projection), MC(MC), Isa(Isa),
-      TargetIsa(TargetIsa), TargetCodeObjectVersion(TargetCodeObjectVersion),
-      Kernargs(Kernargs), Layout(Layout), Kernel(Kernel),
-      ThreadLoopLatch(ThreadLoopLatch), OffsetToBb(OffsetToBb),
+    : B(B), Regs(Regs), Projection(Projection), MC(MC),
+      TargetCodeObjectVersion(TargetCodeObjectVersion), Kernargs(Kernargs),
+      Layout(Layout), ThreadLoopLatch(ThreadLoopLatch), OffsetToBb(OffsetToBb),
       SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
@@ -180,7 +178,7 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   switch (Lane) {
   case AMDGPU::VCC_HI:
     // VCC_HI is a scratch scalar, not part of VCC, on wave32.
-    if (Isa.isWave32()) {
+    if (Projection.sourceIsa().isWave32()) {
       Pr.RegKind = ParsedReg::VCC_HI_SCRATCH;
       Pr.WidthInDwords = 1;
       return Pr;
@@ -189,13 +187,14 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   case AMDGPU::VCC_LO:
     Pr.RegKind = ParsedReg::VCC;
     Pr.BaseIdx = (Lane == AMDGPU::VCC_HI) ? 1 : 0;
-    Pr.WidthInDwords = CanonicalReg == AMDGPU::VCC
-                           ? static_cast<uint8_t>(Isa.waveSize() / 32)
-                           : 1;
+    Pr.WidthInDwords =
+        CanonicalReg == AMDGPU::VCC
+            ? static_cast<uint8_t>(Projection.sourceIsa().waveSize() / 32)
+            : 1;
     return Pr;
   case AMDGPU::EXEC_HI:
     // EXEC_HI is a scratch scalar, not part of EXEC, on wave32.
-    if (Isa.isWave32()) {
+    if (Projection.sourceIsa().isWave32()) {
       Pr.RegKind = ParsedReg::EXEC_HI_SCRATCH;
       Pr.WidthInDwords = 1;
       return Pr;
@@ -328,12 +327,13 @@ Expected<Value *> RaiseContext::readOp32(const DecodedInst &Di,
       if (Projection.sourceWaveScopedLaneOps()) {
         Value *Mask = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
         Value *Lo = B.CreateTrunc(Mask, I32Ty, "vcc_src_wave_lo");
-        Value *Hi = B.CreateTrunc(B.CreateLShr(Mask, Isa.waveSize()), I32Ty,
-                                  "vcc_src_wave_hi");
+        Value *Hi =
+            B.CreateTrunc(B.CreateLShr(Mask, Projection.sourceIsa().waveSize()),
+                          I32Ty, "vcc_src_wave_hi");
         Value *Lane = Projection.emitLaneIdx(B);
-        Value *Upper =
-            B.CreateICmpUGE(Lane, ConstantInt::get(I32Ty, Isa.waveSize()),
-                            "vcc_src_wave_upper");
+        Value *Upper = B.CreateICmpUGE(
+            Lane, ConstantInt::get(I32Ty, Projection.sourceIsa().waveSize()),
+            "vcc_src_wave_upper");
         return B.CreateSelect(Upper, Hi, Lo, "vcc_src_wave_mask");
       }
       return Regs.readReg32(B, Pr);
@@ -490,7 +490,7 @@ Expected<Value *> RaiseContext::readOp64(const DecodedInst &Di,
 Value *RaiseContext::emitLaneIdx() { return Projection.emitLaneIdx(B); }
 
 Value *RaiseContext::freezeMemAddr(Value *Addr) {
-  if (!Isa.isWave32() || TargetIsa.isWave32())
+  if (!Projection.sourceIsa().isWave32() || Projection.targetIsa().isWave32())
     return Addr;
   return B.CreateFreeze(Addr, "mem_addr_frozen");
 }
@@ -503,7 +503,6 @@ Value *RaiseContext::emitLaneActiveBit() {
 
   Value *Active = Projection.emitLaneActiveBit(B, Regs.loadExec(B));
   CachedLaneActive = Active;
-  CachedLaneActiveBb = B.GetInsertBlock();
   return Active;
 }
 
@@ -646,8 +645,9 @@ Expected<Value *> RaiseContext::readOpExecWidth(const DecodedInst &Di,
       Value *Narrow =
           (Projection.sourceWaveScopedLaneOps() && Pr.WidthInDwords >= 2)
               ? Regs.loadSGPR64(B, BaseIdx)
-              : (Isa.isWave32() ? Regs.loadSGPR32(B, BaseIdx)
-                                : Regs.loadSGPR64(B, BaseIdx));
+              : (Projection.sourceIsa().isWave32()
+                     ? Regs.loadSGPR32(B, BaseIdx)
+                     : Regs.loadSGPR64(B, BaseIdx));
       Value *Fallback = WidenToExec(Narrow);
       if (Value *ShadowValid = loadSgprWaveMaskValid(BaseIdx)) {
         Value *ShadowExec = loadSgprWaveMaskExec(BaseIdx);
@@ -668,8 +668,10 @@ Expected<Value *> RaiseContext::readOpExecWidth(const DecodedInst &Di,
   }
   // Interpret immediate masks at source width and replicate them like SGPR
   // operands when widening.
-  Type *SrcTy = Isa.isWave32() ? B.getInt32Ty() : B.getInt64Ty();
-  uint64_t SrcMask = Isa.isWave32() ? 0xFFFFFFFFull : 0xFFFFFFFFFFFFFFFFull;
+  Type *SrcTy =
+      Projection.sourceIsa().isWave32() ? B.getInt32Ty() : B.getInt64Ty();
+  uint64_t SrcMask =
+      Projection.sourceIsa().isWave32() ? 0xFFFFFFFFull : 0xFFFFFFFFFFFFFFFFull;
   if (std::optional<int64_t> Val = evalOperandAsConst(Di.Inst, OpIdx)) {
     uint64_t Bits = static_cast<uint64_t>(*Val) & SrcMask;
     Value *Narrow = ConstantInt::get(SrcTy, Bits, /*IsSigned=*/false);
