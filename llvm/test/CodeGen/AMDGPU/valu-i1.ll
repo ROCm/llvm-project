@@ -42,7 +42,6 @@ define amdgpu_kernel void @test_if(i32 %b, ptr addrspace(1) %src, ptr addrspace(
 ; SI-NEXT:  .LBB0_4:
 ; SI-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; SI-NEXT:    s_xor_b64 s[2:3], exec, s[6:7]
-; SI-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; SI-NEXT:    s_mov_b64 exec, s[6:7]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB0_9
@@ -90,7 +89,6 @@ define amdgpu_kernel void @test_if(i32 %b, ptr addrspace(1) %src, ptr addrspace(
 ; SI-NEXT:  .LBB0_10:
 ; SI-NEXT:    s_or_b64 exec, exec, s[12:13]
 ; SI-NEXT:    s_xor_b64 s[6:7], exec, s[12:13]
-; SI-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; SI-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
 ; SI-NEXT:    s_mov_b64 exec, s[12:13]
 ; SI-NEXT:    ; divergent control-flow edge

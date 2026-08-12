@@ -38,8 +38,8 @@ define float @syncscope_system(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
 ; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX90A-NEXT:    ; implicit-def: $vgpr3
 ; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    ; implicit-def: $vgpr3
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB0_5
 ; GFX90A-NEXT:  .LBB0_1: ; %atomicrmw.check.private
@@ -58,7 +58,6 @@ define float @syncscope_system(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:  .LBB0_3:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
 ; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
@@ -156,8 +155,8 @@ define float @syncscope_workgroup_rtn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
 ; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX90A-NEXT:    ; implicit-def: $vgpr3
 ; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX90A-NEXT:    ; implicit-def: $vgpr3
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB1_5
 ; GFX90A-NEXT:  .LBB1_1: ; %atomicrmw.check.private
@@ -171,7 +170,6 @@ define float @syncscope_workgroup_rtn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:  .LBB1_3:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
 ; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
@@ -255,7 +253,6 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) #0 {
 ; GFX908-NEXT:  .LBB2_3:
 ; GFX908-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
 ; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
@@ -304,7 +301,6 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:  .LBB2_3:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
 ; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge

@@ -142,7 +142,6 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-NEXT:    v_addc_co_u32_e32 v32, vcc, -1, v4, vcc
 ; GFX9-NEXT:    v_mov_b32_e32 v14, 0
 ; GFX9-NEXT:    v_mov_b32_e32 v15, 0
-; GFX9-NEXT:    v_mov_b32_e32 v13, 0
 ; GFX9-NEXT:    v_mov_b32_e32 v20, 0
 ; GFX9-NEXT:    v_mov_b32_e32 v21, 0
 ; GFX9-NEXT:    v_mov_b32_e32 v13, 0
@@ -1486,10 +1485,9 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-NEXT:    v_addc_co_u32_e32 v26, vcc, -1, v5, vcc
 ; GFX9-NEXT:    v_addc_co_u32_e32 v27, vcc, -1, v6, vcc
 ; GFX9-NEXT:    v_addc_co_u32_e32 v28, vcc, -1, v7, vcc
-; GFX9-NEXT:    v_mov_b32_e32 v14, 0
 ; GFX9-NEXT:    v_mov_b32_e32 v19, 0
 ; GFX9-NEXT:    v_mov_b32_e32 v20, 0
-; GFX9-NEXT:    s_and_b64 s[4:5], s[10:11], exec
+; GFX9-NEXT:    v_mov_b32_e32 v14, 0
 ; GFX9-NEXT:  .LBB1_3: ; %udiv-do-while
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_lshlrev_b64 v[29:30], 1, v[11:12]

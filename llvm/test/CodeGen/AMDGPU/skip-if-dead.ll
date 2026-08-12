@@ -1570,11 +1570,11 @@ define amdgpu_ps void @cbranch_kill(i32 inreg %0, float %val0, float %val1) {
 ; SI-NEXT:    v_mov_b32_e32 v2, v1
 ; SI-NEXT:    v_mov_b32_e32 v3, v1
 ; SI-NEXT:    image_sample_l v1, v[1:4], s[0:7], s[0:3] dmask:0x1 da
-; SI-NEXT:    ; implicit-def: $vgpr2
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_cmp_nge_f32_e32 vcc, 0, v1
 ; SI-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; SI-NEXT:    s_mov_b64 exec, s[2:3]
+; SI-NEXT:    ; implicit-def: $vgpr2
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB14_3
 ; SI-NEXT:  .LBB14_1: ; %kill
@@ -1605,11 +1605,11 @@ define amdgpu_ps void @cbranch_kill(i32 inreg %0, float %val0, float %val1) {
 ; GFX10-WAVE64-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX10-WAVE64-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX10-WAVE64-NEXT:    image_sample_l v1, [v1, v1, v1, v2], s[0:7], s[0:3] dmask:0x1 dim:SQ_RSRC_IMG_2D_ARRAY
-; GFX10-WAVE64-NEXT:    ; implicit-def: $vgpr2
 ; GFX10-WAVE64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-WAVE64-NEXT:    v_cmp_nge_f32_e32 vcc, 0, v1
 ; GFX10-WAVE64-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; GFX10-WAVE64-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX10-WAVE64-NEXT:    ; implicit-def: $vgpr2
 ; GFX10-WAVE64-NEXT:    ; divergent control-flow edge
 ; GFX10-WAVE64-NEXT:    s_cbranch_execz .LBB14_3
 ; GFX10-WAVE64-NEXT:  .LBB14_1: ; %kill
@@ -1640,11 +1640,11 @@ define amdgpu_ps void @cbranch_kill(i32 inreg %0, float %val0, float %val1) {
 ; GFX10-WAVE32-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX10-WAVE32-NEXT:    s_mov_b32 s0, exec_lo
 ; GFX10-WAVE32-NEXT:    image_sample_l v1, [v1, v1, v1, v2], s[0:7], s[0:3] dmask:0x1 dim:SQ_RSRC_IMG_2D_ARRAY
-; GFX10-WAVE32-NEXT:    ; implicit-def: $vgpr2
 ; GFX10-WAVE32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-WAVE32-NEXT:    v_cmp_nge_f32_e32 vcc_lo, 0, v1
 ; GFX10-WAVE32-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX10-WAVE32-NEXT:    s_mov_b32 exec_lo, s1
+; GFX10-WAVE32-NEXT:    ; implicit-def: $vgpr2
 ; GFX10-WAVE32-NEXT:    ; divergent control-flow edge
 ; GFX10-WAVE32-NEXT:    s_cbranch_execz .LBB14_3
 ; GFX10-WAVE32-NEXT:  .LBB14_1: ; %kill
@@ -1675,12 +1675,12 @@ define amdgpu_ps void @cbranch_kill(i32 inreg %0, float %val0, float %val1) {
 ; GFX11-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX11-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX11-NEXT:    image_sample_l v1, [v1, v1, v1, v2], s[0:7], s[0:3] dmask:0x1 dim:SQ_RSRC_IMG_2D_ARRAY
-; GFX11-NEXT:    ; implicit-def: $vgpr2
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-NEXT:    v_cmp_nge_f32_e32 vcc, 0, v1
 ; GFX11-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX11-NEXT:    ; implicit-def: $vgpr2
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB14_3
 ; GFX11-NEXT:  .LBB14_1: ; %kill

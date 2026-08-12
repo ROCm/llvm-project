@@ -146,7 +146,6 @@ define void @main(i1 %arg) #0 {
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_xor_b64 s[16:17], exec, s[4:5]
-; CHECK-NEXT:    s_and_b64 s[16:17], s[16:17], exec
 ; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[16:17]
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -207,7 +206,6 @@ define void @main(i1 %arg) #0 {
 ; CHECK-NEXT:  .LBB0_6:
 ; CHECK-NEXT:    s_or_b64 exec, exec, vcc
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge

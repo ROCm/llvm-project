@@ -13,8 +13,8 @@ define i64 @sdiv64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_or_b32_e32 v0, v4, v3
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX9-NEXT:  .LBB0_1:
@@ -165,8 +165,8 @@ define i64 @udiv64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_or_b32_e32 v0, v5, v3
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX9-NEXT:  .LBB1_1:
@@ -302,8 +302,8 @@ define i64 @srem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_or_b32_e32 v0, v4, v3
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX9-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX9-NEXT:  .LBB2_1:
@@ -450,8 +450,8 @@ define i64 @urem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_or_b32_e32 v0, v5, v3
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX9-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB3_2
 ; GFX9-NEXT:  .LBB3_1:
@@ -709,9 +709,9 @@ define <2 x i64> @sdivrem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v2
 ; GFX9-NEXT:    s_xor_b64 s[10:11], vcc, exec
+; GFX9-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    ; implicit-def: $vgpr2_vgpr3
-; GFX9-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB8_2
 ; GFX9-NEXT:  .LBB8_1:
@@ -881,9 +881,9 @@ define <2 x i64> @udivrem64(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v2
 ; GFX9-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX9-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    ; implicit-def: $vgpr2_vgpr3
-; GFX9-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB9_2
 ; GFX9-NEXT:  .LBB9_1:
@@ -1033,8 +1033,8 @@ define i64 @sdiv64_known32(i64 %a, i64 %b) {
 ; GFX9-NEXT:    v_or_b32_e32 v0, v5, v4
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB10_2
 ; GFX9-NEXT:  .LBB10_1:

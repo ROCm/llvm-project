@@ -92,7 +92,7 @@ define <2 x i128> @v_sdiv_v2i128_vv(<2 x i128> %lhs, <2 x i128> %rhs) {
 ; SDAG-NEXT:  .LBB0_1: ; %udiv-bb15
 ; SDAG-NEXT:    v_add_i32_e32 v28, vcc, 1, v8
 ; SDAG-NEXT:    v_addc_u32_e64 v29, s[4:5], 0, v9, vcc
-; SDAG-NEXT:    v_sub_i32_e32 v9, vcc, s16, v8
+; SDAG-NEXT:    v_sub_i32_e32 v9, vcc, s14, v8
 ; SDAG-NEXT:    v_sub_i32_e32 v20, vcc, 64, v9
 ; SDAG-NEXT:    v_lshl_b64 v[0:1], v[18:19], v9
 ; SDAG-NEXT:    v_lshr_b64 v[20:21], v[16:17], v20
@@ -139,10 +139,9 @@ define <2 x i128> @v_sdiv_v2i128_vv(<2 x i128> %lhs, <2 x i128> %rhs) {
 ; SDAG-NEXT:    v_addc_u32_e32 v33, vcc, -1, v27, vcc
 ; SDAG-NEXT:    v_addc_u32_e32 v34, vcc, -1, v2, vcc
 ; SDAG-NEXT:    v_addc_u32_e32 v35, vcc, -1, v3, vcc
-; SDAG-NEXT:    v_mov_b32_e32 v11, 0
 ; SDAG-NEXT:    v_mov_b32_e32 v20, 0
 ; SDAG-NEXT:    v_mov_b32_e32 v21, 0
-; SDAG-NEXT:    s_and_b64 s[4:5], s[10:11], exec
+; SDAG-NEXT:    v_mov_b32_e32 v11, 0
 ; SDAG-NEXT:  .LBB0_3: ; %udiv-do-while3
 ; SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SDAG-NEXT:    v_lshl_b64 v[36:37], v[8:9], 1
@@ -181,10 +180,10 @@ define <2 x i128> @v_sdiv_v2i128_vv(<2 x i128> %lhs, <2 x i128> %rhs) {
 ; SDAG-NEXT:    v_mov_b32_e32 v21, 0
 ; SDAG-NEXT:    v_or_b32_e32 v0, v0, v10
 ; SDAG-NEXT:    v_and_b32_e32 v10, 1, v36
-; SDAG-NEXT:    s_xor_b64 s[16:17], exec, s[4:5]
+; SDAG-NEXT:    s_xor_b64 s[14:15], exec, s[4:5]
 ; SDAG-NEXT:    v_or_b32_e32 v1, v21, v1
 ; SDAG-NEXT:    v_or_b32_e32 v0, v20, v0
-; SDAG-NEXT:    s_or_b64 s[6:7], s[6:7], s[16:17]
+; SDAG-NEXT:    s_or_b64 s[6:7], s[6:7], s[14:15]
 ; SDAG-NEXT:    v_mov_b32_e32 v21, v11
 ; SDAG-NEXT:    v_mov_b32_e32 v20, v10
 ; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
@@ -199,7 +198,7 @@ define <2 x i128> @v_sdiv_v2i128_vv(<2 x i128> %lhs, <2 x i128> %rhs) {
 ; SDAG-NEXT:    v_or_b32_e32 v20, v11, v3
 ; SDAG-NEXT:    v_or_b32_e32 v21, v10, v2
 ; SDAG-NEXT:  .LBB0_5: ; %udiv-end1
-; SDAG-NEXT:    s_or_b64 exec, exec, s[14:15]
+; SDAG-NEXT:    s_or_b64 exec, exec, s[12:13]
 ; SDAG-NEXT:    v_ashrrev_i32_e32 v16, 31, v7
 ; SDAG-NEXT:    v_xor_b32_e32 v3, v4, v16
 ; SDAG-NEXT:    v_xor_b32_e32 v2, v5, v16
@@ -330,10 +329,9 @@ define <2 x i128> @v_sdiv_v2i128_vv(<2 x i128> %lhs, <2 x i128> %rhs) {
 ; SDAG-NEXT:    v_cndmask_b32_e64 v9, v13, v9, s[4:5]
 ; SDAG-NEXT:    v_cndmask_b32_e64 v8, v12, v8, s[4:5]
 ; SDAG-NEXT:    v_addc_u32_e32 v35, vcc, -1, v3, vcc
-; SDAG-NEXT:    v_mov_b32_e32 v13, 0
 ; SDAG-NEXT:    v_mov_b32_e32 v6, 0
 ; SDAG-NEXT:    v_mov_b32_e32 v7, 0
-; SDAG-NEXT:    s_and_b64 s[4:5], s[10:11], exec
+; SDAG-NEXT:    v_mov_b32_e32 v13, 0
 ; SDAG-NEXT:  .LBB0_8: ; %udiv-do-while
 ; SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SDAG-NEXT:    v_lshl_b64 v[36:37], v[4:5], 1
@@ -390,7 +388,7 @@ define <2 x i128> @v_sdiv_v2i128_vv(<2 x i128> %lhs, <2 x i128> %rhs) {
 ; SDAG-NEXT:    v_or_b32_e32 v14, v13, v3
 ; SDAG-NEXT:    v_or_b32_e32 v15, v12, v2
 ; SDAG-NEXT:  .LBB0_10: ; %udiv-end
-; SDAG-NEXT:    s_or_b64 exec, exec, s[12:13]
+; SDAG-NEXT:    s_or_b64 exec, exec, s[10:11]
 ; SDAG-NEXT:    v_xor_b32_e32 v2, v23, v22
 ; SDAG-NEXT:    v_xor_b32_e32 v3, v25, v24
 ; SDAG-NEXT:    v_xor_b32_e32 v5, v0, v2
@@ -1827,7 +1825,7 @@ define <2 x i128> @v_srem_v2i128_vv(<2 x i128> %lhs, <2 x i128> %rhs) {
 ; SDAG-NEXT:    v_or_b32_e32 v34, v19, v17
 ; SDAG-NEXT:    v_or_b32_e32 v35, v18, v16
 ; SDAG-NEXT:  .LBB4_5: ; %udiv-end1
-; SDAG-NEXT:    s_or_b64 exec, exec, s[14:15]
+; SDAG-NEXT:    s_or_b64 exec, exec, s[12:13]
 ; SDAG-NEXT:    v_ashrrev_i32_e32 v26, 31, v7
 ; SDAG-NEXT:    v_xor_b32_e32 v4, v4, v26
 ; SDAG-NEXT:    v_xor_b32_e32 v5, v5, v26
@@ -1957,10 +1955,9 @@ define <2 x i128> @v_srem_v2i128_vv(<2 x i128> %lhs, <2 x i128> %rhs) {
 ; SDAG-NEXT:    v_addc_u32_e32 v49, vcc, -1, v27, vcc
 ; SDAG-NEXT:    v_addc_u32_e32 v50, vcc, -1, v12, vcc
 ; SDAG-NEXT:    v_addc_u32_e32 v51, vcc, -1, v13, vcc
-; SDAG-NEXT:    v_mov_b32_e32 v19, 0
 ; SDAG-NEXT:    v_mov_b32_e32 v20, 0
 ; SDAG-NEXT:    v_mov_b32_e32 v21, 0
-; SDAG-NEXT:    s_and_b64 s[4:5], s[10:11], exec
+; SDAG-NEXT:    v_mov_b32_e32 v19, 0
 ; SDAG-NEXT:  .LBB4_8: ; %udiv-do-while
 ; SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SDAG-NEXT:    v_add_i32_e32 v36, vcc, -1, v36
@@ -2017,7 +2014,7 @@ define <2 x i128> @v_srem_v2i128_vv(<2 x i128> %lhs, <2 x i128> %rhs) {
 ; SDAG-NEXT:    v_or_b32_e32 v20, v19, v15
 ; SDAG-NEXT:    v_or_b32_e32 v21, v18, v14
 ; SDAG-NEXT:  .LBB4_10: ; %udiv-end
-; SDAG-NEXT:    s_or_b64 exec, exec, s[12:13]
+; SDAG-NEXT:    s_or_b64 exec, exec, s[10:11]
 ; SDAG-NEXT:    v_mul_lo_u32 v9, v35, v9
 ; SDAG-NEXT:    v_mad_u64_u32 v[14:15], s[4:5], v35, v8, 0
 ; SDAG-NEXT:    v_mad_u64_u32 v[22:23], s[4:5], v30, v35, 0

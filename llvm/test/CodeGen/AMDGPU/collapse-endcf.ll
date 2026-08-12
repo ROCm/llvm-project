@@ -399,7 +399,6 @@ define amdgpu_kernel void @nested_if_if_else(ptr addrspace(1) nocapture %arg) {
 ; GCN-NEXT:  .LBB2_3:
 ; GCN-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
 ; GCN-NEXT:    s_mov_b64 exec, s[2:3]
 ; GCN-NEXT:    ; divergent control-flow edge
@@ -494,7 +493,6 @@ define amdgpu_kernel void @nested_if_if_else(ptr addrspace(1) nocapture %arg) {
 ; GCN-O0-NEXT:    v_readlane_b32 s2, v4, 2
 ; GCN-O0-NEXT:    v_readlane_b32 s3, v4, 3
 ; GCN-O0-NEXT:    s_xor_b64 s[4:5], exec, s[0:1]
-; GCN-O0-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-O0-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GCN-O0-NEXT:    v_writelane_b32 v4, s2, 4
 ; GCN-O0-NEXT:    v_writelane_b32 v4, s3, 5

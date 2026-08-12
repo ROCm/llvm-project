@@ -5307,9 +5307,8 @@ define float @safe_math_fract_f32_swapped_edge_case_split_block(float %x, i1 %co
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_and_b32_e32 v1, 1, v1
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v1
-; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX7-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX7-NEXT:    ; implicit-def: $vgpr1
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB58_2
 ; GFX7-NEXT:  .LBB58_1: ; %ret
@@ -5337,9 +5336,8 @@ define float @safe_math_fract_f32_swapped_edge_case_split_block(float %x, i1 %co
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    v_and_b32_e32 v1, 1, v1
 ; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v1
-; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX8-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX8-NEXT:    ; implicit-def: $vgpr1
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB58_2
 ; GFX8-NEXT:  .LBB58_1: ; %ret
@@ -5366,10 +5364,10 @@ define float @safe_math_fract_f32_swapped_edge_case_split_block(float %x, i1 %co
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_and_b32_e32 v1, 1, v1
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v1
-; GFX11-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX11-NEXT:    ; implicit-def: $vgpr1
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB58_2
 ; GFX11-NEXT:  .LBB58_1: ; %ret
@@ -5405,9 +5403,8 @@ define float @safe_math_fract_f32_swapped_edge_case_split_block(float %x, i1 %co
 ; GFX12-NEXT:    v_and_b32_e32 v1, 1, v1
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v1
-; GFX12-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_mov_b32 exec_lo, s0
+; GFX12-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX12-NEXT:    ; implicit-def: $vgpr1
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB58_2
 ; GFX12-NEXT:  .LBB58_1: ; %ret

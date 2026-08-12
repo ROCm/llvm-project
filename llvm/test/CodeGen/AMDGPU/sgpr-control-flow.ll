@@ -104,9 +104,9 @@ define amdgpu_kernel void @sgpr_if_else_valu_br(ptr addrspace(1) %out, float %a,
 ; SI-NEXT:    v_cvt_f32_u32_e32 v0, v0
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0xc
 ; SI-NEXT:    v_cmp_lg_f32_e32 vcc, 0, v0
-; SI-NEXT:    s_xor_b64 exec, vcc, exec
-; SI-NEXT:    ; implicit-def: $vgpr0
+; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; implicit-def: $vgpr0
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB2_2
 ; SI-NEXT:  .LBB2_1: ; %else
@@ -159,8 +159,8 @@ define amdgpu_kernel void @sgpr_if_else_valu_cmp_phi_br(ptr addrspace(1) %out, p
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; SI-NEXT:    s_mov_b32 s6, 0
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SI-NEXT:    ; implicit-def: $vgpr1
 ; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; implicit-def: $vgpr1
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB3_2
 ; SI-NEXT:  .LBB3_1: ; %else

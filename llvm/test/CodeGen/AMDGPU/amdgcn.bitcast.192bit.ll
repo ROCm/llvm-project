@@ -1275,14 +1275,13 @@ define <12 x i16> @bitcast_v6i32_to_v12i16(<6 x i32> %a, i32 %b) #0 {
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v6
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; SI-NEXT:    s_mov_b64 exec, s[4:5]
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; implicit-def: $vgpr9
 ; SI-NEXT:    ; implicit-def: $vgpr11
 ; SI-NEXT:    ; implicit-def: $vgpr7
 ; SI-NEXT:    ; implicit-def: $vgpr10
 ; SI-NEXT:    ; implicit-def: $vgpr6
 ; SI-NEXT:    ; implicit-def: $vgpr8
-; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB12_2
 ; SI-NEXT:  .LBB12_1: ; %cmp.false
@@ -1583,8 +1582,8 @@ define <6 x i32> @bitcast_v12i16_to_v6i32(<12 x i16> %a, i32 %b) #0 {
 ; SI-NEXT:    v_lshrrev_b32_e32 v17, 16, v10
 ; SI-NEXT:    v_lshrrev_b32_e32 v18, 16, v11
 ; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB14_2
 ; SI-NEXT:  .LBB14_1: ; %cmp.false
@@ -1933,14 +1932,13 @@ define <12 x half> @bitcast_v6i32_to_v12f16(<6 x i32> %a, i32 %b) #0 {
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v6
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; SI-NEXT:    s_mov_b64 exec, s[4:5]
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; implicit-def: $vgpr9
 ; SI-NEXT:    ; implicit-def: $vgpr11
 ; SI-NEXT:    ; implicit-def: $vgpr7
 ; SI-NEXT:    ; implicit-def: $vgpr10
 ; SI-NEXT:    ; implicit-def: $vgpr6
 ; SI-NEXT:    ; implicit-def: $vgpr8
-; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB16_2
 ; SI-NEXT:  .LBB16_1: ; %cmp.false
@@ -2241,8 +2239,8 @@ define <6 x i32> @bitcast_v12f16_to_v6i32(<12 x half> %a, i32 %b) #0 {
 ; SI-NEXT:    v_lshrrev_b32_e32 v17, 16, v10
 ; SI-NEXT:    v_lshrrev_b32_e32 v18, 16, v11
 ; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB18_2
 ; SI-NEXT:  .LBB18_1: ; %cmp.false
@@ -3468,14 +3466,13 @@ define <12 x i16> @bitcast_v6f32_to_v12i16(<6 x float> %a, i32 %b) #0 {
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v6
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; SI-NEXT:    s_mov_b64 exec, s[4:5]
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; implicit-def: $vgpr9
 ; SI-NEXT:    ; implicit-def: $vgpr11
 ; SI-NEXT:    ; implicit-def: $vgpr7
 ; SI-NEXT:    ; implicit-def: $vgpr10
 ; SI-NEXT:    ; implicit-def: $vgpr6
 ; SI-NEXT:    ; implicit-def: $vgpr8
-; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB28_2
 ; SI-NEXT:  .LBB28_1: ; %cmp.false
@@ -3788,8 +3785,8 @@ define <6 x float> @bitcast_v12i16_to_v6f32(<12 x i16> %a, i32 %b) #0 {
 ; SI-NEXT:    v_lshrrev_b32_e32 v17, 16, v10
 ; SI-NEXT:    v_lshrrev_b32_e32 v18, 16, v11
 ; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB30_2
 ; SI-NEXT:  .LBB30_1: ; %cmp.false
@@ -4138,14 +4135,13 @@ define <12 x half> @bitcast_v6f32_to_v12f16(<6 x float> %a, i32 %b) #0 {
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v6
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; SI-NEXT:    s_mov_b64 exec, s[4:5]
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; implicit-def: $vgpr9
 ; SI-NEXT:    ; implicit-def: $vgpr11
 ; SI-NEXT:    ; implicit-def: $vgpr7
 ; SI-NEXT:    ; implicit-def: $vgpr10
 ; SI-NEXT:    ; implicit-def: $vgpr6
 ; SI-NEXT:    ; implicit-def: $vgpr8
-; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB32_2
 ; SI-NEXT:  .LBB32_1: ; %cmp.false
@@ -4458,8 +4454,8 @@ define <6 x float> @bitcast_v12f16_to_v6f32(<12 x half> %a, i32 %b) #0 {
 ; SI-NEXT:    v_lshrrev_b32_e32 v17, 16, v10
 ; SI-NEXT:    v_lshrrev_b32_e32 v18, 16, v11
 ; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB34_2
 ; SI-NEXT:  .LBB34_1: ; %cmp.false
@@ -5254,13 +5250,13 @@ define <12 x i16> @bitcast_v3i64_to_v12i16(<3 x i64> %a, i32 %b) #0 {
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v6
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; implicit-def: $vgpr9
 ; SI-NEXT:    ; implicit-def: $vgpr11
 ; SI-NEXT:    ; implicit-def: $vgpr7
 ; SI-NEXT:    ; implicit-def: $vgpr10
 ; SI-NEXT:    ; implicit-def: $vgpr6
 ; SI-NEXT:    ; implicit-def: $vgpr8
-; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB40_2
 ; SI-NEXT:  .LBB40_1: ; %cmp.false
@@ -5555,8 +5551,8 @@ define <3 x i64> @bitcast_v12i16_to_v3i64(<12 x i16> %a, i32 %b) #0 {
 ; SI-NEXT:    v_lshrrev_b32_e32 v17, 16, v10
 ; SI-NEXT:    v_lshrrev_b32_e32 v18, 16, v11
 ; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB42_2
 ; SI-NEXT:  .LBB42_1: ; %cmp.false
@@ -5905,13 +5901,13 @@ define <12 x half> @bitcast_v3i64_to_v12f16(<3 x i64> %a, i32 %b) #0 {
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v6
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; implicit-def: $vgpr9
 ; SI-NEXT:    ; implicit-def: $vgpr11
 ; SI-NEXT:    ; implicit-def: $vgpr7
 ; SI-NEXT:    ; implicit-def: $vgpr10
 ; SI-NEXT:    ; implicit-def: $vgpr6
 ; SI-NEXT:    ; implicit-def: $vgpr8
-; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB44_2
 ; SI-NEXT:  .LBB44_1: ; %cmp.false
@@ -6206,8 +6202,8 @@ define <3 x i64> @bitcast_v12f16_to_v3i64(<12 x half> %a, i32 %b) #0 {
 ; SI-NEXT:    v_lshrrev_b32_e32 v17, 16, v10
 ; SI-NEXT:    v_lshrrev_b32_e32 v18, 16, v11
 ; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB46_2
 ; SI-NEXT:  .LBB46_1: ; %cmp.false
@@ -6594,13 +6590,13 @@ define <12 x i16> @bitcast_v3f64_to_v12i16(<3 x double> %a, i32 %b) #0 {
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v6
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; implicit-def: $vgpr9
 ; SI-NEXT:    ; implicit-def: $vgpr11
 ; SI-NEXT:    ; implicit-def: $vgpr7
 ; SI-NEXT:    ; implicit-def: $vgpr10
 ; SI-NEXT:    ; implicit-def: $vgpr6
 ; SI-NEXT:    ; implicit-def: $vgpr8
-; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB48_2
 ; SI-NEXT:  .LBB48_1: ; %cmp.false
@@ -6892,8 +6888,8 @@ define <3 x double> @bitcast_v12i16_to_v3f64(<12 x i16> %a, i32 %b) #0 {
 ; SI-NEXT:    v_lshrrev_b32_e32 v17, 16, v10
 ; SI-NEXT:    v_lshrrev_b32_e32 v18, 16, v11
 ; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB50_2
 ; SI-NEXT:  .LBB50_1: ; %cmp.false
@@ -7242,13 +7238,13 @@ define <12 x half> @bitcast_v3f64_to_v12f16(<3 x double> %a, i32 %b) #0 {
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v6
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; implicit-def: $vgpr9
 ; SI-NEXT:    ; implicit-def: $vgpr11
 ; SI-NEXT:    ; implicit-def: $vgpr7
 ; SI-NEXT:    ; implicit-def: $vgpr10
 ; SI-NEXT:    ; implicit-def: $vgpr6
 ; SI-NEXT:    ; implicit-def: $vgpr8
-; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB52_2
 ; SI-NEXT:  .LBB52_1: ; %cmp.false
@@ -7540,8 +7536,8 @@ define <3 x double> @bitcast_v12f16_to_v3f64(<12 x half> %a, i32 %b) #0 {
 ; SI-NEXT:    v_lshrrev_b32_e32 v17, 16, v10
 ; SI-NEXT:    v_lshrrev_b32_e32 v18, 16, v11
 ; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    s_mov_b64 exec, vcc
+; SI-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB54_2
 ; SI-NEXT:  .LBB54_1: ; %cmp.false
@@ -7928,12 +7924,13 @@ define <12 x half> @bitcast_v12i16_to_v12f16(<12 x i16> %a, i32 %b) #0 {
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v6
 ; SI-NEXT:    v_lshrrev_b32_e32 v9, 16, v5
-; SI-NEXT:    v_lshrrev_b32_e32 v20, 16, v4
+; SI-NEXT:    v_lshrrev_b32_e32 v19, 16, v4
 ; SI-NEXT:    v_lshrrev_b32_e32 v8, 16, v3
 ; SI-NEXT:    v_lshrrev_b32_e32 v18, 16, v2
 ; SI-NEXT:    v_lshrrev_b32_e32 v7, 16, v1
 ; SI-NEXT:    v_lshrrev_b32_e32 v14, 16, v0
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; implicit-def: $vgpr17
 ; SI-NEXT:    ; implicit-def: $vgpr15
 ; SI-NEXT:    ; implicit-def: $vgpr12
@@ -7943,7 +7940,6 @@ define <12 x half> @bitcast_v12i16_to_v12f16(<12 x i16> %a, i32 %b) #0 {
 ; SI-NEXT:    ; implicit-def: $vgpr10
 ; SI-NEXT:    ; implicit-def: $vgpr20
 ; SI-NEXT:    ; implicit-def: $vgpr6
-; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB56_2
 ; SI-NEXT:  .LBB56_1: ; %cmp.false
@@ -7964,10 +7960,10 @@ define <12 x half> @bitcast_v12i16_to_v12f16(<12 x i16> %a, i32 %b) #0 {
 ; SI-NEXT:    v_and_b32_e32 v10, 0xffff, v2
 ; SI-NEXT:    v_alignbit_b32 v16, v11, v13, 16
 ; SI-NEXT:    v_or_b32_e32 v13, v10, v13
-; SI-NEXT:    v_lshlrev_b32_e32 v19, 16, v20
+; SI-NEXT:    v_lshlrev_b32_e32 v20, 16, v19
 ; SI-NEXT:    v_and_b32_e32 v10, 0xffff, v4
-; SI-NEXT:    v_or_b32_e32 v10, v10, v19
-; SI-NEXT:    v_alignbit_b32 v19, v6, v19, 16
+; SI-NEXT:    v_or_b32_e32 v10, v10, v20
+; SI-NEXT:    v_alignbit_b32 v20, v6, v20, 16
 ; SI-NEXT:  .LBB56_2:
 ; SI-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; SI-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
@@ -7977,7 +7973,7 @@ define <12 x half> @bitcast_v12i16_to_v12f16(<12 x i16> %a, i32 %b) #0 {
 ; SI-NEXT:  .LBB56_3: ; %cmp.true
 ; SI-NEXT:    v_add_i32_e32 v4, vcc, 3, v4
 ; SI-NEXT:    v_and_b32_e32 v4, 0xffff, v4
-; SI-NEXT:    v_lshlrev_b32_e32 v6, 16, v20
+; SI-NEXT:    v_lshlrev_b32_e32 v6, 16, v19
 ; SI-NEXT:    v_or_b32_e32 v4, v6, v4
 ; SI-NEXT:    v_add_i32_e32 v10, vcc, 0x30000, v4
 ; SI-NEXT:    v_add_i32_e32 v4, vcc, 3, v5
@@ -8008,7 +8004,7 @@ define <12 x half> @bitcast_v12i16_to_v12f16(<12 x i16> %a, i32 %b) #0 {
 ; SI-NEXT:    v_add_i32_e32 v12, vcc, 0x30000, v0
 ; SI-NEXT:    v_alignbit_b32 v15, v12, v17, 16
 ; SI-NEXT:    v_alignbit_b32 v16, v11, v13, 16
-; SI-NEXT:    v_alignbit_b32 v19, v6, v10, 16
+; SI-NEXT:    v_alignbit_b32 v20, v6, v10, 16
 ; SI-NEXT:    v_lshrrev_b32_e32 v7, 16, v12
 ; SI-NEXT:    v_lshrrev_b32_e32 v8, 16, v11
 ; SI-NEXT:    v_lshrrev_b32_e32 v9, 16, v6
