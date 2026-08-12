@@ -170,6 +170,13 @@ static const ClangInstallPaths &getClangInstallPaths() {
       if (probeClangResourceDir(RocmLayout.ClangBinaryPath))
         return RocmLayout;
 
+      SmallString<256> RuntimeWheelPrefix(SoDir);
+      sys::path::append(RuntimeWheelPrefix, "llvm");
+      ClangInstallPaths RuntimeWheelLayout =
+          makeClangInstallPaths(RuntimeWheelPrefix);
+      if (probeClangResourceDir(RuntimeWheelLayout.ClangBinaryPath))
+        return RuntimeWheelLayout;
+
       SmallString<256> StandardPrefix(sys::path::parent_path(SoDir));
       ClangInstallPaths StandardLayout = makeClangInstallPaths(StandardPrefix);
       if (probeClangResourceDir(StandardLayout.ClangBinaryPath))
