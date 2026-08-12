@@ -338,7 +338,6 @@ private:
                                          HLSLAppliedSemanticAttr *Semantic,
                                          std::optional<unsigned> Index);
   llvm::Value *emitDXILUserSemanticLoad(llvm::IRBuilder<> &B, llvm::Type *Type,
-                                        const clang::DeclaratorDecl *Decl,
                                         HLSLAppliedSemanticAttr *Semantic,
                                         std::optional<unsigned> Index);
   llvm::Value *emitUserSemanticLoad(llvm::IRBuilder<> &B,
@@ -352,7 +351,6 @@ private:
                                   HLSLAppliedSemanticAttr *Semantic,
                                   std::optional<unsigned> Index);
   void emitDXILUserSemanticStore(llvm::IRBuilder<> &B, llvm::Value *Source,
-                                 const clang::DeclaratorDecl *Decl,
                                  HLSLAppliedSemanticAttr *Semantic,
                                  std::optional<unsigned> Index);
   void emitUserSemanticStore(llvm::IRBuilder<> &B, llvm::Value *Source,
@@ -369,12 +367,6 @@ private:
   llvm::DenseMap<const clang::RecordType *, llvm::StructType *> LayoutTypes;
   unsigned SPIRVLastAssignedInputSemanticLocation = 0;
   unsigned SPIRVLastAssignedOutputSemanticLocation = 0;
-
-  // FIXME: #57928, storing these here and reseting them in the entry is not
-  // very nice and is a temporary until we accumulate the signatures as part of
-  // the mentioned issue.
-  unsigned DXILInputSemanticIndex = 0;
-  unsigned DXILOutputSemanticIndex = 0;
 };
 
 } // namespace CodeGen

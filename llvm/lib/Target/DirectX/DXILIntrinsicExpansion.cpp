@@ -1195,7 +1195,7 @@ static Value *expandMatrixTranspose(CallInst *Orig) {
 // The DXIL StoreOutput op is per-component; vector intrinsics are split here
 // so that DXILOpLowering sees only scalar variants.
 static bool expandStoreOutput(CallInst *Orig) {
-  auto *VT = dyn_cast<FixedVectorType>(Orig->getArgOperand(3)->getType());
+  auto *VT = dyn_cast<FixedVectorType>(Orig->getArgOperand(4)->getType());
   if (!VT)
     return false; // already scalar, nothing to expand
 
@@ -1206,10 +1206,11 @@ static bool expandStoreOutput(CallInst *Orig) {
   Type *ScalarTy = VT->getElementType();
   unsigned NumElems = VT->getNumElements();
 
-  Value *SigElementId = Orig->getArgOperand(0);
-  Value *RowIndex = Orig->getArgOperand(1);
-  Value *StartCol = Orig->getArgOperand(2); // i8
-  Value *Data = Orig->getArgOperand(3);
+  Value *SigpointId = Orig->getArgOperand(0);
+  Value *SigElementId = Orig->getArgOperand(1);
+  Value *RowIndex = Orig->getArgOperand(2);
+  Value *StartCol = Orig->getArgOperand(3); // i8
+  Value *Data = Orig->getArgOperand(4);
   Value *StartColI32 = Builder.CreateZExt(StartCol, Int32Ty);
 
   Function *ScalarFn = Intrinsic::getOrInsertDeclaration(
@@ -1221,7 +1222,8 @@ static bool expandStoreOutput(CallInst *Orig) {
     Value *ColIdx =
         Builder.CreateAdd(StartColI32, ConstantInt::get(Int32Ty, I));
     Value *ColI8 = Builder.CreateTrunc(ColIdx, Int8Ty);
-    Builder.CreateCall(ScalarFn, {SigElementId, RowIndex, ColI8, Scalar});
+    Builder.CreateCall(ScalarFn,
+                       {SigpointId, SigElementId, RowIndex, ColI8, Scalar});
   }
 
   Orig->eraseFromParent();
@@ -1242,10 +1244,11 @@ static Value *expandLoadInput(CallInst *Orig) {
   Type *ScalarTy = VT->getElementType();
   unsigned NumElems = VT->getNumElements();
 
-  Value *SigElementId = Orig->getArgOperand(0);
-  Value *RowIndex = Orig->getArgOperand(1);
-  Value *StartCol = Orig->getArgOperand(2); // i8
-  Value *GsVertexOrPrimIndex = Orig->getArgOperand(3);
+  Value *SigpointId = Orig->getArgOperand(0);
+  Value *SigElementId = Orig->getArgOperand(1);
+  Value *RowIndex = Orig->getArgOperand(2);
+  Value *StartCol = Orig->getArgOperand(3); // i8
+  Value *GsVertexOrPrimIndex = Orig->getArgOperand(4);
   Value *StartColI32 = Builder.CreateZExt(StartCol, Int32Ty);
 
   Function *ScalarFn = Intrinsic::getOrInsertDeclaration(
@@ -1256,8 +1259,9 @@ static Value *expandLoadInput(CallInst *Orig) {
     Value *ColIdx =
         Builder.CreateAdd(StartColI32, ConstantInt::get(Int32Ty, I));
     Value *ColI8 = Builder.CreateTrunc(ColIdx, Int8Ty);
-    Value *Scalar = Builder.CreateCall(
-        ScalarFn, {SigElementId, RowIndex, ColI8, GsVertexOrPrimIndex});
+    Value *Scalar =
+        Builder.CreateCall(ScalarFn, {SigpointId, SigElementId, RowIndex, ColI8,
+                                      GsVertexOrPrimIndex});
     Vec =
         Builder.CreateInsertElement(Vec, Scalar, ConstantInt::get(Int32Ty, I));
   }
