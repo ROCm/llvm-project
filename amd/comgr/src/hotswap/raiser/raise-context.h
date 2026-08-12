@@ -85,16 +85,15 @@ struct RaiseContext {
   bool AssumeHipGlobalOffsetZero = false;
 
   // Per-instruction VGPR index adjustments, indexed by MC operand index.
-  // Exceeding this capacity is an error rather than a truncated register index.
-  static constexpr unsigned KMaxOps = 16;
-  unsigned CurrentVgprAdjust[KMaxOps] = {};
+  llvm::SmallVector<unsigned> CurrentVgprAdjust;
 
   // Compute VGPR bank adjustments for the instruction's format-defined slots.
   llvm::Error computeVGPRAdjust(const DecodedInst &Di);
 
   llvm::BasicBlock *lookupBB(uint64_t Addr);
 
-  ParsedReg parseReg(llvm::MCRegister Reg, int MciOpIdx = -1) const;
+  llvm::Expected<ParsedReg> parseReg(const DecodedInst &Di,
+                                     unsigned OperandIndex) const;
 
   // Read the operand at OpIdx as a 32-bit value, resolving registers through
   // the reg-file and immediates through the MC operand.
@@ -489,11 +488,11 @@ struct OpResolver {
   unsigned nSrcs() const { return static_cast<unsigned>(Di.SrcMap.size()); }
 
   unsigned srcMod(unsigned I) const {
+    assert(I < Di.ModMap.size() && "source modifier index out of range");
     unsigned ModIdx = Di.ModMap[I];
     if (ModIdx == UINT_MAX)
       return 0;
-    if (!Di.isImm(ModIdx))
-      return 0;
+    assert(Di.isImm(ModIdx) && "source modifier must be an immediate");
     return static_cast<unsigned>(Di.getImm(ModIdx) & 0xF);
   }
 
@@ -528,19 +527,26 @@ struct OpResolver {
   llvm::Expected<llvm::Value *> srcExecWidth(unsigned I) {
     return Ctx.readOpExecWidth(Di, srcIdx(I));
   }
-  int64_t srcImm(unsigned I) { return Di.getImm(srcIdx(I)); }
+  int64_t srcImm(unsigned I) {
+    unsigned Index = srcIdx(I);
+    assert(Di.isImm(Index) && "source operand must be an immediate");
+    return Di.getImm(Index);
+  }
 
-  ParsedReg dst(unsigned I = 0) { return Ctx.parseReg(Di.getReg(I), I); }
+  llvm::Expected<ParsedReg> dst(unsigned I = 0) {
+    assert(Di.isReg(I) && "destination operand must be a register");
+    return Ctx.parseReg(Di, I);
+  }
   bool isSrcReg(unsigned I) { return Di.isReg(srcIdx(I)); }
 
-  ParsedReg srcReg(unsigned I) {
-    unsigned Idx = srcIdx(I);
-    if (!Di.isReg(Idx)) {
-      ParsedReg Pr;
-      Pr.RegKind = ParsedReg::OTHER;
-      return Pr;
-    }
-    return Ctx.parseReg(Di.getReg(Idx), Idx);
+  llvm::Expected<std::optional<ParsedReg>> srcReg(unsigned I) {
+    unsigned Index = srcIdx(I);
+    if (!Di.isReg(Index))
+      return std::optional<ParsedReg>();
+    llvm::Expected<ParsedReg> Reg = Ctx.parseReg(Di, Index);
+    if (!Reg)
+      return Reg.takeError();
+    return std::optional<ParsedReg>(*Reg);
   }
 };
 
