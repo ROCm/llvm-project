@@ -13,6 +13,29 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Update rocm-systems and rocm-libraries to tip sha
+      shell: bash
+      run: |
+        ROCM_SYSTEMS_SHA="$(git ls-remote https://github.com/ROCm/rocm-systems.git refs/heads/develop | awk '{print $1}')"
+        ROCM_LIBRARIES_SHA="$(git ls-remote https://github.com/ROCm/rocm-libraries.git refs/heads/develop | awk '{print $1}')"
+        if [[ -z "$ROCM_SYSTEMS_SHA" || -z "$ROCM_LIBRARIES_SHA" ]]; then
+          echo "::error::Failed to resolve rocm-systems or rocm-libraries develop tip." >&2
+          exit 1
+        fi
+        echo "rocm-systems develop tip: $ROCM_SYSTEMS_SHA"
+        echo "rocm-libraries develop tip: $ROCM_LIBRARIES_SHA"
+        git config --global --add safe.directory "$PWD"
+        git config --global user.email "z1-cciauto@amd.com"
+        git config --global user.name "Z1 cciauto"
+        git update-index --cacheinfo 160000,"$ROCM_SYSTEMS_SHA",rocm-systems
+        git update-index --cacheinfo 160000,"$ROCM_LIBRARIES_SHA",rocm-libraries
+        if ! git diff --cached --quiet; then
+          git commit -m "Update rocm-systems and rocm-libraries submodules"
+        fi
+        git submodule update --init --depth 1 --jobs 2 \
+          rocm-systems \
+          rocm-libraries
+    
     - name: Update Submodule Pointer to the PR
       if: github.event_name == 'pull_request'
       shell: bash
@@ -65,9 +88,6 @@ runs:
       shell: bash
       run: |
         git config --global --add safe.directory $PWD
-        echo "sha: $GITHUB_SHA"
-        # Update the submodule pointer using cacheinfo
-        git update-index --cacheinfo 160000,$GITHUB_SHA,compiler/amd-llvm
         git config --global user.email "z1-cciauto@amd.com"
         git config --global user.name "Z1 cciauto"
         trim_sha() {
@@ -79,9 +99,13 @@ runs:
           trim_sha "$(git ls-remote "${repo_url}" refs/heads/amd-staging | awk '{print $1}')"
         }
 
-        PR_SHA="$(trim_sha "${{ github.event.pull_request.head.sha }}")"
-        echo "ROCm LLVM PR head SHA: $PR_SHA"
-        git update-index --cacheinfo 160000,"$PR_SHA",compiler/amd-llvm
+        BRANCH_SHA="$(trim_sha "$GITHUB_SHA")"
+        echo "ROCm LLVM branch SHA: $BRANCH_SHA"
+        if [[ -z "$BRANCH_SHA" ]]; then
+          echo "::error::GITHUB_SHA is empty." >&2
+          exit 1
+        fi
+        git update-index --cacheinfo 160000,"$BRANCH_SHA",compiler/amd-llvm
 
         SPIRV_SHA="$(read_amd_staging_tip https://github.com/ROCm/SPIRV-LLVM-Translator.git)"
         echo "SPIRV amd-staging tip SHA: $SPIRV_SHA"
@@ -96,7 +120,7 @@ runs:
           exit 1
         fi
 
-        git commit -m "Update compiler submodule references for llvm-project PR"
+        git commit -m "Update compiler submodule references for Windows debug branch"
         git submodule update --init --depth 1 --jobs 4 \
           compiler/amd-llvm \
           compiler/spirv-llvm-translator \
