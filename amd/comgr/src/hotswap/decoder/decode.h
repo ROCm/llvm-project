@@ -35,8 +35,9 @@ struct DecodeResult {
 // Decode the kernel in `TextBytes` at `[KernelOffset, KernelEndOffset)` using
 // the caller-owned MC and OpcodeMap, producing a DecodedInst per instruction
 // and the set of block-start offsets. A nullopt `KernelEndOffset` scans to the
-// end of `TextBytes`; `KernelStartOffset` defaults to `KernelOffset`.
-DecodeResult
+// end of `TextBytes`; `KernelStartOffset` defaults to `KernelOffset`. Returns
+// an error if any bytes in that range do not decode to an instruction.
+llvm::Expected<DecodeResult>
 decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
              llvm::ArrayRef<uint8_t> TextBytes, uint64_t KernelOffset,
              std::optional<uint64_t> KernelEndOffset = std::nullopt,
