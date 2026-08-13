@@ -9,8 +9,8 @@
 #include "trigredF.h"
 
 
-CONSTATTR struct redret
-MATH_PRIVATE(trigredlarge)(float x)
+CONSTATTR struct redret2
+MATH_PRIVATE(trigred2large)(float x)
 {
     int xe;
     float m = BUILTIN_FREXP_F32(x, &xe);
@@ -134,9 +134,12 @@ MATH_PRIVATE(trigredlarge)(float x)
              MATH_MAD(q0, pio2h, q1*pio2t);
     }
 
-    struct redret ret;
-    ret.hi  = rh + rt;
+    struct redret2 ret;
+    float t = rh + rt;
+    rt = rt - (t - rh);
+
+    ret.hi = t;
+    ret.lo = rt;
     ret.i = ((i >> 1) + (i & 1)) & 0x3;
     return ret;
 }
-
