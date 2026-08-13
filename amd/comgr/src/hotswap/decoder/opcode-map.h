@@ -17,22 +17,16 @@
 
 namespace COMGR::hotswap {
 
-// Maps raw LLVM MC opcodes emitted by the AMDGPU disassembler to
-// architecture-neutral CanonicalOp tags that the raiser dispatches on.
-//
-// The map is built once at raiser-initialization time from MCInstrInfo and
-// TableGen-generated AMDGPU instruction tables. Almost no string parsing is
-// involved: encoding variants (e32/e64/DPP/SDWA/subtarget-specific real
-// encodings) are folded onto their canonical pseudo via the
-// AMDGPU::InstrMapping helpers, and the resulting canonical pseudo is matched
-// against a compile-time table of AMDGPU::<opcode> enum constants that grows
-// one row per landed handler. Every other opcode maps to Unknown.
+// Maps raw AMDGPU MC opcodes to architecture-neutral CanonicalOp tags.
+// Encoding variants (e32/e64/DPP/SDWA/subtarget-specific real encodings) fold
+// onto a single canonical pseudo, so they share one tag; an opcode with no tag
+// maps to Unknown.
 class OpcodeMap {
 public:
-  // Lookup is hot-path: called once per decoded instruction.
+  // Tag for `Opcode`, or Unknown when it has none.
   CanonicalOp lookup(unsigned Opcode) const;
 
-  // Build is one-shot: called during raiser initialization.
+  // Populate the map from `MCII`. Must run before any lookup.
   void build(const llvm::MCInstrInfo &MCII);
 
 private:
