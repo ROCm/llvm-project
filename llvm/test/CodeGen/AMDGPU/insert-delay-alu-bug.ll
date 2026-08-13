@@ -97,7 +97,9 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_and_b32 vcc_lo, exec_lo, s3
 ; GFX11-NEXT:    s_cbranch_vccnz .LBB2_3
 ; GFX11-NEXT:  ; %bb.4:
-; GFX11-NEXT:    s_and_b32 s23, s20, exec_lo
+; GFX11-NEXT:    s_and_b32 s0, s20, exec_lo
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-NEXT:    s_or_b32 s23, s23, s0
 ; GFX11-NEXT:    s_branch .LBB2_8
 ; GFX11-NEXT:  .LBB2_5: ; %bb15
 ; GFX11-NEXT:    s_add_u32 s8, s18, 0x58
