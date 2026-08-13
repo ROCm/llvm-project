@@ -177,10 +177,6 @@ struct DeviceTy {
   /// Ask the device whether it is an APU.
   bool checkIfAPU();
 
-  bool checkIfGFX90a();
-
-  bool checkIfMI300x();
-
   /// Ask the device whether it supports unified memory.
   bool supportsUnifiedMemory();
 
