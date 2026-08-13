@@ -22,6 +22,7 @@
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -95,7 +96,7 @@ protected:
     Module Mod;
     IRBuilder<> B;
     ISAProfile Isa;
-    FullWaveInvariantProjection Projection;
+    std::unique_ptr<WaveProjection> Projection;
     AllocaRegFile Regs;
     KernargLayout Kernargs;
     UserSgprLayout Layout;
@@ -107,15 +108,33 @@ protected:
                                 bool FullWaveInvariant = false)
         : Mod("raise_context_test", LLVMCtx), B(LLVMCtx),
           Isa(ISAProfile::fromSubtarget(*Mc.SubtargetInfo)),
-          Projection(Isa, B.getInt32Ty(), B.getInt64Ty(), FullWaveInvariant),
+          Projection(std::make_unique<FullWaveInvariantProjection>(
+              Isa, B.getInt32Ty(), B.getInt64Ty(), FullWaveInvariant)),
           Kernel(Function::Create(
               FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
               Function::ExternalLinkage, "kernel", Mod)) {
+      initialize(Mc);
+    }
+
+    ContextEnvironment(const MCState &SourceMc, const MCState &TargetMc)
+        : Mod("raise_context_test", LLVMCtx), B(LLVMCtx),
+          Isa(ISAProfile::fromSubtarget(*SourceMc.SubtargetInfo)),
+          Projection(std::make_unique<WaveNativeProjection>(
+              Isa, ISAProfile::fromSubtarget(*TargetMc.SubtargetInfo),
+              B.getInt32Ty(), B.getInt64Ty())),
+          Kernel(Function::Create(
+              FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
+              Function::ExternalLinkage, "kernel", Mod)) {
+      initialize(SourceMc);
+    }
+
+    void initialize(const MCState &Mc) {
       BasicBlock *Entry = BasicBlock::Create(LLVMCtx, "entry", Kernel);
       B.SetInsertPoint(Entry);
-      Regs.init(B, B.getInt32Ty(), B.getInt1Ty(), Isa, *Mc.RegInfo, Projection);
+      Regs.init(B, B.getInt32Ty(), B.getInt1Ty(), Isa, *Mc.RegInfo,
+                *Projection);
       Ctx = std::make_unique<RaiseContext>(
-          B, Regs, Projection, Mc, 6, Kernargs, Layout, nullptr, OffsetToBb,
+          B, Regs, *Projection, Mc, 6, Kernargs, Layout, nullptr, OffsetToBb,
           ArrayRef<uint8_t>(), 0, ArrayRef<TextSection::ImageSection>(), 0, 0);
     }
   };
@@ -391,6 +410,83 @@ TEST_F(RaiseContextTest, InvalidatesOverlappingPairShadows) {
   EXPECT_FALSE(Env->Ctx->lookupSourceImageSgprPairAddr(4));
 }
 
+TEST_F(RaiseContextTest, ProjectsMaskReadsToCurrentSourceWave) {
+  Expected<MCState> SourceState = initMCState("gfx1250");
+  ASSERT_TRUE(static_cast<bool>(SourceState))
+      << toString(SourceState.takeError());
+  ContextEnvironment Widening(*SourceState, Mc);
+  Value *Lane = Widening.Projection->emitLaneIdx(Widening.B);
+  Widening.Regs.storeVCC(
+      Widening.B,
+      Widening.B.CreateICmpUGE(Lane, Widening.B.getInt32(32), "upper_wave"));
+  Widening.Regs.storeExec(Widening.B, Widening.B.getInt64(0xFFFFFFFF00000000));
+
+  const unsigned Opcode = findOpcode(*SourceState->InstrInfo, "S_MOV_B32");
+  ASSERT_NE(Opcode, SourceState->InstrInfo->getNumOpcodes());
+  const auto ReadRegister = [&](MCRegister Register) -> Expected<Value *> {
+    DecodedInst Instruction;
+    Instruction.Inst.setOpcode(Opcode);
+    Instruction.TargetSpecificFlags =
+        SourceState->InstrInfo->get(Opcode).TSFlags;
+    Instruction.Inst.addOperand(MCOperand::createReg(Register));
+    return Widening.Ctx->readOp32(Instruction, 0);
+  };
+  const auto ExpectSourceWaveSlice = [](Value *Mask) {
+    auto *Trunc = dyn_cast<TruncInst>(Mask);
+    ASSERT_NE(Trunc, nullptr);
+    auto *Shift = dyn_cast<BinaryOperator>(Trunc->getOperand(0));
+    ASSERT_NE(Shift, nullptr);
+    EXPECT_EQ(Shift->getOpcode(), Instruction::LShr);
+  };
+
+  for (const StringRef RegisterName : {"VCC_LO", "EXEC_LO"}) {
+    const MCRegister Register =
+        findRegister(*SourceState->RegInfo, RegisterName);
+    ASSERT_TRUE(Register) << RegisterName.str();
+    Expected<Value *> Result = ReadRegister(Register);
+    ASSERT_TRUE(static_cast<bool>(Result)) << toString(Result.takeError());
+    ExpectSourceWaveSlice(*Result);
+  }
+  for (const StringRef RegisterName : {"SRC_VCCZ", "SRC_EXECZ"}) {
+    const MCRegister Register =
+        findRegister(*SourceState->RegInfo, RegisterName);
+    ASSERT_TRUE(Register) << RegisterName.str();
+    Expected<Value *> Result = ReadRegister(Register);
+    ASSERT_TRUE(static_cast<bool>(Result)) << toString(Result.takeError());
+    auto *Extend = dyn_cast<ZExtInst>(*Result);
+    ASSERT_NE(Extend, nullptr);
+    auto *Compare = dyn_cast<ICmpInst>(Extend->getOperand(0));
+    ASSERT_NE(Compare, nullptr);
+    ExpectSourceWaveSlice(Compare->getOperand(0));
+  }
+}
+
+TEST_F(RaiseContextTest, RetainsPairWidthAcrossBlocks) {
+  Env->Ctx->recordSgprWaveMaskI1(2, ConstantInt::getTrue(Env->LLVMCtx), false);
+  Env->Ctx->recordSgprWaveMaskI1(4, ConstantInt::getTrue(Env->LLVMCtx), true);
+  Env->Ctx->clearSgprWaveMaskShadow();
+
+  Env->Ctx->invalidateSgprWaveMaskI1(3);
+  Env->Ctx->invalidateSgprWaveMaskI1(5);
+  Value *SingleValid = Env->Ctx->loadSgprWaveMaskValid(2);
+  Value *PairValid = Env->Ctx->loadSgprWaveMaskValid(4);
+  AllocaInst *ObservedSingle =
+      Env->B.CreateAlloca(Env->B.getInt1Ty(), nullptr, "observed_single");
+  AllocaInst *ObservedPair =
+      Env->B.CreateAlloca(Env->B.getInt1Ty(), nullptr, "observed_pair");
+  StoreInst *StoreSingle = Env->B.CreateStore(SingleValid, ObservedSingle);
+  StoreInst *StorePair = Env->B.CreateStore(PairValid, ObservedPair);
+  Env->B.CreateRetVoid();
+
+  promoteAndFold(*Env);
+  auto *StoredSingle = dyn_cast<ConstantInt>(StoreSingle->getValueOperand());
+  auto *StoredPair = dyn_cast<ConstantInt>(StorePair->getValueOperand());
+  ASSERT_NE(StoredSingle, nullptr);
+  ASSERT_NE(StoredPair, nullptr);
+  EXPECT_TRUE(StoredSingle->isOne());
+  EXPECT_TRUE(StoredPair->isZero());
+}
+
 TEST_F(RaiseContextTest, MaintainsStateOnRegisterWrites) {
   ParsedReg Sgpr;
   Sgpr.RegKind = ParsedReg::SGPR;
@@ -413,7 +509,7 @@ TEST_F(RaiseContextTest, MaintainsStateOnRegisterWrites) {
   M0.RegKind = ParsedReg::M0;
   Env->Ctx->writeReg32(M0, Env->B.getInt32(7));
   EXPECT_EQ(Env->Ctx->getM0Const(), 7u);
-  Env->Ctx->writeReg32(M0, UndefValue::get(Env->B.getInt32Ty()));
+  Env->Ctx->writeReg32(M0, PoisonValue::get(Env->B.getInt32Ty()));
   EXPECT_FALSE(Env->Ctx->getM0Const());
 
   Value *OldLaneActive = Env->Ctx->emitLaneActiveBit();
@@ -457,7 +553,7 @@ TEST_F(RaiseContextTest, InactiveSourceWavePreservesInvalidPairShadow) {
 TEST_F(RaiseContextTest, OwnsPerSgprShadowStorage) {
   SmallVector<AllocaInst *> Allocas;
   Env->Ctx->collectSgprShadowAllocas(Allocas);
-  EXPECT_EQ(Allocas.size(), Env->Regs.Sgpr.size() * 4);
+  EXPECT_EQ(Allocas.size(), Env->Regs.Sgpr.size() * 5);
 }
 
 TEST_F(RaiseContextTest, InvalidatesPerSgprShadowStorage) {
