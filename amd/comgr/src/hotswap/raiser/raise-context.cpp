@@ -8,6 +8,8 @@
 
 #include "raise-context.h"
 
+#include "hotswap/decoder/amdgpu-formats.h"
+
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
@@ -17,6 +19,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -43,7 +46,25 @@ RaiseContext::RaiseContext(
       SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
-      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {}
+      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {
+  SgprShadows.reserve(Regs.Sgpr.size());
+  for (unsigned I = 0, E = Regs.Sgpr.size(); I != E; ++I) {
+    AllocaInst *WaveMask = B.CreateAlloca(Projection.execStorageTy(), nullptr,
+                                          "sgpr_mask_shadow_" + Twine(I));
+    AllocaInst *WaveMaskValid =
+        B.CreateAlloca(B.getInt1Ty(), nullptr, "sgpr_mask_valid_" + Twine(I));
+    AllocaInst *SourceWavePair = B.CreateAlloca(
+        B.getInt64Ty(), nullptr, "source_wave_sgpr_pair_" + Twine(I));
+    AllocaInst *SourceWavePairValid = B.CreateAlloca(
+        B.getInt1Ty(), nullptr, "source_wave_sgpr_pair_valid_" + Twine(I));
+    B.CreateStore(ConstantInt::get(Projection.execStorageTy(), 0), WaveMask);
+    B.CreateStore(B.getFalse(), WaveMaskValid);
+    B.CreateStore(B.getInt64(0), SourceWavePair);
+    B.CreateStore(B.getFalse(), SourceWavePairValid);
+    SgprShadows.push_back(
+        {WaveMask, WaveMaskValid, SourceWavePair, SourceWavePairValid});
+  }
+}
 
 BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
   DenseMap<uint64_t, BasicBlock *>::iterator It = OffsetToBb.find(Addr);
@@ -114,7 +135,9 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
   const auto RegisterFailure = [&](const Twine &Detail) -> Error {
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedInstructionForm,
-        strippedMnemonic(MC, Di.Inst), Di.Offset, "register-decode", Detail);
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        Twine("register-decode: ") + Detail);
   };
 
   const MCInstrDesc &Descriptor = MC.InstrInfo->get(Di.Inst.getOpcode());
@@ -276,9 +299,10 @@ Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
 
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(MC, Di.Inst), Di.Offset, "register-decode",
-      Twine("could not classify register '") + MRI.getName(Reg) + "' (enc=0x" +
-          Twine::utohexstr(Enc) + ")");
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      Twine("register-decode: could not classify register '") +
+          MRI.getName(Reg) + "' (enc=0x" + Twine::utohexstr(Enc) + ")");
 }
 
 Expected<Value *> RaiseContext::readOp32(const DecodedInst &Di,
@@ -336,8 +360,9 @@ Expected<Value *> RaiseContext::readOp32(const DecodedInst &Di,
     if (!V)
       return RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedInstructionForm,
-          strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
-          Twine("readOp32 could not read register '") +
+          strippedMnemonic(MC, Di.Inst), Di.Offset,
+          formatName(Di.TargetSpecificFlags),
+          Twine("operand-read: could not read 32-bit register '") +
               MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
               strippedMnemonic(MC, Di.Inst));
     return V;
@@ -347,9 +372,10 @@ Expected<Value *> RaiseContext::readOp32(const DecodedInst &Di,
   }
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
-      Twine("readOp32 could not resolve operand ") + Twine(OpIdx) + " in " +
-          strippedMnemonic(MC, Di.Inst));
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      Twine("operand-read: could not resolve 32-bit operand ") + Twine(OpIdx) +
+          " in " + strippedMnemonic(MC, Di.Inst));
 }
 
 Expected<Value *> RaiseContext::readOpSourceWaveMask32(const DecodedInst &Di,
@@ -423,8 +449,9 @@ Expected<Value *> RaiseContext::readOp64(const DecodedInst &Di,
     if (!V)
       return RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedInstructionForm,
-          strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
-          Twine("readOp64 could not read register '") +
+          strippedMnemonic(MC, Di.Inst), Di.Offset,
+          formatName(Di.TargetSpecificFlags),
+          Twine("operand-read: could not read 64-bit register '") +
               MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
               strippedMnemonic(MC, Di.Inst));
     return V;
@@ -434,9 +461,10 @@ Expected<Value *> RaiseContext::readOp64(const DecodedInst &Di,
   }
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
-      Twine("readOp64 could not resolve operand ") + Twine(OpIdx) + " in " +
-          strippedMnemonic(MC, Di.Inst));
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      Twine("operand-read: could not resolve 64-bit operand ") + Twine(OpIdx) +
+          " in " + strippedMnemonic(MC, Di.Inst));
 }
 
 Value *RaiseContext::emitLaneIdx() { return Projection.emitLaneIdx(B); }
@@ -616,8 +644,9 @@ Expected<Value *> RaiseContext::readOpExecWidth(const DecodedInst &Di,
     }
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedInstructionForm,
-        strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
-        Twine("readOpExecWidth could not read register '") +
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        Twine("operand-read: could not read EXEC-width register '") +
             MC.RegInfo->getName(Di.getReg(OpIdx)) + "' in " +
             strippedMnemonic(MC, Di.Inst));
   }
@@ -634,9 +663,10 @@ Expected<Value *> RaiseContext::readOpExecWidth(const DecodedInst &Di,
   }
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(MC, Di.Inst), Di.Offset, "operand-read",
-      Twine("readOpExecWidth could not resolve operand ") + Twine(OpIdx) +
-          " in " + strippedMnemonic(MC, Di.Inst));
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      Twine("operand-read: could not resolve EXEC-width operand ") +
+          Twine(OpIdx) + " in " + strippedMnemonic(MC, Di.Inst));
 }
 
 } // namespace COMGR::hotswap

@@ -8,22 +8,34 @@
 
 #include "hotswap/raiser/raise-context.h"
 
+#include "hotswap/common/kernel-meta.h"
 #include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
+#include "hotswap/raiser/raise_failure.h"
 #include "hotswap/raiser/wave-projection.h"
 
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/Support/AMDHSAKernelDescriptor.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Transforms/Utils/PromoteMemToReg.h"
 
 #include "gtest/gtest.h"
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 
@@ -60,6 +72,15 @@ MCRegister findRegister(const MCRegisterInfo &MRI, StringRef Name) {
   return MCRegister();
 }
 
+class FullWaveInvariantProjection : public ReplicationProjection {
+public:
+  FullWaveInvariantProjection(const ISAProfile &Isa, Type *I32Ty, Type *I64Ty,
+                              bool FullWaveInvariant)
+      : ReplicationProjection(Isa, Isa, I32Ty, I64Ty) {
+    ProvidesFullWaveExecInvariant = FullWaveInvariant;
+  }
+};
+
 class RaiseContextTest : public ::testing::Test {
 protected:
   void SetUp() override {
@@ -74,7 +95,7 @@ protected:
     Module Mod;
     IRBuilder<> B;
     ISAProfile Isa;
-    ReplicationProjection Projection;
+    FullWaveInvariantProjection Projection;
     AllocaRegFile Regs;
     KernargLayout Kernargs;
     UserSgprLayout Layout;
@@ -82,10 +103,11 @@ protected:
     Function *Kernel;
     std::unique_ptr<RaiseContext> Ctx;
 
-    explicit ContextEnvironment(const MCState &Mc)
+    explicit ContextEnvironment(const MCState &Mc,
+                                bool FullWaveInvariant = false)
         : Mod("raise_context_test", LLVMCtx), B(LLVMCtx),
           Isa(ISAProfile::fromSubtarget(*Mc.SubtargetInfo)),
-          Projection(Isa, Isa, B.getInt32Ty(), B.getInt64Ty()),
+          Projection(Isa, B.getInt32Ty(), B.getInt64Ty(), FullWaveInvariant),
           Kernel(Function::Create(
               FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
               Function::ExternalLinkage, "kernel", Mod)) {
@@ -97,6 +119,45 @@ protected:
           ArrayRef<uint8_t>(), 0, ArrayRef<TextSection::ImageSection>(), 0, 0);
     }
   };
+
+  static UserSgprLayout makeKernargPtrLayout(const ISAProfile &Isa) {
+    using namespace llvm::amdhsa;
+    KernelMeta Meta;
+    Meta.Name = "k";
+    Meta.KernelCodeProperties =
+        KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR;
+    Meta.ComputePgmRsrc2 =
+        2u << COMPUTE_PGM_RSRC2_GFX6_GFX120_USER_SGPR_COUNT_SHIFT;
+    UserSgprLayout Layout;
+    cantFail(UserSgprLayout::tryFromKernelMeta(Meta, Isa, "gfx942", Layout));
+    return Layout;
+  }
+
+  static void promoteAndFold(ContextEnvironment &Environment) {
+    SmallVector<AllocaInst *> Allocas;
+    Environment.Regs.collectAllocas(Allocas);
+    Environment.Ctx->collectSgprShadowAllocas(Allocas);
+    DominatorTree DT(*Environment.Kernel);
+    PromoteMemToReg(Allocas, DT);
+
+    bool Changed = true;
+    while (Changed) {
+      Changed = false;
+      for (BasicBlock &BB : *Environment.Kernel) {
+        for (Instruction &Instruction : make_early_inc_range(BB)) {
+          if (Instruction.isTerminator()) {
+            continue;
+          }
+          if (Constant *Folded = ConstantFoldInstruction(
+                  &Instruction, Environment.Mod.getDataLayout())) {
+            Instruction.replaceAllUsesWith(Folded);
+            Instruction.eraseFromParent();
+            Changed = true;
+          }
+        }
+      }
+    }
+  }
 
   MCState Mc;
   std::unique_ptr<ContextEnvironment> Env;
@@ -158,12 +219,20 @@ TEST_F(RaiseContextTest, RejectsRegistersOutsideOperandClass) {
 
   DecodedInst Di;
   Di.Inst.setOpcode(Opcode);
+  Di.TargetSpecificFlags = Mc.InstrInfo->get(Opcode).TSFlags;
   Di.Inst.addOperand(MCOperand::createReg(Register));
   Expected<ParsedReg> Parsed = Env->Ctx->parseReg(Di, 0);
   ASSERT_FALSE(static_cast<bool>(Parsed));
-  std::string Message = toString(Parsed.takeError());
-  EXPECT_NE(Message.find("register-decode"), std::string::npos);
-  EXPECT_NE(Message.find("not in operand register class"), std::string::npos);
+  std::string Format;
+  std::string Detail;
+  handleAllErrors(Parsed.takeError(), [&](const RaiseFailure &Failure) {
+    ASSERT_TRUE(Failure.format());
+    Format = Failure.format()->str();
+    Detail = Failure.detail().str();
+  });
+  EXPECT_EQ(Format, "SMEM");
+  EXPECT_NE(Detail.find("register-decode"), std::string::npos);
+  EXPECT_NE(Detail.find("not in operand register class"), std::string::npos);
 }
 
 TEST_F(RaiseContextTest, KeepsWave32VccHighAsScratch) {
@@ -238,6 +307,27 @@ TEST_F(RaiseContextTest, ReportsUnsupportedRegisterOperands) {
   std::string Message = toString(Result.takeError());
   EXPECT_NE(Message.find("register-decode"), std::string::npos);
   EXPECT_NE(Message.find("SRC_SHARED_BASE_LO"), std::string::npos);
+}
+
+TEST_F(RaiseContextTest, ReportsEncodingFormatForOperandFailures) {
+  const unsigned Opcode = findOpcode(*Mc.InstrInfo, "S_MOV_B32");
+  ASSERT_NE(Opcode, Mc.InstrInfo->getNumOpcodes());
+
+  DecodedInst Di;
+  Di.Inst.setOpcode(Opcode);
+  Di.TargetSpecificFlags = Mc.InstrInfo->get(Opcode).TSFlags;
+  Di.Inst.addOperand(MCOperand::createDFPImm(0));
+  Expected<Value *> Result = Env->Ctx->readOp32(Di, 0);
+  ASSERT_FALSE(static_cast<bool>(Result));
+  std::string Format;
+  std::string Detail;
+  handleAllErrors(Result.takeError(), [&](const RaiseFailure &Failure) {
+    ASSERT_TRUE(Failure.format());
+    Format = Failure.format()->str();
+    Detail = Failure.detail().str();
+  });
+  EXPECT_EQ(Format, "SOP1");
+  EXPECT_NE(Detail.find("operand-read"), std::string::npos);
 }
 
 TEST_F(RaiseContextTest, RejectsXnackMaskOperands) {
@@ -332,6 +422,69 @@ TEST_F(RaiseContextTest, MaintainsStateOnRegisterWrites) {
   Exec.BaseIdx = 0;
   Env->Ctx->writeReg32(Exec, Env->B.getInt32(1));
   EXPECT_NE(Env->Ctx->emitLaneActiveBit(), OldLaneActive);
+}
+
+TEST_F(RaiseContextTest, UnrelatedMemoryLoadPreservesKernargPtrOffset) {
+  Env->Layout = makeKernargPtrLayout(Env->Isa);
+  Env->Ctx->setKernargPtrLiveEntryByteOffset(-16);
+
+  Env->Ctx->noteSgprMemoryLoadForKernargProvenance(4, 2);
+
+  const RaiseContext::KernargPtrProvenance Provenance =
+      Env->Ctx->getKernargPtrProvenance();
+  EXPECT_TRUE(Provenance.isLiveEntry());
+  EXPECT_EQ(Provenance.EntryByteOffset, -16);
+}
+
+TEST_F(RaiseContextTest, InactiveSourceWavePreservesInvalidPairShadow) {
+  ContextEnvironment FullWave(Mc, true);
+  FullWave.Regs.storeExec(FullWave.B, FullWave.B.getInt64(0));
+
+  FullWave.Ctx->recordSourceWaveSgprPair(0, FullWave.B.getInt64(7));
+  Value *Result =
+      FullWave.Ctx->materializeSourceWaveSgprPair(0, FullWave.B.getInt64(42));
+  AllocaInst *Observed =
+      FullWave.B.CreateAlloca(FullWave.B.getInt64Ty(), nullptr, "observed");
+  StoreInst *Store = FullWave.B.CreateStore(Result, Observed);
+  FullWave.B.CreateRetVoid();
+
+  promoteAndFold(FullWave);
+  auto *Stored = dyn_cast<ConstantInt>(Store->getValueOperand());
+  ASSERT_NE(Stored, nullptr);
+  EXPECT_EQ(Stored->getZExtValue(), 42u);
+}
+
+TEST_F(RaiseContextTest, OwnsPerSgprShadowStorage) {
+  SmallVector<AllocaInst *> Allocas;
+  Env->Ctx->collectSgprShadowAllocas(Allocas);
+  EXPECT_EQ(Allocas.size(), Env->Regs.Sgpr.size() * 4);
+}
+
+TEST_F(RaiseContextTest, InvalidatesPerSgprShadowStorage) {
+  ContextEnvironment FullWave(Mc, true);
+  FullWave.Regs.storeExec(FullWave.B, FullWave.B.getInt64(UINT64_MAX));
+  FullWave.Ctx->recordSourceWaveSgprPair(0, FullWave.B.getInt64(7));
+  Value *Before =
+      FullWave.Ctx->materializeSourceWaveSgprPair(0, FullWave.B.getInt64(42));
+  AllocaInst *ObservedBefore = FullWave.B.CreateAlloca(
+      FullWave.B.getInt64Ty(), nullptr, "observed_before");
+  StoreInst *StoreBefore = FullWave.B.CreateStore(Before, ObservedBefore);
+
+  FullWave.Ctx->invalidateSgprShadows();
+  Value *After =
+      FullWave.Ctx->materializeSourceWaveSgprPair(0, FullWave.B.getInt64(42));
+  AllocaInst *ObservedAfter = FullWave.B.CreateAlloca(
+      FullWave.B.getInt64Ty(), nullptr, "observed_after");
+  StoreInst *StoreAfter = FullWave.B.CreateStore(After, ObservedAfter);
+  FullWave.B.CreateRetVoid();
+
+  promoteAndFold(FullWave);
+  auto *StoredBefore = dyn_cast<ConstantInt>(StoreBefore->getValueOperand());
+  auto *StoredAfter = dyn_cast<ConstantInt>(StoreAfter->getValueOperand());
+  ASSERT_NE(StoredBefore, nullptr);
+  ASSERT_NE(StoredAfter, nullptr);
+  EXPECT_EQ(StoredBefore->getZExtValue(), 7u);
+  EXPECT_EQ(StoredAfter->getZExtValue(), 42u);
 }
 
 } // namespace

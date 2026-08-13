@@ -239,11 +239,19 @@ struct RaiseContext {
     if (!KernargPtrSgpr)
       return;
     unsigned EndIdx = BaseIdx + WidthDwords - 1;
-    if (BaseIdx <= *KernargPtrSgpr && EndIdx >= *KernargPtrSgpr)
+    const bool OverlapsLow =
+        BaseIdx <= *KernargPtrSgpr && EndIdx >= *KernargPtrSgpr;
+    const bool OverlapsHigh =
+        BaseIdx <= *KernargPtrSgpr + 1 && EndIdx >= *KernargPtrSgpr + 1;
+    if (OverlapsLow) {
       CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::NonEntry;
-    if (BaseIdx <= *KernargPtrSgpr + 1 && EndIdx >= *KernargPtrSgpr + 1)
+    }
+    if (OverlapsHigh) {
       CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::NonEntry;
-    CurrentKernargPtrProvenance.EntryByteOffset = 0;
+    }
+    if (OverlapsLow || OverlapsHigh) {
+      CurrentKernargPtrProvenance.EntryByteOffset = 0;
+    }
   }
 
   // Record the precomputed provenance at a source basic-block entry.
@@ -281,12 +289,6 @@ struct RaiseContext {
 
   llvm::DenseMap<unsigned, WaveMaskEntry> LastSgprWaveMaskI1;
 
-  // Cross-block SGPR wave-mask values and validity bits. Alloca storage avoids
-  // carrying non-dominating SSA values across recovered control flow.
-  llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskExecShadow;
-  llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskValidShadow;
-  llvm::SmallVector<llvm::AllocaInst *> SourceWaveSgprPairShadow;
-  llvm::SmallVector<llvm::AllocaInst *> SourceWaveSgprPairValidShadow;
   // Same-block source-image addresses proven for PC-relative literal loads.
   llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
 
@@ -301,11 +303,11 @@ struct RaiseContext {
   // Record the latest per-lane compare written to an SGPR destination.
   void recordSgprWaveMaskI1(unsigned BaseIdx, llvm::Value *CmpI1, bool IsPair) {
     LastSgprWaveMaskI1[BaseIdx] = WaveMaskEntry{CmpI1, IsPair};
-    if (BaseIdx < SgprWaveMaskExecShadow.size()) {
+    if (BaseIdx < SgprShadows.size()) {
       llvm::Value *ExecMask = Projection.ballotI1ToWidth(
           B, CmpI1, Projection.execStorageTy(), "wm_shadow_exec");
-      B.CreateStore(ExecMask, SgprWaveMaskExecShadow[BaseIdx]);
-      B.CreateStore(B.getTrue(), SgprWaveMaskValidShadow[BaseIdx]);
+      B.CreateStore(ExecMask, SgprShadows[BaseIdx].WaveMask);
+      B.CreateStore(B.getTrue(), SgprShadows[BaseIdx].WaveMaskValid);
     }
   }
 
@@ -339,32 +341,40 @@ struct RaiseContext {
   // Record an SGPR-pair value for the active source wave while preserving the
   // value for inactive source waves.
   void recordSourceWaveSgprPair(unsigned BaseIdx, llvm::Value *V) {
-    if (!Projection.providesFullWaveExecInvariant())
+    if (!Projection.providesFullWaveExecInvariant()) {
       return;
-    if (BaseIdx >= SourceWaveSgprPairShadow.size())
+    }
+    if (BaseIdx >= SgprShadows.size()) {
       return;
-    llvm::Value *Old =
-        B.CreateLoad(B.getInt64Ty(), SourceWaveSgprPairShadow[BaseIdx],
-                     "source_wave_sgpr_pair_old");
-    llvm::Value *Merged = B.CreateSelect(emitCurrentSourceWaveHasActiveLane(),
-                                         V, Old, "source_wave_sgpr_pair");
-    B.CreateStore(Merged, SourceWaveSgprPairShadow[BaseIdx]);
-    B.CreateStore(B.getTrue(), SourceWaveSgprPairValidShadow[BaseIdx]);
+    }
+    const SgprShadow &Shadow = SgprShadows[BaseIdx];
+    llvm::Value *Old = B.CreateLoad(B.getInt64Ty(), Shadow.SourceWavePair,
+                                    "source_wave_sgpr_pair_old");
+    llvm::Value *OldValid =
+        B.CreateLoad(B.getInt1Ty(), Shadow.SourceWavePairValid,
+                     "source_wave_sgpr_pair_valid_old");
+    llvm::Value *Active = emitCurrentSourceWaveHasActiveLane();
+    llvm::Value *Merged =
+        B.CreateSelect(Active, V, Old, "source_wave_sgpr_pair");
+    llvm::Value *Valid = B.CreateSelect(Active, B.getTrue(), OldValid,
+                                        "source_wave_sgpr_pair_valid");
+    B.CreateStore(Merged, Shadow.SourceWavePair);
+    B.CreateStore(Valid, Shadow.SourceWavePairValid);
   }
 
   // Return the recorded source-wave value or Fallback.
   llvm::Value *materializeSourceWaveSgprPair(unsigned BaseIdx,
                                              llvm::Value *Fallback) {
     if (!Projection.providesFullWaveExecInvariant() ||
-        BaseIdx >= SourceWaveSgprPairShadow.size())
+        BaseIdx >= SgprShadows.size()) {
       return Fallback;
-    llvm::Value *Shadow =
-        B.CreateLoad(B.getInt64Ty(), SourceWaveSgprPairShadow[BaseIdx],
-                     "source_wave_sgpr_pair");
-    llvm::Value *Valid =
-        B.CreateLoad(B.getInt1Ty(), SourceWaveSgprPairValidShadow[BaseIdx],
-                     "source_wave_sgpr_pair_valid");
-    return B.CreateSelect(Valid, Shadow, Fallback, "source_wave_sgpr_pair_sel");
+    }
+    const SgprShadow &Shadow = SgprShadows[BaseIdx];
+    llvm::Value *Value = B.CreateLoad(B.getInt64Ty(), Shadow.SourceWavePair,
+                                      "source_wave_sgpr_pair");
+    llvm::Value *Valid = B.CreateLoad(B.getInt1Ty(), Shadow.SourceWavePairValid,
+                                      "source_wave_sgpr_pair_valid");
+    return B.CreateSelect(Valid, Value, Fallback, "source_wave_sgpr_pair_sel");
   }
 
   // Return the current block's cached compare, or null when none is valid.
@@ -374,16 +384,18 @@ struct RaiseContext {
   }
 
   llvm::Value *loadSgprWaveMaskExec(unsigned BaseIdx) const {
-    if (BaseIdx >= SgprWaveMaskExecShadow.size())
+    if (BaseIdx >= SgprShadows.size()) {
       return nullptr;
+    }
     return B.CreateLoad(Projection.execStorageTy(),
-                        SgprWaveMaskExecShadow[BaseIdx], "sgpr_mask_exec");
+                        SgprShadows[BaseIdx].WaveMask, "sgpr_mask_exec");
   }
 
   llvm::Value *loadSgprWaveMaskValid(unsigned BaseIdx) const {
-    if (BaseIdx >= SgprWaveMaskValidShadow.size())
+    if (BaseIdx >= SgprShadows.size()) {
       return nullptr;
-    return B.CreateLoad(B.getInt1Ty(), SgprWaveMaskValidShadow[BaseIdx],
+    }
+    return B.CreateLoad(B.getInt1Ty(), SgprShadows[BaseIdx].WaveMaskValid,
                         "sgpr_mask_valid");
   }
 
@@ -394,19 +406,22 @@ struct RaiseContext {
     noteSgprWriteForKernargProvenance(BaseIdx);
     LastSgprWaveMaskI1.erase(BaseIdx);
     SourceImageSgprPairAddrShadow.erase(BaseIdx);
-    if (BaseIdx < SgprWaveMaskValidShadow.size())
-      B.CreateStore(B.getFalse(), SgprWaveMaskValidShadow[BaseIdx]);
-    if (BaseIdx < SourceWaveSgprPairValidShadow.size())
-      B.CreateStore(B.getFalse(), SourceWaveSgprPairValidShadow[BaseIdx]);
+    if (BaseIdx < SgprShadows.size()) {
+      B.CreateStore(B.getFalse(), SgprShadows[BaseIdx].WaveMaskValid);
+      B.CreateStore(B.getFalse(), SgprShadows[BaseIdx].SourceWavePairValid);
+    }
     if (BaseIdx > 0) {
-      auto Prev = LastSgprWaveMaskI1.find(BaseIdx - 1);
+      const auto Prev = LastSgprWaveMaskI1.find(BaseIdx - 1);
       if (Prev != LastSgprWaveMaskI1.end() && Prev->second.IsPair) {
         LastSgprWaveMaskI1.erase(Prev);
-        if (BaseIdx - 1 < SgprWaveMaskValidShadow.size())
-          B.CreateStore(B.getFalse(), SgprWaveMaskValidShadow[BaseIdx - 1]);
+        if (BaseIdx - 1 < SgprShadows.size()) {
+          B.CreateStore(B.getFalse(), SgprShadows[BaseIdx - 1].WaveMaskValid);
+        }
       }
-      if (BaseIdx - 1 < SourceWaveSgprPairValidShadow.size())
-        B.CreateStore(B.getFalse(), SourceWaveSgprPairValidShadow[BaseIdx - 1]);
+      if (BaseIdx - 1 < SgprShadows.size()) {
+        B.CreateStore(B.getFalse(),
+                      SgprShadows[BaseIdx - 1].SourceWavePairValid);
+      }
       SourceImageSgprPairAddrShadow.erase(BaseIdx - 1);
     }
   }
@@ -443,13 +458,35 @@ struct RaiseContext {
   void clearM0Const() { M0Const = std::nullopt; }
   std::optional<uint64_t> getM0Const() const { return M0Const; }
 
-  void collectSgprWaveMaskShadowAllocas(
-      llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const {
-    Out.append(SgprWaveMaskExecShadow);
-    Out.append(SgprWaveMaskValidShadow);
-    Out.append(SourceWaveSgprPairShadow);
-    Out.append(SourceWaveSgprPairValidShadow);
+  // Mark every cross-block SGPR value invalid.
+  void invalidateSgprShadows() {
+    for (const SgprShadow &Shadow : SgprShadows) {
+      B.CreateStore(B.getFalse(), Shadow.WaveMaskValid);
+      B.CreateStore(B.getFalse(), Shadow.SourceWavePairValid);
+    }
   }
+
+  // Append every shadow alloca to Out for SSA promotion.
+  void collectSgprShadowAllocas(
+      llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const {
+    for (const SgprShadow &Shadow : SgprShadows) {
+      Out.push_back(Shadow.WaveMask);
+      Out.push_back(Shadow.WaveMaskValid);
+      Out.push_back(Shadow.SourceWavePair);
+      Out.push_back(Shadow.SourceWavePairValid);
+    }
+  }
+
+private:
+  struct SgprShadow {
+    llvm::AllocaInst *WaveMask;
+    llvm::AllocaInst *WaveMaskValid;
+    llvm::AllocaInst *SourceWavePair;
+    llvm::AllocaInst *SourceWavePairValid;
+  };
+
+  // Cross-block values use alloca storage to avoid non-dominating SSA values.
+  llvm::SmallVector<SgprShadow> SgprShadows;
 };
 
 // Reads a handler's source operands via the decoded srcMap, applying VOP3
