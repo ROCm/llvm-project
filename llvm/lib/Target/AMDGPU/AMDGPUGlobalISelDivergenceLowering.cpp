@@ -305,6 +305,124 @@ bool DivergenceLoweringHelper::lowerTemporalDivergenceI1() {
   return false;
 }
 
+/// This helper is used for unstructured per-lane control-flow.
+class DivergenceS1WideningHelper : public AMDGPU::PhiLoweringHelper {
+public:
+  DivergenceS1WideningHelper(MachineFunction *MF, MachineUniformityInfo *MUI);
+
+private:
+  MachineUniformityInfo *MUI = nullptr;
+  MachineIRBuilder B;
+
+public:
+  void markAsLaneMask(Register DstReg) const override {}
+  void getCandidatesForLowering(
+      SmallVectorImpl<MachineInstr *> &Vreg1Phis) const override {}
+  void collectIncomingValuesFromPhi(
+      const MachineInstr *MI,
+      SmallVectorImpl<AMDGPU::Incoming> &Incomings) const override {}
+  void replaceDstReg(Register NewReg, Register OldReg,
+                     MachineBasicBlock *MBB) override {}
+  void buildMergeLaneMasks(MachineBasicBlock &MBB,
+                           MachineBasicBlock::iterator I, const DebugLoc &DL,
+                           Register DstReg, Register PrevReg,
+                           Register CurReg) override {}
+  void constrainAsLaneMask(AMDGPU::Incoming &In) override {}
+
+  bool widenS1Phis();
+};
+
+DivergenceS1WideningHelper::DivergenceS1WideningHelper(
+    MachineFunction *MF, MachineUniformityInfo *MUI)
+    : AMDGPU::PhiLoweringHelper(MF, nullptr, nullptr), MUI(MUI), B(*MF) {}
+
+bool DivergenceS1WideningHelper::widenS1Phis() {
+  bool Change = false;
+  DenseMap<Register, Register> S1ToS32;
+  SmallVector<MachineInstr *, 8> S1Phis;
+
+  const LLT S1 = LLT::scalar(1);
+  const LLT S32 = LLT::scalar(32);
+
+  // Round#1, replace the destination of divergent-s1-phi.
+  for (MachineBasicBlock &MBB : *MF) {
+
+    B.setInsertPt(MBB, MBB.getFirstNonPHI());
+
+    for (MachineInstr &MI : MBB) {
+      if (!MI.isPHI())
+        break;
+      Register Dst = MI.getOperand(0).getReg();
+      if (MRI->getType(Dst) != S1 || !MUI->isDivergentAtDef(Dst))
+        continue;
+
+      S1Phis.push_back(&MI);
+      Register Def32 = MRI->createGenericVirtualRegister(S32);
+      S1ToS32[Dst] = Def32;
+      // Replace the phi-dest.
+      MI.getOperand(0).setReg(Def32);
+      // Create g_icmp to convert v32 back to s1.
+      B.buildICmp(CmpInst::ICMP_NE, Dst, Def32, B.buildConstant(S32, 0));
+      Change = true;
+    }
+  }
+  // Round#2, replace the sources of divergent-s1-phi.
+  for (auto MI : S1Phis) {
+    for (unsigned I = 1; I < MI->getNumOperands(); I += 2) {
+      Register Src = MI->getOperand(I).getReg();
+      if (S1ToS32.find(Src) != S1ToS32.end()) {
+        MI->getOperand(I).setReg(S1ToS32[Src]);
+        continue;
+      }
+      // Create G_SELECT to convert from s1 to v32.
+      auto *S1DefI = MRI->getVRegDef(Src);
+      auto *MBB = S1DefI->getParent();
+      B.setInsertPt(*MBB,
+                    MBB->SkipPHIsAndLabels(std::next(S1DefI->getIterator())));
+      Register Def32 = MRI->createGenericVirtualRegister(S32);
+      S1ToS32[Src] = Def32;
+      B.buildSelect(Def32, Src, B.buildConstant(S32, -1),
+                    B.buildConstant(S32, 0));
+      MI->getOperand(I).setReg(Def32);
+    }
+  }
+
+  // Round#3, lower divergent G_BRCOND to SI_BRCOND. Uniform branches keep their
+  // scalar lowering, which is handled by selectG_BRCOND during instruction
+  // selection, so they are left untouched here.
+  SmallVector<MachineInstr *, 8> ToBeErased;
+  for (MachineBasicBlock &MBB : *MF) {
+    for (MachineInstr &MI : MBB) {
+      if (MI.getOpcode() != TargetOpcode::G_BRCOND)
+        continue;
+
+      MachineOperand &CondOp = MI.getOperand(0);
+      Register CondReg = CondOp.getReg();
+      const DebugLoc &DL = MI.getDebugLoc();
+
+      if (!MUI->isDivergentAtDef(CondReg))
+        continue;
+
+      auto ConstrainRC = ST->isWave32() ? &AMDGPU::SReg_32_XM0_XEXECRegClass
+                                        : &AMDGPU::SReg_64_XEXECRegClass;
+
+      if (!MRI->getRegClassOrNull(CondReg))
+        MRI->setRegClass(CondReg, ConstrainRC);
+
+      // Create SI_BRCOND. Operand order is (target, cond).
+      BuildMI(MBB, &MI, DL, TII->get(AMDGPU::SI_BRCOND))
+          .addMBB(MI.getOperand(1).getMBB())
+          .addReg(CondReg);
+      ToBeErased.push_back(&MI);
+      Change = true;
+    }
+  }
+  for (auto MI : ToBeErased)
+    MI->eraseFromParent();
+
+  return Change;
+}
+
 } // End anonymous namespace.
 
 INITIALIZE_PASS_BEGIN(AMDGPUGlobalISelDivergenceLowering, DEBUG_TYPE,
@@ -334,23 +452,28 @@ bool AMDGPUGlobalISelDivergenceLowering::runOnMachineFunction(
   MachineUniformityInfo &MUI =
       getAnalysis<MachineUniformityAnalysisPass>().getUniformityInfo();
 
-  DivergenceLoweringHelper Helper(&MF, &DT, &PDT, &MUI);
-
   bool Changed = false;
-  // Temporal divergence lowering needs to inspect list of instructions used
-  // outside cycle with divergent exit provided by uniformity analysis. Uniform
-  // instructions from the list require lowering, no instruction is deleted.
-  // Thus it needs to be run before lowerPhis that deletes phis that require
-  // lowering and replaces them with new instructions.
+  if (EnableLateWaveTransform) {
+    MF.getInfo<SIMachineFunctionInfo>()->setWaveCFG(false);
+    Changed = DivergenceS1WideningHelper(&MF, &MUI).widenS1Phis();
+  } else {
+    DivergenceLoweringHelper Helper(&MF, &DT, &PDT, &MUI);
 
-  // Non-i1 temporal divergence lowering.
-  Changed |= Helper.lowerTemporalDivergence();
-  // This covers both uniform and divergent i1s. Lane masks are in sgpr and need
-  // to be updated in each iteration.
-  Changed |= Helper.lowerTemporalDivergenceI1();
-  // Temporal divergence lowering of divergent i1 phi used outside of the cycle
-  // could also be handled by lowerPhis but we do it in lowerTempDivergenceI1
-  // since in some case lowerPhis does unnecessary lane mask merging.
-  Changed |= Helper.lowerPhis();
+    // Temporal divergence lowering needs to inspect list of instructions used
+    // outside cycle with divergent exit provided by uniformity analysis. Uniform
+    // instructions from the list require lowering, no instruction is deleted.
+    // Thus it needs to be run before lowerPhis that deletes phis that require
+    // lowering and replaces them with new instructions.
+  
+    // Non-i1 temporal divergence lowering.
+    Changed |= Helper.lowerTemporalDivergence();
+    // This covers both uniform and divergent i1s. Lane masks are in sgpr and need
+    // to be updated in each iteration.
+    Changed |= Helper.lowerTemporalDivergenceI1();
+    // Temporal divergence lowering of divergent i1 phi used outside of the cycle
+    // could also be handled by lowerPhis but we do it in lowerTempDivergenceI1
+    // since in some case lowerPhis does unnecessary lane mask merging.
+    Changed |= Helper.lowerPhis();  
+  }
   return Changed;
 }
