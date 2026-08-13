@@ -566,6 +566,9 @@ endfunction(set_windows_version_resource_properties)
 #   DISABLE_LLVM_LINK_LLVM_DYLIB
 #     Do not link this library to libLLVM, even if
 #     LLVM_LINK_LLVM_DYLIB is enabled.
+#   ENABLE_LLVM_STATIC_LINK_INTERFACE
+#     Let final consumers of a static library select its LLVM components by
+#     setting the LLVM_LINK_STATIC_COMPONENTS target property.
 #   OUTPUT_NAME name
 #     Corresponds to OUTPUT_NAME in target properties.
 #   DEPENDS targets...
@@ -596,7 +599,7 @@ endfunction(set_windows_version_resource_properties)
 #   )
 function(llvm_add_library name)
   cmake_parse_arguments(ARG
-    "MODULE;SHARED;STATIC;OBJECT;DISABLE_LLVM_LINK_LLVM_DYLIB;SONAME;NO_INSTALL_RPATH;COMPONENT_LIB;DISABLE_PCH_REUSE"
+    "MODULE;SHARED;STATIC;OBJECT;DISABLE_LLVM_LINK_LLVM_DYLIB;ENABLE_LLVM_STATIC_LINK_INTERFACE;SONAME;NO_INSTALL_RPATH;COMPONENT_LIB;DISABLE_PCH_REUSE"
     "OUTPUT_NAME;PLUGIN_TOOL;ENTITLEMENTS;BUNDLE_PATH"
     "ADDITIONAL_HEADERS;PRECOMPILE_HEADERS;DEPENDS;LINK_COMPONENTS;LINK_LIBS;OBJLIBS"
     ${ARGN})
@@ -707,8 +710,13 @@ function(llvm_add_library name)
       set(output_name OUTPUT_NAME "${ARG_OUTPUT_NAME}")
     endif()
     # DEPENDS has been appended to LLVM_COMMON_LIBS.
+    set(llvm_static_link_interface_arg)
+    if(ARG_ENABLE_LLVM_STATIC_LINK_INTERFACE)
+      set(llvm_static_link_interface_arg ENABLE_LLVM_STATIC_LINK_INTERFACE)
+    endif()
     llvm_add_library(${name_static} STATIC
       ${output_name}
+      ${llvm_static_link_interface_arg}
       OBJLIBS ${ALL_FILES} # objlib
       LINK_LIBS ${ARG_LINK_LIBS}
       LINK_COMPONENTS ${LLVM_LINK_COMPONENTS}
@@ -863,7 +871,21 @@ function(llvm_add_library name)
     set(llvm_libs ${ARG_PLUGIN_TOOL})
   elseif (NOT ARG_COMPONENT_LIB)
     if (LLVM_LINK_LLVM_DYLIB AND NOT ARG_DISABLE_LLVM_LINK_LLVM_DYLIB)
-      set(llvm_libs LLVM)
+      if(ARG_ENABLE_LLVM_STATIC_LINK_INTERFACE AND ARG_STATIC)
+        llvm_map_components_to_libnames(llvm_component_libs
+          ${LLVM_LINK_COMPONENTS}
+        )
+        set(link_static_components
+          "$<BOOL:$<TARGET_PROPERTY:LLVM_LINK_STATIC_COMPONENTS>>")
+        set(llvm_libs)
+        foreach(llvm_component_lib IN LISTS llvm_component_libs)
+          list(APPEND llvm_libs
+            "$<${link_static_components}:${llvm_component_lib}>")
+        endforeach()
+        list(APPEND llvm_libs "$<$<NOT:${link_static_components}>:LLVM>")
+      else()
+        set(llvm_libs LLVM)
+      endif()
     else()
       if(ARG_DISABLE_LLVM_LINK_LLVM_DYLIB)
         target_compile_definitions(${name} PRIVATE LLVM_BUILD_STATIC)
@@ -1023,10 +1045,13 @@ endfunction()
 
 macro(add_llvm_library name)
   cmake_parse_arguments(ARG
-    "SHARED;BUILDTREE_ONLY;MODULE;INSTALL_WITH_TOOLCHAIN;NO_EXPORT"
+    "SHARED;BUILDTREE_ONLY;MODULE;INSTALL_WITH_TOOLCHAIN;NO_EXPORT;DISABLE_LLVM_STATIC_LINK_INTERFACE"
     ""
     ""
     ${ARGN})
+  if(NOT ARG_DISABLE_LLVM_STATIC_LINK_INTERFACE)
+    list(APPEND ARG_UNPARSED_ARGUMENTS ENABLE_LLVM_STATIC_LINK_INTERFACE)
+  endif()
   if(ARG_MODULE)
     llvm_add_library(${name} MODULE ${ARG_UNPARSED_ARGUMENTS})
   elseif( BUILD_SHARED_LIBS OR ARG_SHARED )

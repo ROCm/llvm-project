@@ -15,9 +15,11 @@
 #
 # If none is available, skip the test-unit suite with a warning rather
 # than failing configure.
+set(COMGR_GTEST_NEEDS_LLVM_SUPPORT OFF)
 if(TARGET llvm_gtest)
   set(COMGR_GTEST_LIBS llvm_gtest_main llvm_gtest)
   set(COMGR_GTEST_INCLUDE_DIRS "")
+  set(COMGR_GTEST_NEEDS_LLVM_SUPPORT ON)
 else()
   find_library(COMGR_LLVM_GTEST_LIB llvm_gtest
     PATHS ${LLVM_LIBRARY_DIRS} NO_DEFAULT_PATH)
@@ -30,6 +32,7 @@ else()
     set(COMGR_GTEST_LIBS
       ${COMGR_LLVM_GTEST_MAIN_LIB} ${COMGR_LLVM_GTEST_LIB})
     set(COMGR_GTEST_INCLUDE_DIRS ${COMGR_LLVM_GTEST_INCLUDE_DIR})
+    set(COMGR_GTEST_NEEDS_LLVM_SUPPORT ON)
   else()
     find_package(GTest CONFIG QUIET)
     if(GTest_FOUND)
@@ -75,8 +78,18 @@ add_subdirectory(hotswap)
 add_executable(DemangleSymbolNameTest
   DemangleSymbolNameTest.cpp)
 
+# LLVM's GTest leaves its Support dependency for consumers to select.
+if(COMGR_GTEST_NEEDS_LLVM_SUPPORT)
+  if(COMGR_LINK_LLVM_DYLIB)
+    set(COMGR_TEST_UNIT_DEMANGLE_LLVM_LIBS LLVM)
+  else()
+    llvm_map_components_to_libnames(COMGR_TEST_UNIT_DEMANGLE_LLVM_LIBS Support)
+  endif()
+endif()
+
 target_link_libraries(DemangleSymbolNameTest PRIVATE
   ${COMGR_GTEST_LIBS}
+  ${COMGR_TEST_UNIT_DEMANGLE_LLVM_LIBS}
   amd_comgr
   ${LLVM_PTHREAD_LIB})
 

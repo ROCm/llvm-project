@@ -194,20 +194,27 @@ else()
   endif()
 endif()
 
-# Allow the super-project to force static linking of LLVM/Clang into comgr.
-# When ON, LLVM symbols are hidden by comgr's version script (local: *;),
-# avoiding symbol interposition issues without requiring namespace isolation.
-option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
-if(COMGR_ENABLE_HOTSWAP_TRANSPILE AND NOT COMGR_STATIC_LLVM AND
-   (LLVM_LINK_LLVM_DYLIB OR CLANG_LINK_CLANG_DYLIB))
+# COMGR's export restrictions keep embedded LLVM, Clang, and LLD symbols from
+# interposing on other compiler libraries in the process.
+option(COMGR_STATIC_LLVM
+  "Statically link LLVM, Clang, and LLD into the comgr shared library" OFF)
+if(COMGR_STATIC_LLVM)
+  set(COMGR_LINK_LLVM_DYLIB OFF)
+  set(COMGR_LINK_CLANG_DYLIB OFF)
+else()
+  set(COMGR_LINK_LLVM_DYLIB ${LLVM_LINK_LLVM_DYLIB})
+  set(COMGR_LINK_CLANG_DYLIB ${CLANG_LINK_CLANG_DYLIB})
+endif()
+if(COMGR_ENABLE_HOTSWAP_TRANSPILE AND
+   (COMGR_LINK_LLVM_DYLIB OR COMGR_LINK_CLANG_DYLIB))
   message(FATAL_ERROR
     "COMGR_ENABLE_HOTSWAP_TRANSPILE requires static LLVM and Clang linkage. "
-    "Enable COMGR_STATIC_LLVM or disable LLVM_LINK_LLVM_DYLIB and "
-    "CLANG_LINK_CLANG_DYLIB.")
+    "Enable COMGR_STATIC_LLVM or use LLVM and Clang packages configured for "
+    "static component linkage.")
 endif()
-if(COMGR_STATIC_LLVM)
-  set(LLVM_LINK_LLVM_DYLIB OFF)
-  set(CLANG_LINK_CLANG_DYLIB OFF)
+if(NOT COMGR_LINK_LLVM_DYLIB AND NOT COMGR_LINK_CLANG_DYLIB)
+  set_property(TARGET amd_comgr PROPERTY LLVM_LINK_STATIC_COMPONENTS ON)
+  add_compile_definitions(CLANG_BUILD_STATIC LLVM_BUILD_STATIC)
 endif()
 
 target_include_directories(amd_comgr
@@ -588,7 +595,7 @@ install(FILES
   COMPONENT amd-comgr
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}")
 
-if(NOT CLANG_LINK_CLANG_DYLIB)
+if(NOT COMGR_LINK_CLANG_DYLIB)
   set(CLANG_LIBS
     clangBasic
     clangDriver
@@ -613,7 +620,7 @@ else()
   set(SPIRV_STATIC_LIB "")
 endif()
 
-if (LLVM_LINK_LLVM_DYLIB)
+if (COMGR_LINK_LLVM_DYLIB)
   set(LLVM_LIBS LLVM ${SPIRV_DYNAMIC_LIB})
 else()
   llvm_map_components_to_libnames(LLVM_LIBS
@@ -747,7 +754,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   endif()
   set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/ROCm/llvm-project/tree/amd-staging/amd/comgr")
   set(DEBIAN_DEPENDENCIES "libzstd1, zlib1g, libc6, libstdc++6, libgcc-s1 | libgcc1")
-  if (LLVM_LINK_LLVM_DYLIB)
+  if (COMGR_LINK_LLVM_DYLIB)
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "libtinfo-dev, rocm-core, rocm-llvm-core, ${DEBIAN_DEPENDENCIES}")
     set(CPACK_DEBIAN_ASAN_PACKAGE_DEPENDS "libtinfo-dev, rocm-core-asan, rocm-llvm-core, ${DEBIAN_DEPENDENCIES}")
   else()
@@ -781,7 +788,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(RPM_DEPENDENCIES "(zlib or libz1), (libzstd or libzstd1), glibc, (libstdc++ or libstdc++6), (libgcc or libgcc_s1)")
   endif()
 
-  if (LLVM_LINK_LLVM_DYLIB)
+  if (COMGR_LINK_LLVM_DYLIB)
     set(CPACK_RPM_PACKAGE_REQUIRES "rocm-core, rocm-llvm-core, ${RPM_DEPENDENCIES}")
     set(CPACK_RPM_ASAN_PACKAGE_REQUIRES "rocm-core-asan, rocm-llvm-core, ${RPM_DEPENDENCIES}")
   else()

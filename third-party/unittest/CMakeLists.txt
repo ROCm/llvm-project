@@ -76,6 +76,8 @@ add_llvm_library("${gtest_name}"
   googletest/src/gtest-all.cc
   googlemock/src/gmock-all.cc
 
+  DISABLE_LLVM_STATIC_LINK_INTERFACE
+
   LINK_LIBS
   ${LIBS}
 
@@ -124,6 +126,8 @@ endif()
 
 add_llvm_library("${gtest_name}_main"
   ${gtest_main_src}
+
+  DISABLE_LLVM_STATIC_LINK_INTERFACE
 
   LINK_LIBS
   "${gtest_name}"

@@ -106,7 +106,8 @@ macro(add_clang_library name)
     endif()
     set_property(GLOBAL APPEND PROPERTY CLANG_STATIC_LIBS ${name})
   endif()
-  llvm_add_library(${name} ${LIBTYPE} ${ARG_UNPARSED_ARGUMENTS} ${srcs})
+  llvm_add_library(${name} ${LIBTYPE} ENABLE_LLVM_STATIC_LINK_INTERFACE
+    ${ARG_UNPARSED_ARGUMENTS} ${srcs})
 
   if((WIN32 AND NOT MINGW) AND NOT CLANG_LINK_CLANG_DYLIB)
     # Make sure all consumers also turn off visibility macros so they're not
