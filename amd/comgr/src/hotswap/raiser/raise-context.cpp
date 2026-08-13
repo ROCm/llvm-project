@@ -53,16 +53,19 @@ RaiseContext::RaiseContext(
                                           "sgpr_mask_shadow_" + Twine(I));
     AllocaInst *WaveMaskValid =
         B.CreateAlloca(B.getInt1Ty(), nullptr, "sgpr_mask_valid_" + Twine(I));
+    AllocaInst *WaveMaskIsPair =
+        B.CreateAlloca(B.getInt1Ty(), nullptr, "sgpr_mask_is_pair_" + Twine(I));
     AllocaInst *SourceWavePair = B.CreateAlloca(
         B.getInt64Ty(), nullptr, "source_wave_sgpr_pair_" + Twine(I));
     AllocaInst *SourceWavePairValid = B.CreateAlloca(
         B.getInt1Ty(), nullptr, "source_wave_sgpr_pair_valid_" + Twine(I));
     B.CreateStore(ConstantInt::get(Projection.execStorageTy(), 0), WaveMask);
     B.CreateStore(B.getFalse(), WaveMaskValid);
+    B.CreateStore(B.getFalse(), WaveMaskIsPair);
     B.CreateStore(B.getInt64(0), SourceWavePair);
     B.CreateStore(B.getFalse(), SourceWavePairValid);
-    SgprShadows.push_back(
-        {WaveMask, WaveMaskValid, SourceWavePair, SourceWavePairValid});
+    SgprShadows.push_back({WaveMask, WaveMaskValid, WaveMaskIsPair,
+                           SourceWavePair, SourceWavePairValid});
   }
 }
 
@@ -117,6 +120,32 @@ static std::optional<unsigned> findIndexInClass(const MCRegisterClass &RC,
     if (RC.getRegister(I) == Reg)
       return I;
   return std::nullopt;
+}
+
+// Return the selected 32-bit register half from the current source-wave mask.
+static Value *emitSourceWaveMask32(IRBuilder<> &B,
+                                   const WaveProjection &Projection,
+                                   Value *Mask, ParsedReg Reg,
+                                   const Twine &Name) {
+  IntegerType *I32Ty = B.getInt32Ty();
+  Mask = Projection.emitCurrentSourceWaveMask(B, Mask, Name);
+  if (Mask->getType() == I32Ty) {
+    return Mask;
+  }
+  if (Reg.WidthInDwords < 2 && Reg.BaseIdx == 1) {
+    Mask = B.CreateLShr(Mask, 32, Name + "_hi_shr");
+  }
+  return B.CreateTrunc(
+      Mask, I32Ty,
+      Reg.WidthInDwords < 2 && Reg.BaseIdx == 1 ? Name + "_hi" : Name + "_lo");
+}
+
+// Return whether the current source wave's mask is empty.
+static Value *emitSourceWaveMaskIsZero(IRBuilder<> &B,
+                                       const WaveProjection &Projection,
+                                       Value *Mask, const Twine &Name) {
+  Mask = Projection.emitCurrentSourceWaveMask(B, Mask, Name + "_mask");
+  return B.CreateICmpEQ(Mask, ConstantInt::get(Mask->getType(), 0), Name);
 }
 
 Expected<ParsedReg> RaiseContext::parseReg(const DecodedInst &Di,
@@ -314,29 +343,12 @@ Expected<Value *> RaiseContext::readOp32(const DecodedInst &Di,
       return Reg.takeError();
     ParsedReg Pr = *Reg;
     if (Pr.RegKind == ParsedReg::VCC) {
-      if (Projection.sourceWaveScopedLaneOps()) {
-        Value *Mask = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
-        Value *Lo = B.CreateTrunc(Mask, I32Ty, "vcc_src_wave_lo");
-        Value *Hi =
-            B.CreateTrunc(B.CreateLShr(Mask, Projection.sourceIsa().waveSize()),
-                          I32Ty, "vcc_src_wave_hi");
-        Value *Lane = Projection.emitLaneIdx(B);
-        Value *Upper = B.CreateICmpUGE(
-            Lane, ConstantInt::get(I32Ty, Projection.sourceIsa().waveSize()),
-            "vcc_src_wave_upper");
-        return B.CreateSelect(Upper, Hi, Lo, "vcc_src_wave_mask");
-      }
-      return Regs.readReg32(B, Pr);
+      Value *Mask = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
+      return emitSourceWaveMask32(B, Projection, Mask, Pr, "vcc_src_wave");
     }
     if (Pr.RegKind == ParsedReg::EXEC) {
-      Value *V = Regs.loadExec(B);
-      if (V->getType() == I32Ty)
-        return V;
-      if (Pr.WidthInDwords < 2 && Pr.BaseIdx == 1)
-        V = B.CreateLShr(V, 32, "exec_hi_shr");
-      return B.CreateTrunc(
-          V, I32Ty,
-          (Pr.WidthInDwords < 2 && Pr.BaseIdx == 1) ? "exec_hi" : "exec_lo");
+      return emitSourceWaveMask32(B, Projection, Regs.loadExec(B), Pr,
+                                  "exec_src_wave");
     }
     if (Pr.RegKind == ParsedReg::SCC)
       return B.CreateZExt(Regs.loadSCC(B), I32Ty);
@@ -344,13 +356,13 @@ Expected<Value *> RaiseContext::readOp32(const DecodedInst &Di,
       return B.CreateZExt(Regs.loadSCC(B), I32Ty);
     if (Pr.RegKind == ParsedReg::SRC_VCCZ) {
       Value *Vcc = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
-      Value *Zero = ConstantInt::get(Projection.execStorageTy(), 0);
-      return B.CreateZExt(B.CreateICmpEQ(Vcc, Zero, "vccz"), I32Ty);
+      return B.CreateZExt(emitSourceWaveMaskIsZero(B, Projection, Vcc, "vccz"),
+                          I32Ty);
     }
     if (Pr.RegKind == ParsedReg::SRC_EXECZ) {
       Value *Exec = Regs.loadExec(B);
-      Value *Zero = ConstantInt::get(Exec->getType(), 0);
-      return B.CreateZExt(B.CreateICmpEQ(Exec, Zero, "execz"), I32Ty);
+      return B.CreateZExt(
+          emitSourceWaveMaskIsZero(B, Projection, Exec, "execz"), I32Ty);
     }
     if (Pr.RegKind == ParsedReg::NOREG)
       return ConstantInt::get(I32Ty, 0);
@@ -437,13 +449,13 @@ Expected<Value *> RaiseContext::readOp64(const DecodedInst &Di,
       return B.CreateZExt(Regs.loadSCC(B), I64Ty);
     if (Pr.RegKind == ParsedReg::SRC_VCCZ) {
       Value *Vcc = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
-      Value *Zero = ConstantInt::get(Projection.execStorageTy(), 0);
-      return B.CreateZExt(B.CreateICmpEQ(Vcc, Zero, "vccz"), I64Ty);
+      return B.CreateZExt(emitSourceWaveMaskIsZero(B, Projection, Vcc, "vccz"),
+                          I64Ty);
     }
     if (Pr.RegKind == ParsedReg::SRC_EXECZ) {
       Value *Exec = Regs.loadExec(B);
-      Value *Zero = ConstantInt::get(Exec->getType(), 0);
-      return B.CreateZExt(B.CreateICmpEQ(Exec, Zero, "execz"), I64Ty);
+      return B.CreateZExt(
+          emitSourceWaveMaskIsZero(B, Projection, Exec, "execz"), I64Ty);
     }
     Value *V = Regs.readReg64(B, Pr);
     if (!V)

@@ -308,6 +308,7 @@ struct RaiseContext {
           B, CmpI1, Projection.execStorageTy(), "wm_shadow_exec");
       B.CreateStore(ExecMask, SgprShadows[BaseIdx].WaveMask);
       B.CreateStore(B.getTrue(), SgprShadows[BaseIdx].WaveMaskValid);
+      B.CreateStore(B.getInt1(IsPair), SgprShadows[BaseIdx].WaveMaskIsPair);
     }
   }
 
@@ -414,11 +415,18 @@ struct RaiseContext {
       const auto Prev = LastSgprWaveMaskI1.find(BaseIdx - 1);
       if (Prev != LastSgprWaveMaskI1.end() && Prev->second.IsPair) {
         LastSgprWaveMaskI1.erase(Prev);
-        if (BaseIdx - 1 < SgprShadows.size()) {
-          B.CreateStore(B.getFalse(), SgprShadows[BaseIdx - 1].WaveMaskValid);
-        }
       }
       if (BaseIdx - 1 < SgprShadows.size()) {
+        const SgprShadow &Previous = SgprShadows[BaseIdx - 1];
+        llvm::Value *PreviousValid = B.CreateLoad(
+            B.getInt1Ty(), Previous.WaveMaskValid, "sgpr_mask_previous_valid");
+        llvm::Value *PreviousIsPair =
+            B.CreateLoad(B.getInt1Ty(), Previous.WaveMaskIsPair,
+                         "sgpr_mask_previous_is_pair");
+        llvm::Value *KeepPrevious =
+            B.CreateAnd(PreviousValid, B.CreateNot(PreviousIsPair),
+                        "sgpr_mask_keep_previous");
+        B.CreateStore(KeepPrevious, Previous.WaveMaskValid);
         B.CreateStore(B.getFalse(),
                       SgprShadows[BaseIdx - 1].SourceWavePairValid);
       }
@@ -472,6 +480,7 @@ struct RaiseContext {
     for (const SgprShadow &Shadow : SgprShadows) {
       Out.push_back(Shadow.WaveMask);
       Out.push_back(Shadow.WaveMaskValid);
+      Out.push_back(Shadow.WaveMaskIsPair);
       Out.push_back(Shadow.SourceWavePair);
       Out.push_back(Shadow.SourceWavePairValid);
     }
@@ -481,6 +490,7 @@ private:
   struct SgprShadow {
     llvm::AllocaInst *WaveMask;
     llvm::AllocaInst *WaveMaskValid;
+    llvm::AllocaInst *WaveMaskIsPair;
     llvm::AllocaInst *SourceWavePair;
     llvm::AllocaInst *SourceWavePairValid;
   };
