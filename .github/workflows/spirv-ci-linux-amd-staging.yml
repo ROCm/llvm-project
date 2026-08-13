@@ -609,7 +609,9 @@ jobs:
     name: Test rocm-examples
     needs: [build, pick_runner]
     runs-on: ${{ needs.pick_runner.outputs.test_runs_on }}
-    timeout-minutes: 45
+    # Match the translator's spirv-ci-linux.yml (#268): the gfx942 runner is
+    # slow/contended and 45m was cutting the job before it could finish.
+    timeout-minutes: 240
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
       options: |

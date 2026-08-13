@@ -417,6 +417,8 @@ if(BUILD_LIBOMPTARGET)
 endif()
 
 add_subdirectory(liboffload)
+#disable for downstream AMDGPU 
+#add_subdirectory(languages)
 
 # Add tests.
 if(OFFLOAD_INCLUDE_TESTS)

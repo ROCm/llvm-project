@@ -29,8 +29,7 @@ add_definitions(${LLVM_DEFINITIONS})
 # Follow COMGR's selected LLVM linkage mode: in a dylib build link the single
 # `LLVM` shared library, otherwise the individual static components. Linking
 # fixed component libraries unconditionally can pull both the dylib and the
-# static components into a dylib build, risking duplicate symbols. Kept PUBLIC
-# so consumers inherit the same set when they link this OBJECT library.
+# static components into a dylib build, risking duplicate symbols.
 if(LLVM_LINK_LLVM_DYLIB)
   set(HOTSWAP_LLVM_LIBS LLVM)
 else()
@@ -162,4 +161,7 @@ target_include_directories(hotswap-decoder PRIVATE
   "${HOTSWAP_COMGR_BINARY_DIR}/include"
 )
 
+# Consumers choose their LLVM linkage, so do not propagate the OBJECT library's
+# private dependencies through $<LINK_ONLY:>.
 target_link_libraries(hotswap-decoder PRIVATE ${HOTSWAP_LLVM_LIBS})
+set_target_properties(hotswap-decoder PROPERTIES INTERFACE_LINK_LIBRARIES "")
