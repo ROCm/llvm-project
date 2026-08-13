@@ -17,13 +17,11 @@
 
 namespace COMGR::hotswap {
 
-// Maps raw AMDGPU MC opcodes to architecture-neutral CanonicalOp tags.
-// Encoding variants (e32/e64/DPP/SDWA/subtarget-specific real encodings) fold
-// onto a single canonical pseudo, so they share one tag; an opcode with no tag
-// maps to Unknown.
+// Maps AMDGPU MC opcodes to CanonicalOp values. Opcodes without a mapping
+// return CanonicalOp::Unknown.
 class OpcodeMap {
 public:
-  // Tag for `Opcode`, or Unknown when it has none.
+  // CanonicalOp for `Opcode`, or Unknown when it has no mapping.
   CanonicalOp lookup(unsigned Opcode) const;
 
   // Populate the map from `MCII`. Must run before any lookup.

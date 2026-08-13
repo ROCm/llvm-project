@@ -10,6 +10,7 @@
 
 #include "canonical-op.h"
 #include "decoded-inst.h"
+#include "hotswap/common/hotswap-error.h"
 #include "mc-state.h"
 #include "opcode-map.h"
 
@@ -42,10 +43,6 @@ using namespace llvm;
 namespace COMGR::hotswap {
 
 namespace {
-
-// AMDGPU instructions occupy whole 4-byte units; step past a word the
-// disassembler could not decode.
-constexpr uint64_t KInstAlignBytes = 4;
 
 // Operand index of `Name` in `Opc`, or nullopt when the opcode has no such
 // operand.
@@ -127,17 +124,16 @@ void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
 
   unsigned Opc = Di.Inst.getOpcode();
 
-  // MADMK/FMAMK place the literal between src0 and src1, so the positional
-  // SrcMap[1] is the literal, not src1; skip the src1 position check.
+  // MADMK/FMAMK place the literal between src0 and src1, so SrcMap[1] cannot
+  // be checked against the named src1 operand.
   std::optional<unsigned> ImmIdx = namedOperandIdx(Opc, AMDGPU::OpName::imm);
   std::optional<unsigned> Src0Idx = namedOperandIdx(Opc, AMDGPU::OpName::src0);
   std::optional<unsigned> Src1Idx = namedOperandIdx(Opc, AMDGPU::OpName::src1);
   bool IsMadmk =
       ImmIdx && Src0Idx && Src1Idx && *Src0Idx < *ImmIdx && *ImmIdx < *Src1Idx;
 
-  // v_movrel{d,sd}_b32 have no def and place $vdst at operand 0 as an input, so
-  // SrcMap[0] is that vdst-as-source while src0 is at operand 1; skip the src0
-  // position check.
+  // v_movrel{d,sd}_b32 place $vdst at operand 0 as an input, so SrcMap[0]
+  // cannot be checked against the named src0 operand.
   bool IsMovrel = namedOperandIdx(Opc, AMDGPU::OpName::vdst) == 0u &&
                   Desc.getNumDefs() == 0;
   assert((!IsMovrel ||
@@ -211,10 +207,11 @@ bool decodedInstEndsBlock(const DecodedInst &LastInst) {
   return LastInst.CanonOp == CanonicalOp::S_ENDPGM;
 }
 
-DecodeResult decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
-                          ArrayRef<uint8_t> TextBytes, uint64_t KernelOffset,
-                          std::optional<uint64_t> KernelEndOffset,
-                          std::optional<uint64_t> KernelStartOffset) {
+Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
+                                    ArrayRef<uint8_t> TextBytes,
+                                    uint64_t KernelOffset,
+                                    std::optional<uint64_t> KernelEndOffset,
+                                    std::optional<uint64_t> KernelStartOffset) {
   DecodeResult Out;
   Out.BlockStarts.insert(KernelOffset);
   [[maybe_unused]] uint64_t KernelStart =
@@ -237,12 +234,15 @@ DecodeResult decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
   while (Off < TotalSize) {
     MCInst Inst;
     uint64_t InstSize = 0;
-    auto Status = Mc.Disasm->getInstruction(
+    MCDisassembler::DecodeStatus Status = Mc.Disasm->getInstruction(
         Inst, InstSize, TextBytes.slice(Off, TotalSize - Off), Off, nulls());
-    if (Status != MCDisassembler::Success) {
-      Off += KInstAlignBytes;
-      continue;
-    }
+    // A failed decode leaves the next instruction boundary unknown, so the
+    // rest of the range cannot be scanned.
+    if (Status != MCDisassembler::Success)
+      return makeHotswapError(
+          "decodeKernel: cannot decode instruction at .text offset 0x" +
+          utohexstr(Off) + " (" +
+          (Status == MCDisassembler::SoftFail ? "soft fail" : "fail") + ")");
     const MCInstrDesc &Desc = Mc.InstrInfo->get(Inst.getOpcode());
     DecodedInst Di;
     Di.Inst = Inst;
@@ -264,7 +264,7 @@ DecodeResult decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
       // `s_endpgm` may appear mid-binary (early-return path); if there are
       // known block starts at later offsets, keep disassembling.
       uint64_t NextOff = Off + InstSize;
-      auto It = Out.BlockStarts.upper_bound(Off);
+      std::set<uint64_t>::const_iterator It = Out.BlockStarts.upper_bound(Off);
       if (It != Out.BlockStarts.end() && *It < TotalSize) {
         Off = NextOff;
         continue;
