@@ -47,20 +47,17 @@ namespace {
 // disassembler could not decode.
 constexpr uint64_t KInstAlignBytes = 4;
 
-// getNamedOperandIdx returns -1 when the opcode has no such operand; index 0
-// is valid. Normalise to an optional operand index so callers compare against
-// unsigned MCInst operand indices without re-testing the sentinel or casting.
+// Operand index of `Name` in `Opc`, or nullopt when the opcode has no such
+// operand.
 std::optional<unsigned> namedOperandIdx(unsigned Opc, AMDGPU::OpName Name) {
   int Idx = AMDGPU::getNamedOperandIdx(Opc, Name);
   return Idx >= 0 ? std::optional<unsigned>(Idx) : std::nullopt;
 }
 
-// Build the logical-source view of an MCInst: SrcMap lists the operand indices
-// that are real sources and ModMap the source-modifier operand paired with each
-// (UINT_MAX when none). A VOP3 source modifier (OPERAND_INPUT_MODS) precedes
-// its source. The DPP/SDWA "old"/"vdst_in" operand is tied to the def but never
-// read in our all-lanes-active model, so it is skipped; other tied inputs (MAC
-// accumulators, atomic read-modify) are real sources and kept.
+// Fill Di.SrcMap with the operand indices that are real sources, and Di.ModMap
+// with the source modifier paired with each (UINT_MAX when none); a modifier
+// operand precedes its source. The "old"/"vdst_in" operand is never read in the
+// all-lanes-active model and is skipped; other tied inputs are kept.
 void buildSrcMap(DecodedInst &Di, const MCInstrDesc &Desc) {
   const MCInst &Inst = Di.Inst;
   unsigned Opc = Inst.getOpcode();
@@ -86,11 +83,9 @@ void buildSrcMap(DecodedInst &Di, const MCInstrDesc &Desc) {
   }
 }
 
-// Assert that every operand tied to a def carries an OpName we have classified.
-// A tied-to-def operand is either a DPP/SDWA inactive-lane fallback (skipped by
-// buildSrcMap) or a real read-modify input (kept); the two are distinguished by
-// OpName, so an unrecognised one means LLVM added a tied input this code does
-// not account for.
+// Assert that every operand tied to a def carries an OpName buildSrcMap
+// classifies. An unrecognised one means a tied input this code does not
+// account for.
 void driftCheckTiedIn(const DecodedInst &Di, const MCInstrDesc &Desc) {
   static constexpr AMDGPU::OpName KKnownTiedIn[] = {
       AMDGPU::OpName::old,     AMDGPU::OpName::vdst_in,
@@ -118,12 +113,10 @@ void driftCheckTiedIn(const DecodedInst &Di, const MCInstrDesc &Desc) {
   }
 }
 
-// Assert that the leading sources and their modifiers agree with LLVM's
-// named-operand table, catching operand-layout changes for the many opcodes
-// that use srcN naming (VALU, VOPC, SOP1/SOP2, ...). Scaled MFMA appends its
-// source modifiers after the sources instead of interleaving them, so the
-// positional walk in buildSrcMap misses them; those are repaired here from the
-// named-operand table.
+// Assert that Di's leading sources and their modifiers agree with the
+// named-operand table, catching operand-layout changes for opcodes using srcN
+// naming. MFMA appends its source modifiers after the sources rather than
+// interleaving them, so Di.ModMap is repaired from the table instead.
 void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
                     const MCInstrDesc &Desc) {
   static constexpr AMDGPU::OpName KSrcNames[] = {
@@ -134,19 +127,17 @@ void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
 
   unsigned Opc = Di.Inst.getOpcode();
 
-  // MADMK/FMAMK place the literal between src0 and src1, so buildSrcMap's
-  // positional SrcMap[1] is the literal, not src1. Handlers index by MC operand
-  // order, so skip the strict src1 position check for this known layout.
+  // MADMK/FMAMK place the literal between src0 and src1, so the positional
+  // SrcMap[1] is the literal, not src1; skip the src1 position check.
   std::optional<unsigned> ImmIdx = namedOperandIdx(Opc, AMDGPU::OpName::imm);
   std::optional<unsigned> Src0Idx = namedOperandIdx(Opc, AMDGPU::OpName::src0);
   std::optional<unsigned> Src1Idx = namedOperandIdx(Opc, AMDGPU::OpName::src1);
   bool IsMadmk =
       ImmIdx && Src0Idx && Src1Idx && *Src0Idx < *ImmIdx && *ImmIdx < *Src1Idx;
 
-  // v_movrel{d,sd}_b32 have no real def and place $vdst at operand 0 as an
-  // input, so SrcMap[0] is that vdst-as-source while src0 is at operand 1. Skip
-  // the strict src0 position check for this layout; the handler reads by named
-  // operand index, not SrcMap[0].
+  // v_movrel{d,sd}_b32 have no def and place $vdst at operand 0 as an input, so
+  // SrcMap[0] is that vdst-as-source while src0 is at operand 1; skip the src0
+  // position check.
   bool IsMovrel = namedOperandIdx(Opc, AMDGPU::OpName::vdst) == 0u &&
                   Desc.getNumDefs() == 0;
   assert((!IsMovrel ||
@@ -205,8 +196,6 @@ void classifyImplicitDefs(DecodedInst &Di, const MCInstrDesc &Desc) {
 
 } // namespace
 
-// s_endpgm ends the block with no successor; any other block falls through to
-// NextBlockOffset when a block follows.
 Expected<SmallVector<uint64_t>>
 computeDecodedBlockSuccessors(const DecodedInst &LastInst,
                               std::optional<uint64_t> NextBlockOffset) {
