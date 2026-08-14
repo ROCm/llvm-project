@@ -43,8 +43,22 @@ Why deprecate?
 Migrating from hipcc
 ====================
 
-Makefile and shell-based projects
-----------------------------------
+.. hint::
+  If you are unsure of what options to pass to ``amdclang++`` or ``nvcc``
+  when replacing a ``hipcc`` invocation, use ``--hipcc-verbose=7`` to see
+  exactly what options ``hipcc`` is currently passing to the underlying
+  compiler before you migrate:
+
+  .. code-block:: bash
+
+    hipcc --hipcc-verbose=7 [your existing hipcc arguments]
+
+  The bitmask ``7`` enables all output: ``0x1`` prints the final compiler
+  command, ``0x2`` prints HIP/ROCm path information, and ``0x4`` prints
+  the arguments passed to ``hipcc``.
+
+AMD platforms (amdclang++)
+--------------------------
 
 Replace ``hipcc`` with ``amdclang++`` and add the required flags explicitly.
 ``amdclang++`` is the AMD-branded HIP-capable compiler included in the ROCm
@@ -85,6 +99,38 @@ Flag equivalency table
     - ``--offload-arch=native`` or explicit ``--offload-arch=gfxNNNN``
   * - Defines ``-D__HIP_PLATFORM_AMD__``
     - Set automatically when ``-x hip`` is specified
+
+NVIDIA platforms (nvcc)
+-----------------------
+
+When ``HIP_PLATFORM=nvidia``, ``hipcc`` was a thin wrapper around ``nvcc``.
+Replace the ``hipcc`` invocation with a direct ``nvcc`` call. Use
+``--hipcc-verbose=7`` first (see the hint above) to see the exact ``nvcc``
+command ``hipcc`` was generating for your specific source files.
+
+A typical equivalent:
+
+.. code-block:: bash
+
+  # Before
+  HIP_PLATFORM=nvidia hipcc -o my_kernel my_kernel.cpp --offload-arch=sm_80
+
+  # After — call nvcc directly
+  nvcc -x cu \
+    -I${ROCM_PATH}/include \
+    -D__HIP_PLATFORM_NVIDIA__ \
+    --gpu-architecture=sm_80 \
+    -o my_kernel my_kernel.cpp
+
+For CMake projects targeting NVIDIA, use CMake's native CUDA language support:
+
+.. code-block:: cmake
+
+  cmake_minimum_required(VERSION 3.18)
+  project(MyProject LANGUAGES CXX CUDA)
+
+  set_source_files_properties(my_kernel.cu PROPERTIES LANGUAGE CUDA)
+  add_executable(my_target my_kernel.cu)
 
 CMake projects
 --------------
@@ -160,9 +206,12 @@ hipconfig flag equivalency table
   * - ``hipconfig --compiler``
     - ``CMAKE_HIP_COMPILER``
   * - ``hipconfig --platform``
-    - Always ``amd`` for AMD GPU builds; set ``HIP_PLATFORM=amd``
+    - ``HIP_PLATFORM`` environment variable: ``amd`` for AMD GPU builds,
+      ``nvidia`` for NVIDIA GPU builds. In CMake-native builds the platform
+      is determined automatically by ``CMAKE_HIP_COMPILER``.
   * - ``hipconfig --runtime``
-    - Always ``rocclr`` for AMD GPU builds
+    - ``HIP_RUNTIME`` environment variable: ``rocclr`` for AMD, ``cuda``
+      for NVIDIA. Not needed in CMake-native builds.
 
 Example: migrating a version check
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
