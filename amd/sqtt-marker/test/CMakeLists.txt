@@ -1,5 +1,10 @@
-# Copyright (c) 2026 Advanced Micro Devices, Inc. All rights reserved.
+# ===- CMakeLists.txt - AMD SQTT marker lit tests -------------------------=== #
+#
+# Part of AMD SQTT Marker, under the MIT License. See
+# amd/sqtt-marker/LICENSE.txt for license information.
 # SPDX-License-Identifier: MIT
+#
+# ===----------------------------------------------------------------------=== #
 
 if(NOT LLVM_TOOLS_BINARY_DIR)
   get_filename_component(SQTT_MARKER_LLVM_PREFIX "${LLVM_DIR}/../../.." ABSOLUTE)
@@ -20,6 +25,21 @@ set(SQTT_MARKER_PLUGIN_FILE
 set(SQTT_MARKER_AMDGPU_AVAILABLE 0)
 if("AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
   set(SQTT_MARKER_AMDGPU_AVAILABLE 1)
+endif()
+set(SQTT_MARKER_CLANG_TESTS_AVAILABLE 0)
+if(TARGET clang)
+  set(SQTT_MARKER_CLANG_TESTS_AVAILABLE 1)
+elseif(SQTT_MARKER_STANDALONE AND
+       EXISTS "${LLVM_TOOLS_BINARY_DIR}/clang${CMAKE_EXECUTABLE_SUFFIX}")
+  set(SQTT_MARKER_CLANG_TESTS_AVAILABLE 1)
+endif()
+set(SQTT_MARKER_OFFLOAD_TOOLS_AVAILABLE 0)
+if(TARGET clang-offload-bundler AND TARGET llvm-objcopy)
+  set(SQTT_MARKER_OFFLOAD_TOOLS_AVAILABLE 1)
+elseif(SQTT_MARKER_STANDALONE AND
+       EXISTS "${LLVM_TOOLS_BINARY_DIR}/clang-offload-bundler${CMAKE_EXECUTABLE_SUFFIX}" AND
+       EXISTS "${LLVM_TOOLS_BINARY_DIR}/llvm-objcopy${CMAKE_EXECUTABLE_SUFFIX}")
+  set(SQTT_MARKER_OFFLOAD_TOOLS_AVAILABLE 1)
 endif()
 
 configure_file(lit.site.cfg.py.in lit.site.cfg.py @ONLY)

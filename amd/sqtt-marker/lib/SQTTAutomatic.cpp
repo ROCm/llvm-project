@@ -1,24 +1,15 @@
-// MIT License
+//===- SQTTAutomatic.cpp - Automatic SQTT instrumentation -----------------===//
 //
-// Copyright (c) 2026 Advanced Micro Devices, Inc. All rights reserved.
+// Part of AMD SQTT Marker, under the MIT License. See
+// amd/sqtt-marker/LICENSE.txt for license information.
+// SPDX-License-Identifier: MIT
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// Implements automatic barrier and memory-operation instrumentation.
+///
+//===----------------------------------------------------------------------===//
 
 #include "SQTTPass.h"
 
@@ -45,50 +36,50 @@ SQTTInstrumentPass::classifyBarrier(CallInst *CI) {
   }
 }
 
-bool SQTTInstrumentPass::instrumentBarriers(Function &F, GfxGen gen) {
+bool SQTTInstrumentPass::instrumentBarriers(Function &F, GfxGen Gen) {
   // Snapshot all insertion points before changing the CFG.
-  SmallVector<std::pair<Instruction *, uint32_t>, 8> insertions;
-  auto markerID = [this](BarrierKind kind) {
-    return kind == BarrierKind::None
+  SmallVector<std::pair<Instruction *, uint32_t>, 8> Insertions;
+  auto MarkerId = [this](BarrierKind Kind) {
+    return Kind == BarrierKind::None
                ? 0
-               : FirstBarrierID + static_cast<uint32_t>(kind);
+               : FirstBarrierID + static_cast<uint32_t>(Kind);
   };
-  for (auto &BB : F) {
-    CallInst *signal = nullptr;
-    for (auto &I : BB) {
-      auto *call = dyn_cast<CallInst>(&I);
-      BarrierKind kind = classifyBarrier(call);
-      if (signal &&
-          (signal->getNextNode() != &I || kind != BarrierKind::Wait)) {
-        insertions.push_back(
-            {signal->getNextNode(), markerID(BarrierKind::Signal)});
-        signal = nullptr;
+  for (BasicBlock &BB : F) {
+    CallInst *Signal = nullptr;
+    for (Instruction &I : BB) {
+      auto *Call = dyn_cast<CallInst>(&I);
+      BarrierKind Kind = classifyBarrier(Call);
+      if (Signal &&
+          (Signal->getNextNode() != &I || Kind != BarrierKind::Wait)) {
+        Insertions.push_back(
+            {Signal->getNextNode(), MarkerId(BarrierKind::Signal)});
+        Signal = nullptr;
       }
-      if (kind == BarrierKind::Signal)
-        signal = call;
-      else if (kind == BarrierKind::Wait && signal) {
-        insertions.push_back({call, markerID(BarrierKind::Full)});
-        signal = nullptr;
-      } else if (kind == BarrierKind::Wait || kind == BarrierKind::Full)
-        insertions.push_back({call, markerID(kind)});
+      if (Kind == BarrierKind::Signal)
+        Signal = Call;
+      else if (Kind == BarrierKind::Wait && Signal) {
+        Insertions.push_back({Call, MarkerId(BarrierKind::Full)});
+        Signal = nullptr;
+      } else if (Kind == BarrierKind::Wait || Kind == BarrierKind::Full)
+        Insertions.push_back({Call, MarkerId(Kind)});
     }
-    if (signal)
-      insertions.push_back(
-          {signal->getNextNode(), markerID(BarrierKind::Signal)});
+    if (Signal)
+      Insertions.push_back(
+          {Signal->getNextNode(), MarkerId(BarrierKind::Signal)});
   }
-  if (insertions.empty())
+  if (Insertions.empty())
     return false;
-  for (auto [before, markerID] : insertions) {
-    IRBuilder<> B(before);
-    insertTraceMarker(B, encodeMarker(markerID, false, false), F, gen);
+  for (auto [Before, MarkerId] : Insertions) {
+    IRBuilder<> B(Before);
+    insertTraceMarker(B, encodeMarker(MarkerId, false, false), F, Gen);
   }
   return true;
 }
 
 SQTTInstrumentPass::MemOpKind
 SQTTInstrumentPass::classifyMemOp(Instruction *I) {
-  if (Value *pointer = getMemoryPointer(I)) {
-    unsigned AS = cast<PointerType>(pointer->getType())->getAddressSpace();
+  if (Value *Pointer = getMemoryPointer(I)) {
+    unsigned AS = cast<PointerType>(Pointer->getType())->getAddressSpace();
     // Atomics are read-modify-write, so use store markers.
     if (AS == 3 || AS == 5)
       return MemOpKind::None;
@@ -98,52 +89,52 @@ SQTTInstrumentPass::classifyMemOp(Instruction *I) {
   Function *Callee = CI ? CI->getCalledFunction() : nullptr;
   if (!Callee)
     return MemOpKind::None;
-  BufferOpKind kind = classifyBufferOp(Callee->getName());
-  return kind == BufferOpKind::Load   ? MemOpKind::Load
-         : kind == BufferOpKind::None ? MemOpKind::None
+  BufferOpKind Kind = classifyBufferOp(Callee->getName());
+  return Kind == BufferOpKind::Load   ? MemOpKind::Load
+         : Kind == BufferOpKind::None ? MemOpKind::None
                                       : MemOpKind::Store;
 }
 
-bool SQTTInstrumentPass::instrumentMemoryOps(Function &F, GfxGen gen) {
+bool SQTTInstrumentPass::instrumentMemoryOps(Function &F, GfxGen Gen) {
   // Snapshot first: inserting a trace changes the instruction stream being
   // chunked.
-  SmallVector<std::pair<Instruction *, uint32_t>, 16> insertions;
-  auto markerID = [this](MemOpKind kind) {
-    return kind == MemOpKind::None ? 0
-                                   : FirstVmemID + static_cast<uint32_t>(kind);
+  SmallVector<std::pair<Instruction *, uint32_t>, 16> Insertions;
+  auto MarkerId = [this](MemOpKind Kind) {
+    return Kind == MemOpKind::None ? 0
+                                   : FirstVmemID + static_cast<uint32_t>(Kind);
   };
-  for (auto &BB : F) {
-    MemOpKind runKind = MemOpKind::None;
-    Instruction *lastOp = nullptr;
-    unsigned runSize = 0, gap = 0;
-    auto flush = [&] {
-      if (runSize)
-        insertions.push_back({lastOp, markerID(runKind)});
-      runSize = 0;
+  for (BasicBlock &BB : F) {
+    MemOpKind RunKind = MemOpKind::None;
+    Instruction *LastOp = nullptr;
+    unsigned RunSize = 0, Gap = 0;
+    auto Flush = [&] {
+      if (RunSize)
+        Insertions.push_back({LastOp, MarkerId(RunKind)});
+      RunSize = 0;
     };
-    for (auto &I : BB) {
-      MemOpKind kind = classifyMemOp(&I);
-      if (kind == MemOpKind::None) {
-        gap += lastOp != nullptr;
+    for (Instruction &I : BB) {
+      MemOpKind Kind = classifyMemOp(&I);
+      if (Kind == MemOpKind::None) {
+        Gap += LastOp != nullptr;
         continue;
       }
-      if (kind != runKind || gap > Config.MemoryMaxGap)
-        flush();
+      if (Kind != RunKind || Gap > Config.MemoryMaxGap)
+        Flush();
 
-      runKind = kind;
-      lastOp = &I;
-      gap = 0;
-      if (++runSize == Config.MemoryChunkSize)
-        flush();
+      RunKind = Kind;
+      LastOp = &I;
+      Gap = 0;
+      if (++RunSize == Config.MemoryChunkSize)
+        Flush();
     }
-    flush();
+    Flush();
   }
-  if (insertions.empty())
+  if (Insertions.empty())
     return false;
 
-  for (auto [lastOp, markerID] : insertions) {
-    IRBuilder<> B(lastOp->getNextNode());
-    insertTraceMarker(B, encodeMarker(markerID, false, false), F, gen);
+  for (auto [LastOp, MarkerId] : Insertions) {
+    IRBuilder<> B(LastOp->getNextNode());
+    insertTraceMarker(B, encodeMarker(MarkerId, false, false), F, Gen);
   }
   return true;
 }

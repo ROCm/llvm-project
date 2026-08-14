@@ -1,5 +1,10 @@
-# Copyright (c) 2026 Advanced Micro Devices, Inc. All rights reserved.
+# ===- lit.cfg.py - AMD SQTT marker test configuration --------------------=== #
+#
+# Part of AMD SQTT Marker, under the MIT License. See
+# amd/sqtt-marker/LICENSE.txt for license information.
 # SPDX-License-Identifier: MIT
+#
+# ===----------------------------------------------------------------------=== #
 
 import os
 
@@ -14,13 +19,19 @@ config.test_exec_root = config.sqtt_marker_obj_root
 
 if config.sqtt_marker_amdgpu_available:
     config.available_features.add("amdgpu-registered-target")
+if config.sqtt_marker_clang_tests_available:
+    config.available_features.add("sqtt-marker-has-clang")
+if config.sqtt_marker_offload_tools_available:
+    config.available_features.add("sqtt-marker-has-offload-tools")
 
 config.environment["PATH"] = os.pathsep.join(
     [config.llvm_tools_dir, config.environment.get("PATH", "")]
 )
 
+
 def tool(name):
     return os.path.join(config.llvm_tools_dir, name).replace("\\", "/")
+
 
 config.substitutions.extend(
     [

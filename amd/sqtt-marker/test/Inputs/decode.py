@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 
+# ===- decode.py - Test-only SQTT marker decoder --------------------------=== #
+#
+# Part of AMD SQTT Marker, under the MIT License. See
+# amd/sqtt-marker/LICENSE.txt for license information.
+# SPDX-License-Identifier: MIT
+#
+# ===----------------------------------------------------------------------=== #
+
 """Small test-only decoder for SQTT funcmap rows and shaderdata values."""
 
 import argparse

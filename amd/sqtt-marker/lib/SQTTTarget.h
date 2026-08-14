@@ -1,26 +1,18 @@
-// MIT License
+//===- SQTTTarget.h - SQTT target helpers ---------------------------------===//
 //
-// Copyright (c) 2026 Advanced Micro Devices, Inc. All rights reserved.
+// Part of AMD SQTT Marker, under the MIT License. See
+// amd/sqtt-marker/LICENSE.txt for license information.
+// SPDX-License-Identifier: MIT
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// Defines AMDGPU target queries and instrumentation cost helpers.
+///
+//===----------------------------------------------------------------------===//
 
-#pragma once
+#ifndef LLVM_AMD_SQTT_MARKER_LIB_SQTTTARGET_H
+#define LLVM_AMD_SQTT_MARKER_LIB_SQTTTARGET_H
 
 #include <cstdint>
 
@@ -31,14 +23,17 @@
 
 #include "SQTTConfig.h"
 
-constexpr const char *SQTT_MARKER_HEADER_METADATA = "sqtt.marker_header";
-constexpr const char *SQTT_RAW_PAYLOAD_METADATA = "sqtt.raw_payload";
-constexpr const char *SQTT_PAYLOAD_GROUP_METADATA = "sqtt.payload_group";
+constexpr llvm::StringLiteral SqttMarkerHeaderMetadata = "sqtt.marker_header";
+constexpr llvm::StringLiteral SqttRawPayloadMetadata = "sqtt.raw_payload";
+constexpr llvm::StringLiteral SqttPayloadGroupMetadata = "sqtt.payload_group";
 
 // ============================================================================
 // Architecture detection
 // ============================================================================
 
+// This pass has no TargetMachine and must also build against installed LLVM
+// releases where the public AMDGPU target-parser header has moved. Classify
+// the small set of ISA protocol differences from the target-cpu attribute.
 enum class GfxGen { GFX9, RDNA, GFX12, Unknown };
 
 inline GfxGen getGfxGen(const llvm::Function &F) {
@@ -46,7 +41,6 @@ inline GfxGen getGfxGen(const llvm::Function &F) {
   if (!A.isValid())
     return GfxGen::Unknown;
   llvm::StringRef CPU = A.getValueAsString();
-
   if (CPU.starts_with("gfx9"))
     return GfxGen::GFX9;
   if (CPU.starts_with("gfx12"))
@@ -65,28 +59,28 @@ inline bool hasShaderCyclesU64(const llvm::Function &F) {
   llvm::StringRef CPU = A.getValueAsString();
   if (!CPU.consume_front("gfx"))
     return false;
-  unsigned target = 0;
-  return !CPU.consumeInteger(10, target) && target > 1201;
+  unsigned Target = 0;
+  return !CPU.consumeInteger(10, Target) && Target > 1201;
 }
 
 // Does this GfxGen support s_ttracedata_imm?
-inline bool supportsImmTrace(GfxGen gen) {
-  return gen == GfxGen::RDNA || gen == GfxGen::GFX12; // gfx10+
+inline bool supportsImmTrace(GfxGen Gen) {
+  return Gen == GfxGen::RDNA || Gen == GfxGen::GFX12; // gfx10+
 }
 
 // Wave size for this architecture
-inline unsigned getWaveSize(GfxGen gen) {
-  return (gen == GfxGen::GFX9) ? 64 : 32;
+inline unsigned getWaveSize(GfxGen Gen) {
+  return (Gen == GfxGen::GFX9) ? 64 : 32;
 }
 
 struct HwRegEncodings {
-  uint32_t wave, simd, cu, wg;
+  uint32_t Wave, Simd, Cu, Wg;
 };
 
-inline HwRegEncodings getHwRegEncodings(GfxGen gen) {
-  if (gen == GfxGen::GFX9)
-    return {GFX9_HWREG_WAVE, GFX9_HWREG_SIMD, GFX9_HWREG_CU, GFX9_HWREG_WG};
-  return {RDNA_HWREG_WAVE, RDNA_HWREG_SIMD, RDNA_HWREG_CU, RDNA_HWREG_WG};
+inline HwRegEncodings getHwRegEncodings(GfxGen Gen) {
+  if (Gen == GfxGen::GFX9)
+    return {Gfx9HwregWave, Gfx9HwregSimd, Gfx9HwregCu, Gfx9HwregWg};
+  return {RdnaHwregWave, RdnaHwregSimd, RdnaHwregCu, RdnaHwregWg};
 }
 
 inline llvm::Value *getMemoryPointer(llvm::Instruction *I) {
@@ -146,47 +140,49 @@ inline unsigned instructionCost(const llvm::Instruction &I) {
   return 1;
 }
 
-inline unsigned computeFunctionSize(const llvm::Function &F, CostMode mode) {
-  unsigned total = 0;
-  for (auto &BB : F) {
-    for (auto &I : BB) {
+inline unsigned computeFunctionSize(const llvm::Function &F, CostMode Mode) {
+  unsigned Total = 0;
+  for (const llvm::BasicBlock &BB : F) {
+    for (const llvm::Instruction &I : BB) {
       // Pass-owned marker calls must not make a function appear large
       // enough to retain the instrumentation that introduced them.
-      if (I.getMetadata(SQTT_MARKER_HEADER_METADATA) ||
-          I.getMetadata(SQTT_RAW_PAYLOAD_METADATA) ||
-          I.getMetadata(SQTT_PAYLOAD_GROUP_METADATA))
+      if (I.getMetadata(SqttMarkerHeaderMetadata) ||
+          I.getMetadata(SqttRawPayloadMetadata) ||
+          I.getMetadata(SqttPayloadGroupMetadata))
         continue;
-      total += mode == CostMode::WeightedCost ? instructionCost(I)
+      Total += Mode == CostMode::WeightedCost ? instructionCost(I)
                                               : isCountedInstruction(I);
     }
   }
-  return total;
+  return Total;
 }
 
 enum class BufferOpKind : uint8_t { None, Load, Store, Atomic };
 
-inline BufferOpKind classifyBufferOp(llvm::StringRef name) {
-  for (const char *prefix :
+inline BufferOpKind classifyBufferOp(llvm::StringRef Name) {
+  for (const char *Prefix :
        {"llvm.amdgcn.raw.buffer.", "llvm.amdgcn.struct.buffer.",
         "llvm.amdgcn.raw.ptr.buffer.", "llvm.amdgcn.struct.ptr.buffer."}) {
-    llvm::StringRef opcode = name;
-    if (!opcode.consume_front(prefix))
+    llvm::StringRef Opcode = Name;
+    if (!Opcode.consume_front(Prefix))
       continue;
-    if (opcode.starts_with("load"))
+    if (Opcode.starts_with("load"))
       return BufferOpKind::Load;
-    if (opcode.starts_with("store"))
+    if (Opcode.starts_with("store"))
       return BufferOpKind::Store;
-    if (opcode.starts_with("atomic"))
+    if (Opcode.starts_with("atomic"))
       return BufferOpKind::Atomic;
     return BufferOpKind::None;
   }
   return BufferOpKind::None;
 }
 
-inline bool isStructBuffer(llvm::StringRef name) {
-  return name.contains("struct");
+inline bool isStructBuffer(llvm::StringRef Name) {
+  return Name.contains("struct");
 }
 
-inline bool isBufferCmpSwap(llvm::StringRef name) {
-  return name.contains("cmpswap");
+inline bool isBufferCmpSwap(llvm::StringRef Name) {
+  return Name.contains("cmpswap");
 }
+
+#endif // LLVM_AMD_SQTT_MARKER_LIB_SQTTTARGET_H

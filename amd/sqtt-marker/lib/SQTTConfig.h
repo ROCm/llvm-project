@@ -1,26 +1,19 @@
-// MIT License
+//===- SQTTConfig.h - SQTT marker configuration ---------------------------===//
 //
-// Copyright (c) 2026 Advanced Micro Devices, Inc. All rights reserved.
+// Part of AMD SQTT Marker, under the MIT License. See
+// amd/sqtt-marker/LICENSE.txt for license information.
+// SPDX-License-Identifier: MIT
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// Defines marker encoding constants and compile-time environment
+/// configuration.
+///
+//===----------------------------------------------------------------------===//
 
-#pragma once
+#ifndef LLVM_AMD_SQTT_MARKER_LIB_SQTTCONFIG_H
+#define LLVM_AMD_SQTT_MARKER_LIB_SQTTCONFIG_H
 
 #include <cstdint>
 #include <cstdlib>
@@ -30,36 +23,38 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
 
-// GETREG_IMMED encoding: (size_minus_1 << 11) | (offset << 6) | register_id
-constexpr uint32_t GETREG_IMMED(uint32_t sz_m1, uint32_t off, uint32_t reg) {
-  return (sz_m1 << 11) | (off << 6) | reg;
+// getRegisterImmediate encoding: (size_minus_1 << 11) | (offset << 6) |
+// register_id
+constexpr uint32_t getRegisterImmediate(uint32_t SzM1, uint32_t Off,
+                                        uint32_t Reg) {
+  return (SzM1 << 11) | (Off << 6) | Reg;
 }
 
 // GCN/CDNA (gfx9): HW_ID register = 4
-constexpr uint32_t GFX9_HWREG_WAVE =
-    GETREG_IMMED(3, 0, 4); // WAVE_ID [3:0], 4 bits
-constexpr uint32_t GFX9_HWREG_SIMD =
-    GETREG_IMMED(1, 4, 4); // SIMD_ID [5:4], 2 bits
-constexpr uint32_t GFX9_HWREG_CU =
-    GETREG_IMMED(3, 8, 4); // CU_ID [11:8], 4 bits
-constexpr uint32_t GFX9_HWREG_WG =
-    GETREG_IMMED(3, 16, 4); // TG_ID [19:16], 4 bits
+constexpr uint32_t Gfx9HwregWave =
+    getRegisterImmediate(3, 0, 4); // WAVE_ID [3:0], 4 bits
+constexpr uint32_t Gfx9HwregSimd =
+    getRegisterImmediate(1, 4, 4); // SIMD_ID [5:4], 2 bits
+constexpr uint32_t Gfx9HwregCu =
+    getRegisterImmediate(3, 8, 4); // CU_ID [11:8], 4 bits
+constexpr uint32_t Gfx9HwregWg =
+    getRegisterImmediate(3, 16, 4); // TG_ID [19:16], 4 bits
 
 // RDNA (gfx10/11/12): HW_ID1=23, HW_ID2=24
-constexpr uint32_t RDNA_HWREG_WAVE =
-    GETREG_IMMED(4, 0, 23); // WAVE_ID [4:0], 5 bits
-constexpr uint32_t RDNA_HWREG_SIMD =
-    GETREG_IMMED(1, 8, 23); // SIMD_ID [9:8], 2 bits
-constexpr uint32_t RDNA_HWREG_CU =
-    GETREG_IMMED(3, 10, 23); // WGP_ID [13:10], 4 bits
-constexpr uint32_t RDNA_HWREG_WG =
-    GETREG_IMMED(4, 16, 24); // WG_ID [20:16], 5 bits
+constexpr uint32_t RdnaHwregWave =
+    getRegisterImmediate(4, 0, 23); // WAVE_ID [4:0], 5 bits
+constexpr uint32_t RdnaHwregSimd =
+    getRegisterImmediate(1, 8, 23); // SIMD_ID [9:8], 2 bits
+constexpr uint32_t RdnaHwregCu =
+    getRegisterImmediate(3, 10, 23); // WGP_ID [13:10], 4 bits
+constexpr uint32_t RdnaHwregWg =
+    getRegisterImmediate(4, 16, 24); // WG_ID [20:16], 5 bits
 
 // Maximum useful mask per HW field (covers all valid IDs)
-constexpr uint32_t FULL_WAVE_MASK = 0xFFFFFFFF; // up to 32 waves
-constexpr uint32_t FULL_SIMD_MASK = 0xF;        // up to 4 SIMDs
-constexpr uint32_t FULL_CU_MASK = 0xFFFF;       // up to 16 CUs/WGPs
-constexpr uint32_t FULL_WG_MASK = 0xFFFFFFFF;   // up to 32 WGs
+constexpr uint32_t FullWaveMask = 0xFFFFFFFF; // up to 32 waves
+constexpr uint32_t FullSimdMask = 0xF;        // up to 4 SIMDs
+constexpr uint32_t FullCuMask = 0xFFFF;       // up to 16 CUs/WGPs
+constexpr uint32_t FullWgMask = 0xFFFFFFFF;   // up to 32 WGs
 
 // Bit flags for marker encoding (low 2 bits)
 //
@@ -70,22 +65,22 @@ constexpr uint32_t FULL_WG_MASK = 0xFFFFFFFF;   // up to 32 WGs
 //
 // The marker type (function, user, barrier, memory) is determined by
 // looking up the ID in the .sqtt_funcmap section, not from encoding bits.
-constexpr uint32_t FLAG_EXIT_PREV = 1u;  // bit 0: exit previous scope
-constexpr uint32_t FLAG_ENTER = 1u << 1; // bit 1: entering scope
-constexpr uint32_t FLAG_MASK = 0x3;      // all flag bits
+constexpr uint32_t FlagExitPrev = 1u;   // bit 0: exit previous scope
+constexpr uint32_t FlagEnter = 1u << 1; // bit 1: entering scope
+constexpr uint32_t FlagMask = 0x3;      // all flag bits
 
 // Encode a marker value for s_ttracedata / s_ttracedata_imm
-inline uint32_t encodeMarker(uint32_t id, bool enter, bool exit_prev) {
-  uint32_t val = (id << 2);
-  if (exit_prev)
-    val |= FLAG_EXIT_PREV;
-  if (enter)
-    val |= FLAG_ENTER;
-  return val;
+inline uint32_t encodeMarker(uint32_t Id, bool Enter, bool ExitPrev) {
+  uint32_t Val = (Id << 2);
+  if (ExitPrev)
+    Val |= FlagExitPrev;
+  if (Enter)
+    Val |= FlagEnter;
+  return Val;
 }
 
 // Can this encoded marker value fit in s_ttracedata_imm (8-bit)?
-inline bool canUseImm(uint32_t encoded) { return encoded <= 0xFF; }
+inline bool canUseImm(uint32_t Encoded) { return Encoded <= 0xFF; }
 
 enum class CostMode { InstructionCount, WeightedCost };
 
@@ -95,7 +90,7 @@ enum class CostMode { InstructionCount, WeightedCost };
 //   None:       no fence/clobber. Only the cheap sched_barrier(0) hints
 //               survive. Fastest kernel; markers may drift in LDS-pipelined
 //               regions.
-//   AsmClobber: empty inline asm with "~{memory}" — IR/MIR-level memory
+//   AsmClobber: empty inline asm with "~{memory}" -- IR/MIR-level memory
 //               reorder constraint, no machine code.
 //   Fence:      fence syncscope("workgroup") acq_rel before AND after the
 //               marker, tagged as AMDGPU local/LDS synchronization. Preserves
@@ -122,142 +117,144 @@ struct SQTTConfig {
   bool hasAddressTracing() const { return TraceMemoryAddrs || TraceLDSAddrs; }
 
   bool needsScopeCheck() const {
-    return (WaveMask & FULL_WAVE_MASK) != FULL_WAVE_MASK ||
-           (SimdMask & FULL_SIMD_MASK) != FULL_SIMD_MASK ||
-           (CuMask & FULL_CU_MASK) != FULL_CU_MASK ||
-           (WgMask & FULL_WG_MASK) != FULL_WG_MASK;
+    return (WaveMask & FullWaveMask) != FullWaveMask ||
+           (SimdMask & FullSimdMask) != FullSimdMask ||
+           (CuMask & FullCuMask) != FullCuMask ||
+           (WgMask & FullWgMask) != FullWgMask;
   }
 
-  static uint32_t parseEnvMask(const char *name, uint32_t def = 0xFFFFFFFF) {
-    const char *v = std::getenv(name);
-    if (!v || v[0] == '\0')
-      return def;
-    if (std::strcmp(v, "-1") == 0)
+  static uint32_t parseEnvMask(const char *Name, uint32_t Def = 0xFFFFFFFF) {
+    const char *V = std::getenv(Name);
+    if (!V || V[0] == '\0')
+      return Def;
+    if (std::strcmp(V, "-1") == 0)
       return 0xFFFFFFFF;
-    char *end = nullptr;
-    unsigned long val = std::strtoul(v, &end, 0);
-    if (end == v || *end != '\0') {
-      llvm::errs() << "SQTT: warning: invalid value for " << name << "='" << v
+    char *End = nullptr;
+    unsigned long Val = std::strtoul(V, &End, 0);
+    if (End == V || *End != '\0') {
+      llvm::errs() << "sqtt: warning: invalid value for " << Name << "='" << V
                    << "', using default\n";
-      return def;
+      return Def;
     }
-    return static_cast<uint32_t>(val);
+    return static_cast<uint32_t>(Val);
   }
 
-  static bool parseEnvBool(const char *name, bool def) {
-    const char *v = std::getenv(name);
-    if (!v || v[0] == '\0')
-      return def;
-    llvm::StringRef s(v);
-    return s.equals_insensitive("1") || s.equals_insensitive("y") ||
-           s.equals_insensitive("yes") || s.equals_insensitive("true") ||
-           s.equals_insensitive("on");
+  static bool parseEnvBool(const char *Name, bool Def) {
+    const char *V = std::getenv(Name);
+    if (!V || V[0] == '\0')
+      return Def;
+    llvm::StringRef S(V);
+    return S.equals_insensitive("1") || S.equals_insensitive("y") ||
+           S.equals_insensitive("yes") || S.equals_insensitive("true") ||
+           S.equals_insensitive("on");
   }
 
-  static MemBarrierMode parseEnvMemBarrier(const char *name,
-                                           MemBarrierMode def) {
-    const char *v = std::getenv(name);
-    if (!v || v[0] == '\0')
-      return def;
-    llvm::StringRef s(v);
+  static MemBarrierMode parseEnvMemBarrier(const char *Name,
+                                           MemBarrierMode Def) {
+    const char *V = std::getenv(Name);
+    if (!V || V[0] == '\0')
+      return Def;
+    llvm::StringRef S(V);
     // Numeric: 0=None, 1=AsmClobber, 2=Fence
-    if (s == "0")
+    if (S == "0")
       return MemBarrierMode::None;
-    if (s == "1")
+    if (S == "1")
       return MemBarrierMode::AsmClobber;
-    if (s == "2")
+    if (S == "2")
       return MemBarrierMode::Fence;
     // Named (case-insensitive)
-    if (s.equals_insensitive("none") || s.equals_insensitive("off"))
+    if (S.equals_insensitive("none") || S.equals_insensitive("off"))
       return MemBarrierMode::None;
-    if (s.equals_insensitive("asm") || s.equals_insensitive("compiler") ||
-        s.equals_insensitive("clobber"))
+    if (S.equals_insensitive("asm") || S.equals_insensitive("compiler") ||
+        S.equals_insensitive("clobber"))
       return MemBarrierMode::AsmClobber;
-    if (s.equals_insensitive("fence") || s.equals_insensitive("on") ||
-        s.equals_insensitive("hw"))
+    if (S.equals_insensitive("fence") || S.equals_insensitive("on") ||
+        S.equals_insensitive("hw"))
       return MemBarrierMode::Fence;
-    llvm::errs() << "SQTT: warning: invalid value for " << name << "='" << v
+    llvm::errs() << "sqtt: warning: invalid value for " << Name << "='" << V
                  << "', expected one of "
                  << "{none|asm|fence|0|1|2}, using default\n";
-    return def;
+    return Def;
   }
 
-  static unsigned parseEnvUnsigned(const char *name, unsigned def) {
-    const char *v = std::getenv(name);
-    if (!v || v[0] == '\0')
-      return def;
-    llvm::StringRef s(v);
-    unsigned out = 0;
-    if (s.getAsInteger(10, out)) {
-      llvm::errs() << "SQTT: warning: invalid value for " << name << "='" << v
+  static unsigned parseEnvUnsigned(const char *Name, unsigned Def) {
+    const char *V = std::getenv(Name);
+    if (!V || V[0] == '\0')
+      return Def;
+    llvm::StringRef S(V);
+    unsigned Out = 0;
+    if (S.getAsInteger(10, Out)) {
+      llvm::errs() << "sqtt: warning: invalid value for " << Name << "='" << V
                    << "', using default\n";
-      return def;
+      return Def;
     }
-    return out;
+    return Out;
   }
 
   static SQTTConfig fromEnvironment() {
-    SQTTConfig c;
-    c.InstrumentBarriers = parseEnvBool("SQTT_INSTRUMENT_BARRIERS", false);
-    c.MemBarrier =
+    SQTTConfig C;
+    C.InstrumentBarriers = parseEnvBool("SQTT_INSTRUMENT_BARRIERS", false);
+    C.MemBarrier =
         parseEnvMemBarrier("SQTT_MEM_BARRIER", MemBarrierMode::Fence);
-    c.WaveMask = parseEnvMask("SQTT_SCOPE_WAVE", 0xFFFFFFFF);
-    c.SimdMask = parseEnvMask("SQTT_SCOPE_SIMD", 0xF);
-    c.CuMask = parseEnvMask("SQTT_SCOPE_CU", 0x3);
-    c.WgMask = parseEnvMask("SQTT_SCOPE_WG", 0xFFFFFFFF);
-    c.ShaderClockBits = parseEnvUnsigned("SQTT_SHADER_CLOCK_BITS", 0);
-    c.ShaderClockShift = parseEnvUnsigned("SQTT_SHADER_CLOCK_SHIFT", 4);
+    C.WaveMask = parseEnvMask("SQTT_SCOPE_WAVE", 0xFFFFFFFF);
+    C.SimdMask = parseEnvMask("SQTT_SCOPE_SIMD", 0xF);
+    C.CuMask = parseEnvMask("SQTT_SCOPE_CU", 0x3);
+    C.WgMask = parseEnvMask("SQTT_SCOPE_WG", 0xFFFFFFFF);
+    C.ShaderClockBits = parseEnvUnsigned("SQTT_SHADER_CLOCK_BITS", 0);
+    C.ShaderClockShift = parseEnvUnsigned("SQTT_SHADER_CLOCK_SHIFT", 4);
 
-    const char *funcEnv = std::getenv("SQTT_INSTRUMENT_FUNCTIONS");
-    if (funcEnv && funcEnv[0] != '\0') {
-      llvm::StringRef s(funcEnv);
-      if (s.consume_front("cost:"))
-        c.Mode = CostMode::WeightedCost;
-      s.getAsInteger(10, c.FunctionThreshold);
+    const char *FuncEnv = std::getenv("SQTT_INSTRUMENT_FUNCTIONS");
+    if (FuncEnv && FuncEnv[0] != '\0') {
+      llvm::StringRef S(FuncEnv);
+      if (S.consume_front("cost:"))
+        C.Mode = CostMode::WeightedCost;
+      S.getAsInteger(10, C.FunctionThreshold);
     }
 
     // SQTT_INSTRUMENT_MEMORY=N:M  (N=chunk size, M=max gap)
-    const char *memEnv = std::getenv("SQTT_INSTRUMENT_MEMORY");
-    if (memEnv && memEnv[0] != '\0') {
-      llvm::StringRef s(memEnv);
-      llvm::StringRef nStr, mStr;
-      std::tie(nStr, mStr) = s.split(':');
-      unsigned n = 0, m = 0;
-      if (!nStr.getAsInteger(10, n) && !mStr.empty() &&
-          !mStr.getAsInteger(10, m) && n > 0) {
-        c.MemoryChunkSize = n;
-        c.MemoryMaxGap = m;
+    const char *MemEnv = std::getenv("SQTT_INSTRUMENT_MEMORY");
+    if (MemEnv && MemEnv[0] != '\0') {
+      llvm::StringRef S(MemEnv);
+      llvm::StringRef NStr, MStr;
+      std::tie(NStr, MStr) = S.split(':');
+      unsigned N = 0, M = 0;
+      if (!NStr.getAsInteger(10, N) && !MStr.empty() &&
+          !MStr.getAsInteger(10, M) && N > 0) {
+        C.MemoryChunkSize = N;
+        C.MemoryMaxGap = M;
       } else {
-        llvm::errs() << "SQTT: warning: invalid SQTT_INSTRUMENT_MEMORY "
+        llvm::errs() << "sqtt: warning: invalid SQTT_INSTRUMENT_MEMORY "
                         "format '"
-                     << memEnv << "', expected N:M\n";
+                     << MemEnv << "', expected N:M\n";
       }
     }
 
     // SQTT_TRACE_ADDRESSES=memory|lds|memory,lds
-    const char *addrEnv = std::getenv("SQTT_TRACE_ADDRESSES");
-    if (addrEnv && addrEnv[0] != '\0') {
-      llvm::StringRef s(addrEnv);
+    const char *AddrEnv = std::getenv("SQTT_TRACE_ADDRESSES");
+    if (AddrEnv && AddrEnv[0] != '\0') {
+      llvm::StringRef S(AddrEnv);
       llvm::SmallVector<llvm::StringRef, 2> Parts;
-      s.split(Parts, ',');
-      for (auto &p : Parts) {
-        llvm::StringRef t = p.trim();
-        if (t == "memory")
-          c.TraceMemoryAddrs = true;
-        else if (t == "lds")
-          c.TraceLDSAddrs = true;
+      S.split(Parts, ',');
+      for (llvm::StringRef &P : Parts) {
+        llvm::StringRef T = P.trim();
+        if (T == "memory")
+          C.TraceMemoryAddrs = true;
+        else if (T == "lds")
+          C.TraceLDSAddrs = true;
         else
-          llvm::errs() << "SQTT: warning: unknown SQTT_TRACE_ADDRESSES "
+          llvm::errs() << "sqtt: warning: unknown SQTT_TRACE_ADDRESSES "
                           "category '"
-                       << t << "'\n";
+                       << T << "'\n";
       }
-      if (c.hasAddressTracing() && c.MemoryChunkSize) {
-        llvm::errs() << "SQTT: error: SQTT_TRACE_ADDRESSES and "
+      if (C.hasAddressTracing() && C.MemoryChunkSize) {
+        llvm::errs() << "sqtt: error: SQTT_TRACE_ADDRESSES and "
                         "SQTT_INSTRUMENT_MEMORY are mutually exclusive\n";
-        c.TraceMemoryAddrs = c.TraceLDSAddrs = false;
+        C.TraceMemoryAddrs = C.TraceLDSAddrs = false;
       }
     }
 
-    return c;
+    return C;
   }
 };
+
+#endif // LLVM_AMD_SQTT_MARKER_LIB_SQTTCONFIG_H

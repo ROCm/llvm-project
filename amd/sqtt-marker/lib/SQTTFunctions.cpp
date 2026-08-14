@@ -1,75 +1,66 @@
-// MIT License
+//===- SQTTFunctions.cpp - SQTT function instrumentation ------------------===//
 //
-// Copyright (c) 2026 Advanced Micro Devices, Inc. All rights reserved.
+// Part of AMD SQTT Marker, under the MIT License. See
+// amd/sqtt-marker/LICENSE.txt for license information.
+// SPDX-License-Identifier: MIT
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// Implements function instrumentation, pruning, and marker ID compaction.
+///
+//===----------------------------------------------------------------------===//
 
 #include "SQTTPass.h"
 
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/Constants.h"
-
-#include <algorithm>
 
 using namespace llvm;
 
-void SQTTInstrumentPass::insertFunctionMarkers(Function &F, uint32_t id,
-                                               GfxGen gen, bool useBareTrace) {
-  auto emit = [&](Instruction *I, uint32_t marker) {
+void SQTTInstrumentPass::insertFunctionMarkers(Function &F, uint32_t Id,
+                                               GfxGen Gen, bool UseBareTrace) {
+  auto Emit = [&](Instruction *I, uint32_t Marker) {
     IRBuilder<> B(I);
-    if (useBareTrace)
-      emitBareTrace(B, marker, F.getParent(), gen);
+    if (UseBareTrace)
+      emitBareTrace(B, Marker, F.getParent(), Gen);
     else
-      insertTraceMarker(B, marker, F, gen);
+      insertTraceMarker(B, Marker, F, Gen);
   };
 
-  Instruction *Entry = useBareTrace || !CurScopeCheck
+  Instruction *Entry = UseBareTrace || !CurScopeCheck
                            ? &*F.getEntryBlock().getFirstInsertionPt()
                            : cast<Instruction>(CurScopeCheck)->getNextNode();
-  emit(Entry, encodeMarker(id, /*enter=*/true, /*exit_prev=*/false));
+  Emit(Entry, encodeMarker(Id, /*enter=*/true, /*exit_prev=*/false));
 
   SmallVector<ReturnInst *, 4> Rets;
-  for (auto &BB : F)
+  for (BasicBlock &BB : F)
     if (auto *RI = dyn_cast<ReturnInst>(BB.getTerminator()))
       Rets.push_back(RI);
-  for (auto *RI : Rets)
-    emit(RI, useBareTrace
-                 ? encodeMarker(id, /*enter=*/false, /*exit_prev=*/true)
-                 : FLAG_EXIT_PREV);
+  for (ReturnInst *RI : Rets)
+    Emit(RI, UseBareTrace
+                 ? encodeMarker(Id, /*enter=*/false, /*exit_prev=*/true)
+                 : FlagExitPrev);
 }
 
 void SQTTInstrumentPass::storeEarlyMarkerMetadata(Module &M, LLVMContext &Ctx) {
   Type *I32 = Type::getInt32Ty(Ctx);
   NamedMDNode *NMD = M.getOrInsertNamedMetadata("sqtt.markers.early");
-  auto asInt = [&](uint32_t value) {
-    return ConstantAsMetadata::get(ConstantInt::get(I32, value));
+  auto AsInt = [&](uint32_t Value) {
+    return ConstantAsMetadata::get(ConstantInt::get(I32, Value));
   };
-  for (const auto &entry : Markers)
+  for (const MarkerRecord &Entry : Markers)
     NMD->addOperand(MDNode::get(
         Ctx,
-        {asInt(entry.ID), asInt(static_cast<unsigned>(entry.Kind)),
-         MDString::get(Ctx, entry.Name), asInt(entry.PreOptSize),
-         MDString::get(Ctx, entry.SourceLoc), asInt(entry.ExtraPayloadCount)}));
+        {AsInt(Entry.ID), AsInt(static_cast<unsigned>(Entry.Kind)),
+         MDString::get(Ctx, Entry.Name), AsInt(Entry.PreOptSize),
+         MDString::get(Ctx, Entry.SourceLoc), AsInt(Entry.ExtraPayloadCount)}));
 }
 
 bool SQTTInstrumentPass::recoverEarlyMarkerMetadata(Module &M,
-                                                    bool &hasEarlyFunctions) {
-  hasEarlyFunctions = false;
+                                                    bool &HasEarlyFunctions) {
+  HasEarlyFunctions = false;
   NamedMDNode *NMD = M.getNamedMetadata("sqtt.markers.early");
   if (!NMD)
     return false;
@@ -85,28 +76,27 @@ bool SQTTInstrumentPass::recoverEarlyMarkerMetadata(Module &M,
     if (!IdC || !KindC || !NameS || !SizeC || !LocS || !PayloadC)
       continue;
 
-    MarkerKind markerKind = static_cast<MarkerKind>(KindC->getZExtValue());
-    if (markerKind != MarkerKind::Function &&
-        markerKind != MarkerKind::UserScope && markerKind != MarkerKind::Point)
+    MarkerKind Kind = static_cast<MarkerKind>(KindC->getZExtValue());
+    if (Kind != MarkerKind::Function && Kind != MarkerKind::UserScope &&
+        Kind != MarkerKind::Point)
       continue;
-    hasEarlyFunctions |= markerKind == MarkerKind::Function;
-    uint32_t id = static_cast<uint32_t>(IdC->getZExtValue());
-    Markers.push_back({id, markerKind, NameS->getString().str(),
+    HasEarlyFunctions |= Kind == MarkerKind::Function;
+    uint32_t Id = static_cast<uint32_t>(IdC->getZExtValue());
+    Markers.push_back({Id, Kind, NameS->getString().str(),
                        LocS->getString().str(),
                        static_cast<uint32_t>(SizeC->getZExtValue()),
                        static_cast<uint32_t>(PayloadC->getZExtValue())});
-    MarkerRecord &entry = Markers.back();
-    if (markerKind == MarkerKind::UserScope ||
-        markerKind == MarkerKind::Point) {
-      std::string key =
-          std::string(markerKind == MarkerKind::Point ? "P:" : "U:") +
-          std::to_string(entry.ExtraPayloadCount) + ":" + entry.Name;
-      UserMarkerMap[key] = id;
+    MarkerRecord &Entry = Markers.back();
+    if (Kind == MarkerKind::UserScope || Kind == MarkerKind::Point) {
+      std::string Key = std::string(Kind == MarkerKind::Point ? "P:" : "U:") +
+                        std::to_string(Entry.ExtraPayloadCount) + ":" +
+                        Entry.Name;
+      UserMarkerMap[Key] = Id;
     }
     // Function IDs are compacted below.  Only user IDs need to advance
     // the no-op fallback counter used when every function is filtered.
-    if (markerKind != MarkerKind::Function && id >= NextEventID)
-      NextEventID = id + 1;
+    if (Kind != MarkerKind::Function && Id >= NextEventID)
+      NextEventID = Id + 1;
   }
   NMD->eraseFromParent();
   return true;
@@ -120,20 +110,20 @@ bool SQTTInstrumentPass::finalizeEarlyFunctionMarkers(Module &M) {
     uint32_t NewID = 0;
     bool Seen = false, Disabled = false;
   };
-  std::map<uint32_t, Entry> entries;
-  for (auto &record : Markers)
-    if (record.ID)
-      entries.emplace(record.ID, Entry{&record});
-  auto find = [&](uint32_t id) -> Entry * {
-    auto it = entries.find(id);
-    return it == entries.end() ? nullptr : &it->second;
+  DenseMap<uint32_t, Entry> Entries;
+  for (MarkerRecord &Record : Markers)
+    if (Record.ID)
+      Entries.try_emplace(Record.ID, Entry{&Record});
+  auto Find = [&](uint32_t Id) -> Entry * {
+    auto It = Entries.find(Id);
+    return It == Entries.end() ? nullptr : &It->second;
   };
 
-  bool changed = false;
+  bool Changed = false;
   if (Config.FunctionThreshold != 0) {
     // A clone group shares one early ID, so a below-threshold copy prunes
     // every copy that carries that ID.
-    for (auto &F : M) {
+    for (Function &F : M) {
       if (F.isDeclaration())
         continue;
       MDNode *MD = F.getMetadata("sqtt.func.id");
@@ -142,130 +132,129 @@ bool SQTTInstrumentPass::finalizeEarlyFunctionMarkers(Module &M) {
       if (!IdC)
         continue;
 
-      Entry *entry = find(IdC->getZExtValue());
+      Entry *Entry = Find(IdC->getZExtValue());
       F.setMetadata("sqtt.func.id", nullptr);
-      if (!entry || entry->Record->Kind != MarkerKind::Function)
+      if (!Entry || Entry->Record->Kind != MarkerKind::Function)
         continue;
 
-      bool firstCopy = !entry->Seen;
-      entry->Seen = true;
+      bool FirstCopy = !Entry->Seen;
+      Entry->Seen = true;
       if (computeFunctionSize(F, Config.Mode) <= Config.FunctionThreshold) {
-        changed |= !entry->Disabled;
-        entry->Disabled = true;
-      } else if (firstCopy) {
-        std::string loc = getFunctionSourceLoc(F);
-        if (!loc.empty())
-          entry->Record->SourceLoc = std::move(loc);
+        Changed |= !Entry->Disabled;
+        Entry->Disabled = true;
+      } else if (FirstCopy) {
+        std::string Loc = getFunctionSourceLoc(F);
+        if (!Loc.empty())
+          Entry->Record->SourceLoc = std::move(Loc);
       }
     }
 
-    for (auto &[id, entry] : entries)
-      if (entry.Record->Kind == MarkerKind::Function && !entry.Seen &&
-          entry.Record->PreOptSize <= Config.FunctionThreshold) {
-        changed |= !entry.Disabled;
-        entry.Disabled = true;
+    for (auto &[Id, MapEntry] : Entries)
+      if (MapEntry.Record->Kind == MarkerKind::Function && !MapEntry.Seen &&
+          MapEntry.Record->PreOptSize <= Config.FunctionThreshold) {
+        Changed |= !MapEntry.Disabled;
+        MapEntry.Disabled = true;
       }
   }
 
   // Snapshot first: pruning and lowering erase calls while preserving the
   // stable state pointer that owns each old ID.
-  SmallVector<std::pair<CallInst *, Entry *>, 16> traces;
-  for (auto &F : M)
-    for (auto &BB : F)
-      for (auto &I : BB) {
+  SmallVector<std::pair<CallInst *, Entry *>, 16> Traces;
+  for (Function &F : M)
+    for (BasicBlock &BB : F)
+      for (Instruction &I : BB) {
         auto *CI = dyn_cast<CallInst>(&I);
-        if (!isTraceDataCall(CI) ||
-            !CI->getMetadata(SQTT_MARKER_HEADER_METADATA))
+        if (!isTraceDataCall(CI) || !CI->getMetadata(SqttMarkerHeaderMetadata))
           continue;
-        auto *arg = dyn_cast<ConstantInt>(CI->getArgOperand(0));
-        if (arg)
-          if (Entry *entry =
-                  find(static_cast<uint32_t>(arg->getZExtValue()) >> 2))
-            traces.emplace_back(CI, entry);
+        auto *Arg = dyn_cast<ConstantInt>(CI->getArgOperand(0));
+        if (Arg)
+          if (Entry *Entry =
+                  Find(static_cast<uint32_t>(Arg->getZExtValue()) >> 2))
+            Traces.emplace_back(CI, Entry);
       }
 
-  for (auto [call, entry] : traces) {
-    uint32_t flags =
-        cast<ConstantInt>(call->getArgOperand(0))->getZExtValue() & FLAG_MASK;
-    if (entry->Disabled && (flags == FLAG_ENTER || flags == FLAG_EXIT_PREV)) {
-      call->eraseFromParent();
-      changed = true;
+  for (auto [Call, MapEntry] : Traces) {
+    uint32_t Flags =
+        cast<ConstantInt>(Call->getArgOperand(0))->getZExtValue() & FlagMask;
+    if (MapEntry->Disabled && (Flags == FlagEnter || Flags == FlagExitPrev)) {
+      Call->eraseFromParent();
+      Changed = true;
       continue;
     }
-    if (!entry->Disabled)
-      ++entry->Count;
+    if (!MapEntry->Disabled)
+      ++MapEntry->Count;
   }
 
-  std::vector<Entry *> sorted;
-  sorted.reserve(entries.size());
-  for (auto &[id, entry] : entries)
-    if (!entry.Disabled)
-      sorted.push_back(&entry);
-  std::sort(sorted.begin(), sorted.end(), [](const Entry *a, const Entry *b) {
-    if (a->Count != b->Count)
-      return a->Count > b->Count;
-    return a->Record->ID < b->Record->ID;
+  SmallVector<Entry *, 16> Sorted;
+  Sorted.reserve(Entries.size());
+  for (auto &[Id, MapEntry] : Entries)
+    if (!MapEntry.Disabled)
+      Sorted.push_back(&MapEntry);
+  llvm::sort(Sorted, [](const Entry *A, const Entry *B) {
+    if (A->Count != B->Count)
+      return A->Count > B->Count;
+    return A->Record->ID < B->Record->ID;
   });
-  uint32_t nextID = 1;
-  for (Entry *entry : sorted)
-    entry->NewID = nextID++;
+  uint32_t NextId = 1;
+  for (Entry *Entry : Sorted)
+    Entry->NewID = NextId++;
 
-  for (auto [call, entry] : traces) {
+  for (auto [Call, MapEntry] : Traces) {
     // Disabled calls may have been erased above, so never dereference
     // their CallInst here.
-    if (entry->Disabled)
+    if (MapEntry->Disabled)
       continue;
-    GfxGen gen = getGfxGen(*call->getFunction());
-    if (gen == GfxGen::Unknown)
+    GfxGen Gen = getGfxGen(*Call->getFunction());
+    if (Gen == GfxGen::Unknown)
       continue;
-    uint32_t value = cast<ConstantInt>(call->getArgOperand(0))->getZExtValue();
-    IRBuilder<> B(call);
-    CallInst *replacement =
+    uint32_t Value = cast<ConstantInt>(Call->getArgOperand(0))->getZExtValue();
+    IRBuilder<> B(Call);
+    CallInst *Replacement =
         emitBareTrace(B,
-                      (value & FLAG_MASK) == FLAG_EXIT_PREV
-                          ? FLAG_EXIT_PREV
-                          : (entry->NewID << 2) | (value & FLAG_MASK),
-                      &M, gen);
-    replacement->copyMetadata(*call);
-    call->eraseFromParent();
-    changed = true;
+                      (Value & FlagMask) == FlagExitPrev
+                          ? FlagExitPrev
+                          : (MapEntry->NewID << 2) | (Value & FlagMask),
+                      &M, Gen);
+    Replacement->copyMetadata(*Call);
+    Call->eraseFromParent();
+    Changed = true;
   }
 
-  Markers.erase(std::remove_if(Markers.begin(), Markers.end(),
-                               [&](const MarkerRecord &record) {
-                                 Entry *entry = find(record.ID);
-                                 return record.Kind == MarkerKind::Function &&
-                                        entry && entry->Disabled;
-                               }),
+  Markers.erase(llvm::remove_if(Markers,
+                                [&](const MarkerRecord &Record) {
+                                  Entry *Entry = Find(Record.ID);
+                                  return Record.Kind == MarkerKind::Function &&
+                                         Entry && Entry->Disabled;
+                                }),
                 Markers.end());
-  auto remap = [&](uint32_t &id) {
-    if (Entry *entry = find(id))
-      id = entry->NewID;
+  auto Remap = [&](uint32_t &Id) {
+    if (Entry *Entry = Find(Id))
+      Id = Entry->NewID;
   };
-  for (auto &entry : Markers)
-    remap(entry.ID);
-  for (auto &[name, id] : UserMarkerMap)
-    remap(id);
-  NextEventID = nextID;
-  return changed;
+  for (MarkerRecord &Entry : Markers)
+    Remap(Entry.ID);
+  for (StringMapEntry<uint32_t> &Entry : UserMarkerMap)
+    Remap(Entry.getValue());
+  NextEventID = NextId;
+  return Changed;
 }
 
 bool SQTTInstrumentPass::hasMustTailCall(const Function &F) {
-  for (const auto &BB : F)
-    for (const auto &I : BB)
+  for (const BasicBlock &BB : F)
+    for (const Instruction &I : BB)
       if (const auto *CB = dyn_cast<CallBase>(&I); CB && CB->isMustTailCall())
         return true;
   return false;
 }
 
-bool SQTTInstrumentPass::instrumentFunctionDirect(Function &F, GfxGen gen) {
+bool SQTTInstrumentPass::instrumentFunctionDirect(Function &F, GfxGen Gen) {
   if (hasMustTailCall(F) ||
       computeFunctionSize(F, Config.Mode) <= Config.FunctionThreshold)
     return false;
 
-  uint32_t id = NextEventID++;
+  uint32_t Id = NextEventID++;
   Markers.push_back(
-      {id, MarkerKind::Function, F.getName().str(), getFunctionSourceLoc(F)});
-  insertFunctionMarkers(F, id, gen, /*useBareTrace=*/false);
+      {Id, MarkerKind::Function, F.getName().str(), getFunctionSourceLoc(F)});
+  insertFunctionMarkers(F, Id, Gen, /*useBareTrace=*/false);
   return true;
 }

@@ -1,24 +1,15 @@
-// MIT License
+//===- SQTTNamedMarkers.cpp - Named SQTT markers --------------------------===//
 //
-// Copyright (c) 2026 Advanced Micro Devices, Inc. All rights reserved.
+// Part of AMD SQTT Marker, under the MIT License. See
+// amd/sqtt-marker/LICENSE.txt for license information.
+// SPDX-License-Identifier: MIT
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// Resolves string marker sentinels and emits their trace records.
+///
+//===----------------------------------------------------------------------===//
 
 #include "SQTTPass.h"
 
@@ -37,21 +28,25 @@ enum MarkerFlag : uint8_t {
   MarkerPayload = 8
 };
 
-uint8_t markerFlags(const CallInst *call) {
-  const Function *callee = call ? call->getCalledFunction() : nullptr;
-  return callee ? StringSwitch<uint8_t>(callee->getName())
+} // namespace
+
+static uint8_t markerFlags(const CallInst *Call) {
+  const Function *Callee = Call ? Call->getCalledFunction() : nullptr;
+  return Callee ? StringSwitch<uint8_t>(Callee->getName())
+                      .Case("sqtt_marker_enter", MarkerEnter)
                       .Case("__sqtt_named_marker_enter", MarkerEnter)
+                      .Case("sqtt_marker_exit", MarkerExit)
                       .Case("__sqtt_named_marker_exit", MarkerExit)
+                      .Case("sqtt_marker_point", MarkerPoint)
                       .Case("__sqtt_named_marker_point", MarkerPoint)
+                      .Case("sqtt_marker_data", MarkerPoint | MarkerPayload)
                       .Case("__sqtt_named_marker_data",
                             MarkerPoint | MarkerPayload)
                       .Default(0)
                 : 0;
 }
 
-} // namespace
-
-uint32_t SQTTInstrumentPass::resolveMarkerString(CallInst *CI, uint8_t flags) {
+uint32_t SQTTInstrumentPass::resolveMarkerString(CallInst *CI, uint8_t Flags) {
   Value *Arg = CI->getArgOperand(0)->stripPointerCasts();
   auto *GV = dyn_cast<GlobalVariable>(Arg);
   if (!GV || !GV->hasInitializer())
@@ -60,41 +55,41 @@ uint32_t SQTTInstrumentPass::resolveMarkerString(CallInst *CI, uint8_t flags) {
   if (!CDA || !CDA->isString())
     return 0;
 
-  // Exit just pops the top of the marker stack — the name string is
+  // Exit just pops the top of the marker stack; the name string is
   // unused at the trace level, so no ID/funcmap entry is needed.
-  if (flags & MarkerExit)
-    return FLAG_EXIT_PREV; // value 1: pop top scope
+  if (Flags & MarkerExit)
+    return FlagExitPrev; // value 1: pop top scope
 
   std::string Name = CDA->getAsString().str();
   if (!Name.empty() && Name.back() == '\0')
     Name.pop_back();
 
-  bool isPoint = flags & MarkerPoint;
-  uint32_t extraPayloadCount = (flags & MarkerPayload) ? 1 : 0;
-  std::string key = std::string(isPoint ? "P:" : "U:") +
-                    std::to_string(extraPayloadCount) + ":" + Name;
-  auto [it, inserted] = UserMarkerMap.try_emplace(key, NextEventID);
-  uint32_t id = it->second;
-  if (inserted) {
+  bool IsPoint = Flags & MarkerPoint;
+  uint32_t ExtraPayloadCount = (Flags & MarkerPayload) ? 1 : 0;
+  std::string Key = std::string(IsPoint ? "P:" : "U:") +
+                    std::to_string(ExtraPayloadCount) + ":" + Name;
+  auto [It, Inserted] = UserMarkerMap.try_emplace(Key, NextEventID);
+  uint32_t Id = It->getValue();
+  if (Inserted) {
     ++NextEventID;
-    Markers.push_back({id,
-                       isPoint ? MarkerKind::Point : MarkerKind::UserScope,
+    Markers.push_back({Id,
+                       IsPoint ? MarkerKind::Point : MarkerKind::UserScope,
                        Name,
                        {},
                        0,
-                       extraPayloadCount});
+                       ExtraPayloadCount});
   }
-  bool enter = flags & MarkerEnter;
-  return encodeMarker(id, enter, false); // enter or point
+  bool Enter = Flags & MarkerEnter;
+  return encodeMarker(Id, Enter, false); // enter or point
 }
 
 // Early emits bare traces and leaves unresolved calls for late processing.
 // Late emits scoped/bounded traces and warns for unresolved calls.
-bool SQTTInstrumentPass::processMarkerCalls(Function &F, GfxGen gen,
-                                            bool useBareTrace) {
+bool SQTTInstrumentPass::processMarkerCalls(Function &F, GfxGen Gen,
+                                            bool UseBareTrace) {
   SmallVector<CallInst *, 8> Calls;
-  for (auto &BB : F)
-    for (auto &I : BB)
+  for (BasicBlock &BB : F)
+    for (Instruction &I : BB)
       if (auto *CI = dyn_cast<CallInst>(&I); markerFlags(CI))
         Calls.push_back(CI);
   if (Calls.empty())
@@ -102,53 +97,53 @@ bool SQTTInstrumentPass::processMarkerCalls(Function &F, GfxGen gen,
 
   Module *M = F.getParent();
   bool Changed = false;
-  auto emit = [&](IRBuilder<> &B, uint32_t encoded, Value *payload = nullptr) {
-    if (useBareTrace) {
-      CallInst *header = emitBareTrace(B, encoded, M, gen);
-      if (payload)
-        emitRawTracePayload(B, payload, M, header);
+  auto Emit = [&](IRBuilder<> &B, uint32_t Encoded, Value *Payload = nullptr) {
+    if (UseBareTrace) {
+      CallInst *Header = emitBareTrace(B, Encoded, M, Gen);
+      if (Payload)
+        emitRawTracePayload(B, Payload, M, Header);
     } else
-      insertTraceMarker(B, encoded, F, gen, payload);
+      insertTraceMarker(B, Encoded, F, Gen, Payload);
   };
 
-  for (unsigned i = 0; i < Calls.size(); i++) {
-    CallInst *CI = Calls[i];
-    uint8_t flags = markerFlags(CI);
+  for (unsigned I = 0; I < Calls.size(); I++) {
+    CallInst *CI = Calls[I];
+    uint8_t Flags = markerFlags(CI);
 
     // Fuse only directly adjacent exit+enter pairs.  A marker boundary
     // must not absorb work between the calls.
-    if (flags == MarkerExit && i + 1 < Calls.size()) {
-      CallInst *NextCI = Calls[i + 1];
+    if (Flags == MarkerExit && I + 1 < Calls.size()) {
+      CallInst *NextCI = Calls[I + 1];
       if (markerFlags(NextCI) == MarkerEnter && CI->getNextNode() == NextCI) {
-        uint32_t enterEncoded = resolveMarkerString(NextCI, MarkerEnter);
-        if (enterEncoded) {
-          uint32_t id = enterEncoded >> 2;
-          uint32_t fused = encodeMarker(id, true, true);
+        uint32_t EnterEncoded = resolveMarkerString(NextCI, MarkerEnter);
+        if (EnterEncoded) {
+          uint32_t Id = EnterEncoded >> 2;
+          uint32_t Fused = encodeMarker(Id, true, true);
           IRBuilder<> B(CI);
-          emit(B, fused);
+          Emit(B, Fused);
           CI->eraseFromParent();
           NextCI->eraseFromParent();
           Changed = true;
-          i++;
+          I++;
           continue;
         }
       }
     }
 
-    uint32_t encoded = resolveMarkerString(CI, flags);
-    if (!encoded) {
-      if (useBareTrace)
+    uint32_t Encoded = resolveMarkerString(CI, Flags);
+    if (!Encoded) {
+      if (UseBareTrace)
         continue; // not resolvable yet, leave for late pass
-      errs() << "SQTT: warning: sqtt_marker_enter/exit/point/data() "
-                "argument is not a string literal, skipping\n";
+      errs() << "sqtt: warning: string marker argument is not a literal, "
+                "skipping\n";
       CI->eraseFromParent();
       continue;
     }
 
     IRBuilder<> B(CI);
-    emit(B, encoded, flags & MarkerPayload ? CI->getArgOperand(1) : nullptr);
+    Emit(B, Encoded, Flags & MarkerPayload ? CI->getArgOperand(1) : nullptr);
     CI->eraseFromParent();
     Changed = true;
   }
-  return Changed || !useBareTrace;
+  return Changed || !UseBareTrace;
 }

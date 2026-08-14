@@ -1,5 +1,10 @@
-// Copyright (c) 2026 Advanced Micro Devices, Inc. All rights reserved.
-// SPDX-License-Identifier: MIT
+/*===-- sqtt_marker.h - AMD SQTT device marker API --------------*- C -*-===
+ *
+ * Part of AMD SQTT Marker, under the MIT License. See
+ * amd/sqtt-marker/LICENSE.txt for license information.
+ * SPDX-License-Identifier: MIT
+ *
+ *===----------------------------------------------------------------------===*/
 
 #ifndef AMD_SQTT_MARKER_H
 #define AMD_SQTT_MARKER_H
@@ -9,6 +14,12 @@
 #ifndef AMD_SQTT_MARKER_ENABLE
 #define AMD_SQTT_MARKER_ENABLE 0
 #endif
+
+/*
+ * Marker calls compile to no-ops unless AMD_SQTT_MARKER_ENABLE is nonzero.
+ * String markers require the SQTT marker pass plugin. ID markers emit the
+ * legacy two-flag-bit marker encoding directly.
+ */
 
 #define AMD_SQTT_MARKER_FLAG_EXIT_PREV UINT32_C(1)
 #define AMD_SQTT_MARKER_FLAG_ENTER (UINT32_C(1) << 1)
@@ -25,62 +36,56 @@
 
 #if !AMD_SQTT_MARKER_ENABLE
 
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_enter_string(const char *name) {
-  (void)name;
-}
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_exit_string(const char *name) {
-  (void)name;
-}
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_point_string(const char *name) {
-  (void)name;
-}
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_data_string(const char *name,
-                                                        uint32_t data) {
+/** Opens the named scope. */
+AMD_SQTT_MARKER_INLINE void sqtt_marker_enter(const char *name) { (void)name; }
+/** Closes the named scope. */
+AMD_SQTT_MARKER_INLINE void sqtt_marker_exit(const char *name) { (void)name; }
+/** Emits a named point event. */
+AMD_SQTT_MARKER_INLINE void sqtt_marker_point(const char *name) { (void)name; }
+/** Emits a named point event followed by one 32-bit payload. */
+AMD_SQTT_MARKER_INLINE void sqtt_marker_data(const char *name, uint32_t data) {
   (void)name;
   (void)data;
 }
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_enter_id(uint32_t id) { (void)id; }
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_exit(void) {}
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_point_id(uint32_t id) { (void)id; }
+/** Opens the scope identified by id. */
+AMD_SQTT_MARKER_INLINE void sqtt_marker_enter_id(uint32_t id) { (void)id; }
+/** Closes the current scope. */
+AMD_SQTT_MARKER_INLINE void sqtt_marker_exit_id(uint32_t id) { (void)id; }
+/** Emits a point event identified by id. */
+AMD_SQTT_MARKER_INLINE void sqtt_marker_point_id(uint32_t id) { (void)id; }
 
 #else
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-AMD_SQTT_MARKER_DEVICE void __sqtt_named_marker_enter(const char *);
-AMD_SQTT_MARKER_DEVICE void __sqtt_named_marker_exit(const char *);
-AMD_SQTT_MARKER_DEVICE void __sqtt_named_marker_point(const char *);
-AMD_SQTT_MARKER_DEVICE void __sqtt_named_marker_data(const char *, uint32_t);
+/** Opens the named scope. */
+AMD_SQTT_MARKER_DEVICE void sqtt_marker_enter(const char *);
+/** Closes the named scope. */
+AMD_SQTT_MARKER_DEVICE void sqtt_marker_exit(const char *);
+/** Emits a named point event. */
+AMD_SQTT_MARKER_DEVICE void sqtt_marker_point(const char *);
+/** Emits a named point event followed by one 32-bit payload. */
+AMD_SQTT_MARKER_DEVICE void sqtt_marker_data(const char *, uint32_t);
 #ifdef __cplusplus
 }
 #endif
 
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_enter_string(const char *name) {
-  __sqtt_named_marker_enter(name);
-}
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_exit_string(const char *name) {
-  __sqtt_named_marker_exit(name);
-}
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_point_string(const char *name) {
-  __sqtt_named_marker_point(name);
-}
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_data_string(const char *name,
-                                                        uint32_t data) {
-  __sqtt_named_marker_data(name, data);
-}
-
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_enter_id(uint32_t id) {
+/** Opens the scope identified by id. */
+AMD_SQTT_MARKER_INLINE void sqtt_marker_enter_id(uint32_t id) {
   __builtin_amdgcn_sched_barrier(0);
   __builtin_amdgcn_s_ttracedata((int)((id << 2) | AMD_SQTT_MARKER_FLAG_ENTER));
   __builtin_amdgcn_sched_barrier(0);
 }
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_exit(void) {
+/** Closes the current scope. */
+AMD_SQTT_MARKER_INLINE void sqtt_marker_exit_id(uint32_t id) {
+  (void)id;
   __builtin_amdgcn_sched_barrier(0);
   __builtin_amdgcn_s_ttracedata((int)AMD_SQTT_MARKER_FLAG_EXIT_PREV);
   __builtin_amdgcn_sched_barrier(0);
 }
-AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_point_id(uint32_t id) {
+/** Emits a point event identified by id. */
+AMD_SQTT_MARKER_INLINE void sqtt_marker_point_id(uint32_t id) {
   __builtin_amdgcn_sched_barrier(0);
   __builtin_amdgcn_s_ttracedata((int)(id << 2));
   __builtin_amdgcn_sched_barrier(0);
