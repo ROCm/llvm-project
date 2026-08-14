@@ -33,6 +33,14 @@ compiler. It is more suitable for experienced developers who want to directly
 interact with the clang compiler and gain full control of the application
 build process.
 
+.. warning::
+  ``hipcc`` and its companion tool ``hipconfig`` are deprecated and will be
+  removed in a future release. Users are encouraged to migrate to
+  ``amdclang++`` directly and to CMake-native HIP language support. See the
+  `hipcc and hipconfig deprecation and migration guide
+  <https://rocm.docs.amd.com/projects/HIPCC/en/latest/deprecation.html>`_
+  for full migration instructions.
+
 The major differences between ``hipcc`` and ``amdclang++`` are listed below:
 
 .. # COMMENT: The following lines define a break for use in the table below. 
