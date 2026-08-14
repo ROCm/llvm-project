@@ -58,7 +58,7 @@ def main() -> None:
         "build_variant_suffix": "",
         "build_variant_cmake_preset": "",
         "build_pytorch": True,
-        "build_runs_on": select_build_runner("linux", variant),
+        "build_runs_on": "aws-linux-scale-rocm-large",
         "prebuilt_stages": prebuilt_stages,
         "baseline_run_id": baseline_run_id,
     }
