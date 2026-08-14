@@ -2098,8 +2098,6 @@ void llvm::replaceDbgValueForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
                                Builder, Offset);
 }
 
-/// Where possible to salvage debug information for \p I do so.
-/// If not possible mark undef.
 void llvm::salvageDebugInfo(Instruction &I) {
   SmallVector<DbgVariableRecord *, 1> DPUsers;
   findDbgUsers(&I, DPUsers);
@@ -2121,7 +2119,8 @@ template <typename T> static void salvageDbgAssignAddress(T *Assign) {
   SmallVector<uint64_t, 16> Ops;
   Value *NewV = salvageDebugInfoImpl(*I, CurrentLocOps, Ops, AdditionalValues);
 
-  // Check if the salvage failed.
+  // Keep an address we cannot salvage. If I is deleted, its remaining metadata
+  // use is replaced with poison.
   if (!NewV)
     return;
 
@@ -2309,6 +2308,8 @@ void llvm::salvageDebugInfoForDbgValues(Instruction &I,
   bool Salvaged = false;
 
   for (auto *DVR : DPUsers) {
+    // replaceVariableLocationOp also updates a matching dbg.assign address, so
+    // salvage the address before changing the variable location.
     if (DVR->isDbgAssign()) {
       if (DVR->getAddress() == &I) {
         salvageDbgAssignAddress(DVR);
@@ -2365,8 +2366,8 @@ void llvm::salvageDebugInfoForDbgValues(Instruction &I,
           DIExpression::appendOpsToArg(SalvagedExpr, Ops, LocNo, StackValue);
       LocItr = std::find(++LocItr, DVRLocation.end(), &I);
     }
-    // salvageDebugInfoImpl should fail on examining the first element of
-    // DbgUsers, or none of them.
+    // The failure conditions in salvageDebugInfoImpl do not depend on
+    // CurrentLocOps, so failure can only occur on the first occurrence.
     if (!Op0)
       break;
 
