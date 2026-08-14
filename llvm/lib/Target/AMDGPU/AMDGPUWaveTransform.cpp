@@ -2776,14 +2776,25 @@ computeAccLiveness(MachineFunction &MF,
   for (const auto &[MBB, UD] : UseDef)
     Liveness[MBB].LiveIn = UD.UpwardExposedUse;
 
+  // Backward dataflow: sweep blocks in post-order so information propagates
+  // toward predecessors quickly. Needed because a layout-order sweep converges
+  // slowly and does not scale to very large CFGs.
+  //
+  // TODO-WAVETRANSFORM: still re-scans all blocks per iteration; replace with a
+  // predecessor worklist (and bit-vector reg sets) to reprocess blocks only
+  // when needed.
+  ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
+  SmallVector<MachineBasicBlock *, 32> Order(RPOT.begin(), RPOT.end());
+  std::reverse(Order.begin(), Order.end());
+
   bool Changed = true;
   while (Changed) {
     Changed = false;
-    for (MachineBasicBlock &MBB : MF) {
-      AccBBLiveness &L = Liveness[&MBB];
-      const AccBBUseDef &UD = UseDef.find(&MBB)->second;
+    for (MachineBasicBlock *MBB : Order) {
+      AccBBLiveness &L = Liveness[MBB];
+      const AccBBUseDef &UD = UseDef.find(MBB)->second;
 
-      for (MachineBasicBlock *Succ : MBB.successors()) {
+      for (MachineBasicBlock *Succ : MBB->successors()) {
         for (Register R : Liveness[Succ].LiveIn) {
           if (L.LiveOut.insert(R).second)
             Changed = true;
