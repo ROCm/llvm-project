@@ -198,13 +198,12 @@ endif()
 # When ON, LLVM symbols are hidden by comgr's version script (local: *;),
 # avoiding symbol interposition issues without requiring namespace isolation.
 option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
-if(COMGR_ENABLE_HOTSWAP_TRANSPILE AND NOT COMGR_STATIC_LLVM AND
-   (LLVM_LINK_LLVM_DYLIB OR CLANG_LINK_CLANG_DYLIB))
-  message(FATAL_ERROR
-    "COMGR_ENABLE_HOTSWAP_TRANSPILE requires static LLVM and Clang linkage. "
-    "Enable COMGR_STATIC_LLVM or disable LLVM_LINK_LLVM_DYLIB and "
-    "CLANG_LINK_CLANG_DYLIB.")
-endif()
+# Clearing the dylib flags here only holds until the next find_package(LLVM or
+# Clang CONFIG), which re-runs LLVMConfig.cmake/ClangConfig.cmake and restores
+# them. They are re-cleared just before LLVM_LIBS/CLANG_LIBS are selected (see
+# "re-assert COMGR_STATIC_LLVM" below), which is what actually decides the link
+# line. The transpile static-linkage guard is checked there too, against the
+# selected libraries rather than these flags.
 if(COMGR_STATIC_LLVM)
   set(LLVM_LINK_LLVM_DYLIB OFF)
   set(CLANG_LINK_CLANG_DYLIB OFF)
@@ -588,6 +587,20 @@ install(FILES
   COMPONENT amd-comgr
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}")
 
+# Re-assert COMGR_STATIC_LLVM. The option cleared LLVM_LINK_LLVM_DYLIB and
+# CLANG_LINK_CLANG_DYLIB near the top of this file, but every later
+# find_package(LLVM or Clang CONFIG) restores them -- notably the
+# find_package(Clang REQUIRED CONFIG) in cmake/opencl_header.cmake, which
+# re-loads ClangConfig.cmake and, through it, LLVMConfig.cmake. Without this the
+# option is silently ignored and amd_comgr links against
+# libLLVM.so/libclang-cpp.so anyway. Everything downstream that branches on
+# these flags (the library lists below, the CPack dependency lists) sees the
+# requested linkage from here on.
+if(COMGR_STATIC_LLVM)
+  set(LLVM_LINK_LLVM_DYLIB OFF)
+  set(CLANG_LINK_CLANG_DYLIB OFF)
+endif()
+
 if(NOT CLANG_LINK_CLANG_DYLIB)
   set(CLANG_LIBS
     clangBasic
@@ -645,6 +658,24 @@ target_link_options(amd_comgr
     ${AMD_COMGR_PUBLIC_LINKER_OPTIONS}
   PRIVATE
     ${AMD_COMGR_PRIVATE_LINKER_OPTIONS})
+
+# The transpile path (raiser, loader, decoder) calls AMDGPU backend-private
+# helpers (getMCOpcode, mc2PseudoReg, getNamedOperandIdx, the SIInstrInfo
+# InstrMapping getters) that carry no LLVM_ABI annotation, so libLLVM.so does
+# not export them and linking amd_comgr against the dylib leaves them undefined
+# (#3869). Gate on the selected library lists, not on the dylib flags: those
+# flags get restored by any find_package(LLVM or Clang CONFIG), so only
+# LLVM_LIBS/CLANG_LIBS reflect the actual link line.
+if(COMGR_ENABLE_HOTSWAP_TRANSPILE AND
+   ("LLVM" IN_LIST LLVM_LIBS OR "clang-cpp" IN_LIST CLANG_LIBS))
+  message(FATAL_ERROR
+    "COMGR_ENABLE_HOTSWAP_TRANSPILE requires static LLVM and Clang linkage, "
+    "but amd_comgr is being linked against libLLVM.so/libclang-cpp.so "
+    "(LLVM_LIBS='${LLVM_LIBS}' CLANG_LIBS='${CLANG_LIBS}'). "
+    "Enable COMGR_STATIC_LLVM, or disable LLVM_LINK_LLVM_DYLIB and "
+    "CLANG_LINK_CLANG_DYLIB in the LLVM build comgr consumes, or build with "
+    "COMGR_ENABLE_HOTSWAP_TRANSPILE=OFF.")
+endif()
 
 target_link_libraries(amd_comgr
   PRIVATE
