@@ -17,12 +17,12 @@
 // Both `_d2` (up-to-2D) and `_d4` (up-to-4D) variants share a CanonicalOp
 // (`TENSOR_LOAD_TO_LDS` / `TENSOR_STORE_FROM_LDS`); see the
 // docstrings in `canonical-op.h` and the canonicalization entries in
-// `opcode-map.cpp`. The form is recovered from `op.nSrcs()`: the
+// `CanonicalOpcodes.td`. The form is recovered from `op.nSrcs()`: the
 // pseudo's InOperandList has `vaddr0, vaddr1, r128, cpol` (4) for
 // `_d2` and `vaddr0, vaddr1, vaddr2, vaddr3, r128, cpol` (6) for
 // `_d4`; both `_d{2,4}_gfx1250` Reals inherit the same operand list
 // (`MIMGInstructions.td:2087`), so this count is stable across the
-// MC -> pseudo collapse `OpcodeMap::canonicalize` performs.
+// MC -> pseudo collapse hotswap-tblgen performs.
 //
 // === Same-target contract (gfx1250 -> gfx1250) ===
 //

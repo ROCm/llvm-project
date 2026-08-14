@@ -79,6 +79,14 @@ if(NOT COMMAND llvm_update_compile_flags)
   include(AddLLVM)
 endif()
 
+# `add_tablegen`, used by tablegen/CMakeLists.txt to build hotswap-tblgen.
+# TableGen.cmake ships in the LLVM install and CMake package, so this works in
+# all three configurations above.
+if(NOT COMMAND add_tablegen)
+  list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
+  include(TableGen)
+endif()
+
 # --- Include paths ------------------------------------------------------------
 include_directories(${LLVM_INCLUDE_DIRS})
 
@@ -142,6 +150,53 @@ endif()
 set(HOTSWAP_HAVE_TDM_RUNTIME ${HOTSWAP_HAVE_TDM_RUNTIME} CACHE INTERNAL
     "Hotswap built with TDM emulation runtime (hipcc available at configure time)")
 
+# --- Canonical opcode tables (hotswap-tblgen) ---------------------------------
+# `CanonicalOpcodes.td` declares the raiser's CanonicalOp enumerators and which
+# AMDGPU pseudo opcodes canonicalize onto each of them. `hotswap-tblgen` reads
+# it together with AMDGPU.td and emits:
+#
+#   CanonicalOpcodes.inc       the enum body, #included by canonical-op.h
+#   CanonicalOpcodesImpl.cpp   the dense lookup tables + accessors
+#
+# Both come out of a single invocation because parsing AMDGPU.td dominates the
+# run time (~10s) and there is no reason to pay for it twice. The depfile keeps
+# the step incremental: it reruns when CanonicalOpcodes.td or any AMDGPU .td it
+# pulls in changes, and not otherwise.
+add_subdirectory(tablegen)
+
+set(HOTSWAP_CANONICAL_OPCODES_INC
+    "${CMAKE_CURRENT_BINARY_DIR}/CanonicalOpcodes.inc")
+set(HOTSWAP_CANONICAL_OPCODES_CPP
+    "${CMAKE_CURRENT_BINARY_DIR}/CanonicalOpcodesImpl.cpp")
+
+# HOTSWAP_TABLEGEN_EXE / _TARGET are set by add_tablegen in the subdirectory
+# above; under cross-compilation they point at a host-native build of the tool
+# rather than the (unrunnable) target-architecture one.
+add_custom_command(
+  OUTPUT ${HOTSWAP_CANONICAL_OPCODES_INC} ${HOTSWAP_CANONICAL_OPCODES_CPP}
+  COMMAND ${HOTSWAP_TABLEGEN_EXE}
+          --gen-hotswap-canonical-opcodes
+          -I "${CMAKE_CURRENT_SOURCE_DIR}"
+          -I "${LLVM_BUILD_MAIN_SRC_DIR}/lib/Target/AMDGPU"
+          -I "${LLVM_BUILD_MAIN_SRC_DIR}/include"
+          -I "${LLVM_BINARY_DIR}/lib/Target/AMDGPU"
+          -d "${HOTSWAP_CANONICAL_OPCODES_INC}.d"
+          -o ${HOTSWAP_CANONICAL_OPCODES_INC}
+          "${CMAKE_CURRENT_SOURCE_DIR}/CanonicalOpcodes.td"
+  DEPENDS ${HOTSWAP_TABLEGEN_TARGET}
+          "${CMAKE_CURRENT_SOURCE_DIR}/CanonicalOpcodes.td"
+  DEPFILE "${HOTSWAP_CANONICAL_OPCODES_INC}.d"
+  COMMENT "Generating hotswap canonical opcode tables"
+  VERBATIM)
+
+add_custom_target(hotswap-canonical-opcodes
+  DEPENDS ${HOTSWAP_CANONICAL_OPCODES_INC} ${HOTSWAP_CANONICAL_OPCODES_CPP})
+
+# Surface the output directory to other subdirectories (test-unit builds
+# against transpiler internals, so its TUs #include canonical-op.h too).
+set(HOTSWAP_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}" CACHE INTERNAL
+    "Directory holding hotswap-tblgen output (CanonicalOpcodes.inc)")
+
 # --- Raiser + Pipeline library ------------------------------------------------
 # OBJECT library so its translation units land directly in amd_comgr.so when
 # `target_link_libraries(amd_comgr PRIVATE hotswap::transpiler)` runs (gated
@@ -154,8 +209,7 @@ add_library(hotswap-transpiler OBJECT
   code-object-utils.cpp
   mc-state.cpp
   hotswap-error.cpp
-  canonical-op.cpp
-  opcode-map.cpp
+  ${HOTSWAP_CANONICAL_OPCODES_CPP}
   decode.cpp
   raise-failure.cpp
   raise-context.cpp
@@ -227,7 +281,11 @@ llvm_update_compile_flags(hotswap-transpiler)
 # these paths to compile against us.
 get_filename_component(HOTSWAP_COMGR_BINARY_DIR
   "${CMAKE_CURRENT_BINARY_DIR}/../.." ABSOLUTE)
+add_dependencies(hotswap-transpiler hotswap-canonical-opcodes)
+
 target_include_directories(hotswap-transpiler PRIVATE
+  # hotswap-tblgen output: CanonicalOpcodes.inc (pulled in by canonical-op.h).
+  "${CMAKE_CURRENT_BINARY_DIR}"
   "${LLVM_BUILD_MAIN_SRC_DIR}/lib/Target/AMDGPU"
   "${LLVM_BUILD_MAIN_SRC_DIR}/lib/Target/AMDGPU/Utils"
   "${LLVM_BINARY_DIR}/lib/Target/AMDGPU"

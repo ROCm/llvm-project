@@ -576,11 +576,11 @@ Expected<HandlerResult> handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   // s_add/sub_nc_u64: gfx12 64-bit scalar add/sub, no carry. SCC is *not*
   // updated (the `nc` suffix) for either form; see
   // SOPInstructions.td ~661 for both opcodes' shared `no-Defs-[SCC]`
-  // shape.  Opcode-map row: `opcode-map.cpp` folds LLVM's
+  // shape.  Opcode-map row: `CanonicalOpcodes.td` folds LLVM's
   // `S_ADD_U64` pseudo into this single CanonicalOp (gfx12 renamed the
   // mnemonic).  An earlier version of this handler also matched a
   // dead `CanonicalOp::S_ADD_U64`; that enum entry is gone, see
-  // opcode-map.cpp's S_ADD_U64 comment for the audit trail.
+  // CanonicalOpcodes.td's S_ADD_U64 comment for the audit trail.
   if (Sop == CanonicalOp::S_ADD_NC_U64 || Sop == CanonicalOp::S_SUB_NC_U64) {
     auto SrcSourceImageAddr = [&](unsigned I) -> std::optional<uint64_t> {
       if (!Op.isSrcReg(I))

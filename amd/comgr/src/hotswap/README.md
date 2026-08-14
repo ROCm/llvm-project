@@ -96,6 +96,13 @@ For local library-only iteration, point `LLVM_DIR` at an LLVM build tree. An
 LLVM install tree is not sufficient because hotswap uses AMDGPU target-private
 headers and generated TableGen include files.
 
+The build tree must also have a full `llvm-project` source checkout behind it,
+not just `llvm/include` and `llvm/lib`: `hotswap-tblgen` (see
+[`tablegen/`](tablegen/)) is built from `llvm/utils/TableGen/Common/*.h` and
+runs over `llvm/lib/Target/AMDGPU/AMDGPU.td` to generate the raiser's canonical
+opcode tables. That TableGen run adds roughly ten seconds to a clean build and
+is skipped on rebuilds unless a `.td` file it read has changed.
+
 ```bash
 cmake -S amd/comgr/hotswap -B amd/comgr/hotswap/build -G Ninja \
   -DLLVM_DIR=<build-dir>/lib/cmake/llvm \

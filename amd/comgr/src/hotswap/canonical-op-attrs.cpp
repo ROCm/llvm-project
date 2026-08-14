@@ -83,14 +83,13 @@ const CanonicalOpAttrs &getCanonicalOpAttrs(CanonicalOp Op) {
   return theTable()[Op];
 }
 
-llvm::Error verifyExecAttrCoverage(const MCInstrInfo &MCII,
-                                   const OpcodeMap &OpcMap) {
+llvm::Error verifyExecAttrCoverage(const MCInstrInfo &MCII) {
   for (unsigned Mc = 0, End = MCII.getNumOpcodes(); Mc < End; ++Mc) {
     const MCInstrDesc &Desc = MCII.get(Mc);
     if (!descImplicitlyDefinesEXEC(Desc))
       continue;
 
-    CanonicalOp Sop = OpcMap.lookup(Mc);
+    CanonicalOp Sop = canonicalOpFor(Mc);
     if (Sop == CanonicalOp::Unknown)
       continue; // covered by the generic unsupported-opcode path
 

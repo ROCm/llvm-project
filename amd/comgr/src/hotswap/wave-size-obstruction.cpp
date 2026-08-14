@@ -666,7 +666,7 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
   // The walk matches purely on `CanonicalOp` and `MCInstrDesc` TSFlags
   // bits; there is no string matching on `rawMnemonic`. New
   // obstruction triggers should be added by extending canonical-op.h +
-  // opcode-map.cpp (so the lookup is a single enum compare here),
+  // CanonicalOpcodes.td (so the lookup is a single enum compare here),
   // not by adding `raw.contains(...)` substring tests.
   bool HaveWmma = false;
   SmallVector<LanePredicatedExecSite> LanePredicatedExecSites =
@@ -968,7 +968,7 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
       Report.Sites.push_back(std::move(Site));
       continue;
     }
-    // DPP detection via the MCInstrDesc TSFlags bit. opcode-map.cpp
+    // DPP detection via the MCInstrDesc TSFlags bit. hotswap-tblgen
     // canonicalises DPP variants down to their base CanonicalOp, so the
     // CanonicalOp alone cannot identify them, but `di.tsFlags` is captured
     // from the *original* MCInstrDesc (see decode.cpp) so the DPP
@@ -1041,7 +1041,7 @@ ObstructionReport buildObstructionReport(ArrayRef<DecodedInst> Insts,
     // non-commutative atomics modeled in canonical-op.h today. New
     // non-commutative atomic encodings (e.g. SCRATCH_ATOMIC_SWAP if we
     // ever model it) should be added by extending the enum +
-    // opcode-map.cpp + semop.cpp, not by adding a substring check
+    // CanonicalOpcodes.td + semop.cpp, not by adding a substring check
     // here. Atomics not yet modeled refuse via the existing Phase 5
     // unsupportedOpcode path.
     //

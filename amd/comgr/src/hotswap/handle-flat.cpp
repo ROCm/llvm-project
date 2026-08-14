@@ -1668,7 +1668,7 @@ Expected<HandlerResult> handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
   // flat_atomic_* -- same as global_atomic but flat address space
   if (Sop >= CanonicalOp::FLAT_ATOMIC_ADD &&
       Sop <= CanonicalOp::FLAT_ATOMIC_MAX_NUM_F64) {
-    // Contract: the RTN/non-RTN collapse in OpcodeMap relies on
+    // Contract: the RTN/non-RTN collapse in CanonicalOpcodes.td relies on
     // IsAtomicRet <=> (numDefs > 0) to decide result writeback below.
     assert(((Di.TsFlags & SIInstrFlags::IsAtomicRet) != 0) ==
                (Di.NumDefs > 0) &&

@@ -716,7 +716,7 @@ Expected<HandlerResult> handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
                                    OpResolver &Op) {
   HandlerResult Hr;
   // `mn` is retained for diagnostic messages only; dispatch is driven entirely
-  // by `sop`, which the OpcodeMap canonicalizer resolves from the DPP/SDWA/e32
+  // by `sop`, which hotswap-tblgen resolves from the DPP/SDWA/e32
   // encoding to the base pseudo before the handler sees it.
   StringRef Mn(Di.Mnemonic);
   CanonicalOp Sop = Di.CanonOp;

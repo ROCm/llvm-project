@@ -646,11 +646,10 @@ Error decodeVopdSource(DecodedInst &Di, DecodedInst::VopdHalf &Half,
 
 Error decodeVopdHalf(DecodedInst &Di, DecodedInst::VopdHalf &Half,
                      const AMDGPU::VOPD::ComponentInfo &Info,
-                     unsigned ComponentOpcode, const OpcodeMap &OpcMap,
-                     const MCRegisterInfo &MRI) {
+                     unsigned ComponentOpcode, const MCRegisterInfo &MRI) {
   const MCInst &Inst = Di.Inst;
   Half.ComponentOpcode = ComponentOpcode;
-  Half.CanonOp = OpcMap.lookup(ComponentOpcode);
+  Half.CanonOp = canonicalOpFor(ComponentOpcode);
   if (Half.CanonOp == CanonicalOp::Unknown)
     return failVopdDecode(Di, "unknown VOPD component opcode " +
                                   Twine(ComponentOpcode));
@@ -699,7 +698,7 @@ Error decodeVopdHalf(DecodedInst &Di, DecodedInst::VopdHalf &Half,
 }
 
 Error decodeVopd(DecodedInst &Di, const MCInstrInfo &MCII,
-                 const MCRegisterInfo &MRI, const OpcodeMap &OpcMap) {
+                 const MCRegisterInfo &MRI) {
   if (!AMDGPU::isVOPD(Di.Inst.getOpcode()))
     return Error::success();
   Di.HasVopd = true;
@@ -713,10 +712,10 @@ Error decodeVopd(DecodedInst &Di, const MCInstrInfo &MCII,
   AMDGPU::VOPD::ComponentInfo YInfo(OpYDesc, XInfo, Di.IsVopd3);
 
   if (Error E = decodeVopdHalf(Di, Di.Vopd[AMDGPU::VOPD::ComponentIndex::X],
-                               XInfo, opX, OpcMap, MRI))
+                               XInfo, opX, MRI))
     return E;
   return decodeVopdHalf(Di, Di.Vopd[AMDGPU::VOPD::ComponentIndex::Y], YInfo,
-                        opY, OpcMap, MRI);
+                        opY, MRI);
 }
 
 // Absolute byte target of an s_add_pc_i64: PC of the following instruction
@@ -887,7 +886,7 @@ bool decodedInstEndsBlock(const DecodedInst &LastInst) {
   }
 }
 
-Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
+Expected<DecodeResult> decodeKernel(const MCState &Mc,
                                     ArrayRef<uint8_t> TextBytes,
                                     uint64_t KernelOffset,
                                     uint64_t KernelEndOffset,
@@ -936,9 +935,9 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
     }
     Di.Mnemonic = stripEncoding(StringRef(Di.RawMnemonic)).str();
     Di.Inst = Inst;
-    Di.CanonOp = OpcMap.lookup(Inst.getOpcode());
+    Di.CanonOp = canonicalOpFor(Inst.getOpcode());
     if (Di.CanonOp == CanonicalOp::V_CMP || Di.CanonOp == CanonicalOp::V_CMPX)
-      Di.Vcmp = OpcMap.lookupVCmp(Inst.getOpcode());
+      Di.Vcmp = vcmpMetaFor(Inst.getOpcode());
     Di.NumDefs = Desc.getNumDefs();
     Di.IsBranch = Desc.isBranch();
     Di.IsConditionalBranch = Desc.isConditionalBranch();
@@ -953,7 +952,7 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
     if (Error E = decodeDppModifiers(Di))
       return E;
     decodeDsSwizzleImm(Di);
-    if (Error E = decodeVopd(Di, *Mc.InstrInfo, *Mc.RegInfo, OpcMap))
+    if (Error E = decodeVopd(Di, *Mc.InstrInfo, *Mc.RegInfo))
       return E;
     if (Error E = buildSrcMap(Di, Desc))
       return E;

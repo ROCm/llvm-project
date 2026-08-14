@@ -61,7 +61,10 @@ function(comgr_add_amdgpu_private_include_dirs target)
   target_include_directories(${target} PRIVATE
     "${_comgr_llvm_main_src_dir}/lib/Target/AMDGPU"
     "${_comgr_llvm_main_src_dir}/lib/Target/AMDGPU/Utils"
-    "${LLVM_BINARY_DIR}/lib/Target/AMDGPU")
+    "${LLVM_BINARY_DIR}/lib/Target/AMDGPU"
+    # hotswap-tblgen output: canonical-op.h #includes CanonicalOpcodes.inc.
+    "${HOTSWAP_GENERATED_INCLUDE_DIR}")
+  add_dependencies(${target} hotswap-canonical-opcodes)
 endfunction()
 
 # Wire up a test target against the hotswap transpiler OBJECT lib + the

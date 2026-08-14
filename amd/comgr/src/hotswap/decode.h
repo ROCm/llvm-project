@@ -22,7 +22,6 @@
 namespace COMGR::hotswap {
 
 struct MCState;
-class OpcodeMap;
 
 // Output of the decode phase: a linearised stream of decoded instructions
 // plus the set of basic-block start offsets the CFG recovery discovered.
@@ -44,8 +43,8 @@ struct DecodeResult {
   std::set<uint64_t> BlockStarts;
 };
 
-// Decode `textBytes` starting at `kernelOffset` using the caller-owned
-// MC + OpcodeMap. Produces a fully populated `DecodedInst` per MCInst
+// Decode `textBytes` starting at `kernelOffset` using the caller-owned MC
+// state. Produces a fully populated `DecodedInst` per MCInst
 // (canonOp, tsFlags, srcMap/modMap, implicit-def classification, branch
 // targets) and the set of block-start offsets.
 //
@@ -59,9 +58,8 @@ struct DecodeResult {
 // LLVM change before it can silently corrupt a handler's view of an
 // instruction.
 llvm::Expected<DecodeResult>
-decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
-             llvm::ArrayRef<uint8_t> TextBytes, uint64_t KernelOffset,
-             uint64_t KernelEndOffset = 0,
+decodeKernel(const MCState &Mc, llvm::ArrayRef<uint8_t> TextBytes,
+             uint64_t KernelOffset, uint64_t KernelEndOffset = 0,
              std::optional<uint64_t> KernelStartOffset = std::nullopt);
 
 // Compute the decoded CFG successors for a block ending in LastInst.

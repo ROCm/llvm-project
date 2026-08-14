@@ -512,13 +512,9 @@ static Expected<RaiseResult> raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
               "`raiser.cpp` for the full rationale.\n";
   }
 
-  // Build opcode -> CanonicalOp map from MCInstrInfo
-  OpcodeMap OpcMap;
-  OpcMap.build(*Mc.InstrInfo);
-
   // Fail loudly if any MFMA-format CanonicalOp is missing a handler row. Cheap
   // startup walk that catches table drift before any kernel is lifted.
-  if (llvm::Error MFMACovErr = verifyMFMACoverage(*Mc.InstrInfo, OpcMap))
+  if (llvm::Error MFMACovErr = verifyMFMACoverage(*Mc.InstrInfo))
     return MFMACovErr;
 
   // Startup invariant: every MC opcode that implicitly defines EXEC must
@@ -526,8 +522,7 @@ static Expected<RaiseResult> raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   // operand EXEC writers (where EXEC is an operand value rather than a
   // TableGen def) stay the per-kernel Phase 1.5 gate's responsibility
   // since they depend on runtime operand values.
-  if (llvm::Error ExecAttrCovErr =
-          verifyExecAttrCoverage(*Mc.InstrInfo, OpcMap))
+  if (llvm::Error ExecAttrCovErr = verifyExecAttrCoverage(*Mc.InstrInfo))
     return ExecAttrCovErr;
 
   // ==== Phase 1: Disassemble + identify block boundaries ====
@@ -544,9 +539,9 @@ static Expected<RaiseResult> raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
       Options.KernelSize == 0 ? 0 : Options.KernelOffset + Options.KernelSize;
   const uint64_t DecodeLimit =
       KernelEndOffset == 0 ? TextBytes.size() : KernelEndOffset;
-  Expected<DecodeResult> DecodedOrErr = decodeKernel(
-      Mc, OpcMap, ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
-      Options.KernelOffset, KernelEndOffset);
+  Expected<DecodeResult> DecodedOrErr =
+      decodeKernel(Mc, ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
+                   Options.KernelOffset, KernelEndOffset);
   if (!DecodedOrErr)
     return DecodedOrErr.takeError();
   DecodeResult Decoded = std::move(*DecodedOrErr);
@@ -636,8 +631,8 @@ static Expected<RaiseResult> raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
             "kernel extent and any known function symbol");
       }
       Expected<DecodeResult> HelperDecodedOrErr = decodeKernel(
-          Mc, OpcMap, ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
-          Addr, Region->second, Region->first);
+          Mc, ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()), Addr,
+          Region->second, Region->first);
       if (!HelperDecodedOrErr)
         return HelperDecodedOrErr.takeError();
       DecodeResult HelperDecoded = std::move(*HelperDecodedOrErr);

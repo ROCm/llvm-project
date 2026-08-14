@@ -322,17 +322,16 @@ Expected<HandlerResult> handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
 // canon table and the handler table disagree. This is the same
 // discipline `initMCState`'s `KMaxSrcs` check uses -- run once, fail
 // loudly, no per-kernel surprises.
-llvm::Error verifyMFMACoverage(const MCInstrInfo &MCII,
-                               const OpcodeMap &OpcMap) {
+llvm::Error verifyMFMACoverage(const MCInstrInfo &MCII) {
   const auto &Table = mfmaIntrinsicTable();
   for (unsigned Opc = 0, End = MCII.getNumOpcodes(); Opc < End; ++Opc) {
     const MCInstrDesc &Desc = MCII.get(Opc);
     if (!(Desc.TSFlags & llvm::SIInstrFlags::IsMAI))
       continue;
-    CanonicalOp Sop = OpcMap.lookup(Opc);
+    CanonicalOp Sop = canonicalOpFor(Opc);
     if (Sop == CanonicalOp::Unknown)
-      continue; // Opcode not modelled in kCanonTable -- fails at raise
-                // time with "Unknown MFMA"; not a drift we own here.
+      continue; // Opcode not modelled in CanonicalOpcodes.td -- fails at
+                // raise time with "Unknown MFMA"; not a drift we own here.
     if (Sop == CanonicalOp::V_ACCVGPR_WRITE_B32 ||
         Sop == CanonicalOp::V_ACCVGPR_READ_B32)
       continue; // Handled specially above; no intrinsic entry needed.
@@ -342,7 +341,7 @@ llvm::Error verifyMFMACoverage(const MCInstrInfo &MCII,
           " maps to CanonicalOp " + Twine(static_cast<int>(Sop)) +
           " but `mfmaIntrinsicTable` has no entry for it. Either add the "
           "Intrinsic::ID row or remove the CanonicalOp from "
-          "`kCanonTable`.");
+          "`CanonicalOpcodes.td`.");
   }
 
   return llvm::Error::success();

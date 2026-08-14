@@ -66,7 +66,7 @@ struct DecodedInst {
 
   uint64_t TsFlags = 0;
   // Non-null iff `canonOp == V_CMP || canonOp == V_CMPX`. Points into the
-  // OpcodeMap side-table; stable for the lifetime of the map.
+  // Points into the generated V_CMP side table; static storage.
   const VCmpMeta *Vcmp = nullptr;
   bool DefsScc = false;
   bool DefsVcc = false;
@@ -89,8 +89,8 @@ struct DecodedInst {
   // DPP is a src0-pathway cross-lane shuffle modifier. The original
   // `inst.getOpcode()` retains the `_dpp` suffix and its MCInstrDesc
   // advertises the DPP bit via `TSFlags & SIInstrFlags::DPP`; the
-  // opcode_map canonicalises the CanonicalOp down to the base op, so handlers
-  // dispatched by CanonicalOp do not see the DPP variant directly.
+  // hotswap-tblgen canonicalises the CanonicalOp down to the base op, so
+  // handlers dispatched by CanonicalOp do not see the DPP variant directly.
   //
   // `hasDpp` is set in decode.cpp only for the DPP16 forms whose
   // modifier operands can be represented by `llvm.amdgcn.update.dpp`;

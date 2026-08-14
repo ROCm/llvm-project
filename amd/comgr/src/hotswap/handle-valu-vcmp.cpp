@@ -52,14 +52,14 @@ Expected<HandlerResult> handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
   // The ~100 V_CMP_* and V_CMPX_* MC opcodes collapse onto two SemOps
   // (V_CMP, V_CMPX); the per-opcode metadata (ICmp/FCmp predicate,
   // element width, int/float kind) is looked up via `di.vcmp`,
-  // populated at decode time by OpcodeMap. That keeps this handler
+  // populated at decode time from the generated table. That keeps this handler
   // linear in the number of abstract shapes (2) rather than in the
   // number of AMDGPU opcodes.
   const VCmpMeta *M = Di.Vcmp;
   if (!M) {
     errs() << "transpiler: " << Mn
            << ": V_CMP/V_CMPX reached handler without VCmpMeta "
-              "(OpcodeMap::build should have populated it)\n";
+              "(decode should have populated it from the generated table)\n";
     return RaiseFailure::unsupportedInstructionForm(
         Di, "VALU", "V_CMP/V_CMPX reached handler without VCmpMeta");
   }

@@ -20,8 +20,6 @@ class MCInstrInfo;
 
 namespace COMGR::hotswap {
 
-class OpcodeMap;
-
 // Per-CanonicalOp metadata that the raiser cross-references at its pre-
 // translation gates. Grows incrementally as new per-writer predicates
 // are needed (today only `routesExecThroughStoreExec`; the wave-size-
@@ -70,17 +68,16 @@ const CanonicalOpAttrs &getCanonicalOpAttrs(CanonicalOp Op);
 
 // Startup invariant: for every MC opcode whose MCInstrDesc declares
 // EXEC (or EXEC_LO/EXEC_HI) as an implicit def, the CanonicalOp it maps to
-// in `opcMap` must have `routesExecThroughStoreExec = true`. Catches
-// the case where a new EXEC-writing opcode lands in LLVM and gets
-// mapped to a CanonicalOp whose handler we have not yet audited for SPE.
+// must have `routesExecThroughStoreExec = true`. Catches the case where a
+// new EXEC-writing opcode lands in LLVM and gets mapped to a CanonicalOp
+// whose handler we have not yet audited for SPE.
 // Explicit-operand EXEC writes (e.g. `s_mov_b32 exec_lo, s2`) remain
 // the Phase 1.5 per-kernel gate's responsibility since they depend on
 // runtime operand values.
 //
 // Called once at raiser init from the same slot that runs
 // `verifyMFMACoverage`.
-llvm::Error verifyExecAttrCoverage(const llvm::MCInstrInfo &MCII,
-                                   const OpcodeMap &OpcMap);
+llvm::Error verifyExecAttrCoverage(const llvm::MCInstrInfo &MCII);
 
 } // namespace COMGR::hotswap
 
