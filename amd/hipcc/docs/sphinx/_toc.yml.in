@@ -15,6 +15,10 @@ subtrees:
   entries:
   - file: usage
 
+- caption: Migration
+  entries:
+  - file: deprecation
+
 - caption: About
   entries:
   - file: license.md
