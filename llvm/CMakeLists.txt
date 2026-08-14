@@ -1460,6 +1460,9 @@ if( LLVM_INCLUDE_EXAMPLES )
   add_subdirectory(examples)
 endif()
 
+option(LLVM_BUILD_SQTT_MARKER
+  "Build and install the AMD SQTT marker pass plugin" ON)
+
 if( LLVM_INCLUDE_TESTS )
   set(LLVM_GTEST_RUN_UNDER
     "" CACHE STRING
@@ -1475,6 +1478,10 @@ if( LLVM_INCLUDE_TESTS )
   add_subdirectory(utils/lit)
   add_subdirectory(test)
   add_subdirectory(unittests)
+  if(LLVM_BUILD_SQTT_MARKER)
+    add_subdirectory(${LLVM_MAIN_SRC_DIR}/../amd/sqtt-marker
+                     ${LLVM_BINARY_DIR}/amd/sqtt-marker)
+  endif()
 
   umbrella_lit_testsuite_end(check-all)
   get_property(LLVM_ALL_LIT_DEPENDS GLOBAL PROPERTY LLVM_ALL_LIT_DEPENDS)
@@ -1486,6 +1493,11 @@ if( LLVM_INCLUDE_TESTS )
   endif()
   set_target_properties(test-depends PROPERTIES FOLDER "LLVM/Tests")
   add_dependencies(check-all test-depends)
+endif()
+
+if(LLVM_BUILD_SQTT_MARKER AND NOT TARGET SQTTMarkerPass)
+  add_subdirectory(${LLVM_MAIN_SRC_DIR}/../amd/sqtt-marker
+                   ${LLVM_BINARY_DIR}/amd/sqtt-marker)
 endif()
 
 if (LLVM_INCLUDE_DOCS)
