@@ -70,6 +70,7 @@ def main() -> None:
                 "amdgpu_targets": "",
                 "test-runs-on": "",
                 "benchmark-runs-on": "",
+                "sanity_check_only_for_family": False,
             },
         ],
         "dist_amdgpu_families": "gfx1151",
