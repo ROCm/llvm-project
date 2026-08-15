@@ -309,11 +309,13 @@ amd_comgr_status_t DataObject::setName(llvm::StringRef Name) {
 }
 
 amd_comgr_status_t DataObject::setData(llvm::StringRef Data) {
+  std::scoped_lock<std::mutex> CacheLock(CacheMutex);
   clearData();
   return setCStr(this->Data, Data, &Size);
 }
 
 amd_comgr_status_t DataObject::setData(std::unique_ptr<llvm::MemoryBuffer> MB) {
+  std::scoped_lock<std::mutex> CacheLock(CacheMutex);
   clearData();
   Buffer = std::move(MB);
   Data = const_cast<char *>(Buffer->getBufferStart());

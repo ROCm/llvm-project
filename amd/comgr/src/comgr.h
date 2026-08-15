@@ -106,8 +106,9 @@ struct DataObject {
   size_t Size;
   int RefCount;
   DataSymbol *DataSym;
-  // Guards the caches below: the query entry points that populate them must
-  // stay safe to call concurrently on one handle.
+  // Serializes cache population against data replacement, so that querying and
+  // re-setting one handle concurrently cannot cache a document parsed from a
+  // buffer that is being swapped out. Held across all of setData().
   std::mutex CacheMutex;
   std::shared_ptr<MetaDocument> CachedMetaDoc;
   std::vector<std::string> MangledNames;
@@ -117,6 +118,7 @@ struct DataObject {
 private:
   std::unique_ptr<llvm::MemoryBuffer> Buffer;
 
+  // Requires CacheMutex, except from the destructor.
   void clearData();
   // We require this type be allocated via new, specifically through calling
   // allocate, because we want to be able to `delete this` in release. To make
