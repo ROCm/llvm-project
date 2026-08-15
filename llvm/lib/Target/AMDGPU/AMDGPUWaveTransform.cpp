@@ -263,6 +263,20 @@ public:
     NodeForBlock.try_emplace(Block, Node);
   }
 
+  /// Walk \p BB up to the block before its outermost enclosing cycle header, so
+  /// an init placed there runs once before the loop instead of per iteration.
+  MachineBasicBlock *hoistBeforeCycle(MachineBasicBlock *BB) {
+    while (WaveNode *N = nodeForBlock(BB)) {
+      if (!N->Cycle)
+        break;
+      MachineDomTreeNode *HN = DomTree.getNode(CycleInfo.getHeader(N->Cycle));
+      if (!HN || !HN->getIDom())
+        break;
+      BB = HN->getIDom()->getBlock();
+    }
+    return BB;
+  }
+
   template <typename WrappedIteratorT, typename WaveNodeT>
   struct node_iterator_impl;
 
@@ -1813,6 +1827,7 @@ void ControlFlowRewriter::rewrite() {
       RegMap;
   AMDGPULaneMaskUpdater Updater(Function);
   Updater.setLaneMaskAnalysis(&LMA);
+  Updater.setDominatorTree(&ReconvergeCfg.getDomTree());
 
   for (WaveNode *LaneTarget : NodeOrder) {
     CFGNodeInfo &LaneTargetInfo = NodeInfo.find(LaneTarget)->second;
@@ -2116,6 +2131,13 @@ void ControlFlowRewriter::rewrite() {
             TII.get(LMC.OrOpc), LMC.ExecReg)
         .addReg(LMC.ExecReg)
         .addReg(RejoinMask);
+  }
+
+  // Hoist each accumulator's init out of any enclosing cycle before emitting
+  for (Register Acc : Updater.getAllAccumulators()) {
+    if (MachineBasicBlock *DomBB = Updater.getAccumulatorInitBlock(Acc))
+      Updater.setAccumulatorInitBlock(Acc,
+                                      ReconvergeCfg.hoistBeforeCycle(DomBB));
   }
   Updater.insertAccumulatorResets();
   AccumulatorRegs = std::move(Updater.getAllAccumulators());
