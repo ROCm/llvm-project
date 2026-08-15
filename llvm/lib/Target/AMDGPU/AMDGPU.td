@@ -1414,11 +1414,6 @@ def FeatureGFX1250B0 : SubtargetFeature<"gfx1250-b0-specific",
   "Generate code for B0 flavor of gfx1250."
 >;
 
-defm NeedsTDMDrain : AMDGPUSubtargetFeature<"needs-tdm-drain",
-  "Needs to keep tensor count low",
-  /*GenPredicate=*/0
->;
-
 //===----------------------------------------------------------------------===//
 
 class GCNSubtargetFeatureGeneration <string Value,
@@ -2219,9 +2214,7 @@ def FeatureISAVersion12_50 : FeatureSet<
    FeatureCvtPkNormVOP2Insts,
    FeatureCvtPkNormVOP3Insts,
    FeatureSWMMACGfx1200Insts,
-   FeatureSWMMACGfx1250Insts,
-   FeatureNeedsTDMDrain,
-])>;
+   FeatureSWMMACGfx1250Insts])>;
 
 def FeatureISAVersion12_51 : FeatureSet<
   !listconcat(FeatureISAVersion12_50_Common.Features,
@@ -2238,9 +2231,7 @@ def FeatureISAVersion12_51 : FeatureSet<
    FeatureCvtPkNormVOP2Insts,
    FeatureCvtPkNormVOP3Insts,
    FeatureSWMMACGfx1200Insts,
-   FeatureSWMMACGfx1250Insts,
-   FeatureNeedsTDMDrain,
-])>;
+   FeatureSWMMACGfx1250Insts])>;
 
 def FeatureISAVersion12_Generic: FeatureSet<
   !listconcat(FeatureISAVersion12.Features,
@@ -2251,9 +2242,7 @@ def FeatureISAVersion12_5_Generic: FeatureSet<
   [FeatureAddressableLocalMemorySize327680,
    FeatureSetregVGPRMSBFixup,
    FeatureRequiresCOV6,
-   FeatureXNACKAnyOnly,
-   FeatureNeedsTDMDrain,
-])>;
+   FeatureXNACKAnyOnly])>;
 
 def FeatureISAVersion13 : FeatureSet<
   [FeatureGFX13,
