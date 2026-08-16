@@ -161,8 +161,8 @@ exit1:                                     ; preds = %LeafBlock, %LeafBlock1
 
 
 ; GCN-LABEL: {{^}}multi_divergent_region_exit_unreachable_unreachable:
-; GCN: ; %exit0
 ; GCN: ; %exit1
+; GCN: ; %exit0
 ; GCN: .Lfunc_end
 define amdgpu_kernel void @multi_divergent_region_exit_unreachable_unreachable(ptr addrspace(1) nocapture %arg0, ptr addrspace(1) nocapture %arg1, ptr addrspace(1) nocapture %arg2) #0 {
 entry:

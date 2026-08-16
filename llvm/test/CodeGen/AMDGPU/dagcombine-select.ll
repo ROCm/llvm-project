@@ -745,6 +745,7 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX9-NEXT:    v_cmp_eq_u32_e64 s[4:5], 1, v0
 ; GFX9-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX9-NEXT:    s_mov_b64 s[6:7], -1
+; GFX9-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB27_3
@@ -785,6 +786,7 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], 1, v0
 ; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
 ; GFX942-NEXT:    s_mov_b64 s[2:3], -1
+; GFX942-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB27_3

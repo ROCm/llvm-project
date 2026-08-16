@@ -9042,68 +9042,64 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX7-LABEL: local_ds_fadd:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_load_dwordx2 s[2:3], s[4:5], 0x2
-; GFX7-NEXT:    s_mov_b64 s[0:1], exec
-; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, s0, 0
-; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v0, s1, v0
-; GFX7-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v0
+; GFX7-NEXT:    s_mov_b64 s[10:11], exec
+; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, s10, 0
+; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v0, s11, v0
+; GFX7-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    s_add_i32 s3, s3, 4
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; GFX7-NEXT:    s_xor_b64 s[14:15], s[12:13], exec
-; GFX7-NEXT:    s_mov_b64 s[8:9], -1
-; GFX7-NEXT:    s_mov_b64 s[10:11], 0
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
+; GFX7-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
+; GFX7-NEXT:    s_mov_b64 s[6:7], -1
+; GFX7-NEXT:    s_mov_b64 s[8:9], 0
 ; GFX7-NEXT:    ; implicit-def: $vgpr2
 ; GFX7-NEXT:    s_mov_b32 m0, -1
-; GFX7-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX7-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB28_3
 ; GFX7-NEXT:  .LBB28_1:
-; GFX7-NEXT:    s_lshl_b32 s14, s3, 3
-; GFX7-NEXT:    v_mov_b32_e32 v1, s14
+; GFX7-NEXT:    s_lshl_b32 s12, s3, 3
+; GFX7-NEXT:    v_mov_b32_e32 v1, s12
 ; GFX7-NEXT:    ds_read_b32 v2, v1
-; GFX7-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
+; GFX7-NEXT:    s_bcnt1_i32_b64 s0, s[10:11]
 ; GFX7-NEXT:    v_cvt_f32_ubyte0_e32 v1, s0
 ; GFX7-NEXT:    v_mul_f32_e32 v1, 0x42280000, v1
-; GFX7-NEXT:    s_and_b64 s[0:1], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[0:1], s[6:7], exec
 ; GFX7-NEXT:  .LBB28_2: ; %atomicrmw.start
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    v_mov_b32_e32 v3, v2
-; GFX7-NEXT:    v_mov_b32_e32 v2, s14
+; GFX7-NEXT:    v_mov_b32_e32 v2, s12
 ; GFX7-NEXT:    v_add_f32_e32 v4, v3, v1
 ; GFX7-NEXT:    ds_cmpst_rtn_b32 v2, v2, v3, v4
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e64 s[0:1], v2, v3
 ; GFX7-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
-; GFX7-NEXT:    s_xor_b64 s[16:17], exec, s[0:1]
-; GFX7-NEXT:    s_or_b64 s[12:13], s[12:13], s[16:17]
+; GFX7-NEXT:    s_xor_b64 s[10:11], exec, s[0:1]
+; GFX7-NEXT:    s_or_b64 s[8:9], s[8:9], s[10:11]
 ; GFX7-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB28_2
 ; GFX7-NEXT:  .LBB28_3:
-; GFX7-NEXT:    s_or_b64 exec, exec, s[12:13]
-; GFX7-NEXT:    s_mov_b64 s[0:1], exec
-; GFX7-NEXT:    v_readfirstlane_b32 s12, v2
-; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v2, s0, 0
-; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v2, s1, v2
+; GFX7-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX7-NEXT:    s_mov_b64 s[8:9], exec
+; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v3, s8, 0
+; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v3, s9, v3
+; GFX7-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v3
 ; GFX7-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
-; GFX7-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
-; GFX7-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX7-NEXT:    s_or_b64 s[10:11], s[10:11], vcc
-; GFX7-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX7-NEXT:    s_xor_b64 s[12:13], s[0:1], exec
+; GFX7-NEXT:    v_readfirstlane_b32 s10, v2
+; GFX7-NEXT:    s_mov_b64 exec, s[12:13]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB28_6
 ; GFX7-NEXT:  .LBB28_4:
 ; GFX7-NEXT:    s_lshl_b32 s3, s3, 4
 ; GFX7-NEXT:    v_mov_b32_e32 v2, s3
 ; GFX7-NEXT:    ds_read_b32 v2, v2
-; GFX7-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
-; GFX7-NEXT:    v_cvt_f32_ubyte0_e32 v3, s0
+; GFX7-NEXT:    s_bcnt1_i32_b64 s8, s[8:9]
+; GFX7-NEXT:    v_cvt_f32_ubyte0_e32 v3, s8
 ; GFX7-NEXT:    v_mul_f32_e32 v3, 0x42280000, v3
-; GFX7-NEXT:    s_and_b64 s[0:1], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[8:9], s[6:7], exec
 ; GFX7-NEXT:  .LBB28_5: ; %atomicrmw.start2
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
@@ -9112,19 +9108,19 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX7-NEXT:    ds_cmpst_rtn_b32 v4, v5, v2, v4
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, v4, v2
-; GFX7-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX7-NEXT:    s_xor_b64 s[14:15], exec, s[0:1]
+; GFX7-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX7-NEXT:    s_xor_b64 s[12:13], exec, s[8:9]
 ; GFX7-NEXT:    v_mov_b32_e32 v2, v4
-; GFX7-NEXT:    s_or_b64 s[10:11], s[10:11], s[14:15]
-; GFX7-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX7-NEXT:    s_or_b64 s[0:1], s[0:1], s[12:13]
+; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB28_5
 ; GFX7-NEXT:  .LBB28_6:
-; GFX7-NEXT:    s_or_b64 exec, exec, s[10:11]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX7-NEXT:    v_cvt_f32_ubyte0_e32 v0, v0
 ; GFX7-NEXT:    v_mul_f32_e32 v0, 0x42280000, v0
-; GFX7-NEXT:    v_add_f32_e32 v0, s12, v0
-; GFX7-NEXT:    v_mov_b32_e32 v2, s12
+; GFX7-NEXT:    v_add_f32_e32 v0, s10, v0
+; GFX7-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX7-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; GFX7-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX7-NEXT:    v_cndmask_b32_e32 v2, v0, v2, vcc
@@ -9133,23 +9129,22 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX7-NEXT:  .LBB28_7: ; %ComputeLoop
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_ff1_i32_b64 s3, s[0:1]
-; GFX7-NEXT:    s_lshl_b64 s[10:11], 1, s3
-; GFX7-NEXT:    s_andn2_b64 s[0:1], s[0:1], s[10:11]
-; GFX7-NEXT:    v_cmp_ne_u64_e64 s[10:11], s[0:1], 0
-; GFX7-NEXT:    v_readfirstlane_b32 s12, v1
-; GFX7-NEXT:    v_readlane_b32 s13, v2, s3
+; GFX7-NEXT:    s_lshl_b64 s[8:9], 1, s3
+; GFX7-NEXT:    s_andn2_b64 s[0:1], s[0:1], s[8:9]
+; GFX7-NEXT:    v_cmp_ne_u64_e64 s[8:9], s[0:1], 0
+; GFX7-NEXT:    v_readfirstlane_b32 s10, v1
+; GFX7-NEXT:    v_readlane_b32 s11, v2, s3
 ; GFX7-NEXT:    s_mov_b32 m0, s3
-; GFX7-NEXT:    v_writelane_b32 v0, s12, m0
-; GFX7-NEXT:    v_add_f32_e32 v1, s13, v1
-; GFX7-NEXT:    s_and_b64 vcc, exec, s[10:11]
+; GFX7-NEXT:    v_writelane_b32 v0, s10, m0
+; GFX7-NEXT:    v_add_f32_e32 v1, s11, v1
+; GFX7-NEXT:    s_and_b64 vcc, exec, s[8:9]
 ; GFX7-NEXT:    s_cbranch_vccnz .LBB28_7
 ; GFX7-NEXT:  ; %bb.8: ; %ComputeEnd
 ; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v2, exec_lo, 0
 ; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v2, exec_hi, v2
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GFX7-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; GFX7-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc
-; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[0:1]
+; GFX7-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; GFX7-NEXT:    ; implicit-def: $vgpr3
 ; GFX7-NEXT:    s_mov_b64 exec, vcc
 ; GFX7-NEXT:    ; divergent control-flow edge
@@ -9158,7 +9153,7 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX7-NEXT:    v_mov_b32_e32 v3, s2
 ; GFX7-NEXT:    s_mov_b32 m0, -1
 ; GFX7-NEXT:    ds_read_b32 v3, v3
-; GFX7-NEXT:    s_and_b64 s[0:1], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GFX7-NEXT:  .LBB28_10: ; %atomicrmw.start8
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
@@ -9168,14 +9163,14 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX7-NEXT:    ds_cmpst_rtn_b32 v3, v3, v4, v5
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
-; GFX7-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX7-NEXT:    s_xor_b64 s[8:9], exec, s[0:1]
-; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX7-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX7-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX7-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
+; GFX7-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB28_10
 ; GFX7-NEXT:  .LBB28_11:
-; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX7-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x0
 ; GFX7-NEXT:    v_readfirstlane_b32 s4, v3
 ; GFX7-NEXT:    v_add_f32_e32 v0, s4, v0
@@ -9190,91 +9185,87 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ;
 ; GFX6-LABEL: local_ds_fadd:
 ; GFX6:       ; %bb.0:
-; GFX6-NEXT:    s_load_dword s12, s[4:5], 0x3
-; GFX6-NEXT:    s_mov_b64 s[0:1], exec
-; GFX6-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, s0, 0
-; GFX6-NEXT:    v_mbcnt_hi_u32_b32_e32 v0, s1, v0
-; GFX6-NEXT:    v_cmp_ne_u32_e64 s[10:11], 0, v0
+; GFX6-NEXT:    s_load_dword s10, s[4:5], 0x3
+; GFX6-NEXT:    s_mov_b64 s[8:9], exec
+; GFX6-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, s8, 0
+; GFX6-NEXT:    v_mbcnt_hi_u32_b32_e32 v0, s9, v0
+; GFX6-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX6-NEXT:    s_add_i32 s12, s12, 4
-; GFX6-NEXT:    s_mov_b64 s[2:3], 0
-; GFX6-NEXT:    s_mov_b64 s[2:3], 0
+; GFX6-NEXT:    s_add_i32 s10, s10, 4
 ; GFX6-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; GFX6-NEXT:    s_xor_b64 s[14:15], s[10:11], exec
-; GFX6-NEXT:    s_mov_b64 s[6:7], -1
-; GFX6-NEXT:    s_mov_b64 s[8:9], 0
-; GFX6-NEXT:    s_mov_b64 s[2:3], 0
+; GFX6-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
+; GFX6-NEXT:    s_mov_b64 s[2:3], -1
+; GFX6-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX6-NEXT:    ; implicit-def: $vgpr2
 ; GFX6-NEXT:    s_mov_b32 m0, -1
-; GFX6-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX6-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB28_3
 ; GFX6-NEXT:  .LBB28_1:
-; GFX6-NEXT:    s_lshl_b32 s13, s12, 3
-; GFX6-NEXT:    v_mov_b32_e32 v1, s13
+; GFX6-NEXT:    s_lshl_b32 s11, s10, 3
+; GFX6-NEXT:    v_mov_b32_e32 v1, s11
 ; GFX6-NEXT:    ds_read_b32 v2, v1
-; GFX6-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
+; GFX6-NEXT:    s_bcnt1_i32_b64 s0, s[8:9]
 ; GFX6-NEXT:    v_cvt_f32_ubyte0_e32 v1, s0
 ; GFX6-NEXT:    v_mul_f32_e32 v1, 0x42280000, v1
-; GFX6-NEXT:    s_and_b64 s[0:1], s[6:7], exec
+; GFX6-NEXT:    s_and_b64 s[0:1], s[2:3], exec
 ; GFX6-NEXT:  .LBB28_2: ; %atomicrmw.start
 ; GFX6-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_mov_b32_e32 v3, v2
-; GFX6-NEXT:    v_mov_b32_e32 v2, s13
+; GFX6-NEXT:    v_mov_b32_e32 v2, s11
 ; GFX6-NEXT:    v_add_f32_e32 v4, v3, v1
 ; GFX6-NEXT:    ds_cmpst_rtn_b32 v2, v2, v3, v4
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_cmp_eq_u32_e64 s[0:1], v2, v3
 ; GFX6-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
-; GFX6-NEXT:    s_xor_b64 s[14:15], exec, s[0:1]
-; GFX6-NEXT:    s_or_b64 s[10:11], s[10:11], s[14:15]
+; GFX6-NEXT:    s_xor_b64 s[8:9], exec, s[0:1]
+; GFX6-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
 ; GFX6-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execnz .LBB28_2
 ; GFX6-NEXT:  .LBB28_3:
-; GFX6-NEXT:    s_or_b64 exec, exec, s[10:11]
-; GFX6-NEXT:    s_mov_b64 s[0:1], exec
-; GFX6-NEXT:    s_load_dword s10, s[4:5], 0x2
-; GFX6-NEXT:    v_readfirstlane_b32 s11, v2
-; GFX6-NEXT:    v_mbcnt_lo_u32_b32_e64 v2, s0, 0
-; GFX6-NEXT:    v_mbcnt_hi_u32_b32_e32 v2, s1, v2
+; GFX6-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX6-NEXT:    s_mov_b64 s[6:7], exec
+; GFX6-NEXT:    s_load_dword s8, s[4:5], 0x2
+; GFX6-NEXT:    v_mbcnt_lo_u32_b32_e64 v3, s6, 0
+; GFX6-NEXT:    v_mbcnt_hi_u32_b32_e32 v3, s7, v3
+; GFX6-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v3
 ; GFX6-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
-; GFX6-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
-; GFX6-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX6-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
-; GFX6-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX6-NEXT:    s_xor_b64 s[12:13], s[0:1], exec
+; GFX6-NEXT:    v_readfirstlane_b32 s9, v2
+; GFX6-NEXT:    s_mov_b64 exec, s[12:13]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB28_6
 ; GFX6-NEXT:  .LBB28_4:
-; GFX6-NEXT:    s_lshl_b32 s12, s12, 4
-; GFX6-NEXT:    v_mov_b32_e32 v2, s12
+; GFX6-NEXT:    s_lshl_b32 s10, s10, 4
+; GFX6-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX6-NEXT:    ds_read_b32 v2, v2
-; GFX6-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
-; GFX6-NEXT:    v_cvt_f32_ubyte0_e32 v3, s0
+; GFX6-NEXT:    s_bcnt1_i32_b64 s6, s[6:7]
+; GFX6-NEXT:    v_cvt_f32_ubyte0_e32 v3, s6
 ; GFX6-NEXT:    v_mul_f32_e32 v3, 0x42280000, v3
-; GFX6-NEXT:    s_and_b64 s[0:1], s[6:7], exec
+; GFX6-NEXT:    s_and_b64 s[6:7], s[2:3], exec
 ; GFX6-NEXT:  .LBB28_5: ; %atomicrmw.start2
 ; GFX6-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_add_f32_e32 v4, v2, v3
-; GFX6-NEXT:    v_mov_b32_e32 v5, s12
+; GFX6-NEXT:    v_mov_b32_e32 v5, s10
 ; GFX6-NEXT:    ds_cmpst_rtn_b32 v4, v5, v2, v4
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_cmp_eq_u32_e32 vcc, v4, v2
-; GFX6-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX6-NEXT:    s_xor_b64 s[14:15], exec, s[0:1]
+; GFX6-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX6-NEXT:    s_xor_b64 s[12:13], exec, s[6:7]
 ; GFX6-NEXT:    v_mov_b32_e32 v2, v4
-; GFX6-NEXT:    s_or_b64 s[8:9], s[8:9], s[14:15]
-; GFX6-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX6-NEXT:    s_or_b64 s[0:1], s[0:1], s[12:13]
+; GFX6-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execnz .LBB28_5
 ; GFX6-NEXT:  .LBB28_6:
-; GFX6-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX6-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX6-NEXT:    v_cvt_f32_ubyte0_e32 v0, v0
 ; GFX6-NEXT:    v_mul_f32_e32 v0, 0x42280000, v0
-; GFX6-NEXT:    v_add_f32_e32 v0, s11, v0
-; GFX6-NEXT:    v_mov_b32_e32 v2, s11
+; GFX6-NEXT:    v_add_f32_e32 v0, s9, v0
+; GFX6-NEXT:    v_mov_b32_e32 v2, s9
 ; GFX6-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; GFX6-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX6-NEXT:    v_cndmask_b32_e32 v2, v0, v2, vcc
@@ -9282,16 +9273,16 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX6-NEXT:    ; implicit-def: $vgpr0
 ; GFX6-NEXT:  .LBB28_7: ; %ComputeLoop
 ; GFX6-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX6-NEXT:    s_ff1_i32_b64 s11, s[0:1]
-; GFX6-NEXT:    s_lshl_b64 s[8:9], 1, s11
-; GFX6-NEXT:    s_andn2_b64 s[0:1], s[0:1], s[8:9]
-; GFX6-NEXT:    v_cmp_ne_u64_e64 s[8:9], s[0:1], 0
-; GFX6-NEXT:    v_readfirstlane_b32 s12, v1
-; GFX6-NEXT:    v_readlane_b32 s13, v2, s11
-; GFX6-NEXT:    s_mov_b32 m0, s11
-; GFX6-NEXT:    v_writelane_b32 v0, s12, m0
-; GFX6-NEXT:    v_add_f32_e32 v1, s13, v1
-; GFX6-NEXT:    s_and_b64 vcc, exec, s[8:9]
+; GFX6-NEXT:    s_ff1_i32_b64 s9, s[0:1]
+; GFX6-NEXT:    s_lshl_b64 s[6:7], 1, s9
+; GFX6-NEXT:    s_andn2_b64 s[0:1], s[0:1], s[6:7]
+; GFX6-NEXT:    v_cmp_ne_u64_e64 s[6:7], s[0:1], 0
+; GFX6-NEXT:    v_readfirstlane_b32 s10, v1
+; GFX6-NEXT:    v_readlane_b32 s11, v2, s9
+; GFX6-NEXT:    s_mov_b32 m0, s9
+; GFX6-NEXT:    v_writelane_b32 v0, s10, m0
+; GFX6-NEXT:    v_add_f32_e32 v1, s11, v1
+; GFX6-NEXT:    s_and_b64 vcc, exec, s[6:7]
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    s_mov_b64 vcc, vcc
 ; GFX6-NEXT:    s_cbranch_vccnz .LBB28_7
@@ -9299,35 +9290,34 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX6-NEXT:    v_mbcnt_lo_u32_b32_e64 v2, exec_lo, 0
 ; GFX6-NEXT:    v_mbcnt_hi_u32_b32_e32 v2, exec_hi, v2
 ; GFX6-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GFX6-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; GFX6-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc
-; GFX6-NEXT:    s_or_b64 s[2:3], s[2:3], s[0:1]
+; GFX6-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; GFX6-NEXT:    ; implicit-def: $vgpr3
 ; GFX6-NEXT:    s_mov_b64 exec, vcc
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB28_11
 ; GFX6-NEXT:  .LBB28_9:
-; GFX6-NEXT:    v_mov_b32_e32 v3, s10
+; GFX6-NEXT:    v_mov_b32_e32 v3, s8
 ; GFX6-NEXT:    s_mov_b32 m0, -1
 ; GFX6-NEXT:    ds_read_b32 v3, v3
-; GFX6-NEXT:    s_and_b64 s[0:1], s[6:7], exec
+; GFX6-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; GFX6-NEXT:  .LBB28_10: ; %atomicrmw.start8
 ; GFX6-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_mov_b32_e32 v4, v3
-; GFX6-NEXT:    v_mov_b32_e32 v3, s10
+; GFX6-NEXT:    v_mov_b32_e32 v3, s8
 ; GFX6-NEXT:    v_add_f32_e32 v5, v4, v1
 ; GFX6-NEXT:    ds_cmpst_rtn_b32 v3, v3, v4, v5
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
-; GFX6-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX6-NEXT:    s_xor_b64 s[6:7], exec, s[0:1]
-; GFX6-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX6-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX6-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX6-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
+; GFX6-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; GFX6-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execnz .LBB28_10
 ; GFX6-NEXT:  .LBB28_11:
-; GFX6-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX6-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX6-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x0
 ; GFX6-NEXT:    v_readfirstlane_b32 s4, v3
 ; GFX6-NEXT:    v_add_f32_e32 v0, s4, v0
@@ -10006,68 +9996,64 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX7-LABEL: local_ds_fadd_one_as:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_load_dwordx2 s[2:3], s[4:5], 0x2
-; GFX7-NEXT:    s_mov_b64 s[0:1], exec
-; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, s0, 0
-; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v0, s1, v0
-; GFX7-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v0
+; GFX7-NEXT:    s_mov_b64 s[10:11], exec
+; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, s10, 0
+; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v0, s11, v0
+; GFX7-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    s_add_i32 s3, s3, 4
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; GFX7-NEXT:    s_xor_b64 s[14:15], s[12:13], exec
-; GFX7-NEXT:    s_mov_b64 s[8:9], -1
-; GFX7-NEXT:    s_mov_b64 s[10:11], 0
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
+; GFX7-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
+; GFX7-NEXT:    s_mov_b64 s[6:7], -1
+; GFX7-NEXT:    s_mov_b64 s[8:9], 0
 ; GFX7-NEXT:    ; implicit-def: $vgpr2
 ; GFX7-NEXT:    s_mov_b32 m0, -1
-; GFX7-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX7-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB29_3
 ; GFX7-NEXT:  .LBB29_1:
-; GFX7-NEXT:    s_lshl_b32 s14, s3, 3
-; GFX7-NEXT:    v_mov_b32_e32 v1, s14
+; GFX7-NEXT:    s_lshl_b32 s12, s3, 3
+; GFX7-NEXT:    v_mov_b32_e32 v1, s12
 ; GFX7-NEXT:    ds_read_b32 v2, v1
-; GFX7-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
+; GFX7-NEXT:    s_bcnt1_i32_b64 s0, s[10:11]
 ; GFX7-NEXT:    v_cvt_f32_ubyte0_e32 v1, s0
 ; GFX7-NEXT:    v_mul_f32_e32 v1, 0x42280000, v1
-; GFX7-NEXT:    s_and_b64 s[0:1], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[0:1], s[6:7], exec
 ; GFX7-NEXT:  .LBB29_2: ; %atomicrmw.start
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    v_mov_b32_e32 v3, v2
-; GFX7-NEXT:    v_mov_b32_e32 v2, s14
+; GFX7-NEXT:    v_mov_b32_e32 v2, s12
 ; GFX7-NEXT:    v_add_f32_e32 v4, v3, v1
 ; GFX7-NEXT:    ds_cmpst_rtn_b32 v2, v2, v3, v4
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e64 s[0:1], v2, v3
 ; GFX7-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
-; GFX7-NEXT:    s_xor_b64 s[16:17], exec, s[0:1]
-; GFX7-NEXT:    s_or_b64 s[12:13], s[12:13], s[16:17]
+; GFX7-NEXT:    s_xor_b64 s[10:11], exec, s[0:1]
+; GFX7-NEXT:    s_or_b64 s[8:9], s[8:9], s[10:11]
 ; GFX7-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB29_2
 ; GFX7-NEXT:  .LBB29_3:
-; GFX7-NEXT:    s_or_b64 exec, exec, s[12:13]
-; GFX7-NEXT:    s_mov_b64 s[0:1], exec
-; GFX7-NEXT:    v_readfirstlane_b32 s12, v2
-; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v2, s0, 0
-; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v2, s1, v2
+; GFX7-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX7-NEXT:    s_mov_b64 s[8:9], exec
+; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v3, s8, 0
+; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v3, s9, v3
+; GFX7-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v3
 ; GFX7-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
-; GFX7-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
-; GFX7-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX7-NEXT:    s_or_b64 s[10:11], s[10:11], vcc
-; GFX7-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX7-NEXT:    s_xor_b64 s[12:13], s[0:1], exec
+; GFX7-NEXT:    v_readfirstlane_b32 s10, v2
+; GFX7-NEXT:    s_mov_b64 exec, s[12:13]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB29_6
 ; GFX7-NEXT:  .LBB29_4:
 ; GFX7-NEXT:    s_lshl_b32 s3, s3, 4
 ; GFX7-NEXT:    v_mov_b32_e32 v2, s3
 ; GFX7-NEXT:    ds_read_b32 v2, v2
-; GFX7-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
-; GFX7-NEXT:    v_cvt_f32_ubyte0_e32 v3, s0
+; GFX7-NEXT:    s_bcnt1_i32_b64 s8, s[8:9]
+; GFX7-NEXT:    v_cvt_f32_ubyte0_e32 v3, s8
 ; GFX7-NEXT:    v_mul_f32_e32 v3, 0x42280000, v3
-; GFX7-NEXT:    s_and_b64 s[0:1], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[8:9], s[6:7], exec
 ; GFX7-NEXT:  .LBB29_5: ; %atomicrmw.start2
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
@@ -10076,19 +10062,19 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX7-NEXT:    ds_cmpst_rtn_b32 v4, v5, v2, v4
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, v4, v2
-; GFX7-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX7-NEXT:    s_xor_b64 s[14:15], exec, s[0:1]
+; GFX7-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX7-NEXT:    s_xor_b64 s[12:13], exec, s[8:9]
 ; GFX7-NEXT:    v_mov_b32_e32 v2, v4
-; GFX7-NEXT:    s_or_b64 s[10:11], s[10:11], s[14:15]
-; GFX7-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX7-NEXT:    s_or_b64 s[0:1], s[0:1], s[12:13]
+; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB29_5
 ; GFX7-NEXT:  .LBB29_6:
-; GFX7-NEXT:    s_or_b64 exec, exec, s[10:11]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX7-NEXT:    v_cvt_f32_ubyte0_e32 v0, v0
 ; GFX7-NEXT:    v_mul_f32_e32 v0, 0x42280000, v0
-; GFX7-NEXT:    v_add_f32_e32 v0, s12, v0
-; GFX7-NEXT:    v_mov_b32_e32 v2, s12
+; GFX7-NEXT:    v_add_f32_e32 v0, s10, v0
+; GFX7-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX7-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; GFX7-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX7-NEXT:    v_cndmask_b32_e32 v2, v0, v2, vcc
@@ -10097,23 +10083,22 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX7-NEXT:  .LBB29_7: ; %ComputeLoop
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_ff1_i32_b64 s3, s[0:1]
-; GFX7-NEXT:    s_lshl_b64 s[10:11], 1, s3
-; GFX7-NEXT:    s_andn2_b64 s[0:1], s[0:1], s[10:11]
-; GFX7-NEXT:    v_cmp_ne_u64_e64 s[10:11], s[0:1], 0
-; GFX7-NEXT:    v_readfirstlane_b32 s12, v1
-; GFX7-NEXT:    v_readlane_b32 s13, v2, s3
+; GFX7-NEXT:    s_lshl_b64 s[8:9], 1, s3
+; GFX7-NEXT:    s_andn2_b64 s[0:1], s[0:1], s[8:9]
+; GFX7-NEXT:    v_cmp_ne_u64_e64 s[8:9], s[0:1], 0
+; GFX7-NEXT:    v_readfirstlane_b32 s10, v1
+; GFX7-NEXT:    v_readlane_b32 s11, v2, s3
 ; GFX7-NEXT:    s_mov_b32 m0, s3
-; GFX7-NEXT:    v_writelane_b32 v0, s12, m0
-; GFX7-NEXT:    v_add_f32_e32 v1, s13, v1
-; GFX7-NEXT:    s_and_b64 vcc, exec, s[10:11]
+; GFX7-NEXT:    v_writelane_b32 v0, s10, m0
+; GFX7-NEXT:    v_add_f32_e32 v1, s11, v1
+; GFX7-NEXT:    s_and_b64 vcc, exec, s[8:9]
 ; GFX7-NEXT:    s_cbranch_vccnz .LBB29_7
 ; GFX7-NEXT:  ; %bb.8: ; %ComputeEnd
 ; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v2, exec_lo, 0
 ; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v2, exec_hi, v2
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GFX7-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; GFX7-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc
-; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[0:1]
+; GFX7-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; GFX7-NEXT:    ; implicit-def: $vgpr3
 ; GFX7-NEXT:    s_mov_b64 exec, vcc
 ; GFX7-NEXT:    ; divergent control-flow edge
@@ -10122,7 +10107,7 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX7-NEXT:    v_mov_b32_e32 v3, s2
 ; GFX7-NEXT:    s_mov_b32 m0, -1
 ; GFX7-NEXT:    ds_read_b32 v3, v3
-; GFX7-NEXT:    s_and_b64 s[0:1], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GFX7-NEXT:  .LBB29_10: ; %atomicrmw.start8
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
@@ -10132,14 +10117,14 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX7-NEXT:    ds_cmpst_rtn_b32 v3, v3, v4, v5
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
-; GFX7-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX7-NEXT:    s_xor_b64 s[8:9], exec, s[0:1]
-; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX7-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX7-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX7-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
+; GFX7-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB29_10
 ; GFX7-NEXT:  .LBB29_11:
-; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX7-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x0
 ; GFX7-NEXT:    v_readfirstlane_b32 s4, v3
 ; GFX7-NEXT:    v_add_f32_e32 v0, s4, v0
@@ -10154,91 +10139,87 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ;
 ; GFX6-LABEL: local_ds_fadd_one_as:
 ; GFX6:       ; %bb.0:
-; GFX6-NEXT:    s_load_dword s12, s[4:5], 0x3
-; GFX6-NEXT:    s_mov_b64 s[0:1], exec
-; GFX6-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, s0, 0
-; GFX6-NEXT:    v_mbcnt_hi_u32_b32_e32 v0, s1, v0
-; GFX6-NEXT:    v_cmp_ne_u32_e64 s[10:11], 0, v0
+; GFX6-NEXT:    s_load_dword s10, s[4:5], 0x3
+; GFX6-NEXT:    s_mov_b64 s[8:9], exec
+; GFX6-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, s8, 0
+; GFX6-NEXT:    v_mbcnt_hi_u32_b32_e32 v0, s9, v0
+; GFX6-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX6-NEXT:    s_add_i32 s12, s12, 4
-; GFX6-NEXT:    s_mov_b64 s[2:3], 0
-; GFX6-NEXT:    s_mov_b64 s[2:3], 0
+; GFX6-NEXT:    s_add_i32 s10, s10, 4
 ; GFX6-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; GFX6-NEXT:    s_xor_b64 s[14:15], s[10:11], exec
-; GFX6-NEXT:    s_mov_b64 s[6:7], -1
-; GFX6-NEXT:    s_mov_b64 s[8:9], 0
-; GFX6-NEXT:    s_mov_b64 s[2:3], 0
+; GFX6-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
+; GFX6-NEXT:    s_mov_b64 s[2:3], -1
+; GFX6-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX6-NEXT:    ; implicit-def: $vgpr2
 ; GFX6-NEXT:    s_mov_b32 m0, -1
-; GFX6-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX6-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB29_3
 ; GFX6-NEXT:  .LBB29_1:
-; GFX6-NEXT:    s_lshl_b32 s13, s12, 3
-; GFX6-NEXT:    v_mov_b32_e32 v1, s13
+; GFX6-NEXT:    s_lshl_b32 s11, s10, 3
+; GFX6-NEXT:    v_mov_b32_e32 v1, s11
 ; GFX6-NEXT:    ds_read_b32 v2, v1
-; GFX6-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
+; GFX6-NEXT:    s_bcnt1_i32_b64 s0, s[8:9]
 ; GFX6-NEXT:    v_cvt_f32_ubyte0_e32 v1, s0
 ; GFX6-NEXT:    v_mul_f32_e32 v1, 0x42280000, v1
-; GFX6-NEXT:    s_and_b64 s[0:1], s[6:7], exec
+; GFX6-NEXT:    s_and_b64 s[0:1], s[2:3], exec
 ; GFX6-NEXT:  .LBB29_2: ; %atomicrmw.start
 ; GFX6-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_mov_b32_e32 v3, v2
-; GFX6-NEXT:    v_mov_b32_e32 v2, s13
+; GFX6-NEXT:    v_mov_b32_e32 v2, s11
 ; GFX6-NEXT:    v_add_f32_e32 v4, v3, v1
 ; GFX6-NEXT:    ds_cmpst_rtn_b32 v2, v2, v3, v4
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_cmp_eq_u32_e64 s[0:1], v2, v3
 ; GFX6-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
-; GFX6-NEXT:    s_xor_b64 s[14:15], exec, s[0:1]
-; GFX6-NEXT:    s_or_b64 s[10:11], s[10:11], s[14:15]
+; GFX6-NEXT:    s_xor_b64 s[8:9], exec, s[0:1]
+; GFX6-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
 ; GFX6-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execnz .LBB29_2
 ; GFX6-NEXT:  .LBB29_3:
-; GFX6-NEXT:    s_or_b64 exec, exec, s[10:11]
-; GFX6-NEXT:    s_mov_b64 s[0:1], exec
-; GFX6-NEXT:    s_load_dword s10, s[4:5], 0x2
-; GFX6-NEXT:    v_readfirstlane_b32 s11, v2
-; GFX6-NEXT:    v_mbcnt_lo_u32_b32_e64 v2, s0, 0
-; GFX6-NEXT:    v_mbcnt_hi_u32_b32_e32 v2, s1, v2
+; GFX6-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX6-NEXT:    s_mov_b64 s[6:7], exec
+; GFX6-NEXT:    s_load_dword s8, s[4:5], 0x2
+; GFX6-NEXT:    v_mbcnt_lo_u32_b32_e64 v3, s6, 0
+; GFX6-NEXT:    v_mbcnt_hi_u32_b32_e32 v3, s7, v3
+; GFX6-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v3
 ; GFX6-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
-; GFX6-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
-; GFX6-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX6-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
-; GFX6-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX6-NEXT:    s_xor_b64 s[12:13], s[0:1], exec
+; GFX6-NEXT:    v_readfirstlane_b32 s9, v2
+; GFX6-NEXT:    s_mov_b64 exec, s[12:13]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB29_6
 ; GFX6-NEXT:  .LBB29_4:
-; GFX6-NEXT:    s_lshl_b32 s12, s12, 4
-; GFX6-NEXT:    v_mov_b32_e32 v2, s12
+; GFX6-NEXT:    s_lshl_b32 s10, s10, 4
+; GFX6-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX6-NEXT:    ds_read_b32 v2, v2
-; GFX6-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
-; GFX6-NEXT:    v_cvt_f32_ubyte0_e32 v3, s0
+; GFX6-NEXT:    s_bcnt1_i32_b64 s6, s[6:7]
+; GFX6-NEXT:    v_cvt_f32_ubyte0_e32 v3, s6
 ; GFX6-NEXT:    v_mul_f32_e32 v3, 0x42280000, v3
-; GFX6-NEXT:    s_and_b64 s[0:1], s[6:7], exec
+; GFX6-NEXT:    s_and_b64 s[6:7], s[2:3], exec
 ; GFX6-NEXT:  .LBB29_5: ; %atomicrmw.start2
 ; GFX6-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_add_f32_e32 v4, v2, v3
-; GFX6-NEXT:    v_mov_b32_e32 v5, s12
+; GFX6-NEXT:    v_mov_b32_e32 v5, s10
 ; GFX6-NEXT:    ds_cmpst_rtn_b32 v4, v5, v2, v4
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_cmp_eq_u32_e32 vcc, v4, v2
-; GFX6-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX6-NEXT:    s_xor_b64 s[14:15], exec, s[0:1]
+; GFX6-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX6-NEXT:    s_xor_b64 s[12:13], exec, s[6:7]
 ; GFX6-NEXT:    v_mov_b32_e32 v2, v4
-; GFX6-NEXT:    s_or_b64 s[8:9], s[8:9], s[14:15]
-; GFX6-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX6-NEXT:    s_or_b64 s[0:1], s[0:1], s[12:13]
+; GFX6-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execnz .LBB29_5
 ; GFX6-NEXT:  .LBB29_6:
-; GFX6-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX6-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX6-NEXT:    v_cvt_f32_ubyte0_e32 v0, v0
 ; GFX6-NEXT:    v_mul_f32_e32 v0, 0x42280000, v0
-; GFX6-NEXT:    v_add_f32_e32 v0, s11, v0
-; GFX6-NEXT:    v_mov_b32_e32 v2, s11
+; GFX6-NEXT:    v_add_f32_e32 v0, s9, v0
+; GFX6-NEXT:    v_mov_b32_e32 v2, s9
 ; GFX6-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; GFX6-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX6-NEXT:    v_cndmask_b32_e32 v2, v0, v2, vcc
@@ -10246,16 +10227,16 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX6-NEXT:    ; implicit-def: $vgpr0
 ; GFX6-NEXT:  .LBB29_7: ; %ComputeLoop
 ; GFX6-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX6-NEXT:    s_ff1_i32_b64 s11, s[0:1]
-; GFX6-NEXT:    s_lshl_b64 s[8:9], 1, s11
-; GFX6-NEXT:    s_andn2_b64 s[0:1], s[0:1], s[8:9]
-; GFX6-NEXT:    v_cmp_ne_u64_e64 s[8:9], s[0:1], 0
-; GFX6-NEXT:    v_readfirstlane_b32 s12, v1
-; GFX6-NEXT:    v_readlane_b32 s13, v2, s11
-; GFX6-NEXT:    s_mov_b32 m0, s11
-; GFX6-NEXT:    v_writelane_b32 v0, s12, m0
-; GFX6-NEXT:    v_add_f32_e32 v1, s13, v1
-; GFX6-NEXT:    s_and_b64 vcc, exec, s[8:9]
+; GFX6-NEXT:    s_ff1_i32_b64 s9, s[0:1]
+; GFX6-NEXT:    s_lshl_b64 s[6:7], 1, s9
+; GFX6-NEXT:    s_andn2_b64 s[0:1], s[0:1], s[6:7]
+; GFX6-NEXT:    v_cmp_ne_u64_e64 s[6:7], s[0:1], 0
+; GFX6-NEXT:    v_readfirstlane_b32 s10, v1
+; GFX6-NEXT:    v_readlane_b32 s11, v2, s9
+; GFX6-NEXT:    s_mov_b32 m0, s9
+; GFX6-NEXT:    v_writelane_b32 v0, s10, m0
+; GFX6-NEXT:    v_add_f32_e32 v1, s11, v1
+; GFX6-NEXT:    s_and_b64 vcc, exec, s[6:7]
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    s_mov_b64 vcc, vcc
 ; GFX6-NEXT:    s_cbranch_vccnz .LBB29_7
@@ -10263,35 +10244,34 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX6-NEXT:    v_mbcnt_lo_u32_b32_e64 v2, exec_lo, 0
 ; GFX6-NEXT:    v_mbcnt_hi_u32_b32_e32 v2, exec_hi, v2
 ; GFX6-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GFX6-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; GFX6-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc
-; GFX6-NEXT:    s_or_b64 s[2:3], s[2:3], s[0:1]
+; GFX6-NEXT:    s_xor_b64 s[0:1], exec, vcc
 ; GFX6-NEXT:    ; implicit-def: $vgpr3
 ; GFX6-NEXT:    s_mov_b64 exec, vcc
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB29_11
 ; GFX6-NEXT:  .LBB29_9:
-; GFX6-NEXT:    v_mov_b32_e32 v3, s10
+; GFX6-NEXT:    v_mov_b32_e32 v3, s8
 ; GFX6-NEXT:    s_mov_b32 m0, -1
 ; GFX6-NEXT:    ds_read_b32 v3, v3
-; GFX6-NEXT:    s_and_b64 s[0:1], s[6:7], exec
+; GFX6-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; GFX6-NEXT:  .LBB29_10: ; %atomicrmw.start8
 ; GFX6-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_mov_b32_e32 v4, v3
-; GFX6-NEXT:    v_mov_b32_e32 v3, s10
+; GFX6-NEXT:    v_mov_b32_e32 v3, s8
 ; GFX6-NEXT:    v_add_f32_e32 v5, v4, v1
 ; GFX6-NEXT:    ds_cmpst_rtn_b32 v3, v3, v4, v5
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
-; GFX6-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX6-NEXT:    s_xor_b64 s[6:7], exec, s[0:1]
-; GFX6-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; GFX6-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX6-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX6-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
+; GFX6-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; GFX6-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execnz .LBB29_10
 ; GFX6-NEXT:  .LBB29_11:
-; GFX6-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX6-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX6-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x0
 ; GFX6-NEXT:    v_readfirstlane_b32 s4, v3
 ; GFX6-NEXT:    v_add_f32_e32 v0, s4, v0

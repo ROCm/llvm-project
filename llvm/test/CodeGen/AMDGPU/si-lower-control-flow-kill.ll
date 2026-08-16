@@ -45,8 +45,8 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}if_with_kill_inside_loop:
-; GCN: v_cmp_ne_u32_e64 [[CMP:s\[[0-9]+:[0-9]+\]]], 32, v0
-; GCN: s_xor_b64 [[COND:s\[[0-9]+:[0-9]+\]]], [[CMP]], exec
+; GCN: v_cmp_ne_u32_e32 vcc, 32, v0
+; GCN: s_xor_b64 [[COND:s\[[0-9]+:[0-9]+\]]], vcc, exec
 ; GCN: s_mov_b64 exec, [[COND]]
 define amdgpu_ps void @if_with_kill_inside_loop(i32 %arg) {
 .entry:

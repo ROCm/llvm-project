@@ -14,9 +14,9 @@ define void @machinesink_loop_variable_out_of_divergent_loop(i32 %arg, i1 %cmp49
 ; CHECK-NEXT:    s_mov_b32 s4, -1
 ; CHECK-NEXT:    s_mov_b32 s6, 0
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
-; CHECK-NEXT:    s_mov_b32 s7, 0
-; CHECK-NEXT:    s_mov_b32 s8, 0
 ; CHECK-NEXT:    s_mov_b32 s5, 0
+; CHECK-NEXT:    s_mov_b32 s8, 0
+; CHECK-NEXT:    s_mov_b32 s7, 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc_lo
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v4
 ; CHECK-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc_lo
@@ -43,12 +43,12 @@ define void @machinesink_loop_variable_out_of_divergent_loop(i32 %arg, i1 %cmp49
 ; CHECK-NEXT:    v_mov_b32_e32 v5, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v4, 0
 ; CHECK-NEXT:    s_xor_b32 s9, vcc_lo, exec_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, s9
+; CHECK-NEXT:    s_or_b32 s7, s7, s9
 ; CHECK-NEXT:    s_mov_b32 s9, 0
-; CHECK-NEXT:    s_xor_b32 s10, exec_lo, s6
+; CHECK-NEXT:    s_xor_b32 s10, exec_lo, s7
 ; CHECK-NEXT:    s_and_b32 s10, s10, exec_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, s6
-; CHECK-NEXT:    s_mov_b32 s6, 0
+; CHECK-NEXT:    s_mov_b32 exec_lo, s7
+; CHECK-NEXT:    s_mov_b32 s7, 0
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_1
 ; CHECK-NEXT:  .LBB0_3: ; %for.body51.preheader
@@ -82,12 +82,12 @@ define void @machinesink_loop_variable_out_of_divergent_loop(i32 %arg, i1 %cmp49
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v4, v6
 ; CHECK-NEXT:    v_mov_b32_e32 v5, 1
-; CHECK-NEXT:    s_or_b32 s7, s7, vcc_lo
-; CHECK-NEXT:    s_xor_b32 s12, exec_lo, s7
+; CHECK-NEXT:    s_or_b32 s6, s6, vcc_lo
+; CHECK-NEXT:    s_xor_b32 s12, exec_lo, s6
 ; CHECK-NEXT:    s_and_b32 s12, s12, exec_lo
 ; CHECK-NEXT:    s_or_b32 s8, s8, s12
-; CHECK-NEXT:    s_mov_b32 exec_lo, s7
-; CHECK-NEXT:    s_mov_b32 s7, 0
+; CHECK-NEXT:    s_mov_b32 exec_lo, s6
+; CHECK-NEXT:    s_mov_b32 s6, 0
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_4
 ; CHECK-NEXT:  .LBB0_6: ; %if.then112
