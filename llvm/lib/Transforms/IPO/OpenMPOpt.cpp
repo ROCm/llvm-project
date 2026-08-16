@@ -119,7 +119,7 @@ static cl::opt<bool> DisableOpenMPOptFolding(
 static cl::opt<bool> DisableOpenMPOptStateMachineRewrite(
     "openmp-opt-disable-state-machine-rewrite",
     cl::desc("Disable OpenMP optimizations that replace the state machine."),
-    cl::Hidden, cl::init(true));
+    cl::Hidden, cl::init(false));
 
 static cl::opt<unsigned> MaxIndirectCallSpecializations(
     "openmp-opt-max-indirect-call-specializations",
