@@ -5776,7 +5776,6 @@ void OpenMPOpt::registerAAsForFunction(Attributor &A, const Function &F) {
           IRPosition::value(*LI->getPointerOperand()));
       continue;
     }
-#if 0 // fixme snap2 mi-teams nest_call_par2
     if (auto *CI = dyn_cast<CallBase>(&I)) {
       if (!DisableOpenMPOptDeglobalization && !HasHeapToStackCandidate) {
         if (!TLI)
@@ -5784,11 +5783,12 @@ void OpenMPOpt::registerAAsForFunction(Attributor &A, const Function &F) {
         HasHeapToStackCandidate =
             isRemovableAlloc(CI, TLI) || getFreedOperand(CI, TLI);
       }
+#if 0 // fixme snap2 mi-teams nest_call_par2
       if (CI->isIndirectCall())
         A.getOrCreateAAFor<AAIndirectCallInfo>(
             IRPosition::callsite_function(*CI));
-    }
 #endif
+    }
     if (auto *SI = dyn_cast<StoreInst>(&I)) {
       A.getOrCreateAAFor<AAIsDead>(IRPosition::value(*SI));
       A.getOrCreateAAFor<AAAddressSpace>(
