@@ -198,13 +198,6 @@ endif()
 # When ON, LLVM symbols are hidden by comgr's version script (local: *;),
 # avoiding symbol interposition issues without requiring namespace isolation.
 option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
-if(COMGR_ENABLE_HOTSWAP_TRANSPILE AND NOT COMGR_STATIC_LLVM AND
-   (LLVM_LINK_LLVM_DYLIB OR CLANG_LINK_CLANG_DYLIB))
-  message(FATAL_ERROR
-    "COMGR_ENABLE_HOTSWAP_TRANSPILE requires static LLVM and Clang linkage. "
-    "Enable COMGR_STATIC_LLVM or disable LLVM_LINK_LLVM_DYLIB and "
-    "CLANG_LINK_CLANG_DYLIB.")
-endif()
 if(COMGR_STATIC_LLVM)
   set(LLVM_LINK_LLVM_DYLIB OFF)
   set(CLANG_LINK_CLANG_DYLIB OFF)
