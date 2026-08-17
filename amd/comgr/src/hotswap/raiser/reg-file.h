@@ -112,7 +112,7 @@ struct AllocaRegFile {
 
   // Populate `Out` with every alloca the raiser emitted, for feeding
   // into `PromoteMemToReg`.
-  void collectAllocas(llvm::SmallVectorImpl<llvm::AllocaInst *> &Out);
+  void collectAllocas(llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const;
 };
 
 } // namespace COMGR::hotswap

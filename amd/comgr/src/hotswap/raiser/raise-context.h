@@ -36,34 +36,33 @@ namespace COMGR::hotswap {
 
 // Shared state threaded through every format handler.
 struct RaiseContext {
+  // Build the context for the source kernel described by Meta. B must be
+  // positioned in the entry block: the register file and the cross-block
+  // shadow storage are allocated there. Meta must outlive the context, which
+  // holds views into its argument metadata. Fails when the kernel descriptor
+  // and the metadata disagree on the user-SGPR layout.
+  static llvm::Expected<RaiseContext> create(
+      llvm::IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
+      const KernelMeta &Meta, unsigned TargetCodeObjectVersion,
+      llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb,
+      llvm::BasicBlock *ThreadLoopLatch,
+      llvm::ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
+      llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
+      uint64_t KernelStartOffset, uint64_t KernelEndOffset);
+
   llvm::IRBuilder<> &B;
-  AllocaRegFile &Regs;
   const WaveProjection &Projection;
   const MCState &MC;
   // Target hidden-argument offsets depend on the code object version.
   unsigned TargetCodeObjectVersion = 6;
-  KernargLayout &Kernargs;
-  // Source user-SGPR layout derived from the kernel descriptor.
-  const UserSgprLayout &Layout;
   llvm::BasicBlock *ThreadLoopLatch = nullptr;
 
-  llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb;
   // Source sections used to materialize proven PC-relative literals.
   llvm::ArrayRef<uint8_t> SourceTextBytes;
   uint64_t SourceTextBaseAddress = 0;
   llvm::ArrayRef<TextSection::ImageSection> SourceImageSections;
   uint64_t KernelStartOffset = 0;
   uint64_t KernelEndOffset = 0;
-
-  RaiseContext(llvm::IRBuilder<> &B, AllocaRegFile &Regs,
-               const WaveProjection &Projection, const MCState &MC,
-               unsigned TargetCodeObjectVersion, KernargLayout &Kernargs,
-               const UserSgprLayout &Layout, llvm::BasicBlock *ThreadLoopLatch,
-               llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb,
-               llvm::ArrayRef<uint8_t> SourceTextBytes,
-               uint64_t SourceTextBaseAddress,
-               llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
-               uint64_t KernelStartOffset, uint64_t KernelEndOffset);
 
   // Source scratch allocation, disjoint from target spills.
   uint32_t SourcePrivateSegmentFixedSize = 0;
@@ -79,6 +78,11 @@ struct RaiseContext {
 
   // Per-instruction VGPR index adjustments, indexed by MC operand index.
   llvm::SmallVector<unsigned> CurrentVgprAdjust;
+
+  AllocaRegFile &regs() { return Regs; }
+  const KernargLayout &kernargs() const { return Kernargs; }
+  // Source user-SGPR layout derived from the kernel descriptor.
+  const UserSgprLayout &layout() const { return Layout; }
 
   // Compute VGPR bank adjustments for the instruction's format-defined slots.
   void computeVGPRAdjust(const DecodedInst &Di);
@@ -474,9 +478,10 @@ struct RaiseContext {
     }
   }
 
-  // Append every shadow alloca to Out for SSA promotion.
-  void collectSgprShadowAllocas(
-      llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const {
+  // Append every alloca backing the context, register file included, to Out
+  // for SSA promotion.
+  void collectAllocas(llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const {
+    Regs.collectAllocas(Out);
     for (const SgprShadow &Shadow : SgprShadows) {
       Out.push_back(Shadow.WaveMask);
       Out.push_back(Shadow.WaveMaskValid);
@@ -487,6 +492,16 @@ struct RaiseContext {
   }
 
 private:
+  RaiseContext(llvm::IRBuilder<> &B, const WaveProjection &Projection,
+               const MCState &MC, const KernelMeta &Meta, UserSgprLayout Layout,
+               unsigned TargetCodeObjectVersion,
+               llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb,
+               llvm::BasicBlock *ThreadLoopLatch,
+               llvm::ArrayRef<uint8_t> SourceTextBytes,
+               uint64_t SourceTextBaseAddress,
+               llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
+               uint64_t KernelStartOffset, uint64_t KernelEndOffset);
+
   struct SgprShadow {
     llvm::AllocaInst *WaveMask;
     llvm::AllocaInst *WaveMaskValid;
@@ -494,6 +509,11 @@ private:
     llvm::AllocaInst *SourceWavePair;
     llvm::AllocaInst *SourceWavePairValid;
   };
+
+  AllocaRegFile Regs;
+  KernargLayout Kernargs;
+  UserSgprLayout Layout;
+  llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb;
 
   // Cross-block values use alloca storage to avoid non-dominating SSA values.
   llvm::SmallVector<SgprShadow> SgprShadows;

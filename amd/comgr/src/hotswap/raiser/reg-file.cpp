@@ -647,7 +647,7 @@ void AllocaRegFile::writeRegVec(IRBuilder<> &B, ParsedReg Pr, Value *V) {
   }
 }
 
-void AllocaRegFile::collectAllocas(SmallVectorImpl<AllocaInst *> &Out) {
+void AllocaRegFile::collectAllocas(SmallVectorImpl<AllocaInst *> &Out) const {
   for (AllocaInst *A : Sgpr)
     Out.push_back(A);
   for (AllocaInst *A : Vgpr)

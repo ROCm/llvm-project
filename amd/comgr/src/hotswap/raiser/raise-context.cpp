@@ -33,21 +33,45 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
+Expected<RaiseContext> RaiseContext::create(
+    IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
+    const KernelMeta &Meta, unsigned TargetCodeObjectVersion,
+    DenseMap<uint64_t, BasicBlock *> OffsetToBb, BasicBlock *ThreadLoopLatch,
+    ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
+    ArrayRef<TextSection::ImageSection> SourceImageSections,
+    uint64_t KernelStartOffset, uint64_t KernelEndOffset) {
+  UserSgprLayout Layout;
+  if (Error Err = UserSgprLayout::tryFromKernelMeta(
+          Meta, Projection.sourceIsa(), MC.SubtargetInfo->getCPU(), Layout))
+    return std::move(Err);
+  return RaiseContext(B, Projection, MC, Meta, std::move(Layout),
+                      TargetCodeObjectVersion, std::move(OffsetToBb),
+                      ThreadLoopLatch, SourceTextBytes, SourceTextBaseAddress,
+                      SourceImageSections, KernelStartOffset, KernelEndOffset);
+}
+
 RaiseContext::RaiseContext(
-    IRBuilder<> &B, AllocaRegFile &Regs, const WaveProjection &Projection,
-    const MCState &MC, unsigned TargetCodeObjectVersion,
-    KernargLayout &Kernargs, const UserSgprLayout &Layout,
-    BasicBlock *ThreadLoopLatch, DenseMap<uint64_t, BasicBlock *> &OffsetToBb,
+    IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
+    const KernelMeta &Meta, UserSgprLayout Layout,
+    unsigned TargetCodeObjectVersion,
+    DenseMap<uint64_t, BasicBlock *> OffsetToBb, BasicBlock *ThreadLoopLatch,
     ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset)
-    : B(B), Regs(Regs), Projection(Projection), MC(MC),
-      TargetCodeObjectVersion(TargetCodeObjectVersion), Kernargs(Kernargs),
-      Layout(Layout), ThreadLoopLatch(ThreadLoopLatch), OffsetToBb(OffsetToBb),
-      SourceTextBytes(SourceTextBytes),
+    : B(B), Projection(Projection), MC(MC),
+      TargetCodeObjectVersion(TargetCodeObjectVersion),
+      ThreadLoopLatch(ThreadLoopLatch), SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
-      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {
+      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),
+      SourcePrivateSegmentFixedSize(Meta.PrivateSegmentFixedSize),
+      SourceComputePgmRsrc2(Meta.ComputePgmRsrc2),
+      SourceKernelCodeProperties(Meta.KernelCodeProperties),
+      Kernargs{Meta.implicitArgsBase(), Meta.Args, Meta.KernargSegmentSize},
+      Layout(std::move(Layout)), OffsetToBb(std::move(OffsetToBb)) {
+  Regs.init(B, B.getInt32Ty(), B.getInt1Ty(), Projection.sourceIsa(),
+            *MC.RegInfo, Projection);
+
   SgprShadows.reserve(Regs.Sgpr.size());
   for (unsigned I = 0, E = Regs.Sgpr.size(); I != E; ++I) {
     AllocaInst *WaveMask = B.CreateAlloca(Projection.execStorageTy(), nullptr,
