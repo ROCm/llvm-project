@@ -76,6 +76,9 @@ runs:
         echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
         echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
         echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
+        if [[ -n "${WAVE_TRANSFORM_BUILD_TEST:-}" ]]; then
+          echo "WAVE_TRANSFORM_BUILD_TEST=$WAVE_TRANSFORM_BUILD_TEST" >> "$GITHUB_ENV"
+        fi
 
     - name: Update submodule pointers from provided parameter PR values
       if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'

@@ -68,6 +68,12 @@ on:
         type: boolean
         default: true
         description: "Build PyTorch wheels"
+      wave_transform_build_test:
+        description: >-
+          Force wave-transform build-test mode. When unset, auto-detects from
+          LLVM_ROCm_PR_URL (branch/title/labels).
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -83,14 +89,24 @@ concurrency:
 jobs:
   multiple_pr_sha_params:
     runs-on: ubuntu-24.04
+    outputs:
+      wave_transform_build_test: ${{ steps.resolve_wave.outputs.wave_transform_build_test }}
     steps:
+      - name: Resolve wave-transform flag
+        id: resolve_wave
+        uses: ./.github/actions/rock-ci-deps/resolve-wave-transform-flag@amd/dev/kirthana14m/wavetransform-label-pr
+        with:
+          wave_transform_build_test: ${{ inputs.wave_transform_build_test }}
+          llvm_rocm_pr_url: ${{ inputs.LLVM_ROCm_PR_URL }}
+
       - name: Store LLVM, HIPIFY and SPIRV PR URLs into file
         run: |
-          cat > ${{ github.run_id }}_PR_params.env <<'EOF'
+          cat > ${{ github.run_id }}_PR_params.env <<EOF
           LLVM_PR_URL=${{ github.event.inputs.LLVM_PR_URL }}
           LLVM_ROCm_PR_URL=${{ github.event.inputs.LLVM_ROCm_PR_URL }}
           SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
           HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
+          WAVE_TRANSFORM_BUILD_TEST=${{ steps.resolve_wave.outputs.wave_transform_build_test }}
           EOF
 
       - name: Upload stored file of PR URls

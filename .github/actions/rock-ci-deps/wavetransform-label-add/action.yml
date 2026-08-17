@@ -1,0 +1,78 @@
+name: Resolve wave-transform build flag
+description: >-
+  Resolve wave-transform build-test mode for parameterized RockCI without
+  any GitHub write access. Auto-detects from ROCm/llvm-project PR metadata
+  (branch/title/labels) via the public API, or accepts an explicit override.
+
+inputs:
+  wave_transform_build_test:
+    description: >-
+      When true, enable wave-transform build-test mode (equivalent to the
+      wave-transform-build-test PR label).
+    required: false
+    default: "false"
+  llvm_rocm_pr_url:
+    description: ROCm/llvm-project pull request URL
+    required: false
+    default: ""
+
+outputs:
+  wave_transform_build_test:
+    description: "true when wave-transform build-test mode should be enabled"
+    value: ${{ steps.resolve.outputs.wave_transform_build_test }}
+  pr_number:
+    description: Parsed ROCm/llvm-project PR number, if any
+    value: ${{ steps.resolve.outputs.pr_number }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve WAVE_TRANSFORM_BUILD_TEST
+      id: resolve
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        wave_transform_build_test=false
+        pr_num=""
+
+        if [[ "${{ inputs.wave_transform_build_test }}" == "true" ]]; then
+          wave_transform_build_test=true
+        fi
+
+        if [[ -n "${{ inputs.llvm_rocm_pr_url }}" ]]; then
+          pr_url="${{ inputs.llvm_rocm_pr_url }}"
+          if [[ "$pr_url" == *"github.com/ROCm/llvm-project/pull/"* ]]; then
+            pr_num="${pr_url##*/pull/}"
+            pr_num="${pr_num%%/*}"
+            pr_num="${pr_num%%\?*}"
+            if [[ "$pr_num" =~ ^[0-9]+$ ]]; then
+              api_url="https://api.github.com/repos/ROCm/llvm-project/pulls/${pr_num}"
+              if pr_json="$(curl -sf "$api_url")"; then
+                head_ref="$(echo "$pr_json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('head',{}).get('ref',''))")"
+                title="$(echo "$pr_json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")"
+                labels="$(echo "$pr_json" | python3 -c "import json,sys; print(','.join(l['name'] for l in json.load(sys.stdin).get('labels',[])))")"
+                shopt -s nocasematch
+                if [[ "$head_ref" == *wave-transform* || "$head_ref" == *wave_transform* \
+                      || "$title" == *wavetransform* || "$title" == *wave-transform* \
+                      || ",$labels," == *",wave-transform-build-test,"* ]]; then
+                  wave_transform_build_test=true
+                fi
+                shopt -u nocasematch
+                echo "PR #${pr_num} head_ref='${head_ref}' title='${title}'"
+              else
+                echo "Could not fetch ROCm/llvm-project PR #${pr_num}; auto-detection skipped."
+              fi
+            else
+              echo "Could not parse PR number from: ${pr_url}"
+              pr_num=""
+            fi
+          else
+            echo "llvm_rocm_pr_url is not a ROCm/llvm-project PR URL; skipping auto-detection."
+          fi
+        fi
+
+        echo "wave_transform_build_test=${wave_transform_build_test}" >> "$GITHUB_OUTPUT"
+        echo "pr_number=${pr_num}" >> "$GITHUB_OUTPUT"
+        echo "Resolved WAVE_TRANSFORM_BUILD_TEST=${wave_transform_build_test}"
+
