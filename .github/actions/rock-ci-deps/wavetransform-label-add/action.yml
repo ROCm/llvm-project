@@ -51,22 +51,7 @@ runs:
               if pr_json="$(curl -sf "$api_url")"; then
                 # Separators are stripped before matching so wavetransform,
                 # wave-transform and wave_transform all compare equal.
-                detected="$(printf '%s' "$pr_json" | python3 -c '
-import json, re, sys
-
-pr = json.load(sys.stdin)
-base = pr.get("base", {}).get("ref", "")
-head = pr.get("head", {}).get("ref", "")
-title = pr.get("title", "")
-labels = [l.get("name", "") for l in pr.get("labels", [])]
-
-normalize = lambda s: re.sub(r"[-_\s]", "", s).lower()
-hit = (
-    any("wavetransform" in normalize(v) for v in (base, head, title))
-    or "wave-transform-build-test" in labels
-)
-print("\t".join(["true" if hit else "false", base, head, title]))
-')"
+                detected="$(printf '%s' "$pr_json" | python3 -c 'import json,re,sys; pr=json.load(sys.stdin); base=pr.get("base",{}).get("ref",""); head=pr.get("head",{}).get("ref",""); title=pr.get("title",""); labels=[label.get("name","") for label in pr.get("labels",[])]; normalize=lambda value: re.sub(r"[-_\s]","",value).lower(); hit=any("wavetransform" in normalize(value) for value in (base,head,title)) or "wave-transform-build-test" in labels; print("\t".join(["true" if hit else "false",base,head,title]))')"
 
                 IFS=$'\t' read -r hit base_ref head_ref title <<< "$detected"
                 if [[ "$hit" == "true" ]]; then
@@ -88,3 +73,4 @@ print("\t".join(["true" if hit else "false", base, head, title]))
         echo "wave_transform_build_test=${wave_transform_build_test}" >> "$GITHUB_OUTPUT"
         echo "pr_number=${pr_num}" >> "$GITHUB_OUTPUT"
         echo "Resolved WAVE_TRANSFORM_BUILD_TEST=${wave_transform_build_test}"
+
