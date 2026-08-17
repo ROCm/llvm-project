@@ -96,12 +96,6 @@ namespace llvm {
                                     DIExpression *Expr, const DILocation *DL,
                                     InsertPosition InsertPt);
 
-    /// Internal helper for insertDbgAddrIntrinsic.
-    Instruction *
-    insertDbgAddrIntrinsic(llvm::Value *Val, DILocalVariable *VarInfo,
-                           DIExpression *Expr, const DILocation *DL,
-                           BasicBlock *InsertBB, Instruction *InsertBefore);
-
   public:
     /// Construct a builder for a module.
     ///
@@ -907,26 +901,6 @@ namespace llvm {
                                DIGenericSubrange::BoundType LowerBound,
                                DIGenericSubrange::BoundType UpperBound,
                                DIGenericSubrange::BoundType Stride);
-
-    /// Create a new descriptor for the specified variable.
-    /// \param Context       Variable scope.
-    /// \param Name          Name of the variable.
-    /// \param LinkageName   Mangled  name of the variable.
-    /// \param File          File where this variable is defined.
-    /// \param LineNo        Line number.
-    /// \param Ty            Variable Type.
-    /// \param IsLocalToUnit Boolean flag indicate whether this variable is
-    ///                      externally visible or not.
-    /// \param Decl          Reference to the corresponding declaration.
-    /// \param MS            DWARF memory space.
-    /// \param AlignInBits   Variable alignment(or 0 if no alignment attr was
-    ///                      specified)
-    DIGlobalVariable *createGlobalVariable(
-        DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *File,
-        unsigned LineNo, DIType *Ty, bool IsLocalToUnit, bool isDefined = true,
-        MDNode *Decl = nullptr, MDTuple *TemplateParams = nullptr,
-        dwarf::MemorySpace MS = dwarf::DW_MSPACE_LLVM_none,
-        uint32_t AlignInBits = 0, DINodeArray Annotations = nullptr);
 
     /// Create a new descriptor for the specified variable.
     /// \param Context     Variable scope.

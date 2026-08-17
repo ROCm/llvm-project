@@ -17,3 +17,12 @@ Revert "Reland "[Clang] Enable -Wunused-template under -Wall" (#208001)
 needs SPIRv changes
 [DebugMetadata][DwarfDebug][CodeView] Support function-local static variables in lexical block scopes 
 ---
+breaks rocrand 4 tests
+[SLP]Vectorize single-user instructions as the last-attempt seeds
+---
+needs more downstream work
+[HLSL][DirectX] Correct codegen of `dx.load.input`/`dx.store.output` intrinsic calls (#212656)
+---
+
+
+

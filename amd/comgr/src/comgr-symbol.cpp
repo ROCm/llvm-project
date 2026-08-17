@@ -19,6 +19,8 @@
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/SymbolSize.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 
 using namespace llvm;
@@ -26,11 +28,28 @@ using namespace llvm::object;
 using namespace llvm::support;
 using namespace COMGR;
 
+amd_comgr_status_t COMGR::setCStr(char *&Dest, StringRef Src, size_t *Size) {
+  free(Dest);
+  Dest = reinterpret_cast<char *>(malloc(Src.size() + 1));
+  if (!Dest) {
+    return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
+  }
+  memcpy(Dest, Src.data(), Src.size());
+  Dest[Src.size()] = '\0';
+  if (Size) {
+    *Size = Src.size();
+  }
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
 SymbolContext::SymbolContext()
     : Name(nullptr), Type(AMD_COMGR_SYMBOL_TYPE_NOTYPE), Size(0),
       Undefined(true), Value(0) {}
 
 SymbolContext::~SymbolContext() { free(Name); }
+
+DataSymbol::DataSymbol(SymbolContext *DataSym) : DataSym(DataSym) {}
+DataSymbol::~DataSymbol() { delete DataSym; }
 
 amd_comgr_status_t SymbolContext::setName(llvm::StringRef Name) {
   return setCStr(this->Name, Name);
@@ -179,6 +198,18 @@ SymbolContext *SymbolHelper::createBinary(StringRef Ins, const char *Name,
   }
 
   return NULL;
+}
+
+Expected<SymbolRef> COMGR::lookupSymbolByName(ObjectFile &Obj, StringRef Name) {
+  for (const SymbolRef &Sym : Obj.symbols()) {
+    Expected<StringRef> NameOrErr = Sym.getName();
+    if (!NameOrErr)
+      return NameOrErr.takeError();
+    if (*NameOrErr == Name)
+      return Sym;
+  }
+  return createStringError(inconvertibleErrorCode(),
+                           "symbol '" + Name + "' not found");
 }
 
 amd_comgr_status_t SymbolHelper::iterateTable(

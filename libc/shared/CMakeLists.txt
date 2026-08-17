@@ -14,7 +14,7 @@ set(LLVM_LIBC_SHARED_RPC_EXPORT_HEADERS
 if(LIBC_TARGET_OS_IS_GPU)
   foreach(header_path IN LISTS LLVM_LIBC_SHARED_RPC_EXPORT_HEADERS)
     install(FILES "${header_path}"
-            DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/shared"
-            COMPONENT libc-headers)
+      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/shared"
+      COMPONENT libc-headers)
   endforeach()
 endif()

@@ -16,11 +16,11 @@ MATH_MANGLE(tan)(float x)
 
     float ax = BUILTIN_ABS_F32(x);
 
-    struct redret r = MATH_PRIVATE(trigred)(ax);
-
 #if defined EXTRA_PRECISION
-    float t = MATH_PRIVATE(tanred)(r.hi + r.lo, r.i & 1);
+    struct redret2 r = MATH_PRIVATE(trigred2)(ax);
+    float t = MATH_PRIVATE(tanred2)(r.hi, r.lo, r.i & 1);
 #else
+    struct redret r = MATH_PRIVATE(trigred)(ax);
     float t = MATH_PRIVATE(tanred)(r.hi, r.i & 1);
 #endif
 

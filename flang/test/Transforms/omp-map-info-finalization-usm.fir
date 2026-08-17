@@ -18,6 +18,6 @@ module attributes {omp.requires = #omp<clause_requires unified_shared_memory>} {
 }
 
 // CHECK-LABEL: func.func @test_usm_close_flag_cleanup
-// CHECK: %[[MEMBER:.*]] = omp.map.info {{.*}} map_clauses(always, descriptor, to) {{.*}} {name = "parent.a.implicit_map"}
+// CHECK: %[[MEMBER:.*]] = omp.map.info {{.*}} map_clauses(always, to) {{.*}} {name = "parent.a.implicit_map"}
 // CHECK: %[[PARENT:.*]] = omp.map.info {{.*}} map_clauses(to) {{.*}} members(%[[MEMBER]], {{.*}}) {{.*}} {name = "parent", {{.*}}}
 // CHECK-NOT: close

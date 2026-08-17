@@ -14,6 +14,7 @@
 #include "flang/Optimizer/Dialect/FIROps.h"
 #include "flang/Optimizer/Dialect/MIF/MIFOps.h"
 #include "flang/Runtime/CUDA/init.h"
+#include "flang/Runtime/exceptions.h"
 #include "flang/Runtime/main.h"
 #include "flang/Runtime/stop.h"
 
@@ -24,7 +25,7 @@ void fir::runtime::genMain(
     fir::FirOpBuilder &builder, mlir::Location loc,
     const std::vector<Fortran::lower::EnvironmentDefault> &defs, bool initCuda,
     bool enableOpenMPAllocator,
-    bool initCoarrayEnv) {
+    bool initCoarrayEnv, unsigned fpExceptionTraps) {
   auto *context = builder.getContext();
   auto argcTy = builder.getDefaultIntegerType();
   auto ptrTy = mlir::LLVM::LLVMPointerType::get(context);
@@ -79,6 +80,17 @@ void fir::runtime::genMain(
                                mlir::FunctionType::get(context, {}, {}));
     builder.create<fir::CallOp>(loc, registerFn);
   }
+
+  if (fpExceptionTraps != 0) {
+    auto i32Ty = builder.getI32Type();
+    auto enableFn =
+        builder.createFunction(loc, RTNAME_STRING(EnableFPETraps),
+                               mlir::FunctionType::get(context, {i32Ty}, {}));
+    mlir::Value trapsVal =
+        builder.createIntegerConstant(loc, i32Ty, fpExceptionTraps);
+    fir::CallOp::create(builder, loc, enableFn, mlir::ValueRange{trapsVal});
+  }
+
   fir::CallOp::create(builder, loc, qqMainFn);
 
   mlir::Value ret = builder.createIntegerConstant(loc, argcTy, 0);

@@ -11,6 +11,7 @@
 
 #include "comgr.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
@@ -18,6 +19,14 @@ namespace COMGR {
 namespace metadata {
 
 amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP);
+
+// Buffer-friendly overloads for callers that hold raw code-object bytes
+// without a `DataObject` (e.g. the hotswap transpiler running over an HSACO
+// buffer), so they reach the same note walker / ISA-string formatter without
+// the public C `amd_comgr_create_data` ceremony. These preserve the underlying
+// LLVM parse error; the `DataObject` overloads above map it to a status.
+llvm::Error getMetadataRoot(llvm::MemoryBufferRef MB, DataMeta *MetaP);
+llvm::Expected<std::string> getElfIsaName(llvm::MemoryBufferRef MB);
 
 size_t getIsaCount();
 

@@ -147,9 +147,8 @@ def ClauseMapFlagsAttachNever : I32BitEnumAttrCaseBit<"attach_never", 14>;
 def ClauseMapFlagsAttachAuto : I32BitEnumAttrCaseBit<"attach_auto", 15>;
 def ClauseMapFlagsRefPtr : I32BitEnumAttrCaseBit<"ref_ptr", 16>;
 def ClauseMapFlagsRefPtee : I32BitEnumAttrCaseBit<"ref_ptee", 17>;
-def ClauseMapFlagsDescriptor : I32BitEnumAttrCaseBit<"descriptor", 18>;
-def ClauseMapFlagsIsDevicePtr : I32BitEnumAttrCaseBit<"is_device_ptr", 19>;
-def ClauseMapFlagsTargetParam : I32BitEnumAttrCaseBit<"target_param", 20>;
+def ClauseMapFlagsIsDevicePtr : I32BitEnumAttrCaseBit<"is_device_ptr", 18>;
+def ClauseMapFlagsTargetParam : I32BitEnumAttrCaseBit<"target_param", 19>;
 
 def ClauseMapFlags : OpenMP_BitEnumAttr<
     "ClauseMapFlags",
@@ -173,7 +172,6 @@ def ClauseMapFlags : OpenMP_BitEnumAttr<
       ClauseMapFlagsAttachAuto,
       ClauseMapFlagsRefPtr,
       ClauseMapFlagsRefPtee,
-      ClauseMapFlagsDescriptor,
       ClauseMapFlagsIsDevicePtr,
       ClauseMapFlagsTargetParam
     ]>;

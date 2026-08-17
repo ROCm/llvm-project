@@ -1192,6 +1192,10 @@ llvm::DIType *CGDebugInfo::CreateType(const BuiltinType *BT) {
     return SingletonId;                                                        \
   }
 #include "clang/Basic/AMDGPUTypes.def"
+#define SPIRV_TYPE(Name, Id, SingletonId)                                      \
+  case BuiltinType::Id:                                                        \
+    return getOrCreateStructPtrType(Name, SingletonId);
+#include "clang/Basic/SPIRVTypes.def"
   case BuiltinType::UChar:
   case BuiltinType::Char_U:
     Encoding = llvm::dwarf::DW_ATE_unsigned_char;
@@ -1840,9 +1844,13 @@ llvm::DIType *CGDebugInfo::CreateType(const TypedefType *Ty,
                                 Flags, Annotations);
 }
 
-static unsigned getDwarfCC(CallingConv CC) {
+static unsigned getDwarfCC(CallingConv CC, const llvm::Triple &T) {
   switch (CC) {
   case CC_C:
+    // On SPIR/SPIR-V, CC_C is the target default calling convention and lowers
+    // to spir_func, so describe it that way.
+    if (T.isSPIROrSPIRV())
+      return llvm::dwarf::DW_CC_LLVM_SpirFunction;
     // Avoid emitting DW_AT_calling_convention if the C convention was used.
     return 0;
 
@@ -1946,7 +1954,8 @@ llvm::DIType *CGDebugInfo::CreateType(const FunctionType *Ty,
 
   llvm::DITypeArray EltTypeArray = DBuilder.getOrCreateTypeArray(EltTys);
   llvm::DIType *F = DBuilder.createSubroutineType(
-      EltTypeArray, Flags, getDwarfCC(Ty->getCallConv()));
+      EltTypeArray, Flags,
+      getDwarfCC(Ty->getCallConv(), CGM.getTarget().getTriple()));
   return F;
 }
 
@@ -2431,8 +2440,9 @@ CGDebugInfo::getOrCreateInstanceMethodType(QualType ThisPtr,
 
   llvm::DITypeArray EltTypeArray = DBuilder.getOrCreateTypeArray(Elts);
 
-  return DBuilder.createSubroutineType(EltTypeArray, OriginalFunc->getFlags(),
-                                       getDwarfCC(Func->getCallConv()));
+  return DBuilder.createSubroutineType(
+      EltTypeArray, OriginalFunc->getFlags(),
+      getDwarfCC(Func->getCallConv(), CGM.getTarget().getTriple()));
 }
 
 /// isFunctionLocalClass - Return true if CXXRecordDecl is defined
@@ -4680,6 +4690,14 @@ void CGDebugInfo::collectVarDeclProps(const VarDecl *VD, llvm::DIFile *&Unit,
     TemplateParameters = nullptr;
   }
 
+  // Get context for static locals (that are technically globals) the same way
+  // we do for "local" locals -- by using current lexical block.
+  if (VD->isStaticLocal()) {
+    assert(!LexicalBlockStack.empty() && "Region stack mismatch, stack empty!");
+    VDContext = LexicalBlockStack.back();
+    return;
+  }
+
   // Since we emit declarations (DW_AT_members) for static members, place the
   // definition of those static members in the namespace they were declared in
   // in the source code (the lexical decl context).
@@ -4951,8 +4969,9 @@ llvm::DISubroutineType *CGDebugInfo::getOrCreateFunctionType(const Decl *D,
       Elts.push_back(DBuilder.createUnspecifiedParameter());
 
     llvm::DITypeArray EltTypeArray = DBuilder.getOrCreateTypeArray(Elts);
-    return DBuilder.createSubroutineType(EltTypeArray, llvm::DINode::FlagZero,
-                                         getDwarfCC(CC));
+    return DBuilder.createSubroutineType(
+        EltTypeArray, llvm::DINode::FlagZero,
+        getDwarfCC(CC, CGM.getTarget().getTriple()));
   }
 
   // Handle variadic function types; they need an additional
@@ -4966,8 +4985,9 @@ llvm::DISubroutineType *CGDebugInfo::getOrCreateFunctionType(const Decl *D,
           EltTys.push_back(getOrCreateType(ParamType, F));
       EltTys.push_back(DBuilder.createUnspecifiedParameter());
       llvm::DITypeArray EltTypeArray = DBuilder.getOrCreateTypeArray(EltTys);
-      return DBuilder.createSubroutineType(EltTypeArray, llvm::DINode::FlagZero,
-                                           getDwarfCC(CC));
+      return DBuilder.createSubroutineType(
+          EltTypeArray, llvm::DINode::FlagZero,
+          getDwarfCC(CC, CGM.getTarget().getTriple()));
     }
 
   return cast<llvm::DISubroutineType>(getOrCreateType(FnType, F));

@@ -159,7 +159,7 @@ function(builtin_default_target compiler_rt_path)
                                                 SANITIZER
                            USE_TOOLCHAIN
                            TARGET_TRIPLE ${LLVM_TARGET_TRIPLE}
-                           FOLDER "Compiler-RT"
+                           FOLDER "compiler-rt"
                            ${EXTRA_ARGS})
 endfunction()
 
@@ -183,7 +183,7 @@ function(builtin_register_target compiler_rt_path name)
                                       ${COMMON_CMAKE_ARGS}
                                       ${${name}_extra_args}
                            USE_TOOLCHAIN
-                           FOLDER "Compiler-RT"
+                           FOLDER "compiler-rt"
                            ${EXTRA_ARGS} ${ARG_EXTRA_ARGS})
 endfunction()
 
@@ -214,7 +214,7 @@ if(compiler_rt_path)
     add_custom_target(install-builtins-stripped)
     set_target_properties(
       builtins install-builtins install-builtins-stripped
-      PROPERTIES FOLDER "Compiler-RT"
+      PROPERTIES FOLDER "compiler-rt"
     )
   endif()
 
@@ -584,12 +584,17 @@ if(build_runtimes)
   # CMAKE_PREFIX_PATH is the search path for CMake packages. In order to pass through
   # the command line interface, the CMake semicolon separator needs to be replaced
   # with $<SEMICOLON>
-  if(CMAKE_PREFIX_PATH)
-    string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
-    # Some projects require access to the LLVM lib/cmake directory
-    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+  string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
+  # Some projects require access to the LLVM lib/cmake directory, whether or not
+  # the user provided a prefix path of their own.
+  if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+    if(escaped_cmake_prefix_path)
       string(PREPEND escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake$<SEMICOLON>")
+    else()
+      set(escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake")
     endif()
+  endif()
+  if(escaped_cmake_prefix_path)
     list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${escaped_cmake_prefix_path}")
   endif()
 
@@ -683,13 +688,7 @@ if(build_runtimes)
       endif()
     endif()
 
-    if("AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
-      set(AMDGPU_ARCH_DEP amdgpu-arch)
-    endif()
-    if (${LIBOMPTARGET_BUILD_DEVICE_FORTRT})
-      set(FORTRT_DEP FortranRuntime)
-    endif()
-    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP} ${AMDGPU_ARCH_DEP} ${FORTRT_DEP})
+    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP})
       if(TARGET ${dep})
         list(APPEND extra_deps ${dep})
       endif()
@@ -781,7 +780,7 @@ if(build_runtimes)
         add_custom_target(check-builtins)
         set_target_properties(
           check-builtins
-          PROPERTIES FOLDER "Compiler-RT"
+          PROPERTIES FOLDER "compiler-rt"
         )
       endif()
       if(LLVM_RUNTIME_DISTRIBUTION_COMPONENTS)

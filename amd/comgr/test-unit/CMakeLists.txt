@@ -133,9 +133,19 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
   COMMAND $<TARGET_FILE:HotswapMCTests>
   COMMAND $<TARGET_FILE:HotswapProfileTests>
-  COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
   COMMAND $<TARGET_FILE:LoggerTests>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapProfileTests
-  RaiserScaffoldingTests DemangleSymbolNameTest LoggerTests)
+  DemangleSymbolNameTest LoggerTests)
+
+# The transpile-path test binaries, exported by hotswap/CMakeLists.txt in
+# COMGR_HOTSWAP_TEST_TARGETS (empty unless COMGR_ENABLE_HOTSWAP_TRANSPILE is on).
+# Adding a hotswap test updates that list, not this file.
+foreach(HotswapTest ${COMGR_HOTSWAP_TEST_TARGETS})
+  add_custom_command(TARGET test-unit POST_BUILD
+    COMMAND $<TARGET_FILE:${HotswapTest}>)
+endforeach()
+if(COMGR_HOTSWAP_TEST_TARGETS)
+  add_dependencies(test-unit ${COMGR_HOTSWAP_TEST_TARGETS})
+endif()
 add_dependencies(check-comgr test-unit)

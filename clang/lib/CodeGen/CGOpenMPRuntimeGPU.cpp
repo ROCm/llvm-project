@@ -565,7 +565,8 @@ static bool hasNestedSPMDDirective(ASTContext &Ctx,
     case OMPD_parallel_for_simd:
     case OMPD_cancel:
     case OMPD_cancellation_point:
-    case OMPD_ordered:
+    case OMPD_ordered_standalone:
+    case OMPD_ordered_blockassoc:
     case OMPD_threadprivate:
     case OMPD_allocate:
     case OMPD_task:
@@ -654,7 +655,8 @@ static bool supportsSPMDExecutionMode(CodeGenModule &CGM,
   case OMPD_parallel_for_simd:
   case OMPD_cancel:
   case OMPD_cancellation_point:
-  case OMPD_ordered:
+  case OMPD_ordered_standalone:
+  case OMPD_ordered_blockassoc:
   case OMPD_threadprivate:
   case OMPD_allocate:
   case OMPD_task:
@@ -2014,6 +2016,13 @@ void CGOpenMPRuntimeGPU::emitReduction(
       auto *CurFn = CGF.CurFn;
       CGF.CurFn = NewFunc;
 
+      // The helper has no DISubprogram of its own, so a debug location here
+      // would name the enclosing function's scope, which is invalid IR.
+      // Suppress them, as the other OpenMPIRBuilder-generated helpers do.
+      llvm::DebugLoc SavedDebugLoc = CGF.Builder.getCurrentDebugLocation();
+      CGF.Builder.SetCurrentDebugLocation(llvm::DebugLoc());
+      CGF.disableDebugInfo();
+
       *LHSPtr = CGF.GetAddrOfLocalVar(
                        cast<VarDecl>(cast<DeclRefExpr>(LHSExprs[I])->getDecl()))
                     .emitRawPointer(CGF);
@@ -2025,6 +2034,8 @@ void CGOpenMPRuntimeGPU::emitReduction(
                                   cast<DeclRefExpr>(LHSExprs[I]),
                                   cast<DeclRefExpr>(RHSExprs[I]));
 
+      CGF.enableDebugInfo();
+      CGF.Builder.SetCurrentDebugLocation(SavedDebugLoc);
       CGF.CurFn = CurFn;
 
       return InsertPointTy(CGF.Builder.GetInsertBlock(),
