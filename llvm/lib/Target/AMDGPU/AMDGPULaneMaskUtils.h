@@ -211,9 +211,11 @@ private:
   /// zero-init is placed.
   DenseMap<Register, MachineBasicBlock *> AccumulatorInitBlock;
 
-  /// Origin blocks whose merge reads Acc mid-block (init must precede it).
+  /// All origin/origin-branch blocks registered for Acc (via addAvailable()/
+  /// addReset()). When DomBB is one of them it contributes to Acc in-block, so
+  /// the zero-init must be emitted before that contribution.
   DenseMap<Register, SmallDenseSet<MachineBasicBlock *, 8>>
-      AccumulatorUseBlocks;
+      AccumulatorOriginBlocks;
 
 public:
   SmallDenseSet<Register, 4> &getAllAccumulators() { return AllAccumulators; }

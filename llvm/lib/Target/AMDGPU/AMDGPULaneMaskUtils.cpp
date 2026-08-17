@@ -304,8 +304,6 @@ void AMDGPULaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
   Register Previous;
   if (&Block != &LMU.function()->front() && !(BlockIt->Flags & ResetInMiddle)) {
     Previous = Accumulator;
-    // Merge reads Acc mid-block here, so the init must precede it in DomBB.
-    AccumulatorUseBlocks[Accumulator].insert(&Block);
   } else {
     Previous = ZeroReg;
   }
@@ -391,6 +389,7 @@ AMDGPULaneMaskUpdater::findBlockInfo(MachineBasicBlock &Block) {
 /// dominator of all origin/origin-branch blocks registered with it.
 void AMDGPULaneMaskUpdater::updateAccumulatorInitBlock(
     MachineBasicBlock &Block) {
+  AccumulatorOriginBlocks[Accumulator].insert(&Block);
   if (!MDT)
     return;
   MachineBasicBlock *&DomBB = AccumulatorInitBlock[Accumulator];
@@ -412,13 +411,14 @@ void AMDGPULaneMaskUpdater::insertAccumulatorInits() {
     if (!DomBB)
       DomBB = &Entry;
 
-    // Init at the top only if DomBB's own merge reads Acc; else at the end.
-    auto UseIt = AccumulatorUseBlocks.find(Acc);
-    bool ReadsAccInDomBB =
-        UseIt != AccumulatorUseBlocks.end() && UseIt->second.contains(DomBB);
+    // If DomBB is an origin/origin-branch block, put the init at the top so it
+    // precedes DomBB's own contribution; otherwise at the SALU-safe end.
+    auto OrigIt = AccumulatorOriginBlocks.find(Acc);
+    bool DomBBIsOrigin = OrigIt != AccumulatorOriginBlocks.end() &&
+                         OrigIt->second.contains(DomBB);
     MachineBasicBlock::iterator InsertPt =
-        ReadsAccInDomBB ? DomBB->getFirstNonPHI()
-                        : getSaluInsertionAtEnd(*DomBB, /*ClobbersSCC=*/false);
+        DomBBIsOrigin ? DomBB->getFirstNonPHI()
+                      : getSaluInsertionAtEnd(*DomBB, /*ClobbersSCC=*/false);
 
     BuildMI(*DomBB, InsertPt, {}, TII->get(MovOpc), Acc).addImm(0);
   }
