@@ -209,7 +209,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       static_cast<unsigned>(Meta.MaxFlatWorkgroupSize) < TargetIsa.waveSize();
   const bool UseThreadLoop = ForceThreadLoopProjection;
   const bool WideningWave32To64 = Isa.isWave32() && !TargetIsa.isWave32();
-  // ReplicationDoubledDispatchProjection is selected only via the C5 y/z-refusal
+  // ReplicationDoubledDispatchProjection is selected only via the C5
+  // y/z-refusal
   // upgrade retry (or an explicit --force-modrep-doubled), so it is a forced
   // route just like ThreadLoop; it takes precedence over WaveNative.
   const bool UseReplicationDoubled =
@@ -773,8 +774,6 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   Ctx.SourceKernelCodeProperties = Meta.KernelCodeProperties;
   Ctx.AssumeHipGlobalOffsetZero = AssumeHipGlobalOffsetZero;
 
-  llvm::Error RaiseReadFailure = llvm::Error::success();
-
   if (UseThreadLoop) {
     auto *IterA = B.CreateAlloca(I32Ty, nullptr, "tl_iter_alloca");
     B.CreateStore(B.getInt32(0), IterA);
@@ -815,11 +814,6 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     B.SetInsertPoint(DoneBb);
     B.CreateRetVoid();
   }
-
-  // No source operand is read before the raise loop, so a recorded read failure
-  // here is an invariant violation; surface it rather than drop it.
-  if (RaiseReadFailure)
-    return std::move(RaiseReadFailure);
 
   llvm::Error RaiseFailures = llvm::Error::success();
   int RaisedCount = 0;
@@ -883,16 +877,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           strippedMnemonic(Mc, Di.Inst), Di.Offset, Format);
     }();
 
-    if (RaiseReadFailure || !HrOrErr) {
-      if (RaiseFailures && RaiseReadFailure) {
-        RaiseFailures = llvm::joinErrors(std::move(RaiseFailures),
-                                         std::move(RaiseReadFailure));
-        RaiseReadFailure = llvm::Error::success();
-      } else if (RaiseReadFailure) {
-        RaiseFailures = std::move(RaiseReadFailure);
-        RaiseReadFailure = llvm::Error::success();
-      }
-
+    if (!HrOrErr) {
       if (RaiseFailures && !HrOrErr) {
         RaiseFailures =
             llvm::joinErrors(std::move(RaiseFailures), HrOrErr.takeError());
@@ -906,8 +891,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
 
     // A handler recognised the instruction but refused it.
     if (!Hr.Handled) {
-      StringRef Format =
-          formatName(Di.TargetSpecificFlags);
+      StringRef Format = formatName(Di.TargetSpecificFlags);
       LLVM_DEBUG(dbgs() << "transpiler: unsupported instruction: "
                         << printInst(Mc, Di.Inst) << " [format=" << Format
                         << "] at offset 0x" << format_hex(Di.Offset, 1)
@@ -930,12 +914,6 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     RaisedCount++;
     continue;
   }
-
-  // Read failures are folded into RaiseFailures as they occur; anything left
-  // here is an invariant slip, so join it in rather than drop it.
-  if (RaiseReadFailure)
-    RaiseFailures =
-        llvm::joinErrors(std::move(RaiseFailures), std::move(RaiseReadFailure));
 
   // If the function's entry block has predecessors (e.g. a backward
   // branch targeting the kernel's first instruction), LLVM's verifier
@@ -1031,7 +1009,8 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                        EnableWaveNative,
                        /*forceThreadLoopProjection=*/false,
                        /*suppressC5ForThreadLoopRoute=*/false,
-                       ForceReplicationDoubled, AssumeHipGlobalOffsetZero, Stats);
+                       ForceReplicationDoubled, AssumeHipGlobalOffsetZero,
+                       Stats);
 }
 
 } // namespace COMGR::hotswap

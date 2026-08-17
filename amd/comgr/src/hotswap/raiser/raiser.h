@@ -81,7 +81,7 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           // in-kernel virtualization independent of a C5 refusal trigger). The
           // normal path needs no flag: the raiser auto-upgrades the WaveNative
           // y/z-derived C5 refusal to a doubled dispatch by default.
-          bool ForceModrepDoubled = false, uint64_t TextBaseAddress = 0,
+          bool ForceReplicationDoubled = false, uint64_t TextBaseAddress = 0,
           llvm::ArrayRef<TextSection::ImageSection> SourceImageSections = {},
           RaiseStats *Stats = nullptr);
 
