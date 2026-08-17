@@ -12886,9 +12886,6 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
 
     bool CBIsVoid = CB->getType()->isVoidTy();
     BasicBlock::iterator IP = CB->getIterator();
-    FunctionType *CSFT = CB->getFunctionType();
-    SmallVector<Value *> CSArgs(CB->args());
-
     // If we know all callees and there are none, the call site is (effectively)
     // dead (or UB).
     if (AssumedCallees.empty()) {
@@ -12898,20 +12895,39 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
       return ChangeStatus::CHANGED;
     }
 
-    // Special handling for the single callee case.
-    if (AllCalleesKnown && AssumedCallees.size() == 1) {
-      auto *NewCallee = AssumedCallees.front();
-      if (isLegalToPromote(*CB, NewCallee)) {
-        promoteCall(*CB, NewCallee, nullptr);
-        NumIndirectCallsPromoted++;
-        return ChangeStatus::CHANGED;
+    // A direct call to a callee that can reach the function holding the call
+    // site closes a call graph cycle that previously only existed through the
+    // function pointer. Nothing downstream can undo that: an alwaysinline
+    // dispatcher, which is how the OpenMP device runtime arranges for every
+    // caller to devirtualize its own copy, stops being inlinable once it is in
+    // a cycle, and on a target without a dynamically sized stack the recursion
+    // it leaves behind has no statically known stack size. Leave those callees
+    // to the indirect call.
+    Function *Caller = CB->getFunction();
+    std::optional<SmallPtrSet<const Function *, 8>> CallersOfCaller;
+    auto ReachesCaller = [&](Function *Callee) {
+      if (!CallersOfCaller) {
+        CallersOfCaller.emplace();
+        SmallVector<const Function *, 8> Worklist = {Caller};
+        while (!Worklist.empty()) {
+          const Function *Fn = Worklist.pop_back_val();
+          if (!CallersOfCaller->insert(Fn).second)
+            continue;
+          for (const User *U : Fn->users())
+            if (const auto *UserCB = dyn_cast<CallBase>(U))
+              if (UserCB->getCalledFunction() == Fn)
+                Worklist.push_back(UserCB->getFunction());
+        }
       }
-      Instruction *NewCall =
-          CallInst::Create(FunctionCallee(CSFT, NewCallee), CSArgs,
-                           CB->getName(), CB->getIterator());
-      if (!CBIsVoid)
-        A.changeAfterManifest(IRPosition::callsite_returned(*CB), *NewCall);
-      A.deleteAfterManifest(*CB);
+      return CallersOfCaller->contains(Callee);
+    };
+
+    // Special handling for the single callee case.
+    if (AllCalleesKnown && AssumedCallees.size() == 1 &&
+        isLegalToPromote(*CB, AssumedCallees.front()) &&
+        !ReachesCaller(AssumedCallees.front())) {
+      promoteCall(*CB, AssumedCallees.front(), nullptr);
+      NumIndirectCallsPromoted++;
       return ChangeStatus::CHANGED;
     }
 
@@ -12928,7 +12944,12 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
     SmallVector<Function *, 8> SkippedAssumedCallees;
     SmallVector<std::pair<CallInst *, Instruction *>> NewCalls;
     for (Function *NewCallee : AssumedCallees) {
-      if (!A.shouldSpecializeCallSiteForCallee(*this, *CB, *NewCallee,
+      // A callee whose signature does not match the call site can only be
+      // called through it in ways that are undefined, so a direct call built
+      // from the call site's operands would not be the call the indirect call
+      // performs. Leave those callees to the indirect fallback.
+      if (!isLegalToPromote(*CB, NewCallee) || ReachesCaller(NewCallee) ||
+          !A.shouldSpecializeCallSiteForCallee(*this, *CB, *NewCallee,
                                                AssumedCallees.size())) {
         SkippedAssumedCallees.push_back(NewCallee);
         SpecializedForAllCallees = false;
@@ -12955,16 +12976,11 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
         ThenTI->replaceUsesOfWith(ElseBB, CBBB);
       }
       CastInst *RetBC = nullptr;
-      CallInst *NewCall = nullptr;
-      if (isLegalToPromote(*CB, NewCallee)) {
-        auto *CBClone = cast<CallBase>(CB->clone());
-        CBClone->insertBefore(ThenTI->getIterator());
-        NewCall = &cast<CallInst>(promoteCall(*CBClone, NewCallee, &RetBC));
-        NumIndirectCallsPromoted++;
-      } else {
-        NewCall = CallInst::Create(FunctionCallee(CSFT, NewCallee), CSArgs,
-                                   CB->getName(), ThenTI->getIterator());
-      }
+      auto *CBClone = cast<CallBase>(CB->clone());
+      CBClone->insertBefore(ThenTI->getIterator());
+      CallInst *NewCall =
+          &cast<CallInst>(promoteCall(*CBClone, NewCallee, &RetBC));
+      NumIndirectCallsPromoted++;
       NewCalls.push_back({NewCall, RetBC});
     }
 
