@@ -126,7 +126,7 @@ struct AMDGPUDeviceTy;
 /// Use to transport information to OMPT timing functions.
 struct ProfilingInfoTy {
   // Holds the profiler instance
-  GenericPluginTy *Plugin;
+  GenericProfilerTy *Profiler;
 
   // The HSA agent on which the operation is executed
   hsa_agent_t Agent;
@@ -160,8 +160,7 @@ static Error timeDataTransferInNsAsync(void *Data) {
 
   auto [Start, End] = getCopyStartAndEndTime(Args);
 
-  Args->Plugin->getProfiler()->handleDataTransfer(Start, End,
-                                                  Args->ProfilerSpecificData);
+  Args->Profiler->handleDataTransfer(Start, End, Args->ProfilerSpecificData);
 
   return Plugin::success();
 }
@@ -1884,8 +1883,8 @@ private:
                                     void *ProfilerSpecificData) {
       Callbacks.emplace_back(timeKernelInNsAsync);
       ActionArgs.emplace_back().ProfilerArgs =
-          ProfilingInfoTy{&(Device->Plugin), Agent, OutputSignal, TicksToTime,
-                          ProfilerSpecificData};
+          ProfilingInfoTy{Device->Plugin.getProfiler(), Agent, OutputSignal,
+                          TicksToTime, ProfilerSpecificData};
       return Plugin::success();
     }
 
@@ -1897,8 +1896,8 @@ private:
                                           void *ProfilerSpecificData) {
       Callbacks.emplace_back(timeDataTransferInNsAsync);
       ActionArgs.emplace_back().ProfilerArgs =
-          ProfilingInfoTy{&(Device->Plugin), Agent, OutputSignal, TicksToTime,
-                          ProfilerSpecificData};
+          ProfilingInfoTy{Device->Plugin.getProfiler(), Agent, OutputSignal,
+                          TicksToTime, ProfilerSpecificData};
       return Plugin::success();
     }
 
@@ -2259,7 +2258,7 @@ private:
 
     auto [StartTime, EndTime] = getKernelStartAndEndTime(ProfilerInfo);
 
-    ProfilerInfo->Plugin->getProfiler()->handleKernelCompletion(
+    ProfilerInfo->Profiler->handleKernelCompletion(
         StartTime, EndTime, ProfilerInfo->ProfilerSpecificData);
 
     return Plugin::success();
@@ -4174,7 +4173,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 #ifdef OMPT_SUPPORT
       if (Plugin.getProfiler()->isProfilingEnabled()) {
         ProfilingInfoTy OmptKernelTimingArgsAsync{
-            &Plugin, Agent, &Signal, TicksToTime, ProfilerSpecificData};
+            Plugin.getProfiler(), Agent, &Signal, TicksToTime,
+            ProfilerSpecificData};
 
         if (auto Err = timeDataTransferInNsAsync(&OmptKernelTimingArgsAsync))
           return Err;
@@ -4266,7 +4266,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 #ifdef OMPT_SUPPORT
       if (Plugin.getProfiler()->isProfilingEnabled()) {
         ProfilingInfoTy OmptKernelTimingArgsAsync{
-            &Plugin, Agent, &Signal, TicksToTime, ProfilerSpecificData};
+            Plugin.getProfiler(), Agent, &Signal, TicksToTime,
+            ProfilerSpecificData};
 
         if (auto Err = timeDataTransferInNsAsync(&OmptKernelTimingArgsAsync))
           return Err;
@@ -4351,7 +4352,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 #ifdef OMPT_SUPPORT
       if (Plugin.getProfiler()->isProfilingEnabled()) {
         ProfilingInfoTy OmptKernelTimingArgsAsync{
-            &Plugin, Agent, &Signal, TicksToTime, ProfilerSpecificData};
+            Plugin.getProfiler(), Agent, &Signal, TicksToTime,
+            ProfilerSpecificData};
 
         if (auto Err = timeDataTransferInNsAsync(&OmptKernelTimingArgsAsync))
           return Err;
@@ -6617,7 +6619,7 @@ static ProfilingInfoTy *getProfilingInfo(void *Data) {
 
   // The ProfilerSpecific part can be nullptr, do not check here.
   assert(Args && "Invalid argument pointer");
-  assert(Args->Plugin && "Invalid plugin");
+  assert(Args->Profiler && "Invalid profiler");
   assert(Args->Signal && "Invalid signal");
 
   return Args;
@@ -6625,7 +6627,7 @@ static ProfilingInfoTy *getProfilingInfo(void *Data) {
 
 static std::pair<uint64_t, uint64_t>
 getKernelStartAndEndTime(const ProfilingInfoTy *Args) {
-  assert(Args->Plugin && "Invalid GenericPlugin pointer in profiling");
+  assert(Args->Profiler && "Invalid GenericProfiler pointer in profiling");
   assert(Args->Signal && "Invalid AMDGPUSignal pointer in profiling");
 
   hsa_amd_profiling_dispatch_time_t TimeRec{0, 0};
