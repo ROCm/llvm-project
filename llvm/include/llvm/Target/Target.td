@@ -1308,6 +1308,9 @@ class InstrInfo {
   //
   // This option is a temporary migration help. It will go away.
   bit guessInstructionProperties = true;
+
+  // Apply LLVM_ABI to the generated named-operand lookup function.
+  bit ExportNamedOperandTable = false;
 }
 
 // Standard Pseudo Instructions.

@@ -84,7 +84,7 @@ unsigned getAMDHSACodeObjectVersion(unsigned ABIVersion);
 /// \returns The default HSA code object version. This should only be used when
 /// we lack a more accurate CodeObjectVersion value (e.g. from the IR module
 /// flag or a .amdhsa_code_object_version directive)
-unsigned getDefaultAMDHSACodeObjectVersion();
+LLVM_ABI unsigned getDefaultAMDHSACodeObjectVersion();
 
 /// \returns ABIVersion suitable for use in ELF's e_ident[EI_ABIVERSION]. \param
 /// CodeObjectVersion is a value returned by getAMDHSACodeObjectVersion().
@@ -620,8 +620,19 @@ LLVM_READONLY
 const GcnBufferFormatInfo *getGcnBufferFormatInfo(uint8_t Format,
                                                   const MCSubtargetInfo &STI);
 
-LLVM_READONLY
-int32_t getMCOpcode(uint32_t Opcode, unsigned Gen);
+LLVM_ABI LLVM_READONLY int32_t getMCOpcode(uint32_t Opcode, unsigned Gen);
+
+LLVM_ABI LLVM_READONLY int32_t getVOPe64(uint32_t Opcode);
+
+LLVM_ABI LLVM_READONLY int32_t getDPPOp32(uint32_t Opcode);
+
+LLVM_ABI LLVM_READONLY int32_t getDPPOp64(uint32_t Opcode);
+
+LLVM_ABI LLVM_READONLY int32_t getBasicFromSDWAOp(uint32_t Opcode);
+
+/// \returns VADDR form of a FLAT Global instruction given an \p Opcode
+/// of a SADDR form.
+LLVM_ABI LLVM_READONLY int32_t getGlobalVaddrOp(uint32_t Opcode);
 
 LLVM_READONLY
 unsigned getVOPDOpcode(unsigned Opc, bool VOPD3);
@@ -1510,7 +1521,7 @@ bool isGFX10Before1030(const MCSubtargetInfo &STI);
 bool isGFX11(const MCSubtargetInfo &STI);
 bool isGFX11Plus(const MCSubtargetInfo &STI);
 bool isGFX12(const MCSubtargetInfo &STI);
-bool isGFX12Plus(const MCSubtargetInfo &STI);
+LLVM_ABI bool isGFX12Plus(const MCSubtargetInfo &STI);
 bool isGFX1250(const MCSubtargetInfo &STI);
 bool isGFX1250Plus(const MCSubtargetInfo &STI);
 bool isGFX13(const MCSubtargetInfo &STI);
@@ -1551,11 +1562,9 @@ bool isHi16Reg(MCRegister Reg, const MCRegisterInfo &MRI);
 MCRegister getMCReg(MCRegister Reg, const MCSubtargetInfo &STI);
 
 /// Convert hardware register \p Reg to a pseudo register
-LLVM_READNONE
-MCRegister mc2PseudoReg(MCRegister Reg);
+LLVM_ABI LLVM_READNONE MCRegister mc2PseudoReg(MCRegister Reg);
 
-LLVM_READNONE
-bool isInlineValue(MCRegister Reg);
+LLVM_ABI LLVM_READNONE bool isInlineValue(MCRegister Reg);
 
 /// Is this an AMDGPU specific source operand? These include registers,
 /// inline constants, literals and mandatory literals (KImm).
@@ -1581,7 +1590,7 @@ bool isSISrcInlinableOperand(const MCInstrDesc &Desc, unsigned OpNo);
 unsigned getRegBitWidth(unsigned RCID);
 
 /// Get the size in bits of a register from the register class \p RC.
-unsigned getRegBitWidth(const MCRegisterClass &RC);
+LLVM_ABI unsigned getRegBitWidth(const MCRegisterClass &RC);
 
 LLVM_READNONE
 inline unsigned getOperandSize(const MCOperandInfo &OpInfo) {
@@ -1797,6 +1806,16 @@ std::optional<unsigned> convertSetRegImmToVgprMSBs(const MCInst &MI,
 // maps, one for X and one for Y component.
 std::pair<const AMDGPU::OpName *, const AMDGPU::OpName *>
 getVGPRLoweringOperandTables(const MCInstrDesc &Desc);
+
+/// MC operand indices selected by the four two-bit fields of S_SET_VGPR_MSB.
+/// Elements 0 through 3 correspond to src0, src1, src2, and dst. Each element
+/// contains the X and Y indices for one field. The Y index is absent for
+/// non-VOPD instructions.
+using VGPRMSBOperandIndices =
+    std::array<std::pair<std::optional<unsigned>, std::optional<unsigned>>, 4>;
+
+LLVM_ABI VGPRMSBOperandIndices
+getVGPRMSBOperandIndices(const MCInstrDesc &Desc);
 
 /// \returns true if a memory instruction supports scale_offset modifier.
 bool supportsScaleOffset(const MCInstrInfo &MII, unsigned Opcode);
