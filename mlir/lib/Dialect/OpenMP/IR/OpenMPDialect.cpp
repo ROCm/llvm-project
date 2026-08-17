@@ -2254,9 +2254,6 @@ static ParseResult parseMapClause(OpAsmParser &parser,
     if (mapTypeMod == "present")
       mapTypeBits |= ClauseMapFlags::present;
 
-    if (mapTypeMod == "descriptor")
-      mapTypeBits |= ClauseMapFlags::descriptor;
-
     if (mapTypeMod == "to")
       mapTypeBits |= ClauseMapFlags::to;
 
@@ -2336,8 +2333,6 @@ static void printMapClause(OpAsmPrinter &p, Operation *op,
     mapTypeStrs.push_back("close");
   if (mapTypeToBool(mapFlags, ClauseMapFlags::present))
     mapTypeStrs.push_back("present");
-  if (mapTypeToBool(mapFlags, ClauseMapFlags::descriptor))
-    mapTypeStrs.push_back("descriptor");
   if (mapTypeToBool(mapFlags, ClauseMapFlags::target_param))
     mapTypeStrs.push_back("target_param");
 
@@ -4505,6 +4500,74 @@ UnrollHeuristicOp::getGenerateesODSOperandIndexAndLength() {
 }
 
 //===----------------------------------------------------------------------===//
+// UnrollFullOp
+//===----------------------------------------------------------------------===//
+
+void UnrollFullOp::build(::mlir::OpBuilder &odsBuilder,
+                         ::mlir::OperationState &odsState, ::mlir::Value cli) {
+  odsState.addOperands(cli);
+}
+
+void UnrollFullOp::print(OpAsmPrinter &p) {
+  p << '(' << getApplyee() << ')';
+
+  p.printOptionalAttrDict((*this)->getAttrs());
+}
+
+mlir::ParseResult UnrollFullOp::parse(::mlir::OpAsmParser &parser,
+                                      ::mlir::OperationState &result) {
+  auto cliType = CanonicalLoopInfoType::get(parser.getContext());
+
+  if (parser.parseLParen())
+    return failure();
+
+  OpAsmParser::UnresolvedOperand applyee;
+  if (parser.parseOperand(applyee) ||
+      parser.resolveOperand(applyee, cliType, result.operands))
+    return failure();
+
+  if (parser.parseRParen())
+    return failure();
+
+  // Optional output loop; full unrolling has none.
+  if (!parser.parseOptionalArrow()) {
+    if (parser.parseLParen() || parser.parseRParen())
+      return failure();
+  }
+
+  // Parse the optional attribute list.
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  return mlir::success();
+}
+
+std::pair<unsigned, unsigned>
+UnrollFullOp::getApplyeesODSOperandIndexAndLength() {
+  return getODSOperandIndexAndLength(odsIndex_applyee);
+}
+
+std::pair<unsigned, unsigned>
+UnrollFullOp::getGenerateesODSOperandIndexAndLength() {
+  return {0, 0};
+}
+
+LogicalResult UnrollFullOp::verify() {
+  auto [create, gen, cons] = decodeCli(getApplyee());
+  if (!gen)
+    return emitOpError() << "applyee CLI has no generator";
+
+  // Full unrolling leaves no loop, so the trip count must be constant. Only
+  // omp.canonical_loop states one.
+  if (auto loop = dyn_cast<CanonicalLoopOp>(gen->getOwner())) {
+    if (!matchPattern(loop.getTripCount(), m_Constant()))
+      return emitOpError() << "applyee loop must have a constant trip count";
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // UnrollPartialOp
 //===----------------------------------------------------------------------===//
 
@@ -4993,6 +5056,12 @@ AtomicUpdateOp AtomicCaptureOp::getAtomicUpdateOp() {
   return dyn_cast<AtomicUpdateOp>(getSecondOp());
 }
 
+AtomicCompareOp AtomicCaptureOp::getAtomicCompareOp() {
+  if (auto op = dyn_cast<AtomicCompareOp>(getFirstOp()))
+    return op;
+  return dyn_cast<AtomicCompareOp>(getSecondOp());
+}
+
 LogicalResult AtomicCaptureOp::verify() {
   return verifySynchronizationHint(*this, getHint());
 }
@@ -5019,6 +5088,16 @@ LogicalResult AtomicCaptureOp::verifyRegions() {
 LogicalResult AtomicCompareOp::verify() {
   if (verifyCommon().failed())
     return mlir::failure();
+  // OpenMP 5.2 [15.8.3]: the fail clause argument must be one of seq_cst,
+  // acquire or relaxed ('release' and 'acq_rel' are not valid failure
+  // orderings and map to invalid cmpxchg failure orderings).
+  if (auto failOrder = getFailMemoryOrder()) {
+    if (*failOrder != ClauseMemoryOrderKind::Seq_cst &&
+        *failOrder != ClauseMemoryOrderKind::Acquire &&
+        *failOrder != ClauseMemoryOrderKind::Relaxed)
+      return emitOpError(
+          "fail_memory_order must be 'seq_cst', 'acquire' or 'relaxed'");
+  }
   return verifySynchronizationHint(*this, getHint());
 }
 

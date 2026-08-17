@@ -18,6 +18,7 @@
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Alignment.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/TargetParser/AMDGPUTargetParser.h"
 #include <array>
 #include <functional>
@@ -90,13 +91,13 @@ unsigned getDefaultAMDHSACodeObjectVersion();
 uint8_t getELFABIVersion(const Triple &OS, unsigned CodeObjectVersion);
 
 /// \returns The offset of the multigrid_sync_arg argument from implicitarg_ptr
-unsigned getMultigridSyncArgImplicitArgPosition(unsigned COV);
+LLVM_ABI unsigned getMultigridSyncArgImplicitArgPosition(unsigned COV);
 
 /// \returns The offset of the hostcall pointer argument from implicitarg_ptr
-unsigned getHostcallImplicitArgPosition(unsigned COV);
+LLVM_ABI unsigned getHostcallImplicitArgPosition(unsigned COV);
 
-unsigned getDefaultQueueImplicitArgPosition(unsigned COV);
-unsigned getCompletionActionImplicitArgPosition(unsigned COV);
+LLVM_ABI unsigned getDefaultQueueImplicitArgPosition(unsigned COV);
+LLVM_ABI unsigned getCompletionActionImplicitArgPosition(unsigned COV);
 
 struct GcnBufferFormatInfo {
   unsigned Format;
@@ -410,6 +411,7 @@ const MIMGBaseOpcodeInfo *getMIMGBaseOpcodeInfo(unsigned BaseOpcode);
 
 struct MIMGDimInfo {
   MIMGDim Dim;
+  MIMGDim NonArrayDim;
   uint8_t NumCoords;
   uint8_t NumGradients;
   bool MSAA;
@@ -1525,6 +1527,12 @@ bool isGFX940(const MCSubtargetInfo &STI);
 bool hasArchitectedFlatScratch(const MCSubtargetInfo &STI);
 bool hasMAIInsts(const MCSubtargetInfo &STI);
 bool hasPopsExitingWaveID(const MCSubtargetInfo &STI);
+
+/// \returns true if the src_private_base and src_private_limit aperture
+/// registers are available on \p STI. Targets with globally addressable
+/// scratch have no private aperture and expose src_flat_scratch_base instead.
+bool hasPrivateApertureRegs(const MCSubtargetInfo &STI);
+
 bool hasVOPD(const MCSubtargetInfo &STI);
 bool hasDPPSrc1SGPR(const MCSubtargetInfo &STI);
 

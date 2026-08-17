@@ -10,9 +10,9 @@
 #define HOTSWAP_TRANSPILER_RAISER_H
 
 #include "hotswap/common/kernel-meta.h"
-#include "raise_failure.h"
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Error.h"
 
 #include <memory>
 
@@ -26,9 +26,6 @@ namespace COMGR::hotswap {
 struct RaiseResult {
   std::unique_ptr<llvm::LLVMContext> Ctx;
   std::unique_ptr<llvm::Module> Module;
-  // Structured failure description. `failure.reason == None` iff `success`.
-  RaiseFailure Failure;
-  bool Success = false;
 };
 
 // Raise a kernel named `KernelName` whose source ISA is `SourceISA`. `Meta`
@@ -39,8 +36,9 @@ struct RaiseResult {
 // `llvm::AMDGPU::parseArchAMDGCN`. The kernel-text bytes, kernel offset, and
 // compilation-target ISA become real parameters once the decoder is wired
 // in (subsequent commit).
-RaiseResult raiseToIR(llvm::StringRef SourceISA, llvm::StringRef KernelName,
-                      const KernelMeta &Meta);
+llvm::Expected<RaiseResult> raiseToIR(llvm::StringRef SourceISA,
+                                      llvm::StringRef KernelName,
+                                      const KernelMeta &Meta);
 
 } // namespace COMGR::hotswap
 

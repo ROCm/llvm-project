@@ -2449,10 +2449,10 @@ void CGOpenMPRuntime::emitOrderedRegion(CodeGenFunction &CGF,
                               CGM.getModule(), OMPRTL___kmpc_end_ordered),
                           Args);
     OrderedOpGen.setAction(Action);
-    emitInlinedDirective(CGF, OMPD_ordered, OrderedOpGen);
+    emitInlinedDirective(CGF, OMPD_ordered_blockassoc, OrderedOpGen);
     return;
   }
-  emitInlinedDirective(CGF, OMPD_ordered, OrderedOpGen);
+  emitInlinedDirective(CGF, OMPD_ordered_blockassoc, OrderedOpGen);
 }
 
 unsigned CGOpenMPRuntime::getDefaultFlagsForBarriers(OpenMPDirectiveKind Kind) {
@@ -6565,7 +6565,8 @@ const Expr *CGOpenMPRuntime::getNumTeamsExprForTargetDirective(
   case OMPD_parallel_for_simd:
   case OMPD_cancel:
   case OMPD_cancellation_point:
-  case OMPD_ordered:
+  case OMPD_ordered_standalone:
+  case OMPD_ordered_blockassoc:
   case OMPD_threadprivate:
   case OMPD_allocate:
   case OMPD_task:
@@ -10523,7 +10524,8 @@ getNestedDistributeDirective(ASTContext &Ctx, const OMPExecutableDirective &D) {
     case OMPD_parallel_for_simd:
     case OMPD_cancel:
     case OMPD_cancellation_point:
-    case OMPD_ordered:
+    case OMPD_ordered_standalone:
+    case OMPD_ordered_blockassoc:
     case OMPD_threadprivate:
     case OMPD_allocate:
     case OMPD_task:
@@ -10609,8 +10611,12 @@ getNestedDistributeDirective(ASTContext &Ctx, const OMPExecutableDirective &D) {
 ///       // Map-type-modifying bits (ALWAYS, DELETE, CLOSE) from the outer map
 ///       // clause are propagated to each component, except ATTACH entries
 ///       // (ATTACH|ALWAYS is reserved for attach(always), and other modifier
-///       // bits have no meaning for ATTACH). PRESENT is handled separately.
-///       imported_modifier_bits = type & (ALWAYS | DELETE | CLOSE);
+///       // bits have no meaning for ATTACH). PRESENT is additionally
+///       // propagated to components with HasAttachPtr (the pointee data) at
+///       // OpenMP >= 6.0.
+///       present_bit = (v60 && c.hasAttachPtr()) ? PRESENT : 0;
+///       imported_modifier_bits =
+///           type & (ALWAYS | DELETE | CLOSE | present_bit);
 ///       effective_type = c.isAttach() ? member_type
 ///                                     : member_type | imported_modifier_bits;
 ///       if (c.hasMapper())
@@ -10690,8 +10696,14 @@ void CGOpenMPRuntime::emitUserDefinedMapper(const OMPDeclareMapperDecl *D,
   CGM.getCXXABI().getMangleContext().mangleCanonicalTypeName(Ty, Out);
   std::string Name = getName({"omp_mapper", TyStr, D->getName()});
 
+  // Propagate the PRESENT modifier to the pointee entries (those with
+  // HasAttachPtr) only for OpenMP >= 6.0; before 6.0 the present modifier does
+  // not apply to the pointee (see the OpenMP 6.0 erratum on the present motion
+  // vs. map-type modifier divergence).
+  bool PropagatePresentToPointee = CGM.getLangOpts().OpenMP >= 60;
   llvm::Function *NewFn = cantFail(OMPBuilder.emitUserDefinedMapper(
-      PrivatizeAndGenMapInfoCB, ElemTy, Name, CustomMapperCB));
+      PrivatizeAndGenMapInfoCB, ElemTy, Name, CustomMapperCB,
+      /*PreserveMemberOfFlags=*/false, PropagatePresentToPointee));
   UDMMap.try_emplace(D, NewFn);
   if (CGF)
     FunctionUDMMap[CGF->CurFn].push_back(D);
@@ -11619,7 +11631,8 @@ void CGOpenMPRuntime::scanForTargetRegionsFunctions(const Stmt *S,
     case OMPD_parallel_for_simd:
     case OMPD_cancel:
     case OMPD_cancellation_point:
-    case OMPD_ordered:
+    case OMPD_ordered_standalone:
+    case OMPD_ordered_blockassoc:
     case OMPD_threadprivate:
     case OMPD_allocate:
     case OMPD_task:
@@ -12196,7 +12209,8 @@ void CGOpenMPRuntime::emitTargetDataStandAloneCall(
     case OMPD_parallel_for_simd:
     case OMPD_cancel:
     case OMPD_cancellation_point:
-    case OMPD_ordered:
+    case OMPD_ordered_standalone:
+    case OMPD_ordered_blockassoc:
     case OMPD_threadprivate:
     case OMPD_allocate:
     case OMPD_task:

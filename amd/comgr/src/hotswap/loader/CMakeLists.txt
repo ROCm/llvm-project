@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-project(hotswap-loader LANGUAGES CXX)
+
+# No project() here: this is an add_subdirectory component of amd_comgr, not a
+# standalone build. A nested project() re-runs the superbuild dependency provider
+# and re-imports LLVM, which links a second copy of the AMDGPU static libraries
+# into amd_comgr and double-registers their cl::opts under a non-folding linker.
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -63,6 +67,17 @@ if(NOT TARGET hotswap::loader)
 endif()
 
 llvm_update_compile_flags(hotswap-loader)
+# llvm_update_compile_flags does not reliably carry LLVM's -fno-rtti to a
+# standalone find_package(LLVM) consumer, and the loader raises HotswapError
+# (an llvm::ErrorInfo). Mirror LLVM_ENABLE_RTTI explicitly so we do not emit
+# typeinfo an RTTI-off LLVM cannot resolve at link time.
+if(NOT LLVM_ENABLE_RTTI)
+  if(MSVC)
+    target_compile_options(hotswap-loader PRIVATE /GR-)
+  else()
+    target_compile_options(hotswap-loader PRIVATE -fno-rtti)
+  endif()
+endif()
 set_target_properties(hotswap-loader PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Match LLVM's RTTI setting explicitly. llvm_update_compile_flags only adds
@@ -115,10 +130,44 @@ if(NOT HOTSWAP_AMDGPU_SRC_DIR)
     "hotswap-loader: cannot find the LLVM AMDGPU target sources "
     "(SIDefines.h); set LLVM_MAIN_SRC_DIR to the llvm source directory.")
 endif()
+
+# Generated headers: the TableGen-generated AMDGPUGen*.inc live in the LLVM
+# build tree, never an install prefix, so in an installed LLVMConfig.cmake
+# LLVM_BINARY_DIR (the install prefix) carries none of them. Probe, in order:
+#   1. LLVM_BUILD_BINARY_DIR, if a consumer points us straight at its LLVM build;
+#   2. LLVM_BINARY_DIR, correct for an in-tree monorepo build;
+#   3. the ROCm/TheRock superbuild layout, where comgr consumes the installed
+#      LLVM under <root>/dist/lib/llvm while the producing build sits beside it
+#      at <root>/build (LLVM_BINARY_DIR is .../dist/lib/llvm there).
+# Validate every header the MC stack pulls in so an unrecognised layout fails
+# the configure loudly.
+set(HOTSWAP_AMDGPU_GEN_DIR "")
+foreach(HotswapLLVMBuild
+    "${LLVM_BUILD_BINARY_DIR}"
+    "${LLVM_BINARY_DIR}"
+    "${LLVM_BINARY_DIR}/../../../build")
+  if(HotswapLLVMBuild AND
+     EXISTS "${HotswapLLVMBuild}/lib/Target/AMDGPU/AMDGPUGenInstrInfo.inc")
+    get_filename_component(HOTSWAP_AMDGPU_GEN_DIR
+      "${HotswapLLVMBuild}/lib/Target/AMDGPU" ABSOLUTE)
+    break()
+  endif()
+endforeach()
+foreach(HotswapGenInc
+    AMDGPUGenInstrInfo.inc
+    AMDGPUGenRegisterInfo.inc
+    AMDGPUGenSubtargetInfo.inc)
+  if(NOT EXISTS "${HOTSWAP_AMDGPU_GEN_DIR}/${HotswapGenInc}")
+    message(FATAL_ERROR
+      "hotswap-loader: cannot find the generated AMDGPU headers "
+      "(${HotswapGenInc}); pass -DLLVM_BUILD_BINARY_DIR=<llvm build dir>.")
+  endif()
+endforeach()
+
 target_include_directories(hotswap-loader PRIVATE
   "${HOTSWAP_AMDGPU_SRC_DIR}"
   "${HOTSWAP_AMDGPU_SRC_DIR}/Utils"
-  "${LLVM_BINARY_DIR}/lib/Target/AMDGPU"
+  "${HOTSWAP_AMDGPU_GEN_DIR}"
   "${HOTSWAP_COMGR_BINARY_DIR}/include"
 )
 

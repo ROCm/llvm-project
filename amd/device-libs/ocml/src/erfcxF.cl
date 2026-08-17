@@ -78,17 +78,27 @@ MATH_MANGLE(erfcx)(float x)
                   -0x1.81286p-1f), 0x1.ffffcap-1f),
                   -0x1.20dd7p+0f), 0x1.0p+0f);
     } else if (ax < 32.0f) {
-        float t = MATH_DIV(ax - 4.0f, ax + 4.0f);
-        ret = MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
+        float n = ax - 4.0f;
+        float d = ax + 4.0f;
+        float r = MATH_FAST_RCP(d);
+        float t = n * r;
+        float e = BUILTIN_FMA_F32(-t, ax, BUILTIN_FMA_F32(t + 1.0f, -4.0f, ax));
+        t = BUILTIN_FMA_F32(r, e, t);
+        float p = MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
               MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
               MATH_MAD(t,
                   0.00416076401f, -0.0167250745f),
                   0.0378070959f), -0.0661972834f),
                   0.0935599947f), -0.101052745f),
                   0.0681148962f), 0.0153801711f),
-                  -0.139621619f), 1.23299511f);
+                  -0.139621619f), 0x1.dd2c9p-3f);
 
-        ret = MATH_DIV(ret, MATH_MAD(ax, 2.0f, 1.0f));
+        float tx = ax + ax;
+        d = 1.0f + tx;
+        r = MATH_FAST_RCP(d);
+        float q = BUILTIN_FMA_F32(p, r, r);
+        e = BUILTIN_FMA_F32(-q, tx, 1.0f) + (p - q);
+        ret = BUILTIN_FMA_F32(r, e, q);
     } else {
         const float one_over_sqrtpi = 0x1.20dd76p-1f;
         float z = MATH_RCP(x * x);

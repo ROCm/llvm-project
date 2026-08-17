@@ -518,6 +518,7 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
         // FIXME: Does this really make sense for all GNU toolchains?
         WantPthread = true;
 
+      addLLVMOffloadingRuntime(C, CmdArgs, ToolChain, Args);
       AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
 
       // LLVM support for atomics on 32-bit SPARC V8+ is incomplete, so
@@ -2308,6 +2309,8 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
       D.getVFS().exists("/opt/rh")) {
     // TODO: We may want to remove this, since the functionality
     //   can be achieved using config files.
+    Prefixes.push_back("/opt/rh/gcc-toolset-15/root/usr");
+    Prefixes.push_back("/opt/rh/gcc-toolset-14/root/usr");
     Prefixes.push_back("/opt/rh/gcc-toolset-13/root/usr");
     Prefixes.push_back("/opt/rh/gcc-toolset-12/root/usr");
     Prefixes.push_back("/opt/rh/gcc-toolset-11/root/usr");

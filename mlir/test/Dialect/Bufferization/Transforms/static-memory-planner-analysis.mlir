@@ -223,3 +223,189 @@ func.func @select_two_deallocs() {
   memref.dealloc %sel2 : memref<1024xf32>
   return
 }
+
+// -----
+
+// Test 11: Deallocs nested inside scf.if bodies (mentor case_2).
+// Both allocs live in the entry block; each dealloc is anchored by the
+// enclosing scf.if, so both are eligible via the buffer view-flow analysis.
+// CHECK-LABEL: func @scf_if_nested_deallocs
+func.func @scf_if_nested_deallocs(%c: i1, %d: i1) {
+  // CHECK: %[[ARENA:.*]] = memref.alloc() {alignment = 1 : i64} : memref<8192xi8>
+  // CHECK-NEXT: %[[C0:.*]] = arith.constant 0 : index
+  // CHECK-NEXT: %{{.*}} = memref.view %[[ARENA]][%[[C0]]][] : memref<8192xi8> to memref<1024xf32>
+  // CHECK-NEXT: %[[C4096:.*]] = arith.constant 4096 : index
+  // CHECK-NEXT: %{{.*}} = memref.view %[[ARENA]][%[[C4096]]][] : memref<8192xi8> to memref<1024xf32>
+  // CHECK-NOT: memref.alloc
+  // CHECK-NOT: memref.dealloc
+  %a = memref.alloc() : memref<1024xf32>
+  %b = memref.alloc() : memref<1024xf32>
+  scf.if %c {
+    memref.dealloc %a : memref<1024xf32>
+  }
+  scf.if %d {
+    memref.dealloc %b : memref<1024xf32>
+  }
+  return
+}
+
+// -----
+
+// Test 12: Allocs flow through scf.if results, then deallocated (mentor case_1).
+// The analysis follows the scf.if result aliases back to %a and %b, so both
+// are planned and the yielded views are rewired automatically.
+// CHECK-LABEL: func @scf_if_result_aliases
+func.func @scf_if_result_aliases(%c: i1) {
+  // CHECK: %[[ARENA:.*]] = memref.alloc() {alignment = 1 : i64} : memref<8192xi8>
+  // CHECK-NEXT: %[[C0:.*]] = arith.constant 0 : index
+  // CHECK-NEXT: %[[V0:.*]] = memref.view %[[ARENA]][%[[C0]]][] : memref<8192xi8> to memref<1024xf32>
+  // CHECK-NEXT: %[[C4096:.*]] = arith.constant 4096 : index
+  // CHECK-NEXT: %[[V1:.*]] = memref.view %[[ARENA]][%[[C4096]]][] : memref<8192xi8> to memref<1024xf32>
+  // CHECK-NOT: memref.alloc
+  // CHECK-NOT: memref.dealloc
+  // CHECK: scf.if
+  // CHECK: scf.yield %[[V0]]
+  // CHECK: scf.yield %[[V1]]
+  %a = memref.alloc() : memref<1024xf32>
+  %b = memref.alloc() : memref<1024xf32>
+  %0 = scf.if %c -> memref<1024xf32> {
+    scf.yield %a : memref<1024xf32>
+  } else {
+    scf.yield %b : memref<1024xf32>
+  }
+  %1 = scf.if %c -> memref<1024xf32> {
+    scf.yield %b : memref<1024xf32>
+  } else {
+    scf.yield %a : memref<1024xf32>
+  }
+  memref.dealloc %0 : memref<1024xf32>
+  memref.dealloc %1 : memref<1024xf32>
+  return
+}
+
+// -----
+
+// Test 13: Alloc nested inside a conditional/loop body is left untouched.
+// Only entry-block allocs are planned; the nested %b keeps its alloc/dealloc.
+// CHECK-LABEL: func @scf_if_nested_alloc_skipped
+func.func @scf_if_nested_alloc_skipped(%c: i1) {
+  // CHECK-NOT: memref.view
+  // CHECK: scf.if
+  // CHECK: memref.alloc() : memref<1024xf32>
+  // CHECK: memref.dealloc
+  scf.if %c {
+    %b = memref.alloc() : memref<1024xf32>
+    memref.dealloc %b : memref<1024xf32>
+  }
+  return
+}
+
+// -----
+
+// Test 14: A dealloc that may free both an entry-block alloc and a nested
+// alloc (mentor case_3) is conservatively skipped: erasing it would be unsafe
+// for the buffer that is not managed by the arena.
+// CHECK-LABEL: func @scf_if_shared_nested_dealloc_skipped
+func.func @scf_if_shared_nested_dealloc_skipped(%c: i1) {
+  // CHECK: memref.alloc() : memref<1024xf32>
+  // CHECK-NOT: memref.view
+  // CHECK: scf.if
+  // CHECK: memref.dealloc
+  %a = memref.alloc() : memref<1024xf32>
+  %0 = scf.if %c -> memref<1024xf32> {
+    memref.dealloc %a : memref<1024xf32>
+    %b = memref.alloc() : memref<1024xf32>
+    scf.yield %b : memref<1024xf32>
+  } else {
+    scf.yield %a : memref<1024xf32>
+  }
+  memref.dealloc %0 : memref<1024xf32>
+  return
+}
+// -----
+
+// Test 15: Alloc nested inside an scf.for body is left untouched (same rule as
+// test 13 — only entry-block allocs are planned).
+// CHECK-LABEL: func @scf_for_nested_alloc_skipped
+func.func @scf_for_nested_alloc_skipped(%lb: index, %ub: index, %step: index) {
+  // CHECK-NOT: memref.view
+  // CHECK: scf.for
+  // CHECK: memref.alloc() : memref<1024xf32>
+  // CHECK: memref.dealloc
+  scf.for %iv = %lb to %ub step %step {
+    %b = memref.alloc() : memref<1024xf32>
+    memref.dealloc %b : memref<1024xf32>
+  }
+  return
+}
+
+// -----
+
+// Test 16: Entry-block alloc passed as scf.for iter_arg; each iteration frees
+// the current iter_arg and allocates a fresh buffer. The reverse-alias guard
+// conservatively skips %a because dealloc(%arg0) may also free the per-iteration
+// nested %b (which is not managed by the arena).
+// CHECK-LABEL: func @scf_for_iter_arg_nested_alloc
+func.func @scf_for_iter_arg_nested_alloc(%lb: index, %ub: index, %step: index) {
+  // CHECK: memref.alloc() : memref<1024xf32>
+  // CHECK-NOT: memref.view
+  // CHECK: scf.for
+  // CHECK: memref.dealloc
+  // CHECK: memref.alloc() : memref<1024xf32>
+  // CHECK: memref.dealloc
+  %a = memref.alloc() : memref<1024xf32>
+  %0 = scf.for %iv = %lb to %ub step %step iter_args(%arg0 = %a) -> memref<1024xf32> {
+    memref.dealloc %arg0 : memref<1024xf32>
+    %b = memref.alloc() : memref<1024xf32>
+    scf.yield %b : memref<1024xf32>
+  }
+  memref.dealloc %0 : memref<1024xf32>
+  return
+}
+
+// -----
+
+// Test 17: Entry-block alloc passed as scf.for iter_arg; each iteration
+// allocates a fresh buffer and yields it without freeing the previous iter_arg
+// (potential memory leak at runtime if the loop executes). The reverse-alias
+// guard skips %a because dealloc(%0) may also free the nested per-iteration %b.
+// CHECK-LABEL: func @scf_for_nested_alloc_yielded
+func.func @scf_for_nested_alloc_yielded(%lb: index, %ub: index, %step: index) {
+  // CHECK: memref.alloc() : memref<1024xf32>
+  // CHECK-NOT: memref.view
+  // CHECK: scf.for
+  // CHECK: memref.alloc() : memref<1024xf32>
+  // CHECK: memref.dealloc
+  %a = memref.alloc() : memref<1024xf32>
+  %0 = scf.for %iv = %lb to %ub step %step iter_args(%arg0 = %a) -> memref<1024xf32> {
+    %b = memref.alloc() : memref<1024xf32>
+    scf.yield %b : memref<1024xf32>
+  }
+  memref.dealloc %0 : memref<1024xf32>
+  return
+}
+
+// -----
+
+// Test 18: Entry-block alloc passed as scf.for iter_arg; the original %a is
+// freed directly inside the loop body (not via the iter_arg), and a fresh
+// buffer is allocated and yielded (potential double-free / memory leak at
+// runtime if the loop executes more than once). The reverse-alias guard skips
+// %a because dealloc(%0) may also free the nested per-iteration %b.
+// CHECK-LABEL: func @scf_for_orig_alloc_freed_in_body
+func.func @scf_for_orig_alloc_freed_in_body(%lb: index, %ub: index, %step: index) {
+  // CHECK: memref.alloc() : memref<1024xf32>
+  // CHECK-NOT: memref.view
+  // CHECK: scf.for
+  // CHECK: memref.dealloc
+  // CHECK: memref.alloc() : memref<1024xf32>
+  // CHECK: memref.dealloc
+  %a = memref.alloc() : memref<1024xf32>
+  %0 = scf.for %iv = %lb to %ub step %step iter_args(%arg0 = %a) -> memref<1024xf32> {
+    memref.dealloc %a : memref<1024xf32>
+    %b = memref.alloc() : memref<1024xf32>
+    scf.yield %b : memref<1024xf32>
+  }
+  memref.dealloc %0 : memref<1024xf32>
+  return
+}

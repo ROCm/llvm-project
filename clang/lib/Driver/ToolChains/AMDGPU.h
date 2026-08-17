@@ -42,48 +42,6 @@ void getAMDGPUTargetFeatures(const Driver &D, const llvm::Triple &Triple,
                              std::vector<StringRef> &Features,
                              bool ForAS = false);
 
-namespace dlr {
-llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>
-getCommonDeviceLibNames(const llvm::opt::ArgList &DriverArgs,
-                        const SanitizerArgs &SanArgs, const Driver &D,
-                        const std::string &GPUArch, bool isOpenMP,
-                        const RocmInstallationDetector &RocmInstallation,
-                        const clang::driver::Action::OffloadKind DeviceOffloadingKind = Action::OFK_OpenMP);
-
-const char *
-getCbslCommandArgs(Compilation &C, const llvm::opt::ArgList &Args,
-                   llvm::opt::ArgStringList &CbslArgs,
-                   const SmallVectorImpl<std::string> &InputFileNames,
-                   llvm::StringRef OutputFilePrefix);
-
-const char *
-getLinkCommandArgs(Compilation &C, const llvm::opt::ArgList &Args,
-                   llvm::opt::ArgStringList &LastLinkArgs, const ToolChain &TC,
-                   const llvm::Triple &Triple, llvm::StringRef TargetID,
-                   llvm::StringRef OutputFilePrefix, const char *InputFileName,
-                   const RocmInstallationDetector &RocmInstallation,
-                   llvm::opt::ArgStringList &EnvironmentLibraryPaths);
-
-const char *getOptCommandArgs(Compilation &C, const llvm::opt::ArgList &Args,
-                              llvm::opt::ArgStringList &OptArgs,
-                              const llvm::Triple &Triple,
-                              llvm::StringRef TargetID,
-                              llvm::StringRef OutputFilePrefix,
-                              const char *InputFileName);
-
-const char *
-getLlcCommandArgs(Compilation &C, const llvm::opt::ArgList &Args,
-                  llvm::opt::ArgStringList &LlcArgs, const llvm::Triple &Triple,
-                  llvm::StringRef TargetID, llvm::StringRef OutputFilePrefix,
-                  const char *InputFileName, bool OutputIsAsm = false);
-
-const char *getLldCommandArgs(
-    Compilation &C, const InputInfo &Output, const llvm::opt::ArgList &Args,
-    llvm::opt::ArgStringList &LldArgs, const llvm::Triple &Triple,
-    llvm::StringRef TargetID, const char *InputFileName,
-    const std::optional<std::string> OutputFilePrefix = std::nullopt);
-} // end namespace dlr
-
 void addFullLTOPartitionOption(const Driver &D, const llvm::opt::ArgList &Args,
                                llvm::opt::ArgStringList &CmdArgs);
 } // end namespace amdgpu

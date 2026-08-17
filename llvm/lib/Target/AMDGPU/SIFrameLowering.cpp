@@ -414,14 +414,14 @@ class PrologEpilogSGPRSpillBuilder {
       ArrayRef<int16_t> DstSplitParts = TRI.getRegSplitParts(RC, EltSize);
       assert(NumSubRegs == (DstSplitParts.empty() ? 1 : DstSplitParts.size()));
       MCRegister CFISuperReg = getCFISuperReg();
-      if (NumSubRegs == 1) {
-        TFI->buildCFI(
-            MBB, MI, DL,
-            MCCFIInstruction::createRegister(
-                nullptr,
-                MCRI->getDwarfRegNum(
-                    CFISuperReg ? CFISuperReg : SuperReg.asMCReg(), false),
-                MCRI->getDwarfRegNum(DstReg, false)));
+      if (!CFISuperReg)
+        CFISuperReg = SuperReg;
+      int64_t DwarfCFISuperReg = MCRI->getDwarfRegNum(CFISuperReg, false);
+      int64_t DwarfDstSuperReg = MCRI->getDwarfRegNum(DstReg, false);
+      if (DwarfCFISuperReg >= 0 && DwarfDstSuperReg >= 0) {
+        TFI->buildCFI(MBB, MI, DL,
+                      MCCFIInstruction::createRegister(
+                          nullptr, DwarfCFISuperReg, DwarfDstSuperReg));
       } else if (isExec(CFISuperReg)) {
         assert(NumSubRegs == 2 && "EXEC larger than 64-bit");
         TFI->buildCFIForRegToSGPRPairSpill(MBB, MI, DL, CFISuperReg, DstReg);
@@ -1784,7 +1784,7 @@ void SIFrameLowering::processFunctionBeforeFrameFinalized(
   // can. Any remaining SGPR spills will go to memory, so move them back to the
   // default stack.
   bool HaveSGPRToVMemSpill =
-      FuncInfo->removeDeadFrameIndices(MF, /*ResetSGPRSpillStackIDs*/ true);
+      FuncInfo->removeDeadFrameIndices(MFI, /*ResetSGPRSpillStackIDs*/ true);
   assert(allSGPRSpillsAreDead(MF) &&
          "SGPR spill should have been removed in SILowerSGPRSpills");
 
