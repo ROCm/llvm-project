@@ -49,17 +49,30 @@ runs:
             if [[ "$pr_num" =~ ^[0-9]+$ ]]; then
               api_url="https://api.github.com/repos/ROCm/llvm-project/pulls/${pr_num}"
               if pr_json="$(curl -sf "$api_url")"; then
-                head_ref="$(echo "$pr_json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('head',{}).get('ref',''))")"
-                title="$(echo "$pr_json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")"
-                labels="$(echo "$pr_json" | python3 -c "import json,sys; print(','.join(l['name'] for l in json.load(sys.stdin).get('labels',[])))")"
-                shopt -s nocasematch
-                if [[ "$head_ref" == *wave-transform* || "$head_ref" == *wave_transform* \
-                      || "$title" == *wavetransform* || "$title" == *wave-transform* \
-                      || ",$labels," == *",wave-transform-build-test,"* ]]; then
+                # Separators are stripped before matching so wavetransform,
+                # wave-transform and wave_transform all compare equal.
+                detected="$(printf '%s' "$pr_json" | python3 -c '
+import json, re, sys
+
+pr = json.load(sys.stdin)
+base = pr.get("base", {}).get("ref", "")
+head = pr.get("head", {}).get("ref", "")
+title = pr.get("title", "")
+labels = [l.get("name", "") for l in pr.get("labels", [])]
+
+normalize = lambda s: re.sub(r"[-_\s]", "", s).lower()
+hit = (
+    any("wavetransform" in normalize(v) for v in (base, head, title))
+    or "wave-transform-build-test" in labels
+)
+print("\t".join(["true" if hit else "false", base, head, title]))
+')"
+
+                IFS=$'\t' read -r hit base_ref head_ref title <<< "$detected"
+                if [[ "$hit" == "true" ]]; then
                   wave_transform_build_test=true
                 fi
-                shopt -u nocasematch
-                echo "PR #${pr_num} head_ref='${head_ref}' title='${title}'"
+                echo "PR #${pr_num} base_ref='${base_ref}' head_ref='${head_ref}' title='${title}'"
               else
                 echo "Could not fetch ROCm/llvm-project PR #${pr_num}; auto-detection skipped."
               fi
@@ -75,4 +88,3 @@ runs:
         echo "wave_transform_build_test=${wave_transform_build_test}" >> "$GITHUB_OUTPUT"
         echo "pr_number=${pr_num}" >> "$GITHUB_OUTPUT"
         echo "Resolved WAVE_TRANSFORM_BUILD_TEST=${wave_transform_build_test}"
-
