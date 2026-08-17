@@ -702,4 +702,276 @@ Expected<Value *> RaiseContext::readOpExecWidth(const DecodedInst &Di,
           Twine(OpIdx) + " in " + strippedMnemonic(MC, Di.Inst));
 }
 
+RaiseContext::KernargPtrLaneProvenance
+RaiseContext::joinKernargPtrLaneProvenance(KernargPtrLaneProvenance Lhs,
+                                           KernargPtrLaneProvenance Rhs) {
+  if (Lhs == Rhs)
+    return Lhs;
+  return KernargPtrLaneProvenance::Unknown;
+}
+
+RaiseContext::KernargPtrProvenance
+RaiseContext::joinKernargPtrProvenance(KernargPtrProvenance Lhs,
+                                       KernargPtrProvenance Rhs) {
+  KernargPtrProvenance Result = {
+      joinKernargPtrLaneProvenance(Lhs.Low, Rhs.Low),
+      joinKernargPtrLaneProvenance(Lhs.High, Rhs.High), 0};
+  if (Result.isLiveEntry()) {
+    if (Lhs.isLiveEntry() && Rhs.isLiveEntry() &&
+        Lhs.EntryByteOffset == Rhs.EntryByteOffset)
+      Result.EntryByteOffset = Lhs.EntryByteOffset;
+    else
+      Result.Low = Result.High = KernargPtrLaneProvenance::Unknown;
+  }
+  return Result;
+}
+
+bool RaiseContext::isEntryKernargSegmentPtrSgpr(ParsedReg Base) const {
+  if (Base.RegKind != ParsedReg::SGPR)
+    return false;
+  assert(Base.BaseIdx && "SGPR must have a base register index");
+  std::optional<unsigned> KernargPtrSgpr = Layout.kernargSegmentPtrSgpr();
+  return KernargPtrSgpr && Base.BaseIdx == KernargPtrSgpr;
+}
+
+void RaiseContext::noteSgprWriteForKernargProvenance(unsigned Idx) {
+  std::optional<unsigned> KernargPtrSgpr = Layout.kernargSegmentPtrSgpr();
+  if (!KernargPtrSgpr)
+    return;
+  if (Idx == *KernargPtrSgpr)
+    CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::Unknown;
+  else if (Idx == *KernargPtrSgpr + 1)
+    CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::Unknown;
+  else
+    return;
+  CurrentKernargPtrProvenance.EntryByteOffset = 0;
+}
+
+void RaiseContext::noteSgprMemoryLoadForKernargProvenance(
+    unsigned BaseIdx, unsigned WidthDwords) {
+  assert(WidthDwords > 0 && "SMEM destination width must be non-zero");
+  std::optional<unsigned> KernargPtrSgpr = Layout.kernargSegmentPtrSgpr();
+  if (!KernargPtrSgpr)
+    return;
+  unsigned EndIdx = BaseIdx + WidthDwords - 1;
+  const bool OverlapsLow =
+      BaseIdx <= *KernargPtrSgpr && EndIdx >= *KernargPtrSgpr;
+  const bool OverlapsHigh =
+      BaseIdx <= *KernargPtrSgpr + 1 && EndIdx >= *KernargPtrSgpr + 1;
+  if (OverlapsLow) {
+    CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::NonEntry;
+  }
+  if (OverlapsHigh) {
+    CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::NonEntry;
+  }
+  if (OverlapsLow || OverlapsHigh) {
+    CurrentKernargPtrProvenance.EntryByteOffset = 0;
+  }
+}
+
+void RaiseContext::enterKernargPtrProvenanceForBlock(BasicBlock *BB) {
+  assert(BB && "cannot enter kernarg provenance for null basic block");
+  if (KernargSegmentPtrProvenanceByBB.empty()) {
+    CurrentKernargPtrProvenance = {};
+    return;
+  }
+  DenseMap<BasicBlock *, KernargPtrProvenance>::const_iterator It =
+      KernargSegmentPtrProvenanceByBB.find(BB);
+  assert(It != KernargSegmentPtrProvenanceByBB.end() &&
+         "missing kernarg provenance for source basic block");
+  CurrentKernargPtrProvenance = It->second;
+}
+
+void RaiseContext::recordSgprWaveMaskI1(unsigned BaseIdx, Value *CmpI1,
+                                        bool IsPair) {
+  LastSgprWaveMaskI1[BaseIdx] = WaveMaskEntry{CmpI1, IsPair};
+  if (BaseIdx < SgprShadows.size()) {
+    Value *ExecMask = Projection.ballotI1ToWidth(
+        B, CmpI1, Projection.execStorageTy(), "wm_shadow_exec");
+    B.CreateStore(ExecMask, SgprShadows[BaseIdx].WaveMask);
+    B.CreateStore(B.getTrue(), SgprShadows[BaseIdx].WaveMaskValid);
+    B.CreateStore(B.getInt1(IsPair), SgprShadows[BaseIdx].WaveMaskIsPair);
+  }
+}
+
+Value *RaiseContext::emitCurrentSourceWaveHasActiveLane() {
+  Value *Exec = Regs.loadExec(B);
+  if (!Projection.providesFullWaveExecInvariant())
+    return emitLaneActiveBit();
+  const ISAProfile &SourceIsa = Projection.sourceIsa();
+  unsigned SourceBits = SourceIsa.waveSize();
+  assert(SourceIsa.hasValidWaveSize() && "source wave size must be 32 or 64");
+  if (SourceBits >= 64)
+    return B.CreateICmpNE(Exec, ConstantInt::get(Exec->getType(), 0),
+                          "source_wave_active");
+  Type *ExecTy = Exec->getType();
+  Value *Lane = B.CreateZExtOrTrunc(emitLaneIdx(), ExecTy, "source_wave_lane");
+  Value *Group = B.CreateUDiv(Lane, ConstantInt::get(ExecTy, SourceBits),
+                              "source_wave_group");
+  Value *Shift = B.CreateMul(Group, ConstantInt::get(ExecTy, SourceBits),
+                             "source_wave_shift");
+  Value *Shifted = B.CreateLShr(Exec, Shift, "source_wave_exec");
+  uint64_t Mask = (uint64_t{1} << SourceBits) - 1;
+  Value *GroupMask =
+      B.CreateAnd(Shifted, ConstantInt::get(ExecTy, Mask), "source_wave_mask");
+  return B.CreateICmpNE(GroupMask, ConstantInt::get(ExecTy, 0),
+                        "source_wave_active");
+}
+
+void RaiseContext::recordSourceWaveSgprPair(unsigned BaseIdx, Value *V) {
+  if (!Projection.providesFullWaveExecInvariant()) {
+    return;
+  }
+  if (BaseIdx >= SgprShadows.size()) {
+    return;
+  }
+  const SgprShadow &Shadow = SgprShadows[BaseIdx];
+  Value *Old = B.CreateLoad(B.getInt64Ty(), Shadow.SourceWavePair,
+                            "source_wave_sgpr_pair_old");
+  Value *OldValid = B.CreateLoad(B.getInt1Ty(), Shadow.SourceWavePairValid,
+                                 "source_wave_sgpr_pair_valid_old");
+  Value *Active = emitCurrentSourceWaveHasActiveLane();
+  Value *Merged = B.CreateSelect(Active, V, Old, "source_wave_sgpr_pair");
+  Value *Valid = B.CreateSelect(Active, B.getTrue(), OldValid,
+                                "source_wave_sgpr_pair_valid");
+  B.CreateStore(Merged, Shadow.SourceWavePair);
+  B.CreateStore(Valid, Shadow.SourceWavePairValid);
+}
+
+Value *RaiseContext::materializeSourceWaveSgprPair(unsigned BaseIdx,
+                                                   Value *Fallback) {
+  if (!Projection.providesFullWaveExecInvariant() ||
+      BaseIdx >= SgprShadows.size()) {
+    return Fallback;
+  }
+  const SgprShadow &Shadow = SgprShadows[BaseIdx];
+  Value *Recorded = B.CreateLoad(B.getInt64Ty(), Shadow.SourceWavePair,
+                                 "source_wave_sgpr_pair");
+  Value *Valid = B.CreateLoad(B.getInt1Ty(), Shadow.SourceWavePairValid,
+                              "source_wave_sgpr_pair_valid");
+  return B.CreateSelect(Valid, Recorded, Fallback, "source_wave_sgpr_pair_sel");
+}
+
+Value *RaiseContext::loadSgprWaveMaskExec(unsigned BaseIdx) const {
+  if (BaseIdx >= SgprShadows.size()) {
+    return nullptr;
+  }
+  return B.CreateLoad(Projection.execStorageTy(), SgprShadows[BaseIdx].WaveMask,
+                      "sgpr_mask_exec");
+}
+
+Value *RaiseContext::loadSgprWaveMaskValid(unsigned BaseIdx) const {
+  if (BaseIdx >= SgprShadows.size()) {
+    return nullptr;
+  }
+  return B.CreateLoad(B.getInt1Ty(), SgprShadows[BaseIdx].WaveMaskValid,
+                      "sgpr_mask_valid");
+}
+
+void RaiseContext::invalidateSgprWaveMaskI1(unsigned BaseIdx) {
+  noteSgprWriteForKernargProvenance(BaseIdx);
+  LastSgprWaveMaskI1.erase(BaseIdx);
+  SourceImageSgprPairAddrShadow.erase(BaseIdx);
+  if (BaseIdx < SgprShadows.size()) {
+    B.CreateStore(B.getFalse(), SgprShadows[BaseIdx].WaveMaskValid);
+    B.CreateStore(B.getFalse(), SgprShadows[BaseIdx].SourceWavePairValid);
+  }
+  if (BaseIdx > 0) {
+    DenseMap<unsigned, WaveMaskEntry>::iterator Prev =
+        LastSgprWaveMaskI1.find(BaseIdx - 1);
+    if (Prev != LastSgprWaveMaskI1.end() && Prev->second.IsPair) {
+      LastSgprWaveMaskI1.erase(Prev);
+    }
+    if (BaseIdx - 1 < SgprShadows.size()) {
+      const SgprShadow &Previous = SgprShadows[BaseIdx - 1];
+      Value *PreviousValid = B.CreateLoad(B.getInt1Ty(), Previous.WaveMaskValid,
+                                          "sgpr_mask_previous_valid");
+      Value *PreviousIsPair = B.CreateLoad(
+          B.getInt1Ty(), Previous.WaveMaskIsPair, "sgpr_mask_previous_is_pair");
+      Value *KeepPrevious =
+          B.CreateAnd(PreviousValid, B.CreateNot(PreviousIsPair),
+                      "sgpr_mask_keep_previous");
+      B.CreateStore(KeepPrevious, Previous.WaveMaskValid);
+      B.CreateStore(B.getFalse(), SgprShadows[BaseIdx - 1].SourceWavePairValid);
+    }
+    SourceImageSgprPairAddrShadow.erase(BaseIdx - 1);
+  }
+}
+
+std::optional<uint64_t>
+RaiseContext::lookupSourceImageSgprPairAddr(unsigned BaseIdx) const {
+  DenseMap<unsigned, uint64_t>::const_iterator It =
+      SourceImageSgprPairAddrShadow.find(BaseIdx);
+  if (It == SourceImageSgprPairAddrShadow.end())
+    return std::nullopt;
+  return It->second;
+}
+
+void RaiseContext::updateM0Const(Value *V) {
+  if (ConstantInt *CI = dyn_cast<ConstantInt>(V))
+    M0Const = CI->getZExtValue();
+  else
+    M0Const = std::nullopt;
+}
+
+void RaiseContext::invalidateSgprShadows() {
+  for (const SgprShadow &Shadow : SgprShadows) {
+    B.CreateStore(B.getFalse(), Shadow.WaveMaskValid);
+    B.CreateStore(B.getFalse(), Shadow.SourceWavePairValid);
+  }
+}
+
+void RaiseContext::collectAllocas(SmallVectorImpl<AllocaInst *> &Out) const {
+  Regs.collectAllocas(Out);
+  for (const SgprShadow &Shadow : SgprShadows) {
+    Out.push_back(Shadow.WaveMask);
+    Out.push_back(Shadow.WaveMaskValid);
+    Out.push_back(Shadow.WaveMaskIsPair);
+    Out.push_back(Shadow.SourceWavePair);
+    Out.push_back(Shadow.SourceWavePairValid);
+  }
+}
+
+unsigned OpResolver::srcMod(unsigned I) const {
+  assert(I < Di.ModMap.size() && "source modifier index out of range");
+  unsigned ModIdx = Di.ModMap[I];
+  if (ModIdx == UINT_MAX)
+    return 0;
+  assert(Di.isImm(ModIdx) && "source modifier must be an immediate");
+  return static_cast<unsigned>(Di.getImm(ModIdx) & 0xF);
+}
+
+Value *OpResolver::applyMods(unsigned I, Value *V) {
+  unsigned Mods = srcMod(I);
+  if (Mods == 0)
+    return V;
+  bool IsI32 = (V->getType() == Ctx.B.getInt32Ty());
+  if (IsI32)
+    V = Ctx.B.CreateBitCast(V, Ctx.B.getFloatTy());
+  if (Mods & 2)
+    V = Ctx.B.CreateUnaryIntrinsic(Intrinsic::fabs, V, nullptr, "abs");
+  if (Mods & 1)
+    V = Ctx.B.CreateFNeg(V, "neg");
+  if (IsI32)
+    V = Ctx.B.CreateBitCast(V, Ctx.B.getInt32Ty());
+  return V;
+}
+
+Expected<Value *> OpResolver::srcF(unsigned I) {
+  Expected<Value *> V = Ctx.readOp32(Di, srcIdx(I));
+  if (!V)
+    return V.takeError();
+  return applyMods(I, *V);
+}
+
+Expected<std::optional<ParsedReg>> OpResolver::srcReg(unsigned I) {
+  unsigned Index = srcIdx(I);
+  if (!Di.isReg(Index))
+    return std::optional<ParsedReg>();
+  Expected<ParsedReg> Reg = Ctx.parseReg(Di, Index);
+  if (!Reg)
+    return Reg.takeError();
+  return std::optional<ParsedReg>(*Reg);
+}
+
 } // namespace COMGR::hotswap
