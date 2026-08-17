@@ -1970,42 +1970,69 @@ void ControlFlowRewriter::rewrite() {
       } else {
         assert(!LaneOrigin.CondIsUndef && "Lane mask is undef");
         CondReg = LaneOrigin.CondReg;
-        if (!LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block,
-                                MBBILaneOriginNodeFirstTerm)) {
-          if (!LaneOrigin.CondIsUndef) {
+
+        // Identify how CondReg relates to EXEC so we emit the cheapest
+        // contribution instead of unconditionally masking with EXEC.
+        CondKind = LMU.classifyLaneMask(CondReg, *LaneOrigin.Node->Block,
+                                        MBBILaneOriginNodeFirstTerm, &LMA);
+
+        switch (CondKind) {
+        case LaneMaskKind::Exec:
+          // Whole-EXEC contribution (CondReg is EXEC or all-ones).
+          CondReg = LMC.ExecReg;
+          break;
+        case LaneMaskKind::Zero:
+          // No-lane contribution.
+          CondReg = getZero();
+          break;
+        case LaneMaskKind::Subset:
+          // Already a subset of EXEC; use as-is.
+          break;
+        case LaneMaskKind::None: {
+          // Superset/unknown: mask into EXEC so the value is a subset.
+          Register Prev = CondReg;
+          CondReg = LMU.createLaneMaskReg();
+          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
+                  TII.get(LMC.AndOpc), CondReg)
+              .addReg(LMC.ExecReg)
+              .addReg(Prev);
+          CondKind = LaneMaskKind::Subset;
+          RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
+              .first = CondReg;
+          break;
+        }
+        }
+
+        if (LaneOrigin.InvertCondition) {
+          switch (CondKind) {
+          case LaneMaskKind::Exec:
+            // !EXEC contributes no lanes.
+            CondReg = getZero();
+            CondKind = LaneMaskKind::Zero;
+            break;
+          case LaneMaskKind::Zero:
+            // !0 contributes all active lanes.
+            CondReg = LMC.ExecReg;
+            CondKind = LaneMaskKind::Exec;
+            break;
+          case LaneMaskKind::Subset: {
+            // Flip within active lanes; subset ^ EXEC is still a subset, so no
+            // further AND with EXEC is needed downstream.
             Register Prev = CondReg;
             CondReg = LMU.createLaneMaskReg();
             BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                    TII.get(LMC.AndOpc), CondReg)
-                .addReg(LMC.ExecReg)
-                .addReg(Prev);
-          }
-
-          RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
-              .first = CondReg;
-        }
-
-        // Skip XOR inversion if the condition register use was undef.
-        // Inverting undef (undef ^ -1) is still undef.
-        if (LaneOrigin.InvertCondition) {
-          Register Prev = CondReg;
-          if (!LaneOrigin.CondIsUndef) {
-            CondReg = LMU.createLaneMaskReg();
-            // Prev is guaranteed to be a subset of EXEC here: either the
-            // original CondReg was already a subset, or we masked it with
-            // AND(EXEC, CondReg) above. XOR with EXEC flips only within
-            // active lanes, so the result is also a subset of EXEC and
-            // no further AND with EXEC is needed downstream.
-            BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm,
-                    {}, TII.get(LMC.XorOpc), CondReg)
+                    TII.get(LMC.XorOpc), CondReg)
                 .addReg(Prev)
                 .addReg(LMC.ExecReg);
+            RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
+                .second = CondReg;
+            RegMap.try_emplace(std::make_pair(LaneOrigin.Node->Block, CondReg),
+                               CondReg, Prev);
+            break;
           }
-
-          RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
-              .second = CondReg;
-          RegMap.try_emplace(std::make_pair(LaneOrigin.Node->Block, CondReg),
-                             CondReg, Prev);
+          case LaneMaskKind::None:
+            llvm_unreachable("None was normalized to Subset above");
+          }
         }
       }
 

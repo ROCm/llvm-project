@@ -109,10 +109,10 @@ inline const LaneMaskConstants &LaneMaskConstants::get(const GCNSubtarget &ST) {
 /// \ref AMDGPULaneMaskUtils::buildMergeLaneMasks. Derive it for an arbitrary
 /// register with \ref AMDGPULaneMaskUtils::classifyLaneMask.
 enum class LaneMaskKind {
-  Zero,      ///< 0 (Reg & EXEC == 0).
-  Subset,    ///< Subset of EXEC (Reg & EXEC == Reg).
-  Exec,      ///< EXEC or -1 (Reg & EXEC == EXEC).
-  NeedsMask, ///< Superset/unknown; emit Reg & EXEC.
+  None,   ///< Superset/unknown; emit Reg & EXEC.
+  Zero,   ///< LaneMask is 0
+  Subset, ///< LaneMask is subset of EXEC, therefore EXEC masking can be skipped
+  Exec,   ///< LaneMask is EXEC
 };
 
 /// \brief Helper class for lane-mask related tasks.

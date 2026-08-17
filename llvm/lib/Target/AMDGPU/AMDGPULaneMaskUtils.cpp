@@ -89,8 +89,7 @@ Register AMDGPULaneMaskUtils::createLaneMaskReg() const {
   return MRI.createVirtualRegister(LMC.LaneMaskRC);
 }
 
-/// Classify \p Reg by its relationship to EXEC; the all-ones constant (-1)
-/// maps to \ref LaneMaskKind::Exec since -1 & EXEC == EXEC.
+/// Classify \p Reg by its relationship to EXEC.
 LaneMaskKind
 AMDGPULaneMaskUtils::classifyLaneMask(Register Reg, MachineBasicBlock &MBB,
                                       MachineBasicBlock::iterator I,
@@ -105,7 +104,7 @@ AMDGPULaneMaskUtils::classifyLaneMask(Register Reg, MachineBasicBlock &MBB,
   if (LMA && LMA->isSubsetOfExec(Reg, MBB, I))
     return LaneMaskKind::Subset;
 
-  return LaneMaskKind::NeedsMask;
+  return LaneMaskKind::None;
 }
 
 /// Insert the moral equivalent of
@@ -154,7 +153,7 @@ void AMDGPULaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
     case LaneMaskKind::Subset:
       buildCopy(DstReg, CurReg);
       break;
-    case LaneMaskKind::NeedsMask:
+    case LaneMaskKind::None:
       buildBinOp(LMC.AndOpc, DstReg, CurReg, LMC.ExecReg);
       break;
     }
@@ -177,7 +176,7 @@ void AMDGPULaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
   case LaneMaskKind::Subset:
     CurMasked = CurReg;
     break;
-  case LaneMaskKind::NeedsMask:
+  case LaneMaskKind::None:
     CurMasked = createLaneMaskReg();
     buildBinOp(LMC.AndOpc, CurMasked, CurReg, LMC.ExecReg);
     break;
