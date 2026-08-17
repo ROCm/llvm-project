@@ -35,54 +35,72 @@
 namespace COMGR::hotswap {
 
 // Shared state threaded through every format handler.
-struct RaiseContext {
+class RaiseContext {
+public:
   // Build the context for the source kernel described by Meta. B must be
   // positioned in the entry block: the register file and the cross-block
   // shadow storage are allocated there. Meta must outlive the context, which
   // holds views into its argument metadata. Fails when the kernel descriptor
   // and the metadata disagree on the user-SGPR layout.
-  static llvm::Expected<RaiseContext> create(
-      llvm::IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
-      const KernelMeta &Meta, unsigned TargetCodeObjectVersion,
-      llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb,
-      llvm::BasicBlock *ThreadLoopLatch,
-      llvm::ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
-      llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
-      uint64_t KernelStartOffset, uint64_t KernelEndOffset);
+  static llvm::Expected<RaiseContext>
+  create(llvm::IRBuilder<> &B, const WaveProjection &Projection,
+         const MCState &MC, const KernelMeta &Meta,
+         unsigned TargetCodeObjectVersion, bool AssumeHipGlobalOffsetZero,
+         llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb,
+         llvm::ArrayRef<uint8_t> SourceTextBytes,
+         uint64_t SourceTextBaseAddress,
+         llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
+         uint64_t KernelStartOffset, uint64_t KernelEndOffset);
 
   llvm::IRBuilder<> &B;
   const WaveProjection &Projection;
   const MCState &MC;
-  // Target hidden-argument offsets depend on the code object version.
-  unsigned TargetCodeObjectVersion = 6;
-  llvm::BasicBlock *ThreadLoopLatch = nullptr;
-
-  // Source sections used to materialize proven PC-relative literals.
-  llvm::ArrayRef<uint8_t> SourceTextBytes;
-  uint64_t SourceTextBaseAddress = 0;
-  llvm::ArrayRef<TextSection::ImageSection> SourceImageSections;
-  uint64_t KernelStartOffset = 0;
-  uint64_t KernelEndOffset = 0;
-
-  // Source scratch allocation, disjoint from target spills.
-  uint32_t SourcePrivateSegmentFixedSize = 0;
-  uint32_t SourceComputePgmRsrc2 = 0;
-  uint16_t SourceKernelCodeProperties = 0;
-  bool UsesScratchPrivateSegment = false;
-  llvm::AllocaInst *ScratchPrivateSegmentAlloca = nullptr;
-
-  // Active low byte of S_SET_VGPR_MSB. Each two-bit field selects the high
-  // VGPR bank for a format-defined operand slot.
-  uint8_t VgprMsBs = 0;
-  bool AssumeHipGlobalOffsetZero = false;
-
-  // Per-instruction VGPR index adjustments, indexed by MC operand index.
-  llvm::SmallVector<unsigned> CurrentVgprAdjust;
 
   AllocaRegFile &regs() { return Regs; }
   const KernargLayout &kernargs() const { return Kernargs; }
   // Source user-SGPR layout derived from the kernel descriptor.
   const UserSgprLayout &layout() const { return Layout; }
+
+  // Target hidden-argument offsets depend on the code object version.
+  unsigned targetCodeObjectVersion() const { return TargetCodeObjectVersion; }
+  bool assumeHipGlobalOffsetZero() const { return AssumeHipGlobalOffsetZero; }
+  uint64_t kernelStartOffset() const { return KernelStartOffset; }
+  uint64_t kernelEndOffset() const { return KernelEndOffset; }
+
+  // Block a kernel-end branch returns to, or null when the raised kernel does
+  // not loop over source threads.
+  llvm::BasicBlock *threadLoopLatch() const { return ThreadLoopLatch; }
+  void setThreadLoopLatch(llvm::BasicBlock *BB) { ThreadLoopLatch = BB; }
+
+  uint32_t sourcePrivateSegmentFixedSize() const {
+    return SourcePrivateSegmentFixedSize;
+  }
+  uint32_t sourceComputePgmRsrc2() const { return SourceComputePgmRsrc2; }
+  uint16_t sourceKernelCodeProperties() const {
+    return SourceKernelCodeProperties;
+  }
+
+  // Source scratch allocation, disjoint from target spills. Absent until a
+  // handler needs source scratch.
+  llvm::AllocaInst *scratchPrivateSegmentAlloca() const {
+    return ScratchPrivateSegmentAlloca;
+  }
+  void setScratchPrivateSegmentAlloca(llvm::AllocaInst *Alloca) {
+    ScratchPrivateSegmentAlloca = Alloca;
+  }
+  bool usesScratchPrivateSegment() const {
+    return ScratchPrivateSegmentAlloca != nullptr;
+  }
+
+  // Active low byte of S_SET_VGPR_MSB. Each two-bit field selects the high
+  // VGPR bank for a format-defined operand slot.
+  uint8_t vgprMsBs() const { return VgprMsBs; }
+  void setVgprMsBs(uint8_t Value) { VgprMsBs = Value; }
+
+  // Per-instruction VGPR index adjustments, indexed by MC operand index.
+  llvm::ArrayRef<unsigned> currentVgprAdjust() const {
+    return CurrentVgprAdjust;
+  }
 
   // Compute VGPR bank adjustments for the instruction's format-defined slots.
   void computeVGPRAdjust(const DecodedInst &Di);
@@ -281,29 +299,6 @@ struct RaiseContext {
   // its merge block. This preserves inactive lanes for per-lane side effects.
   void emitUnderExec(llvm::function_ref<void()> Body);
 
-  // Cached lane-active value.
-  llvm::Value *CachedLaneActive = nullptr;
-
-  // Same-block V_CMP results retained while their SGPR masks remain valid.
-  struct WaveMaskEntry {
-    llvm::Value *I1 = nullptr;
-    // Whether the destination spans this SGPR and its successor.
-    bool IsPair = false;
-  };
-
-  llvm::DenseMap<unsigned, WaveMaskEntry> LastSgprWaveMaskI1;
-
-  // Same-block source-image addresses proven for PC-relative literal loads.
-  llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
-
-  // Block-local constant value last stored to M0.
-  std::optional<uint64_t> M0Const;
-
-  // Kernarg pointer provenance at source basic-block entries.
-  llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>
-      KernargSegmentPtrProvenanceByBB;
-  KernargPtrProvenance CurrentKernargPtrProvenance;
-
   // Record the latest per-lane compare written to an SGPR destination.
   void recordSgprWaveMaskI1(unsigned BaseIdx, llvm::Value *CmpI1, bool IsPair) {
     LastSgprWaveMaskI1[BaseIdx] = WaveMaskEntry{CmpI1, IsPair};
@@ -494,9 +489,8 @@ struct RaiseContext {
 private:
   RaiseContext(llvm::IRBuilder<> &B, const WaveProjection &Projection,
                const MCState &MC, const KernelMeta &Meta, UserSgprLayout Layout,
-               unsigned TargetCodeObjectVersion,
+               unsigned TargetCodeObjectVersion, bool AssumeHipGlobalOffsetZero,
                llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb,
-               llvm::BasicBlock *ThreadLoopLatch,
                llvm::ArrayRef<uint8_t> SourceTextBytes,
                uint64_t SourceTextBaseAddress,
                llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
@@ -510,10 +504,45 @@ private:
     llvm::AllocaInst *SourceWavePairValid;
   };
 
+  // Same-block V_CMP results retained while their SGPR masks remain valid.
+  struct WaveMaskEntry {
+    llvm::Value *I1 = nullptr;
+    // Whether the destination spans this SGPR and its successor.
+    bool IsPair = false;
+  };
+
   AllocaRegFile Regs;
   KernargLayout Kernargs;
   UserSgprLayout Layout;
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb;
+
+  unsigned TargetCodeObjectVersion = 6;
+  bool AssumeHipGlobalOffsetZero = false;
+  // Source sections used to materialize proven PC-relative literals.
+  llvm::ArrayRef<uint8_t> SourceTextBytes;
+  uint64_t SourceTextBaseAddress = 0;
+  llvm::ArrayRef<TextSection::ImageSection> SourceImageSections;
+  uint64_t KernelStartOffset = 0;
+  uint64_t KernelEndOffset = 0;
+  uint32_t SourcePrivateSegmentFixedSize = 0;
+  uint32_t SourceComputePgmRsrc2 = 0;
+  uint16_t SourceKernelCodeProperties = 0;
+
+  llvm::BasicBlock *ThreadLoopLatch = nullptr;
+  llvm::AllocaInst *ScratchPrivateSegmentAlloca = nullptr;
+  uint8_t VgprMsBs = 0;
+  llvm::SmallVector<unsigned> CurrentVgprAdjust;
+
+  llvm::Value *CachedLaneActive = nullptr;
+  llvm::DenseMap<unsigned, WaveMaskEntry> LastSgprWaveMaskI1;
+  // Same-block source-image addresses proven for PC-relative literal loads.
+  llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
+  // Block-local constant value last stored to M0.
+  std::optional<uint64_t> M0Const;
+  // Kernarg pointer provenance at source basic-block entries.
+  llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>
+      KernargSegmentPtrProvenanceByBB;
+  KernargPtrProvenance CurrentKernargPtrProvenance;
 
   // Cross-block values use alloca storage to avoid non-dominating SSA values.
   llvm::SmallVector<SgprShadow> SgprShadows;

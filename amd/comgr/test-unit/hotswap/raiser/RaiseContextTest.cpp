@@ -132,8 +132,8 @@ protected:
       BasicBlock *Entry = BasicBlock::Create(LLVMCtx, "entry", Kernel);
       B.SetInsertPoint(Entry);
       Ctx.emplace(cantFail(RaiseContext::create(
-          B, *Projection, Mc, Meta, 6, DenseMap<uint64_t, BasicBlock *>(),
-          nullptr, ArrayRef<uint8_t>(), 0,
+          B, *Projection, Mc, Meta, 6, /*AssumeHipGlobalOffsetZero=*/false,
+          DenseMap<uint64_t, BasicBlock *>(), ArrayRef<uint8_t>(), 0,
           ArrayRef<TextSection::ImageSection>(), 0, 0)));
     }
   };
@@ -278,16 +278,16 @@ TEST_F(RaiseContextTest, AppliesVgprMsbsToBothVopdComponents) {
   ASSERT_NE(Opc, State->InstrInfo->getNumOpcodes());
   DecodedInst Di;
   Di.Inst.setOpcode(Opc);
-  Gfx1250.Ctx->VgprMsBs = 0xD5;
+  Gfx1250.Ctx->setVgprMsBs(0xD5);
   Gfx1250.Ctx->computeVGPRAdjust(Di);
 
-  EXPECT_EQ(Gfx1250.Ctx->CurrentVgprAdjust[0], 768u);
-  EXPECT_EQ(Gfx1250.Ctx->CurrentVgprAdjust[1], 768u);
-  EXPECT_EQ(Gfx1250.Ctx->CurrentVgprAdjust[2], 256u);
-  EXPECT_EQ(Gfx1250.Ctx->CurrentVgprAdjust[3], 256u);
-  EXPECT_EQ(Gfx1250.Ctx->CurrentVgprAdjust[4], 256u);
-  EXPECT_EQ(Gfx1250.Ctx->CurrentVgprAdjust[5], 256u);
-  EXPECT_EQ(Gfx1250.Ctx->CurrentVgprAdjust.size(),
+  EXPECT_EQ(Gfx1250.Ctx->currentVgprAdjust()[0], 768u);
+  EXPECT_EQ(Gfx1250.Ctx->currentVgprAdjust()[1], 768u);
+  EXPECT_EQ(Gfx1250.Ctx->currentVgprAdjust()[2], 256u);
+  EXPECT_EQ(Gfx1250.Ctx->currentVgprAdjust()[3], 256u);
+  EXPECT_EQ(Gfx1250.Ctx->currentVgprAdjust()[4], 256u);
+  EXPECT_EQ(Gfx1250.Ctx->currentVgprAdjust()[5], 256u);
+  EXPECT_EQ(Gfx1250.Ctx->currentVgprAdjust().size(),
             State->InstrInfo->get(Opc).getNumOperands());
 }
 
@@ -306,7 +306,7 @@ TEST_F(RaiseContextTest, SizesVgprAdjustmentsFromDescriptor) {
   DecodedInst Di;
   Di.Inst.setOpcode(Opcode);
   Env->Ctx->computeVGPRAdjust(Di);
-  EXPECT_EQ(Env->Ctx->CurrentVgprAdjust.size(), MaxOperands);
+  EXPECT_EQ(Env->Ctx->currentVgprAdjust().size(), MaxOperands);
 }
 
 TEST_F(RaiseContextTest, ReportsUnsupportedRegisterOperands) {
