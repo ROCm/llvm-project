@@ -9975,18 +9975,6 @@ def _SLASH_Zg : CLFlag<"Zg">;
 def _SLASH_ZI : CLFlag<"ZI">;
 def _SLASH_ZW : CLJoined<"ZW">;
 
-
-//===----------------------------------------------------------------------===//
-// AOCC Optimization Options
-//===----------------------------------------------------------------------===//
-
-let Visibility = [ClangOption, CLOption, FlangOption] in {
-def famd_opt : Flag<["-"], "famd-opt">, Group<f_Group>,
-  HelpText<"Enable \"All\" [AMD] proprietary Optimizations">;
-def fno_amd_opt : Flag<["-"], "fno-amd-opt">, Group<f_Group>;
-}
-
-
 //===----------------------------------------------------------------------===//
 // clang-dxc Options
 //===----------------------------------------------------------------------===//
