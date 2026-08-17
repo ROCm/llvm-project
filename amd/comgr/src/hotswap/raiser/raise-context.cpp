@@ -87,29 +87,24 @@ void RaiseContext::computeVGPRAdjust(const DecodedInst &Di) {
   if (VgprMsBs == 0)
     return;
 
-  // Operand slots are format-specific rather than positional, so use the
-  // backend's operand-role table to apply each two-bit VGPR bank field.
-  auto [XOps, YOps] = AMDGPU::getVGPRLoweringOperandTables(Desc);
-  if (!XOps && !YOps)
-    return;
-
-  for (unsigned Slot = 0; Slot != 4; ++Slot) {
+  // Operand slots are format-specific rather than positional.
+  const AMDGPU::VGPRMSBOperandIndices OperandIndices =
+      AMDGPU::getVGPRMSBOperandIndices(Desc);
+  for (unsigned Slot = 0; Slot != OperandIndices.size(); ++Slot) {
     unsigned Adjust =
         ((static_cast<unsigned>(VgprMsBs) >> (Slot * 2)) & 0x3u) * 256u;
     if (Adjust == 0)
       continue;
-    auto RecordAdjustment = [&](const AMDGPU::OpName *Ops) {
-      if (!Ops || Ops[Slot] == AMDGPU::OpName::NUM_OPERAND_NAMES)
+    auto [XOperandIndex, YOperandIndex] = OperandIndices[Slot];
+    auto RecordAdjustment = [&](std::optional<unsigned> OperandIndex) {
+      if (!OperandIndex)
         return;
-      int OpIdx = AMDGPU::getNamedOperandIdx(Opc, Ops[Slot]);
-      if (OpIdx < 0)
-        llvm_unreachable("VGPR operand table names a missing operand");
-      if (static_cast<unsigned>(OpIdx) >= CurrentVgprAdjust.size())
+      if (*OperandIndex >= CurrentVgprAdjust.size())
         llvm_unreachable("VGPR operand index exceeds instruction operands");
-      CurrentVgprAdjust[OpIdx] = Adjust;
+      CurrentVgprAdjust[*OperandIndex] = Adjust;
     };
-    RecordAdjustment(XOps);
-    RecordAdjustment(YOps);
+    RecordAdjustment(XOperandIndex);
+    RecordAdjustment(YOperandIndex);
   }
 }
 
