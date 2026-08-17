@@ -39,6 +39,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 namespace COMGR {
 void ensureLLVMInitialized() {
@@ -97,19 +98,18 @@ protected:
     IRBuilder<> B;
     ISAProfile Isa;
     std::unique_ptr<WaveProjection> Projection;
-    AllocaRegFile Regs;
-    KernargLayout Kernargs;
-    UserSgprLayout Layout;
-    DenseMap<uint64_t, BasicBlock *> OffsetToBb;
+    // Declared before Ctx, which holds views into this metadata.
+    KernelMeta Meta;
     Function *Kernel;
-    std::unique_ptr<RaiseContext> Ctx;
+    std::optional<RaiseContext> Ctx;
 
-    explicit ContextEnvironment(const MCState &Mc,
+    explicit ContextEnvironment(const MCState &Mc, KernelMeta Meta = {},
                                 bool FullWaveInvariant = false)
         : Mod("raise_context_test", LLVMCtx), B(LLVMCtx),
           Isa(ISAProfile::fromSubtarget(*Mc.SubtargetInfo)),
           Projection(std::make_unique<FullWaveInvariantProjection>(
               Isa, B.getInt32Ty(), B.getInt64Ty(), FullWaveInvariant)),
+          Meta(std::move(Meta)),
           Kernel(Function::Create(
               FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
               Function::ExternalLinkage, "kernel", Mod)) {
@@ -131,15 +131,15 @@ protected:
     void initialize(const MCState &Mc) {
       BasicBlock *Entry = BasicBlock::Create(LLVMCtx, "entry", Kernel);
       B.SetInsertPoint(Entry);
-      Regs.init(B, B.getInt32Ty(), B.getInt1Ty(), Isa, *Mc.RegInfo,
-                *Projection);
-      Ctx = std::make_unique<RaiseContext>(
-          B, Regs, *Projection, Mc, 6, Kernargs, Layout, nullptr, OffsetToBb,
-          ArrayRef<uint8_t>(), 0, ArrayRef<TextSection::ImageSection>(), 0, 0);
+      Ctx.emplace(cantFail(RaiseContext::create(
+          B, *Projection, Mc, Meta, 6, DenseMap<uint64_t, BasicBlock *>(),
+          nullptr, ArrayRef<uint8_t>(), 0,
+          ArrayRef<TextSection::ImageSection>(), 0, 0)));
     }
   };
 
-  static UserSgprLayout makeKernargPtrLayout(const ISAProfile &Isa) {
+  // Kernel metadata enabling the kernarg segment pointer user SGPR.
+  static KernelMeta makeKernargPtrMeta() {
     using namespace llvm::amdhsa;
     KernelMeta Meta;
     Meta.Name = "k";
@@ -147,15 +147,12 @@ protected:
         KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR;
     Meta.ComputePgmRsrc2 =
         2u << COMPUTE_PGM_RSRC2_GFX6_GFX120_USER_SGPR_COUNT_SHIFT;
-    UserSgprLayout Layout;
-    cantFail(UserSgprLayout::tryFromKernelMeta(Meta, Isa, "gfx942", Layout));
-    return Layout;
+    return Meta;
   }
 
   static void promoteAndFold(ContextEnvironment &Environment) {
     SmallVector<AllocaInst *> Allocas;
-    Environment.Regs.collectAllocas(Allocas);
-    Environment.Ctx->collectSgprShadowAllocas(Allocas);
+    Environment.Ctx->collectAllocas(Allocas);
     DominatorTree DT(*Environment.Kernel);
     PromoteMemToReg(Allocas, DT);
 
@@ -416,10 +413,11 @@ TEST_F(RaiseContextTest, ProjectsMaskReadsToCurrentSourceWave) {
       << toString(SourceState.takeError());
   ContextEnvironment Widening(*SourceState, Mc);
   Value *Lane = Widening.Projection->emitLaneIdx(Widening.B);
-  Widening.Regs.storeVCC(
+  Widening.Ctx->regs().storeVCC(
       Widening.B,
       Widening.B.CreateICmpUGE(Lane, Widening.B.getInt32(32), "upper_wave"));
-  Widening.Regs.storeExec(Widening.B, Widening.B.getInt64(0xFFFFFFFF00000000));
+  Widening.Ctx->regs().storeExec(Widening.B,
+                                 Widening.B.getInt64(0xFFFFFFFF00000000));
 
   const unsigned Opcode = findOpcode(*SourceState->InstrInfo, "S_MOV_B32");
   ASSERT_NE(Opcode, SourceState->InstrInfo->getNumOpcodes());
@@ -521,20 +519,20 @@ TEST_F(RaiseContextTest, MaintainsStateOnRegisterWrites) {
 }
 
 TEST_F(RaiseContextTest, UnrelatedMemoryLoadPreservesKernargPtrOffset) {
-  Env->Layout = makeKernargPtrLayout(Env->Isa);
-  Env->Ctx->setKernargPtrLiveEntryByteOffset(-16);
+  ContextEnvironment WithKernargPtr(Mc, makeKernargPtrMeta());
+  WithKernargPtr.Ctx->setKernargPtrLiveEntryByteOffset(-16);
 
-  Env->Ctx->noteSgprMemoryLoadForKernargProvenance(4, 2);
+  WithKernargPtr.Ctx->noteSgprMemoryLoadForKernargProvenance(4, 2);
 
   const RaiseContext::KernargPtrProvenance Provenance =
-      Env->Ctx->getKernargPtrProvenance();
+      WithKernargPtr.Ctx->getKernargPtrProvenance();
   EXPECT_TRUE(Provenance.isLiveEntry());
   EXPECT_EQ(Provenance.EntryByteOffset, -16);
 }
 
 TEST_F(RaiseContextTest, InactiveSourceWavePreservesInvalidPairShadow) {
-  ContextEnvironment FullWave(Mc, true);
-  FullWave.Regs.storeExec(FullWave.B, FullWave.B.getInt64(0));
+  ContextEnvironment FullWave(Mc, {}, true);
+  FullWave.Ctx->regs().storeExec(FullWave.B, FullWave.B.getInt64(0));
 
   FullWave.Ctx->recordSourceWaveSgprPair(0, FullWave.B.getInt64(7));
   Value *Result =
@@ -551,14 +549,17 @@ TEST_F(RaiseContextTest, InactiveSourceWavePreservesInvalidPairShadow) {
 }
 
 TEST_F(RaiseContextTest, OwnsPerSgprShadowStorage) {
+  SmallVector<AllocaInst *> RegisterFileAllocas;
+  Env->Ctx->regs().collectAllocas(RegisterFileAllocas);
   SmallVector<AllocaInst *> Allocas;
-  Env->Ctx->collectSgprShadowAllocas(Allocas);
-  EXPECT_EQ(Allocas.size(), Env->Regs.Sgpr.size() * 5);
+  Env->Ctx->collectAllocas(Allocas);
+  EXPECT_EQ(Allocas.size(),
+            RegisterFileAllocas.size() + Env->Ctx->regs().Sgpr.size() * 5);
 }
 
 TEST_F(RaiseContextTest, InvalidatesPerSgprShadowStorage) {
-  ContextEnvironment FullWave(Mc, true);
-  FullWave.Regs.storeExec(FullWave.B, FullWave.B.getInt64(UINT64_MAX));
+  ContextEnvironment FullWave(Mc, {}, true);
+  FullWave.Ctx->regs().storeExec(FullWave.B, FullWave.B.getInt64(UINT64_MAX));
   FullWave.Ctx->recordSourceWaveSgprPair(0, FullWave.B.getInt64(7));
   Value *Before =
       FullWave.Ctx->materializeSourceWaveSgprPair(0, FullWave.B.getInt64(42));
