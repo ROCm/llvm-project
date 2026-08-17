@@ -56,8 +56,8 @@ fallbacks; an explicit plugin option takes precedence.
 |---|---|---|
 | `sqtt-marker-instrument-functions` | `N` or `cost:N` | `SQTT_INSTRUMENT_FUNCTIONS` |
 | `sqtt-marker-instrument-barriers` | `0` or `1` | `SQTT_INSTRUMENT_BARRIERS` |
-| `sqtt-marker-instrument-memory` | `N:M` | `SQTT_INSTRUMENT_MEMORY` |
-| `sqtt-marker-trace-addresses` | `memory`, `lds`, or both | `SQTT_TRACE_ADDRESSES` |
+| `sqtt-marker-instrument-memory` | `N:M` or `off` | `SQTT_INSTRUMENT_MEMORY` |
+| `sqtt-marker-trace-addresses` | `memory`, `lds`, both, or `off` | `SQTT_TRACE_ADDRESSES` |
 | `sqtt-marker-scope-wave` | mask or `-1` | `SQTT_SCOPE_WAVE` |
 | `sqtt-marker-scope-simd` | mask or `-1` | `SQTT_SCOPE_SIMD` |
 | `sqtt-marker-scope-cu` | mask or `-1` | `SQTT_SCOPE_CU` |

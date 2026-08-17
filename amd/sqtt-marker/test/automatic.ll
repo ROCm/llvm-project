@@ -21,6 +21,14 @@
 ; RUN:   -sqtt-marker-mem-barrier=none \
 ; RUN:   -sqtt-marker-instrument-barriers=1 \
 ; RUN:   -passes='default<O0>' -S %s -o - | %FileCheck %s --check-prefix=NONE
+; Explicit disable values override enabled environment fallbacks without a
+; diagnostic.
+; RUN: env SQTT_INSTRUMENT_MEMORY=1:0 SQTT_TRACE_ADDRESSES=memory \
+; RUN:   %opt -load-pass-plugin=%sqtt-marker-plugin \
+; RUN:   -sqtt-marker-instrument-memory=off \
+; RUN:   -sqtt-marker-trace-addresses=none \
+; RUN:   -passes='default<O0>' -S %s -o - 2>&1 | \
+; RUN:   %FileCheck %s --check-prefix=DISABLED
 ; REQUIRES: amdgpu-registered-target
 
 target triple = "amdgcn-amd-amdhsa"
@@ -62,3 +70,9 @@ attributes #0 = { "target-cpu"="gfx1200" }
 ; NONE: call void @llvm.amdgcn.s.ttracedata.imm
 ; NONE-NOT: fence syncscope("workgroup") acq_rel
 ; NONE-NOT: asm sideeffect "", "~{memory}"
+
+; DISABLED-NOT: warning:
+; DISABLED: c"K:kernel\0A\00"
+; DISABLED-NOT: vmem_
+; DISABLED-NOT: addr_trace_
+; DISABLED-NOT: warning:

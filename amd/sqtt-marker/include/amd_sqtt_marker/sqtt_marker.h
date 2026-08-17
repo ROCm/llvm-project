@@ -71,23 +71,41 @@ AMD_SQTT_MARKER_DEVICE void sqtt_marker_data(const char *, uint32_t);
 }
 #endif
 
+#if defined(__GFX12__)
+/* s_nop 3 supplies the four-cycle gfx12 M0-to-trace-data delay. */
+AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_emit_id(uint32_t value) {
+  uint32_t scalar_value = __builtin_amdgcn_readfirstlane(value);
+  uint32_t m0_value;
+  __asm__ volatile("s_mov_b32 m0, %1\n"
+                   "s_nop %2\n"
+                   "s_ttracedata"
+                   : "={m0}"(m0_value)
+                   : "s"(scalar_value), "i"(3));
+  (void)m0_value;
+}
+#else
+AMD_SQTT_MARKER_INLINE void amd_sqtt_marker_emit_id(uint32_t value) {
+  __builtin_amdgcn_s_ttracedata((int)value);
+}
+#endif
+
 /** Opens the scope identified by id. */
 AMD_SQTT_MARKER_INLINE void sqtt_marker_enter_id(uint32_t id) {
   __builtin_amdgcn_sched_barrier(0);
-  __builtin_amdgcn_s_ttracedata((int)((id << 2) | AMD_SQTT_MARKER_FLAG_ENTER));
+  amd_sqtt_marker_emit_id((id << 2) | AMD_SQTT_MARKER_FLAG_ENTER);
   __builtin_amdgcn_sched_barrier(0);
 }
 /** Closes the current scope. */
 AMD_SQTT_MARKER_INLINE void sqtt_marker_exit_id(uint32_t id) {
   (void)id;
   __builtin_amdgcn_sched_barrier(0);
-  __builtin_amdgcn_s_ttracedata((int)AMD_SQTT_MARKER_FLAG_EXIT_PREV);
+  amd_sqtt_marker_emit_id(AMD_SQTT_MARKER_FLAG_EXIT_PREV);
   __builtin_amdgcn_sched_barrier(0);
 }
 /** Emits a point event identified by id. */
 AMD_SQTT_MARKER_INLINE void sqtt_marker_point_id(uint32_t id) {
   __builtin_amdgcn_sched_barrier(0);
-  __builtin_amdgcn_s_ttracedata((int)(id << 2));
+  amd_sqtt_marker_emit_id(id << 2);
   __builtin_amdgcn_sched_barrier(0);
 }
 

@@ -33,10 +33,10 @@ constexpr StringLiteral BufferTraceNames[][3] = {
      "addr_trace_struct_buffer_atomic"}};
 
 static constexpr char ExecTraceAsm[] = "s_mov_b32 m0, exec_lo\n"
-                                       "s_nop 0\n"
+                                       "s_nop $1\n"
                                        "s_ttracedata\n"
                                        "s_mov_b32 m0, exec_hi\n"
-                                       "s_nop 0\n"
+                                       "s_nop $1\n"
                                        "s_ttracedata";
 
 } // namespace
@@ -45,10 +45,13 @@ static unsigned traceOperationIndex(bool IsStore, bool IsAtomic) {
   return IsAtomic ? 2 : IsStore;
 }
 
-static void emitExecMaskTraces(IRBuilder<> &B) {
+static void emitExecMaskTraces(IRBuilder<> &B, GfxGen Gen) {
   LLVMContext &Ctx = B.getContext();
-  B.CreateCall(InlineAsm::get(FunctionType::get(Type::getInt32Ty(Ctx), false),
-                              ExecTraceAsm, "={m0}", /*hasSideEffects=*/true));
+  Type *I32 = Type::getInt32Ty(Ctx);
+  B.CreateCall(InlineAsm::get(FunctionType::get(I32, {I32}, false),
+                              ExecTraceAsm, "={m0},i",
+                              /*hasSideEffects=*/true),
+               {ConstantInt::get(I32, getM0TraceNop(Gen))});
 }
 
 SQTTInstrumentPass::AddrTraceOp
@@ -166,7 +169,7 @@ void SQTTInstrumentPass::emitAddressTrace(IRBuilder<> &B, const AddrTraceOp &Op,
         BufOp->getArgOperand(Op.BufferRsrcIndex + (Op.StructBuffer ? 3 : 2));
 
     // Header, EXEC, descriptor words, scalar offset, then lane data.
-    emitExecMaskTraces(B);
+    emitExecMaskTraces(B, Gen);
     Value *RsrcLo, *RsrcHi;
     if (Rsrc->getType()->isVectorTy()) {
       RsrcLo = B.CreateExtractElement(Rsrc, uint64_t{0});
@@ -187,7 +190,7 @@ void SQTTInstrumentPass::emitAddressTrace(IRBuilder<> &B, const AddrTraceOp &Op,
     break;
   }
   case AddrTraceKind::Permute:
-    emitExecMaskTraces(B);
+    emitExecMaskTraces(B, Gen);
     emitReadlaneTraceLoop(B, cast<CallInst>(Op.I)->getArgOperand(0), nullptr,
                           WaveSize);
     break;
@@ -202,7 +205,7 @@ void SQTTInstrumentPass::emitAddressTrace(IRBuilder<> &B, const AddrTraceOp &Op,
       AddrHi = B.CreateTrunc(B.CreateLShr(Addr, 32), I32);
     } else
       AddrLo = B.CreatePtrToInt(Ptr, I32);
-    emitExecMaskTraces(B);
+    emitExecMaskTraces(B, Gen);
     emitReadlaneTraceLoop(B, AddrLo, AddrHi, WaveSize);
     break;
   }
@@ -298,10 +301,9 @@ bool SQTTInstrumentPass::instrumentAddressTraces(Function &F, GfxGen Gen) {
                        getSourceLoc(Op.I), 0, ExtraPayloadCount});
 
     IRBuilder<> B(Op.I);
-    emitScopedTrace(B, F, Gen, "sqtt.addr.trace", "sqtt.addr.skip",
-                    /*pinSkipHead=*/false, [&](IRBuilder<> &Trace) {
-                      emitAddressTrace(Trace, Op, OpId, Gen);
-                    });
+    emitScopedTrace(
+        B, F, Gen, "sqtt.addr.trace", "sqtt.addr.skip",
+        [&](IRBuilder<> &Trace) { emitAddressTrace(Trace, Op, OpId, Gen); });
   }
   return true;
 }

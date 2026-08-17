@@ -119,6 +119,11 @@ static bool parseBool(SelectedValue Input) {
          Value.equals_insensitive("on");
 }
 
+static bool isDisabled(StringRef Value) {
+  return Value == "0" || Value.equals_insensitive("off") ||
+         Value.equals_insensitive("none");
+}
+
 static MemBarrierMode parseMemBarrier(SelectedValue Input,
                                       MemBarrierMode Default) {
   StringRef Value = Input.Value;
@@ -189,31 +194,36 @@ static SQTTConfig parseConfig(ValueSelector Select) {
 
   if (auto Value = Get(InstrumentMemoryOpt, "sqtt-marker-instrument-memory",
                        "SQTT_INSTRUMENT_MEMORY")) {
-    auto [ChunkText, GapText] = Value->Value.split(':');
-    unsigned Chunk = 0, Gap = 0;
-    if (!ChunkText.getAsInteger(10, Chunk) && !GapText.empty() &&
-        !GapText.getAsInteger(10, Gap) && Chunk > 0) {
-      Config.MemoryChunkSize = Chunk;
-      Config.MemoryMaxGap = Gap;
-    } else {
-      errs() << "sqtt: warning: invalid value for " << Value->Name << "='"
-             << Value->Value << "', expected N:M\n";
+    if (!isDisabled(Value->Value)) {
+      auto [ChunkText, GapText] = Value->Value.split(':');
+      unsigned Chunk = 0, Gap = 0;
+      if (!ChunkText.getAsInteger(10, Chunk) && !GapText.empty() &&
+          !GapText.getAsInteger(10, Gap) && Chunk > 0) {
+        Config.MemoryChunkSize = Chunk;
+        Config.MemoryMaxGap = Gap;
+      } else {
+        errs() << "sqtt: warning: invalid value for " << Value->Name << "='"
+               << Value->Value << "', expected N:M\n";
+      }
     }
   }
 
   if (auto Value = Get(TraceAddressesOpt, "sqtt-marker-trace-addresses",
                        "SQTT_TRACE_ADDRESSES")) {
-    SmallVector<StringRef, 2> Parts;
-    Value->Value.split(Parts, ',');
-    for (StringRef Part : Parts) {
-      StringRef Category = Part.trim();
-      if (Category == "memory")
-        Config.TraceMemoryAddrs = true;
-      else if (Category == "lds")
-        Config.TraceLDSAddrs = true;
-      else
-        errs() << "sqtt: warning: unknown " << Value->Name << " category '"
-               << Category << "'\n";
+    if (!Value->Value.equals_insensitive("off") &&
+        !Value->Value.equals_insensitive("none")) {
+      SmallVector<StringRef, 2> Parts;
+      Value->Value.split(Parts, ',');
+      for (StringRef Part : Parts) {
+        StringRef Category = Part.trim();
+        if (Category == "memory")
+          Config.TraceMemoryAddrs = true;
+        else if (Category == "lds")
+          Config.TraceLDSAddrs = true;
+        else
+          errs() << "sqtt: warning: unknown " << Value->Name << " category '"
+                 << Category << "'\n";
+      }
     }
   }
 

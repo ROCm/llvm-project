@@ -31,7 +31,7 @@ attributes #0 = { "target-cpu"="gfx1200" }
 ; CHECK: call void @llvm.amdgcn.s.ttracedata.imm(i16 8)
 ; CHECK: call void @llvm.amdgcn.s.ttracedata.imm(i16 12)
 ; CHECK: call i32 asm sideeffect
-; CHECK-SAME: "={m0},i"(i32 42)
+; CHECK-SAME: "={m0},i,i"(i32 42, i32 3)
 ; CHECK-SAME: !sqtt.raw_payload
 ; CHECK: call void @llvm.amdgcn.s.ttracedata.imm(i16 1)
 ; CHECK-NOT: declare void @__sqtt_named_marker_

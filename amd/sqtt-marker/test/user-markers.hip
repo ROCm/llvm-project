@@ -84,6 +84,6 @@ extern "C" __attribute__((global)) void marker_kernel(unsigned int value) {
 
 // GFX12: s_ttracedata_imm 0x6
 // GFX12: s_mov_b32 m0,
-// GFX12-NEXT: s_nop 0
+// GFX12-NEXT: s_nop 3
 // GFX12-NEXT: s_ttracedata
 // GFX12-NOT: global_inv

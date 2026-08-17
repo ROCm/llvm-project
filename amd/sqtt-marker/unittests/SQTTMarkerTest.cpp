@@ -360,8 +360,17 @@ static std::vector<uint32_t> traceMarkerValues(const llvm::Function &Fn) {
   std::vector<uint32_t> Values;
   forEachCall(Fn, [&](const CallInst &Call) {
     const llvm::Function *Callee = Call.getCalledFunction();
-    if (!Callee)
+    if (!Callee) {
+      const auto *Asm = dyn_cast<InlineAsm>(Call.getCalledOperand());
+      if (!Asm || !Asm->getAsmString().contains("s_ttracedata") ||
+          Asm->getAsmString().contains("exec_lo") || Call.arg_empty())
+        return;
+      unsigned ValueArg =
+          Asm->getAsmString().contains(".Lsqtt_skip_${:uid}") ? 1 : 0;
+      if (auto *Arg = dyn_cast<ConstantInt>(Call.getArgOperand(ValueArg)))
+        Values.push_back(Arg->getZExtValue());
       return;
+    }
     Intrinsic::ID Id = Callee->getIntrinsicID();
     if (Id != Intrinsic::amdgcn_s_ttracedata &&
         Id != Intrinsic::amdgcn_s_ttracedata_imm)
@@ -390,16 +399,17 @@ static std::optional<uint32_t> markerAfter(Instruction *Instruction) {
   return std::nullopt;
 }
 
-static const CallInst *findM0NopTrace(const llvm::Function &Function) {
-  constexpr const char TraceAsm[] = "s_mov_b32 m0, $1\n"
-                                    "s_nop 0\n"
-                                    "s_ttracedata";
+static const CallInst *findM0NopTrace(const llvm::Function &Function,
+                                      unsigned Nop) {
+  constexpr StringLiteral TraceAsm = "s_mov_b32 m0, $1\ns_nop $2\ns_ttracedata";
   const CallInst *Trace = nullptr;
   forEachCall(Function, [&](const CallInst &Call) {
     auto *AsmCall = dyn_cast<InlineAsm>(Call.getCalledOperand());
     if (!Trace && AsmCall && AsmCall->hasSideEffects() &&
-        AsmCall->getAsmString() == TraceAsm)
-      Trace = &Call;
+        AsmCall->getAsmString() == TraceAsm && Call.arg_size() == 2)
+      if (auto *Delay = dyn_cast<ConstantInt>(Call.getArgOperand(1));
+          Delay && Delay->getZExtValue() == Nop)
+        Trace = &Call;
   });
   return Trace;
 }
@@ -423,23 +433,13 @@ static CallInst *findTraceWithMetadata(llvm::Function &Function,
   return nullptr;
 }
 
-static void expectScopedSkipPin(llvm::Function &Function) {
-  const BasicBlock *Skip = nullptr;
-  for (const BasicBlock &Block : Function)
-    if (Block.getName().starts_with("sqtt.skip"))
-      Skip = &Block;
-  ASSERT_NE(Skip, nullptr);
-  auto It = Skip->begin();
-  ASSERT_NE(It, Skip->end());
-  auto *Pin = dyn_cast<CallInst>(&*It++);
-  ASSERT_NE(Pin, nullptr);
-  ASSERT_EQ(Pin->getCalledFunction()->getIntrinsicID(),
-            Intrinsic::amdgcn_sched_barrier);
-  ASSERT_NE(It, Skip->end());
-  auto *Sync = dyn_cast<CallInst>(&*It);
-  ASSERT_NE(Sync, nullptr);
-  EXPECT_EQ(Sync->getCalledFunction()->getIntrinsicID(),
-            Intrinsic::amdgcn_s_barrier);
+static size_t countConditionalTraces(const llvm::Function &Function) {
+  size_t Count = 0;
+  forEachCall(Function, [&](const CallInst &Call) {
+    const auto *Asm = dyn_cast<InlineAsm>(Call.getCalledOperand());
+    Count += Asm && Asm->getAsmString().contains(".Lsqtt_skip_${:uid}");
+  });
+  return Count;
 }
 
 static void expectScopedMarkerCase(bool Early, bool Sync) {
@@ -459,10 +459,26 @@ static void expectScopedMarkerCase(bool Early, bool Sync) {
   if (Early)
     runPass(*Module, Config, SQTTInstrumentPass::Mode::Early);
   runPass(*Module, Config);
+  EXPECT_EQ(countConditionalTraces(*Function), 1u);
+  EXPECT_EQ(Function->size(), 1u);
   EXPECT_EQ(countIntrinsicCalls(*Function, Intrinsic::amdgcn_sched_barrier),
-            Sync ? 1u : 0u);
-  if (Sync)
-    expectScopedSkipPin(*Function);
+            2u);
+  for (const BasicBlock &Block : *Function)
+    EXPECT_FALSE(Block.getName().starts_with("sqtt.skip"));
+  if (Sync) {
+    CallInst *Trace = findTraceWithMetadata(*Function, "sqtt.scope.filter");
+    ASSERT_NE(Trace, nullptr);
+    auto *Pin = dyn_cast_or_null<CallInst>(Trace->getNextNode());
+    ASSERT_NE(Pin, nullptr);
+    ASSERT_NE(Pin->getCalledFunction(), nullptr);
+    EXPECT_EQ(Pin->getCalledFunction()->getIntrinsicID(),
+              Intrinsic::amdgcn_sched_barrier);
+    auto *Barrier = dyn_cast_or_null<CallInst>(Pin->getNextNode());
+    ASSERT_NE(Barrier, nullptr);
+    ASSERT_NE(Barrier->getCalledFunction(), nullptr);
+    EXPECT_EQ(Barrier->getCalledFunction()->getIntrinsicID(),
+              Intrinsic::amdgcn_s_barrier);
+  }
 }
 
 static void addExistingLlvmUsed(llvm::Module &Module) {
@@ -609,6 +625,13 @@ TEST(MarkerConfig, ParsesEnvironmentAndRejectsConflictingModes) {
   EXPECT_EQ(Config.MemBarrier, MemBarrierMode::Fence);
   EXPECT_EQ(Config.MemoryChunkSize, 0u);
   EXPECT_TRUE(Config.TraceLDSAddrs);
+  EXPECT_FALSE(Config.TraceMemoryAddrs);
+
+  Env.push_back(std::make_unique<ScopedEnv>("SQTT_INSTRUMENT_MEMORY", "none"));
+  Env.push_back(std::make_unique<ScopedEnv>("SQTT_TRACE_ADDRESSES", "off"));
+  Config = SQTTConfig::fromEnvironment();
+  EXPECT_EQ(Config.MemoryChunkSize, 0u);
+  EXPECT_FALSE(Config.TraceLDSAddrs);
   EXPECT_FALSE(Config.TraceMemoryAddrs);
 }
 
@@ -772,7 +795,8 @@ TEST_F(MarkerPass, AddressTracingCoversBufferProtocolsAcrossWaveSizes) {
     const std::string Ir = printModule(*BufferModule);
     expectContains(Ir, "sqtt.lanes.loop");
     expectContains(Ir, "s_mov_b32 m0, exec_lo");
-    expectContains(Ir, "s_nop 0");
+    expectContains(Ir, "s_nop $1");
+    expectContains(Ir, "i32 0");
     expectContains(Ir, "s_ttracedata");
     expectContains(Ir, "={m0}");
     bool HasDescriptorPtrToInt = false;
@@ -825,6 +849,7 @@ TEST_F(MarkerPass, PayloadMarkersControlGfx12ClockPacking) {
   EXPECT_EQ(countFences(*Function), 2u);
   EXPECT_EQ(countIntrinsicCalls(*Function, Intrinsic::amdgcn_sched_barrier),
             2u);
+  EXPECT_NE(findM0NopTrace(*Function, 3), nullptr);
 
   // buffer.load.lds must not create an address payload block, so packing
   // remains valid.
@@ -990,11 +1015,12 @@ TEST_F(MarkerPass, NumericMarkerLoweringAndBoundaries) {
   runPass(*TestModule, Config);
 
   for (llvm::Function *Function : Functions) {
-    const CallInst *Trace = findM0NopTrace(*Function);
+    const CallInst *Trace =
+        findM0NopTrace(*Function, Function->getName() == "gfx12_trace" ? 3 : 0);
     ASSERT_NE(Trace, nullptr) << Function->getName().str();
     auto *TraceAsm = dyn_cast<InlineAsm>(Trace->getCalledOperand());
     ASSERT_NE(TraceAsm, nullptr);
-    EXPECT_EQ(TraceAsm->getConstraintString(), "={m0},i");
+    EXPECT_EQ(TraceAsm->getConstraintString(), "={m0},i,i");
     EXPECT_EQ(Trace->getMetadata("sqtt.test.trace"), TraceMetadata);
   }
 
@@ -1031,17 +1057,13 @@ TEST_F(MarkerPass, NumericMarkerLoweringAndBoundaries) {
   ScopeConfig.CuMask = 0x1;
   ScopeConfig.MemBarrier = MemBarrierMode::Fence;
   runPass(*ScopeModule, ScopeConfig);
-  size_t TraceBlocks = 0;
-  for (const BasicBlock &Block : *Scoped)
-    TraceBlocks += Block.getName() == "sqtt.trace";
-  EXPECT_EQ(TraceBlocks, 1u);
+  EXPECT_EQ(countConditionalTraces(*Scoped), 2u);
   EXPECT_EQ(countFences(*Scoped), 4u);
-  EXPECT_EQ(countIntrinsicCalls(*Scoped, Intrinsic::amdgcn_sched_barrier), 1u);
-  expectScopedSkipPin(*Scoped);
+  EXPECT_EQ(countIntrinsicCalls(*Scoped, Intrinsic::amdgcn_sched_barrier), 4u);
+  EXPECT_EQ(countIntrinsicCalls(*Scoped, Intrinsic::amdgcn_s_barrier), 1u);
 }
 
-TEST_F(MarkerPass,
-       ScopedMarkerCoalescingKeepsUserSchedulerBarriersUnconditional) {
+TEST_F(MarkerPass, ScopedMarkersKeepUserSchedulerBarriersUnconditional) {
   llvm::Function *Function =
       makeVoidFunction(*TestModule, "scoped_user_sched_barrier", "gfx1100");
   Instruction *Ret = Function->getEntryBlock().getTerminator();
@@ -1062,16 +1084,13 @@ TEST_F(MarkerPass,
   runPass(*TestModule, Config);
 
   EXPECT_FALSE(verifyModule(*TestModule));
-  size_t TraceBlocks = 0;
-  for (const BasicBlock &Block : *Function)
-    TraceBlocks += Block.getName().starts_with("sqtt.trace");
-  EXPECT_EQ(TraceBlocks, 2u);
-  EXPECT_FALSE(UserBarrier->getParent()->getName().starts_with("sqtt.trace"));
+  EXPECT_EQ(countConditionalTraces(*Function), 2u);
+  EXPECT_EQ(UserBarrier->getParent(), &Function->getEntryBlock());
   EXPECT_EQ(countIntrinsicCalls(*Function, Intrinsic::amdgcn_sched_barrier),
-            1u);
+            3u);
 }
 
-TEST_F(MarkerPass, ScopedMarkerBoundariesStayUniformAndPayloadsStayAtomic) {
+TEST_F(MarkerPass, ScopedMarkerBranchesStayScalarAndPayloadsStayAtomic) {
   SQTTConfig Config = fullScopeConfig();
   Config.CuMask = 0x1;
   for (const auto &[Early, Sync] :
@@ -1128,6 +1147,12 @@ TEST_F(MarkerPass, ScopedMarkerBoundariesStayUniformAndPayloadsStayAtomic) {
         findTraceWithMetadata(*PayloadFunction, "sqtt.raw_payload");
     ASSERT_NE(Header, nullptr);
     ASSERT_NE(Payload, nullptr);
+    EXPECT_EQ(countConditionalTraces(*PayloadFunction), Test.Scoped ? 2u : 0u);
+    if (Test.Scoped) {
+      ASSERT_EQ(Header->arg_size(), 2u);
+      ASSERT_EQ(Payload->arg_size(), 3u);
+      EXPECT_EQ(Header->getArgOperand(0), Payload->getArgOperand(0));
+    }
     if (Test.TailUse) {
       EXPECT_FALSE(
           UserBetween->getParent()->getName().starts_with("sqtt.trace"));
@@ -1137,7 +1162,7 @@ TEST_F(MarkerPass, ScopedMarkerBoundariesStayUniformAndPayloadsStayAtomic) {
     EXPECT_EQ(countFences(*PayloadFunction), 2u);
     EXPECT_EQ(
         countIntrinsicCalls(*PayloadFunction, Intrinsic::amdgcn_sched_barrier),
-        Test.Scoped ? 0u : 2u);
+        2u);
     for (Instruction *Instruction = Header->getNextNode();
          Instruction != Payload; Instruction = Instruction->getNextNode()) {
       ASSERT_NE(Instruction, nullptr);
@@ -1478,9 +1503,9 @@ TEST_F(MarkerPass, FunctionThresholdPrunesMarkersAndPreservesExistingLlvmUsed) {
             0u);
   EXPECT_EQ(countIntrinsicCalls(*SmallClone, Intrinsic::amdgcn_s_ttracedata),
             0u);
-  EXPECT_EQ(findM0NopTrace(*LargeClone), nullptr);
-  EXPECT_EQ(findM0NopTrace(*SmallClone), nullptr);
-  const CallInst *NumericTrace = findM0NopTrace(*Numeric);
+  EXPECT_EQ(findM0NopTrace(*LargeClone, 0), nullptr);
+  EXPECT_EQ(findM0NopTrace(*SmallClone, 0), nullptr);
+  const CallInst *NumericTrace = findM0NopTrace(*Numeric, 0);
   ASSERT_NE(NumericTrace, nullptr);
   auto *NumericValue = dyn_cast<ConstantInt>(NumericTrace->getArgOperand(0));
   ASSERT_NE(NumericValue, nullptr);

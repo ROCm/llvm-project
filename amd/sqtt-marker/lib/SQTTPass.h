@@ -88,10 +88,7 @@ private:
 
   llvm::Value *buildScopeCheck(llvm::IRBuilder<> &B, GfxGen Gen);
   llvm::Value *getOrCreateScopeCheck(llvm::Function &F, GfxGen Gen);
-  bool finalizeExistingMarkers(llvm::Function &F, GfxGen Gen);
-  // Wrap an adjacent marker run in one scope-check diamond.
-  void wrapRangeWithScopeCheck(llvm::CallInst *First, llvm::CallInst *Last,
-                               llvm::Function &F, GfxGen Gen, bool PinSkipHead);
+  bool finalizeExistingMarkers(llvm::Function &F);
 
   uint32_t resolveMarkerString(llvm::CallInst *CI, uint8_t Flags);
 
@@ -108,7 +105,6 @@ private:
   // Automatic barrier and memory instrumentation.
   enum class BarrierKind : uint32_t { Signal = 0, Wait, Full, None };
   static BarrierKind classifyBarrier(llvm::CallInst *CI);
-  static bool isSyncInstruction(llvm::Instruction *I);
   bool instrumentBarriers(llvm::Function &F, GfxGen Gen);
 
   enum class MemOpKind : uint32_t { Load = 0, Store, None };
@@ -140,7 +136,6 @@ private:
   // Emit a sequence directly or inside the configured scope-check diamond.
   void emitScopedTrace(llvm::IRBuilder<> &B, llvm::Function &F, GfxGen Gen,
                        const char *TraceBlockName, const char *SkipBlockName,
-                       bool PinSkipHead,
                        llvm::function_ref<void(llvm::IRBuilder<> &)> Emit);
   // Return the innermost-to-outermost inline chain, or "" without debug info.
   static std::string getSourceLoc(llvm::Instruction *I);

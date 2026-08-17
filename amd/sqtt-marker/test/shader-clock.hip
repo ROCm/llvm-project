@@ -32,7 +32,7 @@ extern "C" __attribute__((global)) void clock_kernel() {
 
 // GFX1200: s_getreg_b32 {{.*}}hwreg(HW_REG_SHADER_CYCLES_LO, 5, 12)
 // GFX1200: s_mov_b32 m0,
-// GFX1200-NEXT: s_nop 0
+// GFX1200-NEXT: s_nop 3
 // GFX1200-NEXT: s_ttracedata
 // GFX1200-NOT: s_ttracedata_imm
 // GFX1200: .asciz "M:shader_clock_bits=12;shader_clock_shift=5
@@ -40,6 +40,6 @@ extern "C" __attribute__((global)) void clock_kernel() {
 // GFX1250: s_get_shader_cycles_u64
 // GFX1250-NOT: HW_REG_SHADER_CYCLES_LO
 // GFX1250: s_mov_b32 m0,
-// GFX1250-NEXT: s_nop 0
+// GFX1250-NEXT: s_nop 3
 // GFX1250-NEXT: s_ttracedata
 // GFX1250-NOT: s_ttracedata_imm

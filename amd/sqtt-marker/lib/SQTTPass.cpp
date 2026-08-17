@@ -159,7 +159,7 @@ PreservedAnalyses SQTTInstrumentPass::runLate(Module &M) {
       Markers.push_back(
           {0, MarkerKind::Kernel, F.getName().str(), getFunctionSourceLoc(F)});
 
-    bool Changed = finalizeExistingMarkers(F, Gen);
+    bool Changed = finalizeExistingMarkers(F);
     Changed |= processMarkerCalls(F, Gen, /*useBareTrace=*/false);
     if (Config.InstrumentBarriers)
       Changed |= instrumentBarriers(F, Gen);
