@@ -134,7 +134,11 @@ StringRef stripEncoding(StringRef Mnemonic) {
 }
 
 std::string strippedMnemonic(const MCState &State, const MCInst &Inst) {
-  return stripEncoding(getMnemonic(State, Inst)).str();
+  const char *Mnemonic = State.Printer->getMnemonic(Inst).first;
+  assert(Mnemonic && "instruction must have a printable mnemonic");
+  StringRef MnemonicRef(Mnemonic);
+  MnemonicRef = MnemonicRef.ltrim().split('\t').first.split(' ').first;
+  return stripEncoding(MnemonicRef).str();
 }
 
 // Spelling the enumerators through concatenation keeps a renamed or dropped
