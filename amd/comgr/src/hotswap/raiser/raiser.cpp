@@ -110,7 +110,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
               llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
               llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
               bool EnableWaveNative, bool ForceThreadLoopProjection,
-              bool SuppressC5ForThreadLoopRoute, bool ForceModrepDoubled,
+              bool SuppressC5ForThreadLoopRoute, bool ForceReplicationDoubled,
               bool AssumeHipGlobalOffsetZero, RaiseStats *Stats) {
   RaiseResult Result;
 
@@ -139,8 +139,9 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   StringRef SourceCpu = NormalizeIsa(SourceIsa);
   if (SourceIsa.empty() ||
       AMDGPU::parseArchAMDGCN(SourceCpu) == AMDGPU::GK_NONE) {
-    return RaiseFailure::badInput("source ISA '" + SourceIsa +
-                                  "' does not name an AMDGPU GPU");
+    return RaiseFailure::general(RaiseFailureReason::BadInput,
+                                 "source ISA '" + SourceIsa +
+                                     "' does not name an AMDGPU GPU");
   }
 
   // Same normalisation for the target-side override (--target-isa on
@@ -172,13 +173,15 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     TargetIsa = ISAProfile::fromSubtarget(*TargetSti);
   }
   if (!Isa.hasValidWaveSize())
-    return RaiseFailure::internalFailure(
-        "transpiler: source ISA profile has unsupported wave size " +
-        Twine(Isa.waveSize()));
+    return RaiseFailure::general(
+        RaiseFailureReason::InternalError,
+        "source ISA profile has unsupported wave size " +
+            Twine(Isa.waveSize()));
   if (!TargetIsa.hasValidWaveSize())
-    return RaiseFailure::internalFailure(
-        "transpiler: target ISA profile has unsupported wave size " +
-        Twine(TargetIsa.waveSize()));
+    return RaiseFailure::general(
+        RaiseFailureReason::InternalError,
+        "target ISA profile has unsupported wave size " +
+            Twine(TargetIsa.waveSize()));
 
   // Create LLVMContext + common IR types here so the WaveProjection has
   // access to i32/i64 before the cross-wave gate runs. The module is created
@@ -189,7 +192,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   auto *I32Ty = Type::getInt32Ty(C);
   auto *I64Ty = Type::getInt64Ty(C);
 
-  // Select the wave projection. ModuloReplicationProjection is the default:
+  // Select the wave projection. ReplicationProjection is the default:
   // it maps each target lane onto `lane_id mod W_src` of the source EXEC mask
   // and truncates cross-wave ballots to source width. WaveNativeProjection is
   // the wave32 -> wave64 alternative that forces hardware EXEC = -1 (via
@@ -206,25 +209,25 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       static_cast<unsigned>(Meta.MaxFlatWorkgroupSize) < TargetIsa.waveSize();
   const bool UseThreadLoop = ForceThreadLoopProjection;
   const bool WideningWave32To64 = Isa.isWave32() && !TargetIsa.isWave32();
-  // ModRepDoubledDispatchProjection is selected only via the C5 y/z-refusal
+  // ReplicationDoubledDispatchProjection is selected only via the C5 y/z-refusal
   // upgrade retry (or an explicit --force-modrep-doubled), so it is a forced
   // route just like ThreadLoop; it takes precedence over WaveNative.
-  const bool UseModrepDoubled =
-      !UseThreadLoop && ForceModrepDoubled && WideningWave32To64;
-  const bool UseWaveNative = !UseThreadLoop && !UseModrepDoubled &&
+  const bool UseReplicationDoubled =
+      !UseThreadLoop && ForceReplicationDoubled && WideningWave32To64;
+  const bool UseWaveNative = !UseThreadLoop && !UseReplicationDoubled &&
                              EnableWaveNative && WideningWave32To64 &&
                              !PhantomLaneRegime;
 
   // Size gate for the doubled dispatch: the runtime scales the block by
   // W_t / W_s along x, so the scaled flat size must not exceed the target's
   // hardware threads-per-block maximum.
-  if (UseModrepDoubled) {
+  if (UseReplicationDoubled) {
     const unsigned Factor = TargetIsa.waveSize() / Isa.waveSize();
     const unsigned SourceFlat =
         Meta.MaxFlatWorkgroupSize > 0 ? Meta.MaxFlatWorkgroupSize : 1024;
     if (SourceFlat * Factor > kTargetMaxThreadsPerBlock) {
       std::string Detail =
-          (Twine("ModRepDoubledDispatchProjection needs to launch ") +
+          (Twine("ReplicationDoubledDispatchProjection needs to launch ") +
            Twine(SourceFlat * Factor) +
            " threads/block (source max_flat_workgroup_size " +
            Twine(SourceFlat) + " scaled by " + Twine(Factor) +
@@ -232,7 +235,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
            Twine(kTargetMaxThreadsPerBlock) +
            "; refuse rather than truncate the block.")
               .str();
-      return RaiseFailure::crossWavePredicateChain(KernelName, Detail);
+      return RaiseFailure::inKernel(RaiseFailureReason::CrossWavePredicateChain,
+                                    KernelName, Detail);
     }
   }
 
@@ -242,16 +246,16 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
         std::make_unique<ThreadLoopProjection>(Isa, TargetIsa, I32Ty, I64Ty);
     LLVM_DEBUG(dbgs() << "transpiler: kernel '" << KernelName
                       << "' selected ThreadLoopProjection\n");
-  } else if (UseModrepDoubled) {
-    ProjectionPtr = std::make_unique<ModRepDoubledDispatchProjection>(
+  } else if (UseReplicationDoubled) {
+    ProjectionPtr = std::make_unique<ReplicationDoubledDispatchProjection>(
         Isa, TargetIsa, I32Ty, I64Ty);
     LLVM_DEBUG(dbgs() << "transpiler: kernel '" << KernelName
-                      << "' selected ModRepDoubledDispatchProjection\n");
+                      << "' selected ReplicationDoubledDispatchProjection\n");
   } else if (UseWaveNative) {
     ProjectionPtr =
         std::make_unique<WaveNativeProjection>(Isa, TargetIsa, I32Ty, I64Ty);
   } else {
-    ProjectionPtr = std::make_unique<ModuloReplicationProjection>(
+    ProjectionPtr = std::make_unique<ReplicationProjection>(
         Isa, TargetIsa, I32Ty, I64Ty);
   }
   ProjectionPtr->setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
@@ -266,14 +270,14 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     Result.DoubledDispatchFactor = Projection.doubledDispatchFactor();
   }
 
-  if (!UseThreadLoop && !UseModrepDoubled && EnableWaveNative &&
+  if (!UseThreadLoop && !UseReplicationDoubled && EnableWaveNative &&
       PhantomLaneRegime && Isa.isWave32() && !TargetIsa.isWave32()) {
     LLVM_DEBUG(dbgs() << "transpiler: kernel '" << KernelName
                       << "' is in phantom-lane regime "
                          "(max_flat_workgroup_size="
                       << Meta.MaxFlatWorkgroupSize
                       << " < target wavefront width=" << TargetIsa.waveSize()
-                      << "); falling back to ModuloReplicationProjection\n");
+                      << "); falling back to ReplicationProjection\n");
   }
 
   // Build opcode -> CanonicalOp map from MCInstrInfo
@@ -286,8 +290,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // this function stays focused on IR emission. decodeKernel returns a
   // linearised instruction stream + the set of CFG block-start offsets.
   if (KernelSize != 0 && KernelSize > UINT64_MAX - KernelOffset)
-    return RaiseFailure::internalFailure(
-        "transpiler: kernel decode extent overflows");
+    return RaiseFailure::general(RaiseFailureReason::InternalError,
+                                 "kernel decode extent overflows");
 
   const uint64_t KernelEndOffset =
       KernelSize == 0 ? 0 : KernelOffset + KernelSize;
@@ -317,7 +321,9 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       Reloc::PIC_));
   if (!Tm) {
     errs() << "transpiler: Failed to create TargetMachine\n";
-    return RaiseFailure::targetMachineCreationFailed();
+    return RaiseFailure::general(
+        RaiseFailureReason::TargetMachineCreationFailed,
+        "could not create the target machine");
   }
   M.setDataLayout(Tm->createDataLayout());
 
@@ -472,8 +478,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   if (AMDGPU::isGFX12Plus(*Mc.SubtargetInfo) &&
       Meta.hasNonDisabledClusterDims()) {
     const std::array<uint32_t, 3> &Dims = *Meta.ClusterDims;
-    return RaiseFailure::unsupportedSourceClusterDims(
-        KernelName,
+    return RaiseFailure::inKernel(
+        RaiseFailureReason::UnsupportedSourceClusterDims, KernelName,
         ".cluster_dims=[" + Twine(Dims[0]) + "," + Twine(Dims[1]) + "," +
             Twine(Dims[2]) +
             "] requires real TTMP6 cluster workgroup state; the current "
@@ -522,20 +528,20 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // source descriptor's dispatch_ptr bit means the corresponding SGPR pair
   // holds the AQL dispatch packet base, and source SMEM may legally load
   // through it just like it loads through kernarg_segment_ptr.
-  if (UserSgprLayout.dispatchPtrSgpr() >= 0) {
-    Regs.storeSGPR64(B, UserSgprLayout.dispatchPtrSgpr(),
+  if (UserSgprLayout.dispatchPtrSgpr().has_value()) {
+    Regs.storeSGPR64(B, *UserSgprLayout.dispatchPtrSgpr(),
                      B.CreateCall(FnDispatchPtr, {}, "dispatch_ptr"));
   }
-  if (UserSgprLayout.kernargSegmentPtrSgpr() >= 0) {
-    Regs.storeSGPR64(B, UserSgprLayout.kernargSegmentPtrSgpr(),
+  if (UserSgprLayout.kernargSegmentPtrSgpr().has_value()) {
+    Regs.storeSGPR64(B, *UserSgprLayout.kernargSegmentPtrSgpr(),
                      B.CreateCall(FnKargPtr, {}, "kernarg_ptr"));
   }
-  if (UserSgprLayout.workgroupIdXSgpr() >= 0) {
-    Regs.storeSGPR32(B, UserSgprLayout.workgroupIdXSgpr(),
+  if (UserSgprLayout.workgroupIdXSgpr().has_value()) {
+    Regs.storeSGPR32(B, *UserSgprLayout.workgroupIdXSgpr(),
                      B.CreateCall(FnWorkgroupIdX, {}, "wg_id_x"));
   }
-  if (UserSgprLayout.workgroupIdYSgpr() >= 0) {
-    Regs.storeSGPR32(B, UserSgprLayout.workgroupIdYSgpr(),
+  if (UserSgprLayout.workgroupIdYSgpr().has_value()) {
+    Regs.storeSGPR32(B, *UserSgprLayout.workgroupIdYSgpr(),
                      B.CreateCall(FnWorkgroupIdY, {}, "wg_id_y"));
   }
   // Hidden-arg remaps use the ABI version the backend will emit for this
@@ -574,8 +580,9 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       // instead of falling back to an implicitarg_ptr load) is not plumbed
       // through this entry point yet; take the non-strict fallback.
       if (/*isStrictMode()=*/false) {
-        return RaiseFailure::preloadedImplicitArgFailure(KernelName,
-                                                         ByteOffset);
+        return RaiseFailure::inKernel(
+            RaiseFailureReason::UnsupportedSourceHiddenArg, KernelName,
+            "preloaded implicit argument at byte offset " + Twine(ByteOffset));
       }
 
       Function *FnImplicitArgPtr = Intrinsic::getOrInsertDeclaration(
@@ -690,20 +697,20 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
 
     // Mirror the entry-BB user-SGPR seeding above so the thread-loop body sees
     // the same source ABI state as a normal source wave.
-    if (UserSgprLayout.dispatchPtrSgpr() >= 0) {
-      Regs.storeSGPR64(SeedB, UserSgprLayout.dispatchPtrSgpr(),
+    if (UserSgprLayout.dispatchPtrSgpr().has_value()) {
+      Regs.storeSGPR64(SeedB, *UserSgprLayout.dispatchPtrSgpr(),
                        SeedB.CreateCall(FnDispatchPtr, {}, "dispatch_ptr"));
     }
-    if (UserSgprLayout.kernargSegmentPtrSgpr() >= 0) {
-      Regs.storeSGPR64(SeedB, UserSgprLayout.kernargSegmentPtrSgpr(),
+    if (UserSgprLayout.kernargSegmentPtrSgpr().has_value()) {
+      Regs.storeSGPR64(SeedB, *UserSgprLayout.kernargSegmentPtrSgpr(),
                        SeedB.CreateCall(FnKargPtr, {}, "kernarg_ptr"));
     }
-    if (UserSgprLayout.workgroupIdXSgpr() >= 0) {
-      Regs.storeSGPR32(SeedB, UserSgprLayout.workgroupIdXSgpr(),
+    if (UserSgprLayout.workgroupIdXSgpr().has_value()) {
+      Regs.storeSGPR32(SeedB, *UserSgprLayout.workgroupIdXSgpr(),
                        SeedB.CreateCall(FnWorkgroupIdX, {}, "wg_id_x"));
     }
-    if (UserSgprLayout.workgroupIdYSgpr() >= 0) {
-      Regs.storeSGPR32(SeedB, UserSgprLayout.workgroupIdYSgpr(),
+    if (UserSgprLayout.workgroupIdYSgpr().has_value()) {
+      Regs.storeSGPR32(SeedB, *UserSgprLayout.workgroupIdYSgpr(),
                        SeedB.CreateCall(FnWorkgroupIdY, {}, "wg_id_y"));
     }
     for (size_t SgprIdx = 0; SgprIdx < UserSgprLayout.Entries.size();
@@ -747,18 +754,13 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
 
   // `userSgprLayout` was built above before Phase 4 so entry SGPR seeding
   // and handler-side ABI decisions use the same descriptor-derived mapping.
-  RaiseContext Ctx{C,
-                   M,
-                   B,
+  RaiseContext Ctx{B,
                    Regs,
                    Projection,
                    Mc,
-                   Isa,
-                   TargetIsa,
                    TargetCodeObjectVersion,
                    Kernargs,
-                   &UserSgprLayout,
-                   F,
+                   UserSgprLayout,
                    nullptr,
                    OffsetToBb,
                    ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
@@ -771,53 +773,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   Ctx.SourceKernelCodeProperties = Meta.KernelCodeProperties;
   Ctx.AssumeHipGlobalOffsetZero = AssumeHipGlobalOffsetZero;
 
-  // Dominance-safe SGPR wave-mask shadow storage.
-  // One EXEC-width mask + one scalar-valid bit per SGPR base index.
-  // Consumers can combine `(valid ? shadow : fallback)` across BBs without
-  // carrying non-dominating SSA values in `lastSgprWaveMaskI1`.
-  Ctx.SgprWaveMaskExecShadow.reserve(Regs.Sgpr.size());
-  Ctx.SgprWaveMaskValidShadow.reserve(Regs.Sgpr.size());
-  Ctx.SourceWaveSgprPairShadow.reserve(Regs.Sgpr.size());
-  Ctx.SourceWaveSgprPairValidShadow.reserve(Regs.Sgpr.size());
-  for (unsigned I = 0; I < Regs.Sgpr.size(); ++I) {
-    auto *MaskA =
-        B.CreateAlloca(Regs.ExecTy, nullptr, "sgpr_mask_shadow_" + Twine(I));
-    auto *ValidA = B.CreateAlloca(I1Ty, nullptr, "sgpr_mask_valid_" + Twine(I));
-    auto *PairA =
-        B.CreateAlloca(I64Ty, nullptr, "source_wave_sgpr_pair_" + Twine(I));
-    auto *PairValidA = B.CreateAlloca(
-        I1Ty, nullptr, "source_wave_sgpr_pair_valid_" + Twine(I));
-    B.CreateStore(ConstantInt::get(Regs.ExecTy, 0), MaskA);
-    B.CreateStore(B.getFalse(), ValidA);
-    B.CreateStore(ConstantInt::get(I64Ty, 0), PairA);
-    B.CreateStore(B.getFalse(), PairValidA);
-    Ctx.SgprWaveMaskExecShadow.push_back(MaskA);
-    Ctx.SgprWaveMaskValidShadow.push_back(ValidA);
-    Ctx.SourceWaveSgprPairShadow.push_back(PairA);
-    Ctx.SourceWaveSgprPairValidShadow.push_back(PairValidA);
-  }
-
   llvm::Error RaiseReadFailure = llvm::Error::success();
-  auto ReadFailureHandler = [&](llvm::Error Err) {
-    if (RaiseReadFailure) {
-      RaiseReadFailure =
-          llvm::joinErrors(std::move(RaiseReadFailure), std::move(Err));
-    } else {
-      RaiseReadFailure = std::move(Err);
-    }
-  };
-  Ctx.recordReadFailure = ReadFailureHandler;
-
-  // Invalidate ctx's lane_active memo on every EXEC write; a stale
-  // lane_active would mispredicate subsequent emitUnderExec diamonds.
-  Regs.OnExecWritten = [&Ctx] { Ctx.resetLaneActiveCache(); };
-
-  // Invalidate ctx's per-SGPR wave-mask i1 shadow on every SGPR write.
-  Regs.OnSgprWritten = [&Ctx](int Idx) { Ctx.invalidateSgprWaveMaskI1(Idx); };
-
-  // Track a raise-time M0 constant shadow: a constant store records the
-  // value, any other store clears it.
-  Regs.OnM0Written = [&Ctx](llvm::Value *V) { Ctx.updateM0Const(V); };
 
   if (UseThreadLoop) {
     auto *IterA = B.CreateAlloca(I32Ty, nullptr, "tl_iter_alloca");
@@ -844,10 +800,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     if (Error Err = SeedThreadLoopIterationState(B))
       return Err;
 
-    for (auto *ValidA : Ctx.SgprWaveMaskValidShadow)
-      B.CreateStore(B.getFalse(), ValidA);
-    for (auto *ValidA : Ctx.SourceWaveSgprPairValidShadow)
-      B.CreateStore(B.getFalse(), ValidA);
+    Ctx.invalidateSgprShadows();
 
     B.CreateCondBr(EnterBody, OffsetToBb[KernelOffset], LatchBb);
 
@@ -905,8 +858,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       Ctx.clearM0Const();
     }
 
-    if (Error E = Ctx.computeVGPRAdjust(Di))
-      return E;
+    Ctx.computeVGPRAdjust(Di);
     // Invalidate the lane_active memo at every instruction boundary: any
     // instruction may write EXEC, and a stale lane_active would mispredicate
     // side effects.
@@ -917,16 +869,17 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
         [&]() -> llvm::Expected<HandlerResult> {
       // Only the SOPP and SOP1 arms are wired; any other opcode falls through
       // to the unsupported-instruction path below and refuses cleanly.
-      const uint64_t Flags = Di.TargetSpecificFlags;
-      const unsigned Opc = Di.Inst.getOpcode();
+      const MCInstrDesc &DispatchDesc =
+          Mc.InstrInfo->get(Di.Inst.getOpcode());
 
-      if (Flags & SIInstrFlags::SOPP)
+      if (SIInstrFlags::isSOPP(DispatchDesc))
         return handleSOPP(Ctx, Di, Op);
-      if (Flags & SIInstrFlags::SOP1)
+      if (SIInstrFlags::isSOP1(DispatchDesc))
         return handleSOP1(Ctx, Di, Op);
 
-      StringRef Format = formatName(Di.TargetSpecificFlags, Opc);
-      return RaiseFailure::unsupportedInstructionForm(
+      StringRef Format = formatName(Di.TargetSpecificFlags);
+      return RaiseFailure::atInstruction(
+          RaiseFailureReason::UnsupportedInstructionForm,
           strippedMnemonic(Mc, Di.Inst), Di.Offset, Format);
     }();
 
@@ -954,15 +907,16 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     // A handler recognised the instruction but refused it.
     if (!Hr.Handled) {
       StringRef Format =
-          formatName(Di.TargetSpecificFlags, Di.Inst.getOpcode());
+          formatName(Di.TargetSpecificFlags);
       LLVM_DEBUG(dbgs() << "transpiler: unsupported instruction: "
                         << printInst(Mc, Di.Inst) << " [format=" << Format
                         << "] at offset 0x" << format_hex(Di.Offset, 1)
                         << "\n");
       RaiseFailures = llvm::joinErrors(
           std::move(RaiseFailures),
-          RaiseFailure::unsupportedOpcode(strippedMnemonic(Mc, Di.Inst),
-                                          Di.Offset, Format));
+          RaiseFailure::atInstruction(RaiseFailureReason::UnsupportedOpcode,
+                                      strippedMnemonic(Mc, Di.Inst),
+                                      Di.Offset, Format));
       continue;
     }
 
@@ -1028,7 +982,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     AssumptionCache AC(*F);
     SmallVector<AllocaInst *, 512> Allocas;
     Regs.collectAllocas(Allocas);
-    Ctx.collectSgprWaveMaskShadowAllocas(Allocas);
+    Ctx.collectSgprShadowAllocas(Allocas);
     PromoteMemToReg(Allocas, DT, &AC);
   }
 
@@ -1037,7 +991,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   raw_string_ostream VerifyOs(VerifyErr);
   if (verifyModule(M, &VerifyOs)) {
     errs() << "transpiler: IR verification failed:\n" << VerifyErr << "\n";
-    return RaiseFailure::irVerificationFailed(VerifyErr);
+    return RaiseFailure::general(RaiseFailureReason::IRVerificationFailed,
+                                 VerifyErr);
   }
 
   Result.UsesScratchPrivateSegment = Ctx.UsesScratchPrivateSegment;
@@ -1057,7 +1012,7 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                    /*KernelSize=*/0, CompilationTargetIsa,
                    EnableWritelaneRewrite, EnableWaveNative,
                    /*AssumeHipGlobalOffsetZero=*/false,
-                   /*ForceModrepDoubled=*/false, TextBaseAddress,
+                   /*ForceReplicationDoubled=*/false, TextBaseAddress,
                    SourceImageSections, Stats);
 }
 
@@ -1067,7 +1022,7 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           uint64_t KernelOffset, uint64_t KernelSize,
           llvm::StringRef CompilationTargetIsa, bool EnableWritelaneRewrite,
           bool EnableWaveNative, bool AssumeHipGlobalOffsetZero,
-          bool ForceModrepDoubled, uint64_t TextBaseAddress,
+          bool ForceReplicationDoubled, uint64_t TextBaseAddress,
           llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
           RaiseStats *Stats) {
   return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta, KernelOffset,
@@ -1076,7 +1031,7 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
                        EnableWaveNative,
                        /*forceThreadLoopProjection=*/false,
                        /*suppressC5ForThreadLoopRoute=*/false,
-                       ForceModrepDoubled, AssumeHipGlobalOffsetZero, Stats);
+                       ForceReplicationDoubled, AssumeHipGlobalOffsetZero, Stats);
 }
 
 } // namespace COMGR::hotswap
