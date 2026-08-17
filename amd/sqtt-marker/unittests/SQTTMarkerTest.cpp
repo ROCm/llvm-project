@@ -1311,7 +1311,8 @@ TEST_F(MarkerPass, NamedExitEnterFusionRequiresDirectAdjacency) {
       makeVoidFunction(*TestModule, "adjacent_named_markers", "gfx1100");
   Instruction *AdjacentRet = Adjacent->getEntryBlock().getTerminator();
   IRBuilder<> AdjacentBuilder(AdjacentRet);
-  AdjacentBuilder.CreateCall(Exit, {OldName});
+  AdjacentBuilder.CreateCall(
+      Exit, {ConstantPointerNull::get(PointerType::get(Ctx, 0))});
   AdjacentBuilder.CreateCall(Enter, {NewName});
 
   SQTTConfig Config = fullScopeConfig();

@@ -39,6 +39,11 @@ sqtt_marker_data("item", item_id);
 sqtt_marker_exit("work");
 ```
 
+`sqtt_marker_exit` always pops the current scope without validating its marker
+name or ID. The name exists only to make source code more readable and is not
+encoded. A null pointer (`nullptr` in C++) or an empty string is allowed when no
+descriptive name is useful.
+
 String markers require the plugin. ID markers can be used without it:
 `sqtt_marker_enter_id`, `sqtt_marker_exit_id`, and
 `sqtt_marker_point_id`. Marker calls are no-ops unless

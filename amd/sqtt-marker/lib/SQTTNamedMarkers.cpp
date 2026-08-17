@@ -47,6 +47,11 @@ static uint8_t markerFlags(const CallInst *Call) {
 }
 
 uint32_t SQTTInstrumentPass::resolveMarkerString(CallInst *CI, uint8_t Flags) {
+  // exit(name) pops the top of the marker stack.  The name may be null or empty
+  // and is documentation only; it is neither encoded nor checked.
+  if (Flags & MarkerExit)
+    return FlagExitPrev;
+
   Value *Arg = CI->getArgOperand(0)->stripPointerCasts();
   auto *GV = dyn_cast<GlobalVariable>(Arg);
   if (!GV || !GV->hasInitializer())
@@ -54,11 +59,6 @@ uint32_t SQTTInstrumentPass::resolveMarkerString(CallInst *CI, uint8_t Flags) {
   auto *CDA = dyn_cast<ConstantDataArray>(GV->getInitializer());
   if (!CDA || !CDA->isString())
     return 0;
-
-  // Exit just pops the top of the marker stack; the name string is
-  // unused at the trace level, so no ID/funcmap entry is needed.
-  if (Flags & MarkerExit)
-    return FlagExitPrev; // value 1: pop top scope
 
   std::string Name = CDA->getAsString().str();
   if (!Name.empty() && Name.back() == '\0')

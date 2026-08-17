@@ -38,7 +38,7 @@
 
 /** Opens the named scope. */
 AMD_SQTT_MARKER_INLINE void sqtt_marker_enter(const char *name) { (void)name; }
-/** Closes the named scope. */
+/** Pops without validating the marker ID; name may be null or empty. */
 AMD_SQTT_MARKER_INLINE void sqtt_marker_exit(const char *name) { (void)name; }
 /** Emits a named point event. */
 AMD_SQTT_MARKER_INLINE void sqtt_marker_point(const char *name) { (void)name; }
@@ -61,7 +61,7 @@ extern "C" {
 #endif
 /** Opens the named scope. */
 AMD_SQTT_MARKER_DEVICE void sqtt_marker_enter(const char *);
-/** Closes the named scope. */
+/** Pops without validating the marker ID; name may be null or empty. */
 AMD_SQTT_MARKER_DEVICE void sqtt_marker_exit(const char *);
 /** Emits a named point event. */
 AMD_SQTT_MARKER_DEVICE void sqtt_marker_point(const char *);

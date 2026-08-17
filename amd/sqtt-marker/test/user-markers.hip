@@ -51,7 +51,7 @@ extern "C" __attribute__((global)) void marker_kernel(unsigned int value) {
   sqtt_marker_enter("inner");
   sqtt_marker_point("point");
   sqtt_marker_data("data", value);
-  sqtt_marker_exit("inner");
+  sqtt_marker_exit("");
 }
 
 // IR: @.sqtt_func_id_map

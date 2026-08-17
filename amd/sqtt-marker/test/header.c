@@ -24,7 +24,7 @@ void use_markers(unsigned int id) {
   sqtt_marker_point_id(7);
   sqtt_marker_enter_id(9);
   sqtt_marker_exit_id(11);
-  sqtt_marker_exit("scope");
+  sqtt_marker_exit((const char *)0);
 }
 
 // ENABLED-LABEL: define{{.*}} void @use_markers(
