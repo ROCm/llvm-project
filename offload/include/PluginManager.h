@@ -158,6 +158,14 @@ struct PluginManager {
     return TraceRecordManager;
   }
 
+  /// Return the process-wide profiler shared across all plugins. It is
+  /// constructed in init() and is never null afterwards, so callers do not
+  /// need to check for null before use.
+  llvm::omp::target::plugin::GenericProfilerTy *getProfiler() const {
+    assert(Profiler && "Profiler not initialized");
+    return Profiler.get();
+  }
+
 private:
   bool RTLsLoaded = false;
   llvm::SmallVector<__tgt_bin_desc *> DelayedBinDesc;
@@ -185,6 +193,11 @@ private:
   ProtectedObj<DeviceContainerTy> Devices;
 
   OmptTracingBufferMgr *TraceRecordManager;
+
+  /// The single profiler instance shared across all plugins. Constructed in
+  /// init(): an OmptProfilerTy when OMPT is compiled in, otherwise a no-op
+  /// GenericProfilerTy.
+  std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy> Profiler;
 
   /// References to upgraded legacy offloading entries.
   std::list<llvm::SmallVector<llvm::offloading::EntryTy, 0>> LegacyEntries;

@@ -23,6 +23,10 @@
 #include "llvm/Support/ErrorHandling.h"
 #include <memory>
 
+#ifdef OMPT_SUPPORT
+#include "OmptProfiler.h"
+#endif
+
 using namespace llvm;
 using namespace llvm::sys;
 using namespace llvm::omp::target::debug;
@@ -59,6 +63,16 @@ void PluginManager::init() {
   TraceRecordManager = new OmptTracingBufferMgr();
 #endif
 
+  // Construct the single profiler shared across all plugins. It is an
+  // OmptProfilerTy when OMPT is compiled in and a no-op GenericProfilerTy
+  // otherwise, so the profiler is always available and never null.
+  assert(!Profiler && "Profiler already initialized");
+#ifdef OMPT_SUPPORT
+  Profiler = std::make_unique<llvm::omp::target::ompt::OmptProfilerTy>();
+#else
+  Profiler = std::make_unique<llvm::omp::target::plugin::GenericProfilerTy>();
+#endif
+
   ODBG(ODT_Init) << "RTLs loaded!";
 }
 
@@ -87,6 +101,8 @@ void PluginManager::deinit() {
     }
     Plugin.release();
   }
+
+  Profiler.reset();
 
   ODBG(ODT_Deinit) << "RTLs unloaded!";
 }
