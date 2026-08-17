@@ -5,7 +5,7 @@ scope, bit 1 enters a scope, and bits 31:2 contain the marker ID. Thus a point
 is `id << 2`, an entry is `(id << 2) | 2`, an exit is `1`, and an adjacent
 exit/entry transition is `(id << 2) | 3`. IDs 1 through 63 can use
 `s_ttracedata_imm` on gfx10 and later. Other values use `s_ttracedata` via M0,
-with the target-required four-cycle M0 delay on gfx12.
+with the target-required four-cycle M0 delay on gfx10 and later.
 
 The pass writes a newline-delimited `.sqtt_funcmap` section:
 

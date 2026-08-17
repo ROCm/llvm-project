@@ -68,9 +68,9 @@ inline bool supportsImmTrace(GfxGen Gen) {
   return Gen == GfxGen::RDNA || Gen == GfxGen::GFX12; // gfx10+
 }
 
-// s_nop N waits N+1 cycles; gfx12 needs four cycles after an M0 write.
+// s_nop N waits N+1 cycles; gfx10+ needs four cycles after an M0 write.
 inline unsigned getM0TraceNop(GfxGen Gen) {
-  return Gen == GfxGen::GFX12 ? 3 : 0;
+  return Gen == GfxGen::GFX9 ? 0 : 3;
 }
 
 // Wave size for this architecture

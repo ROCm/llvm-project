@@ -1016,7 +1016,7 @@ TEST_F(MarkerPass, NumericMarkerLoweringAndBoundaries) {
 
   for (llvm::Function *Function : Functions) {
     const CallInst *Trace =
-        findM0NopTrace(*Function, Function->getName() == "gfx12_trace" ? 3 : 0);
+        findM0NopTrace(*Function, Function->getName() == "gfx9_trace" ? 0 : 3);
     ASSERT_NE(Trace, nullptr) << Function->getName().str();
     auto *TraceAsm = dyn_cast<InlineAsm>(Trace->getCalledOperand());
     ASSERT_NE(TraceAsm, nullptr);
