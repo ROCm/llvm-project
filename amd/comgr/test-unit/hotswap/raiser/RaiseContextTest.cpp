@@ -231,7 +231,7 @@ TEST_F(RaiseContextTest, ParsesWideRegisterOperands) {
 }
 
 TEST_F(RaiseContextTest, RejectsRegistersOutsideOperandClass) {
-  const unsigned Opcode = findOpcode(*Mc.InstrInfo, "S_LOAD_DWORDX8_IMM");
+  const unsigned Opcode = findOpcode(*Mc.InstrInfo, "S_LOAD_DWORDX8_IMM_vi");
   ASSERT_NE(Opcode, Mc.InstrInfo->getNumOpcodes());
   const MCRegister Register = findRegister(*Mc.RegInfo, "VGPR0");
   ASSERT_TRUE(Register);
@@ -313,7 +313,7 @@ TEST_F(RaiseContextTest, SizesVgprAdjustmentsFromDescriptor) {
 }
 
 TEST_F(RaiseContextTest, ReportsUnsupportedRegisterOperands) {
-  unsigned Opc = findOpcode(*Mc.InstrInfo, "S_MOV_B32");
+  unsigned Opc = findOpcode(*Mc.InstrInfo, "S_MOV_B32_vi");
   ASSERT_NE(Opc, Mc.InstrInfo->getNumOpcodes());
   MCRegister Reg = findRegister(*Mc.RegInfo, "SRC_SHARED_BASE_LO");
   ASSERT_TRUE(Reg);
@@ -329,7 +329,7 @@ TEST_F(RaiseContextTest, ReportsUnsupportedRegisterOperands) {
 }
 
 TEST_F(RaiseContextTest, ReportsEncodingFormatForOperandFailures) {
-  const unsigned Opcode = findOpcode(*Mc.InstrInfo, "S_MOV_B32");
+  const unsigned Opcode = findOpcode(*Mc.InstrInfo, "S_MOV_B32_vi");
   ASSERT_NE(Opcode, Mc.InstrInfo->getNumOpcodes());
 
   DecodedInst Di;
@@ -350,7 +350,7 @@ TEST_F(RaiseContextTest, ReportsEncodingFormatForOperandFailures) {
 }
 
 TEST_F(RaiseContextTest, RejectsXnackMaskOperands) {
-  unsigned Opc = findOpcode(*Mc.InstrInfo, "S_MOV_B32");
+  unsigned Opc = findOpcode(*Mc.InstrInfo, "S_MOV_B32_vi");
   ASSERT_NE(Opc, Mc.InstrInfo->getNumOpcodes());
   MCRegister Reg = findRegister(*Mc.RegInfo, "XNACK_MASK_LO");
   ASSERT_TRUE(Reg);

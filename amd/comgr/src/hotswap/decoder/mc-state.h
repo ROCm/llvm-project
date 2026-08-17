@@ -80,10 +80,7 @@ std::string printInst(const MCState &State, const llvm::MCInst &Inst);
 llvm::StringRef stripEncoding(llvm::StringRef Mnemonic);
 
 /// Return the mnemonic of `Inst` with any encoding suffix removed (e.g.
-/// "v_mov_b32" for `v_mov_b32_e32`), for diagnostics that name the instruction.
-/// The raiser's dispatch identity is `CanonicalOp` (see canonical-op.h), not
-/// this string; it is reconstructed on demand rather than stored per
-/// instruction.
+/// "v_mov_b32" for `v_mov_b32_e32`) without printing its operands.
 std::string strippedMnemonic(const MCState &State, const llvm::MCInst &Inst);
 
 } // namespace COMGR::hotswap
