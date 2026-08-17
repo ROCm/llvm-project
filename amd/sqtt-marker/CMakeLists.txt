@@ -37,6 +37,7 @@ option(SQTT_MARKER_BUILD_TESTS "Build AMD SQTT marker tests"
 set(SQTT_MARKER_SOURCES
   lib/SQTTAddressTrace.cpp
   lib/SQTTAutomatic.cpp
+  lib/SQTTConfig.cpp
   lib/SQTTFuncMap.cpp
   lib/SQTTFunctions.cpp
   lib/SQTTMarkers.cpp

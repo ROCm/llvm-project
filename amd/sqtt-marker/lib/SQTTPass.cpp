@@ -203,7 +203,7 @@ llvmGetPassPluginInfo() {
   return {LLVM_PLUGIN_API_VERSION, "SQTTMarkerPass", SQTT_MARKER_VERSION_STRING,
           [](PassBuilder &PB) {
             using Mode = SQTTInstrumentPass::Mode;
-            SQTTConfig Cfg = SQTTConfig::fromEnvironment();
+            SQTTConfig Cfg = SQTTConfig::fromCommandLine();
 
             PB.registerPipelineEarlySimplificationEPCallback(
                 [Cfg](ModulePassManager &MPM, OptimizationLevel OL,

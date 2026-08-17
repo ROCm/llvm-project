@@ -7,8 +7,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Defines marker encoding constants and compile-time environment
-/// configuration.
+/// Defines marker encoding constants and compile-time configuration.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -16,12 +15,6 @@
 #define LLVM_AMD_SQTT_MARKER_LIB_SQTTCONFIG_H
 
 #include <cstdint>
-#include <cstdlib>
-#include <cstring>
-
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/raw_ostream.h"
 
 // getRegisterImmediate encoding: (size_minus_1 << 11) | (offset << 6) |
 // register_id
@@ -123,138 +116,12 @@ struct SQTTConfig {
            (WgMask & FullWgMask) != FullWgMask;
   }
 
-  static uint32_t parseEnvMask(const char *Name, uint32_t Def = 0xFFFFFFFF) {
-    const char *V = std::getenv(Name);
-    if (!V || V[0] == '\0')
-      return Def;
-    if (std::strcmp(V, "-1") == 0)
-      return 0xFFFFFFFF;
-    char *End = nullptr;
-    unsigned long Val = std::strtoul(V, &End, 0);
-    if (End == V || *End != '\0') {
-      llvm::errs() << "sqtt: warning: invalid value for " << Name << "='" << V
-                   << "', using default\n";
-      return Def;
-    }
-    return static_cast<uint32_t>(Val);
-  }
+  /// Reads only the SQTT_* environment variables.
+  static SQTTConfig fromEnvironment();
 
-  static bool parseEnvBool(const char *Name, bool Def) {
-    const char *V = std::getenv(Name);
-    if (!V || V[0] == '\0')
-      return Def;
-    llvm::StringRef S(V);
-    return S.equals_insensitive("1") || S.equals_insensitive("y") ||
-           S.equals_insensitive("yes") || S.equals_insensitive("true") ||
-           S.equals_insensitive("on");
-  }
-
-  static MemBarrierMode parseEnvMemBarrier(const char *Name,
-                                           MemBarrierMode Def) {
-    const char *V = std::getenv(Name);
-    if (!V || V[0] == '\0')
-      return Def;
-    llvm::StringRef S(V);
-    // Numeric: 0=None, 1=AsmClobber, 2=Fence
-    if (S == "0")
-      return MemBarrierMode::None;
-    if (S == "1")
-      return MemBarrierMode::AsmClobber;
-    if (S == "2")
-      return MemBarrierMode::Fence;
-    // Named (case-insensitive)
-    if (S.equals_insensitive("none") || S.equals_insensitive("off"))
-      return MemBarrierMode::None;
-    if (S.equals_insensitive("asm") || S.equals_insensitive("compiler") ||
-        S.equals_insensitive("clobber"))
-      return MemBarrierMode::AsmClobber;
-    if (S.equals_insensitive("fence") || S.equals_insensitive("on") ||
-        S.equals_insensitive("hw"))
-      return MemBarrierMode::Fence;
-    llvm::errs() << "sqtt: warning: invalid value for " << Name << "='" << V
-                 << "', expected one of "
-                 << "{none|asm|fence|0|1|2}, using default\n";
-    return Def;
-  }
-
-  static unsigned parseEnvUnsigned(const char *Name, unsigned Def) {
-    const char *V = std::getenv(Name);
-    if (!V || V[0] == '\0')
-      return Def;
-    llvm::StringRef S(V);
-    unsigned Out = 0;
-    if (S.getAsInteger(10, Out)) {
-      llvm::errs() << "sqtt: warning: invalid value for " << Name << "='" << V
-                   << "', using default\n";
-      return Def;
-    }
-    return Out;
-  }
-
-  static SQTTConfig fromEnvironment() {
-    SQTTConfig C;
-    C.InstrumentBarriers = parseEnvBool("SQTT_INSTRUMENT_BARRIERS", false);
-    C.MemBarrier =
-        parseEnvMemBarrier("SQTT_MEM_BARRIER", MemBarrierMode::Fence);
-    C.WaveMask = parseEnvMask("SQTT_SCOPE_WAVE", 0xFFFFFFFF);
-    C.SimdMask = parseEnvMask("SQTT_SCOPE_SIMD", 0xF);
-    C.CuMask = parseEnvMask("SQTT_SCOPE_CU", 0x3);
-    C.WgMask = parseEnvMask("SQTT_SCOPE_WG", 0xFFFFFFFF);
-    C.ShaderClockBits = parseEnvUnsigned("SQTT_SHADER_CLOCK_BITS", 0);
-    C.ShaderClockShift = parseEnvUnsigned("SQTT_SHADER_CLOCK_SHIFT", 4);
-
-    const char *FuncEnv = std::getenv("SQTT_INSTRUMENT_FUNCTIONS");
-    if (FuncEnv && FuncEnv[0] != '\0') {
-      llvm::StringRef S(FuncEnv);
-      if (S.consume_front("cost:"))
-        C.Mode = CostMode::WeightedCost;
-      S.getAsInteger(10, C.FunctionThreshold);
-    }
-
-    // SQTT_INSTRUMENT_MEMORY=N:M  (N=chunk size, M=max gap)
-    const char *MemEnv = std::getenv("SQTT_INSTRUMENT_MEMORY");
-    if (MemEnv && MemEnv[0] != '\0') {
-      llvm::StringRef S(MemEnv);
-      llvm::StringRef NStr, MStr;
-      std::tie(NStr, MStr) = S.split(':');
-      unsigned N = 0, M = 0;
-      if (!NStr.getAsInteger(10, N) && !MStr.empty() &&
-          !MStr.getAsInteger(10, M) && N > 0) {
-        C.MemoryChunkSize = N;
-        C.MemoryMaxGap = M;
-      } else {
-        llvm::errs() << "sqtt: warning: invalid SQTT_INSTRUMENT_MEMORY "
-                        "format '"
-                     << MemEnv << "', expected N:M\n";
-      }
-    }
-
-    // SQTT_TRACE_ADDRESSES=memory|lds|memory,lds
-    const char *AddrEnv = std::getenv("SQTT_TRACE_ADDRESSES");
-    if (AddrEnv && AddrEnv[0] != '\0') {
-      llvm::StringRef S(AddrEnv);
-      llvm::SmallVector<llvm::StringRef, 2> Parts;
-      S.split(Parts, ',');
-      for (llvm::StringRef &P : Parts) {
-        llvm::StringRef T = P.trim();
-        if (T == "memory")
-          C.TraceMemoryAddrs = true;
-        else if (T == "lds")
-          C.TraceLDSAddrs = true;
-        else
-          llvm::errs() << "sqtt: warning: unknown SQTT_TRACE_ADDRESSES "
-                          "category '"
-                       << T << "'\n";
-      }
-      if (C.hasAddressTracing() && C.MemoryChunkSize) {
-        llvm::errs() << "sqtt: error: SQTT_TRACE_ADDRESSES and "
-                        "SQTT_INSTRUMENT_MEMORY are mutually exclusive\n";
-        C.TraceMemoryAddrs = C.TraceLDSAddrs = false;
-      }
-    }
-
-    return C;
-  }
+  /// Reads plugin command-line options, falling back to SQTT_* environment
+  /// variables for options not explicitly provided.
+  static SQTTConfig fromCommandLine();
 };
 
 #endif // LLVM_AMD_SQTT_MARKER_LIB_SQTTCONFIG_H

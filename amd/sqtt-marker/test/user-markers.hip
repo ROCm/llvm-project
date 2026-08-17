@@ -1,14 +1,18 @@
-// RUN: env SQTT_SCOPE_CU=-1 SQTT_SCOPE_SIMD=-1 SQTT_MEM_BARRIER=none \
-// RUN:   %clang --target=%host-triple -x hip --offload-device-only \
+// RUN: %clang --target=%host-triple -x hip --offload-device-only \
 // RUN:   -nogpuinc -nogpulib \
 // RUN:   --offload-arch=gfx1200 -O2 -DAMD_SQTT_MARKER_ENABLE=1 \
 // RUN:   -I%sqtt-marker-include -fpass-plugin=%sqtt-marker-plugin \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-scope-cu=-1 \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-scope-simd=-1 \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-mem-barrier=none \
 // RUN:   -S -emit-llvm %s -o - | %FileCheck %s --check-prefix=IR
-// RUN: env SQTT_SCOPE_CU=-1 SQTT_SCOPE_SIMD=-1 SQTT_MEM_BARRIER=none \
-// RUN:   %clang --target=%host-triple -x hip --offload-device-only \
+// RUN: %clang --target=%host-triple -x hip --offload-device-only \
 // RUN:   -nogpuinc -nogpulib \
 // RUN:   --offload-arch=gfx1200 -O2 -DAMD_SQTT_MARKER_ENABLE=1 \
 // RUN:   -I%sqtt-marker-include -fpass-plugin=%sqtt-marker-plugin \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-scope-cu=-1 \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-scope-simd=-1 \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-mem-barrier=none \
 // RUN:   -c %s -o %t.o
 // RUN: %clang-offload-bundler -unbundle -type=o \
 // RUN:   -targets=hipv4-amdgcn-amd-amdhsa--gfx1200 \
@@ -20,17 +24,21 @@
 // RUN:   -nogpuinc -nogpulib \
 // RUN:   --offload-arch=gfx1200 -O2 -I%sqtt-marker-include \
 // RUN:   -S -emit-llvm %s -o - | %FileCheck %s --check-prefix=DISABLED
-// RUN: env SQTT_SCOPE_CU=-1 SQTT_SCOPE_SIMD=-1 SQTT_MEM_BARRIER=none \
-// RUN:   %clang --target=%host-triple -x hip --offload-device-only \
+// RUN: %clang --target=%host-triple -x hip --offload-device-only \
 // RUN:   -nogpuinc -nogpulib \
 // RUN:   --offload-arch=gfx90a -O2 -DAMD_SQTT_MARKER_ENABLE=1 \
 // RUN:   -I%sqtt-marker-include -fpass-plugin=%sqtt-marker-plugin \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-scope-cu=-1 \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-scope-simd=-1 \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-mem-barrier=none \
 // RUN:   -S %s -o - | %FileCheck %s --check-prefix=GFX9
-// RUN: env SQTT_SCOPE_CU=-1 SQTT_SCOPE_SIMD=-1 SQTT_MEM_BARRIER=fence \
-// RUN:   %clang --target=%host-triple -x hip --offload-device-only \
+// RUN: %clang --target=%host-triple -x hip --offload-device-only \
 // RUN:   -nogpuinc -nogpulib \
 // RUN:   --offload-arch=gfx1200 -O2 -DAMD_SQTT_MARKER_ENABLE=1 \
 // RUN:   -I%sqtt-marker-include -fpass-plugin=%sqtt-marker-plugin \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-scope-cu=-1 \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-scope-simd=-1 \
+// RUN:   -Xclang -mllvm -Xclang -sqtt-marker-mem-barrier=fence \
 // RUN:   -S %s -o - | %FileCheck %s --check-prefix=GFX12
 // REQUIRES: amdgpu-registered-target, sqtt-marker-has-clang
 // REQUIRES: sqtt-marker-has-offload-tools

@@ -24,9 +24,10 @@ package builds.
 Use the installed plugin and header with HIP:
 
 ```sh
-SQTT_INSTRUMENT_FUNCTIONS=10 \
 hipcc -DAMD_SQTT_MARKER_ENABLE=1 \
   -fpass-plugin=/path/to/lib/libsqtt-marker.so \
+  -Xclang -mllvm \
+  -Xclang -sqtt-marker-instrument-functions=10 \
   -I/path/to/include kernel.hip
 ```
 
@@ -43,12 +44,29 @@ String markers require the plugin. ID markers can be used without it:
 `sqtt_marker_point_id`. Marker calls are no-ops unless
 `AMD_SQTT_MARKER_ENABLE` is nonzero.
 
-Configuration is read by the compiler process. Supported variables are
-`SQTT_INSTRUMENT_FUNCTIONS`, `SQTT_INSTRUMENT_BARRIERS`,
-`SQTT_INSTRUMENT_MEMORY`, `SQTT_TRACE_ADDRESSES`, `SQTT_SCOPE_WAVE`,
-`SQTT_SCOPE_SIMD`, `SQTT_SCOPE_CU`, `SQTT_SCOPE_WG`, `SQTT_MEM_BARRIER`,
-`SQTT_SHADER_CLOCK_BITS`, and `SQTT_SHADER_CLOCK_SHIFT`. See
-[the format note](docs/SQTTMarkerFormat.md) for the encoding and funcmap
+## Configuration
+
+Configuration is read by the compiler process. With `hipcc` or the Clang
+driver, pass each plugin option through cc1 as
+`-Xclang -mllvm -Xclang -<option>=<value>`. With `opt`, place the option after
+`-load-pass-plugin`. Existing environment variables remain supported as
+fallbacks; an explicit plugin option takes precedence.
+
+| Plugin option | Value | Environment fallback |
+|---|---|---|
+| `sqtt-marker-instrument-functions` | `N` or `cost:N` | `SQTT_INSTRUMENT_FUNCTIONS` |
+| `sqtt-marker-instrument-barriers` | `0` or `1` | `SQTT_INSTRUMENT_BARRIERS` |
+| `sqtt-marker-instrument-memory` | `N:M` | `SQTT_INSTRUMENT_MEMORY` |
+| `sqtt-marker-trace-addresses` | `memory`, `lds`, or both | `SQTT_TRACE_ADDRESSES` |
+| `sqtt-marker-scope-wave` | mask or `-1` | `SQTT_SCOPE_WAVE` |
+| `sqtt-marker-scope-simd` | mask or `-1` | `SQTT_SCOPE_SIMD` |
+| `sqtt-marker-scope-cu` | mask or `-1` | `SQTT_SCOPE_CU` |
+| `sqtt-marker-scope-wg` | mask or `-1` | `SQTT_SCOPE_WG` |
+| `sqtt-marker-mem-barrier` | `none`, `asm`, or `fence` | `SQTT_MEM_BARRIER` |
+| `sqtt-marker-shader-clock-bits` | unsigned integer | `SQTT_SHADER_CLOCK_BITS` |
+| `sqtt-marker-shader-clock-shift` | unsigned integer | `SQTT_SHADER_CLOCK_SHIFT` |
+
+See [the format note](docs/SQTTMarkerFormat.md) for the encoding and funcmap
 contract.
 
 ## Testing
