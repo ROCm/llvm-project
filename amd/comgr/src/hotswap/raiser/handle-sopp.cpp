@@ -23,8 +23,9 @@ Expected<HandlerResult> handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
 
-  return RaiseFailure::unsupportedInstructionForm(
-      strippedMnemonic(Ctx.Mc, Di.Inst), Di.Offset, "SOPP");
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset, "SOPP");
 }
 
 } // namespace COMGR::hotswap

@@ -17,13 +17,20 @@ Expected<HandlerResult> handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   HandlerResult Hr;
 
   if (Di.CanonOp == CanonicalOp::S_MOV_B32) {
-    Ctx.Regs.writeReg32(Ctx.B, Op.dst(), Op.src(0));
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> Src = Op.src(0);
+    if (!Src)
+      return Src.takeError();
+    Ctx.writeReg32(*Dst, *Src);
     Hr.Handled = true;
     return Hr;
   }
 
-  return RaiseFailure::unsupportedInstructionForm(
-      strippedMnemonic(Ctx.Mc, Di.Inst), Di.Offset, "SOP1");
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset, "SOP1");
 }
 
 } // namespace COMGR::hotswap

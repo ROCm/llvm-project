@@ -15,6 +15,28 @@
 
 namespace COMGR::hotswap {
 
+// Return value from every format handler, carried inside an
+// `llvm::Expected<HandlerResult>`.
+//
+// Handlers communicate back in three ways:
+//   * `Handled = true` -> the handler fully lowered the instruction.
+//   * `Handled = false` (no Error) -> this handler does not claim the
+//     instruction; the main loop falls through to the generic
+//     `UnsupportedOpcode` diagnostic.
+//   * an `llvm::Error` (a `RaiseFailure`) -> the handler recognised the
+//     instruction but refuses to lower it (e.g. operand shape
+//     unsupported); the main loop records the structured failure and
+//     aborts without consulting other handlers.
+//
+// A handler that computes SCC as a side effect hands the value back in
+// `SccResult` for the dispatch loop to commit, or sets `SccHandled` when it
+// has already stored it itself.
+struct HandlerResult {
+  bool Handled = false;
+  llvm::Value *SccResult = nullptr;
+  bool SccHandled = false;
+};
+
 // Lower a scalar ALU (SOP1) instruction. The HandlerResult is marked handled
 // when the instruction was lifted; an unhandled result means this handler does
 // not claim the instruction; a RaiseFailure means it recognises but refuses the
