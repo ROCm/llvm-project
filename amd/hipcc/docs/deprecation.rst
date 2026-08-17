@@ -8,11 +8,6 @@
 hipcc and hipconfig deprecation guide
 ******************************************
 
-.. warning::
-  ``hipcc`` and ``hipconfig`` are deprecated and will be removed in a future
-  release. Projects and scripts using these tools should migrate to the
-  alternatives described in this guide.
-
 Overview
 ========
 
@@ -21,7 +16,10 @@ Overview
 ``clang++``. ``hipconfig`` is its companion introspection tool used to query
 HIP platform, version, and path information.
 
-Both tools are being deprecated in favor of:
+Both tools are now the legacy option for HIP compilation and introspection.
+``amdclang++`` and CMake-native HIP support are the recommended replacements,
+and projects using ``hipcc`` or ``hipconfig`` should migrate to the
+alternatives described in this guide:
 
 - **Direct** ``amdclang++`` **invocation** for shell and Makefile-based projects
 - **CMake-native HIP language support** (available since CMake 3.21) for CMake
@@ -40,25 +38,8 @@ Why deprecate?
   is available through CMake variables set by ``find_package(hip CONFIG)``
   or through standard ROCm environment variables.
 
-Migrating from hipcc
-====================
-
-.. hint::
-  If you are unsure of what options to pass to ``amdclang++`` or ``nvcc``
-  when replacing a ``hipcc`` invocation, use ``--hipcc-verbose=7`` to see
-  exactly what options ``hipcc`` is currently passing to the underlying
-  compiler before you migrate:
-
-  .. code-block:: bash
-
-    hipcc --hipcc-verbose=7 [your existing hipcc arguments]
-
-  The bitmask ``7`` enables all output: ``0x1`` prints the final compiler
-  command, ``0x2`` prints HIP/ROCm path information, and ``0x4`` prints
-  the arguments passed to ``hipcc``.
-
-AMD platforms (amdclang++)
---------------------------
+Migrating from hipcc to amdclang++
+===================================
 
 Replace ``hipcc`` with ``amdclang++`` and add the required flags explicitly.
 ``amdclang++`` is the AMD-branded HIP-capable compiler included in the ROCm
@@ -82,8 +63,22 @@ installation.
   included here for explicitness. ``--offload-arch=native`` can be used to
   automatically target the GPUs present on the build machine.
 
+.. hint::
+  If you are unsure of what options to pass to ``amdclang++`` or ``nvcc``
+  when replacing a ``hipcc`` invocation, use ``--hipcc-verbose=7`` to see
+  exactly what options ``hipcc`` is currently passing to the underlying
+  compiler before you migrate:
+
+  .. code-block:: bash
+
+    hipcc --hipcc-verbose=7 [your existing hipcc arguments]
+
+  The bitmask ``7`` enables all output: ``0x1`` prints the final compiler
+  command, ``0x2`` prints HIP/ROCm path information, and ``0x4`` prints
+  the arguments passed to ``hipcc``.
+
 Flag equivalency table
-~~~~~~~~~~~~~~~~~~~~~~
+----------------------
 
 .. list-table::
   :header-rows: 1
@@ -132,8 +127,8 @@ For CMake projects targeting NVIDIA, use CMake's native CUDA language support:
   set_source_files_properties(my_kernel.cu PROPERTIES LANGUAGE CUDA)
   add_executable(my_target my_kernel.cu)
 
-CMake projects
---------------
+Migrating CMake projects
+------------------------
 
 Replacing ``CMAKE_CXX_COMPILER=hipcc``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
