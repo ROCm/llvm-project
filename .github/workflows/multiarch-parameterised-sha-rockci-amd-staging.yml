@@ -94,7 +94,7 @@ jobs:
     steps:
       - name: Resolve wave-transform flag
         id: resolve_wave
-        uses: ./.github/actions/rock-ci-deps/resolve-wave-transform-flag@amd/dev/kirthana14m/wavetransform-label-pr
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/resolve-wave-transform-flag@amd/dev/kirthana14m/wavetransform-label-pr
         with:
           wave_transform_build_test: ${{ inputs.wave_transform_build_test }}
           llvm_rocm_pr_url: ${{ inputs.LLVM_ROCm_PR_URL }}
