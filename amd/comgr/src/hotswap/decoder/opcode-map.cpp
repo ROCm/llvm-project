@@ -105,8 +105,7 @@ unsigned canonicalize(unsigned Mc, const MCInstrInfo &MCII,
 
   // Testing the format flag first avoids a table lookup for every non-FLAT
   // opcode.
-  if (P < MCII.getNumOpcodes() &&
-      (MCII.get(P).TSFlags & SIInstrFlags::FLAT) != 0) {
+  if (P < MCII.getNumOpcodes() && SIInstrFlags::isFLAT(MCII, P)) {
     if (std::optional<unsigned> Vaddr =
             mappedOpcode(AMDGPU::getGlobalVaddrOp(P)))
       P = *Vaddr;

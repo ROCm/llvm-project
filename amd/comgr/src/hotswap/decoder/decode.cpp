@@ -156,7 +156,7 @@ void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
         Di.ModMap[K] == UINT_MAX ? std::nullopt
                                  : std::optional<unsigned>(Di.ModMap[K]);
     if (OurMod != NamedMod) {
-      bool IsMai = Di.TargetSpecificFlags & SIInstrFlags::IsMAI;
+      bool IsMai = SIInstrFlags::isMAI(Desc);
       assert(IsMai && NamedMod && !OurMod &&
              "modMap disagrees with OpName::srcN_modifiers table");
       if (IsMai && NamedMod)
