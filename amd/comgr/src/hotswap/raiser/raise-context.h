@@ -78,10 +78,6 @@ public:
   void setScratchPrivateSegmentAlloca(llvm::AllocaInst *Alloca) {
     ScratchPrivateSegmentAlloca = Alloca;
   }
-  // Whether the raised kernel reads or writes the source private segment.
-  bool usesScratchPrivateSegment() const {
-    return ScratchPrivateSegmentAlloca != nullptr;
-  }
 
   // Return the block raised from the source instruction at Addr. A missing
   // block is a raiser bug and aborts.
