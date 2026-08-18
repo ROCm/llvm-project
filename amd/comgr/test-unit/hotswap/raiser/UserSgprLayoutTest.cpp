@@ -1,4 +1,4 @@
-//===- KernargAbiLayoutTest.cpp - Hotswap kernarg ABI layout tests --------===//
+//===- UserSgprLayoutTest.cpp - Hotswap user-SGPR layout tests ------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.
@@ -6,26 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Covers the source kernel-argument ABI reconstruction the raiser seeds entry
-// registers from: the user-SGPR layout derived from the kernel descriptor, the
-// hidden-argument byte classification, and the IR synthesis of source hidden
-// argument values.
+// Covers the user-SGPR layout the raiser seeds its entry registers from: the
+// canonical entry order the kernel descriptor implies, the kernarg preload
+// decode, and the descriptors the layout refuses.
 //
 //===----------------------------------------------------------------------===//
 
-#include "hotswap/raiser/kernarg-layout.h"
 #include "hotswap/raiser/raise_failure.h"
-#include "hotswap/raiser/source-hidden-args.h"
 #include "hotswap/raiser/user-sgpr-layout.h"
 
 #include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
 
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
@@ -56,14 +48,6 @@ using namespace COMGR::hotswap;
 using namespace llvm;
 
 namespace {
-
-KernelArgMeta arg(StringRef ValueKind, uint32_t Offset, uint32_t Size) {
-  KernelArgMeta A;
-  A.ValueKind = ValueKind.str();
-  A.Offset = Offset;
-  A.Size = Size;
-  return A;
-}
 
 // Reason of the RaiseFailure carried by an Error, or None when the Error is not
 // a RaiseFailure. Consumes the Error.
@@ -103,48 +87,6 @@ public:
 private:
   bool Ok = false;
   MCState State;
-};
-
-// A module with one entry-block-positioned builder, for the IR-emitting
-// hidden-argument helpers.
-class HiddenArgHarness {
-public:
-  HiddenArgHarness() : M("kernarg-abi-test", C), B(C) {
-    Fn = Function::Create(FunctionType::get(Type::getVoidTy(C), false),
-                          GlobalValue::ExternalLinkage, "k", M);
-    B.SetInsertPoint(BasicBlock::Create(C, "entry", Fn));
-  }
-
-  SourceHiddenArgContext context(ArrayRef<KernelArgMeta> Args,
-                                 unsigned ScaledReplicationFactor = 1,
-                                 bool AssumeHipGlobalOffsetZero = false) {
-    return SourceHiddenArgContext{C,
-                                  M,
-                                  B,
-                                  *Fn,
-                                  B.getInt8Ty(),
-                                  B.getInt32Ty(),
-                                  B.getInt64Ty(),
-                                  Args,
-                                  AssumeHipGlobalOffsetZero,
-                                  /*TargetCodeObjectVersion=*/6,
-                                  ScaledReplicationFactor};
-  }
-
-  std::string dump() const {
-    std::string S;
-    raw_string_ostream OS(S);
-    Fn->print(OS);
-    return S;
-  }
-
-private:
-  LLVMContext C;
-  Module M;
-
-public:
-  IRBuilder<> B;
-  Function *Fn = nullptr;
 };
 
 TEST(UserSgprLayout, DerivesCanonicalOrderAndAccessors) {
@@ -445,166 +387,6 @@ TEST(UserSgprLayout, PrintSummarizesEntries) {
   Layout.print(OS);
   EXPECT_NE(S.find("user_sgpr_count=2"), std::string::npos);
   EXPECT_NE(S.find("s[0]=KernargSegmentPtr"), std::string::npos);
-}
-
-TEST(ClassifySourceHiddenArgByte, MatchesHiddenArgByteIndex) {
-  std::vector<KernelArgMeta> Args = {arg("hidden_block_count_x", 8, 4)};
-  std::optional<SourceHiddenArgByte> B = classifySourceHiddenArgByte(Args, 11);
-  ASSERT_TRUE(B.has_value());
-  EXPECT_EQ(B->Kind, SourceHiddenArgKind::HiddenBlockCountX);
-  EXPECT_EQ(B->ArgOffset, 8u);
-  EXPECT_EQ(B->ByteOffset, 11u);
-  EXPECT_EQ(B->byteIndexInArg(), 3u);
-}
-
-TEST(ClassifySourceHiddenArgByte, RegularArgIsNotAMatch) {
-  std::vector<KernelArgMeta> Args = {arg("by_value", 0, 8)};
-  EXPECT_FALSE(classifySourceHiddenArgByte(Args, 0).has_value());
-}
-
-TEST(ClassifySourceHiddenArgByte, UnknownHiddenKindIsUnsupported) {
-  std::vector<KernelArgMeta> Args = {arg("hidden_something_new", 0, 4)};
-  std::optional<SourceHiddenArgByte> B = classifySourceHiddenArgByte(Args, 0);
-  ASSERT_TRUE(B.has_value());
-  EXPECT_EQ(B->Kind, SourceHiddenArgKind::UnsupportedHidden);
-}
-
-TEST(ClassifySourceHiddenArgByte, OffsetPastAllArgsIsNotAMatch) {
-  std::vector<KernelArgMeta> Args = {arg("hidden_block_count_x", 0, 4)};
-  EXPECT_FALSE(classifySourceHiddenArgByte(Args, 64).has_value());
-}
-
-TEST(EmitSourceHidden, BlockCountSynthesizesDispatchDivision) {
-  HiddenArgHarness H;
-  std::vector<KernelArgMeta> Args = {arg("hidden_block_count_x", 0, 4)};
-  SourceHiddenArgContext Ctx = H.context(Args);
-
-  Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
-  ASSERT_TRUE(static_cast<bool>(V));
-  EXPECT_NE(*V, nullptr);
-  // block_count = grid_size / group_size, backed by dispatch-packet reads.
-  std::string IR = H.dump();
-  EXPECT_NE(IR.find("udiv"), std::string::npos);
-  EXPECT_NE(IR.find("dispatch.ptr"), std::string::npos);
-}
-
-TEST(EmitSourceHidden, RegularArgReturnsNullWithoutError) {
-  HiddenArgHarness H;
-  std::vector<KernelArgMeta> Args = {arg("global_buffer", 0, 8)};
-  SourceHiddenArgContext Ctx = H.context(Args);
-
-  Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
-  ASSERT_TRUE(static_cast<bool>(V));
-  EXPECT_EQ(*V, nullptr);
-}
-
-TEST(EmitSourceHidden, UnsupportedHiddenKindIsAnError) {
-  HiddenArgHarness H;
-  std::vector<KernelArgMeta> Args = {arg("hidden_private_base", 0, 4)};
-  SourceHiddenArgContext Ctx = H.context(Args);
-
-  Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
-  ASSERT_FALSE(static_cast<bool>(V));
-  EXPECT_EQ(reasonOf(V.takeError()),
-            RaiseFailureReason::UnsupportedSourceHiddenArg);
-}
-
-TEST(EmitSourceHidden, InvalidHiddenArgSizeIsAnError) {
-  HiddenArgHarness H;
-  std::vector<KernelArgMeta> Args = {arg("hidden_block_count_x", 0, 8)};
-  SourceHiddenArgContext Ctx = H.context(Args);
-
-  Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
-  ASSERT_FALSE(static_cast<bool>(V));
-  EXPECT_EQ(reasonOf(V.takeError()),
-            RaiseFailureReason::UnsupportedSourceHiddenArg);
-}
-
-TEST(EmitSourceHidden, ZeroSizedHiddenArgIsAnError) {
-  HiddenArgHarness H;
-  std::vector<KernelArgMeta> Args = {arg("hidden_block_count_x", 0, 0)};
-  SourceHiddenArgContext Ctx = H.context(Args);
-
-  Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
-  ASSERT_FALSE(static_cast<bool>(V));
-  EXPECT_EQ(reasonOf(V.takeError()),
-            RaiseFailureReason::UnsupportedSourceHiddenArg);
-}
-
-TEST(EmitSourceHidden, GlobalOffsetNeedsHipZeroAssumption) {
-  std::vector<KernelArgMeta> Args = {arg("hidden_global_offset_x", 0, 8)};
-
-  HiddenArgHarness Reject;
-  SourceHiddenArgContext RejectCtx = Reject.context(Args);
-  Expected<Value *> Rejected = emitSourceHiddenDword(RejectCtx, 0);
-  ASSERT_FALSE(static_cast<bool>(Rejected));
-  EXPECT_EQ(reasonOf(Rejected.takeError()),
-            RaiseFailureReason::UnsupportedSourceHiddenArg);
-
-  HiddenArgHarness Accept;
-  SourceHiddenArgContext AcceptCtx =
-      Accept.context(Args, /*ScaledReplicationFactor=*/1,
-                     /*AssumeHipGlobalOffsetZero=*/true);
-  Expected<Value *> Accepted = emitSourceHiddenDword(AcceptCtx, 0);
-  ASSERT_TRUE(static_cast<bool>(Accepted));
-  EXPECT_NE(*Accepted, nullptr);
-}
-
-TEST(EmitSourceHidden, ScaledReplicationDescalesOnlyXGroupSize) {
-  std::vector<KernelArgMeta> ArgsX = {arg("hidden_group_size_x", 0, 2)};
-  std::vector<KernelArgMeta> ArgsY = {arg("hidden_group_size_y", 0, 2)};
-
-  HiddenArgHarness AlongX;
-  SourceHiddenArgContext CtxX =
-      AlongX.context(ArgsX, /*ScaledReplicationFactor=*/2);
-  ASSERT_TRUE(static_cast<bool>(
-      emitSourceHiddenInteger(CtxX, 0, /*ByteWidth=*/2, /*IsSigned=*/false)));
-  EXPECT_NE(AlongX.dump().find("_descaled"), std::string::npos);
-
-  HiddenArgHarness AlongY;
-  SourceHiddenArgContext CtxY =
-      AlongY.context(ArgsY, /*ScaledReplicationFactor=*/2);
-  ASSERT_TRUE(static_cast<bool>(
-      emitSourceHiddenInteger(CtxY, 0, /*ByteWidth=*/2, /*IsSigned=*/false)));
-  EXPECT_EQ(AlongY.dump().find("_descaled"), std::string::npos);
-}
-
-TEST(EmitSourceHidden, UnsupportedIntegerWidthIsAnError) {
-  HiddenArgHarness H;
-  std::vector<KernelArgMeta> Args = {arg("hidden_block_count_x", 0, 4)};
-  SourceHiddenArgContext Ctx = H.context(Args);
-
-  Expected<Value *> V =
-      emitSourceHiddenInteger(Ctx, 0, /*ByteWidth=*/3, /*IsSigned=*/false);
-  ASSERT_FALSE(static_cast<bool>(V));
-  EXPECT_EQ(reasonOf(V.takeError()),
-            RaiseFailureReason::UnsupportedSourceHiddenArg);
-}
-
-TEST(EmitSourceHidden, DwordSpanningNonHiddenByteIsAnError) {
-  HiddenArgHarness H;
-  // A 2-byte hidden field followed by a regular arg: a 4-byte read at offset 0
-  // starts hidden but runs into non-hidden memory.
-  std::vector<KernelArgMeta> Args = {arg("hidden_grid_dims", 0, 2),
-                                     arg("by_value", 2, 4)};
-  SourceHiddenArgContext Ctx = H.context(Args);
-
-  Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
-  ASSERT_FALSE(static_cast<bool>(V));
-  EXPECT_EQ(reasonOf(V.takeError()),
-            RaiseFailureReason::UnsupportedSourceHiddenArg);
-}
-
-TEST(EmitSourceHidden, DwordStartingBeforeHiddenArgIsAnError) {
-  HiddenArgHarness H;
-  std::vector<KernelArgMeta> Args = {arg("by_value", 0, 2),
-                                     arg("hidden_grid_dims", 2, 2)};
-  SourceHiddenArgContext Ctx = H.context(Args);
-
-  Expected<Value *> V = emitSourceHiddenDword(Ctx, 0);
-  ASSERT_FALSE(static_cast<bool>(V));
-  EXPECT_EQ(reasonOf(V.takeError()),
-            RaiseFailureReason::UnsupportedSourceHiddenArg);
 }
 
 } // namespace

@@ -38,9 +38,6 @@ enum class RaiseFailureReason : uint16_t {
   // The instruction's opcode is lifted, but this operand shape or encoding
   // variant is not. `detail()` carries shape-specific context when available.
   UnsupportedInstructionForm,
-  // A source hidden kernarg cannot be synthesized safely from its metadata or
-  // requested load range.
-  UnsupportedSourceHiddenArg,
   // An instruction writes EXEC through a path the lift does not model.
   SPEUnsafeExecWriter,
   // `createTargetMachine` returned null.

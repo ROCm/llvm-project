@@ -98,7 +98,6 @@ protected:
     IRBuilder<> B;
     ISAProfile Isa;
     std::unique_ptr<WaveProjection> Projection;
-    // Declared before Ctx, which holds views into this metadata.
     KernelMeta Meta;
     Function *Kernel;
     std::optional<RaiseContext> Ctx;
@@ -132,23 +131,11 @@ protected:
       BasicBlock *Entry = BasicBlock::Create(LLVMCtx, "entry", Kernel);
       B.SetInsertPoint(Entry);
       Ctx.emplace(cantFail(RaiseContext::create(
-          B, *Projection, Mc, Meta, 6, /*AssumeHipGlobalOffsetZero=*/false,
-          DenseMap<uint64_t, BasicBlock *>(), ArrayRef<uint8_t>(), 0,
-          ArrayRef<TextSection::ImageSection>(), 0, 0)));
+          B, *Projection, Mc, Meta, DenseMap<uint64_t, BasicBlock *>(),
+          ArrayRef<uint8_t>(), 0, ArrayRef<TextSection::ImageSection>(), 0,
+          0)));
     }
   };
-
-  // Kernel metadata enabling the kernarg segment pointer user SGPR.
-  static KernelMeta makeKernargPtrMeta() {
-    using namespace llvm::amdhsa;
-    KernelMeta Meta;
-    Meta.Name = "k";
-    Meta.KernelCodeProperties =
-        KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR;
-    Meta.ComputePgmRsrc2 =
-        2u << COMPUTE_PGM_RSRC2_GFX6_GFX120_USER_SGPR_COUNT_SHIFT;
-    return Meta;
-  }
 
   static void promoteAndFold(ContextEnvironment &Environment) {
     SmallVector<AllocaInst *> Allocas;
@@ -516,18 +503,6 @@ TEST_F(RaiseContextTest, MaintainsStateOnRegisterWrites) {
   Exec.BaseIdx = 0;
   Env->Ctx->writeReg32(Exec, Env->B.getInt32(1));
   EXPECT_NE(Env->Ctx->emitLaneActiveBit(), OldLaneActive);
-}
-
-TEST_F(RaiseContextTest, UnrelatedMemoryLoadPreservesKernargPtrOffset) {
-  ContextEnvironment WithKernargPtr(Mc, makeKernargPtrMeta());
-  WithKernargPtr.Ctx->setKernargPtrLiveEntryByteOffset(-16);
-
-  WithKernargPtr.Ctx->noteSgprMemoryLoadForKernargProvenance(4, 2);
-
-  const RaiseContext::KernargPtrProvenance Provenance =
-      WithKernargPtr.Ctx->getKernargPtrProvenance();
-  EXPECT_TRUE(Provenance.isLiveEntry());
-  EXPECT_EQ(Provenance.EntryByteOffset, -16);
 }
 
 TEST_F(RaiseContextTest, InactiveSourceWavePreservesInvalidPairShadow) {

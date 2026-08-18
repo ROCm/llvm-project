@@ -124,16 +124,16 @@ target_include_directories(RaiseContextTests PRIVATE
 
 comgr_configure_test_target(RaiseContextTests)
 
-# -- KernargAbiLayoutTests ----------------------------------------------------
+# -- UserSgprLayoutTests ------------------------------------------------------
 #
-# Covers the source kernel-argument ABI reconstruction: the user-SGPR layout
-# derived from the kernel descriptor, hidden-argument byte classification, and
-# the IR synthesis of source hidden argument values.
+# Covers the user-SGPR layout the raiser derives from the kernel descriptor:
+# the canonical entry order, the kernarg preload decode, and the descriptors it
+# refuses.
 
-add_executable(KernargAbiLayoutTests
-  KernargAbiLayoutTest.cpp)
+add_executable(UserSgprLayoutTests
+  UserSgprLayoutTest.cpp)
 
-target_link_libraries(KernargAbiLayoutTests PRIVATE
+target_link_libraries(UserSgprLayoutTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::raiser
   hotswap::decoder
@@ -141,10 +141,10 @@ target_link_libraries(KernargAbiLayoutTests PRIVATE
   ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
-target_include_directories(KernargAbiLayoutTests PRIVATE
+target_include_directories(UserSgprLayoutTests PRIVATE
   ${LLVM_INCLUDE_DIRS}
   ${PROJECT_SOURCE_DIR}/src
   ${COMGR_GTEST_INCLUDE_DIRS}
   $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
 
-comgr_configure_test_target(KernargAbiLayoutTests)
+comgr_configure_test_target(UserSgprLayoutTests)

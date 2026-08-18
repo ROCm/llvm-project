@@ -14,7 +14,6 @@
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/decoder/parsed-reg.h"
 #include "hotswap/loader/code-object-utils.h"
-#include "kernarg-layout.h"
 #include "raise_failure.h"
 #include "reg-file.h"
 #include "user-sgpr-layout.h"
@@ -39,13 +38,11 @@ class RaiseContext {
 public:
   // Build the context for the source kernel described by Meta. B must be
   // positioned in the entry block: the register file and the cross-block
-  // shadow storage are allocated there. Meta must outlive the context, which
-  // holds views into its argument metadata. Fails when the kernel descriptor
-  // and the metadata disagree on the user-SGPR layout.
+  // shadow storage are allocated there. Fails when the kernel descriptor and
+  // the metadata disagree on the user-SGPR layout.
   static llvm::Expected<RaiseContext>
   create(llvm::IRBuilder<> &B, const WaveProjection &Projection,
          const MCState &MC, const KernelMeta &Meta,
-         unsigned TargetCodeObjectVersion, bool AssumeHipGlobalOffsetZero,
          llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb,
          llvm::ArrayRef<uint8_t> SourceTextBytes,
          uint64_t SourceTextBaseAddress,
@@ -62,16 +59,9 @@ public:
 
   // Alloca-backed storage for the source architectural registers.
   AllocaRegFile &regs() { return Regs; }
-  // Source kernarg segment layout taken from the kernel metadata.
-  const KernargLayout &kernargs() const { return Kernargs; }
   // Source user-SGPR layout derived from the kernel descriptor.
   const UserSgprLayout &layout() const { return Layout; }
 
-  // Target code object version, which fixes the hidden-argument offsets.
-  unsigned targetCodeObjectVersion() const { return TargetCodeObjectVersion; }
-  // Whether the HIP global offset may be assumed zero, letting hidden-argument
-  // synthesis skip it.
-  bool assumeHipGlobalOffsetZero() const { return AssumeHipGlobalOffsetZero; }
   // Source text section, and the address the source code object loads it at.
   // PC-relative literals are materialized by reading out of these.
   llvm::ArrayRef<uint8_t> sourceTextBytes() const { return SourceTextBytes; }
@@ -174,95 +164,6 @@ public:
   void storeVGPR64(unsigned Idx, llvm::Value *V);
   void storeAGPR32(unsigned Idx, llvm::Value *V);
 
-  // What one lane of the source kernarg pointer SGPR pair holds: the value the
-  // kernel descriptor put there at entry, something else, or an unproven mix.
-  enum class KernargPtrLaneProvenance {
-    LiveEntry,
-    NonEntry,
-    Unknown,
-  };
-
-  // Provenance of both lanes of the source kernarg pointer SGPR pair, used to
-  // decide whether hidden-argument synthesis is safe.
-  struct KernargPtrProvenance {
-    KernargPtrLaneProvenance Low = KernargPtrLaneProvenance::Unknown;
-    KernargPtrLaneProvenance High = KernargPtrLaneProvenance::Unknown;
-    // Byte offset from the entry pointer, meaningful only when both lanes are
-    // LiveEntry.
-    int64_t EntryByteOffset = 0;
-
-    // Whether both facts say the same thing about both lanes.
-    bool operator==(KernargPtrProvenance Other) const {
-      return Low == Other.Low && High == Other.High &&
-             EntryByteOffset == Other.EntryByteOffset;
-    }
-
-    // Whether both lanes still hold the entry pointer, offset by
-    // EntryByteOffset.
-    bool isLiveEntry() const {
-      return Low == KernargPtrLaneProvenance::LiveEntry &&
-             High == KernargPtrLaneProvenance::LiveEntry;
-    }
-
-    // Whether both lanes are proven to hold something other than the entry
-    // pointer.
-    bool isNonEntry() const {
-      return Low == KernargPtrLaneProvenance::NonEntry &&
-             High == KernargPtrLaneProvenance::NonEntry;
-    }
-  };
-
-  // Combine two lane facts, keeping only what they agree on.
-  static KernargPtrLaneProvenance
-  joinKernargPtrLaneProvenance(KernargPtrLaneProvenance Lhs,
-                               KernargPtrLaneProvenance Rhs);
-
-  // Combine two pair facts. Live-entry lanes carrying different offsets do not
-  // agree and join to unknown.
-  static KernargPtrProvenance
-  joinKernargPtrProvenance(KernargPtrProvenance Lhs, KernargPtrProvenance Rhs);
-
-  // Whether Base names the kernarg pointer SGPR pair the kernel descriptor
-  // provides. Kernels that do not enable that user SGPR never match.
-  bool isEntryKernargSegmentPtrSgpr(ParsedReg Base) const;
-
-  // Provenance in effect at the instruction being raised.
-  KernargPtrProvenance getKernargPtrProvenance() const {
-    return CurrentKernargPtrProvenance;
-  }
-
-  // Record that both lanes hold the entry pointer at a proven constant offset.
-  void setKernargPtrLiveEntryByteOffset(int64_t ByteOffset) {
-    CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::LiveEntry;
-    CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::LiveEntry;
-    CurrentKernargPtrProvenance.EntryByteOffset = ByteOffset;
-  }
-
-  // Record that both lanes are proven not to hold the entry pointer.
-  void setKernargPtrNonEntry() {
-    CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::NonEntry;
-    CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::NonEntry;
-    CurrentKernargPtrProvenance.EntryByteOffset = 0;
-  }
-
-  // Drop provenance for a kernarg pointer lane that SGPR Idx overwrites.
-  void noteSgprWriteForKernargProvenance(unsigned Idx);
-
-  // Mark the kernarg pointer lanes a scalar memory load overwrites as holding
-  // something other than the entry pointer.
-  void noteSgprMemoryLoadForKernargProvenance(unsigned BaseIdx,
-                                              unsigned WidthDwords);
-
-  // Record the provenance a prepass proved for the entry of source block BB.
-  void setKernargPtrProvenanceForBlock(llvm::BasicBlock *BB,
-                                       KernargPtrProvenance Provenance) {
-    KernargSegmentPtrProvenanceByBB[BB] = Provenance;
-  }
-
-  // Start raising source block BB, taking the provenance recorded for it. With
-  // no prepass results at all, provenance restarts as unknown.
-  void enterKernargPtrProvenanceForBlock(llvm::BasicBlock *BB);
-
   // Emit Body in a lane-active control-flow diamond and leave the builder at
   // its merge block. This preserves inactive lanes for per-lane side effects.
   void emitUnderExec(llvm::function_ref<void()> Body);
@@ -335,8 +236,7 @@ public:
 
 private:
   RaiseContext(llvm::IRBuilder<> &B, const WaveProjection &Projection,
-               const MCState &MC, const KernelMeta &Meta, UserSgprLayout Layout,
-               unsigned TargetCodeObjectVersion, bool AssumeHipGlobalOffsetZero,
+               const MCState &MC, UserSgprLayout Layout,
                llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb,
                llvm::ArrayRef<uint8_t> SourceTextBytes,
                uint64_t SourceTextBaseAddress,
@@ -366,16 +266,10 @@ private:
 
   // Source architectural registers, allocated in the entry block.
   AllocaRegFile Regs;
-  // Source kernarg segment layout, holding views into the kernel metadata.
-  KernargLayout Kernargs;
   // What each SGPR holds at source kernel entry.
   UserSgprLayout Layout;
   // Block raised from each source instruction offset that starts one.
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb;
-
-  // Translation settings fixed when the context is built.
-  unsigned TargetCodeObjectVersion = 6;
-  bool AssumeHipGlobalOffsetZero = false;
 
   // Source code object, read to materialize proven PC-relative literals.
   llvm::ArrayRef<uint8_t> SourceTextBytes;
@@ -401,11 +295,6 @@ private:
   llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
   // Block-local constant value last stored to M0.
   std::optional<uint64_t> M0Const;
-  // Kernarg pointer provenance at source basic-block entries.
-  llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>
-      KernargSegmentPtrProvenanceByBB;
-  // Kernarg pointer provenance at the instruction being raised.
-  KernargPtrProvenance CurrentKernargPtrProvenance;
 
   // Shadow storage per SGPR. Cross-block values live in allocas to avoid
   // carrying SSA values that do not dominate their uses.

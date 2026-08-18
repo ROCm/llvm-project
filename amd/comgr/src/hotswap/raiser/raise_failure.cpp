@@ -42,8 +42,6 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "UnsupportedOpcode";
   case RaiseFailureReason::UnsupportedInstructionForm:
     return "unsupported-instruction-form";
-  case RaiseFailureReason::UnsupportedSourceHiddenArg:
-    return "unsupported-source-hidden-arg";
   case RaiseFailureReason::SPEUnsafeExecWriter:
     return "SPE-unmodeled-EXEC-writer";
   case RaiseFailureReason::TargetMachineCreationFailed:

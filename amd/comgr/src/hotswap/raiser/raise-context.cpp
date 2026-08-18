@@ -35,8 +35,7 @@ namespace COMGR::hotswap {
 
 Expected<RaiseContext> RaiseContext::create(
     IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
-    const KernelMeta &Meta, unsigned TargetCodeObjectVersion,
-    bool AssumeHipGlobalOffsetZero, DenseMap<uint64_t, BasicBlock *> OffsetToBb,
+    const KernelMeta &Meta, DenseMap<uint64_t, BasicBlock *> OffsetToBb,
     ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset) {
@@ -44,8 +43,7 @@ Expected<RaiseContext> RaiseContext::create(
   if (Error Err = UserSgprLayout::tryFromKernelMeta(
           Meta, Projection.sourceIsa(), MC.SubtargetInfo->getCPU(), Layout))
     return std::move(Err);
-  return RaiseContext(B, Projection, MC, Meta, std::move(Layout),
-                      TargetCodeObjectVersion, AssumeHipGlobalOffsetZero,
+  return RaiseContext(B, Projection, MC, std::move(Layout),
                       std::move(OffsetToBb), SourceTextBytes,
                       SourceTextBaseAddress, SourceImageSections,
                       KernelStartOffset, KernelEndOffset);
@@ -53,18 +51,12 @@ Expected<RaiseContext> RaiseContext::create(
 
 RaiseContext::RaiseContext(
     IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
-    const KernelMeta &Meta, UserSgprLayout Layout,
-    unsigned TargetCodeObjectVersion, bool AssumeHipGlobalOffsetZero,
-    DenseMap<uint64_t, BasicBlock *> OffsetToBb,
+    UserSgprLayout Layout, DenseMap<uint64_t, BasicBlock *> OffsetToBb,
     ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset)
-    : B(B), Projection(Projection), MC(MC),
-      Kernargs{Meta.implicitArgsBase(), Meta.Args}, Layout(std::move(Layout)),
-      OffsetToBb(std::move(OffsetToBb)),
-      TargetCodeObjectVersion(TargetCodeObjectVersion),
-      AssumeHipGlobalOffsetZero(AssumeHipGlobalOffsetZero),
-      SourceTextBytes(SourceTextBytes),
+    : B(B), Projection(Projection), MC(MC), Layout(std::move(Layout)),
+      OffsetToBb(std::move(OffsetToBb)), SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {
@@ -606,20 +598,13 @@ void RaiseContext::emitUnderExec(llvm::function_ref<void()> Body) {
   Function *F = PreBb->getParent();
   BasicBlock *DoBb = BasicBlock::Create(B.getContext(), "spe_do", F);
   BasicBlock *SkipBb = BasicBlock::Create(B.getContext(), "spe_skip", F);
-  KernargPtrProvenance PreProvenance = CurrentKernargPtrProvenance;
   B.CreateCondBr(Active, DoBb, SkipBb);
 
   B.SetInsertPoint(DoBb);
   Body();
-  KernargPtrProvenance DoProvenance = CurrentKernargPtrProvenance;
   // Body may terminate its block; do not add a second terminator.
-  if (!B.GetInsertBlock()->hasTerminator()) {
+  if (!B.GetInsertBlock()->hasTerminator())
     B.CreateBr(SkipBb);
-    CurrentKernargPtrProvenance =
-        joinKernargPtrProvenance(PreProvenance, DoProvenance);
-  } else {
-    CurrentKernargPtrProvenance = PreProvenance;
-  }
 
   B.SetInsertPoint(SkipBb);
 }
@@ -697,86 +682,6 @@ Expected<Value *> RaiseContext::readOpExecWidth(const DecodedInst &Di,
       formatName(Di.TargetSpecificFlags),
       Twine("operand-read: could not resolve EXEC-width operand ") +
           Twine(OpIdx) + " in " + strippedMnemonic(MC, Di.Inst));
-}
-
-RaiseContext::KernargPtrLaneProvenance
-RaiseContext::joinKernargPtrLaneProvenance(KernargPtrLaneProvenance Lhs,
-                                           KernargPtrLaneProvenance Rhs) {
-  if (Lhs == Rhs)
-    return Lhs;
-  return KernargPtrLaneProvenance::Unknown;
-}
-
-RaiseContext::KernargPtrProvenance
-RaiseContext::joinKernargPtrProvenance(KernargPtrProvenance Lhs,
-                                       KernargPtrProvenance Rhs) {
-  KernargPtrProvenance Result = {
-      joinKernargPtrLaneProvenance(Lhs.Low, Rhs.Low),
-      joinKernargPtrLaneProvenance(Lhs.High, Rhs.High), 0};
-  if (Result.isLiveEntry()) {
-    if (Lhs.isLiveEntry() && Rhs.isLiveEntry() &&
-        Lhs.EntryByteOffset == Rhs.EntryByteOffset)
-      Result.EntryByteOffset = Lhs.EntryByteOffset;
-    else
-      Result.Low = Result.High = KernargPtrLaneProvenance::Unknown;
-  }
-  return Result;
-}
-
-bool RaiseContext::isEntryKernargSegmentPtrSgpr(ParsedReg Base) const {
-  if (Base.RegKind != ParsedReg::SGPR)
-    return false;
-  assert(Base.BaseIdx && "SGPR must have a base register index");
-  std::optional<unsigned> KernargPtrSgpr = Layout.kernargSegmentPtrSgpr();
-  return KernargPtrSgpr && Base.BaseIdx == KernargPtrSgpr;
-}
-
-void RaiseContext::noteSgprWriteForKernargProvenance(unsigned Idx) {
-  std::optional<unsigned> KernargPtrSgpr = Layout.kernargSegmentPtrSgpr();
-  if (!KernargPtrSgpr)
-    return;
-  if (Idx == *KernargPtrSgpr)
-    CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::Unknown;
-  else if (Idx == *KernargPtrSgpr + 1)
-    CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::Unknown;
-  else
-    return;
-  CurrentKernargPtrProvenance.EntryByteOffset = 0;
-}
-
-void RaiseContext::noteSgprMemoryLoadForKernargProvenance(
-    unsigned BaseIdx, unsigned WidthDwords) {
-  assert(WidthDwords > 0 && "SMEM destination width must be non-zero");
-  std::optional<unsigned> KernargPtrSgpr = Layout.kernargSegmentPtrSgpr();
-  if (!KernargPtrSgpr)
-    return;
-  unsigned EndIdx = BaseIdx + WidthDwords - 1;
-  const bool OverlapsLow =
-      BaseIdx <= *KernargPtrSgpr && EndIdx >= *KernargPtrSgpr;
-  const bool OverlapsHigh =
-      BaseIdx <= *KernargPtrSgpr + 1 && EndIdx >= *KernargPtrSgpr + 1;
-  if (OverlapsLow) {
-    CurrentKernargPtrProvenance.Low = KernargPtrLaneProvenance::NonEntry;
-  }
-  if (OverlapsHigh) {
-    CurrentKernargPtrProvenance.High = KernargPtrLaneProvenance::NonEntry;
-  }
-  if (OverlapsLow || OverlapsHigh) {
-    CurrentKernargPtrProvenance.EntryByteOffset = 0;
-  }
-}
-
-void RaiseContext::enterKernargPtrProvenanceForBlock(BasicBlock *BB) {
-  assert(BB && "cannot enter kernarg provenance for null basic block");
-  if (KernargSegmentPtrProvenanceByBB.empty()) {
-    CurrentKernargPtrProvenance = {};
-    return;
-  }
-  DenseMap<BasicBlock *, KernargPtrProvenance>::const_iterator It =
-      KernargSegmentPtrProvenanceByBB.find(BB);
-  assert(It != KernargSegmentPtrProvenanceByBB.end() &&
-         "missing kernarg provenance for source basic block");
-  CurrentKernargPtrProvenance = It->second;
 }
 
 void RaiseContext::recordSgprWaveMaskI1(unsigned BaseIdx, Value *CmpI1,
@@ -866,7 +771,6 @@ Value *RaiseContext::loadSgprWaveMaskValid(unsigned BaseIdx) const {
 }
 
 void RaiseContext::invalidateSgprWaveMaskI1(unsigned BaseIdx) {
-  noteSgprWriteForKernargProvenance(BaseIdx);
   LastSgprWaveMaskI1.erase(BaseIdx);
   SourceImageSgprPairAddrShadow.erase(BaseIdx);
   if (BaseIdx < SgprShadows.size()) {
