@@ -17,7 +17,7 @@ runs:
       shell: bash
       run: |
         git config --global --add safe.directory "$PWD"
-	git config --global core.longpaths true
+        git config --global core.longpaths true
         git config --global user.email "z1-cciauto@amd.com"
         git config --global user.name "Z1 cciauto"
 
@@ -39,7 +39,7 @@ runs:
 
         if ! git diff --cached --quiet; then
           git commit -m "Update shared submodules from TheRock main"
-        fi
+        fi    
 
     - name: Update Submodule Pointer to the PR
       if: github.event_name == 'pull_request'
