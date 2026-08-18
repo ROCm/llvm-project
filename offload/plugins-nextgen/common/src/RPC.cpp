@@ -17,7 +17,6 @@
 #include "shared/rpc.h"
 #include "shared/rpc_opcodes.h"
 #include "shared/rpc_server.h"
-#include "shared/emissary_rpc_server.h"
 
 using namespace llvm;
 using namespace omp;
@@ -62,28 +61,6 @@ rpc::RPCStatus handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
     Port.send([&](rpc::Buffer *Buffer, uint32_t ID) {
       Buffer->data[0] = static_cast<uint64_t>(Results[ID]);
       delete[] reinterpret_cast<char *>(Args[ID]);
-    });
-    break;
-  }
-  case ALT_LIBC_MALLOC: {
-    Port.recv_and_send([&](rpc::Buffer *Buffer, uint32_t) {
-      auto PtrOrErr =
-          Device.allocate(Buffer->data[0], nullptr, TARGET_ALLOC_DEVICE);
-      void *Ptr = nullptr;
-      if (!PtrOrErr)
-        consumeError(PtrOrErr.takeError());
-      else
-        Ptr = *PtrOrErr;
-      Buffer->data[0] = reinterpret_cast<uintptr_t>(Ptr);
-    });
-    break;
-  }
-  case ALT_LIBC_FREE: {
-    Port.recv([&](rpc::Buffer *Buffer, uint32_t) {
-      if (auto Error = Device.free(reinterpret_cast<void *>(Buffer->data[0]),
-                                   TARGET_ALLOC_DEVICE)) {
-        consumeError(std::move(Error));
-      }
     });
     break;
   }
