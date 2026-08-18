@@ -657,15 +657,16 @@ TEST(MarkerTarget, ClassifiesArchitecturesAndInstructionCosts) {
   EXPECT_FALSE(supportsImmTrace(GfxGen::GFX9));
   EXPECT_TRUE(supportsImmTrace(GfxGen::GFX12));
 
-  llvm::Function *Costed =
-      makeFunction(*LocalModule, "costed", "gfx1100",
-                   FunctionType::get(Type::getVoidTy(Ctx), {I32}, false));
+  llvm::Function *Costed = makeFunction(
+      *LocalModule, "costed", "gfx1100",
+      FunctionType::get(Type::getVoidTy(Ctx),
+                        {PointerType::get(Ctx, 1), PointerType::get(Ctx, 3)},
+                        false));
   BasicBlock *Entry = BasicBlock::Create(Ctx, "entry", Costed);
   IRBuilder<> Builder(Entry);
   Builder.CreateAlloca(I32);
-  Value *Loaded =
-      Builder.CreateLoad(I32, UndefValue::get(PointerType::get(Ctx, 1)));
-  Builder.CreateStore(Loaded, UndefValue::get(PointerType::get(Ctx, 3)));
+  Value *Loaded = Builder.CreateLoad(I32, Costed->getArg(0));
+  Builder.CreateStore(Loaded, Costed->getArg(1));
   Builder.CreateCall(
       declareFunction(*LocalModule, "llvm.amdgcn.mfma.unit", I32, {}));
   Builder.CreateRetVoid();
