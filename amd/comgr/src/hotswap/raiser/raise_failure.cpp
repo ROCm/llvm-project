@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "raise_failure.h"
+#include "hotswap/raiser/raise_failure.h"
 
 #include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"

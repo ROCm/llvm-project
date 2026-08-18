@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "raise-context.h"
+#include "hotswap/raiser/raise-context.h"
 
 #include "hotswap/decoder/amdgpu-formats.h"
 #include "hotswap/decoder/amdgpu-mc-tables.h"

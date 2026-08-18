@@ -6,9 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "raiser.h"
+#include "hotswap/raiser/raiser.h"
 
-#include "raise_failure.h"
+#include "hotswap/raiser/raise_failure.h"
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Attributes.h"

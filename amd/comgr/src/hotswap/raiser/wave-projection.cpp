@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "wave-projection.h"
+#include "hotswap/raiser/wave-projection.h"
 
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/decoder/mc-state.h"

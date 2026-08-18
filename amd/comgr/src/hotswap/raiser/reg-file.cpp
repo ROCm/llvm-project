@@ -6,10 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "reg-file.h"
+#include "hotswap/raiser/reg-file.h"
 
 #include "hotswap/decoder/isa-profile.h"
-#include "wave-projection.h"
+#include "hotswap/raiser/wave-projection.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 

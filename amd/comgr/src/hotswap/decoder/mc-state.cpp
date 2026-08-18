@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mc-state.h"
+#include "hotswap/decoder/mc-state.h"
+
 #include "comgr.h"
 #include "hotswap/common/hotswap-error.h"
 

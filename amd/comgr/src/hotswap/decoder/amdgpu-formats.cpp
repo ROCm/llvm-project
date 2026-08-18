@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "amdgpu-formats.h"
+#include "hotswap/decoder/amdgpu-formats.h"
 
 namespace COMGR::hotswap {
 
