@@ -69,7 +69,6 @@ RaiseContext::RaiseContext(
       SourceImageSections(SourceImageSections),
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),
       SourcePrivateSegmentFixedSize(Meta.PrivateSegmentFixedSize),
-      SourceComputePgmRsrc2(Meta.ComputePgmRsrc2),
       SourceKernelCodeProperties(Meta.KernelCodeProperties) {
   Regs.init(B, B.getInt32Ty(), B.getInt1Ty(), Projection.sourceIsa(),
             *MC.RegInfo, Projection);

@@ -91,8 +91,6 @@ public:
   uint32_t sourcePrivateSegmentFixedSize() const {
     return SourcePrivateSegmentFixedSize;
   }
-  // Source compute_pgm_rsrc2 descriptor word.
-  uint32_t sourceComputePgmRsrc2() const { return SourceComputePgmRsrc2; }
   // Source kernel_code_properties descriptor field.
   uint16_t sourceKernelCodeProperties() const {
     return SourceKernelCodeProperties;
@@ -399,7 +397,6 @@ private:
 
   // Source kernel descriptor values the handlers need.
   uint32_t SourcePrivateSegmentFixedSize = 0;
-  uint32_t SourceComputePgmRsrc2 = 0;
   uint16_t SourceKernelCodeProperties = 0;
 
   // Allocation backing the source private segment, made on first use.
