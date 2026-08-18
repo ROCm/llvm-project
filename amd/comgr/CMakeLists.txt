@@ -9,6 +9,11 @@ set (ver_minor ${CMAKE_MATCH_1})
 
 message("Comgr Version: ${ver_major}.${ver_minor}.0")
 
+if(POLICY CMP0091)
+    # Required for CMAKE_MSVC_RUNTIME_LIBRARY, must be set prior the first project() or enable_language()
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(amd_comgr VERSION "${ver_major}.${ver_minor}.0" LANGUAGES C CXX)
 set(amd_comgr_NAME "${PROJECT_NAME}")
 
