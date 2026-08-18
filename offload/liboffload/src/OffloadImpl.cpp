@@ -131,7 +131,7 @@ llvm::Error ol_platform_impl_t::destroy() {
     if (auto Err = D->destroy())
       Result = llvm::joinErrors(std::move(Result), std::move(Err));
 
-  if (auto Res = Plugin->deinit())
+  if (auto Res = Plugin->deinit(getNoOpProfiler()))
     Result = llvm::joinErrors(std::move(Result), std::move(Res));
 
   return Result;
@@ -145,7 +145,7 @@ llvm::Error ol_platform_impl_t::init() {
     return Err;
 
   for (auto Id = 0, End = Plugin->getNumDevices(); Id != End; Id++) {
-    if (llvm::Error Err = Plugin->initDevice(Id))
+    if (llvm::Error Err = Plugin->initDevice(Id, getNoOpProfiler()))
       return Err;
 
     GenericDeviceTy *Device = &Plugin->getDevice(Id);
@@ -691,7 +691,8 @@ Error olMemAllocImplHelper(ol_device_handle_t Device, ol_alloc_type_t Type,
   // and try again.
   for (size_t Count = 0; Count < MAX_ALLOC_TRIES; Count++) {
     auto NewAlloc = Device->Device->dataAlloc(
-        Size, nullptr, convertOlToPluginAllocTy(Type), Alignment);
+        Size, nullptr, convertOlToPluginAllocTy(Type), Alignment,
+        getNoOpProfiler());
     if (!NewAlloc)
       return NewAlloc.takeError();
 
@@ -721,8 +722,8 @@ Error olMemAllocImplHelper(ol_device_handle_t Device, ol_alloc_type_t Type,
         *AllocationOut = *NewAlloc;
 
         for (void *R : Rejects)
-          if (auto Err =
-                  Device->Device->dataDelete(R, convertOlToPluginAllocTy(Type)))
+          if (auto Err = Device->Device->dataDelete(
+                  R, convertOlToPluginAllocTy(Type), getNoOpProfiler()))
             return Err;
         return Error::success();
       }
@@ -786,8 +787,8 @@ Error olMemFree_impl(void *Address) {
     Bases.erase(std::lower_bound(Bases.begin(), Bases.end(), Address));
   }
 
-  if (auto Res =
-          Device->Device->dataDelete(Address, convertOlToPluginAllocTy(Type)))
+  if (auto Res = Device->Device->dataDelete(
+          Address, convertOlToPluginAllocTy(Type), getNoOpProfiler()))
     return Res;
 
   return Error::success();
@@ -1090,19 +1091,20 @@ Error olMemcpy_impl(ol_queue_handle_t Queue, void *DstPtr,
   auto QueueImpl = Queue ? Queue->AsyncInfo : nullptr;
 
   if (IsDstHost) {
-    if (auto Res =
-            SrcDevice->Device->dataRetrieve(DstPtr, SrcPtr, Size, QueueImpl))
+    if (auto Res = SrcDevice->Device->dataRetrieve(DstPtr, SrcPtr, Size,
+                                                   QueueImpl, getNoOpProfiler()))
       return Res;
   } else if (IsSrcHost) {
-    if (auto Res =
-            DstDevice->Device->dataSubmit(DstPtr, SrcPtr, Size, QueueImpl))
+    if (auto Res = DstDevice->Device->dataSubmit(DstPtr, SrcPtr, Size, QueueImpl,
+                                                 getNoOpProfiler()))
       return Res;
   } else if (SrcDevice->Platform.Plugin == DstDevice->Platform.Plugin &&
              SrcDevice->Platform.Plugin->isDataExchangable(
                  SrcDevice->Device->getDeviceId(),
                  DstDevice->Device->getDeviceId())) {
-    if (auto Res = SrcDevice->Device->dataExchange(SrcPtr, *DstDevice->Device,
-                                                   DstPtr, Size, QueueImpl))
+    if (auto Res = SrcDevice->Device->dataExchange(
+            SrcPtr, *DstDevice->Device, DstPtr, Size, QueueImpl,
+            getNoOpProfiler()))
       return Res;
   } else {
     if (Queue)
@@ -1113,9 +1115,11 @@ Error olMemcpy_impl(ol_queue_handle_t Queue, void *DstPtr,
     if (!Buffer)
       return createOffloadError(ErrorCode::OUT_OF_RESOURCES,
                                 "Couldn't allocate a buffer for transfer");
-    Error Res = SrcDevice->Device->dataRetrieve(Buffer, SrcPtr, Size, nullptr);
+    Error Res = SrcDevice->Device->dataRetrieve(Buffer, SrcPtr, Size, nullptr,
+                                                getNoOpProfiler());
     if (!Res)
-      Res = DstDevice->Device->dataSubmit(DstPtr, Buffer, Size, nullptr);
+      Res = DstDevice->Device->dataSubmit(DstPtr, Buffer, Size, nullptr,
+                                          getNoOpProfiler());
 
     free(Buffer);
     return Res;
@@ -1144,8 +1148,8 @@ Error olMemPrefetch_impl(ol_queue_handle_t Queue, size_t Count,
 Error olCreateProgram_impl(ol_device_handle_t Device, const void *ProgData,
                            size_t ProgDataSize, ol_program_handle_t *Program) {
   StringRef Buffer(reinterpret_cast<const char *>(ProgData), ProgDataSize);
-  Expected<plugin::DeviceImageTy *> Res =
-      Device->Device->loadBinary(Device->Device->Plugin, Buffer);
+  Expected<plugin::DeviceImageTy *> Res = Device->Device->loadBinary(
+      Device->Device->Plugin, getNoOpProfiler(), Buffer);
   if (!Res)
     return Res.takeError();
   assert(*Res && "loadBinary returned nullptr");
@@ -1272,7 +1276,8 @@ Error olLaunchKernel_impl(ol_queue_handle_t Queue, ol_device_handle_t Device,
 
   auto *KernelImpl = std::get<GenericKernelTy *>(Kernel->PluginImpl);
   auto Err = KernelImpl->launch(*DeviceImpl, LaunchArgs.ArgPtrs, nullptr,
-                                LaunchArgs, nullptr, AsyncInfoWrapper);
+                                LaunchArgs, nullptr, AsyncInfoWrapper,
+                                getNoOpProfiler());
 
   AsyncInfoWrapper.finalize(Err);
   if (Err)

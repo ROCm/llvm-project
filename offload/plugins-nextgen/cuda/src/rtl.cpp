@@ -43,9 +43,6 @@
 using namespace llvm::offload::debug;
 using namespace error;
 
-extern std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
-getProfilerToAttach();
-
 namespace llvm {
 namespace omp {
 namespace target {
@@ -143,7 +140,8 @@ struct CUDAKernelTy : public GenericKernelTy {
   Error launchImpl(GenericDeviceTy &GenericDevice, uint32_t NumThreads[3],
                    uint32_t NumBlocks[3], uint32_t DynBlockMemSize,
                    KernelArgsTy &KernelArgs, KernelLaunchParamsTy LaunchParams,
-                   AsyncInfoWrapperTy &AsyncInfoWrapper) const override;
+                   AsyncInfoWrapperTy &AsyncInfoWrapper,
+                   GenericProfilerTy &Profiler) const override;
 
   /// Return maximum block size for maximum occupancy
   Expected<uint64_t> maxGroupSize(GenericDeviceTy &,
@@ -282,7 +280,7 @@ struct CUDADeviceTy : public GenericDeviceTy {
   ~CUDADeviceTy() {}
 
   /// Initialize the device, its resources and get its properties.
-  Error initImpl(GenericPluginTy &Plugin) override {
+  Error initImpl(GenericPluginTy &Plugin, GenericProfilerTy &Profiler) override {
     CUresult Res = cuDeviceGet(&Device, DeviceId);
     if (auto Err = Plugin::check(Res, "error in cuDeviceGet: %s"))
       return Err;
@@ -818,7 +816,8 @@ struct CUDADeviceTy : public GenericDeviceTy {
 
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
-                       AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+                       AsyncInfoWrapperTy &AsyncInfoWrapper,
+                       GenericProfilerTy &Profiler) override {
     if (auto Err = setContext())
       return Err;
 
@@ -832,7 +831,8 @@ struct CUDADeviceTy : public GenericDeviceTy {
 
   /// Retrieve data from the device (device to host transfer).
   Error dataRetrieveImpl(void *HstPtr, const void *TgtPtr, int64_t Size,
-                         AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+                         AsyncInfoWrapperTy &AsyncInfoWrapper,
+                         GenericProfilerTy &Profiler) override {
     if (auto Err = setContext())
       return Err;
 
@@ -862,7 +862,8 @@ struct CUDADeviceTy : public GenericDeviceTy {
   /// the CUDA devices and driver allow them.
   Error dataExchangeImpl(const void *SrcPtr, GenericDeviceTy &DstGenericDevice,
                          void *DstPtr, int64_t Size,
-                         AsyncInfoWrapperTy &AsyncInfoWrapper) override;
+                         AsyncInfoWrapperTy &AsyncInfoWrapper,
+                         GenericProfilerTy &Profiler) override;
 
   Error dataFillImpl(void *TgtPtr, const void *PatternPtr, int64_t PatternSize,
                      int64_t Size,
@@ -1476,7 +1477,8 @@ private:
 
     // Copy the local buffer to the device.
     if (auto Err = dataSubmit(GlobalPtrStart, FunctionPtrs.data(),
-                              FunctionPtrs.size() * sizeof(void *), nullptr))
+                              FunctionPtrs.size() * sizeof(void *), nullptr,
+                              getNoOpProfiler()))
       return Err;
 
     // Copy the created buffer to the appropriate symbols so the kernel can
@@ -1502,7 +1504,8 @@ private:
     uint32_t NumBlocksAndThreads[3] = {1u, 1u, 1u};
     auto Err = CUDAKernel.launchImpl(*this, NumBlocksAndThreads,
                                      NumBlocksAndThreads, 0, KernelArgs,
-                                     KernelLaunchParamsTy{}, AsyncInfoWrapper);
+                                     KernelLaunchParamsTy{}, AsyncInfoWrapper,
+                                     getNoOpProfiler());
 
     AsyncInfoWrapper.finalize(Err);
     if (Err)
@@ -1549,7 +1552,8 @@ Error CUDAKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                                uint32_t DynBlockMemSize,
                                KernelArgsTy &KernelArgs,
                                KernelLaunchParamsTy LaunchParams,
-                               AsyncInfoWrapperTy &AsyncInfoWrapper) const {
+                               AsyncInfoWrapperTy &AsyncInfoWrapper,
+                               GenericProfilerTy &Profiler) const {
   CUDADeviceTy &CUDADevice = static_cast<CUDADeviceTy &>(GenericDevice);
 
   CUstream Stream;
@@ -1821,7 +1825,8 @@ struct CUDAPluginTy final : public GenericPluginTy {
 Error CUDADeviceTy::dataExchangeImpl(const void *SrcPtr,
                                      GenericDeviceTy &DstGenericDevice,
                                      void *DstPtr, int64_t Size,
-                                     AsyncInfoWrapperTy &AsyncInfoWrapper) {
+                                     AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                     GenericProfilerTy &Profiler) {
   if (auto Err = setContext())
     return Err;
 

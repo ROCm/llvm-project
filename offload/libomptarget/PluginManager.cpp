@@ -95,7 +95,7 @@ void PluginManager::deinit() {
     if (!Plugin->is_initialized())
       continue;
 
-    if (auto Err = Plugin->deinit()) {
+    if (auto Err = Plugin->deinit(*Profiler)) {
       std::string InfoMsg = toString(std::move(Err));
       ODBG(ODT_Deinit) << "Failed to deinit plugin: " << InfoMsg;
     }
@@ -545,8 +545,8 @@ static int loadImagesOntoDevice(DeviceTy &Device) {
               ((PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY) ||
                (PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY)))
             if (Device.RTL->data_submit(DeviceId, DeviceEntry.Address,
-                                        Entry.Address,
-                                        Entry.Size) != OFFLOAD_SUCCESS)
+                                        Entry.Address, Entry.Size,
+                                        *PM->getProfiler()) != OFFLOAD_SUCCESS)
               REPORT() << "Failed to write symbol for USM " << Entry.SymbolName;
         } else if (Entry.Address) {
           if (Device.RTL->get_function(Binary, Entry.SymbolName,
@@ -662,21 +662,3 @@ Expected<DeviceTy &> PluginManager::getDevice(uint32_t DeviceNo) {
                                        DeviceNo);
   return *DevicePtr;
 }
-
-#ifdef OMPT_SUPPORT
-
-#include "OmptProfiler.h"
-
-std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
-getProfilerToAttach() {
-  return std::make_unique<llvm::omp::target::ompt::OmptProfilerTy>();
-}
-
-#else
-
-std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
-getProfilerToAttach() {
-  return std::make_unique<llvm::omp::target::plugin::GenericProfilerTy>();
-}
-
-#endif

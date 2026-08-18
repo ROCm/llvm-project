@@ -13,13 +13,6 @@
 #include "Shared/Debug.h"
 
 #include <cstdint>
-#include <memory>
-
-__attribute__((weak))
-std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
-getProfilerToAttach() {
-  return std::make_unique<llvm::omp::target::plugin::GenericProfilerTy>();
-}
 
 namespace llvm {
 namespace omp {
@@ -30,6 +23,11 @@ uint64_t GenericProfilerTy::getDeviceTimeStamp(GenericDeviceTy *D) {
   if (D)
     return D->getDeviceTimeStamp();
   return 0;
+}
+
+GenericProfilerTy &getNoOpProfiler() {
+  static GenericProfilerTy NoOpProfiler;
+  return NoOpProfiler;
 }
 } // namespace plugin
 } // namespace target

@@ -83,13 +83,14 @@ Error GenericGlobalHandlerTy::moveGlobalBetweenDeviceAndHost(
 
   // Transfer the data from the source to the destination.
   if (Device2Host) {
-    if (auto Err =
-            Device.dataRetrieve(HostGlobal.getPtr(), DeviceGlobal.getPtr(),
-                                HostGlobal.getSize(), nullptr))
+    if (auto Err = Device.dataRetrieve(
+            HostGlobal.getPtr(), DeviceGlobal.getPtr(), HostGlobal.getSize(),
+            nullptr, getNoOpProfiler()))
       return Err;
   } else {
     if (auto Err = Device.dataSubmit(DeviceGlobal.getPtr(), HostGlobal.getPtr(),
-                                     HostGlobal.getSize(), nullptr))
+                                     HostGlobal.getSize(), nullptr,
+                                     getNoOpProfiler()))
       return Err;
   }
 
@@ -271,7 +272,7 @@ GenericGlobalHandlerTy::readProfilingGlobals(GenericDeviceTy &Device,
     size_t Size = End - Begin;
     Out.resize_for_overwrite(Size);
     return Size ? Device.dataRetrieve(Out.data(), Start, Size,
-                                      /*AsyncInfo=*/nullptr)
+                                      /*AsyncInfo=*/nullptr, getNoOpProfiler())
                 : Error::success();
   };
 
@@ -292,7 +293,7 @@ GenericGlobalHandlerTy::readProfilingGlobals(GenericDeviceTy &Device,
   // Get the profiling version from the device.
   if (auto Err = Device.dataRetrieve(&ProfData.Version, Table.VersionVar,
                                      sizeof(uint64_t),
-                                     /*AsyncInfo=*/nullptr))
+                                     /*AsyncInfo=*/nullptr, getNoOpProfiler()))
     return Err;
 
   return ProfData;

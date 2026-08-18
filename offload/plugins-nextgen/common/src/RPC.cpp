@@ -240,7 +240,8 @@ Error RPCServerTy::initDevice(plugin::GenericDeviceTy &Device,
 
   rpc::Client client(NumPorts, RPCBuffer);
   if (auto Err = Device.dataSubmit(ClientGlobal.getPtr(), &client,
-                                   sizeof(rpc::Client), nullptr))
+                                   sizeof(rpc::Client), nullptr,
+                                   plugin::getNoOpProfiler()))
     return Err;
   std::lock_guard<decltype(BufferMutex)> Lock(BufferMutex);
   Buffers[Device.getDeviceId()] = RPCBuffer;

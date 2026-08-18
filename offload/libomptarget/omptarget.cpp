@@ -2377,7 +2377,7 @@ int target(ident_t *Loc, DeviceTy &Device, void *HostPtr,
     // set and a trace record generated. Otherwise: No OMPT device tracing.
     TracerInterfaceRAII TargetTraceRAII(
         RegionInterface.getTraceGenerators<ompt_callback_target_submit>(),
-        AsyncInfo, Device.RTL->getProfiler(), /*TracedDeviceId=*/DeviceId,
+        AsyncInfo, PM->getProfiler(), /*TracedDeviceId=*/DeviceId,
         /*EventType=*/ompt_callback_target_submit, DeviceId, NumTeams);
 #endif
     Ret = Device.launchKernel(TgtEntryPtr, TgtArgs.data(), TgtOffsets.data(),

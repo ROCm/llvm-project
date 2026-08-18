@@ -159,7 +159,8 @@ void L0DeviceTy::reportDeviceInfo() const {
   });
 }
 
-Error L0DeviceTy::initImpl(GenericPluginTy &Plugin) {
+Error L0DeviceTy::initImpl(GenericPluginTy &Plugin,
+                           GenericProfilerTy &Profiler) {
   const auto &Options = getPlugin().getOptions();
 
   uint32_t Count = 1;
@@ -336,7 +337,8 @@ Error L0DeviceTy::free(void *TgtPtr, TargetAllocTy Kind) {
 }
 
 Error L0DeviceTy::dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
-                                 AsyncInfoWrapperTy &AsyncInfoWrapper) {
+                                 AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                 GenericProfilerTy &Profiler) {
   if (Size == 0)
     return Plugin::success();
 
@@ -357,7 +359,8 @@ Error L0DeviceTy::dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
 
 Error L0DeviceTy::dataRetrieveImpl(void *HstPtr, const void *TgtPtr,
                                    int64_t Size,
-                                   AsyncInfoWrapperTy &AsyncInfoWrapper) {
+                                   AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                   GenericProfilerTy &Profiler) {
   if (Size == 0)
     return Plugin::success();
 
@@ -394,7 +397,8 @@ Error L0DeviceTy::enqueueHostCallImpl(void (*Callback)(void *), void *UserData,
 
 Error L0DeviceTy::dataExchangeImpl(const void *SrcPtr, GenericDeviceTy &DstDev,
                                    void *DstPtr, int64_t Size,
-                                   AsyncInfoWrapperTy &AsyncInfoWrapper) {
+                                   AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                   GenericProfilerTy &Profiler) {
   if (auto Err =
           enqueueMemCopy(DstPtr, SrcPtr, Size,
                          static_cast<__tgt_async_info *>(AsyncInfoWrapper)))
@@ -938,7 +942,7 @@ Error L0DeviceTy::callGlobalCtorDtorCommon(GenericPluginTy &Plugin,
 
   if (auto Err = dataSubmit(GlobalPtrStart, FunctionPtrs.data(),
                             FunctionPtrs.size() * sizeof(void *),
-                            /*AsyncInfo=*/nullptr))
+                            /*AsyncInfo=*/nullptr, getNoOpProfiler()))
     return CleanupBufferAndErr(std::move(Err));
 
   GlobalTy StartGlobal(IsCtor ? "__init_array_start" : "__fini_array_start",
@@ -964,9 +968,10 @@ Error L0DeviceTy::callGlobalCtorDtorCommon(GenericPluginTy &Plugin,
 
   KernelArgsTy KernelArgs{};
   uint32_t NumBlocksAndThreads[3] = {1u, 1u, 1u};
-  auto Err =
-      L0Kernel.launchImpl(*this, NumBlocksAndThreads, NumBlocksAndThreads, 0,
-                          KernelArgs, KernelLaunchParamsTy{}, AsyncInfoWrapper);
+  auto Err = L0Kernel.launchImpl(*this, NumBlocksAndThreads,
+                                 NumBlocksAndThreads, 0, KernelArgs,
+                                 KernelLaunchParamsTy{}, AsyncInfoWrapper,
+                                 getNoOpProfiler());
 
   AsyncInfoWrapper.finalize(Err);
   return CleanupBufferAndErr(std::move(Err));

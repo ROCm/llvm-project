@@ -184,7 +184,7 @@ public:
   }
 
   Error setContext() override { return Plugin::success(); }
-  Error initImpl(GenericPluginTy &Plugin) override;
+  Error initImpl(GenericPluginTy &Plugin, GenericProfilerTy &Profiler) override;
   Error deinitImpl() override;
   ze_device_handle_t getZeDevice() const { return zeDevice; }
 
@@ -539,14 +539,17 @@ public:
   Error queryAsyncImpl(__tgt_async_info &AsyncInfo, bool ReleaseQueue,
                        bool *IsQueueWorkCompleted) override;
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
-                       AsyncInfoWrapperTy &AsyncInfoWrapper) override;
+                       AsyncInfoWrapperTy &AsyncInfoWrapper,
+                       GenericProfilerTy &Profiler) override;
   Error dataRetrieveImpl(void *HstPtr, const void *TgtPtr, int64_t Size,
-                         AsyncInfoWrapperTy &AsyncInfoWrapper) override;
+                         AsyncInfoWrapperTy &AsyncInfoWrapper,
+                         GenericProfilerTy &Profiler) override;
   Error dataMemcpyImpl(void *DstPtr, const void *SrcPtr, int64_t Size,
                        AsyncInfoWrapperTy &AsyncInfoWrapper) override;
   Error dataExchangeImpl(const void *SrcPtr, GenericDeviceTy &DstDev,
                          void *DstPtr, int64_t Size,
-                         AsyncInfoWrapperTy &AsyncInfoWrapper) override;
+                         AsyncInfoWrapperTy &AsyncInfoWrapper,
+                         GenericProfilerTy &Profiler) override;
   Error initAsyncInfoImpl(AsyncInfoWrapperTy &AsyncInfoWrapper) override;
   Expected<bool>
   hasPendingWorkImpl(AsyncInfoWrapperTy &AsyncInfoWrapper) override;

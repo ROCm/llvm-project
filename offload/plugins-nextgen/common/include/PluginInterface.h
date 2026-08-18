@@ -53,9 +53,6 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/Triple.h"
 
-extern std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
-getProfilerToAttach();
-
 using namespace llvm::offload::debug;
 using namespace llvm::omp::target::debug;
 
@@ -447,12 +444,14 @@ struct GenericKernelTy {
   Error launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
                ptrdiff_t *ArgOffsets, KernelArgsTy &KernelArgs,
                KernelExtraArgsTy *KernelExtraArgs,
-               AsyncInfoWrapperTy &AsyncInfoWrapper) const;
+               AsyncInfoWrapperTy &AsyncInfoWrapper,
+               GenericProfilerTy &Profiler) const;
   virtual Error launchImpl(GenericDeviceTy &GenericDevice,
                            uint32_t NumThreads[3], uint32_t NumBlocks[3],
                            uint32_t DynBlockMemSize, KernelArgsTy &KernelArgs,
                            KernelLaunchParamsTy LaunchParams,
-                           AsyncInfoWrapperTy &AsyncInfoWrapper) const = 0;
+                           AsyncInfoWrapperTy &AsyncInfoWrapper,
+                           GenericProfilerTy &Profiler) const = 0;
 
   virtual Expected<uint64_t> maxGroupSize(GenericDeviceTy &GenericDevice,
                                           uint64_t DynamicMemSize) const = 0;
@@ -493,7 +492,8 @@ struct GenericKernelTy {
   Expected<KernelLaunchEnvironmentTy *> getKernelLaunchEnvironment(
       GenericDeviceTy &GenericDevice, const KernelArgsTy &KernelArgs,
       const DynBlockMemConfTy &DynBlockMemConf,
-      AsyncInfoWrapperTy &AsyncInfoWrapper, uint32_t NumBlocks0) const;
+      AsyncInfoWrapperTy &AsyncInfoWrapper, uint32_t NumBlocks0,
+      GenericProfilerTy &Profiler) const;
 
   /// Indicate whether an execution mode is valid.
   static bool isValidExecutionMode(OMPTgtExecModeFlags ExecutionMode) {
@@ -608,7 +608,8 @@ private:
   /// specified fallback if necessary.
   Expected<DynBlockMemConfTy> prepareBlockMemory(GenericDeviceTy &GenericDevice,
                                                  KernelArgsTy &KernelArgs,
-                                                 uint32_t NumBlocks) const;
+                                                 uint32_t NumBlocks,
+                                                 GenericProfilerTy &Profiler) const;
 
   /// Prepare the arguments before launching the kernel.
   KernelLaunchParamsTy
@@ -996,17 +997,19 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   /// Initialize the device. After this call, the device should be already
   /// working and ready to accept queries or modifications.
-  Error init(GenericPluginTy &Plugin);
-  virtual Error initImpl(GenericPluginTy &Plugin) = 0;
+  Error init(GenericPluginTy &Plugin, GenericProfilerTy &Profiler);
+  virtual Error initImpl(GenericPluginTy &Plugin,
+                         GenericProfilerTy &Profiler) = 0;
 
   /// Deinitialize the device and free all its resources. After this call, the
   /// device is no longer considered ready, so no queries or modifications are
   /// allowed.
-  Error deinit(GenericPluginTy &Plugin);
+  Error deinit(GenericPluginTy &Plugin, GenericProfilerTy &Profiler);
   virtual Error deinitImpl() = 0;
 
   /// Load the binary image into the device and return the target table.
   Expected<DeviceImageTy *> loadBinary(GenericPluginTy &Plugin,
+                                       GenericProfilerTy &Profiler,
                                        StringRef TgtImage);
   virtual Expected<DeviceImageTy *>
   loadBinaryImpl(std::unique_ptr<MemoryBuffer> &&TgtImage, int32_t ImageId) = 0;
@@ -1066,10 +1069,18 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   /// Allocate data on the device or involving the device.
   Expected<void *> dataAlloc(int64_t Size, void *HostPtr, TargetAllocTy Kind,
-                             size_t Alignment);
+                             size_t Alignment, GenericProfilerTy &Profiler);
 
-  /// Deallocate data from the device or involving the device.
-  Error dataDelete(void *TgtPtr, TargetAllocTy Kind);
+  /// Deallocate data from the device or involving the device. Times the
+  /// user-visible operation through the profiler and delegates the work to
+  /// deallocate().
+  Error dataDelete(void *TgtPtr, TargetAllocTy Kind,
+                   GenericProfilerTy &Profiler);
+
+  /// Perform the actual device deallocation without profiling. Used both by
+  /// dataDelete() and internally for runtime buffers whose lifetime is an
+  /// implementation detail (and therefore not profiled).
+  Error deallocate(void *TgtPtr, TargetAllocTy Kind);
 
   /// Pin or register host memory to optimize transfers and return the device
   /// accessible pointer that devices should use for memory transfers involving
@@ -1124,15 +1135,17 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   /// Submit data to the device (host to device transfer).
   Error dataSubmit(void *TgtPtr, const void *HstPtr, int64_t Size,
-                   __tgt_async_info *AsyncInfo);
+                   __tgt_async_info *AsyncInfo, GenericProfilerTy &Profiler);
   virtual Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
-                               AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
+                               AsyncInfoWrapperTy &AsyncInfoWrapper,
+                               GenericProfilerTy &Profiler) = 0;
 
   /// Retrieve data from the device (device to host transfer).
   Error dataRetrieve(void *HstPtr, const void *TgtPtr, int64_t Size,
-                     __tgt_async_info *AsyncInfo);
+                     __tgt_async_info *AsyncInfo, GenericProfilerTy &Profiler);
   virtual Error dataRetrieveImpl(void *HstPtr, const void *TgtPtr, int64_t Size,
-                                 AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
+                                 AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                 GenericProfilerTy &Profiler) = 0;
 
   /// Copy data between arbitrary memory locations.
   Error dataMemcpy(void *DstPtr, const void *SrcPtr, int64_t Size,
@@ -1148,10 +1161,12 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// function is only valid if GenericPlugin::isDataExchangable() passing the
   /// two devices returns true.
   Error dataExchange(const void *SrcPtr, GenericDeviceTy &DstDev, void *DstPtr,
-                     int64_t Size, __tgt_async_info *AsyncInfo);
+                     int64_t Size, __tgt_async_info *AsyncInfo,
+                     GenericProfilerTy &Profiler);
   virtual Error dataExchangeImpl(const void *SrcPtr, GenericDeviceTy &DstDev,
                                  void *DstPtr, int64_t Size,
-                                 AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
+                                 AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                 GenericProfilerTy &Profiler) = 0;
 
   /// Fill data on the device with a pattern from the host
   Error dataFill(void *TgtPtr, const void *PatternPtr, int64_t PatternSize,
@@ -1175,7 +1190,7 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   Error launchKernel(void *EntryPtr, void **ArgPtrs, ptrdiff_t *ArgOffsets,
                      KernelArgsTy &KernelArgs,
                      KernelExtraArgsTy *KernelExtraArgs,
-                     __tgt_async_info *AsyncInfo);
+                     __tgt_async_info *AsyncInfo, GenericProfilerTy &Profiler);
 
   /// Initialize a __tgt_async_info structure.
   Error initAsyncInfo(__tgt_async_info **AsyncInfoPtr);
@@ -1769,8 +1784,7 @@ struct GenericPluginTy {
 
   /// Construct a plugin instance.
   GenericPluginTy(Triple::ArchType TA)
-      : GlobalHandler(nullptr), JIT(TA), RPCServer(nullptr),
-        Profiler(getProfilerToAttach()) {}
+      : GlobalHandler(nullptr), JIT(TA), RPCServer(nullptr) {}
 
   virtual ~GenericPluginTy() {}
 
@@ -1781,7 +1795,7 @@ struct GenericPluginTy {
   virtual Expected<int32_t> initImpl() = 0;
 
   /// Deinitialize the plugin and release the resources.
-  Error deinit();
+  Error deinit(GenericProfilerTy &Profiler);
   virtual Error deinitImpl() = 0;
 
   /// Create a new device for the underlying plugin.
@@ -1866,10 +1880,10 @@ struct GenericPluginTy {
 
   /// Get a reference to the record and replay interface for the plugin.
   /// Initialize a device within the plugin.
-  Error initDevice(int32_t DeviceId);
+  Error initDevice(int32_t DeviceId, GenericProfilerTy &Profiler);
 
   /// Deinitialize a device within the plugin and release its resources.
-  Error deinitDevice(int32_t DeviceId);
+  Error deinitDevice(int32_t DeviceId, GenericProfilerTy &Profiler);
 
   /// Indicate whether data can be exchanged directly between two devices under
   /// this same plugin. If this function returns true, it's safe to call the
@@ -1932,9 +1946,6 @@ struct GenericPluginTy {
                          "async_barrier not supported");
   }
 
-  /// Return a pointer to the profiler instance
-  GenericProfilerTy *getProfiler() const { return Profiler.get(); }
-
   /// Create a plugin-side context grouping the given devices. The default
   /// implementation returns a plain PluginContextTy that only tracks the
   /// device set. Plugins that own native context state (e.g. Level Zero)
@@ -1973,7 +1984,7 @@ public:
   int32_t supports_empty_images();
 
   /// Initialize the device inside of the plugin.
-  int32_t init_device(int32_t DeviceId);
+  int32_t init_device(int32_t DeviceId, GenericProfilerTy &Profiler);
 
   /// Return the number of devices this plugin can support.
   int32_t number_of_devices();
@@ -2009,13 +2020,15 @@ public:
 
   /// Loads the associated binary into the plugin and returns a handle to it.
   int32_t load_binary(int32_t DeviceId, __tgt_device_image *TgtImage,
-                      __tgt_device_binary *Binary);
+                      __tgt_device_binary *Binary, GenericProfilerTy &Profiler);
 
   /// Allocates memory that is accessively to the given device.
-  void *data_alloc(int32_t DeviceId, int64_t Size, void *HostPtr, int32_t Kind);
+  void *data_alloc(int32_t DeviceId, int64_t Size, void *HostPtr, int32_t Kind,
+                   GenericProfilerTy &Profiler);
 
   /// Deallocates memory on the given device.
-  int32_t data_delete(int32_t DeviceId, void *TgtPtr, int32_t Kind);
+  int32_t data_delete(int32_t DeviceId, void *TgtPtr, int32_t Kind,
+                      GenericProfilerTy &Profiler);
 
   /// Locks / pins host memory using the plugin runtime.
   int32_t data_lock(int32_t DeviceId, void *Ptr, int64_t Size,
@@ -2032,28 +2045,31 @@ public:
 
   /// Copy data to the given device.
   int32_t data_submit(int32_t DeviceId, void *TgtPtr, void *HstPtr,
-                      int64_t Size);
+                      int64_t Size, GenericProfilerTy &Profiler);
 
   /// Copy data to the given device asynchronously.
   int32_t data_submit_async(int32_t DeviceId, void *TgtPtr, void *HstPtr,
-                            int64_t Size, __tgt_async_info *AsyncInfoPtr);
+                            int64_t Size, __tgt_async_info *AsyncInfoPtr,
+                            GenericProfilerTy &Profiler);
 
   /// Copy data from the given device.
   int32_t data_retrieve(int32_t DeviceId, void *HstPtr, void *TgtPtr,
-                        int64_t Size);
+                        int64_t Size, GenericProfilerTy &Profiler);
 
   /// Copy data from the given device asynchronously.
   int32_t data_retrieve_async(int32_t DeviceId, void *HstPtr, void *TgtPtr,
-                              int64_t Size, __tgt_async_info *AsyncInfoPtr);
+                              int64_t Size, __tgt_async_info *AsyncInfoPtr,
+                              GenericProfilerTy &Profiler);
 
   /// Exchange memory addresses between two devices.
   int32_t data_exchange(int32_t SrcDeviceId, void *SrcPtr, int32_t DstDeviceId,
-                        void *DstPtr, int64_t Size);
+                        void *DstPtr, int64_t Size, GenericProfilerTy &Profiler);
 
   /// Exchange memory addresses between two devices asynchronously.
   int32_t data_exchange_async(int32_t SrcDeviceId, void *SrcPtr,
                               int DstDeviceId, void *DstPtr, int64_t Size,
-                              __tgt_async_info *AsyncInfo);
+                              __tgt_async_info *AsyncInfo,
+                              GenericProfilerTy &Profiler);
 
   /// Places a fence between previous data movements and following data
   /// movements if necessary on the device
@@ -2062,13 +2078,15 @@ public:
   /// Begin executing a kernel on the given device.
   int32_t launch_kernel_sync(int32_t DeviceId, void *TgtEntryPtr,
                              void **TgtArgs, ptrdiff_t *TgtOffsets,
-                             KernelArgsTy *KernelArgs);
+                             KernelArgsTy *KernelArgs,
+                             GenericProfilerTy &Profiler);
 
   /// Begin executing a kernel on the given device.
   int32_t launch_kernel(int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs,
                         ptrdiff_t *TgtOffsets, KernelArgsTy *KernelArgs,
                         KernelExtraArgsTy *KernelExtraArgs,
-                        __tgt_async_info *AsyncInfoPtr);
+                        __tgt_async_info *AsyncInfoPtr,
+                        GenericProfilerTy &Profiler);
 
   /// Synchronize an asyncrhonous queue with the plugin runtime.
   int32_t synchronize(int32_t DeviceId, __tgt_async_info *AsyncInfoPtr);
@@ -2211,9 +2229,6 @@ private:
 
   /// The interface between the plugin and the GPU for host services.
   RPCServerTy *RPCServer;
-
-  /// The Profiler instance
-  std::unique_ptr<GenericProfilerTy> Profiler;
 };
 
 /// Auxiliary interface class for GenericDeviceResourceManagerTy. This class

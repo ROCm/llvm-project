@@ -154,7 +154,8 @@ Expected<KernelLaunchEnvironmentTy *>
 GenericKernelTy::getKernelLaunchEnvironment(
     GenericDeviceTy &GenericDevice, const KernelArgsTy &KernelArgs,
     const DynBlockMemConfTy &DynBlockMemConf,
-    AsyncInfoWrapperTy &AsyncInfoWrapper, uint32_t NumBlocks0) const {
+    AsyncInfoWrapperTy &AsyncInfoWrapper, uint32_t NumBlocks0,
+    GenericProfilerTy &Profiler) const {
   // Ctor/Dtor have no arguments, replaying uses the original kernel launch
   // environment. Older versions of the compiler do not generate a kernel
   // launch environment.
@@ -183,7 +184,8 @@ GenericKernelTy::getKernelLaunchEnvironment(
 
   auto AllocOrErr = GenericDevice.dataAlloc(
       sizeof(KernelLaunchEnvironmentTy),
-      /*HostPtr=*/nullptr, TargetAllocTy::TARGET_ALLOC_DEVICE, /*Alignment=*/0);
+      /*HostPtr=*/nullptr, TargetAllocTy::TARGET_ALLOC_DEVICE, /*Alignment=*/0,
+      Profiler);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
 
@@ -205,7 +207,7 @@ GenericKernelTy::getKernelLaunchEnvironment(
     auto AllocOrErr = GenericDevice.dataAlloc(
         uint64_t(RedCfg.ReductionDataSize) * NumBlocks0,
         /*HostPtr=*/nullptr, TargetAllocTy::TARGET_ALLOC_DEVICE,
-        /*Alignment=*/0);
+        /*Alignment=*/0, Profiler);
     if (!AllocOrErr)
       return AllocOrErr.takeError();
     LocalKLE.ReductionBuffer = *AllocOrErr;
@@ -231,7 +233,7 @@ GenericKernelTy::getKernelLaunchEnvironment(
     AI->ProfilerData = nullptr;
     auto Err = GenericDevice.dataSubmit(*AllocOrErr, &LocalKLE,
                                         sizeof(KernelLaunchEnvironmentTy),
-                                        AsyncInfoWrapper);
+                                        AsyncInfoWrapper, Profiler);
     if (Err)
       return Err;
     AI->ProfilerData = LocalOEI;
@@ -240,7 +242,7 @@ GenericKernelTy::getKernelLaunchEnvironment(
 
   auto Err = GenericDevice.dataSubmit(*AllocOrErr, &LocalKLE,
                                       sizeof(KernelLaunchEnvironmentTy),
-                                      AsyncInfoWrapper);
+                                      AsyncInfoWrapper, Profiler);
   if (Err)
     return Err;
   return static_cast<KernelLaunchEnvironmentTy *>(*AllocOrErr);
@@ -269,7 +271,8 @@ Error GenericKernelTy::printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
 Expected<DynBlockMemConfTy>
 GenericKernelTy::prepareBlockMemory(GenericDeviceTy &GenericDevice,
                                     KernelArgsTy &KernelArgs,
-                                    uint32_t NumBlocks) const {
+                                    uint32_t NumBlocks,
+                                    GenericProfilerTy &Profiler) const {
   uint32_t MaxBlockMemSize = GenericDevice.getMaxBlockSharedMemSize();
   uint32_t DynBlockMemSize = KernelArgs.DynCGroupMem;
   uint32_t TotalBlockMemSize = StaticBlockMemSize + DynBlockMemSize;
@@ -303,7 +306,7 @@ GenericKernelTy::prepareBlockMemory(GenericDeviceTy &GenericDevice,
       auto AllocOrErr = GenericDevice.dataAlloc(
           NumBlocks * DynBlockMemSize,
           /*HostPtr=*/nullptr, TargetAllocTy::TARGET_ALLOC_DEVICE,
-          /*Alignment=*/0);
+          /*Alignment=*/0, Profiler);
       if (!AllocOrErr)
         return AllocOrErr.takeError();
       DynFallbackPtr = *AllocOrErr;
@@ -316,7 +319,8 @@ GenericKernelTy::prepareBlockMemory(GenericDeviceTy &GenericDevice,
 Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
                               ptrdiff_t *ArgOffsets, KernelArgsTy &KernelArgs,
                               KernelExtraArgsTy *KernelExtraArgs,
-                              AsyncInfoWrapperTy &AsyncInfoWrapper) const {
+                              AsyncInfoWrapperTy &AsyncInfoWrapper,
+                              GenericProfilerTy &Profiler) const {
   llvm::SmallVector<void *, 16> Args;
   llvm::SmallVector<void *, 16> Ptrs;
 
@@ -342,7 +346,8 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
 
   auto DynBlockMemConfOrErr = prepareBlockMemory(
       GenericDevice, KernelArgs,
-      EffectiveNumBlocks[0] * EffectiveNumBlocks[1] * EffectiveNumBlocks[2]);
+      EffectiveNumBlocks[0] * EffectiveNumBlocks[1] * EffectiveNumBlocks[2],
+      Profiler);
   if (!DynBlockMemConfOrErr)
     return DynBlockMemConfOrErr.takeError();
 
@@ -392,7 +397,8 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
   // buffer with the raw user value of 0 and fail to allocate.
   auto KernelLaunchEnvOrErr =
       getKernelLaunchEnvironment(GenericDevice, KernelArgs, DynBlockMemConf,
-                                 AsyncInfoWrapper, EffectiveNumBlocks[0]);
+                                 AsyncInfoWrapper, EffectiveNumBlocks[0],
+                                 Profiler);
   if (!KernelLaunchEnvOrErr)
     return KernelLaunchEnvOrErr.takeError();
 
@@ -434,13 +440,13 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
     RRHandle = *RRHandleOrErr;
   }
 
-  if (GenericDevice.Plugin.getProfiler())
-    GenericDevice.Plugin.getProfiler()->handlePreKernelLaunch(
-        &GenericDevice, EffectiveNumBlocks, AsyncInfoWrapper);
+  Profiler.handlePreKernelLaunch(&GenericDevice, EffectiveNumBlocks,
+                                 AsyncInfoWrapper);
 
   if (auto Err = launchImpl(GenericDevice, EffectiveNumThreads,
                             EffectiveNumBlocks, DynBlockMemConf.NativeSize,
-                            KernelArgs, LaunchParams, AsyncInfoWrapper))
+                            KernelArgs, LaunchParams, AsyncInfoWrapper,
+                            Profiler))
     return Err;
 
   if (RecordReplay) {
@@ -648,16 +654,14 @@ GenericDeviceTy::GenericDeviceTy(GenericPluginTy &Plugin, int32_t DeviceId,
   }
 }
 
-Error GenericDeviceTy::init(GenericPluginTy &Plugin) {
-  auto Profiler = Plugin.getProfiler();
-
-  if (auto Err = initImpl(Plugin))
+Error GenericDeviceTy::init(GenericPluginTy &Plugin,
+                            GenericProfilerTy &Profiler) {
+  if (auto Err = initImpl(Plugin, Profiler))
     return Err;
 
-  if (Profiler)
-    // Invokes profiler backend to dispatch event. Required here to enable
-    // capture hardware-time slope data
-    Profiler->handleInit(this, &Plugin);
+  // Invokes profiler backend to dispatch event. Required here to enable
+  // capture hardware-time slope data.
+  Profiler.handleInit(this, &Plugin);
 
   // Read and reinitialize the envars that depend on the device initialization.
   // Notice these two envars may change the stack size and heap size of the
@@ -728,7 +732,8 @@ Error GenericDeviceTy::unloadBinary(DeviceImageTy *Image) {
   return unloadBinaryImpl(Image);
 }
 
-Error GenericDeviceTy::deinit(GenericPluginTy &Plugin) {
+Error GenericDeviceTy::deinit(GenericPluginTy &Plugin,
+                             GenericProfilerTy &Profiler) {
   // Run the global destructors first in case they required the RPC server.
   for (auto &I : LoadedImages) {
     if (auto Err = callGlobalDestructors(Plugin, *I))
@@ -767,13 +772,13 @@ Error GenericDeviceTy::deinit(GenericPluginTy &Plugin) {
     }
   }
 
-  if (auto Profiler = Plugin.getProfiler(); Profiler)
-    Profiler->handleDeinit(this, &Plugin);
+  Profiler.handleDeinit(this, &Plugin);
 
   return deinitImpl();
 }
 
 Expected<DeviceImageTy *> GenericDeviceTy::loadBinary(GenericPluginTy &Plugin,
+                                                      GenericProfilerTy &Profiler,
                                                       StringRef InputTgtImage) {
   ODBG(OLDT_Init) << "Load data from image "
                   << static_cast<const void *>(InputTgtImage.bytes_begin());
@@ -816,8 +821,7 @@ Expected<DeviceImageTy *> GenericDeviceTy::loadBinary(GenericPluginTy &Plugin,
   if (auto Err = setupRPCServer(Plugin, *Image))
     return std::move(Err);
 
-  if (auto Profiler = Plugin.getProfiler(); Profiler)
-    Profiler->handleLoadBinary(this, &Plugin, InputTgtImage);
+  Profiler.handleLoadBinary(this, &Plugin, InputTgtImage);
 
   // Call any global constructors present on the device.
   if (auto Err = callGlobalConstructors(Plugin, *Image))
@@ -1064,8 +1068,11 @@ Error GenericDeviceTy::synchronize(__tgt_async_info *AsyncInfo,
     std::swap(AllocsToDelete, AsyncInfo->AssociatedAllocations);
   }
 
+  // These are internal runtime buffers (e.g. kernel-launch environment and
+  // reduction buffers); their deallocation is an implementation detail and is
+  // not surfaced as a profiled data operation.
   for (auto *Ptr : AllocsToDelete)
-    if (auto Err = dataDelete(Ptr, TargetAllocTy::TARGET_ALLOC_DEVICE))
+    if (auto Err = deallocate(Ptr, TargetAllocTy::TARGET_ALLOC_DEVICE))
       return Err;
 
   return Plugin::success();
@@ -1098,12 +1105,11 @@ Error GenericDeviceTy::getDeviceMemorySize(uint64_t &DSize) {
 }
 
 Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
-                                            TargetAllocTy Kind,
-                                            size_t Alignment) {
+                                            TargetAllocTy Kind, size_t Alignment,
+                                            GenericProfilerTy &Profiler) {
   // Uses RAII to get timing for this operation through the DataAllocTimer
   // object
-  auto DataAllocTimer =
-      Plugin.getProfiler()->getScopedDataAllocTimer(this, HostPtr, Size);
+  auto DataAllocTimer = Profiler.getScopedDataAllocTimer(this, HostPtr, Size);
 
   void *Alloc = nullptr;
 
@@ -1171,11 +1177,15 @@ Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
   return Alloc;
 }
 
-Error GenericDeviceTy::dataDelete(void *TgtPtr, TargetAllocTy Kind) {
+Error GenericDeviceTy::dataDelete(void *TgtPtr, TargetAllocTy Kind,
+                                 GenericProfilerTy &Profiler) {
+  // Uses RAII to time the user-visible deallocation; the actual work is done by
+  // the non-profiled deallocate() core, which internal callers use directly.
+  auto DataDeleteTimer = Profiler.getScopedDataDeleteTimer(this, TgtPtr);
+  return deallocate(TgtPtr, Kind);
+}
 
-  auto DataDeleteTimer =
-      Plugin.getProfiler()->getScopedDataDeleteTimer(this, TgtPtr);
-
+Error GenericDeviceTy::deallocate(void *TgtPtr, TargetAllocTy Kind) {
   // Free is a noop when recording or replaying.
   if (RecordReplay && RecordReplay->isRecordingOrReplaying())
     return RecordReplay->deallocate(TgtPtr);
@@ -1233,19 +1243,21 @@ Error GenericDeviceTy::dataDelete(void *TgtPtr, TargetAllocTy Kind) {
 }
 
 Error GenericDeviceTy::dataSubmit(void *TgtPtr, const void *HstPtr,
-                                  int64_t Size, __tgt_async_info *AsyncInfo) {
+                                  int64_t Size, __tgt_async_info *AsyncInfo,
+                                  GenericProfilerTy &Profiler) {
   AsyncInfoWrapperTy AsyncInfoWrapper(*this, AsyncInfo);
 
-  auto Err = dataSubmitImpl(TgtPtr, HstPtr, Size, AsyncInfoWrapper);
+  auto Err = dataSubmitImpl(TgtPtr, HstPtr, Size, AsyncInfoWrapper, Profiler);
   AsyncInfoWrapper.finalize(Err);
   return Err;
 }
 
 Error GenericDeviceTy::dataRetrieve(void *HstPtr, const void *TgtPtr,
-                                    int64_t Size, __tgt_async_info *AsyncInfo) {
+                                    int64_t Size, __tgt_async_info *AsyncInfo,
+                                    GenericProfilerTy &Profiler) {
   AsyncInfoWrapperTy AsyncInfoWrapper(*this, AsyncInfo);
 
-  auto Err = dataRetrieveImpl(HstPtr, TgtPtr, Size, AsyncInfoWrapper);
+  auto Err = dataRetrieveImpl(HstPtr, TgtPtr, Size, AsyncInfoWrapper, Profiler);
   AsyncInfoWrapper.finalize(Err);
   return Err;
 }
@@ -1264,10 +1276,12 @@ Error GenericDeviceTy::dataMemcpy(void *DstPtr, const void *SrcPtr,
 
 Error GenericDeviceTy::dataExchange(const void *SrcPtr, GenericDeviceTy &DstDev,
                                     void *DstPtr, int64_t Size,
-                                    __tgt_async_info *AsyncInfo) {
+                                    __tgt_async_info *AsyncInfo,
+                                    GenericProfilerTy &Profiler) {
   AsyncInfoWrapperTy AsyncInfoWrapper(*this, AsyncInfo);
 
-  auto Err = dataExchangeImpl(SrcPtr, DstDev, DstPtr, Size, AsyncInfoWrapper);
+  auto Err = dataExchangeImpl(SrcPtr, DstDev, DstPtr, Size, AsyncInfoWrapper,
+                              Profiler);
   AsyncInfoWrapper.finalize(Err);
   return Err;
 }
@@ -1295,7 +1309,8 @@ Error GenericDeviceTy::launchKernel(void *EntryPtr, void **ArgPtrs,
                                     ptrdiff_t *ArgOffsets,
                                     KernelArgsTy &KernelArgs,
                                     KernelExtraArgsTy *KernelExtraArgs,
-                                    __tgt_async_info *AsyncInfo) {
+                                    __tgt_async_info *AsyncInfo,
+                                    GenericProfilerTy &Profiler) {
   AsyncInfoWrapperTy AsyncInfoWrapper(*this, AsyncInfo);
 
   GenericKernelTy &GenericKernel =
@@ -1314,7 +1329,7 @@ Error GenericDeviceTy::launchKernel(void *EntryPtr, void **ArgPtrs,
   }
 
   auto Err = GenericKernel.launch(*this, ArgPtrs, ArgOffsets, KernelArgs,
-                                  KernelExtraArgs, AsyncInfoWrapper);
+                                  KernelExtraArgs, AsyncInfoWrapper, Profiler);
 
   AsyncInfoWrapper.finalize(Err);
 
@@ -1506,13 +1521,13 @@ Error GenericPluginTy::init() {
   return Plugin::success();
 }
 
-Error GenericPluginTy::deinit() {
+Error GenericPluginTy::deinit(GenericProfilerTy &Profiler) {
   assert(Initialized && "Plugin was not initialized!");
 
   // Deinitialize all active devices.
   for (int32_t DeviceId = 0; DeviceId < NumDevices; ++DeviceId) {
     if (Devices[DeviceId]) {
-      if (auto Err = deinitDevice(DeviceId))
+      if (auto Err = deinitDevice(DeviceId, Profiler))
         return Err;
     }
     assert(!Devices[DeviceId] && "Device was not deinitialized");
@@ -1536,7 +1551,8 @@ Error GenericPluginTy::deinit() {
   return Plugin::success();
 }
 
-Error GenericPluginTy::initDevice(int32_t DeviceId) {
+Error GenericPluginTy::initDevice(int32_t DeviceId,
+                                  GenericProfilerTy &Profiler) {
   assert(!Devices[DeviceId] && "Device already initialized");
 
   // Create the device and save the reference.
@@ -1547,16 +1563,17 @@ Error GenericPluginTy::initDevice(int32_t DeviceId) {
   Devices[DeviceId] = Device;
 
   // Initialize the device and its resources.
-  return Device->init(*this);
+  return Device->init(*this, Profiler);
 }
 
-Error GenericPluginTy::deinitDevice(int32_t DeviceId) {
+Error GenericPluginTy::deinitDevice(int32_t DeviceId,
+                                    GenericProfilerTy &Profiler) {
   // The device may be already deinitialized.
   if (Devices[DeviceId] == nullptr)
     return Plugin::success();
 
   // Deinitialize the device and release its resources.
-  if (auto Err = Devices[DeviceId]->deinit(*this))
+  if (auto Err = Devices[DeviceId]->deinit(*this, Profiler))
     return Err;
 
   // Delete the device and invalidate its reference.
@@ -1680,10 +1697,11 @@ int32_t GenericPluginTy::is_device_initialized(int32_t DeviceId) const {
   return isValidDeviceId(DeviceId) && Devices[DeviceId] != nullptr;
 }
 
-int32_t GenericPluginTy::init_device(int32_t DeviceId) {
+int32_t GenericPluginTy::init_device(int32_t DeviceId,
+                                     GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, DeviceId);
   auto R = [&]() {
-    auto Err = initDevice(DeviceId);
+    auto Err = initDevice(DeviceId, Profiler);
     if (Err) {
       REPORT() << "Failure to initialize device " << DeviceId << ": "
                << toString(std::move(Err));
@@ -1774,14 +1792,15 @@ int32_t GenericPluginTy::initialize_record_replay(
 
 int32_t GenericPluginTy::load_binary(int32_t DeviceId,
                                      __tgt_device_image *TgtImage,
-                                     __tgt_device_binary *Binary) {
+                                     __tgt_device_binary *Binary,
+                                     GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, DeviceId, TgtImage, Binary);
   auto R = [&]() {
     GenericDeviceTy &Device = getDevice(DeviceId);
 
   StringRef Buffer(reinterpret_cast<const char *>(TgtImage->ImageStart),
                    utils::getPtrDiff(TgtImage->ImageEnd, TgtImage->ImageStart));
-  auto ImageOrErr = Device.loadBinary(*this, Buffer);
+  auto ImageOrErr = Device.loadBinary(*this, Profiler, Buffer);
   if (!ImageOrErr) {
     auto Err = ImageOrErr.takeError();
     REPORT() << "Failure to load binary image " << TgtImage << " on device "
@@ -1801,12 +1820,12 @@ int32_t GenericPluginTy::load_binary(int32_t DeviceId,
 }
 
 void *GenericPluginTy::data_alloc(int32_t DeviceId, int64_t Size, void *HostPtr,
-                                  int32_t Kind) {
+                                  int32_t Kind, GenericProfilerTy &Profiler) {
   auto T = logger::log<void *>(__func__, DeviceId, Size, HostPtr, Kind);
   auto R = [&]() -> void * {
     auto &Dev = getDevice(DeviceId);
     auto AllocOrErr = Dev.dataAlloc(Size, HostPtr, (TargetAllocTy)Kind,
-                                    /*Alignment=*/0);
+                                    /*Alignment=*/0, Profiler);
     if (!AllocOrErr) {
       auto Err = AllocOrErr.takeError();
       REPORT() << "Failure to allocate device memory: "
@@ -1822,11 +1841,11 @@ void *GenericPluginTy::data_alloc(int32_t DeviceId, int64_t Size, void *HostPtr,
 }
 
 int32_t GenericPluginTy::data_delete(int32_t DeviceId, void *TgtPtr,
-                                     int32_t Kind) {
+                                     int32_t Kind, GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, DeviceId, TgtPtr, Kind);
   auto R = [&]() {
     auto &Dev = getDevice(DeviceId);
-    auto Err = Dev.dataDelete(TgtPtr, (TargetAllocTy)Kind);
+    auto Err = Dev.dataDelete(TgtPtr, (TargetAllocTy)Kind, Profiler);
     if (Err) {
       REPORT() << "Failure to deallocate device pointer " << TgtPtr << ": "
                << toString(std::move(Err));
@@ -1914,11 +1933,12 @@ int32_t GenericPluginTy::data_notify_unmapped(int32_t DeviceId, void *HstPtr) {
 }
 
 int32_t GenericPluginTy::data_submit(int32_t DeviceId, void *TgtPtr,
-                                     void *HstPtr, int64_t Size) {
+                                     void *HstPtr, int64_t Size,
+                                     GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, DeviceId, TgtPtr, HstPtr, Size);
   auto R = [&]() {
     return data_submit_async(DeviceId, TgtPtr, HstPtr, Size,
-                             /*AsyncInfoPtr=*/nullptr);
+                             /*AsyncInfoPtr=*/nullptr, Profiler);
   }();
   T.res(R);
   return R;
@@ -1926,12 +1946,13 @@ int32_t GenericPluginTy::data_submit(int32_t DeviceId, void *TgtPtr,
 
 int32_t GenericPluginTy::data_submit_async(int32_t DeviceId, void *TgtPtr,
                                            void *HstPtr, int64_t Size,
-                                           __tgt_async_info *AsyncInfoPtr) {
+                                           __tgt_async_info *AsyncInfoPtr,
+                                           GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, DeviceId, TgtPtr, HstPtr, Size,
                                 AsyncInfoPtr);
   auto R = [&]() {
-    auto Err =
-        getDevice(DeviceId).dataSubmit(TgtPtr, HstPtr, Size, AsyncInfoPtr);
+    auto Err = getDevice(DeviceId).dataSubmit(TgtPtr, HstPtr, Size,
+                                              AsyncInfoPtr, Profiler);
     if (Err) {
       REPORT() << "Failure to copy data from host to device. Pointers: host "
                << "= " << HstPtr << ", device = " << TgtPtr << ", size = " << Size
@@ -1946,11 +1967,12 @@ int32_t GenericPluginTy::data_submit_async(int32_t DeviceId, void *TgtPtr,
 }
 
 int32_t GenericPluginTy::data_retrieve(int32_t DeviceId, void *HstPtr,
-                                       void *TgtPtr, int64_t Size) {
+                                       void *TgtPtr, int64_t Size,
+                                       GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, DeviceId, HstPtr, TgtPtr, Size);
   auto R = [&]() {
     return data_retrieve_async(DeviceId, HstPtr, TgtPtr, Size,
-                               /*AsyncInfoPtr=*/nullptr);
+                               /*AsyncInfoPtr=*/nullptr, Profiler);
   }();
   T.res(R);
   return R;
@@ -1958,12 +1980,13 @@ int32_t GenericPluginTy::data_retrieve(int32_t DeviceId, void *HstPtr,
 
 int32_t GenericPluginTy::data_retrieve_async(int32_t DeviceId, void *HstPtr,
                                              void *TgtPtr, int64_t Size,
-                                             __tgt_async_info *AsyncInfoPtr) {
+                                             __tgt_async_info *AsyncInfoPtr,
+                                             GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, DeviceId, HstPtr, TgtPtr, Size,
                                 AsyncInfoPtr);
   auto R = [&]() {
-    auto Err =
-        getDevice(DeviceId).dataRetrieve(HstPtr, TgtPtr, Size, AsyncInfoPtr);
+    auto Err = getDevice(DeviceId).dataRetrieve(HstPtr, TgtPtr, Size,
+                                                AsyncInfoPtr, Profiler);
     if (Err) {
       REPORT() << "Failure to copy data from device to host. Pointers: host "
                << "= " << HstPtr << ", device = " << TgtPtr << ", size = " << Size
@@ -1979,12 +2002,13 @@ int32_t GenericPluginTy::data_retrieve_async(int32_t DeviceId, void *HstPtr,
 
 int32_t GenericPluginTy::data_exchange(int32_t SrcDeviceId, void *SrcPtr,
                                        int32_t DstDeviceId, void *DstPtr,
-                                       int64_t Size) {
+                                       int64_t Size,
+                                       GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, SrcDeviceId, SrcPtr, DstDeviceId,
                                 DstPtr, Size);
   auto R = [&]() {
     return data_exchange_async(SrcDeviceId, SrcPtr, DstDeviceId, DstPtr, Size,
-                               /*AsyncInfoPtr=*/nullptr);
+                               /*AsyncInfoPtr=*/nullptr, Profiler);
   }();
   T.res(R);
   return R;
@@ -1993,14 +2017,15 @@ int32_t GenericPluginTy::data_exchange(int32_t SrcDeviceId, void *SrcPtr,
 int32_t GenericPluginTy::data_exchange_async(int32_t SrcDeviceId, void *SrcPtr,
                                              int DstDeviceId, void *DstPtr,
                                              int64_t Size,
-                                             __tgt_async_info *AsyncInfo) {
+                                             __tgt_async_info *AsyncInfo,
+                                             GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, SrcDeviceId, SrcPtr, DstDeviceId,
                                 DstPtr, Size, AsyncInfo);
   auto R = [&]() {
     GenericDeviceTy &SrcDevice = getDevice(SrcDeviceId);
     GenericDeviceTy &DstDevice = getDevice(DstDeviceId);
-    auto Err =
-        SrcDevice.dataExchange(SrcPtr, DstDevice, DstPtr, Size, AsyncInfo);
+    auto Err = SrcDevice.dataExchange(SrcPtr, DstDevice, DstPtr, Size, AsyncInfo,
+                                      Profiler);
     if (Err) {
       REPORT() << "Failure to copy data from device (" << SrcDeviceId
                << ") to device (" << DstDeviceId
@@ -2018,13 +2043,14 @@ int32_t GenericPluginTy::data_exchange_async(int32_t SrcDeviceId, void *SrcPtr,
 int32_t GenericPluginTy::launch_kernel_sync(int32_t DeviceId, void *TgtEntryPtr,
                                             void **TgtArgs,
                                             ptrdiff_t *TgtOffsets,
-                                            KernelArgsTy *KernelArgs) {
+                                            KernelArgsTy *KernelArgs,
+                                            GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, DeviceId, TgtEntryPtr, TgtArgs,
                                 TgtOffsets, KernelArgs);
   auto R = [&]() {
     __tgt_async_info *AsyncInfoPtr = nullptr;
     return launch_kernel(DeviceId, TgtEntryPtr, TgtArgs, TgtOffsets, KernelArgs,
-                        nullptr, AsyncInfoPtr);
+                        nullptr, AsyncInfoPtr, Profiler);
   }();
   T.res(R);
   return R;
@@ -2034,12 +2060,14 @@ int32_t GenericPluginTy::launch_kernel(int32_t DeviceId, void *TgtEntryPtr,
                                        void **TgtArgs, ptrdiff_t *TgtOffsets,
                                        KernelArgsTy *KernelArgs,
                                        KernelExtraArgsTy *KernelExtraArgs,
-                                       __tgt_async_info *AsyncInfoPtr) {
+                                       __tgt_async_info *AsyncInfoPtr,
+                                       GenericProfilerTy &Profiler) {
   auto T = logger::log<int32_t>(__func__, DeviceId, TgtEntryPtr, TgtArgs,
                                 TgtOffsets, KernelArgs, AsyncInfoPtr);
   auto R = [&]() {
     auto Err = getDevice(DeviceId).launchKernel(
-        TgtEntryPtr, TgtArgs, TgtOffsets, *KernelArgs, KernelExtraArgs, AsyncInfoPtr);
+        TgtEntryPtr, TgtArgs, TgtOffsets, *KernelArgs, KernelExtraArgs,
+        AsyncInfoPtr, Profiler);
     if (Err) {
       REPORT() << "Failure to run target region " << TgtEntryPtr << " in device "
                << DeviceId << ": " << toString(std::move(Err));

@@ -184,6 +184,11 @@ private:
   /// Vendor-specific implementation to obtain device time.
   uint64_t getDeviceTimeStamp(GenericDeviceTy *D);
 };
+
+/// Return a shared no-op profiler. Used where no real profiler is threaded in:
+/// internal device bring-up launches (e.g. global constructors) and consumers
+/// that do not wire up profiling (e.g. liboffload).
+GenericProfilerTy &getNoOpProfiler();
 } // namespace plugin
 } // namespace target
 } // namespace omp
