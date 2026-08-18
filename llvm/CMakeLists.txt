@@ -90,11 +90,6 @@ endif()
 set(LLVM_LIBDIR_SUFFIX "" CACHE STRING "Define suffix of library directory name (32/64)" )
 
 if(WIN32)
-    add_compile_definitions("$<$<COMPILE_LANGUAGE:C,CXX>:_CRT_SECURE_NO_WARNINGS;NOMINMAX>")
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
-        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-fms-extensions;-fms-compatibility>")
-    endif()
-
     option(COMGR_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS "Prepare LLVM for BinSkim Analyzer" OFF)
     option(LLVM_USE_SPECTRE_MITIGATED_LIBRARIES "Use Spectre-mitigated libraries" OFF)
 
