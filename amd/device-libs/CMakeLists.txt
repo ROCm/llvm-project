@@ -7,6 +7,11 @@
 
 cmake_minimum_required(VERSION 3.13.4)
 
+if(WIN32)
+    # Required for CMAKE_MSVC_RUNTIME_LIBRARY, must be set prior the first project() or enable_language()
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(rocm-device-libs VERSION "1.0.0")
 cmake_policy(SET CMP0011 NEW)
 
@@ -60,6 +65,11 @@ if (NOT PREPARE_BUILTINS)
 endif()
 
 if(WIN32)
+    add_compile_definitions("$<$<COMPILE_LANGUAGE:C,CXX>:_CRT_SECURE_NO_WARNINGS;NOMINMAX>")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-fms-extensions;-fms-compatibility>")
+    endif()
+
     option(ROCM_DEVICE_LIBS_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS "Prepare AMDDeviceLibs for BinSkim Analyzer" OFF)
     option(ROCM_DEVICE_LIBS_USE_SPECTRE_MITIGATED_LIBRARIES "Use Spectre-mitigated libraries" OFF)
 
@@ -84,10 +94,10 @@ if(WIN32)
         endif()
     endif()
 
-    option(ROCM_DEVICE_LIBS_USE_MSVC_STATIC_LIBRARY "Link MSVC runtime library statically")
+    option(ROCM_DEVICE_LIBS_USE_MSVC_STATIC_RUNTIME "Link MSVC runtime library statically" OFF)
 
-    if(NOT ROCM_DEVICE_LIBS_USE_MSVC_STATIC_LIBRARY)
-        set(ROCM_DEVICE_LIBS_RUNTIME_SUFFIX "DLL")
+    if(NOT ROCM_DEVICE_LIBS_USE_MSVC_STATIC_RUNTIME)
+        set(ROCM_DEVICE_LIBS_MSVC_RUNTIME_SUFFIX "DLL")
     endif()
     if(NOT CMAKE_MSVC_RUNTIME_LIBRARY)
         set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>${ROCM_DEVICE_LIBS_MSVC_RUNTIME_SUFFIX}")
