@@ -784,6 +784,17 @@ void RegisterState::updateM0Const(Value *V) {
     M0Const = std::nullopt;
 }
 
+void RegisterState::enterBlock() {
+  LastSgprWaveMaskI1.clear();
+  SourceImageSgprPairAddrShadow.clear();
+  M0Const = std::nullopt;
+  // The MSB mode is architectural rather than a raise-time fact: LLVM's
+  // VGPR-encoding lowering resets it at every block boundary, so a raised block
+  // must not inherit the mode a predecessor left set.
+  VgprMsBs = 0;
+  resetLaneActiveCache();
+}
+
 void RegisterState::invalidateSgprShadows() {
   for (const SgprShadow &Shadow : SgprShadows) {
     B.CreateStore(B.getFalse(), Shadow.WaveMaskValid);

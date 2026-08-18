@@ -150,11 +150,11 @@ public:
   // entry. Single-SGPR entries remain independent.
   void invalidateSgprWaveMaskI1(unsigned BaseIdx);
 
-  // Drop the facts whose SSA values cannot cross a block boundary.
-  void clearSgprWaveMaskShadow() {
-    LastSgprWaveMaskI1.clear();
-    SourceImageSgprPairAddrShadow.clear();
-  }
+  // Start raising a new source block, dropping every raise-time fact that does
+  // not survive a block boundary: the compares and source-image addresses
+  // recorded per SGPR, the M0 constant, the VGPR MSB mode, and the cached
+  // lane-active bit. The alloca-backed shadow storage is unaffected.
+  void enterBlock();
 
   // Record that SGPR pair BaseIdx holds source code-object address Value.
   void recordSourceImageSgprPairAddr(unsigned BaseIdx, uint64_t Value) {
@@ -169,7 +169,6 @@ public:
   // resolve its VGPR index while the indexed register file is built. A
   // non-constant write, and any block boundary, gives up the constant.
   void updateM0Const(llvm::Value *V);
-  void clearM0Const() { M0Const = std::nullopt; }
   std::optional<uint64_t> getM0Const() const { return M0Const; }
 
   // Emit stores marking every cross-block SGPR shadow invalid.

@@ -383,6 +383,24 @@ TEST_F(RegisterStateTest, InvalidatesOverlappingPairShadows) {
   EXPECT_FALSE(Env->Regs->lookupSourceImageSgprPairAddr(4));
 }
 
+TEST_F(RegisterStateTest, DropsBlockScopedFactsOnBlockEntry) {
+  Env->Regs->recordSgprWaveMaskI1(4, ConstantInt::getTrue(Env->LLVMCtx), true);
+  Env->Regs->recordSourceImageSgprPairAddr(4, 0x1000);
+  Env->Regs->setVgprMsBs(0xD5);
+  ParsedReg M0;
+  M0.RegKind = ParsedReg::M0;
+  Env->Regs->writeReg32(M0, Env->B.getInt32(7));
+  Value *OldLaneActive = Env->Regs->emitLaneActiveBit();
+
+  Env->Regs->enterBlock();
+
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4), nullptr);
+  EXPECT_FALSE(Env->Regs->lookupSourceImageSgprPairAddr(4));
+  EXPECT_EQ(Env->Regs->vgprMsBs(), 0);
+  EXPECT_FALSE(Env->Regs->getM0Const());
+  EXPECT_NE(Env->Regs->emitLaneActiveBit(), OldLaneActive);
+}
+
 TEST_F(RegisterStateTest, ProjectsMaskReadsToCurrentSourceWave) {
   Expected<MCState> SourceState = initMCState("gfx1250");
   ASSERT_TRUE(static_cast<bool>(SourceState))
@@ -438,7 +456,7 @@ TEST_F(RegisterStateTest, ProjectsMaskReadsToCurrentSourceWave) {
 TEST_F(RegisterStateTest, RetainsPairWidthAcrossBlocks) {
   Env->Regs->recordSgprWaveMaskI1(2, ConstantInt::getTrue(Env->LLVMCtx), false);
   Env->Regs->recordSgprWaveMaskI1(4, ConstantInt::getTrue(Env->LLVMCtx), true);
-  Env->Regs->clearSgprWaveMaskShadow();
+  Env->Regs->enterBlock();
 
   Env->Regs->invalidateSgprWaveMaskI1(3);
   Env->Regs->invalidateSgprWaveMaskI1(5);
