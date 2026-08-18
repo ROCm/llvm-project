@@ -87,11 +87,6 @@ public:
   // to the end of the source text section.
   uint64_t kernelEndOffset() const { return KernelEndOffset; }
 
-  // Block a kernel-end branch returns to, or null when the raised kernel does
-  // not loop over source threads. The raiser sets it once the loop is laid out.
-  llvm::BasicBlock *threadLoopLatch() const { return ThreadLoopLatch; }
-  void setThreadLoopLatch(llvm::BasicBlock *BB) { ThreadLoopLatch = BB; }
-
   // Byte size of the source private segment.
   uint32_t sourcePrivateSegmentFixedSize() const {
     return SourcePrivateSegmentFixedSize;
@@ -407,8 +402,6 @@ private:
   uint32_t SourceComputePgmRsrc2 = 0;
   uint16_t SourceKernelCodeProperties = 0;
 
-  // Block a kernel-end branch returns to, once the raiser lays out the loop.
-  llvm::BasicBlock *ThreadLoopLatch = nullptr;
   // Allocation backing the source private segment, made on first use.
   llvm::AllocaInst *ScratchPrivateSegmentAlloca = nullptr;
   // Active low byte of S_SET_VGPR_MSB.
