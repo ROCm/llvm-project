@@ -572,7 +572,8 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     }
 
     if (trimarg == "--help" || trimarg == "-h") {
-      std::cerr << "Warning: hipcc is deprecated and will be removed in a future release.\n"
+      std::cerr << "Warning: hipcc is deprecated and will be removed in a "
+                   "future release.\n"
                 << "  Please use amdclang++ directly instead.\n"
                 << "  See https://rocm.docs.amd.com/ for migration guidance.\n";
     }
@@ -652,7 +653,8 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
           } else if (arg == "--hipcc-no-func-supp") {
             std::cerr << "Warning: The --hipcc-no-func-supp option has been deprecated and will be removed in the future.\n";
             funcSupp = 0;
-          } else if (hipBinUtilPtr_->stringRegexMatch(arg, "^--hipcc-verbose=.*")) {
+          } else if (hipBinUtilPtr_->stringRegexMatch(arg,
+                                                      "^--hipcc-verbose=.*")) {
             verbose = stoi(arg.substr(arg.find('=') + 1));
           }
         } else {

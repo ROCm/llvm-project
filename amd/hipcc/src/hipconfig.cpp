@@ -34,11 +34,14 @@ int main(int argc, char* argv[]){
         cmd = platformPtrs.at(j)->gethipconfigCmd(argv[i]);
         switch (cmd) {
         case help:
-            std::cerr << "Warning: hipconfig is deprecated and will be removed in a future release.\n"
-                      << "  Please use CMake's find_package(hip CONFIG) and hip_VERSION instead.\n"
-                      << "  See https://rocm.docs.amd.com/ for migration guidance.\n";
-            platformPtrs.at(j)->printUsage();
-            break;
+          std::cerr
+              << "Warning: hipconfig is deprecated and will be removed in a "
+                 "future release.\n"
+              << "  Please use CMake's find_package(hip CONFIG) and "
+                 "hip_VERSION instead.\n"
+              << "  See https://rocm.docs.amd.com/ for migration guidance.\n";
+          platformPtrs.at(j)->printUsage();
+          break;
         case path: cout << platformPtrs.at(j)->getHipPath();
             break;
         case roccmpath: cout << platformPtrs.at(j)->getRoccmPath();
