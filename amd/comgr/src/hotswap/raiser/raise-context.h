@@ -119,8 +119,10 @@ private:
   llvm::AllocaInst *ScratchPrivateSegmentAlloca = nullptr;
 };
 
-// Reads a handler's source operands via the decoded srcMap, applying VOP3
-// neg/abs modifiers on the float paths.
+// Operand access for one decoded instruction, handed to a handler: source
+// reads through the decoded srcMap at 32-bit, 64-bit or EXEC width, register
+// names for sources and destinations, and immediates. Float source reads apply
+// the neg/abs modifiers.
 struct OpResolver {
   // Context the operands are read through.
   RaiseContext &Ctx;
