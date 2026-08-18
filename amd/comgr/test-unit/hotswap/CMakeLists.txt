@@ -15,7 +15,7 @@ if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   add_subdirectory(decoder)
   list(APPEND COMGR_HOTSWAP_TEST_TARGETS
     RaiserScaffoldingTests WaveProjectionTests RaiseFailureTests RegFileTests
-    RaiseContextTests UserSgprLayoutTests DecoderTests)
+    RegisterStateTests RaiseContextTests UserSgprLayoutTests DecoderTests)
 endif()
 
 # The test binaries above, exported to the parent scope so the top-level
