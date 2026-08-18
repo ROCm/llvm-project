@@ -130,8 +130,7 @@ comgr_configure_test_target(RegisterStateTests)
 
 # -- RaiseContextTests --------------------------------------------------------
 #
-# Covers the per-kernel context itself: source-offset block lookup and the
-# operand resolver's failure propagation.
+# Covers the per-kernel context itself: source-offset block lookup.
 
 add_executable(RaiseContextTests
   RaiseContextTest.cpp)
@@ -151,6 +150,30 @@ target_include_directories(RaiseContextTests PRIVATE
   $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
 
 comgr_configure_test_target(RaiseContextTests)
+
+# -- OpResolverTests ----------------------------------------------------------
+#
+# Covers the per-instruction operand accessor: the failures it propagates out of
+# the register reads it resolves through.
+
+add_executable(OpResolverTests
+  OpResolverTest.cpp)
+
+target_link_libraries(OpResolverTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  hotswap::raiser
+  hotswap::decoder
+  hotswap::common
+  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+target_include_directories(OpResolverTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${PROJECT_SOURCE_DIR}/src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
+
+comgr_configure_test_target(OpResolverTests)
 
 # -- UserSgprLayoutTests ------------------------------------------------------
 #
