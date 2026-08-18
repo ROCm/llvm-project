@@ -4704,10 +4704,13 @@ public:
                   llvm::CallBase **CallOrInvoke = nullptr,
                   CGFunctionInfo const **ResolvedFnInfo = nullptr);
 
-  // Emits code for a direct call to the variadic function _emissary_exec:
-  // allocates an arg buffer, packs each _emissary_exec argument with its type,
-  // and calls the __llvm_emissary_rpc RPC utilities. Defined in
-  // CGEmitEmissaryExec.cpp.
+  /// EmitEmissaryExec generates IR to allocate an arg buffer, fill buffer with
+  /// args, then generate a call to __llvm_emissary_rpc(sz,buf) when a call-site
+  /// to _emissary_exec(...) is encountered.  _emissary_exec greatly simplifies
+  /// construction of device stub functions when creating an emissary API.
+  /// The LLVM RPC device utility __llvm_emissary_rpc triggers the rpc client
+  /// server exchange where the RPC host server executes the designated function
+  /// for each active lane in the GPU warp.
   RValue EmitEmissaryExec(const CallExpr *E);
 
   // If a Call or Invoke instruction was emitted for this CallExpr, this method

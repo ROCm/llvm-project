@@ -66,14 +66,6 @@ target_compile_definitions(omptarget PRIVATE
   DEBUG_PREFIX="omptarget"
 )
 
-if(TARGET emissary_mpi)
-  message(STATUS "Adding Emissary MPI library (libemissary_mpi) to omptarget")
-  target_link_libraries(omptarget PRIVATE emissary_mpi)
-elseif(TARGET emissary)
-  message(STATUS "Adding Emissary library to omptarget")
-  target_link_libraries(omptarget PRIVATE emissary)
-endif()
-
 foreach(plugin IN LISTS LIBOMPTARGET_PLUGINS_TO_BUILD)
   target_link_libraries(omptarget PRIVATE omptarget.rtl.${plugin})
 endforeach()

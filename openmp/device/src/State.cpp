@@ -21,13 +21,6 @@
 #include "State.h"
 #include "Synchronization.h"
 
-extern "C" {
-__attribute__((noinline)) void *__alt_libc_malloc(size_t sz);
-__attribute__((noinline)) void __alt_libc_free(void *ptr);
-__attribute__((noinline)) void *internal_malloc(uint64_t Size);
-__attribute__((noinline)) void internal_free(void *Ptr);
-}
-
 using namespace ompx;
 
 /// Memory implementation
