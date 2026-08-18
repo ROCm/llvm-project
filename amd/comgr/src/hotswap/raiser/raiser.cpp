@@ -140,16 +140,16 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   if (SourceIsa.empty() ||
       AMDGPU::parseArchAMDGCN(SourceCpu) == AMDGPU::GK_NONE) {
     return RaiseFailure::general(RaiseFailureReason::BadInput,
-                                 "source ISA '" + SourceIsa +
-                                     "' does not name an AMDGPU GPU");
+                    "source ISA '" + SourceIsa +
+                        "' does not name an AMDGPU GPU");
   }
 
   // Same normalisation for the target-side override (--target-isa on
   // raise_cli, or programmatic CompilationTargetIsa). Empty means
   // "translate in place -- reuse the source profile".
   StringRef TargetCpu = CompilationTargetIsa.empty()
-                            ? CompilationTargetIsa
-                            : NormalizeIsa(CompilationTargetIsa);
+               ? CompilationTargetIsa
+               : NormalizeIsa(CompilationTargetIsa);
 
   Expected<MCState> MCStateOrErr = initMCState(SourceCpu);
   if (!MCStateOrErr) {
@@ -216,8 +216,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   const bool UseReplicationDoubled =
       !UseThreadLoop && ForceReplicationDoubled && WideningWave32To64;
   const bool UseWaveNative = !UseThreadLoop && !UseReplicationDoubled &&
-                             EnableWaveNative && WideningWave32To64 &&
-                             !PhantomLaneRegime;
+                EnableWaveNative && WideningWave32To64 &&
+                !PhantomLaneRegime;
 
   // Size gate for the doubled dispatch: the runtime scales the block by
   // W_t / W_s along x, so the scaled flat size must not exceed the target's
@@ -237,7 +237,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
            "; refuse rather than truncate the block.")
               .str();
       return RaiseFailure::inKernel(RaiseFailureReason::CrossWavePredicateChain,
-                                    KernelName, Detail);
+                       KernelName, Detail);
     }
   }
 
@@ -246,12 +246,12 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     ProjectionPtr =
         std::make_unique<ThreadLoopProjection>(Isa, TargetIsa, I32Ty, I64Ty);
     LLVM_DEBUG(dbgs() << "transpiler: kernel '" << KernelName
-                      << "' selected ThreadLoopProjection\n");
+         << "' selected ThreadLoopProjection\n");
   } else if (UseReplicationDoubled) {
     ProjectionPtr = std::make_unique<ReplicationDoubledDispatchProjection>(
         Isa, TargetIsa, I32Ty, I64Ty);
     LLVM_DEBUG(dbgs() << "transpiler: kernel '" << KernelName
-                      << "' selected ReplicationDoubledDispatchProjection\n");
+         << "' selected ReplicationDoubledDispatchProjection\n");
   } else if (UseWaveNative) {
     ProjectionPtr =
         std::make_unique<WaveNativeProjection>(Isa, TargetIsa, I32Ty, I64Ty);
@@ -274,11 +274,11 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   if (!UseThreadLoop && !UseReplicationDoubled && EnableWaveNative &&
       PhantomLaneRegime && Isa.isWave32() && !TargetIsa.isWave32()) {
     LLVM_DEBUG(dbgs() << "transpiler: kernel '" << KernelName
-                      << "' is in phantom-lane regime "
-                         "(max_flat_workgroup_size="
-                      << Meta.MaxFlatWorkgroupSize
-                      << " < target wavefront width=" << TargetIsa.waveSize()
-                      << "); falling back to ReplicationProjection\n");
+         << "' is in phantom-lane regime "
+            "(max_flat_workgroup_size="
+         << Meta.MaxFlatWorkgroupSize
+         << " < target wavefront width=" << TargetIsa.waveSize()
+         << "); falling back to ReplicationProjection\n");
   }
 
   // Build opcode -> CanonicalOp map from MCInstrInfo
@@ -292,7 +292,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // linearised instruction stream + the set of CFG block-start offsets.
   if (KernelSize != 0 && KernelSize > UINT64_MAX - KernelOffset)
     return RaiseFailure::general(RaiseFailureReason::InternalError,
-                                 "kernel decode extent overflows");
+                    "kernel decode extent overflows");
 
   const uint64_t KernelEndOffset =
       KernelSize == 0 ? 0 : KernelOffset + KernelSize;
@@ -397,8 +397,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
              "doubled dispatch dim must be x/y/z");
       const char DimChar = "xyz"[Projection.doubledDispatchDim()];
       F->addFnAttr("hotswap-modrep-doubled-dispatch",
-                   std::string(1, DimChar) +
-                       std::to_string(Projection.doubledDispatchFactor()));
+      std::string(1, DimChar) +
+          std::to_string(Projection.doubledDispatchFactor()));
     }
     F->addFnAttr("amdgpu-flat-work-group-size",
                  std::to_string(MaxWg) + "," + std::to_string(MaxWg));
@@ -509,8 +509,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // seeds into a dedicated "entry" block inserted before all body blocks and
   // branches it to KernelOffset.
   BasicBlock *EntryBb = UseThreadLoop
-                            ? BasicBlock::Create(C, "entry", F, FirstBodyBb)
-                            : OffsetToBb[KernelOffset];
+               ? BasicBlock::Create(C, "entry", F, FirstBodyBb)
+               : OffsetToBb[KernelOffset];
 
   // ==== Phase 4: Init entry registers ====
   IRBuilder<> B(EntryBb);
@@ -531,19 +531,19 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // through it just like it loads through kernarg_segment_ptr.
   if (UserSgprLayout.dispatchPtrSgpr().has_value()) {
     Regs.storeSGPR64(B, *UserSgprLayout.dispatchPtrSgpr(),
-                     B.CreateCall(FnDispatchPtr, {}, "dispatch_ptr"));
+        B.CreateCall(FnDispatchPtr, {}, "dispatch_ptr"));
   }
   if (UserSgprLayout.kernargSegmentPtrSgpr().has_value()) {
     Regs.storeSGPR64(B, *UserSgprLayout.kernargSegmentPtrSgpr(),
-                     B.CreateCall(FnKargPtr, {}, "kernarg_ptr"));
+        B.CreateCall(FnKargPtr, {}, "kernarg_ptr"));
   }
   if (UserSgprLayout.workgroupIdXSgpr().has_value()) {
     Regs.storeSGPR32(B, *UserSgprLayout.workgroupIdXSgpr(),
-                     B.CreateCall(FnWorkgroupIdX, {}, "wg_id_x"));
+        B.CreateCall(FnWorkgroupIdX, {}, "wg_id_x"));
   }
   if (UserSgprLayout.workgroupIdYSgpr().has_value()) {
     Regs.storeSGPR32(B, *UserSgprLayout.workgroupIdYSgpr(),
-                     B.CreateCall(FnWorkgroupIdY, {}, "wg_id_y"));
+        B.CreateCall(FnWorkgroupIdY, {}, "wg_id_y"));
   }
   // Hidden-arg remaps use the ABI version the backend will emit for this
   // module. If target emission starts pinning a module flag, thread that value
@@ -553,15 +553,15 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   auto EmitPreloadedKernargDword =
       [&](IRBuilder<> &SeedB, uint64_t ByteOffset) -> Expected<Value *> {
     SourceHiddenArgContext HiddenCtx{C,
-                                     M,
-                                     SeedB,
-                                     *F,
-                                     I8Ty,
-                                     I32Ty,
-                                     I64Ty,
-                                     Meta.Args,
-                                     AssumeHipGlobalOffsetZero,
-                                     TargetCodeObjectVersion};
+                        M,
+                        SeedB,
+                        *F,
+                        I8Ty,
+                        I32Ty,
+                        I64Ty,
+                        Meta.Args,
+                        AssumeHipGlobalOffsetZero,
+                        TargetCodeObjectVersion};
     if (Projection.usesDoubledDispatch())
       HiddenCtx.ScaledReplicationFactor = Projection.doubledDispatchFactor();
 
@@ -592,10 +592,10 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           SeedB.CreateCall(FnImplicitArgPtr, {}, "preload_implicitarg_ptr");
       int64_t ImplOffset = ByteOffset - Kernargs.ImplicitArgsBase;
       Value *Gep = ImplOffset == 0
-                       ? ImplPtr
-                       : SeedB.CreateInBoundsGEP(I8Ty, ImplPtr,
-                                                 SeedB.getInt64(ImplOffset),
-                                                 "preload_impl_gep");
+          ? ImplPtr
+          : SeedB.CreateInBoundsGEP(I8Ty, ImplPtr,
+                                    SeedB.getInt64(ImplOffset),
+                                    "preload_impl_gep");
       return SeedB.CreateAlignedLoad(I32Ty, Gep, Align(4), "preload_impl_dw");
     }
 
@@ -632,7 +632,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   // packed v0 seed.
   auto SeedWorkitemId = [&](IRBuilder<> &SeedB) {
     Regs.storeVGPR32(SeedB, 0,
-                     Projection.emitPackedWorkitemId(SeedB, NumWorkitemDims));
+        Projection.emitPackedWorkitemId(SeedB, NumWorkitemDims));
   };
 
   if (!UseThreadLoop)
@@ -700,19 +700,19 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     // the same source ABI state as a normal source wave.
     if (UserSgprLayout.dispatchPtrSgpr().has_value()) {
       Regs.storeSGPR64(SeedB, *UserSgprLayout.dispatchPtrSgpr(),
-                       SeedB.CreateCall(FnDispatchPtr, {}, "dispatch_ptr"));
+          SeedB.CreateCall(FnDispatchPtr, {}, "dispatch_ptr"));
     }
     if (UserSgprLayout.kernargSegmentPtrSgpr().has_value()) {
       Regs.storeSGPR64(SeedB, *UserSgprLayout.kernargSegmentPtrSgpr(),
-                       SeedB.CreateCall(FnKargPtr, {}, "kernarg_ptr"));
+          SeedB.CreateCall(FnKargPtr, {}, "kernarg_ptr"));
     }
     if (UserSgprLayout.workgroupIdXSgpr().has_value()) {
       Regs.storeSGPR32(SeedB, *UserSgprLayout.workgroupIdXSgpr(),
-                       SeedB.CreateCall(FnWorkgroupIdX, {}, "wg_id_x"));
+          SeedB.CreateCall(FnWorkgroupIdX, {}, "wg_id_x"));
     }
     if (UserSgprLayout.workgroupIdYSgpr().has_value()) {
       Regs.storeSGPR32(SeedB, *UserSgprLayout.workgroupIdYSgpr(),
-                       SeedB.CreateCall(FnWorkgroupIdY, {}, "wg_id_y"));
+          SeedB.CreateCall(FnWorkgroupIdY, {}, "wg_id_y"));
     }
     for (size_t SgprIdx = 0; SgprIdx < UserSgprLayout.Entries.size();
          ++SgprIdx) {
@@ -729,7 +729,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
 
     if (AMDGPU::isGFX12Plus(*Mc.SubtargetInfo)) {
       SeedB.CreateStore(SeedB.CreateCall(FnWorkgroupIdX, {}, "ttmp9_wg_id"),
-                        Regs.Ttmp[9]);
+           Regs.Ttmp[9]);
       Value *WgIdY = SeedB.CreateCall(FnWorkgroupIdY, {}, "ttmp7_wg_id_y");
       Function *FnWorkgroupIdZ = Intrinsic::getOrInsertDeclaration(
           &M, Intrinsic::amdgcn_workgroup_id_z);
@@ -755,24 +755,22 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
 
   // `userSgprLayout` was built above before Phase 4 so entry SGPR seeding
   // and handler-side ABI decisions use the same descriptor-derived mapping.
-  RaiseContext Ctx{B,
-                   Regs,
-                   Projection,
-                   Mc,
-                   TargetCodeObjectVersion,
-                   Kernargs,
-                   UserSgprLayout,
-                   nullptr,
-                   OffsetToBb,
-                   ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
-                   TextBaseAddress,
-                   SourceImageSections,
-                   KernelOffset,
-                   KernelEndOffset};
-  Ctx.SourcePrivateSegmentFixedSize = Meta.PrivateSegmentFixedSize;
-  Ctx.SourceComputePgmRsrc2 = Meta.ComputePgmRsrc2;
-  Ctx.SourceKernelCodeProperties = Meta.KernelCodeProperties;
-  Ctx.AssumeHipGlobalOffsetZero = AssumeHipGlobalOffsetZero;
+  Expected<RaiseContext> CtxOrErr = RaiseContext::create(
+      B,
+      Projection,
+      Mc,
+      Meta,
+      TargetCodeObjectVersion,
+      AssumeHipGlobalOffsetZero,
+      OffsetToBb,
+      ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
+      TextBaseAddress,
+      SourceImageSections,
+      KernelOffset,
+      KernelEndOffset);
+  if (!CtxOrErr)
+    return CtxOrErr.takeError();
+  RaiseContext &Ctx = *CtxOrErr;
 
   if (UseThreadLoop) {
     auto *IterA = B.CreateAlloca(I32Ty, nullptr, "tl_iter_alloca");
@@ -783,7 +781,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     BasicBlock *CondBb = BasicBlock::Create(C, "tl_cond", F);
     BasicBlock *LatchBb = BasicBlock::Create(C, "tl_latch", F);
     BasicBlock *DoneBb = BasicBlock::Create(C, "tl_done", F);
-    Ctx.ThreadLoopLatch = LatchBb;
+    Ctx.setThreadLoopLatch(LatchBb);
 
     B.CreateBr(CondBb);
     B.SetInsertPoint(CondBb);
@@ -844,7 +842,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
       // exits).  Mirror that behaviour so we do not inherit stale MSB state
       // from a previous linear instruction that does not control-flow into
       // this BB.
-      Ctx.VgprMsBs = 0;
+      Ctx.setVgprMsBs(0);
       // Drop the per-lane-i1 shadow at every BB transition: the cached i1
       // SSA values dominate only the BB they were emitted in.
       Ctx.clearSgprWaveMaskShadow();
@@ -893,20 +891,20 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     if (!Hr.Handled) {
       StringRef Format = formatName(Di.TargetSpecificFlags);
       LLVM_DEBUG(dbgs() << "transpiler: unsupported instruction: "
-                        << printInst(Mc, Di.Inst) << " [format=" << Format
-                        << "] at offset 0x" << format_hex(Di.Offset, 1)
-                        << "\n");
+           << printInst(Mc, Di.Inst) << " [format=" << Format
+           << "] at offset 0x" << format_hex(Di.Offset, 1)
+           << "\n");
       RaiseFailures = llvm::joinErrors(
           std::move(RaiseFailures),
           RaiseFailure::atInstruction(RaiseFailureReason::UnsupportedOpcode,
-                                      strippedMnemonic(Mc, Di.Inst),
-                                      Di.Offset, Format));
+                         strippedMnemonic(Mc, Di.Inst),
+                         Di.Offset, Format));
       continue;
     }
 
     if (Di.defsScc() && !Hr.SccHandled && Hr.SccResult) {
       Value *Zero = Constant::getNullValue(Hr.SccResult->getType());
-      Ctx.Regs.storeSCC(Ctx.B, Ctx.B.CreateICmpNE(Hr.SccResult, Zero));
+      Ctx.regs().storeSCC(Ctx.B, Ctx.B.CreateICmpNE(Hr.SccResult, Zero));
     }
     if (Di.defsExec())
       Result.HasDivergentExec = true;
@@ -936,8 +934,8 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     if (!BB.hasTerminator()) {
       B.SetInsertPoint(&BB);
       if (!pred_empty(&BB) || &BB == &F->getEntryBlock()) {
-        if (Ctx.ThreadLoopLatch)
-          B.CreateBr(Ctx.ThreadLoopLatch);
+        if (Ctx.threadLoopLatch())
+          B.CreateBr(Ctx.threadLoopLatch());
         else
           B.CreateRetVoid();
       } else {
@@ -960,7 +958,7 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
     AssumptionCache AC(*F);
     SmallVector<AllocaInst *, 512> Allocas;
     Regs.collectAllocas(Allocas);
-    Ctx.collectSgprShadowAllocas(Allocas);
+    Ctx.collectAllocas(Allocas);
     PromoteMemToReg(Allocas, DT, &AC);
   }
 
@@ -970,11 +968,11 @@ raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
   if (verifyModule(M, &VerifyOs)) {
     errs() << "transpiler: IR verification failed:\n" << VerifyErr << "\n";
     return RaiseFailure::general(RaiseFailureReason::IRVerificationFailed,
-                                 VerifyErr);
+                    VerifyErr);
   }
 
-  Result.UsesScratchPrivateSegment = Ctx.UsesScratchPrivateSegment;
-  Result.SourcePrivateSegmentFixedSize = Ctx.SourcePrivateSegmentFixedSize;
+  Result.UsesScratchPrivateSegment = Ctx.usesScratchPrivateSegment();
+  Result.SourcePrivateSegmentFixedSize = Ctx.sourcePrivateSegmentFixedSize();
   return Result;
 }
 
@@ -986,12 +984,12 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
           RaiseStats *Stats) {
   return raiseToIR(TextBytes, SourceIsa, KernelName, Meta,
-                   /*KernelOffset=*/0,
-                   /*KernelSize=*/0, CompilationTargetIsa,
-                   EnableWritelaneRewrite, EnableWaveNative,
-                   /*AssumeHipGlobalOffsetZero=*/false,
-                   /*ForceReplicationDoubled=*/false, TextBaseAddress,
-                   SourceImageSections, Stats);
+      /*KernelOffset=*/0,
+      /*KernelSize=*/0, CompilationTargetIsa,
+      EnableWritelaneRewrite, EnableWaveNative,
+      /*AssumeHipGlobalOffsetZero=*/false,
+      /*ForceReplicationDoubled=*/false, TextBaseAddress,
+      SourceImageSections, Stats);
 }
 
 llvm::Expected<RaiseResult>
@@ -1004,13 +1002,13 @@ raiseToIR(llvm::ArrayRef<uint8_t> TextBytes, llvm::StringRef SourceIsa,
           llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
           RaiseStats *Stats) {
   return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta, KernelOffset,
-                       KernelSize, TextBaseAddress, SourceImageSections,
-                       CompilationTargetIsa, EnableWritelaneRewrite,
-                       EnableWaveNative,
-                       /*forceThreadLoopProjection=*/false,
-                       /*suppressC5ForThreadLoopRoute=*/false,
-                       ForceReplicationDoubled, AssumeHipGlobalOffsetZero,
-                       Stats);
+          KernelSize, TextBaseAddress, SourceImageSections,
+          CompilationTargetIsa, EnableWritelaneRewrite,
+          EnableWaveNative,
+          /*forceThreadLoopProjection=*/false,
+          /*suppressC5ForThreadLoopRoute=*/false,
+          ForceReplicationDoubled, AssumeHipGlobalOffsetZero,
+          Stats);
 }
 
 } // namespace COMGR::hotswap
