@@ -72,6 +72,11 @@ if(POLICY CMP0194)
   cmake_policy(SET CMP0194 OLD)
 endif()
 
+if(POLICY CMP0091)
+  # Required for CMAKE_MSVC_RUNTIME_LIBRARY, must be set prior the first project() or enable_language()
+  cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(LLVM
   VERSION ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}
   LANGUAGES C CXX ASM)
@@ -83,6 +88,47 @@ endif()
 
 # Must go after `DEFINED LLVM_LIBDIR_SUFFIX` check.
 set(LLVM_LIBDIR_SUFFIX "" CACHE STRING "Define suffix of library directory name (32/64)" )
+
+if(WIN32)
+    add_compile_definitions("$<$<COMPILE_LANGUAGE:C,CXX>:_CRT_SECURE_NO_WARNINGS;NOMINMAX>")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-fms-extensions;-fms-compatibility>")
+    endif()
+
+    option(COMGR_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS "Prepare LLVM for BinSkim Analyzer" OFF)
+    option(LLVM_USE_SPECTRE_MITIGATED_LIBRARIES "Use Spectre-mitigated libraries" OFF)
+
+    if (MSVC AND MSVC_VERSION GREATER_EQUAL 1900)
+        if(LLVM_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS)
+            message(STATUS "Control Flow Guard enabled")
+            add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/guard:cf>)
+            add_link_options(/guard:cf /DYNAMICBASE)
+        endif()
+        if(LLVM_USE_SPECTRE_MITIGATED_LIBRARIES)
+            message(STATUS "Using Spectre-mitigated libraries")
+            add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/Qsspectre>)
+        endif()
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        if(LLVM_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS)
+            message(STATUS "Control Flow Guard enabled (Clang)")
+            add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:SHELL:-Xclang -cfguard>")
+            add_link_options(-Wl,-guard:cf)
+        endif()
+        if(LLVM_USE_SPECTRE_MITIGATED_LIBRARIES)
+            message(WARNING "Spectre-mitigated libraries are not yet available for Clang in this project.")
+        endif()
+    endif()
+
+    option(LLVM_USE_MSVC_STATIC_RUNTIME "Link MSVC runtime library statically" OFF)
+
+    if(NOT LLVM_USE_MSVC_STATIC_RUNTIME)
+        set(LLVM_MSVC_RUNTIME_SUFFIX "DLL")
+    endif()
+    if(NOT CMAKE_MSVC_RUNTIME_LIBRARY)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>${LLVM_MSVC_RUNTIME_SUFFIX}")
+    endif()
+e
+endif()
 
 # Must go after `project(..)`.
 include(GNUInstallDirs)
