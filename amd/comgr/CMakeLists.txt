@@ -9,12 +9,23 @@ set (ver_minor ${CMAKE_MATCH_1})
 
 message("Comgr Version: ${ver_major}.${ver_minor}.0")
 
+if(WIN32)
+    # Required for CMAKE_MSVC_RUNTIME_LIBRARY, must be set prior the first project() or enable_language()
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(amd_comgr VERSION "${ver_major}.${ver_minor}.0" LANGUAGES C CXX)
 set(amd_comgr_NAME "${PROJECT_NAME}")
 
 if(WIN32)
+    add_compile_definitions("$<$<COMPILE_LANGUAGE:C,CXX>:_CRT_SECURE_NO_WARNINGS;NOMINMAX>")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-fms-extensions;-fms-compatibility>")
+    endif()
+
     option(COMGR_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS "Prepare amd_comgr for BinSkim Analyzer" OFF)
     option(COMGR_USE_SPECTRE_MITIGATED_LIBRARIES "Use Spectre-mitigated libraries" OFF)
+
     if (MSVC AND MSVC_VERSION GREATER_EQUAL 1900)
         if(COMGR_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS)
             message(STATUS "Control Flow Guard enabled")
