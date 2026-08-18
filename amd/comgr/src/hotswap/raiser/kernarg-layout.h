@@ -25,11 +25,6 @@ struct KernargLayout {
   uint64_t ImplicitArgsBase = 0;
   // Source metadata argument layout, including hidden_* entries.
   llvm::ArrayRef<KernelArgMeta> Args;
-  // Total kernarg segment size in bytes, copied from the kernel
-  // descriptor's `.kernarg_segment_size`. Informational; the lifted
-  // kernel's `Function` parameter list drives the backend's
-  // `kernarg_segment_size` calculation in the output kernel descriptor.
-  uint64_t KernargSegmentSize = 0;
 };
 
 // Source metadata hidden_* argument kinds with source-ABI synthesis support.

@@ -87,15 +87,6 @@ public:
   // to the end of the source text section.
   uint64_t kernelEndOffset() const { return KernelEndOffset; }
 
-  // Byte size of the source private segment.
-  uint32_t sourcePrivateSegmentFixedSize() const {
-    return SourcePrivateSegmentFixedSize;
-  }
-  // Source kernel_code_properties descriptor field.
-  uint16_t sourceKernelCodeProperties() const {
-    return SourceKernelCodeProperties;
-  }
-
   // Source scratch allocation, disjoint from target spills. Null until a
   // handler needs source scratch.
   llvm::AllocaInst *scratchPrivateSegmentAlloca() const {
@@ -394,10 +385,6 @@ private:
   // Extent of the source kernel within the source text section.
   uint64_t KernelStartOffset = 0;
   uint64_t KernelEndOffset = 0;
-
-  // Source kernel descriptor values the handlers need.
-  uint32_t SourcePrivateSegmentFixedSize = 0;
-  uint16_t SourceKernelCodeProperties = 0;
 
   // Allocation backing the source private segment, made on first use.
   llvm::AllocaInst *ScratchPrivateSegmentAlloca = nullptr;

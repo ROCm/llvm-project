@@ -60,16 +60,14 @@ RaiseContext::RaiseContext(
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset)
     : B(B), Projection(Projection), MC(MC),
-      Kernargs{Meta.implicitArgsBase(), Meta.Args, Meta.KernargSegmentSize},
-      Layout(std::move(Layout)), OffsetToBb(std::move(OffsetToBb)),
+      Kernargs{Meta.implicitArgsBase(), Meta.Args}, Layout(std::move(Layout)),
+      OffsetToBb(std::move(OffsetToBb)),
       TargetCodeObjectVersion(TargetCodeObjectVersion),
       AssumeHipGlobalOffsetZero(AssumeHipGlobalOffsetZero),
       SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
-      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),
-      SourcePrivateSegmentFixedSize(Meta.PrivateSegmentFixedSize),
-      SourceKernelCodeProperties(Meta.KernelCodeProperties) {
+      KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset) {
   Regs.init(B, B.getInt32Ty(), B.getInt1Ty(), Projection.sourceIsa(),
             *MC.RegInfo, Projection);
 
