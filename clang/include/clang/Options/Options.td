@@ -9344,6 +9344,18 @@ def opt_record_format : Separate<["-"], "opt-record-format">,
 
 } // let Visibility = [CC1Option, FC1Option]
 
+// Device printf/fprintf are routed to Emissary by including
+// <emissary/emissary_print.h> from the Emissary PRINT client, not by codegen:
+// each argument has to be packed with its own type, so the _emissary_exec call
+// must be written at the call site. This flag only predefines
+// __USE_EMISSARY_PRINT__ so sources and headers can detect that choice.
+def fuse_emissary_print : Flag<["-"], "fuse-emissary-print">,
+  Group<f_Group>, Visibility<[ClangOption]>,
+  HelpText<"Predefine __USE_EMISSARY_PRINT__ for device compilations using the "
+           "Emissary PRINT client">;
+def fno_use_emissary_print : Flag<["-"], "fno-use-emissary-print">,
+  Group<f_Group>, Visibility<[ClangOption]>;
+
 //===----------------------------------------------------------------------===//
 // cc1as-only Options
 //===----------------------------------------------------------------------===//
@@ -9962,9 +9974,6 @@ def _SLASH_Ze : CLFlag<"Ze">;
 def _SLASH_Zg : CLFlag<"Zg">;
 def _SLASH_ZI : CLFlag<"ZI">;
 def _SLASH_ZW : CLJoined<"ZW">;
-
-
-
 
 //===----------------------------------------------------------------------===//
 // clang-dxc Options

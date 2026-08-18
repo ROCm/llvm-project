@@ -7130,6 +7130,21 @@ RValue CodeGenFunction::EmitCall(QualType CalleeType,
       StaticOperator = true;
   }
 
+  // EmitEmissaryExec generates code to allocate an arg buffer, fill buffer
+  // with _emissary_exec args, then generate a call to either
+  // __llvm_emissary_rpc or __llvm_emissary_rpc_dm which are rpc utilities.
+  // Only direct calls to _emissary_exec are intercepted: because each argument
+  // must be packed with its own type, the call has to be written out at the
+  // call site. Clients that wrap variadic library entry points (printf, ...)
+  // therefore expand them with macros rather than device stubs, which could
+  // only forward a va_list.
+  if ((CGM.getTriple().isAMDGCN() || CGM.getTriple().isNVPTX()) && FnType &&
+      isa<FunctionProtoType>(FnType) &&
+      cast<FunctionProtoType>(FnType)->isVariadic() && E->getDirectCallee() &&
+      E->getDirectCallee()->getIdentifier() &&
+      E->getDirectCallee()->getIdentifier()->isStr("_emissary_exec"))
+    return EmitEmissaryExec(E);
+
   auto Arguments = E->arguments();
   if (StaticOperator) {
     // If we're calling a static operator, we need to emit the object argument

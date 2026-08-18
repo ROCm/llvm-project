@@ -103,6 +103,7 @@ VERS1.0 {
     __llvmPushCallConfiguration;
     __llvmPopCallConfiguration;
     llvmLaunchKernel;
+    EmissaryRegistryTable;
   local:
     *;
 };

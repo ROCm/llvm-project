@@ -133,6 +133,49 @@ unsigned long long __llvm_omp_host_call(void *fn, void *data, size_t size) {
   });
   return Ret;
 }
+
+// Calls to __alt_libc_malloc and __alt_libc_free are
+// made by _ockl_devmem_request
+__attribute__((noinline)) void *__alt_libc_malloc(size_t sz) {
+  void *ptr = nullptr;
+  rpc::Client::Port Port = ompx::impl::Client.open<ALT_LIBC_MALLOC>();
+  Port.send_and_recv(
+      [=](rpc::Buffer *buffer, uint32_t) { buffer->data[0] = (uint64_t)sz; },
+      [&](rpc::Buffer *buffer, uint32_t) {
+        ptr = reinterpret_cast<void *>(buffer->data[0]);
+      });
+  return ptr;
+}
+__attribute__((noinline)) void __alt_libc_free(void *ptr) {
+  rpc::Client::Port Port = ompx::impl::Client.open<ALT_LIBC_FREE>();
+  Port.send([=](rpc::Buffer *buffer, uint32_t) {
+    buffer->data[0] = (uint64_t)ptr;
+  });
+  return;
+}
+
+#if SANITIZER_AMDGPU
+__attribute__((noinline)) uint64_t __asan_malloc_impl(uint64_t bufsz,
+                                                      uint64_t pc);
+__attribute__((noinline)) void __asan_free_impl(uint64_t ptr, uint64_t pc);
+#endif
+
+__attribute__((flatten, always_inline)) char *global_allocate(uint32_t bufsz) {
+#if SANITIZER_AMDGPU
+  return (char *)__asan_malloc_impl(bufsz,
+                                    (uint64_t)__builtin_return_address(0));
+#else
+  return (char *)malloc((uint64_t)bufsz);
+#endif
+}
+__attribute__((flatten, always_inline)) int global_free(void *ptr) {
+#if SANITIZER_AMDGPU
+  __asan_free_impl((uint64_t)ptr, (uint64_t)__builtin_return_address(0));
+#else
+  free(ptr);
+#endif
+  return 0;
+}
 }
 
 // C++ ABI helpers.

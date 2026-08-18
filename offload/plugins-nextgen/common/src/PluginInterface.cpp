@@ -661,6 +661,9 @@ Error GenericDeviceTy::init(GenericPluginTy &Plugin) {
 }
 
 Error GenericDeviceTy::unloadBinary(DeviceImageTy *Image) {
+  if (auto Err = callGlobalDestructors(Plugin, *Image))
+    return Err;
+
   GenericGlobalHandlerTy &Handler = Plugin.getGlobalHandler();
   auto ProfOrErr = Handler.readProfilingGlobals(*this, *Image);
   if (!ProfOrErr)
@@ -2414,4 +2417,11 @@ int32_t GenericPluginTy::data_fence(int32_t DeviceId,
   }
 
   return OFFLOAD_SUCCESS;
+}
+extern "C" void *global_allocate(uint32_t bufsz) {
+  return malloc((size_t)bufsz);
+}
+extern "C" int global_free(void *ptr) {
+  free(ptr);
+  return 0;
 }
