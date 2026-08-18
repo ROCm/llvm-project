@@ -30,6 +30,12 @@ getAllPossibleAMDGPUTargetIDFeatures(const llvm::Triple &T,
   if (ProcKind == llvm::AMDGPU::GK_NONE)
     return Ret;
   unsigned Features = llvm::AMDGPU::getArchAttrAMDGCN(ProcKind);
+  // TODO(gfx1250-A0): Temporary. Allow the gfx1250 A0/B0 hardware revision to be
+  // carried as a target-ID feature so A0 and B0 code objects can coexist in a
+  // single offload bundle and be selected independently. Remove once gfx1250 A0
+  // is decommissioned. (Alphabetical order: before "sramecc".)
+  if (ProcKind == llvm::AMDGPU::GK_GFX1250)
+    Ret.push_back("gfx1250-b0-specific");
   if (Features & llvm::AMDGPU::FEATURE_SRAMECC)
     Ret.push_back("sramecc");
   // Only allow xnack in target ID if the processor supports on/off modes.
