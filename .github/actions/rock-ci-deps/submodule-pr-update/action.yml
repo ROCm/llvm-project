@@ -13,33 +13,25 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Update rocm-systems and rocm-libraries from TheRock main
+    - name: Update non-compiler submodules from TheRock main
       shell: bash
       run: |
         git config --global --add safe.directory "$PWD"
         git config --global core.longpaths true
         git config --global user.email "z1-cciauto@amd.com"
         git config --global user.name "Z1 cciauto"
-
         git fetch --no-tags --depth 1 origin \
           refs/heads/main:refs/remotes/origin/main
-
-        ROCM_SYSTEMS_SHA="$(git ls-tree origin/main rocm-systems | awk '{print $3}')"
-        ROCM_LIBRARIES_SHA="$(git ls-tree origin/main rocm-libraries | awk '{print $3}')"
-
-        if [[ -z "$ROCM_SYSTEMS_SHA" || -z "$ROCM_LIBRARIES_SHA" ]]; then
-          echo "::error::Failed to read rocm-systems or rocm-libraries SHA from TheRock main." >&2
-          exit 1
-        fi
-
-        echo "rocm-systems SHA from TheRock main: $ROCM_SYSTEMS_SHA"
-        echo "rocm-libraries SHA from TheRock main: $ROCM_LIBRARIES_SHA"
-        git update-index --cacheinfo 160000,"$ROCM_SYSTEMS_SHA",rocm-systems
-        git update-index --cacheinfo 160000,"$ROCM_LIBRARIES_SHA",rocm-libraries
-
+        git ls-tree -r origin/main |
+          while read -r mode type sha path; do
+            [[ "$mode" == "160000" ]] || continue
+            [[ "$path" == compiler/* ]] && continue
+            echo "${path} SHA from TheRock main: ${sha}"
+            git update-index --cacheinfo 160000,"$sha","$path"
+          done
         if ! git diff --cached --quiet; then
-          git commit -m "Update shared submodules from TheRock main"
-        fi    
+          git commit -m "Update non-compiler submodules from TheRock main"
+        fi
 
     - name: Update Submodule Pointer to the PR
       if: github.event_name == 'pull_request'
