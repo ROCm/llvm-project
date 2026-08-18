@@ -127,7 +127,6 @@ if(WIN32)
     if(NOT CMAKE_MSVC_RUNTIME_LIBRARY)
         set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>${LLVM_MSVC_RUNTIME_SUFFIX}")
     endif()
-e
 endif()
 
 # Must go after `project(..)`.
