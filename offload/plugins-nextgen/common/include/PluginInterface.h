@@ -1844,9 +1844,6 @@ struct GenericPluginTy {
   /// Get the number of active devices.
   int32_t getNumDevices() const { return NumDevices; }
 
-  /// Returns true if the system supports managed memory (SVN in AMD GPUs).
-  virtual bool IsSystemSupportingManagedMemory() { return false; }
-
   /// Get the plugin-specific device identifier.
   int32_t getUserId(int32_t DeviceId) const {
     assert(UserDeviceIds.contains(DeviceId) && "No user-id registered");
@@ -2025,9 +2022,6 @@ public:
   /// variables is enabled under unified shared memory.
   bool is_gfx90a_coarse_grain_usm_map_enabled(int32_t DeviceId);
 
-  /// Returns if managed memory is supported.
-  bool is_system_supporting_managed_memory(int32_t DeviceId);
-
   /// Returns non-zero if the data can be exchanged between the two devices.
   int32_t is_data_exchangable(int32_t SrcDeviceId, int32_t DstDeviceId);
 
@@ -2168,9 +2162,6 @@ public:
 
   /// Returns if we can use automatic zero copy.
   int32_t use_auto_zero_copy(int32_t DeviceId);
-
-  /// Make sure a pointer can be accessed by all agents.
-  int32_t enable_access_to_all_agents(int32_t DeviceId, void *ptr);
 
   /// Perform some checks when using automatic zero copy.
   int32_t zero_copy_sanity_checks_and_diag(int32_t DeviceId,

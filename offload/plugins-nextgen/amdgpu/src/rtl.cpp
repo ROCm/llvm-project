@@ -6063,17 +6063,6 @@ struct AMDGPUPluginTy final : public GenericPluginTy {
   /// Get the ELF code for recognizing the compatible image binary.
   uint16_t getMagicElfBits() const override { return ELF::EM_AMDGPU; }
 
-  bool IsSystemSupportingManagedMemory() override final {
-    bool HasManagedMemorySupport = false;
-    hsa_status_t Status = hsa_system_get_info(HSA_AMD_SYSTEM_INFO_SVM_SUPPORTED,
-                                              &HasManagedMemorySupport);
-
-    if (Status != HSA_STATUS_SUCCESS)
-      return false;
-
-    return HasManagedMemorySupport;
-  }
-
   void checkInvalidImage(__tgt_device_image *TgtImage) override final {
     hsa_utils::checkImageCompatibilityWithSystemXnackMode(TgtImage,
                                                       IsXnackEnabled());
