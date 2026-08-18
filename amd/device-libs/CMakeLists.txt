@@ -65,11 +65,6 @@ if (NOT PREPARE_BUILTINS)
 endif()
 
 if(WIN32)
-    add_compile_definitions("$<$<COMPILE_LANGUAGE:C,CXX>:_CRT_SECURE_NO_WARNINGS;NOMINMAX>")
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
-        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-fms-extensions;-fms-compatibility>")
-    endif()
-
     option(ROCM_DEVICE_LIBS_USE_BINSKIM_COMPLIANT_COMPILE_FLAGS "Prepare AMDDeviceLibs for BinSkim Analyzer" OFF)
     option(ROCM_DEVICE_LIBS_USE_SPECTRE_MITIGATED_LIBRARIES "Use Spectre-mitigated libraries" OFF)
 
