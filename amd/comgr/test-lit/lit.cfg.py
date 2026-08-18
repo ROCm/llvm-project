@@ -109,6 +109,10 @@ def _fwd(*parts):
     return os.path.join(*parts).replace("\\", "/")
 
 # %-prefixed substitutions for LLVM tools (used as %clang, %llvm-dis, etc.)
+# Note: %clang-offload-bundler must precede %clang so the longer token is
+# substituted first (lit does plain string replacement in list order).
+config.substitutions.append(
+    ("%clang-offload-bundler", _fwd(config.llvm_tools_dir, "clang-offload-bundler")))
 config.substitutions.append(("%clang", _fwd(config.llvm_tools_dir, "clang")))
 config.substitutions.append(("%llvm-dis", _fwd(config.llvm_tools_dir, "llvm-dis")))
 config.substitutions.append(("%llvm-mc", _fwd(config.llvm_tools_dir, "llvm-mc")))

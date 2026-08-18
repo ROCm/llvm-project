@@ -1087,6 +1087,32 @@ Error OffloadBundler::ListBundleIDsInFile(
   return Error::success();
 }
 
+// TODO(gfx1250-A0): Temporary. The gfx1250 A0/B0 hardware revision is carried as
+// the gfx1250-b0-specific target-ID feature ("+" = B0, "-" = A0). It is not a
+// canonical AMDGPU target-ID feature, so parseTargetID() would reject any ID
+// containing it. Split the marker off a target ID, returning the remaining ID
+// and, if present, the marker's value. Remove once gfx1250 A0 is decommissioned.
+static std::string splitGfx1250B0Feature(StringRef TargetID,
+                                         std::optional<bool> &B0) {
+  SmallVector<StringRef, 4> Parts;
+  TargetID.split(Parts, ':');
+  std::string Rest;
+  for (StringRef Part : Parts) {
+    if (Part == "gfx1250-b0-specific+") {
+      B0 = true;
+      continue;
+    }
+    if (Part == "gfx1250-b0-specific-") {
+      B0 = false;
+      continue;
+    }
+    if (!Rest.empty())
+      Rest += ':';
+    Rest += Part.str();
+  }
+  return Rest;
+}
+
 /// @brief Checks if a code object \p CodeObjectInfo is compatible with a given
 /// target \p TargetInfo.
 /// @link https://clang.llvm.org/docs/ClangOffloadBundler.html#bundle-entry-id
@@ -1113,12 +1139,25 @@ bool isCodeObjectCompatible(const OffloadTargetInfo &CodeObjectInfo,
     return false;
   }
 
+  // TODO(gfx1250-A0): Temporary. Peel off the gfx1250 A0/B0 revision marker
+  // before parseTargetID (which does not recognize it). A code object that pins
+  // a revision is compatible only with a target requesting the same revision; a
+  // code object with no marker is revision-agnostic. Remove once gfx1250 A0 is
+  // decommissioned.
+  std::optional<bool> CodeObjectB0, TargetB0;
+  std::string CodeObjectTargetID =
+      splitGfx1250B0Feature(CodeObjectInfo.TargetID, CodeObjectB0);
+  std::string TargetTargetID =
+      splitGfx1250B0Feature(TargetInfo.TargetID, TargetB0);
+  if (CodeObjectB0 && (!TargetB0 || *TargetB0 != *CodeObjectB0))
+    return false;
+
   // Incompatible if Processors mismatch.
   llvm::StringMap<bool> CodeObjectFeatureMap, TargetFeatureMap;
   std::optional<StringRef> CodeObjectProc = clang::parseTargetID(
-      CodeObjectInfo.Triple, CodeObjectInfo.TargetID, &CodeObjectFeatureMap);
+      CodeObjectInfo.Triple, CodeObjectTargetID, &CodeObjectFeatureMap);
   std::optional<StringRef> TargetProc = clang::parseTargetID(
-      TargetInfo.Triple, TargetInfo.TargetID, &TargetFeatureMap);
+      TargetInfo.Triple, TargetTargetID, &TargetFeatureMap);
 
   // Both TargetProc and CodeObjectProc can't be empty here.
   if (!TargetProc || !CodeObjectProc ||
