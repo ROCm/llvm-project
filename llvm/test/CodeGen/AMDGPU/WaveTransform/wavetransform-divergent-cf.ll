@@ -423,11 +423,11 @@ define amdgpu_cs void @self_loop(ptr addrspace(1) %out, i32 %val) {
 ; CHECK-NEXT:  .LBB6_1: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    s_add_i32 s2, s2, 1
-; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, s2, v2
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; CHECK-NEXT:    v_cmp_lt_u32_e64 s[4:5], s2, v2
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; CHECK-NEXT:    v_mov_b32_e32 v3, s2
-; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB6_1
 ; CHECK-NEXT:  .LBB6_2: ; %exit
@@ -495,13 +495,13 @@ define amdgpu_cs void @loop_two_exits(ptr addrspace(1) %out, i32 %val1, i32 %val
 ; CHECK-NEXT:    s_lshl_b64 s[6:7], s[0:1], 2
 ; CHECK-NEXT:    v_mov_b32_e32 v6, s7
 ; CHECK-NEXT:    v_add_co_u32_e32 v5, vcc, s6, v0
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[6:7], 0, v3
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; CHECK-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; CHECK-NEXT:    v_addc_co_u32_e32 v6, vcc, v1, v6, vcc
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; CHECK-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
+; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
 ; CHECK-NEXT:    global_store_dword v[5:6], v2, off
-; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_4
 ; CHECK-NEXT:  .LBB7_3: ; %latch

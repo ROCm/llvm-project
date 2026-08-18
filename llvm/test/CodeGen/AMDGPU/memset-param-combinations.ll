@@ -34,11 +34,11 @@ define void @memset_p0_varsize_align_4_varsetval(ptr addrspace(0) align 4 %dst, 
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[14:15], v[0:1], 0, s[6:7]
 ; GFX942-SDAG-NEXT:    s_add_u32 s6, s6, 16
 ; GFX942-SDAG-NEXT:    s_addc_u32 s7, s7, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[6:7], v[12:13]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[8:9], s[6:7], v[12:13]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
 ; GFX942-SDAG-NEXT:    flat_store_dwordx4 v[14:15], v[4:7]
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB0_2
 ; GFX942-SDAG-NEXT:  .LBB0_3: ; %dynamic-memset-expansion-residual-cond
@@ -59,11 +59,11 @@ define void @memset_p0_varsize_align_4_varsetval(ptr addrspace(0) align 4 %dst, 
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[4:5], v[0:1], 0, s[4:5]
 ; GFX942-SDAG-NEXT:    s_add_u32 s4, s4, 1
 ; GFX942-SDAG-NEXT:    s_addc_u32 s5, s5, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[4:5], v[8:9]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[2:3], s[4:5], v[8:9]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
 ; GFX942-SDAG-NEXT:    flat_store_byte v[4:5], v2
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB0_5
 ; GFX942-SDAG-NEXT:  .LBB0_6: ; %dynamic-memset-post-expansion
@@ -171,11 +171,11 @@ define void @memset_p1_varsize_align_4_varsetval(ptr addrspace(1) align 4 %dst, 
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[14:15], v[0:1], 0, s[6:7]
 ; GFX942-SDAG-NEXT:    s_add_u32 s6, s6, 16
 ; GFX942-SDAG-NEXT:    s_addc_u32 s7, s7, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[6:7], v[12:13]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[8:9], s[6:7], v[12:13]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
 ; GFX942-SDAG-NEXT:    global_store_dwordx4 v[14:15], v[4:7], off
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB1_2
 ; GFX942-SDAG-NEXT:  .LBB1_3: ; %dynamic-memset-expansion-residual-cond
@@ -196,11 +196,11 @@ define void @memset_p1_varsize_align_4_varsetval(ptr addrspace(1) align 4 %dst, 
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[4:5], v[0:1], 0, s[4:5]
 ; GFX942-SDAG-NEXT:    s_add_u32 s4, s4, 1
 ; GFX942-SDAG-NEXT:    s_addc_u32 s5, s5, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[4:5], v[8:9]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[2:3], s[4:5], v[8:9]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
 ; GFX942-SDAG-NEXT:    global_store_byte v[4:5], v2, off
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB1_5
 ; GFX942-SDAG-NEXT:  .LBB1_6: ; %dynamic-memset-post-expansion
@@ -306,13 +306,13 @@ define void @memset_p3_varsize_align_4_varsetval(ptr addrspace(3) align 4 %dst, 
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX942-SDAG-NEXT:    s_add_u32 s6, s6, 16
 ; GFX942-SDAG-NEXT:    s_addc_u32 s7, s7, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[6:7], v[4:5]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[8:9], s[6:7], v[4:5]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ds_write2_b32 v9, v8, v7 offset0:2 offset1:3
 ; GFX942-SDAG-NEXT:    ds_write2_b32 v9, v6, v3 offset1:1
 ; GFX942-SDAG-NEXT:    v_add_u32_e32 v9, 16, v9
-; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB2_2
 ; GFX942-SDAG-NEXT:  .LBB2_3: ; %dynamic-memset-expansion-residual-cond
@@ -332,12 +332,12 @@ define void @memset_p3_varsize_align_4_varsetval(ptr addrspace(3) align 4 %dst, 
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX942-SDAG-NEXT:    s_add_u32 s4, s4, 1
 ; GFX942-SDAG-NEXT:    s_addc_u32 s5, s5, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[4:5], v[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[2:3], exec, vcc
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[2:3], s[4:5], v[10:11]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
 ; GFX942-SDAG-NEXT:    ds_write_b8 v0, v1
 ; GFX942-SDAG-NEXT:    v_add_u32_e32 v0, 1, v0
-; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB2_5
 ; GFX942-SDAG-NEXT:  .LBB2_6: ; %dynamic-memset-post-expansion
@@ -437,12 +437,12 @@ define void @memset_p5_varsize_align_4_varsetval(ptr addrspace(5) align 4 %dst, 
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX942-SDAG-NEXT:    s_add_u32 s6, s6, 16
 ; GFX942-SDAG-NEXT:    s_addc_u32 s7, s7, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[6:7], v[4:5]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[8:9], s[6:7], v[4:5]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX942-SDAG-NEXT:    scratch_store_dwordx4 v3, v[6:9], off
 ; GFX942-SDAG-NEXT:    v_add_u32_e32 v3, 16, v3
-; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB3_2
 ; GFX942-SDAG-NEXT:  .LBB3_3: ; %dynamic-memset-expansion-residual-cond
@@ -462,12 +462,12 @@ define void @memset_p5_varsize_align_4_varsetval(ptr addrspace(5) align 4 %dst, 
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX942-SDAG-NEXT:    s_add_u32 s4, s4, 1
 ; GFX942-SDAG-NEXT:    s_addc_u32 s5, s5, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[4:5], v[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[2:3], exec, vcc
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[2:3], s[4:5], v[10:11]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
 ; GFX942-SDAG-NEXT:    scratch_store_byte v0, v1, off
 ; GFX942-SDAG-NEXT:    v_add_u32_e32 v0, 1, v0
-; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB3_5
 ; GFX942-SDAG-NEXT:  .LBB3_6: ; %dynamic-memset-post-expansion
@@ -1722,11 +1722,11 @@ define void @memset_p1_varsz_align_4_set40(ptr addrspace(1) align 4 %dst, i64 %s
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[12:13], v[0:1], 0, s[6:7]
 ; GFX942-SDAG-NEXT:    s_add_u32 s6, s6, 16
 ; GFX942-SDAG-NEXT:    s_addc_u32 s7, s7, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[6:7], v[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[8:9], s[6:7], v[10:11]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
 ; GFX942-SDAG-NEXT:    global_store_dwordx4 v[12:13], v[4:7], off
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB12_2
 ; GFX942-SDAG-NEXT:  .LBB12_3: ; %dynamic-memset-expansion-residual-cond
@@ -1748,11 +1748,11 @@ define void @memset_p1_varsz_align_4_set40(ptr addrspace(1) align 4 %dst, i64 %s
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[4:5], v[0:1], 0, s[4:5]
 ; GFX942-SDAG-NEXT:    s_add_u32 s4, s4, 1
 ; GFX942-SDAG-NEXT:    s_addc_u32 s5, s5, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[4:5], v[8:9]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[2:3], s[4:5], v[8:9]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
 ; GFX942-SDAG-NEXT:    global_store_byte v[4:5], v2, off
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB12_5
 ; GFX942-SDAG-NEXT:  .LBB12_6: ; %dynamic-memset-post-expansion
@@ -1856,11 +1856,11 @@ define void @memset_p1_varsz_align_4_set0(ptr addrspace(1) align 4 %dst, i64 %si
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[12:13], v[0:1], 0, s[6:7]
 ; GFX942-SDAG-NEXT:    s_add_u32 s6, s6, 16
 ; GFX942-SDAG-NEXT:    s_addc_u32 s7, s7, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[6:7], v[6:7]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[8:9], s[6:7], v[6:7]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
 ; GFX942-SDAG-NEXT:    global_store_dwordx4 v[12:13], v[8:11], off
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB13_2
 ; GFX942-SDAG-NEXT:  .LBB13_3: ; %dynamic-memset-expansion-residual-cond
@@ -1882,11 +1882,11 @@ define void @memset_p1_varsz_align_4_set0(ptr addrspace(1) align 4 %dst, i64 %si
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[6:7], v[0:1], 0, s[4:5]
 ; GFX942-SDAG-NEXT:    s_add_u32 s4, s4, 1
 ; GFX942-SDAG-NEXT:    s_addc_u32 s5, s5, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[4:5], v[4:5]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e64 s[2:3], s[4:5], v[4:5]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
 ; GFX942-SDAG-NEXT:    global_store_byte v[6:7], v2, off
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB13_5
 ; GFX942-SDAG-NEXT:  .LBB13_6: ; %dynamic-memset-post-expansion

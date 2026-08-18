@@ -22,10 +22,10 @@ define void @lsr_order_mul24_0(i32 %arg, i32 %arg2, i32 %arg6, i32 %arg13, i32 %
 ; GFX9-NEXT:    v_add_u32_e32 v0, v0, v1
 ; GFX9-NEXT:    v_sub_u32_e32 v5, v4, v5
 ; GFX9-NEXT:    v_add_u32_e32 v5, v5, v0
-; GFX9-NEXT:    v_cmp_lt_u32_e32 vcc, v5, v3
-; GFX9-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    v_cmp_lt_u32_e64 s[6:7], v5, v3
+; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX9-NEXT:  .LBB0_2: ; %.loopexit

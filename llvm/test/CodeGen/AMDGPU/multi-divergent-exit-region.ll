@@ -371,7 +371,7 @@ exit1:                                     ; preds = %LeafBlock, %LeafBlock1
 ; GCN-NEXT: v_cmp_eq_u32_e64    {{s\[[0-9]+:[0-9]+\]}}, 3, v{{[0-9]+}}
 
 ; GCN: ; %LeafBlock1
-; GCN:      v_cmp_ne_u32_e32    vcc, 7, v{{[0-9]+}}
+; GCN:      v_cmp_ne_u32_e{{32|64}}    [[TRUE_MASK:s\[[0-9]+:[0-9]+\]|vcc]], 7, v{{[0-9]+}}
 
 ; GCN: ; %exit1
 ; GCN:      ds_write_b32

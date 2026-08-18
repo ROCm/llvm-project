@@ -765,10 +765,10 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX9-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; GFX9-NEXT:  .LBB27_2: ; %for.inc
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX9-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX9-NEXT:    s_mov_b64 exec, vcc
+; GFX9-NEXT:    v_cmp_ne_u32_e64 s[6:7], 0, v0
+; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB27_2
 ; GFX9-NEXT:  .LBB27_3: ; %for.cond.cleanup
@@ -807,10 +807,10 @@ define i32 @pr176559(i32 %arg, i1 %cond, i1 %tobool.not) {
 ; GFX942-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; GFX942-NEXT:  .LBB27_2: ; %for.inc
 ; GFX942-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
-; GFX942-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[2:3], 0, v0
+; GFX942-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX942-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
+; GFX942-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execnz .LBB27_2
 ; GFX942-NEXT:  .LBB27_3: ; %for.cond.cleanup
