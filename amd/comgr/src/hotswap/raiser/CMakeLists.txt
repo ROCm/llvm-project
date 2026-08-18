@@ -34,6 +34,7 @@ add_library(hotswap-raiser OBJECT
   reg-file.cpp
   wave-projection.cpp
   user-sgpr-layout.cpp
+  register-state.cpp
   raise-context.cpp
 )
 

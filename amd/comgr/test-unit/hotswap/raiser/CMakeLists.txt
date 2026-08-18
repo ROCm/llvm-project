@@ -103,7 +103,35 @@ target_include_directories(RegFileTests PRIVATE
 
 comgr_configure_test_target(RegFileTests)
 
+# -- RegisterStateTests -------------------------------------------------------
+#
+# Covers the source architectural registers as the raiser sees them: operand
+# decode and reads, EXEC-predicated writes, and the per-SGPR shadow storage
+# that carries wave masks and source-wave values across blocks.
+
+add_executable(RegisterStateTests
+  RegisterStateTest.cpp)
+
+target_link_libraries(RegisterStateTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  hotswap::raiser
+  hotswap::decoder
+  hotswap::common
+  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+target_include_directories(RegisterStateTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${PROJECT_SOURCE_DIR}/src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
+
+comgr_configure_test_target(RegisterStateTests)
+
 # -- RaiseContextTests --------------------------------------------------------
+#
+# Covers the per-kernel context itself: source-offset block lookup and the
+# operand resolver's failure propagation.
 
 add_executable(RaiseContextTests
   RaiseContextTest.cpp)
