@@ -7,7 +7,7 @@
 
 cmake_minimum_required(VERSION 3.13.4)
 
-if(WIN32)
+if(POLICY CMP0091)
     # Required for CMAKE_MSVC_RUNTIME_LIBRARY, must be set prior the first project() or enable_language()
     cmake_policy(SET CMP0091 NEW)
 endif()
