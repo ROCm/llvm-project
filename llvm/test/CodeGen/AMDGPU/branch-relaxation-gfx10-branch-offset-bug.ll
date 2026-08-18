@@ -52,7 +52,7 @@ bb3:
 }
 
 ; GCN-LABEL: {{^}}long_forward_exec_branch_3f_offset_bug:
-; GCN: v_cmp_ne_u32_e32
+; GCN: v_cmp_ne_u32_e64
 ; GCN: s_xor_b32
 ; GCN: s_mov_b32
 ; GCN: s_cbranch_execnz [[RELAX_BB:.LBB[0-9]+_[0-9]+]]

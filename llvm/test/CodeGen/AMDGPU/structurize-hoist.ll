@@ -204,35 +204,35 @@ define void @test_nested_if(ptr %ptr, i32 %val, i1 %cond) {
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX900-NEXT:    flat_load_dword v4, v[0:1]
 ; GFX900-NEXT:    v_and_b32_e32 v3, 1, v3
-; GFX900-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v3
-; GFX900-NEXT:    v_cndmask_b32_e64 v5, 0, -1, vcc
-; GFX900-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX900-NEXT:    s_mov_b64 s[6:7], 0
-; GFX900-NEXT:    s_mov_b64 s[4:5], 0
+; GFX900-NEXT:    v_cmp_eq_u32_e64 s[4:5], 1, v3
+; GFX900-NEXT:    v_cndmask_b32_e64 v5, 0, -1, s[4:5]
+; GFX900-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX900-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX900-NEXT:    ; implicit-def: $vgpr3
 ; GFX900-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB3_3
 ; GFX900-NEXT:  .LBB3_1: ; %if
-; GFX900-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v5
-; GFX900-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
-; GFX900-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX900-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
+; GFX900-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX900-NEXT:    s_or_b64 s[6:7], s[4:5], vcc
+; GFX900-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX900-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB3_3
 ; GFX900-NEXT:  .LBB3_2: ; %if_2
 ; GFX900-NEXT:    flat_load_dword v3, v[0:1]
 ; GFX900-NEXT:  .LBB3_3:
-; GFX900-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX900-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GFX900-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX900-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX900-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; GFX900-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX900-NEXT:    ; divergent control-flow edge
 ; GFX900-NEXT:    s_cbranch_execz .LBB3_5
 ; GFX900-NEXT:  .LBB3_4: ; %else
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX900-NEXT:    v_mov_b32_e32 v3, v4
 ; GFX900-NEXT:  .LBB3_5: ; %merge
-; GFX900-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX900-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX900-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
 ; GFX900-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX900-NEXT:    s_mov_b64 s[6:7], s[4:5]

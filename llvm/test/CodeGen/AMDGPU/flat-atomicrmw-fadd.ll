@@ -79,17 +79,17 @@ define float @flat_agent_atomic_fadd_ret_f32__amdgpu_no_fine_grained_memory__amd
 ; GFX90A:       ; %bb.0:
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr3
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB0_5
 ; GFX90A-NEXT:  .LBB0_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB0_3
 ; GFX90A-NEXT:  .LBB0_2: ; %atomicrmw.global
@@ -97,23 +97,24 @@ define float @flat_agent_atomic_fadd_ret_f32__amdgpu_no_fine_grained_memory__amd
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB0_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB0_5
 ; GFX90A-NEXT:  .LBB0_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v4, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v4, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v3, v4, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v5, v3, v2
 ; GFX90A-NEXT:    buffer_store_dword v5, v4, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB0_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB0_7
 ; GFX90A-NEXT:  .LBB0_6: ; %atomicrmw.shared
@@ -122,7 +123,7 @@ define float @flat_agent_atomic_fadd_ret_f32__amdgpu_no_fine_grained_memory__amd
 ; GFX90A-NEXT:    ds_add_rtn_f32 v3, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB0_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v0, v3
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
@@ -273,17 +274,17 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_pos__amdgpu_no_fine_grai
 ; GFX90A-NEXT:    v_add_co_u32_e32 v4, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB1_5
 ; GFX90A-NEXT:  .LBB1_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v5
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB1_3
 ; GFX90A-NEXT:  .LBB1_2: ; %atomicrmw.global
@@ -291,23 +292,24 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_pos__amdgpu_no_fine_grai
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB1_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB1_5
 ; GFX90A-NEXT:  .LBB1_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v1, -1, v4, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v1, -1, v4, vcc
 ; GFX90A-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v3, v0, v2
 ; GFX90A-NEXT:    buffer_store_dword v3, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB1_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB1_7
 ; GFX90A-NEXT:  .LBB1_6: ; %atomicrmw.shared
@@ -316,7 +318,7 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_pos__amdgpu_no_fine_grai
 ; GFX90A-NEXT:    ds_add_rtn_f32 v0, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB1_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -475,17 +477,17 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_neg__amdgpu_no_fine_grai
 ; GFX90A-NEXT:    v_add_co_u32_e32 v4, vcc, 0xfffff800, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v5, vcc, -1, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB2_5
 ; GFX90A-NEXT:  .LBB2_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v5
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB2_3
 ; GFX90A-NEXT:  .LBB2_2: ; %atomicrmw.global
@@ -493,23 +495,24 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_neg__amdgpu_no_fine_grai
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB2_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB2_5
 ; GFX90A-NEXT:  .LBB2_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v1, -1, v4, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v1, -1, v4, vcc
 ; GFX90A-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v3, v0, v2
 ; GFX90A-NEXT:    buffer_store_dword v3, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB2_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB2_7
 ; GFX90A-NEXT:  .LBB2_6: ; %atomicrmw.shared
@@ -518,7 +521,7 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_neg__amdgpu_no_fine_grai
 ; GFX90A-NEXT:    ds_add_rtn_f32 v0, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB2_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -672,16 +675,16 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory__am
 ; GFX90A:       ; %bb.0:
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB3_5
 ; GFX90A-NEXT:  .LBB3_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB3_3
 ; GFX90A-NEXT:  .LBB3_2: ; %atomicrmw.global
@@ -689,23 +692,24 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory__am
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB3_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB3_5
 ; GFX90A-NEXT:  .LBB3_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB3_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB3_7
 ; GFX90A-NEXT:  .LBB3_6: ; %atomicrmw.shared
@@ -714,7 +718,7 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory__am
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB3_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -722,16 +726,16 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory__am
 ; GFX908:       ; %bb.0:
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB3_5
 ; GFX908-NEXT:  .LBB3_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB3_3
 ; GFX908-NEXT:  .LBB3_2: ; %atomicrmw.global
@@ -739,23 +743,24 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory__am
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB3_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB3_5
 ; GFX908-NEXT:  .LBB3_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB3_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB3_7
 ; GFX908-NEXT:  .LBB3_6: ; %atomicrmw.shared
@@ -764,7 +769,7 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory__am
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB3_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -888,16 +893,16 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB4_5
 ; GFX90A-NEXT:  .LBB4_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB4_3
 ; GFX90A-NEXT:  .LBB4_2: ; %atomicrmw.global
@@ -905,23 +910,24 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB4_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB4_5
 ; GFX90A-NEXT:  .LBB4_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB4_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB4_7
 ; GFX90A-NEXT:  .LBB4_6: ; %atomicrmw.shared
@@ -930,7 +936,7 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB4_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -940,16 +946,16 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB4_5
 ; GFX908-NEXT:  .LBB4_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB4_3
 ; GFX908-NEXT:  .LBB4_2: ; %atomicrmw.global
@@ -957,23 +963,24 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB4_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB4_5
 ; GFX908-NEXT:  .LBB4_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB4_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB4_7
 ; GFX908-NEXT:  .LBB4_6: ; %atomicrmw.shared
@@ -982,7 +989,7 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB4_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1117,16 +1124,16 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, 0xfffff800, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, -1, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB5_5
 ; GFX90A-NEXT:  .LBB5_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB5_3
 ; GFX90A-NEXT:  .LBB5_2: ; %atomicrmw.global
@@ -1134,23 +1141,24 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB5_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB5_5
 ; GFX90A-NEXT:  .LBB5_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB5_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB5_7
 ; GFX90A-NEXT:  .LBB5_6: ; %atomicrmw.shared
@@ -1159,7 +1167,7 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB5_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1169,16 +1177,16 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    v_add_co_u32_e32 v0, vcc, 0xfffff800, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v1, vcc, -1, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB5_5
 ; GFX908-NEXT:  .LBB5_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB5_3
 ; GFX908-NEXT:  .LBB5_2: ; %atomicrmw.global
@@ -1186,23 +1194,24 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB5_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB5_5
 ; GFX908-NEXT:  .LBB5_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB5_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB5_7
 ; GFX908-NEXT:  .LBB5_6: ; %atomicrmw.shared
@@ -1211,7 +1220,7 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB5_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1340,17 +1349,17 @@ define float @flat_system_atomic_fadd_ret_f32__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    v_add_co_u32_e32 v4, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB6_5
 ; GFX90A-NEXT:  .LBB6_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v5
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB6_3
 ; GFX90A-NEXT:  .LBB6_2: ; %atomicrmw.global
@@ -1361,23 +1370,24 @@ define float @flat_system_atomic_fadd_ret_f32__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB6_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB6_5
 ; GFX90A-NEXT:  .LBB6_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v1, -1, v4, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v1, -1, v4, vcc
 ; GFX90A-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v3, v0, v2
 ; GFX90A-NEXT:    buffer_store_dword v3, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB6_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB6_7
 ; GFX90A-NEXT:  .LBB6_6: ; %atomicrmw.shared
@@ -1386,7 +1396,7 @@ define float @flat_system_atomic_fadd_ret_f32__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    ds_add_rtn_f32 v0, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB6_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1541,16 +1551,16 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gr
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB7_5
 ; GFX90A-NEXT:  .LBB7_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB7_3
 ; GFX90A-NEXT:  .LBB7_2: ; %atomicrmw.global
@@ -1561,23 +1571,24 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gr
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB7_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB7_5
 ; GFX90A-NEXT:  .LBB7_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB7_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB7_7
 ; GFX90A-NEXT:  .LBB7_6: ; %atomicrmw.shared
@@ -1586,7 +1597,7 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gr
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB7_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1596,16 +1607,16 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gr
 ; GFX908-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB7_5
 ; GFX908-NEXT:  .LBB7_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB7_3
 ; GFX908-NEXT:  .LBB7_2: ; %atomicrmw.global
@@ -1613,23 +1624,24 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gr
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB7_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB7_5
 ; GFX908-NEXT:  .LBB7_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB7_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB7_7
 ; GFX908-NEXT:  .LBB7_6: ; %atomicrmw.shared
@@ -1638,7 +1650,7 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__amdgpu_no_fine_gr
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB7_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2117,16 +2129,16 @@ define void @flat_agent_atomic_fadd_noret_f32___amdgpu_no_fine_grained_memory__a
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB10_5
 ; GFX90A-NEXT:  .LBB10_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB10_3
 ; GFX90A-NEXT:  .LBB10_2: ; %atomicrmw.global
@@ -2134,23 +2146,24 @@ define void @flat_agent_atomic_fadd_noret_f32___amdgpu_no_fine_grained_memory__a
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB10_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB10_5
 ; GFX90A-NEXT:  .LBB10_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB10_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB10_7
 ; GFX90A-NEXT:  .LBB10_6: ; %atomicrmw.shared
@@ -2159,7 +2172,7 @@ define void @flat_agent_atomic_fadd_noret_f32___amdgpu_no_fine_grained_memory__a
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB10_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2169,16 +2182,16 @@ define void @flat_agent_atomic_fadd_noret_f32___amdgpu_no_fine_grained_memory__a
 ; GFX908-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB10_5
 ; GFX908-NEXT:  .LBB10_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB10_3
 ; GFX908-NEXT:  .LBB10_2: ; %atomicrmw.global
@@ -2186,23 +2199,24 @@ define void @flat_agent_atomic_fadd_noret_f32___amdgpu_no_fine_grained_memory__a
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB10_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB10_5
 ; GFX908-NEXT:  .LBB10_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB10_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB10_7
 ; GFX908-NEXT:  .LBB10_6: ; %atomicrmw.shared
@@ -2211,7 +2225,7 @@ define void @flat_agent_atomic_fadd_noret_f32___amdgpu_no_fine_grained_memory__a
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB10_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2523,17 +2537,17 @@ define float @flat_agent_atomic_fadd_ret_f32__ftz__amdgpu_no_fine_grained_memory
 ; GFX90A:       ; %bb.0:
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr3
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB12_5
 ; GFX90A-NEXT:  .LBB12_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB12_3
 ; GFX90A-NEXT:  .LBB12_2: ; %atomicrmw.global
@@ -2541,23 +2555,24 @@ define float @flat_agent_atomic_fadd_ret_f32__ftz__amdgpu_no_fine_grained_memory
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB12_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB12_5
 ; GFX90A-NEXT:  .LBB12_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v4, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v4, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v3, v4, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v5, v3, v2
 ; GFX90A-NEXT:    buffer_store_dword v5, v4, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB12_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB12_7
 ; GFX90A-NEXT:  .LBB12_6: ; %atomicrmw.shared
@@ -2566,7 +2581,7 @@ define float @flat_agent_atomic_fadd_ret_f32__ftz__amdgpu_no_fine_grained_memory
 ; GFX90A-NEXT:    ds_add_rtn_f32 v3, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB12_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v0, v3
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
@@ -2717,17 +2732,17 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_pos__ftz__amdgpu_no_fine
 ; GFX90A-NEXT:    v_add_co_u32_e32 v4, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB13_5
 ; GFX90A-NEXT:  .LBB13_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v5
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB13_3
 ; GFX90A-NEXT:  .LBB13_2: ; %atomicrmw.global
@@ -2735,23 +2750,24 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_pos__ftz__amdgpu_no_fine
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB13_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB13_5
 ; GFX90A-NEXT:  .LBB13_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v1, -1, v4, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v1, -1, v4, vcc
 ; GFX90A-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v3, v0, v2
 ; GFX90A-NEXT:    buffer_store_dword v3, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB13_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB13_7
 ; GFX90A-NEXT:  .LBB13_6: ; %atomicrmw.shared
@@ -2760,7 +2776,7 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_pos__ftz__amdgpu_no_fine
 ; GFX90A-NEXT:    ds_add_rtn_f32 v0, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB13_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -2919,17 +2935,17 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_neg__ftz__amdgpu_no_fine
 ; GFX90A-NEXT:    v_add_co_u32_e32 v4, vcc, 0xfffff800, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v5, vcc, -1, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB14_5
 ; GFX90A-NEXT:  .LBB14_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v5
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB14_3
 ; GFX90A-NEXT:  .LBB14_2: ; %atomicrmw.global
@@ -2937,23 +2953,24 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_neg__ftz__amdgpu_no_fine
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB14_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB14_5
 ; GFX90A-NEXT:  .LBB14_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v1, -1, v4, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v1, -1, v4, vcc
 ; GFX90A-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v3, v0, v2
 ; GFX90A-NEXT:    buffer_store_dword v3, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB14_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB14_7
 ; GFX90A-NEXT:  .LBB14_6: ; %atomicrmw.shared
@@ -2962,7 +2979,7 @@ define float @flat_agent_atomic_fadd_ret_f32__offset12b_neg__ftz__amdgpu_no_fine
 ; GFX90A-NEXT:    ds_add_rtn_f32 v0, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB14_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3116,16 +3133,16 @@ define void @flat_agent_atomic_fadd_noret_f32__ftz__amdgpu_no_fine_grained_memor
 ; GFX90A:       ; %bb.0:
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB15_5
 ; GFX90A-NEXT:  .LBB15_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB15_3
 ; GFX90A-NEXT:  .LBB15_2: ; %atomicrmw.global
@@ -3133,23 +3150,24 @@ define void @flat_agent_atomic_fadd_noret_f32__ftz__amdgpu_no_fine_grained_memor
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB15_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB15_5
 ; GFX90A-NEXT:  .LBB15_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB15_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB15_7
 ; GFX90A-NEXT:  .LBB15_6: ; %atomicrmw.shared
@@ -3158,7 +3176,7 @@ define void @flat_agent_atomic_fadd_noret_f32__ftz__amdgpu_no_fine_grained_memor
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB15_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3166,16 +3184,16 @@ define void @flat_agent_atomic_fadd_noret_f32__ftz__amdgpu_no_fine_grained_memor
 ; GFX908:       ; %bb.0:
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB15_5
 ; GFX908-NEXT:  .LBB15_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB15_3
 ; GFX908-NEXT:  .LBB15_2: ; %atomicrmw.global
@@ -3183,23 +3201,24 @@ define void @flat_agent_atomic_fadd_noret_f32__ftz__amdgpu_no_fine_grained_memor
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB15_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB15_5
 ; GFX908-NEXT:  .LBB15_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB15_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB15_7
 ; GFX908-NEXT:  .LBB15_6: ; %atomicrmw.shared
@@ -3208,7 +3227,7 @@ define void @flat_agent_atomic_fadd_noret_f32__ftz__amdgpu_no_fine_grained_memor
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB15_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3332,16 +3351,16 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fin
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB16_5
 ; GFX90A-NEXT:  .LBB16_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB16_3
 ; GFX90A-NEXT:  .LBB16_2: ; %atomicrmw.global
@@ -3349,23 +3368,24 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fin
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB16_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB16_5
 ; GFX90A-NEXT:  .LBB16_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB16_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB16_7
 ; GFX90A-NEXT:  .LBB16_6: ; %atomicrmw.shared
@@ -3374,7 +3394,7 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fin
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB16_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3384,16 +3404,16 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fin
 ; GFX908-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB16_5
 ; GFX908-NEXT:  .LBB16_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB16_3
 ; GFX908-NEXT:  .LBB16_2: ; %atomicrmw.global
@@ -3401,23 +3421,24 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fin
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB16_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB16_5
 ; GFX908-NEXT:  .LBB16_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB16_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB16_7
 ; GFX908-NEXT:  .LBB16_6: ; %atomicrmw.shared
@@ -3426,7 +3447,7 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fin
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB16_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3561,16 +3582,16 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__ftz__amdgpu_no_fin
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, 0xfffff800, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, -1, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB17_5
 ; GFX90A-NEXT:  .LBB17_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB17_3
 ; GFX90A-NEXT:  .LBB17_2: ; %atomicrmw.global
@@ -3578,23 +3599,24 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__ftz__amdgpu_no_fin
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB17_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB17_5
 ; GFX90A-NEXT:  .LBB17_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB17_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB17_7
 ; GFX90A-NEXT:  .LBB17_6: ; %atomicrmw.shared
@@ -3603,7 +3625,7 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__ftz__amdgpu_no_fin
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB17_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3613,16 +3635,16 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__ftz__amdgpu_no_fin
 ; GFX908-NEXT:    v_add_co_u32_e32 v0, vcc, 0xfffff800, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v1, vcc, -1, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB17_5
 ; GFX908-NEXT:  .LBB17_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB17_3
 ; GFX908-NEXT:  .LBB17_2: ; %atomicrmw.global
@@ -3630,23 +3652,24 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__ftz__amdgpu_no_fin
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB17_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB17_5
 ; GFX908-NEXT:  .LBB17_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB17_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB17_7
 ; GFX908-NEXT:  .LBB17_6: ; %atomicrmw.shared
@@ -3655,7 +3678,7 @@ define void @flat_agent_atomic_fadd_noret_f32__offset12b_neg__ftz__amdgpu_no_fin
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB17_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3784,17 +3807,17 @@ define float @flat_system_atomic_fadd_ret_f32__offset12b_pos__ftz__amdgpu_no_fin
 ; GFX90A-NEXT:    v_add_co_u32_e32 v4, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB18_5
 ; GFX90A-NEXT:  .LBB18_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v5
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB18_3
 ; GFX90A-NEXT:  .LBB18_2: ; %atomicrmw.global
@@ -3805,23 +3828,24 @@ define float @flat_system_atomic_fadd_ret_f32__offset12b_pos__ftz__amdgpu_no_fin
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB18_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB18_5
 ; GFX90A-NEXT:  .LBB18_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v1, -1, v4, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v1, -1, v4, vcc
 ; GFX90A-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v3, v0, v2
 ; GFX90A-NEXT:    buffer_store_dword v3, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB18_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB18_7
 ; GFX90A-NEXT:  .LBB18_6: ; %atomicrmw.shared
@@ -3830,7 +3854,7 @@ define float @flat_system_atomic_fadd_ret_f32__offset12b_pos__ftz__amdgpu_no_fin
 ; GFX90A-NEXT:    ds_add_rtn_f32 v0, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB18_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -3985,16 +4009,16 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fi
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB19_5
 ; GFX90A-NEXT:  .LBB19_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB19_3
 ; GFX90A-NEXT:  .LBB19_2: ; %atomicrmw.global
@@ -4005,23 +4029,24 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fi
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB19_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB19_5
 ; GFX90A-NEXT:  .LBB19_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB19_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB19_7
 ; GFX90A-NEXT:  .LBB19_6: ; %atomicrmw.shared
@@ -4030,7 +4055,7 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fi
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB19_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4040,16 +4065,16 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fi
 ; GFX908-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB19_5
 ; GFX908-NEXT:  .LBB19_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB19_3
 ; GFX908-NEXT:  .LBB19_2: ; %atomicrmw.global
@@ -4057,23 +4082,24 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fi
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB19_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB19_5
 ; GFX908-NEXT:  .LBB19_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB19_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB19_7
 ; GFX908-NEXT:  .LBB19_6: ; %atomicrmw.shared
@@ -4082,7 +4108,7 @@ define void @flat_system_atomic_fadd_noret_f32__offset12b_pos__ftz__amdgpu_no_fi
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB19_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4211,17 +4237,17 @@ define float @flat_agent_atomic_fadd_ret_f32__ieee__amdgpu_no_fine_grained_memor
 ; GFX90A-NEXT:    v_add_co_u32_e32 v4, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB20_5
 ; GFX90A-NEXT:  .LBB20_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v5
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB20_3
 ; GFX90A-NEXT:  .LBB20_2: ; %atomicrmw.global
@@ -4232,23 +4258,24 @@ define float @flat_agent_atomic_fadd_ret_f32__ieee__amdgpu_no_fine_grained_memor
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB20_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB20_5
 ; GFX90A-NEXT:  .LBB20_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v1, -1, v4, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v1, -1, v4, vcc
 ; GFX90A-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v3, v0, v2
 ; GFX90A-NEXT:    buffer_store_dword v3, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB20_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB20_7
 ; GFX90A-NEXT:  .LBB20_6: ; %atomicrmw.shared
@@ -4257,7 +4284,7 @@ define float @flat_agent_atomic_fadd_ret_f32__ieee__amdgpu_no_fine_grained_memor
 ; GFX90A-NEXT:    ds_add_rtn_f32 v0, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB20_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4412,16 +4439,16 @@ define void @flat_agent_atomic_fadd_noret_f32__ieee__amdgpu_no_fine_grained_memo
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB21_5
 ; GFX90A-NEXT:  .LBB21_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB21_3
 ; GFX90A-NEXT:  .LBB21_2: ; %atomicrmw.global
@@ -4432,23 +4459,24 @@ define void @flat_agent_atomic_fadd_noret_f32__ieee__amdgpu_no_fine_grained_memo
 ; GFX90A-NEXT:    buffer_invl2
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB21_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB21_5
 ; GFX90A-NEXT:  .LBB21_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB21_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB21_7
 ; GFX90A-NEXT:  .LBB21_6: ; %atomicrmw.shared
@@ -4457,7 +4485,7 @@ define void @flat_agent_atomic_fadd_noret_f32__ieee__amdgpu_no_fine_grained_memo
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB21_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -4467,16 +4495,16 @@ define void @flat_agent_atomic_fadd_noret_f32__ieee__amdgpu_no_fine_grained_memo
 ; GFX908-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7fc, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB21_5
 ; GFX908-NEXT:  .LBB21_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB21_3
 ; GFX908-NEXT:  .LBB21_2: ; %atomicrmw.global
@@ -4484,23 +4512,24 @@ define void @flat_agent_atomic_fadd_noret_f32__ieee__amdgpu_no_fine_grained_memo
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB21_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB21_5
 ; GFX908-NEXT:  .LBB21_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB21_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB21_7
 ; GFX908-NEXT:  .LBB21_6: ; %atomicrmw.shared
@@ -4509,7 +4538,7 @@ define void @flat_agent_atomic_fadd_noret_f32__ieee__amdgpu_no_fine_grained_memo
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB21_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -5352,17 +5381,17 @@ define float @flat_agent_atomic_fadd_ret_f32__amdgpu_no_fine_grained_memory_amdg
 ; GFX90A:       ; %bb.0:
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr3
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB26_5
 ; GFX90A-NEXT:  .LBB26_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB26_3
 ; GFX90A-NEXT:  .LBB26_2: ; %atomicrmw.global
@@ -5370,23 +5399,24 @@ define float @flat_agent_atomic_fadd_ret_f32__amdgpu_no_fine_grained_memory_amdg
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB26_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB26_5
 ; GFX90A-NEXT:  .LBB26_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v4, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v4, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v3, v4, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v5, v3, v2
 ; GFX90A-NEXT:    buffer_store_dword v5, v4, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB26_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB26_7
 ; GFX90A-NEXT:  .LBB26_6: ; %atomicrmw.shared
@@ -5395,7 +5425,7 @@ define float @flat_agent_atomic_fadd_ret_f32__amdgpu_no_fine_grained_memory_amdg
 ; GFX90A-NEXT:    ds_add_rtn_f32 v3, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB26_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v0, v3
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
@@ -5543,16 +5573,16 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory_amd
 ; GFX90A:       ; %bb.0:
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB27_5
 ; GFX90A-NEXT:  .LBB27_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB27_3
 ; GFX90A-NEXT:  .LBB27_2: ; %atomicrmw.global
@@ -5560,23 +5590,24 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory_amd
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB27_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB27_5
 ; GFX90A-NEXT:  .LBB27_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX90A-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB27_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB27_7
 ; GFX90A-NEXT:  .LBB27_6: ; %atomicrmw.shared
@@ -5585,7 +5616,7 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory_amd
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB27_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -5593,16 +5624,16 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory_amd
 ; GFX908:       ; %bb.0:
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB27_5
 ; GFX908-NEXT:  .LBB27_1: ; %atomicrmw.check.private
-; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX908-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB27_3
 ; GFX908-NEXT:  .LBB27_2: ; %atomicrmw.global
@@ -5610,23 +5641,24 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory_amd
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
 ; GFX908-NEXT:  .LBB27_3:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX908-NEXT:    s_mov_b64 exec, vcc
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB27_5
 ; GFX908-NEXT:  .LBB27_4: ; %atomicrmw.private
-; GFX908-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX908-NEXT:    v_cndmask_b32_e64 v3, -1, v0, s[4:5]
+; GFX908-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX908-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc
 ; GFX908-NEXT:    buffer_load_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    v_add_f32_e32 v4, v4, v2
 ; GFX908-NEXT:    buffer_store_dword v4, v3, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB27_5:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB27_7
 ; GFX908-NEXT:  .LBB27_6: ; %atomicrmw.shared
@@ -5635,7 +5667,7 @@ define void @flat_agent_atomic_fadd_noret_f32__amdgpu_no_fine_grained_memory_amd
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB27_7: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -6027,19 +6059,19 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX12-NEXT:    s_mov_b32 s0, -1
+; GFX12-NEXT:    s_mov_b32 s2, -1
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX12-NEXT:    s_mov_b32 s1, 0
+; GFX12-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
 ; GFX12-NEXT:    ; implicit-def: $vgpr4_vgpr5
-; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX12-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX12-NEXT:    s_mov_b32 s1, s0
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_mov_b32 exec_lo, s2
+; GFX12-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB30_3
 ; GFX12-NEXT:  .LBB30_1: ; %atomicrmw.global
 ; GFX12-NEXT:    flat_load_b64 v[6:7], v[0:1]
-; GFX12-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX12-NEXT:  .LBB30_2: ; %atomicrmw.start
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -6048,23 +6080,22 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX12-NEXT:    flat_atomic_cmpswap_b64 v[4:5], v[0:1], v[4:7] th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX12-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-NEXT:    v_cmp_eq_u64_e64 s0, v[4:5], v[6:7]
+; GFX12-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX12-NEXT:    v_dual_mov_b32 v7, v5 :: v_dual_mov_b32 v6, v4
+; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_xor_b32 s3, exec_lo, s2
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 s1, s1, s2
-; GFX12-NEXT:    s_mov_b32 exec_lo, s0
+; GFX12-NEXT:    s_or_b32 s1, s1, s3
+; GFX12-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execnz .LBB30_2
 ; GFX12-NEXT:  .LBB30_3:
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX12-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX12-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB30_5
 ; GFX12-NEXT:  .LBB30_4: ; %atomicrmw.private
@@ -6077,7 +6108,7 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX12-NEXT:    scratch_store_b64 v6, v[0:1], off
 ; GFX12-NEXT:  .LBB30_5: ; %atomicrmw.phi
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    v_dual_mov_b32 v0, v4 :: v_dual_mov_b32 v1, v5
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -6085,17 +6116,17 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    s_mov_b64 s[0:1], src_shared_base
-; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
-; GFX942-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX942-NEXT:    s_mov_b64 s[2:3], 0
+; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v1
+; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
 ; GFX942-NEXT:    ; implicit-def: $vgpr4_vgpr5
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB30_5
 ; GFX942-NEXT:  .LBB30_1: ; %atomicrmw.check.private
-; GFX942-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v1
-; GFX942-NEXT:    s_xor_b64 exec, s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], src_private_base
+; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s3, v1
+; GFX942-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB30_3
 ; GFX942-NEXT:  .LBB30_2: ; %atomicrmw.global
@@ -6105,24 +6136,25 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    buffer_inv sc1
 ; GFX942-NEXT:  .LBB30_3:
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; GFX942-NEXT:    s_and_b64 s[2:3], s[2:3], exec
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 s[2:3], s[0:1], s[2:3]
+; GFX942-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB30_5
 ; GFX942-NEXT:  .LBB30_4: ; %atomicrmw.private
-; GFX942-NEXT:    v_cmp_ne_u64_e64 s[0:1], 0, v[0:1]
+; GFX942-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
 ; GFX942-NEXT:    s_nop 1
-; GFX942-NEXT:    v_cndmask_b32_e64 v8, -1, v0, s[0:1]
+; GFX942-NEXT:    v_cndmask_b32_e32 v8, -1, v0, vcc
 ; GFX942-NEXT:    scratch_load_dwordx2 v[4:5], v8, off
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_add_f64 v[6:7], v[4:5], v[2:3]
 ; GFX942-NEXT:    scratch_store_dwordx2 v8, v[6:7], off
 ; GFX942-NEXT:  .LBB30_5:
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX942-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB30_7
 ; GFX942-NEXT:  .LBB30_6: ; %atomicrmw.shared
@@ -6132,7 +6164,7 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX942-NEXT:    ds_add_rtn_f64 v[4:5], v0, v[2:3]
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB30_7: ; %atomicrmw.phi
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX942-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
@@ -6142,18 +6174,17 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX11-NEXT:    s_mov_b32 s0, -1
-; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX11-NEXT:    s_mov_b32 s1, 0
+; GFX11-NEXT:    s_mov_b32 s2, -1
+; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
 ; GFX11-NEXT:    ; implicit-def: $vgpr4_vgpr5
-; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_mov_b32 exec_lo, s2
+; GFX11-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX11-NEXT:    s_mov_b32 s1, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB30_3
 ; GFX11-NEXT:  .LBB30_1: ; %atomicrmw.global
 ; GFX11-NEXT:    flat_load_b64 v[6:7], v[0:1]
-; GFX11-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX11-NEXT:  .LBB30_2: ; %atomicrmw.start
 ; GFX11-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -6163,20 +6194,20 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    buffer_gl1_inv
 ; GFX11-NEXT:    buffer_gl0_inv
-; GFX11-NEXT:    v_cmp_eq_u64_e64 s0, v[4:5], v[6:7]
+; GFX11-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX11-NEXT:    v_dual_mov_b32 v7, v5 :: v_dual_mov_b32 v6, v4
-; GFX11-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX11-NEXT:    s_or_b32 s1, s1, s2
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 s3, exec_lo, s2
+; GFX11-NEXT:    s_or_b32 s1, s1, s3
+; GFX11-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execnz .LBB30_2
 ; GFX11-NEXT:  .LBB30_3:
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX11-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB30_5
 ; GFX11-NEXT:  .LBB30_4: ; %atomicrmw.private
@@ -6187,7 +6218,7 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX11-NEXT:    v_add_f64 v[0:1], v[4:5], v[2:3]
 ; GFX11-NEXT:    scratch_store_b64 v6, v[0:1], off
 ; GFX11-NEXT:  .LBB30_5: ; %atomicrmw.phi
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    v_dual_mov_b32 v0, v4 :: v_dual_mov_b32 v1, v5
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -6195,17 +6226,17 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX10-NEXT:    s_mov_b32 s4, -1
-; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s5, v1
-; GFX10-NEXT:    s_mov_b32 s5, 0
+; GFX10-NEXT:    s_mov_b32 s6, -1
+; GFX10-NEXT:    v_cmp_eq_u32_e64 s4, s5, v1
 ; GFX10-NEXT:    ; implicit-def: $vgpr4_vgpr5
-; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, s6
+; GFX10-NEXT:    s_xor_b32 s7, s4, exec_lo
+; GFX10-NEXT:    s_mov_b32 s5, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB30_3
 ; GFX10-NEXT:  .LBB30_1: ; %atomicrmw.global
 ; GFX10-NEXT:    flat_load_dwordx2 v[6:7], v[0:1]
-; GFX10-NEXT:    s_and_b32 s4, s4, exec_lo
+; GFX10-NEXT:    s_and_b32 s6, s6, exec_lo
 ; GFX10-NEXT:  .LBB30_2: ; %atomicrmw.start
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -6215,19 +6246,19 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    buffer_gl1_inv
 ; GFX10-NEXT:    buffer_gl0_inv
-; GFX10-NEXT:    v_cmp_eq_u64_e64 s4, v[4:5], v[6:7]
+; GFX10-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX10-NEXT:    v_mov_b32_e32 v7, v5
 ; GFX10-NEXT:    v_mov_b32_e32 v6, v4
-; GFX10-NEXT:    s_xor_b32 s4, s4, exec_lo
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, s4
-; GFX10-NEXT:    s_or_b32 s5, s5, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, s4
+; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s5, s5, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB30_2
 ; GFX10-NEXT:  .LBB30_3:
 ; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
-; GFX10-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB30_5
 ; GFX10-NEXT:  .LBB30_4: ; %atomicrmw.private
@@ -6242,7 +6273,7 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX10-NEXT:    buffer_store_dword v1, v6, s[0:3], 0 offen offset:4
 ; GFX10-NEXT:  .LBB30_5: ; %atomicrmw.phi
 ; GFX10-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s4
+; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
@@ -6251,17 +6282,17 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX90A:       ; %bb.0:
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr4_vgpr5
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB30_5
 ; GFX90A-NEXT:  .LBB30_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB30_3
 ; GFX90A-NEXT:  .LBB30_2: ; %atomicrmw.global
@@ -6269,15 +6300,16 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB30_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB30_5
 ; GFX90A-NEXT:  .LBB30_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v8, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v8, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v8, s[0:3], 0 offen
 ; GFX90A-NEXT:    buffer_load_dword v5, v8, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
@@ -6286,8 +6318,8 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX90A-NEXT:    buffer_store_dword v7, v8, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:  .LBB30_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB30_7
 ; GFX90A-NEXT:  .LBB30_6: ; %atomicrmw.shared
@@ -6296,7 +6328,7 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX90A-NEXT:    ds_add_rtn_f64 v[4:5], v0, v[2:3]
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB30_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
@@ -6306,17 +6338,17 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX908:       ; %bb.0:
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[4:5], -1
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[8:9], -1
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX908-NEXT:    ; implicit-def: $vgpr4_vgpr5
-; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX908-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB30_3
 ; GFX908-NEXT:  .LBB30_1: ; %atomicrmw.global
 ; GFX908-NEXT:    flat_load_dwordx2 v[6:7], v[0:1]
-; GFX908-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GFX908-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX908-NEXT:  .LBB30_2: ; %atomicrmw.start
 ; GFX908-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -6324,19 +6356,19 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX908-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
-; GFX908-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX908-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX908-NEXT:    v_mov_b32_e32 v7, v5
-; GFX908-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX908-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX908-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX908-NEXT:    v_mov_b32_e32 v6, v4
-; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execnz .LBB30_2
 ; GFX908-NEXT:  .LBB30_3:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB30_5
 ; GFX908-NEXT:  .LBB30_4: ; %atomicrmw.private
@@ -6349,7 +6381,7 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX908-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v6, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB30_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX908-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
@@ -6361,20 +6393,20 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX8-NEXT:    s_mov_b64 s[4:5], 0xc0
 ; GFX8-NEXT:    s_load_dword s4, s[4:5], 0x0
 ; GFX8-NEXT:    s_mov_b64 s[8:9], -1
-; GFX8-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX8-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v1
-; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v1
+; GFX8-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GFX8-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB30_3
 ; GFX8-NEXT:  .LBB30_1: ; %atomicrmw.global
-; GFX8-NEXT:    v_add_u32_e64 v4, s[4:5], 4, v0
-; GFX8-NEXT:    v_addc_u32_e64 v5, s[4:5], 0, v1, s[4:5]
+; GFX8-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
+; GFX8-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
 ; GFX8-NEXT:    flat_load_dword v7, v[4:5]
 ; GFX8-NEXT:    flat_load_dword v6, v[0:1]
-; GFX8-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX8-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX8-NEXT:  .LBB30_2: ; %atomicrmw.start
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -6382,19 +6414,19 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX8-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    buffer_wbinvl1
-; GFX8-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX8-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX8-NEXT:    v_mov_b32_e32 v7, v5
-; GFX8-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX8-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_mov_b32_e32 v6, v4
-; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB30_2
 ; GFX8-NEXT:  .LBB30_3:
 ; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX8-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB30_5
 ; GFX8-NEXT:  .LBB30_4: ; %atomicrmw.private
@@ -6408,7 +6440,7 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX8-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v7, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB30_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX8-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX8-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
@@ -6420,20 +6452,20 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX7-NEXT:    s_mov_b64 s[4:5], 0xc0
 ; GFX7-NEXT:    s_load_dword s4, s[4:5], 0x0
 ; GFX7-NEXT:    s_mov_b64 s[8:9], -1
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX7-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v1
-; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v1
+; GFX7-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GFX7-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB30_3
 ; GFX7-NEXT:  .LBB30_1: ; %atomicrmw.global
-; GFX7-NEXT:    v_add_i32_e64 v4, s[4:5], 4, v0
-; GFX7-NEXT:    v_addc_u32_e64 v5, s[4:5], 0, v1, s[4:5]
+; GFX7-NEXT:    v_add_i32_e32 v4, vcc, 4, v0
+; GFX7-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
 ; GFX7-NEXT:    flat_load_dword v7, v[4:5]
 ; GFX7-NEXT:    flat_load_dword v6, v[0:1]
-; GFX7-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX7-NEXT:  .LBB30_2: ; %atomicrmw.start
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -6441,19 +6473,19 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX7-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    buffer_wbinvl1
-; GFX7-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX7-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX7-NEXT:    v_mov_b32_e32 v7, v5
-; GFX7-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX7-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX7-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX7-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX7-NEXT:    v_mov_b32_e32 v6, v4
-; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB30_2
 ; GFX7-NEXT:  .LBB30_3:
 ; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX7-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX7-NEXT:    s_mov_b64 exec, vcc
+; GFX7-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB30_5
 ; GFX7-NEXT:  .LBB30_4: ; %atomicrmw.private
@@ -6467,7 +6499,7 @@ define double @flat_agent_atomic_fadd_ret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX7-NEXT:    buffer_store_dword v0, v6, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v1, v7, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB30_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX7-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX7-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
@@ -6488,19 +6520,19 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v9, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX12-NEXT:    s_mov_b32 s0, -1
+; GFX12-NEXT:    s_mov_b32 s2, -1
 ; GFX12-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v9
-; GFX12-NEXT:    s_mov_b32 s1, 0
-; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX12-NEXT:    v_cmp_eq_u32_e64 s0, s1, v9
+; GFX12-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX12-NEXT:    s_mov_b32 s1, s0
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_mov_b32 exec_lo, s2
+; GFX12-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB31_3
 ; GFX12-NEXT:  .LBB31_1: ; %atomicrmw.global
 ; GFX12-NEXT:    flat_load_b64 v[6:7], v[8:9]
-; GFX12-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX12-NEXT:  .LBB31_2: ; %atomicrmw.start
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -6509,23 +6541,22 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX12-NEXT:    flat_atomic_cmpswap_b64 v[0:1], v[8:9], v[4:7] th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX12-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-NEXT:    v_cmp_eq_u64_e64 s0, v[0:1], v[6:7]
+; GFX12-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[0:1], v[6:7]
 ; GFX12-NEXT:    v_dual_mov_b32 v7, v1 :: v_dual_mov_b32 v6, v0
+; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_xor_b32 s3, exec_lo, s2
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 s1, s1, s2
-; GFX12-NEXT:    s_mov_b32 exec_lo, s0
+; GFX12-NEXT:    s_or_b32 s1, s1, s3
+; GFX12-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execnz .LBB31_2
 ; GFX12-NEXT:  .LBB31_3:
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX12-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX12-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB31_5
 ; GFX12-NEXT:  .LBB31_4: ; %atomicrmw.private
@@ -6538,7 +6569,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX12-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX12-NEXT:  .LBB31_5: ; %atomicrmw.phi
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_grained_memory:
@@ -6547,17 +6578,17 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_mov_b64 s[2:3], 0x7f8
 ; GFX942-NEXT:    s_mov_b64 s[0:1], src_shared_base
 ; GFX942-NEXT:    v_lshl_add_u64 v[4:5], v[0:1], 0, s[2:3]
-; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v5
-; GFX942-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX942-NEXT:    s_mov_b64 s[2:3], 0
+; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v5
+; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
 ; GFX942-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB31_5
 ; GFX942-NEXT:  .LBB31_1: ; %atomicrmw.check.private
-; GFX942-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v5
-; GFX942-NEXT:    s_xor_b64 exec, s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], src_private_base
+; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s3, v5
+; GFX942-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB31_3
 ; GFX942-NEXT:  .LBB31_2: ; %atomicrmw.global
@@ -6567,24 +6598,25 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    buffer_inv sc1
 ; GFX942-NEXT:  .LBB31_3:
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; GFX942-NEXT:    s_and_b64 s[2:3], s[2:3], exec
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 s[2:3], s[0:1], s[2:3]
+; GFX942-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB31_5
 ; GFX942-NEXT:  .LBB31_4: ; %atomicrmw.private
-; GFX942-NEXT:    v_cmp_ne_u64_e64 s[0:1], 0, v[4:5]
+; GFX942-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
 ; GFX942-NEXT:    s_nop 1
-; GFX942-NEXT:    v_cndmask_b32_e64 v8, -1, v4, s[0:1]
+; GFX942-NEXT:    v_cndmask_b32_e32 v8, -1, v4, vcc
 ; GFX942-NEXT:    scratch_load_dwordx2 v[0:1], v8, off
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_add_f64 v[6:7], v[0:1], v[2:3]
 ; GFX942-NEXT:    scratch_store_dwordx2 v8, v[6:7], off
 ; GFX942-NEXT:  .LBB31_5:
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX942-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB31_7
 ; GFX942-NEXT:  .LBB31_6: ; %atomicrmw.shared
@@ -6594,7 +6626,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX942-NEXT:    ds_add_rtn_f64 v[0:1], v0, v[2:3]
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB31_7: ; %atomicrmw.phi
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -6605,18 +6637,17 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v9, null, 0, v1, vcc_lo
 ; GFX11-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX11-NEXT:    s_mov_b32 s0, -1
+; GFX11-NEXT:    s_mov_b32 s2, -1
 ; GFX11-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v9
-; GFX11-NEXT:    s_mov_b32 s1, 0
-; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_mov_b32 exec_lo, s2
+; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, s1, v9
+; GFX11-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX11-NEXT:    s_mov_b32 s1, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB31_3
 ; GFX11-NEXT:  .LBB31_1: ; %atomicrmw.global
 ; GFX11-NEXT:    flat_load_b64 v[6:7], v[8:9]
-; GFX11-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX11-NEXT:  .LBB31_2: ; %atomicrmw.start
 ; GFX11-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -6626,20 +6657,20 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    buffer_gl1_inv
 ; GFX11-NEXT:    buffer_gl0_inv
-; GFX11-NEXT:    v_cmp_eq_u64_e64 s0, v[0:1], v[6:7]
+; GFX11-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[0:1], v[6:7]
 ; GFX11-NEXT:    v_dual_mov_b32 v7, v1 :: v_dual_mov_b32 v6, v0
-; GFX11-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX11-NEXT:    s_or_b32 s1, s1, s2
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 s3, exec_lo, s2
+; GFX11-NEXT:    s_or_b32 s1, s1, s3
+; GFX11-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execnz .LBB31_2
 ; GFX11-NEXT:  .LBB31_3:
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX11-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB31_5
 ; GFX11-NEXT:  .LBB31_4: ; %atomicrmw.private
@@ -6650,7 +6681,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX11-NEXT:    v_add_f64 v[2:3], v[0:1], v[2:3]
 ; GFX11-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX11-NEXT:  .LBB31_5: ; %atomicrmw.phi
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_grained_memory:
@@ -6659,17 +6690,17 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX10-NEXT:    v_add_co_u32 v8, vcc_lo, 0x7f8, v0
 ; GFX10-NEXT:    v_add_co_ci_u32_e32 v9, vcc_lo, 0, v1, vcc_lo
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX10-NEXT:    s_mov_b32 s4, -1
+; GFX10-NEXT:    s_mov_b32 s6, -1
 ; GFX10-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s5, v9
-; GFX10-NEXT:    s_mov_b32 s5, 0
-; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, s6
+; GFX10-NEXT:    v_cmp_eq_u32_e64 s4, s5, v9
+; GFX10-NEXT:    s_xor_b32 s7, s4, exec_lo
+; GFX10-NEXT:    s_mov_b32 s5, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB31_3
 ; GFX10-NEXT:  .LBB31_1: ; %atomicrmw.global
 ; GFX10-NEXT:    flat_load_dwordx2 v[6:7], v[8:9]
-; GFX10-NEXT:    s_and_b32 s4, s4, exec_lo
+; GFX10-NEXT:    s_and_b32 s6, s6, exec_lo
 ; GFX10-NEXT:  .LBB31_2: ; %atomicrmw.start
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -6679,19 +6710,19 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    buffer_gl1_inv
 ; GFX10-NEXT:    buffer_gl0_inv
-; GFX10-NEXT:    v_cmp_eq_u64_e64 s4, v[0:1], v[6:7]
+; GFX10-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[0:1], v[6:7]
 ; GFX10-NEXT:    v_mov_b32_e32 v7, v1
 ; GFX10-NEXT:    v_mov_b32_e32 v6, v0
-; GFX10-NEXT:    s_xor_b32 s4, s4, exec_lo
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, s4
-; GFX10-NEXT:    s_or_b32 s5, s5, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, s4
+; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s5, s5, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB31_2
 ; GFX10-NEXT:  .LBB31_3:
 ; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
-; GFX10-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB31_5
 ; GFX10-NEXT:  .LBB31_4: ; %atomicrmw.private
@@ -6706,7 +6737,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX10-NEXT:    buffer_store_dword v3, v4, s[0:3], 0 offen offset:4
 ; GFX10-NEXT:  .LBB31_5: ; %atomicrmw.phi
 ; GFX10-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s4
+; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX90A-LABEL: flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_grained_memory:
@@ -6715,17 +6746,17 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    v_add_co_u32_e32 v4, vcc, 0x7f8, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v5, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB31_5
 ; GFX90A-NEXT:  .LBB31_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v5
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB31_3
 ; GFX90A-NEXT:  .LBB31_2: ; %atomicrmw.global
@@ -6733,15 +6764,16 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB31_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB31_5
 ; GFX90A-NEXT:  .LBB31_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v8, -1, v4, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v8, -1, v4, vcc
 ; GFX90A-NEXT:    buffer_load_dword v0, v8, s[0:3], 0 offen
 ; GFX90A-NEXT:    buffer_load_dword v1, v8, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
@@ -6750,8 +6782,8 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    buffer_store_dword v7, v8, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:  .LBB31_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB31_7
 ; GFX90A-NEXT:  .LBB31_6: ; %atomicrmw.shared
@@ -6760,7 +6792,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    ds_add_rtn_f64 v[0:1], v0, v[2:3]
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB31_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -6770,17 +6802,17 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    v_add_co_u32_e32 v8, vcc, 0x7f8, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v9, vcc, 0, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v9
-; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[4:5], -1
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v9
+; GFX908-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[8:9], -1
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX908-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX908-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB31_3
 ; GFX908-NEXT:  .LBB31_1: ; %atomicrmw.global
 ; GFX908-NEXT:    flat_load_dwordx2 v[6:7], v[8:9]
-; GFX908-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GFX908-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX908-NEXT:  .LBB31_2: ; %atomicrmw.start
 ; GFX908-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -6788,19 +6820,19 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    flat_atomic_cmpswap_x2 v[0:1], v[8:9], v[4:7] glc
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
-; GFX908-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[0:1], v[6:7]
+; GFX908-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[6:7]
 ; GFX908-NEXT:    v_mov_b32_e32 v7, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX908-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX908-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX908-NEXT:    v_mov_b32_e32 v6, v0
-; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execnz .LBB31_2
 ; GFX908-NEXT:  .LBB31_3:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB31_5
 ; GFX908-NEXT:  .LBB31_4: ; %atomicrmw.private
@@ -6813,7 +6845,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v3, v4, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB31_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -6825,20 +6857,20 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX8-NEXT:    v_add_u32_e32 v8, vcc, 0x7f8, v0
 ; GFX8-NEXT:    v_addc_u32_e32 v9, vcc, 0, v1, vcc
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v9
-; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v9
+; GFX8-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
 ; GFX8-NEXT:    s_mov_b64 s[8:9], -1
-; GFX8-NEXT:    s_mov_b64 s[6:7], 0
+; GFX8-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX8-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB31_3
 ; GFX8-NEXT:  .LBB31_1: ; %atomicrmw.global
-; GFX8-NEXT:    v_add_u32_e64 v0, s[4:5], 4, v8
-; GFX8-NEXT:    v_addc_u32_e64 v1, s[4:5], 0, v9, s[4:5]
+; GFX8-NEXT:    v_add_u32_e32 v0, vcc, 4, v8
+; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v9, vcc
 ; GFX8-NEXT:    flat_load_dword v7, v[0:1]
 ; GFX8-NEXT:    flat_load_dword v6, v[8:9]
-; GFX8-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX8-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX8-NEXT:  .LBB31_2: ; %atomicrmw.start
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -6846,19 +6878,19 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX8-NEXT:    flat_atomic_cmpswap_x2 v[0:1], v[8:9], v[4:7] glc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    buffer_wbinvl1
-; GFX8-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[0:1], v[6:7]
+; GFX8-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[6:7]
 ; GFX8-NEXT:    v_mov_b32_e32 v7, v1
-; GFX8-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX8-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_mov_b32_e32 v6, v0
-; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB31_2
 ; GFX8-NEXT:  .LBB31_3:
 ; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX8-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB31_5
 ; GFX8-NEXT:  .LBB31_4: ; %atomicrmw.private
@@ -6872,7 +6904,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX8-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v3, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB31_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -6884,20 +6916,20 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX7-NEXT:    v_add_i32_e32 v8, vcc, 0x7f8, v0
 ; GFX7-NEXT:    v_addc_u32_e32 v9, vcc, 0, v1, vcc
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v9
-; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v9
+; GFX7-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
 ; GFX7-NEXT:    s_mov_b64 s[8:9], -1
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
+; GFX7-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX7-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB31_3
 ; GFX7-NEXT:  .LBB31_1: ; %atomicrmw.global
-; GFX7-NEXT:    v_add_i32_e64 v0, s[4:5], 4, v8
-; GFX7-NEXT:    v_addc_u32_e64 v1, s[4:5], 0, v9, s[4:5]
+; GFX7-NEXT:    v_add_i32_e32 v0, vcc, 4, v8
+; GFX7-NEXT:    v_addc_u32_e32 v1, vcc, 0, v9, vcc
 ; GFX7-NEXT:    flat_load_dword v7, v[0:1]
 ; GFX7-NEXT:    flat_load_dword v6, v[8:9]
-; GFX7-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX7-NEXT:  .LBB31_2: ; %atomicrmw.start
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -6905,19 +6937,19 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX7-NEXT:    flat_atomic_cmpswap_x2 v[0:1], v[8:9], v[4:7] glc
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    buffer_wbinvl1
-; GFX7-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[0:1], v[6:7]
+; GFX7-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[6:7]
 ; GFX7-NEXT:    v_mov_b32_e32 v7, v1
-; GFX7-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX7-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX7-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX7-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX7-NEXT:    v_mov_b32_e32 v6, v0
-; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB31_2
 ; GFX7-NEXT:  .LBB31_3:
 ; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX7-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX7-NEXT:    s_mov_b64 exec, vcc
+; GFX7-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB31_5
 ; GFX7-NEXT:  .LBB31_4: ; %atomicrmw.private
@@ -6931,7 +6963,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX7-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v3, v5, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB31_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr inbounds double, ptr %ptr, i64 255
@@ -6951,19 +6983,19 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v9, null, -1, v1, vcc_lo
 ; GFX12-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX12-NEXT:    s_mov_b32 s0, -1
+; GFX12-NEXT:    s_mov_b32 s2, -1
 ; GFX12-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v9
-; GFX12-NEXT:    s_mov_b32 s1, 0
-; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX12-NEXT:    v_cmp_eq_u32_e64 s0, s1, v9
+; GFX12-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX12-NEXT:    s_mov_b32 s1, s0
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_mov_b32 exec_lo, s2
+; GFX12-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB32_3
 ; GFX12-NEXT:  .LBB32_1: ; %atomicrmw.global
 ; GFX12-NEXT:    flat_load_b64 v[6:7], v[8:9]
-; GFX12-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX12-NEXT:  .LBB32_2: ; %atomicrmw.start
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -6972,23 +7004,22 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX12-NEXT:    flat_atomic_cmpswap_b64 v[0:1], v[8:9], v[4:7] th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX12-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-NEXT:    v_cmp_eq_u64_e64 s0, v[0:1], v[6:7]
+; GFX12-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[0:1], v[6:7]
 ; GFX12-NEXT:    v_dual_mov_b32 v7, v1 :: v_dual_mov_b32 v6, v0
+; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_xor_b32 s3, exec_lo, s2
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 s1, s1, s2
-; GFX12-NEXT:    s_mov_b32 exec_lo, s0
+; GFX12-NEXT:    s_or_b32 s1, s1, s3
+; GFX12-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execnz .LBB32_2
 ; GFX12-NEXT:  .LBB32_3:
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX12-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX12-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB32_5
 ; GFX12-NEXT:  .LBB32_4: ; %atomicrmw.private
@@ -7001,7 +7032,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX12-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX12-NEXT:  .LBB32_5: ; %atomicrmw.phi
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_grained_memory:
@@ -7011,17 +7042,17 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_mov_b32 s3, -1
 ; GFX942-NEXT:    s_mov_b64 s[0:1], src_shared_base
 ; GFX942-NEXT:    v_lshl_add_u64 v[4:5], v[0:1], 0, s[2:3]
-; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v5
-; GFX942-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX942-NEXT:    s_mov_b64 s[2:3], 0
+; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v5
+; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
 ; GFX942-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB32_5
 ; GFX942-NEXT:  .LBB32_1: ; %atomicrmw.check.private
-; GFX942-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v5
-; GFX942-NEXT:    s_xor_b64 exec, s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], src_private_base
+; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s3, v5
+; GFX942-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB32_3
 ; GFX942-NEXT:  .LBB32_2: ; %atomicrmw.global
@@ -7031,24 +7062,25 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    buffer_inv sc1
 ; GFX942-NEXT:  .LBB32_3:
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; GFX942-NEXT:    s_and_b64 s[2:3], s[2:3], exec
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 s[2:3], s[0:1], s[2:3]
+; GFX942-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB32_5
 ; GFX942-NEXT:  .LBB32_4: ; %atomicrmw.private
-; GFX942-NEXT:    v_cmp_ne_u64_e64 s[0:1], 0, v[4:5]
+; GFX942-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
 ; GFX942-NEXT:    s_nop 1
-; GFX942-NEXT:    v_cndmask_b32_e64 v8, -1, v4, s[0:1]
+; GFX942-NEXT:    v_cndmask_b32_e32 v8, -1, v4, vcc
 ; GFX942-NEXT:    scratch_load_dwordx2 v[0:1], v8, off
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_add_f64 v[6:7], v[0:1], v[2:3]
 ; GFX942-NEXT:    scratch_store_dwordx2 v8, v[6:7], off
 ; GFX942-NEXT:  .LBB32_5:
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX942-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB32_7
 ; GFX942-NEXT:  .LBB32_6: ; %atomicrmw.shared
@@ -7058,7 +7090,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX942-NEXT:    ds_add_rtn_f64 v[0:1], v0, v[2:3]
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB32_7: ; %atomicrmw.phi
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -7069,18 +7101,17 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v9, null, -1, v1, vcc_lo
 ; GFX11-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX11-NEXT:    s_mov_b32 s0, -1
+; GFX11-NEXT:    s_mov_b32 s2, -1
 ; GFX11-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v9
-; GFX11-NEXT:    s_mov_b32 s1, 0
-; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_mov_b32 exec_lo, s2
+; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, s1, v9
+; GFX11-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX11-NEXT:    s_mov_b32 s1, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB32_3
 ; GFX11-NEXT:  .LBB32_1: ; %atomicrmw.global
 ; GFX11-NEXT:    flat_load_b64 v[6:7], v[8:9]
-; GFX11-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX11-NEXT:  .LBB32_2: ; %atomicrmw.start
 ; GFX11-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7090,20 +7121,20 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    buffer_gl1_inv
 ; GFX11-NEXT:    buffer_gl0_inv
-; GFX11-NEXT:    v_cmp_eq_u64_e64 s0, v[0:1], v[6:7]
+; GFX11-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[0:1], v[6:7]
 ; GFX11-NEXT:    v_dual_mov_b32 v7, v1 :: v_dual_mov_b32 v6, v0
-; GFX11-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX11-NEXT:    s_or_b32 s1, s1, s2
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 s3, exec_lo, s2
+; GFX11-NEXT:    s_or_b32 s1, s1, s3
+; GFX11-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execnz .LBB32_2
 ; GFX11-NEXT:  .LBB32_3:
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX11-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB32_5
 ; GFX11-NEXT:  .LBB32_4: ; %atomicrmw.private
@@ -7114,7 +7145,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX11-NEXT:    v_add_f64 v[2:3], v[0:1], v[2:3]
 ; GFX11-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX11-NEXT:  .LBB32_5: ; %atomicrmw.phi
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_grained_memory:
@@ -7123,17 +7154,17 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX10-NEXT:    v_add_co_u32 v8, vcc_lo, 0xfffff800, v0
 ; GFX10-NEXT:    v_add_co_ci_u32_e32 v9, vcc_lo, -1, v1, vcc_lo
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX10-NEXT:    s_mov_b32 s4, -1
+; GFX10-NEXT:    s_mov_b32 s6, -1
 ; GFX10-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s5, v9
-; GFX10-NEXT:    s_mov_b32 s5, 0
-; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, s6
+; GFX10-NEXT:    v_cmp_eq_u32_e64 s4, s5, v9
+; GFX10-NEXT:    s_xor_b32 s7, s4, exec_lo
+; GFX10-NEXT:    s_mov_b32 s5, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB32_3
 ; GFX10-NEXT:  .LBB32_1: ; %atomicrmw.global
 ; GFX10-NEXT:    flat_load_dwordx2 v[6:7], v[8:9]
-; GFX10-NEXT:    s_and_b32 s4, s4, exec_lo
+; GFX10-NEXT:    s_and_b32 s6, s6, exec_lo
 ; GFX10-NEXT:  .LBB32_2: ; %atomicrmw.start
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7143,19 +7174,19 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    buffer_gl1_inv
 ; GFX10-NEXT:    buffer_gl0_inv
-; GFX10-NEXT:    v_cmp_eq_u64_e64 s4, v[0:1], v[6:7]
+; GFX10-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[0:1], v[6:7]
 ; GFX10-NEXT:    v_mov_b32_e32 v7, v1
 ; GFX10-NEXT:    v_mov_b32_e32 v6, v0
-; GFX10-NEXT:    s_xor_b32 s4, s4, exec_lo
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, s4
-; GFX10-NEXT:    s_or_b32 s5, s5, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, s4
+; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s5, s5, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB32_2
 ; GFX10-NEXT:  .LBB32_3:
 ; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
-; GFX10-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB32_5
 ; GFX10-NEXT:  .LBB32_4: ; %atomicrmw.private
@@ -7170,7 +7201,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX10-NEXT:    buffer_store_dword v3, v4, s[0:3], 0 offen offset:4
 ; GFX10-NEXT:  .LBB32_5: ; %atomicrmw.phi
 ; GFX10-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s4
+; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX90A-LABEL: flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_grained_memory:
@@ -7179,17 +7210,17 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    v_add_co_u32_e32 v4, vcc, 0xfffff800, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v5, vcc, -1, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v5
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB32_5
 ; GFX90A-NEXT:  .LBB32_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v5
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v5
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB32_3
 ; GFX90A-NEXT:  .LBB32_2: ; %atomicrmw.global
@@ -7197,15 +7228,16 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB32_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB32_5
 ; GFX90A-NEXT:  .LBB32_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[4:5]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v8, -1, v4, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v8, -1, v4, vcc
 ; GFX90A-NEXT:    buffer_load_dword v0, v8, s[0:3], 0 offen
 ; GFX90A-NEXT:    buffer_load_dword v1, v8, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
@@ -7214,8 +7246,8 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    buffer_store_dword v7, v8, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:  .LBB32_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB32_7
 ; GFX90A-NEXT:  .LBB32_6: ; %atomicrmw.shared
@@ -7224,7 +7256,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    ds_add_rtn_f64 v[0:1], v0, v[2:3]
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB32_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -7234,17 +7266,17 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    v_add_co_u32_e32 v8, vcc, 0xfffff800, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v9, vcc, -1, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v9
-; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[4:5], -1
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v9
+; GFX908-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[8:9], -1
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX908-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX908-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB32_3
 ; GFX908-NEXT:  .LBB32_1: ; %atomicrmw.global
 ; GFX908-NEXT:    flat_load_dwordx2 v[6:7], v[8:9]
-; GFX908-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GFX908-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX908-NEXT:  .LBB32_2: ; %atomicrmw.start
 ; GFX908-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7252,19 +7284,19 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    flat_atomic_cmpswap_x2 v[0:1], v[8:9], v[4:7] glc
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
-; GFX908-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[0:1], v[6:7]
+; GFX908-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[6:7]
 ; GFX908-NEXT:    v_mov_b32_e32 v7, v1
-; GFX908-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX908-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX908-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX908-NEXT:    v_mov_b32_e32 v6, v0
-; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execnz .LBB32_2
 ; GFX908-NEXT:  .LBB32_3:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB32_5
 ; GFX908-NEXT:  .LBB32_4: ; %atomicrmw.private
@@ -7277,7 +7309,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v3, v4, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB32_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -7289,20 +7321,20 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX8-NEXT:    v_add_u32_e32 v8, vcc, 0xfffff800, v0
 ; GFX8-NEXT:    v_addc_u32_e32 v9, vcc, -1, v1, vcc
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v9
-; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v9
+; GFX8-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
 ; GFX8-NEXT:    s_mov_b64 s[8:9], -1
-; GFX8-NEXT:    s_mov_b64 s[6:7], 0
+; GFX8-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX8-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB32_3
 ; GFX8-NEXT:  .LBB32_1: ; %atomicrmw.global
-; GFX8-NEXT:    v_add_u32_e64 v0, s[4:5], 4, v8
-; GFX8-NEXT:    v_addc_u32_e64 v1, s[4:5], 0, v9, s[4:5]
+; GFX8-NEXT:    v_add_u32_e32 v0, vcc, 4, v8
+; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v9, vcc
 ; GFX8-NEXT:    flat_load_dword v7, v[0:1]
 ; GFX8-NEXT:    flat_load_dword v6, v[8:9]
-; GFX8-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX8-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX8-NEXT:  .LBB32_2: ; %atomicrmw.start
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7310,19 +7342,19 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX8-NEXT:    flat_atomic_cmpswap_x2 v[0:1], v[8:9], v[4:7] glc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    buffer_wbinvl1
-; GFX8-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[0:1], v[6:7]
+; GFX8-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[6:7]
 ; GFX8-NEXT:    v_mov_b32_e32 v7, v1
-; GFX8-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX8-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_mov_b32_e32 v6, v0
-; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB32_2
 ; GFX8-NEXT:  .LBB32_3:
 ; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX8-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB32_5
 ; GFX8-NEXT:  .LBB32_4: ; %atomicrmw.private
@@ -7336,7 +7368,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX8-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v3, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB32_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -7348,20 +7380,20 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX7-NEXT:    v_add_i32_e32 v8, vcc, 0xfffff800, v0
 ; GFX7-NEXT:    v_addc_u32_e32 v9, vcc, -1, v1, vcc
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v9
-; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v9
+; GFX7-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
 ; GFX7-NEXT:    s_mov_b64 s[8:9], -1
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
+; GFX7-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX7-NEXT:    ; implicit-def: $vgpr0_vgpr1
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB32_3
 ; GFX7-NEXT:  .LBB32_1: ; %atomicrmw.global
-; GFX7-NEXT:    v_add_i32_e64 v0, s[4:5], 4, v8
-; GFX7-NEXT:    v_addc_u32_e64 v1, s[4:5], 0, v9, s[4:5]
+; GFX7-NEXT:    v_add_i32_e32 v0, vcc, 4, v8
+; GFX7-NEXT:    v_addc_u32_e32 v1, vcc, 0, v9, vcc
 ; GFX7-NEXT:    flat_load_dword v7, v[0:1]
 ; GFX7-NEXT:    flat_load_dword v6, v[8:9]
-; GFX7-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX7-NEXT:  .LBB32_2: ; %atomicrmw.start
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7369,19 +7401,19 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX7-NEXT:    flat_atomic_cmpswap_x2 v[0:1], v[8:9], v[4:7] glc
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    buffer_wbinvl1
-; GFX7-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[0:1], v[6:7]
+; GFX7-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[6:7]
 ; GFX7-NEXT:    v_mov_b32_e32 v7, v1
-; GFX7-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX7-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX7-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX7-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX7-NEXT:    v_mov_b32_e32 v6, v0
-; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB32_2
 ; GFX7-NEXT:  .LBB32_3:
 ; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX7-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX7-NEXT:    s_mov_b64 exec, vcc
+; GFX7-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB32_5
 ; GFX7-NEXT:  .LBB32_4: ; %atomicrmw.private
@@ -7395,7 +7427,7 @@ define double @flat_agent_atomic_fadd_ret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX7-NEXT:    buffer_store_dword v2, v4, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v3, v5, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB32_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr inbounds double, ptr %ptr, i64 -256
@@ -7412,18 +7444,18 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX12-NEXT:    s_mov_b32 s0, -1
+; GFX12-NEXT:    s_mov_b32 s2, -1
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX12-NEXT:    s_mov_b32 s1, 0
-; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX12-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
+; GFX12-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX12-NEXT:    s_mov_b32 s1, s0
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_mov_b32 exec_lo, s2
+; GFX12-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB33_3
 ; GFX12-NEXT:  .LBB33_1: ; %atomicrmw.global
 ; GFX12-NEXT:    flat_load_b64 v[6:7], v[0:1]
-; GFX12-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX12-NEXT:  .LBB33_2: ; %atomicrmw.start
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -7432,23 +7464,22 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX12-NEXT:    flat_atomic_cmpswap_b64 v[4:5], v[0:1], v[4:7] th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX12-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-NEXT:    v_cmp_eq_u64_e64 s0, v[4:5], v[6:7]
+; GFX12-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX12-NEXT:    v_dual_mov_b32 v7, v5 :: v_dual_mov_b32 v6, v4
+; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_xor_b32 s3, exec_lo, s2
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 s1, s1, s2
-; GFX12-NEXT:    s_mov_b32 exec_lo, s0
+; GFX12-NEXT:    s_or_b32 s1, s1, s3
+; GFX12-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execnz .LBB33_2
 ; GFX12-NEXT:  .LBB33_3:
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX12-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX12-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB33_5
 ; GFX12-NEXT:  .LBB33_4: ; %atomicrmw.private
@@ -7461,23 +7492,23 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX12-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX12-NEXT:  .LBB33_5: ; %atomicrmw.phi
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    s_mov_b64 s[0:1], src_shared_base
-; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
-; GFX942-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX942-NEXT:    s_mov_b64 s[2:3], 0
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v1
+; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB33_5
 ; GFX942-NEXT:  .LBB33_1: ; %atomicrmw.check.private
-; GFX942-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v1
-; GFX942-NEXT:    s_xor_b64 exec, s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], src_private_base
+; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s3, v1
+; GFX942-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB33_3
 ; GFX942-NEXT:  .LBB33_2: ; %atomicrmw.global
@@ -7487,24 +7518,25 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    buffer_inv sc1
 ; GFX942-NEXT:  .LBB33_3:
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; GFX942-NEXT:    s_and_b64 s[2:3], s[2:3], exec
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 s[2:3], s[0:1], s[2:3]
+; GFX942-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB33_5
 ; GFX942-NEXT:  .LBB33_4: ; %atomicrmw.private
-; GFX942-NEXT:    v_cmp_ne_u64_e64 s[0:1], 0, v[0:1]
+; GFX942-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
 ; GFX942-NEXT:    s_nop 1
-; GFX942-NEXT:    v_cndmask_b32_e64 v6, -1, v0, s[0:1]
+; GFX942-NEXT:    v_cndmask_b32_e32 v6, -1, v0, vcc
 ; GFX942-NEXT:    scratch_load_dwordx2 v[4:5], v6, off
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_add_f64 v[4:5], v[4:5], v[2:3]
 ; GFX942-NEXT:    scratch_store_dwordx2 v6, v[4:5], off
 ; GFX942-NEXT:  .LBB33_5:
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX942-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB33_7
 ; GFX942-NEXT:  .LBB33_6: ; %atomicrmw.shared
@@ -7514,7 +7546,7 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX942-NEXT:    ds_add_f64 v0, v[2:3]
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB33_7: ; %atomicrmw.phi
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -7522,17 +7554,16 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX11-NEXT:    s_mov_b32 s0, -1
-; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX11-NEXT:    s_mov_b32 s1, 0
-; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_mov_b32 exec_lo, s2
+; GFX11-NEXT:    s_mov_b32 s2, -1
+; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
+; GFX11-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX11-NEXT:    s_mov_b32 s1, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB33_3
 ; GFX11-NEXT:  .LBB33_1: ; %atomicrmw.global
 ; GFX11-NEXT:    flat_load_b64 v[6:7], v[0:1]
-; GFX11-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX11-NEXT:  .LBB33_2: ; %atomicrmw.start
 ; GFX11-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7542,20 +7573,20 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    buffer_gl1_inv
 ; GFX11-NEXT:    buffer_gl0_inv
-; GFX11-NEXT:    v_cmp_eq_u64_e64 s0, v[4:5], v[6:7]
+; GFX11-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX11-NEXT:    v_dual_mov_b32 v7, v5 :: v_dual_mov_b32 v6, v4
-; GFX11-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX11-NEXT:    s_or_b32 s1, s1, s2
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 s3, exec_lo, s2
+; GFX11-NEXT:    s_or_b32 s1, s1, s3
+; GFX11-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execnz .LBB33_2
 ; GFX11-NEXT:  .LBB33_3:
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX11-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB33_5
 ; GFX11-NEXT:  .LBB33_4: ; %atomicrmw.private
@@ -7566,23 +7597,23 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX11-NEXT:    v_add_f64 v[0:1], v[0:1], v[2:3]
 ; GFX11-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX11-NEXT:  .LBB33_5: ; %atomicrmw.phi
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX10-NEXT:    s_mov_b32 s4, -1
-; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s5, v1
-; GFX10-NEXT:    s_mov_b32 s5, 0
-; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, s6
+; GFX10-NEXT:    s_mov_b32 s6, -1
+; GFX10-NEXT:    v_cmp_eq_u32_e64 s4, s5, v1
+; GFX10-NEXT:    s_xor_b32 s7, s4, exec_lo
+; GFX10-NEXT:    s_mov_b32 s5, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB33_3
 ; GFX10-NEXT:  .LBB33_1: ; %atomicrmw.global
 ; GFX10-NEXT:    flat_load_dwordx2 v[6:7], v[0:1]
-; GFX10-NEXT:    s_and_b32 s4, s4, exec_lo
+; GFX10-NEXT:    s_and_b32 s6, s6, exec_lo
 ; GFX10-NEXT:  .LBB33_2: ; %atomicrmw.start
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7592,19 +7623,19 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    buffer_gl1_inv
 ; GFX10-NEXT:    buffer_gl0_inv
-; GFX10-NEXT:    v_cmp_eq_u64_e64 s4, v[4:5], v[6:7]
+; GFX10-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX10-NEXT:    v_mov_b32_e32 v7, v5
 ; GFX10-NEXT:    v_mov_b32_e32 v6, v4
-; GFX10-NEXT:    s_xor_b32 s4, s4, exec_lo
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, s4
-; GFX10-NEXT:    s_or_b32 s5, s5, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, s4
+; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s5, s5, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB33_2
 ; GFX10-NEXT:  .LBB33_3:
 ; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
-; GFX10-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB33_5
 ; GFX10-NEXT:  .LBB33_4: ; %atomicrmw.private
@@ -7619,23 +7650,23 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX10-NEXT:    buffer_store_dword v1, v4, s[0:3], 0 offen offset:4
 ; GFX10-NEXT:  .LBB33_5: ; %atomicrmw.phi
 ; GFX10-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s4
+; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX90A-LABEL: flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory:
 ; GFX90A:       ; %bb.0:
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB33_5
 ; GFX90A-NEXT:  .LBB33_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB33_3
 ; GFX90A-NEXT:  .LBB33_2: ; %atomicrmw.global
@@ -7643,15 +7674,16 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB33_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB33_5
 ; GFX90A-NEXT:  .LBB33_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v6, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v6, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v6, s[0:3], 0 offen
 ; GFX90A-NEXT:    buffer_load_dword v5, v6, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
@@ -7660,8 +7692,8 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX90A-NEXT:    buffer_store_dword v5, v6, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:  .LBB33_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB33_7
 ; GFX90A-NEXT:  .LBB33_6: ; %atomicrmw.shared
@@ -7670,7 +7702,7 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX90A-NEXT:    ds_add_f64 v0, v[2:3]
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB33_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -7678,16 +7710,16 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX908:       ; %bb.0:
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[4:5], -1
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[8:9], -1
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB33_3
 ; GFX908-NEXT:  .LBB33_1: ; %atomicrmw.global
 ; GFX908-NEXT:    flat_load_dwordx2 v[6:7], v[0:1]
-; GFX908-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GFX908-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX908-NEXT:  .LBB33_2: ; %atomicrmw.start
 ; GFX908-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7695,19 +7727,19 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX908-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
-; GFX908-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX908-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX908-NEXT:    v_mov_b32_e32 v7, v5
-; GFX908-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX908-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX908-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX908-NEXT:    v_mov_b32_e32 v6, v4
-; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execnz .LBB33_2
 ; GFX908-NEXT:  .LBB33_3:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB33_5
 ; GFX908-NEXT:  .LBB33_4: ; %atomicrmw.private
@@ -7720,7 +7752,7 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX908-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v4, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB33_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -7730,19 +7762,19 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX8-NEXT:    s_mov_b64 s[4:5], 0xc0
 ; GFX8-NEXT:    s_load_dword s4, s[4:5], 0x0
 ; GFX8-NEXT:    s_mov_b64 s[8:9], -1
-; GFX8-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v1
-; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v1
+; GFX8-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GFX8-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB33_3
 ; GFX8-NEXT:  .LBB33_1: ; %atomicrmw.global
-; GFX8-NEXT:    v_add_u32_e64 v4, s[4:5], 4, v0
-; GFX8-NEXT:    v_addc_u32_e64 v5, s[4:5], 0, v1, s[4:5]
+; GFX8-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
+; GFX8-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
 ; GFX8-NEXT:    flat_load_dword v7, v[4:5]
 ; GFX8-NEXT:    flat_load_dword v6, v[0:1]
-; GFX8-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX8-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX8-NEXT:  .LBB33_2: ; %atomicrmw.start
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7750,19 +7782,19 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX8-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    buffer_wbinvl1
-; GFX8-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX8-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX8-NEXT:    v_mov_b32_e32 v7, v5
-; GFX8-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX8-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_mov_b32_e32 v6, v4
-; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB33_2
 ; GFX8-NEXT:  .LBB33_3:
 ; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX8-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB33_5
 ; GFX8-NEXT:  .LBB33_4: ; %atomicrmw.private
@@ -7776,7 +7808,7 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX8-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB33_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -7786,19 +7818,19 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX7-NEXT:    s_mov_b64 s[4:5], 0xc0
 ; GFX7-NEXT:    s_load_dword s4, s[4:5], 0x0
 ; GFX7-NEXT:    s_mov_b64 s[8:9], -1
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v1
-; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v1
+; GFX7-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GFX7-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB33_3
 ; GFX7-NEXT:  .LBB33_1: ; %atomicrmw.global
-; GFX7-NEXT:    v_add_i32_e64 v4, s[4:5], 4, v0
-; GFX7-NEXT:    v_addc_u32_e64 v5, s[4:5], 0, v1, s[4:5]
+; GFX7-NEXT:    v_add_i32_e32 v4, vcc, 4, v0
+; GFX7-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
 ; GFX7-NEXT:    flat_load_dword v7, v[4:5]
 ; GFX7-NEXT:    flat_load_dword v6, v[0:1]
-; GFX7-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX7-NEXT:  .LBB33_2: ; %atomicrmw.start
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7806,19 +7838,19 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX7-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    buffer_wbinvl1
-; GFX7-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX7-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX7-NEXT:    v_mov_b32_e32 v7, v5
-; GFX7-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX7-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX7-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX7-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX7-NEXT:    v_mov_b32_e32 v6, v4
-; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB33_2
 ; GFX7-NEXT:  .LBB33_3:
 ; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX7-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX7-NEXT:    s_mov_b64 exec, vcc
+; GFX7-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB33_5
 ; GFX7-NEXT:  .LBB33_4: ; %atomicrmw.private
@@ -7832,7 +7864,7 @@ define void @flat_agent_atomic_fadd_noret_f64__amdgpu_no_fine_grained_memory(ptr
 ; GFX7-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB33_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
   %unused = atomicrmw fadd ptr %ptr, double %val syncscope("agent") seq_cst, !amdgpu.no.fine.grained.memory !0
@@ -7851,18 +7883,18 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v1, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX12-NEXT:    s_mov_b32 s0, -1
+; GFX12-NEXT:    s_mov_b32 s2, -1
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX12-NEXT:    s_mov_b32 s1, 0
-; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX12-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
+; GFX12-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX12-NEXT:    s_mov_b32 s1, s0
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_mov_b32 exec_lo, s2
+; GFX12-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB34_3
 ; GFX12-NEXT:  .LBB34_1: ; %atomicrmw.global
 ; GFX12-NEXT:    flat_load_b64 v[6:7], v[0:1]
-; GFX12-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX12-NEXT:  .LBB34_2: ; %atomicrmw.start
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -7871,23 +7903,22 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX12-NEXT:    flat_atomic_cmpswap_b64 v[4:5], v[0:1], v[4:7] th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX12-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-NEXT:    v_cmp_eq_u64_e64 s0, v[4:5], v[6:7]
+; GFX12-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX12-NEXT:    v_dual_mov_b32 v7, v5 :: v_dual_mov_b32 v6, v4
+; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_xor_b32 s3, exec_lo, s2
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 s1, s1, s2
-; GFX12-NEXT:    s_mov_b32 exec_lo, s0
+; GFX12-NEXT:    s_or_b32 s1, s1, s3
+; GFX12-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execnz .LBB34_2
 ; GFX12-NEXT:  .LBB34_3:
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX12-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX12-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX12-NEXT:  .LBB34_4: ; %atomicrmw.private
@@ -7900,7 +7931,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX12-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX12-NEXT:  .LBB34_5: ; %atomicrmw.phi
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_grained_memory:
@@ -7909,16 +7940,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_mov_b64 s[2:3], 0x7f8
 ; GFX942-NEXT:    s_mov_b64 s[0:1], src_shared_base
 ; GFX942-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
-; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
-; GFX942-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX942-NEXT:    s_mov_b64 s[2:3], 0
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v1
+; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX942-NEXT:  .LBB34_1: ; %atomicrmw.check.private
-; GFX942-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v1
-; GFX942-NEXT:    s_xor_b64 exec, s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], src_private_base
+; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s3, v1
+; GFX942-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB34_3
 ; GFX942-NEXT:  .LBB34_2: ; %atomicrmw.global
@@ -7928,24 +7959,25 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    buffer_inv sc1
 ; GFX942-NEXT:  .LBB34_3:
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; GFX942-NEXT:    s_and_b64 s[2:3], s[2:3], exec
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 s[2:3], s[0:1], s[2:3]
+; GFX942-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX942-NEXT:  .LBB34_4: ; %atomicrmw.private
-; GFX942-NEXT:    v_cmp_ne_u64_e64 s[0:1], 0, v[0:1]
+; GFX942-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
 ; GFX942-NEXT:    s_nop 1
-; GFX942-NEXT:    v_cndmask_b32_e64 v6, -1, v0, s[0:1]
+; GFX942-NEXT:    v_cndmask_b32_e32 v6, -1, v0, vcc
 ; GFX942-NEXT:    scratch_load_dwordx2 v[4:5], v6, off
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_add_f64 v[4:5], v[4:5], v[2:3]
 ; GFX942-NEXT:    scratch_store_dwordx2 v6, v[4:5], off
 ; GFX942-NEXT:  .LBB34_5:
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX942-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB34_7
 ; GFX942-NEXT:  .LBB34_6: ; %atomicrmw.shared
@@ -7955,7 +7987,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX942-NEXT:    ds_add_f64 v0, v[2:3]
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB34_7: ; %atomicrmw.phi
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -7966,17 +7998,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v1, null, 0, v1, vcc_lo
 ; GFX11-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX11-NEXT:    s_mov_b32 s0, -1
-; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX11-NEXT:    s_mov_b32 s1, 0
-; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_mov_b32 exec_lo, s2
+; GFX11-NEXT:    s_mov_b32 s2, -1
+; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
+; GFX11-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX11-NEXT:    s_mov_b32 s1, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB34_3
 ; GFX11-NEXT:  .LBB34_1: ; %atomicrmw.global
 ; GFX11-NEXT:    flat_load_b64 v[6:7], v[0:1]
-; GFX11-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX11-NEXT:  .LBB34_2: ; %atomicrmw.start
 ; GFX11-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -7986,20 +8017,20 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    buffer_gl1_inv
 ; GFX11-NEXT:    buffer_gl0_inv
-; GFX11-NEXT:    v_cmp_eq_u64_e64 s0, v[4:5], v[6:7]
+; GFX11-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX11-NEXT:    v_dual_mov_b32 v7, v5 :: v_dual_mov_b32 v6, v4
-; GFX11-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX11-NEXT:    s_or_b32 s1, s1, s2
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 s3, exec_lo, s2
+; GFX11-NEXT:    s_or_b32 s1, s1, s3
+; GFX11-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execnz .LBB34_2
 ; GFX11-NEXT:  .LBB34_3:
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX11-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX11-NEXT:  .LBB34_4: ; %atomicrmw.private
@@ -8010,7 +8041,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX11-NEXT:    v_add_f64 v[0:1], v[0:1], v[2:3]
 ; GFX11-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX11-NEXT:  .LBB34_5: ; %atomicrmw.phi
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_grained_memory:
@@ -8019,16 +8050,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX10-NEXT:    v_add_co_u32 v0, vcc_lo, 0x7f8, v0
 ; GFX10-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 0, v1, vcc_lo
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX10-NEXT:    s_mov_b32 s4, -1
-; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s5, v1
-; GFX10-NEXT:    s_mov_b32 s5, 0
-; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, s6
+; GFX10-NEXT:    s_mov_b32 s6, -1
+; GFX10-NEXT:    v_cmp_eq_u32_e64 s4, s5, v1
+; GFX10-NEXT:    s_xor_b32 s7, s4, exec_lo
+; GFX10-NEXT:    s_mov_b32 s5, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB34_3
 ; GFX10-NEXT:  .LBB34_1: ; %atomicrmw.global
 ; GFX10-NEXT:    flat_load_dwordx2 v[6:7], v[0:1]
-; GFX10-NEXT:    s_and_b32 s4, s4, exec_lo
+; GFX10-NEXT:    s_and_b32 s6, s6, exec_lo
 ; GFX10-NEXT:  .LBB34_2: ; %atomicrmw.start
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -8038,19 +8069,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    buffer_gl1_inv
 ; GFX10-NEXT:    buffer_gl0_inv
-; GFX10-NEXT:    v_cmp_eq_u64_e64 s4, v[4:5], v[6:7]
+; GFX10-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX10-NEXT:    v_mov_b32_e32 v7, v5
 ; GFX10-NEXT:    v_mov_b32_e32 v6, v4
-; GFX10-NEXT:    s_xor_b32 s4, s4, exec_lo
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, s4
-; GFX10-NEXT:    s_or_b32 s5, s5, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, s4
+; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s5, s5, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB34_2
 ; GFX10-NEXT:  .LBB34_3:
 ; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
-; GFX10-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX10-NEXT:  .LBB34_4: ; %atomicrmw.private
@@ -8065,7 +8096,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX10-NEXT:    buffer_store_dword v1, v4, s[0:3], 0 offen offset:4
 ; GFX10-NEXT:  .LBB34_5: ; %atomicrmw.phi
 ; GFX10-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s4
+; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX90A-LABEL: flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_grained_memory:
@@ -8074,16 +8105,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7f8, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX90A-NEXT:  .LBB34_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB34_3
 ; GFX90A-NEXT:  .LBB34_2: ; %atomicrmw.global
@@ -8091,15 +8122,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB34_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX90A-NEXT:  .LBB34_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v6, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v6, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v6, s[0:3], 0 offen
 ; GFX90A-NEXT:    buffer_load_dword v5, v6, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
@@ -8108,8 +8140,8 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    buffer_store_dword v5, v6, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:  .LBB34_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB34_7
 ; GFX90A-NEXT:  .LBB34_6: ; %atomicrmw.shared
@@ -8118,7 +8150,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    ds_add_f64 v0, v[2:3]
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB34_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -8128,16 +8160,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    v_add_co_u32_e32 v0, vcc, 0x7f8, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[4:5], -1
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[8:9], -1
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB34_3
 ; GFX908-NEXT:  .LBB34_1: ; %atomicrmw.global
 ; GFX908-NEXT:    flat_load_dwordx2 v[6:7], v[0:1]
-; GFX908-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GFX908-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX908-NEXT:  .LBB34_2: ; %atomicrmw.start
 ; GFX908-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -8145,19 +8177,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
-; GFX908-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX908-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX908-NEXT:    v_mov_b32_e32 v7, v5
-; GFX908-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX908-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX908-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX908-NEXT:    v_mov_b32_e32 v6, v4
-; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execnz .LBB34_2
 ; GFX908-NEXT:  .LBB34_3:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX908-NEXT:  .LBB34_4: ; %atomicrmw.private
@@ -8170,7 +8202,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX908-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v4, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB34_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -8182,19 +8214,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX8-NEXT:    v_add_u32_e32 v0, vcc, 0x7f8, v0
 ; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v1
-; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v1
+; GFX8-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
 ; GFX8-NEXT:    s_mov_b64 s[8:9], -1
-; GFX8-NEXT:    s_mov_b64 s[6:7], 0
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB34_3
 ; GFX8-NEXT:  .LBB34_1: ; %atomicrmw.global
-; GFX8-NEXT:    v_add_u32_e64 v4, s[4:5], 4, v0
-; GFX8-NEXT:    v_addc_u32_e64 v5, s[4:5], 0, v1, s[4:5]
+; GFX8-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
+; GFX8-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
 ; GFX8-NEXT:    flat_load_dword v7, v[4:5]
 ; GFX8-NEXT:    flat_load_dword v6, v[0:1]
-; GFX8-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX8-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX8-NEXT:  .LBB34_2: ; %atomicrmw.start
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -8202,19 +8234,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX8-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    buffer_wbinvl1
-; GFX8-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX8-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX8-NEXT:    v_mov_b32_e32 v7, v5
-; GFX8-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX8-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_mov_b32_e32 v6, v4
-; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB34_2
 ; GFX8-NEXT:  .LBB34_3:
 ; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX8-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX8-NEXT:  .LBB34_4: ; %atomicrmw.private
@@ -8228,7 +8260,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX8-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB34_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -8240,19 +8272,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX7-NEXT:    v_add_i32_e32 v0, vcc, 0x7f8, v0
 ; GFX7-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v1
-; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v1
+; GFX7-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
 ; GFX7-NEXT:    s_mov_b64 s[8:9], -1
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB34_3
 ; GFX7-NEXT:  .LBB34_1: ; %atomicrmw.global
-; GFX7-NEXT:    v_add_i32_e64 v4, s[4:5], 4, v0
-; GFX7-NEXT:    v_addc_u32_e64 v5, s[4:5], 0, v1, s[4:5]
+; GFX7-NEXT:    v_add_i32_e32 v4, vcc, 4, v0
+; GFX7-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
 ; GFX7-NEXT:    flat_load_dword v7, v[4:5]
 ; GFX7-NEXT:    flat_load_dword v6, v[0:1]
-; GFX7-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX7-NEXT:  .LBB34_2: ; %atomicrmw.start
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -8260,19 +8292,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX7-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    buffer_wbinvl1
-; GFX7-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX7-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX7-NEXT:    v_mov_b32_e32 v7, v5
-; GFX7-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX7-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX7-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX7-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX7-NEXT:    v_mov_b32_e32 v6, v4
-; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB34_2
 ; GFX7-NEXT:  .LBB34_3:
 ; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX7-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX7-NEXT:    s_mov_b64 exec, vcc
+; GFX7-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX7-NEXT:  .LBB34_4: ; %atomicrmw.private
@@ -8286,7 +8318,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_pos__amdgpu_no_fine_gra
 ; GFX7-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB34_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr inbounds double, ptr %ptr, i64 255
@@ -8306,18 +8338,18 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v1, null, -1, v1, vcc_lo
 ; GFX12-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX12-NEXT:    s_mov_b32 s0, -1
+; GFX12-NEXT:    s_mov_b32 s2, -1
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX12-NEXT:    s_mov_b32 s1, 0
-; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX12-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
+; GFX12-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX12-NEXT:    s_mov_b32 s1, s0
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_mov_b32 exec_lo, s2
+; GFX12-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB35_3
 ; GFX12-NEXT:  .LBB35_1: ; %atomicrmw.global
 ; GFX12-NEXT:    flat_load_b64 v[6:7], v[0:1]
-; GFX12-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX12-NEXT:  .LBB35_2: ; %atomicrmw.start
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -8326,23 +8358,22 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX12-NEXT:    flat_atomic_cmpswap_b64 v[4:5], v[0:1], v[4:7] th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX12-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-NEXT:    v_cmp_eq_u64_e64 s0, v[4:5], v[6:7]
+; GFX12-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX12-NEXT:    v_dual_mov_b32 v7, v5 :: v_dual_mov_b32 v6, v4
+; GFX12-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX12-NEXT:    s_xor_b32 s3, exec_lo, s2
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 s1, s1, s2
-; GFX12-NEXT:    s_mov_b32 exec_lo, s0
+; GFX12-NEXT:    s_or_b32 s1, s1, s3
+; GFX12-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execnz .LBB35_2
 ; GFX12-NEXT:  .LBB35_3:
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX12-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX12-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX12-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX12-NEXT:  .LBB35_4: ; %atomicrmw.private
@@ -8355,7 +8386,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX12-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX12-NEXT:  .LBB35_5: ; %atomicrmw.phi
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX12-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_grained_memory:
@@ -8365,16 +8396,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_mov_b32 s3, -1
 ; GFX942-NEXT:    s_mov_b64 s[0:1], src_shared_base
 ; GFX942-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, s[2:3]
-; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s1, v1
-; GFX942-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX942-NEXT:    s_mov_b64 s[2:3], 0
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v1
+; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX942-NEXT:  .LBB35_1: ; %atomicrmw.check.private
-; GFX942-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v1
-; GFX942-NEXT:    s_xor_b64 exec, s[0:1], exec
+; GFX942-NEXT:    s_mov_b64 s[2:3], src_private_base
+; GFX942-NEXT:    v_cmp_eq_u32_e32 vcc, s3, v1
+; GFX942-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB35_3
 ; GFX942-NEXT:  .LBB35_2: ; %atomicrmw.global
@@ -8384,24 +8415,25 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    buffer_inv sc1
 ; GFX942-NEXT:  .LBB35_3:
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; GFX942-NEXT:    s_and_b64 s[2:3], s[2:3], exec
-; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 s[2:3], s[0:1], s[2:3]
+; GFX942-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX942-NEXT:  .LBB35_4: ; %atomicrmw.private
-; GFX942-NEXT:    v_cmp_ne_u64_e64 s[0:1], 0, v[0:1]
+; GFX942-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
 ; GFX942-NEXT:    s_nop 1
-; GFX942-NEXT:    v_cndmask_b32_e64 v6, -1, v0, s[0:1]
+; GFX942-NEXT:    v_cndmask_b32_e32 v6, -1, v0, vcc
 ; GFX942-NEXT:    scratch_load_dwordx2 v[4:5], v6, off
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_add_f64 v[4:5], v[4:5], v[2:3]
 ; GFX942-NEXT:    scratch_store_dwordx2 v6, v[4:5], off
 ; GFX942-NEXT:  .LBB35_5:
 ; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
-; GFX942-NEXT:    s_xor_b64 s[0:1], exec, vcc
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX942-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB35_7
 ; GFX942-NEXT:  .LBB35_6: ; %atomicrmw.shared
@@ -8411,7 +8443,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX942-NEXT:    ds_add_f64 v0, v[2:3]
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:  .LBB35_7: ; %atomicrmw.phi
-; GFX942-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX942-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -8422,17 +8454,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v1, null, -1, v1, vcc_lo
 ; GFX11-NEXT:    s_mov_b64 s[0:1], src_private_base
-; GFX11-NEXT:    s_mov_b32 s0, -1
-; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX11-NEXT:    s_mov_b32 s1, 0
-; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_mov_b32 exec_lo, s2
+; GFX11-NEXT:    s_mov_b32 s2, -1
+; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
+; GFX11-NEXT:    s_xor_b32 s3, s0, exec_lo
+; GFX11-NEXT:    s_mov_b32 s1, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB35_3
 ; GFX11-NEXT:  .LBB35_1: ; %atomicrmw.global
 ; GFX11-NEXT:    flat_load_b64 v[6:7], v[0:1]
-; GFX11-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX11-NEXT:  .LBB35_2: ; %atomicrmw.start
 ; GFX11-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -8442,20 +8473,20 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    buffer_gl1_inv
 ; GFX11-NEXT:    buffer_gl0_inv
-; GFX11-NEXT:    v_cmp_eq_u64_e64 s0, v[4:5], v[6:7]
+; GFX11-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX11-NEXT:    v_dual_mov_b32 v7, v5 :: v_dual_mov_b32 v6, v4
-; GFX11-NEXT:    s_xor_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX11-NEXT:    s_or_b32 s1, s1, s2
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 s3, exec_lo, s2
+; GFX11-NEXT:    s_or_b32 s1, s1, s3
+; GFX11-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execnz .LBB35_2
 ; GFX11-NEXT:  .LBB35_3:
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX11-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX11-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX11-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX11-NEXT:  .LBB35_4: ; %atomicrmw.private
@@ -8466,7 +8497,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX11-NEXT:    v_add_f64 v[0:1], v[0:1], v[2:3]
 ; GFX11-NEXT:    scratch_store_b64 v4, v[0:1], off
 ; GFX11-NEXT:  .LBB35_5: ; %atomicrmw.phi
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_grained_memory:
@@ -8475,16 +8506,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX10-NEXT:    v_add_co_u32 v0, vcc_lo, 0xfffff800, v0
 ; GFX10-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, -1, v1, vcc_lo
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX10-NEXT:    s_mov_b32 s4, -1
-; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s5, v1
-; GFX10-NEXT:    s_mov_b32 s5, 0
-; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, s6
+; GFX10-NEXT:    s_mov_b32 s6, -1
+; GFX10-NEXT:    v_cmp_eq_u32_e64 s4, s5, v1
+; GFX10-NEXT:    s_xor_b32 s7, s4, exec_lo
+; GFX10-NEXT:    s_mov_b32 s5, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB35_3
 ; GFX10-NEXT:  .LBB35_1: ; %atomicrmw.global
 ; GFX10-NEXT:    flat_load_dwordx2 v[6:7], v[0:1]
-; GFX10-NEXT:    s_and_b32 s4, s4, exec_lo
+; GFX10-NEXT:    s_and_b32 s6, s6, exec_lo
 ; GFX10-NEXT:  .LBB35_2: ; %atomicrmw.start
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -8494,19 +8525,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    buffer_gl1_inv
 ; GFX10-NEXT:    buffer_gl0_inv
-; GFX10-NEXT:    v_cmp_eq_u64_e64 s4, v[4:5], v[6:7]
+; GFX10-NEXT:    v_cmp_eq_u64_e32 vcc_lo, v[4:5], v[6:7]
 ; GFX10-NEXT:    v_mov_b32_e32 v7, v5
 ; GFX10-NEXT:    v_mov_b32_e32 v6, v4
-; GFX10-NEXT:    s_xor_b32 s4, s4, exec_lo
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, s4
-; GFX10-NEXT:    s_or_b32 s5, s5, s6
-; GFX10-NEXT:    s_mov_b32 exec_lo, s4
+; GFX10-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; GFX10-NEXT:    s_xor_b32 s7, exec_lo, s6
+; GFX10-NEXT:    s_or_b32 s5, s5, s7
+; GFX10-NEXT:    s_mov_b32 exec_lo, s6
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB35_2
 ; GFX10-NEXT:  .LBB35_3:
 ; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
-; GFX10-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GFX10-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX10-NEXT:  .LBB35_4: ; %atomicrmw.private
@@ -8521,7 +8552,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX10-NEXT:    buffer_store_dword v1, v4, s[0:3], 0 offen offset:4
 ; GFX10-NEXT:  .LBB35_5: ; %atomicrmw.phi
 ; GFX10-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
-; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s4
+; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX90A-LABEL: flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_grained_memory:
@@ -8530,16 +8561,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, 0xfffff800, v0
 ; GFX90A-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, -1, v1, vcc
-; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_mov_b64 s[6:7], 0
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX90A-NEXT:  .LBB35_1: ; %atomicrmw.check.private
-; GFX90A-NEXT:    s_mov_b64 s[4:5], src_private_base
-; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
-; GFX90A-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
+; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s7, v1
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB35_3
 ; GFX90A-NEXT:  .LBB35_2: ; %atomicrmw.global
@@ -8547,15 +8578,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    buffer_wbinvl1
 ; GFX90A-NEXT:  .LBB35_3:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 s[6:7], s[4:5], s[6:7]
+; GFX90A-NEXT:    s_mov_b64 exec, vcc
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX90A-NEXT:  .LBB35_4: ; %atomicrmw.private
-; GFX90A-NEXT:    v_cmp_ne_u64_e64 s[4:5], 0, v[0:1]
-; GFX90A-NEXT:    v_cndmask_b32_e64 v6, -1, v0, s[4:5]
+; GFX90A-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GFX90A-NEXT:    v_cndmask_b32_e32 v6, -1, v0, vcc
 ; GFX90A-NEXT:    buffer_load_dword v4, v6, s[0:3], 0 offen
 ; GFX90A-NEXT:    buffer_load_dword v5, v6, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
@@ -8564,8 +8596,8 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    buffer_store_dword v5, v6, s[0:3], 0 offen offset:4
 ; GFX90A-NEXT:  .LBB35_5:
 ; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX90A-NEXT:    s_mov_b64 exec, vcc
+; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB35_7
 ; GFX90A-NEXT:  .LBB35_6: ; %atomicrmw.shared
@@ -8574,7 +8606,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX90A-NEXT:    ds_add_f64 v0, v[2:3]
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB35_7: ; %atomicrmw.phi
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -8584,16 +8616,16 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    v_add_co_u32_e32 v0, vcc, 0xfffff800, v0
 ; GFX908-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; GFX908-NEXT:    v_addc_co_u32_e32 v1, vcc, -1, v1, vcc
-; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
-; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX908-NEXT:    s_mov_b64 s[4:5], -1
-; GFX908-NEXT:    s_mov_b64 s[6:7], 0
-; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
+; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
+; GFX908-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GFX908-NEXT:    s_mov_b64 s[8:9], -1
+; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB35_3
 ; GFX908-NEXT:  .LBB35_1: ; %atomicrmw.global
 ; GFX908-NEXT:    flat_load_dwordx2 v[6:7], v[0:1]
-; GFX908-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GFX908-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX908-NEXT:  .LBB35_2: ; %atomicrmw.start
 ; GFX908-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -8601,19 +8633,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    buffer_wbinvl1
-; GFX908-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX908-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX908-NEXT:    v_mov_b32_e32 v7, v5
-; GFX908-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX908-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX908-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX908-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX908-NEXT:    v_mov_b32_e32 v6, v4
-; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execnz .LBB35_2
 ; GFX908-NEXT:  .LBB35_3:
 ; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX908-NEXT:    s_mov_b64 exec, vcc
+; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX908-NEXT:  .LBB35_4: ; %atomicrmw.private
@@ -8626,7 +8658,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX908-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX908-NEXT:    buffer_store_dword v1, v4, s[0:3], 0 offen offset:4
 ; GFX908-NEXT:  .LBB35_5: ; %atomicrmw.phi
-; GFX908-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -8638,19 +8670,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX8-NEXT:    v_add_u32_e32 v0, vcc, 0xfffff800, v0
 ; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, -1, v1, vcc
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v1
-; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v1
+; GFX8-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
 ; GFX8-NEXT:    s_mov_b64 s[8:9], -1
-; GFX8-NEXT:    s_mov_b64 s[6:7], 0
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB35_3
 ; GFX8-NEXT:  .LBB35_1: ; %atomicrmw.global
-; GFX8-NEXT:    v_add_u32_e64 v4, s[4:5], 4, v0
-; GFX8-NEXT:    v_addc_u32_e64 v5, s[4:5], 0, v1, s[4:5]
+; GFX8-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
+; GFX8-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
 ; GFX8-NEXT:    flat_load_dword v7, v[4:5]
 ; GFX8-NEXT:    flat_load_dword v6, v[0:1]
-; GFX8-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX8-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX8-NEXT:  .LBB35_2: ; %atomicrmw.start
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -8658,19 +8690,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX8-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    buffer_wbinvl1
-; GFX8-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX8-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX8-NEXT:    v_mov_b32_e32 v7, v5
-; GFX8-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX8-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX8-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX8-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX8-NEXT:    v_mov_b32_e32 v6, v4
-; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB35_2
 ; GFX8-NEXT:  .LBB35_3:
 ; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX8-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX8-NEXT:    s_mov_b64 exec, vcc
+; GFX8-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX8-NEXT:  .LBB35_4: ; %atomicrmw.private
@@ -8684,7 +8716,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX8-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX8-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX8-NEXT:  .LBB35_5: ; %atomicrmw.phi
-; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX8-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -8696,19 +8728,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX7-NEXT:    v_add_i32_e32 v0, vcc, 0xfffff800, v0
 ; GFX7-NEXT:    v_addc_u32_e32 v1, vcc, -1, v1, vcc
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v1
-; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v1
+; GFX7-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
 ; GFX7-NEXT:    s_mov_b64 s[8:9], -1
-; GFX7-NEXT:    s_mov_b64 s[6:7], 0
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    s_mov_b64 s[6:7], s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[10:11]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB35_3
 ; GFX7-NEXT:  .LBB35_1: ; %atomicrmw.global
-; GFX7-NEXT:    v_add_i32_e64 v4, s[4:5], 4, v0
-; GFX7-NEXT:    v_addc_u32_e64 v5, s[4:5], 0, v1, s[4:5]
+; GFX7-NEXT:    v_add_i32_e32 v4, vcc, 4, v0
+; GFX7-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
 ; GFX7-NEXT:    flat_load_dword v7, v[4:5]
 ; GFX7-NEXT:    flat_load_dword v6, v[0:1]
-; GFX7-NEXT:    s_and_b64 s[4:5], s[8:9], exec
+; GFX7-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX7-NEXT:  .LBB35_2: ; %atomicrmw.start
 ; GFX7-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -8716,19 +8748,19 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX7-NEXT:    flat_atomic_cmpswap_x2 v[4:5], v[0:1], v[4:7] glc
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    buffer_wbinvl1
-; GFX7-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], v[6:7]
+; GFX7-NEXT:    v_cmp_eq_u64_e32 vcc, v[4:5], v[6:7]
 ; GFX7-NEXT:    v_mov_b32_e32 v7, v5
-; GFX7-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX7-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX7-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX7-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; GFX7-NEXT:    v_mov_b32_e32 v6, v4
-; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execnz .LBB35_2
 ; GFX7-NEXT:  .LBB35_3:
 ; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
-; GFX7-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GFX7-NEXT:    s_mov_b64 exec, vcc
+; GFX7-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX7-NEXT:  .LBB35_4: ; %atomicrmw.private
@@ -8742,7 +8774,7 @@ define void @flat_agent_atomic_fadd_noret_f64__offset12b_neg__amdgpu_no_fine_gra
 ; GFX7-NEXT:    buffer_store_dword v0, v4, s[0:3], 0 offen
 ; GFX7-NEXT:    buffer_store_dword v1, v5, s[0:3], 0 offen
 ; GFX7-NEXT:  .LBB35_5: ; %atomicrmw.phi
-; GFX7-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX7-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX7-NEXT:    s_waitcnt vmcnt(0)
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr inbounds double, ptr %ptr, i64 -256

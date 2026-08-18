@@ -327,10 +327,9 @@ define amdgpu_kernel void @multi_vcond_loop(ptr addrspace(1) noalias nocapture %
 ; SI-NEXT:    s_mov_b64 s[8:9], s[6:7]
 ; SI-NEXT:    buffer_load_dword v0, v[6:7], s[8:11], 0 addr64
 ; SI-NEXT:    s_mov_b64 s[8:9], -1
-; SI-NEXT:    s_mov_b64 s[6:7], 0
 ; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    v_cmp_gt_i32_e32 vcc, 1, v0
-; SI-NEXT:    s_xor_b64 s[12:13], vcc, exec
+; SI-NEXT:    v_cmp_gt_i32_e64 s[6:7], 1, v0
+; SI-NEXT:    s_xor_b64 s[12:13], s[6:7], exec
 ; SI-NEXT:    s_mov_b64 exec, s[12:13]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB5_4

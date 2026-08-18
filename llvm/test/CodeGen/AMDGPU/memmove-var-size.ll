@@ -17,10 +17,10 @@ define void @memmove_p0_p0(ptr addrspace(0) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    v_cmp_ge_u64_e32 vcc_lo, v[2:3], v[0:1]
 ; CHECK-NEXT:    s_mov_b32 s5, -1
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[8:9]
-; CHECK-NEXT:    s_mov_b32 s7, 0
 ; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; CHECK-NEXT:    v_cndmask_b32_e64 v17, 0, -1, s4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[6:7]
+; CHECK-NEXT:    s_mov_b32 s7, s6
 ; CHECK-NEXT:    v_cndmask_b32_e64 v16, 0, -1, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -183,10 +183,10 @@ define void @memmove_p0_p1(ptr addrspace(0) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    v_cmp_ge_u64_e32 vcc_lo, v[2:3], v[0:1]
 ; CHECK-NEXT:    s_mov_b32 s5, -1
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[8:9]
-; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    s_xor_b32 s7, vcc_lo, exec_lo
+; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; CHECK-NEXT:    v_cndmask_b32_e64 v17, 0, -1, s4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[6:7]
+; CHECK-NEXT:    s_mov_b32 s7, s6
 ; CHECK-NEXT:    v_cndmask_b32_e64 v16, 0, -1, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -226,7 +226,7 @@ define void @memmove_p0_p1(ptr addrspace(0) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s8
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v17
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, vcc_lo
+; CHECK-NEXT:    s_or_b32 s7, s7, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_7
@@ -252,20 +252,20 @@ define void @memmove_p0_p1(ptr addrspace(0) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    v_add_co_u32 v10, s4, v10, 1
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v11, null, 0, v11, s4
 ; CHECK-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, s4
+; CHECK-NEXT:    s_or_b32 s7, s7, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB1_6
 ; CHECK-NEXT:  .LBB1_7:
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
-; CHECK-NEXT:    s_xor_b32 s4, exec_lo, s7
-; CHECK-NEXT:    s_and_b32 s6, s4, exec_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, s7
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
+; CHECK-NEXT:    s_xor_b32 s4, exec_lo, s6
+; CHECK-NEXT:    s_and_b32 s7, s4, exec_lo
+; CHECK-NEXT:    s_mov_b32 exec_lo, s6
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_14
 ; CHECK-NEXT:  .LBB1_8: ; %memmove_copy_backwards
-; CHECK-NEXT:    v_cmp_ne_u32_e64 s7, 0, v17
-; CHECK-NEXT:    s_xor_b32 exec_lo, s7, exec_lo
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s6, 0, v17
+; CHECK-NEXT:    s_xor_b32 exec_lo, s6, exec_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_11
 ; CHECK-NEXT:  .LBB1_9: ; %memmove_bwd_residual_loop.preheader
@@ -290,15 +290,15 @@ define void @memmove_p0_p1(ptr addrspace(0) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    v_add_co_u32 v10, s4, v10, -1
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v11, null, -1, v11, s4
 ; CHECK-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; CHECK-NEXT:    s_or_b32 s7, s7, s4
+; CHECK-NEXT:    s_or_b32 s6, s6, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB1_10
 ; CHECK-NEXT:  .LBB1_11: ; %memmove_bwd_middle
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v16
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, vcc_lo
+; CHECK-NEXT:    s_or_b32 s7, s7, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_14
@@ -323,14 +323,14 @@ define void @memmove_p0_p1(ptr addrspace(0) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc_lo, 0, v[6:7]
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; CHECK-NEXT:    s_xor_b32 s5, exec_lo, s4
-; CHECK-NEXT:    s_or_b32 s6, s6, s5
+; CHECK-NEXT:    s_or_b32 s7, s7, s5
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    flat_store_dwordx4 v[4:5], v[8:11]
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB1_13
 ; CHECK-NEXT:  .LBB1_14: ; %memmove_done
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 entry:
@@ -349,13 +349,13 @@ define void @memmove_p0_p3(ptr addrspace(0) align 1 %dst, ptr addrspace(3) align
 ; CHECK-NEXT:    v_mov_b32_e32 v6, v4
 ; CHECK-NEXT:    s_mov_b32 s5, -1
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[7:8]
-; CHECK-NEXT:    s_mov_b32 s6, 0
 ; CHECK-NEXT:    v_cndmask_b32_e32 v9, -1, v0, vcc_lo
 ; CHECK-NEXT:    v_cndmask_b32_e64 v14, 0, -1, s4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[5:6]
 ; CHECK-NEXT:    v_cmp_ge_u32_e32 vcc_lo, v2, v9
-; CHECK-NEXT:    s_xor_b32 s7, vcc_lo, exec_lo
+; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; CHECK-NEXT:    v_cndmask_b32_e64 v13, 0, -1, s4
+; CHECK-NEXT:    s_mov_b32 s7, s6
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB2_7
@@ -392,7 +392,7 @@ define void @memmove_p0_p3(ptr addrspace(0) align 1 %dst, ptr addrspace(3) align
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s8
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v14
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, vcc_lo
+; CHECK-NEXT:    s_or_b32 s7, s7, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB2_7
@@ -417,20 +417,20 @@ define void @memmove_p0_p3(ptr addrspace(0) align 1 %dst, ptr addrspace(3) align
 ; CHECK-NEXT:    v_add_co_u32 v9, s4, v9, 1
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v10, null, 0, v10, s4
 ; CHECK-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, s4
+; CHECK-NEXT:    s_or_b32 s7, s7, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB2_6
 ; CHECK-NEXT:  .LBB2_7:
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
-; CHECK-NEXT:    s_xor_b32 s4, exec_lo, s7
-; CHECK-NEXT:    s_and_b32 s6, s4, exec_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, s7
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
+; CHECK-NEXT:    s_xor_b32 s4, exec_lo, s6
+; CHECK-NEXT:    s_and_b32 s7, s4, exec_lo
+; CHECK-NEXT:    s_mov_b32 exec_lo, s6
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB2_14
 ; CHECK-NEXT:  .LBB2_8: ; %memmove_copy_backwards
-; CHECK-NEXT:    v_cmp_ne_u32_e64 s7, 0, v14
-; CHECK-NEXT:    s_xor_b32 exec_lo, s7, exec_lo
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s6, 0, v14
+; CHECK-NEXT:    s_xor_b32 exec_lo, s6, exec_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB2_11
 ; CHECK-NEXT:  .LBB2_9: ; %memmove_bwd_residual_loop.preheader
@@ -453,15 +453,15 @@ define void @memmove_p0_p3(ptr addrspace(0) align 1 %dst, ptr addrspace(3) align
 ; CHECK-NEXT:    v_add_co_u32 v9, s4, v9, -1
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v10, null, -1, v10, s4
 ; CHECK-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; CHECK-NEXT:    s_or_b32 s7, s7, s4
+; CHECK-NEXT:    s_or_b32 s6, s6, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB2_10
 ; CHECK-NEXT:  .LBB2_11: ; %memmove_bwd_middle
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v13
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, vcc_lo
+; CHECK-NEXT:    s_or_b32 s7, s7, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB2_14
@@ -487,12 +487,12 @@ define void @memmove_p0_p3(ptr addrspace(0) align 1 %dst, ptr addrspace(3) align
 ; CHECK-NEXT:    s_xor_b32 s5, exec_lo, s4
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    flat_store_dwordx4 v[3:4], v[7:10]
-; CHECK-NEXT:    s_or_b32 s6, s6, s5
+; CHECK-NEXT:    s_or_b32 s7, s7, s5
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB2_13
 ; CHECK-NEXT:  .LBB2_14: ; %memmove_done
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 entry:
@@ -511,10 +511,10 @@ define void @memmove_p0_p4(ptr addrspace(0) align 1 %dst, ptr addrspace(4) align
 ; CHECK-NEXT:    v_cmp_ge_u64_e32 vcc_lo, v[2:3], v[0:1]
 ; CHECK-NEXT:    s_mov_b32 s5, -1
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[8:9]
-; CHECK-NEXT:    s_mov_b32 s7, 0
 ; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; CHECK-NEXT:    v_cndmask_b32_e64 v17, 0, -1, s4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[6:7]
+; CHECK-NEXT:    s_mov_b32 s7, s6
 ; CHECK-NEXT:    v_cndmask_b32_e64 v16, 0, -1, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -677,13 +677,13 @@ define void @memmove_p0_p5(ptr addrspace(0) align 1 %dst, ptr addrspace(5) align
 ; CHECK-NEXT:    v_mov_b32_e32 v6, v4
 ; CHECK-NEXT:    s_mov_b32 s5, -1
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[7:8]
-; CHECK-NEXT:    s_mov_b32 s6, 0
 ; CHECK-NEXT:    v_cndmask_b32_e32 v9, -1, v0, vcc_lo
 ; CHECK-NEXT:    v_cndmask_b32_e64 v14, 0, -1, s4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[5:6]
 ; CHECK-NEXT:    v_cmp_ge_u32_e32 vcc_lo, v2, v9
 ; CHECK-NEXT:    s_xor_b32 s7, vcc_lo, exec_lo
 ; CHECK-NEXT:    v_cndmask_b32_e64 v13, 0, -1, s4
+; CHECK-NEXT:    s_mov_b32 s6, s7
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB4_7
@@ -848,10 +848,10 @@ define void @memmove_p1_p0(ptr addrspace(1) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    v_cmp_ge_u64_e32 vcc_lo, v[2:3], v[0:1]
 ; CHECK-NEXT:    s_mov_b32 s5, -1
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[8:9]
-; CHECK-NEXT:    s_mov_b32 s7, 0
 ; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; CHECK-NEXT:    v_cndmask_b32_e64 v17, 0, -1, s4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[6:7]
+; CHECK-NEXT:    s_mov_b32 s7, s6
 ; CHECK-NEXT:    v_cndmask_b32_e64 v16, 0, -1, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -1013,10 +1013,10 @@ define void @memmove_p1_p1(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    v_cmp_ge_u64_e32 vcc_lo, v[2:3], v[0:1]
 ; CHECK-NEXT:    s_mov_b32 s5, -1
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[8:9]
-; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    s_xor_b32 s7, vcc_lo, exec_lo
+; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; CHECK-NEXT:    v_cndmask_b32_e64 v17, 0, -1, s4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[6:7]
+; CHECK-NEXT:    s_mov_b32 s7, s6
 ; CHECK-NEXT:    v_cndmask_b32_e64 v16, 0, -1, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -1056,7 +1056,7 @@ define void @memmove_p1_p1(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s8
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v17
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, vcc_lo
+; CHECK-NEXT:    s_or_b32 s7, s7, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB6_7
@@ -1082,20 +1082,20 @@ define void @memmove_p1_p1(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    v_add_co_u32 v10, s4, v10, 1
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v11, null, 0, v11, s4
 ; CHECK-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, s4
+; CHECK-NEXT:    s_or_b32 s7, s7, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB6_6
 ; CHECK-NEXT:  .LBB6_7:
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
-; CHECK-NEXT:    s_xor_b32 s4, exec_lo, s7
-; CHECK-NEXT:    s_and_b32 s6, s4, exec_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, s7
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
+; CHECK-NEXT:    s_xor_b32 s4, exec_lo, s6
+; CHECK-NEXT:    s_and_b32 s7, s4, exec_lo
+; CHECK-NEXT:    s_mov_b32 exec_lo, s6
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB6_14
 ; CHECK-NEXT:  .LBB6_8: ; %memmove_copy_backwards
-; CHECK-NEXT:    v_cmp_ne_u32_e64 s7, 0, v17
-; CHECK-NEXT:    s_xor_b32 exec_lo, s7, exec_lo
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s6, 0, v17
+; CHECK-NEXT:    s_xor_b32 exec_lo, s6, exec_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB6_11
 ; CHECK-NEXT:  .LBB6_9: ; %memmove_bwd_residual_loop.preheader
@@ -1120,15 +1120,15 @@ define void @memmove_p1_p1(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    v_add_co_u32 v4, s4, v4, -1
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v5, null, -1, v5, s4
 ; CHECK-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; CHECK-NEXT:    s_or_b32 s7, s7, s4
+; CHECK-NEXT:    s_or_b32 s6, s6, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB6_10
 ; CHECK-NEXT:  .LBB6_11: ; %memmove_bwd_middle
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v16
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, vcc_lo
+; CHECK-NEXT:    s_or_b32 s7, s7, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB6_14
@@ -1153,14 +1153,14 @@ define void @memmove_p1_p1(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc_lo, 0, v[6:7]
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; CHECK-NEXT:    s_xor_b32 s5, exec_lo, s4
-; CHECK-NEXT:    s_or_b32 s6, s6, s5
+; CHECK-NEXT:    s_or_b32 s7, s7, s5
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    global_store_dwordx4 v[4:5], v[8:11], off
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB6_13
 ; CHECK-NEXT:  .LBB6_14: ; %memmove_done
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 entry:
   tail call void @llvm.memmove.p1.p1.i64(ptr addrspace(1) noundef nonnull align 1 %dst, ptr addrspace(1) noundef nonnull align 1 %src, i64 %sz, i1 false)
@@ -1173,13 +1173,12 @@ define void @memmove_p1_p3(ptr addrspace(1) align 1 %dst, ptr addrspace(3) align
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v7, -16, v3
 ; CHECK-NEXT:    v_mov_b32_e32 v8, v4
-; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    v_and_b32_e32 v5, 15, v3
+; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b32 s6, -1
-; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc_lo, 0, v[7:8]
-; CHECK-NEXT:    s_mov_b32 s7, 0
-; CHECK-NEXT:    s_xor_b32 s8, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_eq_u64_e64 s7, 0, v[7:8]
+; CHECK-NEXT:    s_xor_b32 s8, s7, exec_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s8
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_3
@@ -1250,10 +1249,10 @@ define void @memmove_p1_p4(ptr addrspace(1) align 1 %dst, ptr addrspace(4) align
 ; CHECK-NEXT:    v_cmp_ge_u64_e32 vcc_lo, v[2:3], v[0:1]
 ; CHECK-NEXT:    s_mov_b32 s5, -1
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[8:9]
-; CHECK-NEXT:    s_mov_b32 s7, 0
 ; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; CHECK-NEXT:    v_cndmask_b32_e64 v17, 0, -1, s4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[6:7]
+; CHECK-NEXT:    s_mov_b32 s7, s6
 ; CHECK-NEXT:    v_cndmask_b32_e64 v16, 0, -1, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -1410,13 +1409,12 @@ define void @memmove_p1_p5(ptr addrspace(1) align 1 %dst, ptr addrspace(5) align
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v7, -16, v3
 ; CHECK-NEXT:    v_mov_b32_e32 v8, v4
-; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    v_and_b32_e32 v5, 15, v3
+; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b32 s6, -1
-; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc_lo, 0, v[7:8]
-; CHECK-NEXT:    s_mov_b32 s7, 0
-; CHECK-NEXT:    s_xor_b32 s8, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_eq_u64_e64 s7, 0, v[7:8]
+; CHECK-NEXT:    s_xor_b32 s8, s7, exec_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s8
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB9_3
@@ -1486,14 +1484,13 @@ define void @memmove_p3_p0(ptr addrspace(3) align 1 %dst, ptr addrspace(0) align
 ; CHECK-LABEL: memmove_p3_p0:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    v_mov_b32_e32 v8, 0
 ; CHECK-NEXT:    v_and_b32_e32 v7, 15, v3
-; CHECK-NEXT:    s_mov_b64 s[4:5], src_shared_base
+; CHECK-NEXT:    v_mov_b32_e32 v8, 0
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, -1, v0
+; CHECK-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; CHECK-NEXT:    v_and_b32_e32 v5, -16, v3
 ; CHECK-NEXT:    v_mov_b32_e32 v6, v4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[7:8]
-; CHECK-NEXT:    s_mov_b32 s7, 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v10, 0, s5, vcc_lo
 ; CHECK-NEXT:    v_cndmask_b32_e32 v9, 0, v0, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 s5, -1
@@ -1502,6 +1499,7 @@ define void @memmove_p3_p0(ptr addrspace(3) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    v_cmp_ge_u64_e32 vcc_lo, v[1:2], v[9:10]
 ; CHECK-NEXT:    v_cndmask_b32_e64 v13, 0, -1, s4
 ; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; CHECK-NEXT:    s_mov_b32 s7, s6
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB10_7
@@ -1650,13 +1648,12 @@ define void @memmove_p3_p1(ptr addrspace(3) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v7, -16, v3
 ; CHECK-NEXT:    v_mov_b32_e32 v8, v4
-; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    v_and_b32_e32 v5, 15, v3
+; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b32 s6, -1
-; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc_lo, 0, v[7:8]
-; CHECK-NEXT:    s_mov_b32 s7, 0
-; CHECK-NEXT:    s_xor_b32 s8, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_eq_u64_e64 s7, 0, v[7:8]
+; CHECK-NEXT:    s_xor_b32 s8, s7, exec_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s8
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB11_3
@@ -1726,9 +1723,9 @@ define void @memmove_p3_p3(ptr addrspace(3) align 1 %dst, ptr addrspace(3) align
 ; CHECK-NEXT:    v_and_b32_e32 v6, -16, v2
 ; CHECK-NEXT:    v_mov_b32_e32 v7, v3
 ; CHECK-NEXT:    v_cmp_ge_u32_e32 vcc_lo, v1, v0
-; CHECK-NEXT:    s_mov_b32 s5, 0
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[4:5]
 ; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; CHECK-NEXT:    s_mov_b32 s5, s6
 ; CHECK-NEXT:    v_cndmask_b32_e64 v9, 0, -1, s4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[6:7]
 ; CHECK-NEXT:    v_cndmask_b32_e64 v8, 0, -1, s4
@@ -1869,13 +1866,12 @@ define void @memmove_p3_p4(ptr addrspace(3) align 1 %dst, ptr addrspace(4) align
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v7, -16, v3
 ; CHECK-NEXT:    v_mov_b32_e32 v8, v4
-; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    v_and_b32_e32 v5, 15, v3
+; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b32 s6, -1
-; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc_lo, 0, v[7:8]
-; CHECK-NEXT:    s_mov_b32 s7, 0
-; CHECK-NEXT:    s_xor_b32 s8, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_eq_u64_e64 s7, 0, v[7:8]
+; CHECK-NEXT:    s_xor_b32 s8, s7, exec_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s8
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB13_3
@@ -1944,11 +1940,10 @@ define void @memmove_p3_p5(ptr addrspace(3) align 1 %dst, ptr addrspace(5) align
 ; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b32 s6, -1
-; CHECK-NEXT:    s_mov_b32 s7, 0
 ; CHECK-NEXT:    v_and_b32_e32 v2, -16, v4
 ; CHECK-NEXT:    v_and_b32_e32 v5, 15, v4
-; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc_lo, 0, v[2:3]
-; CHECK-NEXT:    s_xor_b32 s8, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_eq_u64_e64 s7, 0, v[2:3]
+; CHECK-NEXT:    s_xor_b32 s8, s7, exec_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s8
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB14_3
@@ -2017,14 +2012,13 @@ define void @memmove_p5_p0(ptr addrspace(5) align 1 %dst, ptr addrspace(0) align
 ; CHECK-LABEL: memmove_p5_p0:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    v_mov_b32_e32 v8, 0
 ; CHECK-NEXT:    v_and_b32_e32 v7, 15, v3
-; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
+; CHECK-NEXT:    v_mov_b32_e32 v8, 0
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, -1, v0
+; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    v_and_b32_e32 v5, -16, v3
 ; CHECK-NEXT:    v_mov_b32_e32 v6, v4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[7:8]
-; CHECK-NEXT:    s_mov_b32 s6, 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v10, 0, s5, vcc_lo
 ; CHECK-NEXT:    v_cndmask_b32_e32 v9, 0, v0, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 s5, -1
@@ -2032,7 +2026,8 @@ define void @memmove_p5_p0(ptr addrspace(5) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[5:6]
 ; CHECK-NEXT:    v_cmp_ge_u64_e32 vcc_lo, v[1:2], v[9:10]
 ; CHECK-NEXT:    v_cndmask_b32_e64 v13, 0, -1, s4
-; CHECK-NEXT:    s_xor_b32 s7, vcc_lo, exec_lo
+; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; CHECK-NEXT:    s_mov_b32 s7, s6
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB15_7
@@ -2072,7 +2067,7 @@ define void @memmove_p5_p0(ptr addrspace(5) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s4
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v14
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, vcc_lo
+; CHECK-NEXT:    s_or_b32 s7, s7, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB15_7
@@ -2094,7 +2089,7 @@ define void @memmove_p5_p0(ptr addrspace(5) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v10, null, 0, v10, s4
 ; CHECK-NEXT:    v_cmp_ne_u64_e32 vcc_lo, 0, v[11:12]
 ; CHECK-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, s4
+; CHECK-NEXT:    s_or_b32 s7, s7, s4
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    buffer_store_byte v16, v15, s[0:3], 0 offen
 ; CHECK-NEXT:    v_add_nc_u32_e32 v15, 1, v15
@@ -2102,15 +2097,15 @@ define void @memmove_p5_p0(ptr addrspace(5) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB15_6
 ; CHECK-NEXT:  .LBB15_7:
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
-; CHECK-NEXT:    s_xor_b32 s4, exec_lo, s7
-; CHECK-NEXT:    s_and_b32 s6, s4, exec_lo
-; CHECK-NEXT:    s_mov_b32 exec_lo, s7
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
+; CHECK-NEXT:    s_xor_b32 s4, exec_lo, s6
+; CHECK-NEXT:    s_and_b32 s7, s4, exec_lo
+; CHECK-NEXT:    s_mov_b32 exec_lo, s6
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB15_14
 ; CHECK-NEXT:  .LBB15_8: ; %memmove_copy_backwards
-; CHECK-NEXT:    v_cmp_ne_u32_e64 s7, 0, v14
-; CHECK-NEXT:    s_xor_b32 exec_lo, s7, exec_lo
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s6, 0, v14
+; CHECK-NEXT:    s_xor_b32 exec_lo, s6, exec_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB15_11
 ; CHECK-NEXT:  .LBB15_9: ; %memmove_bwd_residual_loop.preheader
@@ -2130,7 +2125,7 @@ define void @memmove_p5_p0(ptr addrspace(5) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    v_add_co_ci_u32_e64 v10, null, -1, v10, s4
 ; CHECK-NEXT:    v_cmp_ne_u64_e32 vcc_lo, 0, v[7:8]
 ; CHECK-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; CHECK-NEXT:    s_or_b32 s7, s7, s4
+; CHECK-NEXT:    s_or_b32 s6, s6, s4
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    buffer_store_byte v11, v4, s[0:3], 0 offen
 ; CHECK-NEXT:    v_add_nc_u32_e32 v4, -1, v4
@@ -2138,10 +2133,10 @@ define void @memmove_p5_p0(ptr addrspace(5) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB15_10
 ; CHECK-NEXT:  .LBB15_11: ; %memmove_bwd_middle
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v13
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; CHECK-NEXT:    s_or_b32 s6, s6, vcc_lo
+; CHECK-NEXT:    s_or_b32 s7, s7, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB15_14
@@ -2168,12 +2163,12 @@ define void @memmove_p5_p0(ptr addrspace(5) align 1 %dst, ptr addrspace(0) align
 ; CHECK-NEXT:    v_add_nc_u32_e32 v0, -16, v0
 ; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; CHECK-NEXT:    s_xor_b32 s5, exec_lo, s4
-; CHECK-NEXT:    s_or_b32 s6, s6, s5
+; CHECK-NEXT:    s_or_b32 s7, s7, s5
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB15_13
 ; CHECK-NEXT:  .LBB15_14: ; %memmove_done
-; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s6
+; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s7
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 entry:
   tail call void @llvm.memmove.p5.p0.i64(ptr addrspace(5) noundef nonnull align 1 %dst, ptr addrspace(0) noundef nonnull align 1 %src, i64 %sz, i1 false)
@@ -2186,13 +2181,12 @@ define void @memmove_p5_p1(ptr addrspace(5) align 1 %dst, ptr addrspace(1) align
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v7, -16, v3
 ; CHECK-NEXT:    v_mov_b32_e32 v8, v4
-; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    v_and_b32_e32 v5, 15, v3
+; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b32 s6, -1
-; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc_lo, 0, v[7:8]
-; CHECK-NEXT:    s_mov_b32 s7, 0
-; CHECK-NEXT:    s_xor_b32 s8, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_eq_u64_e64 s7, 0, v[7:8]
+; CHECK-NEXT:    s_xor_b32 s8, s7, exec_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s8
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB16_3
@@ -2264,11 +2258,10 @@ define void @memmove_p5_p3(ptr addrspace(5) align 1 %dst, ptr addrspace(3) align
 ; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b32 s6, -1
-; CHECK-NEXT:    s_mov_b32 s7, 0
 ; CHECK-NEXT:    v_and_b32_e32 v2, -16, v4
 ; CHECK-NEXT:    v_and_b32_e32 v5, 15, v4
-; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc_lo, 0, v[2:3]
-; CHECK-NEXT:    s_xor_b32 s8, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_eq_u64_e64 s7, 0, v[2:3]
+; CHECK-NEXT:    s_xor_b32 s8, s7, exec_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s8
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB17_3
@@ -2336,13 +2329,12 @@ define void @memmove_p5_p4(ptr addrspace(5) align 1 %dst, ptr addrspace(4) align
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v7, -16, v3
 ; CHECK-NEXT:    v_mov_b32_e32 v8, v4
-; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    v_and_b32_e32 v5, 15, v3
+; CHECK-NEXT:    v_mov_b32_e32 v6, 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b32 s6, -1
-; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc_lo, 0, v[7:8]
-; CHECK-NEXT:    s_mov_b32 s7, 0
-; CHECK-NEXT:    s_xor_b32 s8, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_eq_u64_e64 s7, 0, v[7:8]
+; CHECK-NEXT:    s_xor_b32 s8, s7, exec_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s8
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB18_3
@@ -2415,9 +2407,9 @@ define void @memmove_p5_p5(ptr addrspace(5) align 1 %dst, ptr addrspace(5) align
 ; CHECK-NEXT:    v_and_b32_e32 v6, -16, v2
 ; CHECK-NEXT:    v_mov_b32_e32 v7, v3
 ; CHECK-NEXT:    v_cmp_ge_u32_e32 vcc_lo, v1, v0
-; CHECK-NEXT:    s_mov_b32 s5, 0
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[4:5]
 ; CHECK-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
+; CHECK-NEXT:    s_mov_b32 s5, s6
 ; CHECK-NEXT:    v_cndmask_b32_e64 v9, 0, -1, s4
 ; CHECK-NEXT:    v_cmp_eq_u64_e64 s4, 0, v[6:7]
 ; CHECK-NEXT:    v_cndmask_b32_e64 v8, 0, -1, s4

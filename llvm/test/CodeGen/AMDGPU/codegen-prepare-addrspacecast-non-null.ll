@@ -323,19 +323,20 @@ define void @recursive_phis(i1 %cond, ptr addrspace(5) %ptr) {
 ; DAGISEL-ASM-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; DAGISEL-ASM-NEXT:    v_and_b32_e32 v0, 1, v0
 ; DAGISEL-ASM-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; DAGISEL-ASM-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; DAGISEL-ASM-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc
 ; DAGISEL-ASM-NEXT:    v_lshrrev_b32_e64 v0, 6, s32
-; DAGISEL-ASM-NEXT:    s_mov_b64 s[6:7], -1
+; DAGISEL-ASM-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; DAGISEL-ASM-NEXT:    s_mov_b64 s[8:9], -1
 ; DAGISEL-ASM-NEXT:    s_mov_b64 s[4:5], 0
 ; DAGISEL-ASM-NEXT:    s_mov_b64 exec, vcc
 ; DAGISEL-ASM-NEXT:    ; divergent control-flow edge
 ; DAGISEL-ASM-NEXT:    s_cbranch_execz .LBB11_2
 ; DAGISEL-ASM-NEXT:  .LBB11_1: ; %then
 ; DAGISEL-ASM-NEXT:    v_and_b32_e32 v0, 0xffff, v1
-; DAGISEL-ASM-NEXT:    s_and_b64 s[6:7], s[6:7], exec
+; DAGISEL-ASM-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; DAGISEL-ASM-NEXT:  .LBB11_2: ; %finally
 ; DAGISEL-ASM-NEXT:    ; =>This Inner Loop Header: Depth=1
+; DAGISEL-ASM-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; DAGISEL-ASM-NEXT:    s_mov_b64 s[6:7], src_private_base
 ; DAGISEL-ASM-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
 ; DAGISEL-ASM-NEXT:    v_mov_b32_e32 v1, s7
@@ -346,6 +347,7 @@ define void @recursive_phis(i1 %cond, ptr addrspace(5) %ptr) {
 ; DAGISEL-ASM-NEXT:    flat_store_dword v[0:1], v3
 ; DAGISEL-ASM-NEXT:    s_waitcnt vmcnt(0)
 ; DAGISEL-ASM-NEXT:    s_mov_b64 exec, vcc
+; DAGISEL-ASM-NEXT:    s_mov_b64 s[6:7], 0
 ; DAGISEL-ASM-NEXT:    ; divergent control-flow edge
 ; DAGISEL-ASM-NEXT:    s_cbranch_execnz .LBB11_2
 ; DAGISEL-ASM-NEXT:  .LBB11_3: ; %end

@@ -117,9 +117,8 @@ define protected amdgpu_kernel void @kernel_round1(ptr addrspace(1) nocapture no
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[16:17]
 ; CHECK-NEXT:    v_mov_b32_e32 v42, v0
 ; CHECK-NEXT:    s_mov_b32 s52, -1
-; CHECK-NEXT:    s_mov_b32 s53, 0
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v42
-; CHECK-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
+; CHECK-NEXT:    v_cmp_eq_u32_e64 s53, 0, v42
+; CHECK-NEXT:    s_xor_b32 s4, s53, exec_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_22

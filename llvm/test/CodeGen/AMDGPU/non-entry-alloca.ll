@@ -214,17 +214,17 @@ define void @func_non_entry_block_static_alloca_align4(ptr addrspace(1) %out, i3
 ; MUBUF:       ; %bb.0: ; %entry
 ; MUBUF-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; MUBUF-NEXT:    s_mov_b32 s8, s33
+; MUBUF-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v2
 ; MUBUF-NEXT:    s_mov_b32 s33, s32
 ; MUBUF-NEXT:    s_addk_i32 s32, 0x400
-; MUBUF-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
-; MUBUF-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; MUBUF-NEXT:    s_mov_b64 s[4:5], 0
-; MUBUF-NEXT:    s_mov_b64 exec, s[6:7]
+; MUBUF-NEXT:    s_xor_b64 exec, s[4:5], exec
 ; MUBUF-NEXT:    ; divergent control-flow edge
 ; MUBUF-NEXT:    s_cbranch_execz .LBB2_3
 ; MUBUF-NEXT:  .LBB2_1: ; %bb.0
-; MUBUF-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v3
-; MUBUF-NEXT:    s_xor_b64 exec, s[4:5], exec
+; MUBUF-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
+; MUBUF-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; MUBUF-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
+; MUBUF-NEXT:    s_mov_b64 exec, s[6:7]
 ; MUBUF-NEXT:    ; divergent control-flow edge
 ; MUBUF-NEXT:    s_cbranch_execz .LBB2_3
 ; MUBUF-NEXT:  .LBB2_2: ; %bb.1
@@ -253,17 +253,17 @@ define void @func_non_entry_block_static_alloca_align4(ptr addrspace(1) %out, i3
 ; FLATSCR:       ; %bb.0: ; %entry
 ; FLATSCR-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; FLATSCR-NEXT:    s_mov_b32 s4, s33
+; FLATSCR-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v2
 ; FLATSCR-NEXT:    s_mov_b32 s33, s32
 ; FLATSCR-NEXT:    s_add_i32 s32, s32, 16
-; FLATSCR-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
-; FLATSCR-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; FLATSCR-NEXT:    s_mov_b64 s[0:1], 0
-; FLATSCR-NEXT:    s_mov_b64 exec, s[2:3]
+; FLATSCR-NEXT:    s_xor_b64 exec, s[0:1], exec
 ; FLATSCR-NEXT:    ; divergent control-flow edge
 ; FLATSCR-NEXT:    s_cbranch_execz .LBB2_3
 ; FLATSCR-NEXT:  .LBB2_1: ; %bb.0
-; FLATSCR-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v3
-; FLATSCR-NEXT:    s_xor_b64 exec, s[0:1], exec
+; FLATSCR-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
+; FLATSCR-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; FLATSCR-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
+; FLATSCR-NEXT:    s_mov_b64 exec, s[2:3]
 ; FLATSCR-NEXT:    ; divergent control-flow edge
 ; FLATSCR-NEXT:    s_cbranch_execz .LBB2_3
 ; FLATSCR-NEXT:  .LBB2_2: ; %bb.1
