@@ -174,6 +174,10 @@ extern "C" {
   return mapping::getWarpSize();
 }
 
+[[gnu::noinline]] uint32_t __kmpc_get_max_team_threads() {
+  return mapping::getMaxTeamThreads();
+}
+
 __attribute__((noinline)) uint32_t __kmpc_get_hardware_num_blocks() {
   return mapping::getNumberOfBlocksInKernel(0);
 }
