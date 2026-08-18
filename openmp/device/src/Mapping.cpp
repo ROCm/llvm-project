@@ -172,6 +172,10 @@ extern "C" {
 __attribute__((noinline)) uint32_t __kmpc_get_hardware_num_blocks() {
   return mapping::getNumberOfBlocksInKernel(0);
 }
+
+[[gnu::noinline]] uint32_t __kmpc_get_max_team_threads() {
+  return mapping::getMaxTeamThreads();
+}
 }
 
 #define _TGT_KERNEL_LANGUAGE(NAME, MAPPER_NAME)                                \
