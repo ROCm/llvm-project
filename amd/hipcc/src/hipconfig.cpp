@@ -35,10 +35,10 @@ int main(int argc, char* argv[]){
         switch (cmd) {
         case help:
           std::cerr
-              << "Warning: hipconfig is deprecated and will be removed in a "
-                 "future release.\n"
-              << "  Please use CMake's find_package(hip CONFIG) and "
-                 "hip_VERSION instead.\n"
+              << "hipconfig is a legacy tool. Use CMake's "
+                 "find_package(hip CONFIG) instead.\n"
+              << "  hip_VERSION provides the version information previously "
+                 "returned by hipconfig.\n"
               << "  See https://rocm.docs.amd.com/ for migration guidance.\n";
           platformPtrs.at(j)->printUsage();
           break;

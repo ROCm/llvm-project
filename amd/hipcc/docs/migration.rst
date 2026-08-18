@@ -1,11 +1,11 @@
 .. meta::
-  :description: hipcc and hipconfig deprecation and migration guide
-  :keywords: hipcc, hipconfig, amdclang++, HIP, ROCm, migration, CMake, deprecation
+  :description: hipcc and hipconfig migration guide
+  :keywords: hipcc, hipconfig, amdclang++, HIP, ROCm, migration, CMake, legacy
 
-.. _hipcc_deprecation:
+.. _hipcc_migration:
 
 ******************************************
-hipcc and hipconfig deprecation guide
+hipcc and hipconfig migration guide
 ******************************************
 
 Overview
@@ -25,8 +25,8 @@ alternatives described in this guide:
 - **CMake-native HIP language support** (available since CMake 3.21) for CMake
   projects, using ``find_package(hip CONFIG)`` and ``enable_language(HIP)``
 
-Why deprecate?
-==============
+Why migrate?
+============
 
 - **Redundant indirection.** CMake has had first-class HIP language support
   since CMake 3.21. Projects using ``enable_language(HIP)`` work correctly

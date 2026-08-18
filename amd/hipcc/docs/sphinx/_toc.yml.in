@@ -17,7 +17,7 @@ subtrees:
 
 - caption: Migration
   entries:
-  - file: deprecation
+  - file: migration
 
 - caption: About
   entries:

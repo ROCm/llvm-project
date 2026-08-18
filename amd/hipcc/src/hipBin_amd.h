@@ -572,9 +572,8 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     }
 
     if (trimarg == "--help" || trimarg == "-h") {
-      std::cerr << "Warning: hipcc is deprecated and will be removed in a "
-                   "future release.\n"
-                << "  Please use amdclang++ directly instead.\n"
+      std::cerr << "hipcc is a legacy tool. New projects should use "
+                   "amdclang++ directly.\n"
                 << "  See https://rocm.docs.amd.com/ for migration guidance.\n";
     }
     if (trimarg == "--version") {
