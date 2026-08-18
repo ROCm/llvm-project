@@ -13,30 +13,34 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Update rocm-systems and rocm-libraries to tip sha
+    - name: Update rocm-systems and rocm-libraries from TheRock main
       shell: bash
       run: |
-        ROCM_SYSTEMS_SHA="$(git ls-remote https://github.com/ROCm/rocm-systems.git refs/heads/develop | awk '{print $1}')"
-        ROCM_LIBRARIES_SHA="$(git ls-remote https://github.com/ROCm/rocm-libraries.git refs/heads/develop | awk '{print $1}')"
-        if [[ -z "$ROCM_SYSTEMS_SHA" || -z "$ROCM_LIBRARIES_SHA" ]]; then
-          echo "::error::Failed to resolve rocm-systems or rocm-libraries develop tip." >&2
-          exit 1
-        fi
-        echo "rocm-systems develop tip: $ROCM_SYSTEMS_SHA"
-        echo "rocm-libraries develop tip: $ROCM_LIBRARIES_SHA"
         git config --global --add safe.directory "$PWD"
-        git config --global core.longpaths true
+	git config --global core.longpaths true
         git config --global user.email "z1-cciauto@amd.com"
         git config --global user.name "Z1 cciauto"
+
+        git fetch --no-tags --depth 1 origin \
+          refs/heads/main:refs/remotes/origin/main
+
+        ROCM_SYSTEMS_SHA="$(git ls-tree origin/main rocm-systems | awk '{print $3}')"
+        ROCM_LIBRARIES_SHA="$(git ls-tree origin/main rocm-libraries | awk '{print $3}')"
+
+        if [[ -z "$ROCM_SYSTEMS_SHA" || -z "$ROCM_LIBRARIES_SHA" ]]; then
+          echo "::error::Failed to read rocm-systems or rocm-libraries SHA from TheRock main." >&2
+          exit 1
+        fi
+
+        echo "rocm-systems SHA from TheRock main: $ROCM_SYSTEMS_SHA"
+        echo "rocm-libraries SHA from TheRock main: $ROCM_LIBRARIES_SHA"
         git update-index --cacheinfo 160000,"$ROCM_SYSTEMS_SHA",rocm-systems
         git update-index --cacheinfo 160000,"$ROCM_LIBRARIES_SHA",rocm-libraries
+
         if ! git diff --cached --quiet; then
-          git commit -m "Update rocm-systems and rocm-libraries submodules"
+          git commit -m "Update shared submodules from TheRock main"
         fi
-        git submodule update --init --depth 1 --jobs 2 \
-          rocm-systems \
-          rocm-libraries
-    
+
     - name: Update Submodule Pointer to the PR
       if: github.event_name == 'pull_request'
       shell: bash
