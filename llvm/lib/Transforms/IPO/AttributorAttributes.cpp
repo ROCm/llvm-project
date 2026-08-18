@@ -12857,11 +12857,53 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
       AllCalleesKnownNow = false;
     }
 
+    // A direct call to a callee that can reach the function holding this call
+    // site closes a call graph cycle that previously only existed through the
+    // function pointer. Nothing downstream can undo that: an alwaysinline
+    // dispatcher, which is how the OpenMP device runtime arranges for every
+    // caller to devirtualize its own copy, stops being inlinable once it is in
+    // a cycle, and on a target without a dynamically sized stack the recursion
+    // it leaves behind has no statically known stack size. Record which callees
+    // those are so manifest() can leave them to the indirect call; the question
+    // has to be asked here because the solver no longer answers once
+    // manifestation starts.
+    // Only edges the call graph agrees are direct can close such a cycle: an
+    // unknown or indirect callee is the external node for the inliner and the
+    // backend alike, so AAInterFnReachability, which conservatively reaches
+    // everything once an unknown callee is involved, answers a broader question
+    // than this one. Walk the solver's known edges instead.
+    SmallPtrSet<Function *, 4> CalleesReachingCallerNow;
+    if (Function *Caller = CB->getFunction()) {
+      auto KnownEdgesReach = [&](Function *From) {
+        SmallPtrSet<Function *, 16> Visited;
+        SmallVector<Function *, 16> Worklist = {From};
+        while (!Worklist.empty()) {
+          Function *Fn = Worklist.pop_back_val();
+          if (Fn == Caller)
+            return true;
+          if (!Visited.insert(Fn).second)
+            continue;
+          const auto *EdgesAA = A.getAAFor<AACallEdges>(
+              *this, IRPosition::function(*Fn), DepClassTy::REQUIRED);
+          if (!EdgesAA)
+            continue;
+          for (Function *Next : EdgesAA->getOptimisticEdges())
+            Worklist.push_back(Next);
+        }
+        return false;
+      };
+      for (Function *Callee : AssumedCalleesNow)
+        if (Callee == Caller || KnownEdgesReach(Callee))
+          CalleesReachingCallerNow.insert(Callee);
+    }
+
     if (AssumedCalleesNow == AssumedCallees &&
-        AllCalleesKnown == AllCalleesKnownNow)
+        AllCalleesKnown == AllCalleesKnownNow &&
+        CalleesReachingCallerNow == CalleesReachingCaller)
       return ChangeStatus::UNCHANGED;
 
     std::swap(AssumedCallees, AssumedCalleesNow);
+    std::swap(CalleesReachingCaller, CalleesReachingCallerNow);
     AllCalleesKnown = AllCalleesKnownNow;
     return ChangeStatus::CHANGED;
   }
@@ -12886,9 +12928,6 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
 
     bool CBIsVoid = CB->getType()->isVoidTy();
     BasicBlock::iterator IP = CB->getIterator();
-    FunctionType *CSFT = CB->getFunctionType();
-    SmallVector<Value *> CSArgs(CB->args());
-
     // If we know all callees and there are none, the call site is (effectively)
     // dead (or UB).
     if (AssumedCallees.empty()) {
@@ -12898,20 +12937,18 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
       return ChangeStatus::CHANGED;
     }
 
+    // Callees that can reach the function holding this call site were recorded
+    // during the update, see there for why they are left to the indirect call.
+    auto ReachesCaller = [&](Function *Callee) {
+      return CalleesReachingCaller.contains(Callee);
+    };
+
     // Special handling for the single callee case.
-    if (AllCalleesKnown && AssumedCallees.size() == 1) {
-      auto *NewCallee = AssumedCallees.front();
-      if (isLegalToPromote(*CB, NewCallee)) {
-        promoteCall(*CB, NewCallee, nullptr);
-        NumIndirectCallsPromoted++;
-        return ChangeStatus::CHANGED;
-      }
-      Instruction *NewCall =
-          CallInst::Create(FunctionCallee(CSFT, NewCallee), CSArgs,
-                           CB->getName(), CB->getIterator());
-      if (!CBIsVoid)
-        A.changeAfterManifest(IRPosition::callsite_returned(*CB), *NewCall);
-      A.deleteAfterManifest(*CB);
+    if (AllCalleesKnown && AssumedCallees.size() == 1 &&
+        isLegalToPromote(*CB, AssumedCallees.front()) &&
+        !ReachesCaller(AssumedCallees.front())) {
+      promoteCall(*CB, AssumedCallees.front(), nullptr);
+      NumIndirectCallsPromoted++;
       return ChangeStatus::CHANGED;
     }
 
@@ -12928,7 +12965,12 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
     SmallVector<Function *, 8> SkippedAssumedCallees;
     SmallVector<std::pair<CallInst *, Instruction *>> NewCalls;
     for (Function *NewCallee : AssumedCallees) {
-      if (!A.shouldSpecializeCallSiteForCallee(*this, *CB, *NewCallee,
+      // A callee whose signature does not match the call site can only be
+      // called through it in ways that are undefined, so a direct call built
+      // from the call site's operands would not be the call the indirect call
+      // performs. Leave those callees to the indirect fallback.
+      if (!isLegalToPromote(*CB, NewCallee) || ReachesCaller(NewCallee) ||
+          !A.shouldSpecializeCallSiteForCallee(*this, *CB, *NewCallee,
                                                AssumedCallees.size())) {
         SkippedAssumedCallees.push_back(NewCallee);
         SpecializedForAllCallees = false;
@@ -12955,16 +12997,11 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
         ThenTI->replaceUsesOfWith(ElseBB, CBBB);
       }
       CastInst *RetBC = nullptr;
-      CallInst *NewCall = nullptr;
-      if (isLegalToPromote(*CB, NewCallee)) {
-        auto *CBClone = cast<CallBase>(CB->clone());
-        CBClone->insertBefore(ThenTI->getIterator());
-        NewCall = &cast<CallInst>(promoteCall(*CBClone, NewCallee, &RetBC));
-        NumIndirectCallsPromoted++;
-      } else {
-        NewCall = CallInst::Create(FunctionCallee(CSFT, NewCallee), CSArgs,
-                                   CB->getName(), ThenTI->getIterator());
-      }
+      auto *CBClone = cast<CallBase>(CB->clone());
+      CBClone->insertBefore(ThenTI->getIterator());
+      CallInst *NewCall =
+          &cast<CallInst>(promoteCall(*CBClone, NewCallee, &RetBC));
+      NumIndirectCallsPromoted++;
       NewCalls.push_back({NewCall, RetBC});
     }
 
@@ -13052,6 +13089,12 @@ private:
   /// This set contains all currently assumed calllees, which might grow over
   /// time.
   SmallSetVector<Function *, 4> AssumedCallees;
+
+  /// The subset of the assumed callees that can reach the function holding this
+  /// call site, so that specializing for them would make a call graph cycle
+  /// explicit. Determined during the update, where reachability can still be
+  /// queried, and only read when manifesting.
+  SmallPtrSet<Function *, 4> CalleesReachingCaller;
 
   /// Flag to indicate if all possible callees are in the AssumedCallees set or
   /// if there could be others.
