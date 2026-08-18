@@ -30,9 +30,10 @@ struct RaiseResult {
 
 // Raise a kernel named `KernelName` whose source ISA is `SourceISA`. `Meta`
 // carries the per-kernel metadata already loaded and validated by
-// `CodeObjectInfo`. The scaffolding implementation emits a `ret void`
-// placeholder and refuses inputs the full pipeline would also refuse: an empty
-// kernel name and `SourceISA` strings that don't parse via
+// `CodeObjectInfo`. The kernel declares the source kernarg segment and
+// suppresses the target hidden-argument block; the scaffolding implementation
+// gives it a `ret void` body and refuses inputs the full pipeline would also
+// refuse: an empty kernel name and `SourceISA` strings that don't parse via
 // `llvm::AMDGPU::parseArchAMDGCN`. The kernel-text bytes, kernel offset, and
 // compilation-target ISA become real parameters once the decoder is wired
 // in (subsequent commit).
