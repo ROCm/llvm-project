@@ -464,7 +464,9 @@ void createDefaultFIRCodeGenPassPipeline(mlir::PassManager &pm,
     // First remove host-only functions from target device modules, and then
     // clean up any remaining host functions holding target regions to only
     // contain the bare minimum host operations needed for target device
-    // compilation.
+    // compilation. These passes must always run back to back to ensure no
+    // temporary poison values, introduced by the first pass, cause other passes
+    // to encounter UB before the second pass removes them.
     pm.addPass(mlir::omp::createFunctionFilteringPass());
     pm.addPass(mlir::omp::createHostOpFilteringPass());
 
