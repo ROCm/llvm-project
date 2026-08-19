@@ -64,27 +64,16 @@ Error AsyncInfoWrapperTy::synchronize() {
 void AsyncInfoWrapperTy::finalize(Error &Err) {
   assert(AsyncInfoPtr && "AsyncInfoWrapperTy already finalized");
 
-  // If we used a local async info object we want synchronous behavior. (No need
-  // to check the env-var OMPX_FORCE_SYNC_REGIONS since that was done by
-  // libomptarget.) In that case, and assuming the current status code is
-  // correct, we will synchronize explicitly when the object is deleted. Update
-  // the error with the result of the synchronize operation.
+  // If we used a local async info object we want synchronous behavior. In that
+  // case, and assuming the current status code is correct, we will synchronize
+  // explicitly when the object is deleted. Update the error with the result of
+  // the synchronize operation.
   if (AsyncInfoPtr == &LocalAsyncInfo && LocalAsyncInfo.Queue && !Err) {
-     ODBG(ODT_Init) << "Synchronizing Operation for LOCAL";
+    ODBG(ODT_Init) << "Synchronizing Operation for LOCAL";
     Err = Device.synchronize(&LocalAsyncInfo);
-    // Invalidate the wrapper object.
   }
 
-  // This case is used to transfer information about OMPT down from libomptarget
-  // to the plugins / other parts of the runtime for asynchronous profiling.
-  // Since we want to maintain the possibility to enforce synchronous mode,
-  // This was introduced.
-  else if (AsyncInfoPtr && !AsyncInfoPtr->ExecAsync && AsyncInfoPtr->Queue &&
-           !Err) {
-    ODBG(ODT_Init) << "Synchronizing Operation for EXECASYNC";
-    Err = Device.synchronize(AsyncInfoPtr);
-  }
-
+  // Invalidate the wrapper object.
   AsyncInfoPtr = nullptr;
 }
 

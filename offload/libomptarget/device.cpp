@@ -74,7 +74,7 @@ int HostDataToTargetTy::addEventIfNecessary(DeviceTy &Device,
 
 DeviceTy::DeviceTy(GenericPluginTy *RTL, int32_t DeviceID, int32_t RTLDeviceID)
     : DeviceID(DeviceID), RTL(RTL), RTLDeviceID(RTLDeviceID),
-      ForceSynchronousTargetRegions(false), MappingInfo(*this) {}
+      MappingInfo(*this) {}
 
 DeviceTy::~DeviceTy() {
   if (DeviceID == -1 || !(getInfoLevel() & OMP_INFOTYPE_DUMP_TABLE))
@@ -82,12 +82,6 @@ DeviceTy::~DeviceTy() {
 
   ident_t Loc = {0, 0, 0, 0, ";libomptarget;libomptarget;0;0;;"};
   dumpTargetPointerMappings(&Loc, *this);
-}
-
-/// Used to set the asynchronous execution mode
-inline void setAsyncInfoSynchronous(__tgt_async_info *AI, bool SetSynchronous) {
-  if (SetSynchronous)
-    AI->ExecAsync = false;
 }
 
 llvm::Error DeviceTy::init() {
@@ -333,7 +327,6 @@ int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
           HstPtrBegin, DeviceID, TgtPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
-  setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
   return RTL->data_submit_async(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size,
                                 AsyncInfo);
 }
@@ -363,7 +356,6 @@ int32_t DeviceTy::retrieveData(void *HstPtrBegin, void *TgtPtrBegin,
           omp_initial_device, HstPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
-  setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
   return RTL->data_retrieve_async(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size,
                                   AsyncInfo);
 }
@@ -392,7 +384,6 @@ int32_t DeviceTy::dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
           DstDev.RTLDeviceID, DstPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
-  setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
   return RTL->data_exchange_async(RTLDeviceID, SrcPtr, DstDev.RTLDeviceID,
                                   DstPtr, Size, AsyncInfo);
 }
@@ -452,8 +443,6 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
                                ptrdiff_t *TgtOffsets, KernelArgsTy &KernelArgs,
                                KernelReplayOutcomeTy *ReplayOutcome,
                                AsyncInfoTy &AsyncInfo) {
-  setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
-
   llvm::SmallVector<void *> Args, Ptrs;
   llvm::SmallVector<int64_t> ArgSizes;
 
