@@ -2020,11 +2020,6 @@ public:
   void printPostfixForExternalizedDecl(llvm::raw_ostream &OS,
                                        const Decl *D) const;
 
-  /// Under debug mode, print status of target teams loop transformation,
-  /// which should be either '#distribute' or '#parallel for'
-  void emitTargetTeamsLoopCodegenStatus(std::string StatusMsg,
-                                        const OMPExecutableDirective &D,
-                                        bool IsDevice);
 
   /// Add metadata for all nested directives for optimized kernel codegen.
   void addOptKernelNestMap(const OptKernelNestDirectives &NestDirs);
@@ -2101,8 +2096,6 @@ public:
   /// construct, there are no intermediate statements. Used for a combined
   /// construct
   NoLoopXteamErr checkAndSetNoLoopKernel(const OMPExecutableDirective &D);
-  /// Determine if 'teams loop' can be emitted using 'parallel for'.
-  bool TeamsLoopCanBeParallelFor(const OMPExecutableDirective &D);
 
   /// Given a top-level target construct for no-loop codegen, get the
   /// intermediate OpenMP constructs
