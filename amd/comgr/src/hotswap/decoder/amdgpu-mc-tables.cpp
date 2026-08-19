@@ -5,40 +5,55 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// AMDGPUBaseInfo.h declares the named-operand lookup and the opcode-form
-// mappings the decoder uses, but libLLVM.so exports neither, so a dylib build
-// of amd_comgr cannot resolve them. Instantiate the tables here from the same
-// generated header AMDGPUBaseInfo.cpp instantiates them from, which keeps them
-// in step with the AMDGPU target the rest of the decoder already builds
-// against.
-//
-// A static build resolves the definitions from LLVMAMDGPUUtils and would
-// reject these as duplicates, so CMakeLists.txt compiles this file only when
-// comgr links the LLVM dylib.
-//
-//===----------------------------------------------------------------------===//
 
-// GET_INSTRINFO_ENUM, for the opcode enumerators the tables are indexed by.
+#include "amdgpu-mc-tables.h"
+
+// AMDGPU target-private headers.
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
-// GET_INSTRINFO_OPERAND_ENUM, for the OpName the lookup is keyed by.
 #include "Utils/AMDGPUBaseInfo.h"
-
-#include "llvm/Support/Compiler.h"
 
 #include <cstdint>
 
+namespace COMGR::hotswap {
+
+// Nesting `llvm::AMDGPU` here keeps these definitions distinct from the ones a
+// static build puts on the same link line; the using-directive is what lets the
+// generated code's unqualified lookups still reach the real namespace.
+namespace tables {
+using namespace ::llvm::AMDGPU;
 #define GET_INSTRINFO_NAMED_OPS
 #define GET_INSTRMAP_INFO
 #include "AMDGPUGenInstrInfo.inc"
+} // namespace tables
 
-namespace llvm::AMDGPU {
-
-// The generated lookup takes the encoding family as `enum Subtarget`, which is
-// declared by the same block that defines the lookup and so cannot be named by
-// a caller. AMDGPUBaseInfo.h declares this unsigned-taking wrapper for them.
-int32_t getMCOpcode(uint32_t Opcode, unsigned Gen) {
-  return getMCOpcodeGen(Opcode, static_cast<Subtarget>(Gen));
+int16_t getNamedOperandIdx(uint32_t Opcode, llvm::AMDGPU::OpName Name) {
+  return tables::llvm::AMDGPU::getNamedOperandIdx(Opcode, Name);
 }
 
-} // namespace llvm::AMDGPU
+int32_t getMCOpcode(uint32_t Opcode, unsigned Gen) {
+  using Subtarget = tables::llvm::AMDGPU::Subtarget;
+  return tables::llvm::AMDGPU::getMCOpcodeGen(Opcode,
+                                              static_cast<Subtarget>(Gen));
+}
+
+int32_t getVOPe64(uint32_t Opcode) {
+  return tables::llvm::AMDGPU::getVOPe64(Opcode);
+}
+
+int32_t getDPPOp32(uint32_t Opcode) {
+  return tables::llvm::AMDGPU::getDPPOp32(Opcode);
+}
+
+int32_t getDPPOp64(uint32_t Opcode) {
+  return tables::llvm::AMDGPU::getDPPOp64(Opcode);
+}
+
+int32_t getBasicFromSDWAOp(uint32_t Opcode) {
+  return tables::llvm::AMDGPU::getBasicFromSDWAOp(Opcode);
+}
+
+int32_t getGlobalVaddrOp(uint32_t Opcode) {
+  return tables::llvm::AMDGPU::getGlobalVaddrOp(Opcode);
+}
+
+} // namespace COMGR::hotswap

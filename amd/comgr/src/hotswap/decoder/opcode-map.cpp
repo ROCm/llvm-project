@@ -8,6 +8,8 @@
 
 #include "opcode-map.h"
 
+#include "amdgpu-mc-tables.h"
+
 #include <cassert>
 #include <optional>
 
@@ -61,7 +63,7 @@ DenseMap<unsigned, unsigned> buildMcToPseudoMap(unsigned NumOpc) {
   DenseMap<unsigned, unsigned> Result;
   for (unsigned P = 0; P < NumOpc; ++P) {
     for (unsigned Gen = 0; Gen < KNumEncodingFamilies; ++Gen) {
-      std::optional<unsigned> Mc = mappedOpcode(AMDGPU::getMCOpcode(P, Gen));
+      std::optional<unsigned> Mc = mappedOpcode(hotswap::getMCOpcode(P, Gen));
       if (Mc && *Mc != P)
         Result.try_emplace(*Mc, P);
     }
@@ -74,9 +76,9 @@ DenseMap<unsigned, unsigned> buildMcToPseudoMap(unsigned NumOpc) {
 DenseMap<unsigned, unsigned> buildDppToBaseMap(unsigned NumOpc) {
   DenseMap<unsigned, unsigned> Result;
   for (unsigned P = 0; P < NumOpc; ++P) {
-    if (std::optional<unsigned> D32 = mappedOpcode(AMDGPU::getDPPOp32(P)))
+    if (std::optional<unsigned> D32 = mappedOpcode(hotswap::getDPPOp32(P)))
       Result.try_emplace(*D32, P);
-    if (std::optional<unsigned> D64 = mappedOpcode(AMDGPU::getDPPOp64(P)))
+    if (std::optional<unsigned> D64 = mappedOpcode(hotswap::getDPPOp64(P)))
       Result.try_emplace(*D64, P);
   }
   return Result;
@@ -97,17 +99,17 @@ unsigned canonicalize(unsigned Mc, const MCInstrInfo &MCII,
     P = DppIt->second;
 
   if (std::optional<unsigned> Base =
-          mappedOpcode(AMDGPU::getBasicFromSDWAOp(P)))
+          mappedOpcode(hotswap::getBasicFromSDWAOp(P)))
     P = *Base;
 
-  if (std::optional<unsigned> E64 = mappedOpcode(AMDGPU::getVOPe64(P)))
+  if (std::optional<unsigned> E64 = mappedOpcode(hotswap::getVOPe64(P)))
     P = *E64;
 
   // Testing the format flag first avoids a table lookup for every non-FLAT
   // opcode.
   if (P < MCII.getNumOpcodes() && SIInstrFlags::isFLAT(MCII, P)) {
     if (std::optional<unsigned> Vaddr =
-            mappedOpcode(AMDGPU::getGlobalVaddrOp(P)))
+            mappedOpcode(hotswap::getGlobalVaddrOp(P)))
       P = *Vaddr;
   }
 

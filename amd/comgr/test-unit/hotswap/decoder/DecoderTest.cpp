@@ -168,9 +168,6 @@ TEST(StripEncoding, LeavesUnsuffixedUnchanged) {
   EXPECT_EQ(stripEncoding("s_endpgm"), "s_endpgm");
 }
 
-// A variant is named for the register it collapses onto plus the suffix naming
-// its subtarget, so checking the two names against each other catches a row
-// that maps to the wrong base without this test restating the table.
 TEST_F(DecoderTest, StripRegEncodingDropsOnlyTheVariantSuffix) {
   static constexpr llvm::StringRef KSuffixes[] = {"_ci", "_vi", "_gfx9plus",
                                                   "_gfx11plus", "_gfxpre11"};
@@ -189,9 +186,7 @@ TEST_F(DecoderTest, StripRegEncodingDropsOnlyTheVariantSuffix) {
     EXPECT_TRUE(llvm::is_contained(KSuffixes, Name.substr(BaseName.size())))
         << Name.str() << " does not name a variant of " << BaseName.str();
   }
-  // Two variants each of the 37 registers that have them: FLAT_SCR and its two
-  // halves, the 16 TTMPs and their 16 tuples, M0, and SGPR_NULL. A register
-  // gaining or losing a variant lands here first.
+  // Pinned so a register gaining or losing a variant fails here.
   EXPECT_EQ(Stripped, 74u);
 }
 

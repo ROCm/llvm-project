@@ -10,7 +10,7 @@
 #include "comgr.h"
 #include "hotswap/common/hotswap-error.h"
 
-// GET_REGINFO_ENUM, for the register enumerators stripRegEncoding matches on.
+// AMDGPU target-private headers.
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 
 #include "llvm/ADT/Twine.h"
@@ -137,9 +137,8 @@ std::string strippedMnemonic(const MCState &State, const MCInst &Inst) {
   return stripEncoding(getMnemonic(State, Inst)).str();
 }
 
-// The three variant families, named for the subtargets whose encodings they
-// distinguish. Spelling the enumerators through concatenation keeps a renamed
-// or dropped register a compile error rather than a silent mismatch.
+// Spelling the enumerators through concatenation keeps a renamed or dropped
+// register a compile error rather than a silent mismatch.
 #define CASE_CI_VI(Node)                                                       \
   case AMDGPU::Node##_ci:                                                      \
   case AMDGPU::Node##_vi:                                                      \

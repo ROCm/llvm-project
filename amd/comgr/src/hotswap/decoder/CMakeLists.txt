@@ -58,6 +58,7 @@ endif()
 
 add_library(hotswap-decoder OBJECT
   mc-state.cpp
+  amdgpu-mc-tables.cpp
   amdgpu-formats.cpp
   canonical-op.cpp
   isa-profile.cpp
@@ -167,45 +168,3 @@ target_include_directories(hotswap-decoder PRIVATE
 # private dependencies through $<LINK_ONLY:>.
 target_link_libraries(hotswap-decoder PRIVATE ${HOTSWAP_LLVM_LIBS})
 set_target_properties(hotswap-decoder PROPERTIES INTERFACE_LINK_LIBRARIES "")
-
-# --- Unexported AMDGPU MC tables ----------------------------------------------
-# The decoder calls the named-operand lookup and the opcode-form mappings that
-# AMDGPUBaseInfo.h declares. LLVMAMDGPUUtils defines them and libLLVM.so does
-# not export them, so amd_comgr resolves them only when it links the static
-# component; against the dylib the link fails. amdgpu-mc-tables.cpp
-# instantiates them from the generated header for that case.
-#
-# Keying on amd_comgr's own library set (chosen in the top-level CMakeLists,
-# which runs before this directory is entered) rather than on
-# LLVM_LINK_LLVM_DYLIB tests the condition itself: whichever way that choice is
-# reached, this is on exactly when nothing else supplies the definitions.
-#
-# It is a library of its own rather than another hotswap-decoder source because
-# the definitions must reach that link alone. The hotswap test binaries link
-# the static AMDGPU components (see test-unit/hotswap/CMakeLists.txt), which
-# carry AMDGPUBaseInfo.o and would make these a second definition.
-if(NOT "LLVMAMDGPUUtils" IN_LIST LLVM_LIBS)
-  add_library(hotswap-amdgpu-mc-tables OBJECT amdgpu-mc-tables.cpp)
-  add_library(hotswap::amdgpu-mc-tables ALIAS hotswap-amdgpu-mc-tables)
-
-  llvm_update_compile_flags(hotswap-amdgpu-mc-tables)
-  if(NOT LLVM_ENABLE_RTTI)
-    if(MSVC)
-      target_compile_options(hotswap-amdgpu-mc-tables PRIVATE /GR-)
-    else()
-      target_compile_options(hotswap-amdgpu-mc-tables PRIVATE -fno-rtti)
-    endif()
-  endif()
-  set_target_properties(hotswap-amdgpu-mc-tables PROPERTIES
-    POSITION_INDEPENDENT_CODE ON)
-
-  target_include_directories(hotswap-amdgpu-mc-tables PRIVATE
-    "${HOTSWAP_AMDGPU_SRC_DIR}"
-    "${HOTSWAP_AMDGPU_SRC_DIR}/Utils"
-    "${HOTSWAP_AMDGPU_GEN_DIR}"
-  )
-
-  target_link_libraries(hotswap-amdgpu-mc-tables PRIVATE ${HOTSWAP_LLVM_LIBS})
-  set_target_properties(hotswap-amdgpu-mc-tables PROPERTIES
-    INTERFACE_LINK_LIBRARIES "")
-endif()

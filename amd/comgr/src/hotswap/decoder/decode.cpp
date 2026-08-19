@@ -8,6 +8,7 @@
 
 #include "decode.h"
 
+#include "amdgpu-mc-tables.h"
 #include "canonical-op.h"
 #include "decoded-inst.h"
 #include "hotswap/common/hotswap-error.h"
@@ -47,7 +48,7 @@ namespace {
 // Operand index of `Name` in `Opc`, or nullopt when the opcode has no such
 // operand.
 std::optional<unsigned> namedOperandIdx(unsigned Opc, AMDGPU::OpName Name) {
-  int Idx = AMDGPU::getNamedOperandIdx(Opc, Name);
+  int Idx = COMGR::hotswap::getNamedOperandIdx(Opc, Name);
   return Idx >= 0 ? std::optional<unsigned>(Idx) : std::nullopt;
 }
 

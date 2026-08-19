@@ -83,11 +83,6 @@ llvm::StringRef stripEncoding(llvm::StringRef Mnemonic);
 /// `TTMP0_gfx9plus` both give `TTMP0`), so a handler can match one register id
 /// whichever subtarget the instruction was decoded for. Registers without a
 /// variant are returned unchanged.
-///
-/// Mirrors `AMDGPU::mc2PseudoReg`, which libLLVM.so does not export. The
-/// variant families are declared next to `M0` in SIRegisterInfo.td; a new one
-/// needs a case here, and shows up as a handler failing to match a register it
-/// names.
 llvm::MCRegister stripRegEncoding(llvm::MCRegister Reg);
 
 /// Return the mnemonic of `Inst` with any encoding suffix removed (e.g.
