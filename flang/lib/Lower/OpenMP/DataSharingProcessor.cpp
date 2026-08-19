@@ -548,23 +548,8 @@ void DataSharingProcessor::collectPrivatizedSymbols(
       // and not be added/captured by later directives. Parallel regions
       // will likely want the same captures to be shared and for SIMD it's
       // illegal to have firstprivate clauses.
-      //
-      // Likewise, an implicit private clause should only be applied to the
-      // target construct and the leaf where it is explicitly applied. For,
-      // example for the combined construct `target teams distribute private(a)`
-      // we mark OmpImplicit+OmpPrivate in semantics, and this verification step
-      // makes sure we only apply the privatization to target, and distribute,
-      // target implicitly and distribute explicitly.
-      //
-      // Realistically this just prevents extra redundant intermediate
-      // allocations and assignments (in the firstprivate case) that would be
-      // generated between the different directive regions. As technically it
-      // is OpenMP compliant to have private/firstprivate or any other clause
-      // on a combined construct apply on all directives that can legally have
-      // it.
       if (isConstructWithTopLevelTarget(eval) && !isTargetPrivatization &&
-          (sym->test(semantics::Symbol::Flag::OmpFirstPrivate) ||
-           sym->test(semantics::Symbol::Flag::OmpPrivate))) {
+          sym->test(semantics::Symbol::Flag::OmpFirstPrivate)) {
         return false;
       }
 
