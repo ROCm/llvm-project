@@ -1,6 +1,6 @@
 // RUN: %clang_cc1 %s -triple x86_64-unknown-linux-gnu -fsanitize=address -emit-llvm -o - | FileCheck -check-prefix=CHECK-ASAN %s
 
-// CHECK-ASAN: @myGlobal1 = global { i32, [28 x i8] } zeroinitializer, align 32 #[[ATTR0:[0-9]+]]
+// CHECK-ASAN: @myGlobal1 = global { i32, [28 x i8] } zeroinitializer, align 32, !sanitize.unpadded.size !{{[0-9]+}} #[[ATTR0:[0-9]+]]
 // CHECK-ASAN: @myGlobal2 = global i32 0, no_sanitize_address, align 4
 // CHECK-NOT: #[[ATTR1:[0-9]+]]
 // CHECK-ASAN: attributes #[[ATTR0]] = { sanitized_padded_global }
