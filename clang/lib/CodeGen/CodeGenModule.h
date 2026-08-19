@@ -2020,7 +2020,6 @@ public:
   void printPostfixForExternalizedDecl(llvm::raw_ostream &OS,
                                        const Decl *D) const;
 
-
   /// Add metadata for all nested directives for optimized kernel codegen.
   void addOptKernelNestMap(const OptKernelNestDirectives &NestDirs);
 

@@ -8924,7 +8924,6 @@ void CodeGenModule::printPostfixForExternalizedDecl(llvm::raw_ostream &OS,
   }
 }
 
-
 namespace {
 class NoLoopChecker final : public ConstStmtVisitor<NoLoopChecker> {
 public:
@@ -9428,7 +9427,6 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
 
   llvm::dbgs() << StatusMsg << ": " << FileName << ": " << LineNo << "\n";
 }
-
 
 const ForStmt *CodeGenModule::getSingleForStmt(const Stmt *S) {
   if (S == nullptr)
