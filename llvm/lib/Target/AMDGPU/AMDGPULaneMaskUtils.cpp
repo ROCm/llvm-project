@@ -20,8 +20,7 @@
 
 using namespace llvm;
 
-static MachineBasicBlock::iterator
-getSaluInsertionAtEnd(MachineBasicBlock &MBB, bool ClobbersSCC = true);
+static MachineBasicBlock::iterator getSaluInsertionAtEnd(MachineBasicBlock &MBB);
 
 /// Check whether the register could be a lane-mask register.
 ///
@@ -241,7 +240,7 @@ bool AMDGPULaneMaskAnalysis::isSubsetOfExec(Register Reg,
 }
 
 /// Initialize the updater.
-void AMDGPULaneMaskUpdater::init() {
+Register AMDGPULaneMaskUpdater::init() {
   Blocks.clear();
 
   const SIInstrInfo *TII =
@@ -257,6 +256,7 @@ void AMDGPULaneMaskUpdater::init() {
 
   Accumulator = LMU.createLaneMaskReg();
   AllAccumulators.insert(Accumulator);
+  return Accumulator;
 }
 
 /// Optional cleanup, may remove stray instructions.
@@ -284,7 +284,6 @@ void AMDGPULaneMaskUpdater::addReset(MachineBasicBlock &Block,
 
   BlockIt->Flags |= Flags;
   AccumulatorResetBlocks[&Block].push_back({Accumulator, Flags});
-  updateAccumulatorInitBlock(Block);
 }
 
 ///
@@ -297,7 +296,6 @@ void AMDGPULaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
     Blocks.emplace_back(&Block);
     BlockIt = Blocks.end() - 1;
   }
-  updateAccumulatorInitBlock(Block);
   assert(!BlockIt->Value);
 
   BlockIt->Value = Value;
@@ -340,8 +338,7 @@ static void instrDefsUsesSCC(const MachineInstr &MI, bool &Def, bool &Use) {
 /// Return a point at the end of the given \p MBB to insert SALU instructions
 /// for lane mask calculation. Take terminators, INLINEASM_BR, and SCC into
 /// account.
-static MachineBasicBlock::iterator getSaluInsertionAtEnd(MachineBasicBlock &MBB,
-                                                         bool ClobbersSCC) {
+static MachineBasicBlock::iterator getSaluInsertionAtEnd(MachineBasicBlock &MBB) {
   auto InsertionPt = MBB.getFirstTerminator();
 
   // INLINEASM_BR is not marked as a terminator, but lane mask contributions
@@ -349,10 +346,6 @@ static MachineBasicBlock::iterator getSaluInsertionAtEnd(MachineBasicBlock &MBB,
   if (InsertionPt != MBB.begin() &&
       std::prev(InsertionPt)->getOpcode() == TargetOpcode::INLINEASM_BR)
     --InsertionPt;
-
-  // Non-SCC-clobbering inits (e.g. Acc = MOV 0) can sit before terminators.
-  if (!ClobbersSCC)
-    return InsertionPt;
 
   bool TerminatorsUseSCC = false;
   for (auto I = InsertionPt, E = MBB.end(); I != E; ++I) {
@@ -385,17 +378,6 @@ AMDGPULaneMaskUpdater::findBlockInfo(MachineBasicBlock &Block) {
       Blocks, [&](const auto &Entry) { return Entry.Block == &Block; });
 }
 
-/// Fold \p Block into the current accumulator's DomBB, i.e. the nearest common
-/// dominator of all origin/origin-branch blocks registered with it.
-void AMDGPULaneMaskUpdater::updateAccumulatorInitBlock(
-    MachineBasicBlock &Block) {
-  AccumulatorOriginBlocks[Accumulator].insert(&Block);
-  if (!MDT)
-    return;
-  MachineBasicBlock *&DomBB = AccumulatorInitBlock[Accumulator];
-  DomBB = DomBB ? MDT->findNearestCommonDominator(DomBB, &Block) : &Block;
-}
-
 /// Emit Accumulator init Acc = Mov 0
 void AMDGPULaneMaskUpdater::insertAccumulatorInits() {
   const SIInstrInfo *TII =
@@ -411,16 +393,8 @@ void AMDGPULaneMaskUpdater::insertAccumulatorInits() {
     if (!DomBB)
       DomBB = &Entry;
 
-    // If DomBB is an origin/origin-branch block, put the init at the top so it
-    // precedes DomBB's own contribution; otherwise at the SALU-safe end.
-    auto OrigIt = AccumulatorOriginBlocks.find(Acc);
-    bool DomBBIsOrigin = OrigIt != AccumulatorOriginBlocks.end() &&
-                         OrigIt->second.contains(DomBB);
-    MachineBasicBlock::iterator InsertPt =
-        DomBBIsOrigin ? DomBB->getFirstNonPHI()
-                      : getSaluInsertionAtEnd(*DomBB, /*ClobbersSCC=*/false);
-
-    BuildMI(*DomBB, InsertPt, {}, TII->get(MovOpc), Acc).addImm(0);
+    BuildMI(*DomBB, DomBB->getFirstNonPHI(), {}, TII->get(MovOpc), Acc)
+        .addImm(0);
   }
 }
 

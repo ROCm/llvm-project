@@ -177,7 +177,6 @@ public:
 private:
   AMDGPULaneMaskUtils LMU;
   AMDGPULaneMaskAnalysis *LMA = nullptr;
-  MachineDominatorTree *MDT = nullptr;
 
   struct BlockInfo {
     MachineBasicBlock *Block;
@@ -206,26 +205,12 @@ private:
       AccumulatorResetBlocks;
   SmallDenseSet<Register, 4> AllAccumulators;
 
-  /// Per-accumulator DomBB: nearest common dominator of all
-  /// origin/origin-branch blocks (via addAvailable()/addReset()), where its
-  /// zero-init is placed.
+  /// Per-accumulator block where zero-init is placed (set by the caller).
   DenseMap<Register, MachineBasicBlock *> AccumulatorInitBlock;
-
-  /// All origin/origin-branch blocks registered for Acc (via addAvailable()/
-  /// addReset()). When DomBB is one of them it contributes to Acc in-block, so
-  /// the zero-init must be emitted before that contribution.
-  DenseMap<Register, SmallDenseSet<MachineBasicBlock *, 8>>
-      AccumulatorOriginBlocks;
 
 public:
   SmallDenseSet<Register, 4> &getAllAccumulators() { return AllAccumulators; }
 
-  /// Accessors for an accumulator's DomBB, so the caller can hoist it out of
-  /// any enclosing cycle before insertAccumulatorResets() emits the init.
-  MachineBasicBlock *getAccumulatorInitBlock(Register Acc) const {
-    auto It = AccumulatorInitBlock.find(Acc);
-    return It != AccumulatorInitBlock.end() ? It->second : nullptr;
-  }
   void setAccumulatorInitBlock(Register Acc, MachineBasicBlock *Block) {
     AccumulatorInitBlock[Acc] = Block;
   }
@@ -233,9 +218,8 @@ public:
   AMDGPULaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
 
   void setLaneMaskAnalysis(AMDGPULaneMaskAnalysis *Analysis) { LMA = Analysis; }
-  void setDominatorTree(MachineDominatorTree *DomTree) { MDT = DomTree; }
 
-  void init();
+  Register init();
   void cleanup();
 
   void addReset(MachineBasicBlock &Block, ResetFlags Flags);
@@ -246,11 +230,6 @@ public:
 
 private:
   SmallVectorImpl<BlockInfo>::iterator findBlockInfo(MachineBasicBlock &Block);
-
-  /// Fold \p Block into the current accumulator's DomBB (see
-  /// \ref AccumulatorInitBlock). Requires a dominator tree; without one, the
-  /// DomBB stays unset and the accumulator init falls back to the entry block.
-  void updateAccumulatorInitBlock(MachineBasicBlock &Block);
 
   /// Emit the deferred zero-initialization for every accumulator at the start
   /// of its DomBB (or the entry block when no DomBB was recorded).

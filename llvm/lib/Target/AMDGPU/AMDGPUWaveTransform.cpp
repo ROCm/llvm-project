@@ -1674,6 +1674,24 @@ void ControlFlowRewriter::prepareWaveCfg() {
   }
 }
 
+namespace {
+
+struct AccBlockInfo {
+  SmallVector<MachineBasicBlock *, 4> UseBlocks;
+  SmallVector<MachineBasicBlock *, 4> DefBlocks;
+};
+
+MachineBasicBlock *nearestCommonDominator(ArrayRef<MachineBasicBlock *> Blocks,
+                                          MachineDominatorTree &MDT) {
+  assert(!Blocks.empty() && "accumulator init requires at least one use block");
+  MachineBasicBlock *DomBB = Blocks.front();
+  for (MachineBasicBlock *BB : Blocks.drop_front())
+    DomBB = MDT.findNearestCommonDominator(DomBB, BB);
+  return DomBB;
+}
+
+} // namespace
+
 /// Replace all original terminator instructions by the terminators for
 /// establishing wave-level control flow and insert instructions for EXEC mask
 /// manipulation.
@@ -1827,7 +1845,13 @@ void ControlFlowRewriter::rewrite() {
       RegMap;
   AMDGPULaneMaskUpdater Updater(Function);
   Updater.setLaneMaskAnalysis(&LMA);
-  Updater.setDominatorTree(&ReconvergeCfg.getDomTree());
+
+  auto finalizeAccInit = [&](Register Acc, const AccBlockInfo &Info) {
+    MachineBasicBlock *DomBB =
+        nearestCommonDominator(Info.UseBlocks, ReconvergeCfg.getDomTree());
+    DomBB = ReconvergeCfg.hoistBeforeCycle(DomBB);
+    Updater.setAccumulatorInitBlock(Acc, DomBB);
+  };
 
   for (WaveNode *LaneTarget : NodeOrder) {
     CFGNodeInfo &LaneTargetInfo = NodeInfo.find(LaneTarget)->second;
@@ -1861,19 +1885,25 @@ void ControlFlowRewriter::rewrite() {
                                    NodeDivergentPair.getPointer()->Block);
                       });
     Register DirectCondReg;
+    Register Acc = AMDGPU::NoRegister;
+    AccBlockInfo AccInfo;
 
     // Step 2.1: Add conditions branching to LaneTarget to the Lane mask
     // Updater. Initialize the accumulator only when multiple origins
     // require merging.
     if (!HasSingleDomOrigin) {
-      // FIXME: we are creating a register here only to initialize the updater
-      Updater.init();
+      Acc = Updater.init();
+      AccInfo.DefBlocks.push_back(LaneTarget->Block);
       Updater.addReset(*LaneTarget->Block, AMDGPULaneMaskUpdater::ResetInMiddle);
       for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
         if (!NodeDivergentPair.getInt())
           continue; // not a divergent branch
 
-        Updater.addReset(*NodeDivergentPair.getPointer()->Block,
+        MachineBasicBlock *OriginBranchBlock =
+            NodeDivergentPair.getPointer()->Block;
+        AccInfo.UseBlocks.push_back(OriginBranchBlock);
+        AccInfo.DefBlocks.push_back(OriginBranchBlock);
+        Updater.addReset(*OriginBranchBlock,
                          AMDGPULaneMaskUpdater::ResetAtEnd);
       }
     }
@@ -2021,8 +2051,11 @@ void ControlFlowRewriter::rewrite() {
 
       if (HasSingleDomOrigin)
         DirectCondReg = CondReg;
-      else
+      else {
+        AccInfo.UseBlocks.push_back(LaneOrigin.Node->Block);
+        AccInfo.DefBlocks.push_back(LaneOrigin.Node->Block);
         Updater.addAvailable(*LaneOrigin.Node->Block, CondReg);
+      }
     }
 
     // Step 2.2: Synthesize EXEC updates and branch instructions.
@@ -2056,6 +2089,9 @@ void ControlFlowRewriter::rewrite() {
           .addMBB(OriginNode->Successors[0]->Block);
     }
 
+    if (Acc)
+      finalizeAccInit(Acc, AccInfo);
+
   }
 
   // Step 3: Insert rejoin masks.
@@ -2084,9 +2120,12 @@ void ControlFlowRewriter::rewrite() {
         ReconvergeCfg.getDomTree().dominates(SingleDivPred->Block,
                                              Secondary->Block);
 
+    Register Acc = AMDGPU::NoRegister;
+    AccBlockInfo AccInfo;
+
     if (!HasSingleDivergentPred) {
-      // FIXME: we are creating a register here only to initialize the updater
-      Updater.init();
+      Acc = Updater.init();
+      AccInfo.DefBlocks.push_back(Secondary->Block);
       Updater.addReset(*Secondary->Block, AMDGPULaneMaskUpdater::ResetAtEnd);
     }
 
@@ -2120,9 +2159,15 @@ void ControlFlowRewriter::rewrite() {
 
       if (HasSingleDivergentPred)
         DirectRejoin = Rejoin;
-      else
+      else {
+        AccInfo.UseBlocks.push_back(Pred->Block);
+        AccInfo.DefBlocks.push_back(Pred->Block);
         Updater.addAvailable(*Pred->Block, Rejoin);
+      }
     }
+
+    if (Acc)
+      AccInfo.UseBlocks.push_back(Secondary->Block);
 
     Register RejoinMask = HasSingleDivergentPred
                               ? DirectRejoin
@@ -2131,14 +2176,11 @@ void ControlFlowRewriter::rewrite() {
             TII.get(LMC.OrOpc), LMC.ExecReg)
         .addReg(LMC.ExecReg)
         .addReg(RejoinMask);
+
+    if (Acc)
+      finalizeAccInit(Acc, AccInfo);
   }
 
-  // Hoist each accumulator's init out of any enclosing cycle before emitting
-  for (Register Acc : Updater.getAllAccumulators()) {
-    if (MachineBasicBlock *DomBB = Updater.getAccumulatorInitBlock(Acc))
-      Updater.setAccumulatorInitBlock(Acc,
-                                      ReconvergeCfg.hoistBeforeCycle(DomBB));
-  }
   Updater.insertAccumulatorResets();
   AccumulatorRegs = std::move(Updater.getAllAccumulators());
   Updater.cleanup();
