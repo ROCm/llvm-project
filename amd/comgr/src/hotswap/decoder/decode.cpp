@@ -169,7 +169,7 @@ void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
 // register ids to their canonical pseudo first.
 void classifyImplicitDefs(DecodedInst &Di, const MCInstrDesc &Desc) {
   for (MCPhysReg R : Desc.implicit_defs()) {
-    llvm::MCRegister Reg = AMDGPU::mc2PseudoReg(R);
+    llvm::MCRegister Reg = stripRegEncoding(R);
     switch (Reg) {
     case AMDGPU::SCC:
       Di.setDefsScc(true);

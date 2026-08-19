@@ -36,4 +36,10 @@ if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   list(APPEND COMGR_HOTSWAP_LIBS
     hotswap::common hotswap::loader hotswap::raiser hotswap::decoder)
 endif()
+# Created only when amd_comgr does not link LLVMAMDGPUUtils, and linked by
+# amd_comgr alone: the AMDGPU MC tables it carries are a second definition
+# anywhere the static AMDGPU components are on the link line.
+if(TARGET hotswap::amdgpu-mc-tables)
+  list(APPEND COMGR_HOTSWAP_LIBS hotswap::amdgpu-mc-tables)
+endif()
 set(COMGR_HOTSWAP_LIBS "${COMGR_HOTSWAP_LIBS}" PARENT_SCOPE)

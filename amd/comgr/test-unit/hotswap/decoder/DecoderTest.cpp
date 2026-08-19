@@ -23,6 +23,8 @@
 #include "hotswap/decoder/opcode-map.h"
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -164,6 +166,33 @@ TEST(StripEncoding, DropsKnownSuffixes) {
 TEST(StripEncoding, LeavesUnsuffixedUnchanged) {
   EXPECT_EQ(stripEncoding("s_mov_b32"), "s_mov_b32");
   EXPECT_EQ(stripEncoding("s_endpgm"), "s_endpgm");
+}
+
+// A variant is named for the register it collapses onto plus the suffix naming
+// its subtarget, so checking the two names against each other catches a row
+// that maps to the wrong base without this test restating the table.
+TEST_F(DecoderTest, StripRegEncodingDropsOnlyTheVariantSuffix) {
+  static constexpr llvm::StringRef KSuffixes[] = {"_ci", "_vi", "_gfx9plus",
+                                                  "_gfx11plus", "_gfxpre11"};
+  const llvm::MCRegisterInfo &MRI = *State.RegInfo;
+  unsigned Stripped = 0;
+  for (unsigned Reg = 1; Reg < MRI.getNumRegs(); ++Reg) {
+    llvm::MCRegister Base = stripRegEncoding(Reg);
+    EXPECT_EQ(stripRegEncoding(Base), Base) << MRI.getName(Reg);
+    if (Base == Reg)
+      continue;
+    ++Stripped;
+    llvm::StringRef Name = MRI.getName(Reg);
+    llvm::StringRef BaseName = MRI.getName(Base);
+    ASSERT_TRUE(Name.starts_with(BaseName))
+        << Name << " does not name a variant of " << BaseName;
+    EXPECT_TRUE(llvm::is_contained(KSuffixes, Name.substr(BaseName.size())))
+        << Name << " does not name a variant of " << BaseName;
+  }
+  // Two variants each of the 37 registers that have them: FLAT_SCR and its two
+  // halves, the 16 TTMPs and their 16 tuples, M0, and SGPR_NULL. A register
+  // gaining or losing a variant lands here first.
+  EXPECT_EQ(Stripped, 74u);
 }
 
 // -- isa-profile --------------------------------------------------------------
