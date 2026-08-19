@@ -1787,7 +1787,7 @@ void GCNPassConfig::addPreLegalizeMachineIR() {
 }
 
 bool GCNPassConfig::addLegalizeMachineIR() {
-  addPass(new Legalizer());
+  addPass(new LegalizerLegacy());
   return false;
 }
 
