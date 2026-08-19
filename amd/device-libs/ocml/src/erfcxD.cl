@@ -57,8 +57,8 @@ MATH_MANGLE(erfcx)(double x)
     } else {
         double r = MATH_RCP(ax);
         double t = r*r;
-        double p = MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-                      -29.53125, 6.5625), -1.875), 0.75), -0.5), 1.0);
+        double p = MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
+                      162.421875, -29.53125), 6.5625), -1.875), 0.75), -0.5), 1.0);
         ret = 0x1.20dd750429b6dp-1 * r * p;
     }
 

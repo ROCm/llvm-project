@@ -1784,7 +1784,7 @@ bool GCNPassConfig::addInstSelector() {
 }
 
 bool GCNPassConfig::addIRTranslator() {
-  addPass(new IRTranslator(getOptLevel()));
+  addPass(new IRTranslatorLegacy(getOptLevel()));
   return false;
 }
 
@@ -1795,7 +1795,7 @@ void GCNPassConfig::addPreLegalizeMachineIR() {
 }
 
 bool GCNPassConfig::addLegalizeMachineIR() {
-  addPass(new Legalizer());
+  addPass(new LegalizerLegacy());
   return false;
 }
 

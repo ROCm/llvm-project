@@ -188,25 +188,6 @@ EXTERN void *llvm_omp_target_alloc_shared(size_t Size, int DeviceNum) {
   return targetAllocExplicit(Size, DeviceNum, TARGET_ALLOC_SHARED, __func__);
 }
 
-EXTERN void *llvm_omp_target_alloc_multi_devices(size_t size, int num_devices,
-                                                 int DeviceNums[]) {
-  if (num_devices < 1)
-    return nullptr;
-
-  DeviceTy &Device = *PM->getDevice(DeviceNums[0]);
-  if (!Device.RTL->is_system_supporting_managed_memory(Device.DeviceID))
-    return nullptr;
-
-  // disregard device ids for now and allocate shared memory that can be
-  // accessed by any device and host under xnack+ mode
-  void *ptr =
-      targetAllocExplicit(size, DeviceNums[0], TARGET_ALLOC_DEFAULT, __func__);
-  // TODO: not implemented yet
-  // if (Device.RTL->enable_access_to_all_agents)
-  //   Device.RTL->enable_access_to_all_agents(DeviceNums[0], ptr);
-  return ptr;
-}
-
 EXTERN void omp_target_free(void *Ptr, int DeviceNum) {
   TIMESCOPE();
   OMPT_IF_BUILT(ReturnAddressSetterRAII RA(__builtin_return_address(0)));

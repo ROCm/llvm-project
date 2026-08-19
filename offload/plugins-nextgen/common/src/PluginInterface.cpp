@@ -1688,13 +1688,6 @@ bool GenericPluginTy::is_gfx90a_coarse_grain_usm_map_enabled(int32_t DeviceId) {
   return R;
 }
 
-bool GenericPluginTy::is_system_supporting_managed_memory(int32_t DeviceId) {
-  auto T = logger::log<bool>(__func__, DeviceId);
-  auto R = [&]() { return IsSystemSupportingManagedMemory(); }();
-  T.res(R);
-  return R;
-}
-
 int32_t GenericPluginTy::is_data_exchangable(int32_t SrcDeviceId,
                                              int32_t DstDeviceId) {
   auto T = logger::log<int32_t>(__func__, SrcDeviceId, DstDeviceId);
@@ -2301,17 +2294,6 @@ int32_t GenericPluginTy::get_function(__tgt_device_binary Binary,
 int32_t GenericPluginTy::use_auto_zero_copy(int32_t DeviceId) {
   auto T = logger::log<int32_t>(__func__, DeviceId);
   auto R = [&]() { return getDevice(DeviceId).useAutoZeroCopy(); }();
-  T.res(R);
-  return R;
-}
-
-int32_t GenericPluginTy::enable_access_to_all_agents(int32_t DeviceId,
-                                                     void *ptr) {
-  auto T = logger::log<int32_t>(__func__, DeviceId, ptr);
-  auto R = [&]() {
-    // Not implemented yet.
-    return OFFLOAD_FAIL;
-  }();
   T.res(R);
   return R;
 }
