@@ -28,6 +28,7 @@
 #include "flang/Optimizer/Builder/FIRBuilder.h"
 #include "flang/Optimizer/Builder/HLFIRTools.h"
 #include "flang/Optimizer/Builder/MutableBox.h"
+#include "flang/Optimizer/CodeGen/TypeConverter.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
 #include "flang/Optimizer/Dialect/Support/KindMapping.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
@@ -819,14 +820,20 @@ public:
     return false;
   }
 
-  bool isUseDeviceAddr(mlir::omp::MapInfoOp mapOp, mlir::Operation &userOp) {
+  mlir::BlockArgument getUseDeviceAddrBlockArg(mlir::omp::MapInfoOp mapOp,
+                                               mlir::Operation &userOp) {
     if (auto targetDataOp = llvm::dyn_cast<mlir::omp::TargetDataOp>(userOp)) {
-      for (mlir::Value uda : targetDataOp.getUseDeviceAddrVars()) {
-        if (uda.getDefiningOp() == mapOp)
-          return true;
+      auto iface = mlir::cast<mlir::omp::BlockArgOpenMPOpInterface>(
+          targetDataOp.getOperation());
+      auto useDeviceAddrArgs = iface.getUseDeviceAddrBlockArgs();
+      auto useDeviceAddrVars = targetDataOp.getUseDeviceAddrVars();
+      for (auto [useDeviceAddrVar, useDeviceAddrArg] :
+           llvm::zip_equal(useDeviceAddrVars, useDeviceAddrArgs)) {
+        if (useDeviceAddrVar.getDefiningOp() == mapOp)
+          return mlir::cast<mlir::BlockArgument>(useDeviceAddrArg);
       }
     }
-    return false;
+    return nullptr;
   }
 
   bool isUseDevicePtr(mlir::omp::MapInfoOp mapOp, mlir::Operation &userOp) {
@@ -1153,14 +1160,15 @@ public:
         /*bounds=*/mlir::SmallVector<mlir::Value>{},
         /*mapperId*/ mlir::FlatSymbolRefAttr(), op.getNameAttr(),
         /*partial_map=*/builder.getBoolAttr(false));
-
     mlir::Operation *attachMap = nullptr;
-    if (!isAttachNever && !isHasDeviceAddrFlag)
+    if (!isAttachNever && !isHasDeviceAddrFlag &&
+        !getUseDeviceAddrBlockArg(op, *target)) {
       attachMap =
           genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
                                mlir::omp::ClauseMapFlags::ref_ptr |
                                    mlir::omp::ClauseMapFlags::ref_ptee,
                                isAttachAlways, baseAddr.getVarPtrPtr());
+    }
 
     op.replaceAllUsesWith(newMapInfoOp.getResult());
     op->erase();
@@ -1168,7 +1176,8 @@ public:
     // The deferral only applies to cases where we map both the descriptor and
     // base address at once, and when provided ref_ptr_ptee by a user we
     // assume they know what they're asking for and don't intervene.
-    if (descCanBeDeferred && !isRefPtrPtee)
+    if (descCanBeDeferred && !isRefPtrPtee &&
+        !getUseDeviceAddrBlockArg(op, *target))
       deferrableDesc.push_back(std::make_pair(newMapInfoOp, attachMap));
   }
 
@@ -1191,7 +1200,9 @@ public:
 
     // TODO: map the addendum segment of the descriptor, similarly to the
     // base address/data pointer member.
-    bool isHasDeviceAddrFlag = isHasDeviceAddr(op, *target);
+    bool mapOnlyDescriptor =
+        isHasDeviceAddr(op, *target) || getUseDeviceAddrBlockArg(op, *target);
+
     bool isAttachNever = bitEnumContainsAll(
         op.getMapType(), mlir::omp::ClauseMapFlags::attach_never);
     bool isAttachAlways = bitEnumContainsAll(
@@ -1234,7 +1245,7 @@ public:
     } else {
       genRefPtrPteeOrDefaultMap(op, builder, target, descriptor, mapMemberUsers,
                                 isAttachNever, isAttachAlways,
-                                isHasDeviceAddrFlag, descCanBeDeferred,
+                                mapOnlyDescriptor, descCanBeDeferred,
                                 canOptimizeDescViaPrivatization, mapperId);
     }
   }
@@ -1274,7 +1285,7 @@ public:
     if (!llvm::isa<mlir::omp::TargetDataOp>(target) || op.getMembers().empty())
       return;
 
-    if (!isUseDeviceAddr(op, target) && !isUseDevicePtr(op, target))
+    if (!isUseDevicePtr(op, target))
       return;
 
     auto targetDataOp = llvm::cast<mlir::omp::TargetDataOp>(target);
@@ -1395,7 +1406,64 @@ public:
       return true;
     return false;
   }
+  static unsigned getBoxRank(fir::BaseBoxType boxTy) {
+    mlir::Type eleTy =
+        fir::unwrapRefType(boxTy.getEleTy()); // strips heap/ptr/ref
+    if (auto seqTy = mlir::dyn_cast<fir::SequenceType>(eleTy))
+      return seqTy.getDimension();
+    return 0;
+  }
+  static mlir::Type getDescriptorStructTy(const fir::LLVMTypeConverter &tc,
+                                          fir::BaseBoxType boxTy) {
+    // Returns e.g. !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8,
+    //                            array<Rank x array<3 x i64>>[, addendum...])>
+    return tc.convertBoxTypeAsStruct(boxTy, getBoxRank(boxTy));
+  }
 
+  static void
+  genCopyDescriptorAndRepoint(fir::FirOpBuilder &builder, mlir::Location loc,
+                              mlir::Value oldRef, mlir::Value newRef,
+                              mlir::Value newAddr,
+                              const fir::LLVMTypeConverter &typeConv) {
+    auto *ctx = builder.getContext();
+    auto llvmPtrTy = mlir::LLVM::LLVMPointerType::get(ctx);
+    auto i32Ty = builder.getI32Type();
+    auto i64Ty = builder.getI64Type();
+
+    auto refTy = mlir::cast<fir::ReferenceType>(newRef.getType());
+    auto boxTy = mlir::cast<fir::BaseBoxType>(refTy.getEleTy());
+    mlir::Type descStructTy = getDescriptorStructTy(typeConv, boxTy);
+
+    // Get the raw llvm pointers to the descriptors.
+    mlir::Value dst =
+        fir::ConvertOp::create(builder, loc, llvmPtrTy, newRef).getResult();
+    mlir::Value src =
+        fir::ConvertOp::create(builder, loc, llvmPtrTy, oldRef).getResult();
+    // Calculate the size of descriptor in the following way: &((desc*)null)[1].
+    mlir::Value nullPtr = mlir::LLVM::ZeroOp::create(builder, loc, llvmPtrTy);
+    mlir::Value one = mlir::LLVM::ConstantOp::create(
+        builder, loc, i32Ty, builder.getI32IntegerAttr(1));
+    mlir::Value endPtr = mlir::LLVM::GEPOp::create(
+        builder, loc, llvmPtrTy, /*elementType=*/descStructTy, nullPtr,
+        mlir::ArrayRef<mlir::LLVM::GEPArg>{mlir::LLVM::GEPArg(one)});
+    mlir::Value size =
+        mlir::LLVM::PtrToIntOp::create(builder, loc, i64Ty, endPtr);
+
+    // Copy the original descriptor
+    mlir::LLVM::MemcpyOp::create(builder, loc, dst, src, size,
+                                 /*isVolatile=*/false);
+
+    // Update the base address
+    mlir::Value zero = mlir::LLVM::ConstantOp::create(
+        builder, loc, i32Ty, builder.getI32IntegerAttr(0));
+    mlir::Value baseFld = mlir::LLVM::GEPOp::create(
+        builder, loc, llvmPtrTy, /*elementType=*/descStructTy, dst,
+        mlir::ArrayRef<mlir::LLVM::GEPArg>{mlir::LLVM::GEPArg(zero),
+                                           mlir::LLVM::GEPArg(zero)});
+    mlir::Value newBase =
+        fir::ConvertOp::create(builder, loc, llvmPtrTy, newAddr).getResult();
+    mlir::LLVM::StoreOp::create(builder, loc, newBase, baseFld);
+  }
   // This pass executes on omp::MapInfoOp's containing descriptor based types
   // (allocatables, pointers, assumed shape etc.) and expanding them into
   // multiple omp::MapInfoOp's for each pointer member contained within the
@@ -1665,7 +1733,78 @@ public:
           builder.setInsertionPoint(op);
           mlir::Operation *targetUser = getFirstTargetUser(op);
           assert(targetUser && "expected user of map operation was not found");
+          auto arg = getUseDeviceAddrBlockArg(op, *targetUser);
           genDescriptorMaps(op, builder, targetUser);
+          if (arg != nullptr) {
+            op.setMapType(op.getMapType() | mlir::omp::ClauseMapFlags::literal);
+            // mlir::Block &body = targetUser->front();
+            builder.setInsertionPoint(
+                &targetUser->getRegion(0).front().front());
+            if (!fir::dyn_cast_ptrEleTy(arg.getType())) {
+              mlir::Value gpuDescriptor;
+              mlir::Value hostDescriptor;
+              gpuDescriptor = fir::AllocaOp::create(
+                  builder, (*targetUser).getLoc(), arg.getType());
+              hostDescriptor = fir::AllocaOp::create(
+                  builder, (*targetUser).getLoc(), arg.getType());
+              auto store = fir::StoreOp::create(builder, (*targetUser).getLoc(),
+                                                arg, hostDescriptor);
+              mlir::Type voidPtrTy =
+                  fir::ReferenceType::get(builder.getI8Type());
+              mlir::Type i32Ty = builder.getI32Type();
+
+              auto funcTy =
+                  mlir::FunctionType::get(builder.getContext(),
+                                          /*inputs=*/{voidPtrTy, i32Ty},
+                                          /*results=*/{voidPtrTy});
+              llvm::StringRef funcName = "omp_get_mapped_ptr";
+              mlir::func::FuncOp callee = builder.getNamedFunction(funcName);
+
+              if (!callee)
+                callee = builder.createFunction((*targetUser).getLoc(),
+                                                funcName, funcTy);
+              mlir::Value zero = mlir::LLVM::ConstantOp::create(
+                  builder, (*targetUser).getLoc(), i32Ty,
+                  builder.getI32IntegerAttr(0));
+
+              fir::LLVMTypeConverter converter = fir::LLVMTypeConverter(
+                  module, true, true, builder.getDataLayout());
+              auto refTy =
+                  mlir::cast<fir::ReferenceType>(hostDescriptor.getType());
+              auto boxTy = mlir::cast<fir::BaseBoxType>(refTy.getEleTy());
+              mlir::Type descStructTy = getDescriptorStructTy(converter, boxTy);
+              mlir::Value dst =
+                  fir::ConvertOp::create(
+                      builder, (*targetUser).getLoc(),
+                      mlir::LLVM::LLVMPointerType::get(builder.getContext()),
+                      hostDescriptor)
+                      .getResult();
+              mlir::Value tmp = mlir::LLVM::GEPOp::create(
+                  builder, (*targetUser).getLoc(),
+                  mlir::LLVM::LLVMPointerType::get(builder.getContext()),
+                  /*elementType=*/descStructTy, dst,
+                  mlir::ArrayRef<mlir::LLVM::GEPArg>{mlir::LLVM::GEPArg(zero),
+                                                     mlir::LLVM::GEPArg(zero)});
+              mlir::Value baseAddr = mlir::LLVM::LoadOp::create(
+                  builder, (*targetUser).getLoc(),
+                  mlir::LLVM::LLVMPointerType::get(builder.getContext()),
+                  mlir::ValueRange{dst});
+              auto newAddr =
+                  fir::CallOp::create(builder, (*targetUser).getLoc(), callee,
+                                      mlir::ValueRange{baseAddr, zero});
+
+              genCopyDescriptorAndRepoint(builder, (*targetUser).getLoc(),
+                                          hostDescriptor, gpuDescriptor,
+                                          newAddr.getResult(0), converter);
+              auto res = fir::LoadOp::create(builder, (*targetUser).getLoc(),
+                                             gpuDescriptor);
+              arg.replaceUsesWithIf(res, [&](mlir::OpOperand &use) {
+                mlir::Operation *user = use.getOwner();
+                // keep uses at/before refOp; redirect the ones after it
+                return res->isBeforeInBlock(user);
+              });
+            }
+          }
         }
       });
 
