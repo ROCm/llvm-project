@@ -185,9 +185,9 @@ TEST_F(DecoderTest, StripRegEncodingDropsOnlyTheVariantSuffix) {
     llvm::StringRef Name = MRI.getName(Reg);
     llvm::StringRef BaseName = MRI.getName(Base);
     ASSERT_TRUE(Name.starts_with(BaseName))
-        << Name << " does not name a variant of " << BaseName;
+        << Name.str() << " does not name a variant of " << BaseName.str();
     EXPECT_TRUE(llvm::is_contained(KSuffixes, Name.substr(BaseName.size())))
-        << Name << " does not name a variant of " << BaseName;
+        << Name.str() << " does not name a variant of " << BaseName.str();
   }
   // Two variants each of the 37 registers that have them: FLAT_SCR and its two
   // halves, the 16 TTMPs and their 16 tuples, M0, and SGPR_NULL. A register
