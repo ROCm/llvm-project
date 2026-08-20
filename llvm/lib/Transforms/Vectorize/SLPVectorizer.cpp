@@ -19863,13 +19863,16 @@ InstructionCost BoUpSLP::getTreeCost(InstructionCost TreeCost,
   // On AArch64, this helps in fusing a mov instruction, associated with
   // extractelement, with fmul in the backend so that extractelement is free.
   SmallVector<std::tuple<Value *, User *, int>, 4> ScalarUserAndIdx;
+  // Record every external use: a missing entry is indistinguishable from
+  // lane 0 and is priced as a free extract by the extract-fusion cost model.
+  for (ExternalUser &EU : ExternalUses)
+    ScalarUserAndIdx.emplace_back(EU.Scalar, EU.User, EU.Lane);
   // Detect external uses that drive address computations: the scalar (through
   // an optional single-use index-promotion cast) is used as a GEP index.
   bool AllUsersGEPSWithStoresLoads = true;
   SmallVector<const Value *> Pointers;
   Type *UserScalarTy = nullptr;
   for (ExternalUser &EU : ExternalUses) {
-    ScalarUserAndIdx.emplace_back(EU.Scalar, EU.User, EU.Lane);
     Value *Usr = EU.User;
     if (Usr && match(Usr, m_OneUse(m_ZExtOrSExt(m_Value()))))
       Usr = cast<Instruction>(Usr)->user_back();
@@ -19880,9 +19883,8 @@ InstructionCost BoUpSLP::getTreeCost(InstructionCost TreeCost,
     if (User && User->hasOneUse() &&
         isa<LoadInst, StoreInst>(User->user_back()))
       AccessTy = getValueType(User->user_back());
-    if (!AccessTy || isa<ScalableVectorType>(AccessTy))
-      User = nullptr;
-    if (User && (!UserScalarTy || UserScalarTy == AccessTy)) {
+    if (AccessTy && !isa<ScalableVectorType>(AccessTy) &&
+        (!UserScalarTy || UserScalarTy == AccessTy)) {
       UserScalarTy = AccessTy;
       Pointers.push_back(User);
     } else {
@@ -20273,18 +20275,10 @@ InstructionCost BoUpSLP::getTreeCost(InstructionCost TreeCost,
   // address chain. Add the delta once rather than per external use.
   if (AllUsersGEPSWithStoresLoads && !Pointers.empty()) {
     const TreeEntry &RootEntry = getRootNode();
-    const Value *CommonBase = nullptr;
-    bool HaveCommonBase = true;
-    for (const Value *P : Pointers) {
-      const Value *Op = getUnderlyingObject(P);
-      if (!CommonBase)
-        CommonBase = Op;
-      else if (CommonBase != Op) {
-        HaveCommonBase = false;
-        break;
-      }
-    }
-    if (HaveCommonBase) {
+    const Value *CommonBase = getUnderlyingObject(Pointers.front());
+    if (all_of(Pointers, [CommonBase](const Value *P) {
+          return getUnderlyingObject(P) == CommonBase;
+        })) {
       TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
       auto *VecTy = getWidenedType(UserScalarTy, RootEntry.Scalars.size());
       InstructionCost ScalarGEPCost = TTI->getPointersChainCost(

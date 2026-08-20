@@ -6373,7 +6373,8 @@ void CGOpenMPRuntime::computeMinAndMaxThreadsAndTeams(
   int32_t &MaxTeamsVal = Attrs.MaxTeams.front();
   int32_t &MaxThreadsVal = Attrs.MaxThreads.front();
 
-  getNumTeamsExprForTargetDirective(CGF, D, Attrs.MinTeams, MaxTeamsVal);
+  getNumTeamsExprForTargetDirective(CGF, D, Attrs.MinTeams.front(),
+                                    MaxTeamsVal);
   getNumThreadsExprForTargetDirective(CGF, D, MaxThreadsVal,
                                       /*UpperBoundOnly=*/true);
 
@@ -6391,12 +6392,14 @@ void CGOpenMPRuntime::computeMinAndMaxThreadsAndTeams(
       else
         continue;
 
-      Attrs.MinThreads = std::max(Attrs.MinThreads, AttrMinThreadsVal);
+      Attrs.MinThreads.front() =
+          std::max(Attrs.MinThreads.front(), AttrMinThreadsVal);
       if (AttrMaxThreadsVal > 0)
         MaxThreadsVal = MaxThreadsVal > 0
                             ? std::min(MaxThreadsVal, AttrMaxThreadsVal)
                             : AttrMaxThreadsVal;
-      Attrs.MinTeams = std::max(Attrs.MinTeams, AttrMinBlocksVal);
+      Attrs.MinTeams.front() =
+          std::max(Attrs.MinTeams.front(), AttrMinBlocksVal);
       if (AttrMaxBlocksVal > 0)
         MaxTeamsVal = MaxTeamsVal > 0 ? std::min(MaxTeamsVal, AttrMaxBlocksVal)
                                       : AttrMaxBlocksVal;
