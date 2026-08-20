@@ -26,9 +26,9 @@ struct mg_info {
     ulong prev_sum;
     ulong all_sum;
     uint num_wg;
-    uint pad0[23];          // pad so sgs starts on a new 128B cache line
-    struct mg_sync sgs;     // offset 128, alone on its line
-    uint pad1[30];          // keep the rest of the line to itself
+    // 256 covers the largest cache line across supported GPUs, so the counter's
+    // atomics never share a line with the fields above.
+    struct mg_sync sgs __attribute__((aligned(256)));
 };
 
 static inline size_t
