@@ -1022,6 +1022,8 @@ DerivedArgList getLinkerArgs(ArrayRef<OffloadFile> Input,
   if (llvm::all_of(Input, ContainsBitcode))
     DAL.AddFlagArg(nullptr, Tbl.getOption(OPT_whole_program));
 
+  llvm::Triple CurrentTT(DAL.getLastArgValue(OPT_triple_EQ));
+
   // Forward '-Xoffload-linker' options to the appropriate backend.
   for (StringRef Arg : Args.getAllArgValues(OPT_device_linker_args_EQ)) {
     auto [Triple, Value] = Arg.split('=');
@@ -1033,7 +1035,7 @@ DerivedArgList getLinkerArgs(ArrayRef<OffloadFile> Input,
     else if (Value.empty())
       DAL.AddJoinedArg(nullptr, Tbl.getOption(OPT_linker_arg_EQ),
                        Args.MakeArgString(Triple));
-    else if (Triple == DAL.getLastArgValue(OPT_triple_EQ))
+    else if (TT.isCompatibleWith(CurrentTT))
       DAL.AddJoinedArg(nullptr, Tbl.getOption(OPT_linker_arg_EQ),
                        Args.MakeArgString(Value));
   }
@@ -1049,7 +1051,7 @@ DerivedArgList getLinkerArgs(ArrayRef<OffloadFile> Input,
     else if (Value.empty())
       DAL.AddJoinedArg(nullptr, Tbl.getOption(OPT_compiler_arg_EQ),
                        Args.MakeArgString(Triple));
-    else if (Triple == DAL.getLastArgValue(OPT_triple_EQ))
+    else if (TT.isCompatibleWith(CurrentTT))
       DAL.AddJoinedArg(nullptr, Tbl.getOption(OPT_compiler_arg_EQ),
                        Args.MakeArgString(Value));
   }
