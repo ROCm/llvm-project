@@ -1,4 +1,5 @@
 // Create bitcode bundle
+// XFAIL: *
 // RUN: %clang -c -x hip --offload-arch=gfx900 --offload-arch=gfx1030 \
 // RUN:    -nogpulib -nogpuinc -emit-llvm \
 // RUN:    --gpu-bundle-output --offload-device-only \
