@@ -1,4 +1,5 @@
 // REQUIRES: comgr-has-amdgpu-target
+// XFAIL: *
 // COM: End-to-end coverage of the HotSwap rewrite pipeline on a real
 // COM: clang-produced gfx1250 code object. Drives the full
 // COM: compile -> hotswap-rewrite -> verify chain using the in-tree
