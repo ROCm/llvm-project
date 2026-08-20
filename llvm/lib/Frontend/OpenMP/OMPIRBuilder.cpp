@@ -3172,6 +3172,10 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTask(
           Shareds, [Shareds](Use &U) { return U.getUser() != Shareds; });
     }
 
+    // The insert point may refer to one of the instructions about to be
+    // deleted. It is not needed anymore so clear it instead of leaving it
+    // dangling.
+    Builder.ClearInsertionPoint();
     for (Instruction *I : llvm::reverse(ToBeDeleted))
       I->eraseFromParent();
   };
@@ -9531,8 +9535,7 @@ static Function *emitTargetTaskProxyFunction(
       FunctionType::get(Builder.getVoidTy(), {ThreadIDTy, TaskPtrTy},
                         /* isVarArg */ false);
   auto ProxyFn = Function::Create(ProxyFnTy, GlobalValue::InternalLinkage,
-                                  ".omp_target_task_proxy_func",
-                                  Builder.GetInsertBlock()->getModule());
+                                  ".omp_target_task_proxy_func", M);
   Value *ThreadId = ProxyFn->getArg(0);
   Value *TaskWithPrivates = ProxyFn->getArg(1);
   ThreadId->setName("thread.id");
@@ -10034,6 +10037,7 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::emitTargetTask(
       createRuntimeFunctionCall(TaskFn, {Ident, ThreadID, TaskData});
     }
 
+    Builder.ClearInsertionPoint();
     StaleCI->eraseFromParent();
     for (Instruction *I : llvm::reverse(ToBeDeleted))
       I->eraseFromParent();
@@ -12193,6 +12197,7 @@ OpenMPIRBuilder::createTeams(const LocationDescription &Loc,
             omp::RuntimeFunction::OMPRTL___kmpc_fork_teams),
         Args);
 
+    Builder.ClearInsertionPoint();
     for (Instruction *I : llvm::reverse(ToBeDeleted))
       I->eraseFromParent();
   };
