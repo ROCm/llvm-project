@@ -2316,10 +2316,6 @@ void GCNSchedStage::modifyRegionSchedule(unsigned RegionIdx,
   DAG.Regions[RegionIdx].first = MIOrder.front();
 }
 
-unsigned PreRARematStage::getStageTargetOccupancy() const {
-  return TargetOcc ? *TargetOcc : MFI.getMinWavesPerEU();
-}
-
 /// Returns true if reaching def \p RD will be in AGPR form after the rewrite
 /// and so needs no bridge copy: a candidate MFMA in \p RewriteSet, an
 /// AV_MOV_*_IMM_PSEUDO, or a copy from a candidate src2 reg in \p CandSrc2Regs.
@@ -2975,6 +2971,10 @@ bool RewriteMFMAFormStage::rewrite(
   DAG.Pressure[RegionIdx] = DAG.getRealRegPressure(RegionIdx);
 
   return true;
+}
+
+unsigned PreRARematStage::getStageTargetOccupancy() const {
+  return TargetOcc ? *TargetOcc : MFI.getMinWavesPerEU();
 }
 
 bool PreRARematStage::setObjective() {
