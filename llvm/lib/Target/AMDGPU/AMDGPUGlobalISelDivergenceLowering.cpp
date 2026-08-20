@@ -381,8 +381,9 @@ bool DivergenceS1WideningHelper::widenS1Phis() {
                     MBB->SkipPHIsAndLabels(std::next(S1DefI->getIterator())));
       Register Def32 = MRI->createGenericVirtualRegister(S32);
       S1ToS32[Src] = Def32;
-      B.buildSelect(Def32, Src, B.buildConstant(S32, -1),
-                    B.buildConstant(S32, 0));
+      auto AllOnes = B.buildConstant(S32, -1);
+      auto Zero = B.buildConstant(S32, 0);
+      B.buildSelect(Def32, Src, AllOnes, Zero);
       MI->getOperand(I).setReg(Def32);
     }
   }
