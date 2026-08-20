@@ -46,13 +46,8 @@ module attributes {dlti.dl_spec = #dlti.dl_spec<"dlti.alloca_memory_space" = 5 :
     %4 = llvm.alloca %0 x i1 : (i64) -> !llvm.ptr<5>
     %5 = llvm.addrspacecast %4 : !llvm.ptr<5> to !llvm.ptr
     %8 = llvm.getelementptr %5[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>
-<<<<<<< HEAD
-    %9 = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(implicit, tofrom) capture(ByRef) var_ptr_ptr(%8 : !llvm.ptr, f32) -> !llvm.ptr {name = ""}
-    %10 = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(always, implicit, to) capture(ByRef) members(%9 : [0] : !llvm.ptr) -> !llvm.ptr {name = "scalar_alloc"}
-=======
     %9 = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(implicit, tofrom) capture(ByRef) var_ptr_ptr(%8 : !llvm.ptr, f32) name("") -> !llvm.ptr
-    %10 = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(always, implicit, descriptor, to) capture(ByRef) members(%9 : [0] : !llvm.ptr) name("scalar_alloc") -> !llvm.ptr
->>>>>>> e5b8a7c1eb09dd5abbbc75c3e2b1e36a14d92dc6
+    %10 = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(always, implicit, to) capture(ByRef) members(%9 : [0] : !llvm.ptr) name("scalar_alloc") -> !llvm.ptr
     omp.target kernel_type(spmd) map_entries(%10 -> %arg0 : !llvm.ptr) {
       %13 = llvm.mlir.constant(1000 : i32) : i32
       %14 = llvm.mlir.constant(1 : i32) : i32
@@ -119,4 +114,3 @@ module attributes {dlti.dl_spec = #dlti.dl_spec<"dlti.alloca_memory_space" = 5 :
 // CHECK:   %[[WARP_RED_RES:.*]] = load i32, ptr %[[ALLOC_MEM]], align 4
 // CHECK:   store volatile i32 %[[WARP_RED_RES]], ptr addrspace(3) %[[WARP_TRANSFER_SLOT]], align 4
 // CHECK: }
-//XFAIL: *
