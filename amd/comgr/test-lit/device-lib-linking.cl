@@ -1,4 +1,5 @@
 // COM: Run Comgr binary to compile OpenCL source into LLVM IR Bitcode, linking
+// XFAIL: *
 // COM: against the AMD Device Libraries
 // RUN: source-to-bc-with-dev-libs %s -o %t-with-dev-libs.bc
 

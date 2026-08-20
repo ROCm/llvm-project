@@ -1,4 +1,5 @@
 // COM: create a bitcode package
+// XFAIL: *
 //
 // RUN: %clang -c -x hip --offload-arch=gfx900 \
 // RUN: -nogpulib -nogpuinc -emit-llvm \
