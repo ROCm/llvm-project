@@ -2065,11 +2065,44 @@ public:
     BigJumpLoopKernels.find(S)->second.BlockSize = BlkSz;
   }
 
-  /// Compute the block size to be used for a kernel.
+  /// Compute the block size implied by a single directive. Used in optimized
+  /// kernel codegen, which folds the per-directive values of a nest itself.
   int getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D);
+  /// Compute the block size of the whole kernel rooted at \p D, taking the
+  /// clauses of the nested directives into account for a kernel that is split
+  /// over several directives. See collectSPMDKernelNest().
+  int getWorkGroupSizeSPMDKernel(const OMPExecutableDirective &D);
+  /// Compute the block size implied by the clauses of \p NestDirs, where a
+  /// clause on a nested directive wins over one on an enclosing directive.
+  int getWorkGroupSizeSPMDForNest(const OptKernelNestDirectives &NestDirs);
   /// Used in optimized kernel codegen, compute the block size from the nested
   /// directives.
   int getOptKernelWorkGroupSize(const OptKernelNestDirectives &NestDirs);
+
+  /// Collect the OpenMP directives that make up the kernel rooted at \p D,
+  /// outermost first. The same kernel may be written as a single combined
+  /// directive or split over several ones, e.g.
+  /// \code
+  ///   #pragma omp target teams distribute parallel for reduction(+:s)
+  /// \endcode
+  /// and
+  /// \code
+  ///   #pragma omp target
+  ///   #pragma omp teams reduction(+:s)
+  ///   #pragma omp distribute parallel for reduction(+:s)
+  /// \endcode
+  /// describe the same kernel, so the clauses that determine its launch bounds
+  /// have to be looked up over the whole nest instead of on \p D alone. This is
+  /// a best-effort walk: a nesting that is not recognized simply ends it.
+  void collectSPMDKernelNest(const OMPExecutableDirective &D,
+                             OptKernelNestDirectives &NestDirs);
+
+  /// Is the kernel rooted at \p D a cross-team (teams) reduction kernel? True
+  /// when any directive of its nest is a 'teams' directive that carries a
+  /// reduction clause, whether the nest is written combined or split. This
+  /// mirrors what CodeGen actually emits, and therefore what the plugin sees
+  /// through the non-zero reduction data size of the kernel environment.
+  bool isTeamsReductionKernel(const OMPExecutableDirective &D);
 
   /// Return status indicating whether the call is an Xteam-supported host
   /// builtin.

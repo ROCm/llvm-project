@@ -9476,7 +9476,50 @@ CodeGenModule::getNoLoopForStmtStatus(const OMPExecutableDirective &D,
   return std::make_pair(NxSuccess, HasNestedGenericCall);
 }
 
+/// Does any directive of \p NestDirs perform a cross-team (teams) reduction?
+static bool
+hasTeamsReduction(const CodeGenModule::OptKernelNestDirectives &NestDirs) {
+  return llvm::any_of(NestDirs, [](const OMPExecutableDirective *Dir) {
+    return isOpenMPTeamsDirective(Dir->getDirectiveKind()) &&
+           Dir->hasClausesOfKind<OMPReductionClause>();
+  });
+}
+
+/// Return the innermost occurrence of \p ClauseTy in \p NestDirs, or nullptr if
+/// no directive of the nest has that clause. \p NestDirs is ordered outermost
+/// first, so a clause on a nested directive takes precedence over one on an
+/// enclosing directive. That matches the choice the host side makes in
+/// getNumThreadsExprForTargetDirective(), which prefers the thread_limit of the
+/// nested 'teams' over the one of the enclosing 'target'.
+template <typename ClauseTy>
+static const ClauseTy *getInnermostClauseInNest(
+    const CodeGenModule::OptKernelNestDirectives &NestDirs) {
+  const ClauseTy *Found = nullptr;
+  for (const OMPExecutableDirective *Dir : NestDirs)
+    if (const auto *C = Dir->getSingleClause<ClauseTy>())
+      Found = C;
+  return Found;
+}
+
 int CodeGenModule::getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D) {
+  // Look at this directive alone. Callers that need the block size of a whole
+  // kernel should use getWorkGroupSizeSPMDKernel() instead.
+  OptKernelNestDirectives NestDirs;
+  NestDirs.push_back(&D);
+  return getWorkGroupSizeSPMDForNest(NestDirs);
+}
+
+int CodeGenModule::getWorkGroupSizeSPMDKernel(const OMPExecutableDirective &D) {
+  // A kernel may be written as a single combined directive or split over
+  // several ones. In the latter case the clauses that determine its block size
+  // sit on the nested directives rather than on \p D, so collect the nest.
+  OptKernelNestDirectives NestDirs;
+  collectSPMDKernelNest(D, NestDirs);
+  return getWorkGroupSizeSPMDForNest(NestDirs);
+}
+
+int CodeGenModule::getWorkGroupSizeSPMDForNest(
+    const OptKernelNestDirectives &NestDirs) {
   // Honor block-size provided by command-line option. This logic must be kept
   // in sync with metadata generation. If this option is not specified on the
   // command line then the value used will be the 256.
@@ -9488,16 +9531,26 @@ int CodeGenModule::getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D) {
   // reduction path that now takes over uses the generic SPMD default (256),
   // which would change the launch grid computed by the plugin's reduction
   // heuristic. Until the upstream default is updated, keep the AOMP block size
-  // for teams-reduction kernels so the grid matches. A thread_limit or
-  // num_threads clause still overrides this below.
-  if (isOpenMPTeamsDirective(D.getDirectiveKind()) &&
-      D.hasClausesOfKind<OMPReductionClause>())
-    WorkGroupSz = getLangOpts().OpenMPTargetXteamReductionBlockSize;
+  // for teams-reduction kernels so the grid matches.
+  if (hasTeamsReduction(NestDirs)) {
+    int XteamRedBlockSize = getLangOpts().OpenMPTargetXteamReductionBlockSize;
+    // A block size explicitly requested on the command line overrides the
+    // clauses on the construct, as it did when these kernels were emitted by
+    // the removed Xteam reduction implementation. Exception: if the requested
+    // value is the same as the default, the clauses override, so that the
+    // clauses keep working for everyone who does not tune the block size.
+    if (XteamRedBlockSize > 0 &&
+        XteamRedBlockSize <= llvm::omp::xteam_red::MaxBlockSize &&
+        XteamRedBlockSize != llvm::omp::xteam_red::DefaultBlockSize)
+      return XteamRedBlockSize;
+    WorkGroupSz = XteamRedBlockSize;
+  }
 
   // Check block-size provided by thread_limit clause. We start with the
   // maximum thread limit and lower it if user requests a lower thread limit.
   int ThreadLimit = getTarget().getGridValue().GV_Max_WG_Size;
-  const auto *ThreadLimitClause = D.getSingleClause<OMPThreadLimitClause>();
+  const auto *ThreadLimitClause =
+      getInnermostClauseInNest<OMPThreadLimitClause>(NestDirs);
   if (ThreadLimitClause) {
     Expr *ThreadLimitExpr = ThreadLimitClause->getThreadLimit().front();
     clang::Expr::EvalResult Result;
@@ -9515,7 +9568,8 @@ int CodeGenModule::getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D) {
   // then the default. If the value is greater than the currently computed
   // thread limit then cap the number of threads to the thread limit.
   int NumThreads = getTarget().getGridValue().GV_Default_WG_Size;
-  const auto *NumThreadsClause = D.getSingleClause<OMPNumThreadsClause>();
+  const auto *NumThreadsClause =
+      getInnermostClauseInNest<OMPNumThreadsClause>(NestDirs);
   if (NumThreadsClause) {
     Expr *NumThreadsExpr = NumThreadsClause->getNumThreads();
     clang::Expr::EvalResult Result;
@@ -9646,6 +9700,48 @@ getNestedDirective(const OMPExecutableDirective &D) {
   if (!isa<OMPExecutableDirective>(AssocStmt))
     return nullptr;
   return cast<OMPExecutableDirective>(AssocStmt);
+}
+
+void CodeGenModule::collectSPMDKernelNest(const OMPExecutableDirective &D,
+                                          OptKernelNestDirectives &NestDirs) {
+  NestDirs.push_back(&D);
+
+  // A plain 'target' directive is the only kernel root that carries none of
+  // the information determining the launch bounds: it has no teams level, and
+  // hence neither the reduction clause nor the thread_limit/num_threads of the
+  // teams region. Every other kernel root is a combined construct that has the
+  // teams level folded in, and its clauses keep being looked up on the
+  // directive itself.
+  if (D.getDirectiveKind() != llvm::omp::Directive::OMPD_target)
+    return;
+
+  // Only 'target' and 'teams' open a new level that may still carry the
+  // clauses determining the launch bounds of the kernel. Any other directive
+  // kind is either a combined construct that already has them all, or an
+  // innermost worksharing construct. Stop there.
+  for (const OMPExecutableDirective *Cur = &D;;) {
+    switch (Cur->getDirectiveKind()) {
+    case llvm::omp::Directive::OMPD_target:
+    case llvm::omp::Directive::OMPD_target_teams:
+    case llvm::omp::Directive::OMPD_teams:
+      break;
+    default:
+      return;
+    }
+    if (!Cur->hasAssociatedStmt())
+      return;
+    const OMPExecutableDirective *Nested = getNestedDirective(*Cur);
+    if (!Nested)
+      return;
+    NestDirs.push_back(Nested);
+    Cur = Nested;
+  }
+}
+
+bool CodeGenModule::isTeamsReductionKernel(const OMPExecutableDirective &D) {
+  OptKernelNestDirectives NestDirs;
+  collectSPMDKernelNest(D, NestDirs);
+  return hasTeamsReduction(NestDirs);
 }
 
 static bool

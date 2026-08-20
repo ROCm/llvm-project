@@ -763,17 +763,23 @@ void CGOpenMPRuntimeGPU::GenerateMetaData(CodeGenModule &CGM,
       CGM.getTarget().getGridValue().GV_Default_WG_Size;
   bool isBigJumpLoopKernel = CGM.isBigJumpLoopKernel(D);
   bool isNoLoopKernel = CGM.isNoLoopKernel(D);
+  // A cross-team reduction whose 'target' and 'teams' are written as separate
+  // directives is rooted at a plain 'target' directive, which is neither a
+  // teams nor a parallel directive. Detect it explicitly, otherwise it would
+  // fall through to the generic default block size below and get a smaller
+  // grid than the equivalent combined 'target teams' spelling.
+  bool isTeamsReductionKernel = CGM.isTeamsReductionKernel(D);
   // If constant ThreadLimit(), set reqd_work_group_size metadata
   if (isOpenMPTeamsDirective(D.getDirectiveKind()) ||
-      isOpenMPParallelDirective(D.getDirectiveKind()) || isBigJumpLoopKernel ||
-      isNoLoopKernel) {
+      isOpenMPParallelDirective(D.getDirectiveKind()) ||
+      isTeamsReductionKernel || isBigJumpLoopKernel || isNoLoopKernel) {
     // Call the work group size calculation based on kernel type.
     if (isBigJumpLoopKernel)
       compileTimeThreadLimit = CGM.getBigJumpLoopBlockSize(D);
     else if (isNoLoopKernel)
       compileTimeThreadLimit = CGM.getNoLoopBlockSize(D);
     else
-      compileTimeThreadLimit = CGM.getWorkGroupSizeSPMDHelper(D);
+      compileTimeThreadLimit = CGM.getWorkGroupSizeSPMDKernel(D);
 
     // Add kernel metadata if ThreadLimit Clause is compile time constant > 0
     if (compileTimeThreadLimit > 0) {
