@@ -459,11 +459,12 @@ struct KernelLaunchArgsTy {
   uint32_t UserThreadLimit[3] = {0, 0, 0};
   struct {
     uint64_t Cooperative : 1; // Was this kernel spawned as cooperative.
-    uint64_t StrictBlocksAndThreads
-        : 1; // The user-requested number of blocks and threads are strict.
+    uint64_t StrictBlocks : 1; // The user-requested number of blocks is strict.
+    uint64_t StrictThreads
+        : 1; // The user-requested number of threads is strict.
     uint64_t DynCGroupMemFallback : 2; // The fallback for dynamic cgroup mem.
     uint64_t Unused : 60;
-  } Flags = {0, 0, 0, 0};
+  } Flags = {0, 0, 0, 0, 0};
   /// Set by the caller when replaying a previously recorded kernel launch, so
   /// the plugin can report the outcome back; null for a normal launch.
   KernelReplayOutcomeTy *ReplayOutcome = nullptr;
@@ -586,22 +587,9 @@ struct GenericKernelTy {
     return AchievedOccupancy;
   }
 
-  /// Indicate if the kernel works in Generic SPMD, Generic or SPMD mode.
-  bool isGenericSPMDMode() const {
-    return ExecutionMode == OMP_TGT_EXEC_MODE_GENERIC_SPMD;
-  }
-  bool isGenericMode() const {
-    return ExecutionMode == OMP_TGT_EXEC_MODE_GENERIC;
-  }
-  bool isSPMDMode() const { return ExecutionMode == OMP_TGT_EXEC_MODE_SPMD; }
-  bool isBareMode() const { return ExecutionMode == OMP_TGT_EXEC_MODE_BARE; }
-
   /// AMD-only execution modes
   bool isBigJumpLoopMode() const {
     return ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP;
-  }
-  bool isNoLoopMode() const {
-    return ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
   }
   bool isXTeamReductionsMode() const {
     return ExecutionMode == OMP_TGT_EXEC_MODE_XTEAM_RED;
@@ -673,12 +661,35 @@ private:
   /// The number of threads \p NumThreads can be adjusted by this method.
   /// \p IsNumThreadsFromUser is true is \p NumThreads is defined by user via
   /// thread_limit clause.
-  virtual uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
-                                         uint32_t UserNumBlocks,
-                                         uint64_t LoopTripCount,
-                                         uint32_t &EffectiveNumThreads,
-                                         bool IsNumThreadsFromUser) const;
+  uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
+                                 uint32_t UserNumBlocks, uint64_t LoopTripCount,
+                                 uint32_t &EffectiveNumThreads,
+                                 bool IsNumThreadsStrict,
+                                 bool IsNumThreadsFromUser) const;
 
+public:
+  /// Indicate if the kernel works in Generic SPMD, Generic, No-Loop
+  /// or SPMD mode.
+  bool isGenericSPMDMode() const {
+    return KernelEnvironment.Configuration.ExecMode ==
+           OMP_TGT_EXEC_MODE_GENERIC_SPMD;
+  }
+  bool isGenericMode() const {
+    return KernelEnvironment.Configuration.ExecMode ==
+           OMP_TGT_EXEC_MODE_GENERIC;
+  }
+  bool isSPMDMode() const {
+    return KernelEnvironment.Configuration.ExecMode == OMP_TGT_EXEC_MODE_SPMD;
+  }
+  bool isBareMode() const {
+    return KernelEnvironment.Configuration.ExecMode == OMP_TGT_EXEC_MODE_BARE;
+  }
+  bool isNoLoopMode() const {
+    return KernelEnvironment.Configuration.ExecMode ==
+           OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
+  }
+
+private:
   /// The kernel name.
   std::string Name;
 

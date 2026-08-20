@@ -329,11 +329,25 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
              "Non-bare mode should only use the first thread and block "
              "dimensions");
 
-  assert(!LaunchArgs.Flags.StrictBlocksAndThreads ||
+  assert(!LaunchArgs.Flags.StrictBlocks ||
+         EffectiveNumBlocks[0] > 0 && EffectiveNumBlocks[1] > 0 &&
+             EffectiveNumBlocks[2] > 0 &&
+             "Strict requires number of blocks greater than zero");
+  assert(!LaunchArgs.Flags.StrictThreads ||
          EffectiveNumThreads[0] > 0 && EffectiveNumThreads[1] > 0 &&
-             EffectiveNumThreads[2] > 0 && EffectiveNumBlocks[0] > 0 &&
-             EffectiveNumBlocks[1] > 0 && EffectiveNumBlocks[2] > 0 &&
-             "Strict requires number of blocks and threads greater than zero");
+             EffectiveNumThreads[2] > 0 &&
+             "Strict requires number of threads greater than zero");
+
+  // Calculate or adjust the effective number of threads and blocks if needed.
+  if (!LaunchArgs.Flags.StrictThreads)
+    EffectiveNumThreads[0] =
+        getEffectiveNumThreads(GenericDevice, EffectiveNumThreads[0]);
+
+  if (!LaunchArgs.Flags.StrictBlocks)
+    EffectiveNumBlocks[0] = getEffectiveNumBlocks(
+        GenericDevice, EffectiveNumBlocks[0], LaunchArgs.Tripcount,
+        EffectiveNumThreads[0], LaunchArgs.Flags.StrictThreads,
+        LaunchArgs.UserThreadLimit[0] > 0);
 
   auto DynBlockMemConfOrErr = prepareBlockMemory(
       GenericDevice, LaunchArgs,
@@ -366,19 +380,6 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
         KernelRecord->getLaunchParamsForKernel(*this, GenericDevice);
     EffectiveNumBlocks[0] = Teams;
     EffectiveNumThreads[0] = Threads;
-  } else if (!LaunchArgs.Flags.StrictBlocksAndThreads && !isBareMode()) {
-    EffectiveNumThreads[0] =
-        getEffectiveNumThreads(GenericDevice, EffectiveNumThreads[0]);
-
-    std::pair<bool, uint32_t> AdjustInfo = adjustNumThreadsForLowTripCount(
-        GenericDevice, EffectiveNumThreads[0], LaunchArgs.Tripcount,
-        LaunchArgs.UserThreadLimit);
-    if (AdjustInfo.first)
-      EffectiveNumThreads[0] = AdjustInfo.second;
-
-    EffectiveNumBlocks[0] = getEffectiveNumBlocks(
-        GenericDevice, EffectiveNumBlocks[0], LaunchArgs.Tripcount,
-        EffectiveNumThreads[0], LaunchArgs.UserThreadLimit[0] > 0);
   }
 
   // The teams reduction buffer is sized from the effective number of blocks, so
@@ -460,7 +461,7 @@ GenericKernelTy::getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
 uint32_t GenericKernelTy::getEffectiveNumBlocks(
     GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
     uint64_t LoopTripCount, uint32_t &EffectiveNumThreads,
-    bool IsNumThreadsFromUser) const {
+    bool IsNumThreadsStrict, bool IsNumThreadsFromUser) const {
   assert(!isBareMode() && "bare kernel should not call this function");
 
   // NOTE: This clamps the user-requested number of blocks to the device limit
@@ -491,7 +492,7 @@ uint32_t GenericKernelTy::getEffectiveNumBlocks(
       // Honor the thread_limit clause; only lower the number of threads.
       [[maybe_unused]] auto OldNumThreads = EffectiveNumThreads;
       if (LoopTripCount >= DefaultNumBlocks * EffectiveNumThreads ||
-          IsNumThreadsFromUser) {
+          IsNumThreadsFromUser || IsNumThreadsStrict) {
         // Enough parallelism for blocks and threads.
         TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
         assert(IsNumThreadsFromUser ||

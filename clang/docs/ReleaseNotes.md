@@ -93,6 +93,9 @@ features cannot lower the translation-unit ABI level;
   always passed the parts separately. `-fclang-abi-compat=23` restores the previous
   behavior. (#GH212109)
 
+- On MIPS N32/N64, an `__int128` now correctly start in an even-numbered register
+  or 16-byte aligned stack slot, matching GCC.
+
 ### AST Dumping Potentially Breaking Changes
 
 ### Clang Frontend Potentially Breaking Changes
@@ -399,6 +402,9 @@ features cannot lower the translation-unit ABI level;
 - `-Wno-unsafe-buffer-usage-in-static-sized-array` now also suppresses warnings
   for pointer arithmetic on statically-sized arrays when the offset is a
   non-negative constant within the array bounds.
+
+- `-Wc++98-compat` now diagnoses explicit conversion functions in C++20 and
+  later, matching the behavior in C++11 through C++17. (#GH161689)
 
 ### Improvements to Clang's time-trace
 
