@@ -231,3 +231,31 @@ runs:
           compiler/hipify
         git submodule status
         git submodule
+
+    - name: Enable LLVM assertions for Wavetransform
+      if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
+      shell: bash
+      run: |
+        if [[ -z "${LLVM_ROCm_PR_URL:-}" ]]; then
+          echo "No LLVM_ROCm_PR_URL; leaving LLVM assertions off."
+          exit 0
+        fi
+        pr_num="$(echo "${LLVM_ROCm_PR_URL:-}" | grep -o '/pull/[0-9]*' | tr -dc '0-9')"
+        pr_json="$(curl -fsS "https://api.github.com/repos/ROCm/llvm-project/pulls/${pr_num}")"
+
+        title="$(echo "$pr_json" | grep -o '"title": *"[^"]*"' | head -1)"
+        base="$(echo "$pr_json" | grep -o '"ref": *"[^"]*"' | tail -1)"
+        echo "PR #${pr_num}: ${title} ${base}"
+
+        # Ignore case and separators: wave-transform == wave_transform.
+        if echo "${title} ${base}" | tr -d ' _-' | grep -qi wavetransform; then
+          cat > BRANCH_CONFIG.json <<'EOF'
+        {
+          "flags": {
+            "LLVM_ENABLE_ASSERTIONS": "ON"
+          }
+        }
+        EOF
+          echo "Wave-transform PR: building with LLVM assertions."
+        fi
+

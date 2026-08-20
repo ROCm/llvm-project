@@ -109,8 +109,7 @@ jobs:
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
       - name: Submodule PR update (covers parameterised and PR creation)
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd-staging
-
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd/dev/kirthana14m/parameterised-wave-assertion
       - name: Install python deps
         run: pip install -r requirements.txt
 
@@ -216,7 +215,7 @@ jobs:
           python3 build_tools/github_actions/detect_failed_logs.py
 
       - name: LIT (llvm, clang, flang, mlir, lld)
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/lit-comgr-tests@amd-staging
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/lit-comgr-tests@amd/dev/kirthana14m/parameterised-wave-assertion
         continue-on-error: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         env:
           BUILD_DIR: ${{ env.BUILD_DIR }}

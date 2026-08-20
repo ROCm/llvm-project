@@ -43,5 +43,12 @@ runs:
       shell: bash
       if: ${{ inputs.stage_name == 'compiler-runtime' }}
       run: |
+        # If assertion in on skip mlir-pdll-lsp server test
+        if grep -qs '^LLVM_ENABLE_ASSERTIONS:BOOL=ON$' \
+            "${{ inputs.build_dir }}/compiler/amd-llvm/build/CMakeCache.txt" \
+            && [[ "$RUNNER_OS" != "Windows" ]]; then
+          echo "Skipping mlir-pdll-lsp-server tests (assertions + libLLVM.so hash seed mismatch)"
+          export LIT_FILTER_OUT='mlir-pdll-lsp-server/'
+        fi        
         ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-lld
 
