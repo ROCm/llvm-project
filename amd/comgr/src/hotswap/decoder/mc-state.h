@@ -85,6 +85,11 @@ llvm::StringRef stripEncoding(llvm::StringRef Mnemonic);
 /// variant are returned unchanged.
 llvm::MCRegister stripRegEncoding(llvm::MCRegister Reg);
 
+/// Whether `Reg` is one of the inline values (the hardware apertures, the
+/// condition-code reads and the null register), which an instruction may name
+/// in a source operand without them belonging to that operand's register class.
+bool isInlineValue(llvm::MCRegister Reg);
+
 /// Return the mnemonic of `Inst` with any encoding suffix removed (e.g.
 /// "v_mov_b32" for `v_mov_b32_e32`) without printing its operands.
 std::string strippedMnemonic(const MCState &State, const llvm::MCInst &Inst);

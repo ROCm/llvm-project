@@ -146,7 +146,7 @@ Expected<ParsedReg> RegisterState::parseReg(const DecodedInst &Di,
   }
 
   const MCRegisterInfo &MRI = *MC.RegInfo;
-  const MCRegister CanonicalReg = AMDGPU::mc2PseudoReg(Reg);
+  const MCRegister CanonicalReg = stripRegEncoding(Reg);
   const auto RegisterFailure = [&](const Twine &Detail) -> Error {
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedInstructionForm,
@@ -168,18 +168,16 @@ Expected<ParsedReg> RegisterState::parseReg(const DecodedInst &Di,
     llvm_unreachable("register class lookup failed");
   const MCRegisterClass &RegisterClass =
       MRI.getRegClass(static_cast<unsigned>(RegisterClassID));
-  if (!RegisterClass.contains(CanonicalReg) &&
-      !AMDGPU::isInlineValue(CanonicalReg))
+  if (!RegisterClass.contains(CanonicalReg) && !isInlineValue(CanonicalReg))
     return RegisterFailure(Twine("register '") + MRI.getName(Reg) +
                            "' is not in operand register class '" +
                            MRI.getRegClassName(&RegisterClass) + "'");
-  const unsigned WidthInDwords =
-      divideCeil(AMDGPU::getRegBitWidth(RegisterClass), 32u);
+  const unsigned WidthInDwords = divideCeil(RegisterClass.getSizeInBits(), 32u);
 
   MCRegister Lane = MRI.getSubReg(Reg, AMDGPU::sub0);
   if (!Lane)
     Lane = Reg;
-  Lane = AMDGPU::mc2PseudoReg(Lane);
+  Lane = stripRegEncoding(Lane);
 
   switch (Lane) {
   case AMDGPU::VCC_HI:

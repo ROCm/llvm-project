@@ -206,4 +206,27 @@ MCRegister stripRegEncoding(MCRegister Reg) {
 #undef CASE_VI_GFX9PLUS
 #undef CASE_GFXPRE11_GFX11PLUS
 
+bool isInlineValue(MCRegister Reg) {
+  switch (Reg.id()) {
+  case AMDGPU::SRC_SHARED_BASE_LO:
+  case AMDGPU::SRC_SHARED_BASE:
+  case AMDGPU::SRC_SHARED_LIMIT_LO:
+  case AMDGPU::SRC_SHARED_LIMIT:
+  case AMDGPU::SRC_PRIVATE_BASE_LO:
+  case AMDGPU::SRC_PRIVATE_BASE:
+  case AMDGPU::SRC_PRIVATE_LIMIT_LO:
+  case AMDGPU::SRC_PRIVATE_LIMIT:
+  case AMDGPU::SRC_FLAT_SCRATCH_BASE_LO:
+  case AMDGPU::SRC_FLAT_SCRATCH_BASE_HI:
+  case AMDGPU::SRC_POPS_EXITING_WAVE_ID:
+  case AMDGPU::SRC_VCCZ:
+  case AMDGPU::SRC_EXECZ:
+  case AMDGPU::SRC_SCC:
+  case AMDGPU::SGPR_NULL:
+    return true;
+  default:
+    return false;
+  }
+}
+
 } // namespace COMGR::hotswap
