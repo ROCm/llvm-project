@@ -351,7 +351,7 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; SI-NEXT:    s_cbranch_vccnz .LBB6_2
 ; SI-NEXT:  ; %bb.6: ; %TransitionBlock
 ; SI-NEXT:    ; in Loop: Header=BB6_5 Depth=2
-; SI-NEXT:    v_cmp_ne_u32_e{{32|64}} [[TRUE_MASK:s\[[0-9]+:[0-9]+\]]], 0, v0
+; SI-NEXT:    v_cmp_ne_u32_e64 [[TRUE_MASK:s\[[0-9]+:[0-9]+\]]], 0, v0
 ; SI-NEXT:    s_xor_b64 s[12:13], exec, [[TRUE_MASK]]
 ; SI-NEXT:    s_and_b64 s[12:13], s[12:13], exec
 ; SI-NEXT:    s_mov_b64 s[4:5], 0
