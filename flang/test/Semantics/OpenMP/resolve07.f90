@@ -16,10 +16,10 @@ subroutine f00
   !The i and j are predetermined private as loop induction variables nested
   !in a teams construct.
   !$omp target teams distribute default(none) shared(array)
-!DEF: /f00/OtherConstruct1/i (OmpPrivate, OmpPreDetermined, OmpImplicit) HostAssoc INTEGER(4)
+!DEF: /f00/OtherConstruct1/i (OmpPrivate, OmpPreDetermined) HostAssoc INTEGER(4)
 !REF: /f00/n
   do i = 1, n
-!DEF: /f00/OtherConstruct1/j (OmpPrivate, OmpPreDetermined, OmpImplicit) HostAssoc INTEGER(4)
+!DEF: /f00/OtherConstruct1/j (OmpPrivate, OmpPreDetermined) HostAssoc INTEGER(4)
 !REF: /f00/n
     do j = 1, n
       !i and j are shared in parallel
@@ -36,3 +36,6 @@ subroutine f00
     enddo
   enddo
 end subroutine
+
+
+
