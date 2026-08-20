@@ -102,24 +102,24 @@ def int_dx_resource_getdimensions_levels_xy
 def int_dx_resource_sample
     : DefaultAttrsIntrinsic<
           [llvm_any_ty], [llvm_any_ty, llvm_any_ty, llvm_any_ty, llvm_any_ty],
-          [IntrReadMem]>;
+          [IntrReadMem, IntrConvergent]>;
 
 def int_dx_resource_sample_clamp
     : DefaultAttrsIntrinsic<[llvm_any_ty],
                             [llvm_any_ty, llvm_any_ty, llvm_any_ty, llvm_any_ty,
                              llvm_float_ty],
-                            [IntrReadMem]>;
+                            [IntrReadMem, IntrConvergent]>;
 def int_dx_resource_samplebias
     : DefaultAttrsIntrinsic<[llvm_any_ty],
                             [llvm_any_ty, llvm_any_ty, llvm_any_ty,
                              llvm_float_ty, llvm_any_ty],
-                            [IntrReadMem]>;
+                            [IntrReadMem, IntrConvergent]>;
 
 def int_dx_resource_samplebias_clamp
     : DefaultAttrsIntrinsic<[llvm_any_ty],
                             [llvm_any_ty, llvm_any_ty, llvm_any_ty,
                              llvm_float_ty, llvm_any_ty, llvm_float_ty],
-                            [IntrReadMem]>;
+                            [IntrReadMem, IntrConvergent]>;
 
 def int_dx_resource_samplegrad
     : DefaultAttrsIntrinsic<[llvm_any_ty],
@@ -152,12 +152,12 @@ def int_dx_resource_store_texture
 def int_dx_resource_calculate_lod
     : DefaultAttrsIntrinsic<[llvm_float_ty],
                             [llvm_any_ty, llvm_any_ty, llvm_any_ty],
-                            [IntrReadMem]>;
+                            [IntrReadMem, IntrConvergent]>;
 
 def int_dx_resource_calculate_lod_unclamped
     : DefaultAttrsIntrinsic<[llvm_float_ty],
                             [llvm_any_ty, llvm_any_ty, llvm_any_ty],
-                            [IntrReadMem]>;
+                            [IntrReadMem, IntrConvergent]>;
 
 def int_dx_resource_samplecmp
     : DefaultAttrsIntrinsic<[llvm_any_ty],
@@ -323,16 +323,14 @@ def int_dx_group_memory_barrier_with_group_sync
 def int_dx_load_input
     : DefaultAttrsIntrinsic<
           [llvm_any_ty],
-          [llvm_i32_ty /*sigpointId*/, llvm_i32_ty /*sigElementId*/,
-           llvm_i32_ty /*rowIndex*/, llvm_i8_ty /*colIndex*/,
-           llvm_i32_ty /*gsVertexOrPrimIndex*/],
+          [llvm_i32_ty /*SigElementId*/, llvm_i32_ty /*RowIndex*/,
+           llvm_i8_ty /*ColIndex*/, llvm_i32_ty /*GsVertexOrPrimIndex*/],
           [IntrConvergent]>;
 
 def int_dx_store_output
     : DefaultAttrsIntrinsic<
           [],
-          [llvm_i32_ty /*sigpointId*/, llvm_i32_ty /*sigElementId*/,
-           llvm_i32_ty /*rowIndex*/, llvm_i8_ty /*colIndex*/,
-           llvm_any_ty /*value*/],
+          [llvm_i32_ty /*SigElementId*/, llvm_i32_ty /*RowIndex*/,
+           llvm_i8_ty /*ColIndex*/, llvm_any_ty /*Value*/],
           [IntrConvergent]>;
 }

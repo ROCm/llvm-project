@@ -2035,6 +2035,12 @@ Verifier::visitModuleFlag(const MDNode *Op,
             "invalid float-abi metadata value", Op);
   }
 
+  if (ID->getString() == "target-abi") {
+    const MDString *Value = dyn_cast_or_null<MDString>(Op->getOperand(2));
+    Check(Value && !Value->getString().empty(),
+          "target-abi metadata requires a non-empty string argument", Op);
+  }
+
   if (ID->getString() == "Linker Options") {
     // If the llvm.linker.options named metadata exists, we assume that the
     // bitcode reader has upgraded the module flag. Otherwise the flag might

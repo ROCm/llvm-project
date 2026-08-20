@@ -22,6 +22,8 @@ breaks rocrand 4 tests
 ---
 needs more downstream work
 [HLSL][DirectX] Correct codegen of `dx.load.input`/`dx.store.output` intrinsic calls (#212656)
+ HLSL 2 xfails
+
 ---
 breaks windows build: MSVC rejects the CRTP removal, error C2440 and C2027
 [ADT] Remove CRTP from FoldingSet and ContextualFoldingSet (NFC) (#216830)
