@@ -2751,45 +2751,13 @@ void OmpAttributeVisitor::CreateImplicitSymbols(
     }
 
     if (dsa.any()) {
-      bool isParTaskOrTeams = parallelDir || taskGenDir || teamsDir;
-      // NOTE As `dsa` will match that of the symbol in the current scope
-      //      (if any), we won't override the DSA of any existing symbol.
-      bool dsaAny = (dsa & dataSharingAttributeFlags).any();
-      Symbol::Flags flags{dsa};
-
-      // Make sure that we mark components implicitly private so that
-      // later in lowering the DataSharingProcessor can correctly assess
-      // that the target directive must also be privatized for composite
-      // directives, rather than just the leaf construct. For example,
-      // in "!$omp target teams distribute private(s)" we wish to have
-      // target privatize (s) as well, not just the distribute.
-      // However, for a combined/composite construct it is correct from an
-      // OpenMP specification to reflect these flags on all composite
-      // components, not just the leaf as the clauses in theory apply
-      // at all levels. But, for this case we try to be as restrictive
-      // as possible while maintaining correctness, as reflecting
-      // individual private across everything will result in unrequired
-      // extra allocations.
-      // NOTE: This is separate to the usual isParTaskOrTeams as we need to
-      // cover all the parallel set when coupled with target, not just
-      // the top set.
-      if (dsaAny &&
-          (isParTaskOrTeams ||
-              llvm::omp::allParallelSet.test(dirContext.directive)) &&
-          targetDir && dsa.test(Symbol::Flag::OmpPrivate)) {
-        flags.set(Symbol::Flag::OmpImplicit);
-        // Will be executed below if we fall into isParTaskOrTeams, but
-        // we should cover the cases when we do not.
-        if (!isParTaskOrTeams)
-          makeSymbol(flags);
-      }
-
-      if (isParTaskOrTeams) {
+      if (parallelDir || taskGenDir || teamsDir) {
         Symbol *prevDeclSymbol{lastDeclSymbol};
-
-        if (dsaAny)
-          makeSymbol(flags);
-
+        // NOTE As `dsa` will match that of the symbol in the current scope
+        //      (if any), we won't override the DSA of any existing symbol.
+        if ((dsa & dataSharingAttributeFlags).any()) {
+          makeSymbol(dsa);
+        }
         // Fix host association of explicit symbols, as they can be created
         // before implicit ones in enclosing scope.
         if (prevDeclSymbol && prevDeclSymbol != lastDeclSymbol &&

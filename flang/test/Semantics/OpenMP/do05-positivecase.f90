@@ -43,7 +43,7 @@ program OMP_DO
   !$omp end parallel
 
   !$omp target teams distribute parallel do
-  !DEF:/OMP_DO/OtherConstruct4/i (OmpPrivate, OmpPreDetermined, OmpImplicit) HostAssoc INTEGER(4)
+  !DEF:/OMP_DO/OtherConstruct4/i (OmpPrivate ,OmpPreDetermined) HostAssoc INTEGER(4)
   do i=1,100
     !REF:/OMP_DO/OtherConstruct4/i
     if(i<10) cycle
@@ -59,7 +59,7 @@ program OMP_DO
   !$omp end target teams distribute parallel do simd
 
   !$omp target teams distribute
-  !DEF: /OMP_DO/OtherConstruct6/i (OmpPrivate, OmpPreDetermined, OmpImplicit) HostAssoc INTEGER(4)
+  !DEF: /OMP_DO/OtherConstruct6/i (OmpPrivate, OmpPreDetermined) HostAssoc INTEGER(4)
   do i=1,100
     !REF: /OMP_DO/OtherConstruct6/i
     if(i < 5) cycle
