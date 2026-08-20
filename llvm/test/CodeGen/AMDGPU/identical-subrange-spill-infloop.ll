@@ -94,12 +94,10 @@ define void @main(i1 %arg) #0 {
 ; CHECK-NEXT:    v_readlane_b32 s59, v9, 7
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v0
 ; CHECK-NEXT:    v_cmp_eq_u32_e64 s[4:5], 1, v0
-; CHECK-NEXT:    s_xor_b64 s[72:73], s[4:5], exec
-; CHECK-NEXT:    s_mov_b64 s[6:7], 0
 ; CHECK-NEXT:    v_readlane_b32 s60, v9, 8
-; CHECK-NEXT:    image_sample_lz v4, v[2:3], s[52:59], s[68:71] dmask:0x1
 ; CHECK-NEXT:    v_readlane_b32 s61, v9, 9
 ; CHECK-NEXT:    v_readlane_b32 s62, v9, 10
+; CHECK-NEXT:    image_sample_lz v4, v[2:3], s[52:59], s[68:71] dmask:0x1
 ; CHECK-NEXT:    v_readlane_b32 s63, v9, 11
 ; CHECK-NEXT:    v_readlane_b32 s64, v9, 12
 ; CHECK-NEXT:    v_readlane_b32 s65, v9, 13
@@ -107,7 +105,7 @@ define void @main(i1 %arg) #0 {
 ; CHECK-NEXT:    v_readlane_b32 s67, v9, 15
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    v_mul_f32_e32 v4, v4, v1
-; CHECK-NEXT:    s_mov_b64 exec, s[72:73]
+; CHECK-NEXT:    s_xor_b64 exec, s[4:5], exec
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3
 ; CHECK-NEXT:  .LBB0_1: ; %bb48
@@ -144,10 +142,8 @@ define void @main(i1 %arg) #0 {
 ; CHECK-NEXT:    s_cbranch_vccnz .LBB0_2
 ; CHECK-NEXT:  .LBB0_3:
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
-; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    s_xor_b64 s[16:17], exec, s[4:5]
-; CHECK-NEXT:    s_and_b64 s[16:17], s[16:17], exec
-; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[16:17]
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; CHECK-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_9
@@ -158,6 +154,7 @@ define void @main(i1 %arg) #0 {
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_6
 ; CHECK-NEXT:  .LBB0_5: ; %bb43
+; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_mov_b32 s16, 0
 ; CHECK-NEXT:    s_mov_b32 s17, s16
 ; CHECK-NEXT:    v_readlane_b32 s44, v9, 16
@@ -213,6 +210,7 @@ define void @main(i1 %arg) #0 {
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_9
 ; CHECK-NEXT:  .LBB0_7: ; %bb33.preheader
+; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_mov_b32 s16, 0
 ; CHECK-NEXT:    s_mov_b32 s4, s16
 ; CHECK-NEXT:    s_mov_b32 s5, s16
@@ -250,6 +248,7 @@ define void @main(i1 %arg) #0 {
 ; CHECK-NEXT:    v_readlane_b32 s54, v8, 10
 ; CHECK-NEXT:    v_readlane_b32 s53, v8, 9
 ; CHECK-NEXT:    v_readlane_b32 s52, v8, 8
+; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    v_readlane_b32 s51, v8, 7
 ; CHECK-NEXT:    v_readlane_b32 s50, v8, 6
 ; CHECK-NEXT:    v_readlane_b32 s49, v8, 5

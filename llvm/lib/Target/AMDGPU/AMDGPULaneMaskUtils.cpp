@@ -20,8 +20,7 @@
 
 using namespace llvm;
 
-static MachineBasicBlock::iterator
-getSaluInsertionAtEnd(MachineBasicBlock &MBB);
+static MachineBasicBlock::iterator getSaluInsertionAtEnd(MachineBasicBlock &MBB);
 
 /// Check whether the register could be a lane-mask register.
 ///
@@ -241,7 +240,7 @@ bool AMDGPULaneMaskAnalysis::isSubsetOfExec(Register Reg,
 }
 
 /// Initialize the updater.
-void AMDGPULaneMaskUpdater::init() {
+Register AMDGPULaneMaskUpdater::init() {
   Blocks.clear();
 
   const SIInstrInfo *TII =
@@ -257,9 +256,7 @@ void AMDGPULaneMaskUpdater::init() {
 
   Accumulator = LMU.createLaneMaskReg();
   AllAccumulators.insert(Accumulator);
-  BuildMI(Entry, Entry.getFirstTerminator(), {},
-          TII->get(LMU.getLaneMaskConsts().MovOpc), Accumulator)
-      .addImm(0);
+  return Accumulator;
 }
 
 /// Optional cleanup, may remove stray instructions.
@@ -303,10 +300,11 @@ void AMDGPULaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
 
   BlockIt->Value = Value;
   Register Previous;
-  if (&Block != &LMU.function()->front() && !(BlockIt->Flags & ResetInMiddle))
+  if (&Block != &LMU.function()->front() && !(BlockIt->Flags & ResetInMiddle)) {
     Previous = Accumulator;
-  else
+  } else {
     Previous = ZeroReg;
+  }
   LMU.buildMergeLaneMasks(Block, getSaluInsertionAtEnd(Block), {}, Accumulator,
                           Previous, Value, LMA, Previous == ZeroReg);
 }
@@ -340,8 +338,7 @@ static void instrDefsUsesSCC(const MachineInstr &MI, bool &Def, bool &Use) {
 /// Return a point at the end of the given \p MBB to insert SALU instructions
 /// for lane mask calculation. Take terminators, INLINEASM_BR, and SCC into
 /// account.
-static MachineBasicBlock::iterator
-getSaluInsertionAtEnd(MachineBasicBlock &MBB) {
+static MachineBasicBlock::iterator getSaluInsertionAtEnd(MachineBasicBlock &MBB) {
   auto InsertionPt = MBB.getFirstTerminator();
 
   // INLINEASM_BR is not marked as a terminator, but lane mask contributions
@@ -381,7 +378,28 @@ AMDGPULaneMaskUpdater::findBlockInfo(MachineBasicBlock &Block) {
       Blocks, [&](const auto &Entry) { return Entry.Block == &Block; });
 }
 
+/// Emit Accumulator init Acc = Mov 0
+void AMDGPULaneMaskUpdater::insertAccumulatorInits() {
+  const SIInstrInfo *TII =
+      LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
+  const unsigned MovOpc = LMU.getLaneMaskConsts().MovOpc;
+  MachineBasicBlock &Entry = LMU.function()->front();
+
+  for (Register Acc : AllAccumulators) {
+    MachineBasicBlock *DomBB = nullptr;
+    auto It = AccumulatorInitBlock.find(Acc);
+    if (It != AccumulatorInitBlock.end())
+      DomBB = It->second;
+    if (!DomBB)
+      DomBB = &Entry;
+
+    BuildMI(*DomBB, DomBB->getFirstNonPHI(), {}, TII->get(MovOpc), Acc)
+        .addImm(0);
+  }
+}
+
 void AMDGPULaneMaskUpdater::insertAccumulatorResets() {
+  insertAccumulatorInits();
   const SIInstrInfo *TII =
       LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
   for (auto &[B, AccFlagPairs] : AccumulatorResetBlocks) {

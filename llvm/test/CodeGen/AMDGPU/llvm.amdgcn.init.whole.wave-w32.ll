@@ -432,19 +432,19 @@ define amdgpu_cs_chain void @control_flow(<3 x i32> inreg %sgpr, ptr inreg %call
 ; DAGISEL12-NEXT:    s_wait_kmcnt 0x0
 ; DAGISEL12-NEXT:    s_or_saveexec_b32 s8, -1
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_and_b32 s9, exec_lo, s8
+; DAGISEL12-NEXT:    s_and_b32 s8, exec_lo, s8
 ; DAGISEL12-NEXT:    s_mov_b32 s7, s4
 ; DAGISEL12-NEXT:    s_mov_b32 s6, s3
-; DAGISEL12-NEXT:    s_mov_b32 s8, -1
-; DAGISEL12-NEXT:    s_mov_b32 s4, 0
+; DAGISEL12-NEXT:    s_mov_b32 s4, -1
 ; DAGISEL12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; DAGISEL12-NEXT:    s_xor_b32 s3, exec_lo, s9
-; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s9
+; DAGISEL12-NEXT:    s_xor_b32 s3, exec_lo, s8
+; DAGISEL12-NEXT:    s_mov_b32 exec_lo, s8
 ; DAGISEL12-NEXT:    ; divergent control-flow edge
 ; DAGISEL12-NEXT:    s_cbranch_execz .LBB3_4
 ; DAGISEL12-NEXT:  .LBB3_1: ; %shader.preheader
 ; DAGISEL12-NEXT:    v_add_nc_u32_e32 v1, -1, v12
-; DAGISEL12-NEXT:    s_and_b32 s8, s8, exec_lo
+; DAGISEL12-NEXT:    s_and_b32 s4, s4, exec_lo
+; DAGISEL12-NEXT:    s_mov_b32 s4, 0
 ; DAGISEL12-NEXT:  .LBB3_2: ; %shader
 ; DAGISEL12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; DAGISEL12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
@@ -547,18 +547,18 @@ define amdgpu_cs_chain void @control_flow(<3 x i32> inreg %sgpr, ptr inreg %call
 ; DAGISEL10:       ; %bb.0: ; %entry
 ; DAGISEL10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; DAGISEL10-NEXT:    s_or_saveexec_b32 s8, -1
-; DAGISEL10-NEXT:    s_and_b32 s9, exec_lo, s8
+; DAGISEL10-NEXT:    s_and_b32 s8, exec_lo, s8
 ; DAGISEL10-NEXT:    s_mov_b32 s7, s4
 ; DAGISEL10-NEXT:    s_mov_b32 s6, s3
-; DAGISEL10-NEXT:    s_mov_b32 s8, -1
-; DAGISEL10-NEXT:    s_mov_b32 s4, 0
-; DAGISEL10-NEXT:    s_xor_b32 s3, exec_lo, s9
-; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s9
+; DAGISEL10-NEXT:    s_mov_b32 s4, -1
+; DAGISEL10-NEXT:    s_xor_b32 s3, exec_lo, s8
+; DAGISEL10-NEXT:    s_mov_b32 exec_lo, s8
 ; DAGISEL10-NEXT:    ; divergent control-flow edge
 ; DAGISEL10-NEXT:    s_cbranch_execz .LBB3_4
 ; DAGISEL10-NEXT:  .LBB3_1: ; %shader.preheader
 ; DAGISEL10-NEXT:    v_add_nc_u32_e32 v1, -1, v12
-; DAGISEL10-NEXT:    s_and_b32 s8, s8, exec_lo
+; DAGISEL10-NEXT:    s_and_b32 s4, s4, exec_lo
+; DAGISEL10-NEXT:    s_mov_b32 s4, 0
 ; DAGISEL10-NEXT:  .LBB3_2: ; %shader
 ; DAGISEL10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; DAGISEL10-NEXT:    v_add_nc_u32_e32 v1, 1, v1

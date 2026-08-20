@@ -49,8 +49,8 @@ define amdgpu_vs void @multi_else_break(<4 x float> %vec, i32 %ub, i32 %cont) {
 ; GCN-NEXT:    s_mov_b64 s[0:1], -1
 ; GCN-NEXT:    s_mov_b64 s[2:3], 0
 ; GCN-NEXT:    s_mov_b64 s[4:5], -1
-; GCN-NEXT:    s_mov_b64 s[10:11], 0
 ; GCN-NEXT:    s_mov_b64 s[6:7], 0
+; GCN-NEXT:    s_mov_b64 s[10:11], 0
 ; GCN-NEXT:    s_branch .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %loop.exit.guard
 ; GCN-NEXT:    ; in Loop: Header=BB0_2 Depth=1

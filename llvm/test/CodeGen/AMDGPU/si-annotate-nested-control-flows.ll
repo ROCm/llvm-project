@@ -26,9 +26,9 @@ define void @nested_inf_loop(i1 %0, i1 %1) {
 ; ISA-NEXT:    s_mov_b64 s[6:7], 0
 ; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
 ; ISA-NEXT:    s_mov_b64 s[4:5], -1
-; ISA-NEXT:    s_mov_b64 s[8:9], 0
-; ISA-NEXT:    s_mov_b64 s[10:11], 0
 ; ISA-NEXT:    s_mov_b64 s[6:7], 0
+; ISA-NEXT:    s_mov_b64 s[10:11], 0
+; ISA-NEXT:    s_mov_b64 s[8:9], 0
 ; ISA-NEXT:  .LBB0_1: ; %BB1
 ; ISA-NEXT:    ; =>This Loop Header: Depth=1
 ; ISA-NEXT:    ; Child Loop BB0_3 Depth 2

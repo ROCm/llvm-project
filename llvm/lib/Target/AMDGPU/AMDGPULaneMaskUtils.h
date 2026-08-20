@@ -205,14 +205,21 @@ private:
       AccumulatorResetBlocks;
   SmallDenseSet<Register, 4> AllAccumulators;
 
+  /// Per-accumulator block where zero-init is placed (set by the caller).
+  DenseMap<Register, MachineBasicBlock *> AccumulatorInitBlock;
+
 public:
   SmallDenseSet<Register, 4> &getAllAccumulators() { return AllAccumulators; }
+
+  void setAccumulatorInitBlock(Register Acc, MachineBasicBlock *Block) {
+    AccumulatorInitBlock[Acc] = Block;
+  }
 
   AMDGPULaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
 
   void setLaneMaskAnalysis(AMDGPULaneMaskAnalysis *Analysis) { LMA = Analysis; }
 
-  void init();
+  Register init();
   void cleanup();
 
   void addReset(MachineBasicBlock &Block, ResetFlags Flags);
@@ -223,6 +230,10 @@ public:
 
 private:
   SmallVectorImpl<BlockInfo>::iterator findBlockInfo(MachineBasicBlock &Block);
+
+  /// Emit the deferred zero-initialization for every accumulator at the start
+  /// of its DomBB (or the entry block when no DomBB was recorded).
+  void insertAccumulatorInits();
 };
 
 } // namespace llvm

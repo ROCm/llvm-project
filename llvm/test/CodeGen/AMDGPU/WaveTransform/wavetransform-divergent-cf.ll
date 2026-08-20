@@ -271,8 +271,8 @@ define amdgpu_cs void @cascaded_if_shared_target(ptr addrspace(1) %out, i32 %val
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v2
 ; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; CHECK-NEXT:    s_mov_b64 s[0:1], 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], -1
+; CHECK-NEXT:    s_mov_b64 s[0:1], 0
 ; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB4_2

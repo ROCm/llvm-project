@@ -26,8 +26,8 @@ define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
 ; ISA-NEXT:    s_mov_b64 s[0:1], -1
 ; ISA-NEXT:    s_mov_b64 s[2:3], 0
-; ISA-NEXT:    s_mov_b64 s[6:7], 0
 ; ISA-NEXT:    s_mov_b64 s[8:9], 0
+; ISA-NEXT:    s_mov_b64 s[6:7], 0
 ; ISA-NEXT:    s_mov_b64 s[4:5], 0
 ; ISA-NEXT:    s_branch .LBB0_4
 ; ISA-NEXT:  .LBB0_1: ; in Loop: Header=BB0_4 Depth=1

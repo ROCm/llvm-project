@@ -26,10 +26,10 @@ define amdgpu_kernel void @widget(ptr addrspace(1) %arg, i1 %arg1) #0 {
   ; CHECK-NEXT:   renamable $sgpr2_sgpr3 = S_CSELECT_B64 -1, 0, implicit killed $scc
   ; CHECK-NEXT:   $vgpr2_vgpr3 = V_PK_MOV_B32 8, 0, 8, 0, 0, 0, 0, 0, 0, implicit $exec
   ; CHECK-NEXT:   renamable $sgpr4_sgpr5 = S_MOV_B64 -1
-  ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_MOV_B64 0
   ; CHECK-NEXT:   renamable $sgpr10_sgpr11 = S_MOV_B64 0
-  ; CHECK-NEXT:   renamable $sgpr12_sgpr13 = S_MOV_B64 0
+  ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_MOV_B64 0
   ; CHECK-NEXT:   renamable $sgpr6_sgpr7 = S_MOV_B64 0
+  ; CHECK-NEXT:   renamable $sgpr12_sgpr13 = S_MOV_B64 0
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.1.bb2:
   ; CHECK-NEXT:   successors: %bb.13(0x30000000), %bb.2(0x50000000)
@@ -44,10 +44,10 @@ define amdgpu_kernel void @widget(ptr addrspace(1) %arg, i1 %arg1) #0 {
   ; CHECK-NEXT:   V_CMP_GT_I32_e32 1, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_OR_B64 killed renamable $sgpr8_sgpr9, renamable $vcc, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; CHECK-NEXT:   renamable $sgpr10_sgpr11 = S_OR_B64 killed renamable $sgpr10_sgpr11, killed renamable $sgpr16_sgpr17, implicit-def $scc
+  ; CHECK-NEXT:   renamable $sgpr12_sgpr13 = S_OR_B64 killed renamable $sgpr12_sgpr13, killed renamable $sgpr16_sgpr17, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_XOR_B64 $exec, renamable $sgpr8_sgpr9, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_AND_B64 killed renamable $sgpr16_sgpr17, $exec, implicit-def $scc
-  ; CHECK-NEXT:   renamable $sgpr12_sgpr13 = S_OR_B64 killed renamable $sgpr12_sgpr13, killed renamable $sgpr16_sgpr17, implicit-def $scc
+  ; CHECK-NEXT:   renamable $sgpr10_sgpr11 = S_OR_B64 killed renamable $sgpr10_sgpr11, killed renamable $sgpr16_sgpr17, implicit-def $scc
   ; CHECK-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr8_sgpr9
   ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_MOV_B64 0
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
@@ -64,18 +64,18 @@ define amdgpu_kernel void @widget(ptr addrspace(1) %arg, i1 %arg1) #0 {
   ; CHECK-NEXT:   successors: %bb.3(0x40000000), %bb.11(0x40000000)
   ; CHECK-NEXT:   liveins: $vgpr4, $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9, $sgpr10_sgpr11, $sgpr12_sgpr13, $sgpr14_sgpr15, $vgpr0_vgpr1:0x000000000000000C, $vgpr2_vgpr3, $sgpr20_sgpr21_sgpr22_sgpr23
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   $exec = S_OR_B64 $exec, killed renamable $sgpr12_sgpr13, implicit-def $scc
-  ; CHECK-NEXT:   renamable $sgpr12_sgpr13 = S_XOR_B64 $exec, renamable $sgpr10_sgpr11, implicit-def $scc
-  ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_AND_B64 killed renamable $sgpr12_sgpr13, $exec, implicit-def $scc
-  ; CHECK-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr10_sgpr11
-  ; CHECK-NEXT:   renamable $sgpr10_sgpr11 = S_MOV_B64 0
+  ; CHECK-NEXT:   $exec = S_OR_B64 $exec, killed renamable $sgpr10_sgpr11, implicit-def $scc
+  ; CHECK-NEXT:   renamable $sgpr10_sgpr11 = S_XOR_B64 $exec, renamable $sgpr12_sgpr13, implicit-def $scc
+  ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_AND_B64 killed renamable $sgpr10_sgpr11, $exec, implicit-def $scc
+  ; CHECK-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr12_sgpr13
   ; CHECK-NEXT:   renamable $sgpr12_sgpr13 = S_MOV_B64 0
+  ; CHECK-NEXT:   renamable $sgpr10_sgpr11 = S_MOV_B64 0
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.11, implicit $exec
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.3.bb3:
   ; CHECK-NEXT:   successors: %bb.4(0x80000000)
-  ; CHECK-NEXT:   liveins: $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9, $sgpr12_sgpr13, $sgpr14_sgpr15, $sgpr16_sgpr17, $vgpr0_vgpr1:0x000000000000000C, $vgpr2_vgpr3, $sgpr20_sgpr21_sgpr22_sgpr23, $sgpr10_sgpr11
+  ; CHECK-NEXT:   liveins: $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9, $sgpr10_sgpr11, $sgpr14_sgpr15, $sgpr16_sgpr17, $vgpr0_vgpr1:0x000000000000000C, $vgpr2_vgpr3, $sgpr20_sgpr21_sgpr22_sgpr23, $sgpr12_sgpr13
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   renamable $vgpr4 = BUFFER_LOAD_DWORD_OFFSET $sgpr20_sgpr21_sgpr22_sgpr23, 0, 0, 0, 0, implicit $exec :: (load (s32) from `ptr addrspace(5) null`, addrspace 5)
   ; CHECK-NEXT:   renamable $vgpr0 = GLOBAL_LOAD_DWORD renamable $vgpr2_vgpr3, 0, 0, implicit $exec :: (load (s32) from `ptr addrspace(1) null`, addrspace 1)

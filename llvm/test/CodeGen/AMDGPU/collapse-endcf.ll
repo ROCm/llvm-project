@@ -998,8 +998,8 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; GCN-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; GCN-NEXT:    v_mov_b32_e32 v1, 0
-; GCN-NEXT:    s_mov_b64 s[8:9], 0
 ; GCN-NEXT:    s_mov_b64 s[6:7], 0
+; GCN-NEXT:    s_mov_b64 s[8:9], 0
 ; GCN-NEXT:    s_mov_b64 s[10:11], 0
 ; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:  .LBB5_1: ; %bb1
@@ -1015,8 +1015,8 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-NEXT:  .LBB5_2: ; %bb2
 ; GCN-NEXT:    ; in Loop: Header=BB5_1 Depth=1
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GCN-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
-; GCN-NEXT:    s_xor_b64 s[16:17], exec, s[8:9]
+; GCN-NEXT:    s_or_b64 s[10:11], s[10:11], vcc
+; GCN-NEXT:    s_xor_b64 s[16:17], exec, s[10:11]
 ; GCN-NEXT:    v_mov_b32_e32 v2, v1
 ; GCN-NEXT:    v_mov_b32_e32 v3, v1
 ; GCN-NEXT:    v_mov_b32_e32 v4, v1
@@ -1025,9 +1025,9 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-NEXT:    v_mov_b32_e32 v7, v3
 ; GCN-NEXT:    v_mov_b32_e32 v6, v2
 ; GCN-NEXT:    v_mov_b32_e32 v5, v1
-; GCN-NEXT:    s_or_b64 s[10:11], s[10:11], s[16:17]
-; GCN-NEXT:    s_mov_b64 exec, s[8:9]
-; GCN-NEXT:    s_mov_b64 s[8:9], 0
+; GCN-NEXT:    s_or_b64 s[8:9], s[8:9], s[16:17]
+; GCN-NEXT:    s_mov_b64 exec, s[10:11]
+; GCN-NEXT:    s_mov_b64 s[10:11], 0
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB5_5
 ; GCN-NEXT:  .LBB5_3: ; %bb4
@@ -1043,7 +1043,7 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-NEXT:    s_xor_b64 s[16:17], exec, s[6:7]
 ; GCN-NEXT:    s_and_b64 s[16:17], s[16:17], exec
 ; GCN-NEXT:    v_mov_b32_e32 v5, v1
-; GCN-NEXT:    s_or_b64 s[10:11], s[10:11], s[16:17]
+; GCN-NEXT:    s_or_b64 s[8:9], s[8:9], s[16:17]
 ; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    s_mov_b64 s[6:7], 0
 ; GCN-NEXT:    ; divergent control-flow edge
@@ -1056,11 +1056,11 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-NEXT:    v_mov_b32_e32 v5, v0
 ; GCN-NEXT:  .LBB5_5: ; %bb10
 ; GCN-NEXT:    ; in Loop: Header=BB5_1 Depth=1
-; GCN-NEXT:    s_or_b64 exec, exec, s[10:11]
+; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GCN-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; GCN-NEXT:    s_or_b64 s[12:13], s[12:13], s[10:11]
-; GCN-NEXT:    s_mov_b64 s[10:11], 0
+; GCN-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GCN-NEXT:    s_or_b64 s[12:13], s[12:13], s[8:9]
+; GCN-NEXT:    s_mov_b64 s[8:9], 0
 ; GCN-NEXT:  .LBB5_6: ; in Loop: Header=BB5_1 Depth=1
 ; GCN-NEXT:    s_or_b64 exec, exec, s[14:15]
 ; GCN-NEXT:    s_xor_b64 s[14:15], exec, s[12:13]
@@ -1149,10 +1149,10 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    buffer_load_dword v7, off, s[0:3], s32 ; 4-byte Folded Reload
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
 ; GCN-O0-NEXT:    s_waitcnt vmcnt(0)
-; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 2
-; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 3
-; GCN-O0-NEXT:    v_readlane_b32 s6, v7, 10
-; GCN-O0-NEXT:    v_readlane_b32 s7, v7, 11
+; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 10
+; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 11
+; GCN-O0-NEXT:    v_readlane_b32 s6, v7, 12
+; GCN-O0-NEXT:    v_readlane_b32 s7, v7, 13
 ; GCN-O0-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:4 ; 4-byte Folded Reload
 ; GCN-O0-NEXT:    s_mov_b32 s8, 0
 ; GCN-O0-NEXT:    s_waitcnt vmcnt(0)
@@ -1176,12 +1176,12 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
 ; GCN-O0-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GCN-O0-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GCN-O0-NEXT:    v_writelane_b32 v7, s6, 10
-; GCN-O0-NEXT:    v_writelane_b32 v7, s7, 11
+; GCN-O0-NEXT:    v_writelane_b32 v7, s6, 12
+; GCN-O0-NEXT:    v_writelane_b32 v7, s7, 13
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-O0-NEXT:    s_mov_b64 s[4:5], 0
-; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 2
-; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 3
+; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 10
+; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 11
 ; GCN-O0-NEXT:    s_or_saveexec_b64 s[14:15], -1
 ; GCN-O0-NEXT:    buffer_store_dword v7, off, s[0:3], s32 ; 4-byte Folded Spill
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
@@ -1194,13 +1194,13 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    buffer_load_dword v7, off, s[0:3], s32 ; 4-byte Folded Reload
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
 ; GCN-O0-NEXT:    s_waitcnt vmcnt(0)
-; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 4
-; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 5
-; GCN-O0-NEXT:    v_readlane_b32 s6, v7, 8
-; GCN-O0-NEXT:    v_readlane_b32 s7, v7, 9
+; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 6
+; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 7
+; GCN-O0-NEXT:    v_readlane_b32 s6, v7, 4
+; GCN-O0-NEXT:    v_readlane_b32 s7, v7, 5
 ; GCN-O0-NEXT:    s_mov_b64 s[8:9], 0
-; GCN-O0-NEXT:    v_writelane_b32 v7, s8, 2
-; GCN-O0-NEXT:    v_writelane_b32 v7, s9, 3
+; GCN-O0-NEXT:    v_writelane_b32 v7, s8, 10
+; GCN-O0-NEXT:    v_writelane_b32 v7, s9, 11
 ; GCN-O0-NEXT:    ; implicit-def: $sgpr8
 ; GCN-O0-NEXT:    v_mov_b32_e32 v0, s8
 ; GCN-O0-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 offen
@@ -1223,12 +1223,12 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
 ; GCN-O0-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GCN-O0-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GCN-O0-NEXT:    v_writelane_b32 v7, s6, 8
-; GCN-O0-NEXT:    v_writelane_b32 v7, s7, 9
+; GCN-O0-NEXT:    v_writelane_b32 v7, s6, 4
+; GCN-O0-NEXT:    v_writelane_b32 v7, s7, 5
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-O0-NEXT:    s_mov_b64 s[4:5], 0
-; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 4
-; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 5
+; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 6
+; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 7
 ; GCN-O0-NEXT:    s_or_saveexec_b64 s[14:15], -1
 ; GCN-O0-NEXT:    buffer_store_dword v7, off, s[0:3], s32 ; 4-byte Folded Spill
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
@@ -1242,8 +1242,8 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
 ; GCN-O0-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-O0-NEXT:    s_waitcnt vmcnt(0)
-; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 4
-; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 5
+; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 6
+; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 7
 ; GCN-O0-NEXT:    s_or_saveexec_b64 s[14:15], -1
 ; GCN-O0-NEXT:    buffer_store_dword v7, off, s[0:3], s32 ; 4-byte Folded Spill
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
@@ -1265,8 +1265,8 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    buffer_load_dword v7, off, s[0:3], s32 ; 4-byte Folded Reload
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
 ; GCN-O0-NEXT:    s_waitcnt vmcnt(0)
-; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 8
-; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 9
+; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 4
+; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 5
 ; GCN-O0-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-O0-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:28 ; 4-byte Folded Reload
 ; GCN-O0-NEXT:    buffer_load_dword v1, off, s[0:3], s32 offset:32 ; 4-byte Folded Reload
@@ -1281,8 +1281,8 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    s_waitcnt vmcnt(3)
 ; GCN-O0-NEXT:    buffer_store_dword v3, off, s[0:3], s32 offset:20 ; 4-byte Folded Spill
 ; GCN-O0-NEXT:    s_mov_b64 s[4:5], 0
-; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 8
-; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 9
+; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 4
+; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 5
 ; GCN-O0-NEXT:    s_or_saveexec_b64 s[14:15], -1
 ; GCN-O0-NEXT:    buffer_store_dword v7, off, s[0:3], s32 ; 4-byte Folded Spill
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
@@ -1293,11 +1293,11 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    buffer_load_dword v7, off, s[0:3], s32 ; 4-byte Folded Reload
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
 ; GCN-O0-NEXT:    s_waitcnt vmcnt(0)
-; GCN-O0-NEXT:    v_readlane_b32 s8, v7, 10
-; GCN-O0-NEXT:    v_readlane_b32 s9, v7, 11
+; GCN-O0-NEXT:    v_readlane_b32 s8, v7, 12
+; GCN-O0-NEXT:    v_readlane_b32 s9, v7, 13
 ; GCN-O0-NEXT:    s_or_b64 exec, exec, s[8:9]
-; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 6
-; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 7
+; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 2
+; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 3
 ; GCN-O0-NEXT:    v_readlane_b32 s6, v7, 18
 ; GCN-O0-NEXT:    v_readlane_b32 s7, v7, 19
 ; GCN-O0-NEXT:    buffer_load_dword v4, off, s[0:3], s32 offset:24 ; 4-byte Folded Reload
@@ -1324,11 +1324,11 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    v_writelane_b32 v7, s7, 21
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-O0-NEXT:    s_mov_b64 s[4:5], 0
-; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 6
-; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 7
+; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 2
+; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 3
 ; GCN-O0-NEXT:    s_mov_b64 s[4:5], 0
-; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 10
-; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 11
+; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 12
+; GCN-O0-NEXT:    v_writelane_b32 v7, s5, 13
 ; GCN-O0-NEXT:    s_or_saveexec_b64 s[14:15], -1
 ; GCN-O0-NEXT:    buffer_store_dword v7, off, s[0:3], s32 ; 4-byte Folded Spill
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
@@ -1346,8 +1346,8 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    v_readlane_b32 s6, v7, 0
 ; GCN-O0-NEXT:    v_readlane_b32 s7, v7, 1
 ; GCN-O0-NEXT:    s_mov_b64 s[8:9], 0
-; GCN-O0-NEXT:    v_writelane_b32 v7, s8, 6
-; GCN-O0-NEXT:    v_writelane_b32 v7, s9, 7
+; GCN-O0-NEXT:    v_writelane_b32 v7, s8, 2
+; GCN-O0-NEXT:    v_writelane_b32 v7, s9, 3
 ; GCN-O0-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GCN-O0-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GCN-O0-NEXT:    v_writelane_b32 v7, s4, 16
@@ -1366,13 +1366,13 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 16
 ; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 17
-; GCN-O0-NEXT:    v_readlane_b32 s6, v7, 12
-; GCN-O0-NEXT:    v_readlane_b32 s7, v7, 13
+; GCN-O0-NEXT:    v_readlane_b32 s6, v7, 8
+; GCN-O0-NEXT:    v_readlane_b32 s7, v7, 9
 ; GCN-O0-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
 ; GCN-O0-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GCN-O0-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
-; GCN-O0-NEXT:    v_writelane_b32 v7, s6, 12
-; GCN-O0-NEXT:    v_writelane_b32 v7, s7, 13
+; GCN-O0-NEXT:    v_writelane_b32 v7, s6, 8
+; GCN-O0-NEXT:    v_writelane_b32 v7, s7, 9
 ; GCN-O0-NEXT:    s_or_saveexec_b64 s[14:15], -1
 ; GCN-O0-NEXT:    buffer_store_dword v7, off, s[0:3], s32 ; 4-byte Folded Spill
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
@@ -1386,8 +1386,8 @@ define void @scc_liveness(i32 %arg) local_unnamed_addr #0 {
 ; GCN-O0-NEXT:    buffer_load_dword v7, off, s[0:3], s32 ; 4-byte Folded Reload
 ; GCN-O0-NEXT:    s_mov_b64 exec, s[14:15]
 ; GCN-O0-NEXT:    s_waitcnt vmcnt(0)
-; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 12
-; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 13
+; GCN-O0-NEXT:    v_readlane_b32 s4, v7, 8
+; GCN-O0-NEXT:    v_readlane_b32 s5, v7, 9
 ; GCN-O0-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-O0-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:44 ; 4-byte Folded Reload
 ; GCN-O0-NEXT:    buffer_load_dword v1, off, s[0:3], s32 offset:48 ; 4-byte Folded Reload
