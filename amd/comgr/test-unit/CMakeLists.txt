@@ -113,11 +113,11 @@ add_executable(LoggerTests
   ../src/comgr-logger.cpp
   ../src/comgr-env.cpp)
 
-llvm_map_components_to_libnames(COMGR_TEST_UNIT_LOGGER_LIBS Support)
+llvm_map_components_to_libnames(COMGR_TEST_UNIT_SUPPORT_LIBS Support)
 
 target_link_libraries(LoggerTests PRIVATE
   ${COMGR_GTEST_LIBS}
-  ${COMGR_TEST_UNIT_LOGGER_LIBS}
+  ${COMGR_TEST_UNIT_SUPPORT_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(LoggerTests PRIVATE
@@ -142,6 +142,7 @@ add_executable(MetadataCacheTest
 target_link_libraries(MetadataCacheTest PRIVATE
   ${COMGR_GTEST_LIBS}
   amd_comgr
+  ${COMGR_TEST_UNIT_SUPPORT_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_compile_definitions(MetadataCacheTest PRIVATE
