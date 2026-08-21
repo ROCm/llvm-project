@@ -30,8 +30,21 @@ jobs:
           git config --global core.eol lf
 
       # Pinned ninja 1.12.1 — TheRock pins this version because 1.13.0 has a bug.
+      # Fetched from the GitHub release instead of chocolatey: the community
+      # feed 504s intermittently and takes the whole job down with it. Install
+      # dir must be the same in every job — the build tree's CMakeCache bakes in
+      # CMAKE_MAKE_PROGRAM as an absolute path and the test jobs untar it.
+      # Extracted with System32 tar (bsdtar, reads zip) — Git bash's tar is GNU.
       - name: Install ninja
-        run: choco install -y ninja --version 1.12.1
+        run: |
+          ninja_dir="$(cygpath -u "$GITHUB_WORKSPACE")/.ninja"
+          mkdir -p "$ninja_dir" && cd "$ninja_dir"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+            -O https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
+          echo "f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a  ninja-win.zip" | sha256sum -c -
+          "$(cygpath -u "$SYSTEMROOT")/System32/tar.exe" -xf ninja-win.zip && rm ninja-win.zip
+          cygpath -w "$ninja_dir" >> "$GITHUB_PATH"
+          ./ninja --version
 
       # MSVC environment so cmake -GNinja can find cl.exe + link.exe.
       - name: Configure MSVC
@@ -178,7 +191,15 @@ jobs:
           git config --global core.eol lf
 
       - name: Install ninja
-        run: choco install -y ninja --version 1.12.1
+        run: |
+          ninja_dir="$(cygpath -u "$GITHUB_WORKSPACE")/.ninja"
+          mkdir -p "$ninja_dir" && cd "$ninja_dir"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+            -O https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
+          echo "f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a  ninja-win.zip" | sha256sum -c -
+          "$(cygpath -u "$SYSTEMROOT")/System32/tar.exe" -xf ninja-win.zip && rm ninja-win.zip
+          cygpath -w "$ninja_dir" >> "$GITHUB_PATH"
+          ./ninja --version
 
       - name: Configure MSVC
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
@@ -308,7 +329,15 @@ jobs:
           git config --global core.eol lf
 
       - name: Install ninja
-        run: choco install -y ninja --version 1.12.1
+        run: |
+          ninja_dir="$(cygpath -u "$GITHUB_WORKSPACE")/.ninja"
+          mkdir -p "$ninja_dir" && cd "$ninja_dir"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+            -O https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
+          echo "f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a  ninja-win.zip" | sha256sum -c -
+          "$(cygpath -u "$SYSTEMROOT")/System32/tar.exe" -xf ninja-win.zip && rm ninja-win.zip
+          cygpath -w "$ninja_dir" >> "$GITHUB_PATH"
+          ./ninja --version
 
       - name: Configure MSVC
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
@@ -384,7 +413,15 @@ jobs:
           git config --global core.eol lf
 
       - name: Install ninja
-        run: choco install -y ninja --version 1.12.1
+        run: |
+          ninja_dir="$(cygpath -u "$GITHUB_WORKSPACE")/.ninja"
+          mkdir -p "$ninja_dir" && cd "$ninja_dir"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+            -O https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
+          echo "f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a  ninja-win.zip" | sha256sum -c -
+          "$(cygpath -u "$SYSTEMROOT")/System32/tar.exe" -xf ninja-win.zip && rm ninja-win.zip
+          cygpath -w "$ninja_dir" >> "$GITHUB_PATH"
+          ./ninja --version
 
       - name: Configure MSVC
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
