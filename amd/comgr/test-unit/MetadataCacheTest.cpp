@@ -1,4 +1,4 @@
-//===- MetadataCacheTest.cpp - Unit tests for the DataObject metadata cache ===//
+//===- MetadataCacheTest.cpp - Metadata cache tests -----------------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.
