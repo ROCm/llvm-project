@@ -10,14 +10,16 @@
 #define FLOAT_SPECIALIZATION
 #include "ep.h"
 
+#include "trigredF.h"
+
 extern CONSTATTR float2 MATH_PRIVATE(epexpep)(float2 z);
 
 CONSTATTR float2
 MATH_MANGLE(ctanh)(float2 z)
 {
-    float cy;
-    float sy = MATH_MANGLE(sincos)(z.y, &cy);
-    float cysy = cy*sy;
+    float4 sc = MATH_PRIVATE(epsincos)(z.y);
+    float2 cy = sc.lo;
+    float2 sy = sc.hi;
     float x = BUILTIN_ABS_F32(z.x);
 
     float rr, ri;
@@ -26,17 +28,15 @@ MATH_MANGLE(ctanh)(float2 z)
         float2 er = rcp(e);
         er = ldx(er, -2);
         float2 cx = fadd(e, er);
-        float2 sx = fsub(e, er);
+        float2 sx = x < 0x1.0p-12f ? con(x, 0.0f) : fsub(e, er);
 
-        float cxhi = cx.hi;
-        float sxhi = x < 0x1.0p-12f ? x : sx.hi;
-
-        float d = MATH_MAD(cy, cy, sxhi*sxhi);
-        rr = BUILTIN_COPYSIGN_F32(MATH_DIV(cxhi*sxhi, d), z.x);
-        ri = MATH_DIV(cysy, d);
+        float2 d = add(sqr(cy), sqr(sx));
+        float2 rd = rcp(d);
+        rr = BUILTIN_COPYSIGN_F32(mul(mul(cx, sx), rd).hi, z.x);
+        ri = mul(mul(cy, sy), rd).hi;
     } else {
         rr = BUILTIN_COPYSIGN_F32(1.0f, z.x);
-        ri = 4.0f * cysy * MATH_MANGLE(exp)(-2.0f * x);
+        ri = 4.0f * (cy.hi * sy.hi) * MATH_MANGLE(exp)(-2.0f * x);
     }
 
     if (!FINITE_ONLY_OPT()) {
