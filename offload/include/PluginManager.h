@@ -49,7 +49,7 @@ struct PluginManager {
   /// Exclusive accessor type for the device container.
   using ExclusiveDevicesAccessorTy = Accessor<DeviceContainerTy>;
 
-  PluginManager() : TraceRecordManager(nullptr) {}
+  PluginManager() = default;
 
   void init();
 
@@ -151,12 +151,11 @@ struct PluginManager {
     return count;
   }
 
-  auto getTraceRecordManager() const {
-    // Must be called after runtime is initialized. Since the runtime init
-    // allocates TraceRecordManager, we assert below.
-    assert(TraceRecordManager && "Trace record manager not initialized");
-    return TraceRecordManager;
-  }
+  /// Return the OMPT trace-record buffer manager, which is owned by the
+  /// profiler (an OmptProfilerTy when OMPT is compiled in). Only valid after
+  /// init() and only meaningful in OMPT builds. Defined out-of-line so this
+  /// header need not know the concrete profiler type.
+  OmptTracingBufferMgr *getTraceRecordManager() const;
 
   /// Return the process-wide profiler shared across all plugins. It is
   /// constructed in init() and is never null afterwards, so callers do not
@@ -192,11 +191,10 @@ private:
   /// Devices associated with plugins, accesses to the container are exclusive.
   ProtectedObj<DeviceContainerTy> Devices;
 
-  OmptTracingBufferMgr *TraceRecordManager;
-
   /// The single profiler instance shared across all plugins. Constructed in
   /// init(): an OmptProfilerTy when OMPT is compiled in, otherwise a no-op
-  /// GenericProfilerTy.
+  /// GenericProfilerTy. When OMPT is enabled the profiler also owns the OMPT
+  /// trace-record buffer manager (see getTraceRecordManager()).
   std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy> Profiler;
 
   /// References to upgraded legacy offloading entries.

@@ -19,10 +19,12 @@
 
 #include "OmptDeviceTracing.h"
 #include "OpenMP/OMPT/Callback.h"
+#include "OpenMP/OMPT/OmptTracingBuffer.h"
 #include "Shared/Debug.h"
 #include "omp-tools.h"
 
 #include <functional>
+#include <memory>
 #include <tuple>
 
 #pragma push_macro("DEBUG_PREFIX")
@@ -80,7 +82,15 @@ public:
 
     FOREACH_OMPT_DEVICE_TRACING_FN_COMMON(bindOmptTracingFunction);
 #undef bindOmptTracingFunction
+
+    // The buffer manager is part of the OMPT tracing pipeline and its lifetime
+    // is tied to this profiler: the ProfilerData entries below point into
+    // records it owns, so it must outlive them and be torn down with us.
+    TraceRecordManager = std::make_unique<OmptTracingBufferMgr>();
   }
+
+  /// Return the OMPT trace-record buffer manager owned by this profiler.
+  OmptTracingBufferMgr *getTraceRecordManager() { return TraceRecordManager.get(); }
 
   bool isProfilingEnabled() override;
 
@@ -132,6 +142,10 @@ public:
   }
 
 private:
+  /// The OMPT trace-record buffer manager. Owned here because the ProfilerData
+  /// entries reference records it manages; see the constructor.
+  std::unique_ptr<OmptTracingBufferMgr> TraceRecordManager;
+
   /// Holds a unique ID for each allocation of OmptEventInfoTy
   std::atomic<uint64_t> OmptProfDataId{0};
 

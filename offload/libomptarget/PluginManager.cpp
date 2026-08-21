@@ -54,18 +54,11 @@ void PluginManager::init() {
   } while (false);
 #include "Shared/Targets.def"
 
-// At this point, we don't know whether OMPT tracing will be turned ON.
-// So we create the top-level tracing manager as long as OMPT is built in --
-// the construction itself is inexpensive.
-#ifdef OMPT_SUPPORT
-  assert(TraceRecordManager == nullptr &&
-         "Expected trace record manager to be null");
-  TraceRecordManager = new OmptTracingBufferMgr();
-#endif
-
   // Construct the single profiler shared across all plugins. It is an
   // OmptProfilerTy when OMPT is compiled in and a no-op GenericProfilerTy
-  // otherwise, so the profiler is always available and never null.
+  // otherwise, so the profiler is always available and never null. The
+  // OmptProfilerTy also constructs and owns the OMPT trace-record buffer
+  // manager (retrievable via getTraceRecordManager()).
   assert(!Profiler && "Profiler already initialized");
 #ifdef OMPT_SUPPORT
   Profiler = std::make_unique<llvm::omp::target::ompt::OmptProfilerTy>();
@@ -84,13 +77,10 @@ void PluginManager::deinit() {
   }
   ODBG(ODT_Deinit) << "Unloading RTLs...";
 
-#ifdef OMPT_SUPPORT
-  assert(TraceRecordManager != nullptr &&
-         "Trace record manager should have been non-null");
-  delete TraceRecordManager;
-  TraceRecordManager = nullptr;
-#endif
-
+  // Note: the OMPT trace-record buffer manager is owned by the profiler and is
+  // torn down when the profiler is destroyed (Profiler.reset() below), i.e.
+  // after every plugin has been deinitialized. This keeps the record store
+  // alive while plugin/device teardown can still complete trace records.
   for (auto &Plugin : Plugins) {
     if (!Plugin->is_initialized())
       continue;
@@ -105,6 +95,18 @@ void PluginManager::deinit() {
   Profiler.reset();
 
   ODBG(ODT_Deinit) << "RTLs unloaded!";
+}
+
+OmptTracingBufferMgr *PluginManager::getTraceRecordManager() const {
+#ifdef OMPT_SUPPORT
+  // In OMPT builds the profiler is always an OmptProfilerTy, which owns the
+  // trace-record buffer manager. Only OMPT-specific code calls this.
+  assert(Profiler && "Profiler not initialized");
+  return static_cast<llvm::omp::target::ompt::OmptProfilerTy *>(Profiler.get())
+      ->getTraceRecordManager();
+#else
+  return nullptr;
+#endif
 }
 
 bool PluginManager::initializePlugin(GenericPluginTy &Plugin) {
