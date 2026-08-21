@@ -15,6 +15,10 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
 
+#include <cassert>
+#include <cstdint>
+#include <optional>
+
 using namespace llvm;
 
 namespace COMGR::hotswap {
@@ -128,6 +132,51 @@ static Value *emitScalarFloat(IRBuilder<> &B, CanonicalOp CanonOp, Value *Src) {
   }
 }
 
+// Refuse Di as a relative access that does not resolve statically.
+static Error refuseMovrel(RaiseContext &Ctx, const DecodedInst &Di,
+                          const Twine &Detail) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Twine("movrel: ") + Detail);
+}
+
+// The M0 value a relative register index is displaced by. The register file is
+// one alloca per register rather than addressable memory, so only a constant M0
+// resolves to a named register.
+static Expected<uint64_t> constantM0(RaiseContext &Ctx, const DecodedInst &Di) {
+  std::optional<uint64_t> M0 = Ctx.registers().getM0Const();
+  if (!M0)
+    return refuseMovrel(Ctx, Di, "M0 does not hold a constant here");
+  return *M0;
+}
+
+// The SGPR the register operand at OpIdx names once displaced by Displacement.
+// Refuses an operand that is not an SGPR, an odd index for a 64-bit access,
+// and a displaced index outside the scalar register file.
+static Expected<unsigned> displacedSgpr(RaiseContext &Ctx,
+                                        const DecodedInst &Di, unsigned OpIdx,
+                                        uint64_t Displacement,
+                                        unsigned WidthInDwords) {
+  if (!Di.isReg(OpIdx))
+    return refuseMovrel(Ctx, Di, "relative operand is not a register");
+  Expected<ParsedReg> Base = Ctx.registers().parseReg(Di, OpIdx);
+  if (!Base)
+    return Base.takeError();
+  if (Base->RegKind != ParsedReg::SGPR)
+    return refuseMovrel(Ctx, Di, "relative operand is not an SGPR");
+  assert(Base->BaseIdx && "SGPR must have a base register index");
+
+  uint64_t Idx = *Base->BaseIdx + Displacement;
+  if (WidthInDwords == 2 && Idx % 2 != 0)
+    return refuseMovrel(
+        Ctx, Di, "64-bit access resolves to odd SGPR index " + Twine(Idx));
+  if (Idx + WidthInDwords > Ctx.registers().numSgprs())
+    return refuseMovrel(
+        Ctx, Di, "resolved SGPR index " + Twine(Idx) + " is out of range");
+  return static_cast<unsigned>(Idx);
+}
+
 Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   if (Di.CanonOp == CanonicalOp::S_MOV_B32 ||
       Di.CanonOp == CanonicalOp::S_MOV_B64) {
@@ -200,6 +249,69 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     if (!Src)
       return Src.takeError();
     Ctx.registers().writeReg32(*Dst, emitScalarFloat(Ctx.B, Di.CanonOp, *Src));
+    return Error::success();
+  }
+
+  if (Di.CanonOp == CanonicalOp::S_MOVRELS_B32 ||
+      Di.CanonOp == CanonicalOp::S_MOVRELS_B64) {
+    bool Is64 = Di.CanonOp == CanonicalOp::S_MOVRELS_B64;
+    Expected<uint64_t> M0 = constantM0(Ctx, Di);
+    if (!M0)
+      return M0.takeError();
+    Expected<unsigned> Src =
+        displacedSgpr(Ctx, Di, Op.srcIdx(0), *M0, Is64 ? 2 : 1);
+    if (!Src)
+      return Src.takeError();
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    if (Is64)
+      Ctx.registers().writeReg64(*Dst, Ctx.registers().readSgpr64(*Src));
+    else
+      Ctx.registers().writeReg32(*Dst, Ctx.registers().readSgpr32(*Src));
+    return Error::success();
+  }
+
+  if (Di.CanonOp == CanonicalOp::S_MOVRELD_B32 ||
+      Di.CanonOp == CanonicalOp::S_MOVRELD_B64) {
+    bool Is64 = Di.CanonOp == CanonicalOp::S_MOVRELD_B64;
+    Expected<uint64_t> M0 = constantM0(Ctx, Di);
+    if (!M0)
+      return M0.takeError();
+    // These opcodes only read their destination register for its index, so it
+    // is an input operand and heads the source map.
+    Expected<unsigned> DstIdx =
+        displacedSgpr(Ctx, Di, Op.srcIdx(0), *M0, Is64 ? 2 : 1);
+    if (!DstIdx)
+      return DstIdx.takeError();
+    Expected<Value *> Src = Is64 ? Op.src64(1) : Op.src(1);
+    if (!Src)
+      return Src.takeError();
+    ParsedReg Dst{ParsedReg::SGPR, *DstIdx, static_cast<uint8_t>(Is64 ? 2 : 1)};
+    if (Is64)
+      Ctx.registers().writeReg64(Dst, *Src);
+    else
+      Ctx.registers().writeReg32(Dst, *Src);
+    return Error::success();
+  }
+
+  if (Di.CanonOp == CanonicalOp::S_MOVRELSD_2_B32) {
+    Expected<uint64_t> M0 = constantM0(Ctx, Di);
+    if (!M0)
+      return M0.takeError();
+    // The source index is displaced by M0[9:0] and the destination index by
+    // M0[25:16].
+    constexpr uint64_t FieldMask = (1u << 10) - 1;
+    Expected<unsigned> Src =
+        displacedSgpr(Ctx, Di, Op.srcIdx(0), *M0 & FieldMask, 1);
+    if (!Src)
+      return Src.takeError();
+    Expected<unsigned> DstIdx =
+        displacedSgpr(Ctx, Di, /*OpIdx=*/0, (*M0 >> 16) & FieldMask, 1);
+    if (!DstIdx)
+      return DstIdx.takeError();
+    Ctx.registers().writeReg32(ParsedReg{ParsedReg::SGPR, *DstIdx, 1},
+                               Ctx.registers().readSgpr32(*Src));
     return Error::success();
   }
 
