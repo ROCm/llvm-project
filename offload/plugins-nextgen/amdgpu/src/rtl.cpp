@@ -1174,9 +1174,20 @@ private:
           NumTeamsEnvVar == 0 && UserNumBlocks == 0 &&
           (MaxOccupancy * llvm::omp::amdgpu_arch::SIMDPerCU >=
            llvm::omp::xteam_red::DesiredWavesPerCU)) {
-        uint64_t newNumTeams =
-            OptimizeNumTeamsBaseOccupancy(GenericDevice, EffectiveNumThreads);
-        return std::min(newNumTeams, MaxNumGroups);
+        NumGroups = std::min(
+            OptimizeNumTeamsBaseOccupancy(GenericDevice, EffectiveNumThreads),
+            MaxNumGroups);
+        // Saturating the device is only worth it if there are enough
+        // iterations to go around: a low trip count would otherwise launch
+        // teams that have nothing to execute and only add to the reduction.
+        // The non-occupancy path below applies the same bound.
+        if (LoopTripCount > 0)
+          NumGroups =
+              std::min(NumGroups, getNumGroupsFromThreadsAndTripCount(
+                                      LoopTripCount, EffectiveNumThreads));
+        ODBG(ODT_Tool) << "xteam-red:NumCUs=" << DeviceNumCUs
+                       << " xteam-red:NumGroups=" << NumGroups;
+        return NumGroups;
       }
 
       // Prefer num_teams clause over environment variable. There is a corner
