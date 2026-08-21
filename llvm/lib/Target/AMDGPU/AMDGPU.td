@@ -3144,7 +3144,8 @@ def AMDGPUFrontendVisibleFeatures {
   FeatureWMMA256bInsts, FeatureWMMAN16Insts, FeatureXF32Insts,
   FeatureWavefrontSize32, FeatureWavefrontSize64, FeatureSupportsWGP,
   FeatureSupportsWave32, FeatureFastFMAF32, FeatureFastDenormalF32,
-  FeatureSupportsXNACK, FeatureSupportsSRAMECC, FeatureXNACKOnOffModes
+  FeatureSupportsXNACK, FeatureSupportsSRAMECC, FeatureXNACKOnOffModes,
+  FeatureSGPRInitBug
   ];
 }
 
