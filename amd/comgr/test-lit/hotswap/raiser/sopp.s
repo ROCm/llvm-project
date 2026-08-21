@@ -3,15 +3,9 @@
 ; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %hotswap_transpile_cli %t.hsaco \
-; RUN:   --emit-ir=waits_kernel,setprio_kernel \
+; RUN:   --emit-ir=waits_kernel,setprio_kernel,sleep_kernel,wakeup_kernel \
 ; RUN:   --target-isa=gfx942 \
-; RUN:   | %FileCheck %s --check-prefixes=WAIT-GFX9,PRIO-GFX9
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=sleep_kernel \
-; RUN:   --target-isa=gfx942 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=SLEEP
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=wakeup_kernel \
-; RUN:   --target-isa=gfx942 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=WAKEUP
+; RUN:   | %FileCheck %s --check-prefixes=WAIT-GFX9,PRIO-GFX9,SLEEP,WAKEUP
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
 	.amdhsa_code_object_version 6
@@ -22,8 +16,11 @@
 
 ; WAIT-GFX9-LABEL: define amdgpu_kernel void @waits_kernel(
 waits_kernel:
-; WAIT-GFX9: call void @llvm.amdgcn.s.waitcnt(i32 0)
+; A partial wait fences as widely as a full one.
+; WAIT-GFX9: fence syncscope("agent") seq_cst
 	s_waitcnt vmcnt(1) expcnt(2) lgkmcnt(3)
+	s_waitcnt lgkmcnt(0)
+; WAIT-GFX9-NEXT: fence syncscope("agent") seq_cst
 	s_nop 0
 	s_incperflevel 0
 	s_decperflevel 0
@@ -47,18 +44,22 @@ setprio_kernel:
 	.p2align	8
 	.type	sleep_kernel,@function
 
+; SLEEP-LABEL: define amdgpu_kernel void @sleep_kernel(
 sleep_kernel:
-; SLEEP: UnsupportedOpcode: s_sleep [SOPP]
 	s_sleep 0
+; SLEEP: ret void
+; SLEEP-NEXT: }
 	s_endpgm
 
 	.globl	wakeup_kernel
 	.p2align	8
 	.type	wakeup_kernel,@function
 
+; WAKEUP-LABEL: define amdgpu_kernel void @wakeup_kernel(
 wakeup_kernel:
-; WAKEUP: UnsupportedOpcode: s_wakeup [SOPP]
 	s_wakeup
+; WAKEUP: ret void
+; WAKEUP-NEXT: }
 	s_endpgm
 
 	.section	.rodata,"a",@progbits

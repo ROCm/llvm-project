@@ -93,6 +93,10 @@ enum class RaiseFailureReason : uint16_t {
   // priority is unavailable, so the raiser cannot prove that source wave
   // ordering is preserved.
   UnsupportedWavePriority,
+  // A sleep that ends on an external event rather than after a bounded number
+  // of clocks. Only another wave's wakeup, a trap or a kill releases it, none
+  // of which the raise reproduces.
+  UnsupportedSleepForever,
 };
 
 // Human-readable name for a `RaiseFailureReason`. Stable enough for
