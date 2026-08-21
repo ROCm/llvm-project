@@ -815,6 +815,15 @@ static llvm::Function *emitOutlinedFunctionPrologue(
     if (!FO.UIntPtrCastRequired && Args[Cnt] != TargetArgs[Cnt]) {
       LocalAddr = CGM.getOpenMPRuntime().getParameterAddress(CGF, Args[Cnt],
                                                              TargetArgs[Cnt]);
+      // This function's signature carries the target's ABI type for the
+      // parameter, but it is also the function that holds the user's code, so
+      // the parameter has to appear in the debug info with the type the user
+      // wrote. Describe it at the address that holds it with its native type.
+      // The ABI parameter is nodebug (see translateParameter), so the name is
+      // not described twice.
+      if (CGDebugInfo *DI = CGF.getDebugInfo())
+        DI->EmitDeclareOfArgVariable(Args[Cnt], LocalAddr.emitRawPointer(CGF),
+                                     Cnt + 1, CGF.Builder);
     } else {
       LocalAddr = CGF.GetAddrOfLocalVar(Args[Cnt]);
     }
