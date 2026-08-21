@@ -86,6 +86,14 @@ struct OperandResolver {
     assert(Di.isReg(I) && "destination operand must be a register");
     return Ctx.registers().parseReg(Di, I);
   }
+  // Value the I-th destination holds before the instruction runs, for an
+  // opcode that leaves it alone on one side of a condition.
+  llvm::Expected<llvm::Value *> dstValue(unsigned I = 0) {
+    return Ctx.registers().readOp32(Di, I);
+  }
+  llvm::Expected<llvm::Value *> dstValue64(unsigned I = 0) {
+    return Ctx.registers().readOp64(Di, I);
+  }
   // Whether the I-th source is a register rather than an immediate.
   bool isSrcReg(unsigned I) { return Di.isReg(srcIdx(I)); }
   // Register the I-th source names, or no value when it is an immediate.

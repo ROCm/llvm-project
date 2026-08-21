@@ -93,7 +93,9 @@ struct AllocaRegFile {
   void storeExec(llvm::IRBuilder<> &B, llvm::Value *V);
 
   // Read VCC as a wave-level bit-mask of width `ResultTy` through the wave
-  // projection. Requires `init()` to have supplied a projection.
+  // projection. A `ResultTy` wider than the source wave mask reads the mask
+  // into its low bits and zero above. Requires `init()` to have supplied a
+  // projection.
   llvm::Value *readVCCAsWaveMask(llvm::IRBuilder<> &B, llvm::Type *ResultTy);
 
   // Generic read/write by ParsedReg.

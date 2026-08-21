@@ -301,7 +301,15 @@ void AllocaRegFile::storeExec(IRBuilder<> &B, Value *V) {
 Value *AllocaRegFile::readVCCAsWaveMask(IRBuilder<> &B, Type *ResultTy) {
   assert(Projection && "readVCCAsWaveMask requires a WaveProjection -- "
                        "call init() before using this reg-file");
-  return Projection->ballotI1ToWidth(B, loadVCC(B), ResultTy, "vcc_ballot");
+  // The ballot only reconciles widths the source wave has lanes for. Asking
+  // for more names dwords above the mask, which hold no lanes and so read as
+  // zero.
+  Type *MaskTy = Projection->sourceWaveMaskTy();
+  if (ResultTy->getPrimitiveSizeInBits() <= MaskTy->getPrimitiveSizeInBits())
+    return Projection->ballotI1ToWidth(B, loadVCC(B), ResultTy, "vcc_ballot");
+  Value *Mask =
+      Projection->ballotI1ToWidth(B, loadVCC(B), MaskTy, "vcc_ballot");
+  return B.CreateZExt(Mask, ResultTy, "vcc_ext");
 }
 
 Value *AllocaRegFile::readReg32(IRBuilder<> &B, ParsedReg Pr) {
@@ -519,6 +527,18 @@ void AllocaRegFile::writeReg64(IRBuilder<> &B, ParsedReg Pr, Value *V) {
     return;
   }
   if (Pr.RegKind == ParsedReg::EXEC) {
+    assert(Projection && "writeReg64(EXEC) requires a WaveProjection");
+    // Only the low half of a 64-bit write has lanes on a wave32 source, so it
+    // lands the way a write to EXEC_LO does: narrowed to the EXEC storage
+    // width the projection chose, and subject to its policy for a narrow
+    // write. A wave64 source writes the mask whole.
+    if (Projection->sourceIsa().isWave32()) {
+      ParsedReg ExecLo = Pr;
+      ExecLo.WidthInDwords = 1;
+      ExecLo.BaseIdx = 0;
+      writeReg32(B, ExecLo, V);
+      return;
+    }
     storeExec(B, V);
     return;
   }
