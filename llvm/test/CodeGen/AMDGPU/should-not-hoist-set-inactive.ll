@@ -17,19 +17,19 @@ define amdgpu_cs void @should_not_hoist_set_inactive(<4 x i32> inreg %i14, i32 i
 ; GCN-NEXT:    ; in Loop: Header=BB0_2 Depth=1
 ; GCN-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
 ; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s7
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GCN-NEXT:    s_xor_b32 s7, exec_lo, vcc_lo
-; GCN-NEXT:    s_and_b32 s7, s7, exec_lo
-; GCN-NEXT:    s_or_b32 s5, s5, s7
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    v_cmp_ne_u32_e64 s7, 0, v2
+; GCN-NEXT:    s_xor_b32 s8, exec_lo, s7
+; GCN-NEXT:    s_and_b32 s8, s8, exec_lo
+; GCN-NEXT:    s_or_b32 s5, s5, s8
+; GCN-NEXT:    s_mov_b32 exec_lo, s7
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_5
 ; GCN-NEXT:  .LBB0_2: ; %bb
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
-; GCN-NEXT:    s_xor_b32 s7, exec_lo, vcc_lo
+; GCN-NEXT:    v_cmp_ne_u32_e64 s8, 0, v1
+; GCN-NEXT:    s_xor_b32 s7, exec_lo, s8
 ; GCN-NEXT:    s_and_b32 s7, s7, exec_lo
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    s_mov_b32 exec_lo, s8
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_1
 ; GCN-NEXT:  .LBB0_3: ; %bb1
@@ -47,8 +47,9 @@ define amdgpu_cs void @should_not_hoist_set_inactive(<4 x i32> inreg %i14, i32 i
 ; GCN-NEXT:    s_xor_b32 s8, exec_lo, s6
 ; GCN-NEXT:    s_and_b32 s8, s8, exec_lo
 ; GCN-NEXT:    s_or_b32 s7, s7, s8
-; GCN-NEXT:    s_mov_b32 exec_lo, s6
+; GCN-NEXT:    s_mov_b32 s8, s6
 ; GCN-NEXT:    s_mov_b32 s6, 0
+; GCN-NEXT:    s_mov_b32 exec_lo, s8
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_1
 ; GCN-NEXT:  .LBB0_4: ; %bb2

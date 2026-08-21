@@ -88,9 +88,10 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_or_b64 s[18:19], s[18:19], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
+; CHECK-NEXT:    s_mov_b64 s[4:5], s[8:9]
 ; CHECK-NEXT:    s_mov_b64 s[8:9], 0
 ; CHECK-NEXT:    s_mov_b64 s[22:23], 0
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_12
 ; CHECK-NEXT:  .LBB0_7: ; %dynamic-memcpy-expansion-main-body2.preheader
@@ -117,13 +118,13 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    ; in Loop: Header=BB0_8 Depth=2
 ; CHECK-NEXT:    s_nop 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v10, 0, -1, s[4:5]
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v10
-; CHECK-NEXT:    s_xor_b64 s[24:25], exec, vcc
-; CHECK-NEXT:    s_and_b64 s[24:25], s[24:25], exec
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[24:25], 0, v10
+; CHECK-NEXT:    s_xor_b64 s[26:27], exec, s[24:25]
+; CHECK-NEXT:    s_and_b64 s[26:27], s[26:27], exec
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
-; CHECK-NEXT:    s_or_b64 s[20:21], s[20:21], s[24:25]
-; CHECK-NEXT:    s_mov_b64 exec, vcc
-; CHECK-NEXT:    s_mov_b64 s[24:25], 0
+; CHECK-NEXT:    s_or_b64 s[20:21], s[20:21], s[26:27]
+; CHECK-NEXT:    s_mov_b64 s[26:27], 0
+; CHECK-NEXT:    s_mov_b64 exec, s[24:25]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_8
 ; CHECK-NEXT:    s_branch .LBB0_11
@@ -142,8 +143,8 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[14:15]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_or_b64 s[12:13], s[12:13], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, s[14:15]
 ; CHECK-NEXT:    s_mov_b64 s[18:19], 0
+; CHECK-NEXT:    s_mov_b64 exec, s[14:15]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_16
 ; CHECK-NEXT:  .LBB0_13: ; %dynamic-memcpy-expansion-residual-cond5
@@ -154,8 +155,9 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_mov_b64 s[14:15], 0
 ; CHECK-NEXT:    s_or_b64 s[22:23], s[22:23], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, s[10:11]
+; CHECK-NEXT:    s_mov_b64 s[4:5], s[10:11]
 ; CHECK-NEXT:    s_mov_b64 s[10:11], 0
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_6
 ; CHECK-NEXT:  .LBB0_14: ; %dynamic-memcpy-expansion-residual-body4.preheader
@@ -171,15 +173,15 @@ define void @issue63986(i64 %0, i64 %idxprom, ptr inreg %ptr) {
 ; CHECK-NEXT:    flat_load_ubyte v13, v[10:11]
 ; CHECK-NEXT:    v_add_co_u32_e32 v10, vcc, s4, v4
 ; CHECK-NEXT:    s_add_u32 s4, s4, 1
-; CHECK-NEXT:    v_addc_co_u32_e32 v11, vcc, v5, v12, vcc
+; CHECK-NEXT:    s_mov_b64 s[16:17], 0
 ; CHECK-NEXT:    s_addc_u32 s5, s5, 0
-; CHECK-NEXT:    v_cmp_lt_u64_e32 vcc, s[4:5], v[2:3]
-; CHECK-NEXT:    s_xor_b64 s[16:17], exec, vcc
-; CHECK-NEXT:    s_or_b64 s[22:23], s[22:23], s[16:17]
+; CHECK-NEXT:    v_cmp_lt_u64_e64 s[16:17], s[4:5], v[2:3]
+; CHECK-NEXT:    v_addc_co_u32_e32 v11, vcc, v5, v12, vcc
+; CHECK-NEXT:    s_xor_b64 s[24:25], exec, s[16:17]
+; CHECK-NEXT:    s_or_b64 s[22:23], s[22:23], s[24:25]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    flat_store_byte v[10:11], v13
-; CHECK-NEXT:    s_mov_b64 exec, vcc
-; CHECK-NEXT:    s_mov_b64 s[16:17], 0
+; CHECK-NEXT:    s_mov_b64 exec, s[16:17]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_15
 ; CHECK-NEXT:    s_branch .LBB0_6

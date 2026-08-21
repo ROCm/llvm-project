@@ -390,11 +390,16 @@ void AMDGPULaneMaskUpdater::insertAccumulatorResets() {
     // ResetAtEnd
     MachineBasicBlock::iterator EndInsertPt;
     EndInsertPt = B->getFirstTerminator();
-    if (EndInsertPt != B->end() && EndInsertPt->getOpcode() == LMU.getLaneMaskConsts().MovTermOpc &&
+
+    // Keep the EXEC-narrowing S_MOV_*_term opcode a terminator, since RA
+    // inserts end-of-block spills at the first terminator, and spill code below
+    // the narrowing would store only the lanes still active.
+    MachineInstr *ExecWrite = nullptr;
+    if (EndInsertPt != B->end() &&
+        EndInsertPt->getOpcode() == LMU.getLaneMaskConsts().MovTermOpc &&
         EndInsertPt->getOperand(0).getReg() ==
             LMU.getLaneMaskConsts().ExecReg) {
-      EndInsertPt->setDesc(TII->get(LMU.getLaneMaskConsts().MovOpc));
-      EndInsertPt++;
+      ExecWrite = &*EndInsertPt;
     }
 
     for (auto &[Acc, Flags] : AccFlagPairs) {
@@ -405,6 +410,17 @@ void AMDGPULaneMaskUpdater::insertAccumulatorResets() {
             .addImm(0);
       }
       if (Flags & ResetAtEnd) {
+        // The Acc reset following the EXEC write cannot be a
+        // terminator itself, since InlineSpiller cannot spill a vreg defined by
+        // a terminator. So, Copy Acc into a temporary for the EXEC write to
+        // read, so the Acc reset stays an ordinary instruction ahead of it.
+        if (ExecWrite && ExecWrite->getOperand(1).isReg() &&
+            ExecWrite->getOperand(1).getReg() == Acc) {
+          Register Staged = LMU.createLaneMaskReg();
+          BuildMI(*B, EndInsertPt, {}, TII->get(TargetOpcode::COPY), Staged)
+              .addReg(Acc);
+          ExecWrite->getOperand(1).setReg(Staged);
+        }
         // Insert at end of basic block for ResetAtEnd
         BuildMI(*B, EndInsertPt, {}, TII->get(LMU.getLaneMaskConsts().MovOpc),
                 Acc)

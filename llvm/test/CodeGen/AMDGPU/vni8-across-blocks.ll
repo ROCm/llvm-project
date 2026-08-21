@@ -713,11 +713,11 @@ define amdgpu_kernel void @v32i8_loop_carried(ptr addrspace(1) %src1, ptr addrsp
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX942-NEXT:  .LBB12_1: ; %bb.1
 ; GFX942-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX942-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
-; GFX942-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; GFX942-NEXT:    v_cmp_ne_u32_e64 s[6:7], 0, v2
+; GFX942-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX942-NEXT:    v_perm_b32 v1, v0, v1, s2
-; GFX942-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
-; GFX942-NEXT:    s_mov_b64 exec, vcc
+; GFX942-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
+; GFX942-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execnz .LBB12_1
 ; GFX942-NEXT:  .LBB12_2: ; %bb.2.loopexit

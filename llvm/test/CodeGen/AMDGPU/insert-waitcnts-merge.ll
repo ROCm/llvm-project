@@ -45,11 +45,12 @@ define amdgpu_kernel void @widget(ptr addrspace(1) %arg, i1 %arg1) #0 {
   ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_OR_B64 killed renamable $sgpr8_sgpr9, renamable $vcc, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr10_sgpr11 = S_OR_B64 killed renamable $sgpr10_sgpr11, killed renamable $sgpr16_sgpr17, implicit-def $scc
-  ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_XOR_B64 $exec, renamable $sgpr8_sgpr9, implicit-def $scc
-  ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_AND_B64 killed renamable $sgpr16_sgpr17, $exec, implicit-def $scc
-  ; CHECK-NEXT:   renamable $sgpr12_sgpr13 = S_OR_B64 killed renamable $sgpr12_sgpr13, killed renamable $sgpr16_sgpr17, implicit-def $scc
-  ; CHECK-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr8_sgpr9
+  ; CHECK-NEXT:   $sgpr18_sgpr19 = S_MOV_B64 $sgpr8_sgpr9
+  ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_XOR_B64 $exec, killed renamable $sgpr8_sgpr9, implicit-def $scc
+  ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_AND_B64 killed renamable $sgpr8_sgpr9, $exec, implicit-def $scc
+  ; CHECK-NEXT:   renamable $sgpr12_sgpr13 = S_OR_B64 killed renamable $sgpr12_sgpr13, killed renamable $sgpr8_sgpr9, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr8_sgpr9 = S_MOV_B64 0
+  ; CHECK-NEXT:   $exec = S_MOV_B64 killed $sgpr18_sgpr19
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.2, implicit $exec
   ; CHECK-NEXT: {{  $}}
@@ -67,9 +68,10 @@ define amdgpu_kernel void @widget(ptr addrspace(1) %arg, i1 %arg1) #0 {
   ; CHECK-NEXT:   $exec = S_OR_B64 $exec, killed renamable $sgpr12_sgpr13, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr12_sgpr13 = S_XOR_B64 $exec, renamable $sgpr10_sgpr11, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_AND_B64 killed renamable $sgpr12_sgpr13, $exec, implicit-def $scc
-  ; CHECK-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr10_sgpr11
+  ; CHECK-NEXT:   $sgpr18_sgpr19 = S_MOV_B64 killed $sgpr10_sgpr11
   ; CHECK-NEXT:   renamable $sgpr10_sgpr11 = S_MOV_B64 0
   ; CHECK-NEXT:   renamable $sgpr12_sgpr13 = S_MOV_B64 0
+  ; CHECK-NEXT:   $exec = S_MOV_B64 killed $sgpr18_sgpr19
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.11, implicit $exec
   ; CHECK-NEXT: {{  $}}
@@ -146,7 +148,7 @@ define amdgpu_kernel void @widget(ptr addrspace(1) %arg, i1 %arg1) #0 {
   ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_XOR_B64 $exec, renamable $sgpr14_sgpr15, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_AND_B64 killed renamable $sgpr16_sgpr17, $exec, implicit-def $scc
   ; CHECK-NEXT:   renamable $sgpr6_sgpr7 = S_OR_B64 killed renamable $sgpr6_sgpr7, killed renamable $sgpr16_sgpr17, implicit-def $scc
-  ; CHECK-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr14_sgpr15
+  ; CHECK-NEXT:   $exec = S_MOV_B64 killed $sgpr14_sgpr15
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; CHECK-NEXT: {{  $}}

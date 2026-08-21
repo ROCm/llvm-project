@@ -34,11 +34,11 @@ define void @nested_inf_loop(i1 %0, i1 %1) {
 ; ISA-NEXT:    ; Child Loop BB0_3 Depth 2
 ; ISA-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v1
 ; ISA-NEXT:    s_xor_b64 s[14:15], s[12:13], exec
-; ISA-NEXT:    s_or_b64 s[8:9], s[8:9], s[14:15]
-; ISA-NEXT:    s_xor_b64 s[14:15], exec, s[8:9]
+; ISA-NEXT:    s_or_b64 s[16:17], s[8:9], s[14:15]
+; ISA-NEXT:    s_xor_b64 s[14:15], exec, s[16:17]
 ; ISA-NEXT:    s_and_b64 s[14:15], s[14:15], exec
-; ISA-NEXT:    s_mov_b64 exec, s[8:9]
 ; ISA-NEXT:    s_mov_b64 s[8:9], 0
+; ISA-NEXT:    s_mov_b64 exec, s[16:17]
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB0_7
 ; ISA-NEXT:  .LBB0_2: ; %BB2
@@ -57,8 +57,8 @@ define void @nested_inf_loop(i1 %0, i1 %1) {
 ; ISA-NEXT:    s_and_b64 s[20:21], s[20:21], exec
 ; ISA-NEXT:    s_mov_b64 s[16:17], 0
 ; ISA-NEXT:    s_or_b64 s[10:11], s[10:11], s[20:21]
+; ISA-NEXT:    s_mov_b64 s[20:21], 0
 ; ISA-NEXT:    s_mov_b64 exec, s[18:19]
-; ISA-NEXT:    s_mov_b64 s[18:19], 0
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execnz .LBB0_3
 ; ISA-NEXT:    s_branch .LBB0_6

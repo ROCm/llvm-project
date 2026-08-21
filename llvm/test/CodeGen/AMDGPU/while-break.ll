@@ -11,12 +11,12 @@ define amdgpu_ps float @while_break(i32 %z, float %v, i32 %x, i32 %y) #0 {
 ; GCN-NEXT:  .LBB0_1: ; %header
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    s_add_i32 s0, s0, 1
-; GCN-NEXT:    v_cmp_ge_i32_e32 vcc_lo, s0, v2
-; GCN-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
-; GCN-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
-; GCN-NEXT:    s_and_b32 s5, s5, exec_lo
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GCN-NEXT:    ; implicit-def: $vgpr4
+; GCN-NEXT:    v_cmp_ge_i32_e64 s6, s0, v2
+; GCN-NEXT:    s_xor_b32 s4, s6, exec_lo
+; GCN-NEXT:    s_xor_b32 s5, exec_lo, s6
+; GCN-NEXT:    s_and_b32 s5, s5, exec_lo
+; GCN-NEXT:    s_mov_b32 exec_lo, s6
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_3
 ; GCN-NEXT:  .LBB0_2: ; %else
@@ -46,13 +46,13 @@ define amdgpu_ps float @while_break(i32 %z, float %v, i32 %x, i32 %y) #0 {
 ; GCN-NEXT:    s_cbranch_execz .LBB0_7
 ; GCN-NEXT:  .LBB0_6: ; %latch
 ; GCN-NEXT:    ; in Loop: Header=BB0_1 Depth=1
-; GCN-NEXT:    v_cmp_ge_i32_e32 vcc_lo, s0, v0
+; GCN-NEXT:    v_cmp_ge_i32_e64 s4, s0, v0
 ; GCN-NEXT:    v_mov_b32_e32 v4, v1
-; GCN-NEXT:    s_xor_b32 s3, exec_lo, vcc_lo
-; GCN-NEXT:    s_and_b32 s4, s3, exec_lo
+; GCN-NEXT:    s_xor_b32 s3, exec_lo, s4
+; GCN-NEXT:    s_and_b32 s5, s3, exec_lo
 ; GCN-NEXT:    s_mov_b32 s3, 0
-; GCN-NEXT:    s_or_b32 s2, s2, s4
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 s2, s2, s5
+; GCN-NEXT:    s_mov_b32 exec_lo, s4
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB0_1
 ; GCN-NEXT:  .LBB0_7: ; %end
@@ -98,12 +98,12 @@ define amdgpu_ps float @while_break2(i32 %z, float %v, i32 %x, i32 %y) #0 {
 ; GCN-NEXT:  .LBB1_1: ; %header
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    s_add_i32 s0, s0, 1
-; GCN-NEXT:    v_cmp_lt_i32_e32 vcc_lo, s0, v2
-; GCN-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GCN-NEXT:    s_xor_b32 s4, exec_lo, s5
-; GCN-NEXT:    s_and_b32 s4, s4, exec_lo
-; GCN-NEXT:    s_mov_b32 exec_lo, s5
 ; GCN-NEXT:    ; implicit-def: $vgpr4
+; GCN-NEXT:    v_cmp_lt_i32_e64 s4, s0, v2
+; GCN-NEXT:    s_xor_b32 s6, s4, exec_lo
+; GCN-NEXT:    s_xor_b32 s5, exec_lo, s6
+; GCN-NEXT:    s_and_b32 s5, s5, exec_lo
+; GCN-NEXT:    s_mov_b32 exec_lo, s6
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_3
 ; GCN-NEXT:  .LBB1_2: ; %if
@@ -111,20 +111,20 @@ define amdgpu_ps float @while_break2(i32 %z, float %v, i32 %x, i32 %y) #0 {
 ; GCN-NEXT:    v_add_f32_e32 v4, 1.0, v1
 ; GCN-NEXT:    s_and_b32 s3, s1, exec_lo
 ; GCN-NEXT:  .LBB1_3: ; in Loop: Header=BB1_1 Depth=1
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s4
-; GCN-NEXT:    s_xor_b32 s4, exec_lo, vcc_lo
-; GCN-NEXT:    s_and_b32 s4, s4, exec_lo
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s5
+; GCN-NEXT:    s_xor_b32 s5, exec_lo, s4
+; GCN-NEXT:    s_and_b32 s5, s5, exec_lo
+; GCN-NEXT:    s_mov_b32 exec_lo, s4
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_5
 ; GCN-NEXT:  .LBB1_4: ; %else
 ; GCN-NEXT:    ; in Loop: Header=BB1_1 Depth=1
 ; GCN-NEXT:    v_cmp_ge_i32_e32 vcc_lo, s0, v3
 ; GCN-NEXT:    v_mov_b32_e32 v4, v1
-; GCN-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GCN-NEXT:    s_or_b32 s3, s3, s5
+; GCN-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
+; GCN-NEXT:    s_or_b32 s3, s3, s4
 ; GCN-NEXT:  .LBB1_5: ; in Loop: Header=BB1_1 Depth=1
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s4
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GCN-NEXT:    s_xor_b32 s4, exec_lo, s3
 ; GCN-NEXT:    s_and_b32 s4, s4, exec_lo
 ; GCN-NEXT:    s_or_b32 s2, s2, s4
@@ -133,13 +133,13 @@ define amdgpu_ps float @while_break2(i32 %z, float %v, i32 %x, i32 %y) #0 {
 ; GCN-NEXT:    s_cbranch_execz .LBB1_7
 ; GCN-NEXT:  .LBB1_6: ; %latch
 ; GCN-NEXT:    ; in Loop: Header=BB1_1 Depth=1
-; GCN-NEXT:    v_cmp_ge_i32_e32 vcc_lo, s0, v0
+; GCN-NEXT:    v_cmp_ge_i32_e64 s4, s0, v0
 ; GCN-NEXT:    v_mov_b32_e32 v1, v4
-; GCN-NEXT:    s_xor_b32 s3, exec_lo, vcc_lo
-; GCN-NEXT:    s_and_b32 s4, s3, exec_lo
+; GCN-NEXT:    s_xor_b32 s3, exec_lo, s4
+; GCN-NEXT:    s_and_b32 s5, s3, exec_lo
 ; GCN-NEXT:    s_mov_b32 s3, 0
-; GCN-NEXT:    s_or_b32 s2, s2, s4
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    s_or_b32 s2, s2, s5
+; GCN-NEXT:    s_mov_b32 exec_lo, s4
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB1_1
 ; GCN-NEXT:  .LBB1_7: ; %end
@@ -213,12 +213,12 @@ define amdgpu_ps < 2 x float> @while_break_two_chains_of_phi(float %v, i32 %x, i
 ; GCN-NEXT:    s_cbranch_execz .LBB2_5
 ; GCN-NEXT:  .LBB2_4: ; %latch
 ; GCN-NEXT:    ; in Loop: Header=BB2_1 Depth=1
-; GCN-NEXT:    v_cmp_ge_i32_e32 vcc_lo, s0, v3
+; GCN-NEXT:    v_cmp_ge_i32_e64 s1, s0, v3
 ; GCN-NEXT:    s_add_i32 s0, s0, 1
-; GCN-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
-; GCN-NEXT:    s_and_b32 s1, s1, exec_lo
-; GCN-NEXT:    s_or_b32 s2, s2, s1
-; GCN-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GCN-NEXT:    s_xor_b32 s3, exec_lo, s1
+; GCN-NEXT:    s_and_b32 s3, s3, exec_lo
+; GCN-NEXT:    s_or_b32 s2, s2, s3
+; GCN-NEXT:    s_mov_b32 exec_lo, s1
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB2_1
 ; GCN-NEXT:  .LBB2_5: ; %end

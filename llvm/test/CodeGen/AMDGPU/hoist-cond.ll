@@ -7,9 +7,9 @@
 ; CHECK: v_cmp_{{..}}_u32_e{{32|64}} [[COND:s\[[0-9]+:[0-9]+\]|vcc]]
 ; CHECK: v_cndmask_b32_e64 {{v[0-9]+}}, 0, -1, [[COND]]
 ; CHECK: BB0_1:
-; CHECK: v_cmp_ne_u32_e32 vcc, 0, v0
-; CHECK: s_xor_b64 s[{{[0-9]+:[0-9]+}}], exec, vcc
-; CHECK: s_mov_b64 exec, vcc
+; CHECK: v_cmp_ne_u32_e64 [[TRUE_MASK:s\[[0-9]+:[0-9]+\]]], 0, v0
+; CHECK: s_xor_b64 s[{{[0-9]+:[0-9]+}}], exec, [[TRUE_MASK]]
+; CHECK: s_mov_b64 exec, [[TRUE_MASK]]
 ; CHECK: BB0_2:
 
 define amdgpu_kernel void @hoist_cond(ptr addrspace(1) nocapture %arg, ptr addrspace(1) noalias nocapture readonly %arg1, i32 %arg3, i32 %arg4) {

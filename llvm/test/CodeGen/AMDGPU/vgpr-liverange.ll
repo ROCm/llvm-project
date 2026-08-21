@@ -104,12 +104,12 @@ define amdgpu_ps float @else3(i32 %z, float %v, i32 inreg %bound, i32 %x0) #0 {
 ; SI-NEXT:  .LBB2_2: ; %for.body
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
+; SI-NEXT:    ; implicit-def: $vgpr3
+; SI-NEXT:    ; implicit-def: $vgpr4
 ; SI-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; SI-NEXT:    s_xor_b32 s2, exec_lo, s3
 ; SI-NEXT:    s_and_b32 s2, s2, exec_lo
 ; SI-NEXT:    s_mov_b32 exec_lo, s3
-; SI-NEXT:    ; implicit-def: $vgpr3
-; SI-NEXT:    ; implicit-def: $vgpr4
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB2_4
 ; SI-NEXT:  .LBB2_3: ; %else

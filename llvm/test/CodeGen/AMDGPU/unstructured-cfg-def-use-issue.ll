@@ -289,8 +289,9 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[66:67]
 ; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-NEXT:    s_or_b64 s[64:65], s[64:65], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[66:67]
+; GCN-NEXT:    s_mov_b64 s[4:5], s[66:67]
 ; GCN-NEXT:    s_mov_b64 s[66:67], 0
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_8
 ; GCN-NEXT:  .LBB1_3: ; %bb11
@@ -316,8 +317,9 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-NEXT:    s_mov_b64 s[8:9], -1
 ; GCN-NEXT:    s_or_b64 s[64:65], s[64:65], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[68:69]
+; GCN-NEXT:    s_mov_b64 s[4:5], s[68:69]
 ; GCN-NEXT:    s_mov_b64 s[68:69], 0
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_8
 ; GCN-NEXT:  .LBB1_4: ; %bb14
@@ -329,8 +331,9 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[70:71]
 ; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-NEXT:    s_or_b64 s[96:97], s[96:97], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[70:71]
+; GCN-NEXT:    s_mov_b64 s[4:5], s[70:71]
 ; GCN-NEXT:    s_mov_b64 s[70:71], 0
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_6
 ; GCN-NEXT:  .LBB1_5: ; %bb16
@@ -345,9 +348,10 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[80:81]
 ; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-NEXT:    s_or_b64 s[64:65], s[64:65], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[80:81]
+; GCN-NEXT:    s_mov_b64 s[4:5], s[80:81]
 ; GCN-NEXT:    s_mov_b64 s[80:81], 0
 ; GCN-NEXT:    s_mov_b64 s[96:97], 0
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_8
 ; GCN-NEXT:  .LBB1_7: ; %bb17
@@ -370,8 +374,9 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[82:83]
 ; GCN-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b64 exec, s[82:83]
+; GCN-NEXT:    s_mov_b64 s[6:7], s[82:83]
 ; GCN-NEXT:    s_mov_b64 s[82:83], 0
+; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_11
 ; GCN-NEXT:  .LBB1_10: ; %bb10
@@ -383,8 +388,9 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[84:85]
 ; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; GCN-NEXT:    s_mov_b64 exec, s[84:85]
+; GCN-NEXT:    s_mov_b64 s[6:7], s[84:85]
 ; GCN-NEXT:    s_mov_b64 s[84:85], 0
+; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_13
 ; GCN-NEXT:  .LBB1_12: ; %bb18

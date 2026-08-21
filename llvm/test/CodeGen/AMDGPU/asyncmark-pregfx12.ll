@@ -384,12 +384,12 @@ define void @test_pipelined_loop(ptr addrspace(1) %foo, ptr addrspace(3) %lds, p
 ; SDAG-NEXT:    ; wait_asyncmark(2)
 ; SDAG-NEXT:    s_waitcnt vmcnt(2)
 ; SDAG-NEXT:    ds_read_b32 v6, v2
-; SDAG-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v7
-; SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; SDAG-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v7
+; SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
 ; SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; SDAG-NEXT:    v_add_u32_e32 v5, v5, v6
-; SDAG-NEXT:    s_mov_b64 exec, vcc
+; SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB4_1
 ; SDAG-NEXT:  .LBB4_2: ; %epilog
@@ -523,16 +523,16 @@ define void @test_pipelined_loop_with_global(ptr addrspace(1) %foo, ptr addrspac
 ; SDAG-NEXT:    s_mov_b32 m0, s7
 ; SDAG-NEXT:    s_add_i32 s6, s6, 1
 ; SDAG-NEXT:    global_load_dword v[0:1], off lds
-; SDAG-NEXT:    v_cmp_lt_i32_e32 vcc, s6, v7
-; SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
+; SDAG-NEXT:    v_cmp_lt_i32_e64 s[8:9], s6, v7
+; SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; SDAG-NEXT:    v_mov_b32_e32 v16, v15
 ; SDAG-NEXT:    v_mov_b32_e32 v17, v10
 ; SDAG-NEXT:    v_mov_b32_e32 v10, v9
 ; SDAG-NEXT:    v_mov_b32_e32 v15, v11
-; SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
 ; SDAG-NEXT:    ; asyncmark
 ; SDAG-NEXT:    ; wait_asyncmark(2)
-; SDAG-NEXT:    s_mov_b64 exec, vcc
+; SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB5_1
 ; SDAG-NEXT:  .LBB5_2: ; %epilog

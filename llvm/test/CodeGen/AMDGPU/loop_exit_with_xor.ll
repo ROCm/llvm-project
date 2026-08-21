@@ -18,11 +18,11 @@ define void @needs_and(i32 %arg) {
 ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
 ; GCN-NEXT:    s_add_i32 s8, s8, 1
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, vcc
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; GCN-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v1
+; GCN-NEXT:    s_xor_b64 s[10:11], exec, s[4:5]
+; GCN-NEXT:    s_and_b64 s[10:11], s[10:11], exec
+; GCN-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_4
 ; GCN-NEXT:  .LBB0_2: ; %loop
@@ -77,10 +77,10 @@ define void @doesnt_need_and(i32 %arg) {
 ; GCN-NEXT:  .LBB1_1: ; %loop
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    s_add_i32 s6, s6, 1
-; GCN-NEXT:    v_cmp_gt_u32_e32 vcc, s6, v0
-; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
-; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    v_cmp_gt_u32_e64 s[8:9], s6, v0
+; GCN-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GCN-NEXT:    s_mov_b64 exec, s[8:9]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB1_1
 ; GCN-NEXT:  .LBB1_2: ; %loopexit
@@ -118,11 +118,11 @@ define void @break_cond_is_arg(i32 %arg, i1 %breakcond) {
 ; GCN-NEXT:    ; in Loop: Header=BB2_2 Depth=1
 ; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GCN-NEXT:    s_add_i32 s8, s8, 1
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, vcc
-; GCN-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b64 exec, vcc
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[6:7], 0, v1
+; GCN-NEXT:    s_xor_b64 s[10:11], exec, s[6:7]
+; GCN-NEXT:    s_and_b64 s[10:11], s[10:11], exec
+; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB2_4
 ; GCN-NEXT:  .LBB2_2: ; %loop
