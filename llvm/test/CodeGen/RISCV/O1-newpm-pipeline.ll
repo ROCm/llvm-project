@@ -47,6 +47,8 @@
 ; CHECK-NEXT:     finalize-isel
 ; CHECK-NEXT:     early-machinelicm
 ; CHECK-NEXT:     riscv-vl-optimizer
+; CHECK-NEXT:     riscv-vector-peephole
+; CHECK-NEXT:     riscv-fold-mem-offset
 ; CHECK-NEXT:     early-tailduplication
 ; CHECK-NEXT:     opt-phis
 ; CHECK-NEXT:     stack-coloring
