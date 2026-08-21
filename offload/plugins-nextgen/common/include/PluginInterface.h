@@ -674,7 +674,7 @@ private:
   /// The number of threads \p NumThreads can be adjusted by this method.
   /// \p IsNumThreadsFromUser is true is \p NumThreads is defined by user via
   /// thread_limit clause.
-  uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
+  virtual uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
                                          uint32_t UserNumBlocks,
                                          uint64_t LoopTripCount,
                                          uint32_t &EffectiveNumThreads,

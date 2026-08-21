@@ -1049,7 +1049,8 @@ private:
   uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
                                  uint32_t UserNumBlocks, uint64_t LoopTripCount,
                                  uint32_t &EffectiveNumThreads,
-                                 bool IsNumThreadsFromUser) const {
+                                 bool IsNumThreadsStrict,
+                                 bool IsNumThreadsFromUser) const override {
     assert(!isBareMode() && "bare kernel should not call this function");
 
     const auto getNumGroupsFromThreadsAndTripCount =
