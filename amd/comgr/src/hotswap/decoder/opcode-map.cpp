@@ -56,6 +56,21 @@ static const Entry kCanonTable[] = {
     E(S_BREV_B64, S_BREV_B64),
     E(S_NOT_B32, S_NOT_B32),
     E(S_NOT_B64, S_NOT_B64),
+    E(S_CEIL_F32, S_CEIL_F32),
+    E(S_FLOOR_F32, S_FLOOR_F32),
+    E(S_TRUNC_F32, S_TRUNC_F32),
+    E(S_RNDNE_F32, S_RNDNE_F32),
+    E(S_CVT_F32_I32, S_CVT_F32_I32),
+    E(S_CVT_F32_U32, S_CVT_F32_U32),
+    E(S_CVT_I32_F32, S_CVT_I32_F32),
+    E(S_CVT_U32_F32, S_CVT_U32_F32),
+    E(S_CVT_F16_F32, S_CVT_F16_F32),
+    E(S_CVT_F32_F16, S_CVT_F32_F16),
+    E(S_CVT_HI_F32_F16, S_CVT_HI_F32_F16),
+    E(S_CEIL_F16, S_CEIL_F16),
+    E(S_FLOOR_F16, S_FLOOR_F16),
+    E(S_TRUNC_F16, S_TRUNC_F16),
+    E(S_RNDNE_F16, S_RNDNE_F16),
 };
 // clang-format on
 

@@ -12,6 +12,7 @@
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise_failure.h"
 
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
 
 using namespace llvm;
@@ -30,6 +31,101 @@ static void writeDst(RegisterState &Registers, ParsedReg Dst, Value *V,
     Registers.writeReg64(Dst, V);
   else
     Registers.writeReg32(Dst, V);
+}
+
+// Whether CanonOp is one of the scalar float opcodes, each of which takes one
+// 32-bit source SGPR and writes one 32-bit destination SGPR.
+static bool isScalarFloat(CanonicalOp CanonOp) {
+  switch (CanonOp) {
+  case CanonicalOp::S_CEIL_F32:
+  case CanonicalOp::S_FLOOR_F32:
+  case CanonicalOp::S_TRUNC_F32:
+  case CanonicalOp::S_RNDNE_F32:
+  case CanonicalOp::S_CVT_F32_I32:
+  case CanonicalOp::S_CVT_F32_U32:
+  case CanonicalOp::S_CVT_I32_F32:
+  case CanonicalOp::S_CVT_U32_F32:
+  case CanonicalOp::S_CVT_F16_F32:
+  case CanonicalOp::S_CVT_F32_F16:
+  case CanonicalOp::S_CVT_HI_F32_F16:
+  case CanonicalOp::S_CEIL_F16:
+  case CanonicalOp::S_FLOOR_F16:
+  case CanonicalOp::S_TRUNC_F16:
+  case CanonicalOp::S_RNDNE_F16:
+    return true;
+  default:
+    return false;
+  }
+}
+
+// Round the f32 in Src with intrinsic ID. The result stays in floating-point
+// form, so it goes back as an f32 bit pattern rather than as an integer.
+static Value *roundF32(IRBuilder<> &B, Value *Src, Intrinsic::ID ID) {
+  Value *Rounded =
+      B.CreateUnaryIntrinsic(ID, B.CreateBitCast(Src, B.getFloatTy()));
+  return B.CreateBitCast(Rounded, B.getInt32Ty());
+}
+
+// Round the f16 in the low half of Src with intrinsic ID. A scalar f16 opcode
+// reads the low half of its source SGPR and zeroes the high half of its
+// destination.
+static Value *roundF16(IRBuilder<> &B, Value *Src, Intrinsic::ID ID) {
+  Value *Half =
+      B.CreateBitCast(B.CreateTrunc(Src, B.getInt16Ty()), B.getHalfTy());
+  Value *Rounded = B.CreateUnaryIntrinsic(ID, Half);
+  return B.CreateZExt(B.CreateBitCast(Rounded, B.getInt16Ty()), B.getInt32Ty());
+}
+
+// The 32 bits the scalar float opcode CanonOp writes to its destination SGPR,
+// given the 32 bits Src of its source. CanonOp must satisfy isScalarFloat.
+static Value *emitScalarFloat(IRBuilder<> &B, CanonicalOp CanonOp, Value *Src) {
+  switch (CanonOp) {
+  case CanonicalOp::S_CEIL_F32:
+    return roundF32(B, Src, Intrinsic::ceil);
+  case CanonicalOp::S_FLOOR_F32:
+    return roundF32(B, Src, Intrinsic::floor);
+  case CanonicalOp::S_TRUNC_F32:
+    return roundF32(B, Src, Intrinsic::trunc);
+  case CanonicalOp::S_RNDNE_F32:
+    return roundF32(B, Src, Intrinsic::roundeven);
+  case CanonicalOp::S_CEIL_F16:
+    return roundF16(B, Src, Intrinsic::ceil);
+  case CanonicalOp::S_FLOOR_F16:
+    return roundF16(B, Src, Intrinsic::floor);
+  case CanonicalOp::S_TRUNC_F16:
+    return roundF16(B, Src, Intrinsic::trunc);
+  case CanonicalOp::S_RNDNE_F16:
+    return roundF16(B, Src, Intrinsic::roundeven);
+  case CanonicalOp::S_CVT_F32_I32:
+    return B.CreateBitCast(B.CreateSIToFP(Src, B.getFloatTy()), B.getInt32Ty());
+  case CanonicalOp::S_CVT_F32_U32:
+    return B.CreateBitCast(B.CreateUIToFP(Src, B.getFloatTy()), B.getInt32Ty());
+  // The hardware saturates an out-of-range input and converts NaN to zero.
+  // Plain fptosi and fptoui make both of those poison.
+  case CanonicalOp::S_CVT_I32_F32:
+    return B.CreateIntrinsic(Intrinsic::fptosi_sat,
+                             {B.getInt32Ty(), B.getFloatTy()},
+                             {B.CreateBitCast(Src, B.getFloatTy())});
+  case CanonicalOp::S_CVT_U32_F32:
+    return B.CreateIntrinsic(Intrinsic::fptoui_sat,
+                             {B.getInt32Ty(), B.getFloatTy()},
+                             {B.CreateBitCast(Src, B.getFloatTy())});
+  case CanonicalOp::S_CVT_F16_F32: {
+    Value *Half =
+        B.CreateFPTrunc(B.CreateBitCast(Src, B.getFloatTy()), B.getHalfTy());
+    return B.CreateZExt(B.CreateBitCast(Half, B.getInt16Ty()), B.getInt32Ty());
+  }
+  case CanonicalOp::S_CVT_F32_F16:
+  case CanonicalOp::S_CVT_HI_F32_F16: {
+    Value *Bits =
+        CanonOp == CanonicalOp::S_CVT_HI_F32_F16 ? B.CreateLShr(Src, 16) : Src;
+    Value *Half =
+        B.CreateBitCast(B.CreateTrunc(Bits, B.getInt16Ty()), B.getHalfTy());
+    return B.CreateBitCast(B.CreateFPExt(Half, B.getFloatTy()), B.getInt32Ty());
+  }
+  default:
+    llvm_unreachable("not a scalar float opcode");
+  }
 }
 
 Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
@@ -93,6 +189,17 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Value *Moved =
         Ctx.B.CreateSelect(Ctx.registers().readScc(), *Src, *Old, "s_cmov");
     writeDst(Ctx.registers(), *Dst, Moved, Is64);
+    return Error::success();
+  }
+
+  if (isScalarFloat(Di.CanonOp)) {
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> Src = Op.src(0);
+    if (!Src)
+      return Src.takeError();
+    Ctx.registers().writeReg32(*Dst, emitScalarFloat(Ctx.B, Di.CanonOp, *Src));
     return Error::success();
   }
 
