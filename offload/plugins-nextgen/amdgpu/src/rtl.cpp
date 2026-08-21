@@ -753,9 +753,7 @@ struct AMDGPUKernelTy : public GenericKernelTy {
         OMPX_GenericSPMDOccupancyBasedOpt(
             "OMPX_GENERIC_SPMD_OCCUPANCY_BASED_OPT", false),
         OMPX_BigJumpLoopOccupancyBasedOpt(
-            "OMPX_BIGJUMPLOOP_OCCUPANCY_BASED_OPT", false),
-        OMPX_XTeamReductionOccupancyBasedOpt(
-            "OMPX_XTEAMREDUCTION_OCCUPANCY_BASED_OPT", false) {}
+            "OMPX_BIGJUMPLOOP_OCCUPANCY_BASED_OPT", false) {}
 
   /// Initialize the AMDGPU kernel.
   Error initImpl(GenericDeviceTy &Device, DeviceImageTy &Image) override {
@@ -902,9 +900,6 @@ struct AMDGPUKernelTy : public GenericKernelTy {
 
   /// Envar to enable occupancy-based optimization for big jump loop.
   BoolEnvar OMPX_BigJumpLoopOccupancyBasedOpt;
-
-  /// Envar to enable occupancy-based optimization for cross team reduction.
-  BoolEnvar OMPX_XTeamReductionOccupancyBasedOpt;
 
 private:
   /// The kernel object to execute.
@@ -1175,8 +1170,8 @@ private:
       // the MaxOccupancy equals or exceeds the desirable waves per CU. The
       // assumption is that anything lower is probably resource constrained
       // already and this optimization may not be beneficial.
-      if (OMPX_XTeamReductionOccupancyBasedOpt && NumTeamsEnvVar == 0 &&
-          UserNumBlocks == 0 &&
+      if (GenericDevice.getOMPXXTeamReductionOccupancyBasedOpt() &&
+          NumTeamsEnvVar == 0 && UserNumBlocks == 0 &&
           (MaxOccupancy * llvm::omp::amdgpu_arch::SIMDPerCU >=
            llvm::omp::xteam_red::DesiredWavesPerCU)) {
         uint64_t newNumTeams =
@@ -3325,6 +3320,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
             "LIBOMPTARGET_WAVES_PER_CU_FOR_LOW_TRIP_COUNT", 0),
         OMPX_AdjustNumTeamsForSmallBlockSize("LIBOMPTARGET_AMDGPU_ADJUST_TEAMS",
                                              0),
+        OMPX_XTeamReductionOccupancyBasedOpt(
+            "OMPX_XTEAMREDUCTION_OCCUPANCY_BASED_OPT", false),
         OMPX_AdjustNumTeamsForXteamRedSmallBlockSize(
             "LIBOMPTARGET_AMDGPU_ADJUST_XTEAM_RED_TEAMS", 1),
         OMPX_GenericSpmdUseSmallBlockSize(
@@ -3488,6 +3485,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   virtual uint32_t
   getOMPXAdjustNumTeamsForXteamRedSmallBlockSize() const override {
     return OMPX_AdjustNumTeamsForXteamRedSmallBlockSize;
+  }
+  virtual bool getOMPXXTeamReductionOccupancyBasedOpt() const override {
+    return OMPX_XTeamReductionOccupancyBasedOpt;
   }
   virtual bool getOMPXGenericSpmdUseSmallBlockSize() const override {
     return OMPX_GenericSpmdUseSmallBlockSize;
@@ -5347,6 +5347,8 @@ private:
   /// done.
   UInt32Envar OMPX_AdjustNumTeamsForSmallBlockSize;
 
+  /// Envar to enable occupancy-based optimization for cross team reduction.
+  /// Defaults come from the per-device envar config table.
   BoolEnvar OMPX_XTeamReductionOccupancyBasedOpt;
 
   /// Envar to allow scaling up the number of teams for Xteam-Reduction,

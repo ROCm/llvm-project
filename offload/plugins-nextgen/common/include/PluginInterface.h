@@ -1365,6 +1365,9 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual uint32_t getOMPXAdjustNumTeamsForXteamRedSmallBlockSize() const {
     llvm_unreachable("Unimplemented");
   }
+  virtual bool getOMPXXTeamReductionOccupancyBasedOpt() const {
+    llvm_unreachable("Unimplemented");
+  }
   virtual bool getOMPXGenericSpmdUseSmallBlockSize() const {
     llvm_unreachable("Unimplemented");
   }
