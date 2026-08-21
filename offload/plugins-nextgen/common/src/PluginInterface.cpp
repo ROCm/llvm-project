@@ -1270,14 +1270,15 @@ Error GenericDeviceTy::launchKernel(void *EntryPtr,
   return Err;
 }
 
-Error GenericDeviceTy::initAsyncInfo(__tgt_async_info **AsyncInfoPtr) {
+Error PluginContextTy::initAsyncInfo(GenericDeviceTy &Device,
+                                     __tgt_async_info **AsyncInfoPtr) {
   assert(AsyncInfoPtr && "Invalid async info");
 
   *AsyncInfoPtr = new __tgt_async_info();
 
-  AsyncInfoWrapperTy AsyncInfoWrapper(*this, *AsyncInfoPtr);
+  AsyncInfoWrapperTy AsyncInfoWrapper(Device, *AsyncInfoPtr);
 
-  auto Err = initAsyncInfoImpl(AsyncInfoWrapper);
+  auto Err = initAsyncInfoImpl(Device, AsyncInfoWrapper);
   AsyncInfoWrapper.finalize(Err);
   return Err;
 }
@@ -1419,8 +1420,6 @@ Error GenericDeviceTy::zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
   return zeroCopySanityChecksAndDiagImpl(isUnifiedSharedMemory, isAutoZeroCopy,
                                          isEagerMaps);
 }
-
-bool GenericDeviceTy::useSharedMemForDescriptor(int64_t Size) { return false; }
 
 Expected<bool> GenericDeviceTy::isAccessiblePtr(const void *Ptr, size_t Size) {
   return isAccessiblePtrImpl(Ptr, Size);
@@ -1685,13 +1684,6 @@ bool GenericPluginTy::is_gfx90a_coarse_grain_usm_map_enabled(int32_t DeviceId) {
   auto R = [&]() {
     return getDevice(DeviceId).IsGfx90aCoarseGrainUsmMapEnabled();
   }();
-  T.res(R);
-  return R;
-}
-
-bool GenericPluginTy::is_system_supporting_managed_memory(int32_t DeviceId) {
-  auto T = logger::log<bool>(__func__, DeviceId);
-  auto R = [&]() { return IsSystemSupportingManagedMemory(); }();
   T.res(R);
   return R;
 }
@@ -2143,24 +2135,6 @@ int32_t GenericPluginTy::destroy_event(int32_t DeviceId, void *EventPtr) {
   return R;
 }
 
-int32_t GenericPluginTy::init_async_info(int32_t DeviceId,
-                                         __tgt_async_info **AsyncInfoPtr) {
-  auto T = logger::log<int32_t>(__func__, DeviceId, AsyncInfoPtr);
-  auto R = [&]() {
-    assert(AsyncInfoPtr && "Invalid async info");
-
-    auto Err = getDevice(DeviceId).initAsyncInfo(AsyncInfoPtr);
-    if (Err) {
-      REPORT() << "Failure to initialize async info at " << *AsyncInfoPtr
-               << " on device " << DeviceId << ": " << toString(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-    return OFFLOAD_SUCCESS;
-  }();
-  T.res(R);
-  return R;
-}
-
 // Register mapped or allocated memory (with omp_target_alloc or omp_alloc)
 // as coarse grain
 // \arg DeviceId is the ID of the device for which the memory should be switched
@@ -2324,17 +2298,6 @@ int32_t GenericPluginTy::use_auto_zero_copy(int32_t DeviceId) {
   return R;
 }
 
-int32_t GenericPluginTy::enable_access_to_all_agents(int32_t DeviceId,
-                                                     void *ptr) {
-  auto T = logger::log<int32_t>(__func__, DeviceId, ptr);
-  auto R = [&]() {
-    // Not implemented yet.
-    return OFFLOAD_FAIL;
-  }();
-  T.res(R);
-  return R;
-}
-
 int32_t GenericPluginTy::zero_copy_sanity_checks_and_diag(
     int32_t DeviceId, bool isUnifiedSharedMemory, bool isAutoZeroCopy,
     bool isEagerMaps) {
@@ -2350,16 +2313,6 @@ int32_t GenericPluginTy::zero_copy_sanity_checks_and_diag(
     }
 
     return OFFLOAD_SUCCESS;
-  }();
-  T.res(R);
-  return R;
-}
-
-bool GenericPluginTy::use_shared_mem_for_descriptor(int32_t DeviceId,
-                                                    int64_t Size) {
-  auto T = logger::log<bool>(__func__, DeviceId);
-  auto R = [&]() {
-    return getDevice(DeviceId).useSharedMemForDescriptor(Size);
   }();
   T.res(R);
   return R;

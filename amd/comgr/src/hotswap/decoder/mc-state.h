@@ -79,6 +79,12 @@ std::string printInst(const MCState &State, const llvm::MCInst &Inst);
 /// `_vi`) from `Mnemonic` if present; otherwise return `Mnemonic` unchanged.
 llvm::StringRef stripEncoding(llvm::StringRef Mnemonic);
 
+/// Drop the subtarget encoding variant from `Reg` (e.g. `TTMP0_vi` and
+/// `TTMP0_gfx9plus` both give `TTMP0`), so a handler can match one register id
+/// whichever subtarget the instruction was decoded for. Registers without a
+/// variant are returned unchanged.
+llvm::MCRegister stripRegEncoding(llvm::MCRegister Reg);
+
 /// Return the mnemonic of `Inst` with any encoding suffix removed (e.g.
 /// "v_mov_b32" for `v_mov_b32_e32`), for diagnostics that name the instruction.
 /// The raiser's dispatch identity is `CanonicalOp` (see canonical-op.h), not

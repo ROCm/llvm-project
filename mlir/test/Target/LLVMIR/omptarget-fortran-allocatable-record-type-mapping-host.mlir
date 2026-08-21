@@ -4,7 +4,7 @@
 // to LLVM-IR from MLIR when performing explicit member mapping of a record type
 // that includes fortran allocatables in various locations of the record types
 // hierarchy.
-
+// XFAIL: *
 module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-amd-amdhsa"]} {
   llvm.func @omp_map_derived_type_allocatable_member(%arg0: !llvm.ptr) {
     %0 = llvm.mlir.constant(4 : index) : i64

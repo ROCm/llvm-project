@@ -1256,6 +1256,10 @@ public:
     }
     assert((StackLevel > 0 && I != EndI) || (StackLevel == 0 && I == EndI));
   }
+  void setOrderedToBlockAssociated() {
+    assert(getCurrentDirective() == OMPD_ordered_standalone);
+    getTopOfStack().Directive = OMPD_ordered_blockassoc;
+  }
 };
 
 bool isImplicitTaskingRegion(OpenMPDirectiveKind DKind) {
@@ -4618,6 +4622,10 @@ static void processCapturedRegions(Sema &SemaRef, OpenMPDirectiveKind DKind,
 void SemaOpenMP::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind,
                                         Scope *CurScope) {
   ASTContext &Context = getASTContext();
+  if (DKind == OMPD_ordered_blockassoc &&
+      DSAStack->getCurrentDirective() == OMPD_ordered_standalone) {
+    DSAStack->setOrderedToBlockAssociated();
+  }
   switch (DKind) {
   case OMPD_parallel:
   case OMPD_parallel_for:
@@ -4757,7 +4765,7 @@ void SemaOpenMP::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind,
   case OMPD_taskgroup:
   case OMPD_distribute:
   case OMPD_distribute_simd:
-  case OMPD_ordered:
+  case OMPD_ordered_blockassoc:
   case OMPD_scope:
   case OMPD_target_data:
   case OMPD_dispatch: {
@@ -5469,8 +5477,8 @@ static bool checkNestingOfRegions(Sema &SemaRef, const DSAStackTy *Stack,
     return true;
   }
   if (isOpenMPSimdDirective(ParentRegion) &&
-      ((OMPVersion <= 45 && CurrentRegion != OMPD_ordered) ||
-       (OMPVersion >= 50 && CurrentRegion != OMPD_ordered &&
+      ((OMPVersion <= 45 && CurrentRegion != OMPD_ordered_blockassoc) ||
+       (OMPVersion >= 50 && CurrentRegion != OMPD_ordered_blockassoc &&
         CurrentRegion != OMPD_simd && CurrentRegion != OMPD_atomic &&
         CurrentRegion != OMPD_scan))) {
     // OpenMP [2.16, Nesting of Regions]
@@ -5594,12 +5602,13 @@ static bool checkNestingOfRegions(Sema &SemaRef, const DSAStackTy *Stack,
     // OpenMP 5.1 [2.22, Nesting of Regions]
     // A barrier region may not be closely nested inside a worksharing, loop,
     // task, taskloop, critical, ordered, atomic, or masked region.
-    NestingProhibited = isOpenMPWorksharingDirective(ParentRegion) ||
-                        isOpenMPGenericLoopDirective(ParentRegion) ||
-                        isOpenMPTaskingDirective(ParentRegion) ||
-                        llvm::is_contained({OMPD_masked, OMPD_master,
-                                            OMPD_critical, OMPD_ordered},
-                                           EnclosingConstruct);
+    NestingProhibited =
+        isOpenMPWorksharingDirective(ParentRegion) ||
+        isOpenMPGenericLoopDirective(ParentRegion) ||
+        isOpenMPTaskingDirective(ParentRegion) ||
+        llvm::is_contained(
+            {OMPD_masked, OMPD_master, OMPD_critical, OMPD_ordered_blockassoc},
+            EnclosingConstruct);
   } else if (isOpenMPWorksharingDirective(CurrentRegion) &&
              !isOpenMPParallelDirective(CurrentRegion) &&
              !isOpenMPTeamsDirective(CurrentRegion)) {
@@ -5607,14 +5616,16 @@ static bool checkNestingOfRegions(Sema &SemaRef, const DSAStackTy *Stack,
     // A loop region that binds to a parallel region or a worksharing region
     // may not be closely nested inside a worksharing, loop, task, taskloop,
     // critical, ordered, atomic, or masked region.
-    NestingProhibited = isOpenMPWorksharingDirective(ParentRegion) ||
-                        isOpenMPGenericLoopDirective(ParentRegion) ||
-                        isOpenMPTaskingDirective(ParentRegion) ||
-                        llvm::is_contained({OMPD_masked, OMPD_master,
-                                            OMPD_critical, OMPD_ordered},
-                                           EnclosingConstruct);
+    NestingProhibited =
+        isOpenMPWorksharingDirective(ParentRegion) ||
+        isOpenMPGenericLoopDirective(ParentRegion) ||
+        isOpenMPTaskingDirective(ParentRegion) ||
+        llvm::is_contained(
+            {OMPD_masked, OMPD_master, OMPD_critical, OMPD_ordered_blockassoc},
+            EnclosingConstruct);
     Recommend = ShouldBeInParallelRegion;
-  } else if (CurrentRegion == OMPD_ordered) {
+  } else if (CurrentRegion == OMPD_ordered_blockassoc ||
+             CurrentRegion == OMPD_ordered_standalone) {
     // OpenMP [2.16, Nesting of Regions]
     // An ordered region may not be closely nested inside a critical,
     // atomic, or explicit task region.
@@ -7024,7 +7035,8 @@ StmtResult SemaOpenMP::ActOnOpenMPExecutableDirective(
            "No associated statement allowed for 'omp scan' directive");
     Res = ActOnOpenMPScanDirective(ClausesWithImplicit, StartLoc, EndLoc);
     break;
-  case OMPD_ordered:
+  case OMPD_ordered_blockassoc:
+  case OMPD_ordered_standalone:
     Res = ActOnOpenMPOrderedDirective(ClausesWithImplicit, AStmt, StartLoc,
                                       EndLoc);
     break;
@@ -12237,7 +12249,8 @@ SemaOpenMP::ActOnOpenMPOrderedDirective(ArrayRef<OMPClause *> Clauses,
         if ((DC && DependSourceClause) || (DOC && DoacrossSourceClause)) {
           unsigned OMPVersion = getLangOpts().OpenMP;
           Diag(C->getBeginLoc(), diag::err_omp_more_one_clause)
-              << getOpenMPDirectiveName(OMPD_ordered, OMPVersion)
+              << getOpenMPDirectiveName(DSAStack->getCurrentDirective(),
+                                        OMPVersion)
               << getOpenMPClauseNameForDiag(DC ? OMPC_depend : OMPC_doacross)
               << 2;
           ErrorFound = true;
@@ -12328,8 +12341,11 @@ SemaOpenMP::ActOnOpenMPOrderedDirective(ArrayRef<OMPClause *> Clauses,
     SemaRef.setFunctionHasBranchProtectedScope();
   }
 
-  return OMPOrderedDirective::Create(getASTContext(), StartLoc, EndLoc, Clauses,
-                                     AStmt);
+  if (!AStmt)
+    return OMPOrderedStandaloneDirective::Create(getASTContext(), StartLoc,
+                                                 EndLoc, Clauses);
+  return OMPOrderedBlockAssocDirective::Create(getASTContext(), StartLoc,
+                                               EndLoc, Clauses, AStmt);
 }
 
 namespace {
@@ -22760,7 +22776,7 @@ OMPClause *SemaOpenMP::ActOnOpenMPDependClause(
     SourceLocation EndLoc) {
   OpenMPDependClauseKind DepKind = Data.DepKind;
   SourceLocation DepLoc = Data.DepLoc;
-  if (DSAStack->getCurrentDirective() == OMPD_ordered &&
+  if (DSAStack->getCurrentDirective() == OMPD_ordered_standalone &&
       DepKind != OMPC_DEPEND_source && DepKind != OMPC_DEPEND_sink) {
     Diag(DepLoc, diag::err_omp_unexpected_clause_value)
         << "'source' or 'sink'" << getOpenMPClauseNameForDiag(OMPC_depend);
@@ -22771,7 +22787,7 @@ OMPClause *SemaOpenMP::ActOnOpenMPDependClause(
     Diag(DepLoc, diag::err_omp_taskwait_depend_mutexinoutset_not_allowed);
     return nullptr;
   }
-  if ((DSAStack->getCurrentDirective() != OMPD_ordered ||
+  if ((DSAStack->getCurrentDirective() != OMPD_ordered_standalone ||
        DSAStack->getCurrentDirective() == OMPD_depobj) &&
       (DepKind == OMPC_DEPEND_unknown || DepKind == OMPC_DEPEND_source ||
        DepKind == OMPC_DEPEND_sink ||
@@ -26765,7 +26781,7 @@ OMPClause *SemaOpenMP::ActOnOpenMPDoacrossClause(
     SourceLocation ColonLoc, ArrayRef<Expr *> VarList, SourceLocation StartLoc,
     SourceLocation LParenLoc, SourceLocation EndLoc) {
 
-  if (DSAStack->getCurrentDirective() == OMPD_ordered &&
+  if (DSAStack->getCurrentDirective() == OMPD_ordered_standalone &&
       DepType != OMPC_DOACROSS_source && DepType != OMPC_DOACROSS_sink &&
       DepType != OMPC_DOACROSS_sink_omp_cur_iteration &&
       DepType != OMPC_DOACROSS_source_omp_cur_iteration) {

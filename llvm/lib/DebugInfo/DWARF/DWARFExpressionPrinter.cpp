@@ -16,7 +16,6 @@
 #include "llvm/Support/FormatVariadic.h"
 #include <cassert>
 #include <cstdint>
-#include <vector>
 
 using namespace llvm;
 using namespace dwarf;
@@ -431,9 +430,6 @@ bool prettyPrintRegisterOp(DWARFUnit *U, raw_ostream &OS,
 
   if (RegNumFromOperand)
     DwarfRegNum = Operands[OpNum++];
-  else if (Opcode == DW_OP_LLVM_call_frame_entry_reg ||
-           (SubOpcode && *SubOpcode == DW_OP_LLVM_call_frame_entry_reg))
-    DwarfRegNum = Operands[OpNum];
   else if (Opcode >= DW_OP_breg0 && Opcode < DW_OP_bregx)
     DwarfRegNum = Opcode - DW_OP_breg0;
   else

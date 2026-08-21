@@ -9,6 +9,10 @@
 #include "mc-state.h"
 #include "comgr.h"
 #include "hotswap/common/hotswap-error.h"
+
+// AMDGPU target-private headers.
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+
 #include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/Support/Error.h"
@@ -132,5 +136,69 @@ StringRef stripEncoding(StringRef Mnemonic) {
 std::string strippedMnemonic(const MCState &State, const MCInst &Inst) {
   return stripEncoding(getMnemonic(State, Inst)).str();
 }
+
+// Spelling the enumerators through concatenation keeps a renamed or dropped
+// register a compile error rather than a silent mismatch.
+#define CASE_CI_VI(Node)                                                       \
+  case AMDGPU::Node##_ci:                                                      \
+  case AMDGPU::Node##_vi:                                                      \
+    return AMDGPU::Node;
+#define CASE_VI_GFX9PLUS(Node)                                                 \
+  case AMDGPU::Node##_vi:                                                      \
+  case AMDGPU::Node##_gfx9plus:                                                \
+    return AMDGPU::Node;
+#define CASE_GFXPRE11_GFX11PLUS(Node)                                          \
+  case AMDGPU::Node##_gfxpre11:                                                \
+  case AMDGPU::Node##_gfx11plus:                                               \
+    return AMDGPU::Node;
+
+MCRegister stripRegEncoding(MCRegister Reg) {
+  switch (Reg.id()) {
+  default:
+    return Reg;
+    CASE_CI_VI(FLAT_SCR)
+    CASE_CI_VI(FLAT_SCR_LO)
+    CASE_CI_VI(FLAT_SCR_HI)
+    CASE_VI_GFX9PLUS(TTMP0)
+    CASE_VI_GFX9PLUS(TTMP1)
+    CASE_VI_GFX9PLUS(TTMP2)
+    CASE_VI_GFX9PLUS(TTMP3)
+    CASE_VI_GFX9PLUS(TTMP4)
+    CASE_VI_GFX9PLUS(TTMP5)
+    CASE_VI_GFX9PLUS(TTMP6)
+    CASE_VI_GFX9PLUS(TTMP7)
+    CASE_VI_GFX9PLUS(TTMP8)
+    CASE_VI_GFX9PLUS(TTMP9)
+    CASE_VI_GFX9PLUS(TTMP10)
+    CASE_VI_GFX9PLUS(TTMP11)
+    CASE_VI_GFX9PLUS(TTMP12)
+    CASE_VI_GFX9PLUS(TTMP13)
+    CASE_VI_GFX9PLUS(TTMP14)
+    CASE_VI_GFX9PLUS(TTMP15)
+    CASE_VI_GFX9PLUS(TTMP0_TTMP1)
+    CASE_VI_GFX9PLUS(TTMP2_TTMP3)
+    CASE_VI_GFX9PLUS(TTMP4_TTMP5)
+    CASE_VI_GFX9PLUS(TTMP6_TTMP7)
+    CASE_VI_GFX9PLUS(TTMP8_TTMP9)
+    CASE_VI_GFX9PLUS(TTMP10_TTMP11)
+    CASE_VI_GFX9PLUS(TTMP12_TTMP13)
+    CASE_VI_GFX9PLUS(TTMP14_TTMP15)
+    CASE_VI_GFX9PLUS(TTMP0_TTMP1_TTMP2_TTMP3)
+    CASE_VI_GFX9PLUS(TTMP4_TTMP5_TTMP6_TTMP7)
+    CASE_VI_GFX9PLUS(TTMP8_TTMP9_TTMP10_TTMP11)
+    CASE_VI_GFX9PLUS(TTMP12_TTMP13_TTMP14_TTMP15)
+    CASE_VI_GFX9PLUS(TTMP0_TTMP1_TTMP2_TTMP3_TTMP4_TTMP5_TTMP6_TTMP7)
+    CASE_VI_GFX9PLUS(TTMP4_TTMP5_TTMP6_TTMP7_TTMP8_TTMP9_TTMP10_TTMP11)
+    CASE_VI_GFX9PLUS(TTMP8_TTMP9_TTMP10_TTMP11_TTMP12_TTMP13_TTMP14_TTMP15)
+    CASE_VI_GFX9PLUS(
+        TTMP0_TTMP1_TTMP2_TTMP3_TTMP4_TTMP5_TTMP6_TTMP7_TTMP8_TTMP9_TTMP10_TTMP11_TTMP12_TTMP13_TTMP14_TTMP15)
+    CASE_GFXPRE11_GFX11PLUS(M0)
+    CASE_GFXPRE11_GFX11PLUS(SGPR_NULL)
+  }
+}
+
+#undef CASE_CI_VI
+#undef CASE_VI_GFX9PLUS
+#undef CASE_GFXPRE11_GFX11PLUS
 
 } // namespace COMGR::hotswap

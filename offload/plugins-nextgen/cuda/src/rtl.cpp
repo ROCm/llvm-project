@@ -969,18 +969,6 @@ struct CUDADeviceTy : public GenericDeviceTy {
     return Plugin::success();
   }
 
-  /// Initialize the async info for interoperability purposes.
-  Error initAsyncInfoImpl(AsyncInfoWrapperTy &AsyncInfoWrapper) override {
-    if (auto Err = setContext())
-      return Err;
-
-    CUstream Stream;
-    if (auto Err = getStream(AsyncInfoWrapper, Stream))
-      return Err;
-
-    return Plugin::success();
-  }
-
   /// Insert a data fence between previous data operations and the following
   /// operations. This is a no-op for CUDA devices as operations inserted into
   /// a queue are in-order.
@@ -1677,6 +1665,20 @@ public:
   }
 };
 
+struct CUDAPluginContextTy final : public PluginContextTy {
+  using PluginContextTy::PluginContextTy;
+
+  Error initAsyncInfoImpl(GenericDeviceTy &Device,
+                          AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+    auto &CUDADevice = static_cast<CUDADeviceTy &>(Device);
+    if (auto Err = CUDADevice.setContext())
+      return Err;
+
+    CUstream Stream;
+    return CUDADevice.getStream(AsyncInfoWrapper, Stream);
+  }
+};
+
 /// Class implementing the CUDA-specific functionalities of the plugin.
 struct CUDAPluginTy final : public GenericPluginTy {
   /// Create a CUDA plugin.
@@ -1742,6 +1744,11 @@ struct CUDAPluginTy final : public GenericPluginTy {
     return new CUDADeviceTy(Plugin, DeviceId, NumDevices);
   }
 
+  Expected<std::unique_ptr<PluginContextTy>>
+  createPluginContext(llvm::ArrayRef<GenericDeviceTy *> Devices) override {
+    return std::make_unique<CUDAPluginContextTy>(*this, Devices);
+  }
+
   /// Creates a CUDA global handler.
   GenericGlobalHandlerTy *createGlobalHandler() override {
     return new CUDAGlobalHandlerTy();
@@ -1796,24 +1803,6 @@ struct CUDAPluginTy final : public GenericPluginTy {
     // run on any GPU with the same major revision and same or higher minor
     // revision.
     return Major == ImageMajor && Minor >= ImageMinor;
-  }
-  bool IsSystemSupportingManagedMemory() override final {
-    assert(getNumDevices());
-
-    CUdevice Device;
-    CUresult Res = cuDeviceGet(&Device, 0);
-
-    if (Res != CUDA_SUCCESS)
-      return false;
-
-    int HasManagedMemorySupport = false;
-    Res = cuDeviceGetAttribute(&HasManagedMemorySupport,
-                               CU_DEVICE_ATTRIBUTE_MANAGED_MEMORY, Device);
-
-    if (Res != CUDA_SUCCESS)
-      return false;
-
-    return HasManagedMemorySupport;
   }
 };
 

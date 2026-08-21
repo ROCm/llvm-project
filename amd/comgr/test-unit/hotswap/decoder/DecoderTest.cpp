@@ -8,17 +8,23 @@
 //
 // Unit tests for the decoder library: the AMDGPU MC stack (mc-state), the
 // architecture-neutral instruction identity (canonical-op), the per-subtarget
-// capability queries (isa-profile), and the decoded-instruction model
-// (decoded-inst). Each exercises the piece directly, without a code object or
+// capability queries (isa-profile), the decoded-instruction model
+// (decoded-inst), the MC-opcode to CanonicalOp map (opcode-map), and the .text
+// scan (decode). Each exercises the piece directly, without a code object or
 // the raiser, so the coverage matches what the decoder alone provides.
 //
 //===----------------------------------------------------------------------===//
 
 #include "hotswap/decoder/canonical-op.h"
+#include "hotswap/decoder/decode.h"
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
+#include "hotswap/decoder/opcode-map.h"
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -29,7 +35,10 @@
 #include "gtest/gtest.h"
 
 #include <cstdint>
+#include <initializer_list>
 #include <mutex>
+#include <set>
+#include <vector>
 
 using namespace COMGR::hotswap;
 
@@ -159,6 +168,28 @@ TEST(StripEncoding, LeavesUnsuffixedUnchanged) {
   EXPECT_EQ(stripEncoding("s_endpgm"), "s_endpgm");
 }
 
+TEST_F(DecoderTest, StripRegEncodingDropsOnlyTheVariantSuffix) {
+  static constexpr llvm::StringRef KSuffixes[] = {"_ci", "_vi", "_gfx9plus",
+                                                  "_gfx11plus", "_gfxpre11"};
+  const llvm::MCRegisterInfo &MRI = *State.RegInfo;
+  unsigned Stripped = 0;
+  for (unsigned Reg = 1; Reg < MRI.getNumRegs(); ++Reg) {
+    llvm::MCRegister Base = stripRegEncoding(Reg);
+    EXPECT_EQ(stripRegEncoding(Base), Base) << MRI.getName(Reg);
+    if (Base == Reg)
+      continue;
+    ++Stripped;
+    llvm::StringRef Name = MRI.getName(Reg);
+    llvm::StringRef BaseName = MRI.getName(Base);
+    ASSERT_TRUE(Name.starts_with(BaseName))
+        << Name.str() << " does not name a variant of " << BaseName.str();
+    EXPECT_TRUE(llvm::is_contained(KSuffixes, Name.substr(BaseName.size())))
+        << Name.str() << " does not name a variant of " << BaseName.str();
+  }
+  // Pinned so a register gaining or losing a variant fails here.
+  EXPECT_EQ(Stripped, 74u);
+}
+
 // -- isa-profile --------------------------------------------------------------
 
 TEST_F(DecoderTest, ISAProfileGfx942) {
@@ -181,6 +212,112 @@ TEST_F(DecoderTest, ISAProfileGfx1250) {
   EXPECT_TRUE(Profile.hasValidWaveSize());
   EXPECT_FALSE(Profile.hasAgpr());
   EXPECT_TRUE(Profile.hasGfx125UserSgprCountField());
+}
+
+// -- opcode-map ---------------------------------------------------------------
+
+// Resolve an MC opcode through the disassembler so the map is queried with the
+// same opcode a real .text scan produces.
+unsigned opcodeOf(MCState &State, llvm::ArrayRef<uint8_t> Bytes) {
+  llvm::MCInst Inst;
+  uint64_t Size = 0;
+  EXPECT_EQ(State.Disasm->getInstruction(Inst, Size, Bytes, /*Address=*/0,
+                                         llvm::nulls()),
+            llvm::MCDisassembler::Success);
+  return Inst.getOpcode();
+}
+
+TEST_F(DecoderTest, OpcodeMapTagsTableEntries) {
+  OpcodeMap Map;
+  Map.build(*State.InstrInfo);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SMovB32Bytes)), CanonicalOp::S_MOV_B32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SEndpgmBytes)), CanonicalOp::S_ENDPGM);
+}
+
+TEST_F(DecoderTest, OpcodeMapReturnsUnknownForUnmappedOpcode) {
+  OpcodeMap Map;
+  Map.build(*State.InstrInfo);
+  // v_mov_b32 has no kCanonTable row, so it stays Unknown.
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VMovB32Bytes)), CanonicalOp::Unknown);
+  EXPECT_EQ(Map.lookup(State.InstrInfo->getNumOpcodes()), CanonicalOp::Unknown);
+}
+
+// -- decode -------------------------------------------------------------------
+
+// Concatenate instruction encodings into one .text image.
+std::vector<uint8_t>
+textOf(std::initializer_list<llvm::ArrayRef<uint8_t>> Insts) {
+  std::vector<uint8_t> Bytes;
+  for (llvm::ArrayRef<uint8_t> Inst : Insts)
+    Bytes.insert(Bytes.end(), Inst.begin(), Inst.end());
+  return Bytes;
+}
+
+TEST_F(DecoderTest, DecodeKernelWalksToProgramEnd) {
+  OpcodeMap Map;
+  Map.build(*State.InstrInfo);
+  std::vector<uint8_t> Text =
+      textOf({SMovB32Bytes, VMovB32Bytes, SEndpgmBytes});
+
+  llvm::Expected<DecodeResult> ResultOrErr =
+      decodeKernel(State, Map, Text, /*KernelOffset=*/0);
+  ASSERT_TRUE(static_cast<bool>(ResultOrErr))
+      << llvm::toString(ResultOrErr.takeError());
+
+  ASSERT_EQ(ResultOrErr->Insts.size(), 3u);
+  EXPECT_EQ(ResultOrErr->Insts[0].CanonOp, CanonicalOp::S_MOV_B32);
+  EXPECT_EQ(ResultOrErr->Insts[1].CanonOp, CanonicalOp::Unknown);
+  EXPECT_EQ(ResultOrErr->Insts[2].CanonOp, CanonicalOp::S_ENDPGM);
+  EXPECT_EQ(ResultOrErr->Insts[0].Offset, 0u);
+  EXPECT_EQ(ResultOrErr->Insts[1].Offset, 4u);
+  EXPECT_EQ(ResultOrErr->Insts[2].Offset, 8u);
+  EXPECT_EQ(ResultOrErr->Insts[0].sizeInBytes(), 4u);
+  EXPECT_EQ(ResultOrErr->BlockStarts, (std::set<uint64_t>{0}));
+}
+
+TEST_F(DecoderTest, DecodeKernelStopsAtProgramEnd) {
+  OpcodeMap Map;
+  Map.build(*State.InstrInfo);
+  // Bytes after the terminator belong to the next kernel, not this one.
+  std::vector<uint8_t> Text = textOf({SEndpgmBytes, SMovB32Bytes});
+
+  llvm::Expected<DecodeResult> ResultOrErr =
+      decodeKernel(State, Map, Text, /*KernelOffset=*/0);
+  ASSERT_TRUE(static_cast<bool>(ResultOrErr))
+      << llvm::toString(ResultOrErr.takeError());
+  ASSERT_EQ(ResultOrErr->Insts.size(), 1u);
+  EXPECT_EQ(ResultOrErr->Insts[0].CanonOp, CanonicalOp::S_ENDPGM);
+}
+
+TEST_F(DecoderTest, DecodeKernelHonoursOffsetAndEnd) {
+  OpcodeMap Map;
+  Map.build(*State.InstrInfo);
+  std::vector<uint8_t> Text =
+      textOf({SEndpgmBytes, SMovB32Bytes, SEndpgmBytes});
+
+  llvm::Expected<DecodeResult> ResultOrErr =
+      decodeKernel(State, Map, Text, /*KernelOffset=*/4, /*KernelEndOffset=*/8);
+  ASSERT_TRUE(static_cast<bool>(ResultOrErr))
+      << llvm::toString(ResultOrErr.takeError());
+  ASSERT_EQ(ResultOrErr->Insts.size(), 1u);
+  EXPECT_EQ(ResultOrErr->Insts[0].CanonOp, CanonicalOp::S_MOV_B32);
+  EXPECT_EQ(ResultOrErr->Insts[0].Offset, 4u);
+  EXPECT_EQ(ResultOrErr->BlockStarts, (std::set<uint64_t>{4}));
+}
+
+TEST_F(DecoderTest, DecodeKernelRejectsTruncatedInstruction) {
+  OpcodeMap Map;
+  Map.build(*State.InstrInfo);
+  // A whole s_mov_b32 followed by half an s_endpgm.
+  std::vector<uint8_t> Text = textOf({SMovB32Bytes, SEndpgmBytes});
+  Text.resize(6);
+
+  llvm::Expected<DecodeResult> ResultOrErr =
+      decodeKernel(State, Map, Text, /*KernelOffset=*/0);
+  ASSERT_FALSE(static_cast<bool>(ResultOrErr));
+  EXPECT_EQ(llvm::toString(ResultOrErr.takeError()),
+            "hotswap: decodeKernel: cannot decode instruction at .text offset "
+            "0x4 (fail)");
 }
 
 // -- decoded-inst bitfields ---------------------------------------------------

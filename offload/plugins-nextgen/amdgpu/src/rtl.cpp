@@ -924,7 +924,7 @@ private:
   uint32_t ImplicitArgsSize;
 
   /// Additional Info for the AMD GPU Kernel
-  offloading::amdgpu::AMDGPUKernelMetaData KernelInfo;  
+  offloading::amdgpu::AMDGPUKernelMetaData KernelInfo;
   /// CodeGen generate WGSize
   uint16_t ConstWGSize;
 
@@ -3335,8 +3335,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         OMPX_APUPrefaultMemcopySize("LIBOMPTARGET_APU_PREFAULT_MEMCOPY_SIZE",
                                     1 * 1024 * 1024), // 1MB
         OMPX_DGPUMaps("OMPX_DGPU_MAPS", false),
-        OMPX_SharedDescriptorMaxSize("LIBOMPTARGET_SHARED_DESCRIPTOR_MAX_SIZE",
-                                     0),
         OMPX_EnableDevice2DeviceMemAccess(
             "OMPX_ENABLE_DEVICE_TO_DEVICE_MEM_ACCESS", false),
         AMDGPUStreamManager(*this, Agent), AMDGPUEventManager(*this),
@@ -4452,11 +4450,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
                                           nullptr, Size / PatternSize);
   }
 
-  /// Initialize the async info
-  Error initAsyncInfoImpl(AsyncInfoWrapperTy &AsyncInfoWrapper) override {
-    // TODO: Implement this function.
-    return Plugin::success();
-  }
 
   Error setCoarseGrainMemoryImpl(void *ptr, int64_t size,
                                  bool set_attr = true) override final {
@@ -5110,10 +5103,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
   bool useMultipleSdmaEngines() const { return OMPX_UseMultipleSdmaEngines; }
 
-  bool useSharedMemForDescriptor(int64_t Size) override {
-    return Size <= OMPX_SharedDescriptorMaxSize;
-  }
-
   bool useStrictSanityChecks() const { return OMPX_StrictSanityChecks; }
 
 private:
@@ -5421,10 +5410,6 @@ private:
   /// Value of OMPX_DGPU_MAPS. When enabled, it will always perform
   /// copy on APUs regardless of the setting of HSA_XNACK.
   BoolEnvar OMPX_DGPUMaps;
-
-  /// Descriptors of size <= to this value will be allocated using shared
-  /// memory. Default value is 48.
-  UInt32Envar OMPX_SharedDescriptorMaxSize;
 
   // Determines whether we call HSA API, upon device memory allocation,
   // for making the memory acceccible from other agents.
@@ -5944,6 +5929,15 @@ private:
   }
 };
 
+struct AMDGPUPluginContextTy final : public PluginContextTy {
+  using PluginContextTy::PluginContextTy;
+
+  Error initAsyncInfoImpl(GenericDeviceTy &, AsyncInfoWrapperTy &) override {
+    // TODO: Implement this function.
+    return Plugin::success();
+  }
+};
+
 /// Class implementing the AMDGPU-specific functionalities of the plugin.
 struct AMDGPUPluginTy final : public GenericPluginTy {
   /// Create an AMDGPU plugin and initialize the AMDGPU driver.
@@ -6052,6 +6046,11 @@ struct AMDGPUPluginTy final : public GenericPluginTy {
                               getKernelAgent(DeviceId));
   }
 
+  Expected<std::unique_ptr<PluginContextTy>>
+  createPluginContext(llvm::ArrayRef<GenericDeviceTy *> Devices) override {
+    return std::make_unique<AMDGPUPluginContextTy>(*this, Devices);
+  }
+
   /// Creates an AMDGPU global handler.
   GenericGlobalHandlerTy *createGlobalHandler() override {
     return new AMDGPUGlobalHandlerTy();
@@ -6063,17 +6062,6 @@ struct AMDGPUPluginTy final : public GenericPluginTy {
 
   /// Get the ELF code for recognizing the compatible image binary.
   uint16_t getMagicElfBits() const override { return ELF::EM_AMDGPU; }
-
-  bool IsSystemSupportingManagedMemory() override final {
-    bool HasManagedMemorySupport = false;
-    hsa_status_t Status = hsa_system_get_info(HSA_AMD_SYSTEM_INFO_SVM_SUPPORTED,
-                                              &HasManagedMemorySupport);
-
-    if (Status != HSA_STATUS_SUCCESS)
-      return false;
-
-    return HasManagedMemorySupport;
-  }
 
   void checkInvalidImage(__tgt_device_image *TgtImage) override final {
     hsa_utils::checkImageCompatibilityWithSystemXnackMode(TgtImage,

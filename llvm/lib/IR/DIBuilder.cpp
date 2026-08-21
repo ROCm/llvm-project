@@ -952,19 +952,6 @@ static void checkGlobalVariableScope(DIScope *Context) {
 #endif
 }
 
-DIGlobalVariable *DIBuilder::createGlobalVariable(
-    DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *F,
-    unsigned LineNumber, DIType *Ty, bool IsLocalToUnit, bool isDefined,
-    MDNode *Decl, MDTuple *TemplateParams, dwarf::MemorySpace MS,
-    uint32_t AlignInBits, DINodeArray Annotations) {
-  checkGlobalVariableScope(Context);
-  return DIGlobalVariable::getDistinct(
-      VMContext, cast_or_null<DIScope>(Context), Name, LinkageName, F,
-      LineNumber, Ty, IsLocalToUnit, isDefined,
-      cast_or_null<DIDerivedType>(Decl), TemplateParams, MS, AlignInBits,
-      Annotations);
-}
-
 DIGlobalVariableExpression *DIBuilder::createGlobalVariableExpression(
     DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *F,
     unsigned LineNumber, DIType *Ty, bool IsLocalToUnit, bool isDefined,
