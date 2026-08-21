@@ -45,10 +45,19 @@ struct Entry {
 #define E(OP, SEM)                                                             \
   Entry { AMDGPU::OP, CanonicalOp::SEM }
 
+// clang-format off
 static const Entry kCanonTable[] = {
     E(S_MOV_B32, S_MOV_B32),
     E(S_ENDPGM, S_ENDPGM),
+    E(S_MOV_B64, S_MOV_B64),
+    E(S_CMOV_B32, S_CMOV_B32),
+    E(S_CMOV_B64, S_CMOV_B64),
+    E(S_BREV_B32, S_BREV_B32),
+    E(S_BREV_B64, S_BREV_B64),
+    E(S_NOT_B32, S_NOT_B32),
+    E(S_NOT_B64, S_NOT_B64),
 };
+// clang-format on
 
 #undef E
 
