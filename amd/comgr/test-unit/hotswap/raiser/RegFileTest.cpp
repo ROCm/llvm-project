@@ -186,6 +186,76 @@ TEST_F(RegFileTest, M0RoundTrip) {
   EXPECT_EQ(CI->getZExtValue(), 0x55u);
 }
 
+TEST_F(RegFileTest, FlatScratchHalvesRemainDistinct) {
+  RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+  Fx.begin(Type::getInt64Ty(Fx.Ctx));
+  ParsedReg Pair = reg(ParsedReg::FLAT_SCR, 0, 2);
+  ParsedReg Hi = reg(ParsedReg::FLAT_SCR, 1, 1);
+  Fx.RF.writeReg64(
+      Fx.B, Pair,
+      ConstantInt::get(Type::getInt64Ty(Fx.Ctx), 0x1122334455667788ULL));
+  Fx.RF.writeReg32(Fx.B, Hi,
+                   ConstantInt::get(Type::getInt32Ty(Fx.Ctx), 0xAABBCCDDu));
+  Fx.B.CreateRet(Fx.RF.readReg64(Fx.B, Pair));
+
+  auto *CI = dyn_cast_or_null<ConstantInt>(promoteAndFold(Fx));
+  ASSERT_NE(CI, nullptr);
+  EXPECT_EQ(CI->getZExtValue(), 0xAABBCCDD55667788ULL);
+}
+
+TEST_F(RegFileTest, VccHalfReadsSelectTheNamedHalf) {
+  RegFileFixture LoFx(srcIsa(), *Mc.RegInfo);
+  LoFx.begin(Type::getInt32Ty(LoFx.Ctx));
+  Value *Lo = LoFx.RF.readReg32(LoFx.B, reg(ParsedReg::VCC, 0, 1));
+  auto *LoTrunc = dyn_cast<TruncInst>(Lo);
+  ASSERT_NE(LoTrunc, nullptr);
+  EXPECT_TRUE(isa<CallInst>(LoTrunc->getOperand(0)));
+
+  RegFileFixture HiFx(srcIsa(), *Mc.RegInfo);
+  HiFx.begin(Type::getInt32Ty(HiFx.Ctx));
+  Value *Hi = HiFx.RF.readReg32(HiFx.B, reg(ParsedReg::VCC, 1, 1));
+  auto *HiTrunc = dyn_cast<TruncInst>(Hi);
+  ASSERT_NE(HiTrunc, nullptr);
+  auto *Shift = dyn_cast<BinaryOperator>(HiTrunc->getOperand(0));
+  ASSERT_NE(Shift, nullptr);
+  EXPECT_EQ(Shift->getOpcode(), Instruction::LShr);
+  auto *ShiftAmount = dyn_cast<ConstantInt>(Shift->getOperand(1));
+  ASSERT_NE(ShiftAmount, nullptr);
+  EXPECT_EQ(ShiftAmount->getZExtValue(), 32u);
+}
+
+TEST_F(RegFileTest, VccHalfWritesPreserveTheOtherHalf) {
+  auto Check = [&](unsigned Half, ICmpInst::Predicate Predicate) {
+    RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+    Fx.begin(Type::getInt1Ty(Fx.Ctx));
+    Fx.RF.storeVCC(Fx.B, ConstantInt::getTrue(Fx.Ctx));
+    Fx.RF.writeReg32(Fx.B, reg(ParsedReg::VCC, Half, 1),
+                     ConstantInt::get(Type::getInt32Ty(Fx.Ctx), 0));
+    Fx.B.CreateRet(Fx.RF.loadVCC(Fx.B));
+
+    auto *Select = dyn_cast_or_null<SelectInst>(promoteAndFold(Fx));
+    ASSERT_NE(Select, nullptr);
+    auto *WritesHalf = dyn_cast<ICmpInst>(Select->getCondition());
+    ASSERT_NE(WritesHalf, nullptr);
+    EXPECT_EQ(WritesHalf->getPredicate(), Predicate);
+    auto *Boundary = dyn_cast<ConstantInt>(WritesHalf->getOperand(1));
+    ASSERT_NE(Boundary, nullptr);
+    EXPECT_EQ(Boundary->getZExtValue(), 32u);
+    auto *NewBit = dyn_cast<ICmpInst>(Select->getTrueValue());
+    ASSERT_NE(NewBit, nullptr);
+    EXPECT_EQ(NewBit->getPredicate(), ICmpInst::ICMP_NE);
+    auto *Zero = dyn_cast<ConstantInt>(NewBit->getOperand(1));
+    ASSERT_NE(Zero, nullptr);
+    EXPECT_TRUE(Zero->isZero());
+    auto *Preserved = dyn_cast<ConstantInt>(Select->getFalseValue());
+    ASSERT_NE(Preserved, nullptr);
+    EXPECT_TRUE(Preserved->isOne());
+  };
+
+  Check(0, ICmpInst::ICMP_ULT);
+  Check(1, ICmpInst::ICMP_UGE);
+}
+
 TEST_F(RegFileTest, SGPR64RoundTripSplitsAndRecombines) {
   RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
   Fx.begin(Type::getInt64Ty(Fx.Ctx));

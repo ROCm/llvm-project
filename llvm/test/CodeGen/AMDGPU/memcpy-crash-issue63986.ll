@@ -208,18 +208,17 @@ define void @issue63986_reduced_expanded(i64 %idxprom) {
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 ; CHECK-NEXT:  ; %bb.2: ; %loop-memcpy-residual-header
 ; CHECK-NEXT:    s_and_b32 s4, 32, 15
-; CHECK-NEXT:    s_mov_b32 s7, 0
+; CHECK-NEXT:    s_mov_b32 s5, 0
 ; CHECK-NEXT:    ; implicit-def: $vgpr2_vgpr3
 ; CHECK-NEXT:    s_cbranch_scc0 .LBB1_6
 ; CHECK-NEXT:  ; %bb.3: ; %loop-memcpy-residual.preheader
-; CHECK-NEXT:    s_mov_b32 s5, s7
-; CHECK-NEXT:    s_mov_b64 s[8:9], 0
-; CHECK-NEXT:  .LBB1_4: ; %loop-memcpy-residual
-; CHECK-NEXT:    s_add_i32 s6, s8, 1
+; CHECK-NEXT:    s_mov_b64 s[6:7], 0
 ; CHECK-NEXT:    v_mov_b32_e32 v0, s4
 ; CHECK-NEXT:    v_mov_b32_e32 v1, s5
-; CHECK-NEXT:    v_cmp_lt_u64_e32 vcc, s[6:7], v[0:1]
-; CHECK-NEXT:    s_mov_b64 s[8:9], 1
+; CHECK-NEXT:  .LBB1_4: ; %loop-memcpy-residual
+; CHECK-NEXT:    s_add_i32 s4, s6, 1
+; CHECK-NEXT:    v_cmp_lt_u64_e32 vcc, s[4:5], v[0:1]
+; CHECK-NEXT:    s_mov_b64 s[6:7], 1
 ; CHECK-NEXT:    s_cbranch_vccnz .LBB1_4
 ; CHECK-NEXT:  ; %bb.5:
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 0

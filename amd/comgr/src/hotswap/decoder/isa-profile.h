@@ -38,6 +38,15 @@ public:
   // rather than the older 5-bit field.
   bool hasGfx125UserSgprCountField() const;
 
+  // Maximum USER_SGPR_COUNT supported by the source ISA.
+  unsigned maxUserSgprs() const;
+
+  // Whether the source ISA supports kernarg preloading.
+  bool hasKernargPreload() const;
+
+  // Whether the source ISA uses architected SGPRs.
+  bool hasArchitectedSgprs() const;
+
 private:
   explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}
 

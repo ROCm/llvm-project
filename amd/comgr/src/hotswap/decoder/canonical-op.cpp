@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "canonical-op.h"
+#include "hotswap/decoder/canonical-op.h"
 
 #include "llvm/Support/ErrorHandling.h"
 
@@ -17,7 +17,7 @@ llvm::StringRef canonicalOpName(CanonicalOp Op) {
 #define CANONICAL_OP(Name)                                                     \
   case CanonicalOp::Name:                                                      \
     return #Name;
-#include "canonical-op.def"
+#include "hotswap/decoder/canonical-op.def"
 #undef CANONICAL_OP
   case CanonicalOp::CanonicalOp_COUNT:
     break;

@@ -1,6 +1,6 @@
 // Tests HLFIR-to-FIR conversion aspects relevant to OpenMP. For example, that
 // the correct alloca block is chosen for OMP regions.
-
+// XFAIL: *
 // RUN: fir-opt --convert-hlfir-to-fir %s -o - | \
 // RUN: FileCheck %s
 

@@ -8,11 +8,11 @@
 //
 // Pins the scaffolding contract `raiseToIR` advertises: an empty input
 // produces a well-formed `llvm::Module` containing one `AMDGPU_KERNEL`
-// function whose body is exactly `ret void`, with the AMDGPU triple set.
-// Empty inputs succeed; malformed ISA inputs are rejected with a BadInput
-// RaiseFailure carried in the returned `llvm::Error`. Descriptor presence is
-// enforced upstream by the code-object loader, so it is no longer a raiser
-// precondition.
+// function whose body is exactly `ret void`, with the AMDGPU triple set and
+// the source kernarg segment declared. Empty inputs succeed; malformed ISA
+// inputs are rejected with a BadInput RaiseFailure carried in the returned
+// `llvm::Error`. Descriptor presence is enforced upstream by the code-object
+// loader, so it is no longer a raiser precondition.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,10 +22,12 @@
 
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CallingConv.h"
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/Alignment.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
@@ -61,9 +63,11 @@ using COMGR::hotswap::raiseToIR;
 
 namespace {
 
-KernelMeta makeKernelMeta(llvm::StringRef Name) {
+KernelMeta makeKernelMeta(llvm::StringRef Name,
+                          uint32_t KernargSegmentSize = 0) {
   KernelMeta Meta;
   Meta.Name = Name.str();
+  Meta.KernargSegmentSize = KernargSegmentSize;
   return Meta;
 }
 
@@ -112,6 +116,43 @@ TEST(RaiserScaffolding, KernelFunctionIsAMDGPUKernelWithRetVoid) {
   llvm::BasicBlock &Entry = Fn->getEntryBlock();
   ASSERT_FALSE(Entry.empty());
   EXPECT_TRUE(llvm::isa<llvm::ReturnInst>(Entry.getTerminator()));
+}
+
+TEST(RaiserScaffolding, KernelDeclaresSourceKernargSegment) {
+  KernelMeta Meta = makeKernelMeta("kernel", /*KernargSegmentSize=*/40);
+  llvm::Expected<RaiseResult> Result = raiseToIR("gfx942", "kernel", Meta);
+
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  llvm::Function *Fn = Result->Module->getFunction("kernel");
+  ASSERT_NE(Fn, nullptr);
+  ASSERT_EQ(Fn->arg_size(), 1u);
+  EXPECT_EQ(Fn->getArg(0)->getType()->getPointerAddressSpace(), 4u);
+  auto *SegmentTy =
+      llvm::dyn_cast_if_present<llvm::ArrayType>(Fn->getParamByRefType(0));
+  ASSERT_NE(SegmentTy, nullptr);
+  EXPECT_TRUE(SegmentTy->getElementType()->isIntegerTy(8));
+  EXPECT_EQ(SegmentTy->getNumElements(), 40u);
+  EXPECT_EQ(Fn->getParamAlign(0).valueOrOne().value(), 16u);
+}
+
+TEST(RaiserScaffolding, EmptyKernargSegmentTakesNoParameter) {
+  KernelMeta Meta = makeKernelMeta("kernel");
+  llvm::Expected<RaiseResult> Result = raiseToIR("gfx942", "kernel", Meta);
+
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  llvm::Function *Fn = Result->Module->getFunction("kernel");
+  ASSERT_NE(Fn, nullptr);
+  EXPECT_EQ(Fn->arg_size(), 0u);
+}
+
+TEST(RaiserScaffolding, KernelSuppressesTargetHiddenArguments) {
+  KernelMeta Meta = makeKernelMeta("kernel", /*KernargSegmentSize=*/40);
+  llvm::Expected<RaiseResult> Result = raiseToIR("gfx942", "kernel", Meta);
+
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  llvm::Function *Fn = Result->Module->getFunction("kernel");
+  ASSERT_NE(Fn, nullptr);
+  EXPECT_TRUE(Fn->hasFnAttribute("amdgpu-no-implicitarg-ptr"));
 }
 
 TEST(RaiserScaffolding, EmptyTargetIsaIsRejected) {

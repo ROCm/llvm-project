@@ -38,10 +38,6 @@ enum class RaiseFailureReason : uint16_t {
   // The instruction's opcode is lifted, but this operand shape or encoding
   // variant is not. `detail()` carries shape-specific context when available.
   UnsupportedInstructionForm,
-  // A source hidden kernarg was identified, but no synthesis exists for its
-  // `.value_kind` yet. Narrower than `UnsupportedInstructionForm`: only that
-  // hidden-argument kind is unsupported.
-  UnsupportedSourceHiddenArg,
   // An instruction writes EXEC through a path the lift does not model.
   SPEUnsafeExecWriter,
   // `createTargetMachine` returned null.
@@ -72,8 +68,8 @@ enum class RaiseFailureReason : uint16_t {
   // The kernel descriptor could not be read from `.rodata` via the `<name>.kd`
   // symbol, so the user-SGPR layout cannot be derived.
   MissingKernelDescriptor,
-  // The descriptor's USER_SGPR_COUNT disagrees with the layout implied by
-  // kernel_code_properties and kernarg preload for the source ISA.
+  // Source descriptor fields do not describe a valid, self-consistent user
+  // SGPR layout.
   UserSgprLayoutMismatch,
   // The source object declares non-disabled workgroup cluster dimensions, so
   // TTMP6 carries per-cluster state the Hotswap ABI model does not reconstruct.

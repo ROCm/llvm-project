@@ -130,6 +130,15 @@ public:
   void collectSpillIndexUses(ArrayRef<LiveInterval *> StackIntervals,
                              SpillReferenceMap &Map) const;
 
+  /// Return true if the reload \p LoadMI of the stack slot with live interval
+  /// \p SlotLI is jointly dominated by the slot's spill stores, i.e. every path
+  /// from the entry block to the load passes through a store to the slot before
+  /// the load. \p StoreFreeReachable is the set of blocks reachable from the
+  /// entry block without passing through any store block for the slot.
+  bool isLoadJointlyDominatedByStores(
+      const MachineInstr &LoadMI, const LiveInterval &SlotLI,
+      const SmallPtrSetImpl<MachineBasicBlock *> &StoreFreeReachable) const;
+
   /// Attempt to unspill VGPRs by finding a free register and replacing the
   /// spill instructions with copies.
   void eliminateSpillsOfReassignedVGPRs() const;
@@ -478,6 +487,27 @@ void AMDGPURewriteAGPRCopyMFMAImpl::collectSpillIndexUses(
   }
 }
 
+bool AMDGPURewriteAGPRCopyMFMAImpl::isLoadJointlyDominatedByStores(
+    const MachineInstr &LoadMI, const LiveInterval &SlotLI,
+    const SmallPtrSetImpl<MachineBasicBlock *> &StoreFreeReachable) const {
+  const MachineBasicBlock *LoadMBB = LoadMI.getParent();
+  if (!MDT.isReachableFromEntry(LoadMBB))
+    return true;
+
+  // Check if every path passed through a store block.
+  if (!StoreFreeReachable.contains(LoadMBB))
+    return true;
+
+  // Otherwise, there exists a path to this block that has not seen any store
+  // yet. We must ensure that within this block there is a store to this slot
+  // before the load. Consult the slot's LiveStacks interval: a store to the
+  // slot before the load means the slot is not live into this block but is
+  // live at the load. If the load reads an undef value, the slot is not live
+  // at the load, failing the joint-dominance check.
+  SlotIndex LoadIdx = LIS.getInstructionIndex(LoadMI);
+  return SlotLI.liveAt(LoadIdx) && !LIS.isLiveInToMBB(SlotLI, LoadMBB);
+}
+
 void AMDGPURewriteAGPRCopyMFMAImpl::eliminateSpillsOfReassignedVGPRs() const {
   unsigned NumSlots = LSS.getNumIntervals();
   if (NumSlots == 0)
@@ -533,20 +563,11 @@ void AMDGPURewriteAGPRCopyMFMAImpl::eliminateSpillsOfReassignedVGPRs() const {
 
     // For each spill reload, every path from entry to the reload must pass
     // through at least one spill store to the same stack slot.
-    SmallVector<MachineInstr *, 4> Stores, Loads;
-    Stores.reserve(SpillReferences->second.size());
-    Loads.reserve(SpillReferences->second.size());
-    for (MachineInstr *MI : SpillReferences->second) {
-      if (MI->mayStore())
-        Stores.push_back(MI);
-      else if (MI->mayLoad())
-        Loads.push_back(MI);
-    }
-
     SmallPtrSet<MachineBasicBlock *, 4> StoreBlocks;
-    for (MachineInstr *S : Stores)
-      if (MDT.isReachableFromEntry(S->getParent()))
-        StoreBlocks.insert(S->getParent());
+    for (MachineInstr *MI : SpillReferences->second) {
+      if (MI->mayStore() && MDT.isReachableFromEntry(MI->getParent()))
+        StoreBlocks.insert(MI->getParent());
+    }
 
     if (StoreBlocks.empty()) {
       LLVM_DEBUG(dbgs() << "Skipping " << printReg(Slot, &TRI)
@@ -556,12 +577,9 @@ void AMDGPURewriteAGPRCopyMFMAImpl::eliminateSpillsOfReassignedVGPRs() const {
 
     // Compute blocks reachable from entry without passing through a store
     // block.
-    SmallPtrSet<MachineBasicBlock *, 16> StoreFreeReachable;
-    SmallVector<MachineBasicBlock *, 16> Worklist;
-
     MachineBasicBlock &EntryMBB = MF.front();
-    Worklist.push_back(&EntryMBB);
-    StoreFreeReachable.insert(&EntryMBB);
+    SmallPtrSet<MachineBasicBlock *, 16> StoreFreeReachable = {&EntryMBB};
+    SmallVector<MachineBasicBlock *, 16> Worklist = {&EntryMBB};
 
     while (!Worklist.empty()) {
       MachineBasicBlock *MBB = Worklist.pop_back_val();
@@ -574,33 +592,11 @@ void AMDGPURewriteAGPRCopyMFMAImpl::eliminateSpillsOfReassignedVGPRs() const {
       }
     }
 
-    auto IsLoadJointlyDominatedByStores = [&](MachineInstr *LoadMI) -> bool {
-      MachineBasicBlock *LoadMBB = LoadMI->getParent();
-      if (!MDT.isReachableFromEntry(LoadMBB))
-        return true;
-
-      // Check if every path passed through a store block.
-      if (!StoreFreeReachable.contains(LoadMBB))
-        return true;
-
-      // Otherwise, there exists a path to this block that has not seen any
-      // store yet. We must ensure that within this block there is a store to
-      // this slot before the load.
-      for (MachineInstr &MI : *LoadMBB) {
-        if (&MI == LoadMI)
-          break;
-        if (MI.mayStore()) {
-          for (MachineOperand &MO : MI.operands()) {
-            if (MO.isFI() && MO.getIndex() == Slot)
-              return true;
-          }
-        }
-      }
-
-      return false;
-    };
-
-    if (!llvm::all_of(Loads, IsLoadJointlyDominatedByStores)) {
+    // Every reachable reload must be jointly dominated by the slot's stores.
+    if (!llvm::all_of(SpillReferences->second, [&](const MachineInstr *MI) {
+          return !MI->mayLoad() ||
+                 isLoadJointlyDominatedByStores(*MI, *LI, StoreFreeReachable);
+        })) {
       LLVM_DEBUG(
           dbgs() << "Skipping " << printReg(Slot, &TRI)
                  << ": some reachable load not jointly dominated by stores\n");
