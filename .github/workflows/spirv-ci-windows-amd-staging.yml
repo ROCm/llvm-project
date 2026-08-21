@@ -34,6 +34,7 @@ jobs:
       # feed 504s intermittently and takes the whole job down with it. Install
       # dir must be the same in every job — the build tree's CMakeCache bakes in
       # CMAKE_MAKE_PROGRAM as an absolute path and the test jobs untar it.
+      # Extracted with System32 tar (bsdtar, reads zip) — Git bash's tar is GNU.
       - name: Install ninja
         run: |
           ninja_dir="$(cygpath -u "$GITHUB_WORKSPACE")/.ninja"
@@ -41,7 +42,7 @@ jobs:
           curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
             -O https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
           echo "f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a  ninja-win.zip" | sha256sum -c -
-          tar -xf ninja-win.zip && rm ninja-win.zip
+          "$(cygpath -u "$SYSTEMROOT")/System32/tar.exe" -xf ninja-win.zip && rm ninja-win.zip
           cygpath -w "$ninja_dir" >> "$GITHUB_PATH"
           ./ninja --version
 
@@ -196,7 +197,7 @@ jobs:
           curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
             -O https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
           echo "f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a  ninja-win.zip" | sha256sum -c -
-          tar -xf ninja-win.zip && rm ninja-win.zip
+          "$(cygpath -u "$SYSTEMROOT")/System32/tar.exe" -xf ninja-win.zip && rm ninja-win.zip
           cygpath -w "$ninja_dir" >> "$GITHUB_PATH"
           ./ninja --version
 
@@ -334,7 +335,7 @@ jobs:
           curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
             -O https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
           echo "f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a  ninja-win.zip" | sha256sum -c -
-          tar -xf ninja-win.zip && rm ninja-win.zip
+          "$(cygpath -u "$SYSTEMROOT")/System32/tar.exe" -xf ninja-win.zip && rm ninja-win.zip
           cygpath -w "$ninja_dir" >> "$GITHUB_PATH"
           ./ninja --version
 
@@ -418,7 +419,7 @@ jobs:
           curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
             -O https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
           echo "f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a  ninja-win.zip" | sha256sum -c -
-          tar -xf ninja-win.zip && rm ninja-win.zip
+          "$(cygpath -u "$SYSTEMROOT")/System32/tar.exe" -xf ninja-win.zip && rm ninja-win.zip
           cygpath -w "$ninja_dir" >> "$GITHUB_PATH"
           ./ninja --version
 
