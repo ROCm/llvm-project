@@ -177,9 +177,9 @@ public:
   // this block, if any.
   std::optional<uint64_t> lookupSourceImageSgprPairAddr(unsigned BaseIdx) const;
 
-  // Track the value written to M0, which V_MOVREL needs as a constant to
-  // resolve its VGPR index while the indexed register file is built. A
-  // non-constant write, and any block boundary, gives up the constant.
+  // Track the value written to M0, which the relative-addressing opcodes need
+  // as a constant to resolve the register index they name. A non-constant
+  // write, and any block boundary, gives up the constant.
   void updateM0Const(llvm::Value *V);
   std::optional<uint64_t> getM0Const() const { return M0Const; }
 
