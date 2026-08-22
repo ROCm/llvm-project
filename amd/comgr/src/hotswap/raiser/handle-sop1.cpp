@@ -714,6 +714,42 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   switch (Di.CanonOp) {
+  // The source splits a barrier in two: this arrival, which does not block,
+  // and a release in SOPP, which does. The raise has one barrier, and it
+  // arrives and waits at once, so standing it in for the arrival alone holds
+  // the wave where the source let it run on. A program that made progress only
+  // because the arrival did not block deadlocks under that reading, so the
+  // arrival is refused rather than widened into a whole barrier.
+  case CanonicalOp::S_BARRIER_SIGNAL_IMM:
+  case CanonicalOp::S_BARRIER_SIGNAL_M0:
+    return unsupported(Ctx, Di,
+                       "arrives at a barrier without waiting there, and the "
+                       "raise has only a barrier that also waits");
+
+  // The rest of the family speaks about a named barrier: a barrier a subset of
+  // the workgroup joins, leaves, sizes and polls. The raise carries no barrier
+  // membership and no arrival count, so lifting these would invent the
+  // synchronization they describe.
+  case CanonicalOp::S_BARRIER_SIGNAL_ISFIRST_IMM:
+  case CanonicalOp::S_BARRIER_SIGNAL_ISFIRST_M0:
+    return unsupported(Ctx, Di,
+                       "reports whether this wave arrived at the barrier "
+                       "first, which the raise does not track");
+  case CanonicalOp::S_GET_BARRIER_STATE_IMM:
+  case CanonicalOp::S_GET_BARRIER_STATE_M0:
+    return unsupported(Ctx, Di,
+                       "reads the arrival and membership counts of a barrier "
+                       "the raise keeps none for");
+  case CanonicalOp::S_BARRIER_INIT_IMM:
+  case CanonicalOp::S_BARRIER_INIT_M0:
+    return unsupported(Ctx, Di, "sizes the membership of a named barrier");
+  case CanonicalOp::S_BARRIER_JOIN_IMM:
+  case CanonicalOp::S_BARRIER_JOIN_M0:
+    return unsupported(Ctx, Di, "joins this wave to a named barrier");
+  case CanonicalOp::S_WAKEUP_BARRIER_IMM:
+  case CanonicalOp::S_WAKEUP_BARRIER_M0:
+    return unsupported(Ctx, Di, "wakes the waves waiting on a named barrier");
+
   case CanonicalOp::S_GETPC_B64:
     return unsupported(Ctx, Di,
                        "captures a source address, which no raised "

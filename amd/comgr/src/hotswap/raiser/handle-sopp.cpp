@@ -159,6 +159,22 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   case CanonicalOp::S_ICACHE_INV:
     return Error::success();
 
+  // The release half of the barrier the source splits; the arrival is in SOP1.
+  // The raise has one barrier, and it arrives and waits at once, so standing it
+  // in here makes the wave arrive a second time, at a barrier every other wave
+  // has to reach as well. Waves the source left free to run on are held there
+  // instead, which can deadlock, so the release is refused too.
+  case CanonicalOp::S_BARRIER_WAIT:
+    return unsupported(Ctx, Di,
+                       "waits on a barrier it does not arrive at here, and "
+                       "the raise has only a barrier that also arrives");
+
+  // Leaving takes the wave out of a named barrier's membership and reports in
+  // SCC whether it was the last member out. The raise keeps no membership to
+  // leave and so has nothing truthful to write to SCC.
+  case CanonicalOp::S_BARRIER_LEAVE:
+    return unsupported(Ctx, Di, "leaves a named barrier");
+
   // The branches. A conditional one falls through to the block the instruction
   // after it leads. Its condition is wave-level: SCC as written, and execz and
   // vccz as the emptiness of the mask the source wave holding this target lane
