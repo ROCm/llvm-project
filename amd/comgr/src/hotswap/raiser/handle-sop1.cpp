@@ -13,6 +13,8 @@
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise_failure.h"
 
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
@@ -20,6 +22,7 @@
 #include <cassert>
 #include <cstdint>
 #include <optional>
+#include <string>
 
 using namespace llvm;
 
@@ -30,13 +33,47 @@ static Expected<Value *> readSrc0(OpResolver &Op, bool Is64) {
   return Is64 ? Op.src64(0) : Op.src(0);
 }
 
-// Write V to Dst at the width the opcode operates on.
-static void writeDst(RegisterState &Registers, ParsedReg Dst, Value *V,
-                     bool Is64) {
-  if (Is64)
-    Registers.writeReg64(Dst, V);
-  else
-    Registers.writeReg32(Dst, V);
+// Refuse Di as naming a wave mask of a width the raiser does not hold.
+static Error refuseWaveMaskWidth(RaiseContext &Ctx, const DecodedInst &Di,
+                                 const Twine &Detail) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
+}
+
+// Whether a whole-wave mask of Bits bits is the mask the raiser holds: both
+// the source wave and the EXEC storage are that wide, so a mask combined with
+// EXEC is the same mask that is written back.
+static bool holdsWaveMaskAt(const RaiseContext &Ctx, unsigned Bits) {
+  return Ctx.Projection.sourceWaveMaskTy()->getIntegerBitWidth() == Bits &&
+         Ctx.Projection.execStorageTy()->getIntegerBitWidth() == Bits;
+}
+
+// The two widths holdsWaveMaskAt compares against, for naming in a refusal.
+static std::string heldWaveMaskWidths(const RaiseContext &Ctx) {
+  return (Twine("the source wave is ") +
+          Twine(Ctx.Projection.sourceWaveMaskTy()->getIntegerBitWidth()) +
+          " bits wide and EXEC holds " +
+          Twine(Ctx.Projection.execStorageTy()->getIntegerBitWidth()) + " bits")
+      .str();
+}
+
+// Write V to Dst at the width the opcode operates on. A 64-bit write to EXEC is
+// refused where the raiser holds no 64-bit mask, because reconciling the widths
+// would store a mask other than the one computed.
+static Error writeDst(RaiseContext &Ctx, const DecodedInst &Di, ParsedReg Dst,
+                      Value *V, bool Is64) {
+  if (!Is64) {
+    Ctx.registers().writeReg32(Dst, V);
+    return Error::success();
+  }
+  if (Dst.RegKind == ParsedReg::EXEC && !holdsWaveMaskAt(Ctx, 64))
+    return refuseWaveMaskWidth(Ctx, Di,
+                               "writes a 64-bit mask to EXEC, but " +
+                                   heldWaveMaskWidths(Ctx));
+  Ctx.registers().writeReg64(Dst, V);
+  return Error::success();
 }
 
 // Whether CanonOp is one of the scalar float opcodes, each of which takes one
@@ -201,6 +238,125 @@ static Value *emitBitReplicate(IRBuilder<> &B, Value *Src) {
   return B.CreateOr(Spread, B.CreateShl(Spread, 1), "s_bitreplicate");
 }
 
+// Src with the lowest bit of each group of four set iff any bit of that group
+// is, and every other bit clear. Both quad-mask opcodes start from this.
+static Value *emitQuadAnyBit(IRBuilder<> &B, Value *Src) {
+  IntegerType *Ty = cast<IntegerType>(Src->getType());
+  unsigned Width = Ty->getBitWidth();
+  assert((Width == 32 || Width == 64) && "a wave mask is one or two dwords");
+  Value *Any = B.CreateOr(Src, B.CreateLShr(Src, 2));
+  Any = B.CreateOr(Any, B.CreateLShr(Any, 1));
+  return B.CreateAnd(Any,
+                     ConstantInt::get(Ty, APInt::getSplat(Width, APInt(4, 1))));
+}
+
+// Src reduced to one bit per group of four, packed into the low quarter of the
+// result.
+static Value *emitQuadMask(IRBuilder<> &B, Value *Src) {
+  IntegerType *Ty = cast<IntegerType>(Src->getType());
+  unsigned Width = Ty->getBitWidth();
+  Value *Packed = emitQuadAnyBit(B, Src);
+  for (unsigned Gathered = 2; Gathered * 4 <= Width; Gathered *= 2) {
+    Value *Halved = B.CreateOr(Packed, B.CreateLShr(Packed, Gathered * 3 / 2));
+    // Keep the Gathered bits now adjacent in each field of Gathered * 4 bits.
+    Constant *Keep = ConstantInt::get(
+        Ty,
+        APInt::getSplat(Width, APInt::getLowBitsSet(Gathered * 4, Gathered)));
+    // The last step leaves the gathered bits adjacent, which is the result.
+    bool LastStep = Gathered * 8 > Width;
+    Packed = B.CreateAnd(Halved, Keep, LastStep ? "s_quadmask" : "");
+  }
+  return Packed;
+}
+
+// Src with each group of four bits set whole iff any bit of the group is set.
+static Value *emitWholeQuadMask(IRBuilder<> &B, Value *Src) {
+  Value *Pair = emitQuadAnyBit(B, Src);
+  Pair = B.CreateOr(Pair, B.CreateShl(Pair, 1));
+  return B.CreateOr(Pair, B.CreateShl(Pair, 2), "s_wqm");
+}
+
+// The bitwise operation an EXEC-combining opcode applies to its source and
+// EXEC.
+enum class MaskOperation { And, Or, Xor };
+
+// Which of the source, EXEC, or the combined result the opcode complements on
+// the way. No opcode in the family complements more than one of the three.
+enum class MaskNegate { None, Source, Exec, Result };
+
+// Which mask the opcode leaves in its scalar destination: the EXEC it
+// replaced, or the one it just computed.
+enum class MaskDestination { OldExec, NewExec };
+
+// One row of kExecCombines.
+struct ExecCombine {
+  CanonicalOp Opcode;
+  MaskOperation Operation;
+  MaskNegate Negate;
+  MaskDestination Destination;
+  unsigned MaskBits;
+};
+
+// clang-format off
+static const ExecCombine kExecCombines[] = {
+    {CanonicalOp::S_AND_SAVEEXEC_B32,   MaskOperation::And, MaskNegate::None,   MaskDestination::OldExec, 32},
+    {CanonicalOp::S_AND_SAVEEXEC_B64,   MaskOperation::And, MaskNegate::None,   MaskDestination::OldExec, 64},
+    {CanonicalOp::S_OR_SAVEEXEC_B32,    MaskOperation::Or,  MaskNegate::None,   MaskDestination::OldExec, 32},
+    {CanonicalOp::S_OR_SAVEEXEC_B64,    MaskOperation::Or,  MaskNegate::None,   MaskDestination::OldExec, 64},
+    {CanonicalOp::S_XOR_SAVEEXEC_B32,   MaskOperation::Xor, MaskNegate::None,   MaskDestination::OldExec, 32},
+    {CanonicalOp::S_XOR_SAVEEXEC_B64,   MaskOperation::Xor, MaskNegate::None,   MaskDestination::OldExec, 64},
+    {CanonicalOp::S_NAND_SAVEEXEC_B32,  MaskOperation::And, MaskNegate::Result, MaskDestination::OldExec, 32},
+    {CanonicalOp::S_NAND_SAVEEXEC_B64,  MaskOperation::And, MaskNegate::Result, MaskDestination::OldExec, 64},
+    {CanonicalOp::S_NOR_SAVEEXEC_B32,   MaskOperation::Or,  MaskNegate::Result, MaskDestination::OldExec, 32},
+    {CanonicalOp::S_NOR_SAVEEXEC_B64,   MaskOperation::Or,  MaskNegate::Result, MaskDestination::OldExec, 64},
+    {CanonicalOp::S_XNOR_SAVEEXEC_B32,  MaskOperation::Xor, MaskNegate::Result, MaskDestination::OldExec, 32},
+    {CanonicalOp::S_XNOR_SAVEEXEC_B64,  MaskOperation::Xor, MaskNegate::Result, MaskDestination::OldExec, 64},
+    {CanonicalOp::S_ANDN1_SAVEEXEC_B32, MaskOperation::And, MaskNegate::Source, MaskDestination::OldExec, 32},
+    {CanonicalOp::S_ANDN1_SAVEEXEC_B64, MaskOperation::And, MaskNegate::Source, MaskDestination::OldExec, 64},
+    {CanonicalOp::S_ORN1_SAVEEXEC_B32,  MaskOperation::Or,  MaskNegate::Source, MaskDestination::OldExec, 32},
+    {CanonicalOp::S_ORN1_SAVEEXEC_B64,  MaskOperation::Or,  MaskNegate::Source, MaskDestination::OldExec, 64},
+    {CanonicalOp::S_ANDN2_SAVEEXEC_B32, MaskOperation::And, MaskNegate::Exec,   MaskDestination::OldExec, 32},
+    {CanonicalOp::S_ANDN2_SAVEEXEC_B64, MaskOperation::And, MaskNegate::Exec,   MaskDestination::OldExec, 64},
+    {CanonicalOp::S_ORN2_SAVEEXEC_B32,  MaskOperation::Or,  MaskNegate::Exec,   MaskDestination::OldExec, 32},
+    {CanonicalOp::S_ORN2_SAVEEXEC_B64,  MaskOperation::Or,  MaskNegate::Exec,   MaskDestination::OldExec, 64},
+    {CanonicalOp::S_ANDN1_WREXEC_B32,   MaskOperation::And, MaskNegate::Source, MaskDestination::NewExec, 32},
+    {CanonicalOp::S_ANDN1_WREXEC_B64,   MaskOperation::And, MaskNegate::Source, MaskDestination::NewExec, 64},
+    {CanonicalOp::S_ANDN2_WREXEC_B32,   MaskOperation::And, MaskNegate::Exec,   MaskDestination::NewExec, 32},
+    {CanonicalOp::S_ANDN2_WREXEC_B64,   MaskOperation::And, MaskNegate::Exec,   MaskDestination::NewExec, 64},
+};
+// clang-format on
+
+// The kExecCombines row for CanonOp, or null if CanonOp does not combine a
+// mask with EXEC.
+static const ExecCombine *execCombine(CanonicalOp CanonOp) {
+  for (const ExecCombine &Row : kExecCombines)
+    if (Row.Opcode == CanonOp)
+      return &Row;
+  return nullptr;
+}
+
+// The mask Combine computes from source mask Src and the EXEC it replaces.
+static Value *emitMaskCombine(IRBuilder<> &B, const ExecCombine &Combine,
+                              Value *Src, Value *Exec) {
+  bool NegatesResult = Combine.Negate == MaskNegate::Result;
+  Value *Lhs = Combine.Negate == MaskNegate::Source ? B.CreateNot(Src) : Src;
+  Value *Rhs = Combine.Negate == MaskNegate::Exec ? B.CreateNot(Exec) : Exec;
+  StringRef Name = NegatesResult ? "" : "new_exec";
+  Value *Combined = nullptr;
+  switch (Combine.Operation) {
+  case MaskOperation::And:
+    Combined = B.CreateAnd(Lhs, Rhs, Name);
+    break;
+  case MaskOperation::Or:
+    Combined = B.CreateOr(Lhs, Rhs, Name);
+    break;
+  case MaskOperation::Xor:
+    Combined = B.CreateXor(Lhs, Rhs, Name);
+    break;
+  }
+  return NegatesResult ? B.CreateNot(Combined, "new_exec") : Combined;
+}
+
 // Refuse Di as a relative access that does not resolve statically.
 static Error refuseMovrel(RaiseContext &Ctx, const DecodedInst &Di,
                           const Twine &Detail) {
@@ -265,8 +421,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<Value *> Src = readSrc0(Op, Is64);
     if (!Src)
       return Src.takeError();
-    writeDst(Ctx.registers(), *Dst, *Src, Is64);
-    return Error::success();
+    return writeDst(Ctx, Di, *Dst, *Src, Is64);
   }
 
   if (Di.CanonOp == CanonicalOp::S_BREV_B32 ||
@@ -280,8 +435,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
       return Src.takeError();
     Value *Reversed = Ctx.B.CreateUnaryIntrinsic(Intrinsic::bitreverse, *Src,
                                                  /*FMFSource=*/{}, "s_brev");
-    writeDst(Ctx.registers(), *Dst, Reversed, Is64);
-    return Error::success();
+    return writeDst(Ctx, Di, *Dst, Reversed, Is64);
   }
 
   if (Di.CanonOp == CanonicalOp::S_NOT_B32 ||
@@ -294,7 +448,8 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     if (!Src)
       return Src.takeError();
     Value *Result = Ctx.B.CreateNot(*Src, "s_not");
-    writeDst(Ctx.registers(), *Dst, Result, Is64);
+    if (Error E = writeDst(Ctx, Di, *Dst, Result, Is64))
+      return E;
     Ctx.registers().writeScc(Ctx.B.CreateIsNotNull(Result, "s_not_scc"));
     return Error::success();
   }
@@ -315,8 +470,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
       return Old.takeError();
     Value *Moved =
         Ctx.B.CreateSelect(Ctx.registers().readScc(), *Src, *Old, "s_cmov");
-    writeDst(Ctx.registers(), *Dst, Moved, Is64);
-    return Error::success();
+    return writeDst(Ctx, Di, *Dst, Moved, Is64);
   }
 
   if (isScalarFloat(Di.CanonOp)) {
@@ -343,11 +497,10 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    if (Is64)
-      Ctx.registers().writeReg64(*Dst, Ctx.registers().readSgpr64(*Src));
-    else
-      Ctx.registers().writeReg32(*Dst, Ctx.registers().readSgpr32(*Src));
-    return Error::success();
+    return writeDst(Ctx, Di, *Dst,
+                    Is64 ? Ctx.registers().readSgpr64(*Src)
+                         : Ctx.registers().readSgpr32(*Src),
+                    Is64);
   }
 
   if (Di.CanonOp == CanonicalOp::S_MOVRELD_B32 ||
@@ -452,8 +605,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Value *Result =
         Sets ? Ctx.B.CreateOr(*Old, Bit, "s_bitset1")
              : Ctx.B.CreateAnd(*Old, Ctx.B.CreateNot(Bit), "s_bitset0");
-    writeDst(Ctx.registers(), *Dst, Result, Is64);
-    return Error::success();
+    return writeDst(Ctx, Di, *Dst, Result, Is64);
   }
 
   if (Di.CanonOp == CanonicalOp::S_BITREPLICATE_B64_B32) {
@@ -463,8 +615,56 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<Value *> Src = Op.src(0);
     if (!Src)
       return Src.takeError();
-    Ctx.registers().writeReg64(*Dst, emitBitReplicate(Ctx.B, *Src));
+    return writeDst(Ctx, Di, *Dst, emitBitReplicate(Ctx.B, *Src),
+                    /*Is64=*/true);
+  }
+
+  if (Di.CanonOp == CanonicalOp::S_QUADMASK_B32 ||
+      Di.CanonOp == CanonicalOp::S_QUADMASK_B64 ||
+      Di.CanonOp == CanonicalOp::S_WQM_B32 ||
+      Di.CanonOp == CanonicalOp::S_WQM_B64) {
+    bool Is64 = Di.CanonOp == CanonicalOp::S_QUADMASK_B64 ||
+                Di.CanonOp == CanonicalOp::S_WQM_B64;
+    bool Reduces = Di.CanonOp == CanonicalOp::S_QUADMASK_B32 ||
+                   Di.CanonOp == CanonicalOp::S_QUADMASK_B64;
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> Src = readSrc0(Op, Is64);
+    if (!Src)
+      return Src.takeError();
+    Value *Result =
+        Reduces ? emitQuadMask(Ctx.B, *Src) : emitWholeQuadMask(Ctx.B, *Src);
+    if (Error E = writeDst(Ctx, Di, *Dst, Result, Is64))
+      return E;
+    Ctx.registers().writeScc(Ctx.B.CreateIsNotNull(Result, "s_quad_scc"));
     return Error::success();
+  }
+
+  // EXEC is written before the destination, so a destination naming EXEC ends
+  // up holding what the destination rule says rather than the combined mask.
+  // SCC reports the combined mask either way.
+  if (const ExecCombine *Combine = execCombine(Di.CanonOp)) {
+    if (!holdsWaveMaskAt(Ctx, Combine->MaskBits))
+      return refuseWaveMaskWidth(Ctx, Di,
+                                 "combines a " + Twine(Combine->MaskBits) +
+                                     "-bit mask with EXEC, but " +
+                                     heldWaveMaskWidths(Ctx));
+    bool Is64 = Combine->MaskBits == 64;
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> Src = readSrc0(Op, Is64);
+    if (!Src)
+      return Src.takeError();
+    Value *OldExec = Ctx.registers().readExec();
+    Value *NewExec = emitMaskCombine(Ctx.B, *Combine, *Src, OldExec);
+    Ctx.registers().storeExec(NewExec);
+    Ctx.registers().writeScc(Ctx.B.CreateIsNotNull(NewExec, "new_exec_scc"));
+    return writeDst(Ctx, Di, *Dst,
+                    Combine->Destination == MaskDestination::NewExec ? NewExec
+                                                                     : OldExec,
+                    Is64);
   }
 
   // The most negative input has no positive counterpart and the hardware keeps

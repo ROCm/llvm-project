@@ -99,6 +99,9 @@ public:
   // boundary.
   void resetLaneActiveCache() { facts().CachedLaneActive = nullptr; }
 
+  // Read EXEC at the width the projection stores it in.
+  llvm::Value *readExec() { return Regs.readExecWidth(B); }
+
   // Store EXEC and invalidate cached lane activity.
   void storeExec(llvm::Value *V) {
     Regs.storeExec(B, V);
