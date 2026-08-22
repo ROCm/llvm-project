@@ -168,6 +168,12 @@ public:
   /// Initialization for a specialized kernel.
   llvm::Value *initSpecializedKernel(CodeGenFunction &CGF);
 
+  /// Emit the kernel environment for a specialized kernel. Such a kernel does
+  /// not call kmpc_target_init, but the plugin still reads its execution mode
+  /// and launch bounds out of the environment.
+  void emitSpecializedKernelEnvironment(const OMPExecutableDirective &D,
+                                        CodeGenFunction &CGF);
+
   std::pair<llvm::Value *, llvm::Value *>
   getXteamRedFunctionPtrs(CodeGenFunction &CGF, llvm::Type *RedVarType,
                           CodeGenModule::XteamRedOpKind Opcode);

@@ -326,6 +326,7 @@ void CodeGenFunction::EmitNoLoopCode(const OMPExecutableDirective &D,
 
   // Initialize a specialized kernel.
   RT.initSpecializedKernel(*this);
+  RT.emitSpecializedKernelEnvironment(D, *this);
 
   auto IVPair = EmitNoLoopIV(LD);
   const VarDecl *IVDecl = IVPair.first;
@@ -562,6 +563,7 @@ void CodeGenFunction::EmitBigJumpLoopCode(const OMPExecutableDirective &D,
   auto &RT = static_cast<CGOpenMPRuntimeGPU &>(CGM.getOpenMPRuntime());
   // Initialize a specialized kernel.
   RT.initSpecializedKernel(*this);
+  RT.emitSpecializedKernelEnvironment(D, *this);
   EmitStmt(CapturedForStmt);
 }
 
@@ -577,6 +579,7 @@ void CodeGenFunction::EmitXteamRedCode(const OMPExecutableDirective &D,
 
   // Initialize a specialized kernel.
   RT.initSpecializedKernel(*this);
+  RT.emitSpecializedKernelEnvironment(D, *this);
 
   EmitXteamLocalAggregator(CapturedForStmt);
 

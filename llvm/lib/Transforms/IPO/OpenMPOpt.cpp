@@ -4388,33 +4388,6 @@ struct AAKernelInfoFunction : AAKernelInfo {
         ConstantInt::get(ExecModeC->getIntegerType(),
                          ExecModeVal | OMP_TGT_EXEC_MODE_GENERIC_SPMD));
 
-    // The global variable needs to be set too.
-    GlobalVariable *ExecMode = Kernel->getParent()->getGlobalVariable(
-        (Kernel->getName() + "_exec_mode").str());
-
-    if (!ExecMode) { // likely fortran missing exec mode
-      auto Remark = [&](OptimizationRemark OR) {
-        return OR << "Could not transform generic-mode kernel to SPMD-mode. Missing mode.";
-      };
-      A.emitRemark<OptimizationRemark>(KernelInitCB, "OMP122", Remark);
-    return false;
-    }
-    assert(ExecMode && "Kernel without exec mode?");
-    assert(ExecMode->getInitializer() && "ExecMode doesn't have initializer!");
-
-    // Set the global exec mode flag to indicate SPMD-Generic mode.
-    assert(isa<ConstantInt>(ExecMode->getInitializer()) &&
-           "ExecMode is not an integer!");
-
-    // Adjust the global exec mode flag that tells the runtime what mode this
-    // kernel is executed in.
-    assert(cast<ConstantInt>(ExecMode->getInitializer())->getSExtValue() ==
-               OMP_TGT_EXEC_MODE_GENERIC &&
-           "Initially non-SPMD kernel has SPMD exec mode!");
-    ExecMode->setInitializer(
-        ConstantInt::get(ExecMode->getInitializer()->getType(),
-                         ExecModeVal | OMP_TGT_EXEC_MODE_GENERIC_SPMD));
-
     ++NumOpenMPTargetRegionKernelsSPMD;
 
     // Record that this kernel now runs SPMD so post-Attributor cleanup can drop

@@ -848,13 +848,17 @@ void CGOpenMPRuntimeGPU::emitNonSPMDKernel(const OMPExecutableDirective &D,
   GenerateMetaData(CGM, D, OutlinedFn, /*Generic*/ true);
 }
 
+static llvm::omp::OMPTgtExecModeFlags
+computeExecutionMode(bool Mode, const Stmt *DirectiveStmt, CodeGenModule &CGM);
+
 void CGOpenMPRuntimeGPU::emitKernelInit(const OMPExecutableDirective &D,
                                         CodeGenFunction &CGF,
                                         EntryFunctionState &EST, bool IsSPMD) {
   llvm::OpenMPIRBuilder::TargetKernelDefaultAttrs Attrs;
-  Attrs.ExecFlags =
-      IsSPMD ? llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD
-             : llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_GENERIC;
+  // The kernel environment carries the full mode, including the AMD-only
+  // no-loop, big-jump-loop and xteam-reduction variants, so that the plugin
+  // does not need a second copy of it in a separate global.
+  Attrs.ExecFlags = computeExecutionMode(IsSPMD, CGM.getOptKernelKey(D), CGM);
   computeMinAndMaxThreadsAndTeams(D, CGF, Attrs);
 
   CGBuilderTy &Bld = CGF.Builder;
@@ -950,21 +954,6 @@ void CGOpenMPRuntimeGPU::emitSPMDKernel(const OMPExecutableDirective &D,
   GenerateMetaData(CGM, D, OutlinedFn, /*SPMD*/ false);
 }
 
-// Create a unique global variable to indicate the execution mode of this target
-// region. The execution mode is either 'generic', or 'spmd' depending on the
-// target directive. This variable is picked up by the offload library to setup
-// the device appropriately before kernel launch. If the execution mode is
-// 'generic', the runtime reserves one warp for the master, otherwise, all
-// warps participate in parallel work.
-static void setPropertyExecutionMode(CodeGenModule &CGM, StringRef Name,
-                                     OMPTgtExecModeFlags Mode) {
-  auto *GVMode = new llvm::GlobalVariable(
-      CGM.getModule(), CGM.Int8Ty, /*isConstant=*/true,
-      llvm::GlobalValue::WeakAnyLinkage,
-      llvm::ConstantInt::get(CGM.Int8Ty, Mode), Twine(Name, "_exec_mode"));
-  CGM.addCompilerUsedGlobal(GVMode);
-}
-
 // Create a global variable to indicate whether fast reduction is enabled for
 // this file. This variable is read by the runtime while determining the launch
 // bounds.
@@ -1037,11 +1026,6 @@ void CGOpenMPRuntimeGPU::emitTargetOutlinedFunction(
                     CGM.emitNxResult("[No-Loop/Big-Jump-Loop/Xteam]", D,
                                      CodeGenModule::NxNonSPMD));
   }
-  setPropertyExecutionMode(
-      CGM, OutlinedFn->getName(),
-      IsBareKernel ? OMP_TGT_EXEC_MODE_BARE
-                   : computeExecutionMode(Mode, DirectiveStmt, CGM));
-
   if (Mode && DirectiveStmt)
     CGM.resetOptKernelMetadata(DirectiveStmt);
 
@@ -2624,6 +2608,32 @@ llvm::Value *CGOpenMPRuntimeGPU::getGPUBlockID(CodeGenFunction &CGF) {
 llvm::Value *CGOpenMPRuntimeGPU::getGPUNumBlocks(CodeGenFunction &CGF) {
   return CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
       CGM.getModule(), OMPRTL___kmpc_get_hardware_num_blocks));
+}
+
+void CGOpenMPRuntimeGPU::emitSpecializedKernelEnvironment(
+    const OMPExecutableDirective &D, CodeGenFunction &CGF) {
+  // This runs while emitting the loop body, where the enclosing directive is
+  // not necessarily the target directive, so the launch bounds cannot be
+  // recomputed here. A specialized kernel is compiled for one fixed workgroup
+  // size anyway, which is the size the environment must report.
+  llvm::OpenMPIRBuilder::TargetKernelDefaultAttrs Attrs;
+  unsigned BlockSize = 0;
+  if (CGM.isXteamRedKernel(D)) {
+    Attrs.ExecFlags = llvm::omp::OMP_TGT_EXEC_MODE_XTEAM_RED;
+    BlockSize = CGM.getXteamRedBlockSize(D);
+  } else if (CGM.isBigJumpLoopKernel(D)) {
+    Attrs.ExecFlags = llvm::omp::OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP;
+    BlockSize = CGM.getBigJumpLoopBlockSize(D);
+  } else if (CGM.isNoLoopKernel(D)) {
+    Attrs.ExecFlags = llvm::omp::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
+    BlockSize = CGM.getNoLoopBlockSize(D);
+  } else {
+    return;
+  }
+  if (BlockSize > 0)
+    Attrs.MaxThreads = {static_cast<int32_t>(BlockSize)};
+
+  OMPBuilder.createKernelEnvironment(CGF.Builder, Attrs);
 }
 
 llvm::Value *CGOpenMPRuntimeGPU::initSpecializedKernel(CodeGenFunction &CGF) {

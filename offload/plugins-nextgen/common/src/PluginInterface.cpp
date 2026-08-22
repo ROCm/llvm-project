@@ -108,31 +108,15 @@ Error GenericKernelTy::init(GenericDeviceTy &GenericDevice,
                       << "' Using default Bare (0) execution mode";
   }
 
-  // Create a metadata object for the exec mode global (auto-generated).
-  StaticGlobalTy<llvm::omp::OMPTgtExecModeFlags> ExecModeGlobal(getName(),
-                                                                "_exec_mode");
-
-  // Retrieve execution mode for the kernel. This may fail since some kernels
-  // may not have an execution mode.
-  if (auto Err =
-          GHandler.readGlobalFromImage(GenericDevice, Image, ExecModeGlobal)) {
-    // Consume the error since it is acceptable to fail.
-    [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
-     ODBG(ODT_Init) << "Failed to read execution mode for "
-                    << getName()
-                    << ":"
-                    << ErrStr.data()
-                    << "Using default Bare (0) execution mode";
-
-    ExecutionMode = OMP_TGT_EXEC_MODE_BARE;
-  } else {
-    // Check that the retrieved execution mode is valid.
-    if (!GenericKernelTy::isValidExecutionMode(ExecModeGlobal.getValue()))
-      return Plugin::error(ErrorCode::UNKNOWN,
-                           "Invalid execution mode %d for '%s'",
-                           ExecModeGlobal.getValue(), getName());
-    ExecutionMode = ExecModeGlobal.getValue();
-  }
+  // The execution mode comes from the kernel environment. A kernel without an
+  // environment (a bare kernel) leaves the default zero, which is bare mode.
+  auto ImageExecutionMode = static_cast<llvm::omp::OMPTgtExecModeFlags>(
+      KernelEnvironment.Configuration.ExecMode);
+  if (!GenericKernelTy::isValidExecutionMode(ImageExecutionMode))
+    return Plugin::error(ErrorCode::UNKNOWN,
+                         "Invalid execution mode %d for '%s'",
+                         ImageExecutionMode, getName());
+  ExecutionMode = ImageExecutionMode;
 
   // Max = Config.Max > 0 ? min(Config.Max, Device.Max) : Device.Max;
   MaxNumThreads = KernelEnvironment.Configuration.MaxThreads > 0
