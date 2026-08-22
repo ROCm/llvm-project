@@ -3563,6 +3563,32 @@ public:
       const LocationDescription &Loc,
       const llvm::OpenMPIRBuilder::TargetKernelDefaultAttrs &Attrs);
 
+  /// Create the kernel environment global for the kernel containing \p Loc,
+  /// without emitting a kmpc_target_init call. Kernels that initialize
+  /// themselves with a specialized init still need the environment present in
+  /// the image, because the plugin reads the execution mode and the launch
+  /// bounds out of it as plain data.
+  ///
+  /// \param Loc The insert and source location description.
+  /// \param Attrs Structure containing the default attributes.
+  LLVM_ABI GlobalVariable *createKernelEnvironment(
+      const LocationDescription &Loc,
+      const llvm::OpenMPIRBuilder::TargetKernelDefaultAttrs &Attrs);
+
+private:
+  /// Emit the dynamic and kernel environment globals for the kernel containing
+  /// \p Loc. \p WriteLaunchBounds also manifests the launch configuration in
+  /// the kernel metadata.
+  GlobalVariable *emitKernelEnvironment(
+      const LocationDescription &Loc,
+      const llvm::OpenMPIRBuilder::TargetKernelDefaultAttrs &Attrs,
+      bool WriteLaunchBounds);
+
+  /// Emit the branch that sends non-user threads of a generic kernel to an
+  /// early return, given the result of kmpc_target_init.
+  InsertPointTy emitTargetInitBranch(CallInst *ThreadKind);
+
+public:
   /// Create a runtime call for kmpc_target_deinit
   ///
   /// \param Loc The insert and source location description.

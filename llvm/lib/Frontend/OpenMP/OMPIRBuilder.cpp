@@ -8560,6 +8560,18 @@ CallInst *OpenMPIRBuilder::createCachedThreadPrivate(
   return createRuntimeFunctionCall(Fn, Args);
 }
 
+GlobalVariable *OpenMPIRBuilder::createKernelEnvironment(
+    const LocationDescription &Loc,
+    const llvm::OpenMPIRBuilder::TargetKernelDefaultAttrs &Attrs) {
+  assert(!Attrs.MaxThreads.empty() && !Attrs.MaxTeams.empty() &&
+         "expected num_threads and num_teams to be specified");
+
+  if (!updateToLocation(Loc))
+    return nullptr;
+
+  return emitKernelEnvironment(Loc, Attrs, /*WriteLaunchBounds=*/false);
+}
+
 OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createTargetInit(
     const LocationDescription &Loc,
     const llvm::OpenMPIRBuilder::TargetKernelDefaultAttrs &Attrs) {
@@ -8569,6 +8581,36 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createTargetInit(
   if (!updateToLocation(Loc))
     return Loc.IP;
 
+  GlobalVariable *KernelEnvironmentGV =
+      emitKernelEnvironment(Loc, Attrs, /*WriteLaunchBounds=*/true);
+
+  Function *DebugKernelWrapper = Builder.GetInsertBlock()->getParent();
+  Function *Fn = getOrCreateRuntimeFunctionPtr(
+      omp::RuntimeFunction::OMPRTL___kmpc_target_init);
+
+  Constant *KernelEnvironment =
+      KernelEnvironmentGV->getType() == KernelEnvironmentPtr
+          ? KernelEnvironmentGV
+          : ConstantExpr::getAddrSpaceCast(KernelEnvironmentGV,
+                                           KernelEnvironmentPtr);
+  Value *KernelLaunchEnvironment =
+      DebugKernelWrapper->getArg(DebugKernelWrapper->arg_size() - 1);
+  Type *KernelLaunchEnvParamTy = Fn->getFunctionType()->getParamType(1);
+  KernelLaunchEnvironment =
+      KernelLaunchEnvironment->getType() == KernelLaunchEnvParamTy
+          ? KernelLaunchEnvironment
+          : Builder.CreateAddrSpaceCast(KernelLaunchEnvironment,
+                                        KernelLaunchEnvParamTy);
+  CallInst *ThreadKind = createRuntimeFunctionCall(
+      Fn, {KernelEnvironment, KernelLaunchEnvironment});
+
+  return emitTargetInitBranch(ThreadKind);
+}
+
+GlobalVariable *OpenMPIRBuilder::emitKernelEnvironment(
+    const LocationDescription &Loc,
+    const llvm::OpenMPIRBuilder::TargetKernelDefaultAttrs &Attrs,
+    bool WriteLaunchBounds) {
   uint32_t SrcLocStrSize;
   Constant *SrcLocStr = getOrCreateSrcLocStr(Loc, SrcLocStrSize);
   Constant *Ident = getOrCreateIdent(SrcLocStr, SrcLocStrSize);
@@ -8596,8 +8638,10 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createTargetInit(
     Config.setGridValue(getGridValue(T, Kernel));
 
   // Manifest the launch configuration in the metadata matching the kernel
-  // environment.
-  if (Attrs.MinTeams.front() > 1 || Attrs.MaxTeams.front() > 0)
+  // environment. A specialized kernel has already established its own bounds,
+  // so only the environment data is needed there.
+  if (WriteLaunchBounds &&
+      (Attrs.MinTeams.front() > 1 || Attrs.MaxTeams.front() > 0))
     writeTeamsForKernel(T, *Kernel, Attrs.MinTeams.front(),
                         Attrs.MaxTeams.front());
 
@@ -8614,7 +8658,7 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createTargetInit(
     }
   }
 
-  if (MaxThreadsVal > 0)
+  if (WriteLaunchBounds && MaxThreadsVal > 0)
     writeThreadBoundsForKernel(T, *Kernel, Attrs.MinThreads.front(),
                                MaxThreadsVal);
 
@@ -8672,22 +8716,11 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createTargetInit(
       DL.getDefaultGlobalsAddressSpace());
   KernelEnvironmentGV->setVisibility(GlobalValue::ProtectedVisibility);
 
-  Constant *KernelEnvironment =
-      KernelEnvironmentGV->getType() == KernelEnvironmentPtr
-          ? KernelEnvironmentGV
-          : ConstantExpr::getAddrSpaceCast(KernelEnvironmentGV,
-                                           KernelEnvironmentPtr);
-  Value *KernelLaunchEnvironment =
-      DebugKernelWrapper->getArg(DebugKernelWrapper->arg_size() - 1);
-  Type *KernelLaunchEnvParamTy = Fn->getFunctionType()->getParamType(1);
-  KernelLaunchEnvironment =
-      KernelLaunchEnvironment->getType() == KernelLaunchEnvParamTy
-          ? KernelLaunchEnvironment
-          : Builder.CreateAddrSpaceCast(KernelLaunchEnvironment,
-                                        KernelLaunchEnvParamTy);
-  CallInst *ThreadKind = createRuntimeFunctionCall(
-      Fn, {KernelEnvironment, KernelLaunchEnvironment});
+  return KernelEnvironmentGV;
+}
 
+OpenMPIRBuilder::InsertPointTy
+OpenMPIRBuilder::emitTargetInitBranch(CallInst *ThreadKind) {
   Value *ExecUserCode = Builder.CreateICmpEQ(
       ThreadKind, Constant::getAllOnesValue(ThreadKind->getType()),
       "exec_user_code");
