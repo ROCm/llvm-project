@@ -53,8 +53,8 @@ public:
 
   // Active low byte of S_SET_VGPR_MSB. Each two-bit field selects the high
   // VGPR bank for a format-defined operand slot.
-  uint8_t vgprMsBs() const { return VgprMsBs; }
-  void setVgprMsBs(uint8_t Value) { VgprMsBs = Value; }
+  uint8_t vgprMsBs() { return facts().VgprMsBs; }
+  void setVgprMsBs(uint8_t Value) { facts().VgprMsBs = Value; }
 
   // VGPR index adjustments for the instruction passed to computeVGPRAdjust,
   // indexed by MC operand index.
@@ -97,7 +97,7 @@ public:
 
   // Invalidate cached lane activity after an EXEC write or instruction
   // boundary.
-  void resetLaneActiveCache() { CachedLaneActive = nullptr; }
+  void resetLaneActiveCache() { facts().CachedLaneActive = nullptr; }
 
   // Store EXEC and invalidate cached lane activity.
   void storeExec(llvm::Value *V) {
@@ -153,10 +153,17 @@ public:
 
   // Return the compare recorded for SGPR BaseIdx in this block, or null when
   // none is valid.
-  llvm::Value *lookupSgprWaveMaskI1(unsigned BaseIdx) const {
-    auto It = LastSgprWaveMaskI1.find(BaseIdx);
-    return It == LastSgprWaveMaskI1.end() ? nullptr : It->second.I1;
+  llvm::Value *lookupSgprWaveMaskI1(unsigned BaseIdx) {
+    auto &Recorded = facts().LastSgprWaveMaskI1;
+    auto It = Recorded.find(BaseIdx);
+    return It == Recorded.end() ? nullptr : It->second.I1;
   }
+
+  // Emit a test of whether the source wave holding the current target lane has
+  // no lane set in EXEC, and the same for VCC. These are the wave-level
+  // conditions `execz` and `vccz` name.
+  llvm::Value *emitExecIsZero();
+  llvm::Value *emitVccIsZero();
 
   // Emit a read of the wave mask shadowed for SGPR BaseIdx, and of the bit
   // saying whether that shadow is valid. Both return null for an SGPR with no
@@ -169,26 +176,20 @@ public:
   // entry. Single-SGPR entries remain independent.
   void invalidateSgprWaveMaskI1(unsigned BaseIdx);
 
-  // Start raising a new source block, dropping every raise-time fact that does
-  // not survive a block boundary: the compares and source-image addresses
-  // recorded per SGPR, the M0 constant, the VGPR MSB mode, and the cached
-  // lane-active bit. The alloca-backed shadow storage is unaffected.
-  void enterBlock();
-
   // Record that SGPR pair BaseIdx holds source code-object address Value.
   void recordSourceImageSgprPairAddr(unsigned BaseIdx, uint64_t Value) {
-    SourceImageSgprPairAddrShadow[BaseIdx] = Value;
+    facts().SourceImageSgprPairAddrShadow[BaseIdx] = Value;
   }
 
   // Return the source code-object address recorded for SGPR pair BaseIdx in
   // this block, if any.
-  std::optional<uint64_t> lookupSourceImageSgprPairAddr(unsigned BaseIdx) const;
+  std::optional<uint64_t> lookupSourceImageSgprPairAddr(unsigned BaseIdx);
 
   // Track the value written to M0, which the relative-addressing opcodes need
   // as a constant to resolve the register index they name. A non-constant
   // write, and any block boundary, gives up the constant.
   void updateM0Const(llvm::Value *V);
-  std::optional<uint64_t> getM0Const() const { return M0Const; }
+  std::optional<uint64_t> getM0Const() { return facts().M0Const; }
 
   // Emit stores marking every cross-block SGPR shadow invalid.
   void invalidateSgprShadows();
@@ -225,6 +226,34 @@ private:
     bool IsPair = false;
   };
 
+  // The raise-time facts that hold only while one source block is being
+  // raised. They rest on values that dominate only from inside that block, or
+  // on architectural state a block does not inherit from its predecessors.
+  struct BlockFacts {
+    // Lane-active bit reused until an EXEC write or instruction boundary.
+    llvm::Value *CachedLaneActive = nullptr;
+    // Compares keyed by the SGPR they were written to.
+    llvm::DenseMap<unsigned, WaveMaskEntry> LastSgprWaveMaskI1;
+    // Source-image addresses proven for PC-relative literal loads.
+    llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
+    // Constant value last stored to M0.
+    std::optional<uint64_t> M0Const;
+    // Active low byte of S_SET_VGPR_MSB. Architectural rather than raise-time:
+    // LLVM's VGPR-encoding lowering resets the mode at every block boundary,
+    // so a raised block must not inherit what a predecessor left set.
+    uint8_t VgprMsBs = 0;
+  };
+
+  // The block facts, dropped when the builder has moved to a block other than
+  // the one that established them. Every accessor of a block fact goes through
+  // here, which is what keeps the boundary from depending on a caller
+  // remembering to announce it.
+  BlockFacts &facts();
+
+  // Declare the block the builder now sits in a continuation of the one the
+  // facts belong to. Only sound for a block the fact-holding block dominates.
+  void carryFactsIntoCurrentBlock() { FactsBlock = B.GetInsertBlock(); }
+
   // Builder the register accesses are emitted into. Its insertion point moves
   // as raising progresses.
   llvm::IRBuilder<> &B;
@@ -238,19 +267,12 @@ private:
   // What each SGPR holds at source kernel entry.
   UserSgprLayout Layout;
 
-  // Active low byte of S_SET_VGPR_MSB.
-  uint8_t VgprMsBs = 0;
   // VGPR bank adjustment per MC operand of the instruction being raised.
   llvm::SmallVector<unsigned> CurrentVgprAdjust;
 
-  // Lane-active bit reused until an EXEC write or instruction boundary.
-  llvm::Value *CachedLaneActive = nullptr;
-  // Block-local compares, keyed by the SGPR they were written to.
-  llvm::DenseMap<unsigned, WaveMaskEntry> LastSgprWaveMaskI1;
-  // Block-local source-image addresses proven for PC-relative literal loads.
-  llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
-  // Block-local constant value last stored to M0.
-  std::optional<uint64_t> M0Const;
+  // What holds within one source block, and the block it holds in.
+  BlockFacts Facts;
+  llvm::BasicBlock *FactsBlock = nullptr;
 
   // Shadow storage per SGPR. Cross-block values live in allocas to avoid
   // carrying SSA values that do not dominate their uses.

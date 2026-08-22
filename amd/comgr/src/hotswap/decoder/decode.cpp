@@ -19,6 +19,7 @@
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -191,7 +192,48 @@ void classifyImplicitDefs(DecodedInst &Di, const MCInstrDesc &Desc) {
   }
 }
 
+// Byte length of the unit a SOPP branch displacement counts in.
+constexpr uint64_t BranchDisplacementUnit = 4;
+
 } // namespace
+
+bool isSoppBranch(const DecodedInst &Di) {
+  return Di.CanonOp == CanonicalOp::S_BRANCH || isSoppConditionalBranch(Di);
+}
+
+bool isSoppConditionalBranch(const DecodedInst &Di) {
+  switch (Di.CanonOp) {
+  case CanonicalOp::S_CBRANCH_SCC0:
+  case CanonicalOp::S_CBRANCH_SCC1:
+  case CanonicalOp::S_CBRANCH_VCCZ:
+  case CanonicalOp::S_CBRANCH_VCCNZ:
+  case CanonicalOp::S_CBRANCH_EXECZ:
+  case CanonicalOp::S_CBRANCH_EXECNZ:
+    return true;
+  default:
+    return false;
+  }
+}
+
+Expected<uint64_t> soppBranchTarget(const DecodedInst &Di) {
+  assert(isSoppBranch(Di) && "instruction is not a SOPP branch");
+  std::optional<int64_t> Imm = evalOperandAsConst(Di.Inst, 0);
+  if (!Imm)
+    return makeHotswapError("soppBranchTarget: branch at .text offset 0x" +
+                            utohexstr(Di.Offset) +
+                            " carries no constant displacement");
+
+  // The ISA reads the program counter as the address of the instruction that
+  // follows the branch, and counts the displacement in dwords from there.
+  const uint64_t Base = Di.Offset + Di.sizeInBytes();
+  const int64_t Displacement =
+      SignExtend64<16>(static_cast<uint64_t>(*Imm)) * BranchDisplacementUnit;
+  if (Displacement < 0 && static_cast<uint64_t>(-Displacement) > Base)
+    return makeHotswapError("soppBranchTarget: branch at .text offset 0x" +
+                            utohexstr(Di.Offset) +
+                            " targets a negative .text offset");
+  return Base + static_cast<uint64_t>(Displacement);
+}
 
 Expected<SmallVector<uint64_t>>
 computeDecodedBlockSuccessors(const DecodedInst &LastInst,
@@ -199,13 +241,22 @@ computeDecodedBlockSuccessors(const DecodedInst &LastInst,
   SmallVector<uint64_t> Result;
   if (LastInst.CanonOp == CanonicalOp::S_ENDPGM)
     return Result;
+  if (isSoppBranch(LastInst)) {
+    Expected<uint64_t> Target = soppBranchTarget(LastInst);
+    if (!Target)
+      return Target.takeError();
+    Result.push_back(*Target);
+    if (isSoppConditionalBranch(LastInst) && NextBlockOffset)
+      Result.push_back(*NextBlockOffset);
+    return Result;
+  }
   if (NextBlockOffset)
     Result.push_back(*NextBlockOffset);
   return Result;
 }
 
 bool decodedInstEndsBlock(const DecodedInst &LastInst) {
-  return LastInst.CanonOp == CanonicalOp::S_ENDPGM;
+  return LastInst.CanonOp == CanonicalOp::S_ENDPGM || isSoppBranch(LastInst);
 }
 
 Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
@@ -215,8 +266,7 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
                                     std::optional<uint64_t> KernelStartOffset) {
   DecodeResult Out;
   Out.BlockStarts.insert(KernelOffset);
-  [[maybe_unused]] uint64_t KernelStart =
-      KernelStartOffset.value_or(KernelOffset);
+  const uint64_t KernelStart = KernelStartOffset.value_or(KernelOffset);
 
   LLVM_DEBUG(if (KernelOffset > 0) dbgs()
              << "hotswap: starting disassembly at kernel offset 0x"
@@ -259,9 +309,33 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
     driftCheckSrcN(Mc, Di, Desc);
     classifyImplicitDefs(Di, Desc);
 
-    bool IsEnd = decodedInstEndsBlock(Di);
+    // A branch leads somewhere the scan would otherwise not reach and leaves
+    // its fall-through leading a block of its own, so both start blocks.
+    if (isSoppBranch(Di)) {
+      Expected<uint64_t> Target = soppBranchTarget(Di);
+      if (!Target)
+        return Target.takeError();
+      if (*Target < KernelStart || *Target >= TotalSize)
+        return makeHotswapError(
+            "decodeKernel: branch at .text offset 0x" + utohexstr(Off) +
+            " targets 0x" + utohexstr(*Target) +
+            ", outside the kernel extent [0x" + utohexstr(KernelStart) +
+            ", 0x" + utohexstr(TotalSize) + ")");
+      Out.BlockStarts.insert(*Target);
+      if (isSoppConditionalBranch(Di)) {
+        if (Off + InstSize >= TotalSize)
+          return makeHotswapError(
+              "decodeKernel: conditional branch at .text offset 0x" +
+              utohexstr(Off) +
+              " ends the kernel extent, so it has no "
+              "fall-through successor");
+        Out.BlockStarts.insert(Off + InstSize);
+      }
+    }
+
+    bool IsEndPgm = Di.CanonOp == CanonicalOp::S_ENDPGM;
     Out.Insts.push_back(std::move(Di));
-    if (IsEnd) {
+    if (IsEndPgm) {
       // `s_endpgm` may appear mid-binary (early-return path); if there are
       // known block starts at later offsets, keep disassembling.
       uint64_t NextOff = Off + InstSize;
@@ -274,6 +348,21 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
     }
     Off += InstSize;
   }
+
+  // Instructions are not uniformly four bytes wide, so a displacement that is
+  // well formed on its own can still name an offset inside one. Every branch
+  // target has to lead an instruction the scan actually decoded; the kernel
+  // entry is where the scan began and needs no such check.
+  DenseSet<uint64_t> InstOffsets;
+  InstOffsets.reserve(Out.Insts.size());
+  for (const DecodedInst &Di : Out.Insts)
+    InstOffsets.insert(Di.Offset);
+  for (uint64_t Start : Out.BlockStarts)
+    if (Start != KernelOffset && !InstOffsets.contains(Start))
+      return makeHotswapError("decodeKernel: branch target 0x" +
+                              utohexstr(Start) +
+                              " is not the first byte of a decoded "
+                              "instruction");
 
   return Out;
 }

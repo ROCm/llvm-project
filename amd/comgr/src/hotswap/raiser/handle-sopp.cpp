@@ -9,11 +9,18 @@
 #include "hotswap/raiser/handlers.h"
 
 #include "hotswap/decoder/amdgpu-formats.h"
+#include "hotswap/decoder/decode.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise_failure.h"
 
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Value.h"
 #include "llvm/Support/AtomicOrdering.h"
+#include "llvm/Support/Error.h"
+
+#include <cassert>
+#include <cstdint>
 
 using namespace llvm;
 
@@ -70,6 +77,49 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
   case CanonicalOp::S_TTRACEDATA_IMM:
   case CanonicalOp::S_ICACHE_INV:
     return Error::success();
+
+  // The branches. A conditional one falls through to the block the instruction
+  // after it leads. Its condition is wave-level: SCC as written, and execz and
+  // vccz as the emptiness of the mask the source wave holding this target lane
+  // sees.
+  case CanonicalOp::S_BRANCH:
+  case CanonicalOp::S_CBRANCH_SCC0:
+  case CanonicalOp::S_CBRANCH_SCC1:
+  case CanonicalOp::S_CBRANCH_VCCZ:
+  case CanonicalOp::S_CBRANCH_VCCNZ:
+  case CanonicalOp::S_CBRANCH_EXECZ:
+  case CanonicalOp::S_CBRANCH_EXECNZ: {
+    Expected<uint64_t> Target = soppBranchTarget(Di);
+    if (!Target)
+      return Target.takeError();
+    BasicBlock *TakenBb = Ctx.lookupBB(*Target);
+    if (Di.CanonOp == CanonicalOp::S_BRANCH) {
+      Ctx.B.CreateBr(TakenBb);
+      return Error::success();
+    }
+
+    RegisterState &Regs = Ctx.registers();
+    Value *Taken = nullptr;
+    if (Di.CanonOp == CanonicalOp::S_CBRANCH_SCC0)
+      Taken = Ctx.B.CreateNot(Regs.readScc(), "scc0");
+    else if (Di.CanonOp == CanonicalOp::S_CBRANCH_SCC1)
+      Taken = Regs.readScc();
+    else if (Di.CanonOp == CanonicalOp::S_CBRANCH_VCCZ)
+      Taken = Regs.emitVccIsZero();
+    else if (Di.CanonOp == CanonicalOp::S_CBRANCH_VCCNZ)
+      Taken = Ctx.B.CreateNot(Regs.emitVccIsZero(), "vccnz");
+    else if (Di.CanonOp == CanonicalOp::S_CBRANCH_EXECZ)
+      Taken = Regs.emitExecIsZero();
+    else {
+      assert(Di.CanonOp == CanonicalOp::S_CBRANCH_EXECNZ &&
+             "unhandled SOPP conditional branch");
+      Taken = Ctx.B.CreateNot(Regs.emitExecIsZero(), "execnz");
+    }
+
+    Ctx.B.CreateCondBr(Taken, TakenBb,
+                       Ctx.lookupBB(Di.Offset + Di.sizeInBytes()));
+    return Error::success();
+  }
 
   default:
     break;

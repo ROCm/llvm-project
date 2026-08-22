@@ -13,12 +13,6 @@
 ; RUN:   | %FileCheck %s --check-prefix=SETHALT
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=endpgm_saved_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=ENDPGM-SAVED
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=branch_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=BRANCH
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=cbranch_scc0_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=CBRANCH-SCC0
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=cbranch_execz_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=CBRANCH-EXECZ
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=barrier_wait_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=BARRIER-WAIT
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=barrier_leave_kernel 2>&1 \
@@ -79,8 +73,8 @@ inert_kernel:
 	s_endpgm
 
 ; Every other SOPP opcode is refused by name. Traps, halts and the alternate
-; terminators change what the kernel does; branches, barriers and messages are
-; control flow and communication the raise does not carry.
+; terminators change what the kernel does; barriers and messages are
+; communication the raise does not carry.
 
 	.globl	trap_kernel
 	.p2align	8
@@ -104,30 +98,6 @@ sethalt_kernel:
 endpgm_saved_kernel:
 ; ENDPGM-SAVED: unsupported-instruction-form: s_endpgm_saved [SOPP]
 	s_endpgm_saved
-
-	.globl	branch_kernel
-	.p2align	8
-	.type	branch_kernel,@function
-branch_kernel:
-; BRANCH: unsupported-instruction-form: s_branch [SOPP]
-	s_branch 0
-	s_endpgm
-
-	.globl	cbranch_scc0_kernel
-	.p2align	8
-	.type	cbranch_scc0_kernel,@function
-cbranch_scc0_kernel:
-; CBRANCH-SCC0: unsupported-instruction-form: s_cbranch_scc0 [SOPP]
-	s_cbranch_scc0 0
-	s_endpgm
-
-	.globl	cbranch_execz_kernel
-	.p2align	8
-	.type	cbranch_execz_kernel,@function
-cbranch_execz_kernel:
-; CBRANCH-EXECZ: unsupported-instruction-form: s_cbranch_execz [SOPP]
-	s_cbranch_execz 0
-	s_endpgm
 
 	.globl	barrier_wait_kernel
 	.p2align	8
@@ -176,21 +146,6 @@ sendmsg_kernel:
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel endpgm_saved_kernel
-		.amdhsa_kernarg_size 0
-		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 1
-	.end_amdhsa_kernel
-	.amdhsa_kernel branch_kernel
-		.amdhsa_kernarg_size 0
-		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 1
-	.end_amdhsa_kernel
-	.amdhsa_kernel cbranch_scc0_kernel
-		.amdhsa_kernarg_size 0
-		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 1
-	.end_amdhsa_kernel
-	.amdhsa_kernel cbranch_execz_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
@@ -267,39 +222,6 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         endpgm_saved_kernel.kd
-    .vgpr_count:     1
-    .wavefront_size: 32
-  - .args: []
-    .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 1024
-    .name:           branch_kernel
-    .private_segment_fixed_size: 0
-    .sgpr_count:     1
-    .symbol:         branch_kernel.kd
-    .vgpr_count:     1
-    .wavefront_size: 32
-  - .args: []
-    .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 1024
-    .name:           cbranch_scc0_kernel
-    .private_segment_fixed_size: 0
-    .sgpr_count:     1
-    .symbol:         cbranch_scc0_kernel.kd
-    .vgpr_count:     1
-    .wavefront_size: 32
-  - .args: []
-    .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 1024
-    .name:           cbranch_execz_kernel
-    .private_segment_fixed_size: 0
-    .sgpr_count:     1
-    .symbol:         cbranch_execz_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 32
   - .args: []

@@ -139,14 +139,15 @@ void RegisterState::computeVGPRAdjust(const DecodedInst &Di) {
   const MCInstrDesc &Desc = MC.InstrInfo->get(Opc);
   CurrentVgprAdjust.assign(std::max(Di.numOperands(), Desc.getNumOperands()),
                            0u);
-  if (VgprMsBs == 0)
+  const uint8_t MsBs = facts().VgprMsBs;
+  if (MsBs == 0)
     return;
 
   // Operand slots are format-specific rather than positional.
   const VGPRMSBOperandIndices OperandIndices = getVGPRMSBOperandIndices(Desc);
   for (unsigned Slot = 0; Slot != OperandIndices.size(); ++Slot) {
     unsigned Adjust =
-        ((static_cast<unsigned>(VgprMsBs) >> (Slot * 2)) & 0x3u) * 256u;
+        ((static_cast<unsigned>(MsBs) >> (Slot * 2)) & 0x3u) * 256u;
     if (Adjust == 0)
       continue;
     auto [XOperandIndex, YOperandIndex] = OperandIndices[Slot];
@@ -401,16 +402,10 @@ Expected<Value *> RegisterState::readOp32(const DecodedInst &Di,
       return B.CreateZExt(Regs.loadSCC(B), I32Ty);
     if (Pr.RegKind == ParsedReg::SRC_SCC)
       return B.CreateZExt(Regs.loadSCC(B), I32Ty);
-    if (Pr.RegKind == ParsedReg::SRC_VCCZ) {
-      Value *Vcc = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
-      return B.CreateZExt(emitSourceWaveMaskIsZero(B, Projection, Vcc, "vccz"),
-                          I32Ty);
-    }
-    if (Pr.RegKind == ParsedReg::SRC_EXECZ) {
-      Value *Exec = Regs.loadExec(B);
-      return B.CreateZExt(
-          emitSourceWaveMaskIsZero(B, Projection, Exec, "execz"), I32Ty);
-    }
+    if (Pr.RegKind == ParsedReg::SRC_VCCZ)
+      return B.CreateZExt(emitVccIsZero(), I32Ty);
+    if (Pr.RegKind == ParsedReg::SRC_EXECZ)
+      return B.CreateZExt(emitExecIsZero(), I32Ty);
     if (Pr.RegKind == ParsedReg::NOREG)
       return ConstantInt::get(I32Ty, 0);
     if (Pr.RegKind == ParsedReg::MODE)
@@ -494,16 +489,10 @@ Expected<Value *> RegisterState::readOp64(const DecodedInst &Di,
       return ConstantInt::get(I64Ty, 0);
     if (Pr.RegKind == ParsedReg::SRC_SCC)
       return B.CreateZExt(Regs.loadSCC(B), I64Ty);
-    if (Pr.RegKind == ParsedReg::SRC_VCCZ) {
-      Value *Vcc = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
-      return B.CreateZExt(emitSourceWaveMaskIsZero(B, Projection, Vcc, "vccz"),
-                          I64Ty);
-    }
-    if (Pr.RegKind == ParsedReg::SRC_EXECZ) {
-      Value *Exec = Regs.loadExec(B);
-      return B.CreateZExt(
-          emitSourceWaveMaskIsZero(B, Projection, Exec, "execz"), I64Ty);
-    }
+    if (Pr.RegKind == ParsedReg::SRC_VCCZ)
+      return B.CreateZExt(emitVccIsZero(), I64Ty);
+    if (Pr.RegKind == ParsedReg::SRC_EXECZ)
+      return B.CreateZExt(emitExecIsZero(), I64Ty);
     Value *V = Regs.readReg64(B, Pr);
     if (!V)
       return RaiseFailure::atInstruction(
@@ -529,11 +518,11 @@ Expected<Value *> RegisterState::readOp64(const DecodedInst &Di,
 Value *RegisterState::emitLaneActiveBit() {
   // Linear lane-active diamonds remain dominated by the first value emitted
   // for an instruction. Instruction boundaries and EXEC writes reset it.
-  if (CachedLaneActive)
-    return CachedLaneActive;
+  if (Value *Cached = facts().CachedLaneActive)
+    return Cached;
 
   Value *Active = Projection.emitLaneActiveBit(B, Regs.loadExec(B));
-  CachedLaneActive = Active;
+  facts().CachedLaneActive = Active;
   return Active;
 }
 
@@ -629,13 +618,30 @@ void RegisterState::emitUnderExec(llvm::function_ref<void()> Body) {
   BasicBlock *SkipBb = BasicBlock::Create(B.getContext(), "spe_skip", F);
   B.CreateCondBr(Active, DoBb, SkipBb);
 
+  // The diamond splits one source block across several LLVM blocks, all of
+  // them dominated by the block the facts were established in, so the facts
+  // survive it. The arm is the exception: what it defines does not dominate
+  // the merge, so the merge continues from the state the arm started with.
+  const BlockFacts Entry = facts();
   B.SetInsertPoint(DoBb);
+  carryFactsIntoCurrentBlock();
   Body();
   // Body may terminate its block; do not add a second terminator.
   if (!B.GetInsertBlock()->hasTerminator())
     B.CreateBr(SkipBb);
 
   B.SetInsertPoint(SkipBb);
+  Facts = Entry;
+  carryFactsIntoCurrentBlock();
+}
+
+Value *RegisterState::emitExecIsZero() {
+  return emitSourceWaveMaskIsZero(B, Projection, Regs.loadExec(B), "execz");
+}
+
+Value *RegisterState::emitVccIsZero() {
+  Value *Vcc = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
+  return emitSourceWaveMaskIsZero(B, Projection, Vcc, "vccz");
 }
 
 Expected<Value *> RegisterState::readOpExecWidth(const DecodedInst &Di,
@@ -715,7 +721,7 @@ Expected<Value *> RegisterState::readOpExecWidth(const DecodedInst &Di,
 
 void RegisterState::recordSgprWaveMaskI1(unsigned BaseIdx, Value *CmpI1,
                                          bool IsPair) {
-  LastSgprWaveMaskI1[BaseIdx] = WaveMaskEntry{CmpI1, IsPair};
+  facts().LastSgprWaveMaskI1[BaseIdx] = WaveMaskEntry{CmpI1, IsPair};
   if (BaseIdx < SgprShadows.size()) {
     Value *ExecMask = Projection.ballotI1ToWidth(
         B, CmpI1, Projection.execStorageTy(), "wm_shadow_exec");
@@ -801,17 +807,18 @@ Value *RegisterState::loadSgprWaveMaskValid(unsigned BaseIdx) const {
 }
 
 void RegisterState::invalidateSgprWaveMaskI1(unsigned BaseIdx) {
-  LastSgprWaveMaskI1.erase(BaseIdx);
-  SourceImageSgprPairAddrShadow.erase(BaseIdx);
+  facts().LastSgprWaveMaskI1.erase(BaseIdx);
+  facts().SourceImageSgprPairAddrShadow.erase(BaseIdx);
   if (BaseIdx < SgprShadows.size()) {
     B.CreateStore(B.getFalse(), SgprShadows[BaseIdx].WaveMaskValid);
     B.CreateStore(B.getFalse(), SgprShadows[BaseIdx].SourceWavePairValid);
   }
   if (BaseIdx > 0) {
+    DenseMap<unsigned, WaveMaskEntry> &Recorded = facts().LastSgprWaveMaskI1;
     DenseMap<unsigned, WaveMaskEntry>::iterator Prev =
-        LastSgprWaveMaskI1.find(BaseIdx - 1);
-    if (Prev != LastSgprWaveMaskI1.end() && Prev->second.IsPair) {
-      LastSgprWaveMaskI1.erase(Prev);
+        Recorded.find(BaseIdx - 1);
+    if (Prev != Recorded.end() && Prev->second.IsPair) {
+      Recorded.erase(Prev);
     }
     if (BaseIdx - 1 < SgprShadows.size()) {
       const SgprShadow &Previous = SgprShadows[BaseIdx - 1];
@@ -825,35 +832,33 @@ void RegisterState::invalidateSgprWaveMaskI1(unsigned BaseIdx) {
       B.CreateStore(KeepPrevious, Previous.WaveMaskValid);
       B.CreateStore(B.getFalse(), SgprShadows[BaseIdx - 1].SourceWavePairValid);
     }
-    SourceImageSgprPairAddrShadow.erase(BaseIdx - 1);
+    facts().SourceImageSgprPairAddrShadow.erase(BaseIdx - 1);
   }
 }
 
 std::optional<uint64_t>
-RegisterState::lookupSourceImageSgprPairAddr(unsigned BaseIdx) const {
-  DenseMap<unsigned, uint64_t>::const_iterator It =
-      SourceImageSgprPairAddrShadow.find(BaseIdx);
-  if (It == SourceImageSgprPairAddrShadow.end())
+RegisterState::lookupSourceImageSgprPairAddr(unsigned BaseIdx) {
+  DenseMap<unsigned, uint64_t> &Recorded =
+      facts().SourceImageSgprPairAddrShadow;
+  DenseMap<unsigned, uint64_t>::const_iterator It = Recorded.find(BaseIdx);
+  if (It == Recorded.end())
     return std::nullopt;
   return It->second;
 }
 
 void RegisterState::updateM0Const(Value *V) {
-  if (ConstantInt *CI = dyn_cast<ConstantInt>(V))
-    M0Const = CI->getZExtValue();
-  else
-    M0Const = std::nullopt;
+  ConstantInt *CI = dyn_cast<ConstantInt>(V);
+  facts().M0Const =
+      CI ? std::optional<uint64_t>(CI->getZExtValue()) : std::nullopt;
 }
 
-void RegisterState::enterBlock() {
-  LastSgprWaveMaskI1.clear();
-  SourceImageSgprPairAddrShadow.clear();
-  M0Const = std::nullopt;
-  // The MSB mode is architectural rather than a raise-time fact: LLVM's
-  // VGPR-encoding lowering resets it at every block boundary, so a raised block
-  // must not inherit the mode a predecessor left set.
-  VgprMsBs = 0;
-  resetLaneActiveCache();
+RegisterState::BlockFacts &RegisterState::facts() {
+  BasicBlock *Current = B.GetInsertBlock();
+  if (FactsBlock != Current) {
+    Facts = BlockFacts();
+    FactsBlock = Current;
+  }
+  return Facts;
 }
 
 void RegisterState::invalidateSgprShadows() {

@@ -79,6 +79,10 @@ public:
   // block is a raiser bug and aborts.
   llvm::BasicBlock *lookupBB(uint64_t Addr);
 
+  // Record BB as the block the source instruction at Addr raises into. Two
+  // blocks leading the same offset is a raiser bug and aborts.
+  void defineBB(uint64_t Addr, llvm::BasicBlock *BB);
+
   // Target-hardware lane id (i32), emitted once per kernel and reused.
   llvm::Value *emitLaneIdx();
 
