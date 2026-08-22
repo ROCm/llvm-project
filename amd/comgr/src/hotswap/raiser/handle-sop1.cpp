@@ -132,6 +132,73 @@ static Value *emitScalarFloat(IRBuilder<> &B, CanonicalOp CanonOp, Value *Src) {
   }
 }
 
+// How a bit-search opcode looks for the bit whose position it reports: the
+// counting intrinsic, whether the source is a register pair, and whether the
+// bit sought is the first one differing from the sign rather than the first
+// set one. No value when CanonOp is not a bit-search opcode.
+struct BitSearch {
+  Intrinsic::ID Count;
+  bool Is64;
+  bool AgainstSign;
+};
+
+static std::optional<BitSearch> bitSearch(CanonicalOp CanonOp) {
+  switch (CanonOp) {
+  case CanonicalOp::S_FF1_I32_B32:
+    return BitSearch{Intrinsic::cttz, false, false};
+  case CanonicalOp::S_FF1_I32_B64:
+    return BitSearch{Intrinsic::cttz, true, false};
+  case CanonicalOp::S_FLBIT_I32_B32:
+    return BitSearch{Intrinsic::ctlz, false, false};
+  case CanonicalOp::S_FLBIT_I32_B64:
+    return BitSearch{Intrinsic::ctlz, true, false};
+  case CanonicalOp::S_FLBIT_I32:
+    return BitSearch{Intrinsic::ctlz, false, true};
+  case CanonicalOp::S_FLBIT_I32_I64:
+    return BitSearch{Intrinsic::ctlz, true, true};
+  default:
+    return std::nullopt;
+  }
+}
+
+// The position Search reports for Src, as the single dword every bit-search
+// opcode writes whatever width it searched. Searching against the sign is
+// searching the source exclusive-ored with its own sign, which leaves a
+// non-negative source alone and complements a negative one, so that in all
+// three cases a zero operand is exactly the input with no bit to find. That is
+// the input the hardware answers with -1 and the count intrinsics answer with
+// the operand width, so it is selected out here.
+static Value *emitBitSearch(IRBuilder<> &B, BitSearch Search, Value *Src) {
+  Value *Searched = Src;
+  if (Search.AgainstSign) {
+    unsigned Width = Src->getType()->getIntegerBitWidth();
+    Searched = B.CreateXor(Src, B.CreateAShr(Src, Width - 1), "s_cls_unsigned");
+  }
+  Value *Count = B.CreateBinaryIntrinsic(Search.Count, Searched, B.getFalse(),
+                                         {}, "s_pos");
+  return B.CreateSelect(B.CreateIsNotNull(Searched),
+                        B.CreateZExtOrTrunc(Count, B.getInt32Ty()),
+                        B.getInt32(-1), "s_pos_found");
+}
+
+// Src with each of its 32 bits doubled into a 64-bit value. Every step spreads
+// the bits half as far apart as the one before it, leaving them on the even
+// positions, and the last one copies each into the odd position above it.
+static Value *emitBitReplicate(IRBuilder<> &B, Value *Src) {
+  static constexpr struct {
+    unsigned Shift;
+    uint64_t Keep;
+  } KSpread[] = {{16, 0x0000ffff0000ffffULL},
+                 {8, 0x00ff00ff00ff00ffULL},
+                 {4, 0x0f0f0f0f0f0f0f0fULL},
+                 {2, 0x3333333333333333ULL},
+                 {1, 0x5555555555555555ULL}};
+  Value *Spread = B.CreateZExt(Src, B.getInt64Ty());
+  for (auto [Shift, Keep] : KSpread)
+    Spread = B.CreateAnd(B.CreateOr(Spread, B.CreateShl(Spread, Shift)), Keep);
+  return B.CreateOr(Spread, B.CreateShl(Spread, 1), "s_bitreplicate");
+}
+
 // Refuse Di as a relative access that does not resolve statically.
 static Error refuseMovrel(RaiseContext &Ctx, const DecodedInst &Di,
                           const Twine &Detail) {
@@ -312,6 +379,122 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
       return DstIdx.takeError();
     Ctx.registers().writeReg32(ParsedReg{ParsedReg::SGPR, *DstIdx, 1},
                                Ctx.registers().readSgpr32(*Src));
+    return Error::success();
+  }
+
+  if (std::optional<BitSearch> Search = bitSearch(Di.CanonOp)) {
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> Src = readSrc0(Op, Search->Is64);
+    if (!Src)
+      return Src.takeError();
+    Ctx.registers().writeReg32(*Dst, emitBitSearch(Ctx.B, *Search, *Src));
+    return Error::success();
+  }
+
+  if (Di.CanonOp == CanonicalOp::S_SEXT_I32_I8 ||
+      Di.CanonOp == CanonicalOp::S_SEXT_I32_I16) {
+    unsigned Width = Di.CanonOp == CanonicalOp::S_SEXT_I32_I8 ? 8 : 16;
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> Src = Op.src(0);
+    if (!Src)
+      return Src.takeError();
+    Value *Narrow = Ctx.B.CreateTrunc(*Src, Ctx.B.getIntNTy(Width));
+    Ctx.registers().writeReg32(
+        *Dst, Ctx.B.CreateSExt(Narrow, Ctx.B.getInt32Ty(), "s_sext"));
+    return Error::success();
+  }
+
+  // The bit index comes from the low bits of the source and everything else in
+  // the destination is preserved, so the destination is an input too. The MC
+  // form drops the tied operand that carries it, so it is read back off the
+  // destination register.
+  if (Di.CanonOp == CanonicalOp::S_BITSET0_B32 ||
+      Di.CanonOp == CanonicalOp::S_BITSET0_B64 ||
+      Di.CanonOp == CanonicalOp::S_BITSET1_B32 ||
+      Di.CanonOp == CanonicalOp::S_BITSET1_B64) {
+    bool Is64 = Di.CanonOp == CanonicalOp::S_BITSET0_B64 ||
+                Di.CanonOp == CanonicalOp::S_BITSET1_B64;
+    bool Sets = Di.CanonOp == CanonicalOp::S_BITSET1_B32 ||
+                Di.CanonOp == CanonicalOp::S_BITSET1_B64;
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    // The source is a dword whichever width the destination is, and only as
+    // many of its low bits as index a bit of the destination are read.
+    unsigned DestinationWidth = Is64 ? 64 : 32;
+    Expected<Value *> Index = Op.src(0);
+    if (!Index)
+      return Index.takeError();
+    Value *Shift =
+        Ctx.B.CreateAnd(*Index, DestinationWidth - 1, "s_bitset_index");
+    if (Is64)
+      Shift = Ctx.B.CreateZExt(Shift, Ctx.B.getInt64Ty());
+    Value *Bit = Ctx.B.CreateShl(ConstantInt::get(Shift->getType(), 1), Shift,
+                                 "s_bitset_bit");
+    Expected<Value *> Old = Is64 ? Op.dstValue64() : Op.dstValue();
+    if (!Old)
+      return Old.takeError();
+    Value *Result =
+        Sets ? Ctx.B.CreateOr(*Old, Bit, "s_bitset1")
+             : Ctx.B.CreateAnd(*Old, Ctx.B.CreateNot(Bit), "s_bitset0");
+    writeDst(Ctx.registers(), *Dst, Result, Is64);
+    return Error::success();
+  }
+
+  if (Di.CanonOp == CanonicalOp::S_BITREPLICATE_B64_B32) {
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> Src = Op.src(0);
+    if (!Src)
+      return Src.takeError();
+    Ctx.registers().writeReg64(*Dst, emitBitReplicate(Ctx.B, *Src));
+    return Error::success();
+  }
+
+  // The most negative input has no positive counterpart and the hardware keeps
+  // it as it is, which is what llvm.abs does when overflow is not poison.
+  if (Di.CanonOp == CanonicalOp::S_ABS_I32) {
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> Src = Op.src(0);
+    if (!Src)
+      return Src.takeError();
+    Value *Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::abs, *Src,
+                                                Ctx.B.getFalse(), {}, "s_abs");
+    Ctx.registers().writeReg32(*Dst, Result);
+    Ctx.registers().writeScc(Ctx.B.CreateIsNotNull(Result, "s_abs_scc"));
+    return Error::success();
+  }
+
+  // Counting zeros is counting the ones of the complement. Either way the
+  // result is one dword, so the 64-bit forms narrow their count, which cannot
+  // lose anything below 65.
+  if (Di.CanonOp == CanonicalOp::S_BCNT0_I32_B32 ||
+      Di.CanonOp == CanonicalOp::S_BCNT0_I32_B64 ||
+      Di.CanonOp == CanonicalOp::S_BCNT1_I32_B32 ||
+      Di.CanonOp == CanonicalOp::S_BCNT1_I32_B64) {
+    bool Is64 = Di.CanonOp == CanonicalOp::S_BCNT0_I32_B64 ||
+                Di.CanonOp == CanonicalOp::S_BCNT1_I32_B64;
+    bool CountsZeros = Di.CanonOp == CanonicalOp::S_BCNT0_I32_B32 ||
+                       Di.CanonOp == CanonicalOp::S_BCNT0_I32_B64;
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> Src = readSrc0(Op, Is64);
+    if (!Src)
+      return Src.takeError();
+    Value *Counted = CountsZeros ? Ctx.B.CreateNot(*Src, "s_bcnt0_bits") : *Src;
+    Value *Count =
+        Ctx.B.CreateUnaryIntrinsic(Intrinsic::ctpop, Counted, {}, "s_bcnt");
+    Value *Result = Ctx.B.CreateZExtOrTrunc(Count, Ctx.B.getInt32Ty());
+    Ctx.registers().writeReg32(*Dst, Result);
+    Ctx.registers().writeScc(Ctx.B.CreateIsNotNull(Result, "s_bcnt_scc"));
     return Error::success();
   }
 
