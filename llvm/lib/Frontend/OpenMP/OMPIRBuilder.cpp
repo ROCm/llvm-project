@@ -349,7 +349,9 @@ getTargetKernelExecMode(Function &Kernel) {
 static bool isGenericKernel(Function &Fn) {
   std::optional<omp::OMPTgtExecModeFlags> ExecMode =
       getTargetKernelExecMode(Fn);
-  return !ExecMode || (*ExecMode & OMP_TGT_EXEC_MODE_GENERIC);
+  // Not a bit test: some modes set the generic bit without running generic.
+  return !ExecMode || *ExecMode == OMP_TGT_EXEC_MODE_GENERIC ||
+         *ExecMode == OMP_TGT_EXEC_MODE_GENERIC_SPMD;
 }
 
 /// Make \p Source branch to \p Target.
@@ -8615,9 +8617,8 @@ GlobalVariable *OpenMPIRBuilder::emitKernelEnvironment(
   Constant *SrcLocStr = getOrCreateSrcLocStr(Loc, SrcLocStrSize);
   Constant *Ident = getOrCreateIdent(SrcLocStr, SrcLocStrSize);
   Constant *IsSPMDVal = ConstantInt::getSigned(Int8, Attrs.ExecFlags);
-  Constant *UseGenericStateMachineVal = ConstantInt::getSigned(
-      Int8, Attrs.ExecFlags != omp::OMP_TGT_EXEC_MODE_SPMD &&
-                Attrs.ExecFlags != omp::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP);
+  Constant *UseGenericStateMachineVal =
+      ConstantInt::getSigned(Int8, !omp::isSPMDExecMode(Attrs.ExecFlags));
   Constant *MayUseNestedParallelismVal = ConstantInt::getSigned(Int8, true);
   Constant *DebugIndentionLevelVal = ConstantInt::getSigned(Int16, 0);
 

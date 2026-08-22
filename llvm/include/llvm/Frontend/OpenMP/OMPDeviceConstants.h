@@ -29,6 +29,21 @@ enum OMPTgtExecModeFlags : unsigned char {
   OMP_TGT_EXEC_MODE_XTEAM_RED = 1 << 3
 };
 
+/// Whether \p Mode runs every thread in the kernel body, so that no generic
+/// worker/dispatcher state machine is needed. Modes are not a bitmask that can
+/// be tested for the SPMD bit, so they are enumerated explicitly.
+constexpr bool isSPMDExecMode(OMPTgtExecModeFlags Mode) {
+  switch (Mode) {
+  case OMP_TGT_EXEC_MODE_SPMD:
+  case OMP_TGT_EXEC_MODE_SPMD_NO_LOOP:
+  case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
+  case OMP_TGT_EXEC_MODE_XTEAM_RED:
+    return true;
+  default:
+    return false;
+  }
+}
+
 } // end namespace omp
 } // end namespace llvm
 
