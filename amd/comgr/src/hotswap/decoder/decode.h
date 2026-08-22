@@ -58,6 +58,16 @@ bool isSoppConditionalBranch(const DecodedInst &Di);
 // address space.
 llvm::Expected<uint64_t> soppBranchTarget(const DecodedInst &Di);
 
+// True when the offset `Di` transfers control to follows from the decode
+// alone: a SOPP branch, or an s_add_pc_i64 whose displacement is a constant.
+bool hasStaticBranchTarget(const DecodedInst &Di);
+
+// Offset within the text section `Di` transfers control to. `Di` must satisfy
+// `hasStaticBranchTarget`. s_add_pc_i64 states its displacement as a signed
+// count of bytes, taken from the instruction that follows it. Returns an error
+// when the target does not fit in the address space.
+llvm::Expected<uint64_t> staticBranchTarget(const DecodedInst &Di);
+
 // Compute the CFG successors of a block whose last instruction is `LastInst`.
 // `NextBlockOffset` is the fall-through successor, or nullopt when no block
 // follows. A block ending in s_endpgm has no successors; a branch reaches its
