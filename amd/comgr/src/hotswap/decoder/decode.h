@@ -45,9 +45,6 @@ decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
              std::optional<uint64_t> KernelEndOffset = std::nullopt,
              std::optional<uint64_t> KernelStartOffset = std::nullopt);
 
-// True when `Di` is a SOPP branch, conditional or not.
-bool isSoppBranch(const DecodedInst &Di);
-
 // True when `Di` is a SOPP branch that also falls through.
 bool isSoppConditionalBranch(const DecodedInst &Di);
 
@@ -57,6 +54,14 @@ bool isSoppConditionalBranch(const DecodedInst &Di);
 // carries no constant displacement or when the target does not fit in the
 // address space.
 llvm::Expected<uint64_t> soppBranchTarget(const DecodedInst &Di);
+
+// True when the offset `Di` transfers control to follows from the decode alone.
+bool hasStaticBranchTarget(const DecodedInst &Di);
+
+// Offset within the text section `Di` transfers control to. `Di` must satisfy
+// `hasStaticBranchTarget`. Returns an error when the target does not fit in
+// the address space.
+llvm::Expected<uint64_t> staticBranchTarget(const DecodedInst &Di);
 
 // Compute the CFG successors of a block whose last instruction is `LastInst`.
 // `NextBlockOffset` is the fall-through successor, or nullopt when no block

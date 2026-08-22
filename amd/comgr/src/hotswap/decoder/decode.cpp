@@ -299,7 +299,7 @@ constexpr uint64_t BranchDisplacementUnit = 4;
 
 } // namespace
 
-bool isSoppBranch(const DecodedInst &Di) {
+static bool isSoppBranch(const DecodedInst &Di) {
   return Di.CanonOp == CanonicalOp::S_BRANCH || isSoppConditionalBranch(Di);
 }
 
@@ -340,14 +340,43 @@ Expected<uint64_t> soppBranchTarget(const DecodedInst &Di) {
   return Base + static_cast<uint64_t>(Displacement);
 }
 
+bool hasStaticBranchTarget(const DecodedInst &Di) {
+  if (isSoppBranch(Di))
+    return true;
+  return Di.CanonOp == CanonicalOp::S_ADD_PC_I64 &&
+         evalOperandAsConst(Di.Inst, 0).has_value();
+}
+
+Expected<uint64_t> staticBranchTarget(const DecodedInst &Di) {
+  assert(hasStaticBranchTarget(Di) &&
+         "instruction has no static branch target");
+  if (isSoppBranch(Di))
+    return soppBranchTarget(Di);
+
+  // The displacement operand is already as wide as the addition the hardware
+  // performs, whether it is an inline constant, a 32-bit literal or a 64-bit
+  // one, so nothing is extended here.
+  uint64_t Base = Di.Offset + Di.sizeInBytes();
+  int64_t Displacement = *evalOperandAsConst(Di.Inst, 0);
+  uint64_t Target = Base + static_cast<uint64_t>(Displacement);
+  // The sum is not expected to overflow or underflow; a target that did wrap
+  // names something other than where the hardware would go.
+  if (Displacement >= 0 ? Target < Base : Target > Base)
+    return makeHotswapError(
+        "staticBranchTarget: s_add_pc_i64 at .text offset 0x" +
+        Twine::utohexstr(Di.Offset) +
+        " targets an offset outside the address space");
+  return Target;
+}
+
 Expected<SmallVector<uint64_t>>
 computeDecodedBlockSuccessors(const DecodedInst &LastInst,
                               std::optional<uint64_t> NextBlockOffset) {
   SmallVector<uint64_t> Result;
   if (LastInst.CanonOp == CanonicalOp::S_ENDPGM)
     return Result;
-  if (isSoppBranch(LastInst)) {
-    Expected<uint64_t> Target = soppBranchTarget(LastInst);
+  if (hasStaticBranchTarget(LastInst)) {
+    Expected<uint64_t> Target = staticBranchTarget(LastInst);
     if (!Target)
       return Target.takeError();
     Result.push_back(*Target);
@@ -367,7 +396,8 @@ computeDecodedBlockSuccessors(const DecodedInst &LastInst,
 }
 
 bool decodedInstEndsBlock(const DecodedInst &LastInst) {
-  return LastInst.CanonOp == CanonicalOp::S_ENDPGM || isSoppBranch(LastInst);
+  return LastInst.CanonOp == CanonicalOp::S_ENDPGM ||
+         hasStaticBranchTarget(LastInst);
 }
 
 Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
@@ -424,8 +454,8 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
 
     // A branch leads somewhere the scan would otherwise not reach and leaves
     // its fall-through leading a block of its own, so both start blocks.
-    if (isSoppBranch(Di)) {
-      Expected<uint64_t> Target = soppBranchTarget(Di);
+    if (hasStaticBranchTarget(Di)) {
+      Expected<uint64_t> Target = staticBranchTarget(Di);
       if (!Target)
         return Target.takeError();
       if (*Target < KernelStart || *Target >= TotalSize)
