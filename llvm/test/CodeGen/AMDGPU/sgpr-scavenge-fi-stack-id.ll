@@ -20,34 +20,36 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    v_and_b32_e32 v2, 1, v2
 ; CHECK-NEXT:    v_cndmask_b32_e64 v9, 0, -1, vcc
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v3
+; CHECK-NEXT:    s_mov_b64 s[4:5], -1
 ; CHECK-NEXT:    v_cndmask_b32_e64 v10, 0, -1, vcc
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v2
+; CHECK-NEXT:    v_cndmask_b32_e64 v12, 0, -1, s[4:5]
+; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v11, 0, -1, vcc
 ; CHECK-NEXT:    s_mov_b32 s7, 0x3fe62e42
 ; CHECK-NEXT:    s_mov_b32 s6, 0xfefa39ef
 ; CHECK-NEXT:    s_mov_b32 s9, 0x3c7abc9e
 ; CHECK-NEXT:    s_mov_b32 s8, 0x3b39803f
-; CHECK-NEXT:    s_mov_b64 s[10:11], -1
-; CHECK-NEXT:    v_mov_b32_e32 v12, 0
-; CHECK-NEXT:    s_mov_b32 s12, 0
-; CHECK-NEXT:    s_mov_b32 s13, 0x7ff00000
-; CHECK-NEXT:    s_mov_b32 s15, 0x40417e50
-; CHECK-NEXT:    s_mov_b32 s14, 0xa9dc6553
-; CHECK-NEXT:    s_mov_b32 s16, 0
-; CHECK-NEXT:    s_mov_b32 s17, 0x7ff80000
+; CHECK-NEXT:    v_mov_b32_e32 v13, 0
+; CHECK-NEXT:    s_mov_b32 s10, 0
+; CHECK-NEXT:    s_mov_b32 s11, 0x7ff00000
+; CHECK-NEXT:    s_mov_b32 s13, 0x40417e50
+; CHECK-NEXT:    s_mov_b32 s12, 0xa9dc6553
+; CHECK-NEXT:    s_mov_b32 s14, 0
+; CHECK-NEXT:    s_mov_b32 s15, 0x7ff80000
+; CHECK-NEXT:    v_cndmask_b32_e64 v14, 0, -1, s[4:5]
+; CHECK-NEXT:    s_mov_b64 s[16:17], -1
 ; CHECK-NEXT:    s_mov_b64 s[18:19], 0
-; CHECK-NEXT:    s_mov_b64 s[20:21], -1
+; CHECK-NEXT:    s_mov_b64 s[20:21], 0
 ; CHECK-NEXT:    s_mov_b64 s[22:23], 0
 ; CHECK-NEXT:    s_mov_b64 s[24:25], 0
 ; CHECK-NEXT:    s_mov_b64 s[26:27], 0
-; CHECK-NEXT:    s_mov_b64 s[28:29], 0
+; CHECK-NEXT:    s_mov_b64 s[56:57], 0
 ; CHECK-NEXT:    s_mov_b64 s[40:41], 0
-; CHECK-NEXT:    s_mov_b64 s[60:61], 0
-; CHECK-NEXT:    s_mov_b64 s[44:45], 0
-; CHECK-NEXT:    s_mov_b64 s[62:63], 0
-; CHECK-NEXT:    s_mov_b64 s[46:47], 0
 ; CHECK-NEXT:    s_mov_b64 s[58:59], 0
 ; CHECK-NEXT:    s_mov_b64 s[42:43], 0
+; CHECK-NEXT:    s_mov_b64 s[46:47], 0
+; CHECK-NEXT:    s_mov_b64 s[28:29], 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
@@ -55,15 +57,15 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    s_branch .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %loop.exit.guard
 ; CHECK-NEXT:    ; in Loop: Header=BB0_2 Depth=1
-; CHECK-NEXT:    s_or_b64 exec, exec, s[58:59]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[46:47]
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
 ; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; CHECK-NEXT:    s_or_b64 s[56:57], s[56:57], s[4:5]
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[56:57]
+; CHECK-NEXT:    s_or_b64 s[44:45], s[44:45], s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[44:45]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; CHECK-NEXT:    s_or_b64 s[42:43], s[42:43], s[4:5]
-; CHECK-NEXT:    s_mov_b64 s[58:59], 0
-; CHECK-NEXT:    s_mov_b64 exec, s[56:57]
+; CHECK-NEXT:    s_or_b64 s[28:29], s[28:29], s[4:5]
+; CHECK-NEXT:    s_mov_b64 s[46:47], 0
+; CHECK-NEXT:    s_mov_b64 exec, s[44:45]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_18
 ; CHECK-NEXT:  .LBB0_2: ; %outer_latch
@@ -72,8 +74,8 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    ; Child Loop BB0_5 Depth 3
 ; CHECK-NEXT:    ; Child Loop BB0_7 Depth 4
 ; CHECK-NEXT:    ; Child Loop BB0_9 Depth 5
-; CHECK-NEXT:    s_mov_b64 s[56:57], 0
-; CHECK-NEXT:    s_and_b64 s[4:5], s[20:21], exec
+; CHECK-NEXT:    s_mov_b64 s[44:45], 0
+; CHECK-NEXT:    s_and_b64 s[4:5], s[16:17], exec
 ; CHECK-NEXT:  .LBB0_3: ; %outer_header
 ; CHECK-NEXT:    ; Parent Loop BB0_2 Depth=1
 ; CHECK-NEXT:    ; => This Loop Header: Depth=2
@@ -81,13 +83,13 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    ; Child Loop BB0_7 Depth 4
 ; CHECK-NEXT:    ; Child Loop BB0_9 Depth 5
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v11
-; CHECK-NEXT:    s_or_b64 s[22:23], s[22:23], vcc
-; CHECK-NEXT:    s_xor_b64 s[74:75], vcc, exec
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[22:23]
-; CHECK-NEXT:    s_mov_b64 s[72:73], 0
-; CHECK-NEXT:    s_and_b64 s[76:77], s[4:5], exec
-; CHECK-NEXT:    s_mov_b64 s[4:5], s[22:23]
-; CHECK-NEXT:    s_mov_b64 s[22:23], 0
+; CHECK-NEXT:    s_or_b64 s[18:19], s[18:19], vcc
+; CHECK-NEXT:    s_xor_b64 s[62:63], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[18:19]
+; CHECK-NEXT:    s_mov_b64 s[60:61], 0
+; CHECK-NEXT:    s_and_b64 s[72:73], s[4:5], exec
+; CHECK-NEXT:    s_mov_b64 s[4:5], s[18:19]
+; CHECK-NEXT:    s_mov_b64 s[18:19], 0
 ; CHECK-NEXT:    ; implicit-def: $vgpr4
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -96,7 +98,7 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    ; in Loop: Header=BB0_3 Depth=2
 ; CHECK-NEXT:    v_fma_f64 v[2:3], v[0:1], s[6:7], 0
 ; CHECK-NEXT:    v_fmac_f64_e64 v[2:3], 0, s[8:9]
-; CHECK-NEXT:    s_and_b64 s[4:5], s[20:21], exec
+; CHECK-NEXT:    s_and_b64 s[4:5], s[16:17], exec
 ; CHECK-NEXT:  .LBB0_5: ; %sgpr_loop_header
 ; CHECK-NEXT:    ; Parent Loop BB0_2 Depth=1
 ; CHECK-NEXT:    ; Parent Loop BB0_3 Depth=2
@@ -104,22 +106,21 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    ; Child Loop BB0_7 Depth 4
 ; CHECK-NEXT:    ; Child Loop BB0_9 Depth 5
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v9
-; CHECK-NEXT:    s_or_b64 s[24:25], s[24:25], vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[24:25]
-; CHECK-NEXT:    v_cndmask_b32_e64 v13, 0, -1, s[10:11]
+; CHECK-NEXT:    s_or_b64 s[20:21], s[20:21], vcc
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[20:21]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; CHECK-NEXT:    s_mov_b64 s[78:79], 0
-; CHECK-NEXT:    v_mov_b32_e32 v5, v13
-; CHECK-NEXT:    s_or_b64 s[46:47], s[46:47], s[4:5]
-; CHECK-NEXT:    s_mov_b64 s[4:5], s[24:25]
-; CHECK-NEXT:    s_mov_b64 s[24:25], 0
+; CHECK-NEXT:    s_mov_b64 s[74:75], 0
+; CHECK-NEXT:    v_mov_b32_e32 v5, v12
+; CHECK-NEXT:    s_or_b64 s[42:43], s[42:43], s[4:5]
+; CHECK-NEXT:    s_mov_b64 s[4:5], s[20:21]
+; CHECK-NEXT:    s_mov_b64 s[20:21], 0
 ; CHECK-NEXT:    ; implicit-def: $vgpr4
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_15
 ; CHECK-NEXT:  .LBB0_6: ; %sgpr_pressure_loop.preheader
 ; CHECK-NEXT:    ; in Loop: Header=BB0_5 Depth=3
-; CHECK-NEXT:    s_and_b64 s[4:5], s[20:21], exec
+; CHECK-NEXT:    s_and_b64 s[4:5], s[16:17], exec
 ; CHECK-NEXT:  .LBB0_7: ; %sgpr_pressure_loop
 ; CHECK-NEXT:    ; Parent Loop BB0_2 Depth=1
 ; CHECK-NEXT:    ; Parent Loop BB0_3 Depth=2
@@ -127,27 +128,27 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    ; => This Loop Header: Depth=4
 ; CHECK-NEXT:    ; Child Loop BB0_9 Depth 5
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
-; CHECK-NEXT:    s_or_b64 s[92:93], s[26:27], vcc
+; CHECK-NEXT:    s_or_b64 s[88:89], s[22:23], vcc
 ; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; CHECK-NEXT:    s_or_b64 s[28:29], s[28:29], s[4:5]
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[92:93]
+; CHECK-NEXT:    s_or_b64 s[24:25], s[24:25], s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[88:89]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; CHECK-NEXT:    s_mov_b64 s[88:89], 0
-; CHECK-NEXT:    s_or_b64 s[44:45], s[44:45], s[4:5]
-; CHECK-NEXT:    s_mov_b64 s[26:27], 0
+; CHECK-NEXT:    s_mov_b64 s[76:77], 0
+; CHECK-NEXT:    s_or_b64 s[40:41], s[40:41], s[4:5]
+; CHECK-NEXT:    s_mov_b64 s[22:23], 0
 ; CHECK-NEXT:    ; implicit-def: $sgpr4_sgpr5
-; CHECK-NEXT:    ; implicit-def: $sgpr90_sgpr91
+; CHECK-NEXT:    ; implicit-def: $sgpr78_sgpr79
 ; CHECK-NEXT:    ; implicit-def: $vgpr4
-; CHECK-NEXT:    s_mov_b64 exec, s[92:93]
+; CHECK-NEXT:    s_mov_b64 exec, s[88:89]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_11
 ; CHECK-NEXT:  .LBB0_8: ; %inner_stack_loop.preheader
 ; CHECK-NEXT:    ; in Loop: Header=BB0_7 Depth=4
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v6
-; CHECK-NEXT:    s_mov_b32 s90, 0
+; CHECK-NEXT:    s_mov_b32 s78, 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v5, v3, 0, vcc
 ; CHECK-NEXT:    v_cndmask_b32_e64 v4, v2, 0, vcc
-; CHECK-NEXT:    s_and_b64 s[4:5], s[20:21], exec
+; CHECK-NEXT:    s_and_b64 s[4:5], s[16:17], exec
 ; CHECK-NEXT:  .LBB0_9: ; %inner_stack_loop
 ; CHECK-NEXT:    ; Parent Loop BB0_2 Depth=1
 ; CHECK-NEXT:    ; Parent Loop BB0_3 Depth=2
@@ -155,128 +156,127 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    ; Parent Loop BB0_7 Depth=4
 ; CHECK-NEXT:    ; => This Inner Loop Header: Depth=5
 ; CHECK-NEXT:    s_lshr_b32 s5, s32, 6
-; CHECK-NEXT:    s_lshl3_add_u32 s4, s90, s5
+; CHECK-NEXT:    s_lshl3_add_u32 s4, s78, s5
 ; CHECK-NEXT:    v_mov_b32_e32 v15, s4
-; CHECK-NEXT:    buffer_load_dword v14, v15, s[0:3], 0 offen
-; CHECK-NEXT:    s_nop 0
-; CHECK-NEXT:    buffer_load_dword v15, v15, s[0:3], 0 offen offset:4
+; CHECK-NEXT:    buffer_load_dword v16, v15, s[0:3], 0 offen
+; CHECK-NEXT:    buffer_load_dword v17, v15, s[0:3], 0 offen offset:4
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v10
-; CHECK-NEXT:    v_cndmask_b32_e64 v17, v5, 0, vcc
-; CHECK-NEXT:    v_cndmask_b32_e64 v16, v4, 0, vcc
+; CHECK-NEXT:    v_cndmask_b32_e64 v19, v5, 0, vcc
+; CHECK-NEXT:    v_cndmask_b32_e64 v18, v4, 0, vcc
 ; CHECK-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v7
-; CHECK-NEXT:    v_mul_f64 v[16:17], v[16:17], s[12:13]
-; CHECK-NEXT:    s_mov_b64 s[92:93], 0
+; CHECK-NEXT:    v_mul_f64 v[18:19], v[18:19], s[10:11]
+; CHECK-NEXT:    s_mov_b64 s[88:89], 0
 ; CHECK-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; CHECK-NEXT:    v_mul_f64 v[16:17], v[16:17], s[14:15]
-; CHECK-NEXT:    s_xor_b64 s[92:93], exec, s[4:5]
-; CHECK-NEXT:    v_mul_f64 v[16:17], v[16:17], s[16:17]
-; CHECK-NEXT:    v_mov_b32_e32 v18, s90
-; CHECK-NEXT:    s_mov_b32 s90, 1
-; CHECK-NEXT:    s_or_b64 s[60:61], s[60:61], s[92:93]
+; CHECK-NEXT:    v_mul_f64 v[18:19], v[18:19], s[12:13]
+; CHECK-NEXT:    s_xor_b64 s[88:89], exec, s[4:5]
+; CHECK-NEXT:    v_mul_f64 v[18:19], v[18:19], s[14:15]
+; CHECK-NEXT:    v_mov_b32_e32 v15, s78
+; CHECK-NEXT:    s_mov_b32 s78, 1
+; CHECK-NEXT:    s_or_b64 s[56:57], s[56:57], s[88:89]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_mul_f64 v[14:15], v[16:17], v[14:15]
-; CHECK-NEXT:    buffer_store_dword v15, off, s[0:3], 0 offset:4
-; CHECK-NEXT:    buffer_store_dword v14, off, s[0:3], 0
-; CHECK-NEXT:    buffer_store_dword v12, v18, s[0:3], 0 offen
-; CHECK-NEXT:    buffer_store_dword v12, v18, s[0:3], 0 offen offset:4
+; CHECK-NEXT:    v_mul_f64 v[16:17], v[18:19], v[16:17]
+; CHECK-NEXT:    buffer_store_dword v17, off, s[0:3], 0 offset:4
+; CHECK-NEXT:    buffer_store_dword v16, off, s[0:3], 0
+; CHECK-NEXT:    buffer_store_dword v13, v15, s[0:3], 0 offen
+; CHECK-NEXT:    buffer_store_dword v13, v15, s[0:3], 0 offen offset:4
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_9
 ; CHECK-NEXT:  .LBB0_10: ; %inner_done
 ; CHECK-NEXT:    ; in Loop: Header=BB0_7 Depth=4
-; CHECK-NEXT:    s_or_b64 exec, exec, s[60:61]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[56:57]
 ; CHECK-NEXT:    s_and_b64 vcc, exec, 0
 ; CHECK-NEXT:    s_and_b64 vcc, vcc, vcc
-; CHECK-NEXT:    s_mov_b64 s[90:91], -1
-; CHECK-NEXT:    s_cselect_b64 s[60:61], 0, exec
+; CHECK-NEXT:    s_mov_b64 s[78:79], -1
+; CHECK-NEXT:    s_cselect_b64 s[56:57], 0, exec
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
-; CHECK-NEXT:    v_cndmask_b32_e64 v4, 0, -1, s[90:91]
-; CHECK-NEXT:    s_or_b64 s[28:29], s[28:29], s[60:61]
-; CHECK-NEXT:    s_mov_b64 s[60:61], 0
+; CHECK-NEXT:    v_cndmask_b32_e64 v4, 0, -1, s[78:79]
+; CHECK-NEXT:    s_or_b64 s[24:25], s[24:25], s[56:57]
+; CHECK-NEXT:    s_mov_b64 s[56:57], 0
 ; CHECK-NEXT:  .LBB0_11: ; in Loop: Header=BB0_7 Depth=4
-; CHECK-NEXT:    s_or_b64 exec, exec, s[44:45]
-; CHECK-NEXT:    s_xor_b64 s[44:45], exec, s[28:29]
-; CHECK-NEXT:    s_and_b64 s[44:45], s[44:45], exec
-; CHECK-NEXT:    s_or_b64 s[62:63], s[62:63], s[44:45]
-; CHECK-NEXT:    s_mov_b64 s[92:93], s[28:29]
-; CHECK-NEXT:    s_mov_b64 s[28:29], 0
-; CHECK-NEXT:    s_mov_b64 s[44:45], 0
-; CHECK-NEXT:    s_mov_b64 exec, s[92:93]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[40:41]
+; CHECK-NEXT:    s_xor_b64 s[40:41], exec, s[24:25]
+; CHECK-NEXT:    s_and_b64 s[40:41], s[40:41], exec
+; CHECK-NEXT:    s_or_b64 s[58:59], s[58:59], s[40:41]
+; CHECK-NEXT:    s_mov_b64 s[88:89], s[24:25]
+; CHECK-NEXT:    s_mov_b64 s[24:25], 0
+; CHECK-NEXT:    s_mov_b64 s[40:41], 0
+; CHECK-NEXT:    s_mov_b64 exec, s[88:89]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_13
 ; CHECK-NEXT:  .LBB0_12: ; %sgpr_loop_merge
 ; CHECK-NEXT:    ; in Loop: Header=BB0_7 Depth=4
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v11
-; CHECK-NEXT:    s_or_b64 s[88:89], s[88:89], vcc
-; CHECK-NEXT:    s_xor_b64 s[92:93], exec, s[88:89]
-; CHECK-NEXT:    s_and_b64 s[92:93], s[92:93], exec
-; CHECK-NEXT:    v_cndmask_b32_e64 v4, 0, -1, s[18:19]
-; CHECK-NEXT:    s_or_b64 s[62:63], s[62:63], s[92:93]
+; CHECK-NEXT:    s_or_b64 s[76:77], s[76:77], vcc
+; CHECK-NEXT:    s_xor_b64 s[88:89], exec, s[76:77]
+; CHECK-NEXT:    s_and_b64 s[88:89], s[88:89], exec
+; CHECK-NEXT:    v_mov_b32_e32 v4, v14
+; CHECK-NEXT:    s_or_b64 s[58:59], s[58:59], s[88:89]
 ; CHECK-NEXT:    ; implicit-def: $sgpr4_sgpr5
-; CHECK-NEXT:    ; implicit-def: $sgpr90_sgpr91
-; CHECK-NEXT:    s_mov_b64 s[92:93], 0
-; CHECK-NEXT:    s_mov_b64 exec, s[88:89]
+; CHECK-NEXT:    ; implicit-def: $sgpr78_sgpr79
+; CHECK-NEXT:    s_mov_b64 s[88:89], 0
+; CHECK-NEXT:    s_mov_b64 exec, s[76:77]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_7
 ; CHECK-NEXT:  .LBB0_13: ; %loop.exit.guard6
 ; CHECK-NEXT:    ; in Loop: Header=BB0_5 Depth=3
-; CHECK-NEXT:    s_or_b64 exec, exec, s[62:63]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[58:59]
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
 ; CHECK-NEXT:    v_cndmask_b32_e64 v5, 0, -1, s[4:5]
 ; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; CHECK-NEXT:    s_or_b64 s[40:41], s[40:41], s[4:5]
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[40:41]
+; CHECK-NEXT:    s_or_b64 s[26:27], s[26:27], s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[26:27]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; CHECK-NEXT:    v_cndmask_b32_e64 v4, 0, -1, s[90:91]
-; CHECK-NEXT:    s_or_b64 s[46:47], s[46:47], s[4:5]
-; CHECK-NEXT:    s_mov_b64 s[4:5], s[40:41]
-; CHECK-NEXT:    s_mov_b64 s[40:41], 0
-; CHECK-NEXT:    s_mov_b64 s[62:63], 0
+; CHECK-NEXT:    v_cndmask_b32_e64 v4, 0, -1, s[78:79]
+; CHECK-NEXT:    s_or_b64 s[42:43], s[42:43], s[4:5]
+; CHECK-NEXT:    s_mov_b64 s[4:5], s[26:27]
+; CHECK-NEXT:    s_mov_b64 s[26:27], 0
+; CHECK-NEXT:    s_mov_b64 s[58:59], 0
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_15
 ; CHECK-NEXT:  .LBB0_14: ; %after_sgpr_loop
 ; CHECK-NEXT:    ; in Loop: Header=BB0_5 Depth=3
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v9
-; CHECK-NEXT:    s_or_b64 s[78:79], s[78:79], vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[78:79]
+; CHECK-NEXT:    s_or_b64 s[74:75], s[74:75], vcc
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[74:75]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; CHECK-NEXT:    v_mov_b32_e32 v5, v13
-; CHECK-NEXT:    s_or_b64 s[46:47], s[46:47], s[4:5]
+; CHECK-NEXT:    v_mov_b32_e32 v5, v12
+; CHECK-NEXT:    s_or_b64 s[42:43], s[42:43], s[4:5]
 ; CHECK-NEXT:    ; implicit-def: $vgpr4
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
-; CHECK-NEXT:    s_mov_b64 exec, s[78:79]
+; CHECK-NEXT:    s_mov_b64 exec, s[74:75]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_5
 ; CHECK-NEXT:  .LBB0_15: ; %loop.exit.guard5
 ; CHECK-NEXT:    ; in Loop: Header=BB0_3 Depth=2
-; CHECK-NEXT:    s_or_b64 exec, exec, s[46:47]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[42:43]
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
-; CHECK-NEXT:    s_or_b64 s[74:75], s[74:75], vcc
-; CHECK-NEXT:    s_mov_b64 s[46:47], 0
+; CHECK-NEXT:    s_or_b64 s[62:63], s[62:63], vcc
+; CHECK-NEXT:    s_mov_b64 s[42:43], 0
 ; CHECK-NEXT:  .LBB0_16: ; in Loop: Header=BB0_3 Depth=2
-; CHECK-NEXT:    s_or_b64 exec, exec, s[76:77]
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[74:75]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[72:73]
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[62:63]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; CHECK-NEXT:    s_or_b64 s[58:59], s[58:59], s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, s[74:75]
+; CHECK-NEXT:    s_or_b64 s[46:47], s[46:47], s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, s[62:63]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_1
 ; CHECK-NEXT:  .LBB0_17: ; %outer_exit
 ; CHECK-NEXT:    ; in Loop: Header=BB0_3 Depth=2
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v10
-; CHECK-NEXT:    s_or_b64 s[72:73], s[72:73], vcc
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[72:73]
+; CHECK-NEXT:    s_or_b64 s[60:61], s[60:61], vcc
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[60:61]
 ; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; CHECK-NEXT:    v_cndmask_b32_e64 v4, 0, -1, s[18:19]
-; CHECK-NEXT:    s_or_b64 s[58:59], s[58:59], s[4:5]
+; CHECK-NEXT:    v_mov_b32_e32 v4, v14
+; CHECK-NEXT:    s_or_b64 s[46:47], s[46:47], s[4:5]
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
-; CHECK-NEXT:    s_mov_b64 exec, s[72:73]
+; CHECK-NEXT:    s_mov_b64 exec, s[60:61]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_3
 ; CHECK-NEXT:    s_branch .LBB0_1
 ; CHECK-NEXT:  .LBB0_18: ; %DummyReturnBlock
-; CHECK-NEXT:    s_or_b64 exec, exec, s[42:43]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[28:29]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 entry:

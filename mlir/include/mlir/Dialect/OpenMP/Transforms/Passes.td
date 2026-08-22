@@ -52,7 +52,6 @@ def MarkDeclareTargetPass : Pass<"omp-mark-declare-target", "ModuleOp"> {
     Also, mark transitively reached functions through recipe ops (e.g.
     omp.private) and other function calls.
     }];
-  let dependentDialects = ["mlir::omp::OpenMPDialect"];
 }
 
 def PrepareForOMPOffloadPrivatizationPass : Pass<"omp-offload-privatization-prepare", "ModuleOp"> {

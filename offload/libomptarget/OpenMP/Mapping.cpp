@@ -81,7 +81,6 @@ int MappingInfoTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin,
                /*TgtAllocBegin=*/(uintptr_t)TgtPtrBegin,
                /*TgtPtrBegin=*/(uintptr_t)TgtPtrBegin,
                /*UseHoldRefCount=*/false,
-               /*AllocKind=*/TARGET_ALLOC_DEFAULT,
                /*Name=*/nullptr,
                /*IsRefCountINF=*/true))
            .first->HDTT;
@@ -208,11 +207,10 @@ LookupResult MappingInfoTy::lookupMapping(HDTTMapAccessorTy &HDTTMap,
 
 TargetPointerResultTy MappingInfoTy::getTargetPointer(
     HDTTMapAccessorTy &HDTTMap, void *HstPtrBegin, void *HstPtrBase,
-    int64_t TgtPadding, int64_t Size, int64_t TypeFlags,
-    map_var_info_t HstPtrName, bool HasFlagTo, bool HasFlagAlways,
-    bool IsImplicit, bool UpdateRefCount, bool HasCloseModifier,
-    bool HasPresentModifier, bool HasHoldModifier, AsyncInfoTy &AsyncInfo,
-    HostDataToTargetTy *OwnedTPR, bool ReleaseHDTTMap,
+    int64_t TgtPadding, int64_t Size, map_var_info_t HstPtrName, bool HasFlagTo,
+    bool HasFlagAlways, bool IsImplicit, bool UpdateRefCount,
+    bool HasCloseModifier, bool HasPresentModifier, bool HasHoldModifier,
+    AsyncInfoTy &AsyncInfo, HostDataToTargetTy *OwnedTPR, bool ReleaseHDTTMap,
     StateInfoTy *StateInfo) {
 
   LookupResult LR = lookupMapping(HDTTMap, HstPtrBegin, Size, OwnedTPR);
@@ -318,27 +316,17 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
     // If it is not contained and Size > 0, we should create a new entry for it.
     LR.TPR.Flags.IsNewEntry = true;
 
-    int32_t AllocKind = TARGET_ALLOC_DEFAULT;
-
-    if (TypeFlags == OMP_TGT_MAPTYPE_DESCRIPTOR &&
-        Device.RTL->use_shared_mem_for_descriptor(Device.DeviceID, Size)) {
-      AllocKind = TARGET_ALLOC_SHARED;
-      INFO(OMP_INFOTYPE_MAPPING_CHANGED, Device.DeviceID,
-           "Using shared memory for descriptor allocation of size=%zu\n", Size);
-    }
-
     uintptr_t TgtAllocBegin =
-        (uintptr_t)Device.allocData(TgtPadding + Size, HstPtrBegin, AllocKind);
+        (uintptr_t)Device.allocData(TgtPadding + Size, HstPtrBegin);
     uintptr_t TgtPtrBegin = TgtAllocBegin + TgtPadding;
     // Release the mapping table lock only after the entry is locked by
     // attaching it to TPR.
-    LR.TPR.setEntry(
-        HDTTMap
-            ->emplace(new HostDataToTargetTy(
-                (uintptr_t)HstPtrBase, (uintptr_t)HstPtrBegin,
-                (uintptr_t)HstPtrBegin + Size, TgtAllocBegin, TgtPtrBegin,
-                HasHoldModifier, AllocKind, HstPtrName))
-            .first->HDTT);
+    LR.TPR.setEntry(HDTTMap
+                        ->emplace(new HostDataToTargetTy(
+                            (uintptr_t)HstPtrBase, (uintptr_t)HstPtrBegin,
+                            (uintptr_t)HstPtrBegin + Size, TgtAllocBegin,
+                            TgtPtrBegin, HasHoldModifier, HstPtrName))
+                        .first->HDTT);
     INFO(OMP_INFOTYPE_MAPPING_CHANGED, Device.DeviceID,
          "Creating new map entry with HstPtrBase=" DPxMOD
          ", HstPtrBegin=" DPxMOD ", TgtAllocBegin=" DPxMOD
@@ -419,25 +407,17 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
     ODBG(ODT_Mapping) << "Moving " << Size << " bytes (hst:" << HstPtrBegin
                       << ") -> (tgt:" << LR.TPR.TargetPointer << ")";
 
-    if (LR.TPR.Flags.IsNewEntry ||
-        LR.TPR.getEntry()->AllocKind != TARGET_ALLOC_SHARED) {
-
-      ODBG(ODT_Mapping) << "Moving " << Size << " bytes (hst:" << HstPtrBegin
-                        << ") -> (tgt:" << LR.TPR.TargetPointer << ")";
-
-      int Ret = Device.submitData(LR.TPR.TargetPointer, HstPtrBegin, Size,
-                                  AsyncInfo, LR.TPR.getEntry());
-      if (Ret != OFFLOAD_SUCCESS) {
-        REPORT() << "Copying data to device failed.";
-        // We will also return nullptr if the data movement fails because that
-        // pointer points to a corrupted memory region so it doesn't make any
-        // sense to continue to use it.
-        LR.TPR.TargetPointer = nullptr;
-      } else if (LR.TPR.getEntry()->addEventIfNecessary(Device, AsyncInfo) !=
-                 OFFLOAD_SUCCESS)
-        return TargetPointerResultTy{};
-    }
-
+    int Ret = Device.submitData(LR.TPR.TargetPointer, HstPtrBegin, Size,
+                                AsyncInfo, LR.TPR.getEntry());
+    if (Ret != OFFLOAD_SUCCESS) {
+      REPORT() << "Copying data to device failed.";
+      // We will also return nullptr if the data movement fails because that
+      // pointer points to a corrupted memory region so it doesn't make any
+      // sense to continue to use it.
+      LR.TPR.TargetPointer = nullptr;
+    } else if (LR.TPR.getEntry()->addEventIfNecessary(Device, AsyncInfo) !=
+               OFFLOAD_SUCCESS)
+      return TargetPointerResultTy{};
   } else {
     // If not a host pointer and no present modifier, we need to wait for the
     // event if it exists.

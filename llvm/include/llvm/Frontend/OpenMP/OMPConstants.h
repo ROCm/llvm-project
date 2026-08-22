@@ -249,8 +249,6 @@ enum class OpenMPOffloadMappingFlags : uint64_t {
   // dynamic.
   // This is an OpenMP extension for the sake of OpenACC support.
   OMP_MAP_OMPX_HOLD = 0x2000,
-  // Mapping is for a descriptor (a.k.a. dope vector)
-  OMP_MAP_DESCRIPTOR = 0x4000,
   // Attach pointer and pointee, after processing all other maps.
   // Applicable to map-entering directives. Does not change ref-count.
   OMP_MAP_ATTACH = 0x8000,

@@ -2,10 +2,6 @@
 # ISA profile, and the decoded-instruction model).
 
 # -- DecoderTests -------------------------------------------------------------
-#
-# Links the hotswap::decoder OBJECT library, which carries the AMDGPU MC/CodeGen
-# LLVM components as PUBLIC usage requirements; initMCState registers the target
-# itself, so the test needs no separate target-init step.
 
 add_executable(DecoderTests
   DecoderTest.cpp)
@@ -14,6 +10,7 @@ target_link_libraries(DecoderTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::decoder
   hotswap::common
+  ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(DecoderTests PRIVATE

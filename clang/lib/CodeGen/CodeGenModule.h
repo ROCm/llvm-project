@@ -876,7 +876,8 @@ private:
   llvm::DenseMap<const CXXRecordDecl *, std::optional<PointerAuthQualifier>>
       VTablePtrAuthInfos;
   std::optional<PointerAuthQualifier>
-  computeVTPointerAuthentication(const CXXRecordDecl *ThisClass);
+  computeVTPointerAuthentication(const CXXRecordDecl *ThisClass,
+                                 bool IsVTTEntry);
 
   AtomicOptions AtomicOpts;
 
@@ -1323,13 +1324,14 @@ public:
                                    GlobalDecl SchemaDecl, QualType SchemaType);
 
   uint16_t getPointerAuthDeclDiscriminator(GlobalDecl GD);
-  std::optional<CGPointerAuthInfo>
-  getVTablePointerAuthInfo(CodeGenFunction *Context,
-                           const CXXRecordDecl *Record,
-                           llvm::Value *StorageAddress);
+
+  std::optional<CGPointerAuthInfo> getVTablePointerAuthInfo(
+      CodeGenFunction *Context, const CXXRecordDecl *Record,
+      llvm::Value *StorageAddress, bool IsVTTEntry = false);
 
   std::optional<PointerAuthQualifier>
-  getVTablePointerAuthentication(const CXXRecordDecl *thisClass);
+  getVTablePointerAuthentication(const CXXRecordDecl *thisClass,
+                                 bool IsVTTEntry = false);
 
   CGPointerAuthInfo EmitPointerAuthInfo(const RecordDecl *RD);
 
@@ -2018,12 +2020,6 @@ public:
   void printPostfixForExternalizedDecl(llvm::raw_ostream &OS,
                                        const Decl *D) const;
 
-  /// Under debug mode, print status of target teams loop transformation,
-  /// which should be either '#distribute' or '#parallel for'
-  void emitTargetTeamsLoopCodegenStatus(std::string StatusMsg,
-                                        const OMPExecutableDirective &D,
-                                        bool IsDevice);
-
   /// Add metadata for all nested directives for optimized kernel codegen.
   void addOptKernelNestMap(const OptKernelNestDirectives &NestDirs);
 
@@ -2099,8 +2095,6 @@ public:
   /// construct, there are no intermediate statements. Used for a combined
   /// construct
   NoLoopXteamErr checkAndSetNoLoopKernel(const OMPExecutableDirective &D);
-  /// Determine if 'teams loop' can be emitted using 'parallel for'.
-  bool TeamsLoopCanBeParallelFor(const OMPExecutableDirective &D);
 
   /// Given a top-level target construct for no-loop codegen, get the
   /// intermediate OpenMP constructs
@@ -2705,6 +2699,12 @@ private:
   /// sycl_external attribute to enable them to be identified as entry points
   /// by clang-sycl-linker during device-code splitting.
   void addSYCLModuleIdAttr(llvm::Function *Fn);
+
+  /// Embed the finalized SYCL device binary named by -foffload-include-binary
+  /// into the host module.
+  /// \return the function that registers the binary with the runtime, or null
+  /// if the binary could not be read.
+  llvm::Function *embedSYCLDeviceBinary();
 
   /// Determine whether the definition must be emitted; if this returns \c
   /// false, the definition can be emitted lazily if it's used.

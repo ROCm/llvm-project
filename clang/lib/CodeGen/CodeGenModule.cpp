@@ -356,6 +356,9 @@ bool CodeGenModule::shouldUseLLVMABILowering(unsigned CallingConv) const {
   if (T.isBPF())
     return true;
 
+  if (T.getArch() == llvm::Triple::aarch64 && !T.isOSWindows())
+    return true;
+
   if (T.getArch() == llvm::Triple::x86_64 && !T.isOSWindows() && !T.isUEFI() &&
       !T.isOSDarwin() && !T.isOSCygMing()) {
     switch (CallingConv) {
@@ -386,12 +389,30 @@ CodeGenModule::getLLVMABITargetInfo(llvm::abi::TypeBuilder &TB) {
     return *TheLLVMABITargetInfo;
 
   const llvm::Triple &T = getTriple();
-  if (T.isBPF()) {
-    TheLLVMABITargetInfo = llvm::abi::createBPFTargetInfo(TB);
+
+  switch (T.getArch()) {
+  default:
+    llvm_unreachable("LLVMABI lowering requested for an unsupported target");
+
+  case llvm::Triple::aarch64: {
+    StringRef ABI = getTarget().getABI();
+    llvm::abi::AArch64ABIKind Kind = llvm::abi::AArch64ABIKind::AAPCS;
+    if (ABI == "darwinpcs")
+      Kind = llvm::abi::AArch64ABIKind::DarwinPCS;
+    else if (T.isOSWindows())
+      Kind = llvm::abi::AArch64ABIKind::Win64;
+    else if (ABI == "aapcs-soft")
+      Kind = llvm::abi::AArch64ABIKind::AAPCSSoft;
+    TheLLVMABITargetInfo = llvm::abi::createAArch64TargetInfo(TB, Kind);
     return *TheLLVMABITargetInfo;
   }
 
-  if (T.getArch() == llvm::Triple::x86_64) {
+  case llvm::Triple::bpfeb:
+  case llvm::Triple::bpfel:
+    TheLLVMABITargetInfo = llvm::abi::createBPFTargetInfo(TB);
+    return *TheLLVMABITargetInfo;
+
+  case llvm::Triple::x86_64: {
     StringRef ABI = getTarget().getABI();
     llvm::abi::X86AVXABILevel AVXLevel =
         ABI == "avx512" ? llvm::abi::X86AVXABILevel::AVX512
@@ -418,8 +439,7 @@ CodeGenModule::getLLVMABITargetInfo(llvm::abi::TypeBuilder &TB) {
         TB, AVXLevel, Has64BitPointers, CompatInfo);
     return *TheLLVMABITargetInfo;
   }
-
-  llvm_unreachable("LLVMABI lowering requested for an unsupported target");
+  }
 }
 
 static void checkDataLayoutConsistency(const TargetInfo &Target,
@@ -1170,6 +1190,12 @@ void CodeGenModule::Release() {
     if (llvm::Function *CudaCtorFunction = CUDARuntime->finalizeModule())
       AddGlobalCtor(CudaCtorFunction);
   }
+  if (LangOpts.SYCLIsHost && !CodeGenOpts.OffloadBinaryToEmbedFile.empty()) {
+    if (llvm::Function *SYCLCtorFunction = embedSYCLDeviceBinary())
+      // A static initializer may launch a kernel, so the device binary has to
+      // be registered before any of them run, hence a priority.
+      AddGlobalCtor(SYCLCtorFunction, /*Priority=*/101);
+  }
   if (OpenMPRuntime) {
     OpenMPRuntime->createOffloadEntriesAndInfoMetadata();
     OpenMPRuntime->clear();
@@ -1415,12 +1441,8 @@ void CodeGenModule::Release() {
     else if (flt == &llvm::APFloat::IEEEsingle())
       Format = llvm::LongDoubleFormat::IEEEsingle;
 
-    if (Format) {
-      getModule().addModuleFlag(
-          llvm::Module::Error, "long-double-type",
-          llvm::MDString::get(VMContext,
-                              llvm::getLongDoubleFormatName(*Format)));
-    }
+    if (Format)
+      getModule().setLongDoubleFormat(*Format);
   }
 
   if (getTriple().isOSzOS()) {
@@ -8900,84 +8922,6 @@ void CodeGenModule::printPostfixForExternalizedDecl(llvm::raw_ostream &OS,
 }
 
 namespace {
-/// A 'teams loop' with a nested 'loop bind(parallel)' or generic function
-/// call in the associated loop-nest cannot be a 'parllel for'.
-class TeamsLoopChecker final : public ConstStmtVisitor<TeamsLoopChecker> {
-public:
-  TeamsLoopChecker(CodeGenModule &CGM)
-      : CGM(CGM), TeamsLoopCanBeParallelFor{true} {}
-  bool teamsLoopCanBeParallelFor() const {
-    return TeamsLoopCanBeParallelFor;
-  }
-  // Is there a nested OpenMP loop bind(parallel)
-  void VisitOMPExecutableDirective(const OMPExecutableDirective *D) {
-    if (D->getDirectiveKind() == llvm::omp::Directive::OMPD_loop) {
-      if (const auto *C = D->getSingleClause<OMPBindClause>())
-        if (C->getBindKind() == OMPC_BIND_parallel) {
-          TeamsLoopCanBeParallelFor = false;
-          // No need to continue visiting any more
-          return;
-        }
-    }
-    for (const Stmt *Child : D->children())
-      if (Child)
-        Visit(Child);
-  }
-
-  void VisitCallExpr(const CallExpr *C) {
-    // Function calls inhibit parallel loop translation of 'target teams loop'
-    // unless the assume-no-nested-parallelism flag has been specified.
-    // OpenMP API runtime library calls do not inhibit parallel loop
-    // translation, regardless of the assume-no-nested-parallelism.
-    if (C) {
-      bool IsOpenMPAPI = false;
-      auto *FD = dyn_cast_or_null<FunctionDecl>(C->getCalleeDecl());
-      if (FD) {
-        std::string Name = FD->getNameInfo().getAsString();
-        IsOpenMPAPI = Name.find("omp_") == 0;
-      }
-      TeamsLoopCanBeParallelFor =
-          IsOpenMPAPI || CGM.getLangOpts().OpenMPNoNestedParallelism;
-      if (!TeamsLoopCanBeParallelFor)
-        return;
-    }
-    for (const Stmt *Child : C->children())
-      if (Child)
-        Visit(Child);
-  }
-
-  void VisitCapturedStmt(const CapturedStmt *S) {
-    if (!S)
-      return;
-    Visit(S->getCapturedDecl()->getBody());
-  }
-
-  void VisitStmt(const Stmt *S) {
-    if (!S)
-      return;
-    for (const Stmt *Child : S->children())
-      if (Child)
-        Visit(Child);
-  }
-
-private:
-  CodeGenModule &CGM;
-  bool TeamsLoopCanBeParallelFor;
-};
-} // namespace
-
-/// Determine if 'teams loop' can be emitted using 'parallel for'.
-bool CodeGenModule::TeamsLoopCanBeParallelFor(const OMPExecutableDirective &D) {
-  if (D.getDirectiveKind() != llvm::omp::Directive::OMPD_target_teams_loop)
-    return false;
-  assert(D.hasAssociatedStmt() &&
-      "Loop directive must have associated statement.");
-  TeamsLoopChecker Checker(*this);
-  Checker.Visit(D.getAssociatedStmt());
-  return Checker.teamsLoopCanBeParallelFor();
-}
-
-namespace {
 class NoLoopChecker final : public ConstStmtVisitor<NoLoopChecker> {
 public:
   NoLoopChecker(CodeGenModule &CGM)
@@ -9478,21 +9422,6 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
   unsigned LineNo =
       PLoc.isValid() ? PLoc.getLine() : SM.getExpansionLineNumber(L);
 
-  llvm::dbgs() << StatusMsg << ": " << FileName << ": " << LineNo << "\n";
-}
-
-void CodeGenModule::emitTargetTeamsLoopCodegenStatus(
-    std::string StatusMsg, const OMPExecutableDirective &D, bool IsDevice) {
-  if (IsDevice)
-    StatusMsg += ": DEVICE";
-  else
-    StatusMsg += ": HOST";
-  SourceLocation L = D.getBeginLoc();
-  SourceManager &SM = getContext().getSourceManager();
-  PresumedLoc PLoc = SM.getPresumedLoc(L);
-  const char *FileName = PLoc.isValid() ? PLoc.getFilename() : nullptr;
-  unsigned LineNo =
-      PLoc.isValid() ? PLoc.getLine() : SM.getExpansionLineNumber(L);
   llvm::dbgs() << StatusMsg << ": " << FileName << ": " << LineNo << "\n";
 }
 

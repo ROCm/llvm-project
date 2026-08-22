@@ -9,7 +9,7 @@
 #ifndef HOTSWAP_TRANSPILER_DECODED_INST_H
 #define HOTSWAP_TRANSPILER_DECODED_INST_H
 
-#include "canonical-op.h"
+#include "hotswap/decoder/canonical-op.h"
 
 #include "llvm/ADT/Bitfields.h"
 #include "llvm/ADT/SmallVector.h"

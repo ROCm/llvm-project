@@ -10585,13 +10585,14 @@ define <12 x i8> @bitcast_v6i16_to_v12i8(<6 x i16> %a, i32 %b) #0 {
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB46_4
 ; GFX9-NEXT:  .LBB46_3: ; %cmp.true
-; GFX9-NEXT:    v_pk_add_u16 v8, v8, 3 op_sel_hi:[1,0]
 ; GFX9-NEXT:    v_pk_add_u16 v14, v14, 3 op_sel_hi:[1,0]
 ; GFX9-NEXT:    v_pk_add_u16 v13, v13, 3 op_sel_hi:[1,0]
-; GFX9-NEXT:    v_lshrrev_b32_e32 v9, 8, v8
-; GFX9-NEXT:    v_lshrrev_b64 v[3:4], 24, v[13:14]
+; GFX9-NEXT:    v_pk_add_u16 v9, v0, 3 op_sel_hi:[1,0]
+; GFX9-NEXT:    v_pk_add_u16 v8, v8, 3 op_sel_hi:[1,0]
 ; GFX9-NEXT:    v_lshrrev_b64 v[11:12], 24, v[8:9]
+; GFX9-NEXT:    v_lshrrev_b64 v[3:4], 24, v[13:14]
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v10, 16, v8
+; GFX9-NEXT:    v_lshrrev_b32_e32 v9, 8, v8
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v7, 24, v14
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v6, 16, v14
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v5, 8, v14
@@ -10640,16 +10641,18 @@ define <12 x i8> @bitcast_v6i16_to_v12i8(<6 x i16> %a, i32 %b) #0 {
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB46_4
 ; GFX11-TRUE16-NEXT:  .LBB46_3: ; %cmp.true
-; GFX11-TRUE16-NEXT:    v_pk_add_u16 v8, v8, 3 op_sel_hi:[1,0]
 ; GFX11-TRUE16-NEXT:    v_pk_add_u16 v12, v12, 3 op_sel_hi:[1,0]
+; GFX11-TRUE16-NEXT:    v_pk_add_u16 v9, v0, 3 op_sel_hi:[1,0]
+; GFX11-TRUE16-NEXT:    v_pk_add_u16 v8, v8, 3 op_sel_hi:[1,0]
 ; GFX11-TRUE16-NEXT:    v_pk_add_u16 v11, v11, 3 op_sel_hi:[1,0]
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_1) | instid1(VALU_DEP_3)
-; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v9, 8, v8
-; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v10, 16, v8
-; GFX11-TRUE16-NEXT:    v_lshrrev_b64 v[3:4], 24, v[11:12]
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(SKIP_1) | instid1(VALU_DEP_4)
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v7, 24, v12
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v6, 16, v12
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b64 v[13:14], 24, v[8:9]
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_4)
+; GFX11-TRUE16-NEXT:    v_lshrrev_b64 v[3:4], 24, v[11:12]
+; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v10, 16, v8
+; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v9, 8, v8
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v5, 8, v12
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v2, 16, v11
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 8, v11
@@ -10697,16 +10700,18 @@ define <12 x i8> @bitcast_v6i16_to_v12i8(<6 x i16> %a, i32 %b) #0 {
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB46_4
 ; GFX11-FAKE16-NEXT:  .LBB46_3: ; %cmp.true
-; GFX11-FAKE16-NEXT:    v_pk_add_u16 v8, v8, 3 op_sel_hi:[1,0]
 ; GFX11-FAKE16-NEXT:    v_pk_add_u16 v14, v14, 3 op_sel_hi:[1,0]
+; GFX11-FAKE16-NEXT:    v_pk_add_u16 v9, v0, 3 op_sel_hi:[1,0]
+; GFX11-FAKE16-NEXT:    v_pk_add_u16 v8, v8, 3 op_sel_hi:[1,0]
 ; GFX11-FAKE16-NEXT:    v_pk_add_u16 v13, v13, 3 op_sel_hi:[1,0]
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_1) | instid1(VALU_DEP_3)
-; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v9, 8, v8
-; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v10, 16, v8
-; GFX11-FAKE16-NEXT:    v_lshrrev_b64 v[3:4], 24, v[13:14]
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(SKIP_1) | instid1(VALU_DEP_4)
 ; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v7, 24, v14
 ; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v6, 16, v14
 ; GFX11-FAKE16-NEXT:    v_lshrrev_b64 v[11:12], 24, v[8:9]
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_4)
+; GFX11-FAKE16-NEXT:    v_lshrrev_b64 v[3:4], 24, v[13:14]
+; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v10, 16, v8
+; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v9, 8, v8
 ; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v5, 8, v14
 ; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v2, 16, v13
 ; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v1, 8, v13
@@ -10920,17 +10925,18 @@ define inreg <12 x i8> @bitcast_v6i16_to_v12i8_scalar(<6 x i16> inreg %a, i32 in
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s6
 ; GFX9-NEXT:    s_branch .LBB47_3
 ; GFX9-NEXT:  .LBB47_2: ; %cmp.true
-; GFX9-NEXT:    v_pk_add_u16 v8, s18, 3 op_sel_hi:[1,0]
 ; GFX9-NEXT:    v_pk_add_u16 v14, s17, 3 op_sel_hi:[1,0]
 ; GFX9-NEXT:    v_pk_add_u16 v13, s16, 3 op_sel_hi:[1,0]
-; GFX9-NEXT:    v_lshrrev_b32_e32 v9, 8, v8
+; GFX9-NEXT:    v_pk_add_u16 v9, s4, 3 op_sel_hi:[1,0]
+; GFX9-NEXT:    v_pk_add_u16 v8, s18, 3 op_sel_hi:[1,0]
+; GFX9-NEXT:    v_lshrrev_b64 v[11:12], 24, v[8:9]
 ; GFX9-NEXT:    v_lshrrev_b64 v[3:4], 24, v[13:14]
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v10, 16, v8
+; GFX9-NEXT:    v_lshrrev_b32_e32 v9, 8, v8
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v7, 24, v14
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v6, 16, v14
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v5, 8, v14
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v2, 16, v13
-; GFX9-NEXT:    v_lshrrev_b64 v[11:12], 24, v[8:9]
 ; GFX9-NEXT:    v_lshrrev_b32_e32 v1, 8, v13
 ; GFX9-NEXT:  .LBB47_3: ; %end
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v13
@@ -10973,18 +10979,20 @@ define inreg <12 x i8> @bitcast_v6i16_to_v12i8_scalar(<6 x i16> inreg %a, i32 in
 ; GFX11-NEXT:    v_mov_b32_e32 v3, s6
 ; GFX11-NEXT:    s_branch .LBB47_3
 ; GFX11-NEXT:  .LBB47_2: ; %cmp.true
-; GFX11-NEXT:    v_pk_add_u16 v8, s2, 3 op_sel_hi:[1,0]
 ; GFX11-NEXT:    v_pk_add_u16 v14, s1, 3 op_sel_hi:[1,0]
+; GFX11-NEXT:    v_pk_add_u16 v9, s0, 3 op_sel_hi:[1,0]
+; GFX11-NEXT:    v_pk_add_u16 v8, s2, 3 op_sel_hi:[1,0]
 ; GFX11-NEXT:    v_pk_add_u16 v13, s0, 3 op_sel_hi:[1,0]
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_1) | instid1(VALU_DEP_3)
-; GFX11-NEXT:    v_lshrrev_b32_e32 v9, 8, v8
-; GFX11-NEXT:    v_lshrrev_b32_e32 v10, 16, v8
-; GFX11-NEXT:    v_lshrrev_b64 v[3:4], 24, v[13:14]
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(SKIP_1) | instid1(VALU_DEP_4)
 ; GFX11-NEXT:    v_lshrrev_b32_e32 v7, 24, v14
 ; GFX11-NEXT:    v_lshrrev_b32_e32 v6, 16, v14
+; GFX11-NEXT:    v_lshrrev_b64 v[11:12], 24, v[8:9]
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_4)
+; GFX11-NEXT:    v_lshrrev_b64 v[3:4], 24, v[13:14]
+; GFX11-NEXT:    v_lshrrev_b32_e32 v10, 16, v8
+; GFX11-NEXT:    v_lshrrev_b32_e32 v9, 8, v8
 ; GFX11-NEXT:    v_lshrrev_b32_e32 v5, 8, v14
 ; GFX11-NEXT:    v_lshrrev_b32_e32 v2, 16, v13
-; GFX11-NEXT:    v_lshrrev_b64 v[11:12], 24, v[8:9]
 ; GFX11-NEXT:    v_lshrrev_b32_e32 v1, 8, v13
 ; GFX11-NEXT:  .LBB47_3: ; %end
 ; GFX11-NEXT:    v_mov_b32_e32 v0, v13

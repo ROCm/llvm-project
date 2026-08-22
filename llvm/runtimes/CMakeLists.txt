@@ -584,12 +584,17 @@ if(build_runtimes)
   # CMAKE_PREFIX_PATH is the search path for CMake packages. In order to pass through
   # the command line interface, the CMake semicolon separator needs to be replaced
   # with $<SEMICOLON>
-  if(CMAKE_PREFIX_PATH)
-    string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
-    # Some projects require access to the LLVM lib/cmake directory
-    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+  string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
+  # Some projects require access to the LLVM lib/cmake directory, whether or not
+  # the user provided a prefix path of their own.
+  if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+    if(escaped_cmake_prefix_path)
       string(PREPEND escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake$<SEMICOLON>")
+    else()
+      set(escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake")
     endif()
+  endif()
+  if(escaped_cmake_prefix_path)
     list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${escaped_cmake_prefix_path}")
   endif()
 
@@ -683,13 +688,7 @@ if(build_runtimes)
       endif()
     endif()
 
-    if("AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
-      set(AMDGPU_ARCH_DEP amdgpu-arch)
-    endif()
-    if (${LIBOMPTARGET_BUILD_DEVICE_FORTRT})
-      set(FORTRT_DEP FortranRuntime)
-    endif()
-    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP} ${AMDGPU_ARCH_DEP} ${FORTRT_DEP})
+    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP})
       if(TARGET ${dep})
         list(APPEND extra_deps ${dep})
       endif()

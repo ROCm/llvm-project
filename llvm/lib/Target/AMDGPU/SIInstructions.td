@@ -1259,7 +1259,6 @@ def SI_SPILL_S32_TO_VGPR : PseudoInstSI <(outs VGPR_32:$vdst),
   let hasSideEffects = 0;
   let mayLoad = 0;
   let mayStore = 0;
-  let VALU = 1;
   let hasExtraDefRegAllocReq = 1;
   let Constraints = "$vdst = $vdst_in";
 }
@@ -1271,7 +1270,6 @@ def SI_RESTORE_S32_FROM_VGPR : PseudoInstSI <(outs SReg_32:$sdst),
   let hasSideEffects = 0;
   let mayLoad = 0;
   let mayStore = 0;
-  let VALU = 1;
   let hasExtraSrcRegAllocReq = 1;
 }
 } // End Spill = 1, VALU = 1, isConvergent = 1

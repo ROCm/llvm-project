@@ -605,7 +605,7 @@ int targetDataBegin(ident_t *Loc, DeviceTy &Device, int32_t ArgNum,
       // when HasPresentModifier.
       PointerTpr = Device.getMappingInfo().getTargetPointer(
           HDTTMap, HstPtrBase, HstPtrBase, /*TgtPadding=*/0, sizeof(void *),
-          ArgTypes[I], /*HstPtrName=*/nullptr, /*HasFlagTo=*/false,
+          /*HstPtrName=*/nullptr, /*HasFlagTo=*/false,
           /*HasFlagAlways=*/false, IsImplicit, UpdateRef, HasCloseModifier,
           HasPresentModifier, HasHoldModifier, AsyncInfo, /*OwnedTPR=*/nullptr,
           /*ReleaseHDTTMap=*/false);
@@ -641,10 +641,10 @@ int targetDataBegin(ident_t *Loc, DeviceTy &Device, int32_t ArgNum,
     const bool HasFlagAlways = ArgTypes[I] & OMP_TGT_MAPTYPE_ALWAYS;
     // Note that HDTTMap will be released in getTargetPointer.
     auto TPR = Device.getMappingInfo().getTargetPointer(
-        HDTTMap, HstPtrBegin, HstPtrBase, TgtPadding, DataSize, ArgTypes[I],
-        HstPtrName, HasFlagTo, HasFlagAlways, IsImplicit, UpdateRef,
-        HasCloseModifier, HasPresentModifier, HasHoldModifier, AsyncInfo,
-        PointerTpr.getEntry(), /*ReleaseHDTTMap=*/true, StateInfo);
+        HDTTMap, HstPtrBegin, HstPtrBase, TgtPadding, DataSize, HstPtrName,
+        HasFlagTo, HasFlagAlways, IsImplicit, UpdateRef, HasCloseModifier,
+        HasPresentModifier, HasHoldModifier, AsyncInfo, PointerTpr.getEntry(),
+        /*ReleaseHDTTMap=*/true, StateInfo);
     void *TgtPtrBegin = TPR.TargetPointer;
     IsHostPtr = TPR.Flags.IsHostPointer;
     // If data_size==0, then the argument could be a zero-length pointer to
@@ -730,7 +730,6 @@ int targetDataBegin(ident_t *Loc, DeviceTy &Device, int32_t ArgNum,
     // This happens  with dope vectors in Fortran modules.
     // The pointer has to be copied into the
     // target dope vector.
-    // Perhaps OMP_TGT_MAPTYPE_DESCRIPTOR would help here, not sure.
     if ((ArgTypes[I] & OMP_TGT_MAPTYPE_PTR_AND_OBJ) &&
         (!IsHostPtr || (PointerTpr.getEntry() != nullptr &&
                         PointerHstPtrBegin != PointerTgtPtrBegin))) {
@@ -2521,11 +2520,8 @@ int target_replay(ident_t *Loc, DeviceTy &Device, void *HostPtr,
   KernelArgs.DynCGroupMem = SharedMemorySize;
   KernelArgs.Flags.StrictBlocksAndThreads = true;
 
-  KernelExtraArgsTy KernelExtraArgs{};
-  KernelExtraArgs.ReplayOutcome = ReplayOutcome;
-
   int Ret = Device.launchKernel(Symbols[0].DevPtr, TgtArgs, TgtOffsets,
-                                KernelArgs, &KernelExtraArgs, AsyncInfo);
+                                KernelArgs, ReplayOutcome, AsyncInfo);
   if (Ret != OFFLOAD_SUCCESS) {
     REPORT() << "Failed to launch kernel replay.";
     return OFFLOAD_FAIL;

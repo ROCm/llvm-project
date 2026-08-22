@@ -2621,7 +2621,8 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
     if (Error Err = upgradeDIExpression(Version, Elts, Buffer))
       return Err;
 
-    MetadataList.assignValue(DIExpression::get(Context, Elts), NextMetadataNo);
+    MetadataList.assignValue(GET_OR_DISTINCT(DIExpression, (Context, Elts)),
+                             NextMetadataNo);
     NextMetadataNo++;
     break;
   }

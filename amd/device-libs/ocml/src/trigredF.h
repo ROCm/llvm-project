@@ -7,18 +7,17 @@
 
 #define SMALL_BOUND 0x1.0p+17f
 
-#if defined EXTRA_PRECISION
 struct redret {
+    float hi;
+    int i;
+};
+
+// Extra-precision reduced argument: x = i*(pi/2) + (hi + lo), |hi + lo| <= pi/4.
+struct redret2 {
     float hi;
     float lo;
     int i;
 };
-#else
-struct redret {
-    float hi;
-    int i;
-};
-#endif
 
 struct scret {
     float s;
@@ -29,12 +28,13 @@ extern CONSTATTR struct redret MATH_PRIVATE(trigredsmall)(float x);
 extern CONSTATTR struct redret MATH_PRIVATE(trigredlarge)(float x);
 extern CONSTATTR struct redret MATH_PRIVATE(trigred)(float x);
 
+extern CONSTATTR struct redret2 MATH_PRIVATE(trigred2small)(float x);
+extern CONSTATTR struct redret2 MATH_PRIVATE(trigred2large)(float x);
+extern CONSTATTR struct redret2 MATH_PRIVATE(trigred2)(float x);
 
-#if defined EXTRA_PRECISION
-extern CONSTATTR struct scret  MATH_PRIVATE(sincosred2)(float x, float y);
-#else
 extern CONSTATTR struct scret  MATH_PRIVATE(sincosred)(float x);
-#endif
+extern CONSTATTR struct scret  MATH_PRIVATE(sincosred2)(float x, float y);
 
 extern CONSTATTR float MATH_PRIVATE(tanred)(float x, int regn);
+extern CONSTATTR float MATH_PRIVATE(tanred2)(float x, float xx, int regn);
 

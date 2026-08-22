@@ -15,9 +15,8 @@ define void @repro(<6 x i32> %a, i32 %i) {
 ; CHECK-NEXT:    v_cndmask_b32_e32 v2, v2, v4, vcc
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 5, v6
 ; CHECK-NEXT:    v_cndmask_b32_e32 v2, v2, v5, vcc
-; CHECK-NEXT:    v_xor_b32_e32 v1, v2, v1
-; CHECK-NEXT:    v_xor_b32_e32 v0, v2, v0
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
+; CHECK-NEXT:    v_xor_b32_e32 v0, v2, v0
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
 ; CHECK-NEXT:    ; divergent control-flow edge
