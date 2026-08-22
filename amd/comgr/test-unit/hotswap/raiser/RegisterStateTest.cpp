@@ -376,7 +376,10 @@ TEST_F(RegisterStateTest, DropsBlockScopedFactsOnBlockEntry) {
   Env->Regs->writeReg32(M0, Env->B.getInt32(7));
   Value *OldLaneActive = Env->Regs->emitLaneActiveBit();
 
-  Env->Regs->enterBlock();
+  BasicBlock *Successor = BasicBlock::Create(
+      Env->LLVMCtx, "successor", Env->B.GetInsertBlock()->getParent());
+  Env->B.CreateBr(Successor);
+  Env->B.SetInsertPoint(Successor);
 
   EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4, true), nullptr);
   EXPECT_FALSE(Env->Regs->lookupSourceImageSgprPairAddr(4));
@@ -440,7 +443,10 @@ TEST_F(RegisterStateTest, ProjectsMaskReadsToCurrentSourceWave) {
 TEST_F(RegisterStateTest, RetainsPairWidthAcrossBlocks) {
   Env->Regs->recordSgprWaveMaskI1(2, ConstantInt::getTrue(Env->LLVMCtx), false);
   Env->Regs->recordSgprWaveMaskI1(4, ConstantInt::getTrue(Env->LLVMCtx), true);
-  Env->Regs->enterBlock();
+  BasicBlock *Successor = BasicBlock::Create(
+      Env->LLVMCtx, "successor", Env->B.GetInsertBlock()->getParent());
+  Env->B.CreateBr(Successor);
+  Env->B.SetInsertPoint(Successor);
 
   Env->Regs->invalidateSgprWaveMaskI1(3);
   Env->Regs->invalidateSgprWaveMaskI1(5);

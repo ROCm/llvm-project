@@ -33,9 +33,9 @@ namespace {
 
 class RaiseContextTest : public ::testing::Test {
 protected:
-  // Offset the source kernel starts at, which the context maps to the entry
-  // block. Deliberately not zero: the mapping tracks the kernel's own start,
-  // not the start of the text section it sits in.
+  // Offset the source kernel starts at. Deliberately not zero: the mapping
+  // tracks the kernel's own start, not the start of the text section it sits
+  // in.
   static constexpr uint64_t KKernelStartOffset = 0x40;
 
   void SetUp() override {
@@ -74,7 +74,9 @@ protected:
 };
 
 TEST_F(RaiseContextTest, ResolvesBlocksBySourceOffset) {
-  EXPECT_EQ(Env->Ctx->lookupBB(KKernelStartOffset), Env->Entry);
+  BasicBlock *Start = BasicBlock::Create(Env->LLVMCtx, "bb_start", Env->Kernel);
+  Env->Ctx->defineBB(KKernelStartOffset, Start);
+  EXPECT_EQ(Env->Ctx->lookupBB(KKernelStartOffset), Start);
 }
 
 } // namespace

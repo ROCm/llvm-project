@@ -76,11 +76,7 @@ RaiseContext::RaiseContext(
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),
       SourceFloatRoundMode32(SourceFloatRoundMode32),
       SourceFloatRoundMode16_64(SourceFloatRoundMode16_64),
-      SourceDx10Clamp(SourceDx10Clamp), SourceIeeeMode(SourceIeeeMode) {
-  // The builder is positioned in the entry block, which is what the source
-  // kernel's first instruction raised into.
-  OffsetToBb[KernelStartOffset] = B.GetInsertBlock();
-}
+      SourceDx10Clamp(SourceDx10Clamp), SourceIeeeMode(SourceIeeeMode) {}
 
 Error RaiseContext::validateF32Environment(const DecodedInst &Di) const {
   if (!Projection.TargetSTI.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
@@ -134,8 +130,14 @@ BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
     return It->second;
   // Every branch target is a block leader recorded during CFG layout, so a
   // miss is a raiser bug, not a recoverable case.
-  report_fatal_error(Twine("transpiler: missing basic block for offset 0x") +
-                     utohexstr(Addr));
+  report_fatal_error("transpiler: missing basic block for offset 0x" +
+                     Twine::utohexstr(Addr));
+}
+
+void RaiseContext::defineBB(uint64_t Addr, BasicBlock *BB) {
+  if (!OffsetToBb.try_emplace(Addr, BB).second)
+    report_fatal_error("transpiler: duplicate basic block for offset 0x" +
+                       Twine::utohexstr(Addr));
 }
 
 Value *RaiseContext::emitLaneIdx() { return Projection.emitLaneIdx(B); }
