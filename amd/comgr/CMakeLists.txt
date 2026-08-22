@@ -471,6 +471,7 @@ endforeach()
 set_target_properties(comgr-object-utils PROPERTIES
   CXX_STANDARD 17
   CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS No
   POSITION_INDEPENDENT_CODE ON)
 target_include_directories(comgr-object-utils
   PRIVATE

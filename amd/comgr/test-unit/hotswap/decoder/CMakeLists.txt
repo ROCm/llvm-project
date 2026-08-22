@@ -20,9 +20,3 @@ target_include_directories(DecoderTests PRIVATE
   $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
 
 comgr_configure_test_target(DecoderTests)
-
-# The decoder headers this test includes are built as C++20 by the
-# hotswap::decoder library; match it (comgr_configure_test_target pins C++17).
-set_target_properties(DecoderTests PROPERTIES
-  CXX_STANDARD 20
-  CXX_STANDARD_REQUIRED ON)
