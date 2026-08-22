@@ -13,11 +13,15 @@
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise_failure.h"
 
+// AMDGPU target-private headers.
+#include "SIDefines.h"
+
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 
 #include <cassert>
 #include <cstdint>
@@ -402,6 +406,32 @@ static Expected<unsigned> displacedSgpr(RaiseContext &Ctx,
   return static_cast<unsigned>(Idx);
 }
 
+// Refuse Di as a barrier operation the raised kernel cannot state.
+static Error refuseBarrier(RaiseContext &Ctx, const DecodedInst &Di,
+                           const Twine &Detail) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
+}
+
+// Refuse Di as naming its barrier through m0, whose value the raise does not
+// resolve.
+static Error refuseBarrierFromM0(RaiseContext &Ctx, const DecodedInst &Di) {
+  return refuseBarrier(Ctx, Di,
+                       "takes its barrier id from m0, so which barrier it "
+                       "names is not known here");
+}
+
+// Refuse Di as naming a barrier other than the one the whole workgroup shares.
+static Error refuseNonWorkgroupBarrier(RaiseContext &Ctx, const DecodedInst &Di,
+                                       int64_t BarrierId) {
+  return refuseBarrier(Ctx, Di,
+                       "names barrier " + Twine(BarrierId) +
+                           " rather than the workgroup barrier, which is the "
+                           "only barrier the target has");
+}
+
 // Refuse Di as a control transfer the raised kernel cannot state.
 static Error refusePcTransfer(RaiseContext &Ctx, const DecodedInst &Di,
                               const Twine &Detail) {
@@ -726,12 +756,53 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     return Error::success();
   }
 
+  switch (Di.CanonOp) {
+  // The source splits a barrier into an arrival, here, and a release, in SOPP,
+  // and lets either name any of several barriers. The target has one barrier,
+  // the workgroup's, and one instruction that arrives at it and waits for it
+  // together, which `llvm.amdgcn.s.barrier` spells on every AMDGPU target.
+  // Waiting at the arrival as well only holds the wave at a point the whole
+  // workgroup passes through anyway. Memory ordering rides on the source's own
+  // wait counters, which raise to fences of their own.
+  case CanonicalOp::S_BARRIER_SIGNAL_IMM: {
+    int64_t BarrierId = Op.srcImm(0);
+    if (BarrierId != AMDGPU::Barrier::WORKGROUP)
+      return refuseNonWorkgroupBarrier(Ctx, Di, BarrierId);
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::amdgcn_s_barrier, {});
+    return Error::success();
+  }
+  case CanonicalOp::S_BARRIER_SIGNAL_M0:
+    return refuseBarrierFromM0(Ctx, Di);
+
+  // The rest of the family speaks about a named barrier: a barrier a subset of
+  // the workgroup joins, leaves, sizes and polls. The target has no such thing
+  // and no state to build one out of, so raising these would be inventing the
+  // synchronization they describe.
+  case CanonicalOp::S_BARRIER_SIGNAL_ISFIRST_IMM:
+  case CanonicalOp::S_BARRIER_SIGNAL_ISFIRST_M0:
+    return refuseBarrier(Ctx, Di,
+                         "reports whether this wave arrived at the barrier "
+                         "first, which the target barrier does not tell it");
+  case CanonicalOp::S_GET_BARRIER_STATE_IMM:
+  case CanonicalOp::S_GET_BARRIER_STATE_M0:
+    return refuseBarrier(Ctx, Di,
+                         "reads the arrival and membership counts of a "
+                         "barrier the target does not keep them for");
+  case CanonicalOp::S_BARRIER_INIT_IMM:
+  case CanonicalOp::S_BARRIER_INIT_M0:
+    return refuseBarrier(Ctx, Di, "sizes the membership of a named barrier");
+  case CanonicalOp::S_BARRIER_JOIN_IMM:
+  case CanonicalOp::S_BARRIER_JOIN_M0:
+    return refuseBarrier(Ctx, Di, "joins this wave to a named barrier");
+  case CanonicalOp::S_WAKEUP_BARRIER_IMM:
+  case CanonicalOp::S_WAKEUP_BARRIER_M0:
+    return refuseBarrier(Ctx, Di, "wakes the waves waiting on a named barrier");
+
   // A raised kernel is a different code object at a different address, so a
   // source program counter is a number nothing in it can act on: not an
   // address to jump to, and not where the bytes it points at are mapped.
   // Lowering one to that number would raise a kernel that computes something
   // plausible and goes somewhere wrong, so each of these is refused instead.
-  switch (Di.CanonOp) {
   case CanonicalOp::S_GETPC_B64:
     return refusePcTransfer(Ctx, Di,
                             "captures a source address, which no raised "

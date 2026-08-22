@@ -13,11 +13,17 @@
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise_failure.h"
 
+// AMDGPU target-private headers.
+#include "SIDefines.h"
+
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/MathExtras.h"
 
 #include <cassert>
 #include <cstdint>
@@ -26,7 +32,16 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
+// Refuse Di as a barrier the raised kernel has no barrier to state it with.
+static Error refuseBarrier(RaiseContext &Ctx, const DecodedInst &Di,
+                           const Twine &Detail) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
+}
+
+Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   switch (Di.CanonOp) {
   case CanonicalOp::S_ENDPGM:
     Ctx.B.CreateRetVoid();
@@ -77,6 +92,34 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
   case CanonicalOp::S_TTRACEDATA_IMM:
   case CanonicalOp::S_ICACHE_INV:
     return Error::success();
+
+  // The release half of the barrier the source splits into an arrival, in
+  // SOP1, and a release, here. Waiting for the workgroup barrier is what
+  // `llvm.amdgcn.s.barrier` does, along with arriving at it, and the extra
+  // arrival costs the wave nothing: it has already arrived, at the source
+  // instruction that told it to.
+  case CanonicalOp::S_BARRIER_WAIT: {
+    // The field is 16-bit signed, and a non-negative value does not select a
+    // barrier by number: it waits on whichever one the wave joined last.
+    int64_t BarrierId = SignExtend64<16>(Op.srcImm(0));
+    if (BarrierId >= 0)
+      return refuseBarrier(Ctx, Di,
+                           "waits on the named barrier this wave joined last, "
+                           "and the target has only the workgroup barrier");
+    if (BarrierId != AMDGPU::Barrier::WORKGROUP)
+      return refuseBarrier(Ctx, Di,
+                           "names barrier " + Twine(BarrierId) +
+                               " rather than the workgroup barrier, which is "
+                               "the only barrier the target has");
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::amdgcn_s_barrier, {});
+    return Error::success();
+  }
+
+  // Leaving takes the wave out of a named barrier's membership and reports in
+  // SCC whether it was the last member out. The target keeps no membership to
+  // leave and so has nothing truthful to write to SCC.
+  case CanonicalOp::S_BARRIER_LEAVE:
+    return refuseBarrier(Ctx, Di, "leaves a named barrier");
 
   // The branches. A conditional one falls through to the block the instruction
   // after it leads. Its condition is wave-level: SCC as written, and execz and
