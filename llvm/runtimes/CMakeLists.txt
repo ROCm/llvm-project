@@ -580,19 +580,14 @@ if(build_runtimes)
     endif()
   endif()
 
-  # Forward user-provived system configuration to runtimes for requirement introspection.
-  # CMAKE_PREFIX_PATH is the search path for CMake packages. In order to pass through
-  # the command line interface, the CMake semicolon separator needs to be replaced
-  # with $<SEMICOLON>
-  string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
-  # Some projects require access to the LLVM lib/cmake directory, whether or not
-  # the user provided a prefix path of their own.
-  if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
-    if(escaped_cmake_prefix_path)
-      string(PREPEND escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake$<SEMICOLON>")
-    else()
-      set(escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake")
-    endif()
+  # Forward user-provided system configuration to runtimes for requirement introspection.
+  # These are lists, so their separators have to survive being passed on the
+  # sub-build's command line; an unescaped ';' would split them into separate
+  # arguments.
+  # CMAKE_PREFIX_PATH is the search path for CMake packages.
+  if(CMAKE_PREFIX_PATH)
+    string(JOIN "$<SEMICOLON>" escaped_prefix_path ${CMAKE_PREFIX_PATH})
+    list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${escaped_prefix_path}")
   endif()
   if(escaped_cmake_prefix_path)
     list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${escaped_cmake_prefix_path}")
@@ -600,7 +595,8 @@ if(build_runtimes)
 
   # CMAKE_PROGRAM_PATH is the search path for executables such as python.
   if(CMAKE_PROGRAM_PATH)
-    list(APPEND extra_cmake_args "-DCMAKE_PROGRAM_PATH=${CMAKE_PROGRAM_PATH}")
+    string(JOIN "$<SEMICOLON>" escaped_program_path ${CMAKE_PROGRAM_PATH})
+    list(APPEND extra_cmake_args "-DCMAKE_PROGRAM_PATH=${escaped_program_path}")
   endif()
 
   set(libclc_enabled FALSE)
