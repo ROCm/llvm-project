@@ -13,10 +13,6 @@
 ; RUN:   | %FileCheck %s --check-prefix=SETHALT
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=endpgm_saved_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=ENDPGM-SAVED
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=barrier_wait_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=BARRIER-WAIT
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=barrier_leave_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=BARRIER-LEAVE
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=sendmsg_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=SENDMSG
 
@@ -73,8 +69,8 @@ inert_kernel:
 	s_endpgm
 
 ; Every other SOPP opcode is refused by name. Traps, halts and the alternate
-; terminators change what the kernel does; barriers and messages are
-; communication the raise does not carry.
+; terminators change what the kernel does; messages are communication the raise
+; does not carry.
 
 	.globl	trap_kernel
 	.p2align	8
@@ -98,22 +94,6 @@ sethalt_kernel:
 endpgm_saved_kernel:
 ; ENDPGM-SAVED: unsupported-instruction-form: s_endpgm_saved [SOPP]
 	s_endpgm_saved
-
-	.globl	barrier_wait_kernel
-	.p2align	8
-	.type	barrier_wait_kernel,@function
-barrier_wait_kernel:
-; BARRIER-WAIT: unsupported-instruction-form: s_barrier_wait [SOPP]
-	s_barrier_wait 1
-	s_endpgm
-
-	.globl	barrier_leave_kernel
-	.p2align	8
-	.type	barrier_leave_kernel,@function
-barrier_leave_kernel:
-; BARRIER-LEAVE: unsupported-instruction-form: s_barrier_leave [SOPP]
-	s_barrier_leave
-	s_endpgm
 
 	.globl	sendmsg_kernel
 	.p2align	8
@@ -146,16 +126,6 @@ sendmsg_kernel:
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel endpgm_saved_kernel
-		.amdhsa_kernarg_size 0
-		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 1
-	.end_amdhsa_kernel
-	.amdhsa_kernel barrier_wait_kernel
-		.amdhsa_kernarg_size 0
-		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 1
-	.end_amdhsa_kernel
-	.amdhsa_kernel barrier_leave_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
@@ -222,28 +192,6 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         endpgm_saved_kernel.kd
-    .vgpr_count:     1
-    .wavefront_size: 32
-  - .args: []
-    .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 1024
-    .name:           barrier_wait_kernel
-    .private_segment_fixed_size: 0
-    .sgpr_count:     1
-    .symbol:         barrier_wait_kernel.kd
-    .vgpr_count:     1
-    .wavefront_size: 32
-  - .args: []
-    .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 1024
-    .name:           barrier_leave_kernel
-    .private_segment_fixed_size: 0
-    .sgpr_count:     1
-    .symbol:         barrier_leave_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 32
   - .args: []

@@ -47,6 +47,12 @@ public:
   // Whether the source ISA uses architected SGPRs.
   bool hasArchitectedSgprs() const;
 
+  // Whether the ISA has the split barrier: arriving at a barrier and waiting
+  // on it are separate instructions, and either may name a barrier a subset of
+  // the workgroup joins. An ISA without it has the workgroup barrier and
+  // nothing else.
+  bool hasSplitBarriers() const;
+
 private:
   explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}
 

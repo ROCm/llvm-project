@@ -9,13 +9,26 @@
 #ifndef HOTSWAP_TRANSPILER_HANDLERS_H
 #define HOTSWAP_TRANSPILER_HANDLERS_H
 
+#include "hotswap/decoder/amdgpu-formats.h"
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/raiser/op-resolver.h"
 #include "hotswap/raiser/raise-context.h"
+#include "hotswap/raiser/raise_failure.h"
 
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/Error.h"
 
 namespace COMGR::hotswap {
+
+// Refuse Di as an instruction form the raise does not lift, located by its
+// mnemonic and offset. Detail says what about the form was refused.
+inline llvm::Error unsupported(const RaiseContext &Ctx, const DecodedInst &Di,
+                               const llvm::Twine &Detail = {}) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
+}
 
 // Lower one instruction of the format the handler is named for, emitting into
 // `Ctx`'s builder and reading its operands through `Op`. The raiser runs the
