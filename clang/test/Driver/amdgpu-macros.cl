@@ -137,6 +137,7 @@
 // RUN: %clang -E -dM -target amdgcn -mcpu=gfx1201 %s 2>&1 | FileCheck --check-prefixes=ARCH-GCN,FAST_FMAF %s -DWAVEFRONT_SIZE=32 -DCPU=gfx1201 -DFAMILY=GFX12
 // RUN: %clang -E -dM -target amdgcn -mcpu=gfx1250 %s 2>&1 | FileCheck --check-prefixes=ARCH-GCN,FAST_FMAF %s -DWAVEFRONT_SIZE=32 -DCPU=gfx1250 -DFAMILY=GFX12
 // RUN: %clang -E -dM -target amdgcn -mcpu=gfx1251 %s 2>&1 | FileCheck --check-prefixes=ARCH-GCN,FAST_FMAF %s -DWAVEFRONT_SIZE=32 -DCPU=gfx1251 -DFAMILY=GFX12
+// RUN: %clang -E -dM -target amdgcn -mcpu=gfx1250-strict %s 2>&1 | FileCheck --check-prefixes=ARCH-GCN,FAST_FMAF,GFX1250-STRICT %s -DWAVEFRONT_SIZE=32 -DCPU=gfx1250_strict -DFAMILY=GFX12
 // RUN: %clang -E -dM -target amdgcn -mcpu=gfx1310 %s 2>&1 | FileCheck --check-prefixes=ARCH-GCN,FAST_FMAF %s -DWAVEFRONT_SIZE=32 -DCPU=gfx1310 -DFAMILY=GFX13
 
 // RUN: %clang -E -dM -target amdgcn -mcpu=gfx9-generic %s 2>&1 | FileCheck --check-prefixes=ARCH-GCN,FAST_FMAF %s -DWAVEFRONT_SIZE=64 -DCPU=gfx9_generic -DFAMILY=GFX9
@@ -164,6 +165,9 @@
 // ARCH-GCN-DAG: #define __[[CPU]]__ 1
 // ARCH-GCN-DAG: #define __[[FAMILY]]__ 1
 // ARCH-GCN-DAG: #define __amdgcn_processor__ "[[CPU]]"
+// A variant CPU also defines its base GPU's macro (__gfx1250_strict__ is
+// already covered by the __[[CPU]]__ check above).
+// GFX1250-STRICT-DAG: #define __gfx1250__ 1
 // ARCH-GCN-DAG: #define __GCC_DESTRUCTIVE_SIZE 128
 // ARCH-GCN-DAG: #define __GCC_CONSTRUCTIVE_SIZE 128
 // UNSAFEFPATOMIC-DAG: #define __AMDGCN_UNSAFE_FP_ATOMICS__ 1

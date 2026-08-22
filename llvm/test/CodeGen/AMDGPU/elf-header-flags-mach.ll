@@ -83,6 +83,7 @@
 ; RUN: llc -filetype=obj -mtriple=amdgpu12.01 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1201 %s
 ; RUN: llc -filetype=obj -mtriple=amdgpu12.50 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1250 %s
 ; RUN: llc -filetype=obj -mtriple=amdgpu12.51 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1251 %s
+; RUN: llc -filetype=obj -mtriple=amdgpu12.50s -mcpu=gfx1250-strict < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1250-STRICT %s
 ; RUN: llc -filetype=obj -mtriple=amdgpu13.10 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX1310 %s
 
 ; RUN: llc -filetype=obj --amdhsa-code-object-version=6 -mtriple=amdgpu9 < %s | llvm-readobj --file-header - | FileCheck --check-prefixes=ALL,ARCH-GCN,GFX9_GENERIC %s
@@ -174,6 +175,7 @@
 ; GFX1201:       EF_AMDGPU_MACH_AMDGCN_GFX1201 (0x4E)
 ; GFX1250:       EF_AMDGPU_MACH_AMDGCN_GFX1250 (0x49)
 ; GFX1251:       EF_AMDGPU_MACH_AMDGCN_GFX1251 (0x5A)
+; GFX1250-STRICT: EF_AMDGPU_MACH_AMDGCN_GFX1250_STRICT (0xEB)
 ; GFX1310:       EF_AMDGPU_MACH_AMDGCN_GFX1310 (0x50)
 
 ; GFX9_GENERIC:       EF_AMDGPU_MACH_AMDGCN_GFX9_GENERIC (0x51)

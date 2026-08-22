@@ -2636,6 +2636,40 @@ TEST(TargetParserTest, testAMDGPUisSubArchCompatible) {
   // An unrecognized subarch is incompatible with any recognized subarch.
   EXPECT_FALSE(AMDGPU::isSubArchCompatible(Triple("amdgpu9.99-amd-amdhsa"),
                                            Triple("amdgpu9.00-amd-amdhsa")));
+
+  // subarch 12.50s is its own major, so it is compatible only with itself; the
+  // 12.5 family, gfx1250, and sibling gfx1251 all reject it, both directions.
+  EXPECT_TRUE(AMDGPU::isSubArchCompatible(Triple::AMDGPUSubArch12_50S,
+                                          Triple::AMDGPUSubArch12_50S));
+  EXPECT_FALSE(AMDGPU::isSubArchCompatible(Triple::AMDGPUSubArch12_5,
+                                           Triple::AMDGPUSubArch12_50S));
+  EXPECT_FALSE(AMDGPU::isSubArchCompatible(Triple::AMDGPUSubArch12_50S,
+                                           Triple::AMDGPUSubArch12_5));
+  EXPECT_FALSE(AMDGPU::isSubArchCompatible(Triple::AMDGPUSubArch12_50S,
+                                           Triple::AMDGPUSubArch1250));
+  EXPECT_FALSE(AMDGPU::isSubArchCompatible(Triple::AMDGPUSubArch1250,
+                                           Triple::AMDGPUSubArch12_50S));
+  EXPECT_FALSE(AMDGPU::isSubArchCompatible(Triple::AMDGPUSubArch12_50S,
+                                           Triple::AMDGPUSubArch1251));
+
+  // gfx1250 remains a normal member of the gfx12.5 family.
+  EXPECT_TRUE(AMDGPU::isSubArchCompatible(Triple::AMDGPUSubArch12_5,
+                                          Triple::AMDGPUSubArch1250));
+  EXPECT_TRUE(AMDGPU::isSubArchCompatible(Triple::AMDGPUSubArch1250,
+                                          Triple::AMDGPUSubArch12_5));
+
+  // Same, via triple spellings: only amdgpu12.50s accepts it; amdgpu12.5 and
+  // amdgpu12.50 both reject it.
+  EXPECT_TRUE(AMDGPU::isSubArchCompatible(Triple("amdgpu12.50s-amd-amdhsa"),
+                                          Triple("amdgpu12.50s-amd-amdhsa")));
+  EXPECT_FALSE(AMDGPU::isSubArchCompatible(Triple("amdgpu12.5-amd-amdhsa"),
+                                           Triple("amdgpu12.50s-amd-amdhsa")));
+  EXPECT_FALSE(AMDGPU::isSubArchCompatible(Triple("amdgpu12.50s-amd-amdhsa"),
+                                           Triple("amdgpu12.5-amd-amdhsa")));
+  EXPECT_FALSE(AMDGPU::isSubArchCompatible(Triple("amdgpu12.50-amd-amdhsa"),
+                                           Triple("amdgpu12.50s-amd-amdhsa")));
+  EXPECT_FALSE(AMDGPU::isSubArchCompatible(Triple("amdgpu12.50s-amd-amdhsa"),
+                                           Triple("amdgpu12.50-amd-amdhsa")));
 }
 
 TEST(TargetParserTest, testAMDGPUisCPUValidForSubArch) {
@@ -2847,16 +2881,26 @@ TEST(TargetParserTest, testAMDGPUfillValidArchListAMDGCN) {
     for (StringRef Name : Filtered)
       EXPECT_TRUE(llvm::is_contained(All, Name)) << Name;
 
-    // A specific subarch matches its own concrete GPU, plus the family-generic
-    // GPU. Names may repeat through aliases, so compare distinct GPUKinds.
+    // A subarch matches its concrete GPU(s) plus the family-generic GPU. A
+    // subarch may be shared by variant CPUs (e.g. gfx1250 and gfx1250-strict),
+    // and names may repeat through aliases, so compare distinct GPUKinds.
     if (Major != SubArch) {
-      SmallSet<AMDGPU::GPUKind, 2> Kinds;
+      SmallSet<AMDGPU::GPUKind, 4> Kinds;
       for (StringRef Name : Filtered)
         Kinds.insert(AMDGPU::parseArchAMDGCN(Name));
 
+      // Distinct concrete GPUs (including variants) that own this subarch.
+      SmallSet<AMDGPU::GPUKind, 4> ConcreteKinds;
+      for (StringRef Name : All) {
+        AMDGPU::GPUKind K = AMDGPU::parseArchAMDGCN(Name);
+        if (AMDGPU::getSubArch(K) == SubArch)
+          ConcreteKinds.insert(K);
+      }
+
       bool FamilyHasGeneric =
           AMDGPU::getGPUKindFromSubArch(Major) != AMDGPU::GK_NONE;
-      EXPECT_EQ(Kinds.size(), FamilyHasGeneric ? 2u : 1u)
+      EXPECT_EQ(Kinds.size(),
+                ConcreteKinds.size() + (FamilyHasGeneric ? 1u : 0u))
           << "subarch " << Triple::getArchName(Triple::amdgpu, SubArch);
     }
 
@@ -2948,6 +2992,7 @@ TEST(TargetParserTest, testAMDGPUgetGPUKindFromSubArch) {
       {Triple::AMDGPUSubArch12_5, AMDGPU::GK_GFX12_5_GENERIC},
       {Triple::AMDGPUSubArch1250, AMDGPU::GK_GFX1250},
       {Triple::AMDGPUSubArch1251, AMDGPU::GK_GFX1251},
+      {Triple::AMDGPUSubArch12_50S, AMDGPU::GK_GFX1250_STRICT},
 
       // GFX13 family
       {Triple::AMDGPUSubArch13, AMDGPU::GK_GFX13_GENERIC},

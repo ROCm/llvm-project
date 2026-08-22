@@ -310,6 +310,11 @@ void AMDGPUTargetInfo::getTargetDefines(const LangOptions &Opts,
   if (getTriple().isAMDGCN() && !IsHIPHost) {
     assert(StringRef(CanonName).starts_with("gfx") &&
            "Invalid amdgcn canonical name");
+    // Also define the base GPU's macro for a variant CPU (e.g. gfx1250-strict
+    // -> __gfx1250__), so code guarding on the base target still compiles.
+    if (StringRef BaseName = llvm::AMDGPU::getBaseArchNameAMDGCN(GPUKind);
+        !BaseName.empty())
+      Builder.defineMacro(Twine("__") + Twine(BaseName) + Twine("__"));
     StringRef CanonFamilyName = getArchFamilyNameAMDGCN(GPUKind);
     Builder.defineMacro(Twine("__") + Twine(CanonFamilyName.upper()) +
                         Twine("__"));

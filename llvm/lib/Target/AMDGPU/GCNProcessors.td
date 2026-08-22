@@ -378,6 +378,15 @@ def GFX1251 : AMDGPUProcessorModel<"gfx1251", GFX1251SpeedModel,
   let ArchFeatures = [FEATURE_FAST_FMA_F32, FEATURE_FAST_DENORMAL_F32, FEATURE_WAVE32, FEATURE_XNACK, FEATURE_SRAMECC];
 }
 
+// A gfx1250 variant reporting the same ISA version 12.5.0, but a distinct,
+// binary-incompatible target with its own ELF mach and "12.50s" subarch. The
+// subarch is its own major, so only the amdgpu12.50s triple accepts it.
+def GFX1250_STRICT : AMDGPUProcessorModel<"gfx1250-strict", GFX1250SpeedModel,
+  FeatureISAVersion12_50.Features, [12, 5, 0]> {
+  let ArchFeatures = [FEATURE_FAST_FMA_F32, FEATURE_FAST_DENORMAL_F32, FEATURE_WAVE32, FEATURE_XNACK, FEATURE_SRAMECC];
+  let SubArchSpelling = "12.50s";
+}
+
 def GFX12_5_GENERIC : AMDGPUProcessorModel<"gfx12-5-generic", GFX125xGenericSpeedModel,
   FeatureISAVersion12_5_Generic.Features, [12, 5, 0]> {
   let ArchFeatures = [FEATURE_FAST_FMA_F32, FEATURE_FAST_DENORMAL_F32, FEATURE_WAVE32, FEATURE_XNACK, FEATURE_SRAMECC];
