@@ -33,22 +33,20 @@ define void @nested_inf_loop(i1 %0, i1 %1) {
 ; ISA-NEXT:    s_mov_b64 s[8:9], 0
 ; ISA-NEXT:    s_mov_b64 s[10:11], 0
 ; ISA-NEXT:    s_mov_b64 s[6:7], 0
+; ISA-NEXT:    s_mov_b64 s[8:9], 0
+; ISA-NEXT:    s_mov_b64 s[4:5], 0
 ; ISA-NEXT:  .LBB0_1: ; %BB1
 ; ISA-NEXT:    ; =>This Loop Header: Depth=1
-; ISA-NEXT:    ; Child Loop BB0_3 Depth 2
-; ISA-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v1
-; ISA-NEXT:    s_xor_b64 s[14:15], s[12:13], exec
-; ISA-NEXT:    s_or_b64 s[16:17], s[8:9], s[14:15]
-; ISA-NEXT:    s_xor_b64 s[14:15], exec, s[16:17]
-; ISA-NEXT:    s_and_b64 s[14:15], s[14:15], exec
-; ISA-NEXT:    s_mov_b64 s[8:9], 0
-; ISA-NEXT:    s_mov_b64 exec, s[16:17]
+; ISA-NEXT:    ; Child Loop BB0_2 Depth 2
+; ISA-NEXT:    v_cmp_ne_u32_e64 s[10:11], 0, v1
+; ISA-NEXT:    s_xor_b64 s[12:13], s[10:11], exec
+; ISA-NEXT:    s_or_b64 s[14:15], s[6:7], s[12:13]
+; ISA-NEXT:    s_xor_b64 s[12:13], exec, s[14:15]
+; ISA-NEXT:    s_mov_b64 s[6:7], 0
+; ISA-NEXT:    s_mov_b64 exec, s[14:15]
 ; ISA-NEXT:    ; divergent control-flow edge
-; ISA-NEXT:    s_cbranch_execz .LBB0_7
-; ISA-NEXT:  .LBB0_2: ; %BB2
-; ISA-NEXT:    ; in Loop: Header=BB0_1 Depth=1
-; ISA-NEXT:    s_and_b64 s[16:17], s[4:5], exec
-; ISA-NEXT:  .LBB0_3: ; %BB4
+; ISA-NEXT:    s_cbranch_execz .LBB0_6
+; ISA-NEXT:  .LBB0_2: ; %BB4
 ; ISA-NEXT:    ; Parent Loop BB0_1 Depth=1
 ; ISA-NEXT:    ; => This Inner Loop Header: Depth=2
 ; ISA-NEXT:    s_mov_b64 s[16:17], 0
@@ -83,8 +81,8 @@ define void @nested_inf_loop(i1 %0, i1 %1) {
 ; ISA-NEXT:    s_mov_b64 exec, s[12:13]
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execnz .LBB0_1
-; ISA-NEXT:  .LBB0_8: ; %DummyReturnBlock
-; ISA-NEXT:    s_or_b64 exec, exec, s[6:7]
+; ISA-NEXT:  .LBB0_7: ; %DummyReturnBlock
+; ISA-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; ISA-NEXT:    s_setpc_b64 s[30:31]
 BB:
   br label %BB1
@@ -171,7 +169,6 @@ define void @nested_inf_loop_callbr(i32 %0, i32 %1) {
 ; ISA-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; ISA-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
 ; ISA-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; ISA-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; ISA-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; ISA-NEXT:    s_mov_b64 exec, s[6:7]
 ; ISA-NEXT:    ; divergent control-flow edge

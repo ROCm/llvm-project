@@ -1469,8 +1469,8 @@ define amdgpu_ps float @test_control_flow_1(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v1
 ; GFX9-W64-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
 ; GFX9-W64-NEXT:    ; implicit-def: $vgpr1
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB28_2
 ; GFX9-W64-NEXT:  .LBB28_1: ; %IF
@@ -1501,9 +1501,9 @@ define amdgpu_ps float @test_control_flow_1(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX10-W32-NEXT:    s_mov_b32 s12, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v1
+; GFX10-W32-NEXT:    ; implicit-def: $vgpr1
 ; GFX10-W32-NEXT:    s_xor_b32 s13, vcc_lo, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
-; GFX10-W32-NEXT:    ; implicit-def: $vgpr1
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB28_2
 ; GFX10-W32-NEXT:  .LBB28_1: ; %IF
@@ -1557,14 +1557,16 @@ define amdgpu_ps <4 x float> @test_control_flow_2(<8 x i32> inreg %rsrc, <4 x i3
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    buffer_store_dword v3, v0, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 idxen
-; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
+; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
+; GFX9-W64-NEXT:    buffer_store_dword v4, v2, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
+; GFX9-W64-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-W64-NEXT:    v_cmp_nlt_f32_e32 vcc, 0, v0
 ; GFX9-W64-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX9-W64-NEXT:    buffer_store_dword v4, v2, s[0:3], 0 idxen
-; GFX9-W64-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-W64-NEXT:    ; implicit-def: $vgpr0
-; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
+; GFX9-W64-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB29_2
 ; GFX9-W64-NEXT:  .LBB29_1: ; %ELSE
@@ -1590,14 +1592,16 @@ define amdgpu_ps <4 x float> @test_control_flow_2(<8 x i32> inreg %rsrc, <4 x i3
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:    buffer_store_dword v3, v0, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    buffer_store_dword v4, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    v_cmp_nlt_f32_e32 vcc_lo, 0, v0
 ; GFX10-W32-NEXT:    s_xor_b32 s13, vcc_lo, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo
+; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
+; GFX10-W32-NEXT:    buffer_store_dword v4, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    ; implicit-def: $vgpr0
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB29_2
 ; GFX10-W32-NEXT:  .LBB29_1: ; %ELSE
@@ -1662,8 +1666,8 @@ define amdgpu_ps float @test_control_flow_3(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX9-W64-NEXT:    v_cmp_nlt_f32_e32 vcc, 0, v1
 ; GFX9-W64-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX9-W64-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-W64-NEXT:    ; implicit-def: $vgpr0
+; GFX9-W64-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB30_2
 ; GFX9-W64-NEXT:  .LBB30_1: ; %ELSE
@@ -1693,8 +1697,8 @@ define amdgpu_ps float @test_control_flow_3(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX10-W32-NEXT:    v_cmp_nlt_f32_e32 vcc_lo, 0, v1
 ; GFX10-W32-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
 ; GFX10-W32-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; implicit-def: $vgpr0
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB30_2
 ; GFX10-W32-NEXT:  .LBB30_1: ; %ELSE

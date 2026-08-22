@@ -21,7 +21,7 @@ body:             |
   ; POSTWT-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 -1
   ; POSTWT-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[S_MOV_B32_1]], implicit-def $scc
-  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_MOV_B32_1]]
+  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32_term [[S_MOV_B32_1]]
   ; POSTWT-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; POSTWT-NEXT:   S_CBRANCH_EXECZ %bb.2, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.1
@@ -60,7 +60,7 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 $exec_lo
+  ; POSTWT-NEXT:   $exec_lo = S_MOV_B32_term $exec_lo
   ; POSTWT-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; POSTWT-NEXT:   S_CBRANCH_EXECZ %bb.2, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.1

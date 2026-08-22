@@ -318,7 +318,7 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; SI-NEXT:    s_mov_b64 s[10:11], 0
 ; SI-NEXT:    s_mov_b64 exec, s[0:1]
 ; SI-NEXT:    ; divergent control-flow edge
-; SI-NEXT:    s_cbranch_execz .LBB6_7
+; SI-NEXT:    s_cbranch_execz .LBB6_6
 ; SI-NEXT:  .LBB6_1: ; %outer_loop.preheader
 ; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b64 s[4:5], -1
@@ -371,9 +371,9 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; SI-NEXT:    s_or_b64 s[10:11], s[10:11], s[14:15]
 ; SI-NEXT:    s_mov_b64 exec, s[12:13]
 ; SI-NEXT:    ; divergent control-flow edge
-; SI-NEXT:    s_cbranch_execnz .LBB6_5
+; SI-NEXT:    s_cbranch_execnz .LBB6_4
 ; SI-NEXT:    s_branch .LBB6_3
-; SI-NEXT:  .LBB6_7: ; %UnifiedReturnBlock
+; SI-NEXT:  .LBB6_6: ; %UnifiedReturnBlock
 ; SI-NEXT:    s_endpgm
 ; IR-LABEL: @infinite_loop_nest_ret(
 ; IR-NEXT:  entry:
@@ -416,7 +416,6 @@ define amdgpu_kernel void @infinite_loop_nest_ret_callbr(ptr addrspace(1) %out) 
 ; SI-NEXT:    v_cndmask_b32_e64 v1, 0, 1, vcc
 ; SI-NEXT:    ;;#ASMSTART
 ; SI-NEXT:    ;;#ASMEND
-; SI-NEXT:    s_mov_b64 s[8:9], -1
 ; SI-NEXT:    s_mov_b64 s[6:7], 0
 ; SI-NEXT:  ; %bb.1: ; %outer_loop.preheader
 ; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
@@ -429,7 +428,6 @@ define amdgpu_kernel void @infinite_loop_nest_ret_callbr(ptr addrspace(1) %out) 
 ; SI-NEXT:    s_mov_b32 s2, -1
 ; SI-NEXT:    v_mov_b32_e32 v1, 0x3e7
 ; SI-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[4:5]
-; SI-NEXT:    s_and_b64 s[4:5], s[8:9], exec
 ; SI-NEXT:  .LBB7_2: ; %outer_loop
 ; SI-NEXT:    ; =>This Loop Header: Depth=1
 ; SI-NEXT:    ; Child Loop BB7_3 Depth 2
@@ -465,7 +463,6 @@ define amdgpu_kernel void @infinite_loop_nest_ret_callbr(ptr addrspace(1) %out) 
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; SI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; SI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; SI-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
 ; SI-NEXT:    s_mov_b64 exec, s[4:5]
 ; SI-NEXT:    ; divergent control-flow edge

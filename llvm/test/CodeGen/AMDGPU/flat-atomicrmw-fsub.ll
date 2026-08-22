@@ -3637,13 +3637,13 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    s_mov_b64 s[0:1], src_private_base
+; GFX12-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
 ; GFX12-NEXT:    s_xor_b32 s2, s0, exec_lo
 ; GFX12-NEXT:    s_mov_b32 s1, s0
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    s_mov_b32 exec_lo, s2
-; GFX12-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB16_3
 ; GFX12-NEXT:  .LBB16_1: ; %atomicrmw.global
@@ -3695,8 +3695,8 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v1
 ; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
 ; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; implicit-def: $vgpr4_vgpr5
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB16_3
 ; GFX942-NEXT:  .LBB16_1: ; %atomicrmw.global
@@ -3743,12 +3743,12 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    s_mov_b64 s[0:1], src_private_base
+; GFX11-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, s1, v1
 ; GFX11-NEXT:    s_xor_b32 s2, s0, exec_lo
 ; GFX11-NEXT:    s_mov_b32 s1, s0
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s2
-; GFX11-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB16_3
 ; GFX11-NEXT:  .LBB16_1: ; %atomicrmw.global
@@ -3794,11 +3794,11 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
+; GFX10-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX10-NEXT:    v_cmp_eq_u32_e64 s4, s5, v1
 ; GFX10-NEXT:    s_xor_b32 s6, s4, exec_lo
 ; GFX10-NEXT:    s_mov_b32 s5, s4
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s6
-; GFX10-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB16_3
 ; GFX10-NEXT:  .LBB16_1: ; %atomicrmw.global
@@ -3851,8 +3851,8 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
 ; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr4_vgpr5
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB16_3
 ; GFX90A-NEXT:  .LBB16_1: ; %atomicrmw.global
@@ -3901,8 +3901,8 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v1
 ; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; implicit-def: $vgpr4_vgpr5
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB16_3
 ; GFX908-NEXT:  .LBB16_1: ; %atomicrmw.global
@@ -3950,12 +3950,12 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    s_mov_b64 s[4:5], 0xc0
 ; GFX8-NEXT:    s_load_dword s4, s[4:5], 0x0
+; GFX8-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v1
 ; GFX8-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX8-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
-; GFX8-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB16_3
 ; GFX8-NEXT:  .LBB16_1: ; %atomicrmw.global
@@ -4007,12 +4007,12 @@ define double @flat_agent_atomic_fsub_ret_f64(ptr %ptr, double %val) #0 {
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    s_mov_b64 s[4:5], 0xc0
 ; GFX7-NEXT:    s_load_dword s4, s[4:5], 0x0
+; GFX7-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX7-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v1
 ; GFX7-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX7-NEXT:    s_mov_b64 s[6:7], s[4:5]
 ; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
-; GFX7-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB16_3
 ; GFX7-NEXT:  .LBB16_1: ; %atomicrmw.global
@@ -4074,13 +4074,13 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v9, null, 0, v1, vcc_lo
 ; GFX12-NEXT:    s_mov_b64 s[0:1], src_private_base
+; GFX12-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    v_cmp_eq_u32_e64 s0, s1, v9
 ; GFX12-NEXT:    s_xor_b32 s2, s0, exec_lo
 ; GFX12-NEXT:    s_mov_b32 s1, s0
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    s_mov_b32 exec_lo, s2
-; GFX12-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB17_3
 ; GFX12-NEXT:  .LBB17_1: ; %atomicrmw.global
@@ -4133,8 +4133,8 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v9
 ; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
 ; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; implicit-def: $vgpr0_vgpr1
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB17_3
 ; GFX942-NEXT:  .LBB17_1: ; %atomicrmw.global
@@ -4182,11 +4182,11 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v9, null, 0, v1, vcc_lo
 ; GFX11-NEXT:    s_mov_b64 s[0:1], src_private_base
+; GFX11-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, s1, v9
 ; GFX11-NEXT:    s_xor_b32 s2, s0, exec_lo
 ; GFX11-NEXT:    s_mov_b32 s1, s0
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s2
-; GFX11-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB17_3
 ; GFX11-NEXT:  .LBB17_1: ; %atomicrmw.global
@@ -4233,11 +4233,11 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX10-NEXT:    v_add_co_u32 v8, vcc_lo, 0x7f8, v0
 ; GFX10-NEXT:    v_add_co_ci_u32_e32 v9, vcc_lo, 0, v1, vcc_lo
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
+; GFX10-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX10-NEXT:    v_cmp_eq_u32_e64 s4, s5, v9
 ; GFX10-NEXT:    s_xor_b32 s6, s4, exec_lo
 ; GFX10-NEXT:    s_mov_b32 s5, s4
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s6
-; GFX10-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB17_3
 ; GFX10-NEXT:  .LBB17_1: ; %atomicrmw.global
@@ -4290,8 +4290,8 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v9
 ; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0_vgpr1
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB17_3
 ; GFX90A-NEXT:  .LBB17_1: ; %atomicrmw.global
@@ -4340,8 +4340,8 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v9
 ; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; implicit-def: $vgpr0_vgpr1
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB17_3
 ; GFX908-NEXT:  .LBB17_1: ; %atomicrmw.global
@@ -4393,8 +4393,8 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v9
 ; GFX8-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX8-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; implicit-def: $vgpr0_vgpr1
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB17_3
 ; GFX8-NEXT:  .LBB17_1: ; %atomicrmw.global
@@ -4450,8 +4450,8 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_pos(ptr %ptr, double %v
 ; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v9
 ; GFX7-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX7-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; implicit-def: $vgpr0_vgpr1
+; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB17_3
 ; GFX7-NEXT:  .LBB17_1: ; %atomicrmw.global
@@ -4512,13 +4512,13 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    v_add_co_ci_u32_e64 v9, null, -1, v1, vcc_lo
 ; GFX12-NEXT:    s_mov_b64 s[0:1], src_private_base
+; GFX12-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    v_cmp_eq_u32_e64 s0, s1, v9
 ; GFX12-NEXT:    s_xor_b32 s2, s0, exec_lo
 ; GFX12-NEXT:    s_mov_b32 s1, s0
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    s_mov_b32 exec_lo, s2
-; GFX12-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB18_3
 ; GFX12-NEXT:  .LBB18_1: ; %atomicrmw.global
@@ -4572,8 +4572,8 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX942-NEXT:    v_cmp_eq_u32_e64 s[0:1], s1, v9
 ; GFX942-NEXT:    s_xor_b64 s[4:5], s[0:1], exec
 ; GFX942-NEXT:    s_mov_b64 s[2:3], s[0:1]
-; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; implicit-def: $vgpr0_vgpr1
+; GFX942-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB18_3
 ; GFX942-NEXT:  .LBB18_1: ; %atomicrmw.global
@@ -4621,11 +4621,11 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v9, null, -1, v1, vcc_lo
 ; GFX11-NEXT:    s_mov_b64 s[0:1], src_private_base
+; GFX11-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, s1, v9
 ; GFX11-NEXT:    s_xor_b32 s2, s0, exec_lo
 ; GFX11-NEXT:    s_mov_b32 s1, s0
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s2
-; GFX11-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB18_3
 ; GFX11-NEXT:  .LBB18_1: ; %atomicrmw.global
@@ -4672,11 +4672,11 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX10-NEXT:    v_add_co_u32 v8, vcc_lo, 0xfffff800, v0
 ; GFX10-NEXT:    v_add_co_ci_u32_e32 v9, vcc_lo, -1, v1, vcc_lo
 ; GFX10-NEXT:    s_mov_b64 s[4:5], src_private_base
+; GFX10-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX10-NEXT:    v_cmp_eq_u32_e64 s4, s5, v9
 ; GFX10-NEXT:    s_xor_b32 s6, s4, exec_lo
 ; GFX10-NEXT:    s_mov_b32 s5, s4
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s6
-; GFX10-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB18_3
 ; GFX10-NEXT:  .LBB18_1: ; %atomicrmw.global
@@ -4729,8 +4729,8 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX90A-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v9
 ; GFX90A-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX90A-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; implicit-def: $vgpr0_vgpr1
+; GFX90A-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB18_3
 ; GFX90A-NEXT:  .LBB18_1: ; %atomicrmw.global
@@ -4779,8 +4779,8 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX908-NEXT:    v_cmp_eq_u32_e64 s[4:5], s5, v9
 ; GFX908-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX908-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; implicit-def: $vgpr0_vgpr1
+; GFX908-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB18_3
 ; GFX908-NEXT:  .LBB18_1: ; %atomicrmw.global
@@ -4832,8 +4832,8 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v9
 ; GFX8-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX8-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; implicit-def: $vgpr0_vgpr1
+; GFX8-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB18_3
 ; GFX8-NEXT:  .LBB18_1: ; %atomicrmw.global
@@ -4889,8 +4889,8 @@ define double @flat_agent_atomic_fsub_ret_f64__offset12b_neg(ptr %ptr, double %v
 ; GFX7-NEXT:    v_cmp_eq_u32_e64 s[4:5], s4, v9
 ; GFX7-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX7-NEXT:    s_mov_b64 s[6:7], s[4:5]
-; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; implicit-def: $vgpr0_vgpr1
+; GFX7-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB18_3
 ; GFX7-NEXT:  .LBB18_1: ; %atomicrmw.global

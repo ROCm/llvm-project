@@ -39,8 +39,8 @@ define float @sitofp_i128_to_f32(i128 %x) {
 ; SDAG-NEXT:    v_cmp_gt_i32_e64 s[4:5], 25, v8
 ; SDAG-NEXT:    v_sub_u32_e32 v2, 0x7f, v9
 ; SDAG-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; implicit-def: $vgpr6
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB0_11
 ; SDAG-NEXT:  .LBB0_2:
@@ -314,8 +314,8 @@ define float @uitofp_i128_to_f32(i128 %x) {
 ; SDAG-NEXT:    v_cmp_gt_i32_e64 s[4:5], 25, v7
 ; SDAG-NEXT:    v_sub_u32_e32 v6, 0x7f, v8
 ; SDAG-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; implicit-def: $vgpr4
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB1_11
 ; SDAG-NEXT:  .LBB1_2:
@@ -328,8 +328,8 @@ define float @uitofp_i128_to_f32(i128 %x) {
 ; SDAG-NEXT:    v_cmp_gt_i32_e64 s[10:11], 26, v7
 ; SDAG-NEXT:    s_xor_b64 s[4:5], s[10:11], exec
 ; SDAG-NEXT:    s_mov_b64 s[12:13], s[10:11]
-; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; implicit-def: $vgpr4_vgpr5
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB1_6
 ; SDAG-NEXT:  .LBB1_4: ; %LeafBlock
@@ -589,9 +589,9 @@ define double @sitofp_i128_to_f64(i128 %x) {
 ; SDAG-NEXT:    v_cmp_gt_i32_e64 s[4:5], 54, v2
 ; SDAG-NEXT:    v_sub_u32_e32 v10, 0x7f, v11
 ; SDAG-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; implicit-def: $vgpr0_vgpr1
 ; SDAG-NEXT:    ; implicit-def: $vgpr1
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB2_11
 ; SDAG-NEXT:  .LBB2_2:
@@ -895,9 +895,9 @@ define double @uitofp_i128_to_f64(i128 %x) {
 ; SDAG-NEXT:    v_cmp_gt_i32_e64 s[4:5], 54, v8
 ; SDAG-NEXT:    v_sub_u32_e32 v9, 0x7f, v10
 ; SDAG-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; SDAG-NEXT:    ; implicit-def: $vgpr5
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB3_11
 ; SDAG-NEXT:  .LBB3_2:
@@ -910,9 +910,9 @@ define double @uitofp_i128_to_f64(i128 %x) {
 ; SDAG-NEXT:    v_cmp_gt_i32_e64 s[10:11], 55, v8
 ; SDAG-NEXT:    s_xor_b64 s[4:5], s[10:11], exec
 ; SDAG-NEXT:    s_mov_b64 s[12:13], s[10:11]
-; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; SDAG-NEXT:    ; implicit-def: $vgpr6_vgpr7
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB3_6
 ; SDAG-NEXT:  .LBB3_4: ; %LeafBlock
@@ -1206,8 +1206,8 @@ define half @sitofp_i128_to_f16(i128 %x) {
 ; SDAG-NEXT:    v_cmp_gt_i32_e64 s[4:5], 25, v8
 ; SDAG-NEXT:    v_sub_u32_e32 v2, 0x7f, v9
 ; SDAG-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; implicit-def: $vgpr6
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB4_11
 ; SDAG-NEXT:  .LBB4_2:
@@ -1483,8 +1483,8 @@ define half @uitofp_i128_to_f16(i128 %x) {
 ; SDAG-NEXT:    v_cmp_gt_i32_e64 s[4:5], 25, v7
 ; SDAG-NEXT:    v_sub_u32_e32 v6, 0x7f, v8
 ; SDAG-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
-; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; implicit-def: $vgpr4
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execnz .LBB5_11
 ; SDAG-NEXT:  .LBB5_2:
@@ -1497,8 +1497,8 @@ define half @uitofp_i128_to_f16(i128 %x) {
 ; SDAG-NEXT:    v_cmp_gt_i32_e64 s[10:11], 26, v7
 ; SDAG-NEXT:    s_xor_b64 s[4:5], s[10:11], exec
 ; SDAG-NEXT:    s_mov_b64 s[12:13], s[10:11]
-; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; implicit-def: $vgpr4_vgpr5
+; SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB5_6
 ; SDAG-NEXT:  .LBB5_4: ; %LeafBlock

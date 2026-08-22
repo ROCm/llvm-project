@@ -1570,11 +1570,11 @@ define amdgpu_ps void @cbranch_kill(i32 inreg %0, float %val0, float %val1) {
 ; SI-NEXT:    v_mov_b32_e32 v2, v1
 ; SI-NEXT:    v_mov_b32_e32 v3, v1
 ; SI-NEXT:    image_sample_l v1, v[1:4], s[0:7], s[0:3] dmask:0x1 da
+; SI-NEXT:    ; implicit-def: $vgpr2
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_cmp_nge_f32_e32 vcc, 0, v1
 ; SI-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; SI-NEXT:    s_mov_b64 exec, s[2:3]
-; SI-NEXT:    ; implicit-def: $vgpr2
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB14_3
 ; SI-NEXT:  .LBB14_1: ; %kill
@@ -1605,11 +1605,11 @@ define amdgpu_ps void @cbranch_kill(i32 inreg %0, float %val0, float %val1) {
 ; GFX10-WAVE64-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX10-WAVE64-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX10-WAVE64-NEXT:    image_sample_l v1, [v1, v1, v1, v2], s[0:7], s[0:3] dmask:0x1 dim:SQ_RSRC_IMG_2D_ARRAY
+; GFX10-WAVE64-NEXT:    ; implicit-def: $vgpr2
 ; GFX10-WAVE64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-WAVE64-NEXT:    v_cmp_nge_f32_e32 vcc, 0, v1
 ; GFX10-WAVE64-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; GFX10-WAVE64-NEXT:    s_mov_b64 exec, s[2:3]
-; GFX10-WAVE64-NEXT:    ; implicit-def: $vgpr2
 ; GFX10-WAVE64-NEXT:    ; divergent control-flow edge
 ; GFX10-WAVE64-NEXT:    s_cbranch_execz .LBB14_3
 ; GFX10-WAVE64-NEXT:  .LBB14_1: ; %kill
@@ -1640,11 +1640,11 @@ define amdgpu_ps void @cbranch_kill(i32 inreg %0, float %val0, float %val1) {
 ; GFX10-WAVE32-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX10-WAVE32-NEXT:    s_mov_b32 s0, exec_lo
 ; GFX10-WAVE32-NEXT:    image_sample_l v1, [v1, v1, v1, v2], s[0:7], s[0:3] dmask:0x1 dim:SQ_RSRC_IMG_2D_ARRAY
+; GFX10-WAVE32-NEXT:    ; implicit-def: $vgpr2
 ; GFX10-WAVE32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-WAVE32-NEXT:    v_cmp_nge_f32_e32 vcc_lo, 0, v1
 ; GFX10-WAVE32-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX10-WAVE32-NEXT:    s_mov_b32 exec_lo, s1
-; GFX10-WAVE32-NEXT:    ; implicit-def: $vgpr2
 ; GFX10-WAVE32-NEXT:    ; divergent control-flow edge
 ; GFX10-WAVE32-NEXT:    s_cbranch_execz .LBB14_3
 ; GFX10-WAVE32-NEXT:  .LBB14_1: ; %kill
@@ -1675,12 +1675,12 @@ define amdgpu_ps void @cbranch_kill(i32 inreg %0, float %val0, float %val1) {
 ; GFX11-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX11-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX11-NEXT:    image_sample_l v1, [v1, v1, v1, v2], s[0:7], s[0:3] dmask:0x1 dim:SQ_RSRC_IMG_2D_ARRAY
+; GFX11-NEXT:    ; implicit-def: $vgpr2
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-NEXT:    v_cmp_nge_f32_e32 vcc, 0, v1
 ; GFX11-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_mov_b64 exec, s[2:3]
-; GFX11-NEXT:    ; implicit-def: $vgpr2
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB14_3
 ; GFX11-NEXT:  .LBB14_1: ; %kill
@@ -1730,14 +1730,12 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; SI-LABEL: complex_loop:
 ; SI:       ; %bb.0: ; %.entry
 ; SI-NEXT:    s_cmp_lt_i32 s0, 1
-; SI-NEXT:    s_mov_b64 s[4:5], -1
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
 ; SI-NEXT:    ; implicit-def: $vgpr2
 ; SI-NEXT:    s_cbranch_scc1 .LBB15_6
 ; SI-NEXT:  ; %bb.1: ; %.lr.ph
 ; SI-NEXT:    s_mov_b64 s[2:3], exec
 ; SI-NEXT:    s_mov_b32 s6, 0
-; SI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; SI-NEXT:    s_branch .LBB15_3
 ; SI-NEXT:  .LBB15_2: ; %latch
 ; SI-NEXT:    ; in Loop: Header=BB15_3 Depth=1
@@ -1745,7 +1743,6 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; SI-NEXT:    s_add_i32 s6, s6, 1
 ; SI-NEXT:    v_cmp_lt_i32_e64 s[4:5], s6, v1
 ; SI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; SI-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; SI-NEXT:    v_mov_b32_e32 v2, s6
 ; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
 ; SI-NEXT:    s_mov_b64 exec, s[4:5]
@@ -1756,7 +1753,6 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; SI-NEXT:    v_cmp_le_u32_e32 vcc, s6, v0
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; SI-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; SI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; SI-NEXT:    s_mov_b64 exec, s[8:9]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB15_2
@@ -1782,14 +1778,12 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; GFX10-WAVE64-LABEL: complex_loop:
 ; GFX10-WAVE64:       ; %bb.0: ; %.entry
 ; GFX10-WAVE64-NEXT:    s_cmp_lt_i32 s0, 1
-; GFX10-WAVE64-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX10-WAVE64-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX10-WAVE64-NEXT:    ; implicit-def: $vgpr2
 ; GFX10-WAVE64-NEXT:    s_cbranch_scc1 .LBB15_6
 ; GFX10-WAVE64-NEXT:  ; %bb.1: ; %.lr.ph
 ; GFX10-WAVE64-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX10-WAVE64-NEXT:    s_mov_b32 s6, 0
-; GFX10-WAVE64-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX10-WAVE64-NEXT:    s_branch .LBB15_3
 ; GFX10-WAVE64-NEXT:  .LBB15_2: ; %latch
 ; GFX10-WAVE64-NEXT:    ; in Loop: Header=BB15_3 Depth=1
@@ -1798,7 +1792,6 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; GFX10-WAVE64-NEXT:    v_cmp_lt_i32_e64 s[4:5], s6, v1
 ; GFX10-WAVE64-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX10-WAVE64-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; GFX10-WAVE64-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; GFX10-WAVE64-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
 ; GFX10-WAVE64-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX10-WAVE64-NEXT:    ; divergent control-flow edge
@@ -1808,7 +1801,6 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; GFX10-WAVE64-NEXT:    v_cmp_le_u32_e32 vcc, s6, v0
 ; GFX10-WAVE64-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; GFX10-WAVE64-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; GFX10-WAVE64-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX10-WAVE64-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX10-WAVE64-NEXT:    ; divergent control-flow edge
 ; GFX10-WAVE64-NEXT:    s_cbranch_execz .LBB15_2
@@ -1834,14 +1826,12 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; GFX10-WAVE32-LABEL: complex_loop:
 ; GFX10-WAVE32:       ; %bb.0: ; %.entry
 ; GFX10-WAVE32-NEXT:    s_cmp_lt_i32 s0, 1
-; GFX10-WAVE32-NEXT:    s_mov_b32 s3, -1
 ; GFX10-WAVE32-NEXT:    s_mov_b32 s0, 0
 ; GFX10-WAVE32-NEXT:    ; implicit-def: $vgpr2
 ; GFX10-WAVE32-NEXT:    s_cbranch_scc1 .LBB15_6
 ; GFX10-WAVE32-NEXT:  ; %bb.1: ; %.lr.ph
 ; GFX10-WAVE32-NEXT:    s_mov_b32 s1, exec_lo
 ; GFX10-WAVE32-NEXT:    s_mov_b32 s2, 0
-; GFX10-WAVE32-NEXT:    s_and_b32 s3, s3, exec_lo
 ; GFX10-WAVE32-NEXT:    s_branch .LBB15_3
 ; GFX10-WAVE32-NEXT:  .LBB15_2: ; %latch
 ; GFX10-WAVE32-NEXT:    ; in Loop: Header=BB15_3 Depth=1
@@ -1850,7 +1840,6 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; GFX10-WAVE32-NEXT:    v_cmp_lt_i32_e64 s3, s2, v1
 ; GFX10-WAVE32-NEXT:    v_mov_b32_e32 v2, s2
 ; GFX10-WAVE32-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX10-WAVE32-NEXT:    s_and_b32 s4, s4, exec_lo
 ; GFX10-WAVE32-NEXT:    s_or_b32 s0, s0, s4
 ; GFX10-WAVE32-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX10-WAVE32-NEXT:    ; divergent control-flow edge
@@ -1860,7 +1849,6 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; GFX10-WAVE32-NEXT:    v_cmp_le_u32_e32 vcc_lo, s2, v0
 ; GFX10-WAVE32-NEXT:    s_xor_b32 s4, vcc_lo, exec_lo
 ; GFX10-WAVE32-NEXT:    s_xor_b32 s3, exec_lo, s4
-; GFX10-WAVE32-NEXT:    s_and_b32 s3, s3, exec_lo
 ; GFX10-WAVE32-NEXT:    s_mov_b32 exec_lo, s4
 ; GFX10-WAVE32-NEXT:    ; divergent control-flow edge
 ; GFX10-WAVE32-NEXT:    s_cbranch_execz .LBB15_2
@@ -1886,14 +1874,12 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; GFX11-LABEL: complex_loop:
 ; GFX11:       ; %bb.0: ; %.entry
 ; GFX11-NEXT:    s_cmp_lt_i32 s0, 1
-; GFX11-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX11-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX11-NEXT:    ; implicit-def: $vgpr2
 ; GFX11-NEXT:    s_cbranch_scc1 .LBB15_6
 ; GFX11-NEXT:  ; %bb.1: ; %.lr.ph
 ; GFX11-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX11-NEXT:    s_mov_b32 s6, 0
-; GFX11-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX11-NEXT:    s_branch .LBB15_3
 ; GFX11-NEXT:    .p2align 6
 ; GFX11-NEXT:  .LBB15_2: ; %latch
@@ -1904,8 +1890,6 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; GFX11-NEXT:    v_cmp_lt_i32_e64 s[4:5], s6, v1
 ; GFX11-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX11-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; GFX11-NEXT:    s_and_b64 s[8:9], s[8:9], exec
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
 ; GFX11-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX11-NEXT:    ; divergent control-flow edge
@@ -1914,9 +1898,8 @@ define amdgpu_ps void @complex_loop(i32 inreg %cmpa, i32 %cmpb, i32 %cmpc) {
 ; GFX11-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-NEXT:    v_cmp_le_u32_e32 vcc, s6, v0
 ; GFX11-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; GFX11-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX11-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB15_2

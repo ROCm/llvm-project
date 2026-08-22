@@ -8,29 +8,23 @@ define i32 @rocrand_regression(ptr addrspace(1) %arg, i32 %arg0, i1 %cmp7) {
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v3
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
-; CHECK-NEXT:    s_mov_b32 s8, 0
-; CHECK-NEXT:    s_mov_b64 s[4:5], -1
-; CHECK-NEXT:    s_mov_b64 s[6:7], 0
-; CHECK-NEXT:  .LBB0_1: ; %do.body
-; CHECK-NEXT:    ; =>This Loop Header: Depth=1
-; CHECK-NEXT:    ; Child Loop BB0_2 Depth 2
-; CHECK-NEXT:    s_and_b64 s[10:11], s[4:5], exec
-; CHECK-NEXT:  .LBB0_2: ; %while.cond
-; CHECK-NEXT:    ; Parent Loop BB0_1 Depth=1
-; CHECK-NEXT:    ; => This Inner Loop Header: Depth=2
-; CHECK-NEXT:    v_cmp_ne_u32_e64 s[10:11], 0, v0
-; CHECK-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[12:13]
-; CHECK-NEXT:    s_mov_b64 exec, s[10:11]
+; CHECK-NEXT:    s_mov_b32 s6, 0
+; CHECK-NEXT:    s_mov_b64 s[4:5], 0
+; CHECK-NEXT:  .LBB0_1: ; %while.cond
+; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s[8:9], 0, v0
+; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
 ; CHECK-NEXT:    ; divergent control-flow edge
-; CHECK-NEXT:    s_cbranch_execnz .LBB0_2
-; CHECK-NEXT:  .LBB0_3: ; %do.cond
-; CHECK-NEXT:    ; in Loop: Header=BB0_1 Depth=1
-; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
-; CHECK-NEXT:    s_or_b32 s8, s8, 1
-; CHECK-NEXT:    s_mov_b64 s[6:7], 0
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_1
-; CHECK-NEXT:  ; %bb.4: ; %DummyReturnBlock
+; CHECK-NEXT:  .LBB0_2: ; %do.cond
+; CHECK-NEXT:    ; in Loop: Header=BB0_1 Depth=1
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
+; CHECK-NEXT:    s_or_b32 s6, s6, 1
+; CHECK-NEXT:    s_mov_b64 s[4:5], 0
+; CHECK-NEXT:    s_cbranch_execnz .LBB0_1
+; CHECK-NEXT:  ; %bb.3: ; %DummyReturnBlock
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 entry:
   br label %do.body

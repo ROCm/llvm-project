@@ -15,10 +15,10 @@ define <7 x i32> @multiple_predecessor_unused_lanes(<7 x i32> %ha, i32 %h.sel) {
 ; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; CHECK-NEXT:    v_cmp_gt_i32_e64 s0, 1, v7
 ; CHECK-NEXT:    v_dual_mov_b32 v14, v2 :: v_dual_mov_b32 v15, v1
+; CHECK-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6
 ; CHECK-NEXT:    s_xor_b32 s2, s0, exec_lo
 ; CHECK-NEXT:    s_mov_b32 s1, s0
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s2
-; CHECK-NEXT:    ; implicit-def: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_5
 ; CHECK-NEXT:  .LBB0_1: ; %LeafBlock
