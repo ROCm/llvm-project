@@ -82,6 +82,12 @@ public:
   // Number of SGPRs backed by the register file.
   unsigned numSgprs() const { return static_cast<unsigned>(Regs.Sgpr.size()); }
 
+  // Read M0, which the message opcodes take their payload from without
+  // naming it in an operand.
+  llvm::Value *readM0() {
+    return Regs.readReg32(B, ParsedReg{ParsedReg::M0, 0, 1});
+  }
+
   // Read a mask at target EXEC width, replicating narrower source-wave bits.
   llvm::Expected<llvm::Value *> readOpExecWidth(const DecodedInst &Di,
                                                 unsigned OpIdx);

@@ -9,12 +9,8 @@
 ; RUN:   | %FileCheck %s --check-prefix=INERT
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=trap_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=TRAP
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=sethalt_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=SETHALT
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=endpgm_saved_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=ENDPGM-SAVED
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=sendmsg_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=SENDMSG
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.text
@@ -68,24 +64,16 @@ inert_kernel:
 	s_code_end
 	s_endpgm
 
-; Every other SOPP opcode is refused by name. Traps, halts and the alternate
-; terminators change what the kernel does; messages are communication the raise
-; does not carry.
+; The two opcodes that dispose of the wave are refused by name, each saying
+; what it would have done with it.
 
 	.globl	trap_kernel
 	.p2align	8
 	.type	trap_kernel,@function
 trap_kernel:
 ; TRAP: unsupported-instruction-form: s_trap [SOPP]
+; TRAP-SAME: enters trap handler 1, which the raised kernel does not have
 	s_trap 1
-	s_endpgm
-
-	.globl	sethalt_kernel
-	.p2align	8
-	.type	sethalt_kernel,@function
-sethalt_kernel:
-; SETHALT: unsupported-instruction-form: s_sethalt [SOPP]
-	s_sethalt 1
 	s_endpgm
 
 	.globl	endpgm_saved_kernel
@@ -93,15 +81,8 @@ sethalt_kernel:
 	.type	endpgm_saved_kernel,@function
 endpgm_saved_kernel:
 ; ENDPGM-SAVED: unsupported-instruction-form: s_endpgm_saved [SOPP]
+; ENDPGM-SAVED-SAME: ends the wave for a context save nothing here resumes
 	s_endpgm_saved
-
-	.globl	sendmsg_kernel
-	.p2align	8
-	.type	sendmsg_kernel,@function
-sendmsg_kernel:
-; SENDMSG: unsupported-instruction-form: s_sendmsg [SOPP]
-	s_sendmsg 1
-	s_endpgm
 
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
@@ -120,17 +101,7 @@ sendmsg_kernel:
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
-	.amdhsa_kernel sethalt_kernel
-		.amdhsa_kernarg_size 0
-		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 1
-	.end_amdhsa_kernel
 	.amdhsa_kernel endpgm_saved_kernel
-		.amdhsa_kernarg_size 0
-		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 1
-	.end_amdhsa_kernel
-	.amdhsa_kernel sendmsg_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
@@ -177,32 +148,10 @@ amdhsa.kernels:
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
     .max_flat_workgroup_size: 1024
-    .name:           sethalt_kernel
-    .private_segment_fixed_size: 0
-    .sgpr_count:     1
-    .symbol:         sethalt_kernel.kd
-    .vgpr_count:     1
-    .wavefront_size: 32
-  - .args: []
-    .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 1024
     .name:           endpgm_saved_kernel
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         endpgm_saved_kernel.kd
-    .vgpr_count:     1
-    .wavefront_size: 32
-  - .args: []
-    .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 1024
-    .name:           sendmsg_kernel
-    .private_segment_fixed_size: 0
-    .sgpr_count:     1
-    .symbol:         sendmsg_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 32
 amdhsa.version: [1, 2]
