@@ -105,12 +105,6 @@ static cl::opt<bool> DisableOpenMPOptSPMDization(
     cl::desc("Disable OpenMP optimizations involving SPMD-ization."),
     cl::Hidden, cl::init(false));
 
-static cl::opt<bool> DisableOpenMPOptCallbackSPMDization(
-    "openmp-opt-disable-callback-spmdization",
-    cl::desc("Disable OpenMP optimizations involving SPMD-ization in runtime "
-             "functions taking callbacks."),
-    cl::Hidden, cl::init(true));
-
 static cl::opt<bool> DisableOpenMPOptFolding(
     "openmp-opt-disable-folding",
     cl::desc("Disable OpenMP optimizations involving folding."), cl::Hidden,
@@ -552,22 +546,51 @@ struct OMPInformationCache : public InformationCache {
     collectUses(RFI, /*CollectStats*/ false);
   }
 
+  /// Attach !callback metadata to a runtime function that takes one, so that
+  /// the Attributor sees the edge from the runtime call to the callback and
+  /// AAKernelInfo can look inside it. The runtime declares these functions
+  /// without the metadata, so OpenMPOpt supplies it from the table in
+  /// OMPKinds.def.
   void setCallbackMetadata(Function *F, unsigned ArgNo, ArrayRef<int> Indices,
                            bool IsVarArg) {
-    if (!F)
+    if (!F || F->hasMetadata(LLVMContext::MD_callback))
       return;
 
     LLVMContext &Ctx = F->getContext();
     MDBuilder MDB(Ctx);
+    F->addMetadata(LLVMContext::MD_callback,
+                   *MDNode::get(Ctx, {MDB.createCallbackEncoding(ArgNo, Indices,
+                                                                 IsVarArg)}));
+  }
 
-    // Create the new callback encoding for this runtime function
-    MDNode *NewCallbackEncoding =
-        MDB.createCallbackEncoding(ArgNo, Indices, IsVarArg);
-
-    if (!F->getMetadata(LLVMContext::MD_callback))
-      // No existing metadata, create new with single entry
-      F->addMetadata(LLVMContext::MD_callback,
-                     *MDNode::get(Ctx, {NewCallbackEncoding}));
+  /// The callback a runtime function was handed, if it is one we can analyze.
+  /// Returns null when the call takes no callback, or when the callback is not
+  /// a definition this module can see, in which case its contents are unknown
+  /// and callers have to stay conservative.
+  static Function *getAnalyzableCallback(const CallBase &CB) {
+    Function *Callee = CB.getCalledFunction();
+    if (!Callee)
+      return nullptr;
+    MDNode *CallbackMD = Callee->getMetadata(LLVMContext::MD_callback);
+    if (!CallbackMD || CallbackMD->getNumOperands() == 0)
+      return nullptr;
+    // TODO: A runtime function with more than one callback would need each of
+    // them checked; none of the ones in the table have more than one.
+    auto *Encoding = dyn_cast<MDNode>(CallbackMD->getOperand(0));
+    if (!Encoding || Encoding->getNumOperands() == 0)
+      return nullptr;
+    auto *ArgNoMD = dyn_cast<ConstantAsMetadata>(Encoding->getOperand(0));
+    if (!ArgNoMD)
+      return nullptr;
+    uint64_t ArgNo =
+        cast<ConstantInt>(ArgNoMD->getValue())->getLimitedValue(UINT64_MAX);
+    if (ArgNo >= CB.arg_size())
+      return nullptr;
+    auto *Callback =
+        dyn_cast<Function>(CB.getArgOperand(ArgNo)->stripPointerCasts());
+    if (!Callback || Callback->isDeclaration())
+      return nullptr;
+    return Callback;
   }
 
   // Helper function to recollect uses of all runtime functions.
@@ -653,13 +676,12 @@ struct OMPInformationCache : public InformationCache {
       });                                                                      \
     }                                                                          \
   }
+
 #define OMP_RTL_CB_INFO(_Enum, _Name, _ArgNo, _ArgIndices, _IsVarArg)          \
-  {                                                                            \
-    Function *F = M.getFunction(_Name);                                        \
-    setCallbackMetadata(F, _ArgNo, _ArgIndices, _IsVarArg);                    \
-  }
+  setCallbackMetadata(M.getFunction(_Name), _ArgNo, _ArgIndices, _IsVarArg);
 
 #include "llvm/Frontend/OpenMP/OMPKinds.def"
+
     // Remove the `noinline` attribute from `__kmpc`, `ompx::` and `omp_`
     // functions, except if `optnone` is present.
     if (isOpenMPDevice(M)) {
@@ -4869,41 +4891,22 @@ struct AAKernelInfoFunction : AAKernelInfo {
     bool AllSPMDStatesWereFixed = true;
     auto CheckCallInst = [&](Instruction &I) {
       auto &CB = cast<CallBase>(I);
-      auto &OMPInfoCache = static_cast<OMPInformationCache &>(A.getInfoCache());
-      Function *Callee = CB.getCalledFunction();
-      const auto &It = OMPInfoCache.RuntimeFunctionIDMap.find(Callee);
-      if (It != OMPInfoCache.RuntimeFunctionIDMap.end()) {
-        MDNode *CallbackMD = Callee->getMetadata(LLVMContext::MD_callback);
-        // If this runtime function has callbacks, we need to look at them
-        // to find potential parallel regions.
-        if (CallbackMD && CallbackMD->getNumOperands() > 0) {
-          // TODO: Handle multiple callbacks?
-          MDNode *OpMD = cast<MDNode>(CallbackMD->getOperand(0).get());
-          if (OpMD && OpMD->getNumOperands() > 0) {
-            auto *CBArgCM = cast<ConstantAsMetadata>(OpMD->getOperand(0));
-            const unsigned int ArgNo =
-                cast<ConstantInt>(CBArgCM->getValue())->getZExtValue();
-            auto *LoopRegion = dyn_cast<Function>(
-                CB.getArgOperand(ArgNo)->stripPointerCasts());
-            // Only analyze the callback if we have a concrete function
-            // definition. Declarations cannot be analyzed interprocedurally.
-            if (LoopRegion && !LoopRegion->isDeclaration()) {
-              LLVM_DEBUG(dbgs() << "[OpenMPOpt] Analyzing callback function: "
-                                << LoopRegion->getName() << "\n");
-              auto *FnAA = A.getAAFor<AAKernelInfo>(
-                  *this, IRPosition::function(*LoopRegion),
-                  DepClassTy::OPTIONAL);
-              if (FnAA) {
-                getState() ^= FnAA->getState();
-                AllSPMDStatesWereFixed &=
-                    FnAA->SPMDCompatibilityTracker.isAtFixpoint();
-                AllParallelRegionStatesWereFixed &=
-                    FnAA->ReachedKnownParallelRegions.isAtFixpoint();
-                AllParallelRegionStatesWereFixed &=
-                    FnAA->ReachedUnknownParallelRegions.isAtFixpoint();
-              }
-            }
-          }
+      // A runtime function that takes a callback runs the user's code inside
+      // it, so whatever the callback reaches this kernel reaches too. Fold the
+      // callback's state in; without this the call tells us nothing about the
+      // parallel regions on the other side of it.
+      if (Function *Callback = OMPInformationCache::getAnalyzableCallback(CB)) {
+        LLVM_DEBUG(dbgs() << TAG << "folding in callback "
+                          << Callback->getName() << " of " << CB << "\n");
+        if (auto *CallbackAA = A.getAAFor<AAKernelInfo>(
+                *this, IRPosition::function(*Callback), DepClassTy::OPTIONAL)) {
+          getState() ^= CallbackAA->getState();
+          AllSPMDStatesWereFixed &=
+              CallbackAA->SPMDCompatibilityTracker.isAtFixpoint();
+          AllParallelRegionStatesWereFixed &=
+              CallbackAA->ReachedKnownParallelRegions.isAtFixpoint();
+          AllParallelRegionStatesWereFixed &=
+              CallbackAA->ReachedUnknownParallelRegions.isAtFixpoint();
         }
       }
       auto *CBAA = A.getAAFor<AAKernelInfo>(
@@ -5081,11 +5084,9 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         // state based on the callee state in updateImpl.
         return;
       }
-      // Check if we have multiple possible callees. This usually indicates an
-      // indirect call where we don't know the target, requiring a pessimistic
-      // fixpoint. However, for callback functions, multiple edges are expected:
-      // one to the runtime function and other through callback parameters.
-      // These are analyzable, so we exclude them from the pessimistic check.
+      // More than one callee normally means an indirect call we cannot resolve.
+      // A runtime function carrying !callback is the exception: the extra edge
+      // is the callback, which we analyze rather than give up on.
       if (NumCallees > 1 && !Callee->hasMetadata(LLVMContext::MD_callback)) {
         indicatePessimisticFixpoint();
         return;
@@ -5186,6 +5187,18 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_distribute_static_loop_4u:
       case OMPRTL___kmpc_distribute_static_loop_8:
       case OMPRTL___kmpc_distribute_static_loop_8u:
+        // A plain `distribute` spreads its iterations over the teams, not over
+        // the threads of a team: the runtime runs it with TId 0 and a team size
+        // of one, and asserts the kernel is at parallel level 0. One thread per
+        // block calls it, which is what generic mode gives it. In SPMD mode
+        // every thread would call it, each running the whole of its block's
+        // share of the loop body, so the kernel cannot be SPMD-ized however
+        // analyzable the body is.
+        if (!OMPInformationCache::getAnalyzableCallback(CB))
+          ReachedUnknownParallelRegions.insert(&CB);
+        SPMDCompatibilityTracker.indicatePessimisticFixpoint();
+        SPMDCompatibilityTracker.insert(&CB);
+        break;
       case OMPRTL___kmpc_distribute_for_static_loop_4:
       case OMPRTL___kmpc_distribute_for_static_loop_4u:
       case OMPRTL___kmpc_distribute_for_static_loop_8:
@@ -5194,10 +5207,18 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_for_static_loop_4u:
       case OMPRTL___kmpc_for_static_loop_8:
       case OMPRTL___kmpc_for_static_loop_8u:
-        if (DisableOpenMPOptCallbackSPMDization) {
-          SPMDCompatibilityTracker.indicatePessimisticFixpoint();
-          SPMDCompatibilityTracker.insert(&CB);
-        }
+        // These index by the thread's own id, so unlike a plain distribute they
+        // are meant to be called by every thread of the block, and a kernel
+        // reaching one is not SPMD-incompatible for that reason alone. What
+        // stops us is the transform rather than the analysis: SPMD-ization
+        // guards whatever has to stay single-threaded with a block-wide
+        // barrier, and a barrier placed inside a loop body only some threads
+        // run is divergent. Until guarding can express "the thread that owns
+        // this iteration", stay conservative here too.
+        if (!OMPInformationCache::getAnalyzableCallback(CB))
+          ReachedUnknownParallelRegions.insert(&CB);
+        SPMDCompatibilityTracker.indicatePessimisticFixpoint();
+        SPMDCompatibilityTracker.insert(&CB);
         break;
       default:
         // Unknown OpenMP runtime calls cannot be executed in SPMD-mode,
@@ -5250,11 +5271,8 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         getState() = FnAA->getState();
         return ChangeStatus::CHANGED;
       }
-      // Check if we have multiple possible callees. This usually indicates an
-      // indirect call where we don't know the target, requiring a pessimistic
-      // fixpoint. However, for callback functions, multiple edges are expected:
-      // one to the runtime function and other through callback parameters.
-      // These are analyzable, so we exclude them from the pessimistic check.
+      // See the matching check in initialize: a !callback runtime function has
+      // a second call edge by construction, and it is one we can analyze.
       if (NumCallees > 1 && !F->hasMetadata(LLVMContext::MD_callback))
         return indicatePessimisticFixpoint();
 
