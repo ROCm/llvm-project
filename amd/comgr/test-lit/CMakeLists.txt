@@ -110,7 +110,7 @@ if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   # the AMDGPU components the driver's LLVMInitializeAMDGPU* calls register.
   target_link_libraries(hotswap_transpile_cli
     PRIVATE hotswap::common hotswap::loader hotswap::decoder hotswap::raiser
-            comgr-object-utils ${LLVM_LIBS})
+            comgr-object-utils comgr-test-llvm-init ${LLVM_LIBS})
   if(NOT WIN32)
     target_link_options(hotswap_transpile_cli PRIVATE -Wl,--gc-sections)
   endif()

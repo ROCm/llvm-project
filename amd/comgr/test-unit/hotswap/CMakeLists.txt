@@ -11,6 +11,11 @@ if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
     Analysis AsmPrinter BinaryFormat CodeGen Core MC MCDisassembler
     MCParser Object Passes Support Target TargetParser TransformUtils)
 
+  # AMDGPU is registered into that LLVM by COMGR::ensureLLVMInitialized, whose
+  # production definition lives inside amd_comgr; comgr-test-llvm-init defines
+  # it for binaries that link the hotswap objects without linking amd_comgr.
+  list(APPEND COMGR_HOTSWAP_TEST_LLVM_LIBS comgr-test-llvm-init)
+
   add_subdirectory(raiser)
   add_subdirectory(decoder)
   list(APPEND COMGR_HOTSWAP_TEST_TARGETS

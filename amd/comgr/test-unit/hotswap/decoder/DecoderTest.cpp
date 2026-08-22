@@ -29,35 +29,16 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "gtest/gtest.h"
 
 #include <cstdint>
 #include <initializer_list>
-#include <mutex>
 #include <set>
 #include <vector>
 
 using namespace COMGR::hotswap;
-
-// initMCState registers the AMDGPU target through COMGR::ensureLLVMInitialized,
-// whose production definition lives in libamd_comgr. Provide the registration
-// here so the test binary stays minimal instead of linking the full Comgr.
-namespace COMGR {
-void ensureLLVMInitialized() {
-  static std::once_flag Once;
-  std::call_once(Once, [] {
-    LLVMInitializeAMDGPUTargetInfo();
-    LLVMInitializeAMDGPUTargetMC();
-    LLVMInitializeAMDGPUDisassembler();
-    LLVMInitializeAMDGPUAsmParser();
-    LLVMInitializeAMDGPUAsmPrinter();
-    LLVMInitializeAMDGPUTarget();
-  });
-}
-} // namespace COMGR
 
 namespace {
 

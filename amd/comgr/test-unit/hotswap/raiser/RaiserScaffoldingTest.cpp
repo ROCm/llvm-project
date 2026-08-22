@@ -29,30 +29,8 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/TargetSelect.h"
 
 #include "gtest/gtest.h"
-
-#include <mutex>
-
-// hotswap::raiser also carries the wave-projection objects, which link the
-// hotswap::decoder MC stack; its initMCState calls
-// COMGR::ensureLLVMInitialized, whose production definition lives in
-// libamd_comgr. Provide the registration here so the test binary stays minimal
-// instead of linking the full Comgr.
-namespace COMGR {
-void ensureLLVMInitialized() {
-  static std::once_flag Once;
-  std::call_once(Once, [] {
-    LLVMInitializeAMDGPUTargetInfo();
-    LLVMInitializeAMDGPUTargetMC();
-    LLVMInitializeAMDGPUDisassembler();
-    LLVMInitializeAMDGPUAsmParser();
-    LLVMInitializeAMDGPUAsmPrinter();
-    LLVMInitializeAMDGPUTarget();
-  });
-}
-} // namespace COMGR
 
 using COMGR::hotswap::KernelMeta;
 using COMGR::hotswap::RaiseFailure;
