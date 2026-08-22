@@ -11,9 +11,6 @@ breaks rocgdb UT
 breaks windows build: [amd-llvm] terminate called after throwing an instance of 'std::bad_alloc'
 Make][CodeGen] Add PCH for Clang CodeGen (#206018)
 ---
-hipDMM build warns as errors
-Revert "Reland "[Clang] Enable -Wunused-template under -Wall" (#208001)
----
 breaks rocrand 4 tests
 [SLP]Vectorize single-user instructions as the last-attempt seeds
 ---

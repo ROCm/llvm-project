@@ -10,14 +10,16 @@
 #define DOUBLE_SPECIALIZATION
 #include "ep.h"
 
+#include "trigredD.h"
+
 extern CONSTATTR double2 MATH_PRIVATE(epexpep)(double2 z);
 
 CONSTATTR double2
 MATH_MANGLE(ctanh)(double2 z)
 {
-    double cy;
-    double sy = MATH_MANGLE(sincos)(z.y, &cy);
-    double cysy = cy*sy;
+    double4 sc = MATH_PRIVATE(epsincos)(z.y);
+    double2 cy = sc.lo;
+    double2 sy = sc.hi;
     double x = BUILTIN_ABS_F64(z.x);
 
     double rr, ri;
@@ -26,17 +28,15 @@ MATH_MANGLE(ctanh)(double2 z)
         double2 er = rcp(e);
         er = ldx(er, -2);
         double2 cx = fadd(e, er);
-        double2 sx = fsub(e, er);
+        double2 sx = x < 0x1.0p-27 ? con(x, 0.0) : fsub(e, er);
 
-        double cxhi = cx.hi;
-        double sxhi = x < 0x1.0p-27 ? x : sx.hi;
-
-        double d = MATH_MAD(cy, cy, sxhi*sxhi);
-        rr = BUILTIN_COPYSIGN_F64(MATH_DIV(cxhi*sxhi, d), z.x);
-        ri = MATH_DIV(cysy, d);
+        double2 d = add(sqr(cy), sqr(sx));
+        double2 rd = rcp(d);
+        rr = BUILTIN_COPYSIGN_F64(mul(mul(cx, sx), rd).hi, z.x);
+        ri = mul(mul(cy, sy), rd).hi;
     } else {
         rr = BUILTIN_COPYSIGN_F64(1.0, z.x);
-        ri = 4.0 * cysy * MATH_MANGLE(exp)(-2.0 * x);
+        ri = 4.0 * (cy.hi * sy.hi) * MATH_MANGLE(exp)(-2.0 * x);
     }
 
     if (!FINITE_ONLY_OPT()) {

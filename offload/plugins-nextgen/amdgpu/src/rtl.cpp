@@ -1049,6 +1049,7 @@ private:
   uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
                                  uint32_t UserNumBlocks, uint64_t LoopTripCount,
                                  uint32_t &EffectiveNumThreads,
+                                 bool IsNumThreadsStrict,
                                  bool IsNumThreadsFromUser) const override {
     assert(!isBareMode() && "bare kernel should not call this function");
 
@@ -1331,8 +1332,8 @@ private:
     // required to preserve the occupancy in case the inner loop tripcounts are
     // larger than the blocksize. This change is done only when the user has not
     // specified the number of teams or threads.
-    if (isGenericSPMDMode() && !IsNumThreadsFromUser && UserNumBlocks == 0 &&
-        NumTeamsEnvVar == 0 &&
+    if (isGenericSPMDMode() && !IsNumThreadsFromUser && !IsNumThreadsStrict &&
+        UserNumBlocks == 0 && NumTeamsEnvVar == 0 &&
         GenericDevice.getOMPXGenericSpmdUseSmallBlockSize()) {
       uint64_t TmpPreferredNumBlocks = PreferredNumBlocks << 1;
       while (TmpPreferredNumBlocks <= LoopTripCount &&
