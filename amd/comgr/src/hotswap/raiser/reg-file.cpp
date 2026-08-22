@@ -293,8 +293,13 @@ Value *AllocaRegFile::loadExec(IRBuilder<> &B) {
 
 void AllocaRegFile::storeExec(IRBuilder<> &B, Value *V) {
   Type *ExecTy = Exec->getAllocatedType();
+  // Narrowing would drop lanes and widening would invent them, so a mismatch
+  // here is a raiser bug rather than something to reconcile.
   if (V->getType() != ExecTy)
-    V = B.CreateBitOrPointerCast(V, ExecTy);
+    report_fatal_error("transpiler: storeExec: value is " +
+                       Twine(V->getType()->getPrimitiveSizeInBits()) +
+                       " bits wide but EXEC holds " +
+                       Twine(ExecTy->getPrimitiveSizeInBits()));
   B.CreateStore(V, Exec);
 }
 
