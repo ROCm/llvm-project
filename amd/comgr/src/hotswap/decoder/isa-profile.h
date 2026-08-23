@@ -52,6 +52,8 @@ public:
   bool hasDx10ClampAndIeeeMode() const;
 
   // Whether the ISA has the combined `s_waitcnt` covering every wait counter.
+  // Answered from the generations known to have it, so a generation the raiser
+  // has never seen is not assumed to.
   bool hasCombinedWaitcnt() const;
 
 private:
