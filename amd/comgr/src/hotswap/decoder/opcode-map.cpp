@@ -48,6 +48,26 @@ struct Entry {
 static const Entry kCanonTable[] = {
     E(S_MOV_B32, S_MOV_B32),
     E(S_ENDPGM, S_ENDPGM),
+    E(S_WAITCNT, S_WAITCNT),
+    E(S_WAIT_LOADCNT, S_WAIT_LOADCNT),
+    E(S_WAIT_STORECNT, S_WAIT_STORECNT),
+    E(S_WAIT_DSCNT, S_WAIT_DSCNT),
+    E(S_WAIT_KMCNT, S_WAIT_KMCNT),
+    E(S_WAIT_EXPCNT, S_WAIT_EXPCNT),
+    E(S_WAIT_LOADCNT_DSCNT, S_WAIT_LOADCNT_DSCNT),
+    E(S_WAIT_STORECNT_DSCNT, S_WAIT_STORECNT_DSCNT),
+    E(S_WAIT_IDLE, S_WAIT_IDLE),
+    E(S_WAIT_ASYNCCNT, S_WAIT_ASYNCCNT),
+    E(S_WAIT_TENSORCNT, S_WAIT_TENSORCNT),
+    E(S_WAIT_XCNT, S_WAIT_XCNT),
+    // gfx12 renamed the mnemonic to `s_wait_alu`, but the pseudo LLVM keys on
+    // still carries the original `S_WAITCNT_DEPCTR` spelling.
+    E(S_WAITCNT_DEPCTR, S_WAIT_ALU),
+    E(S_NOP, S_NOP),
+    E(S_CLAUSE, S_CLAUSE),
+    E(S_DELAY_ALU, S_DELAY_ALU),
+    E(S_SLEEP, S_SLEEP),
+    E(S_SETPRIO, S_SETPRIO),
 };
 
 #undef E
