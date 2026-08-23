@@ -47,6 +47,9 @@ public:
   // Whether the source ISA uses architected SGPRs.
   bool hasArchitectedSgprs() const;
 
+  // Whether the ISA has the combined `s_waitcnt` covering every wait counter.
+  bool hasCombinedWaitcnt() const;
+
 private:
   explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}
 
