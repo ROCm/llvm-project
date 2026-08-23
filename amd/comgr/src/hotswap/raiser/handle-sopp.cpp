@@ -20,6 +20,10 @@ namespace COMGR::hotswap {
 
 namespace {
 
+// Bits of the `s_sleep` immediate that hold the sleep duration, per the CDNA3
+// ISA guide's 64..8128 clock range.
+constexpr int64_t KSleepDurationMask = 0x7f;
+
 void emitWait(RaiseContext &Ctx, Intrinsic::ID Wait, Value *Count) {
   IRBuilder<> &B = Ctx.B;
   Module *M = B.GetInsertBlock()->getModule();
@@ -92,9 +96,23 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
   case CanonicalOp::S_NOP:
   case CanonicalOp::S_CLAUSE:
   case CanonicalOp::S_DELAY_ALU:
-  case CanonicalOp::S_SLEEP:
   case CanonicalOp::S_SETPRIO:
     return Error::success();
+
+  // A bounded sleep is a hint like the rest: it self-terminates, so no program
+  // can rest on the wave staying parked. Wider immediates select modes that do
+  // not, and LLVM decodes none of the field -- a plain `i32imm` with no operand
+  // class -- so the raiser refuses instead of assuming.
+  case CanonicalOp::S_SLEEP: {
+    std::optional<int64_t> Imm = evalOperandAsConst(Di.Inst, 0);
+    if (Imm && (*Imm & ~KSleepDurationMask) == 0)
+      return Error::success();
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedInstructionForm,
+        strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        "s_sleep immediate selects more than a sleep duration");
+  }
 
   default:
     break;

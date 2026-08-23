@@ -82,7 +82,36 @@ idle_kernel:
 	s_wait_idle
 	s_endpgm
 
+	.globl	sleep_kernel
+	.p2align	8
+	.type	sleep_kernel,@function
 
+; A bounded sleep is a hint and raises to nothing.
+; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=sleep_kernel | %FileCheck %s \
+; RUN:   --check-prefix=SLEEP
+; SLEEP-LABEL: define amdgpu_kernel void @sleep_kernel(
+; SLEEP-NOT: call
+; SLEEP: ret void
+sleep_kernel:
+	s_sleep 127
+	s_endpgm
+
+	.globl	sleep_mode_kernel
+	.p2align	8
+	.type	sleep_mode_kernel,@function
+
+; An immediate reaching past the duration field selects a mode the raiser does
+; not model, and refuses on every target rather than being dropped as if it were
+; a hint.
+; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=sleep_mode_kernel 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=SLEEPMODE
+; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=sleep_mode_kernel \
+; RUN:   --target-isa=gfx942 2>&1 | %FileCheck %s --check-prefix=SLEEPMODE
+; SLEEPMODE: unsupported-instruction-form: s_sleep [SOPP]
+; SLEEPMODE-SAME: selects more than a sleep duration
+sleep_mode_kernel:
+	s_sleep 0x8000
+	s_endpgm
 
 	.globl	waitalu_kernel
 	.p2align	8
@@ -114,6 +143,16 @@ waitalu_kernel:
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel idle_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel sleep_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel sleep_mode_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
@@ -169,6 +208,28 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         waitalu_kernel.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           sleep_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         sleep_kernel.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           sleep_mode_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         sleep_mode_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 32
 amdhsa.version: [1, 2]

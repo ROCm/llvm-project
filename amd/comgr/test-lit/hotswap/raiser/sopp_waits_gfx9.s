@@ -62,6 +62,19 @@ trap_kernel:
 	s_trap 1
 	s_endpgm
 
+	.globl	sleep_mode_kernel
+	.p2align	8
+	.type	sleep_mode_kernel,@function
+
+; A bounded sleep raises to nothing, but an immediate reaching past the duration
+; field selects a mode the raiser does not model, so it refuses.
+; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=sleep_mode_kernel 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=SLEEPMODE
+; SLEEPMODE: unsupported-instruction-form: s_sleep [SOPP]
+; SLEEPMODE-SAME: selects more than a sleep duration
+sleep_mode_kernel:
+	s_sleep 0x8000
+	s_endpgm
 
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
@@ -73,6 +86,13 @@ trap_kernel:
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel trap_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 1
+		.amdhsa_accum_offset 4
+		.amdhsa_reserve_vcc 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel sleep_mode_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
@@ -103,6 +123,17 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         trap_kernel.kd
+    .vgpr_count:     1
+    .wavefront_size: 64
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           sleep_mode_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         sleep_mode_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 64
 amdhsa.version: [1, 2]
