@@ -19,6 +19,9 @@
 
 #include "VCSVersion.inc"
 
+// PPH merge-failure-triage local test (do not push): forces compiler-runtime build failure.
+#error PPH triage local test — intentional clang build break
+
 namespace clang {
 
 std::string getClangRepositoryPath() {
