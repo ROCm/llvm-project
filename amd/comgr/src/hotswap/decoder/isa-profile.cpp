@@ -56,4 +56,8 @@ bool ISAProfile::hasDx10ClampAndIeeeMode() const {
   return STI->hasFeature(llvm::AMDGPU::FeatureDX10ClampAndIEEEMode);
 }
 
+bool ISAProfile::hasCombinedWaitcnt() const {
+  return !STI->hasFeature(llvm::AMDGPU::FeatureGFX1250Insts);
+}
+
 } // namespace COMGR::hotswap
