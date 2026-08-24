@@ -38,6 +38,7 @@ add_library(hotswap-raiser OBJECT
   raise-context.cpp
   op-resolver.cpp
   handle-sop1.cpp
+  handle-sop2.cpp
   handle-sopp.cpp
 )
 

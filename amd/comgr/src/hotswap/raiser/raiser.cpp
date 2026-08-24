@@ -151,6 +151,8 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
 
   if (Di.TargetSpecificFlags & SOP1)
     return handleSOP1(Ctx, Di, Op);
+  if (Di.TargetSpecificFlags & SOP2)
+    return handleSOP2(Ctx, Di, Op);
   if (Di.TargetSpecificFlags & SOPP)
     return handleSOPP(Ctx, Di, Op);
 

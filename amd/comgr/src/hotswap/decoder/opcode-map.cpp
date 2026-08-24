@@ -47,6 +47,30 @@ struct Entry {
 
 static const Entry kCanonTable[] = {
     E(S_MOV_B32, S_MOV_B32),
+    E(S_ADD_U32, S_ADD_U32),
+    E(S_ADD_I32, S_ADD_U32),
+    E(S_ADDC_U32, S_ADDC_U32),
+    E(S_SUB_U32, S_SUB_U32),
+    E(S_SUB_I32, S_SUB_U32),
+    E(S_SUBB_U32, S_SUBB_U32),
+    E(S_ABSDIFF_I32, S_ABSDIFF_I32),
+    E(S_MUL_I32, S_MUL_I32),
+    E(S_MUL_HI_U32, S_MUL_HI_U32),
+    E(S_MUL_HI_I32, S_MUL_HI_I32),
+    E(S_MUL_U64, S_MUL_U64),
+    E(S_CSELECT_B32, S_CSELECT_B32),
+    E(S_CSELECT_B64, S_CSELECT_B64),
+    E(S_MIN_I32, S_MIN_I32),
+    E(S_MIN_U32, S_MIN_U32),
+    E(S_MAX_I32, S_MAX_I32),
+    E(S_MAX_U32, S_MAX_U32),
+    E(S_LSHL1_ADD_U32, S_LSHL1_ADD_U32),
+    E(S_LSHL2_ADD_U32, S_LSHL2_ADD_U32),
+    E(S_LSHL3_ADD_U32, S_LSHL3_ADD_U32),
+    E(S_LSHL4_ADD_U32, S_LSHL4_ADD_U32),
+    // gfx12 renamed the assembly mnemonics but retained these pseudos.
+    E(S_ADD_U64, S_ADD_NC_U64),
+    E(S_SUB_U64, S_SUB_NC_U64),
     E(S_ENDPGM, S_ENDPGM),
 };
 

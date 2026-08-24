@@ -24,6 +24,8 @@ namespace COMGR::hotswap {
 // no later handler gets the chance to claim it.
 llvm::Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
                        OpResolver &Op);
+llvm::Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
+                       OpResolver &Op);
 llvm::Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
                        OpResolver &Op);
 
