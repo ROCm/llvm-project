@@ -1534,13 +1534,14 @@ bool Compiler<Emitter>::VisitPointerArithBinOp(const BinaryOperator *E) {
     return false;
   }
 
-  if (classifyPrim(E) != PT_Ptr) {
-    if (!this->emitDecayPtr(PT_Ptr, classifyPrim(E), E))
+  PrimType ExprT = classifyPrim(E);
+  if (ExprT != PT_Ptr) {
+    if (!this->emitDecayPtr(PT_Ptr, ExprT, E))
       return false;
   }
 
   if (DiscardResult)
-    return this->emitPop(classifyPrim(E), E);
+    return this->emitPop(ExprT, E);
   return true;
 }
 
@@ -6205,7 +6206,8 @@ bool Compiler<Emitter>::VisitCallExpr(const CallExpr *E) {
     }
   }
 
-  SmallVector<const Expr *, 8> Args(ArrayRef(E->getArgs(), E->getNumArgs()));
+  ArrayRef<const Expr *> Args(E->getArgs(), E->getNumArgs());
+  const Expr *ReversedArgs[2];
 
   bool IsAssignmentOperatorCall = false;
   bool ActivateLHS = false;
@@ -6218,7 +6220,9 @@ bool Compiler<Emitter>::VisitCallExpr(const CallExpr *E) {
     const CXXRecordDecl *LHSRecord = Args[0]->getType()->getAsCXXRecordDecl();
     ActivateLHS = LHSRecord && LHSRecord->hasTrivialDefaultConstructor();
     IsAssignmentOperatorCall = true;
-    std::reverse(Args.begin(), Args.end());
+    ReversedArgs[0] = Args[1];
+    ReversedArgs[1] = Args[0];
+    Args = ReversedArgs;
   }
   // Calling a static operator will still
   // pass the instance, but we don't need it.
@@ -6229,7 +6233,7 @@ bool Compiler<Emitter>::VisitCallExpr(const CallExpr *E) {
       if (!this->discard(E->getArg(0)))
         return false;
       // Drop first arg.
-      Args.erase(Args.begin());
+      Args = Args.drop_front();
     }
   }
 
