@@ -92,6 +92,7 @@ static StringRef getArchFamily(const Record *Rec) {
   StringRef Name = Rec->getValueAsString("Name");
   if (isGenericTarget(Rec))
     return Name.take_front(Name.find('-'));
+  Name.consume_back("-strict");
   return Name.drop_back(2);
 }
 
