@@ -239,10 +239,10 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
       Pred = CmpInst::ICMP_ULT;
       break;
     case CanonicalOp::S_MAX_I32:
-      Pred = CmpInst::ICMP_SGT;
+      Pred = CmpInst::ICMP_SGE;
       break;
     default:
-      Pred = CmpInst::ICMP_UGT;
+      Pred = CmpInst::ICMP_UGE;
       break;
     }
     Value *Condition = Ctx.B.CreateICmp(Pred, Args->Src0, Args->Src1);
@@ -253,7 +253,7 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
                                ? "min"
                                : "max");
     Ctx.registers().writeReg32(Args->Dst, Result);
-    storeNonzeroScc(Ctx, Result);
+    Ctx.registers().regFile().storeSCC(Ctx.B, Condition);
     return Error::success();
   }
 
