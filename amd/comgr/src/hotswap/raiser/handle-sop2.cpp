@@ -206,16 +206,19 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Ctx.registers().writeReg64(Args->Dst, Result);
     return Error::success();
   }
-  case CanonicalOp::S_ADD_NC_U64:
+  case CanonicalOp::S_ADD_NC_U64: {
+    Expected<BinaryOperands> Args = readBinary64(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Result = Ctx.B.CreateAdd(Args->Src0, Args->Src1, "add64");
+    Ctx.registers().writeReg64(Args->Dst, Result);
+    return Error::success();
+  }
   case CanonicalOp::S_SUB_NC_U64: {
     Expected<BinaryOperands> Args = readBinary64(Op);
     if (!Args)
       return Args.takeError();
-    Value *Result;
-    if (Di.CanonOp == CanonicalOp::S_ADD_NC_U64)
-      Result = Ctx.B.CreateAdd(Args->Src0, Args->Src1, "add64");
-    else
-      Result = Ctx.B.CreateSub(Args->Src0, Args->Src1, "sub64");
+    Value *Result = Ctx.B.CreateSub(Args->Src0, Args->Src1, "sub64");
     Ctx.registers().writeReg64(Args->Dst, Result);
     return Error::success();
   }
