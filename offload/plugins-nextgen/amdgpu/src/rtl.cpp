@@ -5568,19 +5568,23 @@ private:
         OMPX_XTeamReductionOccupancyBasedOpt;
   };
 
+  // OMPX_XTeamReductionOccupancyBasedOpt is disabled everywhere: the member
+  // shadowing that kept it from taking effect was only fixed recently, so the
+  // entries that requested it have never actually run. Enable it per device
+  // once the occupancy-based team count has been evaluated there.
   static inline const std::unordered_map<std::string, DeviceEnvarConfigTy>
       EnvarConfigs = {{"MI210", {.OMPX_UseMultipleSdmaEngines = true,
                                  .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = true,
+                                 .OMPX_XTeamReductionOccupancyBasedOpt = false,
                                  .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=0}},
                       {"MI250X",{.OMPX_UseMultipleSdmaEngines = true,
                                  .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = true,
+                                 .OMPX_XTeamReductionOccupancyBasedOpt = false,
                                  .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=0}},
                       {"MI250X/MI250",{
                                  .OMPX_UseMultipleSdmaEngines = true,
                                  .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = true,
+                                 .OMPX_XTeamReductionOccupancyBasedOpt = false,
                                  .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=0}},
                       {"MI300A", {.OMPX_UseMultipleSdmaEngines = false,
                                  .OMPX_XteamBlockSize = 512,
@@ -5592,7 +5596,7 @@ private:
                                  .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=1}},
                       {"MI308X", {.OMPX_UseMultipleSdmaEngines = true,
                                  .OMPX_XteamBlockSize = 256,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = true,
+                                 .OMPX_XTeamReductionOccupancyBasedOpt = false,
                                  .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=0}},
                       {"MI350X", {.OMPX_UseMultipleSdmaEngines = true,
                                  .OMPX_XteamBlockSize = 512,
