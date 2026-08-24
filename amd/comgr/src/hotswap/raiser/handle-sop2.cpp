@@ -58,9 +58,9 @@ Expected<BinaryOperands> readBinary64(OpResolver &Op) {
 // Set SCC if Result is nonzero.
 void storeNonzeroScc(RaiseContext &Ctx, Value *Result,
                      const Twine &Name = "scc") {
-  Ctx.registers().regFile().storeSCC(
-      Ctx.B, Ctx.B.CreateICmpNE(
-                 Result, Constant::getNullValue(Result->getType()), Name));
+  Constant *Zero = Constant::getNullValue(Result->getType());
+  Value *Nonzero = Ctx.B.CreateICmpNE(Result, Zero, Name);
+  Ctx.registers().regFile().storeSCC(Ctx.B, Nonzero);
 }
 
 // Raise a shifted 32-bit addition and set SCC on unsigned overflow.
@@ -71,13 +71,13 @@ Error handleLshlAdd(RaiseContext &Ctx, OpResolver &Op, unsigned Shift,
     return Args.takeError();
   Value *Src0 = Ctx.B.CreateZExt(Args->Src0, Ctx.B.getInt64Ty(), Name + "_s0");
   Value *Src1 = Ctx.B.CreateZExt(Args->Src1, Ctx.B.getInt64Ty(), Name + "_s1");
-  Value *Wide =
-      Ctx.B.CreateAdd(Ctx.B.CreateShl(Src0, Shift), Src1, Name + "_wide");
+  Value *Shifted = Ctx.B.CreateShl(Src0, Shift, Name + "_shifted");
+  Value *Wide = Ctx.B.CreateAdd(Shifted, Src1, Name + "_wide");
   Value *Result = Ctx.B.CreateTrunc(Wide, Ctx.B.getInt32Ty(), Name);
   Ctx.registers().writeReg32(Args->Dst, Result);
-  Ctx.registers().regFile().storeSCC(
-      Ctx.B,
-      Ctx.B.CreateICmpUGT(Wide, Ctx.B.getInt64(UINT32_MAX), Name + "_carry"));
+  Value *Carry =
+      Ctx.B.CreateICmpUGT(Wide, Ctx.B.getInt64(UINT32_MAX), Name + "_carry");
+  Ctx.registers().regFile().storeSCC(Ctx.B, Carry);
   return Error::success();
 }
 
@@ -93,9 +93,9 @@ Error handleOverflowingBinary32(RaiseContext &Ctx, OpResolver &Op,
   Value *Pair = Ctx.B.CreateIntrinsic(IntrinsicID, {Ctx.B.getInt32Ty()},
                                       {Args->Src0, Args->Src1});
   Value *Result = Ctx.B.CreateExtractValue(Pair, 0, ResultName);
+  Value *Overflow = Ctx.B.CreateExtractValue(Pair, 1, OverflowName);
   Ctx.registers().writeReg32(Args->Dst, Result);
-  Ctx.registers().regFile().storeSCC(
-      Ctx.B, Ctx.B.CreateExtractValue(Pair, 1, OverflowName));
+  Ctx.registers().regFile().storeSCC(Ctx.B, Overflow);
   return Error::success();
 }
 
@@ -128,8 +128,8 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<BinaryOperands> Args = readBinary32(Op);
     if (!Args)
       return Args.takeError();
-    Value *CarryIn = Ctx.B.CreateZExt(Ctx.registers().regFile().loadSCC(Ctx.B),
-                                      Ctx.B.getInt32Ty(), "carry_in");
+    Value *Scc = Ctx.registers().regFile().loadSCC(Ctx.B);
+    Value *CarryIn = Ctx.B.CreateZExt(Scc, Ctx.B.getInt32Ty(), "carry_in");
     Value *First =
         Ctx.B.CreateIntrinsic(Intrinsic::uadd_with_overflow,
                               {Ctx.B.getInt32Ty()}, {Args->Src0, Args->Src1});
@@ -137,9 +137,9 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Value *Second = Ctx.B.CreateIntrinsic(Intrinsic::uadd_with_overflow,
                                           {Ctx.B.getInt32Ty()}, {Sum, CarryIn});
     Value *Result = Ctx.B.CreateExtractValue(Second, 0, "addc");
-    Value *Carry =
-        Ctx.B.CreateOr(Ctx.B.CreateExtractValue(First, 1),
-                       Ctx.B.CreateExtractValue(Second, 1), "addc_carry");
+    Value *FirstCarry = Ctx.B.CreateExtractValue(First, 1);
+    Value *SecondCarry = Ctx.B.CreateExtractValue(Second, 1);
+    Value *Carry = Ctx.B.CreateOr(FirstCarry, SecondCarry, "addc_carry");
     Ctx.registers().writeReg32(Args->Dst, Result);
     Ctx.registers().regFile().storeSCC(Ctx.B, Carry);
     return Error::success();
@@ -148,8 +148,8 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<BinaryOperands> Args = readBinary32(Op);
     if (!Args)
       return Args.takeError();
-    Value *BorrowIn = Ctx.B.CreateZExt(Ctx.registers().regFile().loadSCC(Ctx.B),
-                                       Ctx.B.getInt32Ty(), "borrow_in");
+    Value *Scc = Ctx.registers().regFile().loadSCC(Ctx.B);
+    Value *BorrowIn = Ctx.B.CreateZExt(Scc, Ctx.B.getInt32Ty(), "borrow_in");
     Value *First =
         Ctx.B.CreateIntrinsic(Intrinsic::usub_with_overflow,
                               {Ctx.B.getInt32Ty()}, {Args->Src0, Args->Src1});
@@ -158,9 +158,9 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
         Ctx.B.CreateIntrinsic(Intrinsic::usub_with_overflow,
                               {Ctx.B.getInt32Ty()}, {Difference, BorrowIn});
     Value *Result = Ctx.B.CreateExtractValue(Second, 0, "subb");
-    Value *Borrow =
-        Ctx.B.CreateOr(Ctx.B.CreateExtractValue(First, 1),
-                       Ctx.B.CreateExtractValue(Second, 1), "subb_borrow");
+    Value *FirstBorrow = Ctx.B.CreateExtractValue(First, 1);
+    Value *SecondBorrow = Ctx.B.CreateExtractValue(Second, 1);
+    Value *Borrow = Ctx.B.CreateOr(FirstBorrow, SecondBorrow, "subb_borrow");
     Ctx.registers().writeReg32(Args->Dst, Result);
     Ctx.registers().regFile().storeSCC(Ctx.B, Borrow);
     return Error::success();
@@ -170,8 +170,8 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<BinaryOperands> Args = readBinary32(Op);
     if (!Args)
       return Args.takeError();
-    Ctx.registers().writeReg32(Args->Dst,
-                               Ctx.B.CreateMul(Args->Src0, Args->Src1, "mul"));
+    Value *Result = Ctx.B.CreateMul(Args->Src0, Args->Src1, "mul");
+    Ctx.registers().writeReg32(Args->Dst, Result);
     return Error::success();
   }
   case CanonicalOp::S_MUL_HI_U32:
@@ -180,15 +180,20 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     if (!Args)
       return Args.takeError();
     bool Signed = Di.CanonOp == CanonicalOp::S_MUL_HI_I32;
-    Value *A = Signed ? Ctx.B.CreateSExt(Args->Src0, Ctx.B.getInt64Ty())
-                      : Ctx.B.CreateZExt(Args->Src0, Ctx.B.getInt64Ty());
-    Value *B = Signed ? Ctx.B.CreateSExt(Args->Src1, Ctx.B.getInt64Ty())
-                      : Ctx.B.CreateZExt(Args->Src1, Ctx.B.getInt64Ty());
+    Value *A;
+    Value *B;
+    if (Signed) {
+      A = Ctx.B.CreateSExt(Args->Src0, Ctx.B.getInt64Ty());
+      B = Ctx.B.CreateSExt(Args->Src1, Ctx.B.getInt64Ty());
+    } else {
+      A = Ctx.B.CreateZExt(Args->Src0, Ctx.B.getInt64Ty());
+      B = Ctx.B.CreateZExt(Args->Src1, Ctx.B.getInt64Ty());
+    }
     Value *Wide =
         Ctx.B.CreateMul(A, B, Signed ? "mulhi_i_wide" : "mulhi_u_wide");
-    Value *High =
-        Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Wide, 32), Ctx.B.getInt32Ty(),
-                          Signed ? "mulhi_i" : "mulhi_u");
+    Value *Shifted = Ctx.B.CreateLShr(Wide, 32);
+    Value *High = Ctx.B.CreateTrunc(Shifted, Ctx.B.getInt32Ty(),
+                                    Signed ? "mulhi_i" : "mulhi_u");
     Ctx.registers().writeReg32(Args->Dst, High);
     return Error::success();
   }
@@ -196,8 +201,8 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<BinaryOperands> Args = readBinary64(Op);
     if (!Args)
       return Args.takeError();
-    Ctx.registers().writeReg64(
-        Args->Dst, Ctx.B.CreateMul(Args->Src0, Args->Src1, "mul64"));
+    Value *Result = Ctx.B.CreateMul(Args->Src0, Args->Src1, "mul64");
+    Ctx.registers().writeReg64(Args->Dst, Result);
     return Error::success();
   }
   case CanonicalOp::S_ADD_NC_U64:
@@ -205,9 +210,11 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<BinaryOperands> Args = readBinary64(Op);
     if (!Args)
       return Args.takeError();
-    Value *Result = Di.CanonOp == CanonicalOp::S_ADD_NC_U64
-                        ? Ctx.B.CreateAdd(Args->Src0, Args->Src1, "add64")
-                        : Ctx.B.CreateSub(Args->Src0, Args->Src1, "sub64");
+    Value *Result;
+    if (Di.CanonOp == CanonicalOp::S_ADD_NC_U64)
+      Result = Ctx.B.CreateAdd(Args->Src0, Args->Src1, "add64");
+    else
+      Result = Ctx.B.CreateSub(Args->Src0, Args->Src1, "sub64");
     Ctx.registers().writeReg64(Args->Dst, Result);
     return Error::success();
   }
@@ -234,12 +241,13 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
       Pred = CmpInst::ICMP_UGT;
       break;
     }
-    Value *Result = Ctx.B.CreateSelect(
-        Ctx.B.CreateICmp(Pred, Args->Src0, Args->Src1), Args->Src0, Args->Src1,
-        Di.CanonOp == CanonicalOp::S_MIN_I32 ||
-                Di.CanonOp == CanonicalOp::S_MIN_U32
-            ? "min"
-            : "max");
+    Value *Condition = Ctx.B.CreateICmp(Pred, Args->Src0, Args->Src1);
+    Value *Result =
+        Ctx.B.CreateSelect(Condition, Args->Src0, Args->Src1,
+                           Di.CanonOp == CanonicalOp::S_MIN_I32 ||
+                                   Di.CanonOp == CanonicalOp::S_MIN_U32
+                               ? "min"
+                               : "max");
     Ctx.registers().writeReg32(Args->Dst, Result);
     storeNonzeroScc(Ctx, Result);
     return Error::success();
@@ -259,9 +267,9 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     if (!Args)
       return Args.takeError();
     Value *Diff = Ctx.B.CreateSub(Args->Src0, Args->Src1, "absdiff_sub");
-    Value *Result =
-        Ctx.B.CreateSelect(Ctx.B.CreateICmpSLT(Diff, Ctx.B.getInt32(0)),
-                           Ctx.B.CreateNeg(Diff), Diff, "absdiff");
+    Value *IsNegative = Ctx.B.CreateICmpSLT(Diff, Ctx.B.getInt32(0));
+    Value *Negated = Ctx.B.CreateNeg(Diff);
+    Value *Result = Ctx.B.CreateSelect(IsNegative, Negated, Diff, "absdiff");
     Ctx.registers().writeReg32(Args->Dst, Result);
     storeNonzeroScc(Ctx, Result);
     return Error::success();
@@ -271,8 +279,8 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<BinaryOperands> Args = readBinary32(Op);
     if (!Args)
       return Args.takeError();
-    Value *Result = Ctx.B.CreateSelect(Ctx.registers().regFile().loadSCC(Ctx.B),
-                                       Args->Src0, Args->Src1, "cselect");
+    Value *Scc = Ctx.registers().regFile().loadSCC(Ctx.B);
+    Value *Result = Ctx.B.CreateSelect(Scc, Args->Src0, Args->Src1, "cselect");
     Ctx.registers().writeReg32(Args->Dst, Result);
     return Error::success();
   }
@@ -280,8 +288,9 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<BinaryOperands> Args = readBinary64(Op);
     if (!Args)
       return Args.takeError();
-    Value *Result = Ctx.B.CreateSelect(Ctx.registers().regFile().loadSCC(Ctx.B),
-                                       Args->Src0, Args->Src1, "cselect64");
+    Value *Scc = Ctx.registers().regFile().loadSCC(Ctx.B);
+    Value *Result =
+        Ctx.B.CreateSelect(Scc, Args->Src0, Args->Src1, "cselect64");
     Ctx.registers().writeReg64(Args->Dst, Result);
     return Error::success();
   }
