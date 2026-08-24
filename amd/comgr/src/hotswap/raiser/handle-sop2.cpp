@@ -223,35 +223,46 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     return Error::success();
   }
 
-  case CanonicalOp::S_MIN_I32:
-  case CanonicalOp::S_MIN_U32:
-  case CanonicalOp::S_MAX_I32:
+  case CanonicalOp::S_MIN_I32: {
+    Expected<BinaryOperands> Args = readBinary32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Condition = Ctx.B.CreateICmpSLT(Args->Src0, Args->Src1);
+    Value *Result =
+        Ctx.B.CreateSelect(Condition, Args->Src0, Args->Src1, "min");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    Ctx.registers().regFile().storeSCC(Ctx.B, Condition);
+    return Error::success();
+  }
+  case CanonicalOp::S_MIN_U32: {
+    Expected<BinaryOperands> Args = readBinary32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Condition = Ctx.B.CreateICmpULT(Args->Src0, Args->Src1);
+    Value *Result =
+        Ctx.B.CreateSelect(Condition, Args->Src0, Args->Src1, "min");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    Ctx.registers().regFile().storeSCC(Ctx.B, Condition);
+    return Error::success();
+  }
+  case CanonicalOp::S_MAX_I32: {
+    Expected<BinaryOperands> Args = readBinary32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Condition = Ctx.B.CreateICmpSGE(Args->Src0, Args->Src1);
+    Value *Result =
+        Ctx.B.CreateSelect(Condition, Args->Src0, Args->Src1, "max");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    Ctx.registers().regFile().storeSCC(Ctx.B, Condition);
+    return Error::success();
+  }
   case CanonicalOp::S_MAX_U32: {
     Expected<BinaryOperands> Args = readBinary32(Op);
     if (!Args)
       return Args.takeError();
-    CmpInst::Predicate Pred;
-    switch (Di.CanonOp) {
-    case CanonicalOp::S_MIN_I32:
-      Pred = CmpInst::ICMP_SLT;
-      break;
-    case CanonicalOp::S_MIN_U32:
-      Pred = CmpInst::ICMP_ULT;
-      break;
-    case CanonicalOp::S_MAX_I32:
-      Pred = CmpInst::ICMP_SGE;
-      break;
-    default:
-      Pred = CmpInst::ICMP_UGE;
-      break;
-    }
-    Value *Condition = Ctx.B.CreateICmp(Pred, Args->Src0, Args->Src1);
+    Value *Condition = Ctx.B.CreateICmpUGE(Args->Src0, Args->Src1);
     Value *Result =
-        Ctx.B.CreateSelect(Condition, Args->Src0, Args->Src1,
-                           Di.CanonOp == CanonicalOp::S_MIN_I32 ||
-                                   Di.CanonOp == CanonicalOp::S_MIN_U32
-                               ? "min"
-                               : "max");
+        Ctx.B.CreateSelect(Condition, Args->Src0, Args->Src1, "max");
     Ctx.registers().writeReg32(Args->Dst, Result);
     Ctx.registers().regFile().storeSCC(Ctx.B, Condition);
     return Error::success();
