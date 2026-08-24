@@ -39,6 +39,7 @@ add_library(hotswap-raiser OBJECT
   op-resolver.cpp
   handle-sop1.cpp
   handle-sopp.cpp
+  handle-vop2.cpp
 )
 
 if(NOT TARGET hotswap::raiser)

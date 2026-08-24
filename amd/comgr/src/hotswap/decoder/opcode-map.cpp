@@ -46,8 +46,14 @@ struct Entry {
   Entry { AMDGPU::OP, CanonicalOp::SEM }
 
 static const Entry kCanonTable[] = {
+    // clang-format off
     E(S_MOV_B32, S_MOV_B32),
     E(S_ENDPGM, S_ENDPGM),
+    E(V_ADD_F32_e64, V_ADD_F32),
+    E(V_MUL_F32_e64, V_MUL_F32),
+    E(V_SUB_F32_e64, V_SUB_F32),
+    E(V_SUBREV_F32_e64, V_SUBREV_F32),
+    // clang-format on
 };
 
 #undef E

@@ -52,4 +52,8 @@ bool ISAProfile::hasArchitectedSgprs() const {
   return STI->hasFeature(llvm::AMDGPU::FeatureArchitectedSGPRs);
 }
 
+bool ISAProfile::hasDx10ClampAndIeeeMode() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureDX10ClampAndIEEEMode);
+}
+
 } // namespace COMGR::hotswap

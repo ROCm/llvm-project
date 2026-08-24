@@ -13,9 +13,8 @@
 ; RUN: %hotswap_transpile_cli %t.hsaco --dump-decoded=mov_endpgm_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=DECODE
 
-; The dispatch only routes the landed SOP1 / SOPP families; a VALU opcode has
-; no handler yet, so vmov_kernel is refused with a structured diagnostic rather
-; than mislowered or crashed.
+; This VOP1 opcode has no handler, so vmov_kernel is refused with a structured
+; diagnostic rather than mislowered or crashed.
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=vmov_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=UNHANDLED
 ; UNHANDLED: unsupported-instruction-form: v_mov_b32

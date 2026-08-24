@@ -38,6 +38,9 @@ enum class RaiseFailureReason : uint16_t {
   // The instruction's opcode is lifted, but this operand shape or encoding
   // variant is not. `detail()` carries shape-specific context when available.
   UnsupportedInstructionForm,
+  // A source floating-point mode is unsupported or cannot be represented on
+  // the target.
+  UnsupportedFloatingPointMode,
   // An instruction writes EXEC through a path the lift does not model.
   SPEUnsafeExecWriter,
   // `createTargetMachine` returned null.
