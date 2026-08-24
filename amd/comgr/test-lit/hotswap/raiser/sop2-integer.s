@@ -7,14 +7,13 @@
 ; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=sop2_integer \
 ; RUN:   | %FileCheck %s --check-prefix=IR
 
-; The decoder canonicalizes both historical signed spellings onto the common
-; carry-producing add/sub operations, and recognizes the integer arithmetic
-; and selection family.
+; Verify the integer arithmetic and selection family, including distinct
+; signed and unsigned add/sub operations.
 ; DECODE: S_ADD_U32{{.+}}s_add_u32
-; DECODE: S_ADD_U32{{.+}}s_add_i32
+; DECODE: S_ADD_I32{{.+}}s_add_i32
 ; DECODE: S_ADDC_U32
 ; DECODE: S_SUB_U32{{.+}}s_sub_u32
-; DECODE: S_SUB_U32{{.+}}s_sub_i32
+; DECODE: S_SUB_I32{{.+}}s_sub_i32
 ; DECODE: S_SUBB_U32
 ; DECODE: S_ABSDIFF_I32
 ; DECODE: S_MUL_I32
@@ -36,7 +35,11 @@
 ; widened shift-add carry.
 ; IR-LABEL: define amdgpu_kernel void @sop2_integer(
 ; IR: call { i32, i1 } @llvm.uadd.with.overflow.i32
-; IR: icmp ult i32
+; IR: call { i32, i1 } @llvm.sadd.with.overflow.i32
+; IR-COUNT-2: call { i32, i1 } @llvm.uadd.with.overflow.i32
+; IR: call { i32, i1 } @llvm.usub.with.overflow.i32
+; IR: call { i32, i1 } @llvm.ssub.with.overflow.i32
+; IR-COUNT-2: call { i32, i1 } @llvm.usub.with.overflow.i32
 ; IR: zext i32 {{.*}} to i64
 ; IR: sext i32 {{.*}} to i64
 ; IR: mul i64

@@ -48,10 +48,10 @@ struct Entry {
 static const Entry kCanonTable[] = {
     E(S_MOV_B32, S_MOV_B32),
     E(S_ADD_U32, S_ADD_U32),
-    E(S_ADD_I32, S_ADD_U32),
+    E(S_ADD_I32, S_ADD_I32),
     E(S_ADDC_U32, S_ADDC_U32),
     E(S_SUB_U32, S_SUB_U32),
-    E(S_SUB_I32, S_SUB_U32),
+    E(S_SUB_I32, S_SUB_I32),
     E(S_SUBB_U32, S_SUBB_U32),
     E(S_ABSDIFF_I32, S_ABSDIFF_I32),
     E(S_MUL_I32, S_MUL_I32),

@@ -76,6 +76,22 @@ Error handleLshlAdd(RaiseContext &Ctx, OpResolver &Op, unsigned Shift,
   return Error::success();
 }
 
+Error handleOverflowingBinary32(RaiseContext &Ctx, OpResolver &Op,
+                                Intrinsic::ID IntrinsicID,
+                                const Twine &ResultName,
+                                const Twine &OverflowName) {
+  Expected<BinaryOperands> Args = readBinary32(Op);
+  if (!Args)
+    return Args.takeError();
+  Value *Pair = Ctx.B.CreateIntrinsic(IntrinsicID, {Ctx.B.getInt32Ty()},
+                                      {Args->Src0, Args->Src1});
+  Value *Result = Ctx.B.CreateExtractValue(Pair, 0, ResultName);
+  Ctx.registers().writeReg32(Args->Dst, Result);
+  Ctx.registers().regFile().storeSCC(
+      Ctx.B, Ctx.B.CreateExtractValue(Pair, 1, OverflowName));
+  return Error::success();
+}
+
 Error unsupported(RaiseContext &Ctx, const DecodedInst &Di) {
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
@@ -87,29 +103,18 @@ Error unsupported(RaiseContext &Ctx, const DecodedInst &Di) {
 
 Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   switch (Di.CanonOp) {
-  case CanonicalOp::S_ADD_U32: {
-    Expected<BinaryOperands> Args = readBinary32(Op);
-    if (!Args)
-      return Args.takeError();
-    Value *Pair =
-        Ctx.B.CreateIntrinsic(Intrinsic::uadd_with_overflow,
-                              {Ctx.B.getInt32Ty()}, {Args->Src0, Args->Src1});
-    Value *Result = Ctx.B.CreateExtractValue(Pair, 0, "add");
-    Ctx.registers().writeReg32(Args->Dst, Result);
-    Ctx.registers().regFile().storeSCC(
-        Ctx.B, Ctx.B.CreateExtractValue(Pair, 1, "add_carry"));
-    return Error::success();
-  }
-  case CanonicalOp::S_SUB_U32: {
-    Expected<BinaryOperands> Args = readBinary32(Op);
-    if (!Args)
-      return Args.takeError();
-    Value *Result = Ctx.B.CreateSub(Args->Src0, Args->Src1, "sub");
-    Ctx.registers().writeReg32(Args->Dst, Result);
-    Ctx.registers().regFile().storeSCC(
-        Ctx.B, Ctx.B.CreateICmpULT(Args->Src0, Args->Src1, "sub_borrow"));
-    return Error::success();
-  }
+  case CanonicalOp::S_ADD_U32:
+    return handleOverflowingBinary32(Ctx, Op, Intrinsic::uadd_with_overflow,
+                                     "add", "add_carry");
+  case CanonicalOp::S_ADD_I32:
+    return handleOverflowingBinary32(Ctx, Op, Intrinsic::sadd_with_overflow,
+                                     "add", "add_overflow");
+  case CanonicalOp::S_SUB_U32:
+    return handleOverflowingBinary32(Ctx, Op, Intrinsic::usub_with_overflow,
+                                     "sub", "sub_borrow");
+  case CanonicalOp::S_SUB_I32:
+    return handleOverflowingBinary32(Ctx, Op, Intrinsic::ssub_with_overflow,
+                                     "sub", "sub_overflow");
   case CanonicalOp::S_ADDC_U32: {
     Expected<BinaryOperands> Args = readBinary32(Op);
     if (!Args)
@@ -134,15 +139,19 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Expected<BinaryOperands> Args = readBinary32(Op);
     if (!Args)
       return Args.takeError();
-    Value *BorrowIn = Ctx.registers().regFile().loadSCC(Ctx.B);
-    Value *BorrowValue =
-        Ctx.B.CreateZExt(BorrowIn, Ctx.B.getInt32Ty(), "borrow_in");
-    Value *Result = Ctx.B.CreateSub(Ctx.B.CreateSub(Args->Src0, Args->Src1),
-                                    BorrowValue, "subb");
-    Value *Borrow = Ctx.B.CreateOr(
-        Ctx.B.CreateICmpULT(Args->Src0, Args->Src1),
-        Ctx.B.CreateAnd(Ctx.B.CreateICmpEQ(Args->Src0, Args->Src1), BorrowIn),
-        "subb_borrow");
+    Value *BorrowIn = Ctx.B.CreateZExt(Ctx.registers().regFile().loadSCC(Ctx.B),
+                                       Ctx.B.getInt32Ty(), "borrow_in");
+    Value *First =
+        Ctx.B.CreateIntrinsic(Intrinsic::usub_with_overflow,
+                              {Ctx.B.getInt32Ty()}, {Args->Src0, Args->Src1});
+    Value *Difference = Ctx.B.CreateExtractValue(First, 0);
+    Value *Second =
+        Ctx.B.CreateIntrinsic(Intrinsic::usub_with_overflow,
+                              {Ctx.B.getInt32Ty()}, {Difference, BorrowIn});
+    Value *Result = Ctx.B.CreateExtractValue(Second, 0, "subb");
+    Value *Borrow =
+        Ctx.B.CreateOr(Ctx.B.CreateExtractValue(First, 1),
+                       Ctx.B.CreateExtractValue(Second, 1), "subb_borrow");
     Ctx.registers().writeReg32(Args->Dst, Result);
     Ctx.registers().regFile().storeSCC(Ctx.B, Borrow);
     return Error::success();
