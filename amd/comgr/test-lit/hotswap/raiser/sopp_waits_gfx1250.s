@@ -1,6 +1,6 @@
 ; REQUIRES: comgr-has-hotswap-transpile
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -filetype=obj -mcpu=gfx1250 %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
