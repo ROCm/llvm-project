@@ -67,6 +67,10 @@ public:
   /// Return the model used to combine system and user wave priorities.
   WavePriorityModel wavePriorityModel() const;
 
+  // Whether VGPR encodings use MODE/S_SET_VGPR_MSB state to address up to
+  // 1024 registers.
+  bool has1024AddressableVgprs() const;
+
 private:
   explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}
 

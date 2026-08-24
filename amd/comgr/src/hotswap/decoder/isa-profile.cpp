@@ -78,4 +78,8 @@ ISAProfile::WavePriorityModel ISAProfile::wavePriorityModel() const {
              : WavePriorityModel::Gfx9;
 }
 
+bool ISAProfile::has1024AddressableVgprs() const {
+  return STI->hasFeature(llvm::AMDGPU::Feature1024AddressableVGPRs);
+}
+
 } // namespace COMGR::hotswap
