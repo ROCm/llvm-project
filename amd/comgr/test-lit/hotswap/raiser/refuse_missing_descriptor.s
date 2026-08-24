@@ -1,6 +1,6 @@
 ; REQUIRES: comgr-has-hotswap-transpile
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -filetype=obj -mcpu=gfx942 %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: not %hotswap_transpile_cli %t.hsaco --dump-meta 2>&1 | %FileCheck %s
 

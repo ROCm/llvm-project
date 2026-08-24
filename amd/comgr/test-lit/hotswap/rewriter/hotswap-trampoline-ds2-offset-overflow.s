@@ -18,7 +18,7 @@
 // COM:   test_ds_load_b64_inrange  : raw 1/2 -> scaled 512/1024
 // COM:                               (control: in-range stride64_b64 IS rewritten)
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // COM: Capture the verbose log on stderr to confirm the overflow message
 // COM: fires for the out-of-range kernel. AMD_COMGR_EMIT_VERBOSE_LOGS=1

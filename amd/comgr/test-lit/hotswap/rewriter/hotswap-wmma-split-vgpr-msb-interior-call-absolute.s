@@ -4,7 +4,7 @@
 // the rewrite uses, mark the callee as entered at a non-start offset, and fail
 // a mandatory WMMA split there closed rather than seed the wrong mode.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   -Wl,--section-start=.text=0x1000 %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
