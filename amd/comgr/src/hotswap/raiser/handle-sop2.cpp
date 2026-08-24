@@ -174,26 +174,27 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Ctx.registers().writeReg32(Args->Dst, Result);
     return Error::success();
   }
-  case CanonicalOp::S_MUL_HI_U32:
+  case CanonicalOp::S_MUL_HI_U32: {
+    Expected<BinaryOperands> Args = readBinary32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *A = Ctx.B.CreateZExt(Args->Src0, Ctx.B.getInt64Ty());
+    Value *B = Ctx.B.CreateZExt(Args->Src1, Ctx.B.getInt64Ty());
+    Value *Wide = Ctx.B.CreateMul(A, B, "mulhi_u_wide");
+    Value *Shifted = Ctx.B.CreateLShr(Wide, 32);
+    Value *High = Ctx.B.CreateTrunc(Shifted, Ctx.B.getInt32Ty(), "mulhi_u");
+    Ctx.registers().writeReg32(Args->Dst, High);
+    return Error::success();
+  }
   case CanonicalOp::S_MUL_HI_I32: {
     Expected<BinaryOperands> Args = readBinary32(Op);
     if (!Args)
       return Args.takeError();
-    bool Signed = Di.CanonOp == CanonicalOp::S_MUL_HI_I32;
-    Value *A;
-    Value *B;
-    if (Signed) {
-      A = Ctx.B.CreateSExt(Args->Src0, Ctx.B.getInt64Ty());
-      B = Ctx.B.CreateSExt(Args->Src1, Ctx.B.getInt64Ty());
-    } else {
-      A = Ctx.B.CreateZExt(Args->Src0, Ctx.B.getInt64Ty());
-      B = Ctx.B.CreateZExt(Args->Src1, Ctx.B.getInt64Ty());
-    }
-    Value *Wide =
-        Ctx.B.CreateMul(A, B, Signed ? "mulhi_i_wide" : "mulhi_u_wide");
+    Value *A = Ctx.B.CreateSExt(Args->Src0, Ctx.B.getInt64Ty());
+    Value *B = Ctx.B.CreateSExt(Args->Src1, Ctx.B.getInt64Ty());
+    Value *Wide = Ctx.B.CreateMul(A, B, "mulhi_i_wide");
     Value *Shifted = Ctx.B.CreateLShr(Wide, 32);
-    Value *High = Ctx.B.CreateTrunc(Shifted, Ctx.B.getInt32Ty(),
-                                    Signed ? "mulhi_i" : "mulhi_u");
+    Value *High = Ctx.B.CreateTrunc(Shifted, Ctx.B.getInt32Ty(), "mulhi_i");
     Ctx.registers().writeReg32(Args->Dst, High);
     return Error::success();
   }
