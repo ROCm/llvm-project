@@ -463,7 +463,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   bool fileTypeFlag = 0;  // to see if -x flag is mentioned
   bool hasOMPTargets = 0;  // If OMP targets is mentioned
   bool hasC = 0;          // options contain a c-style file
-  // options contain a cpp-style file (NVCC must force recognition as GPU file)
+  // options contain a cpp-style file
   bool hasCXX = 0;
   // options contain a hip-style file (HIP-Clang must pass offloading options)
   bool hasHIP = 0;
@@ -478,7 +478,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
 
   string prevArg;  //  previous argument
   // TODO(hipcc): convert toolArgs to an array rather than a string
-  string toolArgs;   // arguments to pass to the clang or nvcc tool
+  string toolArgs;   // arguments to pass to the clang tool
   string optArg;     // -O args
   vector<string> options, inputs;
 
@@ -825,9 +825,8 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   // hipcc currrently requires separate compilation of source files,
   // ie it is not possible to pass
   // CPP files combined with .O files
-  // Reason is that NVCC uses the file extension to determine
-  // whether to compile in CUDA mode or
-  // pass-through CPP mode.
+  // Reason is that hipcc uses the file extension to determine
+  // whether to compile in HIP mode or pass-through CPP mode.
   // Set default optimization level to -O3 for hip-clang.
   if (optArg.empty()) {
     HIPCXXFLAGS += " -O3";
