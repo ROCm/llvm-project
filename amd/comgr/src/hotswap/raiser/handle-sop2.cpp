@@ -20,12 +20,14 @@ using namespace llvm;
 namespace COMGR::hotswap {
 namespace {
 
+// Destination and source values for a binary SOP2 instruction.
 struct BinaryOperands {
   ParsedReg Dst;
   Value *Src0;
   Value *Src1;
 };
 
+// Read the destination and two 32-bit sources of a binary instruction.
 Expected<BinaryOperands> readBinary32(OpResolver &Op) {
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
@@ -39,6 +41,7 @@ Expected<BinaryOperands> readBinary32(OpResolver &Op) {
   return BinaryOperands{*Dst, *Src0, *Src1};
 }
 
+// Read the destination and two 64-bit sources of a binary instruction.
 Expected<BinaryOperands> readBinary64(OpResolver &Op) {
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
@@ -52,6 +55,7 @@ Expected<BinaryOperands> readBinary64(OpResolver &Op) {
   return BinaryOperands{*Dst, *Src0, *Src1};
 }
 
+// Set SCC if Result is nonzero.
 void storeNonzeroScc(RaiseContext &Ctx, Value *Result,
                      const Twine &Name = "scc") {
   Ctx.registers().regFile().storeSCC(
@@ -59,6 +63,7 @@ void storeNonzeroScc(RaiseContext &Ctx, Value *Result,
                  Result, Constant::getNullValue(Result->getType()), Name));
 }
 
+// Raise a shifted 32-bit addition and set SCC on unsigned overflow.
 Error handleLshlAdd(RaiseContext &Ctx, OpResolver &Op, unsigned Shift,
                     const Twine &Name) {
   Expected<BinaryOperands> Args = readBinary32(Op);
@@ -76,6 +81,8 @@ Error handleLshlAdd(RaiseContext &Ctx, OpResolver &Op, unsigned Shift,
   return Error::success();
 }
 
+// Raise a 32-bit binary instruction, writing the intrinsic result and overflow
+// flag to the destination and SCC.
 Error handleOverflowingBinary32(RaiseContext &Ctx, OpResolver &Op,
                                 Intrinsic::ID IntrinsicID,
                                 const Twine &ResultName,
@@ -92,6 +99,7 @@ Error handleOverflowingBinary32(RaiseContext &Ctx, OpResolver &Op,
   return Error::success();
 }
 
+// Return an unsupported-instruction failure for Di.
 Error unsupported(RaiseContext &Ctx, const DecodedInst &Di) {
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
@@ -101,6 +109,7 @@ Error unsupported(RaiseContext &Ctx, const DecodedInst &Di) {
 
 } // namespace
 
+// Raise one SOP2 instruction and preserve its SCC side effects.
 Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   switch (Di.CanonOp) {
   case CanonicalOp::S_ADD_U32:
