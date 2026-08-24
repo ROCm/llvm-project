@@ -51,12 +51,208 @@ Expected<BinaryOperands> readBinary64(OpResolver &Op) {
   return BinaryOperands{*Dst, *Src0, *Src1};
 }
 
+// Read the destination, a 64-bit source, and a 32-bit source.
+Expected<BinaryOperands> readBinary64x32(OpResolver &Op) {
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Src0 = Op.src64(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = Op.src(1);
+  if (!Src1)
+    return Src1.takeError();
+  return BinaryOperands{*Dst, *Src0, *Src1};
+}
+
 // Set SCC if Result is nonzero.
 void storeNonzeroScc(RaiseContext &Ctx, Value *Result,
                      const Twine &Name = "scc") {
   Constant *Zero = Constant::getNullValue(Result->getType());
   Value *Nonzero = Ctx.B.CreateICmpNE(Result, Zero, Name);
   Ctx.registers().regFile().storeSCC(Ctx.B, Nonzero);
+}
+
+// Return the per-lane form of a source known to carry a wave mask. This keeps
+// mask algebra lossless when a wave32 source is widened to a wave64 target.
+// A null value means the operand has no wave-mask shadow and scalar lowering
+// remains sufficient.
+Expected<Value *> tryReadWaveMaskI1(RaiseContext &Ctx, OpResolver &Op,
+                                    unsigned I) {
+  if (!Op.isSrcReg(I)) {
+    Expected<Value *> Mask = Op.srcExecWidth(I);
+    if (!Mask)
+      return Mask.takeError();
+    return Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, *Mask);
+  }
+
+  Expected<std::optional<ParsedReg>> SrcReg = Op.srcReg(I);
+  if (!SrcReg)
+    return SrcReg.takeError();
+  if (!*SrcReg)
+    return nullptr;
+
+  ParsedReg Pr = **SrcReg;
+  AllocaRegFile &Regs = Ctx.registers().regFile();
+  switch (Pr.RegKind) {
+  case ParsedReg::SGPR: {
+    if (!Pr.BaseIdx)
+      return nullptr;
+    if (Value *Fresh = Ctx.registers().lookupSgprWaveMaskI1(*Pr.BaseIdx))
+      return Fresh;
+    Value *Valid = Ctx.registers().loadSgprWaveMaskValid(*Pr.BaseIdx);
+    Value *Shadow = Ctx.registers().loadSgprWaveMaskExec(*Pr.BaseIdx);
+    if (!Valid || !Shadow)
+      return nullptr;
+    Value *ShadowI1 = Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, Shadow);
+    Value *Scalar = Ctx.Projection.sourceIsa().isWave32()
+                        ? Regs.loadSGPR32(Ctx.B, *Pr.BaseIdx)
+                        : Regs.loadSGPR64(Ctx.B, *Pr.BaseIdx);
+    Value *Fallback = Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, Scalar);
+    return Ctx.B.CreateSelect(Valid, ShadowI1, Fallback, "sop2_src_mask");
+  }
+  case ParsedReg::VCC:
+    return Regs.loadVCC(Ctx.B);
+  case ParsedReg::EXEC: {
+    Value *Exec = Regs.loadExec(Ctx.B);
+    return Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, Exec);
+  }
+  default:
+    return nullptr;
+  }
+}
+
+// Record MaskI1 as the per-lane wave-mask value written to Dst.
+void recordWaveMaskI1(RaiseContext &Ctx, ParsedReg Dst, Value *MaskI1) {
+  if (!MaskI1)
+    return;
+  AllocaRegFile &Regs = Ctx.registers().regFile();
+  switch (Dst.RegKind) {
+  case ParsedReg::SGPR:
+    if (Dst.BaseIdx)
+      Ctx.registers().recordSgprWaveMaskI1(*Dst.BaseIdx, MaskI1,
+                                           /*IsPair=*/Dst.WidthInDwords >= 2);
+    return;
+  case ParsedReg::VCC:
+    Regs.storeVCC(Ctx.B, MaskI1);
+    return;
+  case ParsedReg::EXEC: {
+    Value *Mask = Ctx.Projection.ballotI1ToWidth(
+        Ctx.B, MaskI1, Ctx.Projection.execStorageTy(), "sop2_exec_mask");
+    Ctx.registers().storeExec(Mask);
+    return;
+  }
+  default:
+    return;
+  }
+}
+
+// Set SCC if any lane in MaskI1 is active.
+void storeWaveMaskScc(RaiseContext &Ctx, Value *MaskI1, const Twine &Name) {
+  Value *Mask = Ctx.Projection.ballotI1ToWidth(
+      Ctx.B, MaskI1, Ctx.Projection.execStorageTy(), Name + "_ballot");
+  storeNonzeroScc(Ctx, Mask, Name + "_nonzero");
+}
+
+// A bitwise operation applied to scalar values and wave-mask shadows.
+enum class BitOp { And, Or, Xor, AndNot, OrNot, Nand, Nor, Xnor };
+
+// Emit Op for A and Bv.
+Value *emitBitOp(IRBuilder<> &B, BitOp Op, Value *A, Value *Bv,
+                 const Twine &Name) {
+  switch (Op) {
+  case BitOp::And:
+    return B.CreateAnd(A, Bv, Name);
+  case BitOp::Or:
+    return B.CreateOr(A, Bv, Name);
+  case BitOp::Xor:
+    return B.CreateXor(A, Bv, Name);
+  case BitOp::AndNot: {
+    Value *NotB = B.CreateNot(Bv);
+    return B.CreateAnd(A, NotB, Name);
+  }
+  case BitOp::OrNot: {
+    Value *NotB = B.CreateNot(Bv);
+    return B.CreateOr(A, NotB, Name);
+  }
+  case BitOp::Nand: {
+    Value *And = B.CreateAnd(A, Bv);
+    return B.CreateNot(And, Name);
+  }
+  case BitOp::Nor: {
+    Value *Or = B.CreateOr(A, Bv);
+    return B.CreateNot(Or, Name);
+  }
+  case BitOp::Xnor: {
+    Value *Xor = B.CreateXor(A, Bv);
+    return B.CreateNot(Xor, Name);
+  }
+  }
+  llvm_unreachable("all bit operations are handled");
+}
+
+// Raise a bitwise instruction and preserve wave-mask and SCC state.
+Error handleBitOp(RaiseContext &Ctx, OpResolver &Op, BitOp Kind, bool Is64,
+                  const Twine &Name) {
+  Expected<Value *> SrcMask0 = tryReadWaveMaskI1(Ctx, Op, 0);
+  if (!SrcMask0)
+    return SrcMask0.takeError();
+  Expected<Value *> SrcMask1 = tryReadWaveMaskI1(Ctx, Op, 1);
+  if (!SrcMask1)
+    return SrcMask1.takeError();
+
+  Expected<BinaryOperands> Args = Is64 ? readBinary64(Op) : readBinary32(Op);
+  if (!Args)
+    return Args.takeError();
+  Value *Result = emitBitOp(Ctx.B, Kind, Args->Src0, Args->Src1, Name);
+  if (Is64)
+    Ctx.registers().writeReg64(Args->Dst, Result);
+  else
+    Ctx.registers().writeReg32(Args->Dst, Result);
+
+  if (*SrcMask0 && *SrcMask1) {
+    Value *MaskI1 =
+        emitBitOp(Ctx.B, Kind, *SrcMask0, *SrcMask1, Name + "_wave_mask");
+    recordWaveMaskI1(Ctx, Args->Dst, MaskI1);
+    // Complementing the second operand can set non-lane scalar bits for ORN2,
+    // and the fully-negated operations do so unconditionally. Their SCC must
+    // therefore be derived from the full scalar result.
+    if (Kind == BitOp::And || Kind == BitOp::Or || Kind == BitOp::Xor ||
+        Kind == BitOp::AndNot) {
+      storeWaveMaskScc(Ctx, MaskI1, Name + "_scc");
+      return Error::success();
+    }
+  }
+  storeNonzeroScc(Ctx, Result, Name + "_scc");
+  return Error::success();
+}
+
+// Raise a 32-bit shift and set SCC if its result is nonzero.
+Error handleShift32(RaiseContext &Ctx, OpResolver &Op,
+                    Instruction::BinaryOps Opcode, const Twine &Name) {
+  Expected<BinaryOperands> Args = readBinary32(Op);
+  if (!Args)
+    return Args.takeError();
+  Value *Amount = Ctx.B.CreateAnd(Args->Src1, Ctx.B.getInt32(31), "shamt");
+  Value *Result = Ctx.B.CreateBinOp(Opcode, Args->Src0, Amount, Name);
+  Ctx.registers().writeReg32(Args->Dst, Result);
+  storeNonzeroScc(Ctx, Result);
+  return Error::success();
+}
+
+// Raise a 64-bit shift and set SCC if its result is nonzero.
+Error handleShift64(RaiseContext &Ctx, OpResolver &Op,
+                    Instruction::BinaryOps Opcode, const Twine &Name) {
+  Expected<BinaryOperands> Args = readBinary64x32(Op);
+  if (!Args)
+    return Args.takeError();
+  Value *Amount32 =
+      Ctx.B.CreateAnd(Args->Src1, Ctx.B.getInt32(63), "shamt64_masked");
+  Value *Amount = Ctx.B.CreateZExt(Amount32, Ctx.B.getInt64Ty(), "shamt64");
+  Value *Result = Ctx.B.CreateBinOp(Opcode, Args->Src0, Amount, Name);
+  Ctx.registers().writeReg64(Args->Dst, Result);
+  storeNonzeroScc(Ctx, Result);
+  return Error::success();
 }
 
 // Raise a shifted 32-bit addition and set SCC on unsigned overflow.
@@ -100,6 +296,52 @@ Error handleOverflowingBinary32(RaiseContext &Ctx, OpResolver &Op,
 // Raise one SOP2 instruction and preserve its SCC side effects.
 Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   switch (Di.CanonOp) {
+  case CanonicalOp::S_AND_B32:
+    return handleBitOp(Ctx, Op, BitOp::And, false, "and");
+  case CanonicalOp::S_AND_B64:
+    return handleBitOp(Ctx, Op, BitOp::And, true, "and64");
+  case CanonicalOp::S_OR_B32:
+    return handleBitOp(Ctx, Op, BitOp::Or, false, "or");
+  case CanonicalOp::S_OR_B64:
+    return handleBitOp(Ctx, Op, BitOp::Or, true, "or64");
+  case CanonicalOp::S_XOR_B32:
+    return handleBitOp(Ctx, Op, BitOp::Xor, false, "xor");
+  case CanonicalOp::S_XOR_B64:
+    return handleBitOp(Ctx, Op, BitOp::Xor, true, "xor64");
+  case CanonicalOp::S_ANDN2_B32:
+    return handleBitOp(Ctx, Op, BitOp::AndNot, false, "andn2");
+  case CanonicalOp::S_ANDN2_B64:
+    return handleBitOp(Ctx, Op, BitOp::AndNot, true, "andn2_64");
+  case CanonicalOp::S_ORN2_B32:
+    return handleBitOp(Ctx, Op, BitOp::OrNot, false, "orn2");
+  case CanonicalOp::S_ORN2_B64:
+    return handleBitOp(Ctx, Op, BitOp::OrNot, true, "orn2_64");
+  case CanonicalOp::S_NAND_B32:
+    return handleBitOp(Ctx, Op, BitOp::Nand, false, "nand");
+  case CanonicalOp::S_NAND_B64:
+    return handleBitOp(Ctx, Op, BitOp::Nand, true, "nand64");
+  case CanonicalOp::S_NOR_B32:
+    return handleBitOp(Ctx, Op, BitOp::Nor, false, "nor");
+  case CanonicalOp::S_NOR_B64:
+    return handleBitOp(Ctx, Op, BitOp::Nor, true, "nor64");
+  case CanonicalOp::S_XNOR_B32:
+    return handleBitOp(Ctx, Op, BitOp::Xnor, false, "xnor");
+  case CanonicalOp::S_XNOR_B64:
+    return handleBitOp(Ctx, Op, BitOp::Xnor, true, "xnor64");
+
+  case CanonicalOp::S_LSHL_B32:
+    return handleShift32(Ctx, Op, Instruction::Shl, "shl");
+  case CanonicalOp::S_LSHR_B32:
+    return handleShift32(Ctx, Op, Instruction::LShr, "lshr");
+  case CanonicalOp::S_ASHR_I32:
+    return handleShift32(Ctx, Op, Instruction::AShr, "ashr");
+  case CanonicalOp::S_LSHL_B64:
+    return handleShift64(Ctx, Op, Instruction::Shl, "shl64");
+  case CanonicalOp::S_LSHR_B64:
+    return handleShift64(Ctx, Op, Instruction::LShr, "lshr64");
+  case CanonicalOp::S_ASHR_I64:
+    return handleShift64(Ctx, Op, Instruction::AShr, "ashr64");
+
   case CanonicalOp::S_ADD_U32:
     return handleOverflowingBinary32(Ctx, Op, Intrinsic::uadd_with_overflow,
                                      "add", "add_carry");
@@ -275,6 +517,161 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Value *Result = Ctx.B.CreateSelect(IsNegative, Negated, Diff, "absdiff");
     Ctx.registers().writeReg32(Args->Dst, Result);
     storeNonzeroScc(Ctx, Result);
+    return Error::success();
+  }
+
+  case CanonicalOp::S_BFM_B32: {
+    Expected<BinaryOperands> Args = readBinary32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Width = Ctx.B.CreateAnd(Args->Src0, Ctx.B.getInt32(31));
+    Value *Offset = Ctx.B.CreateAnd(Args->Src1, Ctx.B.getInt32(31));
+    Value *OneShifted = Ctx.B.CreateShl(Ctx.B.getInt32(1), Width);
+    Value *Mask = Ctx.B.CreateSub(OneShifted, Ctx.B.getInt32(1));
+    Value *Result = Ctx.B.CreateShl(Mask, Offset, "bfm32");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    storeNonzeroScc(Ctx, Result);
+    return Error::success();
+  }
+  case CanonicalOp::S_BFM_B64: {
+    Expected<BinaryOperands> Args = readBinary32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Width32 = Ctx.B.CreateAnd(Args->Src0, Ctx.B.getInt32(63));
+    Value *Offset32 = Ctx.B.CreateAnd(Args->Src1, Ctx.B.getInt32(63));
+    Value *Width = Ctx.B.CreateZExt(Width32, Ctx.B.getInt64Ty());
+    Value *Offset = Ctx.B.CreateZExt(Offset32, Ctx.B.getInt64Ty());
+    Value *OneShifted = Ctx.B.CreateShl(Ctx.B.getInt64(1), Width);
+    Value *Mask = Ctx.B.CreateSub(OneShifted, Ctx.B.getInt64(1));
+    Value *Result = Ctx.B.CreateShl(Mask, Offset, "bfm64");
+    Ctx.registers().writeReg64(Args->Dst, Result);
+    storeNonzeroScc(Ctx, Result);
+    return Error::success();
+  }
+
+  case CanonicalOp::S_BFE_U32: {
+    // gfx12 compute prologues expose wave_id_in_workgroup as ttmp8[29:25].
+    // Recreate that value from the target workitem id so widening a wave32
+    // source does not collapse both packed source waves onto lane zero's
+    // scalar TTMP value.
+    if (Op.isSrcReg(0) && !Op.isSrcReg(1)) {
+      Expected<std::optional<ParsedReg>> SrcReg = Op.srcReg(0);
+      if (!SrcReg)
+        return SrcReg.takeError();
+      if (*SrcReg && (**SrcReg).RegKind == ParsedReg::TTMP &&
+          (**SrcReg).BaseIdx == 8 && Op.srcImm(1) == 0x50019) {
+        Expected<ParsedReg> Dst = Op.dst();
+        if (!Dst)
+          return Dst.takeError();
+        unsigned SourceWaveSize = Ctx.Projection.sourceIsa().waveSize();
+        if (SourceWaveSize != 32 && SourceWaveSize != 64)
+          return RaiseFailure::atInstruction(
+              RaiseFailureReason::UnsupportedInstructionForm,
+              strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+              formatName(Di.TargetSpecificFlags),
+              "wave-id extraction requires a 32- or 64-lane source wave");
+        Value *WorkitemId = Ctx.Projection.emitWorkitemIdX(Ctx.B);
+        Value *WaveId = Ctx.B.CreateLShr(
+            WorkitemId, Ctx.B.getInt32(SourceWaveSize == 32 ? 5 : 6),
+            "wave_id_in_workgroup");
+        Value *Result =
+            Ctx.B.CreateAnd(WaveId, Ctx.B.getInt32(0x1f), "wave_id_masked");
+        Ctx.registers().writeReg32(*Dst, Result);
+        storeNonzeroScc(Ctx, Result);
+        return Error::success();
+      }
+    }
+
+    Expected<BinaryOperands> Args = readBinary32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Shift = Ctx.B.CreateAnd(Args->Src1, Ctx.B.getInt32(0x1f));
+    Value *PackedLength = Ctx.B.CreateLShr(Args->Src1, 16);
+    Value *Length = Ctx.B.CreateAnd(PackedLength, Ctx.B.getInt32(0x7f));
+    Value *SafeLength = Ctx.B.CreateAnd(Length, Ctx.B.getInt32(0x1f));
+    Value *OneShifted = Ctx.B.CreateShl(Ctx.B.getInt32(1), SafeLength);
+    Value *Mask = Ctx.B.CreateSub(OneShifted, Ctx.B.getInt32(1));
+    Value *IsSaturated = Ctx.B.CreateICmpUGE(Length, Ctx.B.getInt32(32));
+    Mask = Ctx.B.CreateSelect(IsSaturated, Ctx.B.getInt32(UINT32_MAX), Mask);
+    Value *Shifted = Ctx.B.CreateLShr(Args->Src0, Shift);
+    Value *Extract = Ctx.B.CreateAnd(Shifted, Mask);
+    Value *IsEmpty = Ctx.B.CreateICmpEQ(Length, Ctx.B.getInt32(0));
+    Value *Result =
+        Ctx.B.CreateSelect(IsEmpty, Ctx.B.getInt32(0), Extract, "bfe");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    storeNonzeroScc(Ctx, Result);
+    return Error::success();
+  }
+  case CanonicalOp::S_BFE_I32: {
+    Expected<BinaryOperands> Args = readBinary32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Shift = Ctx.B.CreateAnd(Args->Src1, Ctx.B.getInt32(0x1f));
+    Value *PackedLength = Ctx.B.CreateLShr(Args->Src1, 16);
+    Value *Length = Ctx.B.CreateAnd(PackedLength, Ctx.B.getInt32(0x7f));
+    Value *Sum = Ctx.B.CreateAdd(Shift, Length);
+    Value *Short = Ctx.B.CreateICmpULT(Sum, Ctx.B.getInt32(32));
+    Value *ShlDistance = Ctx.B.CreateSub(Ctx.B.getInt32(32), Sum);
+    Value *ShlAmount = Ctx.B.CreateAnd(ShlDistance, Ctx.B.getInt32(0x1f));
+    Value *ShrDistance = Ctx.B.CreateSub(Ctx.B.getInt32(32), Length);
+    Value *ShrAmount = Ctx.B.CreateAnd(ShrDistance, Ctx.B.getInt32(0x1f));
+    Value *Shifted = Ctx.B.CreateShl(Args->Src0, ShlAmount);
+    Value *Extract = Ctx.B.CreateAShr(Shifted, ShrAmount, "bfe_i");
+    Value *Saturated = Ctx.B.CreateAShr(Args->Src0, Shift, "bfe_i_sat");
+    Value *Nonempty = Ctx.B.CreateSelect(Short, Extract, Saturated);
+    Value *IsEmpty = Ctx.B.CreateICmpEQ(Length, Ctx.B.getInt32(0));
+    Value *Result = Ctx.B.CreateSelect(IsEmpty, Ctx.B.getInt32(0), Nonempty,
+                                       "bfe_i_result");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    storeNonzeroScc(Ctx, Result);
+    return Error::success();
+  }
+  case CanonicalOp::S_BFE_I64: {
+    Expected<BinaryOperands> Args = readBinary64x32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Shift32 = Ctx.B.CreateAnd(Args->Src1, Ctx.B.getInt32(0x3f));
+    Value *PackedLength = Ctx.B.CreateLShr(Args->Src1, 16);
+    Value *Length32 = Ctx.B.CreateAnd(PackedLength, Ctx.B.getInt32(0x7f));
+    Value *Shift = Ctx.B.CreateZExt(Shift32, Ctx.B.getInt64Ty());
+    Value *Length = Ctx.B.CreateZExt(Length32, Ctx.B.getInt64Ty());
+    Value *Sum = Ctx.B.CreateAdd(Shift, Length);
+    Value *Short = Ctx.B.CreateICmpULT(Sum, Ctx.B.getInt64(64));
+    Value *ShlDistance = Ctx.B.CreateSub(Ctx.B.getInt64(64), Sum);
+    Value *ShlAmount = Ctx.B.CreateAnd(ShlDistance, Ctx.B.getInt64(0x3f));
+    Value *ShrDistance = Ctx.B.CreateSub(Ctx.B.getInt64(64), Length);
+    Value *ShrAmount = Ctx.B.CreateAnd(ShrDistance, Ctx.B.getInt64(0x3f));
+    Value *Shifted = Ctx.B.CreateShl(Args->Src0, ShlAmount);
+    Value *Extract = Ctx.B.CreateAShr(Shifted, ShrAmount, "bfe_i64");
+    Value *Saturated = Ctx.B.CreateAShr(Args->Src0, Shift, "bfe_i64_sat");
+    Value *Nonempty = Ctx.B.CreateSelect(Short, Extract, Saturated);
+    Value *IsEmpty = Ctx.B.CreateICmpEQ(Length, Ctx.B.getInt64(0));
+    Value *Result = Ctx.B.CreateSelect(IsEmpty, Ctx.B.getInt64(0), Nonempty,
+                                       "bfe_i64_result");
+    Ctx.registers().writeReg64(Args->Dst, Result);
+    storeNonzeroScc(Ctx, Result);
+    return Error::success();
+  }
+
+  case CanonicalOp::S_PACK_LL_B32_B16: {
+    Expected<BinaryOperands> Args = readBinary32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Lo = Ctx.B.CreateAnd(Args->Src0, Ctx.B.getInt32(0xffff));
+    Value *Hi16 = Ctx.B.CreateAnd(Args->Src1, Ctx.B.getInt32(0xffff));
+    Value *Hi = Ctx.B.CreateShl(Hi16, 16);
+    Value *Result = Ctx.B.CreateOr(Lo, Hi, "pack");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    return Error::success();
+  }
+  case CanonicalOp::S_PACK_LH_B32_B16: {
+    Expected<BinaryOperands> Args = readBinary32(Op);
+    if (!Args)
+      return Args.takeError();
+    Value *Lo = Ctx.B.CreateAnd(Args->Src0, Ctx.B.getInt32(0xffff));
+    Value *Hi = Ctx.B.CreateAnd(Args->Src1, Ctx.B.getInt32(0xffff0000u));
+    Value *Result = Ctx.B.CreateOr(Lo, Hi, "pack");
+    Ctx.registers().writeReg32(Args->Dst, Result);
     return Error::success();
   }
 
