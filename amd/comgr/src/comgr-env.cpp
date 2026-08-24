@@ -14,10 +14,15 @@
 
 #include "comgr-env.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/VirtualFileSystem.h"
 
 #include <cstdlib>
+
+#ifndef _WIN32
+#include <dlfcn.h>
+#endif
 
 using namespace llvm;
 
@@ -119,9 +124,77 @@ LogLevel resolveLogLevel() {
   return parseLogLevel(Requested, shouldEmitVerboseLogs());
 }
 
-llvm::StringRef getLLVMPath() {
-  static const char *EnvLLVMPath = COMGR_GETENV("LLVM_PATH");
-  return EnvLLVMPath ? EnvLLVMPath : "";
+// Probe whether path P names a clang binary whose derived resource directory
+// exists on disk. The binary itself need not exist; clang's Driver only uses
+// the path to derive the resource dir.
+static bool probeClangResourceDir(StringRef P) {
+  SmallString<256> ResourceDir(
+      sys::path::parent_path(sys::path::parent_path(P)));
+  sys::path::append(ResourceDir, "lib", "clang");
+  return sys::fs::is_directory(ResourceDir);
+}
+
+struct ClangInstallPaths {
+  std::string LLVMPrefix;
+  std::string ClangBinaryPath;
+};
+
+static ClangInstallPaths makeClangInstallPaths(StringRef LLVMPrefix) {
+  SmallString<256> ClangBinaryPath(LLVMPrefix);
+  sys::path::append(ClangBinaryPath, "bin", "clang");
+  return {std::string(LLVMPrefix), std::string(ClangBinaryPath)};
+}
+
+// Keep the LLVM install prefix and clang binary path in one cached decision.
+// The driver resource directory and VFS header locations are derived from
+// these paths; computing them separately can make clang look in a different
+// tree from where Comgr plants embedded headers.
+static const ClangInstallPaths &getClangInstallPaths() {
+  static const ClangInstallPaths Cached = []() -> ClangInstallPaths {
+    const char *EnvLLVMPath = COMGR_GETENV("LLVM_PATH");
+    if (EnvLLVMPath && StringRef(EnvLLVMPath) != "")
+      return makeClangInstallPaths(EnvLLVMPath);
+
+#ifndef _WIN32
+    Dl_info Info;
+    if (dladdr(reinterpret_cast<void *>(&getClangInstallPaths), &Info) &&
+        Info.dli_fname) {
+      StringRef SoDir = sys::path::parent_path(Info.dli_fname);
+
+      // Anchor package-layout probing at the loaded Comgr library. The clang
+      // path may be synthetic; the in-process driver only needs it to derive
+      // the resource directory, so probe the resource tree instead.
+      SmallString<256> RocmPrefix(sys::path::parent_path(SoDir));
+      sys::path::append(RocmPrefix, "llvm");
+      ClangInstallPaths RocmLayout = makeClangInstallPaths(RocmPrefix);
+      if (probeClangResourceDir(RocmLayout.ClangBinaryPath))
+        return RocmLayout;
+
+      SmallString<256> RuntimeWheelPrefix(SoDir);
+      sys::path::append(RuntimeWheelPrefix, "llvm");
+      ClangInstallPaths RuntimeWheelLayout =
+          makeClangInstallPaths(RuntimeWheelPrefix);
+      if (probeClangResourceDir(RuntimeWheelLayout.ClangBinaryPath))
+        return RuntimeWheelLayout;
+
+      SmallString<256> StandardPrefix(sys::path::parent_path(SoDir));
+      ClangInstallPaths StandardLayout = makeClangInstallPaths(StandardPrefix);
+      if (probeClangResourceDir(StandardLayout.ClangBinaryPath))
+        return StandardLayout;
+    }
+#endif
+
+    // Keep fallback paths relative; this avoids assuming a host install layout
+    // while still giving clang and Comgr matching VFS keys.
+    return makeClangInstallPaths("");
+  }();
+  return Cached;
+}
+
+llvm::StringRef getLLVMPath() { return getClangInstallPaths().LLVMPrefix; }
+
+llvm::StringRef getClangBinaryPath() {
+  return getClangInstallPaths().ClangBinaryPath;
 }
 
 StringRef getCachePolicy() {

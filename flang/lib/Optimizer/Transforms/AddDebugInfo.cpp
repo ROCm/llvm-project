@@ -20,6 +20,7 @@
 #include "flang/Optimizer/Dialect/FIRType.h"
 #include "flang/Optimizer/Dialect/Support/FIRContext.h"
 #include "flang/Optimizer/Support/InternalNames.h"
+#include "flang/Optimizer/Support/Utils.h"
 #include "flang/Optimizer/Transforms/Passes.h"
 #include "flang/Support/Version.h"
 #include "mlir/Dialect/DLTI/DLTI.h"
@@ -585,10 +586,12 @@ void AddDebugInfoPass::handleFuncOp(mlir::func::FuncOp funcOp,
   bool isMain = false;
   if (funcName == fir::NameUniquer::doProgramEntry()) {
     isMain = true;
-    mlir::StringAttr bindcName =
-        funcOp->getAttrOfType<mlir::StringAttr>(fir::getSymbolAttrName());
-    if (bindcName)
-      funcName = bindcName;
+    // The main program symbol name is uppercased in the cooked character stream
+    // so that it cannot clash with any other symbol. Go through the presentable
+    // name so that the PROGRAM name is spelled the same way here as every other
+    // name in the debug information.
+    funcName =
+        mlir::StringAttr::get(context, fir::getPresentableFunctionName(funcOp));
   }
 
   llvm::SmallVector<mlir::LLVM::DITypeAttr> types;
@@ -670,7 +673,7 @@ void AddDebugInfoPass::handleFuncOp(mlir::func::FuncOp funcOp,
   }
 
   auto addTargetOpDISP = [&](bool lineTableOnly,
-                             llvm::ArrayRef<mlir::LLVM::DINodeAttr> entities) {
+                             llvm::ArrayRef<mlir::Attribute> entities) {
     // When we process the DeclareOp inside the OpenMP target region, all the
     // variables get the DISubprogram of the parent function of the target op as
     // the scope. In the codegen (to llvm ir), OpenMP target op results in the
@@ -722,8 +725,8 @@ void AddDebugInfoPass::handleFuncOp(mlir::func::FuncOp funcOp,
 
       // Make sure that information about the imported modules is copied in the
       // new function.
-      llvm::SmallVector<mlir::LLVM::DINodeAttr> opEntities;
-      for (mlir::LLVM::DINodeAttr N : entities) {
+      llvm::SmallVector<mlir::Attribute> opEntities;
+      for (mlir::Attribute N : entities) {
         if (auto entity = mlir::dyn_cast<mlir::LLVM::DIImportedEntityAttr>(N)) {
           auto importedEntity = mlir::LLVM::DIImportedEntityAttr::get(
               context, entity.getTag(), spAttr, entity.getEntity(),
@@ -742,8 +745,10 @@ void AddDebugInfoPass::handleFuncOp(mlir::func::FuncOp funcOp,
     });
   };
 
-  // Don't process variables if user asked for line tables only.
-  if (debugLevel == mlir::LLVM::DIEmissionKind::LineTablesOnly) {
+  // Don't process variables if user asked for line tables or debug directives
+  // only.
+  if (debugLevel == mlir::LLVM::DIEmissionKind::LineTablesOnly ||
+      debugLevel == mlir::LLVM::DIEmissionKind::DebugDirectivesOnly) {
     auto spAttr = mlir::LLVM::DISubprogramAttr::get(
         context, id, compilationUnit, Scope, funcName, fullName, funcFileAttr,
         line, line, subprogramFlags, subTypeAttr, /*retainedNodes=*/{},
@@ -761,7 +766,7 @@ void AddDebugInfoPass::handleFuncOp(mlir::func::FuncOp funcOp,
   });
 
   mlir::LLVM::DISubprogramAttr spAttr;
-  llvm::SmallVector<mlir::LLVM::DINodeAttr> retainedNodes;
+  llvm::SmallVector<mlir::Attribute> retainedNodes;
 
   if (hasUseStmts) {
     mlir::DistinctAttr recId =

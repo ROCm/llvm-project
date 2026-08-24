@@ -43,6 +43,7 @@ int test(void) {
 
 // The user code, taking the scalar with its original width.
 // CHECK: define internal void @[[DEBUG_FN:__omp_offloading_[0-9a-z_]+_test_l[0-9]+_debug__]](ptr addrspace(1) noalias noundef %{{[a-z0-9_.]+}}, i32 noundef %{{[a-z0-9_.]+}}, ptr noalias noundef %{{[a-z0-9_.]+}}) #{{[0-9]+}} !dbg [[DEBUG_SP:![0-9]+]]
+// CHECK: #dbg_declare(ptr %{{[a-z0-9_.]+}}, [[ARR_VAR:![0-9]+]],
 
 // The entry point, keeping the widened signature and calling the above.
 // CHECK: define weak_odr protected amdgpu_kernel void @__omp_offloading_{{[0-9a-z_]+}}_test_l{{[0-9]+}}(ptr noundef nonnull align 4 dereferenceable(32) %{{[a-z0-9_.]+}}, i64 noundef %{{[a-z0-9_.]+}}, ptr noalias noundef %{{[a-z0-9_.]+}}) #{{[0-9]+}} !dbg [[KERNEL_SP:![0-9]+]]
@@ -55,6 +56,11 @@ int test(void) {
 // CHECK-DAG: [[DEBUG_SP]] = distinct !DISubprogram(name: "[[DEBUG_FN]]"
 // CHECK-DAG: [[INT_TY:![0-9]+]] = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
 // CHECK-DAG: !DILocalVariable(name: "fp", arg: 2, scope: [[DEBUG_SP]], file: !{{[0-9]+}}, line: {{[0-9]+}}, type: [[INT_TY]])
+// CHECK-DAG: [[ARR_VAR]] = !DILocalVariable(name: "arr", arg: 1, scope: [[DEBUG_SP]], file: !{{[0-9]+}}, line: {{[0-9]+}}, type: [[ARR_REF_TY:![0-9]+]])
+// CHECK-DAG: [[ARR_REF_TY]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[ARR_TY:![0-9]+]]
+// CHECK-DAG: [[ARR_TY]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[INT_TY]], size: 256, elements: [[ARR_ELEMS:![0-9]+]]
+// CHECK-DAG: [[ARR_ELEMS]] = !{[[ARR_SUBRANGE:![0-9]+]]}
+// CHECK-DAG: [[ARR_SUBRANGE]] = !DISubrange(count: 8)
 
 // The entry point still describes it as the widened type, marked artificial,
 // which is accurate for that frame.

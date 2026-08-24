@@ -1224,7 +1224,8 @@ public:
     mapType = removeAttachModifiers(mapType);
 
     mlir::Type underlyingVarType = mlir::Type{};
-    if (optDescMap)
+    bool baseAddrInsert = optDescMap && baseAddr;
+    if (baseAddrInsert)
       underlyingVarType = getUnderlyingVarType(baseAddr.getType());
 
     auto newMapInfoOp = mlir::omp::MapInfoOp::create(
@@ -1232,9 +1233,9 @@ public:
         mlir::TypeAttr::get(fir::unwrapRefType(descriptor.getType())),
         builder.getAttr<mlir::omp::ClauseMapFlagsAttr>(mapType),
         op.getMapCaptureTypeAttr(),
-        optDescMap ? baseAddr.getVarPtrPtr() : mlir::Value{},
-        underlyingVarType ? mlir::TypeAttr::get(underlyingVarType)
-                          : mlir::TypeAttr{},
+        baseAddrInsert ? baseAddr.getVarPtrPtr() : mlir::Value{},
+        baseAddrInsert ? mlir::TypeAttr::get(underlyingVarType)
+                       : mlir::TypeAttr{},
         newMembers, newMembersAttr,
         /*bounds=*/mlir::SmallVector<mlir::Value>{},
         /*mapperId*/ mlir::FlatSymbolRefAttr(), op.getNameAttr(),
@@ -1298,6 +1299,12 @@ public:
     mlir::Value descriptor = getDescriptorFromBoxMap(
         op, builder, descCanBeDeferred, canOptimizeDescViaPrivatization);
     mlir::FlatSymbolRefAttr mapperId = op.getMapperIdAttr();
+
+    // Exclude irregular maps from optimization via privatization; at least for
+    // the moment.
+    if (isHasDeviceAddrFlag || isUseDeviceAddr(op, *target) ||
+        isUseDevicePtr(op, *target))
+      canOptimizeDescViaPrivatization = false;
 
     // If we're a derived type descriptor, that's been flagged as ref_ptr,
     // but, in the same mapping, we also have members with their own

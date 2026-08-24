@@ -323,9 +323,6 @@ public:
                   const llvm::Twine &Name = "ballot") const override;
   llvm::Value *extractLaneBitFromWaveMask(llvm::IRBuilder<> &B,
                                           llvm::Value *V) const override;
-  llvm::Value *emitCurrentSourceWaveMask(
-      llvm::IRBuilder<> &B, llvm::Value *Mask,
-      const llvm::Twine &Name = "source_wave_mask") const override;
 };
 
 // ============================================================================

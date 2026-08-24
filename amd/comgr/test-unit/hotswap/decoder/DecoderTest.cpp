@@ -128,6 +128,13 @@ TEST_F(DecoderTest, StrippedMnemonicDropsEncodingSuffix) {
   EXPECT_EQ(strippedMnemonic(State, Inst), "v_mov_b32");
 }
 
+TEST_F(DecoderTest, StrippedMnemonicOnlyRequiresOpcode) {
+  llvm::MCInst Inst;
+  decode(VMovB32Bytes, Inst);
+  Inst.clear();
+  EXPECT_EQ(strippedMnemonic(State, Inst), "v_mov_b32");
+}
+
 TEST_F(DecoderTest, EvalOperandAsConstFoldsExpr) {
   llvm::MCInst Inst;
   Inst.addOperand(llvm::MCOperand::createImm(7));

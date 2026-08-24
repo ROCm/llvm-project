@@ -60,6 +60,10 @@ llvm::StringRef getTimeStatisticsGranularity();
 /// otherwise return the default LLVM path.
 llvm::StringRef getLLVMPath();
 
+/// Return the clang binary path used by Comgr's in-process driver and
+/// resource-dir VFS construction.
+llvm::StringRef getClangBinaryPath();
+
 /// If environment variable AMD_COMGR_CACHE_POLICY is set, return the
 /// environment variable, otherwise return empty
 llvm::StringRef getCachePolicy();

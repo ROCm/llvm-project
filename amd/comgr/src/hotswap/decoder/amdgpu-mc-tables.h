@@ -17,7 +17,10 @@
 
 #include "Utils/AMDGPUBaseInfo.h"
 
+#include <array>
 #include <cstdint>
+#include <optional>
+#include <utility>
 
 namespace COMGR::hotswap {
 
@@ -42,6 +45,17 @@ int32_t getBasicFromSDWAOp(uint32_t Opcode);
 /// The vaddr form of the saddr FLAT/global opcode `Opcode`, or -1 if it has
 /// none.
 int32_t getGlobalVaddrOp(uint32_t Opcode);
+
+/// The operand indices the four two-bit fields of S_SET_VGPR_MSB apply to.
+/// Elements 0 through 3 correspond to src0, src1, src2 and dst. Each element
+/// holds the X and Y operand index of one field; the Y index is absent for
+/// everything but VOPD.
+using VGPRMSBOperandIndices =
+    std::array<std::pair<std::optional<unsigned>, std::optional<unsigned>>, 4>;
+
+/// The operand indices the S_SET_VGPR_MSB fields select for `Desc`. An index is
+/// absent when the instruction has no operand in that slot.
+VGPRMSBOperandIndices getVGPRMSBOperandIndices(const llvm::MCInstrDesc &Desc);
 
 } // namespace COMGR::hotswap
 

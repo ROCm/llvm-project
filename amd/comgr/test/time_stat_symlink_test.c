@@ -21,6 +21,9 @@
 // include, since common.h transitively pulls in <sys/stat.h>/<unistd.h>.
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
 #endif
 
 #include "amd_comgr.h"

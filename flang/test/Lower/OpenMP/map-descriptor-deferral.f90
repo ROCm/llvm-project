@@ -22,15 +22,9 @@ end subroutine
 !CHECK:    omp.target_enter_data map_entries(%[[MAP_ADDR]] : !fir.ref<!fir.array<?xi32>>)
 
 !CHECK:    %[[BOX_ADDR:.*]] = fir.box_offset %{{.*}} base_addr : (!fir.ref<!fir.box<!fir.array<?xi32>>>) -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
-<<<<<<< HEAD
-!CHECK:    %[[MAP_ADDR:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(implicit, tofrom) capture(ByRef) var_ptr_ptr(%[[BOX_ADDR]] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>> {name = ""}
-!CHECK:    %[[MAP_BOX:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(implicit, target_param, private, attach) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) members(%{{.*}} : [0] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) -> !fir.ref<!fir.array<?xi32>> {name = "assumed_arr"}
-!CHECK:    %[[MAP_BOX_ATTACH:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(attach, ref_ptr, ref_ptee) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) -> !fir.ref<!fir.array<?xi32>> {name = "assumed_arr"}
-=======
 !CHECK:    %[[MAP_ADDR:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(implicit, tofrom) capture(ByRef) var_ptr_ptr(%[[BOX_ADDR]] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) name("") -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
-!CHECK:    %[[MAP_BOX:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(always, implicit, to) capture(ByRef) members(%{{.*}} : [0] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) name("assumed_arr") -> !fir.ref<!fir.array<?xi32>>
+!CHECK:    %[[MAP_BOX:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(implicit, target_param, private, attach) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) members(%{{.*}} : [0] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) name("assumed_arr") -> !fir.ref<!fir.array<?xi32>>
 !CHECK:    %[[MAP_BOX_ATTACH:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(attach, ref_ptr, ref_ptee) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) name("assumed_arr") -> !fir.ref<!fir.array<?xi32>>
->>>>>>> e5b8a7c1eb09dd5abbbc75c3e2b1e36a14d92dc6
 !CHECK:    omp.target kernel_type(generic) map_entries(%[[MAP_BOX]] -> %{{.*}}, %[[MAP_BOX_ATTACH]] -> %{{.*}}, %[[MAP_ADDR]] -> %{{.*}} : !fir.ref<!fir.array<?xi32>>, !fir.ref<!fir.array<?xi32>>, !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) {
 !CHECK:    %[[BOX_ADDR:.*]] = fir.box_offset %{{.*}} base_addr : (!fir.ref<!fir.box<!fir.array<?xi32>>>) -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
 !CHECK:    %[[LOAD_BOX:.*]] = fir.load %[[BOX_ADDR]] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
@@ -74,16 +68,10 @@ end subroutine
 
 !CHECK-LABEL:   func.func @_QPassume_pointer_map_target_enter_exit(
 !CHECK:    %[[BOX_ADDR:.*]] = fir.box_offset %{{.*}} base_addr : (!fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>) -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
-<<<<<<< HEAD
-!CHECK:    %[[BOX_ADDR_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>, !fir.box<!fir.ptr<!fir.array<?xi32>>>) map_clauses(to) capture(ByRef) var_ptr_ptr(%[[BOX_ADDR]] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>> {name = ""}
-
-!CHECK:    %[[DESC_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>, !fir.box<!fir.ptr<!fir.array<?xi32>>>) map_clauses(always, to) capture(ByRef) members(%[[BOX_ADDR_MAP]] : [0] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) -> !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>> {name = "assumed_arr"}
-!CHECK:    %[[ATTACH_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>, !fir.box<!fir.ptr<!fir.array<?xi32>>>) map_clauses(attach, ref_ptr, ref_ptee) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) -> !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>> {name = "assumed_arr"}
-=======
 !CHECK:    %[[BOX_ADDR_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>, !fir.box<!fir.ptr<!fir.array<?xi32>>>) map_clauses(to) capture(ByRef) var_ptr_ptr(%[[BOX_ADDR]] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) name("") -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
+
 !CHECK:    %[[DESC_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>, !fir.box<!fir.ptr<!fir.array<?xi32>>>) map_clauses(always, to) capture(ByRef) members(%[[BOX_ADDR_MAP]] : [0] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) name("assumed_arr") -> !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>
 !CHECK:    %[[ATTACH_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>, !fir.box<!fir.ptr<!fir.array<?xi32>>>) map_clauses(attach, ref_ptr, ref_ptee) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) name("assumed_arr") -> !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>
->>>>>>> e5b8a7c1eb09dd5abbbc75c3e2b1e36a14d92dc6
 !CHECK:    omp.target_enter_data map_entries(%[[DESC_MAP]], %[[ATTACH_MAP]], %[[BOX_ADDR_MAP]] : !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>, !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>, !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>)
 !CHECK:    %[[BOX_ADDR:.*]] = fir.box_offset %{{.*}} base_addr : (!fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>) -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
 !CHECK:    %[[BOX_ADDR_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>, !fir.box<!fir.ptr<!fir.array<?xi32>>>) map_clauses(implicit, tofrom) capture(ByRef) var_ptr_ptr(%[[BOX_ADDR]] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) name("") -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
@@ -112,14 +100,7 @@ end subroutine
 !CHECK:    %[[ATTACH:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(attach, ref_ptr, ref_ptee) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) name("assumed_arr") -> !fir.ref<!fir.array<?xi32>>
 !CHECK:    omp.target_data map_entries(%[[MAP_BOX]], %[[ATTACH]], %[[MAP_ADDR]] : !fir.ref<!fir.array<?xi32>>, !fir.ref<!fir.array<?xi32>>, !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) {
 !CHECK:    %[[BOX_ADDR:.*]] = fir.box_offset %{{.*}} base_addr : (!fir.ref<!fir.box<!fir.array<?xi32>>>) -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
-<<<<<<< HEAD
-!CHECK:    %[[MAP_ADDR:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(implicit, tofrom) capture(ByRef) var_ptr_ptr(%[[BOX_ADDR]] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>> {name = ""}
-!CHECK:    %[[MAP_BOX:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(implicit, target_param, private, attach) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) members(%[[MAP_ADDR]] : [0] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) -> !fir.ref<!fir.array<?xi32>> {name = "assumed_arr"}
-!CHECK:    %[[ATTACH:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(attach, ref_ptr, ref_ptee) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) -> !fir.ref<!fir.array<?xi32>> {name = "assumed_arr"}
-=======
 !CHECK:    %[[MAP_ADDR:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(implicit, tofrom) capture(ByRef) var_ptr_ptr(%[[BOX_ADDR]] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) name("") -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
-!CHECK:    %[[MAP_BOX:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(always, implicit, to) capture(ByRef) members(%[[MAP_ADDR]] : [0] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) name("assumed_arr") -> !fir.ref<!fir.array<?xi32>>
+!CHECK:    %[[MAP_BOX:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(implicit, target_param, private, attach) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) members(%[[MAP_ADDR]] : [0] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) name("assumed_arr") -> !fir.ref<!fir.array<?xi32>>
 !CHECK:    %[[ATTACH:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.array<?xi32>>>, !fir.box<!fir.array<?xi32>>) map_clauses(attach, ref_ptr, ref_ptee) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds(%{{.*}}) name("assumed_arr") -> !fir.ref<!fir.array<?xi32>>
->>>>>>> e5b8a7c1eb09dd5abbbc75c3e2b1e36a14d92dc6
 !CHECK:    omp.target kernel_type(generic) map_entries(%[[MAP_BOX]] -> %{{.*}}, %[[ATTACH]] -> %{{.*}}, %[[MAP_ADDR]] -> %{{.*}} : !fir.ref<!fir.array<?xi32>>, !fir.ref<!fir.array<?xi32>>, !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) {
-!XFAIL: *
