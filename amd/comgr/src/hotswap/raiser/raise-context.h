@@ -15,11 +15,13 @@
 #include "hotswap/raiser/register-state.h"
 #include "hotswap/raiser/wave-projection.h"
 
-#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/Error.h"
 
 #include <cstdint>
+#include <set>
 
 namespace COMGR::hotswap {
 
@@ -28,16 +30,19 @@ class RaiseContext {
 public:
   // Build the context for the source kernel described by Meta. B must be
   // positioned in the entry block: the register file and the cross-block
-  // shadow storage are allocated there, and that block is what
-  // `KernelStartOffset` resolves to. Fails when the kernel descriptor and
-  // the metadata disagree on the user-SGPR layout.
+  // shadow storage are allocated there. One block is created per offset in
+  // BlockStarts, which must hold every leader the decode recovered; the entry
+  // block is not one of them, so it keeps no predecessors and stays a legal
+  // home for the allocas. Fails when the kernel descriptor and the metadata
+  // disagree on the user-SGPR layout.
   static llvm::Expected<RaiseContext>
   create(llvm::IRBuilder<> &B, const WaveProjection &Projection,
          const MCState &MC, const KernelMeta &Meta,
          llvm::ArrayRef<uint8_t> SourceTextBytes,
          uint64_t SourceTextBaseAddress,
          llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
-         uint64_t KernelStartOffset, uint64_t KernelEndOffset);
+         uint64_t KernelStartOffset, uint64_t KernelEndOffset,
+         const std::set<uint64_t> &BlockStarts);
 
   // Builder every handler emits into. Its insertion point moves as raising
   // progresses.
@@ -75,9 +80,34 @@ public:
     ScratchPrivateSegmentAlloca = Alloca;
   }
 
-  // Return the block raised from the source instruction at Addr. A missing
-  // block is a raiser bug and aborts.
+  // A source block leader and the LLVM block raised from it.
+  struct SourceBlock {
+    uint64_t Offset;
+    llvm::BasicBlock *Bb;
+  };
+
+  // Return the block raised from the source instruction at Addr. Every leader
+  // the decode recovered has one, so a missing block is a raiser bug and
+  // aborts. Callers resolving a branch must reject an out-of-extent target
+  // before asking.
   llvm::BasicBlock *lookupBB(uint64_t Addr);
+
+  // Return the block starting at Addr, or null when Addr does not start one.
+  llvm::BasicBlock *findBB(uint64_t Addr) const;
+
+  // Whether Addr is inside the source kernel's extent. A branch leaving it
+  // would raise instructions belonging to a neighboring symbol. A kernel that
+  // runs to the end of the text section is still bounded by that section, so a
+  // branch displacement large enough to address outside it is rejected here
+  // rather than reaching a block lookup that has nothing to find.
+  bool isInKernelExtent(uint64_t Addr) const {
+    uint64_t End =
+        KernelEndOffset == 0 ? SourceTextBytes.size() : KernelEndOffset;
+    return Addr >= KernelStartOffset && Addr < End;
+  }
+
+  // Every source block, in ascending source-offset order.
+  llvm::ArrayRef<SourceBlock> blocks() const { return Blocks; }
 
   // Target-hardware lane id (i32), emitted once per kernel and reused.
   llvm::Value *emitLaneIdx();
@@ -94,12 +124,13 @@ private:
                llvm::ArrayRef<uint8_t> SourceTextBytes,
                uint64_t SourceTextBaseAddress,
                llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
-               uint64_t KernelStartOffset, uint64_t KernelEndOffset);
+               uint64_t KernelStartOffset, uint64_t KernelEndOffset,
+               const std::set<uint64_t> &BlockStarts);
 
   // Source architectural registers, allocated in the entry block.
   RegisterState Registers;
-  // Block raised from each source instruction offset that starts one.
-  llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb;
+  // Block raised from each source offset that starts one, ascending by offset.
+  llvm::SmallVector<SourceBlock> Blocks;
 
   // Source code object, read to materialize proven PC-relative literals.
   llvm::ArrayRef<uint8_t> SourceTextBytes;

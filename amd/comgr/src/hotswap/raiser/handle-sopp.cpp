@@ -9,9 +9,11 @@
 #include "hotswap/raiser/handlers.h"
 
 #include "hotswap/decoder/amdgpu-formats.h"
+#include "hotswap/decoder/decode.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise_failure.h"
 
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 
 using namespace llvm;
@@ -55,6 +57,51 @@ void emitMemoryWaitAll(RaiseContext &Ctx) {
     emitWait(Ctx, Wait, B.getInt16(0));
 }
 
+// The condition under which `Di`, a SOPP conditional branch, takes its target.
+Value *emitBranchCondition(RaiseContext &Ctx, const DecodedInst &Di) {
+  IRBuilder<> &B = Ctx.B;
+  AllocaRegFile &Regs = Ctx.registers().regFile();
+
+  switch (Di.CanonOp) {
+  // EXECZ is a status bit over the whole source EXEC mask, and the modeled EXEC
+  // is stored at the source wave width, so the test is exact whatever width the
+  // target runs. It is also wave-uniform, which is what lets it stay a branch
+  // rather than becoming per-lane predication.
+  case CanonicalOp::S_CBRANCH_EXECZ:
+  case CanonicalOp::S_CBRANCH_EXECNZ: {
+    Value *Exec = Regs.loadExec(B);
+    Value *IsZero = B.CreateICmpEQ(
+        Exec, Constant::getNullValue(Exec->getType()), "exec_is_zero");
+    return Di.CanonOp == CanonicalOp::S_CBRANCH_EXECZ
+               ? IsZero
+               : B.CreateNot(IsZero, "exec_is_nonzero");
+  }
+
+  case CanonicalOp::S_CBRANCH_SCC0:
+  case CanonicalOp::S_CBRANCH_SCC1: {
+    Value *Scc = Regs.loadSCC(B);
+    return Di.CanonOp == CanonicalOp::S_CBRANCH_SCC1
+               ? Scc
+               : B.CreateNot(Scc, "scc_is_zero");
+  }
+
+  // VCC is modeled per lane, so it comes back through the projection as the
+  // wave mask the source observes before being tested as a whole.
+  case CanonicalOp::S_CBRANCH_VCCZ:
+  case CanonicalOp::S_CBRANCH_VCCNZ: {
+    Value *Vcc = Regs.readVCCAsWaveMask(B, Ctx.Projection.sourceWaveMaskTy());
+    Value *IsZero = B.CreateICmpEQ(Vcc, Constant::getNullValue(Vcc->getType()),
+                                   "vcc_is_zero");
+    return Di.CanonOp == CanonicalOp::S_CBRANCH_VCCZ
+               ? IsZero
+               : B.CreateNot(IsZero, "vcc_is_nonzero");
+  }
+
+  default:
+    llvm_unreachable("not a SOPP conditional branch");
+  }
+}
+
 } // namespace
 
 Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
@@ -62,6 +109,46 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
   case CanonicalOp::S_ENDPGM:
     Ctx.B.CreateRetVoid();
     return Error::success();
+
+  case CanonicalOp::S_BRANCH:
+  case CanonicalOp::S_CBRANCH_EXECZ:
+  case CanonicalOp::S_CBRANCH_EXECNZ:
+  case CanonicalOp::S_CBRANCH_SCC0:
+  case CanonicalOp::S_CBRANCH_SCC1:
+  case CanonicalOp::S_CBRANCH_VCCZ:
+  case CanonicalOp::S_CBRANCH_VCCNZ: {
+    uint64_t Target = soppBranchTarget(Di);
+    // Following the branch would raise instructions belonging to whichever
+    // symbol the target lands in, so the extent is what bounds a raise rather
+    // than reachability.
+    if (!Ctx.isInKernelExtent(Target))
+      return RaiseFailure::atInstruction(
+          RaiseFailureReason::KernelBoundaryViolation,
+          strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+          formatName(Di.TargetSpecificFlags),
+          "branch target 0x" + utohexstr(Target) +
+              " is outside the kernel extent");
+
+    BasicBlock *TargetBb = Ctx.lookupBB(Target);
+    if (Di.CanonOp == CanonicalOp::S_BRANCH) {
+      Ctx.B.CreateBr(TargetBb);
+      return Error::success();
+    }
+
+    // A conditional branch closing the extent leaves the not-taken path
+    // running off the end of the kernel.
+    uint64_t Fallthrough = Di.Offset + Di.sizeInBytes();
+    if (!Ctx.isInKernelExtent(Fallthrough))
+      return RaiseFailure::atInstruction(
+          RaiseFailureReason::UnterminatedKernelExtent,
+          strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+          formatName(Di.TargetSpecificFlags),
+          "kernel extent ends without an instruction that ends the program");
+
+    Ctx.B.CreateCondBr(emitBranchCondition(Ctx, Di), TargetBb,
+                       Ctx.lookupBB(Fallthrough));
+    return Error::success();
+  }
 
   case CanonicalOp::S_WAITCNT:
   case CanonicalOp::S_WAIT_LOADCNT:

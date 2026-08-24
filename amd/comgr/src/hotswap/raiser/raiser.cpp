@@ -36,6 +36,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Analysis/AssumptionCache.h"
@@ -258,31 +259,58 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   BasicBlock *Entry = BasicBlock::Create(C, "entry", F);
   IRBuilder<> B(Entry);
 
-  // The kernel entry is the only block start the decoder reports, so the whole
-  // kernel raises into one block. A second block start means a handler routed
-  // below would have to branch, and none of them can.
-  assert(Decoded->BlockStarts.size() <= 1 &&
-         "no dispatched instruction format recovers a block start");
-
-  Expected<RaiseContext> Ctx = RaiseContext::create(
-      B, Projection, Env.Source.MC, Meta, Text.Bytes, Text.Address,
-      Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset);
+  Expected<RaiseContext> Ctx =
+      RaiseContext::create(B, Projection, Env.Source.MC, Meta, Text.Bytes,
+                           Text.Address, Text.ImageSections, Kernel.StartOffset,
+                           Kernel.EndOffset, Decoded->BlockStarts);
   if (!Ctx)
     return Ctx.takeError();
 
+  // The entry block carries only the register file and its seeds, so hand
+  // control to the source kernel's first instruction.
+  BasicBlock *KernelStartBb = Ctx->lookupBB(Kernel.StartOffset);
+  B.CreateBr(KernelStartBb);
+  B.SetInsertPoint(KernelStartBb);
+
   for (const DecodedInst &Di : Decoded->Insts) {
+    BasicBlock *Leader = Ctx->findBB(Di.Offset);
+    // Bytes the decode walked through but no edge reaches: padding a branch
+    // skipped over. Raising them would append to a block already closed.
+    if (!Leader && B.GetInsertBlock()->hasTerminator())
+      continue;
+    if (Leader && Leader != B.GetInsertBlock()) {
+      // Leave from wherever the builder ended up, not from the block this
+      // source block began in: a handler may have split it.
+      if (!B.GetInsertBlock()->hasTerminator())
+        B.CreateBr(Leader);
+      B.SetInsertPoint(Leader);
+      Ctx->registers().enterBlock();
+    }
+
     Ctx->registers().computeVGPRAdjust(Di);
     if (Error Err = raiseInst(*Ctx, Di))
       return Err;
   }
 
-  // Execution reaching the end of the extent means the code is truncated or
-  // the extent is misbounded. Closing the block with a return instead would
-  // hand back a kernel that reads as having run to completion.
-  if (!Entry->hasTerminator())
-    return RaiseFailure::general(
-        RaiseFailureReason::UnterminatedKernelExtent,
-        "kernel extent ends without an instruction that ends the program");
+  for (const RaiseContext::SourceBlock &Block : Ctx->blocks()) {
+    // Every leader but the kernel's own start comes from a branch, so one with
+    // nothing in it names an offset the decode never reached: a target that
+    // landed inside an instruction rather than on one. An empty kernel-start
+    // block instead means an extent with no instructions at all, which the
+    // terminator check below reports as the truncation it is.
+    if (Block.Bb->empty() && Block.Offset != Kernel.StartOffset)
+      return RaiseFailure::general(RaiseFailureReason::KernelBoundaryViolation,
+                                   "branch target 0x" +
+                                       utohexstr(Block.Offset) +
+                                       " does not begin an instruction");
+    // Execution reaching the end of the extent means the code is truncated or
+    // the extent is misbounded. Closing the block with a return instead would
+    // hand back a kernel that reads as having run to completion.
+    if (!Block.Bb->hasTerminator())
+      return RaiseFailure::general(
+          RaiseFailureReason::UnterminatedKernelExtent,
+          "kernel extent ends without an instruction that ends the program");
+  }
 
   DominatorTree DT(*F);
   AssumptionCache AC(*F);

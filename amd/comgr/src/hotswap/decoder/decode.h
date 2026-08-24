@@ -43,15 +43,20 @@ decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
              std::optional<uint64_t> KernelEndOffset = std::nullopt,
              std::optional<uint64_t> KernelStartOffset = std::nullopt);
 
+// Offset the SOPP branch `Di` transfers control to when its condition holds.
+// `Di` must be a SOPP branch. The result is not bounded by the kernel extent;
+// a caller that resolves the branch has to check that itself.
+uint64_t soppBranchTarget(const DecodedInst &Di);
+
 // Compute the CFG successors of a block whose last instruction is `LastInst`.
 // `NextBlockOffset` is the fall-through successor, or nullopt when no block
-// follows. A block ending in s_endpgm has no successors; any other block falls
-// through.
+// follows. A block ending in s_endpgm has no successors, and one ending in an
+// unconditional branch has only its target; any other block falls through.
 llvm::Expected<llvm::SmallVector<uint64_t>>
 computeDecodedBlockSuccessors(const DecodedInst &LastInst,
                               std::optional<uint64_t> NextBlockOffset);
 
-// True when `LastInst` terminates its block.
+// True when `LastInst` terminates its block: it ends the program or branches.
 bool decodedInstEndsBlock(const DecodedInst &LastInst);
 
 } // namespace COMGR::hotswap

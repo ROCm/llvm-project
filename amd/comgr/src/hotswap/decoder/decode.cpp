@@ -29,6 +29,7 @@
 #include "llvm/MC/MCRegister.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cassert>
@@ -45,11 +46,53 @@ namespace COMGR::hotswap {
 
 namespace {
 
+// Byte size of one AMDGPU instruction word, the unit a SOPP branch displacement
+// counts in.
+constexpr uint64_t KInstructionWordBytes = 4;
+
+// True for the SOPP branches that fall through when their condition does not
+// hold, and so reach a second successor.
+bool isConditionalBranch(CanonicalOp Op) {
+  switch (Op) {
+  case CanonicalOp::S_CBRANCH_EXECZ:
+  case CanonicalOp::S_CBRANCH_EXECNZ:
+  case CanonicalOp::S_CBRANCH_SCC0:
+  case CanonicalOp::S_CBRANCH_SCC1:
+  case CanonicalOp::S_CBRANCH_VCCZ:
+  case CanonicalOp::S_CBRANCH_VCCNZ:
+    return true;
+  default:
+    return false;
+  }
+}
+
+// True for every SOPP branch, conditional or not.
+bool isBranch(CanonicalOp Op) {
+  return Op == CanonicalOp::S_BRANCH || isConditionalBranch(Op);
+}
+
 // Operand index of `Name` in `Opc`, or nullopt when the opcode has no such
 // operand.
 std::optional<unsigned> namedOperandIdx(unsigned Opc, AMDGPU::OpName Name) {
   int Idx = COMGR::hotswap::getNamedOperandIdx(Opc, Name);
   return Idx >= 0 ? std::optional<unsigned>(Idx) : std::nullopt;
+}
+
+// Record the block leaders `Di` reaches: its branch target, and for a
+// conditional branch the fall-through as well. A target outside
+// `[KernelStart, DecodeLimit)` is left out, so a block start always names an
+// offset within the decoded range.
+void collectBranchTargets(const DecodedInst &Di, uint64_t KernelStart,
+                          uint64_t DecodeLimit,
+                          std::set<uint64_t> &BlockStarts) {
+  auto Admit = [&](uint64_t Addr) {
+    if (Addr >= KernelStart && Addr < DecodeLimit)
+      BlockStarts.insert(Addr);
+  };
+
+  Admit(soppBranchTarget(Di));
+  if (isConditionalBranch(Di.CanonOp))
+    Admit(Di.Offset + Di.sizeInBytes());
 }
 
 // Fill Di.SrcMap with the operand indices that are real sources, and Di.ModMap
@@ -193,19 +236,49 @@ void classifyImplicitDefs(DecodedInst &Di, const MCInstrDesc &Desc) {
 
 } // namespace
 
+uint64_t soppBranchTarget(const DecodedInst &Di) {
+  assert(isBranch(Di.CanonOp) && "not a SOPP branch");
+  std::optional<unsigned> ImmIdx =
+      namedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::simm16);
+  assert(ImmIdx && "SOPP branch has no simm16 displacement operand");
+
+  // A SOPP branch displaces by a signed 16-bit count of instruction words from
+  // the instruction after the branch: PC + 4 + SIMM16 * 4. Every ISA the
+  // transpiler reads encodes it that way, so the arithmetic needs no per-ISA
+  // arm; AMDGPU spells the operand `SOPPBrTarget` in SOPInstructions.td for all
+  // of them.
+  //
+  // The displacement comes from the code object and nothing constrains it, so a
+  // branch near the start of the text section can address before it. Unsigned
+  // arithmetic wraps where signed would overflow, and a wrapped offset lands
+  // far past the end of any text section, so the range check every caller
+  // already applies rejects it.
+  uint64_t Words = static_cast<uint64_t>(
+      SignExtend64<16>(static_cast<uint64_t>(Di.getImm(*ImmIdx))));
+  return Di.Offset + KInstructionWordBytes * (Words + 1);
+}
+
 Expected<SmallVector<uint64_t>>
 computeDecodedBlockSuccessors(const DecodedInst &LastInst,
                               std::optional<uint64_t> NextBlockOffset) {
   SmallVector<uint64_t> Result;
   if (LastInst.CanonOp == CanonicalOp::S_ENDPGM)
     return Result;
+
+  if (isBranch(LastInst.CanonOp)) {
+    Result.push_back(soppBranchTarget(LastInst));
+    if (!isConditionalBranch(LastInst.CanonOp))
+      return Result;
+  }
+
   if (NextBlockOffset)
     Result.push_back(*NextBlockOffset);
   return Result;
 }
 
 bool decodedInstEndsBlock(const DecodedInst &LastInst) {
-  return LastInst.CanonOp == CanonicalOp::S_ENDPGM;
+  return LastInst.CanonOp == CanonicalOp::S_ENDPGM ||
+         isBranch(LastInst.CanonOp);
 }
 
 Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
@@ -215,8 +288,7 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
                                     std::optional<uint64_t> KernelStartOffset) {
   DecodeResult Out;
   Out.BlockStarts.insert(KernelOffset);
-  [[maybe_unused]] uint64_t KernelStart =
-      KernelStartOffset.value_or(KernelOffset);
+  const uint64_t KernelStart = KernelStartOffset.value_or(KernelOffset);
 
   LLVM_DEBUG(if (KernelOffset > 0) dbgs()
              << "hotswap: starting disassembly at kernel offset 0x"
@@ -259,11 +331,17 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
     driftCheckSrcN(Mc, Di, Desc);
     classifyImplicitDefs(Di, Desc);
 
+    // Before the end-of-block test below, so a branch's own targets count as
+    // block starts when deciding whether anything past it is still reachable.
+    if (isBranch(Di.CanonOp))
+      collectBranchTargets(Di, KernelStart, TotalSize, Out.BlockStarts);
+
     bool IsEnd = decodedInstEndsBlock(Di);
     Out.Insts.push_back(std::move(Di));
     if (IsEnd) {
-      // `s_endpgm` may appear mid-binary (early-return path); if there are
-      // known block starts at later offsets, keep disassembling.
+      // An instruction that ends a block need not end the kernel: `s_endpgm`
+      // can be an early return, and a branch is followed by whatever it skips
+      // over. Keep disassembling while a block start remains at a later offset.
       uint64_t NextOff = Off + InstSize;
       std::set<uint64_t>::const_iterator It = Out.BlockStarts.upper_bound(Off);
       if (It != Out.BlockStarts.end() && *It < TotalSize) {

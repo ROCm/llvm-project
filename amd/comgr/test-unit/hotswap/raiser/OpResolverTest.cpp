@@ -32,6 +32,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 
 namespace COMGR {
 void ensureLLVMInitialized() {
@@ -92,9 +93,10 @@ protected:
               FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
               Function::ExternalLinkage, "kernel", Mod)) {
       B.SetInsertPoint(BasicBlock::Create(LLVMCtx, "entry", Kernel));
+      std::set<uint64_t> BlockStarts = {0};
       Ctx.emplace(cantFail(RaiseContext::create(
           B, Projection, Mc, KernelMeta(), ArrayRef<uint8_t>(), 0,
-          ArrayRef<TextSection::ImageSection>(), 0, 0)));
+          ArrayRef<TextSection::ImageSection>(), 0, 0, BlockStarts)));
     }
   };
 

@@ -24,10 +24,12 @@
 
 #include "gtest/gtest.h"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 
 namespace COMGR {
 void ensureLLVMInitialized() {
@@ -50,10 +52,15 @@ namespace {
 
 class RaiseContextTest : public ::testing::Test {
 protected:
-  // Offset the source kernel starts at, which the context maps to the entry
-  // block. Deliberately not zero: the mapping tracks the kernel's own start,
-  // not the start of the text section it sits in.
+  // Offset the source kernel starts at. Deliberately not zero: the mapping
+  // tracks the kernel's own start, not the start of the text section it sits
+  // in.
   static constexpr uint64_t KKernelStartOffset = 0x40;
+  // A second leader, standing in for a branch target inside the kernel.
+  static constexpr uint64_t KSecondBlockOffset = 0x48;
+  // Size of the text section the kernel sits in. The kernel is given no end
+  // offset, so this is what bounds its extent.
+  static constexpr uint64_t KTextSize = 0x100;
 
   void SetUp() override {
     Expected<MCState> State = initMCState("gfx942");
@@ -70,6 +77,7 @@ protected:
     ReplicationProjection Projection;
     Function *Kernel;
     BasicBlock *Entry;
+    std::array<uint8_t, KTextSize> Text{};
     std::optional<RaiseContext> Ctx;
 
     explicit ContextEnvironment(const MCState &Mc)
@@ -81,9 +89,11 @@ protected:
               Function::ExternalLinkage, "kernel", Mod)),
           Entry(BasicBlock::Create(LLVMCtx, "entry", Kernel)) {
       B.SetInsertPoint(Entry);
-      Ctx.emplace(cantFail(RaiseContext::create(
-          B, Projection, Mc, KernelMeta(), ArrayRef<uint8_t>(), 0,
-          ArrayRef<TextSection::ImageSection>(), KKernelStartOffset, 0)));
+      std::set<uint64_t> BlockStarts = {KKernelStartOffset, KSecondBlockOffset};
+      Ctx.emplace(cantFail(
+          RaiseContext::create(B, Projection, Mc, KernelMeta(), Text, 0,
+                               ArrayRef<TextSection::ImageSection>(),
+                               KKernelStartOffset, 0, BlockStarts)));
     }
   };
 
@@ -92,7 +102,34 @@ protected:
 };
 
 TEST_F(RaiseContextTest, ResolvesBlocksBySourceOffset) {
-  EXPECT_EQ(Env->Ctx->lookupBB(KKernelStartOffset), Env->Entry);
+  EXPECT_EQ(Env->Ctx->blocks().size(), 2u);
+  EXPECT_EQ(Env->Ctx->lookupBB(KKernelStartOffset), Env->Ctx->blocks()[0].Bb);
+  EXPECT_EQ(Env->Ctx->lookupBB(KSecondBlockOffset), Env->Ctx->blocks()[1].Bb);
+  EXPECT_EQ(Env->Ctx->blocks()[0].Offset, KKernelStartOffset);
+  EXPECT_EQ(Env->Ctx->blocks()[1].Offset, KSecondBlockOffset);
+}
+
+// The entry block holds the register file, so it must keep no predecessors --
+// a source kernel may branch back to its own first instruction. It is
+// therefore not one of the blocks a source offset resolves to.
+TEST_F(RaiseContextTest, EntryBlockIsNotASourceBlock) {
+  EXPECT_NE(Env->Ctx->lookupBB(KKernelStartOffset), Env->Entry);
+  for (const RaiseContext::SourceBlock &Block : Env->Ctx->blocks())
+    EXPECT_NE(Block.Bb, Env->Entry);
+}
+
+TEST_F(RaiseContextTest, OffsetsThatStartNoBlockResolveToNull) {
+  EXPECT_EQ(Env->Ctx->findBB(KKernelStartOffset + 4), nullptr);
+}
+
+TEST_F(RaiseContextTest, KernelExtentBoundsBranchTargets) {
+  EXPECT_FALSE(Env->Ctx->isInKernelExtent(KKernelStartOffset - 4));
+  EXPECT_TRUE(Env->Ctx->isInKernelExtent(KKernelStartOffset));
+  // A zero end offset runs the kernel to the end of the text section, and stops
+  // there: a branch displacement can name an offset past it, or wrap past it.
+  EXPECT_TRUE(Env->Ctx->isInKernelExtent(KTextSize - 4));
+  EXPECT_FALSE(Env->Ctx->isInKernelExtent(KTextSize));
+  EXPECT_FALSE(Env->Ctx->isInKernelExtent(UINT64_MAX));
 }
 
 } // namespace
