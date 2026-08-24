@@ -7,26 +7,24 @@
 ; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=sop2_integer_gfx1250 | %FileCheck %s --check-prefix=IR
 
-; DECODE: S_MUL_U64{{.+}}s_mul_u64
-; DECODE: S_ADD_NC_U64{{.+}}s_add_nc_u64
-; DECODE: S_SUB_NC_U64{{.+}}s_sub_nc_u64
-
-; IR-LABEL: define amdgpu_kernel void @sop2_integer_gfx1250(
-; IR: mul i64
-; IR: add i64
-; IR: sub i64
-; IR: ret void
-
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
 	.globl	sop2_integer_gfx1250
 	.p2align	8
 	.type	sop2_integer_gfx1250,@function
+; IR-LABEL: define amdgpu_kernel void @sop2_integer_gfx1250(
 sop2_integer_gfx1250:
+	; DECODE: S_MUL_U64{{.+}}s_mul_u64
+	; IR: mul i64
 	s_mul_u64 s[2:3], s[0:1], s[4:5]
+	; DECODE: S_ADD_NC_U64{{.+}}s_add_nc_u64
+	; IR: add i64
 	s_add_nc_u64 s[2:3], s[0:1], s[4:5]
+	; DECODE: S_SUB_NC_U64{{.+}}s_sub_nc_u64
+	; IR: sub i64
 	s_sub_nc_u64 s[2:3], s[0:1], s[4:5]
+	; IR: ret void
 	s_endpgm
 
 	.section	.rodata,"a",@progbits
