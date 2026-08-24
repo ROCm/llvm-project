@@ -90,7 +90,9 @@ public:
   }
 
   /// Return the OMPT trace-record buffer manager owned by this profiler.
-  OmptTracingBufferMgr *getTraceRecordManager() { return TraceRecordManager.get(); }
+  OmptTracingBufferMgr *getTraceRecordManager() {
+    return TraceRecordManager.get();
+  }
 
   bool isProfilingEnabled() override;
 

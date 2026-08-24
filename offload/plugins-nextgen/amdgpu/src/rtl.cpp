@@ -849,7 +849,7 @@ struct AMDGPUKernelTy : public GenericKernelTy {
                    uint32_t NumBlocks[3], uint32_t DynBlockMemSize,
                    KernelArgsTy &KernelArgs, KernelLaunchParamsTy LaunchParams,
                    AsyncInfoWrapperTy &AsyncInfoWrapper,
-                   GenericProfilerTy &Profiler) const override;
+                   GenericProfilerTy *ProfilerPtr) const override;
 
   /// Return maximum block size for maximum occupancy
   ///
@@ -3492,7 +3492,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   uint64_t getDeviceTimeStamp() override { return getSystemTimestampInNs(); }
 
   /// Initialize the device, its resources and get its properties.
-  Error initImpl(GenericPluginTy &Plugin, GenericProfilerTy &Profiler) override {
+  Error initImpl(GenericPluginTy &Plugin,
+                 GenericProfilerTy *ProfilerPtr) override {
     // First setup all the memory pools.
     if (auto Err = initMemoryPools())
       return Err;
@@ -3637,7 +3638,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     // Take the second timepoints and compute the required metadata.
     auto EndTime = getDHTime();
-    deriveHostToDeviceClockOffset(StartTime, EndTime, Profiler);
+    deriveHostToDeviceClockOffset(StartTime, EndTime, ProfilerPtr);
 
     uint32_t NumSdmaEngines = 0;
     if (auto Err =
@@ -4122,7 +4123,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
                        AsyncInfoWrapperTy &AsyncInfoWrapper,
-                       GenericProfilerTy &Profiler) override {
+                       GenericProfilerTy *ProfilerPtr) override {
+    GenericProfilerTy &Profiler =
+        ProfilerPtr ? *ProfilerPtr : getNoOpProfiler();
     AMDGPUStreamTy *Stream = nullptr;
     void *PinnedPtr = nullptr;
 
@@ -4214,7 +4217,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   /// Retrieve data from the device (device to host transfer).
   Error dataRetrieveImpl(void *HstPtr, const void *TgtPtr, int64_t Size,
                          AsyncInfoWrapperTy &AsyncInfoWrapper,
-                         GenericProfilerTy &Profiler) override {
+                         GenericProfilerTy *ProfilerPtr) override {
+    GenericProfilerTy &Profiler =
+        ProfilerPtr ? *ProfilerPtr : getNoOpProfiler();
     AMDGPUStreamTy *Stream = nullptr;
     void *PinnedPtr = nullptr;
 
@@ -4335,7 +4340,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   Error dataExchangeImpl(const void *SrcPtr, GenericDeviceTy &DstGenericDevice,
                          void *DstPtr, int64_t Size,
                          AsyncInfoWrapperTy &AsyncInfoWrapper,
-                         GenericProfilerTy &Profiler) override {
+                         GenericProfilerTy *ProfilerPtr) override {
+    GenericProfilerTy &Profiler =
+        ProfilerPtr ? *ProfilerPtr : getNoOpProfiler();
     AMDGPUDeviceTy &DstDevice = static_cast<AMDGPUDeviceTy &>(DstGenericDevice);
 
     auto ProfilerSpecificData = getOrNullProfilerSpecificData(AsyncInfoWrapper);
@@ -4456,11 +4463,10 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (auto Err = getStream(AsyncInfoWrapper, Stream))
       return Err;
 
-    return Stream->pushMemoryCopyH2DAsync(TgtPtr, PatternPtr, PinnedPtr,
-                                          PatternSize, PinnedMemoryManager,
-                                          /*Profiler=*/nullptr,
-                                          /*ProfilerSpecificData=*/nullptr,
-                                          Size / PatternSize);
+    return Stream->pushMemoryCopyH2DAsync(
+        TgtPtr, PatternPtr, PinnedPtr, PatternSize, PinnedMemoryManager,
+        /*Profiler=*/nullptr,
+        /*ProfilerSpecificData=*/nullptr, Size / PatternSize);
   }
 
   /// Initialize the async info
@@ -5154,7 +5160,7 @@ private:
     uint32_t NumBlocksAndThreads[3] = {1u, 1u, 1u};
     auto Err = AMDGPUKernel.launchImpl(
         *this, NumBlocksAndThreads, NumBlocksAndThreads, 0, KernelArgs,
-        KernelLaunchParamsTy{}, AsyncInfoWrapper, getNoOpProfiler());
+        KernelLaunchParamsTy{}, AsyncInfoWrapper, /*ProfilerPtr=*/nullptr);
 
     AsyncInfoWrapper.finalize(Err);
     return Err;
@@ -5540,7 +5546,9 @@ private:
   /// h = m.d + o, where m is the slope and o is the offset.
   /// Calculate slope and offset from the two host and device timepoints.
   void deriveHostToDeviceClockOffset(DevHostTimePair Start, DevHostTimePair End,
-                                     GenericProfilerTy &Profiler) {
+                                     GenericProfilerTy *ProfilerPtr) {
+    GenericProfilerTy &Profiler =
+        ProfilerPtr ? *ProfilerPtr : getNoOpProfiler();
     double HostDiff = End.Host - Start.Host;
     uint64_t DeviceDiff = End.Device - Start.Device;
     double Slope = DeviceDiff != 0 ? (HostDiff / DeviceDiff) : HostDiff;
@@ -5673,7 +5681,7 @@ private:
     // Launch kernel with 256 threads and 1 block
     if (auto Err = DMInitKernel.launchImpl(*this, NumThreads, NumBlocks, 0,
                                            KernelArgs, LaunchParams, AsyncInfo,
-                                           getNoOpProfiler()))
+                                           /*ProfilerPtr=*/nullptr))
       return Err;
 
     // Wait for completion
@@ -6301,7 +6309,7 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                                  KernelArgsTy &KernelArgs,
                                  KernelLaunchParamsTy LaunchParams,
                                  AsyncInfoWrapperTy &AsyncInfoWrapper,
-                                 GenericProfilerTy &Profiler) const {
+                                 GenericProfilerTy *ProfilerPtr) const {
   // Cooperative kernel launch is not yet supported for AMDGPU
   if (KernelArgs.Flags.Cooperative)
     return Plugin::error(ErrorCode::UNSUPPORTED,
@@ -6390,10 +6398,9 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
   uint32_t TotalBlockMemSize = getStaticBlockMemSize() + DynBlockMemSize;
 
   // Push the kernel launch into the stream.
-  return Stream->pushKernelLaunch(*this, AllArgs, NumThreads, NumBlocks,
-                                  TotalBlockMemSize, StackSize,
-                                  ArgsMemoryManager, &Profiler,
-                                  ProfilerSpecificData);
+  return Stream->pushKernelLaunch(
+      *this, AllArgs, NumThreads, NumBlocks, TotalBlockMemSize, StackSize,
+      ArgsMemoryManager, ProfilerPtr, ProfilerSpecificData);
 }
 
 void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,

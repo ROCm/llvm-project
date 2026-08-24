@@ -141,7 +141,7 @@ struct CUDAKernelTy : public GenericKernelTy {
                    uint32_t NumBlocks[3], uint32_t DynBlockMemSize,
                    KernelArgsTy &KernelArgs, KernelLaunchParamsTy LaunchParams,
                    AsyncInfoWrapperTy &AsyncInfoWrapper,
-                   GenericProfilerTy &Profiler) const override;
+                   GenericProfilerTy *ProfilerPtr) const override;
 
   /// Return maximum block size for maximum occupancy
   Expected<uint64_t> maxGroupSize(GenericDeviceTy &,
@@ -280,7 +280,8 @@ struct CUDADeviceTy : public GenericDeviceTy {
   ~CUDADeviceTy() {}
 
   /// Initialize the device, its resources and get its properties.
-  Error initImpl(GenericPluginTy &Plugin, GenericProfilerTy &Profiler) override {
+  Error initImpl(GenericPluginTy &Plugin,
+                 GenericProfilerTy *ProfilerPtr) override {
     CUresult Res = cuDeviceGet(&Device, DeviceId);
     if (auto Err = Plugin::check(Res, "error in cuDeviceGet: %s"))
       return Err;
@@ -817,7 +818,7 @@ struct CUDADeviceTy : public GenericDeviceTy {
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
                        AsyncInfoWrapperTy &AsyncInfoWrapper,
-                       GenericProfilerTy &Profiler) override {
+                       GenericProfilerTy *ProfilerPtr) override {
     if (auto Err = setContext())
       return Err;
 
@@ -832,7 +833,7 @@ struct CUDADeviceTy : public GenericDeviceTy {
   /// Retrieve data from the device (device to host transfer).
   Error dataRetrieveImpl(void *HstPtr, const void *TgtPtr, int64_t Size,
                          AsyncInfoWrapperTy &AsyncInfoWrapper,
-                         GenericProfilerTy &Profiler) override {
+                         GenericProfilerTy *ProfilerPtr) override {
     if (auto Err = setContext())
       return Err;
 
@@ -863,7 +864,7 @@ struct CUDADeviceTy : public GenericDeviceTy {
   Error dataExchangeImpl(const void *SrcPtr, GenericDeviceTy &DstGenericDevice,
                          void *DstPtr, int64_t Size,
                          AsyncInfoWrapperTy &AsyncInfoWrapper,
-                         GenericProfilerTy &Profiler) override;
+                         GenericProfilerTy *ProfilerPtr) override;
 
   Error dataFillImpl(void *TgtPtr, const void *PatternPtr, int64_t PatternSize,
                      int64_t Size,
@@ -1477,8 +1478,7 @@ private:
 
     // Copy the local buffer to the device.
     if (auto Err = dataSubmit(GlobalPtrStart, FunctionPtrs.data(),
-                              FunctionPtrs.size() * sizeof(void *), nullptr,
-                              getNoOpProfiler()))
+                              FunctionPtrs.size() * sizeof(void *), nullptr))
       return Err;
 
     // Copy the created buffer to the appropriate symbols so the kernel can
@@ -1505,7 +1505,7 @@ private:
     auto Err = CUDAKernel.launchImpl(*this, NumBlocksAndThreads,
                                      NumBlocksAndThreads, 0, KernelArgs,
                                      KernelLaunchParamsTy{}, AsyncInfoWrapper,
-                                     getNoOpProfiler());
+                                     /*ProfilerPtr=*/nullptr);
 
     AsyncInfoWrapper.finalize(Err);
     if (Err)
@@ -1553,7 +1553,7 @@ Error CUDAKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                                KernelArgsTy &KernelArgs,
                                KernelLaunchParamsTy LaunchParams,
                                AsyncInfoWrapperTy &AsyncInfoWrapper,
-                               GenericProfilerTy &Profiler) const {
+                               GenericProfilerTy *ProfilerPtr) const {
   CUDADeviceTy &CUDADevice = static_cast<CUDADeviceTy &>(GenericDevice);
 
   CUstream Stream;
@@ -1826,7 +1826,7 @@ Error CUDADeviceTy::dataExchangeImpl(const void *SrcPtr,
                                      GenericDeviceTy &DstGenericDevice,
                                      void *DstPtr, int64_t Size,
                                      AsyncInfoWrapperTy &AsyncInfoWrapper,
-                                     GenericProfilerTy &Profiler) {
+                                     GenericProfilerTy *ProfilerPtr) {
   if (auto Err = setContext())
     return Err;
 

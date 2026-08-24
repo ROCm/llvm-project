@@ -355,7 +355,7 @@ Error NativeRecordReplayTy::recordSnapshot(StringRef Filename) {
                            "creating MemoryBuffer for device memory");
 
     if (auto Err = Device.dataRetrieve(DeviceMB->getBufferStart(), StartAddr,
-                                       RecordSize, nullptr, getNoOpProfiler()))
+                                       RecordSize, nullptr))
       return Err;
   }
 
@@ -432,8 +432,8 @@ Error NativeRecordReplayTy::recordGlobals(StringRef Filename) {
     memcpy(BufferPtr, Global.Name.data(), NameLength);
     BufferPtr = utils::advancePtr(BufferPtr, NameLength);
 
-    if (auto Err = Device.dataRetrieve(BufferPtr, Global.Addr, Global.Size,
-                                       nullptr, getNoOpProfiler()))
+    if (auto Err =
+            Device.dataRetrieve(BufferPtr, Global.Addr, Global.Size, nullptr))
       return Err;
     BufferPtr = utils::advancePtr(BufferPtr, Global.Size);
   }

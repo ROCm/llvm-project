@@ -85,7 +85,7 @@ void PluginManager::deinit() {
     if (!Plugin->is_initialized())
       continue;
 
-    if (auto Err = Plugin->deinit(*Profiler)) {
+    if (auto Err = Plugin->deinit(Profiler.get())) {
       std::string InfoMsg = toString(std::move(Err));
       ODBG(ODT_Deinit) << "Failed to deinit plugin: " << InfoMsg;
     }
@@ -548,7 +548,7 @@ static int loadImagesOntoDevice(DeviceTy &Device) {
                (PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY)))
             if (Device.RTL->data_submit(DeviceId, DeviceEntry.Address,
                                         Entry.Address, Entry.Size,
-                                        *PM->getProfiler()) != OFFLOAD_SUCCESS)
+                                        PM->getProfiler()) != OFFLOAD_SUCCESS)
               REPORT() << "Failed to write symbol for USM " << Entry.SymbolName;
         } else if (Entry.Address) {
           if (Device.RTL->get_function(Binary, Entry.SymbolName,

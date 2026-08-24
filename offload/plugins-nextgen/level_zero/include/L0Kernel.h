@@ -83,7 +83,7 @@ public:
                    uint32_t NumBlocks[3], uint32_t DynBlockMemSize,
                    KernelArgsTy &KernelArgs, KernelLaunchParamsTy LaunchParams,
                    AsyncInfoWrapperTy &AsyncInfoWrapper,
-                   GenericProfilerTy &Profiler) const override;
+                   GenericProfilerTy *ProfilerPtr) const override;
   Error deinit() {
     CALL_ZE_RET_ERROR(zeKernelDestroy, zeKernel);
     return Plugin::success();

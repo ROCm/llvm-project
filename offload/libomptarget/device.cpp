@@ -89,7 +89,7 @@ inline void setAsyncInfoSynchronous(__tgt_async_info *AI, bool SetSynchronous) {
 }
 
 llvm::Error DeviceTy::init() {
-  int32_t Ret = RTL->init_device(RTLDeviceID, *PM->getProfiler());
+  int32_t Ret = RTL->init_device(RTLDeviceID, PM->getProfiler());
   if (Ret != OFFLOAD_SUCCESS)
     return error::createOffloadError(error::ErrorCode::BACKEND_FAILURE,
                                      "failed to initialize device %d\n",
@@ -225,7 +225,7 @@ llvm::Expected<__tgt_device_binary>
 DeviceTy::loadBinary(__tgt_device_image *Img) {
   __tgt_device_binary Binary;
 
-  if (RTL->load_binary(RTLDeviceID, Img, &Binary, *PM->getProfiler()) !=
+  if (RTL->load_binary(RTLDeviceID, Img, &Binary, PM->getProfiler()) !=
       OFFLOAD_SUCCESS)
     return error::createOffloadError(error::ErrorCode::INVALID_BINARY,
                                      "failed to load binary %p", Img);
@@ -290,8 +290,8 @@ void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
           RTLDeviceID, HstPtr, &TargetPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
-  TargetPtr = RTL->data_alloc(RTLDeviceID, Size, HstPtr, Kind,
-                              *PM->getProfiler());
+  TargetPtr =
+      RTL->data_alloc(RTLDeviceID, Size, HstPtr, Kind, PM->getProfiler());
   return TargetPtr;
 }
 
@@ -306,8 +306,7 @@ int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
           RegionInterface.getTraceGenerators<ompt_target_data_delete>(),
           DeviceID, TgtAllocBegin,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
-  return RTL->data_delete(RTLDeviceID, TgtAllocBegin, Kind,
-                          *PM->getProfiler());
+  return RTL->data_delete(RTLDeviceID, TgtAllocBegin, Kind, PM->getProfiler());
 }
 
 // Submit data to device
@@ -336,7 +335,7 @@ int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
 
   setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
   return RTL->data_submit_async(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size,
-                                AsyncInfo, *PM->getProfiler());
+                                AsyncInfo, PM->getProfiler());
 }
 
 // Retrieve data from device
@@ -366,7 +365,7 @@ int32_t DeviceTy::retrieveData(void *HstPtrBegin, void *TgtPtrBegin,
 
   setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
   return RTL->data_retrieve_async(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size,
-                                  AsyncInfo, *PM->getProfiler());
+                                  AsyncInfo, PM->getProfiler());
 }
 
 // Copy data from current device to destination device directly
@@ -395,7 +394,7 @@ int32_t DeviceTy::dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
 
   setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
   return RTL->data_exchange_async(RTLDeviceID, SrcPtr, DstDev.RTLDeviceID,
-                                  DstPtr, Size, AsyncInfo, *PM->getProfiler());
+                                  DstPtr, Size, AsyncInfo, PM->getProfiler());
 }
 
 int32_t DeviceTy::dataFence(AsyncInfoTy &AsyncInfo) {
@@ -432,7 +431,7 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
   return RTL->launch_kernel(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
                             &KernelArgs, KernelExtraArgs, AsyncInfo,
-                            *PM->getProfiler());
+                            PM->getProfiler());
 }
 
 // Run region on device

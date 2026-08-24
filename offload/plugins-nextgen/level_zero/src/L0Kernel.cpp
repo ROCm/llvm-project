@@ -135,7 +135,7 @@ Error L0KernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                              uint32_t DynBlockMemSize, KernelArgsTy &KernelArgs,
                              KernelLaunchParamsTy LaunchParams,
                              AsyncInfoWrapperTy &AsyncInfoWrapper,
-                             GenericProfilerTy &Profiler) const {
+                             GenericProfilerTy *ProfilerPtr) const {
   if (DynBlockMemSize > 0)
     return Plugin::error(ErrorCode::UNSUPPORTED,
                          "dynamic shared memory is unsupported in L0 plugin");
