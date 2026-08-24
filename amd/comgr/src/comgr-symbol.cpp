@@ -154,8 +154,7 @@ const StringMap<SymbolInfo> *SymbolHelper::getSymbolIndex(DataObject *DataP) {
   return DataP->SymbolIndex.get();
 }
 
-SymbolContext *SymbolHelper::createBinary(DataObject *DataP,
-                                          const char *Name) {
+SymbolContext *SymbolHelper::createBinary(DataObject *DataP, const char *Name) {
   const StringMap<SymbolInfo> *Index = getSymbolIndex(DataP);
   if (!Index) {
     return nullptr;
