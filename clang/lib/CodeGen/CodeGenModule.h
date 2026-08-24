@@ -2071,10 +2071,16 @@ public:
   /// Compute the block size of the whole kernel rooted at \p D, taking the
   /// clauses of the nested directives into account for a kernel that is split
   /// over several directives. See collectSPMDKernelNest().
-  int getWorkGroupSizeSPMDKernel(const OMPExecutableDirective &D);
+  /// \p IsGenericMode skips the larger cross-team reduction block size, which
+  /// does not apply to generic-mode kernels.
+  int getWorkGroupSizeSPMDKernel(const OMPExecutableDirective &D,
+                                 bool IsGenericMode = false);
   /// Compute the block size implied by the clauses of \p NestDirs, where a
   /// clause on a nested directive wins over one on an enclosing directive.
-  int getWorkGroupSizeSPMDForNest(const OptKernelNestDirectives &NestDirs);
+  /// \p UseTeamsReductionBlockSize enables the larger cross-team reduction
+  /// block size.
+  int getWorkGroupSizeSPMDForNest(const OptKernelNestDirectives &NestDirs,
+                                  bool UseTeamsReductionBlockSize = true);
   /// Used in optimized kernel codegen, compute the block size from the nested
   /// directives.
   int getOptKernelWorkGroupSize(const OptKernelNestDirectives &NestDirs);

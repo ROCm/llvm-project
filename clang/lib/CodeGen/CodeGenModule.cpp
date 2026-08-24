@@ -9509,17 +9509,20 @@ int CodeGenModule::getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D) {
   return getWorkGroupSizeSPMDForNest(NestDirs);
 }
 
-int CodeGenModule::getWorkGroupSizeSPMDKernel(const OMPExecutableDirective &D) {
+int CodeGenModule::getWorkGroupSizeSPMDKernel(const OMPExecutableDirective &D,
+                                              bool IsGenericMode) {
   // A kernel may be written as a single combined directive or split over
   // several ones. In the latter case the clauses that determine its block size
   // sit on the nested directives rather than on \p D, so collect the nest.
   OptKernelNestDirectives NestDirs;
   collectSPMDKernelNest(D, NestDirs);
-  return getWorkGroupSizeSPMDForNest(NestDirs);
+  return getWorkGroupSizeSPMDForNest(
+      NestDirs, /*UseTeamsReductionBlockSize=*/!IsGenericMode);
 }
 
 int CodeGenModule::getWorkGroupSizeSPMDForNest(
-    const OptKernelNestDirectives &NestDirs) {
+    const OptKernelNestDirectives &NestDirs,
+    bool UseTeamsReductionBlockSize) {
   // Honor block-size provided by command-line option. This logic must be kept
   // in sync with metadata generation. If this option is not specified on the
   // command line then the value used will be the 256.
@@ -9531,8 +9534,10 @@ int CodeGenModule::getWorkGroupSizeSPMDForNest(
   // reduction path that now takes over uses the generic SPMD default (256),
   // which would change the launch grid computed by the plugin's reduction
   // heuristic. Until the upstream default is updated, keep the AOMP block size
-  // for teams-reduction kernels so the grid matches.
-  if (hasTeamsReduction(NestDirs)) {
+  // for teams-reduction kernels so the grid matches. SPMD mode only: a
+  // generic-mode kernel is launched with the generic block size anyway, so a
+  // larger one here would only lower its register budget.
+  if (UseTeamsReductionBlockSize && hasTeamsReduction(NestDirs)) {
     int XteamRedBlockSize = getLangOpts().OpenMPTargetXteamReductionBlockSize;
     // A block size explicitly requested on the command line overrides the
     // clauses on the construct, as it did when these kernels were emitted by

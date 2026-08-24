@@ -779,7 +779,8 @@ void CGOpenMPRuntimeGPU::GenerateMetaData(CodeGenModule &CGM,
     else if (isNoLoopKernel)
       compileTimeThreadLimit = CGM.getNoLoopBlockSize(D);
     else
-      compileTimeThreadLimit = CGM.getWorkGroupSizeSPMDKernel(D);
+      compileTimeThreadLimit =
+          CGM.getWorkGroupSizeSPMDKernel(D, /*IsGenericMode=*/IsGeneric);
 
     // Add kernel metadata if ThreadLimit Clause is compile time constant > 0
     if (compileTimeThreadLimit > 0) {
