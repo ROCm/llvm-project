@@ -12,9 +12,8 @@
 
 ; Raised for gfx1250 itself: the memory wait takes the split counters, and the
 ; async and tensor waits emit nothing even here, because the backend issues that
-; work and pairs its own waits with it. No EXPcnt wait: gfx1250 has no export
-; instructions, so nothing can be pending in the counter and the intrinsic has
-; no pattern carrier on the target.
+; work and pairs its own waits with it. No EXPcnt wait: no target with the
+; split counters has s_wait_expcnt.
 ; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=waits_kernel | %FileCheck %s
 ; CHECK-LABEL: define amdgpu_kernel void @waits_kernel(
 ; CHECK: call void @llvm.amdgcn.s.wait.loadcnt(i16 0)
@@ -37,6 +36,15 @@ waits_kernel:
 	s_delay_alu instid0(VALU_DEP_1)
 	s_wait_asynccnt 0
 	s_wait_tensorcnt 0
+	s_monitor_sleep 0
+	s_wakeup
+	s_setprio_inc_wg 0
+	s_incperflevel 0
+	s_decperflevel 0
+	s_ttracedata
+	s_ttracedata_imm 0
+	s_icache_inv
+	s_code_end
 	s_endpgm
 
 	.globl	xcnt_kernel

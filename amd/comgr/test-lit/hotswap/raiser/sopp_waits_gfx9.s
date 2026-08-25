@@ -47,6 +47,16 @@ waits_kernel:
 	s_sleep 1
 ; DECODE: S_SETPRIO{{.+}}s_setprio
 	s_setprio 0
+; DECODE: S_WAKEUP{{.+}}s_wakeup
+	s_wakeup
+; DECODE: S_INCPERFLEVEL{{.+}}s_incperflevel
+	s_incperflevel 0
+; DECODE: S_DECPERFLEVEL{{.+}}s_decperflevel
+	s_decperflevel 0
+; DECODE: S_TTRACEDATA{{.+}}s_ttracedata
+	s_ttracedata
+; DECODE: S_ICACHE_INV{{.+}}s_icache_inv
+	s_icache_inv
 	s_endpgm
 
 	.globl	trap_kernel

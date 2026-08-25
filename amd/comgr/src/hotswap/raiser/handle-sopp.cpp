@@ -80,13 +80,26 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
   case CanonicalOp::S_WAIT_ALU:
     return Error::success();
 
-  // Scheduling hints carry no architectural state, and the backend emits its
-  // own for whichever target it lowers to, so the source's must not survive.
+  // Hints and side channels no computed value can depend on: instruction issue
+  // timing (nop, sleep, the ping that wakes a sleeper, clause, delay_alu), wave
+  // priority, performance counters, the thread-trace stream, and an instruction
+  // cache a raised kernel never writes behind. s_code_end is the padding a
+  // shader buffer carries past its terminator. What the target wants in their
+  // place is the backend's to insert.
   case CanonicalOp::S_NOP:
   case CanonicalOp::S_CLAUSE:
   case CanonicalOp::S_DELAY_ALU:
   case CanonicalOp::S_SLEEP:
+  case CanonicalOp::S_MONITOR_SLEEP:
+  case CanonicalOp::S_WAKEUP:
   case CanonicalOp::S_SETPRIO:
+  case CanonicalOp::S_SETPRIO_INC_WG:
+  case CanonicalOp::S_CODE_END:
+  case CanonicalOp::S_INCPERFLEVEL:
+  case CanonicalOp::S_DECPERFLEVEL:
+  case CanonicalOp::S_TTRACEDATA:
+  case CanonicalOp::S_TTRACEDATA_IMM:
+  case CanonicalOp::S_ICACHE_INV:
     return Error::success();
 
   default:
