@@ -9521,8 +9521,7 @@ int CodeGenModule::getWorkGroupSizeSPMDKernel(const OMPExecutableDirective &D,
 }
 
 int CodeGenModule::getWorkGroupSizeSPMDForNest(
-    const OptKernelNestDirectives &NestDirs,
-    bool UseTeamsReductionBlockSize) {
+    const OptKernelNestDirectives &NestDirs, bool UseTeamsReductionBlockSize) {
   // Honor block-size provided by command-line option. This logic must be kept
   // in sync with metadata generation. If this option is not specified on the
   // command line then the value used will be the 256.
