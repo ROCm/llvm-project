@@ -63,6 +63,10 @@ struct OpResolver {
   llvm::Expected<llvm::Value *> srcExecWidth(unsigned I) {
     return Ctx.registers().readOpExecWidth(Di, srcIdx(I));
   }
+  // Read the I-th source's per-lane wave-mask value, or null when unavailable.
+  llvm::Expected<llvm::Value *> srcWaveMaskI1(unsigned I) {
+    return Ctx.registers().readOpWaveMaskI1(Di, srcIdx(I));
+  }
   // Value of the I-th source, which must be an immediate.
   int64_t srcImm(unsigned I) {
     unsigned Index = srcIdx(I);

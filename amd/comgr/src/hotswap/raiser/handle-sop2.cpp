@@ -73,85 +73,10 @@ void storeNonzeroScc(RaiseContext &Ctx, Value *Result,
   Ctx.registers().regFile().storeSCC(Ctx.B, Nonzero);
 }
 
-// Return the per-lane form of a source known to carry a wave mask. This keeps
-// mask algebra lossless when a wave32 source is widened to a wave64 target.
-// A null value means the operand has no wave-mask shadow and scalar lowering
-// remains sufficient.
-Expected<Value *> tryReadWaveMaskI1(RaiseContext &Ctx, OpResolver &Op,
-                                    unsigned I) {
-  if (!Op.isSrcReg(I)) {
-    Expected<Value *> Mask = Op.srcExecWidth(I);
-    if (!Mask)
-      return Mask.takeError();
-    return Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, *Mask);
-  }
-
-  Expected<std::optional<ParsedReg>> SrcReg = Op.srcReg(I);
-  if (!SrcReg)
-    return SrcReg.takeError();
-  if (!*SrcReg)
-    return nullptr;
-
-  ParsedReg Pr = **SrcReg;
-  AllocaRegFile &Regs = Ctx.registers().regFile();
-  switch (Pr.RegKind) {
-  case ParsedReg::SGPR: {
-    if (!Pr.BaseIdx)
-      return nullptr;
-    if (Value *Fresh = Ctx.registers().lookupSgprWaveMaskI1(*Pr.BaseIdx))
-      return Fresh;
-    Value *Valid = Ctx.registers().loadSgprWaveMaskValid(*Pr.BaseIdx);
-    Value *Shadow = Ctx.registers().loadSgprWaveMaskExec(*Pr.BaseIdx);
-    if (!Valid || !Shadow)
-      return nullptr;
-    Value *ShadowI1 = Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, Shadow);
-    Value *Scalar = Ctx.Projection.sourceIsa().isWave32()
-                        ? Regs.loadSGPR32(Ctx.B, *Pr.BaseIdx)
-                        : Regs.loadSGPR64(Ctx.B, *Pr.BaseIdx);
-    Value *Fallback = Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, Scalar);
-    return Ctx.B.CreateSelect(Valid, ShadowI1, Fallback, "sop2_src_mask");
-  }
-  case ParsedReg::VCC:
-    return Regs.loadVCC(Ctx.B);
-  case ParsedReg::EXEC: {
-    Value *Exec = Regs.loadExec(Ctx.B);
-    return Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, Exec);
-  }
-  default:
-    return nullptr;
-  }
-}
-
-// Record MaskI1 as the per-lane wave-mask value written to Dst.
-void recordWaveMaskI1(RaiseContext &Ctx, ParsedReg Dst, Value *MaskI1) {
-  if (!MaskI1)
-    return;
-  AllocaRegFile &Regs = Ctx.registers().regFile();
-  switch (Dst.RegKind) {
-  case ParsedReg::SGPR:
-    if (Dst.BaseIdx)
-      Ctx.registers().recordSgprWaveMaskI1(*Dst.BaseIdx, MaskI1,
-                                           /*IsPair=*/Dst.WidthInDwords >= 2);
-    return;
-  case ParsedReg::VCC:
-    Regs.storeVCC(Ctx.B, MaskI1);
-    return;
-  case ParsedReg::EXEC: {
-    Value *Mask = Ctx.Projection.ballotI1ToWidth(
-        Ctx.B, MaskI1, Ctx.Projection.execStorageTy(), "sop2_exec_mask");
-    Ctx.registers().storeExec(Mask);
-    return;
-  }
-  default:
-    return;
-  }
-}
-
 // Set SCC if any lane in MaskI1 is active.
 void storeWaveMaskScc(RaiseContext &Ctx, Value *MaskI1, const Twine &Name) {
-  Value *Mask = Ctx.Projection.ballotI1ToWidth(
-      Ctx.B, MaskI1, Ctx.Projection.execStorageTy(), Name + "_ballot");
-  storeNonzeroScc(Ctx, Mask, Name + "_nonzero");
+  Value *Any = Ctx.Projection.emitCurrentSourceWaveAny(Ctx.B, MaskI1, Name);
+  Ctx.registers().regFile().storeSCC(Ctx.B, Any);
 }
 
 // A bitwise operation applied to scalar values and wave-mask shadows.
@@ -194,10 +119,10 @@ Value *emitBitOp(IRBuilder<> &B, BitOp Op, Value *A, Value *Bv,
 // Raise a bitwise instruction and preserve wave-mask and SCC state.
 Error handleBitOp(RaiseContext &Ctx, OpResolver &Op, BitOp Kind, bool Is64,
                   const Twine &Name) {
-  Expected<Value *> SrcMask0 = tryReadWaveMaskI1(Ctx, Op, 0);
+  Expected<Value *> SrcMask0 = Op.srcWaveMaskI1(0);
   if (!SrcMask0)
     return SrcMask0.takeError();
-  Expected<Value *> SrcMask1 = tryReadWaveMaskI1(Ctx, Op, 1);
+  Expected<Value *> SrcMask1 = Op.srcWaveMaskI1(1);
   if (!SrcMask1)
     return SrcMask1.takeError();
 
@@ -213,7 +138,7 @@ Error handleBitOp(RaiseContext &Ctx, OpResolver &Op, BitOp Kind, bool Is64,
   if (*SrcMask0 && *SrcMask1) {
     Value *MaskI1 =
         emitBitOp(Ctx.B, Kind, *SrcMask0, *SrcMask1, Name + "_wave_mask");
-    recordWaveMaskI1(Ctx, Args->Dst, MaskI1);
+    Ctx.registers().recordWaveMaskI1(Args->Dst, MaskI1);
     // Complementing the second operand can set non-lane scalar bits for ORN2,
     // and the fully-negated operations do so unconditionally. Their SCC must
     // therefore be derived from the full scalar result.
@@ -530,7 +455,6 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Value *Mask = Ctx.B.CreateSub(OneShifted, Ctx.B.getInt32(1));
     Value *Result = Ctx.B.CreateShl(Mask, Offset, "bfm32");
     Ctx.registers().writeReg32(Args->Dst, Result);
-    storeNonzeroScc(Ctx, Result);
     return Error::success();
   }
   case CanonicalOp::S_BFM_B64: {
@@ -545,15 +469,11 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Value *Mask = Ctx.B.CreateSub(OneShifted, Ctx.B.getInt64(1));
     Value *Result = Ctx.B.CreateShl(Mask, Offset, "bfm64");
     Ctx.registers().writeReg64(Args->Dst, Result);
-    storeNonzeroScc(Ctx, Result);
     return Error::success();
   }
 
   case CanonicalOp::S_BFE_U32: {
     // gfx12 compute prologues expose wave_id_in_workgroup as ttmp8[29:25].
-    // Recreate that value from the target workitem id so widening a wave32
-    // source does not collapse both packed source waves onto lane zero's
-    // scalar TTMP value.
     if (Op.isSrcReg(0) && !Op.isSrcReg(1)) {
       Expected<std::optional<ParsedReg>> SrcReg = Op.srcReg(0);
       if (!SrcReg)
@@ -563,17 +483,7 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
         Expected<ParsedReg> Dst = Op.dst();
         if (!Dst)
           return Dst.takeError();
-        unsigned SourceWaveSize = Ctx.Projection.sourceIsa().waveSize();
-        if (SourceWaveSize != 32 && SourceWaveSize != 64)
-          return RaiseFailure::atInstruction(
-              RaiseFailureReason::UnsupportedInstructionForm,
-              strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
-              formatName(Di.TargetSpecificFlags),
-              "wave-id extraction requires a 32- or 64-lane source wave");
-        Value *WorkitemId = Ctx.Projection.emitWorkitemIdX(Ctx.B);
-        Value *WaveId = Ctx.B.CreateLShr(
-            WorkitemId, Ctx.B.getInt32(SourceWaveSize == 32 ? 5 : 6),
-            "wave_id_in_workgroup");
+        Value *WaveId = Ctx.Projection.emitSourceWaveId(Ctx.B);
         Value *Result =
             Ctx.B.CreateAnd(WaveId, Ctx.B.getInt32(0x1f), "wave_id_masked");
         Ctx.registers().writeReg32(*Dst, Result);

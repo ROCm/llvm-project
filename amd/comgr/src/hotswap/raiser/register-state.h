@@ -77,6 +77,9 @@ public:
   // Read a mask at target EXEC width, replicating narrower source-wave bits.
   llvm::Expected<llvm::Value *> readOpExecWidth(const DecodedInst &Di,
                                                 unsigned OpIdx);
+  // Read an operand's per-lane wave-mask value, or null when unavailable.
+  llvm::Expected<llvm::Value *> readOpWaveMaskI1(const DecodedInst &Di,
+                                                 unsigned OpIdx);
   // Read the mask a source-wave instruction should see, e.g. for `v_mbcnt_lo`.
   // EXEC/VCC/SGPR-shadow masks are projected; scalars use readOp32.
   llvm::Expected<llvm::Value *> readOpSourceWaveMask32(const DecodedInst &Di,
@@ -119,6 +122,9 @@ public:
   // for reuse within the block and in the cross-block shadow storage. IsPair
   // says whether the destination spans BaseIdx and its successor.
   void recordSgprWaveMaskI1(unsigned BaseIdx, llvm::Value *CmpI1, bool IsPair);
+
+  // Record MaskI1 as the wave-mask value written to Dst.
+  void recordWaveMaskI1(ParsedReg Dst, llvm::Value *MaskI1);
 
   // Emit a test of whether the source wave holding the current target lane has
   // any lane active in EXEC.

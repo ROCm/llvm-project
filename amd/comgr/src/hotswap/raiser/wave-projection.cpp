@@ -85,6 +85,22 @@ Value *WaveProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   return B.CreateCall(Fn, {}, "tid");
 }
 
+Value *WaveProjection::emitSourceWaveId(IRBuilder<> &B) const {
+  Module *M = B.GetInsertBlock()->getModule();
+  Function *Fn =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_wave_id);
+  Value *TargetWave = B.CreateCall(Fn, {}, "wave_id");
+  if (Tgt.waveSize() <= Src.waveSize())
+    return TargetWave;
+
+  unsigned SourceWavesPerTarget = Tgt.waveSize() / Src.waveSize();
+  Value *FirstSourceWave = B.CreateMul(
+      TargetWave, B.getInt32(SourceWavesPerTarget), "first_source_wave");
+  Value *SourceWaveInTarget = B.CreateUDiv(
+      emitLaneIdx(B), B.getInt32(Src.waveSize()), "source_wave_in_target");
+  return B.CreateAdd(FirstSourceWave, SourceWaveInTarget, "source_wave_id");
+}
+
 Value *ReplicationProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   Value *Raw = WaveProjection::emitWorkitemIdX(B);
   // When the target wave is wider than the source workgroup, the upper target
@@ -167,6 +183,14 @@ Value *WaveProjection::emitCurrentSourceWaveMask(IRBuilder<> &B, Value *Mask,
       B.CreateZExtOrTrunc(SourceWaveBase, Mask->getType(), Name + "_shift");
   Value *AtSourceWave = B.CreateLShr(Mask, Shift, Name + "_at_srcwave");
   return B.CreateTrunc(AtSourceWave, SourceTy, Name);
+}
+
+Value *WaveProjection::emitCurrentSourceWaveAny(IRBuilder<> &B, Value *Pred,
+                                                const Twine &Name) const {
+  Value *Mask = ballotI1ToWidth(B, Pred, waveMaskTy(), Name + "_ballot");
+  Value *SourceMask = emitCurrentSourceWaveMask(B, Mask, Name + "_mask");
+  return B.CreateICmpNE(SourceMask, ConstantInt::get(SourceMask->getType(), 0),
+                        Name);
 }
 
 Value *ReplicationProjection::emitPackedWorkitemId(IRBuilder<> &B,
@@ -355,6 +379,14 @@ ReplicationDoubledDispatchProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   return emitDoubledDispatchLogicalX(B, Raw, Src.waveSize(), Tgt.waveSize());
 }
 
+Value *
+ReplicationDoubledDispatchProjection::emitSourceWaveId(IRBuilder<> &B) const {
+  Module *M = B.GetInsertBlock()->getModule();
+  Function *Fn =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_wave_id);
+  return B.CreateCall(Fn, {}, "source_wave_id");
+}
+
 Value *ReplicationDoubledDispatchProjection::emitPackedWorkitemId(
     IRBuilder<> &B, unsigned NumDims) const {
   // Remapped x OR'd with the source's raw y/z fields. y/z are per-thread
@@ -527,6 +559,20 @@ Value *ThreadLoopProjection::emitWorkitemIdX(IRBuilder<> &B) const {
       B.CreateMul(Iter, B.getInt32(SrcBits), "tl_source_wave_off");
   return B.CreateAdd(B.CreateAdd(Base, WaveOffset, "tl_tid_wave_base"),
                      SourceLane, "tl_tid");
+}
+
+Value *ThreadLoopProjection::emitSourceWaveId(IRBuilder<> &B) const {
+  assert(IterationAlloca &&
+         "ThreadLoopProjection::emitSourceWaveId requires an iteration alloca");
+  Module *M = B.GetInsertBlock()->getModule();
+  Function *Fn =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_wave_id);
+  Value *TargetWave = B.CreateCall(Fn, {}, "wave_id");
+  Value *FirstSourceWave = B.CreateMul(
+      TargetWave, B.getInt32(numSourceWavesPerTarget()), "first_source_wave");
+  Value *Iteration =
+      B.CreateLoad(B.getInt32Ty(), IterationAlloca, "source_wave_in_target");
+  return B.CreateAdd(FirstSourceWave, Iteration, "source_wave_id");
 }
 
 Value *ThreadLoopProjection::emitLaneActiveBit(IRBuilder<> &B,

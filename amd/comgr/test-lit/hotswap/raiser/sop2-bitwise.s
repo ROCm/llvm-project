@@ -119,21 +119,21 @@ sop2_bitwise:
 	; IR: [[BFEI64_NONEMPTY:%.*]] = select i1 {{.*}}, i64 [[BFEI64_EXTRACT]], i64 [[BFEI64_SAT]]
 	; IR-NEXT: {{%.*}} = icmp eq i64 [[BFEI64_LENGTH]], 0
 	; IR-NEXT: [[BFEI64:%.*]] = select i1 {{.*}}, i64 0, i64 [[BFEI64_NONEMPTY]]
-	; IR: icmp ne i64 [[BFEI64]], 0
+	; IR: [[BFEI64_SCC:%.*]] = icmp ne i64 [[BFEI64]], 0
 	s_bfe_i64 s[2:3], s[0:1], s4
 	; IR: [[BFM32_WIDTH:%.*]] = and i32 {{.*}}, 31
 	; IR: [[BFM32_ONE:%.*]] = shl i32 1, [[BFM32_WIDTH]]
 	; IR-NEXT: [[BFM32_MASK:%.*]] = sub i32 [[BFM32_ONE]], 1
 	; IR-NEXT: [[BFM32:%.*]] = shl i32 [[BFM32_MASK]], {{.*}}
-	; IR: icmp ne i32 [[BFM32]], 0
 	s_bfm_b32 s2, s0, s1
 	; IR: [[BFM64_WIDTH32:%.*]] = and i32 {{.*}}, 63
 	; IR: [[BFM64_WIDTH:%.*]] = zext i32 [[BFM64_WIDTH32]] to i64
 	; IR: [[BFM64_ONE:%.*]] = shl i64 1, [[BFM64_WIDTH]]
 	; IR-NEXT: [[BFM64_MASK:%.*]] = sub i64 [[BFM64_ONE]], 1
 	; IR-NEXT: [[BFM64:%.*]] = shl i64 [[BFM64_MASK]], {{.*}}
-	; IR: icmp ne i64 [[BFM64]], 0
 	s_bfm_b64 s[2:3], s0, s1
+	; IR: select i1 [[BFEI64_SCC]], i32 {{.*}}, i32 {{.*}}
+	s_cselect_b32 s4, s0, s1
 	; IR: [[PACK_LL_LO:%.*]] = and i32 {{.*}}, 65535
 	; IR-NEXT: [[PACK_LL_HI16:%.*]] = and i32 {{.*}}, 65535
 	; IR-NEXT: [[PACK_LL_HI:%.*]] = shl i32 [[PACK_LL_HI16]], 16

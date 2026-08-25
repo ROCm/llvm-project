@@ -88,6 +88,9 @@ public:
   // splits or re-maps source waves overrides it.
   virtual llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const;
 
+  // Emit the source wave's linear ID within its workgroup.
+  virtual llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const;
+
   // Emit the full packed kernel-entry `v0` workitem id under this projection.
   // amdgpu packs the workitem id as x[0:9] | y[10:19] | z[20:29]; `NumDims`
   // (1..3, derived from the source descriptor's ENABLE_VGPR_WORKITEM_ID) says
@@ -123,6 +126,11 @@ public:
   virtual llvm::Value *
   emitCurrentSourceWaveMask(llvm::IRBuilder<> &B, llvm::Value *Mask,
                             const llvm::Twine &Name = "source_wave_mask") const;
+
+  // Return whether Pred is true for any lane in the current source wave.
+  llvm::Value *
+  emitCurrentSourceWaveAny(llvm::IRBuilder<> &B, llvm::Value *Pred,
+                           const llvm::Twine &Name = "source_wave_any") const;
 
   // True iff this projection guarantees hardware EXEC = -1 between
   // `emitUnderExec` diamonds kernel-wide, so cross-lane collectives can run
@@ -282,6 +290,7 @@ public:
   // alias their originals. No phantom-lane clamp: under a doubled dispatch
   // every hardware lane maps to a valid logical thread (real or replica).
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
+  llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
   // Pack the remapped x with the source's raw y/z fields (which are already
   // per-thread correct and become wave-uniform once x is doubled). Bypasses
@@ -347,6 +356,7 @@ public:
 
   void setIterationAlloca(llvm::AllocaInst *Iter) { IterationAlloca = Iter; }
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
+  llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
   llvm::Value *emitLaneActiveBit(llvm::IRBuilder<> &B,
                                  llvm::Value *ExecVal) const override;

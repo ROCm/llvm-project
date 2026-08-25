@@ -282,6 +282,28 @@ struct IRScaffold {
 };
 } // namespace
 
+TEST_F(WaveProjectionContract, WaveNativeScopesWaveValuesToSourceWave) {
+  IRScaffold S;
+  auto *I32Ty = Type::getInt32Ty(S.Ctx);
+  auto *I64Ty = Type::getInt64Ty(S.Ctx);
+
+  ISAProfile Src = srcIsa();
+  ISAProfile Tgt = tgtIsa();
+  WaveNativeProjection Proj(Src, Tgt, I32Ty, I64Ty);
+
+  auto *SourceWaveId = cast<BinaryOperator>(Proj.emitSourceWaveId(S.B));
+  EXPECT_EQ(SourceWaveId->getOpcode(), Instruction::Add);
+  EXPECT_EQ(cast<BinaryOperator>(SourceWaveId->getOperand(0))->getOpcode(),
+            Instruction::Mul);
+  EXPECT_EQ(cast<BinaryOperator>(SourceWaveId->getOperand(1))->getOpcode(),
+            Instruction::UDiv);
+
+  Value *Pred = S.B.CreateICmpNE(S.Arg, S.B.getInt32(0));
+  auto *Any = cast<ICmpInst>(Proj.emitCurrentSourceWaveAny(S.B, Pred));
+  auto *SourceMask = cast<TruncInst>(Any->getOperand(0));
+  EXPECT_TRUE(isa<BinaryOperator>(SourceMask->getOperand(0)));
+}
+
 TEST_F(WaveProjectionContract, WrapAsWWMValueIsNoOpOnWaveNative) {
   IRScaffold S;
   auto *I32Ty = Type::getInt32Ty(S.Ctx);
