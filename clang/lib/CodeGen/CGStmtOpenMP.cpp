@@ -9134,7 +9134,7 @@ void CodeGenFunction::EmitOMPTargetUpdateDirective(
 /// have no way to know if this is true at compile time, for now emit them
 /// as inlined loops.
 void CodeGenFunction::EmitOMPGenericLoopDirective(
-    const OMPLoopDirective &S) {
+    const OMPGenericLoopDirective &S) {
   // Always expect a bind clause on the loop directive. It it wasn't
   // in the source, it should have been added in sema.
 

@@ -4103,7 +4103,7 @@ public:
       const OMPTargetTeamsDistributeParallelForSimdDirective &S);
   void EmitOMPTargetTeamsDistributeSimdDirective(
       const OMPTargetTeamsDistributeSimdDirective &S);
-  void EmitOMPGenericLoopDirective(const OMPLoopDirective &S);
+  void EmitOMPGenericLoopDirective(const OMPGenericLoopDirective &S);
   void EmitOMPParallelGenericLoopDirective(
       const OMPLoopDirective &S);
   void EmitOMPTargetParallelGenericLoopDirective(
