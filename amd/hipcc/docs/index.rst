@@ -11,11 +11,15 @@ HIPCC documentation
 .. note::
   ROCm provides and supports multiple compilers as described in `ROCm compiler reference <https://rocm.docs.amd.com/projects/llvm-project/en/latest/reference/rocmcc.html>`_.
 
-.. note::
-  ``hipcc`` and ``hipconfig`` are legacy tools. See the :ref:`hipcc_migration`
-  for guidance on migrating to ``amdclang++`` and CMake-native HIP support.
+.. important::
+  ``hipcc`` and ``hipconfig`` are legacy tools. New projects should use
+  ``amdclang++`` directly and CMake-native HIP language support instead.
+  See the :ref:`hipcc_migration` for step-by-step migration guidance.
 
-``hipcc`` is a compiler driver utility that will call ``clang`` or ``nvcc``, depending on target, and pass the appropriate include and library options for the target compiler and HIP infrastructure. C++ executable versions of ``hipcc`` and ``hipconfig`` compiler driver utilities are provided.
+``hipcc`` is a compiler driver utility that wraps ``amdclang++`` and
+automatically injects the flags needed to compile HIP source code and link
+to the HIP runtime. C++ executable versions of ``hipcc`` and ``hipconfig``
+compiler driver utilities are provided for backward compatibility.
 
 The HIPCC public repository is located at `https://github.com/ROCm/llvm-project/tree/amd-staging/amd/hipcc <https://github.com/ROCm/llvm-project/tree/amd-staging/amd/hipcc>`_
 
