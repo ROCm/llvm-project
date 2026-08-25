@@ -52,4 +52,8 @@ bool ISAProfile::hasArchitectedSgprs() const {
   return STI->hasFeature(llvm::AMDGPU::FeatureArchitectedSGPRs);
 }
 
+bool ISAProfile::hasVgprDeallocMessage() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureGFX11Insts);
+}
+
 } // namespace COMGR::hotswap

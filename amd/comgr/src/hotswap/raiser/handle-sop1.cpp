@@ -432,6 +432,16 @@ static Error refuseNonWorkgroupBarrier(RaiseContext &Ctx, const DecodedInst &Di,
                            "only barrier the target has");
 }
 
+// Refuse Di as reading state that describes the source wave and its queue
+// rather than anything the raised kernel runs on.
+static Error refuseSourceWaveState(RaiseContext &Ctx, const DecodedInst &Di,
+                                   const Twine &Detail) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
+}
+
 // Refuse Di as a control transfer the raised kernel cannot state.
 static Error refusePcTransfer(RaiseContext &Ctx, const DecodedInst &Di,
                               const Twine &Detail) {
@@ -818,6 +828,41 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   // the return restores belongs to the source wave.
   case CanonicalOp::S_RFE_B64:
     return refusePcTransfer(Ctx, Di, "returns from an exception handler");
+
+  // Free-running cycle counts are a property of the shader clock the source
+  // wave was issued against. The raised kernel runs on another one, at another
+  // rate and from another epoch, so any difference the kernel takes between two
+  // reads means something else there.
+  case CanonicalOp::S_GET_SHADER_CYCLES_U64:
+    return refuseSourceWaveState(Ctx, Di,
+                                 "reads the source shader clock, whose rate "
+                                 "and epoch the raised kernel does not share");
+
+  // Every return message answers with where the source wave sits in the
+  // hardware and in its queue: its doorbell, its dispatch, its trap handler
+  // base, its shader engine. None of that describes the wave that runs the
+  // raised kernel.
+  case CanonicalOp::S_SENDMSG_RTN_B32:
+  case CanonicalOp::S_SENDMSG_RTN_B64:
+    return refuseSourceWaveState(
+        Ctx, Di,
+        "reads back message " + Twine(Op.srcImm(0)) +
+            ", which reports on the source wave's queue and hardware "
+            "placement");
+
+  // The register file backs every VGPR index a source encoding can name, so
+  // the allocation this asks for is already in hand and cannot fail. Answering
+  // otherwise is not the safe direction: a source that checks SCC retries until
+  // it succeeds, so a false answer spins forever.
+  case CanonicalOp::S_ALLOC_VGPR:
+    Ctx.registers().writeScc(Ctx.B.getTrue());
+    return Error::success();
+
+  // Spends issue slots and leaves nothing behind that a later instruction can
+  // read, in either operand form.
+  case CanonicalOp::S_SLEEP_VAR:
+    return Error::success();
+
   default:
     break;
   }

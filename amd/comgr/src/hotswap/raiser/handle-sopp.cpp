@@ -10,6 +10,7 @@
 
 #include "hotswap/decoder/amdgpu-formats.h"
 #include "hotswap/decoder/decode.h"
+#include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise_failure.h"
 
@@ -40,6 +41,43 @@ static Error refuseBarrier(RaiseContext &Ctx, const DecodedInst &Di,
       strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
       formatName(Di.TargetSpecificFlags), Detail);
 }
+
+// Refuse Di as disposing of the source wave in a way nothing picks up again.
+static Error refuseWaveDisposal(RaiseContext &Ctx, const DecodedInst &Di,
+                                const Twine &Detail) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
+}
+
+// Refuse Di as asking for a floating-point mode the raised kernel does not
+// run in.
+static Error refuseFpMode(RaiseContext &Ctx, const DecodedInst &Di,
+                          const Twine &Detail) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
+}
+
+// Refuse Di as sending a message whose meaning the raise does not carry.
+static Error refuseMessage(RaiseContext &Ctx, const DecodedInst &Di,
+                           const Twine &Detail) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
+}
+
+// The rounding and denormal modes the raised kernel computes in, in the field
+// layout each mode-setting opcode takes its immediate in. Nothing the raiser
+// emits moves either of them.
+static constexpr int64_t KRaisedRoundMode =
+    FP_ROUND_MODE_SP(FP_ROUND_ROUND_TO_NEAREST) |
+    FP_ROUND_MODE_DP(FP_ROUND_ROUND_TO_NEAREST);
+static constexpr int64_t KRaisedDenormMode =
+    FP_DENORM_FLUSH_NONE | (FP_DENORM_FLUSH_NONE << 2);
 
 Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   switch (Di.CanonOp) {
@@ -161,6 +199,97 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
 
     Ctx.B.CreateCondBr(Taken, TakenBb,
                        Ctx.lookupBB(Di.Offset + Di.sizeInBytes()));
+    return Error::success();
+  }
+
+  // Halting stops the wave until a debugger resumes it and says nothing about
+  // any register, and the intrinsic exists on every AMDGPU target, so the
+  // immediate goes through as it stands.
+  case CanonicalOp::S_SETHALT:
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::amdgcn_s_sethalt,
+                          {Ctx.B.getInt32(Op.srcImm(0))});
+    return Error::success();
+
+  // Two bits per source operand class, each adding 256 to the VGPR numbers the
+  // instructions after it name. Applying that renumbering is the raiser's job,
+  // since it holds the register file those numbers index, so latch the
+  // immediate rather than emit anything. Only the low byte selects; the high
+  // byte records the selection in force before, which the hardware ignores.
+  case CanonicalOp::S_SET_VGPR_MSB:
+    Ctx.registers().setVgprMsBs(static_cast<uint8_t>(Op.srcImm(0)));
+    return Error::success();
+
+  // Entering the trap handler means running code the source queue installed,
+  // at an address the source wave holds, against state it set up. None of that
+  // is reachable from the raised kernel, and a wave that traps and never
+  // returns is not a kernel that ran.
+  case CanonicalOp::S_TRAP:
+    return refuseWaveDisposal(Ctx, Di,
+                              "enters trap handler " + Twine(Op.srcImm(0)) +
+                                  ", which the raised kernel does not have");
+
+  // Ends the wave expecting the context-save hardware to have taken its state
+  // and something to restore it later. Raising this to a plain return would
+  // claim the kernel finished when the source only paused it.
+  case CanonicalOp::S_ENDPGM_SAVED:
+    return refuseWaveDisposal(
+        Ctx, Di, "ends the wave for a context save nothing here resumes");
+
+  // Accept only the immediate naming the mode the raised kernel is already in,
+  // so that the float instructions after it compute under the mode the source
+  // asked for. Any other immediate would leave the raised arithmetic rounding
+  // or flushing differently from the source, which is a wrong answer rather
+  // than a missing one.
+  case CanonicalOp::S_ROUND_MODE:
+    if (Op.srcImm(0) != KRaisedRoundMode)
+      return refuseFpMode(Ctx, Di,
+                          "selects rounding mode " + Twine(Op.srcImm(0)) +
+                              " rather than round-to-nearest-even, which is "
+                              "the mode the raised kernel computes in");
+    return Error::success();
+  case CanonicalOp::S_DENORM_MODE:
+    if (Op.srcImm(0) != KRaisedDenormMode)
+      return refuseFpMode(Ctx, Di,
+                          "selects denormal mode " + Twine(Op.srcImm(0)) +
+                              " rather than keeping denormals, which is what "
+                              "the raised kernel computes with");
+    return Error::success();
+
+  // The same SIMM16 names different messages on different targets, and most of
+  // them are a conversation between the source wave and hardware that is not
+  // there to answer. Only the interrupt means the same thing everywhere.
+  case CanonicalOp::S_SENDMSG:
+  case CanonicalOp::S_SENDMSGHALT: {
+    unsigned Simm16 = static_cast<unsigned>(Op.srcImm(0)) & 0xFFFF;
+    bool IsHalt = Di.CanonOp == CanonicalOp::S_SENDMSGHALT;
+
+    // The deallocation hint claims the wave is done with its VGPRs, which is
+    // not true of the raised kernel where the source said it, and where it
+    // does become true is for the target backend to settle. Dropping the send
+    // is therefore the faithful reading; dropping the halt the halting
+    // spelling also performs would not be. The id only means the deallocation
+    // hint on a source that spells it that way -- an older one gives the same
+    // bits to the geometry-shader completion message, which falls through to
+    // the refusal below.
+    if (Simm16 == AMDGPU::SendMsg::ID_DEALLOC_VGPRS_GFX11Plus &&
+        Ctx.Projection.sourceIsa().hasVgprDeallocMessage()) {
+      if (IsHalt)
+        return refuseMessage(Ctx, Di,
+                             "halts the wave alongside a VGPR deallocation "
+                             "the raised kernel must not claim");
+      return Error::success();
+    }
+
+    if (Simm16 != AMDGPU::SendMsg::ID_INTERRUPT)
+      return refuseMessage(Ctx, Di,
+                           "sends message 0x" + Twine::utohexstr(Simm16) +
+                               ", and the interrupt is the only message that "
+                               "means the same thing on every target");
+
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(),
+                          IsHalt ? Intrinsic::amdgcn_s_sendmsghalt
+                                 : Intrinsic::amdgcn_s_sendmsg,
+                          {Ctx.B.getInt32(Simm16), Ctx.registers().readM0()});
     return Error::success();
   }
 

@@ -47,6 +47,11 @@ public:
   // Whether the source ISA uses architected SGPRs.
   bool hasArchitectedSgprs() const;
 
+  // Whether message id 3 in an `s_sendmsg` SIMM16 is the VGPR deallocation
+  // hint. Older ISAs spell the geometry-shader completion message with the
+  // same id.
+  bool hasVgprDeallocMessage() const;
+
 private:
   explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}
 
