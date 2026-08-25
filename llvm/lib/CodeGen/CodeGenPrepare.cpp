@@ -621,7 +621,7 @@ bool CodeGenPrepare::_run(Function &F) {
       // optimization to those blocks.
       BasicBlock *Next = BB->getNextNode();
       if (!llvm::shouldOptimizeForSize(BB, PSI, BFI))
-        EverMadeChange |= bypassSlowDivision(BB, BypassWidths, DTU, LI);
+        EverMadeChange |= bypassSlowDivision(BB, BypassWidths, DTU, LI, BPI);
       BB = Next;
     }
   }
@@ -2921,10 +2921,9 @@ static bool isIntrinsicOrLFToBeTailCalled(const TargetLibraryInfo *TLInfo,
       return false;
     }
 
-  LibFunc LF;
   Function *Callee = CI->getCalledFunction();
-  if (Callee && TLInfo && TLInfo->getLibFunc(*Callee, LF))
-    switch (LF) {
+  if (Callee && TLInfo)
+    switch (TLInfo->getLibFunc(*Callee)) {
     case LibFunc_strcpy:
     case LibFunc_strncpy:
     case LibFunc_strcat:

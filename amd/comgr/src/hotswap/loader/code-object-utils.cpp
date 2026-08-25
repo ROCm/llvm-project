@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "code-object-utils.h"
+#include "hotswap/loader/code-object-utils.h"
 
 #include "comgr-metadata.h"
 #include "comgr-symbol.h"

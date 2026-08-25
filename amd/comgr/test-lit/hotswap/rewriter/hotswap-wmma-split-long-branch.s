@@ -3,7 +3,7 @@
 // COM: sequences on both edges and never executes s_add_pc_i64. External NOP
 // COM: space supplies the forward gateway; non-NOP filler forces the far case.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

@@ -203,6 +203,7 @@ static bool isIntrinsicExpansion(Function &F) {
   case Intrinsic::assume:
   case Intrinsic::abs:
   case Intrinsic::atan2:
+  case Intrinsic::copysign:
   case Intrinsic::fshl:
   case Intrinsic::fshr:
   case Intrinsic::exp:
@@ -1055,6 +1056,52 @@ static Value *expandSignIntrinsic(CallInst *Orig) {
   return Builder.CreateSub(ZextGT, ZextLT);
 }
 
+// Expand llvm.copysign by combining the sign bit with the magnitude bits using
+// bitwise operations.
+static Value *expandCopySignIntrinsic(CallInst *Orig) {
+  Value *Magnitude = Orig->getOperand(0);
+  Value *Sign = Orig->getOperand(1);
+  Type *Ty = Orig->getType();
+
+  IRBuilder<> Builder(Orig);
+
+  bool IsDouble = Ty->getScalarType()->isDoubleTy();
+  unsigned BitWidth = IsDouble ? 32 : Ty->getScalarSizeInBits();
+  Type *IntTy = Ty->getWithNewType(Builder.getIntNTy(BitWidth));
+
+  auto CopySignBit = [&](Value *MagnitudeInt, Value *SignInt) {
+    APInt SignMaskVal = APInt::getSignMask(BitWidth);
+    // `ConstantInt::get` broadcasts to a splat when `IntTy` is a vector.
+    Constant *SignMask = ConstantInt::get(IntTy, SignMaskVal);
+    Constant *NotSignMask = ConstantInt::get(IntTy, ~SignMaskVal);
+
+    Value *MagnitudeBits = Builder.CreateAnd(MagnitudeInt, NotSignMask);
+    Value *SignBits = Builder.CreateAnd(SignInt, SignMask);
+    return Builder.CreateOr(MagnitudeBits, SignBits);
+  };
+
+  // Avoid i64 bitwise ops, which require the Int64Ops shader feature.
+  if (IsDouble) {
+    auto *SplitTy = StructType::get(IntTy, IntTy);
+    Value *MagnitudeHalves = Builder.CreateIntrinsic(
+        SplitTy, Intrinsic::dx_splitdouble, {Magnitude});
+    Value *SignHalves =
+        Builder.CreateIntrinsic(SplitTy, Intrinsic::dx_splitdouble, {Sign});
+    Value *MagnitudeLow = Builder.CreateExtractValue(MagnitudeHalves, 0);
+    Value *MagnitudeHigh = Builder.CreateExtractValue(MagnitudeHalves, 1);
+    Value *SignHigh = Builder.CreateExtractValue(SignHalves, 1);
+
+    Value *CombinedHigh = CopySignBit(MagnitudeHigh, SignHigh);
+    return Builder.CreateIntrinsic(Ty, Intrinsic::dx_asdouble,
+                                   {MagnitudeLow, CombinedHigh});
+  }
+
+  Value *MagnitudeInt = Builder.CreateBitCast(Magnitude, IntTy);
+  Value *SignInt = Builder.CreateBitCast(Sign, IntTy);
+  Value *CombinedInt = CopySignBit(MagnitudeInt, SignInt);
+  return Builder.CreateBitCast(CombinedInt, Ty);
+}
+
 // Expand llvm.matrix.multiply by extracting row/column vectors and computing
 // dot products.
 // Result[r,c] = dot(row_r(LHS), col_c(RHS))
@@ -1166,7 +1213,7 @@ static Value *expandMatrixTranspose(CallInst *Orig) {
 // The DXIL StoreOutput op is per-component; vector intrinsics are split here
 // so that DXILOpLowering sees only scalar variants.
 static bool expandStoreOutput(CallInst *Orig) {
-  auto *VT = dyn_cast<FixedVectorType>(Orig->getArgOperand(4)->getType());
+  auto *VT = dyn_cast<FixedVectorType>(Orig->getArgOperand(3)->getType());
   if (!VT)
     return false; // already scalar, nothing to expand
 
@@ -1177,11 +1224,10 @@ static bool expandStoreOutput(CallInst *Orig) {
   Type *ScalarTy = VT->getElementType();
   unsigned NumElems = VT->getNumElements();
 
-  Value *SigpointId = Orig->getArgOperand(0);
-  Value *SigElementId = Orig->getArgOperand(1);
-  Value *RowIndex = Orig->getArgOperand(2);
-  Value *StartCol = Orig->getArgOperand(3); // i8
-  Value *Data = Orig->getArgOperand(4);
+  Value *SigElementId = Orig->getArgOperand(0);
+  Value *RowIndex = Orig->getArgOperand(1);
+  Value *StartCol = Orig->getArgOperand(2); // i8
+  Value *Data = Orig->getArgOperand(3);
   Value *StartColI32 = Builder.CreateZExt(StartCol, Int32Ty);
 
   Function *ScalarFn = Intrinsic::getOrInsertDeclaration(
@@ -1193,8 +1239,7 @@ static bool expandStoreOutput(CallInst *Orig) {
     Value *ColIdx =
         Builder.CreateAdd(StartColI32, ConstantInt::get(Int32Ty, I));
     Value *ColI8 = Builder.CreateTrunc(ColIdx, Int8Ty);
-    Builder.CreateCall(ScalarFn,
-                       {SigpointId, SigElementId, RowIndex, ColI8, Scalar});
+    Builder.CreateCall(ScalarFn, {SigElementId, RowIndex, ColI8, Scalar});
   }
 
   Orig->eraseFromParent();
@@ -1215,11 +1260,10 @@ static Value *expandLoadInput(CallInst *Orig) {
   Type *ScalarTy = VT->getElementType();
   unsigned NumElems = VT->getNumElements();
 
-  Value *SigpointId = Orig->getArgOperand(0);
-  Value *SigElementId = Orig->getArgOperand(1);
-  Value *RowIndex = Orig->getArgOperand(2);
-  Value *StartCol = Orig->getArgOperand(3); // i8
-  Value *GsVertexOrPrimIndex = Orig->getArgOperand(4);
+  Value *SigElementId = Orig->getArgOperand(0);
+  Value *RowIndex = Orig->getArgOperand(1);
+  Value *StartCol = Orig->getArgOperand(2); // i8
+  Value *GsVertexOrPrimIndex = Orig->getArgOperand(3);
   Value *StartColI32 = Builder.CreateZExt(StartCol, Int32Ty);
 
   Function *ScalarFn = Intrinsic::getOrInsertDeclaration(
@@ -1230,9 +1274,8 @@ static Value *expandLoadInput(CallInst *Orig) {
     Value *ColIdx =
         Builder.CreateAdd(StartColI32, ConstantInt::get(Int32Ty, I));
     Value *ColI8 = Builder.CreateTrunc(ColIdx, Int8Ty);
-    Value *Scalar =
-        Builder.CreateCall(ScalarFn, {SigpointId, SigElementId, RowIndex, ColI8,
-                                      GsVertexOrPrimIndex});
+    Value *Scalar = Builder.CreateCall(
+        ScalarFn, {SigElementId, RowIndex, ColI8, GsVertexOrPrimIndex});
     Vec =
         Builder.CreateInsertElement(Vec, Scalar, ConstantInt::get(Int32Ty, I));
   }
@@ -1252,6 +1295,9 @@ static bool expandIntrinsic(Function &F, CallInst *Orig) {
     return true;
   case Intrinsic::atan2:
     Result = expandAtan2Intrinsic(Orig);
+    break;
+  case Intrinsic::copysign:
+    Result = expandCopySignIntrinsic(Orig);
     break;
   case Intrinsic::fshl:
     Result = expandFunnelShiftIntrinsic<true>(Orig);

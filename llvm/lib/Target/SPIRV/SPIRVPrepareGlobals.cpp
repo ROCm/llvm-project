@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "SPIRVPrepareGlobals.h"
 #include "SPIRV.h"
 #include "SPIRVUtils.h"
 
@@ -150,8 +149,8 @@ char SPIRVPrepareGlobalsLegacy::ID = 0;
 INITIALIZE_PASS(SPIRVPrepareGlobalsLegacy, "spirv-prepare-globals",
                 "SPIRV prepare global variables", false, false)
 
-PreservedAnalyses SPIRVPrepareGlobals::run(Module &M,
-                                           ModuleAnalysisManager &AM) {
+PreservedAnalyses SPIRVPrepareGlobalsPass::run(Module &M,
+                                               ModuleAnalysisManager &AM) {
   return SPIRVPrepareGlobalsImpl().runOnModule(M) ? PreservedAnalyses::none()
                                                   : PreservedAnalyses::all();
 }

@@ -15,7 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "isa-profile.h"
+#include "hotswap/decoder/isa-profile.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "llvm/MC/MCSubtargetInfo.h"

@@ -423,8 +423,6 @@ DwarfDebug::DwarfDebug(AsmPrinter *A)
   UseARangesSection = GenerateARangeSection || tuneForSCE();
 
   HasAppleExtensionAttributes = tuneForLLDB();
-  HasHeterogeneousExtensionAttributes =
-      Asm->MAI.supportsHeterogeneousDebuggingExtensions();
 
   // Handle split DWARF.
   HasSplitDwarf = !Asm->TM.Options.MCOptions.SplitDwarfFile.empty();
@@ -1158,6 +1156,34 @@ void DwarfDebug::addGnuPubAttributes(DwarfCompileUnit &U, DIE &D) const {
   U.addFlag(D, dwarf::DW_AT_GNU_pubnames);
 }
 
+static bool isLangCaseSensitive(const DISourceLanguageName &Lang) {
+  if (Lang.hasVersionedName()) {
+    switch (Lang.getName()) {
+    case dwarf::DW_LNAME_Fortran:
+    case dwarf::DW_LNAME_Cobol:
+    case dwarf::DW_LNAME_Pascal:
+      return false;
+    default:
+      return true;
+    }
+  }
+  switch (Lang.getName()) {
+  case dwarf::DW_LANG_Cobol74:
+  case dwarf::DW_LANG_Cobol85:
+  case dwarf::DW_LANG_Fortran77:
+  case dwarf::DW_LANG_Fortran90:
+  case dwarf::DW_LANG_Fortran95:
+  case dwarf::DW_LANG_Fortran03:
+  case dwarf::DW_LANG_Fortran08:
+  case dwarf::DW_LANG_Fortran18:
+  case dwarf::DW_LANG_Fortran23:
+  case dwarf::DW_LANG_Pascal83:
+    return false;
+  default:
+    return true;
+  }
+}
+
 void DwarfDebug::finishUnitAttributes(const DICompileUnit *DIUnit,
                                       DwarfCompileUnit &NewCU) {
   DIE &Die = NewCU.getUnitDie();
@@ -1183,6 +1209,9 @@ void DwarfDebug::finishUnitAttributes(const DICompileUnit *DIUnit,
                   Lang.getName());
   }
 
+  if (!isLangCaseSensitive(DIUnit->getSourceLanguage()))
+    NewCU.addUInt(Die, dwarf::DW_AT_identifier_case, dwarf::DW_FORM_data1,
+                  dwarf::DW_ID_case_insensitive);
   NewCU.addString(Die, dwarf::DW_AT_name, FN);
 
   finishTargetUnitAttributes(*DIUnit, NewCU);
@@ -1208,10 +1237,10 @@ void DwarfDebug::finishUnitAttributes(const DICompileUnit *DIUnit,
     addGnuPubAttributes(NewCU, Die);
   }
 
-  if (useAppleExtensionAttributes()) {
-    if (DIUnit->isOptimized())
-      NewCU.addFlag(Die, dwarf::DW_AT_APPLE_optimized);
+  if (DIUnit->isOptimized())
+    NewCU.addFlag(Die, dwarf::DW_AT_APPLE_optimized);
 
+  if (useAppleExtensionAttributes()) {
     StringRef Flags = DIUnit->getFlags();
     if (!Flags.empty())
       NewCU.addString(Die, dwarf::DW_AT_APPLE_flags, Flags);
@@ -1569,6 +1598,8 @@ void DwarfDebug::endModule() {
     DenseSet<DIGlobalVariable *> Processed;
     for (auto *GVE : CUNode->getGlobalVariables()) {
       DIGlobalVariable *GV = GVE->getVariable();
+      assert(!isa_and_nonnull<DILocalScope>(GV->getScope()) &&
+             "Unexpected function-local entity in 'globals' CU field.");
       if (Processed.insert(GV).second)
         CU->getOrCreateGlobalVariableDIE(GV, sortGlobalExprs(GVMap[GV]));
     }
@@ -1595,14 +1626,20 @@ void DwarfDebug::endModule() {
     }
 
     // Emit function-local entities.
-    for (const auto *D : CU->getDeferredLocalDecls()) {
-      if (auto *IE = dyn_cast<DIImportedEntity>(D))
-        CU->getOrCreateImportedEntityDIE(IE);
-      else if (auto *Ty = dyn_cast<DIType>(D))
-        CU->getOrCreateTypeDIE(Ty);
-      else
-        llvm_unreachable("Unexpected local retained node!");
-    }
+    const auto Unexpected = [](const Metadata *N) {
+      llvm_unreachable("Unexpected local retained node!");
+    };
+    for (const auto *D : CU->getDeferredLocalDecls())
+      DISubprogram::visitRetainedNode<void>(
+          D, Unexpected, Unexpected,
+          [CU](const auto *IE) { CU->getOrCreateImportedEntityDIE(IE); },
+          [CU](const auto *Ty) { CU->getOrCreateTypeDIE(Ty); },
+          [&](const auto *GVE) {
+            DIGlobalVariable *GV = GVE->getVariable();
+            if (Processed.insert(GV).second)
+              CU->getOrCreateGlobalVariableDIE(GV, sortGlobalExprs(GVMap[GV]));
+          },
+          Unexpected);
 
     // Emit base types.
     CU->createBaseTypeDIEs();
@@ -2161,16 +2198,17 @@ void DwarfDebug::collectEntityInfo(DwarfCompileUnit &TheCU,
   }
 
   // Collect info for retained nodes.
-  for (const DINode *DN : SP->getRetainedNodes()) {
-    const auto *LS = getRetainedNodeScope(DN);
-    if (isa<DILocalVariable>(DN) || isa<DILabel>(DN)) {
+  for (const MDNode *N : SP->getRetainedNodes()) {
+    const auto *LS = getRetainedNodeScope(N);
+    if (isa<DILocalVariable>(N) || isa<DILabel>(N)) {
+      auto *DN = cast<DINode>(N);
       if (!Processed.insert(InlinedEntity(DN, nullptr)).second)
         continue;
       LexicalScope *LexS = LScopes.findLexicalScope(LS);
       if (LexS)
         createConcreteEntity(TheCU, *LexS, DN, nullptr);
     } else {
-      LocalDeclsPerLS[LS].insert(DN);
+      LocalDeclsPerLS[LS].insert(N);
     }
   }
 }
@@ -2970,12 +3008,13 @@ void DwarfDebug::endFunctionImpl(const MachineFunction *MF) {
 #endif
   for (LexicalScope *AScope : LScopes.getAbstractScopesList()) {
     const auto *SP = cast<DISubprogram>(AScope->getScopeNode());
-    for (const DINode *DN : SP->getRetainedNodes()) {
-      const auto *LS = getRetainedNodeScope(DN);
+    for (const MDNode *N : SP->getRetainedNodes()) {
+      const auto *LS = getRetainedNodeScope(N);
       // Ensure LexicalScope is created for the scope of this node.
       auto *LexS = LScopes.getOrCreateAbstractScope(LS);
       assert(LexS && "Expected the LexicalScope to be created.");
-      if (isa<DILocalVariable>(DN) || isa<DILabel>(DN)) {
+      if (isa<DILocalVariable>(N) || isa<DILabel>(N)) {
+        auto *DN = cast<DINode>(N);
         // Collect info for variables/labels that were optimized out.
         if (!Processed.insert(InlinedEntity(DN, nullptr)).second ||
             TheCU.getExistingAbstractEntity(DN))
@@ -2983,7 +3022,7 @@ void DwarfDebug::endFunctionImpl(const MachineFunction *MF) {
         TheCU.createAbstractEntity(DN, LexS);
       } else {
         // Remember the node if this is a local declarations.
-        LocalDeclsPerLS[LS].insert(DN);
+        LocalDeclsPerLS[LS].insert(N);
       }
       assert(
           LScopes.getAbstractScopesList().size() == NumAbstractSubprograms &&

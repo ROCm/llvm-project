@@ -816,6 +816,11 @@ struct CUDADeviceTy : public GenericDeviceTy {
     return false;
   }
 
+  /// cuMemcpyHtoDAsync is only a true asynchronous transfer when the host
+  /// buffer is page-locked. Out of pageable memory the driver has to copy the
+  /// data into staging memory of its own before it can return.
+  bool hasFastTransferWithPinnedMemory() const override { return true; }
+
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
                        AsyncInfoWrapperTy &AsyncInfoWrapper) override {
@@ -966,18 +971,6 @@ struct CUDADeviceTy : public GenericDeviceTy {
       if (auto Err = Plugin::check(Res, "error in cuMemPrefetchAsync: %s"))
         return Err;
     }
-    return Plugin::success();
-  }
-
-  /// Initialize the async info for interoperability purposes.
-  Error initAsyncInfoImpl(AsyncInfoWrapperTy &AsyncInfoWrapper) override {
-    if (auto Err = setContext())
-      return Err;
-
-    CUstream Stream;
-    if (auto Err = getStream(AsyncInfoWrapper, Stream))
-      return Err;
-
     return Plugin::success();
   }
 
@@ -1677,6 +1670,20 @@ public:
   }
 };
 
+struct CUDAPluginContextTy final : public PluginContextTy {
+  using PluginContextTy::PluginContextTy;
+
+  Error initAsyncInfoImpl(GenericDeviceTy &Device,
+                          AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+    auto &CUDADevice = static_cast<CUDADeviceTy &>(Device);
+    if (auto Err = CUDADevice.setContext())
+      return Err;
+
+    CUstream Stream;
+    return CUDADevice.getStream(AsyncInfoWrapper, Stream);
+  }
+};
+
 /// Class implementing the CUDA-specific functionalities of the plugin.
 struct CUDAPluginTy final : public GenericPluginTy {
   /// Create a CUDA plugin.
@@ -1742,6 +1749,11 @@ struct CUDAPluginTy final : public GenericPluginTy {
     return new CUDADeviceTy(Plugin, DeviceId, NumDevices);
   }
 
+  Expected<std::unique_ptr<PluginContextTy>>
+  createPluginContext(llvm::ArrayRef<GenericDeviceTy *> Devices) override {
+    return std::make_unique<CUDAPluginContextTy>(*this, Devices);
+  }
+
   /// Creates a CUDA global handler.
   GenericGlobalHandlerTy *createGlobalHandler() override {
     return new CUDAGlobalHandlerTy();
@@ -1796,24 +1808,6 @@ struct CUDAPluginTy final : public GenericPluginTy {
     // run on any GPU with the same major revision and same or higher minor
     // revision.
     return Major == ImageMajor && Minor >= ImageMinor;
-  }
-  bool IsSystemSupportingManagedMemory() override final {
-    assert(getNumDevices());
-
-    CUdevice Device;
-    CUresult Res = cuDeviceGet(&Device, 0);
-
-    if (Res != CUDA_SUCCESS)
-      return false;
-
-    int HasManagedMemorySupport = false;
-    Res = cuDeviceGetAttribute(&HasManagedMemorySupport,
-                               CU_DEVICE_ATTRIBUTE_MANAGED_MEMORY, Device);
-
-    if (Res != CUDA_SUCCESS)
-      return false;
-
-    return HasManagedMemorySupport;
   }
 };
 

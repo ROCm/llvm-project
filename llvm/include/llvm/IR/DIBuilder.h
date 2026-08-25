@@ -50,7 +50,7 @@ namespace llvm {
     /// Track the RetainTypes, since they can be updated later on.
     SmallVector<TrackingMDNodeRef, 4> AllRetainTypes;
     SmallVector<DISubprogram *, 4> AllSubprograms;
-    SmallVector<Metadata *, 4> AllGVs;
+    SmallVector<Metadata *, 4> Globals;
     SmallVector<TrackingMDNodeRef, 4> ImportedModules;
     /// Map Macro parent (which can be DIMacroFile or nullptr) to a list of
     /// Metadata all of type DIMacroNode.
@@ -61,8 +61,8 @@ namespace llvm {
     SmallVector<TrackingMDNodeRef, 4> UnresolvedNodes;
     bool AllowUnresolvedNodes;
 
-    /// Each subprogram's preserved local variables, labels, imported entities,
-    /// and types.
+    /// Each subprogram's preserved local and static local variables, labels,
+    /// imported entities, and types.
     ///
     /// Do not use a std::vector.  Some versions of libc++ apparently copy
     /// instead of move on grow operations, and TrackingMDRef is expensive to
@@ -901,26 +901,6 @@ namespace llvm {
                                DIGenericSubrange::BoundType LowerBound,
                                DIGenericSubrange::BoundType UpperBound,
                                DIGenericSubrange::BoundType Stride);
-
-    /// Create a new descriptor for the specified variable.
-    /// \param Context       Variable scope.
-    /// \param Name          Name of the variable.
-    /// \param LinkageName   Mangled  name of the variable.
-    /// \param File          File where this variable is defined.
-    /// \param LineNo        Line number.
-    /// \param Ty            Variable Type.
-    /// \param IsLocalToUnit Boolean flag indicate whether this variable is
-    ///                      externally visible or not.
-    /// \param Decl          Reference to the corresponding declaration.
-    /// \param MS            DWARF memory space.
-    /// \param AlignInBits   Variable alignment(or 0 if no alignment attr was
-    ///                      specified)
-    DIGlobalVariable *createGlobalVariable(
-        DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *File,
-        unsigned LineNo, DIType *Ty, bool IsLocalToUnit, bool isDefined = true,
-        MDNode *Decl = nullptr, MDTuple *TemplateParams = nullptr,
-        dwarf::MemorySpace MS = dwarf::DW_MSPACE_LLVM_none,
-        uint32_t AlignInBits = 0, DINodeArray Annotations = nullptr);
 
     /// Create a new descriptor for the specified variable.
     /// \param Context     Variable scope.

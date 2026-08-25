@@ -42,7 +42,7 @@
 // RUN: unpackage --expect-fail \
 // RUN: %t.corrupt.bc amdgcn-amd-amdhsa gfx900 %t.corrupt.output.bc
 //
-// BOTH: target triple = "amdgcn-amd-amdhsa"
+// BOTH: target triple = "amd{{gcn|gpu[0-9.]+}}-amd-amdhsa"
 // GFX9: "target-cpu"="gfx900"
 // GFX10: "target-cpu"="gfx1030"
 

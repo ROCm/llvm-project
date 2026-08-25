@@ -51,11 +51,7 @@ template <typename ValueTy> class StringMapEntryStorage;
 class Type;
 
 enum LLVMConstants : uint32_t {
-  // Current debug info version number.
-  DEBUG_METADATA_VERSION = 3,
-  // Debug info version number used for DWARF extensions for
-  // heterogeneous debugging.
-  DEBUG_METADATA_VERSION_HETEROGENEOUS_DWARF = 4
+  DEBUG_METADATA_VERSION = 3 // Current debug info version number.
 };
 
 /// Magic number in the value profile metadata showing a target has been
@@ -1551,6 +1547,17 @@ public:
 
   /// Shrink the operands by 1.
   void pop_back() { resize(getNumOperands() - 1); }
+
+  /// Filter out tuple elements that do not satisfy predicate.
+  /// Return this if no elements should be filtered out (without re-uniquing).
+  template <typename T> MDTuple *filter(T &&Pred) {
+    ArrayRef<MDOperand> Ops = operands();
+    // Exit if no nodes should be removed.
+    if (llvm::all_of(Ops, Pred))
+      return this;
+    return get(getContext(),
+               to_vector_of<Metadata *>(llvm::make_filter_range(Ops, Pred)));
+  }
 
   static bool classof(const Metadata *MD) {
     return MD->getMetadataID() == MDTupleKind;
