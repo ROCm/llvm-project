@@ -267,7 +267,7 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GISEL-NEXT: bb.2.Flow5:
   ; GISEL-NEXT:   successors: %bb.3(0x40000000), %bb.4(0x40000000)
   ; GISEL-NEXT: {{  $}}
-  ; GISEL-NEXT:   [[PHI:%[0-9]+]]:sreg_32 = PHI [[S_CSELECT_B32_]], %bb.1, %96, %bb.6
+  ; GISEL-NEXT:   [[PHI:%[0-9]+]]:sreg_32 = PHI [[S_CSELECT_B32_]], %bb.1, %93, %bb.6
   ; GISEL-NEXT:   [[COPY7:%[0-9]+]]:sreg_32_xm0_xexec = COPY [[PHI]]
   ; GISEL-NEXT:   [[SI_ELSE:%[0-9]+]]:sreg_32_xm0_xexec = SI_ELSE [[SI_IF]], %bb.4, implicit-def $exec, implicit-def $scc, implicit $exec
   ; GISEL-NEXT:   S_BRANCH %bb.3
@@ -296,19 +296,19 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GISEL-NEXT: bb.4.Flow6:
   ; GISEL-NEXT:   successors: %bb.8(0x80000000)
   ; GISEL-NEXT: {{  $}}
-  ; GISEL-NEXT:   [[PHI1:%[0-9]+]]:sreg_32_xm0_xexec = PHI [[PHI]], %bb.2, %103, %bb.7
-  ; GISEL-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI %42, %bb.7, [[V_AND_B32_e64_]], %bb.2
+  ; GISEL-NEXT:   [[PHI1:%[0-9]+]]:sreg_32_xm0_xexec = PHI [[PHI]], %bb.2, %100, %bb.7
+  ; GISEL-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI %40, %bb.7, [[V_AND_B32_e64_]], %bb.2
   ; GISEL-NEXT:   SI_END_CF [[SI_ELSE]], implicit-def $exec, implicit-def $scc, implicit $exec
   ; GISEL-NEXT:   S_BRANCH %bb.8
   ; GISEL-NEXT: {{  $}}
   ; GISEL-NEXT: bb.5.do.body:
   ; GISEL-NEXT:   successors: %bb.7(0x04000000), %bb.5(0x7c000000)
   ; GISEL-NEXT: {{  $}}
-  ; GISEL-NEXT:   [[PHI3:%[0-9]+]]:sreg_32 = PHI [[S_MOV_B32_5]], %bb.3, %110, %bb.5
-  ; GISEL-NEXT:   [[PHI4:%[0-9]+]]:sreg_32 = PHI [[DEF1]], %bb.3, %88, %bb.5
-  ; GISEL-NEXT:   [[PHI5:%[0-9]+]]:sreg_32_xm0_xexec = PHI [[S_MOV_B32_4]], %bb.3, %116, %bb.5
-  ; GISEL-NEXT:   [[PHI6:%[0-9]+]]:vreg_64 = PHI %46, %bb.5, [[REG_SEQUENCE1]], %bb.3
-  ; GISEL-NEXT:   [[PHI7:%[0-9]+]]:vgpr_32 = PHI %42, %bb.5, [[V_AND_B32_e64_]], %bb.3
+  ; GISEL-NEXT:   [[PHI3:%[0-9]+]]:sreg_32 = PHI [[S_MOV_B32_5]], %bb.3, %107, %bb.5
+  ; GISEL-NEXT:   [[PHI4:%[0-9]+]]:sreg_32 = PHI [[DEF1]], %bb.3, %85, %bb.5
+  ; GISEL-NEXT:   [[PHI5:%[0-9]+]]:sreg_32_xm0_xexec = PHI [[S_MOV_B32_4]], %bb.3, %113, %bb.5
+  ; GISEL-NEXT:   [[PHI6:%[0-9]+]]:vreg_64 = PHI %44, %bb.5, [[REG_SEQUENCE1]], %bb.3
+  ; GISEL-NEXT:   [[PHI7:%[0-9]+]]:vgpr_32 = PHI %40, %bb.5, [[V_AND_B32_e64_]], %bb.3
   ; GISEL-NEXT:   [[GLOBAL_LOAD_DWORD:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_DWORD [[PHI6]], 0, 0, implicit $exec :: (load (i32) from %ir.lsr.iv, addrspace 1)
   ; GISEL-NEXT:   [[S_MOV_B32_6:%[0-9]+]]:sreg_32 = S_MOV_B32 7
   ; GISEL-NEXT:   [[COPY14:%[0-9]+]]:vgpr_32 = COPY [[S_MOV_B32_6]]

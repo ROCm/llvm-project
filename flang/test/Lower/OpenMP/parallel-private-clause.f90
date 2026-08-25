@@ -349,11 +349,7 @@ subroutine simd_loop_1
   ! FIRDialect:     %[[UB:.*]] = arith.constant 9 : i32
   ! FIRDialect:     %[[STEP:.*]] = arith.constant 1 : i32
 
-<<<<<<< HEAD
-  ! FIRDialect: omp.simd linear(val({{.*}} : !fir.ref<i32> = %[[STEP]] : i32)) private({{.*}}) {
-=======
-  ! FIRDialect: omp.simd linear({{.*}} : !fir.ref<i32> = %[[STEP]] : i32) linear_var_types([i32]) private({{.*}}) {
->>>>>>> e5b8a7c1eb09dd5abbbc75c3e2b1e36a14d92dc6
+  ! FIRDialect: omp.simd linear(val({{.*}} : !fir.ref<i32> = %[[STEP]] : i32)) linear_var_types([i32]) private({{.*}}) {
   ! FIRDialect-NEXT: omp.loop_nest (%[[I:.*]]) : i32 = (%[[LB]]) to (%[[UB]]) inclusive step (%[[STEP]]) {
   !$OMP SIMD PRIVATE(r)
   do i=1, 9
@@ -366,4 +362,3 @@ subroutine simd_loop_1
   ! FIRDialect:     omp.yield
 
 end subroutine
-!XFAIL: *

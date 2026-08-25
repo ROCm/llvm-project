@@ -1,6 +1,5 @@
 ! RUN: bbc  -fopenmp -fopenmp-version=45 -emit-hlfir %s -o - \
 ! RUN: | FileCheck %s --check-prefix=FIRDialect
-!XFAIL: *
 !CHECK-LABEL: func @_QPsimd_loop_1()
 subroutine simd_loop_1
   integer :: i
@@ -10,7 +9,7 @@ subroutine simd_loop_1
   ! FIRDialect:     %[[UB:.*]] = arith.constant 9 : i32
   ! FIRDialect:     %[[STEP:.*]] = arith.constant 1 : i32
 
-  ! FIRDialect: omp.simd linear({{.*}} = %[[STEP]] : i32) private({{.*}}) {
+  ! FIRDialect: omp.simd linear({{.*}} = %[[STEP]] : i32) linear_var_types([i32]) private({{.*}}) {
   ! FIRDialect-NEXT: omp.loop_nest (%[[I:.*]]) : i32 = (%[[LB]]) to (%[[UB]]) inclusive step (%[[STEP]]) {
   !$OMP SIMD PRIVATE(r)
   do i=1, 9

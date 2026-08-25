@@ -114,6 +114,23 @@ DebugTranslation::getMDTupleOrNull(ArrayRef<DINodeAttr> elements) {
   return llvm::MDNode::get(llvmCtx, llvmElements);
 }
 
+llvm::MDTuple *
+DebugTranslation::getRetainedNodesOrNull(ArrayRef<Attribute> retainedNodes) {
+  if (retainedNodes.empty())
+    return nullptr;
+  SmallVector<llvm::Metadata *> llvmElements = llvm::map_to_vector(
+      retainedNodes, [&](Attribute attr) -> llvm::Metadata * {
+        if (auto GVE = dyn_cast<DIGlobalVariableExpressionAttr>(attr))
+          return translateGlobalVariableExpression(GVE);
+
+        auto diAttr = dyn_cast<DINodeAttr>(attr);
+        if (!diAttr)
+          llvm_unreachable("unknown retained node kind");
+        return translate(diAttr);
+      });
+  return llvm::MDNode::get(llvmCtx, llvmElements);
+}
+
 llvm::DIBasicType *DebugTranslation::translateImpl(DIBasicTypeAttr attr) {
   return llvm::DIBasicType::get(
       llvmCtx, attr.getTag(), getMDStringOrNull(attr.getName()),
@@ -122,11 +139,17 @@ llvm::DIBasicType *DebugTranslation::translateImpl(DIBasicTypeAttr attr) {
 }
 
 static llvm::DISourceLanguageName getSourceLanguage(DICompileUnitAttr attr) {
-  // DISourceLanguageName represents "no source-language dialect" as 0; the
-  // LLVM IR printer omits the `dialect:` field for that value.
+  DISourceLanguageNameAttr sourceLanguage = attr.getSourceLanguage();
+  // A DW_LNAME value selects the versioned source-language representation;
+  // otherwise, the value is an unversioned DW_LANG value.
+  if (sourceLanguage.getName())
+    return llvm::DISourceLanguageName(
+        static_cast<uint16_t>(sourceLanguage.getName()),
+        *sourceLanguage.getVersion(),
+        static_cast<uint16_t>(sourceLanguage.getDialect()));
   return llvm::DISourceLanguageName(
-      static_cast<uint16_t>(attr.getSourceLanguage()),
-      static_cast<uint16_t>(attr.getSourceLanguageDialect()));
+      static_cast<uint16_t>(sourceLanguage.getLanguage()),
+      static_cast<uint16_t>(sourceLanguage.getDialect()));
 }
 
 llvm::TempDICompileUnit
@@ -410,7 +433,7 @@ llvm::DISubprogram *DebugTranslation::translateImpl(DISubprogramAttr attr) {
       /*ThisAdjustment=*/0, llvm::DINode::FlagZero,
       static_cast<llvm::DISubprogram::DISPFlags>(attr.getSubprogramFlags()),
       compileUnit, /*TemplateParams=*/nullptr, /*Declaration=*/nullptr,
-      getMDTupleOrNull(attr.getRetainedNodes()), nullptr,
+      getRetainedNodesOrNull(attr.getRetainedNodes()), nullptr,
       getMDTupleOrNull(attr.getAnnotations()));
   if (attr.getId())
     distinctAttrToNode.try_emplace(attr.getId(), node);

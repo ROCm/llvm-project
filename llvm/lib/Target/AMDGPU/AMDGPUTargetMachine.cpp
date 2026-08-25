@@ -1860,7 +1860,7 @@ void GCNPassConfig::addPreGlobalInstructionSelect() {
 }
 
 bool GCNPassConfig::addGlobalInstructionSelect() {
-  addPass(new InstructionSelect(getOptLevel()));
+  addPass(new InstructionSelectLegacy(getOptLevel()));
   return false;
 }
 

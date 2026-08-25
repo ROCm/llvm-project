@@ -64,49 +64,62 @@ define amdgpu_cs void @issue130119(i1 %arg) {
 ; CHECK-LABEL: issue130119:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v0
+; CHECK-NEXT:    s_mov_b64 s[0:1], 0
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; CHECK-NEXT:    s_mov_b32 s8, 0
-; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
+; CHECK-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[0:1]
 ; CHECK-NEXT:    s_mov_b64 s[0:1], -1
+; CHECK-NEXT:    s_mov_b32 s10, 0
+; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
+; CHECK-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[0:1]
+; CHECK-NEXT:    s_mov_b64 s[4:5], 0
+; CHECK-NEXT:    s_mov_b64 s[6:7], 0
 ; CHECK-NEXT:    s_mov_b64 s[2:3], 0
 ; CHECK-NEXT:  .LBB1_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Loop Header: Depth=1
 ; CHECK-NEXT:    ; Child Loop BB1_3 Depth 2
-; CHECK-NEXT:    s_bitcmp0_b32 s8, 0
-; CHECK-NEXT:    s_cselect_b64 s[4:5], -1, 0
-; CHECK-NEXT:    s_and_b64 s[6:7], s[0:1], exec
+; CHECK-NEXT:    s_bitcmp0_b32 s10, 0
+; CHECK-NEXT:    s_cselect_b64 s[8:9], -1, 0
+; CHECK-NEXT:    s_and_b64 s[12:13], s[0:1], exec
 ; CHECK-NEXT:    s_branch .LBB1_3
 ; CHECK-NEXT:  .LBB1_2: ; %bb8
 ; CHECK-NEXT:    ; in Loop: Header=BB1_3 Depth=2
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; CHECK-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; CHECK-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; CHECK-NEXT:    s_and_b64 s[12:13], s[12:13], exec
-; CHECK-NEXT:    s_mov_b64 s[6:7], 0
-; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[12:13]
-; CHECK-NEXT:    s_mov_b64 exec, s[10:11]
+; CHECK-NEXT:    s_xor_b64 s[12:13], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[14:15], exec, s[12:13]
+; CHECK-NEXT:    s_and_b64 s[14:15], s[14:15], exec
+; CHECK-NEXT:    v_mov_b32_e32 v3, v1
+; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[14:15]
+; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_6
 ; CHECK-NEXT:  .LBB1_3: ; %bb3
 ; CHECK-NEXT:    ; Parent Loop BB1_1 Depth=1
 ; CHECK-NEXT:    ; => This Inner Loop Header: Depth=2
-; CHECK-NEXT:    s_and_b64 vcc, exec, s[4:5]
-; CHECK-NEXT:    ; implicit-def: $sgpr6_sgpr7
+; CHECK-NEXT:    s_and_b64 vcc, exec, s[8:9]
+; CHECK-NEXT:    ; implicit-def: $vgpr3
 ; CHECK-NEXT:    s_cbranch_vccnz .LBB1_2
 ; CHECK-NEXT:  ; %bb.4: ; %bb7
 ; CHECK-NEXT:    ; in Loop: Header=BB1_3 Depth=2
 ; CHECK-NEXT:    s_branch .LBB1_2
 ; CHECK-NEXT:  ; %bb.5:
-; CHECK-NEXT:    s_mov_b64 s[6:7], -1
+; CHECK-NEXT:    v_mov_b32_e32 v3, v2
 ; CHECK-NEXT:  .LBB1_6: ; %loop.exit.guard
 ; CHECK-NEXT:    ; in Loop: Header=BB1_1 Depth=1
-; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
-; CHECK-NEXT:    s_and_b64 vcc, exec, s[6:7]
-; CHECK-NEXT:    s_mov_b64 s[2:3], 0
-; CHECK-NEXT:    s_cbranch_vccnz .LBB1_8
-; CHECK-NEXT:  ; %bb.7: ; %bb10
+; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
+; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; CHECK-NEXT:    s_and_b64 s[6:7], s[6:7], exec
+; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
+; CHECK-NEXT:    s_mov_b64 s[6:7], 0
+; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    ; divergent control-flow edge
+; CHECK-NEXT:    s_cbranch_execz .LBB1_8
+; CHECK-NEXT:  .LBB1_7: ; %bb10
 ; CHECK-NEXT:    ; in Loop: Header=BB1_1 Depth=1
-; CHECK-NEXT:    s_or_b32 s8, s8, 1
+; CHECK-NEXT:    s_mov_b64 s[4:5], 0
+; CHECK-NEXT:    s_or_b32 s10, s10, 1
 ; CHECK-NEXT:    s_branch .LBB1_1
 ; CHECK-NEXT:  .LBB1_8: ; %DummyReturnBlock
 ; CHECK-NEXT:    s_endpgm
