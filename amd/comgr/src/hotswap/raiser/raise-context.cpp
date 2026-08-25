@@ -61,6 +61,13 @@ BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
                      utohexstr(Addr));
 }
 
+void RaiseContext::defineBB(uint64_t Addr, BasicBlock *BB) {
+  if (!OffsetToBb.try_emplace(Addr, BB).second)
+    report_fatal_error(
+        Twine("transpiler: duplicate basic block for offset 0x") +
+        utohexstr(Addr));
+}
+
 Value *RaiseContext::emitLaneIdx() { return Projection.emitLaneIdx(B); }
 
 Value *RaiseContext::freezeMemAddr(Value *Addr) {

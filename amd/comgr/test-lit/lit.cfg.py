@@ -110,6 +110,7 @@ def _fwd(*parts):
 
 # %-prefixed substitutions for LLVM tools (used as %clang, %llvm-dis, etc.)
 config.substitutions.append(("%clang", _fwd(config.llvm_tools_dir, "clang")))
+config.substitutions.append(("%llvm-as", _fwd(config.llvm_tools_dir, "llvm-as")))
 config.substitutions.append(("%llvm-dis", _fwd(config.llvm_tools_dir, "llvm-dis")))
 config.substitutions.append(("%llvm-mc", _fwd(config.llvm_tools_dir, "llvm-mc")))
 config.substitutions.append(
