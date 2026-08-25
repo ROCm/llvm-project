@@ -997,7 +997,6 @@ public:
     return HasGFX1250Insts && getGeneration() == GFX12;
   }
 
-  // TODO: Remove this when we replace all A0 GFX1250 with B0.
   // DS_READ2 and DS_WRITE2 instructions must have addresses aligned to the
   // payload size.
   bool hasUnalignedDS2Bug() const { return hasGFX1250_STRICT(); }
