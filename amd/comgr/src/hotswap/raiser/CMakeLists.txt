@@ -37,6 +37,7 @@ add_library(hotswap-raiser OBJECT
   register-state.cpp
   raise-context.cpp
   op-resolver.cpp
+  handle-smem.cpp
   handle-sop1.cpp
   handle-sop2.cpp
   handle-sopp.cpp

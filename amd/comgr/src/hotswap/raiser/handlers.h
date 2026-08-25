@@ -28,6 +28,9 @@ llvm::Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
                        OpResolver &Op);
 llvm::Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
                        OpResolver &Op);
+/// Translate supported SMEM loads or return a structured refusal.
+llvm::Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
+                       OpResolver &Op);
 /// Translate a supported plain VOP2 instruction, or return a structured
 /// refusal.
 llvm::Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
