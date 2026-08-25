@@ -48,6 +48,11 @@ struct Entry {
 // clang-format off
 static const Entry kCanonTable[] = {
     E(S_MOV_B32, S_MOV_B32),
+    E(S_MOVRELS_B32, S_MOVRELS_B32),
+    E(S_MOVRELS_B64, S_MOVRELS_B64),
+    E(S_MOVRELD_B32, S_MOVRELD_B32),
+    E(S_MOVRELD_B64, S_MOVRELD_B64),
+    E(S_MOVRELSD_2_B32, S_MOVRELSD_2_B32),
     E(S_ENDPGM, S_ENDPGM),
     E(S_MOV_B64, S_MOV_B64),
     E(S_CMOV_B32, S_CMOV_B32),

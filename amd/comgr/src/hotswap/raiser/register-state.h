@@ -75,6 +75,13 @@ public:
   llvm::Expected<llvm::Value *> readOp32(const DecodedInst &Di, unsigned OpIdx);
   // Read the operand at OpIdx as a 64-bit value, pairing adjacent registers.
   llvm::Expected<llvm::Value *> readOp64(const DecodedInst &Di, unsigned OpIdx);
+  // Read the SGPR at Idx, or the pair based there, naming the register by
+  // index rather than by an operand.
+  llvm::Value *readSgpr32(unsigned Idx) { return Regs.loadSGPR32(B, Idx); }
+  llvm::Value *readSgpr64(unsigned Idx) { return Regs.loadSGPR64(B, Idx); }
+  // Number of SGPRs backed by the register file.
+  unsigned numSgprs() const { return static_cast<unsigned>(Regs.Sgpr.size()); }
+
   // Read a mask at target EXEC width, replicating narrower source-wave bits.
   llvm::Expected<llvm::Value *> readOpExecWidth(const DecodedInst &Di,
                                                 unsigned OpIdx);
@@ -177,9 +184,9 @@ public:
   // this block, if any.
   std::optional<uint64_t> lookupSourceImageSgprPairAddr(unsigned BaseIdx) const;
 
-  // Track the value written to M0, which V_MOVREL needs as a constant to
-  // resolve its VGPR index while the indexed register file is built. A
-  // non-constant write, and any block boundary, gives up the constant.
+  // Track the value written to M0, which the relative-addressing opcodes need
+  // as a constant to resolve the register index they name. A non-constant
+  // write, and any block boundary, gives up the constant.
   void updateM0Const(llvm::Value *V);
   std::optional<uint64_t> getM0Const() const { return M0Const; }
 
