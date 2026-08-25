@@ -128,6 +128,11 @@ static const Entry kCanonTable[] = {
     E(S_BCNT0_I32_B64, S_BCNT0_I32_B64),
     E(S_BCNT1_I32_B32, S_BCNT1_I32_B32),
     E(S_BCNT1_I32_B64, S_BCNT1_I32_B64),
+    E(S_GETPC_B64, S_GETPC_B64),
+    E(S_SETPC_B64, S_SETPC_B64),
+    E(S_SWAPPC_B64, S_SWAPPC_B64),
+    E(S_ADD_PC_I64, S_ADD_PC_I64),
+    E(S_RFE_B64, S_RFE_B64),
 };
 // clang-format on
 

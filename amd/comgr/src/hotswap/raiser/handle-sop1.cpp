@@ -9,9 +9,11 @@
 #include "hotswap/raiser/handlers.h"
 
 #include "hotswap/decoder/amdgpu-formats.h"
+#include "hotswap/decoder/decode.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise_failure.h"
 
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
 
@@ -242,6 +244,15 @@ static Expected<unsigned> displacedSgpr(RaiseContext &Ctx,
     return refuseMovrel(
         Ctx, Di, "resolved SGPR index " + Twine(Idx) + " is out of range");
   return static_cast<unsigned>(Idx);
+}
+
+// Refuse Di as a control transfer the raised kernel cannot state.
+static Error refusePcTransfer(RaiseContext &Ctx, const DecodedInst &Di,
+                              const Twine &Detail) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
 }
 
 Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
@@ -496,6 +507,48 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Ctx.registers().writeReg32(*Dst, Result);
     Ctx.registers().writeScc(Ctx.B.CreateIsNotNull(Result, "s_bcnt_scc"));
     return Error::success();
+  }
+
+  // A constant displacement names a source offset rather than an address, and
+  // a source offset leads a block, so the jump is a branch between blocks.
+  // Where it goes is read from the decode and not computed a second time here,
+  // which would be a second chance to disagree about the target.
+  if (Di.CanonOp == CanonicalOp::S_ADD_PC_I64) {
+    if (!hasStaticBranchTarget(Di))
+      return refusePcTransfer(
+          Ctx, Di,
+          "displacement is not a constant, so the offset it jumps to "
+          "is not known");
+    Expected<uint64_t> Target = staticBranchTarget(Di);
+    if (!Target)
+      return Target.takeError();
+    Ctx.B.CreateBr(Ctx.lookupBB(*Target));
+    return Error::success();
+  }
+
+  // A raised kernel is a different code object at a different address, so a
+  // source program counter is a number nothing in it can act on: not an
+  // address to jump to, and not where the bytes it points at are mapped.
+  // Lowering one to that number would raise a kernel that computes something
+  // plausible and goes somewhere wrong, so each of these is refused instead.
+  switch (Di.CanonOp) {
+  case CanonicalOp::S_GETPC_B64:
+    return refusePcTransfer(Ctx, Di,
+                            "captures a source address, which no raised "
+                            "instruction can jump to or load from");
+  case CanonicalOp::S_SETPC_B64:
+    return refusePcTransfer(
+        Ctx, Di, "jumps to a register value, which names no recovered block");
+  case CanonicalOp::S_SWAPPC_B64:
+    return refusePcTransfer(Ctx, Di,
+                            "calls through a register value and leaves behind "
+                            "a return address nothing can return to");
+  // A raised kernel runs no handler to return from, and the privileged state
+  // the return restores belongs to the source wave.
+  case CanonicalOp::S_RFE_B64:
+    return refusePcTransfer(Ctx, Di, "returns from an exception handler");
+  default:
+    break;
   }
 
   return RaiseFailure::atInstruction(
