@@ -38,7 +38,7 @@ define weak amdgpu_kernel void @generic_kernel() "kernel" {
 
 ; SPMD kernel: the wrapper (arg 6) is nulled.
 ; CHECK-LABEL: define internal void @spmd_outlined(
-; CHECK: call void @__kmpc_parallel_60(ptr @1, i32 0, i32 1, i32 -1, i32 -1, ptr @spmd_body, ptr @spmd_body_wrapper, ptr null, i64 0, i32 0)
+; CHECK: call void @__kmpc_parallel_60(ptr @1, i32 0, i32 1, i32 -1, i32 -1, ptr @spmd_body, ptr null, ptr null, i64 0, i32 0)
 define internal void @spmd_outlined(ptr %.global_tid., ptr %.bound_tid.) {
   call void @__kmpc_parallel_60(ptr @1, i32 0, i32 1, i32 -1, i32 -1, ptr @spmd_body, ptr @spmd_body_wrapper, ptr null, i64 0, i32 0)
   ret void

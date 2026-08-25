@@ -4380,40 +4380,32 @@ struct AAKernelInfoFunction : AAKernelInfo {
     else
       forceSingleThreadPerWorkgroupHelper(A);
 
-    // Adjust the global exec mode flag that tells the runtime what mode this
-    // kernel is executed in.
+    // The mode is recorded in two places that have to agree: the kernel
+    // environment, which the device runtime reads in __kmpc_target_init, and
+    // the per-kernel exec mode global, which the plugin reads out of the image
+    // to pick the launch configuration. Update both here so that the two can
+    // never be left disagreeing about how this kernel runs. Kernels built by
+    // clang and by OpenMPIRBuilder always carry the global, but hand-written IR
+    // need not, so only write it if it is there.
     assert(ExecModeVal == OMP_TGT_EXEC_MODE_GENERIC &&
            "Initially non-SPMD kernel has SPMD exec mode!");
     setExecModeOfKernelEnvironment(
         ConstantInt::get(ExecModeC->getIntegerType(),
                          ExecModeVal | OMP_TGT_EXEC_MODE_GENERIC_SPMD));
 
-    // The global variable needs to be set too.
-    GlobalVariable *ExecMode = Kernel->getParent()->getGlobalVariable(
-        (Kernel->getName() + "_exec_mode").str());
-
-    if (!ExecMode) { // likely fortran missing exec mode
-      auto Remark = [&](OptimizationRemark OR) {
-        return OR << "Could not transform generic-mode kernel to SPMD-mode. Missing mode.";
-      };
-      A.emitRemark<OptimizationRemark>(KernelInitCB, "OMP122", Remark);
-    return false;
+    if (GlobalVariable *ExecMode = Kernel->getParent()->getGlobalVariable(
+            (Kernel->getName() + "_exec_mode").str())) {
+      assert(ExecMode->getInitializer() &&
+             "ExecMode doesn't have initializer!");
+      assert(isa<ConstantInt>(ExecMode->getInitializer()) &&
+             "ExecMode is not an integer!");
+      assert(cast<ConstantInt>(ExecMode->getInitializer())->getSExtValue() ==
+                 OMP_TGT_EXEC_MODE_GENERIC &&
+             "Initially non-SPMD kernel has SPMD exec mode!");
+      ExecMode->setInitializer(
+          ConstantInt::get(ExecMode->getInitializer()->getType(),
+                           ExecModeVal | OMP_TGT_EXEC_MODE_GENERIC_SPMD));
     }
-    assert(ExecMode && "Kernel without exec mode?");
-    assert(ExecMode->getInitializer() && "ExecMode doesn't have initializer!");
-
-    // Set the global exec mode flag to indicate SPMD-Generic mode.
-    assert(isa<ConstantInt>(ExecMode->getInitializer()) &&
-           "ExecMode is not an integer!");
-
-    // Adjust the global exec mode flag that tells the runtime what mode this
-    // kernel is executed in.
-    assert(cast<ConstantInt>(ExecMode->getInitializer())->getSExtValue() ==
-               OMP_TGT_EXEC_MODE_GENERIC &&
-           "Initially non-SPMD kernel has SPMD exec mode!");
-    ExecMode->setInitializer(
-        ConstantInt::get(ExecMode->getInitializer()->getType(),
-                         ExecModeVal | OMP_TGT_EXEC_MODE_GENERIC_SPMD));
 
     ++NumOpenMPTargetRegionKernelsSPMD;
 
