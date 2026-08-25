@@ -6,7 +6,7 @@
 // RUN: %llvm-dis %t-with-dev-libs.bc -o - | %FileCheck %s
 
 // COM: Verify LLVM IR text file
-// CHECK: target triple = "amdgcn-amd-amdhsa"
+// CHECK: target triple = "amd{{gcn|gpu[0-9.]+}}-amd-amdhsa"
 // CHECK: define internal float @_Z4powrff
 // CHECK: define internal float @_Z6sincosfPU3AS5f
 // CHECK: define internal float @_Z4cbrtf

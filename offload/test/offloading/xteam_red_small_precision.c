@@ -1,8 +1,9 @@
 // clang-format off
-// This test verifies correctness of Xteam Reduction for reduced precision types.
+// This test verifies correctness of a cross-team reduction for reduced
+// precision types.
 //
 // RUN: %libomptarget-compile-generic -fopenmp-target-fast -lmlir_float16_utils
-// RUN: env LIBOMPTARGET_KERNEL_TRACE=1 %libomptarget-run-generic 2>&1 | %fcheck-generic
+// RUN: %libomptarget-run-generic 2>&1 | %fcheck-generic
 
 // UNSUPPORTED: nvptx64-nvidia-cuda
 // UNSUPPORTED: nvptx64-nvidia-cuda-LTO
@@ -54,6 +55,5 @@ int main() {
   return rc;
 }
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
+/// CHECK: 4952.000000 2448.000000 2450
+/// CHECK: Success

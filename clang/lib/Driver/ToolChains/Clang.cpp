@@ -1429,7 +1429,7 @@ static void CollectARMPACBTIOptions(const ToolChain &TC, const ArgList &Args,
                                        options::OPT_mbranch_protection_EQ)
                      : Args.getLastArg(options::OPT_mbranch_protection_EQ);
   if (!A) {
-    if (Triple.isOSOpenBSD() && isAArch64) {
+    if ((Triple.isOSOpenBSD() || Triple.isAndroid()) && isAArch64) {
       CmdArgs.push_back("-msign-return-address=non-leaf");
       CmdArgs.push_back("-msign-return-address-key=a_key");
       CmdArgs.push_back("-mbranch-target-enforce");
@@ -1451,7 +1451,8 @@ static void CollectARMPACBTIOptions(const ToolChain &TC, const ArgList &Args,
       D.Diag(diag::err_drv_unsupported_option_argument)
           << A->getSpelling() << Scope;
     Key = "a_key";
-    IndirectBranches = Triple.isOSOpenBSD() && isAArch64;
+    IndirectBranches =
+        (Triple.isOSOpenBSD() || Triple.isAndroid()) && isAArch64;
     BranchProtectionPAuthLR = false;
     GuardedControlStack = false;
   } else {
@@ -2094,12 +2095,9 @@ void Clang::AddRISCVTargetArgs(const ArgList &Args,
     return;
   if (!TuneCPU->empty()) {
     CmdArgs.push_back("-tune-cpu");
-    if (*TuneCPU == "native")
-      CmdArgs.push_back(Args.MakeArgString(llvm::sys::getHostCPUName()));
-    else
-      // TuneCPU might or might not be the original -mtune string, so we
-      // have to create a new copy here.
-      CmdArgs.push_back(Args.MakeArgString(*TuneCPU));
+    // TuneCPU might or might not be the original -mtune string, so we
+    // have to create a new copy here.
+    CmdArgs.push_back(Args.MakeArgString(*TuneCPU));
   }
 
   // Handle -mrvv-vector-bits=<bits>
@@ -4255,8 +4253,8 @@ static bool RenderModulesOptions(Compilation &C, const Driver &D,
   if (HaveClangModules)
     Args.AddLastArg(CmdArgs, options::OPT_fmodules_user_build_path);
 
-  // Pass through all -fmodules-ignore-macro arguments.
   Args.AddAllArgs(CmdArgs, options::OPT_fmodules_ignore_macro);
+  Args.AddAllArgs(CmdArgs, options::OPT_fmodules_ignore_search_path);
   Args.AddLastArg(CmdArgs, options::OPT_fmodules_prune_interval);
   Args.AddLastArg(CmdArgs, options::OPT_fmodules_prune_after);
 
@@ -4699,7 +4697,7 @@ renderDebugOptions(const ToolChain &TC, const Driver &D, const llvm::Triple &T,
                    const ArgList &Args, types::ID InputType,
                    ArgStringList &CmdArgs, const InputInfo &Output,
                    llvm::codegenoptions::DebugInfoKind &DebugInfoKind,
-                   DwarfFissionKind &DwarfFission) {
+                   DwarfFissionKind &DwarfFission, bool IsUsingLTO) {
   bool IRInput = isLLVMIR(InputType);
   bool PlainCOrCXX = isDerivedFromC(InputType) && !isCuda(InputType) &&
                      !isHIP(InputType) && !isObjC(InputType) &&
@@ -4923,6 +4921,36 @@ renderDebugOptions(const ToolChain &TC, const Driver &D, const llvm::Triple &T,
   if (!Args.hasFlag(options::OPT_gstructor_decl_linkage_names,
                     options::OPT_gno_structor_decl_linkage_names, true))
     CmdArgs.push_back("-gno-structor-decl-linkage-names");
+
+  if (Args.hasFlag(options::OPT_fdynamic_debugging,
+                   options::OPT_fno_dynamic_debugging, false)) {
+    // As this is an experimental feature we can afford to be strict about
+    // supported configurations.
+    // NOTE on adding target support, consider adding "tail-pad-to-size"
+    // support in `llvm::prepareForDynamicDebugging`.
+    if (!TC.getTriple().isX86())
+      D.Diag(diag::err_drv_unsupported_opt_for_target)
+          << Args.getLastArg(options::OPT_fdynamic_debugging)->getAsString(Args)
+          << T.getTriple();
+    if (IsUsingLTO)
+      D.Diag(diag::err_drv_dyndbg_lto);
+    if (DwarfFission != DwarfFissionKind::None)
+      D.Diag(diag::err_drv_dyndbg_incompatible)
+          << Args.getLastArg(options::OPT_gsplit_dwarf)->getAsString(Args);
+    // There's no fundamental reason why IR input should be incompatible, but
+    // it would add some complexity, and reducing the test matrix is valuable.
+    if (IRInput)
+      D.Diag(diag::err_drv_dyndbg_ir);
+
+    // Disable composition with sanitizers for now.
+    if (auto *San = Args.getLastArg(options::OPT_fsanitize_EQ))
+      D.Diag(diag::err_drv_dyndbg_incompatible) << San->getAsString(Args);
+
+    if (!EmitDwarf)
+      D.Diag(diag::warn_drv_dyndbg_req_debug);
+    else
+      CmdArgs.push_back("-fdynamic-debugging");
+  }
 
   if (EmitCodeView) {
     CmdArgs.push_back("-gcodeview");
@@ -5679,6 +5707,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (Args.getLastArg(options::OPT_save_temps_EQ))
     Args.AddLastArg(CmdArgs, options::OPT_save_temps_EQ);
+
+  if (Args.getLastArg(options::OPT_save_dynamic_debugging_temps))
+    Args.AddLastArg(CmdArgs, options::OPT_save_dynamic_debugging_temps);
 
   auto *MemProfArg = Args.getLastArg(options::OPT_fmemory_profile,
                                      options::OPT_fmemory_profile_EQ,
@@ -6522,7 +6553,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       llvm::codegenoptions::NoDebugInfo;
   DwarfFissionKind DwarfFission = DwarfFissionKind::None;
   renderDebugOptions(TC, D, RawTriple, Args, InputType, CmdArgs, Output,
-                     DebugInfoKind, DwarfFission);
+                     DebugInfoKind, DwarfFission, IsUsingLTO);
 
   // Add the split debug info name to the command lines here so we
   // can propagate it to the backend.
@@ -6668,17 +6699,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.addOptInFlag(CmdArgs, options::OPT_funique_basic_block_section_names,
                     options::OPT_fno_unique_basic_block_section_names);
 
-  if (Arg *A = Args.getLastArg(options::OPT_fsplit_machine_functions,
-                               options::OPT_fno_split_machine_functions)) {
-    if (!A->getOption().matches(options::OPT_fno_split_machine_functions)) {
-      // This codegen pass is only available on x86 and AArch64 ELF targets.
-      if ((Triple.isX86() || Triple.isAArch64()) && Triple.isOSBinFormatELF())
-        A->render(Args, CmdArgs);
-      else
-        D.Diag(diag::err_drv_unsupported_opt_for_target)
-            << A->getAsString(Args) << TripleStr;
-    }
-  }
+  addSplitMachineFunctionsArgs(D, Args, CmdArgs, Triple);
 
   if (Arg *A =
           Args.getLastArg(options::OPT_fpartition_static_data_sections,
@@ -7235,38 +7256,33 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       else
         CmdArgs.push_back("-fno-openmp-target-no-loop");
 
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_reduction,
-                       options::OPT_fno_openmp_target_xteam_reduction, true))
-        CmdArgs.push_back("-fopenmp-target-xteam-reduction");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-reduction");
+      // The downstream cross-team ("Xteam") reduction implementation has been
+      // removed; cross-team reductions now use the upstream implementation,
+      // which is always enabled. These flags are accepted but ignored for
+      // backward compatibility, and emit a deprecation notice when explicitly
+      // specified. Note that '-fopenmp-target-xteam-reduction-blocksize=' is
+      // *not* deprecated: it still selects the block size of cross-team
+      // reduction kernels, see CodeGenModule::getWorkGroupSizeSPMDHelper().
+      for (Arg *A :
+           Args.filtered(options::OPT_fopenmp_target_xteam_reduction,
+                         options::OPT_fno_openmp_target_xteam_reduction))
+        D.Diag(diag::warn_drv_deprecated_custom)
+            << A->getAsString(Args)
+            << "cross-team reductions now use the upstream implementation; the "
+               "flag is ignored";
 
-      if (Args.hasFlag(options::OPT_fopenmp_target_fast_reduction,
-                       options::OPT_fno_openmp_target_fast_reduction, false))
-        CmdArgs.push_back("-fopenmp-target-fast-reduction");
-      else
-        CmdArgs.push_back("-fno-openmp-target-fast-reduction");
-
+      // The downstream cross-team 'scan' specialization has been removed.
+      // These flags are accepted but ignored for backward compatibility, and
+      // emit a deprecation notice when explicitly specified.
       for (Arg *A : Args.filtered(options::OPT_fopenmp_target_xteam_scan,
                                   options::OPT_fno_openmp_target_xteam_scan,
                                   options::OPT_fopenmp_target_xteam_no_loop_scan,
                                   options::OPT_fno_openmp_target_xteam_no_loop_scan))
         D.Diag(diag::warn_drv_deprecated_custom)
             << A->getAsString(Args)
-            << "will be removed in a future revision of the OpenMP implementation.";
-
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_scan,
-                       options::OPT_fno_openmp_target_xteam_scan, false))
-        CmdArgs.push_back("-fopenmp-target-xteam-scan");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-scan");
-
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_no_loop_scan,
-                       options::OPT_fno_openmp_target_xteam_no_loop_scan,
-                       false))
-        CmdArgs.push_back("-fopenmp-target-xteam-no-loop-scan");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-no-loop-scan");
+            << "the cross-team 'scan' specialization has been removed; the "
+               "flag "
+               "is ignored";
       // When in OpenMP offloading mode with NVPTX target, forward
       // cuda-mode flag
       if (Args.hasFlag(options::OPT_fopenmp_cuda_mode,
@@ -8473,14 +8489,14 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // them in the host compilation depending on the target. If the host inputs
   // are not empty we use the new-driver scheme, otherwise use the old scheme.
   if ((IsCuda || IsHIP) && !UsesLLVMOffloading && CudaDeviceInput) {
-    CmdArgs.push_back("-fcuda-include-gpubinary");
+    CmdArgs.push_back("-foffload-include-binary");
     CmdArgs.push_back(CudaDeviceInput->getFilename());
   } else if (!HostOffloadingInputs.empty()) {
     if ((IsCuda || IsHIP) &&
         (!IsRDCMode || Args.hasArg(options::OPT_cuda_emit_nvcc_abi)) &&
         !UsesLLVMOffloading) {
       assert(HostOffloadingInputs.size() == 1 && "Only one input expected");
-      CmdArgs.push_back("-fcuda-include-gpubinary");
+      CmdArgs.push_back("-foffload-include-binary");
       CmdArgs.push_back(HostOffloadingInputs.front().getFilename());
     } else {
       for (const InputInfo Input : HostOffloadingInputs)

@@ -171,9 +171,9 @@ struct AsyncInfoWrapperTy {
 
   /// Register \p Ptr as an associated allocation that is freed after
   /// finalization.
-  void freeAllocationAfterSynchronization(void *Ptr) {
+  void freeAllocationAfterSynchronization(void *Ptr, TargetAllocTy Kind) {
     std::lock_guard<std::mutex> AllocationGuard(AsyncInfoPtr->Mutex);
-    AsyncInfoPtr->AssociatedAllocations.push_back(Ptr);
+    AsyncInfoPtr->AssociatedAllocations.push_back({Ptr, Kind});
   }
 
 private:
@@ -459,11 +459,12 @@ struct KernelLaunchArgsTy {
   uint32_t UserThreadLimit[3] = {0, 0, 0};
   struct {
     uint64_t Cooperative : 1; // Was this kernel spawned as cooperative.
-    uint64_t StrictBlocksAndThreads
-        : 1; // The user-requested number of blocks and threads are strict.
+    uint64_t StrictBlocks : 1; // The user-requested number of blocks is strict.
+    uint64_t
+        StrictThreads : 1; // The user-requested number of threads is strict.
     uint64_t DynCGroupMemFallback : 2; // The fallback for dynamic cgroup mem.
     uint64_t Unused : 60;
-  } Flags = {0, 0, 0, 0};
+  } Flags = {0, 0, 0, 0, 0};
   /// Set by the caller when replaying a previously recorded kernel launch, so
   /// the plugin can report the outcome back; null for a normal launch.
   KernelReplayOutcomeTy *ReplayOutcome = nullptr;
@@ -550,20 +551,10 @@ struct GenericKernelTy {
       return true;
     // AMD-only execution modes
     case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
-    case OMP_TGT_EXEC_MODE_XTEAM_RED:
       ODBG(ODT_Tool) << "AMD-only execution mode";
       return true;
     }
     llvm_unreachable("Unknown execution mode!");
-  }
-
-  /// Indicate whether it is a specialized kernel.
-  bool isSpecializedKernel() const {
-    if (ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_NO_LOOP ||
-        ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP ||
-        ExecutionMode == OMP_TGT_EXEC_MODE_XTEAM_RED)
-      return true;
-    return false;
   }
 
   /// Compute kernel occupancy
@@ -603,8 +594,17 @@ struct GenericKernelTy {
   bool isNoLoopMode() const {
     return ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
   }
-  bool isXTeamReductionsMode() const {
-    return ExecutionMode == OMP_TGT_EXEC_MODE_XTEAM_RED;
+  // Note: there is deliberately no execution mode for a cross-team reduction.
+  // Such a kernel is a plain SPMD one; use doesTeamsReduction() below to detect
+  // it.
+
+  /// Indicate whether this kernel performs a cross-team (teams) reduction.
+  /// Signalled by a non-zero reduction data size emitted by CodeGen for the
+  /// upstream cross-team reduction path. This drives the AMDGPU reduction
+  /// grid-size heuristic now that the downstream Xteam reduction execution
+  /// mode is no longer generated.
+  bool doesTeamsReduction() const {
+    return KernelEnvironment.Configuration.ReductionDataSize > 0;
   }
 
   /// Indicate if the input block size is within the limit.
@@ -627,8 +627,6 @@ protected:
       return "SPMD-No-Loop";
     case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
       return "SPMD-Big-Jump-Loop";
-    case OMP_TGT_EXEC_MODE_XTEAM_RED:
-      return "XTeam-Reductions";
     }
     llvm_unreachable("Unknown execution mode!");
   }
@@ -677,6 +675,7 @@ private:
                                          uint32_t UserNumBlocks,
                                          uint64_t LoopTripCount,
                                          uint32_t &EffectiveNumThreads,
+                                         bool IsNumThreadsStrict,
                                          bool IsNumThreadsFromUser) const;
 
   /// The kernel name.
@@ -1092,6 +1091,22 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual Error queryAsyncImpl(__tgt_async_info &AsyncInfo, bool ReleaseQueue,
                                bool *IsQueueWorkCompleted) = 0;
 
+  /// Indicate whether the plugin transfers data faster when the host side of
+  /// the transfer is pinned memory. If a plugin returns true, the kernel
+  /// launch environment is staged in a pinned host buffer before it is
+  /// submitted. Plugins may benefit for different reasons: some pick a cheaper
+  /// copy path for buffers they know are pinned, others rely on the driver
+  /// only issuing a true asynchronous transfer out of page-locked memory.
+  virtual bool hasFastTransferWithPinnedMemory() const { return false; }
+
+  /// Allocate a pinned host buffer to stage a kernel launch environment. The
+  /// caller owns it until it registers it with
+  /// AsyncInfoWrapperTy::freeAllocationAfterSynchronization, which releases it
+  /// once the transfer reading it has completed. Returns nullptr if staging is
+  /// unavailable, in which case the caller must submit the launch environment
+  /// from ordinary host memory.
+  KernelLaunchEnvironmentTy *getPinnedLaunchEnvBuffer();
+
   /// Check whether the architecture supports VA management
   virtual bool supportVAManagement() const { return false; }
 
@@ -1366,6 +1381,9 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual uint32_t getOMPXAdjustNumTeamsForXteamRedSmallBlockSize() const {
     llvm_unreachable("Unimplemented");
   }
+  virtual bool getOMPXXTeamReductionOccupancyBasedOpt() const {
+    llvm_unreachable("Unimplemented");
+  }
   virtual bool getOMPXGenericSpmdUseSmallBlockSize() const {
     llvm_unreachable("Unimplemented");
   }
@@ -1580,8 +1598,12 @@ private:
   /// only necessary for unhosted targets like the GPU.
   virtual bool shouldSetupRPCServer() const { return false; }
 
-  /// Pointer to the memory manager or nullptr if not available.
+  /// Pointer to the device memory manager or nullptr if not available.
   MemoryManagerTy *MemoryManager;
+  /// Memory managers for the host and shared allocation kinds or nullptr if not
+  /// available.
+  MemoryManagerTy *HostMemoryManager;
+  MemoryManagerTy *SharedMemoryManager;
 
   /// Per device setting of MemoryManager's Threshold
   virtual size_t getMemoryManagerSizeThreshold() { return 0; }
@@ -1620,6 +1642,20 @@ private:
 
   /// Record and replay manager.
   RecordReplayTy *RecordReplay = nullptr;
+
+  /// Return the memory manager for the given allocation kind.
+  MemoryManagerTy *getMemoryManagerFor(TargetAllocTy Kind) {
+    switch (Kind) {
+    case TARGET_ALLOC_DEFAULT:
+    case TARGET_ALLOC_DEVICE:
+      return MemoryManager;
+    case TARGET_ALLOC_HOST:
+      return HostMemoryManager;
+    case TARGET_ALLOC_SHARED:
+      return SharedMemoryManager;
+    }
+    return nullptr;
+  }
 
 protected:
   /// Environment variables defined by the LLVM OpenMP implementation
@@ -1844,9 +1880,6 @@ struct GenericPluginTy {
   /// Get the number of active devices.
   int32_t getNumDevices() const { return NumDevices; }
 
-  /// Returns true if the system supports managed memory (SVN in AMD GPUs).
-  virtual bool IsSystemSupportingManagedMemory() { return false; }
-
   /// Get the plugin-specific device identifier.
   int32_t getUserId(int32_t DeviceId) const {
     assert(UserDeviceIds.contains(DeviceId) && "No user-id registered");
@@ -2025,9 +2058,6 @@ public:
   /// variables is enabled under unified shared memory.
   bool is_gfx90a_coarse_grain_usm_map_enabled(int32_t DeviceId);
 
-  /// Returns if managed memory is supported.
-  bool is_system_supporting_managed_memory(int32_t DeviceId);
-
   /// Returns non-zero if the data can be exchanged between the two devices.
   int32_t is_data_exchangable(int32_t SrcDeviceId, int32_t DstDeviceId);
 
@@ -2168,9 +2198,6 @@ public:
 
   /// Returns if we can use automatic zero copy.
   int32_t use_auto_zero_copy(int32_t DeviceId);
-
-  /// Make sure a pointer can be accessed by all agents.
-  int32_t enable_access_to_all_agents(int32_t DeviceId, void *ptr);
 
   /// Perform some checks when using automatic zero copy.
   int32_t zero_copy_sanity_checks_and_diag(int32_t DeviceId,

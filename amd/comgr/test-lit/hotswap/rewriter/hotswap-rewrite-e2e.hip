@@ -21,7 +21,7 @@
 // RUN: %llvm-readelf -h %t.input.elf | %FileCheck --check-prefix=INPUT-FLAGS %s
 // INPUT-FLAGS: Flags:{{.*}}gfx1250
 // RUN: %llvm-readelf --notes %t.input.elf | %FileCheck --check-prefix=INPUT-META %s
-// INPUT-META: amdhsa.target: amdgcn-amd-amdhsa{{--|-unknown-}}gfx1250
+// INPUT-META: amdhsa.target: amd{{gcn|gpu[0-9.]+}}-amd-amdhsa{{--|-unknown-}}gfx1250
 
 // COM: Run hotswap-rewrite; save the output so we can inspect it.
 // RUN: hotswap-rewrite %t.input.elf \
@@ -36,7 +36,7 @@
 // RUN: %llvm-readelf -h %t.output.elf | %FileCheck --check-prefix=OUTPUT-FLAGS %s
 // OUTPUT-FLAGS: Flags:{{.*}}gfx1250
 // RUN: %llvm-readelf --notes %t.output.elf | %FileCheck --check-prefix=OUTPUT-META %s
-// OUTPUT-META: amdhsa.target: amdgcn-amd-amdhsa{{--|-unknown-}}gfx1250
+// OUTPUT-META: amdhsa.target: amd{{gcn|gpu[0-9.]+}}-amd-amdhsa{{--|-unknown-}}gfx1250
 
 // COM: .text section is still present and marked executable.
 // RUN: %llvm-readelf --section-headers %t.output.elf \

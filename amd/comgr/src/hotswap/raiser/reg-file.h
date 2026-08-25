@@ -11,7 +11,6 @@
 
 #include "hotswap/decoder/parsed-reg.h"
 
-#include "llvm/ADT/FunctionExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
@@ -64,15 +63,6 @@ struct AllocaRegFile {
   // paths are then unreachable.
   const WaveProjection *Projection = nullptr;
 
-  // Invalidation hook fired on every EXEC-mutating store.
-  llvm::unique_function<void()> OnExecWritten;
-
-  // Invalidation hook fired on every per-SGPR store, once per 32-bit half.
-  llvm::unique_function<void(int)> OnSgprWritten;
-
-  // Tracking hook fired on every M0 store, passing the stored value.
-  llvm::unique_function<void(llvm::Value *)> OnM0Written;
-
   // Initialise storage. `MRI` supplies the architectural SGPR_32 / TTMP_32
   // register-class sizes; `Isa.hasAgpr()` selects whether to allocate AGPR
   // slots; `Proj` is retained as a non-owning pointer for the VCC read/write
@@ -122,7 +112,7 @@ struct AllocaRegFile {
 
   // Populate `Out` with every alloca the raiser emitted, for feeding
   // into `PromoteMemToReg`.
-  void collectAllocas(llvm::SmallVectorImpl<llvm::AllocaInst *> &Out);
+  void collectAllocas(llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const;
 };
 
 } // namespace COMGR::hotswap

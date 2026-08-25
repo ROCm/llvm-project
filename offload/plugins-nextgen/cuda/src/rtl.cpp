@@ -816,6 +816,11 @@ struct CUDADeviceTy : public GenericDeviceTy {
     return false;
   }
 
+  /// cuMemcpyHtoDAsync is only a true asynchronous transfer when the host
+  /// buffer is page-locked. Out of pageable memory the driver has to copy the
+  /// data into staging memory of its own before it can return.
+  bool hasFastTransferWithPinnedMemory() const override { return true; }
+
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
                        AsyncInfoWrapperTy &AsyncInfoWrapper) override {
@@ -1803,24 +1808,6 @@ struct CUDAPluginTy final : public GenericPluginTy {
     // run on any GPU with the same major revision and same or higher minor
     // revision.
     return Major == ImageMajor && Minor >= ImageMinor;
-  }
-  bool IsSystemSupportingManagedMemory() override final {
-    assert(getNumDevices());
-
-    CUdevice Device;
-    CUresult Res = cuDeviceGet(&Device, 0);
-
-    if (Res != CUDA_SUCCESS)
-      return false;
-
-    int HasManagedMemorySupport = false;
-    Res = cuDeviceGetAttribute(&HasManagedMemorySupport,
-                               CU_DEVICE_ATTRIBUTE_MANAGED_MEMORY, Device);
-
-    if (Res != CUDA_SUCCESS)
-      return false;
-
-    return HasManagedMemorySupport;
   }
 };
 
