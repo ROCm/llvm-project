@@ -28,6 +28,7 @@
 #include "SILowerI1Copies.h"
 #include "SIMachineFunctionInfo.h"
 #include "llvm/CodeGen/GlobalISel/MachineIRBuilder.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionAnalysisManager.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachinePassManager.h"
@@ -318,6 +319,8 @@ private:
   MachineUniformityInfo *MUI = nullptr;
   MachineIRBuilder B;
 
+  bool simplifyMachinePHIs();
+
 public:
   void markAsLaneMask(Register DstReg) const override {}
   void getCandidatesForLowering(
@@ -334,15 +337,85 @@ public:
   void constrainAsLaneMask(AMDGPU::Incoming &In) override {}
 
   bool widenS1Phis();
+  bool lowerDivergentBrcond();
 };
 
 DivergenceS1WideningHelper::DivergenceS1WideningHelper(
     MachineFunction &MF, MachineDominatorTree &DT,
     MachinePostDominatorTree &PDT, MachineUniformityInfo *MUI)
-    : AMDGPU::PhiLoweringHelper(MF, DT, PDT), MUI(MUI), B(MF) {}
+    : PhiLoweringHelper(MF, DT, PDT), MUI(MUI), B(MF) {}
+
+// Fold a uniform G_PHI that merges a single real value through divergent
+// control flow into that value. Every incoming must be a G_IMPLICIT_DEF, a self
+// reference, or the same uniform register; with a G_IMPLICIT_DEF input the
+// common value must dominate the phi. Only relevant at -O0.
+bool DivergenceS1WideningHelper::simplifyMachinePHIs() {
+  bool Changed = false;
+
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &MI : make_early_inc_range(MBB.phis())) {
+      Register DstReg = MI.getOperand(0).getReg();
+      if (!DstReg.isVirtual() || MUI->isDivergentAtDef(DstReg))
+        continue;
+
+      Register CommonReg;
+      bool HasImplicitDefInput = false;
+      bool Bail = false;
+
+      for (unsigned I = 1, E = MI.getNumOperands(); I < E; I += 2) {
+        Register In = MI.getOperand(I).getReg();
+        if (In == DstReg)
+          continue;
+
+        MachineInstr *Def = MRI->getVRegDef(In);
+        if (Def && (Def->isImplicitDef() ||
+                    Def->getOpcode() == TargetOpcode::G_IMPLICIT_DEF)) {
+          HasImplicitDefInput = true;
+          continue;
+        }
+
+        // A real incoming of a uniform phi must itself be uniform.
+        if (MUI->isDivergentAtDef(In)) {
+          Bail = true;
+          break;
+        }
+
+        if (CommonReg && CommonReg != In) {
+          Bail = true;
+          break;
+        }
+        CommonReg = In;
+      }
+
+      if (Bail || !CommonReg)
+        continue;
+
+      // With a G_IMPLICIT_DEF input the common value must dominate the phi.
+      if (HasImplicitDefInput) {
+        MachineInstr *DefCommonReg = MRI->getVRegDef(CommonReg);
+        if (!DefCommonReg || !DT.dominates(DefCommonReg, &MI))
+          continue;
+      }
+
+      LLVM_DEBUG(dbgs() << "Simplifying uniform PHI: " << MI << "  -> "
+                        << printReg(CommonReg) << "\n");
+
+      if (!MRI->hasOneUse(DstReg))
+        MRI->clearKillFlags(CommonReg);
+      MRI->replaceRegWith(DstReg, CommonReg);
+      MI.eraseFromParent();
+      Changed = true;
+    }
+  }
+
+  return Changed;
+}
 
 bool DivergenceS1WideningHelper::widenS1Phis() {
-  bool Change = false;
+  // Round#0, fold uniform phis that merge a single value through divergent
+  // control flow, before widening the divergent-s1-phis below.
+  bool Change = simplifyMachinePHIs();
+
   DenseMap<Register, Register> S1ToS32;
   SmallVector<MachineInstr *, 8> S1Phis;
 
@@ -371,7 +444,9 @@ bool DivergenceS1WideningHelper::widenS1Phis() {
       Change = true;
     }
   }
-  // Round#2, replace the sources of divergent-s1-phi.
+  // Round#2, replace the sources of divergent-s1-phi. A self reference resolves
+  // via S1ToS32; any other s1 source is widened with a G_SELECT after its def,
+  // which also covers loop back-edge operands.
   for (auto MI : S1Phis) {
     for (unsigned I = 1; I < MI->getNumOperands(); I += 2) {
       Register Src = MI->getOperand(I).getReg();
@@ -393,9 +468,13 @@ bool DivergenceS1WideningHelper::widenS1Phis() {
     }
   }
 
-  // Round#3, lower divergent G_BRCOND to SI_BRCOND. Uniform branches keep their
-  // scalar lowering, which is handled by selectG_BRCOND during instruction
-  // selection, so they are left untouched here.
+  return Change;
+}
+
+// Lower divergent G_BRCOND to SI_BRCOND. Uniform branches are left for
+// selectG_BRCOND during instruction selection.
+bool DivergenceS1WideningHelper::lowerDivergentBrcond() {
+  bool Change = false;
   SmallVector<MachineInstr *, 8> ToBeErased;
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB) {
@@ -436,7 +515,10 @@ static bool runDivergenceLowering(MachineFunction &MF, MachineDominatorTree &DT,
   bool Changed = false;
   if (EnableLateWaveTransform) {
     MF.getInfo<SIMachineFunctionInfo>()->setWaveCFG(false);
-    Changed = DivergenceS1WideningHelper(MF, DT, PDT, &MUI).widenS1Phis();
+    DivergenceS1WideningHelper Helper(MF, DT, PDT, &MUI);
+    // Widen divergent s1 phis (s1->s32), then lower divergent G_BRCOND.
+    Changed |= Helper.widenS1Phis();
+    Changed |= Helper.lowerDivergentBrcond();
   } else {
     DivergenceLoweringHelper Helper(MF, DT, PDT, &MUI);
 
