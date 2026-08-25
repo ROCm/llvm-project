@@ -5497,8 +5497,10 @@ private:
 
   /// The current size of the stack that will be used in cases where it could
   /// not be statically determined.
-  /// Default: 1024, in conformity to hipLimitStackSize.
-  uint32_t StackSize = 1024 /* 1 KB */;
+  /// Default: 16 KB, matching upstream. COV5+ kernels with uses_dynamic_stack
+  /// rely on this value for scratch headroom since the compiler zeroes out
+  /// AssumedStackSizeForDynamicSizeObjects and AssumedStackSizeForExternalCall.
+  uint32_t StackSize = 16 * 1024 /* 16 KB */;
 
   // The maximum scratch memory size per thread.
   // See COMPUTE_TMPRING_SIZE.WAVESIZE (divided by threads per wave).
