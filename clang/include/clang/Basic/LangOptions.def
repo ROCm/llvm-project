@@ -238,7 +238,6 @@ LANGOPT(OpenMPCUDABlocksPerSM  , 32, 0, NotCompatible, "Number of blocks per SM 
 LANGOPT(OpenMPGPUThreadsPerTeam, 32, 256, NotCompatible, "Number of threads per team for GPUs.")
 LANGOPT(OpenMPTargetXteamReductionBlockSize, 32, 512, NotCompatible, "Number of threads in a block used by cross-team reduction.")
 LANGOPT(OpenMPTargetDebug , 32, 0, NotCompatible, "Enable debugging in the OpenMP offloading device RTL")
-LANGOPT(OpenMPTargetIgnoreEnvVars , 1, 0, NotCompatible, "Generate code assuming that device related environment variables can be ignored.")
 LANGOPT(OpenMPTargetBigJumpLoop , 1, 1, NotCompatible, "Use big jump loop code generation technique.")
 LANGOPT(OpenMPTargetNoLoop , 1, 1, NotCompatible, "Use no-loop code generation technique.")
 LANGOPT(OpenMPTargetXteamReduction , 1, 1, NotCompatible, "Use cross-team code generation technique.")
