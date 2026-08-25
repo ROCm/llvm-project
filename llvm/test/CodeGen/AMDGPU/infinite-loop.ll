@@ -27,6 +27,7 @@ define amdgpu_kernel void @infinite_loop(ptr addrspace(1) %out) {
 ; IR-NEXT:    br i1 true, label [[LOOP]], label [[DUMMYRETURNBLOCK:%.*]]
 ; IR:       DummyReturnBlock:
 ; IR-NEXT:    ret void
+;
 entry:
   br label %loop
 
@@ -72,6 +73,7 @@ define amdgpu_kernel void @infinite_loop_callbr(ptr addrspace(1) %out) {
 ; IR-NEXT:            to label [[LOOP]] []
 ; IR:       DummyReturnBlock:
 ; IR-NEXT:    ret void
+;
 entry:
   callbr void asm "", ""() to label %loop []
 
@@ -112,6 +114,7 @@ define amdgpu_kernel void @infinite_loop_ret(ptr addrspace(1) %out) {
 ; IR-NEXT:    br i1 true, label [[LOOP]], label [[UNIFIEDRETURNBLOCK]]
 ; IR:       UnifiedReturnBlock:
 ; IR-NEXT:    ret void
+;
 entry:
   %tmp = tail call i32 @llvm.amdgcn.workitem.id.x()
   %cond = icmp eq i32 %tmp, 1
@@ -170,6 +173,7 @@ define amdgpu_kernel void @infinite_loop_ret_callbr(ptr addrspace(1) %out) {
 ; IR-NEXT:            to label [[LOOP]] []
 ; IR:       UnifiedReturnBlock:
 ; IR-NEXT:    ret void
+;
 entry:
   %tmp = tail call i32 @llvm.amdgcn.workitem.id.x()
   %cond = icmp eq i32 %tmp, 1
@@ -225,6 +229,7 @@ define amdgpu_kernel void @infinite_loops(ptr addrspace(1) %out) {
 ; IR-NEXT:    br i1 true, label [[LOOP2]], label [[DUMMYRETURNBLOCK]]
 ; IR:       DummyReturnBlock:
 ; IR-NEXT:    ret void
+;
 entry:
   br i1 poison, label %loop1, label %loop2
 
@@ -297,6 +302,7 @@ define amdgpu_kernel void @infinite_loops_callbr(ptr addrspace(1) %out) {
 ; IR-NEXT:            to label [[LOOP2]] []
 ; IR:       DummyReturnBlock:
 ; IR-NEXT:    ret void
+;
 entry:
   callbr void asm "", "r,!i"(i32 poison) to label %loop1 [label %loop2]
 
@@ -314,11 +320,10 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; SI:       ; %bb.0: ; %entry
 ; SI-NEXT:    v_cmp_eq_u32_e64 s[6:7], 1, v0
 ; SI-NEXT:    s_xor_b64 s[0:1], s[6:7], exec
-; SI-NEXT:    s_mov_b64 s[8:9], -1
-; SI-NEXT:    s_mov_b64 s[10:11], 0
+; SI-NEXT:    s_mov_b64 s[8:9], 0
 ; SI-NEXT:    s_mov_b64 exec, s[0:1]
 ; SI-NEXT:    ; divergent control-flow edge
-; SI-NEXT:    s_cbranch_execz .LBB6_6
+; SI-NEXT:    s_cbranch_execz .LBB6_7
 ; SI-NEXT:  .LBB6_1: ; %outer_loop.preheader
 ; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b64 s[4:5], -1
@@ -330,20 +335,18 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; SI-NEXT:    s_mov_b32 s2, -1
 ; SI-NEXT:    v_mov_b32_e32 v1, 0x3e7
 ; SI-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[4:5]
-; SI-NEXT:    s_and_b64 s[4:5], s[8:9], exec
 ; SI-NEXT:    s_branch .LBB6_4
 ; SI-NEXT:  .LBB6_2: ; in Loop: Header=BB6_4 Depth=1
 ; SI-NEXT:    v_mov_b32_e32 v4, v2
 ; SI-NEXT:  .LBB6_3: ; %loop.exit.guard
 ; SI-NEXT:    ; in Loop: Header=BB6_4 Depth=1
-; SI-NEXT:    s_or_b64 exec, exec, s[10:11]
+; SI-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; SI-NEXT:    s_xor_b64 s[10:11], exec, s[4:5]
-; SI-NEXT:    s_and_b64 s[10:11], s[10:11], exec
-; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
-; SI-NEXT:    s_mov_b64 s[10:11], 0
+; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; SI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; SI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
+; SI-NEXT:    s_mov_b64 s[8:9], 0
 ; SI-NEXT:    s_mov_b64 exec, s[4:5]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB6_7
@@ -351,7 +354,6 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; SI-NEXT:    ; =>This Loop Header: Depth=1
 ; SI-NEXT:    ; Child Loop BB6_5 Depth 2
 ; SI-NEXT:    s_mov_b64 s[4:5], 0
-; SI-NEXT:    s_and_b64 s[12:13], s[8:9], exec
 ; SI-NEXT:  .LBB6_5: ; %inner_loop
 ; SI-NEXT:    ; Parent Loop BB6_4 Depth=1
 ; SI-NEXT:    ; => This Inner Loop Header: Depth=2
@@ -364,16 +366,15 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; SI-NEXT:    s_cbranch_vccnz .LBB6_2
 ; SI-NEXT:  ; %bb.6: ; %TransitionBlock
 ; SI-NEXT:    ; in Loop: Header=BB6_5 Depth=2
-; SI-NEXT:    v_cmp_ne_u32_e64 s[12:13], 0, v0
-; SI-NEXT:    s_xor_b64 s[14:15], exec, s[12:13]
-; SI-NEXT:    s_and_b64 s[14:15], s[14:15], exec
+; SI-NEXT:    v_cmp_ne_u32_e64 s[10:11], 0, v0
+; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v3
-; SI-NEXT:    s_or_b64 s[10:11], s[10:11], s[14:15]
-; SI-NEXT:    s_mov_b64 exec, s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
-; SI-NEXT:    s_cbranch_execnz .LBB6_4
+; SI-NEXT:    s_cbranch_execnz .LBB6_5
 ; SI-NEXT:    s_branch .LBB6_3
-; SI-NEXT:  .LBB6_6: ; %UnifiedReturnBlock
+; SI-NEXT:  .LBB6_7: ; %UnifiedReturnBlock
 ; SI-NEXT:    s_endpgm
 ; IR-LABEL: @infinite_loop_nest_ret(
 ; IR-NEXT:  entry:
@@ -390,6 +391,7 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; IR-NEXT:    br i1 [[COND3]], label [[INNER_LOOP]], label [[OUTER_LOOP]]
 ; IR:       UnifiedReturnBlock:
 ; IR-NEXT:    ret void
+;
 entry:
   %tmp = tail call i32 @llvm.amdgcn.workitem.id.x()
   %cond1 = icmp ne i32 %tmp, 1  ; avoid following BB optimizing away through the domination
@@ -491,6 +493,7 @@ define amdgpu_kernel void @infinite_loop_nest_ret_callbr(ptr addrspace(1) %out) 
 ; IR-NEXT:            to label [[INNER_LOOP]] [label [[OUTER_LOOP]]]
 ; IR:       UnifiedReturnBlock:
 ; IR-NEXT:    ret void
+;
 entry:
   %tmp = tail call i32 @llvm.amdgcn.workitem.id.x()
   %cond1 = icmp ne i32 %tmp, 1  ; avoid following BB optimizing away through the domination
