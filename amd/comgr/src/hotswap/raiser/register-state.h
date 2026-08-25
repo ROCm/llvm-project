@@ -23,6 +23,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/Error.h"
 
+#include <cassert>
 #include <cstdint>
 #include <optional>
 
@@ -95,6 +96,15 @@ public:
   void storeExec(llvm::Value *V) {
     Regs.storeExec(B, V);
     resetLaneActiveCache();
+  }
+
+  // Read and write SCC, the wave-level condition bit, as an i1. An opcode
+  // whose SCC rule is stated over a wider result compares it against zero
+  // itself.
+  llvm::Value *readScc() { return Regs.loadSCC(B); }
+  void writeScc(llvm::Value *V) {
+    assert(V->getType()->isIntegerTy(1) && "SCC holds a single bit");
+    Regs.storeSCC(B, V);
   }
 
   // Write V to the register Pr names, at the register's width. VGPR and AGPR
