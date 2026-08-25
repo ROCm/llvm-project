@@ -201,7 +201,7 @@ define amdgpu_kernel void @loop_mix_i1(ptr addrspace(1) %filter.coerce, ptr addr
   ; GISEL-NEXT: bb.2.Flow4:
   ; GISEL-NEXT:   successors: %bb.3(0x40000000), %bb.4(0x40000000)
   ; GISEL-NEXT: {{  $}}
-  ; GISEL-NEXT:   [[PHI:%[0-9]+]]:sreg_32 = PHI [[S_CSELECT_B32_]], %bb.1, %74, %bb.6
+  ; GISEL-NEXT:   [[PHI:%[0-9]+]]:sreg_32 = PHI [[S_CSELECT_B32_]], %bb.1, %72, %bb.6
   ; GISEL-NEXT:   [[COPY7:%[0-9]+]]:sreg_32_xm0_xexec = COPY [[PHI]]
   ; GISEL-NEXT:   [[SI_ELSE:%[0-9]+]]:sreg_32_xm0_xexec = SI_ELSE [[SI_IF]], %bb.4, implicit-def $exec, implicit-def $scc, implicit $exec
   ; GISEL-NEXT:   S_BRANCH %bb.3
@@ -215,15 +215,15 @@ define amdgpu_kernel void @loop_mix_i1(ptr addrspace(1) %filter.coerce, ptr addr
   ; GISEL-NEXT: bb.4.Flow5:
   ; GISEL-NEXT:   successors: %bb.8(0x80000000)
   ; GISEL-NEXT: {{  $}}
-  ; GISEL-NEXT:   [[PHI1:%[0-9]+]]:sreg_32_xm0_xexec = PHI [[PHI]], %bb.2, %81, %bb.7
+  ; GISEL-NEXT:   [[PHI1:%[0-9]+]]:sreg_32_xm0_xexec = PHI [[PHI]], %bb.2, %79, %bb.7
   ; GISEL-NEXT:   SI_END_CF [[SI_ELSE]], implicit-def $exec, implicit-def $scc, implicit $exec
   ; GISEL-NEXT:   S_BRANCH %bb.8
   ; GISEL-NEXT: {{  $}}
   ; GISEL-NEXT: bb.5.do.body:
   ; GISEL-NEXT:   successors: %bb.7(0x04000000), %bb.5(0x7c000000)
   ; GISEL-NEXT: {{  $}}
-  ; GISEL-NEXT:   [[PHI2:%[0-9]+]]:sreg_64 = PHI %37, %bb.5, [[COPY2]], %bb.3
-  ; GISEL-NEXT:   [[PHI3:%[0-9]+]]:sreg_32 = PHI %99, %bb.5, [[S_MOV_B32_3]], %bb.3
+  ; GISEL-NEXT:   [[PHI2:%[0-9]+]]:sreg_64 = PHI %36, %bb.5, [[COPY2]], %bb.3
+  ; GISEL-NEXT:   [[PHI3:%[0-9]+]]:sreg_32 = PHI %97, %bb.5, [[S_MOV_B32_3]], %bb.3
   ; GISEL-NEXT:   [[S_LOAD_DWORD_IMM:%[0-9]+]]:sreg_32_xm0_xexec = S_LOAD_DWORD_IMM [[PHI2]], 0, 0 :: ("amdgpu-noclobber" load (i32) from %ir.lsr.iv, addrspace 1)
   ; GISEL-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_MOV_B32 7
   ; GISEL-NEXT:   S_CMP_LT_I32 [[S_LOAD_DWORD_IMM]], [[S_MOV_B32_4]], implicit-def $scc

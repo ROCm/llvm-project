@@ -2,12 +2,11 @@
 
 ; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -filetype=obj -mcpu=gfx942 %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %hotswap_transpile_cli %t.hsaco --kernel nope --dump-meta 2>&1 \
-; RUN:   | %FileCheck %s
-
-; --kernel selects a single kernel by name; an absent name is reported rather
+; A mode's value selects kernels by name; an absent name is reported rather
 ; than silently producing no output.
-; CHECK: kernel 'nope' not found in metadata
+; RUN: not %hotswap_transpile_cli %t.hsaco --dump-meta=nope 2>&1 \
+; RUN:   | %FileCheck %s
+; CHECK: kernel 'nope' not found in
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
 	.amdhsa_code_object_version 6

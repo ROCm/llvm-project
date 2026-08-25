@@ -44,15 +44,9 @@ module attributes {dlti.dl_spec = #dlti.dl_spec<"dlti.alloca_memory_space" = 5 :
     %4 = llvm.alloca %0 x i1 : (i64) -> !llvm.ptr<5>
     %5 = llvm.addrspacecast %4 : !llvm.ptr<5> to !llvm.ptr
     %8 = llvm.getelementptr %5[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>
-<<<<<<< HEAD
-    %9 = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(tofrom) capture(ByRef) var_ptr_ptr(%8 : !llvm.ptr, f32) -> !llvm.ptr {name = ""}
-    %10 = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(always, to) capture(ByRef) members(%9 : [0] : !llvm.ptr) -> !llvm.ptr {name = "scalar_alloc"}
-    %attach = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(ref_ptr_ptee, attach) capture(ByRef) var_ptr_ptr(%8 : !llvm.ptr, f32) -> !llvm.ptr {name = "scalar_alloc"}
-=======
     %9 = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(tofrom) capture(ByRef) var_ptr_ptr(%8 : !llvm.ptr, f32) name("") -> !llvm.ptr
-    %10 = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(always, descriptor, to) capture(ByRef) members(%9 : [0] : !llvm.ptr) name("scalar_alloc") -> !llvm.ptr
+    %10 = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(always, to) capture(ByRef) members(%9 : [0] : !llvm.ptr) name("scalar_alloc") -> !llvm.ptr
     %attach = omp.map.info var_ptr(%5 : !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8)>) map_clauses(ref_ptr_ptee, attach) capture(ByRef) var_ptr_ptr(%8 : !llvm.ptr, f32) name("scalar_alloc") -> !llvm.ptr
->>>>>>> e5b8a7c1eb09dd5abbbc75c3e2b1e36a14d92dc6
     omp.target kernel_type(spmd) map_entries(%10 -> %arg0 : !llvm.ptr) {
       %14 = llvm.mlir.constant(1000000 : i32) : i32
       %15 = llvm.mlir.constant(1 : i32) : i32
@@ -118,4 +112,3 @@ module attributes {dlti.dl_spec = #dlti.dl_spec<"dlti.alloca_memory_space" = 5 :
 // CHECK:   store ptr %[[GLOB_ELEM_PTR]], ptr %[[ALLOC_PTR_PTR]], align 8
 // CHECK:   store ptr %[[ALLOC_DESC_ASCAST]], ptr %[[RED_ARR_LIST]], align 8
 // CHECK: }
-//XFAIL: *

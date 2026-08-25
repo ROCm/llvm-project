@@ -50,8 +50,10 @@ namespace {
 
 class RaiseContextTest : public ::testing::Test {
 protected:
-  // Source offset the environment maps to a block.
-  static constexpr uint64_t KTargetOffset = 0x40;
+  // Offset the source kernel starts at, which the context maps to the entry
+  // block. Deliberately not zero: the mapping tracks the kernel's own start,
+  // not the start of the text section it sits in.
+  static constexpr uint64_t KKernelStartOffset = 0x40;
 
   void SetUp() override {
     Expected<MCState> State = initMCState("gfx942");
@@ -67,7 +69,7 @@ protected:
     ISAProfile Isa;
     ReplicationProjection Projection;
     Function *Kernel;
-    BasicBlock *Target;
+    BasicBlock *Entry;
     std::optional<RaiseContext> Ctx;
 
     explicit ContextEnvironment(const MCState &Mc)
@@ -77,16 +79,11 @@ protected:
           Kernel(Function::Create(
               FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
               Function::ExternalLinkage, "kernel", Mod)),
-          Target(BasicBlock::Create(LLVMCtx, "target", Kernel)) {
-      BasicBlock *Entry =
-          BasicBlock::Create(LLVMCtx, "entry", Kernel, /*InsertBefore=*/Target);
+          Entry(BasicBlock::Create(LLVMCtx, "entry", Kernel)) {
       B.SetInsertPoint(Entry);
-      DenseMap<uint64_t, BasicBlock *> OffsetToBb;
-      OffsetToBb[KTargetOffset] = Target;
-      Ctx.emplace(cantFail(
-          RaiseContext::create(B, Projection, Mc, KernelMeta(),
-                               std::move(OffsetToBb), ArrayRef<uint8_t>(), 0,
-                               ArrayRef<TextSection::ImageSection>(), 0, 0)));
+      Ctx.emplace(cantFail(RaiseContext::create(
+          B, Projection, Mc, KernelMeta(), ArrayRef<uint8_t>(), 0,
+          ArrayRef<TextSection::ImageSection>(), KKernelStartOffset, 0)));
     }
   };
 
@@ -95,7 +92,7 @@ protected:
 };
 
 TEST_F(RaiseContextTest, ResolvesBlocksBySourceOffset) {
-  EXPECT_EQ(Env->Ctx->lookupBB(KTargetOffset), Env->Target);
+  EXPECT_EQ(Env->Ctx->lookupBB(KKernelStartOffset), Env->Entry);
 }
 
 } // namespace

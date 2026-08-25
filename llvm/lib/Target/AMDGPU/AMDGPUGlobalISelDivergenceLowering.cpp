@@ -70,8 +70,8 @@ public:
 /// This helper is used for structurized whole-wave control-flow.
 class DivergenceLoweringHelper : public AMDGPU::PhiLoweringHelper {
 public:
-  DivergenceLoweringHelper(MachineFunction *MF, MachineDominatorTree *DT,
-                           MachinePostDominatorTree *PDT,
+  DivergenceLoweringHelper(MachineFunction &MF, MachineDominatorTree &DT,
+                           MachinePostDominatorTree &PDT,
                            MachineUniformityInfo *MUI);
 
 private:
@@ -99,9 +99,9 @@ public:
 };
 
 DivergenceLoweringHelper::DivergenceLoweringHelper(
-    MachineFunction *MF, MachineDominatorTree *DT,
-    MachinePostDominatorTree *PDT, MachineUniformityInfo *MUI)
-    : PhiLoweringHelper(MF, DT, PDT), MUI(MUI), B(*MF) {}
+    MachineFunction &MF, MachineDominatorTree &DT,
+    MachinePostDominatorTree &PDT, MachineUniformityInfo *MUI)
+    : PhiLoweringHelper(MF, DT, PDT), MUI(MUI), B(MF) {}
 
 // _(s1) -> SReg_32/64(s1)
 void DivergenceLoweringHelper::markAsLaneMask(Register DstReg) const {
@@ -123,7 +123,7 @@ void DivergenceLoweringHelper::getCandidatesForLowering(
   // Add divergent i1 G_PHIs to the list. Only consider G_PHI instructions,
   // not PHI instructions that may have been created by earlier lowering stages
   // (e.g., lowerTemporalDivergenceI1).
-  for (MachineBasicBlock &MBB : *MF) {
+  for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB.phis()) {
       if (MI.getOpcode() != TargetOpcode::G_PHI)
         continue;
@@ -220,7 +220,7 @@ void replaceUsesOfRegInInstWith(Register Reg, MachineInstr *Inst,
 }
 
 bool DivergenceLoweringHelper::lowerTemporalDivergence() {
-  AMDGPU::IntrinsicLaneMaskAnalyzer ILMA(*MF);
+  AMDGPU::IntrinsicLaneMaskAnalyzer ILMA(MF);
   DenseMap<Register, Register> TDCache;
 
   for (auto [Reg, UseInst, _] : MUI->getTemporalDivergenceList()) {
@@ -251,7 +251,7 @@ bool DivergenceLoweringHelper::lowerTemporalDivergence() {
 bool DivergenceLoweringHelper::lowerTemporalDivergenceI1() {
   MachineRegisterInfo::VRegAttrs BoolS1 = {ST->getBoolRC(), LLT::scalar(1)};
   initializeLaneMaskRegisterAttributes(BoolS1);
-  MachineSSAUpdater SSAUpdater(*MF);
+  MachineSSAUpdater SSAUpdater(MF);
 
   const auto &CInfo = MUI->getCycleInfo();
 
@@ -310,7 +310,9 @@ bool DivergenceLoweringHelper::lowerTemporalDivergenceI1() {
 /// This helper is used for unstructured per-lane control-flow.
 class DivergenceS1WideningHelper : public AMDGPU::PhiLoweringHelper {
 public:
-  DivergenceS1WideningHelper(MachineFunction *MF, MachineUniformityInfo *MUI);
+  DivergenceS1WideningHelper(MachineFunction &MF, MachineDominatorTree &DT,
+                             MachinePostDominatorTree &PDT,
+                             MachineUniformityInfo *MUI);
 
 private:
   MachineUniformityInfo *MUI = nullptr;
@@ -335,8 +337,9 @@ public:
 };
 
 DivergenceS1WideningHelper::DivergenceS1WideningHelper(
-    MachineFunction *MF, MachineUniformityInfo *MUI)
-    : AMDGPU::PhiLoweringHelper(MF, nullptr, nullptr), MUI(MUI), B(*MF) {}
+    MachineFunction &MF, MachineDominatorTree &DT,
+    MachinePostDominatorTree &PDT, MachineUniformityInfo *MUI)
+    : AMDGPU::PhiLoweringHelper(MF, DT, PDT), MUI(MUI), B(MF) {}
 
 bool DivergenceS1WideningHelper::widenS1Phis() {
   bool Change = false;
@@ -347,7 +350,7 @@ bool DivergenceS1WideningHelper::widenS1Phis() {
   const LLT S32 = LLT::scalar(32);
 
   // Round#1, replace the destination of divergent-s1-phi.
-  for (MachineBasicBlock &MBB : *MF) {
+  for (MachineBasicBlock &MBB : MF) {
 
     B.setInsertPt(MBB, MBB.getFirstNonPHI());
 
@@ -394,7 +397,7 @@ bool DivergenceS1WideningHelper::widenS1Phis() {
   // scalar lowering, which is handled by selectG_BRCOND during instruction
   // selection, so they are left untouched here.
   SmallVector<MachineInstr *, 8> ToBeErased;
-  for (MachineBasicBlock &MBB : *MF) {
+  for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB) {
       if (MI.getOpcode() != TargetOpcode::G_BRCOND)
         continue;
@@ -433,9 +436,9 @@ static bool runDivergenceLowering(MachineFunction &MF, MachineDominatorTree &DT,
   bool Changed = false;
   if (EnableLateWaveTransform) {
     MF.getInfo<SIMachineFunctionInfo>()->setWaveCFG(false);
-    Changed = DivergenceS1WideningHelper(&MF, &MUI).widenS1Phis();
+    Changed = DivergenceS1WideningHelper(MF, DT, PDT, &MUI).widenS1Phis();
   } else {
-    DivergenceLoweringHelper Helper(&MF, &DT, &PDT, &MUI);
+    DivergenceLoweringHelper Helper(MF, DT, PDT, &MUI);
 
     // Temporal divergence lowering needs to inspect list of instructions used
     // outside cycle with divergent exit provided by uniformity analysis. Uniform

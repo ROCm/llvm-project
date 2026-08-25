@@ -15,6 +15,7 @@
 #include "SILowerI1Copies.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachinePostDominators.h"
 #include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/InitializePasses.h"
@@ -27,7 +28,8 @@ namespace {
 
 class Vreg1WideningHelper : public AMDGPU::PhiLoweringHelper {
 public:
-  Vreg1WideningHelper(MachineFunction *MF);
+  Vreg1WideningHelper(MachineFunction &MF, MachineDominatorTree &DT,
+                      MachinePostDominatorTree &PDT);
 
 private:
   DenseSet<Register> ConstrainRegs;
@@ -91,8 +93,10 @@ public:
   }
 };
 
-Vreg1WideningHelper::Vreg1WideningHelper(MachineFunction *MF)
-    : PhiLoweringHelper(MF, nullptr, nullptr) {}
+Vreg1WideningHelper::Vreg1WideningHelper(MachineFunction &MF,
+                                         MachineDominatorTree &DT,
+                                         MachinePostDominatorTree &PDT)
+    : PhiLoweringHelper(MF, DT, PDT) {}
 
 } // End anonymous namespace.
 
@@ -224,7 +228,7 @@ bool Vreg1WideningHelper::widenVreg1s() {
   DenseSet<Register> Vreg32Set;
 
   // Round#1, create the replacing instruction per Vreg1 definition.
-  for (MachineBasicBlock &MBB : *MF) {
+  for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB) {
       if (!MI.isPHI() && MI.getOpcode() != AMDGPU::COPY &&
           MI.getOpcode() != AMDGPU::IMPLICIT_DEF)
@@ -298,7 +302,7 @@ bool Vreg1WideningHelper::widenVreg1s() {
   }
 
   // Round#2b, fix PHIs with lane mask dst that received widened vgpr_32 operands.
-  for (MachineBasicBlock &MBB : *MF) {
+  for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB.phis()) {
       // Skip instructions with no lane mask destination register (SGPR).
       if (!isLaneMaskReg(MI.getOperand(0).getReg()))
@@ -336,9 +340,12 @@ namespace {
 // PhiNodes. Plus maybe some other lowering work needed?
 class AMDGPUFinalizeISelWaveTransform {
   MachineDominatorTree &MDT;
+  MachinePostDominatorTree &MPDT;
 
 public:
-  AMDGPUFinalizeISelWaveTransform(MachineDominatorTree &MDT) : MDT(MDT) {}
+  AMDGPUFinalizeISelWaveTransform(MachineDominatorTree &MDT,
+                                  MachinePostDominatorTree &MPDT)
+      : MDT(MDT), MPDT(MPDT) {}
   bool run(MachineFunction &MF);
 };
 
@@ -353,7 +360,9 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF) override {
     auto &MDT = getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
-    return AMDGPUFinalizeISelWaveTransform(MDT).run(MF);
+    auto &MPDT =
+        getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
+    return AMDGPUFinalizeISelWaveTransform(MDT, MPDT).run(MF);
   }
 
   StringRef getPassName() const override {
@@ -363,6 +372,7 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
     AU.addRequired<MachineDominatorTreeWrapperPass>();
+    AU.addRequired<MachinePostDominatorTreeWrapperPass>();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 };
@@ -372,6 +382,7 @@ public:
 INITIALIZE_PASS_BEGIN(AMDGPUFinalizeISelWaveTransformLegacy, DEBUG_TYPE,
                       "AMDGPU Finalize ISel Wave Transform", false, false)
 INITIALIZE_PASS_DEPENDENCY(MachineDominatorTreeWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(MachinePostDominatorTreeWrapperPass)
 INITIALIZE_PASS_END(AMDGPUFinalizeISelWaveTransformLegacy, DEBUG_TYPE,
                     "AMDGPU Finalize ISel Wave Transform", false, false)
 
@@ -391,7 +402,7 @@ bool AMDGPUFinalizeISelWaveTransform::run(MachineFunction &MF) {
 
   bool Changed = simplifyMachinePHIs(MF, MDT);
 
-  Vreg1WideningHelper Helper(&MF);
+  Vreg1WideningHelper Helper(MF, MDT, MPDT);
   Changed |= Helper.widenVreg1s();
   return Helper.cleanConstrainRegs(Changed);
 }
@@ -399,7 +410,9 @@ bool AMDGPUFinalizeISelWaveTransform::run(MachineFunction &MF) {
 PreservedAnalyses llvm::AMDGPUFinalizeISelWaveTransformPass::run(
     MachineFunction &MF, MachineFunctionAnalysisManager &MFAM) {
   MachineDominatorTree &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
-  if (!AMDGPUFinalizeISelWaveTransform(MDT).run(MF))
+  MachinePostDominatorTree &MPDT =
+      MFAM.getResult<MachinePostDominatorTreeAnalysis>(MF);
+  if (!AMDGPUFinalizeISelWaveTransform(MDT, MPDT).run(MF))
     return PreservedAnalyses::all();
 
   return getMachineFunctionPassPreservedAnalyses().preserveSet<CFGAnalyses>();

@@ -1,11 +1,15 @@
 # Unit tests for the hotswap raiser (ISA-to-IR transpiler scaffolding).
+#
+# Every target here links hotswap::raiser, which normalizes a source ISA string
+# through COMGR::parseTargetIdentifier, so each also links the
+# comgr-object-utils objects that define it.
 
 # -- RaiserScaffoldingTests ---------------------------------------------------
 #
-# Pins the bare-bones raiser scaffolding contract (`hotswap/raiser/raiser.h`):
-# empty input produces a verifyModule-clean `llvm::Module` with a single
-# `AMDGPU_KERNEL` `ret void` function, plus the failure paths for missing
-# kernel descriptor / malformed ISA.
+# Pins the refusals `hotswap/raiser/raiser.h` reaches before it has a kernel to
+# raise, or on input no code object can express: a malformed ISA at either end,
+# and a kernel extent holding no code. The shape of a raised module is pinned
+# from the emitted IR by test-lit/hotswap/raiser/kernel_scaffolding.s instead.
 
 add_executable(RaiserScaffoldingTests
   RaiserScaffoldingTest.cpp)
@@ -16,6 +20,7 @@ target_link_libraries(RaiserScaffoldingTests PRIVATE
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  comgr-object-utils
   ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
@@ -42,6 +47,7 @@ target_link_libraries(WaveProjectionTests PRIVATE
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  comgr-object-utils
   ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
@@ -68,6 +74,7 @@ target_link_libraries(RaiseFailureTests PRIVATE
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  comgr-object-utils
   ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
@@ -92,6 +99,7 @@ target_link_libraries(RegFileTests PRIVATE
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  comgr-object-utils
   ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
@@ -117,6 +125,7 @@ target_link_libraries(RegisterStateTests PRIVATE
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  comgr-object-utils
   ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
@@ -140,6 +149,7 @@ target_link_libraries(RaiseContextTests PRIVATE
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  comgr-object-utils
   ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
@@ -164,6 +174,7 @@ target_link_libraries(OpResolverTests PRIVATE
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  comgr-object-utils
   ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
@@ -189,6 +200,7 @@ target_link_libraries(UserSgprLayoutTests PRIVATE
   hotswap::raiser
   hotswap::decoder
   hotswap::common
+  comgr-object-utils
   ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 

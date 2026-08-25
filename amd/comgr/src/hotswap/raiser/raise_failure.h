@@ -48,6 +48,11 @@ enum class RaiseFailureReason : uint16_t {
   // in-extent target could not be decoded. Crossing the boundary would inspect
   // neighboring symbols.
   KernelBoundaryViolation,
+  // The kernel extent runs out without an instruction that ends the program,
+  // so the code is truncated or the extent is misbounded. Distinct from a
+  // boundary violation, which is a branch leaving the extent rather than
+  // execution falling off its end.
+  UnterminatedKernelExtent,
   // A helper or device-library bitcode link step failed. Distinct from a
   // verifier failure: the module is intentionally incomplete until the linked
   // body is inlined.
@@ -71,6 +76,9 @@ enum class RaiseFailureReason : uint16_t {
   // Source descriptor fields do not describe a valid, self-consistent user
   // SGPR layout.
   UserSgprLayoutMismatch,
+  // The source ABI preloads an entry SGPR the raiser cannot reproduce on the
+  // target, so its value would be read as undef.
+  UnsupportedEntrySgprSource,
   // The source object declares non-disabled workgroup cluster dimensions, so
   // TTMP6 carries per-cluster state the Hotswap ABI model does not reconstruct.
   UnsupportedSourceClusterDims,
@@ -79,6 +87,15 @@ enum class RaiseFailureReason : uint16_t {
 // Human-readable name for a `RaiseFailureReason`. Stable enough for
 // diagnostics and tests to bucket on.
 llvm::StringRef reasonString(RaiseFailureReason R);
+
+// Which kernel of a batch raise a failure came out of, and the ISA pair that
+// raise ran under. Both processor names are the ones the MC layers were built
+// for, so they name a GPU even when the caller passed a full target identifier.
+struct FailureOrigin {
+  std::string KernelName;
+  std::string SourceCpu;
+  std::string TargetCpu;
+};
 
 // Payload of the `llvm::Error` the raiser produces on a refusal. Build one
 // through the shape factories below, which return the `llvm::Error` directly;
@@ -90,9 +107,11 @@ struct RaiseFailure : public llvm::ErrorInfo<RaiseFailure> {
 
   RaiseFailure(RaiseFailureReason Reason, std::string Mnemonic,
                std::optional<std::string> Format,
-               std::optional<uint64_t> Offset, std::string Detail)
+               std::optional<uint64_t> Offset, std::string Detail,
+               std::optional<FailureOrigin> Origin = std::nullopt)
       : Reason(Reason), Mnemonic(std::move(Mnemonic)),
-        Format(std::move(Format)), Offset(Offset), Detail(std::move(Detail)) {}
+        Format(std::move(Format)), Offset(Offset), Detail(std::move(Detail)),
+        Origin(std::move(Origin)) {}
 
   RaiseFailureReason reason() const { return Reason; }
 
@@ -141,12 +160,21 @@ struct RaiseFailure : public llvm::ErrorInfo<RaiseFailure> {
   static llvm::Error general(RaiseFailureReason Reason,
                              const llvm::Twine &Detail);
 
+  // Name the kernel and ISA pair `Err` came out of. Refusals are raised deep in
+  // the dispatch, which knows the offending instruction but not which of a
+  // batch's kernels holds it, so the raise stamps that on the way out. An error
+  // that is not a `RaiseFailure` passes through unchanged.
+  static llvm::Error withOrigin(llvm::Error Err, llvm::StringRef KernelName,
+                                llvm::StringRef SourceCpu,
+                                llvm::StringRef TargetCpu);
+
 private:
   RaiseFailureReason Reason;
   std::string Mnemonic;
   std::optional<std::string> Format;
   std::optional<uint64_t> Offset;
   std::string Detail;
+  std::optional<FailureOrigin> Origin;
 };
 
 } // namespace COMGR::hotswap

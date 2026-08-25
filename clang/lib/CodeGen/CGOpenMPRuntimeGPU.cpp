@@ -2120,16 +2120,26 @@ CGOpenMPRuntimeGPU::translateParameter(const FieldDecl *FD,
   ArgType = CGM.getContext().getPointerType(PointeeTy);
   QC.addRestrict();
   ArgType = QC.apply(CGM.getContext(), ArgType);
+  VarDecl *TargetParam;
   if (isa<ImplicitParamDecl>(NativeParam))
-    return ImplicitParamDecl::Create(
+    TargetParam = ImplicitParamDecl::Create(
         CGM.getContext(), /*DC=*/nullptr, NativeParam->getLocation(),
         NativeParam->getIdentifier(), ArgType, ImplicitParamKind::Other);
-  return ParmVarDecl::Create(
-      CGM.getContext(),
-      const_cast<DeclContext *>(NativeParam->getDeclContext()),
-      NativeParam->getBeginLoc(), NativeParam->getLocation(),
-      NativeParam->getIdentifier(), ArgType,
-      /*TInfo=*/nullptr, SC_None, /*DefArg=*/nullptr);
+  else
+    TargetParam = ParmVarDecl::Create(
+        CGM.getContext(),
+        const_cast<DeclContext *>(NativeParam->getDeclContext()),
+        NativeParam->getBeginLoc(), NativeParam->getLocation(),
+        NativeParam->getIdentifier(), ArgType,
+        /*TInfo=*/nullptr, SC_None, /*DefArg=*/nullptr);
+  // This parameter exists to carry the device ABI type, which is a pointer to
+  // the mapped object rather than the reference the user's code sees.
+  // Describing it would put that pointer type in the debug info under the name
+  // of the original variable, so the variable is described instead at the
+  // address that holds it with its native type, in
+  // emitOutlinedFunctionPrologue().
+  TargetParam->addAttr(NoDebugAttr::CreateImplicit(CGM.getContext()));
+  return TargetParam;
 }
 
 Address

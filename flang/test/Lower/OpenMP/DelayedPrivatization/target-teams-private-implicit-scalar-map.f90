@@ -27,16 +27,10 @@ program test_default_implicit_firstprivate
 !CHECK:           %[[VAL_8:.*]] = omp.map.info var_ptr(%[[VAL_3]] : !fir.ref<i32>, i32) map_clauses(implicit) capture(ByCopy) name("j") -> !fir.ref<i32>
 !CHECK:           %[[VAL_9:.*]] = omp.map.info var_ptr(%[[VAL_4]] : !fir.ref<i32>, i32) map_clauses(implicit) capture(ByCopy) name("k") -> !fir.ref<i32>
 !CHECK:           %[[VAL_10:.*]] = fir.box_offset %[[VAL_0]] base_addr : (!fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>>) -> !fir.llvm_ptr<!fir.ref<!fir.array<?x?x?xi32>>>
-<<<<<<< HEAD
-!CHECK:           %[[VAL_11:.*]] = omp.map.info var_ptr(%[[VAL_0]] : !fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>>, !fir.box<!fir.heap<!fir.array<?x?x?xi32>>>) map_clauses(implicit, tofrom) capture(ByRef) var_ptr_ptr(%[[VAL_10]] : !fir.llvm_ptr<!fir.ref<!fir.array<?x?x?xi32>>>, i32) bounds({{.*}}) -> !fir.llvm_ptr<!fir.ref<!fir.array<?x?x?xi32>>> {name = ""}
-!CHECK:           %[[VAL_12:.*]] = omp.map.info var_ptr(%[[VAL_0]] : !fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>>, !fir.box<!fir.heap<!fir.array<?x?x?xi32>>>) map_clauses(always, implicit, to) capture(ByRef) members(%[[VAL_11]] : [0] : !fir.llvm_ptr<!fir.ref<!fir.array<?x?x?xi32>>>) -> !fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>> {name = "allocarr"}
-!CHECK:           %[[VAL_12_ATTACH:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>>, !fir.box<!fir.heap<!fir.array<?x?x?xi32>>>) map_clauses(attach, ref_ptr, ref_ptee) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?x?x?xi32>>>, i32) bounds({{.*}}) -> !fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>> {name = "allocarr"}
-!CHECK:           %[[VAL_13:.*]] = omp.map.info var_ptr(%[[VAL_1]] : !fir.ref<!fir.array<10x10x10xi32>>, !fir.array<10x10x10xi32>) map_clauses(implicit, tofrom) capture(ByRef) bounds({{.*}}) -> !fir.ref<!fir.array<10x10x10xi32>> {name = "arr"}
-=======
 !CHECK:           %[[VAL_11:.*]] = omp.map.info var_ptr(%[[VAL_0]] : !fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>>, !fir.box<!fir.heap<!fir.array<?x?x?xi32>>>) map_clauses(implicit, tofrom) capture(ByRef) var_ptr_ptr(%[[VAL_10]] : !fir.llvm_ptr<!fir.ref<!fir.array<?x?x?xi32>>>, i32) bounds({{.*}}) name("") -> !fir.llvm_ptr<!fir.ref<!fir.array<?x?x?xi32>>>
 !CHECK:           %[[VAL_12:.*]] = omp.map.info var_ptr(%[[VAL_0]] : !fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>>, !fir.box<!fir.heap<!fir.array<?x?x?xi32>>>) map_clauses(always, implicit, to) capture(ByRef) members(%[[VAL_11]] : [0] : !fir.llvm_ptr<!fir.ref<!fir.array<?x?x?xi32>>>) name("allocarr") -> !fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>>
+!CHECK:           %[[VAL_12_ATTACH:.*]] = omp.map.info var_ptr(%{{.*}} : !fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>>, !fir.box<!fir.heap<!fir.array<?x?x?xi32>>>) map_clauses(attach, ref_ptr, ref_ptee) capture(ByRef) var_ptr_ptr(%{{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?x?x?xi32>>>, i32) bounds({{.*}}) name("allocarr") -> !fir.ref<!fir.box<!fir.heap<!fir.array<?x?x?xi32>>>>
 !CHECK:           %[[VAL_13:.*]] = omp.map.info var_ptr(%[[VAL_1]] : !fir.ref<!fir.array<10x10x10xi32>>, !fir.array<10x10x10xi32>) map_clauses(implicit, tofrom) capture(ByRef) bounds({{.*}}) name("arr") -> !fir.ref<!fir.array<10x10x10xi32>>
->>>>>>> e5b8a7c1eb09dd5abbbc75c3e2b1e36a14d92dc6
 !CHECK:           %[[VAL_14:.*]] = omp.map.info var_ptr(%[[VAL_6]] : !fir.ref<i32>, i32) map_clauses(to) capture(ByCopy) -> !fir.ref<i32>
 !CHECK:           %[[VAL_15:.*]] = omp.map.info var_ptr(%[[VAL_5]] : !fir.ref<i32>, i32) map_clauses(to) capture(ByCopy) -> !fir.ref<i32>
 !CHECK:           omp.target kernel_type(spmd) host_eval({{.*}}) map_entries(%[[VAL_7]] -> %{{.*}}, %[[VAL_8]] -> %{{.*}}, %[[VAL_9]] -> %{{.*}}, %[[VAL_12]] -> %{{.*}}, %[[VAL_13]] -> %{{.*}}, %[[VAL_14]] -> %{{.*}}, %[[VAL_15]] -> %{{.*}}, %[[VAL_12_ATTACH]] -> %{{.*}}, %[[VAL_11]] -> %{{.*}} : {{.*}}) private(@[[SYM_XFPVX]] %[[VAL_6]] -> %{{.*}} [map_idx=5], @[[SYM_XDGFX]] %[[VAL_5]] -> %{{.*}} [map_idx=6] : {{.*}}) {
@@ -50,4 +44,3 @@ program test_default_implicit_firstprivate
         end do
     end do
 end program
-!XFAIL: *
