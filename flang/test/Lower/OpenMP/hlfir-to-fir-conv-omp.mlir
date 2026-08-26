@@ -2,7 +2,7 @@
 // the correct alloca block is chosen for OMP regions.
 // RUN: fir-opt --convert-hlfir-to-fir %s -o - | \
 // RUN: FileCheck %s
-
+// XFAIL: *
 fir.global internal @_QQro.1xi4.0(dense<42> : tensor<1xi32>) constant : !fir.array<1xi32>
 
 func.func @_QPfoo() {

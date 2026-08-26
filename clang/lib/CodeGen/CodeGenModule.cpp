@@ -9575,7 +9575,7 @@ int CodeGenModule::getWorkGroupSizeSPMDForNest(
   const auto *NumThreadsClause =
       getInnermostClauseInNest<OMPNumThreadsClause>(NestDirs);
   if (NumThreadsClause) {
-    Expr *NumThreadsExpr = NumThreadsClause->getNumThreads();
+    Expr *NumThreadsExpr = NumThreadsClause->getNumThreads().front();
     clang::Expr::EvalResult Result;
     if (NumThreadsExpr->EvaluateAsInt(Result, getContext())) {
       NumThreads = Result.Val.getInt().getExtValue();
