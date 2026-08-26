@@ -416,6 +416,23 @@ eventually make that a parameter similar to the storage class parameter on
 operations and orders in Vulkan.
 :::
 
+(amdgpu-amdgpu-happens-before)=
+
+### `amdgpu-happens-before`
+
+An operation `A` *amdgpu-happens-before* an operation `B` if:
+
+- `A` *happens-before* `B`, or,
+- `B` is the *entry* of some DMA operation `D` such that:
+
+  - `A` *initiates* `D`, or,
+  - `A` *happens-before* some operation `X` and `X` *initiates* `D`.
+
+:::{note}
+*happens-before* also includes the completion of DMA operations as described in
+the {ref}`amdgpu-dma-memmodel`.
+:::
+
 ### Availability Operation
 
 An operation `X` is an *availability operation* on a write `W` if one of the
@@ -432,7 +449,7 @@ following holds:
 - `X` is a *make-available* operation whose scope instance includes `W`,
   and there is an availability operation `Z` on `W` such that:
 
-  - `Z` happens-before `X`, and,
+  - `Z` *amdgpu-happens-before* `X`, and,
   - `Z`'s scope instance includes `X`.
 
 Then `X` makes `W` available in its own scope instance `S` and every
@@ -446,15 +463,15 @@ An operation `Y` is a *visibility operation* on a write `W` if `Y` is a
 
 - There exists an *availability* operation `X` on write `W` such that:
 
-  - `X` happens-before `Y`, and,
-  - `X` and `Y` have inclusive scopes.
+  - `X` *amdgpu-happens-before* `Y`, and,
+  - `X` and `Y` specify inclusive scopes.
 
   Then `Y` makes `W` visible in the common scope instance `S` of `X` and
   `Y`, and every subscope instance of `S` that includes `Y`.
 
 - There exists a *visibility* operation `X` on write `W` such that:
 
-  - `X` happens-before `Y`, and,
+  - `X` *amdgpu-happens-before* `Y`, and,
   - `X` makes `W` visible in a scope instance `S1` that includes `Y`, and,
   - `X` is included in the scope instance `S2` of `Y`.
 
@@ -471,7 +488,7 @@ if `W` is program-ordered before `Y`.
 A write `W` is *location-ordered* before a write `W1` to the same address if
 there exists an availability operation `Z` on `W` such that:
 
-- `Z` happens-before `W1`, and,
+- `Z` *amdgpu-happens-before* `W1`, and,
 - `W1` is included in `Z`'s scope instance.
 
 A write `W` is *location-ordered* before a read `R` to the same address if
@@ -495,7 +512,7 @@ For each byte of a read `R`, `R` may see any write to the same byte, except:
 
 - If a write `W1` is *location-ordered* before a write `W2`, and `W2` is
   *location-ordered* before a read `R`, then `R` may not see `W1`.
-- If a read `R` is *location-ordered* before a write `W3`, then `R` may not see
+- If a read `R` *amdgpu-happens-before* a write `W3`, then `R` may not see
   `W3`.
 
 The value returned by `R` is then defined as follows:
@@ -519,11 +536,12 @@ This section is informational.
 
 The following properties follow from the definitions above:
 
-1. **Happens-before is necessary for location-order.** An access `X` is
-   *location-ordered* before an access `Y` only if `X` happens-before `Y`.
+1. **amdgpu-happens-before is necessary for location-order.** A write `W` is
+   *location-ordered* before a read `R` only if `W`
+   *amdgpu-happens-before* `R`.
    This follows from the definition of availability and visibility operations,
-   which always require a happens-before link with the preceding operation in
-   the chain.
+   which always require an *amdgpu-happens-before* link with the preceding
+   operation in the chain.
 2. **A write cannot be made available in a scope that does not contain it.** The
    definition of an availability operation `X` requires that `X`'s scope
    instance includes `W` as a precondition. Since every scope instance that
@@ -550,9 +568,61 @@ The following properties follow from the definitions above:
    operation with inclusive scopes, such that their common scope includes both
    `W` and `R`.
 
+(amdgpu-ordering-comparison)=
+
+## Comparison of Ordering Relations
+
+[This section is informational.]
+
+```{list-table}
+:header-rows: 1
+:widths: 30 20 25 25
+
+   * - Purpose
+     - C++
+     - Vulkan
+     - AMDGPU
+   * - Intra-thread ordering
+     - sequenced-before<br>(transitive)
+     - program-order<br>(transitive)
+     - program-order<br>(transitive)
+   * - Inter-thread synchronization
+     - synchronizes-with
+     - synchronizes-with
+     - synchronizes-with
+   * - Transitive inter-thread ordering
+     - happens-before
+     - inter-thread-happens-before
+     - happens-before
+   * - Basis for visibility
+     - happens-before<br>(transitive)
+     - happens-before<br>(**not** transitive)
+     - amdgpu-happens-before<br>(**not** transitive)
+```
+
+The above table lines up roughly equivalent ordering relations across the
+C++, Vulkan, and AMDGPU memory models.
+
+- In C++, *happens-before* is transitive and serves directly as the basis of
+  *visible side effects*.
+- In Vulkan, the non-transitive *happens-before* serves as the basis of
+  *location-order*.
+- In AMDGPU, the non-transitive *amdgpu-happens-before* serves the same role.
+
+The Vulkan and AMDGPU models achieve non-transitivity differently:
+
+- Vulkan defines *happens-before* as the union of *program-order* and
+  *inter-thread-happens-before*, which are each individually transitive but whose
+  union is not.
+- AMDGPU defines *amdgpu-happens-before* as the union of the transitive
+  *happens-before* and *initiate DMA* edges. *happens-before* additionally
+  contains *dma-program-order* and *synchronizes-with* edges from DMA operations.
+
 (amdgcn-av-vulkan)=
 
 ## The Vulkan Memory Model
+
+[This section is informational.]
 
 The AMDGPU memory model draws heavily on the Vulkan memory model. In
 particular, the following instructions are equivalent.
