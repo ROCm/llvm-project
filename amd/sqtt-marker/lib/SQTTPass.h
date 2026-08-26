@@ -33,7 +33,8 @@
 /// inlining. The late phase filters and compacts those markers, adds automatic
 /// instrumentation and scope guards, lowers target-specific trace operations,
 /// and emits the funcmap.
-class SQTTInstrumentPass : public llvm::PassInfoMixin<SQTTInstrumentPass> {
+class SQTTInstrumentPass
+    : public llvm::OptionalPassInfoMixin<SQTTInstrumentPass> {
 public:
   enum class Mode { Early, Late };
 
