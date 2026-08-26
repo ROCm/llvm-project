@@ -291,6 +291,26 @@ specifies the behavior that the {ref}`LLVM memory model<memmodel>` otherwise
 leaves target-dependent for `volatile` accesses.
 :::
 
+### make.ptr.available and make.ptr.visible
+
+Certain operations on the specified location propagate certain side-effects from
+or to the specified scope respectively. They are similar to the
+*store-available* and *load-visible* operations, except that they themselves do
+not produce any side-effects.
+
+```llvm
+@llvm.amdgcn.make.ptr.available(%addr, target("amdgcn.scope") %scope)
+@llvm.amdgcn.make.ptr.visible(%addr, target("amdgcn.scope") %scope)
+```
+
+`@llvm.amdgcn.make.ptr.available` is a *make-ptr-available* operation on
+preceding writes to `%addr` at scope `%scope` (see {ref}`amdgpu-scope-type`). It
+makes preceding writes `%addr` available at that scope.
+
+`@llvm.amdgcn.make.ptr.visible` is a *make-ptr-visible* operation on `%addr` at
+scope `%scope` (see {ref}`amdgpu-scope-type`). It makes writes to `%addr` that
+are available at that scope visible to subsequent reads.
+
 (amdgpu-av-metadata)=
 
 ### !"amdgcn-av" metadata
@@ -314,6 +334,19 @@ It only affects the synchronization of other memory accesses.
 from or to the specified scope respectively. They are similar to the
 *store-available* and *load-visible* operations, except that their effect is not
 limited to specific locations.
+
+```llvm
+@llvm.amdgcn.make.available(target("amdgcn.scope") %scope)
+@llvm.amdgcn.make.visible(target("amdgcn.scope") %scope)
+```
+
+`@llvm.amdgcn.make.available` is a *make-available* operation at scope `%scope`
+(see {ref}`amdgpu-scope-type`). It makes all preceding writes available at that
+scope.
+
+`@llvm.amdgcn.make.visible` is a *make-visible* operation at scope `%scope` (see
+{ref}`amdgpu-scope-type`). It makes writes that are available at that scope
+visible to subsequent reads.
 
 ```llvm
 store atomic [syncscope("<target-scope>")] <ordering> [, !mmra !{!"amdgcn-av", !"none"}]
@@ -360,6 +393,9 @@ following holds:
 
 - `X` is `W` itself, and `W` is a *store-available* operation, or,
 
+- `X` is a *make-ptr-available* operation to the same location that follows `W`
+  in program order, or,
+
 - `X` is a *make-available* operation that follows `W` in program order,
   or,
 
@@ -375,7 +411,8 @@ subscope instance of `S` that also includes `W`.
 ### Visibility Operation
 
 An operation `Y` is a *visibility operation* on a write `W` if `Y` is a
-*load-visible* operation to the same address, or a *make-visible* operation,
+*load-visible* or *make-ptr-visible* operation to the same address, or a
+*make-visible* operation,
 and one of the following holds:
 
 - There exists an *availability* operation `X` on write `W` such that:
