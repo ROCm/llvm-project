@@ -12,13 +12,13 @@ exposed to other threads. Even when they do need to be exposed, not all threads
 may need to observe these memory accesses. This document describes the *AMDGPU
 memory model* that allows the user to control how the side-effects of memory
 accesses are propagated across threads. The programmer expresses this using
-**new intrinsics and metadata** as described below, and the implementation can
+**new intrinsics, types and metadata** as described below, and the implementation can
 then choose a more efficient mechanism to complete them, such as the cache
 policy bits in an AMDGPU device.
 
 The AMDGPU memory model allows executions that are not allowed by the LLVM
 memory model. At the same time, a simple mapping can be used to implement these
-new intrinsics and metadata using operations defined in the default LLVM memory
+new intrinsics, types and metadata using operations defined in the default LLVM memory
 model. Thus, **there exists a safe-by-default implementation** that produces
 executions that are valid in both models.
 
@@ -96,6 +96,47 @@ that case, the *common scope instance* `S'` of `X` and `Y` is the
 intersection of their scope instances. The scope corresponding to `S'` is also
 termed as the *common scope* of `X` and `Y`.
 
+(amdgpu-scope-type)=
+
+#### Scope Argument
+
+Several intrinsics accept a `scope` argument that identifies a scope
+instance. The scope argument can be passed in one of two ways:
+
+- `target("amdgcn.scope")` — A target extension type whose values are
+  opaque scope identifiers. Values of this type can only be produced by the
+  scope intrinsics listed below.
+- `metadata` **(deprecated)** — A metadata value containing either a scope
+  name string (e.g., `metadata !"workgroup"`) or a `ValueAsMetadata`
+  wrapping a scope value.
+
+New intrinsics accept only `target("amdgcn.scope")`. Deprecated intrinsics
+that accept `metadata` are documented alongside their replacements.
+
+The `target("amdgcn.scope")` type is opaque and token-like: a scope value may
+only flow directly from a producer intrinsic to a consumer intrinsic within a
+single function. It cannot be loaded from or stored to memory, passed as a
+function argument, returned from a function, or used in `phi` or `select`
+instructions.
+
+The following intrinsics return the AMDGPU LLVM scopes:
+
+```llvm
+target("amdgcn.scope") @llvm.amdgcn.scope.system()
+target("amdgcn.scope") @llvm.amdgcn.scope.agent()
+target("amdgcn.scope") @llvm.amdgcn.scope.cluster()
+target("amdgcn.scope") @llvm.amdgcn.scope.workgroup()
+target("amdgcn.scope") @llvm.amdgcn.scope.wavefront()
+target("amdgcn.scope") @llvm.amdgcn.scope.singlethread()
+```
+
+An example:
+
+```llvm
+%wg = call target("amdgcn.scope") @llvm.amdgcn.scope.workgroup()
+call void @llvm.amdgcn.make.available(target("amdgcn.scope") %wg)
+```
+
 ## Availability and Visibility
 
 The AMDGPU memory model is built on top of the {ref}`happens-before<memmodel>`
@@ -152,12 +193,20 @@ then propagates those side-effects up to its scope instance `S` and also all
 the subscope instances of `S` that contain `X`.
 
 ```llvm
+@llvm.amdgcn.store.available.b128(%addr, %value, target("amdgcn.scope"))
+
+; Deprecated:
 @llvm.amdgcn.av.store.b128(%addr, %value, metadata !scope)
 ```
 
-The `@llvm.amdgcn.av.store.b128` intrinsic performs a non-atomic
-*store-available* operation on `%addr` with scope `!scope`. See
-{ref}`amdgpu-av-load-store` for details.
+Perform a non-atomic *store-available* operation on `%addr` with scope `!scope`.
+See {ref}`amdgpu-av-load-store` for details.
+
+```{note}
+The deprecated `@llvm.amdgcn.av.store.b128` intrinsic accepts scope as a
+metadata argument. New code should use
+`@llvm.amdgcn.store.available.b128` instead.
+```
 
 ```llvm
 store atomic ..., [syncscope("<target-scope>")]
@@ -178,12 +227,19 @@ addition, it makes the retrieved state visible to all subscope instances of `S`
 that contain `Y`.
 
 ```llvm
+%value = @llvm.amdgcn.load.visible.b128(%addr, target("amdgcn.scope"))
+
+; Deprecated
 %value = @llvm.amdgcn.av.load.b128(%addr, metadata !scope)
 ```
 
-The `@llvm.amdgcn.av.load.b128` intrinsic performs a non-atomic *load-visible*
-operation on `%addr` with scope `!scope`. See {ref}`amdgpu-av-load-store` for
-details.
+Perform a non-atomic *load-visible* operation on `%addr` with scope `!scope`.
+See {ref}`amdgpu-av-load-store` for details.
+
+```{note}
+The deprecated `@llvm.amdgcn.av.load.b128` intrinsic accepts scope as a metadata
+argument. New code should use `@llvm.amdgcn.load.visible.b128` instead.
+```
 
 ```llvm
 %value = load atomic ..., [syncscope("<target-scope>")]
@@ -244,8 +300,8 @@ leaves target-dependent for `volatile` accesses.
 ```
 
 The presence of this metadata removes the ability of synchronizing operations to
-establish availability and visibility, and essentially creates *non-av* synchronizing
-operations.
+establish availability and visibility, and essentially creates *non-av*
+synchronizing operations.
 
 For a synchronizing operation which itself accesses memory (e.g., `store atomic
 release` or `load atomic acquire`), the metadata does not affect the
@@ -338,6 +394,8 @@ and one of the following holds:
 
   Then `Y` makes `W` visible in the intersection `S` of `S1` and `S2`,
   and every subscope instance of `S` that includes `Y`.
+
+(amdgpu-location-order)=
 
 ### Location Order
 
