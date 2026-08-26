@@ -140,11 +140,12 @@ public:
   llvm::Value *materializeSourceWaveSgprPair(unsigned BaseIdx,
                                              llvm::Value *Fallback);
 
-  // Return the compare recorded for SGPR BaseIdx in this block, or null when
-  // none is valid.
-  llvm::Value *lookupSgprWaveMaskI1(unsigned BaseIdx) const {
+  // Return the compare recorded for this SGPR range, or null when unavailable.
+  llvm::Value *lookupSgprWaveMaskI1(unsigned BaseIdx, bool Is64) const {
     auto It = LastSgprWaveMaskI1.find(BaseIdx);
-    return It == LastSgprWaveMaskI1.end() ? nullptr : It->second.I1;
+    if (It == LastSgprWaveMaskI1.end())
+      return nullptr;
+    return It->second.IsPair == Is64 ? It->second.I1 : nullptr;
   }
 
   // Emit a read of the wave mask shadowed for SGPR BaseIdx, and of the bit

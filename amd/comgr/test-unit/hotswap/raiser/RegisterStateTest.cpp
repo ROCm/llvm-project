@@ -376,10 +376,13 @@ TEST_F(RegisterStateTest, InvalidatesOverlappingPairShadows) {
   Env->Regs->recordSgprWaveMaskI1(6, ConstantInt::getTrue(Env->LLVMCtx), false);
   Env->Regs->recordSourceImageSgprPairAddr(4, 0x1000);
 
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4, false), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(6, true), nullptr);
+
   Env->Regs->invalidateSgprWaveMaskI1(5);
 
-  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4), nullptr);
-  EXPECT_NE(Env->Regs->lookupSgprWaveMaskI1(6), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4, true), nullptr);
+  EXPECT_NE(Env->Regs->lookupSgprWaveMaskI1(6, false), nullptr);
   EXPECT_FALSE(Env->Regs->lookupSourceImageSgprPairAddr(4));
 }
 
@@ -394,7 +397,7 @@ TEST_F(RegisterStateTest, DropsBlockScopedFactsOnBlockEntry) {
 
   Env->Regs->enterBlock();
 
-  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4, true), nullptr);
   EXPECT_FALSE(Env->Regs->lookupSourceImageSgprPairAddr(4));
   EXPECT_EQ(Env->Regs->vgprMsBs(), 0);
   EXPECT_FALSE(Env->Regs->getM0Const());
@@ -486,7 +489,7 @@ TEST_F(RegisterStateTest, MaintainsStateOnRegisterWrites) {
   Env->Regs->recordSgprWaveMaskI1(4, ConstantInt::getTrue(Env->LLVMCtx), true);
   Env->Regs->recordSourceImageSgprPairAddr(4, 0x1000);
   Env->Regs->writeReg32(Sgpr, Env->B.getInt32(1));
-  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4, true), nullptr);
   EXPECT_FALSE(Env->Regs->lookupSourceImageSgprPairAddr(4));
 
   Sgpr.BaseIdx = 8;
@@ -494,8 +497,8 @@ TEST_F(RegisterStateTest, MaintainsStateOnRegisterWrites) {
   Env->Regs->recordSgprWaveMaskI1(8, ConstantInt::getTrue(Env->LLVMCtx), false);
   Env->Regs->recordSgprWaveMaskI1(9, ConstantInt::getTrue(Env->LLVMCtx), false);
   Env->Regs->writeRegExecWidth(Sgpr, Env->B.getInt64(1));
-  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(8), nullptr);
-  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(9), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(8, false), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(9, false), nullptr);
 
   ParsedReg M0;
   M0.RegKind = ParsedReg::M0;

@@ -737,14 +737,7 @@ Expected<Value *> RegisterState::readOpWaveMaskI1(const DecodedInst &Di,
   switch (Pr.RegKind) {
   case ParsedReg::SGPR: {
     assert(Pr.BaseIdx && "SGPR must have a base register index");
-    unsigned BaseIdx = *Pr.BaseIdx;
-    auto It = LastSgprWaveMaskI1.find(BaseIdx);
-    if (It == LastSgprWaveMaskI1.end())
-      return nullptr;
-    // A B32 use must not consume a pair shadow, and a B64 use needs both
-    // dwords to come from the same recorded mask.
-    bool IsPair = Pr.WidthInDwords >= 2;
-    return It->second.IsPair == IsPair ? It->second.I1 : nullptr;
+    return lookupSgprWaveMaskI1(*Pr.BaseIdx, Pr.WidthInDwords >= 2);
   }
   case ParsedReg::VCC:
     return Regs.loadVCC(B);
