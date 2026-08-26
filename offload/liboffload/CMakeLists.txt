@@ -41,18 +41,10 @@ target_compile_definitions(LLVMOffload PRIVATE
   DEBUG_PREFIX="Liboffload"
 )
 
-# Don't override an externally defined RPATH
-if(NOT DEFINED CMAKE_INSTALL_RPATH)
-  set_target_properties(LLVMOffload PROPERTIES
-                        POSITION_INDEPENDENT_CODE ON
-                        INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib:$ORIGIN/../../lib"
-                        BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
-else()
-  set_target_properties(LLVMOffload PROPERTIES
-                        POSITION_INDEPENDENT_CODE ON
-                        INSTALL_RPATH ${CMAKE_INSTALL_RPATH}
-                        BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
-endif()
+set_target_properties(LLVMOffload PROPERTIES
+                      POSITION_INDEPENDENT_CODE ON
+                      INSTALL_RPATH "${OFFLOAD_INSTALL_RPATH}"
+                      BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
 if(UNIX AND NOT APPLE)
   set_target_properties(LLVMOffload PROPERTIES
                         SOVERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}${LLVM_VERSION_SUFFIX}"

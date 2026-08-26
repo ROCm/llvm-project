@@ -1080,13 +1080,14 @@ public:
   }
 
   bool runOnModuleNormal(Module &M) {
-    CallGraph CG = CallGraph(M);
     bool Changed = superAlignLDSGlobals(M);
 
-    Changed |=
-        eliminateGVConstantExprUsesFromAllInstructions(M, isLDSVariableToLower);
+    Changed |= any_of(M.globals(), isNotYetLoweredLDSVariable);
 
-    Changed = true; // todo: narrow this down
+    CallGraph CG(M);
+
+    eliminateGVConstantExprUsesFromAllInstructions(M,
+                                                   isNotYetLoweredLDSVariable);
 
     // For each kernel, what variables does it access directly or through
     // callees
@@ -1260,7 +1261,7 @@ public:
     }
 
     for (auto &GV : make_early_inc_range(M.globals()))
-      if (AMDGPU::isLDSVariableToLower(GV)) {
+      if (isNotYetLoweredLDSVariable(GV)) {
         // probably want to remove from used lists
         GV.removeDeadConstantUsers();
         if (GV.use_empty())
@@ -1271,6 +1272,11 @@ public:
   }
 
 private:
+  // An absolute address means a previous run already placed the variable.
+  static bool isNotYetLoweredLDSVariable(const GlobalVariable &GV) {
+    return isLDSVariableToLower(GV) && !GV.isAbsoluteSymbolRef();
+  }
+
   // Increase the alignment of LDS globals if necessary to maximise the chance
   // that we can use aligned LDS instructions to access them.
   static bool superAlignLDSGlobals(Module &M) {
