@@ -42,7 +42,6 @@ define amdgpu_kernel void @test_if(i32 %b, ptr addrspace(1) %src, ptr addrspace(
 ; SI-NEXT:  .LBB0_4:
 ; SI-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; SI-NEXT:    s_xor_b64 s[2:3], exec, s[6:7]
-; SI-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; SI-NEXT:    s_mov_b64 exec, s[6:7]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB0_9
@@ -90,7 +89,6 @@ define amdgpu_kernel void @test_if(i32 %b, ptr addrspace(1) %src, ptr addrspace(
 ; SI-NEXT:  .LBB0_10:
 ; SI-NEXT:    s_or_b64 exec, exec, s[12:13]
 ; SI-NEXT:    s_xor_b64 s[6:7], exec, s[12:13]
-; SI-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; SI-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
 ; SI-NEXT:    s_mov_b64 exec, s[12:13]
 ; SI-NEXT:    ; divergent control-flow edge
@@ -326,11 +324,9 @@ define amdgpu_kernel void @multi_vcond_loop(ptr addrspace(1) noalias nocapture %
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_mov_b64 s[8:9], s[6:7]
 ; SI-NEXT:    buffer_load_dword v0, v[6:7], s[8:11], 0 addr64
-; SI-NEXT:    s_mov_b64 s[8:9], -1
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_cmp_gt_i32_e64 s[6:7], 1, v0
-; SI-NEXT:    s_xor_b64 s[12:13], s[6:7], exec
-; SI-NEXT:    s_mov_b64 exec, s[12:13]
+; SI-NEXT:    s_xor_b64 exec, s[6:7], exec
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB5_4
 ; SI-NEXT:  .LBB5_1: ; %bb10.preheader
@@ -345,7 +341,6 @@ define amdgpu_kernel void @multi_vcond_loop(ptr addrspace(1) noalias nocapture %
 ; SI-NEXT:    v_ashrrev_i32_e32 v1, 31, v0
 ; SI-NEXT:    v_addc_u32_e32 v7, vcc, 0, v7, vcc
 ; SI-NEXT:    s_mov_b64 s[2:3], 0
-; SI-NEXT:    s_and_b64 s[0:1], s[8:9], exec
 ; SI-NEXT:  .LBB5_2: ; %bb10
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    s_mov_b32 s8, s10
@@ -360,7 +355,6 @@ define amdgpu_kernel void @multi_vcond_loop(ptr addrspace(1) noalias nocapture %
 ; SI-NEXT:    s_or_b64 s[0:1], vcc, s[0:1]
 ; SI-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
 ; SI-NEXT:    s_xor_b64 s[4:5], exec, s[0:1]
-; SI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; SI-NEXT:    s_mov_b64 exec, s[0:1]
 ; SI-NEXT:    ; divergent control-flow edge
@@ -368,17 +362,16 @@ define amdgpu_kernel void @multi_vcond_loop(ptr addrspace(1) noalias nocapture %
 ; SI-NEXT:  .LBB5_3: ; %bb20
 ; SI-NEXT:    ; in Loop: Header=BB5_2 Depth=1
 ; SI-NEXT:    v_add_i32_e32 v8, vcc, v9, v8
-; SI-NEXT:    s_add_u32 s2, s2, 1
 ; SI-NEXT:    buffer_store_dword v8, v[2:3], s[8:11], 0 addr64
-; SI-NEXT:    s_addc_u32 s3, s3, 0
+; SI-NEXT:    s_add_u32 s2, s2, 1
 ; SI-NEXT:    v_add_i32_e32 v2, vcc, 4, v2
+; SI-NEXT:    s_addc_u32 s3, s3, 0
 ; SI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
-; SI-NEXT:    v_cmp_lt_i64_e64 s[0:1], s[2:3], v[0:1]
 ; SI-NEXT:    v_add_i32_e32 v4, vcc, 4, v4
+; SI-NEXT:    v_cmp_lt_i64_e64 s[0:1], s[2:3], v[0:1]
 ; SI-NEXT:    v_addc_u32_e32 v5, vcc, 0, v5, vcc
-; SI-NEXT:    s_xor_b64 s[4:5], exec, s[0:1]
 ; SI-NEXT:    v_add_i32_e32 v6, vcc, 4, v6
-; SI-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; SI-NEXT:    s_xor_b64 s[4:5], exec, s[0:1]
 ; SI-NEXT:    v_addc_u32_e32 v7, vcc, 0, v7, vcc
 ; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; SI-NEXT:    s_mov_b64 exec, s[0:1]

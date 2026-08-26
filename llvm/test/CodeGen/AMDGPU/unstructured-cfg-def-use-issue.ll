@@ -255,42 +255,39 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    s_mov_b64 s[48:49], s[4:5]
 ; GCN-NEXT:    v_mov_b32_e32 v42, 0
 ; GCN-NEXT:    v_mov_b32_e32 v44, 0x7fc00000
-; GCN-NEXT:    s_mov_b64 s[8:9], -1
+; GCN-NEXT:    s_mov_b64 s[64:65], 0
 ; GCN-NEXT:    s_mov_b64 s[66:67], 0
 ; GCN-NEXT:    s_mov_b64 s[68:69], 0
 ; GCN-NEXT:    s_mov_b64 s[70:71], 0
 ; GCN-NEXT:    s_mov_b64 s[80:81], 0
 ; GCN-NEXT:    s_mov_b64 s[82:83], 0
-; GCN-NEXT:    s_mov_b64 s[84:85], 0
-; GCN-NEXT:    s_mov_b64 s[96:97], 0
-; GCN-NEXT:    v_lshlrev_b32_e32 v41, 2, v0
 ; GCN-NEXT:    s_mov_b64 s[86:87], 0
+; GCN-NEXT:    v_lshlrev_b32_e32 v41, 2, v0
+; GCN-NEXT:    s_mov_b64 s[84:85], 0
 ; GCN-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_cmp_eq_f32_e32 vcc, 0, v43
 ; GCN-NEXT:    v_cndmask_b32_e64 v45, 0, -1, vcc
 ; GCN-NEXT:  .LBB1_1: ; %bb2
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    flat_load_dword v46, v[41:42]
-; GCN-NEXT:    s_mov_b64 s[98:99], 0
+; GCN-NEXT:    s_mov_b64 s[96:97], 0
 ; GCN-NEXT:    buffer_store_dword v42, off, s[0:3], 0
 ; GCN-NEXT:    s_waitcnt vmcnt(1)
 ; GCN-NEXT:    v_cmp_gt_i32_e64 s[50:51], 3, v46
 ; GCN-NEXT:    s_xor_b64 s[4:5], s[50:51], exec
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GCN-NEXT:    s_and_b64 s[64:65], s[6:7], exec
+; GCN-NEXT:    s_xor_b64 s[98:99], exec, s[4:5]
 ; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_8
 ; GCN-NEXT:  .LBB1_2: ; %bb6
 ; GCN-NEXT:    ; in Loop: Header=BB1_1 Depth=1
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 3, v46
-; GCN-NEXT:    s_xor_b64 s[98:99], vcc, exec
-; GCN-NEXT:    s_or_b64 s[66:67], s[66:67], vcc
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[66:67]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; GCN-NEXT:    s_or_b64 s[64:65], s[64:65], s[4:5]
-; GCN-NEXT:    s_mov_b64 s[4:5], s[66:67]
-; GCN-NEXT:    s_mov_b64 s[66:67], 0
+; GCN-NEXT:    s_xor_b64 s[96:97], vcc, exec
+; GCN-NEXT:    s_or_b64 s[64:65], s[64:65], vcc
+; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[64:65]
+; GCN-NEXT:    s_or_b64 s[98:99], s[98:99], s[4:5]
+; GCN-NEXT:    s_mov_b64 s[4:5], s[64:65]
+; GCN-NEXT:    s_mov_b64 s[64:65], 0
 ; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_8
@@ -310,15 +307,13 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    v_mov_b32_e32 v31, v40
 ; GCN-NEXT:    s_swappc_b64 s[30:31], s[16:17]
 ; GCN-NEXT:    v_cmp_eq_f32_e32 vcc, 0, v0
-; GCN-NEXT:    s_or_b64 s[98:99], s[98:99], vcc
+; GCN-NEXT:    s_or_b64 s[96:97], s[96:97], vcc
 ; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GCN-NEXT:    s_or_b64 s[68:69], s[68:69], s[4:5]
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[68:69]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; GCN-NEXT:    s_mov_b64 s[8:9], -1
-; GCN-NEXT:    s_or_b64 s[64:65], s[64:65], s[4:5]
-; GCN-NEXT:    s_mov_b64 s[4:5], s[68:69]
-; GCN-NEXT:    s_mov_b64 s[68:69], 0
+; GCN-NEXT:    s_or_b64 s[66:67], s[66:67], s[4:5]
+; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[66:67]
+; GCN-NEXT:    s_or_b64 s[98:99], s[98:99], s[4:5]
+; GCN-NEXT:    s_mov_b64 s[4:5], s[66:67]
+; GCN-NEXT:    s_mov_b64 s[66:67], 0
 ; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_8
@@ -326,13 +321,12 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    ; in Loop: Header=BB1_1 Depth=1
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v45
 ; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GCN-NEXT:    s_or_b64 s[70:71], s[70:71], s[4:5]
-; GCN-NEXT:    s_or_b64 s[80:81], s[80:81], vcc
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[70:71]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; GCN-NEXT:    s_or_b64 s[96:97], s[96:97], s[4:5]
-; GCN-NEXT:    s_mov_b64 s[4:5], s[70:71]
-; GCN-NEXT:    s_mov_b64 s[70:71], 0
+; GCN-NEXT:    s_or_b64 s[68:69], s[68:69], s[4:5]
+; GCN-NEXT:    s_or_b64 s[70:71], s[70:71], vcc
+; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[68:69]
+; GCN-NEXT:    s_or_b64 s[86:87], s[86:87], s[4:5]
+; GCN-NEXT:    s_mov_b64 s[4:5], s[68:69]
+; GCN-NEXT:    s_mov_b64 s[68:69], 0
 ; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_6
@@ -341,73 +335,66 @@ define hidden void @blam() #0 {
 ; GCN-NEXT:    s_and_b64 vcc, exec, 0
 ; GCN-NEXT:    s_and_b64 vcc, vcc, vcc
 ; GCN-NEXT:    s_cselect_b64 s[4:5], 0, exec
-; GCN-NEXT:    s_or_b64 s[80:81], s[80:81], s[4:5]
+; GCN-NEXT:    s_or_b64 s[70:71], s[70:71], s[4:5]
 ; GCN-NEXT:    buffer_store_dword v44, off, s[0:3], 0
 ; GCN-NEXT:  .LBB1_6: ; in Loop: Header=BB1_1 Depth=1
-; GCN-NEXT:    s_or_b64 exec, exec, s[96:97]
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[80:81]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; GCN-NEXT:    s_or_b64 s[64:65], s[64:65], s[4:5]
-; GCN-NEXT:    s_mov_b64 s[4:5], s[80:81]
-; GCN-NEXT:    s_mov_b64 s[80:81], 0
-; GCN-NEXT:    s_mov_b64 s[96:97], 0
+; GCN-NEXT:    s_or_b64 exec, exec, s[86:87]
+; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[70:71]
+; GCN-NEXT:    s_or_b64 s[98:99], s[98:99], s[4:5]
+; GCN-NEXT:    s_mov_b64 s[4:5], s[70:71]
+; GCN-NEXT:    s_mov_b64 s[70:71], 0
+; GCN-NEXT:    s_mov_b64 s[86:87], 0
 ; GCN-NEXT:    s_mov_b64 exec, s[4:5]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_8
 ; GCN-NEXT:  .LBB1_7: ; %bb17
 ; GCN-NEXT:    ; in Loop: Header=BB1_1 Depth=1
+; GCN-NEXT:    s_mov_b64 s[82:83], exec
 ; GCN-NEXT:    buffer_store_dword v43, off, s[0:3], 0
-; GCN-NEXT:    s_and_b64 s[84:85], s[8:9], exec
 ; GCN-NEXT:  .LBB1_8: ; in Loop: Header=BB1_1 Depth=1
-; GCN-NEXT:    s_or_b64 exec, exec, s[64:65]
+; GCN-NEXT:    s_or_b64 exec, exec, s[98:99]
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[50:51]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-NEXT:    s_mov_b64 exec, s[50:51]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_11
 ; GCN-NEXT:  .LBB1_9: ; %bb8
 ; GCN-NEXT:    ; in Loop: Header=BB1_1 Depth=1
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v46
-; GCN-NEXT:    s_or_b64 s[98:99], s[98:99], vcc
+; GCN-NEXT:    s_or_b64 s[96:97], s[96:97], vcc
 ; GCN-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GCN-NEXT:    s_or_b64 s[82:83], s[82:83], s[6:7]
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[82:83]
-; GCN-NEXT:    s_and_b64 s[6:7], s[6:7], exec
+; GCN-NEXT:    s_or_b64 s[80:81], s[80:81], s[6:7]
+; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[80:81]
 ; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GCN-NEXT:    s_mov_b64 s[6:7], s[82:83]
-; GCN-NEXT:    s_mov_b64 s[82:83], 0
+; GCN-NEXT:    s_mov_b64 s[6:7], s[80:81]
+; GCN-NEXT:    s_mov_b64 s[80:81], 0
 ; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_11
 ; GCN-NEXT:  .LBB1_10: ; %bb10
 ; GCN-NEXT:    ; in Loop: Header=BB1_1 Depth=1
-; GCN-NEXT:    s_and_b64 s[6:7], s[8:9], exec
-; GCN-NEXT:    s_or_b64 s[84:85], s[84:85], s[6:7]
+; GCN-NEXT:    s_or_b64 s[82:83], s[82:83], exec
 ; GCN-NEXT:    buffer_store_dword v44, off, s[0:3], 0
 ; GCN-NEXT:  .LBB1_11: ; in Loop: Header=BB1_1 Depth=1
 ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[84:85]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; GCN-NEXT:    s_mov_b64 s[6:7], s[84:85]
-; GCN-NEXT:    s_mov_b64 s[84:85], 0
+; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[82:83]
+; GCN-NEXT:    s_mov_b64 s[6:7], s[82:83]
+; GCN-NEXT:    s_mov_b64 s[82:83], 0
 ; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_13
 ; GCN-NEXT:  .LBB1_12: ; %bb18
 ; GCN-NEXT:    ; in Loop: Header=BB1_1 Depth=1
-; GCN-NEXT:    s_and_b64 s[6:7], s[8:9], exec
-; GCN-NEXT:    s_or_b64 s[98:99], s[98:99], s[6:7]
+; GCN-NEXT:    s_or_b64 s[96:97], s[96:97], exec
 ; GCN-NEXT:    buffer_store_dword v44, off, s[0:3], 0
 ; GCN-NEXT:  .LBB1_13: ; in Loop: Header=BB1_1 Depth=1
 ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[98:99]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
-; GCN-NEXT:    s_or_b64 s[86:87], s[86:87], s[4:5]
-; GCN-NEXT:    s_mov_b64 exec, s[98:99]
+; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[96:97]
+; GCN-NEXT:    s_or_b64 s[84:85], s[84:85], s[4:5]
+; GCN-NEXT:    s_mov_b64 exec, s[96:97]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB1_1
 ; GCN-NEXT:  .LBB1_14: ; %DummyReturnBlock
-; GCN-NEXT:    s_or_b64 exec, exec, s[86:87]
+; GCN-NEXT:    s_or_b64 exec, exec, s[84:85]
 ; GCN-NEXT:    buffer_load_dword v46, off, s[0:3], s33 ; 4-byte Folded Reload
 ; GCN-NEXT:    buffer_load_dword v45, off, s[0:3], s33 offset:4 ; 4-byte Folded Reload
 ; GCN-NEXT:    buffer_load_dword v44, off, s[0:3], s33 offset:8 ; 4-byte Folded Reload

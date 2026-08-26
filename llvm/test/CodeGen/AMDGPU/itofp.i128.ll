@@ -45,8 +45,7 @@ define float @sitofp_i128_to_f32(i128 %x) {
 ; SDAG-NEXT:    s_cbranch_execnz .LBB0_11
 ; SDAG-NEXT:  .LBB0_2:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
-; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; SDAG-NEXT:    s_and_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB0_9
@@ -321,8 +320,7 @@ define float @uitofp_i128_to_f32(i128 %x) {
 ; SDAG-NEXT:    s_cbranch_execnz .LBB1_11
 ; SDAG-NEXT:  .LBB1_2:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
-; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; SDAG-NEXT:    s_and_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB1_9
@@ -598,8 +596,7 @@ define double @sitofp_i128_to_f64(i128 %x) {
 ; SDAG-NEXT:    s_cbranch_execnz .LBB2_11
 ; SDAG-NEXT:  .LBB2_2:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
-; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; SDAG-NEXT:    s_and_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB2_9
@@ -905,8 +902,7 @@ define double @uitofp_i128_to_f64(i128 %x) {
 ; SDAG-NEXT:    s_cbranch_execnz .LBB3_11
 ; SDAG-NEXT:  .LBB3_2:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
-; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; SDAG-NEXT:    s_and_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB3_9
@@ -1216,8 +1212,7 @@ define half @sitofp_i128_to_f16(i128 %x) {
 ; SDAG-NEXT:    s_cbranch_execnz .LBB4_11
 ; SDAG-NEXT:  .LBB4_2:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
-; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; SDAG-NEXT:    s_and_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB4_9
@@ -1494,8 +1489,7 @@ define half @uitofp_i128_to_f16(i128 %x) {
 ; SDAG-NEXT:    s_cbranch_execnz .LBB5_11
 ; SDAG-NEXT:  .LBB5_2:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
-; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; SDAG-NEXT:    s_and_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB5_9

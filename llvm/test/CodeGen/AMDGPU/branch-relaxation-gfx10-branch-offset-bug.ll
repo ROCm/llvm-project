@@ -53,19 +53,24 @@ bb3:
 
 ; GCN-LABEL: {{^}}long_forward_exec_branch_3f_offset_bug:
 ; GCN: v_cmp_ne_u32_e64
-; GCN: s_xor_b32
-; GCN: s_mov_b32
-; GCN: s_cbranch_execnz [[RELAX_BB:.LBB[0-9]+_[0-9]+]]
+; GCN: s_xor_b32 exec_lo,
+; GCN: s_cbranch_execnz [[LOOP_BB:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: s_getpc_b64
-; GCN-NEXT: [[POST_GETPC:.Lpost_getpc[0-9]+]]:{{$}}
-; GCN-NEXT: s_add_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[ENDBB:.LBB[0-9]+_[0-9]+]]-[[POST_GETPC]])&4294967295
-; GCN-NEXT: s_addc_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[ENDBB:.LBB[0-9]+_[0-9]+]]-[[POST_GETPC]])>>32
-; GCN: [[RELAX_BB]]:
+; GCN-NEXT: [[POST_GETPC0:.Lpost_getpc[0-9]+]]:{{$}}
+; GCN-NEXT: s_add_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[ENDBB:.LBB[0-9]+_[0-9]+]]-[[POST_GETPC0]])&4294967295
+; GCN-NEXT: s_addc_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[ENDBB]]-[[POST_GETPC0]])>>32
 
+; GCN: [[LOOP_BB]]:
 ; GCN: v_nop
 ; GCN: s_sleep
-; GCN: s_cbranch_execz
+; GCN: s_mov_b32 exec_lo,
+; GCN: s_cbranch_execz [[ENDBB]]
+
+; GCN: s_getpc_b64
+; GCN-NEXT: [[POST_GETPC1:.Lpost_getpc[0-9]+]]:{{$}}
+; GCN-NEXT: s_add_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[LOOP_BB]]-[[POST_GETPC1]])&4294967295
+; GCN-NEXT: s_addc_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[LOOP_BB]]-[[POST_GETPC1]])>>32
 
 ; GCN: [[ENDBB]]:
 ; GCN: global_store_{{dword|b32}}

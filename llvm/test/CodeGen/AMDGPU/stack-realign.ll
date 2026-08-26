@@ -357,7 +357,6 @@ define i32 @needs_align1024_stack_args_used_inside_loop(ptr addrspace(5) nocaptu
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_cmp_eq_u32_e64 s[8:9], s6, v0
 ; GCN-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GCN-NEXT:    s_and_b64 s[10:11], s[10:11], exec
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
 ; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
 ; GCN-NEXT:    s_mov_b64 exec, s[8:9]

@@ -68,7 +68,6 @@ ret.bb:                                          ; preds = %else, %main_body
 ; GCN: [[FLOW]]:
 ; GCN: s_or_b64 exec, exec, vcc
 ; GCN: s_xor_b64 [[SAVE:s\[[0-9]+:[0-9]+\]]], exec, vcc
-; GCN: s_and_b64 [[SAVE]], [[SAVE]], exec
 ; GCN: s_mov_b64 exec, vcc
 ; GCN: s_cbranch_execz [[UNIFIED_RET:.LBB[0-9]+_[0-9]+]]
 

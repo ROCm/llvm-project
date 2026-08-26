@@ -108,7 +108,6 @@ define amdgpu_ps float @else3(i32 %z, float %v, i32 inreg %bound, i32 %x0) #0 {
 ; SI-NEXT:    ; implicit-def: $vgpr4
 ; SI-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
 ; SI-NEXT:    s_xor_b32 s2, exec_lo, s3
-; SI-NEXT:    s_and_b32 s2, s2, exec_lo
 ; SI-NEXT:    s_mov_b32 exec_lo, s3
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB2_4
@@ -119,7 +118,6 @@ define amdgpu_ps float @else3(i32 %z, float %v, i32 inreg %bound, i32 %x0) #0 {
 ; SI-NEXT:  .LBB2_4: ; in Loop: Header=BB2_2 Depth=1
 ; SI-NEXT:    s_or_b32 exec_lo, exec_lo, s2
 ; SI-NEXT:    s_xor_b32 s2, exec_lo, vcc_lo
-; SI-NEXT:    s_and_b32 s2, s2, exec_lo
 ; SI-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB2_1

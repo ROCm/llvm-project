@@ -209,7 +209,6 @@ define amdgpu_cs void @nested_if(ptr addrspace(1) %out, i32 %val1, i32 %val2) {
 ; CHECK-NEXT:  .LBB3_3:
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; CHECK-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
-; CHECK-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; CHECK-NEXT:    s_or_b64 s[2:3], s[0:1], s[2:3]
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -272,14 +271,13 @@ define amdgpu_cs void @cascaded_if_shared_target(ptr addrspace(1) %out, i32 %val
 ; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v2
 ; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; CHECK-NEXT:    s_mov_b64 s[0:1], 0
-; CHECK-NEXT:    s_mov_b64 s[4:5], -1
 ; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB4_2
 ; CHECK-NEXT:  .LBB4_1: ; %path_b
 ; CHECK-NEXT:    v_mov_b32_e32 v2, 2
+; CHECK-NEXT:    s_mov_b64 s[0:1], exec
 ; CHECK-NEXT:    global_store_dword v[0:1], v2, off
-; CHECK-NEXT:    s_and_b64 s[0:1], s[4:5], exec
 ; CHECK-NEXT:  .LBB4_2:
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
@@ -484,7 +482,6 @@ define amdgpu_cs void @loop_two_exits(ptr addrspace(1) %out, i32 %val1, i32 %val
 ; CHECK-NEXT:    v_cmp_ge_u32_e32 vcc, s4, v4
 ; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; CHECK-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
 ; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
@@ -497,7 +494,6 @@ define amdgpu_cs void @loop_two_exits(ptr addrspace(1) %out, i32 %val1, i32 %val
 ; CHECK-NEXT:    v_add_co_u32_e32 v5, vcc, s6, v0
 ; CHECK-NEXT:    v_cmp_ne_u32_e64 s[6:7], 0, v3
 ; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; CHECK-NEXT:    s_and_b64 s[8:9], s[8:9], exec
 ; CHECK-NEXT:    v_addc_co_u32_e32 v6, vcc, v1, v6, vcc
 ; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
 ; CHECK-NEXT:    global_store_dword v[5:6], v2, off

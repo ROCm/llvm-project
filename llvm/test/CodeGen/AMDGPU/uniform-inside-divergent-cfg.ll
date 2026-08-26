@@ -32,8 +32,6 @@ define amdgpu_kernel void @div_unif_div(ptr addrspace(1) %out, float %ubeta, i32
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; CHECK-NEXT:    s_xor_b32 s2, exec_lo, s0
-; CHECK-NEXT:    s_and_b32 s2, s2, exec_lo
-; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; CHECK-NEXT:    s_or_b32 s1, s1, s2
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s0
 ; CHECK-NEXT:    ; divergent control-flow edge

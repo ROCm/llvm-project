@@ -58,10 +58,9 @@ define void @lsr_order_mul24_1(i32 %arg, i32 %arg1, i32 %arg2, ptr addrspace(3) 
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_and_b32_e32 v5, 1, v18
 ; GFX9-NEXT:    v_cmp_ge_u32_e64 s[8:9], v0, v1
+; GFX9-NEXT:    s_xor_b64 s[4:5], s[8:9], exec
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v5
-; GFX9-NEXT:    s_xor_b64 s[6:7], s[8:9], exec
-; GFX9-NEXT:    s_mov_b64 s[4:5], -1
-; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB1_3
 ; GFX9-NEXT:  .LBB1_1: ; %bb19
@@ -75,7 +74,6 @@ define void @lsr_order_mul24_1(i32 %arg, i32 %arg1, i32 %arg2, ptr addrspace(3) 
 ; GFX9-NEXT:    v_add_u32_e32 v12, v17, v12
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX9-NEXT:    ; implicit-def: $vgpr3
-; GFX9-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX9-NEXT:  .LBB1_2: ; %bb23
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_cvt_f32_u32_e32 v3, v0

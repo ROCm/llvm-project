@@ -66,7 +66,6 @@ define i128 @fptosi_f64_to_i128(double %x) {
 ; SDAG-NEXT:  .LBB0_3:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; SDAG-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; SDAG-NEXT:    ; divergent control-flow edge
@@ -273,7 +272,6 @@ define i128 @fptoui_f64_to_i128(double %x) {
 ; SDAG-NEXT:  .LBB1_3:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; SDAG-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; SDAG-NEXT:    ; divergent control-flow edge
@@ -417,7 +415,6 @@ define i128 @fptosi_f32_to_i128(float %x) {
 ; SDAG-NEXT:  .LBB2_3:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; SDAG-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; SDAG-NEXT:    ; divergent control-flow edge
@@ -613,7 +610,6 @@ define i128 @fptoui_f32_to_i128(float %x) {
 ; SDAG-NEXT:  .LBB3_3:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; SDAG-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; SDAG-NEXT:    ; divergent control-flow edge
@@ -783,7 +779,6 @@ define i128 @fptosi_bf16_to_i128(bfloat %x) {
 ; SDAG-NEXT:  .LBB6_3:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; SDAG-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; SDAG-NEXT:    ; divergent control-flow edge
@@ -975,7 +970,6 @@ define i128 @fptoui_bf16_to_i128(bfloat %x) {
 ; SDAG-NEXT:  .LBB7_3:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[8:9]
-; SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; SDAG-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
 ; SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; SDAG-NEXT:    ; divergent control-flow edge

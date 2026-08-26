@@ -105,6 +105,16 @@ inline const LaneMaskConstants &LaneMaskConstants::get(const GCNSubtarget &ST) {
 
 } // end namespace AMDGPU
 
+/// How a lane mask relates to EXEC; selects the cheapest merge in
+/// \ref AMDGPULaneMaskUtils::buildMergeLaneMasks. Derive it for an arbitrary
+/// register with \ref AMDGPULaneMaskUtils::classifyLaneMask.
+enum class LaneMaskKind {
+  None,   ///< Superset/unknown; emit Reg & EXEC.
+  Zero,   ///< LaneMask is 0
+  Subset, ///< LaneMask is subset of EXEC, therefore EXEC masking can be skipped
+  Exec,   ///< LaneMask is EXEC
+};
+
 /// \brief Helper class for lane-mask related tasks.
 class AMDGPULaneMaskUtils {
 private:
@@ -129,10 +139,16 @@ public:
                           MachineBasicBlock::iterator I) const;
 
   Register createLaneMaskReg() const;
+
+  /// Classify \p Reg by its relationship to EXEC at \p I in \p MBB.
+  LaneMaskKind classifyLaneMask(Register Reg, MachineBasicBlock &MBB,
+                                MachineBasicBlock::iterator I,
+                                AMDGPULaneMaskAnalysis *LMA = nullptr) const;
+
   void buildMergeLaneMasks(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator I, const DebugLoc &DL,
                            Register DstReg, Register PrevReg, Register CurReg,
-                           AMDGPULaneMaskAnalysis *LMA = nullptr,
+                           LaneMaskKind CurKind,
                            bool isPrevZeroReg = false) const;
 };
 
@@ -176,7 +192,6 @@ public:
 
 private:
   AMDGPULaneMaskUtils LMU;
-  AMDGPULaneMaskAnalysis *LMA = nullptr;
 
   struct BlockInfo {
     MachineBasicBlock *Block;
@@ -210,13 +225,12 @@ public:
 
   AMDGPULaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
 
-  void setLaneMaskAnalysis(AMDGPULaneMaskAnalysis *Analysis) { LMA = Analysis; }
-
   void init();
   void cleanup();
 
   void addReset(MachineBasicBlock &Block, ResetFlags Flags);
-  void addAvailable(MachineBasicBlock &Block, Register Value);
+  void addAvailable(MachineBasicBlock &Block, Register Value,
+                    LaneMaskKind Kind);
 
   Register getMergedMask(MachineBasicBlock &Block);
   void insertAccumulatorResets();

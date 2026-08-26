@@ -105,21 +105,19 @@ define amdgpu_ps { <4 x float> } @test_return_to_epilog_with_optimized_kill(floa
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT:   renamable $vgpr1 = nofpexcept V_RCP_F32_e32 $vgpr0, implicit $mode, implicit $exec
   ; GCN-NEXT:   $sgpr0_sgpr1 = S_MOV_B64 $exec
-  ; GCN-NEXT:   renamable $sgpr6_sgpr7 = S_MOV_B64 -1
   ; GCN-NEXT:   renamable $sgpr2_sgpr3 = nofpexcept V_CMP_GT_F32_e64 0, 0, 0, killed $vgpr1, 0, implicit $mode, implicit $exec
-  ; GCN-NEXT:   renamable $sgpr8_sgpr9 = S_XOR_B64 renamable $sgpr2_sgpr3, $exec, implicit-def $scc
+  ; GCN-NEXT:   renamable $sgpr6_sgpr7 = S_XOR_B64 renamable $sgpr2_sgpr3, $exec, implicit-def $scc
   ; GCN-NEXT:   $sgpr4_sgpr5 = S_MOV_B64 $sgpr2_sgpr3
-  ; GCN-NEXT:   $exec = S_MOV_B64 killed $sgpr8_sgpr9
+  ; GCN-NEXT:   $exec = S_MOV_B64 killed $sgpr6_sgpr7
   ; GCN-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GCN-NEXT:   S_CBRANCH_EXECZ %bb.3, implicit $exec
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT: bb.1.flow.preheader:
   ; GCN-NEXT:   successors: %bb.2(0x80000000)
-  ; GCN-NEXT:   liveins: $vgpr0, $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5, $sgpr6_sgpr7
+  ; GCN-NEXT:   liveins: $vgpr0, $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT:   nofpexcept V_CMP_GT_F32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $mode, implicit $exec
   ; GCN-NEXT:   renamable $vgpr0 = V_CNDMASK_B32_e64 0, 0, 0, -1, killed $vcc, implicit $exec
-  ; GCN-NEXT:   dead renamable $sgpr6_sgpr7 = S_AND_B64 killed renamable $sgpr6_sgpr7, $exec, implicit-def $scc
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT: bb.2.flow:
   ; GCN-NEXT:   successors: %bb.2(0x7c000000), %bb.3(0x04000000)

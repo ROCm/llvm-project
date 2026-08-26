@@ -45,8 +45,7 @@ define bfloat @sitofp_i128_to_bf16(i128 %x) {
 ; SDAG-NEXT:    s_cbranch_execnz .LBB0_11
 ; SDAG-NEXT:  .LBB0_2:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
-; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; SDAG-NEXT:    s_and_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB0_9
@@ -335,8 +334,7 @@ define bfloat @uitofp_i128_to_bf16(i128 %x) {
 ; SDAG-NEXT:    s_cbranch_execnz .LBB1_11
 ; SDAG-NEXT:  .LBB1_2:
 ; SDAG-NEXT:    s_or_b64 exec, exec, s[6:7]
-; SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; SDAG-NEXT:    s_and_b64 s[8:9], s[4:5], exec
+; SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB1_9

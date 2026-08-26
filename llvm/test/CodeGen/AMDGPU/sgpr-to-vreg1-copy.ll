@@ -30,7 +30,6 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
 ; GCN-NEXT:    s_or_b64 s[6:7], s[0:1], vcc
 ; GCN-NEXT:    s_xor_b64 s[0:1], s[6:7], exec
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_3
@@ -44,7 +43,6 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
 ; GCN-NEXT:  .LBB0_3: ; in Loop: Header=BB0_1 Depth=1
 ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[0:1]
-; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
 ; GCN-NEXT:    s_mov_b64 exec, s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge

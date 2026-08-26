@@ -23,7 +23,6 @@ define amdgpu_ps void @i1_copy_from_loop(ptr addrspace(8) inreg %rsrc, i32 %tid)
 ; SI-NEXT:    v_cmp_nle_f32_e32 vcc, 0, v1
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; SI-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; SI-NEXT:    s_and_b64 s[10:11], s[10:11], exec
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
 ; SI-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
 ; SI-NEXT:    s_mov_b64 exec, s[8:9]

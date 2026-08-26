@@ -750,8 +750,6 @@ define double @flat_system_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s1, s1, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_or_b32 s1, s0, s1
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
@@ -816,8 +814,6 @@ define double @flat_one_as_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s1, s1, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_or_b32 s1, s0, s1
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
