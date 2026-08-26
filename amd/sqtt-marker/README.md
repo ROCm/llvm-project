@@ -7,8 +7,7 @@ The trace decoding API remains in `rocprof-trace-decoder`.
 The plugin must be built against the same LLVM build as the compiler process
 that loads it. In standalone builds, set `LLVM_DIR` accordingly.
 
-The plugin is built and installed with LLVM by default. Disable it with
-`-DLLVM_BUILD_SQTT_MARKER=OFF`. It can also be built and packaged separately:
+Build and package the plugin separately against LLVM:
 
 ```sh
 cmake -S amd/sqtt-marker -B build-sqtt-marker \
@@ -76,8 +75,7 @@ contract.
 
 ## Testing
 
-LLVM builds include the tests when `LLVM_INCLUDE_TESTS` is enabled. For a
-standalone build, opt in explicitly:
+For a standalone build, opt in to the tests explicitly:
 
 ```sh
 cmake -S amd/sqtt-marker -B build-sqtt-marker \
