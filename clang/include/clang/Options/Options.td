@@ -4231,7 +4231,9 @@ def fopenmp_runtimelib_EQ : Joined<["-"], "fopenmp-runtimelib=">, Group<f_Group>
 def fopenmp_gpu_threads_per_team_EQ : Joined<["-"], "fopenmp-gpu-threads-per-team=">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>;
 def fopenmp_target_xteam_reduction_blocksize_EQ : Joined<["-"], "fopenmp-target-xteam-reduction-blocksize=">, Group<f_Group>,
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>;
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Number of threads in a block used by GPU cross-team reduction "
+           "kernels">;
 def fopenmp_target_ignore_env_vars : Flag<["-"], "fopenmp-target-ignore-env-vars">, Group<f_Group>, 
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
   HelpText<"Assert that device related environment variables can be ignored while generating code">,
@@ -4256,38 +4258,29 @@ def fno_openmp_target_no_loop : Flag<["-"], "fno-openmp-target-no-loop">, Group<
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
   HelpText<"Do not use the no-loop code generation technique">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetNoLoop">>;
-def fopenmp_target_xteam_reduction : Flag<["-"], "fopenmp-target-xteam-reduction">, Group<f_Group>, 
+// The downstream cross-team ("Xteam") reduction implementation and its 'scan'
+// specialization have been removed. The following flags are accepted and
+// ignored for backward compatibility; the driver emits a deprecation warning
+// when they are used. Note that '-fopenmp-target-xteam-reduction-blocksize='
+// above is *not* deprecated.
+def fopenmp_target_xteam_reduction : Flag<["-"], "fopenmp-target-xteam-reduction">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Use the cross-team code generation technique if possible">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamReduction">>;
-def fno_openmp_target_xteam_reduction : Flag<["-"], "fno-openmp-target-xteam-reduction">, Group<f_Group>, 
+  HelpText<"Deprecated; has no effect. Cross-team reductions are always enabled">;
+def fno_openmp_target_xteam_reduction : Flag<["-"], "fno-openmp-target-xteam-reduction">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Do not use the cross-team reduction code generation technique">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamReduction">>;
-def fopenmp_target_fast_reduction : Flag<["-"], "fopenmp-target-fast-reduction">, Group<f_Group>, 
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Use the fast reduction code generation technique if possible">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetFastReduction">>;
-def fno_openmp_target_fast_reduction : Flag<["-"], "fno-openmp-target-fast-reduction">, Group<f_Group>, 
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Do not use the fast reduction code generation technique">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetFastReduction">>;
-def fopenmp_target_xteam_scan : Flag<["-"], "fopenmp-target-xteam-scan">, Group<f_Group>, 
+  HelpText<"Deprecated; has no effect. Cross-team reductions are always enabled">;
+def fopenmp_target_xteam_scan : Flag<["-"], "fopenmp-target-xteam-scan">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Use the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamScan">>;
-def fno_openmp_target_xteam_scan : Flag<["-"], "fno-openmp-target-xteam-scan">, Group<f_Group>, 
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
+def fno_openmp_target_xteam_scan : Flag<["-"], "fno-openmp-target-xteam-scan">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Do not use the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamScan">>;
-def fopenmp_target_xteam_no_loop_scan : Flag<["-"], "fopenmp-target-xteam-no-loop-scan">, Group<f_Group>, 
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
+def fopenmp_target_xteam_no_loop_scan : Flag<["-"], "fopenmp-target-xteam-no-loop-scan">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Use the no-loop variant of the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamNoLoopScan">>;
-def fno_openmp_target_xteam_no_loop_scan : Flag<["-"], "fno-openmp-target-xteam-no-loop-scan">, Group<f_Group>, 
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
+def fno_openmp_target_xteam_no_loop_scan : Flag<["-"], "fno-openmp-target-xteam-no-loop-scan">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Do not use the no-loop variant of the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamNoLoopScan">>;
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
 
 //===----------------------------------------------------------------------===//
 // Shared cc1 + fc1 OpenMP Target Options
@@ -4409,6 +4402,17 @@ def fopenmp_target_atomic_reduction : Flag<["-"], "fopenmp-target-atomic-reducti
 def fno_openmp_target_atomic_reduction : Flag<["-"], "fno-openmp-target-atomic-reduction">,
   Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
   Visibility<[ClangOption, CC1Option]>;
+// Legacy spellings of the atomic cross-team reduction flags. The downstream
+// 'fast reduction' feature these used to control has been replaced by the
+// atomic cross-team reductions, so keep the old spellings working as aliases.
+def fopenmp_target_fast_reduction : Flag<["-"], "fopenmp-target-fast-reduction">,
+  Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
+  Visibility<[ClangOption, CC1Option, FlangOption]>,
+  Alias<fopenmp_target_atomic_reduction>;
+def fno_openmp_target_fast_reduction : Flag<["-"], "fno-openmp-target-fast-reduction">,
+  Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
+  Visibility<[ClangOption, CC1Option, FlangOption]>,
+  Alias<fno_openmp_target_atomic_reduction>;
 
 defm openmp_optimistic_collapse : BoolFOption<"openmp-optimistic-collapse",
   LangOpts<"OpenMPOptimisticCollapse">, DefaultFalse,

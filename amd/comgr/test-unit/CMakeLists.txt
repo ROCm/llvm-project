@@ -113,11 +113,11 @@ add_executable(LoggerTests
   ../src/comgr-logger.cpp
   ../src/comgr-env.cpp)
 
-llvm_map_components_to_libnames(COMGR_TEST_UNIT_LOGGER_LIBS Support)
+llvm_map_components_to_libnames(COMGR_TEST_UNIT_SUPPORT_LIBS Support)
 
 target_link_libraries(LoggerTests PRIVATE
   ${COMGR_GTEST_LIBS}
-  ${COMGR_TEST_UNIT_LOGGER_LIBS}
+  ${COMGR_TEST_UNIT_SUPPORT_LIBS}
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(LoggerTests PRIVATE
@@ -128,15 +128,51 @@ target_include_directories(LoggerTests PRIVATE
 
 comgr_configure_test_target(LoggerTests)
 
+# -- MetadataCacheTest --------------------------------------------------------
+#
+# The DataObject metadata cache is only observable as pointer identity between
+# two amd_comgr_metadata_node_t handles, so this reaches into src/comgr.h rather
+# than going through the public API alone. Reads the code object straight out of
+# the CTest suite's source tree; it is checked in, so there is no build-order
+# dependency on that suite.
+
+add_executable(MetadataCacheTest
+  MetadataCacheTest.cpp)
+
+target_link_libraries(MetadataCacheTest PRIVATE
+  ${COMGR_GTEST_LIBS}
+  amd_comgr
+  ${COMGR_TEST_UNIT_SUPPORT_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+target_compile_definitions(MetadataCacheTest PRIVATE
+  GTEST_NO_LLVM_SUPPORT=true
+  TEST_CODE_OBJECT="${CMAKE_CURRENT_SOURCE_DIR}/../test/source/legacy/shared-v3.so")
+
+target_include_directories(MetadataCacheTest PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(MetadataCacheTest)
+
+if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
+  add_custom_command(TARGET MetadataCacheTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:MetadataCacheTest>)
+endif()
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
   COMMAND $<TARGET_FILE:HotswapMCTests>
   COMMAND $<TARGET_FILE:HotswapProfileTests>
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
-  COMMAND $<TARGET_FILE:LoggerTests>)
+  COMMAND $<TARGET_FILE:LoggerTests>
+  COMMAND $<TARGET_FILE:MetadataCacheTest>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapProfileTests
-  DemangleSymbolNameTest LoggerTests)
+  DemangleSymbolNameTest LoggerTests MetadataCacheTest)
 
 # The transpile-path test binaries, exported by hotswap/CMakeLists.txt in
 # COMGR_HOTSWAP_TEST_TARGETS (empty unless COMGR_ENABLE_HOTSWAP_TRANSPILE is on).

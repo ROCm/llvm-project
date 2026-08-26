@@ -11815,8 +11815,6 @@ SITargetLowering::lowerStructBufferAtomicIntrin(SDValue Op, SelectionDAG &DAG,
                                  M->getMemOperand());
 }
 
-// Multicast Load Bug Workaround for GFX1250 A0.
-// Do not upstream, remove with B0 available.
 static void InitializeM0ToZero(SDValue Op, SelectionDAG &DAG, SDLoc DL) {
   auto *N = Op.getNode();
   SDValue Zero = DAG.getConstant(0, DL, MVT::i32);
@@ -11834,15 +11832,13 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   SDLoc DL(Op);
 
   switch (IntrID) {
-  // Multicast Load Bug Workaround for GFX1250 A0.
-  // Do not upstream, remove with B0 available.
   case Intrinsic::amdgcn_cluster_load_b32:
   case Intrinsic::amdgcn_cluster_load_b64:
   case Intrinsic::amdgcn_cluster_load_b128: {
-    if (Subtarget->hasGFX1250A0())
+    if (Subtarget->hasGFX1250_STRICT())
       InitializeM0ToZero(Op, DAG, DL);
     return SDValue();
-  } // End Multicast Load Bug Workaround for GFX1250 A0.
+  }
   case Intrinsic::amdgcn_ds_ordered_add:
   case Intrinsic::amdgcn_ds_ordered_swap: {
     MemSDNode *M = cast<MemSDNode>(Op);
@@ -12632,16 +12628,14 @@ SDValue SITargetLowering::LowerINTRINSIC_VOID(SDValue Op,
   unsigned IntrinsicID = Op.getConstantOperandVal(1);
 
   switch (IntrinsicID) {
-  // Multicast Load Bug Workaround for GFX1250 A0.
-  // Do not upstream, remove with B0 available.
   case Intrinsic::amdgcn_cluster_load_async_to_lds_b8:
   case Intrinsic::amdgcn_cluster_load_async_to_lds_b32:
   case Intrinsic::amdgcn_cluster_load_async_to_lds_b64:
   case Intrinsic::amdgcn_cluster_load_async_to_lds_b128: {
-    if (Subtarget->hasGFX1250A0())
+    if (Subtarget->hasGFX1250_STRICT())
       InitializeM0ToZero(Op, DAG, DL);
     return SDValue();
-  } // End Multicast Load Bug Workaround for GFX1250 A0.
+  }
   case Intrinsic::amdgcn_exp_compr: {
     SDValue Src0 = Op.getOperand(4);
     SDValue Src1 = Op.getOperand(5);
@@ -13331,7 +13325,7 @@ SDValue SITargetLowering::lowerPointerAsRsrcIntrin(SDNode *Op,
   SDValue ExtStride = DAG.getAnyExtOrTrunc(Stride, Loc, MVT::i32);
   SDValue Rsrc;
 
-  if (Subtarget->has45BitNumRecordsBufferResource()) {
+  if (Subtarget->getBufferResourceNumRecordsWidth() == 45) {
     NumRecords = DAG.getZExtOrTrunc(NumRecords, Loc, MVT::i64);
     NumRecords = DAG.getNode(ISD::AND, Loc, MVT::i64, NumRecords,
                              DAG.getConstant((1ULL << 45) - 1, Loc, MVT::i64));

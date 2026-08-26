@@ -2,7 +2,7 @@
 // Immediate bits [19:12] are rotated into s_set_vgpr_msb order; 0x81 becomes
 // mode 0x60 and must be restored around the split WMMA's upper half.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \

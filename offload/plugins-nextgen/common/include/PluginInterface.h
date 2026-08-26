@@ -68,7 +68,6 @@ namespace plugin {
 struct GenericPluginTy;
 struct GenericKernelTy;
 struct GenericDeviceTy;
-struct KernelRunRecordTy;
 struct PluginContextTy;
 template <typename ResourceRef> class GenericDeviceResourceManagerTy;
 
@@ -171,9 +170,9 @@ struct AsyncInfoWrapperTy {
 
   /// Register \p Ptr as an associated allocation that is freed after
   /// finalization.
-  void freeAllocationAfterSynchronization(void *Ptr) {
+  void freeAllocationAfterSynchronization(void *Ptr, TargetAllocTy Kind) {
     std::lock_guard<std::mutex> AllocationGuard(AsyncInfoPtr->Mutex);
-    AsyncInfoPtr->AssociatedAllocations.push_back(Ptr);
+    AsyncInfoPtr->AssociatedAllocations.push_back({Ptr, Kind});
   }
 
 private:
@@ -551,20 +550,10 @@ struct GenericKernelTy {
       return true;
     // AMD-only execution modes
     case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
-    case OMP_TGT_EXEC_MODE_XTEAM_RED:
       ODBG(ODT_Tool) << "AMD-only execution mode";
       return true;
     }
     llvm_unreachable("Unknown execution mode!");
-  }
-
-  /// Indicate whether it is a specialized kernel.
-  bool isSpecializedKernel() const {
-    if (ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_NO_LOOP ||
-        ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP ||
-        ExecutionMode == OMP_TGT_EXEC_MODE_XTEAM_RED)
-      return true;
-    return false;
   }
 
   /// Compute kernel occupancy
@@ -604,12 +593,18 @@ struct GenericKernelTy {
   bool isNoLoopMode() const {
     return ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
   }
-  bool isXTeamReductionsMode() const {
-    return ExecutionMode == OMP_TGT_EXEC_MODE_XTEAM_RED;
-  }
+  // Note: there is deliberately no execution mode for a cross-team reduction.
+  // Such a kernel is a plain SPMD one; use doesTeamsReduction() below to detect
+  // it.
 
-  /// Indicate if the input block size is within the limit.
-  virtual bool isValidBlockSize(uint32_t BlockSize) const { return true; }
+  /// Indicate whether this kernel performs a cross-team (teams) reduction.
+  /// Signalled by a non-zero reduction data size emitted by CodeGen for the
+  /// upstream cross-team reduction path. This drives the AMDGPU reduction
+  /// grid-size heuristic now that the downstream Xteam reduction execution
+  /// mode is no longer generated.
+  bool doesTeamsReduction() const {
+    return KernelEnvironment.Configuration.ReductionDataSize > 0;
+  }
 
 protected:
   /// Get the execution mode name of the kernel.
@@ -628,8 +623,6 @@ protected:
       return "SPMD-No-Loop";
     case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
       return "SPMD-Big-Jump-Loop";
-    case OMP_TGT_EXEC_MODE_XTEAM_RED:
-      return "XTeam-Reductions";
     }
     llvm_unreachable("Unknown execution mode!");
   }
@@ -1094,6 +1087,22 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual Error queryAsyncImpl(__tgt_async_info &AsyncInfo, bool ReleaseQueue,
                                bool *IsQueueWorkCompleted) = 0;
 
+  /// Indicate whether the plugin transfers data faster when the host side of
+  /// the transfer is pinned memory. If a plugin returns true, the kernel
+  /// launch environment is staged in a pinned host buffer before it is
+  /// submitted. Plugins may benefit for different reasons: some pick a cheaper
+  /// copy path for buffers they know are pinned, others rely on the driver
+  /// only issuing a true asynchronous transfer out of page-locked memory.
+  virtual bool hasFastTransferWithPinnedMemory() const { return false; }
+
+  /// Allocate a pinned host buffer to stage a kernel launch environment. The
+  /// caller owns it until it registers it with
+  /// AsyncInfoWrapperTy::freeAllocationAfterSynchronization, which releases it
+  /// once the transfer reading it has completed. Returns nullptr if staging is
+  /// unavailable, in which case the caller must submit the launch environment
+  /// from ordinary host memory.
+  KernelLaunchEnvironmentTy *getPinnedLaunchEnvBuffer();
+
   /// Check whether the architecture supports VA management
   virtual bool supportVAManagement() const { return false; }
 
@@ -1368,6 +1377,9 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual uint32_t getOMPXAdjustNumTeamsForXteamRedSmallBlockSize() const {
     llvm_unreachable("Unimplemented");
   }
+  virtual bool getOMPXXTeamReductionOccupancyBasedOpt() const {
+    llvm_unreachable("Unimplemented");
+  }
   virtual bool getOMPXGenericSpmdUseSmallBlockSize() const {
     llvm_unreachable("Unimplemented");
   }
@@ -1455,10 +1467,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
                                                 bool isEagerMaps) {
     return Error::success();
   }
-
-  bool enableRuntimeAutotuning() const { return OMPX_EnableRuntimeAutotuning; }
-
-  KernelRunRecordTy *getKernelRunRecords() const { return KernelRunRecords; }
 
   /// Returns true if the plugin can guarantee that the associated
   /// storage is accessible
@@ -1582,8 +1590,12 @@ private:
   /// only necessary for unhosted targets like the GPU.
   virtual bool shouldSetupRPCServer() const { return false; }
 
-  /// Pointer to the memory manager or nullptr if not available.
+  /// Pointer to the device memory manager or nullptr if not available.
   MemoryManagerTy *MemoryManager;
+  /// Memory managers for the host and shared allocation kinds or nullptr if not
+  /// available.
+  MemoryManagerTy *HostMemoryManager;
+  MemoryManagerTy *SharedMemoryManager;
 
   /// Per device setting of MemoryManager's Threshold
   virtual size_t getMemoryManagerSizeThreshold() { return 0; }
@@ -1623,14 +1635,25 @@ private:
   /// Record and replay manager.
   RecordReplayTy *RecordReplay = nullptr;
 
+  /// Return the memory manager for the given allocation kind.
+  MemoryManagerTy *getMemoryManagerFor(TargetAllocTy Kind) {
+    switch (Kind) {
+    case TARGET_ALLOC_DEFAULT:
+    case TARGET_ALLOC_DEVICE:
+      return MemoryManager;
+    case TARGET_ALLOC_HOST:
+      return HostMemoryManager;
+    case TARGET_ALLOC_SHARED:
+      return SharedMemoryManager;
+    }
+    return nullptr;
+  }
+
 protected:
   /// Environment variables defined by the LLVM OpenMP implementation
   /// regarding the initial number of streams and events.
   UInt32Envar OMPX_InitialNumStreams;
   UInt32Envar OMPX_InitialNumEvents;
-
-  /// Envar to enable runtime tuning.
-  BoolEnvar OMPX_EnableRuntimeAutotuning;
 
   /// The identifier of the device within the plugin. Notice this is not a
   /// global device id and is not the device id visible to the OpenMP user.
@@ -1668,9 +1691,6 @@ protected:
   /// This is used to run the RPC server during task synchronization.
   RPCServerTy *RPCServer;
 
-  /// Structs for functions and data used in runtime autotuning.
-  KernelRunRecordTy *KernelRunRecords;
-
   /// Variable to enable kernel duration tracing.
   BoolEnvar OMPX_KernelDurationTracing;
 
@@ -1682,119 +1702,6 @@ private:
   getKernelEnvironmentForKernel(StringRef Name, DeviceImageTy &Image);
 
   bool IsFastReductionEnabled = false;
-};
-
-/// Struct represents the metadata for each kernel run on the device.
-struct KernelRunRecordTy {
-
-  struct KernelRunEntryTy {
-    std::string KernelName;
-    uint32_t NumTeams = 0;
-    uint32_t NumThreads = 0;
-    uint64_t RunDuration = 0;
-  };
-
-  // Metadata used in tuning process.
-  struct TuningMetadataTy {
-    uint32_t IdxThread = 0;
-    uint32_t IdxCUMultiplier = 0;
-    // Run counters.
-    uint32_t RunCounters = 0;
-    // Entry with minimum running time.
-    KernelRunEntryTy MinEntry;
-  };
-
-  // Add a new entry
-  void addEntry(std::string KernelName, uint32_t NumTeams, uint32_t NumThreads,
-                uint64_t RunDuration) {
-    TuningData[KernelName].RunCounters++;
-
-    // Update min entries.
-    uint64_t MinDuration = 0;
-    auto It = TuningData.find(KernelName);
-    if (It != TuningData.end()) {
-      MinDuration = It->second.MinEntry.RunDuration;
-    }
-    if (MinDuration > RunDuration || MinDuration == 0) {
-      TuningData[KernelName].MinEntry = {KernelName, NumTeams, NumThreads,
-                                         RunDuration};
-    }
-  }
-
-  // Get parameters for next kernel launch.
-  std::pair<uint32_t, uint32_t>
-  getLaunchParamsForKernel(const GenericKernelTy &Kernel,
-                           GenericDeviceTy &GenericDevice) {
-    std::string KernelName = Kernel.getName();
-
-    // If the kernel reaches the run limit,
-    // return the current optimal launch parameters.
-    if (reachedRunLimitForKernel(KernelName)) {
-      auto MinEntry = TuningData[KernelName].MinEntry;
-      return {MinEntry.NumTeams, MinEntry.NumThreads};
-    }
-
-    // Pick new launch parameters.
-    uint32_t IdxCUMulti = TuningData[KernelName].IdxCUMultiplier;
-    uint32_t IdxThread = TuningData[KernelName].IdxThread;
-
-    if (IdxCUMulti >= CUMultiplierCandidate.size()) {
-      // No more element to search.
-      // Max run counter to stop further runs.
-      // Return current optimal launch parameters.
-      TuningData[KernelName].RunCounters = RunLimiter + 1;
-
-      return {TuningData[KernelName].MinEntry.NumTeams,
-              TuningData[KernelName].MinEntry.NumThreads};
-    }
-
-    // New team/thread pair for launch parameters.
-    uint32_t NumCU = GenericDevice.getNumComputeUnits();
-    std::pair<uint32_t, uint32_t> NewLaunchParams = {
-        CUMultiplierCandidate[IdxCUMulti] * NumCU, ThreadCandidate[IdxThread]};
-
-    // Update indices.
-    IdxThread++;
-    TuningData[KernelName].IdxThread = IdxThread;
-
-    // Threads should be within the limit.
-    if (IdxThread >= ThreadCandidate.size() ||
-        !Kernel.isValidBlockSize(ThreadCandidate[IdxThread])) {
-      TuningData[KernelName].IdxThread = 0;
-      TuningData[KernelName].IdxCUMultiplier++;
-    }
-
-    return NewLaunchParams;
-  }
-
-  bool reachedRunLimitForKernel(std::string KernelName) {
-    if (TuningData.find(KernelName) == TuningData.end()) {
-      // If no record for this kernel.
-      return false;
-    }
-
-    return TuningData[KernelName].RunCounters > RunLimiter;
-  }
-
-  uint32_t getRunCounterForKernel(std::string KernelName) {
-    if (TuningData.find(KernelName) == TuningData.end()) {
-      return 0;
-    }
-
-    return TuningData[KernelName].RunCounters;
-  }
-
-private:
-  // Candidates for thread and team.
-  std::vector<uint32_t> ThreadCandidate = {32, 64, 128, 256, 512, 1024};
-  std::vector<uint32_t> CUMultiplierCandidate = {4, 8, 16, 32, 64, 128};
-  // The max number of tuning runs for each kernel.
-  uint32_t RunLimiter = ThreadCandidate.size() * CUMultiplierCandidate.size();
-  // Used for keeping track of the metatdata used in tuning for each kernel.
-  std::unordered_map<std::string, TuningMetadataTy> TuningData;
-  /// Internal representation for OMPT device (initialize & finalize)
-  std::atomic<bool> OmptInitialized;
-
 };
 
 /// Class implementing common functionalities of offload plugins. Each plugin

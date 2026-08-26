@@ -68,6 +68,14 @@ constexpr uint8_t SMovB32Bytes[] = {0x80, 0x00, 0x80, 0xbe}; // s_mov_b32 s0, 0
 constexpr uint8_t SEndpgmBytes[] = {0x00, 0x00, 0x81, 0xbf}; // s_endpgm
 constexpr uint8_t VMovB32Bytes[] = {0x80, 0x02, 0x00,
                                     0x7e}; // v_mov_b32_e32 v0, 0
+constexpr uint8_t VAddF32Bytes[] = {0xf2, 0x02, 0x00,
+                                    0x02}; // v_add_f32_e32 v0, 1.0, v1
+constexpr uint8_t VSubF32Bytes[] = {0x00, 0x03, 0x04,
+                                    0x04}; // v_sub_f32_e32 v2, v0, v1
+constexpr uint8_t VSubrevF32Bytes[] = {0xf4, 0x04, 0x06,
+                                       0x06}; // v_subrev_f32_e32 v3, 2.0, v2
+constexpr uint8_t VMulF32Bytes[] = {0xf0, 0x06, 0x08,
+                                    0x0a}; // v_mul_f32_e32 v4, 0.5, v3
 
 // Holds one gfx942 MCState for the tests that need the disassembler or an
 // MCContext. initMCState registers the AMDGPU target itself, so no separate
@@ -154,6 +162,10 @@ TEST(CanonicalOp, NameRoundTrip) {
   EXPECT_EQ(canonicalOpName(CanonicalOp::Unknown), "Unknown");
   EXPECT_EQ(canonicalOpName(CanonicalOp::S_MOV_B32), "S_MOV_B32");
   EXPECT_EQ(canonicalOpName(CanonicalOp::S_ENDPGM), "S_ENDPGM");
+  EXPECT_EQ(canonicalOpName(CanonicalOp::V_ADD_F32), "V_ADD_F32");
+  EXPECT_EQ(canonicalOpName(CanonicalOp::V_MUL_F32), "V_MUL_F32");
+  EXPECT_EQ(canonicalOpName(CanonicalOp::V_SUB_F32), "V_SUB_F32");
+  EXPECT_EQ(canonicalOpName(CanonicalOp::V_SUBREV_F32), "V_SUBREV_F32");
 }
 
 TEST(CanonicalOp, EveryValueIsNamed) {
@@ -221,6 +233,18 @@ TEST_F(DecoderTest, ISAProfileGfx1250) {
   EXPECT_TRUE(Profile.hasGfx125UserSgprCountField());
 }
 
+TEST_F(DecoderTest, ISAProfileDx10ClampAndIeeeMode) {
+  const ISAProfile Gfx942 = ISAProfile::fromSubtarget(*State.SubtargetInfo);
+  EXPECT_TRUE(Gfx942.hasDx10ClampAndIeeeMode());
+
+  llvm::Expected<std::unique_ptr<llvm::MCSubtargetInfo>> Gfx1250STI =
+      buildSubtargetInfo(*State.Target, "gfx1250");
+  ASSERT_TRUE(static_cast<bool>(Gfx1250STI))
+      << llvm::toString(Gfx1250STI.takeError());
+  const ISAProfile Gfx1250 = ISAProfile::fromSubtarget(**Gfx1250STI);
+  EXPECT_FALSE(Gfx1250.hasDx10ClampAndIeeeMode());
+}
+
 // -- opcode-map ---------------------------------------------------------------
 
 // Resolve an MC opcode through the disassembler so the map is queried with the
@@ -239,6 +263,11 @@ TEST_F(DecoderTest, OpcodeMapTagsTableEntries) {
   Map.build(*State.InstrInfo);
   EXPECT_EQ(Map.lookup(opcodeOf(State, SMovB32Bytes)), CanonicalOp::S_MOV_B32);
   EXPECT_EQ(Map.lookup(opcodeOf(State, SEndpgmBytes)), CanonicalOp::S_ENDPGM);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VAddF32Bytes)), CanonicalOp::V_ADD_F32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VMulF32Bytes)), CanonicalOp::V_MUL_F32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VSubF32Bytes)), CanonicalOp::V_SUB_F32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VSubrevF32Bytes)),
+            CanonicalOp::V_SUBREV_F32);
 }
 
 TEST_F(DecoderTest, OpcodeMapReturnsUnknownForUnmappedOpcode) {

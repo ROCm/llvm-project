@@ -36,7 +36,7 @@ MATH_MANGLE(ctanh)(double2 z)
         ri = mul(mul(cy, sy), rd).hi;
     } else {
         rr = BUILTIN_COPYSIGN_F64(1.0, z.x);
-        ri = 4.0 * (cy.hi * sy.hi) * MATH_MANGLE(exp)(-2.0 * x);
+        ri = 4.0 * mul(cy, sy).hi * MATH_MANGLE(exp)(-2.0 * x);
     }
 
     if (!FINITE_ONLY_OPT()) {

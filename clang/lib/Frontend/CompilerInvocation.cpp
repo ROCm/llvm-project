@@ -3937,26 +3937,6 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
   else
     GenerateArg(Consumer, OPT_fno_openmp_target_no_loop);
 
-  if (Opts.OpenMPTargetXteamReduction)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_reduction);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_reduction);
-
-  if (Opts.OpenMPTargetFastReduction)
-    GenerateArg(Consumer, OPT_fopenmp_target_fast_reduction);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_fast_reduction);
-
-  if (Opts.OpenMPTargetXteamScan)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_scan);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_scan);
-
-  if (Opts.OpenMPTargetXteamNoLoopScan)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_no_loop_scan);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_no_loop_scan);
-
   if (Opts.OpenMPThreadSubscription)
     GenerateArg(Consumer, OPT_fopenmp_assume_threads_oversubscription);
 
@@ -3989,7 +3969,11 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
     GenerateArg(Consumer, OPT_fopenmp_gpu_threads_per_team_EQ,
                 Twine(Opts.OpenMPGPUThreadsPerTeam));
 
-  if (Opts.OpenMPTargetXteamReductionBlockSize != 1024)
+  // Keep this in sync with the default of OpenMPTargetXteamReductionBlockSize
+  // in LangOptions.def. Comparing against a stale default makes the generated
+  // arguments disagree with the parsed ones and turns every explicit use of
+  // '-fopenmp-target-xteam-reduction-blocksize=' into a round-trip error.
+  if (Opts.OpenMPTargetXteamReductionBlockSize != 512)
     GenerateArg(Consumer, OPT_fopenmp_target_xteam_reduction_blocksize_EQ,
                 Twine(Opts.OpenMPTargetXteamReductionBlockSize));
 
@@ -4464,22 +4448,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   Opts.OpenMPTargetNoLoop =
       Args.hasFlag(options::OPT_fopenmp_target_no_loop,
                    options::OPT_fno_openmp_target_no_loop, true);
-
-  Opts.OpenMPTargetXteamReduction =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_reduction,
-                   options::OPT_fno_openmp_target_xteam_reduction, true);
-
-  Opts.OpenMPTargetFastReduction =
-      Args.hasFlag(options::OPT_fopenmp_target_fast_reduction,
-                   options::OPT_fno_openmp_target_fast_reduction, false);
-
-  Opts.OpenMPTargetXteamScan =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_scan,
-                   options::OPT_fno_openmp_target_xteam_scan, false);
-
-  Opts.OpenMPTargetXteamNoLoopScan =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_no_loop_scan,
-                   options::OPT_fno_openmp_target_xteam_no_loop_scan, false);
 
   // Set the value of the debugging flag used in the new offloading device RTL.
   // Set either by a specific value or to a default if not specified.

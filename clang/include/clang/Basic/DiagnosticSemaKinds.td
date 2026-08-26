@@ -9844,6 +9844,11 @@ def err_cuda_host_shared : Error<
     "%select{__device__|__global__|__host__|__host__ __device__}0 functions">;
 def err_cuda_nonstatic_constdev: Error<"__constant__, __device__, and "
     "__managed__ are not allowed on non-static local variables">;
+def err_cuda_invalid_use_of_managedvar: Error<"invalid use of a __managed__ "
+    "variable">;
+def note_cuda_managed_var_in_glob_init : Note<"__managed__ variable shall not "
+    "be used in initialization of an object with static or thread local "
+    "storage duration">;
 def err_cuda_address_space_gpuvar: Error<"__constant__, __device__, and "
     "__shared__ variables must use default address space">;
 def err_cuda_grid_constant_not_allowed : Error<
@@ -12665,7 +12670,7 @@ def note_omp_previous_inscan_reduction : Note<
 def err_omp_multivar_xteam_scan_unsupported : Error<
   "multiple list items are not yet supported with the 'inclusive' or the 'exclusive' clauses that appear with the 'scan' directive">;
 def err_omp_xteam_scan_prohibited : Error<
-  "'scan' directive is not supported inside target regions. Use flag '-fopenmp-target-xteam-scan' to enable it">;
+  "'scan' directive is not supported inside target regions">;
 def err_omp_expected_predefined_allocator : Error<
   "expected one of the predefined allocators for the variables with the static "
   "storage: 'omp_default_mem_alloc', 'omp_large_cap_mem_alloc', "

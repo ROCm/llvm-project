@@ -15,17 +15,22 @@
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
+#include "llvm/IR/Module.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 using namespace llvm;
@@ -40,7 +45,65 @@ Expected<RegisterState> RegisterState::create(IRBuilder<> &B,
   if (Error Err = UserSgprLayout::tryFromKernelMeta(
           Meta, Projection.sourceIsa(), MC.SubtargetInfo->getCPU(), Layout))
     return std::move(Err);
-  return RegisterState(B, Projection, MC, std::move(Layout));
+  RegisterState Registers(B, Projection, MC, std::move(Layout));
+  if (Error Err = Registers.seedEntrySgprs())
+    return std::move(Err);
+  return Registers;
+}
+
+// Seed the SGPRs the source ABI preloads before entry with the target
+// intrinsics that produce the same values. The layout, not a fixed SGPR
+// numbering, says where each source lands: kernarg preload and the
+// enable_sgpr_* toggles legally move them.
+Error RegisterState::seedEntrySgprs() {
+  Module &M = *B.GetInsertBlock()->getModule();
+  auto Seed = [&](std::optional<unsigned> Sgpr, Intrinsic::ID Id, bool Is64,
+                  const Twine &Name) {
+    if (!Sgpr)
+      return;
+    Value *V =
+        B.CreateCall(Intrinsic::getOrInsertDeclaration(&M, Id), {}, Name);
+    if (Is64)
+      Regs.storeSGPR64(B, *Sgpr, V);
+    else
+      Regs.storeSGPR32(B, *Sgpr, V);
+  };
+
+  Seed(Layout.dispatchPtrSgpr(), Intrinsic::amdgcn_dispatch_ptr, true,
+       "dispatch_ptr");
+  Seed(Layout.queuePtrSgpr(), Intrinsic::amdgcn_queue_ptr, true, "queue_ptr");
+  Seed(Layout.kernargSegmentPtrSgpr(), Intrinsic::amdgcn_kernarg_segment_ptr,
+       true, "kernarg_ptr");
+  Seed(Layout.dispatchIdSgpr(), Intrinsic::amdgcn_dispatch_id, true,
+       "dispatch_id");
+  Seed(Layout.workgroupIdXSgpr(), Intrinsic::amdgcn_workgroup_id_x, false,
+       "workgroup_id_x");
+  Seed(Layout.workgroupIdYSgpr(), Intrinsic::amdgcn_workgroup_id_y, false,
+       "workgroup_id_y");
+  Seed(Layout.workgroupIdZSgpr(), Intrinsic::amdgcn_workgroup_id_z, false,
+       "workgroup_id_z");
+
+  // No target intrinsic reproduces the remaining entry sources, which carry
+  // source private-segment, kernarg-buffer, and packed dispatch state. Refuse
+  // rather than leave them unseeded: a handler would read an undef SGPR as if
+  // it held real entry state.
+  for (auto [Index, LayoutEntry] : enumerate(Layout.Entries)) {
+    switch (LayoutEntry.SrcKind) {
+    case UserSgprLayout::Source::PrivateSegmentBuffer:
+    case UserSgprLayout::Source::FlatScratchInit:
+    case UserSgprLayout::Source::PrivateSegmentSize:
+    case UserSgprLayout::Source::PreloadedKernarg:
+    case UserSgprLayout::Source::WorkgroupInfo:
+      return RaiseFailure::general(
+          RaiseFailureReason::UnsupportedEntrySgprSource,
+          "s" + Twine(Index) +
+              " holds an entry source the raise cannot "
+              "reproduce on the target");
+    default:
+      break;
+    }
+  }
+  return Error::success();
 }
 
 RegisterState::RegisterState(IRBuilder<> &B, const WaveProjection &Projection,

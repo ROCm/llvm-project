@@ -12,8 +12,40 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void checkMetadataString(amd_comgr_metadata_node_t Meta, const char *Key,
+                                const char *Expected) {
+  amd_comgr_metadata_node_t Value;
+  amd_comgr_status_t Status = amd_comgr_metadata_lookup(Meta, Key, &Value);
+  checkError(Status, "amd_comgr_metadata_lookup");
+
+  size_t Size;
+  Status = amd_comgr_get_metadata_string(Value, &Size, NULL);
+  checkError(Status, "amd_comgr_get_metadata_string");
+
+  char *Actual = (char *)malloc(Size);
+  if (!Actual)
+    fail("malloc");
+  Status = amd_comgr_get_metadata_string(Value, &Size, Actual);
+  checkError(Status, "amd_comgr_get_metadata_string");
+
+  if (strcmp(Actual, Expected) != 0)
+    fail("%s: expected %s, got %s", Key, Expected, Actual);
+
+  free(Actual);
+  Status = amd_comgr_destroy_metadata(Value);
+  checkError(Status, "amd_comgr_destroy_metadata");
+}
+
 int main(int argc, char *argv[]) {
   amd_comgr_status_t Status;
+
+  amd_comgr_metadata_node_t Gfx950Meta;
+  Status = amd_comgr_get_isa_metadata("amdgcn-amd-amdhsa--gfx950", &Gfx950Meta);
+  checkError(Status, "amd_comgr_get_isa_metadata");
+  checkMetadataString(Gfx950Meta, "LocalMemorySize", "163840");
+  checkMetadataString(Gfx950Meta, "LDSBankCount", "64");
+  Status = amd_comgr_destroy_metadata(Gfx950Meta);
+  checkError(Status, "amd_comgr_destroy_metadata");
 
   // how many isa_names do we support?
   size_t IsaCounts;

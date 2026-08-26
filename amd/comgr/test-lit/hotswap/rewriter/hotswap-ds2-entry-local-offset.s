@@ -9,7 +9,7 @@
 // COM: With semantic splitting mandatory, fail closed on the unavailable
 // COM: gateway instead of retaining an A0-unsafe DS2 instruction.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \
