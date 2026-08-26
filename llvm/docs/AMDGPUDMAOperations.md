@@ -141,3 +141,165 @@ Despite the absence of `.async` in their names, these intrinsics are
 asynchronous.
 
 All arguments must be wave-uniform.
+
+(amdgpu-dma-scopes)=
+
+## DMA Scopes
+
+A DMA operation initiated by a thread does not belong to the corresponding
+instance of "singlethread" scope. Instead the DMA operation belongs to a
+corresponding DMA scope determined by the target. The following intrinsics
+return the {ref}`scope<amdgpu-scope-type>` at which each kind of DMA operation
+observes memory on the current target:
+
+```llvm
+target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
+target("amdgcn.scope") @llvm.amdgcn.scope.tensor.dma()
+```
+
+These scope identifiers can be passed to any intrinsic that accepts a
+{ref}`amdgpu-scope-type` argument:
+
+```llvm
+%lds_dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
+call void @llvm.amdgcn.make.available(target("amdgcn.scope") %lds_dma_scope)
+call void @llvm.amdgcn.make.ptr.visible(ptr %p, target("amdgcn.scope") %lds_dma_scope)
+```
+
+(amdgpu-dma-memory-model)=
+
+## Memory Model
+
+**TODO:** Need to carefully thread *location-order* and *happens-before*.
+
+Each dynamic instance of a DMA *instruction* ``X`` *initiates* a DMA
+*operation* ``D``. The DMA operation is performed in an instance of the
+corresponding DMA scope ``S``. In addition, the user may specify a scope
+``S'`` such that ``S`` is a subscope of ``S'``.
+
+The effect of ``D`` can be modeled as the following pseudo-expansion in LLVM IR:
+
+```llvm
+; M = max(S, S')
+;
+%tmp = load-visible ptr %src, M     ; non-atomic
+store-available ptr %dst, %tmp, M   ; non-atomic
+```
+
+(amdgpu-dma-visibility)=
+
+### Explicit Visibility Required
+
+[This section is informational.]
+
+A DMA operation ``D`` is performed in an instance ``I`` of scope ``S``, but it
+is not included in any subscope instances of ``I``. This means that the
+{ref}`amdgpu-availability-visibility` operations performed by ``D`` **cannot**
+form an *inclusive scope* relationship with those subscopes. This requires
+threads to perform additional availability and visibility operations that ensure
+{ref}`amdgpu-location-order` in certain cases shown below.
+
+#### Wavefront Scope
+
+Consider a thread that writes to global memory and then initiates a DMA
+operation that reads from the same location. The two operations are related in
+*happens-before*, but the DMA operation is not contained in the thread's
+"singlethread" scope instance. The global write is not visible from the DMA
+read; an explicit ``make.available`` at the DMA scope is needed.
+
+```llvm
+%dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
+
+store %val, ptr %global
+call @llvm.amdgcn.make.ptr.available(ptr %global, target("amdgcn.scope") %dma_scope) ; <---
+call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val_lds = load addrspace(3) %lds
+```
+
+The same result can be achieved using a {ref}`amdgpu-store-available` operation:
+
+```llvm
+%dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
+
+call @llvm.amdgcn.global.store.available(%global, %val, target("amdgcn.scope") %dma_scope)
+call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val_lds = load addrspace(3) %lds
+```
+
+A similar pattern is required when storing to global using DMA:
+
+```llvm
+%dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
+
+call @llvm.amdgcn.global.store.async.from.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+call @llvm.amdgcn.make.ptr.visible(ptr %global, target("amdgcn.scope") %dma_scope) ; <---
+%val = load ptr %global
+```
+
+The ``make.ptr.visible`` at the DMA scope is necessary because the DMA write is
+not automatically visible to the subsequent global read.
+
+#### Workgroup Scope
+
+Consider the case where one wave writes to global memory and a different wave in
+the same workgroup initiates a DMA operation that reads from the same location.
+A workgroup-scope fence can provide *happens-before* between the waves but does
+not make the write available at the DMA scope. The DMA operation is not
+contained in the workgroup scope instance, so the fence's *MakeAvailable* and
+the DMA do not have inclusive scopes. An explicit ``make.available`` at the DMA
+scope is needed.
+
+```llvm
+%dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
+
+; wave 1
+store %val, ptr addrspace(1) %global
+call @llvm.amdgcn.make.ptr.available(ptr %global, target("amdgcn.scope") %dma_scope) ; <---
+fence release syncscope("workgroup")
+
+; wave 2
+fence acquire syncscope("workgroup")
+call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val_lds = load addrspace(3) %lds
+```
+
+Similarly, when one wave stores to global memory using a DMA operation and a
+different wave reads from the same location, an explicit ``make.visible`` at the
+DMA scope is needed. The workgroup fence's *MakeVisible* cannot observe the DMA
+write because the DMA is not contained in the workgroup scope instance.
+
+```llvm
+%dma_scope = call target("amdgcn.scope") @llvm.amdgcn.scope.lds.dma()
+
+; wave 1
+call @llvm.amdgcn.global.store.async.from.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+fence release syncscope("workgroup")
+
+; wave 2
+fence acquire syncscope("workgroup")
+call @llvm.amdgcn.make.ptr.visible(ptr %global, target("amdgcn.scope") %dma_scope) ; <---
+%val = load ptr addrspace(1) %global
+```
+
+### Implementation Details
+
+[This section is informational.]
+
+1. On GFX9, ``@llvm.amdgcn.scope.lds.dma()`` returns a value equivalent to
+   "wavefront" scope. The LDS DMA implementation on GFX9 sees the same state of
+   memory as the requesting thread, so ``make.available`` and ``make.visible``
+   at this scope are no-ops.
+2. On GFX1250, ``@llvm.amdgcn.scope.lds.dma()`` returns a value equivalent to
+   "cluster" scope. The compiler emits a cache write-back or invalidate at
+   ``SCOPE_SE`` for ``make.available`` and ``make.visible`` at this scope
+   respectively.
