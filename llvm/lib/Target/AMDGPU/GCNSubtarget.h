@@ -1010,10 +1010,6 @@ public:
     return HasGFX1250Insts && getGeneration() == GFX12;
   }
 
-  // DS_READ2 and DS_WRITE2 instructions must have addresses aligned to the
-  // payload size.
-  bool hasUnalignedDS2Bug() const { return hasGFX1250_STRICT(); }
-
   /// \returns true if the subtarget requires a wait for xcnt before VMEM
   /// accesses that must never be repeated in the event of a page fault/re-try.
   /// Atomic stores/rmw and all volatile accesses fall under this criteria.

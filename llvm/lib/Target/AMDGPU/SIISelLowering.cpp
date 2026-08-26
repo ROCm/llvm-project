@@ -11815,15 +11815,16 @@ SITargetLowering::lowerStructBufferAtomicIntrin(SDValue Op, SelectionDAG &DAG,
                                  M->getMemOperand());
 }
 
-static void InitializeM0ToZero(SDValue Op, SelectionDAG &DAG, SDLoc DL) {
-  auto *N = Op.getNode();
+static void initializeM0ToZeroForClusterLoad(SDValue Op, SelectionDAG &DAG,
+                                             SDLoc DL) {
+  SDNode *N = Op.getNode();
   SDValue Zero = DAG.getConstant(0, DL, MVT::i32);
   unsigned NumOperands = N->getNumOperands();
   if (N->getOperand(NumOperands - 1) == Zero)
     return;
   SmallVector<SDValue, 7> Ops(N->ops());
   Ops[NumOperands - 1] = Zero; // M0 = 0
-  (void)DAG.UpdateNodeOperands(N, Ops);
+  DAG.UpdateNodeOperands(N, Ops);
 }
 
 SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
@@ -11836,7 +11837,7 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   case Intrinsic::amdgcn_cluster_load_b64:
   case Intrinsic::amdgcn_cluster_load_b128: {
     if (Subtarget->hasGFX1250_STRICT())
-      InitializeM0ToZero(Op, DAG, DL);
+      initializeM0ToZeroForClusterLoad(Op, DAG, DL);
     return SDValue();
   }
   case Intrinsic::amdgcn_ds_ordered_add:
@@ -12633,7 +12634,7 @@ SDValue SITargetLowering::LowerINTRINSIC_VOID(SDValue Op,
   case Intrinsic::amdgcn_cluster_load_async_to_lds_b64:
   case Intrinsic::amdgcn_cluster_load_async_to_lds_b128: {
     if (Subtarget->hasGFX1250_STRICT())
-      InitializeM0ToZero(Op, DAG, DL);
+      initializeM0ToZeroForClusterLoad(Op, DAG, DL);
     return SDValue();
   }
   case Intrinsic::amdgcn_exp_compr: {
