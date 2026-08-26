@@ -42,7 +42,7 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
   case RaiseFailureReason::InternalError:
     return "internal-raise-failure";
   case RaiseFailureReason::UnsupportedOpcode:
-    return "UnsupportedOpcode";
+    return "unsupported-opcode";
   case RaiseFailureReason::UnsupportedInstructionForm:
     return "unsupported-instruction-form";
   case RaiseFailureReason::UnsupportedFloatingPointMode:

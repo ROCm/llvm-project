@@ -36,8 +36,6 @@ waits_kernel:
 	s_delay_alu instid0(VALU_DEP_1)
 	s_wait_asynccnt 0
 	s_wait_tensorcnt 0
-	s_monitor_sleep 0
-	s_wakeup
 	s_setprio_inc_wg 0
 	s_incperflevel 0
 	s_decperflevel 0

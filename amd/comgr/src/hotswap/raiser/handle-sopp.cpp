@@ -80,18 +80,26 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
   case CanonicalOp::S_WAIT_ALU:
     return Error::success();
 
-  // Hints and side channels no computed value can depend on: instruction issue
-  // timing (nop, sleep, the ping that wakes a sleeper, clause, delay_alu), wave
-  // priority, performance counters, the thread-trace stream, and an instruction
-  // cache a raised kernel never writes behind. s_code_end is the padding a
-  // shader buffer carries past its terminator. What the target wants in their
-  // place is the backend's to insert.
-  case CanonicalOp::S_NOP:
-  case CanonicalOp::S_CLAUSE:
-  case CanonicalOp::S_DELAY_ALU:
+  // The sleep instructions may rely on s_wakeup for release, but s_wakeup has
+  // no corresponding LLVM intrinsic. Refuse all three rather than emit a sleep
+  // that may never end.
   case CanonicalOp::S_SLEEP:
   case CanonicalOp::S_MONITOR_SLEEP:
   case CanonicalOp::S_WAKEUP:
+    return RaiseFailure::atInstruction(RaiseFailureReason::UnsupportedOpcode,
+                                       strippedMnemonic(Ctx.MC, Di.Inst),
+                                       Di.Offset,
+                                       formatName(Di.TargetSpecificFlags));
+
+  // Hints and side channels no computed value can depend on: instruction issue
+  // timing (nop, clause, delay_alu), wave priority, performance counters, the
+  // thread-trace stream, and an instruction cache a raised kernel never writes
+  // behind. s_code_end is the padding a shader buffer carries past its
+  // terminator. What the target wants in their place is the backend's to
+  // insert.
+  case CanonicalOp::S_NOP:
+  case CanonicalOp::S_CLAUSE:
+  case CanonicalOp::S_DELAY_ALU:
   case CanonicalOp::S_SETPRIO:
   case CanonicalOp::S_SETPRIO_INC_WG:
   case CanonicalOp::S_CODE_END:

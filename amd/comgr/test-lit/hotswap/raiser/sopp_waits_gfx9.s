@@ -43,12 +43,8 @@ waits_kernel:
 	s_waitcnt vmcnt(1) expcnt(2) lgkmcnt(3)
 ; DECODE: S_NOP{{.+}}s_nop
 	s_nop 0
-; DECODE: S_SLEEP{{.+}}s_sleep
-	s_sleep 1
 ; DECODE: S_SETPRIO{{.+}}s_setprio
 	s_setprio 0
-; DECODE: S_WAKEUP{{.+}}s_wakeup
-	s_wakeup
 ; DECODE: S_INCPERFLEVEL{{.+}}s_incperflevel
 	s_incperflevel 0
 ; DECODE: S_DECPERFLEVEL{{.+}}s_decperflevel
