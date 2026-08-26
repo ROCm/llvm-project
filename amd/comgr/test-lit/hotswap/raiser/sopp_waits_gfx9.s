@@ -43,8 +43,6 @@ waits_kernel:
 	s_waitcnt vmcnt(1) expcnt(2) lgkmcnt(3)
 ; DECODE: S_NOP{{.+}}s_nop
 	s_nop 0
-; DECODE: S_SETPRIO{{.+}}s_setprio
-	s_setprio 0
 ; DECODE: S_INCPERFLEVEL{{.+}}s_incperflevel
 	s_incperflevel 0
 ; DECODE: S_DECPERFLEVEL{{.+}}s_decperflevel
@@ -53,6 +51,28 @@ waits_kernel:
 	s_ttracedata
 ; DECODE: S_ICACHE_INV{{.+}}s_icache_inv
 	s_icache_inv
+	s_endpgm
+
+	.globl	setprio_kernel
+	.p2align	8
+	.type	setprio_kernel,@function
+
+; Onto a target that composes the priority as gfx942 does, the write carries its
+; immediate through unchanged.
+; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=setprio_kernel \
+; RUN:   --target-isa=gfx942 | %FileCheck %s --check-prefix=PRIO
+; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=setprio_kernel \
+; RUN:   --target-isa=gfx950 | %FileCheck %s --check-prefix=PRIO
+; PRIO-LABEL: define amdgpu_kernel void @setprio_kernel(
+; PRIO: call void @llvm.amdgcn.s.setprio(i16 3)
+
+; Onto one that composes it differently it refuses; see raiseWavePriority in
+; handle-sopp.cpp for why the value cannot be carried.
+; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=setprio_kernel \
+; RUN:   --target-isa=gfx1250 2>&1 | %FileCheck %s --check-prefix=PRIO-CROSS
+; PRIO-CROSS: unsupported-wave-priority: s_setprio [SOPP]
+setprio_kernel:
+	s_setprio 3
 	s_endpgm
 
 	.globl	trap_kernel
@@ -72,6 +92,13 @@ trap_kernel:
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel waits_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 1
+		.amdhsa_accum_offset 4
+		.amdhsa_reserve_vcc 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel setprio_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
@@ -98,6 +125,17 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         waits_kernel.kd
+    .vgpr_count:     1
+    .wavefront_size: 64
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           setprio_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         setprio_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 64
   - .args: []

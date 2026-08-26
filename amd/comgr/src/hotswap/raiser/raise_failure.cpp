@@ -81,6 +81,8 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "unsupported-entry-sgpr-source";
   case RaiseFailureReason::UnsupportedSourceClusterDims:
     return "unsupported-source-cluster-dims";
+  case RaiseFailureReason::UnsupportedWavePriority:
+    return "unsupported-wave-priority";
   }
   llvm_unreachable("unhandled RaiseFailureReason");
 }

@@ -65,4 +65,10 @@ bool ISAProfile::hasCombinedWaitcnt() const {
          STI->hasFeature(llvm::AMDGPU::FeatureGFX11);
 }
 
+ISAProfile::WavePriorityModel ISAProfile::wavePriorityModel() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureGFX1250Insts)
+             ? WavePriorityModel::Gfx125
+             : WavePriorityModel::Gfx9;
+}
+
 } // namespace COMGR::hotswap

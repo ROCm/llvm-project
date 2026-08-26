@@ -56,6 +56,11 @@ public:
   // has never seen is not assumed to.
   bool hasCombinedWaitcnt() const;
 
+  enum class WavePriorityModel { Gfx9, Gfx125 };
+
+  /// Return the model used to combine system and user wave priorities.
+  WavePriorityModel wavePriorityModel() const;
+
 private:
   explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}
 

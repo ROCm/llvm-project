@@ -8,7 +8,11 @@
 
 #include "hotswap/raiser/handlers.h"
 
+#include "hotswap/decoder/amdgpu-mc-tables.h"
+
 #include "llvm/IR/IntrinsicsAMDGPU.h"
+
+#include <cassert>
 
 using namespace llvm;
 
@@ -42,6 +46,33 @@ void emitMemoryWaitAll(RaiseContext &Ctx) {
       Intrinsic::amdgcn_s_wait_dscnt, Intrinsic::amdgcn_s_wait_kmcnt};
   for (Intrinsic::ID Wait : KSplitWaits)
     emitWait(Ctx, Wait, B.getInt16(0));
+}
+
+// Raise an instruction that changes wave priority only when the source and
+// target use the same priority model. The dispatch-time system priority is
+// unavailable, so different models cannot be proven to preserve wave ordering.
+Error raiseWavePriority(RaiseContext &Ctx, const DecodedInst &Di) {
+  if (Ctx.Projection.sourceIsa().wavePriorityModel() !=
+      Ctx.Projection.targetIsa().wavePriorityModel())
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedWavePriority,
+        strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        "source wave priority is not representable on a target that composes "
+        "it with the system priority differently");
+
+  int16_t ImmIdx = COMGR::hotswap::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                      AMDGPU::OpName::simm16);
+  assert(ImmIdx >= 0 && "every priority write encodes simm16");
+  std::optional<int64_t> Imm = evalOperandAsConst(Di.Inst, ImmIdx);
+  assert(Imm && "simm16 of a priority write is always an immediate");
+
+  IRBuilder<> &B = Ctx.B;
+  Intrinsic::ID Id = Di.CanonOp == CanonicalOp::S_SETPRIO
+                         ? Intrinsic::amdgcn_s_setprio
+                         : Intrinsic::amdgcn_s_setprio_inc_wg;
+  B.CreateIntrinsic(Id, {}, {B.getInt16(static_cast<uint16_t>(*Imm))});
+  return Error::success();
 }
 
 } // namespace
@@ -80,6 +111,10 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
   case CanonicalOp::S_WAIT_ALU:
     return Error::success();
 
+  case CanonicalOp::S_SETPRIO:
+  case CanonicalOp::S_SETPRIO_INC_WG:
+    return raiseWavePriority(Ctx, Di);
+
   // The sleep instructions may rely on s_wakeup for release, but s_wakeup has
   // no corresponding LLVM intrinsic. Refuse all three rather than emit a sleep
   // that may never end.
@@ -92,16 +127,14 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
                                        formatName(Di.TargetSpecificFlags));
 
   // Hints and side channels no computed value can depend on: instruction issue
-  // timing (nop, clause, delay_alu), wave priority, performance counters, the
-  // thread-trace stream, and an instruction cache a raised kernel never writes
-  // behind. s_code_end is the padding a shader buffer carries past its
-  // terminator. What the target wants in their place is the backend's to
-  // insert.
+  // timing (nop, clause, delay_alu), performance counters, the thread-trace
+  // stream, and an instruction cache a raised kernel never writes behind.
+  // s_code_end is the padding a shader buffer carries past its terminator.
+  // Reproducing them is a choice the raise declines, not a limit it hits: what
+  // the target wants in their place is the backend's to insert.
   case CanonicalOp::S_NOP:
   case CanonicalOp::S_CLAUSE:
   case CanonicalOp::S_DELAY_ALU:
-  case CanonicalOp::S_SETPRIO:
-  case CanonicalOp::S_SETPRIO_INC_WG:
   case CanonicalOp::S_CODE_END:
   case CanonicalOp::S_INCPERFLEVEL:
   case CanonicalOp::S_DECPERFLEVEL:

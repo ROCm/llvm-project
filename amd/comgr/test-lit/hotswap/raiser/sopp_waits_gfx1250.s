@@ -36,7 +36,6 @@ waits_kernel:
 	s_delay_alu instid0(VALU_DEP_1)
 	s_wait_asynccnt 0
 	s_wait_tensorcnt 0
-	s_setprio_inc_wg 0
 	s_incperflevel 0
 	s_decperflevel 0
 	s_ttracedata
@@ -90,6 +89,28 @@ idle_kernel:
 
 
 
+	.globl	setprio_kernel
+	.p2align	8
+	.type	setprio_kernel,@function
+
+; Onto a target that composes the priority as gfx1250 does and encodes the
+; workgroup-relative form, both writes carry their immediates through unchanged.
+; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=setprio_kernel \
+; RUN:   --target-isa=gfx1250 | %FileCheck %s --check-prefix=PRIO
+; PRIO-LABEL: define amdgpu_kernel void @setprio_kernel(
+; PRIO: call void @llvm.amdgcn.s.setprio(i16 2)
+; PRIO-NEXT: call void @llvm.amdgcn.s.setprio.inc.wg(i16 1)
+
+; Onto one that composes it differently they refuse; see raiseWavePriority in
+; handle-sopp.cpp.
+; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=setprio_kernel \
+; RUN:   --target-isa=gfx942 2>&1 | %FileCheck %s --check-prefix=PRIO-CROSS
+; PRIO-CROSS: unsupported-wave-priority: s_setprio [SOPP]
+setprio_kernel:
+	s_setprio 2
+	s_setprio_inc_wg 1
+	s_endpgm
+
 	.globl	waitalu_kernel
 	.p2align	8
 	.type	waitalu_kernel,@function
@@ -120,6 +141,11 @@ waitalu_kernel:
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel idle_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel setprio_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
@@ -164,6 +190,17 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         idle_kernel.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           setprio_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         setprio_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 32
   - .args: []
