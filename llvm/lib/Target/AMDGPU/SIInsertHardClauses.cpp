@@ -234,9 +234,6 @@ public:
   }
 
   // \return if scopes are different on gfx1250 and disallowed to be claused.
-  // TODO: This is the fix for SWDEV-546277. This shall be
-  // fixed in HW with gfx1250 B0. Remove the w/a after that.
-  // Do not upstream.
   bool incompatibleScope(const MachineInstr &MI1, const MachineInstr &MI2,
                          const SIInstrInfo *SII) const {
     if (ST->getGeneration() != AMDGPUSubtarget::GFX12 || !ST->hasGFX1250Insts())
