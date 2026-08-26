@@ -668,6 +668,18 @@ Every processor supports every OS ABI (see :ref:`amdgpu-os`) with the following 
                                                                            work-item
                                                                            IDs
 
+     ``gfx1250-strict``   ``amdgpu12.50-strict``  APU   - sramecc        - Architected                   *TBA*
+                                                                           flat
+                                                                           scratch                         .. TODO::
+                                                                         - Packed
+                                                                           work-item                         Add product
+                                                                           IDs                               names.
+                                                                         - Globally
+                                                                           Accessible
+                                                                           Scratch
+                                                                         - Workgroup
+                                                                           Clusters
+
      ``gfx1250``                 ``amdgpu12.50``  APU   - sramecc        - Architected                   *TBA*
                                                                            flat
                                                                            scratch                         .. TODO::
@@ -3416,6 +3428,7 @@ The AMDGPU backend uses the following ELF header:
      ``EF_AMDGPU_MACH_AMDGCN_GFX11_7_GENERIC``  0x062      ``gfx11-7-generic``
      ``EF_AMDGPU_MACH_AMDGCN_GFX13_GENERIC``    0x063      ``gfx13-generic``
      *reserved*                                 0x070      Reserved.
+     ``EF_AMDGPU_MACH_AMDGCN_GFX1250_STRICT``   0x0eb      ``gfx1250-strict``
      ========================================== ========== =============================
 
 Sections

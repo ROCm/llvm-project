@@ -93,9 +93,8 @@ protected:
               Function::ExternalLinkage, "kernel", Mod)) {
       B.SetInsertPoint(BasicBlock::Create(LLVMCtx, "entry", Kernel));
       Ctx.emplace(cantFail(RaiseContext::create(
-          B, Projection, Mc, KernelMeta(), DenseMap<uint64_t, BasicBlock *>(),
-          ArrayRef<uint8_t>(), 0, ArrayRef<TextSection::ImageSection>(), 0,
-          0)));
+          B, Projection, Mc, KernelMeta(), ArrayRef<uint8_t>(), 0,
+          ArrayRef<TextSection::ImageSection>(), 0, 0)));
     }
   };
 

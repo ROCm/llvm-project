@@ -19,36 +19,44 @@ For more details, see:
 ROCm compiler interfaces
 ========================
 
-ROCm provides two compiler interfaces for compiling HIP programs:
+The recommended compiler for HIP programs is ``amdclang++``, located at
+``/opt/rocm/bin/amdclang++``. It provides the same interface as ``clang++``
+and gives full control over compilation.
 
-* ``/opt/rocm/bin/amdclang++``
-* ``/opt/rocm/bin/hipcc``
+When invoking ``amdclang++`` directly, specify the following:
 
-The ROCm compilers leverage the same LLVM compiler technology with the AMD GCN GPU support;
-however, they offer a slightly different user experience. The ``hipcc`` command-line
-interface provides a more familiar user interface to users who are
-experienced in CUDA but relatively new to the ROCm/HIP development environment.
-On the other hand, ``amdclang++`` provides a user interface identical to the ``clang++``
-compiler. It is more suitable for experienced developers who want to directly
-interact with the clang compiler and gain full control of the application
-build process.
+.. code-block:: shell
 
-The major differences between ``hipcc`` and ``amdclang++`` are listed below:
+   amdclang++ -x hip --offload-arch=native my_kernel.cpp --hip-link -o my_kernel
 
-.. # COMMENT: The following lines define a break for use in the table below. 
-.. |br| raw:: html 
+* ``-x hip`` — tells the compiler to treat the source as HIP (required for
+  ``.cpp`` files; ``.hip`` files are detected automatically)
+* ``--offload-arch=<target>`` — specifies the GPU target (e.g. ``gfx1100``).
+  Use ``--offload-arch=native`` to auto-detect the GPUs on the current machine.
+  To query available GPU architectures explicitly, use the ``offload-arch`` tool:
 
-    <br />
+  .. code-block:: shell
 
-.. csv-table::
-  :widths: 20, 40, 40
-  :header: Feature, ``hipcc``, ``amdclang++``
+     offload-arch            # prints the GPU arch(es) on this machine
+     amdclang++ -x hip --offload-arch=$(offload-arch) my_kernel.cpp --hip-link -o my_kernel
 
-  Compiling HIP source files, Treats ``.hip`` source files as HIP language source files, "Enables the HIP language support for files with the ``.hip`` extension or through the ``-x hip`` compiler option"
-  "Detecting GPU architecture", "Auto-detects the GPUs available on the system and generates code for those devices when no GPU architecture is specified", "Has AMD GCN gfx803 as the default GPU architecture. The ``--offload-arch`` compiler option may be used to target other GPU architectures"
-  "Finding a HIP installation", "Finds the HIP installation based on its own location and its knowledge about the ROCm directory structure", "First looks for HIP under the same parent directory as its own LLVM directory and then falls back on ``/opt/rocm``. Users can use the ``--rocm-path`` option to instruct the compiler to use HIP from the specified ROCm installation."
-  "Linking to the HIP runtime library", "Is configured to automatically link to the HIP runtime from the detected HIP installation", "Requires the ``--hip-link`` flag to be specified to link to the HIP runtime. Alternatively, users can use the ``-l<dir>  - Lamdhip64`` option to link to a HIP runtime library."
-  "Source code location:", `ROCm/llvm-project/amd/hipcc <https://github.com/ROCm/llvm-project/tree/amd-staging/amd/hipcc>`_, `ROCm/llvm-project/clang <https://github.com/ROCm/llvm-project/tree/amd-staging/clang>`_
+  See :ref:`offload-arch-tool` for full details on querying GPU architectures.
+
+* ``--hip-link`` — links to the HIP runtime library
+
+For CMake-based projects, CMake's native HIP language support handles
+all of the above automatically, including GPU target detection:
+
+.. code-block:: cmake
+
+   find_package(hip CONFIG REQUIRED)
+   enable_language(HIP)
+
+   add_executable(my_target my_kernel.hip)
+   target_link_libraries(my_target PRIVATE hip::device)
+
+``find_package(hip CONFIG)`` auto-detects the installed GPUs and adds the
+appropriate ``--offload-arch`` flags to any target that links ``hip::device``.
 
 Compiler options and features
 =============================
@@ -158,6 +166,8 @@ Miscellaneous OpenMP compiler features
 
 This section discusses features that have been added or enhanced in the OpenMP
 compiler.
+
+.. _offload-arch-tool:
 
 Offload-arch tool
 ^^^^^^^^^^^^^^^^^

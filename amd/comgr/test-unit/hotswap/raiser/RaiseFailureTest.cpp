@@ -123,6 +123,8 @@ TEST(RaiseFailure, ReasonStringTokensAreStable) {
   EXPECT_EQ(reasonString(RaiseFailureReason::BadInput), "BadInput");
   EXPECT_EQ(reasonString(RaiseFailureReason::UnsupportedInstructionForm),
             "unsupported-instruction-form");
+  EXPECT_EQ(reasonString(RaiseFailureReason::UnsupportedFloatingPointMode),
+            "unsupported-floating-point-mode");
   EXPECT_EQ(reasonString(RaiseFailureReason::CrossWaveLaneIdLeak),
             "cross-wave-lane-id-leak");
 }
