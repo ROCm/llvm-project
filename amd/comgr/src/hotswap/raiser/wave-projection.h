@@ -20,6 +20,8 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 
+#include <array>
+
 namespace COMGR::hotswap {
 
 struct MCState;
@@ -178,6 +180,10 @@ public:
                               const llvm::Twine &Name = "wwm") const;
 
 protected:
+  // Emit the target hardware work-item ID for dimension 0, 1, or 2.
+  llvm::Value *emitTargetWorkitemId(llvm::IRBuilder<> &B,
+                                    unsigned Dimension) const;
+
   // Emit the target wave's linear ID within its workgroup.
   llvm::Value *emitTargetWaveId(llvm::IRBuilder<> &B) const;
 
@@ -217,6 +223,8 @@ protected:
   // rather than returning a value from another one. See `emitLaneIdx`.
   mutable llvm::Function *CachedLaneIdxFunc = nullptr;
   mutable llvm::Value *CachedLaneIdx = nullptr;
+  mutable llvm::Function *CachedWorkitemIdsFunc = nullptr;
+  mutable std::array<llvm::Value *, 3> CachedWorkitemIds = {};
 };
 
 // ============================================================================

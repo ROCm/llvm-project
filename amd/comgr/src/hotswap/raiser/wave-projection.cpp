@@ -81,11 +81,30 @@ Value *WaveProjection::emitLaneIdx(IRBuilder<> &B) const {
   return LaneId;
 }
 
-Value *WaveProjection::emitWorkitemIdX(IRBuilder<> &B) const {
-  Module *M = B.GetInsertBlock()->getModule();
+Value *WaveProjection::emitTargetWorkitemId(IRBuilder<> &B,
+                                            unsigned Dimension) const {
+  assert(Dimension < CachedWorkitemIds.size() && "invalid work-item dimension");
+  Function *F = B.GetInsertBlock()->getParent();
+  if (CachedWorkitemIdsFunc != F) {
+    CachedWorkitemIdsFunc = F;
+    CachedWorkitemIds.fill(nullptr);
+  }
+  if (CachedWorkitemIds[Dimension])
+    return CachedWorkitemIds[Dimension];
+
+  static constexpr Intrinsic::ID Ids[] = {Intrinsic::amdgcn_workitem_id_x,
+                                          Intrinsic::amdgcn_workitem_id_y,
+                                          Intrinsic::amdgcn_workitem_id_z};
+  static constexpr const char *Names[] = {"tid_x", "tid_y", "tid_z"};
+  BasicBlock &Entry = F->getEntryBlock();
+  IRBuilder<> EB(&Entry, Entry.getFirstNonPHIOrDbgOrAlloca());
   Function *Fn =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_x);
-  return B.CreateCall(Fn, {}, "tid");
+      Intrinsic::getOrInsertDeclaration(Entry.getModule(), Ids[Dimension]);
+  return CachedWorkitemIds[Dimension] = EB.CreateCall(Fn, {}, Names[Dimension]);
+}
+
+Value *WaveProjection::emitWorkitemIdX(IRBuilder<> &B) const {
+  return emitTargetWorkitemId(B, 0);
 }
 
 Value *WaveProjection::emitTargetWaveId(IRBuilder<> &B) const {
@@ -110,15 +129,9 @@ Value *WaveProjection::emitTargetWaveId(IRBuilder<> &B) const {
   Value *SizeY =
       LoadWorkgroupSize(DispatchWorkgroupSizeYOffset, "workgroup_size_y");
 
-  Function *IdXFn =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_x);
-  Function *IdYFn =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_y);
-  Function *IdZFn =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_z);
-  Value *X = B.CreateCall(IdXFn, {}, "wave_tid_x");
-  Value *Y = B.CreateCall(IdYFn, {}, "wave_tid_y");
-  Value *Z = B.CreateCall(IdZFn, {}, "wave_tid_z");
+  Value *X = emitTargetWorkitemId(B, 0);
+  Value *Y = emitTargetWorkitemId(B, 1);
+  Value *Z = emitTargetWorkitemId(B, 2);
   Value *Row = B.CreateAdd(Y, B.CreateMul(Z, SizeY), "wave_flat_yz");
   Value *FlatId = B.CreateAdd(X, B.CreateMul(Row, SizeX), "wave_flat_id");
   return B.CreateUDiv(FlatId, B.getInt32(Tgt.waveSize()), "target_wave_id");
@@ -162,10 +175,7 @@ Value *WaveProjection::packWorkitemId(IRBuilder<> &B, Value *X,
                                       unsigned NumDims) const {
   if (NumDims < 2)
     return X;
-  Module *M = B.GetInsertBlock()->getModule();
-  Function *FnY =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_y);
-  Value *Y = B.CreateCall(FnY, {}, "tid_y");
+  Value *Y = emitTargetWorkitemId(B, 1);
   Value *Packed =
       B.CreateOr(X,
                  B.CreateShl(Y, ConstantInt::get(I32Ty, WorkitemIdYBitOffset),
@@ -173,9 +183,7 @@ Value *WaveProjection::packWorkitemId(IRBuilder<> &B, Value *X,
                  "tid_xy");
   if (NumDims < 3)
     return Packed;
-  Function *FnZ =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_z);
-  Value *Z = B.CreateCall(FnZ, {}, "tid_z");
+  Value *Z = emitTargetWorkitemId(B, 2);
   return B.CreateOr(Packed,
                     B.CreateShl(Z,
                                 ConstantInt::get(I32Ty, WorkitemIdZBitOffset),
@@ -569,10 +577,7 @@ Value *ThreadLoopProjection::emitWorkitemIdX(IRBuilder<> &B) const {
          "ThreadLoopProjection::emitWorkitemIdX requires an iteration alloca; "
          "raiser must call setIterationAlloca before emitting source workitem "
          "ids");
-  Module *M = B.GetInsertBlock()->getModule();
-  Function *Fn =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_x);
-  Value *Tid = B.CreateCall(Fn, {}, "tl_hw_tid");
+  Value *Tid = emitTargetWorkitemId(B, 0);
   Value *LaneId = emitLaneIdx(B);
   const unsigned SrcBits = Src.waveSize();
   const unsigned TgtBits = Tgt.waveSize();
