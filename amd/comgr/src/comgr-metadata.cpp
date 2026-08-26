@@ -473,13 +473,13 @@ bool isSupportedFeature(size_t IsaIndex, StringRef Feature) {
     return false;
   }
 
-  unsigned ArchAttr = AMDGPU::getArchAttrAMDGCN(
+  const AMDGPU::AMDGPUFeatureBitset &Features = AMDGPU::getFeatureBitset(
       AMDGPU::parseArchAMDGCN(IsaInfos[IsaIndex].Processor));
 
   return (Feature.drop_back() == "xnack" &&
-          (ArchAttr & AMDGPU::FEATURE_XNACK_ON_OFF_MODES)) ||
+          Features.test(AMDGPU::FEAT_XNACK_ON_OFF_MODES)) ||
          (Feature.drop_back() == "sramecc" &&
-          (ArchAttr & AMDGPU::FEATURE_SRAMECC));
+          Features.test(AMDGPU::FEAT_SRAMECC_SUPPORT));
 }
 
 const char *getIsaName(size_t Index) { return IsaInfos[Index].IsaName; }
@@ -511,13 +511,13 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   Root["Version"] = Doc.getNode("1.0.0", /*Copy=*/true);
 
   AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(IsaInfos[IsaIndex].Processor);
-  unsigned ArchAttr = AMDGPU::getArchAttrAMDGCN(Kind);
+  const AMDGPU::AMDGPUFeatureBitset &Features = AMDGPU::getFeatureBitset(Kind);
 
   auto FeaturesNode = Doc.getMapNode();
-  if (ArchAttr & AMDGPU::FEATURE_XNACK_ON_OFF_MODES) {
+  if (Features.test(AMDGPU::FEAT_XNACK_ON_OFF_MODES)) {
     FeaturesNode["xnack"] = Doc.getNode("any", /*Copy=*/true);
   }
-  if (ArchAttr & AMDGPU::FEATURE_SRAMECC) {
+  if (Features.test(AMDGPU::FEAT_SRAMECC_SUPPORT)) {
     FeaturesNode["sramecc"] = Doc.getNode("any", /*Copy=*/true);
   }
 
