@@ -223,8 +223,8 @@ protected:
   // rather than returning a value from another one. See `emitLaneIdx`.
   mutable llvm::Function *CachedLaneIdxFunc = nullptr;
   mutable llvm::Value *CachedLaneIdx = nullptr;
-  mutable llvm::Function *CachedWorkitemIdsFunc = nullptr;
-  mutable std::array<llvm::Value *, 3> CachedWorkitemIds = {};
+  mutable std::array<llvm::Value *, 3> CachedWorkitemIds = {nullptr, nullptr,
+                                                            nullptr};
 };
 
 // ============================================================================

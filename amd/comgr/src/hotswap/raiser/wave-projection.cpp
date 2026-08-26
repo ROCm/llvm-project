@@ -85,10 +85,6 @@ Value *WaveProjection::emitTargetWorkitemId(IRBuilder<> &B,
                                             unsigned Dimension) const {
   assert(Dimension < CachedWorkitemIds.size() && "invalid work-item dimension");
   Function *F = B.GetInsertBlock()->getParent();
-  if (CachedWorkitemIdsFunc != F) {
-    CachedWorkitemIdsFunc = F;
-    CachedWorkitemIds.fill(nullptr);
-  }
   if (CachedWorkitemIds[Dimension])
     return CachedWorkitemIds[Dimension];
 
