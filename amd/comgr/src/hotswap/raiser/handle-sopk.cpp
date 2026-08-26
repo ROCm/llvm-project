@@ -45,7 +45,10 @@ HwregPolicy classifyHwreg(unsigned Id) {
   using namespace AMDGPU::Hwreg;
   switch (Id) {
   case ID_MODE:
-    return {HwregRead::Zero, HwregWrite::Preserve};
+    // MODE is initialized from the kernel descriptor and can be changed by
+    // preceding SETREG instructions. Until that state is tracked, returning a
+    // fabricated value would silently change source-visible behavior.
+    return {HwregRead::Abort, HwregWrite::Preserve};
 
   case ID_MEM_BASES:
   case ID_FLAT_SCR_LO:
