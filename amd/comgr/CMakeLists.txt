@@ -339,7 +339,18 @@ if (UNIX)
   # Eager RELRO might cause severe performance regressions in situations
   # that load many versions of comgr at once (i.e. in dozens or hundreds
   # of processes), so we're using weak RELRO here
-  list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS -Wl,-z,relro)
+  if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "LINKER:-z,relro" COMGR_LINKER_SUPPORTS_Z_RELRO)
+  else()
+    # CheckLinkerFlag is unavailable before 3.18; approximate by platform.
+    if (NOT APPLE)
+      set(COMGR_LINKER_SUPPORTS_Z_RELRO TRUE)
+    endif()
+  endif()
+  if (COMGR_LINKER_SUPPORTS_Z_RELRO)
+    list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS -Wl,-z,relro)
+  endif()
   if (NOT APPLE AND COMGR_BUILD_SHARED_LIBS)
     configure_file(
       src/exportmap.in

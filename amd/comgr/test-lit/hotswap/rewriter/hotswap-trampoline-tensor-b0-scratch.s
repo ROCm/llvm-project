@@ -2,7 +2,7 @@
 // COM: the kernel descriptor under-reports SGPR use. Scratch must not be
 // COM: allocated inside the tensor descriptor tuple s[4:11].
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \

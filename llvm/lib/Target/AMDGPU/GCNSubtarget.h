@@ -23,6 +23,7 @@
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <optional>
 
 #define GET_SUBTARGETINFO_HEADER
 #include "AMDGPUGenSubtargetInfo.inc"
@@ -82,6 +83,10 @@ protected:
 
   // Data (VMEM) cache line size in bytes; set from TableGen subtarget features.
   unsigned DataCacheLineSize = 0;
+
+  /// The width, in bits, of the num_records field of a buffer resource (V#),
+  /// set from tablegen subtarget features, 0 is unknown.
+  unsigned BufferResourceNumRecordsWidth = 0;
 
   // Dynamically set bits that enable features.
   bool ScalarizeGlobal = false;
@@ -350,6 +355,14 @@ public:
 
   bool hasRelaxedBufferOOBMode() const { return BufferOOBRelaxed; }
   bool hasRelaxedTBufferOOBMode() const { return TBufferOOBRelaxed; }
+
+  /// Return the width, in bits, of the num_records field of a buffer resource
+  /// (V#) on this subtarget, or std::nullopt if not yet known.
+  std::optional<unsigned> getBufferResourceNumRecordsWidth() const {
+    if (BufferResourceNumRecordsWidth == 0)
+      return std::nullopt;
+    return BufferResourceNumRecordsWidth;
+  }
 
   bool isCuModeEnabled() const { return EnableCuMode; }
 
@@ -997,14 +1010,9 @@ public:
     return HasGFX1250Insts && getGeneration() == GFX12;
   }
 
-  bool hasGFX1250A0() const {
-    return getGeneration() == GFX12 && HasGFX1250Insts && !HasGFX1250B0;
-  }
-
-  // TODO: Remove this when we replace all A0 GFX1250 with B0.
   // DS_READ2 and DS_WRITE2 instructions must have addresses aligned to the
   // payload size.
-  bool hasUnalignedDS2Bug() const { return hasGFX1250A0(); }
+  bool hasUnalignedDS2Bug() const { return hasGFX1250_STRICT(); }
 
   /// \returns true if the subtarget requires a wait for xcnt before VMEM
   /// accesses that must never be repeated in the event of a page fault/re-try.
@@ -1046,6 +1054,10 @@ public:
   bool requiresWaitOnWorkgroupReleaseFence(bool TgSplit) const {
     return getGeneration() >= GFX10 || TgSplit;
   }
+
+  bool useDFAforSMS() const override { return false; }
+
+  bool enableWindowScheduler() const override { return false; }
 };
 
 class GCNUserSGPRUsageInfo {

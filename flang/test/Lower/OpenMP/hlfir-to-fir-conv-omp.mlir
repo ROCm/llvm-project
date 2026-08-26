@@ -44,7 +44,7 @@ func.func @_QPfoo() {
               // CHECK: %[[EMBOX:.*]] = fir.embox %[[TARGET_DECL]]
               // CHECK: fir.store %[[EMBOX]] to %[[TO_BOX_ALLOC]]
               // CHECK: %[[BOX_ALLOC_CONV:.*]] = fir.convert %[[TO_BOX_ALLOC]] : (!fir.ref<!fir.box<!fir.array<1xi32>>>) -> !fir.ref<!fir.box<none>>
-              // CHECK: fir.call @_FortranAAssign(%[[BOX_ALLOC_CONV]], {{.*}})
+              // CHECK: fir.call @_FortranAAssignSimple(%[[BOX_ALLOC_CONV]], {{.*}})
               hlfir.assign %27#0 to %target_decl#0 : !fir.ref<!fir.array<1xi32>>, !fir.ref<!fir.array<1xi32>>
               // CHECK: omp.yield
               omp.yield

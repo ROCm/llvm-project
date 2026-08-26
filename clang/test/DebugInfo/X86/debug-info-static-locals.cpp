@@ -1,5 +1,4 @@
 // RUN: %clang_cc1 -triple x86_64-none-linux-gnu -emit-llvm -debug-info-kind=limited %s -o - -O0 | FileCheck %s
-// XFAIL: *
 // Test that static local variables are emitted in correct scopes.
 
 void test() {
