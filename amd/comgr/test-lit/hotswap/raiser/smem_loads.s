@@ -28,6 +28,7 @@
 	.type	smem_loads,@function
 ; IR-LABEL: define amdgpu_kernel void @smem_loads(
 smem_loads:
+; The i64 -4 mask clears the two low address bits.
 ; IR: [[BASE0:%.+]] = and i64 {{%.+}}, -4
 ; IR: [[ADDRESS0:%.+]] = add i64 [[BASE0]], 0
 ; IR: [[POINTER0:%.+]] = inttoptr i64 [[ADDRESS0]] to ptr addrspace(1)
@@ -42,19 +43,20 @@ smem_loads:
 ; IR: [[LOAD128_WORD3_EXT:%.+]] = zext i32 [[LOAD128_WORD3]] to i64
 ; IR: [[LOAD128_WORD3_BITS:%.+]] = shl i64 [[LOAD128_WORD3_EXT]], 32
 ; IR: [[BASE1_BITS:%.+]] = or i64 [[LOAD128_WORD2_EXT]], [[LOAD128_WORD3_BITS]]
+
 ; IR: [[BASE1:%.+]] = and i64 [[BASE1_BITS]], -4
 ; IR: [[ADDRESS1:%.+]] = add i64 [[BASE1]], 4
 ; IR: [[POINTER1:%.+]] = inttoptr i64 [[ADDRESS1]] to ptr addrspace(1)
-; IR: [[LOAD64:%.+]] = load <2 x i32>, ptr addrspace(1) [[POINTER1]], align 4
+; IR: [[LOAD64:%.+]] = load i64, ptr addrspace(1) [[POINTER1]], align 4
 	s_load_b64 s[2:3], s[6:7], 0x7
-; IR: [[LOAD64_BITS:%.+]] = bitcast <2 x i32> [[LOAD64]] to i64
-; IR: [[LOAD64_LO:%.+]] = trunc i64 [[LOAD64_BITS]] to i32
-; IR: [[LOAD64_SHIFTED:%.+]] = lshr i64 [[LOAD64_BITS]], 32
+; IR: [[LOAD64_LO:%.+]] = trunc i64 [[LOAD64]] to i32
+; IR: [[LOAD64_SHIFTED:%.+]] = lshr i64 [[LOAD64]], 32
 ; IR: [[LOAD64_HI:%.+]] = trunc i64 [[LOAD64_SHIFTED]] to i32
 ; IR: [[LOAD64_LO_EXT:%.+]] = zext i32 [[LOAD64_LO]] to i64
 ; IR: [[LOAD64_HI_EXT:%.+]] = zext i32 [[LOAD64_HI]] to i64
 ; IR: [[LOAD64_HI_BITS:%.+]] = shl i64 [[LOAD64_HI_EXT]], 32
 ; IR: [[BASE2_BITS:%.+]] = or i64 [[LOAD64_LO_EXT]], [[LOAD64_HI_BITS]]
+
 ; IR: [[BASE2:%.+]] = and i64 [[BASE2_BITS]], -4
 ; IR: [[ADDRESS2:%.+]] = add i64 [[BASE2]], 8
 ; IR: [[POINTER2:%.+]] = inttoptr i64 [[ADDRESS2]] to ptr addrspace(1)
@@ -62,6 +64,7 @@ smem_loads:
 	s_load_b32 s4, s[2:3], 0xb
 ; IR: [[LOAD32_EXT:%.+]] = zext i32 [[LOAD32]] to i64
 ; IR: [[BASE3_BITS:%.+]] = or i64 [[LOAD32_EXT]], {{%.+}}
+
 ; IR: [[BASE3:%.+]] = and i64 [[BASE3_BITS]], -4
 ; IR: [[ADDRESS3:%.+]] = add i64 [[BASE3]], 12
 ; IR: [[POINTER3:%.+]] = inttoptr i64 [[ADDRESS3]] to ptr addrspace(1)

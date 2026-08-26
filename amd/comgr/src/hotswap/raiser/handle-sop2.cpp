@@ -8,10 +8,6 @@
 
 #include "hotswap/raiser/handlers.h"
 
-#include "hotswap/decoder/amdgpu-formats.h"
-#include "hotswap/decoder/mc-state.h"
-#include "hotswap/raiser/raise_failure.h"
-
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Intrinsics.h"
 
@@ -97,14 +93,6 @@ Error handleOverflowingBinary32(RaiseContext &Ctx, OpResolver &Op,
   Ctx.registers().writeReg32(Args->Dst, Result);
   Ctx.registers().regFile().storeSCC(Ctx.B, Overflow);
   return Error::success();
-}
-
-// Return an unsupported-instruction failure for Di.
-Error unsupported(RaiseContext &Ctx, const DecodedInst &Di) {
-  return RaiseFailure::atInstruction(
-      RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
-      formatName(Di.TargetSpecificFlags));
 }
 
 } // namespace

@@ -8,14 +8,11 @@
 
 #include "hotswap/raiser/handlers.h"
 
-#include "hotswap/decoder/amdgpu-formats.h"
 #include "hotswap/decoder/canonical-op.h"
 #include "hotswap/decoder/decoded-inst.h"
-#include "hotswap/decoder/mc-state.h"
 #include "hotswap/decoder/parsed-reg.h"
 #include "hotswap/raiser/op-resolver.h"
 #include "hotswap/raiser/raise-context.h"
-#include "hotswap/raiser/raise_failure.h"
 
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Value.h"
@@ -43,19 +40,13 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     ReverseOperands = true;
     break;
   default:
-    return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedInstructionForm,
-        strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
-        formatName(Di.TargetSpecificFlags));
+    return unsupported(Ctx, Di);
   }
 
   if (Di.NumDefs != 1 || Di.numOperands() == 0 || !Di.isReg(0) ||
       Op.nSrcs() != 2) {
-    return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedInstructionForm,
-        strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
-        formatName(Di.TargetSpecificFlags),
-        "expected one register destination and two sources");
+    return unsupported(Ctx, Di,
+                       "expected one register destination and two sources");
   }
 
   if (Error Err = Ctx.validateF32Environment(Di)) {

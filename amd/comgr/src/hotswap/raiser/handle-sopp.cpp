@@ -8,10 +8,6 @@
 
 #include "hotswap/raiser/handlers.h"
 
-#include "hotswap/decoder/amdgpu-formats.h"
-#include "hotswap/decoder/mc-state.h"
-#include "hotswap/raiser/raise_failure.h"
-
 using namespace llvm;
 
 namespace COMGR::hotswap {
@@ -22,10 +18,7 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
     return Error::success();
   }
 
-  return RaiseFailure::atInstruction(
-      RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
-      formatName(Di.TargetSpecificFlags));
+  return unsupported(Ctx, Di);
 }
 
 } // namespace COMGR::hotswap
