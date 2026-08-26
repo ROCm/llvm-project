@@ -551,6 +551,8 @@ void RegisterState::writeReg32(ParsedReg Pr, Value *V) {
       invalidateSgprWaveMaskI1(*Pr.BaseIdx);
     } else if (Pr.RegKind == ParsedReg::M0) {
       updateM0Const(V);
+    } else if (Pr.RegKind == ParsedReg::TTMP && Pr.BaseIdx == 8) {
+      TTMP8EntryValueAvailable = false;
     }
   }
 }
@@ -568,6 +570,9 @@ void RegisterState::writeReg64(ParsedReg Pr, Value *V) {
       assert(Pr.BaseIdx && "SGPR must have a base register index");
       invalidateSgprWaveMaskI1(*Pr.BaseIdx);
       invalidateSgprWaveMaskI1(*Pr.BaseIdx + 1);
+    } else if (Pr.RegKind == ParsedReg::TTMP && Pr.BaseIdx &&
+               *Pr.BaseIdx <= 8 && *Pr.BaseIdx + 1 >= 8) {
+      TTMP8EntryValueAvailable = false;
     }
   }
 }
@@ -584,6 +589,9 @@ void RegisterState::writeRegVec(ParsedReg Pr, Value *V) {
       assert(Pr.BaseIdx && "SGPR must have a base register index");
       for (unsigned I = 0; I != Pr.WidthInDwords; ++I)
         invalidateSgprWaveMaskI1(*Pr.BaseIdx + I);
+    } else if (Pr.RegKind == ParsedReg::TTMP && Pr.BaseIdx &&
+               *Pr.BaseIdx <= 8 && *Pr.BaseIdx + Pr.WidthInDwords > 8) {
+      TTMP8EntryValueAvailable = false;
     }
   }
 }
@@ -730,18 +738,13 @@ Expected<Value *> RegisterState::readOpWaveMaskI1(const DecodedInst &Di,
   case ParsedReg::SGPR: {
     assert(Pr.BaseIdx && "SGPR must have a base register index");
     unsigned BaseIdx = *Pr.BaseIdx;
-    if (Value *Fresh = lookupSgprWaveMaskI1(BaseIdx))
-      return Fresh;
-    Value *Valid = loadSgprWaveMaskValid(BaseIdx);
-    Value *Shadow = loadSgprWaveMaskExec(BaseIdx);
-    if (!Valid || !Shadow)
+    auto It = LastSgprWaveMaskI1.find(BaseIdx);
+    if (It == LastSgprWaveMaskI1.end())
       return nullptr;
-    Value *ShadowI1 = Projection.extractLaneBitFromWaveMask(B, Shadow);
-    Value *Scalar = Projection.sourceIsa().isWave32()
-                        ? Regs.loadSGPR32(B, BaseIdx)
-                        : Regs.loadSGPR64(B, BaseIdx);
-    Value *Fallback = Projection.extractLaneBitFromWaveMask(B, Scalar);
-    return B.CreateSelect(Valid, ShadowI1, Fallback, "src_wave_mask");
+    // A B32 use must not consume a pair shadow, and a B64 use needs both
+    // dwords to come from the same recorded mask.
+    bool IsPair = Pr.WidthInDwords >= 2;
+    return It->second.IsPair == IsPair ? It->second.I1 : nullptr;
   }
   case ParsedReg::VCC:
     return Regs.loadVCC(B);

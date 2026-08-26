@@ -13,31 +13,31 @@
 	.type	sop2_bitwise,@function
 ; IR-LABEL: define amdgpu_kernel void @sop2_bitwise(
 sop2_bitwise:
-	; IR: [[AND32:%.*]] = and i32 {{.*}}
-	; IR: call i64 @llvm.amdgcn.ballot.i64(i1 {{%.*}})
+	; IR: %[[AND32:and]] = and i32 {{.*}}
+	; IR: icmp ne i32 %[[AND32]], 0
 	s_and_b32 s2, s0, s1
-	; IR: [[AND64:%.*]] = and i64 {{%.*}}, {{%.*}}
-	; IR: call i64 @llvm.amdgcn.ballot.i64(i1 {{%.*}})
+	; IR: %[[AND64:and64]] = and i64 {{%.*}}, {{%.*}}
+	; IR: icmp ne i64 %[[AND64]], 0
 	s_and_b64 s[2:3], s[0:1], s[4:5]
-	; IR: [[OR32:%.*]] = or i32 {{.*}}
-	; IR: call i64 @llvm.amdgcn.ballot.i64(i1 {{%.*}})
+	; IR: %[[OR32:or]] = or i32 {{.*}}
+	; IR: icmp ne i32 %[[OR32]], 0
 	s_or_b32 s2, s0, s1
-	; IR: [[OR64:%.*]] = or i64 {{%.*}}, {{%.*}}
-	; IR: call i64 @llvm.amdgcn.ballot.i64(i1 {{%.*}})
+	; IR: %[[OR64:or64]] = or i64 {{%.*}}, {{%.*}}
+	; IR: icmp ne i64 %[[OR64]], 0
 	s_or_b64 s[2:3], s[0:1], s[4:5]
-	; IR: [[XOR32:%.*]] = xor i32 {{.*}}
-	; IR: call i64 @llvm.amdgcn.ballot.i64(i1 {{%.*}})
+	; IR: %[[XOR32:xor]] = xor i32 {{.*}}
+	; IR: icmp ne i32 %[[XOR32]], 0
 	s_xor_b32 s2, s0, s1
-	; IR: [[XOR64:%.*]] = xor i64 {{%.*}}, {{%.*}}
-	; IR: call i64 @llvm.amdgcn.ballot.i64(i1 {{%.*}})
+	; IR: %[[XOR64:xor64]] = xor i64 {{%.*}}, {{%.*}}
+	; IR: icmp ne i64 %[[XOR64]], 0
 	s_xor_b64 s[2:3], s[0:1], s[4:5]
 	; IR: [[ANDN32_NOT:%.*]] = xor i32 {{.*}}, -1
-	; IR-NEXT: [[ANDN32:%.*]] = and i32 {{.*}}, [[ANDN32_NOT]]
-	; IR: call i64 @llvm.amdgcn.ballot.i64(i1 {{%.*}})
+	; IR-NEXT: %[[ANDN32:andn2]] = and i32 {{.*}}, [[ANDN32_NOT]]
+	; IR: icmp ne i32 %[[ANDN32]], 0
 	s_andn2_b32 s2, s0, s1
 	; IR: [[ANDN64_NOT:%.*]] = xor i64 {{.*}}, -1
-	; IR-NEXT: [[ANDN64:%.*]] = and i64 {{.*}}, [[ANDN64_NOT]]
-	; IR: call i64 @llvm.amdgcn.ballot.i64(i1 {{%.*}})
+	; IR-NEXT: %[[ANDN64:andn2_64]] = and i64 {{.*}}, [[ANDN64_NOT]]
+	; IR: icmp ne i64 %[[ANDN64]], 0
 	s_andn2_b64 s[2:3], s[0:1], s[4:5]
 	; IR: [[ORN32_NOT:%.*]] = xor i32 {{.*}}, -1
 	; IR-NEXT: [[ORN32:%.*]] = or i32 {{.*}}, [[ORN32_NOT]]
@@ -134,6 +134,13 @@ sop2_bitwise:
 	s_bfm_b64 s[2:3], s0, s1
 	; IR: select i1 [[BFEI64_SCC]], i32 {{.*}}, i32 {{.*}}
 	s_cselect_b32 s4, s0, s1
+	s_mov_b32 s0, 0
+	s_mov_b32 s1, 1
+	; IR: %[[B32_SCALAR:.*]] = and i32 {{.*}}, -1
+	; IR: %[[B32_SCC:.*]] = icmp ne i32 %[[B32_SCALAR]], 0
+	s_and_b32 s2, s0, -1
+	; IR: select i1 %[[B32_SCC]], i32 1, i32 0
+	s_cselect_b32 s3, 1, 0
 	; IR: [[PACK_LL_LO:%.*]] = and i32 {{.*}}, 65535
 	; IR-NEXT: [[PACK_LL_HI16:%.*]] = and i32 {{.*}}, 65535
 	; IR-NEXT: [[PACK_LL_HI:%.*]] = shl i32 [[PACK_LL_HI16]], 16

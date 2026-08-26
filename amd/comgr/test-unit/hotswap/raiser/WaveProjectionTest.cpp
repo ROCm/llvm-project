@@ -145,6 +145,9 @@ namespace {
 class DefaultTestProjection final : public WaveProjection {
 public:
   using WaveProjection::WaveProjection;
+  llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &) const override {
+    return nullptr;
+  }
   llvm::Value *emitLaneActiveBit(llvm::IRBuilder<> &,
                                  llvm::Value *) const override {
     return nullptr;
@@ -281,84 +284,6 @@ struct IRScaffold {
   }
 };
 } // namespace
-
-TEST_F(WaveProjectionContract, WaveNativeScopesWaveValuesToSourceWave) {
-  IRScaffold S;
-  auto *I32Ty = Type::getInt32Ty(S.Ctx);
-  auto *I64Ty = Type::getInt64Ty(S.Ctx);
-
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
-  WaveNativeProjection Proj(Src, Tgt, I32Ty, I64Ty);
-
-  auto *SourceWaveId = cast<BinaryOperator>(Proj.emitSourceWaveId(S.B));
-  EXPECT_EQ(SourceWaveId->getOpcode(), Instruction::Add);
-  EXPECT_EQ(cast<BinaryOperator>(SourceWaveId->getOperand(0))->getOpcode(),
-            Instruction::Mul);
-  EXPECT_EQ(cast<BinaryOperator>(SourceWaveId->getOperand(1))->getOpcode(),
-            Instruction::UDiv);
-
-  Value *Pred = S.B.CreateICmpNE(S.Arg, S.B.getInt32(0));
-  auto *Any = cast<ICmpInst>(Proj.emitCurrentSourceWaveAny(S.B, Pred));
-  auto *SourceMask = cast<TruncInst>(Any->getOperand(0));
-  EXPECT_TRUE(isa<BinaryOperator>(SourceMask->getOperand(0)));
-}
-
-TEST_F(WaveProjectionContract, BaseEmitsPackedSourceWaveId) {
-  IRScaffold S;
-  auto *I32Ty = Type::getInt32Ty(S.Ctx);
-  auto *I64Ty = Type::getInt64Ty(S.Ctx);
-
-  DefaultTestProjection Proj(srcIsa(), tgtIsa(), I32Ty, I64Ty);
-  auto *SourceWaveId = cast<BinaryOperator>(Proj.emitSourceWaveId(S.B));
-  EXPECT_EQ(SourceWaveId->getOpcode(), Instruction::Add);
-
-  auto *FirstSourceWave = cast<BinaryOperator>(SourceWaveId->getOperand(0));
-  EXPECT_EQ(FirstSourceWave->getOpcode(), Instruction::Mul);
-  EXPECT_EQ(cast<CallInst>(FirstSourceWave->getOperand(0))->getIntrinsicID(),
-            Intrinsic::amdgcn_wave_id);
-  EXPECT_EQ(cast<ConstantInt>(FirstSourceWave->getOperand(1))->getZExtValue(),
-            2u);
-
-  auto *SourceWaveInTarget = cast<BinaryOperator>(SourceWaveId->getOperand(1));
-  EXPECT_EQ(SourceWaveInTarget->getOpcode(), Instruction::UDiv);
-  EXPECT_EQ(
-      cast<ConstantInt>(SourceWaveInTarget->getOperand(1))->getZExtValue(),
-      32u);
-}
-
-TEST_F(WaveProjectionContract, DoubledDispatchUsesTargetWaveId) {
-  IRScaffold S;
-  auto *I32Ty = Type::getInt32Ty(S.Ctx);
-  auto *I64Ty = Type::getInt64Ty(S.Ctx);
-
-  ReplicationDoubledDispatchProjection Proj(srcIsa(), tgtIsa(), I32Ty, I64Ty);
-  auto *SourceWaveId = cast<CallInst>(Proj.emitSourceWaveId(S.B));
-  EXPECT_EQ(SourceWaveId->getIntrinsicID(), Intrinsic::amdgcn_wave_id);
-}
-
-TEST_F(WaveProjectionContract, ThreadLoopUsesIterationAsSourceWaveId) {
-  IRScaffold S;
-  auto *I32Ty = Type::getInt32Ty(S.Ctx);
-  auto *I64Ty = Type::getInt64Ty(S.Ctx);
-
-  ThreadLoopProjection Proj(srcIsa(), tgtIsa(), I32Ty, I64Ty);
-  AllocaInst *Iteration = S.B.CreateAlloca(I32Ty);
-  Proj.setIterationAlloca(Iteration);
-
-  auto *SourceWaveId = cast<BinaryOperator>(Proj.emitSourceWaveId(S.B));
-  EXPECT_EQ(SourceWaveId->getOpcode(), Instruction::Add);
-
-  auto *FirstSourceWave = cast<BinaryOperator>(SourceWaveId->getOperand(0));
-  EXPECT_EQ(FirstSourceWave->getOpcode(), Instruction::Mul);
-  EXPECT_EQ(cast<CallInst>(FirstSourceWave->getOperand(0))->getIntrinsicID(),
-            Intrinsic::amdgcn_wave_id);
-  EXPECT_EQ(cast<ConstantInt>(FirstSourceWave->getOperand(1))->getZExtValue(),
-            2u);
-
-  auto *SourceWaveInTarget = cast<LoadInst>(SourceWaveId->getOperand(1));
-  EXPECT_EQ(SourceWaveInTarget->getPointerOperand(), Iteration);
-}
 
 TEST_F(WaveProjectionContract, WrapAsWWMValueIsNoOpOnWaveNative) {
   IRScaffold S;

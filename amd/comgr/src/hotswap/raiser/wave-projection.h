@@ -89,7 +89,7 @@ public:
   virtual llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const;
 
   // Emit the source wave's linear ID within its workgroup.
-  virtual llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const;
+  virtual llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const = 0;
 
   // Emit the full packed kernel-entry `v0` workitem id under this projection.
   // amdgpu packs the workitem id as x[0:9] | y[10:19] | z[20:29]; `NumDims`
@@ -126,11 +126,6 @@ public:
   virtual llvm::Value *
   emitCurrentSourceWaveMask(llvm::IRBuilder<> &B, llvm::Value *Mask,
                             const llvm::Twine &Name = "source_wave_mask") const;
-
-  // Return whether Pred is true for any lane in the current source wave.
-  llvm::Value *
-  emitCurrentSourceWaveAny(llvm::IRBuilder<> &B, llvm::Value *Pred,
-                           const llvm::Twine &Name = "source_wave_any") const;
 
   // True iff this projection guarantees hardware EXEC = -1 between
   // `emitUnderExec` diamonds kernel-wide, so cross-lane collectives can run
@@ -183,6 +178,9 @@ public:
                               const llvm::Twine &Name = "wwm") const;
 
 protected:
+  // Emit the target wave's linear ID within its workgroup.
+  llvm::Value *emitTargetWaveId(llvm::IRBuilder<> &B) const;
+
   // Combine an already-projected workitem-id-x value with the native Y/Z
   // workitem-id fields into AMDGPU's packed `v0` layout
   // (x | y<<10 | z<<20). `NumDims` selects how many fields to fold in.
@@ -231,6 +229,8 @@ protected:
 class ReplicationProjection : public WaveProjection {
 public:
   using WaveProjection::WaveProjection;
+
+  llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
   llvm::Value *emitLaneActiveBit(llvm::IRBuilder<> &B,
                                  llvm::Value *ExecVal) const override;
@@ -323,6 +323,8 @@ public:
   // and two source waves per target wave (lanes 0..31 and 32..63).
   WaveNativeProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
                        llvm::Type *I32Ty, llvm::Type *I64Ty);
+
+  llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
   llvm::Value *emitInitialExec(llvm::IRBuilder<> &B) const override;
   llvm::Value *emitLaneActiveBit(llvm::IRBuilder<> &B,

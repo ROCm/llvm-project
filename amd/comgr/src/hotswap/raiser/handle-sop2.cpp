@@ -75,7 +75,12 @@ void storeNonzeroScc(RaiseContext &Ctx, Value *Result,
 
 // Set SCC if any lane in MaskI1 is active.
 void storeWaveMaskScc(RaiseContext &Ctx, Value *MaskI1, const Twine &Name) {
-  Value *Any = Ctx.Projection.emitCurrentSourceWaveAny(Ctx.B, MaskI1, Name);
+  Value *Mask = Ctx.Projection.ballotI1ToWidth(
+      Ctx.B, MaskI1, Ctx.Projection.waveMaskTy(), Name + "_ballot");
+  Value *SourceMask =
+      Ctx.Projection.emitCurrentSourceWaveMask(Ctx.B, Mask, Name + "_mask");
+  Value *Any = Ctx.B.CreateICmpNE(
+      SourceMask, ConstantInt::get(SourceMask->getType(), 0), Name);
   Ctx.registers().regFile().storeSCC(Ctx.B, Any);
 }
 
@@ -117,14 +122,22 @@ Value *emitBitOp(IRBuilder<> &B, BitOp Op, Value *A, Value *Bv,
 }
 
 // Raise a bitwise instruction and preserve wave-mask and SCC state.
-Error handleBitOp(RaiseContext &Ctx, OpResolver &Op, BitOp Kind, bool Is64,
-                  const Twine &Name) {
+Error handleBitOp(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
+                  BitOp Kind, bool Is64, const Twine &Name) {
   Expected<Value *> SrcMask0 = Op.srcWaveMaskI1(0);
   if (!SrcMask0)
     return SrcMask0.takeError();
   Expected<Value *> SrcMask1 = Op.srcWaveMaskI1(1);
   if (!SrcMask1)
     return SrcMask1.takeError();
+
+  if (Ctx.Projection.numSourceWavesPerTarget() > 1 &&
+      (!*SrcMask0 || !*SrcMask1))
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedInstructionForm,
+        strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        "bitwise operands lack full-width source-wave mask state");
 
   Expected<BinaryOperands> Args = Is64 ? readBinary64(Op) : readBinary32(Op);
   if (!Args)
@@ -222,37 +235,37 @@ Error handleOverflowingBinary32(RaiseContext &Ctx, OpResolver &Op,
 Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   switch (Di.CanonOp) {
   case CanonicalOp::S_AND_B32:
-    return handleBitOp(Ctx, Op, BitOp::And, false, "and");
+    return handleBitOp(Ctx, Di, Op, BitOp::And, false, "and");
   case CanonicalOp::S_AND_B64:
-    return handleBitOp(Ctx, Op, BitOp::And, true, "and64");
+    return handleBitOp(Ctx, Di, Op, BitOp::And, true, "and64");
   case CanonicalOp::S_OR_B32:
-    return handleBitOp(Ctx, Op, BitOp::Or, false, "or");
+    return handleBitOp(Ctx, Di, Op, BitOp::Or, false, "or");
   case CanonicalOp::S_OR_B64:
-    return handleBitOp(Ctx, Op, BitOp::Or, true, "or64");
+    return handleBitOp(Ctx, Di, Op, BitOp::Or, true, "or64");
   case CanonicalOp::S_XOR_B32:
-    return handleBitOp(Ctx, Op, BitOp::Xor, false, "xor");
+    return handleBitOp(Ctx, Di, Op, BitOp::Xor, false, "xor");
   case CanonicalOp::S_XOR_B64:
-    return handleBitOp(Ctx, Op, BitOp::Xor, true, "xor64");
+    return handleBitOp(Ctx, Di, Op, BitOp::Xor, true, "xor64");
   case CanonicalOp::S_ANDN2_B32:
-    return handleBitOp(Ctx, Op, BitOp::AndNot, false, "andn2");
+    return handleBitOp(Ctx, Di, Op, BitOp::AndNot, false, "andn2");
   case CanonicalOp::S_ANDN2_B64:
-    return handleBitOp(Ctx, Op, BitOp::AndNot, true, "andn2_64");
+    return handleBitOp(Ctx, Di, Op, BitOp::AndNot, true, "andn2_64");
   case CanonicalOp::S_ORN2_B32:
-    return handleBitOp(Ctx, Op, BitOp::OrNot, false, "orn2");
+    return handleBitOp(Ctx, Di, Op, BitOp::OrNot, false, "orn2");
   case CanonicalOp::S_ORN2_B64:
-    return handleBitOp(Ctx, Op, BitOp::OrNot, true, "orn2_64");
+    return handleBitOp(Ctx, Di, Op, BitOp::OrNot, true, "orn2_64");
   case CanonicalOp::S_NAND_B32:
-    return handleBitOp(Ctx, Op, BitOp::Nand, false, "nand");
+    return handleBitOp(Ctx, Di, Op, BitOp::Nand, false, "nand");
   case CanonicalOp::S_NAND_B64:
-    return handleBitOp(Ctx, Op, BitOp::Nand, true, "nand64");
+    return handleBitOp(Ctx, Di, Op, BitOp::Nand, true, "nand64");
   case CanonicalOp::S_NOR_B32:
-    return handleBitOp(Ctx, Op, BitOp::Nor, false, "nor");
+    return handleBitOp(Ctx, Di, Op, BitOp::Nor, false, "nor");
   case CanonicalOp::S_NOR_B64:
-    return handleBitOp(Ctx, Op, BitOp::Nor, true, "nor64");
+    return handleBitOp(Ctx, Di, Op, BitOp::Nor, true, "nor64");
   case CanonicalOp::S_XNOR_B32:
-    return handleBitOp(Ctx, Op, BitOp::Xnor, false, "xnor");
+    return handleBitOp(Ctx, Di, Op, BitOp::Xnor, false, "xnor");
   case CanonicalOp::S_XNOR_B64:
-    return handleBitOp(Ctx, Op, BitOp::Xnor, true, "xnor64");
+    return handleBitOp(Ctx, Di, Op, BitOp::Xnor, true, "xnor64");
 
   case CanonicalOp::S_LSHL_B32:
     return handleShift32(Ctx, Op, Instruction::Shl, "shl");
@@ -479,7 +492,14 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
       if (!SrcReg)
         return SrcReg.takeError();
       if (*SrcReg && (**SrcReg).RegKind == ParsedReg::TTMP &&
-          (**SrcReg).BaseIdx == 8 && Op.srcImm(1) == 0x50019) {
+          (**SrcReg).BaseIdx == 8 && Op.srcImm(1) == 0x50019 &&
+          Ctx.registers().isTTMP8EntryValueAvailable()) {
+        if (!Ctx.Projection.sourceIsa().hasArchitectedSgprs())
+          return RaiseFailure::atInstruction(
+              RaiseFailureReason::UnsupportedInstructionForm,
+              strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+              formatName(Di.TargetSpecificFlags),
+              "TTMP8 entry wave ID is unavailable on the source ISA");
         Expected<ParsedReg> Dst = Op.dst();
         if (!Dst)
           return Dst.takeError();

@@ -28,10 +28,9 @@
 
 namespace COMGR::hotswap {
 
-// The source architectural registers as the raiser sees them: alloca-backed
-// storage, the operand reads and writes that resolve through it, EXEC
-// predication of the per-lane ones, and the facts derived from a scalar write
-// that a later write to the same register invalidates.
+// The source architectural registers as the raiser sees them. Scalar wave-mask
+// results also keep a per-lane shadow, keyed by the SGPR range they occupy, so
+// widening projections do not lose independently computed source-wave masks.
 class RegisterState {
 public:
   // Build the register state for the source kernel described by Meta, with the
@@ -77,7 +76,8 @@ public:
   // Read a mask at target EXEC width, replicating narrower source-wave bits.
   llvm::Expected<llvm::Value *> readOpExecWidth(const DecodedInst &Di,
                                                 unsigned OpIdx);
-  // Read an operand's per-lane wave-mask value, or null when unavailable.
+  // Read an operand's per-lane wave-mask value, or null when no shadow matches
+  // the operand's full register width.
   llvm::Expected<llvm::Value *> readOpWaveMaskI1(const DecodedInst &Di,
                                                  unsigned OpIdx);
   // Read the mask a source-wave instruction should see, e.g. for `v_mbcnt_lo`.
@@ -179,6 +179,9 @@ public:
   void updateM0Const(llvm::Value *V);
   std::optional<uint64_t> getM0Const() const { return M0Const; }
 
+  // True while TTMP8 still holds its source kernel-entry value.
+  bool isTTMP8EntryValueAvailable() const { return TTMP8EntryValueAvailable; }
+
   // Emit stores marking every cross-block SGPR shadow invalid.
   void invalidateSgprShadows();
 
@@ -240,6 +243,7 @@ private:
   llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
   // Block-local constant value last stored to M0.
   std::optional<uint64_t> M0Const;
+  bool TTMP8EntryValueAvailable = true;
 
   // Shadow storage per SGPR. Cross-block values live in allocas to avoid
   // carrying SSA values that do not dominate their uses.
