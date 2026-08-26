@@ -13,6 +13,7 @@
 #include "hotswap/raiser/raise_failure.h"
 
 #include "llvm/IR/Instructions.h"
+#include "llvm/Support/MathExtras.h"
 
 #include <optional>
 
@@ -162,17 +163,19 @@ Error handleFloatCompare(RaiseContext &Ctx, OpResolver &Op,
   if (!Src1)
     return Src1.takeError();
 
-  Type *FloatTy = IsF16 ? Ctx.B.getHalfTy() : Ctx.B.getFloatTy();
   Value *Bits0 = *Src0;
   Value *Bits1 = *Src1;
   if (IsF16) {
     Bits0 = Ctx.B.CreateTrunc(Bits0, Ctx.B.getInt16Ty(), "scmpf16_bits");
     Bits1 = Ctx.B.CreateTrunc(Bits1, Ctx.B.getInt16Ty(), "scmpf16_bits");
   }
+  assert(Bits0->getType() == Bits1->getType());
+  Type *FloatTy = Bits0->getType()->isIntegerTy(16) ? Ctx.B.getHalfTy()
+                                                    : Ctx.B.getFloatTy();
   Value *Float0 = Ctx.B.CreateBitCast(Bits0, FloatTy, "scmpf_src");
   Value *Float1 = Ctx.B.CreateBitCast(Bits1, FloatTy, "scmpf_src");
-  Value *Result =
-      Ctx.B.CreateFCmp(Pred, Float0, Float1, IsF16 ? "scmpf16" : "scmpf");
+  Value *Result = Ctx.B.CreateFCmp(Pred, Float0, Float1,
+                                   FloatTy->isHalfTy() ? "scmpf16" : "scmpf");
   Ctx.registers().regFile().storeSCC(Ctx.B, Result);
   return Error::success();
 }
@@ -187,7 +190,8 @@ Error handleBitCompare32(RaiseContext &Ctx, OpResolver &Op,
   if (!Src1)
     return Src1.takeError();
 
-  Value *Amount = Ctx.B.CreateAnd(*Src1, 31, "bitcmp_shamt");
+  Value *Amount =
+      Ctx.B.CreateAnd(*Src1, maskTrailingOnes<uint32_t>(5), "bitcmp_shamt");
   Value *Bit = Ctx.B.CreateShl(Ctx.B.getInt32(1), Amount, "bitcmp_bit");
   Value *Masked = Ctx.B.CreateAnd(*Src0, Bit, "bitcmp_mask");
   Value *Scc = Ctx.B.CreateICmp(Pred, Masked, Ctx.B.getInt32(0), "bitcmp");
@@ -205,7 +209,8 @@ Error handleBitCompare64(RaiseContext &Ctx, OpResolver &Op,
   if (!Src1)
     return Src1.takeError();
 
-  Value *Amount32 = Ctx.B.CreateAnd(*Src1, 63, "bitcmp_shamt");
+  Value *Amount32 =
+      Ctx.B.CreateAnd(*Src1, maskTrailingOnes<uint32_t>(6), "bitcmp_shamt");
   Value *Amount =
       Ctx.B.CreateZExt(Amount32, Ctx.B.getInt64Ty(), "bitcmp_shamt64");
   Value *Bit = Ctx.B.CreateShl(Ctx.B.getInt64(1), Amount, "bitcmp_bit");
@@ -213,14 +218,6 @@ Error handleBitCompare64(RaiseContext &Ctx, OpResolver &Op,
   Value *Scc = Ctx.B.CreateICmp(Pred, Masked, Ctx.B.getInt64(0), "bitcmp");
   Ctx.registers().regFile().storeSCC(Ctx.B, Scc);
   return Error::success();
-}
-
-// Return an unsupported-instruction failure for Di.
-Error unsupported(RaiseContext &Ctx, const DecodedInst &Di) {
-  return RaiseFailure::atInstruction(
-      RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
-      formatName(Di.TargetSpecificFlags));
 }
 
 } // namespace
@@ -248,7 +245,7 @@ Error handleSOPC(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   case CanonicalOp::S_BITCMP1_B64:
     return handleBitCompare64(Ctx, Op, CmpInst::ICMP_NE);
   default:
-    return unsupported(Ctx, Di);
+    return unsupportedInstruction(Ctx, Di);
   }
 }
 

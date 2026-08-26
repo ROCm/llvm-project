@@ -23,6 +23,9 @@ class raw_ostream;
 
 namespace COMGR::hotswap {
 
+struct DecodedInst;
+class RaiseContext;
+
 // Structured reason for a raise failure.
 enum class RaiseFailureReason : uint16_t {
   None = 0,
@@ -184,6 +187,9 @@ private:
   std::string Detail;
   std::optional<FailureOrigin> Origin;
 };
+
+// Return a failure for an unsupported decoded instruction.
+llvm::Error unsupportedInstruction(RaiseContext &Ctx, const DecodedInst &Di);
 
 } // namespace COMGR::hotswap
 

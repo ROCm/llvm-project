@@ -626,7 +626,7 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   }
 
   default:
-    return unsupported(Ctx, Di);
+    return unsupportedInstruction(Ctx, Di);
   }
 }
 

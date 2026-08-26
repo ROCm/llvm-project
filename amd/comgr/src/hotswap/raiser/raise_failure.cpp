@@ -8,6 +8,11 @@
 
 #include "hotswap/raiser/raise_failure.h"
 
+#include "hotswap/decoder/amdgpu-formats.h"
+#include "hotswap/decoder/decoded-inst.h"
+#include "hotswap/decoder/mc-state.h"
+#include "hotswap/raiser/raise-context.h"
+
 #include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -122,6 +127,13 @@ llvm::Error RaiseFailure::withOrigin(llvm::Error Err,
             F->Reason, F->Mnemonic, F->Format, F->Offset, F->Detail,
             FailureOrigin{KernelName.str(), SourceCpu.str(), TargetCpu.str()});
       });
+}
+
+llvm::Error unsupportedInstruction(RaiseContext &Ctx, const DecodedInst &Di) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags));
 }
 
 } // namespace COMGR::hotswap
