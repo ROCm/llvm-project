@@ -2518,7 +2518,8 @@ int target_replay(ident_t *Loc, DeviceTy &Device, void *HostPtr,
   KernelArgs.UserThreadLimit[1] = 1;
   KernelArgs.UserThreadLimit[2] = 1;
   KernelArgs.DynCGroupMem = SharedMemorySize;
-  KernelArgs.Flags.StrictBlocksAndThreads = true;
+  KernelArgs.Flags.StrictBlocks = true;
+  KernelArgs.Flags.StrictThreads = true;
 
   int Ret = Device.launchKernel(Symbols[0].DevPtr, TgtArgs, TgtOffsets,
                                 KernelArgs, ReplayOutcome, AsyncInfo);

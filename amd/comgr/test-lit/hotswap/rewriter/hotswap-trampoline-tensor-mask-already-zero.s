@@ -5,7 +5,7 @@
 // COM: tensor. A variant with one nonzero seed must reject the no-op proof and
 // COM: use the save/clear/tensor/restore fallback.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf 2>&1 \
@@ -19,7 +19,7 @@
 // COM: modeled zero path cannot prove anything about s4 on that hidden edge.
 // RUN: sed 's/^\.set opaque_tensor_entry, 0$/.set opaque_tensor_entry, 1/' \
 // RUN:   %s > %t.opaque.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.opaque.s -o %t.opaque.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.opaque.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -28,7 +28,7 @@
 
 // RUN: sed 's/^\.set nonzero_path, 0$/.set nonzero_path, 1/' \
 // RUN:   %s > %t.nonzero.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.nonzero.s -o %t.nonzero.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.nonzero.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

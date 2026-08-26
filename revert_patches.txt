@@ -11,19 +11,12 @@ breaks rocgdb UT
 breaks windows build: [amd-llvm] terminate called after throwing an instance of 'std::bad_alloc'
 Make][CodeGen] Add PCH for Clang CodeGen (#206018)
 ---
-hipDMM build warns as errors
-Revert "Reland "[Clang] Enable -Wunused-template under -Wall" (#208001)
----
-needs SPIRv changes
-[DebugMetadata][DwarfDebug][CodeView] Support function-local static variables in lexical block scopes 
----
 breaks rocrand 4 tests
 [SLP]Vectorize single-user instructions as the last-attempt seeds
----
-needs more downstream work
-[HLSL][DirectX] Correct codegen of `dx.load.input`/`dx.store.output` intrinsic calls (#212656)
 ---
 breaks windows build: MSVC rejects the CRTP removal, error C2440 and C2027
 [ADT] Remove CRTP from FoldingSet and ContextualFoldingSet (NFC) (#216830)
 ---
-
+breaks comgr, device-libs, hip-test
+clang: Emit legacy amdgcn triple in HIP fatbin bundle entries (#217640)
+clang: Start using new amdgpu subarch triples (#206482)

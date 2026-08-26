@@ -571,208 +571,9 @@ __OMP_RTL(__kmpc_atomicCASLoopXor_int32_t, false, Void, Int32Ptr, Int32)
 
 __OMP_RTL(__kmpc_atomicCASLoopXor_int64_t, false, Void, Int64Ptr, Int64)
 
-__OMP_RTL(__kmpc_rfun_sum_d, false, Void, DoublePtr, Double)
-
-__OMP_RTL(__kmpc_rfun_sum_lds_d, false, Void, DoublePtr, Double)
-
-__OMP_RTL(__kmpc_rfun_sum_f, false, Void, FloatPtr, Float)
-
-__OMP_RTL(__kmpc_rfun_sum_lds_f, false, Void, FloatPtr, Float)
-
-__OMP_RTL(__kmpc_rfun_sum_h, false, Void, HalfPtr, Half)
-
-__OMP_RTL(__kmpc_rfun_sum_lds_h, false, Void, HalfPtr, Half)
-
-__OMP_RTL(__kmpc_rfun_sum_bf, false, Void, BFloatPtr, BFloat)
-
-__OMP_RTL(__kmpc_rfun_sum_lds_bf, false, Void, BFloatPtr, BFloat)
-
-__OMP_RTL(__kmpc_rfun_sum_s, false, Void, Int16Ptr, Int16)
-
-__OMP_RTL(__kmpc_rfun_sum_lds_s, false, Void, Int16Ptr, Int16)
-
-__OMP_RTL(__kmpc_rfun_sum_i, false, Void, Int32Ptr, Int32)
-
-__OMP_RTL(__kmpc_rfun_sum_lds_i, false, Void, Int32Ptr, Int32)
-
-__OMP_RTL(__kmpc_rfun_sum_l, false, Void, Int64Ptr, Int64)
-
-__OMP_RTL(__kmpc_rfun_sum_lds_l, false, Void, Int64Ptr, Int64)
-
-__OMP_RTL(__kmpc_rfun_min_d, false, Void, DoublePtr, Double)
-
-__OMP_RTL(__kmpc_rfun_min_lds_d, false, Void, DoublePtr, Double)
-
-__OMP_RTL(__kmpc_rfun_min_f, false, Void, FloatPtr, Float)
-
-__OMP_RTL(__kmpc_rfun_min_lds_f, false, Void, FloatPtr, Float)
-
-__OMP_RTL(__kmpc_rfun_min_h, false, Void, HalfPtr, Half)
-
-__OMP_RTL(__kmpc_rfun_min_lds_h, false, Void, HalfPtr, Half)
-
-__OMP_RTL(__kmpc_rfun_min_bf, false, Void, BFloatPtr, BFloat)
-
-__OMP_RTL(__kmpc_rfun_min_lds_bf, false, Void, BFloatPtr, BFloat)
-
-__OMP_RTL(__kmpc_rfun_min_s, false, Void, Int16Ptr, Int16)
-
-__OMP_RTL(__kmpc_rfun_min_lds_s, false, Void, Int16Ptr, Int16)
-
-__OMP_RTL(__kmpc_rfun_min_i, false, Void, Int32Ptr, Int32)
-
-__OMP_RTL(__kmpc_rfun_min_lds_i, false, Void, Int32Ptr, Int32)
-
-__OMP_RTL(__kmpc_rfun_min_l, false, Void, Int64Ptr, Int64)
-
-__OMP_RTL(__kmpc_rfun_min_lds_l, false, Void, Int64Ptr, Int64)
-
-__OMP_RTL(__kmpc_rfun_max_d, false, Void, DoublePtr, Double)
-
-__OMP_RTL(__kmpc_rfun_max_lds_d, false, Void, DoublePtr, Double)
-
-__OMP_RTL(__kmpc_rfun_max_f, false, Void, FloatPtr, Float)
-
-__OMP_RTL(__kmpc_rfun_max_lds_f, false, Void, FloatPtr, Float)
-
-__OMP_RTL(__kmpc_rfun_max_h, false, Void, HalfPtr, Half)
-
-__OMP_RTL(__kmpc_rfun_max_lds_h, false, Void, HalfPtr, Half)
-
-__OMP_RTL(__kmpc_rfun_max_bf, false, Void, BFloatPtr, BFloat)
-
-__OMP_RTL(__kmpc_rfun_max_lds_bf, false, Void, BFloatPtr, BFloat)
-
-__OMP_RTL(__kmpc_rfun_max_s, false, Void, Int16Ptr, Int16)
-
-__OMP_RTL(__kmpc_rfun_max_lds_s, false, Void, Int16Ptr, Int16)
-
-__OMP_RTL(__kmpc_rfun_max_i, false, Void, Int32Ptr, Int32)
-
-__OMP_RTL(__kmpc_rfun_max_lds_i, false, Void, Int32Ptr, Int32)
-
-__OMP_RTL(__kmpc_rfun_max_l, false, Void, Int64Ptr, Int64)
-
-__OMP_RTL(__kmpc_rfun_max_lds_l, false, Void, Int64Ptr, Int64)
-
-__OMP_RTL(__kmpc_xteamr_d_16x64, false, Void, Double, DoublePtr, DoublePtr, Int32Ptr, VoidPtr, VoidPtr, Double, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_d_16x64_fast_sum, false, Void, Double, DoublePtr, DoublePtr, Int32Ptr, VoidPtr, VoidPtr, Double, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_f_16x64, false, Void, Float, FloatPtr, FloatPtr, Int32Ptr, VoidPtr, VoidPtr, Float, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_f_16x64_fast_sum, false, Void, Float, FloatPtr, FloatPtr, Int32Ptr, VoidPtr, VoidPtr, Float, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_h_16x64, false, Void, Half, HalfPtr, HalfPtr, Int32Ptr, VoidPtr, VoidPtr, Half, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_h_16x64_fast_sum, false, Void, Half, HalfPtr, HalfPtr, Int32Ptr, VoidPtr, VoidPtr, Half, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_bf_16x64, false, Void, BFloat, BFloatPtr, BFloatPtr, Int32Ptr, VoidPtr, VoidPtr, BFloat, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_bf_16x64_fast_sum, false, Void, BFloat, BFloatPtr, BFloatPtr, Int32Ptr, VoidPtr, VoidPtr, BFloat, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_s_16x64, false, Void, Int16, Int16Ptr, Int16Ptr, Int32Ptr, VoidPtr, VoidPtr, Int16, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_s_16x64_fast_sum, false, Void, Int16, Int16Ptr, Int16Ptr, Int32Ptr, VoidPtr, VoidPtr, Int16, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_i_16x64, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, VoidPtr, Int32, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_i_16x64_fast_sum, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, VoidPtr, Int32, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_l_16x64, false, Void, Int64, Int64Ptr, Int64Ptr, Int32Ptr, VoidPtr, VoidPtr, Int64, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_l_16x64_fast_sum, false, Void, Int64, Int64Ptr, Int64Ptr, Int32Ptr, VoidPtr, VoidPtr, Int64, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_d_32x32, false, Void, Double, DoublePtr, DoublePtr, Int32Ptr, VoidPtr, VoidPtr, Double, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_d_32x32_fast_sum, false, Void, Double, DoublePtr, DoublePtr, Int32Ptr, VoidPtr, VoidPtr, Double, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_f_32x32, false, Void, Float, FloatPtr, FloatPtr, Int32Ptr, VoidPtr, VoidPtr, Float, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_f_32x32_fast_sum, false, Void, Float, FloatPtr, FloatPtr, Int32Ptr, VoidPtr, VoidPtr, Float, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_h_32x32, false, Void, Half, HalfPtr, HalfPtr, Int32Ptr, VoidPtr, VoidPtr, Half, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_h_32x32_fast_sum, false, Void, Half, HalfPtr, HalfPtr, Int32Ptr, VoidPtr, VoidPtr, Half, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_bf_32x32, false, Void, BFloat, BFloatPtr, BFloatPtr, Int32Ptr, VoidPtr, VoidPtr, BFloat, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_bf_32x32_fast_sum, false, Void, BFloat, BFloatPtr, BFloatPtr, Int32Ptr, VoidPtr, VoidPtr, BFloat, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_s_32x32, false, Void, Int16, Int16Ptr, Int16Ptr, Int32Ptr, VoidPtr, VoidPtr, Int16, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_s_32x32_fast_sum, false, Void, Int16, Int16Ptr, Int16Ptr, Int32Ptr, VoidPtr, VoidPtr, Int16, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_i_32x32, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, VoidPtr, Int32, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_i_32x32_fast_sum, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, VoidPtr, Int32, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_l_32x32, false, Void, Int64, Int64Ptr, Int64Ptr, Int32Ptr, VoidPtr, VoidPtr, Int64, Int64, Int32, Int32)
-
-__OMP_RTL(__kmpc_xteamr_l_32x32_fast_sum, false, Void, Int64, Int64Ptr, Int64Ptr, Int32Ptr, VoidPtr, VoidPtr, Int64, Int64, Int32, Int32)
-
 __OMP_RTL(__llvm_profile_register_function, false, Void, VoidPtr)
 __OMP_RTL(__llvm_profile_register_names_function, false, Void, VoidPtr, Int64)
 
-__OMP_RTL(__kmpc_xteams_i_16x64, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, VoidPtr, Int32, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_i_4x64, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, VoidPtr, Int32, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_i_8x64, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, VoidPtr, Int32, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_i_8x32, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, VoidPtr, Int32, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_i_16x32, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, VoidPtr, Int32, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_i_32x32, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, VoidPtr, Int32, Int64, Int32)
-
-__OMP_RTL(__kmpc_xteams_d_16x64, false, Void, Double, DoublePtr, DoublePtr, DoublePtr, Int32Ptr, VoidPtr, VoidPtr, Double, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_d_4x64, false, Void, Double, DoublePtr, DoublePtr, DoublePtr, Int32Ptr, VoidPtr, VoidPtr, Double, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_d_8x64, false, Void, Double, DoublePtr, DoublePtr, DoublePtr, Int32Ptr, VoidPtr, VoidPtr, Double, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_d_8x32, false, Void, Double, DoublePtr, DoublePtr, DoublePtr, Int32Ptr, VoidPtr, VoidPtr, Double, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_d_16x32, false, Void, Double, DoublePtr, DoublePtr, DoublePtr, Int32Ptr, VoidPtr, VoidPtr, Double, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_d_32x32, false, Void, Double, DoublePtr, DoublePtr, DoublePtr, Int32Ptr, VoidPtr, VoidPtr, Double, Int64, Int32)
-
-__OMP_RTL(__kmpc_xteams_f_16x64, false, Void, Float, FloatPtr, FloatPtr, FloatPtr, Int32Ptr, VoidPtr, VoidPtr, Float, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_f_4x64, false, Void, Float, FloatPtr, FloatPtr, FloatPtr, Int32Ptr, VoidPtr, VoidPtr, Float, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_f_8x64, false, Void, Float, FloatPtr, FloatPtr, FloatPtr, Int32Ptr, VoidPtr, VoidPtr, Float, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_f_8x32, false, Void, Float, FloatPtr, FloatPtr, FloatPtr, Int32Ptr, VoidPtr, VoidPtr, Float, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_f_16x32, false, Void, Float, FloatPtr, FloatPtr, FloatPtr, Int32Ptr, VoidPtr, VoidPtr, Float, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_f_32x32, false, Void, Float, FloatPtr, FloatPtr, FloatPtr, Int32Ptr, VoidPtr, VoidPtr, Float, Int64, Int32)
-
-__OMP_RTL(__kmpc_xteams_l_16x64, false, Void, Int64, Int64Ptr, Int64Ptr, Int64Ptr, Int32Ptr, VoidPtr, VoidPtr, Int64, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_l_4x64, false, Void, Int64, Int64Ptr, Int64Ptr, Int64Ptr, Int32Ptr, VoidPtr, VoidPtr, Int64, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_l_8x64, false, Void, Int64, Int64Ptr, Int64Ptr, Int64Ptr, Int32Ptr, VoidPtr, VoidPtr, Int64, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_l_8x32, false, Void, Int64, Int64Ptr, Int64Ptr, Int64Ptr, Int32Ptr, VoidPtr, VoidPtr, Int64, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_l_16x32, false, Void, Int64, Int64Ptr, Int64Ptr, Int64Ptr, Int32Ptr, VoidPtr, VoidPtr, Int64, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_l_32x32, false, Void, Int64, Int64Ptr, Int64Ptr, Int64Ptr, Int32Ptr, VoidPtr, VoidPtr, Int64, Int64, Int32)
-
-
-__OMP_RTL(__kmpc_xteams_phase2_i_16x64, false, Void, Int32Ptr, Int32, Int32Ptr, Int32Ptr, VoidPtr, Int32, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_i_8x64, false, Void, Int32Ptr, Int32, Int32Ptr, Int32Ptr, VoidPtr, Int32, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_i_4x64, false, Void, Int32Ptr, Int32, Int32Ptr, Int32Ptr, VoidPtr, Int32, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_i_8x32, false, Void, Int32Ptr, Int32, Int32Ptr, Int32Ptr, VoidPtr, Int32, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_i_16x32, false, Void, Int32Ptr, Int32, Int32Ptr, Int32Ptr, VoidPtr, Int32, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_i_32x32, false, Void, Int32Ptr, Int32, Int32Ptr, Int32Ptr, VoidPtr, Int32, Int64, Int32)
-
-
-__OMP_RTL(__kmpc_xteams_phase2_d_16x64, false, Void, DoublePtr, Int32, DoublePtr, DoublePtr, VoidPtr, Double, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_d_8x64, false, Void, DoublePtr, Int32, DoublePtr, DoublePtr, VoidPtr, Double, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_d_4x64, false, Void, DoublePtr, Int32, DoublePtr, DoublePtr, VoidPtr, Double, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_d_8x32, false, Void, DoublePtr, Int32, DoublePtr, DoublePtr, VoidPtr, Double, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_d_16x32, false, Void, DoublePtr, Int32, DoublePtr, DoublePtr, VoidPtr, Double, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_d_32x32, false, Void, DoublePtr, Int32, DoublePtr, DoublePtr, VoidPtr, Double, Int64, Int32)
-
-
-__OMP_RTL(__kmpc_xteams_phase2_f_16x64, false, Void, FloatPtr, Int32, FloatPtr, FloatPtr, VoidPtr, Float, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_f_8x64, false, Void, FloatPtr, Int32, FloatPtr, FloatPtr, VoidPtr, Float, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_f_4x64, false, Void, FloatPtr, Int32, FloatPtr, FloatPtr, VoidPtr, Float, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_f_8x32, false, Void, FloatPtr, Int32, FloatPtr, FloatPtr, VoidPtr, Float, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_f_16x32, false, Void, FloatPtr, Int32, FloatPtr, FloatPtr, VoidPtr, Float, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_f_32x32, false, Void, FloatPtr, Int32, FloatPtr, FloatPtr, VoidPtr, Float, Int64, Int32)
-
-
-__OMP_RTL(__kmpc_xteams_phase2_l_16x64, false, Void, Int64Ptr, Int32, Int64Ptr, Int64Ptr, VoidPtr, Int64, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_l_8x64, false, Void, Int64Ptr, Int32, Int64Ptr, Int64Ptr, VoidPtr, Int64, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_l_4x64, false, Void, Int64Ptr, Int32, Int64Ptr, Int64Ptr, VoidPtr, Int64, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_l_8x32, false, Void, Int64Ptr, Int32, Int64Ptr, Int64Ptr, VoidPtr, Int64, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_l_16x32, false, Void, Int64Ptr, Int32, Int64Ptr, Int64Ptr, VoidPtr, Int64, Int64, Int32)
-__OMP_RTL(__kmpc_xteams_phase2_l_32x32, false, Void, Int64Ptr, Int32, Int64Ptr, Int64Ptr, VoidPtr, Int64, Int64, Int32)
 __OMP_RTL(__last, false, Void, )
 
 #undef __OMP_RTL
@@ -1488,27 +1289,27 @@ __OMP_PROC_BIND_KIND(unknown, 7)
 ///
 ///{
 
-#define Indices(...) ArrayRef<int>({__VA_ARGS__})
+#define OmpIndices(...) ArrayRef<int>({__VA_ARGS__})
 
 #ifndef OMP_RTL_CB_INFO
-#define OMP_RTL_CB_INFO(Enum, Str, ArgNo, ArgIndices, IsVarArg)
+#define OMP_RTL_CB_INFO(Enum, Str, ArgNo, ArgOmpIndices, IsVarArg)
 #endif
 
-#define __OMP_RTL_CB_INFO(Name, ArgNo, ArgIndices, IsVarArg)                                      \
-  OMP_RTL_CB_INFO(OMPRTL_##Name, #Name, ArgNo, ArgIndices, IsVarArg)
+#define __OMP_RTL_CB_INFO(Name, ArgNo, ArgOmpIndices, IsVarArg)                                      \
+  OMP_RTL_CB_INFO(OMPRTL_##Name, #Name, ArgNo, ArgOmpIndices, IsVarArg)
 
-__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_4, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_4u, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_8, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_8u, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_4, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_4u, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_8, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_8u, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_for_static_loop_4, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_for_static_loop_4u, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_for_static_loop_8, 1, Indices(-1, -1), false)
-__OMP_RTL_CB_INFO(__kmpc_for_static_loop_8u, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_4, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_4u, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_8, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_8u, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_4, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_4u, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_8, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_8u, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_for_static_loop_4, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_for_static_loop_4u, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_for_static_loop_8, 1, OmpIndices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_for_static_loop_8u, 1, OmpIndices(-1, -1), false)
 
 #undef __OMP_RTL_CB_INFO
 #undef OMP_RTL_CB_INFO

@@ -17,10 +17,13 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Object/ObjectFile.h"
+#include <memory>
+#include <mutex>
 
 namespace COMGR {
 struct DataMeta;
 struct DataSymbol;
+struct MetaDocument;
 
 /// Update @p Dest to point to a newly allocated C-style (null terminated)
 /// string with the contents of @p Src, optionally updating @p Size with the
@@ -103,6 +106,11 @@ struct DataObject {
   size_t Size;
   int RefCount;
   DataSymbol *DataSym;
+  // Serializes cache population against data replacement, so that querying and
+  // re-setting one handle concurrently cannot cache a document parsed from a
+  // buffer that is being swapped out. Held across all of setData().
+  std::mutex CacheMutex;
+  std::shared_ptr<MetaDocument> CachedMetaDoc;
   std::vector<std::string> MangledNames;
   std::map<std::string, std::string> NameExpressionMap;
   llvm::SmallVector<const char *, 128> SpirvFlags;
@@ -110,6 +118,7 @@ struct DataObject {
 private:
   std::unique_ptr<llvm::MemoryBuffer> Buffer;
 
+  // Requires CacheMutex, except from the destructor.
   void clearData();
   // We require this type be allocated via new, specifically through calling
   // allocate, because we want to be able to `delete this` in release. To make

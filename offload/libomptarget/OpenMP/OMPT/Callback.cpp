@@ -568,5 +568,4 @@ void llvm::omp::target::ompt::connectLibrary() {
   ODBG(ODT_Tool) << "Exiting connectLibrary";
 }
 
-#pragma pop_macro("DEBUG_PREFIX")
 #endif // OMPT_SUPPORT

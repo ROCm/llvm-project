@@ -32,7 +32,7 @@
 // RUN: COUNT=$(ls "%t.cache" | wc -l)
 // RUN: [ 3 -eq $COUNT ]
 
-// BOTH: target triple = "amdgcn-amd-amdhsa"
+// BOTH: target triple = "amd{{gcn|gpu[0-9.]+}}-amd-amdhsa"
 // GFX9: "target-cpu"="gfx900"
 // GFX10: "target-cpu"="gfx1030"
 

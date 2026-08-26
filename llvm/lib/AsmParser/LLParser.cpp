@@ -6091,8 +6091,7 @@ bool LLParser::parseDIStringType(MDNode *&Result, bool IsDistinct) {
 ///   ::= !DIDerivedType(tag: DW_TAG_pointer_type, name: "int", file: !0,
 ///                      line: 7, scope: !1, baseType: !2, size: 32,
 ///                      align: 32, offset: 0, flags: 0, extraData: !3,
-///                      addressSpace: 3, memorySpace: DW_MSPACE_LLVM_none
-///                      ptrAuthKey: 1,
+///                      dwarfAddressSpace: 3, ptrAuthKey: 1,
 ///                      ptrAuthIsAddressDiscriminated: true,
 ///                      ptrAuthExtraDiscriminator: 0x1234,
 ///                      ptrAuthIsaPointer: 1, ptrAuthAuthenticatesNullValues:1
@@ -6110,7 +6109,7 @@ bool LLParser::parseDIDerivedType(MDNode *&Result, bool IsDistinct) {
   OPTIONAL(offset, MDUnsignedOrMDField, (0, UINT64_MAX));                      \
   OPTIONAL(flags, DIFlagField, );                                              \
   OPTIONAL(extraData, MDField, );                                              \
-  OPTIONAL(addressSpace, MDUnsignedField, (UINT32_MAX, UINT32_MAX));      \
+  OPTIONAL(dwarfAddressSpace, MDUnsignedField, (UINT32_MAX, UINT32_MAX));      \
   OPTIONAL(memorySpace, DwarfMSpaceField, );                                   \
   OPTIONAL(annotations, MDField, );                                            \
   OPTIONAL(ptrAuthKey, MDUnsignedField, (0, 7));                               \
@@ -6122,9 +6121,8 @@ bool LLParser::parseDIDerivedType(MDNode *&Result, bool IsDistinct) {
 #undef VISIT_MD_FIELDS
 
   std::optional<unsigned> DWARFAddressSpace;
-  
-  if (addressSpace.Val != UINT32_MAX)
-    DWARFAddressSpace = addressSpace.Val;
+  if (dwarfAddressSpace.Val != UINT32_MAX)
+    DWARFAddressSpace = dwarfAddressSpace.Val;
   std::optional<DIDerivedType::PtrAuthData> PtrAuthData;
   if (ptrAuthKey.Val)
     PtrAuthData.emplace(

@@ -8,7 +8,7 @@
 // correct split must bracket the crossing half for 0x60 (0x6050 / 0x5060). A
 // mode-0 misread would emit no bracket at all.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific- \

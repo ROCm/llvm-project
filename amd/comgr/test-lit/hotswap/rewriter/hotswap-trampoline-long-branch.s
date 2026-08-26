@@ -3,7 +3,7 @@
 // COM: directly. A large non-NOP .rept filler (~160 KB) pushes the pool past
 // COM: s_branch's reach to force the far case.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -44,7 +44,7 @@
 // RUN: sed -e 's/s_mov_b64 vcc, -1/s_mov_b32 s104, 0/' \
 // RUN:   -e 's/\.amdhsa_next_free_sgpr 12/.amdhsa_next_free_sgpr 105/' \
 // RUN:   -e 's/\.sgpr_count: 14/.sgpr_count: 105/' %s > %t.full-sgpr.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.full-sgpr.s -o %t.full-sgpr.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.full-sgpr.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -64,9 +64,9 @@
 // COM: A live VCC can instead use an already-allocated numbered pair after
 // COM: CFG liveness proves that neither half is consumed by the replacement or
 // COM: continuation before being redefined.
-// RUN: sed '/^  tensor_load_to_lds/a\  s_cbranch_vccz 0' %t.full-sgpr.s \
+// RUN: sed 's|^// VCCZ-ONLY:|  |' %t.full-sgpr.s \
 // RUN:   > %t.local-pair.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.local-pair.s -o %t.local-pair.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.local-pair.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -78,9 +78,9 @@
 // COM: Search every aligned pair, not just the highest eight. Every pair above
 // COM: s[30:31] has a reachable incoming-value read; s[30:31] is overwritten
 // COM: first and is therefore the highest locally dead pair.
-// RUN: sed -e '/^  tensor_load_to_lds/a\  s_cbranch_vccz 0' \
+// RUN: sed -e 's|^// VCCZ-ONLY:|  |' \
 // RUN:   -e 's|^// LOW-PAIR-ONLY:|  |' %t.full-sgpr.s > %t.low-pair.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.low-pair.s -o %t.low-pair.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.low-pair.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -99,7 +99,7 @@
 // COM: a save/set-PC gateway, and its tail becomes the restore landing pad.
 // RUN: sed 's|^// LIVE-ONLY:|  |' %t.full-sgpr.s \
 // RUN:   > %t.live-vcc.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.live-vcc.s -o %t.live-vcc.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.live-vcc.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -126,7 +126,7 @@
 // RUN: sed -e 's|^// LIVE-ONLY:|  |' \
 // RUN:   -e 's/\.fill 32, 1, 0/.fill 16, 1, 0/g' \
 // RUN:   %t.full-sgpr.s > %t.split-vcc.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.split-vcc.s -o %t.split-vcc.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.split-vcc.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -166,7 +166,7 @@
 // RUN:   -e 's|^// EXACT20-ONLY:|  |' \
 // RUN:   -e 's/\.fill 32, 1, 0/.fill 20, 1, 0/g' \
 // RUN:   %t.full-sgpr.s > %t.exact20.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.exact20.s -o %t.exact20.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.exact20.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -178,7 +178,7 @@
 // COM: A metadata-less object also fails closed because scratch usage cannot
 // COM: be charged to its owning kernel.
 // RUN: sed '/^.amdgpu_metadata$/,/^.end_amdgpu_metadata$/d' %s > %t.nometa.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.nometa.s -o %t.nometa.elf
 // RUN: hotswap-rewrite %t.nometa.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -193,6 +193,7 @@
 test_far:
   s_mov_b64 vcc, -1
   tensor_load_to_lds s[0:3], s[4:11]
+// VCCZ-ONLY:s_cbranch_vccz 0
 // LOW-PAIR-ONLY:s_mov_b64 s[30:31], 0
 // LOW-PAIR-ONLY:.irp live_reg, s32, s34, s36, s38, s40, s42, s44, s46, s48, s50, s52, s54, s56, s58, s60, s62, s64, s66, s68, s70, s72, s74, s76, s78, s80, s82, s84, s86, s88, s90, s92, s94, s96, s98, s100, s102, s104
 // LOW-PAIR-ONLY:s_mov_b32 s1, \live_reg
