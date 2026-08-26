@@ -20,6 +20,7 @@ namespace COMGR::hotswap {
 
 namespace {
 
+// Emit Wait with an immediate encoding its counter thresholds.
 void emitWait(RaiseContext &Ctx, Intrinsic::ID Wait, Value *Count) {
   IRBuilder<> &B = Ctx.B;
   Module *M = B.GetInsertBlock()->getModule();
@@ -126,12 +127,8 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
                                        Di.Offset,
                                        formatName(Di.TargetSpecificFlags));
 
-  // Hints and side channels no computed value can depend on: instruction issue
-  // timing (nop, clause, delay_alu), performance counters, the thread-trace
-  // stream, and an instruction cache a raised kernel never writes behind.
-  // s_code_end is the padding a shader buffer carries past its terminator.
-  // Reproducing them is a choice the raise declines, not a limit it hits: what
-  // the target wants in their place is the backend's to insert.
+  // Drop target-specific scheduling, instrumentation, cache-maintenance, and
+  // padding instructions; none changes program state represented in raised IR.
   case CanonicalOp::S_NOP:
   case CanonicalOp::S_CLAUSE:
   case CanonicalOp::S_DELAY_ALU:

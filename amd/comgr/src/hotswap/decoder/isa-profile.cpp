@@ -57,12 +57,7 @@ bool ISAProfile::hasDx10ClampAndIeeeMode() const {
 }
 
 bool ISAProfile::hasCombinedWaitcnt() const {
-  // The generation features are exclusive, unlike the FeatureGFX*Insts bits,
-  // which name every generation from one onwards: FeatureGFX12 implies
-  // FeatureGFX9Insts, so a list built from those would match gfx1250 too.
-  return STI->hasFeature(llvm::AMDGPU::FeatureGFX9) ||
-         STI->hasFeature(llvm::AMDGPU::FeatureGFX10) ||
-         STI->hasFeature(llvm::AMDGPU::FeatureGFX11);
+  return STI->hasFeature(llvm::AMDGPU::FeatureGFX9);
 }
 
 ISAProfile::WavePriorityModel ISAProfile::wavePriorityModel() const {
