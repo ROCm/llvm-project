@@ -36,9 +36,9 @@ getSubtargetOccupancyLimits(StringRef Processor) {
       AMDGPU::getMaxWavesPerEU(AMDGPU::parseArchAMDGCN(Processor)) * EUsPerCU;
 
 #define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, ELF_MACHINE,                      \
-                   TRAP_HANDLER_ENABLED, IMAGE_SUPPORT, LDS_SIZE,              \
-                   LDS_BANK_COUNT, MAX_FLAT_WORK_GROUP_SIZE,                   \
-                   VGPR_ALLOC_GRANULE, TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS) \
+                   TRAP_HANDLER_ENABLED, IMAGE_SUPPORT, LDS_BANK_COUNT,        \
+                   MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
+                   TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
   if (Processor == PROCESSOR)                                                  \
     return SubtargetOccupancyLimits{EUsPerCU,                                  \
                                     MaxWavesPerCU,                             \
