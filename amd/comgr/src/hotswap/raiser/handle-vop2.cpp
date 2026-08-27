@@ -30,6 +30,34 @@ namespace COMGR::hotswap {
 // Builds the result of a two-source instruction from its already-read sources.
 using BinaryBuilder = function_ref<Value *(IRBuilder<> &, Value *, Value *)>;
 
+namespace {
+
+// Destination and source values for a binary VOP2 instruction.
+struct BinaryOperands {
+  ParsedReg Dst;
+  Value *Src0;
+  Value *Src1;
+};
+
+} // namespace
+
+// Read the destination and two 32-bit sources of a binary instruction.
+static Expected<BinaryOperands> readBinary32(OpResolver &Op) {
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst) {
+    return Dst.takeError();
+  }
+  Expected<Value *> Src0 = Op.src(0);
+  if (!Src0) {
+    return Src0.takeError();
+  }
+  Expected<Value *> Src1 = Op.src(1);
+  if (!Src1) {
+    return Src1.takeError();
+  }
+  return BinaryOperands{*Dst, *Src0, *Src1};
+}
+
 static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
                               OpResolver &Op, Instruction::BinaryOps Opcode,
                               bool ReverseOperands) {
@@ -43,25 +71,17 @@ static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
     return Err;
   }
 
-  Expected<ParsedReg> Dst = Op.dst();
-  if (!Dst) {
-    return Dst.takeError();
-  }
-  Expected<Value *> Src0Bits = Op.src(0);
-  if (!Src0Bits) {
-    return Src0Bits.takeError();
-  }
-  Expected<Value *> Src1Bits = Op.src(1);
-  if (!Src1Bits) {
-    return Src1Bits.takeError();
+  Expected<BinaryOperands> Args = readBinary32(Op);
+  if (!Args) {
+    return Args.takeError();
   }
 
-  Value *Src0 = Ctx.B.CreateBitCast(*Src0Bits, Ctx.B.getFloatTy());
-  Value *Src1 = Ctx.B.CreateBitCast(*Src1Bits, Ctx.B.getFloatTy());
+  Value *Src0 = Ctx.B.CreateBitCast(Args->Src0, Ctx.B.getFloatTy());
+  Value *Src1 = Ctx.B.CreateBitCast(Args->Src1, Ctx.B.getFloatTy());
   Value *Lhs = ReverseOperands ? Src1 : Src0;
   Value *Rhs = ReverseOperands ? Src0 : Src1;
   Value *Result = Ctx.B.CreateBinOp(Opcode, Lhs, Rhs);
-  Ctx.registers().writeReg32(*Dst,
+  Ctx.registers().writeReg32(Args->Dst,
                              Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
   return Error::success();
 }
@@ -70,19 +90,113 @@ static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
 // destination.
 static Error raiseBinary32(RaiseContext &Ctx, OpResolver &Op,
                            BinaryBuilder Build) {
-  Expected<ParsedReg> Dst = Op.dst();
-  if (!Dst) {
-    return Dst.takeError();
+  Expected<BinaryOperands> Args = readBinary32(Op);
+  if (!Args) {
+    return Args.takeError();
   }
-  Expected<Value *> Src0 = Op.src(0);
-  if (!Src0) {
-    return Src0.takeError();
+  Ctx.registers().writeReg32(Args->Dst, Build(Ctx.B, Args->Src0, Args->Src1));
+  return Error::success();
+}
+
+// Raise a low-16-bit binary operation and zero-extend its result to 32 bits.
+static Error raiseBinary16(RaiseContext &Ctx, OpResolver &Op,
+                           BinaryBuilder Build) {
+  return raiseBinary32(Ctx, Op, [&](IRBuilder<> &B, Value *Src0, Value *Src1) {
+    Type *I16Ty = B.getInt16Ty();
+    Value *Lhs = B.CreateTrunc(Src0, I16Ty, "src0_i16");
+    Value *Rhs = B.CreateTrunc(Src1, I16Ty, "src1_i16");
+    return B.CreateZExt(Build(B, Lhs, Rhs), B.getInt32Ty(), "result_i32");
+  });
+}
+
+// Write an EXEC-predicated vector result and fully replace VCC with the
+// per-lane carry or borrow result.
+static void writeResultAndVCC(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
+                              Value *VCC) {
+  Value *LaneActive = Ctx.registers().emitLaneActiveBit();
+  Ctx.registers().writeReg32(Dst, Result);
+  Ctx.registers().regFile().storeVCC(
+      Ctx.B, Ctx.B.CreateAnd(LaneActive, VCC, "vcc_active"));
+}
+
+// Raise a binary operation that writes carry or borrow to VCC.
+static Error raiseVCCBinary32(RaiseContext &Ctx, OpResolver &Op,
+                              Intrinsic::ID IntrinsicID, bool ReverseOperands) {
+  Expected<BinaryOperands> Args = readBinary32(Op);
+  if (!Args) {
+    return Args.takeError();
   }
-  Expected<Value *> Src1 = Op.src(1);
-  if (!Src1) {
-    return Src1.takeError();
+  Value *Lhs = ReverseOperands ? Args->Src1 : Args->Src0;
+  Value *Rhs = ReverseOperands ? Args->Src0 : Args->Src1;
+  Value *Pair =
+      Ctx.B.CreateIntrinsic(IntrinsicID, {Ctx.B.getInt32Ty()}, {Lhs, Rhs});
+  Value *Result = Ctx.B.CreateExtractValue(Pair, 0, "result");
+  Value *VCC = Ctx.B.CreateExtractValue(Pair, 1, "vcc_out");
+  writeResultAndVCC(Ctx, Args->Dst, Result, VCC);
+  return Error::success();
+}
+
+// Raise a binary operation that reads carry or borrow from VCC and writes the
+// updated carry or borrow back to VCC.
+static Error raiseVCCInBinary32(RaiseContext &Ctx, OpResolver &Op,
+                                Intrinsic::ID IntrinsicID,
+                                bool ReverseOperands) {
+  Expected<BinaryOperands> Args = readBinary32(Op);
+  if (!Args) {
+    return Args.takeError();
   }
-  Ctx.registers().writeReg32(*Dst, Build(Ctx.B, *Src0, *Src1));
+  Value *Lhs = ReverseOperands ? Args->Src1 : Args->Src0;
+  Value *Rhs = ReverseOperands ? Args->Src0 : Args->Src1;
+  Value *VCCIn = Ctx.B.CreateZExt(Ctx.registers().regFile().loadVCC(Ctx.B),
+                                  Ctx.B.getInt32Ty(), "vcc_in");
+  Value *First =
+      Ctx.B.CreateIntrinsic(IntrinsicID, {Ctx.B.getInt32Ty()}, {Lhs, Rhs});
+  Value *Intermediate = Ctx.B.CreateExtractValue(First, 0);
+  Value *Second = Ctx.B.CreateIntrinsic(IntrinsicID, {Ctx.B.getInt32Ty()},
+                                        {Intermediate, VCCIn});
+  Value *Result = Ctx.B.CreateExtractValue(Second, 0, "result");
+  Value *FirstVCC = Ctx.B.CreateExtractValue(First, 1);
+  Value *SecondVCC = Ctx.B.CreateExtractValue(Second, 1);
+  Value *VCC = Ctx.B.CreateOr(FirstVCC, SecondVCC, "vcc_out");
+  writeResultAndVCC(Ctx, Args->Dst, Result, VCC);
+  return Error::success();
+}
+
+// Select src1 when the current lane's VCC bit is set, otherwise src0.
+static Error raiseCndMask(RaiseContext &Ctx, OpResolver &Op) {
+  Expected<BinaryOperands> Args = readBinary32(Op);
+  if (!Args) {
+    return Args.takeError();
+  }
+  Value *VCC = Ctx.registers().regFile().loadVCC(Ctx.B);
+  Value *Result = Ctx.B.CreateSelect(VCC, Args->Src1, Args->Src0, "cndmask");
+  Ctx.registers().writeReg32(Args->Dst, Result);
+  return Error::success();
+}
+
+// Accumulate signed products of packed source elements, using the destination's
+// incoming value as the accumulator.
+static Error raiseSignedDotAccumulate(RaiseContext &Ctx, OpResolver &Op,
+                                      unsigned ElementWidthInBits) {
+  Expected<BinaryOperands> Args = readBinary32(Op);
+  if (!Args) {
+    return Args.takeError();
+  }
+  IntegerType *ElementTy = Ctx.B.getIntNTy(ElementWidthInBits);
+  Value *Accumulator = Ctx.registers().regFile().readReg32(Ctx.B, Args->Dst);
+  for (unsigned I = 0; I != 32 / ElementWidthInBits; ++I) {
+    unsigned BitOffset = I * ElementWidthInBits;
+    Value *Lhs = Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Args->Src0, BitOffset),
+                                   ElementTy, "dot_lhs_bits");
+    Value *Rhs = Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Args->Src1, BitOffset),
+                                   ElementTy, "dot_rhs_bits");
+    Lhs = Ctx.B.CreateSExt(Lhs, Ctx.B.getInt32Ty(), "dot_lhs");
+    Rhs = Ctx.B.CreateSExt(Rhs, Ctx.B.getInt32Ty(), "dot_rhs");
+    Accumulator =
+        Ctx.B.CreateAdd(Accumulator, Ctx.B.CreateMul(Lhs, Rhs, "dot_product"),
+                        "dot_accumulate");
+  }
+  Ctx.registers().writeReg32(Args->Dst, Accumulator);
   return Error::success();
 }
 
@@ -198,6 +312,26 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
       return B.CreateSub(Src1, Src0, "subrev");
     });
+  case CanonicalOp::V_ADD_CO_U32:
+    return raiseVCCBinary32(Ctx, Op, Intrinsic::uadd_with_overflow,
+                            /*ReverseOperands=*/false);
+  case CanonicalOp::V_SUB_CO_U32:
+    return raiseVCCBinary32(Ctx, Op, Intrinsic::usub_with_overflow,
+                            /*ReverseOperands=*/false);
+  case CanonicalOp::V_SUBREV_CO_U32:
+    return raiseVCCBinary32(Ctx, Op, Intrinsic::usub_with_overflow,
+                            /*ReverseOperands=*/true);
+  case CanonicalOp::V_ADD_CO_CI_U32:
+    return raiseVCCInBinary32(Ctx, Op, Intrinsic::uadd_with_overflow,
+                              /*ReverseOperands=*/false);
+  case CanonicalOp::V_SUB_CO_CI_U32:
+    return raiseVCCInBinary32(Ctx, Op, Intrinsic::usub_with_overflow,
+                              /*ReverseOperands=*/false);
+  case CanonicalOp::V_SUBREV_CO_CI_U32:
+    return raiseVCCInBinary32(Ctx, Op, Intrinsic::usub_with_overflow,
+                              /*ReverseOperands=*/true);
+  case CanonicalOp::V_CNDMASK_B32:
+    return raiseCndMask(Ctx, Op);
 
   case CanonicalOp::V_MUL_I32_I24:
     return raiseMul24(Ctx, Op, /*IsSigned=*/true);
@@ -270,6 +404,57 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     });
   case CanonicalOp::V_LSHLREV_B64:
     return raiseShiftLeft64(Ctx, Op);
+
+  case CanonicalOp::V_ADD_U16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateAdd(Src0, Src1, "add16");
+    });
+  case CanonicalOp::V_SUB_U16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateSub(Src0, Src1, "sub16");
+    });
+  case CanonicalOp::V_SUBREV_U16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateSub(Src1, Src0, "subrev16");
+    });
+  case CanonicalOp::V_MUL_LO_U16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateMul(Src0, Src1, "mul16");
+    });
+  case CanonicalOp::V_LSHLREV_B16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateShl(Src1, maskShiftAmount(B, Src0, 16), "lshl16");
+    });
+  case CanonicalOp::V_LSHRREV_B16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateLShr(Src1, maskShiftAmount(B, Src0, 16), "lshr16");
+    });
+  case CanonicalOp::V_ASHRREV_I16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateAShr(Src1, maskShiftAmount(B, Src0, 16), "ashr16");
+    });
+  case CanonicalOp::V_MIN_I16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateBinaryIntrinsic(Intrinsic::smin, Src0, Src1, {}, "min16");
+    });
+  case CanonicalOp::V_MAX_I16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateBinaryIntrinsic(Intrinsic::smax, Src0, Src1, {}, "max16");
+    });
+  case CanonicalOp::V_MIN_U16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateBinaryIntrinsic(Intrinsic::umin, Src0, Src1, {}, "min16");
+    });
+  case CanonicalOp::V_MAX_U16:
+    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateBinaryIntrinsic(Intrinsic::umax, Src0, Src1, {}, "max16");
+    });
+  case CanonicalOp::V_DOT2C_I32_I16:
+    return raiseSignedDotAccumulate(Ctx, Op, 16);
+  case CanonicalOp::V_DOT4C_I32_I8:
+    return raiseSignedDotAccumulate(Ctx, Op, 8);
+  case CanonicalOp::V_DOT8C_I32_I4:
+    return raiseSignedDotAccumulate(Ctx, Op, 4);
 
   default:
     return unsupported(Ctx, Di);

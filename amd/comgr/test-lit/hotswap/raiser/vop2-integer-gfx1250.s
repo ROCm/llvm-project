@@ -63,6 +63,27 @@ vop2_integer_gfx1250:
 ; IR-NEXT: [[AMOUNT64:%.+]] = zext i32 [[AMOUNT]] to i64
 ; IR-NEXT: = shl i64 {{.+}}, [[AMOUNT64]]
 	v_lshlrev_b64_e32 v[16:17], v5, v[8:9]
+
+; IR: [[ADDC_IN:%.+]] = zext i1 {{.+}} to i32
+; IR: [[ADDC_FIRST:%.+]] = call { i32, i1 } @llvm.uadd.with.overflow.i32
+; IR: [[ADDC_SUM:%.+]] = extractvalue { i32, i1 } [[ADDC_FIRST]], 0
+; IR: [[ADDC_SECOND:%.+]] = call { i32, i1 } @llvm.uadd.with.overflow.i32(i32 [[ADDC_SUM]], i32 [[ADDC_IN]])
+	v_add_co_ci_u32_e32 v22, vcc_lo, v0, v1, vcc_lo
+; IR: [[SUBB_IN:%.+]] = zext i1 {{.+}} to i32
+; IR: [[SUBB_FIRST:%.+]] = call { i32, i1 } @llvm.usub.with.overflow.i32
+; IR: [[SUBB_DIFF:%.+]] = extractvalue { i32, i1 } [[SUBB_FIRST]], 0
+; IR: [[SUBB_SECOND:%.+]] = call { i32, i1 } @llvm.usub.with.overflow.i32(i32 [[SUBB_DIFF]], i32 [[SUBB_IN]])
+	v_sub_co_ci_u32_e32 v23, vcc_lo, v0, v1, vcc_lo
+; IR: [[SUBREV_BORROW_IN:%.+]] = zext i1 {{.+}} to i32
+; IR: [[SUBREV_FIRST:%.+]] = call { i32, i1 } @llvm.usub.with.overflow.i32
+; IR: [[SUBREV_DIFF:%.+]] = extractvalue { i32, i1 } [[SUBREV_FIRST]], 0
+; IR: [[SUBREV_SECOND:%.+]] = call { i32, i1 } @llvm.usub.with.overflow.i32(i32 [[SUBREV_DIFF]], i32 [[SUBREV_BORROW_IN]])
+; IR: [[SUBREV_SECOND_BORROW:%.+]] = extractvalue { i32, i1 } [[SUBREV_SECOND]], 1
+; IR: [[SUBREV_BORROW_OUT:%.+]] = or i1 {{.+}}, [[SUBREV_SECOND_BORROW]]
+; IR: [[VCC_AFTER_SUBREV:%.+]] = and i1 {{.+}}, [[SUBREV_BORROW_OUT]]
+	v_subrev_co_ci_u32_e32 v24, vcc_lo, v0, v1, vcc_lo
+; IR: = select i1 [[VCC_AFTER_SUBREV]], i32 {{.+}}, i32 {{.+}}
+	v_cndmask_b32_e32 v25, v0, v1, vcc_lo
 ; IR: ret void
 	s_endpgm
 
@@ -71,8 +92,9 @@ vop2_integer_gfx1250:
 	.amdhsa_kernel vop2_integer_gfx1250
 		.amdhsa_kernarg_size 0
 		.amdhsa_wavefront_size32 1
-		.amdhsa_next_free_vgpr 22
+		.amdhsa_next_free_vgpr 26
 		.amdhsa_next_free_sgpr 1
+		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.text
 	.amdgpu_metadata
@@ -87,7 +109,7 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         vop2_integer_gfx1250.kd
-    .vgpr_count:     22
+    .vgpr_count:     26
     .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
