@@ -1319,8 +1319,7 @@ void EmitAssemblyHelper::RunCodegenPipelineNewPM(
   MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
   MAM.registerPass([&] {
     const llvm::TargetOptions &Options = TM->Options;
-    return RuntimeLibraryAnalysis(TargetTriple, Options.ExceptionModel,
-                                  Options.FloatABIType, Options.EABIVersion,
+    return RuntimeLibraryAnalysis(Options.ExceptionModel, Options.EABIVersion,
                                   Options.MCOptions.ABIName, Options.VecLib);
   });
 

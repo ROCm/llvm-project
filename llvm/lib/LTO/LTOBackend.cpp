@@ -534,8 +534,8 @@ static void codegen(const CodegenConfig &Conf, TargetMachine *TM,
     ModuleAnalysisManager MAM;
     PassBuilder PB(TM, PipelineTuningOptions(), std::nullopt, &PIC);
 
-    StandardInstrumentations SI(Mod.getContext(), Conf.DebugPassManager,
-                                Conf.VerifyEach);
+    StandardInstrumentations SI(Mod.getContext(), Conf.Conf.DebugPassManager,
+                                Conf.Conf.VerifyEach);
     SI.registerCallbacks(PIC, &MAM);
 
     TargetLibraryInfoImpl TLII(Mod.getTargetTriple(), TM->Options.VecLib);
@@ -543,8 +543,7 @@ static void codegen(const CodegenConfig &Conf, TargetMachine *TM,
     MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
     MAM.registerPass([&] {
       return RuntimeLibraryAnalysis(
-          Mod.getTargetTriple(), TM->Options.ExceptionModel,
-          TM->Options.FloatABIType, TM->Options.EABIVersion,
+          TM->Options.ExceptionModel, TM->Options.EABIVersion,
           TM->Options.MCOptions.ABIName, TM->Options.VecLib);
     });
 
