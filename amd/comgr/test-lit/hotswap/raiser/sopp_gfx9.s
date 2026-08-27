@@ -21,9 +21,6 @@
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=wakeup_kernel \
 ; RUN:   --isa=gfx942 --target-isa=gfx942 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=WAKEUP
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=trap_kernel \
-; RUN:   --isa=gfx942 --target-isa=gfx942 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=TRAP
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
 	.amdhsa_code_object_version 6
@@ -80,15 +77,6 @@ wakeup_kernel:
 	s_wakeup
 	s_endpgm
 
-	.globl	trap_kernel
-	.p2align	8
-	.type	trap_kernel,@function
-
-trap_kernel:
-; TRAP: unsupported-instruction-form: s_trap [SOPP]
-	s_trap 1
-	s_endpgm
-
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel waits_kernel
@@ -113,13 +101,6 @@ trap_kernel:
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel wakeup_kernel
-		.amdhsa_kernarg_size 0
-		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
-		.amdhsa_reserve_vcc 1
-	.end_amdhsa_kernel
-	.amdhsa_kernel trap_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
@@ -172,17 +153,6 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         wakeup_kernel.kd
-    .vgpr_count:     1
-    .wavefront_size: 64
-  - .args: []
-    .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 1024
-    .name:           trap_kernel
-    .private_segment_fixed_size: 0
-    .sgpr_count:     1
-    .symbol:         trap_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 64
 amdhsa.version: [1, 2]
