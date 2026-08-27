@@ -1602,8 +1602,8 @@ amd_comgr_status_t AMDGPUCompiler::outputResource(llvm::StringRef Path,
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t
-AMDGPUCompiler::materializeHeaderFile(DataObject *Object, StringRef Path) {
+amd_comgr_status_t AMDGPUCompiler::materializeHeaderFile(DataObject *Object,
+                                                         StringRef Path) {
   return outputResource(Path, StringRef(Object->Data, Object->Size));
 }
 
