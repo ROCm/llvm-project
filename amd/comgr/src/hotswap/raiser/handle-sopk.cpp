@@ -12,9 +12,12 @@
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise_failure.h"
 
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
+#include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Module.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <cstdint>
@@ -24,31 +27,29 @@ using namespace llvm;
 namespace COMGR::hotswap {
 namespace {
 
-// Policy for reading a hardware register.
-enum class HwregRead { Zero, Abort };
+enum class HardwareRegisterReadAction { ReturnZero, Reject };
 
-// Policy for writing a hardware register.
-enum class HwregWrite { Drop, Preserve, Abort };
+enum class HardwareRegisterWriteAction { Ignore, Emit, Reject };
 
 // Read and write policies for one hardware-register identifier.
-struct HwregPolicy {
-  HwregRead Read;
-  HwregWrite Write;
+struct HardwareRegisterPolicy {
+  HardwareRegisterReadAction Read;
+  HardwareRegisterWriteAction Write;
 };
 
 // Return the conservative policy for hardware-register identifier Id.
-// HWREG numbers are reused between ISA generations. Where a number denotes a
-// load-bearing register on any supported source ISA, use the conservative
-// policy: refusing is preferable to treating an aperture or retry-control
-// register as diagnostic state.
-HwregPolicy classifyHwreg(unsigned Id) {
+// Hardware-register numbers are reused between ISA generations. Where a number
+// denotes a load-bearing register on any supported source ISA, refuse the
+// access instead of treating it as diagnostic state.
+HardwareRegisterPolicy classifyHardwareRegister(unsigned Id) {
   using namespace AMDGPU::Hwreg;
   switch (Id) {
   case ID_MODE:
     // MODE is initialized from the kernel descriptor and can be changed by
     // preceding SETREG instructions. Until that state is tracked, returning a
     // fabricated value would silently change source-visible behavior.
-    return {HwregRead::Abort, HwregWrite::Preserve};
+    return {HardwareRegisterReadAction::Reject,
+            HardwareRegisterWriteAction::Emit};
 
   case ID_MEM_BASES:
   case ID_FLAT_SCR_LO:
@@ -56,13 +57,15 @@ HwregPolicy classifyHwreg(unsigned Id) {
   case ID_XNACK_MASK:
   case ID_XNACK_STATE_PRIV:
   case ID_XNACK_MASK_gfx1250:
-    return {HwregRead::Abort, HwregWrite::Abort};
+    return {HardwareRegisterReadAction::Reject,
+            HardwareRegisterWriteAction::Reject};
 
   case ID_TBA_LO:
   case ID_TBA_HI:
   case ID_TMA_LO:
   case ID_TMA_HI:
-    return {HwregRead::Zero, HwregWrite::Abort};
+    return {HardwareRegisterReadAction::ReturnZero,
+            HardwareRegisterWriteAction::Reject};
 
   case ID_STATUS:
   case ID_TRAPSTS:
@@ -83,61 +86,40 @@ HwregPolicy classifyHwreg(unsigned Id) {
   case ID_SHADER_CYCLES_HI:
   case ID_DVGPR_ALLOC_LO:
   case ID_DVGPR_ALLOC_HI:
-    return {HwregRead::Zero, HwregWrite::Drop};
+    return {HardwareRegisterReadAction::ReturnZero,
+            HardwareRegisterWriteAction::Ignore};
 
   default:
-    return {HwregRead::Abort, HwregWrite::Abort};
+    return {HardwareRegisterReadAction::Reject,
+            HardwareRegisterWriteAction::Reject};
   }
 }
 
-// Return an unsupported-instruction failure for Di with optional Detail.
-Error unsupported(RaiseContext &Ctx, const DecodedInst &Di,
-                  const Twine &Detail = {}) {
-  return RaiseFailure::atInstruction(
-      RaiseFailureReason::UnsupportedInstructionForm,
-      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
-      formatName(Di.TargetSpecificFlags), Detail);
-}
-
 // Read and validate the 16-bit hardware-register selector from Di.
-Expected<unsigned> readHwregSelector(RaiseContext &Ctx, const DecodedInst &Di) {
-  constexpr unsigned SelectorOperand = 1;
+Expected<unsigned> readHardwareRegisterSelector(RaiseContext &Ctx,
+                                                const DecodedInst &Di) {
+  unsigned SelectorOperand = 1;
   if (Di.numOperands() <= SelectorOperand || !Di.isImm(SelectorOperand))
-    return unsupported(Ctx, Di,
-                       "hardware-register selector is not immediate operand 1");
+    return unsupportedInstruction(
+        Ctx, Di, "hardware-register selector is not immediate operand 1");
   int64_t Raw = Di.getImm(SelectorOperand);
   if (Raw < INT16_MIN || Raw > UINT16_MAX)
-    return unsupported(Ctx, Di,
-                       "hardware-register selector is outside 16 bits");
+    return unsupportedInstruction(
+        Ctx, Di, "hardware-register selector is outside 16 bits");
   return static_cast<unsigned>(Raw) & UINT16_MAX;
 }
 
-// Return the hardware-register identifier encoded in Selector.
-unsigned hwregId(unsigned Selector) { return Selector & 0x3fu; }
-
-// A bit field selected within a hardware register.
-struct HwregField {
-  unsigned Offset;
-  unsigned Size;
-};
-
-// Decode the offset and size encoded in Selector.
-HwregField decodeHwregField(unsigned Selector) {
-  return {(Selector >> 6) & 0x1fu, ((Selector >> 11) & 0x1fu) + 1u};
-}
-
-// Return whether Field overlaps MODE.VGPR_MSB.
-bool overlapsVgprMsb(HwregField Field) {
-  constexpr unsigned VgprMsbLow = 12;
-  constexpr unsigned VgprMsbHigh = 19;
-  return Field.Offset <= VgprMsbHigh &&
-         Field.Offset + Field.Size - 1 >= VgprMsbLow;
+// Return whether the bit range overlaps MODE.VGPR_MSB.
+bool overlapsVgprMsb(unsigned BitOffset, unsigned BitWidth) {
+  uint32_t FieldMask = llvm::maskTrailingOnes<uint32_t>(BitWidth) << BitOffset;
+  return FieldMask & AMDGPU::Hwreg::VGPR_MSB_MASK;
 }
 
 // Update the tracked VGPR_MSB state from an immediate MODE value.
 void updateImmediateModeVgprMsb(RaiseContext &Ctx, uint64_t Value) {
-  constexpr unsigned VgprMsbLow = 12;
-  uint8_t ModeEncoding = static_cast<uint8_t>((Value >> VgprMsbLow) & 0xffu);
+  uint8_t ModeEncoding = static_cast<uint8_t>(
+      (Value & AMDGPU::Hwreg::VGPR_MSB_MASK) >>
+      llvm::countr_zero(static_cast<uint32_t>(AMDGPU::Hwreg::VGPR_MSB_MASK)));
   // MODE stores the slots as (dst, src0, src1, src2), while RegisterState
   // stores them as (src0, src1, src2, dst).
   Ctx.registers().setVgprMsBs(llvm::rotr<uint8_t>(ModeEncoding, 2));
@@ -145,9 +127,9 @@ void updateImmediateModeVgprMsb(RaiseContext &Ctx, uint64_t Value) {
 
 // Raise a hardware-register read according to Policy.
 Error handleGetreg(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
-                   unsigned Id, HwregPolicy Policy) {
-  if (Policy.Read == HwregRead::Abort)
-    return unsupported(
+                   unsigned Id, HardwareRegisterPolicy Policy) {
+  if (Policy.Read == HardwareRegisterReadAction::Reject)
+    return unsupportedInstruction(
         Ctx, Di,
         Twine("cannot reproduce hardware-register read for id ") + Twine(Id));
 
@@ -160,30 +142,31 @@ Error handleGetreg(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
 
 // Raise a hardware-register write according to Policy.
 Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
-                   unsigned Selector, unsigned Id, HwregPolicy Policy) {
-  if (Policy.Write == HwregWrite::Abort)
-    return unsupported(
+                   unsigned Selector, unsigned Id, unsigned BitOffset,
+                   unsigned BitWidth, HardwareRegisterPolicy Policy) {
+  if (Policy.Write == HardwareRegisterWriteAction::Reject)
+    return unsupportedInstruction(
         Ctx, Di,
         Twine("cannot reproduce hardware-register write for id ") + Twine(Id));
-  if (Policy.Write == HwregWrite::Drop)
+  if (Policy.Write == HardwareRegisterWriteAction::Ignore)
     return Error::success();
 
+  bool HasExtendedVgprs = Ctx.Projection.sourceIsa().subtargetInfo().hasFeature(
+      AMDGPU::Feature1024AddressableVGPRs);
   Value *ValueArg;
   if (Di.CanonOp == CanonicalOp::S_SETREG_IMM32_B32) {
-    if (Di.numOperands() < 2 || !Di.isImm(0))
-      return unsupported(Ctx, Di,
-                         "setreg immediate value is not immediate operand 0");
+    if (!Di.isImm(0))
+      return unsupportedInstruction(
+          Ctx, Di, "setreg immediate value is not immediate operand 0");
     uint64_t Value = static_cast<uint64_t>(Di.getImm(0));
     ValueArg = Ctx.B.getInt32(Value);
-    if (Ctx.Projection.sourceIsa().has1024AddressableVgprs() &&
-        Id == AMDGPU::Hwreg::ID_MODE)
+    if (HasExtendedVgprs && Id == AMDGPU::Hwreg::ID_MODE)
       updateImmediateModeVgprMsb(Ctx, Value);
   } else {
-    if (Ctx.Projection.sourceIsa().has1024AddressableVgprs() &&
-        Id == AMDGPU::Hwreg::ID_MODE &&
-        overlapsVgprMsb(decodeHwregField(Selector)))
-      return unsupported(Ctx, Di,
-                         "dynamic MODE write overlaps VGPR_MSB bits [12:19]");
+    if (HasExtendedVgprs && Id == AMDGPU::Hwreg::ID_MODE &&
+        overlapsVgprMsb(BitOffset, BitWidth))
+      return unsupportedInstruction(
+          Ctx, Di, "dynamic MODE write overlaps VGPR_MSB bits [12:19]");
     Expected<Value *> Source = Op.src(0);
     if (!Source)
       return Source.takeError();
@@ -207,18 +190,19 @@ Error handleSOPK(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   case CanonicalOp::S_SETREG_IMM32_B32:
     break;
   default:
-    return unsupported(Ctx, Di);
+    return unsupportedInstruction(Ctx, Di);
   }
 
-  Expected<unsigned> Selector = readHwregSelector(Ctx, Di);
+  Expected<unsigned> Selector = readHardwareRegisterSelector(Ctx, Di);
   if (!Selector)
     return Selector.takeError();
-  unsigned Id = hwregId(*Selector);
-  HwregPolicy Policy = classifyHwreg(Id);
+  auto [Id, BitOffset, BitWidth] =
+      AMDGPU::Hwreg::HwregEncoding::decode(*Selector);
+  HardwareRegisterPolicy Policy = classifyHardwareRegister(Id);
 
   if (Di.CanonOp == CanonicalOp::S_GETREG_B32)
     return handleGetreg(Ctx, Di, Op, Id, Policy);
-  return handleSetreg(Ctx, Di, Op, *Selector, Id, Policy);
+  return handleSetreg(Ctx, Di, Op, *Selector, Id, BitOffset, BitWidth, Policy);
 }
 
 } // namespace COMGR::hotswap

@@ -189,7 +189,8 @@ private:
 };
 
 // Return a failure for an unsupported decoded instruction.
-llvm::Error unsupportedInstruction(RaiseContext &Ctx, const DecodedInst &Di);
+llvm::Error unsupportedInstruction(RaiseContext &Ctx, const DecodedInst &Di,
+                                   const llvm::Twine &Detail = {});
 
 } // namespace COMGR::hotswap
 

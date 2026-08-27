@@ -15,11 +15,8 @@ class MCSubtargetInfo;
 
 namespace COMGR::hotswap {
 
-// The subset of AMDGPU subtarget capabilities the raiser branches on, queried
-// on demand from the MCSubtargetInfo rather than cached. Construct via
-// `fromSubtarget`; the referenced subtarget must outlive the profile. The
-// queries are defined in isa-profile.cpp so this header stays free of the
-// AMDGPU target-private headers they need.
+// AMDGPU subtarget capabilities used by the raiser. Construct via
+// `fromSubtarget`; the referenced subtarget must outlive the profile.
 class ISAProfile {
 public:
   static ISAProfile fromSubtarget(const llvm::MCSubtargetInfo &STI) {
@@ -67,9 +64,7 @@ public:
   /// Return the model used to combine system and user wave priorities.
   WavePriorityModel wavePriorityModel() const;
 
-  // Whether VGPR encodings use MODE/S_SET_VGPR_MSB state to address up to
-  // 1024 registers.
-  bool has1024AddressableVgprs() const;
+  const llvm::MCSubtargetInfo &subtargetInfo() const { return *STI; }
 
 private:
   explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}

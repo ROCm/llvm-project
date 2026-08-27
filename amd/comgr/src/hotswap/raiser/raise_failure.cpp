@@ -129,11 +129,12 @@ llvm::Error RaiseFailure::withOrigin(llvm::Error Err,
       });
 }
 
-llvm::Error unsupportedInstruction(RaiseContext &Ctx, const DecodedInst &Di) {
+llvm::Error unsupportedInstruction(RaiseContext &Ctx, const DecodedInst &Di,
+                                   const llvm::Twine &Detail) {
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
       strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
-      formatName(Di.TargetSpecificFlags));
+      formatName(Di.TargetSpecificFlags), Detail);
 }
 
 } // namespace COMGR::hotswap
