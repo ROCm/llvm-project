@@ -79,6 +79,10 @@ constexpr uint8_t GlobalLoadDwordVaddrBytes[] = {0x00, 0x80, 0x50, 0xdc,
                                                  0x02, 0x00, 0x7f, 0x01};
 constexpr uint8_t GlobalLoadDwordSaddrBytes[] = {0x00, 0x80, 0x50, 0xdc,
                                                  0x00, 0x00, 0x00, 0x01};
+constexpr uint8_t GlobalStoreDwordVaddrBytes[] = {0x00, 0x80, 0x70, 0xdc,
+                                                  0x02, 0x01, 0x7f, 0x00};
+constexpr uint8_t GlobalStoreDwordSaddrBytes[] = {0x00, 0x80, 0x70, 0xdc,
+                                                  0x00, 0x01, 0x00, 0x00};
 
 // Holds one gfx942 MCState for the tests that need the disassembler or an
 // MCContext. initMCState registers the AMDGPU target itself, so no separate
@@ -169,6 +173,7 @@ TEST(CanonicalOp, NameRoundTrip) {
   EXPECT_EQ(canonicalOpName(CanonicalOp::S_LOAD_B64), "S_LOAD_B64");
   EXPECT_EQ(canonicalOpName(CanonicalOp::S_LOAD_B128), "S_LOAD_B128");
   EXPECT_EQ(canonicalOpName(CanonicalOp::GLOBAL_LOAD_B32), "GLOBAL_LOAD_B32");
+  EXPECT_EQ(canonicalOpName(CanonicalOp::GLOBAL_STORE_B32), "GLOBAL_STORE_B32");
   EXPECT_EQ(canonicalOpName(CanonicalOp::V_ADD_F32), "V_ADD_F32");
   EXPECT_EQ(canonicalOpName(CanonicalOp::V_MUL_F32), "V_MUL_F32");
   EXPECT_EQ(canonicalOpName(CanonicalOp::V_SUB_F32), "V_SUB_F32");
@@ -292,6 +297,10 @@ TEST_F(DecoderTest, OpcodeMapTagsTableEntries) {
             CanonicalOp::GLOBAL_LOAD_B32);
   EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalLoadDwordSaddrBytes)),
             CanonicalOp::GLOBAL_LOAD_B32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalStoreDwordVaddrBytes)),
+            CanonicalOp::GLOBAL_STORE_B32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalStoreDwordSaddrBytes)),
+            CanonicalOp::GLOBAL_STORE_B32);
   EXPECT_EQ(Map.lookup(opcodeOf(State, VAddF32Bytes)), CanonicalOp::V_ADD_F32);
   EXPECT_EQ(Map.lookup(opcodeOf(State, VMulF32Bytes)), CanonicalOp::V_MUL_F32);
   EXPECT_EQ(Map.lookup(opcodeOf(State, VSubF32Bytes)), CanonicalOp::V_SUB_F32);
