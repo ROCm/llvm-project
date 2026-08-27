@@ -198,6 +198,36 @@ if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
       $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:SymbolIndexTest>)
 endif()
 
+# -- IncludeMaterializationTest -----------------------------------------------
+#
+# Includes are served out of the in-memory VFS rather than real temp files, so
+# this runs the preprocessor with the filesystem pinned both ways via
+# amd_comgr_action_info_set_vfs. Public API only; AMDGPUCompiler's VFS state is
+# private and not exported from the shared library.
+
+add_executable(IncludeMaterializationTest
+  IncludeMaterializationTest.cpp)
+
+target_link_libraries(IncludeMaterializationTest PRIVATE
+  ${COMGR_GTEST_LIBS}
+  amd_comgr
+  ${LLVM_PTHREAD_LIB})
+
+target_compile_definitions(IncludeMaterializationTest PRIVATE
+  GTEST_NO_LLVM_SUPPORT=true)
+
+target_include_directories(IncludeMaterializationTest PRIVATE
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(IncludeMaterializationTest)
+
+if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
+  add_custom_command(TARGET IncludeMaterializationTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:IncludeMaterializationTest>)
+endif()
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
@@ -206,9 +236,11 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
   COMMAND $<TARGET_FILE:LoggerTests>
   COMMAND $<TARGET_FILE:MetadataCacheTest>
-  COMMAND $<TARGET_FILE:SymbolIndexTest>)
+  COMMAND $<TARGET_FILE:SymbolIndexTest>
+  COMMAND $<TARGET_FILE:IncludeMaterializationTest>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapProfileTests
-  DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest)
+  DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest
+  IncludeMaterializationTest)
 
 # The transpile-path test binaries, exported by hotswap/CMakeLists.txt in
 # COMGR_HOTSWAP_TEST_TARGETS (empty unless COMGR_ENABLE_HOTSWAP_TRANSPILE is on).
