@@ -534,8 +534,8 @@ static void codegen(const CodegenConfig &Conf, TargetMachine *TM,
     ModuleAnalysisManager MAM;
     PassBuilder PB(TM, PipelineTuningOptions(), std::nullopt, &PIC);
 
-    StandardInstrumentations SI(Mod.getContext(), Conf.DebugPassManager,
-                                Conf.VerifyEach);
+    StandardInstrumentations SI(Mod.getContext(), Conf.Conf.DebugPassManager,
+                                Conf.Conf.VerifyEach);
     SI.registerCallbacks(PIC, &MAM);
 
     TargetLibraryInfoImpl TLII(Mod.getTargetTriple(), TM->Options.VecLib);

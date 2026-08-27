@@ -1252,7 +1252,11 @@ void EmitAssemblyHelper::RunCodegenPipeline(
       return;
   }
 
-  if (CodeGenOpts.EnableNewPMCodeGen) {
+  if (CodeGenOpts.getEnableNewPMCodeGen() ==
+          CodeGenOptions::NewPMEnablementLevel::ForceEnable ||
+      (CodeGenOpts.getEnableNewPMCodeGen() ==
+           CodeGenOptions::NewPMEnablementLevel::Auto &&
+       TM->shouldDefaultToNewPM())) {
     RunCodegenPipelineNewPM(Action, OS, DwoOS, CGFT);
   } else {
     RunCodegenPipelineLegacy(Action, OS, DwoOS, CGFT);
@@ -1324,9 +1328,10 @@ void EmitAssemblyHelper::RunCodegenPipelineNewPM(
   MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
   MAM.registerPass([&] {
     const llvm::TargetOptions &Options = TM->Options;
-    return RuntimeLibraryAnalysis(TargetTriple, Options.ExceptionModel,
-                                  Options.FloatABIType, Options.EABIVersion,
-                                  Options.MCOptions.ABIName, Options.VecLib);
+    return RuntimeLibraryAnalysis(TheModule->getTargetTriple(),
+                                  Options.ExceptionModel, Options.FloatABIType,
+                                  Options.EABIVersion, Options.MCOptions.ABIName,
+                                  Options.VecLib);
   });
 
   PB.registerModuleAnalyses(MAM);
