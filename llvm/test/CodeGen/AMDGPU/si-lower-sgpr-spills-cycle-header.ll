@@ -42,9 +42,9 @@ define amdgpu_kernel void @loop_sgpr_spill_implicit_def_in_preheader(
   ; CHECK-NEXT: bb.1.loop.header:
   ; CHECK-NEXT:   successors: %bb.2(0x40000000), %bb.3(0x40000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   $sgpr6 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 3
+  ; CHECK-NEXT:   $sgpr4 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 3
   ; CHECK-NEXT:   $sgpr5 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 4
-  ; CHECK-NEXT:   $sgpr4 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 5
+  ; CHECK-NEXT:   $sgpr6 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 5
   ; CHECK-NEXT:   $sgpr7 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 6
   ; CHECK-NEXT:   $sgpr8 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 7
   ; CHECK-NEXT:   $sgpr9 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 8
@@ -57,13 +57,11 @@ define amdgpu_kernel void @loop_sgpr_spill_implicit_def_in_preheader(
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr9, 15, [[DEF]]
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr8, 16, [[DEF]]
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr7, 17, [[DEF]]
-  ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR $sgpr4, 18, [[DEF]]
-  ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR $sgpr5, 19, [[DEF]]
-  ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR $sgpr6, 20, [[DEF]]
-  ; CHECK-NEXT:   renamable $sgpr7 = S_MOV_B32 0
-  ; CHECK-NEXT:   S_CMP_EQ_U32 renamable $sgpr6, killed renamable $sgpr7, implicit-def $scc
-  ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr5, 21, [[DEF]]
-  ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr4, 22, [[DEF]]
+  ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr6, 18, [[DEF]]
+  ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr5, 19, [[DEF]]
+  ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR $sgpr4, 20, [[DEF]]
+  ; CHECK-NEXT:   renamable $sgpr5 = S_MOV_B32 0
+  ; CHECK-NEXT:   S_CMP_EQ_U32 renamable $sgpr4, killed renamable $sgpr5, implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_SCC1 %bb.2, implicit killed $scc
   ; CHECK-NEXT:   S_BRANCH %bb.3
   ; CHECK-NEXT: {{  $}}
@@ -80,7 +78,7 @@ define amdgpu_kernel void @loop_sgpr_spill_implicit_def_in_preheader(
   ; CHECK-NEXT:   $sgpr10 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 18
   ; CHECK-NEXT:   $sgpr11 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 19
   ; CHECK-NEXT:   renamable $sgpr13 = S_MOV_B32 1
-  ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR $sgpr13, 23, [[DEF]]
+  ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR $sgpr13, 21, [[DEF]]
   ; CHECK-NEXT:   renamable $sgpr11 = S_ADD_I32 renamable $sgpr11, renamable $sgpr13, implicit-def dead $scc
   ; CHECK-NEXT:   renamable $sgpr10 = S_ADD_I32 renamable $sgpr10, renamable $sgpr13, implicit-def dead $scc
   ; CHECK-NEXT:   renamable $sgpr9 = S_ADD_I32 renamable $sgpr9, renamable $sgpr13, implicit-def dead $scc
@@ -104,8 +102,8 @@ define amdgpu_kernel void @loop_sgpr_spill_implicit_def_in_preheader(
   ; CHECK-NEXT: bb.3.exit:
   ; CHECK-NEXT:   $sgpr4 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 0, implicit-def $sgpr4_sgpr5
   ; CHECK-NEXT:   $sgpr5 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 1
-  ; CHECK-NEXT:   $sgpr7 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 22
-  ; CHECK-NEXT:   $sgpr6 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 21
+  ; CHECK-NEXT:   $sgpr6 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 19
+  ; CHECK-NEXT:   $sgpr7 = SI_RESTORE_S32_FROM_VGPR [[DEF]], 18
   ; CHECK-NEXT:   renamable $sgpr6 = S_ADD_I32 killed renamable $sgpr6, killed renamable $sgpr7, implicit-def dead $scc
   ; CHECK-NEXT:   [[V_MOV_B32_e32_:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
   ; CHECK-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY killed renamable $sgpr6

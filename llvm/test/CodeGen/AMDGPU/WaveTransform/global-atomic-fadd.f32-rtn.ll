@@ -229,7 +229,7 @@ define amdgpu_ps float @global_atomic_fadd_f32_saddr_rtn_atomicrmw(ptr addrspace
   ; ITERATE-NEXT:   successors: %bb.3(0x80000000)
   ; ITERATE-NEXT: {{  $}}
   ; ITERATE-NEXT:   [[V_MOV_B32_e32_:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
-  ; ITERATE-NEXT:   [[COPY6:%[0-9]+]]:vgpr_32 = COPY %12
+  ; ITERATE-NEXT:   [[COPY6:%[0-9]+]]:vgpr_32 = COPY %9
   ; ITERATE-NEXT:   [[GLOBAL_ATOMIC_ADD_F32_SADDR_RTN:%[0-9]+]]:vgpr_32 = GLOBAL_ATOMIC_ADD_F32_SADDR_RTN killed [[V_MOV_B32_e32_]], [[COPY6]], [[COPY3]], 0, 1, implicit $exec :: (load store syncscope("wavefront") monotonic (s32) on %ir.ptr, addrspace 1)
   ; ITERATE-NEXT: {{  $}}
   ; ITERATE-NEXT: bb.3 (%ir-block.6):
@@ -268,7 +268,6 @@ define amdgpu_ps float @global_atomic_fadd_f32_saddr_rtn_atomicrmw(ptr addrspace
   ; ITERATE-NEXT:   successors: %bb.2(0x30000000), %bb.3(0x50000000)
   ; ITERATE-NEXT: {{  $}}
   ; ITERATE-NEXT:   [[PHI5:%[0-9]+]]:vgpr_32 = PHI [[V_WRITELANE_B32_]], %bb.5
-  ; ITERATE-NEXT:   [[PHI6:%[0-9]+]]:sgpr_32 = PHI [[S_ADD_F32_]], %bb.5
   ; ITERATE-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; ITERATE-NEXT:   [[V_MBCNT_LO_U32_B32_e64_:%[0-9]+]]:vgpr_32 = V_MBCNT_LO_U32_B32_e64 [[COPY5]], [[S_MOV_B32_3]], implicit $exec
   ; ITERATE-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 killed [[V_MBCNT_LO_U32_B32_e64_]], [[S_MOV_B32_3]], implicit $exec
