@@ -184,6 +184,9 @@ GCNSubtarget &GCNSubtarget::initializeSubtargetDependencies(const Triple &TT,
   LocalMemorySize = AMDGPU::IsaInfo::getLocalMemorySize(*this);
   AddressableLocalMemorySize =
       AMDGPU::IsaInfo::getAddressableLocalMemorySize(*this);
+  // Local fix rocFFT hipFFT
+  if (AddressableLocalMemorySize == 0)
+    AddressableLocalMemorySize = 32768;
   // LDS Allocation Granularity calculated in bytes from dwords
   LDSAllocationGranularity =
       AMDGPU::getLdsDwGranularity(*this) * sizeof(uint32_t);
