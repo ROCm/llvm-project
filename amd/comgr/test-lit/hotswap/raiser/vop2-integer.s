@@ -63,8 +63,8 @@ vop2_integer:
 ; IR-NEXT: = zext i24 {{.+}} to i32
 ; IR: = mul i32
 	v_mul_u32_u24_e32 v17, v0, v1
-; The high halves take the 48-bit product apart at 64 bits, shifting the way
-; the source signedness demands.
+; The high variants return bits [47:32] of the 48-bit product, sign- or
+; zero-extended to 32 bits.
 ; IR: = sext i24 {{.+}} to i64
 ; IR: [[HI_WIDE:%.+]] = mul i64
 ; IR-NEXT: [[HI:%.+]] = ashr i64 [[HI_WIDE]], 32
