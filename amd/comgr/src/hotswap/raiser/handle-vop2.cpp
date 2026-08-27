@@ -23,6 +23,8 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
+#include <cassert>
+
 using namespace llvm;
 
 namespace COMGR::hotswap {
@@ -178,12 +180,17 @@ static Error raiseCndMask(RaiseContext &Ctx, OpResolver &Op) {
 // incoming value as the accumulator.
 static Error raiseSignedDotAccumulate(RaiseContext &Ctx, OpResolver &Op,
                                       unsigned ElementWidthInBits) {
+  assert(Op.nSrcs() == 3 && "dot accumulate must have three sources");
   Expected<BinaryOperands> Args = readBinary32(Op);
   if (!Args) {
     return Args.takeError();
   }
+  Expected<Value *> AccumulatorSource = Op.src(2);
+  if (!AccumulatorSource) {
+    return AccumulatorSource.takeError();
+  }
   IntegerType *ElementTy = Ctx.B.getIntNTy(ElementWidthInBits);
-  Value *Accumulator = Ctx.registers().regFile().readReg32(Ctx.B, Args->Dst);
+  Value *Accumulator = *AccumulatorSource;
   for (unsigned I = 0; I != 32 / ElementWidthInBits; ++I) {
     unsigned BitOffset = I * ElementWidthInBits;
     Value *Lhs = Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Args->Src0, BitOffset),
