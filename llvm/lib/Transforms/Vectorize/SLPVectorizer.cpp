@@ -748,12 +748,6 @@ public:
   /// Construct a vectorizable tree that starts at \p Roots.
   void buildTree(ArrayRef<Value *> Roots);
 
-  /// Sets the narrowed reduction chain instructions, dropped together with
-  /// the reduction.
-  void setNarrowedChainInsts(ArrayRef<Instruction *> Insts) {
-    NarrowedChainInsts.insert(Insts.begin(), Insts.end());
-  }
-
   /// Returns true if the last buildTree() observed a may-alias memory
   /// dependency between two distinct, range-checkable base objects, i.e. a
   /// dependency that could be turned into a runtime alias check.
@@ -964,7 +958,6 @@ public:
     ExtraBitWidthNodes.clear();
     InstrElementSize.clear();
     UserIgnoreList = nullptr;
-    NarrowedChainInsts.clear();
     PostponedGathers.clear();
     ValueToGatherNodes.clear();
     TreeEntryToStridedPtrInfoMap.clear();
@@ -5548,10 +5541,6 @@ private:
 
   /// List of users to ignore during scheduling and that don't need extracting.
   const SmallDenseSet<Value *> *UserIgnoreList = nullptr;
-
-  /// Narrowed reduction chain instructions, dropped together with the
-  /// reduction. Subset of UserIgnoreList.
-  SmallPtrSet<Value *, 4> NarrowedChainInsts;
 
   /// A DenseMapInfo implementation for holding DenseMaps and DenseSets of
   /// sorted SmallVectors of unsigned.
@@ -26261,11 +26250,7 @@ Value *BoUpSLP::vectorizeTree(
           !(GatheredLoadsEntriesFirst.has_value() &&
             IE->Idx >= *GatheredLoadsEntriesFirst && getRootNode().isGather() &&
             is_contained(getRootNodeScalars(), I)) &&
-          !(!getRootNode().isGather() && getRootNode().isCopyableElement(I)) &&
-          // Dropped narrowed reduction chain instructions may still use
-          // non-root scalars; such uses must be cleared as well.
-          none_of(I->users(),
-                  [&](User *U) { return NarrowedChainInsts.contains(U); }))
+          !(!getRootNode().isGather() && getRootNode().isCopyableElement(I)))
         continue;
       SmallVector<SelectInst *> LogicalOpSelects;
       I->replaceUsesWithIf(PoisonValue::get(I->getType()), [&](Use &U) {
@@ -31360,12 +31345,10 @@ public:
               return RedValI && V.isDeleted(RedValI);
             }))
           break;
-        if (RK == ReductionOrdering::Ordered) {
+        if (RK == ReductionOrdering::Ordered)
           V.buildTree(VL);
-        } else {
+        else
           V.buildTree(VL, IgnoreList);
-          V.setNarrowedChainInsts(NarrowedChainInsts);
-        }
         if (V.isTreeTinyAndNotFullyVectorizable(RK ==
                                                 ReductionOrdering::Unordered)) {
           constexpr unsigned CandidatesLimit = 64;
