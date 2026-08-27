@@ -111,7 +111,7 @@ waitalu_kernel:
 	.type	monitor_sleep_kernel,@function
 
 monitor_sleep_kernel:
-; SLEEP: unsupported-opcode: s_monitor_sleep [SOPP]
+; SLEEP: UnsupportedOpcode: s_monitor_sleep [SOPP]
 	s_monitor_sleep 0
 	s_endpgm
 

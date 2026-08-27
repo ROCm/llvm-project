@@ -67,7 +67,7 @@ setprio_kernel:
 	.type	sleep_kernel,@function
 
 sleep_kernel:
-; SLEEP: unsupported-opcode: s_sleep [SOPP]
+; SLEEP: UnsupportedOpcode: s_sleep [SOPP]
 	s_sleep 0
 	s_endpgm
 
@@ -76,7 +76,7 @@ sleep_kernel:
 	.type	wakeup_kernel,@function
 
 wakeup_kernel:
-; WAKEUP: unsupported-opcode: s_wakeup [SOPP]
+; WAKEUP: UnsupportedOpcode: s_wakeup [SOPP]
 	s_wakeup
 	s_endpgm
 
