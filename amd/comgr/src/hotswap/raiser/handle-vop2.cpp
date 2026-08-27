@@ -32,34 +32,6 @@ namespace COMGR::hotswap {
 // Builds the result of a two-source instruction from its already-read sources.
 using BinaryBuilder = function_ref<Value *(IRBuilder<> &, Value *, Value *)>;
 
-namespace {
-
-// Destination and source values for a binary VOP2 instruction.
-struct BinaryOperands {
-  ParsedReg Dst;
-  Value *Src0;
-  Value *Src1;
-};
-
-} // namespace
-
-// Read the destination and two 32-bit sources of a binary instruction.
-static Expected<BinaryOperands> readBinary32(OpResolver &Op) {
-  Expected<ParsedReg> Dst = Op.dst();
-  if (!Dst) {
-    return Dst.takeError();
-  }
-  Expected<Value *> Src0 = Op.src(0);
-  if (!Src0) {
-    return Src0.takeError();
-  }
-  Expected<Value *> Src1 = Op.src(1);
-  if (!Src1) {
-    return Src1.takeError();
-  }
-  return BinaryOperands{*Dst, *Src0, *Src1};
-}
-
 static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
                               OpResolver &Op, Instruction::BinaryOps Opcode,
                               bool ReverseOperands) {
@@ -73,7 +45,7 @@ static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
     return Err;
   }
 
-  Expected<BinaryOperands> Args = readBinary32(Op);
+  Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args) {
     return Args.takeError();
   }
@@ -92,7 +64,7 @@ static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
 // destination.
 static Error raiseBinary32(RaiseContext &Ctx, OpResolver &Op,
                            BinaryBuilder Build) {
-  Expected<BinaryOperands> Args = readBinary32(Op);
+  Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args) {
     return Args.takeError();
   }
@@ -124,7 +96,7 @@ static void writeResultAndVCC(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
 // Raise a binary operation that writes carry or borrow to VCC.
 static Error raiseVCCBinary32(RaiseContext &Ctx, OpResolver &Op,
                               Intrinsic::ID IntrinsicID, bool ReverseOperands) {
-  Expected<BinaryOperands> Args = readBinary32(Op);
+  Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args) {
     return Args.takeError();
   }
@@ -143,7 +115,7 @@ static Error raiseVCCBinary32(RaiseContext &Ctx, OpResolver &Op,
 static Error raiseVCCInBinary32(RaiseContext &Ctx, OpResolver &Op,
                                 Intrinsic::ID IntrinsicID,
                                 bool ReverseOperands) {
-  Expected<BinaryOperands> Args = readBinary32(Op);
+  Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args) {
     return Args.takeError();
   }
@@ -166,7 +138,7 @@ static Error raiseVCCInBinary32(RaiseContext &Ctx, OpResolver &Op,
 
 // Select src1 when the current lane's VCC bit is set, otherwise src0.
 static Error raiseCndMask(RaiseContext &Ctx, OpResolver &Op) {
-  Expected<BinaryOperands> Args = readBinary32(Op);
+  Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args) {
     return Args.takeError();
   }
@@ -181,7 +153,7 @@ static Error raiseCndMask(RaiseContext &Ctx, OpResolver &Op) {
 static Error raiseSignedDotAccumulate(RaiseContext &Ctx, OpResolver &Op,
                                       unsigned ElementWidthInBits) {
   assert(Op.nSrcs() == 3 && "dot accumulate must have three sources");
-  Expected<BinaryOperands> Args = readBinary32(Op);
+  Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args) {
     return Args.takeError();
   }
@@ -211,19 +183,11 @@ static Error raiseSignedDotAccumulate(RaiseContext &Ctx, OpResolver &Op,
 // destination.
 static Error raiseBinary64(RaiseContext &Ctx, OpResolver &Op,
                            BinaryBuilder Build) {
-  Expected<ParsedReg> Dst = Op.dst();
-  if (!Dst) {
-    return Dst.takeError();
+  Expected<BinaryOperands> Args = Op.readBinary64();
+  if (!Args) {
+    return Args.takeError();
   }
-  Expected<Value *> Src0 = Op.src64(0);
-  if (!Src0) {
-    return Src0.takeError();
-  }
-  Expected<Value *> Src1 = Op.src64(1);
-  if (!Src1) {
-    return Src1.takeError();
-  }
-  Ctx.registers().writeReg64(*Dst, Build(Ctx.B, *Src0, *Src1));
+  Ctx.registers().writeReg64(Args->Dst, Build(Ctx.B, Args->Src0, Args->Src1));
   return Error::success();
 }
 

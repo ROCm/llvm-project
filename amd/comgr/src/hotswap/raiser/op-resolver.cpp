@@ -58,4 +58,30 @@ Expected<std::optional<ParsedReg>> OpResolver::srcReg(unsigned I) {
   return std::optional<ParsedReg>(*Reg);
 }
 
+Expected<BinaryOperands> OpResolver::readBinary32() {
+  Expected<ParsedReg> Dst = dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Src0 = src(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = src(1);
+  if (!Src1)
+    return Src1.takeError();
+  return BinaryOperands{*Dst, *Src0, *Src1};
+}
+
+Expected<BinaryOperands> OpResolver::readBinary64() {
+  Expected<ParsedReg> Dst = dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Src0 = src64(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = src64(1);
+  if (!Src1)
+    return Src1.takeError();
+  return BinaryOperands{*Dst, *Src0, *Src1};
+}
+
 } // namespace COMGR::hotswap
