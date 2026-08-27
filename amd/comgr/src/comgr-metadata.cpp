@@ -294,7 +294,6 @@ struct IsaInfo {
   const char *Processor;
   unsigned ElfMachine;
   bool TrapHandlerEnabled;
-  bool ImageSupport;
   unsigned LDSBankCount;
   unsigned MaxFlatWorkGroupSize;
   unsigned VGPRAllocGranule;
@@ -303,13 +302,12 @@ struct IsaInfo {
   unsigned AddressableNumVGPRs;
 } IsaInfos[] = {
 #define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, ELF_MACHINE,                      \
-                   TRAP_HANDLER_ENABLED, IMAGE_SUPPORT, LDS_BANK_COUNT,        \
+                   TRAP_HANDLER_ENABLED, LDS_BANK_COUNT,                       \
                    MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
                    TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
-  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR,          ELF::ELF_MACHINE,          \
-   TRAP_HANDLER_ENABLED,        IMAGE_SUPPORT,      LDS_BANK_COUNT,            \
-   MAX_FLAT_WORK_GROUP_SIZE,    VGPR_ALLOC_GRANULE, TOTAL_NUM_VGPRS,           \
-   ADDRESSABLE_NUM_VGPRS},
+  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR,       ELF::ELF_MACHINE,             \
+   TRAP_HANDLER_ENABLED,        LDS_BANK_COUNT,  MAX_FLAT_WORK_GROUP_SIZE,     \
+   VGPR_ALLOC_GRANULE,          TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS},
 #include "comgr-isa-metadata.def"
 };
 
@@ -531,8 +529,8 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   auto Info = IsaInfos[IsaIndex];
   Root["TrapHandlerEnabled"] =
       Doc.getNode(std::to_string(Info.TrapHandlerEnabled), /*Copy=*/true);
-  Root["ImageSupport"] =
-      Doc.getNode(std::to_string(Info.ImageSupport), /*Copy=*/true);
+  Root["ImageSupport"] = Doc.getNode(
+      std::to_string(Features.test(AMDGPU::FEAT_IMAGE_INSTS)), /*Copy=*/true);
   Root["LocalMemorySize"] = Doc.getNode(
       std::to_string(AMDGPU::getMaxHWAddressableLocalMemorySize(Kind)),
       /*Copy=*/true);

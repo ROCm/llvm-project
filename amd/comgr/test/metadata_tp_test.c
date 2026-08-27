@@ -44,6 +44,8 @@ int main(int argc, char *argv[]) {
   checkError(Status, "amd_comgr_get_isa_metadata");
   checkMetadataString(Gfx950Meta, "LocalMemorySize", "163840");
   checkMetadataString(Gfx950Meta, "LDSBankCount", "64");
+  // gfx950 has no image instructions.
+  checkMetadataString(Gfx950Meta, "ImageSupport", "0");
   Status = amd_comgr_destroy_metadata(Gfx950Meta);
   checkError(Status, "amd_comgr_destroy_metadata");
 
@@ -52,6 +54,7 @@ int main(int argc, char *argv[]) {
   Status = amd_comgr_get_isa_metadata("amdgcn-amd-amdhsa--gfx600", &Gfx600Meta);
   checkError(Status, "amd_comgr_get_isa_metadata");
   checkMetadataString(Gfx600Meta, "LocalMemorySize", "32768");
+  checkMetadataString(Gfx600Meta, "ImageSupport", "1");
   Status = amd_comgr_destroy_metadata(Gfx600Meta);
   checkError(Status, "amd_comgr_destroy_metadata");
 
