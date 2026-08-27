@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=amdgpu11.00 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GCN,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu11.00 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GCN,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu11.00 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GCN,FUNC %s
 ; RUN: not --crash llc -mtriple=amdgpu12.00 -amdgpu-enable-vopd=0 < %s 2>&1 | FileCheck -check-prefix=GFX12-ERR %s
 
 ; GFX12-ERR: LLVM ERROR: Cannot select: {{.*}} = AMDGPUISD::DS_ORDERED_COUNT

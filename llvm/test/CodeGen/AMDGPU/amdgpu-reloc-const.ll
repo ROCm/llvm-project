@@ -1,8 +1,8 @@
 ; RUN: llc -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=GCN %s
 ; RUN: llc -mtriple=amdgpu9.00--amdpal -filetype=obj -o %t.o < %s && llvm-readobj -r %t.o | FileCheck --check-prefix=ELF %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00--amdpal -filetype=obj -o %t.o < %s && llvm-readobj -r %t.o | FileCheck --check-prefix=ELF %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.00--amdpal -filetype=obj -o %t.o < %s && llvm-readobj -r %t.o | FileCheck --check-prefix=ELF %s
 
 ; GCN-LABEL: {{^}}ps_main:
 ; GCN: v_mov_b32_{{.*}} v[[relocreg:[0-9]+]], doff_0_0_b@abs32@lo

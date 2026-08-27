@@ -4,10 +4,10 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX9,GFX9-SDAG %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.00 < %s | FileCheck -check-prefixes=GCN,GFX11,GFX11-SDAG %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefixes=GCN,GFX6,GFX6-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,GFX8,GFX8-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX9,GFX9-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 < %s | FileCheck -check-prefixes=GCN,GFX11,GFX11-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefixes=GCN,GFX6,GFX6-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,GFX8,GFX8-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX9,GFX9-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 < %s | FileCheck -check-prefixes=GCN,GFX11,GFX11-GISEL %s
 
 ; define double @test_ldexp_f64_i16(ptr addrspace(1) %out, double %a, i16 %b) #0 {
 ;   %result = call double @llvm.experimental.constrained.ldexp.f64.i16(double %a, i16 %b, metadata !"round.dynamic", metadata !"fpexcept.strict")

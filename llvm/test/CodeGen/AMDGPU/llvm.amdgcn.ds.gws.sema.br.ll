@@ -1,15 +1,15 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu6.00-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,LOOP %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu6.00-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,LOOP %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu6.00-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,LOOP %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu7.01-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,LOOP %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.01-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,LOOP %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu7.01-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,LOOP %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu8.03-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,LOOP %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.03-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,LOOP %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.03-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,LOOP %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.00-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,NOLOOP %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,NOLOOP %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,NOLOOP %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu10.10-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,NOLOOP %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.10-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,NOLOOP %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.10-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,NOLOOP %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.00-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,NOLOOP %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,NOLOOP %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00-mesa-mesa3d < %s | FileCheck -check-prefixes=GCN,NOLOOP %s
 
 ; GCN-LABEL: {{^}}gws_sema_br_offset0:
 ; NOLOOP-DAG: s_load_{{dword|b32}} [[BAR_NUM:s[0-9]+]]

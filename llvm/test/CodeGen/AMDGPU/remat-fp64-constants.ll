@@ -1,5 +1,5 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00-amd-amdhsa --stress-regalloc=10 < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00-amd-amdhsa --stress-regalloc=10 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.00-amd-amdhsa --stress-regalloc=10 < %s | FileCheck -check-prefix=GCN %s
 
 ; Rematerialization test for fp64 constants (w/ intentionally high register pressure).
 ; Check to make sure we have at least six constant MOVs, not necessarily consecutive, inside the loop.

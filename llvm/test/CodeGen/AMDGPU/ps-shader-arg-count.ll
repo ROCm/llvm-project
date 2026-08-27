@@ -1,5 +1,5 @@
-;RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 < %s -mtriple=amdgpu10.10-pal | FileCheck %s --check-prefixes=CHECK
-;RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 < %s -mtriple=amdgpu10.10-mesa-mesa3d | FileCheck %s --check-prefixes=CHECK
+;RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 < %s -mtriple=amdgpu10.10-pal | FileCheck %s --check-prefixes=CHECK
+;RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 < %s -mtriple=amdgpu10.10-mesa-mesa3d | FileCheck %s --check-prefixes=CHECK
 ;RUN: llc -global-isel=0 < %s -mtriple=amdgpu10.10-pal | FileCheck %s --check-prefixes=CHECK
 ;RUN: llc -global-isel=0 < %s -mtriple=amdgpu10.10-mesa-mesa3d | FileCheck %s --check-prefixes=CHECK
 

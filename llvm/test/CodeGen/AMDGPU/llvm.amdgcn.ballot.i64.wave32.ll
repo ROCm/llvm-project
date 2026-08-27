@@ -2,9 +2,9 @@
 ; RUN: llc -mtriple=amdgpu10.10 -global-isel=0 < %s | FileCheck %s --check-prefixes=CHECK,DAGISEL
 ; RUN: llc -mtriple=amdgpu11.00 -global-isel=0 -mattr=+real-true16 -amdgpu-enable-delay-alu=0 < %s | FileCheck %s --check-prefixes=CHECK,DAGISEL,DAGISEL-TRUE16
 ; RUN: llc -mtriple=amdgpu11.00 -global-isel=0 -mattr=-real-true16 -amdgpu-enable-delay-alu=0 < %s | FileCheck %s --check-prefixes=CHECK,DAGISEL,DAGISEL-FAKE16
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu10.10 -global-isel < %s | FileCheck %s --check-prefixes=CHECK,GISEL
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu11.00 -global-isel -mattr=+real-true16 -amdgpu-enable-delay-alu=0 < %s | FileCheck %s --check-prefixes=CHECK,GISEL
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu11.00 -global-isel -mattr=-real-true16 -amdgpu-enable-delay-alu=0 < %s | FileCheck %s --check-prefixes=CHECK,GISEL
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu10.10 -global-isel < %s | FileCheck %s --check-prefixes=CHECK,GISEL
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu11.00 -global-isel -mattr=+real-true16 -amdgpu-enable-delay-alu=0 < %s | FileCheck %s --check-prefixes=CHECK,GISEL
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu11.00 -global-isel -mattr=-real-true16 -amdgpu-enable-delay-alu=0 < %s | FileCheck %s --check-prefixes=CHECK,GISEL
 
 declare i64 @llvm.amdgcn.ballot.i64(i1)
 declare i64 @llvm.ctpop.i64(i64)

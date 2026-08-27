@@ -2,8 +2,8 @@
 ; RUN: llc -mtriple=amdgpu6.00 < %s | FileCheck -enable-var-scope -check-prefix=GFX7 %s
 ; RUN: llc -mtriple=amdgpu8.02 < %s | FileCheck -enable-var-scope -check-prefix=GFX8 %s
 ; RUN: llc -mtriple=amdgpu10.31 < %s | FileCheck -enable-var-scope -check-prefix=GFX10 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu8.02 < %s | FileCheck -enable-var-scope -check-prefix=GFX8-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu10.31 < %s | FileCheck -enable-var-scope -check-prefix=GFX10-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu8.02 < %s | FileCheck -enable-var-scope -check-prefix=GFX8-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu10.31 < %s | FileCheck -enable-var-scope -check-prefix=GFX10-GISEL %s
 
 ; BFI_INT Definition pattern from ISA docs
 ; (y & x) | (z & ~x)

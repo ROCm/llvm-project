@@ -1,5 +1,5 @@
 ; RUN: not llc -global-isel=0 -mtriple=amdgpu9.00-amd-amdhsa -filetype=null %s 2>&1 | FileCheck %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00-amd-amdhsa -filetype=null %s 2>&1 | FileCheck %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.00-amd-amdhsa -filetype=null %s 2>&1 | FileCheck %s
 
 ; FIXME: To actually support stackguard, need to fix intrinsic to
 ; return pointer in any address space.

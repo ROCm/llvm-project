@@ -5,7 +5,7 @@
 ; RUN: llc -mtriple=amdgpu11.00 -mattr=+real-true16 -mattr=-flat-for-global -amdgpu-scalarize-global-loads=0 < %s | FileCheck -enable-var-scope -check-prefixes=GFX11,GFX11-TRUE16 %s
 ; RUN: llc -mtriple=amdgpu11.00 -mattr=-real-true16 -mattr=-flat-for-global -amdgpu-scalarize-global-loads=0 < %s | FileCheck -enable-var-scope -check-prefixes=GFX11,GFX11-FAKE16 %s
 ; RUN: llc -mtriple=amdgpu8.03-amd-amdhsa -mattr=-flat-for-global -amdgpu-scalarize-global-loads=0 < %s | FileCheck -enable-var-scope -check-prefixes=HSA %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu9.00 -global-isel=1 -mattr=-flat-for-global -amdgpu-scalarize-global-loads=0 < %s | FileCheck -enable-var-scope -check-prefixes=GFX9,GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00 -global-isel=1 -mattr=-flat-for-global -amdgpu-scalarize-global-loads=0 < %s | FileCheck -enable-var-scope -check-prefixes=GFX9,GISEL %s
 
 declare hidden void @external_void_func_i1(i1) #0
 declare hidden void @external_void_func_i1_signext(i1 signext) #0

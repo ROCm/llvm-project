@@ -2,10 +2,10 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu10.30 < %s | FileCheck -check-prefixes=CHECK,SDAG %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu10.10 < %s | FileCheck -check-prefixes=CHECK,SDAG %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.00 -mattr=+real-true16 < %s | FileCheck -check-prefixes=CHECK,GFX11-SDAG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 < %s | FileCheck -check-prefixes=CHECK,GFX11-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.30 < %s | FileCheck -check-prefixes=CHECK,GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 < %s | FileCheck -check-prefixes=CHECK,GFX11-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.30 < %s | FileCheck -check-prefixes=CHECK,GISEL %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.00 < %s | FileCheck -check-prefixes=GFX12,GFX12-SDAG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00 < %s | FileCheck -check-prefixes=GFX12,GFX12-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00 < %s | FileCheck -check-prefixes=GFX12,GFX12-GISEL %s
 
 define amdgpu_gs half @v_fptrunc_round_f32_to_f16_tonearest(float %a) {
 ; SDAG-LABEL: v_fptrunc_round_f32_to_f16_tonearest:

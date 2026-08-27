@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu8.02 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu8.02 < %s | FileCheck -check-prefix=GCN %s
 
 declare void @llvm.amdgcn.s.sleep(i32) #0
 

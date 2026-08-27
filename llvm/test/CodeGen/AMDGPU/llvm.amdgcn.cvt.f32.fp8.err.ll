@@ -11,14 +11,14 @@
 ; RUN: not --crash llc -global-isel=0 -mtriple=amdgpu9.0a -filetype=null %t/bf8-byte1-err.ll 2>&1 | FileCheck -check-prefix=ERR-BF8-BYTE1-ERR %s
 
 
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.08 -filetype=null %t/fp8-byte0-err.ll 2>&1 | FileCheck -check-prefix=ERR-FP8-BYTE0-ERR-GISEL %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.08 -filetype=null %t/fp8-byte1-err.ll 2>&1 | FileCheck -check-prefix=ERR-FP8-BYTE1-ERR-GISEL %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.08 -filetype=null %t/bf8-byte0-err.ll 2>&1 | FileCheck -check-prefix=ERR-BF8-BYTE0-ERR-GISEL %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.08 -filetype=null %t/bf8-byte1-err.ll 2>&1 | FileCheck -check-prefix=ERR-BF8-BYTE1-ERR-GISEL %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.0a -filetype=null %t/fp8-byte0-err.ll 2>&1 | FileCheck -check-prefix=ERR-FP8-BYTE0-ERR-GISEL %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.0a -filetype=null %t/fp8-byte1-err.ll 2>&1 | FileCheck -check-prefix=ERR-FP8-BYTE1-ERR-GISEL %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.0a -filetype=null %t/bf8-byte0-err.ll 2>&1 | FileCheck -check-prefix=ERR-BF8-BYTE0-ERR-GISEL %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.0a -filetype=null %t/bf8-byte1-err.ll 2>&1 | FileCheck -check-prefix=ERR-BF8-BYTE1-ERR-GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.08 -filetype=null %t/fp8-byte0-err.ll 2>&1 | FileCheck -check-prefix=ERR-FP8-BYTE0-ERR-GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.08 -filetype=null %t/fp8-byte1-err.ll 2>&1 | FileCheck -check-prefix=ERR-FP8-BYTE1-ERR-GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.08 -filetype=null %t/bf8-byte0-err.ll 2>&1 | FileCheck -check-prefix=ERR-BF8-BYTE0-ERR-GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.08 -filetype=null %t/bf8-byte1-err.ll 2>&1 | FileCheck -check-prefix=ERR-BF8-BYTE1-ERR-GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.0a -filetype=null %t/fp8-byte0-err.ll 2>&1 | FileCheck -check-prefix=ERR-FP8-BYTE0-ERR-GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.0a -filetype=null %t/fp8-byte1-err.ll 2>&1 | FileCheck -check-prefix=ERR-FP8-BYTE1-ERR-GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.0a -filetype=null %t/bf8-byte0-err.ll 2>&1 | FileCheck -check-prefix=ERR-BF8-BYTE0-ERR-GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.0a -filetype=null %t/bf8-byte1-err.ll 2>&1 | FileCheck -check-prefix=ERR-BF8-BYTE1-ERR-GISEL %s
 
 
 

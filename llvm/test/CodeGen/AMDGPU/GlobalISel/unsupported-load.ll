@@ -1,4 +1,4 @@
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -o - < %s 2>&1 | FileCheck -check-prefix=GISEL-ERR %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -o - < %s 2>&1 | FileCheck -check-prefix=GISEL-ERR %s
 
 ; GISEL-ERR: LLVM ERROR: cannot select: %{{[0-9]+}}:vgpr_32(f32) = G_LOAD %{{[0-9]+}}:vgpr(p8) :: (load (f32) from %ir.rsrc, addrspace 8)
 

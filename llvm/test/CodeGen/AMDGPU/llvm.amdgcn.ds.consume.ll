@@ -1,11 +1,11 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefixes=GCN,SI,NOTGFX9 %s
 ; XUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefixes=GCN,SI,NOTGFX9 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu7.04 < %s | FileCheck -check-prefixes=GCN,CIPLUS,NOTGFX9 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.04 < %s | FileCheck -check-prefixes=GCN,CIPLUS,NOTGFX9 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu7.04 < %s | FileCheck -check-prefixes=GCN,CIPLUS,NOTGFX9 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,CIPLUS,NOTGFX9 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,CIPLUS,NOTGFX9 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,CIPLUS,NOTGFX9 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,CIPLUS,GFX9 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,CIPLUS,GFX9 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,CIPLUS,GFX9 %s
 
 ; GCN-LABEL: {{^}}ds_consume_lds:
 ; GCN: s_load_dword [[PTR:s[0-9]+]]

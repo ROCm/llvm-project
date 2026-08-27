@@ -1,8 +1,8 @@
 ; RUN: opt -mtriple=amdgpu-amd-amdhsa -passes=amdgpu-attributor %s -o %t.bc
 ; RUN: llc -mtriple=amdgpu12.50 %t.bc -o - | FileCheck --check-prefixes=CHECK-UNKNOWN %s
 ; RUN: llc -mtriple=amdgpu12.50-unknown-mesa3d %t.bc -o - | FileCheck -check-prefixes=CHECK-MESA3D %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu12.50 %t.bc -o - | FileCheck --check-prefixes=CHECK-G-UNKNOWN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu12.50-unknown-mesa3d %t.bc -o - | FileCheck -check-prefixes=CHECK-G-MESA3D %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu12.50 %t.bc -o - | FileCheck --check-prefixes=CHECK-G-UNKNOWN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu12.50-unknown-mesa3d %t.bc -o - | FileCheck -check-prefixes=CHECK-G-MESA3D %s
 
 declare i32 @llvm.amdgcn.cluster.id.x() #0
 declare i32 @llvm.amdgcn.cluster.id.y() #0

@@ -3,7 +3,7 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu8.02 -denormal-fp-math-f32=preserve-sign < %s | FileCheck -check-prefixes=GFX8 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu8.02 -denormal-fp-math-f32=ieee < %s | FileCheck -check-prefixes=GFX8 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.00 -denormal-fp-math-f32=ieee < %s | FileCheck -check-prefixes=GFX9-SDAG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00 -denormal-fp-math-f32=ieee < %s | FileCheck -check-prefixes=GFX9-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00 -denormal-fp-math-f32=ieee < %s | FileCheck -check-prefixes=GFX9-GISEL %s
 
 declare float @llvm.amdgcn.fmad.ftz.f32(float %a, float %b, float %c)
 

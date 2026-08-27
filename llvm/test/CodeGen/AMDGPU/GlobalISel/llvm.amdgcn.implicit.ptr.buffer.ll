@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu6.00-mesa-mesa3d < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu6.00-mesa-mesa3d < %s | FileCheck -check-prefix=GCN %s
 
 ; FIXME: Dropped parts from original test
 

@@ -4,11 +4,11 @@
 ; RUN: llc -mtriple=amdgpu11.00 -mattr=-flat-for-global,-real-true16 < %s | FileCheck -check-prefix=SDAG-GFX11-FAKE16 %s
 ; RUN: llc -mtriple=amdgpu12.00 -mattr=-flat-for-global,+real-true16 < %s | FileCheck -check-prefix=SDAG-GFX12-TRUE16 %s
 ; RUN: llc -mtriple=amdgpu12.00 -mattr=-flat-for-global,-real-true16 < %s | FileCheck -check-prefix=SDAG-GFX12-FAKE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu8.03 -global-isel=1 -mattr=-flat-for-global < %s | FileCheck -check-prefix=GISEL-GCN -check-prefix=GISEL-VI %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu11.00 -global-isel=1 -mattr=-flat-for-global,+real-true16 < %s | FileCheck -check-prefix=GISEL-GFX11-TRUE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu11.00 -global-isel=1 -mattr=-flat-for-global,-real-true16 < %s | FileCheck -check-prefix=GISEL-GFX11-FAKE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu12.00 -global-isel=1 -mattr=-flat-for-global,+real-true16 < %s | FileCheck -check-prefix=GISEL-GFX12-TRUE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu12.00 -global-isel=1 -mattr=-flat-for-global,-real-true16 < %s | FileCheck -check-prefix=GISEL-GFX12-FAKE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.03 -global-isel=1 -mattr=-flat-for-global < %s | FileCheck -check-prefix=GISEL-GCN -check-prefix=GISEL-VI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu11.00 -global-isel=1 -mattr=-flat-for-global,+real-true16 < %s | FileCheck -check-prefix=GISEL-GFX11-TRUE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu11.00 -global-isel=1 -mattr=-flat-for-global,-real-true16 < %s | FileCheck -check-prefix=GISEL-GFX11-FAKE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu12.00 -global-isel=1 -mattr=-flat-for-global,+real-true16 < %s | FileCheck -check-prefix=GISEL-GFX12-TRUE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu12.00 -global-isel=1 -mattr=-flat-for-global,-real-true16 < %s | FileCheck -check-prefix=GISEL-GFX12-FAKE16 %s
 
 declare half @llvm.amdgcn.rsq.f16(half %a)
 

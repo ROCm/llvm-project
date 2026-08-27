@@ -1,6 +1,6 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu6.00--amdpal < %s | FileCheck -check-prefix=GCN -check-prefix=SI -enable-var-scope %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.02--amdpal < %s | FileCheck -check-prefix=GCN -check-prefix=VI -enable-var-scope %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00--amdpal < %s | FileCheck -check-prefix=GCN -check-prefix=GFX9 -enable-var-scope %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu6.00--amdpal < %s | FileCheck -check-prefix=GCN -check-prefix=SI -enable-var-scope %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.02--amdpal < %s | FileCheck -check-prefix=GCN -check-prefix=VI -enable-var-scope %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00--amdpal < %s | FileCheck -check-prefix=GCN -check-prefix=GFX9 -enable-var-scope %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu6.00--amdpal < %s | FileCheck -check-prefix=GCN -check-prefix=SI -enable-var-scope %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu8.02--amdpal < %s | FileCheck -check-prefix=GCN -check-prefix=VI -enable-var-scope %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.00--amdpal < %s | FileCheck -check-prefix=GCN -check-prefix=GFX9 -enable-var-scope %s

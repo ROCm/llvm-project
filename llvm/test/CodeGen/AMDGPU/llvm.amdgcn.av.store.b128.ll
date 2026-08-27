@@ -7,12 +7,12 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.50 < %s | FileCheck -check-prefix=GFX1250-SDAG %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu13.10 < %s | FileCheck -check-prefix=GFX1310-SDAG %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.06  < %s | FileCheck -check-prefix=GFX906-ISEL  %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.42  < %s | FileCheck -check-prefix=GFX942-ISEL  %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.12 < %s | FileCheck -check-prefix=GFX1012-ISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 < %s | FileCheck -check-prefix=GFX1100-ISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.50 < %s | FileCheck -check-prefix=GFX1250-ISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu13.10 < %s | FileCheck -check-prefix=GFX1310-ISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.06  < %s | FileCheck -check-prefix=GFX906-ISEL  %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.42  < %s | FileCheck -check-prefix=GFX942-ISEL  %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.12 < %s | FileCheck -check-prefix=GFX1012-ISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 < %s | FileCheck -check-prefix=GFX1100-ISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.50 < %s | FileCheck -check-prefix=GFX1250-ISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu13.10 < %s | FileCheck -check-prefix=GFX1310-ISEL %s
 
 ;;==============================================================================
 ;; A few basic test cases

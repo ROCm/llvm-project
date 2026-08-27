@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu7.00-amd-amdhsa -global-isel -stop-after=irtranslator -o - %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu7.00-amd-amdhsa -global-isel -stop-after=irtranslator -o - %s | FileCheck %s
 
 ; Make sure that an intrinsic declaration that has side effects, but
 ; called with a readnone call site is translated to

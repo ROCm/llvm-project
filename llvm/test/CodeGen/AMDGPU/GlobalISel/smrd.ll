@@ -1,8 +1,8 @@
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -mtriple=amdgpu6.00 -show-mc-encoding -global-isel | FileCheck --check-prefixes=SI,GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -mtriple=amdgpu7.04 -show-mc-encoding -global-isel | FileCheck --check-prefixes=CI,GCN,SICIVI %s
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -mtriple=amdgpu8.02 -show-mc-encoding -global-isel | FileCheck --check-prefixes=VI,GCN,SICIVI %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu9.00 -show-mc-encoding -global-isel < %s | FileCheck --check-prefixes=GFX9_10,GCN,VIGFX9_10,SIVIGFX9_10  %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu10.10 -show-mc-encoding -global-isel < %s | FileCheck --check-prefixes=GFX9_10,GCN,VIGFX9_10,SIVIGFX9_10  %s
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -mtriple=amdgpu6.00 -show-mc-encoding -global-isel | FileCheck --check-prefixes=SI,GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -mtriple=amdgpu7.04 -show-mc-encoding -global-isel | FileCheck --check-prefixes=CI,GCN,SICIVI %s
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -mtriple=amdgpu8.02 -show-mc-encoding -global-isel | FileCheck --check-prefixes=VI,GCN,SICIVI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.00 -show-mc-encoding -global-isel < %s | FileCheck --check-prefixes=GFX9_10,GCN,VIGFX9_10,SIVIGFX9_10  %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu10.10 -show-mc-encoding -global-isel < %s | FileCheck --check-prefixes=GFX9_10,GCN,VIGFX9_10,SIVIGFX9_10  %s
 
 ; SMRD load with an immediate offset.
 ; GCN-LABEL: {{^}}smrd0:

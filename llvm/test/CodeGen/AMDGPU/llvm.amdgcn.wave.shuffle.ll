@@ -9,17 +9,17 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.00-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX11-W64 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.00-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX12-W64 %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.01-amd-amdhsa < %s | FileCheck -check-prefixes=GFX8-W32-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX9-W32-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX11-W32-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX12-W32-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.01-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX8-W64-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX9-W64-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX11-W64-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX12-W64-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -amdgpu-enable-uniform-intrinsic-combine=0 -mtriple=amdgpu12.00-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX12-W64-GISEL-NO-WIC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.01-amd-amdhsa < %s | FileCheck -check-prefixes=GFX8-W32-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX9-W32-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX11-W32-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX12-W32-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.01-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX8-W64-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX9-W64-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX11-W64-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX12-W64-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -amdgpu-enable-uniform-intrinsic-combine=0 -mtriple=amdgpu12.00-amd-amdhsa -mattr=+wavefrontsize64 < %s | FileCheck -check-prefixes=GFX12-W64-GISEL-NO-WIC %s
 ; RUN: not --crash llc -global-isel=0 -mtriple=amdgpu6.00-amd-amdhsa -filetype=null %s 2>&1 | FileCheck -check-prefixes=GFX6-SDAG-ERR %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu6.00-amd-amdhsa -filetype=null %s 2>&1 | FileCheck -check-prefixes=GFX6-GISEL-ERR %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu6.00-amd-amdhsa -filetype=null %s 2>&1 | FileCheck -check-prefixes=GFX6-GISEL-ERR %s
 
 
 
@@ -27,7 +27,7 @@
 ; GFX6-GISEL-ERR: LLVM ERROR: cannot select: %10:vgpr_32(f32) = G_INTRINSIC_CONVERGENT intrinsic(@llvm.amdgcn.wave.shuffle), %0:vgpr(f32), %1:vgpr(i32) (in function: test_wave_shuffle_float)
 
 ; RUN: not --crash llc -global-isel=0 -mtriple=amdgpu7.00-amd-amdhsa -filetype=null %s 2>&1 | FileCheck -check-prefixes=GFX7-SDAG-ERR %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.00-amd-amdhsa -filetype=null %s 2>&1 | FileCheck -check-prefixes=GFX7-GISEL-ERR %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu7.00-amd-amdhsa -filetype=null %s 2>&1 | FileCheck -check-prefixes=GFX7-GISEL-ERR %s
 
 ; GFX7-SDAG-ERR: LLVM ERROR: Cannot select: intrinsic %llvm.amdgcn.ds.bpermute
 ; GFX7-GISEL-ERR: LLVM ERROR: cannot select: %10:vgpr_32(f32) = G_INTRINSIC_CONVERGENT intrinsic(@llvm.amdgcn.wave.shuffle), %0:vgpr(f32), %1:vgpr(i32) (in function: test_wave_shuffle_float)

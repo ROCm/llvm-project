@@ -2,9 +2,9 @@
 ; RUN: llc -mtriple=amdgpu7.00--amdhsa < %s | FileCheck -check-prefix=GCN %s
 ; RUN: llc -mtriple=amdgpu8.03--amdhsa < %s | FileCheck -check-prefix=GCN %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu7.00--amdhsa < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu8.03--amdhsa < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu7.00--amdhsa < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu8.03--amdhsa < %s | FileCheck -check-prefix=GCN %s
 
 
 ; GCN-LABEL: {{^}}s_getreg_test:

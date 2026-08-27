@@ -7,13 +7,13 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.00 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12,GFX12-SDAG,GFX12-SDAG-TRUE16 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12,GFX12-SDAG,GFX12-SDAG-FAKE16 %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefixes=GCN,GFX6,GFX6-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,GFX8,GFX8-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX9,GFX9-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GCN,GFX11,GFX11-GISEL,GFX11-GISEL-TRUE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GCN,GFX11,GFX11-GISEL,GFX11-GISEL-FAKE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12,GFX12-GISEL,GFX12-GISEL-TRUE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12,GFX12-GISEL,GFX12-GISEL-FAKE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefixes=GCN,GFX6,GFX6-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=GCN,GFX8,GFX8-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX9,GFX9-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GCN,GFX11,GFX11-GISEL,GFX11-GISEL-TRUE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GCN,GFX11,GFX11-GISEL,GFX11-GISEL-FAKE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12,GFX12-GISEL,GFX12-GISEL-TRUE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12,GFX12-GISEL,GFX12-GISEL-FAKE16 %s
 
 define { half, i32 } @test_frexp_f16_i32(half %a) {
 ; GFX6-SDAG-LABEL: test_frexp_f16_i32:

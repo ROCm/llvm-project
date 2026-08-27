@@ -3,7 +3,7 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu7.04 < %s | FileCheck %s -check-prefix=SI
 ; RUN: llc -global-isel=0 -mtriple=amdgpu8.03 < %s | FileCheck %s -check-prefix=VI
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.00 < %s | FileCheck %s -check-prefixes=GFX9,GFX9-SDAG
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck %s -check-prefixes=GFX9,GFX9-GISEL
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck %s -check-prefixes=GFX9,GFX9-GISEL
 
 ; TODO: fneg/fabs folding for GlobalISel
 

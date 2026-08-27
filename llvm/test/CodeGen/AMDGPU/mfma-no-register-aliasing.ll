@@ -3,7 +3,7 @@
 ; RUN: llc -mtriple=amdgpu9.0a < %s | FileCheck -enable-var-scope --check-prefixes=GREEDY90A %s
 ; RUN: llc -mtriple=amdgpu9.0a -early-live-intervals < %s | FileCheck -enable-var-scope --check-prefixes=GREEDY90A %s
 ; RUN: llc -mtriple=amdgpu9.42 < %s | FileCheck -enable-var-scope --check-prefixes=GREEDY942 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.0a < %s | FileCheck -enable-var-scope --check-prefixes=GREEDY90A-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.0a < %s | FileCheck -enable-var-scope --check-prefixes=GREEDY90A-GISEL %s
 ; RUN: llc -mtriple=amdgpu9.0a -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck -enable-var-scope --check-prefixes=FAST90A %s
 
 ; This is better with 90a

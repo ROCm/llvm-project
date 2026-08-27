@@ -1,8 +1,8 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu6.00 -global-isel -stop-after=instruction-select -o - %s | FileCheck -check-prefixes=GCN,GFX8 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu8.02 -global-isel -stop-after=instruction-select -o - %s | FileCheck -check-prefixes=GCN,GFX9 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 -global-isel -stop-after=instruction-select -o - %s | FileCheck -check-prefixes=GCN,GFX8 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 -global-isel -stop-after=instruction-select -o - %s | FileCheck -check-prefixes=GCN,GFX9 %s
 
-; RUN: not llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu6.00 -global-isel < %s 2>&1 | FileCheck %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu8.02 -global-isel < %s 2>&1 | FileCheck %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 -global-isel < %s 2>&1 | FileCheck %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 -global-isel < %s 2>&1 | FileCheck %s
 
 ; CHECK: error: lds: unsupported initializer for address space
 

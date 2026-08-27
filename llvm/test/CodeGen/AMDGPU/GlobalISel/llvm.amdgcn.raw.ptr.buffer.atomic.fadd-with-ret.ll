@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.0a-amd-amdhsa < %s | FileCheck -enable-var-scope -check-prefixes=GFX90A %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel < %s -mtriple=amdgpu9.08 2>&1 | FileCheck %s -check-prefix=GFX908
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.0a-amd-amdhsa < %s | FileCheck -enable-var-scope -check-prefixes=GFX90A %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel < %s -mtriple=amdgpu9.08 2>&1 | FileCheck %s -check-prefix=GFX908
 
 declare float @llvm.amdgcn.raw.ptr.buffer.atomic.fadd.f32(float, ptr addrspace(8), i32, i32, i32 immarg)
 declare <2 x half> @llvm.amdgcn.raw.ptr.buffer.atomic.fadd.v2f16(<2 x half>, ptr addrspace(8), i32, i32, i32 immarg)

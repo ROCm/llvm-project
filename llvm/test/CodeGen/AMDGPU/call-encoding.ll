@@ -1,7 +1,7 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu8.03-amd-amdhsa -filetype=obj < %s | llvm-objdump --triple=amdgpu8.03--amdhsa -d - | FileCheck --check-prefix=GCN %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.00-amd-amdhsa -filetype=obj < %s | llvm-objdump --triple=amdgpu9.00--amdhsa -d - | FileCheck --check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.03-amd-amdhsa -filetype=obj < %s | llvm-objdump --triple=amdgpu8.03--amdhsa -d - | FileCheck --check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -filetype=obj < %s | llvm-objdump --triple=amdgpu9.00--amdhsa -d - | FileCheck --check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.03-amd-amdhsa -filetype=obj < %s | llvm-objdump --triple=amdgpu8.03--amdhsa -d - | FileCheck --check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -filetype=obj < %s | llvm-objdump --triple=amdgpu9.00--amdhsa -d - | FileCheck --check-prefix=GCN %s
 ; XUN: llc -mtriple=amdgpu7.01-amd-amdhsa -filetype=obj < %s | llvm-objdump --triple=amdgpu7.01--amdhsa -d - | FileCheck --check-prefixes=GCN,CI %s
 
 ; GCN: s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)

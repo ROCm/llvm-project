@@ -3,10 +3,10 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu7.01-amd-amdhsa -enable-ipra=0 < %s | FileCheck -check-prefixes=GCN,MUBUF,SDAG %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.00-amd-amdhsa -enable-ipra=0 < %s | FileCheck -check-prefixes=GCN,MUBUF,SDAG %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.00-amd-amdhsa -enable-ipra=0 -mattr=+enable-flat-scratch < %s | FileCheck -check-prefixes=GCN,FLATSCR,SDAG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.03-amd-amdhsa -enable-ipra=0 < %s | FileCheck -check-prefixes=GCN,MUBUF,GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.01-amd-amdhsa -enable-ipra=0 < %s | FileCheck -check-prefixes=GCN,MUBUF,GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -enable-ipra=0 < %s | FileCheck -check-prefixes=GCN,MUBUF,GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -enable-ipra=0 -mattr=+enable-flat-scratch < %s | FileCheck -check-prefixes=GCN,FLATSCR,GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.03-amd-amdhsa -enable-ipra=0 < %s | FileCheck -check-prefixes=GCN,MUBUF,GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu7.01-amd-amdhsa -enable-ipra=0 < %s | FileCheck -check-prefixes=GCN,MUBUF,GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -enable-ipra=0 < %s | FileCheck -check-prefixes=GCN,MUBUF,GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -enable-ipra=0 -mattr=+enable-flat-scratch < %s | FileCheck -check-prefixes=GCN,FLATSCR,GISEL %s
 
 declare hidden void @external_void_func_void() #3
 

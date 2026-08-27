@@ -1,6 +1,6 @@
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -global-isel-abort=2 -mtriple=amdgpu9.42--amdhsa < %s 2>&1 | FileCheck -check-prefixes=ERROR,GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -global-isel-abort=2 -mtriple=amdgpu9.42--amdhsa < %s 2>&1 | FileCheck -check-prefixes=ERROR,GISEL %s
 ; RUN: not llc -global-isel=0 -mtriple=amdgpu9.42--amdhsa < %s 2>&1 | FileCheck -check-prefix=ERROR %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -global-isel-abort=2 -amdgpu-ir-lower-kernel-arguments=0 -mtriple=amdgpu9.42--amdhsa < %s 2>&1 | FileCheck -check-prefixes=ERROR,GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -global-isel-abort=2 -amdgpu-ir-lower-kernel-arguments=0 -mtriple=amdgpu9.42--amdhsa < %s 2>&1 | FileCheck -check-prefixes=ERROR,GISEL %s
 ; RUN: not llc -global-isel=0 -amdgpu-ir-lower-kernel-arguments=0 -mtriple=amdgpu9.42--amdhsa < %s 2>&1 | FileCheck -check-prefix=ERROR %s
 
 define amdgpu_kernel void @no_free_sgprs_block_count_x_no_preload_diag(ptr addrspace(1) inreg %out, i512 inreg, i32 inreg "amdgpu-hidden-argument" %_hidden_block_count_x) #0 {
