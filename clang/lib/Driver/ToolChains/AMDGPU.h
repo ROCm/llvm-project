@@ -118,6 +118,9 @@ public:
   StringRef getSanitizerRequirement(SanitizerMask Kinds,
                                     BoundArch BA) const override;
 
+  /// Should skip argument.
+  bool shouldSkipArgument(const llvm::opt::Arg *Arg) const;
+
   /// Uses amdgpu-arch tool to get arch of the system GPU. Will return error
   /// if unable to find one.
   virtual Expected<SmallVector<std::string>>

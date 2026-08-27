@@ -3,7 +3,7 @@
 ! being supported by gfortran to GCC when falling back to GCC for
 ! a fortran input file.
 !
-! RUN: %clang --target=i386-linux -### %s 2>&1 \
+! RUN: %clang --target i386-linux -### %s -o %t 2>&1 \
 ! RUN:     -Aquestion=answer \
 ! RUN:     -A-question=answer \
 ! RUN:     -C \

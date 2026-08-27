@@ -80,7 +80,8 @@ int MappingInfoTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin,
                /*HstPtrEnd=*/(uintptr_t)HstPtrBegin + Size,
                /*TgtAllocBegin=*/(uintptr_t)TgtPtrBegin,
                /*TgtPtrBegin=*/(uintptr_t)TgtPtrBegin,
-               /*UseHoldRefCount=*/false, /*Name=*/nullptr,
+               /*UseHoldRefCount=*/false,
+               /*Name=*/nullptr,
                /*IsRefCountINF=*/true))
            .first->HDTT;
   ODBG(ODT_Mapping) << "Creating new map entry: HstBase="
@@ -262,27 +263,48 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
       MESSAGE("device mapping required by 'present' map type modifier does not "
               "exist for host address " DPxMOD " (%" PRId64 " bytes)",
               DPxPTR(HstPtrBegin), Size);
-  } else if ((PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY &&
-              !HasCloseModifier) ||
-             (PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY)) {
-
-    // If unified shared memory is active, implicitly mapped variables that are
-    // not privatized use host address. Any explicitly mapped variables also use
-    // host address where correctness is not impeded. In all other cases maps
-    // are respected.
-    // In addition to the mapping rules above, the close map modifier forces the
-    // mapping of the variable to the device.
+  } else if (((PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY) ||
+              (PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY)) &&
+             (!HasCloseModifier)) {
+    // If unified shared memory is active, implicitly mapped variables that
+    // are not privatized use host address. Any explicitly mapped variables
+    // also use host address where correctness is not impeded. In all other
+    // cases maps are respected. In addition to the mapping rules above, the
+    // close map modifier forces the mapping of the variable to the device.
     if (Size) {
-      INFO(OMP_INFOTYPE_MAPPING_CHANGED, Device.DeviceID,
-           "Return HstPtrBegin " DPxMOD " Size=%" PRId64 " for unified shared "
-           "memory\n",
-           DPxPTR((uintptr_t)HstPtrBegin), Size);
-      ODBG(ODT_Mapping) << "Return HstPtrBegin " << HstPtrBegin
-                        << " Size=" << Size << " for unified shared memory";
-      LR.TPR.Flags.IsPresent = false;
-      LR.TPR.Flags.IsHostPointer = true;
-      LR.TPR.TargetPointer = HstPtrBegin;
+      // For MI200, when allocating under unified_shared_memory, amdgpu plugin
+      // can optimize memory access latency by registering allocated
+      // memory as coarse-grained. The usage of coarse-grained memory can be
+      // overriden by setting the env-var OMPX_DISABLE_USM_MAPS=1.
+      if (Device.RTL->is_gfx90a(Device.DeviceID) && HstPtrBegin &&
+          Device.RTL->is_gfx90a_coarse_grain_usm_map_enabled(Device.DeviceID)) {
+        Device.RTL->set_coarse_grain_mem_region(Device.DeviceID, HstPtrBegin,
+                                                Size);
+        INFO(OMP_INFOTYPE_MAPPING_CHANGED, Device.DeviceID,
+             "Memory pages for HstPtrBegin " DPxMOD " Size=%" PRId64
+             " switched to coarse grain\n",
+             DPxPTR((uintptr_t)HstPtrBegin), Size);
+      }
+
+      // If we are here, it means that we are either in auto zero-copy or USM.
+      // Enable GPU page table prefaulting if selected by the user. This feature
+      // is only enabled for APUs.
+      if (PM->getRequirements() & OMPX_REQ_EAGER_ZERO_COPY_MAPS) {
+        Device.RTL->prepopulate_page_table(Device.DeviceID, HstPtrBegin, Size);
+        INFO(OMP_INFOTYPE_MAPPING_CHANGED, Device.DeviceID,
+             "Prefaulted " DPxMOD " Size=%" PRId64 " on GPU page table\n",
+             DPxPTR((uintptr_t)HstPtrBegin), Size);
+      }
     }
+    INFO(OMP_INFOTYPE_MAPPING_CHANGED, Device.DeviceID,
+         "Return HstPtrBegin " DPxMOD " Size=%" PRId64 " for unified shared "
+         "memory\n",
+         DPxPTR((uintptr_t)HstPtrBegin), Size);
+    ODBG(ODT_Mapping) << "Return HstPtrBegin " << HstPtrBegin
+                      << " Size=" << Size << " for unified shared memory";
+    LR.TPR.Flags.IsPresent = false;
+    LR.TPR.Flags.IsHostPointer = true;
+    LR.TPR.TargetPointer = HstPtrBegin;
   } else if (HasPresentModifier) {
     ODBG(ODT_Mapping) << "Mapping required by 'present' map type modifier does "
                       << "not exist for HstPtrBegin=" << HstPtrBegin
@@ -293,6 +315,7 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
   } else if (Size) {
     // If it is not contained and Size > 0, we should create a new entry for it.
     LR.TPR.Flags.IsNewEntry = true;
+
     uintptr_t TgtAllocBegin =
         (uintptr_t)Device.allocData(TgtPadding + Size, HstPtrBegin);
     uintptr_t TgtPtrBegin = TgtAllocBegin + TgtPadding;
@@ -426,8 +449,9 @@ TargetPointerResultTy MappingInfoTy::getTgtPtrBegin(
 
   LR.TPR.Flags.IsPresent = true;
 
-  if (LR.Flags.IsContained ||
-      (!MustContain && (LR.Flags.ExtendsBefore || LR.Flags.ExtendsAfter))) {
+  if ((LR.Flags.IsContained ||
+       (!MustContain && (LR.Flags.ExtendsBefore || LR.Flags.ExtendsAfter)))) {
+
     LR.TPR.Flags.IsLast =
         LR.TPR.getEntry()->decShouldRemove(UseHoldRefCount, ForceDelete);
 
@@ -472,7 +496,7 @@ TargetPointerResultTy MappingInfoTy::getTgtPtrBegin(
          LR.TPR.getEntry()->dynRefCountToStr().c_str(), DynRefCountAction,
          LR.TPR.getEntry()->holdRefCountToStr().c_str(), HoldRefCountAction);
     LR.TPR.TargetPointer = (void *)TP;
-  } else if (PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY ||
+  } else if ((PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY) ||
              PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY) {
     // If the value isn't found in the mapping and unified shared memory
     // is on then it means we have stumbled upon a value which we need to

@@ -134,6 +134,7 @@ LanguageFeatureControl::LanguageFeatureControl() {
   disable_.set(LanguageFeature::CUDA); // !@cuf
   disable_.set(LanguageFeature::CudaManaged);
   disable_.set(LanguageFeature::CudaUnified);
+  disable_.set(LanguageFeature::OpenMPDefaultAllocator);
   disable_.set(LanguageFeature::CudaPinned);
   disable_.set(LanguageFeature::CUDAInit);
   disable_.set(LanguageFeature::ImplicitNoneTypeNever);

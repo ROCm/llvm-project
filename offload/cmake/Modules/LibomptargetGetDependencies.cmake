@@ -34,8 +34,10 @@ if(LIBOMPTARGET_OFFLOAD_ARCH)
   execute_process(COMMAND ${LIBOMPTARGET_OFFLOAD_ARCH} "--only=nvptx"
                   OUTPUT_VARIABLE LIBOMPTARGET_NVPTX_ARCH_OUTPUT
                   OUTPUT_STRIP_TRAILING_WHITESPACE)
-  string(REPLACE "\n" ";" nvptx_arch_list "${LIBOMPTARGET_NVPTX_ARCH_OUTPUT}")
-  if(nvptx_arch_list)
+  string(FIND "${LIBOMPTARGET_NVPTX_ARCH_OUTPUT}" "\n" first_arch_string)
+  string(SUBSTRING "${LIBOMPTARGET_NVPTX_ARCH_OUTPUT}" 0 ${first_arch_string}
+         arch_string)
+  if(arch_string)
     set(LIBOMPTARGET_FOUND_NVIDIA_GPU TRUE)
     set(LIBOMPTARGET_NVPTX_DETECTED_ARCH_LIST "${nvptx_arch_list}")
   endif()

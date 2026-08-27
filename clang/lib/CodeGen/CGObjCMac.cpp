@@ -2244,7 +2244,7 @@ CGObjCCommonMac::GenerateConstantNSString(const StringLiteral *Literal) {
 
   if (auto *C = Entry.second)
     return ConstantAddress(C, C->getValueType(),
-                           CharUnits::fromQuantity(C->getAlign().valueOrOne()));
+                           CharUnits::fromQuantity(C->getAlignment()));
 
   // If we don't already have it, get _NSConstantStringClassReference.
   llvm::Constant *Class = getNSConstantStringClassRef();

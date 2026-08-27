@@ -51,6 +51,7 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/MDBuilder.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -104,6 +105,12 @@ static cl::opt<bool> DisableOpenMPOptSPMDization(
     cl::desc("Disable OpenMP optimizations involving SPMD-ization."),
     cl::Hidden, cl::init(false));
 
+static cl::opt<bool> DisableOpenMPOptCallbackSPMDization(
+    "openmp-opt-disable-callback-spmdization",
+    cl::desc("Disable OpenMP optimizations involving SPMD-ization in runtime "
+             "functions taking callbacks."),
+    cl::Hidden, cl::init(true));
+
 static cl::opt<bool> DisableOpenMPOptFolding(
     "openmp-opt-disable-folding",
     cl::desc("Disable OpenMP optimizations involving folding."), cl::Hidden,
@@ -112,7 +119,7 @@ static cl::opt<bool> DisableOpenMPOptFolding(
 static cl::opt<bool> DisableOpenMPOptStateMachineRewrite(
     "openmp-opt-disable-state-machine-rewrite",
     cl::desc("Disable OpenMP optimizations that replace the state machine."),
-    cl::Hidden, cl::init(false));
+    cl::Hidden, cl::init(true));
 
 static cl::opt<bool> DisableOpenMPOptBarrierElimination(
     "openmp-opt-disable-barrier-elimination",
@@ -545,6 +552,24 @@ struct OMPInformationCache : public InformationCache {
     collectUses(RFI, /*CollectStats*/ false);
   }
 
+  void setCallbackMetadata(Function *F, unsigned ArgNo, ArrayRef<int> Indices,
+                           bool IsVarArg) {
+    if (!F)
+      return;
+
+    LLVMContext &Ctx = F->getContext();
+    MDBuilder MDB(Ctx);
+
+    // Create the new callback encoding for this runtime function
+    MDNode *NewCallbackEncoding =
+        MDB.createCallbackEncoding(ArgNo, Indices, IsVarArg);
+
+    if (!F->getMetadata(LLVMContext::MD_callback))
+      // No existing metadata, create new with single entry
+      F->addMetadata(LLVMContext::MD_callback,
+                     *MDNode::get(Ctx, {NewCallbackEncoding}));
+  }
+
   // Helper function to recollect uses of all runtime functions.
   void recollectUses() {
     for (int Idx = 0; Idx < RFIs.size(); ++Idx)
@@ -628,8 +653,13 @@ struct OMPInformationCache : public InformationCache {
       });                                                                      \
     }                                                                          \
   }
-#include "llvm/Frontend/OpenMP/OMPKinds.def"
+#define OMP_RTL_CB_INFO(_Enum, _Name, _ArgNo, _ArgIndices, _IsVarArg)          \
+  {                                                                            \
+    Function *F = M.getFunction(_Name);                                        \
+    setCallbackMetadata(F, _ArgNo, _ArgIndices, _IsVarArg);                    \
+  }
 
+#include "llvm/Frontend/OpenMP/OMPKinds.def"
     // Remove the `noinline` attribute from `__kmpc`, `ompx::` and `omp_`
     // functions, except if `optnone` is present.
     if (isOpenMPDevice(M)) {
@@ -4358,6 +4388,33 @@ struct AAKernelInfoFunction : AAKernelInfo {
         ConstantInt::get(ExecModeC->getIntegerType(),
                          ExecModeVal | OMP_TGT_EXEC_MODE_GENERIC_SPMD));
 
+    // The global variable needs to be set too.
+    GlobalVariable *ExecMode = Kernel->getParent()->getGlobalVariable(
+        (Kernel->getName() + "_exec_mode").str());
+
+    if (!ExecMode) { // likely fortran missing exec mode
+      auto Remark = [&](OptimizationRemark OR) {
+        return OR << "Could not transform generic-mode kernel to SPMD-mode. Missing mode.";
+      };
+      A.emitRemark<OptimizationRemark>(KernelInitCB, "OMP122", Remark);
+    return false;
+    }
+    assert(ExecMode && "Kernel without exec mode?");
+    assert(ExecMode->getInitializer() && "ExecMode doesn't have initializer!");
+
+    // Set the global exec mode flag to indicate SPMD-Generic mode.
+    assert(isa<ConstantInt>(ExecMode->getInitializer()) &&
+           "ExecMode is not an integer!");
+
+    // Adjust the global exec mode flag that tells the runtime what mode this
+    // kernel is executed in.
+    assert(cast<ConstantInt>(ExecMode->getInitializer())->getSExtValue() ==
+               OMP_TGT_EXEC_MODE_GENERIC &&
+           "Initially non-SPMD kernel has SPMD exec mode!");
+    ExecMode->setInitializer(
+        ConstantInt::get(ExecMode->getInitializer()->getType(),
+                         ExecModeVal | OMP_TGT_EXEC_MODE_GENERIC_SPMD));
+
     ++NumOpenMPTargetRegionKernelsSPMD;
 
     // Record that this kernel now runs SPMD so post-Attributor cleanup can drop
@@ -4820,6 +4877,43 @@ struct AAKernelInfoFunction : AAKernelInfo {
     bool AllSPMDStatesWereFixed = true;
     auto CheckCallInst = [&](Instruction &I) {
       auto &CB = cast<CallBase>(I);
+      auto &OMPInfoCache = static_cast<OMPInformationCache &>(A.getInfoCache());
+      Function *Callee = CB.getCalledFunction();
+      const auto &It = OMPInfoCache.RuntimeFunctionIDMap.find(Callee);
+      if (It != OMPInfoCache.RuntimeFunctionIDMap.end()) {
+        MDNode *CallbackMD = Callee->getMetadata(LLVMContext::MD_callback);
+        // If this runtime function has callbacks, we need to look at them
+        // to find potential parallel regions.
+        if (CallbackMD && CallbackMD->getNumOperands() > 0) {
+          // TODO: Handle multiple callbacks?
+          MDNode *OpMD = cast<MDNode>(CallbackMD->getOperand(0).get());
+          if (OpMD && OpMD->getNumOperands() > 0) {
+            auto *CBArgCM = cast<ConstantAsMetadata>(OpMD->getOperand(0));
+            const unsigned int ArgNo =
+                cast<ConstantInt>(CBArgCM->getValue())->getZExtValue();
+            auto *LoopRegion = dyn_cast<Function>(
+                CB.getArgOperand(ArgNo)->stripPointerCasts());
+            // Only analyze the callback if we have a concrete function
+            // definition. Declarations cannot be analyzed interprocedurally.
+            if (LoopRegion && !LoopRegion->isDeclaration()) {
+              LLVM_DEBUG(dbgs() << "[OpenMPOpt] Analyzing callback function: "
+                                << LoopRegion->getName() << "\n");
+              auto *FnAA = A.getAAFor<AAKernelInfo>(
+                  *this, IRPosition::function(*LoopRegion),
+                  DepClassTy::OPTIONAL);
+              if (FnAA) {
+                getState() ^= FnAA->getState();
+                AllSPMDStatesWereFixed &=
+                    FnAA->SPMDCompatibilityTracker.isAtFixpoint();
+                AllParallelRegionStatesWereFixed &=
+                    FnAA->ReachedKnownParallelRegions.isAtFixpoint();
+                AllParallelRegionStatesWereFixed &=
+                    FnAA->ReachedUnknownParallelRegions.isAtFixpoint();
+              }
+            }
+          }
+        }
+      }
       auto *CBAA = A.getAAFor<AAKernelInfo>(
           *this, IRPosition::callsite_function(CB), DepClassTy::OPTIONAL);
       if (!CBAA)
@@ -4995,7 +5089,12 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         // state based on the callee state in updateImpl.
         return;
       }
-      if (NumCallees > 1) {
+      // Check if we have multiple possible callees. This usually indicates an
+      // indirect call where we don't know the target, requiring a pessimistic
+      // fixpoint. However, for callback functions, multiple edges are expected:
+      // one to the runtime function and other through callback parameters.
+      // These are analyzable, so we exclude them from the pessimistic check.
+      if (NumCallees > 1 && !Callee->hasMetadata(LLVMContext::MD_callback)) {
         indicatePessimisticFixpoint();
         return;
       }
@@ -5103,16 +5202,10 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_for_static_loop_4u:
       case OMPRTL___kmpc_for_static_loop_8:
       case OMPRTL___kmpc_for_static_loop_8u:
-        // Parallel regions might be reached by these calls, as they take a
-        // callback argument potentially containing arbitrary user-provided
-        // code.
-        ReachedUnknownParallelRegions.insert(&CB);
-        // TODO: The presence of these calls on their own does not prevent a
-        // kernel from being SPMD-izable. We mark it as such because we need
-        // further changes in order to also consider the contents of the
-        // callbacks passed to them.
-        SPMDCompatibilityTracker.indicatePessimisticFixpoint();
-        SPMDCompatibilityTracker.insert(&CB);
+        if (DisableOpenMPOptCallbackSPMDization) {
+          SPMDCompatibilityTracker.indicatePessimisticFixpoint();
+          SPMDCompatibilityTracker.insert(&CB);
+        }
         break;
       default:
         // Unknown OpenMP runtime calls cannot be executed in SPMD-mode,
@@ -5165,7 +5258,12 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         getState() = FnAA->getState();
         return ChangeStatus::CHANGED;
       }
-      if (NumCallees > 1)
+      // Check if we have multiple possible callees. This usually indicates an
+      // indirect call where we don't know the target, requiring a pessimistic
+      // fixpoint. However, for callback functions, multiple edges are expected:
+      // one to the runtime function and other through callback parameters.
+      // These are analyzable, so we exclude them from the pessimistic check.
+      if (NumCallees > 1 && !F->hasMetadata(LLVMContext::MD_callback))
         return indicatePessimisticFixpoint();
 
       CallBase &CB = cast<CallBase>(getAssociatedValue());
@@ -5678,6 +5776,7 @@ void OpenMPOpt::registerAAsForFunction(Attributor &A, const Function &F) {
           IRPosition::value(*LI->getPointerOperand()));
       continue;
     }
+#if 0 // fixme snap2 mi-teams nest_call_par2
     if (auto *CI = dyn_cast<CallBase>(&I)) {
       if (!DisableOpenMPOptDeglobalization && !HasHeapToStackCandidate) {
         if (!TLI)
@@ -5689,6 +5788,7 @@ void OpenMPOpt::registerAAsForFunction(Attributor &A, const Function &F) {
         A.getOrCreateAAFor<AAIndirectCallInfo>(
             IRPosition::callsite_function(*CI));
     }
+#endif
     if (auto *SI = dyn_cast<StoreInst>(&I)) {
       A.getOrCreateAAFor<AAIsDead>(IRPosition::value(*SI));
       A.getOrCreateAAFor<AAAddressSpace>(
@@ -5902,7 +6002,8 @@ PreservedAnalyses OpenMPOptPass::run(Module &M, ModuleAnalysisManager &AM) {
 
   bool PostLink = LTOPhase == ThinOrFullLTOPhase::FullLTOPostLink ||
                   LTOPhase == ThinOrFullLTOPhase::ThinLTOPostLink ||
-                  LTOPhase == ThinOrFullLTOPhase::ThinLTOPreLink;
+                  LTOPhase == ThinOrFullLTOPhase::ThinLTOPreLink ||
+                  LTOPhase == ThinOrFullLTOPhase::CustomLTOPostLink;
   OMPInformationCache InfoCache(M, AG, Allocator, /*CGSCC*/ nullptr, PostLink);
 
   unsigned MaxFixpointIterations =
@@ -5980,7 +6081,8 @@ PreservedAnalyses OpenMPOptCGSCCPass::run(LazyCallGraph::SCC &C,
 
   bool PostLink = LTOPhase == ThinOrFullLTOPhase::FullLTOPostLink ||
                   LTOPhase == ThinOrFullLTOPhase::ThinLTOPostLink ||
-                  LTOPhase == ThinOrFullLTOPhase::ThinLTOPreLink;
+                  LTOPhase == ThinOrFullLTOPhase::ThinLTOPreLink ||
+                  LTOPhase == ThinOrFullLTOPhase::CustomLTOPostLink;
   SetVector<Function *> Functions(llvm::from_range, SCC);
   OMPInformationCache InfoCache(*(Functions.back()->getParent()), AG, Allocator,
                                 /*CGSCC*/ &Functions, PostLink);

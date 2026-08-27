@@ -48,6 +48,16 @@ struct DeviceTy {
   int32_t DeviceID;
   GenericPluginTy *RTL;
   int32_t RTLDeviceID;
+  /// The physical number of processors that may concurrently execute a team
+  /// For cuda, this is number of SMs, for amdgcn, this is number of CUs.
+  /// This field is used by ompx_get_team_procs(devid).
+  int32_t TeamProcs;
+
+
+  /// Flag to force synchronous data transfers
+  /// Controlled via environment flag OMPX_FORCE_SYNC_REGIONS
+  bool ForceSynchronousTargetRegions = false;
+
 
   DeviceTy(GenericPluginTy *RTL, int32_t DeviceID, int32_t RTLDeviceID);
   // DeviceTy is not copyable
@@ -153,6 +163,9 @@ struct DeviceTy {
 
   /// Destroy the event.
   int32_t destroyEvent(void *Event);
+
+  void setTeamProcs(int32_t num_team_procs) { TeamProcs = num_team_procs; }
+  int32_t getTeamProcs() { return TeamProcs; }
   /// }
 
   /// Print all offload entries to stderr.
@@ -161,6 +174,19 @@ struct DeviceTy {
   /// Ask the device whether the runtime should use auto zero-copy.
   bool useAutoZeroCopy();
 
+  /// Ask the device whether it is an APU.
+  bool checkIfAPU();
+
+  bool checkIfGFX90a();
+
+  bool checkIfMI300x();
+
+  /// Ask the device whether it supports unified memory.
+  bool supportsUnifiedMemory();
+
+  /// Ask the device to perform sanity checks for zero-copy configurations.
+  void zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
+                                   bool isAutoZeroCopy, bool isEagerMaps);
   /// Ask the device whether the storage is accessible.
   bool isAccessiblePtr(const void *Ptr, size_t Size);
 

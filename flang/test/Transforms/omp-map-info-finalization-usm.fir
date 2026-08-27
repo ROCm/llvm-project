@@ -1,5 +1,4 @@
 // RUN: fir-opt --split-input-file --omp-map-info-finalization %s | FileCheck %s
-
 // Test that the 'close' map flag is cleared from member maps if the parent map
 // (derived type) does not have the 'close' flag. This typically happens in
 // Unified Shared Memory (USM) mode where the parent is in USM (no close) but

@@ -4,13 +4,13 @@
 // CHECK: @_ZN6pr96081xE ={{.*}} global ptr null, align 8, !dbg [[X:![0-9]+]]
 
 // CHECK: define{{.*}} void @_ZN7pr147634funcENS_3fooE
-// CHECK-SAME: ptr nofree noundef align 1 dead_on_return dereferenceable(1) [[param:%.*]])
+// CHECK-SAME: ptr nofreeobj noundef align 1 dead_on_return dereferenceable(1) [[param:%.*]])
 // CHECK-NEXT: entry:
 // CHECK-NEXT:   alloca ptr, align 8
 // CHECK-NEXT:   [[param_addr_storage:%.*]] = alloca ptr, align 8
 // CHECK-NEXT:   store
 // CHECK-NEXT:   store ptr [[param]], ptr [[param_addr_storage]], align 8
-// CHECK-NEXT:   #dbg_declare(ptr [[param_addr_storage]], ![[F:[0-9]+]], !DIExpression(DW_OP_deref),
+// CHECK-NEXT:   #dbg_declare(ptr [[param]], ![[F:[0-9]+]], !DIExpression(DW_OP_deref),
 
 // !llvm.dbg.cu pulls in globals and their types first.
 // CHECK-NOT: !DIGlobalVariable(name: "c"

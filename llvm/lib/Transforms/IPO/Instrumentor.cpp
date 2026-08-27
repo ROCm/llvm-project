@@ -957,7 +957,7 @@ static Value *createValuePack(const Range &R, InstrumentationConfig &IConf,
                             IConf.getRTName("", "value_pack"));
 
   auto *AI = IIRB.getAlloca(Fn, STy);
-  IIRB.IRB.CreateMemCpy(AI, AI->getAlign(), GV, GV->getAlign(),
+  IIRB.IRB.CreateMemCpy(AI, AI->getAlign(), GV, MaybeAlign(GV->getAlignment()),
                         IIRB.DL.getTypeAllocSize(STy));
   for (auto [Param, Idx] : Values) {
     auto *Ptr = IIRB.IRB.CreateStructGEP(STy, AI, Idx);
@@ -1721,8 +1721,7 @@ Value *GlobalVarIO::getAlignment(Value &V, Type &Ty,
                                  InstrumentationConfig &IConf,
                                  InstrumentorIRBuilderTy &IIRB) {
   GlobalVariable &GV = cast<GlobalVariable>(V);
-  MaybeAlign Alignment = GV.getAlign();
-  return getCI(&Ty, Alignment ? Alignment->value() : 0);
+  return getCI(&Ty, GV.getAlignment());
 }
 Value *GlobalVarIO::getDeclaredSize(Value &V, Type &Ty,
                                     InstrumentationConfig &IConf,

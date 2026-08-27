@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=amdgpu9.00-amd-amdhsa -amdgpu-codegenprepare-break-large-phis=0 < %s | FileCheck %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -experimental-debug-variable-locations=false -amdgpu-codegenprepare-break-large-phis=0 < %s | FileCheck %s
 
 %struct.wombat = type { [4 x i32], [4 x i32], [4 x i32] }
 
@@ -85,7 +85,7 @@ declare float @barney() #2
 declare void @eggs(float) #2
 declare void @llvm.dbg.value(metadata, metadata, metadata) #1
 
-attributes #0 = { convergent nounwind }
+attributes #0 = { convergent nounwind "target-cpu"="gfx900" }
 attributes #1 = { nounwind readnone speculatable }
 attributes #2 = { nounwind }
 

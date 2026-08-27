@@ -6,6 +6,8 @@
 
 // RUN: %clang_cc1 -fopenmp -triple=amdgpu-amd-amdhsa -fopenmp-is-target-device \
 // RUN: -aux-triple x86_64-linux-unknown -E %s | FileCheck -implicit-check-not=BAD %s
+// needs SPIRV openmp support
+// XFAIL: *
 
 // RUN: %clang_cc1 -fopenmp -triple=aarch64 -fopenmp-is-target-device \
 // RUN: -aux-triple x86_64-linux-unknown -E %s | FileCheck -implicit-check-not=BAD %s

@@ -16,7 +16,7 @@
 @1 = private unnamed_addr constant %struct.ident_t { i32 0, i32 2, i32 0, i32 0, ptr @0 }, align 8
 
 ; The SPMD-amenable kernel is promoted: ExecMode 1 (GENERIC) -> 3 (GENERIC_SPMD).
-; CHECK: @spmd_kernel_environment = {{.*}}ConfigurationEnvironmentTy { i8 0, i8 0, i8 3
+; CHECK: @spmd_kernel_environment = {{.*}}ConfigurationEnvironmentTy { i8 1, i8 0, i8 3, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0 }, ptr @1, ptr null }
 @spmd_kernel_environment = local_unnamed_addr constant %struct.KernelEnvironmentTy { %struct.ConfigurationEnvironmentTy { i8 1, i8 0, i8 1, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0 }, ptr @1, ptr null }
 ; The kernel with an unguardable side effect stays generic: ExecMode remains 1.
 ; CHECK: @generic_kernel_environment = {{.*}}ConfigurationEnvironmentTy { i8 1, i8 0, i8 1
@@ -38,7 +38,7 @@ define weak amdgpu_kernel void @generic_kernel() "kernel" {
 
 ; SPMD kernel: the wrapper (arg 6) is nulled.
 ; CHECK-LABEL: define internal void @spmd_outlined(
-; CHECK: call void @__kmpc_parallel_60(ptr @1, i32 0, i32 1, i32 -1, i32 -1, ptr @spmd_body, ptr null, ptr null, i64 0, i32 0)
+; CHECK: call void @__kmpc_parallel_60(ptr @1, i32 0, i32 1, i32 -1, i32 -1, ptr @spmd_body, ptr @spmd_body_wrapper, ptr null, i64 0, i32 0)
 define internal void @spmd_outlined(ptr %.global_tid., ptr %.bound_tid.) {
   call void @__kmpc_parallel_60(ptr @1, i32 0, i32 1, i32 -1, i32 -1, ptr @spmd_body, ptr @spmd_body_wrapper, ptr null, i64 0, i32 0)
   ret void

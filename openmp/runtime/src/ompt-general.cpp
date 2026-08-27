@@ -118,8 +118,6 @@ static void *ompt_tool_module = NULL;
 static void *ompt_archer_module = NULL;
 #define OMPT_DLCLOSE(Lib) dlclose(Lib)
 #endif
-
-/// Used to track the initializer and the finalizer provided by libomptarget
 static ompt_start_tool_result_t *libomptarget_ompt_result = NULL;
 
 /*****************************************************************************
@@ -916,7 +914,7 @@ static ompt_interface_fn_t ompt_fn_lookup(const char *s) {
 
 #undef ompt_interface_fn
 
-  return NULL;
+  return (ompt_interface_fn_t)0;
 }
 
 static ompt_data_t *ompt_get_task_data() { return __ompt_get_task_data(); }
@@ -953,7 +951,6 @@ static ompt_interface_fn_t ompt_libomp_target_fn_lookup(const char *s) {
 _OMP_EXTERN void ompt_libomp_connect(ompt_start_tool_result_t *result) {
   OMPT_VERBOSE_INIT_PRINT("libomp --> OMPT: Enter ompt_libomp_connect\n");
 
-  // Ensure libomp callbacks have been added if not already
   __ompt_force_initialization();
 
   if (ompt_enabled.enabled && result) {

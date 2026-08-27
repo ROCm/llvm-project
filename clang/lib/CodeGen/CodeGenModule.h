@@ -354,6 +354,75 @@ public:
 
   typedef std::vector<Structor> CtorList;
 
+  enum NoLoopXteamErr {
+    NxSuccess,
+    NxNonSPMD,
+    NxOptionDisabled,
+    NxOptionDisabledOrHasCall,
+    NxUnsupportedDirective,
+    NxUnsupportedSplitDirective,
+    NxNoStmt,
+    NxUnsupportedTargetClause,
+    NxNotLoopDirective,
+    NxNotCapturedStmt,
+    NxNotExecutableStmt,
+    NxUnsupportedNestedSplitDirective,
+    NxSplitConstructImproperlyNested,
+    NxNestedOmpParallelDirective,
+    NxNestedOmpCall,
+    NxNoSingleForStmt,
+    NxUnsupportedLoopInit,
+    NxUnsupportedLoopStop,
+    NxUnsupportedLoopStep,
+    NxGuidedOrRuntimeSched,
+    NxNonUnitStaticChunk,
+    NxNonConcurrentOrder,
+    NxUnsupportedRedType,
+    NxUnsupportedRedIntSize,
+    NxNotScalarRed,
+    NxNotBinOpRed,
+    NxUnsupportedRedOp,
+    NxNoRedVar,
+    NxMultRedVar,
+    NxUnsupportedRedExpr,
+    NxUnsupportedXteamRedThreadLimit,
+    NxUnsupportedPseudoObject,
+    NxNotRedVarInBinOpRHS,
+    NxNotAddOpInBinOpRHs,
+    NxRhsOfAssignNotBinOpOrCall,
+    NxBinOpNotAddAssignOrAssign,
+    NxNotBinOpOrCallButAccessesRedVar,
+    NxNotArgScalarEval,
+    NxReductionOpNotBinAssign,
+    NxReductionOpRhsNotBinOrCond,
+    NxReductionOpRhsNotMinMaxSum,
+    NxNotBuiltinByNameInHostCompile,
+    NxNotBuiltinByNameInDeviceCompile,
+    NxPOExprCountNotOne,
+    NxPOSemanticExprNotCall,
+    NxChildOfCallIsNull,
+    NxMultiDeviceMinMaxNotSupported,
+    NxFastReductionMinMaxNotSupported,
+    NxScanMinMaxNotSupported,
+    NxAmbiguousRedKind
+  };
+
+  using Stmt2StmtMap = llvm::DenseMap<const Stmt *, const Stmt *>;
+
+  /// Top-level and nested OpenMP directives, used in optimized kernel codegen.
+  using OptKernelNestDirectives =
+      llvm::SmallVector<const OMPExecutableDirective *, 3>;
+  /// Metadata for NoLoop kernel codegen
+  struct NoLoopKernelInfo {
+    NoLoopKernelInfo(int BlkSz, OptKernelNestDirectives Dirs)
+        : BlockSize{BlkSz}, NoLoopNestDirs{Dirs} {}
+
+    int BlockSize; // Cached blocksize
+    OptKernelNestDirectives NoLoopNestDirs;
+  };
+  /// Map construct statement to corresponding metadata for a NoLoop kernel.
+  using NoLoopKernelMap = llvm::DenseMap<const Stmt *, NoLoopKernelInfo>;
+
 private:
   ASTContext &Context;
   const LangOptions &LangOpts;
@@ -370,6 +439,9 @@ private:
   std::string ModuleNameHash;
   bool CXX20ModuleInits = false;
   std::unique_ptr<CodeGenTBAA> TBAA;
+
+  /// Used by emitParallelCall
+  bool isSPMDExecutionMode = false;
 
   mutable std::unique_ptr<TargetCodeGenInfo> TheTargetCodeGenInfo;
 
@@ -405,6 +477,13 @@ private:
   InstrProfStats PGOStats;
   std::unique_ptr<llvm::SanitizerStatReport> SanStats;
   StackExhaustionHandler StackHandler;
+
+  // Map associated statement from top-level to innermost level for optimized
+  // kernels.
+  Stmt2StmtMap OptKernelNestMap;
+
+  NoLoopKernelMap NoLoopKernels;
+  NoLoopKernelMap BigJumpLoopKernels;
 
   // A set of references that have only been seen via a weakref so far. This is
   // used to remove the weak of the reference if we ever see a direct reference
@@ -741,6 +820,7 @@ public:
   ~CodeGenModule();
 
   void clear();
+  const OMPExecutableDirective *OMPPresentScanDirective = nullptr;
 
   /// Finalize LLVM code generation.
   void Release();
@@ -797,6 +877,9 @@ public:
   }
 
   const std::string &getModuleNameHash() const { return ModuleNameHash; }
+
+  void setIsSPMDExecutionMode(bool isSPMD) { isSPMDExecutionMode = isSPMD; }
+  bool IsSPMDExecutionMode() { return isSPMDExecutionMode; }
 
   /// Return a reference to the configured OpenCL runtime.
   CGOpenCLRuntime &getOpenCLRuntime() {
@@ -1858,6 +1941,247 @@ public:
   void printPostfixForExternalizedDecl(llvm::raw_ostream &OS,
                                        const Decl *D) const;
 
+  /// Add metadata for all nested directives for optimized kernel codegen.
+  void addOptKernelNestMap(const OptKernelNestDirectives &NestDirs);
+
+  /// Given a directive, return the statement key used for maintaining metadata.
+  const Stmt *getOptKernelKey(const OMPExecutableDirective &D);
+
+  /// Given a captured statement, return the nested directives involved in
+  /// optimized kernel codegen.
+  const OptKernelNestDirectives &
+  getOptKernelDirectives(const ForStmt *CapturedForStmt,
+                         llvm::omp::OMPTgtExecModeFlags OptKernelMode);
+
+  // Should be called under debug mode for printing analysis result.
+  void emitNxResult(std::string StatusMsg, const OMPExecutableDirective &D,
+                    NoLoopXteamErr Status);
+
+  /// Given the schedule clause, can No-Loop code be generated?
+  NoLoopXteamErr getNoLoopCompatibleSchedStatus(const OMPLoopDirective &LD);
+
+  /// Given the order clause, can No-Loop code be generated?
+  NoLoopXteamErr getNoLoopCompatibleOrderStatus(const OMPLoopDirective &LD);
+
+  /// Helper functions for generating a NoLoop kernel
+  /// For a captured statement, get the single For statement, if it exists,
+  /// otherwise return nullptr.
+  const ForStmt *getSingleForStmt(const Stmt *S);
+
+  /// Does the loop init qualify for a NoLoop kernel?
+  const VarDecl *checkLoopInit(const OMPLoopDirective &LD);
+
+  /// Does the loop increment qualify for a NoLoop kernel?
+  bool checkLoopStep(const Expr *Inc, const VarDecl *VD);
+
+  /// Does the loop condition qualify for a NoLoop kernel?
+  bool checkLoopStop(const OMPLoopDirective &, const ForStmt &);
+
+  /// If the step is a binary expression, extract and return the step.
+  /// If the step is a unary expression, return nullptr.
+  const Expr *getBinaryExprStep(const Expr *Inc, const VarDecl *VD);
+
+  /// Reset optimized kernel metadata.
+  void resetOptKernelMetadata(const Stmt *S);
+  void eraseOptKernelNestElem(const Stmt *S) { OptKernelNestMap.erase(S); }
+
+  /// Used in optimized kernel codegen.
+  const Stmt *getMappedInnermostStmt(const Stmt *S) {
+    auto nest_itr = OptKernelNestMap.find(S);
+    if (nest_itr == OptKernelNestMap.end())
+      return nullptr;
+    return nest_itr->second;
+  }
+
+  /// If we are able to generate a NoLoop kernel for this directive, return
+  /// true, otherwise return false. If successful, a map is created from the
+  /// top-level statement to the intermediate statements. For a combined
+  /// construct, there are no intermediate statements. Used for a combined
+  /// construct
+  NoLoopXteamErr checkAndSetNoLoopKernel(const OMPExecutableDirective &D);
+
+  /// Given a top-level target construct for no-loop codegen, get the
+  /// intermediate OpenMP constructs
+  const OptKernelNestDirectives &getNoLoopNestDirs(const Stmt *S) {
+    assert(isNoLoopKernel(S));
+    return NoLoopKernels.find(S)->second.NoLoopNestDirs;
+  }
+
+  /// Get the cached blocksize to be used for this NoLoop kernel.
+  int getNoLoopBlockSize(const Stmt *S) {
+    assert(isNoLoopKernel(S));
+    return NoLoopKernels.find(S)->second.BlockSize;
+  }
+
+  int getNoLoopBlockSize(const OMPExecutableDirective &D) {
+    assert(isNoLoopKernel(D) && "Expected a no-loop kernel");
+    const ForStmt *FStmt = getSingleForStmt(getOptKernelKey(D));
+    return getNoLoopBlockSize(FStmt);
+  }
+
+  /// Erase no-loop related metadata for the input statement
+  void resetNoLoopKernel(const Stmt *S) { NoLoopKernels.erase(S); }
+
+  /// Are we generating no-loop kernel for the input statement
+  bool isNoLoopKernel(const Stmt *S) {
+    return NoLoopKernels.find(S) != NoLoopKernels.end();
+  }
+  bool isNoLoopKernel(const OMPExecutableDirective &D);
+
+  /// Given a top-level target construct for BigJumpLoop codegen, get the
+  /// nested OpenMP constructs.
+  const OptKernelNestDirectives &getBigJumpLoopNestDirs(const Stmt *S) {
+    assert(isBigJumpLoopKernel(S));
+    return BigJumpLoopKernels.find(S)->second.NoLoopNestDirs;
+  }
+
+  void updateNoLoopKernel(const Stmt *S, int BlkSz) {
+    assert(isNoLoopKernel(S));
+    NoLoopKernels.find(S)->second.BlockSize = BlkSz;
+  }
+
+  /// Get the cached blocksize to be used for this BigJumpLoop kernel.
+  int getBigJumpLoopBlockSize(const Stmt *S) {
+    assert(isBigJumpLoopKernel(S));
+    return BigJumpLoopKernels.find(S)->second.BlockSize;
+  }
+
+  int getBigJumpLoopBlockSize(const OMPExecutableDirective &D) {
+    assert(isBigJumpLoopKernel(D) && "Expected a big-jump-loop kernel");
+    const ForStmt *FStmt = getSingleForStmt(getOptKernelKey(D));
+    return getBigJumpLoopBlockSize(FStmt);
+  }
+
+  /// Erase BigJumpLoop related metadata for the input statement.
+  void resetBigJumpLoopKernel(const Stmt *S) { BigJumpLoopKernels.erase(S); }
+  /// Is a BigJumpLoop kernel generated for the input statement?
+  bool isBigJumpLoopKernel(const Stmt *S) {
+    return BigJumpLoopKernels.find(S) != BigJumpLoopKernels.end();
+  }
+  bool isBigJumpLoopKernel(const OMPExecutableDirective &D);
+
+  void updateBigJumpLoopKernel(const Stmt *S, int BlkSz) {
+    assert(isBigJumpLoopKernel(S));
+    BigJumpLoopKernels.find(S)->second.BlockSize = BlkSz;
+  }
+
+  /// Compute the block size implied by a single directive. Used in optimized
+  /// kernel codegen, which folds the per-directive values of a nest itself.
+  int getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D);
+  /// Compute the block size of the whole kernel rooted at \p D, taking the
+  /// clauses of the nested directives into account for a kernel that is split
+  /// over several directives. See collectSPMDKernelNest().
+  /// \p IsGenericMode skips the larger cross-team reduction block size, which
+  /// does not apply to generic-mode kernels.
+  int getWorkGroupSizeSPMDKernel(const OMPExecutableDirective &D,
+                                 bool IsGenericMode = false);
+  /// Compute the block size implied by the clauses of \p NestDirs, where a
+  /// clause on a nested directive wins over one on an enclosing directive.
+  /// \p UseTeamsReductionBlockSize enables the larger cross-team reduction
+  /// block size.
+  int getWorkGroupSizeSPMDForNest(const OptKernelNestDirectives &NestDirs,
+                                  bool UseTeamsReductionBlockSize = true);
+  /// Used in optimized kernel codegen, compute the block size from the nested
+  /// directives.
+  int getOptKernelWorkGroupSize(const OptKernelNestDirectives &NestDirs);
+
+  /// Collect the OpenMP directives that make up the kernel rooted at \p D,
+  /// outermost first. The same kernel may be written as a single combined
+  /// directive or split over several ones, e.g.
+  /// \code
+  ///   #pragma omp target teams distribute parallel for reduction(+:s)
+  /// \endcode
+  /// and
+  /// \code
+  ///   #pragma omp target
+  ///   #pragma omp teams reduction(+:s)
+  ///   #pragma omp distribute parallel for reduction(+:s)
+  /// \endcode
+  /// describe the same kernel, so the clauses that determine its launch bounds
+  /// have to be looked up over the whole nest instead of on \p D alone. This is
+  /// a best-effort walk: a nesting that is not recognized simply ends it.
+  void collectSPMDKernelNest(const OMPExecutableDirective &D,
+                             OptKernelNestDirectives &NestDirs);
+
+  /// Is the kernel rooted at \p D a cross-team (teams) reduction kernel? True
+  /// when any directive of its nest is a 'teams' directive that carries a
+  /// reduction clause, whether the nest is written combined or split. This
+  /// mirrors what CodeGen actually emits, and therefore what the plugin sees
+  /// through the non-zero reduction data size of the kernel environment.
+  bool isTeamsReductionKernel(const OMPExecutableDirective &D);
+
+  /// Return status indicating whether the call is an Xteam-supported host
+  /// builtin.
+  CodeGenModule::NoLoopXteamErr
+  getStatusOptKernelHostBuiltin(const CallExpr *C) const;
+
+  /// Is the callee in std namespace?
+  bool isStdNameSpace(const CallExpr *Call) const;
+
+  /// Is the function name recognized as a min builtin by the host compile?
+  bool isOptKernelHostMin(const CallExpr *Call) const {
+    std::string CallName = Call->getDirectCallee()->getNameInfo().getAsString();
+    if (isStdNameSpace(Call) && !CallName.compare("min"))
+      return true;
+    return (!CallName.compare("fmin") || !CallName.compare("fminf") ||
+            !CallName.compare("fminl") || !CallName.compare("__builtin_fmin") ||
+            !CallName.compare("__builtin_fminf") ||
+            !CallName.compare("__builtin_fminl"));
+  }
+
+  /// Is the function name recognized as a max builtin by the host compile?
+  bool isOptKernelHostMax(const CallExpr *Call) const {
+    std::string CallName = Call->getDirectCallee()->getNameInfo().getAsString();
+    if (isStdNameSpace(Call) && !CallName.compare("max"))
+      return true;
+    return (!CallName.compare("fmax") || !CallName.compare("fmaxf") ||
+            !CallName.compare("fmaxl") || !CallName.compare("__builtin_fmax") ||
+            !CallName.compare("__builtin_fmaxf") ||
+            !CallName.compare("__builtin_fmaxl"));
+  }
+
+  /// Return status indicating whether the amdgcn device function is supported
+  /// by Xteam.
+  CodeGenModule::NoLoopXteamErr
+  getStatusOptKernelAMDGCNBuiltin(const CallExpr *C) const;
+
+  /// Is the function name recognized as a min builtin by the device compile?
+  bool isOptKernelAMDGCNMin(const CallExpr *Call) const {
+    std::string CallName = Call->getDirectCallee()->getNameInfo().getAsString();
+    if (isStdNameSpace(Call) && !CallName.compare("min"))
+      return true;
+    return (!CallName.compare("fmin[device={arch(amdgcn)}]") ||
+            !CallName.compare("fminf[device={arch(amdgcn)}]") ||
+            !CallName.compare("fminl[device={arch(amdgcn)}]") ||
+            !CallName.compare("fmin") || !CallName.compare("fminf") ||
+            !CallName.compare("fminl") || !CallName.compare("__builtin_fmin") ||
+            !CallName.compare("__builtin_fminf") ||
+            !CallName.compare("__builtin_fminl"));
+  }
+
+  // Is the function name recognized as a max builtin by the device compile?
+  bool isOptKernelAMDGCNMax(const CallExpr *Call) const {
+    std::string CallName = Call->getDirectCallee()->getNameInfo().getAsString();
+    if (isStdNameSpace(Call) && !CallName.compare("max"))
+      return true;
+    return (!CallName.compare("fmax[device={arch(amdgcn)}]") ||
+            !CallName.compare("fmaxf[device={arch(amdgcn)}]") ||
+            !CallName.compare("fmaxl[device={arch(amdgcn)}]") ||
+            !CallName.compare("fmax") || !CallName.compare("fmaxf") ||
+            !CallName.compare("fmaxl") || !CallName.compare("__builtin_fmax") ||
+            !CallName.compare("__builtin_fmaxf") ||
+            !CallName.compare("__builtin_fmaxl"));
+  }
+
+  /// Return status indicating whether the call expression is supported by Xteam
+  /// as a builtin
+  CodeGenModule::NoLoopXteamErr getStatusOptKernelBuiltin(const CallExpr *C);
+
+  /// Return status indicating if the pseudo-object expression is supported by
+  /// Xteam
+  std::pair<CodeGenModule::NoLoopXteamErr, const Expr *>
+  getStatusXteamSupportedPseudoObject(const PseudoObjectExpr *PO);
+
   /// Move some lazily-emitted states to the NewBuilder. This is especially
   /// essential for the incremental parsing environment like Clang Interpreter,
   /// because we'll lose all important information after each repl.
@@ -2215,6 +2539,28 @@ private:
   llvm::Metadata *CreateMetadataIdentifierImpl(QualType T, MetadataTypeMap &Map,
                                                StringRef Suffix,
                                                bool ForceString = false);
+
+  /// Return success if the directives are nested in a way appropriate for
+  /// specialized kernel generation. Track the component directives in
+  /// a vector. Otherwise return an error code.
+  NoLoopXteamErr checkNest(const OMPExecutableDirective &D,
+                           OptKernelNestDirectives *NestDirs);
+  NoLoopXteamErr checkTargetNest(const OMPExecutableDirective &D,
+                                 OptKernelNestDirectives *NestDirs);
+  NoLoopXteamErr checkTargetTeamsNest(const OMPExecutableDirective &D,
+                                      OptKernelNestDirectives *NestDirs);
+
+  /// Top level checker for no-loop on the for statement
+  std::pair<NoLoopXteamErr, bool>
+  getNoLoopForStmtStatus(const OMPExecutableDirective &, const Stmt *);
+
+  // Compute the block size used by optimized kernels.
+  int computeOptKernelBlockSize(const OptKernelNestDirectives &NestDirs);
+
+  /// Are clauses on a combined OpenMP construct compatible with no-loop
+  /// codegen?
+  NoLoopXteamErr
+  getNoLoopStatusForClauses(const OptKernelNestDirectives &NestDirs);
 
   /// Emit deactivation symbols for any PFP fields whose offset is taken with
   /// offsetof.

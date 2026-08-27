@@ -68,6 +68,7 @@
 #include "clang/Driver/Tool.h"
 #include "clang/Driver/ToolChain.h"
 #include "clang/Driver/Types.h"
+#include "clang/Driver/Util.h"
 #include "clang/Options/OptionUtils.h"
 #include "clang/Options/Options.h"
 #include "clang/ScalableStaticAnalysis/Core/Serialization/SerializationFormatRegistry.h"
@@ -102,6 +103,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Process.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/StringSaver.h"
@@ -904,6 +906,7 @@ Driver::OpenMPRuntimeKind Driver::getOpenMPRuntime(const ArgList &Args) const {
                 .Case("libomp", OMPRT_OMP)
                 .Case("libgomp", OMPRT_GOMP)
                 .Case("libiomp5", OMPRT_IOMP5)
+                .Case("libbolt", OMPRT_BOLT)
                 .Default(OMPRT_Unknown);
 
   if (RT == OMPRT_Unknown) {
@@ -1492,6 +1495,21 @@ bool Driver::loadDefaultConfigFiles(llvm::cl::ExpansionContext &ExpCtx) {
   return false;
 }
 
+// TODO: This is a short term downstream fix to ignore $ prefixed
+// entries in a clang config file. A long term fix will be
+// upstreamed that will most likely include setting
+// FinalPhase = phase::Precompile for all PCH invocations.
+static bool anyInputReachesLinkPhase(const InputList &Inputs,
+                                     phases::ID FinalPhase) {
+  for (const auto &I : Inputs) {
+    llvm::SmallVector<phases::ID, phases::MaxNumberOfPhases> PL =
+        types::getCompilationPhases(I.first, FinalPhase);
+    if (!PL.empty() && PL.back() == phases::Link)
+      return true;
+  }
+  return false;
+}
+
 Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   llvm::PrettyStackTraceString CrashInfo("Compilation construction");
 
@@ -1834,8 +1852,10 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   InputList Inputs;
   BuildInputs(C->getDefaultToolChain(), *TranslatedArgs, Inputs);
   if (HasConfigFileTail && Inputs.size()) {
-    Arg *FinalPhaseArg;
-    if (getFinalPhase(*TranslatedArgs, &FinalPhaseArg) == phases::Link) {
+    Arg *FinalPhaseArg = nullptr;
+    phases::ID FinalPhase = getFinalPhase(*TranslatedArgs, &FinalPhaseArg);
+    if (FinalPhase == phases::Link &&
+        anyInputReachesLinkPhase(Inputs, FinalPhase)) {
       DerivedArgList TranslatedLinkerIns(*CfgOptionsTail);
       for (Arg *A : *CfgOptionsTail)
         TranslatedLinkerIns.append(A);
@@ -2484,6 +2504,34 @@ void Driver::PrintHelp(bool ShowHidden) const {
                       VisibilityMask);
 }
 
+/// Read and display additional version info from a local file if present.
+static void PrintLocalVersionInfo(StringRef ExecutablePath, raw_ostream &OS) {
+  SmallString<128> VersionInfoPath;
+
+  // Check if environment variable specifies a custom path
+  if (const char *EnvPath = ::getenv("LLVM_VERSION_INFO_FILE")) {
+    VersionInfoPath = EnvPath;
+  } else {
+    // Try same directory as executable
+    VersionInfoPath = llvm::sys::path::parent_path(ExecutablePath);
+    llvm::sys::path::append(VersionInfoPath, ".llvm-version-info");
+  }
+
+  // Read the version info file
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FileOrErr =
+      llvm::MemoryBuffer::getFile(VersionInfoPath);
+
+  if (!FileOrErr)
+    return;
+
+  StringRef Contents = FileOrErr.get()->getBuffer();
+  if (Contents.empty())
+    return;
+
+  // Print the additional version info
+  OS << "Distribution: " << Contents.trim() << "\n";
+}
+
 void Driver::PrintVersion(const Compilation &C, raw_ostream &OS) const {
   if (IsFlangMode()) {
     OS << getClangToolFullVersion("flang") << '\n';
@@ -2516,6 +2564,8 @@ void Driver::PrintVersion(const Compilation &C, raw_ostream &OS) const {
   // If configuration files were used, print their paths.
   for (auto ConfigFile : ConfigFiles)
     OS << "Configuration file: " << ConfigFile << '\n';
+
+  PrintLocalVersionInfo(DriverExecutable, OS);
 }
 
 /// PrintDiagnosticCategories - Implement the --print-diagnostic-categories
@@ -7793,3 +7843,4 @@ void driver::applyOverrideOptions(SmallVectorImpl<const char *> &Args,
       ++S;
   }
 }
+

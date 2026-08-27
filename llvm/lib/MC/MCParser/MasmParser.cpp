@@ -697,7 +697,6 @@ private:
     DK_ELSEIFIDNI,
     DK_ELSE,
     DK_ENDIF,
-
     DK_MACRO,
     DK_EXITM,
     DK_ENDM,

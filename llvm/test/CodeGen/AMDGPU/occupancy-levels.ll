@@ -31,10 +31,7 @@
 ; RUN: llc -mtriple=amdgpu12.00 -mattr=+cumode < %s | FileCheck --check-prefixes=GCN,GFX1200,GFX1200W32,GFX1200W32CU %s
 ; RUN: llc -mtriple=amdgpu12.00 -mattr=+wavefrontsize64,+cumode < %s | FileCheck --check-prefixes=GCN,GFX1200,GFX1200W64,GFX1200W64CU %s
 ; RUN: llc -mtriple=amdgpu12.50 < %s | FileCheck --check-prefixes=GCN,GFX1250 %s
-; RUN: llc -mtriple=amdgpu13.10 < %s | FileCheck --check-prefixes=GCN,GFX1310,GFX1310W32,GFX1310W32WG %s
-; RUN: llc -mtriple=amdgpu13.10 -mattr=+wavefrontsize64 < %s | FileCheck --check-prefixes=GCN,GFX1310,GFX1310W64,GFX1310W64WG %s
-; RUN: llc -mtriple=amdgpu13.10 -mattr=+cumode < %s | FileCheck --check-prefixes=GCN,GFX1310,GFX1310W32,GFX1310W32CU %s
-; RUN: llc -mtriple=amdgpu13.10 -mattr=+wavefrontsize64,+cumode < %s | FileCheck --check-prefixes=GCN,GFX1310,GFX1310W64,GFX1310W64CU %s
+; RUN: llc -mtriple=amdgpu13.10 < %s | FileCheck --check-prefixes=GCN,GFX1100,GFX1100W32 %s
 
 ; GCN-LABEL: {{^}}max_occupancy:
 ; GFX6:       ; Occupancy: 10{{$}}
@@ -47,7 +44,6 @@
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @max_occupancy() #10 {
   ret void
 }
@@ -65,8 +61,6 @@ define amdgpu_kernel void @max_occupancy() #10 {
 ; GFX1200W32: ; Occupancy: 5
 ; GFX1200W64: ; Occupancy: 3
 ; GFX1250:    ; Occupancy: 3
-; GFX1310W32: ; Occupancy: 5
-; GFX1310W64: ; Occupancy: 3
 define amdgpu_kernel void @limited_occupancy_3() #0 {
   ret void
 }
@@ -82,7 +76,6 @@ define amdgpu_kernel void @limited_occupancy_3() #0 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @limited_occupancy_18() #1 {
   ret void
 }
@@ -98,7 +91,6 @@ define amdgpu_kernel void @limited_occupancy_18() #1 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @limited_occupancy_19() #2 {
   ret void
 }
@@ -114,7 +106,6 @@ define amdgpu_kernel void @limited_occupancy_19() #2 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_24_vgprs() #10 {
   call void asm sideeffect "", "~{v23}" ()
   ret void
@@ -132,7 +123,6 @@ define amdgpu_kernel void @used_24_vgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_28_vgprs() #10 {
   call void asm sideeffect "", "~{v27}" ()
   ret void
@@ -150,7 +140,6 @@ define amdgpu_kernel void @used_28_vgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_32_vgprs() #10 {
   call void asm sideeffect "", "~{v31}" ()
   ret void
@@ -169,7 +158,6 @@ define amdgpu_kernel void @used_32_vgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_36_vgprs() #10 {
   call void asm sideeffect "", "~{v35}" ()
   ret void
@@ -187,7 +175,6 @@ define amdgpu_kernel void @used_36_vgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_40_vgprs() #10 {
   call void asm sideeffect "", "~{v39}" ()
   ret void
@@ -206,7 +193,6 @@ define amdgpu_kernel void @used_40_vgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_44_vgprs() #10 {
   call void asm sideeffect "", "~{v43}" ()
   ret void
@@ -224,7 +210,6 @@ define amdgpu_kernel void @used_44_vgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_48_vgprs() #10 {
   call void asm sideeffect "", "~{v47}" ()
   ret void
@@ -244,8 +229,6 @@ define amdgpu_kernel void @used_48_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 16
 ; GFX1200W64: ; Occupancy: 12
 ; GFX1250:    ; Occupancy: 16
-; GFX1310W32: ; Occupancy: 16
-; GFX1310W64: ; Occupancy: 12
 define amdgpu_kernel void @used_56_vgprs() #10 {
   call void asm sideeffect "", "~{v55}" ()
   ret void
@@ -264,8 +247,6 @@ define amdgpu_kernel void @used_56_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 16
 ; GFX1200W64: ; Occupancy: 10
 ; GFX1250:    ; Occupancy: 16
-; GFX1310W32: ; Occupancy: 16
-; GFX1310W64: ; Occupancy: 10
 define amdgpu_kernel void @used_64_vgprs() #10 {
   call void asm sideeffect "", "~{v63}" ()
   ret void
@@ -285,8 +266,6 @@ define amdgpu_kernel void @used_64_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 16
 ; GFX1200W64: ; Occupancy: 10
 ; GFX1250:    ; Occupancy: 12
-; GFX1310W32: ; Occupancy: 16
-; GFX1310W64: ; Occupancy: 10
 define amdgpu_kernel void @used_72_vgprs() #10 {
   call void asm sideeffect "", "~{v71}" ()
   ret void
@@ -305,8 +284,6 @@ define amdgpu_kernel void @used_72_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 16
 ; GFX1200W64: ; Occupancy: 9
 ; GFX1250:    ; Occupancy: 12
-; GFX1310W32: ; Occupancy: 16
-; GFX1310W64: ; Occupancy: 9
 define amdgpu_kernel void @used_80_vgprs() #10 {
   call void asm sideeffect "", "~{v79}" ()
   ret void
@@ -327,8 +304,6 @@ define amdgpu_kernel void @used_80_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 16
 ; GFX1200W64: ; Occupancy: 9
 ; GFX1250:    ; Occupancy: 10
-; GFX1310W32: ; Occupancy: 16
-; GFX1310W64: ; Occupancy: 9
 define amdgpu_kernel void @used_84_vgprs() #10 {
   call void asm sideeffect "", "~{v83}" ()
   ret void
@@ -348,8 +323,6 @@ define amdgpu_kernel void @used_84_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 16
 ; GFX1200W64: ; Occupancy: 8
 ; GFX1250:    ; Occupancy: 10
-; GFX1310W32: ; Occupancy: 16
-; GFX1310W64: ; Occupancy: 8
 define amdgpu_kernel void @used_88_vgprs() #10 {
   call void asm sideeffect "", "~{v87}" ()
   ret void
@@ -368,8 +341,6 @@ define amdgpu_kernel void @used_88_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 16
 ; GFX1200W64: ; Occupancy: 8
 ; GFX1250:    ; Occupancy: 10
-; GFX1310W32: ; Occupancy: 16
-; GFX1310W64: ; Occupancy: 8
 define amdgpu_kernel void @used_96_vgprs() #10 {
   call void asm sideeffect "", "~{v95}" ()
   ret void
@@ -389,8 +360,6 @@ define amdgpu_kernel void @used_96_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 12
 ; GFX1200W64: ; Occupancy: 7
 ; GFX1250:    ; Occupancy: 9
-; GFX1310W32: ; Occupancy: 12
-; GFX1310W64: ; Occupancy: 7
 define amdgpu_kernel void @used_100_vgprs() #10 {
   call void asm sideeffect "", "~{v99}" ()
   ret void
@@ -409,8 +378,6 @@ define amdgpu_kernel void @used_100_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 12
 ; GFX1200W64: ; Occupancy: 6
 ; GFX1250:    ; Occupancy: 9
-; GFX1310W32: ; Occupancy: 12
-; GFX1310W64: ; Occupancy: 6
 define amdgpu_kernel void @used_112_vgprs() #10 {
   call void asm sideeffect "", "~{v111}" ()
   ret void
@@ -429,8 +396,6 @@ define amdgpu_kernel void @used_112_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 10
 ; GFX1200W64: ; Occupancy: 5
 ; GFX1250:    ; Occupancy: 8
-; GFX1310W32: ; Occupancy: 10
-; GFX1310W64: ; Occupancy: 5
 define amdgpu_kernel void @used_128_vgprs() #10 {
   call void asm sideeffect "", "~{v127}" ()
   ret void
@@ -449,8 +414,6 @@ define amdgpu_kernel void @used_128_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 10
 ; GFX1200W64: ; Occupancy: 5
 ; GFX1250:    ; Occupancy: 7
-; GFX1310W32: ; Occupancy: 10
-; GFX1310W64: ; Occupancy: 5
 define amdgpu_kernel void @used_144_vgprs() #10 {
   call void asm sideeffect "", "~{v143}" ()
   ret void
@@ -470,8 +433,6 @@ define amdgpu_kernel void @used_144_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 9
 ; GFX1200W64: ; Occupancy: 4
 ; GFX1250:    ; Occupancy: 5
-; GFX1310W32: ; Occupancy: 9
-; GFX1310W64: ; Occupancy: 4
 define amdgpu_kernel void @used_168_vgprs() #10 {
   call void asm sideeffect "", "~{v167}" ()
   ret void
@@ -491,8 +452,6 @@ define amdgpu_kernel void @used_168_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 7
 ; GFX1200W64: ; Occupancy: 3
 ; GFX1250:    ; Occupancy: 4
-; GFX1310W32: ; Occupancy: 7
-; GFX1310W64: ; Occupancy: 3
 define amdgpu_kernel void @used_200_vgprs() #10 {
   call void asm sideeffect "", "~{v199}" ()
   ret void
@@ -511,8 +470,6 @@ define amdgpu_kernel void @used_200_vgprs() #10 {
 ; GFX1200W32: ; Occupancy: 5
 ; GFX1200W64: ; Occupancy: 2
 ; GFX1250:    ; Occupancy: 4
-; GFX1310W32: ; Occupancy: 5
-; GFX1310W64: ; Occupancy: 2
 define amdgpu_kernel void @used_256_vgprs() #10 {
   call void asm sideeffect "", "~{v255}" ()
   ret void
@@ -531,7 +488,6 @@ define amdgpu_kernel void @used_256_vgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_80_sgprs() #10 {
   call void asm sideeffect "", "~{s79}" ()
   ret void
@@ -550,7 +506,6 @@ define amdgpu_kernel void @used_80_sgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_88_sgprs() #10 {
   call void asm sideeffect "", "~{s87}" ()
   ret void
@@ -569,7 +524,6 @@ define amdgpu_kernel void @used_88_sgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_100_sgprs() #10 {
   call void asm sideeffect "", "~{s99}" ()
   ret void
@@ -588,7 +542,6 @@ define amdgpu_kernel void @used_100_sgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 define amdgpu_kernel void @used_101_sgprs() #10 {
   call void asm sideeffect "", "~{s100}" ()
   ret void
@@ -606,7 +559,6 @@ define amdgpu_kernel void @used_101_sgprs() #10 {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 @lds6552 = internal addrspace(3) global [6552 x i8] poison, align 4
 define amdgpu_kernel void @used_lds_6552() {
   store volatile i8 1, ptr addrspace(3) @lds6552
@@ -625,7 +577,6 @@ define amdgpu_kernel void @used_lds_6552() {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 @lds6556 = internal addrspace(3) global [6556 x i8] poison, align 4
 define amdgpu_kernel void @used_lds_6556() {
   store volatile i8 1, ptr addrspace(3) @lds6556
@@ -644,7 +595,6 @@ define amdgpu_kernel void @used_lds_6556() {
 ; GFX1100:    ; Occupancy: 16
 ; GFX1200:    ; Occupancy: 16
 ; GFX1250:    ; Occupancy: 16
-; GFX1310:    ; Occupancy: 16
 @lds13112 = internal addrspace(3) global [13112 x i8] poison, align 4
 define amdgpu_kernel void @used_lds_13112() {
   store volatile i8 1, ptr addrspace(3) @lds13112
@@ -665,10 +615,6 @@ define amdgpu_kernel void @used_lds_13112() {
 ; GFX1200W32CU: ; Occupancy: 7{{$}}
 ; GFX1200W64: ; Occupancy: 4{{$}}
 ; GFX1250:    ; Occupancy: 8{{$}}
-; GFX1310W32WG: ; Occupancy: 11{{$}}
-; GFX1310W32CU: ; Occupancy: 10{{$}}
-; GFX1310W64WG: ; Occupancy: 6{{$}}
-; GFX1310W64CU: ; Occupancy: 5{{$}}
 @lds8252 = internal addrspace(3) global [8252 x i8] poison, align 4
 define amdgpu_kernel void @used_lds_8252_max_group_size_64() #3 {
   store volatile i8 1, ptr addrspace(3) @lds8252
@@ -690,10 +636,6 @@ define amdgpu_kernel void @used_lds_8252_max_group_size_64() #3 {
 ; GFX1200W64WG: ; Occupancy: 8{{$}}
 ; GFX1200W64CU: ; Occupancy: 7{{$}}
 ; GFX1250:    ; Occupancy: 12{{$}}
-; GFX1310W32WG: ; Occupancy: 16{{$}}
-; GFX1310W32CU: ; Occupancy: 15{{$}}
-; GFX1310W64WG: ; Occupancy: 11{{$}}
-; GFX1310W64CU: ; Occupancy: 10{{$}}
 define amdgpu_kernel void @used_lds_8252_max_group_size_96() #4 {
   store volatile i8 1, ptr addrspace(3) @lds8252
   ret void
@@ -714,9 +656,6 @@ define amdgpu_kernel void @used_lds_8252_max_group_size_96() #4 {
 ; GFX1200W64WG: ; Occupancy: 8{{$}}
 ; GFX1200W64CU: ; Occupancy: 7{{$}}
 ; GFX1250:    ; Occupancy: 16{{$}}
-; GFX1310W32: ; Occupancy: 16{{$}}
-; GFX1310W64WG: ; Occupancy: 11{{$}}
-; GFX1310W64CU: ; Occupancy: 10{{$}}
 define amdgpu_kernel void @used_lds_8252_max_group_size_128() #5 {
   store volatile i8 1, ptr addrspace(3) @lds8252
   ret void
@@ -737,9 +676,6 @@ define amdgpu_kernel void @used_lds_8252_max_group_size_128() #5 {
 ; GFX1200W64WG: ; Occupancy: 12{{$}}
 ; GFX1200W64CU: ; Occupancy: 11{{$}}
 ; GFX1250:    ; Occupancy: 15{{$}}
-; GFX1310W32: ; Occupancy: 15{{$}}
-; GFX1310W64WG: ; Occupancy: 16{{$}}
-; GFX1310W64CU: ; Occupancy: 15{{$}}
 define amdgpu_kernel void @used_lds_8252_max_group_size_192() #6 {
   store volatile i8 1, ptr addrspace(3) @lds8252
   ret void
@@ -760,7 +696,6 @@ define amdgpu_kernel void @used_lds_8252_max_group_size_192() #6 {
 ; GFX1200W64WG: ; Occupancy: 15{{$}}
 ; GFX1200W64CU: ; Occupancy: 14{{$}}
 ; GFX1250:    ; Occupancy: 16{{$}}
-; GFX1310:    ; Occupancy: 16{{$}}
 define amdgpu_kernel void @used_lds_8252_max_group_size_256() #7 {
   store volatile i8 1, ptr addrspace(3) @lds8252
   ret void
@@ -777,7 +712,6 @@ define amdgpu_kernel void @used_lds_8252_max_group_size_256() #7 {
 ; GFX1100:    ; Occupancy: 16{{$}}
 ; GFX1200:    ; Occupancy: 16{{$}}
 ; GFX1250:    ; Occupancy: 16{{$}}
-; GFX1310:    ; Occupancy: 16{{$}}
 define amdgpu_kernel void @used_lds_8252_max_group_size_512() #8 {
   store volatile i8 1, ptr addrspace(3) @lds8252
   ret void
@@ -795,7 +729,6 @@ define amdgpu_kernel void @used_lds_8252_max_group_size_512() #8 {
 ; GFX1100:    ; Occupancy: 16{{$}}
 ; GFX1200:    ; Occupancy: 16{{$}}
 ; GFX1250:    ; Occupancy: 16{{$}}
-; GFX1310:    ; Occupancy: 16{{$}}
 define amdgpu_kernel void @used_lds_8252_max_group_size_1024() #9 {
   store volatile i8 1, ptr addrspace(3) @lds8252
   ret void
@@ -811,10 +744,6 @@ define amdgpu_kernel void @used_lds_8252_max_group_size_1024() #9 {
 ; GFX1100:    ; Occupancy: 4{{$}}
 ; GFX1200:    ; Occupancy: 4{{$}}
 ; GFX1250:    ; Occupancy: 8{{$}}
-; GFX1310W32WG: ; Occupancy: 6{{$}}
-; GFX1310W32CU: ; Occupancy: 5{{$}}
-; GFX1310W64WG: ; Occupancy: 6{{$}}
-; GFX1310W64CU: ; Occupancy: 5{{$}}
 define amdgpu_kernel void @used_lds_8252_max_group_size_32() #10 {
   store volatile i8 1, ptr addrspace(3) @lds8252
   ret void

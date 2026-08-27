@@ -1,6 +1,6 @@
 ! RUN: bbc --strict-fir-volatile-verifier -fopenmp %s -o - | FileCheck %s
 type t
-    integer, pointer :: array(:)
+integer, pointer :: array(:)
 end type
 integer, volatile, pointer :: array1(:)
 type(t), volatile :: container

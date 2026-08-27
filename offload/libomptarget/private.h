@@ -41,6 +41,7 @@ target_replay(ident_t *Loc, DeviceTy &Device, void *HostPtr, void *DeviceMemory,
               KernelReplayOutcomeTy *ReplayOutcome);
 
 extern void handleTargetOutcome(bool Success, ident_t *Loc);
+extern bool checkDevice(int64_t &DeviceID, ident_t *Loc);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Print out the names and properties of the arguments to each kernel

@@ -895,8 +895,12 @@ public:
     Ty NumBlocks = mapping::getNumberOfBlocksInKernel();
     Ty BId = mapping::getBlockIdInKernel();
 
-    // The index is BId * NumThreads + TId, so NumThreads must be the real
-    // block size; a larger value strides past each block and drops iterations.
+    // In the SPMD no-loop fast path (OneIterationPerThread=1), the caller
+    // derives NumThreads from omp_get_num_threads() which is evaluated before
+    // the parallel region is active and returns 1 instead of the actual block
+    // size. This produces a stride of 1 in NormalizedLoopNestNoChunk, leaving
+    // iterations [NumBlocks+blocksize-1 .. NumIters-1] permanently unexecuted.
+    // Read the hardware block size directly, which is always correct here.
     if (OneIterationPerThread)
       NumThreads = static_cast<Ty>(mapping::getMaxTeamThreads());
 

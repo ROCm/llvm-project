@@ -36,6 +36,7 @@ class DataLayout;
 class Module;
 
 template <typename ValueSubClass, typename... Args> class SymbolTableListTraits;
+class DIGlobalVariable;
 class DIGlobalVariableExpression;
 
 class GlobalVariable : public GlobalObject, public ilist_node<GlobalVariable> {
@@ -215,6 +216,12 @@ public:
   LLVM_ABI void
   getDebugInfo(SmallVectorImpl<DIGlobalVariableExpression *> &GVs) const;
 
+  /// Attach a DIGlobalVariable.
+  void addDebugInfo(DIGlobalVariable *GV);
+
+  /// Fill the vector with all debug info attachements.
+  void getDebugInfo(SmallVectorImpl<DIGlobalVariable *> &GVs) const;
+
   /// Add attribute to this global.
   void addAttribute(Attribute::AttrKind Kind) {
     Attrs = Attrs.addAttribute(getContext(), Kind);
@@ -310,6 +317,12 @@ public:
   /// Remove the code model for this global.
   ///
   LLVM_ABI void clearCodeModel();
+
+  /// FIXME: Remove this function once transition to Align is over.
+  uint64_t getAlignment() const {
+    MaybeAlign Align = getAlign();
+    return Align ? Align->value() : 0;
+  }
 
   /// Returns the alignment of the given variable.
   MaybeAlign getAlign() const { return GlobalObject::getAlign(); }

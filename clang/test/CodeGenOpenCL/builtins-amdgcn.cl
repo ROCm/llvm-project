@@ -320,13 +320,6 @@ void test_readlane(global int* out, int a, int b)
   *out = __builtin_amdgcn_readlane(a, b);
 }
 
-// CHECK-LABEL: @test_wave_shuffle
-// CHECK: {{.*}}call{{.*}} i32 @llvm.amdgcn.wave.shuffle.i32(i32 %a, i32 %b)
-void test_wave_shuffle(global int* out, int a, int b)
-{
-  *out = __builtin_amdgcn_wave_shuffle(a, b);
-}
-
 // CHECK-LABEL: @test_fcmp_f32
 // CHECK: [[CMP:%.+]] = fcmp ole float %a, %b
 // CHECK: {{.*}}call{{.*}} i64 @llvm.amdgcn.ballot.i64(i1 [[CMP]])

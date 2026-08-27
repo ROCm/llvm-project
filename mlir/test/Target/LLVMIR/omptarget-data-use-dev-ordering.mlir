@@ -72,7 +72,7 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK: %[[BASEPTR_2_GEP:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 4
 // CHECK: store ptr %[[ARG_2]], ptr %[[BASEPTR_2_GEP]], align 8
 // CHECK: %[[BASEPTR_3_GEP:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 7
-
+// CHECK: store ptr %[[ARG_4]], ptr %[[BASEPTR_3_GEP]], align 8
 // CHECK: call void @__tgt_target_data_begin_mapper({{.*}})
 // CHECK: %[[LOAD_BASEPTR_0:.*]] = load ptr, ptr %[[BASEPTR_0_GEP]], align 8
 // store ptr %[[LOAD_BASEPTR_0]], ptr %[[ALLOCA]], align 8

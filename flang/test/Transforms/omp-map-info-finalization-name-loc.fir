@@ -30,5 +30,6 @@ func.func @preserve_name_loc_for_descriptor_base_member(%arg0: !fir.box<!fir.arr
 // CHECK-LABEL: func.func @preserve_name_loc_for_descriptor_base_member
 // CHECK: fir.box_offset {{.*}} base_addr : (!fir.ref<!fir.box<!fir.heap<i32>>>) -> !fir.llvm_ptr<!fir.ref<i32>> loc(#loc[[LOCID:[0-9]+]])
 // CHECK: omp.map.info {{.*}} map_clauses(tofrom){{.*}} loc(#loc[[LOCID]])
-// CHECK: omp.map.info {{.*}} map_clauses(always, to){{.*}} members({{.*}}){{.*}} loc(#loc[[LOCID]])
+// Descriptor maps include `descriptor` on amd-staging / newer lowering.
+// CHECK: omp.map.info {{.*}} map_clauses(always{{.*}}to){{.*}} members({{.*}}){{.*}} loc(#loc[[LOCID]])
 // CHECK: #loc[[LOCID]] = loc("arr(1:42)"({{.*}}))

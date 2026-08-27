@@ -232,6 +232,8 @@ void Flang::addDebugOptions(const llvm::opt::ArgList &Args, const JobAction &JA,
                    options::OPT_std_EQ, options::OPT_W_Joined,
                    options::OPT_fconvert_EQ, options::OPT_fpass_plugin_EQ,
                    options::OPT_funderscoring, options::OPT_fno_underscoring,
+                   options::OPT_foffload_global_filtering,
+                   options::OPT_fno_offload_global_filtering,
                    options::OPT_funsigned, options::OPT_fno_unsigned,
                    options::OPT_fenumeration_type,
                    options::OPT_fno_enumeration_type,
@@ -240,6 +242,11 @@ void Flang::addDebugOptions(const llvm::opt::ArgList &Args, const JobAction &JA,
                    options::OPT_fopenacc_multiple_names_in_routine,
                    options::OPT_fno_openacc_multiple_names_in_routine,
                    options::OPT_finstrument_functions});
+
+  if (Args.hasArg(options::OPT_fopenacc)) {
+     const Driver &D = getToolChain().getDriver();
+     D.Diag(diag::warn_openacc_experimental);
+  }
 
   llvm::codegenoptions::DebugInfoKind DebugInfoKind;
   bool hasDwarfNArg = getDwarfNArg(Args) != nullptr;
@@ -252,7 +259,14 @@ void Flang::addDebugOptions(const llvm::opt::ArgList &Args, const JobAction &JA,
     DebugInfoKind = llvm::codegenoptions::NoDebugInfo;
   }
   addDebugInfoKind(CmdArgs, DebugInfoKind);
-  if (hasDwarfNArg) {
+  // Pass on the DWARF version when debug information is being generated, or
+  // when -gdwarf-N names a version. Leaving it out means the version stays
+  // unset and the backend falls back to dwarf::DWARF_VERSION (4) instead of
+  // honouring toolchain default like clang does.
+  //
+  // Note that both conditions are needed to match clang for cases like
+  // "-gdwarf-5 -g0".
+  if (hasDwarfNArg || DebugInfoKind != llvm::codegenoptions::NoDebugInfo) {
     const unsigned DwarfVersion = getDwarfVersion(getToolChain(), Args);
     CmdArgs.push_back(
         Args.MakeArgString("-dwarf-version=" + Twine(DwarfVersion)));
@@ -358,6 +372,12 @@ void Flang::addCodegenOptions(const ArgList &Args,
           << "-frepack-arrays-contiguity=" << arg;
     }
 
+  // -fdo-concurrent and -fdo-concurrent-to-openmp are aliases. Make sure the
+  // correct alias (spelling) is added to the list of command arguments.
+  if (const Arg *A = Args.getLastArg(options::OPT_fdo_concurrent_EQ)) {
+    CmdArgs.push_back(Args.MakeArgString(A->getAsString(Args)));
+  }
+
   Args.addAllArgs(
       CmdArgs,
       {options::OPT_fdo_concurrent_to_openmp_EQ,
@@ -369,6 +389,7 @@ void Flang::addCodegenOptions(const ArgList &Args,
        options::OPT_fstack_repack_arrays, options::OPT_fno_stack_repack_arrays,
        options::OPT_ftime_report, options::OPT_ftime_report_EQ,
        options::OPT_funroll_loops, options::OPT_fno_unroll_loops,
+       options::OPT_fdefer_desc_map, options::OPT_fno_defer_desc_map,
        options::OPT_relaxed_c_loc});
 
   const llvm::Triple &Triple = getToolChain().getEffectiveTriple();
@@ -1316,6 +1337,21 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
 
   addFortranDialectOptions(Args, CmdArgs);
 
+  if (const Arg *A =
+          Args.getLastArg(options::OPT_fopenmp_default_allocate_EQ)) {
+    StringRef Val(A->getValue());
+    if (Val != "target" && Val != "host") {
+      D.Diag(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
+    } else {
+      D.Diag(diag::warn_openmp_default_allocate_experimental);
+      CmdArgs.push_back(Args.MakeArgString("-fopenmp-default-allocate=" + Val));
+      if (Val == "target") {
+        CmdArgs.push_back("-mmlir");
+        CmdArgs.push_back("-use-alloc-runtime");
+      }
+    }
+  }
+
   // 'flang -E' always produces output that is suitable for use as fixed form
   // Fortran. However it is only valid free form source if the original is also
   // free form. Ensure this logic does not incorrectly assume fixed-form for
@@ -1576,3 +1612,4 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
 Flang::Flang(const ToolChain &TC) : Tool("flang", "flang frontend", TC) {}
 
 Flang::~Flang() {}
+

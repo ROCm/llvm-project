@@ -53,8 +53,8 @@ program main
     end subroutine no_declaretarget
 
     ! MLIR-HOST: llvm.func{{.*}} @main(
-    ! MLIR-DEVICE-NOT: llvm.func{{.*}} @main(
     ! MLIR-HOST: llvm.return
+    ! MLIR-DEVICE-NOT: llvm.func{{.*}} @main(
 
     ! LLVM-HOST: define {{.*}} @{{.*}}main{{.*}}(
     ! LLVM-HOST: {{.*}} @{{.*}}__omp_offloading{{.*}}main_{{.*}}(

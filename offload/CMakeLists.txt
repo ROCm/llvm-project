@@ -12,6 +12,18 @@ endif()
 
 set(LLVM_SUBPROJECT_TITLE "liboffload")
 
+if(DEFINED LIBOMP_SHARED_LINKER_FLAGS)
+  set(CMAKE_SHARED_LINKER_FLAGS "${LIBOMP_SHARED_LINKER_FLAGS}")
+endif()
+
+if(DEFINED LIBOMP_INSTALL_RPATH)
+  set(CMAKE_INSTALL_RPATH "${LIBOMP_INSTALL_RPATH}")
+endif()
+
+if(LIBOMPTARGET_NO_SANITIZER_AMDGPU)
+  set(SANITIZER_AMDGPU FALSE)
+endif()
+
 # The minimum versions required for dependencies.
 set(OFFLOAD_MIN_CUDA_VERSION 11.8.0)
 set(OFFLOAD_MIN_CUDA_VERSION_CODE 11080)
@@ -40,6 +52,9 @@ elseif(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 
 set(OFFLOAD_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+include(GetClangResourceDir)
+get_clang_resource_dir(LIBOMP_HEADERS_INSTALL_PATH SUBDIR include)
 
 # When building in tree we install the runtime according to the LLVM settings.
 # TODO: Use common runtimes infrastructure for output and install paths
@@ -108,6 +123,14 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED NO)
 set(CMAKE_CXX_EXTENSIONS NO)
+
+# Emit a warning for people who haven't updated their build.
+if(NOT "openmp" IN_LIST RUNTIMES_amdgcn-amd-amdhsa_LLVM_ENABLE_RUNTIMES AND
+   NOT "openmp" IN_LIST RUNTIMES_nvptx64-nvidia-cuda_LLVM_ENABLE_RUNTIMES)
+  message(WARNING "Building the offloading runtime with no device library. See "
+                  "https://openmp.llvm.org/SupportAndFAQ.html#q-how-to-build-an-openmp-gpu-offload-capable-compiler.html "
+                  "for more information.")
+endif()
 
 # Set the path of all resulting libraries to a unified location so that it can
 # be used for testing and found in the build tree.
@@ -213,15 +236,20 @@ include_directories(${LIBOMPTARGET_LLVM_INCLUDE_DIRS})
 
 # This is a list of all the targets that are supported/tested right now.
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} aarch64-unknown-linux-gnu")
+set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} aarch64-unknown-linux-gnu-oldDriver")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} aarch64-unknown-linux-gnu-LTO")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} amdgpu-amd-amdhsa")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64le-ibm-linux-gnu")
+set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64le-ibm-linux-gnu-oldDriver")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64le-ibm-linux-gnu-LTO")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64-ibm-linux-gnu")
+set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64-ibm-linux-gnu-oldDriver")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64-ibm-linux-gnu-LTO")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} x86_64-unknown-linux-gnu")
+set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} x86_64-unknown-linux-gnu-oldDriver")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} x86_64-unknown-linux-gnu-LTO")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} nvptx64-nvidia-cuda")
+set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} nvptx64-nvidia-cuda-oldDriver")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} nvptx64-nvidia-cuda-LTO")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} nvptx64-nvidia-cuda-JIT-LTO")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} s390x-ibm-linux-gnu")
@@ -243,11 +271,18 @@ set (LIBOMPTARGET_TESTED_PLUGINS "")
 string( TOLOWER "${CMAKE_BUILD_TYPE}" LIBOMPTARGET_CMAKE_BUILD_TYPE)
 if(LIBOMPTARGET_CMAKE_BUILD_TYPE MATCHES debug)
   option(LIBOMPTARGET_ENABLE_DEBUG "Allow debug output with the environment variable LIBOMPTARGET_DEBUG=1" ON)
+  add_definitions(-DDEBUG)
 else()
   option(LIBOMPTARGET_ENABLE_DEBUG "Allow debug output with the environment variable LIBOMPTARGET_DEBUG=1" OFF)
 endif()
 if(LIBOMPTARGET_ENABLE_DEBUG)
   add_definitions(-DOMPTARGET_DEBUG)
+endif()
+
+# OMPD support for libomptarget (currently only with cuda)
+set(LIBOMPTARGET_OMPD_SUPPORT FALSE CACHE BOOL "OMPD-support?")
+if (LIBOMPTARGET_OMPD_SUPPORT)
+  add_definitions(-DOMPD_SUPPORT=1)
 endif()
 
 # No exceptions and no RTTI, except if requested.
@@ -266,7 +301,7 @@ if(NOT LLVM_ENABLE_RTTI)
 endif()
 
 if(OFFLOAD_HAVE_WERROR_CTOR)
-  list(APPEND offload_compile_flags -Werror=global-constructors)
+#   list(APPEND offload_compile_flags -Werror=global-constructors)
 endif()
 
 # TODO: Consider enabling LTO by default if supported.
@@ -295,17 +330,25 @@ else()
 endif()
 endmacro()
 
+if(OPENMP_STANDALONE_BUILD OR TARGET omp)
+  # Check LIBOMP_HAVE_VERSION_SCRIPT_FLAG
+  include(LLVMCheckCompilerLinkerFlag)
+  if(NOT APPLE)
+    llvm_check_compiler_linker_flag(C "-Wl,--version-script=${CMAKE_CURRENT_LIST_DIR}/../openmp/runtime/src/exports_test_so.txt" LIBOMP_HAVE_VERSION_SCRIPT_FLAG)
+  endif()
+endif()
+
 # OMPT support for libomptarget
 # Follow host OMPT support and check if host support has been requested.
 # LIBOMP_HAVE_OMPT_SUPPORT indicates whether host OMPT support has been implemented.
 # LIBOMP_OMPT_SUPPORT indicates whether host OMPT support has been requested (default is ON).
 # LIBOMPTARGET_OMPT_SUPPORT indicates whether target OMPT support has been requested (default is ON).
 set(OMPT_TARGET_DEFAULT FALSE)
-if ((LIBOMP_HAVE_OMPT_SUPPORT) AND (LIBOMP_OMPT_SUPPORT) AND (NOT WIN32))
+if ((LIBOMP_HAVE_OMPT_SUPPORT) AND (NOT WIN32))
   set (OMPT_TARGET_DEFAULT TRUE)
 endif()
 set(LIBOMPTARGET_OMPT_SUPPORT ${OMPT_TARGET_DEFAULT} CACHE BOOL "OMPT-target-support?")
-if ((OMPT_TARGET_DEFAULT) AND (LIBOMPTARGET_OMPT_SUPPORT))
+if (LIBOMPTARGET_OMPT_SUPPORT)
   add_definitions(-DOMPT_SUPPORT=1)
   message(STATUS "OMPT target enabled")
 else()
@@ -313,9 +356,37 @@ else()
   message(STATUS "OMPT target disabled")
 endif()
 
+include_directories(include)
 pythonize_bool(LIBOMPTARGET_OMPT_SUPPORT)
 
 set(LIBOMPTARGET_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+# Various LLVM_TOOLS are needed to build libomptarget
+find_package(LLVM QUIET CONFIG PATHS
+   ${LLVM_INSTALL_PREFIX}
+   ${LIBOMPTARGET_NVPTX_CUDA_COMPILER_DIR}
+   ${LIBOMPTARGET_NVPTX_CUDA_LINKER_DIR}
+   ${CMAKE_CXX_COMPILER_DIR}
+   NO_DEFAULT_PATH)
+if(LLVM_DIR)
+  message(" -- LLVM found at ${LLVM_DIR}")
+  find_program(CLANG_TOOL clang PATHS ${LLVM_TOOLS_BINARY_DIR} NO_DEFAULT_PATH)
+  find_program(CLANG_OFFLOAD_BUNDLER_TOOL clang-offload-bundler PATHS ${LLVM_TOOLS_BINARY_DIR} NO_DEFAULT_PATH)
+  find_program(AR_TOOL llvm-ar PATHS ${LLVM_TOOLS_BINARY_DIR} NO_DEFAULT_PATH)
+  find_program(LINK_TOOL llvm-link PATHS ${LLVM_TOOLS_BINARY_DIR}
+    NO_DEFAULT_PATH)
+  find_program(OPT_TOOL opt PATHS ${LLVM_TOOLS_BINARY_DIR} NO_DEFAULT_PATH)
+elseif (LLVM_TOOL_CLANG_BUILD AND NOT CMAKE_CROSSCOMPILING AND NOT OPENMP_STANDALONE_BUILD)
+  # LLVM in-tree builds may use CMake target names to discover the tools.
+  set(CLANG_TOOL $<TARGET_FILE:clang>)
+  set(CLANG_OFFLOAD_BUNDLER_TOOL $<TARGET_FILE:clang-offload-bundler>)
+  set(AR_TOOL $<TARGET_FILE:llvm-ar>)
+  set(LINK_TOOL $<TARGET_FILE:llvm-link>)
+  set(OPT_TOOL $<TARGET_FILE:opt>)
+else()
+  message(" ====== WARNING! no LLVM found! some libomptarget components may be skipped")
+endif()
+
 set(LIBOMPTARGET_BINARY_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include)
 message(STATUS "OpenMP tools dir in libomptarget: ${LIBOMP_OMP_TOOLS_INCLUDE_DIR}")
 if(LIBOMP_OMP_TOOLS_INCLUDE_DIR)
@@ -327,6 +398,21 @@ set(LIBOMPTARGET_LLVM_LIBRARY_DIR "${LLVM_LIBRARY_DIR}" CACHE STRING
   "Path to folder containing llvm library libomptarget.so")
 set(LIBOMPTARGET_LLVM_LIBRARY_INTDIR "${LIBOMPTARGET_LIBRARY_DIR}" CACHE STRING
   "Path to folder where intermediate libraries will be output")
+
+if(SANITIZER_AMDGPU)
+  add_definitions(-DSANITIZER_AMDGPU=1)
+  # Check for COMGr package , ASan requires COMGr with minimum version 2.4
+  find_package(amd_comgr QUIET 2.4.0 HINTS ${CMAKE_INSTALL_PREFIX} PATHS /opt/rocm)
+endif()
+# If LLVM is dynamically linked we need to add its libraries.
+set(OFFLOAD_INSTALL_RPATH "$ORIGIN")
+if(LLVM_LINK_LLVM_DYLIB)
+  file(RELATIVE_PATH llvm_libdir_relpath
+       "${CMAKE_INSTALL_PREFIX}/${OFFLOAD_INSTALL_LIBDIR}"
+       "${CMAKE_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}")
+  string(REGEX REPLACE "/$" "" llvm_libdir_relpath "${llvm_libdir_relpath}")
+  list(APPEND OFFLOAD_INSTALL_RPATH "$ORIGIN/${llvm_libdir_relpath}")
+endif()
 
 add_subdirectory(tools/offload-tblgen)
 
@@ -348,6 +434,7 @@ if(OFFLOAD_INCLUDE_TESTS)
   add_subdirectory(unittests)
 endif()
 
+add_subdirectory(utils)
 # Expose a high-level target to build the offloading runtimes.
 # This is used in pre-commit CI to run a build of the libraries without requiring
 # to invoke the check-* targets.

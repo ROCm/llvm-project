@@ -136,6 +136,16 @@ void registerDefaultInlinerPass(MLIRToLLVMPassPipelineConfig &config);
 /// e.g. --mlir-print-ir-before=<pass> and similar.
 void registerFlangPipelinePasses();
 
+/// Create a pass pipeline for default FIR optimizations that run before CFG
+/// conversion.
+void createDefaultFIRPreCFGOptimizerPassPipeline(
+    mlir::PassManager &pm, MLIRToLLVMPassPipelineConfig &pc);
+
+/// Create a pass pipeline for default FIR optimizations that run after CFG
+/// conversion.
+void createDefaultFIRPostCFGOptimizerPassPipeline(
+    mlir::PassManager &pm, MLIRToLLVMPassPipelineConfig &pc);
+
 /// Create a pass pipeline for running default optimization passes for
 /// incremental conversion of FIR.
 ///
@@ -159,6 +169,12 @@ struct OpenMPFIRPassPipelineOpts {
   /// Whether code is being generated for a target device rather than the host
   /// device
   bool isTargetDevice;
+  bool enableOffloadGlobalFiltering;
+
+  /// Deactivates or activates MapInfoFinalization passes removal of
+  /// top-level descriptor mapping for non-Target Data/Target region
+  /// directives.
+  bool deferDescMap;
 
   /// Controls how to map `do concurrent` loops; to device, host, or none at
   /// all.

@@ -4621,11 +4621,125 @@ static void processCapturedRegions(Sema &SemaRef, OpenMPDirectiveKind DKind,
 
 void SemaOpenMP::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind,
                                         Scope *CurScope) {
+  ASTContext &Context = getASTContext();
   if (DKind == OMPD_ordered_blockassoc &&
       DSAStack->getCurrentDirective() == OMPD_ordered_standalone) {
     DSAStack->setOrderedToBlockAssociated();
   }
   switch (DKind) {
+  case OMPD_parallel:
+  case OMPD_parallel_for:
+  case OMPD_parallel_for_simd:
+  case OMPD_parallel_sections:
+  case OMPD_parallel_master:
+  case OMPD_parallel_masked:
+  case OMPD_parallel_loop:
+  case OMPD_teams:
+  case OMPD_teams_loop:
+  case OMPD_teams_distribute:
+  case OMPD_teams_distribute_simd: {
+    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
+    QualType KmpInt32PtrTy =
+        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
+    SemaOpenMP::CapturedParamNameType Params[] = {
+        std::make_pair(".global_tid.", KmpInt32PtrTy),
+        std::make_pair(".bound_tid.", KmpInt32PtrTy),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, Params);
+    break;
+  }
+  case OMPD_target_teams:
+  case OMPD_target_parallel:
+  case OMPD_target_parallel_for:
+  case OMPD_target_parallel_for_simd:
+  case OMPD_target_parallel_loop:
+  case OMPD_target_teams_distribute:
+  case OMPD_target_teams_distribute_simd: {
+    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
+    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
+    QualType KmpInt32PtrTy =
+        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
+    QualType Args[] = {VoidPtrTy};
+    FunctionProtoType::ExtProtoInfo EPI;
+    EPI.Variadic = true;
+    QualType CopyFnType = Context.getFunctionType(Context.VoidTy, Args, EPI);
+    SemaOpenMP::CapturedParamNameType Params[] = {
+        std::make_pair(".global_tid.", KmpInt32Ty),
+        std::make_pair(".part_id.", KmpInt32PtrTy),
+        std::make_pair(".privates.", VoidPtrTy),
+        std::make_pair(
+            ".copy_fn.",
+            Context.getPointerType(CopyFnType).withConst().withRestrict()),
+        std::make_pair(".task_t.", Context.VoidPtrTy.withConst()),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, Params,
+                                     /*OpenMPCaptureLevel=*/0);
+    // Mark this captured region as inlined, because we don't use outlined
+    // function directly.
+    SemaRef.getCurCapturedRegion()->TheCapturedDecl->addAttr(
+        AlwaysInlineAttr::CreateImplicit(
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
+    SmallVector<SemaOpenMP::CapturedParamNameType, 2> ParamsTarget;
+    ParamsTarget.push_back(
+        std::make_pair(StringRef(), QualType())); // __context with shared vars;
+    ParamsTarget.push_back(std::make_pair(StringRef("dyn_ptr"), VoidPtrTy));
+    // Start a captured region for 'target' with no implicit parameters.
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, ParamsTarget,
+                                     /*OpenMPCaptureLevel=*/1);
+    SemaOpenMP::CapturedParamNameType ParamsTeamsOrParallel[] = {
+        std::make_pair(".global_tid.", KmpInt32PtrTy),
+        std::make_pair(".bound_tid.", KmpInt32PtrTy),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    // Start a captured region for 'teams' or 'parallel'.  Both regions have
+    // the same implicit parameters.
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, ParamsTeamsOrParallel,
+                                     /*OpenMPCaptureLevel=*/2);
+    break;
+  }
+  case OMPD_target:
+  case OMPD_target_simd: {
+    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
+    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
+    QualType KmpInt32PtrTy =
+        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
+    QualType Args[] = {VoidPtrTy};
+    FunctionProtoType::ExtProtoInfo EPI;
+    EPI.Variadic = true;
+    QualType CopyFnType = Context.getFunctionType(Context.VoidTy, Args, EPI);
+    SemaOpenMP::CapturedParamNameType Params[] = {
+        std::make_pair(".global_tid.", KmpInt32Ty),
+        std::make_pair(".part_id.", KmpInt32PtrTy),
+        std::make_pair(".privates.", VoidPtrTy),
+        std::make_pair(
+            ".copy_fn.",
+            Context.getPointerType(CopyFnType).withConst().withRestrict()),
+        std::make_pair(".task_t.", Context.VoidPtrTy.withConst()),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, Params,
+                                     /*OpenMPCaptureLevel=*/0);
+    // Mark this captured region as inlined, because we don't use outlined
+    // function directly.
+    SemaRef.getCurCapturedRegion()->TheCapturedDecl->addAttr(
+        AlwaysInlineAttr::CreateImplicit(
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
+    SmallVector<SemaOpenMP::CapturedParamNameType, 2> ParamsTarget;
+    ParamsTarget.push_back(
+        std::make_pair(StringRef(), QualType())); // __context with shared vars;
+    ParamsTarget.push_back(std::make_pair(StringRef("dyn_ptr"), VoidPtrTy));
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, ParamsTarget,
+                                     /*OpenMPCaptureLevel=*/1);
+    break;
+  }
   case OMPD_atomic:
   case OMPD_critical:
   case OMPD_masked:
@@ -4640,6 +4754,321 @@ void SemaOpenMP::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind,
   case OMPD_fuse:
   case OMPD_assume:
     break;
+  case OMPD_loop:
+    // TODO: 'loop' may require additional parameters depending on the binding.
+    // Treat similar to OMPD_simd/OMPD_for for now.
+  case OMPD_simd:
+  case OMPD_for:
+  case OMPD_for_simd:
+  case OMPD_sections:
+  case OMPD_single:
+  case OMPD_taskgroup:
+  case OMPD_distribute:
+  case OMPD_distribute_simd:
+  case OMPD_ordered_blockassoc:
+  case OMPD_scope:
+  case OMPD_target_data:
+  case OMPD_dispatch: {
+    SemaOpenMP::CapturedParamNameType Params[] = {
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, Params);
+    break;
+  }
+  case OMPD_task: {
+    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
+    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
+    QualType KmpInt32PtrTy =
+        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
+    QualType Args[] = {VoidPtrTy};
+    FunctionProtoType::ExtProtoInfo EPI;
+    EPI.Variadic = true;
+    QualType CopyFnType = Context.getFunctionType(Context.VoidTy, Args, EPI);
+    SemaOpenMP::CapturedParamNameType Params[] = {
+        std::make_pair(".global_tid.", KmpInt32Ty),
+        std::make_pair(".part_id.", KmpInt32PtrTy),
+        std::make_pair(".privates.", VoidPtrTy),
+        std::make_pair(
+            ".copy_fn.",
+            Context.getPointerType(CopyFnType).withConst().withRestrict()),
+        std::make_pair(".task_t.", Context.VoidPtrTy.withConst()),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, Params);
+    // Mark this captured region as inlined, because we don't use outlined
+    // function directly.
+    SemaRef.getCurCapturedRegion()->TheCapturedDecl->addAttr(
+        AlwaysInlineAttr::CreateImplicit(
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
+    break;
+  }
+  case OMPD_taskloop:
+  case OMPD_taskloop_simd:
+  case OMPD_master_taskloop:
+  case OMPD_masked_taskloop:
+  case OMPD_masked_taskloop_simd:
+  case OMPD_master_taskloop_simd: {
+    QualType KmpInt32Ty =
+        Context.getIntTypeForBitwidth(/*DestWidth=*/32, /*Signed=*/1)
+            .withConst();
+    QualType KmpUInt64Ty =
+        Context.getIntTypeForBitwidth(/*DestWidth=*/64, /*Signed=*/0)
+            .withConst();
+    QualType KmpInt64Ty =
+        Context.getIntTypeForBitwidth(/*DestWidth=*/64, /*Signed=*/1)
+            .withConst();
+    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
+    QualType KmpInt32PtrTy =
+        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
+    QualType Args[] = {VoidPtrTy};
+    FunctionProtoType::ExtProtoInfo EPI;
+    EPI.Variadic = true;
+    QualType CopyFnType = Context.getFunctionType(Context.VoidTy, Args, EPI);
+    SemaOpenMP::CapturedParamNameType Params[] = {
+        std::make_pair(".global_tid.", KmpInt32Ty),
+        std::make_pair(".part_id.", KmpInt32PtrTy),
+        std::make_pair(".privates.", VoidPtrTy),
+        std::make_pair(
+            ".copy_fn.",
+            Context.getPointerType(CopyFnType).withConst().withRestrict()),
+        std::make_pair(".task_t.", Context.VoidPtrTy.withConst()),
+        std::make_pair(".lb.", KmpUInt64Ty),
+        std::make_pair(".ub.", KmpUInt64Ty),
+        std::make_pair(".st.", KmpInt64Ty),
+        std::make_pair(".liter.", KmpInt32Ty),
+        std::make_pair(".reductions.", VoidPtrTy),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, Params);
+    // Mark this captured region as inlined, because we don't use outlined
+    // function directly.
+    SemaRef.getCurCapturedRegion()->TheCapturedDecl->addAttr(
+        AlwaysInlineAttr::CreateImplicit(
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
+    break;
+  }
+  case OMPD_parallel_masked_taskloop:
+  case OMPD_parallel_masked_taskloop_simd:
+  case OMPD_parallel_master_taskloop:
+  case OMPD_parallel_master_taskloop_simd: {
+    QualType KmpInt32Ty =
+        Context.getIntTypeForBitwidth(/*DestWidth=*/32, /*Signed=*/1)
+            .withConst();
+    QualType KmpUInt64Ty =
+        Context.getIntTypeForBitwidth(/*DestWidth=*/64, /*Signed=*/0)
+            .withConst();
+    QualType KmpInt64Ty =
+        Context.getIntTypeForBitwidth(/*DestWidth=*/64, /*Signed=*/1)
+            .withConst();
+    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
+    QualType KmpInt32PtrTy =
+        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
+    SemaOpenMP::CapturedParamNameType ParamsParallel[] = {
+        std::make_pair(".global_tid.", KmpInt32PtrTy),
+        std::make_pair(".bound_tid.", KmpInt32PtrTy),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    // Start a captured region for 'parallel'.
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, ParamsParallel,
+                                     /*OpenMPCaptureLevel=*/0);
+    QualType Args[] = {VoidPtrTy};
+    FunctionProtoType::ExtProtoInfo EPI;
+    EPI.Variadic = true;
+    QualType CopyFnType = Context.getFunctionType(Context.VoidTy, Args, EPI);
+    SemaOpenMP::CapturedParamNameType Params[] = {
+        std::make_pair(".global_tid.", KmpInt32Ty),
+        std::make_pair(".part_id.", KmpInt32PtrTy),
+        std::make_pair(".privates.", VoidPtrTy),
+        std::make_pair(
+            ".copy_fn.",
+            Context.getPointerType(CopyFnType).withConst().withRestrict()),
+        std::make_pair(".task_t.", Context.VoidPtrTy.withConst()),
+        std::make_pair(".lb.", KmpUInt64Ty),
+        std::make_pair(".ub.", KmpUInt64Ty),
+        std::make_pair(".st.", KmpInt64Ty),
+        std::make_pair(".liter.", KmpInt32Ty),
+        std::make_pair(".reductions.", VoidPtrTy),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, Params,
+                                     /*OpenMPCaptureLevel=*/1);
+    // Mark this captured region as inlined, because we don't use outlined
+    // function directly.
+    SemaRef.getCurCapturedRegion()->TheCapturedDecl->addAttr(
+        AlwaysInlineAttr::CreateImplicit(
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
+    break;
+  }
+  case OMPD_distribute_parallel_for_simd:
+  case OMPD_distribute_parallel_for: {
+    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
+    QualType KmpInt32PtrTy =
+        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
+    SemaOpenMP::CapturedParamNameType Params[] = {
+        std::make_pair(".global_tid.", KmpInt32PtrTy),
+        std::make_pair(".bound_tid.", KmpInt32PtrTy),
+        std::make_pair(".previous.lb.", Context.getSizeType().withConst()),
+        std::make_pair(".previous.ub.", Context.getSizeType().withConst()),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, Params);
+    break;
+  }
+  // For 'target teams loop', collect all captured regions so codegen can
+  // later decide the best IR to emit given the associated loop-nest.
+  case OMPD_target_teams_loop:
+  case OMPD_target_teams_distribute_parallel_for:
+  case OMPD_target_teams_distribute_parallel_for_simd: {
+    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
+    QualType KmpInt32PtrTy =
+        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
+    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
+
+    QualType Args[] = {VoidPtrTy};
+    FunctionProtoType::ExtProtoInfo EPI;
+    EPI.Variadic = true;
+    QualType CopyFnType = Context.getFunctionType(Context.VoidTy, Args, EPI);
+    SemaOpenMP::CapturedParamNameType Params[] = {
+        std::make_pair(".global_tid.", KmpInt32Ty),
+        std::make_pair(".part_id.", KmpInt32PtrTy),
+        std::make_pair(".privates.", VoidPtrTy),
+        std::make_pair(
+            ".copy_fn.",
+            Context.getPointerType(CopyFnType).withConst().withRestrict()),
+        std::make_pair(".task_t.", Context.VoidPtrTy.withConst()),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, Params,
+                                     /*OpenMPCaptureLevel=*/0);
+    // Mark this captured region as inlined, because we don't use outlined
+    // function directly.
+    SemaRef.getCurCapturedRegion()->TheCapturedDecl->addAttr(
+        AlwaysInlineAttr::CreateImplicit(
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
+    SmallVector<SemaOpenMP::CapturedParamNameType, 2> ParamsTarget;
+    ParamsTarget.push_back(
+        std::make_pair(StringRef(), QualType())); // __context with shared vars;
+    ParamsTarget.push_back(std::make_pair(StringRef("dyn_ptr"), VoidPtrTy));
+    // Start a captured region for 'target' with no implicit parameters.
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, ParamsTarget,
+                                     /*OpenMPCaptureLevel=*/1);
+
+    SemaOpenMP::CapturedParamNameType ParamsTeams[] = {
+        std::make_pair(".global_tid.", KmpInt32PtrTy),
+        std::make_pair(".bound_tid.", KmpInt32PtrTy),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    // Start a captured region for 'target' with no implicit parameters.
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, ParamsTeams,
+                                     /*OpenMPCaptureLevel=*/2);
+
+    SemaOpenMP::CapturedParamNameType ParamsParallel[] = {
+        std::make_pair(".global_tid.", KmpInt32PtrTy),
+        std::make_pair(".bound_tid.", KmpInt32PtrTy),
+        std::make_pair(".previous.lb.", Context.getSizeType().withConst()),
+        std::make_pair(".previous.ub.", Context.getSizeType().withConst()),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    // Start a captured region for 'teams' or 'parallel'.  Both regions have
+    // the same implicit parameters.
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, ParamsParallel,
+                                     /*OpenMPCaptureLevel=*/3);
+    break;
+  }
+
+  case OMPD_teams_distribute_parallel_for:
+  case OMPD_teams_distribute_parallel_for_simd: {
+    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
+    QualType KmpInt32PtrTy =
+        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
+
+    SemaOpenMP::CapturedParamNameType ParamsTeams[] = {
+        std::make_pair(".global_tid.", KmpInt32PtrTy),
+        std::make_pair(".bound_tid.", KmpInt32PtrTy),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    // Start a captured region for 'target' with no implicit parameters.
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, ParamsTeams,
+                                     /*OpenMPCaptureLevel=*/0);
+
+    SemaOpenMP::CapturedParamNameType ParamsParallel[] = {
+        std::make_pair(".global_tid.", KmpInt32PtrTy),
+        std::make_pair(".bound_tid.", KmpInt32PtrTy),
+        std::make_pair(".previous.lb.", Context.getSizeType().withConst()),
+        std::make_pair(".previous.ub.", Context.getSizeType().withConst()),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    // Start a captured region for 'teams' or 'parallel'.  Both regions have
+    // the same implicit parameters.
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, ParamsParallel,
+                                     /*OpenMPCaptureLevel=*/1);
+    break;
+  }
+  case OMPD_target_update:
+  case OMPD_target_enter_data:
+  case OMPD_target_exit_data: {
+    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
+    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
+    QualType KmpInt32PtrTy =
+        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
+    QualType Args[] = {VoidPtrTy};
+    FunctionProtoType::ExtProtoInfo EPI;
+    EPI.Variadic = true;
+    QualType CopyFnType = Context.getFunctionType(Context.VoidTy, Args, EPI);
+    SemaOpenMP::CapturedParamNameType Params[] = {
+        std::make_pair(".global_tid.", KmpInt32Ty),
+        std::make_pair(".part_id.", KmpInt32PtrTy),
+        std::make_pair(".privates.", VoidPtrTy),
+        std::make_pair(
+            ".copy_fn.",
+            Context.getPointerType(CopyFnType).withConst().withRestrict()),
+        std::make_pair(".task_t.", Context.VoidPtrTy.withConst()),
+        std::make_pair(StringRef(), QualType()) // __context with shared vars
+    };
+    SemaRef.ActOnCapturedRegionStart(DSAStack->getConstructLoc(), CurScope,
+                                     CR_OpenMP, Params);
+    // Mark this captured region as inlined, because we don't use outlined
+    // function directly.
+    SemaRef.getCurCapturedRegion()->TheCapturedDecl->addAttr(
+        AlwaysInlineAttr::CreateImplicit(
+            Context, {}, AlwaysInlineAttr::Keyword_forceinline));
+    break;
+  }
+  case OMPD_threadprivate:
+  case OMPD_allocate:
+  case OMPD_taskyield:
+  case OMPD_error:
+  case OMPD_barrier:
+  case OMPD_taskwait:
+  case OMPD_cancellation_point:
+  case OMPD_cancel:
+  case OMPD_flush:
+  case OMPD_depobj:
+  case OMPD_scan:
+  case OMPD_declare_reduction:
+  case OMPD_declare_mapper:
+  case OMPD_declare_simd:
+  case OMPD_declare_target:
+  case OMPD_end_declare_target:
+  case OMPD_requires:
+  case OMPD_declare_variant:
+  case OMPD_begin_declare_variant:
+  case OMPD_end_declare_variant:
+  case OMPD_metadirective:
+    llvm_unreachable("OpenMP Directive is not allowed");
+  case OMPD_unknown:
   default:
     processCapturedRegions(SemaRef, DKind, CurScope,
                            DSAStack->getConstructLoc());
@@ -5222,12 +5651,20 @@ static bool checkNestingOfRegions(Sema &SemaRef, const DSAStackTy *Stack,
     Recommend = ShouldBeInTargetRegion;
   } else if (CurrentRegion == OMPD_scan) {
     if (OMPVersion >= 50) {
+      // The downstream cross-team 'scan' specialization has been removed, so a
+      // 'scan' directive nested inside 'target teams distribute parallel for'
+      // is not supported.
+      if (ParentRegion == OMPD_target_teams_distribute_parallel_for)
+        SemaRef.Diag(StartLoc, diag::err_omp_xteam_scan_prohibited)
+            << getOpenMPDirectiveName(CurrentRegion) << Recommend;
       // OpenMP spec 5.0 and 5.1 require scan to be directly enclosed by for,
       // simd, or for simd. This has to take into account combined directives.
       // In 5.2 this seems to be implied by the fact that the specified
       // separated constructs are do, for, and simd.
-      NestingProhibited = !llvm::is_contained(
-          {OMPD_for, OMPD_simd, OMPD_for_simd}, EnclosingConstruct);
+      NestingProhibited =
+          !llvm::is_contained({OMPD_for, OMPD_simd, OMPD_for_simd},
+                              EnclosingConstruct) &&
+          ParentRegion != OMPD_target_teams_distribute_parallel_for;
     } else {
       NestingProhibited = true;
     }
@@ -17446,43 +17883,89 @@ static std::string getListOfPossibleValues(OpenMPClauseKind K, unsigned First,
 }
 
 OMPClause *SemaOpenMP::ActOnOpenMPNumThreadsClause(
-    OpenMPNumThreadsClauseModifier Modifier, Expr *NumThreads,
-    SourceLocation StartLoc, SourceLocation LParenLoc,
-    SourceLocation ModifierLoc, SourceLocation EndLoc) {
-  assert((ModifierLoc.isInvalid() || getLangOpts().OpenMP >= 60) &&
-         "Unexpected num_threads modifier in OpenMP < 60.");
-
-  if (ModifierLoc.isValid() && Modifier == OMPC_NUMTHREADS_unknown) {
-    std::string Values = getListOfPossibleValues(OMPC_num_threads, /*First=*/0,
-                                                 OMPC_NUMTHREADS_unknown);
-    Diag(ModifierLoc, diag::err_omp_unexpected_clause_value)
-        << Values << getOpenMPClauseNameForDiag(OMPC_num_threads);
+    ArrayRef<Expr *> VarList, OpenMPNumThreadsClauseModifier SimpleModifier,
+    SourceLocation SimpleModifierLoc,
+    OpenMPNumThreadsClauseModifier ComplexModifier, Expr *ComplexModifierExpr,
+    SourceLocation ComplexModifierLoc, SourceLocation StartLoc,
+    SourceLocation LParenLoc, SourceLocation EndLoc) {
+  // Check that modifiers were correctly specified.
+  if (ComplexModifierLoc.isValid() &&
+      (ComplexModifier != OMPC_NUMTHREADS_dims || !ComplexModifierExpr)) {
+    Diag(ComplexModifierLoc, diag::err_omp_malformed_complex_modifier)
+        << getOpenMPSimpleClauseTypeName(OMPC_num_threads, OMPC_NUMTHREADS_dims)
+        << getOpenMPClauseName(OMPC_num_threads);
+    return nullptr;
+  }
+  if (SimpleModifierLoc.isValid() && SimpleModifier == OMPC_NUMTHREADS_dims) {
+    Diag(SimpleModifierLoc, diag::err_omp_malformed_complex_modifier)
+        << getOpenMPSimpleClauseTypeName(OMPC_num_threads, OMPC_NUMTHREADS_dims)
+        << getOpenMPClauseName(OMPC_num_threads);
+    return nullptr;
+  }
+  if (SimpleModifierLoc.isValid() && SimpleModifier != OMPC_NUMTHREADS_strict) {
+    Diag(SimpleModifierLoc, diag::err_omp_unexpected_clause_value)
+        << getOpenMPSimpleClauseTypeName(OMPC_num_threads,
+                                         OMPC_NUMTHREADS_strict)
+        << getOpenMPClauseName(OMPC_num_threads);
     return nullptr;
   }
 
-  Expr *ValExpr = NumThreads;
-  Stmt *HelperValStmt = nullptr;
-
-  // OpenMP [2.5, Restrictions]
-  //  The num_threads expression must evaluate to a positive integer value.
-  if (!isNonNegativeIntegerValue(ValExpr, SemaRef, OMPC_num_threads,
-                                 /*StrictlyPositive=*/true))
+  if (VarList.empty())
     return nullptr;
+
+  SmallVector<Expr *, 3> Vars(VarList.begin(), VarList.end());
+  for (Expr *&ValExpr : Vars) {
+    // OpenMP [2.5, Restrictions]
+    //  The num_threads expression must evaluate to a positive integer value.
+    if (!isNonNegativeIntegerValue(ValExpr, SemaRef, OMPC_num_threads,
+                                   /*StrictlyPositive=*/true))
+      return nullptr;
+  }
+
+  if (ComplexModifier == OMPC_NUMTHREADS_dims) {
+    ExprResult Res = ActOnOpenMPDimsModifier(OMPC_num_threads, ComplexModifier,
+                                             ComplexModifierExpr,
+                                             ComplexModifierLoc, Vars, EndLoc);
+    if (Res.isInvalid())
+      return nullptr;
+    ComplexModifierExpr = Res.get();
+
+    if (validateMultidimClauseExprs(*this, OMPC_num_threads, StartLoc, Vars,
+                                    ComplexModifierExpr))
+      return nullptr;
+  }
+  if (SimpleModifier == OMPC_NUMTHREADS_strict && getLangOpts().OpenMP < 60) {
+    Diag(SimpleModifierLoc, diag::err_omp_modifier_requires_version)
+        << getOpenMPSimpleClauseTypeName(OMPC_num_threads, SimpleModifier)
+        << getOpenMPClauseName(OMPC_num_threads) << "6.0";
+    return nullptr;
+  }
 
   OpenMPDirectiveKind DKind = DSAStack->getCurrentDirective();
   OpenMPDirectiveKind CaptureRegion = getOpenMPCaptureRegionForClause(
       DKind, OMPC_num_threads, getLangOpts().OpenMP);
-  if (CaptureRegion != OMPD_unknown &&
-      !SemaRef.CurContext->isDependentContext()) {
-    ValExpr = SemaRef.MakeFullExpr(ValExpr).get();
-    llvm::MapVector<const Expr *, DeclRefExpr *> Captures;
-    ValExpr = tryBuildCapture(SemaRef, ValExpr, Captures).get();
-    HelperValStmt = buildPreInits(getASTContext(), Captures);
-  }
+  if (CaptureRegion == OMPD_unknown || SemaRef.CurContext->isDependentContext())
+    return OMPNumThreadsClause::Create(
+        getASTContext(), CaptureRegion, StartLoc, LParenLoc, EndLoc, Vars,
+        SimpleModifier, ComplexModifier, SimpleModifierLoc, ComplexModifierLoc,
+        ComplexModifierExpr, /*PreInit=*/nullptr);
 
-  return new (getASTContext())
-      OMPNumThreadsClause(Modifier, ValExpr, HelperValStmt, CaptureRegion,
-                          StartLoc, LParenLoc, ModifierLoc, EndLoc);
+  llvm::MapVector<const Expr *, DeclRefExpr *> Captures;
+  for (Expr *&ValExpr : Vars) {
+    ValExpr = SemaRef.MakeFullExpr(ValExpr).get();
+    ValExpr = tryBuildCapture(SemaRef, ValExpr, Captures).get();
+  }
+  if (ComplexModifierExpr) {
+    ComplexModifierExpr = SemaRef.MakeFullExpr(ComplexModifierExpr).get();
+    ComplexModifierExpr =
+        tryBuildCapture(SemaRef, ComplexModifierExpr, Captures).get();
+  }
+  Stmt *PreInit = buildPreInits(getASTContext(), Captures);
+
+  return OMPNumThreadsClause::Create(
+      getASTContext(), CaptureRegion, StartLoc, LParenLoc, EndLoc, Vars,
+      SimpleModifier, ComplexModifier, SimpleModifierLoc, ComplexModifierLoc,
+      ComplexModifierExpr, PreInit);
 }
 
 ExprResult SemaOpenMP::VerifyPositiveIntegerConstantInClause(
@@ -18507,13 +18990,6 @@ OMPClause *SemaOpenMP::ActOnOpenMPSingleExprWithArgClause(
         ArgumentLoc[Modifier2], EndLoc);
     break;
   }
-  case OMPC_num_threads:
-    assert(Argument.size() == 1 && ArgumentLoc.size() == 1 &&
-           "Modifier for num_threads clause and its location are expected.");
-    Res = ActOnOpenMPNumThreadsClause(
-        static_cast<OpenMPNumThreadsClauseModifier>(Argument.back()), Expr,
-        StartLoc, LParenLoc, ArgumentLoc.back(), EndLoc);
-    break;
   case OMPC_final:
   case OMPC_safelen:
   case OMPC_simdlen:
@@ -19460,10 +19936,23 @@ OMPClause *SemaOpenMP::ActOnOpenMPVarListClause(OpenMPClauseKind Kind,
         VarList, static_cast<OpenMPThreadLimitClauseModifier>(ExtraModifier),
         ExtraModifierExpr, ExtraModifierLoc, StartLoc, LParenLoc, EndLoc);
     break;
+  case OMPC_num_threads:
+    assert(0 <= Data.ExtraModifierArray[0] &&
+           Data.ExtraModifierArray[0] <= OMPC_NUMTHREADS_unknown &&
+           0 <= Data.ExtraModifierArray[1] &&
+           Data.ExtraModifierArray[1] <= OMPC_NUMTHREADS_unknown &&
+           "Unexpected num_threads modifier.");
+    Res = ActOnOpenMPNumThreadsClause(
+        VarList,
+        static_cast<OpenMPNumThreadsClauseModifier>(Data.ExtraModifierArray[0]),
+        Data.ExtraModifierLocArray[0],
+        static_cast<OpenMPNumThreadsClauseModifier>(Data.ExtraModifierArray[1]),
+        Data.ExtraModifierExprArray[1], Data.ExtraModifierLocArray[1], StartLoc,
+        LParenLoc, EndLoc);
+    break;
   case OMPC_if:
   case OMPC_depobj:
   case OMPC_final:
-  case OMPC_num_threads:
   case OMPC_safelen:
   case OMPC_simdlen:
   case OMPC_sizes:
@@ -21489,7 +21978,9 @@ OMPClause *SemaOpenMP::ActOnOpenMPReductionClause(
        DSAStack->getCurrentDirective() != OMPD_for_simd &&
        DSAStack->getCurrentDirective() != OMPD_simd &&
        DSAStack->getCurrentDirective() != OMPD_parallel_for &&
-       DSAStack->getCurrentDirective() != OMPD_parallel_for_simd)) {
+       DSAStack->getCurrentDirective() != OMPD_parallel_for_simd &&
+       DSAStack->getCurrentDirective() !=
+           OMPD_target_teams_distribute_parallel_for)) {
     Diag(ModifierLoc, diag::err_omp_wrong_inscan_reduction);
     return nullptr;
   }
@@ -25971,6 +26462,11 @@ OMPClause *SemaOpenMP::ActOnOpenMPInclusiveClause(ArrayRef<Expr *> VarList,
     Expr *SimpleRefExpr = RefExpr;
     auto Res = getPrivateItem(SemaRef, SimpleRefExpr, ELoc, ERange,
                               /*AllowArraySection=*/true);
+    if (!Vars.empty() && DSAStack->getParentDirective() ==
+                             OMPD_target_teams_distribute_parallel_for) {
+      Diag(ELoc, diag::err_omp_multivar_xteam_scan_unsupported)
+          << RefExpr->getSourceRange();
+    }
     if (Res.second)
       // It will be analyzed later.
       Vars.push_back(RefExpr);
@@ -26012,6 +26508,11 @@ OMPClause *SemaOpenMP::ActOnOpenMPExclusiveClause(ArrayRef<Expr *> VarList,
     Expr *SimpleRefExpr = RefExpr;
     auto Res = getPrivateItem(SemaRef, SimpleRefExpr, ELoc, ERange,
                               /*AllowArraySection=*/true);
+    if (!Vars.empty() && DSAStack->getParentDirective() ==
+                             OMPD_target_teams_distribute_parallel_for) {
+      Diag(ELoc, diag::err_omp_multivar_xteam_scan_unsupported)
+          << RefExpr->getSourceRange();
+    }
     if (Res.second)
       // It will be analyzed later.
       Vars.push_back(RefExpr);

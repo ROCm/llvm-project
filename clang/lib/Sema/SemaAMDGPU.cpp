@@ -16,8 +16,10 @@
 #include "clang/AST/Expr.h"
 #include "clang/Basic/DiagnosticFrontend.h"
 #include "clang/Basic/DiagnosticSema.h"
+#include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Sema/Ownership.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/Sema.h"
@@ -404,6 +406,9 @@ bool SemaAMDGPU::CheckAMDGCNBuiltinFunctionCall(unsigned BuiltinID,
            SemaRef.BuiltinConstantArg(TheCall, ArgCount, Result) ||
            SemaRef.BuiltinConstantArg(TheCall, (ArgCount - 1), Result);
   }
+  case AMDGPU::BI__builtin_amdgcn_global_load_b128:
+  case AMDGPU::BI__builtin_amdgcn_global_store_b128:
+    return checkScopedMemAccessFunctionCall(TheCall);
   case AMDGPU::BI__builtin_amdgcn_wmma_i32_16x16x64_iu8:
   case AMDGPU::BI__builtin_amdgcn_swmmac_i32_16x16x128_iu8: {
     if (BuiltinID == AMDGPU::BI__builtin_amdgcn_wmma_i32_16x16x64_iu8) {
@@ -546,6 +551,19 @@ bool SemaAMDGPU::checkAtomicMonitorLoad(CallExpr *TheCall) {
   bool Fail = checkAtomicOrderingCABIArg(AO, /*MayLoad=*/true,
                                          /*MayStore=*/false);
   Fail |= checkScopeAsInt(*this, Scope);
+  return Fail;
+}
+
+bool SemaAMDGPU::checkScopedMemAccessFunctionCall(CallExpr *TheCall) {
+  bool Fail = false;
+  // Last argument is a string literal
+  Expr *Arg = TheCall->getArg(TheCall->getNumArgs() - 1);
+  auto Scope = dyn_cast<StringLiteral>(Arg->IgnoreParenCasts());
+  if (!Scope) {
+    Fail = true;
+    Diag(TheCall->getBeginLoc(), diag::err_expr_not_string_literal)
+        << Arg->getSourceRange();
+  }
   return Fail;
 }
 
@@ -1018,6 +1036,9 @@ bool DiagnoseUnguardedBuiltins::TraverseGuardedStmt(Stmt *S, CallExpr *P) {
 }
 
 bool DiagnoseUnguardedBuiltins::VisitAsmStmt(AsmStmt *ASM) {
+  // TODO: drop once ROCm HIP headers add is_invocable guards.
+  if (SemaRef.getSourceManager().isInSystemHeader(ASM->getAsmLoc()))
+    return true;
   // TODO: should we check if the ASM is valid for the target? Can we?
   if (!CurrentGFXIP.empty())
     return true;
@@ -1030,6 +1051,10 @@ bool DiagnoseUnguardedBuiltins::VisitAsmStmt(AsmStmt *ASM) {
 }
 
 bool DiagnoseUnguardedBuiltins::VisitCallExpr(CallExpr *CE) {
+  // TODO: drop once ROCm HIP headers add is_invocable guards.
+  if (SemaRef.getSourceManager().isInSystemHeader(CE->getExprLoc()))
+    return true;
+
   unsigned ID = CE->getBuiltinCallee();
   Builtin::Context &BInfo = SemaRef.getASTContext().BuiltinInfo;
 

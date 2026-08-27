@@ -1143,6 +1143,16 @@ bool SIRegisterInfo::isFrameOffsetLegal(const MachineInstr *MI,
                                 AMDGPU::FlatAddrSpace::FlatScratch);
 }
 
+std::optional<unsigned> SIRegisterInfo::getDwarfRegLaneSize(int64_t DwarfReg,
+                                                            bool IsEH) const {
+  if (std::optional<MCRegister> Reg = getLLVMRegNum(DwarfReg, IsEH)) {
+    const TargetRegisterClass *RC = getPhysRegBaseClass(*Reg);
+    if (RC == &AMDGPU::VGPR_32RegClass || RC == &AMDGPU::AGPR_32RegClass)
+      return 4;
+  }
+  return std::nullopt;
+}
+
 const TargetRegisterClass *
 SIRegisterInfo::getPointerRegClass(unsigned Kind) const {
   // This is inaccurate. It depends on the instruction and address space. The
@@ -2728,7 +2738,7 @@ bool SIRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator MI,
 
       auto *MBB = MI->getParent();
       bool IsWWMRegSpill = TII->isWWMRegSpillOpcode(MI->getOpcode());
-      if (IsWWMRegSpill) {
+      if (IsWWMRegSpill){
         TII->insertScratchExecCopy(*MF, *MBB, MI, DL, MFI->getSGPRForEXECCopy(),
                                    RS->isRegUsed(AMDGPU::SCC));
       }
@@ -2815,7 +2825,7 @@ bool SIRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator MI,
 
       auto *MBB = MI->getParent();
       bool IsWWMRegSpill = TII->isWWMRegSpillOpcode(MI->getOpcode());
-      if (IsWWMRegSpill) {
+      if (IsWWMRegSpill){
         TII->insertScratchExecCopy(*MF, *MBB, MI, DL, MFI->getSGPRForEXECCopy(),
                                    RS->isRegUsed(AMDGPU::SCC));
       }

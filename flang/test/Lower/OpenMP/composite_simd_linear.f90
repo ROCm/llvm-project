@@ -8,9 +8,9 @@ subroutine do_simd
 !CHECK: %[[CONST:.*]] = arith.constant 1 : i32
 !CHECK: %{{.*}} = arith.constant 1 : i32
 !CHECK: %[[IV_STEP:.*]] = arith.constant 1 : i32
-!DEFAULT: omp.wsloop linear(%[[X]]#0 : !fir.ref<i32> = {{.*}}) linear_var_types([i32]) {
+!DEFAULT: omp.wsloop linear(val(%[[X]]#0 : !fir.ref<i32> = {{.*}})) linear_var_types([i32]) {
 !OPENMP52: omp.wsloop linear(val(%[[X]]#0 : !fir.ref<i32> = {{.*}})) linear_var_types([i32]) {
-!DEFAULT: omp.simd linear(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32) linear_var_types([i32]) {
+!DEFAULT: omp.simd linear(val(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32)) linear_var_types([i32]) {
 !OPENMP52: omp.simd linear(val(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32)) linear_var_types([i32]) {
 !CHECK: }
 !CHECK: } {omp.composite}
@@ -27,7 +27,7 @@ subroutine distribute_simd
 !CHECK: %[[I:.*]]:2 = hlfir.declare %{{.*}} {uniq_name = "_QFdistribute_simdEi"} : (!fir.ref<i32>) -> (!fir.ref<i32>, !fir.ref<i32>)
 !CHECK: omp.teams {
 !CHECK: omp.distribute {
-!DEFAULT: omp.simd linear({{.*}}) linear_var_types([i32]) {
+!DEFAULT: omp.simd linear(val({{.*}})) linear_var_types([i32]) {
 !OPENMP52: omp.simd linear(val({{.*}})) linear_var_types([i32]) {
 !CHECK: } {omp.composite}
 !CHECK: } {omp.composite}
@@ -50,9 +50,9 @@ subroutine distribute_parallel_do
 !CHECK: %{{.*}} = arith.constant 1 : i32
 !CHECK: %[[IV_STEP:.*]] = arith.constant 1 : i32
 !CHECK: omp.distribute {
-!DEFAULT: omp.wsloop linear(%[[I]]#0 : !fir.ref<i32> = %[[CONST]] : i32) linear_var_types([i32]) {
+!DEFAULT: omp.wsloop linear(val(%[[I]]#0 : !fir.ref<i32> = %[[CONST]] : i32)) linear_var_types([i32]) {
 !OPENMP52: omp.wsloop linear(val(%[[I]]#0 : !fir.ref<i32> = %[[CONST]] : i32)) linear_var_types([i32]) {
-!DEFAULT: omp.simd linear(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32) linear_var_types([i32]) {
+!DEFAULT: omp.simd linear(val(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32)) linear_var_types([i32]) {
 !OPENMP52: omp.simd linear(val(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32)) linear_var_types([i32]) {
     !$omp teams
     !$omp distribute parallel do simd linear(i:1)
@@ -71,9 +71,9 @@ subroutine parallel_do
 !CHECK: %[[LINEAR_STEP:.*]] = arith.constant 2 : i32
 !CHECK: %{{.*}} = arith.constant 1 : i32
 !CHECK: %[[IV_STEP:.*]] = arith.constant 1 : i32
-!DEFAULT: omp.wsloop linear(%[[X]]#0 : !fir.ref<i32> = %[[LINEAR_STEP]] : i32) linear_var_types([i32]) {
+!DEFAULT: omp.wsloop linear(val(%[[X]]#0 : !fir.ref<i32> = %[[LINEAR_STEP]] : i32)) linear_var_types([i32]) {
 !OPENMP52: omp.wsloop linear(val(%[[X]]#0 : !fir.ref<i32> = %[[LINEAR_STEP]] : i32)) linear_var_types([i32]) {
-!DEFAULT: omp.simd linear(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32) linear_var_types([i32]) {
+!DEFAULT: omp.simd linear(val(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32)) linear_var_types([i32]) {
 !OPENMP52: omp.simd linear(val(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32)) linear_var_types([i32]) {
     integer :: x
     !$omp parallel do simd linear(x:2)
@@ -92,7 +92,7 @@ subroutine teams_distribute
 !CHECK: {{.*}} = arith.constant 1 : i32
 !CHECK: %[[IV_STEP:.*]] = arith.constant 1 : i32
 !CHECK: omp.distribute {
-!DEFAULT: omp.simd linear(%[[X]]#0 : !fir.ref<i32> = %[[LINEAR_STEP]] : i32, %[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32) linear_var_types([i32, i32]) {
+!DEFAULT: omp.simd linear(val(%[[X]]#0 : !fir.ref<i32> = %[[LINEAR_STEP]] : i32), val(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32)) linear_var_types([i32, i32]) {
 !OPENMP52: omp.simd linear(val(%[[X]]#0 : !fir.ref<i32> = %[[LINEAR_STEP]] : i32), val(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32)) linear_var_types([i32, i32]) {
     integer :: x
     !$omp teams distribute simd linear(x)
@@ -111,9 +111,9 @@ subroutine teams_distribute_parallel_do
 !CHECK: %{{.*}} = arith.constant 1 : i32
 !CHECK: %[[IV_STEP:.*]] = arith.constant 1 : i32
 !CHECK: omp.distribute {
-!DEFAULT: omp.wsloop linear(%[[X]]#0 : !fir.ref<i32> = %[[LINEAR_STEP]] : i32) linear_var_types([i32]) {
+!DEFAULT: omp.wsloop linear(val(%[[X]]#0 : !fir.ref<i32> = %[[LINEAR_STEP]] : i32)) linear_var_types([i32]) {
 !OPENMP52: omp.wsloop linear(val(%[[X]]#0 : !fir.ref<i32> = %[[LINEAR_STEP]] : i32)) linear_var_types([i32]) {
-!DEFAULT: omp.simd linear(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32) linear_var_types([i32]) {
+!DEFAULT: omp.simd linear(val(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32)) linear_var_types([i32]) {
 !OPENMP52: omp.simd linear(val(%[[I]]#0 : !fir.ref<i32> = %[[IV_STEP]] : i32)) linear_var_types([i32]) {
     integer :: x
     !$omp teams distribute parallel do simd linear(x)

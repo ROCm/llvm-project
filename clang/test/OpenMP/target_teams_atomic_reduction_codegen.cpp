@@ -8,6 +8,14 @@
 // RUN: FileCheck --check-prefix=BUFFER %s < %t.ll
 // RUN: FileCheck %s < %t.ll
 
+// The legacy spelling '-fopenmp-target-fast-reduction' is an alias for
+// '-fopenmp-target-atomic-reduction'.
+// RUN: %clang_cc1 -verify -fopenmp -x c++ -triple amdgcn-amd-amdhsa \
+// RUN:   -fopenmp-targets=amdgcn-amd-amdhsa -fopenmp-is-target-device \
+// RUN:   -fopenmp-target-fast-reduction -fopenmp-host-ir-file-path %t-host.bc \
+// RUN:   -emit-llvm %s -o %t-legacy.ll
+// RUN: FileCheck --check-prefix=ATOMIC %s < %t-legacy.ll
+
 // expected-no-diagnostics
 
 // ATOMIC-DAG: call i32 @__kmpc_is_team_main_thread(

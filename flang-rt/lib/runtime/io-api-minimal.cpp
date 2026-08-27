@@ -19,7 +19,9 @@
 #include "flang/Runtime/io-api.h"
 
 namespace Fortran::runtime::io {
+#ifdef RT_OFFLOAD_IO
 RT_EXT_API_GROUP_BEGIN
+#endif
 
 Cookie IODEF(BeginExternalListOutput)(
     ExternalUnit unitNumber, const char *sourceFile, int sourceLine) {
@@ -146,4 +148,6 @@ bool IODEF(OutputLogical)(Cookie cookie, bool truth) {
 
 } // namespace Fortran::runtime::io
 
+#ifdef RT_OFFLOAD_IO
 RT_EXT_API_GROUP_END
+#endif

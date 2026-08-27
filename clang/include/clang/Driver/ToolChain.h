@@ -15,6 +15,7 @@
 #include "clang/Basic/Sanitizers.h"
 #include "clang/Driver/Action.h"
 #include "clang/Driver/Multilib.h"
+#include "clang/Driver/Tool.h"
 #include "clang/Driver/Types.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -56,10 +57,10 @@ class ObjCRuntime;
 
 namespace driver {
 
+class Compilation;
 class Driver;
 class InputInfo;
 class SanitizerArgs;
-class Tool;
 class XRayArgs;
 
 enum LTOKind : int;
@@ -213,6 +214,8 @@ private:
   mutable std::optional<CStdlibType> cStdlibType;
 
 protected:
+  // OpenMP creates a toolchain for each target arch. eg - gfx908
+  std::string TargetID;
   MultilibSet Multilibs;
   llvm::SmallVector<Multilib> SelectedMultilibs;
   SmallVector<std::string> MultilibMacroDefines;
@@ -319,6 +322,8 @@ public:
   bool hasEffectiveTriple() const {
     return !EffectiveTriple.getTriple().empty();
   }
+
+  StringRef getTargetID() const { return TargetID; }
 
   path_list &getLibraryPaths() { return LibraryPaths; }
   const path_list &getLibraryPaths() const { return LibraryPaths; }
@@ -752,6 +757,14 @@ public:
   virtual void
   AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &CC1Args) const;
+
+  /// Add options that need to be passed to cc1 for this target that could add
+  /// commands to the compilation to transform an input.
+  virtual void
+  addActionsFromClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
+                                   llvm::opt::ArgStringList &CC1Args,
+                                   const JobAction &JA, Compilation &C,
+                                   const InputInfoList &Inputs) const;
 
   /// Add options that need to be passed to cc1 for this target.
   virtual void

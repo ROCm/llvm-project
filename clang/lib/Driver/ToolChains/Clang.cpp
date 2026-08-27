@@ -24,6 +24,7 @@
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/MakeSupport.h"
 #include "clang/Basic/ObjCRuntime.h"
+#include "clang/Basic/TargetID.h"
 #include "clang/Basic/Version.h"
 #include "clang/Config/config.h"
 #include "clang/Driver/Action.h"
@@ -331,6 +332,33 @@ static void addCoveragePrefixMapArg(const Driver &D, const ArgList &Args,
       CmdArgs.push_back(Args.MakeArgString("-fcoverage-prefix-map=" + Map));
     A->claim();
   }
+}
+
+/// Is -Ofast used?
+bool clang::driver::isOFastUsed(const ArgList &Args) {
+  if (Arg *A = Args.getLastArg(options::OPT_O_Group))
+    if (A->getOption().matches(options::OPT_Ofast))
+      return true;
+  return false;
+}
+
+/// Is -fopenmp-target-fast or -Ofast used
+bool clang::driver::isTargetFastUsed(const ArgList &Args) {
+  return Args.hasFlag(options::OPT_fopenmp_target_fast,
+                      options::OPT_fno_openmp_target_fast, isOFastUsed(Args));
+}
+
+/// Ignore possibility of environment variables if either
+/// -fopenmp-target-fast or -Ofast is used.
+bool clang::driver::shouldIgnoreEnvVars(const ArgList &Args) {
+  if (Args.hasFlag(options::OPT_fno_openmp_target_fast,
+                   options::OPT_fopenmp_target_fast, false))
+    return false;
+
+  if (isTargetFastUsed(Args))
+    return true;
+
+  return false;
 }
 
 /// Add -x lang to \p CmdArgs for \p Input.
@@ -976,10 +1004,19 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
         CmdArgs.push_back("-internal-isystem");
         CmdArgs.push_back(Args.MakeArgString(P));
       }
-
       CmdArgs.push_back("-include");
       CmdArgs.push_back("__clang_openmp_device_functions.h");
     }
+  }
+  // Add include for either -fopenmp= or -fopenmp
+  if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+                   options::OPT_fno_openmp, false)){
+    if (D.getOpenMPRuntime(Args) == Driver::OMPRT_BOLT) {
+      CmdArgs.push_back("-I");
+      CmdArgs.push_back(Args.MakeArgString(D.Dir + "/../include/bolt"));
+    }
+    CmdArgs.push_back("-I");
+    CmdArgs.push_back(Args.MakeArgString(D.Dir + "/../include"));
   }
 
   // Add -i* options, and automatically translate to
@@ -3233,9 +3270,9 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
                                   FPExceptionBehavior)
             << Args.MakeArgString("-ffp-exception-behavior=" + Val);
       TrappingMath = TrappingMathPresent = false;
-      if (Val == "ignore" || Val == "maytrap")
+      if (Val == "ignore" || Val == "maytrap") {
         FPExceptionBehavior = Val;
-      else if (Val == "strict") {
+      } else if (Val == "strict") {
         FPExceptionBehavior = Val;
         TrappingMath = TrappingMathPresent = true;
       } else
@@ -4011,6 +4048,7 @@ static void RenderOpenACCOptions(const Driver &D, const ArgList &Args,
   if (!Args.hasArg(options::OPT_fopenacc))
     return;
 
+  D.Diag(diag::warn_openacc_experimental);
   CmdArgs.push_back("-fopenacc");
 }
 
@@ -5059,6 +5097,40 @@ renderDebugOptions(const ToolChain &TC, const Driver &D, const llvm::Triple &T,
   renderDwarfFormat(D, T, Args, CmdArgs, EffectiveDWARFVersion);
   renderDebugInfoCompressionArgs(Args, CmdArgs, D, TC);
 
+  bool EmitDwarfForAMDGCN =
+      EmitDwarf &&
+      (T.isAMDGCN() || (T.isSPIRV() && T.getVendor() == llvm::Triple::AMD));
+  if (EmitDwarfForAMDGCN)
+    CmdArgs.append({"-mllvm", "-amdgpu-spill-cfi-saved-regs"});
+  if (Arg *A = Args.getLastArg(options::OPT_gheterogeneous_dwarf_EQ)) {
+    if (StringRef(A->getValue()) == "diexpr")
+      D.Diag(clang::diag::err_drv_unsupported_opt_with_suggestion)
+          << A->getAsString(Args) << "-gheterogeneous-dwarf=diexpression";
+    A->render(Args, CmdArgs);
+  } else if (EmitDwarfForAMDGCN) {
+#ifndef NDEBUG
+    // There doesn't seem to be a straightforward way to "render" an option
+    // acquired from the OptTable into a string we can append to CmdArgs.
+    // All of the logic is buried in "accept" which works directly in terms
+    // of an ArgList.
+    //
+    // Instead, assert that the static string we are adding to CmdArgs has
+    // the same shape as what a bare -gheterogeneous-dwarf would alias to
+    // if the user has provided it in ArgList.
+    const Option GHeterogeneousDwarf =
+        getDriverOptTable().getOption(options::OPT_gheterogeneous_dwarf);
+    const Option Aliased = GHeterogeneousDwarf.getAlias();
+    assert(Aliased.isValid() && "gheterogeneous-dwarf must be an alias");
+    assert(Aliased.getName() == "gheterogeneous-dwarf=" &&
+           "gheterogeneous-dwarf must alias gheterogeneous-dwarf=");
+    assert(StringRef(GHeterogeneousDwarf.getAliasArgs()) == "diexpression" &&
+           GHeterogeneousDwarf.getAliasArgs()[strlen("diexpression") + 1] ==
+               '\0' &&
+           "gheterogeneous-dwarf must alias gheterogeneous-dwarf=diexpression");
+#endif
+    CmdArgs.push_back("-gheterogeneous-dwarf=diexpression");
+  }
+
   // This controls whether or not we perform JustMyCode instrumentation.
   if (Args.hasFlag(options::OPT_fjmc, options::OPT_fno_jmc, false)) {
     if (TC.getTriple().isOSBinFormatELF() ||
@@ -5547,6 +5619,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       if (Triple.isAMDGCN() && IsOpenMPDevice && Args.hasArg(options::OPT_S) &&
           Args.hasArg(options::OPT_emit_llvm)) {
         CmdArgs.push_back("-emit-llvm");
+      } else if (Triple.isAMDGCN() && IsOpenMPDevice &&
+                 Args.hasArg(options::OPT_S)) {
+        CmdArgs.push_back("-S");
       } else {
         CmdArgs.push_back("-emit-llvm-bc");
       }
@@ -5665,6 +5740,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-disable-llvm-passes");
 
     // Render target options.
+    TC.addActionsFromClangTargetOptions(Args, CmdArgs, JA, C, Inputs);
     TC.addClangTargetOptions(Args, CmdArgs, JA.getOffloadingArch(),
                              JA.getOffloadingDeviceKind());
 
@@ -6434,6 +6510,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                       /*ForAS*/ false, /*IsAux*/ true);
   }
 
+  TC.addActionsFromClangTargetOptions(Args, CmdArgs, JA, C, Inputs);
   TC.addClangTargetOptions(Args, CmdArgs, JA.getOffloadingArch(),
                            JA.getOffloadingDeviceKind());
 
@@ -6457,6 +6534,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Add the target cpu
   std::string CPU = getCPUName(D, Args, Triple, /*FromAs*/ false);
+  // In case args have been translated and -march deleted, get GPU from TC
+  if (CPU.empty())
+    CPU = TC.getTargetID().str();
   if (!CPU.empty()) {
     CmdArgs.push_back("-target-cpu");
     CmdArgs.push_back(Args.MakeArgString(CPU));
@@ -7111,6 +7191,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     switch (D.getOpenMPRuntime(Args)) {
     case Driver::OMPRT_OMP:
     case Driver::OMPRT_IOMP5:
+    case Driver::OMPRT_BOLT:
       // Clang can generate useful OpenMP code for these two runtime libraries.
       CmdArgs.push_back("-fopenmp");
 
@@ -7129,6 +7210,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back("-fno-openmp-extensions");
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_cuda_number_of_sm_EQ);
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_cuda_blocks_per_sm_EQ);
+      Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_gpu_threads_per_team_EQ);
+      Args.AddAllArgs(CmdArgs,
+                      options::OPT_fopenmp_target_xteam_reduction_blocksize_EQ);
       // '-fopenmp-cuda-teams-reduction-recs-num=' is deprecated and has no
       // effect: the teams reduction buffer is sized at kernel launch by the
       // offload plugin to match the actual number of teams. Honoring a
@@ -7145,11 +7229,69 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                        /*Default=*/false))
         CmdArgs.push_back("-fopenmp-optimistic-collapse");
 
+      if (isTargetFastUsed(Args)) {
+        if (!Args.hasArg(options::OPT_O_Group))
+          CmdArgs.push_back("-O3");
+
+        CmdArgs.push_back("-fopenmp-target-fast");
+      } else
+        CmdArgs.push_back("-fno-openmp-target-fast");
+
+      if (Args.hasFlag(options::OPT_fopenmp_target_ignore_env_vars,
+                       options::OPT_fno_openmp_target_ignore_env_vars,
+                       shouldIgnoreEnvVars(Args)))
+        CmdArgs.push_back("-fopenmp-target-ignore-env-vars");
+      else
+        CmdArgs.push_back("-fno-openmp-target-ignore-env-vars");
+
+      if (Args.hasFlag(options::OPT_fopenmp_target_big_jump_loop,
+                       options::OPT_fno_openmp_target_big_jump_loop, true))
+        CmdArgs.push_back("-fopenmp-target-big-jump-loop");
+      else
+        CmdArgs.push_back("-fno-openmp-target-big-jump-loop");
+
+      if (Args.hasFlag(options::OPT_fopenmp_target_no_loop,
+                       options::OPT_fno_openmp_target_no_loop, true))
+        CmdArgs.push_back("-fopenmp-target-no-loop");
+      else
+        CmdArgs.push_back("-fno-openmp-target-no-loop");
+
+      // The downstream cross-team ("Xteam") reduction implementation has been
+      // removed; cross-team reductions now use the upstream implementation,
+      // which is always enabled. These flags are accepted but ignored for
+      // backward compatibility, and emit a deprecation notice when explicitly
+      // specified. Note that '-fopenmp-target-xteam-reduction-blocksize=' is
+      // *not* deprecated: it still selects the block size of cross-team
+      // reduction kernels, see CodeGenModule::getWorkGroupSizeSPMDHelper().
+      for (Arg *A :
+           Args.filtered(options::OPT_fopenmp_target_xteam_reduction,
+                         options::OPT_fno_openmp_target_xteam_reduction))
+        D.Diag(diag::warn_drv_deprecated_custom)
+            << A->getAsString(Args)
+            << "cross-team reductions now use the upstream implementation; the "
+               "flag is ignored";
+
+      // The downstream cross-team 'scan' specialization has been removed.
+      // These flags are accepted but ignored for backward compatibility, and
+      // emit a deprecation notice when explicitly specified.
+      for (Arg *A : Args.filtered(options::OPT_fopenmp_target_xteam_scan,
+                                  options::OPT_fno_openmp_target_xteam_scan,
+                                  options::OPT_fopenmp_target_xteam_no_loop_scan,
+                                  options::OPT_fno_openmp_target_xteam_no_loop_scan))
+        D.Diag(diag::warn_drv_deprecated_custom)
+            << A->getAsString(Args)
+            << "the cross-team 'scan' specialization has been removed; the "
+               "flag "
+               "is ignored";
       // When in OpenMP offloading mode with NVPTX target, forward
       // cuda-mode flag
       if (Args.hasFlag(options::OPT_fopenmp_cuda_mode,
                        options::OPT_fno_openmp_cuda_mode, /*Default=*/false))
         CmdArgs.push_back("-fopenmp-cuda-mode");
+
+      // When in OpenMP offloading mode, enable or disable the new device
+      // runtime.
+      CmdArgs.push_back("-fopenmp-target-new-runtime");
 
       // When in OpenMP offloading mode, enable debugging on the device.
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_target_debug_EQ);
@@ -7190,6 +7332,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back("-fopenmp-offload-mandatory");
       if (Args.hasArg(options::OPT_fopenmp_force_usm))
         CmdArgs.push_back("-fopenmp-force-usm");
+
       break;
     default:
       // By default, if Clang doesn't know how to generate useful OpenMP code
@@ -8303,9 +8446,15 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // be added so both IR can be captured.
   if ((C.getDriver().isSaveTempsEnabled() ||
        JA.isHostOffloading(Action::OFK_OpenMP)) &&
-      !(C.getDriver().embedBitcodeInObject() && !IsUsingLTO) &&
-      isa<CompileJobAction>(JA))
-    CmdArgs.push_back("-disable-llvm-passes");
+      !(C.getDriver().embedBitcodeInObject() && !getToolChain().isUsingLTO(Args)) &&
+      isa<CompileJobAction>(JA)) {
+    // We do not want to disable llvm opt passes if we are offloading
+    // amdgpu openmp code, and -save-temps is specified.
+    // We want the same opt passes run regardless of setting -save-temps.
+    if (!(Triple.isAMDGCN() && C.getDriver().isSaveTempsEnabled() &&
+          JA.getOffloadingDeviceKind() == Action::OFK_OpenMP))
+      CmdArgs.push_back("-disable-llvm-passes");
+  }
 
   Args.AddAllArgs(CmdArgs, options::OPT_undef);
 
@@ -8689,7 +8838,8 @@ ObjCRuntime Clang::AddObjCRuntimeArgs(const ArgList &args,
     if ((runtime.getKind() == ObjCRuntime::GNUstep) &&
         (runtime.getVersion() >= VersionTuple(2, 0)))
       if (!getToolChain().getTriple().isOSBinFormatELF() &&
-          !getToolChain().getTriple().isOSBinFormatCOFF()) {
+          !getToolChain().getTriple().isOSBinFormatCOFF() &&
+          !getToolChain().getTriple().isOSBinFormatWasm()) {
         getToolChain().getDriver().Diag(
             diag::err_drv_gnustep_objc_runtime_incompatible_binary)
           << runtime.getVersion().getMajor();
@@ -9532,12 +9682,16 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   if (Triple.isAMDGPU())
-    handleAMDGPUCodeObjectVersionOptions(D, Args, CmdArgs, /*IsCC1As=*/true);
+    handleAMDGPUCodeObjectVersionOptions(D, C.getArgs(), CmdArgs,
+                                         /*IsCC1As=*/true);
 
   assert(Input.isFilename() && "Invalid input.");
   CmdArgs.push_back(Input.getFilename());
 
-  const char *Exec = getToolChain().getDriver().getDriverProgramPath();
+  // TODO This is a workaround to enable using -save-temps with flang
+  // const char *Exec = getToolChain().getDriver().getClangProgramPath();
+  const char *Exec = Args.MakeArgString(getToolChain().GetProgramPath("clang"));
+//const char *Exec = getToolChain().getDriver().getDriverProgramPath();
   if (D.CC1Main && !D.CCGenDiagnostics) {
     // Invoke cc1as directly in this process.
     C.addCommand(std::make_unique<CC1Command>(
@@ -9638,7 +9792,23 @@ void OffloadBundler::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(std::make_unique<Command>(
       JA, *this, ResponseFileSupport::None(),
       TCArgs.MakeArgString(getToolChain().GetProgramPath(getShortName())),
-      CmdArgs, ArrayRef<InputInfo>(), Output));
+      CmdArgs, Inputs, Output));
+}
+
+static bool isArchiveOfBundlesFileName(StringRef FilePath) {
+  StringRef FileName = llvm::sys::path::filename(FilePath);
+  if (!FileName.ends_with(".a"))
+    return false;
+
+
+  if (FileName.starts_with("lib")) {
+    if (FileName.contains("amdgcn") && FileName.contains("gfx"))
+      return false;
+    if (FileName.contains("nvptx") && FileName.contains("sm_"))
+      return false;
+  }
+
+  return true;
 }
 
 void OffloadBundler::ConstructJobMultipleOutputs(
@@ -9661,6 +9831,11 @@ void OffloadBundler::ConstructJobMultipleOutputs(
 
   assert(Inputs.size() == 1 && "Expecting to unbundle a single file!");
   InputInfo Input = Inputs.front();
+  StringRef FileName = Input.getFilename();
+
+  if (isArchiveOfBundlesFileName(FileName)) {
+    return;
+  }
 
   // Get the type.
   CmdArgs.push_back(TCArgs.MakeArgString(
@@ -9675,7 +9850,8 @@ void OffloadBundler::ConstructJobMultipleOutputs(
       Triples += ',';
 
     auto &Dep = DepInfo[I];
-    Triples += Action::GetOffloadKindName(Dep.DependentOffloadKind);
+    auto OffloadKind = Dep.DependentOffloadKind;
+    Triples += Action::GetOffloadKindName(OffloadKind);
     Triples += '-';
     Triples += llvm::Triple(Dep.DependentToolChain->ComputeEffectiveClangTriple(
                                 TCArgs, Dep.DependentBoundArch))
@@ -9711,7 +9887,7 @@ void OffloadBundler::ConstructJobMultipleOutputs(
   C.addCommand(std::make_unique<Command>(
       JA, *this, ResponseFileSupport::None(),
       TCArgs.MakeArgString(getToolChain().GetProgramPath(getShortName())),
-      CmdArgs, ArrayRef<InputInfo>(), Outputs));
+      CmdArgs, Inputs, Outputs));
 }
 
 void OffloadPackager::ConstructJob(Compilation &C, const JobAction &JA,
@@ -9743,7 +9919,7 @@ void OffloadPackager::ConstructJob(Compilation &C, const JobAction &JA,
 
     ArgStringList Features;
     SmallVector<StringRef> FeatureArgs;
-    getTargetFeatures(TC->getDriver(), TC->getTriple(), TCArgs, Features,
+    getTargetFeatures(TC->getDriver(), TC->getTriple(), TCArgs, Features, false,
                       false);
     llvm::copy_if(Features, std::back_inserter(FeatureArgs),
                   [](StringRef Arg) { return !Arg.starts_with("-target"); });
@@ -9808,12 +9984,26 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
                                  const InputInfoList &Inputs,
                                  const ArgList &Args,
                                  const char *LinkingOutput) const {
+  bool isAMDGPU = false;
+  auto offloadTC = C.getOffloadToolChains(Action::OFK_OpenMP);
+  const auto OpenMPTCs = llvm::make_range(offloadTC.first, offloadTC.second);
+  const ToolChain *OTC;
+  for (auto &I : OpenMPTCs) {
+    OTC = I.second;
+    if (OTC->getTriple().isAMDGPU()) {
+      isAMDGPU = true;
+      break;
+    }
+  }
+
   using namespace options;
 
   // A list of permitted options that will be forwarded to the embedded device
   // compilation job.
   const llvm::DenseSet<unsigned> CompilerOptions{
       OPT_v,
+      OPT_cuda_path_EQ,
+      OPT_rocm_path_EQ,
       OPT_hip_path_EQ,
       OPT_O_Group,
       OPT_g_Group,
@@ -9923,6 +10113,28 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
         } else if (ShouldForward(LinkerOptions, A, *TC)) {
           A->claim();
           A->render(Args, LinkerArgs);
+        }
+      }
+
+      if (isAMDGPU && !C.getDriver().IsFlangMode()) {
+        StringRef OOpt;
+        if (const Arg *A = Args.getLastArg(options::OPT_O_Group)) {
+          if (A->getOption().matches(options::OPT_O4) ||
+              A->getOption().matches(options::OPT_Ofast))
+            OOpt = "3";
+          else if (A->getOption().matches(options::OPT_O)) {
+            OOpt = A->getValue();
+            if (OOpt == "g")
+              OOpt = "1";
+            else if (OOpt == "s" || OOpt == "z")
+              OOpt = "2";
+          } else if (A->getOption().matches(options::OPT_O0))
+            OOpt = "0";
+        }
+
+        if (!OOpt.empty() && OOpt != "0") {
+          LinkerArgs.push_back(Args.MakeArgString(
+              "--lto-newpm-passes=default-post-link<O" + OOpt + ">"));
         }
       }
 
@@ -10113,6 +10325,13 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   addOffloadCompressArgs(Args, CmdArgs);
+
+  if (Arg *A = Args.getLastArg(options::OPT_offload_jobs_EQ))
+    if (StringRef(Args.getArgString(A->getIndex()))
+            .starts_with("-parallel-jobs="))
+      C.getDriver().Diag(diag::warn_drv_deprecated_arg)
+          << A->getAsString(Args) << /*hasReplacement=*/true
+          << "--offload-jobs=<N>";
 
   OffloadJobsOpt OffloadJobs = parseOffloadJobs(Args);
   if (OffloadJobs.A) {

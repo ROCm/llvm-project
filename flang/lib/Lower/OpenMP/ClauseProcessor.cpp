@@ -1865,8 +1865,9 @@ void ClauseProcessor::processMapObjects(
     const omp::ObjectList &objects, mlir::omp::ClauseMapFlags mapTypeBits,
     std::map<Object, OmpMapParentAndMemberData> &parentMemberIndices,
     llvm::SmallVectorImpl<mlir::Value> &mapVars,
-    llvm::SmallVectorImpl<Object> &mapObjects, llvm::StringRef mapperIdNameRef,
-    bool isMotionModifier, llvm::omp::Directive directive) const {
+    llvm::SmallVectorImpl<Object> &mapObjects,
+    llvm::StringRef mapperIdNameRef, bool isMotionModifier,
+    llvm::omp::Directive directive, llvm::omp::Clause clause) const {
   fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
 
   for (const omp::Object &object : objects) {
@@ -1910,11 +1911,19 @@ void ClauseProcessor::processMapObjects(
     auto location = mlir::NameLoc::get(
         mlir::StringAttr::get(firOpBuilder.getContext(), asFortran.str()),
         baseOp.getLoc());
+    auto mapCaptureType = mlir::omp::VariableCaptureKind::ByRef;
+
+    // Check if we process C_PTR objects for the use_device_ptr clause.
+    // These objects should be mapped as a copy.
+    bool isCPtrSym = semantics::IsBuiltinCPtr(*object.sym());
+    if (isCPtrSym && clause == llvm::omp::Clause::OMPC_use_device_ptr) {
+      mapCaptureType = mlir::omp::VariableCaptureKind::ByCopy;
+    }
     mlir::omp::MapInfoOp mapOp = utils::openmp::createMapInfoOp(
         firOpBuilder, location, baseOp,
         /*varPtrPtr=*/mlir::Value{}, asFortran.str(), bounds,
         /*members=*/{}, /*membersIndex=*/mlir::ArrayAttr{}, mapTypeBits,
-        mlir::omp::VariableCaptureKind::ByRef, baseOp.getType(),
+        mapCaptureType, baseOp.getType(),
         /*partialMap=*/false, mapperId);
 
     if (parentObj.has_value()) {
@@ -2242,7 +2251,8 @@ bool ClauseProcessor::processUseDevicePtr(
             mlir::omp::ClauseMapFlags::return_param;
         processMapObjects(stmtCtx, location, clause.v, mapTypeBits,
                           parentMemberIndices, result.useDevicePtrVars,
-                          useDeviceObjects);
+                          useDeviceObjects, "", false, llvm::omp::OMPD_unknown,
+                          llvm::omp::OMPC_use_device_ptr);
       });
 
   insertChildMapInfoIntoParent(converter, semaCtx, stmtCtx, parentMemberIndices,

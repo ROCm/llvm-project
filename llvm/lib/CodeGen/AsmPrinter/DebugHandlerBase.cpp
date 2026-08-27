@@ -58,7 +58,7 @@ DbgVariableLocation::extractFromMachineInstruction(
   while (Op != DIExpr->expr_op_end()) {
     switch (Op->getOp()) {
     case dwarf::DW_OP_constu: {
-      int Value = cast<DIExpression::ConstuOp>(*Op).getValue();
+      int Value = Op->getArg(0);
       ++Op;
       if (Op != DIExpr->expr_op_end()) {
         switch (Op->getOp()) {
@@ -74,14 +74,11 @@ DbgVariableLocation::extractFromMachineInstruction(
       }
     } break;
     case dwarf::DW_OP_plus_uconst:
-      Offset += cast<DIExpression::PlusUconstOp>(*Op).getOffset();
+      Offset += Op->getArg(0);
       break;
-    case dwarf::DW_OP_LLVM_fragment: {
-      auto Fragment = cast<DIExpression::FragmentOp>(*Op);
-      Location.FragmentInfo = {Fragment.getSizeInBits(),
-                               Fragment.getOffsetInBits()};
+    case dwarf::DW_OP_LLVM_fragment:
+      Location.FragmentInfo = {Op->getArg(1), Op->getArg(0)};
       break;
-    }
     case dwarf::DW_OP_deref:
       Location.LoadChain.push_back(Offset);
       Offset = 0;

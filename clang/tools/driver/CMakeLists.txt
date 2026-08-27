@@ -80,8 +80,15 @@ endif()
 
 add_dependencies(clang clang-resource-headers)
 
+#Only create flang symlink if Flang is not being built
+list(FIND LLVM_ENABLE_PROJECTS flang FLANG_TARGET_INDEX)
+
 if(NOT CLANG_LINKS_TO_CREATE)
-  set(CLANG_LINKS_TO_CREATE clang++ clang-cl clang-cpp)
+  if("${FLANG_TARGET_INDEX}" EQUAL "-1")
+    set(CLANG_LINKS_TO_CREATE clang++ clang-cl clang-cpp flang)
+  else()
+    set(CLANG_LINKS_TO_CREATE clang++ clang-cl clang-cpp)
+  endif()
 endif()
 
 if (CLANG_ENABLE_HLSL)

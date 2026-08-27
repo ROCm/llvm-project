@@ -33,6 +33,8 @@
 
 #define OFFLOAD_DEVICE_DEFAULT -1
 
+#define HOST_DEVICE                -10
+
 /// return flags of __tgt_target_XXX public APIs
 enum __tgt_target_return_t : int {
   /// successful offload executed on a target device
@@ -79,11 +81,11 @@ enum tgt_map_type : uint64_t {
   OMP_TGT_MAPTYPE_OMPX_HOLD = 0x2000,
   // Attach pointer and pointee, after processing all other maps.
   // Applicable to map-entering directives. Does not change ref-count.
-  OMP_TGT_MAPTYPE_ATTACH = 0x4000,
+  OMP_TGT_MAPTYPE_ATTACH = 0x8000,
   // When a lookup fails, fall back to using null as the translated pointer,
   // instead of preserving the original pointer's value. Currently only
   // useful in conjunction with RETURN_PARAM.
-  OMP_TGT_MAPTYPE_FB_NULLIFY = 0x8000,
+  OMP_TGT_MAPTYPE_FB_NULLIFY = 0x10000,
   // descriptor for non-contiguous target-update
   OMP_TGT_MAPTYPE_NON_CONTIG = 0x100000000000,
   // member of struct, member given by [16 MSBs] - 1
@@ -274,6 +276,8 @@ struct __tgt_target_non_contig {
 extern "C" {
 #endif
 
+int ompx_get_team_procs(int device_num);
+
 /// The OpenMP access group type. The criterion for grouping tasks using a
 /// specific grouping property.
 enum omp_access_t {
@@ -311,6 +315,8 @@ int omp_target_disassociate_ptr(const void *HostPtr, int DeviceNum);
 
 /// Explicit target memory allocators
 /// Using the llvm_ prefix until they become part of the OpenMP standard.
+void *llvm_omp_target_lock_mem(void *ptr, size_t size, int device_num);
+void llvm_omp_target_unlock_mem(void *ptr, int device_num);
 void *llvm_omp_target_alloc_device(size_t Size, int DeviceNum);
 void *llvm_omp_target_alloc_host(size_t Size, int DeviceNum);
 void *llvm_omp_target_alloc_shared(size_t Size, int DeviceNum);

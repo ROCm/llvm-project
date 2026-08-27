@@ -18,6 +18,7 @@
 #include "flang/Optimizer/Dialect/Support/FIRContext.h"
 #include "mlir/Dialect/OpenMP/OpenMPInterfaces.h"
 #include <flang/Lower/AbstractConverter.h>
+#include <flang/Lower/ConvertExprToHLFIR.h>
 #include <flang/Lower/ConvertType.h>
 #include <flang/Lower/DirectivesCommon.h>
 #include <flang/Lower/OpenMP.h>
@@ -42,6 +43,8 @@
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/CommandLine.h>
+#include <mlir/Analysis/TopologicalSortUtils.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 
 #include <functional>
 #include <iterator>

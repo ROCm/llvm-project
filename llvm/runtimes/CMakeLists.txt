@@ -581,19 +581,27 @@ if(build_runtimes)
     endif()
   endif()
 
-  # Forward user-provided system configuration to runtimes for requirement introspection.
-  # These are lists, so their separators have to survive being passed on the
-  # sub-build's command line; an unescaped ';' would split them into separate
-  # arguments.
-  # CMAKE_PREFIX_PATH is the search path for CMake packages.
-  if(CMAKE_PREFIX_PATH)
-    string(JOIN "$<SEMICOLON>" escaped_prefix_path ${CMAKE_PREFIX_PATH})
-    list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${escaped_prefix_path}")
+  # Forward user-provived system configuration to runtimes for requirement introspection.
+  # CMAKE_PREFIX_PATH is the search path for CMake packages. In order to pass through
+  # the command line interface, the CMake semicolon separator needs to be replaced
+  # with $<SEMICOLON>
+  string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
+  # Some projects require access to the LLVM lib/cmake directory, whether or not
+  # the user provided a prefix path of their own.
+  if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+    if(escaped_cmake_prefix_path)
+      string(PREPEND escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake$<SEMICOLON>")
+    else()
+      set(escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake")
+    endif()
   endif()
+  if(escaped_cmake_prefix_path)
+    list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${escaped_cmake_prefix_path}")
+  endif()
+
   # CMAKE_PROGRAM_PATH is the search path for executables such as python.
   if(CMAKE_PROGRAM_PATH)
-    string(JOIN "$<SEMICOLON>" escaped_program_path ${CMAKE_PROGRAM_PATH})
-    list(APPEND extra_cmake_args "-DCMAKE_PROGRAM_PATH=${escaped_program_path}")
+    list(APPEND extra_cmake_args "-DCMAKE_PROGRAM_PATH=${CMAKE_PROGRAM_PATH}")
   endif()
 
   set(libclc_enabled FALSE)
@@ -629,7 +637,59 @@ if(build_runtimes)
     endforeach()
   endif()
   if("openmp" IN_LIST LLVM_ENABLE_RUNTIMES OR "offload" IN_LIST LLVM_ENABLE_RUNTIMES)
-    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper)
+    # With ROCm 6.3 the ROCr runtime and the thunk layer share a single repository.
+    # No need to provide a separate path for ROCt.
+    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR)
+
+      set(rocr_extra_cmake_args "")
+      if(THEROCK_AMDGPU_TARGETS)
+        # Pass the list of AMDGPU targets to ROCr runtime
+        list(APPEND rocr_extra_cmake_args "-DTHEROCK_AMDGPU_TARGETS=${THEROCK_AMDGPU_TARGETS}")
+      endif()
+
+      if(NOT DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH)
+        message(SEND_ERROR "External ROCr requires setting LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH")
+      endif()
+
+      message(STATUS "Add external unified ROCr: ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}")
+      ExternalProject_Add(rocr-runtime
+        SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}
+        DEPENDS clang llvm-link lld opt llvm-objcopy
+        INSTALL_COMMAND ""
+        CMAKE_ARGS -DBUILD_SHARED_LIBS=ON
+                   -DIMAGE_SUPPORT=OFF
+                   -DLLVM_RUNTIME_OPENMP=ON
+                   ${rocr_extra_cmake_args}
+                   ${extra_cmake_args})
+      set(HSA_DEP rocr-runtime)
+    endif()
+
+    # omptarget device RTL depends on device libs, leading to circular dependency in build scripts.
+    # Providing path to the sources enables to build them as part of compiler build, which
+    # removes the ciruclar dependency on the script-side.
+    if (DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+      message(STATUS "Add external AMD device-libs: ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}")
+      if (NOT ${ROCM_DEVICE_LIBS_INSTALL_PREFIX_PATH} STREQUAL "")
+        ExternalProject_Add(rocm-device-libs
+          SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}
+          DEPENDS clang llvm-link lld opt llvm-objcopy
+          CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ROCM_DEVICE_LIBS_INSTALL_PREFIX_PATH}
+                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW=${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC}
+                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn
+                     -DCMAKE_INSTALL_LIBDIR=lib
+                     ${extra_cmake_args})
+      else()
+        ExternalProject_Add(rocm-device-libs
+          SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}
+          DEPENDS clang llvm-link lld opt llvm-objcopy
+          INSTALL_COMMAND ""
+          CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/lib/cmake
+                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW=${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC}
+                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn)
+      endif()
+    endif()
+
+    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP})
       if(TARGET ${dep})
         list(APPEND extra_deps ${dep})
       endif()

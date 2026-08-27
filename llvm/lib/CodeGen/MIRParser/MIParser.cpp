@@ -1328,6 +1328,7 @@ bool MIParser::parseStandaloneMDNode(MDNode *&Node) {
     if (parseMDNode(Node))
       return true;
   } else if (Token.is(MIToken::md_diexpr)) {
+    // FIXME: This should be driven off of the UNIQUED property in Metadata.def
     if (parseDIExpression(Node))
       return true;
   } else if (Token.is(MIToken::md_dilocation)) {

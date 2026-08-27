@@ -93,6 +93,9 @@ if (NOT COMPILER_RT_PROFILE_BAREMETAL)
     InstrProfilingUtil.c
     InstrProfilingValue.c
     )
+  if(COMPILER_RT_BUILD_PROFILE_ROCM)
+    list(APPEND PROFILE_SOURCES InstrProfilingPlatformROCm.cpp)
+  endif()
 endif()
 
 set(PROFILE_HEADERS
@@ -168,13 +171,24 @@ if(COMPILER_RT_TARGET_AMDGPU OR "${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "nv
 endif()
 
 if(MSVC)
-  # profile historically has only been supported with the static runtime
-  # on windows
-  set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
+  # profile historically used the static CRT (/MT). When we merge RTInterception and
+  # RTSanitizerCommon (same object libs as clang_rt.cfi on ELF), those targets are
+  # built with MultiThreadedDLL (/MD) — see interception/CMakeLists.txt and
+  # sanitizer_common/CMakeLists.txt. Mixing /MD objects into a /MT libclang_rt.profile
+  # yields LNK2019 (__imp__stricmp from interception_win.cpp) and LNK4098 in Profile-*.
+  if(PROFILE_HAS_HIP_INTERCEPTOR)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
+  else()
+    set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
+  endif()
 endif()
 
 # We don't use the C++ Standard Library here, so avoid including it by mistake.
 append_list_if(COMPILER_RT_HAS_NOSTDINCXX_FLAG -nostdinc++ EXTRA_FLAGS)
+# C++ profile sources (e.g. InstrProfilingPlatformROCm.cpp) must not emit exception
+# personality symbols: host libclang_rt.profile.a is linked from C code and from C++
+# tests that do not pull in __gxx_personality_v0 (Profile-* / premerge).
+append_list_if(COMPILER_RT_HAS_FNO_EXCEPTIONS_FLAG -fno-exceptions EXTRA_FLAGS)
 # XRay uses C++ standard library headers.
 string(REGEX REPLACE "-?-stdlib=[a-zA-Z+]*" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
@@ -200,6 +214,7 @@ if(APPLE)
     STATIC
     OS ${PROFILE_SUPPORTED_OS}
     ARCHS ${PROFILE_SUPPORTED_ARCH}
+    OBJECT_LIBS ${PROFILE_OBJECT_LIBS}
     CFLAGS ${EXTRA_FLAGS}
     SOURCES ${PROFILE_SOURCES}
     ADDITIONAL_HEADERS ${PROFILE_HEADERS}
@@ -209,6 +224,7 @@ else()
   add_compiler_rt_runtime(clang_rt.profile
     STATIC
     ARCHS ${PROFILE_SUPPORTED_ARCH}
+    OBJECT_LIBS ${PROFILE_OBJECT_LIBS}
     CFLAGS ${EXTRA_FLAGS}
     SOURCES ${PROFILE_SOURCES}
     ADDITIONAL_HEADERS ${PROFILE_HEADERS}

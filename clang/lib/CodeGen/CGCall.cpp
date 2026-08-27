@@ -1062,7 +1062,8 @@ const CGFunctionInfo &CodeGenTypes::arrangeLLVMFunctionInfo(
     FunctionType::ExtInfo info,
     ArrayRef<FunctionProtoType::ExtParameterInfo> paramInfos,
     RequiredArgs required, const FunctionDecl *ABIInfoFD) {
-  assert(llvm::all_of(argTypes,
+  if (!getContext().getLangOpts().OpenMP)
+    assert(llvm::all_of(argTypes,
                       [](CanQualType T) { return T.isCanonicalAsParam(); }));
 
   // Lookup or create unique function info.
@@ -3259,7 +3260,7 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
         // require parameters to have automatic storage duration. Therefore, the
         // underlying object of this pointer will not be freed during the
         // function's execution.
-        Attrs.addAttribute(llvm::Attribute::NoFree);
+        Attrs.addAttribute(llvm::Attribute::NoFreeObj);
         Attrs.addDereferenceableAttr(
             Context.getTypeSizeInChars(ParamType).getQuantity());
       }
@@ -3551,6 +3552,9 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
       if (ArgI.getInAllocaIndirect())
         V = Address(Builder.CreateLoad(V), ConvertTypeForMem(Ty),
                     getContext().getTypeAlignInChars(Ty));
+      // FIXME: It seems like we would want to represent inalloca via
+      // ParamValue more directly, so the debug information can reflect it
+      // directly.
       ArgVals.push_back(ParamValue::forIndirect(V));
       break;
     }
@@ -3751,6 +3755,7 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
 
       llvm::StructType *STy =
           dyn_cast<llvm::StructType>(ArgI.getCoerceToType());
+      RawAddress DebugAddr = Address::invalid();
       Address Alloca = CreateMemTempWithoutCast(
           Ty, getContext().getDeclAlign(Arg), Arg->getName());
 
@@ -3834,13 +3839,14 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
           V = emitArgumentDemotion(*this, Arg, V);
         ArgVals.push_back(ParamValue::forDirect(V));
       } else {
-        ArgVals.push_back(ParamValue::forIndirect(Alloca));
+        ArgVals.push_back(ParamValue::forIndirect(Alloca, DebugAddr));
       }
       break;
     }
 
     case ABIArgInfo::CoerceAndExpand: {
       // Reconstruct into a temporary.
+      RawAddress DebugAddr = Address::invalid();
       Address alloca =
           CreateMemTempWithoutCast(Ty, getContext().getDeclAlign(Arg));
       ArgVals.push_back(ParamValue::forIndirect(alloca));
@@ -3883,10 +3889,11 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
       // If this structure was expanded into multiple arguments then
       // we need to create a temporary and reconstruct it from the
       // arguments.
+      RawAddress DebugAddr = Address::invalid();
       Address Alloca =
           CreateMemTempWithoutCast(Ty, getContext().getDeclAlign(Arg));
       LValue LV = MakeAddrLValue(Alloca, Ty);
-      ArgVals.push_back(ParamValue::forIndirect(Alloca));
+      ArgVals.push_back(ParamValue::forIndirect(Alloca, DebugAddr));
 
       auto FnArgIter = Fn->arg_begin() + FirstIRArg;
       ExpandTypeFromArgs(Ty, LV, FnArgIter);

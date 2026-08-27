@@ -4,7 +4,7 @@
 ! to associate with is diagnosed like the loop-nest case, but names a sequence.
 subroutine no_sequence_at_end()
   !ERROR: This construct should contain a DO-loop or a loop-sequence-generating construct
-  !$omp metadirective when(implementation={vendor(llvm)}: fuse) otherwise(nothing)
+  !$omp metadirective when(implementation={vendor(amd)}: fuse) otherwise(nothing)
 end subroutine
 
 ! A variant that cannot be selected on this target needs no loop sequence.

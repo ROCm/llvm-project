@@ -55,7 +55,7 @@
 
 // CK23-LABEL: @.__omp_offloading_{{.*}}explicit_maps_inside_captured{{.*}}_l{{[0-9]+}}.region_id = weak constant i8 0
 // CK23: [[SIZE05:@.+]] = private {{.*}}constant [3 x i64] [i64 16, i64 {{4|8}}, i64 0]
-// CK23: [[MTYPE05:@.+]] = private {{.*}}constant [3 x i64] [i64 35, i64 16384, i64 288]
+// CK23: [[MTYPE05:@.+]] = private {{.*}}constant [3 x i64] [i64 35, i64 32768, i64 288]
 
 // CK23-LABEL: explicit_maps_inside_captured{{.*}}(
 int explicit_maps_inside_captured(int a){

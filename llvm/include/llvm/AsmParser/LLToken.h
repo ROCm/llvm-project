@@ -514,6 +514,7 @@ enum Kind {
   DwarfSourceLangName, // DW_LNAME_foo
   DwarfLangDialect,    // DW_LLVM_LANG_DIALECT_foo
   DwarfCC,             // DW_CC_foo
+  DwarfMSpaceLLVM,     // DW_MSPACE_LLVM_foo
   EmissionKind,        // lineTablesOnly
   NameTableKind,       // GNU
   FixedPointKind,      // Fixed point
@@ -522,6 +523,7 @@ enum Kind {
   DISPFlag,            // DISPFlagFoo
   DwarfMacinfo,        // DW_MACINFO_foo
   ChecksumKind,        // CSK_foo
+  DIOp,                // DIOpFoo
   DbgRecordType,       // dbg_foo
   DwarfEnumKind,       // DW_APPLE_ENUM_KIND_foo
   FloatLiteral,        // Unparsed float literal

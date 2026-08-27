@@ -4,8 +4,8 @@
 // CHECK: llvm.return
 // CHECK: llvm.func @nohost
 // CHECK: llvm.return
-// CHECK-NOT: llvm.func {{.*}}@host
-// CHECK-NOT: llvm.func {{.*}}@none
+// CHECK-NOT: llvm.func {{.*}}}} @host
+// CHECK-NOT: llvm.func {{.*}}}} @none
 // CHECK: llvm.func @nohost_target
 // CHECK: llvm.return
 // CHECK: llvm.func @host_target

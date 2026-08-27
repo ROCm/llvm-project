@@ -2,6 +2,8 @@
 add_target_library(omptarget.rtl.cuda CUDA)
 
 target_sources(omptarget.rtl.cuda PRIVATE src/rtl.cpp)
+#workaround strange -O3 issue for cuda src.rtk,coo ASAN
+set_source_files_properties(src/rtl.cpp PROPERTIES COMPILE_FLAGS "-O0")
 
 # Define the minimum CUDA version required by offload.
 target_compile_definitions(omptarget.rtl.cuda PRIVATE OFFLOAD_MIN_CUDA_VERSION=${OFFLOAD_MIN_CUDA_VERSION_CODE})

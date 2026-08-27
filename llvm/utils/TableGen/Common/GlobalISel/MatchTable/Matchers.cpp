@@ -1671,6 +1671,17 @@ bool InstructionOperandMatcher::isHigherPriorityThan(
   return false;
 }
 
+//===- MachineOperandTypeMatcher -----------------------------------------===//
+
+void MachineOperandTypeMatcher::emitPredicateOpcodes(MatchTable &Table,
+                                                     RuleMatcher &Rule) const {
+  Table << MatchTable::Opcode("GIM_CheckMachineOperandType")
+        << MatchTable::Comment("MI") << MatchTable::ULEB128Value(InsnVarID)
+        << MatchTable::Comment("Op") << MatchTable::ULEB128Value(OpIdx)
+        << MatchTable::Comment("Ty") << MatchTable::ULEB128Value(MOTy)
+        << MatchTable::LineBreak;
+}
+
 //===- OperandRenderer ----------------------------------------------------===//
 
 OperandRenderer::~OperandRenderer() = default;

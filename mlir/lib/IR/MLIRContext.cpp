@@ -57,7 +57,8 @@ struct MLIRContextOptions {
   llvm::cl::opt<bool> disableThreading{
       "mlir-disable-threading",
       llvm::cl::desc("Disable multi-threading within MLIR, overrides any "
-                     "further call to MLIRContext::enableMultiThreading()")};
+                     "further call to MLIRContext::enableMultiThreading()"),
+      llvm::cl::init(true)};
 
   llvm::cl::opt<bool> printOpOnDiagnostic{
       "mlir-print-op-on-diagnostic",
@@ -75,7 +76,7 @@ struct MLIRContextOptions {
 static llvm::ManagedStatic<MLIRContextOptions> clOptions;
 
 static bool isThreadingGloballyDisabled() {
-#if LLVM_ENABLE_THREADS != 0
+#if MLIR_ENABLE_THREADS != 0
   return clOptions.isConstructed() && clOptions->disableThreading;
 #else
   return true;
@@ -1007,8 +1008,8 @@ void OperationName::UnregisteredOpModel::setInherentAttr(Operation *op,
   *op->getPropertiesStorage().as<Attribute *>() =
       attrs.getDictionary(op->getContext());
 }
-void OperationName::UnregisteredOpModel::populateInherentAttrs(
-    Operation *op, NamedAttrList &attrs) {}
+void OperationName::UnregisteredOpModel::walkInherentAttrs(
+    Operation *op, InherentAttrVisitor visitor) {}
 LogicalResult OperationName::UnregisteredOpModel::verifyInherentAttrs(
     OperationName opName, NamedAttrList &attributes,
     function_ref<InFlightDiagnostic()> emitError) {

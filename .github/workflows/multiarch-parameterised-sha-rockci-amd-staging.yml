@@ -1,0 +1,177 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+# Multi-Arch CI
+#
+# This is a staging workflow for the sharded multi-arch build pipeline.
+# It mirrors ci.yml but uses multi_arch_build_portable_linux.yml instead of
+# ci_linux.yml. Once validated, ci.yml will be updated to use the multi-arch
+# sub-workflows directly.
+#
+# Same `ci:skip` rules as rockci-amd-staging.yml: only automated LLVM_MAIN_REVISION PRs
+# (matching title/body) skip presubmit; label alone is not enough. 
+
+name: Multi Arch Parameterised CI amd-staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      LLVM_PR_URL:
+        description: "LLVM upstream PR urls(supports multi PR separated by ,). ex: https://github.com/llvm/llvm-project/pull/1"
+        required: false
+        type: string
+        default: ""
+      LLVM_ROCm_PR_URL:
+        description: "LLVM ROCm PR url. ex: https://github.com/ROCm/llvm-project/pull/1"
+        required: false
+        type: string
+        default: ""
+      SPIRV_PR_URL:
+        description: "SPIRV PR url. ex: https://github.com/ROCm/SPIRV-LLVM-Translator/pull/1"
+        required: false
+        type: string
+        default: ""
+      HIPIFY_PR_URL:
+        description: "HIPIFY PR url. ex: https://github.com/ROCm/HIPIFY/pull/1 "
+        required: false
+        type: string
+        default: ""
+      linux_amdgpu_families:
+        type: string
+        description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
+        default: "gfx94x,gfx110x,gfx90a"
+      linux_test_labels:
+        type: string
+        description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
+        default: ""
+      windows_amdgpu_families:
+        type: string
+        description: "Insert comma-separated list of Windows GPU families to build and test. ex: gfx94X, gfx1201X"
+        default: "gfx1151"
+      windows_test_labels:
+        type: string
+        description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
+        default: ""
+      prebuilt_stages:
+        type: string
+        default: ""
+        description: "Comma-separated build stages to skip (or 'all' for all stages); artifacts are copied from baseline_run_id instead"
+      baseline_run_id:
+        type: string
+        default: ""
+        description: "Workflow run ID to copy prebuilt stage artifacts from; required when prebuilt_stages is set"
+      changed_projects:
+        type: string
+        default: ""
+        description: "Comma-separated list of changed projects to filter tests (empty = run all tests)"
+      build_pytorch:
+        type: boolean
+        default: true
+        description: "Build PyTorch wheels"
+
+permissions:
+  contents: read
+
+concurrency:
+  # A PR number if a pull request and otherwise the commit hash. This cancels
+  # queued and in-progress runs for the same PR (presubmit) or commit
+  # (postsubmit). The workflow name is prepended to avoid conflicts between
+  # different workflows.
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  multiple_pr_sha_params:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Store LLVM, HIPIFY and SPIRV PR URLs into file
+        run: |
+          cat > ${{ github.run_id }}_PR_params.env <<'EOF'
+          LLVM_PR_URL=${{ github.event.inputs.LLVM_PR_URL }}
+          LLVM_ROCm_PR_URL=${{ github.event.inputs.LLVM_ROCm_PR_URL }}
+          SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
+          HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
+          EOF
+
+      - name: Upload stored file of PR URls
+        uses: actions/upload-artifact@v4
+        with:
+          name: multiple-pr-build-params
+          path: ${{ github.run_id }}_PR_params.env
+  setup:
+    uses: ./.github/workflows/setup_multi_arch.yml
+    with:
+      build_variant: "release"
+      linux_amdgpu_families: ${{ github.event.inputs.linux_amdgpu_families }}
+      windows_amdgpu_families: ${{ github.event.inputs.windows_amdgpu_families }}              
+      linux_test_labels: ${{ inputs.linux_test_labels || '' }}
+      windows_test_labels: ${{ inputs.windows_test_labels || '' }}
+      prebuilt_stages: ${{ inputs.prebuilt_stages || '' }}
+      baseline_run_id: ${{ inputs.baseline_run_id || '' }}
+      build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
+      build_jax: false
+
+  linux_build_and_test:
+    name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
+    needs:
+      - setup
+      - multiple_pr_sha_params
+    if: >-
+      ${{
+        needs.setup.outputs.linux_build_config != '' &&
+        needs.setup.outputs.enable_build_jobs == 'true'
+      }}
+    uses: ./.github/workflows/multi_arch_ci_linux.yml
+    secrets: inherit
+    with:
+      build_config: ${{ needs.setup.outputs.linux_build_config }}
+      test_labels: ${{ needs.setup.outputs.linux_test_labels }}
+      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      rocm_deb_package_version: ${{ needs.setup.outputs.rocm_deb_package_version }}
+      rocm_rpm_package_version: ${{ needs.setup.outputs.rocm_rpm_package_version }}
+      test_type: 'quick'
+      changed_projects: ${{ inputs.changed_projects || '' }}
+    permissions:
+      contents: read
+      id-token: write
+
+  windows_build_and_test:
+    name: Windows::${{ fromJSON(needs.setup.outputs.windows_build_config || '{}').build_variant_label || 'skip' }}
+    needs:
+      - setup
+      - multiple_pr_sha_params
+    if: >-
+      ${{
+        needs.setup.outputs.windows_build_config != '' &&
+        needs.setup.outputs.enable_build_jobs == 'true'
+      }}
+    uses: ./.github/workflows/multi_arch_ci_windows.yml
+    secrets: inherit
+    with:
+      build_config: ${{ needs.setup.outputs.windows_build_config }}
+      test_labels: ${{ needs.setup.outputs.windows_test_labels }}
+      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      test_type: 'quick'
+      changed_projects: ${{ inputs.changed_projects || '' }}
+    permissions:
+      contents: read
+      id-token: write
+
+  ci_summary:
+    name: CI Summary
+    if: always()
+    needs:
+      - setup
+      - linux_build_and_test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: "ROCm/TheRock"
+          ref: 'compiler/amd-staging'
+      - name: Evaluate workflow results
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python build_tools/github_actions/workflow_summary.py \
+            --needs-json '${{ toJSON(needs) }}'

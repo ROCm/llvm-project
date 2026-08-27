@@ -11,6 +11,19 @@
 # See https://llvm.org/docs/DeveloperPolicy.html#maintainers as well as the
 # Maintainers.md files in the the respective subproject directories.
 
+# AMD-specific projects.
+/amd/comgr/ @lamb-j @chinmaydd
+/amd/device-libs/ @b-sumner @lamb-j
+/amd/hipcc/ @david-salinas @lamb-j
+/amd/docs/ @ROCm/rocm-documentation
+
+# HotSwap specific
+/amd/comgr/src/hotswap/ @harsh-amd @ftynse
+/amd/comgr/test-unit/hotswap/ @harsh-amd @ftynse
+/amd/comgr/test-lit/hotswap/ @harsh-amd @ftynse
+
+/libc/ @llbm/reviewers-libc
+/bolt/ @llvm/reviewers-bolt
 /libc/ @llvm/reviewers-libc
 /libcxx/ @llvm/reviewers-libcxx
 /libcxxabi/ @llvm/reviewers-libcxxabi

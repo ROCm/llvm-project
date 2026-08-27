@@ -102,5 +102,20 @@ void ReportMacCfReallocUnknown(uptr addr, uptr zone_ptr,
                                const char *zone_name,
                                BufferedStackTrace *stack);
 
+// Interface to report errors and warnings by nonself threads
+// executing in the environment. Needed cpu threads can also submit a report.
+void ReportNonselfError(uptr *nonself_callstack, u32 n_nonself_callstack,
+                        uptr *nonself_addrs, u32 n_nonself_addrs,
+                        u64 *nonself_tids, u32 n_nonself_tids, bool is_write,
+                        u32 access_size, bool is_abort,
+                        const char *nonself_name, s64 nonself_vma_adjust,
+                        int nonself_fd, u64 nonself_file_extent_size,
+                        u64 nonself_file_extent_start);
+
+// Report a device memory leak or print summary when device_id == -1.
+void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
+                       const char *device_name, s64 vma_adjust, int fd,
+                       u64 file_extent_size, u64 file_extent_start);
+
 }  // namespace __asan
 #endif  // ASAN_REPORT_H

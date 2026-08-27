@@ -12,9 +12,13 @@
 
 #ifdef OMPT_SUPPORT
 
+#include <atomic>
+#include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <mutex>
+#include <thread>
 
 #include "Shared/Debug.h"
 
@@ -440,6 +444,11 @@ void Interface::endTarget(int64_t DeviceId, void *Code) {
                             TargetData.value, Code);
   }
   endTargetRegion();
+}
+
+void Interface::announceTargetRegion(const char *RegionName) {
+  ODBG(ODT_Tool) << "in Interface::target_region_" << RegionName
+                 << " target_id=" << TargetData.value;
 }
 
 void Interface::beginTargetDataOperation() {

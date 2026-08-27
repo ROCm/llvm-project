@@ -3,7 +3,7 @@
 subroutine missing_dsa(n, a, x)
   integer :: n, a(n), x, i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, a)) default(nothing)
   do i = 1, n
     !ERROR: The DEFAULT(NONE) clause requires that 'x' must be listed in a data-sharing attribute clause
@@ -14,7 +14,7 @@ end subroutine
 subroutine explicit_dsa(n, a, x)
   integer :: n, a(n), x, i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, a, x)) default(nothing)
   do i = 1, n
     a(i) = x
@@ -25,7 +25,7 @@ subroutine common_block_dsa(n)
   integer :: n, i, x
   common /block/ x
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, /block/)) default(nothing)
   do i = 1, n
     x = i
@@ -36,7 +36,7 @@ end subroutine
 subroutine variant_dsa(n, a, x)
   integer :: n, a(n), x, i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, a)) &
   !$omp& default(parallel do shared(x))
   do i = 1, n
@@ -52,7 +52,7 @@ contains
   subroutine inner(n, a)
     integer :: n, a(n), i
     !$omp metadirective &
-    !$omp& when(implementation={vendor(llvm)}: &
+    !$omp& when(implementation={vendor(amd)}: &
     !$omp& parallel do default(none) shared(n, a)) &
     !$omp& default(parallel do private(x))
     do i = 1, n
@@ -90,7 +90,7 @@ end subroutine
 subroutine invalid_depth_and_missing_dsa(n, a, x)
   integer :: n, a(n), x, i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !ERROR: This construct requires a nest of depth 2, but the associated nest is a nest of depth 1
   !BECAUSE: COLLAPSE clause was specified with argument 2
   !$omp& parallel do collapse(2) default(none) shared(n, a)) default(nothing)
@@ -105,7 +105,7 @@ end subroutine
 subroutine predetermined_dsa(n, a)
   integer :: n, a(n), i, j
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, a)) default(nothing)
   do i = 1, n
     do j = 1, n
@@ -121,7 +121,7 @@ end subroutine
 subroutine static_local(n, a)
   integer :: n, a(n), i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, a)) default(nothing)
   do i = 1, n
     block
@@ -136,7 +136,7 @@ end subroutine
 subroutine implicit_saved_local(n, a)
   integer :: n, a(n), i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, a)) default(nothing)
   do i = 1, n
     block
@@ -151,7 +151,7 @@ end subroutine
 subroutine unused_static_locals(n, a)
   integer :: n, a(n), i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, a)) default(nothing)
   do i = 1, n
     block
@@ -170,7 +170,7 @@ end subroutine
 subroutine saved_statement_locals(n, a)
   integer :: n, a(n), i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, a)) default(nothing)
   do i = 1, n
     block
@@ -188,7 +188,7 @@ end subroutine
 subroutine declaration_bound(n, a, extent)
   integer :: n, a(n), extent, i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, a)) default(nothing)
   do i = 1, n
     block
@@ -202,7 +202,7 @@ end subroutine
 subroutine nested_private(n, a)
   integer :: n, a(n), i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n)) default(nothing)
   do i = 1, n
     !$omp task private(a)
@@ -214,7 +214,7 @@ end subroutine
 subroutine nested_firstprivate(n, a, x)
   integer :: n, a(n), x, i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n, a)) default(nothing)
   do i = 1, n
     !ERROR: The DEFAULT(NONE) clause requires that 'x' must be listed in a data-sharing attribute clause
@@ -227,7 +227,7 @@ end subroutine
 subroutine nested_implicit(n, a)
   integer :: n, a(n), i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n)) default(nothing)
   do i = 1, n
     !$omp task
@@ -240,7 +240,7 @@ end subroutine
 subroutine nested_shared(n, a)
   integer :: n, a(n), i
   !$omp metadirective &
-  !$omp& when(implementation={vendor(llvm)}: &
+  !$omp& when(implementation={vendor(amd)}: &
   !$omp& parallel do default(none) shared(n)) default(nothing)
   do i = 1, n
     !ERROR: The DEFAULT(NONE) clause requires that 'a' must be listed in a data-sharing attribute clause

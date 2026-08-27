@@ -48,6 +48,7 @@ void AMDGCN::Linker::constructLLVMLinkCommand(
   auto TargetID = Args.getLastArgValue(options::OPT_mcpu_EQ);
   AddStaticDeviceLibsLinking(C, *this, JA, Inputs, Args, LinkerInputs, "amdgcn",
                              TargetID, /*IsBitCodeSDL=*/true);
+
   tools::constructLLVMLinkCommand(C, *this, JA, Inputs, LinkerInputs, Output,
                                   Args);
 }
@@ -95,6 +96,11 @@ void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
     LldArgs.push_back("-plugin-opt=-avail-extern-to-local");
     LldArgs.push_back("-plugin-opt=-avail-extern-gv-in-addrspace-to-local=3");
   }
+
+  if (Arg *A = Args.getLastArgNoClaim(options::OPT_g_Group))
+    if (!A->getOption().matches(options::OPT_g0) &&
+        !A->getOption().matches(options::OPT_ggdb0))
+      LldArgs.push_back("-plugin-opt=-amdgpu-spill-cfi-saved-regs");
 
   for (const Arg *A : Args.filtered(options::OPT_mllvm)) {
     LldArgs.push_back(

@@ -99,6 +99,7 @@
 #include "llvm/IR/IntrinsicsAArch64.h"
 #include "llvm/IR/IntrinsicsARM.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
+#include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/IR/IntrinsicsWebAssembly.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/MemoryModelRelaxationAnnotations.h"
@@ -126,6 +127,7 @@
 #include "llvm/Support/ModRef.h"
 #include "llvm/Support/TimeProfiler.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/RISCVTargetParser.h"
 #include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/Coroutines/CoroInstr.h"
 #include <algorithm>
@@ -797,6 +799,14 @@ void Verifier::visitGlobalVariable(const GlobalVariable &GV) {
   SmallVector<MDNode *, 1> MDs;
   GV.getMetadata(LLVMContext::MD_dbg, MDs);
   for (MDNode *MD : MDs) {
+    if (auto *GVE = dyn_cast<DIGlobalVariableExpression>(MD)) {
+      if (auto *E = dyn_cast_or_null<DIExpression>(GVE->getRawExpression())) {
+        SmallVector<const Value *> Arguments{&GV};
+        DIExpressionEnv Env{GVE->getVariable(), Arguments, DL};
+        CheckDI(E->isValid(Env, dbgs()),
+                "invalid DIExpression in DIGlobalVariableExpression", &GV);
+      }
+    }
     if (auto *GVE = dyn_cast<DIGlobalVariableExpression>(MD))
       visitDIGlobalVariableExpression(*GVE);
     else
@@ -1318,6 +1328,14 @@ void Verifier::visitDIDerivedType(const DIDerivedType &N) {
   CheckDI(!Size || isa<ConstantAsMetadata>(Size) || isa<DIVariable>(Size) ||
               isa<DIExpression>(Size),
           "SizeInBits must be a constant or DIVariable or DIExpression");
+
+  if (N.getDWARFMemorySpace() != dwarf::DW_MSPACE_LLVM_none) {
+    CheckDI(N.getTag() == dwarf::DW_TAG_pointer_type ||
+                N.getTag() == dwarf::DW_TAG_reference_type ||
+                N.getTag() == dwarf::DW_TAG_rvalue_reference_type,
+            "DWARF memory space only applies to pointer or reference types",
+            &N);
+  }
 }
 
 /// Detect mutually exclusive flags.
@@ -1771,6 +1789,21 @@ void Verifier::visitDIObjCProperty(const DIObjCProperty &N) {
     CheckDI(isType(T), "invalid type ref", &N, T);
   if (auto *F = N.getRawFile())
     CheckDI(isa<DIFile>(F), "invalid file", &N, F);
+}
+
+void Verifier::visitDIProperty(const DIProperty &N) {
+  CheckDI(N.getTag() == dwarf::DW_TAG_property, "invalid tag", &N);
+  if (auto *T = N.getRawType())
+    CheckDI(isType(T), "invalid type ref", &N, T);
+  if (auto *F = N.getRawFile())
+    CheckDI(isa<DIFile>(F), "invalid file", &N, F);
+  // DWARF allows a property getter to forward to a subprogram, variable, or
+  // constant too, but the backend only knows how to forward to a member.
+  if (DINode *BackingStorage = N.getBackingStorage()) {
+    auto *DT = dyn_cast<DIDerivedType>(BackingStorage);
+    CheckDI(DT && DT->getTag() == dwarf::DW_TAG_member,
+            "property backing storage must be a member", &N, BackingStorage);
+  }
 }
 
 void Verifier::visitDIImportedEntity(const DIImportedEntity &N) {
@@ -6014,6 +6047,15 @@ void Verifier::visitInstruction(Instruction &I) {
   InstsInThisBlock.insert(&I);
 }
 
+inline MDString *getMetadataValueAsString(MetadataAsValue *MDV) {
+  if (!MDV)
+    return nullptr;
+  auto *MD = dyn_cast<MDTuple>(MDV->getMetadata());
+  if (!MD || MD->getNumOperands() != 1)
+    return nullptr;
+  return dyn_cast<MDString>(MD->getOperand(0));
+}
+
 /// Allow intrinsics to be verified in different ways.
 void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
   Function *IF = Call.getCalledFunction();
@@ -6976,6 +7018,26 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
           Call);
     break;
   }
+  case Intrinsic::riscv_vsetvli:
+  case Intrinsic::riscv_vsetvlimax: {
+    // The result models VLMAX (or a VL bounded by it) and is only defined for
+    // XLen (i32/i64). Narrower types cannot represent the architectural VLMAX
+    // range of [1, 65536], which value analyses rely on.
+    Check(Call.getType()->isIntegerTy(32) || Call.getType()->isIntegerTy(64),
+          "llvm.riscv.vsetvli/vsetvlimax result must be i32 or i64", &Call);
+
+    // VSEW and VLMUL select the vtype and must encode a valid SEW/LMUL pair.
+    bool HasAVL = ID == Intrinsic::riscv_vsetvli;
+    unsigned Offset = HasAVL ? 1 : 0;
+    uint64_t VSEW =
+        cast<ConstantInt>(Call.getArgOperand(Offset))->getZExtValue();
+    uint64_t VLMUL =
+        cast<ConstantInt>(Call.getArgOperand(Offset + 1))->getZExtValue();
+    Check(VSEW <= 3, "llvm.riscv.vsetvli/vsetvlimax VSEW must be 0-3", &Call);
+    Check(VLMUL <= 7 && VLMUL != RISCVVType::LMUL_RESERVED,
+          "llvm.riscv.vsetvli/vsetvlimax VLMUL is reserved", &Call);
+    break;
+  }
   case Intrinsic::callbr_landingpad: {
     const auto *CBR = dyn_cast<CallBrInst>(Call.getOperand(0));
     Check(CBR, "intrinstic requires callbr operand", &Call);
@@ -7250,6 +7312,13 @@ void Verifier::visit(DbgVariableRecord &DVR) {
           F);
   visitMDNode(*DVR.getExpression(), AreDebugLocsAllowed::No);
 
+  // This is redundant with the visitMDNode check above, but here we can include
+  // arguments for DIOp-based expression checking.
+  SmallVector<const Value *> Arguments{DVR.location_ops()};
+  DIExpressionEnv ExprEnv{DVR.getVariable(), Arguments, DL};
+  CheckDI(DVR.getExpression()->isValid(ExprEnv, dbgs()),
+          "invalid #dbg record expression", &DVR, DVR.getRawExpression());
+
   if (DVR.isDbgAssign()) {
     CheckDI(isa_and_nonnull<DIAssignID>(DVR.getRawAssignID()),
             "invalid #dbg_assign DIAssignID", &DVR, DVR.getRawAssignID(), BB,
@@ -7482,6 +7551,9 @@ void Verifier::verifyFragmentExpression(const DIVariable &V,
   CheckDI(FragSize + FragOffset <= *VarSize,
           "fragment is larger than or outside of variable", Desc, &V);
   CheckDI(FragSize != *VarSize, "fragment covers entire variable", Desc, &V);
+
+  auto MSpace = V.getDWARFMemorySpace();
+  CheckDI(MSpace <= dwarf::DW_MSPACE_LLVM_hi_user, "invalid memory space", &V);
 }
 
 void Verifier::verifyFnArgs(const DbgVariableRecord &DVR) {

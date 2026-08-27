@@ -18,8 +18,8 @@ using namespace llvm;
 
 /// Returns true if the Op is a DW_OP_constu.
 static std::optional<uint64_t> isConstantVal(DIExpression::ExprOperand Op) {
-  if (auto Constant = dyn_cast<DIExpression::ConstuOp>(Op))
-    return Constant.getValue();
+  if (Op.getOp() == dwarf::DW_OP_constu)
+    return Op.getArg(0);
   return std::nullopt;
 }
 
@@ -129,9 +129,9 @@ canonicalizeDwarfOperations(ArrayRef<uint64_t> WorkingOps) {
       consumeOneOperator(Cursor, Loc, *Cursor.peek());
       continue;
     }
-    if (auto PlusUconst = dyn_cast<DIExpression::PlusUconstOp>(*Op)) {
+    if (OpRaw == dwarf::DW_OP_plus_uconst) {
       ResultOps.push_back(dwarf::DW_OP_constu);
-      ResultOps.push_back(PlusUconst.getOffset());
+      ResultOps.push_back(Op->getArg(0));
       ResultOps.push_back(dwarf::DW_OP_plus);
       consumeOneOperator(Cursor, Loc, *Cursor.peek());
       continue;
@@ -156,9 +156,9 @@ optimizeDwarfOperations(ArrayRef<uint64_t> WorkingOps) {
     /// Expression has no operations, exit.
     if (!Op1)
       break;
+    auto Op1Raw = Op1->getOp();
 
-    auto Constant = dyn_cast<DIExpression::ConstuOp>(*Op1);
-    if (Constant && Constant.getValue() == 0) {
+    if (Op1Raw == dwarf::DW_OP_constu && Op1->getArg(0) == 0) {
       ResultOps.push_back(dwarf::DW_OP_lit0);
       consumeOneOperator(Cursor, Loc, *Cursor.peek());
       continue;
@@ -174,9 +174,9 @@ optimizeDwarfOperations(ArrayRef<uint64_t> WorkingOps) {
     }
     auto Op2Raw = Op2->getOp();
 
-    if (Constant && Op2Raw == dwarf::DW_OP_plus) {
+    if (Op1Raw == dwarf::DW_OP_constu && Op2Raw == dwarf::DW_OP_plus) {
       ResultOps.push_back(dwarf::DW_OP_plus_uconst);
-      ResultOps.push_back(Constant.getValue());
+      ResultOps.push_back(Op1->getArg(0));
       consumeOneOperator(Cursor, Loc, *Cursor.peek());
       consumeOneOperator(Cursor, Loc, *Cursor.peek());
       continue;
@@ -286,6 +286,9 @@ static bool tryFoldCommutativeMathWithArgInBetween(
 }
 
 DIExpression *DIExpression::foldConstantMath() {
+  if (holdsNewElements())
+    return this;
+  auto Elements = getElements();
 
   SmallVector<uint64_t, 8> WorkingOps(Elements.begin(), Elements.end());
   uint64_t Loc = 0;

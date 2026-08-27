@@ -88,7 +88,6 @@ mlir::omp::MapInfoOp createMapInfoOp(mlir::OpBuilder &builder,
   auto varPtrType = getPtrVarType(retTy);
   auto varPtrPtrTy =
       varPtrPtr ? getPtrVarType(varPtrPtr.getType()) : mlir::TypeAttr{};
-
   mlir::omp::MapInfoOp op =
       mlir::omp::MapInfoOp::create(builder, loc, retTy, baseAddr, varPtrType,
           builder.getAttr<mlir::omp::ClauseMapFlagsAttr>(mapType),

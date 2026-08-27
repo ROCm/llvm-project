@@ -178,3 +178,4 @@ end subroutine target_allocatable
 ! CHECK:          omp.terminator
 ! CHECK-NEXT:   }
 
+! CHAR_VAR_DESC_MAP

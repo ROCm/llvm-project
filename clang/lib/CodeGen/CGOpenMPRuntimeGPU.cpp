@@ -20,11 +20,14 @@
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/AST/StmtVisitor.h"
+#include "clang/Basic/OffloadArch.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Frontend/OpenMP/OMPDeviceConstants.h"
 #include "llvm/Frontend/OpenMP/OMPGridValues.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/TargetParser/NVPTXTargetParser.h"
 
 using namespace clang;
@@ -544,7 +547,7 @@ static bool hasNestedSPMDDirective(ASTContext &Ctx,
       }
       return false;
     case OMPD_target_teams:
-      return isOpenMPParallelDirective(DKind);
+      return isOpenMPParallelDirective(DKind) || (DKind == OMPD_loop);
     case OMPD_target_simd:
     case OMPD_target_parallel:
     case OMPD_target_parallel_for:
@@ -618,8 +621,9 @@ static bool hasNestedSPMDDirective(ASTContext &Ctx,
   return false;
 }
 
-static bool supportsSPMDExecutionMode(ASTContext &Ctx,
+static bool supportsSPMDExecutionMode(CodeGenModule &CGM,
                                       const OMPExecutableDirective &D) {
+  ASTContext &Ctx = CGM.getContext();
   OpenMPDirectiveKind DirectiveKind = D.getDirectiveKind();
   switch (DirectiveKind) {
   case OMPD_target:
@@ -706,6 +710,106 @@ static bool supportsSPMDExecutionMode(ASTContext &Ctx,
       "Unknown programming model for OpenMP directive on NVPTX target.");
 }
 
+// Create a unique global variable to indicate the flat-work-group-size
+// for this region. Values are [1..1024].
+static void setPropertyWorkGroupSize(CodeGenModule &CGM, StringRef Name,
+                                     int WGSize) {
+  auto *GVMode = new llvm::GlobalVariable(
+      CGM.getModule(), CGM.Int16Ty,
+      /*isConstant=*/true, llvm::GlobalValue::WeakAnyLinkage,
+      llvm::ConstantInt::get(CGM.Int16Ty, WGSize), Twine(Name, "_wg_size"));
+
+  CGM.addCompilerUsedGlobal(GVMode);
+}
+
+// Compute the correct number of threads in a team
+// to accommodate for a master thread.
+// Keep aligned with amdgpu plugin code located in function getLaunchVals
+static int ComputeGenericWorkgroupSize(CodeGenModule &CGM, int WorkgroupSize) {
+  assert(WorkgroupSize >= 0);
+  int MaxWorkGroupSz = CGM.getTarget().getGridValue().GV_Max_WG_Size;
+  int WorkgroupSizeWithMaster = -1;
+
+  // Add master thread in additional warp for GENERIC mode
+  // Only one additional thread is started, not an entire warp
+
+  if (WorkgroupSize >= MaxWorkGroupSz)
+    // Do not exceed max number of threads: sacrifice last warp for
+    // the thread master
+    WorkgroupSizeWithMaster =
+        MaxWorkGroupSz - CGM.getTarget().getGridValue().GV_Warp_Size + 1;
+  else if ((unsigned int)WorkgroupSize <
+           CGM.getTarget().getGridValue().GV_Warp_Size)
+    // Cap threadsPerGroup at WarpSize level as we need a master
+    WorkgroupSizeWithMaster = CGM.getTarget().getGridValue().GV_Warp_Size + 1;
+  else
+    WorkgroupSizeWithMaster =
+        CGM.getTarget().getGridValue().GV_Warp_Size *
+            (WorkgroupSize / CGM.getTarget().getGridValue().GV_Warp_Size) +
+        1;
+  return WorkgroupSizeWithMaster;
+}
+
+void CGOpenMPRuntimeGPU::GenerateMetaData(CodeGenModule &CGM,
+                                          const OMPExecutableDirective &D,
+                                          llvm::Function *&OutlinedFn,
+                                          bool IsGeneric) {
+  if (!CGM.getTriple().isAMDGCN())
+    return;
+
+  int FlatAttr = 0;
+  bool flatAttrEmitted = false;
+  unsigned compileTimeThreadLimit =
+      CGM.getTarget().getGridValue().GV_Default_WG_Size;
+  bool isBigJumpLoopKernel = CGM.isBigJumpLoopKernel(D);
+  bool isNoLoopKernel = CGM.isNoLoopKernel(D);
+  // A cross-team reduction whose 'target' and 'teams' are written as separate
+  // directives is rooted at a plain 'target' directive, which is neither a
+  // teams nor a parallel directive. Detect it explicitly, otherwise it would
+  // fall through to the generic default block size below and get a smaller
+  // grid than the equivalent combined 'target teams' spelling.
+  bool isTeamsReductionKernel = CGM.isTeamsReductionKernel(D);
+  // If constant ThreadLimit(), set reqd_work_group_size metadata
+  if (isOpenMPTeamsDirective(D.getDirectiveKind()) ||
+      isOpenMPParallelDirective(D.getDirectiveKind()) ||
+      isTeamsReductionKernel || isBigJumpLoopKernel || isNoLoopKernel) {
+    // Call the work group size calculation based on kernel type.
+    if (isBigJumpLoopKernel)
+      compileTimeThreadLimit = CGM.getBigJumpLoopBlockSize(D);
+    else if (isNoLoopKernel)
+      compileTimeThreadLimit = CGM.getNoLoopBlockSize(D);
+    else
+      compileTimeThreadLimit =
+          CGM.getWorkGroupSizeSPMDKernel(D, /*IsGenericMode=*/IsGeneric);
+
+    // Add kernel metadata if ThreadLimit Clause is compile time constant > 0
+    if (compileTimeThreadLimit > 0) {
+      if (IsGeneric)
+        compileTimeThreadLimit =
+            ComputeGenericWorkgroupSize(CGM, compileTimeThreadLimit);
+      FlatAttr = compileTimeThreadLimit;
+      OutlinedFn->addFnAttr("amdgpu-flat-work-group-size",
+                            "1," + llvm::utostr(compileTimeThreadLimit));
+      flatAttrEmitted = true;
+    } // end   > 0
+  } // end of amdgcn teams or parallel directive
+
+  // emit amdgpu-flat-work-group-size if not emitted already.
+  if (!flatAttrEmitted) {
+    // When outermost construct does not have teams or parallel
+    // workgroup size is still based on mode
+    int GenericModeWorkgroupSize = compileTimeThreadLimit;
+    if (IsGeneric)
+      GenericModeWorkgroupSize =
+          ComputeGenericWorkgroupSize(CGM, compileTimeThreadLimit);
+    FlatAttr = GenericModeWorkgroupSize;
+    OutlinedFn->addFnAttr("amdgpu-flat-work-group-size",
+                          "1," + llvm::utostr(GenericModeWorkgroupSize));
+  }
+  // Emit a kernel descriptor for runtime.
+  setPropertyWorkGroupSize(CGM, OutlinedFn->getName(), FlatAttr);
+}
+
 void CGOpenMPRuntimeGPU::emitNonSPMDKernel(const OMPExecutableDirective &D,
                                              StringRef ParentName,
                                              llvm::Function *&OutlinedFn,
@@ -745,6 +849,7 @@ void CGOpenMPRuntimeGPU::emitNonSPMDKernel(const OMPExecutableDirective &D,
   emitTargetOutlinedFunctionHelper(D, ParentName, OutlinedFn, OutlinedFnID,
                                    IsOffloadEntry, CodeGen);
   IsInTTDRegion = false;
+  GenerateMetaData(CGM, D, OutlinedFn, /*Generic*/ true);
 }
 
 void CGOpenMPRuntimeGPU::emitKernelInit(const OMPExecutableDirective &D,
@@ -845,6 +950,51 @@ void CGOpenMPRuntimeGPU::emitSPMDKernel(const OMPExecutableDirective &D,
   emitTargetOutlinedFunctionHelper(D, ParentName, OutlinedFn, OutlinedFnID,
                                    IsOffloadEntry, CodeGen);
   IsInTTDRegion = false;
+
+  GenerateMetaData(CGM, D, OutlinedFn, /*SPMD*/ false);
+}
+
+// Create a unique global variable to indicate the execution mode of this target
+// region. The execution mode is either 'generic', or 'spmd' depending on the
+// target directive. This variable is picked up by the offload library to setup
+// the device appropriately before kernel launch. If the execution mode is
+// 'generic', the runtime reserves one warp for the master, otherwise, all
+// warps participate in parallel work.
+static void setPropertyExecutionMode(CodeGenModule &CGM, StringRef Name,
+                                     OMPTgtExecModeFlags Mode) {
+  auto *GVMode = new llvm::GlobalVariable(
+      CGM.getModule(), CGM.Int8Ty, /*isConstant=*/true,
+      llvm::GlobalValue::WeakAnyLinkage,
+      llvm::ConstantInt::get(CGM.Int8Ty, Mode), Twine(Name, "_exec_mode"));
+  CGM.addCompilerUsedGlobal(GVMode);
+}
+
+// Create a global variable to indicate whether fast reduction is enabled for
+// this file. This variable is read by the runtime while determining the launch
+// bounds. The downstream fast-reduction feature it used to control has been
+// removed, so this is always emitted as disabled to keep the plugin ABI stable.
+static void setIsFastReduction(CodeGenModule &CGM) {
+  auto *GVFastReduction = new llvm::GlobalVariable(
+      CGM.getModule(), CGM.Int8Ty, /*isConstant=*/true,
+      llvm::GlobalValue::WeakAnyLinkage, llvm::ConstantInt::get(CGM.Int8Ty, 0),
+      Twine("__omp_plugin_enable_fast_reduction"));
+  CGM.addCompilerUsedGlobal(GVFastReduction);
+}
+
+static OMPTgtExecModeFlags
+computeExecutionMode(bool Mode, const Stmt *DirectiveStmt, CodeGenModule &CGM) {
+  if (!Mode)
+    return OMP_TGT_EXEC_MODE_GENERIC;
+  if (DirectiveStmt) {
+    const Stmt *KernelForStmt = CGM.getSingleForStmt(DirectiveStmt);
+    if (KernelForStmt) {
+      if (CGM.isNoLoopKernel(KernelForStmt))
+        return OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
+      if (CGM.isBigJumpLoopKernel(KernelForStmt))
+        return OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP;
+    }
+  }
+  return OMP_TGT_EXEC_MODE_SPMD;
 }
 
 void CGOpenMPRuntimeGPU::emitTargetOutlinedFunction(
@@ -856,14 +1006,49 @@ void CGOpenMPRuntimeGPU::emitTargetOutlinedFunction(
 
   assert(!ParentName.empty() && "Invalid target region parent name!");
 
-  bool Mode = supportsSPMDExecutionMode(CGM.getContext(), D);
+  const Stmt *DirectiveStmt = CGM.getOptKernelKey(D);
+  bool Mode = supportsSPMDExecutionMode(CGM, D);
+  // Used by emitParallelCall
+  CGM.setIsSPMDExecutionMode(Mode);
+  if (Mode) {
+    // For AMDGPU, check if a no-loop or a Xteam reduction kernel should
+    // be generated and if so, set metadata that can be used by codegen.
+    // This check is done regardless of host or device codegen since the
+    // signature of the offloading routine has to match across host and device.
+    if (CGM.getTriple().isAMDGCN()) {
+      assert(CGM.getLangOpts().OpenMPIsTargetDevice && "Unexpected host path");
+      // Downstream Xteam cross-team reduction codegen has been removed; kernels
+      // with reductions fall through to the normal SPMD path and use the
+      // upstream reduction implementation (emitReduction ->
+      // createReductionsGPU). Only the no-loop/big-jump-loop specialized
+      // kernels remain.
+      CodeGenModule::NoLoopXteamErr NxStatus = CGM.checkAndSetNoLoopKernel(D);
+      DEBUG_WITH_TYPE(NO_LOOP_XTEAM_RED,
+                      CGM.emitNxResult("[No-Loop/Big-Jump-Loop]", D, NxStatus));
+      (void)NxStatus;
+    }
+  }
   bool IsBareKernel = D.getSingleClause<OMPXBareClause>();
   if (Mode || IsBareKernel)
     emitSPMDKernel(D, ParentName, OutlinedFn, OutlinedFnID, IsOffloadEntry,
                    CodeGen);
-  else
+  else {
     emitNonSPMDKernel(D, ParentName, OutlinedFn, OutlinedFnID, IsOffloadEntry,
                       CodeGen);
+    DEBUG_WITH_TYPE(NO_LOOP_XTEAM_RED,
+                    CGM.emitNxResult("[No-Loop/Big-Jump-Loop/Xteam]", D,
+                                     CodeGenModule::NxNonSPMD));
+  }
+  setPropertyExecutionMode(
+      CGM, OutlinedFn->getName(),
+      IsBareKernel ? OMP_TGT_EXEC_MODE_BARE
+                   : computeExecutionMode(Mode, DirectiveStmt, CGM));
+
+  if (Mode && DirectiveStmt)
+    CGM.resetOptKernelMetadata(DirectiveStmt);
+
+  // Reset cached mode
+  CGM.setIsSPMDExecutionMode(false);
 }
 
 CGOpenMPRuntimeGPU::CGOpenMPRuntimeGPU(CodeGenModule &CGM)
@@ -884,6 +1069,11 @@ CGOpenMPRuntimeGPU::CGOpenMPRuntimeGPU(CodeGenModule &CGM)
 
   if (CGM.getLangOpts().OpenMPCUDAMode)
     CurrentDataSharingMode = CGOpenMPRuntimeGPU::DS_CUDA;
+
+  // Write a global variable indicating whether fast reduction is enabled.
+  // This is done regardless of -nogpulib
+  if (!CGM.getLangOpts().OMPHostIRFile.empty())
+    setIsFastReduction(CGM);
 
   llvm::OpenMPIRBuilder &OMPBuilder = getOMPBuilder();
   if (CGM.getLangOpts().NoGPULib || CGM.getLangOpts().OMPHostIRFile.empty())
@@ -1064,6 +1254,7 @@ llvm::Function *CGOpenMPRuntimeGPU::emitTeamsOutlinedFunction(
     }
   } Action(Loc, GlobalizedRD, MappedDeclsFields);
   CodeGen.setAction(Action);
+
   llvm::Function *OutlinedFun = CGOpenMPRuntime::emitTeamsOutlinedFunction(
       CGF, D, ThreadIDVar, InnermostKind, CodeGen);
 
@@ -1931,16 +2122,26 @@ CGOpenMPRuntimeGPU::translateParameter(const FieldDecl *FD,
   ArgType = CGM.getContext().getPointerType(PointeeTy);
   QC.addRestrict();
   ArgType = QC.apply(CGM.getContext(), ArgType);
+  VarDecl *TargetParam;
   if (isa<ImplicitParamDecl>(NativeParam))
-    return ImplicitParamDecl::Create(
+    TargetParam = ImplicitParamDecl::Create(
         CGM.getContext(), /*DC=*/nullptr, NativeParam->getLocation(),
         NativeParam->getIdentifier(), ArgType, ImplicitParamKind::Other);
-  return ParmVarDecl::Create(
-      CGM.getContext(),
-      const_cast<DeclContext *>(NativeParam->getDeclContext()),
-      NativeParam->getBeginLoc(), NativeParam->getLocation(),
-      NativeParam->getIdentifier(), ArgType,
-      /*TInfo=*/nullptr, SC_None, /*DefArg=*/nullptr);
+  else
+    TargetParam = ParmVarDecl::Create(
+        CGM.getContext(),
+        const_cast<DeclContext *>(NativeParam->getDeclContext()),
+        NativeParam->getBeginLoc(), NativeParam->getLocation(),
+        NativeParam->getIdentifier(), ArgType,
+        /*TInfo=*/nullptr, SC_None, /*DefArg=*/nullptr);
+  // This parameter exists to carry the device ABI type, which is a pointer to
+  // the mapped object rather than the reference the user's code sees.
+  // Describing it would put that pointer type in the debug info under the name
+  // of the original variable, so the variable is described instead at the
+  // address that holds it with its native type, in
+  // emitOutlinedFunctionPrologue().
+  TargetParam->addAttr(NoDebugAttr::CreateImplicit(CGM.getContext()));
+  return TargetParam;
 }
 
 Address
@@ -2034,6 +2235,7 @@ llvm::Function *CGOpenMPRuntimeGPU::createParallelDataSharingWrapper(
 
   CGM.SetInternalFunctionAttributes(GlobalDecl(), Fn, CGFI);
   Fn->setLinkage(llvm::GlobalValue::InternalLinkage);
+
   Fn->setDoesNotRecurse();
 
   CodeGenFunction CGF(CGM, /*suppressNewContext=*/true);
@@ -2413,4 +2615,261 @@ llvm::Value *CGOpenMPRuntimeGPU::getGPUThreadID(CodeGenFunction &CGF) {
       OMPBuilder.getOrCreateRuntimeFunction(
           CGM.getModule(), OMPRTL___kmpc_get_hardware_thread_id_in_block),
       Args);
+}
+llvm::Value *CGOpenMPRuntimeGPU::getGPUBlockID(CodeGenFunction &CGF) {
+  CGBuilderTy &Bld = CGF.Builder;
+  llvm::Function *F =
+      CGF.CGM.getIntrinsic(llvm::Intrinsic::amdgcn_workgroup_id_x);
+  return Bld.CreateCall(F, {}, "gpu_block_id");
+}
+
+llvm::Value *CGOpenMPRuntimeGPU::getGPUNumBlocks(CodeGenFunction &CGF) {
+  return CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
+      CGM.getModule(), OMPRTL___kmpc_get_hardware_num_blocks));
+}
+
+llvm::Value *CGOpenMPRuntimeGPU::initSpecializedKernel(CodeGenFunction &CGF) {
+  return CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
+      CGM.getModule(), OMPRTL___kmpc_specialized_kernel_init));
+}
+
+static OffloadArch getOffloadArch(const CodeGenModule &CGM) {
+  // FIXME: This should not require parsing
+  return StringToOffloadArch(CGM.getTarget().getTargetOpts().CPU);
+}
+
+bool CGOpenMPRuntimeGPU::needsHintsForFastFPAtomics() {
+  return strncmp(OffloadArchToString(getOffloadArch(CGM)), "gfx90a", strlen("gfx90a")) == 0;
+}
+
+bool CGOpenMPRuntimeGPU::supportFastFPAtomics() {
+  OffloadArch Arch = getOffloadArch(CGM);
+  return strncmp(OffloadArchToString(Arch), "gfx90a", strlen("gfx90a")) == 0 ||
+         strncmp(OffloadArchToString(Arch), "gfx942", strlen("gfx942")) == 0;
+}
+
+std::pair<bool, RValue>
+CGOpenMPRuntimeGPU::emitFastFPAtomicCall(CodeGenFunction &CGF, LValue X,
+                                         RValue Update, BinaryOperatorKind BO,
+                                         bool IsXBinopExpr) {
+  CGBuilderTy &Bld = CGF.Builder;
+  llvm::AtomicRMWInst::BinOp Kind = llvm::AtomicRMWInst::FAdd;
+  switch (BO) {
+  case BO_Sub:
+    Kind = llvm::AtomicRMWInst::FSub;
+    break;
+  case BO_Add:
+    Kind = llvm::AtomicRMWInst::FAdd;
+    break;
+  case BO_LT:
+    Kind = IsXBinopExpr ? llvm::AtomicRMWInst::FMax : llvm::AtomicRMWInst::FMin;
+    break;
+  case BO_GT:
+    Kind = IsXBinopExpr ? llvm::AtomicRMWInst::FMin : llvm::AtomicRMWInst::FMax;
+    break;
+  default:
+    // remaining operations are not supported yet
+    return std::make_pair(false, RValue::get(nullptr));
+  }
+
+  llvm::Value *UpdateVal = Update.getScalarVal();
+
+  // The scope of the atomic, currently set to 'agent'. By default, if this
+  // scope is not specified the scope will be 'system' scope.
+  llvm::SyncScope::ID SSID =
+      CGM.getLLVMContext().getOrInsertSyncScopeID("agent");
+  llvm::AtomicRMWInst *CallInst = Bld.CreateAtomicRMW(
+      Kind, X.getAddress(), UpdateVal, llvm::AtomicOrdering::Monotonic, SSID);
+
+  // The following settings are used to get the atomicrmw instruction to
+  // be closer in spirit to the previous use of the intrinsic.
+  // Setting of amdgpu.no.fine.grained.memory property
+  llvm::MDTuple *EmptyMD = llvm::MDNode::get(CGM.getLLVMContext(), {});
+  CallInst->setMetadata("amdgpu.no.fine.grained.memory", EmptyMD);
+
+  // Setting of amdgpu.ignore.denormal.mode
+  if (Kind == llvm::AtomicRMWInst::FAdd && UpdateVal->getType()->isFloatTy())
+    CallInst->setMetadata("amdgpu.ignore.denormal.mode", EmptyMD);
+
+  // Note: breaks fp_atomics test so volatile cannot be used
+  // CallInst->setVolatile(true);
+
+  return std::make_pair(true, RValue::get(CallInst));
+}
+
+void CGOpenMPRuntimeGPU::emitFlush(CodeGenFunction &CGF, ArrayRef<const Expr *>,
+                                   SourceLocation Loc,
+                                   llvm::AtomicOrdering AO) {
+  if (CGF.CGM.getLangOpts().OpenMPIRBuilder) {
+    OMPBuilder.createFlush(CGF.Builder);
+  } else {
+    if (!CGF.HaveInsertPoint())
+      return;
+    // Build call void __kmpc_flush(ident_t *loc) and variants
+    //__kmpc_flush_acquire, __kmpc_flush_release, __kmpc_flush_acqrel
+    if (AO == llvm::AtomicOrdering::NotAtomic ||
+        AO == llvm::AtomicOrdering::SequentiallyConsistent)
+      CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
+                              CGM.getModule(), OMPRTL___kmpc_flush),
+                          emitUpdateLocation(CGF, Loc));
+    else
+      switch (AO) {
+      case llvm::AtomicOrdering::Acquire:
+        CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
+                                CGM.getModule(), OMPRTL___kmpc_flush_acquire),
+                            emitUpdateLocation(CGF, Loc));
+        return;
+      case llvm::AtomicOrdering::Release:
+        CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
+                                CGM.getModule(), OMPRTL___kmpc_flush_release),
+                            emitUpdateLocation(CGF, Loc));
+        return;
+      case llvm::AtomicOrdering::AcquireRelease:
+        CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
+                                CGM.getModule(), OMPRTL___kmpc_flush_acqrel),
+                            emitUpdateLocation(CGF, Loc));
+        return;
+      default:
+        llvm_unreachable("Unexpected atomic ordering for flush directive.");
+      }
+  }
+}
+
+std::pair<bool, RValue>
+CGOpenMPRuntimeGPU::emitAtomicCASLoop(CodeGenFunction &CGF, LValue X,
+                                      RValue Update, BinaryOperatorKind BO) {
+  ASTContext &Context = CGF.getContext();
+  SmallVector<llvm::Value *> CASLoopArgs;
+  CASLoopArgs.reserve(2);
+  CASLoopArgs.push_back(X.getPointer(CGF));
+  CASLoopArgs.push_back(Update.getScalarVal());
+  llvm::Value *CallInst = nullptr;
+  switch (BO) {
+  case BO_LT: { // unavailable for both float, double, and integer types (32 and
+                // 64 bits)
+    if (Update.getScalarVal()->getType()->isIntegerTy() &&
+        !(Context.getTypeSize(X.getType()) == 32 ||
+          Context.getTypeSize(X.getType()) == 64))
+      llvm_unreachable("Atomic Min types available for CAS loop conversion is "
+                       "double, float, int (32 and 64 bits)");
+
+    if (Update.getScalarVal()->getType()->isDoubleTy())
+      CallInst = CGF.EmitRuntimeCall(
+          OMPBuilder.getOrCreateRuntimeFunction(
+              CGM.getModule(), OMPRTL___kmpc_atomicCASLoopMin_double),
+          CASLoopArgs);
+    else if (Update.getScalarVal()->getType()->isFloatTy())
+      CallInst = CGF.EmitRuntimeCall(
+          OMPBuilder.getOrCreateRuntimeFunction(
+              CGM.getModule(), OMPRTL___kmpc_atomicCASLoopMin_float),
+          CASLoopArgs);
+
+    else if (Update.getScalarVal()->getType()->isIntegerTy()) {
+      if (Context.getTypeSize(X.getType()) == 32) {
+        if (X.getType()->hasSignedIntegerRepresentation()) {
+          CallInst = CGF.EmitRuntimeCall(
+              OMPBuilder.getOrCreateRuntimeFunction(
+                  CGM.getModule(), OMPRTL___kmpc_atomicCASLoopMin_int32_t),
+              CASLoopArgs);
+        } else {
+          const llvm::StringRef FunNameStr = "__kmpc_atomicCASLoopMin_uint32_t";
+          CallInst = CGF.EmitRuntimeCall(
+              OMPBuilder.unsignedGetOrCreateAtomicCASRuntimeFunction(
+                  CGM.getModule(), FunNameStr,
+                  /*RetType=*/CGF.Builder.getVoidTy(),
+                  X.getPointer(CGF)->getType(),
+                  Update.getScalarVal()->getType()),
+              CASLoopArgs);
+        }
+      } else if (Context.getTypeSize(X.getType()) == 64) {
+        if (X.getType()->hasSignedIntegerRepresentation()) {
+          CallInst = CGF.EmitRuntimeCall(
+              OMPBuilder.getOrCreateRuntimeFunction(
+                  CGM.getModule(), OMPRTL___kmpc_atomicCASLoopMin_int64_t),
+              CASLoopArgs);
+        } else {
+          const llvm::StringRef FunNameStr = "__kmpc_atomicCASLoopMin_uint64_t";
+          CallInst = CGF.EmitRuntimeCall(
+              OMPBuilder.unsignedGetOrCreateAtomicCASRuntimeFunction(
+                  CGM.getModule(), FunNameStr,
+                  /*RetType=*/CGF.Builder.getVoidTy(),
+                  X.getPointer(CGF)->getType(),
+                  Update.getScalarVal()->getType()),
+              CASLoopArgs);
+        }
+      }
+    }
+    // other types (e.g., int8_t) are handled by backend directly
+    return std::make_pair(true, RValue::get(CallInst));
+  }
+  case BO_GT: { // unavailable for both float, double, and integer types (32 and
+                // 664 bits)
+    if (Update.getScalarVal()->getType()->isIntegerTy() &&
+        !(Context.getTypeSize(X.getType()) == 32 ||
+          Context.getTypeSize(X.getType()) == 64))
+      llvm_unreachable("Atomic Max types available for CAS loop conversion is "
+                       "double, float, int (32 and 64 bits)");
+
+    if (Update.getScalarVal()->getType()->isDoubleTy())
+      CallInst = CGF.EmitRuntimeCall(
+          OMPBuilder.getOrCreateRuntimeFunction(
+              CGM.getModule(), OMPRTL___kmpc_atomicCASLoopMax_double),
+          CASLoopArgs);
+    else if (Update.getScalarVal()->getType()->isFloatTy())
+      CallInst = CGF.EmitRuntimeCall(
+          OMPBuilder.getOrCreateRuntimeFunction(
+              CGM.getModule(), OMPRTL___kmpc_atomicCASLoopMax_float),
+          CASLoopArgs);
+
+    else if (Update.getScalarVal()->getType()->isIntegerTy()) {
+      if (Context.getTypeSize(X.getType()) == 32) {
+        if (X.getType()->hasSignedIntegerRepresentation()) {
+          CallInst = CGF.EmitRuntimeCall(
+              OMPBuilder.getOrCreateRuntimeFunction(
+                  CGM.getModule(), OMPRTL___kmpc_atomicCASLoopMax_int32_t),
+              CASLoopArgs);
+        } else {
+          const llvm::StringRef FunNameStr = "__kmpc_atomicCASLoopMax_uint32_t";
+          CallInst = CGF.EmitRuntimeCall(
+              OMPBuilder.unsignedGetOrCreateAtomicCASRuntimeFunction(
+                  CGM.getModule(), FunNameStr,
+                  /*RetType=*/CGF.Builder.getVoidTy(),
+                  X.getPointer(CGF)->getType(),
+                  Update.getScalarVal()->getType()),
+              CASLoopArgs);
+        }
+      } else if (Context.getTypeSize(X.getType()) == 64) {
+        if (X.getType()->hasSignedIntegerRepresentation()) {
+          CallInst = CGF.EmitRuntimeCall(
+              OMPBuilder.getOrCreateRuntimeFunction(
+                  CGM.getModule(), OMPRTL___kmpc_atomicCASLoopMax_int64_t),
+              CASLoopArgs);
+        } else {
+          const llvm::StringRef FunNameStr = "__kmpc_atomicCASLoopMax_uint64_t";
+          CallInst = CGF.EmitRuntimeCall(
+              OMPBuilder.unsignedGetOrCreateAtomicCASRuntimeFunction(
+                  CGM.getModule(), FunNameStr,
+                  /*RetType=*/CGF.Builder.getVoidTy(),
+                  X.getPointer(CGF)->getType(),
+                  Update.getScalarVal()->getType()),
+              CASLoopArgs);
+        }
+      }
+    }
+    return std::make_pair(true, RValue::get(CallInst));
+  }
+  case BO_Add:
+  case BO_Sub:
+  case BO_And:
+  case BO_Or:
+  case BO_Xor:
+    llvm_unreachable("Atomic operation must be generated via clang atomic "
+                     "support and not via OpenMP runtime");
+    break;
+  default:
+    llvm_unreachable(
+        "Operation is not supported by kmpc_atomicCASLoop functions");
+    break;
+  }
+  return std::make_pair(false, RValue::get(nullptr));
 }

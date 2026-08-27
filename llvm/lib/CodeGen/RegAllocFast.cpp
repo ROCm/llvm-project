@@ -1803,7 +1803,7 @@ void RegAllocFastImpl::allocateBasicBlock(MachineBasicBlock &MBB) {
   Coalesced.clear();
 
   // Traverse block in reverse order allocating instructions one by one.
-  for (MachineInstr &MI : reverse(MBB)) {
+  for (MachineInstr &MI : make_early_inc_range(reverse(MBB))) {
     LLVM_DEBUG(dbgs() << "\n>> " << MI << "Regs:"; dumpState());
 
     // Special handling for debug values. Note that they are not allowed to

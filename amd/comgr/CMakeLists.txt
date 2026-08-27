@@ -1,0 +1,822 @@
+cmake_minimum_required(VERSION 3.13.4)
+
+file(READ "VERSION.txt" comgr_ver_file)
+
+string(REGEX MATCH "#COMGR_VERSION_MAJOR\n([0-9]*)" _ ${comgr_ver_file})
+set (ver_major ${CMAKE_MATCH_1})
+string(REGEX MATCH "#COMGR_VERSION_MINOR\n([0-9]*)" _ ${comgr_ver_file})
+set (ver_minor ${CMAKE_MATCH_1})
+
+message("Comgr Version: ${ver_major}.${ver_minor}.0")
+
+project(amd_comgr VERSION "${ver_major}.${ver_minor}.0" LANGUAGES C CXX)
+set(amd_comgr_NAME "${PROJECT_NAME}")
+
+# Static API consistency check: verify VERSION.txt, the public header
+# (include/amd_comgr.h.in), and the Linux exportmap (src/exportmap.in)
+# stay in sync. Runs at configure time so the gate applies to every
+# Comgr build.
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+set(_comgr_api_check_script
+  "${CMAKE_CURRENT_SOURCE_DIR}/utils/check_api_consistency.py")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/amd_comgr.h.in"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/exportmap.in"
+  "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.txt"
+  "${_comgr_api_check_script}")
+execute_process(
+  COMMAND "${Python3_EXECUTABLE}" "${_comgr_api_check_script}"
+          --comgr-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+  RESULT_VARIABLE _comgr_api_check_rc
+  OUTPUT_VARIABLE _comgr_api_check_out
+  ERROR_VARIABLE _comgr_api_check_err
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_STRIP_TRAILING_WHITESPACE)
+if(NOT _comgr_api_check_rc EQUAL 0)
+  message(FATAL_ERROR "${_comgr_api_check_err}")
+endif()
+message(STATUS "${_comgr_api_check_out}")
+
+# Get git branch and commit hash to add to log for easier debugging.
+execute_process(
+  COMMAND git log -1 --format=%h
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  OUTPUT_VARIABLE AMD_COMGR_GIT_COMMIT
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  RESULT_VARIABLE GIT_REV_PARSE_EXITCODE
+)
+
+if (${GIT_REV_PARSE_EXITCODE} EQUAL 0)
+  execute_process(
+    COMMAND git log -1 --format=%h
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE AMD_COMGR_GIT_COMMIT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  execute_process(
+    COMMAND git name-rev --name-only HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE AMD_COMGR_GIT_BRANCH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+else()
+  set(AMD_COMGR_GIT_BRANCH "not-available")
+  set(AMD_COMGR_GIT_COMMIT "not-available")
+endif()
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+# Optionally, build Compiler Support with ccache.
+set(ROCM_CCACHE_BUILD OFF CACHE BOOL "Set to ON for a ccache enabled build")
+if (ROCM_CCACHE_BUILD)
+  find_program(CCACHE_PROGRAM ccache)
+  if (CCACHE_PROGRAM)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ${CCACHE_PROGRAM})
+  else()
+    message(WARNING "Unable to find ccache. Falling back to real compiler")
+  endif() # if (CCACHE_PROGRAM)
+endif() # if (ROCM_CCACHE_BUILD)
+
+# BUILD_SHARED_LIBS is a frustratingly global variable common to all
+# projects. LLVM also defines an option for the same varible with the
+# opposite default, which will overwrite our default preference
+# here. Ignore the regular BUILD_SHARED_LIBS in an embedded llvm
+# build. Try to use BUILD_SHARED_LIBS to hint our project specific
+# version in a standalone build.
+set(build_shared_libs_default ON)
+if(NOT DEFINED LLVM_SOURCE_DIR AND DEFINED BUILD_SHARED_LIBS)
+  set(build_shared_libs_default ${BUILD_SHARED_LIBS})
+endif()
+
+option(COMGR_BUILD_SHARED_LIBS "Build the shared library"
+       ${build_shared_libs_default})
+
+set(SOURCES
+  src/comgr-cache.cpp
+  src/comgr-cache-command.cpp
+  src/comgr-clang-command.cpp
+  src/comgr-compiler.cpp
+  src/comgr.cpp
+  src/comgr-device-libs.cpp
+  src/comgr-diagnostic-handler.cpp
+  src/comgr-disassembly.cpp
+  src/comgr-env.cpp
+  src/comgr-libcxx-headers.cpp
+  src/comgr-logger.cpp
+  src/comgr-signal.cpp
+  src/comgr-spirv-command.cpp
+  src/comgr-symbolizer.cpp
+  src/comgr-unbundle-command.cpp
+  src/comgr-unpackage-command.cpp
+  src/time-stat/time-stat.cpp)
+
+# Code-object metadata and symbol helpers, built once as an internal OBJECT
+# library so amd_comgr and the hotswap test drivers link the same objects
+# instead of recompiling these sources with divergent flags. The drivers need
+# the buffer-facing getMetadataRoot / getElfIsaName / lookupSymbolByName entry
+# points without the amd_comgr C API; sharing the objects keeps a single
+# definition and a single set of compile flags.
+set(COMGR_OBJECT_UTILS_SOURCES
+  src/comgr-metadata.cpp
+  src/comgr-symbol.cpp)
+
+# Hotswap IR transpiler (raiser), opt-in. The raiser lives under
+# amd/comgr/src/hotswap/raiser as a private COMGR subproject. When enabled, we
+# link the hotswap::raiser OBJECT library into amd_comgr (its TUs land directly
+# in amd_comgr.so so hotswap files can call comgr-metadata helpers
+# without a layering inversion) and compile the transpile entry point. When
+# disabled, the amd_comgr_hotswap_transpile API is simply not provided.
+option(COMGR_ENABLE_HOTSWAP_TRANSPILE
+  "Build the hotswap-raiser-backed amd_comgr_hotswap_transpile entry point" OFF)
+
+# Add Windows resource file for version info
+if(WIN32)
+  # Allow users to override the DLL name via -DCOMGR_DLL_NAME
+  set(COMGR_DLL_NAME "amd_comgr.dll" CACHE STRING "Windows DLL output name")
+  string(TIMESTAMP COMGR_BUILD_YEAR "%Y")
+  set(COMGR_MANIFEST_NAME "AMD.ROCM.Comgr")
+  configure_file(
+    cmake/${COMGR_MANIFEST_NAME}.MANIFEST.in
+    cmake/${COMGR_MANIFEST_NAME}.MANIFEST @ONLY)
+  configure_file(
+    cmake/comgr.rc.in
+    cmake/comgr.rc @ONLY)
+  list(APPEND SOURCES "${CMAKE_CURRENT_BINARY_DIR}/cmake/comgr.rc")
+endif()
+
+if(COMGR_BUILD_SHARED_LIBS)
+  add_library(amd_comgr SHARED ${SOURCES})
+  # Windows doesn't have a strip utility, so CMAKE_STRIP won't be set.
+  if((CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT ("${CMAKE_STRIP}" STREQUAL ""))
+    if (APPLE)
+      # Building on Mac fails unless -x is passed to the strip command
+      add_custom_command(TARGET amd_comgr POST_BUILD COMMAND ${CMAKE_STRIP} -x $<TARGET_FILE:amd_comgr>)
+    else()
+      add_custom_command(TARGET amd_comgr POST_BUILD COMMAND ${CMAKE_STRIP} $<TARGET_FILE:amd_comgr>)
+    endif()
+  endif()
+else()
+  add_library(amd_comgr STATIC ${SOURCES})
+endif()
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  find_package(AMDDeviceLibs REQUIRED CONFIG)
+  find_package(Clang REQUIRED CONFIG)
+  find_package(LLD REQUIRED CONFIG)
+
+  target_include_directories(amd_comgr
+    PRIVATE
+      ${LLVM_INCLUDE_DIRS}
+      ${CLANG_INCLUDE_DIRS}
+      ${LLD_INCLUDE_DIRS})
+else()
+  # If building with LLVM_EXTERNAL_PROJECTS, we've already picked up
+  # the include directories for LLVM, but not clang.
+  #
+  if (LLVM_EXTERNAL_CLANG_SOURCE_DIR)
+    target_include_directories(amd_comgr
+      PRIVATE
+        ${LLVM_EXTERNAL_CLANG_SOURCE_DIR}/include
+        ${LLVM_BINARY_DIR}/tools/clang/include)
+  endif()
+
+  if (LLVM_EXTERNAL_LLD_SOURCE_DIR)
+    target_include_directories(amd_comgr
+      PRIVATE
+        ${LLVM_EXTERNAL_LLD_SOURCE_DIR}/include
+        ${LLVM_BINARY_DIR}/tools/lld/include)
+  endif()
+
+  if (LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR)
+    target_include_directories(amd_comgr
+      PRIVATE
+        ${LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR}/include)
+  endif()
+endif()
+
+# Allow the super-project to force static linking of LLVM/Clang into comgr.
+# When ON, LLVM symbols are hidden by comgr's version script (local: *;),
+# avoiding symbol interposition issues without requiring namespace isolation.
+option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
+if(COMGR_STATIC_LLVM)
+  set(LLVM_LINK_LLVM_DYLIB OFF)
+  set(CLANG_LINK_CLANG_DYLIB OFF)
+endif()
+
+target_include_directories(amd_comgr
+  PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# The hotswap subdirectory is added unconditionally below (around the
+# add_subdirectory(src/hotswap) line) so the OBJECT libraries are available
+# to the test-unit suite; here we opt amd_comgr into exposing the
+# `amd_comgr_hotswap_transpile` entry point. The hotswap link edges are
+# added after the curated LLVM/LLD link block below (see "hotswap link
+# edges"), not here.
+if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
+  target_compile_definitions(amd_comgr PRIVATE COMGR_ENABLE_HOTSWAP_TRANSPILE=1)
+endif()
+
+message("")
+message("------------LLVM_DIR: ${LLVM_DIR}")
+message("---LLVM_INCLUDE_DIRS: ${LLVM_INCLUDE_DIRS}")
+message("---LLVM_LIBRARY_DIRS: ${LLVM_LIBRARY_DIRS}")
+message("-----------Clang_DIR: ${Clang_DIR}")
+message("--CLANG_INCLUDE_DIRS: ${CLANG_INCLUDE_DIRS}")
+message("----LLD_INCLUDE_DIRS: ${LLD_INCLUDE_DIRS}")
+message("---AMDDeviceLibs_DIR: ${AMDDeviceLibs_DIR}")
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+if (ADDRESS_SANITIZER)
+  set(ASAN_LINKER_FLAGS "-fsanitize=address")
+  set(ASAN_COMPILER_FLAGS "-fno-omit-frame-pointer -fsanitize=address")
+
+  if (NOT CMAKE_COMPILER_IS_GNUCC)
+    if (COMGR_BUILD_SHARED_LIBS)
+      set(ASAN_LINKER_FLAGS "${ASAN_LINKER_FLAGS} -shared-libsan")
+    else()
+      set(ASAN_LINKER_FLAGS "${ASAN_LINKER_FLAGS} -static-libsan")
+    endif()
+  endif()
+
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${ASAN_COMPILER_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ASAN_COMPILER_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ASAN_LINKER_FLAGS} -s")
+  set(CMAKE_SHARED_LINKER_FLAGS
+    "${CMAKE_SHARED_LINKER_FLAGS} ${ASAN_LINKER_FLAGS}")
+endif()
+
+set(AMD_COMGR_PRIVATE_COMPILE_OPTIONS)
+set(AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS ${LLVM_DEFINITIONS})
+set(AMD_COMGR_PUBLIC_LINKER_OPTIONS)
+set(AMD_COMGR_PRIVATE_LINKER_OPTIONS)
+
+list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS "AMD_COMGR_GIT_COMMIT=${AMD_COMGR_GIT_COMMIT}")
+list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS "AMD_COMGR_GIT_BRANCH=${AMD_COMGR_GIT_BRANCH}")
+message("----COMGR_GIT_COMMIT: ${AMD_COMGR_GIT_COMMIT}")
+message("----COMGR_GIT_BRANCH: ${AMD_COMGR_GIT_BRANCH}")
+message("")
+
+include(CheckEmbed)
+option(COMGR_USE_EMBED "Use the C++26 #embed directive"
+       ${HAVE_EMBED_SUPPORT})
+
+if(NOT ${COMGR_USE_EMBED} AND HAVE_INCBIN_SUPPORT)
+  set(default_use_incbin ON)
+else()
+  set(default_use_incbin OFF)
+endif()
+
+option(COMGR_USE_INCBIN "Use the gnu .incbin assembler directive" ${default_use_incbin})
+
+option(COMGR_DISABLE_SPIRV "To disable SPIRV in Comgr" OFF)
+
+set(COMGR_SPIRV_TRANSLATOR_AVAILABLE OFF)
+set(COMGR_SPIRV_BACKEND_AVAILABLE OFF)
+
+if (COMGR_DISABLE_SPIRV)
+  message("-- Comgr SPIRV disabled (-DCOMGR_DISABLE_SPIRV)")
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS "COMGR_DISABLE_SPIRV")
+else()
+  if ("SPIRV" IN_LIST LLVM_TARGETS_TO_BUILD)
+    set(COMGR_SPIRV_BACKEND_AVAILABLE ON)
+    message("-- LLVM SPIRV target found (SPIRV backend available in Comgr)")
+  else()
+    message("-- LLVM SPIRV target not found (SPIRV backend unavailable in Comgr)")
+    message("-- LLVM targets configured: ${LLVM_TARGETS_TO_BUILD}")
+    message("-- SPIRV must be set in -DLLVM_TARGETS_TO_BUILD when building LLVM")
+  endif()
+
+  # Candidate include paths for LLVMSPIRVLib.h:
+  # 1. ${LLVM_INCLUDE_DIRS}/LLVMSPIRVLib (standalone build)
+  # 2. ${LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR}/include (external project)
+  # 3. ${CMAKE_SOURCE_DIR}/projects/SPIRV-LLVM-Translator/include (usual location)
+  find_path(
+    FOUND_SPIRV_INCLUDE_DIR
+    LLVMSPIRVLib.h
+    PATHS
+      "${LLVM_INCLUDE_DIRS}/LLVMSPIRVLib"
+      "${LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR}/include"
+      "${CMAKE_SOURCE_DIR}/projects/SPIRV-LLVM-Translator/include"
+    NO_DEFAULT_PATH
+  )
+  if (EXISTS "${FOUND_SPIRV_INCLUDE_DIR}/LLVMSPIRVLib.h")
+    set(COMGR_SPIRV_TRANSLATOR_AVAILABLE ON)
+    message("-- LLVMSPIRVLib/LLVMSPIRVLib.h found at ${FOUND_SPIRV_INCLUDE_DIR} (SPIRV translator available in Comgr)")
+  else()
+    message("-- LLVMSPIRVLib/LLVMSPIRVLib.h not found (SPIRV translator unavailable in Comgr)")
+  endif()
+
+  if (COMGR_SPIRV_TRANSLATOR_AVAILABLE)
+    target_include_directories(amd_comgr
+        PRIVATE
+          "${FOUND_SPIRV_INCLUDE_DIR}")
+  endif()
+
+endif()
+
+message("-- COMGR_SPIRV_TRANSLATOR_AVAILABLE: ${COMGR_SPIRV_TRANSLATOR_AVAILABLE}")
+message("-- COMGR_SPIRV_BACKEND_AVAILABLE: ${COMGR_SPIRV_BACKEND_AVAILABLE}")
+
+if (COMGR_SPIRV_TRANSLATOR_AVAILABLE)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS "COMGR_SPIRV_TRANSLATOR_AVAILABLE")
+endif()
+if (COMGR_SPIRV_BACKEND_AVAILABLE)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS "COMGR_SPIRV_BACKEND_AVAILABLE")
+endif()
+
+if (UNIX)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS
+    -fno-rtti -Wall -Wno-attributes -fms-extensions -fvisibility=hidden)
+  # TODO: Confirm this is actually needed due to LLVM/Clang code
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS -fno-strict-aliasing)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS -fstack-protector-strong)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS _FORTIFY_SOURCE=2)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS
+    _GNU_SOURCE __STDC_LIMIT_MACROS __STDC_CONSTANT_MACROS AMD_COMGR_BUILD)
+  list(APPEND AMD_COMGR_PUBLIC_LINKER_OPTIONS -pthread)
+  # Eager RELRO might cause severe performance regressions in situations
+  # that load many versions of comgr at once (i.e. in dozens or hundreds
+  # of processes), so we're using weak RELRO here
+  if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "LINKER:-z,relro" COMGR_LINKER_SUPPORTS_Z_RELRO)
+  else()
+    # CheckLinkerFlag is unavailable before 3.18; approximate by platform.
+    if (NOT APPLE)
+      set(COMGR_LINKER_SUPPORTS_Z_RELRO TRUE)
+    endif()
+  endif()
+  if (COMGR_LINKER_SUPPORTS_Z_RELRO)
+    list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS -Wl,-z,relro)
+  endif()
+  if (NOT APPLE AND COMGR_BUILD_SHARED_LIBS)
+    configure_file(
+      src/exportmap.in
+      src/exportmap @ONLY)
+    list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS
+      "-Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/src/exportmap")
+    # When building a shared library with -fsanitize=address we can't be
+    # strict about undefined symbol references, as Clang won't include
+    # libasan in the link, see
+    # https://clang.llvm.org/docs/AddressSanitizer.html
+    if (NOT ADDRESS_SANITIZER)
+      list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS
+        -Wl,--no-undefined)
+    endif()
+  endif()
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS
+    "/wd4244" #[[Suppress 'argument' : conversion from 'type1' to 'type2', possible loss of data]]
+    "/wd4624" #[[Suppress 'derived class' : destructor could not be generated because a base class destructor is inaccessible]]
+    "/wd4267" #[[Suppress 'var' : conversion from 'size_t' to 'type', possible loss of data]]
+    "/wd4291" #[[Suppress 'declaration' : no matching operator delete found; memory will not be freed if initialization throws an exception]]
+    "/wd4146" #[[Suppress 'unary minus operator applied to unsigned type, result still unsigned]]
+    "/Zc:preprocessor" #[[Enable standards conforming preprocessor - https://learn.microsoft.com/en-us/cpp/build/reference/zc-preprocessor]])
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS _HAS_EXCEPTIONS=0)
+  # disable automatic manifest embedding to avoid duplicate resource errors
+  # (CVT1100/LNK1123) - the manifest is already embedded via comgr.rc
+  list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS "/MANIFEST:NO")
+endif()
+
+# Windows is strict about visibility of exports in shared libraries, so we ask
+# GCC/Clang to also be strict, and then explicitly mark each exported symbol in
+# the shared header.
+list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS AMD_COMGR_EXPORT)
+
+include(bc2h)
+include(opencl_header)
+include(DeviceLibs)
+
+# Embed libc++ headers for HIPRTC std C++ support
+# Can be disabled with -DCOMGR_EMBED_LIBCXX_HEADERS=OFF to reduce library size
+option(COMGR_EMBED_LIBCXX_HEADERS "Embed libc++ headers for HIPRTC" ON)
+if(COMGR_EMBED_LIBCXX_HEADERS)
+  include(LibcxxHeaders)
+endif()
+
+set_target_properties(amd_comgr PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED Yes
+  CXX_EXTENSIONS No)
+set_target_properties(amd_comgr PROPERTIES
+  SOVERSION "${amd_comgr_VERSION_MAJOR}"
+  VERSION "${amd_comgr_VERSION_MAJOR}.${amd_comgr_VERSION_MINOR}.${amd_comgr_VERSION_PATCH}")
+
+if (NOT COMGR_BUILD_SHARED_LIBS)
+  set_target_properties(amd_comgr PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
+# Overwrite the name on 32-bit Linux and Windows
+if (CMAKE_SIZEOF_VOID_P EQUAL 4)
+  set_target_properties(amd_comgr PROPERTIES OUTPUT_NAME "amd_comgr32")
+endif()
+
+# Set the DLL output name on Windows based on COMGR_DLL_NAME
+if (WIN32)
+  string(REGEX REPLACE "\\.dll$" "" COMGR_OUTPUT_NAME "${COMGR_DLL_NAME}")
+  set_target_properties(amd_comgr PROPERTIES OUTPUT_NAME "${COMGR_OUTPUT_NAME}")
+endif()
+
+option(LLVM_BUILD_INSTRUMENTED_COVERAGE "Build LLVM and tools with Code Coverage instrumentation" Off)
+mark_as_advanced(LLVM_BUILD_INSTRUMENTED_COVERAGE)
+if(LLVM_BUILD_INSTRUMENTED_COVERAGE)
+  if(NOT LLVM_PROFILE_MERGE_POOL_SIZE)
+    # A pool size of 1-2 is probably sufficient on an SSD. 3-4 should be fine
+    # for spinning disks. Anything higher may only help on slower mediums.
+    set(LLVM_PROFILE_MERGE_POOL_SIZE "4")
+  endif()
+  if(NOT LLVM_PROFILE_FILE_PATTERN)
+    if(NOT LLVM_PROFILE_DATA_DIR)
+      file(TO_NATIVE_PATH "${LLVM_BINARY_DIR}/profiles" LLVM_PROFILE_DATA_DIR)
+    endif()
+    file(TO_NATIVE_PATH "${LLVM_PROFILE_DATA_DIR}/%${LLVM_PROFILE_MERGE_POOL_SIZE}m.profraw" LLVM_PROFILE_FILE_PATTERN)
+  endif()
+  set(INSTRUMENTED_COVERAGE_FLAGS -O0 -fprofile-instr-generate=${LLVM_PROFILE_FILE_PATTERN} -fcoverage-mapping)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS ${INSTRUMENTED_COVERAGE_FLAGS})
+  list(APPEND AMD_COMGR_PUBLIC_COMPILE_OPTIONS ${INSTRUMENTED_COVERAGE_FLAGS})
+  list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS ${INSTRUMENTED_COVERAGE_FLAGS} -L${LLVM_LIBRARY_DIRS})
+  list(APPEND AMD_COMGR_PUBLIC_LINKER_OPTIONS ${INSTRUMENTED_COVERAGE_FLAGS} -L${LLVM_LIBRARY_DIRS})
+endif()
+
+target_compile_options(amd_comgr
+  PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}")
+target_compile_definitions(amd_comgr
+  PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS}")
+target_include_directories(amd_comgr
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
+
+# Internal OBJECT library for the shared metadata / symbol helpers. Compiled
+# once with the same flags and include roots as amd_comgr, then linked into both
+# amd_comgr and the hotswap test drivers, so the drivers reuse the exact same
+# objects (and the buffer-facing getMetadataRoot / getElfIsaName /
+# lookupSymbolByName entry points) instead of recompiling the sources with
+# divergent flags. Per-function/data sections let a standalone driver drop the
+# parts of these translation units it does not reference (the amd_comgr build
+# keeps them); the GCC/Clang spelling is -ffunction-sections/-fdata-sections,
+# the MSVC equivalent is /Gy plus /Gw.
+add_library(comgr-object-utils OBJECT ${COMGR_OBJECT_UTILS_SOURCES})
+# These sources include LLVM headers that pull in TableGen-generated .inc files.
+# amd_comgr is ordered after those generators by its LLVM link libraries, but an
+# OBJECT library that links nothing needs the dependency spelled out. The
+# generator targets only exist in an in-tree build.
+foreach(comgr_tablegen_target intrinsics_gen target_parser_gen)
+  if(TARGET ${comgr_tablegen_target})
+    add_dependencies(comgr-object-utils ${comgr_tablegen_target})
+  endif()
+endforeach()
+set_target_properties(comgr-object-utils PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  POSITION_INDEPENDENT_CODE ON)
+target_include_directories(comgr-object-utils
+  PRIVATE
+    ${LLVM_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>)
+if(MSVC)
+  target_compile_options(comgr-object-utils
+    PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" /Gy /Gw)
+else()
+  target_compile_options(comgr-object-utils
+    PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" -ffunction-sections -fdata-sections)
+endif()
+target_compile_definitions(comgr-object-utils
+  PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS}")
+target_link_libraries(amd_comgr PRIVATE comgr-object-utils)
+
+configure_file(
+  include/amd_comgr.h.in
+  include/amd_comgr.h @ONLY)
+
+set(AMD_COMGR_CONFIG_NAME amd_comgr-config.cmake)
+set(AMD_COMGR_TARGETS_NAME amd_comgr-targets.cmake)
+set(AMD_COMGR_VERSION_NAME amd_comgr-config-version.cmake)
+set(AMD_COMGR_PACKAGE_PREFIX cmake/amd_comgr)
+
+# Generate the build-tree package.
+set(AMD_COMGR_PREFIX_CODE)
+if (NOT COMGR_BUILD_SHARED_LIBS)
+  string(APPEND AMD_COMGR_PREFIX_CODE "\ninclude(CMakeFindDependencyMacro)\n")
+  string(APPEND AMD_COMGR_PREFIX_CODE "find_dependency(Clang REQUIRED)\n")
+  string(APPEND AMD_COMGR_PREFIX_CODE "find_dependency(LLD REQUIRED)\n")
+endif()
+
+set(AMD_COMGR_TARGETS_PATH
+  "${CMAKE_CURRENT_BINARY_DIR}/lib/${AMD_COMGR_PACKAGE_PREFIX}/${AMD_COMGR_TARGETS_NAME}")
+set(AMD_COMGR_VERSION_PATH
+  "${CMAKE_CURRENT_BINARY_DIR}/lib/${AMD_COMGR_PACKAGE_PREFIX}/${AMD_COMGR_VERSION_NAME}")
+export(TARGETS amd_comgr
+  FILE "lib/${AMD_COMGR_PACKAGE_PREFIX}/${AMD_COMGR_TARGETS_NAME}")
+configure_file("cmake/${AMD_COMGR_CONFIG_NAME}.in"
+  "lib/${AMD_COMGR_PACKAGE_PREFIX}/${AMD_COMGR_CONFIG_NAME}"
+  @ONLY)
+write_basic_package_version_file("${AMD_COMGR_VERSION_PATH}"
+  VERSION "${amd_comgr_VERSION}"
+  COMPATIBILITY SameMajorVersion)
+
+if(ENABLE_ASAN_PACKAGING)
+  install(TARGETS amd_comgr
+    EXPORT amd_comgr_export
+    COMPONENT asan
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+else()
+  install(TARGETS amd_comgr
+    EXPORT amd_comgr_export
+    COMPONENT amd-comgr
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
+# Install the manifest file alongside the DLL for Windows SxS
+if(WIN32)
+  install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/cmake/${COMGR_MANIFEST_NAME}.MANIFEST"
+    COMPONENT amd-comgr
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/include/amd_comgr.h"
+  COMPONENT amd-comgr
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${amd_comgr_NAME})
+
+if(ENABLE_ASAN_PACKAGING)
+  install(FILES
+    "LICENSE.txt"
+    COMPONENT asan
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}-asan)
+else()
+  install(FILES
+    "README.md"
+    "LICENSE.txt"
+    COMPONENT amd-comgr
+    DESTINATION ${CMAKE_INSTALL_DOCDIR})
+endif()
+
+# Generate the install-tree package.
+set(AMD_COMGR_PREFIX_CODE "
+# Derive absolute install prefix from config file path.
+get_filename_component(AMD_COMGR_PREFIX \"\${CMAKE_CURRENT_LIST_FILE}\" PATH)")
+string(REGEX REPLACE "/" ";" count "${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}")
+foreach(p ${count})
+  set(AMD_COMGR_PREFIX_CODE "${AMD_COMGR_PREFIX_CODE}
+get_filename_component(AMD_COMGR_PREFIX \"\${AMD_COMGR_PREFIX}\" PATH)")
+endforeach()
+
+if (NOT COMGR_BUILD_SHARED_LIBS)
+  string(APPEND AMD_COMGR_PREFIX_CODE "\ninclude(CMakeFindDependencyMacro)\n")
+  string(APPEND AMD_COMGR_PREFIX_CODE "find_dependency(Clang REQUIRED)\n")
+  string(APPEND AMD_COMGR_PREFIX_CODE "find_dependency(LLD REQUIRED)\n")
+endif()
+
+set(AMD_COMGR_TARGETS_PATH "\${AMD_COMGR_PREFIX}/${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}/${AMD_COMGR_TARGETS_NAME}")
+configure_file("cmake/${AMD_COMGR_CONFIG_NAME}.in"
+  "${AMD_COMGR_CONFIG_NAME}.install"
+  @ONLY)
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/${AMD_COMGR_CONFIG_NAME}.install"
+  COMPONENT amd-comgr
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}"
+  RENAME "${AMD_COMGR_CONFIG_NAME}")
+install(EXPORT amd_comgr_export
+  COMPONENT amd-comgr
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}"
+  FILE "${AMD_COMGR_TARGETS_NAME}")
+install(FILES
+  "${AMD_COMGR_VERSION_PATH}"
+  COMPONENT amd-comgr
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}")
+
+if(NOT CLANG_LINK_CLANG_DYLIB)
+  set(CLANG_LIBS
+    clangBasic
+    clangDriver
+    clangOptions
+    clangSerialization
+    clangFrontend
+    clangFrontendTool)
+else()
+  set(CLANG_LIBS
+    clang-cpp)
+endif()
+
+set(LLD_LIBS
+  lldELF
+  lldCommon)
+
+if (${COMGR_SPIRV_TRANSLATOR_AVAILABLE})
+  set(SPIRV_DYNAMIC_LIB "LLVMSPIRVAMDLib")
+  set(SPIRV_STATIC_LIB "SPIRVAMDLib")
+else()
+  set(SPIRV_DYNAMIC_LIB "")
+  set(SPIRV_STATIC_LIB "")
+endif()
+
+if (LLVM_LINK_LLVM_DYLIB)
+  set(LLVM_LIBS LLVM ${SPIRV_DYNAMIC_LIB})
+else()
+  llvm_map_components_to_libnames(LLVM_LIBS
+    ${LLVM_TARGETS_TO_BUILD}
+    BinaryFormat
+    BitReader
+    BitWriter
+    CodeGen
+    Core
+    DebugInfoDWARF
+    Demangle
+    IRReader
+    Linker
+    MC
+    MCDisassembler
+    MCParser
+    Object
+    Option
+    Support
+    Symbolize
+    TargetParser
+    TransformUtils
+    ${SPIRV_STATIC_LIB}
+    )
+endif()
+
+target_link_options(amd_comgr
+  PUBLIC
+    ${AMD_COMGR_PUBLIC_LINKER_OPTIONS}
+  PRIVATE
+    ${AMD_COMGR_PRIVATE_LINKER_OPTIONS})
+
+target_link_libraries(amd_comgr
+  PRIVATE
+    ${LLD_LIBS}
+    ${LLVM_LIBS}
+    ${CLANG_LIBS})
+
+if(TARGET embedded-resource-dir)
+  target_link_libraries(amd_comgr PRIVATE embedded-resource-dir)
+endif()
+
+if (NOT UNIX)
+  target_link_libraries(amd_comgr
+    PRIVATE version)
+endif()
+
+find_package(Threads)
+target_link_libraries(amd_comgr PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+
+find_library(LIBRT rt)
+if(LIBRT)
+  target_link_libraries(amd_comgr PRIVATE ${LIBRT})
+endif()
+
+
+if (NOT WIN32)
+  target_link_libraries(amd_comgr
+    PRIVATE
+      c
+      ${CMAKE_DL_LIBS})
+endif()
+
+# Hotswap subproject. Builds the rewriter (byte-level rewrite path) plus, under
+# COMGR_ENABLE_HOTSWAP_TRANSPILE, the transpile-path OBJECT libraries, and
+# exports the set amd_comgr links as COMGR_HOTSWAP_LIBS. These OBJECT libraries
+# keep their LLVM deps PRIVATE, so they contribute only their objects and leave
+# the curated LLVM set linked above unchanged.
+add_subdirectory(src/hotswap)
+target_link_libraries(amd_comgr PRIVATE ${COMGR_HOTSWAP_LIBS})
+
+include(CTest)
+
+if(BUILD_TESTING)
+  add_custom_target(check-comgr COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS amd_comgr)
+  if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set_property(GLOBAL APPEND PROPERTY LLVM_ADDITIONAL_TEST_TARGETS check-comgr)
+  endif()
+  add_subdirectory(test)
+  add_subdirectory(test-lit)
+  add_subdirectory(test-unit)
+endif()
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  # Add packaging directives for amd_comgr
+  if(ENABLE_ASAN_PACKAGING)
+  # Only libraries required for ASAN Package
+    set(CPACK_COMPONENTS_ALL asan)
+    set(PKG_DESC_SUMMARY "AddressSanitizer Instrumented Libraries to provide support functions for ROCm code objects.")
+  elseif(NOT COMGR_BUILD_SHARED_LIBS)
+    set(CPACK_COMPONENTS_ALL amd-comgr)
+    set(PKG_DESC_SUMMARY "Static Library to provide support functions for ROCm code objects.")
+  else()
+    set(CPACK_COMPONENTS_ALL amd-comgr)
+    set(PKG_DESC_SUMMARY "Library to provide support functions for ROCm code objects.")
+  endif()
+  set(CPACK_PACKAGE_NAME comgr)
+  set(CPACK_PACKAGE_VENDOR "Advanced Micro Devices, Inc.")
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY ${PKG_DESC_SUMMARY})
+  set(CPACK_PACKAGE_DESCRIPTION "This package contains the AMD ${CPACK_PACKAGE_DESCRIPTION_SUMMARY}.")
+  set(CPACK_PACKAGE_VERSION_MAJOR "${amd_comgr_VERSION_MAJOR}")
+  set(CPACK_PACKAGE_VERSION_MINOR "${amd_comgr_VERSION_MINOR}")
+  set(CPACK_PACKAGE_VERSION_PATCH "${amd_comgr_VERSION_PATCH}")
+  set(CPACK_PACKAGE_CONTACT "ROCm Compiler Support <rocm.compiler.support@amd.com>")
+  set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt")
+
+  # ASAN Specific variables
+  set(CPACK_DEBIAN_ASAN_PACKAGE_NAME comgr-asan)
+  set(CPACK_RPM_ASAN_PACKAGE_NAME comgr-asan)
+
+ # Make proper version for appending
+  set(ROCM_VERSION_FOR_PACKAGE "")
+  if(DEFINED ENV{ROCM_LIBPATCH_VERSION})
+    set(ROCM_VERSION_FOR_PACKAGE $ENV{ROCM_LIBPATCH_VERSION})
+  elseif(DEFINED ENV{ROCM_VERSION})
+    string(REGEX REPLACE "." "" ROCM_VERSION_FOR_PACKAGE $ENV{ROCM_VERSION})
+  else()
+    # Default Case, set to 99999
+    set(ROCM_VERSION_FOR_PACKAGE "99999")
+  endif()
+
+  # Archive package specific variable
+  set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
+
+  # Debian package specific variables
+  set(CPACK_DEB_COMPONENT_INSTALL ON)
+  if(COMGR_BUILD_SHARED_LIBS)
+    set(CPACK_DEBIAN_AMD-COMGR_PACKAGE_NAME comgr)
+  else()
+    set(CPACK_DEBIAN_AMD-COMGR_PACKAGE_NAME comgr-static-dev)
+  endif()
+  set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/ROCm/llvm-project/tree/amd-staging/amd/comgr")
+  set(DEBIAN_DEPENDENCIES "libzstd1, zlib1g, libc6, libstdc++6, libgcc-s1 | libgcc1")
+  if (LLVM_LINK_LLVM_DYLIB)
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libtinfo-dev, rocm-core, rocm-llvm-core, ${DEBIAN_DEPENDENCIES}")
+    set(CPACK_DEBIAN_ASAN_PACKAGE_DEPENDS "libtinfo-dev, rocm-core-asan, rocm-llvm-core, ${DEBIAN_DEPENDENCIES}")
+  else()
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libtinfo-dev, rocm-core, ${DEBIAN_DEPENDENCIES}")
+    set(CPACK_DEBIAN_ASAN_PACKAGE_DEPENDS "libtinfo-dev, rocm-core-asan, ${DEBIAN_DEPENDENCIES}")
+  endif()
+  if (DEFINED ENV{CPACK_DEBIAN_PACKAGE_RELEASE})
+    set(CPACK_DEBIAN_PACKAGE_RELEASE $ENV{CPACK_DEBIAN_PACKAGE_RELEASE})
+  else()
+    set(CPACK_DEBIAN_PACKAGE_RELEASE "local")
+  endif()
+
+  # RPM package specific variables
+  set(CPACK_RPM_COMPONENT_INSTALL ON)
+  if(COMGR_BUILD_SHARED_LIBS)
+    set(CPACK_RPM_AMD-COMGR_PACKAGE_NAME comgr)
+  else()
+    set(CPACK_RPM_AMD-COMGR_PACKAGE_NAME comgr-static-devel)
+  endif()
+
+  execute_process(COMMAND rpm --eval %{?dist}
+                 RESULT_VARIABLE PROC_RESULT
+                 OUTPUT_VARIABLE EVAL_RESULT
+                 OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+  if(PROC_RESULT EQUAL "0" AND "${EVAL_RESULT}" STREQUAL ".el7")
+    # In Centos using parentheses is causing cpack errors.
+    # Set the dependencies specifically for centos
+    set(RPM_DEPENDENCIES "zlib, glibc, libstdc++, libgcc")
+  else()
+    set(RPM_DEPENDENCIES "(zlib or libz1), (libzstd or libzstd1), glibc, (libstdc++ or libstdc++6), (libgcc or libgcc_s1)")
+  endif()
+
+  if (LLVM_LINK_LLVM_DYLIB)
+    set(CPACK_RPM_PACKAGE_REQUIRES "rocm-core, rocm-llvm-core, ${RPM_DEPENDENCIES}")
+    set(CPACK_RPM_ASAN_PACKAGE_REQUIRES "rocm-core-asan, rocm-llvm-core, ${RPM_DEPENDENCIES}")
+  else()
+    set(CPACK_RPM_PACKAGE_REQUIRES "rocm-core, ${RPM_DEPENDENCIES}")
+    set(CPACK_RPM_ASAN_PACKAGE_REQUIRES "rocm-core-asan, ${RPM_DEPENDENCIES}")
+  endif()
+  if(DEFINED ENV{CPACK_RPM_PACKAGE_RELEASE})
+    set(CPACK_RPM_PACKAGE_RELEASE $ENV{CPACK_RPM_PACKAGE_RELEASE})
+  else()
+    set(CPACK_RPM_PACKAGE_RELEASE "local")
+  endif()
+  set(CPACK_RPM_PACKAGE_LICENSE "NCSA")
+
+  # Get rpm distro
+  if(CPACK_RPM_PACKAGE_RELEASE)
+    set(CPACK_RPM_PACKAGE_RELEASE_DIST ON)
+  endif()
+
+  # Prepare final version for the CPACK use
+  set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}.${ROCM_VERSION_FOR_PACKAGE}")
+
+  # Set the names now using CPACK utility
+  set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+  set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
+  # Remove dependency on rocm-core if -DROCM_DEP_ROCMCORE=ON not given to cmake
+  if(NOT ROCM_DEP_ROCMCORE)
+      string(REGEX REPLACE ",? ?rocm-core" "" CPACK_RPM_PACKAGE_REQUIRES ${CPACK_RPM_PACKAGE_REQUIRES})
+      string(REGEX REPLACE ",? ?rocm-core-asan" "" CPACK_RPM_ASAN_PACKAGE_REQUIRES ${CPACK_RPM_ASAN_PACKAGE_REQUIRES})
+      string(REGEX REPLACE ",? ?rocm-core" "" CPACK_DEBIAN_PACKAGE_DEPENDS ${CPACK_DEBIAN_PACKAGE_DEPENDS})
+      string(REGEX REPLACE ",? ?rocm-core-asan" "" CPACK_DEBIAN_ASAN_PACKAGE_DEPENDS ${CPACK_DEBIAN_ASAN_PACKAGE_DEPENDS})
+  endif()
+
+  include(CPack)
+endif()

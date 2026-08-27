@@ -6,8 +6,7 @@ permissions:
 on:
   pull_request:
     branches:
-      - main
-      - 'users/**'
+      - amd-staging
     paths:
       - 'clang-tools-extra/clang-tidy/**'
       - 'clang-tools-extra/docs/clang-tidy/**'
@@ -15,7 +14,8 @@ on:
 
 jobs:
   code_linter:
-    if: github.repository_owner == 'llvm'
+    if: >-
+      !contains(github.event.pull_request.head.ref, 'upstream_merge')
     runs-on: ubuntu-24.04
     defaults:
       run:

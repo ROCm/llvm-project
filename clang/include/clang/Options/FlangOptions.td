@@ -73,6 +73,7 @@ defm real_8_real_16 : BooleanFFlag<"real-8-real-16">, Group<gfortran_Group>;
 defm real_8_real_4 : BooleanFFlag<"real-8-real-4">, Group<gfortran_Group>;
 defm recursive : BooleanFFlag<"recursive">, Group<gfortran_Group>;
 defm second_underscore : BooleanFFlag<"second-underscore">, Group<gfortran_Group>;
+defm offload_global_filtering : OptInFC1FFlag<"offload-global-filtering", "Enable/disable OpenMP global filtering pass">;
 defm sign_zero : BooleanFFlag<"sign-zero">, Group<gfortran_Group>;
 defm whole_file : BooleanFFlag<"whole-file">, Group<gfortran_Group>;
 
@@ -312,9 +313,18 @@ def relaxed_c_loc : Flag<["-"], "frelaxed-c-loc-checks">, Group<f_Group>,
 def fhermetic_module_files : Flag<["-"], "fhermetic-module-files">, Group<f_Group>,
   HelpText<"Emit hermetic module files (no nested USE association)">;
 
-def fdo_concurrent_to_openmp_EQ : Joined<["-"], "fdo-concurrent-to-openmp=">,
+def fdo_concurrent_EQ : Joined<["-"], "fdo-concurrent=">,
   HelpText<"Try to map `do concurrent` loops to OpenMP [none|host|device]">,
       Values<"none, host, device">;
+def fdo_concurrent_to_openmp_EQ : Joined<["-"], "fdo-concurrent-to-openmp=">, Flags<[HelpHidden]>, HelpText<"Alias for -fdo-concurrent">, Alias<fdo_concurrent_EQ>;
+
+def fdefer_desc_map : Flag<["-"], "fdefer-desc-map">, Group<f_Group>,
+  HelpText<"Enable deferred descriptor mapping, which puts off top-level descriptor "
+    "mapping until target regions, this is the default behaviour">;
+
+def fno_defer_desc_map : Flag<["-"], "fno-defer-desc-map">, Group<f_Group>,
+  HelpText<"Disable deferred deferred descriptor mapping, which puts off top-level "
+          " descriptor mapping till target regions">;
 
 def J : JoinedOrSeparate<["-"], "J">,
   Flags<[RenderJoined]>, Group<gfortran_Group>, Alias<module_dir>;

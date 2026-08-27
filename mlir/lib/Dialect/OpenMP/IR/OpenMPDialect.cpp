@@ -2268,8 +2268,9 @@ static bool mapTypeToBool(ClauseMapFlags value, ClauseMapFlags flag) {
 /// Parses a map_entries map type from a string format back into its numeric
 /// value.
 ///
-/// map-clause = `map_clauses (  ( `(` `always, `? `implicit, `? `ompx_hold, `?
-/// `close, `? `present, `? ( `to` | `from` | `delete` `)` )+ `)` )
+/// map-clause = `map_clauses (  ( `(` `attach, `? `always, `? `implicit, `?
+/// `ompx_hold, `? `close, `? `present, `? ( `to` | `from` | `delete` `)` )+ `)`
+/// )
 static ParseResult parseMapClause(OpAsmParser &parser,
                                   ClauseMapFlagsAttr &mapType) {
   ClauseMapFlags mapTypeBits = ClauseMapFlags::none;
@@ -2340,6 +2341,9 @@ static ParseResult parseMapClause(OpAsmParser &parser,
     if (mapTypeMod == "is_device_ptr")
       mapTypeBits |= ClauseMapFlags::is_device_ptr;
 
+    if (mapTypeMod == "target_param")
+      mapTypeBits |= ClauseMapFlags::target_param;
+
     return success();
   };
 
@@ -2371,6 +2375,8 @@ static void printMapClause(OpAsmPrinter &p, Operation *op,
     mapTypeStrs.push_back("close");
   if (mapTypeToBool(mapFlags, ClauseMapFlags::present))
     mapTypeStrs.push_back("present");
+  if (mapTypeToBool(mapFlags, ClauseMapFlags::target_param))
+    mapTypeStrs.push_back("target_param");
 
   // special handling of to/from/tofrom/delete and release/alloc, release +
   // alloc are the abscense of one of the other flags, whereas tofrom requires
@@ -4406,7 +4412,7 @@ void CanonicalLoopOp::print(OpAsmPrinter &p) {
   p.printRegion(getRegion(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/true);
 
-  p.printOptionalAttrDict((*this)->getAttrs());
+  p.printOptionalAttrDict((*this)->getDiscardableAttrDictionary().getValue());
 }
 
 mlir::ParseResult CanonicalLoopOp::parse(::mlir::OpAsmParser &parser,
@@ -4494,7 +4500,7 @@ void UnrollHeuristicOp::build(::mlir::OpBuilder &odsBuilder,
 void UnrollHeuristicOp::print(OpAsmPrinter &p) {
   p << '(' << getApplyee() << ')';
 
-  p.printOptionalAttrDict((*this)->getAttrs());
+  p.printOptionalAttrDict((*this)->getDiscardableAttrDictionary().getValue());
 }
 
 mlir::ParseResult UnrollHeuristicOp::parse(::mlir::OpAsmParser &parser,
@@ -4547,7 +4553,7 @@ void UnrollFullOp::build(::mlir::OpBuilder &odsBuilder,
 void UnrollFullOp::print(OpAsmPrinter &p) {
   p << '(' << getApplyee() << ')';
 
-  p.printOptionalAttrDict((*this)->getAttrs());
+  p.printOptionalAttrDict((*this)->getDiscardableAttrDictionary().getValue());
 }
 
 mlir::ParseResult UnrollFullOp::parse(::mlir::OpAsmParser &parser,
@@ -4618,7 +4624,10 @@ void UnrollPartialOp::build(::mlir::OpBuilder &odsBuilder,
 void UnrollPartialOp::print(OpAsmPrinter &p) {
   p << '(' << getApplyee() << ')';
 
-  p.printOptionalAttrDict((*this)->getAttrs());
+  SmallVector<NamedAttribute> attrs((*this)->getDiscardableAttrs());
+  attrs.emplace_back(getUnrollFactorAttrName(), getUnrollFactorAttr());
+  llvm::sort(attrs);
+  p.printOptionalAttrDict(attrs);
 }
 
 mlir::ParseResult UnrollPartialOp::parse(::mlir::OpAsmParser &parser,
@@ -5011,7 +5020,7 @@ LogicalResult AtomicReadOp::verify() {
 
   int64_t version = 50;
   if (auto moduleOp = getOperation()->getParentOfType<ModuleOp>())
-    if (Attribute verAttr = moduleOp->getAttr("omp.version"))
+    if (Attribute verAttr = moduleOp->getDiscardableAttr("omp.version"))
       version = llvm::cast<VersionAttr>(verAttr).getVersion();
 
   if (auto mo = getMemoryOrder()) {
@@ -5037,7 +5046,7 @@ LogicalResult AtomicWriteOp::verify() {
 
   int64_t version = 50;
   if (auto moduleOp = getOperation()->getParentOfType<ModuleOp>())
-    if (Attribute verAttr = moduleOp->getAttr("omp.version"))
+    if (Attribute verAttr = moduleOp->getDiscardableAttr("omp.version"))
       version = llvm::cast<VersionAttr>(verAttr).getVersion();
 
   if (auto mo = getMemoryOrder()) {
@@ -5077,7 +5086,7 @@ LogicalResult AtomicUpdateOp::verify() {
 
   int64_t version = 50;
   if (auto moduleOp = getOperation()->getParentOfType<ModuleOp>())
-    if (Attribute verAttr = moduleOp->getAttr("omp.version"))
+    if (Attribute verAttr = moduleOp->getDiscardableAttr("omp.version"))
       version = llvm::cast<VersionAttr>(verAttr).getVersion();
 
   if (auto mo = getMemoryOrder()) {
@@ -5131,12 +5140,13 @@ LogicalResult AtomicCaptureOp::verifyRegions() {
   if (verifyRegionsCommon().failed())
     return mlir::failure();
 
-  if (getFirstOp()->getAttr("hint") || getSecondOp()->getAttr("hint"))
+  if (getFirstOp()->getInherentAttr("hint").value_or(Attribute{}) ||
+      getSecondOp()->getInherentAttr("hint").value_or(Attribute{}))
     return emitOpError(
         "operations inside capture region must not have hint clause");
 
-  if (getFirstOp()->getAttr("memory_order") ||
-      getSecondOp()->getAttr("memory_order"))
+  if (getFirstOp()->getInherentAttr("memory_order").value_or(Attribute{}) ||
+      getSecondOp()->getInherentAttr("memory_order").value_or(Attribute{}))
     return emitOpError(
         "operations inside capture region must not have memory_order clause");
   return success();

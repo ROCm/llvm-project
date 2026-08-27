@@ -621,6 +621,8 @@ public:
                  Fortran::common::LanguageFeature::CUDA) &&
              getFoldingContext().languageFeatures().IsEnabled(
                  Fortran::common::LanguageFeature::CUDAInit)),
+             getFoldingContext().languageFeatures().IsEnabled(
+                 Fortran::common::LanguageFeature::OpenMPDefaultAllocator),
             getFoldingContext().languageFeatures().IsEnabled(
                 Fortran::common::LanguageFeature::Coarray),
             bridge.getLoweringOptions().getFPExceptionTraps());
@@ -2239,6 +2241,8 @@ private:
     // Relax the requirement that the GOTO variable must have a value in the
     // label list when a list is present, and allow a branch to any non-format
     // target that has an ASSIGN statement for the variable.
+    //
+    // (Both PFT builder and MLIR lowering bridge apply the same relaxation)
     mlir::Location loc = toLocation();
     Fortran::lower::pft::Evaluation &eval = getEval();
     Fortran::lower::pft::FunctionLikeUnit &owningProc =

@@ -316,9 +316,9 @@
 #endif
 
 #if defined(__AMDGPU__)
-#  define SANITIZER_AMDGPU 1
+#  define SANITIZER_AMDGPU_ 1
 #else
-#  define SANITIZER_AMDGPU 0
+#  define SANITIZER_AMDGPU_ 0
 #endif
 
 #if defined(__NVPTX__)

@@ -102,10 +102,7 @@ struct GPUProfGlobals {
 };
 
 /// Subclass of GlobalTy that holds the memory for a global of \p Ty.
-template <typename Ty> class StaticGlobalTy : public GlobalTy {
-  Ty Data;
-
-public:
+template <typename Ty> struct StaticGlobalTy : public GlobalTy {
   template <typename... Args>
   StaticGlobalTy(const std::string &Name, Args &&...args)
       : GlobalTy(Name, sizeof(Ty), &Data),
@@ -124,6 +121,9 @@ public:
   Ty &getValue() { return Data; }
   const Ty &getValue() const { return Data; }
   void setValue(const Ty &V) { Data = V; }
+
+private:
+  Ty Data;
 };
 
 /// Helper class to do the heavy lifting when it comes to moving globals between

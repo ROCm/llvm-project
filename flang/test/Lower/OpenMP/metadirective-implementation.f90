@@ -9,7 +9,7 @@
 ! CHECK:         return
 subroutine test_vendor_llvm()
   !$omp metadirective &
-  !$omp & when(implementation={vendor(llvm)}: taskwait) &
+  !$omp & when(implementation={vendor(amd)}: taskwait) &
 #ifdef OMP_52
   !$omp & otherwise(nothing)
 #else
@@ -35,7 +35,7 @@ end subroutine
 ! CHECK:         return
 subroutine test_standalone_barrier_match()
   !$omp metadirective &
-  !$omp & when(implementation={vendor(llvm)}: barrier) &
+  !$omp & when(implementation={vendor(amd)}: barrier) &
 #ifdef OMP_52
   !$omp & otherwise(nothing)
 #else
@@ -61,7 +61,7 @@ end subroutine
 ! CHECK:         return
 subroutine test_nothing_variant()
   !$omp metadirective &
-  !$omp & when(implementation={vendor(llvm)}: nothing) &
+  !$omp & when(implementation={vendor(amd)}: nothing) &
 #ifdef OMP_52
   !$omp & otherwise(taskwait)
 #else
@@ -96,7 +96,7 @@ end subroutine
 ! CHECK:         return
 subroutine test_multiple_when_first_match()
   !$omp metadirective &
-  !$omp & when(implementation={vendor(llvm)}: taskwait) &
+  !$omp & when(implementation={vendor(amd)}: taskwait) &
   !$omp & when(user={condition(.false.)}: taskyield) &
 #ifdef OMP_52
   !$omp & otherwise(nothing)
@@ -125,8 +125,8 @@ end subroutine
 ! CHECK:         return
 subroutine test_implicit_nothing_tie_break()
   !$omp metadirective &
-  !$omp & when(implementation={vendor(llvm)}:) &
-  !$omp & when(implementation={vendor(llvm)}: barrier)
+  !$omp & when(implementation={vendor(amd)}:) &
+  !$omp & when(implementation={vendor(amd)}: barrier)
 end subroutine
 
 ! CHECK-LABEL: func.func @_QPtest_begin_vendor_llvm()
@@ -138,11 +138,11 @@ subroutine test_begin_vendor_llvm()
   x = 0
 #ifdef OMP_52
   !$omp begin metadirective &
-  !$omp & when(implementation={vendor(llvm)}: parallel) &
+  !$omp & when(implementation={vendor(amd)}: parallel) &
   !$omp & otherwise(nothing)
 #else
   !$omp begin metadirective &
-  !$omp & when(implementation={vendor(llvm)}: parallel)
+  !$omp & when(implementation={vendor(amd)}: parallel)
 #endif
   x = 1
   !$omp end metadirective
@@ -176,12 +176,12 @@ subroutine test_begin_multiple_when_first_match()
   x = 0
 #ifdef OMP_52
   !$omp begin metadirective &
-  !$omp & when(implementation={vendor(llvm)}: parallel) &
+  !$omp & when(implementation={vendor(amd)}: parallel) &
   !$omp & when(user={condition(.false.)}: task) &
   !$omp & otherwise(nothing)
 #else
   !$omp begin metadirective &
-  !$omp & when(implementation={vendor(llvm)}: parallel) &
+  !$omp & when(implementation={vendor(amd)}: parallel) &
   !$omp & when(user={condition(.false.)}: task)
 #endif
   x = 1
@@ -196,8 +196,8 @@ subroutine test_begin_implicit_nothing_tie_break()
   integer :: x
   x = 0
   !$omp begin metadirective &
-  !$omp & when(implementation={vendor(llvm)}:) &
-  !$omp & when(implementation={vendor(llvm)}: parallel)
+  !$omp & when(implementation={vendor(amd)}:) &
+  !$omp & when(implementation={vendor(amd)}: parallel)
   x = 1
   !$omp end metadirective
 end subroutine

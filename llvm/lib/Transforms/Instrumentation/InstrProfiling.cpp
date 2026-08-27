@@ -1903,7 +1903,9 @@ InstrLowerer::getOrCreateRegionBitmaps(InstrProfMCDCBitmapInstBase *Inc) {
           SP, BitmapPtr->getName(), /*LinkageName=*/StringRef(), SP->getFile(),
           /*LineNo=*/0, DB.createUnspecifiedType("Profile Bitmap Type"),
           BitmapPtr->hasLocalLinkage(), /*IsDefined=*/true, /*Expr=*/nullptr,
-          /*Decl=*/nullptr, /*TemplateParams=*/nullptr, /*AlignInBits=*/0,
+          /*Decl=*/nullptr, /*TemplateParams=*/nullptr,
+          llvm::dwarf::DW_MSPACE_LLVM_none,
+          /*AlignInBits=*/0,
           Annotations);
       BitmapPtr->addDebugInfo(DICounter);
       DB.finalizeSubprogram(SP);
@@ -1980,8 +1982,8 @@ InstrLowerer::getOrCreateRegionCounters(InstrProfCntrInstBase *Inc) {
           SP, CounterPtr->getName(), /*LinkageName=*/StringRef(), SP->getFile(),
           /*LineNo=*/0, DB.createUnspecifiedType("Profile Data Type"),
           CounterPtr->hasLocalLinkage(), /*IsDefined=*/true, /*Expr=*/nullptr,
-          /*Decl=*/nullptr, /*TemplateParams=*/nullptr, /*AlignInBits=*/0,
-          Annotations);
+          /*Decl=*/nullptr, /*TemplateParams=*/nullptr,
+          llvm::dwarf::DW_MSPACE_LLVM_none, /*AlignInBits=*/0, Annotations);
       CounterPtr->addDebugInfo(DICounter);
       DB.finalizeSubprogram(SP);
       DB.finalize();

@@ -1,0 +1,22 @@
+---
+rocwmma and CK needs changes
+[AMDGPU][NFC] Change AMDGPU builtins to use ExtVector (#176033)
+---
+breaks build of hipblaslt
+[AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
+---
+breaks rocgdb UT
+[Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
+---
+breaks windows build: [amd-llvm] terminate called after throwing an instance of 'std::bad_alloc'
+Make][CodeGen] Add PCH for Clang CodeGen (#206018)
+---
+breaks rocrand 4 tests
+[SLP]Vectorize single-user instructions as the last-attempt seeds
+---
+breaks windows build: MSVC rejects the CRTP removal, error C2440 and C2027
+[ADT] Remove CRTP from FoldingSet and ContextualFoldingSet (NFC) (#216830)
+---
+breaks comgr, device-libs, hip-test
+clang: Emit legacy amdgcn triple in HIP fatbin bundle entries (#217640)
+clang: Start using new amdgpu subarch triples (#206482)

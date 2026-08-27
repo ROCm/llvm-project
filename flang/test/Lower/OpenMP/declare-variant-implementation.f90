@@ -5,7 +5,7 @@
 ! the variant is accessible at every reference to the base.
 
 ! CHECK-LABEL: func.func @_QPtest_vendor_llvm
-! CHECK: fir.call @_QPvllvm(){{.*}}: () -> ()
+! CHECK: fir.call @_QPbase_llvm(){{.*}}: () -> ()
 ! CHECK-NOT: fir.call @_QPbase_llvm
 subroutine test_vendor_llvm
   call base_llvm()

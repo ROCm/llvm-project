@@ -1375,6 +1375,8 @@ def offload_jobs_EQ : Joined<["--"], "offload-jobs=">,
   HelpText<"Specify the number of threads to use for device offloading tasks "
            "during compilation. Can be a positive integer or the string "
            "'jobserver' to use the make-style jobserver from the environment.">;
+def parallel_jobs_EQ : Joined<["-"], "parallel-jobs=">,
+  Alias<offload_jobs_EQ>;
 
 defm offload_via_llvm : BoolFOption<"offload-via-llvm",
   LangOpts<"OffloadViaLLVM">, DefaultFalse,
@@ -1718,11 +1720,15 @@ defm xl_pragma_pack : BoolFOption<"xl-pragma-pack",
           "Enable IBM XL #pragma pack handling">,
   NegFlag<SetFalse>>;
 def shared_libsan : Flag<["-"], "shared-libsan">,
+  Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>,
   HelpText<"Dynamically link the sanitizer runtime">;
 def static_libsan : Flag<["-"], "static-libsan">,
+  Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>,
   HelpText<"Statically link the sanitizer runtime (Not supported for ASan, TSan or UBSan on darwin)">;
-def : Flag<["-"], "shared-libasan">, Alias<shared_libsan>;
-def : Flag<["-"], "static-libasan">, Alias<static_libsan>;
+def : Flag<["-"], "shared-libasan">, Alias<shared_libsan>,
+  Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>;
+def : Flag<["-"], "static-libasan">, Alias<static_libsan>,
+  Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>;
 def fasm : Flag<["-"], "fasm">, Group<f_Group>;
 
 defm assume_unique_vtables : BoolFOption<"assume-unique-vtables",
@@ -2620,7 +2626,7 @@ def fmemory_profile_use_EQ : Joined<["-"], "fmemory-profile-use=">,
 
 // Begin sanitizer flags. These should all be core options exposed in all driver
 // modes.
-let Visibility = [ClangOption, CC1Option, CLOption] in {
+let Visibility = [ClangOption, CC1Option, CLOption, FlangOption, FC1Option] in {
 
 def fsanitize_EQ : CommaJoined<["-"], "fsanitize=">, Group<f_clang_Group>,
                    MetaVarName<"<check>">,
@@ -4142,6 +4148,10 @@ defm disable_block_signature_string : BoolFOption<"disable-block-signature-strin
   NegFlag<SetFalse, [], [ClangOption], "Don't disable">,
   BothFlags<[], [CC1Option], " block signature string)">>;
 
+def fopenmp_default_allocate_EQ : Joined<["-"], "fopenmp-default-allocate=">,
+  Group<f_Group>, Visibility<[FlangOption, FC1Option]>,
+  HelpText<"Set default allocator for OpenMP offloading (=target or =host)">,
+  Values<"target,host">;
 def fomit_frame_pointer : Flag<["-"], "fomit-frame-pointer">, Group<f_Group>,
   Visibility<[ClangOption, FlangOption]>,
   HelpText<"Omit the frame pointer from functions that don't need it. "
@@ -4215,6 +4225,63 @@ def fopenmp_cuda_teams_reduction_recs_num_EQ : Joined<["-"], "fopenmp-cuda-teams
            "teams; this flag is accepted for backwards compatibility only "
            "and emits a deprecation warning when used.">;
 
+def fopenmp_runtimelib_EQ : Joined<["-"], "fopenmp-runtimelib=">, Group<f_Group>, Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>, Flags<[NoArgumentUnused]>,
+  HelpText<"Select lib, lib-perf, or lib-debug openmp runtime"
+           " <arg> must be: lib, lib-perf or lib-debug.">;
+def fopenmp_gpu_threads_per_team_EQ : Joined<["-"], "fopenmp-gpu-threads-per-team=">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>;
+def fopenmp_target_xteam_reduction_blocksize_EQ : Joined<["-"], "fopenmp-target-xteam-reduction-blocksize=">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Number of threads in a block used by GPU cross-team reduction "
+           "kernels">;
+def fopenmp_target_ignore_env_vars : Flag<["-"], "fopenmp-target-ignore-env-vars">, Group<f_Group>, 
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Assert that device related environment variables can be ignored while generating code">,
+  MarshallingInfoFlag<LangOpts<"OpenMPTargetIgnoreEnvVars">>;
+def fno_openmp_target_ignore_env_vars : Flag<["-"], "fno-openmp-target-ignore-env-vars">, Group<f_Group>, 
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Assert that device related environment variables cannot be ignored while generating code">,
+  MarshallingInfoFlag<LangOpts<"OpenMPTargetIgnoreEnvVars">>;
+def fopenmp_target_big_jump_loop : Flag<["-"], "fopenmp-target-big-jump-loop">, Group<f_Group>, 
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Use the big-jump-loop code generation technique if possible">,
+  MarshallingInfoFlag<LangOpts<"OpenMPTargetBigJumpLoop">>;
+def fno_openmp_target_big_jump_loop : Flag<["-"], "fno-openmp-target-big-jump-loop">, Group<f_Group>, 
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Do not use the big-jump-loop code generation technique">,
+  MarshallingInfoFlag<LangOpts<"OpenMPTargetBigJumpLoop">>;
+def fopenmp_target_no_loop : Flag<["-"], "fopenmp-target-no-loop">, Group<f_Group>, 
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Use the no-loop code generation technique if possible">,
+  MarshallingInfoFlag<LangOpts<"OpenMPTargetNoLoop">>;
+def fno_openmp_target_no_loop : Flag<["-"], "fno-openmp-target-no-loop">, Group<f_Group>, 
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Do not use the no-loop code generation technique">,
+  MarshallingInfoFlag<LangOpts<"OpenMPTargetNoLoop">>;
+// The downstream cross-team ("Xteam") reduction implementation and its 'scan'
+// specialization have been removed. The following flags are accepted and
+// ignored for backward compatibility; the driver emits a deprecation warning
+// when they are used. Note that '-fopenmp-target-xteam-reduction-blocksize='
+// above is *not* deprecated.
+def fopenmp_target_xteam_reduction : Flag<["-"], "fopenmp-target-xteam-reduction">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Deprecated; has no effect. Cross-team reductions are always enabled">;
+def fno_openmp_target_xteam_reduction : Flag<["-"], "fno-openmp-target-xteam-reduction">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Deprecated; has no effect. Cross-team reductions are always enabled">;
+def fopenmp_target_xteam_scan : Flag<["-"], "fopenmp-target-xteam-scan">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
+def fno_openmp_target_xteam_scan : Flag<["-"], "fno-openmp-target-xteam-scan">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
+def fopenmp_target_xteam_no_loop_scan : Flag<["-"], "fopenmp-target-xteam-no-loop-scan">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
+def fno_openmp_target_xteam_no_loop_scan : Flag<["-"], "fno-openmp-target-xteam-no-loop-scan">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
+
 //===----------------------------------------------------------------------===//
 // Shared cc1 + fc1 OpenMP Target Options
 //===----------------------------------------------------------------------===//
@@ -4234,10 +4301,11 @@ def fno_openmp_target_debug : Flag<["-"], "fno-openmp-target-debug">;
 //===----------------------------------------------------------------------===//
 // FlangOption + FC1 + ClangOption + CC1Option
 //===----------------------------------------------------------------------===//
+// Unsupported on AMD downstream
 let Visibility = [FC1Option, FlangOption, CC1Option, ClangOption] in {
-def fopenacc : Flag<["-"], "fopenacc">, Group<f_Group>,
+def fopenacc : Flag<["-"], "fopenacc">, Group<f_Group>, Visibility<[]>,
   HelpText<"Enable OpenACC">;
-} // let Visibility = [FC1Option, FlangOption, CC1Option, ClangOption]
+}
 
 //===----------------------------------------------------------------------===//
 // Optimisation remark options
@@ -4301,7 +4369,7 @@ def fno_openmp_assume_no_nested_parallelism : Flag<["-"], "fno-openmp-assume-no-
 } // let Flags = [NoArgumentUnused, HelpHidden]
 
 def fopenmp_offload_mandatory : Flag<["-"], "fopenmp-offload-mandatory">, Group<f_Group>,
-  Flags<[NoArgumentUnused]>, Visibility<[ClangOption, CC1Option]>,
+  Flags<[NoArgumentUnused]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
   HelpText<"Do not create a host fallback if offloading to the device fails.">,
   MarshallingInfoFlag<LangOpts<"OpenMPOffloadMandatory">>;
 def fopenmp_force_usm : Flag<["-"], "fopenmp-force-usm">, Group<f_Group>,
@@ -4320,11 +4388,11 @@ def fno_openmp_target_new_runtime : Flag<["-"], "fno-openmp-target-new-runtime">
   Group<f_Group>, Flags<[HelpHidden]>, Visibility<[ClangOption, CC1Option]>;
 def fopenmp_target_fast : Flag<["-"], "fopenmp-target-fast">,
   Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
-  Visibility<[ClangOption, FlangOption]>,
+  Visibility<[ClangOption, CC1Option, FlangOption]>,
   HelpText<"Assert common GPU usage patterns to enable OpenMP runtime optimizations">;
 def fno_openmp_target_fast : Flag<["-"], "fno-openmp-target-fast">,
   Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
-  Visibility<[ClangOption, FlangOption]>;
+  Visibility<[ClangOption, CC1Option, FlangOption]>;
 def fopenmp_target_atomic_reduction : Flag<["-"], "fopenmp-target-atomic-reduction">,
   Group<f_Group>, Flags<[NoArgumentUnused]>,
   Visibility<[ClangOption, CC1Option]>,
@@ -4334,6 +4402,18 @@ def fopenmp_target_atomic_reduction : Flag<["-"], "fopenmp-target-atomic-reducti
 def fno_openmp_target_atomic_reduction : Flag<["-"], "fno-openmp-target-atomic-reduction">,
   Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
   Visibility<[ClangOption, CC1Option]>;
+// Legacy spellings of the atomic cross-team reduction flags. The downstream
+// 'fast reduction' feature these used to control has been replaced by the
+// atomic cross-team reductions, so keep the old spellings working as aliases.
+def fopenmp_target_fast_reduction : Flag<["-"], "fopenmp-target-fast-reduction">,
+  Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
+  Visibility<[ClangOption, CC1Option, FlangOption]>,
+  Alias<fopenmp_target_atomic_reduction>;
+def fno_openmp_target_fast_reduction : Flag<["-"], "fno-openmp-target-fast-reduction">,
+  Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
+  Visibility<[ClangOption, CC1Option, FlangOption]>,
+  Alias<fno_openmp_target_atomic_reduction>;
+
 defm openmp_optimistic_collapse : BoolFOption<"openmp-optimistic-collapse",
   LangOpts<"OpenMPOptimisticCollapse">, DefaultFalse,
   PosFlag<SetTrue, [], [ClangOption, CC1Option]>,
@@ -5246,6 +5326,23 @@ def gdwarf32 : Flag<["-"], "gdwarf32">, Group<g_Group>,
   Visibility<[ClangOption, CC1Option, CC1AsOption]>,
   HelpText<"Enables DWARF32 format for ELF binaries, if debug information emission is enabled.">;
 
+def gheterogeneous_dwarf_EQ : Joined<["-"], "gheterogeneous-dwarf=">,
+  Group<g_Group>, Visibility<[ClangOption, CC1Option]>,
+  HelpText<"Control DWARF extensions for heterogeneous debugging">,
+  Values<"disabled,diexpression">,
+  NormalizedValuesScope<"CodeGenOptions::HeterogeneousDwarfOpts">,
+  NormalizedValues<["Disabled","DIExpression"]>,
+  MarshallingInfoEnum<CodeGenOpts<"HeterogeneousDwarfMode">, "Disabled">;
+def gheterogeneous_dwarf : Flag<["-"], "gheterogeneous-dwarf">, Group<g_Group>,
+  Visibility<[ClangOption, CC1Option]>,
+  HelpText<"Enable DIExpression-based DWARF extensions for heterogeneous debugging">,
+  Alias<gheterogeneous_dwarf_EQ>, AliasArgs<["diexpression"]>;
+def gno_heterogeneous_dwarf : Flag<["-"], "gno-heterogeneous-dwarf">,
+  Visibility<[ClangOption, CC1Option]>,
+  Group<g_Group>,
+  HelpText<"Disable DWARF extensions for heterogeneous debugging">,
+  Alias<gheterogeneous_dwarf_EQ>, AliasArgs<["disabled"]>;
+
 def gcodeview : Flag<["-"], "gcodeview">, Group<g_Group>,
   HelpText<"Generate CodeView debug information">,
   Visibility<[ClangOption, CC1Option, CC1AsOption, CLOption, DXCOption]>,
@@ -5345,7 +5442,7 @@ def gmodules : Flag <["-"], "gmodules">, Group<gN_Group>,
            " or precompiled headers">;
 def gno_modules : Flag <["-"], "gno-modules">, Group<g_flags_Group>;
 def gz_EQ : Joined<["-"], "gz=">, Group<g_flags_Group>,
-    Visibility<[ClangOption, FlangOption]>,
+  Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>,
     HelpText<"DWARF debug sections compression type">;
 def gz : Flag<["-"], "gz">, Alias<gz_EQ>, AliasArgs<["zlib"]>,
     Visibility<[ClangOption, FlangOption]>, Group<g_flags_Group>;
@@ -6598,6 +6695,8 @@ def : Flag<["-"], "nogpulib">,
 def : Flag<["-"], "nocudalib">, Alias<no_offloadlib>;
 def gpulibc : Flag<["-"], "gpulibc">, Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>,
   HelpText<"Link the LLVM C Library for GPUs">;
+def fgpu_flang_rt : Flag<["-"], "fgpu-flang-rt">, Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>;
+def fno_gpu_flang_rt : Flag<["-"], "fno-gpu-flang-rt">, Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>;
 def nogpulibc : Flag<["-"], "nogpulibc">, Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>;
 def nodefaultlibs : Flag<["-"], "nodefaultlibs">,
   Visibility<[ClangOption, FlangOption]>;
@@ -6775,6 +6874,13 @@ def no_offload_add_rpath: Flag<["--"], "no-offload-add-rpath">,
   Alias<frtlib_add_rpath>;
 def r : Flag<["-"], "r">, Flags<[LinkerInput, NoArgumentUnused]>,
         Group<Link_Group>;
+defm openmp_implicit_rpath: BoolFOption<"openmp-implicit-rpath",
+  LangOpts<"OpenMP">,
+  DefaultTrue,
+  PosFlag<SetTrue, [], [ClangOption, CC1Option],
+  "Set rpath on OpenMP executables">,
+  NegFlag<SetFalse>,
+  BothFlags<[NoArgumentUnused]>>;
 def regcall4 : Flag<["-"], "regcall4">, Group<m_Group>,
   Visibility<[ClangOption, CC1Option]>,
   HelpText<"Set __regcall4 as a default calling convention to respect __regcall ABI v.4">,
@@ -9008,6 +9114,10 @@ def fnative_half_arguments_and_returns : Flag<["-"], "fnative-half-arguments-and
   HelpText<"Use the native __fp16 type for arguments and returns (and skip ABI-specific lowering)">,
   MarshallingInfoFlag<LangOpts<"NativeHalfArgsAndReturns">>,
   ImpliedByAnyOf<[open_cl.KeyPath, hlsl.KeyPath, hip.KeyPath]>;
+def fallow_half_arguments_and_returns : Flag<["-"], "fallow-half-arguments-and-returns">,
+  HelpText<"Allow function arguments and returns of type half">,
+  MarshallingInfoFlag<LangOpts<"HalfArgsAndReturns">>,
+  ImpliedByAnyOf<[open_cl.KeyPath, hlsl.KeyPath, hip.KeyPath]>;
 def fdefault_calling_conv_EQ : Joined<["-"], "fdefault-calling-conv=">,
   HelpText<"Set default calling convention">,
   Values<"cdecl,fastcall,stdcall,vectorcall,regcall,rtdcall">,
@@ -9145,7 +9255,7 @@ def init_datetime_macros_EQ : Joined<["-"], "init-datetime-macros=">,
 // CUDA Options
 //===----------------------------------------------------------------------===//
 
-let Visibility = [CC1Option] in {
+let Visibility = [CC1Option, FC1Option] in {
 
 def fcuda_is_device : Flag<["-"], "fcuda-is-device">,
   HelpText<"Generate code for CUDA device">,
@@ -9859,6 +9969,9 @@ def _SLASH_Ze : CLFlag<"Ze">;
 def _SLASH_Zg : CLFlag<"Zg">;
 def _SLASH_ZI : CLFlag<"ZI">;
 def _SLASH_ZW : CLJoined<"ZW">;
+
+
+
 
 //===----------------------------------------------------------------------===//
 // clang-dxc Options

@@ -16,7 +16,6 @@
 #include "flang/Lower/OpenMP/Clauses.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
-#include "flang/Parser/parse-tree.h"
 #include "flang/Semantics/symbol.h"
 #include "flang/Semantics/type.h"
 #include "mlir/IR/Location.h"
@@ -33,6 +32,7 @@ namespace lower {
 class AbstractConverter;
 } // namespace lower
 namespace semantics {
+class Scope;
 class SemanticsContext;
 } // namespace semantics
 } // namespace Fortran
@@ -92,6 +92,14 @@ public:
 
   static bool
   supportedIntrinsicProcReduction(const omp::clause::ProcedureDesignator &pd);
+
+  /// Return the user-defined reduction that processReductionArguments would
+  /// bind instead of \p reductionIntrinsic for \p type in \p scope, or null if
+  /// it would bind the supported intrinsic.
+  static const semantics::Symbol *findUserDefinedReductionForIntrinsic(
+      const semantics::Scope &scope,
+      const omp::clause::ProcedureDesignator &reductionIntrinsic,
+      const semantics::DeclTypeSpec *type);
 
   static const semantics::SourceName
   getRealName(const semantics::Symbol *symbol);

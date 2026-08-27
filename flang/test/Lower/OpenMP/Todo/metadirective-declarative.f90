@@ -4,7 +4,7 @@
 
 subroutine test_declarative_variant()
   !$omp metadirective &
-  !$omp & when(implementation={vendor(llvm)}: declare target) &
+  !$omp & when(implementation={vendor(amd)}: declare target) &
   !$omp & otherwise(nothing)
 end subroutine
 

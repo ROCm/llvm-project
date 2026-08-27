@@ -173,15 +173,8 @@ void registerDefaultInlinerPass(MLIRToLLVMPassPipelineConfig &config) {
       });
 }
 
-/// Create a pass pipeline for running default optimization passes for
-/// incremental conversion of FIR.
-///
-/// \param pm - MLIR pass manager that will hold the pipeline definition
-void createDefaultFIROptimizerPassPipeline(mlir::PassManager &pm,
-                                           MLIRToLLVMPassPipelineConfig &pc) {
-  // Early Optimizer EP Callback
-  pc.invokeFIROptEarlyEPCallbacks(pm, pc.OptLevel);
-
+void createDefaultFIRPreCFGOptimizerPassPipeline(
+    mlir::PassManager &pm, MLIRToLLVMPassPipelineConfig &pc) {
   // simplify the IR
   mlir::GreedyRewriteConfig config;
   config.setRegionSimplificationLevel(
@@ -208,7 +201,8 @@ void createDefaultFIROptimizerPassPipeline(mlir::PassManager &pm,
   // -gpu=mem:unified|managed the unified/managed allocators are required for
   // correctness, so this must not depend on which placement pass is selected
   // or on -disable-memory-allocation-opt.
-  pm.addPass(fir::createCudaHeapAllocPromotion());
+  pm.addPass(fir::createCudaHeapAllocPromotion(
+      fir::CudaHeapAllocPromotionOptions{pc.StackArrays}));
 
   if (enableAllocationPlacement)
     fir::addAllocationPlacement(pm, pc.StackArrays);
@@ -245,8 +239,14 @@ void createDefaultFIROptimizerPassPipeline(mlir::PassManager &pm,
 
   addNestedPassToAllTopLevelOperations<PassConstructor>(
       pm, fir::createStackReclaim);
-  // convert control flow to CFG form
-  fir::addCfgConversionPass(pm, pc);
+}
+
+void createDefaultFIRPostCFGOptimizerPassPipeline(
+    mlir::PassManager &pm, MLIRToLLVMPassPipelineConfig &pc) {
+  mlir::GreedyRewriteConfig config;
+  config.setRegionSimplificationLevel(
+      mlir::GreedySimplifyRegionLevel::Disabled);
+
   pm.addPass(mlir::createSCFToControlFlowPass());
 
   pm.addPass(mlir::createCanonicalizerPass(config));
@@ -257,8 +257,18 @@ void createDefaultFIROptimizerPassPipeline(mlir::PassManager &pm,
 
   if (pc.OptLevel != llvm::OptimizationLevel::O0)
     pm.addPass(fir::createSetRuntimeCallAttributes());
+}
 
-  // Last Optimizer EP Callback
+/// Create a pass pipeline for running default optimization passes for
+/// incremental conversion of FIR.
+///
+/// \param pm - MLIR pass manager that will hold the pipeline definition
+void createDefaultFIROptimizerPassPipeline(mlir::PassManager &pm,
+                                           MLIRToLLVMPassPipelineConfig &pc) {
+  pc.invokeFIROptEarlyEPCallbacks(pm, pc.OptLevel);
+  createDefaultFIRPreCFGOptimizerPassPipeline(pm, pc);
+  fir::addCfgConversionPass(pm, pc);
+  createDefaultFIRPostCFGOptimizerPassPipeline(pm, pc);
   pc.invokeFIROptLastEPCallbacks(pm, pc.OptLevel);
 }
 
@@ -378,9 +388,11 @@ void createOpenMPFIRPassPipeline(mlir::PassManager &pm,
   // to access the data on the offload target device.
   pm.addPass(flangomp::createMapsForPrivatizedSymbolsPass());
   pm.addPass(flangomp::createAutomapToTargetDataPass());
-  pm.addPass(flangomp::createMapInfoFinalizationPass());
+  pm.addPass(flangomp::createMapInfoFinalizationPass(opts.deferDescMap));
 
   pm.addPass(flangomp::createGenericLoopConversionPass());
+  if (opts.isTargetDevice && opts.enableOffloadGlobalFiltering)
+    pm.addPass(flangomp::createGlobalFilteringPass());
 }
 
 void createDebugPasses(mlir::PassManager &pm,
@@ -470,9 +482,7 @@ void createDefaultFIRCodeGenPassPipeline(mlir::PassManager &pm,
     // First remove host-only functions from target device modules, and then
     // clean up any remaining host functions holding target regions to only
     // contain the bare minimum host operations needed for target device
-    // compilation. These passes must always run back to back to ensure no
-    // temporary poison values, introduced by the first pass, cause other passes
-    // to encounter UB before the second pass removes them.
+    // compilation.
     pm.addPass(mlir::omp::createFunctionFilteringPass());
     pm.addPass(mlir::omp::createHostOpFilteringPass());
 

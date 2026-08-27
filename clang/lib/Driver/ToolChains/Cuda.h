@@ -134,6 +134,9 @@ class LLVM_LIBRARY_VISIBILITY CudaToolChain : public NVPTXToolChain {
 public:
   CudaToolChain(const Driver &D, const llvm::Triple &Triple,
                 const ToolChain &HostTC, const llvm::opt::ArgList &Args);
+  CudaToolChain(const Driver &D, const llvm::Triple &Triple,
+                const ToolChain &HostTC, const llvm::opt::ArgList &Args,
+                const std::string TargetID);
 
   const llvm::Triple *getAuxTriple() const override {
     return &HostTC.getTriple();

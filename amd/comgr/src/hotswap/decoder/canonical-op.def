@@ -1,0 +1,55 @@
+//===- canonical-op.def - Hotswap transpiler ------------------------------===//
+//
+// Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
+// amd/comgr/LICENSE.TXT in this repository for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef CANONICAL_OP
+#error "define CANONICAL_OP(Name) before including canonical-op.def"
+#endif
+
+CANONICAL_OP(Unknown)
+
+// SOP1.
+CANONICAL_OP(S_MOV_B32)
+
+// SOP2 integer arithmetic and selection.
+CANONICAL_OP(S_ADD_U32)
+CANONICAL_OP(S_ADD_I32)
+CANONICAL_OP(S_ADDC_U32)
+CANONICAL_OP(S_SUB_U32)
+CANONICAL_OP(S_SUB_I32)
+CANONICAL_OP(S_SUBB_U32)
+CANONICAL_OP(S_ABSDIFF_I32)
+CANONICAL_OP(S_MUL_I32)
+CANONICAL_OP(S_MUL_HI_U32)
+CANONICAL_OP(S_MUL_HI_I32)
+CANONICAL_OP(S_MUL_U64)
+CANONICAL_OP(S_CSELECT_B32)
+CANONICAL_OP(S_CSELECT_B64)
+CANONICAL_OP(S_MIN_I32)
+CANONICAL_OP(S_MIN_U32)
+CANONICAL_OP(S_MAX_I32)
+CANONICAL_OP(S_MAX_U32)
+CANONICAL_OP(S_LSHL1_ADD_U32)
+CANONICAL_OP(S_LSHL2_ADD_U32)
+CANONICAL_OP(S_LSHL3_ADD_U32)
+CANONICAL_OP(S_LSHL4_ADD_U32)
+CANONICAL_OP(S_ADD_NC_U64)
+CANONICAL_OP(S_SUB_NC_U64)
+
+// SOPP.
+CANONICAL_OP(S_ENDPGM)
+
+// SMEM.
+CANONICAL_OP(S_LOAD_B32)
+CANONICAL_OP(S_LOAD_B64)
+CANONICAL_OP(S_LOAD_B128)
+
+// VOP2.
+CANONICAL_OP(V_ADD_F32)
+CANONICAL_OP(V_MUL_F32)
+CANONICAL_OP(V_SUB_F32)
+CANONICAL_OP(V_SUBREV_F32)

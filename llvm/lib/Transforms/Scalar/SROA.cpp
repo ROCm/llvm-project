@@ -1612,7 +1612,8 @@ static bool isSafePHIToSpeculate(PHINode &PN) {
     // If this pointer is always safe to load, or if we can prove that there
     // is already a load in the block, then we can move the load to the pred
     // block.
-    if (isSafeToLoadUnconditionally(InVal, MaxAlign, LoadSize, DL, TI))
+    if (isSafeToLoadUnconditionally(InVal, MaxAlign, LoadSize,
+                                    SimplifyQuery(DL, TI)))
       continue;
 
     return false;
@@ -1708,8 +1709,8 @@ isSafeLoadOfSelectToSpeculate(LoadInst &LI, SelectInst &SI, bool PreserveCFG) {
 
   const DataLayout &DL = SI.getDataLayout();
   for (Value *Value : {SI.getTrueValue(), SI.getFalseValue()})
-    if (isSafeToLoadUnconditionally(Value, LI.getType(), LI.getAlign(), DL,
-                                    &LI))
+    if (isSafeToLoadUnconditionally(Value, LI.getType(), LI.getAlign(),
+                                    SimplifyQuery(DL, &LI)))
       Spec.setAsSpeculatable(/*isTrueVal=*/Value == SI.getTrueValue());
     else if (PreserveCFG)
       return Spec;
@@ -5713,15 +5714,25 @@ static DIExpression *createOrReplaceFragment(const DIExpression *Expr,
   bool HasFragment = false;
   bool HasBitExtract = false;
 
+  if (auto NewElems = Expr->getNewElementsRef()) {
+    DIExprBuilder B(Expr->getContext());
+    for (DIOp::Variant Op : *NewElems)
+      if (!std::holds_alternative<DIOp::Fragment>(Op))
+        B.append(Op);
+    B.append<DIOp::Fragment>(Frag.OffsetInBits, Frag.SizeInBits);
+    return B.intoExpression();
+  }
+
   for (auto &Op : Expr->expr_ops()) {
     if (Op.getOp() == dwarf::DW_OP_LLVM_fragment) {
       HasFragment = true;
       continue;
     }
-    if (auto Extract = dyn_cast<DIExpression::ExtractBitsOp>(Op)) {
+    if (Op.getOp() == dwarf::DW_OP_LLVM_extract_bits_zext ||
+        Op.getOp() == dwarf::DW_OP_LLVM_extract_bits_sext) {
       HasBitExtract = true;
-      int64_t ExtractOffsetInBits = Extract.getOffsetInBits();
-      int64_t ExtractSizeInBits = Extract.getSizeInBits();
+      int64_t ExtractOffsetInBits = Op.getArg(0);
+      int64_t ExtractSizeInBits = Op.getArg(1);
 
       // DIExpression::createFragmentExpression doesn't know how to handle
       // a fragment that is smaller than the extract. Copy the behaviour
@@ -5819,6 +5830,19 @@ insertNewDbgInst(DIBuilder &DIB, DbgVariableRecord *Orig, AllocaInst *NewAddr,
       NewAddrExpr, Orig->getDebugLoc());
   LLVM_DEBUG(dbgs() << "Created new DVRAssign: " << *NewAssign << "\n");
   (void)NewAssign;
+}
+
+static bool isNoOffsetDIOpExpr(const DIExpression *Expr) {
+  auto OptNewOps = Expr->getNewElementsRef();
+  if (!OptNewOps)
+    return false;
+
+  ArrayRef<DIOp::Variant> NewOps = *OptNewOps;
+  if (!NewOps.empty() && std::holds_alternative<DIOp::Fragment>(NewOps.back()))
+    NewOps = NewOps.drop_back();
+
+  return NewOps.size() == 2 && std::holds_alternative<DIOp::Arg>(NewOps[0]) &&
+         std::holds_alternative<DIOp::Deref>(NewOps[1]);
 }
 
 /// Walks the slices of an alloca and form partitions based on them,
@@ -5932,15 +5956,21 @@ bool SROA::splitAlloca(AllocaInst &AI, AllocaSlices &AS) {
     // that come after it.
     int64_t CurrentExprOffsetInBytes = 0;
     SmallVector<uint64_t> PostOffsetOps;
-    if (!getAddressExpression(DbgVariable)
+    const DIExpression *NoOffsetDIOpExpr = nullptr;
+    if (isNoOffsetDIOpExpr(getAddressExpression(DbgVariable))) {
+      NoOffsetDIOpExpr = getAddressExpression(DbgVariable);
+      ArrayRef<uint64_t> PoisonElems = NoOffsetDIOpExpr->getElements();
+      PostOffsetOps.append(PoisonElems.begin(), PoisonElems.end());
+    } else if (!getAddressExpression(DbgVariable)
              ->extractLeadingOffset(CurrentExprOffsetInBytes, PostOffsetOps))
       return; // Couldn't interpret this DIExpression - drop the var.
 
     // Offset defined by a DW_OP_LLVM_extract_bits_[sz]ext.
     int64_t ExtractOffsetInBits = 0;
     for (auto Op : getAddressExpression(DbgVariable)->expr_ops()) {
-      if (auto Extract = dyn_cast<DIExpression::ExtractBitsOp>(Op)) {
-        ExtractOffsetInBits = Extract.getOffsetInBits();
+      if (Op.getOp() == dwarf::DW_OP_LLVM_extract_bits_zext ||
+          Op.getOp() == dwarf::DW_OP_LLVM_extract_bits_sext) {
+        ExtractOffsetInBits = Op.getArg(0);
         break;
       }
     }
@@ -5992,6 +6022,8 @@ bool SROA::splitAlloca(AllocaInst &AI, AllocaSlices &AS) {
       if (OffestFromNewAllocaInBits > 0) {
         int64_t OffsetInBytes = (OffestFromNewAllocaInBits + 7) / 8;
         NewExpr = DIExpression::prepend(NewExpr, /*flags=*/0, OffsetInBytes);
+      } else if (NoOffsetDIOpExpr && OffestFromNewAllocaInBits == 0) {
+        NewExpr = const_cast<DIExpression *>(NoOffsetDIOpExpr);
       }
 
       // Remove any existing intrinsics on the new alloca describing

@@ -459,7 +459,7 @@ static void flattenGlobalArrays(
 
     // Copy relevant attributes
     NewGlobal->setUnnamedAddr(G.getUnnamedAddr());
-    if (G.getAlign()) {
+    if (G.getAlignment() > 0) {
       NewGlobal->setAlignment(G.getAlign());
     }
 

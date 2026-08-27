@@ -1809,6 +1809,27 @@ void SITargetLowering::getTgtMemIntrinsic(SmallVectorImpl<IntrinsicInfo> &Infos,
     Infos.push_back(Info);
     return;
   }
+  case Intrinsic::amdgcn_global_load_b128:
+  case Intrinsic::amdgcn_global_store_b128: {
+    bool IsStore = IntrID == Intrinsic::amdgcn_global_store_b128;
+    Info.opc = IsStore ? ISD::INTRINSIC_VOID : ISD::INTRINSIC_W_CHAIN;
+    Info.memVT = EVT::getIntegerVT(CI.getContext(), 128);
+    Info.ptrVal = CI.getArgOperand(0);
+    Info.flags |=
+        IsStore ? MachineMemOperand::MOStore : MachineMemOperand::MOLoad;
+    // Pretend to be atomic so that SIMemoryLegalizer::expandStore sets cache
+    // flags appropriately.
+    Info.order = AtomicOrdering::Monotonic;
+
+    LLVMContext &Ctx = CI.getContext();
+    unsigned ScopeIdx = CI.arg_size() - 1;
+    MDNode *ScopeMD = cast<MDNode>(
+        cast<MetadataAsValue>(CI.getArgOperand(ScopeIdx))->getMetadata());
+    StringRef Scope = cast<MDString>(ScopeMD->getOperand(0))->getString();
+    Info.ssid = Ctx.getOrInsertSyncScopeID(Scope);
+    Infos.push_back(Info);
+    return;
+  }
   case Intrinsic::amdgcn_av_load_b128:
   case Intrinsic::amdgcn_av_store_b128: {
     bool IsStore = IntrID == Intrinsic::amdgcn_av_store_b128;
@@ -1948,6 +1969,8 @@ bool SITargetLowering::getAddrModeArguments(const IntrinsicInst *II,
   case Intrinsic::amdgcn_global_store_async_from_lds_b32:
   case Intrinsic::amdgcn_global_store_async_from_lds_b64:
   case Intrinsic::amdgcn_global_store_async_from_lds_b128:
+  case Intrinsic::amdgcn_global_load_b128:
+  case Intrinsic::amdgcn_global_store_b128:
   case Intrinsic::amdgcn_av_load_b128:
   case Intrinsic::amdgcn_av_store_b128:
     Ptr = II->getArgOperand(0);
@@ -11792,12 +11815,31 @@ SITargetLowering::lowerStructBufferAtomicIntrin(SDValue Op, SelectionDAG &DAG,
                                  M->getMemOperand());
 }
 
+static void initializeM0ToZeroForClusterLoad(SDValue Op, SelectionDAG &DAG,
+                                             SDLoc DL) {
+  SDNode *N = Op.getNode();
+  SDValue Zero = DAG.getConstant(0, DL, MVT::i32);
+  unsigned NumOperands = N->getNumOperands();
+  if (N->getOperand(NumOperands - 1) == Zero)
+    return;
+  SmallVector<SDValue, 7> Ops(N->ops());
+  Ops[NumOperands - 1] = Zero; // M0 = 0
+  DAG.UpdateNodeOperands(N, Ops);
+}
+
 SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
                                                  SelectionDAG &DAG) const {
   unsigned IntrID = Op.getConstantOperandVal(1);
   SDLoc DL(Op);
 
   switch (IntrID) {
+  case Intrinsic::amdgcn_cluster_load_b32:
+  case Intrinsic::amdgcn_cluster_load_b64:
+  case Intrinsic::amdgcn_cluster_load_b128: {
+    if (Subtarget->hasGFX1250_STRICT())
+      initializeM0ToZeroForClusterLoad(Op, DAG, DL);
+    return SDValue();
+  }
   case Intrinsic::amdgcn_ds_ordered_add:
   case Intrinsic::amdgcn_ds_ordered_swap: {
     MemSDNode *M = cast<MemSDNode>(Op);
@@ -12587,6 +12629,14 @@ SDValue SITargetLowering::LowerINTRINSIC_VOID(SDValue Op,
   unsigned IntrinsicID = Op.getConstantOperandVal(1);
 
   switch (IntrinsicID) {
+  case Intrinsic::amdgcn_cluster_load_async_to_lds_b8:
+  case Intrinsic::amdgcn_cluster_load_async_to_lds_b32:
+  case Intrinsic::amdgcn_cluster_load_async_to_lds_b64:
+  case Intrinsic::amdgcn_cluster_load_async_to_lds_b128: {
+    if (Subtarget->hasGFX1250_STRICT())
+      initializeM0ToZeroForClusterLoad(Op, DAG, DL);
+    return SDValue();
+  }
   case Intrinsic::amdgcn_exp_compr: {
     SDValue Src0 = Op.getOperand(4);
     SDValue Src1 = Op.getOperand(5);
@@ -13276,7 +13326,7 @@ SDValue SITargetLowering::lowerPointerAsRsrcIntrin(SDNode *Op,
   SDValue ExtStride = DAG.getAnyExtOrTrunc(Stride, Loc, MVT::i32);
   SDValue Rsrc;
 
-  if (Subtarget->has45BitNumRecordsBufferResource()) {
+  if (Subtarget->getBufferResourceNumRecordsWidth() == 45) {
     NumRecords = DAG.getZExtOrTrunc(NumRecords, Loc, MVT::i64);
     NumRecords = DAG.getNode(ISD::AND, Loc, MVT::i64, NumRecords,
                              DAG.getConstant((1ULL << 45) - 1, Loc, MVT::i64));

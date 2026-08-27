@@ -84,14 +84,6 @@ LLVM_ABI bool
 wouldInstructionBeTriviallyDead(const Instruction *I,
                                 const TargetLibraryInfo *TLI = nullptr);
 
-/// Return true if the result produced by the instruction has no side effects on
-/// any paths other than where it is used. This is less conservative than
-/// wouldInstructionBeTriviallyDead which is based on the assumption
-/// that the use count will be 0. An example usage of this API is for
-/// identifying instructions that can be sunk down to use(s).
-LLVM_ABI bool wouldInstructionBeTriviallyDeadOnUnusedPaths(
-    Instruction *I, const TargetLibraryInfo *TLI = nullptr);
-
 /// If the specified value is a trivially dead instruction, delete it.
 /// If that makes any of its operands trivially dead, delete them too,
 /// recursively. Return true if any instructions were deleted.
@@ -371,7 +363,7 @@ salvageDebugInfoImpl(Instruction &I, uint64_t CurrentLocOps,
 /// introducing a use-before-def, it is either salvaged (\ref salvageDebugInfo)
 /// or deleted. Returns true if any debug users were updated.
 LLVM_ABI bool replaceAllDbgUsesWith(Instruction &From, Value &To,
-                                    Instruction &DomPoint, DominatorTree &DT);
+                                    Instruction &DomPoint, const DominatorTree &DT);
 
 /// If a terminator in an unreachable basic block has an operand of type
 /// Instruction, transform it into poison. Return true if any operands

@@ -98,7 +98,6 @@ else()
     kmp_str.cpp
     kmp_tasking.cpp
     kmp_threadprivate.cpp
-    kmp_traits.cpp
     kmp_utility.cpp
     kmp_barrier.cpp
     kmp_wait_release.cpp
@@ -153,8 +152,14 @@ libomp_append(LIBOMP_SOURCE_FILES libomp.rc WIN32)
 libomp_get_cxxflags(LIBOMP_CONFIGURED_CXXFLAGS)
 libomp_get_asmflags(LIBOMP_CONFIGURED_ASMFLAGS)
 # Set the compiler flags for each type of source
+set(LIBOMP_CONFIGURED_CXXFLAGS "${LIBOMP_CONFIGURED_CXXFLAGS} ${OPENMP_SOURCE_DEBUG_MAP}")
 set_source_files_properties(${LIBOMP_CXXFILES} PROPERTIES COMPILE_FLAGS "${LIBOMP_CONFIGURED_CXXFLAGS}")
 set_source_files_properties(${LIBOMP_ASMFILES} ${LIBOMP_GNUASMFILES} PROPERTIES COMPILE_FLAGS "${LIBOMP_CONFIGURED_ASMFLAGS}")
+
+# Disable libstdc++/libc++ assertions, even in an LLVM_ENABLE_ASSERTIONS build,
+# to avoid an unwanted dependency on libstdc++/libc++.so.
+add_definitions(-U_GLIBCXX_ASSERTIONS)
+add_definitions(-U_LIBCPP_ENABLE_ASSERTIONS)
 
 # Disable libstdc++ assertions, even in an LLVM_ENABLE_ASSERTIONS build, to
 # avoid an unwanted dependency on libstdc++.so.
@@ -429,7 +434,26 @@ if(WIN32)
       \"${alias}${CMAKE_STATIC_LIBRARY_SUFFIX}\" WORKING_DIRECTORY \"${outdir}\")" COMPONENT openmp)
   endforeach()
 else()
+  if(${CMAKE_SYSTEM_NAME} MATCHES "AIX")
+    install(FILES ${LIBOMP_LIBRARY_DIR}/libomp.a DESTINATION "${OPENMP_INSTALL_LIBDIR}" COMPONENT runtime)
+  else()
+    install(TARGETS omp ${export_to_llvmexports} EXPORT openmpTargets ${LIBOMP_INSTALL_KIND}
+            DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+    install(EXPORT openmpTargets FILE openmpTargets.cmake NAMESPACE OpenMP::
+            DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp)
+  endif()
 
+  # Create cmake configuration files
+  include(CMakePackageConfigHelpers)
+
+  configure_package_config_file(
+   ../openmp-config.cmake.in
+   openmp-config.cmake
+   INSTALL_DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp
+   PATH_VARS LIBOMP_HEADERS_INSTALL_PATH OPENMP_INSTALL_LIBDIR)
+
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/openmp-config.cmake
+          DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp)
   install(TARGETS omp ${export_to_llvmexports} ${LIBOMP_INSTALL_KIND} DESTINATION "${OPENMP_INSTALL_LIBDIR}" COMPONENT openmp)
 
   if(LIBOMP_INSTALL_ALIASES)
@@ -445,7 +469,7 @@ else()
     foreach(alias IN LISTS LIBOMP_ALIASES)
       install(CODE "execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E create_symlink \"${LIBOMP_LIB_NAME}${LIBRARY_SUFFIX}\"
         \"${alias}${LIBRARY_SUFFIX}\" WORKING_DIRECTORY
-        \"\$ENV{DESTDIR}${outdir}\")" COMPONENT openmp)
+        \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${RUN_PACKAGE}${OPENMP_INSTALL_LIBDIR}\")" COMPONENT openmp)
     endforeach()
     if(LIBOMP_ENABLE_SHARED AND NOT AIX)
       install(CODE "execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E create_symlink \"${LIBOMP_LIB_FILE}\"

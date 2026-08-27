@@ -190,6 +190,8 @@
 #include "llvm/Analysis/ScopedNoAliasAA.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/DIBuilder.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/IRBuilder.h"
@@ -783,7 +785,7 @@ public:
           (Twine("llvm.amdgcn.kernel.") + Func.getName() + ".lds").str();
 
       auto Replacement =
-          createLDSVariableReplacement(M, VarName, KernelUsedVariables);
+          createLDSVariableReplacement(M, VarName, KernelUsedVariables, &Func);
 
       // If any indirect uses, create a direct use to ensure allocation
       // TODO: Simpler to unconditionally mark used but that regresses
@@ -1078,13 +1080,14 @@ public:
   }
 
   bool runOnModuleNormal(Module &M) {
-    CallGraph CG = CallGraph(M);
     bool Changed = superAlignLDSGlobals(M);
 
-    Changed |=
-        eliminateGVConstantExprUsesFromAllInstructions(M, isLDSVariableToLower);
+    Changed |= any_of(M.globals(), isNotYetLoweredLDSVariable);
 
-    Changed = true; // todo: narrow this down
+    CallGraph CG(M);
+
+    eliminateGVConstantExprUsesFromAllInstructions(M,
+                                                   isNotYetLoweredLDSVariable);
 
     // For each kernel, what variables does it access directly or through
     // callees
@@ -1258,7 +1261,7 @@ public:
     }
 
     for (auto &GV : make_early_inc_range(M.globals()))
-      if (AMDGPU::isLDSVariableToLower(GV)) {
+      if (isNotYetLoweredLDSVariable(GV)) {
         // probably want to remove from used lists
         GV.removeDeadConstantUsers();
         if (GV.use_empty())
@@ -1269,6 +1272,11 @@ public:
   }
 
 private:
+  // An absolute address means a previous run already placed the variable.
+  static bool isNotYetLoweredLDSVariable(const GlobalVariable &GV) {
+    return isLDSVariableToLower(GV) && !GV.isAbsoluteSymbolRef();
+  }
+
   // Increase the alignment of LDS globals if necessary to maximise the chance
   // that we can use aligned LDS instructions to access them.
   static bool superAlignLDSGlobals(Module &M) {
@@ -1320,7 +1328,8 @@ private:
 
   static LDSVariableReplacement createLDSVariableReplacement(
       Module &M, std::string VarName,
-      DenseSet<GlobalVariable *> const &LDSVarsToTransform) {
+      DenseSet<GlobalVariable *> const &LDSVarsToTransform,
+      Function *F = nullptr) {
     // Create a struct instance containing LDSVarsToTransform and map from those
     // variables to ConstantExprGEP
     // Variables may be introduced to meet alignment requirements. No aliasing
@@ -1347,6 +1356,14 @@ private:
     }
 
     performOptimizedStructLayout(LayoutFields);
+
+    struct DIExpressionVarInfo {
+      GlobalVariable *Var;
+      Metadata *DIVar;
+      DIExpression::NewElementsRef Expr;
+      uint64_t Offset;
+    };
+    SmallVector<DIExpressionVarInfo> DIExpressionVarInfos;
 
     std::vector<GlobalVariable *> LocalVars;
     BitVector IsPaddingField;
@@ -1376,6 +1393,16 @@ private:
           CurrentOffset += Padding;
         }
 
+        SmallVector<DIGlobalVariableExpression *, 1> OriginalGVEs;
+        FGV->getDebugInfo(OriginalGVEs);
+        for (const auto *OriginalGVE : OriginalGVEs) {
+          if (auto NewElementsRef =
+                  OriginalGVE->getExpression()->getNewElementsRef()) {
+            DIExpressionVarInfos.push_back({FGV, OriginalGVE->getRawVariable(),
+                                            *NewElementsRef, CurrentOffset});
+          }
+        }
+
         LocalVars.push_back(FGV);
         IsPaddingField.push_back(false);
         CurrentOffset += F.Size;
@@ -1397,6 +1424,36 @@ private:
         VarName, nullptr, GlobalValue::NotThreadLocal, AMDGPUAS::LOCAL_ADDRESS,
         false);
     SGV->setAlignment(StructAlign);
+
+    for (auto VarInfo : DIExpressionVarInfos) {
+      DIExprBuilder ExprBuilder(Ctx);
+      for (auto Op : VarInfo.Expr) {
+        if (auto *ArgOp = std::get_if<DIOp::Arg>(&Op)) {
+          assert(ArgOp->getIndex() == 0u &&
+                 "DIOp-based DIExpression in DIGlobalVariableExpression must "
+                 "have only one argument");
+          Type *ArgTy = SGV->getType();
+          assert(isa<PointerType>(ArgTy));
+          Type *ResultTy = VarInfo.Var->getType();
+          assert(isa<PointerType>(ResultTy));
+          assert(ArgTy->getPointerAddressSpace() ==
+                 ResultTy->getPointerAddressSpace());
+          unsigned PointerSizeInBits =
+              DL.getPointerSizeInBits(ArgTy->getPointerAddressSpace());
+          auto *IntTy = IntegerType::get(Ctx, PointerSizeInBits);
+          ConstantData *C = ConstantInt::get(IntTy, VarInfo.Offset, true);
+          ExprBuilder.append<DIOp::Arg>(0u, ArgTy);
+          ExprBuilder.append<DIOp::Reinterpret>(IntTy);
+          ExprBuilder.append<DIOp::Constant>(C);
+          ExprBuilder.append<DIOp::Add>();
+          ExprBuilder.append<DIOp::Reinterpret>(ResultTy);
+        } else {
+          ExprBuilder.append(Op);
+        }
+      }
+      SGV->addDebugInfo(DIGlobalVariableExpression::get(
+          Ctx, VarInfo.DIVar, ExprBuilder.intoExpression()));
+    }
 
     DenseMap<GlobalVariable *, Constant *> Map;
     Type *I32 = Type::getInt32Ty(Ctx);

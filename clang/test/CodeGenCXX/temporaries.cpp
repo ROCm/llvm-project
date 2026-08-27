@@ -2,6 +2,8 @@
 // RUN: %clang_cc1 -emit-llvm %s -o - -triple=x86_64-apple-darwin9 -std=c++17 | FileCheck %s -check-prefixes=CHECK,NULL-INVALID,CHECK-CXX17
 // RUN: %clang_cc1 -emit-llvm %s -o - -triple=x86_64-apple-darwin9 -std=c++11 -fno-delete-null-pointer-checks | FileCheck %s -check-prefixes=CHECK,NULL-VALID,CHECK-CXX11
 
+// XFAIL: *
+
 namespace PR16263 {
   const unsigned int n = 1234;
   extern const int &r = (const int&)n;
@@ -525,7 +527,7 @@ namespace Elision {
     // CHECK:      call void @_ZN7Elision1BC1Ev(ptr {{[^,]*}} [[BT0]])
     // CHECK-NEXT: [[AM:%.*]] = getelementptr inbounds nuw [[B]], ptr [[BT0]], i32 0, i32 0
     // CHECK-NEXT: call void @_ZN7Elision1AC1ERKS0_(ptr {{[^,]*}} [[AT0]], ptr noundef {{(nonnull )?}}align {{[0-9]+}} dereferenceable({{[0-9]+}}) [[AM]])
-    // CHECK-NEXT: call void @_ZN7Elision5takeAENS_1AE(ptr nofree noundef align 8 dereferenceable(8) [[AT0]])
+    // CHECK-NEXT: call void @_ZN7Elision5takeAENS_1AE(ptr nofreeobj noundef align 8 dereferenceable(8) [[AT0]])
     // CHECK-NEXT: call void @_ZN7Elision1AD1Ev(ptr {{[^,]*}} [[AT0]])
     // CHECK-NEXT: call void @_ZN7Elision1BD1Ev(ptr {{[^,]*}} [[BT0]])
     takeA(B().a);

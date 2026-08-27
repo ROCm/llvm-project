@@ -1922,6 +1922,7 @@ struct MDFieldPrinter {
   void printEmissionKind(StringRef Name, DICompileUnit::DebugEmissionKind EK);
   void printNameTableKind(StringRef Name,
                           DICompileUnit::DebugNameTableKind NTK);
+  void printMemorySpace(StringRef Name, dwarf::MemorySpace MS);
   void printFixedPointKind(StringRef Name, DIFixedPointType::FixedPointKind V);
 };
 
@@ -2065,6 +2066,20 @@ void MDFieldPrinter::printDISPFlags(StringRef Name,
 void MDFieldPrinter::printEmissionKind(StringRef Name,
                                        DICompileUnit::DebugEmissionKind EK) {
   Out << FS << Name << ": " << DICompileUnit::emissionKindString(EK);
+}
+
+void MDFieldPrinter::printMemorySpace(StringRef Name, dwarf::MemorySpace MS) {
+  if (MS == dwarf::DW_MSPACE_LLVM_none)
+    return;
+
+  StringRef MSStr = dwarf::MemorySpaceString(MS);
+
+  Out << FS << Name << ": ";
+  if (MSStr.empty()) {
+    Out << static_cast<unsigned>(MS);
+  } else {
+    Out << MSStr;
+  }
 }
 
 void MDFieldPrinter::printNameTableKind(StringRef Name,
@@ -2300,6 +2315,7 @@ static void writeDIDerivedType(raw_ostream &Out, const DIDerivedType *N,
   if (const auto &DWARFAddressSpace = N->getDWARFAddressSpace())
     Printer.printInt("dwarfAddressSpace", *DWARFAddressSpace,
                      /* ShouldSkipZero */ false);
+  Printer.printMemorySpace("memorySpace", N->getDWARFMemorySpace());
   Printer.printMetadata("annotations", N->getRawAnnotations());
   if (auto PtrAuthData = N->getPtrAuthData()) {
     Printer.printInt("ptrAuthKey", PtrAuthData->key());
@@ -2599,6 +2615,7 @@ static void writeDIGlobalVariable(raw_ostream &Out, const DIGlobalVariable *N,
   Printer.printBool("isDefinition", N->isDefinition());
   Printer.printMetadata("declaration", N->getRawStaticDataMemberDeclaration());
   Printer.printMetadata("templateParams", N->getRawTemplateParams());
+  Printer.printMemorySpace("memorySpace", N->getDWARFMemorySpace());
   Printer.printInt("align", N->getAlignInBits());
   Printer.printMetadata("annotations", N->getRawAnnotations());
   Out << ")";
@@ -2615,6 +2632,7 @@ static void writeDILocalVariable(raw_ostream &Out, const DILocalVariable *N,
   Printer.printInt("line", N->getLine());
   Printer.printMetadata("type", N->getRawType());
   Printer.printDIFlags("flags", N->getFlags());
+  Printer.printMemorySpace("memorySpace", N->getDWARFMemorySpace());
   Printer.printInt("align", N->getAlignInBits());
   Printer.printMetadata("annotations", N->getRawAnnotations());
   Out << ")";
@@ -2636,9 +2654,9 @@ static void writeDILabel(raw_ostream &Out, const DILabel *N,
   Out << ")";
 }
 
-static void writeDIExpression(raw_ostream &Out, const DIExpression *N,
-                              AsmWriterContext &WriterCtx) {
-  Out << "!DIExpression(";
+static void writeDIExpressionImpl(raw_ostream &Out, const DIExpression *N,
+                                  AsmWriterContext &WriterCtx,
+                                  DIExpression::OldElementsRef) {
   ListSeparator FS;
   if (N->isValid()) {
     for (const DIExpression::ExprOperand &Op : N->expr_ops()) {
@@ -2646,9 +2664,9 @@ static void writeDIExpression(raw_ostream &Out, const DIExpression *N,
       assert(!OpStr.empty() && "Expected valid opcode");
 
       Out << FS << OpStr;
-      if (auto Convert = dyn_cast<DIExpression::ConvertOp>(Op)) {
-        Out << FS << Convert.getBitSize();
-        Out << FS << dwarf::AttributeEncodingString(Convert.getEncoding());
+      if (Op.getOp() == dwarf::DW_OP_LLVM_convert) {
+        Out << FS << Op.getArg(0);
+        Out << FS << dwarf::AttributeEncodingString(Op.getArg(1));
       } else {
         for (unsigned A = 0, AE = Op.getNumArgs(); A != AE; ++A)
           Out << FS << Op.getArg(A);
@@ -2658,6 +2676,80 @@ static void writeDIExpression(raw_ostream &Out, const DIExpression *N,
     for (const auto &I : N->getElements())
       Out << FS << I;
   }
+}
+
+static void writeDIExpressionImpl(raw_ostream &Out, const DIExpression *N,
+                                  AsmWriterContext &WriterCtx,
+                                  DIExpression::NewElementsRef Elements) {
+  assert(WriterCtx.TypePrinter && "DIExpr require TypePrinting!");
+  assert(!Elements.empty() && "DIOp-based DIExpression cannot be empty");
+  ListSeparator FS;
+  for (auto Op : Elements) {
+    Out << FS << DIOp::getAsmName(Op) << '(';
+    std::visit(
+        makeVisitor(
+#define HANDLE_OP0(NAME) [](DIOp::NAME) {},
+#include "llvm/IR/DIExprOps.def"
+#undef HANDLE_OP0
+            [&](DIOp::Referrer Referrer) {
+              WriterCtx.TypePrinter->print(Referrer.getResultType(), Out);
+            },
+            [&](DIOp::Arg Arg) {
+              Out << Arg.getIndex() << ", ";
+              WriterCtx.TypePrinter->print(Arg.getResultType(), Out);
+            },
+            [&](DIOp::TypeObject TypeObject) {
+              WriterCtx.TypePrinter->print(TypeObject.getResultType(), Out);
+            },
+            [&](DIOp::Constant Constant) {
+              WriterCtx.TypePrinter->print(
+                  Constant.getLiteralValue()->getType(), Out);
+              Out << ' ';
+              writeConstantInternal(Out, Constant.getLiteralValue(), WriterCtx);
+            },
+            [&](DIOp::Convert Convert) {
+              WriterCtx.TypePrinter->print(Convert.getResultType(), Out);
+            },
+            [&](DIOp::ZExt ZExt) {
+              WriterCtx.TypePrinter->print(ZExt.getResultType(), Out);
+            },
+            [&](DIOp::SExt SExt) {
+              WriterCtx.TypePrinter->print(SExt.getResultType(), Out);
+            },
+            [&](DIOp::Reinterpret Reinterpret) {
+              WriterCtx.TypePrinter->print(Reinterpret.getResultType(), Out);
+            },
+            [&](DIOp::BitOffset BitOffset) {
+              WriterCtx.TypePrinter->print(BitOffset.getResultType(), Out);
+            },
+            [&](DIOp::ByteOffset ByteOffset) {
+              WriterCtx.TypePrinter->print(ByteOffset.getResultType(), Out);
+            },
+            [&](DIOp::Composite Composite) {
+              Out << Composite.getCount() << ", ";
+              WriterCtx.TypePrinter->print(Composite.getResultType(), Out);
+            },
+            [&](DIOp::Extend Extend) { Out << Extend.getCount(); },
+            [&](DIOp::AddrOf AddrOf) { Out << AddrOf.getAddressSpace(); },
+            [&](DIOp::Deref Deref) {
+              WriterCtx.TypePrinter->print(Deref.getResultType(), Out);
+            },
+            [&](DIOp::PushLane PushLane) {
+              WriterCtx.TypePrinter->print(PushLane.getResultType(), Out);
+            },
+            [&](DIOp::Fragment Fragment) {
+              Out << Fragment.getBitOffset() << ", " << Fragment.getBitSize();
+            }),
+        Op);
+    Out << ')';
+  }
+}
+
+static void writeDIExpression(raw_ostream &Out, const DIExpression *N,
+                              AsmWriterContext &WriterCtx) {
+  Out << "!DIExpression(";
+  std::visit([&](auto E) { writeDIExpressionImpl(Out, N, WriterCtx, E); },
+             N->getElementsRef());
   Out << ")";
 }
 
@@ -2697,6 +2789,18 @@ static void writeDIObjCProperty(raw_ostream &Out, const DIObjCProperty *N,
   Printer.printString("getter", N->getGetterName());
   Printer.printInt("attributes", N->getAttributes());
   Printer.printMetadata("type", N->getRawType());
+  Out << ")";
+}
+
+static void writeDIProperty(raw_ostream &Out, const DIProperty *N,
+                            AsmWriterContext &WriterCtx) {
+  Out << "!DIProperty(";
+  MDFieldPrinter Printer(Out, WriterCtx);
+  Printer.printString("name", N->getName());
+  Printer.printMetadata("file", N->getRawFile());
+  Printer.printInt("line", N->getLine());
+  Printer.printMetadata("type", N->getRawType());
+  Printer.printMetadata("backing_storage", N->getRawBackingStorage());
   Out << ")";
 }
 
@@ -3837,6 +3941,7 @@ static void printMetadataIdentifier(StringRef Name,
 }
 
 void AssemblyWriter::printNamedMDNode(const NamedMDNode *NMD) {
+  AsmWriterContext WriterCtx(&TypePrinter, &Machine, NMD->getParent());
   Out << '!';
   printMetadataIdentifier(NMD->getName(), Out);
   Out << " = !{";
@@ -3846,7 +3951,7 @@ void AssemblyWriter::printNamedMDNode(const NamedMDNode *NMD) {
     // Write DIExpressions inline.
     // FIXME: Ban DIExpressions in NamedMDNodes, they will serve no purpose.
     if (auto *Expr = dyn_cast<DIExpression>(Op)) {
-      writeDIExpression(Out, Expr, AsmWriterContext::getEmpty());
+      writeDIExpression(Out, Expr, WriterCtx);
       continue;
     }
 

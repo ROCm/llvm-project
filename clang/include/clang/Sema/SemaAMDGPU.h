@@ -41,6 +41,8 @@ public:
   bool checkAVLoadStore(CallExpr *TheCall, bool IsStore);
   bool checkAtomicMonitorLoad(CallExpr *TheCall);
 
+  bool checkScopedMemAccessFunctionCall(CallExpr *TheCall);
+
   bool checkMovDPPFunctionCall(CallExpr *TheCall, unsigned NumArgs,
                                unsigned NumDataArgs);
 
@@ -82,7 +84,7 @@ public:
 
   /// Expand a valid use of the feature identification builtins into its
   /// corresponding sequence of instructions.
-  Expr *ExpandAMDGPUPredicateBuiltIn(Expr *CE);
+  Expr *ExpandAMDGPUPredicateBuiltIn(Expr *E);
   bool IsPredicate(Expr *E) const;
   /// Diagnose unguarded usages of AMDGPU builtins and recommend guarding with
   /// __builtin_amdgcn_is_invocable

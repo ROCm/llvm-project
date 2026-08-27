@@ -1,0 +1,99 @@
+name: Teams Notifier
+
+on:
+  workflow_call:
+    inputs:
+      JOB_NAME_TO_MATCH:
+        required: true
+        type: string
+    secrets:
+      AMD_STAGING_NIGHTLY_TEAMS_WEBHOOK_URL:
+         required: true
+jobs:
+  notify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+            sparse-checkout: .github
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: submodule-commit-all
+
+      - name: Calculate URLs and Fetch Manifest
+        id: extract_urls
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID="$GITHUB_RUN_ID"  # Use the current run ID
+
+          ORG_NAME="${{ github.repository_owner }}"
+          PROJECT_NAME="${{ github.event.repository.name }}"
+    
+          JOBS_URL="https://api.github.com/repos/$ORG_NAME/$PROJECT_NAME/actions/runs/$RUN_ID/jobs"
+          JOB_ID=$(curl -H "Authorization: token $GITHUB_TOKEN" -L "$JOBS_URL" \
+                  | jq -r --arg JOB_NAME "${{ inputs.JOB_NAME_TO_MATCH }}" \
+                  '.jobs[] | select(.name==$JOB_NAME) | .id')
+
+
+          echo "JOB_ID=$JOB_ID"
+
+          # Fetch logs for the selected job ID using the constructed URL
+          LOG_URL="https://api.github.com/repos/$ORG_NAME/$PROJECT_NAME/actions/jobs/$JOB_ID/logs"
+          curl -H "Authorization: token $GITHUB_TOKEN" -L "$LOG_URL" -o logs.txt
+
+          # Parse URLs from the logs using grep
+          #THE_ROCK_MANIFEST_URL=$(grep -oP '\[TheRock Manifest\]\(\K[^\)]+' "logs.txt" || echo "")
+          #ARTIFACTS_URL=$(grep -oP '\[Artifacts\]\(\K[^\)]+' "logs.txt" || echo "") 
+          #BUILD_LOGS_URL=$(grep -oP '\[Build Logs\]\(\K[^\)]+' "logs.txt" || echo "")
+          ARTIFACTS_URL="https://therock-ci-artifacts-external.s3.amazonaws.com/ROCm-llvm-project/$RUN_ID-linux/index.html"
+          BUILD_LOGS_URL="https://therock-ci-artifacts-external.s3.amazonaws.com/ROCm-llvm-project/$RUN_ID-linux/logs/index.html"
+          echo "ARTIFACTS_URL=$ARTIFACTS_URL" >> $GITHUB_ENV
+          echo "BUILD_LOGS_URL=$BUILD_LOGS_URL" >> $GITHUB_ENV
+
+          # Fetch the manifest file and set URLs as environment variables
+          #if [[ -n "$THE_ROCK_MANIFEST_URL" ]]; then
+          #  curl -L "$THE_ROCK_MANIFEST_URL" -o manifest.json
+          #  echo "Manifest file has been downloaded."
+          #  echo "THE_ROCK_MANIFEST_URL=$THE_ROCK_MANIFEST_URL" >> $GITHUB_ENV
+          #  echo "ARTIFACTS_URL=$ARTIFACTS_URL" >> $GITHUB_ENV
+          #  echo "BUILD_LOGS_URL=$BUILD_LOGS_URL" >> $GITHUB_ENV
+          #else
+          #  echo "Failed to extract URLs from logs.txt."
+          #fi
+
+      - name: Set environment variables
+        run: |
+          echo "ORG_NAME=ROCm" >> $GITHUB_ENV
+          echo "PROJECT_NAME=llvm-project" >> $GITHUB_ENV
+          echo "RUN_ID=${{ github.run_id }}" >> $GITHUB_ENV
+          echo "MANIFEST_FILE=manifest.txt" >> $GITHUB_ENV
+          echo "OUTPUT_FILE=results.json" >> $GITHUB_ENV
+
+      - name: Execute Python script for Notification Content
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORG_NAME: ${{ env.ORG_NAME }}
+          PROJECT_NAME: ${{ env.PROJECT_NAME }}
+          RUN_ID: ${{ env.RUN_ID }}
+          MANIFEST_FILE: ${{ env.MANIFEST_FILE }}
+          #ROCK_MANIFEST_URL: ${{ env.THE_ROCK_MANIFEST_URL }}
+          ARTIFACTS_URL: ${{ env.ARTIFACTS_URL }}
+          BUILD_LOGS_URL: ${{ env.BUILD_LOGS_URL }}
+          OUTPUT_FILE: ${{ env.OUTPUT_FILE }}
+        run: |
+          python .github/workflows/build_metadata_extractor.py
+
+      - name: Notify status
+        continue-on-error: true
+        env:
+          TZ: 'America/Chicago'
+          JSON_RESULT_FILE: results.json
+          RUN_ID: ${{ env.RUN_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.AMD_STAGING_NIGHTLY_TEAMS_WEBHOOK_URL }}
+        run: python3 .github/workflows/teams_webhook_sender.py
+

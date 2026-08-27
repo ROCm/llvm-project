@@ -43,6 +43,9 @@
 using namespace llvm::offload::debug;
 using namespace error;
 
+extern std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
+getProfilerToAttach();
+
 namespace llvm {
 namespace omp {
 namespace target {
@@ -813,6 +816,11 @@ struct CUDADeviceTy : public GenericDeviceTy {
     return false;
   }
 
+  /// cuMemcpyHtoDAsync is only a true asynchronous transfer when the host
+  /// buffer is page-locked. Out of pageable memory the driver has to copy the
+  /// data into staging memory of its own before it can return.
+  bool hasFastTransferWithPinnedMemory() const override { return true; }
+
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
                        AsyncInfoWrapperTy &AsyncInfoWrapper) override {
@@ -1351,10 +1359,10 @@ struct CUDADeviceTy : public GenericDeviceTy {
   Error setDeviceStackSize(uint64_t Value) override {
     return setCtxLimit(CU_LIMIT_STACK_SIZE, Value);
   }
-  bool hasDeviceHeapSize() override { return true; }
   Error getDeviceHeapSize(uint64_t &Value) override {
     return getCtxLimit(CU_LIMIT_MALLOC_HEAP_SIZE, Value);
   }
+  bool hasDeviceHeapSize() override { return true; }
   Error setDeviceHeapSize(uint64_t Value) override {
     return setCtxLimit(CU_LIMIT_MALLOC_HEAP_SIZE, Value);
   }
@@ -1434,7 +1442,7 @@ private:
     }
 
     // Sort the created array to be in priority order.
-    llvm::sort(Funcs, [=](auto X, auto Y) { return X.second < Y.second; });
+    llvm::sort(Funcs, [=](auto x, auto y) { return x.second < y.second; });
 
     // Allocate a buffer to store all of the known constructor / destructor
     // functions in so we can iterate them on the device.

@@ -18,6 +18,7 @@
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Alignment.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/TargetParser/AMDGPUTargetParser.h"
 #include <array>
 #include <functional>
@@ -90,13 +91,13 @@ unsigned getDefaultAMDHSACodeObjectVersion();
 uint8_t getELFABIVersion(const Triple &OS, unsigned CodeObjectVersion);
 
 /// \returns The offset of the multigrid_sync_arg argument from implicitarg_ptr
-unsigned getMultigridSyncArgImplicitArgPosition(unsigned COV);
+LLVM_ABI unsigned getMultigridSyncArgImplicitArgPosition(unsigned COV);
 
 /// \returns The offset of the hostcall pointer argument from implicitarg_ptr
-unsigned getHostcallImplicitArgPosition(unsigned COV);
+LLVM_ABI unsigned getHostcallImplicitArgPosition(unsigned COV);
 
-unsigned getDefaultQueueImplicitArgPosition(unsigned COV);
-unsigned getCompletionActionImplicitArgPosition(unsigned COV);
+LLVM_ABI unsigned getDefaultQueueImplicitArgPosition(unsigned COV);
+LLVM_ABI unsigned getCompletionActionImplicitArgPosition(unsigned COV);
 
 struct GcnBufferFormatInfo {
   unsigned Format;
@@ -1514,11 +1515,6 @@ bool isGFX1250(const MCSubtargetInfo &STI);
 bool isGFX1250Plus(const MCSubtargetInfo &STI);
 bool isGFX13(const MCSubtargetInfo &STI);
 bool isGFX13Plus(const MCSubtargetInfo &STI);
-
-/// \returns true if a work-group's waves run on all four SIMD32s (one
-/// contiguous LDS) and not just on two.
-bool isFullSIMDMode(const MCSubtargetInfo &STI);
-
 bool supportsWGP(const MCSubtargetInfo &STI);
 bool isNotGFX12Plus(const MCSubtargetInfo &STI);
 bool isNotGFX11Plus(const MCSubtargetInfo &STI);

@@ -6282,14 +6282,7 @@ bool SelectionDAGBuilder::EmitFuncArgumentDbgValue(
           /* isKill */ false, /* isDead */ false,
           /* isUndef */ false, /* isEarlyClobber */ false,
           /* SubReg */ 0, /* isDebug */ true)});
-
-      auto *NewDIExpr = FragExpr;
-      // We don't have an "Indirect" field in DBG_INSTR_REF, fold that into
-      // the DIExpression.
-      if (Indirect)
-        NewDIExpr = DIExpression::prepend(FragExpr, DIExpression::DerefBefore);
-      SmallVector<uint64_t, 2> Ops({dwarf::DW_OP_LLVM_arg, 0});
-      NewDIExpr = DIExpression::prependOpcodes(NewDIExpr, Ops);
+      auto *NewDIExpr = DIExpression::convertForInstrRef(FragExpr, Indirect);
       return BuildMI(MF, DL, Inst, false, MOs, Variable, NewDIExpr);
     } else {
       // Create a completely standard DBG_VALUE.
@@ -8206,6 +8199,8 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
   case Intrinsic::vector_reduce_fmin:
   case Intrinsic::vector_reduce_fmaximum:
   case Intrinsic::vector_reduce_fminimum:
+  case Intrinsic::vector_reduce_fmaximumnum:
+  case Intrinsic::vector_reduce_fminimumnum:
     visitVectorReduce(I, Intrinsic);
     return;
 
@@ -11287,6 +11282,12 @@ void SelectionDAGBuilder::visitVectorReduce(const CallInst &I,
     break;
   case Intrinsic::vector_reduce_fminimum:
     Res = DAG.getNode(ISD::VECREDUCE_FMINIMUM, dl, VT, Op1, SDFlags);
+    break;
+  case Intrinsic::vector_reduce_fmaximumnum:
+    Res = DAG.getNode(ISD::VECREDUCE_FMAXIMUMNUM, dl, VT, Op1, SDFlags);
+    break;
+  case Intrinsic::vector_reduce_fminimumnum:
+    Res = DAG.getNode(ISD::VECREDUCE_FMINIMUMNUM, dl, VT, Op1, SDFlags);
     break;
   default:
     llvm_unreachable("Unhandled vector reduce intrinsic");

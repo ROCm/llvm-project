@@ -498,6 +498,38 @@ def : HWWriteRes<WriteSALUDummy, [HWSALU],  2>;
 
 }  // End SchedModel = GFX12SpeedModel
 
+def PredIsGFX1250_Unrestricted : SchedPredicate<[{
+  !MI->getMF()->getSubtarget<GCNSubtarget>().hasGFX1250_STRICT()
+}]>;
+
+// On B0, an f8f6f4 wmma runs in 4 cycles when both matrix inputs are f4.
+def PredIsBothF4AndB0_WMMA_SCALE : SchedPredicate<[{
+  MI->getMF()->getSubtarget<GCNSubtarget>().hasGFX1250_Unrestricted() &&
+  TII->getNamedOperand(*MI, AMDGPU::OpName::matrix_a_fmt)->getImm() == AMDGPU::WMMA::MATRIX_FMT_FP4 &&
+  TII->getNamedOperand(*MI, AMDGPU::OpName::matrix_b_fmt)->getImm() == AMDGPU::WMMA::MATRIX_FMT_FP4
+}]>;
+
+// On B0, an f8f6f4 wmma with any f8 input runs in 8 cycles (halved from A0's 16).
+def PredIsF8AndB0_WMMA_SCALE : SchedPredicate<[{
+  MI->getMF()->getSubtarget<GCNSubtarget>().hasGFX1250_Unrestricted() &&
+  (TII->getNamedOperand(*MI, AMDGPU::OpName::matrix_a_fmt)->getImm() <= AMDGPU::WMMA::MATRIX_FMT_BF8 ||
+   TII->getNamedOperand(*MI, AMDGPU::OpName::matrix_b_fmt)->getImm() <= AMDGPU::WMMA::MATRIX_FMT_BF8)
+}]>;
+
+// f8f6f4 wmma latency.
+//   B0, both inputs f4        -> 4 cycles
+//   A0, both inputs f4        -> 8 cycles
+//   B0, any input f8          -> 8 cycles
+//   A0, any input f8          -> 16 cycles
+//   any f6 input (no f8)      -> 8 cycles (both steppings)
+// TODO: This isn't reflected in MCA.
+//def WriteWMMAScale_16X16X128_F8F6F4 : SchedWriteVariant<[
+//    SchedVar<PredIsBothF4AndB0_WMMA_SCALE, [WriteXDL1PassWMMA]>,
+//    SchedVar<PredIsF8AndB0_WMMA_SCALE, [WriteXDL2PassWMMA]>,
+//    SchedVar<PredIsF8_WMMA_SCALE, [WriteXDL4PassWMMA]>,
+//    SchedVar<NoSchedPred, [WriteXDL2PassWMMA]>
+//]>;
+
 // Check whether the two matrix inputs of an f8f6f4 wmma instruction are not
 // both interpreted as f4. On gfx1250 an f8f6f4 wmma runs in 4 cycles when both
 // inputs are f4, and in 8 cycles when any input is f6 or f8.
@@ -510,6 +542,12 @@ def PredIsNotBothF4_WMMA_SCALE : SchedPredicate<[{
 def WriteWMMAScale_16X16X128_F8F6F4 : SchedWriteVariant<[
     SchedVar<PredIsNotBothF4_WMMA_SCALE, [WriteXDL2PassWMMA]>,
     SchedVar<NoSchedPred, [WriteXDL1PassWMMA]>
+]>;
+
+// 16x16x64 FP8/BF8 wmma latency: 4 cycles on B0, 8 cycles on A0.
+def WriteWMMA_16X16X64_FP8BF8 : SchedWriteVariant<[
+    SchedVar<PredIsGFX1250_Unrestricted, [WriteXDL1PassWMMA]>,
+    SchedVar<NoSchedPred, [WriteXDL2PassWMMA]>
 ]>;
 
 // Check whether matrix_a_fmt and matrix_a_fmt are both MATRIX_FMT_FP4.

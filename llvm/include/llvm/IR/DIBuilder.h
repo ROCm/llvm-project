@@ -90,6 +90,12 @@ namespace llvm {
     void insertDbgVariableRecord(DbgVariableRecord *DVR,
                                  InsertPosition InsertPt);
 
+    /// Internal helper with common code used by insertDbg{Value,Addr}Intrinsic.
+    Instruction *insertDbgIntrinsic(llvm::Function *Intrinsic, llvm::Value *Val,
+                                    DILocalVariable *VarInfo,
+                                    DIExpression *Expr, const DILocation *DL,
+                                    InsertPosition InsertPt);
+
   public:
     /// Construct a builder for a module.
     ///
@@ -315,13 +321,14 @@ namespace llvm {
     /// \param SizeInBits        Size.
     /// \param AlignInBits       Alignment. (optional)
     /// \param DWARFAddressSpace DWARF address space. (optional)
+    /// \param DWARFMemorySpace  DWARF memory space. (optional)
     /// \param Name              Pointer type name. (optional)
     /// \param Annotations       Member annotations.
-    LLVM_ABI DIDerivedType *
-    createPointerType(DIType *PointeeTy, uint64_t SizeInBits,
-                      uint32_t AlignInBits = 0,
-                      std::optional<unsigned> DWARFAddressSpace = std::nullopt,
-                      StringRef Name = "", DINodeArray Annotations = nullptr);
+    LLVM_ABI DIDerivedType *createPointerType(
+        DIType *PointeeTy, uint64_t SizeInBits, uint32_t AlignInBits = 0,
+        std::optional<unsigned> DWARFAddressSpace = std::nullopt,
+        dwarf::MemorySpace DWARFMemorySpace = dwarf::DW_MSPACE_LLVM_none,
+        StringRef Name = "", DINodeArray Annotations = nullptr);
 
     /// Create a __ptrauth qualifier.
     LLVM_ABI DIDerivedType *
@@ -345,7 +352,8 @@ namespace llvm {
     LLVM_ABI DIDerivedType *createReferenceType(
         unsigned Tag, DIType *RTy, uint64_t SizeInBits = 0,
         uint32_t AlignInBits = 0,
-        std::optional<unsigned> DWARFAddressSpace = std::nullopt);
+        std::optional<unsigned> DWARFAddressSpace = std::nullopt,
+        dwarf::MemorySpace MS = dwarf::DW_MSPACE_LLVM_none);
 
     /// Create debugging information entry for a typedef.
     /// \param Ty          Original type.
@@ -547,6 +555,19 @@ namespace llvm {
     createObjCProperty(StringRef Name, DIFile *File, unsigned LineNumber,
                        StringRef GetterName, StringRef SetterName,
                        unsigned PropertyAttributes, DIType *Ty);
+
+    /// Create debugging information entry for a property, i.e. an entity that
+    /// is accessed like a data member but whose access is implemented by an
+    /// accessor.
+    /// \param Name          Property name.
+    /// \param File          File where this property is defined.
+    /// \param LineNumber    Line number.
+    /// \param Ty            Type of the property.
+    /// \param BackingStorage The data member holding the property's backing
+    ///                      storage.
+    LLVM_ABI DIProperty *createProperty(StringRef Name, DIFile *File,
+                                        unsigned LineNumber, DIType *Ty,
+                                        DIDerivedType *BackingStorage);
 
     /// Create debugging information entry for a class.
     /// \param Scope        Scope in which this class is defined.
@@ -906,21 +927,25 @@ namespace llvm {
     /// \param Expr        The location of the global relative to the attached
     ///                    GlobalVariable.
     /// \param Decl        Reference to the corresponding declaration.
+    /// \param MS          DWARF memory space.
     /// \param AlignInBits Variable alignment(or 0 if no alignment attr was
     ///                    specified)
     LLVM_ABI DIGlobalVariableExpression *createGlobalVariableExpression(
         DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *File,
         unsigned LineNo, DIType *Ty, bool IsLocalToUnit, bool isDefined = true,
         DIExpression *Expr = nullptr, MDNode *Decl = nullptr,
-        MDTuple *TemplateParams = nullptr, uint32_t AlignInBits = 0,
-        DINodeArray Annotations = nullptr);
+        MDTuple *TemplateParams = nullptr,
+        dwarf::MemorySpace MS = dwarf::DW_MSPACE_LLVM_none,
+        uint32_t AlignInBits = 0, DINodeArray Annotations = nullptr);
 
     /// Identical to createGlobalVariable
     /// except that the resulting DbgNode is temporary and meant to be RAUWed.
     LLVM_ABI DIGlobalVariable *createTempGlobalVariableFwdDecl(
         DIScope *Context, StringRef Name, StringRef LinkageName, DIFile *File,
         unsigned LineNo, DIType *Ty, bool IsLocalToUnit, MDNode *Decl = nullptr,
-        MDTuple *TemplateParams = nullptr, uint32_t AlignInBits = 0);
+        MDTuple *TemplateParams = nullptr,
+        dwarf::MemorySpace MS = dwarf::DW_MSPACE_LLVM_none,
+        uint32_t AlignInBits = 0);
 
     /// Create a new descriptor for an auto variable.  This is a local variable
     /// that is not a subprogram parameter.
@@ -934,6 +959,7 @@ namespace llvm {
     createAutoVariable(DIScope *Scope, StringRef Name, DIFile *File,
                        unsigned LineNo, DIType *Ty, bool AlwaysPreserve = false,
                        DINode::DIFlags Flags = DINode::FlagZero,
+                       dwarf::MemorySpace MS = dwarf::DW_MSPACE_LLVM_none,
                        uint32_t AlignInBits = 0);
 
     /// Create a new descriptor for an label.
@@ -962,6 +988,7 @@ namespace llvm {
                             DIFile *File, unsigned LineNo, DIType *Ty,
                             bool AlwaysPreserve = false,
                             DINode::DIFlags Flags = DINode::FlagZero,
+                            dwarf::MemorySpace MS = dwarf::DW_MSPACE_LLVM_none,
                             DINodeArray Annotations = nullptr);
 
     /// Create a new descriptor for the specified

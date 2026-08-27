@@ -250,8 +250,9 @@ macro(test_targets)
         endif()
       endif()
     elseif(COMPILER_RT_TARGET_AMDGPU)
-      test_target_arch(amdgpu "" "--target=amdgpu-amd-amdhsa" "-nogpulib"
-                       "-flto" "-Xclang -mcode-object-version=none")
+      test_target_arch(amdgcn "" "--target=amdgpu-amd-amdhsa" "-nogpulib"
+                       "-flto" "-fconvergent-functions"
+                       "-Xclang -mcode-object-version=none")
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "hexagon")
       test_target_arch(hexagon "" "")
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "loongarch64")
@@ -295,7 +296,8 @@ macro(test_targets)
         test_target_arch(mips64 "" "-mips64r2" "-mabi=64")
       endif()
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "nvptx")
-      test_target_arch(nvptx64 "" "--nvptx64-nvidia-cuda" "-nogpulib" "-flto" "-c")
+      test_target_arch(nvptx64 "" "--nvptx64-nvidia-cuda" "-nogpulib" "-flto" "-c"
+                               "-fconvergent-functions")
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "spirv64")
       test_target_arch(spirv64 "" "--spirv64-unknown-unknown" "-nogpulib" "-flto" "-c")
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "arm")

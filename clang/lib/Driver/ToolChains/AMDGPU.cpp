@@ -667,7 +667,12 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   getToolChain().addProfileRTLibs(Args, CmdArgs);
-  addSanitizerRuntimes(getToolChain(), Args, CmdArgs);
+
+  // Divergent because asanrtl.bc does not use the standard compiler-rt
+  // semantics. Skip this if `-fsanitize=address` is set.
+  const SanitizerArgs &SanArgs = getToolChain().getSanitizerArgs(Args);
+  if (!SanArgs.needsAsanRt())
+    addSanitizerRuntimes(getToolChain(), Args, CmdArgs);
 
   if (Args.hasArg(options::OPT_stdlib))
     CmdArgs.append({"-lc", "-lm"});
@@ -1009,7 +1014,34 @@ void AMDGPUToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   // In an offloading compilation the device toolchain must pick up the host's
   // system include paths, even when compiling device code.
   if (HostTC) {
+    // OpenMP offload code targeting AMDGPU frequently includes ROCm/HIP headers
+    // (e.g. <hip/hip_runtime.h>) directly. Add the ROCm include directories so
+    // those headers are found without requiring an explicit -I. The install is
+    // laid out as <root>/lib/llvm/bin/clang, so the HIP headers live in
+    // <root>/include (three levels up from the driver dir) and the toolchain's
+    // own headers in <root>/lib/llvm/include (one level up). For HIP these come
+    // from AddHIPIncludeArgs, so only do this for OpenMP.
+    const bool IsOpenMP =
+        DriverArgs.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
+                           options::OPT_fno_openmp, false);
+    const Driver &D = HostTC->getDriver();
+    if (IsOpenMP) {
+      CC1Args.push_back("-internal-isystem");
+      CC1Args.push_back(DriverArgs.MakeArgString(D.Dir + "/../include"));
+      CC1Args.push_back("-internal-isystem");
+      CC1Args.push_back(DriverArgs.MakeArgString(D.Dir + "/../../../include"));
+    }
+
     HostTC->AddClangSystemIncludeArgs(DriverArgs, CC1Args);
+
+    // The HIP headers pull in the cuda_wrappers headers, which must precede the
+    // standard C++ headers added above.
+    if (IsOpenMP && !DriverArgs.hasArg(options::OPT_nobuiltininc)) {
+      SmallString<128> P(D.ResourceDir);
+      llvm::sys::path::append(P, "include", "cuda_wrappers");
+      CC1Args.push_back("-internal-isystem");
+      CC1Args.push_back(DriverArgs.MakeArgString(P));
+    }
     return;
   }
 
@@ -1042,8 +1074,15 @@ AMDGPUToolChain::getGPUArch(const llvm::opt::ArgList &DriverArgs) const {
 AMDGPUToolChain::ParsedTargetIDType
 AMDGPUToolChain::getParsedTargetID(const llvm::opt::ArgList &DriverArgs) const {
   StringRef TargetID = DriverArgs.getLastArgValue(options::OPT_mcpu_EQ);
+  // For offload toolchains (HIP, OpenMP, etc.), `getAuxTriple()` is the host;
+  // `-march=` there refers to the host CPU (e.g. haswell) and must not be
+  // parsed as an AMDGPU Target ID. Only standalone AMDGPU uses `-march=` as
+  // a legacy spelling for the GPU `-mcpu=` (see TranslateArgs when OFK_None).
+  if (TargetID.empty() && !getAuxTriple())
+    TargetID = DriverArgs.getLastArgValue(options::OPT_march_EQ);
+
   if (TargetID.empty())
-    return {};
+    return {std::nullopt, std::nullopt, std::nullopt};
 
   llvm::StringMap<bool> FeatureMap;
   auto OptionalGpuArch = parseTargetID(getTriple(), TargetID, &FeatureMap);
@@ -1164,6 +1203,13 @@ RocmInstallationDetector::getCommonBitcodeLibs(
     AddBCLib(ABIVerPath);
 
   return BCLibs;
+}
+
+bool AMDGPUToolChain::shouldSkipArgument(const llvm::opt::Arg *A) const {
+  Option O = A->getOption();
+  if (O.matches(options::OPT_fPIE) || O.matches(options::OPT_fpie))
+    return true;
+  return false;
 }
 
 llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>

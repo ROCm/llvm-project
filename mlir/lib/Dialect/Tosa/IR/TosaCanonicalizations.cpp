@@ -694,7 +694,7 @@ struct ClampClampOptimization : public OpRewritePattern<tosa::ClampOp> {
     Value input = op.getInput();
 
     // Check the input to the CLAMP op is itself a CLAMP.
-    auto clampOp = input.getDefiningOp<tosa::ClampOp>();
+    auto clampOp = dyn_cast_if_present<tosa::ClampOp>(input.getDefiningOp());
     if (!clampOp)
       return failure();
 

@@ -40,6 +40,8 @@ add_llvm_library(
   src/LanguageLaunch.cpp
   src/LanguageRegistration.cpp
   src/State.cpp
+  LINK_COMPONENTS
+  Support
   )
 
 if(LLVM_LINK_LLVM_DYLIB)
@@ -47,7 +49,14 @@ if(LLVM_LINK_LLVM_DYLIB)
 else()
   llvm_map_components_to_libnames(llvm_libs Support)
 endif()
-target_link_libraries(LLVMOffloadKernel PRIVATE ${llvm_libs} LLVMOffload)
+
+
+# NOTE: LLVMOffload is a standalone shared library and is NOT part of the
+# aggregate libLLVM dylib. When building with -DLLVM_LINK_LLVM_DYLIB=ON, using
+# "LINK_COMPONENTS Offload" collapses to linking libLLVM only, which drops the
+# real libLLVMOffload dependency and leaves the ol* symbols undefined. Link it
+# explicitly to guarantee the dependency is always present.
+target_link_libraries(LLVMOffloadKernel PRIVATE LLVMOffload)
 
 if(LLVM_HAVE_LINK_VERSION_SCRIPT)
   target_link_libraries(LLVMOffloadKernel PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports")

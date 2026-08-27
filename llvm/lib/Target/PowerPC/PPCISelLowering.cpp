@@ -241,12 +241,39 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
   setTruncStoreAction(MVT::f128, MVT::f16, Expand);
   setOperationAction(ISD::FP_TO_FP16, MVT::f128, Expand);
 
+  // bf16 is soft-promoted to f32 on all PowerPC targets.
+  // Loads/stores use the integer i16 path (lhz/sth) via TypeSoftPromoteHalf.
+  // BF16_TO_FP (extend) is done inline via left-shift-16.
+  // FP_TO_BF16 (truncate) is done via the __truncsfbf2 libcall.
+  // No hardware extending loads or truncating stores to/from bf16.
+  //
+  // BF16_TO_FP and FP_TO_BF16 must be explicitly marked Expand so that
+  // LegalizeDAG expands them to the shift+bitcast / libcall sequences before
+  // ISel.  Without this they default to Legal and reach ISel with no matching
+  // .td pattern, causing a "Cannot select" fatal error.
+  // BF16_TO_FP action is keyed on the result type; FP_TO_BF16 on the operand
+  // type (see LegalizeDAG.cpp action dispatch).
+  for (MVT VT : {MVT::f32, MVT::f64, MVT::f128}) {
+    setLoadExtAction(ISD::EXTLOAD, VT, MVT::bf16, Expand);
+    setTruncStoreAction(VT, MVT::bf16, Expand);
+    setOperationAction(ISD::BF16_TO_FP, VT, Expand);
+    setOperationAction(ISD::FP_TO_BF16, VT, Expand);
+  }
+
   if (Subtarget.isISA3_0()) {
     setLoadExtAction(ISD::EXTLOAD, MVT::f128, MVT::f16, Legal);
     setLoadExtAction(ISD::EXTLOAD, MVT::f64, MVT::f16, Legal);
     setLoadExtAction(ISD::EXTLOAD, MVT::f32, MVT::f16, Legal);
     setTruncStoreAction(MVT::f64, MVT::f16, Legal);
     setTruncStoreAction(MVT::f32, MVT::f16, Legal);
+    // ISA 3.0 (Power9) has XSCVHPDP/XSCVDPHP for scalar HP<->DP conversion.
+    // The .td patterns in PPCInstrVSX.td use f16_to_fp/fp_to_f16 ISD nodes;
+    // mark them Legal here so the soft-promote machinery uses hardware instead
+    // of __extendhfsf2/__truncsfhf2 libcalls for register-to-register converts.
+    setOperationAction(ISD::FP16_TO_FP, MVT::f64, Legal);
+    setOperationAction(ISD::FP16_TO_FP, MVT::f32, Legal);
+    setOperationAction(ISD::FP_TO_FP16, MVT::f64, Legal);
+    setOperationAction(ISD::FP_TO_FP16, MVT::f32, Legal);
   } else {
     // No extending loads from f16 or HW conversions back and forth.
     setLoadExtAction(ISD::EXTLOAD, MVT::f128, MVT::f16, Expand);

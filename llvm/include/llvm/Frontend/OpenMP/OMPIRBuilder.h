@@ -129,6 +129,7 @@ public:
 
   /// First separator used between the initial two parts of a name.
   std::optional<StringRef> FirstSeparator;
+
   /// Separator used between all of the rest consecutive parts of s name.
   std::optional<StringRef> Separator;
 
@@ -2535,6 +2536,17 @@ public:
   LLVM_ABI FunctionCallee getOrCreateRuntimeFunction(Module &M,
                                                      omp::RuntimeFunction FnID);
 
+  /// Return the function declaration for atomic CAS runtime function
+  /// with name \p FunName. Used for unsigned types as basic .def machinery
+  /// does not support unsigned integer types in the API.
+  /// \param FunName Name of the function to get or create
+  /// \param RetType Type of function return parameter
+  /// \param AddrTy Type of atomic target pointer
+  /// \param UpdateTy Type of atomic update expression
+  LLVM_ABI FunctionCallee unsignedGetOrCreateAtomicCASRuntimeFunction(
+      Module &M, const StringRef &FunName, Type *RetType, Type *AddrTy,
+      Type *UpdateTy);
+
   LLVM_ABI Function *getOrCreateRuntimeFunctionPtr(omp::RuntimeFunction FnID);
 
   LLVM_ABI CallInst *createRuntimeFunctionCall(FunctionCallee Callee,
@@ -2879,7 +2891,7 @@ public:
     /// Arguments passed to the runtime library
     TargetDataRTArgs RTArgs;
     /// The number of iterations
-    Value *NumIterations = nullptr;
+    Value *TripCount = nullptr;
     /// The number of teams.
     ArrayRef<Value *> NumTeams;
     /// The number of threads.
@@ -2899,15 +2911,14 @@ public:
     // Constructors for TargetKernelArgs.
     TargetKernelArgs() = default;
     TargetKernelArgs(unsigned NumTargetItems, TargetDataRTArgs RTArgs,
-                     Value *NumIterations, ArrayRef<Value *> NumTeams,
+                     Value *TripCount, ArrayRef<Value *> NumTeams,
                      ArrayRef<Value *> NumThreads, Value *DynCGroupMem,
                      bool HasNoWait, bool StrictBlocks, bool StrictThreads,
                      omp::OMPDynGroupprivateFallbackType DynCGroupMemFallback)
-        : NumTargetItems(NumTargetItems), RTArgs(RTArgs),
-          NumIterations(NumIterations), NumTeams(NumTeams),
-          NumThreads(NumThreads), DynCGroupMem(DynCGroupMem),
-          HasNoWait(HasNoWait), StrictBlocks(StrictBlocks),
-          StrictThreads(StrictThreads),
+        : NumTargetItems(NumTargetItems), RTArgs(RTArgs), TripCount(TripCount),
+          NumTeams(NumTeams), NumThreads(NumThreads),
+          DynCGroupMem(DynCGroupMem), HasNoWait(HasNoWait),
+          StrictBlocks(StrictBlocks), StrictThreads(StrictThreads),
           DynCGroupMemFallback(DynCGroupMemFallback) {}
   };
 
@@ -4245,7 +4256,7 @@ public:
   /// \param Name Name of the variable.
   LLVM_ABI GlobalVariable *
   getOrCreateInternalVariable(Type *Ty, const StringRef &Name,
-                              std::optional<unsigned> AddressSpace = {});
+                              std::optional<unsigned> AddressSpace = 0);
 
   using IteratorBodyGenTy = llvm::function_ref<llvm::Error(
       InsertPointTy BodyIP, llvm::Value *LinearIV)>;

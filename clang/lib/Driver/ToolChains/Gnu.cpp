@@ -29,6 +29,7 @@
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/VirtualFileSystem.h"
+#include "llvm/TargetParser/Host.h"
 #include "llvm/TargetParser/RISCVISAInfo.h"
 #include "llvm/TargetParser/TargetParser.h"
 #include <system_error>
@@ -434,6 +435,13 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
           Args.MakeArgString(ToolChain.GetFilePath("crt_pad_segment.o")));
   }
 
+  // Make sure openmp finds it libomp.so before all others.
+  if (Args.hasArg(options::OPT_fopenmp) ||
+      JA.isHostOffloading(Action::OFK_OpenMP)) {
+    addDirectoryList(Args, CmdArgs, "-L", "LIBRARY_PATH");
+    CmdArgs.push_back(Args.MakeArgString("-L" + D.Dir + "/../lib"));
+  }
+
   Args.addAllArgs(CmdArgs, {options::OPT_L});
 
   ToolChain.AddFilePathLibArgs(Args, CmdArgs);
@@ -584,6 +592,7 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   Args.addAllArgs(CmdArgs, {options::OPT_T});
 
   const char *Exec = Args.MakeArgString(ToolChain.GetLinkerPath());
+
   C.addCommand(std::make_unique<Command>(JA, *this,
                                          ResponseFileSupport::AtFileCurCP(),
                                          Exec, CmdArgs, Inputs, Output));
@@ -2300,6 +2309,8 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
       D.getVFS().exists("/opt/rh")) {
     // TODO: We may want to remove this, since the functionality
     //   can be achieved using config files.
+    Prefixes.push_back("/opt/rh/gcc-toolset-15/root/usr");
+    Prefixes.push_back("/opt/rh/gcc-toolset-14/root/usr");
     Prefixes.push_back("/opt/rh/gcc-toolset-13/root/usr");
     Prefixes.push_back("/opt/rh/gcc-toolset-12/root/usr");
     Prefixes.push_back("/opt/rh/gcc-toolset-11/root/usr");

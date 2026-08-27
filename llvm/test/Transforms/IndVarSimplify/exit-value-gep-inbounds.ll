@@ -5,11 +5,11 @@ define ptr @unknown_start_inbounds(ptr %p, i64 %n) {
 ; CHECK-LABEL: define ptr @unknown_start_inbounds(
 ; CHECK-SAME: ptr [[P:%.*]], i64 [[N:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
+; CHECK-NEXT:    [[TMP0:%.*]] = add i64 [[N]], -1
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = add i64 [[N]], -1
 ; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[P]], i64 [[TMP0]]
 ; CHECK-NEXT:    ret ptr [[SCEVGEP]]
 ;
@@ -31,13 +31,13 @@ define ptr @unknown_start_nonneg_step(ptr %p, i64 %n, i32 %s) {
 ; CHECK-LABEL: define ptr @unknown_start_nonneg_step(
 ; CHECK-SAME: ptr [[P:%.*]], i64 [[N:%.*]], i32 [[S:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
+; CHECK-NEXT:    [[STEP:%.*]] = zext i32 [[S]] to i64
+; CHECK-NEXT:    [[TMP0:%.*]] = add i64 [[N]], -1
+; CHECK-NEXT:    [[TMP1:%.*]] = mul i64 [[TMP0]], [[STEP]]
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[STEP:%.*]] = zext i32 [[S]] to i64
-; CHECK-NEXT:    [[TMP0:%.*]] = add i64 [[N]], -1
-; CHECK-NEXT:    [[TMP1:%.*]] = mul i64 [[TMP0]], [[STEP]]
 ; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[P]], i64 [[TMP1]]
 ; CHECK-NEXT:    ret ptr [[SCEVGEP]]
 ;
@@ -118,11 +118,11 @@ define ptr @nonconstant_nonneg_step_inbounds(ptr %p, i64 %n, i32 %s) {
 ; CHECK-SAME: ptr [[P:%.*]], i64 [[N:%.*]], i32 [[S:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
 ; CHECK-NEXT:    [[STEP:%.*]] = zext i32 [[S]] to i64
+; CHECK-NEXT:    [[TMP0:%.*]] = mul i64 [[N]], [[STEP]]
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = mul i64 [[N]], [[STEP]]
 ; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[P]], i64 [[TMP0]]
 ; CHECK-NEXT:    ret ptr [[SCEVGEP]]
 ;
@@ -207,11 +207,11 @@ define ptr @two_loops_only_first_inbounds(ptr %p, i64 %n) {
 ; CHECK:       [[LOOP1]]:
 ; CHECK-NEXT:    br i1 true, label %[[BETWEEN:.*]], label %[[LOOP1]]
 ; CHECK:       [[BETWEEN]]:
+; CHECK-NEXT:    [[TMP0:%.*]] = shl i64 [[N]], 1
 ; CHECK-NEXT:    br label %[[LOOP2:.*]]
 ; CHECK:       [[LOOP2]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LOOP2]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = shl i64 [[N]], 1
 ; CHECK-NEXT:    [[SCEVGEP1:%.*]] = getelementptr i8, ptr [[P]], i64 [[TMP0]]
 ; CHECK-NEXT:    ret ptr [[SCEVGEP1]]
 ;
@@ -246,11 +246,11 @@ define ptr @unknown_step_inbounds(ptr %p, i64 %n, i64 %step) {
 ; CHECK-LABEL: define ptr @unknown_step_inbounds(
 ; CHECK-SAME: ptr [[P:%.*]], i64 [[N:%.*]], i64 [[STEP:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
+; CHECK-NEXT:    [[TMP0:%.*]] = mul i64 [[STEP]], [[N]]
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = mul i64 [[STEP]], [[N]]
 ; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[P]], i64 [[TMP0]]
 ; CHECK-NEXT:    ret ptr [[SCEVGEP]]
 ;
@@ -303,11 +303,11 @@ define ptr @symbolic_start_below_base_inbounds(ptr %base, i64 %m, i64 %n) {
 ; CHECK-LABEL: define ptr @symbolic_start_below_base_inbounds(
 ; CHECK-SAME: ptr [[BASE:%.*]], i64 [[M:%.*]], i64 [[N:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
+; CHECK-NEXT:    [[TMP0:%.*]] = add i64 [[N]], [[M]]
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = add i64 [[N]], [[M]]
 ; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[BASE]], i64 [[TMP0]]
 ; CHECK-NEXT:    ret ptr [[SCEVGEP]]
 ;
@@ -331,11 +331,7 @@ exit:
 define ptr @polynomial_addrec_inbounds(ptr %p, i64 %n) {
 ; CHECK-LABEL: define ptr @polynomial_addrec_inbounds(
 ; CHECK-SAME: ptr [[P:%.*]], i64 [[N:%.*]]) {
-; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    br label %[[LOOP:.*]]
-; CHECK:       [[LOOP]]:
-; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LOOP]]
-; CHECK:       [[EXIT]]:
+; CHECK-NEXT:  [[EXIT:.*:]]
 ; CHECK-NEXT:    [[TMP0:%.*]] = shl i64 [[N]], 1
 ; CHECK-NEXT:    [[TMP1:%.*]] = add i64 [[N]], -1
 ; CHECK-NEXT:    [[TMP2:%.*]] = zext i64 [[TMP1]] to i65
@@ -346,6 +342,10 @@ define ptr @polynomial_addrec_inbounds(ptr %p, i64 %n) {
 ; CHECK-NEXT:    [[TMP7:%.*]] = trunc i65 [[TMP6]] to i64
 ; CHECK-NEXT:    [[TMP8:%.*]] = add i64 [[TMP0]], [[TMP7]]
 ; CHECK-NEXT:    [[TMP9:%.*]] = add i64 [[TMP8]], -1
+; CHECK-NEXT:    br label %[[LOOP:.*]]
+; CHECK:       [[LOOP]]:
+; CHECK-NEXT:    br i1 true, label %[[EXIT1:.*]], label %[[LOOP]]
+; CHECK:       [[EXIT1]]:
 ; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[P]], i64 [[TMP9]]
 ; CHECK-NEXT:    ret ptr [[SCEVGEP]]
 ;

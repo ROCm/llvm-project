@@ -104,9 +104,9 @@ int main()
 // CHECK1: @.offload_maptypes.2 = private unnamed_addr constant [2 x i64] [i64 547, i64 288]
 //.
 // CHECK2: @.offload_sizes = private unnamed_addr constant [6 x i64] [i64 4, i64 4, i64 4, i64 0, i64 4, i64 0]
-// CHECK2: @.offload_maptypes = private unnamed_addr constant [6 x i64] [i64 800, i64 547, i64 16384, i64 33, i64 16384, i64 288]
+// CHECK2: @.offload_maptypes = private unnamed_addr constant [6 x i64] [i64 800, i64 547, i64 32768, i64 33, i64 32768, i64 288]
 // CHECK2: @.offload_sizes.1 = private unnamed_addr constant [6 x i64] [i64 4, i64 12, i64 4, i64 0, i64 4, i64 0]
-// CHECK2: @.offload_maptypes.2 = private unnamed_addr constant [6 x i64] [i64 800, i64 547, i64 16384, i64 33, i64 16384, i64 288]
+// CHECK2: @.offload_maptypes.2 = private unnamed_addr constant [6 x i64] [i64 800, i64 547, i64 32768, i64 33, i64 32768, i64 288]
 // CHECK2: @.offload_sizes.3 = private unnamed_addr constant [3 x i64] [i64 4, i64 8, i64 0]
 // CHECK2: @.offload_maptypes.4 = private unnamed_addr constant [3 x i64] [i64 800, i64 547, i64 288]
 // CHECK2: @.offload_sizes.5 = private unnamed_addr constant [3 x i64] [i64 4, i64 4, i64 0]

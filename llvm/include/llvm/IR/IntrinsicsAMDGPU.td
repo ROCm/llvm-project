@@ -190,7 +190,8 @@ def int_amdgcn_queue_ptr :
 def int_amdgcn_kernarg_segment_ptr :
   ClangBuiltin<"__builtin_amdgcn_kernarg_segment_ptr">,
   DefaultAttrsIntrinsic<[LLVMQualPointerType<4>], [],
-  [Align<RetIndex, 4>, NoUndef<RetIndex>, IntrNoMem, IntrSpeculatable]>;
+  [Align<RetIndex, 4>, NoUndef<RetIndex>, NoFreeObj<RetIndex>,
+   IntrNoMem, IntrSpeculatable]>;
 
 def int_amdgcn_implicitarg_ptr :
   ClangBuiltin<"__builtin_amdgcn_implicitarg_ptr">,
@@ -935,6 +936,29 @@ def int_amdgcn_av_store_b128 : AMDGPUAVStore;
 def int_amdgcn_av_load_b128 : AMDGPUAVLoad;
 } // End TargetFeatures = "flat-global-insts"
 
+class AMDGPUGlobalStore : Intrinsic <
+  [],
+  [global_ptr_ty,          // Base global pointer to store to
+   llvm_v4i32_ty,          // Data to store
+   llvm_metadata_ty],      // Scope
+  [ IntrWriteMem, WriteOnly<ArgIndex<0>>, NoCapture<ArgIndex<0>>,
+    IntrWillReturn, IntrNoCallback, IntrNoFree ],
+  "",
+  [SDNPMemOperand, SDNPMayStore]
+>;
+
+class AMDGPUGlobalLoad : Intrinsic <
+  [llvm_v4i32_ty],
+  [global_ptr_ty,          // Base global pointer to load from
+   llvm_metadata_ty],      // Scope
+  [ IntrReadMem, ReadOnly<ArgIndex<0>>, NoCapture<ArgIndex<0>>, IntrWillReturn,
+    IntrNoCallback, IntrNoFree ],
+  "",
+  [SDNPMemOperand, SDNPMayLoad]
+>;
+
+def int_amdgcn_global_store_b128 : AMDGPUGlobalStore;
+def int_amdgcn_global_load_b128 : AMDGPUGlobalLoad;
 } // TargetPrefix = "amdgcn"
 
 // New-style image intrinsics

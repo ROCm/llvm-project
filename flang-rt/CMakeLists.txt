@@ -102,6 +102,7 @@ if (NOT "${FLANG_RT_LIBCXX_PROVIDER}" IN_LIST FLANG_RT_SUPPORTED_PROVIDERS)
 endif ()
 
 option(FLANG_RT_ENABLE_STATIC "Build Flang-RT as a static library." ON)
+
 if (WIN32)
   # Windows DLL currently not implemented.
   set(FLANG_RT_ENABLE_SHARED OFF)
@@ -304,7 +305,9 @@ endif ()
 
 if (FLANG_RT_INCLUDE_TESTS)
   add_subdirectory(test)
-  add_subdirectory(unittests)
+  if (NOT "${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
+    add_subdirectory(unittests)
+  endif()
 else ()
   add_custom_target(check-flang-rt)
 endif()

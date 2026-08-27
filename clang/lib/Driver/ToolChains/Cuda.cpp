@@ -8,6 +8,7 @@
 
 #include "Cuda.h"
 #include "clang/Basic/Cuda.h"
+#include "clang/Basic/TargetID.h"
 #include "clang/Config/config.h"
 #include "clang/Driver/CommonArgs.h"
 #include "clang/Driver/Compilation.h"
@@ -618,6 +619,10 @@ void NVPTX::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-v");
 
   StringRef GPUArch = Args.getLastArgValue(options::OPT_march_EQ);
+  if (GPUArch.empty())
+    GPUArch = getProcessorFromTargetID(getToolChain().getTriple(),
+                                       getToolChain().getTargetID());
+
   if (GPUArch.empty() && !getToolChain().isUsingLTO(Args)) {
     C.getDriver().Diag(diag::err_drv_offload_missing_gpu_arch)
         << getToolChain().getArchName() << getShortName();
@@ -899,6 +904,11 @@ NVPTXToolChain::getSystemGPUArchs(const ArgList &Args) const {
 /// CUDA toolchain.  Our assembler is ptxas, and our "linker" is fatbinary,
 /// which isn't properly a linker but nonetheless performs the step of stitching
 /// together object files from the assembler into a single blob.
+
+CudaToolChain::CudaToolChain(const Driver &D, const llvm::Triple &Triple,
+                             const ToolChain &HostTC, const ArgList &Args,
+                             const std::string TargetID)
+    : NVPTXToolChain(D, Triple, HostTC.getTriple(), Args), HostTC(HostTC) {}
 
 CudaToolChain::CudaToolChain(const Driver &D, const llvm::Triple &Triple,
                              const ToolChain &HostTC, const ArgList &Args)

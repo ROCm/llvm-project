@@ -88,7 +88,7 @@ end subroutine
 subroutine test_begin_construct_selected_parent()
   !$omp target
     !$omp begin metadirective &
-    !$omp & when(implementation={vendor(llvm)}: parallel)
+    !$omp & when(implementation={vendor(amd)}: parallel)
       !$omp metadirective &
       !$omp & when(construct={target, parallel}: barrier) &
       !$omp & default(taskyield)

@@ -16,6 +16,9 @@
 
 #include "kmp.h"
 #include "ompt-specific.h"
+#if OMPD_SUPPORT
+#include "ompd-specific.h"
+#endif
 
 #if KMP_OS_UNIX
 #include <dlfcn.h>
@@ -265,7 +268,11 @@ void __ompt_lw_taskteam_init(ompt_lw_taskteam_t *lwt, kmp_info_t *thr, int gtid,
   lwt->ompt_team_info.master_return_address = codeptr;
   lwt->ompt_task_info.task_data.value = 0;
   lwt->ompt_task_info.frame.enter_frame = ompt_data_none;
+  lwt->ompt_task_info.frame.enter_frame_flags = 0;
+  ;
   lwt->ompt_task_info.frame.exit_frame = ompt_data_none;
+  lwt->ompt_task_info.frame.exit_frame_flags = 0;
+  ;
   lwt->ompt_task_info.frame.enter_frame_flags = OMPT_FRAME_FLAGS_RUNTIME;
   lwt->ompt_task_info.frame.exit_frame_flags = OMPT_FRAME_FLAGS_RUNTIME;
   lwt->ompt_task_info.scheduling_parent = NULL;
@@ -392,7 +399,7 @@ int __ompt_get_task_info_internal(int ancestor_level, int *type,
       // lightweight teams are exhausted
       if (!lwt && taskdata) {
         // first try scheduling parent (for explicit task scheduling)
-        if (taskdata->ompt_task_info.scheduling_parent) {
+        if (taskdata->td_flags.tasktype == TASK_EXPLICIT && taskdata->ompt_task_info.scheduling_parent) {
           taskdata = taskdata->ompt_task_info.scheduling_parent;
         } else if (next_lwt) {
           lwt = next_lwt;

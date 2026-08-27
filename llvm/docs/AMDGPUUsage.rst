@@ -13,6 +13,7 @@ User Guide for AMDGPU Backend
    AMDGPUInstructionSyntax
    AMDGPUInstructionNotation
    AMDGPUDwarfExtensionsForHeterogeneousDebugging
+   AMDGPULLVMExtensionsForHeterogeneousDebugging
    AMDGPUDwarfExtensionAllowLocationDescriptionOnTheDwarfExpressionStack/AMDGPUDwarfExtensionAllowLocationDescriptionOnTheDwarfExpressionStack
    AMDGPU/DeveloperGuideline
 
@@ -666,6 +667,18 @@ Every processor supports every OS ABI (see :ref:`amdgpu-os`) with the following 
                                                                          - Packed
                                                                            work-item
                                                                            IDs
+
+     ``gfx1250-strict``   ``amdgpu12.50-strict``  APU   - sramecc        - Architected                   *TBA*
+                                                                           flat
+                                                                           scratch                         .. TODO::
+                                                                         - Packed
+                                                                           work-item                         Add product
+                                                                           IDs                               names.
+                                                                         - Globally
+                                                                           Accessible
+                                                                           Scratch
+                                                                         - Workgroup
+                                                                           Clusters
 
      ``gfx1250``                 ``amdgpu12.50``  APU   - sramecc        - Architected                   *TBA*
                                                                            flat
@@ -2026,6 +2039,112 @@ The AMDGPU backend implements the following LLVM IR intrinsics.
 
                                                    Instruction cache prefetches are unsafe on invalid address.
 
+  llvm.amdgcn.global.load.b128                     This intrinsic is supported on gfx9, gfx10, gfx11, and gfx12 targets.
+  
+                                                   Signature:
+                                                   
+                                                   .. code-block:: llvm
+                                                      
+                                                      <4 x i32> @llvm.amdgcn.global.load.b128(
+                                                          ptr addrspace(1), ; source
+                                                          metadata)         ; scope    - e.g. '!0' where '!0 = !{!"wavegroup"}'
+
+                                                   Reads the value from the source address with cache behavior specified by the scope.
+
+                                                   The following table shows the mapping between valid scope values and target
+                                                   instruction flags or field values.
+
+                                                   ============== ========================== ========================== ========================== ========================== ========================== ==========================
+                                                   targets        instruction                           ``"wavefront"``            ``"workgroup"``              ``"cluster"``                ``"agent"``      ``""`` (empty string)
+                                                   ============== ========================== ========================== ========================== ========================== ========================== ==========================
+                                                   gfx90*         ``global_load_dwordx4``                                                                             ``glc``                    ``glc``                    ``glc``
+                                                                                                                                                                                                         
+                                                   gfx942, gfx950 ``global_load_dwordx4``                        (wave)            ``sc0`` (group)           ``sc1`` (device)           ``sc1`` (device)       ``sc0 sc1`` (system)
+                                                                                                                                                                                                         
+                                                   gfx10*         ``global_load_dwordx4``                                                  ``glc``                ``glc dlc``                ``glc dlc``                ``glc dlc``
+                                                                                                                                                                                                         
+                                                   gfx11*         ``global_load_dwordx4``                                                  ``glc``                    ``glc``                    ``glc``                    ``glc``
+                                                                                                                                                                                                         
+                                                   gfx120*        ``global_load_b128``                             (CU)    ``scope:SCOPE_SE`` (SE)  ``scope:SCOPE_DEV`` (DEV)  ``scope:SCOPE_DEV`` (DEV)  ``scope:SCOPE_SYS`` (SYS)
+                                                                                                                                                                                                         
+                                                   gfx125*        ``global_load_b128``                             (CU)                               ``scope:SCOPE_SE`` (SE)  ``scope:SCOPE_DEV`` (DEV)  ``scope:SCOPE_SYS`` (SYS)
+                                                   ============== ========================== ========================== ========================== ========================== ========================== ==========================
+                                                   
+                                                   For gfx90*, see "GLC Bit Explained" in the appropriate instruction set reference
+                                                   (e.g. Chapter 9.1.10 in "AMD Instinct MI100" Instruction Set Architecture Reference
+                                                   Guide).
+                                                   
+                                                   For gfx942 and gfx950 targets, see "Memory Scope and Temporal Controls" in the
+                                                   appropriate instruction set reference (e.g. Chapter 9.1.10.2 in the "AMD Instinct
+                                                   MI300" Instruction Set Architecture Reference Guide).
+
+                                                   For gfx10* targets, see "GLC, DLC and SLC Bit Explained" in the appropriate
+                                                   instruction set reference (e.g. Chapter 8.1.10 in "RDNA 2" Instruction Set Architecture
+                                                   Reference Guide)
+                                                   
+                                                   For gfx11* targets, see "Cache Controls: SLC, GLC and DLC" in the appropriate
+                                                   instruction set reference (e.g. Chapter 4.1.1 in "RDNA3" Instruction Set Architecture
+                                                   Reference Guide).
+                                                   
+                                                   For gfx12* targets, see "Cache Controls: SCOPE and Temporal-Hint" in the
+                                                   appropriate instruction set reference (e.g. Chapter 4.1.1 in the "RDNA4"
+                                                   Instruction Set Architecture Reference Guide).
+
+                                                                                                      
+  llvm.amdgcn.global.store.b128                    This intrinsic is supported on gfx9, gfx10, gfx11, and gfx12 targets.
+  
+                                                   Signature:
+                                                   
+                                                   .. code-block:: llvm
+                                                      
+                                                      void @llvm.amdgcn.global.store.b128(
+                                                          ptr addrspace(1), ; destination
+                                                          <4 x i32>,        ; value
+                                                          metadata)         ; scope    - e.g. '!0' where '!0 = !{!"wavegroup"}'
+
+                                                   Writes the value to the destination address with cache
+                                                   behavior specified by the scope.
+
+                                                   The following table shows the mapping between valid scope values and target
+                                                   instruction flags or field values.
+
+                                                   ============== ========================== ========================== ========================== ========================== ========================== ==========================
+                                                   targets        instruction                           ``"wavefront"``            ``"workgroup"``              ``"cluster"``                ``"agent"``      ``""`` (empty string)
+                                                   ============== ========================== ========================== ========================== ========================== ========================== ==========================
+                                                   gfx90*         ``global_store_dwordx4``                                                                                                               
+                                                                                                                                                                                                         
+                                                   gfx942, gfx950 ``global_store_dwordx4``                       (wave)            ``sc0`` (group)           ``sc1`` (device)           ``sc1`` (device)       ``sc0 sc1`` (system)
+                                                                                                                                                                                                         
+                                                   gfx10*         ``global_store_dwordx4``                                                                                                               
+                                                                                                                                                                                                         
+                                                   gfx11*         ``global_store_dwordx4``                                                                                                               
+                                                                                                                                                                                                         
+                                                   gfx120*        ``global_store_b128``                            (CU)    ``scope:SCOPE_SE`` (SE)  ``scope:SCOPE_DEV`` (DEV)  ``scope:SCOPE_DEV`` (DEV)  ``scope:SCOPE_SYS`` (SYS)
+                                                                                                                                                                                                         
+                                                   gfx125*        ``global_store_b128``                            (CU)                               ``scope:SCOPE_SE`` (SE)  ``scope:SCOPE_DEV`` (DEV)  ``scope:SCOPE_SYS`` (SYS)
+                                                   ============== ========================== ========================== ========================== ========================== ========================== ==========================
+
+                                                   For gfx90*, see "GLC Bit Explained" in the appropriate instruction set reference
+                                                   (e.g. Chapter 9.1.10 in "AMD Instinct MI100" Instruction Set Architecture Reference
+                                                   Guide).
+                                                   
+                                                   For gfx942 and gfx950 targets, see "Memory Scope and Temporal Controls" in the
+                                                   appropriate instruction set reference (e.g. Chapter 9.1.10.2 in the "AMD Instinct
+                                                   MI300" Instruction Set Architecture Reference Guide).
+
+                                                   For gfx10* targets, see "GLC, DLC and SLC Bit Explained" in the appropriate
+                                                   instruction set reference (e.g. Chapter 8.1.10 in "RDNA 2" Instruction Set
+                                                   Architecture Reference Guide)
+                                                   
+                                                   For gfx11* targets, see "Cache Controls: SLC, GLC and DLC" in the appropriate
+                                                   instruction set reference (e.g. Chapter 4.1.1 in "RDNA3" Instruction Set
+                                                   Architecture Reference Guide).
+                                                   
+                                                   For gfx12* targets, see "Cache Controls: SCOPE and Temporal-Hint" in the
+                                                   appropriate instruction set reference (e.g. Chapter 4.1.1 in the "RDNA4"
+                                                   Instruction Set Architecture Reference Guide).
+                                                                   
+
   llvm.amdgcn.s.barrier                            Performs a barrier *arrive* operation immediately followed
                                                    by a barrier *wait* operation on the *workgroup barrier* object.
                                                    see :ref:`amdgpu-amdhsa-execution-barriers`.
@@ -3309,6 +3428,7 @@ The AMDGPU backend uses the following ELF header:
      ``EF_AMDGPU_MACH_AMDGCN_GFX11_7_GENERIC``  0x062      ``gfx11-7-generic``
      ``EF_AMDGPU_MACH_AMDGCN_GFX13_GENERIC``    0x063      ``gfx13-generic``
      *reserved*                                 0x070      Reserved.
+     ``EF_AMDGPU_MACH_AMDGCN_GFX1250_STRICT``   0x0eb      ``gfx1250-strict``
      ========================================== ========== =============================
 
 Sections
@@ -3875,6 +3995,10 @@ object executable code and data to the source language constructs. It can be
 used by tools such as debuggers and profilers. It uses features defined in
 :doc:`AMDGPUDwarfExtensionsForHeterogeneousDebugging` that are made available in
 DWARF Version 4 and DWARF Version 5 as an LLVM vendor extension.
+
+AMDGPU uses LLVM features defined in
+:doc:`AMDGPULLVMExtensionsForHeterogeneousDebugging` to implement the generation
+of DWARF.
 
 This section defines the AMDGPU target architecture specific DWARF mappings.
 
@@ -4525,20 +4649,6 @@ temporarily updated. The location list expression created for this artificial
 variable is used to define the value of the ``DW_AT_LLVM_active_lane``
 attribute.
 
-``DW_AT_LLVM_augmentation``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-For AMDGPU, the ``DW_AT_LLVM_augmentation`` attribute of a compilation unit
-debugger information entry has the following value for the augmentation string:
-
-::
-
-  [amdgpu:v0.0]
-
-The "vX.Y" specifies the major X and minor Y version number of the AMDGPU
-extensions used in the DWARF of the compilation unit. The version number
-conforms to [SEMVER]_.
-
 Call Frame Information
 ----------------------
 
@@ -4594,37 +4704,6 @@ Accelerated Access
 ------------------
 
 See DWARF Version 5 section 6.1.
-
-Lookup By Name Section Header
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-See DWARF Version 5 section 6.1.1.4.1 and :ref:`amdgpu-dwarf-lookup-by-name`.
-
-For AMDGPU the lookup by name section header table:
-
-``augmentation_string_size`` (uword)
-
-  Set to the length of the ``augmentation_string`` value which is always a
-  multiple of 4.
-
-``augmentation_string`` (sequence of UTF-8 characters)
-
-  Contains the following UTF-8 string null padded to a multiple of 4 bytes:
-
-  ::
-
-    [amdgpu:v0.0]
-
-  The "vX.Y" specifies the major X and minor Y version number of the AMDGPU
-  extensions used in the DWARF of this index. The version number conforms to
-  [SEMVER]_.
-
-  .. note::
-
-    This is different to the DWARF Version 5 definition that requires the first
-    4 characters to be the vendor ID. But this is consistent with the other
-    augmentation strings and does allow multiple vendor contributions. However,
-    backwards compatibility may be more desirable.
 
 Lookup By Address Section Header
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -6714,8 +6793,6 @@ The fields used by CP for code objects before V3 also match those specified in
                                                        roundup(lds-size / (320 * 4))
                                                      GFX125*
                                                        roundup(lds-size / (512 * 4))
-                                                     GFX13
-                                                       roundup(lds-size / (256 * 4))
 
      24      1 bit   ENABLE_EXCEPTION_IEEE_754_FP    Wavefront starts execution
                      _INVALID_OPERATION              with specified exceptions
