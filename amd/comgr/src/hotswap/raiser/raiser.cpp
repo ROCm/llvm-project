@@ -207,6 +207,8 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
     return handleSOPP(Ctx, Di, Op);
   if (Di.TargetSpecificFlags & SMRD)
     return handleSMEM(Ctx, Di, Op);
+  if (Di.TargetSpecificFlags & FLAT)
+    return handleFLAT(Ctx, Di, Op);
 
   constexpr uint64_t VOP2EncodingMask =
       VOP2 | VOP3 | VOP3P | DPP | SDWA | VOPD3;

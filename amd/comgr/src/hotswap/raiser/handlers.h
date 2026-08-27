@@ -46,6 +46,11 @@ llvm::Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
 // Translate supported SMEM loads or return a structured refusal.
 llvm::Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
                        OpResolver &Op);
+// Translate supported GLOBAL memory accesses, or return a structured refusal.
+// The format covers flat, global and scratch addressing; only the global forms
+// are recognized and the rest are refused.
+llvm::Error handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
+                       OpResolver &Op);
 /// Translate a supported plain VOP2 instruction, or return a structured
 /// refusal.
 llvm::Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,

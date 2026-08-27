@@ -41,6 +41,14 @@ public:
   // Maximum USER_SGPR_COUNT supported by the source ISA.
   unsigned maxUserSgprs() const;
 
+  // Width in bits of the signed immediate byte offset of a FLAT, GLOBAL or
+  // SCRATCH instruction.
+  unsigned flatOffsetBits() const;
+
+  // Whether the per-lane offset a GLOBAL instruction adds to its SGPR-pair
+  // base is signed. Targets without it read that offset as unsigned.
+  bool hasSignedGlobalLaneOffset() const;
+
   // Whether the source ISA supports kernarg preloading.
   bool hasKernargPreload() const;
 

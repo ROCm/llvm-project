@@ -44,6 +44,18 @@ unsigned ISAProfile::maxUserSgprs() const {
   return STI->hasFeature(llvm::AMDGPU::FeatureGFX1250Insts) ? 32 : 16;
 }
 
+unsigned ISAProfile::flatOffsetBits() const {
+  if (STI->hasFeature(llvm::AMDGPU::FeatureFlatOffsetBits12))
+    return 12;
+  if (STI->hasFeature(llvm::AMDGPU::FeatureFlatOffsetBits24))
+    return 24;
+  return 13;
+}
+
+bool ISAProfile::hasSignedGlobalLaneOffset() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureGFX1250Insts);
+}
+
 bool ISAProfile::hasKernargPreload() const {
   return STI->hasFeature(llvm::AMDGPU::FeatureKernargPreload);
 }
