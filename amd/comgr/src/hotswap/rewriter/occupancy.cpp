@@ -17,6 +17,7 @@
 #include "internal.h"
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/TargetParser/AMDGPUTargetParser.h"
 
 #include <algorithm>
 #include <limits>
@@ -28,14 +29,19 @@ namespace hotswap {
 
 std::optional<SubtargetOccupancyLimits>
 getSubtargetOccupancyLimits(StringRef Processor) {
+  // The rewriter sees a finished code object and cannot tell CU mode from WGP
+  // mode, so assume the full-SIMD block the metadata has always reported.
+  unsigned EUsPerCU = AMDGPU::getNumWorkGroupSIMDs(/*FullSIMDMode=*/true);
+  unsigned MaxWavesPerCU =
+      AMDGPU::getMaxWavesPerEU(AMDGPU::parseArchAMDGCN(Processor)) * EUsPerCU;
+
 #define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, ELF_MACHINE,                      \
                    TRAP_HANDLER_ENABLED, IMAGE_SUPPORT, LDS_SIZE,              \
-                   LDS_BANK_COUNT, EUS_PER_CU, MAX_WAVES_PER_CU,               \
-                   MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
-                   TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
+                   LDS_BANK_COUNT, MAX_FLAT_WORK_GROUP_SIZE,                   \
+                   VGPR_ALLOC_GRANULE, TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS) \
   if (Processor == PROCESSOR)                                                  \
-    return SubtargetOccupancyLimits{EUS_PER_CU,                                \
-                                    MAX_WAVES_PER_CU,                          \
+    return SubtargetOccupancyLimits{EUsPerCU,                                  \
+                                    MaxWavesPerCU,                             \
                                     MAX_FLAT_WORK_GROUP_SIZE,                  \
                                     VGPR_ALLOC_GRANULE,                        \
                                     TOTAL_NUM_VGPRS,                           \
