@@ -47,6 +47,10 @@ public:
   // Whether the source ISA uses architected SGPRs.
   bool hasArchitectedSgprs() const;
 
+  /// Return whether kernel descriptors for this ISA encode DX10_CLAMP and
+  /// IEEE_MODE.
+  bool hasDx10ClampAndIeeeMode() const;
+
 private:
   explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}
 

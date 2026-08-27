@@ -18,7 +18,7 @@
 // RUN: unbundle %t.compressed-bundle.bc hip-amdgcn-amd-amdhsa-unknown-gfx1030 %t.compressed.gfx1030.bc
 // RUN: %llvm-dis %t.compressed.gfx1030.bc -o - | %FileCheck --check-prefixes=BOTH,GFX10 %s
 //
-// BOTH: target triple = "amdgcn-amd-amdhsa"
+// BOTH: target triple = "amd{{gcn|gpu[0-9.]+}}-amd-amdhsa"
 // GFX9: "target-cpu"="gfx900"
 // GFX10: "target-cpu"="gfx1030"
 

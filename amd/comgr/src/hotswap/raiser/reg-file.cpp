@@ -6,10 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "reg-file.h"
+#include "hotswap/raiser/reg-file.h"
 
 #include "hotswap/decoder/isa-profile.h"
-#include "wave-projection.h"
+#include "hotswap/raiser/wave-projection.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 
@@ -220,9 +220,6 @@ void AllocaRegFile::init(IRBuilder<> &B, Type *I32Ty, Type *I1Ty,
 void AllocaRegFile::storeSGPR32(IRBuilder<> &B, unsigned Idx, Value *V) {
   assertInBank(Sgpr, Idx);
   B.CreateStore(asI32(B, V), Sgpr[Idx]);
-  // Notify the per-SGPR write hook, if installed.
-  if (OnSgprWritten)
-    OnSgprWritten(Idx);
 }
 
 Value *AllocaRegFile::loadSGPR32(IRBuilder<> &B, unsigned Idx) {
@@ -233,11 +230,6 @@ Value *AllocaRegFile::loadSGPR32(IRBuilder<> &B, unsigned Idx) {
 void AllocaRegFile::storeSGPR64(IRBuilder<> &B, unsigned Idx, Value *V) {
   assertPairInBank(Sgpr, Idx);
   storeLoHi(B, Sgpr, Idx, V);
-  // A pair write touches both halves, so notify the hook for each.
-  if (OnSgprWritten) {
-    OnSgprWritten(Idx);
-    OnSgprWritten(Idx + 1);
-  }
 }
 
 Value *AllocaRegFile::loadSGPR64(IRBuilder<> &B, unsigned Idx) {
@@ -304,8 +296,6 @@ void AllocaRegFile::storeExec(IRBuilder<> &B, Value *V) {
   if (V->getType() != ExecTy)
     V = B.CreateBitOrPointerCast(V, ExecTy);
   B.CreateStore(V, Exec);
-  if (OnExecWritten)
-    OnExecWritten();
 }
 
 Value *AllocaRegFile::readVCCAsWaveMask(IRBuilder<> &B, Type *ResultTy) {
@@ -328,8 +318,13 @@ Value *AllocaRegFile::readReg32(IRBuilder<> &B, ParsedReg Pr) {
   // VCC read as a scalar goes through the wave-mask ballot, not a
   // sign-extension of the local i1; callers wanting a per-lane i1 call
   // `loadVCC` directly.
-  if (Pr.RegKind == ParsedReg::VCC)
-    return readVCCAsWaveMask(B, B.getInt32Ty());
+  if (Pr.RegKind == ParsedReg::VCC) {
+    Value *V = readVCCAsWaveMask(B, Projection->sourceWaveMaskTy());
+    if (Pr.WidthInDwords == 1 && Pr.BaseIdx == 1)
+      V = B.CreateLShr(V, 32, "vcc_hi_shr");
+    return B.CreateTruncOrBitCast(V, B.getInt32Ty(),
+                                  Pr.BaseIdx == 1 ? "vcc_hi" : "vcc_lo");
+  }
   if (Pr.RegKind == ParsedReg::EXEC) {
     Value *V = loadExec(B);
     Type *I32Ty = B.getInt32Ty();
@@ -349,8 +344,11 @@ Value *AllocaRegFile::readReg32(IRBuilder<> &B, ParsedReg Pr) {
     return B.CreateZExt(loadSCC(B), B.getInt32Ty());
   if (Pr.RegKind == ParsedReg::M0)
     return B.CreateLoad(B.getInt32Ty(), M0, "m0_val");
-  if (Pr.RegKind == ParsedReg::FLAT_SCR)
-    return B.CreateLoad(B.getInt32Ty(), FlatScr[0], "fscr_val");
+  if (Pr.RegKind == ParsedReg::FLAT_SCR) {
+    unsigned Idx = requireIndex(Pr);
+    assertInBank(FlatScr, Idx);
+    return B.CreateLoad(B.getInt32Ty(), FlatScr[Idx], "fscr_val");
+  }
   if (Pr.RegKind == ParsedReg::TTMP && Pr.BaseIdx && *Pr.BaseIdx < Ttmp.size())
     return B.CreateLoad(B.getInt32Ty(), Ttmp[*Pr.BaseIdx], "ttmp_val");
   // GFX9 src_lds_direct (encoding 254) reads one dword from LDS at the byte
@@ -472,18 +470,30 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
   }
   if (Pr.RegKind == ParsedReg::VCC) {
     assert(Projection && "writeReg32(VCC) requires a WaveProjection");
-    storeVCC(B, Projection->extractLaneBitFromWaveMask(B, V));
+    Value *NewBit = Projection->extractLaneBitFromWaveMask(B, V);
+    if (Pr.WidthInDwords == 1 && !Projection->sourceIsa().isWave32()) {
+      unsigned Half = requireIndex(Pr);
+      assert(Half < 2 && "VCC half index must be zero or one");
+      Value *Lane = Projection->emitLaneIdx(B);
+      Value *Boundary = ConstantInt::get(Lane->getType(), 32);
+      Value *WritesLane = Half == 0
+                              ? B.CreateICmpULT(Lane, Boundary, "vcc_write_lo")
+                              : B.CreateICmpUGE(Lane, Boundary, "vcc_write_hi");
+      NewBit =
+          B.CreateSelect(WritesLane, NewBit, loadVCC(B), "vcc_partial_write");
+    }
+    storeVCC(B, NewBit);
     return;
   }
   if (Pr.RegKind == ParsedReg::M0) {
     V = asI32(B, V);
     B.CreateStore(V, M0);
-    if (OnM0Written)
-      OnM0Written(V);
     return;
   }
   if (Pr.RegKind == ParsedReg::FLAT_SCR) {
-    B.CreateStore(asI32(B, V), FlatScr[0]);
+    unsigned Idx = requireIndex(Pr);
+    assertInBank(FlatScr, Idx);
+    B.CreateStore(asI32(B, V), FlatScr[Idx]);
     return;
   }
   if (Pr.RegKind == ParsedReg::TTMP && Pr.BaseIdx &&
@@ -637,7 +647,7 @@ void AllocaRegFile::writeRegVec(IRBuilder<> &B, ParsedReg Pr, Value *V) {
   }
 }
 
-void AllocaRegFile::collectAllocas(SmallVectorImpl<AllocaInst *> &Out) {
+void AllocaRegFile::collectAllocas(SmallVectorImpl<AllocaInst *> &Out) const {
   for (AllocaInst *A : Sgpr)
     Out.push_back(A);
   for (AllocaInst *A : Vgpr)

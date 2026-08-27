@@ -70,13 +70,14 @@ add_comgr_lit_binary(isa-enumeration c)
 add_comgr_lit_binary(test-get-data-isa-name c)
 
 # The hotswap transpiler driver used by the hotswap/raiser lit tests. It links
-# the hotswap-loader OBJECT library and the shared comgr-object-utils
-# objects (which carry the buffer-facing getElfIsaName / getMetadataRoot /
-# lookupSymbolByName entry points) rather than recompiling the comgr sources, so
-# the driver and amd_comgr share one set of objects and compile flags. Those
-# objects also contain amd_comgr C-API helpers the driver never calls and that
-# reference the rest of comgr; --gc-sections drops them (they were built with
-# function/data sections). MSVC's default /OPT:REF removes them the same way.
+# the hotswap decoder, raiser, loader, and common OBJECT libraries and the
+# shared comgr-object-utils objects (which carry the buffer-facing
+# getElfIsaName / getMetadataRoot / lookupSymbolByName entry points) rather than
+# recompiling the comgr sources, so the driver and amd_comgr share one set of
+# objects and compile flags. Those objects also contain amd_comgr C-API helpers
+# the driver never calls and that reference the rest of comgr; --gc-sections
+# drops them (they were built with function/data sections). MSVC's default
+# /OPT:REF removes them the same way.
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   add_executable(hotswap_transpile_cli comgr-sources/hotswap_transpile_cli.cpp)
   # Match the C++ standard the rest of comgr compiles with. The comgr build
@@ -98,15 +99,18 @@ if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
       target_compile_options(hotswap_transpile_cli PRIVATE -fno-rtti)
     endif()
   endif()
+
   target_include_directories(hotswap_transpile_cli PRIVATE
     ${LLVM_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
     ${CMAKE_CURRENT_BINARY_DIR}/../include)
   # The hotswap OBJECT libraries contribute objects only, so name the LLVM set
   # this driver needs explicitly; ${LLVM_LIBS} is the same curated set amd_comgr
-  # links, already resolved to the dylib or the static components.
+  # links, already resolved to the dylib or the static components. It carries
+  # the AMDGPU components the driver's LLVMInitializeAMDGPU* calls register.
   target_link_libraries(hotswap_transpile_cli
-    PRIVATE hotswap::common hotswap::loader comgr-object-utils ${LLVM_LIBS})
+    PRIVATE hotswap::common hotswap::loader hotswap::decoder hotswap::raiser
+            comgr-object-utils ${LLVM_LIBS})
   if(NOT WIN32)
     target_link_options(hotswap_transpile_cli PRIVATE -Wl,--gc-sections)
   endif()

@@ -2313,7 +2313,7 @@ static void writeDIDerivedType(raw_ostream &Out, const DIDerivedType *N,
   Printer.printDIFlags("flags", N->getFlags());
   Printer.printMetadata("extraData", N->getRawExtraData());
   if (const auto &DWARFAddressSpace = N->getDWARFAddressSpace())
-    Printer.printInt("addressSpace", *DWARFAddressSpace,
+    Printer.printInt("dwarfAddressSpace", *DWARFAddressSpace,
                      /* ShouldSkipZero */ false);
   Printer.printMemorySpace("memorySpace", N->getDWARFMemorySpace());
   Printer.printMetadata("annotations", N->getRawAnnotations());
@@ -4573,7 +4573,9 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
       (isa<AtomicRMWInst>(I) && cast<AtomicRMWInst>(I).isVolatile()))
     Out << " volatile";
 
-  if (isa<LoadInst>(I) && cast<LoadInst>(I).isElementwise())
+  // Print the elementwise marker for atomic loads and stores.
+  if ((isa<LoadInst>(I) && cast<LoadInst>(I).isElementwise()) ||
+      (isa<StoreInst>(I) && cast<StoreInst>(I).isElementwise()))
     Out << " elementwise";
 
   // Print out optimization information.

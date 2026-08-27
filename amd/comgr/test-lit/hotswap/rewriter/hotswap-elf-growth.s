@@ -4,7 +4,7 @@
 // COM: kernel contains no patchable instructions), but the rewrite pipeline
 // COM: must accept the ELF rather than returning an error.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // COM: Confirm .dynamic exists after .text in the input ELF.
 // RUN: %llvm-readelf --section-headers %t.elf | %FileCheck --check-prefix=LAYOUT %s

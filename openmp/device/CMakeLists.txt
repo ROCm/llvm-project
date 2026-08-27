@@ -23,9 +23,7 @@ set(src_files
   ${CMAKE_CURRENT_SOURCE_DIR}/src/DeviceUtils.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Workshare.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ExtraMapping.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/Xteamr.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/Xteams.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/DeviceMemInit.cpp
 )
 # Only link AMD ockl/ocml device libraries when actually building for AMDGCN.

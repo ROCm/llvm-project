@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "raise_failure.h"
+#include "hotswap/raiser/raise_failure.h"
 
 #include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
@@ -25,6 +25,9 @@ void RaiseFailure::log(llvm::raw_ostream &OS) const {
     OS << " @offset=0x";
     OS.write_hex(*Offset);
   }
+  if (Origin)
+    OS << " in kernel '" << Origin->KernelName << "' (" << Origin->SourceCpu
+       << " -> " << Origin->TargetCpu << ")";
   if (!Detail.empty())
     OS << " :: " << Detail;
 }
@@ -42,8 +45,8 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "UnsupportedOpcode";
   case RaiseFailureReason::UnsupportedInstructionForm:
     return "unsupported-instruction-form";
-  case RaiseFailureReason::UnsupportedSourceHiddenArg:
-    return "unsupported-source-hidden-arg";
+  case RaiseFailureReason::UnsupportedFloatingPointMode:
+    return "unsupported-floating-point-mode";
   case RaiseFailureReason::SPEUnsafeExecWriter:
     return "SPE-unmodeled-EXEC-writer";
   case RaiseFailureReason::TargetMachineCreationFailed:
@@ -52,6 +55,8 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "IRVerificationFailed";
   case RaiseFailureReason::KernelBoundaryViolation:
     return "kernel-boundary-violation";
+  case RaiseFailureReason::UnterminatedKernelExtent:
+    return "unterminated-kernel-extent";
   case RaiseFailureReason::DeviceLibraryLinkFailed:
     return "device-library-link-failed";
   case RaiseFailureReason::CrossWaveLaneIdLeak:
@@ -72,6 +77,8 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "missing-kernel-descriptor";
   case RaiseFailureReason::UserSgprLayoutMismatch:
     return "user-sgpr-layout-mismatch";
+  case RaiseFailureReason::UnsupportedEntrySgprSource:
+    return "unsupported-entry-sgpr-source";
   case RaiseFailureReason::UnsupportedSourceClusterDims:
     return "unsupported-source-cluster-dims";
   }
@@ -101,6 +108,18 @@ llvm::Error RaiseFailure::general(RaiseFailureReason Reason,
   return llvm::make_error<RaiseFailure>(
       Reason, std::string(), std::optional<std::string>(std::nullopt),
       std::optional<uint64_t>(std::nullopt), Detail.str());
+}
+
+llvm::Error RaiseFailure::withOrigin(llvm::Error Err,
+                                     llvm::StringRef KernelName,
+                                     llvm::StringRef SourceCpu,
+                                     llvm::StringRef TargetCpu) {
+  return llvm::handleErrors(
+      std::move(Err), [&](std::unique_ptr<RaiseFailure> F) -> llvm::Error {
+        return llvm::make_error<RaiseFailure>(
+            F->Reason, F->Mnemonic, F->Format, F->Offset, F->Detail,
+            FailureOrigin{KernelName.str(), SourceCpu.str(), TargetCpu.str()});
+      });
 }
 
 } // namespace COMGR::hotswap

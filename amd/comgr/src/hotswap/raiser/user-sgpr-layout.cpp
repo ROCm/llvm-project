@@ -6,8 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "user-sgpr-layout.h"
-#include "raise_failure.h"
+#include "hotswap/raiser/user-sgpr-layout.h"
+
+#include "hotswap/raiser/raise_failure.h"
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"

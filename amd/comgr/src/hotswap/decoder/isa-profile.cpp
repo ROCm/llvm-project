@@ -15,7 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "isa-profile.h"
+#include "hotswap/decoder/isa-profile.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -50,6 +50,10 @@ bool ISAProfile::hasKernargPreload() const {
 
 bool ISAProfile::hasArchitectedSgprs() const {
   return STI->hasFeature(llvm::AMDGPU::FeatureArchitectedSGPRs);
+}
+
+bool ISAProfile::hasDx10ClampAndIeeeMode() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureDX10ClampAndIEEEMode);
 }
 
 } // namespace COMGR::hotswap

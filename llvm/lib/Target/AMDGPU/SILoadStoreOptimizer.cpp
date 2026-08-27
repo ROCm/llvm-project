@@ -1322,7 +1322,7 @@ SILoadStoreOptimizer::checkAndPrepareMerge(CombineInfo &CI,
   // this function should only be called on CombineInfo objects that
   // have already been confirmed to be mergeable.
   if (CI.InstClass == DS_READ || CI.InstClass == DS_WRITE) {
-    if (STM->hasUnalignedDS2Bug() &&
+    if (STM->hasNeedsAligned2addrDS() &&
         (CI.I->memoperands_empty() ||
          (*CI.I->memoperands_begin())->getAlign().value() < CI.Width * 4))
       return nullptr;

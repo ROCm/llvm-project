@@ -6091,8 +6091,7 @@ bool LLParser::parseDIStringType(MDNode *&Result, bool IsDistinct) {
 ///   ::= !DIDerivedType(tag: DW_TAG_pointer_type, name: "int", file: !0,
 ///                      line: 7, scope: !1, baseType: !2, size: 32,
 ///                      align: 32, offset: 0, flags: 0, extraData: !3,
-///                      addressSpace: 3, memorySpace: DW_MSPACE_LLVM_none
-///                      ptrAuthKey: 1,
+///                      dwarfAddressSpace: 3, ptrAuthKey: 1,
 ///                      ptrAuthIsAddressDiscriminated: true,
 ///                      ptrAuthExtraDiscriminator: 0x1234,
 ///                      ptrAuthIsaPointer: 1, ptrAuthAuthenticatesNullValues:1
@@ -6110,7 +6109,7 @@ bool LLParser::parseDIDerivedType(MDNode *&Result, bool IsDistinct) {
   OPTIONAL(offset, MDUnsignedOrMDField, (0, UINT64_MAX));                      \
   OPTIONAL(flags, DIFlagField, );                                              \
   OPTIONAL(extraData, MDField, );                                              \
-  OPTIONAL(addressSpace, MDUnsignedField, (UINT32_MAX, UINT32_MAX));      \
+  OPTIONAL(dwarfAddressSpace, MDUnsignedField, (UINT32_MAX, UINT32_MAX));      \
   OPTIONAL(memorySpace, DwarfMSpaceField, );                                   \
   OPTIONAL(annotations, MDField, );                                            \
   OPTIONAL(ptrAuthKey, MDUnsignedField, (0, 7));                               \
@@ -6122,9 +6121,8 @@ bool LLParser::parseDIDerivedType(MDNode *&Result, bool IsDistinct) {
 #undef VISIT_MD_FIELDS
 
   std::optional<unsigned> DWARFAddressSpace;
-  
-  if (addressSpace.Val != UINT32_MAX)
-    DWARFAddressSpace = addressSpace.Val;
+  if (dwarfAddressSpace.Val != UINT32_MAX)
+    DWARFAddressSpace = dwarfAddressSpace.Val;
   std::optional<DIDerivedType::PtrAuthData> PtrAuthData;
   if (ptrAuthKey.Val)
     PtrAuthData.emplace(
@@ -9220,10 +9218,11 @@ int LLParser::parseLoad(Instruction *&Inst, PerFunctionState &PFS) {
 /// parseStore
 
 ///   ::= 'store' 'volatile'? TypeAndValue ',' TypeAndValue (',' 'align' i32)?
-///   ::= 'store' 'atomic' 'volatile'? TypeAndValue ',' TypeAndValue
-///       'singlethread'? AtomicOrdering (',' 'align' i32)?
+///   ::= 'store' 'atomic' 'volatile'? 'elementwise'? TypeAndValue ','
+///       TypeAndValue 'singlethread'? AtomicOrdering (',' 'align' i32)?
 int LLParser::parseStore(Instruction *&Inst, PerFunctionState &PFS) {
-  Value *Val, *Ptr; LocTy Loc, PtrLoc;
+  Value *Val, *Ptr;
+  LocTy Loc, PtrLoc;
   MaybeAlign Alignment;
   bool AteExtraComma = false;
   bool isAtomic = false;
@@ -9238,6 +9237,12 @@ int LLParser::parseStore(Instruction *&Inst, PerFunctionState &PFS) {
   bool isVolatile = false;
   if (Lex.getKind() == lltok::kw_volatile) {
     isVolatile = true;
+    Lex.Lex();
+  }
+
+  bool IsElementwise = false;
+  if (Lex.getKind() == lltok::kw_elementwise) {
+    IsElementwise = true;
     Lex.Lex();
   }
 
@@ -9257,13 +9262,28 @@ int LLParser::parseStore(Instruction *&Inst, PerFunctionState &PFS) {
   if (Ordering == AtomicOrdering::Acquire ||
       Ordering == AtomicOrdering::AcquireRelease)
     return error(Loc, "atomic store cannot use Acquire ordering");
+
+  if (IsElementwise && !isAtomic)
+    return error(Loc, "elementwise store must be atomic");
+
+  if (IsElementwise && !isa<FixedVectorType>(Val->getType()))
+    return error(
+        Loc, "atomic elementwise store operand must have fixed vector type");
+
+  if (IsElementwise && Ordering == AtomicOrdering::SequentiallyConsistent)
+    return error(Loc,
+                 "atomic elementwise store cannot be sequentially consistent");
+
   SmallPtrSet<Type *, 4> Visited;
   if (!Alignment && !Val->getType()->isSized(&Visited))
     return error(Loc, "storing unsized types is not allowed");
   if (!Alignment)
     Alignment = M->getDataLayout().getABITypeAlign(Val->getType());
 
-  Inst = new StoreInst(Val, Ptr, isVolatile, *Alignment, Ordering, SSID);
+  Inst = new StoreInst(Val, Ptr,
+                       LoadStoreInstProperties{isVolatile, *Alignment, Ordering,
+                                               SSID, IsElementwise},
+                       /*InsertBefore=*/nullptr);
   return AteExtraComma ? InstExtraComma : InstNormal;
 }
 
