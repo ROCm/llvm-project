@@ -55,6 +55,10 @@ llvm::Error handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
 /// refusal.
 llvm::Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
                        OpResolver &Op);
+/// Translate a supported plain VOPC comparison into the condition registers
+/// the opcode writes, or return a structured refusal.
+llvm::Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
+                       OpResolver &Op);
 
 } // namespace COMGR::hotswap
 

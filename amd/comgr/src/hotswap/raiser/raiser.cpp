@@ -216,6 +216,12 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
     return handleVOP2(Ctx, Di, Op);
   }
 
+  constexpr uint64_t VOPCEncodingMask =
+      VOPC | VOP3 | VOP3P | DPP | SDWA | VOPD3;
+  if ((Di.TargetSpecificFlags & VOPCEncodingMask) == VOPC) {
+    return handleVOPC(Ctx, Di, Op);
+  }
+
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
       strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,

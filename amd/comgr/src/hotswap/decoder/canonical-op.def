@@ -157,6 +157,21 @@ CANONICAL_OP(S_ICACHE_INV)
 CANONICAL_OP(S_LOAD_B32)
 CANONICAL_OP(S_LOAD_B64)
 CANONICAL_OP(S_LOAD_B128)
+// VOPC 32-bit integer comparisons. The `v_cmpx_*` opcodes share these rows:
+// they compute the same comparison and differ only in where the lane mask
+// lands, which the decoded implicit definitions already record.
+CANONICAL_OP(V_CMP_LT_I32)
+CANONICAL_OP(V_CMP_EQ_I32)
+CANONICAL_OP(V_CMP_LE_I32)
+CANONICAL_OP(V_CMP_GT_I32)
+CANONICAL_OP(V_CMP_NE_I32)
+CANONICAL_OP(V_CMP_GE_I32)
+CANONICAL_OP(V_CMP_LT_U32)
+CANONICAL_OP(V_CMP_EQ_U32)
+CANONICAL_OP(V_CMP_LE_U32)
+CANONICAL_OP(V_CMP_GT_U32)
+CANONICAL_OP(V_CMP_NE_U32)
+CANONICAL_OP(V_CMP_GE_U32)
 
 // FLAT global memory.
 CANONICAL_OP(GLOBAL_LOAD_B32)
