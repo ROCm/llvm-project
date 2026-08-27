@@ -21,6 +21,7 @@
 #include "llvm/IR/Value.h"
 
 #include <array>
+#include <cassert>
 
 namespace COMGR::hotswap {
 
@@ -38,7 +39,12 @@ public:
   WaveProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
                  llvm::Type *I32Ty, llvm::Type *I64Ty)
       : Src(SrcIsa), Tgt(TgtIsa), I32Ty(I32Ty), I64Ty(I64Ty),
-        ExecStorageTy(SrcIsa.isWave32() ? I32Ty : I64Ty) {}
+        ExecStorageTy(SrcIsa.isWave32() ? I32Ty : I64Ty) {
+    assert(SrcIsa.hasValidWaveSize() && "invalid source wave size");
+    assert(TgtIsa.hasValidWaveSize() && "invalid target wave size");
+    assert(TgtIsa.waveSize() >= SrcIsa.waveSize() &&
+           "wave projection does not support narrowing");
+  }
 
   virtual ~WaveProjection() = default;
 
