@@ -83,8 +83,8 @@ static Error raiseBinary16(RaiseContext &Ctx, OpResolver &Op,
   });
 }
 
-// Write an EXEC-predicated vector result and fully replace VCC with the
-// per-lane carry or borrow result.
+// Write an EXEC-predicated vector result and store carry or borrow in VCC for
+// active source lanes.
 static void writeResultAndVCC(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
                               Value *VCC) {
   Value *LaneActive = Ctx.registers().emitLaneActiveBit();
