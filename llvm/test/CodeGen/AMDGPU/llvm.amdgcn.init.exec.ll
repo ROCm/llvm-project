@@ -1,9 +1,9 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefix=GCN %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu10.10 -mattr=+wavefrontsize64 < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.10 -mattr=+wavefrontsize64 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.10 -mattr=+wavefrontsize64 < %s | FileCheck -check-prefix=GCN %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.00 -mattr=+wavefrontsize64 -amdgpu-enable-delay-alu=0 < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 -mattr=+wavefrontsize64 -amdgpu-enable-delay-alu=0 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 -mattr=+wavefrontsize64 -amdgpu-enable-delay-alu=0 < %s | FileCheck -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}full_mask:
 ; GCN: s_mov_b64 exec, -1

@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=amdgpu12.00 -start-before=amdgpu-unify-divergent-exit-nodes < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-SDAG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu12.00 -start-before=amdgpu-unify-divergent-exit-nodes < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu12.00 -start-before=amdgpu-unify-divergent-exit-nodes < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-GISEL %s
 
 ; --------------------------------------------------------------------------------
 ; fminimum tests

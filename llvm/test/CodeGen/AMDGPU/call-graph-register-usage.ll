@@ -3,11 +3,11 @@
 ; RUN: sed 's/CODE_OBJECT_VERSION/600/g' %s | llc -global-isel=0 -mtriple=amdgpu7.00-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN-V5 %s
 ; RUN: sed 's/CODE_OBJECT_VERSION/400/g' %s | llc -global-isel=0 -mtriple=amdgpu8.03-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN,VI,VI-NOBUG %s
 ; RUN: sed 's/CODE_OBJECT_VERSION/400/g' %s | llc -global-isel=0 -mtriple=amdgpu8.02-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN,VI,VI-BUG %s
-; RUN: sed 's/CODE_OBJECT_VERSION/400/g' %s | llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.00-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN,CI %s
-; RUN: sed 's/CODE_OBJECT_VERSION/500/g' %s | llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.00-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN-V5 %s
-; RUN: sed 's/CODE_OBJECT_VERSION/600/g' %s | llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.00-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN-V5 %s
-; RUN: sed 's/CODE_OBJECT_VERSION/400/g' %s | llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.03-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN,VI,VI-NOBUG %s
-; RUN: sed 's/CODE_OBJECT_VERSION/400/g' %s | llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.02-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN,VI,VI-BUG %s
+; RUN: sed 's/CODE_OBJECT_VERSION/400/g' %s | llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu7.00-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN,CI %s
+; RUN: sed 's/CODE_OBJECT_VERSION/500/g' %s | llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu7.00-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN-V5 %s
+; RUN: sed 's/CODE_OBJECT_VERSION/600/g' %s | llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu7.00-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN-V5 %s
+; RUN: sed 's/CODE_OBJECT_VERSION/400/g' %s | llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.03-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN,VI,VI-NOBUG %s
+; RUN: sed 's/CODE_OBJECT_VERSION/400/g' %s | llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.02-amd-amdhsa -enable-ipra=0 | FileCheck -check-prefixes=GCN,VI,VI-BUG %s
 
 ; Make sure to run a GPU with the SGPR allocation bug.
 

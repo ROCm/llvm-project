@@ -2,8 +2,8 @@
 ; RUN: llc -mtriple=amdgpu11.00 -mattr="+wavefrontsize32" < %s | FileCheck -check-prefixes=SDAG-GFX11 %s
 ; RUN: llc -mtriple=amdgpu10.10 -mattr="+wavefrontsize32" < %s | FileCheck -check-prefixes=SDAG-GFX10 %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 -mattr="+wavefrontsize32" < %s | FileCheck -check-prefixes=GISEL-GFX11 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.10 -mattr="+wavefrontsize32" < %s | FileCheck -check-prefixes=GISEL-GFX10 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 -mattr="+wavefrontsize32" < %s | FileCheck -check-prefixes=GISEL-GFX11 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.10 -mattr="+wavefrontsize32" < %s | FileCheck -check-prefixes=GISEL-GFX10 %s
 
 declare i32 @llvm.amdgcn.fcmp.f32(float, float, i32) #0
 declare i32 @llvm.amdgcn.fcmp.f64(double, double, i32) #0

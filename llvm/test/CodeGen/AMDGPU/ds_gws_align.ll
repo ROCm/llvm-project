@@ -1,7 +1,7 @@
 ; RUN: llc -mtriple=amdgpu9.08-mesa-mesa3d -o - < %s | FileCheck --check-prefixes=GCN,GFX908 %s
 ; RUN: llc -mtriple=amdgpu9.0a-mesa-mesa3d -o - < %s | FileCheck --check-prefixes=GCN,GFX90A %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.08-mesa-mesa3d -o - < %s | FileCheck --check-prefixes=GCN,GFX908 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.0a-mesa-mesa3d -o - < %s | FileCheck --check-prefixes=GCN,GFX90A %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.08-mesa-mesa3d -o - < %s | FileCheck --check-prefixes=GCN,GFX908 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.0a-mesa-mesa3d -o - < %s | FileCheck --check-prefixes=GCN,GFX90A %s
 ; RUN: llc -mtriple=amdgpu9.08-mesa-mesa3d -early-live-intervals -o - < %s | FileCheck --check-prefixes=GCN,GFX908 %s
 
 ; GCN-LABEL: {{^}}gws_init_odd_reg:

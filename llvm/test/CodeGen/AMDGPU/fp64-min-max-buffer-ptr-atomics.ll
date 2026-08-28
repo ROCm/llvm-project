@@ -5,11 +5,11 @@
 ; RUN: llc < %s -mtriple=amdgpu10.30 | FileCheck %s -check-prefix=GFX1030
 ; RUN: llc < %s -mtriple=amdgpu13.10 | FileCheck %s -check-prefix=GFX1310
 
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu6.01 | FileCheck %s -check-prefix=G_SI
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu7.01 | FileCheck %s  -check-prefix=G_GFX7
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu10.10 | FileCheck %s -check-prefix=G_GFX10
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu10.30 | FileCheck %s -check-prefix=G_GFX1030
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu13.10 | FileCheck %s -check-prefix=G_GFX1310
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu6.01 | FileCheck %s -check-prefix=G_SI
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu7.01 | FileCheck %s  -check-prefix=G_GFX7
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu10.10 | FileCheck %s -check-prefix=G_GFX10
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu10.30 | FileCheck %s -check-prefix=G_GFX1030
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu13.10 | FileCheck %s -check-prefix=G_GFX1310
 
 declare double @llvm.amdgcn.raw.ptr.buffer.atomic.fmin.f64(double, ptr addrspace(8), i32, i32, i32 immarg)
 declare double @llvm.amdgcn.raw.ptr.buffer.atomic.fmax.f64(double, ptr addrspace(8), i32, i32, i32 immarg)

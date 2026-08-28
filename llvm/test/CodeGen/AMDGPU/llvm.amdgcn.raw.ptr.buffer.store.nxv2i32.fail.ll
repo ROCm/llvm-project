@@ -2,7 +2,7 @@
 ; anything changing.
 ; RUN: not --crash llc -global-isel=0 -mtriple=amdgpu9.00  -filetype=null < %s 2>&1 | FileCheck %s --check-prefix=SDAG
 ; SDAG: LLVM ERROR: Scalarization of scalable vectors is not supported.
-; RUN: not --crash llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00  -filetype=null < %s 2>&1 | FileCheck %s --check-prefix=GISEL
+; RUN: not --crash llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00  -filetype=null < %s 2>&1 | FileCheck %s --check-prefix=GISEL
 ; GISEL: LLVM ERROR: Cannot implicitly convert a scalable size to a fixed-width size in `TypeSize::operator ScalarTy()`
 
 define void @buffer_store_nxv2i32(ptr addrspace(8) inreg %rsrc, i32 %offset) {

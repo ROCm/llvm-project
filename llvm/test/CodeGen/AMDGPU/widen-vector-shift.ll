@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn -mcpu=gfx90a -O0 -print-after=legalizer %s -o /dev/null 2>&1 | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgcn -mcpu=gfx90a -O0 -print-after=legalizer %s -o /dev/null 2>&1 | FileCheck %s
 
 ; CHECK-LABEL: widen_ashr_i4:
 define amdgpu_kernel void @widen_ashr_i4(

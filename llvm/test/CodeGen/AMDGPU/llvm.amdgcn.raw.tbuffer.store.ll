@@ -4,7 +4,7 @@
 ;RUN: llc < %s -mtriple=amdgpu10.10 | FileCheck -check-prefix=GFX10 %s
 ;RUN: llc < %s -mtriple=amdgpu11.00 | FileCheck -check-prefix=GFX11 %s
 ;RUN: llc < %s -mtriple=amdgpu12.00 | FileCheck -check-prefix=GFX12 %s
-;RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu12.00 | FileCheck -check-prefix=GFX12 %s
+;RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu12.00 | FileCheck -check-prefix=GFX12 %s
 
 define amdgpu_ps void @tbuffer_store(<4 x i32> inreg, <4 x float>, <4 x float>, <4 x float>) {
 ; PREGFX10-LABEL: tbuffer_store:

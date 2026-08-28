@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu12.00-amd-amdpal < %s | FileCheck %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu6.00-amd-amdpal < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu12.00-amd-amdpal < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu6.00-amd-amdpal < %s | FileCheck %s
 
 @global = addrspace(1) global i32 poison, align 4
 

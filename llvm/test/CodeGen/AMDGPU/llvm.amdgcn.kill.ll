@@ -3,7 +3,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu10.10 -mattr=+wavefrontsize64 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX10 %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu11.00 -mattr=+wavefrontsize64 -amdgpu-enable-delay-alu=0 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX11-12,GFX11-12-SDAG,GFX11 %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu12.00 -mattr=+wavefrontsize64 -amdgpu-enable-delay-alu=0 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX11-12,GFX11-12-SDAG,GFX12,GFX12-SDAG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00 -mattr=+wavefrontsize64 -amdgpu-enable-delay-alu=0 < %s | FileCheck -enable-var-scope -check-prefixes=GFX11-12,GFX12,GFX12-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00 -mattr=+wavefrontsize64 -amdgpu-enable-delay-alu=0 < %s | FileCheck -enable-var-scope -check-prefixes=GFX11-12,GFX12,GFX12-GISEL %s
 
 define amdgpu_gs void @gs_const() {
 ; SI-LABEL: gs_const:

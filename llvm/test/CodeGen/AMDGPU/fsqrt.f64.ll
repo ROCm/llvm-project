@@ -2,8 +2,8 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu6.01 < %s | FileCheck -check-prefixes=GFX6,GFX6-SDAG %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu8.03 < %s | FileCheck -check-prefixes=GFX8,GFX8-SDAG %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu6.01 < %s | FileCheck -check-prefixes=GFX6,GFX6-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.03 < %s | FileCheck -check-prefixes=GFX8,GFX8-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu6.01 < %s | FileCheck -check-prefixes=GFX6,GFX6-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.03 < %s | FileCheck -check-prefixes=GFX8,GFX8-GISEL %s
 
 define double @v_sqrt_f64(double %x) {
 ; GFX6-SDAG-LABEL: v_sqrt_f64:

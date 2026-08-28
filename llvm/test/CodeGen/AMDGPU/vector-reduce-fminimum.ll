@@ -7,12 +7,12 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX11,GFX11-SDAG,GFX11-SDAG-FAKE16 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.70 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-SDAG,GFX1170-SDAG-TRUE16 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.70 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-SDAG,GFX1170-SDAG-FAKE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.70 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-GISEL,GFX1170-GISEL-TRUE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.70 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-GISEL,GFX1170-GISEL-FAKE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.70 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-GISEL,GFX1170-GISEL-TRUE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.70 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1170,GFX1170-GISEL,GFX1170-GISEL-FAKE16 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.00 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-SDAG,GFX12-SDAG-TRUE16 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-SDAG,GFX12-SDAG-FAKE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-GISEL,GFX12-GISEL-TRUE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-GISEL,GFX12-GISEL-FAKE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-GISEL,GFX12-GISEL-TRUE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-GISEL,GFX12-GISEL-FAKE16 %s
 
 define half @test_vector_reduce_fminimum_v2half(<2 x half> %v) {
 ; GFX7-LABEL: test_vector_reduce_fminimum_v2half:

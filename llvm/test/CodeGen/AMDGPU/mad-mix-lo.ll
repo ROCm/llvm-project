@@ -7,11 +7,11 @@
 ; RUN: llc -mtriple=amdgpu7.01 < %s | FileCheck -check-prefixes=SDAG-CI %s
 
 ; FIXME-TRUE16. enable gisel
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu11.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1100,GISEL-GFX1100,GISEL-GFX1100-FAKE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GFX900,GISEL-GFX900 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.06 < %s | FileCheck -check-prefixes=GFX906,GISEL-GFX906 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu8.03 < %s | FileCheck -check-prefixes=VI,GISEL-VI %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu7.01 < %s | FileCheck -check-prefixes=GISEL-CI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu11.00 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1100,GISEL-GFX1100,GISEL-GFX1100-FAKE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GFX900,GISEL-GFX900 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.06 < %s | FileCheck -check-prefixes=GFX906,GISEL-GFX906 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu8.03 < %s | FileCheck -check-prefixes=VI,GISEL-VI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu7.01 < %s | FileCheck -check-prefixes=GISEL-CI %s
 ; XUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu11.00 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1100,GISEL-GFX1100,GISEL-GFX1100-TRUE16 %s
 
 define half @mixlo_simple(float %src0, float %src1, float %src2) #0 {

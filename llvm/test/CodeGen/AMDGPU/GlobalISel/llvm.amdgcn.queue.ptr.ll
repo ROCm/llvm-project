@@ -1,4 +1,4 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu7.00--amdhsa < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu7.00--amdhsa < %s | FileCheck -check-prefix=GCN %s
 
 ; FIXME: Error on non-hsa target
 

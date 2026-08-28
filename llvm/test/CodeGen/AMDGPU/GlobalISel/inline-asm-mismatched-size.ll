@@ -1,4 +1,4 @@
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu8.03 -filetype=null %s 2>&1 | FileCheck -check-prefix=ERR %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu8.03 -filetype=null %s 2>&1 | FileCheck -check-prefix=ERR %s
 
 ; This asm is broken because it's using a 5 element wide physical
 ; register for a 4 element wide value. Make sure we don't crash, and

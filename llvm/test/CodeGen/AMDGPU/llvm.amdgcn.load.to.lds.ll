@@ -3,7 +3,7 @@
 ; RUN: llc -mtriple=amdgpu9.0a < %s | FileCheck %s --check-prefix=GFX90A
 ; RUN: llc -mtriple=amdgpu9.42 < %s | FileCheck %s --check-prefix=GFX942
 ; RUN: llc -mtriple=amdgpu10.10 < %s | FileCheck %s --check-prefix=GFX10
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.42 < %s | FileCheck %s --check-prefix=GFX942-GISEL
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.42 < %s | FileCheck %s --check-prefix=GFX942-GISEL
 
 ;; Note: load.to.lds is a wrapper intrinsic around underlying operations.
 ;; This is a bare-bones test to ensure that it lowers to the correct instructions.

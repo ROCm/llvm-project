@@ -1,9 +1,9 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu9.00  < %s | FileCheck %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00  < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00  < %s | FileCheck %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu9.42  < %s | FileCheck %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.42  < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.42  < %s | FileCheck %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu10.10 < %s | FileCheck %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.10 < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.10 < %s | FileCheck %s
 
 ; Loop body exceeds MaxAsyncMarkers on first iteration
 ; Preloop: 5 markers

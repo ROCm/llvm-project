@@ -1,17 +1,17 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu6.00 < %s | FileCheck -check-prefix=MEMTIME -check-prefix=SIVI -check-prefix=GCN %s
 ; -global-isel=1 SI run line skipped since store not yet implemented.
 ; RUN: llc -global-isel=0 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefix=MEMTIME -check-prefix=SIVI -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefix=MEMTIME -check-prefix=SIVI -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.02 < %s | FileCheck -check-prefix=MEMTIME -check-prefix=SIVI -check-prefix=GCN %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu10.10 < %s | FileCheck -check-prefix=MEMTIME -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.10 < %s | FileCheck -check-prefix=MEMTIME -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.10 < %s | FileCheck -check-prefix=MEMTIME -check-prefix=GCN %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu10.30 < %s | FileCheck -check-prefixes=MEMTIME -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.30 < %s | FileCheck -check-prefixes=MEMTIME -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.30 < %s | FileCheck -check-prefixes=MEMTIME -check-prefix=GCN %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.00 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GETREG,GETREG-SDAG -check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GETREG,GETREG-GISEL -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GETREG,GETREG-GISEL -check-prefix=GCN %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.00 < %s | FileCheck -check-prefixes=GCN,GFX12 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00 < %s | FileCheck -check-prefixes=GCN,GFX12 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00 < %s | FileCheck -check-prefixes=GCN,GFX12 %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.50 < %s | FileCheck -check-prefixes=GCN,GFX1250 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.50 < %s | FileCheck -check-prefixes=GCN,GFX1250 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.50 < %s | FileCheck -check-prefixes=GCN,GFX1250 %s
 
 declare i64 @llvm.readcyclecounter() #0
 

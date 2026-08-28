@@ -2,8 +2,8 @@
 ; RUN: not --crash llc -global-isel=0 -mtriple=amdgpu10.30-amd-amdpal -filetype=null %t/stacksave-error.ll 2>&1 | FileCheck -check-prefix=ERR-SAVE-SDAG %s
 ; RUN: not --crash llc -global-isel=0 -mtriple=amdgpu10.30-amd-amdpal -filetype=null %t/stackrestore-error.ll 2>&1 | FileCheck -check-prefix=ERR-RESTORE-SDAG %s
 
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.30-amd-amdpal -filetype=null %t/stacksave-error.ll 2>&1 | FileCheck -check-prefix=ERR-SAVE-GISEL %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.30-amd-amdpal -filetype=null %t/stackrestore-error.ll 2>&1 | FileCheck -check-prefix=ERR-RESTORE-GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.30-amd-amdpal -filetype=null %t/stacksave-error.ll 2>&1 | FileCheck -check-prefix=ERR-SAVE-GISEL %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.30-amd-amdpal -filetype=null %t/stackrestore-error.ll 2>&1 | FileCheck -check-prefix=ERR-RESTORE-GISEL %s
 
 ; Test that an error is produced if stacksave/stackrestore are used
 ; with the wrong (default) address space.

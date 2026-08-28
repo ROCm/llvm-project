@@ -3,11 +3,11 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu7.01-amd-amdhsa < %s | FileCheck -check-prefixes=CI,CI-SDAG %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX9,GFX9-SDAG %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu12.50-amd-amdhsa < %s | FileCheck -check-prefixes=GFX1250,GFX1250-SDAG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu7.01-amd-amdhsa < %s | FileCheck -check-prefixes=CI,CI-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX9,GFX9-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu10.10-amd-amdhsa < %s | FileCheck -check-prefixes=GFX10,GFX10-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX11,GFX11-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.50-amd-amdhsa < %s | FileCheck -check-prefixes=GFX1250,GFX1250-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu7.01-amd-amdhsa < %s | FileCheck -check-prefixes=CI,CI-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX9,GFX9-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu10.10-amd-amdhsa < %s | FileCheck -check-prefixes=GFX10,GFX10-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00-amd-amdhsa < %s | FileCheck -check-prefixes=GFX11,GFX11-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.50-amd-amdhsa < %s | FileCheck -check-prefixes=GFX1250,GFX1250-GISEL %s
 
 define amdgpu_kernel void @is_private_vgpr(ptr addrspace(1) %ptr.ptr) {
 ; SI-LABEL: is_private_vgpr:

@@ -1,5 +1,5 @@
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.0a-amd-amdhsa < %s | FileCheck -enable-var-scope -check-prefixes=GFX90A %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -global-isel < %s -mtriple=amdgpu9.08 2>&1 | FileCheck %s -check-prefix=GFX908
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.0a-amd-amdhsa < %s | FileCheck -enable-var-scope -check-prefixes=GFX90A %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -global-isel < %s -mtriple=amdgpu9.08 2>&1 | FileCheck %s -check-prefix=GFX908
 
 ; GFX908: LLVM ERROR: cannot select: %{{[0-9]+}}:vgpr_32(f32) = G_AMDGPU_BUFFER_ATOMIC_FADD %{{[0-9]+}}:vgpr, %{{[0-9]+}}:sgpr(<4 x i32>), %{{[0-9]+}}:vgpr(i32), %{{[0-9]+}}:vgpr, %{{[0-9]+}}:sgpr, 0, 0, -1 :: (volatile dereferenceable load store (f32), align 1, addrspace 8) (in function: buffer_atomic_add_f32_rtn)
 

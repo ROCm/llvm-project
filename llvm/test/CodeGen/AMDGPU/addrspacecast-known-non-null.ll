@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=amdgpu9.00-amd-amdhsa -o - %s | FileCheck %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00-amd-amdhsa -o - %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.00-amd-amdhsa -o - %s | FileCheck %s
 
 ; Test that a null check is not emitted for lowered addrspacecast
 

@@ -4,10 +4,10 @@
 ; RUN: llc -mtriple=amdgpu10.10 < %s | FileCheck -check-prefixes=GCN,GFX10-SDAG %s
 ; RUN: llc -mtriple=amdgpu11.00 -amdgpu-enable-delay-alu=0 < %s | FileCheck -check-prefixes=GCN,GFX10-SDAG %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX9 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu8.03 < %s | FileCheck -check-prefixes=GCN,GFX8 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu10.10 < %s | FileCheck -check-prefixes=GCN,GFX10 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu11.00 -amdgpu-enable-delay-alu=0 < %s | FileCheck -check-prefixes=GCN,GFX10 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX9 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu8.03 < %s | FileCheck -check-prefixes=GCN,GFX8 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu10.10 < %s | FileCheck -check-prefixes=GCN,GFX10 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu11.00 -amdgpu-enable-delay-alu=0 < %s | FileCheck -check-prefixes=GCN,GFX10 %s
 
 ; Test gfx9+ s_shl[1-4]_add_u32 pattern matching
 

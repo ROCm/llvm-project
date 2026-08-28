@@ -2,7 +2,7 @@
 ; RUN: llc -mtriple=amdgpu6.00 < %s | FileCheck -check-prefixes=SI %s
 ; RUN: llc -mtriple=amdgpu8.02 < %s | FileCheck -check-prefixes=VI %s
 ; RUN: llc -mtriple=r600 -mcpu=cypress < %s | FileCheck -check-prefixes=EG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GFX9-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GFX9-GISEL %s
 
 declare i7 @llvm.cttz.i7(i7, i1) nounwind readnone
 declare i8 @llvm.cttz.i8(i8, i1) nounwind readnone

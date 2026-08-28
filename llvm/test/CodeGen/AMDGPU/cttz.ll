@@ -3,7 +3,7 @@
 ; RUN: llc < %s -mtriple=amdgpu8.02 -mattr=-flat-for-global | FileCheck %s -enable-var-scope --check-prefix=VI
 ; RUN: llc < %s -mtriple=r600 -mcpu=cypress | FileCheck %s -enable-var-scope --check-prefix=EG
 ; RUN: llc < %s -mtriple=amdgpu10.10 | FileCheck %s -enable-var-scope --check-prefix=GFX10
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu10.10 | FileCheck %s -enable-var-scope --check-prefix=GFX10-GISEL
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu10.10 | FileCheck %s -enable-var-scope --check-prefix=GFX10-GISEL
 
 declare i7 @llvm.cttz.i7(i7, i1) nounwind readnone
 declare i8 @llvm.cttz.i8(i8, i1) nounwind readnone

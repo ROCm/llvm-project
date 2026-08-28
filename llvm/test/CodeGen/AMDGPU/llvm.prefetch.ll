@@ -5,12 +5,12 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.00 < %s | FileCheck --check-prefixes=GCN,NOSPREFETCH %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.00 -mattr=+safe-smem-prefetch < %s | FileCheck --check-prefixes=GCN,SPREFETCH,GFX12-SPREFETCH,SPREFETCH-SDAG %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.00 < %s | FileCheck --check-prefixes=GCN,NOSPREFETCH %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.50 < %s | FileCheck --check-prefixes=GCN,GFX1250,GL2-ONLY %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.50 -mattr=+safe-smem-prefetch < %s | FileCheck --check-prefixes=GCN,SPREFETCH,GFX1250-SPREFETCH,GFX1250-SPREFETCH-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.50 -mattr=+safe-cu-prefetch < %s | FileCheck --check-prefixes=GCN,GFX1250,SAFE-CU %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00 < %s | FileCheck --check-prefixes=GCN,NOSPREFETCH %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.00 -mattr=+safe-smem-prefetch < %s | FileCheck --check-prefixes=GCN,SPREFETCH,GFX12-SPREFETCH,SPREFETCH-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 < %s | FileCheck --check-prefixes=GCN,NOSPREFETCH %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.50 < %s | FileCheck --check-prefixes=GCN,GFX1250,GL2-ONLY %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.50 -mattr=+safe-smem-prefetch < %s | FileCheck --check-prefixes=GCN,SPREFETCH,GFX1250-SPREFETCH,GFX1250-SPREFETCH-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.50 -mattr=+safe-cu-prefetch < %s | FileCheck --check-prefixes=GCN,GFX1250,SAFE-CU %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00 < %s | FileCheck --check-prefixes=GCN,NOSPREFETCH %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.00 -mattr=+safe-smem-prefetch < %s | FileCheck --check-prefixes=GCN,SPREFETCH,GFX12-SPREFETCH,SPREFETCH-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 < %s | FileCheck --check-prefixes=GCN,NOSPREFETCH %s
 
 ; Scalar data prefetch
 

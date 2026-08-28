@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=amdgpu9.06 < %s | FileCheck %s --check-prefixes=GCN,GFX9,GFX906
 ; RUN: llc -mtriple=amdgpu9.42 < %s | FileCheck %s --check-prefixes=GCN,GFX9,GFX942-SDAG
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu9.42 -global-isel < %s | FileCheck %s --check-prefixes=GCN,GFX9,GFX942-GISEL
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu9.42 -global-isel < %s | FileCheck %s --check-prefixes=GCN,GFX9,GFX942-GISEL
 ; RUN: llc -mtriple=amdgpu10.11 < %s | FileCheck %s --check-prefixes=GCN,GFX10
 ; RUN: llc -mtriple=amdgpu10.12 < %s | FileCheck %s --check-prefixes=GCN,GFX10
 

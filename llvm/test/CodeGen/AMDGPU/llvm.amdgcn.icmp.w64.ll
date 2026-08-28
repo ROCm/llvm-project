@@ -4,10 +4,10 @@
 ; RUN: llc -mtriple=amdgpu8.03 < %s | FileCheck -check-prefixes=GCN,VI,SDAG-VI %s
 ; RUN: llc -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX9,SDAG-GFX9 %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 -mattr="+wavefrontsize64",+real-true16 < %s | FileCheck -check-prefixes=GCN,GFX11,GISEL-GFX11 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 -mattr="+wavefrontsize64",-real-true16 < %s | FileCheck -check-prefixes=GCN,GFX11,GISEL-GFX11 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.03 < %s | FileCheck -check-prefixes=GCN,VI,GISEL-VI %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX9,GISEL-GFX9 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 -mattr="+wavefrontsize64",+real-true16 < %s | FileCheck -check-prefixes=GCN,GFX11,GISEL-GFX11 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 -mattr="+wavefrontsize64",-real-true16 < %s | FileCheck -check-prefixes=GCN,GFX11,GISEL-GFX11 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.03 < %s | FileCheck -check-prefixes=GCN,VI,GISEL-VI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00 < %s | FileCheck -check-prefixes=GCN,GFX9,GISEL-GFX9 %s
 
 declare i64 @llvm.amdgcn.icmp.i32(i32, i32, i32) #0
 declare i64 @llvm.amdgcn.icmp.i64(i64, i64, i32) #0

@@ -5,11 +5,11 @@
 ; RUN: llc < %s -mtriple=amdgpu10.30 | FileCheck %s -check-prefix=GFX1030
 ; RUN: not --crash llc < %s -mtriple=amdgpu11.00 2>&1 | FileCheck %s -check-prefix=GFX11-ERR
 
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu6.01 | FileCheck %s -check-prefix=G_SI
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu7.01 | FileCheck %s  -check-prefix=G_GFX7
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu10.10 | FileCheck %s -check-prefix=G_GFX10
-; RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu10.30 | FileCheck %s -check-prefix=G_GFX1030
-; RUN: not llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu11.00 2>&1 | FileCheck %s -check-prefix=G_GFX11-ERR
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu6.01 | FileCheck %s -check-prefix=G_SI
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu7.01 | FileCheck %s  -check-prefix=G_GFX7
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu10.10 | FileCheck %s -check-prefix=G_GFX10
+; RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu10.30 | FileCheck %s -check-prefix=G_GFX1030
+; RUN: not llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu11.00 2>&1 | FileCheck %s -check-prefix=G_GFX11-ERR
 
 ; image_atomic_fmin and image_atomic_fmax was removed on gfx11+
 ; GFX11-ERR: LLVM ERROR: Cannot select: intrinsic %llvm.amdgcn.image.atomic.f

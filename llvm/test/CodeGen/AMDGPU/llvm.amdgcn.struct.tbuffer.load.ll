@@ -4,7 +4,7 @@
 ;RUN: llc < %s -mtriple=amdgpu10.10 | FileCheck -check-prefixes=GFX10 %s
 ;RUN: llc < %s -mtriple=amdgpu11.00 | FileCheck -check-prefixes=GFX11 %s
 ;RUN: llc < %s -mtriple=amdgpu12.00 | FileCheck -check-prefixes=GFX12,GFX12-SDAG %s
-;RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu12.00 | FileCheck -check-prefixes=GFX12,GFX12-GISEL %s
+;RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu12.00 | FileCheck -check-prefixes=GFX12,GFX12-GISEL %s
 
 define amdgpu_vs {<4 x float>, <4 x float>, <4 x float>, <4 x float>} @tbuffer_load(<4 x i32> inreg) {
 ; PREGFX10-LABEL: tbuffer_load:

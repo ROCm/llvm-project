@@ -1,7 +1,7 @@
 ; RUN: not --crash llc -filetype=null -mtriple=amdgpu8.10 %s 2>&1 | FileCheck --ignore-case %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -filetype=null -global-isel -mtriple=amdgpu8.10 %s 2>&1 | FileCheck --ignore-case %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -filetype=null -global-isel -mtriple=amdgpu8.10 %s 2>&1 | FileCheck --ignore-case %s
 ; RUN: not --crash llc -filetype=null -mtriple=amdgpu11.00 %s 2>&1 | FileCheck --ignore-case %s
-; RUN: not llc -amdgpu-late-wave-transform=0 -filetype=null -global-isel -mtriple=amdgpu11.00 %s 2>&1 | FileCheck --ignore-case %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -filetype=null -global-isel -mtriple=amdgpu11.00 %s 2>&1 | FileCheck --ignore-case %s
 ;
 ; CHECK: LLVM ERROR: Cannot select
 

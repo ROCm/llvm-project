@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck --check-prefix=GCN %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck --check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck --check-prefix=GCN %s
 
 ; Test with zero frame
 ; GCN-LABEL: {{^}}func1

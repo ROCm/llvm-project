@@ -3,7 +3,7 @@
 ; RUN: llc -mtriple=amdgpu9.0a < %s | FileCheck %s --check-prefix=GFX90A
 ; RUN: llc -mtriple=amdgpu9.42 < %s | FileCheck %s --check-prefix=GFX942
 ; RUN: llc -mtriple=amdgpu10.10 < %s | FileCheck %s --check-prefix=GFX10
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu9.00 < %s | FileCheck %s --check-prefix=GFX900-GISEL
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel -mtriple=amdgpu9.00 < %s | FileCheck %s --check-prefix=GFX900-GISEL
 
 declare void @llvm.amdgcn.global.load.lds(ptr addrspace(1) nocapture %gptr, ptr addrspace(3) nocapture %lptr, i32 %size, i32 %offset, i32 %aux)
 

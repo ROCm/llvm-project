@@ -2,8 +2,8 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.50-amd-amdhsa < %s | FileCheck -check-prefixes=GCN,GFX1250,GFX1250-SDAG %s
 ; RUN: llc -global-isel=0 -mtriple=amdgpu12.51-amd-amdhsa < %s | FileCheck -check-prefixes=GCN,GFX1251,GFX1251-SDAG %s
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.50-amd-amdhsa < %s | FileCheck -check-prefixes=GCN,GFX1250,GFX1250-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu12.51-amd-amdhsa < %s | FileCheck -check-prefixes=GCN,GFX1251,GFX1251-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.50-amd-amdhsa < %s | FileCheck -check-prefixes=GCN,GFX1250,GFX1250-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu12.51-amd-amdhsa < %s | FileCheck -check-prefixes=GCN,GFX1251,GFX1251-GISEL %s
 
 ; this test has both gfx1250/1251 run lines to check availability of the intrinsic on both variants.
 

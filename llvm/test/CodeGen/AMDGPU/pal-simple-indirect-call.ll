@@ -5,7 +5,7 @@
 ; Check that it doesn't crash
 ; RUN: llc -mtriple=amdgpu9.00-amd-amdpal < %s | FileCheck -check-prefixes=GFX9 %s
 ; RUN: llc -mtriple=amdgpu10.10-amd-amdpal < %s | FileCheck -check-prefixes=GFX10 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu10.10-amd-amdpal -global-isel < %s | FileCheck -check-prefixes=GFX10 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu10.10-amd-amdpal -global-isel < %s | FileCheck -check-prefixes=GFX10 %s
 
 define amdgpu_cs void @test_simple_indirect_call() {
 ; ATTRIBUTOR_GCN-LABEL: define {{[^@]+}}@test_simple_indirect_call() {

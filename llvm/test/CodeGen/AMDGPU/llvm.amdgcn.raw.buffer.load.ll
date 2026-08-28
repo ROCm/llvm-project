@@ -6,8 +6,8 @@
 ;RUN: llc < %s -mtriple=amdgpu11.00 -amdgpu-enable-delay-alu=0 -mattr=-real-true16 | FileCheck %s --check-prefixes=GFX11,GFX11-FAKE16
 ;RUN: llc < %s -mtriple=amdgpu12.00 -amdgpu-enable-delay-alu=0 -mattr=+real-true16 | FileCheck %s --check-prefixes=GFX12,GFX12-TRUE16,GFX12-SDAG-TRUE16
 ;RUN: llc < %s -mtriple=amdgpu12.00 -amdgpu-enable-delay-alu=0 -mattr=-real-true16 | FileCheck %s --check-prefixes=GFX12,GFX12-FAKE16,GFX12-SDAG-FAKE16
-;RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu12.00 -amdgpu-enable-delay-alu=0 -mattr=+real-true16 | FileCheck %s --check-prefixes=GFX12,GFX12-TRUE16,GFX12-GISEL-TRUE16
-;RUN: llc -amdgpu-late-wave-transform=0 < %s -global-isel -mtriple=amdgpu12.00 -amdgpu-enable-delay-alu=0 -mattr=-real-true16 | FileCheck %s --check-prefixes=GFX12,GFX12-FAKE16,GFX12-GISEL-FAKE16
+;RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu12.00 -amdgpu-enable-delay-alu=0 -mattr=+real-true16 | FileCheck %s --check-prefixes=GFX12,GFX12-TRUE16,GFX12-GISEL-TRUE16
+;RUN: llc -amdgpu-late-wave-transform=1 < %s -global-isel -mtriple=amdgpu12.00 -amdgpu-enable-delay-alu=0 -mattr=-real-true16 | FileCheck %s --check-prefixes=GFX12,GFX12-FAKE16,GFX12-GISEL-FAKE16
 
 define amdgpu_ps {<4 x float>, <4 x float>, <4 x float>} @buffer_load(<4 x i32> inreg) {
 ; PREGFX10-LABEL: buffer_load:

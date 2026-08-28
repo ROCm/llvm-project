@@ -2,7 +2,7 @@
 ; RUN: llc -mtriple=amdgpu6.00 < %s | FileCheck %s -check-prefixes=SI
 ; RUN: llc -mtriple=amdgpu8.02 -mattr=-flat-for-global < %s | FileCheck %s -check-prefixes=VI
 ; RUN: llc -global-isel=0 -mtriple=amdgpu11.00 < %s | FileCheck %s -check-prefixes=GFX11,GFX11-SDAG
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu11.00 < %s | FileCheck %s -check-prefixes=GFX11,GFX11-GISEL
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu11.00 < %s | FileCheck %s -check-prefixes=GFX11,GFX11-GISEL
 ; RUN: llc -mtriple=r600 -mcpu=redwood < %s | FileCheck  %s -check-prefixes=EG
 
 declare float @llvm.fabs.f32(float) #1

@@ -1,4 +1,4 @@
-; RUN: not llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu12.00--amdpal -global-isel=1 -mattr=+wavefrontsize64 < %s 2>&1 | FileCheck %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu12.00--amdpal -global-isel=1 -mattr=+wavefrontsize64 < %s 2>&1 | FileCheck %s
 ; RUN: not llc -mtriple=amdgpu12.00--amdpal -global-isel=0 -mattr=+wavefrontsize64 < %s 2>&1 | FileCheck %s
 
 declare amdgpu_cs_chain void @callee() nounwind
