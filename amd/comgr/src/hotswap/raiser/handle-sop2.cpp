@@ -104,8 +104,7 @@ Error handleBitOp(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
         formatName(Di.TargetSpecificFlags),
         "bitwise operands lack full-width source-wave mask state");
 
-  Expected<BinaryOperands> Args =
-      Is64 ? Op.readBinary64() : Op.readBinary32();
+  Expected<BinaryOperands> Args = Is64 ? Op.readBinary64() : Op.readBinary32();
   if (!Args)
     return Args.takeError();
   Value *Result = emitBitOp(Ctx.B, Kind, Args->Src0, Args->Src1, Name);
