@@ -1316,16 +1316,17 @@ static void fixupDebugInfoPostExtraction(Function &OldFunc, Function &NewFunc,
     DIB.insertDbgValue(NewLoc, DR->getVariable(), Expr, DR->getDebugLoc(),
                        NewFunc.getEntryBlock().getTerminator()->getIterator());
   };
-  for (auto [Input, NewVal] : zip_equal(Inputs, NewValues)) {
+  for (auto [In, NewVal] : zip_equal(Inputs, NewValues)) {
+    Value *Input = In;
     SmallVector<DbgVariableRecord *, 1> DPUsers;
     findDbgUsers(Input, DPUsers);
-    DIExpression *Expr = DIB.createExpression();
 
     // Iterate the debud users of the Input values. If they are in the extracted
     // function then update their location with the new value. If they are in
     // the parent function then create a similar debug record.
     for (auto *DVR : DPUsers)
-      UpdateOrInsertDebugRecord(DVR, Input, NewVal, Expr, DVR->isDbgDeclare());
+      UpdateOrInsertDebugRecord(DVR, Input, NewVal, DVR->getExpression(),
+                                DVR->isDbgDeclare());
   }
 
   auto IsInvalidLocation = [&NewFunc](Value *Location) {
