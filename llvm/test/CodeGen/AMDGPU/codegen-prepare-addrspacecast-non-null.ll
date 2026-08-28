@@ -339,7 +339,6 @@ define void @recursive_phis(i1 %cond, ptr addrspace(5) %ptr) {
 ; DAGISEL-ASM-NEXT:    v_cmp_ne_u32_e64 s[8:9], 0, v2
 ; DAGISEL-ASM-NEXT:    v_mov_b32_e32 v1, s7
 ; DAGISEL-ASM-NEXT:    s_xor_b64 s[6:7], exec, s[8:9]
-; DAGISEL-ASM-NEXT:    s_xor_b64 s[6:7], exec, s[8:9]
 ; DAGISEL-ASM-NEXT:    v_mov_b32_e32 v3, 7
 ; DAGISEL-ASM-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; DAGISEL-ASM-NEXT:    s_mov_b64 s[6:7], 0

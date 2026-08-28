@@ -386,8 +386,7 @@ body: |
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = COPY [[V_ADD_U32_e32_]]
   ; CHECK-NEXT:   [[V_CMP_LT_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_LT_U32_e64 [[DEF]], [[COPY]], implicit $exec
   ; CHECK-NEXT:   [[S_XOR_B32_2:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[V_CMP_LT_U32_e64_]], implicit-def $scc
-  ; CHECK-NEXT:   [[S_XOR_B32_3:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[V_CMP_LT_U32_e64_]], implicit-def $scc
-  ; CHECK-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_2]], [[S_XOR_B32_3]], implicit-def $scc
+  ; CHECK-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_2]], [[S_XOR_B32_2]], implicit-def $scc
   ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:sreg_32 = COPY [[V_CMP_LT_U32_e64_]]
   ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32_term [[COPY2]]

@@ -215,6 +215,19 @@ struct WaveNode {
   }
 };
 
+/// Return true if \p Succ is the *primary* (divergence-entry) successor of the
+/// divergent node \p Pred, i.e. the block \p Pred branches to after narrowing
+/// EXEC to \ref CFGNodeInfo::PrimarySuccessorExec.
+///
+/// A divergent branch whose two successors are the same node is *not* treated
+/// as a divergence entry: that block is reached on both edges and is therefore
+/// always entered with the narrowed EXEC, so it still needs the rejoin.
+static bool isDivergenceEntrySuccessor(const WaveNode *Pred,
+                                       const WaveNode *Succ) {
+  return Pred->Successors.size() == 2 && Pred->Successors[0] == Succ &&
+         Pred->Successors[1] != Succ;
+}
+
 /// \brief Helper class for making a CFG reconverging.
 class ReconvergeCFGHelper {
 private:
@@ -2078,11 +2091,26 @@ void ControlFlowRewriter::rewrite() {
     // is exactly one such predecessor that is acyclic and dominates the
     // secondary, the rejoin register can be used directly without the
     // accumulator machinery.
+    //
+    // \ref WaveNode::IsSecondary is a per-node flag, but "reconverges here" is
+    // a per-*edge* property: a block can be the reconvergence (secondary)
+    // successor of one divergent node and at the same time the
+    // divergence-entry (primary) successor of another - SimplifyCFG's
+    // common-code sinking creates exactly such shared blocks. A
+    // divergence-entry edge already enters with EXEC narrowed to that
+    // predecessor's PrimarySuccessorExec, so it must contribute *no* rejoin
+    // mask; OR-ing the complement back in would restore EXEC to the
+    // pre-divergence value and run the guarded body on all lanes.
     unsigned NumDivergentPreds = 0;
+    bool HasDivergenceEntryPred = false;
     WaveNode *SingleDivPred = nullptr;
     for (WaveNode *Pred : Secondary->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
         continue;
+      if (isDivergenceEntrySuccessor(Pred, Secondary)) {
+        HasDivergenceEntryPred = true;
+        continue;
+      }
       NumDivergentPreds++;
       SingleDivPred = Pred;
     }
@@ -2090,8 +2118,17 @@ void ControlFlowRewriter::rewrite() {
     // The accumulator is only needed when multiple divergent predecessors
     // contribute rejoin masks, or when cycle membership or non-dominance
     // requires temporal merging across iterations.
+    //
+    // A divergence-entry predecessor also forces the accumulator: the direct
+    // rejoin register is live on that edge but is not zero there, so the
+    // unconditional OR would widen EXEC. The accumulator is provably zero on
+    // such an edge instead - \ref AMDGPULaneMaskUpdater::init creates a fresh
+    // accumulator per secondary node and initializes it to 0 in the entry
+    // block, and \ref AMDGPULaneMaskUpdater::ResetAtEnd re-zeroes it at the
+    // end of the secondary - so the OR degenerates to a no-op there.
     bool HasSingleDivergentPred =
-        (NumDivergentPreds == 1) && !SingleDivPred->Cycle &&
+        (NumDivergentPreds == 1) && !HasDivergenceEntryPred &&
+        !SingleDivPred->Cycle &&
         ReconvergeCfg.getDomTree().dominates(SingleDivPred->Block,
                                              Secondary->Block);
 
@@ -2104,6 +2141,8 @@ void ControlFlowRewriter::rewrite() {
     Register DirectRejoin;
     for (WaveNode *Pred : Secondary->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
+        continue;
+      if (isDivergenceEntrySuccessor(Pred, Secondary))
         continue;
 
       CFGNodeInfo &PredInfo = NodeInfo.find(Pred)->second;
