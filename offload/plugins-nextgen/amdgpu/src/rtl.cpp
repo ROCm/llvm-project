@@ -884,10 +884,6 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   /// Indicates whether or not we need to set up our own private segment size.
   bool usesDynamicStack() const { return DynamicStack; }
 
-  bool isValidBlockSize(uint32_t BlockSize) const override {
-    return BlockSize <= ConstWGSize;
-  }
-
   uint32_t getKernelLaunchId() const { return KernelLaunchId; }
 
   void setKernelLaunchId(uint32_t Id) const { KernelLaunchId = Id; }
@@ -1798,21 +1794,6 @@ private:
     double TicksToTime;
   };
 
-  /// Utility struct holding arguments for post kernel run processing.
-  struct PostKernelRunProcessingArgsTy {
-    hsa_agent_t Agent;
-    AMDGPUSignalTy *Signal;
-    double TicksToTime;
-    std::string KernelName;
-    uint32_t NumTeams;
-    uint32_t NumThreads;
-    KernelRunRecordTy *KernelRunRecords;
-
-    PostKernelRunProcessingArgsTy()
-        : Agent{0}, Signal(nullptr), TicksToTime(setTicksToTime()), NumTeams(0),
-          NumThreads(0), KernelRunRecords(nullptr) {}
-  };
-
   struct KernelDurationTracingArgsTy {
     hsa_agent_t Agent;
     AMDGPUSignalTy *Signal;
@@ -2006,9 +1987,6 @@ private:
   /// When copying data from one host buffer to another, only do it
   /// asynchronously if `MinHostToHostAsyncCopySize <= size`.
   UInt32Envar OMPX_MinHostToHostAsyncCopySize;
-
-  /// Arguments for the callback function.
-  PostKernelRunProcessingArgsTy PostKernelRunProcessingArgs;
 
   /// Arguments for callback function to collect kernel duration.
   KernelDurationTracingArgsTy KernelDurationTracingArgs;
@@ -2229,30 +2207,6 @@ private:
     return EndTime - StartTime;
   }
 
-  /// Callback funtion to process the data for each kernel run.
-  static Error postKernelRunProcessingAction(void *Data) {
-    assert(Data && "Invalid data pointer for post kernel run processing");
-    PostKernelRunProcessingArgsTy *Args =
-        reinterpret_cast<PostKernelRunProcessingArgsTy *>(Data);
-
-    KernelRunRecordTy *KernelRecord = Args->KernelRunRecords;
-    assert(KernelRecord && "KernelRunRecord is null!");
-
-    uint64_t KernelDuration =
-        getKernelDuration<PostKernelRunProcessingArgsTy>(Args);
-    KernelRecord->addEntry(Args->KernelName, Args->NumTeams, Args->NumThreads,
-                           KernelDuration);
-
-    if (getInfoLevel() & OMP_INFOTYPE_AMD_KERNEL_TRACE) {
-      fprintf(stderr,
-              "[Autotuning run] Kernel %s with %u teams and %u threads "
-              "completed in %lu ns.\n",
-              Args->KernelName.c_str(), Args->NumTeams, Args->NumThreads,
-              KernelDuration);
-    }
-    return Plugin::success();
-  }
-
   /// Callback function to generate traces for kernel runtime.
   static Error KernelDurationTracingAction(void *Data) {
     assert(Data && "Invalid data pointer for tracing kernel duration");
@@ -2340,29 +2294,6 @@ public:
         return Err;
     }
 #endif
-
-    // If runtime autotuning is enabled, setup the callback functions to process
-    // the data after kernel completed.
-    if (Device.enableRuntimeAutotuning() && Kernel.isSPMDMode()) {
-      std::string KernelName(Kernel.getName());
-      KernelRunRecordTy *KernelRecords = Device.getKernelRunRecords();
-      assert(KernelRecords && "No KernelRecords!");
-
-      // If this kernel has reached the run limit,
-      // skip registering the callback function.
-      if (!KernelRecords->reachedRunLimitForKernel(KernelName)) {
-        PostKernelRunProcessingArgs.Agent = Agent;
-        PostKernelRunProcessingArgs.Signal = OutputSignal;
-        PostKernelRunProcessingArgs.KernelName = KernelName;
-        PostKernelRunProcessingArgs.NumTeams = NumBlocks[0];
-        PostKernelRunProcessingArgs.NumThreads = NumThreads[0];
-        PostKernelRunProcessingArgs.KernelRunRecords = KernelRecords;
-
-        if (auto Err = Slots[Curr].schedCallback(postKernelRunProcessingAction,
-                                                 &PostKernelRunProcessingArgs))
-          return Err;
-      }
-    }
 
     // When LIBOMPTARGET_KERNEL_EXE_TIME is set, register the callback function
     // to get the kernel duration.
@@ -3021,10 +2952,8 @@ struct AMDGPUStreamManagerTy final
         OMPX_EnableQueueProfiling("LIBOMPTARGET_AMDGPU_ENABLE_QUEUE_PROFILING",
                                   false),
         NextQueue(0), Agent(HSAAgent) {
-    // If OMPX_ENABLE_RUNTIME_AUTOTUNING or LIBOMPTARGET_KERNEL_EXE_TIME is
-    // enabled, set queue profiling to true.
-    if (Device.enableRuntimeAutotuning() ||
-        Device.enableKernelDurationTracing()) {
+    // Enable queue profiling to collect kernel execution times.
+    if (Device.enableKernelDurationTracing()) {
       OMPX_EnableQueueProfiling = true;
     }
   }

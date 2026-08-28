@@ -47,6 +47,18 @@ public:
   // Whether the source ISA uses architected SGPRs.
   bool hasArchitectedSgprs() const;
 
+  /// Return whether kernel descriptors for this ISA encode DX10_CLAMP and
+  /// IEEE_MODE.
+  bool hasDx10ClampAndIeeeMode() const;
+
+  // Whether the ISA has the combined `s_waitcnt` covering every wait counter.
+  bool hasCombinedWaitcnt() const;
+
+  enum class WavePriorityModel { Gfx9, Gfx125 };
+
+  /// Return the model used to combine system and user wave priorities.
+  WavePriorityModel wavePriorityModel() const;
+
 private:
   explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}
 

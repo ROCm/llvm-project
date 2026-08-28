@@ -373,25 +373,9 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
 
   // Get max occupancy for this kernel
   computeMaxOccupancy(GenericDevice);
-  std::string KernelName = getName();
-  KernelRunRecordTy *KernelRecord = GenericDevice.getKernelRunRecords();
-  uint32_t KernelRunCounter = 0;
 
   // Calculate or adjust the effective number of threads and blocks if needed.
-  if (KernelRecord) {
-    KernelRunCounter = KernelRecord->getRunCounterForKernel(KernelName);
-  }
-  // If Autotuning is enabled and the kernel is not launched for the first time.
-  if (GenericDevice.enableRuntimeAutotuning() && isSPMDMode() &&
-      KernelRunCounter > 0) {
-    assert(KernelRecord &&
-           "Autotuning is enabled, but KernelRunRecord is not initialized!");
-
-    auto [Teams, Threads] =
-        KernelRecord->getLaunchParamsForKernel(*this, GenericDevice);
-    EffectiveNumBlocks[0] = Teams;
-    EffectiveNumThreads[0] = Threads;
-  } else if (!isBareMode()) {
+  if (!isBareMode()) {
     if (!LaunchArgs.Flags.StrictThreads) {
       EffectiveNumThreads[0] =
           getEffectiveNumThreads(GenericDevice, EffectiveNumThreads[0]);
@@ -594,11 +578,10 @@ GenericDeviceTy::GenericDeviceTy(GenericPluginTy &Plugin, int32_t DeviceId,
       // By default, the initial number of streams and events is 1.
       OMPX_InitialNumStreams("LIBOMPTARGET_NUM_INITIAL_STREAMS", 1),
       OMPX_InitialNumEvents("LIBOMPTARGET_NUM_INITIAL_EVENTS", 1),
-      OMPX_EnableRuntimeAutotuning("OMPX_ENABLE_RUNTIME_AUTOTUNING", false),
       OMPX_KernelDurationTracing("LIBOMPTARGET_KERNEL_EXE_TIME", false),
       DeviceId(DeviceId), GridValues(OMPGridValues),
       PeerAccesses(NumDevices, PeerAccessState::PENDING), PeerAccessesLock(),
-      PinnedAllocs(*this), RPCServer(nullptr), KernelRunRecords(nullptr) {
+      PinnedAllocs(*this), RPCServer(nullptr) {
   // Conservative fall-back to the plugin's device uid for the case that no real
   // vendor (u)uid will become available later.
   setDeviceUidFromVendorUid(std::to_string(static_cast<uint64_t>(DeviceId)));
@@ -690,11 +673,6 @@ Error GenericDeviceTy::init(GenericPluginTy &Plugin) {
         *this, MemoryManagerTy::DefaultSizeThreshold, TARGET_ALLOC_SHARED);
   }
 
-  // Allocate resources for autotuning if enabled.
-  if (OMPX_EnableRuntimeAutotuning) {
-    KernelRunRecords = new KernelRunRecordTy();
-  }
-
   return Plugin::success();
 }
 
@@ -753,14 +731,6 @@ Error GenericDeviceTy::deinit(GenericPluginTy &Plugin) {
       return Err;
     delete RecordReplay;
     RecordReplay = nullptr;
-  }
-
-  // Delete autotuning related resources if the option is on.
-  if (OMPX_EnableRuntimeAutotuning) {
-    if (KernelRunRecords) {
-      delete KernelRunRecords;
-      KernelRunRecords = nullptr;
-    }
   }
 
   if (auto Profiler = Plugin.getProfiler(); Profiler)

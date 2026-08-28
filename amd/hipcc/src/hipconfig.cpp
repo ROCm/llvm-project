@@ -33,8 +33,15 @@ int main(int argc, char* argv[]){
         HipBinCommand cmd;
         cmd = platformPtrs.at(j)->gethipconfigCmd(argv[i]);
         switch (cmd) {
-        case help: platformPtrs.at(j)->printUsage();
-            break;
+        case help:
+          std::cerr
+              << "hipconfig is a legacy tool. Use CMake's "
+                 "find_package(hip CONFIG) instead.\n"
+              << "  hip_VERSION provides the version information previously "
+                 "returned by hipconfig.\n"
+              << "  See https://rocm.docs.amd.com/ for migration guidance.\n";
+          platformPtrs.at(j)->printUsage();
+          break;
         case path: cout << platformPtrs.at(j)->getHipPath();
             break;
         case roccmpath: cout << platformPtrs.at(j)->getRoccmPath();

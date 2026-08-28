@@ -442,7 +442,15 @@ public:
               boxMap.getVarPtr().getDefiningOp()))
         descriptor = addrOp.getVal();
 
+    // We defer descriptor mapping until target or target data regions for
+    // non-allocatable, non-pointer type dummy arguments with assumed type or
+    // shape. We choose to optimize via privatization a subset of these cases
+    // for target regions, which can not be deferred. We can extend the
+    // privatization to allocatables pointers and other descriptor types as
+    // needed in the future.
     canDescBeDeferred = canDeferDescriptorMapping(descriptor);
+    canOptimizeDescViaPrivatization = isDummyArgument(descriptor) &&
+                                      fir::isAssumedShape(descriptor.getType());
 
     // A restricted subset of canDeferDescriptorMapping for the moment
     // can extend to encompass more as we find acceptable cases.
@@ -860,10 +868,16 @@ public:
     //
     //  PRIVATE | ATTACH | TARGET_PARAM
     //
-    // NOTE: Before extending to wider cases need to verify privatization
-    //  interaction  with:
-    //    1) use_device_ptr/addr
-    //    2) usm and the CLOSE map type
+    // This map type triggers the runtime to perform firstprivatization
+    // on the descriptor, treating the descriptor as a privatized entity
+    // for the duration of the device kernel, initialized with the same
+    // data as the host descriptor. The transferred data is then attached
+    // to the descriptor. The effects of this, other than the descriptor
+    // being privatized, are that the descriptors contents gets transferred
+    // across to the device with the initial kernel payload, packaged
+    // alongside the initial kernel argument list, reducing the number of
+    // host to device transfers required alongside runtime overhead as we
+    // batch as much of our required data together as we can.
     if (privatizeDescriptor) {
       return MapFlags::priv | MapFlags::attach | MapFlags::target_param |
              (mapTypeFlag & MapFlags::implicit);
@@ -918,12 +932,12 @@ public:
     return false;
   }
 
-  /// Gets the underlying type of a pointer type, effectively unwrapping fir.ref,
-  /// and fir.array to get the underlying scalar type.
+  /// Gets the underlying type of a pointer type, effectively unwrapping
+  /// fir.ref, and fir.array to get the underlying scalar type.
   mlir::Type getUnderlyingVarType(mlir::Type baseAddrType) {
-    baseAddrType = llvm::cast<mlir::omp::PointerLikeType>(
-                                       fir::unwrapRefType(baseAddrType))
-                                       .getElementType();
+    baseAddrType =
+        llvm::cast<mlir::omp::PointerLikeType>(fir::unwrapRefType(baseAddrType))
+            .getElementType();
     if (auto seqType = llvm::dyn_cast<fir::SequenceType>(baseAddrType))
       if (seqType.hasDynamicExtents())
         baseAddrType = seqType.getEleTy();
@@ -1215,7 +1229,6 @@ public:
                                                        optDescMap);
 
     mapType = removeAttachModifiers(mapType);
-
     mlir::Type underlyingVarType = mlir::Type{};
     bool baseAddrInsert = optDescMap && baseAddr;
     if (baseAddrInsert)

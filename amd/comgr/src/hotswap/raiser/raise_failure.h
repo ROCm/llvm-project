@@ -38,6 +38,9 @@ enum class RaiseFailureReason : uint16_t {
   // The instruction's opcode is lifted, but this operand shape or encoding
   // variant is not. `detail()` carries shape-specific context when available.
   UnsupportedInstructionForm,
+  // A source floating-point mode is unsupported or cannot be represented on
+  // the target.
+  UnsupportedFloatingPointMode,
   // An instruction writes EXEC through a path the lift does not model.
   SPEUnsafeExecWriter,
   // `createTargetMachine` returned null.
@@ -82,6 +85,11 @@ enum class RaiseFailureReason : uint16_t {
   // The source object declares non-disabled workgroup cluster dimensions, so
   // TTMP6 carries per-cluster state the Hotswap ABI model does not reconstruct.
   UnsupportedSourceClusterDims,
+  // Source and target use different models to combine the program-controlled
+  // user priority with the system-assigned priority. The dispatch-time system
+  // priority is unavailable, so the raiser cannot prove that source wave
+  // ordering is preserved.
+  UnsupportedWavePriority,
 };
 
 // Human-readable name for a `RaiseFailureReason`. Stable enough for

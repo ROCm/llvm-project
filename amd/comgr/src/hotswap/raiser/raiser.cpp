@@ -35,6 +35,7 @@
 #include "comgr.h"
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
@@ -49,9 +50,11 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
@@ -61,6 +64,7 @@
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 
 #include <cassert>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -91,12 +95,55 @@ static StringRef processorName(StringRef Isa) {
   return Isa;
 }
 
+/// Return the LLVM denormal mode represented by an AMDHSA descriptor field.
+static DenormalMode denormalMode(unsigned HardwareMode) {
+  using Kind = DenormalMode::DenormalModeKind;
+  switch (HardwareMode) {
+  case amdhsa::FLOAT_DENORM_MODE_FLUSH_SRC_DST:
+    return {Kind::PreserveSign, Kind::PreserveSign};
+  case amdhsa::FLOAT_DENORM_MODE_FLUSH_DST:
+    return {Kind::PreserveSign, Kind::IEEE};
+  case amdhsa::FLOAT_DENORM_MODE_FLUSH_SRC:
+    return {Kind::IEEE, Kind::PreserveSign};
+  case amdhsa::FLOAT_DENORM_MODE_FLUSH_NONE:
+    return {Kind::IEEE, Kind::IEEE};
+  }
+  llvm_unreachable("invalid hardware denormal mode");
+}
+
+/// Attach the floating-point attributes represented by the source descriptor.
+static void setFloatingPointAttributes(Function &F, const KernelMeta &Meta,
+                                       const ISAProfile &SourceProfile) {
+  const unsigned DefaultDenormalMode = AMDHSA_BITS_GET(
+      Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_DENORM_MODE_16_64);
+  const unsigned Float32DenormalMode = AMDHSA_BITS_GET(
+      Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_DENORM_MODE_32);
+  const DenormalFPEnv FPEnv(denormalMode(DefaultDenormalMode),
+                            denormalMode(Float32DenormalMode));
+  F.addFnAttr(Attribute::get(F.getContext(), Attribute::DenormalFPEnv,
+                             FPEnv.toIntValue()));
+
+  if (!SourceProfile.hasDx10ClampAndIeeeMode()) {
+    return;
+  }
+
+  const bool Dx10Clamp =
+      AMDHSA_BITS_GET(Meta.ComputePgmRsrc1,
+                      amdhsa::COMPUTE_PGM_RSRC1_GFX6_GFX11_ENABLE_DX10_CLAMP);
+  const bool IeeeMode =
+      AMDHSA_BITS_GET(Meta.ComputePgmRsrc1,
+                      amdhsa::COMPUTE_PGM_RSRC1_GFX6_GFX11_ENABLE_IEEE_MODE);
+  F.addFnAttr("amdgpu-dx10-clamp", Dx10Clamp ? "true" : "false");
+  F.addFnAttr("amdgpu-ieee", IeeeMode ? "true" : "false");
+}
+
 // Declare the lifted kernel: one opaque parameter spanning the source kernarg
 // segment, so the emitted descriptor reports the source segment size and the
 // ABI alignment. The raised body reads arguments as ordinary loads off the
 // kernarg pointer, at the byte offsets the source metadata gives them.
 static Function *declareKernel(Module &M, StringRef KernelName,
-                               const KernelMeta &Meta) {
+                               const KernelMeta &Meta,
+                               const ISAProfile &SourceProfile) {
   LLVMContext &C = M.getContext();
   SmallVector<Type *> ParamTys;
   if (Meta.KernargSegmentSize > 0)
@@ -107,6 +154,7 @@ static Function *declareKernel(Module &M, StringRef KernelName,
   Function *F =
       Function::Create(FuncTy, GlobalValue::ExternalLinkage, KernelName, &M);
   F->setCallingConv(CallingConv::AMDGPU_KERNEL);
+  setFloatingPointAttributes(*F, Meta, SourceProfile);
 
   if (Meta.KernargSegmentSize > 0) {
     // AMDGPULowerKernelArguments honors the `align` parameter attribute only on
@@ -151,8 +199,18 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
 
   if (Di.TargetSpecificFlags & SOP1)
     return handleSOP1(Ctx, Di, Op);
+  if (Di.TargetSpecificFlags & SOP2)
+    return handleSOP2(Ctx, Di, Op);
   if (Di.TargetSpecificFlags & SOPP)
     return handleSOPP(Ctx, Di, Op);
+  if (Di.TargetSpecificFlags & SMRD)
+    return handleSMEM(Ctx, Di, Op);
+
+  constexpr uint64_t VOP2EncodingMask =
+      VOP2 | VOP3 | VOP3P | DPP | SDWA | VOPD3;
+  if ((Di.TargetSpecificFlags & VOP2EncodingMask) == VOP2) {
+    return handleVOP2(Ctx, Di, Op);
+  }
 
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedInstructionForm,
@@ -248,7 +306,7 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
                                    Type::getInt32Ty(C), Type::getInt64Ty(C));
   Projection.setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
 
-  Function *F = declareKernel(M, Kernel.Name, Meta);
+  Function *F = declareKernel(M, Kernel.Name, Meta, Env.Source.Profile);
   BasicBlock *Entry = BasicBlock::Create(C, "entry", F);
   IRBuilder<> B(Entry);
 

@@ -7,6 +7,12 @@
 
 #include "mathF.h"
 
+#define FLOAT_SPECIALIZATION
+#include "ep.h"
+
+extern CONSTATTR float2 MATH_PRIVATE(epln)(float);
+extern CONSTATTR float MATH_PRIVATE(expep)(float2);
+
 CONSTATTR float
 MATH_MANGLE(tgamma)(float x)
 {
@@ -14,67 +20,66 @@ MATH_MANGLE(tgamma)(float x)
     float ret;
 
     if (ax < 16.0f) {
-        float n, d;
+        float2 n, d;
         float y = x;
         if (x > 0.0f) {
-            n = 1.0f;
+            n = con(1.0f, 0.0f);
             while (y > 2.5f) {
-                n = MATH_MAD(n, y, -n);
+                n = omul(n, y - 1.0f);
                 y = y - 1.0f;
-                n = MATH_MAD(n, y, -n);
+                n = omul(n, y - 1.0f);
                 y = y - 1.0f;
             }
             if (y > 1.5f) {
-                n = MATH_MAD(n, y, -n);
+                n = omul(n, y - 1.0f);
                 y = y - 1.0f;
             }
             if (x >= 0.5f)
                 y = y - 1.0f;
-            d = x < 0.5f ? x : 1.0f;
+            d = con(x < 0.5f ? x : 1.0f, 0.0f);
         } else {
-            d = x;
+            d = con(x, 0.0f);
             while (y < -1.5f) {
-                d = MATH_MAD(d, y, d);
+                d = omul(d, y + 1.0f);
                 y = y + 1.0f;
-                d = MATH_MAD(d, y, d);
+                d = omul(d, y + 1.0f);
                 y = y + 1.0f;
             }
             if (y < -0.5f) {
-                d = MATH_MAD(d, y, d);
+                d = omul(d, y + 1.0f);
                 y = y + 1.0f;
             }
-            n = 1.0f;
+            n = con(1.0f, 0.0f);
         }
         float qt = MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y,
-                   MATH_MAD(y, MATH_MAD(y,
-                       0x1.d5a56ep-8f, -0x1.4dcb00p-7f), -0x1.59c03ap-5f), 0x1.55405ap-3f),
-                       -0x1.5810f2p-5f), -0x1.4fcfd6p-1f), 0x1.2788ccp-1f);
-        ret = MATH_DIV(n, MATH_MAD(d, y*qt, d));
+                   MATH_MAD(y, MATH_MAD(y, MATH_MAD(y,
+                       -0x1.1201dcp-10f, 0x1.d16868p-8f), -0x1.3c8284p-7f), -0x1.598558p-5f), 0x1.55148ep-3f),
+                       -0x1.581830p-5f), -0x1.4fcf46p-1f), 0x1.2788d0p-1f);
+
+        float2 den = fadd(mul(d, y*qt), d);
+        ret = MATH_DIV(n.hi, den.hi);
         ret = x == 0.0f ? BUILTIN_COPYSIGN_F32(PINF_F32, x) : ret;
         ret = x < 0.0f && BUILTIN_TRUNC_F32(x) == x ? QNAN_F32 : ret;
     } else {
-        const float sqrt2pi = 0x1.40d932p+1f;
-        const float sqrtpiby2 = 0x1.40d932p+0f;
-
-        float t1 = MATH_MANGLE(powr)(ax, MATH_MAD(ax, 0.5f, -0.25f));
-        float t2 = MATH_MANGLE(exp)(-ax);
         float xr = MATH_FAST_RCP(ax);
-        float p = MATH_MAD(xr, MATH_MAD(xr, 0x1.96d7e4p-9f, 0x1.556652p-4f), 0x1.fffff8p-1f);
+        float p = MATH_MAD(xr, MATH_MAD(xr, MATH_MAD(xr, -0x1.61f140p-9f, 0x1.c72f8cp-9f), 0x1.555554p-4f), 1.0f);
+
+        float2 e = sub(mul(MATH_PRIVATE(epln)(ax), ax - 0.5f), ax);
+
         if (x > 0.0f) {
-            float g = sqrt2pi*t2*t1*t1*p;
-            ret = x >  0x1.18521ep+5f ? PINF_F32 : g;
+            const float sqrt2pi = 0x1.40d932p+1f;
+            float m = MATH_PRIVATE(expep)(e);
+            float g = sqrt2pi * m * p;
+            ret = x > 0x1.18521ep+5f ? PINF_F32 : g;
         } else {
+            const float2 lnsqrtpiby2 = con(0x1.ce6bb2p-3f, 0x1.6a84c6p-29f);
             float s = -x * MATH_MANGLE(sinpi)(x);
-            if (x > -30.0f)
-                ret = MATH_DIV(sqrtpiby2, s*t2*t1*t1*p);
-            else if (x > -41.0f)
-                ret = MATH_DIV(MATH_DIV(sqrtpiby2, t2*t1*p), s*t1);
-            else
-                ret = BUILTIN_COPYSIGN_F32(0.0f, s);
+            float asp = BUILTIN_ABS_F32(s) * p;
+            float mag = MATH_PRIVATE(expep)(sub(sub(lnsqrtpiby2, e), MATH_PRIVATE(epln)(asp)));
+            ret = BUILTIN_COPYSIGN_F32(mag, s);
             ret = BUILTIN_TRUNC_F32(x) == x || BUILTIN_ISNAN_F32(x) ? QNAN_F32 : ret;
         }
     }
 
     return ret;
 }
-

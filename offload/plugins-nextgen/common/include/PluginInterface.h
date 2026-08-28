@@ -68,7 +68,6 @@ namespace plugin {
 struct GenericPluginTy;
 struct GenericKernelTy;
 struct GenericDeviceTy;
-struct KernelRunRecordTy;
 struct PluginContextTy;
 template <typename ResourceRef> class GenericDeviceResourceManagerTy;
 
@@ -606,9 +605,6 @@ struct GenericKernelTy {
   bool doesTeamsReduction() const {
     return KernelEnvironment.Configuration.ReductionDataSize > 0;
   }
-
-  /// Indicate if the input block size is within the limit.
-  virtual bool isValidBlockSize(uint32_t BlockSize) const { return true; }
 
 protected:
   /// Get the execution mode name of the kernel.
@@ -1472,10 +1468,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
     return Error::success();
   }
 
-  bool enableRuntimeAutotuning() const { return OMPX_EnableRuntimeAutotuning; }
-
-  KernelRunRecordTy *getKernelRunRecords() const { return KernelRunRecords; }
-
   /// Returns true if the plugin can guarantee that the associated
   /// storage is accessible
   Expected<bool> isAccessiblePtr(const void *Ptr, size_t Size);
@@ -1663,9 +1655,6 @@ protected:
   UInt32Envar OMPX_InitialNumStreams;
   UInt32Envar OMPX_InitialNumEvents;
 
-  /// Envar to enable runtime tuning.
-  BoolEnvar OMPX_EnableRuntimeAutotuning;
-
   /// The identifier of the device within the plugin. Notice this is not a
   /// global device id and is not the device id visible to the OpenMP user.
   const int32_t DeviceId;
@@ -1702,9 +1691,6 @@ protected:
   /// This is used to run the RPC server during task synchronization.
   RPCServerTy *RPCServer;
 
-  /// Structs for functions and data used in runtime autotuning.
-  KernelRunRecordTy *KernelRunRecords;
-
   /// Variable to enable kernel duration tracing.
   BoolEnvar OMPX_KernelDurationTracing;
 
@@ -1716,119 +1702,6 @@ private:
   getKernelEnvironmentForKernel(StringRef Name, DeviceImageTy &Image);
 
   bool IsFastReductionEnabled = false;
-};
-
-/// Struct represents the metadata for each kernel run on the device.
-struct KernelRunRecordTy {
-
-  struct KernelRunEntryTy {
-    std::string KernelName;
-    uint32_t NumTeams = 0;
-    uint32_t NumThreads = 0;
-    uint64_t RunDuration = 0;
-  };
-
-  // Metadata used in tuning process.
-  struct TuningMetadataTy {
-    uint32_t IdxThread = 0;
-    uint32_t IdxCUMultiplier = 0;
-    // Run counters.
-    uint32_t RunCounters = 0;
-    // Entry with minimum running time.
-    KernelRunEntryTy MinEntry;
-  };
-
-  // Add a new entry
-  void addEntry(std::string KernelName, uint32_t NumTeams, uint32_t NumThreads,
-                uint64_t RunDuration) {
-    TuningData[KernelName].RunCounters++;
-
-    // Update min entries.
-    uint64_t MinDuration = 0;
-    auto It = TuningData.find(KernelName);
-    if (It != TuningData.end()) {
-      MinDuration = It->second.MinEntry.RunDuration;
-    }
-    if (MinDuration > RunDuration || MinDuration == 0) {
-      TuningData[KernelName].MinEntry = {KernelName, NumTeams, NumThreads,
-                                         RunDuration};
-    }
-  }
-
-  // Get parameters for next kernel launch.
-  std::pair<uint32_t, uint32_t>
-  getLaunchParamsForKernel(const GenericKernelTy &Kernel,
-                           GenericDeviceTy &GenericDevice) {
-    std::string KernelName = Kernel.getName();
-
-    // If the kernel reaches the run limit,
-    // return the current optimal launch parameters.
-    if (reachedRunLimitForKernel(KernelName)) {
-      auto MinEntry = TuningData[KernelName].MinEntry;
-      return {MinEntry.NumTeams, MinEntry.NumThreads};
-    }
-
-    // Pick new launch parameters.
-    uint32_t IdxCUMulti = TuningData[KernelName].IdxCUMultiplier;
-    uint32_t IdxThread = TuningData[KernelName].IdxThread;
-
-    if (IdxCUMulti >= CUMultiplierCandidate.size()) {
-      // No more element to search.
-      // Max run counter to stop further runs.
-      // Return current optimal launch parameters.
-      TuningData[KernelName].RunCounters = RunLimiter + 1;
-
-      return {TuningData[KernelName].MinEntry.NumTeams,
-              TuningData[KernelName].MinEntry.NumThreads};
-    }
-
-    // New team/thread pair for launch parameters.
-    uint32_t NumCU = GenericDevice.getNumComputeUnits();
-    std::pair<uint32_t, uint32_t> NewLaunchParams = {
-        CUMultiplierCandidate[IdxCUMulti] * NumCU, ThreadCandidate[IdxThread]};
-
-    // Update indices.
-    IdxThread++;
-    TuningData[KernelName].IdxThread = IdxThread;
-
-    // Threads should be within the limit.
-    if (IdxThread >= ThreadCandidate.size() ||
-        !Kernel.isValidBlockSize(ThreadCandidate[IdxThread])) {
-      TuningData[KernelName].IdxThread = 0;
-      TuningData[KernelName].IdxCUMultiplier++;
-    }
-
-    return NewLaunchParams;
-  }
-
-  bool reachedRunLimitForKernel(std::string KernelName) {
-    if (TuningData.find(KernelName) == TuningData.end()) {
-      // If no record for this kernel.
-      return false;
-    }
-
-    return TuningData[KernelName].RunCounters > RunLimiter;
-  }
-
-  uint32_t getRunCounterForKernel(std::string KernelName) {
-    if (TuningData.find(KernelName) == TuningData.end()) {
-      return 0;
-    }
-
-    return TuningData[KernelName].RunCounters;
-  }
-
-private:
-  // Candidates for thread and team.
-  std::vector<uint32_t> ThreadCandidate = {32, 64, 128, 256, 512, 1024};
-  std::vector<uint32_t> CUMultiplierCandidate = {4, 8, 16, 32, 64, 128};
-  // The max number of tuning runs for each kernel.
-  uint32_t RunLimiter = ThreadCandidate.size() * CUMultiplierCandidate.size();
-  // Used for keeping track of the metatdata used in tuning for each kernel.
-  std::unordered_map<std::string, TuningMetadataTy> TuningData;
-  /// Internal representation for OMPT device (initialize & finalize)
-  std::atomic<bool> OmptInitialized;
-
 };
 
 /// Class implementing common functionalities of offload plugins. Each plugin

@@ -52,4 +52,18 @@ bool ISAProfile::hasArchitectedSgprs() const {
   return STI->hasFeature(llvm::AMDGPU::FeatureArchitectedSGPRs);
 }
 
+bool ISAProfile::hasDx10ClampAndIeeeMode() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureDX10ClampAndIEEEMode);
+}
+
+bool ISAProfile::hasCombinedWaitcnt() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureGFX9);
+}
+
+ISAProfile::WavePriorityModel ISAProfile::wavePriorityModel() const {
+  return STI->hasFeature(llvm::AMDGPU::FeatureGFX1250Insts)
+             ? WavePriorityModel::Gfx125
+             : WavePriorityModel::Gfx9;
+}
+
 } // namespace COMGR::hotswap
