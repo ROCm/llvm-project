@@ -6,6 +6,8 @@
 
 import glob
 import os
+import shlex
+import subprocess
 
 
 def getRoot(config):
@@ -34,6 +36,45 @@ def rocm_lib_dir(rocm_root):
         if glob.glob(os.path.join(libdir, "libhsa-runtime64.so*")):
             return libdir
     return None
+
+
+def rocm_has_comgr(rocm_root):
+    """True when the Code Object Manager the symbolizer dlopens is installed."""
+    libdir = rocm_lib_dir(rocm_root)
+    if not libdir:
+        return False
+    return bool(glob.glob(os.path.join(libdir, "libamd_comgr.so*")))
+
+
+def compiler_has_amdgpu(cfg):
+    """True when the test compiler can generate code for amdgcn.
+
+    ROCm being installed says nothing about the compiler under test having the
+    AMDGPU backend registered, so ask it to codegen an empty translation unit.
+    """
+    clang = walk_config_attr(cfg, "clang")
+    if not clang:
+        return False
+    cmd = shlex.split(clang) + [
+        "--target=amdgcn-amd-amdhsa",
+        "-mcpu=gfx900",
+        "-nogpulib",
+        "-x",
+        "c++",
+        "-S",
+        "-o",
+        os.devnull,
+        os.devnull,
+    ]
+    try:
+        return (
+            subprocess.call(
+                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            == 0
+        )
+    except OSError:
+        return False
 
 
 def rocm_is_available(rocm_root):
@@ -94,6 +135,13 @@ else:
             config.unsupported = True
         else:
             config.available_features.add("rocm")
+            # AMDGPU code-object symbolization dlopens libamd_comgr at report
+            # time; it is packaged separately from the HSA runtime.
+            if rocm_has_comgr(rocm_root):
+                config.available_features.add("comgr")
+                # Symbolizing a real code object means building one first.
+                if compiler_has_amdgpu(config):
+                    config.available_features.add("amdgpu-codegen")
             # VMEM API availability is a runtime KFD/kernel property and cannot
             # be detected at test-discovery time. Let the environment declare it
             # (HSA_VMEM_SUPPORTED=1) so VMEM tests gate on `REQUIRES: hsa-vmem`.
