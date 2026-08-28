@@ -94,8 +94,9 @@ static void writeResultAndVCC(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
 }
 
 // Raise a binary operation that writes carry or borrow to VCC.
-static Error raiseVCCBinary32(RaiseContext &Ctx, OpResolver &Op,
-                              Intrinsic::ID IntrinsicID, bool ReverseOperands) {
+static Error raiseBinary32WriteVCC(RaiseContext &Ctx, OpResolver &Op,
+                                   Intrinsic::ID IntrinsicID,
+                                   bool ReverseOperands) {
   Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args) {
     return Args.takeError();
@@ -112,9 +113,9 @@ static Error raiseVCCBinary32(RaiseContext &Ctx, OpResolver &Op,
 
 // Raise a binary operation that reads carry or borrow from VCC and writes the
 // updated carry or borrow back to VCC.
-static Error raiseVCCInBinary32(RaiseContext &Ctx, OpResolver &Op,
-                                Intrinsic::ID IntrinsicID,
-                                bool ReverseOperands) {
+static Error raiseBinary32ReadWriteVCC(RaiseContext &Ctx, OpResolver &Op,
+                                       Intrinsic::ID IntrinsicID,
+                                       bool ReverseOperands) {
   Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args) {
     return Args.takeError();
@@ -161,19 +162,24 @@ static Error raiseSignedDotAccumulate(RaiseContext &Ctx, OpResolver &Op,
   if (!AccumulatorSource) {
     return AccumulatorSource.takeError();
   }
+  // Both sources pack their elements into a single 32-bit VGPR, so the number
+  // of elements to accumulate follows from the element width.
+  constexpr unsigned PackedWidthInBits = 32;
+  unsigned NumElements = PackedWidthInBits / ElementWidthInBits;
+
   IntegerType *ElementTy = Ctx.B.getIntNTy(ElementWidthInBits);
+  IntegerType *AccumulatorTy = Ctx.B.getInt32Ty();
   Value *Accumulator = *AccumulatorSource;
-  for (unsigned I = 0; I != 32 / ElementWidthInBits; ++I) {
+  for (unsigned I = 0; I != NumElements; ++I) {
     unsigned BitOffset = I * ElementWidthInBits;
-    Value *Lhs = Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Args->Src0, BitOffset),
-                                   ElementTy, "dot_lhs_bits");
-    Value *Rhs = Ctx.B.CreateTrunc(Ctx.B.CreateLShr(Args->Src1, BitOffset),
-                                   ElementTy, "dot_rhs_bits");
-    Lhs = Ctx.B.CreateSExt(Lhs, Ctx.B.getInt32Ty(), "dot_lhs");
-    Rhs = Ctx.B.CreateSExt(Rhs, Ctx.B.getInt32Ty(), "dot_rhs");
-    Accumulator =
-        Ctx.B.CreateAdd(Accumulator, Ctx.B.CreateMul(Lhs, Rhs, "dot_product"),
-                        "dot_accumulate");
+    Value *LhsBits = Ctx.B.CreateLShr(Args->Src0, BitOffset, "dot_lhs_shifted");
+    Value *LhsElement = Ctx.B.CreateTrunc(LhsBits, ElementTy, "dot_lhs_bits");
+    Value *RhsBits = Ctx.B.CreateLShr(Args->Src1, BitOffset, "dot_rhs_shifted");
+    Value *RhsElement = Ctx.B.CreateTrunc(RhsBits, ElementTy, "dot_rhs_bits");
+    Value *Lhs = Ctx.B.CreateSExt(LhsElement, AccumulatorTy, "dot_lhs");
+    Value *Rhs = Ctx.B.CreateSExt(RhsElement, AccumulatorTy, "dot_rhs");
+    Value *Product = Ctx.B.CreateMul(Lhs, Rhs, "dot_product");
+    Accumulator = Ctx.B.CreateAdd(Accumulator, Product, "dot_accumulate");
   }
   Ctx.registers().writeReg32(Args->Dst, Accumulator);
   return Error::success();
@@ -284,23 +290,23 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
       return B.CreateSub(Src1, Src0, "subrev");
     });
   case CanonicalOp::V_ADD_CO_U32:
-    return raiseVCCBinary32(Ctx, Op, Intrinsic::uadd_with_overflow,
-                            /*ReverseOperands=*/false);
+    return raiseBinary32WriteVCC(Ctx, Op, Intrinsic::uadd_with_overflow,
+                                 /*ReverseOperands=*/false);
   case CanonicalOp::V_SUB_CO_U32:
-    return raiseVCCBinary32(Ctx, Op, Intrinsic::usub_with_overflow,
-                            /*ReverseOperands=*/false);
+    return raiseBinary32WriteVCC(Ctx, Op, Intrinsic::usub_with_overflow,
+                                 /*ReverseOperands=*/false);
   case CanonicalOp::V_SUBREV_CO_U32:
-    return raiseVCCBinary32(Ctx, Op, Intrinsic::usub_with_overflow,
-                            /*ReverseOperands=*/true);
+    return raiseBinary32WriteVCC(Ctx, Op, Intrinsic::usub_with_overflow,
+                                 /*ReverseOperands=*/true);
   case CanonicalOp::V_ADD_CO_CI_U32:
-    return raiseVCCInBinary32(Ctx, Op, Intrinsic::uadd_with_overflow,
-                              /*ReverseOperands=*/false);
+    return raiseBinary32ReadWriteVCC(Ctx, Op, Intrinsic::uadd_with_overflow,
+                                     /*ReverseOperands=*/false);
   case CanonicalOp::V_SUB_CO_CI_U32:
-    return raiseVCCInBinary32(Ctx, Op, Intrinsic::usub_with_overflow,
-                              /*ReverseOperands=*/false);
+    return raiseBinary32ReadWriteVCC(Ctx, Op, Intrinsic::usub_with_overflow,
+                                     /*ReverseOperands=*/false);
   case CanonicalOp::V_SUBREV_CO_CI_U32:
-    return raiseVCCInBinary32(Ctx, Op, Intrinsic::usub_with_overflow,
-                              /*ReverseOperands=*/true);
+    return raiseBinary32ReadWriteVCC(Ctx, Op, Intrinsic::usub_with_overflow,
+                                     /*ReverseOperands=*/true);
   case CanonicalOp::V_CNDMASK_B32:
     return raiseCndMask(Ctx, Op);
 
