@@ -149,6 +149,13 @@ jobs:
                print a[n], $4
              }' > submodule-commit-${STAGE_NAME}.txt          
 
+      - name: Temp addition for comm-libs (assertion on)
+        run: |
+          mkdir -p patches/amd-mainline/llvm-project
+          curl -fsSL \
+            "https://raw.githubusercontent.com/ROCm/TheRock/d9189b378f8fdc2525acaf6975deee29538ba48d/patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch" \
+            -o patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch 
+
       - name: build prep (patches & hotfixes for CK, hipcc and hiprtc, tests)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/linux-patches@amd-staging
         with:
