@@ -16,7 +16,6 @@
 #include "asan_descriptions.h"
 #include "asan_scariness_score.h"
 #include "sanitizer_common/sanitizer_common.h"
-#include "sanitizer_common/sanitizer_symbolizer_amdgpu.h"
 
 namespace __asan {
 
