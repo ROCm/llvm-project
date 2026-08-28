@@ -21,6 +21,32 @@ vop2_integer_gfx1250:
 ; IR: = sub i32 {{.+}}, 3
 	v_subrev_nc_u32_e32 v4, 3, v1
 
+; IR: = call i32 @llvm.smin.i32(i32 8, i32 {{.+}})
+	v_min_i32_e32 v26, 8, v1
+; IR: = call i32 @llvm.smax.i32(i32 9, i32 {{.+}})
+	v_max_i32_e32 v27, 9, v1
+; IR: = call i32 @llvm.umin.i32(i32 10, i32 {{.+}})
+	v_min_u32_e32 v28, 10, v1
+; IR: = call i32 @llvm.umax.i32(i32 11, i32 {{.+}})
+	v_max_u32_e32 v29, 11, v1
+
+; IR: = and i32 12, {{.+}}
+	v_and_b32_e32 v30, 12, v1
+; IR: = or i32 13, {{.+}}
+	v_or_b32_e32 v31, 13, v1
+; IR: = xor i32 14, {{.+}}
+	v_xor_b32_e32 v32, 14, v1
+; IR: [[XNOR_XOR:%.+]] = xor i32 15, {{.+}}
+; IR-NEXT: = xor i32 [[XNOR_XOR]], -1
+	v_xnor_b32_e32 v33, 15, v1
+
+; IR: = shl i32 {{.+}}, 1
+	v_lshlrev_b32_e32 v34, 33, v1
+; IR: = lshr i32 {{.+}}, 2
+	v_lshrrev_b32_e32 v35, 34, v1
+; IR: = ashr i32 {{.+}}, 3
+	v_ashrrev_i32_e32 v36, 35, v1
+
 ; IR: = add i64
 	v_add_nc_u64_e32 v[10:11], v[6:7], v[8:9]
 ; IR: = sub i64
@@ -92,7 +118,7 @@ vop2_integer_gfx1250:
 	.amdhsa_kernel vop2_integer_gfx1250
 		.amdhsa_kernarg_size 0
 		.amdhsa_wavefront_size32 1
-		.amdhsa_next_free_vgpr 26
+		.amdhsa_next_free_vgpr 37
 		.amdhsa_next_free_sgpr 1
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
@@ -109,7 +135,7 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         vop2_integer_gfx1250.kd
-    .vgpr_count:     26
+    .vgpr_count:     37
     .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
