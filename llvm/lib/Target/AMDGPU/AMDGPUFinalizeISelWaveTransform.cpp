@@ -165,11 +165,11 @@ static Register simplifyMachinePHI(MachineInstr &PHI, MachineRegisterInfo &MRI,
   // originally carried IMPLICIT_DEF.
   if (HasImplicitDefInput) {
     MachineInstr *DefCommonReg = MRI.getVRegDef(CommonReg);
-    if (DefCommonReg && MDT.dominates(DefCommonReg, &PHI))
-      return CommonReg;
+    if (!DefCommonReg || !MDT.dominates(DefCommonReg, &PHI))
+      return Register();
   }
 
-  return Register();
+  return CommonReg;
 }
 
 /// Walk every PHI in the function and try to replace uniform (SGPR) PHIs that
