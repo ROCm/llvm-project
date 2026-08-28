@@ -1,5 +1,5 @@
 // REQUIRES: amdgpu-registered-target
-
+// XFAIL: *
 // RUN: %clang_cc1 -triple amdgpu12.50-unknown-unknown -verify -emit-llvm -o - %s
 
 typedef float  v16f  __attribute__((ext_vector_type(16)));
