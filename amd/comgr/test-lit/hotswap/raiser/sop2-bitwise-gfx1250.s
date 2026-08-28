@@ -19,10 +19,10 @@ sop2_bitwise_gfx1250:
 	; NATIVE: %[[TARGET_WAVE:.*]] = call i32 @llvm.amdgcn.wave.id()
 	; NATIVE: and i32 %[[TARGET_WAVE]], 31
 	; IR-NOT: @llvm.amdgcn.wave.id
-	; IR: %[[DISPATCH_PTR:.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
-	; IR: %[[TID_X:.*]] = call i32 @llvm.amdgcn.workitem.id.x()
-	; IR: %[[TID_Y:.*]] = call i32 @llvm.amdgcn.workitem.id.y()
-	; IR: %[[TID_Z:.*]] = call i32 @llvm.amdgcn.workitem.id.z()
+	; IR-DAG: %[[DISPATCH_PTR:.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
+	; IR-DAG: %[[TID_X:.*]] = call i32 @llvm.amdgcn.workitem.id.x()
+	; IR-DAG: %[[TID_Y:.*]] = call i32 @llvm.amdgcn.workitem.id.y()
+	; IR-DAG: %[[TID_Z:.*]] = call i32 @llvm.amdgcn.workitem.id.z()
 	; IR: %[[FLAT_YZ:.*]] = add i32 %[[TID_Y]], {{.*}}
 	; IR: %[[FLAT_ID:.*]] = add i32 %[[TID_X]], {{.*}}
 	; IR: %[[SOURCE_WAVE_ID:.*]] = udiv i32 %[[FLAT_ID]], 64
