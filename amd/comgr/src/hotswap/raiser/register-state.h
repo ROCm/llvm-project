@@ -28,10 +28,9 @@
 
 namespace COMGR::hotswap {
 
-// The source architectural registers as the raiser sees them: alloca-backed
-// storage, the operand reads and writes that resolve through it, EXEC
-// predication of the per-lane ones, and the facts derived from a scalar write
-// that a later write to the same register invalidates.
+// The source architectural registers as the raiser sees them. Scalar wave-mask
+// results also keep a per-lane shadow, keyed by the SGPR range they occupy, so
+// widening projections do not lose independently computed source-wave masks.
 class RegisterState {
 public:
   // Build the register state for the source kernel described by Meta, with the
@@ -77,6 +76,10 @@ public:
   // Read a mask at target EXEC width, replicating narrower source-wave bits.
   llvm::Expected<llvm::Value *> readOpExecWidth(const DecodedInst &Di,
                                                 unsigned OpIdx);
+  // Read an operand's per-lane wave-mask value, or null when no shadow matches
+  // the operand's full register width.
+  llvm::Expected<llvm::Value *> readOpWaveMaskI1(const DecodedInst &Di,
+                                                 unsigned OpIdx);
   // Read the mask a source-wave instruction should see, e.g. for `v_mbcnt_lo`.
   // EXEC/VCC/SGPR-shadow masks are projected; scalars use readOp32.
   llvm::Expected<llvm::Value *> readOpSourceWaveMask32(const DecodedInst &Di,
@@ -120,6 +123,9 @@ public:
   // says whether the destination spans BaseIdx and its successor.
   void recordSgprWaveMaskI1(unsigned BaseIdx, llvm::Value *CmpI1, bool IsPair);
 
+  // Record MaskI1 as the wave-mask value written to Dst.
+  void recordWaveMaskI1(ParsedReg Dst, llvm::Value *MaskI1);
+
   // Emit a test of whether the source wave holding the current target lane has
   // any lane active in EXEC.
   llvm::Value *emitCurrentSourceWaveHasActiveLane();
@@ -134,11 +140,12 @@ public:
   llvm::Value *materializeSourceWaveSgprPair(unsigned BaseIdx,
                                              llvm::Value *Fallback);
 
-  // Return the compare recorded for SGPR BaseIdx in this block, or null when
-  // none is valid.
-  llvm::Value *lookupSgprWaveMaskI1(unsigned BaseIdx) const {
+  // Return the compare recorded for this SGPR range, or null when unavailable.
+  llvm::Value *lookupSgprWaveMaskI1(unsigned BaseIdx, bool Is64) const {
     auto It = LastSgprWaveMaskI1.find(BaseIdx);
-    return It == LastSgprWaveMaskI1.end() ? nullptr : It->second.I1;
+    if (It == LastSgprWaveMaskI1.end())
+      return nullptr;
+    return It->second.IsPair == Is64 ? It->second.I1 : nullptr;
   }
 
   // Emit a read of the wave mask shadowed for SGPR BaseIdx, and of the bit
@@ -172,6 +179,9 @@ public:
   // non-constant write, and any block boundary, gives up the constant.
   void updateM0Const(llvm::Value *V);
   std::optional<uint64_t> getM0Const() const { return M0Const; }
+
+  // True while TTMP8 still holds its source kernel-entry value.
+  bool isTTMP8EntryValueAvailable() const { return TTMP8EntryValueAvailable; }
 
   // Emit stores marking every cross-block SGPR shadow invalid.
   void invalidateSgprShadows();
@@ -234,6 +244,7 @@ private:
   llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
   // Block-local constant value last stored to M0.
   std::optional<uint64_t> M0Const;
+  bool TTMP8EntryValueAvailable = true;
 
   // Shadow storage per SGPR. Cross-block values live in allocas to avoid
   // carrying SSA values that do not dominate their uses.

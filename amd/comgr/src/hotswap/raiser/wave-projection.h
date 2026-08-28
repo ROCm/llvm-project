@@ -20,6 +20,9 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 
+#include <array>
+#include <cassert>
+
 namespace COMGR::hotswap {
 
 struct MCState;
@@ -36,7 +39,12 @@ public:
   WaveProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
                  llvm::Type *I32Ty, llvm::Type *I64Ty)
       : Src(SrcIsa), Tgt(TgtIsa), I32Ty(I32Ty), I64Ty(I64Ty),
-        ExecStorageTy(SrcIsa.isWave32() ? I32Ty : I64Ty) {}
+        ExecStorageTy(SrcIsa.isWave32() ? I32Ty : I64Ty) {
+    assert(SrcIsa.hasValidWaveSize() && "invalid source wave size");
+    assert(TgtIsa.hasValidWaveSize() && "invalid target wave size");
+    assert(TgtIsa.waveSize() >= SrcIsa.waveSize() &&
+           "wave projection does not support narrowing");
+  }
 
   virtual ~WaveProjection() = default;
 
@@ -87,6 +95,9 @@ public:
   // projection. The base returns the target hardware value; a projection that
   // splits or re-maps source waves overrides it.
   virtual llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const;
+
+  // Emit the source wave's linear ID within its workgroup.
+  virtual llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const = 0;
 
   // Emit the full packed kernel-entry `v0` workitem id under this projection.
   // amdgpu packs the workitem id as x[0:9] | y[10:19] | z[20:29]; `NumDims`
@@ -175,6 +186,13 @@ public:
                               const llvm::Twine &Name = "wwm") const;
 
 protected:
+  // Emit the target hardware work-item ID for dimension 0, 1, or 2.
+  llvm::Value *emitTargetWorkitemId(llvm::IRBuilder<> &B,
+                                    unsigned Dimension) const;
+
+  // Emit the target wave's linear ID within its workgroup.
+  llvm::Value *emitTargetWaveId(llvm::IRBuilder<> &B) const;
+
   // Combine an already-projected workitem-id-x value with the native Y/Z
   // workitem-id fields into AMDGPU's packed `v0` layout
   // (x | y<<10 | z<<20). `NumDims` selects how many fields to fold in.
@@ -211,6 +229,8 @@ protected:
   // rather than returning a value from another one. See `emitLaneIdx`.
   mutable llvm::Function *CachedLaneIdxFunc = nullptr;
   mutable llvm::Value *CachedLaneIdx = nullptr;
+  mutable std::array<llvm::Value *, 3> CachedWorkitemIds = {nullptr, nullptr,
+                                                            nullptr};
 };
 
 // ============================================================================
@@ -223,6 +243,8 @@ protected:
 class ReplicationProjection : public WaveProjection {
 public:
   using WaveProjection::WaveProjection;
+
+  llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
   llvm::Value *emitLaneActiveBit(llvm::IRBuilder<> &B,
                                  llvm::Value *ExecVal) const override;
@@ -282,6 +304,7 @@ public:
   // alias their originals. No phantom-lane clamp: under a doubled dispatch
   // every hardware lane maps to a valid logical thread (real or replica).
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
+  llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
   // Pack the remapped x with the source's raw y/z fields (which are already
   // per-thread correct and become wave-uniform once x is doubled). Bypasses
@@ -315,6 +338,8 @@ public:
   WaveNativeProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
                        llvm::Type *I32Ty, llvm::Type *I64Ty);
 
+  llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
+
   llvm::Value *emitInitialExec(llvm::IRBuilder<> &B) const override;
   llvm::Value *emitLaneActiveBit(llvm::IRBuilder<> &B,
                                  llvm::Value *ExecVal) const override;
@@ -347,6 +372,7 @@ public:
 
   void setIterationAlloca(llvm::AllocaInst *Iter) { IterationAlloca = Iter; }
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
+  llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
   llvm::Value *emitLaneActiveBit(llvm::IRBuilder<> &B,
                                  llvm::Value *ExecVal) const override;

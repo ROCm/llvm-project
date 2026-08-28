@@ -294,11 +294,7 @@ struct IsaInfo {
   const char *Processor;
   unsigned ElfMachine;
   bool TrapHandlerEnabled;
-  bool ImageSupport;
-  unsigned LDSSize;
   unsigned LDSBankCount;
-  unsigned EUsPerCU;
-  unsigned MaxWavesPerCU;
   unsigned MaxFlatWorkGroupSize;
   unsigned VGPRAllocGranule;
   unsigned TotalNumVGPRs;
@@ -306,23 +302,12 @@ struct IsaInfo {
   unsigned AddressableNumVGPRs;
 } IsaInfos[] = {
 #define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, ELF_MACHINE,                      \
-                   TRAP_HANDLER_ENABLED, IMAGE_SUPPORT, LDS_SIZE,              \
-                   LDS_BANK_COUNT, EUS_PER_CU, MAX_WAVES_PER_CU,               \
+                   TRAP_HANDLER_ENABLED, LDS_BANK_COUNT,                       \
                    MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
                    TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
-  {TARGET_TRIPLE "-" PROCESSOR,                                                \
-   PROCESSOR,                                                                  \
-   ELF::ELF_MACHINE,                                                           \
-   TRAP_HANDLER_ENABLED,                                                       \
-   IMAGE_SUPPORT,                                                              \
-   LDS_SIZE,                                                                   \
-   LDS_BANK_COUNT,                                                             \
-   EUS_PER_CU,                                                                 \
-   MAX_WAVES_PER_CU,                                                           \
-   MAX_FLAT_WORK_GROUP_SIZE,                                                   \
-   VGPR_ALLOC_GRANULE,                                                         \
-   TOTAL_NUM_VGPRS,                                                            \
-   ADDRESSABLE_NUM_VGPRS},
+  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR,       ELF::ELF_MACHINE,             \
+   TRAP_HANDLER_ENABLED,        LDS_BANK_COUNT,  MAX_FLAT_WORK_GROUP_SIZE,     \
+   VGPR_ALLOC_GRANULE,          TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS},
 #include "comgr-isa-metadata.def"
 };
 
@@ -544,13 +529,16 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   auto Info = IsaInfos[IsaIndex];
   Root["TrapHandlerEnabled"] =
       Doc.getNode(std::to_string(Info.TrapHandlerEnabled), /*Copy=*/true);
-  Root["ImageSupport"] =
-      Doc.getNode(std::to_string(Info.ImageSupport), /*Copy=*/true);
-  Root["LocalMemorySize"] =
-      Doc.getNode(std::to_string(Info.LDSSize), /*Copy=*/true);
-  Root["EUsPerCU"] = Doc.getNode(std::to_string(Info.EUsPerCU), /*Copy=*/true);
-  Root["MaxWavesPerCU"] =
-      Doc.getNode(std::to_string(Info.MaxWavesPerCU), /*Copy=*/true);
+  Root["ImageSupport"] = Doc.getNode(
+      std::to_string(Features.test(AMDGPU::FEAT_IMAGE_INSTS)), /*Copy=*/true);
+  Root["LocalMemorySize"] = Doc.getNode(
+      std::to_string(AMDGPU::getMaxHWAddressableLocalMemorySize(Kind)),
+      /*Copy=*/true);
+  // The ISA metadata is mode-independent, so report the full-SIMD counts.
+  unsigned EUsPerCU = AMDGPU::getNumWorkGroupSIMDs(/*FullSIMDMode=*/true);
+  Root["EUsPerCU"] = Doc.getNode(std::to_string(EUsPerCU), /*Copy=*/true);
+  Root["MaxWavesPerCU"] = Doc.getNode(
+      std::to_string(AMDGPU::getMaxWavesPerEU(Kind) * EUsPerCU), /*Copy=*/true);
   Root["MaxFlatWorkGroupSize"] =
       Doc.getNode(std::to_string(Info.MaxFlatWorkGroupSize), /*Copy=*/true);
   Root["SGPRAllocGranule"] =

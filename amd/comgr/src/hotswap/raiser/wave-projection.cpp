@@ -38,6 +38,9 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
+static constexpr uint64_t DispatchWorkgroupSizeXOffset = 4;
+static constexpr uint64_t DispatchWorkgroupSizeYOffset = 6;
+
 // ----------------------------------------------------------------------------
 // WaveProjection base: lane-id derivation is shared across every projection
 // that keeps each target lane mapped 1:1 to a hardware lane.
@@ -78,11 +81,60 @@ Value *WaveProjection::emitLaneIdx(IRBuilder<> &B) const {
   return LaneId;
 }
 
-Value *WaveProjection::emitWorkitemIdX(IRBuilder<> &B) const {
-  Module *M = B.GetInsertBlock()->getModule();
+Value *WaveProjection::emitTargetWorkitemId(IRBuilder<> &B,
+                                            unsigned Dimension) const {
+  assert(Dimension < CachedWorkitemIds.size() && "invalid work-item dimension");
+  Function *F = B.GetInsertBlock()->getParent();
+  if (CachedWorkitemIds[Dimension])
+    return CachedWorkitemIds[Dimension];
+
+  static constexpr Intrinsic::ID Ids[] = {Intrinsic::amdgcn_workitem_id_x,
+                                          Intrinsic::amdgcn_workitem_id_y,
+                                          Intrinsic::amdgcn_workitem_id_z};
+  static constexpr const char *Names[] = {"tid_x", "tid_y", "tid_z"};
+  BasicBlock &Entry = F->getEntryBlock();
+  IRBuilder<> EB(&Entry, Entry.getFirstNonPHIOrDbgOrAlloca());
   Function *Fn =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_x);
-  return B.CreateCall(Fn, {}, "tid");
+      Intrinsic::getOrInsertDeclaration(Entry.getModule(), Ids[Dimension]);
+  return CachedWorkitemIds[Dimension] = EB.CreateCall(Fn, {}, Names[Dimension]);
+}
+
+Value *WaveProjection::emitWorkitemIdX(IRBuilder<> &B) const {
+  return emitTargetWorkitemId(B, 0);
+}
+
+Value *WaveProjection::emitTargetWaveId(IRBuilder<> &B) const {
+  Module *M = B.GetInsertBlock()->getModule();
+  if (Tgt.hasArchitectedSgprs()) {
+    Function *Fn =
+        Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_wave_id);
+    return B.CreateCall(Fn, {}, "target_wave_id");
+  }
+
+  Function *DispatchPtrFn =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_dispatch_ptr);
+  Value *DispatchPtr = B.CreateCall(DispatchPtrFn, {}, "dispatch_ptr");
+  auto LoadWorkgroupSize = [&](uint64_t Offset, const Twine &Name) {
+    Value *Ptr = B.CreateConstInBoundsGEP1_64(B.getInt8Ty(), DispatchPtr,
+                                              Offset, Name + "_ptr");
+    LoadInst *Size = B.CreateAlignedLoad(B.getInt16Ty(), Ptr, Align(2), Name);
+    return B.CreateZExt(Size, B.getInt32Ty(), Name + "_i32");
+  };
+  Value *SizeX =
+      LoadWorkgroupSize(DispatchWorkgroupSizeXOffset, "workgroup_size_x");
+  Value *SizeY =
+      LoadWorkgroupSize(DispatchWorkgroupSizeYOffset, "workgroup_size_y");
+
+  Value *X = emitTargetWorkitemId(B, 0);
+  Value *Y = emitTargetWorkitemId(B, 1);
+  Value *Z = emitTargetWorkitemId(B, 2);
+  Value *Row = B.CreateAdd(Y, B.CreateMul(Z, SizeY), "wave_flat_yz");
+  Value *FlatId = B.CreateAdd(X, B.CreateMul(Row, SizeX), "wave_flat_id");
+  return B.CreateUDiv(FlatId, B.getInt32(Tgt.waveSize()), "target_wave_id");
+}
+
+Value *ReplicationProjection::emitSourceWaveId(IRBuilder<> &B) const {
+  return emitTargetWaveId(B);
 }
 
 Value *ReplicationProjection::emitWorkitemIdX(IRBuilder<> &B) const {
@@ -119,10 +171,7 @@ Value *WaveProjection::packWorkitemId(IRBuilder<> &B, Value *X,
                                       unsigned NumDims) const {
   if (NumDims < 2)
     return X;
-  Module *M = B.GetInsertBlock()->getModule();
-  Function *FnY =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_y);
-  Value *Y = B.CreateCall(FnY, {}, "tid_y");
+  Value *Y = emitTargetWorkitemId(B, 1);
   Value *Packed =
       B.CreateOr(X,
                  B.CreateShl(Y, ConstantInt::get(I32Ty, WorkitemIdYBitOffset),
@@ -130,9 +179,7 @@ Value *WaveProjection::packWorkitemId(IRBuilder<> &B, Value *X,
                  "tid_xy");
   if (NumDims < 3)
     return Packed;
-  Function *FnZ =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_z);
-  Value *Z = B.CreateCall(FnZ, {}, "tid_z");
+  Value *Z = emitTargetWorkitemId(B, 2);
   return B.CreateOr(Packed,
                     B.CreateShl(Z,
                                 ConstantInt::get(I32Ty, WorkitemIdZBitOffset),
@@ -355,6 +402,11 @@ ReplicationDoubledDispatchProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   return emitDoubledDispatchLogicalX(B, Raw, Src.waveSize(), Tgt.waveSize());
 }
 
+Value *
+ReplicationDoubledDispatchProjection::emitSourceWaveId(IRBuilder<> &B) const {
+  return emitTargetWaveId(B);
+}
+
 Value *ReplicationDoubledDispatchProjection::emitPackedWorkitemId(
     IRBuilder<> &B, unsigned NumDims) const {
   // Remapped x OR'd with the source's raw y/z fields. y/z are per-thread
@@ -391,6 +443,15 @@ WaveNativeProjection::WaveNativeProjection(const ISAProfile &SrcIsa,
   BroadcastNarrowExecLoWrite = true;
   ProvidesFullWaveExecInvariant = true;
   PreservesMbcntDerivedExec = true;
+}
+
+Value *WaveNativeProjection::emitSourceWaveId(IRBuilder<> &B) const {
+  Value *TargetWave = emitTargetWaveId(B);
+  Value *FirstSourceWave = B.CreateMul(
+      TargetWave, B.getInt32(numSourceWavesPerTarget()), "first_source_wave");
+  Value *SourceWaveInTarget = B.CreateUDiv(
+      emitLaneIdx(B), B.getInt32(Src.waveSize()), "source_wave_in_target");
+  return B.CreateAdd(FirstSourceWave, SourceWaveInTarget, "source_wave_id");
 }
 
 Value *WaveNativeProjection::emitInitialExec(IRBuilder<> &B) const {
@@ -512,10 +573,7 @@ Value *ThreadLoopProjection::emitWorkitemIdX(IRBuilder<> &B) const {
          "ThreadLoopProjection::emitWorkitemIdX requires an iteration alloca; "
          "raiser must call setIterationAlloca before emitting source workitem "
          "ids");
-  Module *M = B.GetInsertBlock()->getModule();
-  Function *Fn =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_workitem_id_x);
-  Value *Tid = B.CreateCall(Fn, {}, "tl_hw_tid");
+  Value *Tid = emitTargetWorkitemId(B, 0);
   Value *LaneId = emitLaneIdx(B);
   const unsigned SrcBits = Src.waveSize();
   const unsigned TgtBits = Tgt.waveSize();
@@ -527,6 +585,17 @@ Value *ThreadLoopProjection::emitWorkitemIdX(IRBuilder<> &B) const {
       B.CreateMul(Iter, B.getInt32(SrcBits), "tl_source_wave_off");
   return B.CreateAdd(B.CreateAdd(Base, WaveOffset, "tl_tid_wave_base"),
                      SourceLane, "tl_tid");
+}
+
+Value *ThreadLoopProjection::emitSourceWaveId(IRBuilder<> &B) const {
+  assert(IterationAlloca &&
+         "ThreadLoopProjection::emitSourceWaveId requires an iteration alloca");
+  Value *TargetWave = emitTargetWaveId(B);
+  Value *FirstSourceWave = B.CreateMul(
+      TargetWave, B.getInt32(numSourceWavesPerTarget()), "first_source_wave");
+  Value *Iteration =
+      B.CreateLoad(B.getInt32Ty(), IterationAlloca, "source_wave_in_target");
+  return B.CreateAdd(FirstSourceWave, Iteration, "source_wave_id");
 }
 
 Value *ThreadLoopProjection::emitLaneActiveBit(IRBuilder<> &B,

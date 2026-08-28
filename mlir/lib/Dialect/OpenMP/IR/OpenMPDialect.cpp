@@ -4872,7 +4872,8 @@ std::pair<unsigned, unsigned> FuseOp::getGenerateesODSOperandIndexAndLength() {
 
 void CriticalDeclareOp::build(OpBuilder &builder, OperationState &state,
                               const CriticalDeclareOperands &clauses) {
-  CriticalDeclareOp::build(builder, state, clauses.symName, clauses.hint);
+  CriticalDeclareOp::build(builder, state, clauses.symName,
+                           clauses.symVisibility, clauses.hint);
 }
 
 LogicalResult CriticalDeclareOp::verify() {
@@ -5318,7 +5319,7 @@ void PrivateClauseOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                             TypeRange /*result_types*/, StringAttr symName,
                             TypeAttr type) {
   PrivateClauseOp::build(
-      odsBuilder, odsState, symName, type,
+      odsBuilder, odsState, symName, /*sym_visibility=*/nullptr, type,
       DataSharingClauseTypeAttr::get(odsBuilder.getContext(),
                                      DataSharingClauseType::Private));
 }

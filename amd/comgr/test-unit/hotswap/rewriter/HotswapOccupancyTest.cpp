@@ -84,7 +84,7 @@ TEST(HotswapOccupancy, LoadsGfx1250LimitsFromComgrIsaMetadata) {
       getSubtargetOccupancyLimits("gfx1250");
   ASSERT_TRUE(Limits.has_value());
   EXPECT_EQ(Limits->EUsPerCU, 4u);
-  EXPECT_EQ(Limits->MaxWavesPerCU, 40u);
+  EXPECT_EQ(Limits->MaxWavesPerCU, 64u);
   EXPECT_EQ(Limits->MaxFlatWorkgroupSize, 1024u);
   EXPECT_EQ(Limits->VgprAllocGranule, 16u);
   EXPECT_EQ(Limits->TotalNumVgprs, 1024u);

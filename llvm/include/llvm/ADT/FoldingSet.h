@@ -126,15 +126,8 @@ template <typename T> struct DefaultFoldingSetTrait {
   // to compute a temporary ID if necessary. The default implementation
   // just calls Profile and does a regular comparison. Implementations
   // can override this to provide more efficient implementations.
-  static inline bool Equals(T &X, const FoldingSetNodeID &ID, unsigned IDHash,
+  static inline bool Equals(T &X, const FoldingSetNodeID &ID,
                             FoldingSetNodeID &TempID);
-
-  // ComputeHash - Compute a hash value for X, using TempID to
-  // compute a temporary ID if necessary. The default implementation
-  // just calls Profile and does a regular hash computation.
-  // Implementations can override this to provide more efficient
-  // implementations.
-  static inline unsigned ComputeHash(T &X, FoldingSetNodeID &TempID);
 };
 
 /// This trait class is used to define behavior of how to "profile" (in the
@@ -158,10 +151,8 @@ template <typename T, typename Ctx> struct DefaultContextualFoldingSetTrait {
     X.Profile(ID, Context);
   }
 
-  static inline bool Equals(T &X, const FoldingSetNodeID &ID, unsigned IDHash,
+  static inline bool Equals(T &X, const FoldingSetNodeID &ID,
                             FoldingSetNodeID &TempID, Ctx Context);
-  static inline unsigned ComputeHash(T &X, FoldingSetNodeID &TempID,
-                                     Ctx Context);
 };
 
 /// Like FoldingSetTrait, but for ContextualFoldingSets.
@@ -359,13 +350,7 @@ protected:
     /// Instantiations of the FoldingSet template implement this function to
     /// compare the given node with the given ID.
     bool (*NodeEquals)(const FoldingSetBase *Self, Node *N,
-                       const FoldingSetNodeID &ID, unsigned IDHash,
-                       FoldingSetNodeID &TempID);
-
-    /// Instantiations of the FoldingSet template implement this function to
-    /// compute a hash value for the given node.
-    unsigned (*ComputeNodeHash)(const FoldingSetBase *Self, Node *N,
-                                FoldingSetNodeID &TempID);
+                       const FoldingSetNodeID &ID, FoldingSetNodeID &TempID);
   };
 
 private:
@@ -376,9 +361,7 @@ private:
   /// Compare \p N against \p ID. Out of line to keep FoldingSetNodeID's inline
   /// storage out of the probe loop's frame.
   static bool nodeEquals(const FoldingSetInfo &Info, const FoldingSetBase *Self,
-                         Node *N, const FoldingSetNodeID &ID, unsigned IDHash);
-
-  friend class FoldingSetIteratorImpl;
+                         Node *N, const FoldingSetNodeID &ID);
 
   /// Rehash into at least \p MinNumBuckets buckets, rounded up to a power of
   /// two and floored at the constructor's minimum.
@@ -416,29 +399,15 @@ template <class T> class FoldingSetIterator;
 // require the definition of FoldingSetNodeID.
 template <typename T>
 inline bool DefaultFoldingSetTrait<T>::Equals(T &X, const FoldingSetNodeID &ID,
-                                              unsigned /*IDHash*/,
                                               FoldingSetNodeID &TempID) {
   FoldingSetTrait<T>::Profile(X, TempID);
   return TempID == ID;
 }
-template <typename T>
-inline unsigned
-DefaultFoldingSetTrait<T>::ComputeHash(T &X, FoldingSetNodeID &TempID) {
-  FoldingSetTrait<T>::Profile(X, TempID);
-  return TempID.ComputeHash();
-}
 template <typename T, typename Ctx>
 inline bool DefaultContextualFoldingSetTrait<T, Ctx>::Equals(
-    T &X, const FoldingSetNodeID &ID, unsigned /*IDHash*/,
-    FoldingSetNodeID &TempID, Ctx Context) {
+    T &X, const FoldingSetNodeID &ID, FoldingSetNodeID &TempID, Ctx Context) {
   ContextualFoldingSetTrait<T, Ctx>::Profile(X, TempID, Context);
   return TempID == ID;
-}
-template <typename T, typename Ctx>
-inline unsigned DefaultContextualFoldingSetTrait<T, Ctx>::ComputeHash(
-    T &X, FoldingSetNodeID &TempID, Ctx Context) {
-  ContextualFoldingSetTrait<T, Ctx>::Profile(X, TempID, Context);
-  return TempID.ComputeHash();
 }
 
 //===----------------------------------------------------------------------===//
@@ -463,23 +432,12 @@ class FoldingSetImpl : public FoldingSetBase, public Trait::ContextStorage {
         },
         // NodeEquals
         [](const FoldingSetBase *Base, FoldingSetNode *N,
-           const FoldingSetNodeID &ID, unsigned IDHash,
-           FoldingSetNodeID &TempID) {
+           const FoldingSetNodeID &ID, FoldingSetNodeID &TempID) {
           if constexpr (std::is_empty_v<typename Trait::ContextStorage>)
-            return Trait::Equals(*static_cast<T *>(N), ID, IDHash, TempID);
+            return Trait::Equals(*static_cast<T *>(N), ID, TempID);
           else
             return Trait::Equals(
-                *static_cast<T *>(N), ID, IDHash, TempID,
-                static_cast<const FoldingSetImpl *>(Base)->getContext());
-        },
-        // ComputeNodeHash
-        [](const FoldingSetBase *Base, FoldingSetNode *N,
-           FoldingSetNodeID &TempID) {
-          if constexpr (std::is_empty_v<typename Trait::ContextStorage>)
-            return Trait::ComputeHash(*static_cast<T *>(N), TempID);
-          else
-            return Trait::ComputeHash(
-                *static_cast<T *>(N), TempID,
+                *static_cast<T *>(N), ID, TempID,
                 static_cast<const FoldingSetImpl *>(Base)->getContext());
         }};
     return Info;
@@ -502,13 +460,19 @@ public:
 public:
   using iterator = FoldingSetIterator<T>;
 
-  iterator begin() { return iterator(this, 0); }
-  iterator end() { return iterator(this, NumBuckets); }
+  iterator begin() { return iterator(Buckets, Buckets + NumBuckets, this); }
+  iterator end() {
+    return iterator(Buckets + NumBuckets, Buckets + NumBuckets, this);
+  }
 
   using const_iterator = FoldingSetIterator<const T>;
 
-  const_iterator begin() const { return const_iterator(this, 0); }
-  const_iterator end() const { return const_iterator(this, NumBuckets); }
+  const_iterator begin() const {
+    return const_iterator(Buckets, Buckets + NumBuckets, this);
+  }
+  const_iterator end() const {
+    return const_iterator(Buckets + NumBuckets, Buckets + NumBuckets, this);
+  }
 
   /// Remove a node from the folding set, returning true if one
   /// was removed or false if the node was not in the folding set.
@@ -634,40 +598,31 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
-/// This is the common iterator support shared by all folding sets, which knows
-/// how to walk the folding set hash table.
-class FoldingSetIteratorImpl : DebugEpochBase::HandleBase {
-protected:
-  const FoldingSetBase *Set = nullptr;
-  unsigned Index = 0;
+/// Forward iterator for FoldingSet and ContextualFoldingSet.
+template <class T> class FoldingSetIterator : DebugEpochBase::HandleBase {
+  void **Bucket = nullptr;
+  void **End = nullptr;
 
-  LLVM_ABI FoldingSetIteratorImpl(const FoldingSetBase *Set, unsigned Index);
-
-  LLVM_ABI void advance();
-
-  FoldingSetNode *getNode() const {
+  void advance() {
     assert(isHandleInSync() && "invalid iterator access!");
-    return static_cast<FoldingSetNode *>(Set->Buckets[Index]);
+    do
+      ++Bucket;
+    while (Bucket != End && *Bucket == nullptr);
   }
 
 public:
-  bool operator==(const FoldingSetIteratorImpl &RHS) const {
-    assert(isHandleInSync() && RHS.isHandleInSync() && "handle not in sync!");
-    return Set == RHS.Set && Index == RHS.Index;
+  FoldingSetIterator(void **Bucket, void **End, const DebugEpochBase *Epoch)
+      : DebugEpochBase::HandleBase(Epoch), Bucket(Bucket), End(End) {
+    while (this->Bucket != this->End && *this->Bucket == nullptr)
+      ++this->Bucket;
   }
-  bool operator!=(const FoldingSetIteratorImpl &RHS) const {
-    return !(*this == RHS);
+
+  T &operator*() const {
+    assert(isHandleInSync() && "invalid iterator access!");
+    return *static_cast<T *>(static_cast<FoldingSetNode *>(*Bucket));
   }
-};
 
-template <class T> class FoldingSetIterator : public FoldingSetIteratorImpl {
-public:
-  explicit FoldingSetIterator(const FoldingSetBase *Set, unsigned Index)
-      : FoldingSetIteratorImpl(Set, Index) {}
-
-  T &operator*() const { return *static_cast<T *>(getNode()); }
-
-  T *operator->() const { return static_cast<T *>(getNode()); }
+  T *operator->() const { return &operator*(); }
 
   inline FoldingSetIterator &operator++() { // Preincrement
     advance();
@@ -677,6 +632,14 @@ public:
     FoldingSetIterator tmp = *this;
     ++*this;
     return tmp;
+  }
+
+  bool operator==(const FoldingSetIterator &RHS) const {
+    assert(isHandleInSync() && RHS.isHandleInSync() && "handle not in sync!");
+    return Bucket == RHS.Bucket;
+  }
+  bool operator!=(const FoldingSetIterator &RHS) const {
+    return !(*this == RHS);
   }
 };
 

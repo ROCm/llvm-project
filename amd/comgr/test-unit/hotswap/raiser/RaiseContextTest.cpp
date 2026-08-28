@@ -20,28 +20,12 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/TargetSelect.h"
 
 #include "gtest/gtest.h"
 
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <optional>
-
-namespace COMGR {
-void ensureLLVMInitialized() {
-  static std::once_flag Once;
-  std::call_once(Once, [] {
-    LLVMInitializeAMDGPUTargetInfo();
-    LLVMInitializeAMDGPUTargetMC();
-    LLVMInitializeAMDGPUDisassembler();
-    LLVMInitializeAMDGPUAsmParser();
-    LLVMInitializeAMDGPUAsmPrinter();
-    LLVMInitializeAMDGPUTarget();
-  });
-}
-} // namespace COMGR
 
 using namespace llvm;
 using namespace COMGR::hotswap;

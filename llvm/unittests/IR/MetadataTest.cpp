@@ -5058,7 +5058,7 @@ TEST_F(DIObjCPropertyTest, get) {
   TempDIObjCProperty Temp = N->clone();
   EXPECT_EQ(N, MDNode::replaceWithUniqued(std::move(Temp)));
 }
-#ifdef FIXME
+
 typedef MetadataTest DIPropertyTest;
 
 TEST_F(DIPropertyTest, get) {
@@ -5066,7 +5066,8 @@ TEST_F(DIPropertyTest, get) {
   auto GetMember = [&](StringRef Name) {
     return DIDerivedType::getDistinct(
         Context, dwarf::DW_TAG_member, Name, nullptr, 0, nullptr,
-        getBasicType("basictype"), 8, 8, 0, std::nullopt, {}, DINode::FlagZero);
+        getBasicType("basictype"), 8, 8, 0, std::nullopt,
+        dwarf::DW_MSPACE_LLVM_none, {}, DINode::FlagZero);
   };
 
   StringRef Name = "x";
@@ -5100,7 +5101,6 @@ TEST_F(DIPropertyTest, get) {
   TempDIProperty Temp = N->clone();
   EXPECT_EQ(N, MDNode::replaceWithUniqued(std::move(Temp)));
 }
-#endif
 
 typedef MetadataTest DIImportedEntityTest;
 

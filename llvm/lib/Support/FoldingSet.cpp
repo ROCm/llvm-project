@@ -214,9 +214,9 @@ void FoldingSetBase::reserve(unsigned N) {
 LLVM_ATTRIBUTE_NOINLINE bool
 FoldingSetBase::nodeEquals(const FoldingSetInfo &Info,
                            const FoldingSetBase *Self, Node *N,
-                           const FoldingSetNodeID &ID, unsigned IDHash) {
+                           const FoldingSetNodeID &ID) {
   FoldingSetNodeID TempID;
-  return Info.NodeEquals(Self, N, ID, IDHash, TempID);
+  return Info.NodeEquals(Self, N, ID, TempID);
 }
 
 FoldingSetBase::Node *FoldingSetBase::FindNodeOrInsertPos(
@@ -225,8 +225,7 @@ FoldingSetBase::Node *FoldingSetBase::FindNodeOrInsertPos(
   unsigned Mask = NumBuckets - 1;
   for (unsigned I = IDHash & Mask; Buckets[I]; I = (I + 1) & Mask) {
     Node *N = static_cast<Node *>(Buckets[I]);
-    if (N->getFoldingSetHash() == IDHash &&
-        nodeEquals(Info, this, N, ID, IDHash)) {
+    if (N->getFoldingSetHash() == IDHash && nodeEquals(Info, this, N, ID)) {
       InsertPos = nullptr;
       return N;
     }
@@ -286,21 +285,4 @@ FoldingSetBase::GetOrInsertNode(Node *N, const FoldingSetInfo &Info) {
     return E;
   InsertNode(N, IP);
   return N;
-}
-
-//===----------------------------------------------------------------------===//
-// FoldingSetIteratorImpl Implementation
-
-FoldingSetIteratorImpl::FoldingSetIteratorImpl(const FoldingSetBase *Set,
-                                               unsigned Index)
-    : DebugEpochBase::HandleBase(Set), Set(Set), Index(Index) {
-  while (this->Index < Set->NumBuckets && !Set->Buckets[this->Index])
-    ++this->Index;
-}
-
-void FoldingSetIteratorImpl::advance() {
-  assert(isHandleInSync() && "invalid iterator access!");
-  do
-    ++Index;
-  while (Index < Set->NumBuckets && !Set->Buckets[Index]);
 }

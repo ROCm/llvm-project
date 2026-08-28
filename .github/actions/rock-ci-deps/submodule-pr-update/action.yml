@@ -1,6 +1,7 @@
 name: LLVM submodule & PR-parameter setup
 description: >
-  On pull_request updates amd-llvm submodule pointer to PR head.
+  On pull_request updates amd-llvm submodule pointer to PR head and aligns
+  spirv-llvm-translator and hipify with amd-staging tip.
   On workflow_dispatch downloads PR params artifact, sources env, merges upstream PRs, updates submodule pointers.
 
 inputs:
@@ -23,8 +24,38 @@ runs:
         git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm
         git config --global user.email "z1-cciauto@amd.com"
         git config --global user.name "Z1 cciauto"
-        git commit -m "Update submodule reference for compiler/amd-llvm"
-        git submodule update --init --recursive compiler/amd-llvm
+        
+        trim_sha() {
+          printf '%s' "$1" | tr -d '[:space:]'
+        }
+
+        read_amd_staging_tip() {
+          local repo_url="$1"
+          trim_sha "$(git ls-remote "${repo_url}" refs/heads/amd-staging | awk '{print $1}')"
+        }
+
+        PR_SHA="$(trim_sha "${{ github.event.pull_request.head.sha }}")"
+        echo "ROCm LLVM PR head SHA: $PR_SHA"
+        git update-index --cacheinfo 160000,"$PR_SHA",compiler/amd-llvm
+
+        SPIRV_SHA="$(read_amd_staging_tip https://github.com/ROCm/SPIRV-LLVM-Translator.git)"
+        echo "SPIRV amd-staging tip SHA: $SPIRV_SHA"
+        git update-index --cacheinfo 160000,"$SPIRV_SHA",compiler/spirv-llvm-translator
+
+        HIPIFY_SHA="$(read_amd_staging_tip https://github.com/ROCm/HIPIFY.git)"
+        echo "HIPIFY amd-staging tip SHA: $HIPIFY_SHA"
+        git update-index --cacheinfo 160000,"$HIPIFY_SHA",compiler/hipify
+
+        if [[ -z "$SPIRV_SHA" || -z "$HIPIFY_SHA" ]]; then
+          echo "::error::Failed to resolve SPIRV/HIPIFY amd-staging tip SHAs." >&2
+          exit 1
+        fi
+        
+        git commit -m "Update compiler submodule references for llvm-project PR"
+        git submodule update --init --depth 1 --jobs 4 \
+          compiler/amd-llvm \
+          compiler/spirv-llvm-translator \
+          compiler/hipify
         # Verify the pointer update
         git submodule status
         git submodule
@@ -34,14 +65,43 @@ runs:
       shell: bash
       run: |
         git config --global --add safe.directory $PWD
-        echo "sha: $GITHUB_SHA"
-        # Update the submodule pointer using cacheinfo
-        git update-index --cacheinfo 160000,$GITHUB_SHA,compiler/amd-llvm
         git config --global user.email "z1-cciauto@amd.com"
         git config --global user.name "Z1 cciauto"
-        git commit -m "Update submodule reference for compiler/amd-llvm using branch SHA"
-        # Verify the pointer update
-        git submodule update --init --recursive compiler/amd-llvm          
+        trim_sha() {
+          printf '%s' "$1" | tr -d '[:space:]'
+        }
+
+        read_amd_staging_tip() {
+          local repo_url="$1"
+          trim_sha "$(git ls-remote "${repo_url}" refs/heads/amd-staging | awk '{print $1}')"
+        }
+
+        BRANCH_SHA="$(trim_sha "$GITHUB_SHA")"
+        echo "ROCm LLVM branch SHA: $BRANCH_SHA"
+        if [[ -z "$BRANCH_SHA" ]]; then
+          echo "::error::GITHUB_SHA is empty." >&2
+          exit 1
+        fi
+        git update-index --cacheinfo 160000,"$BRANCH_SHA",compiler/amd-llvm
+
+        SPIRV_SHA="$(read_amd_staging_tip https://github.com/ROCm/SPIRV-LLVM-Translator.git)"
+        echo "SPIRV amd-staging tip SHA: $SPIRV_SHA"
+        git update-index --cacheinfo 160000,"$SPIRV_SHA",compiler/spirv-llvm-translator
+
+        HIPIFY_SHA="$(read_amd_staging_tip https://github.com/ROCm/HIPIFY.git)"
+        echo "HIPIFY amd-staging tip SHA: $HIPIFY_SHA"
+        git update-index --cacheinfo 160000,"$HIPIFY_SHA",compiler/hipify
+
+        if [[ -z "$SPIRV_SHA" || -z "$HIPIFY_SHA" ]]; then
+          echo "::error::Failed to resolve SPIRV/HIPIFY amd-staging tip SHAs." >&2
+          exit 1
+        fi
+
+        git commit -m "Update compiler submodule references for Windows debug branch"
+        git submodule update --init --depth 1 --jobs 4 \
+          compiler/amd-llvm \
+          compiler/spirv-llvm-translator \
+          compiler/hipify
         git submodule status
         git submodule
 
@@ -101,7 +161,7 @@ runs:
         merge_upstream_prs() {
           local pr_urls="$1"
           local url repo num ref
-          git submodule update --init --jobs 1 compiler/amd-llvm
+          git submodule update --init --depth 1 --jobs 1 compiler/amd-llvm
           IFS=',' read -ra PR_URLS <<< "$pr_urls"
           for url in "${PR_URLS[@]}"; do
             url="$(echo "$url" | xargs)"
@@ -134,12 +194,17 @@ runs:
           git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
         fi
 
+        read_amd_staging_tip() {
+          local repo_url="$1"
+          trim_sha "$(git ls-remote "${repo_url}" refs/heads/amd-staging | awk '{print $1}')"
+        }
+        
         if [[ -n "${SPIRV_PR_URL:-}" ]]; then
           SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
           echo "SPIRV head SHA: $SPIRV_SHA"
           git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
         else
-          SPIRV_SHA="$(git ls-remote https://github.com/ROCm/SPIRV-LLVM-Translator.git refs/heads/amd-staging | awk '{print $1}')"
+          SPIRV_SHA="$(read_amd_staging_tip https://github.com/ROCm/SPIRV-LLVM-Translator.git)"
           echo "SPIRV PR NOT Passed, defaulting to the amd-staging tip : $SPIRV_SHA"
           git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
         fi
@@ -149,12 +214,20 @@ runs:
           echo "HIPIFY head SHA: $HIPIFY_SHA"
           git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
         else
-          HIPIFY_SHA="$(git ls-remote https://github.com/ROCm/HIPIFY.git refs/heads/amd-staging | awk '{print $1}')"
+          HIPIFY_SHA="$(read_amd_staging_tip https://github.com/ROCm/HIPIFY.git)"
           echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
           git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
         fi
 
+        if [[ -z "$SPIRV_SHA" || -z "$HIPIFY_SHA" ]]; then
+          echo "::error::Failed to resolve SPIRV/HIPIFY amd-staging tip SHAs." >&2
+          exit 1
+        fi
+
         git commit -m "Update submodule references from PR URLs"
-        git submodule update --init --recursive compiler/amd-llvm
+        git submodule update --init --depth 1 --jobs 4 \
+          compiler/amd-llvm \
+          compiler/spirv-llvm-translator \
+          compiler/hipify
         git submodule status
         git submodule

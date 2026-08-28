@@ -551,6 +551,8 @@ void RegisterState::writeReg32(ParsedReg Pr, Value *V) {
       invalidateSgprWaveMaskI1(*Pr.BaseIdx);
     } else if (Pr.RegKind == ParsedReg::M0) {
       updateM0Const(V);
+    } else if (Pr.RegKind == ParsedReg::TTMP && Pr.BaseIdx == 8) {
+      TTMP8EntryValueAvailable = false;
     }
   }
 }
@@ -568,6 +570,9 @@ void RegisterState::writeReg64(ParsedReg Pr, Value *V) {
       assert(Pr.BaseIdx && "SGPR must have a base register index");
       invalidateSgprWaveMaskI1(*Pr.BaseIdx);
       invalidateSgprWaveMaskI1(*Pr.BaseIdx + 1);
+    } else if (Pr.RegKind == ParsedReg::TTMP && Pr.BaseIdx &&
+               *Pr.BaseIdx <= 8 && *Pr.BaseIdx + 1 >= 8) {
+      TTMP8EntryValueAvailable = false;
     }
   }
 }
@@ -584,6 +589,9 @@ void RegisterState::writeRegVec(ParsedReg Pr, Value *V) {
       assert(Pr.BaseIdx && "SGPR must have a base register index");
       for (unsigned I = 0; I != Pr.WidthInDwords; ++I)
         invalidateSgprWaveMaskI1(*Pr.BaseIdx + I);
+    } else if (Pr.RegKind == ParsedReg::TTMP && Pr.BaseIdx &&
+               *Pr.BaseIdx <= 8 && *Pr.BaseIdx + Pr.WidthInDwords > 8) {
+      TTMP8EntryValueAvailable = false;
     }
   }
 }
@@ -713,6 +721,33 @@ Expected<Value *> RegisterState::readOpExecWidth(const DecodedInst &Di,
           Twine(OpIdx) + " in " + strippedMnemonic(MC, Di.Inst));
 }
 
+Expected<Value *> RegisterState::readOpWaveMaskI1(const DecodedInst &Di,
+                                                  unsigned OpIdx) {
+  if (!Di.isReg(OpIdx)) {
+    Expected<Value *> Mask = readOpExecWidth(Di, OpIdx);
+    if (!Mask)
+      return Mask.takeError();
+    return Projection.extractLaneBitFromWaveMask(B, *Mask);
+  }
+
+  Expected<ParsedReg> Reg = parseReg(Di, OpIdx);
+  if (!Reg)
+    return Reg.takeError();
+  ParsedReg Pr = *Reg;
+  switch (Pr.RegKind) {
+  case ParsedReg::SGPR: {
+    assert(Pr.BaseIdx && "SGPR must have a base register index");
+    return lookupSgprWaveMaskI1(*Pr.BaseIdx, Pr.WidthInDwords >= 2);
+  }
+  case ParsedReg::VCC:
+    return Regs.loadVCC(B);
+  case ParsedReg::EXEC:
+    return Projection.extractLaneBitFromWaveMask(B, Regs.loadExec(B));
+  default:
+    return nullptr;
+  }
+}
+
 void RegisterState::recordSgprWaveMaskI1(unsigned BaseIdx, Value *CmpI1,
                                          bool IsPair) {
   LastSgprWaveMaskI1[BaseIdx] = WaveMaskEntry{CmpI1, IsPair};
@@ -722,6 +757,29 @@ void RegisterState::recordSgprWaveMaskI1(unsigned BaseIdx, Value *CmpI1,
     B.CreateStore(ExecMask, SgprShadows[BaseIdx].WaveMask);
     B.CreateStore(B.getTrue(), SgprShadows[BaseIdx].WaveMaskValid);
     B.CreateStore(B.getInt1(IsPair), SgprShadows[BaseIdx].WaveMaskIsPair);
+  }
+}
+
+void RegisterState::recordWaveMaskI1(ParsedReg Dst, Value *MaskI1) {
+  if (!MaskI1)
+    return;
+  switch (Dst.RegKind) {
+  case ParsedReg::SGPR:
+    if (Dst.BaseIdx)
+      recordSgprWaveMaskI1(*Dst.BaseIdx, MaskI1,
+                           /*IsPair=*/Dst.WidthInDwords >= 2);
+    return;
+  case ParsedReg::VCC:
+    Regs.storeVCC(B, MaskI1);
+    return;
+  case ParsedReg::EXEC: {
+    Value *Mask = Projection.ballotI1ToWidth(
+        B, MaskI1, Projection.execStorageTy(), "wave_mask_exec");
+    storeExec(Mask);
+    return;
+  }
+  default:
+    return;
   }
 }
 

@@ -152,6 +152,7 @@ void Flang::addFortranDialectOptions(const ArgList &Args,
                    options::OPT_fdefault_integer_8,
                    options::OPT_fdefault_double_8,
                    options::OPT_flarge_sizes,
+                   options::OPT_fmodule_mismatch_check_EQ,
                    options::OPT_fno_automatic,
                    options::OPT_fhermetic_module_files,
                    options::OPT_frealloc_lhs,
@@ -1258,7 +1259,18 @@ static void addPGOAndCoverageFlags(const ToolChain &TC, const JobAction &JA,
                    options::OPT_fno_pseudo_probe_for_profiling, false))
     CmdArgs.push_back("-fpseudo-probe-for-profiling");
 
+  // TODO: Consider reusing Clang's addPGOAndCoverageFlags() for
+  // -fprofile-generate and other similar options handling instead of
+  // duplicating driver logic here.
+  if (Arg *PGOGenerateArg = Args.getLastArg(
+          options::OPT_fprofile_generate, options::OPT_fprofile_generate_EQ,
+          options::OPT_fno_profile_generate)) {
+    if (!PGOGenerateArg->getOption().matches(options::OPT_fno_profile_generate))
+      PGOGenerateArg->render(Args, CmdArgs);
+  }
+
   addSplitMachineFunctionsArgs(TC.getDriver(), Args, CmdArgs, TC.getTriple());
+  Args.addAllArgs(CmdArgs, {options::OPT_fprofile_use_EQ});
 }
 
 void Flang::ConstructJob(Compilation &C, const JobAction &JA,
@@ -1405,10 +1417,6 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
   // Disable all warnings
   // TODO: Handle interactions between -w, -pedantic, -Wall, -WOption
   Args.AddLastArg(CmdArgs, options::OPT_w);
-
-  // recognise options: fprofile-generate -fprofile-use=
-  Args.addAllArgs(
-      CmdArgs, {options::OPT_fprofile_generate, options::OPT_fprofile_use_EQ});
 
   addPGOAndCoverageFlags(TC, JA, Args, CmdArgs);
 
