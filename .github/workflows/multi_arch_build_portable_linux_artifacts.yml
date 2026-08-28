@@ -140,6 +140,15 @@ jobs:
             --output-dir="${BUILD_DIR}" \
             --bootstrap
 
+      - name: Temp addition for comm-libs (assertion on)
+        run: |
+             set -x
+             git fetch --no-tags --depth 1 https://github.com/ROCm/TheRock.git \
+                d9189b378f8fdc2525acaf6975deee29538ba48d
+             git show FETCH_HEAD:patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch \
+             > patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
+             ls -l patches/amd-mainline/llvm-project/
+            
       - name: Fetch sources
         timeout-minutes: 30
         run: |
@@ -148,13 +157,6 @@ jobs:
                n = split($2, a, "/")
                print a[n], $4
              }' > submodule-commit-${STAGE_NAME}.txt          
-
-      - name: Temp addition for comm-libs (assertion on)
-        run: |
-          mkdir -p patches/amd-mainline/llvm-project
-          curl -fsSL \
-            "https://raw.githubusercontent.com/ROCm/TheRock/d9189b378f8fdc2525acaf6975deee29538ba48d/patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch" \
-            -o patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch 
 
       - name: build prep (patches & hotfixes for CK, hipcc and hiprtc, tests)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/linux-patches@amd-staging
