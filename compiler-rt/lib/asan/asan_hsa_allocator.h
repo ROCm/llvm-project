@@ -18,7 +18,7 @@
 #if SANITIZER_AMDHSA
 
 #  include "asan_stack.h"
-#  include "sanitizer_common/sanitizer_hsa.h"
+#  include "sanitizer_common/sanitizer_offload_hsa.h"
 
 namespace __asan {
 

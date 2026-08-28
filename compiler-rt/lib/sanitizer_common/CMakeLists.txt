@@ -89,7 +89,7 @@ set(SANITIZER_SYMBOLIZER_SOURCES
   sanitizer_stacktrace_printer.cpp
   sanitizer_stacktrace_sparc.cpp
   sanitizer_symbolizer.cpp
-  sanitizer_symbolizer_amdgpu.cpp
+  sanitizer_symbolizer_amdhsa.cpp
   sanitizer_symbolizer_libbacktrace.cpp
   sanitizer_symbolizer_libcdep.cpp
   sanitizer_symbolizer_mac.cpp
@@ -115,9 +115,11 @@ set(SANITIZER_IMPL_HEADERS
   sanitizer_addrhashmap.h
   sanitizer_aix.h
   sanitizer_allocator.h
+  sanitizer_allocator_amdhsa.h
   sanitizer_allocator_checks.h
   sanitizer_allocator_combined.h
   sanitizer_allocator_combined_device.h
+  sanitizer_allocator_device.h
   sanitizer_allocator_dlsym.h
   sanitizer_allocator_interface.h
   sanitizer_allocator_internal.h
@@ -204,7 +206,8 @@ set(SANITIZER_IMPL_HEADERS
   sanitizer_stoptheworld.h
   sanitizer_suppressions.h
   sanitizer_symbolizer.h
-  sanitizer_symbolizer_amdgpu.h
+  sanitizer_symbolizer_amdhsa.h
+  sanitizer_symbolizer_comgr.h
   sanitizer_symbolizer_markup_constants.h
   sanitizer_symbolizer_internal.h
   sanitizer_symbolizer_libbacktrace.h

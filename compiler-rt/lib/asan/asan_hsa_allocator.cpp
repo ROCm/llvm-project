@@ -23,7 +23,7 @@
 #  include "asan_report.h"
 #  include "sanitizer_common/sanitizer_allocator_checks.h"
 #  include "sanitizer_common/sanitizer_errno.h"
-#  include "sanitizer_common/sanitizer_hsa.h"
+#  include "sanitizer_common/sanitizer_offload_hsa.h"
 #  include "sanitizer_common/sanitizer_stackdepot.h"
 
 namespace __asan {

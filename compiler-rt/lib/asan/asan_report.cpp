@@ -29,6 +29,7 @@
 #include "sanitizer_common/sanitizer_report_decorator.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "sanitizer_common/sanitizer_symbolizer.h"
+#include "sanitizer_common/sanitizer_symbolizer_amdhsa.h"
 
 namespace __asan {
 

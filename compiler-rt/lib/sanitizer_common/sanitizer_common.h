@@ -1090,7 +1090,7 @@ const s32 kReleaseToOSIntervalNever = -1;
 
 // Host HSA interceptor path no longer forces RTLD_GLOBAL on ROCr dlopen;
 // keep this as an inert hook for existing INTERCEPT_FUNCTION wrappers.
-inline void PatchHsaRuntimeDlopenFlag(const char *filename, int &flag) {
+inline void PatchHsaRuntimeDlopenFlag(const char* filename, int& flag) {
   (void)filename;
   (void)flag;
 }
