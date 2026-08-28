@@ -380,11 +380,12 @@ bool DivergenceS1WideningHelper::simplifyMachinePHIs() {
           break;
         }
 
-        if (CommonReg && CommonReg != In) {
+        if (!CommonReg)
+          CommonReg = In;
+        else if (CommonReg != In) {
           Bail = true;
           break;
         }
-        CommonReg = In;
       }
 
       if (Bail || !CommonReg)
