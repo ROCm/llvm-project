@@ -1309,6 +1309,21 @@ void EmitAssemblyHelper::RunCodegenPipelineNewPM(
   TargetMachine *TMPointer = TM.get();
   PassBuilder PB(TMPointer, PTOptions, std::nullopt, &PIC,
                  CI.getVirtualFileSystemPtr());
+
+  StandardInstrumentations SI(TheModule->getContext(),
+                              CodeGenOpts.DebugPassManager,
+                              CodeGenOpts.VerifyEach);
+  SI.registerCallbacks(PIC, &MAM);
+
+  TargetLibraryInfoImpl TLII(TheModule->getTargetTriple());
+  FAM.registerPass([&] { return TargetLibraryAnalysis(TLII); });
+  MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
+  MAM.registerPass([&] {
+    const llvm::TargetOptions &Options = TM->Options;
+    return RuntimeLibraryAnalysis(Options.ExceptionModel, Options.EABIVersion,
+                                  Options.MCOptions.ABIName, Options.VecLib);
+  });
+
   PB.registerModuleAnalyses(MAM);
   PB.registerCGSCCAnalyses(CGAM);
   PB.registerFunctionAnalyses(FAM);
@@ -1316,17 +1331,26 @@ void EmitAssemblyHelper::RunCodegenPipelineNewPM(
   PB.registerMachineFunctionAnalyses(MFAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM, &MFAM);
 
-  MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
-
-  Error BuildPipelineError =
-      TM->buildCodeGenPipeline(MPM, MAM, *OS, DwoOS ? &DwoOS->os() : nullptr,
-                               CGFT, Opt, MMI.getContext(), &PIC);
-  if (BuildPipelineError) {
+  if (Error BuildPipelineError = TM->buildCodeGenPipeline(
+          MPM, MAM, *OS, DwoOS ? &DwoOS->os() : nullptr, CGFT, Opt,
+          MMI.getContext(), &PIC)) {
     Diags.Report(diag::err_fe_unable_to_interface_with_target);
     return;
   }
 
+  if (PrintPipelinePasses) {
+    std::string PipelineStr;
+    raw_string_ostream OutS(PipelineStr);
+    MPM.printPipeline(OutS, [&PIC](StringRef ClassName) {
+      auto PassName = PIC.getPassNameForClassName(ClassName);
+      return PassName.empty() ? ClassName : PassName;
+    });
+    outs() << PipelineStr << '\n';
+    return;
+  }
+
   TimeCodegenPasses([&] { MPM.run(*TheModule, MAM); });
+  return;
 }
 
 void EmitAssemblyHelper::TimeCodegenPasses(
