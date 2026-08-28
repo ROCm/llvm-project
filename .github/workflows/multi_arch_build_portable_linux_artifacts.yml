@@ -140,16 +140,6 @@ jobs:
             --output-dir="${BUILD_DIR}" \
             --bootstrap
 
-      - name: Temp fix for comm-libs (assertion on)
-        run: |
-             set -x
-             mkdir -p patches/amd-mainline/llvm-project
-             git fetch --no-tags --depth 1 https://github.com/ROCm/TheRock.git \
-                d9189b378f8fdc2525acaf6975deee29538ba48d
-             git show FETCH_HEAD:patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch \
-             > patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
-             ls -l patches/amd-mainline/llvm-project/
-            
       - name: Fetch sources
         timeout-minutes: 30
         run: |
