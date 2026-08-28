@@ -2079,19 +2079,33 @@ void ControlFlowRewriter::rewrite() {
     // secondary, the rejoin register can be used directly without the
     // accumulator machinery.
     unsigned NumDivergentPreds = 0;
+    bool HasDivergenceEntryPred = false;
     WaveNode *SingleDivPred = nullptr;
     for (WaveNode *Pred : Secondary->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
         continue;
+
+      // Reconvergence is a per-edge property: common-code sinking can make a
+      // node the secondary of one divergent node and the primary successor
+      // of another. The latter edge already enters with EXEC narrowed to
+      // PrimarySuccessorExec, so it must contribute no rejoin mask.
+      if (Pred->Successors[0] == Secondary) {
+        HasDivergenceEntryPred = true;
+        continue;
+      }
+
       NumDivergentPreds++;
       SingleDivPred = Pred;
     }
 
     // The accumulator is only needed when multiple divergent predecessors
     // contribute rejoin masks, or when cycle membership or non-dominance
-    // requires temporal merging across iterations.
+    // requires temporal merging across iterations. A skipped divergence-entry
+    // predecessor forces it too: the direct rejoin register is nonzero on
+    // that edge, whereas the accumulator is zero there and the OR is a no-op.
     bool HasSingleDivergentPred =
         (NumDivergentPreds == 1) && !SingleDivPred->Cycle &&
+        !HasDivergenceEntryPred &&
         ReconvergeCfg.getDomTree().dominates(SingleDivPred->Block,
                                              Secondary->Block);
 
@@ -2104,6 +2118,10 @@ void ControlFlowRewriter::rewrite() {
     Register DirectRejoin;
     for (WaveNode *Pred : Secondary->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
+        continue;
+
+      // As above: a divergence-entry edge contributes no rejoin mask.
+      if (Pred->Successors[0] == Secondary)
         continue;
 
       CFGNodeInfo &PredInfo = NodeInfo.find(Pred)->second;
