@@ -1,6 +1,4 @@
 // Cross-team (teams) reduction kernels get a larger default block size than
-// XFAIL: *
-// XFAIL: *
 // plain SPMD kernels, selected by '-fopenmp-target-xteam-reduction-blocksize='
 // (512 by default). A kernel written as a single combined directive and the
 // same kernel split over several directives must end up with the same block
@@ -76,11 +74,12 @@ void no_teams_reduction(int N, double *a, double *s) {
 // CHECK: define weak_odr protected amdgpu_kernel void @{{.*}}_combined_l{{[0-9]+}}({{.*}}) #[[RED:[0-9]+]] {
 // CHECK: define weak_odr protected amdgpu_kernel void @{{.*}}_split_l{{[0-9]+}}({{.*}}) #[[RED]] {
 // CHECK: define weak_odr protected amdgpu_kernel void @{{.*}}_split_thread_limit_l{{[0-9]+}}({{.*}}) #[[TL:[0-9]+]] {
-// With the default block size the num_threads clause wins and gives this kernel
-// a group of its own. With an explicit '-fopenmp-target-xteam-reduction-blocksize='
-// the option wins, so the kernel shares the group of the other reductions.
-// DEFAULT: define weak_odr protected amdgpu_kernel void @{{.*}}_split_num_threads_l{{[0-9]+}}({{.*}}) #[[NT:[0-9]+]] {
-// BS64: define weak_odr protected amdgpu_kernel void @{{.*}}_split_thread_limit_l{{[0-9]+}}({{.*}}) #[[RED]] {
+// The num_threads clause gives this kernel a group of its own with the default
+// block size, and it keeps one with an explicit
+// '-fopenmp-target-xteam-reduction-blocksize=' too: the option then wins over
+// the clause for the block size, but the clause is still reported through
+// 'omp_target_thread_limit', which keeps the group distinct.
+// CHECK: define weak_odr protected amdgpu_kernel void @{{.*}}_split_num_threads_l{{[0-9]+}}({{.*}}) #[[NT:[0-9]+]] {
 // CHECK: define weak_odr protected amdgpu_kernel void @{{.*}}_no_teams_reduction_l{{[0-9]+}}({{.*}}) #[[NORED:[0-9]+]] {
 // CHECK: define weak_odr protected amdgpu_kernel void @{{.*}}_no_teams_reduction_l{{[0-9]+}}({{.*}}) #[[NORED]] {
 
@@ -96,6 +95,7 @@ void no_teams_reduction(int N, double *a, double *s) {
 // DEFAULT: attributes #[[TL]] = { {{.*}}"amdgpu-flat-work-group-size"="1,128"
 // BS64: attributes #[[TL]] = { {{.*}}"amdgpu-flat-work-group-size"="1,64"
 // DEFAULT: attributes #[[NT]] = { {{.*}}"amdgpu-flat-work-group-size"="1,32"
+// BS64: attributes #[[NT]] = { {{.*}}"amdgpu-flat-work-group-size"="1,64"
 
 // Without a reduction on 'teams' the generic SPMD block size is kept.
 // CHECK: attributes #[[NORED]] = { {{.*}}"amdgpu-flat-work-group-size"="1,256"
