@@ -231,5 +231,5 @@ attributes #1 = { convergent nounwind }
 ; CHECK: [[META0:![0-9]+]] = !{i32 7, !"openmp", i32 50}
 ; CHECK: [[META1:![0-9]+]] = !{i32 7, !"openmp-device", i32 50}
 ; CHECK: [[META2:![0-9]+]] = !{[[META3:![0-9]+]]}
-; CHECK: [[META3]] = !{i64 1, i64 -1, i64 -1, i1 false}
+; CHECK: [[META3]] = !{i64 1, i64 -1, i64 2, i1 false}
 ;.
