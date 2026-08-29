@@ -17,7 +17,7 @@
 /* The number of commits in the linear history from the
  * start of the universe up to the latest llvm main commit
  * that has been merged */
-#define LLVM_MAIN_REVISION 594506
+#define LLVM_MAIN_REVISION 594710
 
 /* Define if LLVM_ENABLE_DUMP is enabled */
 #cmakedefine LLVM_ENABLE_DUMP
