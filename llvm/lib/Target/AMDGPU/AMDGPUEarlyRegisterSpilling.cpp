@@ -1581,9 +1581,9 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
         if (WhereToSpill == DefBlock->end())
           WhereToSpill = DefBlock->instr_end();
       } else {
-        WhereToSpill = InstrOfCandidateReg->getNextNode()->getIterator();
-        if (WhereToSpill == DefBlock->end())
-          WhereToSpill = DefBlock->instr_end();
+        WhereToSpill = InstrOfCandidateReg == &DefBlock->instr_back()
+                           ? DefBlock->instr_end()
+                           : InstrOfCandidateReg->getNextNode()->getIterator();
       }
 
       MachineBasicBlock::iterator LastIt = PreHeader->getFirstTerminator();
