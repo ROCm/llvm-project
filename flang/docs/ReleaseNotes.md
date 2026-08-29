@@ -38,6 +38,11 @@ page](https://llvm.org/releases/).
 - The warning flags with prefixes -Wopen-mp and -Wopen-acc have been deprecated in favor of corrected spellings with the respective prefixes -Wopenmp and -Wopenacc. Removal of the deprecated options is planned for LLVM 25 (July 2027).
 
 
+- Added `-fmodule-mismatch-check=non-intrinsic` and
+  `-fmodule-mismatch-check=warn` to turn module USE checksum mismatches into a
+  warning instead of an error. `-Wno-module-file-mismatch` can be used to
+  silence even that warning.
+
 ## Windows Support
 
 ## Fortran Language Changes in Flang

@@ -216,6 +216,7 @@ LanguageFeatureControl::LanguageFeatureControl() {
   warnUsage_.set(UsageWarning::ImpureFinalInPure);
   warnUsage_.set(UsageWarning::IgnoredNoReallocateLHS);
   warnUsage_.set(UsageWarning::CLoc);
+  warnUsage_.set(UsageWarning::ModuleFileMismatch);
   warnLanguage_.set(LanguageFeature::OpenMPThreadprivateEquivalence);
 }
 
