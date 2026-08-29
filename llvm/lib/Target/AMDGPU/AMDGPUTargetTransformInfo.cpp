@@ -50,11 +50,6 @@ static cl::opt<unsigned> UnrollThresholdIf(
   cl::desc("Unroll threshold increment for AMDGPU for each if statement inside loop"),
   cl::init(200), cl::Hidden);
 
-static cl::opt<bool>
-    UnrollRuntimeDefault("amdgpu-unroll-runtime-default",
-                         cl::desc("Set default runtime unrolling for AMDGPU "),
-                         cl::init(false), cl::Hidden);
-
 static cl::opt<bool> UnrollRuntimeLocal(
   "amdgpu-unroll-runtime-local",
   cl::desc("Allow runtime unroll for AMDGPU if local memory used in a loop"),
@@ -132,10 +127,9 @@ void AMDGPUTTIImpl::getUnrollingPreferences(
   // We want to run unroll even for the loops which have been vectorized.
   UP.UnrollVectorizedLoop = true;
 
-  // If selecte Enable runtime unrolling for loops whose trip count
-  // is not known at compile time.
-  if (UnrollRuntimeDefault.getNumOccurrences())
-    UP.Runtime = UnrollRuntimeDefault;
+  // Enable runtime unrolling for loops whose trip count is not known at
+  // compile time.
+  UP.Runtime = true;
 
   // Maximum alloca size than can fit registers. Reserve 16 registers.
   const unsigned MaxAlloca = (256 - 16) * 4;
