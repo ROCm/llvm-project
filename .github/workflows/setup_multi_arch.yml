@@ -11,13 +11,60 @@ on:
         default: "release"
       release_type:
         description: >-
-          Release type: "" for CI builds, or "dev", "nightly", "prerelease"
-          for release builds. Controls artifact bucket selection, IAM role,
-          and package versioning.
+          Release type: "ci", "dev", "nightly", or "prerelease"; controls
+          artifact bucket selection, IAM role, and package versioning.
         type: string
-        default: ""
+        default: ci
       prerelease_version:
         description: Prerelease version number such as '2'. This gets appended to the computed version after 'rc', like '7.10.0rc2'
+        type: string
+        default: ""
+      linux_amdgpu_families:
+        description: 'Comma-separated Linux GPU families. "all" = all, "none" or empty = skip.'
+        type: string
+        default: ""
+      windows_amdgpu_families:
+        description: 'Comma-separated Windows GPU families. "all" = all, "none" or empty = skip.'
+        type: string
+        default: ""
+      linux_test_labels:
+        description: "Comma-separated list of test labels for Linux."
+        type: string
+        default: ""
+      windows_test_labels:
+        description: "Comma-separated list of test labels for Windows."
+        type: string
+        default: ""
+      prebuilt_stages:
+        description: "Comma-separated build stages to skip (artifacts copied from baseline_run_id instead)."
+        type: string
+        default: ""
+      baseline_run_id:
+        description: "Workflow run ID to copy prebuilt stage artifacts from."
+        type: string
+        default: ""
+      build_pytorch:
+        description: "Build PyTorch wheels."
+        type: boolean
+        default: true
+      build_jax:
+        description: "Build JAX wheels."
+        type: boolean
+        default: false
+      python_version:
+        description: "Single Python version for wheel builds; empty uses the default matrix."
+        type: string
+        default: ""          
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
+        default: ""
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+        default: ""
+      external_repo:
+        description: "JSON object with 'repository' (e.g., 'ROCm/rocm-libraries') and 'ref' fields for external repo builds."
         type: string
         default: ""
     outputs:
@@ -42,6 +89,21 @@ on:
       rocm_package_version:
         description: ROCm package version (primarily for Python packages).
         value: ${{ jobs.setup.outputs.rocm_package_version }}
+      rocm_deb_package_version:
+        description: ROCm DEB package version for native packages.
+        value: ${{ jobs.setup.outputs.rocm_deb_package_version }}
+      rocm_rpm_package_version:
+        description: ROCm RPM package version for native packages.
+        value: ${{ jobs.setup.outputs.rocm_rpm_package_version }}
+      ref:
+        description: >-
+          Resolved commit SHA from checkout. Use this instead of the input ref
+          to ensure all downstream jobs use the same commit, even if the branch
+          HEAD moves during the workflow run.
+        value: ${{ jobs.setup.outputs.ref }}
+      external_repo_config:
+        description: "JSON config for external repo checkout (generated from external_repo_name)"
+        value: ${{ jobs.setup.outputs.external_repo_config }}
 
 permissions:
   contents: read
@@ -50,94 +112,94 @@ jobs:
   setup:
     runs-on: ubuntu-24.04
     env:
-      BASE_REF: '0efc7532e43c16b532fdd2887e00aec8eb69e10f'      
+      BASE_REF: '0efc7532e43c16b532fdd2887e00aec8eb69e10f'
     outputs:
       enable_build_jobs: true
-      # Temporary fix on gfx94x due to non availability of MI325 machines
-      linux_build_config: >-
-        {
-          "per_family_info": [
-            {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "gfx942", "test-runs-on": "linux-gfx942-1gpu-ossci-rocm", "sanity_check_only_for_family": false},
-            {"amdgpu_family": "gfx110X-all", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true},
-            {"amdgpu_family": "gfx90a", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true}
-          ],
-          "dist_amdgpu_families": "gfx94X-dcgpu;gfx110X-all;gfx90a",
-          "artifact_group": "multi-arch-release",
-          "build_variant_label": "release",
-          "build_variant_suffix": "",
-          "build_variant_cmake_preset": "",
-          "expect_failure": false,
-          "build_pytorch": true,
-          "prebuilt_stages": "",
-          "baseline_run_id": ""
-        }
-      windows_build_config: >-
-        {
-          "per_family_info": [
-            {"amdgpu_family": "gfx1151", "amdgpu_targets": "", "test-runs-on": "windows-gfx1151-gpu-rocm", "benchmark-runs-on": "windows-gfx1151-gpu-rocm"}
-          ],
-          "dist_amdgpu_families": "gfx1151",
-          "artifact_group": "multi-arch-release",
-          "build_variant_label": "release",
-          "build_variant_suffix": "",
-          "build_variant_cmake_preset": "windows-release",
-          "expect_failure": false,
-          "build_pytorch": true,
-          "prebuilt_stages": "",
-          "baseline_run_id": ""
-        }      
-      test_type: 'quick'        
+      linux_build_config: ${{ steps.convergence_config.outputs.linux_build_config }}
+      windows_build_config: ${{ steps.convergence_config.outputs.windows_build_config }}
+      test_type: 'quick'
       linux_test_labels: ${{ steps.configure.outputs.linux_test_labels }}
       windows_test_labels: ${{ steps.configure.outputs.windows_test_labels }}
       rocm_package_version: ${{ steps.rocm_package_version.outputs.rocm_package_version }}
+      rocm_deb_package_version: ${{ steps.rocm_package_version.outputs.rocm_deb_package_version }}
+      rocm_rpm_package_version: ${{ steps.rocm_package_version.outputs.rocm_rpm_package_version }}
+      ref: ${{ steps.checkout.outputs.commit }}
+      external_repo_config: ${{ steps.external_repo_config.outputs.config_json }}
     steps:
       - name: Checking out repository
+        id: checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}          
+          # We need the parent commit to do a diff
+          fetch-depth: 2
+
+      - name: Checkout CI config
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          # We need the parent commit to do a diff
-          repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
-          fetch-depth: 2
+          repository: ROCm/therock-ci-config
+          ref: main
+          path: ci-config
+        continue-on-error: true
 
       - name: SHA of TheRock
         run: |
              git rev-parse HEAD
              git log -1
-             
+
       - name: Set PR_LABELS variable with labels assigned to pull request
         if: ${{ github.event.pull_request }} # only set PR labels var if this is a pull request
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          echo "PR_LABELS=$(gh pr view ${PR_NUMBER} --repo ROCm/llvm-project --json labels)" >> $GITHUB_ENV            
-
-      # The script reads GITHUB_EVENT_PATH directly for PR labels and
-      # workflow_dispatch inputs — no env var pass-through needed.
+          echo "PR_LABELS=$(gh pr view ${PR_NUMBER} --repo ROCm/llvm-project --json labels)" >> $GITHUB_ENV
+ 
+      # Note: the script reads PR labels, the base ref, etc. from the event
+      # payload (GITHUB_EVENT_PATH). That is the original event that started
+      # the workflow run, which may not directly map to the "inputs" on
+      # the "workflow_call" trigger for this file.
       - name: Configuring CI options
         id: configure
         env:
-          #INPUT_LINUX_AMDGPU_FAMILIES: ${{ github.event.inputs.linux_amdgpu_families }}
-          INPUT_LINUX_AMDGPU_FAMILIES: 'gfx94X-dcgpu,gfx110X-all,gfx1151'
-          LINUX_TEST_LABELS: ${{ github.event.inputs.linux_test_labels }}
-          LINUX_USE_PREBUILT_ARTIFACTS: ${{ github.event.inputs.linux_use_prebuilt_artifacts }}
-          #INPUT_WINDOWS_AMDGPU_FAMILIES: ${{ github.event.inputs.windows_amdgpu_families }}
-          INPUT_WINDOWS_AMDGPU_FAMILIES: "gfx1151"
-          WINDOWS_TEST_LABELS: ${{ github.event.inputs.windows_test_labels }}
-          WINDOWS_USE_PREBUILT_ARTIFACTS: ${{ github.event.inputs.windows_use_prebuilt_artifacts }}          
           BUILD_VARIANT: ${{ inputs.build_variant }}
-          RELEASE_TYPE: ${{ inputs.release_type }}            
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          BUILD_PYTORCH: ${{ inputs.build_pytorch }}
+          BUILD_JAX: ${{ inputs.build_jax }}
+          PYTHON_VERSION: ${{ inputs.python_version }}
+          LINUX_AMDGPU_FAMILIES: ${{ inputs.linux_amdgpu_families != '' && inputs.linux_amdgpu_families || 'gfx94x,gfx110x,gfx90a' }}
+          WINDOWS_AMDGPU_FAMILIES: ${{ inputs.windows_amdgpu_families != '' && inputs.windows_amdgpu_families || 'gfx1151' }}
+          LINUX_TEST_LABELS: ${{ inputs.linux_test_labels }}
+          WINDOWS_TEST_LABELS: ${{ inputs.windows_test_labels }}
+          PREBUILT_STAGES: ${{ inputs.prebuilt_stages }}
+          BASELINE_RUN_ID: ${{ inputs.baseline_run_id }}
+          # Skip path filtering for external repos (git sha won't exist in TheRock)
+          SKIP_PATH_FILTERS: ${{ inputs.external_repo != '' && 'true' || '' }}
+          CI_CONFIG_PATH: ci-config
+          # External repo family overrides allow callers to add/modify GPU family configs
+          # (e.g., adding test runners for architectures not enabled in TheRock's default config)
+          EXTERNAL_FAMILY_OVERRIDES: ${{ inputs.external_repo != '' && toJSON(fromJSON(inputs.external_repo).family_overrides) || '' }}            
         run: python ./build_tools/github_actions/configure_multi_arch_ci.py
+
+      - name: Build Test CI Config matrix
+        id: convergence_config
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/ci-config-matrix@amd-staging
+        with:
+          build_variant: ${{ inputs.build_variant }}
+          ci_config_path: ci-config
+          prebuilt_stages: ${{ inputs.prebuilt_stages }}
+          baseline_run_id: ${{ inputs.baseline_run_id }}
 
       # Note: Other scripts treat "dev releases" and "CI builds" differently.
       # Here we set to a "dev" package version even for CI builds:
       #
-      # type of build                         | package version | version example
-      # ------------------------------------- | --------------- | ------------------
-      # ci ("" empty string for release_type) | dev             | 7.10.0.dev0+f689a8
-      # dev                                   | dev             | 7.10.0.dev0+f689a8
-      # nightly                               | nightly         | 7.10.0a20251021
-      # prerelease                            | prerelease      | 7.10.0rc2
+      # release_type | package version | version example
+      # ------------ | --------------- | ------------------
+      # ci           | dev             | 7.10.0.dev0+f689a8
+      # dev          | dev             | 7.10.0.dev0+f689a8
+      # nightly      | nightly         | 7.10.0a20251021
+      # prerelease   | prerelease      | 7.10.0rc2
       #
       # Other scripts upload "ci" and "dev release" packages to different
       # buckets, use different ccache namespaces, etc.
@@ -145,5 +207,13 @@ jobs:
         id: rocm_package_version
         run: |
           python ./build_tools/compute_rocm_package_version.py \
-            --release-type=${{ inputs.release_type || 'dev' }} \
-            --prerelease-version=${{ inputs.prerelease_version }}
+            --release-type=${{ inputs.release_type }} \
+            --prerelease-version=${{ inputs.prerelease_version }} \
+            --override-git-sha=${{ steps.checkout.outputs.commit }}
+
+      - name: Detect external repo config
+        id: external_repo_config
+        if: ${{ inputs.external_repo != '' }}
+        run: |
+          python ./build_tools/github_actions/detect_external_repo_config.py \
+            --external-repo-json='${{ inputs.external_repo }}'

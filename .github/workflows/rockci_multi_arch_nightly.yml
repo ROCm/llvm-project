@@ -14,58 +14,36 @@ on:
     inputs:
       linux_amdgpu_families:
         type: string
-        description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
+        description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx120X (empty = skip linux)"
         default: ""
       linux_test_labels:
         type: string
-        description: "If enabled, reduce test set on Linux to the list of labels prefixed with 'test:'"
+        description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
         default: ""
-      linux_use_prebuilt_artifacts:
-        type: boolean
-        description: "If enabled, the CI will pull Linux artifacts using artifact_run_id and only run tests"
       windows_amdgpu_families:
         type: string
-        description: "Insert comma-separated list of Windows GPU families to build and test. ex: gfx94X, gfx1201X"
+        description: "Insert comma-separated list of Windows GPU families to build and test. ex: gfx94X, gfx120X (empty = skip windows)"
         default: ""
       windows_test_labels:
         type: string
-        description: "If enabled, reduce test set on Windows to the list of labels prefixed with 'test:'"
+        description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
         default: ""
-      windows_use_prebuilt_artifacts:
+      prebuilt_stages:
+        type: string
+        default: ""
+        description: "Comma-separated build stages to skip (or 'all' for all stages); artifacts are copied from baseline_run_id instead"
+      baseline_run_id:
+        type: string
+        default: ""
+        description: "Workflow run ID to copy prebuilt stage artifacts from; required when prebuilt_stages is set"
+      changed_projects:
+        type: string
+        default: ""
+        description: "Comma-separated list of changed projects to filter tests (empty = run all tests)"
+      build_pytorch:
         type: boolean
-        description: "If enabled, the CI will pull Windows artifacts using artifact_run_id and only run tests"
-      artifact_run_id:
-        type: string
-        description: "If provided, the tests will run on this artifact ID"
-        default: ""
-  workflow_call:
-    inputs:
-      linux_amdgpu_families:
-        type: string
-        description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: ""
-      linux_test_labels:
-        type: string
-        description: "If enabled, reduce test set on Linux to the list of labels prefixed with 'test:'"
-        default: ""
-      linux_use_prebuilt_artifacts:
-        type: boolean
-        description: "If enabled, the CI will pull Linux artifacts using artifact_run_id and only run tests"
-      windows_amdgpu_families:
-        type: string
-        description: "Insert comma-separated list of Windows GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: ""
-      windows_test_labels:
-        type: string
-        description: "If enabled, reduce test set on Windows to the list of labels prefixed with 'test:'"
-        default: ""
-      windows_use_prebuilt_artifacts:
-        type: boolean
-        description: "If enabled, the CI will pull Windows artifacts using artifact_run_id and only run tests"
-      artifact_run_id:
-        type: string
-        description: "If provided, the tests will run on this artifact ID"
-        default: ""
+        default: true
+        description: "Build PyTorch wheels"
   push:
     branches:
       - ADHOCBUILD
@@ -86,6 +64,16 @@ jobs:
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"
+      linux_amdgpu_families: ${{ inputs.linux_amdgpu_families || '' }}
+      windows_amdgpu_families: ${{ inputs.windows_amdgpu_families || '' }}
+      linux_test_labels: ${{ inputs.linux_test_labels || '' }}
+      windows_test_labels: ${{ inputs.windows_test_labels || '' }}
+      prebuilt_stages: ${{ inputs.prebuilt_stages || '' }}
+      baseline_run_id: ${{ inputs.baseline_run_id || '' }}
+      build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
+      build_jax: false
+      repository: "ROCm/TheRock"
+      ref: ${{ vars.THEROCK_CI_MAIN_REF || '' }}        
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
@@ -101,11 +89,16 @@ jobs:
       build_config: ${{ needs.setup.outputs.linux_build_config }}
       test_labels: ${{ needs.setup.outputs.linux_test_labels }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: "full"
+      rocm_deb_package_version: ${{ needs.setup.outputs.rocm_deb_package_version }}
+      rocm_rpm_package_version: ${{ needs.setup.outputs.rocm_rpm_package_version }}
+      test_type: 'full'
+      changed_projects: ${{ inputs.changed_projects || '' }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}        
     permissions:
       contents: read
       id-token: write
-        
+
   windows_build_and_test:
     name: Windows::${{ fromJSON(needs.setup.outputs.windows_build_config || '{}').build_variant_label || 'skip' }}
     needs: setup
@@ -120,7 +113,10 @@ jobs:
       build_config: ${{ needs.setup.outputs.windows_build_config }}
       test_labels: ${{ needs.setup.outputs.windows_test_labels }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: "full"
+      test_type: 'full'
+      changed_projects: ${{ inputs.changed_projects || '' }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}        
     permissions:
       contents: read
       id-token: write
@@ -131,11 +127,9 @@ jobs:
     needs:
       - windows_build_and_test
       - linux_build_and_test
+    permissions:
+      contents: read
+      actions: read        
     with:
-        JOB_NAME_TO_MATCH: "Linux::release / Build Multi-Arch Stages / math-libs (gfx94X-dcgpu, gfx942, linux-gfx942-1gpu-ossci-rocm, false) / Stage - Math Libs (gfx94X-dcgpu)"
+        JOB_NAME_TO_MATCH: "Linux::release / Build Multi-Arch Stages / math-libs (gfx94X-dcgpu, gfx942, linux-gfx942-1gpu-ccs-csp-ossci-rocm, false) / Stage - Math Libs (gfx94X-dcgpu)"
     secrets: inherit
-
-
-  # build_python_packages:
-  #   name: Build Python Packages
-  #   uses: ./.github/workflows/build_python_packages.yml

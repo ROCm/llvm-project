@@ -20,7 +20,28 @@ on:
         type: string
       release_type:
         type: string
+        default: ""
+      suite_list:
+        description: Space-separated AOMP suite names for this shard
+        type: string
+        default: ""
+      shard:
+        description: Shard index (1-based)
+        type: string
+        default: "1"
+      total_shards:
+        description: Total number of AOMP shards
+        type: string
+        default: "6"
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
         default: ""          
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+        default: ""
+          
   workflow_call:
     inputs:
       artifact_group:
@@ -40,7 +61,23 @@ on:
         type: string
       release_type:
         type: string
+        default: "" 
+      suite_list:
+        type: string
+      shard:
+        type: string
+      total_shards:
+        type: string
+        default: "6"
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
         default: ""          
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+        default: ""
+          
   push:
     branches:
       - ADHOCBUILD
@@ -50,7 +87,7 @@ permissions:
 
 jobs:
   aomp_smoke_test:
-    name: "aomp smoke test"
+    name: "AOMP smoke test (shard ${{ inputs.shard }}/${{ inputs.total_shards }})"
     runs-on: ${{ inputs.test_runs_on }}
     # Running docker with cap-add and -v /lib/modiles, by recommendation of Github: https://rocm.docs.amd.com/projects/amdsmi/en/amd-staging/how-to/setup-docker-container.html
     container:
@@ -82,10 +119,17 @@ jobs:
       AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
       AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
       ARTIFACT_GROUP: ${{ inputs.artifact_group }}
+      SUITE_LIST: ${{ inputs.suite_list }}
     steps:
+      - name: Fix Python shared library
+        run: |
+           echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+           export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+           python3 --version
+
       - name: "Fetch 'build_tools' from repository"
         if: ${{ runner.os == 'Windows' }}
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           sparse-checkout: build_tools
           path: prejob
@@ -96,10 +140,10 @@ jobs:
         run: . '${{ github.workspace }}\prejob\build_tools\github_actions\cleanup_processes.ps1'
 
       - name: Checkout Repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}          
           fetch-depth: 1
 
       - name: Pre-job cleanup Docker containers on Linux
@@ -129,10 +173,12 @@ jobs:
           AMD_LOG_LEVEL: 4
         run: |
           set -x
+          echo "=== AOMP shard ${{ inputs.shard }}/${{ inputs.total_shards }}: SUITE_LIST=${SUITE_LIST} ==="          
           git clone https://github.com/ROCm/aomp -b amd-staging --depth 1
           cd aomp/bin
           export AOMP=${OUTPUT_ARTIFACTS_DIR}/llvm
           echo ${AOMP}
+          echo ${SUITE_LIST}          
           ./run_theRockCI.sh
 
       - name: Post-job cleanup processes on Windows

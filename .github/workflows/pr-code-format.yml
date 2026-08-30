@@ -6,11 +6,22 @@ permissions:
 on:
   pull_request:
     branches:
-      - main
-      - 'users/**'
+      - amd-staging
 
 jobs:
   code_formatter:
+    if: >-
+      !contains(github.event.pull_request.head.ref, 'upstream_merge')
+      && !(
+        contains(github.event.pull_request.labels.*.name, 'ci:skip') ||
+        (
+          contains(github.event.pull_request.title, 'Update LLVM_MAIN_REVISION') ||
+          (
+            contains(github.event.pull_request.body, 'Automated update of') &&
+            contains(github.event.pull_request.body, 'LLVM_MAIN_REVISION')
+          )
+        )
+      )
     runs-on: ubuntu-24.04
     container:
       image: 'ghcr.io/llvm/ci-ubuntu-24.04-format'
@@ -18,10 +29,9 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
       cancel-in-progress: true
-    if: github.repository == 'llvm/llvm-project'
     steps:
       - name: Fetch LLVM sources
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 2
