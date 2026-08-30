@@ -7,8 +7,10 @@ option(CLANG_TIDY_ENABLE_STATIC_ANALYZER
   "Include static analyzer checks in clang-tidy" ON)
 option(CLANG_TIDY_ENABLE_QUERY_BASED_CUSTOM_CHECKS
   "Enable query-based custom checks in clang-tidy" OFF)
+option(CLANG_TOOLS_EXTRA_INCLUDE_TESTS
+  "Generate build targets for Clang Extra Tools tests." ON)
 
-if(CLANG_INCLUDE_TESTS)
+if(CLANG_INCLUDE_TESTS AND CLANG_TOOLS_EXTRA_INCLUDE_TESTS)
   umbrella_lit_testsuite_begin(check-clang-tools)
 
   option(CLANG_TOOLS_TEST_USE_VG "Run Clang tools' tests under Valgrind" OFF)
@@ -16,6 +18,10 @@ if(CLANG_INCLUDE_TESTS)
     set_property(GLOBAL APPEND PROPERTY LLVM_CLANG_TOOLS_LIT_EXTRA_ARGS "--vg")
   endif()
 endif()
+
+# Add Clang tools to the "llvm-test-depends" target, so that it is built
+# before running the llvm tests
+set(LLVM_TEST_DEPENDS ${LLVM_TEST_DEPENDS} clang-resource-headers PARENT_SCOPE)
 
 add_subdirectory(clang-apply-replacements)
 add_subdirectory(clang-reorder-fields)
@@ -33,7 +39,7 @@ add_subdirectory(pp-trace)
 add_subdirectory(tool-template)
 
 # Add the common testsuite after all the tools.
-if(CLANG_INCLUDE_TESTS)
+if(CLANG_INCLUDE_TESTS AND CLANG_TOOLS_EXTRA_INCLUDE_TESTS)
 add_subdirectory(test)
 add_subdirectory(unittests)
 endif()
@@ -50,3 +56,4 @@ CMAKE_DEPENDENT_OPTION(CLANG_ENABLE_CLANGD "Build clangd language server" ON
 if (CLANG_ENABLE_CLANGD)
   add_subdirectory(clangd)
 endif()
+
