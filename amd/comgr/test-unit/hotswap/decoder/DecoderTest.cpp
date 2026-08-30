@@ -29,35 +29,16 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "gtest/gtest.h"
 
 #include <cstdint>
 #include <initializer_list>
-#include <mutex>
 #include <set>
 #include <vector>
 
 using namespace COMGR::hotswap;
-
-// initMCState registers the AMDGPU target through COMGR::ensureLLVMInitialized,
-// whose production definition lives in libamd_comgr. Provide the registration
-// here so the test binary stays minimal instead of linking the full Comgr.
-namespace COMGR {
-void ensureLLVMInitialized() {
-  static std::once_flag Once;
-  std::call_once(Once, [] {
-    LLVMInitializeAMDGPUTargetInfo();
-    LLVMInitializeAMDGPUTargetMC();
-    LLVMInitializeAMDGPUDisassembler();
-    LLVMInitializeAMDGPUAsmParser();
-    LLVMInitializeAMDGPUAsmPrinter();
-    LLVMInitializeAMDGPUTarget();
-  });
-}
-} // namespace COMGR
 
 namespace {
 
@@ -76,6 +57,24 @@ constexpr uint8_t VSubrevF32Bytes[] = {0xf4, 0x04, 0x06,
                                        0x06}; // v_subrev_f32_e32 v3, 2.0, v2
 constexpr uint8_t VMulF32Bytes[] = {0xf0, 0x06, 0x08,
                                     0x0a}; // v_mul_f32_e32 v4, 0.5, v3
+constexpr uint8_t SLoadDwordImmBytes[] = {0x80, 0x00, 0x02, 0xc0,
+                                          0x00, 0x00, 0x00, 0x00};
+constexpr uint8_t SLoadDwordSgprBytes[] = {0x80, 0x00, 0x00, 0xc0,
+                                           0x04, 0x00, 0x00, 0x00};
+constexpr uint8_t SLoadDwordSgprImmBytes[] = {0x80, 0x40, 0x02, 0xc0,
+                                              0x08, 0x00, 0x00, 0x08};
+constexpr uint8_t SLoadDwordx2ImmBytes[] = {0x80, 0x00, 0x06, 0xc0,
+                                            0x04, 0x00, 0x00, 0x00};
+constexpr uint8_t SLoadDwordx2SgprBytes[] = {0x80, 0x00, 0x04, 0xc0,
+                                             0x04, 0x00, 0x00, 0x00};
+constexpr uint8_t SLoadDwordx2SgprImmBytes[] = {0x80, 0x40, 0x06, 0xc0,
+                                                0x08, 0x00, 0x00, 0x08};
+constexpr uint8_t SLoadDwordx4ImmBytes[] = {0x00, 0x01, 0x0a, 0xc0,
+                                            0x08, 0x00, 0x00, 0x00};
+constexpr uint8_t SLoadDwordx4SgprBytes[] = {0x00, 0x01, 0x08, 0xc0,
+                                             0x04, 0x00, 0x00, 0x00};
+constexpr uint8_t SLoadDwordx4SgprImmBytes[] = {0x00, 0x41, 0x0a, 0xc0,
+                                                0x08, 0x00, 0x00, 0x08};
 
 // Holds one gfx942 MCState for the tests that need the disassembler or an
 // MCContext. initMCState registers the AMDGPU target itself, so no separate
@@ -162,6 +161,9 @@ TEST(CanonicalOp, NameRoundTrip) {
   EXPECT_EQ(canonicalOpName(CanonicalOp::Unknown), "Unknown");
   EXPECT_EQ(canonicalOpName(CanonicalOp::S_MOV_B32), "S_MOV_B32");
   EXPECT_EQ(canonicalOpName(CanonicalOp::S_ENDPGM), "S_ENDPGM");
+  EXPECT_EQ(canonicalOpName(CanonicalOp::S_LOAD_B32), "S_LOAD_B32");
+  EXPECT_EQ(canonicalOpName(CanonicalOp::S_LOAD_B64), "S_LOAD_B64");
+  EXPECT_EQ(canonicalOpName(CanonicalOp::S_LOAD_B128), "S_LOAD_B128");
   EXPECT_EQ(canonicalOpName(CanonicalOp::V_ADD_F32), "V_ADD_F32");
   EXPECT_EQ(canonicalOpName(CanonicalOp::V_MUL_F32), "V_MUL_F32");
   EXPECT_EQ(canonicalOpName(CanonicalOp::V_SUB_F32), "V_SUB_F32");
@@ -263,6 +265,24 @@ TEST_F(DecoderTest, OpcodeMapTagsTableEntries) {
   Map.build(*State.InstrInfo);
   EXPECT_EQ(Map.lookup(opcodeOf(State, SMovB32Bytes)), CanonicalOp::S_MOV_B32);
   EXPECT_EQ(Map.lookup(opcodeOf(State, SEndpgmBytes)), CanonicalOp::S_ENDPGM);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordImmBytes)),
+            CanonicalOp::S_LOAD_B32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordSgprBytes)),
+            CanonicalOp::S_LOAD_B32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordSgprImmBytes)),
+            CanonicalOp::S_LOAD_B32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx2ImmBytes)),
+            CanonicalOp::S_LOAD_B64);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx2SgprBytes)),
+            CanonicalOp::S_LOAD_B64);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx2SgprImmBytes)),
+            CanonicalOp::S_LOAD_B64);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx4ImmBytes)),
+            CanonicalOp::S_LOAD_B128);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx4SgprBytes)),
+            CanonicalOp::S_LOAD_B128);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx4SgprImmBytes)),
+            CanonicalOp::S_LOAD_B128);
   EXPECT_EQ(Map.lookup(opcodeOf(State, VAddF32Bytes)), CanonicalOp::V_ADD_F32);
   EXPECT_EQ(Map.lookup(opcodeOf(State, VMulF32Bytes)), CanonicalOp::V_MUL_F32);
   EXPECT_EQ(Map.lookup(opcodeOf(State, VSubF32Bytes)), CanonicalOp::V_SUB_F32);

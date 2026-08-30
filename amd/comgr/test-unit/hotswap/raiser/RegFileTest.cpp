@@ -35,30 +35,10 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 
 #include "gtest/gtest.h"
-
-#include <mutex>
-
-// AllocaRegFile links the hotswap::decoder MC stack, whose initMCState calls
-// COMGR::ensureLLVMInitialized; its production definition lives in
-// libamd_comgr. Provide the registration here so the test binary stays minimal.
-namespace COMGR {
-void ensureLLVMInitialized() {
-  static std::once_flag Once;
-  std::call_once(Once, [] {
-    LLVMInitializeAMDGPUTargetInfo();
-    LLVMInitializeAMDGPUTargetMC();
-    LLVMInitializeAMDGPUDisassembler();
-    LLVMInitializeAMDGPUAsmParser();
-    LLVMInitializeAMDGPUAsmPrinter();
-    LLVMInitializeAMDGPUTarget();
-  });
-}
-} // namespace COMGR
 
 using namespace llvm;
 using COMGR::hotswap::AllocaRegFile;

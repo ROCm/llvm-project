@@ -22,6 +22,13 @@
 
 namespace COMGR::hotswap {
 
+// Destination and source values of a binary instruction.
+struct BinaryOperands {
+  ParsedReg Dst;
+  llvm::Value *Src0;
+  llvm::Value *Src1;
+};
+
 // Operand access for one decoded instruction, handed to a handler: source
 // reads through the decoded srcMap at 32-bit, 64-bit or EXEC width, register
 // names for sources and destinations, and immediates. Float source reads apply
@@ -63,6 +70,10 @@ struct OpResolver {
   llvm::Expected<llvm::Value *> srcExecWidth(unsigned I) {
     return Ctx.registers().readOpExecWidth(Di, srcIdx(I));
   }
+  // Read the I-th source's per-lane wave-mask value, or null when unavailable.
+  llvm::Expected<llvm::Value *> srcWaveMaskI1(unsigned I) {
+    return Ctx.registers().readOpWaveMaskI1(Di, srcIdx(I));
+  }
   // Value of the I-th source, which must be an immediate.
   int64_t srcImm(unsigned I) {
     unsigned Index = srcIdx(I);
@@ -79,6 +90,11 @@ struct OpResolver {
   bool isSrcReg(unsigned I) { return Di.isReg(srcIdx(I)); }
   // Register the I-th source names, or no value when it is an immediate.
   llvm::Expected<std::optional<ParsedReg>> srcReg(unsigned I);
+
+  // Read the destination and two 32-bit sources.
+  llvm::Expected<BinaryOperands> readBinary32();
+  // Read the destination and two 64-bit sources.
+  llvm::Expected<BinaryOperands> readBinary64();
 };
 
 } // namespace COMGR::hotswap

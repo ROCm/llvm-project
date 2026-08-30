@@ -30,7 +30,6 @@
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/Builtins.h"
-#include "clang/Basic/DiagnosticComment.h"
 #include "clang/Basic/HLSLRuntime.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/SourceManager.h"
@@ -6584,6 +6583,8 @@ NamedDecl *Sema::HandleDeclarator(Scope *S, Declarator &D,
         if (DC->isRecord())
           return nullptr;
 
+        D.setInvalidType();
+      } else if (CurContext->isRecord() && !CurContext->Equals(DC)) {
         D.setInvalidType();
       }
     }
@@ -15738,10 +15739,8 @@ void Sema::ActOnDocumentableDecls(ArrayRef<Decl *> Group) {
   if (Group.empty() || !Group[0])
     return;
 
-  if (Diags.isIgnored(diag::warn_doc_param_not_found,
-                      Group[0]->getLocation()) &&
-      Diags.isIgnored(diag::warn_unknown_comment_command_name,
-                      Group[0]->getLocation()))
+  if (Diags.areAllIgnored("documentation", Group[0]->getLocation()) &&
+      Diags.areAllIgnored("documentation-pedantic", Group[0]->getLocation()))
     return;
 
   if (Group.size() >= 2) {
@@ -18506,7 +18505,7 @@ Sema::ActOnTag(Scope *S, unsigned TagSpec, TagUseKind TUK, SourceLocation KWLoc,
   }
 
   if (getLangOpts().CPlusPlus && Name && DC && StdNamespace &&
-      DC->Equals(getStdNamespace())) {
+      DC->getRedeclContext()->Equals(getStdNamespace())) {
     if (Name->isStr("bad_alloc")) {
       // This is a declaration of or a reference to "std::bad_alloc".
       isStdBadAlloc = true;

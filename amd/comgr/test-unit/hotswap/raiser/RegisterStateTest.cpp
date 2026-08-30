@@ -30,29 +30,13 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/TargetSelect.h"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 
 #include "gtest/gtest.h"
 
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <optional>
-
-namespace COMGR {
-void ensureLLVMInitialized() {
-  static std::once_flag Once;
-  std::call_once(Once, [] {
-    LLVMInitializeAMDGPUTargetInfo();
-    LLVMInitializeAMDGPUTargetMC();
-    LLVMInitializeAMDGPUDisassembler();
-    LLVMInitializeAMDGPUAsmParser();
-    LLVMInitializeAMDGPUAsmPrinter();
-    LLVMInitializeAMDGPUTarget();
-  });
-}
-} // namespace COMGR
 
 using namespace llvm;
 using namespace COMGR::hotswap;
@@ -376,10 +360,13 @@ TEST_F(RegisterStateTest, InvalidatesOverlappingPairShadows) {
   Env->Regs->recordSgprWaveMaskI1(6, ConstantInt::getTrue(Env->LLVMCtx), false);
   Env->Regs->recordSourceImageSgprPairAddr(4, 0x1000);
 
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4, false), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(6, true), nullptr);
+
   Env->Regs->invalidateSgprWaveMaskI1(5);
 
-  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4), nullptr);
-  EXPECT_NE(Env->Regs->lookupSgprWaveMaskI1(6), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4, true), nullptr);
+  EXPECT_NE(Env->Regs->lookupSgprWaveMaskI1(6, false), nullptr);
   EXPECT_FALSE(Env->Regs->lookupSourceImageSgprPairAddr(4));
 }
 
@@ -394,7 +381,7 @@ TEST_F(RegisterStateTest, DropsBlockScopedFactsOnBlockEntry) {
 
   Env->Regs->enterBlock();
 
-  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4, true), nullptr);
   EXPECT_FALSE(Env->Regs->lookupSourceImageSgprPairAddr(4));
   EXPECT_EQ(Env->Regs->vgprMsBs(), 0);
   EXPECT_FALSE(Env->Regs->getM0Const());
@@ -486,7 +473,7 @@ TEST_F(RegisterStateTest, MaintainsStateOnRegisterWrites) {
   Env->Regs->recordSgprWaveMaskI1(4, ConstantInt::getTrue(Env->LLVMCtx), true);
   Env->Regs->recordSourceImageSgprPairAddr(4, 0x1000);
   Env->Regs->writeReg32(Sgpr, Env->B.getInt32(1));
-  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(4, true), nullptr);
   EXPECT_FALSE(Env->Regs->lookupSourceImageSgprPairAddr(4));
 
   Sgpr.BaseIdx = 8;
@@ -494,8 +481,8 @@ TEST_F(RegisterStateTest, MaintainsStateOnRegisterWrites) {
   Env->Regs->recordSgprWaveMaskI1(8, ConstantInt::getTrue(Env->LLVMCtx), false);
   Env->Regs->recordSgprWaveMaskI1(9, ConstantInt::getTrue(Env->LLVMCtx), false);
   Env->Regs->writeRegExecWidth(Sgpr, Env->B.getInt64(1));
-  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(8), nullptr);
-  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(9), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(8, false), nullptr);
+  EXPECT_EQ(Env->Regs->lookupSgprWaveMaskI1(9, false), nullptr);
 
   ParsedReg M0;
   M0.RegKind = ParsedReg::M0;

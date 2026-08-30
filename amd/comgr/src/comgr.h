@@ -14,6 +14,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Object/ObjectFile.h"
@@ -111,6 +112,9 @@ struct DataObject {
   // buffer that is being swapped out. Held across all of setData().
   std::mutex CacheMutex;
   std::shared_ptr<MetaDocument> CachedMetaDoc;
+  // Aliases Data rather than owning a copy, so it must be released before Data.
+  std::unique_ptr<llvm::object::Binary> CachedBinary;
+  std::unique_ptr<llvm::StringMap<SymbolInfo>> SymbolIndex;
   std::vector<std::string> MangledNames;
   std::map<std::string, std::string> NameExpressionMap;
   llvm::SmallVector<const char *, 128> SpirvFlags;

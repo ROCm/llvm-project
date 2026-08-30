@@ -488,9 +488,6 @@ public:
   void setScalarizeGlobalBehavior(bool b) { ScalarizeGlobal = b; }
   bool getScalarizeGlobalBehavior() const { return ScalarizeGlobal; }
 
-  // static wrappers
-  static bool hasHalfRate64Ops(const TargetSubtargetInfo &STI);
-
   // XXX - Why is this here if it isn't in the default pass set?
   bool enableEarlyIfConversion() const override { return true; }
 
@@ -499,6 +496,8 @@ public:
 
   void overridePostRASchedPolicy(MachineSchedPolicy &Policy,
                                  const SchedRegion &Region) const override;
+
+  void overridePipelinerPolicy(MachinePipelinerPolicy &Policy) const override;
 
   void mirFileLoaded(MachineFunction &MF) const override;
 
@@ -963,7 +962,7 @@ public:
   /// \returns Minimum number of waves per execution unit supported by the
   /// subtarget.
   unsigned getMinWavesPerEU() const override {
-    return AMDGPU::IsaInfo::getMinWavesPerEU(*this);
+    return AMDGPU::getMinWavesPerEU();
   }
 
   void adjustSchedDependency(SUnit *Def, int DefOpIdx, SUnit *Use, int UseOpIdx,
@@ -1010,10 +1009,6 @@ public:
     return HasGFX1250Insts && getGeneration() == GFX12;
   }
 
-  // DS_READ2 and DS_WRITE2 instructions must have addresses aligned to the
-  // payload size.
-  bool hasUnalignedDS2Bug() const { return hasGFX1250_STRICT(); }
-
   /// \returns true if the subtarget requires a wait for xcnt before VMEM
   /// accesses that must never be repeated in the event of a page fault/re-try.
   /// Atomic stores/rmw and all volatile accesses fall under this criteria.
@@ -1054,6 +1049,10 @@ public:
   bool requiresWaitOnWorkgroupReleaseFence(bool TgSplit) const {
     return getGeneration() >= GFX10 || TgSplit;
   }
+
+  bool useDFAforSMS() const override { return false; }
+
+  bool enableWindowScheduler() const override { return false; }
 };
 
 class GCNUserSGPRUsageInfo {

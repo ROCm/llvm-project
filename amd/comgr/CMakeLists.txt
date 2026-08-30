@@ -471,6 +471,7 @@ endforeach()
 set_target_properties(comgr-object-utils PROPERTIES
   CXX_STANDARD 17
   CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS No
   POSITION_INDEPENDENT_CODE ON)
 target_include_directories(comgr-object-utils
   PRIVATE
@@ -696,6 +697,7 @@ if(BUILD_TESTING)
   if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set_property(GLOBAL APPEND PROPERTY LLVM_ADDITIONAL_TEST_TARGETS check-comgr)
   endif()
+  add_subdirectory(test-support)
   add_subdirectory(test)
   add_subdirectory(test-lit)
   add_subdirectory(test-unit)

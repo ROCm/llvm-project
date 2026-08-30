@@ -35,33 +35,13 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <memory>
-#include <mutex>
 #include <string>
 
 using namespace llvm;
 using namespace COMGR::hotswap;
-
-// The decoder calls this to register AMDGPU before building its MC stack.
-// Its production definition sits inside amd_comgr.so, which bakes its own copy
-// of LLVM and hides every internal symbol; linking the .so for it would
-// register AMDGPU into the .so's TargetRegistry while this driver's own LLVM
-// kept an empty one. Defining it here lands the registration on the LLVM this
-// driver is linked against.
-void COMGR::ensureLLVMInitialized() {
-  static std::once_flag Once;
-  std::call_once(Once, [] {
-    LLVMInitializeAMDGPUTargetInfo();
-    LLVMInitializeAMDGPUTargetMC();
-    LLVMInitializeAMDGPUDisassembler();
-    LLVMInitializeAMDGPUAsmParser();
-    LLVMInitializeAMDGPUAsmPrinter();
-    LLVMInitializeAMDGPUTarget();
-  });
-}
 
 namespace {
 

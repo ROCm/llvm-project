@@ -455,6 +455,12 @@ ExtractAPIAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 }
 
 bool ExtractAPIAction::PrepareToExecuteAction(CompilerInstance &CI) {
+  // ExtractAPI reads documentation comments off the AST.
+  CI.getLangOpts().CommentOpts.RetainComments = true;
+
+  // Public API can never be inside function bodies, so skip parsing them.
+  CI.getFrontendOpts().SkipFunctionBodies = true;
+
   auto &Inputs = CI.getFrontendOpts().Inputs;
   if (Inputs.empty())
     return true;

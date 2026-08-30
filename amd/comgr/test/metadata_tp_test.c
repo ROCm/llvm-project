@@ -44,7 +44,18 @@ int main(int argc, char *argv[]) {
   checkError(Status, "amd_comgr_get_isa_metadata");
   checkMetadataString(Gfx950Meta, "LocalMemorySize", "163840");
   checkMetadataString(Gfx950Meta, "LDSBankCount", "64");
+  // gfx950 has no image instructions.
+  checkMetadataString(Gfx950Meta, "ImageSupport", "0");
   Status = amd_comgr_destroy_metadata(Gfx950Meta);
+  checkError(Status, "amd_comgr_destroy_metadata");
+
+  // gfx6 addresses 32 KiB of LDS, not the 64 KiB of gfx7 onwards.
+  amd_comgr_metadata_node_t Gfx600Meta;
+  Status = amd_comgr_get_isa_metadata("amdgcn-amd-amdhsa--gfx600", &Gfx600Meta);
+  checkError(Status, "amd_comgr_get_isa_metadata");
+  checkMetadataString(Gfx600Meta, "LocalMemorySize", "32768");
+  checkMetadataString(Gfx600Meta, "ImageSupport", "1");
+  Status = amd_comgr_destroy_metadata(Gfx600Meta);
   checkError(Status, "amd_comgr_destroy_metadata");
 
   // how many isa_names do we support?

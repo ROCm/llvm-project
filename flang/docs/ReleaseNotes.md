@@ -33,6 +33,11 @@ page](https://llvm.org/releases/).
 
 ## Non-comprehensive list of changes in this release
 
+- Added support for the OpenMP implementation-defined extension sentinels
+  (OpenMP 5.2, section 3.1): `!$omx`, `c$omx` and `*$omx` in fixed source form
+  and `!$ompx` in free source form. These sentinels are recognized like their
+  `omp` counterparts when OpenMP is enabled.
+
 - The legacy array-value operations (`fir.array_load`, `fir.array_fetch`,
   `fir.array_update`, `fir.array_modify`, `fir.array_access`,
   `fir.array_amend`, `fir.array_merge_store`) have been removed from FIR,
@@ -56,6 +61,11 @@ page](https://llvm.org/releases/).
 
 - Added `-gz` and `-gz=<format>` flags to enable compression of DWARF debug
   sections. Supported formats are `zlib`, `zstd`, and `none`.
+
+- Added `-fmodule-mismatch-check=non-intrinsic` and
+  `-fmodule-mismatch-check=warn` to turn module USE checksum mismatches into a
+  warning instead of an error. `-Wno-module-file-mismatch` can be used to
+  silence even that warning.
 
 ## Windows Support
 
