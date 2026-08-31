@@ -368,8 +368,7 @@ bool DivergenceS1WideningHelper::simplifyMachinePHIs() {
           continue;
 
         MachineInstr *Def = MRI->getVRegDef(In);
-        if (Def && (Def->isImplicitDef() ||
-                    Def->getOpcode() == TargetOpcode::G_IMPLICIT_DEF)) {
+        if (Def && Def->getOpcode() == TargetOpcode::G_IMPLICIT_DEF) {
           HasImplicitDefInput = true;
           continue;
         }
