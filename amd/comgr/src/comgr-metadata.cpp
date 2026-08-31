@@ -483,6 +483,10 @@ bool isSupportedFeature(size_t IsaIndex, StringRef Feature) {
 
 const char *getIsaName(size_t Index) { return IsaInfos[Index].IsaName; }
 
+// TODO: Duplicates the target-internal IsaInfo::TRAP_NUM_SGPRS; use it directly
+// once it is promoted to AMDGPUTargetParser.h.
+constexpr unsigned TrapNumSGPRs = 16;
+
 amd_comgr_status_t getIsaMetadata(StringRef IsaName,
                                   llvm::msgpack::Document &Doc) {
   amd_comgr_status_t Status;
@@ -543,6 +547,10 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   auto Info = IsaInfos[IsaIndex];
   Root["TrapHandlerEnabled"] =
       Doc.getNode(std::to_string(isTrapHandlerEnabled(Kind)), /*Copy=*/true);
+  // Per-wave SGPRs occupancy must charge on top of the kernel's own.
+  Root["SGPRTrapHandlerReserve"] =
+      Doc.getNode(std::to_string(isTrapHandlerEnabled(Kind) ? TrapNumSGPRs : 0),
+                  /*Copy=*/true);
   Root["ImageSupport"] = Doc.getNode(
       std::to_string(Features.test(AMDGPU::FEAT_IMAGE_INSTS)), /*Copy=*/true);
   Root["LocalMemorySize"] = Doc.getNode(
