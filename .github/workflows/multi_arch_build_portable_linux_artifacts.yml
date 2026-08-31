@@ -159,6 +159,23 @@ jobs:
                print a[n], $4
              }' > submodule-commit-${STAGE_NAME}.txt          
 
+      # DIAGNOSTIC (temporary): fetch_sources.py captures its own stdout into a
+      # shell variable above, so its "Applying N patches" line never reaches the
+      # log. Inspect the submodule directly to prove whether the wave32 EXEC CFI
+      # carry (TheRock #6102) actually landed: patched sources show
+      # "isExec(CFISuperReg) && NumSubRegs == 2", unpatched show the bare assert.
+      - name: DIAG - was the wave32 EXEC CFI carry applied?
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          echo "--- patch files present ---"
+          ls -l patches/amd-mainline/llvm-project/ || true
+          echo "--- amd-llvm submodule history (a patch shows as a therockbot commit) ---"
+          git -C compiler/amd-llvm log --oneline -3 || true
+          echo "--- the code path in question ---"
+          grep -n -A3 'isExec(CFISuperReg)' \
+            compiler/amd-llvm/llvm/lib/Target/AMDGPU/SIFrameLowering.cpp || true
+
       - name: build prep (patches & hotfixes for CK, hipcc and hiprtc, tests)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/linux-patches@amd-staging
         with:
@@ -231,6 +248,25 @@ jobs:
           BUILD_DIR: ${{ env.BUILD_DIR }}
         with:
           stage_name: ${{ inputs.stage_name }}
+
+      # DIAGNOSTIC (temporary): lit reports only the failing shard index, e.g.
+      # "LLVM-Unit :: ObjectYAML/./ObjectYAMLTests/13/39", and not the gtest
+      # output, so we cannot see which case failed or why. Run the binary
+      # directly for the assertion text, repeatedly to distinguish a genuine
+      # failure from a flaky one.
+      - name: DIAG - ObjectYAMLTests detail and repeat
+        if: ${{ !cancelled() && inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: true
+        run: |
+          bin=$(find "${BUILD_DIR}/compiler/amd-llvm/build" -type f -name ObjectYAMLTests -print -quit 2>/dev/null)
+          echo "binary: ${bin:-NOT FOUND}"
+          if [ -z "$bin" ]; then exit 0; fi
+          pass=0; fail=0
+          for i in 1 2 3 4 5; do
+            echo "===== attempt $i ====="
+            if "$bin"; then pass=$((pass+1)); else fail=$((fail+1)); fi
+          done
+          echo "===== ObjectYAMLTests: $pass passed, $fail failed out of 5 ====="
 
       - name: Run build tests (Comgr, blocking)
         if: ${{ !cancelled() && inputs.stage_name == 'compiler-runtime' }}
