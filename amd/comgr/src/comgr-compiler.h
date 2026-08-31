@@ -67,8 +67,8 @@ class AMDGPUCompiler {
 
   // Only for paths read back through Clang's FileManager, since under VFS the
   // content never reaches the real filesystem.
-  amd_comgr_status_t materializeHeaderFile(DataObject *Object,
-                                           llvm::StringRef Path);
+  amd_comgr_status_t materializeDataObjectData(DataObject *Object,
+                                               llvm::StringRef Path);
   amd_comgr_status_t addDeviceLibraries();
   amd_comgr_status_t extractSpirvFlags(DataSet *BcSet);
   amd_comgr_status_t cloneKernelsInBitcode(DataSet *BcSet);

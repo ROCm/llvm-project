@@ -1395,7 +1395,7 @@ AMDGPUCompiler::processFiles(amd_comgr_data_kind_t OutputKind,
       continue;
     }
     auto IncludeFilePath = getFilePath(Input, IncludeDir);
-    if (auto Status = materializeHeaderFile(Input, IncludeFilePath)) {
+    if (auto Status = materializeDataObjectData(Input, IncludeFilePath)) {
       return Status;
     }
   }
@@ -1484,7 +1484,7 @@ amd_comgr_status_t AMDGPUCompiler::addIncludeFlags() {
     }
     PrecompiledHeaders.push_back(getFilePath(Input, IncludeDir));
     auto &PrecompiledHeaderPath = PrecompiledHeaders.back();
-    if (auto Status = materializeHeaderFile(Input, PrecompiledHeaderPath)) {
+    if (auto Status = materializeDataObjectData(Input, PrecompiledHeaderPath)) {
       return Status;
     }
     Args.push_back("-include-pch");
@@ -1602,8 +1602,8 @@ amd_comgr_status_t AMDGPUCompiler::outputResource(llvm::StringRef Path,
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-amd_comgr_status_t AMDGPUCompiler::materializeHeaderFile(DataObject *Object,
-                                                         StringRef Path) {
+amd_comgr_status_t AMDGPUCompiler::materializeDataObjectData(DataObject *Object,
+                                                             StringRef Path) {
   return outputResource(Path, StringRef(Object->Data, Object->Size));
 }
 
