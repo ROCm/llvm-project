@@ -24,7 +24,6 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/BinaryFormat/Dwarf.h"
-#include "llvm/Frontend/Offloading/Utility.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
