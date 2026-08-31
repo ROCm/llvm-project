@@ -108,15 +108,6 @@ jobs:
           ref: ${{ fromJSON(inputs.external_repo_config).ref }}
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
-      - name: Use TheRock PR #6102 (assertions + wave32 EXEC CFI patch)
-        run: |
-          set -x
-          git config --global --add safe.directory "$PWD"
-          git fetch --no-tags --depth 1 https://github.com/ROCm/TheRock.git refs/pull/6102/head
-          git reset --hard FETCH_HEAD
-          git log --oneline -1
-          ls -l patches/amd-mainline/llvm-project/
-
       - name: Submodule PR update (covers parameterised and PR creation)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd/dev/kirthana14m/parameterised-wave-assertion
       - name: Install python deps
@@ -149,6 +140,17 @@ jobs:
             --output-dir="${BUILD_DIR}" \
             --bootstrap
 
+      - name: Carry wave32 EXEC CFI patch (TheRock #6102)
+        if: ${{ inputs.stage_name == 'comm-libs' }}
+        run: |
+          set -x
+          git config --global --add safe.directory "$PWD"
+          mkdir -p patches/amd-mainline/llvm-project
+          git fetch --no-tags --depth 1 https://github.com/ROCm/TheRock.git \
+            d9189b378f8fdc2525acaf6975deee29538ba48d
+          git show FETCH_HEAD:patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch \
+            > patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
+            
       - name: Fetch sources
         timeout-minutes: 30
         run: |
