@@ -46,7 +46,7 @@ inline std::optional<int64_t> evalOperandAsConst(const llvm::MCInst &Inst,
 // it.
 struct DecodedInst {
   llvm::MCInst Inst;
-  CanonicalOp CanonOp = CanonicalOp::Unknown;
+  CanonicalInst Canon;
 
   // The instruction's MCInstrDesc::TSFlags, whose AMDGPU-specific bits carry
   // the instruction-format the raiser dispatches on (see amdgpu-formats.h).

@@ -50,7 +50,7 @@
 	.p2align	8
 	.type	mov_endpgm_kernel,@function
 mov_endpgm_kernel:
-; DECODE: S_MOV_B32{{.+}}s_mov_b32 s0, 0
+; DECODE: S_MOV<B32>{{.+}}s_mov_b32 s0, 0
 	s_mov_b32 s0, 0
 ; DECODE: S_ENDPGM{{.+}}s_endpgm
 	s_endpgm

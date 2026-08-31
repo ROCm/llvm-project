@@ -85,22 +85,17 @@ static unsigned requiredNamedOperandIndex(const MCState &MC,
 }
 
 // Return the data width for a supported non-buffer scalar load.
-static std::optional<unsigned> scalarLoadWidthInDwords(CanonicalOp Operation) {
-  switch (Operation) {
-  case CanonicalOp::S_LOAD_B32:
-    return 1;
-  case CanonicalOp::S_LOAD_B64:
-    return 2;
-  case CanonicalOp::S_LOAD_B128:
-    return 4;
-  default:
+static std::optional<unsigned>
+scalarLoadWidthInDwords(const CanonicalInst &Inst) {
+  if (Inst.Op != CanonicalOp::S_LOAD)
     return std::nullopt;
-  }
+  unsigned Width = canonicalTypeBitWidth(Inst.Type);
+  return Width && Width % 32 == 0 ? std::optional<unsigned>(Width / 32)
+                                  : std::nullopt;
 }
 
 Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
-  std::optional<unsigned> LoadWidthInDwords =
-      scalarLoadWidthInDwords(Di.CanonOp);
+  std::optional<unsigned> LoadWidthInDwords = scalarLoadWidthInDwords(Di.Canon);
   if (!LoadWidthInDwords)
     return unsupported(Ctx, Di, "unsupported scalar memory operation");
 

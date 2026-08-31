@@ -22,106 +22,62 @@ using namespace llvm;
 namespace COMGR::hotswap {
 namespace {
 
-// Return the LLVM predicate for a 32-bit integer comparison.
-std::optional<CmpInst::Predicate> integerPredicate(CanonicalOp Opcode) {
-  switch (Opcode) {
-  case CanonicalOp::S_CMP_EQ_U32:
-  case CanonicalOp::S_CMP_EQ_I32:
+std::optional<CmpInst::Predicate> integerPredicate(const CanonicalInst &Inst) {
+  bool IsSigned = Inst.Type == CanonicalType::I32;
+  bool IsUnsigned = Inst.Type == CanonicalType::U32;
+  if (!IsSigned && !IsUnsigned)
+    return std::nullopt;
+
+  switch (Inst.Op) {
+  case CanonicalOp::S_CMP_EQ:
     return CmpInst::ICMP_EQ;
-  case CanonicalOp::S_CMP_LG_U32:
-  case CanonicalOp::S_CMP_LG_I32:
+  case CanonicalOp::S_CMP_LG:
     return CmpInst::ICMP_NE;
-  case CanonicalOp::S_CMP_GT_U32:
-    return CmpInst::ICMP_UGT;
-  case CanonicalOp::S_CMP_GE_U32:
-    return CmpInst::ICMP_UGE;
-  case CanonicalOp::S_CMP_LT_U32:
-    return CmpInst::ICMP_ULT;
-  case CanonicalOp::S_CMP_LE_U32:
-    return CmpInst::ICMP_ULE;
-  case CanonicalOp::S_CMP_GT_I32:
-    return CmpInst::ICMP_SGT;
-  case CanonicalOp::S_CMP_GE_I32:
-    return CmpInst::ICMP_SGE;
-  case CanonicalOp::S_CMP_LT_I32:
-    return CmpInst::ICMP_SLT;
-  case CanonicalOp::S_CMP_LE_I32:
-    return CmpInst::ICMP_SLE;
+  case CanonicalOp::S_CMP_GT:
+    return IsSigned ? CmpInst::ICMP_SGT : CmpInst::ICMP_UGT;
+  case CanonicalOp::S_CMP_GE:
+    return IsSigned ? CmpInst::ICMP_SGE : CmpInst::ICMP_UGE;
+  case CanonicalOp::S_CMP_LT:
+    return IsSigned ? CmpInst::ICMP_SLT : CmpInst::ICMP_ULT;
+  case CanonicalOp::S_CMP_LE:
+    return IsSigned ? CmpInst::ICMP_SLE : CmpInst::ICMP_ULE;
   default:
     return std::nullopt;
   }
 }
 
-// Return the LLVM predicate for a floating-point comparison.
 std::optional<CmpInst::Predicate> floatPredicate(CanonicalOp Opcode) {
   switch (Opcode) {
-  case CanonicalOp::S_CMP_EQ_F32:
-  case CanonicalOp::S_CMP_EQ_F16:
+  case CanonicalOp::S_CMP_EQ:
     return CmpInst::FCMP_OEQ;
-  case CanonicalOp::S_CMP_LG_F32:
-  case CanonicalOp::S_CMP_LG_F16:
+  case CanonicalOp::S_CMP_LG:
     return CmpInst::FCMP_ONE;
-  case CanonicalOp::S_CMP_GT_F32:
-  case CanonicalOp::S_CMP_GT_F16:
+  case CanonicalOp::S_CMP_GT:
     return CmpInst::FCMP_OGT;
-  case CanonicalOp::S_CMP_GE_F32:
-  case CanonicalOp::S_CMP_GE_F16:
+  case CanonicalOp::S_CMP_GE:
     return CmpInst::FCMP_OGE;
-  case CanonicalOp::S_CMP_LT_F32:
-  case CanonicalOp::S_CMP_LT_F16:
+  case CanonicalOp::S_CMP_LT:
     return CmpInst::FCMP_OLT;
-  case CanonicalOp::S_CMP_LE_F32:
-  case CanonicalOp::S_CMP_LE_F16:
+  case CanonicalOp::S_CMP_LE:
     return CmpInst::FCMP_OLE;
-  case CanonicalOp::S_CMP_NEQ_F32:
-  case CanonicalOp::S_CMP_NEQ_F16:
+  case CanonicalOp::S_CMP_NEQ:
     return CmpInst::FCMP_UNE;
-  case CanonicalOp::S_CMP_NGT_F32:
-  case CanonicalOp::S_CMP_NGT_F16:
+  case CanonicalOp::S_CMP_NGT:
     return CmpInst::FCMP_ULE;
-  case CanonicalOp::S_CMP_NGE_F32:
-  case CanonicalOp::S_CMP_NGE_F16:
+  case CanonicalOp::S_CMP_NGE:
     return CmpInst::FCMP_ULT;
-  case CanonicalOp::S_CMP_NLT_F32:
-  case CanonicalOp::S_CMP_NLT_F16:
+  case CanonicalOp::S_CMP_NLT:
     return CmpInst::FCMP_UGE;
-  case CanonicalOp::S_CMP_NLE_F32:
-  case CanonicalOp::S_CMP_NLE_F16:
+  case CanonicalOp::S_CMP_NLE:
     return CmpInst::FCMP_UGT;
-  case CanonicalOp::S_CMP_NLG_F32:
-  case CanonicalOp::S_CMP_NLG_F16:
+  case CanonicalOp::S_CMP_NLG:
     return CmpInst::FCMP_UEQ;
-  case CanonicalOp::S_CMP_O_F32:
-  case CanonicalOp::S_CMP_O_F16:
+  case CanonicalOp::S_CMP_O:
     return CmpInst::FCMP_ORD;
-  case CanonicalOp::S_CMP_U_F32:
-  case CanonicalOp::S_CMP_U_F16:
+  case CanonicalOp::S_CMP_U:
     return CmpInst::FCMP_UNO;
   default:
     return std::nullopt;
-  }
-}
-
-// Return whether Opcode compares 16-bit floating-point values.
-bool isFloat16Compare(CanonicalOp Opcode) {
-  switch (Opcode) {
-  case CanonicalOp::S_CMP_EQ_F16:
-  case CanonicalOp::S_CMP_LG_F16:
-  case CanonicalOp::S_CMP_GT_F16:
-  case CanonicalOp::S_CMP_GE_F16:
-  case CanonicalOp::S_CMP_LT_F16:
-  case CanonicalOp::S_CMP_LE_F16:
-  case CanonicalOp::S_CMP_NEQ_F16:
-  case CanonicalOp::S_CMP_NGT_F16:
-  case CanonicalOp::S_CMP_NGE_F16:
-  case CanonicalOp::S_CMP_NLT_F16:
-  case CanonicalOp::S_CMP_NLE_F16:
-  case CanonicalOp::S_CMP_NLG_F16:
-  case CanonicalOp::S_CMP_O_F16:
-  case CanonicalOp::S_CMP_U_F16:
-    return true;
-  default:
-    return false;
   }
 }
 
@@ -224,26 +180,35 @@ Error handleBitCompare64(RaiseContext &Ctx, OpResolver &Op,
 
 // Raise one SOPC instruction and write its comparison result to SCC.
 Error handleSOPC(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
-  if (std::optional<CmpInst::Predicate> Pred = integerPredicate(Di.CanonOp))
+  if (std::optional<CmpInst::Predicate> Pred = integerPredicate(Di.Canon))
     return handleIntegerCompare(Ctx, Op, *Pred);
 
-  if (Di.CanonOp == CanonicalOp::S_CMP_EQ_U64)
+  if (Di.Canon.Op == CanonicalOp::S_CMP_EQ &&
+      Di.Canon.Type == CanonicalType::U64)
     return handleInteger64Compare(Ctx, Op, CmpInst::ICMP_EQ);
-  if (Di.CanonOp == CanonicalOp::S_CMP_LG_U64)
+  if (Di.Canon.Op == CanonicalOp::S_CMP_LG &&
+      Di.Canon.Type == CanonicalType::U64)
     return handleInteger64Compare(Ctx, Op, CmpInst::ICMP_NE);
 
-  if (std::optional<CmpInst::Predicate> Pred = floatPredicate(Di.CanonOp))
-    return handleFloatCompare(Ctx, Op, *Pred, isFloat16Compare(Di.CanonOp));
+  if (Di.Canon.Type == CanonicalType::F16 ||
+      Di.Canon.Type == CanonicalType::F32) {
+    if (std::optional<CmpInst::Predicate> Pred = floatPredicate(Di.Canon.Op))
+      return handleFloatCompare(Ctx, Op, *Pred,
+                                Di.Canon.Type == CanonicalType::F16);
+  }
 
-  switch (Di.CanonOp) {
-  case CanonicalOp::S_BITCMP0_B32:
-    return handleBitCompare32(Ctx, Op, CmpInst::ICMP_EQ);
-  case CanonicalOp::S_BITCMP1_B32:
-    return handleBitCompare32(Ctx, Op, CmpInst::ICMP_NE);
-  case CanonicalOp::S_BITCMP0_B64:
-    return handleBitCompare64(Ctx, Op, CmpInst::ICMP_EQ);
-  case CanonicalOp::S_BITCMP1_B64:
-    return handleBitCompare64(Ctx, Op, CmpInst::ICMP_NE);
+  switch (Di.Canon.Op) {
+  case CanonicalOp::S_BITCMP0:
+  case CanonicalOp::S_BITCMP1: {
+    CmpInst::Predicate Pred = Di.Canon.Op == CanonicalOp::S_BITCMP0
+                                  ? CmpInst::ICMP_EQ
+                                  : CmpInst::ICMP_NE;
+    if (Di.Canon.Type == CanonicalType::B32)
+      return handleBitCompare32(Ctx, Op, Pred);
+    if (Di.Canon.Type == CanonicalType::B64)
+      return handleBitCompare64(Ctx, Op, Pred);
+    return unsupportedInstruction(Ctx, Di);
+  }
   default:
     return unsupportedInstruction(Ctx, Di);
   }

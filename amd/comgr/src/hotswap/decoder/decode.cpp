@@ -197,7 +197,7 @@ Expected<SmallVector<uint64_t>>
 computeDecodedBlockSuccessors(const DecodedInst &LastInst,
                               std::optional<uint64_t> NextBlockOffset) {
   SmallVector<uint64_t> Result;
-  if (LastInst.CanonOp == CanonicalOp::S_ENDPGM)
+  if (LastInst.Canon.Op == CanonicalOp::S_ENDPGM)
     return Result;
   if (NextBlockOffset)
     Result.push_back(*NextBlockOffset);
@@ -205,7 +205,7 @@ computeDecodedBlockSuccessors(const DecodedInst &LastInst,
 }
 
 bool decodedInstEndsBlock(const DecodedInst &LastInst) {
-  return LastInst.CanonOp == CanonicalOp::S_ENDPGM;
+  return LastInst.Canon.Op == CanonicalOp::S_ENDPGM;
 }
 
 Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
@@ -247,7 +247,7 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
     const MCInstrDesc &Desc = Mc.InstrInfo->get(Inst.getOpcode());
     DecodedInst Di;
     Di.Inst = Inst;
-    Di.CanonOp = OpcMap.lookup(Inst.getOpcode());
+    Di.Canon = OpcMap.lookup(Inst.getOpcode());
     Di.NumDefs = Desc.getNumDefs();
     Di.Offset = Off;
     Di.setSizeInBytes(InstSize);

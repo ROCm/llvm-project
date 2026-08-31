@@ -69,7 +69,7 @@ Error raiseWavePriority(RaiseContext &Ctx, const DecodedInst &Di) {
   assert(Imm && "simm16 of a priority write is always an immediate");
 
   IRBuilder<> &B = Ctx.B;
-  Intrinsic::ID Id = Di.CanonOp == CanonicalOp::S_SETPRIO
+  Intrinsic::ID Id = Di.Canon.Op == CanonicalOp::S_SETPRIO
                          ? Intrinsic::amdgcn_s_setprio
                          : Intrinsic::amdgcn_s_setprio_inc_wg;
   B.CreateIntrinsic(Id, {}, {B.getInt16(static_cast<uint16_t>(*Imm))});
@@ -79,7 +79,7 @@ Error raiseWavePriority(RaiseContext &Ctx, const DecodedInst &Di) {
 } // namespace
 
 Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
-  switch (Di.CanonOp) {
+  switch (Di.Canon.Op) {
   case CanonicalOp::S_ENDPGM:
     Ctx.B.CreateRetVoid();
     return Error::success();

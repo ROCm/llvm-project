@@ -17,18 +17,16 @@
 
 namespace COMGR::hotswap {
 
-// Maps AMDGPU MC opcodes to CanonicalOp values. Opcodes without a mapping
-// return CanonicalOp::Unknown.
+// Maps AMDGPU MC opcodes to typed canonical instructions.
 class OpcodeMap {
 public:
-  // CanonicalOp for `Opcode`, or Unknown when it has no mapping.
-  CanonicalOp lookup(unsigned Opcode) const;
+  CanonicalInst lookup(unsigned Opcode) const;
 
   // Populate the map from `MCII`. Must run before any lookup.
   void build(const llvm::MCInstrInfo &MCII);
 
 private:
-  llvm::DenseMap<unsigned, CanonicalOp> Map;
+  llvm::DenseMap<unsigned, CanonicalInst> Map;
 };
 
 } // namespace COMGR::hotswap

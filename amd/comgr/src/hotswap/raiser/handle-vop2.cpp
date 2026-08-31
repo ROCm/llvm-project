@@ -197,6 +197,20 @@ static Error raiseBinary64(RaiseContext &Ctx, OpResolver &Op,
   return Error::success();
 }
 
+static Error raiseIntegerBinary(RaiseContext &Ctx, OpResolver &Op,
+                                CanonicalType Type, BinaryBuilder Build) {
+  switch (canonicalTypeBitWidth(Type)) {
+  case 16:
+    return raiseBinary16(Ctx, Op, Build);
+  case 32:
+    return raiseBinary32(Ctx, Op, Build);
+  case 64:
+    return raiseBinary64(Ctx, Op, Build);
+  default:
+    llvm_unreachable("unsupported integer operation width");
+  }
+}
+
 // Reduce a shift amount to the low bits the hardware reads: `S0[4:0]` for a
 // 32-bit shift and `S0[5:0]` for a 64-bit one. The mask is not redundant: an
 // LLVM shift is poison once the amount reaches the operand width, where the
@@ -263,179 +277,159 @@ static Error raiseShiftLeft64(RaiseContext &Ctx, OpResolver &Op) {
 }
 
 Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
-  switch (Di.CanonOp) {
-  case CanonicalOp::V_ADD_F32:
-    return raiseFloatBinary(Ctx, Di, Op, Instruction::FAdd,
-                            /*ReverseOperands=*/false);
-  case CanonicalOp::V_MUL_F32:
-    return raiseFloatBinary(Ctx, Di, Op, Instruction::FMul,
-                            /*ReverseOperands=*/false);
-  case CanonicalOp::V_SUB_F32:
-    return raiseFloatBinary(Ctx, Di, Op, Instruction::FSub,
-                            /*ReverseOperands=*/false);
-  case CanonicalOp::V_SUBREV_F32:
-    return raiseFloatBinary(Ctx, Di, Op, Instruction::FSub,
-                            /*ReverseOperands=*/true);
-
-  case CanonicalOp::V_ADD_NC_U32:
-    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateAdd(Src0, Src1, "add");
-    });
-  case CanonicalOp::V_SUB_NC_U32:
-    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateSub(Src0, Src1, "sub");
-    });
-  case CanonicalOp::V_SUBREV_NC_U32:
+  switch (Di.Canon.Op) {
+  case CanonicalOp::V_ADD:
+    if (Di.Canon.Type == CanonicalType::F32)
+      return raiseFloatBinary(Ctx, Di, Op, Instruction::FAdd, false);
+    if (Di.Canon.Type == CanonicalType::U16)
+      return raiseBinary16(Ctx, Op,
+                           [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+                             return B.CreateAdd(Src0, Src1, "add16");
+                           });
+    break;
+  case CanonicalOp::V_SUB:
+  case CanonicalOp::V_SUBREV: {
+    bool Reverse = Di.Canon.Op == CanonicalOp::V_SUBREV;
+    if (Di.Canon.Type == CanonicalType::F32)
+      return raiseFloatBinary(Ctx, Di, Op, Instruction::FSub, Reverse);
+    if (Di.Canon.Type == CanonicalType::U16)
+      return raiseBinary16(
+          Ctx, Op, [Reverse](IRBuilder<> &B, Value *Src0, Value *Src1) {
+            return B.CreateSub(Reverse ? Src1 : Src0, Reverse ? Src0 : Src1,
+                               Reverse ? "subrev16" : "sub16");
+          });
+    break;
+  }
+  case CanonicalOp::V_MUL:
+    if (Di.Canon.Type == CanonicalType::F32)
+      return raiseFloatBinary(Ctx, Di, Op, Instruction::FMul, false);
+    if (Di.Canon.ElementType == CanonicalType::I24)
+      return raiseMul24(Ctx, Op, true);
+    if (Di.Canon.ElementType == CanonicalType::U24)
+      return raiseMul24(Ctx, Op, false);
+    if (Di.Canon.Type == CanonicalType::U64)
+      return raiseBinary64(Ctx, Op,
+                           [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+                             return B.CreateMul(Src0, Src1, "mul64");
+                           });
+    break;
+  case CanonicalOp::V_MUL_HI:
+    if (Di.Canon.ElementType == CanonicalType::I24)
+      return raiseMulHi24(Ctx, Op, true);
+    if (Di.Canon.ElementType == CanonicalType::U24)
+      return raiseMulHi24(Ctx, Op, false);
+    break;
+  case CanonicalOp::V_ADD_NC:
+    return raiseIntegerBinary(
+        Ctx, Op, Di.Canon.Type,
+        [&Di](IRBuilder<> &B, Value *Src0, Value *Src1) {
+          return B.CreateAdd(Src0, Src1,
+                             Di.Canon.Type == CanonicalType::U64 ? "add64"
+                                                                 : "add");
+        });
+  case CanonicalOp::V_SUB_NC:
+    return raiseIntegerBinary(
+        Ctx, Op, Di.Canon.Type,
+        [&Di](IRBuilder<> &B, Value *Src0, Value *Src1) {
+          return B.CreateSub(Src0, Src1,
+                             Di.Canon.Type == CanonicalType::U64 ? "sub64"
+                                                                 : "sub");
+        });
+  case CanonicalOp::V_SUBREV_NC:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
       return B.CreateSub(Src1, Src0, "subrev");
     });
-  case CanonicalOp::V_ADD_CO_U32:
+  case CanonicalOp::V_ADD_CO:
     return raiseBinary32WriteVCC(Ctx, Op, Intrinsic::uadd_with_overflow,
                                  /*ReverseOperands=*/false);
-  case CanonicalOp::V_SUB_CO_U32:
+  case CanonicalOp::V_SUB_CO:
     return raiseBinary32WriteVCC(Ctx, Op, Intrinsic::usub_with_overflow,
                                  /*ReverseOperands=*/false);
-  case CanonicalOp::V_SUBREV_CO_U32:
+  case CanonicalOp::V_SUBREV_CO:
     return raiseBinary32WriteVCC(Ctx, Op, Intrinsic::usub_with_overflow,
                                  /*ReverseOperands=*/true);
-  case CanonicalOp::V_ADD_CO_CI_U32:
+  case CanonicalOp::V_ADD_CO_CI:
     return raiseBinary32ReadWriteVCC(Ctx, Op, Intrinsic::uadd_with_overflow,
                                      /*ReverseOperands=*/false);
-  case CanonicalOp::V_SUB_CO_CI_U32:
+  case CanonicalOp::V_SUB_CO_CI:
     return raiseBinary32ReadWriteVCC(Ctx, Op, Intrinsic::usub_with_overflow,
                                      /*ReverseOperands=*/false);
-  case CanonicalOp::V_SUBREV_CO_CI_U32:
+  case CanonicalOp::V_SUBREV_CO_CI:
     return raiseBinary32ReadWriteVCC(Ctx, Op, Intrinsic::usub_with_overflow,
                                      /*ReverseOperands=*/true);
-  case CanonicalOp::V_CNDMASK_B32:
+  case CanonicalOp::V_CNDMASK:
     return raiseCndMask(Ctx, Op);
-
-  case CanonicalOp::V_MUL_I32_I24:
-    return raiseMul24(Ctx, Op, /*IsSigned=*/true);
-  case CanonicalOp::V_MUL_U32_U24:
-    return raiseMul24(Ctx, Op, /*IsSigned=*/false);
-  case CanonicalOp::V_MUL_HI_I32_I24:
-    return raiseMulHi24(Ctx, Op, /*IsSigned=*/true);
-  case CanonicalOp::V_MUL_HI_U32_U24:
-    return raiseMulHi24(Ctx, Op, /*IsSigned=*/false);
-
-  case CanonicalOp::V_MIN_I32:
-    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::smin, Src0, Src1, {}, "min");
-    });
-  case CanonicalOp::V_MAX_I32:
-    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::smax, Src0, Src1, {}, "max");
-    });
-  case CanonicalOp::V_MIN_U32:
-    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::umin, Src0, Src1, {}, "min");
-    });
-  case CanonicalOp::V_MAX_U32:
-    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::umax, Src0, Src1, {}, "max");
-    });
-
-  case CanonicalOp::V_AND_B32:
+  case CanonicalOp::V_MIN:
+  case CanonicalOp::V_MAX: {
+    bool IsMin = Di.Canon.Op == CanonicalOp::V_MIN;
+    bool IsSigned = Di.Canon.Type == CanonicalType::I16 ||
+                    Di.Canon.Type == CanonicalType::I32;
+    Intrinsic::ID ID = IsMin ? (IsSigned ? Intrinsic::smin : Intrinsic::umin)
+                             : (IsSigned ? Intrinsic::smax : Intrinsic::umax);
+    const char *Name = canonicalTypeBitWidth(Di.Canon.Type) == 16
+                           ? (IsMin ? "min16" : "max16")
+                           : (IsMin ? "min" : "max");
+    return raiseIntegerBinary(
+        Ctx, Op, Di.Canon.Type,
+        [ID, Name](IRBuilder<> &B, Value *Src0, Value *Src1) {
+          return B.CreateBinaryIntrinsic(ID, Src0, Src1, {}, Name);
+        });
+  }
+  case CanonicalOp::V_AND:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
       return B.CreateAnd(Src0, Src1, "and");
     });
-  case CanonicalOp::V_OR_B32:
+  case CanonicalOp::V_OR:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
       return B.CreateOr(Src0, Src1, "or");
     });
-  case CanonicalOp::V_XOR_B32:
+  case CanonicalOp::V_XOR:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
       return B.CreateXor(Src0, Src1, "xor");
     });
-  case CanonicalOp::V_XNOR_B32:
+  case CanonicalOp::V_XNOR:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
       return B.CreateNot(B.CreateXor(Src0, Src1, "xnor_xor"), "xnor");
     });
-
-  // These take the shift amount in src0 and the value being shifted in src1.
-  case CanonicalOp::V_LSHLREV_B32:
-    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateShl(Src1, maskShiftAmount(B, Src0, 32), "lshl");
-    });
-  case CanonicalOp::V_LSHRREV_B32:
-    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateLShr(Src1, maskShiftAmount(B, Src0, 32), "lshr");
-    });
-  case CanonicalOp::V_ASHRREV_I32:
-    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateAShr(Src1, maskShiftAmount(B, Src0, 32), "ashr");
-    });
-
-  case CanonicalOp::V_ADD_NC_U64:
-    return raiseBinary64(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateAdd(Src0, Src1, "add64");
-    });
-  case CanonicalOp::V_SUB_NC_U64:
-    return raiseBinary64(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateSub(Src0, Src1, "sub64");
-    });
-  case CanonicalOp::V_MUL_U64:
-    return raiseBinary64(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateMul(Src0, Src1, "mul64");
-    });
-  case CanonicalOp::V_LSHLREV_B64:
-    return raiseShiftLeft64(Ctx, Op);
-
-  case CanonicalOp::V_ADD_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateAdd(Src0, Src1, "add16");
-    });
-  case CanonicalOp::V_SUB_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateSub(Src0, Src1, "sub16");
-    });
-  case CanonicalOp::V_SUBREV_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateSub(Src1, Src0, "subrev16");
-    });
-  case CanonicalOp::V_MUL_LO_U16:
+  case CanonicalOp::V_MUL_LO:
     return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
       return B.CreateMul(Src0, Src1, "mul16");
     });
-  case CanonicalOp::V_LSHLREV_B16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateShl(Src1, maskShiftAmount(B, Src0, 16), "lshl16");
-    });
-  case CanonicalOp::V_LSHRREV_B16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateLShr(Src1, maskShiftAmount(B, Src0, 16), "lshr16");
-    });
-  case CanonicalOp::V_ASHRREV_I16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateAShr(Src1, maskShiftAmount(B, Src0, 16), "ashr16");
-    });
-  case CanonicalOp::V_MIN_I16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::smin, Src0, Src1, {}, "min16");
-    });
-  case CanonicalOp::V_MAX_I16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::smax, Src0, Src1, {}, "max16");
-    });
-  case CanonicalOp::V_MIN_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::umin, Src0, Src1, {}, "min16");
-    });
-  case CanonicalOp::V_MAX_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::umax, Src0, Src1, {}, "max16");
-    });
-  case CanonicalOp::V_DOT2C_I32_I16:
-    return raiseSignedDotAccumulate(Ctx, Op, 16);
-  case CanonicalOp::V_DOT4C_I32_I8:
-    return raiseSignedDotAccumulate(Ctx, Op, 8);
-  case CanonicalOp::V_DOT8C_I32_I4:
-    return raiseSignedDotAccumulate(Ctx, Op, 4);
-
+  case CanonicalOp::V_LSHLREV:
+    if (Di.Canon.Type == CanonicalType::B64)
+      return raiseShiftLeft64(Ctx, Op);
+    return raiseIntegerBinary(
+        Ctx, Op, Di.Canon.Type,
+        [&Di](IRBuilder<> &B, Value *Src0, Value *Src1) {
+          unsigned Width = canonicalTypeBitWidth(Di.Canon.Type);
+          return B.CreateShl(Src1, maskShiftAmount(B, Src0, Width),
+                             Width == 16 ? "lshl16" : "lshl");
+        });
+  case CanonicalOp::V_LSHRREV:
+    return raiseIntegerBinary(
+        Ctx, Op, Di.Canon.Type,
+        [&Di](IRBuilder<> &B, Value *Src0, Value *Src1) {
+          unsigned Width = canonicalTypeBitWidth(Di.Canon.Type);
+          return B.CreateLShr(Src1, maskShiftAmount(B, Src0, Width),
+                              Width == 16 ? "lshr16" : "lshr");
+        });
+  case CanonicalOp::V_ASHRREV:
+    return raiseIntegerBinary(
+        Ctx, Op, Di.Canon.Type,
+        [&Di](IRBuilder<> &B, Value *Src0, Value *Src1) {
+          unsigned Width = canonicalTypeBitWidth(Di.Canon.Type);
+          return B.CreateAShr(Src1, maskShiftAmount(B, Src0, Width),
+                              Width == 16 ? "ashr16" : "ashr");
+        });
+  case CanonicalOp::V_DOT2C:
+  case CanonicalOp::V_DOT4C:
+  case CanonicalOp::V_DOT8C:
+    return raiseSignedDotAccumulate(
+        Ctx, Op, canonicalTypeBitWidth(Di.Canon.ElementType));
   default:
-    return unsupported(Ctx, Di);
+    break;
   }
+  return unsupported(Ctx, Di);
 }
 
 } // namespace COMGR::hotswap

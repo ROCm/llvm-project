@@ -204,7 +204,7 @@ int runDumpDecoded(const CodeObjectInfo &Info, const TextSection &Text,
     for (const DecodedInst &Di : DecodedOrErr->Insts) {
       outs() << "0x";
       outs().write_hex(Di.Offset);
-      outs() << "  " << canonicalOpName(Di.CanonOp) << "  "
+      outs() << "  " << canonicalInstName(Di.Canon) << "  "
              << printInst(MC, Di.Inst) << "\n";
     }
   }
