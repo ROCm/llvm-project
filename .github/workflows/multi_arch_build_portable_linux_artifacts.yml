@@ -108,6 +108,15 @@ jobs:
           ref: ${{ fromJSON(inputs.external_repo_config).ref }}
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
+      - name: Use TheRock PR #6102 (assertions + wave32 EXEC CFI patch)
+        run: |
+          set -x
+          git config --global --add safe.directory "$PWD"
+          git fetch --no-tags --depth 1 https://github.com/ROCm/TheRock.git refs/pull/6102/head
+          git reset --hard FETCH_HEAD
+          git log --oneline -1
+          ls -l patches/amd-mainline/llvm-project/
+
       - name: Submodule PR update (covers parameterised and PR creation)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd/dev/kirthana14m/parameterised-wave-assertion
       - name: Install python deps
