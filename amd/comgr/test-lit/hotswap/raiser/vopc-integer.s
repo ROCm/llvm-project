@@ -18,13 +18,16 @@ vopc_exec_write:
 ; the mask reaches the AND without being narrowed. This opcode writes the scalar
 ; destination it names as well as EXEC.
 ; EXEC: [[CMP:%.+]] = icmp ugt i32 {{.+}}, {{.+}}
+; The bit that reaches the scalar destination is the comparison cleared where
+; the lane is inactive, since a masked-off lane reads its bit back as zero.
+; EXEC: [[WASACTIVE:%.+]] = icmp ne i64 {{.+}}, 0
+; EXEC: [[VCC:%.+]] = and i1 [[CMP]], [[WASACTIVE]]
 ; EXEC: [[BALLOT:%.+]] = call i64 @llvm.amdgcn.ballot.i64(i1 [[CMP]])
 ; EXEC: [[NARROWED:%.+]] = and i64 -1, [[BALLOT]]
 	v_cmpx_gt_u32_e32 vcc, v0, v1
 ; Reading the scalar destination back is what shows the comparison reached it:
-; VCC is held as a per-lane bit and a scalar read of it ballots that bit, so the
-; ballot operand is the comparison the same instruction sent to EXEC.
-; EXEC: call i64 @llvm.amdgcn.ballot.i64(i1 [[CMP]])
+; VCC is held as a per-lane bit and a scalar read of it ballots that bit.
+; EXEC: call i64 @llvm.amdgcn.ballot.i64(i1 [[VCC]])
 	s_mov_b32 s0, vcc_lo
 ; The vector write that follows is predicated on the narrowed EXEC, which is
 ; what makes the store observable: the lane-active bit is recomputed from it

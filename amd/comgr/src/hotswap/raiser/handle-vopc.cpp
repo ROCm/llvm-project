@@ -94,8 +94,12 @@ Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
   // GFX10 `v_cmpx` wrote both.
   if (Di.defsVcc()) {
     // VCC is held as the bit belonging to the lane doing the writing, so the
-    // per-lane comparison is what it wants.
-    Regs.regFile().storeVCC(Ctx.B, Cmp);
+    // per-lane comparison is what it wants, cleared where the lane is inactive:
+    // a comparison writes the whole mask whatever EXEC holds, and the bits of
+    // the lanes EXEC masks off read back as zero. Masking rather than skipping
+    // the write, since an inactive lane does not keep the bit it had.
+    Value *Bit = Ctx.B.CreateAnd(Cmp, Regs.emitLaneActiveBit(), "vcc_bit");
+    Regs.regFile().storeVCC(Ctx.B, Bit);
   }
 
   if (Di.defsExec()) {
@@ -108,6 +112,8 @@ Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
     Value *Mask = Ctx.Projection.ballotI1ToWidth(
         Ctx.B, Cmp, Ctx.Projection.execStorageTy(), "cmpx_ballot");
     Value *CurrentExec = Regs.regFile().loadExec(Ctx.B);
+    // The AND is also what clears the bits of the lanes that were inactive,
+    // which the ballot took the comparison of regardless.
     Value *NarrowedExec = Ctx.B.CreateAnd(CurrentExec, Mask, "cmpx_exec");
     // Through RegisterState rather than the register file: the lane-active bit
     // every following per-lane write is predicated on was derived from the
