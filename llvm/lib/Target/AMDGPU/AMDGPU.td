@@ -405,6 +405,7 @@ class SubtargetFeatureLDSBankCount <int Value> : SubtargetFeature <
 
 def FeatureLDSBankCount16 : SubtargetFeatureLDSBankCount<16>;
 def FeatureLDSBankCount32 : SubtargetFeatureLDSBankCount<32>;
+def FeatureLDSBankCount64 : SubtargetFeatureLDSBankCount<64>;
 
 class SubtargetFeatureInstCacheLineSize <int Value> : SubtargetFeature <
   "instcachelinesize"#Value,
@@ -2303,7 +2304,7 @@ def FeatureISAVersion12_50_Common : FeatureSet<
    FeatureCuMode,
    Feature1024AddressableVGPRs,
    Feature64BitLiterals,
-   FeatureLDSBankCount32,
+   FeatureLDSBankCount64,
    FeatureDLInsts,
    FeatureFmacF64Inst,
    FeaturePackedFP32SingleSGPROps,
