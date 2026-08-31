@@ -7,9 +7,6 @@
 # It mirrors ci.yml but uses multi_arch_build_portable_linux.yml instead of
 # ci_linux.yml. Once validated, ci.yml will be updated to use the multi-arch
 # sub-workflows directly.
-#
-# Same `ci:skip` rules as rockci-amd-staging.yml: only automated LLVM_MAIN_REVISION PRs
-# (matching title/body) skip presubmit; label alone is not enough. 
 
 name: Multi Arch Parameterised CI amd-staging
 
