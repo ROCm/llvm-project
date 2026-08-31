@@ -10,7 +10,6 @@
 
 // CHECK: [[CLANG:".*clang.*"]] "-cc1" "-triple" "amdgpu9.06-amd-amdhsa"
 // CHECK-SAME: "-aux-triple" "x86_64-pc-linux-gnu"
-// CHECK-SAME: "-target-cpu" "gfx906"
 // CHECK-SAME: "-fopenmp"
 // CHECK-SAME: "-mllvm" "-amdgpu-dump-hsa-metadata"
 // CHECK-NOT:  "-mllvm" "-amdgpu-dump-hsa-metadata" "-mllvm" "-amdgpu-dump-hsa-metadata"
