@@ -13,7 +13,7 @@ config.test_format = lit.formats.ShTest(
     execute_external=True, force_execute_external=True
 )
 
-config.excludes = ["comgr-sources"]
+config.excludes = ["comgr-sources", "Inputs"]
 
 config.test_source_root = os.path.dirname(__file__)
 config.test_exec_root = config.my_obj_root
@@ -137,3 +137,38 @@ config.substitutions.append(("%python", _fwd(sys.executable)))
 config.substitutions.append(
     ("%transpile_cli", _fwd(config.comgr_obj_dir, "transpile_cli"))
 )
+
+
+# Dispatching a raised code object needs both a device to run it on and the HIP
+# runtime to launch it with; neither is part of a comgr build, so the tests that
+# execute are enabled only where a ROCm installation and a device are found.
+# The raise widens a wave32 gfx1250 kernel onto a wave64 target, so only a
+# device from the list the raiser is tested against exercises the translation.
+_rocm_path = os.environ.get("ROCM_PATH", "/opt/rocm")
+_wave64_processors = ["gfx942", "gfx950"]
+
+
+def _wave64_device_arch():
+    enumerator = _fwd(_rocm_path, "bin", "rocm_agent_enumerator")
+    if not os.path.exists(enumerator):
+        return None
+    try:
+        out = subprocess.run(enumerator, stdout=subprocess.PIPE, timeout=120)
+    except Exception:
+        return None
+    return next(
+        (arch for arch in out.stdout.decode().split() if arch in _wave64_processors),
+        None,
+    )
+
+
+_hip_include = _fwd(_rocm_path, "include")
+_hip_lib = _fwd(_rocm_path, "lib")
+_wave64_arch = _wave64_device_arch()
+if _wave64_arch and os.path.exists(_fwd(_hip_include, "hip", "hip_runtime_api.h")):
+    config.available_features.add("comgr-has-hip-wave64-device")
+    config.substitutions.append(("%amdgpu_wave64_arch", _wave64_arch))
+    config.substitutions.append(("%hip_cflags", "-I" + _hip_include))
+    config.substitutions.append(
+        ("%hip_ldflags", "-L{0} -lamdhip64 -Wl,-rpath,{0}".format(_hip_lib))
+    )
