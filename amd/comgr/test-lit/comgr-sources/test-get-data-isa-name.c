@@ -9,6 +9,39 @@
 #include "amd_comgr.h"
 #include "common.h"
 
+// Each path must be rejected with AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT.
+// Asserting the exact status keeps this from passing on an unrelated failure.
+static int expectFail(int argc, char *argv[]) {
+  if (argc < 1)
+    fail("Usage: test-get-data-isa-name --expect-fail <code-object-path>...");
+
+  for (int I = 0; I < argc; ++I) {
+    char *Buf;
+    size_t Size = setBuf(argv[I], &Buf);
+    size_t SizeIsa = 0;
+    amd_comgr_data_t Data;
+
+    amd_comgr_(create_data(AMD_COMGR_DATA_KIND_RELOCATABLE, &Data));
+    amd_comgr_(set_data(Data, Size, Buf));
+
+    amd_comgr_status_t Status =
+        amd_comgr_get_data_isa_name(Data, &SizeIsa, NULL);
+    if (Status != AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT) {
+      const char *Reason = "";
+      amd_comgr_status_string(Status, &Reason);
+      free(Buf);
+      fail("get_data_isa_name(%s): expected "
+           "AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT, saw %s",
+           argv[I], Reason);
+    }
+
+    amd_comgr_(release_data(Data));
+    free(Buf);
+  }
+
+  return 0;
+}
+
 int main(int argc, char *argv[]) {
   char *BufReloc, *BufExec;
   size_t SizeReloc, SizeExec;
@@ -16,9 +49,17 @@ int main(int argc, char *argv[]) {
   char *IsaName;
   amd_comgr_data_t DataReloc, DataExec;
 
+  if (argc > 1 && strncmp(argv[1], "--", 2) == 0) {
+    if (strcmp(argv[1], "--expect-fail") == 0)
+      return expectFail(argc - 2, argv + 2);
+    fprintf(stderr, "error: unknown argument: %s\n", argv[1]);
+    return 1;
+  }
+
   if (argc != 4)
     fail("Usage: test-get-data-isa-name <code-object-path> "
-         "<code-shared-object-path> <expected-isa-name>");
+         "<code-shared-object-path> <expected-isa-name>\n"
+         "       test-get-data-isa-name --expect-fail <code-object-path>...");
 
   SizeReloc = setBuf(argv[1], &BufReloc);
   SizeExec = setBuf(argv[2], &BufExec);

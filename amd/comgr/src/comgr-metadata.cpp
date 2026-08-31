@@ -292,7 +292,6 @@ llvm::Error getMetadataRoot(MemoryBufferRef MB, DataMeta *MetaP) {
 struct IsaInfo {
   const char *IsaName;
   const char *Processor;
-  unsigned ElfMachine;
   unsigned LDSBankCount;
   unsigned MaxFlatWorkGroupSize;
   unsigned VGPRAllocGranule;
@@ -300,12 +299,11 @@ struct IsaInfo {
   // TODO: Update this to AvailableNumVGPRs to be more accurate
   unsigned AddressableNumVGPRs;
 } IsaInfos[] = {
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, ELF_MACHINE, LDS_BANK_COUNT,      \
+#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, LDS_BANK_COUNT,                   \
                    MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
                    TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
   {TARGET_TRIPLE "-" PROCESSOR,                                                \
    PROCESSOR,                                                                  \
-   ELF::ELF_MACHINE,                                                           \
    LDS_BANK_COUNT,                                                             \
    MAX_FLAT_WORK_GROUP_SIZE,                                                   \
    VGPR_ALLOC_GRANULE,                                                         \
@@ -338,14 +336,24 @@ typedef struct amdgpu_hsa_note_code_object_version_s {
 // NOLINTNEXTLINE(readability-identifier-naming)
 namespace {
 bool getMachInfo(unsigned Mach, std::string &Processor) {
-  auto *IsaIterator = std::find_if(
-      std::begin(IsaInfos), std::end(IsaInfos),
-      [Mach](const IsaInfo &IsaInfo) { return Mach == IsaInfo.ElfMachine; });
-  if (IsaIterator == std::end(IsaInfos)) {
+  StringRef Name;
+  switch (Mach) {
+#define X(NUM, ENUM, NAME)                                                     \
+  case ELF::ENUM:                                                              \
+    Name = NAME;                                                               \
+    break;
+    AMDGPU_MACH_LIST(X)
+#undef X
+  default:
     return false;
   }
 
-  Processor = IsaIterator->Processor;
+  // AMDGPU_MACH_LIST also covers the R600 machs, which are not AMDGCN
+  // processors.
+  if (AMDGPU::parseArchAMDGCN(Name) == AMDGPU::GK_NONE)
+    return false;
+
+  Processor = Name.str();
   return true;
 }
 
