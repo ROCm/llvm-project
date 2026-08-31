@@ -27,7 +27,7 @@
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/decoder/opcode-map.h"
 #include "hotswap/raiser/handlers.h"
-#include "hotswap/raiser/op-resolver.h"
+#include "hotswap/raiser/operand-resolver.h"
 #include "hotswap/raiser/raise-context.h"
 #include "hotswap/raiser/raise_failure.h"
 #include "hotswap/raiser/wave-projection.h"
@@ -195,7 +195,7 @@ static Function *declareKernel(Module &M, StringRef KernelName,
 // lowered as something else.
 static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
   using namespace AmdgpuFormat;
-  OpResolver Op{Ctx, Di};
+  OperandResolver Op{Ctx, Di};
 
   if (Di.TargetSpecificFlags & SOP1)
     return handleSOP1(Ctx, Di, Op);

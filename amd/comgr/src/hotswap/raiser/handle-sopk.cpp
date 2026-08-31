@@ -145,7 +145,8 @@ void updateImmediateModeVgprMsb(RaiseContext &Ctx, uint64_t Value) {
 }
 
 // Raise a hardware-register read according to Policy.
-Error handleGetreg(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
+Error handleGetreg(RaiseContext &Ctx, const DecodedInst &Di,
+                   OperandResolver &Op,
                    unsigned Id, HardwareRegisterPolicy Policy) {
   if (Policy.Read == HardwareRegisterReadAction::Reject)
     return unsupportedInstruction(
@@ -160,7 +161,8 @@ Error handleGetreg(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
 }
 
 // Raise a hardware-register write according to Policy.
-Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
+Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di,
+                   OperandResolver &Op,
                    unsigned Selector, unsigned Id, unsigned BitOffset,
                    unsigned BitWidth, HardwareRegisterPolicy Policy) {
   if (Policy.Write == HardwareRegisterWriteAction::Reject)
@@ -201,7 +203,8 @@ Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
 } // namespace
 
 // Raise a hardware-register SOPK instruction.
-Error handleSOPK(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
+Error handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
+                 OperandResolver &Op) {
   switch (Di.CanonOp) {
   case CanonicalOp::S_GETREG_B32:
   case CanonicalOp::S_SETREG_B32:

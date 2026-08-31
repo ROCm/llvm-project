@@ -33,7 +33,7 @@ add_library(hotswap-raiser OBJECT
   user-sgpr-layout.cpp
   register-state.cpp
   raise-context.cpp
-  op-resolver.cpp
+  operand-resolver.cpp
   flat-addr.cpp
   handle-flat.cpp
   handle-smem.cpp

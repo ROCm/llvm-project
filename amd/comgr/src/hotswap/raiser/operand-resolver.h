@@ -1,4 +1,4 @@
-//===- op-resolver.h - Hotswap transpiler ---------------------------------===//
+//===- operand-resolver.h - Hotswap transpiler ----------------------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef HOTSWAP_TRANSPILER_OP_RESOLVER_H
-#define HOTSWAP_TRANSPILER_OP_RESOLVER_H
+#ifndef HOTSWAP_TRANSPILER_OPERAND_RESOLVER_H
+#define HOTSWAP_TRANSPILER_OPERAND_RESOLVER_H
 
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/decoder/parsed-reg.h"
@@ -33,7 +33,7 @@ struct BinaryOperands {
 // reads through the decoded srcMap at 32-bit, 64-bit or EXEC width, register
 // names for sources and destinations, and immediates. Float source reads apply
 // the neg/abs modifiers.
-struct OpResolver {
+struct OperandResolver {
   // Context the operands are read through.
   RaiseContext &Ctx;
   // Instruction whose operands are being read.

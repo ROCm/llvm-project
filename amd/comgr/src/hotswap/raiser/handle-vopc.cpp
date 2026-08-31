@@ -10,7 +10,7 @@
 
 #include "hotswap/decoder/canonical-op.h"
 #include "hotswap/decoder/decoded-inst.h"
-#include "hotswap/raiser/op-resolver.h"
+#include "hotswap/raiser/operand-resolver.h"
 #include "hotswap/raiser/raise-context.h"
 #include "hotswap/raiser/register-state.h"
 
@@ -24,7 +24,8 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
+Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
+                 OperandResolver &Op) {
   ICmpInst::Predicate Pred;
   switch (Di.CanonOp) {
   case CanonicalOp::V_CMP_LT_I32:

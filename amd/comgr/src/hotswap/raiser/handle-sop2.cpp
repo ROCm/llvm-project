@@ -17,7 +17,7 @@ namespace COMGR::hotswap {
 namespace {
 
 // Read the destination, a 64-bit source, and a 32-bit source.
-Expected<BinaryOperands> readBinary64x32(OpResolver &Op) {
+Expected<BinaryOperands> readBinary64x32(OperandResolver &Op) {
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
@@ -87,7 +87,7 @@ Value *emitBitOp(IRBuilder<> &B, BitOp Op, Value *A, Value *Bv,
 }
 
 // Raise a bitwise instruction and preserve wave-mask and SCC state.
-Error handleBitOp(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
+Error handleBitOp(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
                   BitOp Kind, bool Is64, const Twine &Name) {
   Expected<Value *> SrcMask0 = Op.srcWaveMaskI1(0);
   if (!SrcMask0)
@@ -131,7 +131,7 @@ Error handleBitOp(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
 }
 
 // Raise a 32-bit shift and set SCC if its result is nonzero.
-Error handleShift32(RaiseContext &Ctx, OpResolver &Op,
+Error handleShift32(RaiseContext &Ctx, OperandResolver &Op,
                     Instruction::BinaryOps Opcode, const Twine &Name) {
   Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args)
@@ -144,7 +144,7 @@ Error handleShift32(RaiseContext &Ctx, OpResolver &Op,
 }
 
 // Raise a 64-bit shift and set SCC if its result is nonzero.
-Error handleShift64(RaiseContext &Ctx, OpResolver &Op,
+Error handleShift64(RaiseContext &Ctx, OperandResolver &Op,
                     Instruction::BinaryOps Opcode, const Twine &Name) {
   Expected<BinaryOperands> Args = readBinary64x32(Op);
   if (!Args)
@@ -159,7 +159,7 @@ Error handleShift64(RaiseContext &Ctx, OpResolver &Op,
 }
 
 // Raise a shifted 32-bit addition and set SCC on unsigned overflow.
-Error handleLshlAdd(RaiseContext &Ctx, OpResolver &Op, unsigned Shift,
+Error handleLshlAdd(RaiseContext &Ctx, OperandResolver &Op, unsigned Shift,
                     const Twine &Name) {
   Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args)
@@ -178,7 +178,7 @@ Error handleLshlAdd(RaiseContext &Ctx, OpResolver &Op, unsigned Shift,
 
 // Raise a 32-bit binary instruction, writing the intrinsic result and overflow
 // flag to the destination and SCC.
-Error handleOverflowingBinary32(RaiseContext &Ctx, OpResolver &Op,
+Error handleOverflowingBinary32(RaiseContext &Ctx, OperandResolver &Op,
                                 Intrinsic::ID IntrinsicID,
                                 const Twine &ResultName,
                                 const Twine &OverflowName) {
@@ -197,7 +197,8 @@ Error handleOverflowingBinary32(RaiseContext &Ctx, OpResolver &Op,
 } // namespace
 
 // Raise one SOP2 instruction and preserve its SCC side effects.
-Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
+Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
+                 OperandResolver &Op) {
   switch (Di.CanonOp) {
   case CanonicalOp::S_AND_B32:
     return handleBitOp(Ctx, Di, Op, BitOp::And, false, "and");

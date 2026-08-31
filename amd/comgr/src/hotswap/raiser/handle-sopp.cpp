@@ -78,7 +78,7 @@ Error raiseWavePriority(RaiseContext &Ctx, const DecodedInst &Di) {
 
 } // namespace
 
-Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
+Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   switch (Di.CanonOp) {
   case CanonicalOp::S_ENDPGM:
     Ctx.B.CreateRetVoid();

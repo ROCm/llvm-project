@@ -1,4 +1,4 @@
-//===- OpResolverTest.cpp - operand resolver unit tests -------------------===//
+//===- OperandResolverTest.cpp - operand resolver unit tests --------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "hotswap/raiser/op-resolver.h"
+#include "hotswap/raiser/operand-resolver.h"
 
 #include "hotswap/common/kernel-meta.h"
 #include "hotswap/decoder/decoded-inst.h"
@@ -50,7 +50,7 @@ MCRegister findRegister(const MCRegisterInfo &MRI, StringRef Name) {
   return MCRegister();
 }
 
-class OpResolverTest : public ::testing::Test {
+class OperandResolverTest : public ::testing::Test {
 protected:
   void SetUp() override {
     Expected<MCState> State = initMCState("gfx942");
@@ -69,7 +69,7 @@ protected:
     std::optional<RaiseContext> Ctx;
 
     explicit ContextEnvironment(const MCState &Mc)
-        : Mod("op_resolver_test", LLVMCtx), B(LLVMCtx),
+        : Mod("operand_resolver_test", LLVMCtx), B(LLVMCtx),
           Isa(ISAProfile::fromSubtarget(*Mc.SubtargetInfo)),
           Projection(Isa, Isa, B.getInt32Ty(), B.getInt64Ty()),
           Kernel(Function::Create(
@@ -86,7 +86,7 @@ protected:
   std::unique_ptr<ContextEnvironment> Env;
 };
 
-TEST_F(OpResolverTest, ReportsRegisterFailures) {
+TEST_F(OperandResolverTest, ReportsRegisterFailures) {
   unsigned Opc = findOpcode(*Mc.InstrInfo, "S_MOV_B32_vi");
   ASSERT_NE(Opc, Mc.InstrInfo->getNumOpcodes());
   MCRegister Reg = findRegister(*Mc.RegInfo, "XNACK_MASK_LO");
@@ -96,7 +96,7 @@ TEST_F(OpResolverTest, ReportsRegisterFailures) {
   Di.Inst.setOpcode(Opc);
   Di.Inst.addOperand(MCOperand::createReg(Reg));
 
-  OpResolver Resolver{*Env->Ctx, Di};
+  OperandResolver Resolver{*Env->Ctx, Di};
   Expected<ParsedReg> Destination = Resolver.dst();
   ASSERT_FALSE(static_cast<bool>(Destination));
   EXPECT_NE(toString(Destination.takeError()).find("register-decode"),

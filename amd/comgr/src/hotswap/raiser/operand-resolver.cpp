@@ -1,4 +1,4 @@
-//===- op-resolver.cpp - Hotswap transpiler -------------------------------===//
+//===- operand-resolver.cpp - Hotswap transpiler --------------------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "hotswap/raiser/op-resolver.h"
+#include "hotswap/raiser/operand-resolver.h"
 
 #include "llvm/IR/Intrinsics.h"
 
@@ -16,7 +16,7 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-unsigned OpResolver::srcMod(unsigned I) const {
+unsigned OperandResolver::srcMod(unsigned I) const {
   assert(I < Di.ModMap.size() && "source modifier index out of range");
   unsigned ModIdx = Di.ModMap[I];
   if (ModIdx == UINT_MAX)
@@ -25,7 +25,7 @@ unsigned OpResolver::srcMod(unsigned I) const {
   return static_cast<unsigned>(Di.getImm(ModIdx) & 0xF);
 }
 
-Value *OpResolver::applyMods(unsigned I, Value *V) {
+Value *OperandResolver::applyMods(unsigned I, Value *V) {
   unsigned Mods = srcMod(I);
   if (Mods == 0)
     return V;
@@ -41,14 +41,14 @@ Value *OpResolver::applyMods(unsigned I, Value *V) {
   return V;
 }
 
-Expected<Value *> OpResolver::srcF(unsigned I) {
+Expected<Value *> OperandResolver::srcF(unsigned I) {
   Expected<Value *> V = Ctx.registers().readOp32(Di, srcIdx(I));
   if (!V)
     return V.takeError();
   return applyMods(I, *V);
 }
 
-Expected<std::optional<ParsedReg>> OpResolver::srcReg(unsigned I) {
+Expected<std::optional<ParsedReg>> OperandResolver::srcReg(unsigned I) {
   unsigned Index = srcIdx(I);
   if (!Di.isReg(Index))
     return std::optional<ParsedReg>();
@@ -58,7 +58,7 @@ Expected<std::optional<ParsedReg>> OpResolver::srcReg(unsigned I) {
   return std::optional<ParsedReg>(*Reg);
 }
 
-Expected<BinaryOperands> OpResolver::readBinary32() {
+Expected<BinaryOperands> OperandResolver::readBinary32() {
   Expected<ParsedReg> Dst = dst();
   if (!Dst)
     return Dst.takeError();
@@ -71,7 +71,7 @@ Expected<BinaryOperands> OpResolver::readBinary32() {
   return BinaryOperands{*Dst, *Src0, *Src1};
 }
 
-Expected<BinaryOperands> OpResolver::readBinary64() {
+Expected<BinaryOperands> OperandResolver::readBinary64() {
   Expected<ParsedReg> Dst = dst();
   if (!Dst)
     return Dst.takeError();

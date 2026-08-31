@@ -13,7 +13,7 @@
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/decoder/parsed-reg.h"
 #include "hotswap/raiser/flat-addr.h"
-#include "hotswap/raiser/op-resolver.h"
+#include "hotswap/raiser/operand-resolver.h"
 #include "hotswap/raiser/raise-context.h"
 
 #include "llvm/IR/Instructions.h"
@@ -29,7 +29,7 @@ namespace COMGR::hotswap {
 static constexpr Align DwordGlobalAccessAlignment = Align::Constant<4>();
 
 static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
-                            OpResolver &Op) {
+                            OperandResolver &Op) {
   Expected<ParsedReg> Destination = Op.dst();
   if (!Destination)
     return Destination.takeError();
@@ -69,7 +69,8 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di) {
   return Error::success();
 }
 
-Error handleFLAT(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
+Error handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
+                 OperandResolver &Op) {
   switch (Di.CanonOp) {
   case CanonicalOp::GLOBAL_LOAD_B32:
     return emitGlobalLoad(Ctx, Di, Op);

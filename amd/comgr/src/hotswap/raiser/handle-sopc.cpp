@@ -126,7 +126,7 @@ bool isFloat16Compare(CanonicalOp Opcode) {
 }
 
 // Raise a 32-bit integer comparison and write its result to SCC.
-Error handleIntegerCompare(RaiseContext &Ctx, OpResolver &Op,
+Error handleIntegerCompare(RaiseContext &Ctx, OperandResolver &Op,
                            CmpInst::Predicate Pred) {
   Expected<Value *> Src0 = Op.src(0);
   if (!Src0)
@@ -140,7 +140,7 @@ Error handleIntegerCompare(RaiseContext &Ctx, OpResolver &Op,
 }
 
 // Raise a 64-bit integer comparison and write its result to SCC.
-Error handleInteger64Compare(RaiseContext &Ctx, OpResolver &Op,
+Error handleInteger64Compare(RaiseContext &Ctx, OperandResolver &Op,
                              CmpInst::Predicate Pred) {
   Expected<Value *> Src0 = Op.src64(0);
   if (!Src0)
@@ -154,7 +154,7 @@ Error handleInteger64Compare(RaiseContext &Ctx, OpResolver &Op,
 }
 
 // Raise a floating-point comparison and write its result to SCC.
-Error handleFloatCompare(RaiseContext &Ctx, OpResolver &Op,
+Error handleFloatCompare(RaiseContext &Ctx, OperandResolver &Op,
                          CmpInst::Predicate Pred, bool IsF16) {
   Expected<Value *> Src0 = Op.src(0);
   if (!Src0)
@@ -181,7 +181,7 @@ Error handleFloatCompare(RaiseContext &Ctx, OpResolver &Op,
 }
 
 // Raise a 32-bit bit test and write the requested bit value to SCC.
-Error handleBitCompare32(RaiseContext &Ctx, OpResolver &Op,
+Error handleBitCompare32(RaiseContext &Ctx, OperandResolver &Op,
                          CmpInst::Predicate Pred) {
   Expected<Value *> Src0 = Op.src(0);
   if (!Src0)
@@ -200,7 +200,7 @@ Error handleBitCompare32(RaiseContext &Ctx, OpResolver &Op,
 }
 
 // Raise a 64-bit bit test and write the requested bit value to SCC.
-Error handleBitCompare64(RaiseContext &Ctx, OpResolver &Op,
+Error handleBitCompare64(RaiseContext &Ctx, OperandResolver &Op,
                          CmpInst::Predicate Pred) {
   Expected<Value *> Src0 = Op.src64(0);
   if (!Src0)
@@ -223,7 +223,8 @@ Error handleBitCompare64(RaiseContext &Ctx, OpResolver &Op,
 } // namespace
 
 // Raise one SOPC instruction and write its comparison result to SCC.
-Error handleSOPC(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
+Error handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
+                 OperandResolver &Op) {
   if (std::optional<CmpInst::Predicate> Pred = integerPredicate(Di.CanonOp))
     return handleIntegerCompare(Ctx, Op, *Pred);
 
