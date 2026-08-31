@@ -35,6 +35,7 @@
 
 ;COMMON: [[PTR_FLAT]]: DW_TAG_pointer_type
 ;COMMON:   DW_AT_type ([[INT]] "int")
+;COMMON-NOT: DW_AT_byte_size
 ;AMDGPU:   DW_AT_LLVM_address_space (0x00000001 "DW_ASPACE_LLVM_AMDGPU_generic")
 ;X86:      DW_AT_LLVM_address_space (0x00000001)
 
