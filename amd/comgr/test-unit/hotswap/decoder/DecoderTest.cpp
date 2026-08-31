@@ -7,18 +7,17 @@
 //===----------------------------------------------------------------------===//
 //
 // Unit tests for the decoder library: the AMDGPU MC stack (mc-state), the
-// architecture-neutral instruction identity (canonical-op), the per-subtarget
-// capability queries (isa-profile), the decoded-instruction model
-// (decoded-inst), the MC-opcode to CanonicalOp map (opcode-map), and the .text
-// scan (decode). Each exercises the piece directly, without a code object or
-// the raiser, so the coverage matches what the decoder alone provides.
+// architecture-neutral instruction identity (canonical-op), the
+// decoded-instruction model (decoded-inst), the MC-opcode to CanonicalOp map
+// (opcode-map), and the .text scan (decode). Each exercises the piece directly,
+// without a code object or the raiser, so the coverage matches what the decoder
+// alone provides.
 //
 //===----------------------------------------------------------------------===//
 
 #include "hotswap/decoder/canonical-op.h"
 #include "hotswap/decoder/decode.h"
 #include "hotswap/decoder/decoded-inst.h"
-#include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/decoder/opcode-map.h"
 
@@ -219,42 +218,6 @@ TEST_F(DecoderTest, StripRegEncodingDropsOnlyTheVariantSuffix) {
   }
   // Pinned so a register gaining or losing a variant fails here.
   EXPECT_EQ(Stripped, 74u);
-}
-
-// -- isa-profile --------------------------------------------------------------
-
-TEST_F(DecoderTest, ISAProfileGfx942) {
-  ISAProfile Profile = ISAProfile::fromSubtarget(*State.SubtargetInfo);
-  EXPECT_EQ(Profile.waveSize(), 64u);
-  EXPECT_FALSE(Profile.isWave32());
-  EXPECT_TRUE(Profile.hasValidWaveSize());
-  EXPECT_TRUE(Profile.hasAgpr());
-  EXPECT_FALSE(Profile.hasGfx125UserSgprCountField());
-}
-
-TEST_F(DecoderTest, ISAProfileGfx1250) {
-  llvm::Expected<std::unique_ptr<llvm::MCSubtargetInfo>> STIOrErr =
-      buildSubtargetInfo(*State.Target, "gfx1250");
-  ASSERT_TRUE(static_cast<bool>(STIOrErr))
-      << llvm::toString(STIOrErr.takeError());
-  ISAProfile Profile = ISAProfile::fromSubtarget(**STIOrErr);
-  EXPECT_EQ(Profile.waveSize(), 32u);
-  EXPECT_TRUE(Profile.isWave32());
-  EXPECT_TRUE(Profile.hasValidWaveSize());
-  EXPECT_FALSE(Profile.hasAgpr());
-  EXPECT_TRUE(Profile.hasGfx125UserSgprCountField());
-}
-
-TEST_F(DecoderTest, ISAProfileDx10ClampAndIeeeMode) {
-  const ISAProfile Gfx942 = ISAProfile::fromSubtarget(*State.SubtargetInfo);
-  EXPECT_TRUE(Gfx942.hasDx10ClampAndIeeeMode());
-
-  llvm::Expected<std::unique_ptr<llvm::MCSubtargetInfo>> Gfx1250STI =
-      buildSubtargetInfo(*State.Target, "gfx1250");
-  ASSERT_TRUE(static_cast<bool>(Gfx1250STI))
-      << llvm::toString(Gfx1250STI.takeError());
-  const ISAProfile Gfx1250 = ISAProfile::fromSubtarget(**Gfx1250STI);
-  EXPECT_FALSE(Gfx1250.hasDx10ClampAndIeeeMode());
 }
 
 // -- opcode-map ---------------------------------------------------------------

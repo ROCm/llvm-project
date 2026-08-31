@@ -59,7 +59,6 @@ add_library(hotswap-decoder OBJECT
   amdgpu-mc-tables.cpp
   amdgpu-formats.cpp
   canonical-op.cpp
-  isa-profile.cpp
   opcode-map.cpp
   decode.cpp
 )

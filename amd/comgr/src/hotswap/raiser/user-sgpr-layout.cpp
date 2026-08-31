@@ -10,8 +10,11 @@
 
 #include "hotswap/raiser/raise_failure.h"
 
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -67,17 +70,17 @@ llvm::StringRef sourceName(UserSgprLayout::Source S) {
   return "<invalid>";
 }
 
-unsigned userSgprCountFieldWidth(const ISAProfile &SourceProfile) {
+unsigned userSgprCountFieldWidth(const llvm::MCSubtargetInfo &SourceSTI) {
   using namespace llvm::amdhsa;
-  return SourceProfile.hasGfx125UserSgprCountField()
+  return SourceSTI.hasFeature(llvm::AMDGPU::FeatureGFX1250Insts)
              ? COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_WIDTH
              : COMPUTE_PGM_RSRC2_GFX6_GFX120_USER_SGPR_COUNT_WIDTH;
 }
 
 unsigned decodeUserSgprCount(uint32_t ComputePgmRsrc2,
-                             const ISAProfile &SourceProfile) {
+                             const llvm::MCSubtargetInfo &SourceSTI) {
   using namespace llvm::amdhsa;
-  return SourceProfile.hasGfx125UserSgprCountField()
+  return SourceSTI.hasFeature(llvm::AMDGPU::FeatureGFX1250Insts)
              ? AMDHSA_BITS_GET(ComputePgmRsrc2,
                                COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT)
              : AMDHSA_BITS_GET(ComputePgmRsrc2,
@@ -185,10 +188,9 @@ unsigned UserSgprLayout::dwordCount(Source Src) {
   llvm_unreachable("unhandled UserSgprLayout::Source");
 }
 
-llvm::Error UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
-                                              const ISAProfile &SourceProfile,
-                                              llvm::StringRef SourceIsa,
-                                              UserSgprLayout &Layout) {
+llvm::Error UserSgprLayout::tryFromKernelMeta(
+    const KernelMeta &Meta, const llvm::MCSubtargetInfo &SourceSTI,
+    llvm::StringRef SourceIsa, UserSgprLayout &Layout) {
   Layout = UserSgprLayout();
 
   using namespace llvm::amdhsa;
@@ -221,7 +223,8 @@ llvm::Error UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
       AMDHSA_BITS_GET(Meta.KernargPreload, KERNARG_PRELOAD_SPEC_LENGTH));
   const uint16_t PreloadOffsetDwords = static_cast<uint16_t>(
       AMDHSA_BITS_GET(Meta.KernargPreload, KERNARG_PRELOAD_SPEC_OFFSET));
-  if (Meta.KernargPreload != 0 && !SourceProfile.hasKernargPreload())
+  if (Meta.KernargPreload != 0 &&
+      !SourceSTI.hasFeature(llvm::AMDGPU::FeatureKernargPreload))
     return RaiseFailure::inKernel(RaiseFailureReason::UserSgprLayoutMismatch,
                                   Meta.Name,
                                   llvm::Twine("source ISA '") + SourceIsa +
@@ -257,16 +260,17 @@ llvm::Error UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
   Layout.UserSgprCount = static_cast<uint8_t>(ImpliedUserSgprCount);
 
   // USER_SGPR_COUNT is 6 bits on gfx1250, where 32 is a valid count.
-  const unsigned UserSgprCountWidth = userSgprCountFieldWidth(SourceProfile);
+  const unsigned UserSgprCountWidth = userSgprCountFieldWidth(SourceSTI);
   const unsigned PgmRsrc2UserSgprCount =
-      decodeUserSgprCount(Meta.ComputePgmRsrc2, SourceProfile);
-  if (PgmRsrc2UserSgprCount > SourceProfile.maxUserSgprs())
+      decodeUserSgprCount(Meta.ComputePgmRsrc2, SourceSTI);
+  const unsigned MaxUserSgprs =
+      SourceSTI.hasFeature(llvm::AMDGPU::FeatureGFX1250Insts) ? 32 : 16;
+  if (PgmRsrc2UserSgprCount > MaxUserSgprs)
     return RaiseFailure::inKernel(
         RaiseFailureReason::UserSgprLayoutMismatch, Meta.Name,
         llvm::Twine("compute_pgm_rsrc2.USER_SGPR_COUNT=") +
             llvm::Twine(PgmRsrc2UserSgprCount) + " exceeds source ISA '" +
-            SourceIsa + "' maximum of " +
-            llvm::Twine(SourceProfile.maxUserSgprs()));
+            SourceIsa + "' maximum of " + llvm::Twine(MaxUserSgprs));
   if (PgmRsrc2UserSgprCount < ImpliedUserSgprCount) {
     std::string Detail;
     llvm::raw_string_ostream Os(Detail);
@@ -280,15 +284,15 @@ llvm::Error UserSgprLayout::tryFromKernelMeta(const KernelMeta &Meta,
   Layout.UserSgprCount = static_cast<uint8_t>(PgmRsrc2UserSgprCount);
 
   // Architected workgroup IDs do not consume sequential SGPRs.
-  if (!SourceProfile.hasArchitectedSgprs() &&
+  if (!SourceSTI.hasFeature(llvm::AMDGPU::FeatureArchitectedSGPRs) &&
       Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_X)
     Layout.WorkgroupIdXSgpr =
         appendSource(Layout.Entries, Source::WorkgroupIdX);
-  if (!SourceProfile.hasArchitectedSgprs() &&
+  if (!SourceSTI.hasFeature(llvm::AMDGPU::FeatureArchitectedSGPRs) &&
       Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_Y)
     Layout.WorkgroupIdYSgpr =
         appendSource(Layout.Entries, Source::WorkgroupIdY);
-  if (!SourceProfile.hasArchitectedSgprs() &&
+  if (!SourceSTI.hasFeature(llvm::AMDGPU::FeatureArchitectedSGPRs) &&
       Meta.ComputePgmRsrc2 & COMPUTE_PGM_RSRC2_ENABLE_SGPR_WORKGROUP_ID_Z)
     Layout.WorkgroupIdZSgpr =
         appendSource(Layout.Entries, Source::WorkgroupIdZ);

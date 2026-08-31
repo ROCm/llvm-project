@@ -10,7 +10,6 @@
 #define HOTSWAP_TRANSPILER_WAVE_PROJECTION_H
 
 #include "hotswap/decoder/decoded-inst.h"
-#include "hotswap/decoder/isa-profile.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
@@ -27,6 +26,14 @@ namespace COMGR::hotswap {
 
 struct MCState;
 
+} // namespace COMGR::hotswap
+
+namespace llvm {
+class MCSubtargetInfo;
+} // namespace llvm
+
+namespace COMGR::hotswap {
+
 // ============================================================================
 // WaveProjection -- the cross-wave translation policy surface.
 //
@@ -36,20 +43,14 @@ struct MCState;
 // constructs it.
 class WaveProjection {
 public:
-  WaveProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
-                 llvm::Type *I32Ty, llvm::Type *I64Ty)
-      : Src(SrcIsa), Tgt(TgtIsa), I32Ty(I32Ty), I64Ty(I64Ty),
-        ExecStorageTy(SrcIsa.isWave32() ? I32Ty : I64Ty) {
-    assert(SrcIsa.hasValidWaveSize() && "invalid source wave size");
-    assert(TgtIsa.hasValidWaveSize() && "invalid target wave size");
-    assert(TgtIsa.waveSize() >= SrcIsa.waveSize() &&
-           "wave projection does not support narrowing");
-  }
+  WaveProjection(const llvm::MCSubtargetInfo &SrcSTI,
+                 const llvm::MCSubtargetInfo &TgtSTI, llvm::Type *I32Ty,
+                 llvm::Type *I64Ty);
 
   virtual ~WaveProjection() = default;
 
-  const ISAProfile &sourceIsa() const { return Src; }
-  const ISAProfile &targetIsa() const { return Tgt; }
+  const llvm::MCSubtargetInfo &sourceSTI() const { return SrcSTI; }
+  const llvm::MCSubtargetInfo &targetSTI() const { return TgtSTI; }
 
   // Source kernel's max_flat_workgroup_size (threads per workgroup), set by
   // the raiser after construction. Used to clamp the workitem id of the
@@ -58,14 +59,12 @@ public:
   // Hardware-width wave mask (i32 on wave32 target, i64 on wave64 target).
   // Distinct from the EXEC alloca storage width returned by
   // `execStorageTy()`.
-  llvm::Type *waveMaskTy() const { return Tgt.isWave32() ? I32Ty : I64Ty; }
+  llvm::Type *waveMaskTy() const;
 
   // Wave mask at the source ISA's width (i32 on wave32 source, i64 on wave64):
   // the width the source observes when reading or writing EXEC and SGPR wave
   // masks through 32/64-bit scalar operations.
-  llvm::Type *sourceWaveMaskTy() const {
-    return Src.isWave32() ? I32Ty : I64Ty;
-  }
+  llvm::Type *sourceWaveMaskTy() const;
 
   // EXEC alloca storage width chosen by the projection; the base uses the
   // source wave-mask width. A subclass may widen it (e.g. to the target mask)
@@ -199,8 +198,8 @@ protected:
   llvm::Value *packWorkitemId(llvm::IRBuilder<> &B, llvm::Value *X,
                               unsigned NumDims) const;
 
-  ISAProfile Src;
-  ISAProfile Tgt;
+  const llvm::MCSubtargetInfo &SrcSTI;
+  const llvm::MCSubtargetInfo &TgtSTI;
   // Retained on the base so `waveMaskTy()` / `sourceWaveMaskTy()` /
   // `execStorageTy()` can return the canonical i32/i64 IR types without
   // re-deriving them from the current IRBuilder's context (subclasses are
@@ -292,13 +291,9 @@ public:
 class ReplicationDoubledDispatchProjection final
     : public ReplicationProjection {
 public:
-  ReplicationDoubledDispatchProjection(const ISAProfile &SrcIsa,
-                                       const ISAProfile &TgtIsa,
-                                       llvm::Type *I32Ty, llvm::Type *I64Ty)
-      : ReplicationProjection(SrcIsa, TgtIsa, I32Ty, I64Ty) {
-    // Doubled dispatch along x (the wave-carrying dimension); dim stays 0.
-    DoubledDispatchFactor = TgtIsa.waveSize() / SrcIsa.waveSize();
-  }
+  ReplicationDoubledDispatchProjection(const llvm::MCSubtargetInfo &SrcSTI,
+                                       const llvm::MCSubtargetInfo &TgtSTI,
+                                       llvm::Type *I32Ty, llvm::Type *I64Ty);
 
   // Remap hardware workitem-id.x to the logical source id so replica lanes
   // alias their originals. No phantom-lane clamp: under a doubled dispatch
@@ -335,8 +330,9 @@ public:
   // storage, full-wave-EXEC invariant (its `emitInitialExec` forces HW
   // EXEC=-1), broadcast-on-narrow-EXEC-write, preserved mbcnt-derived EXEC,
   // and two source waves per target wave (lanes 0..31 and 32..63).
-  WaveNativeProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
-                       llvm::Type *I32Ty, llvm::Type *I64Ty);
+  WaveNativeProjection(const llvm::MCSubtargetInfo &SrcSTI,
+                       const llvm::MCSubtargetInfo &TgtSTI, llvm::Type *I32Ty,
+                       llvm::Type *I64Ty);
 
   llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
@@ -367,8 +363,9 @@ public:
   // The constructor sets the projection configuration: target-width EXEC
   // storage, source-wave-scoped lane ops, and `W_t / W_s` source waves per
   // target wave.
-  ThreadLoopProjection(const ISAProfile &SrcIsa, const ISAProfile &TgtIsa,
-                       llvm::Type *I32Ty, llvm::Type *I64Ty);
+  ThreadLoopProjection(const llvm::MCSubtargetInfo &SrcSTI,
+                       const llvm::MCSubtargetInfo &TgtSTI, llvm::Type *I32Ty,
+                       llvm::Type *I64Ty);
 
   void setIterationAlloca(llvm::AllocaInst *Iter) { IterationAlloca = Iter; }
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;

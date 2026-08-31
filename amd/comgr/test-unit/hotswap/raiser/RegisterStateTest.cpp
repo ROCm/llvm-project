@@ -9,7 +9,6 @@
 #include "hotswap/raiser/register-state.h"
 
 #include "hotswap/common/kernel-meta.h"
-#include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise_failure.h"
 #include "hotswap/raiser/wave-projection.h"
@@ -59,9 +58,9 @@ MCRegister findRegister(const MCRegisterInfo &MRI, StringRef Name) {
 
 class FullWaveInvariantProjection : public ReplicationProjection {
 public:
-  FullWaveInvariantProjection(const ISAProfile &Isa, Type *I32Ty, Type *I64Ty,
-                              bool FullWaveInvariant)
-      : ReplicationProjection(Isa, Isa, I32Ty, I64Ty) {
+  FullWaveInvariantProjection(const MCSubtargetInfo &STI, Type *I32Ty,
+                              Type *I64Ty, bool FullWaveInvariant)
+      : ReplicationProjection(STI, STI, I32Ty, I64Ty) {
     ProvidesFullWaveExecInvariant = FullWaveInvariant;
   }
 };
@@ -79,7 +78,6 @@ protected:
     LLVMContext LLVMCtx;
     Module Mod;
     IRBuilder<> B;
-    ISAProfile Isa;
     std::unique_ptr<WaveProjection> Projection;
     Function *Kernel;
     std::optional<RegisterState> Regs;
@@ -87,9 +85,9 @@ protected:
     explicit RegisterEnvironment(const MCState &Mc,
                                  bool FullWaveInvariant = false)
         : Mod("register_state_test", LLVMCtx), B(LLVMCtx),
-          Isa(ISAProfile::fromSubtarget(*Mc.SubtargetInfo)),
           Projection(std::make_unique<FullWaveInvariantProjection>(
-              Isa, B.getInt32Ty(), B.getInt64Ty(), FullWaveInvariant)),
+              *Mc.SubtargetInfo, B.getInt32Ty(), B.getInt64Ty(),
+              FullWaveInvariant)),
           Kernel(Function::Create(
               FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
               Function::ExternalLinkage, "kernel", Mod)) {
@@ -98,10 +96,9 @@ protected:
 
     RegisterEnvironment(const MCState &SourceMc, const MCState &TargetMc)
         : Mod("register_state_test", LLVMCtx), B(LLVMCtx),
-          Isa(ISAProfile::fromSubtarget(*SourceMc.SubtargetInfo)),
           Projection(std::make_unique<WaveNativeProjection>(
-              Isa, ISAProfile::fromSubtarget(*TargetMc.SubtargetInfo),
-              B.getInt32Ty(), B.getInt64Ty())),
+              *SourceMc.SubtargetInfo, *TargetMc.SubtargetInfo, B.getInt32Ty(),
+              B.getInt64Ty())),
           Kernel(Function::Create(
               FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
               Function::ExternalLinkage, "kernel", Mod)) {

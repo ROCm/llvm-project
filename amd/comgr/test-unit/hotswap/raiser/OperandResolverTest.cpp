@@ -10,7 +10,6 @@
 
 #include "hotswap/common/kernel-meta.h"
 #include "hotswap/decoder/decoded-inst.h"
-#include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/raise-context.h"
 #include "hotswap/raiser/wave-projection.h"
@@ -63,15 +62,14 @@ protected:
     LLVMContext LLVMCtx;
     Module Mod;
     IRBuilder<> B;
-    ISAProfile Isa;
     ReplicationProjection Projection;
     Function *Kernel;
     std::optional<RaiseContext> Ctx;
 
     explicit ContextEnvironment(const MCState &Mc)
         : Mod("operand_resolver_test", LLVMCtx), B(LLVMCtx),
-          Isa(ISAProfile::fromSubtarget(*Mc.SubtargetInfo)),
-          Projection(Isa, Isa, B.getInt32Ty(), B.getInt64Ty()),
+          Projection(*Mc.SubtargetInfo, *Mc.SubtargetInfo, B.getInt32Ty(),
+                     B.getInt64Ty()),
           Kernel(Function::Create(
               FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
               Function::ExternalLinkage, "kernel", Mod)) {

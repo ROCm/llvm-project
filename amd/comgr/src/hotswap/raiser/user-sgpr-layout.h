@@ -10,7 +10,6 @@
 #define HOTSWAP_TRANSPILER_USER_SGPR_LAYOUT_H
 
 #include "hotswap/common/kernel-meta.h"
-#include "hotswap/decoder/isa-profile.h"
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -20,6 +19,7 @@
 #include <optional>
 
 namespace llvm {
+class MCSubtargetInfo;
 class raw_ostream;
 } // namespace llvm
 
@@ -115,10 +115,10 @@ struct UserSgprLayout {
 
   // Build the layout from a parsed kernel descriptor. Returns llvm::Error
   // when the descriptor is missing or internally inconsistent.
-  // `sourceProfile` selects ABI-versioned fields such as gfx125's 6-bit
+  // `sourceSTI` selects ABI-versioned fields such as gfx125's 6-bit
   // compute_pgm_rsrc2.USER_SGPR_COUNT. `sourceISA` is used only in diagnostics.
   static llvm::Error tryFromKernelMeta(const KernelMeta &Meta,
-                                       const ISAProfile &SourceProfile,
+                                       const llvm::MCSubtargetInfo &SourceSTI,
                                        llvm::StringRef SourceIsa,
                                        UserSgprLayout &Layout);
 

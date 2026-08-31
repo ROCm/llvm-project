@@ -14,8 +14,6 @@
 
 namespace COMGR::hotswap {
 
-class ISAProfile;
-
 struct ParsedReg {
   // Compact-predicate "source-only" registers (SIRegisterInfo.td:198-200):
   //   SRC_VCCZ : i1 == (VCC == 0)   read as i32 in VOP/SOP src slots

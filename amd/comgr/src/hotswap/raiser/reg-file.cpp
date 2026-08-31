@@ -8,7 +8,6 @@
 
 #include "hotswap/raiser/reg-file.h"
 
-#include "hotswap/decoder/isa-profile.h"
 #include "hotswap/raiser/wave-projection.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
@@ -19,6 +18,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/ErrorHandling.h"
 
@@ -168,7 +168,7 @@ Value *loadLoHi(IRBuilder<> &B, ArrayRef<AllocaInst *> Bank, unsigned Idx) {
 } // namespace
 
 void AllocaRegFile::init(IRBuilder<> &B, Type *I32Ty, Type *I1Ty,
-                         const ISAProfile &Isa, const MCRegisterInfo &MRI,
+                         const MCSubtargetInfo &STI, const MCRegisterInfo &MRI,
                          const WaveProjection &Proj) {
   Projection = &Proj;
 
@@ -185,7 +185,7 @@ void AllocaRegFile::init(IRBuilder<> &B, Type *I32Ty, Type *I1Ty,
   for (unsigned I = 0; I < KVGPRCap; ++I)
     Vgpr[I] = B.CreateAlloca(I32Ty, nullptr, "Vgpr" + Twine(I));
 
-  if (Isa.hasAgpr()) {
+  if (STI.hasFeature(AMDGPU::FeatureMAIInsts)) {
     Agpr.assign(KVGPRCap, nullptr);
     for (unsigned I = 0; I < KVGPRCap; ++I)
       Agpr[I] = B.CreateAlloca(I32Ty, nullptr, "Agpr" + Twine(I));
@@ -471,7 +471,8 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
   if (Pr.RegKind == ParsedReg::VCC) {
     assert(Projection && "writeReg32(VCC) requires a WaveProjection");
     Value *NewBit = Projection->extractLaneBitFromWaveMask(B, V);
-    if (Pr.WidthInDwords == 1 && !Projection->sourceIsa().isWave32()) {
+    if (Pr.WidthInDwords == 1 &&
+        !Projection->sourceSTI().hasFeature(AMDGPU::FeatureWavefrontSize32)) {
       unsigned Half = requireIndex(Pr);
       assert(Half < 2 && "VCC half index must be zero or one");
       Value *Lane = Projection->emitLaneIdx(B);

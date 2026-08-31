@@ -15,7 +15,10 @@
 #include "hotswap/raiser/handlers.h"
 #include "hotswap/raiser/raise-context.h"
 
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/Error.h"
@@ -27,6 +30,14 @@
 using namespace llvm;
 
 namespace COMGR::hotswap {
+
+static unsigned flatOffsetBits(const MCSubtargetInfo &STI) {
+  if (STI.hasFeature(AMDGPU::FeatureFlatOffsetBits12))
+    return 12;
+  if (STI.hasFeature(AMDGPU::FeatureFlatOffsetBits24))
+    return 24;
+  return 13;
+}
 
 // Index of the operand named `Name`, or nothing when the instruction has no
 // operand of that name. The GLOBAL addressing forms differ in exactly which
@@ -70,7 +81,7 @@ Expected<Value *> emitGlobalAddress(RaiseContext &Ctx, const DecodedInst &Di,
   unsigned OffsetIndex = requiredGlobalOperandIndex(Di, AMDGPU::OpName::offset);
   assert(Di.isImm(OffsetIndex) && "operand 'offset' is not an immediate");
   int64_t Offset = SignExtend64(static_cast<uint64_t>(Di.getImm(OffsetIndex)),
-                                Ctx.Projection.sourceIsa().flatOffsetBits());
+                                flatOffsetBits(Ctx.Projection.sourceSTI()));
   // The access is modeled as naturally aligned, which holds for the base
   // address of a well-formed program but is the caller's assumption to make.
   // An immediate offset that does not preserve it would make that model a lie.
@@ -96,7 +107,7 @@ Expected<Value *> emitGlobalAddress(RaiseContext &Ctx, const DecodedInst &Di,
       return LaneOffset.takeError();
     Type *I64Ty = Ctx.B.getInt64Ty();
     Value *WideLaneOffset =
-        Ctx.Projection.sourceIsa().hasSignedGlobalLaneOffset()
+        Ctx.Projection.sourceSTI().hasFeature(AMDGPU::FeatureGFX1250Insts)
             ? Ctx.B.CreateSExt(*LaneOffset, I64Ty, "global_lane_offset")
             : Ctx.B.CreateZExt(*LaneOffset, I64Ty, "global_lane_offset");
     Address = Ctx.B.CreateAdd(*ScalarBase, WideLaneOffset, "global_addr");

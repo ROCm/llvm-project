@@ -15,7 +15,6 @@
 #include "hotswap/raiser/raise_failure.h"
 #include "hotswap/raiser/user-sgpr-layout.h"
 
-#include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
 
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
@@ -48,10 +47,10 @@ bool succeeded(Error E) {
   return true;
 }
 
-// Owns an MCState so the ISAProfile's referenced subtarget outlives it.
-class Profile {
+// Owns an MCState and exposes its subtarget to the layout tests.
+class SubtargetContext {
 public:
-  explicit Profile(StringRef Isa) {
+  explicit SubtargetContext(StringRef Isa) {
     if (Expected<MCState> S = initMCState(Isa)) {
       State = std::move(*S);
       Ok = true;
@@ -60,9 +59,7 @@ public:
     }
   }
   bool ok() const { return Ok && State.SubtargetInfo != nullptr; }
-  ISAProfile get() const {
-    return ISAProfile::fromSubtarget(*State.SubtargetInfo);
-  }
+  const MCSubtargetInfo &get() const { return *State.SubtargetInfo; }
 
 private:
   bool Ok = false;
@@ -70,7 +67,7 @@ private:
 };
 
 TEST(UserSgprLayout, DerivesCanonicalOrderAndAccessors) {
-  Profile P("gfx942");
+  SubtargetContext P("gfx942");
   ASSERT_TRUE(P.ok());
 
   using namespace llvm::amdhsa;
@@ -103,7 +100,7 @@ TEST(UserSgprLayout, DerivesCanonicalOrderAndAccessors) {
 }
 
 TEST(UserSgprLayout, DisabledSourcesHaveNoSgpr) {
-  Profile P("gfx942");
+  SubtargetContext P("gfx942");
   ASSERT_TRUE(P.ok());
 
   using namespace llvm::amdhsa;
@@ -125,7 +122,7 @@ TEST(UserSgprLayout, DisabledSourcesHaveNoSgpr) {
 }
 
 TEST(UserSgprLayout, EntryRunLengthMatchesDwordCount) {
-  Profile P("gfx942");
+  SubtargetContext P("gfx942");
   ASSERT_TRUE(P.ok());
 
   using namespace llvm::amdhsa;
@@ -161,7 +158,7 @@ TEST(UserSgprLayout, EntryRunLengthMatchesDwordCount) {
 }
 
 TEST(UserSgprLayout, DecodesKernargPreload) {
-  Profile P("gfx1250");
+  SubtargetContext P("gfx1250");
   ASSERT_TRUE(P.ok());
 
   using namespace llvm::amdhsa;
@@ -193,7 +190,7 @@ TEST(UserSgprLayout, DecodesKernargPreload) {
 }
 
 TEST(UserSgprLayout, ReservedUserSgprsRemainUnset) {
-  Profile P("gfx942");
+  SubtargetContext P("gfx942");
   ASSERT_TRUE(P.ok());
 
   using namespace llvm::amdhsa;
@@ -217,7 +214,7 @@ TEST(UserSgprLayout, ReservedUserSgprsRemainUnset) {
 }
 
 TEST(UserSgprLayout, TooFewUserSgprsAreRefused) {
-  Profile P("gfx942");
+  SubtargetContext P("gfx942");
   ASSERT_TRUE(P.ok());
 
   using namespace llvm::amdhsa;
@@ -234,7 +231,7 @@ TEST(UserSgprLayout, TooFewUserSgprsAreRefused) {
 }
 
 TEST(UserSgprLayout, KernargPreloadOutsideSegmentIsRefused) {
-  Profile P("gfx1250");
+  SubtargetContext P("gfx1250");
   ASSERT_TRUE(P.ok());
 
   using namespace llvm::amdhsa;
@@ -252,7 +249,7 @@ TEST(UserSgprLayout, KernargPreloadOutsideSegmentIsRefused) {
 }
 
 TEST(UserSgprLayout, ArchitectedWorkgroupIdsAreNotSequentialSgprs) {
-  Profile P("gfx1250");
+  SubtargetContext P("gfx1250");
   ASSERT_TRUE(P.ok());
 
   using namespace llvm::amdhsa;
@@ -276,8 +273,8 @@ TEST(UserSgprLayout, ArchitectedWorkgroupIdsAreNotSequentialSgprs) {
 }
 
 TEST(UserSgprLayout, UserSgprCountFieldWidthIsIsaVersioned) {
-  Profile Gfx942("gfx942");
-  Profile Gfx1250("gfx1250");
+  SubtargetContext Gfx942("gfx942");
+  SubtargetContext Gfx1250("gfx1250");
   ASSERT_TRUE(Gfx942.ok());
   ASSERT_TRUE(Gfx1250.ok());
 
@@ -305,8 +302,8 @@ TEST(UserSgprLayout, UserSgprCountFieldWidthIsIsaVersioned) {
 }
 
 TEST(UserSgprLayout, ExcessiveUserSgprCountIsRefused) {
-  Profile Gfx942("gfx942");
-  Profile Gfx1250("gfx1250");
+  SubtargetContext Gfx942("gfx942");
+  SubtargetContext Gfx1250("gfx1250");
   ASSERT_TRUE(Gfx942.ok());
   ASSERT_TRUE(Gfx1250.ok());
 
@@ -330,7 +327,7 @@ TEST(UserSgprLayout, ExcessiveUserSgprCountIsRefused) {
 }
 
 TEST(UserSgprLayout, KernargPreloadOnUnsupportedIsaIsRefused) {
-  Profile P("gfx900");
+  SubtargetContext P("gfx900");
   ASSERT_TRUE(P.ok());
 
   using namespace llvm::amdhsa;
@@ -348,7 +345,7 @@ TEST(UserSgprLayout, KernargPreloadOnUnsupportedIsaIsRefused) {
 }
 
 TEST(UserSgprLayout, PrintSummarizesEntries) {
-  Profile P("gfx942");
+  SubtargetContext P("gfx942");
   ASSERT_TRUE(P.ok());
 
   using namespace llvm::amdhsa;

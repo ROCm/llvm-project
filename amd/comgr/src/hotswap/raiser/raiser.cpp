@@ -23,7 +23,6 @@
 
 #include "hotswap/decoder/amdgpu-formats.h"
 #include "hotswap/decoder/decode.h"
-#include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/decoder/opcode-map.h"
 #include "hotswap/raiser/handlers.h"
@@ -33,6 +32,8 @@
 #include "hotswap/raiser/wave-projection.h"
 
 #include "comgr.h"
+
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FloatingPointMode.h"
@@ -50,6 +51,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/CodeGen.h"
@@ -113,7 +115,7 @@ static DenormalMode denormalMode(unsigned HardwareMode) {
 
 /// Attach the floating-point attributes represented by the source descriptor.
 static void setFloatingPointAttributes(Function &F, const KernelMeta &Meta,
-                                       const ISAProfile &SourceProfile) {
+                                       const MCSubtargetInfo &SourceSTI) {
   const unsigned DefaultDenormalMode = AMDHSA_BITS_GET(
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_DENORM_MODE_16_64);
   const unsigned Float32DenormalMode = AMDHSA_BITS_GET(
@@ -123,7 +125,7 @@ static void setFloatingPointAttributes(Function &F, const KernelMeta &Meta,
   F.addFnAttr(Attribute::get(F.getContext(), Attribute::DenormalFPEnv,
                              FPEnv.toIntValue()));
 
-  if (!SourceProfile.hasDx10ClampAndIeeeMode()) {
+  if (!SourceSTI.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
     return;
   }
 
@@ -143,7 +145,7 @@ static void setFloatingPointAttributes(Function &F, const KernelMeta &Meta,
 // kernarg pointer, at the byte offsets the source metadata gives them.
 static Function *declareKernel(Module &M, StringRef KernelName,
                                const KernelMeta &Meta,
-                               const ISAProfile &SourceProfile) {
+                               const MCSubtargetInfo &SourceSTI) {
   LLVMContext &C = M.getContext();
   SmallVector<Type *> ParamTys;
   if (Meta.KernargSegmentSize > 0)
@@ -154,7 +156,7 @@ static Function *declareKernel(Module &M, StringRef KernelName,
   Function *F =
       Function::Create(FuncTy, GlobalValue::ExternalLinkage, KernelName, &M);
   F->setCallingConv(CallingConv::AMDGPU_KERNEL);
-  setFloatingPointAttributes(*F, Meta, SourceProfile);
+  setFloatingPointAttributes(*F, Meta, SourceSTI);
 
   if (Meta.KernargSegmentSize > 0) {
     // AMDGPULowerKernelArguments honors the `align` parameter attribute only on
@@ -230,13 +232,11 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
       formatName(Di.TargetSpecificFlags));
 }
 
-// The MC layer for one ISA and the profile read off it. The profile points
-// into the MC state, so the two are kept together and move together. `Role`
-// names which end of the raise this is, and only reaches diagnostics.
+// The MC layer for one ISA. `Role` names which end of the raise this is, and
+// only reaches diagnostics.
 namespace {
 struct IsaContext {
   MCState MC;
-  ISAProfile Profile;
   // Bare AMDGPU processor the MC layer was built for.
   std::string Cpu;
 
@@ -255,17 +255,15 @@ Expected<IsaContext> IsaContext::create(StringRef Isa, StringRef Role) {
                                  Role + " ISA '" + Isa +
                                      "' does not name an AMDGPU GPU");
 
-  // The target side reads only the subtarget behind the profile and the
-  // registered target behind the machine, and pays for a disassembler and a
-  // printer it never uses. That is one extra MC stack per raise, against a
-  // second way of standing a subtarget up that has to be kept in step with
-  // this one.
+  // The target side reads only the subtarget and registered target behind the
+  // machine, and pays for a disassembler and a printer it never uses. That is
+  // one extra MC stack per raise, against a second way of standing a subtarget
+  // up that has to be kept in step with this one.
   Expected<MCState> MC = initMCState(Cpu);
   if (!MC)
     return MC.takeError();
 
-  ISAProfile Profile = ISAProfile::fromSubtarget(*MC->SubtargetInfo);
-  return IsaContext{std::move(*MC), Profile, Cpu.str()};
+  return IsaContext{std::move(*MC), Cpu.str()};
 }
 
 // What every kernel of one raise runs against: the ISA the code object was
@@ -314,11 +312,13 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   // Replication is the only projection policy the raiser can select: a target
   // lane reads the source EXEC bit of the source lane it stands in for. What
   // that costs when the two wave sizes differ is the policy's own business.
-  ReplicationProjection Projection(Env.Source.Profile, Env.Target.Profile,
+  ReplicationProjection Projection(*Env.Source.MC.SubtargetInfo,
+                                   *Env.Target.MC.SubtargetInfo,
                                    Type::getInt32Ty(C), Type::getInt64Ty(C));
   Projection.setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
 
-  Function *F = declareKernel(M, Kernel.Name, Meta, Env.Source.Profile);
+  Function *F =
+      declareKernel(M, Kernel.Name, Meta, *Env.Source.MC.SubtargetInfo);
   BasicBlock *Entry = BasicBlock::Create(C, "entry", F);
   IRBuilder<> B(Entry);
 

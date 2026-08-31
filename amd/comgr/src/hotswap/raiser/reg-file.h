@@ -21,11 +21,11 @@
 
 namespace llvm {
 class MCRegisterInfo;
+class MCSubtargetInfo;
 } // namespace llvm
 
 namespace COMGR::hotswap {
 
-class ISAProfile;
 class WaveProjection;
 
 // Per-register alloca-based representation of the AMDGPU register file. Every
@@ -64,11 +64,11 @@ struct AllocaRegFile {
   const WaveProjection *Projection = nullptr;
 
   // Initialise storage. `MRI` supplies the architectural SGPR_32 / TTMP_32
-  // register-class sizes; `Isa.hasAgpr()` selects whether to allocate AGPR
+  // register-class sizes; `STI` selects whether to allocate AGPR
   // slots; `Proj` is retained as a non-owning pointer for the VCC read/write
   // paths.
   void init(llvm::IRBuilder<> &B, llvm::Type *I32Ty, llvm::Type *I1Ty,
-            const ISAProfile &Isa, const llvm::MCRegisterInfo &MRI,
+            const llvm::MCSubtargetInfo &STI, const llvm::MCRegisterInfo &MRI,
             const WaveProjection &Proj);
 
   // Direct per-class store/load helpers. `Idx` must be in range for the

@@ -17,7 +17,6 @@
 
 #include "hotswap/raiser/reg-file.h"
 
-#include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/raiser/wave-projection.h"
 
@@ -43,7 +42,6 @@
 using namespace llvm;
 using COMGR::hotswap::AllocaRegFile;
 using COMGR::hotswap::initMCState;
-using COMGR::hotswap::ISAProfile;
 using COMGR::hotswap::MCState;
 using COMGR::hotswap::ParsedReg;
 using COMGR::hotswap::ReplicationProjection;
@@ -61,9 +59,7 @@ protected:
     Mc = std::move(*S);
   }
 
-  ISAProfile srcIsa() const {
-    return ISAProfile::fromSubtarget(*Mc.SubtargetInfo);
-  }
+  const MCSubtargetInfo &srcSTI() const { return *Mc.SubtargetInfo; }
 
   MCState Mc;
 };
@@ -74,16 +70,16 @@ protected:
 struct RegFileFixture {
   LLVMContext Ctx;
   std::unique_ptr<Module> M;
-  ISAProfile Isa;
+  const MCSubtargetInfo &STI;
   ReplicationProjection Proj;
   const MCRegisterInfo &MRI;
   IRBuilder<> B;
   AllocaRegFile RF;
   Function *F = nullptr;
 
-  RegFileFixture(const ISAProfile &SrcIsa, const MCRegisterInfo &Mri)
-      : M(std::make_unique<Module>("regfile_test", Ctx)), Isa(SrcIsa),
-        Proj(Isa, Isa, Type::getInt32Ty(Ctx), Type::getInt64Ty(Ctx)), MRI(Mri),
+  RegFileFixture(const MCSubtargetInfo &STI, const MCRegisterInfo &Mri)
+      : M(std::make_unique<Module>("regfile_test", Ctx)), STI(STI),
+        Proj(STI, STI, Type::getInt32Ty(Ctx), Type::getInt64Ty(Ctx)), MRI(Mri),
         B(Ctx) {}
 
   void begin(Type *RetTy) {
@@ -91,7 +87,7 @@ struct RegFileFixture {
     F = Function::Create(FT, Function::ExternalLinkage, "f", M.get());
     BasicBlock *BB = BasicBlock::Create(Ctx, "entry", F);
     B.SetInsertPoint(BB);
-    RF.init(B, Type::getInt32Ty(Ctx), Type::getInt1Ty(Ctx), Isa, MRI, Proj);
+    RF.init(B, Type::getInt32Ty(Ctx), Type::getInt1Ty(Ctx), STI, MRI, Proj);
   }
 };
 
@@ -131,7 +127,7 @@ ParsedReg reg(ParsedReg::Kind Kind, unsigned Idx, uint8_t Width) {
 }
 
 TEST_F(RegFileTest, SGPR32RoundTrip) {
-  RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture Fx(srcSTI(), *Mc.RegInfo);
   Fx.begin(Type::getInt32Ty(Fx.Ctx));
   ParsedReg R = reg(ParsedReg::SGPR, 5, 1);
   Fx.RF.writeReg32(Fx.B, R, ConstantInt::get(Type::getInt32Ty(Fx.Ctx), 0x1234));
@@ -143,7 +139,7 @@ TEST_F(RegFileTest, SGPR32RoundTrip) {
 }
 
 TEST_F(RegFileTest, VGPR32RoundTrip) {
-  RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture Fx(srcSTI(), *Mc.RegInfo);
   Fx.begin(Type::getInt32Ty(Fx.Ctx));
   ParsedReg R = reg(ParsedReg::VGPR, 7, 1);
   Fx.RF.writeReg32(Fx.B, R, ConstantInt::get(Type::getInt32Ty(Fx.Ctx), 0xABCD));
@@ -155,7 +151,7 @@ TEST_F(RegFileTest, VGPR32RoundTrip) {
 }
 
 TEST_F(RegFileTest, M0RoundTrip) {
-  RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture Fx(srcSTI(), *Mc.RegInfo);
   Fx.begin(Type::getInt32Ty(Fx.Ctx));
   ParsedReg R = reg(ParsedReg::M0, 0, 1);
   Fx.RF.writeReg32(Fx.B, R, ConstantInt::get(Type::getInt32Ty(Fx.Ctx), 0x55));
@@ -167,7 +163,7 @@ TEST_F(RegFileTest, M0RoundTrip) {
 }
 
 TEST_F(RegFileTest, FlatScratchHalvesRemainDistinct) {
-  RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture Fx(srcSTI(), *Mc.RegInfo);
   Fx.begin(Type::getInt64Ty(Fx.Ctx));
   ParsedReg Pair = reg(ParsedReg::FLAT_SCR, 0, 2);
   ParsedReg Hi = reg(ParsedReg::FLAT_SCR, 1, 1);
@@ -184,14 +180,14 @@ TEST_F(RegFileTest, FlatScratchHalvesRemainDistinct) {
 }
 
 TEST_F(RegFileTest, VccHalfReadsSelectTheNamedHalf) {
-  RegFileFixture LoFx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture LoFx(srcSTI(), *Mc.RegInfo);
   LoFx.begin(Type::getInt32Ty(LoFx.Ctx));
   Value *Lo = LoFx.RF.readReg32(LoFx.B, reg(ParsedReg::VCC, 0, 1));
   auto *LoTrunc = dyn_cast<TruncInst>(Lo);
   ASSERT_NE(LoTrunc, nullptr);
   EXPECT_TRUE(isa<CallInst>(LoTrunc->getOperand(0)));
 
-  RegFileFixture HiFx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture HiFx(srcSTI(), *Mc.RegInfo);
   HiFx.begin(Type::getInt32Ty(HiFx.Ctx));
   Value *Hi = HiFx.RF.readReg32(HiFx.B, reg(ParsedReg::VCC, 1, 1));
   auto *HiTrunc = dyn_cast<TruncInst>(Hi);
@@ -206,7 +202,7 @@ TEST_F(RegFileTest, VccHalfReadsSelectTheNamedHalf) {
 
 TEST_F(RegFileTest, VccHalfWritesPreserveTheOtherHalf) {
   auto Check = [&](unsigned Half, ICmpInst::Predicate Predicate) {
-    RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+    RegFileFixture Fx(srcSTI(), *Mc.RegInfo);
     Fx.begin(Type::getInt1Ty(Fx.Ctx));
     Fx.RF.storeVCC(Fx.B, ConstantInt::getTrue(Fx.Ctx));
     Fx.RF.writeReg32(Fx.B, reg(ParsedReg::VCC, Half, 1),
@@ -237,7 +233,7 @@ TEST_F(RegFileTest, VccHalfWritesPreserveTheOtherHalf) {
 }
 
 TEST_F(RegFileTest, SGPR64RoundTripSplitsAndRecombines) {
-  RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture Fx(srcSTI(), *Mc.RegInfo);
   Fx.begin(Type::getInt64Ty(Fx.Ctx));
   ParsedReg R = reg(ParsedReg::SGPR, 4, 2);
   Constant *C =
@@ -251,7 +247,7 @@ TEST_F(RegFileTest, SGPR64RoundTripSplitsAndRecombines) {
 }
 
 TEST_F(RegFileTest, SccI1RoundTrip) {
-  RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture Fx(srcSTI(), *Mc.RegInfo);
   Fx.begin(Type::getInt1Ty(Fx.Ctx));
   Fx.RF.storeSCC(Fx.B, ConstantInt::getTrue(Fx.Ctx));
   Fx.B.CreateRet(Fx.RF.loadSCC(Fx.B));
@@ -262,7 +258,7 @@ TEST_F(RegFileTest, SccI1RoundTrip) {
 }
 
 TEST_F(RegFileTest, VectorRoundTripAcrossContiguousVgprs) {
-  RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture Fx(srcSTI(), *Mc.RegInfo);
   auto *VecTy = FixedVectorType::get(Type::getInt32Ty(Fx.Ctx), 4);
   Fx.begin(VecTy);
   ParsedReg R = reg(ParsedReg::VGPR, 8, 4);
@@ -277,7 +273,7 @@ TEST_F(RegFileTest, VectorRoundTripAcrossContiguousVgprs) {
 }
 
 TEST_F(RegFileTest, InitProducesPromotableAllocasAndVerifies) {
-  RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture Fx(srcSTI(), *Mc.RegInfo);
   Fx.begin(Type::getVoidTy(Fx.Ctx));
   Fx.RF.writeReg32(Fx.B, reg(ParsedReg::SGPR, 0, 1),
                    ConstantInt::get(Type::getInt32Ty(Fx.Ctx), 7));
@@ -305,7 +301,7 @@ TEST_F(RegFileTest, InitProducesPromotableAllocasAndVerifies) {
 
 #if GTEST_HAS_DEATH_TEST && !defined(NDEBUG)
 TEST_F(RegFileTest, AbsentIndexOnIndexedKindAborts) {
-  RegFileFixture Fx(srcIsa(), *Mc.RegInfo);
+  RegFileFixture Fx(srcSTI(), *Mc.RegInfo);
   Fx.begin(Type::getInt32Ty(Fx.Ctx));
   ParsedReg R;
   R.RegKind = ParsedReg::SGPR;

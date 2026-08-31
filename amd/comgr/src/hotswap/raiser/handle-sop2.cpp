@@ -8,8 +8,11 @@
 
 #include "hotswap/raiser/handlers.h"
 
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 
 using namespace llvm;
 
@@ -460,7 +463,8 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
       if (*SrcReg && (**SrcReg).RegKind == ParsedReg::TTMP &&
           (**SrcReg).BaseIdx == 8 && Op.srcImm(1) == 0x50019 &&
           Ctx.registers().isTTMP8EntryValueAvailable()) {
-        if (!Ctx.Projection.sourceIsa().hasArchitectedSgprs())
+        if (!Ctx.Projection.sourceSTI().hasFeature(
+                AMDGPU::FeatureArchitectedSGPRs))
           return RaiseFailure::atInstruction(
               RaiseFailureReason::UnsupportedInstructionForm,
               strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,

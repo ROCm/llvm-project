@@ -1,5 +1,5 @@
 # Unit tests for the hotswap decoder (AMDGPU MC stack, canonical-op identity,
-# ISA profile, and the decoded-instruction model).
+# and the decoded-instruction model).
 
 # -- DecoderTests -------------------------------------------------------------
 

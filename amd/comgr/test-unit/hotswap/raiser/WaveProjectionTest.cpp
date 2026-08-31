@@ -19,7 +19,6 @@
 
 #include "hotswap/raiser/wave-projection.h"
 
-#include "hotswap/decoder/isa-profile.h"
 #include "hotswap/decoder/mc-state.h"
 
 #include "llvm/IR/BasicBlock.h"
@@ -37,7 +36,6 @@
 
 using namespace llvm;
 using COMGR::hotswap::initMCState;
-using COMGR::hotswap::ISAProfile;
 using COMGR::hotswap::MCState;
 using COMGR::hotswap::ReplicationDoubledDispatchProjection;
 using COMGR::hotswap::ReplicationProjection;
@@ -49,9 +47,8 @@ namespace {
 
 // Every projection here covers the widening direction: a wave32 source
 // (gfx1250) onto a wave64 target (gfx942). The projections consult only the
-// wave size, but ISAProfile reads it from a live MCSubtargetInfo, so the
-// fixture stands up the real AMDGPU MC stack for both ISAs and hands out
-// profiles that reference it.
+// wave size from live MCSubtargetInfo objects, so the fixture stands up the
+// real AMDGPU MC stack for both ISAs.
 class WaveProjectionContract : public ::testing::Test {
 protected:
   void SetUp() override {
@@ -64,12 +61,8 @@ protected:
     TgtMc = std::move(*TgtState);
   }
 
-  ISAProfile srcIsa() const {
-    return ISAProfile::fromSubtarget(*SrcMc.SubtargetInfo);
-  }
-  ISAProfile tgtIsa() const {
-    return ISAProfile::fromSubtarget(*TgtMc.SubtargetInfo);
-  }
+  const MCSubtargetInfo &srcSTI() const { return *SrcMc.SubtargetInfo; }
+  const MCSubtargetInfo &tgtSTI() const { return *TgtMc.SubtargetInfo; }
 
   MCState SrcMc;
   MCState TgtMc;
@@ -87,11 +80,13 @@ TEST_F(WaveProjectionContract, ReplicationDoesNotProvideFullWaveExec) {
   auto *I32Ty = Type::getInt32Ty(Ctx);
   auto *I64Ty = Type::getInt64Ty(Ctx);
 
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
 
   ReplicationProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
+  EXPECT_EQ(&Proj.sourceSTI(), &Src);
+  EXPECT_EQ(&Proj.targetSTI(), &Tgt);
 
   // Read through a base reference too: the value lives in the base subobject
   // the constructor set, so the non-virtual accessor resolves it correctly.
@@ -105,8 +100,8 @@ TEST_F(WaveProjectionContract, WaveNativeProvidesFullWaveExec) {
   auto *I64Ty = Type::getInt64Ty(Ctx);
 
   // The constructor asserts a wave32 -> wave64 direction.
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
 
   WaveNativeProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_TRUE(Proj.providesFullWaveExecInvariant());
@@ -147,8 +142,8 @@ TEST_F(WaveProjectionContract, BaseDefaults) {
   auto *I32Ty = Type::getInt32Ty(Ctx);
   auto *I64Ty = Type::getInt64Ty(Ctx);
 
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
 
   DefaultTestProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
@@ -161,8 +156,8 @@ TEST_F(WaveProjectionContract, ThreadLoop) {
   auto *I32Ty = Type::getInt32Ty(Ctx);
   auto *I64Ty = Type::getInt64Ty(Ctx);
 
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
 
   ThreadLoopProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
@@ -183,8 +178,8 @@ TEST_F(WaveProjectionContract, ReplicationHasOneSourceWavePerTarget) {
   auto *I32Ty = Type::getInt32Ty(Ctx);
   auto *I64Ty = Type::getInt64Ty(Ctx);
 
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
 
   ReplicationProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_EQ(Proj.numSourceWavesPerTarget(), 1u);
@@ -195,8 +190,8 @@ TEST_F(WaveProjectionContract, WaveNativeHasTwoSourceWavesPerTarget) {
   auto *I32Ty = Type::getInt32Ty(Ctx);
   auto *I64Ty = Type::getInt64Ty(Ctx);
 
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
 
   WaveNativeProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_EQ(Proj.numSourceWavesPerTarget(), 2u);
@@ -207,8 +202,8 @@ TEST_F(WaveProjectionContract, ThreadLoopReportsSourceWavesPerTargetRatio) {
   auto *I32Ty = Type::getInt32Ty(Ctx);
   auto *I64Ty = Type::getInt64Ty(Ctx);
 
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
 
   ThreadLoopProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_EQ(Proj.numSourceWavesPerTarget(), 2u);
@@ -223,8 +218,8 @@ TEST_F(WaveProjectionContract, ReplicationDoubledDispatch) {
   auto *I32Ty = Type::getInt32Ty(Ctx);
   auto *I64Ty = Type::getInt64Ty(Ctx);
 
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
 
   ReplicationDoubledDispatchProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_TRUE(Proj.usesDoubledDispatch());
@@ -269,8 +264,8 @@ TEST_F(WaveProjectionContract, WrapAsWWMValueIsNoOpOnWaveNative) {
   auto *I32Ty = Type::getInt32Ty(S.Ctx);
   auto *I64Ty = Type::getInt64Ty(S.Ctx);
 
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
   WaveNativeProjection Proj(Src, Tgt, I32Ty, I64Ty);
 
   Value *Result = Proj.wrapAsWWMValue(S.B, S.Arg);
@@ -283,8 +278,8 @@ TEST_F(WaveProjectionContract, WrapAsWWMValueEmitsStrictWWMOnReplication) {
   auto *I32Ty = Type::getInt32Ty(S.Ctx);
   auto *I64Ty = Type::getInt64Ty(S.Ctx);
 
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
   ReplicationProjection Proj(Src, Tgt, I32Ty, I64Ty);
 
   Value *Result = Proj.wrapAsWWMValue(S.B, S.Arg);
@@ -309,8 +304,8 @@ TEST_F(WaveProjectionContract, WrapAsWWMValueHandlesVectorFloatOverload) {
   auto *F32Ty = Type::getFloatTy(S.Ctx);
   auto *V4f32Ty = FixedVectorType::get(F32Ty, 4);
 
-  ISAProfile Src = srcIsa();
-  ISAProfile Tgt = tgtIsa();
+  const MCSubtargetInfo &Src = srcSTI();
+  const MCSubtargetInfo &Tgt = tgtSTI();
   ReplicationProjection Proj(Src, Tgt, I32Ty, I64Ty);
 
   Value *Vec = PoisonValue::get(V4f32Ty);
