@@ -141,7 +141,6 @@ jobs:
             --bootstrap
 
       - name: Carry wave32 EXEC CFI patch (TheRock #6102)
-        if: ${{ inputs.stage_name == 'comm-libs' }}
         run: |
           set -x
           git config --global --add safe.directory "$PWD"
