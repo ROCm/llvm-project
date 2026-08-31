@@ -27,6 +27,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -37,6 +38,11 @@
 using namespace llvm;
 
 namespace COMGR::transpiler {
+
+// Where an architected-SGPR prologue leaves the workgroup id.
+constexpr unsigned ArchitectedWorkgroupIdXTtmp = 9;
+constexpr unsigned ArchitectedWorkgroupIdYZTtmp = 7;
+constexpr unsigned ArchitectedWorkgroupIdZBitOffset = 16;
 
 Expected<RegisterState> RegisterState::create(IRBuilder<> &B,
                                               const WaveProjection &Projection,
@@ -49,7 +55,27 @@ Expected<RegisterState> RegisterState::create(IRBuilder<> &B,
   RegisterState Registers(B, Projection, MC, std::move(Layout));
   if (Error Err = Registers.seedEntrySgprs())
     return std::move(Err);
+  Registers.seedEntryVgprs(Meta);
   return Registers;
+}
+
+// Seed the VGPRs the source ABI preloads before entry. Only the workitem id
+// arrives in a VGPR, and compute_pgm_rsrc2 says how many of its dimensions the
+// kernel asked for; the projection turns them into the value the source
+// expects to read, which on a widening raise is not the target's own id.
+void RegisterState::seedEntryVgprs(const KernelMeta &Meta) {
+  const unsigned NumDims =
+      AMDHSA_BITS_GET(Meta.ComputePgmRsrc2,
+                      amdhsa::COMPUTE_PGM_RSRC2_ENABLE_VGPR_WORKITEM_ID) +
+      1;
+  assert(NumDims <= 3 && "workitem id has three dimensions at most");
+  if (Projection.SourceSTI.hasFeature(AMDGPU::FeaturePackedTID)) {
+    Regs.storeVGPR32(B, 0, Projection.emitPackedWorkitemId(B, NumDims));
+    return;
+  }
+  // One dimension per VGPR, starting at v0, in x, y, z order.
+  for (unsigned Dim = 0; Dim < NumDims; ++Dim)
+    Regs.storeVGPR32(B, Dim, Projection.emitWorkitemId(B, Dim));
 }
 
 // Seed the SGPRs the source ABI preloads before entry with the target
@@ -83,6 +109,23 @@ Error RegisterState::seedEntrySgprs() {
        "workgroup_id_y");
   Seed(Layout.workgroupIdZSgpr(), Intrinsic::amdgcn_workgroup_id_z, false,
        "workgroup_id_z");
+
+  // An architected-SGPR prologue delivers the workgroup id in TTMPs instead of
+  // entry SGPRs.
+  if (Projection.SourceSTI.hasFeature(AMDGPU::FeatureArchitectedSGPRs)) {
+    auto Call = [&](Intrinsic::ID Id, const Twine &Name) {
+      return B.CreateCall(Intrinsic::getOrInsertDeclaration(&M, Id), {}, Name);
+    };
+    Value *IdZ =
+        B.CreateShl(Call(Intrinsic::amdgcn_workgroup_id_z, "workgroup_id_z"),
+                    ArchitectedWorkgroupIdZBitOffset);
+    writeReg32(ParsedReg{ParsedReg::TTMP, ArchitectedWorkgroupIdXTtmp},
+               Call(Intrinsic::amdgcn_workgroup_id_x, "workgroup_id_x"));
+    writeReg32(
+        ParsedReg{ParsedReg::TTMP, ArchitectedWorkgroupIdYZTtmp},
+        B.CreateOr(Call(Intrinsic::amdgcn_workgroup_id_y, "workgroup_id_y"),
+                   IdZ, "workgroup_id_yz"));
+  }
 
   // No target intrinsic reproduces the remaining entry sources, which carry
   // source private-segment, kernarg-buffer, and packed dispatch state. Refuse
