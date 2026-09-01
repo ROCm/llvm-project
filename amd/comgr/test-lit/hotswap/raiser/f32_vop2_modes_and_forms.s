@@ -1,6 +1,6 @@
 ; REQUIRES: comgr-has-hotswap-transpile
 
-; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -filetype=obj %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu10.10-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 
 ; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=fp_mode_kernel \
@@ -24,7 +24,7 @@
 ; IEEE-OFF-REFUSE-SAME: source IEEE_MODE=0 is not representable on a target
 ; IEEE-OFF-REFUSE-SAME: with fixed IEEE mode
 
-; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx1010 \
 ; RUN:   --emit-ir=ieee_off_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=IEEE-OFF-SAME-ISA
 
@@ -49,7 +49,7 @@
 ; RUN:   | %FileCheck %s --check-prefix=SDWA
 ; SDWA: unsupported-instruction-form: v_add_f32 [SDWA]
 
-	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
+	.amdgcn_target "amdgcn-amd-amdhsa--gfx1010"
 	.amdhsa_code_object_version 6
 	.text
 	.globl	fp_mode_kernel
@@ -128,7 +128,6 @@ sdwa_kernel:
 	.amdhsa_kernel fp_mode_kernel
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 		.amdhsa_float_round_mode_32 0
 		.amdhsa_float_denorm_mode_32 2
 		.amdhsa_float_denorm_mode_16_64 1
@@ -138,7 +137,6 @@ sdwa_kernel:
 	.amdhsa_kernel fixed_mode_kernel
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 		.amdhsa_dx10_clamp 1
 		.amdhsa_ieee_mode 1
 	.end_amdhsa_kernel
@@ -147,37 +145,31 @@ sdwa_kernel:
 	.amdhsa_kernel ieee_off_kernel
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 		.amdhsa_dx10_clamp 1
 		.amdhsa_ieee_mode 0
 	.end_amdhsa_kernel
 	.amdhsa_kernel integer_modes_off_kernel
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 		.amdhsa_dx10_clamp 0
 		.amdhsa_ieee_mode 0
 	.end_amdhsa_kernel
 	.amdhsa_kernel rounding_kernel
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 		.amdhsa_float_round_mode_32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel e64_kernel
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 	.end_amdhsa_kernel
 	.amdhsa_kernel dpp_kernel
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 	.end_amdhsa_kernel
 	.amdhsa_kernel sdwa_kernel
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 	.end_amdhsa_kernel
 	.text
 	.amdgpu_metadata
@@ -192,7 +184,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         fp_mode_kernel.kd
     .vgpr_count:     3
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
@@ -202,7 +194,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         fixed_mode_kernel.kd
     .vgpr_count:     3
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
@@ -212,7 +204,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         ieee_off_kernel.kd
     .vgpr_count:     3
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
@@ -222,7 +214,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         integer_modes_off_kernel.kd
     .vgpr_count:     1
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
@@ -232,7 +224,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         rounding_kernel.kd
     .vgpr_count:     3
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
@@ -242,7 +234,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         e64_kernel.kd
     .vgpr_count:     3
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
@@ -252,7 +244,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         dpp_kernel.kd
     .vgpr_count:     3
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
@@ -262,7 +254,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         sdwa_kernel.kd
     .vgpr_count:     3
-    .wavefront_size: 64
+    .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
 	.end_amdgpu_metadata
