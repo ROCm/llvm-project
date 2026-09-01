@@ -14,6 +14,17 @@ import sys
 import tempfile
 
 
+def to_posix(path):
+    """Convert OS-native separators to '/'.
+
+    No-op on POSIX. On Windows os.path.realpath() and os.path.relpath()
+    return '\\'-separated paths, but header classification below, the
+    manifest consumed by CMake, and the relative paths used as virtual
+    filesystem keys at runtime all assume '/'.
+    """
+    return path.replace(os.sep, '/')
+
+
 def trace_headers(clang, libcxx_dir, config_site, target, headers):
     """Run clang -E -H to discover all transitive header dependencies."""
     with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
@@ -50,7 +61,7 @@ def trace_headers(clang, libcxx_dir, config_site, target, headers):
         for line in non_trace:
             print(f'  {line}', file=sys.stderr)
 
-    libcxx_real = os.path.realpath(libcxx_dir) + '/'
+    libcxx_real = to_posix(os.path.realpath(libcxx_dir)) + '/'
     libcxx_headers = set()
     clang_headers = set()
 
@@ -58,7 +69,7 @@ def trace_headers(clang, libcxx_dir, config_site, target, headers):
         m = re.match(r'^\.+ (.+)$', line)
         if not m:
             continue
-        path = os.path.realpath(m.group(1).strip())
+        path = to_posix(os.path.realpath(m.group(1).strip()))
         if path.startswith(libcxx_real):
             libcxx_headers.add(path)
         elif '/lib/clang/' in path and '/include/' in path:
@@ -107,7 +118,8 @@ def main():
     entries = []
 
     # Custom __config_site for HIPRTC
-    entries.append(('libcxx', '__config_site', os.path.abspath(args.config_site)))
+    entries.append(('libcxx', '__config_site',
+                    to_posix(os.path.abspath(args.config_site))))
 
     # __assertion_handler if it exists in the vendor directory
     assertion_handler = os.path.join(
@@ -115,15 +127,15 @@ def main():
         'vendor', 'llvm', 'default_assertion_handler.in')
     if os.path.exists(assertion_handler):
         entries.append(('libcxx', '__assertion_handler',
-                       os.path.abspath(assertion_handler)))
+                        to_posix(os.path.abspath(assertion_handler))))
 
     for path in libcxx_headers:
-        rel = os.path.relpath(path, libcxx_real)
+        rel = to_posix(os.path.relpath(path, libcxx_real))
         entries.append(('libcxx', rel, path))
 
     for path in clang_headers:
         if clang_resource_dir:
-            rel = os.path.relpath(path, clang_resource_dir)
+            rel = to_posix(os.path.relpath(path, clang_resource_dir))
         else:
             rel = os.path.basename(path)
         entries.append(('clang', rel, path))
