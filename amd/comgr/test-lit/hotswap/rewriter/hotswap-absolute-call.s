@@ -2,7 +2,7 @@
 // COM: address inside .text to a text-relative direct target so the second of
 // COM: two adjacent far patch sites retains an independently callable entry.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   -Wl,--section-start=.text=0x1000 %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \

@@ -90,12 +90,8 @@ uint32_t mapping::getWarpSize() { return __gpu_num_lanes(); }
 
 uint32_t mapping::getMaxTeamThreads(bool IsSPMD) {
   uint32_t BlockSize = mapping::getNumberOfThreadsInBlock();
-  if (IsSPMD)
-    return BlockSize;
-  // Trim off the odd lanes in the last warp
-  if (BlockSize % mapping::getWarpSize())
-    return BlockSize - (BlockSize % mapping::getWarpSize());
-  // If we are in SPMD mode, remove one warp.
+  // Generic mode reserves the first warp for the main thread, so those threads
+  // are not available to the team.
   return BlockSize - (!IsSPMD * mapping::getWarpSize());
 }
 uint32_t mapping::getMaxTeamThreads() {
@@ -176,6 +172,10 @@ extern "C" {
 
 __attribute__((noinline)) uint32_t __kmpc_get_hardware_num_blocks() {
   return mapping::getNumberOfBlocksInKernel(0);
+}
+
+[[gnu::noinline]] uint32_t __kmpc_get_max_team_threads() {
+  return mapping::getMaxTeamThreads();
 }
 }
 

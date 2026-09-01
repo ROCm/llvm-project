@@ -4,7 +4,7 @@
 // COM: trampoline/growth path. Its cyclic exchange is the intentional no-op
 // COM: case: the original instruction must remain byte-stable.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf | %FileCheck --check-prefix=API %s

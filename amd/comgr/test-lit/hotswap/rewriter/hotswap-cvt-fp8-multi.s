@@ -8,7 +8,7 @@
 // COM:   hotswap-cvt-sr-fp8.s   — v_cvt_sr_fp8_f32  (stochastic round F32->E5M3)
 // COM:   hotswap-cvt-f32-fp8.s  — v_cvt_f32_fp8     (unpack E5M3->F32)
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

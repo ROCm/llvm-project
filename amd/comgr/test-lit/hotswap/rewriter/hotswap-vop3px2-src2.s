@@ -4,7 +4,7 @@
 // COM: SALU stall. The patch sets this field to VGPR0 encoding (0x100).
 // COM: Applies to both A0 and B0 steppings.
 
-// RUN: %clang --target=amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

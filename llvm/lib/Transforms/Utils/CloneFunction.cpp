@@ -37,7 +37,6 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
 #include <cstdint>
-#include <map>
 #include <optional>
 using namespace llvm;
 
@@ -104,6 +103,12 @@ createIdentityMDPredicate(const Function &F, CloneFunctionChangeType Changes) {
     if (auto *DV = dyn_cast<DILocalVariable>(MD))
       if (auto *S = dyn_cast_or_null<DILocalScope>(DV->getScope()))
         return ShouldKeep(S->getSubprogram());
+
+    // DIGlobalVariableExpression representing static local variable may be
+    // encountered in DISubprogram's retainedNodes list. Do not remap it, and
+    // remove it from retainedNodes after mapping.
+    if (isa<DIGlobalVariableExpression>(MD))
+      return true;
 
     // Clone types that are local to subprograms being cloned.
     // Avoid cloning other types.
@@ -349,6 +354,15 @@ void llvm::CloneFunctionInto(Function *NewFunc, const Function *OldFunc,
   CloneFunctionBodyInto(*NewFunc, *OldFunc, VMap, RemapFlag, Returns,
                         NameSuffix, CodeInfo, TypeMapper, Materializer,
                         &IdentityMD);
+
+  // DIGlobalVariableExpressions representing static locals stay in the scope of
+  // OldSP after function cloning. Remove them from retainedNodes of NewSP.
+  if (DISubprogram *NewSP = NewFunc->getSubprogram())
+    NewSP->cleanupRetainedNodesIf([NewSP](Metadata *N) {
+      auto *GVE = dyn_cast_or_null<DIGlobalVariableExpression>(N);
+      return !GVE ||
+             DISubprogram::getRetainedNodeScope(GVE)->getSubprogram() == NewSP;
+    });
 
   // Only update !llvm.dbg.cu for DifferentModule (not CloneModule). In the
   // same module, the compile unit will already be listed (or not). When

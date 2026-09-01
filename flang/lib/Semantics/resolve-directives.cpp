@@ -61,6 +61,7 @@ protected:
     Scope &scope;
     Symbol::Flag defaultDSA{Symbol::Flag::AccShared}; // TODOACC
     std::map<const Symbol *, Symbol::Flag> objectWithDSA;
+    std::map<const Symbol *, Symbol::Flags> commonBlockClauseFlags;
     std::map<parser::OmpVariableCategory::Value,
         parser::OmpDefaultmapClause::ImplicitBehavior>
         defaultMap;
@@ -2751,45 +2752,13 @@ void OmpAttributeVisitor::CreateImplicitSymbols(
     }
 
     if (dsa.any()) {
-      bool isParTaskOrTeams = parallelDir || taskGenDir || teamsDir;
-      // NOTE As `dsa` will match that of the symbol in the current scope
-      //      (if any), we won't override the DSA of any existing symbol.
-      bool dsaAny = (dsa & dataSharingAttributeFlags).any();
-      Symbol::Flags flags{dsa};
-
-      // Make sure that we mark components implicitly private so that
-      // later in lowering the DataSharingProcessor can correctly assess
-      // that the target directive must also be privatized for composite
-      // directives, rather than just the leaf construct. For example,
-      // in "!$omp target teams distribute private(s)" we wish to have
-      // target privatize (s) as well, not just the distribute.
-      // However, for a combined/composite construct it is correct from an
-      // OpenMP specification to reflect these flags on all composite
-      // components, not just the leaf as the clauses in theory apply
-      // at all levels. But, for this case we try to be as restrictive
-      // as possible while maintaining correctness, as reflecting
-      // individual private across everything will result in unrequired
-      // extra allocations.
-      // NOTE: This is separate to the usual isParTaskOrTeams as we need to
-      // cover all the parallel set when coupled with target, not just
-      // the top set.
-      if (dsaAny &&
-          (isParTaskOrTeams ||
-              llvm::omp::allParallelSet.test(dirContext.directive)) &&
-          targetDir && dsa.test(Symbol::Flag::OmpPrivate)) {
-        flags.set(Symbol::Flag::OmpImplicit);
-        // Will be executed below if we fall into isParTaskOrTeams, but
-        // we should cover the cases when we do not.
-        if (!isParTaskOrTeams)
-          makeSymbol(flags);
-      }
-
-      if (isParTaskOrTeams) {
+      if (parallelDir || taskGenDir || teamsDir) {
         Symbol *prevDeclSymbol{lastDeclSymbol};
-
-        if (dsaAny)
-          makeSymbol(flags);
-
+        // NOTE As `dsa` will match that of the symbol in the current scope
+        //      (if any), we won't override the DSA of any existing symbol.
+        if ((dsa & dataSharingAttributeFlags).any()) {
+          makeSymbol(dsa);
+        }
         // Fix host association of explicit symbols, as they can be created
         // before implicit ones in enclosing scope.
         if (prevDeclSymbol && prevDeclSymbol != lastDeclSymbol &&
@@ -3230,7 +3199,27 @@ void OmpAttributeVisitor::ResolveOmpCommonBlock(
   Symbol *originalCB{ResolveOmpCommonBlockName(&cbName)};
   if (auto *symbol{cbResolved ? name.symbol : originalCB}) {
     if (!dataCopyingAttributeFlags.test(ompFlag)) {
-      CheckMultipleAppearances(name, *symbol, Symbol::Flag::OmpCommonBlock);
+      const Symbol::Flags mapFlags{Symbol::Flag::OmpMapTo,
+          Symbol::Flag::OmpMapFrom, Symbol::Flag::OmpMapToFrom,
+          Symbol::Flag::OmpMapStorage, Symbol::Flag::OmpMapDelete};
+      const Symbol *commonBlock{&symbol->GetUltimate()};
+      auto [it, inserted]{
+          GetContext().commonBlockClauseFlags.try_emplace(commonBlock)};
+      bool isTargetData{
+          GetContext().directive == llvm::omp::Directive::OMPD_target_data};
+      Symbol::Flags allowedRepeatFlags{mapFlags};
+      if (isTargetData) {
+        allowedRepeatFlags.set(Symbol::Flag::OmpUseDeviceAddr);
+      }
+      bool allowRepeatedAppearance{!inserted &&
+          (it->second & ~allowedRepeatFlags).none() &&
+          (mapFlags.test(ompFlag) ||
+              (isTargetData && ompFlag == Symbol::Flag::OmpUseDeviceAddr &&
+                  !it->second.test(Symbol::Flag::OmpUseDeviceAddr)))};
+      it->second.set(ompFlag);
+      if (!allowRepeatedAppearance) {
+        CheckMultipleAppearances(name, *symbol, Symbol::Flag::OmpCommonBlock);
+      }
     }
     // 2.15.3 When a named common block appears in a list, it has the
     // same meaning as if every explicit member of the common block

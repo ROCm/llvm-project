@@ -45,6 +45,7 @@
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/MDBuilder.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/Debug.h"
@@ -1199,7 +1200,9 @@ convertMLIRAttributesToLLVM(Location loc, llvm::LLVMContext &ctx,
 
 LogicalResult ModuleTranslation::convertGlobalsAndAliases() {
   // Mapping from compile unit to its respective set of global variables.
-  DenseMap<llvm::DICompileUnit *, SmallVector<llvm::Metadata *>> allGVars;
+  DenseMap<llvm::DICompileUnit *, SmallVector<llvm::Metadata *>> globalGVars;
+  // Mapping from subprogram to its respective set of static local variables.
+  DenseMap<llvm::DISubprogram *, SmallVector<llvm::Metadata *>> staticLocals;
 
   // First, create all global variables and global aliases in LLVM IR. A global
   // or alias body may refer to another global/alias or itself, so all the
@@ -1290,7 +1293,7 @@ LogicalResult ModuleTranslation::convertGlobalsAndAliases() {
         //
         // 3. For entities like static local variables in C or variable with
         // SAVE attribute in Fortran, the scope hierarchy can be
-        // variable -> DISubprogram -> DICompileUnit
+        // variable (-> DILocalScope)* -> DISubprogram
         llvm::DIScope *scope = diGlobalVar->getScope();
         if (auto *mod = dyn_cast_if_present<llvm::DIModule>(scope))
           scope = mod->getScope();
@@ -1298,15 +1301,23 @@ LogicalResult ModuleTranslation::convertGlobalsAndAliases() {
           if (auto *sp =
                   dyn_cast_if_present<llvm::DISubprogram>(cb->getScope()))
             scope = sp->getUnit();
-        } else if (auto *sp = dyn_cast_if_present<llvm::DISubprogram>(scope))
-          scope = sp->getUnit();
+        } else if (auto *lbb =
+                       dyn_cast_if_present<llvm::DILexicalBlockBase>(scope)) {
+          scope = lbb->getSubprogram();
+        }
 
-        // Get the compile unit (scope) of the the global variable.
+        // Get the compile unit (scope) of the the global variable, or the
+        // subprogram of the static local variable.
         if (llvm::DICompileUnit *compileUnit =
                 dyn_cast_if_present<llvm::DICompileUnit>(scope)) {
           // Update the compile unit with this incoming global variable
           // expression during the finalizing step later.
-          allGVars[compileUnit].push_back(diGlobalExpr);
+          globalGVars[compileUnit].push_back(diGlobalExpr);
+        } else if (llvm::DISubprogram *sp =
+                       dyn_cast_if_present<llvm::DISubprogram>(scope)) {
+          // Update the subprogram with this incoming static local variable
+          // expression during the finalizing step later.
+          staticLocals[sp].push_back(diGlobalExpr);
         }
       }
     }
@@ -1496,10 +1507,14 @@ LogicalResult ModuleTranslation::convertGlobalsAndAliases() {
 
   // Finally, update the compile units their respective sets of global variables
   // created earlier.
-  for (const auto &[compileUnit, globals] : allGVars) {
+  for (const auto &[compileUnit, globals] : globalGVars)
     compileUnit->replaceGlobalVariables(
         llvm::MDTuple::get(getLLVMContext(), globals));
-  }
+
+  // And update the subprograms with their respective sets of static local
+  // variables.
+  for (const auto &[sp, globals] : staticLocals)
+    sp->retainNodes(globals.begin(), globals.end());
 
   // Convert global alias bodies.
   for (auto op : getModuleBody(mlirModule).getOps<LLVM::AliasOp>()) {
@@ -1584,22 +1599,7 @@ FailureOr<llvm::Metadata *> ModuleTranslation::convertMetadataAttr(
             intAttr.getValue()));
       })
       .Case([&](MDGlobalValueAttr a) -> FailureOr<llvm::Metadata *> {
-        if (llvm::Function *fn = lookupFunction(a.getName().getValue()))
-          return llvm::ValueAsMetadata::get(fn);
-        if (llvm::GlobalValue *global = lookupGlobal(a.getName().getValue()))
-          return llvm::ValueAsMetadata::get(global);
-        Operation *symbol =
-            symbolTable().lookupSymbolIn(mlirModule, a.getName());
-        if (auto alias = dyn_cast_if_present<LLVM::AliasOp>(symbol)) {
-          if (llvm::GlobalValue *global = lookupAlias(alias))
-            return llvm::ValueAsMetadata::get(global);
-        }
-        if (auto ifunc = dyn_cast_if_present<LLVM::IFuncOp>(symbol)) {
-          if (llvm::GlobalValue *global = lookupIFunc(ifunc))
-            return llvm::ValueAsMetadata::get(global);
-        }
-        return emitError() << "could not resolve metadata reference '"
-                           << a.getName() << "'";
+        return convertSymbolRefToMetadata(a.getName(), emitError);
       })
       .Case([&](MDNullAttr a) -> FailureOr<llvm::Metadata *> {
         return llvm::ConstantAsMetadata::get(llvm::ConstantPointerNull::get(
@@ -1632,6 +1632,54 @@ FailureOr<llvm::Metadata *> ModuleTranslation::convertMetadataAttr(
       .Default([&](Attribute attr) -> FailureOr<llvm::Metadata *> {
         return emitError() << "unsupported LLVM metadata attribute " << attr;
       });
+}
+
+FailureOr<llvm::Metadata *> ModuleTranslation::convertSymbolRefToMetadata(
+    FlatSymbolRefAttr name, function_ref<InFlightDiagnostic()> emitError) {
+  if (llvm::Function *fn = lookupFunction(name.getValue()))
+    return llvm::ValueAsMetadata::get(fn);
+  if (llvm::GlobalValue *global = lookupGlobal(name.getValue()))
+    return llvm::ValueAsMetadata::get(global);
+  Operation *symbol = symbolTable().lookupSymbolIn(mlirModule, name);
+  if (auto alias = dyn_cast_if_present<LLVM::AliasOp>(symbol)) {
+    if (llvm::GlobalValue *global = lookupAlias(alias))
+      return llvm::ValueAsMetadata::get(global);
+  }
+  if (auto ifunc = dyn_cast_if_present<LLVM::IFuncOp>(symbol)) {
+    if (llvm::GlobalValue *global = lookupIFunc(ifunc))
+      return llvm::ValueAsMetadata::get(global);
+  }
+  return emitError() << "could not resolve metadata reference '" << name << "'";
+}
+
+LogicalResult ModuleTranslation::convertFunctionMetadata() {
+  for (auto function : getModuleBody(mlirModule).getOps<LLVMFuncOp>()) {
+    ArrayAttr metadata = function.getFunctionMetadataAttr();
+    if (!metadata)
+      continue;
+
+    llvm::Function *llvmFunc = lookupFunction(function.getName());
+    for (auto entry : metadata.getAsRange<LLVM::FunctionMetadataAttr>()) {
+      StringRef metadataName = entry.getMetadataName().getValue();
+
+      FailureOr<llvm::Metadata *> md =
+          convertMetadataAttr(entry.getNode(), [&]() {
+            return function.emitError()
+                   << "failed to convert function_metadata entry '"
+                   << metadataName << "': ";
+          });
+      if (failed(md))
+        return failure();
+      llvm::MDNode *node = llvm::dyn_cast_if_present<llvm::MDNode>(*md);
+      if (!node) {
+        return function.emitError()
+               << "failed to convert function_metadata entry '" << metadataName
+               << "'";
+      }
+      llvmFunc->addMetadata(metadataName, *node);
+    }
+  }
+  return success();
 }
 
 LogicalResult ModuleTranslation::convertOneFunction(LLVMFuncOp func) {
@@ -2053,15 +2101,20 @@ ModuleTranslation::convertParameterAttrs(Location loc,
 
 LogicalResult ModuleTranslation::convertFunctionSignatures() {
   // Declare all functions first because there may be function calls that form a
-  // call graph with cycles, or global initializers that reference functions.
+  // call graph with cycles, global initializers that reference functions, or
+  // metadata that references functions declared later in the module.
   for (auto function : getModuleBody(mlirModule).getOps<LLVMFuncOp>()) {
     llvm::FunctionCallee llvmFuncCst = llvmModule->getOrInsertFunction(
         function.getName(),
         cast<llvm::FunctionType>(convertType(function.getFunctionType())));
     llvm::Function *llvmFunc = cast<llvm::Function>(llvmFuncCst.getCallee());
+    mapFunction(function.getName(), llvmFunc);
+  }
+
+  for (auto function : getModuleBody(mlirModule).getOps<LLVMFuncOp>()) {
+    llvm::Function *llvmFunc = lookupFunction(function.getName());
     llvmFunc->setLinkage(convertLinkageToLLVM(function.getLinkage()));
     llvmFunc->setCallingConv(convertCConvToLLVM(function.getCConv()));
-    mapFunction(function.getName(), llvmFunc);
     addRuntimePreemptionSpecifier(function.getDsoLocal(), llvmFunc);
 
     // Convert function attributes.
@@ -2181,6 +2234,41 @@ LogicalResult ModuleTranslation::convertIFuncs() {
     ifunc->setVisibility(convertVisibilityToLLVM(op.getVisibility_()));
 
     ifuncMapping.try_emplace(op, ifunc);
+  }
+
+  return success();
+}
+
+// Attach global metadata after all globals, aliases, ifuncs, and function
+// signatures exist so symbol references can be resolved.
+LogicalResult ModuleTranslation::convertGlobalMetadata() {
+  for (auto op : getModuleBody(mlirModule).getOps<LLVM::GlobalOp>()) {
+    auto *var = cast<llvm::GlobalVariable>(lookupGlobal(op));
+    if (FlatSymbolRefAttr associated = op.getAssociatedAttr()) {
+      FailureOr<llvm::Metadata *> md =
+          convertSymbolRefToMetadata(associated, [&]() {
+            return op.emitError("failed to convert associated metadata");
+          });
+      if (failed(md))
+        return failure();
+      var->setMetadata(llvm::LLVMContext::MD_associated,
+                       llvm::MDNode::get(var->getContext(), *md));
+    }
+
+    if (ArrayAttr absSym = op.getAbsoluteSymbolAttr()) {
+      SmallVector<llvm::Metadata *> mdOps;
+      llvm::LLVMContext &ctx = var->getContext();
+      mdOps.reserve(absSym.size());
+      for (Attribute attr : absSym) {
+        auto intAttr = cast<IntegerAttr>(attr);
+        llvm::IntegerType *ty = llvm::IntegerType::get(
+            ctx, intAttr.getType().getIntOrFloatBitWidth());
+        mdOps.push_back(llvm::ConstantAsMetadata::get(
+            llvm::ConstantInt::get(ty, intAttr.getValue())));
+      }
+      var->setMetadata(llvm::LLVMContext::MD_absolute_symbol,
+                       llvm::MDNode::get(ctx, mdOps));
+    }
   }
 
   return success();
@@ -2644,6 +2732,10 @@ mlir::translateModuleToLLVMIR(Operation *module, llvm::LLVMContext &llvmContext,
   if (failed(translator.convertGlobalsAndAliases()))
     return nullptr;
   if (failed(translator.convertIFuncs()))
+    return nullptr;
+  if (failed(translator.convertGlobalMetadata()))
+    return nullptr;
+  if (failed(translator.convertFunctionMetadata()))
     return nullptr;
   if (failed(translator.createTBAAMetadata()))
     return nullptr;

@@ -97,8 +97,8 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
 
       - name: Checkout external repository
         if: ${{ inputs.external_repo_config != '' }}
@@ -110,6 +110,7 @@ jobs:
 
       - name: Submodule PR update (covers parameterised and PR creation)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd-staging
+
       - name: Install python deps
         run: pip install -r requirements.txt
 
@@ -214,15 +215,25 @@ jobs:
         run: |
           python3 build_tools/github_actions/detect_failed_logs.py
 
-      - name: LIT (llvm, clang, flang, mlir, lld) / COMGR Lit & CTest
+      - name: LIT (llvm, clang, flang, mlir, lld)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/lit-comgr-tests@amd-staging
         continue-on-error: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         env:
           BUILD_DIR: ${{ env.BUILD_DIR }}
         with:
           stage_name: ${{ inputs.stage_name }}
- 
-      - name: Run build tests
+
+      - name: Run build tests (Comgr, blocking)
+        if: ${{ !cancelled() && inputs.stage_name == 'compiler-runtime' }}
+        env:
+          TEATIME_FORCE_INTERACTIVE: 1
+        run: |
+          cmake --build "${BUILD_DIR}" --target build-test-amd-comgr -- -k 0
+
+      # Remaining build tests (e.g. rocjitsu, mirage) still run and report, but
+      # are not yet gating. Comgr is split out above so its failures block CI.
+      # TODO(#6112): rocjitsu tests are being moved out; drop this step once done.
+      - name: Run build tests (other, non-blocking)
         if: ${{ !cancelled() && inputs.stage_name == 'compiler-runtime' }}
         continue-on-error: true
         env:

@@ -23,5 +23,9 @@ extern CONSTATTR struct redret MATH_PRIVATE(trigred)(double x);
 extern CONSTATTR struct scret MATH_PRIVATE(sincosred)(double x);
 extern CONSTATTR struct scret MATH_PRIVATE(sincosred2)(double x, double y);
 
+// cos in .lo, sin in .hi
+extern CONSTATTR double4 MATH_PRIVATE(epsincosred2)(double x, double y);
+extern CONSTATTR double4 MATH_PRIVATE(epsincos)(double y);
+
 extern CONSTATTR double MATH_PRIVATE(tanred2)(double x, double xx, int sel);
 

@@ -50,7 +50,7 @@ namespace llvm {
     /// Track the RetainTypes, since they can be updated later on.
     SmallVector<TrackingMDNodeRef, 4> AllRetainTypes;
     SmallVector<DISubprogram *, 4> AllSubprograms;
-    SmallVector<Metadata *, 4> AllGVs;
+    SmallVector<Metadata *, 4> Globals;
     SmallVector<TrackingMDNodeRef, 4> ImportedModules;
     /// Map Macro parent (which can be DIMacroFile or nullptr) to a list of
     /// Metadata all of type DIMacroNode.
@@ -61,8 +61,8 @@ namespace llvm {
     SmallVector<TrackingMDNodeRef, 4> UnresolvedNodes;
     bool AllowUnresolvedNodes;
 
-    /// Each subprogram's preserved local variables, labels, imported entities,
-    /// and types.
+    /// Each subprogram's preserved local and static local variables, labels,
+    /// imported entities, and types.
     ///
     /// Do not use a std::vector.  Some versions of libc++ apparently copy
     /// instead of move on grow operations, and TrackingMDRef is expensive to
@@ -555,6 +555,19 @@ namespace llvm {
     createObjCProperty(StringRef Name, DIFile *File, unsigned LineNumber,
                        StringRef GetterName, StringRef SetterName,
                        unsigned PropertyAttributes, DIType *Ty);
+
+    /// Create debugging information entry for a property, i.e. an entity that
+    /// is accessed like a data member but whose access is implemented by an
+    /// accessor.
+    /// \param Name          Property name.
+    /// \param File          File where this property is defined.
+    /// \param LineNumber    Line number.
+    /// \param Ty            Type of the property.
+    /// \param BackingStorage The data member holding the property's backing
+    ///                      storage.
+    LLVM_ABI DIProperty *createProperty(StringRef Name, DIFile *File,
+                                        unsigned LineNumber, DIType *Ty,
+                                        DIDerivedType *BackingStorage);
 
     /// Create debugging information entry for a class.
     /// \param Scope        Scope in which this class is defined.

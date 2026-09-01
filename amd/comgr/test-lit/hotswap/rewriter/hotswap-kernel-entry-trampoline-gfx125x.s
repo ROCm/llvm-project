@@ -1,6 +1,6 @@
 // COM: Direct HotSwap entry displacement is supported across gfx125x.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1251 -nostdlib %s -o %t.gfx1251.elf
+// RUN: %clang --target=amdgpu12.51-amd-amdhsa -nostdlib %s -o %t.gfx1251.elf
 // RUN: hotswap-rewrite %t.gfx1251.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1251 amdgcn-amd-amdhsa--gfx1251 \
 // RUN:   --entry-trampolines --output %t.gfx1251.out.elf \
@@ -10,7 +10,7 @@
 // COM: Direct displacement does not need scratch SGPRs, so it remains valid at
 // COM: the architectural SGPR limit.
 // RUN: sed 's/.sgpr_count: 1/.sgpr_count: 105/' %s > %t.highsgpr.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1251 -nostdlib \
+// RUN: %clang --target=amdgpu12.51-amd-amdhsa -nostdlib \
 // RUN:   %t.highsgpr.s -o %t.highsgpr.elf
 // RUN: hotswap-rewrite %t.highsgpr.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1251 amdgcn-amd-amdhsa--gfx1251 \
@@ -21,7 +21,7 @@
 
 // RUN: sed -e '/^\.amdgcn_target/d' \
 // RUN:   -e 's/gfx1251/gfx12-5-generic/g' %s > %t.generic.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx12-5-generic -nostdlib \
+// RUN: %clang --target=amdgpu12.5-amd-amdhsa -nostdlib \
 // RUN:   %t.generic.s -o %t.generic.elf
 // RUN: hotswap-rewrite %t.generic.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx12-5-generic \

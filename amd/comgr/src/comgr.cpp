@@ -309,19 +309,25 @@ amd_comgr_status_t DataObject::setName(llvm::StringRef Name) {
 }
 
 amd_comgr_status_t DataObject::setData(llvm::StringRef Data) {
+  std::scoped_lock<std::mutex> CacheLock(CacheMutex);
   clearData();
   return setCStr(this->Data, Data, &Size);
 }
 
 amd_comgr_status_t DataObject::setData(std::unique_ptr<llvm::MemoryBuffer> MB) {
+  std::scoped_lock<std::mutex> CacheLock(CacheMutex);
+  clearData();
   Buffer = std::move(MB);
   Data = const_cast<char *>(Buffer->getBufferStart());
   Size = Buffer->getBufferSize();
-  MangledNames.clear();
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
 void DataObject::clearData() {
+  // CachedBinary aliases Data, so it must go first.
+  SymbolIndex.reset();
+  CachedBinary.reset();
+
   if (Buffer) {
     Buffer.reset();
   } else {
@@ -330,6 +336,7 @@ void DataObject::clearData() {
 
   Data = nullptr;
   Size = 0;
+  CachedMetaDoc.reset();
   MangledNames.clear();
 }
 
@@ -1494,6 +1501,15 @@ amd_comgr_status_t AMD_COMGR_API
     return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
   }
 
+  std::scoped_lock<std::mutex> CacheLock(DataP->CacheMutex);
+
+  if (DataP->CachedMetaDoc) {
+    MetaP->MetaDoc = DataP->CachedMetaDoc;
+    MetaP->DocNode = MetaP->MetaDoc->Document.getRoot();
+    *MetadataNode = DataMeta::convert(MetaP.release());
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
+
   MetaDocument *MetaDoc = new (std::nothrow) MetaDocument();
   if (!MetaDoc) {
     return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
@@ -1505,6 +1521,8 @@ amd_comgr_status_t AMD_COMGR_API
   if (auto Status = metadata::getMetadataRoot(DataP, MetaP.get())) {
     return Status;
   }
+
+  DataP->CachedMetaDoc = MetaP->MetaDoc;
 
   // if no metadata found in this data object, still return SUCCESS but
   // with default NULL kind
@@ -1714,8 +1732,7 @@ amd_comgr_status_t AMD_COMGR_API
 
   ensureLLVMInitialized();
 
-  StringRef Ins(DataP->Data, DataP->Size);
-  return Helper.iterateTable(Ins, DataP->DataKind, Callback, UserData);
+  return Helper.iterateTable(DataP, Callback, UserData);
 }
 
 amd_comgr_status_t AMD_COMGR_API
@@ -1726,7 +1743,7 @@ amd_comgr_status_t AMD_COMGR_API
   DataObject *DataP = DataObject::convert(Data);
   SymbolHelper Helper;
 
-  if (!DataP || !DataP->hasValidDataKind() ||
+  if (!DataP || !DataP->hasValidDataKind() || !Name || !Symbol ||
       !(DataP->DataKind == AMD_COMGR_DATA_KIND_RELOCATABLE ||
         DataP->DataKind == AMD_COMGR_DATA_KIND_EXECUTABLE)) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
@@ -1734,11 +1751,7 @@ amd_comgr_status_t AMD_COMGR_API
 
   ensureLLVMInitialized();
 
-  // look through the symbol table for a symbol name based
-  // on the data object.
-
-  StringRef Ins(DataP->Data, DataP->Size);
-  SymbolContext *Sym = Helper.createBinary(Ins, Name, DataP->DataKind);
+  SymbolContext *Sym = Helper.createBinary(DataP, Name);
   if (!Sym) {
     return AMD_COMGR_STATUS_ERROR;
   }

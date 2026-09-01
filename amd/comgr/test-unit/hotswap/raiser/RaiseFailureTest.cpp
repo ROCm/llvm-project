@@ -16,30 +16,9 @@
 #include "hotswap/raiser/raise_failure.h"
 
 #include "llvm/Support/Error.h"
-#include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "gtest/gtest.h"
-
-#include <mutex>
-
-// Linking hotswap::raiser drags in the sibling objects (the reg file and wave
-// projection), whose decoder dependency calls COMGR::ensureLLVMInitialized. Its
-// production definition lives in libamd_comgr; provide the registration here so
-// the test binary links without pulling in the full Comgr.
-namespace COMGR {
-void ensureLLVMInitialized() {
-  static std::once_flag Once;
-  std::call_once(Once, [] {
-    LLVMInitializeAMDGPUTargetInfo();
-    LLVMInitializeAMDGPUTargetMC();
-    LLVMInitializeAMDGPUDisassembler();
-    LLVMInitializeAMDGPUAsmParser();
-    LLVMInitializeAMDGPUAsmPrinter();
-    LLVMInitializeAMDGPUTarget();
-  });
-}
-} // namespace COMGR
 
 using COMGR::hotswap::RaiseFailure;
 using COMGR::hotswap::RaiseFailureReason;
@@ -123,6 +102,8 @@ TEST(RaiseFailure, ReasonStringTokensAreStable) {
   EXPECT_EQ(reasonString(RaiseFailureReason::BadInput), "BadInput");
   EXPECT_EQ(reasonString(RaiseFailureReason::UnsupportedInstructionForm),
             "unsupported-instruction-form");
+  EXPECT_EQ(reasonString(RaiseFailureReason::UnsupportedFloatingPointMode),
+            "unsupported-floating-point-mode");
   EXPECT_EQ(reasonString(RaiseFailureReason::CrossWaveLaneIdLeak),
             "cross-wave-lane-id-leak");
 }

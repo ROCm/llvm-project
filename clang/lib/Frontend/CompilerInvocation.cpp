@@ -1949,8 +1949,10 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
   Opts.UnrollLoops =
       Args.hasFlag(OPT_funroll_loops, OPT_fno_unroll_loops,
                    (Opts.OptimizationLevel > 1));
+  // Match the LLVM pipeline default (PipelineTuningOptions::LoopInterchange),
+  // which enables the pass whenever the optimization pipeline runs.
   Opts.InterchangeLoops =
-      Args.hasFlag(OPT_floop_interchange, OPT_fno_loop_interchange, false);
+      Args.hasFlag(OPT_floop_interchange, OPT_fno_loop_interchange, true);
   Opts.FuseLoops = Args.hasFlag(OPT_fexperimental_loop_fusion,
                                 OPT_fno_experimental_loop_fusion, false);
   Opts.BinutilsVersion =
@@ -3356,6 +3358,9 @@ static void GenerateHeaderSearchArgs(const HeaderSearchOptions &Opts,
   for (const auto &Macro : Opts.ModulesIgnoreMacros)
     GenerateArg(Consumer, OPT_fmodules_ignore_macro, Macro.val());
 
+  for (const auto &Path : Opts.ModulesIgnoreSearchPaths)
+    GenerateArg(Consumer, OPT_fmodules_ignore_search_path, Path.val());
+
   auto Matches = [](const HeaderSearchOptions::Entry &Entry,
                     llvm::ArrayRef<frontend::IncludeDirGroup> Groups,
                     std::optional<bool> IsFramework,
@@ -3479,6 +3484,9 @@ static bool ParseHeaderSearchArgs(HeaderSearchOptions &Opts, ArgList &Args,
     Opts.ModulesIgnoreMacros.insert(
         llvm::CachedHashString(MacroDef.split('=').first));
   }
+
+  for (const auto *A : Args.filtered(OPT_fmodules_ignore_search_path))
+    Opts.ModulesIgnoreSearchPaths.insert(llvm::CachedHashString(A->getValue()));
 
   // Add -I... and -F... options in order.
   bool IsSysrootSpecified =
@@ -3931,26 +3939,6 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
   else
     GenerateArg(Consumer, OPT_fno_openmp_target_no_loop);
 
-  if (Opts.OpenMPTargetXteamReduction)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_reduction);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_reduction);
-
-  if (Opts.OpenMPTargetFastReduction)
-    GenerateArg(Consumer, OPT_fopenmp_target_fast_reduction);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_fast_reduction);
-
-  if (Opts.OpenMPTargetXteamScan)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_scan);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_scan);
-
-  if (Opts.OpenMPTargetXteamNoLoopScan)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_no_loop_scan);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_no_loop_scan);
-
   if (Opts.OpenMPThreadSubscription)
     GenerateArg(Consumer, OPT_fopenmp_assume_threads_oversubscription);
 
@@ -3983,7 +3971,11 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
     GenerateArg(Consumer, OPT_fopenmp_gpu_threads_per_team_EQ,
                 Twine(Opts.OpenMPGPUThreadsPerTeam));
 
-  if (Opts.OpenMPTargetXteamReductionBlockSize != 1024)
+  // Keep this in sync with the default of OpenMPTargetXteamReductionBlockSize
+  // in LangOptions.def. Comparing against a stale default makes the generated
+  // arguments disagree with the parsed ones and turns every explicit use of
+  // '-fopenmp-target-xteam-reduction-blocksize=' into a round-trip error.
+  if (Opts.OpenMPTargetXteamReductionBlockSize != 512)
     GenerateArg(Consumer, OPT_fopenmp_target_xteam_reduction_blocksize_EQ,
                 Twine(Opts.OpenMPTargetXteamReductionBlockSize));
 
@@ -4458,22 +4450,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   Opts.OpenMPTargetNoLoop =
       Args.hasFlag(options::OPT_fopenmp_target_no_loop,
                    options::OPT_fno_openmp_target_no_loop, true);
-
-  Opts.OpenMPTargetXteamReduction =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_reduction,
-                   options::OPT_fno_openmp_target_xteam_reduction, true);
-
-  Opts.OpenMPTargetFastReduction =
-      Args.hasFlag(options::OPT_fopenmp_target_fast_reduction,
-                   options::OPT_fno_openmp_target_fast_reduction, false);
-
-  Opts.OpenMPTargetXteamScan =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_scan,
-                   options::OPT_fno_openmp_target_xteam_scan, false);
-
-  Opts.OpenMPTargetXteamNoLoopScan =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_no_loop_scan,
-                   options::OPT_fno_openmp_target_xteam_no_loop_scan, false);
 
   // Set the value of the debugging flag used in the new offloading device RTL.
   // Set either by a specific value or to a default if not specified.
@@ -5427,7 +5403,20 @@ std::string CompilerInvocation::computeContextHash() const {
 
   if (hsOpts.ModulesStrictContextHash) {
     HBuilder.addRange(hsOpts.SystemHeaderPrefixes);
-    HBuilder.addRange(hsOpts.UserEntries);
+
+    for (const auto &UserEntry : hsOpts.UserEntries) {
+      // If we're supposed to ignore this search path for the purposes of
+      // modules, don't put it into the hash.
+      if (!hsOpts.ModulesIgnoreSearchPaths.empty()) {
+        // Check whether we're ignoring this search path.
+        StringRef Path = UserEntry.Path;
+        if (hsOpts.ModulesIgnoreSearchPaths.count(llvm::CachedHashString(Path)))
+          continue;
+      }
+
+      HBuilder.add(UserEntry);
+    }
+
     HBuilder.addRange(hsOpts.VFSOverlayFiles);
 
     const DiagnosticOptions &diagOpts = getDiagnosticOpts();

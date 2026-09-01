@@ -53,7 +53,6 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/PatternMatch.h"
-#include "llvm/IR/ProfDataUtils.h"
 #include "llvm/IR/Statepoint.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/User.h"
@@ -1861,25 +1860,19 @@ foldIntrinsicUsingDistributiveLaws(IntrinsicInst *II,
       return nullptr;
   }
 
-  BinaryOperator *NewBinop;
   if (A == C &&
       leftDistributesOverRight(InnerOpcode, HasNUW, HasNSW, TopLevelOpcode)) {
     Value *NewIntrinsic = Builder.CreateBinaryIntrinsic(TopLevelOpcode, B, D);
-    NewBinop =
-        cast<BinaryOperator>(Builder.CreateBinOp(InnerOpcode, A, NewIntrinsic));
-  } else if (B == D && rightDistributesOverLeft(InnerOpcode, HasNUW, HasNSW,
-                                                TopLevelOpcode)) {
-    Value *NewIntrinsic = Builder.CreateBinaryIntrinsic(TopLevelOpcode, A, C);
-    NewBinop =
-        cast<BinaryOperator>(Builder.CreateBinOp(InnerOpcode, NewIntrinsic, B));
-  } else {
-    return nullptr;
+    return Builder.CreateNoWrapBinOp(InnerOpcode, A, NewIntrinsic, HasNUW,
+                                     HasNSW);
   }
-
-  NewBinop->setHasNoUnsignedWrap(HasNUW);
-  NewBinop->setHasNoSignedWrap(HasNSW);
-
-  return NewBinop;
+  if (B == D &&
+      rightDistributesOverLeft(InnerOpcode, HasNUW, HasNSW, TopLevelOpcode)) {
+    Value *NewIntrinsic = Builder.CreateBinaryIntrinsic(TopLevelOpcode, A, C);
+    return Builder.CreateNoWrapBinOp(InnerOpcode, NewIntrinsic, B, HasNUW,
+                                     HasNSW);
+  }
+  return nullptr;
 }
 
 static Instruction *foldNeonShift(IntrinsicInst *II, InstCombinerImpl &IC) {
@@ -1988,6 +1981,60 @@ static Value *foldSinAndCosToSinCos(IntrinsicInst *II, IRBuilderBase &B,
   IC.replaceInstUsesWith(*Match, IsSin ? Cos : Sin);
   IC.eraseInstFromFunction(*Match);
   return IsSin ? Sin : Cos;
+}
+
+/// Fold an scmp/ucmp intrinsic whose operands are extended from a narrower
+/// type:
+///   scmp (sext X), (sext Y) --> scmp X, Y
+///   scmp (zext X), (zext Y) --> ucmp X, Y
+///   ucmp (ext X), (ext Y)   --> ucmp X, Y
+/// Both operands must use the same extend opcode and source type. A constant
+/// operand is narrowed instead, if truncating and re-extending it gives back
+/// the same constant.
+static Value *foldCmpIntrinsicOfExtended(IntrinsicInst *II,
+                                         InstCombiner::BuilderTy &Builder,
+                                         const DataLayout &DL) {
+  // scmp/ucmp are not commutative, so the extend may be on either side.
+  unsigned ExtIdx = 0;
+  Value *X;
+  if (!match(II->getArgOperand(0), m_ZExtOrSExt(m_Value(X)))) {
+    ExtIdx = 1;
+    if (!match(II->getArgOperand(1), m_ZExtOrSExt(m_Value(X))))
+      return nullptr;
+  }
+
+  auto CastOpc = static_cast<Instruction::CastOps>(
+      cast<Operator>(II->getArgOperand(ExtIdx))->getOpcode());
+  Type *NarrowTy = X->getType();
+
+  // The other operand must be the same kind of extend from the same type, or a
+  // constant that can be narrowed losslessly.
+  Value *OtherOp = II->getArgOperand(1 - ExtIdx);
+  Value *Y;
+  Constant *WideC;
+  if (match(OtherOp, m_ZExtOrSExt(m_Value(Y)))) {
+    if (cast<Operator>(OtherOp)->getOpcode() != CastOpc ||
+        Y->getType() != NarrowTy)
+      return nullptr;
+  } else if (match(OtherOp, m_ImmConstant(WideC))) {
+    Y = getLosslessInvCast(WideC, NarrowTy, CastOpc, DL);
+    if (!Y)
+      return nullptr;
+  } else {
+    return nullptr;
+  }
+
+  // Both extends preserve the unsigned order, so an unsigned compare of the
+  // narrow operands is always equivalent. The signed order is only preserved by
+  // sext; zero extended values are non-negative, so a signed compare of those
+  // is an unsigned compare of the narrow operands.
+  Intrinsic::ID NewIID =
+      II->getIntrinsicID() == Intrinsic::scmp && CastOpc == Instruction::SExt
+          ? Intrinsic::scmp
+          : Intrinsic::ucmp;
+  if (ExtIdx != 0)
+    std::swap(X, Y);
+  return Builder.CreateIntrinsic(II->getType(), NewIID, {X, Y});
 }
 
 /// CallInst simplification. This mostly only handles folding of intrinsic
@@ -2488,7 +2535,14 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
 
     break;
   }
-  case Intrinsic::scmp: {
+  case Intrinsic::scmp:
+  case Intrinsic::ucmp: {
+    if (Value *V = foldCmpIntrinsicOfExtended(II, Builder, DL))
+      return replaceInstUsesWith(CI, V);
+
+    if (IID == Intrinsic::ucmp)
+      break;
+
     Value *I0 = II->getArgOperand(0), *I1 = II->getArgOperand(1);
 
     // scmp(X, 0) -> sext_or_trunc(X) if X is known to be one of -1, 0, 1.

@@ -226,6 +226,7 @@ public:
     case DILocalVariableKind:
     case DILabelKind:
     case DIObjCPropertyKind:
+    case DIPropertyKind:
     case DIImportedEntityKind:
     case DIModuleKind:
     case DIGenericSubrangeKind:
@@ -2353,7 +2354,7 @@ private:
           unsigned VirtualIndex, int ThisAdjustment, DIFlags Flags,
           DISPFlags SPFlags, DICompileUnit *Unit,
           DITemplateParameterArray TemplateParams, DISubprogram *Declaration,
-          DINodeArray RetainedNodes, DITypeArray ThrownTypes,
+          MDNodeArray RetainedNodes, DITypeArray ThrownTypes,
           DINodeArray Annotations, StringRef TargetFuncName,
           bool UsesKeyInstructions, StorageType Storage,
           bool ShouldCreate = true) {
@@ -2394,7 +2395,7 @@ public:
        DIType *ContainingType, unsigned VirtualIndex, int ThisAdjustment,
        DIFlags Flags, DISPFlags SPFlags, DICompileUnit *Unit,
        DITemplateParameterArray TemplateParams = nullptr,
-       DISubprogram *Declaration = nullptr, DINodeArray RetainedNodes = nullptr,
+       DISubprogram *Declaration = nullptr, MDNodeArray RetainedNodes = nullptr,
        DITypeArray ThrownTypes = nullptr, DINodeArray Annotations = nullptr,
        StringRef TargetFuncName = "", bool UsesKeyInstructions = false),
       (Scope, Name, LinkageName, File, Line, Type, ScopeLine, ContainingType,
@@ -2523,7 +2524,7 @@ public:
     return cast_or_null<DISubprogram>(getRawDeclaration());
   }
   void replaceDeclaration(DISubprogram *Decl) { replaceOperandWith(6, Decl); }
-  DINodeArray getRetainedNodes() const {
+  MDNodeArray getRetainedNodes() const {
     return cast_or_null<MDTuple>(getRawRetainedNodes());
   }
   DITypeArray getThrownTypes() const {
@@ -2562,19 +2563,24 @@ public:
   void replaceRawLinkageName(MDString *LinkageName) {
     replaceOperandWith(3, LinkageName);
   }
-  void replaceRetainedNodes(DINodeArray N) {
-    replaceOperandWith(7, N.get());
+  void replaceRetainedNodes(MDNodeArray N) { replaceOperandWith(7, N.get()); }
+
+  template <typename IterT> void retainNodes(IterT NodesBegin, IterT NodesEnd) {
+    auto RetainedNodes = getRetainedNodes();
+    SmallVector<Metadata *> MDs(RetainedNodes.begin(), RetainedNodes.end());
+    MDs.append(NodesBegin, NodesEnd);
+    replaceRetainedNodes(MDNode::get(getContext(), MDs));
   }
 
   /// For the given retained node of DISubprogram, applies one of the
   /// given functions depending on the type of the node.
   template <typename T, typename MetadataT, typename FuncLVT,
             typename FuncLabelT, typename FuncImportedEntityT,
-            typename FuncTypeT, typename FuncUnknownT>
+            typename FuncTypeT, typename FuncGVET, typename FuncUnknownT>
   static T visitRetainedNode(MetadataT *N, FuncLVT &&FuncLV,
                              FuncLabelT &&FuncLabel,
                              FuncImportedEntityT &&FuncIE, FuncTypeT &&FuncType,
-                             FuncUnknownT &&FuncUnknown) {
+                             FuncGVET &&FuncGVE, FuncUnknownT &&FuncUnknown) {
     static_assert(std::is_base_of_v<Metadata, MetadataT>,
                   "N must point to Metadata or const Metadata");
 
@@ -2586,6 +2592,8 @@ public:
       return FuncIE(IE);
     if (auto *Ty = dyn_cast<DIType>(N))
       return FuncType(Ty);
+    if (auto *GVE = dyn_cast<DIGlobalVariableExpression>(N))
+      return FuncGVE(GVE);
     return FuncUnknown(N);
   }
 
@@ -2599,12 +2607,13 @@ public:
   /// For each retained node, applies one of the given functions depending
   /// on the type of a node.
   template <typename FuncLVT, typename FuncLabelT, typename FuncImportedEntityT,
-            typename FuncTypeT>
+            typename FuncTypeT, typename FuncGVET>
   void forEachRetainedNode(FuncLVT &&FuncLV, FuncLabelT &&FuncLabel,
-                           FuncImportedEntityT &&FuncIE, FuncTypeT &&FuncType) {
+                           FuncImportedEntityT &&FuncIE, FuncTypeT &&FuncType,
+                           FuncGVET &&FuncGVE) {
     for (MDNode *N : getRetainedNodes())
       visitRetainedNode<void>(
-          N, FuncLV, FuncLabel, FuncIE, FuncType,
+          N, FuncLV, FuncLabel, FuncIE, FuncType, FuncGVE,
           [](auto *N) { llvm_unreachable("Unexpected retained node!"); });
   }
 
@@ -2635,6 +2644,17 @@ public:
   /// it is more complicated for debugger to properly discover local types
   /// of a current scope for expression evaluation.
   LLVM_ABI void cleanupRetainedNodes();
+
+  template <typename T> void cleanupRetainedNodesIf(T &&Pred) {
+    MDTuple *RetainedNodes = dyn_cast_or_null<MDTuple>(getRawRetainedNodes());
+    // As this is expected to be called during module loading, before
+    // stripping old or incorrect debug info, perform minimal sanity check.
+    if (!RetainedNodes)
+      return;
+    // replaceRetainedNodes() should not re-unique DISubprogram if new list is
+    // the same pointer.
+    replaceRetainedNodes(RetainedNodes->filter(Pred));
+  }
 
   /// Calls SP->cleanupRetainedNodes() for a range of DISubprograms.
   template <typename RangeT>
@@ -5146,6 +5166,88 @@ public:
   }
 };
 
+/// A property of a class or structure.
+///
+/// An entity that is syntactically accessed like a data member, but whose
+/// access is implemented by invoking a user-defined or compiler-generated
+/// accessor.
+///
+/// Currently only the backing storage is modelled, and it must be a data
+/// member holding the property's storage.
+class DIProperty : public DINode {
+  friend class LLVMContextImpl;
+  friend class MDNode;
+
+  unsigned Line;
+
+  DIProperty(LLVMContext &C, StorageType Storage, unsigned Line,
+             ArrayRef<Metadata *> Ops);
+  ~DIProperty() = default;
+
+  static DIProperty *getImpl(LLVMContext &Context, StringRef Name, DIFile *File,
+                             unsigned Line, DIType *Type,
+                             DINode *BackingStorage, StorageType Storage,
+                             bool ShouldCreate = true) {
+    return getImpl(Context, getCanonicalMDString(Context, Name), File, Line,
+                   Type, BackingStorage, Storage, ShouldCreate);
+  }
+  LLVM_ABI static DIProperty *getImpl(LLVMContext &Context, MDString *Name,
+                                      Metadata *File, unsigned Line,
+                                      Metadata *Type, Metadata *BackingStorage,
+                                      StorageType Storage,
+                                      bool ShouldCreate = true);
+
+  TempDIProperty cloneImpl() const {
+    return getTemporary(getContext(), getName(), getFile(), getLine(),
+                        getType(), getBackingStorage());
+  }
+
+public:
+  DEFINE_MDNODE_GET(DIProperty,
+                    (StringRef Name, DIFile *File, unsigned Line, DIType *Type,
+                     DINode *BackingStorage),
+                    (Name, File, Line, Type, BackingStorage))
+  DEFINE_MDNODE_GET(DIProperty,
+                    (MDString * Name, Metadata *File, unsigned Line,
+                     Metadata *Type, Metadata *BackingStorage),
+                    (Name, File, Line, Type, BackingStorage))
+
+  TempDIProperty clone() const { return cloneImpl(); }
+
+  unsigned getLine() const { return Line; }
+  StringRef getName() const { return getStringOperand(0); }
+  DIFile *getFile() const { return cast_or_null<DIFile>(getRawFile()); }
+  DIType *getType() const { return cast_or_null<DIType>(getRawType()); }
+
+  /// The data member holding the property's backing storage, i.e. the target
+  /// of \c DW_AT_property_forward on this property's
+  /// \c DW_TAG_property_getter child.
+  DINode *getBackingStorage() const {
+    return cast_or_null<DINode>(getRawBackingStorage());
+  }
+
+  StringRef getFilename() const {
+    if (auto *F = getFile())
+      return F->getFilename();
+    return "";
+  }
+
+  StringRef getDirectory() const {
+    if (auto *F = getFile())
+      return F->getDirectory();
+    return "";
+  }
+
+  MDString *getRawName() const { return getOperandAs<MDString>(0); }
+  Metadata *getRawFile() const { return getOperand(1); }
+  Metadata *getRawType() const { return getOperand(2); }
+  Metadata *getRawBackingStorage() const { return getOperand(3); }
+
+  static bool classof(const Metadata *MD) {
+    return MD->getMetadataID() == DIPropertyKind;
+  }
+};
+
 /// An imported module (C++ using directive or similar).
 ///
 /// Uses the SubclassData32 Metadata slot.
@@ -5557,6 +5659,24 @@ public:
 template <>
 struct DenseMapInfo<DebugVariableAggregate>
     : public DenseMapInfo<DebugVariable> {};
+
+template <typename NodeT> static const DIScope *getScope(const NodeT *N) {
+  return N->getScope();
+}
+
+template <typename NodeT> static DIScope *getScope(NodeT *N) {
+  return N->getScope();
+}
+
+template <>
+[[maybe_unused]] const DIScope *
+getScope<>(const DIGlobalVariableExpression *N) {
+  return N->getVariable()->getScope();
+}
+template <>
+[[maybe_unused]] DIScope *getScope<>(DIGlobalVariableExpression *N) {
+  return N->getVariable()->getScope();
+}
 } // end namespace llvm
 
 #undef DEFINE_MDNODE_GET_UNPACK_IMPL

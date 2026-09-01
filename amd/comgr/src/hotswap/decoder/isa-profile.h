@@ -15,16 +15,15 @@ class MCSubtargetInfo;
 
 namespace COMGR::hotswap {
 
-// The subset of AMDGPU subtarget capabilities the raiser branches on, queried
-// on demand from the MCSubtargetInfo rather than cached. Construct via
-// `fromSubtarget`; the referenced subtarget must outlive the profile. The
-// queries are defined in isa-profile.cpp so this header stays free of the
-// AMDGPU target-private headers they need.
+// AMDGPU subtarget capabilities used by the raiser. Construct via
+// `fromSubtarget`; the referenced subtarget must outlive the profile.
 class ISAProfile {
 public:
   static ISAProfile fromSubtarget(const llvm::MCSubtargetInfo &STI) {
     return ISAProfile(STI);
   }
+
+  const llvm::MCSubtargetInfo &STI;
 
   // Wavefront width in lanes (32 or 64).
   unsigned waveSize() const;
@@ -41,16 +40,34 @@ public:
   // Maximum USER_SGPR_COUNT supported by the source ISA.
   unsigned maxUserSgprs() const;
 
+  // Width in bits of the signed immediate byte offset of a FLAT, GLOBAL or
+  // SCRATCH instruction.
+  unsigned flatOffsetBits() const;
+
+  // Whether the per-lane offset a GLOBAL instruction adds to its SGPR-pair
+  // base is signed. Targets without it read that offset as unsigned.
+  bool hasSignedGlobalLaneOffset() const;
+
   // Whether the source ISA supports kernarg preloading.
   bool hasKernargPreload() const;
 
   // Whether the source ISA uses architected SGPRs.
   bool hasArchitectedSgprs() const;
 
-private:
-  explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}
+  /// Return whether kernel descriptors for this ISA encode DX10_CLAMP and
+  /// IEEE_MODE.
+  bool hasDx10ClampAndIeeeMode() const;
 
-  const llvm::MCSubtargetInfo *STI;
+  // Whether the ISA has the combined `s_waitcnt` covering every wait counter.
+  bool hasCombinedWaitcnt() const;
+
+  enum class WavePriorityModel { Gfx9, Gfx125 };
+
+  /// Return the model used to combine system and user wave priorities.
+  WavePriorityModel wavePriorityModel() const;
+
+private:
+  explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(STI) {}
 };
 
 } // namespace COMGR::hotswap

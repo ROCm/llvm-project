@@ -138,6 +138,18 @@ def module_dir : JoinedOrSeparate<["-"], "module-dir">, MetaVarName<"<dir>">,
   DocBrief<[{This option specifies where to put .mod files for compiled modules.
 It is also added to the list of directories to be searched by an USE statement.
 The default is the current directory.}]>;
+def fmodule_mismatch_check_EQ : Joined<["-"], "fmodule-mismatch-check=">,
+  Group<f_Group>,
+  HelpText<"Check consistency of used modules (option: on, non-intrinsic, warn)">,
+  DocBrief<[{Normally, when loading a .mod file, Flang checks whether the
+modules it itself depends on are the same modules from when the .mod file was
+created. If there is a mismatch, compilation fails. The option converts this
+error into a warning instead. The warning can be silenced using
+-Wno-module-file-mismatch and thus mismatches are completely ignored.
+-fmodule-mismatch-check=non-intrinsic still keeps the error for user modules
+where mismatches hint towards a build dependency problem. Mismatches of
+intrinsic modules are expected after a compiler upgrade. Upgraded intrinsic
+modules are supposed to be backwards-compatible.}]>;
 
 def ffixed_form : Flag<["-"], "ffixed-form">, Group<f_Group>,
   HelpText<"Process source files in fixed form">;
@@ -197,6 +209,9 @@ defm openacc_default_none_scalars_strict : OptOutFC1FFlag<"openacc-default-none-
 defm openacc_multiple_names_in_routine : OptOutFC1FFlag<"openacc-multiple-names-in-routine",
   "Accept multiple names in OpenACC ROUTINE directive (extension)",
   "Do not accept multiple names in OpenACC ROUTINE directive">;
+defm prefer_intrinsic_module_use_association : OptOutFC1FFlag<"prefer-intrinsic-module-use-association",
+  "Resolve a USE association conflict in favor of an intrinsic module generic (extension)",
+  "Diagnose a USE association conflict with an intrinsic module generic">;
 
 def fno_automatic : Flag<["-"], "fno-automatic">, Group<f_Group>,
   HelpText<"Implies the SAVE attribute for non-automatic local objects in subprograms unless RECURSIVE">;
