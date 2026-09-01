@@ -14,7 +14,7 @@
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/decoder/mc-state.h"
 #include "hotswap/decoder/parsed-reg.h"
-#include "hotswap/raiser/op-resolver.h"
+#include "hotswap/raiser/operand-resolver.h"
 #include "hotswap/raiser/raise-context.h"
 
 #include "llvm/IR/Constants.h"
@@ -98,7 +98,7 @@ static std::optional<unsigned> scalarLoadWidthInDwords(CanonicalOp Operation) {
   }
 }
 
-Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &) {
+Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   std::optional<unsigned> LoadWidthInDwords =
       scalarLoadWidthInDwords(Di.CanonOp);
   if (!LoadWidthInDwords)

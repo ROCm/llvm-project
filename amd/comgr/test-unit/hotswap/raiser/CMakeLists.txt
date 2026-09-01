@@ -161,15 +161,15 @@ target_include_directories(RaiseContextTests PRIVATE
 
 comgr_configure_test_target(RaiseContextTests)
 
-# -- OpResolverTests ----------------------------------------------------------
+# -- OperandResolverTests -----------------------------------------------------
 #
 # Covers the per-instruction operand accessor: the failures it propagates out of
 # the register reads it resolves through.
 
-add_executable(OpResolverTests
-  OpResolverTest.cpp)
+add_executable(OperandResolverTests
+  OperandResolverTest.cpp)
 
-target_link_libraries(OpResolverTests PRIVATE
+target_link_libraries(OperandResolverTests PRIVATE
   ${COMGR_GTEST_LIBS}
   hotswap::raiser
   hotswap::decoder
@@ -178,13 +178,13 @@ target_link_libraries(OpResolverTests PRIVATE
   ${COMGR_HOTSWAP_TEST_LLVM_LIBS}
   ${LLVM_PTHREAD_LIB})
 
-target_include_directories(OpResolverTests PRIVATE
+target_include_directories(OperandResolverTests PRIVATE
   ${LLVM_INCLUDE_DIRS}
   ${PROJECT_SOURCE_DIR}/src
   ${COMGR_GTEST_INCLUDE_DIRS}
   $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>)
 
-comgr_configure_test_target(OpResolverTests)
+comgr_configure_test_target(OperandResolverTests)
 
 # -- UserSgprLayoutTests ------------------------------------------------------
 #

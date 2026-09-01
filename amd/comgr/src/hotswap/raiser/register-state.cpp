@@ -617,6 +617,16 @@ void RegisterState::writeRegExecWidth(ParsedReg Pr, Value *V) {
   }
 }
 
+void RegisterState::writeReg32UnderExec(ParsedReg Pr,
+                                        function_ref<Value *()> Body) {
+  // Only a per-lane register can take a predicated write. A scalar one commits
+  // for the whole wave, and writing it invalidates facts that a body running
+  // under EXEC cannot be trusted to have invalidated.
+  assert((Pr.RegKind == ParsedReg::VGPR || Pr.RegKind == ParsedReg::AGPR) &&
+         "predicated register write must target a per-lane register");
+  emitUnderExec([&] { Regs.writeReg32(B, Pr, Body()); });
+}
+
 void RegisterState::storeVGPR32(unsigned Idx, Value *V) {
   emitUnderExec([&] { Regs.storeVGPR32(B, Idx, V); });
 }

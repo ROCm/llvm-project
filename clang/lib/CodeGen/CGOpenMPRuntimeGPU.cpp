@@ -722,32 +722,13 @@ static void setPropertyWorkGroupSize(CodeGenModule &CGM, StringRef Name,
   CGM.addCompilerUsedGlobal(GVMode);
 }
 
-// Compute the correct number of threads in a team
-// to accommodate for a master thread.
-// Keep aligned with amdgpu plugin code located in function getLaunchVals
+// Generic mode runs the main thread on a warp of its own, past thread_limit.
+// Keep aligned with createTargetInit in OMPIRBuilder.
 static int ComputeGenericWorkgroupSize(CodeGenModule &CGM, int WorkgroupSize) {
   assert(WorkgroupSize >= 0);
-  int MaxWorkGroupSz = CGM.getTarget().getGridValue().GV_Max_WG_Size;
-  int WorkgroupSizeWithMaster = -1;
-
-  // Add master thread in additional warp for GENERIC mode
-  // Only one additional thread is started, not an entire warp
-
-  if (WorkgroupSize >= MaxWorkGroupSz)
-    // Do not exceed max number of threads: sacrifice last warp for
-    // the thread master
-    WorkgroupSizeWithMaster =
-        MaxWorkGroupSz - CGM.getTarget().getGridValue().GV_Warp_Size + 1;
-  else if ((unsigned int)WorkgroupSize <
-           CGM.getTarget().getGridValue().GV_Warp_Size)
-    // Cap threadsPerGroup at WarpSize level as we need a master
-    WorkgroupSizeWithMaster = CGM.getTarget().getGridValue().GV_Warp_Size + 1;
-  else
-    WorkgroupSizeWithMaster =
-        CGM.getTarget().getGridValue().GV_Warp_Size *
-            (WorkgroupSize / CGM.getTarget().getGridValue().GV_Warp_Size) +
-        1;
-  return WorkgroupSizeWithMaster;
+  const llvm::omp::GV &GridValue = CGM.getTarget().getGridValue();
+  return std::min<int>(WorkgroupSize + GridValue.GV_Warp_Size,
+                       GridValue.GV_Max_WG_Size);
 }
 
 void CGOpenMPRuntimeGPU::GenerateMetaData(CodeGenModule &CGM,
@@ -2235,9 +2216,6 @@ llvm::Function *CGOpenMPRuntimeGPU::createParallelDataSharingWrapper(
 
   CGM.SetInternalFunctionAttributes(GlobalDecl(), Fn, CGFI);
   Fn->setLinkage(llvm::GlobalValue::InternalLinkage);
-
-  Fn->setDoesNotRecurse();
-
   CodeGenFunction CGF(CGM, /*suppressNewContext=*/true);
   CGF.StartFunction(GlobalDecl(), Ctx.VoidTy, Fn, CGFI, WrapperArgs,
                     D.getBeginLoc(), D.getBeginLoc());

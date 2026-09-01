@@ -11,7 +11,7 @@
 #include "hotswap/decoder/canonical-op.h"
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/decoder/parsed-reg.h"
-#include "hotswap/raiser/op-resolver.h"
+#include "hotswap/raiser/operand-resolver.h"
 #include "hotswap/raiser/raise-context.h"
 
 #include "llvm/ADT/STLFunctionalExtras.h"
@@ -33,7 +33,8 @@ namespace COMGR::hotswap {
 using BinaryBuilder = function_ref<Value *(IRBuilder<> &, Value *, Value *)>;
 
 static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
-                              OpResolver &Op, Instruction::BinaryOps Opcode,
+                              OperandResolver &Op,
+                              Instruction::BinaryOps Opcode,
                               bool ReverseOperands) {
   if (Di.NumDefs != 1 || Di.numOperands() == 0 || !Di.isReg(0) ||
       Op.nSrcs() != 2) {
@@ -62,7 +63,7 @@ static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
 
 // Build a 32-bit result from two integer sources and write it to the
 // destination.
-static Error raiseBinary32(RaiseContext &Ctx, OpResolver &Op,
+static Error raiseBinary32(RaiseContext &Ctx, OperandResolver &Op,
                            BinaryBuilder Build) {
   Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args) {
@@ -73,7 +74,7 @@ static Error raiseBinary32(RaiseContext &Ctx, OpResolver &Op,
 }
 
 // Raise a low-16-bit binary operation and zero-extend its result to 32 bits.
-static Error raiseBinary16(RaiseContext &Ctx, OpResolver &Op,
+static Error raiseBinary16(RaiseContext &Ctx, OperandResolver &Op,
                            BinaryBuilder Build) {
   return raiseBinary32(Ctx, Op, [&](IRBuilder<> &B, Value *Src0, Value *Src1) {
     Type *I16Ty = B.getInt16Ty();
@@ -94,7 +95,7 @@ static void writeResultAndVCC(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
 }
 
 // Raise a binary operation that writes carry or borrow to VCC.
-static Error raiseBinary32WriteVCC(RaiseContext &Ctx, OpResolver &Op,
+static Error raiseBinary32WriteVCC(RaiseContext &Ctx, OperandResolver &Op,
                                    Intrinsic::ID IntrinsicID,
                                    bool ReverseOperands) {
   Expected<BinaryOperands> Args = Op.readBinary32();
@@ -113,7 +114,7 @@ static Error raiseBinary32WriteVCC(RaiseContext &Ctx, OpResolver &Op,
 
 // Raise a binary operation that reads carry or borrow from VCC and writes the
 // updated carry or borrow back to VCC.
-static Error raiseBinary32ReadWriteVCC(RaiseContext &Ctx, OpResolver &Op,
+static Error raiseBinary32ReadWriteVCC(RaiseContext &Ctx, OperandResolver &Op,
                                        Intrinsic::ID IntrinsicID,
                                        bool ReverseOperands) {
   Expected<BinaryOperands> Args = Op.readBinary32();
@@ -138,7 +139,7 @@ static Error raiseBinary32ReadWriteVCC(RaiseContext &Ctx, OpResolver &Op,
 }
 
 // Select src1 when the current lane's VCC bit is set, otherwise src0.
-static Error raiseCndMask(RaiseContext &Ctx, OpResolver &Op) {
+static Error raiseCndMask(RaiseContext &Ctx, OperandResolver &Op) {
   Expected<BinaryOperands> Args = Op.readBinary32();
   if (!Args) {
     return Args.takeError();
@@ -151,7 +152,7 @@ static Error raiseCndMask(RaiseContext &Ctx, OpResolver &Op) {
 
 // Accumulate signed products of packed source elements, using the destination's
 // incoming value as the accumulator.
-static Error raiseSignedDotAccumulate(RaiseContext &Ctx, OpResolver &Op,
+static Error raiseSignedDotAccumulate(RaiseContext &Ctx, OperandResolver &Op,
                                       unsigned ElementWidthInBits) {
   assert(Op.nSrcs() == 3 && "dot accumulate must have three sources");
   Expected<BinaryOperands> Args = Op.readBinary32();
@@ -187,7 +188,7 @@ static Error raiseSignedDotAccumulate(RaiseContext &Ctx, OpResolver &Op,
 
 // Build a 64-bit result from two integer sources and write it to the
 // destination.
-static Error raiseBinary64(RaiseContext &Ctx, OpResolver &Op,
+static Error raiseBinary64(RaiseContext &Ctx, OperandResolver &Op,
                            BinaryBuilder Build) {
   Expected<BinaryOperands> Args = Op.readBinary64();
   if (!Args) {
@@ -216,7 +217,7 @@ static Value *extendLow24(IRBuilder<> &B, Value *Source, Type *Ty,
 }
 
 // Raise a 24-bit multiply returning the low 32 bits of the product.
-static Error raiseMul24(RaiseContext &Ctx, OpResolver &Op, bool IsSigned) {
+static Error raiseMul24(RaiseContext &Ctx, OperandResolver &Op, bool IsSigned) {
   return raiseBinary32(Ctx, Op,
                        [IsSigned](IRBuilder<> &B, Value *Src0, Value *Src1) {
                          Type *I32Ty = B.getInt32Ty();
@@ -228,7 +229,8 @@ static Error raiseMul24(RaiseContext &Ctx, OpResolver &Op, bool IsSigned) {
 
 // Raise a 24-bit multiply returning bits [63:32] of the sign- or
 // zero-extended 64-bit product.
-static Error raiseMulHi24(RaiseContext &Ctx, OpResolver &Op, bool IsSigned) {
+static Error raiseMulHi24(RaiseContext &Ctx, OperandResolver &Op,
+                          bool IsSigned) {
   return raiseBinary32(
       Ctx, Op, [IsSigned](IRBuilder<> &B, Value *Src0, Value *Src1) {
         Type *I64Ty = B.getInt64Ty();
@@ -243,7 +245,7 @@ static Error raiseMulHi24(RaiseContext &Ctx, OpResolver &Op, bool IsSigned) {
 
 // Raise `v_lshlrev_b64`, whose src0 is a 32-bit shift amount while its src1
 // and destination are 64 bits.
-static Error raiseShiftLeft64(RaiseContext &Ctx, OpResolver &Op) {
+static Error raiseShiftLeft64(RaiseContext &Ctx, OperandResolver &Op) {
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst) {
     return Dst.takeError();
@@ -262,7 +264,8 @@ static Error raiseShiftLeft64(RaiseContext &Ctx, OpResolver &Op) {
   return Error::success();
 }
 
-Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op) {
+Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
+                 OperandResolver &Op) {
   switch (Di.CanonOp) {
   case CanonicalOp::V_ADD_F32:
     return raiseFloatBinary(Ctx, Di, Op, Instruction::FAdd,

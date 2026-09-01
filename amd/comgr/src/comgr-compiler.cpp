@@ -548,14 +548,16 @@ bool executeAssembler(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
 SmallString<128> getFilePath(DataObject *Object, StringRef Dir) {
   SmallString<128> Path(Dir);
   path::append(Path, Object->Name);
+  return Path;
+}
 
-  // Create directories specified in the File Path so that the in-process driver
-  // can successfully execute clang commands that use this file path as an
-  // output argument
+// Also creates the parent directory, which only paths the in-process driver
+// writes itself need; outputToFile creates its own.
+SmallString<128> getOutputFilePath(DataObject *Object, StringRef Dir) {
+  SmallString<128> Path = getFilePath(Object, Dir);
   if (fs::create_directories(path::parent_path(Path))) {
     return SmallString<128>();
   }
-
   return Path;
 }
 
@@ -570,8 +572,7 @@ amd_comgr_status_t inputFromFile(DataObject *Object, StringRef Path) {
   if (std::error_code EC = BufOrError.getError()) {
     return AMD_COMGR_STATUS_ERROR;
   }
-  Object->setData(BufOrError.get()->getBuffer());
-  return AMD_COMGR_STATUS_SUCCESS;
+  return Object->setData(std::move(*BufOrError));
 }
 
 amd_comgr_status_t outputToFile(StringRef Data, StringRef Path) {
@@ -1394,7 +1395,7 @@ AMDGPUCompiler::processFiles(amd_comgr_data_kind_t OutputKind,
       continue;
     }
     auto IncludeFilePath = getFilePath(Input, IncludeDir);
-    if (auto Status = outputToFile(Input, IncludeFilePath)) {
+    if (auto Status = materializeDataObjectData(Input, IncludeFilePath)) {
       return Status;
     }
   }
@@ -1426,7 +1427,7 @@ AMDGPUCompiler::processFiles(amd_comgr_data_kind_t OutputKind,
     sys::path::replace_extension(OutputName, OutputSuffix);
     Output->setName(OutputName);
 
-    auto OutputFilePath = getFilePath(Output, OutputDir);
+    auto OutputFilePath = getOutputFilePath(Output, OutputDir);
 
     if (auto Status =
             processFile(Input, InputFilePath.c_str(), OutputFilePath.c_str())) {
@@ -1456,7 +1457,7 @@ amd_comgr_status_t AMDGPUCompiler::addIncludeFlags() {
     SmallString<128> OpenCLCBasePath = IncludeDir;
     sys::path::append(OpenCLCBasePath, "opencl-c-base.h");
     if (auto Status =
-            outputToFile(getOpenCLCBaseHeaderContents(), OpenCLCBasePath)) {
+            outputResource(OpenCLCBasePath, getOpenCLCBaseHeaderContents())) {
       return Status;
     }
     Args.push_back("-include");
@@ -1483,7 +1484,7 @@ amd_comgr_status_t AMDGPUCompiler::addIncludeFlags() {
     }
     PrecompiledHeaders.push_back(getFilePath(Input, IncludeDir));
     auto &PrecompiledHeaderPath = PrecompiledHeaders.back();
-    if (auto Status = outputToFile(Input, PrecompiledHeaderPath)) {
+    if (auto Status = materializeDataObjectData(Input, PrecompiledHeaderPath)) {
       return Status;
     }
     Args.push_back("-include-pch");
@@ -1584,8 +1585,12 @@ amd_comgr_status_t AMDGPUCompiler::outputResource(llvm::StringRef Path,
   // TODO: We should abstract the logic of deciding whether to use the VFS
   // or the real file system within inputFromFile and outputToFile.
   if (UseVFS) {
-    if (!InMemoryFS->addFile(Path, /* ModificationTime */ 0,
-                             llvm::MemoryBuffer::getMemBuffer(FileContent))) {
+    // Not null-terminated: set_data_from_file_slice hands us a raw mapping.
+    if (!InMemoryFS->addFile(
+            Path, /* ModificationTime */ 0,
+            llvm::MemoryBuffer::getMemBuffer(FileContent, Path,
+                                             /* RequiresNullTerminator */
+                                             false))) {
       return AMD_COMGR_STATUS_ERROR;
     }
   } else {
@@ -1595,6 +1600,11 @@ amd_comgr_status_t AMDGPUCompiler::outputResource(llvm::StringRef Path,
   }
 
   return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMDGPUCompiler::materializeDataObjectData(DataObject *Object,
+                                                             StringRef Path) {
+  return outputResource(Path, StringRef(Object->Data, Object->Size));
 }
 
 amd_comgr_status_t AMDGPUCompiler::addDeviceLibraries() {
@@ -2244,7 +2254,7 @@ amd_comgr_status_t AMDGPUCompiler::linkToRelocatable() {
 
   DataObject *Output = DataObject::convert(OutputT);
   Output->setName("a.o");
-  auto OutputFilePath = getFilePath(Output, OutputDir);
+  auto OutputFilePath = getOutputFilePath(Output, OutputDir);
   Args.push_back("-o");
   Args.push_back(OutputFilePath.c_str());
 
@@ -2305,7 +2315,7 @@ amd_comgr_status_t AMDGPUCompiler::linkToExecutable() {
 
   DataObject *Output = DataObject::convert(OutputT);
   Output->setName("a.so");
-  auto OutputFilePath = getFilePath(Output, OutputDir);
+  auto OutputFilePath = getOutputFilePath(Output, OutputDir);
   Args.push_back("-o");
   Args.push_back(OutputFilePath.c_str());
 

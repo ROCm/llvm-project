@@ -1,0 +1,48 @@
+name: sync-branch-main
+
+on:
+  # Runs every day at 11 PM UTC
+  schedule:
+    - cron: '0 23 * * *'
+  # Allows manual triggering
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  # Allows to push branches
+  contents: write
+
+jobs:
+  sync-branch-main:
+    if: ${{ github.repository == 'ROCm/llvm-project' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.MERGE_APP_ID }}
+          private-key: ${{ secrets.MERGE_APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: users/kzhuravl/main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync branches
+        run: |
+          UPSTREAM_URL="https://github.com/llvm/llvm-project.git"
+          UPSTREAM_BRANCH="main"
+          git fetch $UPSTREAM_URL $UPSTREAM_BRANCH
+          git merge --ff-only FETCH_HEAD
+          git push origin users/kzhuravl/main

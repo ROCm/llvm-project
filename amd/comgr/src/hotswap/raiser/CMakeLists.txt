@@ -33,12 +33,17 @@ add_library(hotswap-raiser OBJECT
   user-sgpr-layout.cpp
   register-state.cpp
   raise-context.cpp
-  op-resolver.cpp
+  operand-resolver.cpp
+  flat-addr.cpp
+  handle-flat.cpp
   handle-smem.cpp
   handle-sop1.cpp
   handle-sop2.cpp
+  handle-sopc.cpp
+  handle-sopk.cpp
   handle-sopp.cpp
   handle-vop2.cpp
+  handle-vopc.cpp
 )
 
 if(NOT TARGET hotswap::raiser)

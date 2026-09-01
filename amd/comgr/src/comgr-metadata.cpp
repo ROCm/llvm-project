@@ -293,7 +293,6 @@ struct IsaInfo {
   const char *IsaName;
   const char *Processor;
   unsigned ElfMachine;
-  bool TrapHandlerEnabled;
   unsigned LDSBankCount;
   unsigned MaxFlatWorkGroupSize;
   unsigned VGPRAllocGranule;
@@ -301,15 +300,30 @@ struct IsaInfo {
   // TODO: Update this to AvailableNumVGPRs to be more accurate
   unsigned AddressableNumVGPRs;
 } IsaInfos[] = {
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, ELF_MACHINE,                      \
-                   TRAP_HANDLER_ENABLED, LDS_BANK_COUNT,                       \
+#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, ELF_MACHINE, LDS_BANK_COUNT,      \
                    MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
                    TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
-  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR,       ELF::ELF_MACHINE,             \
-   TRAP_HANDLER_ENABLED,        LDS_BANK_COUNT,  MAX_FLAT_WORK_GROUP_SIZE,     \
-   VGPR_ALLOC_GRANULE,          TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS},
+  {TARGET_TRIPLE "-" PROCESSOR,                                                \
+   PROCESSOR,                                                                  \
+   ELF::ELF_MACHINE,                                                           \
+   LDS_BANK_COUNT,                                                             \
+   MAX_FLAT_WORK_GROUP_SIZE,                                                   \
+   VGPR_ALLOC_GRANULE,                                                         \
+   TOTAL_NUM_VGPRS,                                                            \
+   ADDRESSABLE_NUM_VGPRS},
 #include "comgr-isa-metadata.def"
 };
+
+namespace {
+// Every AMDGCN target Comgr supports ships a trap handler. Kept as a query so
+// per-processor exceptions can be added without reintroducing a table column.
+bool isTrapHandlerEnabled(AMDGPU::GPUKind Kind) {
+  switch (Kind) {
+  default:
+    return true;
+  }
+}
+} // namespace
 
 size_t getIsaCount() {
   return std::distance(std::begin(IsaInfos), std::end(IsaInfos));
@@ -528,7 +542,7 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
 
   auto Info = IsaInfos[IsaIndex];
   Root["TrapHandlerEnabled"] =
-      Doc.getNode(std::to_string(Info.TrapHandlerEnabled), /*Copy=*/true);
+      Doc.getNode(std::to_string(isTrapHandlerEnabled(Kind)), /*Copy=*/true);
   Root["ImageSupport"] = Doc.getNode(
       std::to_string(Features.test(AMDGPU::FEAT_IMAGE_INSTS)), /*Copy=*/true);
   Root["LocalMemorySize"] = Doc.getNode(

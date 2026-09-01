@@ -109,6 +109,12 @@ public:
   // Write a wave mask at the target EXEC width.
   void writeRegExecWidth(ParsedReg Pr, llvm::Value *V);
 
+  // Emit Body in a lane-active region and write the value it returns to the
+  // per-lane register Pr names. For a value an inactive lane must not compute
+  // at all, such as one loaded from a per-lane address.
+  void writeReg32UnderExec(ParsedReg Pr,
+                           llvm::function_ref<llvm::Value *()> Body);
+
   // Write V to a vector register by resolved index, predicated on EXEC.
   void storeVGPR32(unsigned Idx, llvm::Value *V);
   void storeVGPR64(unsigned Idx, llvm::Value *V);

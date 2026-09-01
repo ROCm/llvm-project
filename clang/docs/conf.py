@@ -281,3 +281,8 @@ texinfo_documents = [
 
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 # texinfo_show_urls = 'footnote'
+
+# Pygments lexers are sometimes out of date or fail on custom/new Clang C++
+# attributes (e.g. [[clang::...]]). Suppress the warning so the build
+# doesn't abort under -W.
+suppress_warnings = ["misc.highlighting_failure"]

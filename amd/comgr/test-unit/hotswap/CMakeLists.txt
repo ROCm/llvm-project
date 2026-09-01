@@ -20,7 +20,7 @@ if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
   add_subdirectory(decoder)
   list(APPEND COMGR_HOTSWAP_TEST_TARGETS
     RaiserScaffoldingTests WaveProjectionTests RaiseFailureTests RegFileTests
-    RegisterStateTests RaiseContextTests OpResolverTests UserSgprLayoutTests
+    RegisterStateTests RaiseContextTests OperandResolverTests UserSgprLayoutTests
     DecoderTests)
 endif()
 

@@ -1,0 +1,87 @@
+//===- operand-resolver.cpp - Hotswap transpiler --------------------------===//
+//
+// Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
+// amd/comgr/LICENSE.TXT in this repository for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#include "hotswap/raiser/operand-resolver.h"
+
+#include "llvm/IR/Intrinsics.h"
+
+#include <climits>
+
+using namespace llvm;
+
+namespace COMGR::hotswap {
+
+unsigned OperandResolver::srcMod(unsigned I) const {
+  assert(I < Di.ModMap.size() && "source modifier index out of range");
+  unsigned ModIdx = Di.ModMap[I];
+  if (ModIdx == UINT_MAX)
+    return 0;
+  assert(Di.isImm(ModIdx) && "source modifier must be an immediate");
+  return static_cast<unsigned>(Di.getImm(ModIdx) & 0xF);
+}
+
+Value *OperandResolver::applyMods(unsigned I, Value *V) {
+  unsigned Mods = srcMod(I);
+  if (Mods == 0)
+    return V;
+  bool IsI32 = (V->getType() == Ctx.B.getInt32Ty());
+  if (IsI32)
+    V = Ctx.B.CreateBitCast(V, Ctx.B.getFloatTy());
+  if (Mods & 2)
+    V = Ctx.B.CreateUnaryIntrinsic(Intrinsic::fabs, V, nullptr, "abs");
+  if (Mods & 1)
+    V = Ctx.B.CreateFNeg(V, "neg");
+  if (IsI32)
+    V = Ctx.B.CreateBitCast(V, Ctx.B.getInt32Ty());
+  return V;
+}
+
+Expected<Value *> OperandResolver::srcF(unsigned I) {
+  Expected<Value *> V = Ctx.registers().readOp32(Di, srcIdx(I));
+  if (!V)
+    return V.takeError();
+  return applyMods(I, *V);
+}
+
+Expected<std::optional<ParsedReg>> OperandResolver::srcReg(unsigned I) {
+  unsigned Index = srcIdx(I);
+  if (!Di.isReg(Index))
+    return std::optional<ParsedReg>();
+  Expected<ParsedReg> Reg = Ctx.registers().parseReg(Di, Index);
+  if (!Reg)
+    return Reg.takeError();
+  return std::optional<ParsedReg>(*Reg);
+}
+
+Expected<BinaryOperands> OperandResolver::readBinary32() {
+  Expected<ParsedReg> Dst = dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Src0 = src(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = src(1);
+  if (!Src1)
+    return Src1.takeError();
+  return BinaryOperands{*Dst, *Src0, *Src1};
+}
+
+Expected<BinaryOperands> OperandResolver::readBinary64() {
+  Expected<ParsedReg> Dst = dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Src0 = src64(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = src64(1);
+  if (!Src1)
+    return Src1.takeError();
+  return BinaryOperands{*Dst, *Src0, *Src1};
+}
+
+} // namespace COMGR::hotswap
