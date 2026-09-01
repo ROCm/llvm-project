@@ -172,8 +172,8 @@ Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di,
   if (Policy.Write == HardwareRegisterWriteAction::Ignore)
     return Error::success();
 
-  bool HasExtendedVgprs = Ctx.Projection.sourceSTI().hasFeature(
-      AMDGPU::Feature1024AddressableVGPRs);
+  bool HasExtendedVgprs =
+      Ctx.Projection.Source.hasFeature(AMDGPU::Feature1024AddressableVGPRs);
   Value *ValueArg;
   if (Di.CanonOp == CanonicalOp::S_SETREG_IMM32_B32) {
     uint64_t Value = static_cast<uint64_t>(Di.getImm(0));

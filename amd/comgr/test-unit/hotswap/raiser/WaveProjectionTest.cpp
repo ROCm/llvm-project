@@ -85,8 +85,8 @@ TEST_F(WaveProjectionContract, ReplicationDoesNotProvideFullWaveExec) {
 
   ReplicationProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
-  EXPECT_EQ(&Proj.sourceSTI(), &Src);
-  EXPECT_EQ(&Proj.targetSTI(), &Tgt);
+  EXPECT_EQ(&Proj.Source, &Src);
+  EXPECT_EQ(&Proj.Target, &Tgt);
   EXPECT_EQ(Proj.sourceWaveSize(), 32u);
   EXPECT_EQ(Proj.targetWaveSize(), 64u);
 

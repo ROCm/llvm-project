@@ -44,7 +44,7 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_32);
   bool Dx10Clamp = true;
   bool IeeeMode = true;
-  if (Projection.sourceSTI().hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
+  if (Projection.Source.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
     Dx10Clamp =
         AMDHSA_BITS_GET(Meta.ComputePgmRsrc1,
                         amdhsa::COMPUTE_PGM_RSRC1_GFX6_GFX11_ENABLE_DX10_CLAMP);
@@ -78,7 +78,7 @@ RaiseContext::RaiseContext(
 }
 
 Error RaiseContext::validateF32Environment(const DecodedInst &Di) const {
-  if (!Projection.targetSTI().hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
+  if (!Projection.Target.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
     if (!SourceDx10Clamp) {
       return RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedFloatingPointMode,

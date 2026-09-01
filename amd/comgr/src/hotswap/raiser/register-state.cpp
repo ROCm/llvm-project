@@ -44,7 +44,7 @@ Expected<RegisterState> RegisterState::create(IRBuilder<> &B,
                                               const KernelMeta &Meta) {
   UserSgprLayout Layout;
   if (Error Err = UserSgprLayout::tryFromKernelMeta(
-          Meta, Projection.sourceSTI(), MC.SubtargetInfo->getCPU(), Layout))
+          Meta, Projection.Source, MC.SubtargetInfo->getCPU(), Layout))
     return std::move(Err);
   RegisterState Registers(B, Projection, MC, std::move(Layout));
   if (Error Err = Registers.seedEntrySgprs())
@@ -110,8 +110,8 @@ Error RegisterState::seedEntrySgprs() {
 RegisterState::RegisterState(IRBuilder<> &B, const WaveProjection &Projection,
                              const MCState &MC, UserSgprLayout Layout)
     : B(B), Projection(Projection), MC(MC), Layout(std::move(Layout)) {
-  Regs.init(B, B.getInt32Ty(), B.getInt1Ty(), Projection.sourceSTI(),
-            *MC.RegInfo, Projection);
+  Regs.init(B, B.getInt32Ty(), B.getInt1Ty(), Projection.Source, *MC.RegInfo,
+            Projection);
 
   SgprShadows.reserve(Regs.Sgpr.size());
   for (unsigned I = 0, E = Regs.Sgpr.size(); I != E; ++I) {

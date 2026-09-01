@@ -40,7 +40,7 @@ void emitWait(RaiseContext &Ctx, Intrinsic::ID Wait, Value *Count) {
 // for less can.
 void emitMemoryWaitAll(RaiseContext &Ctx) {
   IRBuilder<> &B = Ctx.B;
-  if (Ctx.Projection.targetSTI().hasFeature(AMDGPU::FeatureGFX9)) {
+  if (Ctx.Projection.Target.hasFeature(AMDGPU::FeatureGFX9)) {
     emitWait(Ctx, Intrinsic::amdgcn_s_waitcnt, B.getInt32(0));
     return;
   }
@@ -56,8 +56,8 @@ void emitMemoryWaitAll(RaiseContext &Ctx) {
 // target use the same priority model. The dispatch-time system priority is
 // unavailable, so different models cannot be proven to preserve wave ordering.
 Error raiseWavePriority(RaiseContext &Ctx, const DecodedInst &Di) {
-  if (Ctx.Projection.sourceSTI().hasFeature(AMDGPU::FeatureGFX1250Insts) !=
-      Ctx.Projection.targetSTI().hasFeature(AMDGPU::FeatureGFX1250Insts))
+  if (Ctx.Projection.Source.hasFeature(AMDGPU::FeatureGFX1250Insts) !=
+      Ctx.Projection.Target.hasFeature(AMDGPU::FeatureGFX1250Insts))
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedWavePriority,
         strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,

@@ -51,18 +51,18 @@ static unsigned getWaveSize(const MCSubtargetInfo &STI) {
 // that keeps each target lane mapped 1:1 to a hardware lane.
 // ----------------------------------------------------------------------------
 
-WaveProjection::WaveProjection(const MCSubtargetInfo &SrcSTI,
-                               const MCSubtargetInfo &TgtSTI, Type *I32Ty,
+WaveProjection::WaveProjection(const MCSubtargetInfo &SourceSTI,
+                               const MCSubtargetInfo &TargetSTI, Type *I32Ty,
                                Type *I64Ty)
-    : SrcSTI(SrcSTI), TgtSTI(TgtSTI), I32Ty(I32Ty), I64Ty(I64Ty),
-      ExecStorageTy(getWaveSize(SrcSTI) == 32 ? I32Ty : I64Ty) {
+    : Source(SourceSTI), Target(TargetSTI), I32Ty(I32Ty), I64Ty(I64Ty),
+      ExecStorageTy(getWaveSize(Source) == 32 ? I32Ty : I64Ty) {
   assert(targetWaveSize() >= sourceWaveSize() &&
          "wave projection does not support narrowing");
 }
 
-unsigned WaveProjection::sourceWaveSize() const { return getWaveSize(SrcSTI); }
+unsigned WaveProjection::sourceWaveSize() const { return getWaveSize(Source); }
 
-unsigned WaveProjection::targetWaveSize() const { return getWaveSize(TgtSTI); }
+unsigned WaveProjection::targetWaveSize() const { return getWaveSize(Target); }
 
 Type *WaveProjection::waveMaskTy() const {
   return targetWaveSize() == 32 ? I32Ty : I64Ty;
@@ -131,7 +131,7 @@ Value *WaveProjection::emitWorkitemIdX(IRBuilder<> &B) const {
 
 Value *WaveProjection::emitTargetWaveId(IRBuilder<> &B) const {
   Module *M = B.GetInsertBlock()->getModule();
-  if (TgtSTI.hasFeature(AMDGPU::FeatureArchitectedSGPRs)) {
+  if (Target.hasFeature(AMDGPU::FeatureArchitectedSGPRs)) {
     Function *Fn =
         Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_wave_id);
     return B.CreateCall(Fn, {}, "target_wave_id");
@@ -434,9 +434,9 @@ ReplicationDoubledDispatchProjection::emitWorkitemIdX(IRBuilder<> &B) const {
 }
 
 ReplicationDoubledDispatchProjection::ReplicationDoubledDispatchProjection(
-    const MCSubtargetInfo &SrcSTI, const MCSubtargetInfo &TgtSTI, Type *I32Ty,
-    Type *I64Ty)
-    : ReplicationProjection(SrcSTI, TgtSTI, I32Ty, I64Ty) {
+    const MCSubtargetInfo &SourceSTI, const MCSubtargetInfo &TargetSTI,
+    Type *I32Ty, Type *I64Ty)
+    : ReplicationProjection(SourceSTI, TargetSTI, I32Ty, I64Ty) {
   DoubledDispatchFactor = targetWaveSize() / sourceWaveSize();
 }
 
@@ -460,10 +460,10 @@ Value *ReplicationDoubledDispatchProjection::emitPackedWorkitemId(
 // both the EXEC alloca storage and the ballot/lane-active arithmetic.
 // ----------------------------------------------------------------------------
 
-WaveNativeProjection::WaveNativeProjection(const MCSubtargetInfo &SrcSTI,
-                                           const MCSubtargetInfo &TgtSTI,
+WaveNativeProjection::WaveNativeProjection(const MCSubtargetInfo &SourceSTI,
+                                           const MCSubtargetInfo &TargetSTI,
                                            Type *I32Ty, Type *I64Ty)
-    : WaveProjection(SrcSTI, TgtSTI, I32Ty, I64Ty) {
+    : WaveProjection(SourceSTI, TargetSTI, I32Ty, I64Ty) {
   // Restrict to the one direction where the widened-EXEC invariants are
   // well-defined: same-wave needs no widening, and narrowing loses lanes
   // regardless of policy.
@@ -589,10 +589,10 @@ Value *WaveNativeProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
 // ThreadLoopProjection.
 // ----------------------------------------------------------------------------
 
-ThreadLoopProjection::ThreadLoopProjection(const MCSubtargetInfo &SrcSTI,
-                                           const MCSubtargetInfo &TgtSTI,
+ThreadLoopProjection::ThreadLoopProjection(const MCSubtargetInfo &SourceSTI,
+                                           const MCSubtargetInfo &TargetSTI,
                                            Type *I32Ty, Type *I64Ty)
-    : WaveProjection(SrcSTI, TgtSTI, I32Ty, I64Ty) {
+    : WaveProjection(SourceSTI, TargetSTI, I32Ty, I64Ty) {
   const unsigned SourceWaveSize = sourceWaveSize();
   const unsigned TargetWaveSize = targetWaveSize();
   assert(TargetWaveSize > SourceWaveSize &&

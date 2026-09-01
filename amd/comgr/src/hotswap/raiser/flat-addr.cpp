@@ -81,7 +81,7 @@ Expected<Value *> emitGlobalAddress(RaiseContext &Ctx, const DecodedInst &Di,
   unsigned OffsetIndex = requiredGlobalOperandIndex(Di, AMDGPU::OpName::offset);
   assert(Di.isImm(OffsetIndex) && "operand 'offset' is not an immediate");
   int64_t Offset = SignExtend64(static_cast<uint64_t>(Di.getImm(OffsetIndex)),
-                                flatOffsetBits(Ctx.Projection.sourceSTI()));
+                                flatOffsetBits(Ctx.Projection.Source));
   // The access is modeled as naturally aligned, which holds for the base
   // address of a well-formed program but is the caller's assumption to make.
   // An immediate offset that does not preserve it would make that model a lie.
@@ -107,7 +107,7 @@ Expected<Value *> emitGlobalAddress(RaiseContext &Ctx, const DecodedInst &Di,
       return LaneOffset.takeError();
     Type *I64Ty = Ctx.B.getInt64Ty();
     Value *WideLaneOffset =
-        Ctx.Projection.sourceSTI().hasFeature(AMDGPU::FeatureGFX1250Insts)
+        Ctx.Projection.Source.hasFeature(AMDGPU::FeatureGFX1250Insts)
             ? Ctx.B.CreateSExt(*LaneOffset, I64Ty, "global_lane_offset")
             : Ctx.B.CreateZExt(*LaneOffset, I64Ty, "global_lane_offset");
     Address = Ctx.B.CreateAdd(*ScalarBase, WideLaneOffset, "global_addr");
