@@ -146,8 +146,8 @@ void updateImmediateModeVgprMsb(RaiseContext &Ctx, uint64_t Value) {
 
 // Raise a hardware-register read according to Policy.
 Error handleGetreg(RaiseContext &Ctx, const DecodedInst &Di,
-                   OperandResolver &Op,
-                   unsigned Id, HardwareRegisterPolicy Policy) {
+                   OperandResolver &Op, unsigned Id,
+                   HardwareRegisterPolicy Policy) {
   if (Policy.Read == HardwareRegisterReadAction::Reject)
     return unsupportedInstruction(
         Ctx, Di,
@@ -162,9 +162,9 @@ Error handleGetreg(RaiseContext &Ctx, const DecodedInst &Di,
 
 // Raise a hardware-register write according to Policy.
 Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di,
-                   OperandResolver &Op,
-                   unsigned Selector, unsigned Id, unsigned BitOffset,
-                   unsigned BitWidth, HardwareRegisterPolicy Policy) {
+                   OperandResolver &Op, unsigned Selector, unsigned Id,
+                   unsigned BitOffset, unsigned BitWidth,
+                   HardwareRegisterPolicy Policy) {
   if (Policy.Write == HardwareRegisterWriteAction::Reject)
     return unsupportedInstruction(
         Ctx, Di,
