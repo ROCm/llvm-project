@@ -23,6 +23,8 @@ public:
     return ISAProfile(STI);
   }
 
+  const llvm::MCSubtargetInfo &STI;
+
   // Wavefront width in lanes (32 or 64).
   unsigned waveSize() const;
   bool isWave32() const;
@@ -64,12 +66,8 @@ public:
   /// Return the model used to combine system and user wave priorities.
   WavePriorityModel wavePriorityModel() const;
 
-  const llvm::MCSubtargetInfo &subtargetInfo() const { return *STI; }
-
 private:
-  explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(&STI) {}
-
-  const llvm::MCSubtargetInfo *STI;
+  explicit ISAProfile(const llvm::MCSubtargetInfo &STI) : STI(STI) {}
 };
 
 } // namespace COMGR::hotswap

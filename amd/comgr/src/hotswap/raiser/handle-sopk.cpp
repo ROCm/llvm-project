@@ -21,15 +21,23 @@
 #include "llvm/Support/MathExtras.h"
 
 #include <cstdint>
+#include <limits>
 
 using namespace llvm;
 
 namespace COMGR::hotswap {
 namespace {
 
-enum class HardwareRegisterReadAction { ReturnZero, Reject };
+enum class HardwareRegisterReadAction {
+  ReturnZero, // Replace the read with zero.
+  Reject      // Reject the instruction.
+};
 
-enum class HardwareRegisterWriteAction { Ignore, Emit, Reject };
+enum class HardwareRegisterWriteAction {
+  Ignore, // Drop the write.
+  Emit,   // Preserve the write with an intrinsic.
+  Reject  // Reject the instruction.
+};
 
 // Read and write policies for one hardware-register identifier.
 struct HardwareRegisterPolicy {
@@ -95,18 +103,14 @@ HardwareRegisterPolicy classifyHardwareRegister(unsigned Id) {
   }
 }
 
-// Read and validate the 16-bit hardware-register selector from Di.
+// Read the hardware-register selector from Di.
 Expected<unsigned> readHardwareRegisterSelector(RaiseContext &Ctx,
                                                 const DecodedInst &Di) {
   unsigned SelectorOperand = 1;
   if (Di.numOperands() <= SelectorOperand || !Di.isImm(SelectorOperand))
     return unsupportedInstruction(
         Ctx, Di, "hardware-register selector is not immediate operand 1");
-  int64_t Raw = Di.getImm(SelectorOperand);
-  if (Raw < INT16_MIN || Raw > UINT16_MAX)
-    return unsupportedInstruction(
-        Ctx, Di, "hardware-register selector is outside 16 bits");
-  return static_cast<unsigned>(Raw) & UINT16_MAX;
+  return static_cast<unsigned>(Di.getImm(SelectorOperand)) & UINT16_MAX;
 }
 
 // Return whether the bit range overlaps MODE.VGPR_MSB.
@@ -115,14 +119,29 @@ bool overlapsVgprMsb(unsigned BitOffset, unsigned BitWidth) {
   return FieldMask & AMDGPU::Hwreg::VGPR_MSB_MASK;
 }
 
+constexpr unsigned VgprMsbFieldWidth =
+    llvm::popcount(static_cast<unsigned>(AMDGPU::Hwreg::DST_VGPR_MSB));
+constexpr unsigned VgprMsbLowBit = llvm::countr_zero_constexpr<unsigned>(
+    static_cast<unsigned>(AMDGPU::Hwreg::VGPR_MSB_MASK));
+constexpr unsigned VgprMsbHighBit =
+    std::numeric_limits<unsigned>::digits -
+    llvm::countl_zero_constexpr<unsigned>(
+        static_cast<unsigned>(AMDGPU::Hwreg::VGPR_MSB_MASK)) -
+    1;
+
+uint8_t getVgprMsbField(uint64_t Value, uint32_t Mask, unsigned Slot) {
+  unsigned Shift = llvm::countr_zero(Mask);
+  return static_cast<uint8_t>(((Value & Mask) >> Shift)
+                              << (Slot * VgprMsbFieldWidth));
+}
+
 // Update the tracked VGPR_MSB state from an immediate MODE value.
 void updateImmediateModeVgprMsb(RaiseContext &Ctx, uint64_t Value) {
-  uint8_t ModeEncoding = static_cast<uint8_t>(
-      (Value & AMDGPU::Hwreg::VGPR_MSB_MASK) >>
-      llvm::countr_zero(static_cast<uint32_t>(AMDGPU::Hwreg::VGPR_MSB_MASK)));
-  // MODE stores the slots as (dst, src0, src1, src2), while RegisterState
-  // stores them as (src0, src1, src2, dst).
-  Ctx.registers().setVgprMsBs(llvm::rotr<uint8_t>(ModeEncoding, 2));
+  uint8_t Encoding = getVgprMsbField(Value, AMDGPU::Hwreg::SRC0_VGPR_MSB, 0) |
+                     getVgprMsbField(Value, AMDGPU::Hwreg::SRC1_VGPR_MSB, 1) |
+                     getVgprMsbField(Value, AMDGPU::Hwreg::SRC2_VGPR_MSB, 2) |
+                     getVgprMsbField(Value, AMDGPU::Hwreg::DST_VGPR_MSB, 3);
+  Ctx.registers().setVgprMsBs(Encoding);
 }
 
 // Raise a hardware-register read according to Policy.
@@ -151,13 +170,10 @@ Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
   if (Policy.Write == HardwareRegisterWriteAction::Ignore)
     return Error::success();
 
-  bool HasExtendedVgprs = Ctx.Projection.sourceIsa().subtargetInfo().hasFeature(
+  bool HasExtendedVgprs = Ctx.Projection.sourceIsa().STI.hasFeature(
       AMDGPU::Feature1024AddressableVGPRs);
   Value *ValueArg;
   if (Di.CanonOp == CanonicalOp::S_SETREG_IMM32_B32) {
-    if (!Di.isImm(0))
-      return unsupportedInstruction(
-          Ctx, Di, "setreg immediate value is not immediate operand 0");
     uint64_t Value = static_cast<uint64_t>(Di.getImm(0));
     ValueArg = Ctx.B.getInt32(Value);
     if (HasExtendedVgprs && Id == AMDGPU::Hwreg::ID_MODE)
@@ -166,7 +182,9 @@ Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
     if (HasExtendedVgprs && Id == AMDGPU::Hwreg::ID_MODE &&
         overlapsVgprMsb(BitOffset, BitWidth))
       return unsupportedInstruction(
-          Ctx, Di, "dynamic MODE write overlaps VGPR_MSB bits [12:19]");
+          Ctx, Di,
+          Twine("dynamic MODE write overlaps VGPR_MSB bits [") +
+              Twine(VgprMsbLowBit) + ":" + Twine(VgprMsbHighBit) + "]");
     Expected<Value *> Source = Op.src(0);
     if (!Source)
       return Source.takeError();
