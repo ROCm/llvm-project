@@ -302,12 +302,8 @@ struct IsaInfo {
 #define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, LDS_BANK_COUNT,                   \
                    MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
                    TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
-  {TARGET_TRIPLE "-" PROCESSOR,                                                \
-   PROCESSOR,                                                                  \
-   LDS_BANK_COUNT,                                                             \
-   MAX_FLAT_WORK_GROUP_SIZE,                                                   \
-   VGPR_ALLOC_GRANULE,                                                         \
-   TOTAL_NUM_VGPRS,                                                            \
+  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR,          LDS_BANK_COUNT,            \
+   MAX_FLAT_WORK_GROUP_SIZE,    VGPR_ALLOC_GRANULE, TOTAL_NUM_VGPRS,           \
    ADDRESSABLE_NUM_VGPRS},
 #include "comgr-isa-metadata.def"
 };
