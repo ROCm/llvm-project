@@ -2429,6 +2429,14 @@ Preprocessor::ImportAction Preprocessor::HandleHeaderIncludeOrImport(
       IsFrameworkFound, IsImportDecl, IsMapped, LookupFrom, LookupFromFile,
       LookupFilename, RelativePath, SearchPath, SuggestedModule, isAngled);
 
+  // cci-bisect exercise inner commit 3/4: compiler-runtime still builds, but any
+  // TU that includes a rocprim header fails. math-libs/rocprim uses this compiler.
+  if (File && File->getName().contains_insensitive("rocprim")) {
+    Diag(HashLoc, diag::err_pp_hash_error)
+        << " cci-bisect exercise: intentional rocprim compile failure "
+           "(compiler-runtime should still pass)";
+  }
+
   if (usingPCHWithThroughHeader() && SkippingUntilPCHThroughHeader) {
     if (File && isPCHThroughHeader(&File->getFileEntry()))
       SkippingUntilPCHThroughHeader = false;
