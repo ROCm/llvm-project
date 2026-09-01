@@ -463,7 +463,8 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
       if (*SrcReg && (**SrcReg).RegKind == ParsedReg::TTMP &&
           (**SrcReg).BaseIdx == 8 && Op.srcImm(1) == 0x50019 &&
           Ctx.registers().isTTMP8EntryValueAvailable()) {
-        if (!Ctx.Projection.Source.hasFeature(AMDGPU::FeatureArchitectedSGPRs))
+        if (!Ctx.Projection.SourceSTI.hasFeature(
+                AMDGPU::FeatureArchitectedSGPRs))
           return RaiseFailure::atInstruction(
               RaiseFailureReason::UnsupportedInstructionForm,
               strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,

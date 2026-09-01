@@ -43,14 +43,14 @@ namespace COMGR::hotswap {
 // constructs it.
 class WaveProjection {
 public:
-  WaveProjection(const llvm::MCSubtargetInfo &SourceSTI,
-                 const llvm::MCSubtargetInfo &TargetSTI, llvm::Type *I32Ty,
+  WaveProjection(const llvm::MCSubtargetInfo &Source,
+                 const llvm::MCSubtargetInfo &Target, llvm::Type *I32Ty,
                  llvm::Type *I64Ty);
 
   virtual ~WaveProjection() = default;
 
-  const llvm::MCSubtargetInfo &Source;
-  const llvm::MCSubtargetInfo &Target;
+  const llvm::MCSubtargetInfo &SourceSTI;
+  const llvm::MCSubtargetInfo &TargetSTI;
 
   // Wavefront widths in lanes, derived from the corresponding subtarget.
   unsigned sourceWaveSize() const;
@@ -293,8 +293,8 @@ public:
 class ReplicationDoubledDispatchProjection final
     : public ReplicationProjection {
 public:
-  ReplicationDoubledDispatchProjection(const llvm::MCSubtargetInfo &SourceSTI,
-                                       const llvm::MCSubtargetInfo &TargetSTI,
+  ReplicationDoubledDispatchProjection(const llvm::MCSubtargetInfo &Source,
+                                       const llvm::MCSubtargetInfo &Target,
                                        llvm::Type *I32Ty, llvm::Type *I64Ty);
 
   // Remap hardware workitem-id.x to the logical source id so replica lanes
@@ -332,9 +332,9 @@ public:
   // storage, full-wave-EXEC invariant (its `emitInitialExec` forces HW
   // EXEC=-1), broadcast-on-narrow-EXEC-write, preserved mbcnt-derived EXEC,
   // and two source waves per target wave (lanes 0..31 and 32..63).
-  WaveNativeProjection(const llvm::MCSubtargetInfo &SourceSTI,
-                       const llvm::MCSubtargetInfo &TargetSTI,
-                       llvm::Type *I32Ty, llvm::Type *I64Ty);
+  WaveNativeProjection(const llvm::MCSubtargetInfo &Source,
+                       const llvm::MCSubtargetInfo &Target, llvm::Type *I32Ty,
+                       llvm::Type *I64Ty);
 
   llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
@@ -365,9 +365,9 @@ public:
   // The constructor sets the projection configuration: target-width EXEC
   // storage, source-wave-scoped lane ops, and `W_t / W_s` source waves per
   // target wave.
-  ThreadLoopProjection(const llvm::MCSubtargetInfo &SourceSTI,
-                       const llvm::MCSubtargetInfo &TargetSTI,
-                       llvm::Type *I32Ty, llvm::Type *I64Ty);
+  ThreadLoopProjection(const llvm::MCSubtargetInfo &Source,
+                       const llvm::MCSubtargetInfo &Target, llvm::Type *I32Ty,
+                       llvm::Type *I64Ty);
 
   void setIterationAlloca(llvm::AllocaInst *Iter) { IterationAlloca = Iter; }
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
