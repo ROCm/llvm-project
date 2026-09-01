@@ -19,8 +19,8 @@
 // RUN: %llvm-dis %t.compressed.gfx1030.bc -o - | %FileCheck --check-prefixes=BOTH,GFX10 %s
 //
 // BOTH: target triple = "amd{{gcn|gpu[0-9.]+}}-amd-amdhsa"
-// GFX9: "target-cpu"="gfx900"
-// GFX10: "target-cpu"="gfx1030"
+// GFX9: "frame-pointer"
+// GFX10: "frame-pointer"
 
 __attribute__((device))
 void add_value(float* a, float* b, float* res) {

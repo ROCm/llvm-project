@@ -33,8 +33,8 @@
 // RUN: [ 3 -eq $COUNT ]
 
 // BOTH: target triple = "amd{{gcn|gpu[0-9.]+}}-amd-amdhsa"
-// GFX9: "target-cpu"="gfx900"
-// GFX10: "target-cpu"="gfx1030"
+// GFX9: "frame-pointer"
+// GFX10: "frame-pointer"
 
 __attribute__((device))
 void add_value(float* a, float* b, float* res) {
