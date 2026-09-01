@@ -226,6 +226,26 @@ struct AMDGPUDeviceImageTy;
 struct AMDGPUMemoryManagerTy;
 struct AMDGPUMemoryPoolTy;
 
+/// AMD GPU specs for computing kernel occupancy
+namespace amdgpu_arch {
+// Local memory size
+constexpr unsigned LocalMemorySize = 32768;
+// SIMD unit per CU
+constexpr unsigned SIMDPerCU = 4;
+// Max waves each SIMD supports
+constexpr unsigned MaxWavesPerEU8 = 8;
+constexpr unsigned MaxWavesPerEU10 = 10;
+// Number of VGPR for each thread
+constexpr unsigned VGPRNumPerThread = 512;
+// Max number of workgroup per CU
+constexpr unsigned MaxWorkgroupNumPerCU = 16;
+// Occupancy computation conditions by SGPRs
+constexpr unsigned SGPRCountOccupancy10 = 80;
+constexpr unsigned SGPRCountOccupancy9 = 88;
+constexpr unsigned SGPRCountOccupancy8 = 100;
+
+} // end namespace amdgpu_arch
+
 namespace hsa_utils {
 
 /// Iterate elements using an HSA iterate function. Do not use this function
@@ -982,7 +1002,7 @@ private:
                                          uint32_t NumThreads) const {
     unsigned NumWavesPerTeam =
         divideCeil(NumThreads, GenericDevice.getWarpSize());
-    unsigned TotalWavesPerCU = MaxOccupancy * llvm::omp::amdgpu_arch::SIMDPerCU;
+    unsigned TotalWavesPerCU = MaxOccupancy * amdgpu_arch::SIMDPerCU;
     // Per device
     unsigned TotalWavesPerDevice =
         TotalWavesPerCU * GenericDevice.getNumComputeUnits();
@@ -1168,7 +1188,7 @@ private:
       // already and this optimization may not be beneficial.
       if (GenericDevice.getOMPXXTeamReductionOccupancyBasedOpt() &&
           NumTeamsEnvVar == 0 && UserNumBlocks == 0 &&
-          (MaxOccupancy * llvm::omp::amdgpu_arch::SIMDPerCU >=
+          (MaxOccupancy * amdgpu_arch::SIMDPerCU >=
            llvm::omp::xteam_red::DesiredWavesPerCU)) {
         NumGroups = std::min(
             OptimizeNumTeamsBaseOccupancy(GenericDevice, EffectiveNumThreads),
@@ -1369,11 +1389,11 @@ private:
   /// llvm-project/llvm/lib/Target/AMDGPU/Utils/AMDGPUBaseInfo.cpp:getOccupancyWithNumSGPRs
   unsigned getOccupancyWithNumSGPRs(unsigned SGPRCount) const {
 
-    if (SGPRCount <= llvm::omp::amdgpu_arch::SGPRCountOccupancy10) {
+    if (SGPRCount <= amdgpu_arch::SGPRCountOccupancy10) {
       return 10;
-    } else if (SGPRCount <= llvm::omp::amdgpu_arch::SGPRCountOccupancy9) {
+    } else if (SGPRCount <= amdgpu_arch::SGPRCountOccupancy9) {
       return 9;
-    } else if (SGPRCount <= llvm::omp::amdgpu_arch::SGPRCountOccupancy8) {
+    } else if (SGPRCount <= amdgpu_arch::SGPRCountOccupancy8) {
       return 8;
     }
     return 7;
@@ -1388,15 +1408,14 @@ private:
                                unsigned MaxWavesPerEU,
                                uint32_t MaxFlatWorkgroupSize) const {
 
-    unsigned MaxWorkgroupNum =
-        llvm::omp::amdgpu_arch::LocalMemorySize / GroupSegmentSize;
+    unsigned MaxWorkgroupNum = amdgpu_arch::LocalMemorySize / GroupSegmentSize;
 
     // workgroup size
     unsigned ThreadsPerWorkgroup = MaxFlatWorkgroupSize;
     unsigned WavesPerWorkgroup =
         divideCeil(ThreadsPerWorkgroup, GenericDevice.getWarpSize());
 
-    unsigned MaxWavesPerCU = MaxWavesPerEU * llvm::omp::amdgpu_arch::SIMDPerCU;
+    unsigned MaxWavesPerCU = MaxWavesPerEU * amdgpu_arch::SIMDPerCU;
 
     // if a workgroup has just one wavefront, the max # of workgroup per CU is
     // 40 if a workgroup has more than one wavefront, the max # of workgroup per
@@ -1407,12 +1426,12 @@ private:
       MaxWorkgroupNum =
           std::min(MaxWorkgroupNum, MaxWavesPerCU / WavesPerWorkgroup);
       MaxWorkgroupNum = std::min(MaxWorkgroupNum,
-                                 llvm::omp::amdgpu_arch::MaxWorkgroupNumPerCU);
+                                 amdgpu_arch::MaxWorkgroupNumPerCU);
     }
 
     // per SIMD
     unsigned WaveNumByLDS = divideCeil(WavesPerWorkgroup * MaxWorkgroupNum,
-                                       llvm::omp::amdgpu_arch::SIMDPerCU);
+                                       amdgpu_arch::SIMDPerCU);
     WaveNumByLDS = std::min(WaveNumByLDS, MaxWavesPerEU);
 
     return WaveNumByLDS;
@@ -6676,7 +6695,7 @@ unsigned AMDGPUKernelTy::computeMaxOccupancy(GenericDeviceTy &Device) const {
   uint32_t MaxFlatWorkgroupSize = (KernelInfo).MaxFlatWorkgroupSize;
 
   // Default number of waves per EU
-  unsigned MaxWavesPerEU = llvm::omp::amdgpu_arch::MaxWavesPerEU10;
+  unsigned MaxWavesPerEU = amdgpu_arch::MaxWavesPerEU10;
 
   // Get GPU info
   AMDGPUDeviceTy &AMDDevice = static_cast<AMDGPUDeviceTy &>(Device);
@@ -6684,7 +6703,7 @@ unsigned AMDGPUKernelTy::computeMaxOccupancy(GenericDeviceTy &Device) const {
   bool IsEquippedWithMI300 = AMDDevice.checkIfMI300Device();
 
   if (IsEquippedWithGFX90A || IsEquippedWithMI300) {
-    MaxWavesPerEU = llvm::omp::amdgpu_arch::MaxWavesPerEU8;
+    MaxWavesPerEU = amdgpu_arch::MaxWavesPerEU8;
   }
 
   unsigned Occupancy = INT_MAX;
@@ -6701,8 +6720,7 @@ unsigned AMDGPUKernelTy::computeMaxOccupancy(GenericDeviceTy &Device) const {
   // Ref:
   // llvm-project/llvm/lib/Target/AMDGPU/Utils/AMDGPUBaseInfo.cpp:getNumWavesPerEUWithNumVGPRs
   if (VGPRCount) {
-    unsigned WaveNumByVGPR =
-        llvm::omp::amdgpu_arch::VGPRNumPerThread / VGPRCount;
+    unsigned WaveNumByVGPR = amdgpu_arch::VGPRNumPerThread / VGPRCount;
     Occupancy = std::min(Occupancy, WaveNumByVGPR);
   }
 
@@ -6732,7 +6750,7 @@ unsigned AMDGPUKernelTy::computeAchievedOccupancy(GenericDeviceTy &Device,
   }
 
   // Default number of waves per EU.
-  unsigned MaxWavesPerEU = llvm::omp::amdgpu_arch::MaxWavesPerEU10;
+  unsigned MaxWavesPerEU = amdgpu_arch::MaxWavesPerEU10;
 
   // Get GPU info.
   AMDGPUDeviceTy &AMDDevice = static_cast<AMDGPUDeviceTy &>(Device);
@@ -6740,11 +6758,11 @@ unsigned AMDGPUKernelTy::computeAchievedOccupancy(GenericDeviceTy &Device,
   bool IsEquippedWithMI300 = AMDDevice.checkIfMI300Device();
 
   if (IsEquippedWithGFX90A || IsEquippedWithMI300) {
-    MaxWavesPerEU = llvm::omp::amdgpu_arch::MaxWavesPerEU8;
+    MaxWavesPerEU = amdgpu_arch::MaxWavesPerEU8;
   }
 
   // Get the max number of waves per CU.
-  unsigned MaxNumWaves = MaxOccupancy * llvm::omp::amdgpu_arch::SIMDPerCU;
+  unsigned MaxNumWaves = MaxOccupancy * amdgpu_arch::SIMDPerCU;
   // Get the number of waves from the kernel launch parameters.
   unsigned AchievedNumWaves =
       divideCeil(numThreads, AMDDevice.getWarpSize()) * numTeams;
@@ -6753,8 +6771,7 @@ unsigned AMDGPUKernelTy::computeAchievedOccupancy(GenericDeviceTy &Device,
   // Get the min waves.
   AchievedNumWaves = std::min(MaxNumWaves, AchievedNumWaves);
   // Total number of wave slots each CU supports.
-  unsigned TotalWaveSlotsPerCU =
-      MaxWavesPerEU * llvm::omp::amdgpu_arch::SIMDPerCU;
+  unsigned TotalWaveSlotsPerCU = MaxWavesPerEU * amdgpu_arch::SIMDPerCU;
   // Compute occupancy ratio representing in percentage.
   unsigned Occupancy = (AchievedNumWaves * 100) / TotalWaveSlotsPerCU;
 
