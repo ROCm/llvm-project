@@ -140,6 +140,22 @@ jobs:
             --output-dir="${BUILD_DIR}" \
             --bootstrap
 
+      # DIAGNOSTIC (temporary): assertions are normally enabled inside the
+      # submodule-pr-update action, but only when LLVM_ROCm_PR_URL names a
+      # wave-transform PR. That couples "assertions on" to "which source gets
+      # built", which makes controlled experiments impossible. Write the branch
+      # config unconditionally so assertions can be varied on their own.
+      - name: DIAG - force LLVM assertions on
+        run: |
+          cat > BRANCH_CONFIG.json <<'EOF'
+          {
+            "flags": {
+              "LLVM_ENABLE_ASSERTIONS": "ON"
+            }
+          }
+          EOF
+          cat BRANCH_CONFIG.json
+
       - name: Carry wave32 EXEC CFI patch (TheRock #6102)
         run: |
           set -x
@@ -243,7 +259,11 @@ jobs:
 
       - name: LIT (llvm, clang, flang, mlir, lld)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/lit-comgr-tests@amd/dev/kirthana14m/parameterised-wave-assertion
-        continue-on-error: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
+        # DIAGNOSTIC (temporary): non-gating so the run reaches comm-libs, which
+        # is where the RCCL carry patch needs to be observed. The label-based
+        # expression this replaces only applies to pull_request events, never to
+        # workflow_dispatch.
+        continue-on-error: true
         env:
           BUILD_DIR: ${{ env.BUILD_DIR }}
         with:
@@ -261,6 +281,20 @@ jobs:
           bin=$(find "${BUILD_DIR}/compiler/amd-llvm/build" -type f -name ObjectYAMLTests -print -quit 2>/dev/null)
           echo "binary: ${bin:-NOT FOUND}"
           if [ -z "$bin" ]; then exit 0; fi
+          # The failure is an invalid free in a binary that links libLLVM.so, and
+          # TheRock a465d78 turned on LLVM_ENABLE_PER_TARGET_RUNTIME_DIR and added
+          # a triple-suffixed RPATH entry. Capture what the linker was told and
+          # what the loader actually resolves, plus the runtime directory layout.
+          echo "===== link.txt ====="
+          cat "$(dirname "$bin")/CMakeFiles/ObjectYAMLTests.dir/link.txt" 2>/dev/null || echo "(no link.txt)"
+          echo "===== ldd ====="
+          ldd "$bin" 2>&1 || true
+          echo "===== runtime dirs under the LLVM install ====="
+          ls -1 "${BUILD_DIR}"/compiler/amd-llvm/stage/lib/llvm/lib 2>/dev/null | head -30 || true
+          echo "----- per-triple subdirectories, if any -----"
+          find "${BUILD_DIR}"/compiler/amd-llvm/stage/lib/llvm/lib -maxdepth 1 -type d 2>/dev/null | head -10 || true
+          echo "===== duplicate libLLVM / libc++ copies in the build tree ====="
+          find "${BUILD_DIR}"/compiler/amd-llvm -name 'libLLVM.so*' -o -name 'libc++.so*' 2>/dev/null | head -10 || true
           pass=0; fail=0
           for i in 1 2 3 4 5; do
             echo "===== attempt $i ====="
