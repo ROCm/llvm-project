@@ -42,6 +42,10 @@ namespace COMGR::hotswap {
 static constexpr uint64_t DispatchWorkgroupSizeXOffset = 4;
 static constexpr uint64_t DispatchWorkgroupSizeYOffset = 6;
 
+static unsigned getWaveSize(const MCSubtargetInfo &STI) {
+  return STI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
+}
+
 // ----------------------------------------------------------------------------
 // WaveProjection base: lane-id derivation is shared across every projection
 // that keeps each target lane mapped 1:1 to a hardware lane.
@@ -51,19 +55,21 @@ WaveProjection::WaveProjection(const MCSubtargetInfo &SrcSTI,
                                const MCSubtargetInfo &TgtSTI, Type *I32Ty,
                                Type *I64Ty)
     : SrcSTI(SrcSTI), TgtSTI(TgtSTI), I32Ty(I32Ty), I64Ty(I64Ty),
-      ExecStorageTy(SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? I32Ty
-                                                                      : I64Ty) {
-  assert((SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ||
-          !TgtSTI.hasFeature(AMDGPU::FeatureWavefrontSize32)) &&
+      ExecStorageTy(getWaveSize(SrcSTI) == 32 ? I32Ty : I64Ty) {
+  assert(targetWaveSize() >= sourceWaveSize() &&
          "wave projection does not support narrowing");
 }
 
+unsigned WaveProjection::sourceWaveSize() const { return getWaveSize(SrcSTI); }
+
+unsigned WaveProjection::targetWaveSize() const { return getWaveSize(TgtSTI); }
+
 Type *WaveProjection::waveMaskTy() const {
-  return TgtSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? I32Ty : I64Ty;
+  return targetWaveSize() == 32 ? I32Ty : I64Ty;
 }
 
 Type *WaveProjection::sourceWaveMaskTy() const {
-  return SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? I32Ty : I64Ty;
+  return sourceWaveSize() == 32 ? I32Ty : I64Ty;
 }
 
 Value *WaveProjection::emitLaneIdx(IRBuilder<> &B) const {
@@ -150,9 +156,7 @@ Value *WaveProjection::emitTargetWaveId(IRBuilder<> &B) const {
   Value *Z = emitTargetWorkitemId(B, 2);
   Value *Row = B.CreateAdd(Y, B.CreateMul(Z, SizeY), "wave_flat_yz");
   Value *FlatId = B.CreateAdd(X, B.CreateMul(Row, SizeX), "wave_flat_id");
-  const unsigned TargetWaveSize =
-      TgtSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
-  return B.CreateUDiv(FlatId, B.getInt32(TargetWaveSize), "target_wave_id");
+  return B.CreateUDiv(FlatId, B.getInt32(targetWaveSize()), "target_wave_id");
 }
 
 Value *ReplicationProjection::emitSourceWaveId(IRBuilder<> &B) const {
@@ -166,10 +170,8 @@ Value *ReplicationProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   // id is just the hardware lane index. Clamp those lanes to workitem 0 so they
   // replicate lane 0's in-bounds addressing; real lanes are unchanged and every
   // committed result is identical.
-  const unsigned SourceWaveSize =
-      SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
-  const unsigned TargetWaveSize =
-      TgtSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
+  const unsigned SourceWaveSize = sourceWaveSize();
+  const unsigned TargetWaveSize = targetWaveSize();
   if (TargetWaveSize > SourceWaveSize && MaxFlatWG > 0 &&
       MaxFlatWG < TargetWaveSize) {
     // The "real lane" test is the flat local id, not workitem.id.x. Under
@@ -234,11 +236,7 @@ Value *WaveProjection::emitCurrentSourceWaveMask(IRBuilder<> &B, Value *Mask,
 
   Value *LaneId = emitLaneIdx(B);
   Value *SourceWaveBase = B.CreateAnd(
-      LaneId,
-      B.getInt32(
-          ~(static_cast<uint32_t>(
-                SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64) -
-            1u)),
+      LaneId, B.getInt32(~(static_cast<uint32_t>(sourceWaveSize()) - 1u)),
       Name + "_base");
   Value *Shift =
       B.CreateZExtOrTrunc(SourceWaveBase, Mask->getType(), Name + "_shift");
@@ -255,10 +253,8 @@ Value *ReplicationProjection::emitPackedWorkitemId(IRBuilder<> &B,
   // whole packed id; otherwise a clamped-to-0 x OR'd with a non-zero Y/Z would
   // leave phantom lanes with a stray id instead of replicating lane 0.
   Value *Raw = packWorkitemId(B, WaveProjection::emitWorkitemIdX(B), NumDims);
-  const unsigned SourceWaveSize =
-      SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
-  const unsigned TargetWaveSize =
-      TgtSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
+  const unsigned SourceWaveSize = sourceWaveSize();
+  const unsigned TargetWaveSize = targetWaveSize();
   if (TargetWaveSize > SourceWaveSize && MaxFlatWG > 0 &&
       MaxFlatWG < TargetWaveSize) {
     Value *Limit = ConstantInt::get(I32Ty, MaxFlatWG);
@@ -433,20 +429,15 @@ ReplicationDoubledDispatchProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   // phantom-lane clamp): a doubled dispatch has no phantom lanes, every
   // hardware lane is a real source thread or an exact replica of one.
   Value *Raw = WaveProjection::emitWorkitemIdX(B);
-  return emitDoubledDispatchLogicalX(
-      B, Raw, SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64,
-      TgtSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64);
+  return emitDoubledDispatchLogicalX(B, Raw, sourceWaveSize(),
+                                     targetWaveSize());
 }
 
 ReplicationDoubledDispatchProjection::ReplicationDoubledDispatchProjection(
     const MCSubtargetInfo &SrcSTI, const MCSubtargetInfo &TgtSTI, Type *I32Ty,
     Type *I64Ty)
     : ReplicationProjection(SrcSTI, TgtSTI, I32Ty, I64Ty) {
-  const unsigned SourceWaveSize =
-      SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
-  const unsigned TargetWaveSize =
-      TgtSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
-  DoubledDispatchFactor = TargetWaveSize / SourceWaveSize;
+  DoubledDispatchFactor = targetWaveSize() / sourceWaveSize();
 }
 
 Value *
@@ -476,8 +467,7 @@ WaveNativeProjection::WaveNativeProjection(const MCSubtargetInfo &SrcSTI,
   // Restrict to the one direction where the widened-EXEC invariants are
   // well-defined: same-wave needs no widening, and narrowing loses lanes
   // regardless of policy.
-  assert((SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) &&
-          !TgtSTI.hasFeature(AMDGPU::FeatureWavefrontSize32)) &&
+  assert((sourceWaveSize() == 32 && targetWaveSize() == 64) &&
          "WaveNativeProjection is defined only for wave32 source -> "
          "wave64 target widening");
 
@@ -498,9 +488,7 @@ Value *WaveNativeProjection::emitSourceWaveId(IRBuilder<> &B) const {
   Value *FirstSourceWave = B.CreateMul(
       TargetWave, B.getInt32(numSourceWavesPerTarget()), "first_source_wave");
   Value *SourceWaveInTarget = B.CreateUDiv(
-      emitLaneIdx(B),
-      B.getInt32(SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64),
-      "source_wave_in_target");
+      emitLaneIdx(B), B.getInt32(sourceWaveSize()), "source_wave_in_target");
   return B.CreateAdd(FirstSourceWave, SourceWaveInTarget, "source_wave_id");
 }
 
@@ -605,10 +593,8 @@ ThreadLoopProjection::ThreadLoopProjection(const MCSubtargetInfo &SrcSTI,
                                            const MCSubtargetInfo &TgtSTI,
                                            Type *I32Ty, Type *I64Ty)
     : WaveProjection(SrcSTI, TgtSTI, I32Ty, I64Ty) {
-  const unsigned SourceWaveSize =
-      SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
-  const unsigned TargetWaveSize =
-      TgtSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
+  const unsigned SourceWaveSize = sourceWaveSize();
+  const unsigned TargetWaveSize = targetWaveSize();
   assert(TargetWaveSize > SourceWaveSize &&
          "ThreadLoopProjection is defined only for widening "
          "(target wave > source wave)");
@@ -629,10 +615,8 @@ Value *ThreadLoopProjection::emitWorkitemIdX(IRBuilder<> &B) const {
          "ids");
   Value *Tid = emitTargetWorkitemId(B, 0);
   Value *LaneId = emitLaneIdx(B);
-  const unsigned SrcBits =
-      SrcSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
-  const unsigned TgtBits =
-      TgtSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
+  const unsigned SrcBits = sourceWaveSize();
+  const unsigned TgtBits = targetWaveSize();
   Value *Iter = B.CreateLoad(B.getInt32Ty(), IterationAlloca, "tl_iter");
   Value *Base = B.CreateAnd(Tid, B.getInt32(~(TgtBits - 1u)), "tl_tid_base");
   Value *SourceLane =
@@ -727,8 +711,7 @@ bool instructionWritesEXEC(const DecodedInst &Di, const MCState &Mc) {
   // On a wave32 source, hardware EXEC is 32-bit (== EXEC_LO) and EXEC_HI is a
   // free scratch scalar, so an explicit def of EXEC_HI alone is a scratch
   // write, not an EXEC write.
-  const bool SourceIsWave32 =
-      Mc.SubtargetInfo->hasFeature(AMDGPU::FeatureWavefrontSize32);
+  const bool SourceIsWave32 = getWaveSize(*Mc.SubtargetInfo) == 32;
   const MCInstrDesc &Desc = Mc.InstrInfo->get(Di.Inst.getOpcode());
   for (unsigned I = 0; I < Desc.getNumDefs() && I < Di.Inst.getNumOperands();
        ++I) {
@@ -753,11 +736,9 @@ bool instructionWritesEXEC(const DecodedInst &Di, const MCState &Mc) {
 bool emitCrossWaveWarning(const WaveProjection &Proj, const MCState &Mc,
                           ArrayRef<DecodedInst> Insts, StringRef SourceIsa,
                           StringRef TargetIsa) {
-  const bool SourceIsWave32 =
-      Proj.sourceSTI().hasFeature(AMDGPU::FeatureWavefrontSize32);
-  const bool TargetIsWave32 =
-      Proj.targetSTI().hasFeature(AMDGPU::FeatureWavefrontSize32);
-  if (SourceIsWave32 == TargetIsWave32)
+  const unsigned SourceWaveSize = Proj.sourceWaveSize();
+  const unsigned TargetWaveSize = Proj.targetWaveSize();
+  if (SourceWaveSize == TargetWaveSize)
     return false;
 
   const DecodedInst *FirstExecWriter = nullptr;
@@ -775,9 +756,9 @@ bool emitCrossWaveWarning(const WaveProjection &Proj, const MCState &Mc,
     dbgs() << "transpiler: WARNING: cross-wave translation of an "
               "EXEC-manipulating kernel relies on replication, "
               "which is not provably correct in general.\n"
-           << "  source ISA wave size: " << (SourceIsWave32 ? 32 : 64) << " ("
-           << SourceIsa << ")\n"
-           << "  target ISA wave size: " << (TargetIsWave32 ? 32 : 64) << " ("
+           << "  source ISA wave size: " << SourceWaveSize << " (" << SourceIsa
+           << ")\n"
+           << "  target ISA wave size: " << TargetWaveSize << " ("
            << (TargetIsa.empty() ? SourceIsa : TargetIsa) << ")\n"
            << "  first EXEC-writer: " << getMnemonic(Mc, FirstExecWriter->Inst)
            << " at offset 0x"

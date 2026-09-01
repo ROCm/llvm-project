@@ -471,8 +471,7 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
   if (Pr.RegKind == ParsedReg::VCC) {
     assert(Projection && "writeReg32(VCC) requires a WaveProjection");
     Value *NewBit = Projection->extractLaneBitFromWaveMask(B, V);
-    if (Pr.WidthInDwords == 1 &&
-        !Projection->sourceSTI().hasFeature(AMDGPU::FeatureWavefrontSize32)) {
+    if (Pr.WidthInDwords == 1 && Projection->sourceWaveSize() == 64) {
       unsigned Half = requireIndex(Pr);
       assert(Half < 2 && "VCC half index must be zero or one");
       Value *Lane = Projection->emitLaneIdx(B);

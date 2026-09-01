@@ -52,6 +52,10 @@ public:
   const llvm::MCSubtargetInfo &sourceSTI() const { return SrcSTI; }
   const llvm::MCSubtargetInfo &targetSTI() const { return TgtSTI; }
 
+  // Wavefront widths in lanes, derived from the corresponding subtarget.
+  unsigned sourceWaveSize() const;
+  unsigned targetWaveSize() const;
+
   // Source kernel's max_flat_workgroup_size (threads per workgroup), set by
   // the raiser after construction. Used to clamp the workitem id of the
   // undispatched upper target lanes.

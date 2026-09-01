@@ -123,8 +123,7 @@ BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
 Value *RaiseContext::emitLaneIdx() { return Projection.emitLaneIdx(B); }
 
 Value *RaiseContext::freezeMemAddr(Value *Addr) {
-  if (!Projection.sourceSTI().hasFeature(AMDGPU::FeatureWavefrontSize32) ||
-      Projection.targetSTI().hasFeature(AMDGPU::FeatureWavefrontSize32))
+  if (Projection.sourceWaveSize() != 32 || Projection.targetWaveSize() == 32)
     return Addr;
   return B.CreateFreeze(Addr, "mem_addr_frozen");
 }
