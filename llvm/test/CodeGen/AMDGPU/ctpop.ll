@@ -2,8 +2,8 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 < %s | FileCheck -enable-var-scope -check-prefix=SI %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 -mattr=-flat-for-global < %s | FileCheck -enable-var-scope -check-prefix=VI %s
 ; RUN: llc -mtriple=r600 -mcpu=cypress < %s | FileCheck -enable-var-scope -check-prefix=EG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu6.00 -global-isel=1 < %s | FileCheck -enable-var-scope -check-prefix=SI-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu8.02 -mattr=-flat-for-global -global-isel=1 < %s | FileCheck -enable-var-scope -check-prefix=VI-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 -global-isel=1 < %s | FileCheck -enable-var-scope -check-prefix=SI-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 -mattr=-flat-for-global -global-isel=1 < %s | FileCheck -enable-var-scope -check-prefix=VI-GISEL %s
 
 declare i32 @llvm.ctpop.i32(i32) nounwind readnone
 declare <2 x i32> @llvm.ctpop.v2i32(<2 x i32>) nounwind readnone
@@ -1725,24 +1725,16 @@ define amdgpu_kernel void @ctpop_i32_in_br(ptr addrspace(1) %out, ptr addrspace(
 ; SI-GISEL-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-GISEL-NEXT:    s_cmp_lg_u32 s6, 0
-; SI-GISEL-NEXT:    s_mov_b32 s6, 1
+; SI-GISEL-NEXT:    ; implicit-def: $sgpr6
 ; SI-GISEL-NEXT:    s_cbranch_scc0 .LBB14_2
 ; SI-GISEL-NEXT:  ; %bb.1: ; %else
 ; SI-GISEL-NEXT:    s_load_dword s2, s[2:3], 0x1
-; SI-GISEL-NEXT:    s_mov_b32 s6, 0
 ; SI-GISEL-NEXT:    s_branch .LBB14_3
-; SI-GISEL-NEXT:  .LBB14_2:
-; SI-GISEL-NEXT:    ; implicit-def: $sgpr2
-; SI-GISEL-NEXT:  .LBB14_3: ; %Flow
-; SI-GISEL-NEXT:    s_xor_b32 s3, s6, 1
-; SI-GISEL-NEXT:    s_cmp_lg_u32 s3, 0
-; SI-GISEL-NEXT:    s_cbranch_scc1 .LBB14_5
-; SI-GISEL-NEXT:  ; %bb.4: ; %if
-; SI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-GISEL-NEXT:  .LBB14_2: ; %if
 ; SI-GISEL-NEXT:    s_load_dword s2, s[4:5], 0xd
 ; SI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-GISEL-NEXT:    s_bcnt1_i32_b32 s2, s2
-; SI-GISEL-NEXT:  .LBB14_5: ; %endif
+; SI-GISEL-NEXT:  .LBB14_3: ; %endif
 ; SI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-GISEL-NEXT:    v_mov_b32_e32 v0, s2
 ; SI-GISEL-NEXT:    s_mov_b32 s2, -1
@@ -1756,24 +1748,16 @@ define amdgpu_kernel void @ctpop_i32_in_br(ptr addrspace(1) %out, ptr addrspace(
 ; VI-GISEL-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
 ; VI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-GISEL-NEXT:    s_cmp_lg_u32 s6, 0
-; VI-GISEL-NEXT:    s_mov_b32 s6, 1
+; VI-GISEL-NEXT:    ; implicit-def: $sgpr6
 ; VI-GISEL-NEXT:    s_cbranch_scc0 .LBB14_2
 ; VI-GISEL-NEXT:  ; %bb.1: ; %else
 ; VI-GISEL-NEXT:    s_load_dword s2, s[2:3], 0x4
-; VI-GISEL-NEXT:    s_mov_b32 s6, 0
 ; VI-GISEL-NEXT:    s_branch .LBB14_3
-; VI-GISEL-NEXT:  .LBB14_2:
-; VI-GISEL-NEXT:    ; implicit-def: $sgpr2
-; VI-GISEL-NEXT:  .LBB14_3: ; %Flow
-; VI-GISEL-NEXT:    s_xor_b32 s3, s6, 1
-; VI-GISEL-NEXT:    s_cmp_lg_u32 s3, 0
-; VI-GISEL-NEXT:    s_cbranch_scc1 .LBB14_5
-; VI-GISEL-NEXT:  ; %bb.4: ; %if
-; VI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
+; VI-GISEL-NEXT:  .LBB14_2: ; %if
 ; VI-GISEL-NEXT:    s_load_dword s2, s[4:5], 0x34
 ; VI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-GISEL-NEXT:    s_bcnt1_i32_b32 s2, s2
-; VI-GISEL-NEXT:  .LBB14_5: ; %endif
+; VI-GISEL-NEXT:  .LBB14_3: ; %endif
 ; VI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-GISEL-NEXT:    v_mov_b32_e32 v0, s2
 ; VI-GISEL-NEXT:    s_mov_b32 s2, -1

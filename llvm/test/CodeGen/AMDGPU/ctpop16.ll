@@ -2,8 +2,8 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 < %s | FileCheck -enable-var-scope -check-prefixes=SI %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 -mattr=-flat-for-global < %s | FileCheck -enable-var-scope -check-prefixes=VI %s
 ; RUN: llc -mtriple=r600 -mcpu=cypress < %s | FileCheck -enable-var-scope -check-prefix=EG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu6.00 -global-isel=1 < %s | FileCheck -enable-var-scope -check-prefixes=SI-GISEL %s
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu8.02 -mattr=-flat-for-global -global-isel=1 < %s | FileCheck -enable-var-scope -check-prefixes=VI-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu6.00 -global-isel=1 < %s | FileCheck -enable-var-scope -check-prefixes=SI-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.02 -mattr=-flat-for-global -global-isel=1 < %s | FileCheck -enable-var-scope -check-prefixes=VI-GISEL %s
 
 declare i16 @llvm.ctpop.i16(i16) nounwind readnone
 declare <2 x i16> @llvm.ctpop.v2i16(<2 x i16>) nounwind readnone
@@ -2274,29 +2274,22 @@ define amdgpu_kernel void @ctpop_i16_in_br(ptr addrspace(1) %out, ptr addrspace(
 ; SI-GISEL:       ; %bb.0: ; %entry
 ; SI-GISEL-NEXT:    s_load_dword s6, s[4:5], 0xd
 ; SI-GISEL-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
+; SI-GISEL-NEXT:    ; implicit-def: $sgpr4
 ; SI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-GISEL-NEXT:    s_lshr_b32 s4, s6, 16
-; SI-GISEL-NEXT:    s_mov_b32 s4, 1
 ; SI-GISEL-NEXT:    s_cbranch_scc0 .LBB14_2
 ; SI-GISEL-NEXT:  ; %bb.1: ; %else
-; SI-GISEL-NEXT:    s_mov_b32 s10, -1
-; SI-GISEL-NEXT:    s_mov_b32 s11, 0xf000
-; SI-GISEL-NEXT:    s_mov_b64 s[8:9], s[2:3]
-; SI-GISEL-NEXT:    buffer_load_ushort v0, off, s[8:11], 0 offset:2
-; SI-GISEL-NEXT:    s_mov_b32 s4, 0
+; SI-GISEL-NEXT:    s_mov_b32 s6, -1
+; SI-GISEL-NEXT:    s_mov_b32 s7, 0xf000
+; SI-GISEL-NEXT:    s_mov_b64 s[4:5], s[2:3]
+; SI-GISEL-NEXT:    buffer_load_ushort v0, off, s[4:7], 0 offset:2
 ; SI-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; SI-GISEL-NEXT:    v_readfirstlane_b32 s2, v0
 ; SI-GISEL-NEXT:    s_branch .LBB14_3
-; SI-GISEL-NEXT:  .LBB14_2:
-; SI-GISEL-NEXT:    ; implicit-def: $sgpr2
-; SI-GISEL-NEXT:  .LBB14_3: ; %Flow
-; SI-GISEL-NEXT:    s_xor_b32 s3, s4, 1
-; SI-GISEL-NEXT:    s_cmp_lg_u32 s3, 0
-; SI-GISEL-NEXT:    s_cbranch_scc1 .LBB14_5
-; SI-GISEL-NEXT:  ; %bb.4: ; %if
+; SI-GISEL-NEXT:  .LBB14_2: ; %if
 ; SI-GISEL-NEXT:    s_and_b32 s2, s6, 0xffff
 ; SI-GISEL-NEXT:    s_bcnt1_i32_b32 s2, s2
-; SI-GISEL-NEXT:  .LBB14_5: ; %endif
+; SI-GISEL-NEXT:  .LBB14_3: ; %endif
 ; SI-GISEL-NEXT:    v_mov_b32_e32 v0, s2
 ; SI-GISEL-NEXT:    s_mov_b32 s2, -1
 ; SI-GISEL-NEXT:    s_mov_b32 s3, 0xf000
@@ -2307,32 +2300,26 @@ define amdgpu_kernel void @ctpop_i16_in_br(ptr addrspace(1) %out, ptr addrspace(
 ; VI-GISEL:       ; %bb.0: ; %entry
 ; VI-GISEL-NEXT:    s_load_dword s6, s[4:5], 0x34
 ; VI-GISEL-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
+; VI-GISEL-NEXT:    ; implicit-def: $sgpr4
 ; VI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-GISEL-NEXT:    s_lshr_b32 s4, s6, 16
-; VI-GISEL-NEXT:    s_mov_b32 s4, 1
 ; VI-GISEL-NEXT:    s_cbranch_scc0 .LBB14_2
 ; VI-GISEL-NEXT:  ; %bb.1: ; %else
-; VI-GISEL-NEXT:    s_mov_b32 s10, -1
-; VI-GISEL-NEXT:    s_mov_b32 s11, 0xf000
-; VI-GISEL-NEXT:    s_mov_b64 s[8:9], s[2:3]
-; VI-GISEL-NEXT:    buffer_load_ushort v0, off, s[8:11], 0 offset:2
-; VI-GISEL-NEXT:    s_mov_b32 s4, 0
+; VI-GISEL-NEXT:    s_mov_b32 s6, -1
+; VI-GISEL-NEXT:    s_mov_b32 s7, 0xf000
+; VI-GISEL-NEXT:    s_mov_b64 s[4:5], s[2:3]
+; VI-GISEL-NEXT:    buffer_load_ushort v0, off, s[4:7], 0 offset:2
 ; VI-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; VI-GISEL-NEXT:    v_readfirstlane_b32 s2, v0
 ; VI-GISEL-NEXT:    s_branch .LBB14_3
-; VI-GISEL-NEXT:  .LBB14_2:
-; VI-GISEL-NEXT:    ; implicit-def: $sgpr2
-; VI-GISEL-NEXT:  .LBB14_3: ; %Flow
-; VI-GISEL-NEXT:    s_xor_b32 s3, s4, 1
-; VI-GISEL-NEXT:    s_cmp_lg_u32 s3, 0
-; VI-GISEL-NEXT:    s_cbranch_scc1 .LBB14_5
-; VI-GISEL-NEXT:  ; %bb.4: ; %if
+; VI-GISEL-NEXT:  .LBB14_2: ; %if
 ; VI-GISEL-NEXT:    s_and_b32 s2, s6, 0xffff
 ; VI-GISEL-NEXT:    s_bcnt1_i32_b32 s2, s2
-; VI-GISEL-NEXT:  .LBB14_5: ; %endif
+; VI-GISEL-NEXT:  .LBB14_3: ; %endif
 ; VI-GISEL-NEXT:    v_mov_b32_e32 v0, s2
 ; VI-GISEL-NEXT:    s_mov_b32 s2, -1
 ; VI-GISEL-NEXT:    s_mov_b32 s3, 0xf000
+; VI-GISEL-NEXT:    s_nop 0
 ; VI-GISEL-NEXT:    buffer_store_short v0, off, s[0:3], 0
 ; VI-GISEL-NEXT:    s_endpgm
 entry:

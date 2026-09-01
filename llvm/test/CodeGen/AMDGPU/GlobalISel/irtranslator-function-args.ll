@@ -2,7 +2,7 @@
 ; Note update_mir_test_checks does not support generating checks for
 ; the frame info, so some functions have manually added stack object
 ; checks.
-; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgpu8.03 -O0 -stop-after=irtranslator -global-isel -o - %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu8.03 -O0 -stop-after=irtranslator -global-isel -o - %s | FileCheck %s
 ; FIXME: pre-VI should have same ABI without legal i16 operations.
 
 define void @void_func_empty_arg({} %arg0, i32 %arg1) #0 {
@@ -88,27 +88,23 @@ define void @void_func_i1_signext(i1 signext %arg0) #0 {
 define void @i1_arg_i1_use(i1 %arg) #0 {
   ; CHECK-LABEL: name: i1_arg_i1_use
   ; CHECK: bb.1.bb:
-  ; CHECK-NEXT:   successors: %bb.2(0x40000000), %bb.3(0x40000000)
+  ; CHECK-NEXT:   successors: %bb.3(0x40000000), %bb.2(0x40000000)
   ; CHECK-NEXT:   liveins: $vgpr0
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[COPY:%[0-9]+]]:_(i32) = COPY $vgpr0
   ; CHECK-NEXT:   [[TRUNC:%[0-9]+]]:_(i1) = G_TRUNC [[COPY]](i32)
-  ; CHECK-NEXT:   [[C:%[0-9]+]]:_(i1) = G_CONSTANT i1 true
-  ; CHECK-NEXT:   [[C1:%[0-9]+]]:_(i32) = G_CONSTANT i32 0
+  ; CHECK-NEXT:   [[C:%[0-9]+]]:_(i32) = G_CONSTANT i32 0
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:_(p1) = G_IMPLICIT_DEF
-  ; CHECK-NEXT:   [[XOR:%[0-9]+]]:_(i1) = G_XOR [[TRUNC]], [[C]]
-  ; CHECK-NEXT:   [[INT:%[0-9]+]]:_(i1), [[INT1:%[0-9]+]]:_(i64) = G_INTRINSIC_W_SIDE_EFFECTS intrinsic(@llvm.amdgcn.if), [[XOR]](i1)
-  ; CHECK-NEXT:   G_BRCOND [[INT]](i1), %bb.2
-  ; CHECK-NEXT:   G_BR %bb.3
+  ; CHECK-NEXT:   G_BRCOND [[TRUNC]](i1), %bb.3
+  ; CHECK-NEXT:   G_BR %bb.2
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2.bb1:
   ; CHECK-NEXT:   successors: %bb.3(0x80000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   G_STORE [[C1]](i32), [[DEF]](p1) :: (volatile store (i32) into `ptr addrspace(1) poison`, addrspace 1)
+  ; CHECK-NEXT:   G_STORE [[C]](i32), [[DEF]](p1) :: (volatile store (i32) into `ptr addrspace(1) poison`, addrspace 1)
   ; CHECK-NEXT:   G_BR %bb.3
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.3.bb2:
-  ; CHECK-NEXT:   G_INTRINSIC_W_SIDE_EFFECTS intrinsic(@llvm.amdgcn.end.cf), [[INT1]](i64)
   ; CHECK-NEXT:   SI_RETURN
 bb:
   br i1 %arg, label %bb2, label %bb1
