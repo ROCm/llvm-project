@@ -1,0 +1,25 @@
+# Code objects whose EF_AMDGPU_MACH does not name an AMDGCN processor.
+#
+# Doc 1 uses an R600 mach: R600 and AMDGCN share the EF_AMDGPU_MACH value
+# space, so decoding the mach alone is not enough to conclude the object
+# targets an AMDGCN processor.
+#
+# Doc 2 uses EF_AMDGPU_MACH_NONE, i.e. no processor is recorded at all.
+--- !ELF
+FileHeader:
+  Class:      ELFCLASS64
+  Data:       ELFDATA2LSB
+  Type:       ET_REL
+  Machine:    EM_AMDGPU
+  OSABI:      ELFOSABI_AMDGPU_HSA
+  ABIVersion: 0x2
+  Flags:      [ EF_AMDGPU_MACH_R600_R600 ]
+--- !ELF
+FileHeader:
+  Class:      ELFCLASS64
+  Data:       ELFDATA2LSB
+  Type:       ET_REL
+  Machine:    EM_AMDGPU
+  OSABI:      ELFOSABI_AMDGPU_HSA
+  ABIVersion: 0x2
+  Flags:      [ EF_AMDGPU_MACH_NONE ]
