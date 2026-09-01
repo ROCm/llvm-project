@@ -19,6 +19,11 @@ runs:
       shell: bash
       if: ${{ inputs.stage_name == 'compiler-runtime' }}
       run: |
+        if grep -qs '^LLVM_ENABLE_ASSERTIONS:BOOL=ON$' \
+            "${{ inputs.build_dir }}/compiler/amd-llvm/build/CMakeCache.txt"; then
+          echo "Skipping DXCFile.ComputeVERSPart (assertions + patched revision string)"
+          export GTEST_FILTER='-DXCFile.ComputeVERSPart'
+        fi 
         ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-llvm
 
     - name: Clang Lit Tests
@@ -37,12 +42,6 @@ runs:
       shell: bash
       if: ${{ inputs.stage_name == 'compiler-runtime' }}
       run: |
-        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-mlir
-
-    - name: LLD Lit Tests
-      shell: bash
-      if: ${{ inputs.stage_name == 'compiler-runtime' }}
-      run: |
         # If assertion in on skip mlir-pdll-lsp server test
         if grep -qs '^LLVM_ENABLE_ASSERTIONS:BOOL=ON$' \
             "${{ inputs.build_dir }}/compiler/amd-llvm/build/CMakeCache.txt" \
@@ -50,5 +49,11 @@ runs:
           echo "Skipping mlir-pdll-lsp-server tests (assertions + libLLVM.so hash seed mismatch)"
           export LIT_FILTER_OUT='mlir-pdll-lsp-server/'
         fi        
+        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-mlir
+
+    - name: LLD Lit Tests
+      shell: bash
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
         ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-lld
 
