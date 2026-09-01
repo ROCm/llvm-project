@@ -1,5 +1,4 @@
 # RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -amdgpu-spill-sgpr-to-vgpr=true -run-pass=si-lower-sgpr-spills -o - %s | FileCheck %s
-# XFAIL: *
 --- |
   define amdgpu_kernel void @test() { ret void }
 
@@ -47,19 +46,19 @@ body:             |
     renamable $sgpr10 = IMPLICIT_DEF
     SI_SPILL_S32_SAVE killed $sgpr10, %stack.0, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
     ; Test the path we expect to work (Arg followed immediately by Deref)
-    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, i32), DIOpConstant(i8 0), DIOpByteOffset(i32)), [[DEF]], 0, {{.*}}
+    ; CHECK:   DBG_VALUE_LIST !{{[0-9]+}}, !DIExpression(DIOpArg(0, i32), DIOpConstant(i8 0), DIOpByteOffset(i32)), [[DEF]], 0, {{.*}}
     DBG_VALUE_LIST !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), %stack.0, 0, debug-location !9
     S_NOP 0
     ; Test that we replace unhandled stack indexes with $noreg
-    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), $noreg, 0, {{.*}}
+    ; CHECK:   DBG_VALUE_LIST !{{[0-9]+}}, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), $noreg, 0, {{.*}}
     DBG_VALUE_LIST !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), %stack.0, 0, debug-location !9
     S_NOP 0
     ; Test that we replace unhandled stack indexes with $noreg even if they are not referenced by a DIOpArg
-    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), $noreg, $noreg, 0, {{.*}}
+    ; CHECK:   DBG_VALUE_LIST !{{[0-9]+}}, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), $noreg, $noreg, 0, {{.*}}
     DBG_VALUE_LIST !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), %stack.0, %stack.0, 0, debug-location !9
     S_NOP 0
     ; Test that we handle multiple such unhandled stack indexes
-    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32), DIOpArg(1, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), $noreg, $noreg, 0, {{.*}}
+    ; CHECK:   DBG_VALUE_LIST !{{[0-9]+}}, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32), DIOpArg(1, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), $noreg, $noreg, 0, {{.*}}
     DBG_VALUE_LIST !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32), DIOpArg(1, ptr addrspace(5)), DIOpRead(), DIOpDeref(i32)), %stack.0, %stack.0, 0, debug-location !9
 
   bb.1:

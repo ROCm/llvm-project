@@ -1,5 +1,4 @@
 // RUN: mlir-translate -mlir-to-llvmir %s | FileCheck %s
-// XFAIL: *
 // This test checks the offload sizes, map types and base pointers and pointers
 // provided to the OpenMP kernel argument structure are correct when lowering
 // to LLVM-IR from MLIR when performing explicit member mapping of a record type
@@ -7,9 +6,9 @@
 // hierarchy.
 module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-amd-amdhsa"]} {
   llvm.func @omp_map_derived_type_allocatable_member(%arg0: !llvm.ptr) {
-    %0 = llvm.mlir.constant(4 : index) : i64
-    %1 = llvm.mlir.constant(1 : index) : i64
-    %2 = llvm.mlir.constant(0 : index) : i64
+    %0 = llvm.mlir.constant(4 : i64) : i64
+    %1 = llvm.mlir.constant(1 : i64) : i64
+    %2 = llvm.mlir.constant(0 : i64) : i64
     %3 = omp.map.bounds lower_bound(%2 : i64) upper_bound(%0 : i64) extent(%0 : i64) stride(%1 : i64) start_idx(%2 : i64) stride_in_bytes(true)
     %4 = llvm.getelementptr %arg0[0, 4] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<"_QFtest_derived_type_allocatable_map_operand_and_block_additionTone_layer", (f32, struct<(ptr, i64, i32, i8, i8, i8, i8)>, array<10 x i32>, f32, struct<(ptr, i64, i32, i8, i8, i8, i8, array<1 x array<3 x i64>>)>, i32)>
     %5 = llvm.getelementptr %4[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8, array<1 x array<3 x i64>>)>
@@ -27,10 +26,10 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
     %1 = llvm.alloca %0 x !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8, ptr, array<1 x i64>)> {alignment = 8 : i64} : (i32) -> !llvm.ptr
     %2 = llvm.mlir.constant(1 : i32) : i32
     %3 = llvm.alloca %2 x !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8, ptr, array<1 x i64>)> {alignment = 8 : i64} : (i32) -> !llvm.ptr
-    %4 = llvm.mlir.constant(5 : index) : i64
-    %5 = llvm.mlir.constant(4 : index) : i64
-    %6 = llvm.mlir.constant(1 : index) : i64
-    %7 = llvm.mlir.constant(0 : index) : i64
+    %4 = llvm.mlir.constant(5 : i64) : i64
+    %5 = llvm.mlir.constant(4 : i64) : i64
+    %6 = llvm.mlir.constant(1 : i64) : i64
+    %7 = llvm.mlir.constant(0 : i64) : i64
     %8 = omp.map.bounds lower_bound(%7 : i64) upper_bound(%5 : i64) extent(%5 : i64) stride(%6 : i64) start_idx(%7 : i64) stride_in_bytes(true)
     %9 = llvm.load %arg0 : !llvm.ptr -> !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8, ptr, array<1 x i64>)>
     llvm.store %9, %3 : !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8, ptr, array<1 x i64>)>, !llvm.ptr
@@ -60,12 +59,12 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
     %1 = llvm.alloca %0 x !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8, ptr, array<1 x i64>)> {alignment = 8 : i64} : (i32) -> !llvm.ptr
     %2 = llvm.mlir.constant(1 : i32) : i32
     %3 = llvm.alloca %2 x !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8, ptr, array<1 x i64>)> {alignment = 8 : i64} : (i32) -> !llvm.ptr
-    %4 = llvm.mlir.constant(3 : index) : i64
-    %5 = llvm.mlir.constant(4 : index) : i64
-    %6 = llvm.mlir.constant(6 : index) : i64
-    %7 = llvm.mlir.constant(1 : index) : i64
-    %8 = llvm.mlir.constant(2 : index) : i64
-    %9 = llvm.mlir.constant(0 : index) : i64
+    %4 = llvm.mlir.constant(3 : i64) : i64
+    %5 = llvm.mlir.constant(4 : i64) : i64
+    %6 = llvm.mlir.constant(6 : i64) : i64
+    %7 = llvm.mlir.constant(1 : i64) : i64
+    %8 = llvm.mlir.constant(2 : i64) : i64
+    %9 = llvm.mlir.constant(0 : i64) : i64
     %10 = omp.map.bounds lower_bound(%9 : i64) upper_bound(%5 : i64) extent(%5 : i64) stride(%7 : i64) start_idx(%9 : i64) stride_in_bytes(true)
     %11 = llvm.load %arg0 : !llvm.ptr -> !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8, ptr, array<1 x i64>)>
     llvm.store %11, %3 : !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8, ptr, array<1 x i64>)>, !llvm.ptr
@@ -93,11 +92,11 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
   }
 
   llvm.func @omp_nested_derived_type_alloca_map(%arg0: !llvm.ptr) {
-    %0 = llvm.mlir.constant(4 : index) : i64
-    %1 = llvm.mlir.constant(1 : index) : i64
-    %2 = llvm.mlir.constant(2 : index) : i64
-    %3 = llvm.mlir.constant(0 : index) : i64
-    %4 = llvm.mlir.constant(6 : index) : i64
+    %0 = llvm.mlir.constant(4 : i64) : i64
+    %1 = llvm.mlir.constant(1 : i64) : i64
+    %2 = llvm.mlir.constant(2 : i64) : i64
+    %3 = llvm.mlir.constant(0 : i64) : i64
+    %4 = llvm.mlir.constant(6 : i64) : i64
     %5 = omp.map.bounds lower_bound(%3 : i64) upper_bound(%0 : i64) extent(%0 : i64) stride(%1 : i64) start_idx(%3 : i64) stride_in_bytes(true)
     %6 = llvm.getelementptr %arg0[0, 6] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<"_QFtest_nested_derived_type_alloca_map_operand_and_block_additionTtop_layer", (f32, struct<(ptr, i64, i32, i8, i8, i8, i8)>, array<10 x i32>, f32, struct<(ptr, i64, i32, i8, i8, i8, i8, array<1 x array<3 x i64>>)>, i32, struct<"_QFtest_nested_derived_type_alloca_map_operand_and_block_additionTmiddle_layer", (f32, array<10 x i32>, struct<(ptr, i64, i32, i8, i8, i8, i8, array<1 x array<3 x i64>>)>, i32)>)>
     %7 = llvm.getelementptr %6[0, 2] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<"_QFtest_nested_derived_type_alloca_map_operand_and_block_additionTmiddle_layer", (f32, array<10 x i32>, struct<(ptr, i64, i32, i8, i8, i8, i8, array<1 x array<3 x i64>>)>, i32)>
