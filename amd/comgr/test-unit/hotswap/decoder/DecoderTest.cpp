@@ -82,6 +82,10 @@ constexpr uint8_t GlobalStoreDwordVaddrBytes[] = {0x00, 0x80, 0x70, 0xdc,
                                                   0x02, 0x01, 0x7f, 0x00};
 constexpr uint8_t GlobalStoreDwordSaddrBytes[] = {0x00, 0x80, 0x70, 0xdc,
                                                   0x00, 0x01, 0x00, 0x00};
+constexpr uint8_t VOPDAddMovBytes[] = {0x00, 0x03, 0x10, 0xc9,
+                                       0x00, 0x01, 0x02, 0x02};
+constexpr uint8_t VOPD3FmaMovBytes[] = {0x04, 0x81, 0x4c, 0xcf, 0x05, 0x01,
+                                        0x02, 0x01, 0x06, 0x00, 0x00, 0x07};
 
 // Holds one gfx942 MCState for the tests that need the disassembler or an
 // MCContext. initMCState registers the AMDGPU target itself, so no separate
@@ -354,6 +358,39 @@ TEST_F(DecoderTest, DecodeKernelRejectsTruncatedInstruction) {
   EXPECT_EQ(llvm::toString(ResultOrErr.takeError()),
             "hotswap: decodeKernel: cannot decode instruction at .text offset "
             "0x4 (fail)");
+}
+
+TEST(DecoderTestVOPD, DecodeKernelBuildsBothComponentViews) {
+  llvm::Expected<MCState> StateOrErr = initMCState("gfx1250");
+  ASSERT_TRUE(static_cast<bool>(StateOrErr))
+      << llvm::toString(StateOrErr.takeError());
+  MCState State = std::move(*StateOrErr);
+  OpcodeMap Map;
+  Map.build(*State.InstrInfo);
+
+  llvm::Expected<DecodeResult> Result =
+      decodeKernel(State, Map, VOPDAddMovBytes, /*KernelOffset=*/0,
+                   /*KernelEndOffset=*/sizeof(VOPDAddMovBytes));
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  ASSERT_EQ(Result->Insts.size(), 1u);
+  const DecodedInst &Di = Result->Insts.front();
+  ASSERT_TRUE(Di.HasVOPD);
+  EXPECT_FALSE(Di.IsVOPD3);
+  EXPECT_EQ(Di.VOPD[0].CanonOp, CanonicalOp::V_ADD_F32);
+  EXPECT_EQ(Di.VOPD[0].NumSrcs, 2u);
+  EXPECT_EQ(Di.VOPD[1].CanonOp, CanonicalOp::V_MOV_B32);
+  EXPECT_EQ(Di.VOPD[1].NumSrcs, 1u);
+
+  Result = decodeKernel(State, Map, VOPD3FmaMovBytes, /*KernelOffset=*/0,
+                        /*KernelEndOffset=*/sizeof(VOPD3FmaMovBytes));
+  ASSERT_TRUE(static_cast<bool>(Result)) << llvm::toString(Result.takeError());
+  ASSERT_EQ(Result->Insts.size(), 1u);
+  const DecodedInst &VOPD3 = Result->Insts.front();
+  ASSERT_TRUE(VOPD3.HasVOPD);
+  EXPECT_TRUE(VOPD3.IsVOPD3);
+  EXPECT_EQ(VOPD3.VOPD[0].CanonOp, CanonicalOp::V_FMA_F32);
+  EXPECT_EQ(VOPD3.VOPD[0].NumSrcs, 3u);
+  EXPECT_EQ(VOPD3.VOPD[1].CanonOp, CanonicalOp::V_MOV_B32);
 }
 
 // -- decoded-inst bitfields ---------------------------------------------------

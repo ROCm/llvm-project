@@ -65,6 +65,24 @@ struct DecodedInst {
   llvm::SmallVector<unsigned> SrcMap;
   llvm::SmallVector<unsigned> ModMap;
 
+  // Structural view of a VOPD packet. A packet contains two component VOPs
+  // in one MCInst, so the ordinary one-opcode CanonOp/SrcMap view cannot
+  // describe it. Operand indices still refer to Inst and therefore retain
+  // the register classes and S_SET_VGPR_MSB adjustments of the full packet.
+  struct VOPDHalf {
+    CanonicalOp CanonOp = CanonicalOp::Unknown;
+    unsigned DstIdx = 0;
+    unsigned SrcIdx[3] = {};
+    uint8_t SrcMods[3] = {};
+    unsigned NumSrcs = 0;
+    bool HasBitOp3 = false;
+    uint8_t BitOp3 = 0;
+  };
+
+  bool HasVOPD = false;
+  bool IsVOPD3 = false;
+  VOPDHalf VOPD[2];
+
   // Instruction length in bytes. The AMDGPU maximum is 20
   // (AMDGPUMCAsmInfo::MaxInstLength), so five bits suffice.
   unsigned sizeInBytes() const { return llvm::Bitfield::get<SizeField>(Flags); }

@@ -46,6 +46,7 @@ add_library(hotswap-raiser OBJECT
   handle-vop2.cpp
   handle-vop3.cpp
   handle-vop-shared.cpp
+  handle-vopd.cpp
   handle-vopc.cpp
 )
 
