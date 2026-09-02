@@ -403,7 +403,6 @@ public:
     NxChildOfCallIsNull,
     NxMultiDeviceMinMaxNotSupported,
     NxFastReductionMinMaxNotSupported,
-    NxScanMinMaxNotSupported,
     NxAmbiguousRedKind
   };
 
@@ -513,9 +512,6 @@ private:
 
   /// Used by emitParallelCall
   bool isSPMDExecutionMode = false;
-
-  /// Used by Xteam Scan Codegen
-  bool isXteamScanCandidate = false;
 
   mutable std::unique_ptr<TargetCodeGenInfo> TheTargetCodeGenInfo;
 
@@ -897,9 +893,6 @@ public:
   ~CodeGenModule();
 
   void clear();
-  bool isXteamScanPhaseOne = true;
-  llvm::SmallVector<llvm::Value *, 8> ReductionVars;
-  const OMPExecutableDirective *OMPPresentScanDirective = nullptr;
 
   /// Finalize LLVM code generation.
   void Release();
@@ -2083,16 +2076,6 @@ public:
 
   bool isFastXteamSumReduction() {
     return getLangOpts().OpenMPTargetFastReduction;
-  }
-
-  bool isXteamScanKernel() {
-    return (getLangOpts().OpenMPTargetXteamScan ||
-            getLangOpts().OpenMPTargetXteamNoLoopScan) &&
-           isXteamScanCandidate;
-  }
-
-  bool isXteamSegmentedScanKernel() {
-    return isXteamScanKernel() && !getLangOpts().OpenMPTargetXteamNoLoopScan;
   }
 
   /// If we are able to generate a NoLoop kernel for this directive, return

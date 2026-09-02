@@ -9254,11 +9254,8 @@ public:
     else if (isa<DeclRefExpr>(S)) {
       IsAtTopLevel = false;
       // Not a binary operator or call, so not supported at this point. So
-      // ensure no reduction variable is accessed. Disable this check for Xteam
-      // scan because the RedVar could be read in the form of RHS of a binary
-      // operator.
-      if (CGM.hasXteamRedVar(cast<DeclRefExpr>(S), *RedMap) &&
-          !CGM.isXteamScanKernel()) {
+      // ensure no reduction variable is accessed.
+      if (CGM.hasXteamRedVar(cast<DeclRefExpr>(S), *RedMap)) {
         NxStatus = CodeGenModule::NxNotBinOpOrCallButAccessesRedVar;
         return;
       }
@@ -9478,9 +9475,6 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
     break;
   case NxFastReductionMinMaxNotSupported:
     StatusMsg += "Xteam min/max reduction not supported with fast reduction";
-    break;
-  case NxScanMinMaxNotSupported:
-    StatusMsg += "Xteam min/max reduction not supported with scan";
     break;
   case NxAmbiguousRedKind:
     StatusMsg += "Could not determine reduction kind";
@@ -10043,8 +10037,6 @@ CodeGenModule::collectXteamRedVars(const OptKernelNestDirectives &NestDirs) {
   bool isFastReductionEnabled = getLangOpts().OpenMPTargetFastReduction;
   for (auto &D : NestDirs) {
     for (const auto *C : D->getClausesOfKind<OMPReductionClause>()) {
-      if (C->getModifier() == OMPC_REDUCTION_inscan)
-        isXteamScanCandidate = true;
       for (const Expr *Ref : C->varlist()) {
         // Only scalar variables supported today
         if (!isa<DeclRefExpr>(Ref))
@@ -10115,13 +10107,6 @@ CodeGenModule::collectXteamRedVars(const OptKernelNestDirectives &NestDirs) {
         if (MinMaxOp != XR_OP_unknown && isFastReductionEnabled) {
           return std::make_pair(
               NxFastReductionMinMaxNotSupported,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-        }
-        // Scan kernel codegen is not compatible with min/max, so
-        // disable Xteam codegen if a scan reduction variable is found.
-        if (OpKindsFound > XR_OP_add && isXteamScanKernel()) {
-          return std::make_pair(
-              NxScanMinMaxNotSupported,
               XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
         }
 

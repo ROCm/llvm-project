@@ -11042,17 +11042,9 @@ static void emitTargetCallKernelLaunch(
     CodeGenModule::XteamRedVarMap &XteamRVM = CGF.CGM.getXteamRedVarMap(FStmt);
     auto &XteamOrdVars = CGF.CGM.getXteamOrderedRedVar(FStmt);
 
-    // Note Regarding the ExpectedNumArgs:
-    // 1. The Xteam Reduction kernels require two helper variables - `team_vals`
+    // The Xteam Reduction kernels require two helper variables - `team_vals`
     // array and `teams_done_ptr`.
-    // 2. The Xteam Scan Reduction kernels require a third helper variable -
-    // `scan_storage` array.
-    //    a. The segmented scan variant(the default) requires a fourth helper
-    //    variable - `segmented_vals`
-    size_t ExpectedNumArgs =
-        CGF.CGM.isXteamScanKernel()
-            ? (CGF.CGM.isXteamSegmentedScanKernel() ? 4 : 3)
-            : 2;
+    size_t ExpectedNumArgs = 2;
     assert((CapturedVars.size() ==
             CapturedCount + ExpectedNumArgs * XteamRVM.size()) &&
            "Unexpected number of captured vars");
@@ -11114,28 +11106,10 @@ static void emitTargetCallKernelLaunch(
     // reduction variables.
     size_t ArgPos = 0;
     size_t RedVarCount = 0;
-    if (CGF.CGM.isXteamScanKernel() && !CGF.CGM.isXteamScanPhaseOne) {
-      // For the Phase 2 of the Xteam Scan codegen, fresh memory allocation for
-      // reduction helper data structures is not needed. The helpers generated
-      // during the Phase 1 will be re-used here.
-      assert(CGF.CGM.ReductionVars.size() == ExpectedNumArgs &&
-             "Insufficient number of helper variables for Xteam Scan reduction "
-             "code-generation");
-      addXTeamReductionComponentHelper(
-          CGF, CombinedInfo, CGF.CGM.ReductionVars[0]); // team_vals
-      addXTeamReductionComponentHelper(
-          CGF, CombinedInfo, CGF.CGM.ReductionVars[1]); // teams_done_ptr
-      addXTeamReductionComponentHelper(
-          CGF, CombinedInfo, CGF.CGM.ReductionVars[2]); // scan_storage
-      if (CGF.CGM.isXteamSegmentedScanKernel())
-        addXTeamReductionComponentHelper(
-            CGF, CombinedInfo, CGF.CGM.ReductionVars[3]); // segment_vals
-    } else {
+    {
       for (; CapturedCount + ArgPos < CapturedVars.size();) {
         // Process the pair of captured variables:
         llvm::Value *DTeamValsInst = nullptr;
-        llvm::Value *DScanStorageInst = nullptr;
-        llvm::Value *DSegmentValsInst = nullptr;
 
         assert(CapturedCount + ArgPos < CapturedVars.size() &&
                "Xteam reduction argument position out of bounds");
@@ -11176,65 +11150,8 @@ static void emitTargetCallKernelLaunch(
               OMPBuilder.getOrCreateRuntimeFunction(CGF.CGM.getModule(),
                                                     OMPRTL_omp_target_alloc),
               TgtAllocArgs, "d_team_vals");
-
-          if (CGF.CGM.isXteamScanKernel()) {
-            // d_scan_storage = omp_target_alloc(sizeof(red-type) * (2*num_teams*num_threads + 1), devid)
-            llvm::Value *TotalNumThreads = CGF.Builder.CreateMul(
-                XteamRedNumTeamsFromClauseVal ? XteamRedNumTeamsFromClauseVal
-                                              : XteamRedNumTeamsFromOccupancy,
-                CGF.Builder.CreateIntCast(
-                    CGF.Builder.getInt32(CGF.CGM.getXteamRedBlockSize(D)),
-                    CGF.Int64Ty, false),
-                "total_num_threads");
-            llvm::Value *StorageSize = CGF.Builder.CreateAdd(
-                CGF.Builder.CreateMul(TotalNumThreads,
-                                      llvm::ConstantInt::get(CGF.Int64Ty, 2)),
-                llvm::ConstantInt::get(CGF.Int64Ty, 1), "storage_size");
-            llvm::Value *DScanStorageSz = CGF.Builder.CreateMul(
-                RedVarTySz, StorageSize, "d_scan_storage_sz");
-            llvm::Value *TgtAllocArgsScan[] = {DScanStorageSz, DevIdVal};
-            DScanStorageInst = CGF.EmitRuntimeCall(
-                OMPBuilder.getOrCreateRuntimeFunction(CGF.CGM.getModule(),
-                                                      OMPRTL_omp_target_alloc),
-                TgtAllocArgsScan, "d_scan_storage");
-            if (CGF.CGM.isXteamSegmentedScanKernel()) {
-              // Emit the lower and upper bounds
-              const auto *LBDecl = cast<VarDecl>(
-                  cast<DeclRefExpr>(
-                      cast<OMPLoopDirective>(D).getLowerBoundVariable())
-                      ->getDecl());
-              CGF.EmitVarDecl(*LBDecl);
-
-              const auto *UBDecl = cast<VarDecl>(
-                  cast<DeclRefExpr>(
-                      cast<OMPLoopDirective>(D).getUpperBoundVariable())
-                      ->getDecl());
-              CGF.EmitVarDecl(*UBDecl);
-              const auto UBLValue = CGF.EmitLValue(cast<DeclRefExpr>(
-                  cast<OMPLoopDirective>(D).getUpperBoundVariable()));
-              const auto LBLValue = CGF.EmitLValue(cast<DeclRefExpr>(
-                  cast<OMPLoopDirective>(D).getLowerBoundVariable()));
-              // Emit SegmentValsSize = UBLValue - LBLValue + 1
-              llvm::Value *SegmentValsSize = CGF.Builder.CreateAdd(
-                  CGF.Builder.CreateSub(
-                      CGF.Builder.CreateLoad(UBLValue.getAddress()),
-                      CGF.Builder.CreateLoad(LBLValue.getAddress())),
-                  llvm::ConstantInt::get(CGF.Int32Ty, 1), "segment_vals_size");
-
-              llvm::Value *DSegmentValsSz = CGF.Builder.CreateMul(
-                  RedVarTySz,
-                  CGF.Builder.CreateIntCast(SegmentValsSize, CGF.Int64Ty,
-                                            /*isSigned*/ false),
-                  "d_segment_vals_sz");
-              llvm::Value *TgtAllocArgsScan[] = {DSegmentValsSz, DevIdVal};
-              DSegmentValsInst = CGF.EmitRuntimeCall(
-                  OMPBuilder.getOrCreateRuntimeFunction(
-                      CGF.CGM.getModule(), OMPRTL_omp_target_alloc),
-                  TgtAllocArgsScan, "d_segment_vals");
-            }
-          }
         }
-        CGF.CGM.ReductionVars.push_back(DTeamValsInst);
+        ReductionVars.push_back(DTeamValsInst);
         addXTeamReductionComponentHelper(CGF, CombinedInfo, DTeamValsInst);
 
         // Advance to the next reduction variable in the pair:
@@ -11281,21 +11198,9 @@ static void emitTargetCallKernelLaunch(
                                                     OMPRTL_omp_target_memcpy),
               DTeamsDoneMemcpyArgs);
         }
-        CGF.CGM.ReductionVars.push_back(DTeamsDonePtrInst);
+        ReductionVars.push_back(DTeamsDonePtrInst);
         addXTeamReductionComponentHelper(CGF, CombinedInfo, DTeamsDonePtrInst);
 
-        if (CGF.CGM.isXteamScanKernel()) {
-          // Advance to the next reduction variable in the pair:
-          ++ArgPos;
-          CGF.CGM.ReductionVars.push_back(DScanStorageInst);
-          addXTeamReductionComponentHelper(CGF, CombinedInfo, DScanStorageInst);
-          if (CGF.CGM.isXteamSegmentedScanKernel()) {
-            ++ArgPos;
-            CGF.CGM.ReductionVars.push_back(DSegmentValsInst);
-            addXTeamReductionComponentHelper(CGF, CombinedInfo,
-                                             DSegmentValsInst);
-          }
-        }
         // Advance to the next reduction variable in the pair:
         ++ArgPos;
 
@@ -11426,16 +11331,14 @@ static void emitTargetCallKernelLaunch(
     OMPRuntime->emitInlinedDirective(CGF, D.getDirectiveKind(), ThenGen);
 
   if (HasXTeamReduction) {
-    if (!CGF.CGM.isXteamRedFast(FStmt) &&
-        !(CGF.CGM.isXteamScanKernel() && CGF.CGM.isXteamScanPhaseOne)) {
+    if (!CGF.CGM.isXteamRedFast(FStmt)) {
       // Deallocate XTeam reduction variables:
-      for (uint32_t I = 0; I < CGF.CGM.ReductionVars.size(); ++I) {
-        llvm::Value *FreeArgs[] = {CGF.CGM.ReductionVars[I], DevIdVal};
+      for (uint32_t I = 0; I < ReductionVars.size(); ++I) {
+        llvm::Value *FreeArgs[] = {ReductionVars[I], DevIdVal};
         CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
                                 CGF.CGM.getModule(), OMPRTL_omp_target_free),
                             FreeArgs);
       }
-      CGF.CGM.ReductionVars.clear();
     }
   }
 }
@@ -11603,10 +11506,6 @@ void CGOpenMPRuntime::scanForTargetRegionsFunctions(const Stmt *S,
       CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDeviceFunction(
           CGM, ParentName,
           cast<OMPTargetTeamsDistributeParallelForDirective>(E));
-      if (CGM.isXteamScanKernel() && !CGM.isXteamScanPhaseOne)
-        CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDeviceFunction(
-            CGM, ParentName,
-            cast<OMPTargetTeamsDistributeParallelForDirective>(E));
       break;
     case OMPD_target_teams_distribute_parallel_for_simd:
       CodeGenFunction::

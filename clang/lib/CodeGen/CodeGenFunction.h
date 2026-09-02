@@ -3684,24 +3684,6 @@ public:
                         const ForStmt *CapturedForStmt, SourceLocation Loc,
                         const FunctionArgList *Args);
 
-  void EmitNoLoopXteamScanInit(const OMPLoopDirective &D,
-                               const ForStmt *CapturedForStmt,
-                               const FunctionArgList *Args,
-                               llvm::Value *&GpuThreadId,
-                               llvm::Value *&GlobalGpuThreadId,
-                               llvm::Value *&WorkGroupId,
-                               llvm::Value *&TotalNumThreads);
-
-  void EmitNoLoopXteamScanPhaseOneCode(const OMPExecutableDirective &D,
-                                       const ForStmt *CapturedForStmt,
-                                       SourceLocation Loc,
-                                       const FunctionArgList *Args);
-
-  void EmitNoLoopXteamScanPhaseTwoCode(const OMPExecutableDirective &D,
-                                       const ForStmt *CapturedForStmt,
-                                       SourceLocation Loc,
-                                       const FunctionArgList *Args);
-
   /// Used in No-Loop and Xteam codegen to emit the loop iteration and the
   /// associated variables. Returns the loop iteration variable and its address.
   std::pair<const VarDecl *, Address> EmitNoLoopIV(const OMPLoopDirective &LD);
@@ -4203,8 +4185,6 @@ public:
 
   /// Helper for OpenMP NoLoop kernel CodeGen
   void EmitOMPNoLoopBody(const OMPLoopDirective &D);
-
-  void EmitOMPXteamScanNoLoopBody(const OMPLoopDirective &D);
 
   /// Emit code for the worksharing loop-based directive.
   /// \return true, if this construct has any lastprivate clause, false -
@@ -5769,14 +5749,6 @@ private:
   /// API.
   void EmitXteamRedOperation(const ForStmt *FStmt, const FunctionArgList &Args,
                              int BlockSize);
-  /// For every scan reduction variable, emit a call to the DeviceRTL API.
-  void EmitXteamScanSum(const ForStmt *FStmt, const FunctionArgList &Args,
-                        int BlockSize);
-  /// For every scan reduction variable, emit a call to the DeviceRTL API
-  /// required for phase 2 kernel.
-  void EmitXteamScanPhaseTwo(const ForStmt *FStmt, llvm::Value *SegmentSize,
-                             const FunctionArgList &Args, int BlockSize,
-                             bool IsInclusiveScan);
   /// Emit reduction into local variable for a statement within the BigJumpLoop.
   bool EmitXteamRedStmt(const Stmt *S);
   /// Emit reduction into local variable for a statement within the BigJumpLoop.

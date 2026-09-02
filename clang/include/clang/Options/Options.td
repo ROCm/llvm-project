@@ -4269,22 +4269,21 @@ def fno_openmp_target_fast_reduction : Flag<["-"], "fno-openmp-target-fast-reduc
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
   HelpText<"Do not use the fast reduction code generation technique">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetFastReduction">>;
-def fopenmp_target_xteam_scan : Flag<["-"], "fopenmp-target-xteam-scan">, Group<f_Group>, 
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Use the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamScan">>;
-def fno_openmp_target_xteam_scan : Flag<["-"], "fno-openmp-target-xteam-scan">, Group<f_Group>, 
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Do not use the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamScan">>;
-def fopenmp_target_xteam_no_loop_scan : Flag<["-"], "fopenmp-target-xteam-no-loop-scan">, Group<f_Group>, 
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Use the no-loop variant of the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamNoLoopScan">>;
-def fno_openmp_target_xteam_no_loop_scan : Flag<["-"], "fno-openmp-target-xteam-no-loop-scan">, Group<f_Group>, 
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Do not use the no-loop variant of the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamNoLoopScan">>;
+// Deprecated no-ops: the xteam-scan feature has been removed. These flags are
+// still accepted by the driver (which emits a deprecation warning) but have no
+// effect and are not forwarded to cc1.
+def fopenmp_target_xteam_scan : Flag<["-"], "fopenmp-target-xteam-scan">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption]>,
+  HelpText<"Deprecated, no effect. The cross-team 'scan' directive code generation has been removed.">;
+def fno_openmp_target_xteam_scan : Flag<["-"], "fno-openmp-target-xteam-scan">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption]>,
+  HelpText<"Deprecated, no effect. The cross-team 'scan' directive code generation has been removed.">;
+def fopenmp_target_xteam_no_loop_scan : Flag<["-"], "fopenmp-target-xteam-no-loop-scan">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption]>,
+  HelpText<"Deprecated, no effect. The cross-team 'scan' directive code generation has been removed.">;
+def fno_openmp_target_xteam_no_loop_scan : Flag<["-"], "fno-openmp-target-xteam-no-loop-scan">, Group<f_Group>,
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption]>,
+  HelpText<"Deprecated, no effect. The cross-team 'scan' directive code generation has been removed.">;
 
 //===----------------------------------------------------------------------===//
 // Shared cc1 + fc1 OpenMP Target Options

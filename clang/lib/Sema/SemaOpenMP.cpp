@@ -5651,23 +5651,12 @@ static bool checkNestingOfRegions(Sema &SemaRef, const DSAStackTy *Stack,
     Recommend = ShouldBeInTargetRegion;
   } else if (CurrentRegion == OMPD_scan) {
     if (OMPVersion >= 50) {
-      // Make sure that one of the flags - '-fopenmp-target-xteam-scan' or
-      // '-fopenmp-target-xteam-no-loop-scan' flag is passed to enable the
-      // Xteam-Scan Codegen, if the 'scan' directive is found to be nested
-      // inside the 'target teams distribute parallel for' directive
-      if (ParentRegion == OMPD_target_teams_distribute_parallel_for &&
-          !(SemaRef.getLangOpts().OpenMPTargetXteamScan ||
-            SemaRef.getLangOpts().OpenMPTargetXteamNoLoopScan))
-        SemaRef.Diag(StartLoc, diag::err_omp_xteam_scan_prohibited)
-            << getOpenMPDirectiveName(CurrentRegion) << Recommend;
       // OpenMP spec 5.0 and 5.1 require scan to be directly enclosed by for,
       // simd, or for simd. This has to take into account combined directives.
       // In 5.2 this seems to be implied by the fact that the specified
       // separated constructs are do, for, and simd.
-      NestingProhibited =
-          !llvm::is_contained({OMPD_for, OMPD_simd, OMPD_for_simd},
-                              EnclosingConstruct) &&
-          ParentRegion != OMPD_target_teams_distribute_parallel_for;
+      NestingProhibited = !llvm::is_contained(
+          {OMPD_for, OMPD_simd, OMPD_for_simd}, EnclosingConstruct);
     } else {
       NestingProhibited = true;
     }
@@ -26413,11 +26402,6 @@ OMPClause *SemaOpenMP::ActOnOpenMPInclusiveClause(ArrayRef<Expr *> VarList,
     Expr *SimpleRefExpr = RefExpr;
     auto Res = getPrivateItem(SemaRef, SimpleRefExpr, ELoc, ERange,
                               /*AllowArraySection=*/true);
-    if (!Vars.empty() && DSAStack->getParentDirective() ==
-                             OMPD_target_teams_distribute_parallel_for) {
-      Diag(ELoc, diag::err_omp_multivar_xteam_scan_unsupported)
-          << RefExpr->getSourceRange();
-    }
     if (Res.second)
       // It will be analyzed later.
       Vars.push_back(RefExpr);
@@ -26459,11 +26443,6 @@ OMPClause *SemaOpenMP::ActOnOpenMPExclusiveClause(ArrayRef<Expr *> VarList,
     Expr *SimpleRefExpr = RefExpr;
     auto Res = getPrivateItem(SemaRef, SimpleRefExpr, ELoc, ERange,
                               /*AllowArraySection=*/true);
-    if (!Vars.empty() && DSAStack->getParentDirective() ==
-                             OMPD_target_teams_distribute_parallel_for) {
-      Diag(ELoc, diag::err_omp_multivar_xteam_scan_unsupported)
-          << RefExpr->getSourceRange();
-    }
     if (Res.second)
       // It will be analyzed later.
       Vars.push_back(RefExpr);

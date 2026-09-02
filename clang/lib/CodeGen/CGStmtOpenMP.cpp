@@ -455,35 +455,6 @@ void CodeGenFunction::InitializeXteamRedCapturedVars(
 
   assert(DTeamsDonePtrInst && "Device team done pointer cannot be null");
   CapturedVars.push_back(DTeamsDonePtrInst);
-
-  if (CGM.isXteamScanKernel()) {
-    // Placeholder for d_scan_storage initialized to nullptr
-    llvm::Value *DScanStorageInst =
-        Builder.CreateAlloca(RedVarType, nullptr, "d_scan_storage");
-    Address DScanStorageAddr(
-        DScanStorageInst, RedVarType,
-        Context.getTypeAlignInChars(Context.UnsignedIntTy));
-    llvm::Value *NullPtrDScanStorage = llvm::ConstantPointerNull::get(
-        llvm::PointerType::get(getLLVMContext(), /*AddressSpace=*/0));
-    Builder.CreateStore(NullPtrDScanStorage, DScanStorageAddr);
-
-    assert(DScanStorageInst && "Device scan storage pointer cannot be null");
-    CapturedVars.push_back(DScanStorageInst);
-    if (CGM.isXteamSegmentedScanKernel()) {
-      // Placeholder for d_segment_vals initialized to nullptr
-      llvm::Value *DSegmentValsInst =
-          Builder.CreateAlloca(RedVarType, nullptr, "d_segment_vals");
-      Address DSegmentValsAddr(
-          DSegmentValsInst, RedVarType,
-          Context.getTypeAlignInChars(Context.UnsignedIntTy));
-      llvm::Value *NullPtrDSegmentVals = llvm::ConstantPointerNull::get(
-          llvm::PointerType::get(getLLVMContext(), /*AddressSpace=*/0));
-      Builder.CreateStore(NullPtrDSegmentVals, DSegmentValsAddr);
-
-      assert(DSegmentValsInst && "Segment Vals Array pointer cannot be null");
-      CapturedVars.push_back(DSegmentValsInst);
-    }
-  }
 }
 
 void CodeGenFunction::GenerateOpenMPCapturedVars(
@@ -726,18 +697,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
           Ctx, Ctx.VoidPtrTy, ImplicitParamKind::CapturedContext);
       Args.emplace_back(DTeamsDoneVD);
       TargetArgs.emplace_back(DTeamsDoneVD);
-      if (CGM.isXteamScanKernel()) {
-        VarDecl *DScanStorageVD = ImplicitParamDecl::Create(
-            Ctx, Ctx.VoidPtrTy, ImplicitParamKind::CapturedContext);
-        Args.emplace_back(DScanStorageVD);
-        TargetArgs.emplace_back(DScanStorageVD);
-        if (CGM.isXteamSegmentedScanKernel()) {
-          VarDecl *DSegmentValsVD = ImplicitParamDecl::Create(
-              Ctx, Ctx.VoidPtrTy, ImplicitParamKind::CapturedContext);
-          Args.emplace_back(DSegmentValsVD);
-          TargetArgs.emplace_back(DSegmentValsVD);
-        }
-      }
     }
   }
 
@@ -1097,18 +1056,7 @@ llvm::Function *CodeGenFunction::GenerateOpenMPCapturedStmtFunction(
                   llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_XTEAM_RED,
                   Loc, &WrapperArgs);
   } else {
-    if (!(CGM.isXteamScanKernel() && !CGM.isXteamScanPhaseOne))
-      // This condition prevents any codegen for the host fallback function of
-      // the PhaseTwo kernel of Xteam Scan.
-      // Explanation: The fallback function for PhaseOne kernel is the 'true'
-      // fallback that computes parallel scan on the host using the existing
-      // implementation of scan. Whereas, the fallback function for PhaseTwo
-      // kernel is a 'dummy' one, that is, it doesn't do any computation. The
-      // two kernels are necessary to enforce synchronization between the two
-      // phases of Xteam Scan. At the same time, fallback generation is
-      // mandatory for every kernel although we don't need the host fallback
-      // generation for the PhaseTwo kernel.
-      CapturedStmtInfo->EmitBody(*this, CD->getBody());
+    CapturedStmtInfo->EmitBody(*this, CD->getBody());
   }
 
   LocalScope.ForceCleanup();
@@ -2580,46 +2528,6 @@ void CodeGenFunction::EmitOMPNoLoopBody(const OMPLoopDirective &D) {
            D.getLoopsNumber());
 }
 
-void CodeGenFunction::EmitOMPXteamScanNoLoopBody(const OMPLoopDirective &D) {
-  RunCleanupsScope BodyScope(*this);
-  JumpDest Continue = getJumpDestInCurrentScope("omp.body.continue");
-  JumpDest LoopExit = getJumpDestInCurrentScope("omp.loop.exit");
-  const Stmt *BodyL =
-      D.getInnermostCapturedStmt()->getCapturedStmt()->IgnoreContainers();
-  BreakContinueStack.push_back(BreakContinue(cast<ForStmt>(*BodyL), LoopExit, Continue));
-  OMPPrivateScope InscanScope(*this);
-  EmitOMPReductionClauseInit(D, InscanScope, /*ForInscan=*/true);
-
-  // Need to remember the block before and after scan directive
-  // to dispatch them correctly depending on the clause used in
-  // this directive, inclusive or exclusive. For inclusive scan the natural
-  // order of the blocks is used, for exclusive clause the blocks must be
-  // executed in reverse order.
-  OMPBeforeScanBlock = createBasicBlock("omp.before.scan.bb");
-  OMPAfterScanBlock = createBasicBlock("omp.after.scan.bb");
-  // No need to allocate inscan exit block, in simd mode it is selected in the
-  // codegen for the scan directive.
-  if (D.getDirectiveKind() != OMPD_simd && !getLangOpts().OpenMPSimd)
-    OMPScanExitBlock = createBasicBlock("omp.exit.inscan.bb");
-  OMPScanDispatch = createBasicBlock("omp.inscan.dispatch");
-  EmitBranch(OMPScanDispatch);
-  EmitBlock(OMPBeforeScanBlock);
-
-  // Emit loop variables for C++ range loops.
-  const Stmt *Body =
-      D.getInnermostCapturedStmt()->getCapturedStmt()->IgnoreContainers();
-  // Emit loop body.
-  emitBody(*this, Body,
-           OMPLoopBasedDirective::tryToFindNextInnerLoop(
-               Body, /*TryImperfectlyNestedLoops=*/true),
-           D.getLoopsNumber());
-
-  // Jump to the dispatcher at the end of the loop body.
-  EmitBranch(OMPScanExitBlock);
-  EmitBlock(Continue.getBlock());
-  BreakContinueStack.pop_back();
-}
-
 using EmittedClosureTy = std::pair<llvm::Function *, llvm::Value *>;
 
 /// Emit a captured statement and return the function as well as its captured
@@ -3990,15 +3898,10 @@ emitInnerParallelForWhenCombined(CodeGenFunction &CGF,
                    dyn_cast<OMPTargetTeamsDistributeParallelForDirective>(&S))
         HasCancel = D->hasCancel();
     }
-    if (CGF.CGM.isXteamScanKernel()) {
-      emitOMPCopyinClause(CGF, S);
-      (void)emitWorksharingDirective(CGF, S, HasCancel);
-    } else {
-      CodeGenFunction::OMPCancelStackRAII CancelRegion(CGF, EKind, HasCancel);
-      CGF.EmitOMPWorksharingLoop(S, S.getPrevEnsureUpperBound(),
-                                 emitDistributeParallelForInnerBounds,
-                                 emitDistributeParallelForDispatchBounds);
-    }
+    CodeGenFunction::OMPCancelStackRAII CancelRegion(CGF, EKind, HasCancel);
+    CGF.EmitOMPWorksharingLoop(S, S.getPrevEnsureUpperBound(),
+                               emitDistributeParallelForInnerBounds,
+                               emitDistributeParallelForDispatchBounds);
   };
 
   emitCommonOMPParallelDirective(
@@ -4397,27 +4300,7 @@ static void emitScanBasedDirectiveDecls(
           RValue::get(OMPScanNumIterations));
       // Emit temp buffer.
       auto TempVarDecl = cast<VarDecl>(cast<DeclRefExpr>(*ITA)->getDecl());
-      if (CGF.CGM.isXteamScanKernel() &&
-          !CGF.CGM.getLangOpts().OpenMPIsTargetDevice &&
-          CGF.hasAddrOfLocalVar(TempVarDecl)) {
-        // While generating the Host Fallback function for the Xteam Scan
-        // Kernels, emit the stack allocation pointer for the VLA(Variable
-        // Length Array) of size <N>(i.e. OMPScanNumIterations) - a helper
-        // variable required for host scan. In a previous allocation for this
-        // VarDecl, only a dummy VLA allocation of size 0 was emitted just so
-        // that there is an entry in the LocalDeclMap at the CGF level. However,
-        // this is the place where the actual allocation happens and the new
-        // alloca's pointer is now stored at the address of older alloca's
-        // pointer.
-        auto TempVLAInst = CGF.Builder.CreateAlloca(
-            CGF.Int32Ty, OMPScanNumIterations, "tmp.vla");
-        Address TempVDAddr = CGF.GetAddrOfLocalVar(TempVarDecl);
-        auto TempVDAddrLValue =
-            CGF.MakeAddrLValue(TempVDAddr, TempVarDecl->getType());
-        CGF.EmitStoreOfScalar(TempVLAInst, TempVDAddrLValue,
-                              /* isInitialization */ false);
-      } else
-        CGF.EmitVarDecl(*TempVarDecl);
+      CGF.EmitVarDecl(*TempVarDecl);
       ++ITA;
       ++Count;
     }
@@ -6334,7 +6217,6 @@ void CodeGenFunction::EmitOMPDepobjDirective(const OMPDepobjDirective &S) {
 void CodeGenFunction::EmitOMPScanDirective(const OMPScanDirective &S) {
   if (!OMPParentLoopDirectiveForScan)
     return;
-  CGM.OMPPresentScanDirective = &S;
   const OMPExecutableDirective &ParentDir = *OMPParentLoopDirectiveForScan;
   bool IsInclusive = S.hasClausesOfKind<OMPInclusiveClause>();
   SmallVector<const Expr *, 4> Shareds;
@@ -6477,19 +6359,12 @@ void CodeGenFunction::EmitOMPScanDirective(const OMPScanDirective &S) {
               cast<ArraySubscriptExpr>(CopyArrayElem)->getIdx()),
           RValue::get(IdxVal));
 
-      // Omit the codegen of `CopyArrayElem[Index] = Red_Var (aka OrigExpr)`
-      // while generating code for the Xteam Scan kernel function because the
-      // Red_Var will be eventually consumed by the Device codegen machinery
-      // implemented for Xteam Scan
-      if (!(CGM.getLangOpts().OpenMPIsTargetDevice &&
-            CGM.isXteamRedKernel(ParentDir) && CGM.isXteamScanKernel())) {
-        LValue DestLVal = EmitLValue(CopyArrayElem);
-        LValue SrcLVal = EmitLValue(OrigExpr);
-        EmitOMPCopy(
-            PrivateExpr->getType(), DestLVal.getAddress(), SrcLVal.getAddress(),
-            cast<VarDecl>(cast<DeclRefExpr>(LHSs[I])->getDecl()),
-            cast<VarDecl>(cast<DeclRefExpr>(RHSs[I])->getDecl()), CopyOps[I]);
-      }
+      LValue DestLVal = EmitLValue(CopyArrayElem);
+      LValue SrcLVal = EmitLValue(OrigExpr);
+      EmitOMPCopy(
+          PrivateExpr->getType(), DestLVal.getAddress(), SrcLVal.getAddress(),
+          cast<VarDecl>(cast<DeclRefExpr>(LHSs[I])->getDecl()),
+          cast<VarDecl>(cast<DeclRefExpr>(RHSs[I])->getDecl()), CopyOps[I]);
     }
   }
   EmitBranch(BreakContinueStack.back().ContinueBlock.getBlock());
@@ -6528,25 +6403,10 @@ void CodeGenFunction::EmitOMPScanDirective(const OMPScanDirective &S) {
       LValue SrcLVal = EmitLValue(CopyArrayElem);
       LValue DestLVal = EmitLValue(OrigExpr);
 
-      if (CGM.getLangOpts().OpenMPIsTargetDevice &&
-          CGM.isXteamRedKernel(ParentDir) && CGM.isXteamScanKernel()) {
-        // Store the updated value of reduction variable(in the second phase of
-        // Xteam scan) to the OrigExpr(aka Red_Var). This will be consumed by
-        // the AfterScanBlock later on.
-        const CodeGenModule::XteamRedVarMap &RedVarMap =
-            CGM.getXteamRedVarMap(CGM.getCurrentXteamRedStmt());
-        const VarDecl *RedVarDecl =
-            cast<VarDecl>(cast<DeclRefExpr>(OrigExpr)->getDecl());
-        Address XteamRedLocalAddr =
-            RedVarMap.find(RedVarDecl)->second.RedVarAddr;
-        Builder.CreateStore(Builder.CreateLoad(XteamRedLocalAddr),
-                            DestLVal.getAddress());
-      } else {
-        EmitOMPCopy(
-            PrivateExpr->getType(), DestLVal.getAddress(), SrcLVal.getAddress(),
-            cast<VarDecl>(cast<DeclRefExpr>(LHSs[I])->getDecl()),
-            cast<VarDecl>(cast<DeclRefExpr>(RHSs[I])->getDecl()), CopyOps[I]);
-      }
+      EmitOMPCopy(
+          PrivateExpr->getType(), DestLVal.getAddress(), SrcLVal.getAddress(),
+          cast<VarDecl>(cast<DeclRefExpr>(LHSs[I])->getDecl()),
+          cast<VarDecl>(cast<DeclRefExpr>(RHSs[I])->getDecl()), CopyOps[I]);
     }
     if (!IsInclusive) {
       EmitBlock(ExclusiveExitBB);
@@ -8238,19 +8098,8 @@ static void emitTargetTeamsDistributeParallelForRegion(
     CGF.EmitOMPReductionClauseFinal(S, /*ReductionKind=*/OMPD_teams);
   };
 
-  auto &&NumIteratorsGen = [&S](CodeGenFunction &CGF) {
-    CodeGenFunction::OMPLocalDeclMapRAII Scope(CGF);
-    OMPLoopScope LoopScope(CGF, S);
-    return CGF.EmitScalarExpr(S.getNumIterations());
-  };
-
-  if (CGF.CGM.isXteamScanKernel())
-    emitScanBasedDirectiveDecls(CGF, S, NumIteratorsGen);
   emitCommonOMPTeamsDirective(CGF, S, OMPD_distribute_parallel_for,
                               CodeGenTeams);
-  if (CGF.CGM.isXteamScanKernel())
-    emitScanBasedDirectiveFinals(CGF, S, NumIteratorsGen);
-
   emitPostUpdateForReductionClause(CGF, S,
                                    [](CodeGenFunction &) { return nullptr; });
 }
@@ -8277,36 +8126,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDirective(
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
     emitTargetTeamsDistributeParallelForRegion(CGF, S, Action);
   };
-  {
-    const auto &&NumIteratorsGen = [&S](CodeGenFunction &CGF) {
-      CodeGenFunction::OMPLocalDeclMapRAII Scope(CGF);
-      CGCapturedStmtInfo CGSI(CR_OpenMP);
-      CodeGenFunction::CGCapturedStmtRAII CapInfoRAII(CGF, &CGSI);
-      OMPLoopScope LoopScope(CGF, S);
-      // Emit the size 0 to emit a dummy alloca just so that the LocalDeclMap
-      // contains the respective VarDecl. We later emit the actual alloca during
-      // host fallback generation for Xteam Scan kernels.
-      return CGF.Builder.getInt32(0);
-    };
-    bool IsInscan =
-        llvm::any_of(S.getClausesOfKind<OMPReductionClause>(),
-                     [](const OMPReductionClause *C) {
-                       return C->getModifier() == OMPC_REDUCTION_inscan;
-                     });
-    if (IsInscan)
-      emitScanBasedDirectiveDecls(*this, S, NumIteratorsGen);
-    auto LPCRegion =
-        CGOpenMPRuntime::LastprivateConditionalRAII::disable(*this, S);
-    emitCommonOMPTargetDirective(*this, S, CodeGen);
-    this->CGM.isXteamScanPhaseOne = false;
-    if (this->CGM.isXteamScanKernel()) {
-      emitCommonOMPTargetDirective(*this, S, CodeGen);
-      this->CGM.isXteamScanPhaseOne = true;
-    }
-
-    if (IsInscan)
-      emitScanBasedDirectiveFinals(*this, S, NumIteratorsGen);
-  }
+  emitCommonOMPTargetDirective(*this, S, CodeGen);
 }
 
 static void emitTargetTeamsDistributeParallelForSimdRegion(

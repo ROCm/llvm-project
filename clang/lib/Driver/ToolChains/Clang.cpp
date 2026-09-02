@@ -7277,6 +7277,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       else
         CmdArgs.push_back("-fno-openmp-target-fast-reduction");
 
+      // The xteam-scan feature has been removed. These flags are retained only
+      // as deprecated no-ops: warn on use and do not forward them to cc1.
       for (Arg *A : Args.filtered(options::OPT_fopenmp_target_xteam_scan,
                                   options::OPT_fno_openmp_target_xteam_scan,
                                   options::OPT_fopenmp_target_xteam_no_loop_scan,
@@ -7285,18 +7287,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
             << A->getAsString(Args)
             << "will be removed in a future revision of the OpenMP implementation.";
 
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_scan,
-                       options::OPT_fno_openmp_target_xteam_scan, false))
-        CmdArgs.push_back("-fopenmp-target-xteam-scan");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-scan");
-
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_no_loop_scan,
-                       options::OPT_fno_openmp_target_xteam_no_loop_scan,
-                       false))
-        CmdArgs.push_back("-fopenmp-target-xteam-no-loop-scan");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-no-loop-scan");
       // When in OpenMP offloading mode with NVPTX target, forward
       // cuda-mode flag
       if (Args.hasFlag(options::OPT_fopenmp_cuda_mode,
