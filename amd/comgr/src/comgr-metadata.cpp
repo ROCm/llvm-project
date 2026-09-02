@@ -292,19 +292,16 @@ llvm::Error getMetadataRoot(MemoryBufferRef MB, DataMeta *MetaP) {
 struct IsaInfo {
   const char *IsaName;
   const char *Processor;
-  unsigned LDSBankCount;
   unsigned MaxFlatWorkGroupSize;
   unsigned VGPRAllocGranule;
   unsigned TotalNumVGPRs;
   // TODO: Update this to AvailableNumVGPRs to be more accurate
   unsigned AddressableNumVGPRs;
 } IsaInfos[] = {
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, LDS_BANK_COUNT,                   \
-                   MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
-                   TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
-  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR,          LDS_BANK_COUNT,            \
-   MAX_FLAT_WORK_GROUP_SIZE,    VGPR_ALLOC_GRANULE, TOTAL_NUM_VGPRS,           \
-   ADDRESSABLE_NUM_VGPRS},
+#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE,         \
+                   VGPR_ALLOC_GRANULE, TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS) \
+  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR,       MAX_FLAT_WORK_GROUP_SIZE,     \
+   VGPR_ALLOC_GRANULE,          TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS},
 #include "comgr-isa-metadata.def"
 };
 
@@ -573,7 +570,7 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   Root["AddressableNumVGPRs"] =
       Doc.getNode(std::to_string(Info.AddressableNumVGPRs), /*Copy=*/true);
   Root["LDSBankCount"] =
-      Doc.getNode(std::to_string(Info.LDSBankCount), /*Copy=*/true);
+      Doc.getNode(std::to_string(AMDGPU::getLDSBankCount(Kind)), /*Copy=*/true);
 
   return AMD_COMGR_STATUS_SUCCESS;
 }
