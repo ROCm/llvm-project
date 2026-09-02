@@ -207,6 +207,25 @@ static Value *maskShiftAmount(IRBuilder<> &B, Value *Amount, unsigned Width) {
                      "shift_amount");
 }
 
+static Error raiseBitMask(RaiseContext &Ctx, OperandResolver &Op) {
+  return raiseBinary32(
+      Ctx, Op, [](IRBuilder<> &B, Value *Width, Value *Offset) {
+        Width = maskShiftAmount(B, Width, 32);
+        Offset = maskShiftAmount(B, Offset, 32);
+        Value *Ones = B.CreateSub(B.CreateShl(B.getInt32(1), Width),
+                                  B.getInt32(1), "bfm.ones");
+        return B.CreateShl(Ones, Offset, "bfm");
+      });
+}
+
+static Error raiseBitCount(RaiseContext &Ctx, OperandResolver &Op) {
+  return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+    Value *Count =
+        B.CreateUnaryIntrinsic(Intrinsic::ctpop, Src0, nullptr, "bcnt");
+    return B.CreateAdd(Count, Src1, "bcnt.add");
+  });
+}
+
 // Widen the low 24 bits of a source to `Ty`, which is how the `*_i24` and
 // `*_u24` multiplies read their operands.
 static Value *extendLow24(IRBuilder<> &B, Value *Source, Type *Ty,
@@ -355,6 +374,10 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
       return B.CreateNot(B.CreateXor(Src0, Src1, "xnor_xor"), "xnor");
     });
+  case CanonicalOp::V_BFM_B32:
+    return raiseBitMask(Ctx, Op);
+  case CanonicalOp::V_BCNT_U32_B32:
+    return raiseBitCount(Ctx, Op);
 
   // These take the shift amount in src0 and the value being shifted in src1.
   case CanonicalOp::V_LSHLREV_B32:
