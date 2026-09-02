@@ -69,6 +69,8 @@ STATISTIC(NumReloadsRemoved,  "Number of reloads removed");
 STATISTIC(NumFolded,          "Number of folded stack accesses");
 STATISTIC(NumFoldedLoads,     "Number of folded loads");
 STATISTIC(NumRemats,          "Number of rematerialized defs for spilling");
+STATISTIC(NumLaneUnsafeSpillsKept,
+          "Number of spills kept for lanes no other spill stores");
 
 static cl::opt<bool>
 RestrictStatepointRemat("restrict-statepoint-remat",
@@ -1538,6 +1540,29 @@ bool HoistSpillHelper::isSpillCandBB(LiveInterval &OrigLI, VNInfo &OrigVNI,
   return false;
 }
 
+/// Return the lanes of the register spilled by \p MI that hold a defined value.
+static LaneBitmask spilledLanes(const MachineInstr &MI, LiveIntervals &LIS,
+                                const MachineRegisterInfo &MRI) {
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.isUse() || MO.isImplicit() ||
+        !MO.getReg().isVirtual())
+      continue;
+    Register Reg = MO.getReg();
+    if (!LIS.hasInterval(Reg))
+      return LaneBitmask::getAll();
+    const LiveInterval &LI = LIS.getInterval(Reg);
+    if (!LI.hasSubRanges())
+      return MRI.getMaxLaneMaskForVReg(Reg);
+    SlotIndex Idx = LIS.getInstructionIndex(MI).getRegSlot(true);
+    LaneBitmask Mask;
+    for (const LiveInterval::SubRange &S : LI.subranges())
+      if (S.liveAt(Idx))
+        Mask |= S.LaneMask;
+    return Mask;
+  }
+  return LaneBitmask::getAll();
+}
+
 /// Remove redundant spills in the same BB. Save those redundant spills in
 /// SpillsToRm, and save the spill to keep and its BB in SpillBBToSpill map.
 void HoistSpillHelper::rmRedundantSpills(
@@ -1556,6 +1581,13 @@ void HoistSpillHelper::rmRedundantSpills(
       SlotIndex CIdx = LIS.getInstructionIndex(*CurrentSpill);
       MachineInstr *SpillToRm = (CIdx > PIdx) ? CurrentSpill : PrevSpill;
       MachineInstr *SpillToKeep = (CIdx > PIdx) ? PrevSpill : CurrentSpill;
+      // Only sound if SpillToKeep stores every lane SpillToRm stores.
+      if ((spilledLanes(*SpillToRm, LIS, MRI) &
+           ~spilledLanes(*SpillToKeep, LIS, MRI))
+              .any()) {
+        ++NumLaneUnsafeSpillsKept;
+        continue;
+      }
       SpillsToRm.push_back(SpillToRm);
       SpillBBToSpill[MDT.getNode(Block)] = SpillToKeep;
     } else {

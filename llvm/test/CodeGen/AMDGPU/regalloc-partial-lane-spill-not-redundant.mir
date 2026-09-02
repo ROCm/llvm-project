@@ -3,8 +3,8 @@
 # RUN:   | FileCheck %s
 
 # CHECK:     SI_SPILL_S512_SAVE %{{[0-9]+}}, %stack.[[SLOT:[0-9]+]],
-# CHECK-NOT: SI_SPILL_S512_SAVE
-# CHECK:     bb.
+# CHECK-NOT: bb.
+# CHECK:     SI_SPILL_S512_SAVE %{{[0-9]+}}, %stack.[[SLOT]],
 
 --- |
   ; ModuleID = '/mnt/nvme2/jinpli/workspace/home/jinpli/development/workspace/fly_1087/repro/repro.ll'
