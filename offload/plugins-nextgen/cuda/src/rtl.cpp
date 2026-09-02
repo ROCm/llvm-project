@@ -564,8 +564,8 @@ struct CUDADeviceTy : public GenericDeviceTy {
 
   /// Load the binary image into the device and allocate an image object.
   Expected<DeviceImageTy *>
-  loadBinaryImpl(std::unique_ptr<MemoryBuffer> &&TgtImage,
-                 int32_t ImageId) override {
+  loadBinaryImpl(std::unique_ptr<MemoryBuffer> &&TgtImage, int32_t ImageId,
+                 PluginContextTy * /*Context*/) override {
     if (auto Err = setContext())
       return std::move(Err);
 
@@ -815,6 +815,11 @@ struct CUDADeviceTy : public GenericDeviceTy {
     // TODO: Implement pinning feature for CUDA.
     return false;
   }
+
+  /// cuMemcpyHtoDAsync is only a true asynchronous transfer when the host
+  /// buffer is page-locked. Out of pageable memory the driver has to copy the
+  /// data into staging memory of its own before it can return.
+  bool hasFastTransferWithPinnedMemory() const override { return true; }
 
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,

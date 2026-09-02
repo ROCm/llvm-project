@@ -53,11 +53,11 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/NVVMAttributes.h"
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/TargetParser/AMDGPUTargetParser.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/CodeExtractor.h"
@@ -198,6 +198,19 @@ static const omp::GV &getGridValue(const Triple &T, Function *Kernel) {
     StringRef Features =
         Kernel->getFnAttribute("target-features").getValueAsString();
     if (Features.count("+wavefrontsize64"))
+      return omp::getAMDGPUGridValues<64>();
+    if (Features.count("+wavefrontsize32"))
+      return omp::getAMDGPUGridValues<32>();
+
+    // Clang sets no wavefront size on OpenMP device kernels, so ask the CPU.
+    StringRef CPU = Kernel->getFnAttribute("target-cpu").getValueAsString();
+    AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(CPU);
+    if (Kind == AMDGPU::GK_NONE)
+      Kind = AMDGPU::getGPUKindFromSubArch(T.getSubArch());
+    // An unknown target gets the wider wavefront: too large a block only wastes
+    // threads, too small a one underflows the team size.
+    if (Kind == AMDGPU::GK_NONE ||
+        !AMDGPU::getFeatureBitset(Kind).test(AMDGPU::FEAT_SUPPORTS_WAVE32))
       return omp::getAMDGPUGridValues<64>();
     return omp::getAMDGPUGridValues<32>();
   }
@@ -5450,6 +5463,7 @@ OpenMPIRBuilder::InsertPointOrErrorTy
 OpenMPIRBuilder::createMasked(const LocationDescription &Loc,
                               BodyGenCallbackTy BodyGenCB,
                               FinalizeCallbackTy FiniCB, Value *Filter) {
+  IRBuilder<>::InsertPointGuard IPG(Builder);
   if (!updateToLocation(Loc))
     return Loc.IP;
 
@@ -5585,15 +5599,15 @@ Error OpenMPIRBuilder::emitScanBasedDirectiveDeclsIR(
   Builder.SetInsertPoint(ScanRedInfo->OMPScanInit->getTerminator());
   llvm::Value *FilterVal = Builder.getInt32(0);
   llvm::OpenMPIRBuilder::InsertPointOrErrorTy AfterIP =
-      createMasked(Builder.saveIP(), BodyGenCB, FiniCB, FilterVal);
+      createMasked(Builder, BodyGenCB, FiniCB, FilterVal);
 
   if (!AfterIP)
     return AfterIP.takeError();
   Builder.restoreIP(*AfterIP);
   BasicBlock *InputBB = Builder.GetInsertBlock();
   if (InputBB->hasTerminator())
-    Builder.SetInsertPoint(Builder.GetInsertBlock()->getTerminator());
-  AfterIP = createBarrier(Builder.saveIP(), llvm::omp::OMPD_barrier);
+    Builder.SetInsertPoint(InputBB->getTerminator());
+  AfterIP = createBarrier(Builder, llvm::omp::OMPD_barrier);
   if (!AfterIP)
     return AfterIP.takeError();
   Builder.restoreIP(*AfterIP);
@@ -5633,15 +5647,15 @@ Error OpenMPIRBuilder::emitScanBasedDirectiveFinalsIR(
 
   llvm::Value *FilterVal = Builder.getInt32(0);
   llvm::OpenMPIRBuilder::InsertPointOrErrorTy AfterIP =
-      createMasked(Builder.saveIP(), BodyGenCB, FiniCB, FilterVal);
+      createMasked(Builder, BodyGenCB, FiniCB, FilterVal);
 
   if (!AfterIP)
     return AfterIP.takeError();
   Builder.restoreIP(*AfterIP);
   BasicBlock *InputBB = Builder.GetInsertBlock();
   if (InputBB->hasTerminator())
-    Builder.SetInsertPoint(Builder.GetInsertBlock()->getTerminator());
-  AfterIP = createBarrier(Builder.saveIP(), llvm::omp::OMPD_barrier);
+    Builder.SetInsertPoint(InputBB->getTerminator());
+  AfterIP = createBarrier(Builder, llvm::omp::OMPD_barrier);
   if (!AfterIP)
     return AfterIP.takeError();
   Builder.restoreIP(*AfterIP);
@@ -5747,12 +5761,12 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::emitScanReduction(
 
   llvm::Value *FilterVal = Builder.getInt32(0);
   llvm::OpenMPIRBuilder::InsertPointOrErrorTy AfterIP =
-      createMasked(Builder.saveIP(), BodyGenCB, FiniCB, FilterVal);
+      createMasked(Builder, BodyGenCB, FiniCB, FilterVal);
 
   if (!AfterIP)
     return AfterIP.takeError();
   Builder.restoreIP(*AfterIP);
-  AfterIP = createBarrier(Builder.saveIP(), llvm::omp::OMPD_barrier);
+  AfterIP = createBarrier(Builder, llvm::omp::OMPD_barrier);
 
   if (!AfterIP)
     return AfterIP.takeError();
@@ -5787,7 +5801,7 @@ Error OpenMPIRBuilder::emitScanBasedDirectiveIR(
     //   <scan phase>;
     // }
     ScanRedInfo->OMPFirstScanLoop = false;
-    Error Err = ScanLoopGen(Builder.saveIP());
+    Error Err = ScanLoopGen(Builder);
     if (Err)
       return Err;
   }
@@ -5967,9 +5981,9 @@ OpenMPIRBuilder::createCanonicalScanLoops(
   };
 
   const auto &&InputLoopGen = [&]() -> Error {
-    Expected<CanonicalLoopInfo *> LoopInfo = createCanonicalLoop(
-        Builder.saveIP(), BodyGen, Start, Stop, Step, IsSigned, InclusiveStop,
-        ComputeIP, Name, true, ScanRedInfo);
+    Expected<CanonicalLoopInfo *> LoopInfo =
+        createCanonicalLoop(Builder, BodyGen, Start, Stop, Step, IsSigned,
+                            InclusiveStop, ComputeIP, Name, true, ScanRedInfo);
     if (!LoopInfo)
       return LoopInfo.takeError();
     Result.push_back(*LoopInfo);
@@ -7619,6 +7633,8 @@ OpenMPIRBuilder::getOpenMPDefaultSimdAlign(const Triple &TargetTriple,
     return 128;
   if (TargetTriple.isWasm())
     return 128;
+  if (TargetTriple.isSystemZ())
+    return 64;
   return 0;
 }
 
@@ -8618,6 +8634,18 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createTargetInit(
     }
   }
 
+  // Generic mode runs the main thread on a warp of its own, past thread_limit.
+  if (MaxThreadsVal > 0 && Attrs.ExecFlags == omp::OMP_TGT_EXEC_MODE_GENERIC &&
+      hasGridValue(T)) {
+    // An out-of-range bound is dropped rather than clamped, so clamp it here.
+    const omp::GV &GridValue = getGridValue(T, Kernel);
+    // A thread_limit near the top of the range would overflow the addition, so
+    // widen it and clamp before narrowing back.
+    MaxThreadsVal = int32_t(std::min<int64_t>(
+        int64_t(MaxThreadsVal) + int64_t(GridValue.GV_Warp_Size),
+        int64_t(GridValue.GV_Max_WG_Size)));
+  }
+
   if (MaxThreadsVal > 0)
     writeThreadBoundsForKernel(T, *Kernel, Attrs.MinThreads.front(),
                                MaxThreadsVal);
@@ -9580,9 +9608,11 @@ static Function *emitTargetTaskProxyFunction(
 
   bool HasShareds = SharedArgsOperandNo > 0;
   bool HasOffloadingArrays = NumOffloadingArrays > 0;
+  IRBuilder<>::InsertPointGuard IPG(Builder);
   BasicBlock *EntryBB =
       BasicBlock::Create(Builder.getContext(), "entry", ProxyFn);
   Builder.SetInsertPoint(EntryBB);
+  Builder.SetCurrentDebugLocation(llvm::DebugLoc());
 
   SmallVector<Value *> KernelLaunchArgs;
   KernelLaunchArgs.reserve(StaleCI->arg_size());

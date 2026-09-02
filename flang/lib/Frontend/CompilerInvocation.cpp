@@ -321,8 +321,11 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
                    clang::options::OPT_fno_fp_sum_reassociation, false))
     opts.SplitSumExpressionTree = 1;
 
-  if (args.getLastArg(clang::options::OPT_floop_interchange))
-    opts.InterchangeLoops = 1;
+  // Match the LLVM pipeline default (PipelineTuningOptions::LoopInterchange),
+  // which enables the pass whenever the optimization pipeline runs.
+  opts.InterchangeLoops =
+      args.hasFlag(clang::options::OPT_floop_interchange,
+                   clang::options::OPT_fno_loop_interchange, true);
 
   if (args.getLastArg(clang::options::OPT_fexperimental_loop_fusion))
     opts.FuseLoops = 1;
@@ -498,8 +501,15 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
       opts.IsPIE = 1;
   }
 
-  if (args.hasArg(clang::options::OPT_fprofile_generate)) {
+  if (const llvm::opt::Arg *a =
+          args.getLastArg(clang::options::OPT_fprofile_generate,
+                          clang::options::OPT_fprofile_generate_EQ)) {
     opts.setProfileInstr(llvm::driver::ProfileInstrKind::ProfileIRInstr);
+    if (a->getOption().matches(clang::options::OPT_fprofile_generate_EQ)) {
+      llvm::SmallString<128> path(a->getValue());
+      llvm::sys::path::append(path, "default_%m.profraw");
+      opts.InstrProfileOutput = std::string(path);
+    }
   }
 
   if (auto A = args.getLastArg(clang::options::OPT_fprofile_use_EQ)) {
@@ -1088,6 +1098,26 @@ static bool parseSemaArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
   if (moduleDirList.size() == 1)
     res.setModuleDir(moduleDirList[0]);
 
+  // -fmodule-mismatch-check=<value>
+  if (const auto *arg =
+          args.getLastArg(clang::options::OPT_fmodule_mismatch_check_EQ)) {
+    using ModuleMismatchCheckTy =
+        Fortran::common::LangOptions::ModuleMismatchCheckTy;
+    auto check = llvm::StringSwitch<std::optional<ModuleMismatchCheckTy>>(
+                     arg->getValue())
+                     .Case("on", Fortran::common::LangOptions::MMC_On)
+                     .Case("warn", Fortran::common::LangOptions::MMC_Warn)
+                     .Case("non-intrinsic",
+                           Fortran::common::LangOptions::MMC_NonIntrinsic)
+                     .Default(std::nullopt);
+    if (check) {
+      res.getLangOpts().setModuleMismatchCheck(*check);
+    } else {
+      diags.Report(clang::diag::err_drv_invalid_value)
+          << arg->getAsString(args) << arg->getValue();
+    }
+  }
+
   // -fdebug-module-writer option
   if (args.hasArg(clang::options::OPT_fdebug_module_writer)) {
     res.setDebugModuleDir(true);
@@ -1323,7 +1353,10 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
   res.getFrontendOpts().features.Enable(
       Fortran::common::LanguageFeature::OpenMP);
   if (auto *arg = args.getLastArg(clang::options::OPT_fopenmp_version_EQ)) {
-    llvm::ArrayRef<unsigned> ompVersions = llvm::omp::getOpenMPVersions();
+    llvm::SmallVector<unsigned> ompVersions;
+    for (llvm::omp::Version v : llvm::omp::getOpenMPVersions()) {
+      ompVersions.push_back(static_cast<unsigned>(v));
+    }
     unsigned oldVersions[] = {11, 20, 25, 30};
     unsigned version = 0;
 
@@ -1976,8 +2009,9 @@ void CompilerInvocation::setDefaultPredefinitions() {
   }
   if (frontendOptions.features.IsEnabled(
           Fortran::common::LanguageFeature::OpenMP)) {
-    Fortran::common::setOpenMPMacro(getLangOpts().OpenMPVersion,
-                                    fortranOptions.predefinitions);
+    Fortran::common::setOpenMPMacro(
+        static_cast<unsigned>(getLangOpts().getOpenMPVersion()),
+        fortranOptions.predefinitions);
   }
 
   if (frontendOptions.features.IsEnabled(
@@ -2012,6 +2046,10 @@ void CompilerInvocation::setDefaultPredefinitions() {
   case llvm::Triple::ArchType::aarch64:
     fortranOptions.predefinitions.emplace_back("__aarch64__", "1");
     fortranOptions.predefinitions.emplace_back("__aarch64", "1");
+    break;
+  case llvm::Triple::ArchType::systemz:
+    fortranOptions.predefinitions.emplace_back("__s390x__", "1");
+    fortranOptions.predefinitions.emplace_back("__s390x", "1");
     break;
   }
 }

@@ -1429,7 +1429,7 @@ static void CollectARMPACBTIOptions(const ToolChain &TC, const ArgList &Args,
                                        options::OPT_mbranch_protection_EQ)
                      : Args.getLastArg(options::OPT_mbranch_protection_EQ);
   if (!A) {
-    if (Triple.isOSOpenBSD() && isAArch64) {
+    if ((Triple.isOSOpenBSD() || Triple.isAndroid()) && isAArch64) {
       CmdArgs.push_back("-msign-return-address=non-leaf");
       CmdArgs.push_back("-msign-return-address-key=a_key");
       CmdArgs.push_back("-mbranch-target-enforce");
@@ -1450,8 +1450,11 @@ static void CollectARMPACBTIOptions(const ToolChain &TC, const ArgList &Args,
     if (Scope != "none" && Scope != "non-leaf" && Scope != "all")
       D.Diag(diag::err_drv_unsupported_option_argument)
           << A->getSpelling() << Scope;
-    Key = "a_key";
-    IndirectBranches = Triple.isOSOpenBSD() && isAArch64;
+    // This spelling cannot express a key, and AArch64 Windows only supports
+    // B-key, so default to it there as parseBranchProtection() does.
+    Key = isAArch64 && Triple.isOSWindows() ? "b_key" : "a_key";
+    IndirectBranches =
+        (Triple.isOSOpenBSD() || Triple.isAndroid()) && isAArch64;
     BranchProtectionPAuthLR = false;
     GuardedControlStack = false;
   } else {
@@ -4008,6 +4011,7 @@ static void RenderHLSLOptions(const Driver &D, const ArgList &Args,
       options::OPT_fdx_rootsignature_define,
       options::OPT_fdx_rootsignature_version,
       options::OPT_fhlsl_spv_use_unknown_image_format,
+      options::OPT_fhlsl_spv_use_legacy_buffer_matrix_order,
       options::OPT_fhlsl_spv_enable_maximal_reconvergence,
       options::OPT_fhlsl_spv_preserve_interface};
   if (!types::isHLSL(InputType))
@@ -7255,38 +7259,33 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       else
         CmdArgs.push_back("-fno-openmp-target-no-loop");
 
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_reduction,
-                       options::OPT_fno_openmp_target_xteam_reduction, true))
-        CmdArgs.push_back("-fopenmp-target-xteam-reduction");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-reduction");
+      // The downstream cross-team ("Xteam") reduction implementation has been
+      // removed; cross-team reductions now use the upstream implementation,
+      // which is always enabled. These flags are accepted but ignored for
+      // backward compatibility, and emit a deprecation notice when explicitly
+      // specified. Note that '-fopenmp-target-xteam-reduction-blocksize=' is
+      // *not* deprecated: it still selects the block size of cross-team
+      // reduction kernels, see CodeGenModule::getWorkGroupSizeSPMDHelper().
+      for (Arg *A :
+           Args.filtered(options::OPT_fopenmp_target_xteam_reduction,
+                         options::OPT_fno_openmp_target_xteam_reduction))
+        D.Diag(diag::warn_drv_deprecated_custom)
+            << A->getAsString(Args)
+            << "cross-team reductions now use the upstream implementation; the "
+               "flag is ignored";
 
-      if (Args.hasFlag(options::OPT_fopenmp_target_fast_reduction,
-                       options::OPT_fno_openmp_target_fast_reduction, false))
-        CmdArgs.push_back("-fopenmp-target-fast-reduction");
-      else
-        CmdArgs.push_back("-fno-openmp-target-fast-reduction");
-
+      // The downstream cross-team 'scan' specialization has been removed.
+      // These flags are accepted but ignored for backward compatibility, and
+      // emit a deprecation notice when explicitly specified.
       for (Arg *A : Args.filtered(options::OPT_fopenmp_target_xteam_scan,
                                   options::OPT_fno_openmp_target_xteam_scan,
                                   options::OPT_fopenmp_target_xteam_no_loop_scan,
                                   options::OPT_fno_openmp_target_xteam_no_loop_scan))
         D.Diag(diag::warn_drv_deprecated_custom)
             << A->getAsString(Args)
-            << "will be removed in a future revision of the OpenMP implementation.";
-
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_scan,
-                       options::OPT_fno_openmp_target_xteam_scan, false))
-        CmdArgs.push_back("-fopenmp-target-xteam-scan");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-scan");
-
-      if (Args.hasFlag(options::OPT_fopenmp_target_xteam_no_loop_scan,
-                       options::OPT_fno_openmp_target_xteam_no_loop_scan,
-                       false))
-        CmdArgs.push_back("-fopenmp-target-xteam-no-loop-scan");
-      else
-        CmdArgs.push_back("-fno-openmp-target-xteam-no-loop-scan");
+            << "the cross-team 'scan' specialization has been removed; the "
+               "flag "
+               "is ignored";
       // When in OpenMP offloading mode with NVPTX target, forward
       // cuda-mode flag
       if (Args.hasFlag(options::OPT_fopenmp_cuda_mode,
@@ -8284,6 +8283,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddLastArg(CmdArgs, options::OPT__ssaf_no_extract_from_system_headers);
   Args.AddLastArg(CmdArgs, options::OPT__ssaf_source_transformation);
   Args.AddLastArg(CmdArgs, options::OPT__ssaf_global_scope_analysis_result);
+  Args.AddLastArg(CmdArgs, options::OPT__ssaf_link_unit_id);
   Args.AddLastArg(CmdArgs, options::OPT__ssaf_src_edit_file);
   Args.AddLastArg(CmdArgs, options::OPT__ssaf_transformation_report_file);
 
@@ -8842,7 +8842,8 @@ ObjCRuntime Clang::AddObjCRuntimeArgs(const ArgList &args,
     if ((runtime.getKind() == ObjCRuntime::GNUstep) &&
         (runtime.getVersion() >= VersionTuple(2, 0)))
       if (!getToolChain().getTriple().isOSBinFormatELF() &&
-          !getToolChain().getTriple().isOSBinFormatCOFF()) {
+          !getToolChain().getTriple().isOSBinFormatCOFF() &&
+          !getToolChain().getTriple().isOSBinFormatWasm()) {
         getToolChain().getDriver().Diag(
             diag::err_drv_gnustep_objc_runtime_incompatible_binary)
           << runtime.getVersion().getMajor();
@@ -10140,6 +10141,12 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
               "--lto-newpm-passes=default-post-link<O" + OOpt + ">"));
         }
       }
+
+      // If no optimization level was requested we default to `-O0` for no-RDC
+      // mode compilations. Others default to `lto<O2>` as standard in ld.lld.
+      if (JA.getType() == types::TY_HIP_FATBIN &&
+          !ToolChainArgs.getLastArg(OPT_O_Group))
+        CompilerArgs.emplace_back("-O0");
 
       // If the user explicitly requested it via `--offload-arch` we should
       // extract it from any static libraries if present.

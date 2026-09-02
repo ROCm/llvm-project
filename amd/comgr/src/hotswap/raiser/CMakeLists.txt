@@ -5,9 +5,6 @@ cmake_minimum_required(VERSION 3.20)
 # and re-imports LLVM, which links a second copy of the AMDGPU static libraries
 # into amd_comgr and double-registers their cl::opts under a non-folding linker.
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 # --- LLVM ---------------------------------------------------------------------
 if(NOT TARGET LLVMSupport)
   find_package(LLVM REQUIRED CONFIG)
@@ -36,9 +33,17 @@ add_library(hotswap-raiser OBJECT
   user-sgpr-layout.cpp
   register-state.cpp
   raise-context.cpp
-  op-resolver.cpp
+  operand-resolver.cpp
+  flat-addr.cpp
+  handle-flat.cpp
+  handle-smem.cpp
   handle-sop1.cpp
+  handle-sop2.cpp
+  handle-sopc.cpp
+  handle-sopk.cpp
   handle-sopp.cpp
+  handle-vop2.cpp
+  handle-vopc.cpp
 )
 
 if(NOT TARGET hotswap::raiser)
@@ -61,7 +66,11 @@ if(NOT LLVM_ENABLE_RTTI)
   endif()
 endif()
 
-set_target_properties(hotswap-raiser PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(hotswap-raiser PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS No
+  POSITION_INDEPENDENT_CODE ON)
 
 # Public include root (src/) so consumers can `#include "hotswap/raiser/raiser.h"`.
 target_include_directories(hotswap-raiser PUBLIC

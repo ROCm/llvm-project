@@ -23,7 +23,7 @@
 namespace COMGR::hotswap {
 
 unsigned ISAProfile::waveSize() const {
-  return STI->hasFeature(llvm::AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
+  return STI.hasFeature(llvm::AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
 }
 
 bool ISAProfile::isWave32() const { return waveSize() == 32; }
@@ -33,23 +33,48 @@ bool ISAProfile::hasValidWaveSize() const {
 }
 
 bool ISAProfile::hasAgpr() const {
-  return STI->hasFeature(llvm::AMDGPU::FeatureMAIInsts);
+  return STI.hasFeature(llvm::AMDGPU::FeatureMAIInsts);
 }
 
 bool ISAProfile::hasGfx125UserSgprCountField() const {
-  return STI->hasFeature(llvm::AMDGPU::FeatureGFX1250Insts);
+  return STI.hasFeature(llvm::AMDGPU::FeatureGFX1250Insts);
 }
 
 unsigned ISAProfile::maxUserSgprs() const {
-  return STI->hasFeature(llvm::AMDGPU::FeatureGFX1250Insts) ? 32 : 16;
+  return STI.hasFeature(llvm::AMDGPU::FeatureGFX1250Insts) ? 32 : 16;
+}
+
+unsigned ISAProfile::flatOffsetBits() const {
+  if (STI.hasFeature(llvm::AMDGPU::FeatureFlatOffsetBits12))
+    return 12;
+  if (STI.hasFeature(llvm::AMDGPU::FeatureFlatOffsetBits24))
+    return 24;
+  return 13;
+}
+
+bool ISAProfile::hasSignedGlobalLaneOffset() const {
+  return STI.hasFeature(llvm::AMDGPU::FeatureGFX1250Insts);
 }
 
 bool ISAProfile::hasKernargPreload() const {
-  return STI->hasFeature(llvm::AMDGPU::FeatureKernargPreload);
+  return STI.hasFeature(llvm::AMDGPU::FeatureKernargPreload);
 }
 
 bool ISAProfile::hasArchitectedSgprs() const {
-  return STI->hasFeature(llvm::AMDGPU::FeatureArchitectedSGPRs);
+  return STI.hasFeature(llvm::AMDGPU::FeatureArchitectedSGPRs);
 }
 
+bool ISAProfile::hasDx10ClampAndIeeeMode() const {
+  return STI.hasFeature(llvm::AMDGPU::FeatureDX10ClampAndIEEEMode);
+}
+
+bool ISAProfile::hasCombinedWaitcnt() const {
+  return STI.hasFeature(llvm::AMDGPU::FeatureGFX9);
+}
+
+ISAProfile::WavePriorityModel ISAProfile::wavePriorityModel() const {
+  return STI.hasFeature(llvm::AMDGPU::FeatureGFX1250Insts)
+             ? WavePriorityModel::Gfx125
+             : WavePriorityModel::Gfx9;
+}
 } // namespace COMGR::hotswap

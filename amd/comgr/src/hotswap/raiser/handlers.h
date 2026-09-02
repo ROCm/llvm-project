@@ -9,13 +9,26 @@
 #ifndef HOTSWAP_TRANSPILER_HANDLERS_H
 #define HOTSWAP_TRANSPILER_HANDLERS_H
 
+#include "hotswap/decoder/amdgpu-formats.h"
 #include "hotswap/decoder/decoded-inst.h"
-#include "hotswap/raiser/op-resolver.h"
+#include "hotswap/decoder/mc-state.h"
+#include "hotswap/raiser/operand-resolver.h"
 #include "hotswap/raiser/raise-context.h"
+#include "hotswap/raiser/raise_failure.h"
 
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/Error.h"
 
 namespace COMGR::hotswap {
+
+// Return a structured refusal for an unsupported instruction form.
+inline llvm::Error unsupported(const RaiseContext &Ctx, const DecodedInst &Di,
+                               const llvm::Twine &Detail = {}) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
+}
 
 // Lower one instruction of the format the handler is named for, emitting into
 // `Ctx`'s builder and reading its operands through `Op`. The raiser runs the
@@ -23,9 +36,31 @@ namespace COMGR::hotswap {
 // does not recognize the opcode returns a `RaiseFailure` rather than declining:
 // no later handler gets the chance to claim it.
 llvm::Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
-                       OpResolver &Op);
+                       OperandResolver &Op);
+llvm::Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
+llvm::Error handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
+llvm::Error handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
 llvm::Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
-                       OpResolver &Op);
+                       OperandResolver &Op);
+// Translate supported SMEM loads or return a structured refusal.
+llvm::Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
+// Translate supported GLOBAL memory accesses, or return a structured refusal.
+// The format covers flat, global and scratch addressing; only the global forms
+// are recognized and the rest are refused.
+llvm::Error handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
+/// Translate a supported plain VOP2 instruction, or return a structured
+/// refusal.
+llvm::Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
+/// Translate a supported plain VOPC comparison into the condition registers
+/// the opcode writes, or return a structured refusal.
+llvm::Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
 
 } // namespace COMGR::hotswap
 

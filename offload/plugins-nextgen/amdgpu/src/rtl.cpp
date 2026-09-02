@@ -226,6 +226,26 @@ struct AMDGPUDeviceImageTy;
 struct AMDGPUMemoryManagerTy;
 struct AMDGPUMemoryPoolTy;
 
+/// AMD GPU specs for computing kernel occupancy
+namespace amdgpu_arch {
+// Local memory size
+constexpr unsigned LocalMemorySize = 32768;
+// SIMD unit per CU
+constexpr unsigned SIMDPerCU = 4;
+// Max waves each SIMD supports
+constexpr unsigned MaxWavesPerEU8 = 8;
+constexpr unsigned MaxWavesPerEU10 = 10;
+// Number of VGPR for each thread
+constexpr unsigned VGPRNumPerThread = 512;
+// Max number of workgroup per CU
+constexpr unsigned MaxWorkgroupNumPerCU = 16;
+// Occupancy computation conditions by SGPRs
+constexpr unsigned SGPRCountOccupancy10 = 80;
+constexpr unsigned SGPRCountOccupancy9 = 88;
+constexpr unsigned SGPRCountOccupancy8 = 100;
+
+} // end namespace amdgpu_arch
+
 namespace hsa_utils {
 
 /// Iterate elements using an HSA iterate function. Do not use this function
@@ -753,9 +773,7 @@ struct AMDGPUKernelTy : public GenericKernelTy {
         OMPX_GenericSPMDOccupancyBasedOpt(
             "OMPX_GENERIC_SPMD_OCCUPANCY_BASED_OPT", false),
         OMPX_BigJumpLoopOccupancyBasedOpt(
-            "OMPX_BIGJUMPLOOP_OCCUPANCY_BASED_OPT", false),
-        OMPX_XTeamReductionOccupancyBasedOpt(
-            "OMPX_XTEAMREDUCTION_OCCUPANCY_BASED_OPT", false) {}
+            "OMPX_BIGJUMPLOOP_OCCUPANCY_BASED_OPT", false) {}
 
   /// Initialize the AMDGPU kernel.
   Error initImpl(GenericDeviceTy &Device, DeviceImageTy &Image) override {
@@ -886,10 +904,6 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   /// Indicates whether or not we need to set up our own private segment size.
   bool usesDynamicStack() const { return DynamicStack; }
 
-  bool isValidBlockSize(uint32_t BlockSize) const override {
-    return BlockSize <= ConstWGSize;
-  }
-
   uint32_t getKernelLaunchId() const { return KernelLaunchId; }
 
   void setKernelLaunchId(uint32_t Id) const { KernelLaunchId = Id; }
@@ -902,9 +916,6 @@ struct AMDGPUKernelTy : public GenericKernelTy {
 
   /// Envar to enable occupancy-based optimization for big jump loop.
   BoolEnvar OMPX_BigJumpLoopOccupancyBasedOpt;
-
-  /// Envar to enable occupancy-based optimization for cross team reduction.
-  BoolEnvar OMPX_XTeamReductionOccupancyBasedOpt;
 
 private:
   /// The kernel object to execute.
@@ -938,13 +949,15 @@ private:
     uint32_t NumThreads = BlockSize;
 
     // If there is an override already, do nothing. Note the different
-    // default for Xteam Reductions.
-    if (!isXTeamReductionsMode() &&
+    // default for cross-team reductions.
+    const bool IsTeamsReduction = isSPMDMode() && doesTeamsReduction();
+
+    if (!IsTeamsReduction &&
         NumThreads != GenericDevice.getDefaultNumThreads() &&
         NumThreads != ConstWGSize)
       return std::make_pair(false, NumThreads);
 
-    if (isXTeamReductionsMode() &&
+    if (IsTeamsReduction &&
         NumThreads != llvm::omp::xteam_red::DefaultBlockSize &&
         NumThreads != ConstWGSize)
       return std::make_pair(false, NumThreads);
@@ -973,7 +986,11 @@ private:
     if (NumThreads == 0)
       return std::make_pair(false, BlockSize);
 
-    if (isXTeamReductionsMode())
+    // The repeated halving above can leave an awkward block size when the
+    // CodeGen-provided one is not a power of two. Round the value the plugin
+    // picked itself; a block size the user asked for is honored verbatim, see
+    // getEffectiveNumThreads().
+    if (IsTeamsReduction)
       return std::make_pair(true,
                             llvm::omp::getBlockSizeAsPowerOfTwo(NumThreads));
 
@@ -985,7 +1002,7 @@ private:
                                          uint32_t NumThreads) const {
     unsigned NumWavesPerTeam =
         divideCeil(NumThreads, GenericDevice.getWarpSize());
-    unsigned TotalWavesPerCU = MaxOccupancy * llvm::omp::amdgpu_arch::SIMDPerCU;
+    unsigned TotalWavesPerCU = MaxOccupancy * amdgpu_arch::SIMDPerCU;
     // Per device
     unsigned TotalWavesPerDevice =
         TotalWavesPerCU * GenericDevice.getNumComputeUnits();
@@ -1012,19 +1029,22 @@ private:
       return ConstWGSize;
     }
 
-    if (isXTeamReductionsMode()) {
+    // Cross-team reduction kernels default to the block size CodeGen picked
+    // for them, which is larger than the generic SPMD default. A user-provided
+    // value is honored as given, as long as it fits: the upstream cross-team
+    // reduction works with any block size, unlike the removed Xteamr helpers
+    // that required a power of two.
+    if (isSPMDMode() && doesTeamsReduction()) {
       if (TeamsThreadLimitEnvVar > 0 &&
           TeamsThreadLimitEnvVar <= static_cast<int32_t>(ConstWGSize))
-        return llvm::omp::getBlockSizeAsPowerOfTwo(TeamsThreadLimitEnvVar);
+        return TeamsThreadLimitEnvVar;
       if (UserThreadLimit > 0 && UserThreadLimit != (uint32_t)-1 &&
           UserThreadLimit <= static_cast<uint32_t>(ConstWGSize))
-        return llvm::omp::getBlockSizeAsPowerOfTwo(UserThreadLimit);
+        return UserThreadLimit;
       uint32_t BlockSizeOverride = GenericDevice.getOMPXXteamBlockSize();
       if (BlockSizeOverride > 0 &&
-          BlockSizeOverride <= static_cast<int32_t>(ConstWGSize))
-        return llvm::omp::getBlockSizeAsPowerOfTwo(BlockSizeOverride);
-      assert(((ConstWGSize & (ConstWGSize - 1)) == 0) &&
-             "XTeam Reduction blocksize must be a power of two");
+          BlockSizeOverride <= static_cast<uint32_t>(ConstWGSize))
+        return BlockSizeOverride;
       return ConstWGSize;
     }
 
@@ -1127,7 +1147,12 @@ private:
                           GenericDevice.getBlockLimit(EffectiveNumThreads)));
     }
 
-    if (isXTeamReductionsMode()) {
+    // A cross-team reduction kernel is now emitted by CodeGen as a plain SPMD
+    // kernel using the upstream reduction path (the downstream Xteam reduction
+    // execution mode has been removed). Recognize it via the reduction data
+    // size so the AMDGPU reduction grid-size heuristic (which upstream has no
+    // equivalent for) still applies.
+    if (isSPMDMode() && doesTeamsReduction()) {
       // Here's the default number of teams.
       uint64_t NumGroups = DeviceNumCUs;
       // The number of teams must not exceed this upper limit.
@@ -1161,13 +1186,24 @@ private:
       // the MaxOccupancy equals or exceeds the desirable waves per CU. The
       // assumption is that anything lower is probably resource constrained
       // already and this optimization may not be beneficial.
-      if (OMPX_XTeamReductionOccupancyBasedOpt && NumTeamsEnvVar == 0 &&
-          UserNumBlocks == 0 &&
-          (MaxOccupancy * llvm::omp::amdgpu_arch::SIMDPerCU >=
+      if (GenericDevice.getOMPXXTeamReductionOccupancyBasedOpt() &&
+          NumTeamsEnvVar == 0 && UserNumBlocks == 0 &&
+          (MaxOccupancy * amdgpu_arch::SIMDPerCU >=
            llvm::omp::xteam_red::DesiredWavesPerCU)) {
-        uint64_t newNumTeams =
-            OptimizeNumTeamsBaseOccupancy(GenericDevice, EffectiveNumThreads);
-        return std::min(newNumTeams, MaxNumGroups);
+        NumGroups = std::min(
+            OptimizeNumTeamsBaseOccupancy(GenericDevice, EffectiveNumThreads),
+            MaxNumGroups);
+        // Saturating the device is only worth it if there are enough
+        // iterations to go around: a low trip count would otherwise launch
+        // teams that have nothing to execute and only add to the reduction.
+        // The non-occupancy path below applies the same bound.
+        if (LoopTripCount > 0)
+          NumGroups =
+              std::min(NumGroups, getNumGroupsFromThreadsAndTripCount(
+                                      LoopTripCount, EffectiveNumThreads));
+        ODBG(ODT_Tool) << "xteam-red:NumCUs=" << DeviceNumCUs
+                       << " xteam-red:NumGroups=" << NumGroups;
+        return NumGroups;
       }
 
       // Prefer num_teams clause over environment variable. There is a corner
@@ -1353,11 +1389,11 @@ private:
   /// llvm-project/llvm/lib/Target/AMDGPU/Utils/AMDGPUBaseInfo.cpp:getOccupancyWithNumSGPRs
   unsigned getOccupancyWithNumSGPRs(unsigned SGPRCount) const {
 
-    if (SGPRCount <= llvm::omp::amdgpu_arch::SGPRCountOccupancy10) {
+    if (SGPRCount <= amdgpu_arch::SGPRCountOccupancy10) {
       return 10;
-    } else if (SGPRCount <= llvm::omp::amdgpu_arch::SGPRCountOccupancy9) {
+    } else if (SGPRCount <= amdgpu_arch::SGPRCountOccupancy9) {
       return 9;
-    } else if (SGPRCount <= llvm::omp::amdgpu_arch::SGPRCountOccupancy8) {
+    } else if (SGPRCount <= amdgpu_arch::SGPRCountOccupancy8) {
       return 8;
     }
     return 7;
@@ -1372,15 +1408,14 @@ private:
                                unsigned MaxWavesPerEU,
                                uint32_t MaxFlatWorkgroupSize) const {
 
-    unsigned MaxWorkgroupNum =
-        llvm::omp::amdgpu_arch::LocalMemorySize / GroupSegmentSize;
+    unsigned MaxWorkgroupNum = amdgpu_arch::LocalMemorySize / GroupSegmentSize;
 
     // workgroup size
     unsigned ThreadsPerWorkgroup = MaxFlatWorkgroupSize;
     unsigned WavesPerWorkgroup =
         divideCeil(ThreadsPerWorkgroup, GenericDevice.getWarpSize());
 
-    unsigned MaxWavesPerCU = MaxWavesPerEU * llvm::omp::amdgpu_arch::SIMDPerCU;
+    unsigned MaxWavesPerCU = MaxWavesPerEU * amdgpu_arch::SIMDPerCU;
 
     // if a workgroup has just one wavefront, the max # of workgroup per CU is
     // 40 if a workgroup has more than one wavefront, the max # of workgroup per
@@ -1391,12 +1426,12 @@ private:
       MaxWorkgroupNum =
           std::min(MaxWorkgroupNum, MaxWavesPerCU / WavesPerWorkgroup);
       MaxWorkgroupNum = std::min(MaxWorkgroupNum,
-                                 llvm::omp::amdgpu_arch::MaxWorkgroupNumPerCU);
+                                 amdgpu_arch::MaxWorkgroupNumPerCU);
     }
 
     // per SIMD
     unsigned WaveNumByLDS = divideCeil(WavesPerWorkgroup * MaxWorkgroupNum,
-                                       llvm::omp::amdgpu_arch::SIMDPerCU);
+                                       amdgpu_arch::SIMDPerCU);
     WaveNumByLDS = std::min(WaveNumByLDS, MaxWavesPerEU);
 
     return WaveNumByLDS;
@@ -1778,21 +1813,6 @@ private:
     double TicksToTime;
   };
 
-  /// Utility struct holding arguments for post kernel run processing.
-  struct PostKernelRunProcessingArgsTy {
-    hsa_agent_t Agent;
-    AMDGPUSignalTy *Signal;
-    double TicksToTime;
-    std::string KernelName;
-    uint32_t NumTeams;
-    uint32_t NumThreads;
-    KernelRunRecordTy *KernelRunRecords;
-
-    PostKernelRunProcessingArgsTy()
-        : Agent{0}, Signal(nullptr), TicksToTime(setTicksToTime()), NumTeams(0),
-          NumThreads(0), KernelRunRecords(nullptr) {}
-  };
-
   struct KernelDurationTracingArgsTy {
     hsa_agent_t Agent;
     AMDGPUSignalTy *Signal;
@@ -1986,9 +2006,6 @@ private:
   /// When copying data from one host buffer to another, only do it
   /// asynchronously if `MinHostToHostAsyncCopySize <= size`.
   UInt32Envar OMPX_MinHostToHostAsyncCopySize;
-
-  /// Arguments for the callback function.
-  PostKernelRunProcessingArgsTy PostKernelRunProcessingArgs;
 
   /// Arguments for callback function to collect kernel duration.
   KernelDurationTracingArgsTy KernelDurationTracingArgs;
@@ -2209,30 +2226,6 @@ private:
     return EndTime - StartTime;
   }
 
-  /// Callback funtion to process the data for each kernel run.
-  static Error postKernelRunProcessingAction(void *Data) {
-    assert(Data && "Invalid data pointer for post kernel run processing");
-    PostKernelRunProcessingArgsTy *Args =
-        reinterpret_cast<PostKernelRunProcessingArgsTy *>(Data);
-
-    KernelRunRecordTy *KernelRecord = Args->KernelRunRecords;
-    assert(KernelRecord && "KernelRunRecord is null!");
-
-    uint64_t KernelDuration =
-        getKernelDuration<PostKernelRunProcessingArgsTy>(Args);
-    KernelRecord->addEntry(Args->KernelName, Args->NumTeams, Args->NumThreads,
-                           KernelDuration);
-
-    if (getInfoLevel() & OMP_INFOTYPE_AMD_KERNEL_TRACE) {
-      fprintf(stderr,
-              "[Autotuning run] Kernel %s with %u teams and %u threads "
-              "completed in %lu ns.\n",
-              Args->KernelName.c_str(), Args->NumTeams, Args->NumThreads,
-              KernelDuration);
-    }
-    return Plugin::success();
-  }
-
   /// Callback function to generate traces for kernel runtime.
   static Error KernelDurationTracingAction(void *Data) {
     assert(Data && "Invalid data pointer for tracing kernel duration");
@@ -2320,29 +2313,6 @@ public:
         return Err;
     }
 #endif
-
-    // If runtime autotuning is enabled, setup the callback functions to process
-    // the data after kernel completed.
-    if (Device.enableRuntimeAutotuning() && Kernel.isSPMDMode()) {
-      std::string KernelName(Kernel.getName());
-      KernelRunRecordTy *KernelRecords = Device.getKernelRunRecords();
-      assert(KernelRecords && "No KernelRecords!");
-
-      // If this kernel has reached the run limit,
-      // skip registering the callback function.
-      if (!KernelRecords->reachedRunLimitForKernel(KernelName)) {
-        PostKernelRunProcessingArgs.Agent = Agent;
-        PostKernelRunProcessingArgs.Signal = OutputSignal;
-        PostKernelRunProcessingArgs.KernelName = KernelName;
-        PostKernelRunProcessingArgs.NumTeams = NumBlocks[0];
-        PostKernelRunProcessingArgs.NumThreads = NumThreads[0];
-        PostKernelRunProcessingArgs.KernelRunRecords = KernelRecords;
-
-        if (auto Err = Slots[Curr].schedCallback(postKernelRunProcessingAction,
-                                                 &PostKernelRunProcessingArgs))
-          return Err;
-      }
-    }
 
     // When LIBOMPTARGET_KERNEL_EXE_TIME is set, register the callback function
     // to get the kernel duration.
@@ -3001,10 +2971,8 @@ struct AMDGPUStreamManagerTy final
         OMPX_EnableQueueProfiling("LIBOMPTARGET_AMDGPU_ENABLE_QUEUE_PROFILING",
                                   false),
         NextQueue(0), Agent(HSAAgent) {
-    // If OMPX_ENABLE_RUNTIME_AUTOTUNING or LIBOMPTARGET_KERNEL_EXE_TIME is
-    // enabled, set queue profiling to true.
-    if (Device.enableRuntimeAutotuning() ||
-        Device.enableKernelDurationTracing()) {
+    // Enable queue profiling to collect kernel execution times.
+    if (Device.enableKernelDurationTracing()) {
       OMPX_EnableQueueProfiling = true;
     }
   }
@@ -3311,6 +3279,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
             "LIBOMPTARGET_WAVES_PER_CU_FOR_LOW_TRIP_COUNT", 0),
         OMPX_AdjustNumTeamsForSmallBlockSize("LIBOMPTARGET_AMDGPU_ADJUST_TEAMS",
                                              0),
+        OMPX_XTeamReductionOccupancyBasedOpt(
+            "OMPX_XTEAMREDUCTION_OCCUPANCY_BASED_OPT", false),
         OMPX_AdjustNumTeamsForXteamRedSmallBlockSize(
             "LIBOMPTARGET_AMDGPU_ADJUST_XTEAM_RED_TEAMS", 1),
         OMPX_GenericSpmdUseSmallBlockSize(
@@ -3474,6 +3444,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   virtual uint32_t
   getOMPXAdjustNumTeamsForXteamRedSmallBlockSize() const override {
     return OMPX_AdjustNumTeamsForXteamRedSmallBlockSize;
+  }
+  virtual bool getOMPXXTeamReductionOccupancyBasedOpt() const override {
+    return OMPX_XTeamReductionOccupancyBasedOpt;
   }
   virtual bool getOMPXGenericSpmdUseSmallBlockSize() const override {
     return OMPX_GenericSpmdUseSmallBlockSize;
@@ -3960,8 +3933,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
   /// Load the binary image into the device and allocate an image object.
   Expected<DeviceImageTy *>
-  loadBinaryImpl(std::unique_ptr<MemoryBuffer> &&TgtImage,
-                 int32_t ImageId) override {
+  loadBinaryImpl(std::unique_ptr<MemoryBuffer> &&TgtImage, int32_t ImageId,
+                 PluginContextTy * /*Context*/) override {
     // Allocate and initialize the image object.
     AMDGPUDeviceImageTy *AMDImage = Plugin.allocate<AMDGPUDeviceImageTy>();
     new (AMDImage) AMDGPUDeviceImageTy(ImageId, *this, std::move(TgtImage));
@@ -4006,6 +3979,12 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (!MemoryPool)
       return Plugin::error(ErrorCode::OUT_OF_RESOURCES,
                            "no memory pool for the specified allocation kind");
+
+    // See allocate() for the registration of host / shared memory as pinned
+    // memory.
+    if (Kind == TARGET_ALLOC_HOST || Kind == TARGET_ALLOC_SHARED)
+      if (auto Err = PinnedAllocs.unregisterHostBuffer(TgtPtr))
+        return Err;
 
     if (auto Err = MemoryPool->deallocate(TgtPtr))
       return Err;
@@ -4111,6 +4090,10 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     return true;
   }
+
+  /// Transfers out of registered pinned memory take the one-step path in
+  /// dataSubmitImpl instead of staging through an intermediate buffer.
+  bool hasFastTransferWithPinnedMemory() const override { return true; }
 
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
@@ -5327,6 +5310,8 @@ private:
   /// done.
   UInt32Envar OMPX_AdjustNumTeamsForSmallBlockSize;
 
+  /// Envar to enable occupancy-based optimization for cross team reduction.
+  /// Defaults come from the per-device envar config table.
   BoolEnvar OMPX_XTeamReductionOccupancyBasedOpt;
 
   /// Envar to allow scaling up the number of teams for Xteam-Reduction,
@@ -5535,45 +5520,57 @@ private:
         OMPX_XTeamReductionOccupancyBasedOpt;
   };
 
+  // OMPX_XTeamReductionOccupancyBasedOpt is disabled everywhere: the member
+  // shadowing that kept it from taking effect was only fixed recently, so the
+  // entries that requested it have never actually run. Enable it per device
+  // once the occupancy-based team count has been evaluated there.
   static inline const std::unordered_map<std::string, DeviceEnvarConfigTy>
-      EnvarConfigs = {{"MI210", {.OMPX_UseMultipleSdmaEngines = true,
-                                 .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = true,
-                                 .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=0}},
-                      {"MI250X",{.OMPX_UseMultipleSdmaEngines = true,
-                                 .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = true,
-                                 .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=0}},
-                      {"MI250X/MI250",{
-                                 .OMPX_UseMultipleSdmaEngines = true,
-                                 .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = true,
-                                 .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=0}},
-                      {"MI300A", {.OMPX_UseMultipleSdmaEngines = false,
-                                 .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = false,
-                                 .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=1}},
-                      {"MI300X", {.OMPX_UseMultipleSdmaEngines = true,
-                                 .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = false,
-                                 .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=1}},
-                      {"MI308X", {.OMPX_UseMultipleSdmaEngines = true,
-                                 .OMPX_XteamBlockSize = 256,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = true,
-                                 .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=0}},
-                      {"MI350X", {.OMPX_UseMultipleSdmaEngines = true,
-                                 .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = false,
-                                 .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=1}},
-                      {"MI355X", {.OMPX_UseMultipleSdmaEngines = true,
-                                 .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = false,
-                                 .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=1}},
+      EnvarConfigs = {{"MI210",
+                       {.OMPX_UseMultipleSdmaEngines = true,
+                        .OMPX_XteamBlockSize = 512,
+                        .OMPX_XTeamReductionOccupancyBasedOpt = false,
+                        .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize = 0}},
+                      {"MI250X",
+                       {.OMPX_UseMultipleSdmaEngines = true,
+                        .OMPX_XteamBlockSize = 512,
+                        .OMPX_XTeamReductionOccupancyBasedOpt = false,
+                        .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize = 0}},
+                      {"MI250X/MI250",
+                       {.OMPX_UseMultipleSdmaEngines = true,
+                        .OMPX_XteamBlockSize = 512,
+                        .OMPX_XTeamReductionOccupancyBasedOpt = false,
+                        .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize = 0}},
+                      {"MI300A",
+                       {.OMPX_UseMultipleSdmaEngines = false,
+                        .OMPX_XteamBlockSize = 512,
+                        .OMPX_XTeamReductionOccupancyBasedOpt = false,
+                        .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize = 1}},
+                      {"MI300X",
+                       {.OMPX_UseMultipleSdmaEngines = true,
+                        .OMPX_XteamBlockSize = 512,
+                        .OMPX_XTeamReductionOccupancyBasedOpt = false,
+                        .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize = 1}},
+                      {"MI308X",
+                       {.OMPX_UseMultipleSdmaEngines = true,
+                        .OMPX_XteamBlockSize = 256,
+                        .OMPX_XTeamReductionOccupancyBasedOpt = false,
+                        .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize = 0}},
+                      {"MI350X",
+                       {.OMPX_UseMultipleSdmaEngines = true,
+                        .OMPX_XteamBlockSize = 512,
+                        .OMPX_XTeamReductionOccupancyBasedOpt = false,
+                        .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize = 1}},
+                      {"MI355X",
+                       {.OMPX_UseMultipleSdmaEngines = true,
+                        .OMPX_XteamBlockSize = 512,
+                        .OMPX_XTeamReductionOccupancyBasedOpt = false,
+                        .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize = 1}},
                       // Default config for unknown devices.
-                      {"DEFAULT", {.OMPX_UseMultipleSdmaEngines = false,
-                                 .OMPX_XteamBlockSize = 512,
-                                 .OMPX_XTeamReductionOccupancyBasedOpt = false,
-                                 .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=1}}};
+                      {"DEFAULT",
+                       {.OMPX_UseMultipleSdmaEngines = false,
+                        .OMPX_XteamBlockSize = 512,
+                        .OMPX_XTeamReductionOccupancyBasedOpt = false,
+                        .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize = 1}}};
 
   const DeviceEnvarConfigTy &getEnvarConfig() const {
     std::string DeviceMarketingName = getNormMarketingName();
@@ -6593,6 +6590,12 @@ Expected<void *> AMDGPUDeviceTy::allocate(size_t Size, void *,
     // Enable all valid kernel agents to access the buffer.
     if (auto Err = MemoryPool->enableAccess(Alloc, Size, Agents))
       return std::move(Err);
+
+    // Register host / shared memory as pinned memory, so that transfers reading
+    // from it can take a device-accessible path.
+    if (Kind == TARGET_ALLOC_HOST || Kind == TARGET_ALLOC_SHARED)
+      if (auto Err = PinnedAllocs.registerHostBuffer(Alloc, Alloc, Size))
+        return std::move(Err);
   }
 
   return Alloc;
@@ -6692,7 +6695,7 @@ unsigned AMDGPUKernelTy::computeMaxOccupancy(GenericDeviceTy &Device) const {
   uint32_t MaxFlatWorkgroupSize = (KernelInfo).MaxFlatWorkgroupSize;
 
   // Default number of waves per EU
-  unsigned MaxWavesPerEU = llvm::omp::amdgpu_arch::MaxWavesPerEU10;
+  unsigned MaxWavesPerEU = amdgpu_arch::MaxWavesPerEU10;
 
   // Get GPU info
   AMDGPUDeviceTy &AMDDevice = static_cast<AMDGPUDeviceTy &>(Device);
@@ -6700,7 +6703,7 @@ unsigned AMDGPUKernelTy::computeMaxOccupancy(GenericDeviceTy &Device) const {
   bool IsEquippedWithMI300 = AMDDevice.checkIfMI300Device();
 
   if (IsEquippedWithGFX90A || IsEquippedWithMI300) {
-    MaxWavesPerEU = llvm::omp::amdgpu_arch::MaxWavesPerEU8;
+    MaxWavesPerEU = amdgpu_arch::MaxWavesPerEU8;
   }
 
   unsigned Occupancy = INT_MAX;
@@ -6717,8 +6720,7 @@ unsigned AMDGPUKernelTy::computeMaxOccupancy(GenericDeviceTy &Device) const {
   // Ref:
   // llvm-project/llvm/lib/Target/AMDGPU/Utils/AMDGPUBaseInfo.cpp:getNumWavesPerEUWithNumVGPRs
   if (VGPRCount) {
-    unsigned WaveNumByVGPR =
-        llvm::omp::amdgpu_arch::VGPRNumPerThread / VGPRCount;
+    unsigned WaveNumByVGPR = amdgpu_arch::VGPRNumPerThread / VGPRCount;
     Occupancy = std::min(Occupancy, WaveNumByVGPR);
   }
 
@@ -6748,7 +6750,7 @@ unsigned AMDGPUKernelTy::computeAchievedOccupancy(GenericDeviceTy &Device,
   }
 
   // Default number of waves per EU.
-  unsigned MaxWavesPerEU = llvm::omp::amdgpu_arch::MaxWavesPerEU10;
+  unsigned MaxWavesPerEU = amdgpu_arch::MaxWavesPerEU10;
 
   // Get GPU info.
   AMDGPUDeviceTy &AMDDevice = static_cast<AMDGPUDeviceTy &>(Device);
@@ -6756,11 +6758,11 @@ unsigned AMDGPUKernelTy::computeAchievedOccupancy(GenericDeviceTy &Device,
   bool IsEquippedWithMI300 = AMDDevice.checkIfMI300Device();
 
   if (IsEquippedWithGFX90A || IsEquippedWithMI300) {
-    MaxWavesPerEU = llvm::omp::amdgpu_arch::MaxWavesPerEU8;
+    MaxWavesPerEU = amdgpu_arch::MaxWavesPerEU8;
   }
 
   // Get the max number of waves per CU.
-  unsigned MaxNumWaves = MaxOccupancy * llvm::omp::amdgpu_arch::SIMDPerCU;
+  unsigned MaxNumWaves = MaxOccupancy * amdgpu_arch::SIMDPerCU;
   // Get the number of waves from the kernel launch parameters.
   unsigned AchievedNumWaves =
       divideCeil(numThreads, AMDDevice.getWarpSize()) * numTeams;
@@ -6769,8 +6771,7 @@ unsigned AMDGPUKernelTy::computeAchievedOccupancy(GenericDeviceTy &Device,
   // Get the min waves.
   AchievedNumWaves = std::min(MaxNumWaves, AchievedNumWaves);
   // Total number of wave slots each CU supports.
-  unsigned TotalWaveSlotsPerCU =
-      MaxWavesPerEU * llvm::omp::amdgpu_arch::SIMDPerCU;
+  unsigned TotalWaveSlotsPerCU = MaxWavesPerEU * amdgpu_arch::SIMDPerCU;
   // Compute occupancy ratio representing in percentage.
   unsigned Occupancy = (AchievedNumWaves * 100) / TotalWaveSlotsPerCU;
 

@@ -18,6 +18,7 @@
 #include "Decomposer.h"
 #include "Utils.h"
 #include "flang/Common/idioms.h"
+#include "flang/Common/reference-wrapper.h"
 #include "flang/Evaluate/expression.h"
 #include "flang/Evaluate/fold.h"
 #include "flang/Evaluate/tools.h"
@@ -39,6 +40,7 @@
 #include "flang/Optimizer/Builder/Todo.h"
 #include "flang/Optimizer/Dialect/FIROpsSupport.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
+#include "flang/Optimizer/Dialect/Support/FIRContext.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
 #include "flang/Optimizer/Support/InternalNames.h"
 #include "flang/Parser/openmp-utils.h"
@@ -65,6 +67,7 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Frontend/OpenMP/OMP.h"
+#include "llvm/TargetParser/Triple.h"
 #include <atomic>
 
 using namespace Fortran::lower::omp;
@@ -210,11 +213,13 @@ struct ObjectEntryBlockArgs {
   ObjectEntryBlockArgsEntry taskReduction;
   ObjectEntryBlockArgsEntry useDeviceAddr;
   ObjectEntryBlockArgsEntry useDevicePtr;
+  std::size_t sourceUseDeviceAddrCount{0};
 
   bool isValid() const {
     return hasDeviceAddr.isValid() && inReduction.isValid() && map.isValid() &&
            priv.isValid() && reduction.isValid() && taskReduction.isValid() &&
-           useDeviceAddr.isValid() && useDevicePtr.isValid();
+           useDeviceAddr.isValid() && useDevicePtr.isValid() &&
+           sourceUseDeviceAddrCount <= useDeviceAddr.objects.size();
   }
 
   llvm::SmallVector<const semantics::Symbol *> getSyms() const {
@@ -1218,7 +1223,7 @@ static fir::GlobalOp globalInitialization(lower::AbstractConverter &converter,
                                           const lower::pft::Variable &var,
                                           mlir::Location currentLocation) {
   std::string globalName = converter.mangleName(sym);
-  mlir::StringAttr linkage = firOpBuilder.createInternalLinkage();
+  fir::LinkageAttr linkage = firOpBuilder.createInternalLinkage();
   return Fortran::lower::defineGlobal(converter, var, globalName, linkage);
 }
 
@@ -1496,7 +1501,7 @@ static void promoteNonCPtrUseDevicePtrArgsToUseDeviceAddr(
 /// 'declare target' directive and return the intended device type for them.
 static void getDeclareTargetInfo(
     lower::AbstractConverter &converter, semantics::SemanticsContext &semaCtx,
-    lower::pft::Evaluation &eval,
+    std::optional<common::reference_wrapper<lower::pft::Evaluation>> eval,
     const parser::OmpDeclareTargetDirective &construct,
     mlir::omp::DeclareTargetOperands &clauseOps,
     llvm::SmallVectorImpl<DeclareTargetCaptureInfo> &symbolAndClause) {
@@ -1510,8 +1515,10 @@ static void getDeclareTargetInfo(
     List<Clause> clauses = makeClauses(construct.v.Clauses(), semaCtx);
     if (clauses.empty()) {
       // Case: implicit capture of the enclosing function/subroutine.
+      assert(eval.has_value() &&
+             "expected eval to have value when clauses is empty");
       Fortran::lower::pft::FunctionLikeUnit *owningProc =
-          eval.getOwningProcedure();
+          eval->get().getOwningProcedure();
       bool owningProcNotMainProgram =
           owningProc && !owningProc->isMainProgram();
 
@@ -1855,6 +1862,36 @@ markDeclareTarget(mlir::Operation *op, lower::AbstractConverter &converter,
                                    /*implicit=*/false);
 }
 
+// Take a declare target directive, and mark the globals and functions
+// named in its clauses.
+static void markDeclareTargetWithDirective(
+    lower::AbstractConverter &converter, semantics::SemanticsContext &semaCtx,
+    std::optional<common::reference_wrapper<lower::pft::Evaluation>> eval,
+    const parser::OmpDeclareTargetDirective &declareTargetConstruct) {
+  mlir::omp::DeclareTargetOperands clauseOps;
+  llvm::SmallVector<DeclareTargetCaptureInfo> symbolAndClause;
+  mlir::ModuleOp mod = converter.getFirOpBuilder().getModule();
+  getDeclareTargetInfo(converter, semaCtx, eval, declareTargetConstruct,
+                       clauseOps, symbolAndClause);
+
+  for (const DeclareTargetCaptureInfo &symClause : symbolAndClause) {
+    mlir::Operation *op =
+        mod.lookupSymbol(converter.mangleName(symClause.symbol));
+
+    // Skip if no op is found. This happens during module declaration
+    // scope lowering for symbols that are deferred to be handled
+    // later in finalizeOpenMPLowering. This is also expected when
+    // handling a directive imported from a module file and the symbol
+    // is not used in the current translation unit, because no op is
+    // created for unused imports.
+    if (!op)
+      continue;
+
+    markDeclareTarget(op, converter, symClause.clause, clauseOps.deviceType,
+                      symClause.automap);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Op body generation helper structures and functions
 //===----------------------------------------------------------------------===//
@@ -2126,6 +2163,12 @@ static void createBodyOfOp(mlir::Operation &op, const OpWithBodyGenInfo &info,
   marker->erase();
 }
 
+static void genIntermediateCommonBlockAccessors(
+    Fortran::lower::AbstractConverter &converter,
+    const mlir::Location &currentLocation,
+    llvm::ArrayRef<mlir::BlockArgument> mapBlockArgs,
+    llvm::ArrayRef<const Fortran::semantics::Symbol *> mapSyms);
+
 static void genBodyOfTargetDataOp(
     lower::AbstractConverter &converter, lower::SymMap &symTable,
     semantics::SemanticsContext &semaCtx, lower::pft::Evaluation &eval,
@@ -2136,6 +2179,15 @@ static void genBodyOfTargetDataOp(
 
   genEntryBlock(firOpBuilder, args.asEntryBlockArgs(), dataOp.getRegion());
   bindEntryBlockArgs(converter, dataOp, args);
+  auto argIface = llvm::cast<mlir::omp::BlockArgOpenMPOpInterface>(*dataOp);
+  llvm::SmallVector<const semantics::Symbol *> sourceUseDeviceAddrSyms{
+      args.useDeviceAddr.getSyms()};
+  genIntermediateCommonBlockAccessors(
+      converter, currentLocation,
+      argIface.getUseDeviceAddrBlockArgs().take_front(
+          args.sourceUseDeviceAddrCount),
+      llvm::ArrayRef(sourceUseDeviceAddrSyms)
+          .take_front(args.sourceUseDeviceAddrCount));
 
   // Insert dummy instruction to remember the insertion position. The
   // marker will be deleted by clean up passes since there are no uses.
@@ -2173,7 +2225,7 @@ static void genBodyOfTargetDataOp(
 // When the scope changes, the bindings to the intermediate accessors should
 // be dropped in place of the original symbol bindings.
 //
-// This is for utilisation with TargetOp.
+// This is for utilisation with TargetOp and TargetDataOp.
 static void genIntermediateCommonBlockAccessors(
     Fortran::lower::AbstractConverter &converter,
     const mlir::Location &currentLocation,
@@ -2537,7 +2589,7 @@ genSimdImplicitLinear(lower::AbstractConverter &converter,
           Fortran::semantics::IsAllocatableOrPointer(loopVar->GetUltimate()))) {
       mlir::Type ty = converter.genType(*loopVar);
       typeAttrs.push_back(mlir::TypeAttr::get(ty));
-      if (semaCtx.langOptions().OpenMPVersion >= 52)
+      if (semaCtx.langOptions().getOpenMPVersion() >= 52)
         linearModAttrs.push_back(mlir::omp::LinearModifierAttr::get(
             &converter.getMLIRContext(), mlir::omp::LinearModifier::val));
       else
@@ -2640,12 +2692,15 @@ static void genTargetDataClauses(
     lower::StatementContext &stmtCtx, const List<Clause> &clauses,
     mlir::Location loc, mlir::omp::TargetDataOperands &clauseOps,
     llvm::SmallVectorImpl<Object> &useDeviceAddrObjects,
-    llvm::SmallVectorImpl<Object> &useDevicePtrObjects) {
+    llvm::SmallVectorImpl<Object> &useDevicePtrObjects,
+    std::size_t &sourceUseDeviceAddrCount) {
   ClauseProcessor cp(converter, semaCtx, clauses);
   cp.processDevice(stmtCtx, clauseOps);
   cp.processIf(llvm::omp::Directive::OMPD_target_data, clauseOps);
   cp.processMap(loc, stmtCtx, clauseOps);
   cp.processUseDeviceAddr(stmtCtx, clauseOps, useDeviceAddrObjects);
+  // Record the source UDA prefix before non-C_PTR UDP operands are promoted.
+  sourceUseDeviceAddrCount = useDeviceAddrObjects.size();
   cp.processUseDevicePtr(stmtCtx, clauseOps, useDevicePtrObjects);
 
   // This function implements the deprecated functionality of use_device_ptr
@@ -4197,19 +4252,18 @@ genTargetOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
 
           if (!mapperIdName.empty()) {
             bool isPointer = semantics::IsPointer(sym);
-            bool isAllocatable = semantics::IsAllocatable(sym);
             bool hasDefaultMapper =
                 converter.getModuleOp().lookupSymbol(mapperIdName);
             // Avoid attaching implicit default mappers to pointer captures.
             // For large pointer-based derived aggregates this can over-map
             // nested payloads and conflict with explicit enter/exit maps.
             //
-            // For an allocatable capture, only synthesize an implicit default
-            // mapper when the type requires one; a flat record does not.
+            // For other captures, make sure we require a declare mapper to
+            // map the underlying record type, this is primarily for cases
+            // where the record type contains an allocatable.
             if (!isPointer &&
                 (hasDefaultMapper ||
-                 (isAllocatable &&
-                  requiresImplicitDefaultDeclareMapper(*typeSpec)))) {
+                 (requiresImplicitDefaultDeclareMapper(*typeSpec)))) {
               if (!hasDefaultMapper) {
                 if (auto recordType = mlir::dyn_cast_or_null<fir::RecordType>(
                         converter.genType(*typeSpec)))
@@ -4287,8 +4341,10 @@ static mlir::omp::TargetDataOp genTargetDataOp(
     const ConstructQueue &queue, ConstructQueue::const_iterator item) {
   mlir::omp::TargetDataOperands clauseOps;
   llvm::SmallVector<Object> useDeviceAddrObjects, useDevicePtrObjects;
+  std::size_t sourceUseDeviceAddrCount;
   genTargetDataClauses(converter, semaCtx, stmtCtx, item->clauses, loc,
-                       clauseOps, useDeviceAddrObjects, useDevicePtrObjects);
+                       clauseOps, useDeviceAddrObjects, useDevicePtrObjects,
+                       sourceUseDeviceAddrCount);
 
   auto targetDataOp = mlir::omp::TargetDataOp::create(
       converter.getFirOpBuilder(), loc, clauseOps);
@@ -4303,10 +4359,178 @@ static mlir::omp::TargetDataOp genTargetDataOp(
   args.useDeviceAddr.vars = useDeviceAddrBaseValues;
   args.useDevicePtr.objects = useDevicePtrObjects;
   args.useDevicePtr.vars = useDevicePtrBaseValues;
+  args.sourceUseDeviceAddrCount = sourceUseDeviceAddrCount;
 
   genBodyOfTargetDataOp(converter, symTable, semaCtx, eval, targetDataOp, args,
                         loc, queue, item);
   return targetDataOp;
+}
+
+struct TargetUpdateKernelEntry {
+  mlir::omp::MapInfoOp mapInfo;
+  mlir::Value hostPtr;
+  mlir::Type componentType;
+};
+
+static bool hasAMDGCNTarget(mlir::ModuleOp module) {
+  auto offloadModule = llvm::cast<mlir::omp::OffloadModuleInterface>(*module);
+  if (offloadModule.getIsTargetDevice())
+    return fir::getTargetTriple(module).isAMDGCN();
+  return llvm::any_of(
+      offloadModule.getTargetTriples(), [](mlir::Attribute attr) {
+        auto tripleAttr = llvm::dyn_cast<mlir::StringAttr>(attr);
+        return tripleAttr && llvm::Triple(tripleAttr.getValue()).isAMDGCN();
+      });
+}
+
+static std::optional<TargetUpdateKernelEntry>
+getTargetUpdateKernelEntry(mlir::Value mapVar) {
+  auto mapInfo = mapVar.getDefiningOp<mlir::omp::MapInfoOp>();
+  if (!mapInfo)
+    return std::nullopt;
+
+  // Keep the fast path to plain synchronous H2D motion. In particular, do not
+  // silently weaken `present` motion modifiers.
+  if (mapInfo.getMapType() != mlir::omp::ClauseMapFlags::to ||
+      mapInfo.getVarPtrPtr() || !mapInfo.getMembers().empty() ||
+      !mapInfo.getBounds().empty() || mapInfo.getMapperId())
+    return std::nullopt;
+
+  mlir::Value hostPtr = mapInfo.getVarPtr();
+  auto designate = hostPtr.getDefiningOp<hlfir::DesignateOp>();
+  if (!designate || !designate.getComponent() ||
+      designate.getComponentShape() || !designate.getIndices().empty() ||
+      !designate.getSubstring().empty() || designate.getComplexPart() ||
+      designate.getShape() || !designate.getTypeparams().empty())
+    return std::nullopt;
+
+  mlir::Type baseType = fir::unwrapRefType(designate.getMemref().getType());
+  auto recordType = mlir::dyn_cast<fir::RecordType>(baseType);
+  if (!recordType || recordType.getNumLenParams() != 0)
+    return std::nullopt;
+
+  llvm::StringRef component = designate.getComponent()->getValue();
+  mlir::Type componentType = recordType.getType(component);
+  if (!componentType || !fir::isa_trivial(componentType))
+    return std::nullopt;
+
+  return TargetUpdateKernelEntry{mapInfo, hostPtr, componentType};
+}
+
+static mlir::omp::TargetOp
+genTargetUpdateKernel(lower::AbstractConverter &converter, mlir::Location loc,
+                      llvm::ArrayRef<TargetUpdateKernelEntry> entries) {
+  fir::FirOpBuilder &builder = converter.getFirOpBuilder();
+  mlir::omp::TargetExtOperands targetClauseOps;
+  targetClauseOps.kernelType = mlir::omp::TargetExecModeAttr::get(
+      builder.getContext(), mlir::omp::TargetExecMode::generic);
+
+  llvm::SmallVector<mlir::Value> destinationMaps;
+  destinationMaps.reserve(entries.size());
+
+  llvm::SmallVector<mlir::Type> sourceTypes;
+  llvm::transform(
+      entries, std::back_inserter(sourceTypes),
+      [](const TargetUpdateKernelEntry &entry) { return entry.componentType; });
+  mlir::TupleType sourceType =
+      mlir::TupleType::get(builder.getContext(), sourceTypes);
+  mlir::Value sourcePack = builder.createTemporary(loc, sourceType);
+
+  for (auto indexedEntry : llvm::enumerate(entries)) {
+    std::size_t i = indexedEntry.index();
+    const TargetUpdateKernelEntry &entry = indexedEntry.value();
+    mlir::Value sourceValue = fir::LoadOp::create(builder, loc, entry.hostPtr);
+    mlir::Value index =
+        builder.createIntegerConstant(loc, builder.getI32Type(), i);
+    mlir::Value sourceAddr = fir::CoordinateOp::create(
+        builder, loc, builder.getRefType(entry.componentType), sourcePack,
+        index);
+    fir::StoreOp::create(builder, loc, sourceValue, sourceAddr);
+
+    mlir::Value destinationMap = createMapInfoOp(
+        builder, loc, entry.hostPtr, /*varPtrPtr=*/mlir::Value{},
+        /*name=*/"", /*bounds=*/{}, /*members=*/{},
+        /*membersIndex=*/mlir::ArrayAttr{}, mlir::omp::ClauseMapFlags::storage,
+        mlir::omp::VariableCaptureKind::ByRef, entry.hostPtr.getType());
+    destinationMaps.push_back(destinationMap);
+  }
+
+  mlir::Value sourceMap = createMapInfoOp(
+      builder, loc, sourcePack, /*varPtrPtr=*/mlir::Value{},
+      ".omp.target.update.source", /*bounds=*/{}, /*members=*/{},
+      /*membersIndex=*/mlir::ArrayAttr{}, mlir::omp::ClauseMapFlags::to,
+      mlir::omp::VariableCaptureKind::ByRef, sourcePack.getType());
+  targetClauseOps.mapVars.push_back(sourceMap);
+  targetClauseOps.mapVars.append(destinationMaps);
+
+  auto targetOp = mlir::omp::TargetOp::create(builder, loc, targetClauseOps);
+  llvm::SmallVector<mlir::Value> mapBaseValues;
+  extractMappedBaseValues(targetClauseOps.mapVars, mapBaseValues);
+  ObjectEntryBlockArgs args;
+  args.map.vars = mapBaseValues;
+  genEntryBlock(builder, args.asEntryBlockArgs(), targetOp.getRegion());
+
+  auto argIface = llvm::cast<mlir::omp::BlockArgOpenMPOpInterface>(*targetOp);
+  llvm::ArrayRef<mlir::BlockArgument> mapBlockArgs = argIface.getMapBlockArgs();
+  assert(mapBlockArgs.size() == entries.size() + 1 &&
+         "expected source and destination map arguments");
+  builder.setInsertionPointToEnd(&targetOp.getRegion().front());
+  for (unsigned i = 0; i < entries.size(); ++i) {
+    mlir::Value index =
+        builder.createIntegerConstant(loc, builder.getI32Type(), i);
+    mlir::Value sourceAddr = fir::CoordinateOp::create(
+        builder, loc, builder.getRefType(entries[i].componentType),
+        mapBlockArgs.front(), index);
+    mlir::Value sourceValue = fir::LoadOp::create(builder, loc, sourceAddr);
+    fir::StoreOp::create(builder, loc, sourceValue, mapBlockArgs[i + 1]);
+  }
+  mlir::omp::TerminatorOp::create(builder, loc);
+  builder.setInsertionPointAfter(targetOp);
+  return targetOp;
+}
+
+static mlir::Operation *tryGenTargetUpdateKernel(
+    lower::AbstractConverter &converter, mlir::Location loc,
+    mlir::omp::TargetEnterExitUpdateDataOperands &clauseOps) {
+  // Updating several small, discontiguous fields issues one device transfer
+  // for every map entry. Pack their host values and use one target region so
+  // that the runtime performs one H2D transfer followed by the scalar stores.
+  // This addresses the AMDGPU runtime transfer cost and is only enabled when
+  // an AMDGPU image will actually be emitted.
+  if (!hasAMDGCNTarget(converter.getModuleOp()) || clauseOps.mapVars.empty() ||
+      !clauseOps.dependVars.empty() || !clauseOps.dependIterated.empty() ||
+      !clauseOps.mapIterated.empty() || clauseOps.nowait || clauseOps.device)
+    return nullptr;
+
+  llvm::SmallVector<TargetUpdateKernelEntry> entries;
+  entries.reserve(clauseOps.mapVars.size());
+  for (mlir::Value mapVar : clauseOps.mapVars) {
+    std::optional<TargetUpdateKernelEntry> entry =
+        getTargetUpdateKernelEntry(mapVar);
+    if (!entry)
+      return nullptr;
+    entries.push_back(*entry);
+  }
+
+  fir::FirOpBuilder &builder = converter.getFirOpBuilder();
+  mlir::Operation *firstGenerated = nullptr;
+
+  if (mlir::Value ifExpr = clauseOps.ifExpr) {
+    auto ifOp = fir::IfOp::create(builder, loc, ifExpr,
+                                  /*withElseRegion=*/false);
+    firstGenerated = ifOp;
+    builder.setInsertionPoint(ifOp.getThenRegion().front().getTerminator());
+    genTargetUpdateKernel(converter, loc, entries);
+    builder.setInsertionPointAfter(ifOp);
+  } else {
+    firstGenerated = genTargetUpdateKernel(converter, loc, entries);
+  }
+
+  for (TargetUpdateKernelEntry &entry : entries)
+    if (entry.mapInfo->use_empty())
+      entry.mapInfo.erase();
+
+  return firstGenerated;
 }
 
 template <typename OpTy>
@@ -4334,6 +4558,24 @@ static OpTy genTargetEnterExitUpdateDataOp(
                                       item->clauses, loc, directive, clauseOps);
 
   return OpTy::create(firOpBuilder, loc, clauseOps);
+}
+
+static mlir::Operation *
+genTargetUpdateDataOp(lower::AbstractConverter &converter,
+                      lower::SymMap &symTable, lower::StatementContext &stmtCtx,
+                      semantics::SemanticsContext &semaCtx, mlir::Location loc,
+                      const ConstructQueue &queue,
+                      ConstructQueue::const_iterator item) {
+  fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
+  mlir::omp::TargetEnterExitUpdateDataOperands clauseOps;
+  genTargetEnterExitUpdateDataClauses(
+      converter, semaCtx, symTable, stmtCtx, item->clauses, loc,
+      llvm::omp::Directive::OMPD_target_update, clauseOps);
+
+  if (mlir::Operation *op = tryGenTargetUpdateKernel(converter, loc, clauseOps))
+    return op;
+
+  return mlir::omp::TargetUpdateOp::create(firOpBuilder, loc, clauseOps);
 }
 
 static mlir::omp::TaskOp
@@ -5525,8 +5767,8 @@ static void genOMPDispatch(lower::AbstractConverter &converter,
         converter, symTable, stmtCtx, semaCtx, loc, queue, item);
     break;
   case llvm::omp::Directive::OMPD_target_update:
-    newOp = genTargetEnterExitUpdateDataOp<mlir::omp::TargetUpdateOp>(
-        converter, symTable, stmtCtx, semaCtx, loc, queue, item);
+    newOp = genTargetUpdateDataOp(converter, symTable, stmtCtx, semaCtx, loc,
+                                  queue, item);
     break;
   case llvm::omp::Directive::OMPD_task:
     newOp = genTaskOp(converter, symTable, stmtCtx, semaCtx, eval, loc, queue,
@@ -6773,7 +7015,7 @@ genOpenMPDeclareMapperImpl(lower::AbstractConverter &converter,
   firOpBuilder.setInsertionPointToStart(converter.getModuleOp().getBody());
   auto mlirType = converter.genType(varType.declTypeSpec->derivedTypeSpec());
   auto declMapperOp = mlir::omp::DeclareMapperOp::create(
-      firOpBuilder, loc, mapperNameStr, mlirType);
+      firOpBuilder, loc, mapperNameStr, /*sym_visibility=*/nullptr, mlirType);
   auto &region = declMapperOp.getRegion();
   firOpBuilder.createBlock(&region);
   auto varVal = region.addArgument(firOpBuilder.getRefType(mlirType), loc);
@@ -6798,25 +7040,8 @@ static void
 genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
        semantics::SemanticsContext &semaCtx, lower::pft::Evaluation &eval,
        const parser::OmpDeclareTargetDirective &declareTargetConstruct) {
-  mlir::omp::DeclareTargetOperands clauseOps;
-  llvm::SmallVector<DeclareTargetCaptureInfo> symbolAndClause;
-  mlir::ModuleOp mod = converter.getFirOpBuilder().getModule();
-  getDeclareTargetInfo(converter, semaCtx, eval, declareTargetConstruct,
-                       clauseOps, symbolAndClause);
-
-  for (const DeclareTargetCaptureInfo &symClause : symbolAndClause) {
-    mlir::Operation *op =
-        mod.lookupSymbol(converter.mangleName(symClause.symbol));
-
-    // Some symbols are deferred until later in the module, these are handled
-    // upon finalization of the module for OpenMP inside of Bridge, so we simply
-    // skip for now.
-    if (!op)
-      continue;
-
-    markDeclareTarget(op, converter, symClause.clause, clauseOps.deviceType,
-                      symClause.automap);
-  }
+  markDeclareTargetWithDirective(converter, semaCtx, eval,
+                                 declareTargetConstruct);
 }
 
 static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
@@ -7546,7 +7771,7 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
       const common::LangOptions &options = semaCtx.langOptions();
       if (!options.OpenMPSimd) {
         std::string name =
-            parser::omp::GetUpperName(clause.id, options.OpenMPVersion);
+            parser::omp::GetUpperName(clause.id, options.getOpenMPVersion());
         TODO(clauseLocation, name + " clause is not implemented yet");
       }
     }
@@ -7756,7 +7981,7 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
         // generating the omp.loop_nest op.
         break;
       default: {
-        unsigned version = semaCtx.langOptions().OpenMPVersion;
+        llvm::omp::Version version = semaCtx.langOptions().getOpenMPVersion();
         TODO(currentLocation,
              "Applying a loop-associated on the loop generated by the " +
                  llvm::omp::getOpenMPDirectiveName(nestedDirective, version) +
@@ -8117,3 +8342,37 @@ void Fortran::lower::materializeOpenMPDeclareMappers(
 // Walk scopes and materialize omp.declare_reduction ops for user-defined
 // operator reductions imported from modules (deleted: replaced by lazy,
 // clause-driven materialization).
+
+namespace {
+// Visitor used to mark declare target globals from imported modules.
+struct ModuleDeclareTargetVisitor {
+  Fortran::lower::AbstractConverter &converter;
+  semantics::SemanticsContext &semaCtx;
+
+  explicit ModuleDeclareTargetVisitor(
+      Fortran::lower::AbstractConverter &converter,
+      semantics::SemanticsContext &ctx)
+      : converter(converter), semaCtx(ctx) {}
+
+  template <typename T>
+  bool Pre(const T &) {
+    return true;
+  }
+  template <typename T>
+  void Post(const T &) {}
+
+  void Post(const parser::OmpDeclareTargetDirective &directive) {
+    markDeclareTargetWithDirective(converter, semaCtx, std::nullopt, directive);
+  }
+};
+} // namespace
+
+void Fortran::lower::markOpenMPImportedDeclareTargets(
+    Fortran::lower::AbstractConverter &converter,
+    semantics::SemanticsContext &semaCtx) {
+  const std::list<parser::Program> &modTrees = semaCtx.GetModFileParseTrees();
+  ModuleDeclareTargetVisitor visitor{converter, semaCtx};
+  for (auto &modTree : modTrees) {
+    parser::Walk(modTree, visitor);
+  }
+}

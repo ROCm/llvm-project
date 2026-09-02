@@ -62,7 +62,7 @@ public:
                                 omp::DeclareTargetDeviceType::host;
 
       // Remove unused host symbols with external linkage.
-      if (symbolUnused && !globalOp.getLinkName() && hostOnlySymbol)
+      if (symbolUnused && !globalOp.getLinkage() && hostOnlySymbol)
         globalOp.erase();
     });
   }

@@ -1021,6 +1021,15 @@ def _ssaf_global_scope_analysis_result :
     "consumed by the source transformation. The extension selects which file "
     "format to use.">,
   MarshallingInfoString<SSAFOpts<"GlobalScopeAnalysisResult">>;
+def _ssaf_link_unit_id :
+  Joined<["--"], "ssaf-link-unit-id=">,
+  MetaVarName<"<id>">,
+  Group<SSAF_Group>,
+  Visibility<[ClangOption, CC1Option]>,
+  HelpText<
+    "Stable identifier of the link unit that this compilation unit was "
+    "linked into.">,
+  MarshallingInfoString<SSAFOpts<"LinkUnitId">>;
 def _ssaf_src_edit_file :
   Joined<["--"], "ssaf-src-edit-file=">,
   MetaVarName<"<path>">,
@@ -1124,7 +1133,11 @@ def allowable__client : Separate<["-"], "allowable_client">;
 def ansi : Flag<["-", "--"], "ansi">, Group<CompileOnly_Group>;
 def arch__errors__fatal : Flag<["-"], "arch_errors_fatal">;
 def arch : Separate<["-"], "arch">, Flags<[NoXarchOption,TargetSpecific]>;
+
+// Ignored option for gcc compatibility - not used for anything.
+// -arch_only is passed to libtool through --static-lib-target-arch-only
 def arch__only : Separate<["-"], "arch_only">;
+
 def autocomplete : Joined<["--"], "autocomplete=">;
 def bind__at__load : Flag<["-"], "bind_at_load">;
 def bundle__loader : Separate<["-"], "bundle_loader">;
@@ -1435,6 +1448,28 @@ defm cuda_short_ptr : BoolOptionWithoutMarshalling<
 
 def emit_static_lib : Flag<["--"], "emit-static-lib">,
   HelpText<"Enable linker job to emit a static library.">;
+
+// Options controlling the static library tool. Most of these are specific
+// to Apple's libtool.
+def static_lib_target_arch_only : Flag<["--"],
+  "static-lib-target-arch-only">,
+  Visibility<[ClangOption]>,
+  HelpText<"Restrict the static library to the target architecture, ignoring "
+           "other architectures present in universal inputs (Darwin only)">;
+defm static_lib_deterministic : BoolOptionWithoutMarshalling<"",
+  "static-lib-deterministic",
+  PosFlag<SetTrue, [], [ClangOption],
+          "Set static library member metadata to fixed values so that "
+          "identical inputs produce identical output (default)">,
+  NegFlag<SetFalse, [], [ClangOption]>, BothFlags<[]>, ["--"]>;
+defm static_lib_warn_no_symbols : BoolOptionWithoutMarshalling<"",
+  "static-lib-warn-no-symbols",
+  PosFlag<SetTrue, [], [ClangOption],
+          "Warn about static library members that define no symbols">,
+  NegFlag<SetFalse, [], [ClangOption]>, BothFlags<[]>, ["--"]>;
+def Xstatic_lib_tool : Separate<["-"], "Xstatic-lib-tool">,
+  Visibility<[ClangOption]>,
+  HelpText<"Pass <arg> to the static library tool">, MetaVarName<"<arg>">;
 
 def mprintf_kind_EQ : Joined<["-"], "mprintf-kind=">, Group<m_Group>,
   HelpText<"Specify the printf lowering scheme (AMDGPU only), allowed values are "
@@ -1960,7 +1995,7 @@ def fprofile_generate : Flag<["-"], "fprofile-generate">,
     Group<f_Group>, Visibility<[ClangOption, CLOption, FlangOption, FC1Option]>,
     HelpText<"Generate instrumented code to collect execution counts into default.profraw (overridden by LLVM_PROFILE_FILE env var)">;
 def fprofile_generate_EQ : Joined<["-"], "fprofile-generate=">,
-    Group<f_Group>, Visibility<[ClangOption, CLOption]>,
+    Group<f_Group>, Visibility<[ClangOption, CLOption, FlangOption, FC1Option]>,
     MetaVarName<"<directory>">,
     HelpText<"Generate instrumented code to collect execution counts into <directory>/default.profraw (overridden by LLVM_PROFILE_FILE env var)">;
 def fcs_profile_generate : Flag<["-"], "fcs-profile-generate">,
@@ -1981,7 +2016,7 @@ def fno_profile_instr_generate : Flag<["-"], "fno-profile-instr-generate">,
     Group<f_Group>, Visibility<[ClangOption, CLOption]>,
     HelpText<"Disable generation of profile instrumentation.">;
 def fno_profile_generate : Flag<["-"], "fno-profile-generate">,
-    Group<f_Group>, Visibility<[ClangOption, CLOption]>,
+    Group<f_Group>, Visibility<[ClangOption, CLOption, FlangOption]>,
     HelpText<"Disable generation of profile instrumentation.">;
 def fno_profile_instr_use : Flag<["-"], "fno-profile-instr-use">,
     Group<f_Group>, Visibility<[ClangOption, CLOption]>,
@@ -4231,7 +4266,9 @@ def fopenmp_runtimelib_EQ : Joined<["-"], "fopenmp-runtimelib=">, Group<f_Group>
 def fopenmp_gpu_threads_per_team_EQ : Joined<["-"], "fopenmp-gpu-threads-per-team=">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>;
 def fopenmp_target_xteam_reduction_blocksize_EQ : Joined<["-"], "fopenmp-target-xteam-reduction-blocksize=">, Group<f_Group>,
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>;
+  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Number of threads in a block used by GPU cross-team reduction "
+           "kernels">;
 def fopenmp_target_ignore_env_vars : Flag<["-"], "fopenmp-target-ignore-env-vars">, Group<f_Group>, 
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
   HelpText<"Assert that device related environment variables can be ignored while generating code">,
@@ -4256,38 +4293,29 @@ def fno_openmp_target_no_loop : Flag<["-"], "fno-openmp-target-no-loop">, Group<
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
   HelpText<"Do not use the no-loop code generation technique">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetNoLoop">>;
-def fopenmp_target_xteam_reduction : Flag<["-"], "fopenmp-target-xteam-reduction">, Group<f_Group>, 
+// The downstream cross-team ("Xteam") reduction implementation and its 'scan'
+// specialization have been removed. The following flags are accepted and
+// ignored for backward compatibility; the driver emits a deprecation warning
+// when they are used. Note that '-fopenmp-target-xteam-reduction-blocksize='
+// above is *not* deprecated.
+def fopenmp_target_xteam_reduction : Flag<["-"], "fopenmp-target-xteam-reduction">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Use the cross-team code generation technique if possible">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamReduction">>;
-def fno_openmp_target_xteam_reduction : Flag<["-"], "fno-openmp-target-xteam-reduction">, Group<f_Group>, 
+  HelpText<"Deprecated; has no effect. Cross-team reductions are always enabled">;
+def fno_openmp_target_xteam_reduction : Flag<["-"], "fno-openmp-target-xteam-reduction">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Do not use the cross-team reduction code generation technique">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamReduction">>;
-def fopenmp_target_fast_reduction : Flag<["-"], "fopenmp-target-fast-reduction">, Group<f_Group>, 
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Use the fast reduction code generation technique if possible">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetFastReduction">>;
-def fno_openmp_target_fast_reduction : Flag<["-"], "fno-openmp-target-fast-reduction">, Group<f_Group>, 
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Do not use the fast reduction code generation technique">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetFastReduction">>;
-def fopenmp_target_xteam_scan : Flag<["-"], "fopenmp-target-xteam-scan">, Group<f_Group>, 
+  HelpText<"Deprecated; has no effect. Cross-team reductions are always enabled">;
+def fopenmp_target_xteam_scan : Flag<["-"], "fopenmp-target-xteam-scan">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Use the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamScan">>;
-def fno_openmp_target_xteam_scan : Flag<["-"], "fno-openmp-target-xteam-scan">, Group<f_Group>, 
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
+def fno_openmp_target_xteam_scan : Flag<["-"], "fno-openmp-target-xteam-scan">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Do not use the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamScan">>;
-def fopenmp_target_xteam_no_loop_scan : Flag<["-"], "fopenmp-target-xteam-no-loop-scan">, Group<f_Group>, 
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
+def fopenmp_target_xteam_no_loop_scan : Flag<["-"], "fopenmp-target-xteam-no-loop-scan">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Use the no-loop variant of the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamNoLoopScan">>;
-def fno_openmp_target_xteam_no_loop_scan : Flag<["-"], "fno-openmp-target-xteam-no-loop-scan">, Group<f_Group>, 
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
+def fno_openmp_target_xteam_no_loop_scan : Flag<["-"], "fno-openmp-target-xteam-no-loop-scan">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Do not use the no-loop variant of the cross-team specialized kernel code generation for 'scan' directive.">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamNoLoopScan">>;
+  HelpText<"Deprecated; has no effect. The cross-team 'scan' specialization has been removed">;
 
 //===----------------------------------------------------------------------===//
 // Shared cc1 + fc1 OpenMP Target Options
@@ -4409,6 +4437,17 @@ def fopenmp_target_atomic_reduction : Flag<["-"], "fopenmp-target-atomic-reducti
 def fno_openmp_target_atomic_reduction : Flag<["-"], "fno-openmp-target-atomic-reduction">,
   Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
   Visibility<[ClangOption, CC1Option]>;
+// Legacy spellings of the atomic cross-team reduction flags. The downstream
+// 'fast reduction' feature these used to control has been replaced by the
+// atomic cross-team reductions, so keep the old spellings working as aliases.
+def fopenmp_target_fast_reduction : Flag<["-"], "fopenmp-target-fast-reduction">,
+  Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
+  Visibility<[ClangOption, CC1Option, FlangOption]>,
+  Alias<fopenmp_target_atomic_reduction>;
+def fno_openmp_target_fast_reduction : Flag<["-"], "fno-openmp-target-fast-reduction">,
+  Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
+  Visibility<[ClangOption, CC1Option, FlangOption]>,
+  Alias<fno_openmp_target_atomic_reduction>;
 
 defm openmp_optimistic_collapse : BoolFOption<"openmp-optimistic-collapse",
   LangOpts<"OpenMPOptimisticCollapse">, DefaultFalse,
@@ -7133,7 +7172,8 @@ def _dyld_prefix_EQ : Joined<["--"], "dyld-prefix=">;
 def _dyld_prefix : Separate<["--"], "dyld-prefix">, Alias<_dyld_prefix_EQ>;
 def _encoding_EQ : Joined<["--"], "encoding=">, Alias<fencoding_EQ>;
 def _encoding : Separate<["--"], "encoding">, Alias<fencoding_EQ>;
-def _entry : Flag<["--"], "entry">, Alias<e>;
+def : Joined<["--"], "entry=">, Alias<e>;
+def : Separate<["--"], "entry">, Alias<e>;
 def _extdirs_EQ : Joined<["--"], "extdirs=">, Alias<fextdirs_EQ>;
 def _extdirs : Separate<["--"], "extdirs">, Alias<fextdirs_EQ>;
 def _extra_warnings : Flag<["--"], "extra-warnings">, Alias<W_Joined>;
@@ -9239,6 +9279,11 @@ def fno_modules_check_relocated
       Group<f_Group>,
       HelpText<"Skip checks for relocated modules when loading PCM files">,
       MarshallingInfoNegativeFlag<PreprocessorOpts<"ModulesCheckRelocated">>;
+def fmodules_force_redundant_lookup
+    : Flag<["-"], "fmodules-force-redundant-lookup">,
+      Group<f_Group>,
+      HelpText<"Force redundant module lookup when loading PCM files">,
+      MarshallingInfoFlag<PreprocessorOpts<"ModulesForceRedundantLookup">>;
 def init_datetime_macros_EQ : Joined<["-"], "init-datetime-macros=">,
   HelpText<"Change __DATE__, __TIME__, and __TIMESTAMP__ macros initialization and expansion">,
   Values<"default,literalone,undefined">,
@@ -10146,6 +10191,15 @@ def fhlsl_spv_use_unknown_image_format
                "attribute. If this option is not used, the format is inferred "
                "from the resource's data type.">,
       MarshallingInfoFlag<LangOpts<"HLSLSpvUseUnknownImageFormat">>;
+
+def fhlsl_spv_use_legacy_buffer_matrix_order
+    : Flag<["-"], "fspv-use-legacy-buffer-matrix-order">,
+      Group<dxc_Group>,
+      Visibility<[CC1Option, DXCOption]>,
+      HelpText<"Assume the legacy matrix order (row major) when accessing "
+               "raw buffers (e.g. ByteAddressBuffer). Defaults to column "
+               "major.">,
+      MarshallingInfoFlag<LangOpts<"HLSLSpvUseLegacyBufferMatrixOrder">>;
 
 def fhlsl_spv_enable_maximal_reconvergence
     : Flag<["-"], "fspv-enable-maximal-reconvergence">,

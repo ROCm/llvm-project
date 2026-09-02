@@ -7,6 +7,12 @@
 
 #include "mathD.h"
 
+#define DOUBLE_SPECIALIZATION
+#include "ep.h"
+
+extern CONSTATTR double2 MATH_PRIVATE(epln)(double);
+extern CONSTATTR double MATH_PRIVATE(expep)(double2);
+
 CONSTATTR double
 MATH_MANGLE(tgamma)(double x)
 {
@@ -14,36 +20,36 @@ MATH_MANGLE(tgamma)(double x)
     double ret;
 
     if (ax < 16.0) {
-        double n, d;
+        double2 n, d;
         double y = x;
         if (x > 0.0) {
-            n = 1.0;
+            n = con(1.0, 0.0);
             while (y > 2.5) {
-                n = MATH_MAD(n, y, -n);
+                n = omul(n, y - 1.0);
                 y = y - 1.0;
-                n = MATH_MAD(n, y, -n);
+                n = omul(n, y - 1.0);
                 y = y - 1.0;
             }
             if (y > 1.5) {
-                n = MATH_MAD(n, y, -n);
+                n = omul(n, y - 1.0);
                 y = y - 1.0;
             }
             if (x >= 0.5)
                 y = y - 1.0;
-            d = x < 0.5 ? x : 1.0;
+            d = con(x < 0.5 ? x : 1.0, 0.0);
         } else {
-            d = x;
+            d = con(x, 0.0);
             while (y < -1.5) {
-                d = MATH_MAD(d, y, d);
+                d = omul(d, y + 1.0);
                 y = y + 1.0;
-                d = MATH_MAD(d, y, d);
+                d = omul(d, y + 1.0);
                 y = y + 1.0;
             }
             if (y < -0.5) {
-                d = MATH_MAD(d, y, d);
+                d = omul(d, y + 1.0);
                 y = y + 1.0;
             }
-            n = 1.0;
+            n = con(1.0, 0.0);
         }
         double qt = MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y,
                     MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y,
@@ -57,15 +63,11 @@ MATH_MANGLE(tgamma)(double x)
                        0x1.5512320b432ccp-3), -0x1.5815e8fa28886p-5),
                        -0x1.4fcf4026afa24p-1), 0x1.2788cfc6fb61cp-1);
 
-        ret = MATH_DIV(n, MATH_MAD(d, y*qt, d));
+        double2 den = fadd(mul(d, y*qt), d);
+        ret = MATH_DIV(n.hi, den.hi);
         ret = x == 0.0 ? BUILTIN_COPYSIGN_F64(PINF_F64, x) : ret;
         ret = x < 0.0 && BUILTIN_TRUNC_F64(x) == x ? QNAN_F64 : ret;
     } else {
-        const double sqrt2pi = 0x1.40d931ff62706p+1;
-        const double sqrtpiby2 = 0x1.40d931ff62706p+0;
-
-        double t1 = MATH_MANGLE(powr)(ax, MATH_MAD(ax, 0.5, -0.25));
-        double t2 = MATH_MANGLE(exp)(-ax);
         double xr = MATH_FAST_RCP(ax);
         double pt = MATH_MAD(xr, MATH_MAD(xr, MATH_MAD(xr, MATH_MAD(xr,
                     MATH_MAD(xr, MATH_MAD(xr,
@@ -74,24 +76,22 @@ MATH_MANGLE(tgamma)(double x)
                        -0x1.5f7266f67c4e0p-9), 0x1.c71c71c0f96adp-9),
                        0x1.5555555555a28p-4);
 
+        double2 e = sub(mul(MATH_PRIVATE(epln)(ax), ax - 0.5), ax);
+
         if (x > 0.0) {
-            double gt = sqrt2pi*t2*t1*t1;
-            double g = MATH_MAD(gt, xr*pt, gt);
+            const double sqrt2pi = 0x1.40d931ff62706p+1;
+            double m = MATH_PRIVATE(expep)(e);
+            double g = MATH_MAD(sqrt2pi*m, xr*pt, sqrt2pi*m);
             ret = x > 0x1.573fae561f646p+7 ? PINF_F64 : g;
         } else {
+            const double2 lnsqrtpiby2 = con(0x1.ce6bb25aa1316p-3, -0x1.dcd49c8e5aff6p-58);
             double s = -x * MATH_MANGLE(sinpi)(x);
-            if (x > -170.5) {
-                double d = s*t2*t1*t1;
-                ret = MATH_DIV(sqrtpiby2, MATH_MAD(d, xr*pt, d));
-            } else if (x > -184.0) {
-                double d = t2*t1;
-                ret = MATH_DIV(MATH_DIV(sqrtpiby2, MATH_MAD(d, xr*pt, d)), s*t1);
-            } else
-                ret = BUILTIN_COPYSIGN_F64(0.0, s);
+            double asp = BUILTIN_ABS_F64(s) * MATH_MAD(xr, pt, 1.0);
+            double mag = MATH_PRIVATE(expep)(sub(sub(lnsqrtpiby2, e), MATH_PRIVATE(epln)(asp)));
+            ret = BUILTIN_COPYSIGN_F64(mag, s);
             ret = BUILTIN_TRUNC_F64(x) == x || BUILTIN_ISNAN_F64(x) ? QNAN_F64 : ret;
         }
     }
 
     return ret;
 }
-

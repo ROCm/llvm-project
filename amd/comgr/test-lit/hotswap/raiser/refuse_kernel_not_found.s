@@ -1,6 +1,6 @@
 ; REQUIRES: comgr-has-hotswap-transpile
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -filetype=obj -mcpu=gfx942 %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; A mode's value selects kernels by name; an absent name is reported rather
 ; than silently producing no output.

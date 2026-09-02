@@ -8,6 +8,11 @@
 
 #include "hotswap/raiser/raise_failure.h"
 
+#include "hotswap/decoder/amdgpu-formats.h"
+#include "hotswap/decoder/decoded-inst.h"
+#include "hotswap/decoder/mc-state.h"
+#include "hotswap/raiser/raise-context.h"
+
 #include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -45,6 +50,8 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "UnsupportedOpcode";
   case RaiseFailureReason::UnsupportedInstructionForm:
     return "unsupported-instruction-form";
+  case RaiseFailureReason::UnsupportedFloatingPointMode:
+    return "unsupported-floating-point-mode";
   case RaiseFailureReason::SPEUnsafeExecWriter:
     return "SPE-unmodeled-EXEC-writer";
   case RaiseFailureReason::TargetMachineCreationFailed:
@@ -79,6 +86,8 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "unsupported-entry-sgpr-source";
   case RaiseFailureReason::UnsupportedSourceClusterDims:
     return "unsupported-source-cluster-dims";
+  case RaiseFailureReason::UnsupportedWavePriority:
+    return "unsupported-wave-priority";
   }
   llvm_unreachable("unhandled RaiseFailureReason");
 }
@@ -118,6 +127,14 @@ llvm::Error RaiseFailure::withOrigin(llvm::Error Err,
             F->Reason, F->Mnemonic, F->Format, F->Offset, F->Detail,
             FailureOrigin{KernelName.str(), SourceCpu.str(), TargetCpu.str()});
       });
+}
+
+llvm::Error unsupportedInstruction(RaiseContext &Ctx, const DecodedInst &Di,
+                                   const llvm::Twine &Detail) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags), Detail);
 }
 
 } // namespace COMGR::hotswap

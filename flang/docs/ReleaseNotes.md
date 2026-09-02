@@ -33,6 +33,11 @@ page](https://llvm.org/releases/).
 
 ## Non-comprehensive list of changes in this release
 
+- Added support for the OpenMP implementation-defined extension sentinels
+  (OpenMP 5.2, section 3.1): `!$omx`, `c$omx` and `*$omx` in fixed source form
+  and `!$ompx` in free source form. These sentinels are recognized like their
+  `omp` counterparts when OpenMP is enabled.
+
 - The legacy array-value operations (`fir.array_load`, `fir.array_fetch`,
   `fir.array_update`, `fir.array_modify`, `fir.array_access`,
   `fir.array_amend`, `fir.array_merge_store`) have been removed from FIR,
@@ -47,6 +52,18 @@ page](https://llvm.org/releases/).
   compressing DWARF debug info in ELF object files using zlib or zstd,
   reducing debug information size in compiled binaries.
 
+- The FIR loop invariant code motion pass (`flang-licm`) is now enabled by
+  default at optimization levels above `-O0`. It can be turned off with
+  `-mmlir -disable-fir-licm`. The `-mmlir -enable-fir-licm` option that
+  previously opted into the pass has been removed.
+
+- Named constants (`PARAMETER`) now appear in the debug information, so a
+  debugger can print them by name. A constant is described only in the
+  compilation unit that defines it: one declared in a module is described
+  where that module is compiled, and one declared in a procedure is local to
+  that unit. Constants of an intrinsic module such as `iso_fortran_env` are
+  not described yet, because no compilation unit defines them.
+
 ## New Compiler Flags
 - Added the gfortran-compatible `-ffpe-trap=` flag, which sets the initial
   floating-point exception halting mode of the main program. It takes a
@@ -56,6 +73,11 @@ page](https://llvm.org/releases/).
 
 - Added `-gz` and `-gz=<format>` flags to enable compression of DWARF debug
   sections. Supported formats are `zlib`, `zstd`, and `none`.
+
+- Added `-fmodule-mismatch-check=non-intrinsic` and
+  `-fmodule-mismatch-check=warn` to turn module USE checksum mismatches into a
+  warning instead of an error. `-Wno-module-file-mismatch` can be used to
+  silence even that warning.
 
 ## Windows Support
 
