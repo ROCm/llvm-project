@@ -31,6 +31,9 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
+/// Returns the width of the immediate offset field in the FLAT instruction
+/// encoding. Most subtargets use the legacy 13-bit field; dedicated features
+/// select 12- or 24-bit variants.
 static unsigned flatOffsetBits(const MCSubtargetInfo &STI) {
   if (STI.hasFeature(AMDGPU::FeatureFlatOffsetBits12))
     return 12;
