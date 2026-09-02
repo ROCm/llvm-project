@@ -4,46 +4,25 @@
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 
 ; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=workgroup_barrier_kernel \
-; RUN:   | %FileCheck %s --check-prefix=WORKGROUP
+; RUN:   | %FileCheck %s
 ; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=workgroup_barrier_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=ONTO-GFX942
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=signal_named_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=SIGNAL-NAMED
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=signal_cluster_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=SIGNAL-CLUSTER
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=signal_m0_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=SIGNAL-M0
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=signal_isfirst_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=ISFIRST-IMM
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=signal_isfirst_m0_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=ISFIRST-M0
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=get_barrier_state_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=STATE-IMM
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=get_barrier_state_m0_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=STATE-M0
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=barrier_init_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=INIT-IMM
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=barrier_init_m0_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=INIT-M0
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=barrier_join_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=JOIN-IMM
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=barrier_join_m0_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=JOIN-M0
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=wakeup_barrier_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=WAKEUP-IMM
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=wakeup_barrier_m0_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=WAKEUP-M0
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=wait_named_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=WAIT-NAMED
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=wait_cluster_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=WAIT-CLUSTER
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=barrier_leave_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=LEAVE
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=rfe_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=UNHANDLED-SOP1
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=trap_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=UNHANDLED-SOPP
+
+; The barriers that name a barrier other than the workgroup one, or ask about
+; barrier state, are refused: the raised kernel has neither the source wave's
+; barrier resources nor its cluster. So are the SOP1 and SOPP opcodes the
+; handlers do not lift at all.
+; RUN: not %hotswap_transpile_cli %t.hsaco \
+; RUN:   --emit-ir=signal_named_kernel,signal_cluster_kernel,signal_m0_kernel \
+; RUN:   --emit-ir=signal_isfirst_kernel,signal_isfirst_m0_kernel \
+; RUN:   --emit-ir=get_barrier_state_kernel,get_barrier_state_m0_kernel \
+; RUN:   --emit-ir=barrier_init_kernel,barrier_init_m0_kernel \
+; RUN:   --emit-ir=barrier_join_kernel,barrier_join_m0_kernel \
+; RUN:   --emit-ir=wakeup_barrier_kernel,wakeup_barrier_m0_kernel \
+; RUN:   --emit-ir=wait_named_kernel,wait_cluster_kernel,barrier_leave_kernel \
+; RUN:   --emit-ir=rfe_kernel,trap_kernel 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.text
@@ -54,12 +33,12 @@ workgroup_barrier_kernel:
 ; The arrival raises to the whole barrier and so does the release, so the
 ; source pair raises to a pair. Neither is dropped: each says on its own that
 ; the workgroup meets here.
-; WORKGROUP-LABEL: define amdgpu_kernel void @workgroup_barrier_kernel(
-; WORKGROUP-NEXT: entry:
-; WORKGROUP-NEXT: call void @llvm.amdgcn.s.barrier()
-; WORKGROUP-NEXT: call void @llvm.amdgcn.s.barrier()
-; WORKGROUP-NEXT: ret void
-; WORKGROUP-NEXT: }
+; CHECK-LABEL: define amdgpu_kernel void @workgroup_barrier_kernel(
+; CHECK-NEXT: entry:
+; CHECK-NEXT: call void @llvm.amdgcn.s.barrier()
+; CHECK-NEXT: call void @llvm.amdgcn.s.barrier()
+; CHECK-NEXT: ret void
+; CHECK-NEXT: }
 ; Raising onto the GPU that never had the split barrier reaches the same
 ; barrier, which is the point of raising it to the one every target has.
 ; ONTO-GFX942-LABEL: define amdgpu_kernel void @workgroup_barrier_kernel(
@@ -75,8 +54,8 @@ workgroup_barrier_kernel:
 	.p2align	8
 	.type	signal_named_kernel,@function
 signal_named_kernel:
-; SIGNAL-NAMED: unsupported-instruction-form: s_barrier_signal [SOP1]
-; SIGNAL-NAMED-SAME: names barrier 1 rather than the workgroup barrier
+; REFUSE: unsupported-instruction-form: s_barrier_signal [SOP1]
+; REFUSE-SAME: names barrier 1 rather than the workgroup barrier
 	s_barrier_signal 1
 	s_endpgm
 
@@ -84,8 +63,8 @@ signal_named_kernel:
 	.p2align	8
 	.type	signal_cluster_kernel,@function
 signal_cluster_kernel:
-; SIGNAL-CLUSTER: unsupported-instruction-form: s_barrier_signal [SOP1]
-; SIGNAL-CLUSTER-SAME: names barrier -3 rather than the workgroup barrier
+; REFUSE: unsupported-instruction-form: s_barrier_signal [SOP1]
+; REFUSE-SAME: names barrier -3 rather than the workgroup barrier
 	s_barrier_signal -3
 	s_endpgm
 
@@ -93,8 +72,8 @@ signal_cluster_kernel:
 	.p2align	8
 	.type	signal_m0_kernel,@function
 signal_m0_kernel:
-; SIGNAL-M0: unsupported-instruction-form: s_barrier_signal [SOP1]
-; SIGNAL-M0-SAME: takes its barrier id from m0
+; REFUSE: unsupported-instruction-form: s_barrier_signal [SOP1]
+; REFUSE-SAME: takes its barrier id from m0
 	s_barrier_signal m0
 	s_endpgm
 
@@ -102,8 +81,8 @@ signal_m0_kernel:
 	.p2align	8
 	.type	signal_isfirst_kernel,@function
 signal_isfirst_kernel:
-; ISFIRST-IMM: unsupported-instruction-form: s_barrier_signal_isfirst [SOP1]
-; ISFIRST-IMM-SAME: reports whether this wave arrived at the barrier first
+; REFUSE: unsupported-instruction-form: s_barrier_signal_isfirst [SOP1]
+; REFUSE-SAME: reports whether this wave arrived at the barrier first
 	s_barrier_signal_isfirst -1
 	s_endpgm
 
@@ -111,8 +90,8 @@ signal_isfirst_kernel:
 	.p2align	8
 	.type	signal_isfirst_m0_kernel,@function
 signal_isfirst_m0_kernel:
-; ISFIRST-M0: unsupported-instruction-form: s_barrier_signal_isfirst [SOP1]
-; ISFIRST-M0-SAME: reports whether this wave arrived at the barrier first
+; REFUSE: unsupported-instruction-form: s_barrier_signal_isfirst [SOP1]
+; REFUSE-SAME: reports whether this wave arrived at the barrier first
 	s_barrier_signal_isfirst m0
 	s_endpgm
 
@@ -120,8 +99,8 @@ signal_isfirst_m0_kernel:
 	.p2align	8
 	.type	get_barrier_state_kernel,@function
 get_barrier_state_kernel:
-; STATE-IMM: unsupported-instruction-form: s_get_barrier_state [SOP1]
-; STATE-IMM-SAME: reads the arrival and membership counts
+; REFUSE: unsupported-instruction-form: s_get_barrier_state [SOP1]
+; REFUSE-SAME: reads the arrival and membership counts
 	s_get_barrier_state s0, 1
 	s_endpgm
 
@@ -129,8 +108,8 @@ get_barrier_state_kernel:
 	.p2align	8
 	.type	get_barrier_state_m0_kernel,@function
 get_barrier_state_m0_kernel:
-; STATE-M0: unsupported-instruction-form: s_get_barrier_state [SOP1]
-; STATE-M0-SAME: reads the arrival and membership counts
+; REFUSE: unsupported-instruction-form: s_get_barrier_state [SOP1]
+; REFUSE-SAME: reads the arrival and membership counts
 	s_get_barrier_state s0, m0
 	s_endpgm
 
@@ -138,8 +117,8 @@ get_barrier_state_m0_kernel:
 	.p2align	8
 	.type	barrier_init_kernel,@function
 barrier_init_kernel:
-; INIT-IMM: unsupported-instruction-form: s_barrier_init [SOP1]
-; INIT-IMM-SAME: sizes the membership of a named barrier
+; REFUSE: unsupported-instruction-form: s_barrier_init [SOP1]
+; REFUSE-SAME: sizes the membership of a named barrier
 	s_barrier_init 1
 	s_endpgm
 
@@ -147,8 +126,8 @@ barrier_init_kernel:
 	.p2align	8
 	.type	barrier_init_m0_kernel,@function
 barrier_init_m0_kernel:
-; INIT-M0: unsupported-instruction-form: s_barrier_init [SOP1]
-; INIT-M0-SAME: sizes the membership of a named barrier
+; REFUSE: unsupported-instruction-form: s_barrier_init [SOP1]
+; REFUSE-SAME: sizes the membership of a named barrier
 	s_barrier_init m0
 	s_endpgm
 
@@ -156,8 +135,8 @@ barrier_init_m0_kernel:
 	.p2align	8
 	.type	barrier_join_kernel,@function
 barrier_join_kernel:
-; JOIN-IMM: unsupported-instruction-form: s_barrier_join [SOP1]
-; JOIN-IMM-SAME: joins this wave to a named barrier
+; REFUSE: unsupported-instruction-form: s_barrier_join [SOP1]
+; REFUSE-SAME: joins this wave to a named barrier
 	s_barrier_join 1
 	s_endpgm
 
@@ -165,8 +144,8 @@ barrier_join_kernel:
 	.p2align	8
 	.type	barrier_join_m0_kernel,@function
 barrier_join_m0_kernel:
-; JOIN-M0: unsupported-instruction-form: s_barrier_join [SOP1]
-; JOIN-M0-SAME: joins this wave to a named barrier
+; REFUSE: unsupported-instruction-form: s_barrier_join [SOP1]
+; REFUSE-SAME: joins this wave to a named barrier
 	s_barrier_join m0
 	s_endpgm
 
@@ -174,8 +153,8 @@ barrier_join_m0_kernel:
 	.p2align	8
 	.type	wakeup_barrier_kernel,@function
 wakeup_barrier_kernel:
-; WAKEUP-IMM: unsupported-instruction-form: s_wakeup_barrier [SOP1]
-; WAKEUP-IMM-SAME: wakes the waves waiting on a named barrier
+; REFUSE: unsupported-instruction-form: s_wakeup_barrier [SOP1]
+; REFUSE-SAME: wakes the waves waiting on a named barrier
 	s_wakeup_barrier 1
 	s_endpgm
 
@@ -183,8 +162,8 @@ wakeup_barrier_kernel:
 	.p2align	8
 	.type	wakeup_barrier_m0_kernel,@function
 wakeup_barrier_m0_kernel:
-; WAKEUP-M0: unsupported-instruction-form: s_wakeup_barrier [SOP1]
-; WAKEUP-M0-SAME: wakes the waves waiting on a named barrier
+; REFUSE: unsupported-instruction-form: s_wakeup_barrier [SOP1]
+; REFUSE-SAME: wakes the waves waiting on a named barrier
 	s_wakeup_barrier m0
 	s_endpgm
 
@@ -194,8 +173,8 @@ wakeup_barrier_m0_kernel:
 wait_named_kernel:
 ; The immediate does not pick the named barrier out by number, so the refusal
 ; names the barrier the way the source does: the one joined last.
-; WAIT-NAMED: unsupported-instruction-form: s_barrier_wait [SOPP]
-; WAIT-NAMED-SAME: waits on the named barrier this wave joined last
+; REFUSE: unsupported-instruction-form: s_barrier_wait [SOPP]
+; REFUSE-SAME: waits on the named barrier this wave joined last
 	s_barrier_wait 1
 	s_endpgm
 
@@ -203,8 +182,8 @@ wait_named_kernel:
 	.p2align	8
 	.type	wait_cluster_kernel,@function
 wait_cluster_kernel:
-; WAIT-CLUSTER: unsupported-instruction-form: s_barrier_wait [SOPP]
-; WAIT-CLUSTER-SAME: names barrier -3 rather than the workgroup barrier
+; REFUSE: unsupported-instruction-form: s_barrier_wait [SOPP]
+; REFUSE-SAME: names barrier -3 rather than the workgroup barrier
 	s_barrier_wait -3
 	s_endpgm
 
@@ -212,8 +191,8 @@ wait_cluster_kernel:
 	.p2align	8
 	.type	barrier_leave_kernel,@function
 barrier_leave_kernel:
-; LEAVE: unsupported-instruction-form: s_barrier_leave [SOPP]
-; LEAVE-SAME: leaves a named barrier
+; REFUSE: unsupported-instruction-form: s_barrier_leave [SOPP]
+; REFUSE-SAME: leaves a named barrier
 	s_barrier_leave
 	s_endpgm
 
@@ -221,7 +200,7 @@ barrier_leave_kernel:
 	.p2align	8
 	.type	rfe_kernel,@function
 rfe_kernel:
-; UNHANDLED-SOP1: unsupported-instruction-form: s_rfe_i64 [SOP1]
+; REFUSE: unsupported-instruction-form: s_rfe_i64 [SOP1]
 	s_rfe_i64 s[0:1]
 	s_endpgm
 
@@ -229,7 +208,7 @@ rfe_kernel:
 	.p2align	8
 	.type	trap_kernel,@function
 trap_kernel:
-; UNHANDLED-SOPP: unsupported-instruction-form: s_trap [SOPP]
+; REFUSE: unsupported-instruction-form: s_trap [SOPP]
 	s_trap 1
 	s_endpgm
 

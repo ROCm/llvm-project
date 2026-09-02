@@ -13,36 +13,18 @@
 ; The raised IR is fed back to the assembly parser, which verifies it. A jump
 ; into the entry block, or a block left without a terminator, is caught there
 ; rather than by a pattern below.
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=addpc_forward_kernel \
-; RUN:   | %llvm-as -o /dev/null
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=addpc_wide_kernel \
-; RUN:   | %llvm-as -o /dev/null
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=addpc_backward_kernel \
+; RUN: %hotswap_transpile_cli %t.hsaco \
+; RUN:   --emit-ir=addpc_forward_kernel,addpc_wide_kernel,addpc_backward_kernel \
 ; RUN:   | %llvm-as -o /dev/null
 
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=addpc_forward_kernel \
-; RUN:   | %FileCheck %s --check-prefix=FORWARD
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=addpc_wide_kernel \
-; RUN:   | %FileCheck %s --check-prefix=WIDE
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=addpc_backward_kernel \
-; RUN:   | %FileCheck %s --check-prefix=BACKWARD
+; RUN: %hotswap_transpile_cli %t.hsaco \
+; RUN:   --emit-ir=addpc_forward_kernel,addpc_wide_kernel,addpc_backward_kernel \
+; RUN:   | %FileCheck %s
 
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=getpc_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=GETPC
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=setpc_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=SETPC
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=swappc_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=SWAPPC
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=addpc_register_kernel \
-; RUN:   2>&1 | %FileCheck %s --check-prefix=ADDPC-REG
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=rfe_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=RFE
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=addpc_past_end_kernel \
-; RUN:   2>&1 | %FileCheck %s --check-prefix=PAST-END
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=addpc_inside_wide_kernel \
-; RUN:   2>&1 | %FileCheck %s --check-prefix=INSIDE-WIDE
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=addpc_wrap_kernel \
-; RUN:   2>&1 | %FileCheck %s --check-prefix=WRAP
+; RUN: not %hotswap_transpile_cli %t.hsaco \
+; RUN:   --emit-ir=getpc_kernel,setpc_kernel,swappc_kernel,addpc_register_kernel \
+; RUN:   --emit-ir=rfe_kernel,addpc_past_end_kernel,addpc_inside_wide_kernel \
+; RUN:   --emit-ir=addpc_wrap_kernel 2>&1 | %FileCheck %s --check-prefix=REFUSE
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.text
@@ -54,67 +36,67 @@
 	.globl	addpc_forward_kernel
 	.p2align	8
 	.type	addpc_forward_kernel,@function
-; FORWARD-LABEL: define amdgpu_kernel void @addpc_forward_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @addpc_forward_kernel(
 addpc_forward_kernel:
 	s_mov_b32 s2, 11
 ; The jump sits four bytes into the kernel and is four bytes wide, so a
 ; displacement of four reaches twelve bytes in and steps over the seed below.
-; FORWARD: br label %[[FW_TARGET:.+]]
+; CHECK: br label %[[FW_TARGET:.+]]
 	s_add_pc_i64 4
 	s_mov_b32 s2, 22
-; FORWARD: [[FW_TARGET]]:
-; FORWARD: uitofp i32 11 to float
+; CHECK: [[FW_TARGET]]:
+; CHECK: uitofp i32 11 to float
 	s_cvt_f32_u32 s3, s2
-; FORWARD: ret void
+; CHECK: ret void
 	s_endpgm
 
 	.globl	addpc_wide_kernel
 	.p2align	8
 	.type	addpc_wide_kernel,@function
-; WIDE-LABEL: define amdgpu_kernel void @addpc_wide_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @addpc_wide_kernel(
 addpc_wide_kernel:
 	s_mov_b32 s2, 11
 ; The same jump written with a 64-bit literal, which makes the instruction
 ; twelve bytes rather than four. The displacement is unchanged, so where it
 ; reaches moves with the width of the instruction carrying it: the jump ends
 ; sixteen bytes into the kernel and a displacement of four reaches twenty.
-; WIDE: br label %[[WIDE_TARGET:.+]]
+; CHECK: br label %[[WIDE_TARGET:.+]]
 	s_add_pc_i64 lit64(4)
 	s_mov_b32 s2, 22
-; WIDE: [[WIDE_TARGET]]:
-; WIDE: uitofp i32 11 to float
+; CHECK: [[WIDE_TARGET]]:
+; CHECK: uitofp i32 11 to float
 	s_cvt_f32_u32 s3, s2
-; WIDE: ret void
+; CHECK: ret void
 	s_endpgm
 
 	.globl	addpc_backward_kernel
 	.p2align	8
 	.type	addpc_backward_kernel,@function
-; BACKWARD-LABEL: define amdgpu_kernel void @addpc_backward_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @addpc_backward_kernel(
 addpc_backward_kernel:
 	s_mov_b32 s2, 0
-; BACKWARD: entry:
-; BACKWARD: br label %[[HEAD:.+]]
-; BACKWARD: [[HEAD]]:
+; CHECK: entry:
+; CHECK: br label %[[HEAD:.+]]
+; CHECK: [[HEAD]]:
 backward_head:
-; BACKWARD: [[NOTTED:%.+]] = xor i32 {{.+}}, -1
+; CHECK: [[NOTTED:%.+]] = xor i32 {{.+}}, -1
 	s_not_b32 s2, s2
-; BACKWARD: [[SCC:%.+]] = icmp ne i32 [[NOTTED]], 0
-; BACKWARD: [[EXIT_COND:%.+]] = xor i1 [[SCC]], true
-; BACKWARD: br i1 [[EXIT_COND]], label %[[EXIT:.+]], label %[[LATCH:.+]]
+; CHECK: [[SCC:%.+]] = icmp ne i32 [[NOTTED]], 0
+; CHECK: [[EXIT_COND:%.+]] = xor i1 [[SCC]], true
+; CHECK: br i1 [[EXIT_COND]], label %[[EXIT:.+]], label %[[LATCH:.+]]
 	s_cbranch_scc0 backward_exit
-; BACKWARD: [[LATCH]]:
+; CHECK: [[LATCH]]:
 ; The jump sits twelve bytes into the kernel and ends at sixteen, so minus
 ; twelve reaches four, the head of the loop. Read as an unsigned count it
 ; would leave the kernel, and measured from the jump rather than from its end
 ; it would reach the entry block, which no block may branch to.
-; BACKWARD: br label %[[HEAD]]
+; CHECK: br label %[[HEAD]]
 	s_add_pc_i64 -12
-; BACKWARD: [[EXIT]]:
+; CHECK: [[EXIT]]:
 backward_exit:
-; BACKWARD: uitofp i32 [[NOTTED]] to float
+; CHECK: uitofp i32 [[NOTTED]] to float
 	s_cvt_f32_u32 s3, s2
-; BACKWARD: ret void
+; CHECK: ret void
 	s_endpgm
 
 ; Every other way of writing the program counter is refused, and each carries
@@ -124,7 +106,7 @@ backward_exit:
 	.p2align	8
 	.type	getpc_kernel,@function
 getpc_kernel:
-; GETPC: unsupported-instruction-form: s_get_pc_i64 {{.+}} :: captures a source address
+; REFUSE: unsupported-instruction-form: s_get_pc_i64 {{.+}} :: captures a source address
 	s_get_pc_i64 s[10:11]
 ; The captured address escaping into arithmetic changes nothing: the refusal
 ; is on the capture, so no consumer of it is ever reached.
@@ -135,7 +117,7 @@ getpc_kernel:
 	.p2align	8
 	.type	setpc_kernel,@function
 setpc_kernel:
-; SETPC: unsupported-instruction-form: s_set_pc_i64 {{.+}} :: jumps to a register value
+; REFUSE: unsupported-instruction-form: s_set_pc_i64 {{.+}} :: jumps to a register value
 	s_set_pc_i64 s[10:11]
 	s_endpgm
 
@@ -145,7 +127,7 @@ setpc_kernel:
 swappc_kernel:
 ; A call whose target the raise cannot resolve to a block, and whose return
 ; address it has nowhere to put.
-; SWAPPC: unsupported-instruction-form: s_swap_pc_i64 {{.+}} :: calls through a register value
+; REFUSE: unsupported-instruction-form: s_swap_pc_i64 {{.+}} :: calls through a register value
 	s_swap_pc_i64 s[12:13], s[10:11]
 	s_endpgm
 
@@ -153,7 +135,7 @@ swappc_kernel:
 	.p2align	8
 	.type	addpc_register_kernel,@function
 addpc_register_kernel:
-; ADDPC-REG: unsupported-instruction-form: s_add_pc_i64 {{.+}} :: displacement is not a constant
+; REFUSE: unsupported-instruction-form: s_add_pc_i64 {{.+}} :: displacement is not a constant
 	s_add_pc_i64 s[10:11]
 	s_endpgm
 
@@ -161,7 +143,7 @@ addpc_register_kernel:
 	.p2align	8
 	.type	rfe_kernel,@function
 rfe_kernel:
-; RFE: unsupported-instruction-form: s_rfe_i64 {{.+}} :: returns from an exception handler
+; REFUSE: unsupported-instruction-form: s_rfe_i64 {{.+}} :: returns from an exception handler
 	s_rfe_i64 s[10:11]
 	s_endpgm
 
@@ -187,7 +169,7 @@ refuse_all_pc_kernel:
 	.p2align	8
 	.type	addpc_past_end_kernel,@function
 addpc_past_end_kernel:
-; PAST-END: decodeKernel: branch at .text offset 0x{{.+}} targets 0x{{.+}}, outside the kernel extent
+; REFUSE: decodeKernel: branch at .text offset 0x{{.+}} targets 0x{{.+}}, outside the kernel extent
 	s_add_pc_i64 0x1000
 	s_endpgm
 
@@ -197,7 +179,7 @@ addpc_past_end_kernel:
 addpc_inside_wide_kernel:
 ; The move below spans three dwords, so a displacement of four bytes from the
 ; end of the jump lands in the middle of it.
-; INSIDE-WIDE: decodeKernel: branch target 0x{{.+}} is not the first byte of a decoded instruction
+; REFUSE: decodeKernel: branch target 0x{{.+}} is not the first byte of a decoded instruction
 	s_add_pc_i64 4
 	s_mov_b64 s[0:1], 0x123456789abcdef
 	s_endpgm
@@ -209,7 +191,7 @@ addpc_wrap_kernel:
 ; A displacement further back than the jump stands from zero. Text offsets do
 ; not wrap, so the sum names nothing and is reported as such rather than as the
 ; enormous offset the arithmetic produces.
-; WRAP: staticBranchTarget: s_add_pc_i64 at .text offset 0x{{.+}} targets an offset outside the address space
+; REFUSE: staticBranchTarget: s_add_pc_i64 at .text offset 0x{{.+}} targets an offset outside the address space
 	s_add_pc_i64 lit64(0xffffffffffff0000)
 	s_endpgm
 
