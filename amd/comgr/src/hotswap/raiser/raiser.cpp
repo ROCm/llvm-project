@@ -199,6 +199,9 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
   using namespace AmdgpuFormat;
   OperandResolver Op{Ctx, Di};
 
+  if (Di.HasVOPD)
+    return handleVOPD(Ctx, Di);
+
   if (Di.TargetSpecificFlags & SOP1)
     return handleSOP1(Ctx, Di, Op);
   if (Di.TargetSpecificFlags & SOP2)

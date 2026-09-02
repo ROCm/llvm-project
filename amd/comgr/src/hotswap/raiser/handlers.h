@@ -65,6 +65,9 @@ llvm::Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
 /// a structured refusal.
 llvm::Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
+/// Translate both components of a VOPD packet. Both halves read the register
+/// state that preceded the packet; their writes commit together afterwards.
+llvm::Error handleVOPD(RaiseContext &Ctx, const DecodedInst &Di);
 /// Translate a supported plain VOPC comparison into the condition registers
 /// the opcode writes, or return a structured refusal.
 llvm::Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,

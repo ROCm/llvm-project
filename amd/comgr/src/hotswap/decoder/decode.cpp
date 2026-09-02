@@ -8,6 +8,7 @@
 
 #include "decode.h"
 
+#include "amdgpu-formats.h"
 #include "amdgpu-mc-tables.h"
 #include "canonical-op.h"
 #include "decoded-inst.h"
@@ -191,6 +192,103 @@ void classifyImplicitDefs(DecodedInst &Di, const MCInstrDesc &Desc) {
   }
 }
 
+Error failVOPDDecode(const DecodedInst &Di, const Twine &Detail) {
+  return createStringError("decodeKernel: malformed VOPD instruction at " +
+                           Twine(Di.Offset) + ": " + Detail);
+}
+
+Error decodeVOPDSource(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
+                       const AMDGPU::VOPD::ComponentInfo &Info,
+                       unsigned ComponentSrcIdx) {
+  unsigned OperandIdx =
+      Info.getIndexOfSrcInMCOperands(ComponentSrcIdx, Di.IsVOPD3);
+  if (OperandIdx >= Di.numOperands())
+    return failVOPDDecode(Di, "component source operand is out of range");
+
+  if (static_cast<int>(OperandIdx) == Info.getBitOp3OperandIdx()) {
+    if (!Di.isImm(OperandIdx))
+      return failVOPDDecode(Di, "bitop3 operand is not an immediate");
+    int64_t TruthTable = Di.getImm(OperandIdx);
+    if (TruthTable < 0 || TruthTable > UINT8_MAX)
+      return failVOPDDecode(Di, "bitop3 immediate is out of range");
+    Half.HasBitOp3 = true;
+    Half.BitOp3 = static_cast<uint8_t>(TruthTable);
+    return Error::success();
+  }
+
+  if (Half.NumSrcs == 3)
+    return failVOPDDecode(Di, "component has more than three sources");
+  unsigned LogicalSrc = Half.NumSrcs++;
+  Half.SrcIdx[LogicalSrc] = OperandIdx;
+
+  if (Di.IsVOPD3 && ComponentSrcIdx < Info.getCompVOPD3ModsNum()) {
+    if (OperandIdx == 0 || !Di.isImm(OperandIdx - 1))
+      return failVOPDDecode(Di, "component source modifier is missing");
+    int64_t Mods = Di.getImm(OperandIdx - 1);
+    if (Mods < 0 || Mods > UINT8_MAX)
+      return failVOPDDecode(Di, "component source modifier is out of range");
+    Half.SrcMods[LogicalSrc] = static_cast<uint8_t>(Mods);
+  }
+  return Error::success();
+}
+
+Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
+                     const AMDGPU::VOPD::ComponentInfo &Info,
+                     unsigned ComponentOpcode, const OpcodeMap &OpcMap) {
+  Half.CanonOp = OpcMap.lookup(ComponentOpcode);
+  if (Half.CanonOp == CanonicalOp::Unknown)
+    return failVOPDDecode(Di, "component opcode has no canonical operation");
+
+  Half.DstIdx = Info.getIndexOfDstInMCOperands();
+  if (Half.DstIdx >= Di.numOperands() || !Di.isReg(Half.DstIdx))
+    return failVOPDDecode(Di,
+                          "component destination is missing or not a register");
+
+  for (unsigned I = 0; I != Info.getCompParsedSrcOperandsNum(); ++I)
+    if (Error Err = decodeVOPDSource(Di, Half, Info, I))
+      return Err;
+
+  int BitOpIdx = Info.getBitOp3OperandIdx();
+  if (BitOpIdx < 0 && (Half.CanonOp == CanonicalOp::V_AND_B32 ||
+                       Half.CanonOp == CanonicalOp::V_OR_B32 ||
+                       Half.CanonOp == CanonicalOp::V_XOR_B32 ||
+                       Half.CanonOp == CanonicalOp::V_BITOP3_B32))
+    BitOpIdx = COMGR::hotswap::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                  AMDGPU::OpName::bitop3);
+
+  if (!Half.HasBitOp3 && BitOpIdx >= 0) {
+    unsigned OperandIdx = static_cast<unsigned>(BitOpIdx);
+    if (OperandIdx >= Di.numOperands() || !Di.isImm(OperandIdx))
+      return failVOPDDecode(Di, "bitop3 operand is missing or not immediate");
+    int64_t TruthTable = Di.getImm(OperandIdx);
+    if (TruthTable < 0 || TruthTable > UINT8_MAX)
+      return failVOPDDecode(Di, "bitop3 immediate is out of range");
+    Half.HasBitOp3 = true;
+    Half.BitOp3 = static_cast<uint8_t>(TruthTable);
+  }
+  return Error::success();
+}
+
+Error decodeVOPD(DecodedInst &Di, const MCInstrInfo &MCII,
+                 const OpcodeMap &OpcMap) {
+  if (!AMDGPU::isVOPD(Di.Inst.getOpcode()))
+    return Error::success();
+
+  Di.HasVOPD = true;
+  Di.IsVOPD3 = (Di.TargetSpecificFlags & AmdgpuFormat::VOPD3) != 0;
+  auto [OpX, OpY] = AMDGPU::getVOPDComponents(Di.Inst.getOpcode());
+  const MCInstrDesc &OpXDesc = MCII.get(OpX);
+  const MCInstrDesc &OpYDesc = MCII.get(OpY);
+  AMDGPU::VOPD::ComponentInfo XInfo(
+      OpXDesc, AMDGPU::VOPD::ComponentKind::COMPONENT_X, Di.IsVOPD3);
+  AMDGPU::VOPD::ComponentInfo YInfo(OpYDesc, XInfo, Di.IsVOPD3);
+  if (Error Err = decodeVOPDHalf(Di, Di.VOPD[AMDGPU::VOPD::ComponentIndex::X],
+                                 XInfo, OpX, OpcMap))
+    return Err;
+  return decodeVOPDHalf(Di, Di.VOPD[AMDGPU::VOPD::ComponentIndex::Y], YInfo,
+                        OpY, OpcMap);
+}
+
 } // namespace
 
 Expected<SmallVector<uint64_t>>
@@ -258,6 +356,8 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
     driftCheckTiedIn(Di, Desc);
     driftCheckSrcN(Mc, Di, Desc);
     classifyImplicitDefs(Di, Desc);
+    if (Error Err = decodeVOPD(Di, *Mc.InstrInfo, OpcMap))
+      return std::move(Err);
 
     bool IsEnd = decodedInstEndsBlock(Di);
     Out.Insts.push_back(std::move(Di));
