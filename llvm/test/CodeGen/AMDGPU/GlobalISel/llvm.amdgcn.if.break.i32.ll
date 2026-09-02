@@ -2,7 +2,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu10.10--amdhsa < %s | FileCheck -check-prefix=GFX10 %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgpu11.00--amdhsa -amdgpu-enable-delay-alu=0 < %s | FileCheck -check-prefix=GFX11 %s
 
-; TODO-WAVETRANSFORM: Structurizer-only intrinsic; so this test need to be removed for WaveTransform pipeline.
+; TODO-WAVETRANSFORM: Structurizer-specific test; remove it when the structurizer support is fully dropped.
 
 define amdgpu_kernel void @test_wave32(i32 %arg0, [8 x i32], i32 %saved) {
 ; GFX10-LABEL: test_wave32:
