@@ -52,7 +52,7 @@ body:             |
   ; SGPR_SPILL-NEXT:   DBG_VALUE [[DEF]], 0, {{.+}}, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 0), DIOpByteOffset(i32)), {{.+}}
   ; SGPR_SPILL:   [[DEF]]:vgpr_32 = SI_SPILL_S32_TO_VGPR $sgpr12, 1, [[DEF]]
   ; SGPR_SPILL-NEXT:   [[DEF]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr13, 2, [[DEF]]
-  ; SGPR_SPILL-NEXT:   DBG_VALUE [[DEF]], 0, <{{.*}}>, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 4), DIOpByteOffset(i32), DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 8), DIOpByteOffset(i32), DIOpComposite(2, %struct.pair)),
+  ; SGPR_SPILL-NEXT:   DBG_VALUE [[DEF]], 0, !{{[0-9]+}}, !DIExpression(DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 4), DIOpByteOffset(i32), DIOpArg(0, target("amdgpu.debug.whole.vreg", i32, 64)), DIOpConstant(i32 8), DIOpByteOffset(i32), DIOpComposite(2, %struct.pair)),
   bb.0:
     renamable $sgpr10 = IMPLICIT_DEF
     SI_SPILL_S32_SAVE killed $sgpr10, %stack.0, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
