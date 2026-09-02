@@ -269,13 +269,12 @@ TEST_F(DecoderTest, OpcodeMapTagsTableEntries) {
   EXPECT_EQ(Map.lookup(opcodeOf(State, VSubF32Bytes)), CanonicalOp::V_SUB_F32);
   EXPECT_EQ(Map.lookup(opcodeOf(State, VSubrevF32Bytes)),
             CanonicalOp::V_SUBREV_F32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VMovB32Bytes)), CanonicalOp::V_MOV_B32);
 }
 
 TEST_F(DecoderTest, OpcodeMapReturnsUnknownForUnmappedOpcode) {
   OpcodeMap Map;
   Map.build(*State.InstrInfo);
-  // v_mov_b32 has no kCanonTable row, so it stays Unknown.
-  EXPECT_EQ(Map.lookup(opcodeOf(State, VMovB32Bytes)), CanonicalOp::Unknown);
   EXPECT_EQ(Map.lookup(State.InstrInfo->getNumOpcodes()), CanonicalOp::Unknown);
 }
 
@@ -303,7 +302,7 @@ TEST_F(DecoderTest, DecodeKernelWalksToProgramEnd) {
 
   ASSERT_EQ(ResultOrErr->Insts.size(), 3u);
   EXPECT_EQ(ResultOrErr->Insts[0].CanonOp, CanonicalOp::S_MOV_B32);
-  EXPECT_EQ(ResultOrErr->Insts[1].CanonOp, CanonicalOp::Unknown);
+  EXPECT_EQ(ResultOrErr->Insts[1].CanonOp, CanonicalOp::V_MOV_B32);
   EXPECT_EQ(ResultOrErr->Insts[2].CanonOp, CanonicalOp::S_ENDPGM);
   EXPECT_EQ(ResultOrErr->Insts[0].Offset, 0u);
   EXPECT_EQ(ResultOrErr->Insts[1].Offset, 4u);

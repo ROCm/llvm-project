@@ -13,18 +13,17 @@
 ; RUN: %hotswap_transpile_cli %t.hsaco --dump-decoded=mov_endpgm_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=DECODE
 
-; This VOP1 opcode has no handler, so vmov_kernel is refused with a structured
-; diagnostic rather than mislowered or crashed.
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=vmov_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=UNHANDLED
-; UNHANDLED: unsupported-instruction-form: v_mov_b32
+; Integer VOP1 moves lift as register-file copies.
+; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=vmov_kernel \
+; RUN:   | %FileCheck %s --check-prefix=VMOV
+; VMOV-LABEL: define amdgpu_kernel void @vmov_kernel(
+; VMOV: ret void
 
-; Raising the whole code object runs both kernels through one call, so the
-; refusal names the kernel it came out of and the ISA pair it ran under rather
-; than leaving the caller to work out which request failed.
-; RUN: not %hotswap_transpile_cli %t.hsaco --target-isa=gfx950 --emit-ir 2>&1 \
+; Raising the whole code object runs both kernels through one call.
+; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx950 --emit-ir \
 ; RUN:   | %FileCheck %s --check-prefix=BATCH
-; BATCH: unsupported-instruction-form: v_mov_b32 {{.+}} in kernel 'vmov_kernel' (gfx942 -> gfx950)
+; BATCH: define amdgpu_kernel void @mov_endpgm_kernel(
+; BATCH: define amdgpu_kernel void @vmov_kernel(
 
 ; The target ISA is a parameter of the raise, so a gfx942 kernel raises onto
 ; another GPU. Nothing this kernel lifts to depends on which one, so what the

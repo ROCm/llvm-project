@@ -214,11 +214,20 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
   if (Di.TargetSpecificFlags & FLAT)
     return handleFLAT(Ctx, Di, Op);
 
+  constexpr uint64_t VOP1EncodingMask = VOP1 | VOP3 | DPP | SDWA | VOPD3;
+  if ((Di.TargetSpecificFlags & VOP1EncodingMask) == VOP1)
+    return handleVOP1(Ctx, Di, Op);
+
   constexpr uint64_t VOP2EncodingMask =
       VOP2 | VOP3 | VOP3P | DPP | SDWA | VOPD3;
   if ((Di.TargetSpecificFlags & VOP2EncodingMask) == VOP2) {
     return handleVOP2(Ctx, Di, Op);
   }
+
+  constexpr uint64_t VOP3EncodingMask =
+      VOP3 | VOP3P | VOPC | DPP | SDWA | VOPD3;
+  if ((Di.TargetSpecificFlags & VOP3EncodingMask) == VOP3)
+    return handleVOP3(Ctx, Di, Op);
 
   constexpr uint64_t VOPCEncodingMask =
       VOPC | VOP3 | VOP3P | DPP | SDWA | VOPD3;
