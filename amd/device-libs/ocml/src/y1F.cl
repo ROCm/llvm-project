@@ -131,10 +131,7 @@ MATH_MANGLE(y1)(float x)
         float xs = x - ch - cl;
         float t = x < b0 ? x2 : xs;
 
-        ret = MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-              MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-              p[8],  p[7]), p[6]), p[5]), p[4]),
-              p[3]), p[2]), p[1]), p[0]);
+        ret = PE8(t, p[8], p[7], p[6], p[5], p[4], p[3], p[2], p[1], p[0]);
 
         if (x < b0) {
             const float twobypi = 0x1.45f306p-1f;

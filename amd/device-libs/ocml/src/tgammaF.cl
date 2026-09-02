@@ -51,10 +51,8 @@ MATH_MANGLE(tgamma)(float x)
             }
             n = con(1.0f, 0.0f);
         }
-        float qt = MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y,
-                   MATH_MAD(y, MATH_MAD(y, MATH_MAD(y,
-                       -0x1.1201dcp-10f, 0x1.d16868p-8f), -0x1.3c8284p-7f), -0x1.598558p-5f), 0x1.55148ep-3f),
-                       -0x1.581830p-5f), -0x1.4fcf46p-1f), 0x1.2788d0p-1f);
+        float qt = PE7(y, -0x1.1201dcp-10f, 0x1.d16868p-8f, -0x1.3c8284p-7f, -0x1.598558p-5f, 0x1.55148ep-3f,
+                         -0x1.581830p-5f, -0x1.4fcf46p-1f, 0x1.2788d0p-1f);
 
         float2 den = fadd(mul(d, y*qt), d);
         ret = MATH_DIV(n.hi, den.hi);
@@ -62,7 +60,7 @@ MATH_MANGLE(tgamma)(float x)
         ret = x < 0.0f && BUILTIN_TRUNC_F32(x) == x ? QNAN_F32 : ret;
     } else {
         float xr = MATH_FAST_RCP(ax);
-        float p = MATH_MAD(xr, MATH_MAD(xr, MATH_MAD(xr, -0x1.61f140p-9f, 0x1.c72f8cp-9f), 0x1.555554p-4f), 1.0f);
+        float p = PE3(xr, -0x1.61f140p-9f, 0x1.c72f8cp-9f, 0x1.555554p-4f, 1.0f);
 
         float2 e = sub(mul(MATH_PRIVATE(epln)(ax), ax - 0.5f), ax);
 

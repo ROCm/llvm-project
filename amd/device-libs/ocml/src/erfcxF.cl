@@ -11,14 +11,8 @@ MATH_PRIVATE(erfcx)(float x)
     float e = BUILTIN_FMA_F32(-q, x, BUILTIN_FMA_F32(q + 1.0f, -2.0f, x));
     q = BUILTIN_FMA_F32(r, e, q);
     
-    float p = MATH_MAD(q, MATH_MAD(q, MATH_MAD(q, MATH_MAD(q,
-              MATH_MAD(q, MATH_MAD(q, MATH_MAD(q, MATH_MAD(q,
-              MATH_MAD(q,
-                  -0x1.adf188p-12f, -0x1.45aea6p-10f),
-                  0x1.5a5f68p-10f), 0x1.1b44cep-7f),
-                  -0x1.082b62p-7f), -0x1.bc143p-5f),
-                  0x1.4ffc54p-3f), -0x1.5407fap-3f),
-                  -0x1.7bf616p-4f), 0x1.1ba038p-2);
+    float p = PE9(q, -0x1.adf188p-12f, -0x1.45aea6p-10f, 0x1.5a5f68p-10f, 0x1.1b44cep-7f, -0x1.082b62p-7f,
+                    -0x1.bc143p-5f, 0x1.4ffc54p-3f, -0x1.5407fap-3f, -0x1.7bf616p-4f, 0x1.1ba038p-2);
     float tx = x + x;
     d = 1.0f + tx;
     r = MATH_FAST_RCP(d);
@@ -41,8 +35,7 @@ MATH_MANGLE(erfcx)(float x)
     } else {
         float r = MATH_FAST_RCP(0x1.0p-2f * ax);
         float t = r*r * 0x1.0p-4f;
-        float p = MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-                      6.5625f, -1.875f), 0.75f), -0.5f), 1.0f);
+        float p = PE4(t, 6.5625f, -1.875f, 0.75f, -0.5f, 1.0f);
         ret = 0x1.20dd76p-3f * r * p;
     }
 
@@ -66,17 +59,9 @@ MATH_MANGLE(erfcx)(float x)
     float ret;
 
     if (ax < 1.0f) {
-        ret = MATH_MAD(x, MATH_MAD(x, MATH_MAD(x, MATH_MAD(x,
-              MATH_MAD(x, MATH_MAD(x, MATH_MAD(x, MATH_MAD(x,
-              MATH_MAD(x, MATH_MAD(x, MATH_MAD(x, MATH_MAD(x,
-              MATH_MAD(x,
-                  -0x1.77d64p-11f, 0x1.269372p-9f),
-                  -0x1.c27dd4p-9f), 0x1.d3d3c4p-8f),
-                  -0x1.35d6cap-6f), 0x1.5bb082p-5f),
-                  -0x1.60e46ep-4f), 0x1.54d3e4p-3f),
-                  -0x1.340edap-2f), 0x1.00049ap-1f),
-                  -0x1.81286p-1f), 0x1.ffffcap-1f),
-                  -0x1.20dd7p+0f), 0x1.0p+0f);
+        ret = PE13(x, -0x1.77d64p-11f, 0x1.269372p-9f, -0x1.c27dd4p-9f, 0x1.d3d3c4p-8f, -0x1.35d6cap-6f,
+                    0x1.5bb082p-5f, -0x1.60e46ep-4f, 0x1.54d3e4p-3f, -0x1.340edap-2f,
+                    0x1.00049ap-1f, -0x1.81286p-1f, 0x1.ffffcap-1f, -0x1.20dd7p+0f, 0x1.0p+0f);
     } else if (ax < 32.0f) {
         float n = ax - 4.0f;
         float d = ax + 4.0f;
@@ -84,14 +69,8 @@ MATH_MANGLE(erfcx)(float x)
         float t = n * r;
         float e = BUILTIN_FMA_F32(-t, ax, BUILTIN_FMA_F32(t + 1.0f, -4.0f, ax));
         t = BUILTIN_FMA_F32(r, e, t);
-        float p = MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-              MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-              MATH_MAD(t,
-                  0.00416076401f, -0.0167250745f),
-                  0.0378070959f), -0.0661972834f),
-                  0.0935599947f), -0.101052745f),
-                  0.0681148962f), 0.0153801711f),
-                  -0.139621619f), 0x1.dd2c9p-3f);
+        float p = PE9(t, 0.00416076401f, -0.0167250745f, 0.0378070959f, -0.0661972834f, 0.0935599947f, -0.101052745f,
+                        0.0681148962f, 0.0153801711f, -0.139621619f, 0x1.dd2c9p-3f);
 
         float tx = ax + ax;
         d = 1.0f + tx;
@@ -102,7 +81,7 @@ MATH_MANGLE(erfcx)(float x)
     } else {
         const float one_over_sqrtpi = 0x1.20dd76p-1f;
         float z = MATH_RCP(x * x);
-        ret =  MATH_DIV(one_over_sqrtpi, x) * MATH_MAD(z, MATH_MAD(z, 0.375f, -0.5f), 1.0f);
+        ret =  MATH_DIV(one_over_sqrtpi, x) * PE2(z, 0.375f, -0.5f, 1.0f);
     }
 
     if (x <= -1.0f) {

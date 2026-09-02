@@ -21,9 +21,8 @@ MATH_MANGLE(i0)(float x)
         float h = 0.5f * x;
         float2 t = sqr(h);
         float th = t.hi;
-        float ph = MATH_MAD(th, MATH_MAD(th, MATH_MAD(th, MATH_MAD(th, MATH_MAD(th,
-                       0x1.38d760p-43f, 0x1.7fd5c6p-38f), 0x1.66ffc8p-31f), 0x1.4ecb6ep-25f),
-                       0x1.033c70p-19f), 0x1.233bb2p-14f);
+        float ph = PE5(th, 0x1.38d760p-43f, 0x1.7fd5c6p-38f, 0x1.66ffc8p-31f, 0x1.4ecb6ep-25f, 0x1.033c70p-19f,
+                         0x1.233bb2p-14f);
         float2 p = con(ph, 0.0f);
         p = fadd(mul(p, t), 0x1.c71db2p-10f);
         p = fadd(mul(p, t), 0x1.c71c5ep-6f);
@@ -32,7 +31,7 @@ MATH_MANGLE(i0)(float x)
         ret = fadd(mul(t, p), 1.0f).hi;
     } else {
         float t = MATH_FAST_RCP(x);
-        float ph = MATH_MAD(t, MATH_MAD(t, 0x1.c49916p-2f, -0x1.110f5ep-5f), 0x1.2a130ap-5f);
+        float ph = PE2(t, 0x1.c49916p-2f, -0x1.110f5ep-5f, 0x1.2a130ap-5f);
         float2 p = con(ph, 0.0f);
         p = fadd(mul(p, t), 0x1.c68702p-6f);
         p = fadd(mul(p, t), 0x1.9890aep-5f);

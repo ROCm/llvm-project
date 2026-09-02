@@ -45,3 +45,5 @@
 })
 
 #define MATH_SQRT(X) BUILTIN_SQRT_F64(X)
+
+#include "pe.h"

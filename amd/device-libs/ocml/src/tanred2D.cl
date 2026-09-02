@@ -17,17 +17,11 @@ MATH_PRIVATE(tanred2)(double x, double xx, int sel)
 {
 #if defined NOCFLOW
     double s = sqr(con(x,xx)).hi;
-    double p = s * MATH_MAD(s, MATH_MAD(s, MATH_MAD(s, MATH_MAD(s,
-                   MATH_MAD(s, MATH_MAD(s, MATH_MAD(s, MATH_MAD(s,
-                   MATH_MAD(s, MATH_MAD(s, MATH_MAD(s, MATH_MAD(s,
-                   MATH_MAD(s,
-                       0x1.5e089c751c08cp-16, -0x1.78809a9a29f71p-15),
-                       0x1.7746f90a8aaep-14), -0x1.bb44da6fbf144p-16),
-                       0x1.1e634a7943acfp-13), 0x1.d250fdeb68febp-13),
-                       0x1.37fd9b58c4d95p-11), 0x1.7d5af15120e2cp-10),
-                       0x1.d6d93e09491dfp-9), 0x1.226e12033784dp-7),
-                       0x1.664f49ac36ae2p-6), 0x1.ba1ba1b451c21p-5),
-                       0x1.11111111185b7p-3), 0x1.55555555554eep-2);
+    double p = s * PE13(s, 0x1.5e089c751c08cp-16, -0x1.78809a9a29f71p-15, 0x1.7746f90a8aaep-14,
+                         -0x1.bb44da6fbf144p-16, 0x1.1e634a7943acfp-13, 0x1.d250fdeb68febp-13,
+                         0x1.37fd9b58c4d95p-11, 0x1.7d5af15120e2cp-10, 0x1.d6d93e09491dfp-9,
+                         0x1.226e12033784dp-7, 0x1.664f49ac36ae2p-6, 0x1.ba1ba1b451c21p-5,
+                         0x1.11111111185b7p-3, 0x1.55555555554eep-2);
     double2 t = fadd(con(x,xx), mul(x, p));
     double2 tr = frcp(t);
     return sel ? -tr.hi : t.hi;
@@ -54,15 +48,9 @@ MATH_PRIVATE(tanred2)(double x, double xx, int sel)
     double t1 = x;
     double r = MATH_MAD(x*xx, 2.0, x*x);
 
-    double a = MATH_MAD(r,
-                        MATH_MAD(r, 0x1.d5daf289c385ap-13, -0x1.77c24c7569abbp-6),
-                        0x1.7d50f6638564ap-2);
+    double a = PE2(r, 0x1.d5daf289c385ap-13, -0x1.77c24c7569abbp-6, 0x1.7d50f6638564ap-2);
 
-    double b = MATH_MAD(r,
-                        MATH_MAD(r,
-                                 MATH_MAD(r, -0x1.e7517ef6d98f8p-13, 0x1.ab0f4f80a0acfp-6),
-                                 -0x1.08046499eb90fp-1),
-                        0x1.1dfcb8caa40b8p+0);
+    double b = PE3(r, -0x1.e7517ef6d98f8p-13, 0x1.ab0f4f80a0acfp-6, -0x1.08046499eb90fp-1, 0x1.1dfcb8caa40b8p+0);
 
     double t2 = MATH_MAD(MATH_FAST_DIV(a, b), x*r, xx);
 

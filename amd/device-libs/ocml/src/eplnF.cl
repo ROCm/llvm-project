@@ -22,7 +22,7 @@ MATH_PRIVATE(epln)(float a)
     float2 x = div(m - 1.0f, fadd(1.0f, m));
     float2 s = sqr(x);
     float t = s.hi;
-    float p = MATH_MAD(t, MATH_MAD(t, 0x1.ed89c2p-3f, 0x1.23e988p-2f), 0x1.999bdep-2f);
+    float p = PE2(t, 0x1.ed89c2p-3f, 0x1.23e988p-2f, 0x1.999bdep-2f);
 
     // ln(2)*e + 2*x + x^3(c3 + x^2*p)
     float2 r = add(mul(con(0x1.62e430p-1f, -0x1.05c610p-29f), (float)e),

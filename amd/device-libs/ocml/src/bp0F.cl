@@ -11,6 +11,5 @@ CONSTATTR float
 MATH_PRIVATE(bp0)(float t)
 {
     return
-        MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-            0x1.0cd6fap+4f, -0x1.9a583ap+0f), 0x1.ad0a9ep-3f), -0x1.0aaa9cp-4f), 0x1.000000p-3f);
+        PE4(t, 0x1.0cd6fap+4f, -0x1.9a583ap+0f, 0x1.ad0a9ep-3f, -0x1.0aaa9cp-4f, 0x1.000000p-3f);
 }
