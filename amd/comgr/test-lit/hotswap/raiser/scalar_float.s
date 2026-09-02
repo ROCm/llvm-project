@@ -4,11 +4,8 @@
 ; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -filetype=obj -mcpu=gfx1250 %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=scalar_float_kernel | %FileCheck %s
-
-; None of the scalar float opcodes writes SCC.
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=scc_kernel \
-; RUN:   | %FileCheck %s --check-prefix=SCC
+; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=scalar_float_kernel,scc_kernel \
+; RUN:   | %FileCheck %s
 
 ; s_rfe_i64 has no lowering, and SOP1 refuses an opcode it does not lift rather
 ; than letting it through unlowered.
@@ -114,12 +111,12 @@ scalar_float_kernel:
 ; s_not_b32 writes SCC and s_cmov_b32 reads it. Every scalar float opcode runs
 ; in between, so the select still taking the bit s_not_b32 produced is what
 ; says none of them touched SCC along the way.
-; SCC-LABEL: define amdgpu_kernel void @scc_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @scc_kernel(
 scc_kernel:
 ; The value s_cmov_b32 preserves when SCC is clear.
 	s_mov_b32 s2, 7
-; SCC: [[NOT:%.+]] = xor i32 {{.+}}, -1
-; SCC: [[SCC:%.+]] = icmp ne i32 [[NOT]], 0
+; CHECK: [[NOT:%.+]] = xor i32 {{.+}}, -1
+; CHECK: [[SCC:%.+]] = icmp ne i32 [[NOT]], 0
 	s_not_b32 s0, s1
 	s_ceil_f32 s3, s0
 	s_floor_f32 s3, s3
@@ -136,7 +133,7 @@ scc_kernel:
 	s_floor_f16 s3, s3
 	s_trunc_f16 s3, s3
 	s_rndne_f16 s3, s3
-; SCC: select i1 [[SCC]], i32 {{.+}}, i32 7
+; CHECK: select i1 [[SCC]], i32 {{.+}}, i32 7
 	s_cmov_b32 s2, s3
 	s_endpgm
 

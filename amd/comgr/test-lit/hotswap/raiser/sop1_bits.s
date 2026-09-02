@@ -5,22 +5,10 @@
 ; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -filetype=obj -mcpu=gfx1250 %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=search_kernel \
-; RUN:   | %FileCheck %s --check-prefix=SEARCH
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=search_nothing_kernel \
-; RUN:   | %FileCheck %s --check-prefix=NOTHING
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=sext_kernel \
-; RUN:   | %FileCheck %s --check-prefix=SEXT
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=bitset_kernel \
-; RUN:   | %FileCheck %s --check-prefix=BITSET
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=bitreplicate_kernel \
-; RUN:   | %FileCheck %s --check-prefix=REPLICATE
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=abs_kernel \
-; RUN:   | %FileCheck %s --check-prefix=ABS
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=bcnt_kernel \
-; RUN:   | %FileCheck %s --check-prefix=BCNT
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=scc_kernel \
-; RUN:   | %FileCheck %s --check-prefix=SCC
+; RUN: %hotswap_transpile_cli %t.hsaco \
+; RUN:   --emit-ir=search_kernel,search_nothing_kernel,sext_kernel,bitset_kernel \
+; RUN:   --emit-ir=bitreplicate_kernel,abs_kernel,bcnt_kernel,scc_kernel \
+; RUN:   | %FileCheck %s
 
 ; s_rfe_i64 has no lowering, and SOP1 refuses an opcode it does not lift rather
 ; than letting it through unlowered.
@@ -38,76 +26,76 @@
 	.globl	search_kernel
 	.p2align	8
 	.type	search_kernel,@function
-; SEARCH-LABEL: define amdgpu_kernel void @search_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @search_kernel(
 search_kernel:
 	s_mov_b32 s0, 0x10000
-; SEARCH: [[CTZ:%.+]] = call i32 @llvm.cttz.i32(i32 65536, i1 false)
-; SEARCH: [[CTZ_ANY:%.+]] = icmp ne i32 65536, 0
-; SEARCH: [[CTZ_POS:%.+]] = select i1 [[CTZ_ANY]], i32 [[CTZ]], i32 -1
+; CHECK: [[CTZ:%.+]] = call i32 @llvm.cttz.i32(i32 65536, i1 false)
+; CHECK: [[CTZ_ANY:%.+]] = icmp ne i32 65536, 0
+; CHECK: [[CTZ_POS:%.+]] = select i1 [[CTZ_ANY]], i32 [[CTZ]], i32 -1
 	s_ctz_i32_b32 s1, s0
-; SEARCH: uitofp i32 [[CTZ_POS]] to float
+; CHECK: uitofp i32 [[CTZ_POS]] to float
 	s_cvt_f32_u32 s30, s1
 ; s_clz counts from the other end of the same operand.
-; SEARCH: [[CLZ:%.+]] = call i32 @llvm.ctlz.i32(i32 65536, i1 false)
-; SEARCH: [[CLZ_ANY:%.+]] = icmp ne i32 65536, 0
-; SEARCH: [[CLZ_POS:%.+]] = select i1 [[CLZ_ANY]], i32 [[CLZ]], i32 -1
+; CHECK: [[CLZ:%.+]] = call i32 @llvm.ctlz.i32(i32 65536, i1 false)
+; CHECK: [[CLZ_ANY:%.+]] = icmp ne i32 65536, 0
+; CHECK: [[CLZ_POS:%.+]] = select i1 [[CLZ_ANY]], i32 [[CLZ]], i32 -1
 	s_clz_i32_u32 s2, s0
-; SEARCH: uitofp i32 [[CLZ_POS]] to float
+; CHECK: uitofp i32 [[CLZ_POS]] to float
 	s_cvt_f32_u32 s30, s2
 ; s_cls stops at the first bit unlike the sign rather than at the first set
 ; bit, so a negative source is complemented before the leading zeros of what is
 ; left are counted.
 	s_mov_b32 s3, 0xffff3333
-; SEARCH: [[SIGN:%.+]] = ashr i32 -52429, 31
-; SEARCH: [[CLS_IN:%.+]] = xor i32 -52429, [[SIGN]]
-; SEARCH: [[CLS:%.+]] = call i32 @llvm.ctlz.i32(i32 [[CLS_IN]], i1 false)
-; SEARCH: [[CLS_ANY:%.+]] = icmp ne i32 [[CLS_IN]], 0
-; SEARCH: [[CLS_POS:%.+]] = select i1 [[CLS_ANY]], i32 [[CLS]], i32 -1
+; CHECK: [[SIGN:%.+]] = ashr i32 -52429, 31
+; CHECK: [[CLS_IN:%.+]] = xor i32 -52429, [[SIGN]]
+; CHECK: [[CLS:%.+]] = call i32 @llvm.ctlz.i32(i32 [[CLS_IN]], i1 false)
+; CHECK: [[CLS_ANY:%.+]] = icmp ne i32 [[CLS_IN]], 0
+; CHECK: [[CLS_POS:%.+]] = select i1 [[CLS_ANY]], i32 [[CLS]], i32 -1
 	s_cls_i32 s4, s3
-; SEARCH: uitofp i32 [[CLS_POS]] to float
+; CHECK: uitofp i32 [[CLS_POS]] to float
 	s_cvt_f32_u32 s30, s4
 ; A non-negative source goes into the count as it stands.
 	s_mov_b32 s5, 0xcccc
-; SEARCH: [[PSIGN:%.+]] = ashr i32 52428, 31
-; SEARCH: [[PCLS_IN:%.+]] = xor i32 52428, [[PSIGN]]
-; SEARCH: [[PCLS:%.+]] = call i32 @llvm.ctlz.i32(i32 [[PCLS_IN]], i1 false)
-; SEARCH: [[PCLS_ANY:%.+]] = icmp ne i32 [[PCLS_IN]], 0
-; SEARCH: [[PCLS_POS:%.+]] = select i1 [[PCLS_ANY]], i32 [[PCLS]], i32 -1
+; CHECK: [[PSIGN:%.+]] = ashr i32 52428, 31
+; CHECK: [[PCLS_IN:%.+]] = xor i32 52428, [[PSIGN]]
+; CHECK: [[PCLS:%.+]] = call i32 @llvm.ctlz.i32(i32 [[PCLS_IN]], i1 false)
+; CHECK: [[PCLS_ANY:%.+]] = icmp ne i32 [[PCLS_IN]], 0
+; CHECK: [[PCLS_POS:%.+]] = select i1 [[PCLS_ANY]], i32 [[PCLS]], i32 -1
 	s_cls_i32 s6, s5
-; SEARCH: uitofp i32 [[PCLS_POS]] to float
+; CHECK: uitofp i32 [[PCLS_POS]] to float
 	s_cvt_f32_u32 s30, s6
 ; The 64-bit forms search a register pair and still write a single dword, so
 ; the count is narrowed before it reaches the destination.
 	s_mov_b32 s8, 0
 	s_mov_b32 s9, 0x10000
-; SEARCH: [[CTZ64_IN:%.+]] = or i64 {{.+}}, {{.+}}
-; SEARCH: [[CTZ64:%.+]] = call i64 @llvm.cttz.i64(i64 [[CTZ64_IN]], i1 false)
-; SEARCH: [[CTZ64_LO:%.+]] = trunc i64 [[CTZ64]] to i32
-; SEARCH: [[CTZ64_ANY:%.+]] = icmp ne i64 [[CTZ64_IN]], 0
-; SEARCH: [[CTZ64_POS:%.+]] = select i1 [[CTZ64_ANY]], i32 [[CTZ64_LO]], i32 -1
+; CHECK: [[CTZ64_IN:%.+]] = or i64 {{.+}}, {{.+}}
+; CHECK: [[CTZ64:%.+]] = call i64 @llvm.cttz.i64(i64 [[CTZ64_IN]], i1 false)
+; CHECK: [[CTZ64_ANY:%.+]] = icmp ne i64 [[CTZ64_IN]], 0
+; CHECK: [[CTZ64_LO:%.+]] = trunc i64 [[CTZ64]] to i32
+; CHECK: [[CTZ64_POS:%.+]] = select i1 [[CTZ64_ANY]], i32 [[CTZ64_LO]], i32 -1
 	s_ctz_i32_b64 s10, s[8:9]
-; SEARCH: uitofp i32 [[CTZ64_POS]] to float
+; CHECK: uitofp i32 [[CTZ64_POS]] to float
 	s_cvt_f32_u32 s30, s10
-; SEARCH: [[CLZ64_IN:%.+]] = or i64 {{.+}}, {{.+}}
-; SEARCH: [[CLZ64:%.+]] = call i64 @llvm.ctlz.i64(i64 [[CLZ64_IN]], i1 false)
-; SEARCH: [[CLZ64_LO:%.+]] = trunc i64 [[CLZ64]] to i32
-; SEARCH: [[CLZ64_ANY:%.+]] = icmp ne i64 [[CLZ64_IN]], 0
-; SEARCH: [[CLZ64_POS:%.+]] = select i1 [[CLZ64_ANY]], i32 [[CLZ64_LO]], i32 -1
+; CHECK: [[CLZ64_IN:%.+]] = or i64 {{.+}}, {{.+}}
+; CHECK: [[CLZ64:%.+]] = call i64 @llvm.ctlz.i64(i64 [[CLZ64_IN]], i1 false)
+; CHECK: [[CLZ64_ANY:%.+]] = icmp ne i64 [[CLZ64_IN]], 0
+; CHECK: [[CLZ64_LO:%.+]] = trunc i64 [[CLZ64]] to i32
+; CHECK: [[CLZ64_POS:%.+]] = select i1 [[CLZ64_ANY]], i32 [[CLZ64_LO]], i32 -1
 	s_clz_i32_u64 s11, s[8:9]
-; SEARCH: uitofp i32 [[CLZ64_POS]] to float
+; CHECK: uitofp i32 [[CLZ64_POS]] to float
 	s_cvt_f32_u32 s30, s11
 ; The sign of a pair is its bit 63.
 	s_mov_b32 s12, 0
 	s_mov_b32 s13, 0xffff3333
-; SEARCH: [[PAIR:%.+]] = or i64 {{.+}}, {{.+}}
-; SEARCH: [[SIGN64:%.+]] = ashr i64 [[PAIR]], 63
-; SEARCH: [[CLS64_IN:%.+]] = xor i64 [[PAIR]], [[SIGN64]]
-; SEARCH: [[CLS64:%.+]] = call i64 @llvm.ctlz.i64(i64 [[CLS64_IN]], i1 false)
-; SEARCH: [[CLS64_LO:%.+]] = trunc i64 [[CLS64]] to i32
-; SEARCH: [[CLS64_ANY:%.+]] = icmp ne i64 [[CLS64_IN]], 0
-; SEARCH: [[CLS64_POS:%.+]] = select i1 [[CLS64_ANY]], i32 [[CLS64_LO]], i32 -1
+; CHECK: [[PAIR:%.+]] = or i64 {{.+}}, {{.+}}
+; CHECK: [[SIGN64:%.+]] = ashr i64 [[PAIR]], 63
+; CHECK: [[CLS64_IN:%.+]] = xor i64 [[PAIR]], [[SIGN64]]
+; CHECK: [[CLS64:%.+]] = call i64 @llvm.ctlz.i64(i64 [[CLS64_IN]], i1 false)
+; CHECK: [[CLS64_ANY:%.+]] = icmp ne i64 [[CLS64_IN]], 0
+; CHECK: [[CLS64_LO:%.+]] = trunc i64 [[CLS64]] to i32
+; CHECK: [[CLS64_POS:%.+]] = select i1 [[CLS64_ANY]], i32 [[CLS64_LO]], i32 -1
 	s_cls_i32_i64 s14, s[12:13]
-; SEARCH: uitofp i32 [[CLS64_POS]] to float
+; CHECK: uitofp i32 [[CLS64_POS]] to float
 	s_cvt_f32_u32 s30, s14
 	s_endpgm
 
@@ -118,75 +106,75 @@ search_kernel:
 	.globl	search_nothing_kernel
 	.p2align	8
 	.type	search_nothing_kernel,@function
-; NOTHING-LABEL: define amdgpu_kernel void @search_nothing_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @search_nothing_kernel(
 search_nothing_kernel:
 	s_mov_b32 s0, 0
 	s_mov_b32 s1, 0
-; NOTHING: call i32 @llvm.cttz.i32(i32 0, i1 false)
-; NOTHING: [[CTZ_ANY:%.+]] = icmp ne i32 0, 0
-; NOTHING: [[CTZ_POS:%.+]] = select i1 [[CTZ_ANY]], i32 {{.+}}, i32 -1
+; CHECK: call i32 @llvm.cttz.i32(i32 0, i1 false)
+; CHECK: [[CTZ_ANY:%.+]] = icmp ne i32 0, 0
+; CHECK: [[CTZ_POS:%.+]] = select i1 [[CTZ_ANY]], i32 {{.+}}, i32 -1
 	s_ctz_i32_b32 s2, s0
-; NOTHING: uitofp i32 [[CTZ_POS]] to float
+; CHECK: uitofp i32 [[CTZ_POS]] to float
 	s_cvt_f32_u32 s30, s2
-; NOTHING: call i32 @llvm.ctlz.i32(i32 0, i1 false)
-; NOTHING: [[CLZ_ANY:%.+]] = icmp ne i32 0, 0
-; NOTHING: [[CLZ_POS:%.+]] = select i1 [[CLZ_ANY]], i32 {{.+}}, i32 -1
+; CHECK: call i32 @llvm.ctlz.i32(i32 0, i1 false)
+; CHECK: [[CLZ_ANY:%.+]] = icmp ne i32 0, 0
+; CHECK: [[CLZ_POS:%.+]] = select i1 [[CLZ_ANY]], i32 {{.+}}, i32 -1
 	s_clz_i32_u32 s3, s0
-; NOTHING: uitofp i32 [[CLZ_POS]] to float
+; CHECK: uitofp i32 [[CLZ_POS]] to float
 	s_cvt_f32_u32 s30, s3
-; NOTHING: [[Z_IN:%.+]] = xor i32 0, {{.+}}
-; NOTHING: [[Z_ANY:%.+]] = icmp ne i32 [[Z_IN]], 0
-; NOTHING: [[Z_POS:%.+]] = select i1 [[Z_ANY]], i32 {{.+}}, i32 -1
+; CHECK: [[Z_IN:%.+]] = xor i32 0, {{.+}}
+; CHECK: [[Z_ANY:%.+]] = icmp ne i32 [[Z_IN]], 0
+; CHECK: [[Z_POS:%.+]] = select i1 [[Z_ANY]], i32 {{.+}}, i32 -1
 	s_cls_i32 s4, s0
-; NOTHING: uitofp i32 [[Z_POS]] to float
+; CHECK: uitofp i32 [[Z_POS]] to float
 	s_cvt_f32_u32 s30, s4
 ; All ones is as uniformly signed as all zeros, so it too has no bit to find.
 	s_mov_b32 s5, -1
-; NOTHING: [[ONES_IN:%.+]] = xor i32 -1, {{.+}}
-; NOTHING: [[ONES_ANY:%.+]] = icmp ne i32 [[ONES_IN]], 0
-; NOTHING: [[ONES_POS:%.+]] = select i1 [[ONES_ANY]], i32 {{.+}}, i32 -1
+; CHECK: [[ONES_IN:%.+]] = xor i32 -1, {{.+}}
+; CHECK: [[ONES_ANY:%.+]] = icmp ne i32 [[ONES_IN]], 0
+; CHECK: [[ONES_POS:%.+]] = select i1 [[ONES_ANY]], i32 {{.+}}, i32 -1
 	s_cls_i32 s6, s5
-; NOTHING: uitofp i32 [[ONES_POS]] to float
+; CHECK: uitofp i32 [[ONES_POS]] to float
 	s_cvt_f32_u32 s30, s6
-; NOTHING: [[CTZ64_IN:%.+]] = or i64 {{.+}}, {{.+}}
-; NOTHING: call i64 @llvm.cttz.i64(i64 [[CTZ64_IN]], i1 false)
-; NOTHING: [[CTZ64_ANY:%.+]] = icmp ne i64 [[CTZ64_IN]], 0
-; NOTHING: [[CTZ64_POS:%.+]] = select i1 [[CTZ64_ANY]], i32 {{.+}}, i32 -1
+; CHECK: [[CTZ64_IN:%.+]] = or i64 {{.+}}, {{.+}}
+; CHECK: call i64 @llvm.cttz.i64(i64 [[CTZ64_IN]], i1 false)
+; CHECK: [[CTZ64_ANY:%.+]] = icmp ne i64 [[CTZ64_IN]], 0
+; CHECK: [[CTZ64_POS:%.+]] = select i1 [[CTZ64_ANY]], i32 {{.+}}, i32 -1
 	s_ctz_i32_b64 s7, s[0:1]
-; NOTHING: uitofp i32 [[CTZ64_POS]] to float
+; CHECK: uitofp i32 [[CTZ64_POS]] to float
 	s_cvt_f32_u32 s30, s7
-; NOTHING: [[CLZ64_IN:%.+]] = or i64 {{.+}}, {{.+}}
-; NOTHING: call i64 @llvm.ctlz.i64(i64 [[CLZ64_IN]], i1 false)
-; NOTHING: [[CLZ64_ANY:%.+]] = icmp ne i64 [[CLZ64_IN]], 0
-; NOTHING: [[CLZ64_POS:%.+]] = select i1 [[CLZ64_ANY]], i32 {{.+}}, i32 -1
+; CHECK: [[CLZ64_IN:%.+]] = or i64 {{.+}}, {{.+}}
+; CHECK: call i64 @llvm.ctlz.i64(i64 [[CLZ64_IN]], i1 false)
+; CHECK: [[CLZ64_ANY:%.+]] = icmp ne i64 [[CLZ64_IN]], 0
+; CHECK: [[CLZ64_POS:%.+]] = select i1 [[CLZ64_ANY]], i32 {{.+}}, i32 -1
 	s_clz_i32_u64 s8, s[0:1]
-; NOTHING: uitofp i32 [[CLZ64_POS]] to float
+; CHECK: uitofp i32 [[CLZ64_POS]] to float
 	s_cvt_f32_u32 s30, s8
-; NOTHING: [[CLS64_IN:%.+]] = xor i64 {{.+}}, {{.+}}
-; NOTHING: [[CLS64_ANY:%.+]] = icmp ne i64 [[CLS64_IN]], 0
-; NOTHING: [[CLS64_POS:%.+]] = select i1 [[CLS64_ANY]], i32 {{.+}}, i32 -1
+; CHECK: [[CLS64_IN:%.+]] = xor i64 {{.+}}, {{.+}}
+; CHECK: [[CLS64_ANY:%.+]] = icmp ne i64 [[CLS64_IN]], 0
+; CHECK: [[CLS64_POS:%.+]] = select i1 [[CLS64_ANY]], i32 {{.+}}, i32 -1
 	s_cls_i32_i64 s9, s[0:1]
-; NOTHING: uitofp i32 [[CLS64_POS]] to float
+; CHECK: uitofp i32 [[CLS64_POS]] to float
 	s_cvt_f32_u32 s30, s9
 	s_endpgm
 
 	.globl	sext_kernel
 	.p2align	8
 	.type	sext_kernel,@function
-; SEXT-LABEL: define amdgpu_kernel void @sext_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @sext_kernel(
 sext_kernel:
 ; The source has bit 7 and bit 15 set, so the two widths disagree on the sign
 ; and a check on one of them cannot pass for the other.
 	s_mov_b32 s0, 0xff81
-; SEXT: [[BYTE:%.+]] = trunc i32 65409 to i8
-; SEXT: [[SEXT8:%.+]] = sext i8 [[BYTE]] to i32
+; CHECK: [[BYTE:%.+]] = trunc i32 65409 to i8
+; CHECK: [[SEXT8:%.+]] = sext i8 [[BYTE]] to i32
 	s_sext_i32_i8 s1, s0
-; SEXT: uitofp i32 [[SEXT8]] to float
+; CHECK: uitofp i32 [[SEXT8]] to float
 	s_cvt_f32_u32 s30, s1
-; SEXT: [[HALF:%.+]] = trunc i32 65409 to i16
-; SEXT: [[SEXT16:%.+]] = sext i16 [[HALF]] to i32
+; CHECK: [[HALF:%.+]] = trunc i32 65409 to i16
+; CHECK: [[SEXT16:%.+]] = sext i16 [[HALF]] to i32
 	s_sext_i32_i16 s2, s0
-; SEXT: uitofp i32 [[SEXT16]] to float
+; CHECK: uitofp i32 [[SEXT16]] to float
 	s_cvt_f32_u32 s30, s2
 	s_endpgm
 
@@ -196,55 +184,55 @@ sext_kernel:
 	.globl	bitset_kernel
 	.p2align	8
 	.type	bitset_kernel,@function
-; BITSET-LABEL: define amdgpu_kernel void @bitset_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @bitset_kernel(
 bitset_kernel:
 	s_mov_b32 s0, -1
 	s_mov_b32 s1, 5
-; BITSET: [[I0:%.+]] = and i32 5, 31
-; BITSET: [[B0:%.+]] = shl i32 1, [[I0]]
-; BITSET: [[N0:%.+]] = xor i32 [[B0]], -1
-; BITSET: [[CLEARED:%.+]] = and i32 -1, [[N0]]
+; CHECK: [[I0:%.+]] = and i32 5, 31
+; CHECK: [[B0:%.+]] = shl i32 1, [[I0]]
+; CHECK: [[N0:%.+]] = xor i32 [[B0]], -1
+; CHECK: [[CLEARED:%.+]] = and i32 -1, [[N0]]
 	s_bitset0_b32 s0, s1
-; BITSET: uitofp i32 [[CLEARED]] to float
+; CHECK: uitofp i32 [[CLEARED]] to float
 	s_cvt_f32_u32 s30, s0
 	s_mov_b32 s2, 0
-; BITSET: [[I1:%.+]] = and i32 5, 31
-; BITSET: [[B1:%.+]] = shl i32 1, [[I1]]
-; BITSET: [[SET:%.+]] = or i32 0, [[B1]]
+; CHECK: [[I1:%.+]] = and i32 5, 31
+; CHECK: [[B1:%.+]] = shl i32 1, [[I1]]
+; CHECK: [[SET:%.+]] = or i32 0, [[B1]]
 	s_bitset1_b32 s2, s1
-; BITSET: uitofp i32 [[SET]] to float
+; CHECK: uitofp i32 [[SET]] to float
 	s_cvt_f32_u32 s30, s2
 ; A pair takes six index bits, so index 32 reaches the high half of the
 ; destination instead of wrapping back to its bit 0.
 	s_mov_b32 s4, 0
 	s_mov_b32 s5, 0
 	s_mov_b32 s3, 32
-; BITSET: [[I2:%.+]] = and i32 32, 63
-; BITSET: [[I2W:%.+]] = zext i32 [[I2]] to i64
-; BITSET: [[B2:%.+]] = shl i64 1, [[I2W]]
-; BITSET: [[SET64:%.+]] = or i64 {{.+}}, [[B2]]
-; BITSET: [[SET64_LO:%.+]] = trunc i64 [[SET64]] to i32
-; BITSET: [[SET64_SHIFTED:%.+]] = lshr i64 [[SET64]], 32
-; BITSET: [[SET64_HI:%.+]] = trunc i64 [[SET64_SHIFTED]] to i32
+; CHECK: [[I2:%.+]] = and i32 32, 63
+; CHECK: [[I2W:%.+]] = zext i32 [[I2]] to i64
+; CHECK: [[B2:%.+]] = shl i64 1, [[I2W]]
+; CHECK: [[SET64:%.+]] = or i64 {{.+}}, [[B2]]
+; CHECK: [[SET64_LO:%.+]] = trunc i64 [[SET64]] to i32
+; CHECK: [[SET64_SHIFTED:%.+]] = lshr i64 [[SET64]], 32
+; CHECK: [[SET64_HI:%.+]] = trunc i64 [[SET64_SHIFTED]] to i32
 	s_bitset1_b64 s[4:5], s3
-; BITSET: uitofp i32 [[SET64_LO]] to float
+; CHECK: uitofp i32 [[SET64_LO]] to float
 	s_cvt_f32_u32 s30, s4
-; BITSET: uitofp i32 [[SET64_HI]] to float
+; CHECK: uitofp i32 [[SET64_HI]] to float
 	s_cvt_f32_u32 s30, s5
 	s_mov_b32 s6, -1
 	s_mov_b32 s7, -1
-; BITSET: [[I3:%.+]] = and i32 32, 63
-; BITSET: [[I3W:%.+]] = zext i32 [[I3]] to i64
-; BITSET: [[B3:%.+]] = shl i64 1, [[I3W]]
-; BITSET: [[N3:%.+]] = xor i64 [[B3]], -1
-; BITSET: [[CLEARED64:%.+]] = and i64 {{.+}}, [[N3]]
-; BITSET: [[CLEARED64_LO:%.+]] = trunc i64 [[CLEARED64]] to i32
-; BITSET: [[CLEARED64_SHIFTED:%.+]] = lshr i64 [[CLEARED64]], 32
-; BITSET: [[CLEARED64_HI:%.+]] = trunc i64 [[CLEARED64_SHIFTED]] to i32
+; CHECK: [[I3:%.+]] = and i32 32, 63
+; CHECK: [[I3W:%.+]] = zext i32 [[I3]] to i64
+; CHECK: [[B3:%.+]] = shl i64 1, [[I3W]]
+; CHECK: [[N3:%.+]] = xor i64 [[B3]], -1
+; CHECK: [[CLEARED64:%.+]] = and i64 {{.+}}, [[N3]]
+; CHECK: [[CLEARED64_LO:%.+]] = trunc i64 [[CLEARED64]] to i32
+; CHECK: [[CLEARED64_SHIFTED:%.+]] = lshr i64 [[CLEARED64]], 32
+; CHECK: [[CLEARED64_HI:%.+]] = trunc i64 [[CLEARED64_SHIFTED]] to i32
 	s_bitset0_b64 s[6:7], s3
-; BITSET: uitofp i32 [[CLEARED64_LO]] to float
+; CHECK: uitofp i32 [[CLEARED64_LO]] to float
 	s_cvt_f32_u32 s30, s6
-; BITSET: uitofp i32 [[CLEARED64_HI]] to float
+; CHECK: uitofp i32 [[CLEARED64_HI]] to float
 	s_cvt_f32_u32 s30, s7
 	s_endpgm
 
@@ -254,103 +242,103 @@ bitset_kernel:
 	.globl	bitreplicate_kernel
 	.p2align	8
 	.type	bitreplicate_kernel,@function
-; REPLICATE-LABEL: define amdgpu_kernel void @bitreplicate_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @bitreplicate_kernel(
 bitreplicate_kernel:
 	s_mov_b32 s0, 0x80000003
-; REPLICATE: [[WIDE:%.+]] = zext i32 -2147483645 to i64
-; REPLICATE: [[SH16:%.+]] = shl i64 [[WIDE]], 16
-; REPLICATE: [[OR16:%.+]] = or i64 [[WIDE]], [[SH16]]
-; REPLICATE: [[K16:%.+]] = and i64 [[OR16]], 281470681808895
-; REPLICATE: [[SH8:%.+]] = shl i64 [[K16]], 8
-; REPLICATE: [[OR8:%.+]] = or i64 [[K16]], [[SH8]]
-; REPLICATE: [[K8:%.+]] = and i64 [[OR8]], 71777214294589695
-; REPLICATE: [[SH4:%.+]] = shl i64 [[K8]], 4
-; REPLICATE: [[OR4:%.+]] = or i64 [[K8]], [[SH4]]
-; REPLICATE: [[K4:%.+]] = and i64 [[OR4]], 1085102592571150095
-; REPLICATE: [[SH2:%.+]] = shl i64 [[K4]], 2
-; REPLICATE: [[OR2:%.+]] = or i64 [[K4]], [[SH2]]
-; REPLICATE: [[K2:%.+]] = and i64 [[OR2]], 3689348814741910323
-; REPLICATE: [[SH1:%.+]] = shl i64 [[K2]], 1
-; REPLICATE: [[OR1:%.+]] = or i64 [[K2]], [[SH1]]
-; REPLICATE: [[EVEN:%.+]] = and i64 [[OR1]], 6148914691236517205
-; REPLICATE: [[ODD:%.+]] = shl i64 [[EVEN]], 1
-; REPLICATE: [[BOTH:%.+]] = or i64 [[EVEN]], [[ODD]]
-; REPLICATE: [[LO:%.+]] = trunc i64 [[BOTH]] to i32
-; REPLICATE: [[SHIFTED:%.+]] = lshr i64 [[BOTH]], 32
-; REPLICATE: [[HI:%.+]] = trunc i64 [[SHIFTED]] to i32
+; CHECK: [[WIDE:%.+]] = zext i32 -2147483645 to i64
+; CHECK: [[SH16:%.+]] = shl i64 [[WIDE]], 16
+; CHECK: [[OR16:%.+]] = or i64 [[WIDE]], [[SH16]]
+; CHECK: [[K16:%.+]] = and i64 [[OR16]], 281470681808895
+; CHECK: [[SH8:%.+]] = shl i64 [[K16]], 8
+; CHECK: [[OR8:%.+]] = or i64 [[K16]], [[SH8]]
+; CHECK: [[K8:%.+]] = and i64 [[OR8]], 71777214294589695
+; CHECK: [[SH4:%.+]] = shl i64 [[K8]], 4
+; CHECK: [[OR4:%.+]] = or i64 [[K8]], [[SH4]]
+; CHECK: [[K4:%.+]] = and i64 [[OR4]], 1085102592571150095
+; CHECK: [[SH2:%.+]] = shl i64 [[K4]], 2
+; CHECK: [[OR2:%.+]] = or i64 [[K4]], [[SH2]]
+; CHECK: [[K2:%.+]] = and i64 [[OR2]], 3689348814741910323
+; CHECK: [[SH1:%.+]] = shl i64 [[K2]], 1
+; CHECK: [[OR1:%.+]] = or i64 [[K2]], [[SH1]]
+; CHECK: [[EVEN:%.+]] = and i64 [[OR1]], 6148914691236517205
+; CHECK: [[ODD:%.+]] = shl i64 [[EVEN]], 1
+; CHECK: [[BOTH:%.+]] = or i64 [[EVEN]], [[ODD]]
+; CHECK: [[LO:%.+]] = trunc i64 [[BOTH]] to i32
+; CHECK: [[SHIFTED:%.+]] = lshr i64 [[BOTH]], 32
+; CHECK: [[HI:%.+]] = trunc i64 [[SHIFTED]] to i32
 	s_bitreplicate_b64_b32 s[2:3], s0
-; REPLICATE: uitofp i32 [[LO]] to float
+; CHECK: uitofp i32 [[LO]] to float
 	s_cvt_f32_u32 s30, s2
-; REPLICATE: uitofp i32 [[HI]] to float
+; CHECK: uitofp i32 [[HI]] to float
 	s_cvt_f32_u32 s30, s3
 	s_endpgm
 
 	.globl	abs_kernel
 	.p2align	8
 	.type	abs_kernel,@function
-; ABS-LABEL: define amdgpu_kernel void @abs_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @abs_kernel(
 abs_kernel:
 ; The most negative input has no positive counterpart and the hardware keeps
 ; it, so the intrinsic is the one that does not make that poison.
 	s_mov_b32 s0, -5
-; ABS: [[NEG:%.+]] = call i32 @llvm.abs.i32(i32 -5, i1 false)
+; CHECK: [[NEG:%.+]] = call i32 @llvm.abs.i32(i32 -5, i1 false)
 	s_abs_i32 s1, s0
-; ABS: uitofp i32 [[NEG]] to float
+; CHECK: uitofp i32 [[NEG]] to float
 	s_cvt_f32_u32 s30, s1
 	s_mov_b32 s2, 5
-; ABS: [[POS:%.+]] = call i32 @llvm.abs.i32(i32 5, i1 false)
-; ABS: [[FLAG:%.+]] = icmp ne i32 [[POS]], 0
+; CHECK: [[POS:%.+]] = call i32 @llvm.abs.i32(i32 5, i1 false)
+; CHECK: [[FLAG:%.+]] = icmp ne i32 [[POS]], 0
 	s_abs_i32 s3, s2
-; ABS: uitofp i32 [[POS]] to float
+; CHECK: uitofp i32 [[POS]] to float
 	s_cvt_f32_u32 s30, s3
 ; s_abs writes SCC, and the move that follows it selects on the bit it wrote.
 	s_mov_b32 s4, 7
-; ABS: [[MOVED:%.+]] = select i1 [[FLAG]], i32 [[POS]], i32 7
+; CHECK: [[MOVED:%.+]] = select i1 [[FLAG]], i32 [[POS]], i32 7
 	s_cmov_b32 s4, s3
-; ABS: uitofp i32 [[MOVED]] to float
+; CHECK: uitofp i32 [[MOVED]] to float
 	s_cvt_f32_u32 s30, s4
 	s_endpgm
 
 	.globl	bcnt_kernel
 	.p2align	8
 	.type	bcnt_kernel,@function
-; BCNT-LABEL: define amdgpu_kernel void @bcnt_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @bcnt_kernel(
 bcnt_kernel:
 ; Half the bits of the source are set, so a count of ones and a count of zeros
 ; agree on the value and only the complement in front of one of them tells the
 ; two lowerings apart.
 	s_mov_b32 s0, 0xcccccccc
-; BCNT: [[FLIPPED:%.+]] = xor i32 -858993460, -1
-; BCNT: [[ZEROS:%.+]] = call i32 @llvm.ctpop.i32(i32 [[FLIPPED]])
+; CHECK: [[FLIPPED:%.+]] = xor i32 -858993460, -1
+; CHECK: [[ZEROS:%.+]] = call i32 @llvm.ctpop.i32(i32 [[FLIPPED]])
 	s_bcnt0_i32_b32 s1, s0
-; BCNT: uitofp i32 [[ZEROS]] to float
+; CHECK: uitofp i32 [[ZEROS]] to float
 	s_cvt_f32_u32 s30, s1
-; BCNT: [[ONES:%.+]] = call i32 @llvm.ctpop.i32(i32 -858993460)
+; CHECK: [[ONES:%.+]] = call i32 @llvm.ctpop.i32(i32 -858993460)
 	s_bcnt1_i32_b32 s2, s0
-; BCNT: uitofp i32 [[ONES]] to float
+; CHECK: uitofp i32 [[ONES]] to float
 	s_cvt_f32_u32 s30, s2
 ; A pair is counted whole and the count still comes out one dword wide.
 	s_mov_b32 s4, 0xcccccccc
 	s_mov_b32 s5, 0
-; BCNT: [[FLIPPED64:%.+]] = xor i64 {{.+}}, -1
-; BCNT: [[ZEROS64:%.+]] = call i64 @llvm.ctpop.i64(i64 [[FLIPPED64]])
-; BCNT: [[ZEROS64_LO:%.+]] = trunc i64 [[ZEROS64]] to i32
+; CHECK: [[FLIPPED64:%.+]] = xor i64 {{.+}}, -1
+; CHECK: [[ZEROS64:%.+]] = call i64 @llvm.ctpop.i64(i64 [[FLIPPED64]])
+; CHECK: [[ZEROS64_LO:%.+]] = trunc i64 [[ZEROS64]] to i32
 	s_bcnt0_i32_b64 s6, s[4:5]
-; BCNT: uitofp i32 [[ZEROS64_LO]] to float
+; CHECK: uitofp i32 [[ZEROS64_LO]] to float
 	s_cvt_f32_u32 s30, s6
-; BCNT: [[PAIR:%.+]] = or i64 {{.+}}, {{.+}}
-; BCNT: [[ONES64:%.+]] = call i64 @llvm.ctpop.i64(i64 [[PAIR]])
-; BCNT: [[ONES64_LO:%.+]] = trunc i64 [[ONES64]] to i32
-; BCNT: [[FLAG:%.+]] = icmp ne i32 [[ONES64_LO]], 0
+; CHECK: [[PAIR:%.+]] = or i64 {{.+}}, {{.+}}
+; CHECK: [[ONES64:%.+]] = call i64 @llvm.ctpop.i64(i64 [[PAIR]])
+; CHECK: [[ONES64_LO:%.+]] = trunc i64 [[ONES64]] to i32
+; CHECK: [[FLAG:%.+]] = icmp ne i32 [[ONES64_LO]], 0
 	s_bcnt1_i32_b64 s7, s[4:5]
-; BCNT: uitofp i32 [[ONES64_LO]] to float
+; CHECK: uitofp i32 [[ONES64_LO]] to float
 	s_cvt_f32_u32 s30, s7
 ; Every s_bcnt writes SCC, and the move that follows selects on the bit the
 ; last of them wrote.
 	s_mov_b32 s8, 7
-; BCNT: [[MOVED:%.+]] = select i1 [[FLAG]], i32 [[ONES64_LO]], i32 7
+; CHECK: [[MOVED:%.+]] = select i1 [[FLAG]], i32 [[ONES64_LO]], i32 7
 	s_cmov_b32 s8, s7
-; BCNT: uitofp i32 [[MOVED]] to float
+; CHECK: uitofp i32 [[MOVED]] to float
 	s_cvt_f32_u32 s30, s8
 	s_endpgm
 
@@ -360,12 +348,12 @@ bcnt_kernel:
 ; s_not_b32 writes SCC and s_cmov_b32 reads it. The thirteen opcodes here that
 ; leave SCC alone all run in between, so the select still taking the bit
 ; s_not_b32 produced is what says none of them touched it on the way.
-; SCC-LABEL: define amdgpu_kernel void @scc_kernel(
+; CHECK-LABEL: define amdgpu_kernel void @scc_kernel(
 scc_kernel:
 ; The value s_cmov_b32 preserves when SCC is clear.
 	s_mov_b32 s2, 7
-; SCC: [[NOT:%.+]] = xor i32 {{.+}}, -1
-; SCC: [[BIT:%.+]] = icmp ne i32 [[NOT]], 0
+; CHECK: [[NOT:%.+]] = xor i32 {{.+}}, -1
+; CHECK: [[BIT:%.+]] = icmp ne i32 [[NOT]], 0
 	s_not_b32 s0, s1
 	s_ctz_i32_b32 s3, s0
 	s_ctz_i32_b64 s3, s[0:1]
@@ -380,9 +368,9 @@ scc_kernel:
 	s_bitset0_b64 s[4:5], s0
 	s_bitset1_b64 s[4:5], s0
 	s_bitreplicate_b64_b32 s[6:7], s0
-; SCC: [[MOVED:%.+]] = select i1 [[BIT]], i32 {{.+}}, i32 7
+; CHECK: [[MOVED:%.+]] = select i1 [[BIT]], i32 {{.+}}, i32 7
 	s_cmov_b32 s2, s3
-; SCC: uitofp i32 [[MOVED]] to float
+; CHECK: uitofp i32 [[MOVED]] to float
 	s_cvt_f32_u32 s30, s2
 	s_endpgm
 

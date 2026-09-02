@@ -82,20 +82,22 @@ cl::opt<std::string>
 
 // The three modes are mutually exclusive and each names the kernels it runs
 // over the same way: bare selects every kernel in code-object order,
-// =<k>[,<k>...] selects those kernels in the order given.
-cl::opt<std::string> DumpMetaOpt(
+// =<k>[,<k>...] selects those kernels in the order given. Repeating the option
+// appends to that order, so a long selection can be spread over several
+// occurrences.
+cl::list<std::string> DumpMetaOpt(
     "dump-meta", cl::ValueOptional, cl::value_desc("kernel[,kernel...]"),
     cl::desc(
         "Print the metadata extracted from the code object (per-kernel ABI "
         "surface, kernel-descriptor fields, and .text extent) and exit."));
 
-cl::opt<std::string>
+cl::list<std::string>
     EmitIrOpt("emit-ir", cl::ValueOptional,
               cl::value_desc("kernel[,kernel...]"),
               cl::desc("Raise the selected kernels and print the LLVM IR on "
                        "stdout."));
 
-cl::opt<std::string> DumpDecodedOpt(
+cl::list<std::string> DumpDecodedOpt(
     "dump-decoded", cl::ValueOptional, cl::value_desc("kernel[,kernel...]"),
     cl::desc("Print the decoded instruction listing (offset, canonical op, "
              "disassembly) instead of raising."));
@@ -136,26 +138,29 @@ int dumpKernel(const CodeObjectInfo &Info, StringRef Name) {
   return 0;
 }
 
-// Resolve a mode's value into the ordered list of kernels to process: empty
-// selects every kernel in code-object order; a comma list selects the named
-// kernels in order. Reports unknown names on stderr.
-bool resolveTargets(StringRef Requested, ArrayRef<std::string> KernelNames,
-                    StringRef CoPath, SmallVectorImpl<std::string> &Targets) {
-  if (Requested.empty()) {
-    Targets.assign(KernelNames.begin(), KernelNames.end());
-    return true;
-  }
-  SmallVector<StringRef> RequestedNames;
-  Requested.split(RequestedNames, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
-  for (StringRef Name : RequestedNames) {
-    Name = Name.trim();
-    if (!is_contained(KernelNames, Name)) {
-      errs() << "hotswap_transpile_cli: kernel '" << Name << "' not found in "
-             << CoPath << "\n";
-      return false;
+// Resolve a mode's occurrences into the ordered list of kernels to process:
+// naming none selects every kernel in code-object order; the comma lists select
+// the named kernels in the order they were given. Reports unknown names on
+// stderr.
+bool resolveTargets(ArrayRef<std::string> Requested,
+                    ArrayRef<std::string> KernelNames, StringRef CoPath,
+                    SmallVectorImpl<std::string> &Targets) {
+  for (StringRef Occurrence : Requested) {
+    SmallVector<StringRef> RequestedNames;
+    Occurrence.split(RequestedNames, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+    for (StringRef Name : RequestedNames) {
+      Name = Name.trim();
+      if (!is_contained(KernelNames, Name)) {
+        errs() << "hotswap_transpile_cli: kernel '" << Name << "' not found in "
+               << CoPath << "\n";
+        return false;
+      }
+      Targets.push_back(Name.str());
     }
-    Targets.push_back(Name.str());
   }
+  // The mode was given without naming a kernel, which selects all of them.
+  if (Targets.empty())
+    Targets.assign(KernelNames.begin(), KernelNames.end());
   return true;
 }
 
@@ -260,9 +265,26 @@ int runEmitIr(const CodeObjectInfo &Info, const TextSection &Text,
       raiseToIR(Text, SourceIsa, TargetIsa, Kernels);
   if (!RaisedOrErr) {
     // The raiser only returns a module on success, so a failure has no partial
-    // IR to dump; report the structured reason on stderr.
-    errs() << "hotswap_transpile_cli: failed to raise: "
-           << toString(RaisedOrErr.takeError()) << "\n";
+    // IR to dump; report the structured reason on stderr. It also stops at the
+    // kernel it refuses, so raise the requested kernels one at a time to say
+    // what is wrong with each of them rather than only with the first.
+    bool Reported = false;
+    for (const KernelRequest &Kernel : Kernels) {
+      Expected<RaiseResult> OneOrErr =
+          raiseToIR(Text, SourceIsa, TargetIsa, Kernel);
+      if (OneOrErr)
+        continue;
+      errs() << "hotswap_transpile_cli: failed to raise: "
+             << toString(OneOrErr.takeError()) << "\n";
+      Reported = true;
+    }
+    // Nothing to attribute to a single kernel, so report what the whole
+    // request failed with.
+    if (!Reported)
+      errs() << "hotswap_transpile_cli: failed to raise: "
+             << toString(RaisedOrErr.takeError()) << "\n";
+    else
+      consumeError(RaisedOrErr.takeError());
     return 1;
   }
   RaisedOrErr->Module->print(outs(), nullptr);
@@ -316,9 +338,9 @@ int main(int Argc, char **Argv) {
 
   // Every mode names its kernels the same way, so the selection is resolved
   // once from whichever mode's value carries it.
-  StringRef Requested = DumpMeta      ? StringRef(DumpMetaOpt)
-                        : DumpDecoded ? StringRef(DumpDecodedOpt)
-                                      : StringRef(EmitIrOpt);
+  ArrayRef<std::string> Requested = DumpMeta      ? DumpMetaOpt
+                                    : DumpDecoded ? DumpDecodedOpt
+                                                  : EmitIrOpt;
   SmallVector<std::string> Targets;
   if (!resolveTargets(Requested, Info.kernelNames(), CoPathOpt, Targets))
     return 2;
