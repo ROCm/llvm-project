@@ -219,6 +219,11 @@ StringRef getCacheDirectory() {
     return Result;
 
   if (sys::path::cache_directory(Result)) {
+    // If the cache directory is mounted on a remote filesystem, disable the
+    // cache due to concurrency issues. We saw some issues where a SIGBUS was
+    // thrown when there was contention on the cache.
+    if (!sys::fs::is_local(Result))
+      return "";
     sys::path::append(Result, "comgr");
     return Result;
   }
