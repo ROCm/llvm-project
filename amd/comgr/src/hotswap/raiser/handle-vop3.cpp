@@ -20,6 +20,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
@@ -216,6 +217,34 @@ Value *extendLow24(IRBuilder<> &B, Value *V, Type *Ty, bool IsSigned) {
                   : B.CreateZExt(Low, Ty, "zext24");
 }
 
+Value *maskShiftAmount(IRBuilder<> &B, Value *Amount, unsigned Width) {
+  return B.CreateAnd(Amount, ConstantInt::get(Amount->getType(), Width - 1),
+                     "shift.amount");
+}
+
+struct TernaryOperands {
+  ParsedReg Dst;
+  Value *S0;
+  Value *S1;
+  Value *S2;
+};
+
+Expected<TernaryOperands> readTernary32(OperandResolver &Op) {
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> S0 = Op.src(0);
+  if (!S0)
+    return S0.takeError();
+  Expected<Value *> S1 = Op.src(1);
+  if (!S1)
+    return S1.takeError();
+  Expected<Value *> S2 = Op.src(2);
+  if (!S2)
+    return S2.takeError();
+  return TernaryOperands{*Dst, *S0, *S1, *S2};
+}
+
 /// Raise a nested min/max operation over three integer sources.
 Error handleTernaryMinMax(RaiseContext &Ctx, OperandResolver &Op,
                           Intrinsic::ID Inner, Intrinsic::ID Outer,
@@ -255,10 +284,224 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   switch (Di.CanonOp) {
   case CanonicalOp::V_MOV_B32:
   case CanonicalOp::V_MOV_B64:
+  case CanonicalOp::V_NOT_B32:
+  case CanonicalOp::V_BFREV_B32:
+  case CanonicalOp::V_FFBH_U32:
+  case CanonicalOp::V_FFBL_B32:
+  case CanonicalOp::V_FFBH_I32:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer VOP1 operation does not define clamp");
+    return handleVOP1(Ctx, Di, Op);
+
+  case CanonicalOp::V_AND_B32:
+  case CanonicalOp::V_OR_B32:
+  case CanonicalOp::V_XOR_B32:
+  case CanonicalOp::V_XNOR_B32:
+  case CanonicalOp::V_BFM_B32:
+  case CanonicalOp::V_BCNT_U32_B32:
+  case CanonicalOp::V_LSHLREV_B32:
+  case CanonicalOp::V_LSHRREV_B32:
+  case CanonicalOp::V_ASHRREV_I32:
+  case CanonicalOp::V_LSHLREV_B64:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    return handleVOP2(Ctx, Di, Op);
+
+  case CanonicalOp::V_LSHL_ADD_U32:
+  case CanonicalOp::V_ADD_LSHL_U32:
+  case CanonicalOp::V_LSHL_OR_B32:
+  case CanonicalOp::V_AND_OR_B32:
+  case CanonicalOp::V_OR3_B32:
+  case CanonicalOp::V_XOR3_B32:
+  case CanonicalOp::V_XAD_U32:
+  case CanonicalOp::V_ALIGNBIT_B32:
+  case CanonicalOp::V_BFE_U32:
+  case CanonicalOp::V_BFE_I32:
+  case CanonicalOp::V_BFI_B32:
+  case CanonicalOp::V_PERM_B32: {
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    if (Op.nSrcs() < 3)
+      return unsupportedInstruction(
+          Ctx, Di, "expected one destination and three sources");
+    Expected<TernaryOperands> Args = readTernary32(Op);
+    if (!Args)
+      return Args.takeError();
+
+    Value *Result;
+    switch (Di.CanonOp) {
+    case CanonicalOp::V_LSHL_ADD_U32:
+      Result = Ctx.B.CreateAdd(
+          Ctx.B.CreateShl(Args->S0, maskShiftAmount(Ctx.B, Args->S1, 32)),
+          Args->S2, "lshl.add");
+      break;
+    case CanonicalOp::V_ADD_LSHL_U32:
+      Result =
+          Ctx.B.CreateShl(Ctx.B.CreateAdd(Args->S0, Args->S1),
+                          maskShiftAmount(Ctx.B, Args->S2, 32), "add.lshl");
+      break;
+    case CanonicalOp::V_LSHL_OR_B32:
+      Result = Ctx.B.CreateOr(
+          Ctx.B.CreateShl(Args->S0, maskShiftAmount(Ctx.B, Args->S1, 32)),
+          Args->S2, "lshl.or");
+      break;
+    case CanonicalOp::V_AND_OR_B32:
+      Result = Ctx.B.CreateOr(Ctx.B.CreateAnd(Args->S0, Args->S1), Args->S2,
+                              "and.or");
+      break;
+    case CanonicalOp::V_OR3_B32:
+      Result =
+          Ctx.B.CreateOr(Ctx.B.CreateOr(Args->S0, Args->S1), Args->S2, "or3");
+      break;
+    case CanonicalOp::V_XOR3_B32:
+      Result = Ctx.B.CreateXor(Ctx.B.CreateXor(Args->S0, Args->S1), Args->S2,
+                               "xor3");
+      break;
+    case CanonicalOp::V_XAD_U32:
+      Result =
+          Ctx.B.CreateAdd(Ctx.B.CreateXor(Args->S0, Args->S1), Args->S2, "xad");
+      break;
+    case CanonicalOp::V_ALIGNBIT_B32:
+      Result = Ctx.B.CreateIntrinsic(
+          Intrinsic::fshr, {Ctx.B.getInt32Ty()},
+          {Args->S0, Args->S1, maskShiftAmount(Ctx.B, Args->S2, 32)}, nullptr,
+          "alignbit");
+      break;
+    case CanonicalOp::V_BFE_U32:
+    case CanonicalOp::V_BFE_I32: {
+      Value *Offset = maskShiftAmount(Ctx.B, Args->S1, 32);
+      Value *Width = maskShiftAmount(Ctx.B, Args->S2, 32);
+      Value *WidthNonZero =
+          Ctx.B.CreateICmpNE(Width, Ctx.B.getInt32(0), "bfe.width.nonzero");
+      Value *SafeWidth = Ctx.B.CreateSelect(
+          WidthNonZero, Width, Ctx.B.getInt32(1), "bfe.safe.width");
+      Value *Mask =
+          Ctx.B.CreateSub(Ctx.B.CreateShl(Ctx.B.getInt32(1), SafeWidth),
+                          Ctx.B.getInt32(1), "bfe.mask");
+      Value *Shifted = Di.CanonOp == CanonicalOp::V_BFE_I32
+                           ? Ctx.B.CreateAShr(Args->S0, Offset)
+                           : Ctx.B.CreateLShr(Args->S0, Offset);
+      Value *Field = Ctx.B.CreateAnd(Shifted, Mask, "bfe.field");
+      if (Di.CanonOp == CanonicalOp::V_BFE_I32) {
+        Value *SignBit = Ctx.B.CreateShl(
+            Ctx.B.getInt32(1), Ctx.B.CreateSub(SafeWidth, Ctx.B.getInt32(1)));
+        Field = Ctx.B.CreateSub(Ctx.B.CreateXor(Field, SignBit), SignBit,
+                                "bfe.sign.extend");
+      }
+      Result =
+          Ctx.B.CreateSelect(WidthNonZero, Field, Ctx.B.getInt32(0), "bfe");
+      break;
+    }
+    case CanonicalOp::V_BFI_B32:
+      Result = Ctx.B.CreateOr(
+          Ctx.B.CreateAnd(Args->S0, Args->S1),
+          Ctx.B.CreateAnd(Ctx.B.CreateNot(Args->S0), Args->S2), "bfi");
+      break;
+    case CanonicalOp::V_PERM_B32:
+      Result = Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_perm, {},
+                                     {Args->S0, Args->S1, Args->S2}, nullptr,
+                                     "perm");
+      break;
+    default:
+      llvm_unreachable("not a ternary integer bit operation");
+    }
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    return Error::success();
+  }
+
+  case CanonicalOp::V_BITOP3_B32: {
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    if (Op.nSrcs() < 4 || !Di.isImm(Op.srcIdx(3)))
+      return unsupportedInstruction(
+          Ctx, Di, "expected three data sources and an immediate truth table");
+    Expected<TernaryOperands> Args = readTernary32(Op);
+    if (!Args)
+      return Args.takeError();
+
+    Value *Not0 = Ctx.B.CreateNot(Args->S0);
+    Value *Not1 = Ctx.B.CreateNot(Args->S1);
+    Value *Not2 = Ctx.B.CreateNot(Args->S2);
+    Value *Minterms[] = {
+        Ctx.B.CreateAnd(Ctx.B.CreateAnd(Not0, Not1), Not2),
+        Ctx.B.CreateAnd(Ctx.B.CreateAnd(Not0, Not1), Args->S2),
+        Ctx.B.CreateAnd(Ctx.B.CreateAnd(Not0, Args->S1), Not2),
+        Ctx.B.CreateAnd(Ctx.B.CreateAnd(Not0, Args->S1), Args->S2),
+        Ctx.B.CreateAnd(Ctx.B.CreateAnd(Args->S0, Not1), Not2),
+        Ctx.B.CreateAnd(Ctx.B.CreateAnd(Args->S0, Not1), Args->S2),
+        Ctx.B.CreateAnd(Ctx.B.CreateAnd(Args->S0, Args->S1), Not2),
+        Ctx.B.CreateAnd(Ctx.B.CreateAnd(Args->S0, Args->S1), Args->S2),
+    };
+    uint64_t TruthTable = static_cast<uint64_t>(Op.srcImm(3)) & 0xff;
+    Value *Result = Ctx.B.getInt32(0);
+    for (unsigned I = 0; I != 8; ++I) {
+      if (TruthTable & (UINT64_C(1) << I))
+        Result = Ctx.B.CreateOr(Result, Minterms[I], "bitop3");
+    }
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    return Error::success();
+  }
+
+  case CanonicalOp::V_LSHRREV_B64:
+  case CanonicalOp::V_ASHRREV_I64: {
     if (*Clamp)
       return unsupportedInstruction(Ctx, Di,
-                                    "integer move with clamp is not supported");
-    return handleVOP1(Ctx, Di, Op);
+                                    "64-bit shift does not define clamp");
+    if (Op.nSrcs() < 2)
+      return unsupportedInstruction(Ctx, Di,
+                                    "expected one destination and two sources");
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> Amount = Op.src(0);
+    if (!Amount)
+      return Amount.takeError();
+    Expected<Value *> Source = Op.src64(1);
+    if (!Source)
+      return Source.takeError();
+    Value *Shift = Ctx.B.CreateZExt(maskShiftAmount(Ctx.B, *Amount, 64),
+                                    Ctx.B.getInt64Ty());
+    Value *Result = Di.CanonOp == CanonicalOp::V_LSHRREV_B64
+                        ? Ctx.B.CreateLShr(*Source, Shift, "lshr64")
+                        : Ctx.B.CreateAShr(*Source, Shift, "ashr64");
+    Ctx.registers().writeReg64(*Dst, Result);
+    return Error::success();
+  }
+
+  case CanonicalOp::V_LSHL_ADD_U64: {
+    if (*Clamp)
+      return unsupportedInstruction(Ctx, Di,
+                                    "64-bit shift-add does not define clamp");
+    if (Op.nSrcs() < 3)
+      return unsupportedInstruction(
+          Ctx, Di, "expected one destination and three sources");
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> S0 = Op.src64(0);
+    if (!S0)
+      return S0.takeError();
+    Expected<Value *> S1 = Op.src(1);
+    if (!S1)
+      return S1.takeError();
+    Expected<Value *> S2 = Op.src64(2);
+    if (!S2)
+      return S2.takeError();
+    Value *EncodedShift = maskShiftAmount(Ctx.B, *S1, 8);
+    Value *ShiftSupported =
+        Ctx.B.CreateICmpULE(EncodedShift, Ctx.B.getInt32(4));
+    Value *Shift32 = Ctx.B.CreateSelect(ShiftSupported, EncodedShift,
+                                        Ctx.B.getInt32(0), "shift.supported");
+    Value *Shift = Ctx.B.CreateZExt(Shift32, Ctx.B.getInt64Ty());
+    Value *Result =
+        Ctx.B.CreateAdd(Ctx.B.CreateShl(*S0, Shift), *S2, "lshl.add64");
+    Ctx.registers().writeReg64(*Dst, Result);
+    return Error::success();
+  }
 
   case CanonicalOp::V_ADD_NC_U32:
   case CanonicalOp::V_SUB_NC_U32:
