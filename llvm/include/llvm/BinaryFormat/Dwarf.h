@@ -1139,11 +1139,10 @@ LLVM_ABI unsigned getSubOperationEncoding(unsigned OpEncoding,
 LLVM_ABI unsigned getVirtuality(StringRef VirtualityString);
 LLVM_ABI unsigned getEnumKind(StringRef EnumKindString);
 LLVM_ABI unsigned getLanguage(StringRef LanguageString);
-LLVM_ABI unsigned getMemorySpace(StringRef LanguageString);
+LLVM_ABI unsigned getMemorySpace(StringRef MSString);
 LLVM_ABI unsigned getSourceLanguageName(StringRef SourceLanguageNameString);
 LLVM_ABI unsigned getLanguageDialect(StringRef LanguageDialectString);
 LLVM_ABI unsigned getCallingConvention(StringRef LanguageString);
-LLVM_ABI unsigned getMemorySpace(StringRef LanguageString);
 LLVM_ABI unsigned getAttributeEncoding(StringRef EncodingString);
 LLVM_ABI unsigned getMacinfo(StringRef MacinfoString);
 LLVM_ABI unsigned getMacro(StringRef MacroString);

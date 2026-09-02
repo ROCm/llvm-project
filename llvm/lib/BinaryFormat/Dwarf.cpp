@@ -1089,8 +1089,8 @@ StringRef llvm::dwarf::RLEString(unsigned RLE) {
   }
 }
 
-unsigned llvm::dwarf::getMemorySpace(StringRef CCString) {
-  return StringSwitch<unsigned>(CCString)
+unsigned llvm::dwarf::getMemorySpace(StringRef MSString) {
+  return StringSwitch<unsigned>(MSString)
 #define HANDLE_DW_MSPACE(ID, NAME)                                             \
   .Case("DW_MSPACE_LLVM_" #NAME, DW_MSPACE_LLVM_##NAME)
 #include "llvm/BinaryFormat/Dwarf.def"
