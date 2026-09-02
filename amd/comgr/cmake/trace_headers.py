@@ -22,7 +22,7 @@ def to_posix(path):
     manifest consumed by CMake, and the relative paths used as virtual
     filesystem keys at runtime all assume '/'.
     """
-    return path.replace(os.sep, '/')
+    return path.replace(os.sep, "/")
 
 
 def trace_headers(clang, libcxx_dir, config_site, target, headers):
@@ -61,7 +61,7 @@ def trace_headers(clang, libcxx_dir, config_site, target, headers):
         for line in non_trace:
             print(f'  {line}', file=sys.stderr)
 
-    libcxx_real = to_posix(os.path.realpath(libcxx_dir)) + '/'
+    libcxx_real = to_posix(os.path.realpath(libcxx_dir)) + "/"
     libcxx_headers = set()
     clang_headers = set()
 
@@ -118,16 +118,22 @@ def main():
     entries = []
 
     # Custom __config_site for HIPRTC
-    entries.append(('libcxx', '__config_site',
-                    to_posix(os.path.abspath(args.config_site))))
+    entries.append(
+        ("libcxx", "__config_site", to_posix(os.path.abspath(args.config_site)))
+    )
 
     # __assertion_handler if it exists in the vendor directory
     assertion_handler = os.path.join(
         os.path.dirname(args.libcxx_dir),
         'vendor', 'llvm', 'default_assertion_handler.in')
     if os.path.exists(assertion_handler):
-        entries.append(('libcxx', '__assertion_handler',
-                        to_posix(os.path.abspath(assertion_handler))))
+        entries.append(
+            (
+                "libcxx",
+                "__assertion_handler",
+                to_posix(os.path.abspath(assertion_handler)),
+            )
+        )
 
     for path in libcxx_headers:
         rel = to_posix(os.path.relpath(path, libcxx_real))
