@@ -1,0 +1,514 @@
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -O2 -start-before=greedy \
+# RUN:   -greedy-regclass-priority-trumps-globalness -stop-after=greedy -o - %s \
+# RUN:   | FileCheck %s
+
+# CHECK:     SI_SPILL_S512_SAVE %{{[0-9]+}}, %stack.[[SLOT:[0-9]+]],
+# CHECK-NOT: SI_SPILL_S512_SAVE
+# CHECK:     bb.
+
+--- |
+  ; ModuleID = '/mnt/nvme2/jinpli/workspace/home/jinpli/development/workspace/fly_1087/repro/repro.ll'
+  source_filename = "/mnt/nvme2/jinpli/workspace/home/jinpli/development/workspace/fly_1087/repro/repro.ll"
+  target datalayout = "e-m:e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"
+  target triple = "amdgcn-amd-amdhsa"
+  
+  define amdgpu_kernel void @flyc_bwd_dkdv() #0 {
+    ret void
+  }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+...
+---
+name:            flyc_bwd_dkdv
+alignment:       4
+tracksRegLiveness: true
+noPhis:          true
+registers:
+  - { id: 44, class: sreg_64, preferred-register: '$vcc', flags: [  ] }
+  - { id: 76, class: sreg_64, preferred-register: '%404', flags: [  ] }
+  - { id: 286, class: sreg_32, preferred-register: '%287', flags: [  ] }
+  - { id: 287, class: sreg_32, preferred-register: '%286', flags: [  ] }
+  - { id: 384, class: sreg_64_xexec, preferred-register: '$vcc', flags: [  ] }
+  - { id: 404, class: sreg_32, preferred-register: '%76', flags: [  ] }
+  - { id: 405, class: sreg_64, preferred-register: '%461', flags: [  ] }
+  - { id: 461, class: sreg_32, preferred-register: '%405', flags: [  ] }
+  - { id: 472, class: sreg_64_xexec, preferred-register: '$vcc', flags: [  ] }
+  - { id: 744, class: sreg_64_xexec, preferred-register: '$vcc', flags: [  ] }
+  - { id: 745, class: sreg_64_xexec, preferred-register: '$vcc', flags: [  ] }
+  - { id: 748, class: sreg_64_xexec, preferred-register: '$vcc', flags: [  ] }
+  - { id: 752, class: sreg_64_xexec, preferred-register: '$vcc', flags: [  ] }
+  - { id: 755, class: sreg_64_xexec, preferred-register: '$vcc', flags: [  ] }
+  - { id: 870, class: sreg_32_xexec_hi_and_sreg_32_xm0, preferred-register: '', 
+      flags: [  ] }
+liveins:
+  - { reg: '$vgpr0', virtual-reg: '%65' }
+  - { reg: '$sgpr2_sgpr3', virtual-reg: '%67' }
+frameInfo:
+  isFrameAddressTaken: false
+  isReturnAddressTaken: false
+  hasStackMap:     false
+  hasPatchPoint:   false
+  stackSize:       0
+  offsetAdjustment: 0
+  maxAlignment:    1
+  adjustsStack:    false
+  hasCalls:        false
+  framePointerPolicy: none
+  stackProtector:  ''
+  functionContext: ''
+  maxCallFrameSize: 4294967295
+  cvBytesOfCalleeSavedRegisters: 0
+  hasOpaqueSPAdjustment: false
+  hasVAStart:      false
+  hasMustTailInVarArgFunc: false
+  hasTailCall:     false
+  isCalleeSavedInfoValid: false
+  localFrameSize:  0
+machineFunctionInfo:
+  explicitKernArgSize: 290
+  maxKernArgAlign: 8
+  ldsSize:         0
+  gdsSize:         0
+  dynLDSAlign:     1
+  isEntryFunction: true
+  isChainFunction: false
+  memoryBound:     false
+  waveLimiter:     true
+  hasSpilledSGPRs: false
+  hasSpilledVGPRs: false
+  numWaveDispatchSGPRs: 0
+  numWaveDispatchVGPRs: 0
+  scratchRSrcReg:  '$private_rsrc_reg'
+  frameOffsetReg:  '$fp_reg'
+  stackPtrOffsetReg: '$sgpr32'
+  bytesInStackArgArea: 0
+  returnsVoid:     true
+  argumentInfo:
+    queuePtr:        { reg: '$sgpr0_sgpr1' }
+    kernargSegmentPtr: { reg: '$sgpr2_sgpr3' }
+    dispatchID:      { reg: '$sgpr4_sgpr5' }
+    workGroupIDX:    { reg: '$sgpr6' }
+    workGroupIDY:    { reg: '$sgpr7' }
+    workGroupIDZ:    { reg: '$sgpr8' }
+    workItemIDX:     { reg: '$vgpr0', mask: 1023 }
+    workItemIDY:     { reg: '$vgpr0', mask: 1047552 }
+    workItemIDZ:     { reg: '$vgpr0', mask: 1072693248 }
+  psInputAddr:     0
+  psInputEnable:   0
+  maxMemoryClusterDWords: 8
+  mode:
+    ieee:            true
+    dx10-clamp:      true
+    fp32-input-denormals: true
+    fp32-output-denormals: true
+    fp64-fp16-input-denormals: true
+    fp64-fp16-output-denormals: true
+  highBitsOf32BitAddress: 0
+  occupancy:       6
+  vgprForAGPRCopy: ''
+  sgprForEXECCopy: '$sgpr100_sgpr101'
+  longBranchReservedReg: ''
+  hasInitWholeWave: false
+  dynamicVGPRBlockSize: 0
+  scratchReservedForDynamicVGPRs: 0
+  numKernargPreloadSGPRs: 0
+  isWholeWaveFunction: false
+  minNumAGPRs:     4294967295
+body:             |
+  bb.0:
+    successors: %bb.4(0x50000000), %bb.1(0x30000000)
+    liveins: $vgpr0, $sgpr2_sgpr3
+  
+    %67:sgpr_64(p4) = COPY $sgpr2_sgpr3
+    %65:vgpr_32(s32) = COPY $vgpr0
+    early-clobber %1:sgpr_256 = S_LOAD_DWORDX8_IMM_ec %67(p4), 112, 0 :: (dereferenceable invariant load (s256), align 16, addrspace 4)
+    %77:sreg_64_xexec = S_LOAD_DWORDX2_IMM %67(p4), 232, 0 :: (dereferenceable invariant load (s64), addrspace 4)
+    %78:sreg_64 = S_OR_B64 %77, %1.sub0_sub1, implicit-def dead $scc
+    S_CMP_LG_U32 %78.sub1, 0, implicit-def $scc
+    S_CBRANCH_SCC1 %bb.4, implicit $scc
+  
+  bb.1:
+    successors: %bb.2(0x80000000)
+  
+    %846:sreg_64 = S_MOV_B64 -1
+    %8:sreg_64 = IMPLICIT_DEF
+  
+  bb.2:
+    successors: %bb.3(0x40000000), %bb.5(0x40000000)
+  
+    dead %743:sreg_64 = S_AND_B64 %846, $exec, implicit-def $scc
+    S_CBRANCH_SCC1 %bb.5, implicit $scc
+  
+  bb.3:
+    successors: %bb.5(0x80000000)
+  
+    %269:vgpr_32 = V_CVT_F32_U32_e32 %1.sub0, implicit $mode, implicit $exec
+    %270:vgpr_32 = nofpexcept V_RCP_IFLAG_F32_e32 %269, implicit $mode, implicit $exec
+    %271:vgpr_32 = nofpexcept V_MUL_F32_e32 1333788670, %270, implicit $mode, implicit $exec
+    %272:vgpr_32 = nofpexcept V_CVT_U32_F32_e32 %271, implicit $mode, implicit $exec
+    %268:sreg_32 = S_SUB_I32 0, %1.sub0, implicit-def dead $scc
+    %274:sreg_32_xm0 = V_READFIRSTLANE_B32 %272, implicit $exec
+    %273:sreg_32 = S_MUL_I32 %268, %274
+    %275:sreg_32 = S_MUL_HI_U32 %274, %273
+    %277:sreg_32 = S_ADD_I32 %274, %275, implicit-def dead $scc
+    %279:sreg_32 = S_MUL_HI_U32 %77.sub0, %277
+    %282:sreg_32 = S_MUL_I32 %279, %1.sub0
+    %283:sreg_32 = S_SUB_I32 %77.sub0, %282, implicit-def dead $scc
+    %284:sreg_32 = S_SUB_I32 %283, %1.sub0, implicit-def dead $scc
+    S_CMP_GE_U32 %283, %1.sub0, implicit-def $scc
+    %285:sreg_32 = S_CSELECT_B32 %284, %283, implicit $scc
+    S_CMP_GE_U32 %285, %1.sub0, implicit-def $scc
+    S_BRANCH %bb.5
+  
+  bb.4:
+    successors: %bb.2(0x80000000)
+  
+    %83:vgpr_32 = V_CVT_F32_U32_e32 %1.sub0, implicit $mode, implicit $exec
+    %85:vgpr_32 = V_CVT_F32_U32_e32 %1.sub1, implicit $mode, implicit $exec
+    %87:vgpr_32 = nofpexcept V_FMAMK_F32 %85, 1333788672, %83, implicit $mode, implicit $exec
+    %88:vgpr_32 = nofpexcept V_RCP_F32_e32 %87, implicit $mode, implicit $exec
+    %846:sreg_64 = S_MOV_B64 0
+    %90:vgpr_32 = nofpexcept V_MUL_F32_e32 1602224124, %88, implicit $mode, implicit $exec
+    %92:vgpr_32 = nofpexcept V_MUL_F32_e32 796917760, %90, implicit $mode, implicit $exec
+    %93:vgpr_32 = nofpexcept V_TRUNC_F32_e32 %92, implicit $mode, implicit $exec
+    %95:vgpr_32 = nofpexcept V_FMAMK_F32 %93, -813694976, %90, implicit $mode, implicit $exec
+    %105:vgpr_32 = nofpexcept V_CVT_U32_F32_e32 %93, implicit $mode, implicit $exec
+    %96:vgpr_32 = nofpexcept V_CVT_U32_F32_e32 %95, implicit $mode, implicit $exec
+    %762:sreg_32 = S_SUB_U32 0, %1.sub0, implicit-def $scc
+    %763:sreg_32 = S_SUBB_U32 0, %1.sub1, implicit-def dead $scc, implicit $scc
+    %107:sreg_32_xm0 = V_READFIRSTLANE_B32 %105, implicit $exec
+    %101:sreg_32_xm0 = V_READFIRSTLANE_B32 %96, implicit $exec
+    %106:sreg_32 = S_MUL_I32 %762, %107
+    %100:sreg_32 = S_MUL_I32 %763, %101
+    %103:sreg_32 = S_MUL_HI_U32 %762, %101
+    %108:sreg_32 = S_ADD_I32 %103, %106, implicit-def dead $scc
+    %109:sreg_32 = S_ADD_I32 %108, %100, implicit-def dead $scc
+    %110:sreg_32 = S_MUL_HI_U32 %101, %109
+    %112:sreg_32 = S_MUL_I32 %101, %109
+    %115:sreg_32 = S_MUL_I32 %762, %101
+    %117:sreg_32 = S_MUL_HI_U32 %101, %115
+    %768:sreg_32 = S_ADD_U32 %117, %112, implicit-def $scc
+    %769:sreg_32 = S_ADDC_U32 0, %110, implicit-def dead $scc, implicit $scc
+    %123:sreg_32 = S_MUL_HI_U32 %107, %115
+    %125:sreg_32 = S_MUL_I32 %107, %115
+    dead %129:sreg_32 = S_ADD_U32 %768, %125, implicit-def $scc
+    %133:sreg_32 = S_ADDC_U32 %769, %123, implicit-def $scc, implicit $scc
+    %135:sreg_32 = S_MUL_HI_U32 %107, %109
+    %138:sreg_32 = S_ADDC_U32 %135, 0, implicit-def dead $scc, implicit $scc
+    %140:sreg_32 = S_MUL_I32 %107, %109
+    %776:sreg_32 = S_ADD_U32 %133, %140, implicit-def $scc
+    %777:sreg_32 = S_ADDC_U32 0, %138, implicit-def dead $scc, implicit $scc
+    %148:sreg_32 = S_ADD_U32 %101, %776, implicit-def $scc
+    %152:sreg_32 = S_ADDC_U32 %107, %777, implicit-def dead $scc, implicit $scc
+    %155:sreg_32 = S_MUL_I32 %762, %148
+    %156:sreg_32 = S_MUL_HI_U32 %152, %155
+    %157:sreg_32 = S_MUL_I32 %152, %155
+    %160:sreg_32 = S_MUL_I32 %762, %152
+    %161:sreg_32 = S_MUL_HI_U32 %762, %148
+    %162:sreg_32 = S_ADD_I32 %161, %160, implicit-def dead $scc
+    %163:sreg_32 = S_MUL_I32 %763, %148
+    %164:sreg_32 = S_ADD_I32 %162, %163, implicit-def dead $scc
+    %165:sreg_32 = S_MUL_HI_U32 %148, %164
+    %166:sreg_32 = S_MUL_I32 %148, %164
+    %168:sreg_32 = S_MUL_HI_U32 %148, %155
+    %783:sreg_32 = S_ADD_U32 %168, %166, implicit-def $scc
+    %784:sreg_32 = S_ADDC_U32 0, %165, implicit-def dead $scc, implicit $scc
+    dead %172:sreg_32 = S_ADD_U32 %783, %157, implicit-def $scc
+    %176:sreg_32 = S_ADDC_U32 %784, %156, implicit-def $scc, implicit $scc
+    %181:sreg_32 = S_MUL_HI_U32 %152, %164
+    %182:sreg_32 = S_ADDC_U32 %181, 0, implicit-def dead $scc, implicit $scc
+    %184:sreg_32 = S_MUL_I32 %152, %164
+    %791:sreg_32 = S_ADD_U32 %176, %184, implicit-def $scc
+    %792:sreg_32 = S_ADDC_U32 0, %182, implicit-def dead $scc, implicit $scc
+    %188:sreg_32 = S_ADD_U32 %148, %791, implicit-def $scc
+    %191:sreg_32 = S_ADDC_U32 %152, %792, implicit-def dead $scc, implicit $scc
+    %194:sreg_32 = S_MUL_HI_U32 %77.sub0, %191
+    %195:sreg_32 = S_MUL_I32 %77.sub0, %191
+    %197:sreg_32 = S_MUL_HI_U32 %77.sub0, %188
+    %798:sreg_32 = S_ADD_U32 %197, %195, implicit-def $scc
+    %799:sreg_32 = S_ADDC_U32 0, %194, implicit-def dead $scc, implicit $scc
+    %202:sreg_32 = S_MUL_HI_U32 %77.sub1, %188
+    %203:sreg_32 = S_MUL_I32 %77.sub1, %188
+    dead %206:sreg_32 = S_ADD_U32 %798, %203, implicit-def $scc
+    %210:sreg_32 = S_ADDC_U32 %799, %202, implicit-def $scc, implicit $scc
+    %212:sreg_32 = S_MUL_HI_U32 %77.sub1, %191
+    %213:sreg_32 = S_ADDC_U32 %212, 0, implicit-def dead $scc, implicit $scc
+    %215:sreg_32 = S_MUL_I32 %77.sub1, %191
+    %806:sreg_32 = S_ADD_U32 %210, %215, implicit-def $scc
+    %807:sreg_32 = S_ADDC_U32 0, %213, implicit-def dead $scc, implicit $scc
+    %222:sreg_32 = S_MUL_I32 %1.sub0, %807
+    %224:sreg_32 = S_MUL_HI_U32 %1.sub0, %806
+    %225:sreg_32 = S_ADD_I32 %224, %222, implicit-def dead $scc
+    %226:sreg_32 = S_MUL_I32 %1.sub1, %806
+    %227:sreg_32 = S_ADD_I32 %225, %226, implicit-def dead $scc
+    %228:sreg_32 = S_SUB_I32 %77.sub1, %227, implicit-def dead $scc
+    %229:sreg_32 = S_MUL_I32 %1.sub0, %806
+    %230:sreg_32 = S_SUB_U32 %77.sub0, %229, implicit-def $scc
+    %232:sreg_32 = S_SUBB_U32 %228, %1.sub1, implicit-def dead $scc, implicit $scc
+    %234:sreg_32 = S_SUB_U32 %230, %1.sub0, implicit-def $scc
+    %236:sreg_32 = S_SUBB_U32 %232, 0, implicit-def dead $scc, implicit $scc
+    S_CMP_GE_U32 %236, %1.sub1, implicit-def $scc
+    %239:sreg_32 = S_CSELECT_B32 -1, 0, implicit $scc
+    S_CMP_GE_U32 %234, %1.sub0, implicit-def $scc
+    %240:sreg_32 = S_CSELECT_B32 -1, 0, implicit $scc
+    %241:sreg_32 = S_CSELECT_B32 %240, %239, implicit $scc
+    %815:sreg_32 = S_ADDC_U32 %807, 0, implicit-def dead $scc, implicit $scc
+    %820:sreg_32 = S_ADD_U32 %806, 2, implicit-def $scc
+    %821:sreg_32 = S_ADDC_U32 %807, 0, implicit-def dead $scc, implicit $scc
+    S_CMP_LG_U32 %241, 0, implicit-def $scc
+    %253:sreg_32 = S_CSELECT_B32 %821, %815, implicit $scc
+    %254:sreg_32 = S_SUBB_U32 %77.sub1, %227, implicit-def dead $scc, implicit $scc
+    S_CMP_GE_U32 %254, %1.sub1, implicit-def $scc
+    S_CMP_GE_U32 %230, %1.sub0, implicit-def $scc
+    S_CMP_EQ_U32 %254, %1.sub1, implicit-def $scc
+    undef %8.sub1:sreg_64 = S_CSELECT_B32 %253, %807, implicit $scc
+    S_BRANCH %bb.2
+  
+  bb.5:
+    successors: %bb.6(0x40000000), %bb.7(0x40000000)
+  
+    %291:sreg_32_xm0_xexec = S_LOAD_DWORD_IMM %67(p4), 272, 0 :: (invariant load (s32), align 16, addrspace 4)
+    S_BITCMP1_B32 %291, 0, implicit-def $scc
+    %744:sreg_64_xexec = S_CSELECT_B64 -1, 0, implicit $scc
+    %10:sreg_64 = S_XOR_B64 %744, -1, implicit-def dead $scc
+    %295:sreg_64 = S_AND_B64 $exec, %10, implicit-def dead $scc
+    $vcc = COPY %295
+    S_CBRANCH_VCCNZ %bb.7, implicit $vcc
+  
+  bb.6:
+    successors: %bb.7(0x80000000)
+  
+  bb.7:
+    successors: %bb.9(0x40000000), %bb.8(0x40000000)
+  
+    %296:sreg_64 = S_AND_B64 $exec, %744, implicit-def dead $scc
+    $vcc = COPY %296
+    S_CBRANCH_VCCNZ %bb.9, implicit $vcc
+  
+  bb.8:
+    S_ENDPGM 0
+  
+  bb.9:
+    successors: %bb.10(0x40000000), %bb.8(0x40000000)
+  
+    %297:sreg_32_xm0_xexec = S_LOAD_DWORD_IMM %67(p4), 288, 0 :: (invariant load (s32), align 16, addrspace 4)
+    S_BITCMP1_B32 %297, 0, implicit-def $scc
+    %745:sreg_64_xexec = S_CSELECT_B64 -1, 0, implicit $scc
+    S_CBRANCH_SCC1 %bb.8, implicit $scc
+  
+  bb.10:
+    successors: %bb.12(0x40000000), %bb.11(0x40000000)
+  
+    early-clobber %13:sgpr_256 = S_LOAD_DWORDX8_IMM_ec %67(p4), 0, 0 :: (invariant load (s256), align 16, addrspace 4)
+    %307:sreg_64_xexec = S_LOAD_DWORDX2_IMM %67(p4), 104, 0 :: (invariant load (s64), addrspace 4)
+    early-clobber %14:sgpr_512 = S_LOAD_DWORDX16_IMM_ec %67(p4), 152, 0 :: (invariant load (s512), align 8, addrspace 4)
+    undef %341.sub0:sgpr_128 = S_ADD_U32 %1.sub6, %13.sub0, implicit-def $scc
+    %828:sreg_32 = S_ADDC_U32 %1.sub7, %13.sub1, implicit-def dead $scc, implicit $scc
+    dead %746:sreg_64 = S_AND_B64 $exec, %744, implicit-def $scc
+    %330:sreg_32 = S_CSELECT_B32 1, 0, implicit $scc
+    S_CMP_LG_U32 %330, 1, implicit-def $scc
+    undef %625.sub3:vreg_192_align2 = AV_MOV_B32_IMM_PSEUDO 0, implicit $exec
+    S_CBRANCH_SCC0 %bb.12, implicit $scc
+  
+  bb.11:
+    successors: %bb.13(0x80000000)
+  
+    S_BRANCH %bb.13
+  
+  bb.12:
+    successors: %bb.14(0x80000000)
+  
+    %341.sub1:sgpr_128 = S_AND_B32 %828, 65535, implicit-def dead $scc
+    %341.sub3:sgpr_128 = S_MOV_B32 159744
+    %343:vreg_128_align2 = BUFFER_LOAD_DWORDX4_OFFSET %341, 0, 0, 0, 0, implicit $exec :: (dereferenceable load (s128), align 1, addrspace 8)
+    early-clobber %310:sgpr_128 = S_LOAD_DWORDX4_IMM_ec %67(p4), 88, 0 :: (invariant load (s128), align 8, addrspace 4)
+    undef %344.sub1:sgpr_128 = S_MOV_B32 0
+    undef %449.sub2_sub3:sgpr_128 = S_LOAD_DWORDX2_IMM %67(p4), 248, 0 :: (invariant load (s64), addrspace 4)
+    %344.sub0:sgpr_128 = COPY %310.sub3
+    %344.sub2:sgpr_128 = COPY %344.sub1
+    %344.sub3:sgpr_128 = COPY %344.sub1
+    %345:sreg_64 = V_CMP_LT_I64_e64 0, %1.sub2_sub3, implicit $exec
+    undef %607.sub0_sub1:sgpr_128 = S_LOAD_DWORDX2_IMM %67(p4), 40, 0 :: (invariant load (s64), addrspace 4)
+    %351:sgpr_128 = S_LOAD_DWORDX4_IMM %67(p4), 64, 0 :: (invariant load (s128), addrspace 4)
+    S_BITCMP1_B32 %297, 8, implicit-def $scc
+    %748:sreg_64_xexec = S_CSELECT_B64 -1, 0, implicit $scc
+    S_CMP_EQ_U64 %14.sub2_sub3, 0, implicit-def $scc
+    %749:sreg_64_xexec = S_CSELECT_B64 -1, 0, implicit $scc
+    S_CMP_EQ_U64 %77, 0, implicit-def $scc
+    %750:sreg_64_xexec = S_CSELECT_B64 -1, 0, implicit $scc
+    %383:vgpr_32 = V_AND_B32_e32 1023, %65(s32), implicit $exec
+    undef %430.sub2:sgpr_128 = S_MOV_B32 1
+    %871:sgpr_32 = COPY %430.sub2
+    %866:sgpr_32 = COPY %310.sub2
+    %872:sgpr_32 = COPY %351.sub0
+    %867:sgpr_32 = COPY %351.sub2
+    %873:sgpr_32 = COPY %351.sub0
+    %874:sgpr_32 = COPY %351.sub0
+    dead %751:sreg_64 = S_AND_B64 %345, $exec, implicit-def $scc
+    %868:sgpr_32 = S_CSELECT_B32 1, 0, implicit $scc
+    %607.sub1:sgpr_128 = S_AND_B32 %607.sub1, 65535, implicit-def dead $scc
+    %400:sreg_32 = S_MUL_I32 %1.sub1, -845247145
+    %402:sreg_32 = S_MUL_HI_U32 %1.sub0, -845247145
+    %882:sreg_32_xm0 = S_ADD_I32 %402, %400, implicit-def dead $scc
+    undef %406.sub0:sreg_64 = COPY %310.sub1
+    %406.sub1:sreg_64 = COPY %310.sub1
+    S_CMP_LT_I32 %310.sub0, 0, implicit-def $scc
+    %408:vreg_64_align2 = COPY %8
+    undef %643.sub2:sgpr_128 = S_MOV_B32 1
+    %643.sub3:sgpr_128 = COPY %430.sub2
+    %341.sub2:sgpr_128 = COPY %449.sub2
+    undef %741.sub3:vreg_192_align2 = AV_MOV_B32_IMM_PSEUDO 0, implicit $exec
+    %477:vgpr_32 = V_MOV_B32_e32 15360, implicit $exec
+    undef %522.sub0:sgpr_128 = COPY %344.sub1
+    %522.sub1:sgpr_128 = COPY %344.sub1
+    %522.sub2:sgpr_128 = COPY %344.sub1
+    %522.sub3:sgpr_128 = COPY %344.sub1
+    %526:vreg_128_align2 = COPY %522
+    undef %589.sub1:sgpr_64 = S_MOV_B32 1069066811
+    %589.sub0:sgpr_64 = COPY %344.sub1
+    %607.sub2:sgpr_128 = COPY %344.sub1
+    %607.sub3:sgpr_128 = COPY %344.sub1
+    %875:sgpr_32 = COPY %351.sub0
+    %876:sgpr_32 = COPY %351.sub0
+    %877:sgpr_32 = COPY %351.sub0
+    %878:sgpr_32 = COPY %351.sub0
+    %869:sgpr_32 = COPY %351.sub1
+    %879:sgpr_32 = COPY %351.sub0
+    %880:sgpr_32 = COPY %351.sub0
+    %881:sgpr_32 = COPY %351.sub0
+    %870:sreg_32_xexec_hi_and_sreg_32_xm0 = S_MUL_I32 %1.sub0, -845247145
+    %623:sreg_32 = S_MOV_B32 84148480
+    %849:sreg_64 = S_MOV_B64 0
+    %377:sreg_64_xexec = S_LOAD_DWORDX2_IMM %67(p4), 264, 0 :: (invariant load (s64), addrspace 4)
+    %384:sreg_64_xexec = V_CMP_EQ_U32_e64 0, %383, implicit $exec
+    %752:sreg_64_xexec = S_CSELECT_B64 -1, 0, implicit $scc
+    %44:sreg_64 = V_CMP_GE_I64_e64 %14.sub0_sub1, %408, implicit $exec
+    %386:sgpr_128 = COPY %344
+    S_BRANCH %bb.14
+  
+  bb.13:
+    successors: %bb.18(0x80000000)
+  
+    S_BRANCH %bb.18
+  
+  bb.14:
+    successors: %bb.15(0x80000000)
+  
+    %833:sreg_32 = S_ADD_U32 %377.sub0, %849.sub0, implicit-def $scc
+    %834:sreg_32 = S_ADDC_U32 %377.sub1, %849.sub1, implicit-def dead $scc, implicit $scc
+    %415:sreg_32 = S_MUL_I32 %833, %1.sub1
+    %417:sreg_32 = S_MUL_HI_U32 %833, %1.sub0
+    %418:sreg_32 = S_ADD_I32 %417, %415, implicit-def dead $scc
+    %419:sreg_32 = S_MUL_I32 %834, %1.sub0
+    undef %422.sub1:sreg_64 = S_ADD_I32 %418, %419, implicit-def dead $scc
+    %422.sub0:sreg_64 = S_MUL_I32 %833, %1.sub0
+    %643.sub0_sub1:sgpr_128 = S_OR_B64 %14.sub10_sub11, %422, implicit-def dead $scc
+    %643.sub1:sgpr_128 = S_AND_B32 %643.sub1, 65535, implicit-def dead $scc
+    %430.sub0:sgpr_128 = COPY %643.sub0
+    %430.sub1:sgpr_128 = COPY %643.sub1
+    %430.sub3:sgpr_128 = COPY %430.sub2
+    %434:sreg_32 = S_MUL_I32 %849.sub0, %14.sub9
+    %436:sreg_32 = S_MUL_HI_U32 %849.sub0, %14.sub8
+    %437:sreg_32 = S_ADD_I32 %436, %434, implicit-def dead $scc
+    %438:sreg_32 = S_MUL_I32 %849.sub1, %14.sub8
+    %439:sreg_32 = S_ADD_I32 %437, %438, implicit-def dead $scc
+    %440:sreg_32 = S_MUL_I32 %849.sub0, %14.sub8
+    %341.sub0:sgpr_128 = S_ADD_U32 %440, %13.sub2, implicit-def $scc
+    %840:sreg_32 = S_ADDC_U32 %439, %13.sub3, implicit-def dead $scc, implicit $scc
+    %341.sub1:sgpr_128 = S_AND_B32 %840, 65535, implicit-def dead $scc
+    %449.sub0:sgpr_128 = COPY %341.sub0
+    %449.sub1:sgpr_128 = COPY %341.sub1
+    BUFFER_LOAD_UBYTE_LDS_OFFSET %449, 0, 0, 0, 0, 0, implicit $exec, implicit $m0 :: (dereferenceable load (s8), addrspace 8), (dereferenceable store (s512) into `ptr addrspace(3) null`, align 1, addrspace 3)
+    %453:sreg_32 = S_OR_B32 %849.sub0, %14.sub6, implicit-def dead $scc
+    %455:sreg_32 = S_MUL_I32 %870, %849.sub1
+    %456:sreg_32 = S_MUL_HI_U32 %870, %849.sub0
+    %457:sreg_32 = S_ADD_I32 %456, %455, implicit-def dead $scc
+    %459:sreg_32 = S_MUL_I32 %882, %849.sub0
+    undef %462.sub1:sreg_64 = S_ADD_I32 %457, %459, implicit-def dead $scc
+    %463:sreg_64 = S_LSHR_B64 %462, 1, implicit-def dead $scc
+    dead %753:sreg_64 = S_AND_B64 %749, $exec, implicit-def $scc
+    dead %754:sreg_64 = S_AND_B64 %750, $exec, implicit-def $scc
+    %755:sreg_64_xexec = S_CSELECT_B64 -1, 0, implicit $scc
+    %471:vgpr_32 = COPY %463.sub0
+    %468:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, %471, %384, implicit $exec
+    %472:sreg_64_xexec = V_CMP_LT_I32_e64 %351.sub0, %468, implicit $exec
+    %475:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, %477, %472, implicit $exec
+  
+  bb.15:
+    successors: %bb.16(0x04000000), %bb.15(0x7c000000)
+  
+    %577:av_128_align2 = BUFFER_LOAD_DWORDX4_OFFSET %522, 0, 0, 0, 0, implicit $exec :: (dereferenceable load (s128) from `ptr addrspace(8) null`, align 1, addrspace 8)
+    %608:vreg_128_align2 = BUFFER_LOAD_DWORDX4_OFFSET %607, 0, 0, 0, 0, implicit $exec :: (dereferenceable load (s128), align 1, addrspace 8)
+    %489:vreg_128_align2 = DS_READ_B128_gfx9 %625.sub3, 0, 0, implicit $exec :: (load (s128) from `ptr addrspace(3) null`, addrspace 3)
+    BUFFER_LOAD_UBYTE_LDS_OFFSET %643, 0, 0, 0, 0, 0, implicit $exec, implicit $m0 :: (dereferenceable load (s8), addrspace 8), (dereferenceable store (s512) into `ptr addrspace(3) null`, align 1, addrspace 3)
+    BUFFER_LOAD_UBYTE_LDS_OFFSET %341, 0, 0, 0, 0, 0, implicit $exec, implicit $m0 :: (dereferenceable load (s8), addrspace 8), (dereferenceable store (s512) into `ptr addrspace(3) null`, align 1, addrspace 3)
+    undef %734.sub2:vreg_128_align2 = COPY %741.sub3
+    %480:vgpr_32 = COPY %741.sub3
+    dead %756:sreg_64 = S_AND_B64 $exec, %10, implicit-def $scc
+    %592:vgpr_32 = nofpexcept V_CVT_F16_F32_e32 %480, implicit $mode, implicit $exec
+    %741.sub2:vreg_192_align2 = V_AND_B32_e32 %871, %489.sub2, implicit $exec
+    %741.sub1:vreg_192_align2 = V_AND_B32_e32 %386.sub1, %489.sub1, implicit $exec
+    %734.sub1:vreg_128_align2 = V_AND_B32_e32 %872, %489.sub1, implicit $exec
+    %734.sub0:vreg_128_align2 = V_AND_B32_e32 %866, %489.sub0, implicit $exec
+    undef %735.sub3:vreg_128_align2 = V_AND_B32_e32 %875, %489.sub3, implicit $exec
+    %735.sub2:vreg_128_align2 = V_AND_B32_e32 %874, %489.sub2, implicit $exec
+    %735.sub1:vreg_128_align2 = V_AND_B32_e32 %873, %489.sub1, implicit $exec
+    %735.sub0:vreg_128_align2 = V_AND_B32_e32 %867, %489.sub0, implicit $exec
+    undef %736.sub3:vreg_128_align2 = V_AND_B32_e32 %878, %489.sub3, implicit $exec
+    %523:vreg_128_align2 = V_MFMA_F32_16X16X32_F16_vgprcd_e64 %741.sub0_sub1_sub2_sub3, %343, 0, 0, 0, 0, implicit $mode, implicit $exec
+    %736.sub2:vreg_128_align2 = V_AND_B32_e32 %877, %489.sub2, implicit $exec
+    %741.sub5:vreg_192_align2 = V_AND_B32_e32 %344.sub3, %489.sub3, implicit $exec
+    %741.sub4:vreg_192_align2 = V_AND_B32_e32 %344.sub2, %489.sub2, implicit $exec
+    %529:vreg_128_align2 = V_MFMA_F32_16X16X32_F16_vgprcd_e64 %734, %526, %523, 0, 0, 0, implicit $mode, implicit $exec
+    %553:vreg_128_align2 = V_MFMA_F32_16X16X32_F16_vgprcd_e64 %741.sub2_sub3_sub4_sub5, %526, 0, 0, 0, 0, implicit $mode, implicit $exec
+    %736.sub1:vreg_128_align2 = V_AND_B32_e32 %876, %489.sub1, implicit $exec
+    %736.sub0:vreg_128_align2 = V_AND_B32_e32 %868, %489.sub0, implicit $exec
+    %625.sub2:vreg_192_align2 = V_AND_B32_e32 %307.sub1, %489.sub0, implicit $exec
+    %566:vreg_128_align2 = V_MFMA_F32_16X16X32_F16_vgprcd_e64 %735, %526, %529, 0, 0, 0, implicit $mode, implicit $exec
+    undef %742.sub3:vreg_128_align2 = V_AND_B32_e32 %881, %489.sub3, implicit $exec
+    %742.sub2:vreg_128_align2 = V_AND_B32_e32 %880, %489.sub2, implicit $exec
+    %742.sub1:vreg_128_align2 = V_AND_B32_e32 %879, %489.sub1, implicit $exec
+    %593:vreg_128_align2 = V_MFMA_F32_16X16X32_F16_vgprcd_e64 %625.sub2_sub3_sub4_sub5, %526, %553, 0, 0, 0, implicit $mode, implicit $exec
+    %742.sub0:vreg_128_align2 = V_AND_B32_e32 %869, %489.sub0, implicit $exec
+    %620:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, %592, %755, implicit $exec
+    %625.sub0:vreg_192_align2 = V_PERM_B32_e64 %620, %475, %623, implicit $exec
+    %569:vreg_128_align2 = V_MFMA_F32_16X16X32_F16_vgprcd_e64 %736, %526, %566, 0, 0, 0, implicit $mode, implicit $exec
+    %597:vreg_64_align2 = nofpexcept V_PK_MUL_F32 8, %593.sub0_sub1, 8, %406, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    undef %604.sub1:vreg_64_align2 = V_CNDMASK_B32_e64 0, 0, 0, %597.sub1, %744, implicit $exec
+    %572:vreg_128_align2 = V_MFMA_F32_16X16X32_F16_vgprcd_e64 %742, %526, %569, 0, 0, 0, implicit $mode, implicit $exec
+    %590:vreg_64_align2 = nofpexcept V_PK_MUL_F32 8, %572.sub2_sub3, 8, %589, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    %613:vgpr_32 = nofpexcept V_SUB_F32_e32 %590.sub0, %590.sub1, implicit $mode, implicit $exec
+    %614:vgpr_32 = nofpexcept V_CVT_F16_F32_e32 %613, implicit $mode, implicit $exec
+    %616:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, %614, %745, implicit $exec
+    %618:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, %614, %748, implicit $exec
+    %604.sub0:vreg_64_align2 = V_CNDMASK_B32_e64 0, 0, 0, %597.sub0, %752, implicit $exec
+    S_CBRANCH_SCC1 %bb.15, implicit $scc
+  
+  bb.16:
+    successors: %bb.17(0x04000000), %bb.14(0x7c000000)
+  
+    dead %757:sreg_64 = S_AND_B64 %44, $exec, implicit-def $scc
+    %849:sreg_64 = COPY %14.sub14_sub15
+    S_CBRANCH_SCC1 %bb.14, implicit $scc
+  
+  bb.17:
+    successors: %bb.13(0x80000000)
+  
+    S_BRANCH %bb.13
+  
+  bb.18:
+    %662:sreg_64 = S_OR_B64 %14.sub4_sub5, %1.sub4_sub5, implicit-def dead $scc
+    %671:sreg_64_xexec = S_LOAD_DWORDX2_IMM %67(p4), 216, 0 :: (invariant load (s64), addrspace 4)
+    undef %688.sub0_sub1:sgpr_128 = S_OR_B64 %662, %13.sub6_sub7, implicit-def dead $scc
+    %683:sreg_64 = S_OR_B64 %14.sub12_sub13, %671, implicit-def dead $scc
+    %688.sub0_sub1:sgpr_128 = S_OR_B64 %683, %13.sub4_sub5, implicit-def dead $scc
+...
