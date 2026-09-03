@@ -172,8 +172,9 @@ void CommandCache::prune() {
 }
 
 std::unique_ptr<CommandCache> CommandCache::get(raw_ostream &LogS) {
-  StringRef CacheDir = env::getCacheDirectory();
-  if (CacheDir.empty())
+  static std::optional<SmallString<256>> CacheDir =
+      env::getCacheDirectory(LogS);
+  if (CacheDir)
     return nullptr;
 
   std::optional<CachePruningPolicy> Policy =
@@ -182,7 +183,7 @@ std::unique_ptr<CommandCache> CommandCache::get(raw_ostream &LogS) {
     return nullptr;
 
   return std::unique_ptr<CommandCache>(
-      new CommandCache(CacheDir, *Policy, LogS));
+      new CommandCache(*CacheDir, *Policy, LogS));
 }
 
 CommandCache::CommandCache(StringRef CacheDir, const CachePruningPolicy &Policy,

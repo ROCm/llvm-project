@@ -17,6 +17,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/VirtualFileSystem.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <cstdlib>
 
@@ -202,33 +203,33 @@ StringRef getCachePolicy() {
   return EnvCachePolicy ? EnvCachePolicy : "";
 }
 
-StringRef getCacheDirectory() {
+std::optional<SmallString<256>> getCacheDirectory(raw_ostream &LogS) {
   // By default the cache is enabled
   static const char *Enable = COMGR_GETENV("AMD_COMGR_CACHE");
   bool CacheDisabled = StringRef(Enable) == "0";
   if (CacheDisabled)
-    return "";
+    return std::nullopt;
 
   StringRef EnvCacheDirectory = COMGR_GETENV("AMD_COMGR_CACHE_DIR");
   if (!EnvCacheDirectory.empty())
-    return EnvCacheDirectory;
+    return {EnvCacheDirectory};
 
-  // mark Result as static to keep it cached across calls
-  static SmallString<256> Result;
-  if (!Result.empty())
-    return Result;
+  SmallString<256> Result;
+  if (!sys::path::cache_directory(Result))
+    return std::nullopt;
 
-  if (sys::path::cache_directory(Result)) {
-    // If the cache directory is mounted on a remote filesystem, disable the
-    // cache due to concurrency issues. We saw some issues where a SIGBUS was
-    // thrown when there was contention on the cache.
-    if (!sys::fs::is_local(Result))
-      return "";
-    sys::path::append(Result, "comgr");
-    return Result;
+  // If the cache directory is mounted on a remote filesystem, disable the
+  // cache due to concurrency issues. We saw some issues where a SIGBUS was
+  // thrown when there was contention on the cache.
+  if (!sys::fs::is_local(Result)) {
+    if (shouldEmitVerboseLogs())
+      LogS << "Comgr cache: default directory '" << Result
+           << "' is not on a local filesystem; disabling cache.\n";
+    return std::nullopt;
   }
 
-  return "";
+  sys::path::append(Result, "comgr");
+  return {std::move(Result)};
 }
 
 StringRef getDriverOptionsAppend() {
