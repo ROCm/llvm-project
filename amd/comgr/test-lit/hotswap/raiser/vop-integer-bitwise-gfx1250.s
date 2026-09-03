@@ -22,7 +22,10 @@ vop_integer_bitwise:
 	v_clz_i32_u32_e32 v6, v0
 ; CHECK: call i32 @llvm.cttz.i32
 	v_ctz_i32_b32_e64 v7, v0
-; CHECK: call i32 @llvm.amdgcn.sffbh.i32
+; CHECK: [[FFBH_SIGN:%.+]] = ashr i32 {{.+}}, 31
+; CHECK: [[FFBH_NORMALIZED:%.+]] = xor i32 {{.+}}, [[FFBH_SIGN]]
+; CHECK: [[FFBH_COUNT:%.+]] = call i32 @llvm.ctlz.i32(i32 [[FFBH_NORMALIZED]], i1 false)
+; CHECK: select i1 {{.+}}, i32 -1, i32 [[FFBH_COUNT]]
 	v_cls_i32_e32 v8, v0
 
 ; CHECK: call i32 @llvm.ctpop.i32
@@ -65,7 +68,10 @@ vop_integer_bitwise:
 	v_bfe_i32 v20, v0, v1, v2
 ; CHECK: bfi
 	v_bfi_b32 v21, v0, v1, v2
-; CHECK: call i32 @llvm.amdgcn.perm
+; CHECK: [[PERM_INPUT:%.+]] = or i64
+; CHECK: [[PERM_SELECTOR:%.+]] = and i32 {{.+}}, 255
+; CHECK: [[PERM_BYTE:%.+]] = select i1 {{.+}}, i8 -1, i8 {{.+}}
+; CHECK: [[PERM_RESULT:%.+]] = or i32 {{.+}}, {{.+}}
 	v_perm_b32 v22, v0, v1, v2
 ; CHECK: bitop3
 	v_bitop3_b32 v23, v0, v1, v2 bitop3:0x96

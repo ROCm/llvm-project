@@ -84,4 +84,21 @@ Expected<BinaryOperands> OperandResolver::readBinary64() {
   return BinaryOperands{*Dst, *Src0, *Src1};
 }
 
+Expected<TernaryOperands> OperandResolver::readTernary32() {
+  assert(nSrcs() >= 3 && "ternary instruction must have three sources");
+  Expected<ParsedReg> Dst = dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Src0 = src(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = src(1);
+  if (!Src1)
+    return Src1.takeError();
+  Expected<Value *> Src2 = src(2);
+  if (!Src2)
+    return Src2.takeError();
+  return TernaryOperands{*Dst, *Src0, *Src1, *Src2};
+}
+
 } // namespace COMGR::hotswap

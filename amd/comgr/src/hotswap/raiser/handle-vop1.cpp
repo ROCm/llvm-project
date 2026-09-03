@@ -17,7 +17,6 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
@@ -79,11 +78,18 @@ Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
       Result = Ctx.B.CreateSelect(IsZero, Ctx.B.getInt32(-1), Count, "ffb");
       break;
     }
-    case CanonicalOp::V_FFBH_I32:
-      Result =
-          Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_sffbh, {Ctx.B.getInt32Ty()},
-                                {*Src}, nullptr, "ffbh.i32");
+    case CanonicalOp::V_FFBH_I32: {
+      Value *Sign = Ctx.B.CreateAShr(*Src, Ctx.B.getInt32(31), "ffbh.sign");
+      Value *Normalized = Ctx.B.CreateXor(*Src, Sign, "ffbh.normalized");
+      Value *Count = Ctx.B.CreateIntrinsic(
+          Intrinsic::ctlz, {Ctx.B.getInt32Ty()}, {Normalized, Ctx.B.getFalse()},
+          nullptr, "ffbh.count");
+      Value *AllSignBits =
+          Ctx.B.CreateICmpEQ(Normalized, Ctx.B.getInt32(0), "ffbh.uniform");
+      Result = Ctx.B.CreateSelect(AllSignBits, Ctx.B.getInt32(-1), Count,
+                                  "ffbh.i32");
       break;
+    }
     default:
       llvm_unreachable("not a VOP1 integer bit operation");
     }
