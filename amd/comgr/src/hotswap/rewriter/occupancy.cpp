@@ -31,19 +31,22 @@ std::optional<SubtargetOccupancyLimits>
 getSubtargetOccupancyLimits(StringRef Processor) {
   // The rewriter sees a finished code object and cannot tell CU mode from WGP
   // mode, so assume the full-SIMD block the metadata has always reported.
+  AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(Processor);
   unsigned EUsPerCU = AMDGPU::getNumWorkGroupSIMDs(/*FullSIMDMode=*/true);
-  unsigned MaxWavesPerCU =
-      AMDGPU::getMaxWavesPerEU(AMDGPU::parseArchAMDGCN(Processor)) * EUsPerCU;
+  unsigned MaxWavesPerCU = AMDGPU::getMaxWavesPerEU(Kind) * EUsPerCU;
+
+  // Limits below are the wave32 values wherever wave32 exists; wave64 halves
+  // them on those targets.
+  bool HasWave32 =
+      AMDGPU::getFeatureBitset(Kind).test(AMDGPU::FEAT_GFX10_INSTS);
+  unsigned VgprAllocGranule = AMDGPU::getVGPRAllocGranule(Kind, HasWave32);
 
 #define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE,         \
-                   VGPR_ALLOC_GRANULE, TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS) \
+                   TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
   if (Processor == PROCESSOR)                                                  \
-    return SubtargetOccupancyLimits{EUsPerCU,                                  \
-                                    MaxWavesPerCU,                             \
-                                    MAX_FLAT_WORK_GROUP_SIZE,                  \
-                                    VGPR_ALLOC_GRANULE,                        \
-                                    TOTAL_NUM_VGPRS,                           \
-                                    StringRef(PROCESSOR).starts_with("gfx1")};
+    return SubtargetOccupancyLimits{                                           \
+        EUsPerCU,         MaxWavesPerCU,   MAX_FLAT_WORK_GROUP_SIZE,           \
+        VgprAllocGranule, TOTAL_NUM_VGPRS, HasWave32};
 #include "comgr-isa-metadata.def"
 #undef HANDLE_ISA
 
