@@ -2,13 +2,13 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu8.03-amd-amdhsa -o - -amdgpu-enable-lower-module-lds=false %s 2> %t | FileCheck -check-prefixes=GFX8,GFX8-SDAG %s
 ; RUN: FileCheck -check-prefix=ERR %s < %t
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu8.03-amd-amdhsa -o - -amdgpu-enable-lower-module-lds=false %s 2> %t | FileCheck -check-prefixes=GFX8,GFX8-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu8.03-amd-amdhsa -o - -amdgpu-enable-lower-module-lds=false %s 2> %t | FileCheck -check-prefixes=GFX8,GFX8-GISEL %s
 ; RUN: FileCheck -check-prefix=ERR %s < %t
 
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu9.00-amd-amdhsa -o - -amdgpu-enable-lower-module-lds=false %s 2> %t | FileCheck -check-prefixes=GFX9,GFX9-SDAG %s
 ; RUN: FileCheck -check-prefix=ERR %s < %t
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -o - -amdgpu-enable-lower-module-lds=false %s 2> %t | FileCheck -check-prefixes=GFX9,GFX9-GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00-amd-amdhsa -o - -amdgpu-enable-lower-module-lds=false %s 2> %t | FileCheck -check-prefixes=GFX9,GFX9-GISEL %s
 ; RUN: FileCheck -check-prefix=ERR %s < %t
 
 ; Test there's no verifier error if a function directly uses LDS and
@@ -18,7 +18,7 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgpu9.00-mesa-mesa3d < %s 2> %t | FileCheck -check-prefixes=CHECK,SDAG %s
 ; RUN: FileCheck -check-prefix=ERR %s < %t
 
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -mtriple=amdgpu9.00-mesa-mesa3d < %s 2> %t | FileCheck -check-prefixes=CHECK,GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=1 -mtriple=amdgpu9.00-mesa-mesa3d < %s 2> %t | FileCheck -check-prefixes=CHECK,GISEL %s
 ; RUN: FileCheck -check-prefix=ERR %s < %t
 
 
@@ -173,13 +173,13 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; GFX8-GISEL:       ; %bb.0: ; %entry
 ; GFX8-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-GISEL-NEXT:    v_and_b32_e32 v0, 1, v0
-; GFX8-GISEL-NEXT:    s_mov_b64 s[4:5], exec
 ; GFX8-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX8-GISEL-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
-; GFX8-GISEL-NEXT:    s_and_saveexec_b64 s[6:7], s[4:5]
-; GFX8-GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; GFX8-GISEL-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX8-GISEL-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
+; GFX8-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX8-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX8-GISEL-NEXT:    s_cbranch_execz .LBB2_2
-; GFX8-GISEL-NEXT:  ; %bb.1: ; %bb1
+; GFX8-GISEL-NEXT:  .LBB2_1: ; %bb1
 ; GFX8-GISEL-NEXT:    s_mov_b64 s[6:7], 0xc8
 ; GFX8-GISEL-NEXT:    v_mov_b32_e32 v0, 1
 ; GFX8-GISEL-NEXT:    s_mov_b32 m0, -1
@@ -187,19 +187,22 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; GFX8-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-GISEL-NEXT:    s_trap 2
 ; GFX8-GISEL-NEXT:    ds_write_b32 v0, v0
-; GFX8-GISEL-NEXT:  .LBB2_2: ; %Flow
-; GFX8-GISEL-NEXT:    s_andn2_saveexec_b64 s[4:5], s[4:5]
+; GFX8-GISEL-NEXT:  .LBB2_2:
+; GFX8-GISEL-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX8-GISEL-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX8-GISEL-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX8-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX8-GISEL-NEXT:    s_cbranch_execz .LBB2_4
-; GFX8-GISEL-NEXT:  ; %bb.3: ; %bb0
-; GFX8-GISEL-NEXT:    s_mov_b64 s[6:7], 0xc8
+; GFX8-GISEL-NEXT:  .LBB2_3: ; %bb0
+; GFX8-GISEL-NEXT:    s_mov_b64 s[4:5], 0xc8
 ; GFX8-GISEL-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX8-GISEL-NEXT:    s_mov_b32 m0, -1
-; GFX8-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[6:7], 0x0
+; GFX8-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x0
 ; GFX8-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-GISEL-NEXT:    s_trap 2
 ; GFX8-GISEL-NEXT:    ds_write_b32 v0, v0
 ; GFX8-GISEL-NEXT:  .LBB2_4: ; %ret
-; GFX8-GISEL-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX8-GISEL-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX8-GISEL-NEXT:    s_mov_b64 s[4:5], 0xc8
 ; GFX8-GISEL-NEXT:    v_mov_b32_e32 v0, 2
 ; GFX8-GISEL-NEXT:    s_mov_b32 m0, -1
@@ -244,25 +247,28 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; GFX9-GISEL:       ; %bb.0: ; %entry
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-GISEL-NEXT:    v_and_b32_e32 v0, 1, v0
-; GFX9-GISEL-NEXT:    s_mov_b64 s[4:5], exec
 ; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX9-GISEL-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
-; GFX9-GISEL-NEXT:    s_and_saveexec_b64 s[6:7], s[4:5]
-; GFX9-GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX9-GISEL-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execz .LBB2_2
-; GFX9-GISEL-NEXT:  ; %bb.1: ; %bb1
+; GFX9-GISEL-NEXT:  .LBB2_1: ; %bb1
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v0, 1
 ; GFX9-GISEL-NEXT:    s_trap 2
 ; GFX9-GISEL-NEXT:    ds_write_b32 v0, v0
-; GFX9-GISEL-NEXT:  .LBB2_2: ; %Flow
-; GFX9-GISEL-NEXT:    s_andn2_saveexec_b64 s[4:5], s[4:5]
+; GFX9-GISEL-NEXT:  .LBB2_2:
+; GFX9-GISEL-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX9-GISEL-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GFX9-GISEL-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execz .LBB2_4
-; GFX9-GISEL-NEXT:  ; %bb.3: ; %bb0
+; GFX9-GISEL-NEXT:  .LBB2_3: ; %bb0
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX9-GISEL-NEXT:    s_trap 2
 ; GFX9-GISEL-NEXT:    ds_write_b32 v0, v0
 ; GFX9-GISEL-NEXT:  .LBB2_4: ; %ret
-; GFX9-GISEL-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX9-GISEL-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v0, 2
 ; GFX9-GISEL-NEXT:    s_trap 2
 ; GFX9-GISEL-NEXT:    ds_write_b32 v0, v0
@@ -306,27 +312,30 @@ define void @func_uses_lds_multi(i1 %cond) {
 ; GISEL:       ; %bb.0: ; %entry
 ; GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GISEL-NEXT:    v_and_b32_e32 v0, 1, v0
-; GISEL-NEXT:    s_mov_b64 s[4:5], exec
 ; GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GISEL-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
-; GISEL-NEXT:    s_and_saveexec_b64 s[6:7], s[4:5]
-; GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
+; GISEL-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GISEL-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
+; GISEL-NEXT:    s_mov_b64 exec, s[6:7]
+; GISEL-NEXT:    ; divergent control-flow edge
 ; GISEL-NEXT:    s_cbranch_execz .LBB2_3
-; GISEL-NEXT:  ; %bb.1: ; %bb1
+; GISEL-NEXT:  .LBB2_1: ; %bb1
 ; GISEL-NEXT:    s_cbranch_execnz .LBB2_8
 ; GISEL-NEXT:  ; %bb.2: ; %bb1
 ; GISEL-NEXT:    v_mov_b32_e32 v0, 1
 ; GISEL-NEXT:    ds_write_b32 v0, v0
-; GISEL-NEXT:  .LBB2_3: ; %Flow
-; GISEL-NEXT:    s_andn2_saveexec_b64 s[4:5], s[4:5]
+; GISEL-NEXT:  .LBB2_3:
+; GISEL-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GISEL-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; GISEL-NEXT:    s_mov_b64 exec, s[4:5]
+; GISEL-NEXT:    ; divergent control-flow edge
 ; GISEL-NEXT:    s_cbranch_execz .LBB2_6
-; GISEL-NEXT:  ; %bb.4: ; %bb0
+; GISEL-NEXT:  .LBB2_4: ; %bb0
 ; GISEL-NEXT:    s_cbranch_execnz .LBB2_8
 ; GISEL-NEXT:  ; %bb.5: ; %bb0
 ; GISEL-NEXT:    v_mov_b32_e32 v0, 0
 ; GISEL-NEXT:    ds_write_b32 v0, v0
 ; GISEL-NEXT:  .LBB2_6: ; %ret
-; GISEL-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GISEL-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GISEL-NEXT:    s_cbranch_execnz .LBB2_8
 ; GISEL-NEXT:  ; %bb.7: ; %ret
 ; GISEL-NEXT:    v_mov_b32_e32 v0, 2
@@ -473,9 +482,11 @@ define i32 @func_uses_lds_phi_after(i1 %cond, ptr addrspace(1) %ptr) {
 ; GFX8-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-GISEL-NEXT:    v_and_b32_e32 v3, 1, v3
 ; GFX8-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
-; GFX8-GISEL-NEXT:    s_and_saveexec_b64 s[4:5], vcc
+; GFX8-GISEL-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX8-GISEL-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX8-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX8-GISEL-NEXT:    s_cbranch_execz .LBB4_2
-; GFX8-GISEL-NEXT:  ; %bb.1: ; %use.bb
+; GFX8-GISEL-NEXT:  .LBB4_1: ; %use.bb
 ; GFX8-GISEL-NEXT:    s_mov_b64 s[6:7], 0xc8
 ; GFX8-GISEL-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX8-GISEL-NEXT:    s_mov_b32 m0, -1
@@ -521,9 +532,11 @@ define i32 @func_uses_lds_phi_after(i1 %cond, ptr addrspace(1) %ptr) {
 ; GFX9-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-GISEL-NEXT:    v_and_b32_e32 v3, 1, v3
 ; GFX9-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
-; GFX9-GISEL-NEXT:    s_and_saveexec_b64 s[4:5], vcc
+; GFX9-GISEL-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9-GISEL-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GFX9-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX9-GISEL-NEXT:    s_cbranch_execz .LBB4_2
-; GFX9-GISEL-NEXT:  ; %bb.1: ; %use.bb
+; GFX9-GISEL-NEXT:  .LBB4_1: ; %use.bb
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX9-GISEL-NEXT:    s_trap 2
 ; GFX9-GISEL-NEXT:    ds_write_b32 v0, v0
@@ -568,9 +581,11 @@ define i32 @func_uses_lds_phi_after(i1 %cond, ptr addrspace(1) %ptr) {
 ; GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GISEL-NEXT:    v_and_b32_e32 v3, 1, v3
 ; GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
-; GISEL-NEXT:    s_and_saveexec_b64 s[4:5], vcc
+; GISEL-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GISEL-NEXT:    s_xor_b64 exec, s[4:5], exec
+; GISEL-NEXT:    ; divergent control-flow edge
 ; GISEL-NEXT:    s_cbranch_execz .LBB4_3
-; GISEL-NEXT:  ; %bb.1: ; %use.bb
+; GISEL-NEXT:  .LBB4_1: ; %use.bb
 ; GISEL-NEXT:    s_cbranch_execnz .LBB4_4
 ; GISEL-NEXT:  ; %bb.2: ; %use.bb
 ; GISEL-NEXT:    v_mov_b32_e32 v0, 0
