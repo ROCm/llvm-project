@@ -1351,6 +1351,8 @@ uint32_t GenericDeviceTy::queryCoarseGrainMemory(const void *ptr,
 
 bool GenericDeviceTy::hasAPUDevice() { return hasAPUDeviceImpl(); }
 
+bool GenericDeviceTy::hasStrixHaloDevice() { return hasStrixHaloDeviceImpl(); }
+
 bool GenericDeviceTy::hasGfx90aDevice() { return hasGfx90aDeviceImpl(); }
 
 bool GenericDeviceTy::supportsUnifiedMemory() {
@@ -1703,6 +1705,13 @@ int GenericPluginTy::number_of_team_procs(int DeviceId) {
 bool GenericPluginTy::has_apu_device(int32_t DeviceId) {
   auto T = logger::log<bool>(__func__, DeviceId);
   auto R = [&]() { return getDevice(DeviceId).hasAPUDevice(); }();
+  T.res(R);
+  return R;
+}
+
+bool GenericPluginTy::is_strixHalo(int32_t DeviceId) {
+  auto T = logger::log<bool>(__func__, DeviceId);
+  auto R = [&]() { return getDevice(DeviceId).hasStrixHaloDeviceImpl(); }();
   T.res(R);
   return R;
 }

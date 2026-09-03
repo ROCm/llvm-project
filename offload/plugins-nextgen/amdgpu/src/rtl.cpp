@@ -3628,6 +3628,10 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (auto Err = checkIfAPU())
       return Err;
 
+    // detect if device is StrixHalo.
+    if (auto Err = checkIfStrixHalo())
+      return Err;
+
     // detect if device is GFX90a.
     if (auto Err = checkIfGFX90a())
       return Err;
@@ -5139,6 +5143,14 @@ private:
     return Plugin::success();
   }
 
+  Error checkIfStrixHalo() {
+    llvm::StringRef StrGfxName(ComputeUnitKind);
+    IsEquippedWithStrixHalo = llvm::StringSwitch<bool>(StrGfxName)
+                               .Case("gfx1151", true)
+                               .Default(false);
+    return Plugin::success();
+  }
+
   Error checkIfGFX90a() {
     llvm::StringRef StrGfxName(ComputeUnitKind);
     IsEquippedWithGFX90A = llvm::StringSwitch<bool>(StrGfxName)
@@ -5216,6 +5228,9 @@ private:
 
   // TODO: move the following function in private section.
   bool hasMI300xDevice() { return IsEquippedWithMI300X; }
+
+  /// Returns whether the device is a StrixHalo.
+  bool hasStrixHaloDeviceImpl() override final { return IsEquippedWithStrixHalo; }
 
   /// Returns whether the device is a gfx90a.
   bool hasGfx90aDeviceImpl() override final { return IsEquippedWithGFX90A; }
@@ -5460,6 +5475,8 @@ private:
 
   // Is the device an MI200?
   bool IsEquippedWithGFX90A = false;
+
+  bool IsEquippedWithStrixHalo = false;
 
   /// True if the system is configured with XNACK-Enabled.
   /// False otherwise.
@@ -6754,8 +6771,11 @@ unsigned AMDGPUKernelTy::computeAchievedOccupancy(GenericDeviceTy &Device,
 
   // Get GPU info.
   AMDGPUDeviceTy &AMDDevice = static_cast<AMDGPUDeviceTy &>(Device);
+  bool IsEquippedWithStrixHalo = Device.hasStrixHaloDevice();
   bool IsEquippedWithGFX90A = Device.hasGfx90aDevice();
   bool IsEquippedWithMI300 = AMDDevice.checkIfMI300Device();
+
+  DP("Halo %d\n", IsEquippedWithStrixHalo);
 
   if (IsEquippedWithGFX90A || IsEquippedWithMI300) {
     MaxWavesPerEU = amdgpu_arch::MaxWavesPerEU8;

@@ -1257,6 +1257,10 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   bool hasAPUDevice();
   virtual bool hasAPUDeviceImpl() { return false; }
 
+  // Returns true if the device is a StrixHalo.
+  bool hasStrixHaloDevice();
+  virtual bool hasStrixHaloDeviceImpl() { return false; }
+
   // Returns true if the device is a gfx90a.
   bool hasGfx90aDevice();
   virtual bool hasGfx90aDeviceImpl() { return false; }
@@ -1923,6 +1927,9 @@ public:
 
   /// Returns if this device is an APU.
   bool has_apu_device(int32_t DeviceId);
+
+  /// Returns if this discrete GPU is a StrixHalo.
+  bool is_strixHalo(int32_t DeviceId);
 
   /// Returns if this discrete GPU is a gfx90a.
   bool is_gfx90a(int32_t DeviceId);
