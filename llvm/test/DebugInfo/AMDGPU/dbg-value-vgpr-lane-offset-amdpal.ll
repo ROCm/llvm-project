@@ -26,7 +26,7 @@ entry:
 ; CHECK-LABEL: DW_AT_name ("CSMain_uniform")
 ; CHECK:      DW_TAG_variable
 ; CHECK:      DW_AT_location
-; CHECK-NEXT: {{.*\): }}DW_OP_regx SGPR{{[0-9]+}})
+; CHECK-NEXT: DW_OP_regx SGPR[[#]]
 ; CHECK:      DW_AT_name ("uval")
 
 define amdgpu_cs void @test_amdpal_cs_uniform(i32 inreg noundef %userdata, i32 noundef %LocalInvocationId) #0 !dbg !15 {
