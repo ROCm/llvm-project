@@ -719,6 +719,8 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
       if (llvm::any_of(
               UsesForNextUseDistCalculation, [&](const MachineOperand *UseMO) {
                 const MachineInstr *UseMI = UseMO->getParent();
+                if (!DT->dominates(LastMIPreHeader, UseMI))
+                  return true;
                 const MachineBasicBlock *UseMBB = UseMI->getParent();
                 MachineLoop *UseLoop = MLI->getLoopFor(UseMBB);
                 if (UseLoop && OutermostLoopOfCurLoop->contains(UseLoop) &&
