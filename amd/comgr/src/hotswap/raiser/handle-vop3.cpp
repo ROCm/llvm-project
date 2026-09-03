@@ -30,32 +30,38 @@ using namespace llvm;
 namespace COMGR::hotswap {
 namespace {
 
+/// Read the VOP3 clamp operand. Opcodes whose encoding reserves the field have
+/// no named operand and are necessarily unclamped.
 Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
   int Idx =
       AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::clamp);
   if (Idx < 0)
     return false;
-  if (!Di.isImm(static_cast<unsigned>(Idx)))
+  if (!Di.isImm(Idx))
     return unsupportedInstruction(Ctx, Di, "clamp operand is not immediate");
-  return Di.getImm(static_cast<unsigned>(Idx)) != 0;
+  return Di.getImm(Idx) != 0;
 }
 
+/// Reject nonzero output multipliers on integer VOP3 instructions.
 Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
   int Idx =
       AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::omod);
   if (Idx < 0)
     return Error::success();
-  if (!Di.isImm(static_cast<unsigned>(Idx)))
+  if (!Di.isImm(Idx))
     return unsupportedInstruction(Ctx, Di, "omod operand is not immediate");
-  if (Di.getImm(static_cast<unsigned>(Idx)) != 0)
+  if (Di.getImm(Idx) != 0)
     return unsupportedInstruction(Ctx, Di,
                                   "integer output multiplier is not supported");
   return Error::success();
 }
 
+/// Reject source modifiers, which have floating-point rather than integer
+/// semantics.
 Error requireNoIntegerSourceModifiers(RaiseContext &Ctx, const DecodedInst &Di,
                                       OperandResolver &Op) {
-  for (unsigned I = 0; I != Op.nSrcs(); ++I) {
+  const unsigned NumSources = Op.nSrcs();
+  for (unsigned I = 0; I != NumSources; ++I) {
     if (Op.srcMod(I) != 0)
       return unsupportedInstruction(
           Ctx, Di, "integer source modifiers are not supported");
@@ -63,13 +69,15 @@ Error requireNoIntegerSourceModifiers(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+/// Read source I at the width selected by Is64.
 Expected<Value *> readSrc(OperandResolver &Op, unsigned I, bool Is64) {
   return Is64 ? Op.src64(I) : Op.src(I);
 }
 
-Error writeBinary(RaiseContext &Ctx, OperandResolver &Op,
-                  Instruction::BinaryOps Opcode, bool Is64,
-                  bool Reverse = false) {
+/// Raise a wrapping binary integer operation at the selected width.
+Error handleBinary(RaiseContext &Ctx, OperandResolver &Op,
+                   Instruction::BinaryOps Opcode, bool Is64,
+                   bool Reverse = false) {
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
@@ -89,6 +97,8 @@ Error writeBinary(RaiseContext &Ctx, OperandResolver &Op,
   return Error::success();
 }
 
+/// Write a per-lane carry or borrow result to the instruction's second
+/// destination.
 Error writeCarryOut(RaiseContext &Ctx, const DecodedInst &Di,
                     OperandResolver &Op, Value *Carry) {
   if (Di.NumDefs != 2 || !Di.isReg(1))
@@ -120,10 +130,11 @@ Error writeCarryOut(RaiseContext &Ctx, const DecodedInst &Di,
   }
 }
 
-Error writeBinaryCarry(RaiseContext &Ctx, const DecodedInst &Di,
-                       OperandResolver &Op, Intrinsic::ID OverflowIntrinsic,
-                       Intrinsic::ID SaturatingIntrinsic, bool Reverse,
-                       bool Clamp) {
+/// Raise a binary integer operation with an explicit carry or borrow output.
+Error handleBinaryCarry(RaiseContext &Ctx, const DecodedInst &Di,
+                        OperandResolver &Op, Intrinsic::ID OverflowIntrinsic,
+                        Intrinsic::ID SaturatingIntrinsic, bool Reverse,
+                        bool Clamp) {
   if (Di.NumDefs != 2 || Op.nSrcs() < 2)
     return unsupportedInstruction(Ctx, Di,
                                   "expected two destinations and two sources");
@@ -149,10 +160,12 @@ Error writeBinaryCarry(RaiseContext &Ctx, const DecodedInst &Di,
   return writeCarryOut(Ctx, Di, Op, Carry);
 }
 
-Error writeBinaryCarryIn(RaiseContext &Ctx, const DecodedInst &Di,
-                         OperandResolver &Op, Intrinsic::ID OverflowIntrinsic,
-                         Intrinsic::ID SaturatingIntrinsic, bool Reverse,
-                         bool Clamp) {
+/// Raise a binary integer operation with explicit carry or borrow input and
+/// output.
+Error handleBinaryCarryIn(RaiseContext &Ctx, const DecodedInst &Di,
+                          OperandResolver &Op, Instruction::BinaryOps Opcode,
+                          Intrinsic::ID SaturatingIntrinsic, bool Reverse,
+                          bool Clamp) {
   if (Di.NumDefs != 2 || Op.nSrcs() < 3)
     return unsupportedInstruction(
         Ctx, Di, "expected two destinations and three sources");
@@ -173,18 +186,21 @@ Error writeBinaryCarryIn(RaiseContext &Ctx, const DecodedInst &Di,
 
   Value *Lhs = Reverse ? *Src1 : *Src0;
   Value *Rhs = Reverse ? *Src0 : *Src1;
-  Value *CarryIn = Ctx.B.CreateZExt(*CarryInI1, Ctx.B.getInt32Ty(), "carry.in");
-  Value *First = Ctx.B.CreateIntrinsic(OverflowIntrinsic, {Ctx.B.getInt32Ty()},
-                                       {Lhs, Rhs});
-  Value *FirstResult = Ctx.B.CreateExtractValue(First, 0);
-  Value *FirstCarry = Ctx.B.CreateExtractValue(First, 1);
-  Value *Second = Ctx.B.CreateIntrinsic(OverflowIntrinsic, {Ctx.B.getInt32Ty()},
-                                        {FirstResult, CarryIn});
-  Value *Wrapped = Ctx.B.CreateExtractValue(Second, 0, "result");
-  Value *SecondCarry = Ctx.B.CreateExtractValue(Second, 1);
-  Value *Carry = Ctx.B.CreateOr(FirstCarry, SecondCarry, "carry");
+  IntegerType *WideTy = Ctx.B.getIntNTy(33);
+  Value *WideLhs = Ctx.B.CreateZExt(Lhs, WideTy, "lhs.wide");
+  Value *WideRhs = Ctx.B.CreateZExt(Rhs, WideTy, "rhs.wide");
+  Value *WideCarryIn = Ctx.B.CreateZExt(*CarryInI1, WideTy, "carry.in.wide");
+  Value *WideResult =
+      Ctx.B.CreateBinOp(Opcode, WideLhs, WideRhs, "result.wide");
+  WideResult =
+      Ctx.B.CreateBinOp(Opcode, WideResult, WideCarryIn, "result.with.carry");
+  Value *Wrapped = Ctx.B.CreateTrunc(WideResult, Ctx.B.getInt32Ty(), "result");
+  Value *CarryBit = Ctx.B.CreateLShr(WideResult, 32, "carry.bit");
+  Value *Carry = Ctx.B.CreateTrunc(CarryBit, Ctx.B.getInt1Ty(), "carry");
   Value *Result = Wrapped;
   if (Clamp) {
+    Value *CarryIn =
+        Ctx.B.CreateZExt(*CarryInI1, Ctx.B.getInt32Ty(), "carry.in");
     Value *FirstSat =
         Ctx.B.CreateBinaryIntrinsic(SaturatingIntrinsic, Lhs, Rhs);
     Result =
@@ -194,15 +210,17 @@ Error writeBinaryCarryIn(RaiseContext &Ctx, const DecodedInst &Di,
   return writeCarryOut(Ctx, Di, Op, Carry);
 }
 
+/// Extend the low 24 bits of V to Ty according to the instruction's signedness.
 Value *extendLow24(IRBuilder<> &B, Value *V, Type *Ty, bool IsSigned) {
   Value *Low = B.CreateTrunc(V, B.getIntNTy(24), "low24");
   return IsSigned ? B.CreateSExt(Low, Ty, "sext24")
                   : B.CreateZExt(Low, Ty, "zext24");
 }
 
-Error writeTernaryMinMax(RaiseContext &Ctx, OperandResolver &Op,
-                         Intrinsic::ID Inner, Intrinsic::ID Outer,
-                         StringRef Name) {
+/// Raise a nested min/max operation over three integer sources.
+Error handleTernaryMinMax(RaiseContext &Ctx, OperandResolver &Op,
+                          Intrinsic::ID Inner, Intrinsic::ID Outer,
+                          StringRef Name) {
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
@@ -271,29 +289,31 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   case CanonicalOp::V_ADD_CO_U32:
-    return writeBinaryCarry(Ctx, Di, Op, Intrinsic::uadd_with_overflow,
-                            Intrinsic::uadd_sat, /*Reverse=*/false, *Clamp);
+    return handleBinaryCarry(Ctx, Di, Op, Intrinsic::uadd_with_overflow,
+                             Intrinsic::uadd_sat, /*Reverse=*/false, *Clamp);
   case CanonicalOp::V_SUB_CO_U32:
-    return writeBinaryCarry(Ctx, Di, Op, Intrinsic::usub_with_overflow,
-                            Intrinsic::usub_sat, /*Reverse=*/false, *Clamp);
+    return handleBinaryCarry(Ctx, Di, Op, Intrinsic::usub_with_overflow,
+                             Intrinsic::usub_sat, /*Reverse=*/false, *Clamp);
   case CanonicalOp::V_SUBREV_CO_U32:
-    return writeBinaryCarry(Ctx, Di, Op, Intrinsic::usub_with_overflow,
-                            Intrinsic::usub_sat, /*Reverse=*/true, *Clamp);
+    return handleBinaryCarry(Ctx, Di, Op, Intrinsic::usub_with_overflow,
+                             Intrinsic::usub_sat, /*Reverse=*/true, *Clamp);
   case CanonicalOp::V_ADD_CO_CI_U32:
-    return writeBinaryCarryIn(Ctx, Di, Op, Intrinsic::uadd_with_overflow,
-                              Intrinsic::uadd_sat, /*Reverse=*/false, *Clamp);
+    return handleBinaryCarryIn(Ctx, Di, Op, Instruction::Add,
+                               Intrinsic::uadd_sat, /*Reverse=*/false, *Clamp);
   case CanonicalOp::V_SUB_CO_CI_U32:
-    return writeBinaryCarryIn(Ctx, Di, Op, Intrinsic::usub_with_overflow,
-                              Intrinsic::usub_sat, /*Reverse=*/false, *Clamp);
+    return handleBinaryCarryIn(Ctx, Di, Op, Instruction::Sub,
+                               Intrinsic::usub_sat, /*Reverse=*/false, *Clamp);
   case CanonicalOp::V_SUBREV_CO_CI_U32:
-    return writeBinaryCarryIn(Ctx, Di, Op, Intrinsic::usub_with_overflow,
-                              Intrinsic::usub_sat, /*Reverse=*/true, *Clamp);
+    return handleBinaryCarryIn(Ctx, Di, Op, Instruction::Sub,
+                               Intrinsic::usub_sat, /*Reverse=*/true, *Clamp);
 
   case CanonicalOp::V_MIN_I32:
   case CanonicalOp::V_MAX_I32:
   case CanonicalOp::V_MIN_U32:
   case CanonicalOp::V_MAX_U32:
   case CanonicalOp::V_MUL_U64:
+    // These opcodes require the encoding's clamp bit to be zero. Refuse a
+    // malformed binary rather than asserting on external input.
     if (*Clamp)
       return unsupportedInstruction(
           Ctx, Di, "this integer arithmetic operation does not define clamp");
@@ -343,55 +363,46 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   case CanonicalOp::V_ADD_NC_U64:
-  case CanonicalOp::V_SUB_NC_U64: {
-    Expected<ParsedReg> Dst = Op.dst();
-    if (!Dst)
-      return Dst.takeError();
-    Expected<Value *> Src0 = Op.src64(0);
-    if (!Src0)
-      return Src0.takeError();
-    Expected<Value *> Src1 = Op.src64(1);
-    if (!Src1)
-      return Src1.takeError();
-    const bool IsAdd = Di.CanonOp == CanonicalOp::V_ADD_NC_U64;
-    Value *Result =
-        *Clamp ? Ctx.B.CreateBinaryIntrinsic(IsAdd ? Intrinsic::uadd_sat
-                                                   : Intrinsic::usub_sat,
-                                             *Src0, *Src1)
-               : Ctx.B.CreateBinOp(IsAdd ? Instruction::Add : Instruction::Sub,
-                                   *Src0, *Src1);
-    Ctx.registers().writeReg64(*Dst, Result);
-    return Error::success();
-  }
-
+  case CanonicalOp::V_SUB_NC_U64:
   case CanonicalOp::V_ADD_I32:
   case CanonicalOp::V_SUB_I32: {
+    const bool Is64 = Di.CanonOp == CanonicalOp::V_ADD_NC_U64 ||
+                      Di.CanonOp == CanonicalOp::V_SUB_NC_U64;
+    const bool Signed = !Is64;
+    const bool IsAdd = Di.CanonOp == CanonicalOp::V_ADD_NC_U64 ||
+                       Di.CanonOp == CanonicalOp::V_ADD_I32;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src0 = Op.src(0);
+    Expected<Value *> Src0 = readSrc(Op, 0, Is64);
     if (!Src0)
       return Src0.takeError();
-    Expected<Value *> Src1 = Op.src(1);
+    Expected<Value *> Src1 = readSrc(Op, 1, Is64);
     if (!Src1)
       return Src1.takeError();
-    const bool IsAdd = Di.CanonOp == CanonicalOp::V_ADD_I32;
+    Intrinsic::ID Saturating =
+        Signed ? (IsAdd ? Intrinsic::sadd_sat : Intrinsic::ssub_sat)
+               : (IsAdd ? Intrinsic::uadd_sat : Intrinsic::usub_sat);
     Value *Result =
-        *Clamp ? Ctx.B.CreateBinaryIntrinsic(IsAdd ? Intrinsic::sadd_sat
-                                                   : Intrinsic::ssub_sat,
-                                             *Src0, *Src1)
+        *Clamp ? Ctx.B.CreateBinaryIntrinsic(Saturating, *Src0, *Src1)
                : Ctx.B.CreateBinOp(IsAdd ? Instruction::Add : Instruction::Sub,
                                    *Src0, *Src1);
-    Ctx.registers().writeReg32(*Dst, Result);
+    if (Is64)
+      Ctx.registers().writeReg64(*Dst, Result);
+    else
+      Ctx.registers().writeReg32(*Dst, Result);
     return Error::success();
   }
 
   case CanonicalOp::V_MUL_LO_U32:
+    // Clamp is reserved for this opcode. Refuse malformed input rather than
+    // asserting while decoding an external binary.
     if (*Clamp)
       return unsupportedInstruction(Ctx, Di, "multiply does not define clamp");
-    return writeBinary(Ctx, Op, Instruction::Mul, false);
+    return handleBinary(Ctx, Op, Instruction::Mul, false);
   case CanonicalOp::V_MUL_HI_U32:
   case CanonicalOp::V_MUL_HI_I32: {
+    // Clamp is reserved for these opcodes as well.
     if (*Clamp)
       return unsupportedInstruction(Ctx, Di, "multiply does not define clamp");
     const bool Signed = Di.CanonOp == CanonicalOp::V_MUL_HI_I32;
@@ -451,13 +462,35 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     } else {
       Value *A = extendLow24(Ctx.B, *Src0, Ctx.B.getInt32Ty(), Signed);
       Value *B = extendLow24(Ctx.B, *Src1, Ctx.B.getInt32Ty(), Signed);
+      // LLVM has no integer FMA intrinsic; separate integer operations retain
+      // the instruction's wrapping multiply-add semantics.
       Result = Ctx.B.CreateAdd(Ctx.B.CreateMul(A, B), *Src2, "mad24");
     }
     Ctx.registers().writeReg32(*Dst, Result);
     return Error::success();
   }
 
-  case CanonicalOp::V_MAD_U32:
+  case CanonicalOp::V_MAD_U32: {
+    if (*Clamp)
+      return unsupportedInstruction(Ctx, Di,
+                                    "instruction does not define clamp");
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Expected<Value *> S0 = Op.src(0);
+    if (!S0)
+      return S0.takeError();
+    Expected<Value *> S1 = Op.src(1);
+    if (!S1)
+      return S1.takeError();
+    Expected<Value *> S2 = Op.src(2);
+    if (!S2)
+      return S2.takeError();
+    Value *Product = Ctx.B.CreateMul(*S0, *S1, "mad.mul");
+    Ctx.registers().writeReg32(*Dst, Ctx.B.CreateAdd(Product, *S2, "mad"));
+    return Error::success();
+  }
+
   case CanonicalOp::V_ADD3_U32: {
     if (*Clamp)
       return unsupportedInstruction(Ctx, Di,
@@ -474,10 +507,8 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<Value *> S2 = Op.src(2);
     if (!S2)
       return S2.takeError();
-    Value *First = Di.CanonOp == CanonicalOp::V_MAD_U32
-                       ? Ctx.B.CreateMul(*S0, *S1, "mad.mul")
-                       : Ctx.B.CreateAdd(*S0, *S1, "add3.first");
-    Ctx.registers().writeReg32(*Dst, Ctx.B.CreateAdd(First, *S2));
+    Value *First = Ctx.B.CreateAdd(*S0, *S1, "add3.first");
+    Ctx.registers().writeReg32(*Dst, Ctx.B.CreateAdd(First, *S2, "add3"));
     return Error::success();
   }
 
@@ -514,17 +545,17 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   case CanonicalOp::V_MIN3_I32:
-    return writeTernaryMinMax(Ctx, Op, Intrinsic::smin, Intrinsic::smin,
-                              "min3");
+    return handleTernaryMinMax(Ctx, Op, Intrinsic::smin, Intrinsic::smin,
+                               "min3");
   case CanonicalOp::V_MAX3_I32:
-    return writeTernaryMinMax(Ctx, Op, Intrinsic::smax, Intrinsic::smax,
-                              "max3");
+    return handleTernaryMinMax(Ctx, Op, Intrinsic::smax, Intrinsic::smax,
+                               "max3");
   case CanonicalOp::V_MIN3_U32:
-    return writeTernaryMinMax(Ctx, Op, Intrinsic::umin, Intrinsic::umin,
-                              "min3");
+    return handleTernaryMinMax(Ctx, Op, Intrinsic::umin, Intrinsic::umin,
+                               "min3");
   case CanonicalOp::V_MAX3_U32:
-    return writeTernaryMinMax(Ctx, Op, Intrinsic::umax, Intrinsic::umax,
-                              "max3");
+    return handleTernaryMinMax(Ctx, Op, Intrinsic::umax, Intrinsic::umax,
+                               "max3");
   case CanonicalOp::V_MED3_I32: {
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
@@ -546,17 +577,17 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
   case CanonicalOp::V_MINMAX_I32:
-    return writeTernaryMinMax(Ctx, Op, Intrinsic::smin, Intrinsic::smax,
-                              "minmax");
+    return handleTernaryMinMax(Ctx, Op, Intrinsic::smin, Intrinsic::smax,
+                               "minmax");
   case CanonicalOp::V_MAXMIN_I32:
-    return writeTernaryMinMax(Ctx, Op, Intrinsic::smax, Intrinsic::smin,
-                              "maxmin");
+    return handleTernaryMinMax(Ctx, Op, Intrinsic::smax, Intrinsic::smin,
+                               "maxmin");
   case CanonicalOp::V_MINMAX_U32:
-    return writeTernaryMinMax(Ctx, Op, Intrinsic::umin, Intrinsic::umax,
-                              "minmax");
+    return handleTernaryMinMax(Ctx, Op, Intrinsic::umin, Intrinsic::umax,
+                               "minmax");
   case CanonicalOp::V_MAXMIN_U32:
-    return writeTernaryMinMax(Ctx, Op, Intrinsic::umax, Intrinsic::umin,
-                              "maxmin");
+    return handleTernaryMinMax(Ctx, Op, Intrinsic::umax, Intrinsic::umin,
+                               "maxmin");
 
   case CanonicalOp::V_MIN_I64:
   case CanonicalOp::V_MAX_I64:

@@ -58,10 +58,15 @@ vop3_integer_arithmetic:
 ; CHECK: call { i32, i1 } @llvm.uadd.with.overflow.i32
 ; CHECK: call i32 @llvm.uadd.sat.i32
 	v_add_co_u32 v24, s2, v0, v1 clamp
-; CHECK: = zext i1
-; CHECK: call { i32, i1 } @llvm.uadd.with.overflow.i32
+; CHECK: = zext i32 {{.*}} to i33
+; CHECK: = add i33
+; CHECK: = add i33
+; CHECK: = lshr i33
 	v_add_co_ci_u32 v25, s4, v0, v1, s2
-; CHECK: call { i32, i1 } @llvm.usub.with.overflow.i32
+; CHECK: = zext i32 {{.*}} to i33
+; CHECK: = sub i33
+; CHECK: = sub i33
+; CHECK: = lshr i33
 ; CHECK: call i32 @llvm.usub.sat.i32
 	v_sub_co_ci_u32 v26, vcc_lo, v0, v1, s4 clamp
 ; CHECK: call { i64, i1 } @llvm.uadd.with.overflow.i64
