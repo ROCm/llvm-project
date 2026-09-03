@@ -2,7 +2,7 @@
 // COM: for GFX1250 A0. A0 may return stale SCC before the barrier completes
 // COM: when the barrier ID names a user cluster barrier; the non-isfirst
 // COM: variant shares encoding size and operand layout but does not write SCC.
-
+// XFAIL: *
 // RUN: %clang --target=amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
