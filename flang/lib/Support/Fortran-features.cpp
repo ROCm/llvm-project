@@ -229,6 +229,7 @@ LanguageFeatureControl::LanguageFeatureControl() {
   warnLanguage_.set(LanguageFeature::OpenMPThreadprivateEquivalence);
   warnLanguage_.set(LanguageFeature::OpenAccDefaultNoneScalarsStrict);
   warnLanguage_.set(LanguageFeature::OpenACCMultipleNamesInRoutine);
+  warnLanguage_.set(LanguageFeature::MultipleCommonBlockInit);
 }
 
 std::optional<LanguageControlFlag> LanguageFeatureControl::FindWarning(
