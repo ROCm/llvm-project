@@ -24,7 +24,6 @@ def to_posix(path):
     """
     return path.replace(os.sep, "/")
 
-
 def trace_headers(clang, libcxx_dir, config_site, target, headers):
     """Run clang -E -H to discover all transitive header dependencies."""
     with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
