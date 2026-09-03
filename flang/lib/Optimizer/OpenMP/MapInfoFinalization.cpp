@@ -28,7 +28,6 @@
 #include "flang/Optimizer/Builder/FIRBuilder.h"
 #include "flang/Optimizer/Builder/HLFIRTools.h"
 #include "flang/Optimizer/Builder/MutableBox.h"
-#include "flang/Optimizer/CodeGen/TypeConverter.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
 #include "flang/Optimizer/Dialect/Support/KindMapping.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
@@ -1446,19 +1445,6 @@ public:
         mlir::isa_and_present<fir::BoxAddrOp>(varOp))
       return true;
     return false;
-  }
-  static unsigned getBoxRank(fir::BaseBoxType boxTy) {
-    mlir::Type eleTy =
-        fir::unwrapRefType(boxTy.getEleTy()); // strips heap/ptr/ref
-    if (auto seqTy = mlir::dyn_cast<fir::SequenceType>(eleTy))
-      return seqTy.getDimension();
-    return 0;
-  }
-  static mlir::Type getDescriptorStructTy(const fir::LLVMTypeConverter &tc,
-                                          fir::BaseBoxType boxTy) {
-    // Returns e.g. !llvm.struct<(ptr, i64, i32, i8, i8, i8, i8,
-    //                            array<Rank x array<3 x i64>>[, addendum...])>
-    return tc.convertBoxTypeAsStruct(boxTy, getBoxRank(boxTy));
   }
 
   mlir::Value genTgtGetMappedPtrCall(fir::FirOpBuilder &builder,
