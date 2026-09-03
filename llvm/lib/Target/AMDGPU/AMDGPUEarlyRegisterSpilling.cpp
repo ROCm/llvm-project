@@ -1394,7 +1394,9 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
     OutermostLoopOfCurLoop = CurLoop->getOutermostLoop();
 
   unsigned NumOfRestoresMoved = 0;
-  auto ItL = LoopToDomGroups.find(OutermostLoopOfCurLoop);
+  auto ItL = OutermostLoopOfCurLoop
+                 ? LoopToDomGroups.find(OutermostLoopOfCurLoop)
+                 : LoopToDomGroups.end();
   if (ItL != LoopToDomGroups.end()) {
 
     // In this case, next-use distance does not matter because the restores in
