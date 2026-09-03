@@ -1395,20 +1395,18 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
   if (CurLoop)
     OutermostLoopOfCurLoop = CurLoop->getOutermostLoop();
 
+  // It does not matter which restore instructions are pushed inside the loop
+  // because they all live through the backedge.
   unsigned NumOfRestoresMoved = 0;
   auto ItL = OutermostLoopOfCurLoop
                  ? LoopToDomGroups.find(OutermostLoopOfCurLoop)
                  : LoopToDomGroups.end();
   if (ItL != LoopToDomGroups.end()) {
+    SmallVector<DomGroup> &RestoreCandidates = ItL->second;
+    while ((NumOfRestoresMoved < NumOfSpills) && !RestoreCandidates.empty()) {
 
-    // In this case, next-use distance does not matter because the restores in
-    // loop preheader and they all live-ins to the loop and they are live though
-    // the backedge.
-    SmallVector<DomGroup> DomGroupsToBeDeleted;
-    for (DomGroup &DG : ItL->second) {
-
-      if (NumOfRestoresMoved >= NumOfSpills)
-        break;
+      DomGroup DG = RestoreCandidates.back();
+      RestoreCandidates.pop_back();
 
       if (DG.isDeleted())
         continue;
@@ -1445,11 +1443,6 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
       SpilledRegs.insert(OrigRestoreReg);
       Candidate->generateSpillRestoreInstrs(CurMI, RestoreRegToDomGroup,
                                             LoopToDomGroups);
-      DomGroupsToBeDeleted.push_back(DG);
-    }
-    for (DomGroup &DG : DomGroupsToBeDeleted) {
-      auto ItD = llvm::find(ItL->second, DG);
-      ItL->second.erase(ItD);
     }
   }
 
