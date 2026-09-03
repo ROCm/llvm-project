@@ -37,6 +37,7 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[REG_SEQUENCE4:%[0-9]+]]:sgpr_64 = REG_SEQUENCE [[COPY9]], %subreg.sub0, [[COPY8]], %subreg.sub1
   ; CHECK-NEXT:   [[COPY18:%[0-9]+]]:vgpr_32 = COPY [[S_LSHL_B32_]]
   ; CHECK-NEXT:   [[GLOBAL_LOAD_DWORD:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_DWORD [[REG_SEQUENCE2]], 0, 0, implicit $exec :: (load (s32) from %ir.p3, addrspace 1)
+  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[GLOBAL_LOAD_DWORD]], %stack.9, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.9, addrspace 5)
   ; CHECK-NEXT:   [[GLOBAL_LOAD_USHORT:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_USHORT [[REG_SEQUENCE3]], 0, 0, implicit $exec :: (load (s16) from %ir.p1, addrspace 1)
   ; CHECK-NEXT:   [[GLOBAL_LOAD_USHORT1:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_USHORT [[REG_SEQUENCE3]], 2, 0, implicit $exec :: (load (s16) from %ir.p1 + 2, addrspace 1)
   ; CHECK-NEXT:   SI_SPILL_V64_SAVE [[REG_SEQUENCE2]], %stack.0, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.0, align 4, addrspace 5)
@@ -45,15 +46,18 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   SI_SPILL_V64_SAVE [[REG_SEQUENCE1]], %stack.1, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.1, align 4, addrspace 5)
   ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[COPY13]], %stack.2, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.2, addrspace 5)
   ; CHECK-NEXT:   [[GLOBAL_LOAD_DWORDX3_SADDR:%[0-9]+]]:vreg_96 = GLOBAL_LOAD_DWORDX3_SADDR [[REG_SEQUENCE4]], [[COPY18]], 0, 0, implicit $exec :: (load (s96) from %ir.base, align 4, addrspace 1)
+  ; CHECK-NEXT:   SI_SPILL_V96_SAVE [[GLOBAL_LOAD_DWORDX3_SADDR]], %stack.10, $sgpr32, 0, implicit $exec :: (store (s96) into %stack.10, align 4, addrspace 5)
   ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[COPY12]], %stack.3, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.3, addrspace 5)
   ; CHECK-NEXT:   [[GLOBAL_LOAD_DWORD_SADDR:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_DWORD_SADDR [[REG_SEQUENCE4]], [[COPY18]], 16, 0, implicit $exec :: (load (s32) from %ir.in.offset3, addrspace 1)
   ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[GLOBAL_LOAD_DWORD_SADDR]], %stack.4, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.4, addrspace 5)
   ; CHECK-NEXT:   [[GLOBAL_LOAD_DWORD_SADDR1:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_DWORD_SADDR [[REG_SEQUENCE4]], [[COPY18]], 28, 0, implicit $exec :: (load (s32) from %ir.in.offset7, addrspace 1)
+  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[GLOBAL_LOAD_DWORD_SADDR1]], %stack.11, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.11, addrspace 5)
   ; CHECK-NEXT:   [[V_LSHL_OR_B32_e64_:%[0-9]+]]:vgpr_32 = V_LSHL_OR_B32_e64 [[GLOBAL_LOAD_UBYTE1]], 8, [[GLOBAL_LOAD_UBYTE]], implicit $exec
   ; CHECK-NEXT:   [[V_LSHL_OR_B32_e64_1:%[0-9]+]]:vgpr_32 = V_LSHL_OR_B32_e64 [[GLOBAL_LOAD_UBYTE3]], 8, [[GLOBAL_LOAD_UBYTE2]], implicit $exec
   ; CHECK-NEXT:   [[V_LSHL_OR_B32_e64_2:%[0-9]+]]:vgpr_32 = V_LSHL_OR_B32_e64 [[V_LSHL_OR_B32_e64_1]], 16, [[V_LSHL_OR_B32_e64_]], implicit $exec
   ; CHECK-NEXT:   [[V_CMP_LE_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_LE_U32_e64 [[V_LSHL_OR_B32_e64_2]], [[GLOBAL_LOAD_DWORD]], implicit $exec
   ; CHECK-NEXT:   [[V_LSHL_OR_B32_e64_3:%[0-9]+]]:vgpr_32 = V_LSHL_OR_B32_e64 [[GLOBAL_LOAD_USHORT1]], 16, [[GLOBAL_LOAD_USHORT]], implicit $exec
+  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[V_LSHL_OR_B32_e64_3]], %stack.12, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.12, addrspace 5)
   ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[GLOBAL_LOAD_USHORT2]], %stack.5, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.5, addrspace 5)
   ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[GLOBAL_LOAD_USHORT3]], %stack.6, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.6, addrspace 5)
   ; CHECK-NEXT:   [[SI_IF:%[0-9]+]]:sreg_32 = SI_IF [[V_CMP_LE_U32_e64_]], %bb.28, implicit-def dead $exec, implicit-def dead $scc, implicit $exec
@@ -150,7 +154,8 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[V_MUL_LO_U32_e64_5:%[0-9]+]]:vgpr_32 = V_MUL_LO_U32_e64 [[V_ADD3_U32_e64_]], [[PHI7]], implicit $exec
   ; CHECK-NEXT:   [[V_CMP_GT_I32_e64_1:%[0-9]+]]:sreg_32 = V_CMP_GT_I32_e64 31, [[V_SUB_U32_e64_5]], implicit $exec
   ; CHECK-NEXT:   [[S_ORN2_B32_:%[0-9]+]]:sreg_32 = S_ORN2_B32 [[V_CMP_GT_I32_e64_1]], $exec_lo, implicit-def dead $scc
-  ; CHECK-NEXT:   GLOBAL_STORE_DWORD %455, [[V_MUL_LO_U32_e64_5]], 0, 0, implicit $exec :: (store (s32) into %ir.p1, addrspace 1)
+  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.8, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.8, align 4, addrspace 5)
+  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE]], [[V_MUL_LO_U32_e64_5]], 0, 0, implicit $exec :: (store (s32) into %ir.p1, addrspace 1)
   ; CHECK-NEXT:   S_BRANCH %bb.8
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.7.else.bb5:
@@ -195,9 +200,8 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[REG_SEQUENCE10:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[GLOBAL_LOAD_DWORDX3_SADDR]].sub2, %subreg.sub0, undef %377:vgpr_32, %subreg.sub1
   ; CHECK-NEXT:   %273:vreg_64, $sgpr_null = V_MAD_U64_U32_e64 [[V_ADD3_U32_e64_3]], [[V_SUB_U32_e64_]], [[REG_SEQUENCE10]], 0, implicit $exec
   ; CHECK-NEXT:   [[COPY22:%[0-9]+]]:vgpr_32 = COPY %273.sub0
-  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.1, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.1, align 4, addrspace 5)
-  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE]], %273.sub0, 0, 0, implicit $exec :: (store (s32) into %ir.p7, addrspace 1)
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE3:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.9, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.9, addrspace 5)
+  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE1:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.1, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.1, align 4, addrspace 5)
+  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE1]], %273.sub0, 0, 0, implicit $exec :: (store (s32) into %ir.p7, addrspace 1)
   ; CHECK-NEXT:   S_BRANCH %bb.28
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.10.if.then:
@@ -207,8 +211,6 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[V_ADD_U32_e64_4:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 %412, [[GLOBAL_LOAD_DWORDX3_SADDR]].sub1, 0, implicit $exec
   ; CHECK-NEXT:   [[V_MOV_B32_e32_:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
   ; CHECK-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE %412, %stack.14, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.14, addrspace 5)
-  ; CHECK-NEXT:   SI_SPILL_V64_SAVE %416, %stack.15, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.15, align 4, addrspace 5)
   ; CHECK-NEXT:   S_BRANCH %bb.12
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.11.Flow11:
@@ -232,10 +234,13 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[PHI24:%[0-9]+]]:sreg_32 = PHI [[S_MOV_B32_2]], %bb.10, %84, %bb.17
   ; CHECK-NEXT:   [[PHI25:%[0-9]+]]:vgpr_32 = PHI [[V_MOV_B32_e32_]], %bb.10, %370, %bb.17
   ; CHECK-NEXT:   [[PHI26:%[0-9]+]]:vgpr_32 = PHI [[V_ADD_U32_e64_3]], %bb.10, %81, %bb.17
-  ; CHECK-NEXT:   [[V_ADD_U32_e64_5:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_LSHL_OR_B32_e64_3]], [[PHI26]], 0, implicit $exec
-  ; CHECK-NEXT:   [[V_ADD_U32_e64_6:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_5]], [[GLOBAL_LOAD_DWORD_SADDR1]], 0, implicit $exec
+  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE3:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.12, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.12, addrspace 5)
+  ; CHECK-NEXT:   [[V_ADD_U32_e64_5:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[SI_SPILL_V32_RESTORE3]], [[PHI26]], 0, implicit $exec
+  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE4:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.11, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.11, addrspace 5)
+  ; CHECK-NEXT:   [[V_ADD_U32_e64_6:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_5]], [[SI_SPILL_V32_RESTORE4]], 0, implicit $exec
   ; CHECK-NEXT:   [[V_MUL_LO_U32_e64_10:%[0-9]+]]:vgpr_32 = V_MUL_LO_U32_e64 [[V_ADD_U32_e64_6]], %412, implicit $exec
-  ; CHECK-NEXT:   [[V_CMP_LT_I32_e64_1:%[0-9]+]]:sreg_32 = V_CMP_LT_I32_e64 [[PHI25]], [[GLOBAL_LOAD_DWORD]], implicit $exec
+  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE5:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.9, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.9, addrspace 5)
+  ; CHECK-NEXT:   [[V_CMP_LT_I32_e64_1:%[0-9]+]]:sreg_32 = V_CMP_LT_I32_e64 [[PHI25]], [[SI_SPILL_V32_RESTORE5]], implicit $exec
   ; CHECK-NEXT:   [[V_ADD_U32_e64_7:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_5]], [[PHI25]], 0, implicit $exec
   ; CHECK-NEXT:   [[S_OR_B32_1:%[0-9]+]]:sreg_32 = S_OR_B32 [[PHI23]], $exec_lo, implicit-def dead $scc
   ; CHECK-NEXT:   [[SI_IF4:%[0-9]+]]:sreg_32 = SI_IF [[V_CMP_LT_I32_e64_1]], %bb.17, implicit-def dead $exec, implicit-def dead $scc, implicit $exec
@@ -258,12 +263,12 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT: bb.15.loop.left:
   ; CHECK-NEXT:   successors: %bb.18(0x80000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE4:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.14, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.14, addrspace 5)
-  ; CHECK-NEXT:   [[V_MUL_LO_U32_e64_11:%[0-9]+]]:vgpr_32 = V_MUL_LO_U32_e64 [[V_MUL_LO_U32_e64_10]], [[SI_SPILL_V32_RESTORE4]], implicit $exec
+  ; CHECK-NEXT:   [[V_MUL_LO_U32_e64_11:%[0-9]+]]:vgpr_32 = V_MUL_LO_U32_e64 [[V_MUL_LO_U32_e64_10]], %412, implicit $exec
   ; CHECK-NEXT:   [[V_ADD_U32_e64_8:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[PHI26]], [[V_MUL_LO_U32_e64_11]], 0, implicit $exec
-  ; CHECK-NEXT:   GLOBAL_STORE_DWORD %414, [[V_ADD_U32_e64_8]], 0, 0, implicit $exec :: (store (s32) into %ir.p1, addrspace 1)
-  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE1:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.15, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.15, align 4, addrspace 5)
-  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE1]], [[V_MUL_LO_U32_e64_11]], 0, 0, implicit $exec :: (store (s32) into %ir.p2, addrspace 1)
+  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE2:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.14, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.14, align 4, addrspace 5)
+  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE2]], [[V_ADD_U32_e64_8]], 0, 0, implicit $exec :: (store (s32) into %ir.p1, addrspace 1)
+  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE3:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.15, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.15, align 4, addrspace 5)
+  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE3]], [[V_MUL_LO_U32_e64_11]], 0, 0, implicit $exec :: (store (s32) into %ir.p2, addrspace 1)
   ; CHECK-NEXT:   S_BRANCH %bb.18
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.16.loop.right:
@@ -271,15 +276,18 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[V_ADD_U32_e64_9:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[PHI26]], [[V_ADD_U32_e64_4]], 0, implicit $exec
   ; CHECK-NEXT:   [[REG_SEQUENCE11:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[V_MUL_LO_U32_e64_10]], %subreg.sub0, undef %375:vgpr_32, %subreg.sub1
-  ; CHECK-NEXT:   %287:vreg_64, $sgpr_null = V_MAD_U64_U32_e64 [[V_ADD_U32_e64_9]], %10, [[REG_SEQUENCE11]], 0, implicit $exec
-  ; CHECK-NEXT:   [[V_SUB_U32_e64_7:%[0-9]+]]:vgpr_32 = V_SUB_U32_e64 %287.sub0, [[V_LSHL_OR_B32_e64_3]], 0, implicit $exec
+  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE6:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.13, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.13, addrspace 5)
+  ; CHECK-NEXT:   %287:vreg_64, $sgpr_null = V_MAD_U64_U32_e64 [[V_ADD_U32_e64_9]], [[SI_SPILL_V32_RESTORE6]], [[REG_SEQUENCE11]], 0, implicit $exec
+  ; CHECK-NEXT:   [[V_SUB_U32_e64_7:%[0-9]+]]:vgpr_32 = V_SUB_U32_e64 %287.sub0, [[SI_SPILL_V32_RESTORE3]], 0, implicit $exec
   ; CHECK-NEXT:   [[V_MUL_LO_U32_e64_12:%[0-9]+]]:vgpr_32 = V_MUL_LO_U32_e64 [[V_SUB_U32_e64_7]], [[V_ADD_U32_e64_7]], implicit $exec
   ; CHECK-NEXT:   [[REG_SEQUENCE12:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[PHI26]], %subreg.sub0, undef %373:vgpr_32, %subreg.sub1
-  ; CHECK-NEXT:   %295:vreg_64, $sgpr_null = V_MAD_U64_U32_e64 [[V_MUL_LO_U32_e64_12]], [[GLOBAL_LOAD_DWORDX3_SADDR]].sub2, [[REG_SEQUENCE12]], 0, implicit $exec
+  ; CHECK-NEXT:   [[SI_SPILL_V96_RESTORE:%[0-9]+]]:vreg_96 = SI_SPILL_V96_RESTORE %stack.10, $sgpr32, 0, implicit $exec :: (load (s96) from %stack.10, align 4, addrspace 5)
+  ; CHECK-NEXT:   %295:vreg_64, $sgpr_null = V_MAD_U64_U32_e64 [[V_MUL_LO_U32_e64_12]], [[SI_SPILL_V96_RESTORE]].sub2, [[REG_SEQUENCE12]], 0, implicit $exec
   ; CHECK-NEXT:   [[COPY23:%[0-9]+]]:vgpr_32 = COPY %295.sub0
-  ; CHECK-NEXT:   GLOBAL_STORE_DWORD %414, %295.sub0, 0, 0, implicit $exec :: (store (s32) into %ir.p1, addrspace 1)
-  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE2:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.15, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.15, align 4, addrspace 5)
-  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE2]], [[V_SUB_U32_e64_7]], 0, 0, implicit $exec :: (store (s32) into %ir.p2, addrspace 1)
+  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE4:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.14, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.14, align 4, addrspace 5)
+  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE4]], %295.sub0, 0, 0, implicit $exec :: (store (s32) into %ir.p1, addrspace 1)
+  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE5:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.15, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.15, align 4, addrspace 5)
+  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE5]], [[V_SUB_U32_e64_7]], 0, 0, implicit $exec :: (store (s32) into %ir.p2, addrspace 1)
   ; CHECK-NEXT:   S_BRANCH %bb.14
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.17.Flow9:
@@ -308,8 +316,8 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   successors: %bb.11(0x80000000)
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   SI_END_CF [[SI_IF_BREAK1]], implicit-def dead $exec, implicit-def dead $scc, implicit $exec
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE5:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.11, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.11, addrspace 5)
-  ; CHECK-NEXT:   [[V_ADD_U32_e64_11:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_5]], [[SI_SPILL_V32_RESTORE5]], 0, implicit $exec
+  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE7:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.9, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.9, addrspace 5)
+  ; CHECK-NEXT:   [[V_ADD_U32_e64_11:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_5]], [[SI_SPILL_V32_RESTORE7]], 0, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.11
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.20.if.end:
@@ -319,8 +327,7 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   successors: %bb.22(0x40000000), %bb.27(0x40000000)
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[V_ADD_U32_e64_12:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[PHI22]], [[GLOBAL_LOAD_DWORDX3_SADDR]].sub1, 0, implicit $exec
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE6:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.13, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.13, addrspace 5)
-  ; CHECK-NEXT:   [[V_ADD_U32_e64_13:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_12]], [[SI_SPILL_V32_RESTORE6]], 0, implicit $exec
+  ; CHECK-NEXT:   [[V_ADD_U32_e64_13:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_12]], [[V_LSHL_OR_B32_e64_3]], 0, implicit $exec
   ; CHECK-NEXT:   [[V_CMP_LT_I32_e64_2:%[0-9]+]]:sreg_32 = V_CMP_LT_I32_e64 100, [[V_ADD_U32_e64_13]], implicit $exec
   ; CHECK-NEXT:   [[SI_IF6:%[0-9]+]]:sreg_32 = SI_IF [[V_CMP_LT_I32_e64_2]], %bb.27, implicit-def dead $exec, implicit-def dead $scc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.22
@@ -328,13 +335,10 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT: bb.22.post.cond:
   ; CHECK-NEXT:   successors: %bb.25(0x40000000), %bb.23(0x40000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE7:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.11, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.11, addrspace 5)
-  ; CHECK-NEXT:   [[V_ADD_U32_e64_14:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_13]], [[SI_SPILL_V32_RESTORE7]], 0, implicit $exec
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE8:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.10, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.10, addrspace 5)
-  ; CHECK-NEXT:   [[V_ADD3_U32_e64_4:%[0-9]+]]:vgpr_32 = V_ADD3_U32_e64 [[V_ADD_U32_e64_14]], [[SI_SPILL_V32_RESTORE6]], [[SI_SPILL_V32_RESTORE8]], implicit $exec
+  ; CHECK-NEXT:   [[V_ADD_U32_e64_14:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_13]], [[GLOBAL_LOAD_DWORD]], 0, implicit $exec
+  ; CHECK-NEXT:   [[V_ADD3_U32_e64_4:%[0-9]+]]:vgpr_32 = V_ADD3_U32_e64 [[V_ADD_U32_e64_14]], [[V_LSHL_OR_B32_e64_3]], [[GLOBAL_LOAD_DWORD_SADDR1]], implicit $exec
   ; CHECK-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_32 = V_CMP_NE_U32_e64 1000, [[V_ADD3_U32_e64_4]], implicit $exec
-  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE3:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.0, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.0, align 4, addrspace 5)
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE9:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.12, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.12, addrspace 5)
+  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE6:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.0, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.0, align 4, addrspace 5)
   ; CHECK-NEXT:   [[SI_IF7:%[0-9]+]]:sreg_32 = SI_IF [[V_CMP_NE_U32_e64_1]], %bb.23, implicit-def dead $exec, implicit-def dead $scc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.25
   ; CHECK-NEXT: {{  $}}
@@ -345,8 +349,8 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[PHI33:%[0-9]+]]:vgpr_32 = PHI undef %304:vgpr_32, %bb.22, %110, %bb.25
   ; CHECK-NEXT:   [[PHI34:%[0-9]+]]:vgpr_32 = PHI undef %304:vgpr_32, %bb.22, %109, %bb.25
   ; CHECK-NEXT:   [[PHI35:%[0-9]+]]:vgpr_32 = PHI undef %304:vgpr_32, %bb.22, %112, %bb.25
-  ; CHECK-NEXT:   [[PHI36:%[0-9]+]]:vgpr_32 = PHI [[SI_SPILL_V32_RESTORE7]], %bb.22, undef %419:vgpr_32, %bb.25
-  ; CHECK-NEXT:   [[PHI37:%[0-9]+]]:vgpr_32 = PHI [[SI_SPILL_V32_RESTORE9]], %bb.22, undef %421:vgpr_32, %bb.25
+  ; CHECK-NEXT:   [[PHI36:%[0-9]+]]:vgpr_32 = PHI [[GLOBAL_LOAD_DWORD]], %bb.22, undef %419:vgpr_32, %bb.25
+  ; CHECK-NEXT:   [[PHI37:%[0-9]+]]:vgpr_32 = PHI %10, %bb.22, undef %421:vgpr_32, %bb.25
   ; CHECK-NEXT:   [[PHI38:%[0-9]+]]:vgpr_32 = PHI [[PHI15]], %bb.22, undef %423:vgpr_32, %bb.25
   ; CHECK-NEXT:   [[PHI39:%[0-9]+]]:vgpr_32 = PHI [[PHI16]], %bb.22, undef %425:vgpr_32, %bb.25
   ; CHECK-NEXT:   [[PHI40:%[0-9]+]]:vgpr_32 = PHI [[PHI17]], %bb.22, undef %427:vgpr_32, %bb.25
@@ -358,9 +362,10 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[PHI46:%[0-9]+]]:vgpr_32 = PHI [[V_ADD_U32_e64_12]], %bb.22, undef %439:vgpr_32, %bb.25
   ; CHECK-NEXT:   [[PHI47:%[0-9]+]]:vgpr_32 = PHI [[V_ADD_U32_e64_13]], %bb.22, undef %441:vgpr_32, %bb.25
   ; CHECK-NEXT:   [[PHI48:%[0-9]+]]:vgpr_32 = PHI [[V_ADD3_U32_e64_4]], %bb.22, undef %443:vgpr_32, %bb.25
-  ; CHECK-NEXT:   [[PHI49:%[0-9]+]]:vreg_64 = PHI [[SI_SPILL_V64_RESTORE3]], %bb.22, undef %445:vreg_64, %bb.25
-  ; CHECK-NEXT:   SI_SPILL_V64_SAVE [[PHI49]], %stack.17, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.17, align 4, addrspace 5)
+  ; CHECK-NEXT:   [[PHI49:%[0-9]+]]:vreg_64 = PHI [[SI_SPILL_V64_RESTORE6]], %bb.22, undef %445:vreg_64, %bb.25
+  ; CHECK-NEXT:   SI_SPILL_V64_SAVE [[PHI49]], %stack.18, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.18, align 4, addrspace 5)
   ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI36]], %stack.16, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.16, addrspace 5)
+  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI37]], %stack.17, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.17, addrspace 5)
   ; CHECK-NEXT:   [[SI_ELSE1:%[0-9]+]]:sreg_32 = SI_ELSE [[SI_IF7]], %bb.26, implicit-def dead $exec, implicit-def dead $scc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.24
   ; CHECK-NEXT: {{  $}}
@@ -376,17 +381,17 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[V_ADD_U32_e64_18:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_17]], [[GLOBAL_LOAD_DWORDX3_SADDR]].sub0, 0, implicit $exec
   ; CHECK-NEXT:   [[V_XOR_B32_e64_1:%[0-9]+]]:vgpr_32 = V_XOR_B32_e64 [[V_MUL_LO_U32_e64_14]], [[PHI45]], implicit $exec
   ; CHECK-NEXT:   [[V_SUB_U32_e64_8:%[0-9]+]]:vgpr_32 = V_SUB_U32_e64 [[V_XOR_B32_e64_]], [[PHI46]], 0, implicit $exec
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE10:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.10, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.10, addrspace 5)
-  ; CHECK-NEXT:   [[V_ADD3_U32_e64_5:%[0-9]+]]:vgpr_32 = V_ADD3_U32_e64 [[V_ADD_U32_e64_18]], [[SI_SPILL_V32_RESTORE6]], [[SI_SPILL_V32_RESTORE10]], implicit $exec
+  ; CHECK-NEXT:   [[V_ADD3_U32_e64_5:%[0-9]+]]:vgpr_32 = V_ADD3_U32_e64 [[V_ADD_U32_e64_18]], [[V_LSHL_OR_B32_e64_3]], [[GLOBAL_LOAD_DWORD_SADDR1]], implicit $exec
   ; CHECK-NEXT:   [[V_SUB_U32_e64_9:%[0-9]+]]:vgpr_32 = V_SUB_U32_e64 [[V_XOR_B32_e64_1]], [[PHI47]], 0, implicit $exec
   ; CHECK-NEXT:   [[V_OR_B32_e64_:%[0-9]+]]:vgpr_32 = V_OR_B32_e64 [[V_SUB_U32_e64_8]], [[PHI43]], implicit $exec
-  ; CHECK-NEXT:   [[V_MUL_LO_U32_e64_15:%[0-9]+]]:vgpr_32 = V_MUL_LO_U32_e64 [[V_ADD3_U32_e64_5]], [[PHI37]], implicit $exec
+  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE8:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.17, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.17, addrspace 5)
+  ; CHECK-NEXT:   [[V_MUL_LO_U32_e64_15:%[0-9]+]]:vgpr_32 = V_MUL_LO_U32_e64 [[V_ADD3_U32_e64_5]], [[SI_SPILL_V32_RESTORE8]], implicit $exec
   ; CHECK-NEXT:   [[V_OR_B32_e64_1:%[0-9]+]]:vgpr_32 = V_OR_B32_e64 [[V_SUB_U32_e64_9]], [[PHI44]], implicit $exec
   ; CHECK-NEXT:   [[V_AND_B32_e64_:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[V_OR_B32_e64_]], [[PHI41]], implicit $exec
   ; CHECK-NEXT:   [[V_AND_B32_e64_1:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[V_OR_B32_e64_1]], [[PHI42]], implicit $exec
   ; CHECK-NEXT:   [[V_ASHRREV_I32_e64_:%[0-9]+]]:vgpr_32 = V_ASHRREV_I32_e64 [[PHI40]], [[V_AND_B32_e64_]], implicit $exec
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE11:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.16, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.16, addrspace 5)
-  ; CHECK-NEXT:   [[V_XOR_B32_e64_2:%[0-9]+]]:vgpr_32 = V_XOR_B32_e64 [[V_MUL_LO_U32_e64_15]], [[SI_SPILL_V32_RESTORE11]], implicit $exec
+  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE9:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.16, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.16, addrspace 5)
+  ; CHECK-NEXT:   [[V_XOR_B32_e64_2:%[0-9]+]]:vgpr_32 = V_XOR_B32_e64 [[V_MUL_LO_U32_e64_15]], [[SI_SPILL_V32_RESTORE9]], implicit $exec
   ; CHECK-NEXT:   [[V_LSHL_ADD_U32_e64_:%[0-9]+]]:vgpr_32 = V_LSHL_ADD_U32_e64 [[V_AND_B32_e64_1]], [[PHI39]], [[PHI45]], implicit $exec
   ; CHECK-NEXT:   [[V_ADD_U32_e64_19:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ASHRREV_I32_e64_]], [[PHI45]], 0, implicit $exec
   ; CHECK-NEXT:   [[V_SUB_U32_e64_10:%[0-9]+]]:vgpr_32 = V_SUB_U32_e64 [[V_XOR_B32_e64_2]], [[GLOBAL_LOAD_DWORDX3_SADDR]].sub1, 0, implicit $exec
@@ -397,8 +402,8 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[V_MOV_B32_e32_1:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
   ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[PHI39]], [[V_XAD_U32_e64_]], implicit $exec
   ; CHECK-NEXT:   GLOBAL_STORE_DWORD_SADDR [[V_MOV_B32_e32_1]], [[V_XAD_U32_e64_]], [[REG_SEQUENCE4]], 0, 0, implicit $exec :: (store (s32) into %ir.in, addrspace 1)
-  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE4:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.17, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.17, align 4, addrspace 5)
-  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE4]], [[V_LSHLREV_B32_e64_]], 0, 0, implicit $exec :: (store (s32) into %ir.p3, addrspace 1)
+  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE7:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.18, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.18, align 4, addrspace 5)
+  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE7]], [[V_LSHLREV_B32_e64_]], 0, 0, implicit $exec :: (store (s32) into %ir.p3, addrspace 1)
   ; CHECK-NEXT:   S_BRANCH %bb.26
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.25.post.right:
@@ -406,13 +411,13 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[V_ADD_U32_e64_20:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD3_U32_e64_4]], [[GLOBAL_LOAD_DWORDX3_SADDR]].sub2, 0, implicit $exec
   ; CHECK-NEXT:   [[V_ADD_U32_e64_21:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_20]], [[GLOBAL_LOAD_DWORDX3_SADDR]].sub1, 0, implicit $exec
-  ; CHECK-NEXT:   [[V_ADD_U32_e64_22:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_21]], [[SI_SPILL_V32_RESTORE6]], 0, implicit $exec
-  ; CHECK-NEXT:   [[V_ADD_U32_e64_23:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_22]], [[SI_SPILL_V32_RESTORE8]], 0, implicit $exec
+  ; CHECK-NEXT:   [[V_ADD_U32_e64_22:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_21]], [[V_LSHL_OR_B32_e64_3]], 0, implicit $exec
+  ; CHECK-NEXT:   [[V_ADD_U32_e64_23:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_ADD_U32_e64_22]], [[GLOBAL_LOAD_DWORD_SADDR1]], 0, implicit $exec
   ; CHECK-NEXT:   [[V_MOV_B32_e32_2:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
   ; CHECK-NEXT:   [[V_ASHRREV_I32_e64_1:%[0-9]+]]:vgpr_32 = V_ASHRREV_I32_e64 1, [[V_ADD_U32_e64_23]], implicit $exec
   ; CHECK-NEXT:   GLOBAL_STORE_DWORD_SADDR [[V_MOV_B32_e32_2]], [[V_ASHRREV_I32_e64_1]], [[REG_SEQUENCE4]], 0, 0, implicit $exec :: (store (s32) into %ir.in, addrspace 1)
-  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE5:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.0, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.0, align 4, addrspace 5)
-  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE5]], [[PHI15]], 0, 0, implicit $exec :: (store (s32) into %ir.p3, addrspace 1)
+  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE8:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.0, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.0, align 4, addrspace 5)
+  ; CHECK-NEXT:   GLOBAL_STORE_DWORD [[SI_SPILL_V64_RESTORE8]], [[PHI15]], 0, 0, implicit $exec :: (store (s32) into %ir.p3, addrspace 1)
   ; CHECK-NEXT:   S_BRANCH %bb.23
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.26.Flow4:
@@ -434,10 +439,9 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[REG_SEQUENCE13:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[V_ADD_U32_e64_24]], %subreg.sub0, undef %369:vgpr_32, %subreg.sub1
   ; CHECK-NEXT:   %338:vreg_64, $sgpr_null = V_MAD_U64_U32_e64 [[V_ADD_U32_e64_24]], [[PHI57]], [[REG_SEQUENCE13]], 0, implicit $exec
   ; CHECK-NEXT:   [[V_ADD_U32_e64_25:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[PHI54]], [[GLOBAL_LOAD_DWORDX3_SADDR]].sub0, 0, implicit $exec
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE12:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.4, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.4, addrspace 5)
-  ; CHECK-NEXT:   [[V_ADD3_U32_e64_6:%[0-9]+]]:vgpr_32 = V_ADD3_U32_e64 [[V_ADD_U32_e64_25]], %338.sub0, [[SI_SPILL_V32_RESTORE12]], implicit $exec
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE13:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.10, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.10, addrspace 5)
-  ; CHECK-NEXT:   [[V_ADD3_U32_e64_7:%[0-9]+]]:vgpr_32 = V_ADD3_U32_e64 [[V_ADD3_U32_e64_6]], [[SI_SPILL_V32_RESTORE6]], [[SI_SPILL_V32_RESTORE13]], implicit $exec
+  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE10:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.4, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.4, addrspace 5)
+  ; CHECK-NEXT:   [[V_ADD3_U32_e64_6:%[0-9]+]]:vgpr_32 = V_ADD3_U32_e64 [[V_ADD_U32_e64_25]], %338.sub0, [[SI_SPILL_V32_RESTORE10]], implicit $exec
+  ; CHECK-NEXT:   [[V_ADD3_U32_e64_7:%[0-9]+]]:vgpr_32 = V_ADD3_U32_e64 [[V_ADD3_U32_e64_6]], [[V_LSHL_OR_B32_e64_3]], [[GLOBAL_LOAD_DWORD_SADDR1]], implicit $exec
   ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_1:%[0-9]+]]:vgpr_32 = nuw nsw V_LSHLREV_B32_e64 2, undef %184:sreg_32, implicit $exec
   ; CHECK-NEXT:   GLOBAL_STORE_DWORD_SADDR [[V_LSHLREV_B32_e64_1]], [[V_ADD3_U32_e64_7]], %176, 0, 0, implicit $exec :: (store (s32) into %ir.out.offset, addrspace 1)
   ; CHECK-NEXT:   S_ENDPGM 0
@@ -446,7 +450,7 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   successors: %bb.10(0x40000000), %bb.11(0x40000000)
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[PHI58:%[0-9]+]]:vgpr_32 = PHI undef %172:vgpr_32, %bb.0, [[COPY22]], %bb.9
-  ; CHECK-NEXT:   [[PHI59:%[0-9]+]]:vgpr_32 = PHI undef %172:vgpr_32, %bb.0, [[SI_SPILL_V32_RESTORE3]], %bb.9
+  ; CHECK-NEXT:   [[PHI59:%[0-9]+]]:vgpr_32 = PHI undef %172:vgpr_32, %bb.0, [[V_ADD_U32_e64_]], %bb.9
   ; CHECK-NEXT:   [[PHI60:%[0-9]+]]:vgpr_32 = PHI undef %172:vgpr_32, %bb.0, [[V_ADD3_U32_e64_2]], %bb.9
   ; CHECK-NEXT:   [[PHI61:%[0-9]+]]:vgpr_32 = PHI undef %172:vgpr_32, %bb.0, [[V_LSHL_OR_B32_e64_5]], %bb.9
   ; CHECK-NEXT:   [[PHI62:%[0-9]+]]:vgpr_32 = PHI undef %172:vgpr_32, %bb.0, [[PHI14]], %bb.9
@@ -455,14 +459,13 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[PHI65:%[0-9]+]]:vgpr_32 = PHI [[V_LSHL_OR_B32_e64_2]], %bb.0, undef %413:vgpr_32, %bb.9
   ; CHECK-NEXT:   [[PHI66:%[0-9]+]]:vreg_64 = PHI [[REG_SEQUENCE3]], %bb.0, undef %415:vreg_64, %bb.9
   ; CHECK-NEXT:   [[PHI67:%[0-9]+]]:vreg_64 = PHI [[REG_SEQUENCE]], %bb.0, undef %417:vreg_64, %bb.9
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE14:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.5, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.5, addrspace 5)
-  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE15:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.6, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.6, addrspace 5)
-  ; CHECK-NEXT:   [[V_LSHL_OR_B32_e64_7:%[0-9]+]]:vgpr_32 = V_LSHL_OR_B32_e64 [[SI_SPILL_V32_RESTORE15]], 16, [[SI_SPILL_V32_RESTORE14]], implicit $exec
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[V_LSHL_OR_B32_e64_7]], %stack.12, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.12, addrspace 5)
+  ; CHECK-NEXT:   SI_SPILL_V64_SAVE [[PHI67]], %stack.15, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.15, align 4, addrspace 5)
+  ; CHECK-NEXT:   SI_SPILL_V64_SAVE [[PHI66]], %stack.14, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.14, align 4, addrspace 5)
+  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE11:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.5, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.5, addrspace 5)
+  ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE12:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.6, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.6, addrspace 5)
+  ; CHECK-NEXT:   [[V_LSHL_OR_B32_e64_7:%[0-9]+]]:vgpr_32 = V_LSHL_OR_B32_e64 [[SI_SPILL_V32_RESTORE12]], 16, [[SI_SPILL_V32_RESTORE11]], implicit $exec
+  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[V_LSHL_OR_B32_e64_7]], %stack.13, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.13, addrspace 5)
   ; CHECK-NEXT:   [[REG_SEQUENCE14:%[0-9]+]]:sgpr_64 = REG_SEQUENCE [[COPY17]], %subreg.sub0, [[COPY16]], %subreg.sub1
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[GLOBAL_LOAD_DWORD_SADDR1]], %stack.10, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.10, addrspace 5)
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[GLOBAL_LOAD_DWORD]], %stack.11, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.11, addrspace 5)
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[V_LSHL_OR_B32_e64_3]], %stack.13, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.13, addrspace 5)
   ; CHECK-NEXT:   [[SI_ELSE2:%[0-9]+]]:sreg_32 = SI_ELSE [[SI_IF]], %bb.11, implicit-def dead $exec, implicit-def dead $scc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.10
   ; CHECK-NEXT: {{  $}}
@@ -478,8 +481,6 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[PHI74:%[0-9]+]]:vgpr_32 = PHI undef %229:vgpr_32, %bb.3, [[V_ADD_U32_e64_1]], %bb.4
   ; CHECK-NEXT:   SI_END_CF [[SI_IF2]], implicit-def dead $exec, implicit-def dead $scc, implicit $exec
   ; CHECK-NEXT:   [[V_ADD_U32_e64_26:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[GLOBAL_LOAD_DWORDX3_SADDR]].sub1, [[V_ADD_U32_e64_]], 0, implicit $exec
-  ; CHECK-NEXT:   [[SI_SPILL_V64_RESTORE6:%[0-9]+]]:vreg_64 = SI_SPILL_V64_RESTORE %stack.8, $sgpr32, 0, implicit $exec :: (load (s64) from %stack.8, align 4, addrspace 5)
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[V_ADD_U32_e64_]], %stack.9, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.9, addrspace 5)
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.30.irr.guard:
   ; CHECK-NEXT:   successors: %bb.7(0x40000000), %bb.5(0x40000000)
