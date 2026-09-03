@@ -1126,7 +1126,7 @@ public:
       llvm::SmallVectorImpl<ParentAndPlacement> &mapMemberUsers,
       bool isAttachNever, bool isAttachAlways, bool isHasDeviceAddrFlag,
       bool descCanBeDeferred, bool canOptimizeDescViaPrivatization,
-      mlir::FlatSymbolRefAttr mapperId) {
+      mlir::FlatSymbolRefAttr mapperId, bool mapOnlyDescriptor) {
     bool isRefPtrPtee =
         bitEnumContainsAll(op.getMapType(),
                            mlir::omp::ClauseMapFlags::ref_ptr) &&
@@ -1181,8 +1181,7 @@ public:
         /*mapperId*/ mlir::FlatSymbolRefAttr(), op.getNameAttr(),
         /*partial_map=*/builder.getBoolAttr(false));
     mlir::Operation *attachMap = nullptr;
-    if (!isAttachNever && !isHasDeviceAddrFlag &&
-        !getUseDeviceAddrBlockArg(op, *target)) {
+    if (!isAttachNever && !isHasDeviceAddrFlag && !mapOnlyDescriptor) {
       attachMap =
           genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
                                mlir::omp::ClauseMapFlags::ref_ptr |
@@ -1288,7 +1287,7 @@ public:
       newMapInfo = genRefPtrPteeOrDefaultMap(
           op, builder, target, descriptor, mapMemberUsers, isAttachNever,
           isAttachAlways, mapOnlyDescriptor, descCanBeDeferred,
-          canOptimizeDescViaPrivatization, mapperId);
+          canOptimizeDescViaPrivatization, mapperId, canOptimizeUseDeviceAddr);
     }
     return newMapInfo;
   }
@@ -1328,7 +1327,7 @@ public:
     if (!llvm::isa<mlir::omp::TargetDataOp>(target) || op.getMembers().empty())
       return;
 
-    if (!isUseDevicePtr(op, target))
+    if (!getUseDeviceAddrBlockArg(op, target) && !isUseDevicePtr(op, target))
       return;
 
     auto targetDataOp = llvm::cast<mlir::omp::TargetDataOp>(target);
