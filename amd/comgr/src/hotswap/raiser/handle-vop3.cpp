@@ -22,6 +22,7 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
+#include <cassert>
 #include <climits>
 #include <cstdint>
 
@@ -69,6 +70,11 @@ Error requireNoIntegerSourceModifiers(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+/// Read source I at the width selected by Is64.
+Expected<Value *> readSrc(OperandResolver &Op, unsigned I, bool Is64) {
+  return Is64 ? Op.src64(I) : Op.src(I);
+}
+
 /// Raise a wrapping binary integer operation at the selected width.
 Error handleBinary(RaiseContext &Ctx, OperandResolver &Op,
                    Instruction::BinaryOps Opcode, bool Is64,
@@ -76,10 +82,10 @@ Error handleBinary(RaiseContext &Ctx, OperandResolver &Op,
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> Src0 = Op.src(0, Is64);
+  Expected<Value *> Src0 = readSrc(Op, 0, Is64);
   if (!Src0)
     return Src0.takeError();
-  Expected<Value *> Src1 = Op.src(1, Is64);
+  Expected<Value *> Src1 = readSrc(Op, 1, Is64);
   if (!Src1)
     return Src1.takeError();
   Value *Lhs = Reverse ? *Src1 : *Src0;
@@ -158,7 +164,7 @@ Error handleBinaryCarry(RaiseContext &Ctx, const DecodedInst &Di,
 /// Raise a binary integer operation with explicit carry or borrow input and
 /// output.
 Error handleBinaryCarryIn(RaiseContext &Ctx, const DecodedInst &Di,
-                          OperandResolver &Op, Instruction::BinaryOps Opcode,
+                          OperandResolver &Op, Intrinsic::ID OverflowIntrinsic,
                           Intrinsic::ID SaturatingIntrinsic, bool Reverse,
                           bool Clamp) {
   if (Di.NumDefs != 2 || Op.nSrcs() < 3)
@@ -181,21 +187,18 @@ Error handleBinaryCarryIn(RaiseContext &Ctx, const DecodedInst &Di,
 
   Value *Lhs = Reverse ? *Src1 : *Src0;
   Value *Rhs = Reverse ? *Src0 : *Src1;
-  IntegerType *WideTy = Ctx.B.getIntNTy(33);
-  Value *WideLhs = Ctx.B.CreateZExt(Lhs, WideTy, "lhs.wide");
-  Value *WideRhs = Ctx.B.CreateZExt(Rhs, WideTy, "rhs.wide");
-  Value *WideCarryIn = Ctx.B.CreateZExt(*CarryInI1, WideTy, "carry.in.wide");
-  Value *WideResult =
-      Ctx.B.CreateBinOp(Opcode, WideLhs, WideRhs, "result.wide");
-  WideResult =
-      Ctx.B.CreateBinOp(Opcode, WideResult, WideCarryIn, "result.with.carry");
-  Value *Wrapped = Ctx.B.CreateTrunc(WideResult, Ctx.B.getInt32Ty(), "result");
-  Value *CarryBit = Ctx.B.CreateLShr(WideResult, 32, "carry.bit");
-  Value *Carry = Ctx.B.CreateTrunc(CarryBit, Ctx.B.getInt1Ty(), "carry");
+  Value *CarryIn = Ctx.B.CreateZExt(*CarryInI1, Ctx.B.getInt32Ty(), "carry.in");
+  Value *First = Ctx.B.CreateIntrinsic(OverflowIntrinsic, {Ctx.B.getInt32Ty()},
+                                       {Lhs, Rhs});
+  Value *FirstResult = Ctx.B.CreateExtractValue(First, 0);
+  Value *FirstCarry = Ctx.B.CreateExtractValue(First, 1);
+  Value *Second = Ctx.B.CreateIntrinsic(OverflowIntrinsic, {Ctx.B.getInt32Ty()},
+                                        {FirstResult, CarryIn});
+  Value *Wrapped = Ctx.B.CreateExtractValue(Second, 0, "result");
+  Value *SecondCarry = Ctx.B.CreateExtractValue(Second, 1);
+  Value *Carry = Ctx.B.CreateOr(FirstCarry, SecondCarry, "carry");
   Value *Result = Wrapped;
   if (Clamp) {
-    Value *CarryIn =
-        Ctx.B.CreateZExt(*CarryInI1, Ctx.B.getInt32Ty(), "carry.in");
     Value *FirstSat =
         Ctx.B.CreateBinaryIntrinsic(SaturatingIntrinsic, Lhs, Rhs);
     Result =
@@ -293,13 +296,13 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     return handleBinaryCarry(Ctx, Di, Op, Intrinsic::usub_with_overflow,
                              Intrinsic::usub_sat, /*Reverse=*/true, *Clamp);
   case CanonicalOp::V_ADD_CO_CI_U32:
-    return handleBinaryCarryIn(Ctx, Di, Op, Instruction::Add,
+    return handleBinaryCarryIn(Ctx, Di, Op, Intrinsic::uadd_with_overflow,
                                Intrinsic::uadd_sat, /*Reverse=*/false, *Clamp);
   case CanonicalOp::V_SUB_CO_CI_U32:
-    return handleBinaryCarryIn(Ctx, Di, Op, Instruction::Sub,
+    return handleBinaryCarryIn(Ctx, Di, Op, Intrinsic::usub_with_overflow,
                                Intrinsic::usub_sat, /*Reverse=*/false, *Clamp);
   case CanonicalOp::V_SUBREV_CO_CI_U32:
-    return handleBinaryCarryIn(Ctx, Di, Op, Instruction::Sub,
+    return handleBinaryCarryIn(Ctx, Di, Op, Intrinsic::usub_with_overflow,
                                Intrinsic::usub_sat, /*Reverse=*/true, *Clamp);
 
   case CanonicalOp::V_MIN_I32:
@@ -307,11 +310,7 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_MIN_U32:
   case CanonicalOp::V_MAX_U32:
   case CanonicalOp::V_MUL_U64:
-    // These opcodes require the encoding's clamp bit to be zero. Refuse a
-    // malformed binary rather than asserting on external input.
-    if (*Clamp)
-      return unsupportedInstruction(
-          Ctx, Di, "this integer arithmetic operation does not define clamp");
+    assert(!*Clamp && "integer arithmetic operation does not define clamp");
     return handleVOP2(Ctx, Di, Op);
 
   case CanonicalOp::V_MUL_I32_I24:
@@ -369,10 +368,10 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src0 = Op.src(0, Is64);
+    Expected<Value *> Src0 = readSrc(Op, 0, Is64);
     if (!Src0)
       return Src0.takeError();
-    Expected<Value *> Src1 = Op.src(1, Is64);
+    Expected<Value *> Src1 = readSrc(Op, 1, Is64);
     if (!Src1)
       return Src1.takeError();
     Intrinsic::ID Saturating =

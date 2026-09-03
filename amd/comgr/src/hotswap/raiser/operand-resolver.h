@@ -66,10 +66,6 @@ struct OperandResolver {
   llvm::Expected<llvm::Value *> src64(unsigned I) {
     return Ctx.registers().readOp64(Di, srcIdx(I));
   }
-  // Read the I-th source at the width selected by Is64.
-  llvm::Expected<llvm::Value *> src(unsigned I, bool Is64) {
-    return Is64 ? src64(I) : src(I);
-  }
   // Read the I-th source as a wave mask at target EXEC width.
   llvm::Expected<llvm::Value *> srcExecWidth(unsigned I) {
     return Ctx.registers().readOpExecWidth(Di, srcIdx(I));
