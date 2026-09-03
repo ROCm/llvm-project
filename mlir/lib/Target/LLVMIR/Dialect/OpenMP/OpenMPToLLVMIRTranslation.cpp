@@ -1764,6 +1764,7 @@ static LogicalResult createReductionsAndCleanup(
   // and remove it later.
   llvm::UnreachableInst *tempTerminator = builder.CreateUnreachable();
   builder.SetInsertPoint(tempTerminator);
+  llvm::DebugLoc reductionLoc = builder.getCurrentDebugLocation();
   llvm::OpenMPIRBuilder::InsertPointOrErrorTy contInsertPoint =
       ompBuilder->createReductions(builder, allocaIP, reductionInfos, isByRef,
                                    isNowait, isTeamsReduction);
@@ -1777,7 +1778,8 @@ static LogicalResult createReductionsAndCleanup(
   llvm::OpenMPIRBuilder::InsertPointTy afterIP = *contInsertPoint;
   if (!isTeamsReduction) {
     llvm::OpenMPIRBuilder::InsertPointOrErrorTy barrierIP =
-        ompBuilder->createBarrier(*contInsertPoint, llvm::omp::OMPD_for);
+        ompBuilder->createBarrier({*contInsertPoint, reductionLoc},
+                                  llvm::omp::OMPD_for);
 
     if (failed(handleError(barrierIP, *op)))
       return failure();
