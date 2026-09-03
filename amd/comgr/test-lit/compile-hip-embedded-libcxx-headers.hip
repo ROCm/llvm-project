@@ -6,9 +6,10 @@
 // COM:
 // COM: --mode=distroless only forces the embedded set to be mounted; it does
 // COM: not remove the host's C++ headers, and Comgr injects the embedded
-// COM: directory with -idirafter (last). -nostdinc++ drops the host paths while
-// COM: leaving that -idirafter intact, so the embedded set is the only source.
-// RUN: env AMD_COMGR_DRIVER_OPTIONS_APPEND="-nostdinc++" \
+// COM: directory with -idirafter (last). -nostdlibinc drops the host paths
+// COM: while leaving that -idirafter and the clang resource dir intact, so the
+// COM: embedded set is the only source.
+// RUN: env AMD_COMGR_DRIVER_OPTIONS_APPEND="-nostdlibinc" \
 // RUN:     compile-hip-cxx-headers --mode=distroless %s | %FileCheck %s
 
 // Match a non-zero count, not just the log line: that line reports the skip
