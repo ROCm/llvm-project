@@ -8,7 +8,7 @@
 ; CHECK-LABEL: DW_AT_name ("CSMain")
 ; CHECK:      DW_TAG_variable
 ; CHECK:      DW_AT_location
-; CHECK-NEXT: {{.*\): }}DW_OP_regx {{0x6[0-9a-f]+}}, DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset)
+; CHECK-NEXT: DW_OP_regx 0x[[#%x]], DW_OP_LLVM_user DW_OP_LLVM_push_lane, DW_OP_lit4, DW_OP_mul, DW_OP_LLVM_user DW_OP_LLVM_offset)
 ; CHECK:      DW_AT_name ("first_idx")
 
 define amdgpu_cs void @test_amdpal_cs(i32 inreg noundef %globalTable, i32 noundef %LocalInvocationId) #0 !dbg !5 {
