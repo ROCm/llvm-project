@@ -213,8 +213,8 @@ static Error raiseBitMask(RaiseContext &Ctx, OperandResolver &Op) {
       Ctx, Op, [](IRBuilder<> &B, Value *Width, Value *Offset) {
         Width = maskShiftAmount(B, Width, 32);
         Offset = maskShiftAmount(B, Offset, 32);
-        Value *Ones = B.CreateSub(B.CreateShl(B.getInt32(1), Width),
-                                  B.getInt32(1), "bfm.ones");
+        Value *HighBit = B.CreateShl(B.getInt32(1), Width);
+        Value *Ones = B.CreateSub(HighBit, B.getInt32(1), "bfm.ones");
         return B.CreateShl(Ones, Offset, "bfm");
       });
 }
@@ -279,9 +279,10 @@ static Error raiseShiftLeft64(RaiseContext &Ctx, OperandResolver &Op) {
   if (!Operand) {
     return Operand.takeError();
   }
-  Value *Shift = Ctx.B.CreateZExt(maskShiftAmount(Ctx.B, *Amount, 64),
-                                  Ctx.B.getInt64Ty(), "shift64");
-  Ctx.registers().writeReg64(*Dst, Ctx.B.CreateShl(*Operand, Shift, "lshl64"));
+  Value *MaskedAmount = maskShiftAmount(Ctx.B, *Amount, 64);
+  Value *Shift = Ctx.B.CreateZExt(MaskedAmount, Ctx.B.getInt64Ty(), "shift64");
+  Value *Result = Ctx.B.CreateShl(*Operand, Shift, "lshl64");
+  Ctx.registers().writeReg64(*Dst, Result);
   return Error::success();
 }
 
@@ -374,7 +375,8 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
     });
   case CanonicalOp::V_XNOR_B32:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateNot(B.CreateXor(Src0, Src1, "xnor_xor"), "xnor");
+      Value *Xor = B.CreateXor(Src0, Src1, "xnor_xor");
+      return B.CreateNot(Xor, "xnor");
     });
   case CanonicalOp::V_BFM_B32:
     return raiseBitMask(Ctx, Op);
@@ -384,15 +386,18 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
   // These take the shift amount in src0 and the value being shifted in src1.
   case CanonicalOp::V_LSHLREV_B32:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateShl(Src1, maskShiftAmount(B, Src0, 32), "lshl");
+      Value *Amount = maskShiftAmount(B, Src0, 32);
+      return B.CreateShl(Src1, Amount, "lshl");
     });
   case CanonicalOp::V_LSHRREV_B32:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateLShr(Src1, maskShiftAmount(B, Src0, 32), "lshr");
+      Value *Amount = maskShiftAmount(B, Src0, 32);
+      return B.CreateLShr(Src1, Amount, "lshr");
     });
   case CanonicalOp::V_ASHRREV_I32:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateAShr(Src1, maskShiftAmount(B, Src0, 32), "ashr");
+      Value *Amount = maskShiftAmount(B, Src0, 32);
+      return B.CreateAShr(Src1, Amount, "ashr");
     });
 
   case CanonicalOp::V_ADD_NC_U64:
