@@ -88,17 +88,15 @@ DataSharingProcessor::DataSharingProcessor(lower::AbstractConverter &converter,
                            useDelayedPrivatization, symTable,
                            isTargetPrivatization) {}
 
-void DataSharingProcessor::processStep1() {
+void DataSharingProcessor::processStep1(
+    mlir::omp::PrivateClauseOps *clauseOps,
+    std::optional<llvm::omp::Directive> dir) {
   collectSymbolsForPrivatization();
   collectDefaultSymbols();
   collectImplicitSymbols();
   collectPreDeterminedSymbols();
   collectIndirectReferences();
-}
 
-void DataSharingProcessor::processStep2(
-    mlir::omp::PrivateClauseOps *clauseOps,
-    std::optional<llvm::omp::Directive> dir) {
   if (privatizationDone)
     return;
 
@@ -107,7 +105,7 @@ void DataSharingProcessor::processStep2(
   privatizationDone = true;
 }
 
-void DataSharingProcessor::processStep3(mlir::Operation *op, bool isLoop) {
+void DataSharingProcessor::processStep2(mlir::Operation *op, bool isLoop) {
   // 'sections' lastprivate is handled by genOMP()
   if (mlir::isa<mlir::omp::SectionOp>(op))
     return;
