@@ -37,6 +37,7 @@
 #include "flang/Optimizer/Builder/BoxValue.h"
 #include "flang/Optimizer/Builder/Character.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
+#include "flang/Optimizer/Builder/Runtime/Allocatable.h"
 #include "flang/Optimizer/Builder/Todo.h"
 #include "flang/Optimizer/Dialect/FIROpsSupport.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
@@ -121,6 +122,126 @@ emitNestedParallelGuardForCondLp(lower::AbstractConverter &converter,
 //===----------------------------------------------------------------------===//
 // Code generation helper functions
 //===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// OpenMP allocators side table
+//
+// The `!$omp allocators` lowering registers each allocatable mentioned in an
+// ALLOCATE clause here before lowering the nested block.  The downstream
+// lowering of the ALLOCATE statement (flang/lib/Lower/Allocatable.cpp)
+// queries this table to decide whether to route the allocation through the
+// runtime (so it can dispatch to __kmpc_alloc / __kmpc_aligned_alloc with
+// the recorded handle and alignment) instead of taking the fir.allocmem
+// inline fast path.
+//
+// Flang lowering is single-threaded, but a single process may lower
+// multiple translation units sequentially (e.g. some out-of-tree drivers
+// and Flang's own `-fc1` test fixtures).  Each TU has its own
+// SemanticsContext + Scope::Symbol storage, so a file-static
+// `DenseMap<const Symbol*, ...>` would silently outlive its keys and let
+// stale `Symbol *` pointers from a freed TU collide with fresh `Symbol *`
+// pointers from the next TU (because DenseMap's intrinsic identity is the
+// pointer bit pattern).
+//
+// To stay safe we key the per-TU state on a stable SemanticsContext
+// pointer and reset it explicitly from LoweringBridge::lower() once each
+// TU is done (see Fortran::lower::clearOmpAllocatorState below, called
+// from Bridge.cpp).  Entries are still added and removed with matching
+// stack discipline around genNestedEvaluations() so that nested
+// `!$omp allocators` constructs can shadow outer bindings and restore
+// them on exit.
+//===----------------------------------------------------------------------===//
+
+namespace {
+using OmpAllocatorSymbolMap = llvm::DenseMap<const Fortran::semantics::Symbol *,
+                                             Fortran::lower::OmpAllocatorInfo>;
+using OmpAllocatorTouchedSet =
+    llvm::DenseSet<const Fortran::semantics::Symbol *>;
+
+struct OmpAllocatorTuState {
+  OmpAllocatorSymbolMap symbolMap;
+  // Sticky set: every symbol that has ever been mentioned in an
+  // `!$omp allocators` ALLOCATE clause is recorded here for the rest of
+  // the TU's lowering.  Membership forces every ALLOCATE/DEALLOCATE for
+  // that symbol through the Fortran runtime path so the descriptor's
+  // allocator-index (kOmpAllocatorPos / kDefaultAllocator) can correctly
+  // route the call to __kmpc_alloc / __kmpc_aligned_alloc / __kmpc_free
+  // or std::malloc / std::free.
+  OmpAllocatorTouchedSet touched;
+};
+
+using OmpAllocatorStateByContext =
+    llvm::DenseMap<const Fortran::semantics::SemanticsContext *,
+                   OmpAllocatorTuState>;
+
+OmpAllocatorStateByContext &ompAllocatorStateByContext() {
+  static OmpAllocatorStateByContext instance;
+  return instance;
+}
+
+OmpAllocatorTuState &
+ompAllocatorTuState(Fortran::semantics::SemanticsContext &semaCtx) {
+  return ompAllocatorStateByContext()[&semaCtx];
+}
+} // namespace
+
+std::optional<Fortran::lower::OmpAllocatorInfo>
+Fortran::lower::registerOmpAllocatorInfo(
+    Fortran::semantics::SemanticsContext &semaCtx,
+    const Fortran::semantics::Symbol &sym,
+    Fortran::lower::OmpAllocatorInfo info) {
+  OmpAllocatorTuState &state = ompAllocatorTuState(semaCtx);
+  std::optional<Fortran::lower::OmpAllocatorInfo> previous;
+  auto it = state.symbolMap.find(&sym);
+  if (it != state.symbolMap.end())
+    previous = it->second;
+  state.symbolMap[&sym] = info;
+  // This symbol must use the runtime allocate/deallocate path for the rest of
+  // the compilation, even after this construct's scope ends.
+  state.touched.insert(&sym);
+  return previous;
+}
+
+void Fortran::lower::unregisterOmpAllocatorInfo(
+    Fortran::semantics::SemanticsContext &semaCtx,
+    const Fortran::semantics::Symbol &sym,
+    std::optional<Fortran::lower::OmpAllocatorInfo> prev) {
+  OmpAllocatorTuState &state = ompAllocatorTuState(semaCtx);
+  if (prev)
+    state.symbolMap[&sym] = *prev;
+  else
+    state.symbolMap.erase(&sym);
+  // We deliberately do NOT remove the symbol from `touched` -- the sticky
+  // marker must outlive the construct's scope so that downstream
+  // DEALLOCATE statements (which typically appear outside the
+  // `!$omp allocators` block) still route through the runtime.
+}
+
+std::optional<Fortran::lower::OmpAllocatorInfo>
+Fortran::lower::lookupOmpAllocatorInfo(
+    Fortran::semantics::SemanticsContext &semaCtx,
+    const Fortran::semantics::Symbol &sym) {
+  OmpAllocatorTuState &state = ompAllocatorTuState(semaCtx);
+  auto it = state.symbolMap.find(&sym);
+  if (it == state.symbolMap.end())
+    return std::nullopt;
+  return it->second;
+}
+
+bool Fortran::lower::isOmpAllocatorTouchedSymbol(
+    Fortran::semantics::SemanticsContext &semaCtx,
+    const Fortran::semantics::Symbol &sym) {
+  return ompAllocatorTuState(semaCtx).touched.count(&sym) != 0;
+}
+
+void Fortran::lower::clearOmpAllocatorState(
+    Fortran::semantics::SemanticsContext &semaCtx) {
+  // Drop the entire per-TU side-table so memory does not accumulate when
+  // the same process lowers more than one TU.  Doing this from
+  // LoweringBridge::lower() means callers do not have to remember to
+  // tear the state down themselves.
+  ompAllocatorStateByContext().erase(&semaCtx);
+}
 
 static void genOMPDispatch(lower::AbstractConverter &converter,
                            lower::SymMap &symTable,
@@ -7694,8 +7815,115 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
                    semantics::SemanticsContext &semaCtx,
                    lower::pft::Evaluation &eval,
                    const parser::OpenMPAllocatorsConstruct &allocsConstruct) {
-  if (!semaCtx.langOptions().OpenMPSimd)
-    TODO(converter.getCurrentLocation(), "OpenMPAllocatorsConstruct");
+  // Lowering of the OpenMP 5.0+ `!$omp allocators` construct over Fortran
+  // allocatables:
+  //
+  //   !$omp allocators allocate(align(64): omp_high_bw_mem_alloc: a)
+  //     allocate(a(n))
+  //   !$omp end allocators
+  //
+  // For each allocatable named in an ALLOCATE clause we evaluate the
+  // allocator-handle and ALIGN expressions, then register the resulting
+  // (handle, align) pair in a side table keyed by the allocatable's symbol.
+  // Lowering of the nested ALLOCATE statement (in
+  // flang/lib/Lower/Allocatable.cpp) consults this side table and, on a
+  // hit, does two things that are necessary for the OpenMP allocator path:
+  //
+  //   1. forces the runtime allocation path (disables the fir.allocmem
+  //      inline fast path that would otherwise bypass the descriptor and
+  //      drop the stamp); and
+  //   2. emits a _FortranAOmpAllocatorStamp(descriptor, handle, align) call
+  //      immediately before _FortranAAllocatableAllocate so that
+  //      Descriptor::Allocate dispatches through the OpenMP runtime with
+  //      the recorded handle and alignment.
+  //
+  // Emitting the stamp at the AllocateStmt site (rather than here, at the
+  // allocators-construct entry) means the stamp survives any intervening
+  // code that rebuilds the descriptor (e.g. hlfir::DeclareOp folding), and
+  // makes the alignment value available exactly at the allocation point.
+  fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
+  mlir::Location loc = converter.genLocation(allocsConstruct.source);
+  lower::StatementContext stmtCtx;
+
+  const List<Clause> clauses =
+      makeClauses(allocsConstruct.BeginDir().Clauses(), semaCtx);
+
+  // The runtime receives the allocator handle as a uintptr_t (64-bit on all
+  // supported targets), so emit the handle as i64 to avoid truncation of
+  // user-defined omp_init_allocator handles.  The alignment is recorded in
+  // the same type; 0 means "default alignment" at the runtime level.
+  const mlir::Type handleTy = firOpBuilder.getI64Type();
+
+  // Collect the set of symbols we register in the side table so we can undo
+  // each registration on scope exit, even if lowering of the nested block
+  // throws or exits early.  For each (symbol, previous-binding) pair we
+  // remember what was registered under the symbol before we stomped on it.
+  struct SavedBinding {
+    const semantics::Symbol *sym;
+    std::optional<lower::OmpAllocatorInfo> previous;
+  };
+  llvm::SmallVector<SavedBinding> savedBindings;
+
+  for (const Clause &c : clauses) {
+    const auto *allocClause = std::get_if<clause::Allocate>(&c.u);
+    if (!allocClause)
+      continue;
+    using Allocate = clause::Allocate;
+
+    // Evaluate the allocator handle.  When the clause has no allocator
+    // modifier, OpenMP semantics falls back on the default allocator; we
+    // encode that as handle 0 (omp_null_allocator), which the runtime will
+    // translate to the default memory space.
+    mlir::Value handle;
+    if (const auto &mod =
+            std::get<std::optional<Allocate::AllocatorComplexModifier>>(
+                allocClause->t)) {
+      handle = fir::getBase(converter.genExprValue(mod->v, stmtCtx));
+      handle = firOpBuilder.createConvert(loc, handleTy, handle);
+    } else {
+      handle = firOpBuilder.createIntegerConstant(loc, handleTy, 0);
+    }
+
+    // Evaluate the ALIGN modifier, if present.  The OpenMP spec requires
+    // the value to be a positive integer constant that is a power of two;
+    // we defer that check to the runtime's __kmpc_aligned_alloc, which
+    // returns null on violation and surfaces as an allocation error.
+    mlir::Value align;
+    if (const auto &amod =
+            std::get<std::optional<Allocate::AlignModifier>>(allocClause->t)) {
+      align = fir::getBase(converter.genExprValue(amod->v, stmtCtx));
+      align = firOpBuilder.createConvert(loc, handleTy, align);
+    }
+
+    const auto &objects = std::get<ObjectList>(allocClause->t);
+    for (const Object &obj : objects) {
+      const semantics::Symbol *sym = obj.sym();
+      if (!sym) {
+        // An OMP allocate clause object without a resolved symbol normally
+        // indicates a malformed clause that the parser/semantic checker
+        // already complained about (e.g. a typoed name).  Lowering should
+        // not crash on it -- skip the registration so we still produce IR
+        // for whatever else is valid, and surface a soft diagnostic so
+        // the issue is not silently swallowed.
+        llvm::errs() << "warning: OMP allocate clause object has no symbol; "
+                        "skipping side-table registration for this object\n";
+        continue;
+      }
+      lower::OmpAllocatorInfo info{handle, align};
+      auto prev = lower::registerOmpAllocatorInfo(semaCtx, *sym, info);
+      savedBindings.push_back({sym, prev});
+    }
+  }
+
+  // Lower the inner block.  Its AllocateStmt(s) observe the side-table
+  // bindings just registered and emit the stamp + runtime-allocate
+  // sequence inline.
+  genNestedEvaluations(converter, eval);
+
+  // Restore (or remove) the outer bindings.  Traverse in reverse so nested
+  // shadowing is unwound in LIFO order.
+  for (auto it = savedBindings.rbegin(); it != savedBindings.rend(); ++it)
+    lower::unregisterOmpAllocatorInfo(semaCtx, *it->sym, it->previous);
 }
 
 //===----------------------------------------------------------------------===//

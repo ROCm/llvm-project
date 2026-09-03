@@ -59,6 +59,7 @@ namespace semantics {
 class Symbol;
 class Scope;
 class DerivedTypeSpec;
+class SemanticsContext;
 } // namespace semantics
 
 namespace lower {
@@ -252,6 +253,14 @@ public:
   /// Get FoldingContext that is required for some expression
   /// analysis.
   virtual Fortran::evaluate::FoldingContext &getFoldingContext() = 0;
+
+  /// Get the SemanticsContext associated with the current lowering bridge.
+  /// Used by lowering helpers that need to attach per-translation-unit
+  /// state (e.g. the OpenMP allocator side-table maintained in
+  /// `flang/lib/Lower/OpenMP/OpenMP.cpp`) without resorting to file-static
+  /// globals that would otherwise leak across translation units within
+  /// the same process.
+  virtual Fortran::semantics::SemanticsContext &getSemanticsContext() = 0;
 
   /// Host associated variables are grouped as a tuple. This returns that value,
   /// which is itself a reference. Use bindTuple() to set this value.
