@@ -25,16 +25,19 @@ using namespace llvm;
 namespace COMGR::hotswap {
 namespace {
 
+// One component result awaiting the packet's shared commit point.
 struct PendingWrite {
   ParsedReg Dst;
   Value *Val;
 };
 
+// Report a malformed VOPD packet as a structured raise failure.
 Error malformedVOPD(RaiseContext &Ctx, const DecodedInst &Di,
                     const Twine &Detail) {
   return unsupported(Ctx, Di, Twine("malformed VOPD packet: ") + Detail);
 }
 
+// Apply the component's floating-point source modifiers to its bit value.
 Value *applySourceMods(RaiseContext &Ctx, Value *V, uint8_t Mods) {
   if (Mods == 0)
     return V;
@@ -48,6 +51,7 @@ Value *applySourceMods(RaiseContext &Ctx, Value *V, uint8_t Mods) {
                              IsI64 ? Ctx.B.getInt64Ty() : Ctx.B.getInt32Ty());
 }
 
+// Read and modify a 64-bit component source.
 Expected<Value *> readSource64(RaiseContext &Ctx, const DecodedInst &Di,
                                const DecodedInst::VOPDHalf &Half, unsigned I) {
   if (I >= Half.NumSrcs)
@@ -58,6 +62,7 @@ Expected<Value *> readSource64(RaiseContext &Ctx, const DecodedInst &Di,
   return applySourceMods(Ctx, *V, Half.SrcMods[I]);
 }
 
+// Read and modify a 32-bit component source.
 Expected<Value *> readSource(RaiseContext &Ctx, const DecodedInst &Di,
                              const DecodedInst::VOPDHalf &Half, unsigned I) {
   if (I >= Half.NumSrcs)
@@ -68,15 +73,18 @@ Expected<Value *> readSource(RaiseContext &Ctx, const DecodedInst &Di,
   return applySourceMods(Ctx, *V, Half.SrcMods[I]);
 }
 
+// Decode a component destination register.
 Expected<ParsedReg> readDestination(RaiseContext &Ctx, const DecodedInst &Di,
                                     const DecodedInst::VOPDHalf &Half) {
   return Ctx.registers().parseReg(Di, Half.DstIdx);
 }
 
+// Restrict a 32-bit shift amount to the hardware range.
 Value *maskShiftAmount(IRBuilder<> &B, Value *Amount) {
   return B.CreateAnd(Amount, B.getInt32(31), "vopd.shift.amount");
 }
 
+// Lower a two-input bitop using the encoded three-input truth table.
 Expected<Value *> lowerBitOp3(RaiseContext &Ctx, const DecodedInst &Di,
                               const DecodedInst::VOPDHalf &Half) {
   Expected<Value *> A = readSource(Ctx, Di, Half, 0);
@@ -107,6 +115,7 @@ Expected<Value *> lowerBitOp3(RaiseContext &Ctx, const DecodedInst &Di,
   return Result;
 }
 
+// Lower one VOPD component without committing its destination.
 Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
                             const DecodedInst::VOPDHalf &Half, ParsedReg Dst) {
   if (Half.HasBitOp3)
@@ -228,6 +237,9 @@ Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_ADD_F64:
   case CanonicalOp::V_MUL_F64:
   case CanonicalOp::V_FMA_F64:
+    if (Error Err = Ctx.validateF64Environment(Di))
+      return std::move(Err);
+    [[fallthrough]];
   case CanonicalOp::V_MAX_NUM_F64:
   case CanonicalOp::V_MIN_NUM_F64: {
     Expected<Value *> S0Bits = readSource64(Ctx, Di, Half, 0);

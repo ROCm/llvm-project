@@ -42,6 +42,8 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
     return Registers.takeError();
   const unsigned SourceFloatRoundMode32 = AMDHSA_BITS_GET(
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_32);
+  const unsigned SourceFloatRoundMode16_64 = AMDHSA_BITS_GET(
+      Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_16_64);
   bool Dx10Clamp = true;
   bool IeeeMode = true;
   if (Projection.SourceSTI.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
@@ -55,7 +57,8 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
   return RaiseContext(B, Projection, MC, std::move(*Registers), SourceTextBytes,
                       SourceTextBaseAddress, SourceImageSections,
                       KernelStartOffset, KernelEndOffset,
-                      SourceFloatRoundMode32, Dx10Clamp, IeeeMode);
+                      SourceFloatRoundMode32, SourceFloatRoundMode16_64,
+                      Dx10Clamp, IeeeMode);
 }
 
 RaiseContext::RaiseContext(
@@ -64,13 +67,15 @@ RaiseContext::RaiseContext(
     uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset,
-    unsigned SourceFloatRoundMode32, bool SourceDx10Clamp, bool SourceIeeeMode)
+    unsigned SourceFloatRoundMode32, unsigned SourceFloatRoundMode16_64,
+    bool SourceDx10Clamp, bool SourceIeeeMode)
     : B(B), Projection(Projection), MC(MC), Registers(std::move(Registers)),
       SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),
       SourceFloatRoundMode32(SourceFloatRoundMode32),
+      SourceFloatRoundMode16_64(SourceFloatRoundMode16_64),
       SourceDx10Clamp(SourceDx10Clamp), SourceIeeeMode(SourceIeeeMode) {
   // The builder is positioned in the entry block, which is what the source
   // kernel's first instruction raised into.
@@ -104,6 +109,19 @@ Error RaiseContext::validateF32Environment(const DecodedInst &Di) const {
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags),
         Twine("f32 rounding mode ") + Twine(SourceFloatRoundMode32) +
+            " is unsupported");
+  }
+
+  return Error::success();
+}
+
+Error RaiseContext::validateF64Environment(const DecodedInst &Di) const {
+  if (SourceFloatRoundMode16_64 != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedFloatingPointMode,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        Twine("f64 rounding mode ") + Twine(SourceFloatRoundMode16_64) +
             " is unsupported");
   }
 

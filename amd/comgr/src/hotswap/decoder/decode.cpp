@@ -192,11 +192,13 @@ void classifyImplicitDefs(DecodedInst &Di, const MCInstrDesc &Desc) {
   }
 }
 
+// Report a malformed VOPD packet at its source offset.
 Error failVOPDDecode(const DecodedInst &Di, const Twine &Detail) {
   return createStringError("decodeKernel: malformed VOPD instruction at " +
                            Twine(Di.Offset) + ": " + Detail);
 }
 
+// Record one component source or its bitop truth table.
 Error decodeVOPDSource(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
                        const AMDGPU::VOPD::ComponentInfo &Info,
                        unsigned ComponentSrcIdx) {
@@ -232,6 +234,7 @@ Error decodeVOPDSource(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
   return Error::success();
 }
 
+// Decode one component of a VOPD packet.
 Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
                      const AMDGPU::VOPD::ComponentInfo &Info,
                      unsigned ComponentOpcode, const OpcodeMap &OpcMap) {
@@ -269,6 +272,7 @@ Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
   return Error::success();
 }
 
+// Populate the component views of a VOPD instruction.
 Error decodeVOPD(DecodedInst &Di, const MCInstrInfo &MCII,
                  const OpcodeMap &OpcMap) {
   if (!AMDGPU::isVOPD(Di.Inst.getOpcode()))
