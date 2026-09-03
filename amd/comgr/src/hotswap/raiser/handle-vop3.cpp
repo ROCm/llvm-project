@@ -217,11 +217,13 @@ Value *extendLow24(IRBuilder<> &B, Value *V, Type *Ty, bool IsSigned) {
                   : B.CreateZExt(Low, Ty, "zext24");
 }
 
+// Reduce Amount modulo the power-of-two instruction width.
 Value *maskShiftAmount(IRBuilder<> &B, Value *Amount, unsigned Width) {
   return B.CreateAnd(Amount, ConstantInt::get(Amount->getType(), Width - 1),
                      "shift.amount");
 }
 
+// Destination and three 32-bit sources for a ternary VOP3 operation.
 struct TernaryOperands {
   ParsedReg Dst;
   Value *S0;
@@ -229,6 +231,7 @@ struct TernaryOperands {
   Value *S2;
 };
 
+// Read a destination and three 32-bit sources.
 Expected<TernaryOperands> readTernary32(OperandResolver &Op) {
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)

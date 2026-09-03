@@ -207,6 +207,7 @@ static Value *maskShiftAmount(IRBuilder<> &B, Value *Amount, unsigned Width) {
                      "shift_amount");
 }
 
+// Raise V_BFM_B32 using its five-bit width and offset operands.
 static Error raiseBitMask(RaiseContext &Ctx, OperandResolver &Op) {
   return raiseBinary32(
       Ctx, Op, [](IRBuilder<> &B, Value *Width, Value *Offset) {
@@ -218,6 +219,7 @@ static Error raiseBitMask(RaiseContext &Ctx, OperandResolver &Op) {
       });
 }
 
+// Raise V_BCNT_U32_B32 by adding popcount(src0) to src1.
 static Error raiseBitCount(RaiseContext &Ctx, OperandResolver &Op) {
   return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
     Value *Count =
