@@ -274,7 +274,7 @@ static cl::opt<WWMRegisterRegAlloc::FunctionPassCtor, false,
 static cl::opt<bool, true> LateWaveTransform(
     "amdgpu-late-wave-transform",
     cl::desc("Enable wave transform control flow implementation"),
-    cl::location(AMDGPUTargetMachine::EnableLateWaveTransform), cl::init(false),
+    cl::location(AMDGPUTargetMachine::EnableLateWaveTransform), cl::init(true),
     cl::Hidden);
 // New pass manager register allocator options for AMDGPU
 static cl::opt<RegAllocType, false, RegAllocTypeParser> SGPRRegAllocNPM(
