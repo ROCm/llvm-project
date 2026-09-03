@@ -116,6 +116,9 @@ let Component = "Driver" in {
               "'-nogpuinc' "
               "is given">;
 
+  def err_drv_sycl_no_rdc_multiple_targets : Error<
+    "'%0' is not supported with multiple SYCL offloading targets">;
+
   // SYCL Windows-specific diagnostics
   def err_drv_sycl_requires_dynamic_crt
       : Error<"SYCL requires dynamic C++ runtime (/MD or /MDd); "
