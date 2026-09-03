@@ -3290,7 +3290,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
                                64 * 1024),
         OMPX_InitialNumSignals("LIBOMPTARGET_AMDGPU_NUM_INITIAL_HSA_SIGNALS",
                                64),
-        OMPX_ForceSyncRegions("OMPX_FORCE_SYNC_REGIONS", 0),
         OMPX_StreamBusyWait("LIBOMPTARGET_AMDGPU_STREAM_BUSYWAIT", 2000000),
         OMPX_UseMultipleSdmaEngines(
             // setting default to true here appears to solve random sdma problem
@@ -4128,7 +4127,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     //        work. So for now, skip async copy for non-x86 for dataSubmit
     //        and dataRetrive only.
 #if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86)
-    if (OMPX_ForceSyncRegions || Size >= OMPX_MaxAsyncCopyBytes) {
+    if (Size >= OMPX_MaxAsyncCopyBytes) {
 #else
     if (false) {
 #endif
@@ -4214,13 +4213,12 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     }
 
     // For large transfers use synchronous behavior.
-    // If OMPT is enabled or synchronous behavior is explicitly requested:
     // FIXME: Currently hsa async copy fails to see completion signal for
     //        non-x86 dataSubmit/Retrieve. Other non-x86 calls to asyncMemCopy
     //        work. So for now, skip async copy for non-x86 for dataSubmit
     //        and dataRetrive only.
 #if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86)
-    if (OMPX_ForceSyncRegions || Size >= OMPX_MaxAsyncCopyBytes) {
+    if (Size >= OMPX_MaxAsyncCopyBytes) {
 #else
     if (false) {
 #endif
@@ -4314,8 +4312,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     auto ProfilerSpecificData = getOrNullProfilerSpecificData(AsyncInfoWrapper);
 
     // For large transfers use synchronous behavior.
-    // If OMPT is enabled or synchronous behavior is explicitly requested:
-    if (OMPX_ForceSyncRegions || Size >= OMPX_MaxAsyncCopyBytes) {
+    if (Size >= OMPX_MaxAsyncCopyBytes) {
       if (AsyncInfoWrapper.hasQueue())
         if (auto Err = synchronize(AsyncInfoWrapper))
           return Err;
@@ -5344,10 +5341,6 @@ private:
   /// These signals are mainly used by AMDGPU streams. If needed, more signals
   /// will be created.
   UInt32Envar OMPX_InitialNumSignals;
-
-  /// Envar to force synchronous target regions. The default 0 uses an
-  /// asynchronous implementation.
-  UInt32Envar OMPX_ForceSyncRegions;
   /// switching to blocked state. The default 2000000 busywaits for 2 seconds
   /// before going into a blocking HSA wait state. The unit for these variables
   /// are microseconds.

@@ -96,8 +96,6 @@ struct __tgt_async_info {
   /// happening.
   KernelLaunchEnvironmentTy KernelLaunchEnvironment;
 
-  /// Use for sync interface. When false => synchronous execution
-  bool ExecAsync = true;
   /// Maintain the actal data for OMPT.
   void *ProfilerData = nullptr;
 };
