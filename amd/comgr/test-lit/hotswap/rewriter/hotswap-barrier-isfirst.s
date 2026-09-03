@@ -1,8 +1,8 @@
 // COM: Test HotSwap in-place patch s_barrier_signal_isfirst -> s_barrier_signal
 // COM: for GFX1250 A0. A0 may return stale SCC before the barrier completes
-// COM: when the barrier ID names a user cluster barrier; the non-isfirst
-// COM: variant shares encoding size and operand layout but does not write SCC.
-// XFAIL: *
+// COM: while cluster barriers are in flight; the non-isfirst variant shares
+// COM: encoding size and operand layout but does not write SCC.
+
 // RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
@@ -13,16 +13,16 @@
 
 // COM: Verify the patched layout: both isfirst sites are replaced by the
 // COM: non-isfirst variant in place with their operand values preserved
-// COM: (-1 stays -1, -3 stays -3). Surrounding waits and endpgm stay put.
+// COM: (-1 stays -1, 1 stays 1). Surrounding waits and endpgm stay put.
 // COM: DISASM-NOT brackets ensure no s_barrier_signal_isfirst remains
-// COM: anywhere. Wait operands are shown as raw 16-bit hex by llvm-objdump
-// COM: (signed -1 = 0xffff, -3 = 0xfffd).
+// COM: anywhere. Negative wait operands are shown as raw 16-bit hex by
+// COM: llvm-objdump (signed -1 = 0xffff).
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 // DISASM-NOT: s_barrier_signal_isfirst
 // DISASM: s_barrier_signal -1
 // DISASM-NEXT: s_barrier_wait 0xffff
-// DISASM-NEXT: s_barrier_signal -3
-// DISASM-NEXT: s_barrier_wait 0xfffd
+// DISASM-NEXT: s_barrier_signal 1
+// DISASM-NEXT: s_barrier_wait 1
 // DISASM-NEXT: s_endpgm
 // DISASM-NOT: s_barrier_signal_isfirst
 
@@ -56,8 +56,8 @@
 
 // NO-PATCH: s_barrier_signal_isfirst -1
 // NO-PATCH-NEXT: s_barrier_wait 0xffff
-// NO-PATCH-NEXT: s_barrier_signal_isfirst -3
-// NO-PATCH-NEXT: s_barrier_wait 0xfffd
+// NO-PATCH-NEXT: s_barrier_signal_isfirst 1
+// NO-PATCH-NEXT: s_barrier_wait 1
 // NO-PATCH-NEXT: s_endpgm
 
 // COM: With explicit B0->B0 stepping, entry trampolines must not accidentally
@@ -72,8 +72,8 @@
 // RUN: %llvm-objdump -d %t.b0b0.elf | %FileCheck --check-prefix=B0B0 %s
 // B0B0: s_barrier_signal_isfirst -1
 // B0B0-NEXT: s_barrier_wait 0xffff
-// B0B0-NEXT: s_barrier_signal_isfirst -3
-// B0B0-NEXT: s_barrier_wait 0xfffd
+// B0B0-NEXT: s_barrier_signal_isfirst 1
+// B0B0-NEXT: s_barrier_wait 1
 // B0B0: global_prefetch_b8 v0, s[0:1] scope:SCOPE_SE
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -84,10 +84,12 @@
 test_barrier_isfirst:
   // Two isfirst sites with different barrier IDs; both must be swapped
   // to s_barrier_signal in place with their operand values preserved.
+  // The IDs sit in different encoding classes (-1 = inline negative 0xc1,
+  // 1 = named barrier 0x81) so the swap must not disturb src0.
   s_barrier_signal_isfirst -1
   s_barrier_wait -1
-  s_barrier_signal_isfirst -3
-  s_barrier_wait -3
+  s_barrier_signal_isfirst 1
+  s_barrier_wait 1
   s_endpgm
 .Ltest_barrier_isfirst_end:
 .size test_barrier_isfirst, .Ltest_barrier_isfirst_end-test_barrier_isfirst
