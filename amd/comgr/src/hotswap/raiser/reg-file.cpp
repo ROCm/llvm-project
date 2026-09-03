@@ -532,7 +532,7 @@ void AllocaRegFile::writeReg64(IRBuilder<> &B, ParsedReg Pr, Value *V) {
     // lands the way a write to EXEC_LO does: narrowed to the EXEC storage
     // width the projection chose, and subject to its policy for a narrow
     // write. A wave64 source writes the mask whole.
-    if (Projection->sourceIsa().isWave32()) {
+    if (Projection->sourceWaveSize() == 32) {
       ParsedReg ExecLo = Pr;
       ExecLo.WidthInDwords = 1;
       ExecLo.BaseIdx = 0;
