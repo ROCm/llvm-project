@@ -11533,6 +11533,73 @@ static bool setsSCCIfResultIsZero(const MachineInstr &Def, bool &NeedInversion,
   return true;
 }
 
+static bool evaluateCompare(const MachineInstr *CmpInstr,
+			    bool &SCCIsSet) {
+  const MachineRegisterInfo &MRI = CmpInstr->getParent()->getParent()->getRegInfo();  
+  int64_t Cmp0Value, Cmp1Value;
+
+  const MachineOperand &Op0 = CmpInstr->getOperand(0);
+  const MachineOperand &Op1 = CmpInstr->getOperand(1);
+  Register SrcReg0, SrcReg1;
+
+  if (!Op0.isReg() || Op0.getSubReg()) {
+    return false;
+  }
+  SrcReg0 = Op0.getReg();
+  if (!getFoldableImm(SrcReg0, MRI, Cmp0Value)) {
+    return false;
+  }
+    
+  if (Op1.isImm()) {
+    Cmp1Value=Op1.getImm();
+  } else if (Op1.isReg() && !Op1.getSubReg() && !getFoldableImm(Op1.getReg(), MRI, Cmp1Value)) {
+    return false;
+  }
+
+
+  dbgs() << "FFFFFFFFFFFFFFFFFFFFFFFFFFF evaluating comp " << CmpInstr->getOpcode() << " " << Cmp0Value << " " << Cmp1Value << "\n";
+    
+  switch (CmpInstr->getOpcode()) {
+  default:
+    return false;
+  case AMDGPU::S_CMP_EQ_U32:
+  case AMDGPU::S_CMP_EQ_I32:
+  case AMDGPU::S_CMP_EQ_U64:
+    SCCIsSet = Cmp0Value == Cmp1Value;
+    break;
+  case AMDGPU::S_CMP_LG_U32:
+  case AMDGPU::S_CMP_LG_I32:
+  case AMDGPU::S_CMP_LG_U64:
+    SCCIsSet = Cmp0Value != Cmp1Value;
+    break;
+  case AMDGPU::S_CMP_LT_U32:
+    SCCIsSet = static_cast<uint64_t>(Cmp0Value) < static_cast<uint64_t>(Cmp1Value);
+    break;
+  case AMDGPU::S_CMP_LE_U32:
+    SCCIsSet = static_cast<uint64_t>(Cmp0Value) <= static_cast<uint64_t>(Cmp1Value);
+    break;
+  case AMDGPU::S_CMP_GT_U32:
+    SCCIsSet = static_cast<uint64_t>(Cmp0Value) > static_cast<uint64_t>(Cmp1Value);
+    break;
+  case AMDGPU::S_CMP_GE_U32:
+    SCCIsSet = static_cast<uint64_t>(Cmp0Value) >= static_cast<uint64_t>(Cmp1Value);
+    break;
+    
+  case AMDGPU::S_CMP_LT_I32:
+    SCCIsSet = Cmp0Value < Cmp1Value;
+    break;
+  case AMDGPU::S_CMP_LE_I32:
+    SCCIsSet = Cmp0Value <= Cmp1Value;
+    break;
+  case AMDGPU::S_CMP_GT_I32:
+    SCCIsSet = Cmp0Value > Cmp1Value;
+    break;
+  case AMDGPU::S_CMP_GE_I32:
+    SCCIsSet = Cmp0Value >= Cmp1Value;
+    break;
+  }  
+  return true;
+}
 bool SIInstrInfo::optimizeCompareInstr(MachineInstr &CmpInstr, Register SrcReg,
                                        Register SrcReg2, int64_t CmpMask,
                                        int64_t CmpValue,
@@ -11747,6 +11814,56 @@ bool SIInstrInfo::optimizeCompareInstr(MachineInstr &CmpInstr, Register SrcReg,
   }
 
   return false;
+}
+
+bool SIInstrInfo::optimizeCondBranch(MachineInstr &CBI) const {
+  MachineBasicBlock *Parent = CBI.getParent();  
+  if (CBI.getOpcode()!=AMDGPU::S_CBRANCH_SCC0 &&
+      CBI.getOpcode()!=AMDGPU::S_CBRANCH_SCC1)
+    return false;
+
+  // Search backward for compare.
+  MachineInstr *CompareInst=nullptr;
+  constexpr unsigned ScanLimit = 8;
+  unsigned Count = 0;  
+  for (MachineInstr &MI :
+	 make_range(std::next(MachineBasicBlock::reverse_iterator(CBI)), Parent->rend())) {
+    if (++Count > ScanLimit)
+      return false;
+    if (MI.isCompare()) {
+      CompareInst = &MI;
+      break;
+    }
+    if (MI.definesRegister(AMDGPU::SCC, &RI))
+      return false;    
+  }
+
+  // If compare can be evaluated simplify the conditional branch.
+  bool SCCIsSet;  
+  if (!CompareInst ||
+      !evaluateCompare(CompareInst, SCCIsSet))
+    return false;
+
+  MachineBasicBlock *TBB = CBI.getOperand(0).getMBB();    
+
+  if (SCCIsSet == (CBI.getOpcode()==AMDGPU::S_CBRANCH_SCC1)) {
+    MachineBasicBlock::iterator CBII = CBI.getIterator();
+    MachineInstr &LastInst = Parent->back();
+      
+    dbgs() << "FFFFFFFFFFFFFFFFFFFFFFFFF unconditional\n";
+
+    if (std::next(CBII) != LastInst.getIterator() ||
+	LastInst.getOpcode() != AMDGPU::S_BRANCH)
+      return false;
+    Parent->removeSuccessor(LastInst.getOperand(0).getMBB());
+    LastInst.setDesc(get(AMDGPU::S_BRANCH));
+    LastInst.getOperand(0).setMBB(TBB);
+  } else {
+    dbgs() << "FFFFFFFFFFFFFFFFFFFFFFFFF remove\n";
+    Parent->removeSuccessor(TBB);
+  }
+  CBI.eraseFromParent();  
+  return true;
 }
 
 void SIInstrInfo::enforceOperandRCAlignment(MachineInstr &MI,
