@@ -7,14 +7,14 @@ define i32 @nuw_kept(i32 %start, i32 %step, i32 %n) {
 ; CHECK-LABEL: define i32 @nuw_kept(
 ; CHECK-SAME: i32 [[START:%.*]], i32 [[STEP:%.*]], i32 [[N:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
+; CHECK-NEXT:    [[TMP0:%.*]] = mul i32 [[N]], [[STEP]]
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LATCH:.*]]
 ; CHECK:       [[LATCH]]:
 ; CHECK-NEXT:    br label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = mul i32 [[N]], [[STEP]]
-; CHECK-NEXT:    [[TMP1:%.*]] = add nuw i32 [[START]], [[TMP0]]
+; CHECK-NEXT:    [[TMP1:%.*]] = add i32 [[START]], [[TMP0]]
 ; CHECK-NEXT:    ret i32 [[TMP1]]
 ;
 entry:
@@ -42,14 +42,14 @@ define i32 @nsw_kept_same_sign(i32 %start.in, i32 %step.in, i32 %n) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
 ; CHECK-NEXT:    [[START:%.*]] = and i32 [[START_IN]], 1023
 ; CHECK-NEXT:    [[STEP:%.*]] = and i32 [[STEP_IN]], 1023
+; CHECK-NEXT:    [[TMP0:%.*]] = mul i32 [[N]], [[STEP]]
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LATCH:.*]]
 ; CHECK:       [[LATCH]]:
 ; CHECK-NEXT:    br label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = mul i32 [[N]], [[STEP]]
-; CHECK-NEXT:    [[TMP1:%.*]] = add nuw i32 [[TMP0]], [[START]]
+; CHECK-NEXT:    [[TMP1:%.*]] = add i32 [[TMP0]], [[START]]
 ; CHECK-NEXT:    ret i32 [[TMP1]]
 ;
 entry:
@@ -79,13 +79,13 @@ define i32 @nsw_dropped_mixed_signs(i32 %start.in, i32 %step.in, i32 %n) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
 ; CHECK-NEXT:    [[START:%.*]] = and i32 [[START_IN]], 1023
 ; CHECK-NEXT:    [[STEP_POS:%.*]] = and i32 [[STEP_IN]], 1023
+; CHECK-NEXT:    [[TMP0:%.*]] = mul i32 [[N]], [[STEP_POS]]
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LATCH:.*]]
 ; CHECK:       [[LATCH]]:
 ; CHECK-NEXT:    br label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = mul i32 [[N]], [[STEP_POS]]
 ; CHECK-NEXT:    [[TMP1:%.*]] = sub i32 [[START]], [[TMP0]]
 ; CHECK-NEXT:    ret i32 [[TMP1]]
 ;
@@ -140,13 +140,13 @@ define i32 @nuw_dropped_sum_flattened(i32 %a, i32 %b, i32 %n) {
 ; CHECK-LABEL: define i32 @nuw_dropped_sum_flattened(
 ; CHECK-SAME: i32 [[A:%.*]], i32 [[B:%.*]], i32 [[N:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
+; CHECK-NEXT:    [[TMP0:%.*]] = add i32 [[N]], [[B]]
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LATCH:.*]]
 ; CHECK:       [[LATCH]]:
 ; CHECK-NEXT:    br label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = add i32 [[N]], [[B]]
 ; CHECK-NEXT:    [[TMP1:%.*]] = add i32 [[TMP0]], [[A]]
 ; CHECK-NEXT:    ret i32 [[TMP1]]
 ;
@@ -174,13 +174,13 @@ define i32 @nuw_dropped_product_flattened(i32 %s1, i32 %s2, i32 %n) {
 ; CHECK-LABEL: define i32 @nuw_dropped_product_flattened(
 ; CHECK-SAME: i32 [[S1:%.*]], i32 [[S2:%.*]], i32 [[N:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
+; CHECK-NEXT:    [[TMP0:%.*]] = mul i32 [[N]], [[S2]]
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT:.*]], label %[[LATCH:.*]]
 ; CHECK:       [[LATCH]]:
 ; CHECK-NEXT:    br label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = mul i32 [[N]], [[S2]]
 ; CHECK-NEXT:    [[TMP1:%.*]] = mul i32 [[TMP0]], [[S1]]
 ; CHECK-NEXT:    ret i32 [[TMP1]]
 ;
@@ -272,23 +272,23 @@ define i32 @no_flag_leak_through_shared_udiv(i32 %start, i32 %n, i1 %c) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
 ; CHECK-NEXT:    br i1 [[C]], label %[[PH_1:.*]], label %[[PH_2:.*]]
 ; CHECK:       [[PH_1]]:
+; CHECK-NEXT:    [[TMP0:%.*]] = add i32 [[N]], [[START]]
 ; CHECK-NEXT:    br label %[[LOOP_1_HEADER:.*]]
 ; CHECK:       [[LOOP_1_HEADER]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT_1:.*]], label %[[LOOP_1_LATCH:.*]]
 ; CHECK:       [[LOOP_1_LATCH]]:
 ; CHECK-NEXT:    br label %[[LOOP_1_HEADER]]
 ; CHECK:       [[EXIT_1]]:
-; CHECK-NEXT:    [[TMP0:%.*]] = add i32 [[N]], [[START]]
 ; CHECK-NEXT:    [[TMP1:%.*]] = udiv i32 [[TMP0]], 3
 ; CHECK-NEXT:    ret i32 [[TMP1]]
 ; CHECK:       [[PH_2]]:
+; CHECK-NEXT:    [[TMP2:%.*]] = add i32 [[N]], [[START]]
 ; CHECK-NEXT:    br label %[[LOOP_2_HEADER:.*]]
 ; CHECK:       [[LOOP_2_HEADER]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT_2:.*]], label %[[LOOP_2_LATCH:.*]]
 ; CHECK:       [[LOOP_2_LATCH]]:
 ; CHECK-NEXT:    br label %[[LOOP_2_HEADER]]
 ; CHECK:       [[EXIT_2]]:
-; CHECK-NEXT:    [[TMP2:%.*]] = add nuw i32 [[N]], [[START]]
 ; CHECK-NEXT:    [[TMP3:%.*]] = udiv i32 [[TMP2]], 3
 ; CHECK-NEXT:    ret i32 [[TMP3]]
 ;
@@ -342,10 +342,6 @@ define ptr @exit_value_mul(ptr %first, ptr %last) {
 ; CHECK-NEXT:    [[C0:%.*]] = icmp ult ptr [[FIRST]], [[LAST]]
 ; CHECK-NEXT:    br i1 [[C0]], label %[[LOOP_PREHEADER:.*]], label %[[DONE:.*]]
 ; CHECK:       [[LOOP_PREHEADER]]:
-; CHECK-NEXT:    br label %[[LOOP:.*]]
-; CHECK:       [[LOOP]]:
-; CHECK-NEXT:    br i1 false, label %[[LOOP]], label %[[EXIT:.*]]
-; CHECK:       [[EXIT]]:
 ; CHECK-NEXT:    [[TMP0:%.*]] = add i64 [[FIRST2]], 24
 ; CHECK-NEXT:    [[UMAX:%.*]] = call i64 @llvm.umax.i64(i64 [[LAST1]], i64 [[TMP0]])
 ; CHECK-NEXT:    [[TMP1:%.*]] = add i64 [[UMAX]], -24
@@ -355,7 +351,11 @@ define ptr @exit_value_mul(ptr %first, ptr %last) {
 ; CHECK-NEXT:    [[TMP4:%.*]] = udiv i64 [[TMP3]], 24
 ; CHECK-NEXT:    [[TMP5:%.*]] = add i64 [[UMIN]], [[TMP4]]
 ; CHECK-NEXT:    [[TMP6:%.*]] = mul i64 [[TMP5]], 24
-; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr nuw i8, ptr [[FIRST]], i64 [[TMP6]]
+; CHECK-NEXT:    br label %[[LOOP:.*]]
+; CHECK:       [[LOOP]]:
+; CHECK-NEXT:    br i1 false, label %[[LOOP]], label %[[EXIT:.*]]
+; CHECK:       [[EXIT]]:
+; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[FIRST]], i64 [[TMP6]]
 ; CHECK-NEXT:    ret ptr [[SCEVGEP]]
 ; CHECK:       [[DONE]]:
 ; CHECK-NEXT:    ret ptr [[FIRST]]
