@@ -72,11 +72,6 @@ Error requireNoIntegerSourceModifiers(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
-/// Read source I at the width selected by Is64.
-Expected<Value *> readSrc(OperandResolver &Op, unsigned I, bool Is64) {
-  return Is64 ? Op.src64(I) : Op.src(I);
-}
-
 /// Raise a wrapping binary integer operation at the selected width.
 Error handleBinary(RaiseContext &Ctx, OperandResolver &Op,
                    Instruction::BinaryOps Opcode, bool Is64,
@@ -84,10 +79,10 @@ Error handleBinary(RaiseContext &Ctx, OperandResolver &Op,
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> Src0 = readSrc(Op, 0, Is64);
+  Expected<Value *> Src0 = Op.src(0, Is64);
   if (!Src0)
     return Src0.takeError();
-  Expected<Value *> Src1 = readSrc(Op, 1, Is64);
+  Expected<Value *> Src1 = Op.src(1, Is64);
   if (!Src1)
     return Src1.takeError();
   Value *Lhs = Reverse ? *Src1 : *Src0;
@@ -744,10 +739,10 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src0 = readSrc(Op, 0, Is64);
+    Expected<Value *> Src0 = Op.src(0, Is64);
     if (!Src0)
       return Src0.takeError();
-    Expected<Value *> Src1 = readSrc(Op, 1, Is64);
+    Expected<Value *> Src1 = Op.src(1, Is64);
     if (!Src1)
       return Src1.takeError();
     Intrinsic::ID Saturating =

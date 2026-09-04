@@ -14,11 +14,6 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-// Read source 0 at the width the opcode operates on.
-static Expected<Value *> readSrc0(OperandResolver &Op, bool Is64) {
-  return Is64 ? Op.src64(0) : Op.src(0);
-}
-
 // Write V to Dst at the width the opcode operates on.
 static void writeDst(RegisterState &Registers, ParsedReg Dst, Value *V,
                      bool Is64) {
@@ -132,7 +127,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src = readSrc0(Op, Is64);
+    Expected<Value *> Src = Op.src(0, Is64);
     if (!Src)
       return Src.takeError();
     writeDst(Ctx.registers(), *Dst, *Src, Is64);
@@ -145,7 +140,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src = readSrc0(Op, Is64);
+    Expected<Value *> Src = Op.src(0, Is64);
     if (!Src)
       return Src.takeError();
     Value *Reversed = Ctx.B.CreateUnaryIntrinsic(Intrinsic::bitreverse, *Src,
@@ -160,7 +155,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src = readSrc0(Op, Is64);
+    Expected<Value *> Src = Op.src(0, Is64);
     if (!Src)
       return Src.takeError();
     Value *Result = Ctx.B.CreateNot(*Src, "s_not");
@@ -179,7 +174,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src = readSrc0(Op, Is64);
+    Expected<Value *> Src = Op.src(0, Is64);
     if (!Src)
       return Src.takeError();
     Expected<Value *> Old = Is64 ? Op.dstValue64() : Op.dstValue();
