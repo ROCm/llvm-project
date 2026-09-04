@@ -166,6 +166,21 @@ jobs:
             > patches/amd-mainline/llvm-project/0002-ObjectYAML-VERS-part-size.patch
           test -s patches/amd-mainline/llvm-project/0002-ObjectYAML-VERS-part-size.patch
 
+      # mlir-pdll-lsp-server links both static LLVMSupport and libLLVM.so, so the
+      # process holds two Hashing.h seeds; with assertions those seeds are
+      # randomised and view-output.test fails intermittently. Merged upstream on
+      # 2026-09-01 but not yet in the amd-llvm pin. See llvm/llvm-project#152371.
+      - name: Carry mlir-pdll-lsp-server link fix (llvm/llvm-project#220123)
+        run: |
+          set -x
+          git config --global --add safe.directory "$PWD"
+          mkdir -p patches/amd-mainline/llvm-project
+          git fetch --no-tags --depth 2 https://github.com/llvm/llvm-project.git \
+            14cdf0c5f29976d682b51fdfb6038ed67acca82b
+          git format-patch -1 --stdout FETCH_HEAD \
+            > patches/amd-mainline/llvm-project/0003-mlir-pdll-lsp-server-link.patch
+          test -s patches/amd-mainline/llvm-project/0003-mlir-pdll-lsp-server-link.patch
+
       # Assertions are otherwise enabled only when LLVM_ROCm_PR_URL names a
       # wave-transform PR, which "Multi-Arch CI amd-staging" cannot supply.
       - name: Force LLVM assertions on
