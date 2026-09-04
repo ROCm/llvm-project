@@ -79,6 +79,21 @@ Expected<ParsedReg> readDestination(RaiseContext &Ctx, const DecodedInst &Di,
   return Ctx.registers().parseReg(Di, Half.DstIdx);
 }
 
+// Read the per-lane condition from an explicit VOPD3 wave-mask operand.
+Expected<Value *> readCondition(RaiseContext &Ctx, const DecodedInst &Di,
+                                unsigned OperandIdx) {
+  Expected<Value *> Known = Ctx.registers().readOpWaveMaskI1(Di, OperandIdx);
+  if (!Known)
+    return Known.takeError();
+  if (*Known)
+    return *Known;
+
+  Expected<Value *> Mask = Ctx.registers().readOpExecWidth(Di, OperandIdx);
+  if (!Mask)
+    return Mask.takeError();
+  return Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, *Mask);
+}
+
 // Restrict a 32-bit shift amount to the hardware range.
 Value *maskShiftAmount(IRBuilder<> &B, Value *Amount) {
   return B.CreateAnd(Amount, B.getInt32(31), "vopd.shift.amount");
@@ -150,12 +165,9 @@ Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
     if (Half.NumSrcs == 2) {
       Cond = Ctx.registers().regFile().loadVCC(Ctx.B);
     } else {
-      Expected<Value *> C =
-          Ctx.registers().readOpWaveMaskI1(Di, Half.SrcIdx[2]);
+      Expected<Value *> C = readCondition(Ctx, Di, Half.SrcIdx[2]);
       if (!C)
         return C.takeError();
-      if (!*C)
-        return malformedVOPD(Ctx, Di, "cndmask condition is not a wave mask");
       Cond = *C;
     }
     return Ctx.B.CreateSelect(Cond, Srcs->second, Srcs->first, "vopd.cndmask");

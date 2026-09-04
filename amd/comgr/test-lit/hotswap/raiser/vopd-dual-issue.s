@@ -13,6 +13,10 @@
 	.type	vopd_dual_issue,@function
 ; CHECK-LABEL: define amdgpu_kernel void @vopd_dual_issue(
 vopd_dual_issue:
+; An explicit VOPD3 cndmask condition may be an arbitrary SGPR mask, not only
+; the directly recorded result of a comparison.
+; CHECK: select i1 %{{[^,]+}}, i32
+	v_dual_cndmask_b32 v6, v0, v1, s0 :: v_dual_add_f32 v7, v3, v4
 ; CHECK: fadd float
 ; CHECK: fadd float
 	v_dual_add_f32 v4, v0, v1 :: v_dual_add_f32 v5, v2, v3
