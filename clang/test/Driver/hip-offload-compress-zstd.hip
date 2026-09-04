@@ -1,6 +1,6 @@
 // REQUIRES: zstd
 
-// Test HIP offload compression.
+// Test compress with the new driver.
 
 // RUN: rm -rf %t.bc
 // RUN: %clang -### -v --target=x86_64-linux-gnu \

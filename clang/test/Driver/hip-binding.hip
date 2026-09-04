@@ -41,7 +41,8 @@
 // MULTI-D-ONLY-BC-NEXT: "amdgpu-amd-amdhsa" - "AMDGCN::Linker", inputs: ["[[GFX908]]", "[[GFX90A]]"], output: "a.out"
 
 //
-// Check to ensure that we can use '-fsyntax-only' for HIP output.
+// Check to ensure that we can use '-fsyntax-only' for HIP output with the new
+// driver.
 //
 // RUN: %clang -### --target=x86_64-unknown-linux-gnu -nogpulib -nogpuinc \
 // RUN:        -fsyntax-only --offload-arch=gfx90a --offload-arch=gfx908 -c %s 2>&1 \

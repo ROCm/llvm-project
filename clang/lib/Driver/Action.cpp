@@ -53,6 +53,8 @@ const char *Action::getClassName(ActionClass AC) {
     return "verify-pch";
   case OffloadBundlingJobClass:
     return "clang-offload-bundler";
+  case OffloadUnbundlingJobClass:
+    return "clang-offload-unbundler";
   case OffloadPackagerJobClass:
     return "llvm-offload-binary";
   case LinkerWrapperJobClass:
@@ -85,13 +87,10 @@ void Action::propagateDeviceOffloadInfo(OffloadKind OKind, BoundArch OArch,
       OffloadingArch = OArch;
     }
     return;
-<<<<<<< HEAD
   }
   // Unbundling actions use the host kinds.
   if (Kind == OffloadUnbundlingJobClass)
     return;
-=======
->>>>>>> 128cdb86fc6b
 
   assert((OffloadingDeviceKind == OKind || OffloadingDeviceKind == OFK_None) &&
          "Setting device kind to a different device??");
@@ -458,6 +457,11 @@ void OffloadBundlingJobAction::anchor() {}
 
 OffloadBundlingJobAction::OffloadBundlingJobAction(ActionList &Inputs)
     : JobAction(OffloadBundlingJobClass, Inputs, Inputs.back()->getType()) {}
+
+void OffloadUnbundlingJobAction::anchor() {}
+
+OffloadUnbundlingJobAction::OffloadUnbundlingJobAction(Action *Input)
+    : JobAction(OffloadUnbundlingJobClass, Input, Input->getType()) {}
 
 void OffloadPackagerJobAction::anchor() {}
 

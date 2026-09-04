@@ -34,7 +34,7 @@
 
 //------------------------------------------------------------------------------
 // Check the clang command, invoked by the linker wrapper, selects the HIPSPV
-// toolchain.
+// toolchain for the new offload driver.
 
 // RUN: %clang -cc1 %s -triple spirv64-unknown-chipstar -emit-llvm-bc -o %t.dev.bc
 // RUN: llvm-offload-binary -o %t.dev.out \
