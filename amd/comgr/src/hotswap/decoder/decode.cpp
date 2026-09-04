@@ -200,10 +200,9 @@ Error failVOPDDecode(const DecodedInst &Di, const Twine &Detail) {
 
 // Record one component source or its bitop truth table.
 Error decodeVOPDSource(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
-                       const AMDGPU::VOPD::ComponentInfo &Info,
+                       const VOPDComponentInfo &Info,
                        unsigned ComponentSrcIdx) {
-  unsigned OperandIdx =
-      Info.getIndexOfSrcInMCOperands(ComponentSrcIdx, Di.IsVOPD3);
+  unsigned OperandIdx = Info.getSrcOperandIdx(ComponentSrcIdx, Di.IsVOPD3);
   if (OperandIdx >= Di.numOperands())
     return failVOPDDecode(Di, "component source operand is out of range");
 
@@ -223,7 +222,7 @@ Error decodeVOPDSource(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
   unsigned LogicalSrc = Half.NumSrcs++;
   Half.SrcIdx[LogicalSrc] = OperandIdx;
 
-  if (Di.IsVOPD3 && ComponentSrcIdx < Info.getCompVOPD3ModsNum()) {
+  if (Di.IsVOPD3 && ComponentSrcIdx < Info.getVOPD3ModsNum()) {
     if (OperandIdx == 0 || !Di.isImm(OperandIdx - 1))
       return failVOPDDecode(Di, "component source modifier is missing");
     int64_t Mods = Di.getImm(OperandIdx - 1);
@@ -236,18 +235,18 @@ Error decodeVOPDSource(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
 
 // Decode one component of a VOPD packet.
 Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
-                     const AMDGPU::VOPD::ComponentInfo &Info,
-                     unsigned ComponentOpcode, const OpcodeMap &OpcMap) {
+                     const VOPDComponentInfo &Info, unsigned ComponentOpcode,
+                     const OpcodeMap &OpcMap) {
   Half.CanonOp = OpcMap.lookup(ComponentOpcode);
   if (Half.CanonOp == CanonicalOp::Unknown)
     return failVOPDDecode(Di, "component opcode has no canonical operation");
 
-  Half.DstIdx = Info.getIndexOfDstInMCOperands();
+  Half.DstIdx = Info.getDstOperandIdx();
   if (Half.DstIdx >= Di.numOperands() || !Di.isReg(Half.DstIdx))
     return failVOPDDecode(Di,
                           "component destination is missing or not a register");
 
-  for (unsigned I = 0; I != Info.getCompParsedSrcOperandsNum(); ++I)
+  for (unsigned I = 0; I != Info.getParsedSrcOperandsNum(); ++I)
     if (Error Err = decodeVOPDSource(Di, Half, Info, I))
       return Err;
 
@@ -275,17 +274,16 @@ Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
 // Populate the component views of a VOPD instruction.
 Error decodeVOPD(DecodedInst &Di, const MCInstrInfo &MCII,
                  const OpcodeMap &OpcMap) {
-  if (!AMDGPU::isVOPD(Di.Inst.getOpcode()))
+  if (!COMGR::hotswap::isVOPD(Di.Inst.getOpcode()))
     return Error::success();
 
   Di.HasVOPD = true;
   Di.IsVOPD3 = (Di.TargetSpecificFlags & AmdgpuFormat::VOPD3) != 0;
-  auto [OpX, OpY] = AMDGPU::getVOPDComponents(Di.Inst.getOpcode());
+  auto [OpX, OpY] = COMGR::hotswap::getVOPDComponents(Di.Inst.getOpcode());
   const MCInstrDesc &OpXDesc = MCII.get(OpX);
   const MCInstrDesc &OpYDesc = MCII.get(OpY);
-  AMDGPU::VOPD::ComponentInfo XInfo(
-      OpXDesc, AMDGPU::VOPD::ComponentKind::COMPONENT_X, Di.IsVOPD3);
-  AMDGPU::VOPD::ComponentInfo YInfo(OpYDesc, XInfo, Di.IsVOPD3);
+  VOPDComponentInfo XInfo(OpXDesc, Di.IsVOPD3);
+  VOPDComponentInfo YInfo(OpYDesc, XInfo, Di.IsVOPD3);
   if (Error Err = decodeVOPDHalf(Di, Di.VOPD[AMDGPU::VOPD::ComponentIndex::X],
                                  XInfo, OpX, OpcMap))
     return Err;

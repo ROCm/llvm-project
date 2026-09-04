@@ -24,9 +24,37 @@
 
 namespace COMGR::hotswap {
 
+/// Maps VOPD component operands to combined MC operands.
+class VOPDComponentInfo {
+  unsigned SrcOperandsNum = 0;
+  unsigned NumVOPD3Mods = 0;
+  unsigned PreviousSrcOperandsNum = 0;
+  unsigned PreviousVOPD3Mods = 0;
+  int BitOp3OperandIdx = -1;
+  bool HasSrc2Acc = false;
+  bool IsY = false;
+
+public:
+  VOPDComponentInfo(const llvm::MCInstrDesc &Desc, bool VOPD3);
+  VOPDComponentInfo(const llvm::MCInstrDesc &Desc,
+                    const VOPDComponentInfo &Previous, bool VOPD3);
+
+  unsigned getParsedSrcOperandsNum() const;
+  unsigned getDstOperandIdx() const;
+  unsigned getSrcOperandIdx(unsigned ComponentSrcIdx, bool VOPD3) const;
+  unsigned getVOPD3ModsNum() const { return NumVOPD3Mods; }
+  int getBitOp3OperandIdx() const { return BitOp3OperandIdx; }
+};
+
 /// Index of the operand named `Name` in `Opcode`, or -1 if it has no operand of
 /// that name.
 int16_t getNamedOperandIdx(uint32_t Opcode, llvm::AMDGPU::OpName Name);
+
+/// Return whether `Opcode` is a combined VOPD instruction.
+bool isVOPD(uint32_t Opcode);
+
+/// Return the X and Y component opcodes of a combined VOPD instruction.
+std::pair<uint32_t, uint32_t> getVOPDComponents(uint32_t Opcode);
 
 /// The opcode `Opcode` encodes as on encoding family `Gen` (an
 /// `AMDGPUEncodingFamily`), or -1 if that family does not encode it.
