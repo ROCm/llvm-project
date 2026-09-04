@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // Check invalid -fuse-cuid= option.
 
 // RUN: not %clang -### -x hip \
@@ -74,6 +75,9 @@
 // RUN: 2>&1 | FileCheck -check-prefixes=DEVICE %s
 
 // Check cuid is supported by the new driver.
+=======
+// Check cuid is supported.
+>>>>>>> 128cdb86fc6b
 // RUN: %clang -### -x hip \
 // RUN:   --target=x86_64-unknown-linux-gnu \
 // RUN:   --offload-arch=gfx900 \
@@ -83,7 +87,7 @@
 // RUN:   %S/Inputs/hip_multiple_inputs/b.hip \
 // RUN: 2>&1 | FileCheck -check-prefixes=COMMON,HEX %s
 
-// Check cuid is supported by CUDA by the default new driver.
+// Check cuid is supported for CUDA.
 // RUN: %clang -### -x cu \
 // RUN:   --target=x86_64-unknown-linux-gnu \
 // RUN:   --offload-arch=sm_60 \
