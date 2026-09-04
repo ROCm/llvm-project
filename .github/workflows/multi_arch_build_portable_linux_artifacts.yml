@@ -151,6 +151,34 @@ jobs:
           git show FETCH_HEAD:patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch \
             > patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
             
+      # TheRock git-ams every patch in this directory into compiler/amd-llvm,
+      # sorted by filename, so this has to be format-patch output and has to
+      # sort after the wave32 patch above. Depth 2 gives format-patch the parent
+      # commit to diff against.
+      - name: Carry ObjectYAML VERS part size fix (llvm/llvm-project#221137)
+        run: |
+          set -x
+          git config --global --add safe.directory "$PWD"
+          mkdir -p patches/amd-mainline/llvm-project
+          git fetch --no-tags --depth 2 https://github.com/llvm/llvm-project.git \
+            refs/pull/221137/head
+          git format-patch -1 --stdout FETCH_HEAD \
+            > patches/amd-mainline/llvm-project/0002-ObjectYAML-VERS-part-size.patch
+          test -s patches/amd-mainline/llvm-project/0002-ObjectYAML-VERS-part-size.patch
+
+      # Assertions are otherwise enabled only when LLVM_ROCm_PR_URL names a
+      # wave-transform PR, which "Multi-Arch CI amd-staging" cannot supply.
+      - name: Force LLVM assertions on
+        run: |
+          cat > BRANCH_CONFIG.json <<'EOF'
+          {
+            "flags": {
+              "LLVM_ENABLE_ASSERTIONS": "ON"
+            }
+          }
+          EOF
+          cat BRANCH_CONFIG.json
+
       - name: Fetch sources
         timeout-minutes: 30
         run: |
