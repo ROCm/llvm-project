@@ -229,8 +229,9 @@ Value *extractByte(IRBuilder<> &B, Value *Packed, Value *ByteIndex,
   return B.CreateTrunc(Shifted, B.getInt8Ty(), Name);
 }
 
-// Selectors 0-7 choose an input byte, 8-11 replicate a sign bit, 12
-// produces zero, and larger selectors produce all ones.
+/// Select one byte from Packed according to the V_PERM_B32 selector encoding.
+/// Selectors 0-7 choose an input byte, 8-11 replicate a sign bit, 12 produces
+/// zero, and larger selectors produce all ones.
 Value *permuteByte(IRBuilder<> &B, Value *Packed, Value *Selector) {
   constexpr unsigned DataSelectorMask = 7;
   constexpr unsigned FirstSignSelector = 8;
