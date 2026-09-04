@@ -58,9 +58,6 @@ public:
   computeMSVCVersion(const Driver *D,
                      const llvm::opt::ArgList &Args) const override;
 
-protected:
-  Tool *buildLinker() const override;
-
 private:
   const ToolChain &HostTC;
   SYCLInstallationDetector SYCLInstallation;
