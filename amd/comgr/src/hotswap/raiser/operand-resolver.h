@@ -29,7 +29,7 @@ struct BinaryOperands {
   llvm::Value *Src1;
 };
 
-// Destination and source values of a ternary instruction.
+/// Destination and source values of a ternary 32-bit instruction.
 struct TernaryOperands {
   ParsedReg Dst;
   llvm::Value *Src0;
@@ -111,7 +111,7 @@ struct OperandResolver {
   llvm::Expected<BinaryOperands> readBinary32();
   // Read the destination and two 64-bit sources.
   llvm::Expected<BinaryOperands> readBinary64();
-  // Read the destination and three 32-bit sources.
+  /// Read the destination and three 32-bit sources.
   llvm::Expected<TernaryOperands> readTernary32();
 };
 
