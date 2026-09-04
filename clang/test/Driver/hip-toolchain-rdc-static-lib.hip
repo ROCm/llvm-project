@@ -1,4 +1,3 @@
-// XFAIL: *
 // RUN: %clang -### --target=x86_64-linux-gnu \
 // RUN:   -x hip --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 \
 // RUN:   --no-offload-new-driver --emit-static-lib -nogpulib \

@@ -1490,7 +1490,8 @@ llvm::Function *CGNVCUDARuntime::finalizeModule() {
     return nullptr;
   }
   if (!CGM.getLangOpts().CUDANVCCABI &&
-      (CGM.getLangOpts().OffloadViaLLVM || RelocatableDeviceCode))
+      (CGM.getLangOpts().OffloadViaLLVM ||
+       (CGM.getLangOpts().OffloadingNewDriver && RelocatableDeviceCode)))
     createOffloadingEntries();
   else
     return makeModuleCtorFunction();

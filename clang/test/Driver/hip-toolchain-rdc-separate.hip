@@ -1,4 +1,3 @@
-// XFAIL: *
 // RUN: rm -rf %t && mkdir %t
 // RUN: %clang -c -### --target=x86_64-linux-gnu \
 // RUN:   -x hip --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 \

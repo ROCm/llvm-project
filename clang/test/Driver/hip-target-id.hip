@@ -1,4 +1,3 @@
-// XFAIL: *
 // RUN: %clang -### --target=x86_64-linux-gnu \
 // RUN:   -x hip \
 // RUN:   --offload-arch=gfx908:xnack+:sramecc+ \
