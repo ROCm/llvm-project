@@ -44,8 +44,6 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/TargetParser/Triple.h>
-#include <mlir/Analysis/TopologicalSortUtils.h>
-#include <mlir/Dialect/Arith/IR/Arith.h>
 
 #include <functional>
 #include <iterator>
