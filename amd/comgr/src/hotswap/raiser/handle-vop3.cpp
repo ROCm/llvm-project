@@ -8,6 +8,7 @@
 
 #include "hotswap/raiser/handlers.h"
 
+#include "hotswap/decoder/amdgpu-mc-tables.h"
 #include "hotswap/decoder/canonical-op.h"
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/raiser/operand-resolver.h"
@@ -34,8 +35,8 @@ namespace {
 /// Read the VOP3 clamp operand. Opcodes whose encoding reserves the field have
 /// no named operand and are necessarily unclamped.
 Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
-  int Idx =
-      AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::clamp);
+  int Idx = COMGR::hotswap::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                               AMDGPU::OpName::clamp);
   if (Idx < 0)
     return false;
   if (!Di.isImm(Idx))
@@ -45,8 +46,8 @@ Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
 
 /// Reject nonzero output multipliers on integer VOP3 instructions.
 Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
-  int Idx =
-      AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::omod);
+  int Idx = COMGR::hotswap::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                               AMDGPU::OpName::omod);
   if (Idx < 0)
     return Error::success();
   if (!Di.isImm(Idx))
