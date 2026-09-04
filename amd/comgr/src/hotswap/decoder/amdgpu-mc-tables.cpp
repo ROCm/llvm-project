@@ -13,6 +13,7 @@
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/MC/MCInstrDesc.h"
 
 #include <cassert>
 #include <cstdint>
@@ -54,6 +55,105 @@ struct VOPDInfo {
 
 int16_t getNamedOperandIdx(uint32_t Opcode, llvm::AMDGPU::OpName Name) {
   return tables::llvm::AMDGPU::getNamedOperandIdx(Opcode, Name);
+}
+
+bool isVOPD(uint32_t Opcode) {
+  return COMGR::hotswap::getNamedOperandIdx(Opcode,
+                                            llvm::AMDGPU::OpName::src0X) >= 0;
+}
+
+std::pair<uint32_t, uint32_t> getVOPDComponents(uint32_t Opcode) {
+  const tables::VOPDInfo *Pair = tables::getVOPDOpcodeHelper(Opcode);
+  assert(Pair && "VOPD opcode is absent from the VOPD pair table");
+  const tables::VOPDComponentInfo *OpX =
+      tables::getVOPDBaseFromComponent(Pair->OpX);
+  const tables::VOPDComponentInfo *OpY =
+      tables::getVOPDBaseFromComponent(Pair->OpY);
+  assert(OpX && OpY && "VOPD component is absent from the component table");
+  return {OpX->BaseVOP, OpY->BaseVOP};
+}
+
+static bool isFloatingPointSource(const llvm::MCInstrDesc &Desc,
+                                  unsigned OperandIdx) {
+  switch (Desc.operands()[OperandIdx].OperandType) {
+  case llvm::AMDGPU::OPERAND_REG_IMM_FP32:
+  case llvm::AMDGPU::OPERAND_REG_IMM_FP64:
+  case llvm::AMDGPU::OPERAND_REG_IMM_FP16:
+  case llvm::AMDGPU::OPERAND_REG_IMM_V2FP16:
+  case llvm::AMDGPU::OPERAND_REG_IMM_V2FP16_SPLAT:
+  case llvm::AMDGPU::OPERAND_REG_IMM_NOINLINE_V2FP16:
+  case llvm::AMDGPU::OPERAND_REG_INLINE_C_FP32:
+  case llvm::AMDGPU::OPERAND_REG_INLINE_C_FP64:
+  case llvm::AMDGPU::OPERAND_REG_INLINE_C_FP16:
+  case llvm::AMDGPU::OPERAND_REG_INLINE_C_V2FP16:
+  case llvm::AMDGPU::OPERAND_REG_INLINE_AC_FP32:
+  case llvm::AMDGPU::OPERAND_REG_IMM_V2FP32:
+  case llvm::AMDGPU::OPERAND_REG_INLINE_AC_FP64:
+  case llvm::AMDGPU::OPERAND_REG_IMM_V2FP64:
+    return true;
+  default:
+    return false;
+  }
+}
+
+VOPDComponentInfo::VOPDComponentInfo(const llvm::MCInstrDesc &Desc, bool VOPD3)
+    : BitOp3OperandIdx(COMGR::hotswap::getNamedOperandIdx(
+          Desc.getOpcode(), llvm::AMDGPU::OpName::bitop3)) {
+  bool UsesVOP3Layout = VOPD3 || llvm::SIInstrFlags::isVOP3(Desc);
+  HasSrc2Acc = Desc.getOperandConstraint(3, llvm::MCOI::TIED_TO) != -1;
+  SrcOperandsNum =
+      COMGR::hotswap::getNamedOperandIdx(Desc.getOpcode(),
+                                         llvm::AMDGPU::OpName::src2) >= 0
+          ? 3
+      : COMGR::hotswap::getNamedOperandIdx(Desc.getOpcode(),
+                                           llvm::AMDGPU::OpName::imm) >= 0
+          ? 3
+      : COMGR::hotswap::getNamedOperandIdx(Desc.getOpcode(),
+                                           llvm::AMDGPU::OpName::src1) >= 0
+          ? 2
+          : 1;
+
+  if (Desc.getOpcode() == llvm::AMDGPU::V_CNDMASK_B32_e32 ||
+      Desc.getOpcode() == llvm::AMDGPU::V_CNDMASK_B32_e64) {
+    NumVOPD3Mods = 2;
+    if (UsesVOP3Layout)
+      SrcOperandsNum = 3;
+  } else if (Desc.getOpcode() == llvm::AMDGPU::V_DOT2_F32_F16 ||
+             Desc.getOpcode() == llvm::AMDGPU::V_DOT2_F32_BF16) {
+    NumVOPD3Mods = SrcOperandsNum;
+  } else {
+    int Src0 = COMGR::hotswap::getNamedOperandIdx(Desc.getOpcode(),
+                                                  llvm::AMDGPU::OpName::src0);
+    if (Src0 >= 0 && isFloatingPointSource(Desc, Src0)) {
+      NumVOPD3Mods = SrcOperandsNum;
+      if (HasSrc2Acc)
+        --NumVOPD3Mods;
+    }
+  }
+}
+
+VOPDComponentInfo::VOPDComponentInfo(const llvm::MCInstrDesc &Desc,
+                                     const VOPDComponentInfo &Previous,
+                                     bool VOPD3)
+    : VOPDComponentInfo(Desc, VOPD3) {
+  IsY = true;
+  PreviousSrcOperandsNum = Previous.SrcOperandsNum;
+  PreviousVOPD3Mods = Previous.NumVOPD3Mods;
+}
+
+unsigned VOPDComponentInfo::getParsedSrcOperandsNum() const {
+  return SrcOperandsNum - HasSrc2Acc;
+}
+
+unsigned VOPDComponentInfo::getDstOperandIdx() const { return IsY ? 1 : 0; }
+
+unsigned VOPDComponentInfo::getSrcOperandIdx(unsigned ComponentSrcIdx,
+                                             bool VOPD3) const {
+  static constexpr unsigned SrcIndices[4][3] = {
+      {1, 2, 3}, {2, 3, 4}, {2, 4, 5}, {2, 4, 6}};
+  assert(ComponentSrcIdx < 3);
+  return SrcIndices[VOPD3 ? NumVOPD3Mods : 0][ComponentSrcIdx] +
+         PreviousSrcOperandsNum + (VOPD3 ? PreviousVOPD3Mods : 0) + 1;
 }
 
 int32_t getMCOpcode(uint32_t Opcode, unsigned Gen) {
