@@ -2,7 +2,6 @@
 
 // RUN: not %clang -### -x hip \
 // RUN:   --target=x86_64-unknown-linux-gnu \
-// RUN:   --no-offload-new-driver \
 // RUN:   --offload-arch=gfx900 \
 // RUN:   --offload-arch=gfx906 \
 // RUN:   -c -nogpuinc -nogpulib -fuse-cuid=invalid \
@@ -14,7 +13,6 @@
 
 // RUN: %clang -### -x hip \
 // RUN:   --target=x86_64-unknown-linux-gnu \
-// RUN:   --no-offload-new-driver \
 // RUN:   --offload-arch=gfx900 \
 // RUN:   --offload-arch=gfx906 \
 // RUN:   -c -nogpuinc -nogpulib -fuse-cuid=random \
@@ -26,7 +24,6 @@
 
 // RUN: %clang -### -x hip \
 // RUN:   --target=x86_64-unknown-linux-gnu \
-// RUN:   --no-offload-new-driver \
 // RUN:   --offload-arch=gfx900 \
 // RUN:   --offload-arch=gfx906 \
 // RUN:   -c -nogpuinc -nogpulib -cuid=xyz_123 \
@@ -38,7 +35,6 @@
 
 // RUN: %clang -### -x hip \
 // RUN:   --target=x86_64-unknown-linux-gnu \
-// RUN:   --no-offload-new-driver \
 // RUN:   --offload-arch=gfx900 \
 // RUN:   --offload-arch=gfx906 \
 // RUN:   -c -nogpuinc -nogpulib -fuse-cuid=random -cuid=xyz_123 \
@@ -50,7 +46,6 @@
 
 // RUN: %clang -### -x hip \
 // RUN:   --target=x86_64-unknown-linux-gnu \
-// RUN:   --no-offload-new-driver \
 // RUN:   --offload-arch=gfx900 \
 // RUN:   --offload-arch=gfx906 \
 // RUN:   -c -nogpuinc -nogpulib -fuse-cuid=hash \
@@ -61,7 +56,6 @@
 // Check that cuid is propagated to the host-only compilation.
 // RUN: %clang -### -x hip \
 // RUN:   --target=x86_64-unknown-linux-gnu \
-// RUN:   --no-offload-new-driver \
 // RUN:   --offload-arch=gfx900 \
 // RUN:   --offload-host-only \
 // RUN:   -c -nogpuinc -nogpulib -cuid=xyz_123 \
@@ -72,7 +66,6 @@
 // Check that cuid is propagated to the device-only compilation.
 // RUN: %clang -### -x hip \
 // RUN:   --target=x86_64-unknown-linux-gnu \
-// RUN:   --no-offload-new-driver \
 // RUN:   --offload-arch=gfx900 \
 // RUN:   --offload-device-only \
 // RUN:   -c -nogpuinc -nogpulib -cuid=xyz_123 \
@@ -83,10 +76,9 @@
 // Check cuid is supported by the new driver.
 // RUN: %clang -### -x hip \
 // RUN:   --target=x86_64-unknown-linux-gnu \
-// RUN:   --no-offload-new-driver \
 // RUN:   --offload-arch=gfx900 \
 // RUN:   --offload-arch=gfx906 \
-// RUN:   -c -nogpuinc -nogpulib --offload-new-driver \
+// RUN:   -c -nogpuinc -nogpulib \
 // RUN:   %S/Inputs/hip_multiple_inputs/a.cu \
 // RUN:   %S/Inputs/hip_multiple_inputs/b.hip \
 // RUN: 2>&1 | FileCheck -check-prefixes=COMMON,HEX %s

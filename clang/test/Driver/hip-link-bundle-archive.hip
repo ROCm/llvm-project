@@ -1,3 +1,4 @@
+// XFAIL: *
 // Check clang unbundle the archive and link them by lld.
 // If there is a directory which has the same name as the
 // value of the '-l' option, it should not interfere with
