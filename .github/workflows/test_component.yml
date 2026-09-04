@@ -172,6 +172,21 @@ jobs:
             echo "KUBE_CPU_REQUEST not set, thread limits not configured"
           fi
 
+      # DIAGNOSTIC (temporary): hipfft and rocfft exceed their 600 s per-test
+      # budget when LLVM assertions are on (377 s and 501 s with assertions off).
+      # Raise the property so the suites finish and we can measure the real cost.
+      - name: DIAG - raise ctest timeout for hipfft/rocfft
+        if: ${{ contains(fromJSON(inputs.component).job_name, 'fft') }}
+        run: |
+          set -x
+          comp="${{ fromJSON(inputs.component).job_name }}"
+          before=$(grep -rn "TIMEOUT" "build/bin/${comp}" --include=CTestTestfile.cmake || true)
+          echo "before: ${before:-<none found>}"
+          test -n "$before"
+          grep -rl "TIMEOUT" "build/bin/${comp}" --include=CTestTestfile.cmake \
+            | xargs sed -i -E 's/TIMEOUT "?[0-9]+"?/TIMEOUT "3600"/g'
+          grep -rn "TIMEOUT" "build/bin/${comp}" --include=CTestTestfile.cmake
+
       - name: Test
         id: test
         timeout-minutes: ${{ fromJSON(inputs.component).timeout_minutes }}
