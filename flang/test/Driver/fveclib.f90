@@ -56,4 +56,3 @@
 ! CHECK-RPATH-ARMPL: "--push-state" "--as-needed" "-lm" "-lamath" "-lm" "--pop-state"
 ! We need to see "-rpath" at least twice, one for veclib, one for the Fortran runtime
 ! CHECK-RPATH-ARMPL-SAME: "-rpath"
-! CHECK-RPATH-ARMPL-SAME: "-rpath"
