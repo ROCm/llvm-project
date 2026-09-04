@@ -501,14 +501,6 @@ static LogicalResult checkImplementationStatus(Operation &op) {
       result = todo("in_reduction");
     }
   };
-  auto checkLinear = [&todo](auto op, LogicalResult &result) {
-    if (!op.getLinearVars().empty() || !op.getLinearStepVars().empty())
-      result = todo("linear");
-  };
-  auto checkIsDevicePtr = [&todo](auto op, LogicalResult &result) {
-    if (!op.getIsDevicePtrVars().empty())
-      result = todo("is_device_ptr");
-  };
   auto checkNowait = [&todo](auto op, LogicalResult &result) {
     if (op.getNowait())
       result = todo("nowait");
@@ -1764,6 +1756,7 @@ static LogicalResult createReductionsAndCleanup(
   // and remove it later.
   llvm::UnreachableInst *tempTerminator = builder.CreateUnreachable();
   builder.SetInsertPoint(tempTerminator);
+  llvm::DebugLoc reductionLoc = builder.getCurrentDebugLocation();
   llvm::OpenMPIRBuilder::InsertPointOrErrorTy contInsertPoint =
       ompBuilder->createReductions(builder, allocaIP, reductionInfos, isByRef,
                                    isNowait, isTeamsReduction);
@@ -1777,7 +1770,8 @@ static LogicalResult createReductionsAndCleanup(
   llvm::OpenMPIRBuilder::InsertPointTy afterIP = *contInsertPoint;
   if (!isTeamsReduction) {
     llvm::OpenMPIRBuilder::InsertPointOrErrorTy barrierIP =
-        ompBuilder->createBarrier(*contInsertPoint, llvm::omp::OMPD_for);
+        ompBuilder->createBarrier({*contInsertPoint, reductionLoc},
+                                  llvm::omp::OMPD_for);
 
     if (failed(handleError(barrierIP, *op)))
       return failure();
@@ -7269,11 +7263,6 @@ static llvm::Value *getSizeInBytes(DataLayout &dl, const mlir::Type &type,
   return builder.getInt64(dl.getTypeSizeInBits(type) / 8);
 }
 
-static bool checkHasClauseMapFlag(omp::ClauseMapFlags flag,
-                                  omp::ClauseMapFlags checkFlag) {
-  return (flag & checkFlag) == checkFlag;
-}
-
 // Convert the MLIR map flag set to the runtime map flag set for embedding
 // in LLVM-IR. This is important as the two bit-flag lists do not correspond
 // 1-to-1 as there's flags the runtime doesn't care about and vice versa.
@@ -7365,12 +7354,6 @@ static void collectMapDataFromMapOperands(
           return true;
     }
     return false;
-  };
-
-  auto checkPrivatizeableAttachPointer = [](omp::ClauseMapFlags mapType) {
-    return bitEnumContainsAll(mapType, omp::ClauseMapFlags::priv) &&
-           bitEnumContainsAll(mapType, omp::ClauseMapFlags::target_param) &&
-           bitEnumContainsAll(mapType, omp::ClauseMapFlags::attach);
   };
 
   // Process MapOperands
