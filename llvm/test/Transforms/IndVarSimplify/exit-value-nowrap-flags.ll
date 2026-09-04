@@ -14,7 +14,7 @@ define i32 @nuw_kept(i32 %start, i32 %step, i32 %n) {
 ; CHECK:       [[LATCH]]:
 ; CHECK-NEXT:    br label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP1:%.*]] = add i32 [[START]], [[TMP0]]
+; CHECK-NEXT:    [[TMP1:%.*]] = add nuw i32 [[START]], [[TMP0]]
 ; CHECK-NEXT:    ret i32 [[TMP1]]
 ;
 entry:
@@ -49,7 +49,7 @@ define i32 @nsw_kept_same_sign(i32 %start.in, i32 %step.in, i32 %n) {
 ; CHECK:       [[LATCH]]:
 ; CHECK-NEXT:    br label %[[LOOP]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[TMP1:%.*]] = add i32 [[TMP0]], [[START]]
+; CHECK-NEXT:    [[TMP1:%.*]] = add nuw i32 [[TMP0]], [[START]]
 ; CHECK-NEXT:    ret i32 [[TMP1]]
 ;
 entry:
@@ -282,7 +282,7 @@ define i32 @no_flag_leak_through_shared_udiv(i32 %start, i32 %n, i1 %c) {
 ; CHECK-NEXT:    [[TMP1:%.*]] = udiv i32 [[TMP0]], 3
 ; CHECK-NEXT:    ret i32 [[TMP1]]
 ; CHECK:       [[PH_2]]:
-; CHECK-NEXT:    [[TMP2:%.*]] = add i32 [[N]], [[START]]
+; CHECK-NEXT:    [[TMP2:%.*]] = add nuw i32 [[N]], [[START]]
 ; CHECK-NEXT:    br label %[[LOOP_2_HEADER:.*]]
 ; CHECK:       [[LOOP_2_HEADER]]:
 ; CHECK-NEXT:    br i1 true, label %[[EXIT_2:.*]], label %[[LOOP_2_LATCH:.*]]
@@ -355,7 +355,7 @@ define ptr @exit_value_mul(ptr %first, ptr %last) {
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    br i1 false, label %[[LOOP]], label %[[EXIT:.*]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr i8, ptr [[FIRST]], i64 [[TMP6]]
+; CHECK-NEXT:    [[SCEVGEP:%.*]] = getelementptr nuw i8, ptr [[FIRST]], i64 [[TMP6]]
 ; CHECK-NEXT:    ret ptr [[SCEVGEP]]
 ; CHECK:       [[DONE]]:
 ; CHECK-NEXT:    ret ptr [[FIRST]]
