@@ -53,9 +53,17 @@ llvm::Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
 // are recognized and the rest are refused.
 llvm::Error handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
+/// Translate a supported plain VOP1 instruction, or return a structured
+/// refusal.
+llvm::Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
 /// Translate a supported plain VOP2 instruction, or return a structured
 /// refusal.
 llvm::Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
+/// Translate a supported plain VOP3 integer-arithmetic instruction, or return
+/// a structured refusal.
+llvm::Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
 /// Translate a supported plain VOPC comparison into the condition registers
 /// the opcode writes, or return a structured refusal.
