@@ -11,6 +11,7 @@
 #include "hotswap/decoder/amdgpu-mc-tables.h"
 #include "hotswap/decoder/canonical-op.h"
 #include "hotswap/decoder/decoded-inst.h"
+#include "hotswap/raiser/handle-vop-shared.h"
 #include "hotswap/raiser/operand-resolver.h"
 #include "hotswap/raiser/raise-context.h"
 #include "hotswap/raiser/raise_failure.h"
@@ -216,12 +217,7 @@ Value *extendLow24(IRBuilder<> &B, Value *V, Type *Ty, bool IsSigned) {
                   : B.CreateZExt(Low, Ty, "zext24");
 }
 
-// Hardware ignores the high bits of a shift amount.
-Value *maskShiftAmount(IRBuilder<> &B, Value *Amount, unsigned Width) {
-  return B.CreateAnd(Amount, ConstantInt::get(Amount->getType(), Width - 1),
-                     "shift.amount");
-}
-
+/// Extract the byte at ByteIndex from a packed 64-bit value.
 Value *extractByte(IRBuilder<> &B, Value *Packed, Value *ByteIndex,
                    const Twine &Name) {
   constexpr unsigned ByteOffsetShift = 3;
@@ -269,6 +265,7 @@ Value *permuteByte(IRBuilder<> &B, Value *Packed, Value *Selector) {
   return B.CreateSelect(IsOnes, B.getInt8(-1), Result, "perm.byte");
 }
 
+/// Raise V_PERM_B32 using generic integer operations.
 Value *raiseBytePermute(IRBuilder<> &B, const TernaryOperands &Args) {
   constexpr unsigned BitsPerByte = 8;
   constexpr unsigned BytesPerDword = 4;
@@ -328,11 +325,15 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
 
   switch (Di.CanonOp) {
   case CanonicalOp::V_MOV_B32:
+    if (*Clamp)
+      return unsupportedInstruction(Ctx, Di,
+                                    "integer move with clamp is not supported");
+    return raiseMove32(Ctx, Di, Op);
   case CanonicalOp::V_MOV_B64:
     if (*Clamp)
       return unsupportedInstruction(Ctx, Di,
                                     "integer move with clamp is not supported");
-    return handleVOP1(Ctx, Di, Op);
+    return raiseMove64(Ctx, Di, Op);
 
   case CanonicalOp::V_NOT_B32:
   case CanonicalOp::V_BFREV_B32:
@@ -342,24 +343,76 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     if (*Clamp)
       return unsupportedInstruction(
           Ctx, Di, "integer bit operation does not define clamp");
-    return handleVOP1(Ctx, Di, Op);
+    return raiseUnaryBit32(Ctx, Di, Op);
 
-  // VOP3 encodings share their canonical operation and decoded source layout
-  // with the corresponding VOP2 forms.
   case CanonicalOp::V_AND_B32:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateAnd(Src0, Src1, "and");
+    });
   case CanonicalOp::V_OR_B32:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateOr(Src0, Src1, "or");
+    });
   case CanonicalOp::V_XOR_B32:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateXor(Src0, Src1, "xor");
+    });
   case CanonicalOp::V_XNOR_B32:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      Value *Xor = B.CreateXor(Src0, Src1, "xnor_xor");
+      return B.CreateNot(Xor, "xnor");
+    });
   case CanonicalOp::V_BFM_B32:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    return raiseBitMask(Ctx, Op);
   case CanonicalOp::V_BCNT_U32_B32:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    return raiseBitCount(Ctx, Op);
   case CanonicalOp::V_LSHLREV_B32:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      Value *Amount = maskShiftAmount(B, Src0, 32);
+      return B.CreateShl(Src1, Amount, "lshl");
+    });
   case CanonicalOp::V_LSHRREV_B32:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      Value *Amount = maskShiftAmount(B, Src0, 32);
+      return B.CreateLShr(Src1, Amount, "lshr");
+    });
   case CanonicalOp::V_ASHRREV_I32:
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer bit operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      Value *Amount = maskShiftAmount(B, Src0, 32);
+      return B.CreateAShr(Src1, Amount, "ashr");
+    });
   case CanonicalOp::V_LSHLREV_B64:
     if (*Clamp)
       return unsupportedInstruction(
           Ctx, Di, "integer bit operation does not define clamp");
-    return handleVOP2(Ctx, Di, Op);
+    return raiseShiftLeft64(Ctx, Op);
 
   case CanonicalOp::V_LSHL_ADD_U32:
   case CanonicalOp::V_ADD_LSHL_U32:
@@ -611,12 +664,30 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                                Intrinsic::usub_sat, /*Reverse=*/true, *Clamp);
 
   case CanonicalOp::V_MIN_I32:
+    assert(!*Clamp && "integer arithmetic operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateBinaryIntrinsic(Intrinsic::smin, Src0, Src1, {}, "min");
+    });
   case CanonicalOp::V_MAX_I32:
+    assert(!*Clamp && "integer arithmetic operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateBinaryIntrinsic(Intrinsic::smax, Src0, Src1, {}, "max");
+    });
   case CanonicalOp::V_MIN_U32:
+    assert(!*Clamp && "integer arithmetic operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateBinaryIntrinsic(Intrinsic::umin, Src0, Src1, {}, "min");
+    });
   case CanonicalOp::V_MAX_U32:
+    assert(!*Clamp && "integer arithmetic operation does not define clamp");
+    return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateBinaryIntrinsic(Intrinsic::umax, Src0, Src1, {}, "max");
+    });
   case CanonicalOp::V_MUL_U64:
     assert(!*Clamp && "integer arithmetic operation does not define clamp");
-    return handleVOP2(Ctx, Di, Op);
+    return raiseBinary64(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
+      return B.CreateMul(Src0, Src1, "mul64");
+    });
 
   case CanonicalOp::V_MUL_I32_I24:
   case CanonicalOp::V_MUL_HI_I32_I24:
