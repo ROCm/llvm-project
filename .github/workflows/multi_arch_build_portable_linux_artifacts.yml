@@ -203,6 +203,18 @@ jobs:
                print a[n], $4
              }' > submodule-commit-${STAGE_NAME}.txt          
 
+      # linux-patches unconditionally cds into compiler/amd-llvm/llvm, but only
+      # the LLVM_ROCm_PR_URL path initialises that submodule. Stages that do not
+      # build the compiler otherwise leave it empty and the action dies there.
+      - name: Ensure compiler/amd-llvm is populated for build prep
+        run: |
+          set -x
+          git config --global --add safe.directory "$PWD"
+          if [ ! -d compiler/amd-llvm/llvm ]; then
+            git submodule update --init --depth 1 --jobs 4 compiler/amd-llvm
+          fi
+          test -d compiler/amd-llvm/llvm
+
       - name: build prep (patches & hotfixes for CK, hipcc and hiprtc, tests)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/linux-patches@amd-staging
         with:
