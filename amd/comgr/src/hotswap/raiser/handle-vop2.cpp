@@ -11,10 +11,10 @@
 #include "hotswap/decoder/canonical-op.h"
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/decoder/parsed-reg.h"
+#include "hotswap/raiser/handle-vop-shared.h"
 #include "hotswap/raiser/operand-resolver.h"
 #include "hotswap/raiser/raise-context.h"
 
-#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instruction.h"
@@ -28,9 +28,6 @@
 using namespace llvm;
 
 namespace COMGR::hotswap {
-
-// Builds the result of a two-source instruction from its already-read sources.
-using BinaryBuilder = function_ref<Value *(IRBuilder<> &, Value *, Value *)>;
 
 static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
                               OperandResolver &Op,
@@ -61,18 +58,6 @@ static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
-// Build a 32-bit result from two integer sources and write it to the
-// destination.
-static Error raiseBinary32(RaiseContext &Ctx, OperandResolver &Op,
-                           BinaryBuilder Build) {
-  Expected<BinaryOperands> Args = Op.readBinary32();
-  if (!Args) {
-    return Args.takeError();
-  }
-  Ctx.registers().writeReg32(Args->Dst, Build(Ctx.B, Args->Src0, Args->Src1));
-  return Error::success();
-}
-
 // Raise a low-16-bit binary operation and zero-extend its result to 32 bits.
 static Error raiseBinary16(RaiseContext &Ctx, OperandResolver &Op,
                            BinaryBuilder Build) {
@@ -80,7 +65,8 @@ static Error raiseBinary16(RaiseContext &Ctx, OperandResolver &Op,
     Type *I16Ty = B.getInt16Ty();
     Value *Lhs = B.CreateTrunc(Src0, I16Ty, "src0_i16");
     Value *Rhs = B.CreateTrunc(Src1, I16Ty, "src1_i16");
-    return B.CreateZExt(Build(B, Lhs, Rhs), B.getInt32Ty(), "result_i32");
+    Value *Result = Build(B, Lhs, Rhs);
+    return B.CreateZExt(Result, B.getInt32Ty(), "result_i32");
   });
 }
 
@@ -186,48 +172,6 @@ static Error raiseSignedDotAccumulate(RaiseContext &Ctx, OperandResolver &Op,
   return Error::success();
 }
 
-// Build a 64-bit result from two integer sources and write it to the
-// destination.
-static Error raiseBinary64(RaiseContext &Ctx, OperandResolver &Op,
-                           BinaryBuilder Build) {
-  Expected<BinaryOperands> Args = Op.readBinary64();
-  if (!Args) {
-    return Args.takeError();
-  }
-  Ctx.registers().writeReg64(Args->Dst, Build(Ctx.B, Args->Src0, Args->Src1));
-  return Error::success();
-}
-
-// Reduce a shift amount to the low bits the hardware reads: `S0[4:0]` for a
-// 32-bit shift and `S0[5:0]` for a 64-bit one. The mask is not redundant: an
-// LLVM shift is poison once the amount reaches the operand width, where the
-// hardware wraps instead.
-static Value *maskShiftAmount(IRBuilder<> &B, Value *Amount, unsigned Width) {
-  return B.CreateAnd(Amount, ConstantInt::get(Amount->getType(), Width - 1),
-                     "shift_amount");
-}
-
-// Raise V_BFM_B32 using its five-bit width and offset operands.
-static Error raiseBitMask(RaiseContext &Ctx, OperandResolver &Op) {
-  return raiseBinary32(
-      Ctx, Op, [](IRBuilder<> &B, Value *Width, Value *Offset) {
-        Width = maskShiftAmount(B, Width, 32);
-        Offset = maskShiftAmount(B, Offset, 32);
-        Value *HighBit = B.CreateShl(B.getInt32(1), Width);
-        Value *Ones = B.CreateSub(HighBit, B.getInt32(1), "bfm.ones");
-        return B.CreateShl(Ones, Offset, "bfm");
-      });
-}
-
-// Raise V_BCNT_U32_B32 by adding popcount(src0) to src1.
-static Error raiseBitCount(RaiseContext &Ctx, OperandResolver &Op) {
-  return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-    Value *Count =
-        B.CreateUnaryIntrinsic(Intrinsic::ctpop, Src0, nullptr, "bcnt");
-    return B.CreateAdd(Count, Src1, "bcnt.add");
-  });
-}
-
 // Widen the low 24 bits of a source to `Ty`, which is how the `*_i24` and
 // `*_u24` multiplies read their operands.
 static Value *extendLow24(IRBuilder<> &B, Value *Source, Type *Ty,
@@ -262,28 +206,6 @@ static Error raiseMulHi24(RaiseContext &Ctx, OperandResolver &Op,
                                : B.CreateLShr(Wide, 32, "mul24_high");
         return B.CreateTrunc(High, B.getInt32Ty(), "mul_hi24");
       });
-}
-
-// Raise `v_lshlrev_b64`, whose src0 is a 32-bit shift amount while its src1
-// and destination are 64 bits.
-static Error raiseShiftLeft64(RaiseContext &Ctx, OperandResolver &Op) {
-  Expected<ParsedReg> Dst = Op.dst();
-  if (!Dst) {
-    return Dst.takeError();
-  }
-  Expected<Value *> Amount = Op.src(0);
-  if (!Amount) {
-    return Amount.takeError();
-  }
-  Expected<Value *> Operand = Op.src64(1);
-  if (!Operand) {
-    return Operand.takeError();
-  }
-  Value *MaskedAmount = maskShiftAmount(Ctx.B, *Amount, 64);
-  Value *Shift = Ctx.B.CreateZExt(MaskedAmount, Ctx.B.getInt64Ty(), "shift64");
-  Value *Result = Ctx.B.CreateShl(*Operand, Shift, "lshl64");
-  Ctx.registers().writeReg64(*Dst, Result);
-  return Error::success();
 }
 
 Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
@@ -433,15 +355,18 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
     });
   case CanonicalOp::V_LSHLREV_B16:
     return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateShl(Src1, maskShiftAmount(B, Src0, 16), "lshl16");
+      Value *Amount = maskShiftAmount(B, Src0, 16);
+      return B.CreateShl(Src1, Amount, "lshl16");
     });
   case CanonicalOp::V_LSHRREV_B16:
     return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateLShr(Src1, maskShiftAmount(B, Src0, 16), "lshr16");
+      Value *Amount = maskShiftAmount(B, Src0, 16);
+      return B.CreateLShr(Src1, Amount, "lshr16");
     });
   case CanonicalOp::V_ASHRREV_I16:
     return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateAShr(Src1, maskShiftAmount(B, Src0, 16), "ashr16");
+      Value *Amount = maskShiftAmount(B, Src0, 16);
+      return B.CreateAShr(Src1, Amount, "ashr16");
     });
   case CanonicalOp::V_MIN_I16:
     return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
