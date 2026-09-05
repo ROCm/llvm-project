@@ -1642,7 +1642,7 @@ static void readConfigs(Ctx &ctx, opt::InputArgList &args) {
   ctx.arg.trace = args.hasArg(OPT_trace);
   ctx.arg.undefined = args::getStrings(args, OPT_undefined);
   ctx.arg.undefinedVersion =
-      args.hasFlag(OPT_undefined_version, OPT_no_undefined_version, true);
+      args.hasFlag(OPT_undefined_version, OPT_no_undefined_version, false);
   ctx.arg.unique = args.hasArg(OPT_unique);
   ctx.arg.useAndroidRelrTags = args.hasFlag(
       OPT_use_android_relr_tags, OPT_no_use_android_relr_tags, false);
