@@ -25,9 +25,10 @@ struct mg_info {
     uint num_grids;
     ulong prev_sum;
     ulong all_sum;
-
-    struct mg_sync sgs;
     uint num_wg;
+    // 256 covers the largest cache line across supported GPUs, so the counter's
+    // atomics never share a line with the fields above.
+    struct mg_sync sgs __attribute__((aligned(256)));
 };
 
 static inline size_t
