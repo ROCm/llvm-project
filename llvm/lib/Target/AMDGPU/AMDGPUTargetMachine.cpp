@@ -23,6 +23,7 @@
 #include "AMDGPUCtorDtorLowering.h"
 #include "AMDGPUExportClustering.h"
 #include "AMDGPUExportKernelRuntimeHandles.h"
+#include "AMDGPUFormSSAMemoryClauses.h"
 #include "AMDGPUHazardLatency.h"
 #include "AMDGPUIGroupLP.h"
 #include "AMDGPUISelDAGToDAG.h"
@@ -99,6 +100,7 @@
 #include "llvm/CodeGen/StackSlotColoring.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/CodeGen/TwoAddressInstructionPass.h"
+#include "llvm/CodeGen/UnreachableBlockElim.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Module.h"
@@ -587,6 +589,11 @@ static cl::opt<bool> EnablePreRAOptimizations(
     cl::desc("Enable Pre-RA optimizations pass"), cl::init(true),
     cl::Hidden);
 
+static cl::opt<bool> EnableAMDGPUFormSSAMemoryClauses(
+    "amdgpu-enable-ssa-form-memory-clauses",
+    cl::desc("Enable SSA form memory clause pass (before PHI elimination)"),
+    cl::init(false), cl::Hidden);
+
 static cl::opt<bool> EnablePromoteKernelArguments(
     "amdgpu-enable-promote-kernel-arguments",
     cl::desc("Enable promotion of flat kernel pointer arguments to global"),
@@ -744,6 +751,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeSIOptimizeExecMaskingLegacyPass(*PR);
   initializeSIPreAllocateWWMRegsLegacyPass(*PR);
   initializeSIFormMemoryClausesLegacyPass(*PR);
+  initializeAMDGPUFormSSAMemoryClausesLegacyPass(*PR);
   initializeSIPostRABundlerLegacyPass(*PR);
   initializeGCNCreateVOPDLegacyPass(*PR);
   initializeAMDGPUUnifyDivergentExitNodesLegacyPass(*PR);
@@ -1889,8 +1897,15 @@ void GCNPassConfig::addOptimizedRegAlloc() {
 
   // This is not an essential optimization and it has a noticeable impact on
   // compilation time, so we only enable it from O2.
-  if (TM->getOptLevel() > CodeGenOptLevel::Less)
+  if (TM->getOptLevel() > CodeGenOptLevel::Less &&
+      !EnableAMDGPUFormSSAMemoryClauses)
     insertPass(&MachineSchedulerID, &SIFormMemoryClausesID);
+
+  // Run the SSA form of the memory clause pass before PHI elimination by
+  // anchoring to UnreachableMachineBlockElim, which is added once
+  // unconditionally in the base pipeline before PHI elimination.
+  if (EnableAMDGPUFormSSAMemoryClauses)
+    insertPass(&UnreachableMachineBlockElimID, &AMDGPUFormSSAMemoryClausesID);
 
   TargetPassConfig::addOptimizedRegAlloc();
 }
@@ -2655,8 +2670,16 @@ Error AMDGPUCodeGenPassBuilder::addOptimizedRegAlloc(PassManagerWrapper &PMW) {
 
   // This is not an essential optimization and it has a noticeable impact on
   // compilation time, so we only enable it from O2.
-  if (TM.getOptLevel() > CodeGenOptLevel::Less)
+  if (TM.getOptLevel() > CodeGenOptLevel::Less &&
+      !EnableAMDGPUFormSSAMemoryClauses)
     insertPass<MachineSchedulerPass>(SIFormMemoryClausesPass());
+
+  // Run the SSA form of the memory clause pass before PHI elimination by
+  // anchoring to UnreachableMachineBlockElim, which is added once
+  // unconditionally in the base pipeline before PHI elimination.
+  if (EnableAMDGPUFormSSAMemoryClauses)
+    insertPass<UnreachableMachineBlockElimPass>(
+        AMDGPUFormSSAMemoryClausesPass());
 
   return Base::addOptimizedRegAlloc(PMW);
 }
