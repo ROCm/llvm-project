@@ -14,11 +14,6 @@
 #ifndef LLVM_CONFIG_H
 #define LLVM_CONFIG_H
 
-/* The number of commits in the linear history from the
- * start of the universe up to the latest llvm main commit
- * that has been merged */
-#define LLVM_MAIN_REVISION 594793
-
 /* Define if LLVM_ENABLE_DUMP is enabled */
 #cmakedefine LLVM_ENABLE_DUMP
 
