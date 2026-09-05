@@ -114,6 +114,8 @@
 ; CHECK-O-NEXT: Running analysis: OuterAnalysisManagerProxy
 ; CHECK-EP-PEEPHOLE-NEXT: Running pass: NoOpFunctionPass
 ; CHECK-O-NEXT: Running pass: SimplifyCFGPass
+; CHECK-O-NEXT: Running pass: AlwaysInlinerPass
+; CHECK-O-NEXT: Running analysis: ProfileSummaryAnalysis
 ; CHECK-O-NEXT: Running pass: ModuleInlinerWrapperPass
 ; CHECK-O-NEXT: Running analysis: InlineAdvisorAnalysis
 ; CHECK-O-NEXT: Running pass: RequireAnalysisPass<{{.*}}GlobalsAA
@@ -122,13 +124,11 @@
 ; CHECK-O-NEXT: Running pass: InvalidateAnalysisPass<{{.*}}AAManager
 ; CHECK-O-NEXT: Invalidating analysis: AAManager
 ; CHECK-O-NEXT: Running pass: RequireAnalysisPass<{{.*}}ProfileSummaryAnalysis
-; CHECK-O-NEXT: Running analysis: ProfileSummaryAnalysis
 ; CHECK-O-NEXT: Running analysis: InnerAnalysisManagerProxy
 ; CHECK-O-NEXT: Running analysis: LazyCallGraphAnalysis
 ; CHECK-O-NEXT: Running analysis: FunctionAnalysisManagerCGSCCProxy
 ; CHECK-O-NEXT: Running analysis: OuterAnalysisManagerProxy<{{.*}}LazyCallGraph::SCC{{.*}}>
 ; CHECK-O-NEXT: Running pass: DevirtSCCRepeatedPass
-; CHECK-O-NEXT: Running pass: InlinerPass
 ; CHECK-O-NEXT: Running pass: InlinerPass
 ; CHECK-O-NEXT: Running pass: PostOrderFunctionAttrsPass
 ; CHECK-O3-NEXT: Running pass: ArgumentPromotionPass

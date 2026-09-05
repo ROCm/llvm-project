@@ -56,6 +56,7 @@
 ; CHECK-O-NEXT: Running analysis: TypeBasedAA
 ; CHECK-O-NEXT: Running analysis: OuterAnalysisManagerProxy
 ; CHECK-O-NEXT: Running pass: SimplifyCFGPass
+; CHECK-O-NEXT: Running pass: AlwaysInlinerPass
 ; CHECK-O-NEXT: Running pass: ModuleInlinerWrapperPass
 ; CHECK-O-NEXT: Running analysis: InlineAdvisorAnalysis
 ; CHECK-O-NEXT: Running pass: RequireAnalysisPass<{{.*}}GlobalsAA
@@ -69,7 +70,6 @@
 ; CHECK-O-NEXT: Running analysis: FunctionAnalysisManagerCGSCCProxy
 ; CHECK-O-NEXT: Running analysis: OuterAnalysisManagerProxy
 ; CHECK-O-NEXT: Running pass: DevirtSCCRepeatedPass
-; CHECK-O-NEXT: Running pass: InlinerPass
 ; CHECK-O-NEXT: Running pass: InlinerPass
 ; CHECK-O-NEXT: Running pass: PostOrderFunctionAttrsPass
 ; CHECK-O3-NEXT: Running pass: ArgumentPromotionPass
