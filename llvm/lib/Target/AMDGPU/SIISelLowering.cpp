@@ -17256,10 +17256,7 @@ unsigned SITargetLowering::getFusedOpcode(const SelectionDAG &DAG,
       isOperationLegal(ISD::FMAD, VT))
     return ISD::FMAD;
 
-  const TargetOptions &Options = DAG.getTarget().Options;
-  if ((Options.AllowFPOpFusion == FPOpFusion::Fast ||
-       (N0->getFlags().hasAllowContract() &&
-        N1->getFlags().hasAllowContract())) &&
+  if (N0->getFlags().hasAllowContract() && N1->getFlags().hasAllowContract() &&
       isFMAFasterThanFMulAndFAdd(DAG.getMachineFunction(), VT)) {
     return ISD::FMA;
   }
@@ -18389,10 +18386,7 @@ SDValue SITargetLowering::performFMACombine(SDNode *N,
   }
 
   // fp-contract allows reassociating the fma tree into a dot product.
-  const TargetOptions &Options = DAG.getTarget().Options;
-  if (Options.AllowFPOpFusion == FPOpFusion::Fast ||
-      (N->getFlags().hasAllowContract() &&
-       FMA->getFlags().hasAllowContract())) {
+  if (N->getFlags().hasAllowContract() && FMA->getFlags().hasAllowContract()) {
     Op1 = Op1.getOperand(0);
     Op2 = Op2.getOperand(0);
     if (Op1.getOpcode() != ISD::EXTRACT_VECTOR_ELT ||
