@@ -183,9 +183,13 @@ DECL_CONST_OCML_UNARY_F32(ncdfinv)
 DECL_CONST_OCML_UNARY_F32(nearbyint)
 DECL_CONST_OCML_BINARY_F32(nextafter)
 DECL_CONST_OCML_BINARY_F32(pow)
+DECL_CONST_OCML_BINARY_F32(pow_fast)
 DECL_CONST_OCML_BINARY_F32(powr)
+DECL_CONST_OCML_BINARY_F32(powr_fast)
 extern __attribute__((pure)) float OCML_MANGLE_F32(pown)(float, int);
+extern __attribute__((pure)) float OCML_MANGLE_F32(pown_fast)(float, int);
 extern __attribute__((pure)) float OCML_MANGLE_F32(rootn)(float, int);
+extern __attribute__((pure)) float OCML_MANGLE_F32(rootn_fast)(float, int);
 DECL_CONST_OCML_UNARY_F32(pred)
 DECL_CONST_OCML_BINARY_F32(remainder)
 
