@@ -319,13 +319,20 @@ public:
   }
 
   bool isJoinable(const DbgValueProperties &Other) const {
+    // When joining values the operand counts must agree. And equal expressions
+    // do not imply equal counts, as a poisoned expression (DW_OP_LLVM_poisoned)
+    // is a single uniqued node that stands in for any DIOp expression,
+    // regardless of how many location operands that expression had.
+    if (NumLocOps != Other.NumLocOps)
+      return false;
     return DIExpression::isEqualExpression(DIExpr, Indirect, Other.DIExpr,
                                            Other.Indirect);
   }
 
   bool operator==(const DbgValueProperties &Other) const {
     return std::tie(DIExpr, Indirect, IsVariadic, NumLocOps) ==
-           std::tie(Other.DIExpr, Other.Indirect, Other.IsVariadic, NumLocOps);
+           std::tie(Other.DIExpr, Other.Indirect, Other.IsVariadic,
+	            Other.NumLocOps);
   }
 
   bool operator!=(const DbgValueProperties &Other) const {
