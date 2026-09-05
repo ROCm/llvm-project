@@ -161,7 +161,7 @@ jobs:
           python build_tools/health_status.py
 
       - name: Windows build and test hot fixes
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/windows-patches@amd-staging
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/windows-patches@amd/dev/kirthana14m/parameterised-wave-assertion
         with:
           stage_name: ${{ inputs.stage_name }}
 
