@@ -204,6 +204,21 @@ static void ProcessFlags() {
            "quarantine_size_mb is set to 0\n", SanitizerToolName);
     Die();
   }
+  // Device quarantine sizes default to the host quarantine sizes so that
+  // device allocations keep the same use-after-free detection window.
+  if (f->device_quarantine_size_mb < 0)
+    f->device_quarantine_size_mb = f->quarantine_size_mb;
+  if (f->device_thread_local_quarantine_size_kb < 0)
+    f->device_thread_local_quarantine_size_kb =
+        f->thread_local_quarantine_size_kb;
+  if (f->device_thread_local_quarantine_size_kb == 0 &&
+      f->device_quarantine_size_mb > 0) {
+    Report(
+        "%s: device_thread_local_quarantine_size_kb can be set to 0 only "
+        "when device_quarantine_size_mb is set to 0\n",
+        SanitizerToolName);
+    Die();
+  }
   if (!f->replace_str && common_flags()->intercept_strlen) {
     Report("WARNING: strlen interceptor is enabled even though replace_str=0. "
            "Use intercept_strlen=0 to disable it.");
