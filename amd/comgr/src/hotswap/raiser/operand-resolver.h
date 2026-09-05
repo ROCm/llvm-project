@@ -29,6 +29,14 @@ struct BinaryOperands {
   llvm::Value *Src1;
 };
 
+/// Destination and source values of a ternary 32-bit instruction.
+struct TernaryOperands {
+  ParsedReg Dst;
+  llvm::Value *Src0;
+  llvm::Value *Src1;
+  llvm::Value *Src2;
+};
+
 // Operand access for one decoded instruction, handed to a handler: source
 // reads through the decoded srcMap at 32-bit, 64-bit or EXEC width, register
 // names for sources and destinations, and immediates. Float source reads apply
@@ -103,6 +111,8 @@ struct OperandResolver {
   llvm::Expected<BinaryOperands> readBinary32();
   // Read the destination and two 64-bit sources.
   llvm::Expected<BinaryOperands> readBinary64();
+  /// Read the destination and three 32-bit sources.
+  llvm::Expected<TernaryOperands> readTernary32();
 };
 
 } // namespace COMGR::hotswap
