@@ -22,7 +22,6 @@ THE SOFTWARE.
 
 #include "hipBin_util.h"
 #include "hipBin_amd.h"
-#include "hipBin_nvidia.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -30,7 +29,6 @@ THE SOFTWARE.
 class HipBinUtil;
 class HipBinBase;
 class HipBinAmd;
-class HipBinNvidia;
 class HipBin;
 
 
@@ -38,7 +36,6 @@ class HipBin {
  private:
   HipBinUtil* hipBinUtilPtr_;
   vector<HipBinBase *> hipBinBasePtrs_;
-  HipBinBase* hipBinNVPtr_;
   HipBinBase* hipBinAMDPtr_;
 
  public:
@@ -53,28 +50,12 @@ class HipBin {
 
 HipBin::HipBin() {
   hipBinUtilPtr_ = hipBinUtilPtr_->getInstance();
-  hipBinNVPtr_ = new HipBinNvidia();
   hipBinAMDPtr_ = new HipBinAmd();
-  bool platformDetected = false;
-  if (hipBinAMDPtr_->detectPlatform()) {
-    // populates the struct with AMD info
-    hipBinBasePtrs_.push_back(hipBinAMDPtr_);
-    platformDetected = true;
-  } else if (hipBinNVPtr_->detectPlatform()) {
-    // populates the struct with Nvidia info
-    hipBinBasePtrs_.push_back(hipBinNVPtr_);
-    platformDetected = true;
-  }
-  // if no device is detected, then it is defaulted to AMD
-  if (!platformDetected) {
-    std::cerr << "Device not supported - Defaulting to AMD" << endl;
-    // populates the struct with AMD info
-    hipBinBasePtrs_.push_back(hipBinAMDPtr_);
-  }
+  // AMD is the only supported platform; always populate with AMD info.
+  hipBinBasePtrs_.push_back(hipBinAMDPtr_);
 }
 
 HipBin::~HipBin() {
-  delete hipBinNVPtr_;
   delete hipBinAMDPtr_;
   // clearing the vector so no one accesses the pointers
   hipBinBasePtrs_.clear();
