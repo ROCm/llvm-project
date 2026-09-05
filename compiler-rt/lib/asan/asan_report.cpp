@@ -29,6 +29,7 @@
 #include "sanitizer_common/sanitizer_report_decorator.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "sanitizer_common/sanitizer_symbolizer.h"
+#include "sanitizer_common/sanitizer_symbolizer_amdhsa.h"
 
 namespace __asan {
 
@@ -258,6 +259,37 @@ void ReportDoubleFree(uptr addr, BufferedStackTrace *free_stack) {
   ScopedInErrorReport in_report;
   ErrorDoubleFree error(GetCurrentTidOrInvalid(), free_stack, addr);
   in_report.ReportError(error);
+}
+
+void ReportVmemDoubleFree(uptr addr, uptr size, u32 reserve_stack_id,
+                          u32 reserve_tid, u32 first_free_stack_id,
+                          u32 first_free_tid, BufferedStackTrace* free_stack) {
+  ScopedInErrorReport in_report;
+  Decorator d;
+  Printf("%s", d.Error());
+  Report(
+      "ERROR: AddressSanitizer: attempting double-free on %p in thread %s:\n",
+      (void*)addr, AsanThreadIdAndName(GetCurrentTidOrInvalid()).c_str());
+  Printf("%s", d.Default());
+  CHECK_GT(free_stack->size, 0);
+  free_stack->Print();
+
+  // GPU-only VMEM reservations have no AsanChunk metadata; describe the tracked
+  // reservation bounds and the reserve / first-free provenance instead.
+  Printf("%s%p is a device VMEM reservation of size %zu [%p,%p)%s\n",
+         d.Location(), (void*)addr, size, (void*)addr, (void*)(addr + size),
+         d.Default());
+  if (first_free_stack_id) {
+    Printf("%sfirst freed by thread %s here:%s\n", d.Allocation(),
+           AsanThreadIdAndName(first_free_tid).c_str(), d.Default());
+    StackDepotGet(first_free_stack_id).Print();
+  }
+  if (reserve_stack_id) {
+    Printf("%spreviously reserved by thread %s here:%s\n", d.Allocation(),
+           AsanThreadIdAndName(reserve_tid).c_str(), d.Default());
+    StackDepotGet(reserve_stack_id).Print();
+  }
+  ReportErrorSummary("double-free", free_stack);
 }
 
 void ReportNewDeleteTypeMismatch(uptr addr, uptr delete_size,
@@ -617,7 +649,7 @@ void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
 
       InternalScopedString source_location;
       source_location.AppendF("    #0 0x%llx", e->alloc_pc);
-#if SANITIZER_AMDGPU
+#if SANITIZER_AMDHSA
       source_location.Append(" in ");
       __sanitizer::AMDGPUCodeObjectSymbolizer symbolizer;
       symbolizer.Init(e->fd, e->file_extent_start, e->file_extent_size);
