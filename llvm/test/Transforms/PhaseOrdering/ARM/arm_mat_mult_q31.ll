@@ -195,8 +195,8 @@ define i32 @arm_mat_mult_q31(ptr noundef %pSrcA, ptr noundef %pSrcB, ptr noundef
 ; CHECK-NEXT:    store i32 [[ADD45_US_US_LCSSA_PROL_2_OFF31]], ptr [[INCDEC_PTR52_US_US59_PROL_1]], align 4, !tbaa [[INT_TBAA17]]
 ; CHECK-NEXT:    br label %[[DO_BODY8_US_US56_PROL_LOOPEXIT]]
 ; CHECK:       [[DO_BODY8_US_US56_PROL_LOOPEXIT]]:
-; CHECK-NEXT:    [[PIN2_0_US_US_UNR:%.*]] = phi ptr [ [[TMP1]], %[[DO_BODY_US]] ], [ [[ADD_PTR55_US_US_PROL]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL]] ], [ [[ADD_PTR55_US_US_PROL_1]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL_1]] ], [ [[ADD_PTR55_US_US_PROL_2]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL_2]] ]
 ; CHECK-NEXT:    [[PX_0_US_US58_UNR:%.*]] = phi ptr [ [[ADD_PTR_US]], %[[DO_BODY_US]] ], [ [[INCDEC_PTR52_US_US59_PROL]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL]] ], [ [[INCDEC_PTR52_US_US59_PROL_1]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL_1]] ], [ [[INCDEC_PTR52_US_US59_PROL_2]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL_2]] ]
+; CHECK-NEXT:    [[PIN2_0_US_US_UNR:%.*]] = phi ptr [ [[TMP1]], %[[DO_BODY_US]] ], [ [[ADD_PTR55_US_US_PROL]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL]] ], [ [[ADD_PTR55_US_US_PROL_1]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL_1]] ], [ [[ADD_PTR55_US_US_PROL_2]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL_2]] ]
 ; CHECK-NEXT:    [[COL_0_US_US59_UNR:%.*]] = phi i32 [ [[CONV6]], %[[DO_BODY_US]] ], [ [[DEC53_US_US60_PROL]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL]] ], [ [[DEC53_US_US60_PROL_1]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL_1]] ], [ [[DEC53_US_US60_PROL_2]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_PROL_2]] ]
 ; CHECK-NEXT:    br i1 [[TMP11]], label %[[DO_END_SPLIT_US_SPLIT_US62]], label %[[DO_BODY_US_NEW:.*]]
 ; CHECK:       [[DO_BODY_US_NEW]]:
@@ -210,8 +210,8 @@ define i32 @arm_mat_mult_q31(ptr noundef %pSrcA, ptr noundef %pSrcB, ptr noundef
 ; CHECK-NEXT:    [[INCDEC_PTR41_US_US_1_3:%.*]] = getelementptr inbounds nuw i8, ptr [[PINA_0_US]], i32 8
 ; CHECK-NEXT:    br label %[[DO_BODY8_US_US56:.*]]
 ; CHECK:       [[DO_BODY8_US_US56]]:
-; CHECK-NEXT:    [[PIN2_0_US_US:%.*]] = phi ptr [ [[PIN2_0_US_US_UNR]], %[[DO_BODY_US_NEW]] ], [ [[ADD_PTR55_US_US_3:%.*]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_3:.*]] ]
-; CHECK-NEXT:    [[PX_0_US_US57:%.*]] = phi ptr [ [[PX_0_US_US58_UNR]], %[[DO_BODY_US_NEW]] ], [ [[INCDEC_PTR52_US_US59_3:%.*]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_3]] ]
+; CHECK-NEXT:    [[PX_0_US_US57:%.*]] = phi ptr [ [[PX_0_US_US58_UNR]], %[[DO_BODY_US_NEW]] ], [ [[INCDEC_PTR52_US_US59_3:%.*]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_3:.*]] ]
+; CHECK-NEXT:    [[PIN2_0_US_US:%.*]] = phi ptr [ [[PIN2_0_US_US_UNR]], %[[DO_BODY_US_NEW]] ], [ [[ADD_PTR55_US_US_3:%.*]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_3]] ]
 ; CHECK-NEXT:    [[COL_0_US_US58:%.*]] = phi i32 [ [[COL_0_US_US59_UNR]], %[[DO_BODY_US_NEW]] ], [ [[DEC53_US_US60_3:%.*]], %[[WHILE_COND37_WHILE_END49_CRIT_EDGE_US_US_3]] ]
 ; CHECK-NEXT:    [[TMP32:%.*]] = load i32, ptr [[PINA_0_US]], align 4, !tbaa [[INT_TBAA17]]
 ; CHECK-NEXT:    [[CONV42_US_US:%.*]] = sext i32 [[TMP32]] to i64
@@ -380,15 +380,15 @@ define i32 @arm_mat_mult_q31(ptr noundef %pSrcA, ptr noundef %pSrcB, ptr noundef
 ; CHECK-NEXT:    br label %[[DO_BODY8:.*]]
 ; CHECK:       [[DO_BODY8]]:
 ; CHECK-NEXT:    [[INDVARS_IV70:%.*]] = phi ptr [ [[SCEVGEP71:%.*]], %[[WHILE_END49:.*]] ], [ [[SCEVGEP69]], %[[DO_BODY]] ]
-; CHECK-NEXT:    [[PIN2_0:%.*]] = phi ptr [ [[ADD_PTR55:%.*]], %[[WHILE_END49]] ], [ [[TMP1]], %[[DO_BODY]] ]
 ; CHECK-NEXT:    [[PX_0:%.*]] = phi ptr [ [[INCDEC_PTR52:%.*]], %[[WHILE_END49]] ], [ [[ADD_PTR]], %[[DO_BODY]] ]
+; CHECK-NEXT:    [[PIN2_0:%.*]] = phi ptr [ [[ADD_PTR55:%.*]], %[[WHILE_END49]] ], [ [[TMP1]], %[[DO_BODY]] ]
 ; CHECK-NEXT:    [[COL_0:%.*]] = phi i32 [ [[DEC53:%.*]], %[[WHILE_END49]] ], [ [[CONV6]], %[[DO_BODY]] ]
 ; CHECK-NEXT:    br label %[[WHILE_BODY:.*]]
 ; CHECK:       [[WHILE_BODY]]:
-; CHECK-NEXT:    [[COLCNT_045:%.*]] = phi i32 [ [[SHR]], %[[DO_BODY8]] ], [ [[DEC:%.*]], %[[WHILE_BODY]] ]
-; CHECK-NEXT:    [[SUM_043:%.*]] = phi i64 [ 0, %[[DO_BODY8]] ], [ [[ADD33:%.*]], %[[WHILE_BODY]] ]
-; CHECK-NEXT:    [[PIN2_144:%.*]] = phi ptr [ [[PIN2_0]], %[[DO_BODY8]] ], [ [[ADD_PTR35:%.*]], %[[WHILE_BODY]] ]
 ; CHECK-NEXT:    [[PIN1_046:%.*]] = phi ptr [ [[PINA_0]], %[[DO_BODY8]] ], [ [[INCDEC_PTR29:%.*]], %[[WHILE_BODY]] ]
+; CHECK-NEXT:    [[COLCNT_045:%.*]] = phi i32 [ [[SHR]], %[[DO_BODY8]] ], [ [[DEC:%.*]], %[[WHILE_BODY]] ]
+; CHECK-NEXT:    [[PIN2_144:%.*]] = phi ptr [ [[PIN2_0]], %[[DO_BODY8]] ], [ [[ADD_PTR35:%.*]], %[[WHILE_BODY]] ]
+; CHECK-NEXT:    [[SUM_043:%.*]] = phi i64 [ 0, %[[DO_BODY8]] ], [ [[ADD33:%.*]], %[[WHILE_BODY]] ]
 ; CHECK-NEXT:    [[INCDEC_PTR:%.*]] = getelementptr inbounds nuw i8, ptr [[PIN1_046]], i32 4
 ; CHECK-NEXT:    [[TMP56:%.*]] = load i32, ptr [[PIN1_046]], align 4, !tbaa [[INT_TBAA17]]
 ; CHECK-NEXT:    [[CONV11:%.*]] = sext i32 [[TMP56]] to i64
