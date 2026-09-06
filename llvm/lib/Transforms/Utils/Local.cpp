@@ -1695,9 +1695,6 @@ void llvm::ConvertDebugDeclareToDebugValue(DbgVariableRecord *DVR,
   auto *DIExpr = DVR->getExpression();
   Value *DV = SI->getValueOperand();
 
-  if (isa<UndefValue>(DV) && !isa<PoisonValue>(DV))
-    return;
-
   DebugLoc NewLoc = getDebugValueLoc(DVR);
 
   DIExpr = tryRemoveNewDIExpressionIndirection(DIExpr, DV->getType());
