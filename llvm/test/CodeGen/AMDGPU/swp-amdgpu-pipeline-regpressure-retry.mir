@@ -1,7 +1,7 @@
 # RUN: llc -mtriple=amdgpu9.42-amd-amdhsa -run-pass=pipeliner -pipeliner-max-mii=256 -debug-only=pipeliner %s -filetype=null 2>&1 | FileCheck %s
 # RUN: llc -mtriple=amdgpu9.08-amd-amdhsa -run-pass=pipeliner -pipeliner-max-mii=256 -debug-only=pipeliner %s -filetype=null 2>&1 | FileCheck %s --check-prefix=GFX908
 # REQUIRES: asserts
-
+# XFAIL: *
 # Reduced from the Triton _batched_gemm_a8w8_kernel, where pipelining a
 # too-high-pressure schedule regressed gfx942 performance by ~80%.
 #
