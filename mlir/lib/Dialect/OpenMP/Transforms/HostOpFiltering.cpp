@@ -34,6 +34,10 @@ using namespace mlir;
 /// This includes cast-style operations to avoid losing information about the
 /// original source of an operand.
 static bool keepHostOpInDevice(Operation &op) {
+  // Function filtering leaves a poison wherever it deleted a host-only call's
+  // result. That has to become a placeholder argument instead.
+  if (isa<LLVM::PoisonOp>(&op))
+    return false;
   return isPure(&op) &&
          op.getDialect() ==
              op.getContext()->getLoadedDialect<LLVM::LLVMDialect>();
