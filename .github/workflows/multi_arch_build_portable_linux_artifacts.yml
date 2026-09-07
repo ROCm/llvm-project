@@ -139,8 +139,10 @@ jobs:
             --amdgpu-families="${{ inputs.amdgpu_family }}" \
             --output-dir="${BUILD_DIR}" \
             --bootstrap
-
-      - name: Carry wave32 EXEC CFI patch (TheRock #6102)
+      
+      # Temp fix for the assertion on - this needs to be removed once the merge happens
+      - name: Carry wave32 EXEC CFI patch - temp for assertion on (TheRock #6102)
+        if: ${{ env.LLVM_ASSERTIONS == '1' }}
         run: |
           set -x
           git config --global --add safe.directory "$PWD"
@@ -150,6 +152,27 @@ jobs:
           git show FETCH_HEAD:patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch \
             > patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
             
+      - name: Carry ObjectYAML VERS part size fix - temp for assertion on (llvm/llvm-project 221137)
+        if: ${{ env.LLVM_ASSERTIONS == '1' }}
+        run: |
+          set -x
+          git config --global --add safe.directory "$PWD"
+          mkdir -p patches/amd-mainline/llvm-project
+          git fetch --no-tags --depth 2 https://github.com/llvm/llvm-project.git \
+            refs/pull/221137/head
+          git format-patch -1 --stdout FETCH_HEAD \
+            > patches/amd-mainline/llvm-project/0002-ObjectYAML-VERS-part-size.patch
+
+      - name: Carry mlir-pdll-lsp-server link fix - temp for assertion on (llvm/llvm-project 220123)
+        if: ${{ env.LLVM_ASSERTIONS == '1' }}
+        run: |
+          set -x
+          git config --global --add safe.directory "$PWD"
+          git fetch --no-tags --depth 2 https://github.com/llvm/llvm-project.git \
+            14cdf0c5f29976d682b51fdfb6038ed67acca82b
+          git format-patch -1 --stdout FETCH_HEAD \
+            > patches/amd-mainline/llvm-project/0003-mlir-pdll-lsp-server-link.patch          
+ 
       - name: Fetch sources
         timeout-minutes: 30
         run: |

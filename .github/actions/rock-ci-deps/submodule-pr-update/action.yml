@@ -256,6 +256,7 @@ runs:
           }
         }
         EOF
+          echo "LLVM_ASSERTIONS=1" >> "$GITHUB_ENV"
           echo "Wave-transform PR: building with LLVM assertions."
         fi
 
