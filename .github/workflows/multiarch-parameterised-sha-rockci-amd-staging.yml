@@ -61,17 +61,13 @@ jobs:
       run_id: ${{ steps.dispatch.outputs.run_id }}
       run_url: ${{ steps.dispatch.outputs.run_url }}
     steps:
-      - uses: actions/create-github-app-token@v2
+
+      - name: Generate GitHub App token
         id: rocm-cciapp
-        if: ${{ vars.ROCM_CCIAPP_APP_ID != '' }}
+        uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
-          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: llvm-project
-          permission-contents: read
-          permission-actions: write
-          permission-variables: write
+          app-id: ${{ secrets.MERGE_APP_ID }}
+          private-key: ${{ secrets.MERGE_APP_PRIVATE_KEY }}
 
       - name: Checkout llvm-project
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -325,21 +321,16 @@ jobs:
       needs.jenkins.result == 'success'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/create-github-app-token@v2
-        id: rocm-cciapp
-        if: ${{ vars.ROCM_CCIAPP_APP_ID != '' }}
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
-          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: llvm-project
-          permission-contents: read
-          permission-actions: write
-          permission-variables: write          
+          app-id: ${{ secrets.MERGE_APP_ID }}
+          private-key: ${{ secrets.MERGE_APP_PRIVATE_KEY }}
 
       - name: Update the RockCI baseline variables
         env:
-          ROCM_CCIAPP_TOKEN: ${{ steps.rocm-cciapp.outputs.token }}
+          ROCM_CCIAPP_TOKEN: ${{ steps.app-token.outputs.token }}
           THEROCK_SHA: ${{ needs.dispatch.outputs.sha }}
           RUN_URL: ${{ needs.dispatch.outputs.run_url }}
         run: |
