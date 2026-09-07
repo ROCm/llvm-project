@@ -422,6 +422,26 @@ module attributes {omp.is_target_device = true} {
     llvm.return
   }
 
+  // Function filtering replaces a deleted host-only call's result with poison,
+  // as it does for the malloc backing a Fortran array temporary. Cloning that
+  // would leave the device storing through poison, so it takes a placeholder.
+  // CHECK-LABEL: llvm.func @poison_operand
+  // CHECK-SAME: (%[[PLACEHOLDER:.*]]: !llvm.ptr)
+  llvm.func @poison_operand() {
+    // CHECK-NOT: llvm.mlir.poison
+    // CHECK: %[[MAP:.*]] = omp.map.info var_ptr(%[[PLACEHOLDER]] : !llvm.ptr, i32) map_clauses(tofrom) capture(ByRef) -> !llvm.ptr
+    %0 = llvm.mlir.poison : !llvm.ptr
+    %1 = omp.map.info var_ptr(%0 : !llvm.ptr, i32) map_clauses(tofrom) capture(ByRef) -> !llvm.ptr
+
+    // CHECK-NEXT: omp.target kernel_type(generic) map_entries(%[[MAP]] -> %{{.*}} : !llvm.ptr)
+    omp.target kernel_type(generic) map_entries(%1 -> %arg0 : !llvm.ptr) {
+      omp.terminator
+    }
+
+    // CHECK: llvm.return
+    llvm.return
+  }
+
   // CHECK-LABEL: llvm.func @reciprocal_a
   // CHECK-SAME: (%[[PLACEHOLDER:.*]]: !llvm.ptr)
   llvm.func @reciprocal_a() {
