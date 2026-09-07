@@ -2085,10 +2085,10 @@ void ControlFlowRewriter::rewrite() {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
         continue;
 
-      // Reconvergence is a per-edge property: common-code sinking can make a
-      // node the secondary of one divergent node and the primary successor
-      // of another. The latter edge already enters with EXEC narrowed to
-      // PrimarySuccessorExec, so it must contribute no rejoin mask.
+      // Since Reconvergence is a per-edge property, a node can be the secondary
+      // of one divergent node and the primary successor of another. And in the
+      // latter case, the edge already enters with a narrowed EXEC, so it must
+      // not contribute any rejoin mask.
       if (Pred->Successors[0] == Secondary) {
         HasDivergenceEntryPred = true;
         continue;
@@ -2100,9 +2100,9 @@ void ControlFlowRewriter::rewrite() {
 
     // The accumulator is only needed when multiple divergent predecessors
     // contribute rejoin masks, or when cycle membership or non-dominance
-    // requires temporal merging across iterations. A skipped divergence-entry
-    // predecessor forces it too: the direct rejoin register is nonzero on
-    // that edge, whereas the accumulator is zero there and the OR is a no-op.
+    // requires temporal merging across iterations. Accumulator is also needed
+    // when there is a divergence-entry edge, since the direct rejoin register
+    // is nonzero on that edge.
     bool HasSingleDivergentPred =
         (NumDivergentPreds == 1) && !SingleDivPred->Cycle &&
         !HasDivergenceEntryPred &&
@@ -2120,7 +2120,8 @@ void ControlFlowRewriter::rewrite() {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
         continue;
 
-      // As above: a divergence-entry edge contributes no rejoin mask.
+      // A node with a divergence-entry edge should not contribute any rejoin
+      // mask.
       if (Pred->Successors[0] == Secondary)
         continue;
 
