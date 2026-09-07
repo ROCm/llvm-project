@@ -174,7 +174,7 @@ void CommandCache::prune() {
 std::unique_ptr<CommandCache> CommandCache::get(raw_ostream &LogS) {
   static std::optional<SmallString<256>> CacheDir =
       env::getCacheDirectory(LogS);
-  if (CacheDir)
+  if (!CacheDir)
     return nullptr;
 
   std::optional<CachePruningPolicy> Policy =
