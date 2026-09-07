@@ -106,9 +106,7 @@ smem_wide_loads:
 ; IR: ret void
 	s_endpgm
 
-; Exercise a destination overlapping the source base pair. The address must be
-; computed from the pre-instruction base value, before the destination
-; overwrites it.
+; Test overlap with the source base pair.
 
 	.globl	smem_wide_overlap
 	.p2align	8
@@ -161,8 +159,7 @@ smem_wide_register_offset:
 ; IR: ret void
 	s_endpgm
 
-; Exercise a destination overlapping the SGPR offset. The offset must be read
-; before the destination overwrites it.
+; Test overlap with the SGPR offset.
 
 	.globl	smem_soffset_overlap
 	.p2align	8
@@ -182,8 +179,7 @@ smem_soffset_overlap:
 ; IR: ret void
 	s_endpgm
 
-; SCALE_OFFSET scales the SGPR element index by the load width before dword
-; alignment.
+; SCALE_OFFSET scales the SGPR element index by the load width before alignment.
 
 	.globl	smem_scale_offset
 	.p2align	8

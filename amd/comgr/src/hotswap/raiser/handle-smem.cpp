@@ -37,7 +37,8 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-// Supported S_LOAD_B* forms use dword-granular address components.
+// Supported S_LOAD_B* instructions ignore bits [1:0] of every address
+// component.
 static constexpr Align DwordSmemAddressAlignment = Align::Constant<4>();
 
 // Report decoded operands that contradict the generated instruction metadata.
@@ -187,7 +188,6 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   }
 
   Type *I64Ty = Ctx.B.getInt64Ty();
-  // Round each address component down independently to a dword boundary.
   uint64_t AddressMask =
       maskTrailingZeros<uint64_t>(Log2(DwordSmemAddressAlignment));
   Value *AlignedBase = Ctx.B.CreateAnd(
