@@ -317,9 +317,13 @@ jobs:
         id: rocm-cciapp
         if: ${{ vars.ROCM_CCIAPP_APP_ID != '' }}
         with:
-          app-id: ${{ secrets.MERGE_APP_ID }}
-          private-key: ${{ secrets.MERGE_APP_PRIVATE_KEY }}
+          app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
+          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
+          repositories: llvm-project
+          permission-contents: read
+          permission-actions: write
+          permission-variables: write          
 
       - name: Update the RockCI baseline variables
         env:
