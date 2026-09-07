@@ -42,7 +42,7 @@ concurrency:
 
 env:
   ROCKCI_WORKFLOW: rockci_multi_arch_amd_staging.yml
-  ROCKCI_REF: amd-staging
+  ROCKCI_REF: amd/dev/kirthana14m/sha-check-automation
   GPU_TARGET: gfx90a
   # Job name rendered by multi_arch_build_portable_linux.yml for the per-arch
   # math-libs stage; the Jenkins hand-off waits for this to go green.
@@ -158,7 +158,7 @@ jobs:
           # defaults (Linux gfx94x/gfx110x/gfx90a, Windows gfx1151).
           gh workflow run "$ROCKCI_WORKFLOW" \
             --repo "$GITHUB_REPOSITORY" \
-            --ref "amd/dev/kirthana14m/sha-check-automation" \
+            --ref "$ROCKCI_REF" \
             -f "therock_ref=${THEROCK_SHA}"
 
           RUN_ID=""
