@@ -34,7 +34,8 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 concurrency:
   group: rockci-validate-therock-tip
@@ -61,25 +62,25 @@ jobs:
       run_id: ${{ steps.dispatch.outputs.run_id }}
       run_url: ${{ steps.dispatch.outputs.run_url }}
     steps:
-
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
+        id: rocm-cciapp
+        if: ${{ vars.ROCM_CCIAPP_APP_ID != '' }}
         with:
-          app-id: ${{ secrets.MERGE_APP_ID }}
-          private-key: ${{ secrets.MERGE_APP_PRIVATE_KEY }}
+          app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
+          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
 
       - name: Checkout llvm-project
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: amd-staging
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.rocm-cciapp.outputs.token }}
 
       - name: Resolve merged TheRock main tip
         id: tip
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/resolve-therock-green-sha@amd/dev/kirthana14m/sha-check-automation
         with:
-          github_token: ${{ steps.app-token.outputs.token }}
+          github_token: ${{ steps.rocm-cciapp.outputs.token }}
 
       - name: Decide whether this tip needs validating
         id: plan
@@ -135,7 +136,7 @@ jobs:
         id: dispatch
         if: steps.plan.outputs.validate == 'true'
         env:
-          ROCM_CCIAPP_TOKEN: ${{ steps.app-token.outputs.token }}
+          ROCM_CCIAPP_TOKEN: ${{ steps.rocm-cciapp.outputs.token }}
           THEROCK_SHA: ${{ steps.plan.outputs.sha }}
         run: |
           set -euo pipefail
