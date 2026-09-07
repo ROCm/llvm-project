@@ -297,7 +297,7 @@ jobs:
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/jenkins-rock-artifacts-tester@amd/dev/kirthana14m/sha-check-automation
         with:
           jenkins_host: ${{ secrets.ROCM_JENKINS_HOST }}
-          jenkins_user: ${{ secrets.CI_JENKINS_USER }}
+          jenkins_user: ${{ secrets.ROCM_JENKINS_USER }}
           jenkins_token: ${{ secrets.ROCM_JENKINS_CI_TOKEN }}
           artifacts_run_id: ${{ needs.dispatch.outputs.run_id }}
           gpu_target: ${{ env.GPU_TARGET }}
@@ -317,8 +317,8 @@ jobs:
         id: rocm-cciapp
         if: ${{ vars.ROCM_CCIAPP_APP_ID != '' }}
         with:
-          app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
-          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
+          app-id: ${{ secrets.MERGE_APP_ID }}
+          private-key: ${{ secrets.MERGE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
       - name: Update the RockCI baseline variables
