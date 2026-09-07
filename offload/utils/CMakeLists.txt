@@ -7,4 +7,5 @@ macro(add_openmp_util path)
      DESTINATION "${OPENMP_UTILS_INSTALL_DIR}")
 endmacro()
 
-add_subdirectory(gpurun)
+add_subdirectory("${LLVM_EXTERNAL_OFFLOAD_SOURCE_DIR}/../amd/tools" amd-tools)
+
