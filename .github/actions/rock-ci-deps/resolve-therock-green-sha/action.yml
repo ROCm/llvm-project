@@ -5,9 +5,8 @@ description: >
 
 inputs:
   github_token:
-    description: Token for the GitHub API. Defaults to the job token.
-    required: false
-    default: ${{ github.token }}
+    description: Token for the GitHub API. Must be a PAT or GitHub App token, not anonymous.
+    required: true
 
 outputs:
   sha:
