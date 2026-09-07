@@ -35,7 +35,8 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-// Supported S_LOAD_B* instructions ignore bits [1:0] of both address components.
+// Supported S_LOAD_B* instructions ignore bits [1:0] of both address
+// components.
 static constexpr Align DwordSmemAddressAlignment = Align::Constant<4>();
 
 // Report decoded operands that contradict the generated instruction metadata.
