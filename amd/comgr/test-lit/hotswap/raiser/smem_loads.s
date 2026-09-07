@@ -115,8 +115,9 @@ smem_wide_loads:
 ; IR: ret void
 	s_endpgm
 
-; A destination that covers its own base. The base is read before the first
-; dword of the result lands, so the address is formed from the old base.
+; Exercise a destination overlapping the source base pair. The address must be
+; computed from the pre-instruction base value, before the destination
+; overwrites it.
 
 	.globl	smem_wide_overlap
 	.p2align	8
@@ -139,9 +140,6 @@ smem_register_offset:
 ; REGISTER-OFFSET: only immediate scalar load offsets are supported
 	s_load_b32 s2, s[0:1], s4
 	s_endpgm
-
-; The wider widths reach the same refusal. Raising one would need the gfx12
-; scale_offset bit, which scales a register offset by the load width.
 
 	.globl	smem_wide_register_offset
 	.p2align	8

@@ -35,8 +35,7 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-// Every mapped scalar load ignores the low two bits of both address
-// components, whatever its data width.
+// Supported S_LOAD_B* instructions ignore bits [1:0] of both address components.
 static constexpr Align DwordSmemAddressAlignment = Align::Constant<4>();
 
 // Report decoded operands that contradict the generated instruction metadata.
