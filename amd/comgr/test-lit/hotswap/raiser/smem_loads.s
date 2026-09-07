@@ -5,14 +5,8 @@
 ; RUN: %ld.lld -shared %t.gfx1250.o -o %t.gfx1250.hsaco
 
 ; RUN: %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=smem_loads,smem_wide_loads,smem_wide_overlap | \
-; RUN:   %FileCheck %s --check-prefix=IR
-; RUN: not %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=smem_register_offset 2>&1 | \
-; RUN:   %FileCheck %s --check-prefix=REGISTER-OFFSET
-; RUN: not %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=smem_wide_register_offset 2>&1 | \
-; RUN:   %FileCheck %s --check-prefix=WIDE-REGISTER-OFFSET
+; RUN:   --emit-ir=smem_loads,smem_wide_loads,smem_wide_overlap,smem_register_offset,smem_wide_register_offset,smem_soffset_overlap,smem_scale_offset \
+; RUN:   | %FileCheck %s --check-prefix=IR
 ; RUN: not %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=smem_cache_policy 2>&1 | \
 ; RUN:   %FileCheck %s --check-prefix=CACHE-POLICY
@@ -77,9 +71,6 @@ smem_loads:
 ; IR: ret void
 	s_endpgm
 
-; The widths above four dwords. The vector type and the largest shift together
-; pin the dword count of each load.
-
 	.globl	smem_wide_loads
 	.p2align	8
 	.type	smem_wide_loads,@function
@@ -133,27 +124,99 @@ smem_wide_overlap:
 ; IR: ret void
 	s_endpgm
 
+; The SGPR and immediate offsets are intentionally unaligned. Each is rounded
+; down to a dword before the address components are added.
+
 	.globl	smem_register_offset
 	.p2align	8
 	.type	smem_register_offset,@function
+; IR-LABEL: define amdgpu_kernel void @smem_register_offset(
 smem_register_offset:
-; REGISTER-OFFSET: only immediate scalar load offsets are supported
-	s_load_b32 s2, s[0:1], s4
+	s_mov_b32 s4, 0x13
+; IR: [[RO_BASE:%.+]] = and i64 {{.+}}, -4
+; IR: [[RO_ADDRESS:%.+]] = add i64 [[RO_BASE]], 32
+; IR: [[RO_SOFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR: [[RO_SOFFSET_DWORD:%.+]] = and i64 [[RO_SOFFSET]], -4
+; IR: [[RO_SUM:%.+]] = add i64 [[RO_ADDRESS]], [[RO_SOFFSET_DWORD]]
+; IR: [[RO_POINTER:%.+]] = inttoptr i64 [[RO_SUM]] to ptr addrspace(1)
+; IR: load i32, ptr addrspace(1) [[RO_POINTER]], align 4
+	s_load_b32 s2, s[0:1], s4 offset:0x23
+; IR: ret void
 	s_endpgm
 
 	.globl	smem_wide_register_offset
 	.p2align	8
 	.type	smem_wide_register_offset,@function
+; IR-LABEL: define amdgpu_kernel void @smem_wide_register_offset(
 smem_wide_register_offset:
-; WIDE-REGISTER-OFFSET: only immediate scalar load offsets are supported
+	s_mov_b32 s8, 0x13
+; IR: [[WRO_BASE:%.+]] = and i64 {{.+}}, -4
+; IR: [[WRO_ADDRESS:%.+]] = add i64 [[WRO_BASE]], 0
+; IR: [[WRO_SOFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR: [[WRO_SOFFSET_DWORD:%.+]] = and i64 [[WRO_SOFFSET]], -4
+; IR: [[WRO_SUM:%.+]] = add i64 [[WRO_ADDRESS]], [[WRO_SOFFSET_DWORD]]
+; IR: [[WRO_POINTER:%.+]] = inttoptr i64 [[WRO_SUM]] to ptr addrspace(1)
+; IR: load <3 x i32>, ptr addrspace(1) [[WRO_POINTER]], align 4
 	s_load_b96 s[4:6], s[0:1], s8
+; IR: ret void
+	s_endpgm
+
+; Exercise a destination overlapping the SGPR offset. The offset must be read
+; before the destination overwrites it.
+
+	.globl	smem_soffset_overlap
+	.p2align	8
+	.type	smem_soffset_overlap,@function
+; IR-LABEL: define amdgpu_kernel void @smem_soffset_overlap(
+smem_soffset_overlap:
+	s_mov_b32 s6, 0x10
+; IR: [[SO_BASE:%.+]] = and i64 {{.+}}, -4
+; IR: [[SO_ADDRESS:%.+]] = add i64 [[SO_BASE]], 0
+; IR: [[SO_SOFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR: [[SO_SOFFSET_DWORD:%.+]] = and i64 [[SO_SOFFSET]], -4
+; IR: [[SO_SUM:%.+]] = add i64 [[SO_ADDRESS]], [[SO_SOFFSET_DWORD]]
+; IR: [[SO_POINTER:%.+]] = inttoptr i64 [[SO_SUM]] to ptr addrspace(1)
+; IR: [[SO_LOAD:%.+]] = load <3 x i32>, ptr addrspace(1) [[SO_POINTER]], align 4
+	s_load_b96 s[4:6], s[0:1], s6
+; IR: bitcast <3 x i32> [[SO_LOAD]] to i96
+; IR: ret void
+	s_endpgm
+
+; SCALE_OFFSET scales the SGPR element index by the load width before dword
+; alignment.
+
+	.globl	smem_scale_offset
+	.p2align	8
+	.type	smem_scale_offset,@function
+; IR-LABEL: define amdgpu_kernel void @smem_scale_offset(
+smem_scale_offset:
+	s_mov_b32 s8, 0x13
+; IR: [[SC96_BASE:%.+]] = and i64 {{.+}}, -4
+; IR: [[SC96_ADDRESS:%.+]] = add i64 [[SC96_BASE]], 0
+; IR: [[SC96_SOFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR: [[SC96_SCALED:%.+]] = mul i64 [[SC96_SOFFSET]], 12
+; IR: [[SC96_DWORD:%.+]] = and i64 [[SC96_SCALED]], -4
+; IR: [[SC96_SUM:%.+]] = add i64 [[SC96_ADDRESS]], [[SC96_DWORD]]
+; IR: [[SC96_POINTER:%.+]] = inttoptr i64 [[SC96_SUM]] to ptr addrspace(1)
+; IR: load <3 x i32>, ptr addrspace(1) [[SC96_POINTER]], align 4
+	s_load_b96 s[4:6], s[0:1], s8 scale_offset
+; IR: [[SC512_BASE:%.+]] = and i64 {{.+}}, -4
+; IR: [[SC512_ADDRESS:%.+]] = add i64 [[SC512_BASE]], 0
+; IR: [[SC512_SOFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR: [[SC512_SCALED:%.+]] = mul i64 [[SC512_SOFFSET]], 64
+; IR: [[SC512_DWORD:%.+]] = and i64 [[SC512_SCALED]], -4
+; IR: [[SC512_SUM:%.+]] = add i64 [[SC512_ADDRESS]], [[SC512_DWORD]]
+; IR: [[SC512_POINTER:%.+]] = inttoptr i64 [[SC512_SUM]] to ptr addrspace(1)
+; IR: load <16 x i32>, ptr addrspace(1) [[SC512_POINTER]], align 4
+	s_load_b512 s[16:31], s[0:1], s8 scale_offset
+; IR: ret void
 	s_endpgm
 
 	.globl	smem_cache_policy
 	.p2align	8
 	.type	smem_cache_policy,@function
 smem_cache_policy:
-; CACHE-POLICY: non-default scalar load modifiers are not supported
+; CACHE-POLICY: scalar load cache-policy modifiers other than SCALE_OFFSET are not supported
 	s_load_b32 s2, s[0:1], 0x0 scope:SCOPE_SYS
 	s_endpgm
 
@@ -204,6 +267,18 @@ smem_negative_offset:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 9
+	.end_amdhsa_kernel
+	.amdhsa_kernel smem_soffset_overlap
+		.amdhsa_kernarg_size 32
+		.amdhsa_user_sgpr_kernarg_segment_ptr 1
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 7
+	.end_amdhsa_kernel
+	.amdhsa_kernel smem_scale_offset
+		.amdhsa_kernarg_size 32
+		.amdhsa_user_sgpr_kernarg_segment_ptr 1
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 32
 	.end_amdhsa_kernel
 	.amdhsa_kernel smem_cache_policy
 		.amdhsa_kernarg_size 32
@@ -275,6 +350,26 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     9
     .symbol:         smem_wide_register_offset.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 32
+    .max_flat_workgroup_size: 1024
+    .name:           smem_soffset_overlap
+    .private_segment_fixed_size: 0
+    .sgpr_count:     7
+    .symbol:         smem_soffset_overlap.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 32
+    .max_flat_workgroup_size: 1024
+    .name:           smem_scale_offset
+    .private_segment_fixed_size: 0
+    .sgpr_count:     32
+    .symbol:         smem_scale_offset.kd
     .vgpr_count:     1
     .wavefront_size: 32
   - .group_segment_fixed_size: 0

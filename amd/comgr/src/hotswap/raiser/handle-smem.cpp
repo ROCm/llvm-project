@@ -8,6 +8,8 @@
 
 #include "hotswap/raiser/handlers.h"
 
+#include "SIDefines.h"
+
 #include "hotswap/decoder/amdgpu-formats.h"
 #include "hotswap/decoder/amdgpu-mc-tables.h"
 #include "hotswap/decoder/canonical-op.h"
@@ -35,8 +37,7 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-// Supported S_LOAD_B* instructions ignore bits [1:0] of both address
-// components.
+// Supported S_LOAD_B* forms use dword-granular address components.
 static constexpr Align DwordSmemAddressAlignment = Align::Constant<4>();
 
 // Report decoded operands that contradict the generated instruction metadata.
@@ -124,24 +125,31 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
     invalidOperandLayout(Ctx.MC, Di, "operand 'sdst' is not a register");
   if (!Di.isReg(BaseIndex))
     invalidOperandLayout(Ctx.MC, Di, "operand 'sbase' is not a register");
-  if (ScalarOffsetIndex)
-    return unsupported(Ctx, Di,
-                       "only immediate scalar load offsets are supported");
-  if (!OffsetIndex)
-    invalidOperandLayout(Ctx.MC, Di,
-                         "immediate scalar load has no 'offset' operand");
-  if (!Di.isImm(*OffsetIndex))
-    invalidOperandLayout(Ctx.MC, Di, "operand 'offset' is not an immediate");
   if (!Di.isImm(CachePolicyIndex))
     invalidOperandLayout(Ctx.MC, Di, "operand 'cpol' is not an immediate");
-  if (Di.getImm(CachePolicyIndex) != 0)
+  // SCALE_OFFSET is encoded in the cache-policy field but changes the address:
+  // it makes the SGPR offset an element index scaled by the load size. The
+  // scale is handled below; other cache-policy modifiers remain unsupported.
+  int64_t CachePolicy = Di.getImm(CachePolicyIndex);
+  bool ScaleScalarOffset = (CachePolicy & AMDGPU::CPol::SCAL) != 0;
+  if (CachePolicy & ~static_cast<int64_t>(AMDGPU::CPol::SCAL))
     return unsupported(Ctx, Di,
-                       "non-default scalar load modifiers are not supported");
+                       "scalar load cache-policy modifiers other than "
+                       "SCALE_OFFSET are not supported");
 
-  int64_t ImmediateOffset = Di.getImm(*OffsetIndex);
-  if (ImmediateOffset < 0)
-    return unsupported(Ctx, Di,
-                       "negative scalar load offsets are not supported");
+  // The immediate and SGPR offsets are separate operands that add together.
+  // An encoding may carry either or both, but not neither.
+  if (!OffsetIndex && !ScalarOffsetIndex)
+    invalidOperandLayout(Ctx.MC, Di, "scalar load has no offset operand");
+  int64_t ImmediateOffset = 0;
+  if (OffsetIndex) {
+    if (!Di.isImm(*OffsetIndex))
+      invalidOperandLayout(Ctx.MC, Di, "operand 'offset' is not an immediate");
+    ImmediateOffset = Di.getImm(*OffsetIndex);
+    if (ImmediateOffset < 0)
+      return unsupported(Ctx, Di,
+                         "negative scalar load offsets are not supported");
+  }
 
   Expected<ParsedReg> Destination =
       Ctx.registers().parseReg(Di, DestinationIndex);
@@ -170,7 +178,16 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   if (!BaseValue)
     return BaseValue.takeError();
 
+  Value *ScalarOffsetValue = nullptr;
+  if (ScalarOffsetIndex) {
+    Expected<Value *> Read = Ctx.registers().readOp32(Di, *ScalarOffsetIndex);
+    if (!Read)
+      return Read.takeError();
+    ScalarOffsetValue = *Read;
+  }
+
   Type *I64Ty = Ctx.B.getInt64Ty();
+  // Round each address component down independently to a dword boundary.
   uint64_t AddressMask =
       maskTrailingZeros<uint64_t>(Log2(DwordSmemAddressAlignment));
   Value *AlignedBase = Ctx.B.CreateAnd(
@@ -179,6 +196,25 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
                               DwordSmemAddressAlignment.value());
   Value *Address = Ctx.B.CreateAdd(AlignedBase, ConstantInt::get(I64Ty, Offset),
                                    "smem_addr");
+  if (ScalarOffsetValue) {
+    // SCALE_OFFSET treats the 32-bit SGPR value as an element index. Widen it
+    // first, then scale it by the load size.
+    Value *WideScalarOffset =
+        Ctx.B.CreateZExt(ScalarOffsetValue, I64Ty, "smem_soff");
+    if (ScaleScalarOffset) {
+      uint64_t ScaleFactor =
+          *LoadWidthInDwords * DwordSmemAddressAlignment.value();
+      WideScalarOffset = Ctx.B.CreateMul(WideScalarOffset,
+                                         ConstantInt::get(I64Ty, ScaleFactor),
+                                         "smem_soff_scaled");
+    }
+    // The ISA aligns the scaled offset, not the raw register, so the mask
+    // follows the multiply.
+    Value *AlignedScalarOffset =
+        Ctx.B.CreateAnd(WideScalarOffset, ConstantInt::get(I64Ty, AddressMask),
+                        "smem_soff_dword");
+    Address = Ctx.B.CreateAdd(Address, AlignedScalarOffset, "smem_addr_soff");
+  }
   PointerType *PointerTy =
       PointerType::get(Ctx.B.getContext(), AMDGPUAS::GLOBAL_ADDRESS);
   Value *Pointer = Ctx.B.CreateIntToPtr(Address, PointerTy, "smem_ptr");
