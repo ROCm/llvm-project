@@ -16,6 +16,7 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <optional>
@@ -71,17 +72,62 @@ struct DecodedInst {
   // the register classes and S_SET_VGPR_MSB adjustments of the full packet.
   struct VOPDHalf {
     CanonicalOp CanonOp = CanonicalOp::Unknown;
-    unsigned DstIdx = 0;
     unsigned SrcIdx[3] = {};
-    uint8_t SrcMods[3] = {};
-    unsigned NumSrcs = 0;
-    bool HasBitOp3 = false;
-    uint8_t BitOp3 = 0;
+
+    unsigned destinationIndex() const {
+      return llvm::Bitfield::get<DstIdxField>(DstAndFlags);
+    }
+    void setDestinationIndex(unsigned I) {
+      assert(I < (1u << 29) && "VOPD destination index does not fit");
+      llvm::Bitfield::set<DstIdxField>(DstAndFlags, I);
+    }
+
+    unsigned numSources() const {
+      return llvm::Bitfield::get<NumSrcsField>(DstAndFlags);
+    }
+    unsigned appendSource(unsigned OperandIdx) {
+      unsigned I = numSources();
+      assert(I < 3 && "too many VOPD component sources");
+      SrcIdx[I] = OperandIdx;
+      llvm::Bitfield::set<NumSrcsField>(DstAndFlags, I + 1);
+      return I;
+    }
+
+    uint8_t sourceModifier(unsigned I) const {
+      assert(I < 3 && "VOPD source modifier index out of range");
+      return static_cast<uint8_t>(PackedModifiers >> (I * 8));
+    }
+    void setSourceModifier(unsigned I, uint8_t Mods) {
+      assert(I < 3 && "VOPD source modifier index out of range");
+      const unsigned Shift = I * 8;
+      PackedModifiers = (PackedModifiers & ~(UINT32_C(0xff) << Shift)) |
+                        (static_cast<uint32_t>(Mods) << Shift);
+    }
+
+    bool hasBitOp3() const {
+      return llvm::Bitfield::get<HasBitOp3Field>(DstAndFlags);
+    }
+    uint8_t bitOp3() const {
+      return static_cast<uint8_t>(PackedModifiers >> 24);
+    }
+    void setBitOp3(uint8_t TruthTable) {
+      llvm::Bitfield::set<HasBitOp3Field>(DstAndFlags, true);
+      PackedModifiers = (PackedModifiers & UINT32_C(0x00ffffff)) |
+                        (static_cast<uint32_t>(TruthTable) << 24);
+    }
+
+  private:
+    // MC operand indices are far smaller than 2^29. Pack the destination next
+    // to the two-bit source count and bitop-presence flag, and store the three
+    // source modifiers and eight-bit bitop truth table in one word.
+    using DstIdxField = llvm::Bitfield::Element<unsigned, 0, 29>;
+    using NumSrcsField = llvm::Bitfield::Element<unsigned, 29, 2>;
+    using HasBitOp3Field = llvm::Bitfield::Element<bool, 31, 1>;
+    uint32_t DstAndFlags = 0;
+    uint32_t PackedModifiers = 0;
   };
 
-  bool HasVOPD = false;
-  bool IsVOPD3 = false;
-  VOPDHalf VOPD[2];
+  std::optional<std::array<VOPDHalf, 2>> VOPD;
 
   // Instruction length in bytes. The AMDGPU maximum is 20
   // (AMDGPUMCAsmInfo::MaxInstLength), so five bits suffice.

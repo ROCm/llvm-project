@@ -2,6 +2,8 @@
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: %hotswap_transpile_cli %t.hsaco --dump-decoded=vopd_dual_issue \
+; RUN:   | %FileCheck %s --check-prefix=DECODE
 ; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=vopd_dual_issue | %FileCheck %s
 
@@ -13,6 +15,10 @@
 	.type	vopd_dual_issue,@function
 ; CHECK-LABEL: define amdgpu_kernel void @vopd_dual_issue(
 vopd_dual_issue:
+; DECODE: VOPD(V_CNDMASK_B32, V_ADD_F32)
+; DECODE: VOPD(V_ADD_F32, V_ADD_F32)
+; DECODE: VOPD(V_MUL_F32, V_MOV_B32)
+; DECODE: VOPD(V_FMA_F32, V_MOV_B32)
 ; An explicit VOPD3 cndmask condition may be an arbitrary SGPR mask, not only
 ; the directly recorded result of a comparison.
 ; CHECK: select i1 %{{[^,]+}}, i32

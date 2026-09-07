@@ -11,6 +11,7 @@
 #include "hotswap/decoder/canonical-op.h"
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/decoder/parsed-reg.h"
+#include "hotswap/raiser/handle-vop-shared.h"
 #include "hotswap/raiser/raise-context.h"
 
 #include "Utils/AMDGPUBaseInfo.h"
@@ -43,40 +44,33 @@ Value *applySourceMods(RaiseContext &Ctx, Value *V, uint8_t Mods) {
     return V;
   bool IsI64 = V->getType()->isIntegerTy(64);
   V = Ctx.B.CreateBitCast(V, IsI64 ? Ctx.B.getDoubleTy() : Ctx.B.getFloatTy());
-  if (Mods & 2)
+  if (Mods & SISrcMods::ABS)
     V = Ctx.B.CreateUnaryIntrinsic(Intrinsic::fabs, V, nullptr, "vopd.abs");
-  if (Mods & 1)
+  if (Mods & SISrcMods::NEG)
     V = Ctx.B.CreateFNeg(V, "vopd.neg");
   return Ctx.B.CreateBitCast(V,
                              IsI64 ? Ctx.B.getInt64Ty() : Ctx.B.getInt32Ty());
 }
 
-// Read and modify a 64-bit component source.
-Expected<Value *> readSource64(RaiseContext &Ctx, const DecodedInst &Di,
-                               const DecodedInst::VOPDHalf &Half, unsigned I) {
-  if (I >= Half.NumSrcs)
-    return malformedVOPD(Ctx, Di, "component has too few sources");
-  Expected<Value *> V = Ctx.registers().readOp64(Di, Half.SrcIdx[I]);
-  if (!V)
-    return V.takeError();
-  return applySourceMods(Ctx, *V, Half.SrcMods[I]);
-}
-
-// Read and modify a 32-bit component source.
+// Read one component source at the requested bit width and apply its source
+// modifiers. The decoder guarantees that callers only request valid sources.
 Expected<Value *> readSource(RaiseContext &Ctx, const DecodedInst &Di,
-                             const DecodedInst::VOPDHalf &Half, unsigned I) {
-  if (I >= Half.NumSrcs)
-    return malformedVOPD(Ctx, Di, "component has too few sources");
-  Expected<Value *> V = Ctx.registers().readOp32(Di, Half.SrcIdx[I]);
+                             const DecodedInst::VOPDHalf &Half, unsigned I,
+                             unsigned BitWidth = 32) {
+  assert(I < Half.numSources() && "VOPD component source index out of range");
+  assert((BitWidth == 32 || BitWidth == 64) && "unsupported VOPD source width");
+  Expected<Value *> V = BitWidth == 64
+                            ? Ctx.registers().readOp64(Di, Half.SrcIdx[I])
+                            : Ctx.registers().readOp32(Di, Half.SrcIdx[I]);
   if (!V)
     return V.takeError();
-  return applySourceMods(Ctx, *V, Half.SrcMods[I]);
+  return applySourceMods(Ctx, *V, Half.sourceModifier(I));
 }
 
 // Decode a component destination register.
 Expected<ParsedReg> readDestination(RaiseContext &Ctx, const DecodedInst &Di,
                                     const DecodedInst::VOPDHalf &Half) {
-  return Ctx.registers().parseReg(Di, Half.DstIdx);
+  return Ctx.registers().parseReg(Di, Half.destinationIndex());
 }
 
 // Read the per-lane condition from an explicit VOPD3 wave-mask operand.
@@ -94,11 +88,6 @@ Expected<Value *> readCondition(RaiseContext &Ctx, const DecodedInst &Di,
   return Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, *Mask);
 }
 
-// Restrict a 32-bit shift amount to the hardware range.
-Value *maskShiftAmount(IRBuilder<> &B, Value *Amount) {
-  return B.CreateAnd(Amount, B.getInt32(31), "vopd.shift.amount");
-}
-
 // Lower a two-input bitop using the encoded three-input truth table.
 Expected<Value *> lowerBitOp3(RaiseContext &Ctx, const DecodedInst &Di,
                               const DecodedInst::VOPDHalf &Half) {
@@ -113,56 +102,135 @@ Expected<Value *> lowerBitOp3(RaiseContext &Ctx, const DecodedInst &Di,
   Value *NA = Ctx.B.CreateNot(*A);
   Value *NB = Ctx.B.CreateNot(*B);
   Value *NC = Ctx.B.CreateNot(C);
+  Value *NANB = Ctx.B.CreateAnd(NA, NB);
+  Value *NAB = Ctx.B.CreateAnd(NA, *B);
+  Value *ANB = Ctx.B.CreateAnd(*A, NB);
+  Value *AB = Ctx.B.CreateAnd(*A, *B);
   Value *Minterms[8] = {
-      Ctx.B.CreateAnd(Ctx.B.CreateAnd(NA, NB), NC),
-      Ctx.B.CreateAnd(Ctx.B.CreateAnd(NA, NB), C),
-      Ctx.B.CreateAnd(Ctx.B.CreateAnd(NA, *B), NC),
-      Ctx.B.CreateAnd(Ctx.B.CreateAnd(NA, *B), C),
-      Ctx.B.CreateAnd(Ctx.B.CreateAnd(*A, NB), NC),
-      Ctx.B.CreateAnd(Ctx.B.CreateAnd(*A, NB), C),
-      Ctx.B.CreateAnd(Ctx.B.CreateAnd(*A, *B), NC),
-      Ctx.B.CreateAnd(Ctx.B.CreateAnd(*A, *B), C),
+      Ctx.B.CreateAnd(NANB, NC), Ctx.B.CreateAnd(NANB, C),
+      Ctx.B.CreateAnd(NAB, NC),  Ctx.B.CreateAnd(NAB, C),
+      Ctx.B.CreateAnd(ANB, NC),  Ctx.B.CreateAnd(ANB, C),
+      Ctx.B.CreateAnd(AB, NC),   Ctx.B.CreateAnd(AB, C),
   };
   Value *Result = Ctx.B.getInt32(0);
   for (unsigned I = 0; I != 8; ++I)
-    if (Half.BitOp3 & (1u << I))
+    if (Half.bitOp3() & (1u << I))
       Result = Ctx.B.CreateOr(Result, Minterms[I], "vopd.bitop");
   return Result;
+}
+
+// Read two operands with the caller-selected representation.
+template <typename Reader>
+Expected<std::pair<Value *, Value *>> readPair(Reader &&ReadOperand) {
+  Expected<Value *> S0 = ReadOperand(0);
+  if (!S0)
+    return S0.takeError();
+  Expected<Value *> S1 = ReadOperand(1);
+  if (!S1)
+    return S1.takeError();
+  return std::pair<Value *, Value *>{*S0, *S1};
+}
+
+// Lower the common f32/f64 arithmetic subset. The selected LLVM type controls
+// operand width, validation, intrinsic overloads, and the result bit width.
+Expected<Value *> lowerFloatingPoint(RaiseContext &Ctx, const DecodedInst &Di,
+                                     const DecodedInst::VOPDHalf &Half,
+                                     ParsedReg Dst, Type *Ty) {
+  const bool IsF64 = Ty->isDoubleTy();
+  if (IsF64) {
+    if (Half.CanonOp != CanonicalOp::V_MAX_NUM_F64 &&
+        Half.CanonOp != CanonicalOp::V_MIN_NUM_F64)
+      if (Error Err = Ctx.validateF64Environment(Di))
+        return std::move(Err);
+  } else if (Error Err = Ctx.validateF32Environment(Di)) {
+    return std::move(Err);
+  }
+
+  auto ReadFloat = [&](unsigned I) -> Expected<Value *> {
+    Expected<Value *> Bits = readSource(Ctx, Di, Half, I, IsF64 ? 64 : 32);
+    if (!Bits)
+      return Bits.takeError();
+    return Ctx.B.CreateBitCast(*Bits, Ty);
+  };
+  Expected<std::pair<Value *, Value *>> Srcs = readPair(ReadFloat);
+  if (!Srcs)
+    return Srcs.takeError();
+  Value *S0 = Srcs->first;
+  Value *S1 = Srcs->second;
+  Value *Result = nullptr;
+
+  switch (Half.CanonOp) {
+  case CanonicalOp::V_ADD_F32:
+  case CanonicalOp::V_ADD_F64:
+    Result = Ctx.B.CreateFAdd(S0, S1, "vopd.fadd");
+    break;
+  case CanonicalOp::V_MUL_F32:
+  case CanonicalOp::V_MUL_F64:
+    Result = Ctx.B.CreateFMul(S0, S1, "vopd.fmul");
+    break;
+  case CanonicalOp::V_SUB_F32:
+    Result = Ctx.B.CreateFSub(S0, S1, "vopd.fsub");
+    break;
+  case CanonicalOp::V_SUBREV_F32:
+    Result = Ctx.B.CreateFSub(S1, S0, "vopd.fsubrev");
+    break;
+  case CanonicalOp::V_FMAC_F32:
+  case CanonicalOp::V_FMA_F32:
+  case CanonicalOp::V_FMAMK_F32:
+  case CanonicalOp::V_FMAAK_F32:
+  case CanonicalOp::V_FMA_F64: {
+    Value *S2 = nullptr;
+    if (Half.CanonOp == CanonicalOp::V_FMAC_F32) {
+      Value *Acc = Ctx.registers().regFile().readReg32(Ctx.B, Dst);
+      if (!Acc)
+        return malformedVOPD(Ctx, Di, "cannot read fmac accumulator");
+      S2 = Ctx.B.CreateBitCast(Acc, Ty);
+    } else {
+      Expected<Value *> Third = ReadFloat(2);
+      if (!Third)
+        return Third.takeError();
+      S2 = *Third;
+    }
+    Function *Fma = Intrinsic::getOrInsertDeclaration(
+        Ctx.B.GetInsertBlock()->getModule(), Intrinsic::fma, {Ty});
+    Result = Ctx.B.CreateCall(Fma, {S0, S1, S2}, "vopd.fma");
+    break;
+  }
+  case CanonicalOp::V_MAX_NUM_F32:
+  case CanonicalOp::V_MAX_NUM_F64:
+    Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::maximumnum, S0, S1, {},
+                                         "vopd.fmax");
+    break;
+  case CanonicalOp::V_MIN_NUM_F32:
+  case CanonicalOp::V_MIN_NUM_F64:
+    Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::minimumnum, S0, S1, {},
+                                         "vopd.fmin");
+    break;
+  default:
+    llvm_unreachable("filtered VOPD floating-point operation");
+  }
+  Type *ResultTy = IsF64 ? Ctx.B.getInt64Ty() : Ctx.B.getInt32Ty();
+  return Ctx.B.CreateBitCast(Result, ResultTy);
 }
 
 // Lower one VOPD component without committing its destination.
 Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
                             const DecodedInst::VOPDHalf &Half, ParsedReg Dst) {
-  if (Half.HasBitOp3)
+  if (Half.hasBitOp3())
     return lowerBitOp3(Ctx, Di, Half);
 
   auto Read = [&](unsigned I) { return readSource(Ctx, Di, Half, I); };
-  auto ReadBinary = [&]() -> Expected<std::pair<Value *, Value *>> {
-    Expected<Value *> S0 = Read(0);
-    if (!S0)
-      return S0.takeError();
-    Expected<Value *> S1 = Read(1);
-    if (!S1)
-      return S1.takeError();
-    return std::pair<Value *, Value *>{*S0, *S1};
-  };
-  auto ReadFloat = [&](unsigned I) -> Expected<Value *> {
-    Expected<Value *> V = Read(I);
-    if (!V)
-      return V.takeError();
-    return Ctx.B.CreateBitCast(*V, Ctx.B.getFloatTy());
-  };
 
   switch (Half.CanonOp) {
   case CanonicalOp::V_MOV_B32:
     return Read(0);
 
   case CanonicalOp::V_CNDMASK_B32: {
-    Expected<std::pair<Value *, Value *>> Srcs = ReadBinary();
+    Expected<std::pair<Value *, Value *>> Srcs = readPair(Read);
     if (!Srcs)
       return Srcs.takeError();
     Value *Cond = nullptr;
-    if (Half.NumSrcs == 2) {
+    if (Half.numSources() == 2) {
       Cond = Ctx.registers().regFile().loadVCC(Ctx.B);
     } else {
       Expected<Value *> C = readCondition(Ctx, Di, Half.SrcIdx[2]);
@@ -176,114 +244,21 @@ Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_ADD_F32:
   case CanonicalOp::V_MUL_F32:
   case CanonicalOp::V_SUB_F32:
-  case CanonicalOp::V_SUBREV_F32: {
-    if (Error Err = Ctx.validateF32Environment(Di))
-      return std::move(Err);
-    Expected<Value *> S0 = ReadFloat(0);
-    if (!S0)
-      return S0.takeError();
-    Expected<Value *> S1 = ReadFloat(1);
-    if (!S1)
-      return S1.takeError();
-    Value *Result = nullptr;
-    if (Half.CanonOp == CanonicalOp::V_ADD_F32)
-      Result = Ctx.B.CreateFAdd(*S0, *S1, "vopd.fadd");
-    else if (Half.CanonOp == CanonicalOp::V_MUL_F32)
-      Result = Ctx.B.CreateFMul(*S0, *S1, "vopd.fmul");
-    else if (Half.CanonOp == CanonicalOp::V_SUBREV_F32)
-      Result = Ctx.B.CreateFSub(*S1, *S0, "vopd.fsubrev");
-    else
-      Result = Ctx.B.CreateFSub(*S0, *S1, "vopd.fsub");
-    return Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty());
-  }
-
+  case CanonicalOp::V_SUBREV_F32:
   case CanonicalOp::V_FMAC_F32:
   case CanonicalOp::V_FMA_F32:
   case CanonicalOp::V_FMAMK_F32:
-  case CanonicalOp::V_FMAAK_F32: {
-    if (Error Err = Ctx.validateF32Environment(Di))
-      return std::move(Err);
-    Expected<Value *> S0 = ReadFloat(0);
-    if (!S0)
-      return S0.takeError();
-    Expected<Value *> S1 = ReadFloat(1);
-    if (!S1)
-      return S1.takeError();
-    Value *S2 = nullptr;
-    if (Half.CanonOp == CanonicalOp::V_FMAC_F32) {
-      Value *Acc = Ctx.registers().regFile().readReg32(Ctx.B, Dst);
-      if (!Acc)
-        return malformedVOPD(Ctx, Di, "cannot read fmac accumulator");
-      S2 = Ctx.B.CreateBitCast(Acc, Ctx.B.getFloatTy());
-    } else {
-      Expected<Value *> Third = ReadFloat(2);
-      if (!Third)
-        return Third.takeError();
-      S2 = *Third;
-    }
-    Function *Fma =
-        Intrinsic::getOrInsertDeclaration(Ctx.B.GetInsertBlock()->getModule(),
-                                          Intrinsic::fma, {Ctx.B.getFloatTy()});
-    Value *Result = Ctx.B.CreateCall(Fma, {*S0, *S1, S2}, "vopd.fma");
-    return Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty());
-  }
-
+  case CanonicalOp::V_FMAAK_F32:
   case CanonicalOp::V_MAX_NUM_F32:
-  case CanonicalOp::V_MIN_NUM_F32: {
-    if (Error Err = Ctx.validateF32Environment(Di))
-      return std::move(Err);
-    Expected<Value *> S0 = ReadFloat(0);
-    if (!S0)
-      return S0.takeError();
-    Expected<Value *> S1 = ReadFloat(1);
-    if (!S1)
-      return S1.takeError();
-    Intrinsic::ID ID = Half.CanonOp == CanonicalOp::V_MAX_NUM_F32
-                           ? Intrinsic::maximumnum
-                           : Intrinsic::minimumnum;
-    Value *Result =
-        Ctx.B.CreateBinaryIntrinsic(ID, *S0, *S1, {}, "vopd.fminmax");
-    return Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty());
-  }
+  case CanonicalOp::V_MIN_NUM_F32:
+    return lowerFloatingPoint(Ctx, Di, Half, Dst, Ctx.B.getFloatTy());
 
   case CanonicalOp::V_ADD_F64:
   case CanonicalOp::V_MUL_F64:
   case CanonicalOp::V_FMA_F64:
-    if (Error Err = Ctx.validateF64Environment(Di))
-      return std::move(Err);
-    [[fallthrough]];
   case CanonicalOp::V_MAX_NUM_F64:
-  case CanonicalOp::V_MIN_NUM_F64: {
-    Expected<Value *> S0Bits = readSource64(Ctx, Di, Half, 0);
-    if (!S0Bits)
-      return S0Bits.takeError();
-    Expected<Value *> S1Bits = readSource64(Ctx, Di, Half, 1);
-    if (!S1Bits)
-      return S1Bits.takeError();
-    Value *S0 = Ctx.B.CreateBitCast(*S0Bits, Ctx.B.getDoubleTy());
-    Value *S1 = Ctx.B.CreateBitCast(*S1Bits, Ctx.B.getDoubleTy());
-    Value *Result = nullptr;
-    if (Half.CanonOp == CanonicalOp::V_ADD_F64)
-      Result = Ctx.B.CreateFAdd(S0, S1, "vopd.fadd64");
-    else if (Half.CanonOp == CanonicalOp::V_MUL_F64)
-      Result = Ctx.B.CreateFMul(S0, S1, "vopd.fmul64");
-    else if (Half.CanonOp == CanonicalOp::V_FMA_F64) {
-      Expected<Value *> S2Bits = readSource64(Ctx, Di, Half, 2);
-      if (!S2Bits)
-        return S2Bits.takeError();
-      Value *S2 = Ctx.B.CreateBitCast(*S2Bits, Ctx.B.getDoubleTy());
-      Function *Fma = Intrinsic::getOrInsertDeclaration(
-          Ctx.B.GetInsertBlock()->getModule(), Intrinsic::fma,
-          {Ctx.B.getDoubleTy()});
-      Result = Ctx.B.CreateCall(Fma, {S0, S1, S2}, "vopd.fma64");
-    } else {
-      Intrinsic::ID ID = Half.CanonOp == CanonicalOp::V_MAX_NUM_F64
-                             ? Intrinsic::maximumnum
-                             : Intrinsic::minimumnum;
-      Result = Ctx.B.CreateBinaryIntrinsic(ID, S0, S1, {}, "vopd.fminmax64");
-    }
-    return Ctx.B.CreateBitCast(Result, Ctx.B.getInt64Ty());
-  }
+  case CanonicalOp::V_MIN_NUM_F64:
+    return lowerFloatingPoint(Ctx, Di, Half, Dst, Ctx.B.getDoubleTy());
 
   case CanonicalOp::V_ADD_NC_U32:
   case CanonicalOp::V_SUB_NC_U32:
@@ -294,7 +269,7 @@ Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_AND_B32:
   case CanonicalOp::V_OR_B32:
   case CanonicalOp::V_XOR_B32: {
-    Expected<std::pair<Value *, Value *>> Srcs = ReadBinary();
+    Expected<std::pair<Value *, Value *>> Srcs = readPair(Read);
     if (!Srcs)
       return Srcs.takeError();
     Value *S0 = Srcs->first;
@@ -307,11 +282,11 @@ Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
     case CanonicalOp::V_SUBREV_NC_U32:
       return Ctx.B.CreateSub(S1, S0, "vopd.subrev");
     case CanonicalOp::V_LSHLREV_B32:
-      return Ctx.B.CreateShl(S1, maskShiftAmount(Ctx.B, S0), "vopd.shl");
+      return Ctx.B.CreateShl(S1, maskShiftAmount(Ctx.B, S0, 32), "vopd.shl");
     case CanonicalOp::V_LSHRREV_B32:
-      return Ctx.B.CreateLShr(S1, maskShiftAmount(Ctx.B, S0), "vopd.lshr");
+      return Ctx.B.CreateLShr(S1, maskShiftAmount(Ctx.B, S0, 32), "vopd.lshr");
     case CanonicalOp::V_ASHRREV_I32:
-      return Ctx.B.CreateAShr(S1, maskShiftAmount(Ctx.B, S0), "vopd.ashr");
+      return Ctx.B.CreateAShr(S1, maskShiftAmount(Ctx.B, S0, 32), "vopd.ashr");
     case CanonicalOp::V_AND_B32:
       return Ctx.B.CreateAnd(S0, S1, "vopd.and");
     case CanonicalOp::V_OR_B32:
@@ -327,7 +302,7 @@ Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_MAX_I32:
   case CanonicalOp::V_MIN_U32:
   case CanonicalOp::V_MAX_U32: {
-    Expected<std::pair<Value *, Value *>> Srcs = ReadBinary();
+    Expected<std::pair<Value *, Value *>> Srcs = readPair(Read);
     if (!Srcs)
       return Srcs.takeError();
     Intrinsic::ID ID = Intrinsic::smin;
@@ -352,12 +327,12 @@ Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
 } // namespace
 
 Error handleVOPD(RaiseContext &Ctx, const DecodedInst &Di) {
-  if (!Di.HasVOPD)
+  if (!Di.VOPD)
     return malformedVOPD(Ctx, Di, "missing structural decode");
 
   SmallVector<PendingWrite, 2> Writes;
   for (unsigned Component : AMDGPU::VOPD::COMPONENTS) {
-    const DecodedInst::VOPDHalf &Half = Di.VOPD[Component];
+    const DecodedInst::VOPDHalf &Half = (*Di.VOPD)[Component];
     Expected<ParsedReg> Dst = readDestination(Ctx, Di, Half);
     if (!Dst)
       return Dst.takeError();

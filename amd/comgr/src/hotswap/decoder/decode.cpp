@@ -198,37 +198,37 @@ Error failVOPDDecode(const DecodedInst &Di, const Twine &Detail) {
                            Twine(Di.Offset) + ": " + Detail);
 }
 
-// Record one component source or its bitop truth table.
+// Record one component source or its bitop truth-table index. V_BITOP3 uses
+// each immediate bit as the result for one of the eight src0/src1/src2 input
+// combinations, with the input values forming that bit's three-bit index.
 Error decodeVOPDSource(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
-                       const VOPDComponentInfo &Info,
-                       unsigned ComponentSrcIdx) {
-  unsigned OperandIdx = Info.getSrcOperandIdx(ComponentSrcIdx, Di.IsVOPD3);
+                       const VOPDComponentInfo &Info, unsigned ComponentSrcIdx,
+                       bool IsVOPD3) {
+  unsigned OperandIdx = Info.getSrcOperandIdx(ComponentSrcIdx, IsVOPD3);
   if (OperandIdx >= Di.numOperands())
     return failVOPDDecode(Di, "component source operand is out of range");
 
   if (static_cast<int>(OperandIdx) == Info.getBitOp3OperandIdx()) {
     if (!Di.isImm(OperandIdx))
       return failVOPDDecode(Di, "bitop3 operand is not an immediate");
-    int64_t TruthTable = Di.getImm(OperandIdx);
-    if (TruthTable < 0 || TruthTable > UINT8_MAX)
+    int64_t TruthTableIdx = Di.getImm(OperandIdx);
+    if (TruthTableIdx < 0 || TruthTableIdx > UINT8_MAX)
       return failVOPDDecode(Di, "bitop3 immediate is out of range");
-    Half.HasBitOp3 = true;
-    Half.BitOp3 = static_cast<uint8_t>(TruthTable);
+    Half.setBitOp3(static_cast<uint8_t>(TruthTableIdx));
     return Error::success();
   }
 
-  if (Half.NumSrcs == 3)
-    return failVOPDDecode(Di, "component has more than three sources");
-  unsigned LogicalSrc = Half.NumSrcs++;
-  Half.SrcIdx[LogicalSrc] = OperandIdx;
+  if (Half.numSources() == 3)
+    return failVOPDDecode(Di, "component source count exceeds storage");
+  unsigned LogicalSrc = Half.appendSource(OperandIdx);
 
-  if (Di.IsVOPD3 && ComponentSrcIdx < Info.getVOPD3ModsNum()) {
+  if (IsVOPD3 && ComponentSrcIdx < Info.getVOPD3ModsNum()) {
     if (OperandIdx == 0 || !Di.isImm(OperandIdx - 1))
       return failVOPDDecode(Di, "component source modifier is missing");
     int64_t Mods = Di.getImm(OperandIdx - 1);
     if (Mods < 0 || Mods > UINT8_MAX)
       return failVOPDDecode(Di, "component source modifier is out of range");
-    Half.SrcMods[LogicalSrc] = static_cast<uint8_t>(Mods);
+    Half.setSourceModifier(LogicalSrc, static_cast<uint8_t>(Mods));
   }
   return Error::success();
 }
@@ -236,18 +236,20 @@ Error decodeVOPDSource(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
 // Decode one component of a VOPD packet.
 Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
                      const VOPDComponentInfo &Info, unsigned ComponentOpcode,
-                     const OpcodeMap &OpcMap) {
+                     const OpcodeMap &OpcMap, bool IsVOPD3) {
   Half.CanonOp = OpcMap.lookup(ComponentOpcode);
   if (Half.CanonOp == CanonicalOp::Unknown)
     return failVOPDDecode(Di, "component opcode has no canonical operation");
 
-  Half.DstIdx = Info.getDstOperandIdx();
-  if (Half.DstIdx >= Di.numOperands() || !Di.isReg(Half.DstIdx))
+  unsigned DstIdx = Info.getDstOperandIdx();
+  if (DstIdx >= Di.numOperands() || !Di.isReg(DstIdx))
     return failVOPDDecode(Di,
                           "component destination is missing or not a register");
+  Half.setDestinationIndex(DstIdx);
 
-  for (unsigned I = 0; I != Info.getParsedSrcOperandsNum(); ++I)
-    if (Error Err = decodeVOPDSource(Di, Half, Info, I))
+  const unsigned NumParsedSrcs = Info.getParsedSrcOperandsNum();
+  for (unsigned I = 0; I != NumParsedSrcs; ++I)
+    if (Error Err = decodeVOPDSource(Di, Half, Info, I, IsVOPD3))
       return Err;
 
   int BitOpIdx = Info.getBitOp3OperandIdx();
@@ -258,15 +260,14 @@ Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
     BitOpIdx = COMGR::hotswap::getNamedOperandIdx(Di.Inst.getOpcode(),
                                                   AMDGPU::OpName::bitop3);
 
-  if (!Half.HasBitOp3 && BitOpIdx >= 0) {
+  if (!Half.hasBitOp3() && BitOpIdx >= 0) {
     unsigned OperandIdx = static_cast<unsigned>(BitOpIdx);
     if (OperandIdx >= Di.numOperands() || !Di.isImm(OperandIdx))
       return failVOPDDecode(Di, "bitop3 operand is missing or not immediate");
-    int64_t TruthTable = Di.getImm(OperandIdx);
-    if (TruthTable < 0 || TruthTable > UINT8_MAX)
+    int64_t TruthTableIdx = Di.getImm(OperandIdx);
+    if (TruthTableIdx < 0 || TruthTableIdx > UINT8_MAX)
       return failVOPDDecode(Di, "bitop3 immediate is out of range");
-    Half.HasBitOp3 = true;
-    Half.BitOp3 = static_cast<uint8_t>(TruthTable);
+    Half.setBitOp3(static_cast<uint8_t>(TruthTableIdx));
   }
   return Error::success();
 }
@@ -277,18 +278,19 @@ Error decodeVOPD(DecodedInst &Di, const MCInstrInfo &MCII,
   if (!COMGR::hotswap::isVOPD(Di.Inst.getOpcode()))
     return Error::success();
 
-  Di.HasVOPD = true;
-  Di.IsVOPD3 = (Di.TargetSpecificFlags & AmdgpuFormat::VOPD3) != 0;
+  Di.VOPD.emplace();
+  const bool IsVOPD3 = (Di.TargetSpecificFlags & AmdgpuFormat::VOPD3) != 0;
   auto [OpX, OpY] = COMGR::hotswap::getVOPDComponents(Di.Inst.getOpcode());
   const MCInstrDesc &OpXDesc = MCII.get(OpX);
   const MCInstrDesc &OpYDesc = MCII.get(OpY);
-  VOPDComponentInfo XInfo(OpXDesc, Di.IsVOPD3);
-  VOPDComponentInfo YInfo(OpYDesc, XInfo, Di.IsVOPD3);
-  if (Error Err = decodeVOPDHalf(Di, Di.VOPD[AMDGPU::VOPD::ComponentIndex::X],
-                                 XInfo, OpX, OpcMap))
+  VOPDComponentInfo XInfo(OpXDesc, IsVOPD3);
+  VOPDComponentInfo YInfo(OpYDesc, XInfo, IsVOPD3);
+  if (Error Err =
+          decodeVOPDHalf(Di, (*Di.VOPD)[AMDGPU::VOPD::ComponentIndex::X], XInfo,
+                         OpX, OpcMap, IsVOPD3))
     return Err;
-  return decodeVOPDHalf(Di, Di.VOPD[AMDGPU::VOPD::ComponentIndex::Y], YInfo,
-                        OpY, OpcMap);
+  return decodeVOPDHalf(Di, (*Di.VOPD)[AMDGPU::VOPD::ComponentIndex::Y], YInfo,
+                        OpY, OpcMap, IsVOPD3);
 }
 
 } // namespace
