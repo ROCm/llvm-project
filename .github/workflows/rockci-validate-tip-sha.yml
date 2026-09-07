@@ -1,0 +1,357 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+#
+# Daily promotion gate for the TheRock baseline.
+#
+#   1. resolve TheRock origin/main tip (merged code only) plus the
+#      rocm-systems / rocm-libraries gitlinks recorded at that commit,
+#   2. dispatch a full Linux + Windows RockCI build pinned to that SHA
+#      (same default families as a normal PSDB run),
+#   3. hand gfx90a artifacts to Jenkins once gfx90a math-libs is done,
+#   4. write THEROCK_CI_MAIN_REF (the SHA RockCI checks out) only when the
+#      GitHub Actions run and the Jenkins build both pass.
+#
+# GitHub API calls use the rocm-cciapp GitHub App token, minted the same way
+# as automerge-main-into-amd-staging.yml (not GITHUB_TOKEN and not a PAT).
+#
+# Nothing is promoted on a partial pass, so a broken tip keeps the previously
+# validated baseline instead of poisoning every downstream RockCI run.
+
+name: Validate and promote TheRock main tip
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      therock_main_sha:
+        description: "Validate this TheRock commit instead of the current main tip."
+        type: string
+        default: ""
+      force:
+        description: "Revalidate even when the resolved tip is already promoted."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rockci-validate-therock-tip
+  cancel-in-progress: false
+
+env:
+  ROCKCI_WORKFLOW: rockci_multi_arch_amd_staging.yml
+  ROCKCI_REF: amd-staging
+  GPU_TARGET: gfx90a
+  # Job name rendered by multi_arch_build_portable_linux.yml for the per-arch
+  # math-libs stage; the Jenkins hand-off waits for this to go green.
+  MATH_LIBS_JOB_MATCH: "Stage - Math Libs (gfx90a)"
+
+jobs:
+  dispatch:
+    name: Resolve tip and dispatch RockCI
+    if: github.repository == 'ROCm/llvm-project'
+    runs-on: ubuntu-24.04
+    outputs:
+      validate: ${{ steps.plan.outputs.validate }}
+      sha: ${{ steps.plan.outputs.sha }}
+      systems_sha: ${{ steps.plan.outputs.systems_sha }}
+      libraries_sha: ${{ steps.plan.outputs.libraries_sha }}
+      run_id: ${{ steps.dispatch.outputs.run_id }}
+      run_url: ${{ steps.dispatch.outputs.run_url }}
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: rocm-cciapp
+        if: ${{ vars.ROCM_CCIAPP_APP_ID != '' }}
+        with:
+          app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
+          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Checkout llvm-project
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: amd-staging
+          token: ${{ steps.rocm-cciapp.outputs.token }}
+
+      - name: Resolve merged TheRock main tip
+        id: tip
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/resolve-therock-green-sha@amd/dev/kirthana14m/sha-check-automation
+        with:
+          github_token: ${{ steps.rocm-cciapp.outputs.token }}
+
+      - name: Decide whether this tip needs validating
+        id: plan
+        env:
+          OVERRIDE_SHA: ${{ inputs.therock_main_sha }}
+          TIP_SHA: ${{ steps.tip.outputs.sha }}
+          TIP_SYSTEMS: ${{ steps.tip.outputs.systems_sha }}
+          TIP_LIBRARIES: ${{ steps.tip.outputs.libraries_sha }}
+          PROMOTED_SHA: ${{ vars.THEROCK_CI_MAIN_REF }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+
+          SHA="${OVERRIDE_SHA:-$TIP_SHA}"
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::therock_main_sha must be a full 40-character commit SHA, got '${SHA}'."
+            exit 1
+          fi
+
+          # A manual override picks its own TheRock commit, so the gitlinks read
+          # at the main tip no longer describe it; let RockCI read them itself.
+          if [[ -n "$OVERRIDE_SHA" ]]; then
+            SYSTEMS=""
+            LIBRARIES=""
+          else
+            SYSTEMS="$TIP_SYSTEMS"
+            LIBRARIES="$TIP_LIBRARIES"
+          fi
+
+          VALIDATE=true
+          if [[ "$SHA" == "$PROMOTED_SHA" && "$FORCE" != "true" ]]; then
+            echo "TheRock ${SHA} is already the promoted baseline; nothing to do."
+            VALIDATE=false
+          fi
+
+          {
+            echo "validate=${VALIDATE}"
+            echo "sha=${SHA}"
+            echo "systems_sha=${SYSTEMS}"
+            echo "libraries_sha=${LIBRARIES}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| TheRock | \`${SHA}\` |"
+            echo "| rocm-systems | \`${SYSTEMS:-<from TheRock>}\` |"
+            echo "| rocm-libraries | \`${LIBRARIES:-<from TheRock>}\` |"
+            echo "| promoted baseline | \`${PROMOTED_SHA:-<none>}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dispatch full Linux and Windows RockCI
+        id: dispatch
+        if: steps.plan.outputs.validate == 'true'
+        env:
+          ROCM_CCIAPP_TOKEN: ${{ steps.rocm-cciapp.outputs.token }}
+          THEROCK_SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ROCM_CCIAPP_TOKEN:-}" ]]; then
+            echo "::error::Set repo Variable ROCM_CCIAPP_APP_ID (and Secret ROCM_CCIAPP_PRIVATE_KEY). GITHUB_TOKEN is read-only here and cannot dispatch workflows or write variables."
+            exit 1
+          fi
+          export GH_TOKEN="$ROCM_CCIAPP_TOKEN"
+
+          # Run ids climb monotonically, so anything above the newest existing
+          # RockCI run was created after this dispatch.
+          PREVIOUS_ID="$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow "$ROCKCI_WORKFLOW" \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // 0')"
+
+          # Pin TheRock only. Family lists and pytorch stay at the PSDB
+          # defaults (Linux gfx94x/gfx110x/gfx90a, Windows gfx1151).
+          gh workflow run "$ROCKCI_WORKFLOW" \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$ROCKCI_REF" \
+            -f "therock_ref=${THEROCK_SHA}"
+
+          RUN_ID=""
+          for _ in $(seq 1 30); do
+            sleep 10
+            RUN_ID="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow "$ROCKCI_WORKFLOW" \
+              --event workflow_dispatch \
+              --branch "$ROCKCI_REF" \
+              --limit 20 \
+              --json databaseId \
+              --jq "[.[].databaseId | select(. > ${PREVIOUS_ID})] | min // empty")"
+            [[ -n "$RUN_ID" ]] && break
+          done
+
+          if [[ -z "$RUN_ID" ]]; then
+            echo "::error::Dispatched RockCI but could not find the resulting run."
+            exit 1
+          fi
+
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
+          echo "RockCI run: $RUN_URL"
+          {
+            echo "run_id=${RUN_ID}"
+            echo "run_url=${RUN_URL}"
+          } >> "$GITHUB_OUTPUT"
+          echo "RockCI validation run: ${RUN_URL}" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Watch RockCI run
+    needs: dispatch
+    if: needs.dispatch.outputs.validate == 'true'
+    # Full Linux+Windows PSDB can outlive the 6h GitHub-hosted limit.
+    runs-on:
+      group: compiler-generic-runners
+    timeout-minutes: 720
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: rocm-cciapp
+        if: ${{ vars.ROCM_CCIAPP_APP_ID != '' }}
+        with:
+          app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
+          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Wait for the RockCI run to finish
+        env:
+          ROCM_CCIAPP_TOKEN: ${{ steps.rocm-cciapp.outputs.token }}
+          RUN_ID: ${{ needs.dispatch.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ROCM_CCIAPP_TOKEN:-}" ]]; then
+            echo "::error::Set repo Variable ROCM_CCIAPP_APP_ID (and Secret ROCM_CCIAPP_PRIVATE_KEY)."
+            exit 1
+          fi
+          export GH_TOKEN="$ROCM_CCIAPP_TOKEN"
+          gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --interval 60 --exit-status
+
+  jenkins:
+    name: Validate gfx90a artifacts on Jenkins
+    needs: dispatch
+    if: needs.dispatch.outputs.validate == 'true'
+    runs-on:
+      group: compiler-generic-runners
+    timeout-minutes: 720
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: rocm-cciapp
+        if: ${{ vars.ROCM_CCIAPP_APP_ID != '' }}
+        with:
+          app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
+          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Checkout llvm-project
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: amd-staging
+          token: ${{ steps.rocm-cciapp.outputs.token }}
+
+      - name: Wait for the gfx90a math-libs stage
+        env:
+          ROCM_CCIAPP_TOKEN: ${{ steps.rocm-cciapp.outputs.token }}
+          RUN_ID: ${{ needs.dispatch.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ROCM_CCIAPP_TOKEN:-}" ]]; then
+            echo "::error::Set repo Variable ROCM_CCIAPP_APP_ID (and Secret ROCM_CCIAPP_PRIVATE_KEY)."
+            exit 1
+          fi
+          export GH_TOKEN="$ROCM_CCIAPP_TOKEN"
+          DEADLINE=$(( SECONDS + 480 * 60 ))
+
+          while true; do
+            RUN_STATUS="$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json status --jq .status || echo unknown)"
+
+            mapfile -t STAGES < <(gh api --paginate \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" \
+              --jq '.jobs[]
+                    | select(.name | contains(env.MATH_LIBS_JOB_MATCH))
+                    | .status + ":" + (.conclusion // "")')
+
+            pending=0
+            for stage in "${STAGES[@]}"; do
+              status="${stage%%:*}"
+              conclusion="${stage#*:}"
+              if [[ "$status" != "completed" ]]; then
+                pending=1
+              elif [[ "$conclusion" != "success" ]]; then
+                echo "::error::gfx90a math-libs finished as '${conclusion}'; skipping the Jenkins run."
+                exit 1
+              fi
+            done
+
+            if (( ${#STAGES[@]} > 0 && pending == 0 )); then
+              echo "gfx90a math-libs is green; handing the artifacts to Jenkins."
+              break
+            fi
+
+            if [[ "$RUN_STATUS" == "completed" ]]; then
+              echo "::error::RockCI run finished without a successful '${MATH_LIBS_JOB_MATCH}' job."
+              exit 1
+            fi
+
+            if (( SECONDS > DEADLINE )); then
+              echo "::error::Timed out waiting for '${MATH_LIBS_JOB_MATCH}'."
+              exit 1
+            fi
+
+            echo "Waiting for '${MATH_LIBS_JOB_MATCH}' (run is ${RUN_STATUS})."
+            sleep 60
+          done
+
+      - name: Run rock-artifacts-tester
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/jenkins-rock-artifacts-tester@amd/dev/kirthana14m/sha-check-automation
+        with:
+          jenkins_host: ${{ secrets.ROCM_JENKINS_HOST }}
+          jenkins_user: ${{ secrets.CI_JENKINS_USER }}
+          jenkins_token: ${{ secrets.ROCM_JENKINS_CI_TOKEN }}
+          artifacts_run_id: ${{ needs.dispatch.outputs.run_id }}
+          gpu_target: ${{ env.GPU_TARGET }}
+          # Kept under the job timeout, which also covers the math-libs wait.
+          timeout_minutes: "240"
+
+  promote:
+    name: Promote validated baseline
+    needs: [dispatch, build, jenkins]
+    if: >-
+      needs.dispatch.outputs.validate == 'true' &&
+      needs.build.result == 'success' &&
+      needs.jenkins.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: rocm-cciapp
+        if: ${{ vars.ROCM_CCIAPP_APP_ID != '' }}
+        with:
+          app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
+          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Update the RockCI baseline variables
+        env:
+          ROCM_CCIAPP_TOKEN: ${{ steps.rocm-cciapp.outputs.token }}
+          THEROCK_SHA: ${{ needs.dispatch.outputs.sha }}
+          RUN_URL: ${{ needs.dispatch.outputs.run_url }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${ROCM_CCIAPP_TOKEN:-}" ]]; then
+            echo "::error::Set repo Variable ROCM_CCIAPP_APP_ID (and Secret ROCM_CCIAPP_PRIVATE_KEY). GITHUB_TOKEN cannot write repository variables."
+            exit 1
+          fi
+          export GH_TOKEN="$ROCM_CCIAPP_TOKEN"
+
+          set_var() {
+            local name="$1" value="$2"
+            if [[ -z "$value" ]]; then
+              echo "::error::Refusing to clear ${name}; promotion needs a SHA."
+              exit 1
+            fi
+            gh variable set "$name" --repo "$GITHUB_REPOSITORY" --body "$value"
+            echo "${name}=${value}"
+          }
+
+          # This is the variable RockCI already checks out with.
+          set_var THEROCK_CI_MAIN_REF "$THEROCK_SHA"
+          set_var ROCKCI_THEROCK_VALIDATED_RUN "$RUN_URL"
+
+          {
+            echo "Promoted TheRock \`${THEROCK_SHA}\` after a green Linux+Windows RockCI run and Jenkins tester."
+            echo ""
+            echo "Validation run: ${RUN_URL}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
