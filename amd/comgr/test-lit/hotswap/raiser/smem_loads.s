@@ -5,10 +5,14 @@
 ; RUN: %ld.lld -shared %t.gfx1250.o -o %t.gfx1250.hsaco
 
 ; RUN: %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=smem_loads | %FileCheck %s --check-prefix=IR
+; RUN:   --emit-ir=smem_loads,smem_wide_loads,smem_wide_overlap | \
+; RUN:   %FileCheck %s --check-prefix=IR
 ; RUN: not %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=smem_register_offset 2>&1 | \
 ; RUN:   %FileCheck %s --check-prefix=REGISTER-OFFSET
+; RUN: not %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=smem_wide_register_offset 2>&1 | \
+; RUN:   %FileCheck %s --check-prefix=WIDE-REGISTER-OFFSET
 ; RUN: not %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=smem_cache_policy 2>&1 | \
 ; RUN:   %FileCheck %s --check-prefix=CACHE-POLICY
@@ -73,12 +77,78 @@ smem_loads:
 ; IR: ret void
 	s_endpgm
 
+; The widths above four dwords. The vector type and the largest shift together
+; pin the dword count of each load.
+
+	.globl	smem_wide_loads
+	.p2align	8
+	.type	smem_wide_loads,@function
+; IR-LABEL: define amdgpu_kernel void @smem_wide_loads(
+smem_wide_loads:
+; IR: [[BASE96:%.+]] = and i64 {{%.+}}, -4
+; IR: [[ADDRESS96:%.+]] = add i64 [[BASE96]], 0
+; IR: [[POINTER96:%.+]] = inttoptr i64 [[ADDRESS96]] to ptr addrspace(1)
+; IR: [[LOAD96:%.+]] = load <3 x i32>, ptr addrspace(1) [[POINTER96]], align 4
+	s_load_b96 s[4:6], s[0:1], 0x0
+; IR: [[LOAD96_BITS:%.+]] = bitcast <3 x i32> [[LOAD96]] to i96
+; IR: trunc i96 [[LOAD96_BITS]] to i32
+; IR: [[LOAD96_WORD2_SHIFTED:%.+]] = lshr i96 [[LOAD96_BITS]], 64
+; IR: trunc i96 [[LOAD96_WORD2_SHIFTED]] to i32
+
+; IR: [[ADDRESS256:%.+]] = add i64 {{%.+}}, 16
+; IR: [[POINTER256:%.+]] = inttoptr i64 [[ADDRESS256]] to ptr addrspace(1)
+; IR: [[LOAD256:%.+]] = load <8 x i32>, ptr addrspace(1) [[POINTER256]], align 4
+	s_load_b256 s[8:15], s[0:1], 0x10
+; IR: [[LOAD256_BITS:%.+]] = bitcast <8 x i32> [[LOAD256]] to i256
+; IR: trunc i256 [[LOAD256_BITS]] to i32
+; IR: [[LOAD256_WORD7_SHIFTED:%.+]] = lshr i256 [[LOAD256_BITS]], 224
+; IR: trunc i256 [[LOAD256_WORD7_SHIFTED]] to i32
+
+; IR: [[ADDRESS512:%.+]] = add i64 {{%.+}}, 64
+; IR: [[POINTER512:%.+]] = inttoptr i64 [[ADDRESS512]] to ptr addrspace(1)
+; IR: [[LOAD512:%.+]] = load <16 x i32>, ptr addrspace(1) [[POINTER512]], align 4
+	s_load_b512 s[16:31], s[0:1], 0x40
+; IR: [[LOAD512_BITS:%.+]] = bitcast <16 x i32> [[LOAD512]] to i512
+; IR: trunc i512 [[LOAD512_BITS]] to i32
+; IR: [[LOAD512_WORD15_SHIFTED:%.+]] = lshr i512 [[LOAD512_BITS]], 480
+; IR: trunc i512 [[LOAD512_WORD15_SHIFTED]] to i32
+; IR: ret void
+	s_endpgm
+
+; A destination that covers its own base. The base is read before the first
+; dword of the result lands, so the address is formed from the old base.
+
+	.globl	smem_wide_overlap
+	.p2align	8
+	.type	smem_wide_overlap,@function
+; IR-LABEL: define amdgpu_kernel void @smem_wide_overlap(
+smem_wide_overlap:
+; IR: [[OVERLAP_BASE:%.+]] = and i64 {{%.+}}, -4
+; IR: [[OVERLAP_ADDRESS:%.+]] = add i64 [[OVERLAP_BASE]], 4
+; IR: [[OVERLAP_POINTER:%.+]] = inttoptr i64 [[OVERLAP_ADDRESS]] to ptr addrspace(1)
+; IR: [[OVERLAP_LOAD:%.+]] = load <3 x i32>, ptr addrspace(1) [[OVERLAP_POINTER]], align 4
+	s_load_b96 s[0:2], s[0:1], 0x4
+; IR: bitcast <3 x i32> [[OVERLAP_LOAD]] to i96
+; IR: ret void
+	s_endpgm
+
 	.globl	smem_register_offset
 	.p2align	8
 	.type	smem_register_offset,@function
 smem_register_offset:
 ; REGISTER-OFFSET: only immediate scalar load offsets are supported
 	s_load_b32 s2, s[0:1], s4
+	s_endpgm
+
+; The wider widths reach the same refusal. Raising one would need the gfx12
+; scale_offset bit, which scales a register offset by the load width.
+
+	.globl	smem_wide_register_offset
+	.p2align	8
+	.type	smem_wide_register_offset,@function
+smem_wide_register_offset:
+; WIDE-REGISTER-OFFSET: only immediate scalar load offsets are supported
+	s_load_b96 s[4:6], s[0:1], s8
 	s_endpgm
 
 	.globl	smem_cache_policy
@@ -113,11 +183,29 @@ smem_negative_offset:
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 9
 	.end_amdhsa_kernel
+	.amdhsa_kernel smem_wide_loads
+		.amdhsa_kernarg_size 128
+		.amdhsa_user_sgpr_kernarg_segment_ptr 1
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 32
+	.end_amdhsa_kernel
+	.amdhsa_kernel smem_wide_overlap
+		.amdhsa_kernarg_size 32
+		.amdhsa_user_sgpr_kernarg_segment_ptr 1
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 3
+	.end_amdhsa_kernel
 	.amdhsa_kernel smem_register_offset
 		.amdhsa_kernarg_size 32
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 5
+	.end_amdhsa_kernel
+	.amdhsa_kernel smem_wide_register_offset
+		.amdhsa_kernarg_size 32
+		.amdhsa_user_sgpr_kernarg_segment_ptr 1
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 9
 	.end_amdhsa_kernel
 	.amdhsa_kernel smem_cache_policy
 		.amdhsa_kernarg_size 32
@@ -153,12 +241,42 @@ amdhsa.kernels:
     .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
+    .kernarg_segment_size: 128
+    .max_flat_workgroup_size: 1024
+    .name:           smem_wide_loads
+    .private_segment_fixed_size: 0
+    .sgpr_count:     32
+    .symbol:         smem_wide_loads.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 32
+    .max_flat_workgroup_size: 1024
+    .name:           smem_wide_overlap
+    .private_segment_fixed_size: 0
+    .sgpr_count:     3
+    .symbol:         smem_wide_overlap.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
     .kernarg_segment_size: 32
     .max_flat_workgroup_size: 1024
     .name:           smem_register_offset
     .private_segment_fixed_size: 0
     .sgpr_count:     5
     .symbol:         smem_register_offset.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 32
+    .max_flat_workgroup_size: 1024
+    .name:           smem_wide_register_offset
+    .private_segment_fixed_size: 0
+    .sgpr_count:     9
+    .symbol:         smem_wide_register_offset.kd
     .vgpr_count:     1
     .wavefront_size: 32
   - .group_segment_fixed_size: 0

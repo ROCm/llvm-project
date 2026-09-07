@@ -35,8 +35,8 @@ using namespace llvm;
 
 namespace COMGR::hotswap {
 
-// S_LOAD_B32, S_LOAD_B64, and S_LOAD_B128 ignore the low two bits of both
-// address components.
+// Every mapped scalar load ignores the low two bits of both address
+// components, whatever its data width.
 static constexpr Align DwordSmemAddressAlignment = Align::Constant<4>();
 
 // Report decoded operands that contradict the generated instruction metadata.
@@ -91,8 +91,14 @@ static std::optional<unsigned> scalarLoadWidthInDwords(CanonicalOp Operation) {
     return 1;
   case CanonicalOp::S_LOAD_B64:
     return 2;
+  case CanonicalOp::S_LOAD_B96:
+    return 3;
   case CanonicalOp::S_LOAD_B128:
     return 4;
+  case CanonicalOp::S_LOAD_B256:
+    return 8;
+  case CanonicalOp::S_LOAD_B512:
+    return 16;
   default:
     return std::nullopt;
   }
@@ -180,7 +186,7 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   Type *LoadType = Ctx.B.getInt32Ty();
   if (*LoadWidthInDwords == 2)
     LoadType = Ctx.B.getInt64Ty();
-  else if (*LoadWidthInDwords == 4)
+  else if (*LoadWidthInDwords > 2)
     LoadType = FixedVectorType::get(Ctx.B.getInt32Ty(), *LoadWidthInDwords);
   Value *Loaded = Ctx.B.CreateAlignedLoad(
       LoadType, Pointer, DwordSmemAddressAlignment, "smem_load");
@@ -189,7 +195,7 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   } else if (*LoadWidthInDwords == 2) {
     Ctx.registers().writeReg64(*Destination, Loaded);
   } else {
-    // B128 is represented as four i32 values written across an SGPR tuple.
+    // Every wider load is a vector of i32 written across an SGPR tuple.
     Ctx.registers().writeRegVec(*Destination, Loaded);
   }
   return Error::success();

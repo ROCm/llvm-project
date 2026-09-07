@@ -188,7 +188,10 @@ CANONICAL_OP(S_ICACHE_INV)
 // SMEM.
 CANONICAL_OP(S_LOAD_B32)
 CANONICAL_OP(S_LOAD_B64)
+CANONICAL_OP(S_LOAD_B96)
 CANONICAL_OP(S_LOAD_B128)
+CANONICAL_OP(S_LOAD_B256)
+CANONICAL_OP(S_LOAD_B512)
 // VOPC 32-bit integer comparisons. The `v_cmpx_*` opcodes share these rows:
 // they compute the same comparison and differ only in where the lane mask
 // lands, which the decoded implicit definitions already record.
