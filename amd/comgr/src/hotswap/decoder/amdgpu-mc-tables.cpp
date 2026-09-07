@@ -97,8 +97,13 @@ static bool isFloatingPointSource(const llvm::MCInstrDesc &Desc,
 }
 
 VOPDComponentInfo::VOPDComponentInfo(const llvm::MCInstrDesc &Desc, bool VOPD3)
-    : BitOp3OperandIdx(COMGR::hotswap::getNamedOperandIdx(
-          Desc.getOpcode(), llvm::AMDGPU::OpName::bitop3)) {
+    : SrcOperandsNum(0), NumVOPD3Mods(0), PreviousSrcOperandsNum(0),
+      PreviousVOPD3Mods(0), EncodedBitOp3OperandIdx(0), HasSrc2Acc(0), IsY(0) {
+  int BitOp3OperandIdx = COMGR::hotswap::getNamedOperandIdx(
+      Desc.getOpcode(), llvm::AMDGPU::OpName::bitop3);
+  assert(BitOp3OperandIdx >= -1 && BitOp3OperandIdx < 255);
+  EncodedBitOp3OperandIdx = BitOp3OperandIdx + 1;
+
   bool UsesVOP3Layout = VOPD3 || llvm::SIInstrFlags::isVOP3(Desc);
   HasSrc2Acc = Desc.getOperandConstraint(3, llvm::MCOI::TIED_TO) != -1;
   SrcOperandsNum =

@@ -26,13 +26,14 @@ namespace COMGR::hotswap {
 
 /// Maps VOPD component operands to combined MC operands.
 class VOPDComponentInfo {
-  unsigned SrcOperandsNum = 0;
-  unsigned NumVOPD3Mods = 0;
-  unsigned PreviousSrcOperandsNum = 0;
-  unsigned PreviousVOPD3Mods = 0;
-  int BitOp3OperandIdx = -1;
-  bool HasSrc2Acc = false;
-  bool IsY = false;
+  uint32_t SrcOperandsNum : 2;
+  uint32_t NumVOPD3Mods : 2;
+  uint32_t PreviousSrcOperandsNum : 2;
+  uint32_t PreviousVOPD3Mods : 2;
+  // Zero means there is no bitop3 operand; other values store its index + 1.
+  uint32_t EncodedBitOp3OperandIdx : 8;
+  uint32_t HasSrc2Acc : 1;
+  uint32_t IsY : 1;
 
 public:
   VOPDComponentInfo(const llvm::MCInstrDesc &Desc, bool VOPD3);
@@ -43,8 +44,12 @@ public:
   unsigned getDstOperandIdx() const;
   unsigned getSrcOperandIdx(unsigned ComponentSrcIdx, bool VOPD3) const;
   unsigned getVOPD3ModsNum() const { return NumVOPD3Mods; }
-  int getBitOp3OperandIdx() const { return BitOp3OperandIdx; }
+  int getBitOp3OperandIdx() const {
+    return static_cast<int>(EncodedBitOp3OperandIdx) - 1;
+  }
 };
+
+static_assert(sizeof(VOPDComponentInfo) == sizeof(uint32_t));
 
 /// Index of the operand named `Name` in `Opcode`, or -1 if it has no operand of
 /// that name.
