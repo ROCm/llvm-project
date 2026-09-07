@@ -53,7 +53,10 @@ on:
         type: boolean
         default: true
         description: "Build PyTorch wheels"
-
+      therock_ref:
+        type: string
+        default: ""
+        description: "TheRock commit SHA (or ref) to check out. Empty uses the repository variable THEROCK_CI_MAIN_REF"
   pull_request:
     branches: [amd-staging]
     types:
@@ -104,7 +107,7 @@ jobs:
       build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
       build_jax: false
       repository: "ROCm/TheRock"
-      ref: ${{ vars.THEROCK_CI_MAIN_REF || '' }}
+      ref: ${{ inputs.therock_ref || vars.THEROCK_CI_MAIN_REF || '' }}
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}

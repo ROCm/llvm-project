@@ -1,0 +1,33 @@
+name: Resolve TheRock main tip SHA
+description: >
+  Look up the current TheRock origin/main tip and the rocm-systems /
+  rocm-libraries submodule pointers recorded at that commit.
+
+inputs:
+  github_token:
+    description: Token for the GitHub API. Defaults to the job token.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  sha:
+    description: Full 40-character TheRock origin/main tip SHA.
+    value: ${{ steps.resolve.outputs.sha }}
+  systems_sha:
+    description: rocm-systems submodule pointer recorded at that TheRock commit.
+    value: ${{ steps.resolve.outputs.systems_sha }}
+  libraries_sha:
+    description: rocm-libraries submodule pointer recorded at that TheRock commit.
+    value: ${{ steps.resolve.outputs.libraries_sha }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve TheRock main tip
+      id: resolve
+      shell: bash
+      env:
+        GH_API_TOKEN: ${{ inputs.github_token }}
+      run: |
+        set -euo pipefail
+        "${GITHUB_ACTION_PATH}/resolve.sh"

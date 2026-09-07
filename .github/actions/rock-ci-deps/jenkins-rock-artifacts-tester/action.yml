@@ -1,0 +1,106 @@
+name: Jenkins rock-artifacts-tester
+description: >
+  Trigger the Jenkins artifacts tester against a GitHub Actions run and block
+  until the Jenkins build finishes. Fails unless the build result is SUCCESS.
+
+inputs:
+  container_image:
+    description: Image carrying the python/requests toolchain used to reach Jenkins.
+    required: true
+  jenkins_host:
+    description: Jenkins base URL.
+    required: true
+  jenkins_user:
+    description: Jenkins user for basic auth.
+    required: true
+  jenkins_token:
+    description: Jenkins API token for basic auth.
+    required: true
+  jenkins_job:
+    description: Jenkins job name to build.
+    required: false
+    default: rock-artifacts-tester
+  artifacts_run_id:
+    description: GitHub Actions run id holding the artifacts under test.
+    required: true
+  gpu_target:
+    description: GPU family the tester should run on.
+    required: false
+    default: gfx90a
+  poll_interval_seconds:
+    description: Seconds between Jenkins status polls.
+    required: false
+    default: "60"
+  timeout_minutes:
+    description: Give up if the Jenkins build has not finished within this window.
+    required: false
+    default: "300"
+
+outputs:
+  build_url:
+    description: URL of the Jenkins build, empty if it never left the queue.
+    value: ${{ steps.collect.outputs.build_url }}
+  result:
+    description: Jenkins build result, empty if the build never reported one.
+    value: ${{ steps.collect.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Start Jenkins client container
+      shell: bash
+      env:
+        CONTAINER_IMAGE: ${{ inputs.container_image }}
+      run: |
+        set -euo pipefail
+        CONTAINER_NAME="jenkins-tester-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        docker pull "$CONTAINER_IMAGE"
+        docker run -d --name "$CONTAINER_NAME" "$CONTAINER_IMAGE" sleep infinity
+        docker cp "${GITHUB_ACTION_PATH}/trigger_and_wait.py" "${CONTAINER_NAME}:/tmp/trigger_and_wait.py"
+        echo "JENKINS_CONTAINER_NAME=$CONTAINER_NAME" >> "$GITHUB_ENV"
+
+    - name: Trigger and wait for the Jenkins build
+      shell: bash
+      env:
+        # Passed through docker exec by name so the values stay out of argv and
+        # out of the command echoed into the log.
+        JENKINS_HOST: ${{ inputs.jenkins_host }}
+        JENKINS_USER: ${{ inputs.jenkins_user }}
+        JENKINS_TOKEN: ${{ inputs.jenkins_token }}
+        JENKINS_JOB: ${{ inputs.jenkins_job }}
+        ARTIFACTS_RUN_ID: ${{ inputs.artifacts_run_id }}
+        GPU_TARGET: ${{ inputs.gpu_target }}
+        POLL_INTERVAL_SECONDS: ${{ inputs.poll_interval_seconds }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+      run: |
+        set -euo pipefail
+        docker exec \
+          -e JENKINS_HOST -e JENKINS_USER -e JENKINS_TOKEN -e JENKINS_JOB \
+          -e ARTIFACTS_RUN_ID -e GPU_TARGET \
+          -e POLL_INTERVAL_SECONDS -e TIMEOUT_MINUTES \
+          -e JENKINS_OUTPUT_FILE=/tmp/jenkins-result.env \
+          "$JENKINS_CONTAINER_NAME" \
+          python /tmp/trigger_and_wait.py
+
+    - name: Collect Jenkins build outputs
+      id: collect
+      if: always()
+      shell: bash
+      run: |
+        set -euo pipefail
+        RESULT_FILE="$(mktemp)"
+        if ! docker cp "${JENKINS_CONTAINER_NAME}:/tmp/jenkins-result.env" "$RESULT_FILE" 2>/dev/null; then
+          echo "Jenkins never wrote a result file."
+          exit 0
+        fi
+        cat "$RESULT_FILE" >> "$GITHUB_OUTPUT"
+        cat "$RESULT_FILE"
+
+    - name: Remove Jenkins client container
+      if: always()
+      shell: bash
+      run: |
+        if [[ -n "${JENKINS_CONTAINER_NAME:-}" ]]; then
+          docker rm -f "$JENKINS_CONTAINER_NAME" || true
+        fi
+
