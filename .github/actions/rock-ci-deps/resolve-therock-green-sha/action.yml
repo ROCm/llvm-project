@@ -5,8 +5,11 @@ description: >
 
 inputs:
   github_token:
-    description: Token for the GitHub API. Must be a PAT or GitHub App token, not anonymous.
-    required: true
+    description: >
+      Token used only for the optional submodule-pointer lookup. The main tip
+      is resolved over the git protocol and needs no token.
+    required: false
+    default: ""
 
 outputs:
   sha:
