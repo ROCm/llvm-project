@@ -56,7 +56,7 @@ runs:
         GPU_TARGET: ${{ inputs.gpu_target }}
         POLL_INTERVAL_SECONDS: ${{ inputs.poll_interval_seconds }}
         TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
-        JENKINS_OUTPUT_FILE: ${{ runner.temp }}/jenkins-result.env         
+        JENKINS_OUTPUT_FILE: ${{ runner.temp }}/jenkins-result.env
       run: |
         set -euo pipefail
         python3 -m pip install --user -q requests
@@ -73,4 +73,8 @@ runs:
         if [[ ! -f "$RESULT_FILE" ]]; then
           echo "Jenkins never wrote a result file."
           exit 0
-        fi        
+        fi
+        # trigger_and_wait.py appends KEY=VALUE lines (build_url, result).
+        cat "$RESULT_FILE" >> "$GITHUB_OUTPUT"
+        echo "Jenkins result file:"
+        cat "$RESULT_FILE"        

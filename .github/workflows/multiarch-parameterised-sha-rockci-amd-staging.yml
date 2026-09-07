@@ -158,7 +158,7 @@ jobs:
           # defaults (Linux gfx94x/gfx110x/gfx90a, Windows gfx1151).
           gh workflow run "$ROCKCI_WORKFLOW" \
             --repo "$GITHUB_REPOSITORY" \
-            --ref "$ROCKCI_REF" \
+            --ref "amd/dev/kirthana14m/sha-check-automation" \
             -f "therock_ref=${THEROCK_SHA}"
 
           RUN_ID=""
