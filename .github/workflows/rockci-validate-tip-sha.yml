@@ -68,7 +68,7 @@ jobs:
           app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
           private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ github.repository }}
+          repositories: llvm-project
           permission-contents: read
           permission-actions: write
           permission-variables: write
@@ -208,7 +208,7 @@ jobs:
           app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
           private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ github.repository }}
+          repositories: llvm-project            
           permission-contents: read
           permission-actions: write
           permission-variables: write
@@ -241,7 +241,7 @@ jobs:
           app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
           private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ github.repository }}
+          repositories: llvm-project          
           permission-contents: read
           permission-actions: write
           permission-variables: write
@@ -332,7 +332,7 @@ jobs:
           app-id: ${{ vars.ROCM_CCIAPP_APP_ID }}
           private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ github.repository }}
+          repositories: llvm-project
           permission-contents: read
           permission-actions: write
           permission-variables: write
