@@ -172,6 +172,13 @@ extern "C" {
 __attribute__((noinline)) uint32_t __kmpc_get_hardware_num_blocks() {
   return mapping::getNumberOfBlocksInKernel(0);
 }
+
+// The mode is passed in rather than read from the shared IsSPMDMode, which the
+// initial thread alone writes: the state machine's callers reach this before
+// the barrier that would make that write visible to them.
+[[gnu::noinline]] uint32_t __kmpc_get_max_team_threads(int32_t IsSPMD) {
+  return mapping::getMaxTeamThreads(IsSPMD);
+}
 }
 
 #define _TGT_KERNEL_LANGUAGE(NAME, MAPPER_NAME)                                \
