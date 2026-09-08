@@ -2,23 +2,16 @@
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=waits_kernel \
-; RUN:   --target-isa=gfx942 | %FileCheck %s --check-prefix=GFX9
+; RUN: %hotswap_transpile_cli %t.hsaco \
+; RUN:   --emit-ir=waits_kernel,sleep_kernel,monitor_sleep_kernel,wakeup_kernel \
+; RUN:   --target-isa=gfx942 \
+; RUN:   | %FileCheck %s --check-prefixes=GFX9,SLEEP,MONITOR-SLEEP,WAKEUP
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=setprio_kernel \
 ; RUN:   --target-isa=gfx942 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=PRIO-CROSS
 ; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=setprio_inc_wg_kernel \
 ; RUN:   --target-isa=gfx942 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=PRIO-INC-CROSS
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=sleep_kernel \
-; RUN:   --target-isa=gfx942 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=SLEEP
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=monitor_sleep_kernel \
-; RUN:   --target-isa=gfx942 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=MONITOR-SLEEP
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=wakeup_kernel \
-; RUN:   --target-isa=gfx942 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=WAKEUP
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -29,21 +22,21 @@
 
 ; GFX9-LABEL: define amdgpu_kernel void @waits_kernel(
 waits_kernel:
-; GFX9: call void @llvm.amdgcn.s.waitcnt(i32 0)
+; GFX9: fence syncscope("agent") seq_cst
 	s_wait_loadcnt 1
-; GFX9-NEXT: call void @llvm.amdgcn.s.waitcnt(i32 0)
+; GFX9-NEXT: fence syncscope("agent") seq_cst
 	s_wait_storecnt 2
-; GFX9-NEXT: call void @llvm.amdgcn.s.waitcnt(i32 0)
+; GFX9-NEXT: fence syncscope("agent") seq_cst
 	s_wait_dscnt 3
-; GFX9-NEXT: call void @llvm.amdgcn.s.waitcnt(i32 0)
+; GFX9-NEXT: fence syncscope("agent") seq_cst
 	s_wait_kmcnt 4
-; GFX9-NEXT: call void @llvm.amdgcn.s.waitcnt(i32 0)
+; GFX9-NEXT: fence syncscope("agent") seq_cst
 	s_wait_loadcnt_dscnt 5
-; GFX9-NEXT: call void @llvm.amdgcn.s.waitcnt(i32 0)
+; GFX9-NEXT: fence syncscope("agent") seq_cst
 	s_wait_storecnt_dscnt 6
-; GFX9-NEXT: call void @llvm.amdgcn.s.waitcnt(i32 0)
+; GFX9-NEXT: fence syncscope("agent") seq_cst
 	s_wait_idle
-; GFX9-NOT: llvm.amdgcn.s.wait
+; GFX9-NOT: fence
 	s_wait_xcnt 0
 	s_wait_alu depctr_va_vdst(0)
 	s_nop 0
@@ -82,27 +75,33 @@ setprio_inc_wg_kernel:
 	.p2align	8
 	.type	sleep_kernel,@function
 
+; SLEEP-LABEL: define amdgpu_kernel void @sleep_kernel(
 sleep_kernel:
-; SLEEP: UnsupportedOpcode: s_sleep [SOPP]
 	s_sleep 0
+; SLEEP: ret void
+; SLEEP-NEXT: }
 	s_endpgm
 
 	.globl	monitor_sleep_kernel
 	.p2align	8
 	.type	monitor_sleep_kernel,@function
 
+; MONITOR-SLEEP-LABEL: define amdgpu_kernel void @monitor_sleep_kernel(
 monitor_sleep_kernel:
-; MONITOR-SLEEP: UnsupportedOpcode: s_monitor_sleep [SOPP]
 	s_monitor_sleep 0
+; MONITOR-SLEEP: ret void
+; MONITOR-SLEEP-NEXT: }
 	s_endpgm
 
 	.globl	wakeup_kernel
 	.p2align	8
 	.type	wakeup_kernel,@function
 
+; WAKEUP-LABEL: define amdgpu_kernel void @wakeup_kernel(
 wakeup_kernel:
-; WAKEUP: UnsupportedOpcode: s_wakeup [SOPP]
 	s_wakeup
+; WAKEUP: ret void
+; WAKEUP-NEXT: }
 	s_endpgm
 
 	.section	.rodata,"a",@progbits

@@ -88,6 +88,8 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "unsupported-source-cluster-dims";
   case RaiseFailureReason::UnsupportedWavePriority:
     return "unsupported-wave-priority";
+  case RaiseFailureReason::UnsupportedSleepForever:
+    return "unsupported-sleep-forever";
   }
   llvm_unreachable("unhandled RaiseFailureReason");
 }

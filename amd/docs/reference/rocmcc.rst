@@ -362,10 +362,6 @@ offload-arch tool to determine capability of the current system.
 
 ROCmCC compilers create an instance of toolchain for each unique combination
 of target triple and the target GPU (along with the associated target features).
-``clang-offload-wrapper`` tool is modified to insert a new structure
-``__tgt_image_info`` along with each image in the binary. Device runtime is also
-modified to query this structure to identify a compatible image based on the
-capability of the current system.
 
 Unified shared memory
 ^^^^^^^^^^^^^^^^^^^^^

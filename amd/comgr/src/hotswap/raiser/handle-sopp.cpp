@@ -17,53 +17,43 @@
 
 #include <cassert>
 
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/Support/AtomicOrdering.h"
+
 using namespace llvm;
 
 namespace COMGR::hotswap {
 
 namespace {
 
-// Emit Wait with an immediate encoding its counter thresholds.
-void emitWait(RaiseContext &Ctx, Intrinsic::ID Wait, Value *Count) {
-  IRBuilder<> &B = Ctx.B;
-  Module *M = B.GetInsertBlock()->getModule();
-  B.CreateCall(Intrinsic::getOrInsertDeclaration(M, Wait), {Count});
-}
-
-// Wait for every memory counter the target tracks.
+// Wait for every memory counter the target tracks, as one sequentially
+// consistent agent-scope fence.
 //
-// Counter identities do not correspond across ISA families, so a memory wait
-// takes the strongest memory wait the target offers rather than a per-counter
-// translation, and the source's count is discarded with the identity: a count
-// names a position in the source's issue order, which re-scheduling
-// invalidates. Waiting for more than the source asked cannot break it; waiting
-// for less can.
+// Counter identities do not correspond across ISA families and no wait
+// intrinsic exists on all of them, so the fence stands in for whichever
+// counter the source named and the backend expands it for the target. The
+// source's count is dropped along with the identity, a count naming a position
+// in an issue order that raising does not preserve. Agent is the weakest scope
+// that still expands to a wait everywhere: a narrower scope drops the wait on a
+// target whose caches already order that scope, which suits a fence pairing
+// with another thread but not a counter, which only has to have retired.
 void emitMemoryWaitAll(RaiseContext &Ctx) {
   IRBuilder<> &B = Ctx.B;
-  if (Ctx.Projection.TargetSTI.hasFeature(AMDGPU::FeatureGFX9)) {
-    emitWait(Ctx, Intrinsic::amdgcn_s_waitcnt, B.getInt32(0));
-    return;
-  }
-
-  static constexpr Intrinsic::ID KSplitWaits[] = {
-      Intrinsic::amdgcn_s_wait_loadcnt, Intrinsic::amdgcn_s_wait_storecnt,
-      Intrinsic::amdgcn_s_wait_dscnt, Intrinsic::amdgcn_s_wait_kmcnt};
-  for (Intrinsic::ID Wait : KSplitWaits)
-    emitWait(Ctx, Wait, B.getInt16(0));
+  B.CreateFence(AtomicOrdering::SequentiallyConsistent,
+                B.getContext().getOrInsertSyncScopeID("agent"));
 }
 
-// Raise an instruction that changes wave priority only when the source and
-// target use the same priority model. The dispatch-time system priority is
-// unavailable, so different models cannot be proven to preserve wave ordering.
+// Raise a wave priority write to the matching intrinsic. Refuse a source that
+// composes the priority with a dispatch-time system priority, which is not
+// available to the raise, leaving the resulting wave ordering unreproducible.
 Error raiseWavePriority(RaiseContext &Ctx, const DecodedInst &Di) {
-  if (Ctx.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX1250Insts) !=
-      Ctx.Projection.TargetSTI.hasFeature(AMDGPU::FeatureGFX1250Insts))
+  if (Ctx.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX1250Insts))
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedWavePriority,
         strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags),
-        "source wave priority is not representable on a target that composes "
-        "it with the system priority differently");
+        "source wave priority composes with a dispatch-time system priority "
+        "that is not available to the raise");
 
   int16_t ImmIdx = COMGR::hotswap::getNamedOperandIdx(Di.Inst.getOpcode(),
                                                       AMDGPU::OpName::simm16);
@@ -76,6 +66,31 @@ Error raiseWavePriority(RaiseContext &Ctx, const DecodedInst &Di) {
                          ? Intrinsic::amdgcn_s_setprio
                          : Intrinsic::amdgcn_s_setprio_inc_wg;
   B.CreateIntrinsic(Id, {}, {B.getInt16(static_cast<uint16_t>(*Imm))});
+  return Error::success();
+}
+
+// Drop a sleep that ends after a bounded number of clocks, and refuse one that
+// ends on an external event. A bounded sleep leaves a wave that stalled for
+// zero cycles, a schedule the source already had to tolerate. An unbounded one
+// runs until another wave wakes it, so it is the wave's forward progress that
+// depends on it, not just the wave's timing.
+Error raiseSleep(RaiseContext &Ctx, const DecodedInst &Di) {
+  int16_t ImmIdx = COMGR::hotswap::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                      AMDGPU::OpName::simm16);
+  assert(ImmIdx >= 0 && "every sleep encodes simm16");
+  std::optional<int64_t> Imm = evalOperandAsConst(Di.Inst, ImmIdx);
+  assert(Imm && "simm16 of a sleep is always an immediate");
+
+  // SIMM16[15] selects sleep-forever; SIMM16[6:0] holds the clock count.
+  constexpr int64_t SleepForever = 0x8000;
+  if (*Imm & SleepForever)
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedSleepForever,
+        strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        "sleep ends on a wakeup, trap or kill that the raise does not "
+        "reproduce");
+
   return Error::success();
 }
 
@@ -93,24 +108,25 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   case CanonicalOp::S_WAIT_DSCNT:
   case CanonicalOp::S_WAIT_KMCNT:
   case CanonicalOp::S_WAIT_EXPCNT:
+  case CanonicalOp::S_WAIT_SAMPLECNT:
+  case CanonicalOp::S_WAIT_BVHCNT:
+  case CanonicalOp::S_WAIT_EVENT:
   case CanonicalOp::S_WAIT_LOADCNT_DSCNT:
   case CanonicalOp::S_WAIT_STORECNT_DSCNT:
   case CanonicalOp::S_WAIT_IDLE:
     emitMemoryWaitAll(Ctx);
     return Error::success();
 
-  // A target without asynchronous transfer or tensor units cannot have that
-  // work in flight. A target that has them only receives such work from the
-  // backend, which pairs its own wait with each operation it issues.
+  // No asynchronous transfer or tensor operation raises, so a kernel that
+  // raises has none of that work in flight for these to wait on.
   case CanonicalOp::S_WAIT_ASYNCCNT:
   case CanonicalOp::S_WAIT_TENSORCNT:
     return Error::success();
 
-  // XCNT counts memory operations awaiting address translation; the ALU
-  // counters count register hazards. Both waits stop a later instruction from
-  // overwriting a register an earlier one still needs, so where they belong
-  // depends on the register assignment -- which raising discards and the
-  // backend remakes.
+  // XCNT tracks address translation and the ALU counters track register
+  // hazards; both stop a later instruction from overwriting a register an
+  // earlier one still needs. Where such a wait belongs depends on the register
+  // assignment, which raising discards and the backend remakes.
   case CanonicalOp::S_WAIT_XCNT:
   case CanonicalOp::S_WAIT_ALU:
     return Error::success();
@@ -119,20 +135,15 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   case CanonicalOp::S_SETPRIO_INC_WG:
     return raiseWavePriority(Ctx, Di);
 
-  // The sleep instructions may rely on s_wakeup for release, but s_wakeup has
-  // no corresponding LLVM intrinsic. Refuse all three rather than emit a sleep
-  // that may never end.
   case CanonicalOp::S_SLEEP:
   case CanonicalOp::S_MONITOR_SLEEP:
-  case CanonicalOp::S_WAKEUP:
-    return RaiseFailure::atInstruction(RaiseFailureReason::UnsupportedOpcode,
-                                       strippedMnemonic(Ctx.MC, Di.Inst),
-                                       Di.Offset,
-                                       formatName(Di.TargetSpecificFlags));
+    return raiseSleep(Ctx, Di);
 
-  // Drop target-specific scheduling, instrumentation, cache-maintenance, and
-  // padding instructions; none changes program state represented in raised IR.
+  // None of these changes program state the raised IR represents. A wakeup
+  // releases a wave sleeping until an external event, and such a sleep does
+  // not raise, so no wave of a raised kernel is waiting for one.
   case CanonicalOp::S_NOP:
+  case CanonicalOp::S_WAKEUP:
   case CanonicalOp::S_CLAUSE:
   case CanonicalOp::S_DELAY_ALU:
   case CanonicalOp::S_CODE_END:
