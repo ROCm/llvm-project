@@ -64,23 +64,32 @@ find_library(CLANG_CPP clang-cpp HINTS ${LLVM_LIBRARY_DIR} ${LLVM_LIBRARY_DIR}/.
 GET_FILENAME_COMPONENT(CLANG_CPP_PATH "${CLANG_CPP}" PATH)
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/__init__.py
+<<<<<<< HEAD
                    DEPENDS ompdModule.c DLSymService.cpp ompdAPITests.c setup.py ompd/frame_filter.py ompd/__init__.py ompd/ompd_address_space.py ompd/ompd_callbacks.py ompd/ompd_handles.py ompd/ompd.py
 		    COMMAND ${CMAKE_COMMAND} -E env LIBOMP_INCLUDE_DIR=${LIBOMP_INCLUDE_DIR} LLVM_MAIN_INCLUDE_DIR=${LLVM_MAIN_INCLUDE_DIR} CLANG_CPP=${CLANG_CPP}
                    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py -v bdist_wheel -b ${CMAKE_CURRENT_BINARY_DIR}/build -d ${CMAKE_CURRENT_BINARY_DIR}
                    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py clean --all
                    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_SOURCE_DIR}/ompd.egg-info
                    COMMAND ${Python3_EXECUTABLE} -m pip install ${PYSYSFLAG} -U -t ${CMAKE_CURRENT_BINARY_DIR}/python-module --no-index --find-links=${CMAKE_CURRENT_BINARY_DIR} ompd
+=======
+                   DEPENDS ompdModule.c ompdDLService.c ompdAPITests.c ompd/frame_filter.py ompd/__init__.py ompd/ompd_address_space.py ompd/ompd_callbacks.py ompd/ompd_handles.py ompd/ompd.py
+                   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/ompd ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/
+>>>>>>> 14e941a0566a
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_custom_target(ompd_gdb_plugin ALL
                   DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/__init__.py
                   COMMENT "Building the OMPD GDB plugin")
 
+<<<<<<< HEAD
 add_library (ompdModule MODULE ompdModule.c ompdAPITests.c DLSymService.cpp)
 
 ## Include LLVM headers for DynamicLibrary support
 target_include_directories(ompdModule PRIVATE ${LLVM_INCLUDE_DIRS})
 
+=======
+add_library (ompdModule MODULE ompdModule.c ompdAPITests.c ompdDLService.c)
+>>>>>>> 14e941a0566a
 include_directories (
         ${LIBOMP_INCLUDE_DIR}
         ${LIBOMP_SRC_DIR}
