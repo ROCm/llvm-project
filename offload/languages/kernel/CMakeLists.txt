@@ -101,6 +101,7 @@ target_compile_definitions(LLVMOffloadKernel PRIVATE
 
 set_target_properties(LLVMOffloadKernel PROPERTIES
                       RUNTIME_OUTPUT_DIRECTORY "${LLVM_LIBRARY_OUTPUT_INTDIR}/${OFFLOAD_TARGET_SUBDIR}"
+                      LIBRARY_OUTPUT_DIRECTORY "${LLVM_LIBRARY_OUTPUT_INTDIR}/${OFFLOAD_TARGET_SUBDIR}"
                       POSITION_INDEPENDENT_CODE ON
                       INSTALL_RPATH "${OFFLOAD_INSTALL_RPATH}"
                       BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
