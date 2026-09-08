@@ -106,6 +106,7 @@ int main(int argc, char *argv[]) {
     amd_comgr_metadata_node_t Meta;
     Status = amd_comgr_get_isa_metadata(Name, &Meta);
     checkError(Status, "amd_comgr_get_isa_metadata");
+    checkMetadataString(Meta, "MaxFlatWorkGroupSize", "1024");
     int Indent = 1;
     Status = amd_comgr_iterate_map_metadata(Meta, printEntry, (void *)&Indent);
     checkError(Status, "amd_comgr_iterate_map_metadata");

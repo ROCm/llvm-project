@@ -292,10 +292,9 @@ llvm::Error getMetadataRoot(MemoryBufferRef MB, DataMeta *MetaP) {
 struct IsaInfo {
   const char *IsaName;
   const char *Processor;
-  unsigned MaxFlatWorkGroupSize;
 } IsaInfos[] = {
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE)         \
-  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE},
+#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR)                                   \
+  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR},
 #include "comgr-isa-metadata.def"
 };
 
@@ -535,7 +534,6 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
 
   Root["Features"] = FeaturesNode;
 
-  auto Info = IsaInfos[IsaIndex];
   Root["TrapHandlerEnabled"] =
       Doc.getNode(std::to_string(isTrapHandlerEnabled(Kind)), /*Copy=*/true);
   Root["ImageSupport"] = Doc.getNode(
@@ -548,8 +546,8 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   Root["EUsPerCU"] = Doc.getNode(std::to_string(EUsPerCU), /*Copy=*/true);
   Root["MaxWavesPerCU"] = Doc.getNode(
       std::to_string(AMDGPU::getMaxWavesPerEU(Kind) * EUsPerCU), /*Copy=*/true);
-  Root["MaxFlatWorkGroupSize"] =
-      Doc.getNode(std::to_string(Info.MaxFlatWorkGroupSize), /*Copy=*/true);
+  Root["MaxFlatWorkGroupSize"] = Doc.getNode(
+      std::to_string(AMDGPU::getMaxFlatWorkGroupSize()), /*Copy=*/true);
   Root["SGPRAllocGranule"] =
       Doc.getNode(std::to_string(AMDGPU::getSGPRAllocGranule(Kind)),
                   /*Copy=*/true);

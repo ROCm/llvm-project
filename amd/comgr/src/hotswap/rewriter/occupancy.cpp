@@ -42,10 +42,10 @@ getSubtargetOccupancyLimits(StringRef Processor) {
   unsigned VgprAllocGranule = AMDGPU::getVGPRAllocGranule(Kind, HasWave32);
   unsigned TotalNumVgprs = AMDGPU::getTotalNumVGPRs(Kind, HasWave32);
 
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE)         \
+#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR)                                   \
   if (Processor == PROCESSOR)                                                  \
     return SubtargetOccupancyLimits{                                           \
-        EUsPerCU,         MaxWavesPerCU, MAX_FLAT_WORK_GROUP_SIZE,             \
+        EUsPerCU,         MaxWavesPerCU, AMDGPU::getMaxFlatWorkGroupSize(),    \
         VgprAllocGranule, TotalNumVgprs, HasWave32};
 #include "comgr-isa-metadata.def"
 #undef HANDLE_ISA

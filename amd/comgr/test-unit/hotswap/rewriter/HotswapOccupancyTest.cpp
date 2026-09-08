@@ -91,7 +91,7 @@ TEST(HotswapOccupancy, LoadsGfx1250Limits) {
   EXPECT_TRUE(Limits->Wave64HalvesVgprCapacity);
 }
 
-TEST(HotswapOccupancy, LoadsTotalVgprCounts) {
+TEST(HotswapOccupancy, LoadsVgprAndWorkgroupLimits) {
   const struct {
     const char *Processor;
     unsigned TotalNumVgprs;
@@ -110,6 +110,11 @@ TEST(HotswapOccupancy, LoadsTotalVgprCounts) {
     ASSERT_TRUE(Limits.has_value());
     EXPECT_EQ(Limits->TotalNumVgprs, Case.TotalNumVgprs);
     EXPECT_EQ(Limits->Wave64HalvesVgprCapacity, Case.HasWave32);
+    EXPECT_EQ(Limits->MaxFlatWorkgroupSize, 1024u);
+    unsigned WavefrontSize = Case.HasWave32 ? 32 : 64;
+    EXPECT_TRUE(computeWorkgroupCapacity(1, 1024, WavefrontSize, *Limits));
+    EXPECT_EQ(computeWorkgroupCapacity(1, 1025, WavefrontSize, *Limits),
+              std::nullopt);
   }
 }
 
