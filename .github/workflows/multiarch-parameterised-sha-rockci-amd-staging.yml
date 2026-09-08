@@ -158,7 +158,8 @@ jobs:
       build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
       build_jax: false
       repository: "ROCm/TheRock"
-      ref: ${{ inputs.therock_ref || '' }} 
+      ref: ${{ inputs.therock_ref || '' }}
+      use_promoted_ref: true
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}

@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BASELINE_BRANCH: ${{ github.ref_name }}  
+  BASELINE_BRANCH: ${{ github.event_name == 'schedule' && 'amd-staging' || github.ref_name }}
   BASELINE_FILE: .github/rockci-sha/therock-ci-main-ref
   GPU_TARGET: gfx90a
 
@@ -111,8 +111,8 @@ jobs:
     needs: [resolve, rockci_sha_check]
     if: needs.resolve.outputs.validate == 'true' && needs.rockci_sha_check.result == 'success'
     runs-on:
-      group: compiler-generic-runners
-    timeout-minutes: 360
+      group: aws-linux-scale-rocm-large
+    timeout-minutes: 3600
     outputs:
       build_url: ${{ steps.jenkins.outputs.build_url }}
       result: ${{ steps.jenkins.outputs.result }}

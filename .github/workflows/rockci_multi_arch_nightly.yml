@@ -74,6 +74,7 @@ jobs:
       build_jax: false
       repository: "ROCm/TheRock"
       ref: ""        
+      use_promoted_ref: true
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}

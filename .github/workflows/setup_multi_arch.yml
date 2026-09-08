@@ -63,6 +63,13 @@ on:
         description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
         type: string
         default: ""
+      use_promoted_ref:
+        description: >-
+          When ref is empty, checkout the TheRock SHA promoted by the daily
+          validate-tip-sha gate instead of the triggering ref. Only the
+          amd-staging, parameterised, debug and nightly workflows opt in.
+        type: boolean
+        default: false
       external_repo:
         description: "JSON object with 'repository' (e.g., 'ROCm/rocm-libraries') and 'ref' fields for external repo builds."
         type: string
@@ -128,25 +135,21 @@ jobs:
     steps:
       - name: Resolve the requested or promoted repository ref
         id: effective_ref
+        if: inputs.use_promoted_ref && inputs.ref == ''          
         shell: bash
         env:
-          INPUT_REF: ${{ inputs.ref }}
-          REPOSITORY: ${{ inputs.repository }}
           LEGACY_THEROCK_REF: ${{ vars.THEROCK_CI_MAIN_REF }}
         run: |
           set -euo pipefail
-          REF="$INPUT_REF"
-          if [[ -z "$REF" && "$REPOSITORY" == "ROCm/TheRock" ]]; then
-            REF="$(curl -fsSL \
-              "https://raw.githubusercontent.com/ROCm/llvm-project/amd-staging/.github/rockci-sha/therock-ci-main-ref" \
-              2>/dev/null | tr -d '[:space:]' || true)"
-            if [[ ! "$REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
-              REF="$LEGACY_THEROCK_REF"
-            fi
-            if [[ ! "$REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
-              echo "::error::No valid promoted TheRock SHA exists in .github/rockci-sha/therock-ci-main-ref."
-              exit 1
-            fi
+          REF="$(curl -fsSL \
+            "https://raw.githubusercontent.com/ROCm/llvm-project/amd-staging/.github/rockci-sha/therock-ci-main-ref" \
+            2>/dev/null | tr -d '[:space:]' || true)"
+          if [[ ! "$REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            REF="$LEGACY_THEROCK_REF"
+          fi
+          if [[ ! "$REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::No valid promoted TheRock SHA exists in .github/rockci-sha/therock-ci-main-ref."
+            exit 1
           fi
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
       
@@ -155,7 +158,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: ${{ inputs.repository || github.repository }}
-          ref: ${{ steps.effective_ref.outputs.ref }}
+          ref: ${{ steps.effective_ref.outputs.ref || inputs.ref }}
           # We need the parent commit to do a diff
           fetch-depth: 2
 
