@@ -7222,8 +7222,7 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
   }
   case Intrinsic::fmuladd: {
     EVT VT = TLI.getValueType(DAG.getDataLayout(), I.getType());
-    if (TM.Options.AllowFPOpFusion != FPOpFusion::Strict &&
-        TLI.isFMAFasterThanFMulAndFAdd(DAG.getMachineFunction(), VT)) {
+    if (TLI.isFMAFasterThanFMulAndFAdd(DAG.getMachineFunction(), VT)) {
       setValue(&I, DAG.getNode(ISD::FMA, sdl,
                                getValue(I.getArgOperand(0)).getValueType(),
                                getValue(I.getArgOperand(0)),
@@ -8717,8 +8716,7 @@ void SelectionDAGBuilder::visitConstrainedFPIntrinsic(
   case Intrinsic::experimental_constrained_fmuladd: {
     Opcode = ISD::STRICT_FMA;
     // Break fmuladd into fmul and fadd.
-    if (TM.Options.AllowFPOpFusion == FPOpFusion::Strict ||
-        !TLI.isFMAFasterThanFMulAndFAdd(DAG.getMachineFunction(), VT)) {
+    if (!TLI.isFMAFasterThanFMulAndFAdd(DAG.getMachineFunction(), VT)) {
       Opers.pop_back();
       SDValue Mul = DAG.getNode(ISD::STRICT_FMUL, sdl, VTs, Opers, Flags);
       pushFPOpOutChain(Mul, EB);
