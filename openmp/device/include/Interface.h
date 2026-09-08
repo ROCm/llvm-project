@@ -219,7 +219,7 @@ uint32_t __kmpc_get_hardware_num_threads_in_block();
 /// External interface to get the warp size.
 uint32_t __kmpc_get_warp_size();
 
-/// External interface to get the maximum number of threads in a team.
+/// External interface to get how many of a block's threads a team can use.
 uint32_t __kmpc_get_max_team_threads(int32_t IsSPMD);
 
 /// Kernel
