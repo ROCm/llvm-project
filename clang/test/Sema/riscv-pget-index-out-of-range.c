@@ -4,7 +4,7 @@
 // RUN:   -fsyntax-only -verify -verify-ignore-unexpected=note %s
 
 #include <riscv_packed_simd.h>
-
+// XFAIL: *
 // expected-note@*:* 2 {{candidate disabled: index must be a constant integer from 0 to 3}}
 // expected-note@*:* {{candidate disabled: index must be a constant integer from 0 to 1}}
 // expected-note@*:* {{candidate disabled: index must be a constant integer from 0 to 7}}

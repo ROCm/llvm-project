@@ -6728,8 +6728,6 @@ def fno_gpu_flang_rt : Flag<["-"], "fno-gpu-flang-rt">, Visibility<[ClangOption,
 def nogpulibc : Flag<["-"], "nogpulibc">, Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>;
 def nodefaultlibs : Flag<["-"], "nodefaultlibs">,
   Visibility<[ClangOption, FlangOption]>;
-def nodefaultrtlibs : Flag<["-"], "nodefaultrtlibs">,
-  Visibility<[ClangOption]>;
 def nodriverkitlib : Flag<["-"], "nodriverkitlib">;
 def nofixprebinding : Flag<["-"], "nofixprebinding">;
 def nolibc : Flag<["-"], "nolibc">;
