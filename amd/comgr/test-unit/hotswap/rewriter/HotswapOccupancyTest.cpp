@@ -79,7 +79,7 @@ public:
 
 } // namespace
 
-TEST(HotswapOccupancy, LoadsGfx1250LimitsFromComgrIsaMetadata) {
+TEST(HotswapOccupancy, LoadsGfx1250Limits) {
   std::optional<SubtargetOccupancyLimits> Limits =
       getSubtargetOccupancyLimits("gfx1250");
   ASSERT_TRUE(Limits.has_value());
@@ -89,6 +89,28 @@ TEST(HotswapOccupancy, LoadsGfx1250LimitsFromComgrIsaMetadata) {
   EXPECT_EQ(Limits->VgprAllocGranule, 16u);
   EXPECT_EQ(Limits->TotalNumVgprs, 1024u);
   EXPECT_TRUE(Limits->Wave64HalvesVgprCapacity);
+}
+
+TEST(HotswapOccupancy, LoadsTotalVgprCounts) {
+  const struct {
+    const char *Processor;
+    unsigned TotalNumVgprs;
+    bool HasWave32;
+  } Cases[] = {
+      {"gfx600", 256, false},         {"gfx90a", 512, false},
+      {"gfx1030", 1024, true},        {"gfx1100", 1536, true},
+      {"gfx1102", 1024, true},        {"gfx1250-strict", 1024, true},
+      {"gfx9-4-generic", 512, false}, {"gfx11-generic", 1024, true},
+      {"gfx12-generic", 1536, true},  {"gfx12-5-generic", 1024, true},
+  };
+  for (const auto &Case : Cases) {
+    SCOPED_TRACE(Case.Processor);
+    std::optional<SubtargetOccupancyLimits> Limits =
+        getSubtargetOccupancyLimits(Case.Processor);
+    ASSERT_TRUE(Limits.has_value());
+    EXPECT_EQ(Limits->TotalNumVgprs, Case.TotalNumVgprs);
+    EXPECT_EQ(Limits->Wave64HalvesVgprCapacity, Case.HasWave32);
+  }
 }
 
 TEST(HotswapOccupancy, PreservesExactWave32WorkgroupBoundary) {

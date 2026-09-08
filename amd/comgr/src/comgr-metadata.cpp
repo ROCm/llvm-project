@@ -293,14 +293,9 @@ struct IsaInfo {
   const char *IsaName;
   const char *Processor;
   unsigned MaxFlatWorkGroupSize;
-  unsigned TotalNumVGPRs;
-  // TODO: Update this to AvailableNumVGPRs to be more accurate
-  unsigned AddressableNumVGPRs;
 } IsaInfos[] = {
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE,         \
-                   TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
-  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE,           \
-   TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS},
+#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE)         \
+  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE},
 #include "comgr-isa-metadata.def"
 };
 
@@ -562,16 +557,18 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
       std::to_string(AMDGPU::getTotalNumSGPRs(Kind)), /*Copy=*/true);
   Root["AddressableNumSGPRs"] = Doc.getNode(
       std::to_string(AMDGPU::getAddressableNumSGPRs(Kind)), /*Copy=*/true);
-  // The VGPR counts reported here are the wave32 values wherever wave32
-  // exists, so ask for the granule of the same mode.
+  // Report wave32 VGPR counts and allocation granularity wherever wave32
+  // exists.
   bool IsWave32 = Features.test(AMDGPU::FEAT_GFX10_INSTS);
   Root["VGPRAllocGranule"] =
       Doc.getNode(std::to_string(AMDGPU::getVGPRAllocGranule(Kind, IsWave32)),
                   /*Copy=*/true);
   Root["TotalNumVGPRs"] =
-      Doc.getNode(std::to_string(Info.TotalNumVGPRs), /*Copy=*/true);
-  Root["AddressableNumVGPRs"] =
-      Doc.getNode(std::to_string(Info.AddressableNumVGPRs), /*Copy=*/true);
+      Doc.getNode(std::to_string(AMDGPU::getTotalNumVGPRs(Kind, IsWave32)),
+                  /*Copy=*/true);
+  Root["AddressableNumVGPRs"] = Doc.getNode(
+      std::to_string(AMDGPU::getAddressableNumVGPRs(Kind, IsWave32)),
+      /*Copy=*/true);
   Root["LDSBankCount"] =
       Doc.getNode(std::to_string(AMDGPU::getLDSBankCount(Kind)), /*Copy=*/true);
 

@@ -44,6 +44,8 @@ int main(int argc, char *argv[]) {
   checkError(Status, "amd_comgr_get_isa_metadata");
   checkMetadataString(Gfx950Meta, "LocalMemorySize", "163840");
   checkMetadataString(Gfx950Meta, "LDSBankCount", "64");
+  checkMetadataString(Gfx950Meta, "TotalNumVGPRs", "512");
+  checkMetadataString(Gfx950Meta, "AddressableNumVGPRs", "512");
   // gfx950 has no image instructions.
   checkMetadataString(Gfx950Meta, "ImageSupport", "0");
   Status = amd_comgr_destroy_metadata(Gfx950Meta);
@@ -55,8 +57,38 @@ int main(int argc, char *argv[]) {
   checkError(Status, "amd_comgr_get_isa_metadata");
   checkMetadataString(Gfx600Meta, "LocalMemorySize", "32768");
   checkMetadataString(Gfx600Meta, "ImageSupport", "1");
+  checkMetadataString(Gfx600Meta, "TotalNumVGPRs", "256");
+  checkMetadataString(Gfx600Meta, "AddressableNumVGPRs", "256");
   Status = amd_comgr_destroy_metadata(Gfx600Meta);
   checkError(Status, "amd_comgr_destroy_metadata");
+
+  // VGPR counts use wave32 where supported, including generic and strict ISAs.
+  const struct {
+    const char *IsaName;
+    const char *Total;
+    const char *Addressable;
+  } VGPRCounts[] = {
+      {"amdgcn-amd-amdhsa--gfx900", "256", "256"},
+      {"amdgcn-amd-amdhsa--gfx90a", "512", "512"},
+      {"amdgcn-amd-amdhsa--gfx1030", "1024", "256"},
+      {"amdgcn-amd-amdhsa--gfx1100", "1536", "256"},
+      {"amdgcn-amd-amdhsa--gfx1102", "1024", "256"},
+      {"amdgcn-amd-amdhsa--gfx1250", "1024", "1024"},
+      {"amdgcn-amd-amdhsa--gfx1250-strict", "1024", "1024"},
+      {"amdgcn-amd-amdhsa--gfx9-4-generic", "512", "512"},
+      {"amdgcn-amd-amdhsa--gfx11-generic", "1024", "256"},
+      {"amdgcn-amd-amdhsa--gfx12-generic", "1536", "256"},
+      {"amdgcn-amd-amdhsa--gfx12-5-generic", "1024", "1024"},
+  };
+  for (size_t I = 0; I < sizeof(VGPRCounts) / sizeof(VGPRCounts[0]); ++I) {
+    amd_comgr_metadata_node_t Meta;
+    Status = amd_comgr_get_isa_metadata(VGPRCounts[I].IsaName, &Meta);
+    checkError(Status, "amd_comgr_get_isa_metadata");
+    checkMetadataString(Meta, "TotalNumVGPRs", VGPRCounts[I].Total);
+    checkMetadataString(Meta, "AddressableNumVGPRs", VGPRCounts[I].Addressable);
+    Status = amd_comgr_destroy_metadata(Meta);
+    checkError(Status, "amd_comgr_destroy_metadata");
+  }
 
   // how many isa_names do we support?
   size_t IsaCounts;
