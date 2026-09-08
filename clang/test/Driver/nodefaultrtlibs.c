@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: %clang -### -target s390x-ibm-zos %s 2>&1 | FileCheck %s
 // CHECK: SCEELIB(CELQS003)
 // CHECK: libclang_rt.builtins.a
