@@ -78,7 +78,7 @@ jobs:
       build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
       build_jax: false
       repository: "ROCm/TheRock"
-      ref: ${{ vars.THEROCK_CI_MAIN_REF || '' }}        
+      ref: ""        
 
   windows_build_and_test:
     name: Windows::${{ fromJSON(needs.setup.outputs.windows_build_config || '{}').build_variant_label || 'skip' }}
@@ -133,4 +133,4 @@ jobs:
             exit 1
           else
             echo "All required jobs succeeded (continue-on-error jobs ignored)."
-          fi        
+          fi 

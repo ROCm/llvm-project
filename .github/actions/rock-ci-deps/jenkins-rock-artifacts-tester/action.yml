@@ -1,0 +1,73 @@
+name: Jenkins rock-artifacts-tester
+description: Trigger the Jenkins artifact tester and wait for SUCCESS.
+
+inputs:
+  jenkins_host:
+    description: Jenkins base URL.
+    required: true
+  jenkins_user:
+    description: Jenkins user for basic authentication.
+    required: true
+  jenkins_token:
+    description: Jenkins API token.
+    required: true
+  jenkins_job:
+    description: Jenkins job name.
+    required: false
+    default: rock-artifacts-tester
+  artifacts_run_id:
+    description: GitHub Actions run containing the artifacts.
+    required: true
+  gpu_target:
+    description: GPU target used by the tester.
+    required: false
+    default: gfx90a
+  poll_interval_seconds:
+    description: Seconds between Jenkins polls.
+    required: false
+    default: "60"
+  timeout_minutes:
+    description: Maximum Jenkins queue and build wait.
+    required: false
+    default: "300"
+
+outputs:
+  build_url:
+    description: Jenkins build URL.
+    value: ${{ steps.collect.outputs.build_url }}
+  result:
+    description: Jenkins result.
+    value: ${{ steps.collect.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Trigger and wait for Jenkins
+      shell: bash
+      env:
+        JENKINS_HOST: ${{ inputs.jenkins_host }}
+        JENKINS_USER: ${{ inputs.jenkins_user }}
+        JENKINS_TOKEN: ${{ inputs.jenkins_token }}
+        JENKINS_JOB: ${{ inputs.jenkins_job }}
+        ARTIFACTS_RUN_ID: ${{ inputs.artifacts_run_id }}
+        GPU_TARGET: ${{ inputs.gpu_target }}
+        POLL_INTERVAL_SECONDS: ${{ inputs.poll_interval_seconds }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+        JENKINS_OUTPUT_FILE: ${{ runner.temp }}/jenkins-result.env
+      run: |
+        set -euo pipefail
+        rm -f "$JENKINS_OUTPUT_FILE"
+        python3 -m pip install --user -q requests
+        python3 "${GITHUB_ACTION_PATH}/trigger_and_wait.py"
+
+    - name: Collect Jenkins outputs
+      id: collect
+      if: always()
+      shell: bash
+      env:
+        RESULT_FILE: ${{ runner.temp }}/jenkins-result.env
+      run: |
+        set -euo pipefail
+        if [[ -f "$RESULT_FILE" ]]; then
+          cat "$RESULT_FILE" >> "$GITHUB_OUTPUT"
+        fi
