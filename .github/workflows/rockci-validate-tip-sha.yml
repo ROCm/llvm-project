@@ -371,3 +371,87 @@ jobs:
             echo "Validation run: ${RUN_URL}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  notify:
+    name: Notify Teams
+    needs: [dispatch, build, jenkins, promote]
+    if: always() && github.repository == 'ROCm/llvm-project'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Post result to the Teams channel
+        continue-on-error: true
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.ROCM_SHA_NOTIFIER }}
+          VALIDATE: ${{ needs.dispatch.outputs.validate }}
+          THEROCK_SHA: ${{ needs.dispatch.outputs.sha }}
+          ROCKCI_RUN_URL: ${{ needs.dispatch.outputs.run_url }}
+          DISPATCH_RESULT: ${{ needs.dispatch.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          JENKINS_RESULT: ${{ needs.jenkins.result }}
+          PROMOTE_RESULT: ${{ needs.promote.result }}
+          GATE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${TEAMS_WEBHOOK_URL:-}" ]]; then
+            echo "ROCM_SHA_NOTIFIER is not set; skipping Teams notify."
+            exit 0
+          fi
+
+          if [[ "$PROMOTE_RESULT" == "success" ]]; then
+            STATUS="promoted"
+            ICON="✅"
+          elif [[ "$VALIDATE" == "false" ]]; then
+            STATUS="skipped (already promoted)"
+            ICON="⏭️"
+          elif [[ "$BUILD_RESULT" == "failure" || "$JENKINS_RESULT" == "failure" || "$DISPATCH_RESULT" == "failure" ]]; then
+            STATUS="failed"
+            ICON="❌"
+          else
+            STATUS="incomplete (${DISPATCH_RESULT}/${BUILD_RESULT}/${JENKINS_RESULT}/${PROMOTE_RESULT})"
+            ICON="⚠️"
+          fi
+          export STATUS ICON
+
+          python3 - <<'PY'
+          import json, os, urllib.request
+
+          status = os.environ["STATUS"]
+          icon = os.environ["ICON"]
+          title = f"{icon} TheRock baseline gate: {status}"
+          rockci = os.environ.get("ROCKCI_RUN_URL") or ""
+          payload = {
+              "type": "message",
+              "summary": title,
+              "attachments": [{
+                  "contentType": "application/vnd.microsoft.card.adaptive",
+                  "contentUrl": None,
+                  "content": {
+                      "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                      "type": "AdaptiveCard",
+                      "version": "1.5",
+                      "msteams": {"width": "Full"},
+                      "body": [
+                          {"type": "TextBlock", "text": title, "weight": "Bolder", "size": "Large", "wrap": True},
+                          {"type": "FactSet", "facts": [
+                              {"title": "Repository", "value": os.environ["GITHUB_REPOSITORY"]},
+                              {"title": "TheRock SHA", "value": os.environ.get("THEROCK_SHA") or "n/a"},
+                              {"title": "Dispatch", "value": os.environ["DISPATCH_RESULT"]},
+                              {"title": "RockCI", "value": os.environ["BUILD_RESULT"]},
+                              {"title": "Jenkins", "value": os.environ["JENKINS_RESULT"]},
+                              {"title": "Promote", "value": os.environ["PROMOTE_RESULT"]},
+                          ]},
+                          {"type": "TextBlock", "text": f"[Gate run]({os.environ['GATE_RUN_URL']})", "wrap": True},
+                          {"type": "TextBlock", "text": f"[RockCI run]({rockci})" if rockci else "RockCI was not dispatched.", "wrap": True},
+                      ],
+                  },
+              }],
+          }
+          req = urllib.request.Request(
+              os.environ["TEAMS_WEBHOOK_URL"],
+              data=json.dumps(payload).encode(),
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=60) as resp:
+              print(f"Teams webhook HTTP {resp.status}")
+          PY
