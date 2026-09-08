@@ -68,6 +68,53 @@ on:
         type: boolean
         default: true
         description: "Build PyTorch wheels"
+      therock_ref:
+        type: string
+        default: ""
+        description: "TheRock commit SHA to build. Empty uses the promoted baseline."
+
+  workflow_call:
+    inputs:
+      LLVM_PR_URL:
+        type: string
+        default: ""
+      LLVM_ROCm_PR_URL:
+        type: string
+        default: ""
+      SPIRV_PR_URL:
+        type: string
+        default: ""
+      HIPIFY_PR_URL:
+        type: string
+        default: ""
+      linux_amdgpu_families:
+        type: string
+        default: "gfx94x,gfx110x,gfx90a"
+      linux_test_labels:
+        type: string
+        default: ""
+      windows_amdgpu_families:
+        type: string
+        default: "gfx1151"
+      windows_test_labels:
+        type: string
+        default: ""
+      prebuilt_stages:
+        type: string
+        default: ""
+      baseline_run_id:
+        type: string
+        default: ""
+      changed_projects:
+        type: string
+        default: ""
+      build_pytorch:
+        type: boolean
+        default: true
+      therock_ref:
+        description: "TheRock commit SHA to build."
+        type: string
+        required: true          
 
 permissions:
   contents: read
@@ -87,10 +134,10 @@ jobs:
       - name: Store LLVM, HIPIFY and SPIRV PR URLs into file
         run: |
           cat > ${{ github.run_id }}_PR_params.env <<'EOF'
-          LLVM_PR_URL=${{ github.event.inputs.LLVM_PR_URL }}
-          LLVM_ROCm_PR_URL=${{ github.event.inputs.LLVM_ROCm_PR_URL }}
-          SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
-          HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
+          LLVM_PR_URL=${{ inputs.LLVM_PR_URL }}
+          LLVM_ROCm_PR_URL=${{ inputs.LLVM_ROCm_PR_URL }}
+          SPIRV_PR_URL=${{ inputs.SPIRV_PR_URL }}
+          HIPIFY_PR_URL=${{ inputs.HIPIFY_PR_URL }}          
           EOF
 
       - name: Upload stored file of PR URls
@@ -102,8 +149,8 @@ jobs:
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"
-      linux_amdgpu_families: ${{ github.event.inputs.linux_amdgpu_families }}
-      windows_amdgpu_families: ${{ github.event.inputs.windows_amdgpu_families }}              
+      linux_amdgpu_families: ${{ inputs.linux_amdgpu_families }}
+      windows_amdgpu_families: ${{ inputs.windows_amdgpu_families }}
       linux_test_labels: ${{ inputs.linux_test_labels || '' }}
       windows_test_labels: ${{ inputs.windows_test_labels || '' }}
       prebuilt_stages: ${{ inputs.prebuilt_stages || '' }}
@@ -111,7 +158,7 @@ jobs:
       build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
       build_jax: false
       repository: "ROCm/TheRock"
-      ref: "" 
+      ref: ${{ inputs.therock_ref || '' }} 
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
