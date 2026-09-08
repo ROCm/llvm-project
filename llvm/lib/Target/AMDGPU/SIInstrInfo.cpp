@@ -8055,9 +8055,7 @@ void SIInstrInfo::legalizeOperandsVALUt16(MachineInstr &MI, unsigned OpIdx,
   unsigned Opcode = MI.getOpcode();
   MachineBasicBlock *MBB = MI.getParent();
   // Legalize operands and check for size mismatch
-  if (OpIdx >= MI.getNumExplicitOperands() ||
-      OpIdx >= get(Opcode).getNumOperands() ||
-      get(Opcode).operands()[OpIdx].RegClass == -1)
+  if (OpIdx >= MI.getNumExplicitOperands())
     return;
 
   MachineOperand &Op = MI.getOperand(OpIdx);
@@ -8068,8 +8066,17 @@ void SIInstrInfo::legalizeOperandsVALUt16(MachineInstr &MI, unsigned OpIdx,
   if (!RI.isVGPRClass(CurrRC))
     return;
 
-  int16_t RCID = getOpRegClassID(get(Opcode).operands()[OpIdx]);
-  const TargetRegisterClass *ExpectedRC = RI.getRegClass(RCID);
+  // A PHI is generic, so it carries no operand register classes. Each incoming
+  // value has to supply the whole definition.
+  const TargetRegisterClass *ExpectedRC;
+  if (MI.isPHI()) {
+    ExpectedRC = MRI.getRegClass(MI.getOperand(0).getReg());
+  } else {
+    if (OpIdx >= get(Opcode).getNumOperands() ||
+        get(Opcode).operands()[OpIdx].RegClass == -1)
+      return;
+    ExpectedRC = RI.getRegClass(getOpRegClassID(get(Opcode).operands()[OpIdx]));
+  }
   if (RI.getMatchingSuperRegClass(CurrRC, ExpectedRC, AMDGPU::lo16)) {
     // Default to the lo16 only if the subregister is not specified.
     if (Op.getSubReg() == AMDGPU::NoSubRegister)
@@ -8081,10 +8088,17 @@ void SIInstrInfo::legalizeOperandsVALUt16(MachineInstr &MI, unsigned OpIdx,
       RI.getSubRegisterClass(CurrRC, Op.getSubReg());
   if (RI.getMatchingSuperRegClass(ExpectedRC, CurrSRC, AMDGPU::lo16)) {
     const DebugLoc &DL = MI.getDebugLoc();
+    // An incoming value has to be built in the block it comes from, which is
+    // also the only place it is known to be live.
+    MachineBasicBlock::iterator InsertPt = MI;
+    if (MI.isPHI()) {
+      MBB = MI.getOperand(OpIdx + 1).getMBB();
+      InsertPt = MBB->getFirstTerminator();
+    }
     Register NewDstReg = MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass);
     Register Undef = MRI.createVirtualRegister(&AMDGPU::VGPR_16RegClass);
-    BuildMI(*MBB, MI, DL, get(AMDGPU::IMPLICIT_DEF), Undef);
-    BuildMI(*MBB, MI, DL, get(AMDGPU::REG_SEQUENCE), NewDstReg)
+    BuildMI(*MBB, InsertPt, DL, get(AMDGPU::IMPLICIT_DEF), Undef);
+    BuildMI(*MBB, InsertPt, DL, get(AMDGPU::REG_SEQUENCE), NewDstReg)
         .addReg(Op.getReg(), {}, Op.getSubReg())
         .addImm(AMDGPU::lo16)
         .addReg(Undef)
