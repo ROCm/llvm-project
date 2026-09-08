@@ -9162,9 +9162,6 @@ void CodeGenModule::emitNxResult(std::string StatusMsg,
   case NxNoRedVar:
     StatusMsg += "No reduction variable found";
     break;
-  case NxMultRedVar:
-    StatusMsg += "Multiple reduction variables in the same loop not supported";
-    break;
   case NxUnsupportedRedExpr:
     StatusMsg += "Unsupported reduction expression found";
     break;

@@ -477,13 +477,6 @@ __OMP_RTL(__tgt_push_mapper_component, false, Void, VoidPtr, VoidPtr, VoidPtr,
 __OMP_RTL(__kmpc_task_allow_completion_event, false, VoidPtr, IdentPtr,
           /* Int */ Int32, /* kmp_task_t */ VoidPtr)
 
-__OMP_RTL(omp_target_alloc, false, VoidPtr, Int64, Int32)
-__OMP_RTL(omp_target_free, false, Void, VoidPtr, Int32)
-__OMP_RTL(omp_target_memcpy, false, Int32, VoidPtr, VoidPtr, Int64, Int64, Int64, Int32, Int32)
-__OMP_RTL(ompx_get_team_procs, false, Int32, Int32)
-__OMP_RTL(omp_get_initial_device, false, Int32,)
-__OMP_RTL(omp_get_default_device, false, Int32,)
-
 /// OpenMP Device runtime functions
 __OMP_RTL(__kmpc_target_init, false, Int32, KernelEnvironmentPtr, KernelLaunchEnvironmentPtr)
 __OMP_RTL(__kmpc_target_deinit, false, Void,)
@@ -1043,12 +1036,6 @@ __OMP_RTL_ATTRS(__kmpc_doacross_wait, BarrierAttrs, AttributeSet(),
 __OMP_RTL_ATTRS(__kmpc_doacross_fini, BarrierAttrs, AttributeSet(),
                 ParamAttrs(ReadOnlyPtrAttrs, SExt))
 
-__OMP_RTL_ATTRS(omp_target_alloc, AttributeSet(), AttributeSet(), ParamAttrs())
-__OMP_RTL_ATTRS(omp_target_free, AttributeSet(), AttributeSet(), ParamAttrs())
-__OMP_RTL_ATTRS(omp_target_memcpy, AttributeSet(), AttributeSet(), ParamAttrs())
-__OMP_RTL_ATTRS(ompx_get_team_procs, AttributeSet(), AttributeSet(), ParamAttrs())
-__OMP_RTL_ATTRS(omp_get_initial_device, AttributeSet(), AttributeSet(), ParamAttrs())
-__OMP_RTL_ATTRS(omp_get_default_device, AttributeSet(), AttributeSet(), ParamAttrs())
 __OMP_RTL_ATTRS(__kmpc_alloc_shared,
                 AttributeSet(EnumAttr(NoUnwind), EnumAttr(NoSync),
                              AllocSizeAttr(0, std::nullopt),
