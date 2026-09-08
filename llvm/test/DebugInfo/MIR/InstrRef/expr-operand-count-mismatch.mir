@@ -1,11 +1,8 @@
 # RUN: llc %s -o - -experimental-debug-variable-locations=true \
 # RUN:     -run-pass=livedebugvalues | FileCheck %s
 #
-## A poisoned expression (DW_OP_LLVM_poisoned) is a single uniqued node that
-## stands in for any DIOp expression that a pass did not understand, no matter
-## how many location operands that expression had. Two debug values for the
-## same variable can therefore carry identical expressions while having
-## different numbers of location operands.
+## Two debug values for the same variable can carry identical expressions
+## while having different numbers of location operands.
 ##
 ## LiveDebugValues joins values by pairing their location operands up by index,
 ## and used to decide two values were joinable by comparing expressions alone.
@@ -16,11 +13,11 @@
 # CHECK: ![[VAR:[0-9]+]] = !DILocalVariable(name: "x"
 #
 # CHECK-LABEL: bb.0.entry:
-# CHECK:       DBG_VALUE_LIST ![[VAR]], !DIExpression(DW_OP_LLVM_poisoned), $noreg, $noreg, debug-location
+# CHECK:       DBG_VALUE_LIST ![[VAR]], !DIExpression(), $noreg, $noreg, debug-location
 #
 # CHECK-LABEL: bb.1.then:
-# CHECK:       DBG_VALUE_LIST ![[VAR]], !DIExpression(DW_OP_LLVM_poisoned), $edi, $edi, debug-location
-# CHECK:       DBG_VALUE_LIST ![[VAR]], !DIExpression(DW_OP_LLVM_poisoned), $edi, debug-location
+# CHECK:       DBG_VALUE_LIST ![[VAR]], !DIExpression(), $edi, $edi, debug-location
+# CHECK:       DBG_VALUE_LIST ![[VAR]], !DIExpression(), $edi, debug-location
 #
 # CHECK-LABEL: bb.2.exit:
 # CHECK-NOT:   DBG_VALUE
@@ -32,11 +29,11 @@
   define i32 @f(i32 %a, i1 %c) !dbg !4 {
   entry:
     %v = add i32 %a, 1, !dbg !7
-      #dbg_value(!DIArgList(i32 %v, i32 %v), !8, !DIExpression(DW_OP_LLVM_poisoned), !7)
+      #dbg_value(!DIArgList(i32 %v, i32 %v), !8, !DIExpression(), !7)
     br i1 %c, label %exit, label %then
 
   then:                                             ; preds = %entry
-      #dbg_value(i32 %v, !8, !DIExpression(DW_OP_LLVM_poisoned), !7)
+      #dbg_value(i32 %v, !8, !DIExpression(), !7)
     %t = mul i32 %v, 3, !dbg !7
     br label %exit
 
@@ -74,7 +71,7 @@ body:             |
     liveins: $edi, $esi
 
     renamable $edi = KILL $edi, implicit-def $rdi
-    DBG_INSTR_REF !8, !DIExpression(DW_OP_LLVM_poisoned), dbg-instr-ref(1, 0), dbg-instr-ref(1, 0), debug-location !7
+    DBG_INSTR_REF !8, !DIExpression(), dbg-instr-ref(1, 0), dbg-instr-ref(1, 0), debug-location !7
     renamable $eax = XOR32rr undef $eax, undef $eax, implicit-def dead $eflags
     TEST8ri renamable $sil, 1, implicit-def $eflags, implicit killed $esi
     JCC_1 %bb.2, 5, implicit $eflags
@@ -84,7 +81,7 @@ body:             |
     liveins: $rdi
 
     renamable $edi = INC32r renamable $edi, implicit-def dead $eflags, implicit killed $rdi, implicit-def $rdi, debug-instr-number 1, debug-location !7
-    DBG_INSTR_REF !8, !DIExpression(DW_OP_LLVM_poisoned), dbg-instr-ref(1, 0), debug-location !7
+    DBG_INSTR_REF !8, !DIExpression(), dbg-instr-ref(1, 0), debug-location !7
     renamable $eax = LEA64_32r killed renamable $rdi, 2, renamable $rdi, 0, $noreg, debug-location !7
 
   bb.2.exit:

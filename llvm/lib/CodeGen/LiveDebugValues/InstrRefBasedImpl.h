@@ -319,10 +319,10 @@ public:
   }
 
   bool isJoinable(const DbgValueProperties &Other) const {
-    // When joining values the operand counts must agree. And equal expressions
-    // do not imply equal counts, as a poisoned expression (DW_OP_LLVM_poisoned)
-    // is a single uniqued node that stands in for any DIOp expression,
-    // regardless of how many location operands that expression had.
+    // Joining pairs location operands by index, so the operand counts must
+    // agree. Equal expressions do not imply equal counts, because the same
+    // DIExpression can appear on MachineInstrs with different numbers of
+    // debug operands.
     if (NumLocOps != Other.NumLocOps)
       return false;
     return DIExpression::isEqualExpression(DIExpr, Indirect, Other.DIExpr,
