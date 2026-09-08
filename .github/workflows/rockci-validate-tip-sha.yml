@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BASELINE_BRANCH: amd-staging
+  BASELINE_BRANCH: ${{ github.ref_name }}  
   BASELINE_FILE: .github/rockci-sha/therock-ci-main-ref
   GPU_TARGET: gfx90a
 
@@ -63,7 +63,11 @@ jobs:
             exit 1
           fi
 
-          BASELINE="$(tr -d '[:space:]' < "$BASELINE_FILE")"
+          BASELINE=""
+          if [[ -f "$BASELINE_FILE" ]]; then
+            BASELINE="$(tr -d '[:space:]' < "$BASELINE_FILE")"
+          fi
+
           if [[ ! "$BASELINE" =~ ^[0-9a-f]{40}$ ]]; then
             BASELINE=""
           fi
@@ -133,7 +137,7 @@ jobs:
     needs: [resolve, rockci_sha_check, jenkins]
     if: >-
       needs.resolve.outputs.validate == 'true' &&
-      needs.rockci.result == 'success' &&
+      needs.rockci_sha_check.result == 'success' &&
       needs.jenkins.result == 'success'
     runs-on: ubuntu-24.04
     steps:
@@ -162,7 +166,11 @@ jobs:
           set -euo pipefail
           git pull --ff-only origin "$BASELINE_BRANCH"
 
-          CURRENT="$(tr -d '[:space:]' < "$BASELINE_FILE")"
+          CURRENT=""
+          if [[ -f "$BASELINE_FILE" ]]; then
+            CURRENT="$(tr -d '[:space:]' < "$BASELINE_FILE")"
+          fi
+
           if [[ ! "$CURRENT" =~ ^[0-9a-f]{40}$ ]]; then
             CURRENT=""
           fi
@@ -171,6 +179,7 @@ jobs:
             exit 1
           fi
 
+          mkdir -p "$(dirname "$BASELINE_FILE")"          
           printf '%s\n' "$THEROCK_SHA" > "$BASELINE_FILE"
           git add "$BASELINE_FILE"
           if git diff --cached --quiet; then
@@ -196,7 +205,7 @@ jobs:
           VALIDATE: ${{ needs.resolve.outputs.validate }}
           THEROCK_SHA: ${{ needs.resolve.outputs.sha }}
           RESOLVE_RESULT: ${{ needs.resolve.result }}
-          ROCKCI_RESULT: ${{ needs.rockci_sha.result }}
+          ROCKCI_RESULT: ${{ needs.rockci_sha_check.result }}
           JENKINS_RESULT: ${{ needs.jenkins.result }}
           JENKINS_URL: ${{ needs.jenkins.outputs.build_url }}
           PROMOTE_RESULT: ${{ needs.promote.result }}
