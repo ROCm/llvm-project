@@ -225,6 +225,7 @@ jobs:
 
       - name: Run build tests (Comgr, blocking)
         if: ${{ !cancelled() && inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         env:
           TEATIME_FORCE_INTERACTIVE: 1
         run: |
