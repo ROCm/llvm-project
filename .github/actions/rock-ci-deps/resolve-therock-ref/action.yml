@@ -1,0 +1,55 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+name: Resolve TheRock ref
+description: >-
+  Reads the promoted TheRock SHA from the checked-in RockCI config JSON in
+  ROCm/llvm-project. Pull request checks read the JSON from the synthetic
+  merge commit so a generated update PR validates its own proposed SHA;
+  every other event reads the JSON that last merged to amd-staging.
+
+inputs:
+  config_repository:
+    description: "Repository holding the RockCI config JSON."
+    required: false
+    default: ROCm/llvm-project
+  config_path:
+    description: "Path to the RockCI config JSON inside config_repository."
+    required: false
+    default: .github/rockci-sha/therock-ci-main-ref.json
+  config_ref:
+    description: >-
+      Ref to read the JSON from. Empty resolves to the merge commit on
+      pull_request events and to amd-staging otherwise.
+    required: false
+    default: ""
+  github_token:
+    description: >-
+      Token used to read the JSON through the GitHub contents API. Needs
+      contents:read on config_repository.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  ref:
+    description: Full 40-character TheRock commit SHA, lowercased.
+    value: ${{ steps.resolve.outputs.ref }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read TheRock ref from RockCI config
+      id: resolve
+      shell: bash
+      env:
+        CONFIG_REPOSITORY: ${{ inputs.config_repository }}
+        CONFIG_PATH: ${{ inputs.config_path }}
+        CONFIG_REF: >-
+          ${{
+            inputs.config_ref ||
+            (github.event_name == 'pull_request' && github.sha) ||
+            'amd-staging'
+          }}
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: python3 "${{ github.action_path }}/resolve_therock_ref.py"
+
