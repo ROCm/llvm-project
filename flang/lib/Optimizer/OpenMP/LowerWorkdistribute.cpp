@@ -24,7 +24,9 @@
 #include "flang/Optimizer/Dialect/FIRDialect.h"
 #include "flang/Optimizer/Dialect/FIROps.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
+#include "flang/Optimizer/OpenMP/Passes.h"
 #include "flang/Optimizer/Transforms/Passes.h"
+#include "flang/Utils/OpenMP.h"
 #include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/IR/Builders.h"
@@ -718,6 +720,14 @@ FailureOr<omp::TargetOp> splitTargetData(omp::TargetOp targetOp,
     auto mapInfo = cast<omp::MapInfoOp>(opr.getDefiningOp());
     mapInfos.push_back(mapInfo);
   }
+
+  // A data region only hosts ByRef maps. With only ByCopy maps (e.g. scalar
+  // live-ins) there is nothing to move; leave the target as-is and let the
+  // caller skip fission by returning a null TargetOp.
+  if (llvm::none_of(mapInfos, [](omp::MapInfoOp mi) {
+        return mi.getMapCaptureType() == mlir::omp::VariableCaptureKind::ByRef;
+      }))
+    return omp::TargetOp{};
 
   rewriter.setInsertionPoint(targetOp);
   SmallVector<Value> innerMapInfos;
@@ -1445,8 +1455,11 @@ static void computeAllocsCacheRecomputable(
     SetVector<Operation *> &toRecompute) {
   auto *targetBlock = &targetOp.getRegion().front();
   // Find all values that are used outside the split point.
+  llvm::DenseMap<Operation *, unsigned> blockPos;
+  unsigned pos = 0;
   for (auto it = targetBlock->begin(); it != splitBeforeOp->getIterator();
        it++) {
+    blockPos.try_emplace(&*it, pos++);
     // Check if any of the results are used outside the split point.
     for (auto res : it->getResults()) {
       if (usedOutsideSplit(res, splitBeforeOp)) {
@@ -1462,6 +1475,18 @@ static void computeAllocsCacheRecomputable(
   for (auto requiredVal : requiredVals)
     collectNonRecomputableDeps(requiredVal, targetOp, nonRecomputable, toCache,
                                toRecompute);
+  // Sort by block position, not dependency-walk order: each cached value
+  // becomes a map entry, and the host marshals a kernarg buffer the device
+  // kernel reads positionally, so a permutation between the modules swaps
+  // arguments.
+  {
+    SmallVector<Operation *> ordered(toCache.begin(), toCache.end());
+    llvm::stable_sort(ordered, [&](Operation *a, Operation *b) {
+      return blockPos.lookup(a) < blockPos.lookup(b);
+    });
+    toCache.clear();
+    toCache.insert(ordered.begin(), ordered.end());
+  }
   // For each op in toCache, create an alloc and update the pre and post map
   // operands.
   for (Operation *op : toCache) {
@@ -1807,15 +1832,322 @@ static LogicalResult fissionTarget(omp::TargetOp targetOp,
   return success();
 }
 
+/// Outermost `fir.do_loop unordered` (array-statement shape) not already
+/// inside an OpenMP region.
+static bool isImplicitCandidate(fir::DoLoopOp loop) {
+  if (!loop.getUnordered())
+    return false;
+  // Results/reductions aren't pure array-syntax; they'd break the wrap.
+  if (loop->getNumResults() != 0)
+    return false;
+  if (!loop.getReduceOperands().empty())
+    return false;
+  // Honor user-written OpenMP regions as-is.
+  for (mlir::Operation *p = loop->getParentOp(); p; p = p->getParentOp())
+    if (mlir::isa_and_nonnull<mlir::omp::OpenMPDialect>(p->getDialect()))
+      return false;
+  // Only the outermost loop is a wrap point; inner loops ride along.
+  if (loop->getParentOfType<fir::DoLoopOp>())
+    return false;
+  return true;
+}
+
+/// Move `loop` into a new `omp.teams { omp.workdistribute { loop } }`.
+/// Shared by host and device wrappers; diagnostics live in the callers.
+static void wrapLoopInTeamsWorkdistribute(fir::DoLoopOp loop) {
+  mlir::OpBuilder b(loop);
+  mlir::Location loc = loop.getLoc();
+
+  mlir::omp::TeamsOperands teamsOps;
+  auto teamsOp = mlir::omp::TeamsOp::create(b, loc, teamsOps);
+  mlir::Block *teamsBlock = b.createBlock(&teamsOp.getRegion());
+
+  b.setInsertionPointToStart(teamsBlock);
+  auto wdOp = mlir::omp::WorkdistributeOp::create(b, loc);
+  mlir::Block *wdBlock = b.createBlock(&wdOp.getRegion());
+
+  loop->moveBefore(wdBlock, wdBlock->end());
+
+  b.setInsertionPointToEnd(wdBlock);
+  mlir::omp::TerminatorOp::create(b, loc);
+  b.setInsertionPointToEnd(teamsBlock);
+  mlir::omp::TerminatorOp::create(b, loc);
+}
+
+/// Host shape: wrap in `omp.teams { omp.workdistribute { loop } }`, no
+/// `omp.target`. The rest of this pass lowers it to the full nest.
+static void wrapImplicitCandidateForHost(fir::DoLoopOp loop) {
+  loop->emitRemark() << "implicit-workdistribute: wrapped array loop in "
+                        "`omp.teams { omp.workdistribute { ... } }`";
+  wrapLoopInTeamsWorkdistribute(loop);
+}
+
+/// Wrap every host candidate. Gather first to avoid mutating during walk.
+static void wrapImplicitCandidatesForHost(mlir::ModuleOp moduleOp) {
+  llvm::SmallVector<fir::DoLoopOp> candidates;
+  moduleOp.walk([&](fir::DoLoopOp loop) {
+    if (isImplicitCandidate(loop))
+      candidates.push_back(loop);
+  });
+  for (fir::DoLoopOp loop : candidates)
+    wrapImplicitCandidateForHost(loop);
+}
+
+/// One singleton group (one `omp.target`) per candidate loop. Grouping
+/// siblings is unused: the temp+Assign+freemem gap is never effect-free.
+static llvm::SmallVector<llvm::SmallVector<fir::DoLoopOp>>
+collectImplicitCandidateGroups(mlir::ModuleOp moduleOp) {
+  llvm::SmallVector<llvm::SmallVector<fir::DoLoopOp>> groups;
+  moduleOp.walk([&](fir::DoLoopOp loop) {
+    if (isImplicitCandidate(loop))
+      groups.push_back({loop});
+  });
+  return groups;
+}
+
+/// FIR metadata types (shape/slice/...): no storage, so they can't back an
+/// `omp.map.info`; the device wrap pre-clones their defs instead.
+static bool isFirMetadataType(mlir::Type ty) {
+  return mlir::isa<fir::ShapeType, fir::ShiftType, fir::ShapeShiftType,
+                   fir::SliceType, fir::FieldType, fir::LenType,
+                   fir::TypeDescType>(ty);
+}
+
+/// Clone metadata-typed defs used by `group` into `targetOp`'s entry block,
+/// recording host->device in `mapper`.
+static void preCloneMetadataIntoTarget(mlir::IRRewriter &rewriter,
+                                       mlir::omp::TargetOp targetOp,
+                                       mlir::IRMapping &mapper,
+                                       llvm::ArrayRef<fir::DoLoopOp> group) {
+  mlir::Operation *terminator = targetOp.getRegion().front().getTerminator();
+  auto savedIP = rewriter.saveInsertionPoint();
+  rewriter.setInsertionPoint(terminator);
+
+  // Fixed point in case a metadata op ever references another.
+  bool progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (fir::DoLoopOp loop : group) {
+      mlir::visitUsedValuesDefinedAbove(
+          loop.getRegion(), [&](mlir::OpOperand *operand) {
+            mlir::Value v = operand->get();
+            if (!isFirMetadataType(v.getType()))
+              return;
+            if (mapper.contains(v))
+              return;
+            mlir::Operation *def = v.getDefiningOp();
+            if (!def || targetOp->isAncestor(def))
+              return;
+            rewriter.clone(*def, mapper);
+            progressed = true;
+          });
+    }
+  }
+
+  rewriter.restoreInsertionPoint(savedIP);
+}
+
+/// Deduped union of live-ins across `group`: values used by a loop but
+/// defined outside the span [front..back] (span-internal defs move along).
+static void collectGroupLiveIns(llvm::ArrayRef<fir::DoLoopOp> group,
+                                llvm::SmallVectorImpl<mlir::Value> &liveIns) {
+  llvm::SmallPtrSet<mlir::Operation *, 16> insideOps;
+  for (auto it = group.front()->getIterator(),
+            end = std::next(group.back()->getIterator());
+       it != end; ++it)
+    insideOps.insert(&*it);
+
+  llvm::SmallDenseSet<mlir::Value> seenValues;
+
+  // Dedup by value, not by defining op.
+  auto addLiveIn = [&](mlir::Value v) {
+    if (!v)
+      return;
+    mlir::Operation *def = v.getDefiningOp();
+    if (def && insideOps.contains(def))
+      return;
+    if (isFirMetadataType(v.getType()))
+      return;
+    if (!seenValues.insert(v).second)
+      return;
+    liveIns.push_back(v);
+  };
+
+  for (fir::DoLoopOp loop : group) {
+    addLiveIn(loop.getLowerBound());
+    addLiveIn(loop.getUpperBound());
+    addLiveIn(loop.getStep());
+    mlir::visitUsedValuesDefinedAbove(
+        loop.getRegion(),
+        [&](mlir::OpOperand *operand) { addLiveIn(operand->get()); });
+  }
+}
+
+/// Device wrap: put `group` in one `omp.target/teams/workdistribute` with the
+/// union of live-ins mapped once, via the `flang/Utils/OpenMP.h` helpers.
+static void
+wrapImplicitCandidateGroupForDevice(llvm::ArrayRef<fir::DoLoopOp> group) {
+  assert(!group.empty());
+
+  // Collect the deduped union of live-ins across the whole group.
+  llvm::SmallVector<mlir::Value> liveIns;
+  collectGroupLiveIns(group, liveIns);
+
+  // One omp.map.info per live-in plus a shape snapshot.
+  fir::DoLoopOp anchor = group.front();
+  mlir::ModuleOp module = anchor->getParentOfType<mlir::ModuleOp>();
+  mlir::OpBuilder hostBuilder(anchor);
+  fir::FirOpBuilder builder(hostBuilder, fir::getKindMapping(module));
+
+  llvm::SmallDenseSet<mlir::Value> loopBounds;
+  for (fir::DoLoopOp loop : group) {
+    loopBounds.insert(loop.getLowerBound());
+    loopBounds.insert(loop.getUpperBound());
+    loopBounds.insert(loop.getStep());
+  }
+  llvm::SmallVector<mlir::Value> mappedLiveIns;
+  mlir::omp::TargetExtOperands targetOps;
+  Fortran::utils::openmp::LiveInShapeInfoMap shapeMap;
+  for (mlir::Value v : liveIns) {
+    // A rematerializable bound needs no map entry: cloneOrMapRegionOutsiders
+    // clones its def in for every use, the loop_nest included.
+    if (loopBounds.contains(v))
+      if (mlir::Operation *def = v.getDefiningOp())
+        if (isRecomputableAfterFission(def, /*splitBefore=*/nullptr))
+          continue;
+    mappedLiveIns.push_back(v);
+    targetOps.mapVars.push_back(
+        Fortran::utils::openmp::genMapInfoOpForLiveIn(builder, v));
+    Fortran::utils::openmp::LiveInShapeInfo liveInShape(v);
+    liveInShape.materializeExtents(builder, v);
+    shapeMap.insert({v, liveInShape});
+  }
+  // Stay `generic` with no host_eval. `genIsolatedTargetOp` attaches both
+  // during fission. Claiming spmd early binds the verifier's host-evaluation
+  // obligation before anything can meet it, and an early host_eval would deaden
+  // the in-region bound uses on the host module alone.
+  targetOps.kernelType = mlir::omp::TargetExecModeAttr::get(
+      builder.getContext(), mlir::omp::TargetExecMode::generic);
+
+  // Create the omp.target, entry block, and host->device `mapper`.
+  // `emptyLoopNestOps` keeps each loop as a fir.do_loop, not lowered here.
+  mlir::IRRewriter rewriter(builder);
+  rewriter.setInsertionPoint(anchor);
+  mlir::IRMapping mapper;
+  mlir::omp::LoopNestOperands emptyLoopNestOps;
+  // FIR flavor: this runs after HLFIR-to-FIR, so the device-side declare must
+  // be a `fir.declare`. Emitting `hlfir.declare` here would leave HLFIR ops
+  // that fail FIR-to-LLVM legalization.
+  mlir::omp::TargetOp targetOp = Fortran::utils::openmp::genTargetOpFromLiveIns(
+      anchor.getLoc(), rewriter, mapper, mappedLiveIns, targetOps,
+      emptyLoopNestOps, shapeMap,
+      [](fir::FirOpBuilder &builder, mlir::Location loc, mlir::Value liveInArg,
+         llvm::StringRef name,
+         mlir::Value shape) -> Fortran::utils::openmp::LiveInDeclareResult {
+        auto declareOp = fir::DeclareOp::create(
+            builder, loc, liveInArg.getType(), liveInArg, shape,
+            /*typeParams=*/mlir::ValueRange{}, /*dummy_scope=*/nullptr,
+            /*storage=*/nullptr, /*storage_offset=*/0,
+            builder.getStringAttr(name),
+            /*fortran_attrs=*/fir::FortranVariableFlagsAttr{},
+            /*data_attr=*/cuf::DataAttributeAttr{},
+            /*dummy_arg_no=*/mlir::IntegerAttr{});
+        // A `fir.declare` has a single result, so `originalBase` and `base`
+        // alias it.
+        return {declareOp.getResult(), declareOp.getResult()};
+      });
+
+  // Redirect mapped bounds to the copy loaded inside the region, so a bound is
+  // read out of the kernarg buffer and never off the host value.
+  auto argIface = mlir::cast<mlir::omp::BlockArgOpenMPOpInterface>(*targetOp);
+  auto loadedDeviceValue = [](mlir::Value mapArg) -> mlir::Value {
+    for (mlir::Operation *u : mapArg.getUsers())
+      if (auto decl = mlir::dyn_cast<fir::DeclareOp>(u))
+        for (mlir::Operation *du : decl.getResult().getUsers())
+          if (auto ld = mlir::dyn_cast<fir::LoadOp>(du))
+            return ld.getResult();
+    return {};
+  };
+  auto mapBlockArgs = argIface.getMapBlockArgs();
+  for (auto [idx, v] : llvm::enumerate(mappedLiveIns))
+    if (loopBounds.contains(v))
+      if (mlir::Value loaded = loadedDeviceValue(mapBlockArgs[idx]))
+        mapper.map(v, loaded);
+
+  // Pre-clone metadata defs so next step has no dangling host refs.
+  preCloneMetadataIntoTarget(rewriter, targetOp, mapper, group);
+
+  // Clone the span [front..back] into the target via `mapper`, then
+  // erase originals in reverse. cloneOrMapRegionOutsiders pulls in leftovers.
+  mlir::Operation *terminator = targetOp.getRegion().front().getTerminator();
+  rewriter.setInsertionPoint(terminator);
+
+  llvm::SmallVector<fir::DoLoopOp> clonedLoops;
+  llvm::SmallVector<mlir::Operation *> toErase;
+  for (auto it = group.front()->getIterator(),
+            end = std::next(group.back()->getIterator());
+       it != end; ++it) {
+    mlir::Operation *cloned = rewriter.clone(*it, mapper);
+    if (auto clonedLoop = mlir::dyn_cast<fir::DoLoopOp>(cloned))
+      clonedLoops.push_back(clonedLoop);
+    toErase.push_back(&*it);
+  }
+  for (mlir::Operation *op : llvm::reverse(toErase))
+    rewriter.eraseOp(op);
+
+  Fortran::utils::openmp::cloneOrMapRegionOutsiders(builder, targetOp);
+
+  // Wrap each cloned loop so the rest of this pass lowers them to
+  // actual device parallel work.
+  for (fir::DoLoopOp clonedLoop : clonedLoops)
+    wrapLoopInTeamsWorkdistribute(clonedLoop);
+
+  // `anchor` was erased above; diagnostics are attached to `targetOp`.
+  targetOp->emitRemark()
+      << "implicit-workdistribute(device): wrapped " << clonedLoops.size()
+      << " array loop(s) in omp.target/omp.teams/omp.workdistribute with "
+      << targetOps.mapVars.size() << " omp.map.info";
+}
+
+/// Wrap every device candidate group in its own `omp.target`.
+static void wrapImplicitCandidatesForDevice(mlir::ModuleOp moduleOp) {
+  for (auto &group : collectImplicitCandidateGroups(moduleOp))
+    wrapImplicitCandidateGroupForDevice(group);
+}
+
+/// Entry point: dispatch to the host or device wrapper; `IWK_None` no-ops.
+static void
+runImplicitWorkdistribute(mlir::ModuleOp moduleOp,
+                          flangomp::ImplicitWorkdistributeKind kind) {
+  switch (kind) {
+  case flangomp::ImplicitWorkdistributeKind::IWK_None:
+    return;
+  case flangomp::ImplicitWorkdistributeKind::IWK_Host:
+    wrapImplicitCandidatesForHost(moduleOp);
+    return;
+  case flangomp::ImplicitWorkdistributeKind::IWK_Device:
+    wrapImplicitCandidatesForDevice(moduleOp);
+    return;
+  }
+}
+
 /// Pass to lower omp.workdistribute ops.
 class LowerWorkdistributePass
     : public flangomp::impl::LowerWorkdistributeBase<LowerWorkdistributePass> {
 public:
+  LowerWorkdistributePass() = default;
+  LowerWorkdistributePass(const flangomp::LowerWorkdistributeOptions &options)
+      : LowerWorkdistributeBase(options) {}
   void runOnOperation() override {
     MLIRContext &context = getContext();
     auto moduleOp = getOperation();
     bool changed = false;
     SetVector<omp::TargetOp> targetOpsToProcess;
+
+    // Wrap bare array-statement loops before the lowering below.
+    // `this->implicit` comes from `-fopenmp-implicit-workdistribute=`.
+    runImplicitWorkdistribute(moduleOp, this->implicit);
+
     auto verify =
         moduleOp->walk([&](mlir::omp::WorkdistributeOp workdistribute) {
           if (failed(verifyTargetTeamsWorkdistribute(workdistribute)))
