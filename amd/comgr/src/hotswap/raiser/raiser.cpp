@@ -334,19 +334,37 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   BasicBlock *Entry = BasicBlock::Create(C, "entry", F);
   IRBuilder<> B(Entry);
 
-  // The kernel entry is the only block start the decoder reports, so the whole
-  // kernel raises into one block. A second block start means a handler routed
-  // below would have to branch, and none of them can.
-  assert(Decoded->BlockStarts.size() <= 1 &&
-         "no dispatched instruction format recovers a block start");
-
   Expected<RaiseContext> Ctx = RaiseContext::create(
       B, Projection, Env.Source.MC, Meta, Text.Bytes, Text.Address,
       Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset);
   if (!Ctx)
     return Ctx.takeError();
 
+  // A block per recovered block start, all of them made before any instruction
+  // is raised so a branch reaching forward finds the block it targets. The
+  // kernel entry gets one too, rather than raising into the entry block the
+  // allocas live in: a branch back to the first instruction would otherwise
+  // give the entry block a predecessor, which LLVM does not allow.
+  for (uint64_t Start : Decoded->BlockStarts)
+    Ctx->defineBB(Start, BasicBlock::Create(C, formatv("bb_{0:x}", Start), F));
+
   for (const DecodedInst &Di : Decoded->Insts) {
+    BasicBlock *Open = B.GetInsertBlock();
+    if (Decoded->BlockStarts.count(Di.Offset)) {
+      BasicBlock *Next = Ctx->lookupBB(Di.Offset);
+      // A source block ending in something other than a control transfer
+      // reaches the block that follows it, which LLVM states as a branch.
+      if (!Open->hasTerminator())
+        B.CreateBr(Next);
+      B.SetInsertPoint(Next);
+    } else if (Open->hasTerminator()) {
+      // An instruction trailing a control transfer without leading a block
+      // start of its own is reached by nothing, and needs a block anyway for
+      // its handler to raise into.
+      B.SetInsertPoint(
+          BasicBlock::Create(C, formatv("unreached_{0:x}", Di.Offset), F));
+    }
+
     Ctx->registers().computeVGPRAdjust(Di);
     if (Error Err = raiseInst(*Ctx, Di))
       return Err;
@@ -354,8 +372,10 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
 
   // Execution reaching the end of the extent means the code is truncated or
   // the extent is misbounded. Closing the block with a return instead would
-  // hand back a kernel that reads as having run to completion.
-  if (!Entry->hasTerminator())
+  // hand back a kernel that reads as having run to completion. Every earlier
+  // block is terminated on the way out of it, so the open one is the only
+  // block that can still be missing a terminator here.
+  if (!B.GetInsertBlock()->hasTerminator())
     return RaiseFailure::general(
         RaiseFailureReason::UnterminatedKernelExtent,
         "kernel extent ends without an instruction that ends the program");
