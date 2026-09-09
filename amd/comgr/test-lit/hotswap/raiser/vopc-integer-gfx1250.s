@@ -4,10 +4,7 @@
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 
 ; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=vopc_predicates | %FileCheck %s --check-prefix=PRED
-
-; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=vopc_exec_write | %FileCheck %s --check-prefix=EXEC
+; RUN:   --emit-ir=vopc_predicates,vopc_exec_write | %FileCheck %s
 
 ; RUN: not %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=vopc_vop3_encoding 2>&1 \
@@ -20,57 +17,57 @@
 	.globl	vopc_predicates
 	.p2align	8
 	.type	vopc_predicates,@function
-; PRED-LABEL: define amdgpu_kernel void @vopc_predicates(
+; CHECK-LABEL: define amdgpu_kernel void @vopc_predicates(
 vopc_predicates:
-; PRED: icmp slt i32
+; CHECK: icmp slt i32
 	v_cmp_lt_i32_e32 vcc_lo, v0, v1
-; PRED: icmp eq i32
+; CHECK: icmp eq i32
 	v_cmp_eq_i32_e32 vcc_lo, v0, v1
-; PRED: icmp sle i32
+; CHECK: icmp sle i32
 	v_cmp_le_i32_e32 vcc_lo, v0, v1
-; PRED: icmp sgt i32
+; CHECK: icmp sgt i32
 	v_cmp_gt_i32_e32 vcc_lo, v0, v1
-; PRED: icmp ne i32
+; CHECK: icmp ne i32
 	v_cmp_ne_i32_e32 vcc_lo, v0, v1
-; PRED: icmp sge i32
+; CHECK: icmp sge i32
 	v_cmp_ge_i32_e32 vcc_lo, v0, v1
-; PRED: icmp ult i32
+; CHECK: icmp ult i32
 	v_cmp_lt_u32_e32 vcc_lo, v0, v1
-; PRED: icmp eq i32
+; CHECK: icmp eq i32
 	v_cmp_eq_u32_e32 vcc_lo, v0, v1
-; PRED: icmp ule i32
+; CHECK: icmp ule i32
 	v_cmp_le_u32_e32 vcc_lo, v0, v1
-; PRED: icmp ugt i32
+; CHECK: icmp ugt i32
 	v_cmp_gt_u32_e32 vcc_lo, v0, v1
-; PRED: icmp ne i32
+; CHECK: icmp ne i32
 	v_cmp_ne_u32_e32 vcc_lo, v0, v1
-; PRED: icmp uge i32
+; CHECK: icmp uge i32
 	v_cmp_ge_u32_e32 vcc_lo, v0, v1
-; PRED: ret void
+; CHECK: ret void
 	s_endpgm
 
 	.globl	vopc_exec_write
 	.p2align	8
 	.type	vopc_exec_write,@function
-; EXEC-LABEL: define amdgpu_kernel void @vopc_exec_write(
+; CHECK-LABEL: define amdgpu_kernel void @vopc_exec_write(
 vopc_exec_write:
 ; The comparison reaches EXEC as a wave-level ballot, taken at the width of the
 ; wave the gfx1250 source believes it runs on and so narrowed from the gfx942
 ; target ballot, and ANDed into the EXEC the raiser is tracking.
-; EXEC: [[CMP:%.+]] = icmp sgt i32 {{.+}}, {{.+}}
-; EXEC: [[BALLOT:%.+]] = call i64 @llvm.amdgcn.ballot.i64(i1 [[CMP]])
-; EXEC: [[MASK:%.+]] = trunc i64 [[BALLOT]] to i32
-; EXEC: [[NARROWED:%.+]] = and i32 -1, [[MASK]]
+; CHECK: [[CMP:%.+]] = icmp sgt i32 {{.+}}, {{.+}}
+; CHECK: [[BALLOT:%.+]] = call i64 @llvm.amdgcn.ballot.i64(i1 [[CMP]])
+; CHECK: [[MASK:%.+]] = trunc i64 [[BALLOT]] to i32
+; CHECK: [[NARROWED:%.+]] = and i32 -1, [[MASK]]
 	v_cmpx_gt_i32_e32 v0, v1
 ; The vector write that follows is predicated on the narrowed EXEC, which is
 ; what makes the store observable: the lane-active bit is recomputed from it
 ; rather than from the EXEC in force before the comparison.
-; EXEC: [[LANE:%.+]] = lshr i32 [[NARROWED]], {{.+}}
-; EXEC: [[BIT:%.+]] = and i32 [[LANE]], 1
-; EXEC: [[ACTIVE:%.+]] = icmp ne i32 [[BIT]], 0
-; EXEC: br i1 [[ACTIVE]]
+; CHECK: [[LANE:%.+]] = lshr i32 [[NARROWED]], {{.+}}
+; CHECK: [[BIT:%.+]] = and i32 [[LANE]], 1
+; CHECK: [[ACTIVE:%.+]] = icmp ne i32 [[BIT]], 0
+; CHECK: br i1 [[ACTIVE]]
 	v_add_f32_e32 v2, v0, v1
-; EXEC: ret void
+; CHECK: ret void
 	s_endpgm
 
 	.globl	vopc_vop3_encoding

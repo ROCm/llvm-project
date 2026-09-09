@@ -14,8 +14,8 @@
 ; DX10-OFF-REFUSE-SAME: with fixed DX10 clamp mode
 
 ; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx1250 \
-; RUN:   --emit-ir=fixed_mode_kernel \
-; RUN:   | %FileCheck %s --check-prefix=FIXED-MODE
+; RUN:   --emit-ir=fixed_mode_kernel,integer_modes_off_kernel \
+; RUN:   | %FileCheck %s --check-prefix=FIXED-TARGET
 
 ; RUN: not %hotswap_transpile_cli %t.hsaco --target-isa=gfx1250 \
 ; RUN:   --emit-ir=ieee_off_kernel 2>&1 \
@@ -28,26 +28,16 @@
 ; RUN:   --emit-ir=ieee_off_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=IEEE-OFF-SAME-ISA
 
-; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx1250 \
-; RUN:   --emit-ir=integer_modes_off_kernel \
-; RUN:   | %FileCheck %s --check-prefix=INTEGER-MODES-OFF
-
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=rounding_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=ROUNDING
-; ROUNDING: unsupported-floating-point-mode: v_add_f32 [VOP2]
-; ROUNDING-SAME: f32 rounding mode 1 is unsupported
-
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=e64_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=E64
-; E64: unsupported-instruction-form: v_add_f32 [VOP3]
-
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=dpp_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=DPP
-; DPP: unsupported-instruction-form: v_add_f32 [DPP]
-
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=sdwa_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=SDWA
-; SDWA: unsupported-instruction-form: v_add_f32 [SDWA]
+; A mode the raise cannot carry over and an encoding outside the dispatched
+; VOP2 form are both refused rather than mislowered.
+; RUN: not %hotswap_transpile_cli %t.hsaco \
+; RUN:   --emit-ir=rounding_kernel,e64_kernel,dpp_kernel,sdwa_kernel 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE
+; REFUSE:      unsupported-floating-point-mode: v_add_f32 [VOP2]
+; REFUSE-SAME: f32 rounding mode 1 is unsupported
+; REFUSE:      unsupported-instruction-form: v_add_f32 [VOP3]
+; REFUSE:      unsupported-instruction-form: v_add_f32 [DPP]
+; REFUSE:      unsupported-instruction-form: v_add_f32 [SDWA]
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1010"
 	.amdhsa_code_object_version 6
@@ -65,9 +55,9 @@ fp_mode_kernel:
 	.globl	fixed_mode_kernel
 	.p2align	8
 	.type	fixed_mode_kernel,@function
-; FIXED-MODE-LABEL: define amdgpu_kernel void @fixed_mode_kernel()
+; FIXED-TARGET-LABEL: define amdgpu_kernel void @fixed_mode_kernel()
 fixed_mode_kernel:
-; FIXED-MODE: fadd float
+; FIXED-TARGET: fadd float
 	v_add_f32_e32 v0, v1, v2
 	s_endpgm
 
@@ -84,10 +74,10 @@ ieee_off_kernel:
 	.globl	integer_modes_off_kernel
 	.p2align	8
 	.type	integer_modes_off_kernel,@function
-; INTEGER-MODES-OFF-LABEL: define amdgpu_kernel void @integer_modes_off_kernel()
+; FIXED-TARGET-LABEL: define amdgpu_kernel void @integer_modes_off_kernel()
 integer_modes_off_kernel:
 	s_mov_b32 s0, 0
-; INTEGER-MODES-OFF: ret void
+; FIXED-TARGET: ret void
 	s_endpgm
 
 	.globl	rounding_kernel

@@ -3,21 +3,19 @@
 ; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -filetype=obj -mcpu=gfx942 %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 
-; s0 is never read, so the moved value is dead and the lifted body is just the
-; terminator.
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=mov_endpgm_kernel | %FileCheck %s
+; Scalar and integer VOP1 moves both lift as register-file copies. Neither
+; destination is read again, so the moved value is dead in each and the lifted
+; body is just the terminator.
+; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=mov_endpgm_kernel,vmov_kernel \
+; RUN:   | %FileCheck %s
 ; CHECK-LABEL: define amdgpu_kernel void @mov_endpgm_kernel(
+; CHECK: ret void
+; CHECK-LABEL: define amdgpu_kernel void @vmov_kernel(
 ; CHECK: ret void
 
 ; The decoder maps the two instructions onto their canonical ops.
 ; RUN: %hotswap_transpile_cli %t.hsaco --dump-decoded=mov_endpgm_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=DECODE
-
-; Integer VOP1 moves lift as register-file copies.
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=vmov_kernel \
-; RUN:   | %FileCheck %s --check-prefix=VMOV
-; VMOV-LABEL: define amdgpu_kernel void @vmov_kernel(
-; VMOV: ret void
 
 ; Raising the whole code object runs both kernels through one call.
 ; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx950 --emit-ir \

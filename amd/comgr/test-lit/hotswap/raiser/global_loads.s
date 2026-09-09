@@ -6,19 +6,9 @@
 ; RUN: %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_loads | %FileCheck %s --check-prefix=IR
 ; RUN: not %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_load_cache_policy 2>&1 | \
-; RUN:   %FileCheck %s --check-prefix=CACHE-POLICY
-; RUN: not %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_load_unaligned_offset 2>&1 | \
-; RUN:   %FileCheck %s --check-prefix=UNALIGNED-OFFSET
-; RUN: not %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_load_pair 2>&1 | \
-; RUN:   %FileCheck %s --check-prefix=PAIR
-; RUN: not %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_load_flat 2>&1 | %FileCheck %s --check-prefix=FLAT
-; RUN: not %hotswap_transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_load_scratch 2>&1 | \
-; RUN:   %FileCheck %s --check-prefix=SCRATCH
+; RUN:   --emit-ir=global_load_cache_policy,global_load_unaligned_offset \
+; RUN:   --emit-ir=global_load_pair,global_load_flat,global_load_scratch 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
 	.amdhsa_code_object_version 6
@@ -60,7 +50,8 @@ global_loads:
 	.p2align	8
 	.type	global_load_cache_policy,@function
 global_load_cache_policy:
-; CACHE-POLICY: non-default cache policy is not modeled
+; REFUSE:      in kernel 'global_load_cache_policy'
+; REFUSE-SAME: non-default cache policy is not modeled
 	global_load_dword v1, v[2:3], off sc0
 	s_endpgm
 
@@ -68,7 +59,8 @@ global_load_cache_policy:
 	.p2align	8
 	.type	global_load_unaligned_offset,@function
 global_load_unaligned_offset:
-; UNALIGNED-OFFSET: immediate offset does not preserve the alignment of the access
+; REFUSE:      in kernel 'global_load_unaligned_offset'
+; REFUSE-SAME: immediate offset does not preserve the alignment of the access
 	global_load_dword v1, v[2:3], off offset:1
 	s_endpgm
 
@@ -76,7 +68,8 @@ global_load_unaligned_offset:
 	.p2align	8
 	.type	global_load_pair,@function
 global_load_pair:
-; PAIR: unsupported flat memory operation
+; REFUSE:      in kernel 'global_load_pair'
+; REFUSE-SAME: unsupported flat memory operation
 	global_load_dwordx2 v[2:3], v[2:3], off
 	s_endpgm
 
@@ -84,7 +77,8 @@ global_load_pair:
 	.p2align	8
 	.type	global_load_flat,@function
 global_load_flat:
-; FLAT: unsupported flat memory operation
+; REFUSE:      in kernel 'global_load_flat'
+; REFUSE-SAME: unsupported flat memory operation
 	flat_load_dword v1, v[2:3]
 	s_endpgm
 
@@ -92,7 +86,8 @@ global_load_flat:
 	.p2align	8
 	.type	global_load_scratch,@function
 global_load_scratch:
-; SCRATCH: unsupported flat memory operation
+; REFUSE:      in kernel 'global_load_scratch'
+; REFUSE-SAME: unsupported flat memory operation
 	scratch_load_dword v1, v0, off
 	s_endpgm
 

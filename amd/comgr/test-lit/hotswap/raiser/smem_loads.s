@@ -5,17 +5,14 @@
 ; RUN: %ld.lld -shared %t.gfx1250.o -o %t.gfx1250.hsaco
 
 ; RUN: %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=smem_loads,smem_wide_loads,smem_wide_overlap,smem_register_offset,smem_wide_register_offset,smem_soffset_overlap,smem_scale_offset \
+; RUN:   --emit-ir=smem_loads,smem_wide_loads,smem_wide_overlap \
+; RUN:   --emit-ir=smem_register_offset,smem_wide_register_offset \
+; RUN:   --emit-ir=smem_soffset_overlap,smem_scale_offset \
 ; RUN:   | %FileCheck %s --check-prefix=IR
 ; RUN: not %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=smem_cache_policy 2>&1 | \
-; RUN:   %FileCheck %s --check-prefix=CACHE-POLICY
-; RUN: not %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=smem_buffer_load 2>&1 | \
-; RUN:   %FileCheck %s --check-prefix=BUFFER
-; RUN: not %hotswap_transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=smem_negative_offset 2>&1 | \
-; RUN:   %FileCheck %s --check-prefix=NEGATIVE-OFFSET
+; RUN:   --emit-ir=smem_cache_policy,smem_buffer_load \
+; RUN:   --emit-ir=smem_negative_offset 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -212,7 +209,7 @@ smem_scale_offset:
 	.p2align	8
 	.type	smem_cache_policy,@function
 smem_cache_policy:
-; CACHE-POLICY: scalar load cache-policy modifiers other than SCALE_OFFSET are not supported
+; REFUSE: scalar load cache-policy modifiers other than SCALE_OFFSET are not supported
 	s_load_b32 s2, s[0:1], 0x0 scope:SCOPE_SYS
 	s_endpgm
 
@@ -220,7 +217,7 @@ smem_cache_policy:
 	.p2align	8
 	.type	smem_buffer_load,@function
 smem_buffer_load:
-; BUFFER: unsupported scalar memory operation
+; REFUSE: unsupported scalar memory operation
 	s_buffer_load_b32 s4, s[0:3], 0x0
 	s_endpgm
 
@@ -228,7 +225,7 @@ smem_buffer_load:
 	.p2align	8
 	.type	smem_negative_offset,@function
 smem_negative_offset:
-; NEGATIVE-OFFSET: negative scalar load offsets are not supported
+; REFUSE: negative scalar load offsets are not supported
 	s_load_b32 s2, s[0:1], -4
 	s_endpgm
 

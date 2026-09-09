@@ -6,12 +6,10 @@
 ; RUN:   --emit-ir=waits_kernel,sleep_kernel,monitor_sleep_kernel,wakeup_kernel \
 ; RUN:   --target-isa=gfx942 \
 ; RUN:   | %FileCheck %s --check-prefixes=GFX9,SLEEP,MONITOR-SLEEP,WAKEUP
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=setprio_kernel \
+; RUN: not %hotswap_transpile_cli %t.hsaco \
+; RUN:   --emit-ir=setprio_kernel,setprio_inc_wg_kernel \
 ; RUN:   --target-isa=gfx942 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=PRIO-CROSS
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=setprio_inc_wg_kernel \
-; RUN:   --target-isa=gfx942 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=PRIO-INC-CROSS
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -67,7 +65,7 @@ setprio_kernel:
 	.type	setprio_inc_wg_kernel,@function
 
 setprio_inc_wg_kernel:
-; PRIO-INC-CROSS: unsupported-wave-priority: s_setprio_inc_wg [SOPP]
+; PRIO-CROSS: unsupported-wave-priority: s_setprio_inc_wg [SOPP]
 	s_setprio_inc_wg 1
 	s_endpgm
 

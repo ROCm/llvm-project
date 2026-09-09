@@ -2,12 +2,9 @@
 
 ; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=refuse_hwreg_read 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=READ
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=refuse_hwreg_write 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=WRITE
-; RUN: not %hotswap_transpile_cli %t.hsaco --emit-ir=refuse_mode_read 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=MODE-READ
+; RUN: not %hotswap_transpile_cli %t.hsaco \
+; RUN:   --emit-ir=refuse_hwreg_read,refuse_hwreg_write,refuse_mode_read 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
 	.amdhsa_code_object_version 6
@@ -16,7 +13,8 @@
 	.p2align	8
 	.type	refuse_hwreg_read,@function
 refuse_hwreg_read:
-	; READ: unsupported-instruction-form
+	; REFUSE:      in kernel 'refuse_hwreg_read'
+	; REFUSE-SAME: cannot reproduce hardware-register read for id 20
 	; READ-SAME: s_getreg_b32
 	; READ-SAME: cannot reproduce hardware-register read for id 20
 	s_getreg_b32 s0, hwreg(20)
@@ -26,7 +24,8 @@ refuse_hwreg_read:
 	.p2align	8
 	.type	refuse_hwreg_write,@function
 refuse_hwreg_write:
-	; WRITE: unsupported-instruction-form
+	; REFUSE:      in kernel 'refuse_hwreg_write'
+	; REFUSE-SAME: cannot reproduce hardware-register write for id 16
 	; WRITE-SAME: s_setreg_imm32_b32
 	; WRITE-SAME: cannot reproduce hardware-register write for id 16
 	s_setreg_imm32_b32 hwreg(16), 1
@@ -36,7 +35,8 @@ refuse_hwreg_write:
 	.p2align	8
 	.type	refuse_mode_read,@function
 refuse_mode_read:
-	; MODE-READ: unsupported-instruction-form
+	; REFUSE:      in kernel 'refuse_mode_read'
+	; REFUSE-SAME: cannot reproduce hardware-register read for id 1
 	; MODE-READ-SAME: s_getreg_b32
 	; MODE-READ-SAME: cannot reproduce hardware-register read for id 1
 	s_setreg_imm32_b32 hwreg(HW_REG_MODE, 0, 4), 5

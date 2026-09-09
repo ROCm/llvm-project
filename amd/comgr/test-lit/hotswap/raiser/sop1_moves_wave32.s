@@ -5,17 +5,9 @@
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=literal64_kernel \
+; RUN: %hotswap_transpile_cli %t.hsaco \
+; RUN:   --emit-ir=literal64_kernel,exec_pair_kernel,vcc_pair_kernel \
 ; RUN:   | %FileCheck %s
-; CHECK-LABEL: define amdgpu_kernel void @literal64_kernel(
-
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=exec_pair_kernel \
-; RUN:   | %FileCheck %s --check-prefix=EXECPAIR
-; EXECPAIR-LABEL: define amdgpu_kernel void @exec_pair_kernel(
-
-; RUN: %hotswap_transpile_cli %t.hsaco --emit-ir=vcc_pair_kernel \
-; RUN:   | %FileCheck %s --check-prefix=VCCPAIR
-; VCCPAIR-LABEL: define amdgpu_kernel void @vcc_pair_kernel(
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -24,6 +16,7 @@
 	.p2align	8
 	.type	literal64_kernel,@function
 literal64_kernel:
+; CHECK-LABEL: define amdgpu_kernel void @literal64_kernel(
 	s_mov_b64 s[0:1], 0x123456789abcdef
 ; Both halves of the literal reach the destination pair: 0x89abcdef read as a
 ; signed dword is -1985229329, and 0x01234567 is 19088743.
@@ -42,17 +35,18 @@ literal64_kernel:
 	.p2align	8
 	.type	exec_pair_kernel,@function
 exec_pair_kernel:
+; CHECK-LABEL: define amdgpu_kernel void @exec_pair_kernel(
 	s_mov_b32 s2, 0x1234
 	s_mov_b32 s3, -1
-; EXECPAIR: [[LO:%.+]] = zext i32 4660 to i64
-; EXECPAIR: [[HI:%.+]] = zext i32 -1 to i64
-; EXECPAIR: [[SHL:%.+]] = shl i64 [[HI]], 32
-; EXECPAIR: [[JOIN:%.+]] = or i64 [[LO]], [[SHL]]
-; EXECPAIR: [[MASK:%.+]] = trunc i64 [[JOIN]] to i32
+; CHECK: [[LO:%.+]] = zext i32 4660 to i64
+; CHECK: [[HI:%.+]] = zext i32 -1 to i64
+; CHECK: [[SHL:%.+]] = shl i64 [[HI]], 32
+; CHECK: [[JOIN:%.+]] = or i64 [[LO]], [[SHL]]
+; CHECK: [[MASK:%.+]] = trunc i64 [[JOIN]] to i32
 	s_mov_b64 exec, s[2:3]
-; EXECPAIR: call i32 @llvm.bitreverse.i32(i32 [[MASK]])
+; CHECK: call i32 @llvm.bitreverse.i32(i32 [[MASK]])
 	s_brev_b32 s0, exec_lo
-; EXECPAIR: ret void
+; CHECK: ret void
 	s_endpgm
 
 ; VCC is the other wave mask a pair can name, and it reads back the same way:
@@ -62,12 +56,13 @@ exec_pair_kernel:
 	.p2align	8
 	.type	vcc_pair_kernel,@function
 vcc_pair_kernel:
+; CHECK-LABEL: define amdgpu_kernel void @vcc_pair_kernel(
 	s_mov_b32 vcc_lo, 0x1234
-; VCCPAIR: [[BALLOT:%.+]] = call i32 @llvm.amdgcn.ballot.i32(
-; VCCPAIR: [[EXT:%.+]] = zext i32 [[BALLOT]] to i64
+; CHECK: [[BALLOT:%.+]] = call i32 @llvm.amdgcn.ballot.i32(
+; CHECK: [[EXT:%.+]] = zext i32 [[BALLOT]] to i64
 	s_mov_b64 s[0:1], vcc
 	s_brev_b64 s[2:3], s[0:1]
-; VCCPAIR: ret void
+; CHECK: ret void
 	s_endpgm
 
 	.section	.rodata,"a",@progbits
