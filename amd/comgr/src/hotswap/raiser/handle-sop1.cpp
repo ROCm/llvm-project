@@ -383,7 +383,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src = readSrc0(Op, Search->Is64);
+    Expected<Value *> Src = Op.src(0, Search->Is64);
     if (!Src)
       return Src.takeError();
     Ctx.registers().writeReg32(*Dst, emitBitSearch(Ctx.B, *Search, *Src));
@@ -487,7 +487,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src = readSrc0(Op, Is64);
+    Expected<Value *> Src = Op.src(0, Is64);
     if (!Src)
       return Src.takeError();
     Value *Counted = CountsZeros ? Ctx.B.CreateNot(*Src, "s_bcnt0_bits") : *Src;
