@@ -172,6 +172,22 @@ jobs:
             echo "KUBE_CPU_REQUEST not set, thread limits not configured"
           fi
 
+      - name: Temp - raise ctest timeout for hipfft/rocfft (assertion - on)
+        if: ${{ contains(fromJSON(inputs.component).job_name, 'fft') }}
+        run: |
+          set -x
+          if ! ./build/llvm/bin/llvm-config --assertion-mode | grep -qx 'ON'; then
+            echo "assertions off - leaving ctest timeouts alone"
+            exit 0
+          fi
+          comp="${{ fromJSON(inputs.component).job_name }}"
+          before=$(grep -rn "TIMEOUT" "build/bin/${comp}" --include=CTestTestfile.cmake || true)
+          echo "before: ${before:-<none found>}"
+          test -n "$before"
+          grep -rl "TIMEOUT" "build/bin/${comp}" --include=CTestTestfile.cmake \
+            | xargs sed -i -E 's/TIMEOUT "?[0-9]+"?/TIMEOUT "3600"/g'
+          grep -rn "TIMEOUT" "build/bin/${comp}" --include=CTestTestfile.cmake
+
       - name: Test
         id: test
         timeout-minutes: ${{ fromJSON(inputs.component).timeout_minutes }}
