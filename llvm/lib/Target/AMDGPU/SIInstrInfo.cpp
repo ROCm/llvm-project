@@ -11549,9 +11549,7 @@ static bool foldableSelect(const MachineInstr &Def) {
       Def.getOperand(1).isImm() && Def.getOperand(1).getImm() != 0;
   bool Op2IsZeroImm =
       Def.getOperand(2).isImm() && Def.getOperand(2).getImm() == 0;
-  if (!Op1IsNonZeroImm || !Op2IsZeroImm)
-    return false;
-  return true;
+  return Op1IsNonZeroImm && Op2IsZeroImm;
 }
 
 static bool setsSCCIfResultIsZero(const MachineInstr &Def, bool &NeedInversion,
