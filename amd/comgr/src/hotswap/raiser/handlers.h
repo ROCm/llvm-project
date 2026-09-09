@@ -61,8 +61,8 @@ llvm::Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
 /// refusal.
 llvm::Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
-/// Translate a supported plain VOP3 integer-arithmetic instruction, or return
-/// a structured refusal.
+/// Translate a supported plain VOP3 instruction, or return a structured
+/// refusal.
 llvm::Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
 /// Translate both components of a VOPD packet. Both halves read the register
