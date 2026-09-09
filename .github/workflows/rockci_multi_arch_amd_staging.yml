@@ -30,9 +30,86 @@ env:
   GPU_TARGET: gfx90a
 
 jobs:
+  resolve:
+    name: Resolve TheRock candidate
+    if: github.repository == 'ROCm/llvm-project'
+    runs-on: ubuntu-24.04
+    outputs:
+      validate: ${{ steps.plan.outputs.validate }}
+      sha: ${{ steps.plan.outputs.sha }}
+      baseline_before: ${{ steps.plan.outputs.baseline_before }}
+    steps:
+      - name: Checkout baseline
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ env.BASELINE_BRANCH }}
+
+      - name: Resolve candidate and compare with baseline
+        id: plan
+        shell: bash
+        env:
+          OVERRIDE_SHA: ${{ inputs.therock_main_sha }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "$OVERRIDE_SHA" ]]; then
+            SHA="${OVERRIDE_SHA,,}"
+          else
+            SHA="$(git ls-remote https://github.com/ROCm/TheRock.git refs/heads/main | awk '{print $1}')"
+          fi
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::TheRock candidate must be a full 40-character SHA, got '${SHA}'."
+            exit 1
+          fi
+
+          BASELINE=""
+          if [[ -f "$BASELINE_FILE" ]]; then
+            BASELINE="$(tr -d '[:space:]' < "$BASELINE_FILE")"
+          fi
+
+          if [[ ! "$BASELINE" =~ ^[0-9a-f]{40}$ ]]; then
+            BASELINE=""
+          fi
+
+          VALIDATE=true
+          if [[ "$SHA" == "$BASELINE" && "$FORCE" != "true" ]]; then
+            VALIDATE=false
+            echo "TheRock ${SHA} is already promoted."
+          fi
+
+          {
+            echo "validate=${VALIDATE}"
+            echo "sha=${SHA}"
+            echo "baseline_before=${BASELINE}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### TheRock baseline gate"
+            echo "- Candidate: \`${SHA}\`"
+            echo "- Current baseline: \`${BASELINE:-<uninitialized>}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rockci_sha_check:
+    name: Full Linux and Windows Multi-Arch CI
+    needs: resolve
+    if: needs.resolve.outputs.validate == 'true'
+    uses: ./.github/workflows/multiarch-parameterised-sha-rockci-amd-staging.yml
+    with:
+      therock_ref: ${{ needs.resolve.outputs.sha }}
+      LLVM_ROCm_PR_URL: ${{ vars.LLVM_ROCM_PR_URL || '' }}
+      linux_amdgpu_families: gfx94x,gfx110x,gfx90a
+      windows_amdgpu_families: gfx1151
+      build_pytorch: true
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
 
   jenkins:
     name: Validate artifacts on Jenkins
+    needs: [resolve, rockci_sha_check]
+    if: needs.resolve.outputs.validate == 'true' && needs.rockci_sha_check.result == 'success'
     runs-on: linux-gfx942-1gpu-ccs-csp-ossci-rocm
     timeout-minutes: 3600
     outputs:
@@ -51,12 +128,16 @@ jobs:
           jenkins_host: ${{ secrets.ROCM_JENKINS_HOST }}
           jenkins_user: ${{ secrets.ROCM_JENKINS_USER }}
           jenkins_token: ${{ secrets.ROCM_JENKINS_CI_TOKEN }}
-          artifacts_run_id: 34327745415
+          artifacts_run_id: ${{ github.run_id }}
           gpu_target: ${{ env.GPU_TARGET }}
           timeout_minutes: "3600"
   promote:
     name: Commit promoted SHA
-    needs: [jenkins]
+    needs: [resolve, rockci_sha_check, jenkins]
+    if: >-
+      needs.resolve.outputs.validate == 'true' &&
+      needs.rockci_sha_check.result == 'success' &&
+      needs.jenkins.result == 'success'
     runs-on: ubuntu-24.04
     steps:
       - name: Generate GitHub App token
@@ -112,7 +193,7 @@ jobs:
 
   notify:
     name: Notify Teams
-    needs: [jenkins]
+    needs: [resolve, rockci_sha_check, jenkins, promote]
     if: always() && github.repository == 'ROCm/llvm-project'
     runs-on: ubuntu-24.04
     steps:
