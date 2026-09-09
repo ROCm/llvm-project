@@ -124,18 +124,6 @@ static Error raiseBinary32ReadWriteVCC(RaiseContext &Ctx, OperandResolver &Op,
   return Error::success();
 }
 
-// Select src1 when the current lane's VCC bit is set, otherwise src0.
-static Error raiseCndMask(RaiseContext &Ctx, OperandResolver &Op) {
-  Expected<BinaryOperands> Args = Op.readBinary32();
-  if (!Args) {
-    return Args.takeError();
-  }
-  Value *VCC = Ctx.registers().regFile().loadVCC(Ctx.B);
-  Value *Result = Ctx.B.CreateSelect(VCC, Args->Src1, Args->Src0, "cndmask");
-  Ctx.registers().writeReg32(Args->Dst, Result);
-  return Error::success();
-}
-
 // Accumulate signed products of packed source elements, using the destination's
 // incoming value as the accumulator.
 static Error raiseSignedDotAccumulate(RaiseContext &Ctx, OperandResolver &Op,
@@ -255,7 +243,7 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return raiseBinary32ReadWriteVCC(Ctx, Op, Intrinsic::usub_with_overflow,
                                      /*ReverseOperands=*/true);
   case CanonicalOp::V_CNDMASK_B32:
-    return raiseCndMask(Ctx, Op);
+    return raiseCndMask32(Ctx, Di, Op);
 
   case CanonicalOp::V_MUL_I32_I24:
     return raiseMul24(Ctx, Op, /*IsSigned=*/true);
