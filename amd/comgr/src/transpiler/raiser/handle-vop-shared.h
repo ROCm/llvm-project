@@ -35,6 +35,18 @@ llvm::Error raiseMove64(RaiseContext &Ctx, const DecodedInst &Di,
 llvm::Error raiseUnaryBit32(RaiseContext &Ctx, const DecodedInst &Di,
                             OperandResolver &Op);
 
+/// Raise a unary F32 operation shared by VOP1 and VOP3 encodings.
+llvm::Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
+                              OperandResolver &Op);
+
+/// Raise a 32-bit floating-point conversion shared by VOP1 and VOP3 encodings.
+llvm::Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
+                                   OperandResolver &Op);
+
+/// Raise V_CNDMASK_B32 with an implicit or explicit wave-mask condition.
+llvm::Error raiseCndMask32(RaiseContext &Ctx, const DecodedInst &Di,
+                           OperandResolver &Op);
+
 /// Raise a binary 32-bit operation and write its result.
 llvm::Error raiseBinary32(RaiseContext &Ctx, OperandResolver &Op,
                           BinaryBuilder Build);
