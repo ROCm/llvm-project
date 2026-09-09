@@ -1563,11 +1563,9 @@ void ControlFlowRewriter::prepareWaveCfg() {
     // target, so that the machine verifier accepts the edge. No INLINEASM_BR
     // and no branch instruction targets it. Treat it like the opaque
     // INLINEASM_BR case: a uniform conditional whose branch is implicit.
-    if (!Info.OrigExit && !Info.OrigSuccCond && !Info.OrigCondition &&
-        Node->Successors.size() >= 2) {
+    if (!Info.OrigSuccCond && Node->Successors.size() >= 2) {
       for (const LaneEdge &LaneSucc : Node->LaneSuccessors) {
-        if (LaneSucc.Lane == Info.OrigSuccFinal || !LaneSucc.Lane->Block ||
-            !LaneSucc.Lane->Block->isInlineAsmBrIndirectTarget())
+        if (!LaneSucc.Lane->Block->isInlineAsmBrIndirectTarget())
           continue;
         assert(!Info.OrigSuccCond &&
                "Multiple implicit indirect targets not yet supported");
