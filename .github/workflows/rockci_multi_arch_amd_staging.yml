@@ -33,7 +33,7 @@ jobs:
 
   jenkins:
     name: Validate artifacts on Jenkins
-    runs-on: aws-linux-scale-rocm-large
+    runs-on: linux-gfx942-1gpu-ccs-csp-ossci-rocm
     timeout-minutes: 3600
     outputs:
       build_url: ${{ steps.jenkins.outputs.build_url }}
