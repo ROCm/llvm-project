@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Trigger Jenkins rock-artifacts-tester and wait for its final result."""
 
+import base64
+import json
 import os
 import sys
 import time
-
-import requests
-from requests.auth import HTTPBasicAuth
+import urllib.error
+import urllib.parse
+import urllib.request
 
 
 def required(name: str) -> str:
@@ -28,22 +30,34 @@ def write_output(key: str, value: str) -> None:
             output.write(f"{key}={value}\n")
 
 
-def response_json(response: requests.Response, description: str) -> dict:
-    if response.status_code != 200:
-        sys.exit(
-            f"Failed to read {description}: "
-            f"HTTP {response.status_code}: {response.text}"
-        )
-    return response.json()
+def auth_header(user: str, token: str) -> str:
+    return "Basic " + base64.b64encode(f"{user}:{token}".encode()).decode()
+
+
+def request(url: str, authorization: str, method: str = "GET"):
+    call = urllib.request.Request(url, method=method)
+    call.add_header("Authorization", authorization)
+    try:
+        return urllib.request.urlopen(call, timeout=60)
+    except urllib.error.HTTPError as error:
+        body = error.read().decode(errors="replace")
+        sys.exit(f"{method} {url} failed: HTTP {error.code}: {body}")
+
+
+def request_json(url: str, authorization: str, description: str) -> dict:
+    with request(url, authorization) as response:
+        try:
+            return json.loads(response.read().decode())
+        except json.JSONDecodeError as error:
+            sys.exit(f"Failed to read {description}: {error}")
 
 
 def wait_for_build_url(
-    session: requests.Session, queue_url: str, poll_seconds: int, deadline: float
+    queue_url: str, authorization: str, poll_seconds: int, deadline: float
 ) -> str:
     while True:
-        item = response_json(
-            session.get(f"{queue_url}/api/json", timeout=60),
-            "the Jenkins queue item",
+        item = request_json(
+            f"{queue_url}/api/json", authorization, "the Jenkins queue item"
         )
         if item.get("cancelled"):
             sys.exit("The queued Jenkins build was cancelled.")
@@ -59,12 +73,11 @@ def wait_for_build_url(
 
 
 def wait_for_result(
-    session: requests.Session, build_url: str, poll_seconds: int, deadline: float
+    build_url: str, authorization: str, poll_seconds: int, deadline: float
 ) -> str:
     while True:
-        build = response_json(
-            session.get(f"{build_url}/api/json", timeout=60),
-            "the Jenkins build",
+        build = request_json(
+            f"{build_url}/api/json", authorization, "the Jenkins build"
         )
         if not build.get("building") and build.get("result"):
             return build["result"]
@@ -80,32 +93,29 @@ def main() -> None:
     run_id = required("ARTIFACTS_RUN_ID")
     poll_seconds = optional_int("POLL_INTERVAL_SECONDS", 60)
     deadline = time.monotonic() + optional_int("TIMEOUT_MINUTES", 300) * 60
+    authorization = auth_header(required("JENKINS_USER"), required("JENKINS_TOKEN"))
 
-    session = requests.Session()
-    session.auth = HTTPBasicAuth(required("JENKINS_USER"), required("JENKINS_TOKEN"))
-    response = session.post(
-        f"{host}/job/{job}/buildWithParameters",
-        params={
+    parameters = urllib.parse.urlencode(
+        {
             "theRockArtifactsRunId": run_id,
             "gpuTarget": required("GPU_TARGET"),
-        },
-        timeout=60,
+        }
     )
-    if response.status_code not in (200, 201):
-        sys.exit(
-            f"Jenkins trigger failed: HTTP {response.status_code}: {response.text}"
-        )
-
-    queue_url = response.headers.get("Location", "").rstrip("/")
+    with request(
+        f"{host}/job/{job}/buildWithParameters?{parameters}",
+        authorization,
+        method="POST",
+    ) as response:
+        queue_url = response.headers.get("Location", "").rstrip("/")
     if not queue_url:
         sys.exit("Jenkins accepted the trigger but returned no queue URL.")
     print(f"Queued {job} for GitHub Actions run {run_id}: {queue_url}", flush=True)
 
-    build_url = wait_for_build_url(session, queue_url, poll_seconds, deadline)
+    build_url = wait_for_build_url(queue_url, authorization, poll_seconds, deadline)
     write_output("build_url", build_url)
     print(f"Jenkins build: {build_url}", flush=True)
 
-    result = wait_for_result(session, build_url, poll_seconds, deadline)
+    result = wait_for_result(build_url, authorization, poll_seconds, deadline)
     write_output("result", result)
     print(f"Jenkins build result: {result}", flush=True)
     if result != "SUCCESS":
@@ -114,3 +124,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

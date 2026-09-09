@@ -57,7 +57,6 @@ runs:
       run: |
         set -euo pipefail
         rm -f "$JENKINS_OUTPUT_FILE"
-        python3 -m pip install --user -q requests
         python3 "${GITHUB_ACTION_PATH}/trigger_and_wait.py"
 
     - name: Collect Jenkins outputs
