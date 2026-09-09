@@ -3347,10 +3347,10 @@ bool isArgPassedInSGPR(const CallBase *CB, unsigned ArgNo) {
   case CallingConv::AMDGPU_CS_ChainPreserve:
     // For non-compute shaders, SGPR inputs are marked with either inreg or
     // byval. Everything else is in VGPRs.
-    return CB->hasABIParamAttr(ArgNo, Attribute::InReg) ||
+    return CB->paramHasAttr(ArgNo, Attribute::InReg) ||
            CB->isByValArgument(ArgNo);
   default:
-    return CB->hasABIParamAttr(ArgNo, Attribute::InReg);
+    return CB->paramHasAttr(ArgNo, Attribute::InReg);
   }
 }
 
