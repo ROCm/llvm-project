@@ -110,7 +110,7 @@ jobs:
     name: Validate artifacts on Jenkins
     needs: [resolve, rockci_sha_check]
     if: needs.resolve.outputs.validate == 'true' && needs.rockci_sha_check.result == 'success'
-    runs-on: aws-linux-scale-rocm-large        
+    runs-on: linux-gfx942-1gpu-ccs-csp-ossci-rocm 
     timeout-minutes: 3600
     outputs:
       build_url: ${{ steps.jenkins.outputs.build_url }}
