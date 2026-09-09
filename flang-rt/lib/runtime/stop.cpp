@@ -8,11 +8,11 @@
 
 #include "flang/Runtime/stop.h"
 #include "config.h"
-#include "unit.h"
 #include "flang-rt/runtime/environment.h"
 #include "flang-rt/runtime/file.h"
 #include "flang-rt/runtime/io-error.h"
 #include "flang-rt/runtime/terminator.h"
+#include "flang-rt/runtime/unit.h"
 #if not defined(__AMDGPU__) && not defined(__NVPTX__)
 #include "flang/Runtime/main.h"
 #endif
