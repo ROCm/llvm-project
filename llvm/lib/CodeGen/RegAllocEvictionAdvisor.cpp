@@ -46,6 +46,10 @@ static cl::opt<bool> EnableLocalReassignment(
              "may be compile time intensive"),
     cl::init(false));
 
+static cl::opt<bool> ReuseReassignmentBlockers(
+    "regalloc-reuse-reassignment-blockers", cl::Hidden, cl::init(true),
+    cl::desc("Reuse blocking segments within an eviction candidate search"));
+
 namespace llvm {
 cl::opt<unsigned> EvictInterferenceCutoff(
     "regalloc-eviction-max-interference-cutoff", cl::Hidden,
@@ -240,8 +244,10 @@ bool DefaultEvictionAdvisor::canEvictHintInterference(
     const SmallVirtRegSet &FixedRegisters) const {
   EvictionCost MaxCost;
   MaxCost.setBrokenHints(MRI->getRegClass(VirtReg.reg())->getCopyCost());
-  return canEvictInterferenceBasedOnCost(VirtReg, PhysReg, true, MaxCost,
-                                         FixedRegisters);
+  ReassignmentCache Cache;
+  return canEvictInterferenceBasedOnCost(
+      VirtReg, PhysReg, true, MaxCost, FixedRegisters,
+      ReuseReassignmentBlockers ? &Cache : nullptr);
 }
 
 /// canEvictInterferenceBasedOnCost - Return true if all interferences between
@@ -255,7 +261,8 @@ bool DefaultEvictionAdvisor::canEvictHintInterference(
 /// @returns True when interference can be evicted cheaper than MaxCost.
 bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
     const LiveInterval &VirtReg, MCRegister PhysReg, bool IsHint,
-    EvictionCost &MaxCost, const SmallVirtRegSet &FixedRegisters) const {
+    EvictionCost &MaxCost, const SmallVirtRegSet &FixedRegisters,
+    ReassignmentCache *Cache) const {
   // It is only possible to evict virtual register interference.
   if (Matrix->checkInterference(VirtReg, PhysReg) > LiveRegMatrix::IK_VirtReg)
     return false;
@@ -326,7 +333,7 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
       // Evicting another local live range in this case could lead to suboptimal
       // coloring.
       if (!MaxCost.isMax() && IsLocal && LIS->intervalIsInOneMBB(*Intf) &&
-          (!EnableLocalReassign || !canReassign(*Intf, PhysReg))) {
+          (!EnableLocalReassign || !canReassign(*Intf, PhysReg, Cache))) {
         return false;
       }
     }
@@ -354,13 +361,15 @@ MCRegister DefaultEvictionAdvisor::tryFindEvictionCandidate(
     BestCost.MaxWeight = VirtReg.weight();
   }
 
+  ReassignmentCache Cache;
   for (auto I = Order.begin(), E = Order.getOrderLimitEnd(OrderLimit); I != E;
        ++I) {
     MCRegister PhysReg = *I;
     assert(PhysReg);
     if (!canAllocatePhysReg(CostPerUseLimit, PhysReg) ||
-        !canEvictInterferenceBasedOnCost(VirtReg, PhysReg, false, BestCost,
-                                         FixedRegisters))
+        !canEvictInterferenceBasedOnCost(
+            VirtReg, PhysReg, false, BestCost, FixedRegisters,
+            ReuseReassignmentBlockers ? &Cache : nullptr))
       continue;
 
     // Best so far.

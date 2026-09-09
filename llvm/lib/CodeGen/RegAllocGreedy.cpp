@@ -82,6 +82,17 @@ using namespace llvm;
 STATISTIC(NumGlobalSplits, "Number of split global live ranges");
 STATISTIC(NumLocalSplits,  "Number of split local live ranges");
 STATISTIC(NumEvicted,      "Number of interferences evicted");
+STATISTIC(NumReassignCalls, "Number of local reassignment searches");
+STATISTIC(NumReassignCandidates, "Number of reassignment physical candidates");
+STATISTIC(NumReassignBlockerHits, "Number of reused reassignment blockers");
+STATISTIC(NumReassignCrossVRegHits,
+          "Number of reassignment blockers reused for a different vreg");
+STATISTIC(NumReassignUnitSearches, "Number of reassignment regunit searches");
+STATISTIC(NumReassignSuccesses, "Number of successful reassignment searches");
+
+static cl::opt<bool> VerifyReassignmentBlockers(
+    "regalloc-verify-reassignment-blockers", cl::Hidden, cl::init(false),
+    cl::desc("Verify reassignment blocker checks with an uncached query"));
 
 static cl::opt<SplitEditor::ComplementSpillMode> SplitSpillMode(
     "split-spill-mode", cl::Hidden,
@@ -589,26 +600,78 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
 
 bool RegAllocEvictionAdvisor::canReassign(const LiveInterval &VirtReg,
                                           MCRegister FromReg) const {
+  return canReassign(VirtReg, FromReg, nullptr);
+}
+
+bool RegAllocEvictionAdvisor::canReassign(const LiveInterval &VirtReg,
+                                          MCRegister FromReg,
+                                          ReassignmentCache *Cache) const {
+  ++NumReassignCalls;
+  bool Cacheable =
+      Cache && VirtReg.segments.size() == 1 && !VirtReg.hasSubRanges();
+  if (Cacheable && Cache->Blockers.empty())
+    Cache->Blockers.resize(TRI->getNumRegUnits());
+
+  unsigned Candidates = 0;
+  unsigned BlockerHits = 0;
+  unsigned CrossVRegHits = 0;
+  unsigned UnitSearches = 0;
   auto HasRegUnitInterference = [&](MCRegUnit Unit) {
+    auto &LiveUnion = Matrix->getLiveUnions()[static_cast<unsigned>(Unit)];
+    if (Cacheable) {
+      auto VerifyInterference = [&](bool Interference) {
+        if (VerifyReassignmentBlockers &&
+            Interference != LiveIntervalUnion::Query(VirtReg, LiveUnion)
+                                .checkInterference())
+          report_fatal_error("Invalid reassignment blocker result");
+        return Interference;
+      };
+      auto &Blocker = Cache->Blockers[static_cast<unsigned>(Unit)];
+      if (Blocker.Start.isValid() && Blocker.Tag == LiveUnion.getTag() &&
+          VirtReg.beginIndex() < Blocker.End &&
+          Blocker.Start < VirtReg.endIndex()) {
+        ++BlockerHits;
+        CrossVRegHits += Blocker.QueriedReg != VirtReg.reg();
+        return VerifyInterference(true);
+      }
+
+      ++UnitSearches;
+      auto Interference = LiveUnion.find(VirtReg.beginIndex());
+      if (Interference.valid() && Interference.start() < VirtReg.endIndex()) {
+        Blocker = {Interference.start(), Interference.stop(),
+                   LiveUnion.getTag(), VirtReg.reg()};
+        return VerifyInterference(true);
+      }
+      return VerifyInterference(false);
+    }
+
+    ++UnitSearches;
     // Instantiate a "subquery", not to be confused with the Queries array.
-    LiveIntervalUnion::Query SubQ(
-        VirtReg, Matrix->getLiveUnions()[static_cast<unsigned>(Unit)]);
+    LiveIntervalUnion::Query SubQ(VirtReg, LiveUnion);
     return SubQ.checkInterference();
   };
 
+  bool CanReassign = false;
   for (MCRegister Reg :
        AllocationOrder::create(VirtReg.reg(), *VRM, RegClassInfo, Matrix)) {
     if (Reg == FromReg)
       continue;
+    ++Candidates;
     // If no units have interference, reassignment is possible.
     if (none_of(TRI->regunits(Reg), HasRegUnitInterference)) {
+      ++NumReassignSuccesses;
       LLVM_DEBUG(dbgs() << "can reassign: " << VirtReg << " from "
                         << printReg(FromReg, TRI) << " to "
                         << printReg(Reg, TRI) << '\n');
-      return true;
+      CanReassign = true;
+      break;
     }
   }
-  return false;
+  NumReassignCandidates += Candidates;
+  NumReassignBlockerHits += BlockerHits;
+  NumReassignCrossVRegHits += CrossVRegHits;
+  NumReassignUnitSearches += UnitSearches;
+  return CanReassign;
 }
 
 /// evictInterference - Evict any interferring registers that prevent VirtReg
