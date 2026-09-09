@@ -63,7 +63,7 @@ Error raiseUnaryBit32(RaiseContext &Ctx, const DecodedInst &Di,
     return Src.takeError();
 
   Value *Result;
-  switch (Di.CanonOp) {
+  switch (Di.Canon.Op) {
   case CanonicalOp::V_NOT_B32:
     Result = Ctx.B.CreateNot(*Src, "not");
     break;
@@ -73,8 +73,8 @@ Error raiseUnaryBit32(RaiseContext &Ctx, const DecodedInst &Di,
     break;
   case CanonicalOp::V_FFBH_U32:
   case CanonicalOp::V_FFBL_B32: {
-    Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_FFBH_U32 ? Intrinsic::ctlz
-                                                             : Intrinsic::cttz;
+    Intrinsic::ID ID = Di.Canon.Op == CanonicalOp::V_FFBH_U32 ? Intrinsic::ctlz
+                                                              : Intrinsic::cttz;
     Value *Count = Ctx.B.CreateIntrinsic(
         ID, {Ctx.B.getInt32Ty()}, {*Src, Ctx.B.getFalse()}, nullptr, "ffb");
     Value *IsZero = Ctx.B.CreateICmpEQ(*Src, Ctx.B.getInt32(0), "ffb.zero");

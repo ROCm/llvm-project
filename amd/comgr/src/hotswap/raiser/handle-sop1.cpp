@@ -240,9 +240,9 @@ static Value *emitBitReplicate(IRBuilder<> &B, Value *Src) {
 
 Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
-  if (Di.CanonOp == CanonicalOp::S_MOV_B32 ||
-      Di.CanonOp == CanonicalOp::S_MOV_B64) {
-    bool Is64 = Di.CanonOp == CanonicalOp::S_MOV_B64;
+  if (Di.Canon.Op == CanonicalOp::S_MOV_B32 ||
+      Di.Canon.Op == CanonicalOp::S_MOV_B64) {
+    bool Is64 = canonicalTypeBitWidth(Di.Canon.Type) == 64;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -253,9 +253,9 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
-  if (Di.CanonOp == CanonicalOp::S_BREV_B32 ||
-      Di.CanonOp == CanonicalOp::S_BREV_B64) {
-    bool Is64 = Di.CanonOp == CanonicalOp::S_BREV_B64;
+  if (Di.Canon.Op == CanonicalOp::S_BREV_B32 ||
+      Di.Canon.Op == CanonicalOp::S_BREV_B64) {
+    bool Is64 = canonicalTypeBitWidth(Di.Canon.Type) == 64;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -268,9 +268,9 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
-  if (Di.CanonOp == CanonicalOp::S_NOT_B32 ||
-      Di.CanonOp == CanonicalOp::S_NOT_B64) {
-    bool Is64 = Di.CanonOp == CanonicalOp::S_NOT_B64;
+  if (Di.Canon.Op == CanonicalOp::S_NOT_B32 ||
+      Di.Canon.Op == CanonicalOp::S_NOT_B64) {
+    bool Is64 = canonicalTypeBitWidth(Di.Canon.Type) == 64;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -287,9 +287,9 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
 
   // A clear SCC leaves the destination alone. The MC form carries no tied
   // operand for that preserved value, so it is read back off the destination.
-  if (Di.CanonOp == CanonicalOp::S_CMOV_B32 ||
-      Di.CanonOp == CanonicalOp::S_CMOV_B64) {
-    bool Is64 = Di.CanonOp == CanonicalOp::S_CMOV_B64;
+  if (Di.Canon.Op == CanonicalOp::S_CMOV_B32 ||
+      Di.Canon.Op == CanonicalOp::S_CMOV_B64) {
+    bool Is64 = canonicalTypeBitWidth(Di.Canon.Type) == 64;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -305,20 +305,20 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
-  if (isScalarFloat(Di.CanonOp)) {
+  if (isScalarFloat(Di.Canon.Op)) {
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
     Expected<Value *> Src = Op.src(0);
     if (!Src)
       return Src.takeError();
-    Ctx.registers().writeReg32(*Dst, emitScalarFloat(Ctx.B, Di.CanonOp, *Src));
+    Ctx.registers().writeReg32(*Dst, emitScalarFloat(Ctx.B, Di.Canon.Op, *Src));
     return Error::success();
   }
 
-  if (Di.CanonOp == CanonicalOp::S_MOVRELS_B32 ||
-      Di.CanonOp == CanonicalOp::S_MOVRELS_B64) {
-    bool Is64 = Di.CanonOp == CanonicalOp::S_MOVRELS_B64;
+  if (Di.Canon.Op == CanonicalOp::S_MOVRELS_B32 ||
+      Di.Canon.Op == CanonicalOp::S_MOVRELS_B64) {
+    bool Is64 = canonicalTypeBitWidth(Di.Canon.Type) == 64;
     Expected<uint64_t> M0 = constantM0(Ctx, Di);
     if (!M0)
       return M0.takeError();
@@ -336,9 +336,9 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
-  if (Di.CanonOp == CanonicalOp::S_MOVRELD_B32 ||
-      Di.CanonOp == CanonicalOp::S_MOVRELD_B64) {
-    bool Is64 = Di.CanonOp == CanonicalOp::S_MOVRELD_B64;
+  if (Di.Canon.Op == CanonicalOp::S_MOVRELD_B32 ||
+      Di.Canon.Op == CanonicalOp::S_MOVRELD_B64) {
+    bool Is64 = canonicalTypeBitWidth(Di.Canon.Type) == 64;
     Expected<uint64_t> M0 = constantM0(Ctx, Di);
     if (!M0)
       return M0.takeError();
@@ -359,7 +359,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
-  if (Di.CanonOp == CanonicalOp::S_MOVRELSD_2_B32) {
+  if (Di.Canon.Op == CanonicalOp::S_MOVRELSD_2_B32) {
     Expected<uint64_t> M0 = constantM0(Ctx, Di);
     if (!M0)
       return M0.takeError();
@@ -379,7 +379,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
-  if (std::optional<BitSearch> Search = bitSearch(Di.CanonOp)) {
+  if (std::optional<BitSearch> Search = bitSearch(Di.Canon.Op)) {
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -390,9 +390,9 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
-  if (Di.CanonOp == CanonicalOp::S_SEXT_I32_I8 ||
-      Di.CanonOp == CanonicalOp::S_SEXT_I32_I16) {
-    unsigned Width = Di.CanonOp == CanonicalOp::S_SEXT_I32_I8 ? 8 : 16;
+  if (Di.Canon.Op == CanonicalOp::S_SEXT_I32_I8 ||
+      Di.Canon.Op == CanonicalOp::S_SEXT_I32_I16) {
+    unsigned Width = canonicalTypeBitWidth(Di.Canon.ElementType);
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -409,14 +409,13 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   // the destination is preserved, so the destination is an input too. The MC
   // form drops the tied operand that carries it, so it is read back off the
   // destination register.
-  if (Di.CanonOp == CanonicalOp::S_BITSET0_B32 ||
-      Di.CanonOp == CanonicalOp::S_BITSET0_B64 ||
-      Di.CanonOp == CanonicalOp::S_BITSET1_B32 ||
-      Di.CanonOp == CanonicalOp::S_BITSET1_B64) {
-    bool Is64 = Di.CanonOp == CanonicalOp::S_BITSET0_B64 ||
-                Di.CanonOp == CanonicalOp::S_BITSET1_B64;
-    bool Sets = Di.CanonOp == CanonicalOp::S_BITSET1_B32 ||
-                Di.CanonOp == CanonicalOp::S_BITSET1_B64;
+  if (Di.Canon.Op == CanonicalOp::S_BITSET0_B32 ||
+      Di.Canon.Op == CanonicalOp::S_BITSET0_B64 ||
+      Di.Canon.Op == CanonicalOp::S_BITSET1_B32 ||
+      Di.Canon.Op == CanonicalOp::S_BITSET1_B64) {
+    bool Is64 = canonicalTypeBitWidth(Di.Canon.Type) == 64;
+    bool Sets = Di.Canon.Op == CanonicalOp::S_BITSET1_B32 ||
+                Di.Canon.Op == CanonicalOp::S_BITSET1_B64;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -446,7 +445,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
-  if (Di.CanonOp == CanonicalOp::S_BITREPLICATE_B64_B32) {
+  if (Di.Canon.Op == CanonicalOp::S_BITREPLICATE_B64_B32) {
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -459,7 +458,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
 
   // The most negative input has no positive counterpart and the hardware keeps
   // it as it is, which is what llvm.abs does when overflow is not poison.
-  if (Di.CanonOp == CanonicalOp::S_ABS_I32) {
+  if (Di.Canon.Op == CanonicalOp::S_ABS_I32) {
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -476,14 +475,13 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   // Counting zeros is counting the ones of the complement. Either way the
   // result is one dword, so the 64-bit forms narrow their count, which cannot
   // lose anything below 65.
-  if (Di.CanonOp == CanonicalOp::S_BCNT0_I32_B32 ||
-      Di.CanonOp == CanonicalOp::S_BCNT0_I32_B64 ||
-      Di.CanonOp == CanonicalOp::S_BCNT1_I32_B32 ||
-      Di.CanonOp == CanonicalOp::S_BCNT1_I32_B64) {
-    bool Is64 = Di.CanonOp == CanonicalOp::S_BCNT0_I32_B64 ||
-                Di.CanonOp == CanonicalOp::S_BCNT1_I32_B64;
-    bool CountsZeros = Di.CanonOp == CanonicalOp::S_BCNT0_I32_B32 ||
-                       Di.CanonOp == CanonicalOp::S_BCNT0_I32_B64;
+  if (Di.Canon.Op == CanonicalOp::S_BCNT0_I32_B32 ||
+      Di.Canon.Op == CanonicalOp::S_BCNT0_I32_B64 ||
+      Di.Canon.Op == CanonicalOp::S_BCNT1_I32_B32 ||
+      Di.Canon.Op == CanonicalOp::S_BCNT1_I32_B64) {
+    bool Is64 = canonicalTypeBitWidth(Di.Canon.ElementType) == 64;
+    bool CountsZeros = Di.Canon.Op == CanonicalOp::S_BCNT0_I32_B32 ||
+                       Di.Canon.Op == CanonicalOp::S_BCNT0_I32_B64;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();

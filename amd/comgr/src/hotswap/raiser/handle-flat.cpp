@@ -71,7 +71,7 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di) {
 
 Error handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
-  switch (Di.CanonOp) {
+  switch (Di.Canon.Op) {
   case CanonicalOp::GLOBAL_LOAD_B32:
     return emitGlobalLoad(Ctx, Di, Op);
   case CanonicalOp::GLOBAL_STORE_B32:

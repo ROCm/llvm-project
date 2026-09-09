@@ -138,8 +138,8 @@ Expected<Value *> lowerFloatingPoint(RaiseContext &Ctx, const DecodedInst &Di,
                                      ParsedReg Dst, Type *Ty) {
   const bool IsF64 = Ty->isDoubleTy();
   if (IsF64) {
-    if (Half.CanonOp != CanonicalOp::V_MAX_NUM_F64 &&
-        Half.CanonOp != CanonicalOp::V_MIN_NUM_F64)
+    if (Half.Canon.Op != CanonicalOp::V_MAX_NUM_F64 &&
+        Half.Canon.Op != CanonicalOp::V_MIN_NUM_F64)
       if (Error Err = Ctx.validateF64Environment(Di))
         return std::move(Err);
   } else if (Error Err = Ctx.validateF32Environment(Di)) {
@@ -159,7 +159,7 @@ Expected<Value *> lowerFloatingPoint(RaiseContext &Ctx, const DecodedInst &Di,
   Value *S1 = Srcs->second;
   Value *Result = nullptr;
 
-  switch (Half.CanonOp) {
+  switch (Half.Canon.Op) {
   case CanonicalOp::V_ADD_F32:
   case CanonicalOp::V_ADD_F64:
     Result = Ctx.B.CreateFAdd(S0, S1, "vopd.fadd");
@@ -180,7 +180,7 @@ Expected<Value *> lowerFloatingPoint(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_FMAAK_F32:
   case CanonicalOp::V_FMA_F64: {
     Value *S2 = nullptr;
-    if (Half.CanonOp == CanonicalOp::V_FMAC_F32) {
+    if (Half.Canon.Op == CanonicalOp::V_FMAC_F32) {
       Value *Acc = Ctx.registers().regFile().readReg32(Ctx.B, Dst);
       if (!Acc)
         return malformedVOPD(Ctx, Di, "cannot read fmac accumulator");
@@ -221,7 +221,7 @@ Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
 
   auto Read = [&](unsigned I) { return readSource(Ctx, Di, Half, I); };
 
-  switch (Half.CanonOp) {
+  switch (Half.Canon.Op) {
   case CanonicalOp::V_MOV_B32:
     return Read(0);
 
@@ -274,7 +274,7 @@ Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
       return Srcs.takeError();
     Value *S0 = Srcs->first;
     Value *S1 = Srcs->second;
-    switch (Half.CanonOp) {
+    switch (Half.Canon.Op) {
     case CanonicalOp::V_ADD_NC_U32:
       return Ctx.B.CreateAdd(S0, S1, "vopd.add");
     case CanonicalOp::V_SUB_NC_U32:
@@ -306,11 +306,11 @@ Expected<Value *> lowerHalf(RaiseContext &Ctx, const DecodedInst &Di,
     if (!Srcs)
       return Srcs.takeError();
     Intrinsic::ID ID = Intrinsic::smin;
-    if (Half.CanonOp == CanonicalOp::V_MAX_I32)
+    if (Half.Canon.Op == CanonicalOp::V_MAX_I32)
       ID = Intrinsic::smax;
-    else if (Half.CanonOp == CanonicalOp::V_MIN_U32)
+    else if (Half.Canon.Op == CanonicalOp::V_MIN_U32)
       ID = Intrinsic::umin;
-    else if (Half.CanonOp == CanonicalOp::V_MAX_U32)
+    else if (Half.Canon.Op == CanonicalOp::V_MAX_U32)
       ID = Intrinsic::umax;
     return Ctx.B.CreateBinaryIntrinsic(ID, Srcs->first, Srcs->second, {},
                                        "vopd.minmax");

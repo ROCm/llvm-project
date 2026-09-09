@@ -36,7 +36,7 @@ std::optional<unsigned> mappedOpcode(int Result) {
   return Result;
 }
 
-// One kCanonTable row: a canonical AMDGPU pseudo opcode and its CanonicalOp.
+// One kCanonTable row: a canonical AMDGPU pseudo opcode and its operation.
 struct Entry {
   unsigned Opc;
   CanonicalOp Sem;
@@ -477,9 +477,9 @@ unsigned canonicalize(unsigned Mc, const MCInstrInfo &MCII,
 
 } // namespace
 
-CanonicalOp OpcodeMap::lookup(unsigned Opcode) const {
-  DenseMap<unsigned, CanonicalOp>::const_iterator It = Map.find(Opcode);
-  return It != Map.end() ? It->second : CanonicalOp::Unknown;
+CanonicalInst OpcodeMap::lookup(unsigned Opcode) const {
+  DenseMap<unsigned, CanonicalInst>::const_iterator It = Map.find(Opcode);
+  return It != Map.end() ? It->second : canonicalInst(CanonicalOp::Unknown);
 }
 
 void OpcodeMap::build(const MCInstrInfo &MCII) {
@@ -502,7 +502,7 @@ void OpcodeMap::build(const MCInstrInfo &MCII) {
     const unsigned Canon = canonicalize(Mc, MCII, McToPseudo, DppToBase);
     DenseMap<unsigned, CanonicalOp>::const_iterator It = CanonToSem.find(Canon);
     if (It != CanonToSem.end())
-      Map[Mc] = It->second;
+      Map[Mc] = canonicalInst(It->second);
   }
 }
 

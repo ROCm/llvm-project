@@ -319,7 +319,7 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Clamp)
     return Clamp.takeError();
 
-  switch (Di.CanonOp) {
+  switch (Di.Canon.Op) {
   case CanonicalOp::V_MOV_B32:
     if (*Clamp)
       return unsupportedInstruction(Ctx, Di,
@@ -430,7 +430,7 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
       return Args.takeError();
 
     Value *Result;
-    switch (Di.CanonOp) {
+    switch (Di.Canon.Op) {
     case CanonicalOp::V_LSHL_ADD_U32: {
       Value *Amount = maskShiftAmount(Ctx.B, Args->Src1, 32);
       Value *Shifted = Ctx.B.CreateShl(Args->Src0, Amount);
@@ -486,11 +486,11 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
           WidthNonZero, Width, Ctx.B.getInt32(1), "bfe.safe.width");
       Value *MaskHighBit = Ctx.B.CreateShl(Ctx.B.getInt32(1), SafeWidth);
       Value *Mask = Ctx.B.CreateSub(MaskHighBit, Ctx.B.getInt32(1), "bfe.mask");
-      Value *Shifted = Di.CanonOp == CanonicalOp::V_BFE_I32
+      Value *Shifted = Di.Canon.Op == CanonicalOp::V_BFE_I32
                            ? Ctx.B.CreateAShr(Args->Src0, Offset)
                            : Ctx.B.CreateLShr(Args->Src0, Offset);
       Value *Field = Ctx.B.CreateAnd(Shifted, Mask, "bfe.field");
-      if (Di.CanonOp == CanonicalOp::V_BFE_I32) {
+      if (Di.Canon.Op == CanonicalOp::V_BFE_I32) {
         Value *SignOffset = Ctx.B.CreateSub(SafeWidth, Ctx.B.getInt32(1));
         Value *SignBit = Ctx.B.CreateShl(Ctx.B.getInt32(1), SignOffset);
         Value *SignFlipped = Ctx.B.CreateXor(Field, SignBit);
@@ -575,7 +575,7 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
       return Source.takeError();
     Value *MaskedAmount = maskShiftAmount(Ctx.B, *Amount, 64);
     Value *Shift = Ctx.B.CreateZExt(MaskedAmount, Ctx.B.getInt64Ty());
-    Value *Result = Di.CanonOp == CanonicalOp::V_LSHRREV_B64
+    Value *Result = Di.Canon.Op == CanonicalOp::V_LSHRREV_B64
                         ? Ctx.B.CreateLShr(*Source, Shift, "lshr64")
                         : Ctx.B.CreateAShr(*Source, Shift, "ashr64");
     Ctx.registers().writeReg64(*Dst, Result);
@@ -625,8 +625,8 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<Value *> Src1 = Op.src(1);
     if (!Src1)
       return Src1.takeError();
-    const bool IsAdd = Di.CanonOp == CanonicalOp::V_ADD_NC_U32;
-    const bool Reverse = Di.CanonOp == CanonicalOp::V_SUBREV_NC_U32;
+    const bool IsAdd = Di.Canon.Op == CanonicalOp::V_ADD_NC_U32;
+    const bool Reverse = Di.Canon.Op == CanonicalOp::V_SUBREV_NC_U32;
     Value *Lhs = Reverse ? *Src1 : *Src0;
     Value *Rhs = Reverse ? *Src0 : *Src1;
     Value *Result;
@@ -689,10 +689,10 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_MUL_HI_I32_I24:
   case CanonicalOp::V_MUL_U32_U24:
   case CanonicalOp::V_MUL_HI_U32_U24: {
-    const bool Signed = Di.CanonOp == CanonicalOp::V_MUL_I32_I24 ||
-                        Di.CanonOp == CanonicalOp::V_MUL_HI_I32_I24;
-    const bool High = Di.CanonOp == CanonicalOp::V_MUL_HI_I32_I24 ||
-                      Di.CanonOp == CanonicalOp::V_MUL_HI_U32_U24;
+    const bool Signed = Di.Canon.Op == CanonicalOp::V_MUL_I32_I24 ||
+                        Di.Canon.Op == CanonicalOp::V_MUL_HI_I32_I24;
+    const bool High = Di.Canon.Op == CanonicalOp::V_MUL_HI_I32_I24 ||
+                      Di.Canon.Op == CanonicalOp::V_MUL_HI_U32_U24;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -732,11 +732,11 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_SUB_NC_U64:
   case CanonicalOp::V_ADD_I32:
   case CanonicalOp::V_SUB_I32: {
-    const bool Is64 = Di.CanonOp == CanonicalOp::V_ADD_NC_U64 ||
-                      Di.CanonOp == CanonicalOp::V_SUB_NC_U64;
+    const bool Is64 = Di.Canon.Op == CanonicalOp::V_ADD_NC_U64 ||
+                      Di.Canon.Op == CanonicalOp::V_SUB_NC_U64;
     const bool Signed = !Is64;
-    const bool IsAdd = Di.CanonOp == CanonicalOp::V_ADD_NC_U64 ||
-                       Di.CanonOp == CanonicalOp::V_ADD_I32;
+    const bool IsAdd = Di.Canon.Op == CanonicalOp::V_ADD_NC_U64 ||
+                       Di.Canon.Op == CanonicalOp::V_ADD_I32;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -771,7 +771,7 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     // Clamp is reserved for these opcodes as well.
     if (*Clamp)
       return unsupportedInstruction(Ctx, Di, "multiply does not define clamp");
-    const bool Signed = Di.CanonOp == CanonicalOp::V_MUL_HI_I32;
+    const bool Signed = Di.Canon.Op == CanonicalOp::V_MUL_HI_I32;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -795,7 +795,7 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
 
   case CanonicalOp::V_MAD_I32_I24:
   case CanonicalOp::V_MAD_U32_U24: {
-    const bool Signed = Di.CanonOp == CanonicalOp::V_MAD_I32_I24;
+    const bool Signed = Di.Canon.Op == CanonicalOp::V_MAD_I32_I24;
     Expected<TernaryOperands> Args = Op.readTernary32();
     if (!Args)
       return Args.takeError();
@@ -870,10 +870,10 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<TernaryOperands> Args = Op.readTernary32();
     if (!Args)
       return Args.takeError();
-    const bool Signed = Di.CanonOp == CanonicalOp::V_ADD_MIN_I32 ||
-                        Di.CanonOp == CanonicalOp::V_ADD_MAX_I32;
-    const bool Max = Di.CanonOp == CanonicalOp::V_ADD_MAX_I32 ||
-                     Di.CanonOp == CanonicalOp::V_ADD_MAX_U32;
+    const bool Signed = Di.Canon.Op == CanonicalOp::V_ADD_MIN_I32 ||
+                        Di.Canon.Op == CanonicalOp::V_ADD_MAX_I32;
+    const bool Max = Di.Canon.Op == CanonicalOp::V_ADD_MAX_I32 ||
+                     Di.Canon.Op == CanonicalOp::V_ADD_MAX_U32;
     Value *Sum = Ctx.B.CreateBinaryIntrinsic(Signed ? Intrinsic::sadd_sat
                                                     : Intrinsic::uadd_sat,
                                              Args->Src0, Args->Src1);
@@ -942,7 +942,7 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     if (!S1)
       return S1.takeError();
     Intrinsic::ID ID;
-    switch (Di.CanonOp) {
+    switch (Di.Canon.Op) {
     case CanonicalOp::V_MIN_I64:
       ID = Intrinsic::smin;
       break;
@@ -964,7 +964,7 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
 
   case CanonicalOp::V_MAD_NC_U64_U32:
   case CanonicalOp::V_MAD_NC_I64_I32: {
-    const bool Signed = Di.CanonOp == CanonicalOp::V_MAD_NC_I64_I32;
+    const bool Signed = Di.Canon.Op == CanonicalOp::V_MAD_NC_I64_I32;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
@@ -996,7 +996,7 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     if (Di.NumDefs != 2 || Op.nSrcs() < 3)
       return unsupportedInstruction(
           Ctx, Di, "expected two destinations and three sources");
-    const bool Signed = Di.CanonOp == CanonicalOp::V_MAD_I64_I32;
+    const bool Signed = Di.Canon.Op == CanonicalOp::V_MAD_I64_I32;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();

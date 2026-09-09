@@ -23,7 +23,7 @@ namespace COMGR::hotswap {
 
 Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
-  switch (Di.CanonOp) {
+  switch (Di.Canon.Op) {
   case CanonicalOp::V_MOV_B32:
     return raiseMove32(Ctx, Di, Op);
   case CanonicalOp::V_MOV_B64:

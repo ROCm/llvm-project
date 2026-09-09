@@ -184,6 +184,20 @@ TEST(CanonicalOp, EveryValueIsNamed) {
     EXPECT_FALSE(canonicalOpName(static_cast<CanonicalOp>(I)).empty());
 }
 
+TEST(CanonicalInst, CarriesOperandTypes) {
+  EXPECT_EQ(canonicalInst(CanonicalOp::S_ENDPGM),
+            (CanonicalInst{CanonicalOp::S_ENDPGM, CanonicalType::None,
+                           CanonicalType::None}));
+  EXPECT_EQ(canonicalInst(CanonicalOp::S_MOV_B64),
+            (CanonicalInst{CanonicalOp::S_MOV_B64, CanonicalType::B64,
+                           CanonicalType::None}));
+  EXPECT_EQ(canonicalInst(CanonicalOp::S_CVT_F32_I32),
+            (CanonicalInst{CanonicalOp::S_CVT_F32_I32, CanonicalType::F32,
+                           CanonicalType::I32}));
+  EXPECT_EQ(canonicalTypeBitWidth(CanonicalType::B512), 512u);
+  EXPECT_EQ(canonicalTypeName(CanonicalType::F64), "F64");
+}
+
 // -- stripEncoding (pure string helper) ---------------------------------------
 
 TEST(StripEncoding, DropsKnownSuffixes) {
@@ -235,46 +249,56 @@ unsigned opcodeOf(MCState &State, llvm::ArrayRef<uint8_t> Bytes) {
 TEST_F(DecoderTest, OpcodeMapTagsTableEntries) {
   OpcodeMap Map;
   Map.build(*State.InstrInfo);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SMovB32Bytes)), CanonicalOp::S_MOV_B32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SEndpgmBytes)), CanonicalOp::S_ENDPGM);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordImmBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SMovB32Bytes)).Op,
+            CanonicalOp::S_MOV_B32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SEndpgmBytes)).Op,
+            CanonicalOp::S_ENDPGM);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordImmBytes)).Op,
             CanonicalOp::S_LOAD_B32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordSgprBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordSgprBytes)).Op,
             CanonicalOp::S_LOAD_B32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordSgprImmBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordSgprImmBytes)).Op,
             CanonicalOp::S_LOAD_B32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx2ImmBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx2ImmBytes)).Op,
             CanonicalOp::S_LOAD_B64);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx2SgprBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx2ImmBytes)).Type,
+            CanonicalType::B64);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx2SgprBytes)).Op,
             CanonicalOp::S_LOAD_B64);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx2SgprImmBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx2SgprImmBytes)).Op,
             CanonicalOp::S_LOAD_B64);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx4ImmBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx4ImmBytes)).Op,
             CanonicalOp::S_LOAD_B128);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx4SgprBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx4SgprBytes)).Op,
             CanonicalOp::S_LOAD_B128);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx4SgprImmBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, SLoadDwordx4SgprImmBytes)).Op,
             CanonicalOp::S_LOAD_B128);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalLoadDwordVaddrBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalLoadDwordVaddrBytes)).Op,
             CanonicalOp::GLOBAL_LOAD_B32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalLoadDwordSaddrBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalLoadDwordSaddrBytes)).Op,
             CanonicalOp::GLOBAL_LOAD_B32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalStoreDwordVaddrBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalStoreDwordVaddrBytes)).Op,
             CanonicalOp::GLOBAL_STORE_B32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalStoreDwordSaddrBytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, GlobalStoreDwordSaddrBytes)).Op,
             CanonicalOp::GLOBAL_STORE_B32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, VAddF32Bytes)), CanonicalOp::V_ADD_F32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, VMulF32Bytes)), CanonicalOp::V_MUL_F32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, VSubF32Bytes)), CanonicalOp::V_SUB_F32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, VSubrevF32Bytes)),
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VAddF32Bytes)).Op,
+            CanonicalOp::V_ADD_F32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VAddF32Bytes)).Type, CanonicalType::F32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VMulF32Bytes)).Op,
+            CanonicalOp::V_MUL_F32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VSubF32Bytes)).Op,
+            CanonicalOp::V_SUB_F32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VSubrevF32Bytes)).Op,
             CanonicalOp::V_SUBREV_F32);
-  EXPECT_EQ(Map.lookup(opcodeOf(State, VMovB32Bytes)), CanonicalOp::V_MOV_B32);
+  EXPECT_EQ(Map.lookup(opcodeOf(State, VMovB32Bytes)).Op,
+            CanonicalOp::V_MOV_B32);
 }
 
 TEST_F(DecoderTest, OpcodeMapReturnsUnknownForUnmappedOpcode) {
   OpcodeMap Map;
   Map.build(*State.InstrInfo);
-  EXPECT_EQ(Map.lookup(State.InstrInfo->getNumOpcodes()), CanonicalOp::Unknown);
+  EXPECT_EQ(Map.lookup(State.InstrInfo->getNumOpcodes()).Op,
+            CanonicalOp::Unknown);
 }
 
 // -- decode -------------------------------------------------------------------
@@ -300,9 +324,9 @@ TEST_F(DecoderTest, DecodeKernelWalksToProgramEnd) {
       << llvm::toString(ResultOrErr.takeError());
 
   ASSERT_EQ(ResultOrErr->Insts.size(), 3u);
-  EXPECT_EQ(ResultOrErr->Insts[0].CanonOp, CanonicalOp::S_MOV_B32);
-  EXPECT_EQ(ResultOrErr->Insts[1].CanonOp, CanonicalOp::V_MOV_B32);
-  EXPECT_EQ(ResultOrErr->Insts[2].CanonOp, CanonicalOp::S_ENDPGM);
+  EXPECT_EQ(ResultOrErr->Insts[0].Canon.Op, CanonicalOp::S_MOV_B32);
+  EXPECT_EQ(ResultOrErr->Insts[1].Canon.Op, CanonicalOp::V_MOV_B32);
+  EXPECT_EQ(ResultOrErr->Insts[2].Canon.Op, CanonicalOp::S_ENDPGM);
   EXPECT_EQ(ResultOrErr->Insts[0].Offset, 0u);
   EXPECT_EQ(ResultOrErr->Insts[1].Offset, 4u);
   EXPECT_EQ(ResultOrErr->Insts[2].Offset, 8u);
@@ -321,7 +345,7 @@ TEST_F(DecoderTest, DecodeKernelStopsAtProgramEnd) {
   ASSERT_TRUE(static_cast<bool>(ResultOrErr))
       << llvm::toString(ResultOrErr.takeError());
   ASSERT_EQ(ResultOrErr->Insts.size(), 1u);
-  EXPECT_EQ(ResultOrErr->Insts[0].CanonOp, CanonicalOp::S_ENDPGM);
+  EXPECT_EQ(ResultOrErr->Insts[0].Canon.Op, CanonicalOp::S_ENDPGM);
 }
 
 TEST_F(DecoderTest, DecodeKernelHonoursOffsetAndEnd) {
@@ -335,7 +359,7 @@ TEST_F(DecoderTest, DecodeKernelHonoursOffsetAndEnd) {
   ASSERT_TRUE(static_cast<bool>(ResultOrErr))
       << llvm::toString(ResultOrErr.takeError());
   ASSERT_EQ(ResultOrErr->Insts.size(), 1u);
-  EXPECT_EQ(ResultOrErr->Insts[0].CanonOp, CanonicalOp::S_MOV_B32);
+  EXPECT_EQ(ResultOrErr->Insts[0].Canon.Op, CanonicalOp::S_MOV_B32);
   EXPECT_EQ(ResultOrErr->Insts[0].Offset, 4u);
   EXPECT_EQ(ResultOrErr->BlockStarts, (std::set<uint64_t>{4}));
 }

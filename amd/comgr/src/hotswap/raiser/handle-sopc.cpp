@@ -225,18 +225,18 @@ Error handleBitCompare64(RaiseContext &Ctx, OperandResolver &Op,
 // Raise one SOPC instruction and write its comparison result to SCC.
 Error handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
-  if (std::optional<CmpInst::Predicate> Pred = integerPredicate(Di.CanonOp))
+  if (std::optional<CmpInst::Predicate> Pred = integerPredicate(Di.Canon.Op))
     return handleIntegerCompare(Ctx, Op, *Pred);
 
-  if (Di.CanonOp == CanonicalOp::S_CMP_EQ_U64)
+  if (Di.Canon.Op == CanonicalOp::S_CMP_EQ_U64)
     return handleInteger64Compare(Ctx, Op, CmpInst::ICMP_EQ);
-  if (Di.CanonOp == CanonicalOp::S_CMP_LG_U64)
+  if (Di.Canon.Op == CanonicalOp::S_CMP_LG_U64)
     return handleInteger64Compare(Ctx, Op, CmpInst::ICMP_NE);
 
-  if (std::optional<CmpInst::Predicate> Pred = floatPredicate(Di.CanonOp))
-    return handleFloatCompare(Ctx, Op, *Pred, isFloat16Compare(Di.CanonOp));
+  if (std::optional<CmpInst::Predicate> Pred = floatPredicate(Di.Canon.Op))
+    return handleFloatCompare(Ctx, Op, *Pred, isFloat16Compare(Di.Canon.Op));
 
-  switch (Di.CanonOp) {
+  switch (Di.Canon.Op) {
   case CanonicalOp::S_BITCMP0_B32:
     return handleBitCompare32(Ctx, Op, CmpInst::ICMP_EQ);
   case CanonicalOp::S_BITCMP1_B32:

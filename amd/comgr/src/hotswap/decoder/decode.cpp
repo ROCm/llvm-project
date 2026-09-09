@@ -237,8 +237,8 @@ Error decodeVOPDSource(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
 Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
                      const VOPDComponentInfo &Info, unsigned ComponentOpcode,
                      const OpcodeMap &OpcMap, bool IsVOPD3) {
-  Half.CanonOp = OpcMap.lookup(ComponentOpcode);
-  if (Half.CanonOp == CanonicalOp::Unknown)
+  Half.Canon = OpcMap.lookup(ComponentOpcode);
+  if (Half.Canon.Op == CanonicalOp::Unknown)
     return failVOPDDecode(Di, "component opcode has no canonical operation");
 
   unsigned DstIdx = Info.getDstOperandIdx();
@@ -253,10 +253,10 @@ Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
       return Err;
 
   int BitOpIdx = Info.getBitOp3OperandIdx();
-  if (BitOpIdx < 0 && (Half.CanonOp == CanonicalOp::V_AND_B32 ||
-                       Half.CanonOp == CanonicalOp::V_OR_B32 ||
-                       Half.CanonOp == CanonicalOp::V_XOR_B32 ||
-                       Half.CanonOp == CanonicalOp::V_BITOP3_B32))
+  if (BitOpIdx < 0 && (Half.Canon.Op == CanonicalOp::V_AND_B32 ||
+                       Half.Canon.Op == CanonicalOp::V_OR_B32 ||
+                       Half.Canon.Op == CanonicalOp::V_XOR_B32 ||
+                       Half.Canon.Op == CanonicalOp::V_BITOP3_B32))
     BitOpIdx = COMGR::hotswap::getNamedOperandIdx(Di.Inst.getOpcode(),
                                                   AMDGPU::OpName::bitop3);
 
@@ -278,7 +278,7 @@ Error decodeVOPD(DecodedInst &Di, const MCInstrInfo &MCII,
   if (!COMGR::hotswap::isVOPD(Di.Inst.getOpcode()))
     return Error::success();
 
-  Di.VOPD.emplace();
+  Di.VOPD = std::array<DecodedInst::VOPDHalf, 2>{};
   const bool IsVOPD3 = (Di.TargetSpecificFlags & AmdgpuFormat::VOPD3) != 0;
   auto [OpX, OpY] = COMGR::hotswap::getVOPDComponents(Di.Inst.getOpcode());
   const MCInstrDesc &OpXDesc = MCII.get(OpX);
@@ -299,7 +299,7 @@ Expected<SmallVector<uint64_t>>
 computeDecodedBlockSuccessors(const DecodedInst &LastInst,
                               std::optional<uint64_t> NextBlockOffset) {
   SmallVector<uint64_t> Result;
-  if (LastInst.CanonOp == CanonicalOp::S_ENDPGM)
+  if (LastInst.Canon.Op == CanonicalOp::S_ENDPGM)
     return Result;
   if (NextBlockOffset)
     Result.push_back(*NextBlockOffset);
@@ -307,7 +307,7 @@ computeDecodedBlockSuccessors(const DecodedInst &LastInst,
 }
 
 bool decodedInstEndsBlock(const DecodedInst &LastInst) {
-  return LastInst.CanonOp == CanonicalOp::S_ENDPGM;
+  return LastInst.Canon.Op == CanonicalOp::S_ENDPGM;
 }
 
 Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
@@ -349,7 +349,7 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
     const MCInstrDesc &Desc = Mc.InstrInfo->get(Inst.getOpcode());
     DecodedInst Di;
     Di.Inst = Inst;
-    Di.CanonOp = OpcMap.lookup(Inst.getOpcode());
+    Di.Canon = OpcMap.lookup(Inst.getOpcode());
     Di.NumDefs = Desc.getNumDefs();
     Di.Offset = Off;
     Di.setSizeInBytes(InstSize);

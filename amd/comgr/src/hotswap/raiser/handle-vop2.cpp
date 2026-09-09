@@ -210,7 +210,7 @@ static Error raiseMulHi24(RaiseContext &Ctx, OperandResolver &Op,
 
 Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
-  switch (Di.CanonOp) {
+  switch (Di.Canon.Op) {
   case CanonicalOp::V_ADD_F32:
     return raiseFloatBinary(Ctx, Di, Op, Instruction::FAdd,
                             /*ReverseOperands=*/false);

@@ -211,10 +211,10 @@ int runDumpDecoded(const CodeObjectInfo &Info, const TextSection &Text,
       outs().write_hex(Di.Offset);
       outs() << "  ";
       if (Di.VOPD)
-        outs() << "VOPD(" << canonicalOpName((*Di.VOPD)[0].CanonOp) << ", "
-               << canonicalOpName((*Di.VOPD)[1].CanonOp) << ")";
+        outs() << "VOPD(" << canonicalOpName((*Di.VOPD)[0].Canon.Op) << ", "
+               << canonicalOpName((*Di.VOPD)[1].Canon.Op) << ")";
       else
-        outs() << canonicalOpName(Di.CanonOp);
+        outs() << canonicalOpName(Di.Canon.Op);
       outs() << "  " << printInst(MC, Di.Inst) << "\n";
     }
   }

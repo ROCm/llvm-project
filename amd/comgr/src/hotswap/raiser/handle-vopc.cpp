@@ -27,7 +27,7 @@ namespace COMGR::hotswap {
 Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
   ICmpInst::Predicate Pred;
-  switch (Di.CanonOp) {
+  switch (Di.Canon.Op) {
   case CanonicalOp::V_CMP_LT_I32:
     Pred = ICmpInst::ICMP_SLT;
     break;

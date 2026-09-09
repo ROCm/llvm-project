@@ -47,7 +47,7 @@ inline std::optional<int64_t> evalOperandAsConst(const llvm::MCInst &Inst,
 // it.
 struct DecodedInst {
   llvm::MCInst Inst;
-  CanonicalOp CanonOp = CanonicalOp::Unknown;
+  CanonicalInst Canon;
 
   // The instruction's MCInstrDesc::TSFlags, whose AMDGPU-specific bits carry
   // the instruction-format the raiser dispatches on (see amdgpu-formats.h).
@@ -67,11 +67,13 @@ struct DecodedInst {
   llvm::SmallVector<unsigned> ModMap;
 
   // Structural view of a VOPD packet. A packet contains two component VOPs
-  // in one MCInst, so the ordinary one-opcode CanonOp/SrcMap view cannot
+  // in one MCInst, so the ordinary one-opcode Canon/SrcMap view cannot
   // describe it. Operand indices still refer to Inst and therefore retain
   // the register classes and S_SET_VGPR_MSB adjustments of the full packet.
   struct VOPDHalf {
-    CanonicalOp CanonOp = CanonicalOp::Unknown;
+    VOPDHalf() = default;
+
+    CanonicalInst Canon;
     unsigned SrcIdx[3] = {};
 
     unsigned destinationIndex() const {

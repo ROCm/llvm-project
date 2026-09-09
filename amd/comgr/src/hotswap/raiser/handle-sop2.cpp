@@ -202,7 +202,7 @@ Error handleOverflowingBinary32(RaiseContext &Ctx, OperandResolver &Op,
 // Raise one SOP2 instruction and preserve its SCC side effects.
 Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
-  switch (Di.CanonOp) {
+  switch (Di.Canon.Op) {
   case CanonicalOp::S_AND_B32:
     return handleBitOp(Ctx, Di, Op, BitOp::And, false, "and");
   case CanonicalOp::S_AND_B64:
