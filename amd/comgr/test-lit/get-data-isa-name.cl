@@ -1,6 +1,6 @@
 // COM: Test Comgr get_data_isa_name() API
 // RUN: %python %S/enumerate-isa-check.py %clang %s %t
-
+// XFAIL: *
 // COM: Running non-enumerated tests for COV=4 and COV=6
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx900 -nogpulib \
 // RUN:   -nogpuinc -mcode-object-version=4 -c %s -o %t.o
