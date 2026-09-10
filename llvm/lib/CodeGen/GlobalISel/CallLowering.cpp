@@ -99,6 +99,7 @@ static void addFlagsFromAttrSet(ISD::ArgFlagsTy &Flags, AttributeSet Attrs) {
   }
 }
 
+<<<<<<< HEAD
 ISD::ArgFlagsTy CallLowering::getAttributesForArgIdx(const CallBase &Call,
                                                      unsigned ArgIdx) const {
   ISD::ArgFlagsTy Flags;
@@ -118,6 +119,8 @@ CallLowering::getAttributesForReturn(const CallBase &Call) const {
   return Flags;
 }
 
+=======
+>>>>>>> a6aa47a28dcf
 void CallLowering::addArgFlagsFromAttributes(ISD::ArgFlagsTy &Flags,
                                              const AttributeList &Attrs,
                                              unsigned OpIdx) const {
@@ -144,10 +147,15 @@ bool CallLowering::lowerCall(MachineIRBuilder &MIRBuilder, const CallBase &CB,
   CallingConv::ID CallConv = CB.getCallingConv();
   Type *RetTy = CB.getType();
   bool IsVarArg = CB.getFunctionType()->isVarArg();
+  const Function *Callee = CB.getCalledFunction();
 
-  SmallVector<BaseArgInfo, 4> SplitArgs;
-  getReturnInfo(CallConv, RetTy, CB.getAttributes(), SplitArgs, DL);
-  Info.CanLowerReturn = canLowerReturn(MF, CallConv, SplitArgs, IsVarArg);
+  if (RetTy->isVoidTy()) {
+    Info.CanLowerReturn = true;
+  } else {
+    SmallVector<BaseArgInfo, 4> SplitArgs;
+    getReturnInfo(CallConv, RetTy, CB.getAttributes(), SplitArgs, DL);
+    Info.CanLowerReturn = canLowerReturn(MF, CallConv, SplitArgs, IsVarArg);
+  }
 
   Info.IsConvergent = CB.isConvergent();
 
@@ -166,7 +174,11 @@ bool CallLowering::lowerCall(MachineIRBuilder &MIRBuilder, const CallBase &CB,
   unsigned i = 0;
   unsigned NumFixedArgs = CB.getFunctionType()->getNumParams();
   for (const auto &Arg : CB.args()) {
-    ArgInfo OrigArg{ArgRegs[i], *Arg.get(), i, getAttributesForArgIdx(CB, i)};
+    ISD::ArgFlagsTy Flags;
+    // "returned" is not an ABI attribute, so we can inherit it from the callee.
+    if (Callee && Callee->hasParamAttribute(i, Attribute::Returned))
+      Flags.setReturned();
+    ArgInfo OrigArg{ArgRegs[i], *Arg.get(), i, Flags};
     setArgFlags(OrigArg, i + AttributeList::FirstArgIndex, DL, CB);
     if (i >= NumFixedArgs)
       OrigArg.Flags[0].setVarArg();
@@ -210,7 +222,8 @@ bool CallLowering::lowerCall(MachineIRBuilder &MIRBuilder, const CallBase &CB,
   Register ReturnHintAlignReg;
   Align ReturnHintAlign;
 
-  Info.OrigRet = ArgInfo{ResRegs, RetTy, 0, getAttributesForReturn(CB)};
+  ISD::ArgFlagsTy RetFlags;
+  Info.OrigRet = ArgInfo{ResRegs, RetTy, 0, RetFlags};
 
   if (!Info.OrigRet.Ty->isVoidTy()) {
     setArgFlags(Info.OrigRet, AttributeList::ReturnIndex, DL, CB);
