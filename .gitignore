@@ -102,3 +102,4 @@ pythonenv*
 /_build
 .depend*/
 depend*/
+CMakeUserPresets.json
