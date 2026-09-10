@@ -129,7 +129,7 @@ jobs:
       - name: Resolve TheRock ref from RockCI config
         id: rockci_ref
         if: inputs.repository == 'ROCm/TheRock' && inputs.ref == ''
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/resolve-therock-ref@amd/dev/kirthana14m/rock-sha-check
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/resolve-therock-ref@amd-staging
         with:
           github_token: ${{ github.token }}
       
