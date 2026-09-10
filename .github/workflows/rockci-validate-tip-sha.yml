@@ -9,7 +9,7 @@ on:
 
   workflow_dispatch:
     inputs:
-      therock_ref:
+      therock_rev:
         description: "TheRock commit SHA, branch, or tag to validate. Empty uses the current main tip. Dispatch opens a PR for checks only; it does not auto-merge."
         required: false
         type: string
@@ -53,7 +53,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          REQUESTED_REF: ${{ inputs.therock_ref || '' }}
+          REQUESTED_REF: ${{ inputs.therock_rev || '' }}
         run: |
           set -euo pipefail
           THEROCK_URL="https://github.com/ROCm/TheRock.git"
@@ -85,7 +85,7 @@ jobs:
               print("")
           else:
               try:
-                  print(json.loads(path.read_text(encoding="utf-8")).get("therock_ref", ""))
+                  print(json.loads(path.read_text(encoding="utf-8")).get("therock_rev", ""))
               except (json.JSONDecodeError, OSError):
                   print("")
           PY
@@ -134,7 +134,7 @@ jobs:
 
           path = pathlib.Path(sys.argv[1])
           path.write_text(
-              json.dumps({"therock_ref": sys.argv[2]}, indent=2) + "\n",
+              json.dumps({"therock_rev": sys.argv[2]}, indent=2) + "\n",
               encoding="utf-8",
           )
           PY

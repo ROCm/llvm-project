@@ -38,7 +38,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Read TheRock ref from RockCI config
+    - name: Read TheRock sha from RockCI config
       id: resolve
       shell: bash
       env:

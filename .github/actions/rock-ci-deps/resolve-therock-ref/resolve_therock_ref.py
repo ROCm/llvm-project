@@ -52,9 +52,9 @@ def main() -> None:
     except (KeyError, ValueError) as error:
         fail(f"{config_path} at {config_ref} is not valid JSON: {error}")
 
-    ref = config.get("therock_ref", "")
+    ref = config.get("therock_rev", "")
     if not SHA_PATTERN.fullmatch(ref):
-        fail(f"{config_path} must contain a full 40-character therock_ref.")
+        fail(f"{config_path} must contain a full 40-character therock_rev.")
 
     ref = ref.lower()
     print(f"Resolved TheRock ref {ref} from {repository}@{config_ref}")
