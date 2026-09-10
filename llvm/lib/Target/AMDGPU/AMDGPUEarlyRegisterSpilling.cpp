@@ -1569,21 +1569,12 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
       MachineBasicBlock *PreHeader = OutermostLoopOfCurLoop->getLoopPreheader();
       MachineInstr *InstrOfCandidateReg =
           MRI->getOneDef(CandidateReg)->getParent();
-      MachineBasicBlock *DefBlock = InstrOfCandidateReg->getParent();
-      SpillBlock = DefBlock;
-      if (InstrOfCandidateReg->isPHI()) {
-        WhereToSpill = DefBlock->getFirstNonPHI();
-        if (WhereToSpill == DefBlock->end())
-          WhereToSpill = DefBlock->instr_end();
-      } else {
-        WhereToSpill = InstrOfCandidateReg == &DefBlock->instr_back()
-                           ? DefBlock->instr_end()
-                           : InstrOfCandidateReg->getNextNode()->getIterator();
-      }
-
       MachineBasicBlock::iterator LastIt = PreHeader->getFirstTerminator();
       if (LastIt == PreHeader->end())
         LastIt = PreHeader->instr_back();
+      SpillBlock = PreHeader;
+      WhereToSpill = LastIt;
+
       MachineInstr *LastInstrPreHeader = &*(LastIt);
       // The dominated uses are the ones that are dominated by the SpillBlock.
       SetVectorType DominatedUses;

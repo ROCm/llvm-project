@@ -207,6 +207,8 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[V_ADD_U32_e64_4:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 %412, [[GLOBAL_LOAD_DWORDX3_SADDR]].sub1, 0, implicit $exec
   ; CHECK-NEXT:   [[V_MOV_B32_e32_:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
   ; CHECK-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
+  ; CHECK-NEXT:   SI_SPILL_V64_SAVE %414, %stack.9, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.9, align 4, addrspace 5)
+  ; CHECK-NEXT:   SI_SPILL_V64_SAVE %416, %stack.10, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.10, align 4, addrspace 5)
   ; CHECK-NEXT:   S_BRANCH %bb.12
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.11.Flow11:
@@ -449,8 +451,6 @@ define amdgpu_ps void @hammock_loop_under_if_test(ptr addrspace(1) inreg %out, p
   ; CHECK-NEXT:   [[PHI65:%[0-9]+]]:vgpr_32 = PHI [[V_LSHL_OR_B32_e64_2]], %bb.0, undef %413:vgpr_32, %bb.9
   ; CHECK-NEXT:   [[PHI66:%[0-9]+]]:vreg_64 = PHI [[REG_SEQUENCE3]], %bb.0, undef %415:vreg_64, %bb.9
   ; CHECK-NEXT:   [[PHI67:%[0-9]+]]:vreg_64 = PHI [[REG_SEQUENCE]], %bb.0, undef %417:vreg_64, %bb.9
-  ; CHECK-NEXT:   SI_SPILL_V64_SAVE [[PHI67]], %stack.10, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.10, align 4, addrspace 5)
-  ; CHECK-NEXT:   SI_SPILL_V64_SAVE [[PHI66]], %stack.9, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.9, align 4, addrspace 5)
   ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE6:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.5, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.5, addrspace 5)
   ; CHECK-NEXT:   [[SI_SPILL_V32_RESTORE7:%[0-9]+]]:vgpr_32 = SI_SPILL_V32_RESTORE %stack.6, $sgpr32, 0, implicit $exec :: (load (s32) from %stack.6, addrspace 5)
   ; CHECK-NEXT:   [[V_LSHL_OR_B32_e64_7:%[0-9]+]]:vgpr_32 = V_LSHL_OR_B32_e64 [[SI_SPILL_V32_RESTORE7]], 16, [[SI_SPILL_V32_RESTORE6]], implicit $exec

@@ -23,7 +23,6 @@ define amdgpu_ps i32 @test6(ptr addrspace(1) %p1, ptr addrspace(1) %p2, ptr addr
   ; CHECK-NEXT:   liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr7
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[COPY]], %stack.0, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.0, addrspace 5)
   ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:vgpr_32 = COPY $vgpr1
   ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:vgpr_32 = COPY $vgpr5
@@ -31,9 +30,7 @@ define amdgpu_ps i32 @test6(ptr addrspace(1) %p1, ptr addrspace(1) %p2, ptr addr
   ; CHECK-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY $vgpr3
   ; CHECK-NEXT:   [[COPY6:%[0-9]+]]:vgpr_32 = COPY $vgpr2
   ; CHECK-NEXT:   [[COPY7:%[0-9]+]]:vgpr_32 = COPY $vgpr6
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[COPY7]], %stack.1, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.1, addrspace 5)
   ; CHECK-NEXT:   [[REG_SEQUENCE:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[COPY2]], %subreg.sub0, [[COPY1]], %subreg.sub1
-  ; CHECK-NEXT:   SI_SPILL_V64_SAVE [[REG_SEQUENCE]], %stack.2, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.2, align 4, addrspace 5)
   ; CHECK-NEXT:   [[GLOBAL_LOAD_UBYTE:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_UBYTE [[REG_SEQUENCE]], 0, 0, implicit $exec :: (load (s8) from %ir.p1, addrspace 1)
   ; CHECK-NEXT:   [[GLOBAL_LOAD_UBYTE1:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_UBYTE [[REG_SEQUENCE]], 1, 0, implicit $exec :: (load (s8) from %ir.p1 + 1, addrspace 1)
   ; CHECK-NEXT:   [[GLOBAL_LOAD_UBYTE2:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_UBYTE [[REG_SEQUENCE]], 2, 0, implicit $exec :: (load (s8) from %ir.p1 + 2, addrspace 1)
@@ -45,6 +42,9 @@ define amdgpu_ps i32 @test6(ptr addrspace(1) %p1, ptr addrspace(1) %p2, ptr addr
   ; CHECK-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 1
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[COPY4]], %subreg.sub0, [[COPY3]], %subreg.sub1
+  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[COPY]], %stack.0, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.0, addrspace 5)
+  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[COPY7]], %stack.1, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.1, addrspace 5)
+  ; CHECK-NEXT:   SI_SPILL_V64_SAVE [[REG_SEQUENCE]], %stack.2, $sgpr32, 0, implicit $exec :: (store (s64) into %stack.2, align 4, addrspace 5)
   ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[COPY6]], %subreg.sub0, [[COPY5]], %subreg.sub1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.1.loop1:
