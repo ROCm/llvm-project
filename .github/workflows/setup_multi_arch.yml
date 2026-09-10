@@ -126,10 +126,10 @@ jobs:
       ref: ${{ steps.checkout.outputs.commit }}
       external_repo_config: ${{ steps.external_repo_config.outputs.config_json }}
     steps:
-      - name: Resolve TheRock ref from RockCI config
+      - name: Resolve TheRock sha from RockCI config
         id: rockci_ref
         if: inputs.repository == 'ROCm/TheRock' && inputs.ref == ''
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/resolve-therock-ref@amd/dev/kirthana14m/rename_ref_rev
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/resolve-therock-ref@amd-staging
         with:
           github_token: ${{ github.token }}
       
