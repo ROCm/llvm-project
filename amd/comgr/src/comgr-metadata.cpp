@@ -18,7 +18,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-metadata.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Object/ELFObjectFile.h"
@@ -289,16 +292,32 @@ llvm::Error getMetadataRoot(MemoryBufferRef MB, DataMeta *MetaP) {
   return getMetadataRoot(ObjOrErr->get(), MetaP);
 }
 
+namespace {
 struct IsaInfo {
-  const char *IsaName;
-  const char *Processor;
-} IsaInfos[] = {
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR)                                   \
-  {TARGET_TRIPLE "-" PROCESSOR, PROCESSOR},
-#include "comgr-isa-metadata.def"
+  std::string IsaName;
+  AMDGPU::GPUKind Kind;
 };
 
-namespace {
+ArrayRef<IsaInfo> getIsaInfos() {
+  // Own the names for the lifetime of the library: getIsaName returns pointers
+  // into these strings to callers of amd_comgr_get_isa_name.
+  static const auto IsaInfos = [] {
+    SmallVector<StringRef> Processors;
+    AMDGPU::fillValidArchListAMDGCN(Processors);
+    SmallVector<IsaInfo> Infos;
+    for (StringRef Processor : Processors) {
+      AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(Processor);
+      // TargetParser also lists aliases such as "tahiti". Enumerate only the
+      // canonical names, including generic targets and target variants.
+      if (Processor != AMDGPU::getArchNameAMDGCN(Kind))
+        continue;
+      Infos.push_back({("amdgcn-amd-amdhsa--" + Processor).str(), Kind});
+    }
+    return Infos;
+  }();
+  return IsaInfos;
+}
+
 // Every AMDGCN target Comgr supports ships a trap handler. Kept as a query so
 // per-processor exceptions can be added without reintroducing a table column.
 bool isTrapHandlerEnabled(AMDGPU::GPUKind Kind) {
@@ -309,9 +328,7 @@ bool isTrapHandlerEnabled(AMDGPU::GPUKind Kind) {
 }
 } // namespace
 
-size_t getIsaCount() {
-  return std::distance(std::begin(IsaInfos), std::end(IsaInfos));
-}
+size_t getIsaCount() { return getIsaInfos().size(); }
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 typedef struct amdgpu_hsa_note_code_object_version_s {
@@ -445,17 +462,15 @@ amd_comgr_status_t getIsaIndex(StringRef TargetIDString, size_t &Index,
     *Processor = CanonicalProcessor;
   }
 
-  // Match by processor only; TargetID already validated the rest of the triple,
-  // so the vendor/os/environ are not checked against the table (which stores an
-  // empty environment).
-  auto *IsaIterator = std::find_if(
-      std::begin(IsaInfos), std::end(IsaInfos), [&](const IsaInfo &IsaInfo) {
-        return CanonicalProcessor == IsaInfo.Processor;
-      });
-  if (IsaIterator == std::end(IsaInfos)) {
+  // TargetID already validated the triple, so match only the resolved GPU kind.
+  ArrayRef<IsaInfo> IsaInfos = getIsaInfos();
+  auto IsaIterator = llvm::find_if(IsaInfos, [&](const IsaInfo &Info) {
+    return TID->getGPUKind() == Info.Kind;
+  });
+  if (IsaIterator == IsaInfos.end()) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
-  Index = std::distance(std::begin(IsaInfos), IsaIterator);
+  Index = std::distance(IsaInfos.begin(), IsaIterator);
 
   return AMD_COMGR_STATUS_SUCCESS;
 }
@@ -466,8 +481,8 @@ bool isSupportedFeature(size_t IsaIndex, StringRef Feature) {
     return false;
   }
 
-  const AMDGPU::AMDGPUFeatureBitset &Features = AMDGPU::getFeatureBitset(
-      AMDGPU::parseArchAMDGCN(IsaInfos[IsaIndex].Processor));
+  const AMDGPU::AMDGPUFeatureBitset &Features =
+      AMDGPU::getFeatureBitset(getIsaInfos()[IsaIndex].Kind);
 
   return (Feature.drop_back() == "xnack" &&
           Features.test(AMDGPU::FEAT_XNACK_ON_OFF_MODES)) ||
@@ -475,7 +490,9 @@ bool isSupportedFeature(size_t IsaIndex, StringRef Feature) {
           Features.test(AMDGPU::FEAT_SRAMECC_SUPPORT));
 }
 
-const char *getIsaName(size_t Index) { return IsaInfos[Index].IsaName; }
+const char *getIsaName(size_t Index) {
+  return getIsaInfos()[Index].IsaName.c_str();
+}
 
 amd_comgr_status_t getIsaMetadata(StringRef IsaName,
                                   llvm::msgpack::Document &Doc) {
@@ -503,7 +520,7 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   Root["Processor"] = Doc.getNode(Ident.Processor, /*Copy=*/true);
   Root["Version"] = Doc.getNode("1.0.0", /*Copy=*/true);
 
-  AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(IsaInfos[IsaIndex].Processor);
+  AMDGPU::GPUKind Kind = getIsaInfos()[IsaIndex].Kind;
   const AMDGPU::AMDGPUFeatureBitset &Features = AMDGPU::getFeatureBitset(Kind);
 
   auto FeaturesNode = Doc.getMapNode();
