@@ -211,9 +211,9 @@ subroutine test_cache_loop_var()
 ! CHECK: fir.load
 ! CHECK: hlfir.designate %[[DECL]]#0
 ! CHECK: fir.load
-! CHECK: arith.addf
 ! CHECK: hlfir.designate %[[DECL]]#0
 ! CHECK: fir.load
+! CHECK: arith.addf
 ! CHECK: arith.addf
 ! CHECK: hlfir.assign
 ! Scope termination
