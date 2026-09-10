@@ -79,6 +79,14 @@ public:
 
 } // namespace
 
+TEST(HotswapOccupancy, RejectsUnsupportedProcessors) {
+  for (const char *Processor :
+       {"", "gfx9999", "r600", "tahiti", "generic", "generic-hsa"}) {
+    SCOPED_TRACE(Processor);
+    EXPECT_EQ(getSubtargetOccupancyLimits(Processor), std::nullopt);
+  }
+}
+
 TEST(HotswapOccupancy, LoadsGfx1250Limits) {
   std::optional<SubtargetOccupancyLimits> Limits =
       getSubtargetOccupancyLimits("gfx1250");

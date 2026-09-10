@@ -13,6 +13,14 @@
 // RUN: parse-isa-name "amdgcn-amd-amdhsa--gfx1010:xnack+" SUCCESS
 // RUN: parse-isa-name "" SUCCESS
 
+// COM: Legacy aliases remain valid inputs, while unknown processors and
+// COM: placeholder targets are not supported ISAs.
+// RUN: parse-isa-name "amdgcn-amd-amdhsa--tahiti" SUCCESS
+// RUN: parse-isa-name "amdgcn-amd-amdhsa--gfx9999" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgcn-amd-amdhsa--r600" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgcn-amd-amdhsa--generic" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgcn-amd-amdhsa--generic-hsa" INVALID_ARGUMENT
+
 // COM: The forward-looking "amdgpu<subarch>" arch spelling is accepted in
 // COM: addition to the legacy "amdgcn" arch.
 // RUN: parse-isa-name "amdgpu8.03-amd-amdhsa--gfx803" SUCCESS
