@@ -1,0 +1,193 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+# Watches RockCI SHA-gate PRs (heads automation/rockci-therock-*).
+# Nothing else calls this file. GitHub starts it from PR / CI events.
+
+name: RockCI SHA PR monitor
+
+on:
+  # Only SHA-gate PRs: they are the only PRs that touch the baseline JSON.
+  pull_request:
+    types:
+      - closed
+    paths:
+      - .github/rockci-sha/therock-ci-main-ref.json
+  # Only CI runs whose head is a SHA-gate branch, so ordinary Multi-Arch CI
+  # runs never start this workflow.
+  workflow_run:
+    workflows:
+      - Multi-Arch CI amd-staging
+    types:
+      - completed
+    branches:
+      - automation/rockci-therock-**
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+env:
+  JSON_PATH: .github/rockci-sha/therock-ci-main-ref.json
+
+jobs:
+  pr-closed:
+    name: Notify SHA PR merged or closed
+    if: >-
+      github.repository == 'ROCm/llvm-project' &&
+      github.event_name == 'pull_request' &&
+      startsWith(github.event.pull_request.head.ref, 'automation/rockci-therock-')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout notifier
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          sparse-checkout: .github/workflows
+          persist-credentials: false
+
+      - name: Build Teams payload from PR
+        id: payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGED: ${{ github.event.pull_request.merged }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          READ_REF="${MERGE_SHA:-$HEAD_SHA}"
+          THEROCK_REF="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/contents/${JSON_PATH}?ref=${READ_REF}" \
+            --jq '.content' 2>/dev/null \
+            | base64 -d \
+            | jq -r '.therock_ref // empty' || true)"
+
+          if [[ "$MERGED" == "true" ]]; then
+            TITLE="RockCI TheRock baseline merged to ${BASE_BRANCH}"
+            STATE="merged"
+          else
+            TITLE="RockCI SHA PR closed without merging"
+            STATE="closed without merge"
+          fi
+
+          FACTS="$(jq -n \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg head "$HEAD_BRANCH" \
+            --arg base "$BASE_BRANCH" \
+            --arg state "$STATE" \
+            --arg sha "$THEROCK_REF" \
+            --arg pr "$PR_URL" \
+            '[
+              {"title":"Repository","value":$repo},
+              {"title":"Head","value":$head},
+              {"title":"Base","value":$base},
+              {"title":"State","value":$state},
+              {"title":"TheRock SHA","value":$sha},
+              {"title":"Pull request","value":$pr}
+            ]')"
+
+          {
+            echo "title=${TITLE}"
+            echo "facts<<EOF"
+            echo "$FACTS"
+            echo "EOF"
+            echo "details=${PR_TITLE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post to Teams
+        continue-on-error: true
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.ROCM_SHA_NOTIFIER }}
+          NOTIFY_TITLE: ${{ steps.payload.outputs.title }}
+          NOTIFY_FACTS_JSON: ${{ steps.payload.outputs.facts }}
+          NOTIFY_DETAILS: ${{ steps.payload.outputs.details }}
+        run: python3 .github/workflows/rockci_sha_pr_notify.py
+
+  ci-finished:
+    name: Notify SHA PR CI result
+    if: >-
+      github.repository == 'ROCm/llvm-project' &&
+      github.event_name == 'workflow_run' &&
+      startsWith(github.event.workflow_run.head_branch, 'automation/rockci-therock-')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout notifier
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          sparse-checkout: .github/workflows
+          persist-credentials: false
+
+      - name: Build Teams payload from CI run
+        id: payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          PR_JSON="$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head "$HEAD_BRANCH" \
+            --state open \
+            --json url,title,baseRefName \
+            --jq '.[0]')"
+          if [[ -z "$PR_JSON" || "$PR_JSON" == "null" ]]; then
+            PR_JSON="$(gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$HEAD_BRANCH" \
+              --state merged \
+              --json url,title,baseRefName \
+              --jq '.[0]')"
+          fi
+          PR_URL="$(echo "${PR_JSON:-{}}" | jq -r '.url // empty')"
+          PR_TITLE="$(echo "${PR_JSON:-{}}" | jq -r '.title // empty')"
+          BASE_REF="$(echo "${PR_JSON:-{}}" | jq -r '.baseRefName // empty')"
+
+          THEROCK_REF="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/contents/${JSON_PATH}?ref=${HEAD_SHA}" \
+            --jq '.content' 2>/dev/null \
+            | base64 -d \
+            | jq -r '.therock_ref // empty' || true)"
+
+          TITLE="RockCI SHA PR CI ${CONCLUSION}"
+          FACTS="$(jq -n \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg head "$HEAD_BRANCH" \
+            --arg base "$BASE_REF" \
+            --arg status "$CONCLUSION" \
+            --arg sha "$THEROCK_REF" \
+            --arg pr "$PR_URL" \
+            --arg run "$RUN_URL" \
+            '[
+              {"title":"Repository","value":$repo},
+              {"title":"Head","value":$head},
+              {"title":"Base","value":$base},
+              {"title":"CI","value":$status},
+              {"title":"TheRock SHA","value":$sha},
+              {"title":"Pull request","value":$pr},
+              {"title":"Workflow run","value":$run}
+            ]')"
+
+          {
+            echo "title=${TITLE}"
+            echo "facts<<EOF"
+            echo "$FACTS"
+            echo "EOF"
+            echo "details=${PR_TITLE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post to Teams
+        continue-on-error: true
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.ROCM_SHA_NOTIFIER }}
+          NOTIFY_TITLE: ${{ steps.payload.outputs.title }}
+          NOTIFY_FACTS_JSON: ${{ steps.payload.outputs.facts }}
+          NOTIFY_DETAILS: ${{ steps.payload.outputs.details }}
+        run: python3 .github/workflows/rockci_sha_pr_notify.py
+

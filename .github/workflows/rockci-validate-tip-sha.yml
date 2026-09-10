@@ -1,0 +1,198 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+name: Update TheRock main SHA
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+
+  workflow_dispatch:
+    inputs:
+      therock_ref:
+        description: "TheRock commit SHA, branch, or tag to validate. Empty uses the current main tip. Dispatch opens a PR for checks only; it does not auto-merge."
+        required: false
+        type: string
+        default: ""
+      
+permissions:
+  contents: read
+
+concurrency:
+  group: rockci-update-therock-main-sha
+  cancel-in-progress: false
+
+env:
+  BASE_BRANCH: amd-staging  
+  REF_FILE: .github/rockci-sha/therock-ci-main-ref.json
+
+jobs:
+  update:
+    name: Open TheRock SHA update PR
+    if: github.repository == 'ROCm/llvm-project'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ROCM_CCIAPP_APP_ID }}
+          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: llvm-project
+
+      - name: Checkout amd-staging
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ env.BASE_BRANCH }}
+          fetch-depth: 2
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Resolve TheRock candidate SHA
+        id: candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.therock_ref || '' }}
+        run: |
+          set -euo pipefail
+          THEROCK_URL="https://github.com/ROCm/TheRock.git"
+          if [[ -z "$REQUESTED_REF" ]]; then
+            SOURCE="main tip"
+            SHA="$(git ls-remote "$THEROCK_URL" refs/heads/main | awk '{print $1}')"
+          elif [[ "$REQUESTED_REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            # A bare SHA is not advertised by ls-remote, so confirm it exists.
+            SOURCE="requested SHA ${REQUESTED_REF}"
+            SHA="$(gh api "repos/ROCm/TheRock/commits/${REQUESTED_REF}" --jq '.sha')"
+          else
+            SOURCE="requested ref ${REQUESTED_REF}"
+            SHA="$(git ls-remote "$THEROCK_URL" "$REQUESTED_REF" | head -n 1 | awk '{print $1}')"
+          fi
+
+          SHA="$(echo "${SHA}" | tr '[:upper:]' '[:lower:]')"
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::TheRock ${SOURCE} did not resolve to a full SHA: '${SHA}'."
+            exit 1
+          fi
+
+          CURRENT="$(python3 - "$REF_FILE" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          if not path.is_file():
+              print("")
+          else:
+              try:
+                  print(json.loads(path.read_text(encoding="utf-8")).get("therock_ref", ""))
+              except (json.JSONDecodeError, OSError):
+                  print("")
+          PY
+          )"
+
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          {
+            echo "Resolved TheRock ${SOURCE} to \`${SHA}\`."
+            echo "Recorded SHA: \`${CURRENT:-<uninitialized>}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$SHA" == "$CURRENT" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing to do; that SHA is already recorded." \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          DATE="$(date -u +%Y%m%d)"
+          if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
+            UPDATE_BRANCH="automation/rockci-therock-main-ref-${DATE}"
+          else
+            UPDATE_BRANCH="automation/rockci-therock-validate-${DATE}"
+          fi
+          echo "update_branch=${UPDATE_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "UPDATE_BRANCH=${UPDATE_BRANCH}" >> "$GITHUB_ENV"
+          echo "Update branch: \`${UPDATE_BRANCH}\`." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push update branch
+        if: steps.candidate.outputs.changed == 'true'
+        shell: bash
+        env:
+          THEROCK_SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "Z1 cciauto"
+          git config user.email "z1-cciauto@amd.com"
+          git switch --force-create "$UPDATE_BRANCH"
+
+          mkdir -p "$(dirname "$REF_FILE")"
+          python3 - "$REF_FILE" "$THEROCK_SHA" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          path.write_text(
+              json.dumps({"therock_ref": sys.argv[2]}, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          git add "$REF_FILE"
+          git commit -m "compiler-ci: update TheRock baseline to ${THEROCK_SHA}"
+          git fetch origin "$UPDATE_BRANCH:refs/remotes/origin/$UPDATE_BRANCH" || true
+          git push --force-with-lease --set-upstream origin \
+            "HEAD:refs/heads/${UPDATE_BRANCH}"
+
+      - name: Open or refresh pull request
+        if: steps.candidate.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          THEROCK_SHA: ${{ steps.candidate.outputs.sha }}
+          AUTO_MERGE: ${{ github.event_name == 'schedule' }}
+          REVIEWERS: ${{ secrets['ROCK_CI_CHECK_REVIEWERS'] }}            
+        run: |
+          set -euo pipefail
+          TITLE="compiler-ci: validate TheRock sha used in compiler-ci"
+          BODY=""
+          PR_URL="$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "$BASE_BRANCH" \
+            --head "$UPDATE_BRANCH" \
+            --state open \
+            --json url \
+            --jq '.[0].url')"
+
+          if [[ -z "$PR_URL" ]]; then
+            PR_URL="$(gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$BASE_BRANCH" \
+              --head "$UPDATE_BRANCH" \
+              --title "$TITLE" \
+              --body "$BODY")"
+          else
+            gh pr edit "$PR_URL" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TITLE" \
+              --body "$BODY"
+          fi
+
+          if [[ -n "$REVIEWERS" ]]; then
+            gh pr edit "$PR_URL" \
+              --repo "$GITHUB_REPOSITORY" \
+              --add-reviewer "$REVIEWERS"
+            echo "Reviewers requested from ROCK-CI-CHECK-REVIEWERS." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [[ "$AUTO_MERGE" == "true" ]]; then
+            gh pr merge "$PR_URL" --repo "$GITHUB_REPOSITORY" --auto --squash
+            echo "Auto-merge enabled." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Auto-merge not enabled; merge manually once the checks pass." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "Pull request: ${PR_URL}" >> "$GITHUB_STEP_SUMMARY"
+    
