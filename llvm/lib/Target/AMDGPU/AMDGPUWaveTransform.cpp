@@ -2079,7 +2079,7 @@ void ControlFlowRewriter::rewrite() {
     // secondary, the rejoin register can be used directly without the
     // accumulator machinery.
     unsigned NumDivergentPreds = 0;
-    bool HasDivergenceEntryPred = false;
+    bool IsPrimarySuccOfPred = false;
     WaveNode *SingleDivPred = nullptr;
     for (WaveNode *Pred : Secondary->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
@@ -2090,7 +2090,7 @@ void ControlFlowRewriter::rewrite() {
       // latter case, the edge already enters with a narrowed EXEC, so it must
       // not contribute any rejoin mask.
       if (Pred->Successors[0] == Secondary) {
-        HasDivergenceEntryPred = true;
+        IsPrimarySuccOfPred = true;
         continue;
       }
 
@@ -2105,7 +2105,7 @@ void ControlFlowRewriter::rewrite() {
     // is nonzero on that edge.
     bool HasSingleDivergentPred =
         (NumDivergentPreds == 1) && !SingleDivPred->Cycle &&
-        !HasDivergenceEntryPred &&
+        !IsPrimarySuccOfPred &&
         ReconvergeCfg.getDomTree().dominates(SingleDivPred->Block,
                                              Secondary->Block);
 
