@@ -5097,20 +5097,31 @@ Register SITargetLowering::getRegisterByName(const char *RegName, LLT VT,
                                              const MachineFunction &MF) const {
   const Function &Fn = MF.getFunction();
 
-  Register Reg = StringSwitch<Register>(RegName)
-                     .Case("m0", AMDGPU::M0)
-                     .Case("exec", AMDGPU::EXEC)
-                     .Case("exec_lo", AMDGPU::EXEC_LO)
-                     .Case("exec_hi", AMDGPU::EXEC_HI)
-                     .Case("flat_scratch", AMDGPU::FLAT_SCR)
-                     .Case("flat_scratch_lo", AMDGPU::FLAT_SCR_LO)
-                     .Case("flat_scratch_hi", AMDGPU::FLAT_SCR_HI)
-                     .Default(Register());
+  Register Reg =
+      StringSwitch<Register>(RegName)
+          .Case("m0", AMDGPU::M0)
+          .Case("exec", AMDGPU::EXEC)
+          .Case("exec_lo", AMDGPU::EXEC_LO)
+          .Case("exec_hi", AMDGPU::EXEC_HI)
+          .Case("flat_scratch", AMDGPU::FLAT_SCR)
+          .Case("flat_scratch_lo", AMDGPU::FLAT_SCR_LO)
+          .Case("flat_scratch_hi", AMDGPU::FLAT_SCR_HI)
+          .Case("src_flat_scratch_base", AMDGPU::SRC_FLAT_SCRATCH_BASE)
+          .Case("src_flat_scratch_base_lo", AMDGPU::SRC_FLAT_SCRATCH_BASE_LO)
+          .Case("src_flat_scratch_base_hi", AMDGPU::SRC_FLAT_SCRATCH_BASE_HI)
+          .Default(Register());
   if (!Reg)
     return Reg;
 
   if (!Subtarget->hasFlatScrRegister() &&
       Subtarget->getRegisterInfo()->regsOverlap(Reg, AMDGPU::FLAT_SCR)) {
+    Fn.getContext().emitError(Twine("invalid register \"" + StringRef(RegName) +
+                                    "\" for subtarget."));
+  }
+
+  if (!Subtarget->hasGloballyAddressableScratch() &&
+      Subtarget->getRegisterInfo()->regsOverlap(
+          Reg, AMDGPU::SRC_FLAT_SCRATCH_BASE)) {
     Fn.getContext().emitError(Twine("invalid register \"" + StringRef(RegName) +
                                     "\" for subtarget."));
   }
@@ -5121,11 +5132,14 @@ Register SITargetLowering::getRegisterByName(const char *RegName, LLT VT,
   case AMDGPU::EXEC_HI:
   case AMDGPU::FLAT_SCR_LO:
   case AMDGPU::FLAT_SCR_HI:
+  case AMDGPU::SRC_FLAT_SCRATCH_BASE_LO:
+  case AMDGPU::SRC_FLAT_SCRATCH_BASE_HI:
     if (VT.getSizeInBits() == 32)
       return Reg;
     break;
   case AMDGPU::EXEC:
   case AMDGPU::FLAT_SCR:
+  case AMDGPU::SRC_FLAT_SCRATCH_BASE:
     if (VT.getSizeInBits() == 64)
       return Reg;
     break;
@@ -20905,8 +20919,10 @@ SITargetLowering::shouldExpandAtomicRMWInIR(const AtomicRMWInst *RMW) const {
           Op == AtomicRMWInst::Xor) {
         // Atomic sub/or/xor do not work over PCI express, but atomic add
         // does. InstCombine transforms these with 0 to or, so undo that.
+        // Sub-word types are not selectable and take the cmpxchg expansion.
         if (const Constant *ConstVal = dyn_cast<Constant>(RMW->getValOperand());
-            ConstVal && ConstVal->isNullValue())
+            ConstVal && ConstVal->isNullValue() &&
+            isAtomicRMWLegalIntTy(RMW->getType()))
           return AtomicExpansionKind::CustomExpand;
       }
 
@@ -21477,7 +21493,8 @@ void SITargetLowering::emitExpandAtomicRMW(AtomicRMWInst *AI) const {
   if (Op == AtomicRMWInst::Sub || Op == AtomicRMWInst::Or ||
       Op == AtomicRMWInst::Xor) {
     if (const auto *ConstVal = dyn_cast<Constant>(AI->getValOperand());
-        ConstVal && ConstVal->isNullValue()) {
+        ConstVal && ConstVal->isNullValue() &&
+        isAtomicRMWLegalIntTy(AI->getType())) {
       // atomicrmw or %ptr, 0 -> atomicrmw add %ptr, 0
       AI->setOperation(AtomicRMWInst::Add);
 
@@ -21516,26 +21533,4 @@ void SITargetLowering::emitExpandAtomicStore(StoreInst *SI) const {
 
   llvm_unreachable(
       "Expand Atomic Store only handles SCRATCH -> FLAT conversion");
-}
-
-LoadInst *
-SITargetLowering::lowerIdempotentRMWIntoFencedLoad(AtomicRMWInst *AI) const {
-  IRBuilder<> Builder(AI);
-  auto Order = AI->getOrdering();
-
-  // The optimization removes store aspect of the atomicrmw. Therefore, cache
-  // must be flushed if the atomic ordering had a release semantics. This is
-  // not necessary a fence, a release fence just coincides to do that flush.
-  // Avoid replacing of an atomicrmw with a release semantics.
-  if (isReleaseOrStronger(Order))
-    return nullptr;
-
-  LoadInst *LI = Builder.CreateAlignedLoad(
-      AI->getType(), AI->getPointerOperand(), AI->getAlign());
-  LI->setAtomic(Order, AI->getSyncScopeID());
-  LI->copyMetadata(*AI);
-  LI->takeName(AI);
-  AI->replaceAllUsesWith(LI);
-  AI->eraseFromParent();
-  return LI;
 }
