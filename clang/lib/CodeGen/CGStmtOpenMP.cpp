@@ -9075,8 +9075,8 @@ void CodeGenFunction::EmitOMPTargetTeamsGenericLoopDeviceFunction(
 }
 
 static void emitTargetParallelGenericLoopRegion(
-  CodeGenFunction &CGF, const OMPTargetParallelGenericLoopDirective &S,
-  PrePostActionTy &Action) {
+    CodeGenFunction &CGF, const OMPTargetParallelGenericLoopDirective &S,
+    PrePostActionTy &Action) {
   Action.Enter(CGF);
   // Emit as 'parallel for'.
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
