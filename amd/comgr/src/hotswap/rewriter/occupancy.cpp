@@ -40,13 +40,13 @@ getSubtargetOccupancyLimits(StringRef Processor) {
   bool HasWave32 =
       AMDGPU::getFeatureBitset(Kind).test(AMDGPU::FEAT_GFX10_INSTS);
   unsigned VgprAllocGranule = AMDGPU::getVGPRAllocGranule(Kind, HasWave32);
+  unsigned TotalNumVgprs = AMDGPU::getTotalNumVGPRs(Kind, HasWave32);
 
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE,         \
-                   TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
+#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, MAX_FLAT_WORK_GROUP_SIZE)         \
   if (Processor == PROCESSOR)                                                  \
     return SubtargetOccupancyLimits{                                           \
-        EUsPerCU,         MaxWavesPerCU,   MAX_FLAT_WORK_GROUP_SIZE,           \
-        VgprAllocGranule, TOTAL_NUM_VGPRS, HasWave32};
+        EUsPerCU,         MaxWavesPerCU, MAX_FLAT_WORK_GROUP_SIZE,             \
+        VgprAllocGranule, TotalNumVgprs, HasWave32};
 #include "comgr-isa-metadata.def"
 #undef HANDLE_ISA
 
