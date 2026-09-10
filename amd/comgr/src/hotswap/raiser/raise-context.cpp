@@ -44,6 +44,8 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_32);
   const unsigned SourceFloatRoundMode16_64 = AMDHSA_BITS_GET(
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_16_64);
+  const bool SourceFp16Overflow = AMDHSA_BITS_GET(
+      Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_GFX9_PLUS_FP16_OVFL);
   bool Dx10Clamp = true;
   bool IeeeMode = true;
   if (Projection.SourceSTI.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
@@ -58,7 +60,7 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
                       SourceTextBaseAddress, SourceImageSections,
                       KernelStartOffset, KernelEndOffset,
                       SourceFloatRoundMode32, SourceFloatRoundMode16_64,
-                      Dx10Clamp, IeeeMode);
+                      SourceFp16Overflow, Dx10Clamp, IeeeMode);
 }
 
 RaiseContext::RaiseContext(
@@ -68,7 +70,7 @@ RaiseContext::RaiseContext(
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset,
     unsigned SourceFloatRoundMode32, unsigned SourceFloatRoundMode16_64,
-    bool SourceDx10Clamp, bool SourceIeeeMode)
+    bool SourceFp16Overflow, bool SourceDx10Clamp, bool SourceIeeeMode)
     : B(B), Projection(Projection), MC(MC), Registers(std::move(Registers)),
       SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
@@ -76,7 +78,8 @@ RaiseContext::RaiseContext(
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),
       SourceFloatRoundMode32(SourceFloatRoundMode32),
       SourceFloatRoundMode16_64(SourceFloatRoundMode16_64),
-      SourceDx10Clamp(SourceDx10Clamp), SourceIeeeMode(SourceIeeeMode) {}
+      SourceFp16Overflow(SourceFp16Overflow), SourceDx10Clamp(SourceDx10Clamp),
+      SourceIeeeMode(SourceIeeeMode) {}
 
 Error RaiseContext::validateF32Environment(const DecodedInst &Di) const {
   if (!Projection.TargetSTI.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
@@ -105,6 +108,27 @@ Error RaiseContext::validateF32Environment(const DecodedInst &Di) const {
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags),
         Twine("f32 rounding mode ") + Twine(SourceFloatRoundMode32) +
+            " is unsupported");
+  }
+
+  return Error::success();
+}
+
+Error RaiseContext::validateF16Environment(const DecodedInst &Di) const {
+  if (SourceFp16Overflow) {
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedFloatingPointMode,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        "FP16 overflow saturation is unsupported");
+  }
+
+  if (SourceFloatRoundMode16_64 != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedFloatingPointMode,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        Twine("f16 rounding mode ") + Twine(SourceFloatRoundMode16_64) +
             " is unsupported");
   }
 
