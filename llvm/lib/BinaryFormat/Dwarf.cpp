@@ -195,7 +195,8 @@ static StringRef LlvmUserOperationEncodingString(unsigned Encoding) {
 static unsigned
 getLlvmUserOperationEncoding(StringRef LlvmUserOperationEncodingString) {
   unsigned E = StringSwitch<unsigned>(LlvmUserOperationEncodingString)
-#define HANDLE_DW_OP_LLVM_USEROP(ID, NAME) .Case(#NAME, DW_OP_LLVM_##NAME)
+#define HANDLE_DW_OP_LLVM_USEROP(ID, NAME)                                     \
+  .Case("DW_OP_LLVM_" #NAME, DW_OP_LLVM_##NAME)
 #include "llvm/BinaryFormat/Dwarf.def"
                    .Default(0);
   assert(E && "unhandled DWARF operation string with LLVM user op");
@@ -1088,8 +1089,8 @@ StringRef llvm::dwarf::RLEString(unsigned RLE) {
   }
 }
 
-unsigned llvm::dwarf::getMemorySpace(StringRef CCString) {
-  return StringSwitch<unsigned>(CCString)
+unsigned llvm::dwarf::getMemorySpace(StringRef MSString) {
+  return StringSwitch<unsigned>(MSString)
 #define HANDLE_DW_MSPACE(ID, NAME)                                             \
   .Case("DW_MSPACE_LLVM_" #NAME, DW_MSPACE_LLVM_##NAME)
 #include "llvm/BinaryFormat/Dwarf.def"

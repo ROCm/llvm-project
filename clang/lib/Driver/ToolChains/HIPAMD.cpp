@@ -47,9 +47,7 @@ void AMDGCN::Linker::constructLLVMLinkCommand(
   // for the extracted archive of bitcode to inputs.
   auto TargetID = Args.getLastArgValue(options::OPT_mcpu_EQ);
   AddStaticDeviceLibsLinking(C, *this, JA, Inputs, Args, LinkerInputs, "amdgcn",
-                             TargetID,
-                             /*IsBitCodeSDL=*/true,
-                             /*PostClangLink=*/false);
+                             TargetID, /*IsBitCodeSDL=*/true);
 
   tools::constructLLVMLinkCommand(C, *this, JA, Inputs, LinkerInputs, Output,
                                   Args);
@@ -141,14 +139,13 @@ void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
   LldArgs.append({"-o", Output.getFilename()});
   for (auto Input : Inputs)
     LldArgs.push_back(Input.getFilename());
+  TC.addProfileRTLibs(Args, LldArgs);
 
   // Look for archive of bundled bitcode in arguments, and add temporary files
   // for the extracted archive of bitcode to inputs.
   auto TargetID = Args.getLastArgValue(options::OPT_mcpu_EQ);
   AddStaticDeviceLibsLinking(C, *this, JA, Inputs, Args, LldArgs, "amdgcn",
-                             TargetID,
-                             /*IsBitCodeSDL=*/true,
-                             /*PostClangLink=*/false);
+                             TargetID, /*IsBitCodeSDL=*/true);
 
   LldArgs.push_back("--no-whole-archive");
 

@@ -1,7 +1,7 @@
 // COM: Test HotSwap B0 tensor_load_to_lds masking when fixed .cluster_dims
 // COM: metadata proves the dispatch is non-cluster or size-one.
 
-// RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 \
+// RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa \
 // RUN:   --amdhsa-code-object-version=6 -filetype=obj %s -o %t.o
 // RUN: %ld.lld -flavor gnu -m elf64_amdgpu %t.o -o %t.elf
 

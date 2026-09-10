@@ -59,6 +59,7 @@ static void PutBound(llvm::raw_ostream &, const Bound &);
 static void PutShapeSpec(llvm::raw_ostream &, const ShapeSpec &);
 static void PutShape(
     llvm::raw_ostream &, const ArraySpec &, char open, char close);
+static bool HasRankOneBound(const ArraySpec &);
 static void PutMapper(llvm::raw_ostream &, const Symbol &, SemanticsContext &);
 
 static llvm::raw_ostream &PutAttr(llvm::raw_ostream &, Attr);
@@ -381,7 +382,7 @@ static const WithOmpDeclarative *GetOmpDeclarative(const Symbol &symbol) {
 
 static void PutOpenMPRequirements(
     llvm::raw_ostream &os, const Symbol &symbol, SemanticsContext &semaCtx) {
-  unsigned version{semaCtx.langOptions().OpenMPVersion};
+  llvm::omp::Version version{semaCtx.langOptions().getOpenMPVersion()};
 
   if (const auto *decls{GetOmpDeclarative(symbol)}) {
     if (const llvm::omp::ClauseSet &reqs{decls->ompRequires()}; reqs.count()) {
@@ -396,7 +397,7 @@ static void PutOpenMPRequirements(
 
 static void PutOpenMPDeclarativeDirectives(llvm::raw_ostream &os,
     const SymbolVector &symbols, SemanticsContext &semaCtx) {
-  unsigned version{semaCtx.langOptions().OpenMPVersion};
+  llvm::omp::Version version{semaCtx.langOptions().getOpenMPVersion()};
 
   for (const Symbol &symbol : symbols) {
     if (const auto *decls{GetOmpDeclarative(symbol)}) {
@@ -1065,18 +1066,63 @@ void PutShapeSpec(llvm::raw_ostream &os, const ShapeSpec &x) {
     }
   }
 }
+
+// Check whether any bound in an ArraySpec holds a RankOneBoundElement,
+// indicating the shape came from a rank-1 integer array expression.
+bool HasRankOneBound(const ArraySpec &shape) {
+  const auto &first{shape.front()};
+  if (auto lb{first.lbound().GetExplicit()}) {
+    if (evaluate::UnwrapExpr<evaluate::RankOneBoundElement>(*lb)) {
+      return true;
+    }
+  }
+  if (auto ub{first.ubound().GetExplicit()}) {
+    if (evaluate::UnwrapExpr<evaluate::RankOneBoundElement>(*ub)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void PutShape(
     llvm::raw_ostream &os, const ArraySpec &shape, char open, char close) {
   if (!shape.empty()) {
     os << open;
-    bool first{true};
-    for (const auto &shapeSpec : shape) {
-      if (first) {
-        first = false;
-      } else {
-        os << ',';
+    if (HasRankOneBound(shape)) {
+      // Rank-1 bounds: all ShapeSpecs share the same rank-1 expression
+      // wrapped in RankOneBoundElement. Extract the base expression from the
+      // first element and emit it whole so the mod file round-trips through
+      // the parser as an ExplicitShapeBoundsSpec.
+      const auto &first{shape.front()};
+      if (!first.lbound().isColon()) {
+        auto lb{first.lbound().GetExplicit()};
+        if (auto *robe =
+                evaluate::UnwrapExpr<evaluate::RankOneBoundElement>(*lb)) {
+          robe->base().AsFortran(os);
+        } else {
+          PutBound(os, first.lbound());
+        }
       }
-      PutShapeSpec(os, shapeSpec);
+      os << ':';
+      if (!first.ubound().isColon()) {
+        auto ub{first.ubound().GetExplicit()};
+        if (auto *robe =
+                evaluate::UnwrapExpr<evaluate::RankOneBoundElement>(*ub)) {
+          robe->base().AsFortran(os);
+        } else {
+          PutBound(os, first.ubound());
+        }
+      }
+    } else {
+      bool first{true};
+      for (const auto &shapeSpec : shape) {
+        if (first) {
+          first = false;
+        } else {
+          os << ',';
+        }
+        PutShapeSpec(os, shapeSpec);
+      }
     }
     os << close;
   }
@@ -1698,6 +1744,28 @@ Scope *ModFileReader::Read(SourceName name, std::optional<bool> isIntrinsic,
     return nullptr;
   }
   CHECK(sourceFile);
+
+  if (!isIntrinsic.has_value()) {
+    for (const auto &dir : context_.intrinsicModuleDirectories()) {
+      if (sourceFile->path().size() > dir.size() &&
+          sourceFile->path().find(dir) == 0) {
+        isIntrinsic = true;
+        break;
+      }
+    }
+  }
+  bool mismatchIsError;
+  switch (context_.langOptions().getModuleMismatchCheck()) {
+  case common::LangOptions::MMC_On:
+    mismatchIsError = true;
+    break;
+  case common::LangOptions::MMC_NonIntrinsic:
+    mismatchIsError = !isIntrinsic.value_or(false);
+    break;
+  case common::LangOptions::MMC_Warn:
+    mismatchIsError = false;
+    break;
+  }
   std::optional<ModuleCheckSumType> checkSum{
       VerifyHeader(sourceFile->content())};
   if (!checkSum) {
@@ -1712,12 +1780,20 @@ Scope *ModFileReader::Read(SourceName name, std::optional<bool> isIntrinsic,
     }
     return nullptr;
   } else if (requiredHash && *requiredHash != *checkSum) {
-    if (!silent) {
-      Say("use", name, ancestorName,
-          "File is not the right module file for %s"_err_en_US,
-          "'"s + name.ToString() + "': "s + sourceFile->path());
+    if (mismatchIsError) {
+      if (!silent) {
+        Say("use", name, ancestorName,
+            "File is not the right module file for %s. Use -fmodule-mismatch-check=warn to turn this error into a warning."_err_en_US,
+            "'"s + name.ToString() + "': "s + sourceFile->path());
+      }
+      return nullptr;
+    } else {
+      if (!silent) {
+        Warn(name, common::UsageWarning::ModuleFileMismatch, ancestorName,
+            "File has a different checksum than expected for %s"_warn_en_US,
+            "'"s + name.ToString() + "': "s + sourceFile->path());
+      }
     }
-    return nullptr;
   }
   llvm::raw_null_ostream NullStream;
   parsing.Parse(NullStream, context_.langOptions());
@@ -1732,15 +1808,6 @@ Scope *ModFileReader::Read(SourceName name, std::optional<bool> isIntrinsic,
   }
   parser::Program &parseTree{context_.SaveParseTree(std::move(*parsedProgram))};
   Scope *parentScope; // the scope this module/submodule goes into
-  if (!isIntrinsic.has_value()) {
-    for (const auto &dir : context_.intrinsicModuleDirectories()) {
-      if (sourceFile->path().size() > dir.size() &&
-          sourceFile->path().find(dir) == 0) {
-        isIntrinsic = true;
-        break;
-      }
-    }
-  }
   Scope &topScope{isIntrinsic.value_or(false) ? context_.intrinsicModulesScope()
                                               : context_.globalScope()};
   Symbol *moduleSymbol{nullptr};
@@ -1839,6 +1906,20 @@ parser::Message &ModFileReader::Say(const char *verb, SourceName name,
     const std::string &ancestor, parser::MessageFixedText &&msg,
     const std::string &arg) {
   return context_.Say(name, "Cannot %s module file for %s: %s"_err_en_US, verb,
+      parser::MessageFormattedText{ancestor.empty()
+              ? "module '%s'"_en_US
+              : "submodule '%s' of module '%s'"_en_US,
+          name, ancestor}
+          .MoveString(),
+      parser::MessageFormattedText{std::move(msg), arg}.MoveString());
+}
+
+parser::Message *ModFileReader::Warn(SourceName name,
+    common::UsageWarning warning, const std::string &ancestor,
+    parser::MessageFixedText &&msg, const std::string &arg) {
+  return context_.messages().Warn(/*isInModuleFile=*/false,
+      context_.languageFeatures(), warning, name,
+      "Module file for %s: %s"_warn_en_US,
       parser::MessageFormattedText{ancestor.empty()
               ? "module '%s'"_en_US
               : "submodule '%s' of module '%s'"_en_US,

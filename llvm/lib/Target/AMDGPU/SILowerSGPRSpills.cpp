@@ -18,7 +18,6 @@
 #include "SILowerSGPRSpills.h"
 #include "AMDGPU.h"
 #include "GCNSubtarget.h"
-#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIMachineFunctionInfo.h"
 #include "SIPreAllocateWWMRegs.h"
 #include "SISpillUtils.h"
@@ -717,7 +716,7 @@ bool SILowerSGPRSpills::run(MachineFunction &MF) {
     // free frame index ids by the later pass(es) like "stack slot coloring"
     // which in turn could mess-up with the book keeping of "frame index to VGPR
     // lane".
-    FuncInfo->removeDeadFrameIndices(MF, /*ResetSGPRSpillStackIDs*/ false);
+    FuncInfo->removeDeadFrameIndices(MFI, /*ResetSGPRSpillStackIDs*/ false);
 
     MadeChange = true;
   }

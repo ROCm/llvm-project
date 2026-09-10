@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "llvm/Frontend/OpenMP/OMPVersion.h"
 #include "llvm/TargetParser/Triple.h"
 
 namespace Fortran::common {
@@ -41,6 +42,20 @@ public:
 
     // Aggressively fuse FP ops (E.g. FMA).
     FPM_Fast,
+  };
+
+  enum ModuleMismatchCheckTy {
+    // Verify checksums of all modules
+    MMC_On,
+
+    // Reject checksum mismatches only in user modules. Intrinsic modules are
+    // shipped by the compiler, and their contents are defined by the language;
+    // a compiler update should not trigger an error when their APIs remain
+    // compatible.
+    MMC_NonIntrinsic,
+
+    // Do not enforce module use consistency, just warn about them
+    MMC_Warn,
   };
 
   /// Floating-point exception trap kinds for -ffpe-trap=.
@@ -86,6 +101,10 @@ public:
 
   /// List of triples passed in using -fopenmp-targets.
   std::vector<llvm::Triple> OMPTargetTriples;
+
+  llvm::omp::Version getOpenMPVersion() const {
+    return llvm::omp::Version(OpenMPVersion);
+  }
 
   LangOptions();
 };

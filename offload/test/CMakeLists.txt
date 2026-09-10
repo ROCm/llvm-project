@@ -12,12 +12,6 @@ else()
   set(LIBOMPTARGET_DEBUG False)
 endif()
 
-if ("compiler-rt" IN_LIST LLVM_ENABLE_RUNTIMES)
-  set(LIBOMPTARGET_TEST_GPU_PGO True)
-else()
-  set(LIBOMPTARGET_TEST_GPU_PGO False)
-endif()
-
 # Replace the space from user's input with ";" in case that CMake add escape
 # char into the lit command.
 string(REPLACE " " ";" LIBOMPTARGET_LIT_ARG_LIST "${LIBOMPTARGET_LIT_ARGS}")
@@ -71,18 +65,23 @@ configure_lit_site_cfg(
   MAIN_CONFIG
   ${CMAKE_CURRENT_SOURCE_DIR}/unit/lit.cfg.py)
 
+set(CHECK_OFFLOAD_SUITES ${CMAKE_CURRENT_BINARY_DIR}/unit)
+set(CHECK_OFFLOAD_DEPS ${OFFLOAD_TOOLS} LLVMOffload OffloadUnitTests ${LIBOMPTARGET_TESTED_PLUGINS})
+set(CHECK_OFFLOAD_ARGS "")
+
 if(TARGET omptarget)
-  add_offload_testsuite(check-offload
-    "Running offload tests"
-    ${LIBOMPTARGET_LIT_TESTSUITES}
-    ${CMAKE_CURRENT_BINARY_DIR}/unit
-    EXCLUDE_FROM_CHECK_ALL
-    DEPENDS ${OFFLOAD_TOOLS} omptarget ${OMP_DEPEND} ${LIBOMPTARGET_TESTED_PLUGINS}
-      LLVMOffload OffloadUnitTests
-    ARGS ${LIBOMPTARGET_LIT_ARG_LIST})
+  list(APPEND CHECK_OFFLOAD_SUITES ${LIBOMPTARGET_LIT_TESTSUITES})
+  list(APPEND CHECK_OFFLOAD_DEPS omptarget ${OMP_DEPEND})
+  list(APPEND CHECK_OFFLOAD_ARGS ${LIBOMPTARGET_LIT_ARG_LIST})
 endif()
+
+add_offload_testsuite(check-offload
+    "Running offload tests"
+    ${CHECK_OFFLOAD_SUITES}
+    EXCLUDE_FROM_CHECK_ALL
+    DEPENDS ${CHECK_OFFLOAD_DEPS}
+    ARGS ${CHECK_OFFLOAD_ARGS})
 
 add_lit_testsuite(check-offload-unit "Running offload unittest suites"
   ${CMAKE_CURRENT_BINARY_DIR}/unit
-  #DEPENDS LLVMOffload
-   OffloadUnitTests)
+  DEPENDS LLVMOffload OffloadUnitTests)

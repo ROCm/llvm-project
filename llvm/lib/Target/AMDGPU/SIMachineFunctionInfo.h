@@ -855,7 +855,7 @@ public:
 
   /// If \p ResetSGPRSpillStackIDs is true, reset the stack ID from sgpr-spill
   /// to the default stack.
-  bool removeDeadFrameIndices(MachineFunction &MF,
+  bool removeDeadFrameIndices(MachineFrameInfo &MFI,
                               bool ResetSGPRSpillStackIDs);
 
   int getScavengeFI(MachineFrameInfo &MFI, const SIRegisterInfo &TRI);

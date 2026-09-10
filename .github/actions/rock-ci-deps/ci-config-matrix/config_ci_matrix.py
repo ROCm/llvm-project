@@ -58,7 +58,7 @@ def main() -> None:
         "build_variant_suffix": "",
         "build_variant_cmake_preset": "",
         "build_pytorch": True,
-        "build_runs_on": select_build_runner("linux", variant),
+        "build_runs_on": "aws-linux-scale-rocm-large",
         "prebuilt_stages": prebuilt_stages,
         "baseline_run_id": baseline_run_id,
     }
@@ -70,6 +70,7 @@ def main() -> None:
                 "amdgpu_targets": "",
                 "test-runs-on": "",
                 "benchmark-runs-on": "",
+                "sanity_check_only_for_family": False,
             },
         ],
         "dist_amdgpu_families": "gfx1151",

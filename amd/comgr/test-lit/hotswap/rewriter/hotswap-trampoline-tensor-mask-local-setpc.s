@@ -4,7 +4,7 @@
 // COM: the jump target kill s4 after the tensor mask definition, so the
 // COM: definition-time low16 clear is safe.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf 2>&1 \
@@ -34,7 +34,7 @@
 // COM: and uses the at-site fallback.
 // RUN: sed 's/^\.set wrong_pair, 0$/.set wrong_pair, 1/' \
 // RUN:   %s > %t.wrong-pair.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.wrong-pair.s -o %t.wrong-pair.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.wrong-pair.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -42,7 +42,7 @@
 // RUN:   | %FileCheck --check-prefix=OPAQUE %s
 // RUN: sed 's/^\.set intervening_def, 0$/.set intervening_def, 1/' \
 // RUN:   %s > %t.intervening.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.intervening.s -o %t.intervening.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.intervening.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -50,7 +50,7 @@
 // RUN:   | %FileCheck --check-prefix=OPAQUE %s
 // RUN: sed 's/^\.set outside_target, 0$/.set outside_target, 1/' \
 // RUN:   %s > %t.outside.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.outside.s -o %t.outside.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.outside.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -58,7 +58,7 @@
 // RUN:   | %FileCheck --check-prefix=OPAQUE %s
 // RUN: sed 's/^\.set interior_entry, 0$/.set interior_entry, 1/' \
 // RUN:   %s > %t.interior.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.interior.s -o %t.interior.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.interior.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -66,7 +66,7 @@
 // RUN:   | %FileCheck --check-prefix=OPAQUE %s
 // RUN: sed 's/^\.set declared_entry, 0$/.set declared_entry, 1/' \
 // RUN:   %s > %t.declared.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.declared.s -o %t.declared.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.declared.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

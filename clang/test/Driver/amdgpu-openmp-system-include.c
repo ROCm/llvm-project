@@ -7,5 +7,5 @@
 
 // CHECK: "-cc1" "-triple" "x86_64-unknown-linux-gnu"
 // CHECK-SAME: "-internal-isystem" "{{.*}}/../../../include"
-// CHECK: "-cc1" "-triple" "amdgcn-amd-amdhsa"
+// CHECK: "-cc1" "-triple" "amdgpu9.06-amd-amdhsa"
 // CHECK-SAME: "-internal-isystem" "{{.*}}/../../../include"

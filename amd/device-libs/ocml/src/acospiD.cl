@@ -36,12 +36,10 @@ MATH_MANGLE(acospi)(double x)
     double y2 = y * y;
     double r = transform ? rt : y2;
 
-    double u = r * MATH_MAD(r, MATH_MAD(r, MATH_MAD(r, MATH_MAD(r, 
-                   MATH_MAD(r, MATH_MAD(r, MATH_MAD(r, MATH_MAD(r, 
-                   MATH_MAD(r, MATH_MAD(r, MATH_MAD(r, 
-                       0x1.547a51d41fb0bp-7, -0x1.6a3fb0718a8f7p-8), 0x1.a7b91f7177ee8p-8), 0x1.035d3435b8ad8p-9),
-                       0x1.ff0549b4e0449p-9), 0x1.21604ae288f96p-8), 0x1.6a2b36f9aec49p-8), 0x1.d2b076c914f04p-8),
-                       0x1.3ce53861f8f1fp-7), 0x1.d1a4529a30a69p-7), 0x1.8723a1d61d2e9p-6), 0x1.b2995e7b7af0fp-5);
+    double u = r * PE11(r, 0x1.547a51d41fb0bp-7, -0x1.6a3fb0718a8f7p-8, 0x1.a7b91f7177ee8p-8, 0x1.035d3435b8ad8p-9,
+                         0x1.ff0549b4e0449p-9, 0x1.21604ae288f96p-8, 0x1.6a2b36f9aec49p-8,
+                         0x1.d2b076c914f04p-8, 0x1.3ce53861f8f1fp-7, 0x1.d1a4529a30a69p-7,
+                         0x1.8723a1d61d2e9p-6, 0x1.b2995e7b7af0fp-5);
 
     const double piinv = 0x1.45f306dc9c883p-2;
     double z = 0.5 - MATH_MAD(x, u, piinv*x);

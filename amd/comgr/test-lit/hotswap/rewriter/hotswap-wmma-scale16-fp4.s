@@ -3,7 +3,7 @@
 // COM: split along the VGPR index, so the masked-A copy nulls the opposite
 // COM: subblock's VGPRs (v_mov ..., 0) instead of using a lane mask.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf \

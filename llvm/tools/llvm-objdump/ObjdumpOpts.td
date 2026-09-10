@@ -72,12 +72,13 @@ def traceback_table : Flag<["--"], "traceback-table">,
            "This option is for XCOFF files only">;
 
 def disassemble_symbols_EQ : Joined<["--"], "disassemble-symbols=">,
-  HelpText<"List of symbols to disassemble. "
+  HelpText<"Comma-separated list of symbols to disassemble. "
            "Accept demangled names when --demangle is "
            "specified, otherwise accept mangled names">;
 
 def disassemble_EQ : Joined<["--"], "disassemble=">,
-  HelpText<"Specify a symbol name to diasassemble. "
+  HelpText<"Disassemble a single symbol. "
+           "May be specified multiple times. "
            "Accept demangled names when --demangle is "
            "specified, otherwise accept mangled names">;
 
@@ -112,9 +113,6 @@ def fault_map_section : Flag<["--"], "fault-map-section">,
 
 def offloading : Flag<["--"], "offloading">,
   HelpText<"Display the content of the offloading section">;
-
-def offload_fatbin : Flag<["--"], "offload-fatbin">,
-  HelpText<"Display the content of the offload FatBin section">;
 
 def file_headers : Flag<["--"], "file-headers">,
   HelpText<"Display the contents of the overall file header">;

@@ -3,7 +3,7 @@
 // recovery. The cross-bank DS2 still has a locally provable mode because its
 // exact setter is adjacent and no control-flow or declared entry bypasses it.
 
-// RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 \
+// RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa \
 // RUN:   --amdhsa-code-object-version=6 -filetype=obj %s -o %t.local.o
 // RUN: %ld.lld -flavor gnu -m elf64_amdgpu %t.local.o -o %t.local.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.local.elf \
@@ -37,7 +37,7 @@
 // that site even though DirectControlFlow remains closed.
 // RUN: sed 's/^\.set bypass_setter, 0$/.set bypass_setter, 1/' \
 // RUN:   %s > %t.bypass.s
-// RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 \
+// RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa \
 // RUN:   --amdhsa-code-object-version=6 -filetype=obj %t.bypass.s \
 // RUN:   -o %t.bypass.o
 // RUN: %ld.lld -flavor gnu -m elf64_amdgpu %t.bypass.o -o %t.bypass.elf

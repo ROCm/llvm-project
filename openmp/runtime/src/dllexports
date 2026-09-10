@@ -534,8 +534,6 @@ kmp_set_disp_num_buffers                    890
     omp_get_device_num                      896
     omp_init_allocator                      897
     omp_destroy_allocator                   898
-    omp_get_memory_space                    900
-    omp_destroy_memory_space                901
     omp_get_devices_memspace                810
     omp_get_device_memspace                 811
     omp_get_devices_and_host_memspace       812
@@ -558,8 +556,6 @@ kmp_set_disp_num_buffers                    890
         __kmpc_calloc
         __kmpc_realloc
         __kmpc_free
-        __kmpc_get_memory_space
-        __kmpc_destroy_memory_space
         __kmpc_init_allocator
         __kmpc_destroy_allocator
     %endif

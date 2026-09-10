@@ -2,7 +2,7 @@
 // COM: references displaced code. Direct displacement must decline this input
 // COM: and use an appended entry stub so the relocation remains valid.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --entry-trampolines --output %t.out.elf \

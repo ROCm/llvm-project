@@ -92,8 +92,8 @@ jobs:
       - name: "Fetch 'build_tools' from repository"
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}          
           sparse-checkout: build_tools
           path: "prejob"
 
@@ -111,8 +111,8 @@ jobs:
       - name: Checking repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}          
 
       - name: Run setup test environment workflow
         timeout-minutes: 15
@@ -171,6 +171,22 @@ jobs:
           else
             echo "KUBE_CPU_REQUEST not set, thread limits not configured"
           fi
+
+      - name: Temp - raise ctest timeout for hipfft/rocfft (assertion - on)
+        if: ${{ contains(fromJSON(inputs.component).job_name, 'fft') }}
+        run: |
+          set -x
+          if ! ./build/llvm/bin/llvm-config --assertion-mode | grep -qx 'ON'; then
+            echo "assertions off - leaving ctest timeouts alone"
+            exit 0
+          fi
+          comp="${{ fromJSON(inputs.component).job_name }}"
+          before=$(grep -rn "TIMEOUT" "build/bin/${comp}" --include=CTestTestfile.cmake || true)
+          echo "before: ${before:-<none found>}"
+          test -n "$before"
+          grep -rl "TIMEOUT" "build/bin/${comp}" --include=CTestTestfile.cmake \
+            | xargs sed -i -E 's/TIMEOUT "?[0-9]+"?/TIMEOUT "3600"/g'
+          grep -rn "TIMEOUT" "build/bin/${comp}" --include=CTestTestfile.cmake
 
       - name: Test
         id: test

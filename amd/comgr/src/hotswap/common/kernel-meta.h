@@ -17,8 +17,6 @@
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/MathExtras.h"
 
 #include <array>
 #include <cstdint>
@@ -95,19 +93,6 @@ struct KernelMeta {
   /// kernarg preload the user-SGPR layout needs; absent from the MsgPack notes,
   /// which is why the descriptor is read directly.
   uint16_t KernargPreload = 0;
-
-  /// Byte offset (8-byte aligned) of the first hidden argument in the kernarg
-  /// segment. Hidden arguments (`hidden_*` value kinds) follow the explicit
-  /// ones.
-  uint64_t implicitArgsBase() const {
-    uint64_t MaxEnd = 0;
-    for (const KernelArgMeta &Arg : Args) {
-      if (llvm::StringRef(Arg.ValueKind).starts_with("hidden_"))
-        continue;
-      MaxEnd = std::max(MaxEnd, static_cast<uint64_t>(Arg.Offset) + Arg.Size);
-    }
-    return llvm::alignTo(MaxEnd, 8);
-  }
 };
 
 } // namespace COMGR::hotswap

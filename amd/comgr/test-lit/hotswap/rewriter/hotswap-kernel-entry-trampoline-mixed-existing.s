@@ -5,7 +5,7 @@
 
 // COM: First create an object where the pre-fixed first kernel is skipped and
 // COM: the second kernel receives a fast-path appended stub.
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s \
 // RUN:   -o %t.prefixed.elf
 // RUN: env AMD_COMGR_HOTSWAP_ENTRY_STUB_SYMBOLS=1 hotswap-rewrite \
 // RUN:   %t.prefixed.elf \
@@ -19,7 +19,7 @@
 // COM: the workaround.
 // RUN: sed 's/^\.set raw_entry, 0$/.set raw_entry, 1/' \
 // RUN:   %s > %t.raw.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %t.raw.s \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %t.raw.s \
 // RUN:   -o %t.raw.elf
 // RUN: %llvm-objcopy --dump-section .text=%t.raw.text %t.raw.elf
 // RUN: %llvm-objcopy --update-section .text=%t.raw.text %t.seed.elf \

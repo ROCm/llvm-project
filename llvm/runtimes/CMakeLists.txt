@@ -161,7 +161,7 @@ function(builtin_default_target compiler_rt_path)
                                                 SANITIZER
                            USE_TOOLCHAIN
                            TARGET_TRIPLE ${LLVM_TARGET_TRIPLE}
-                           FOLDER "Compiler-RT"
+                           FOLDER "compiler-rt"
                            ${EXTRA_ARGS})
 endfunction()
 
@@ -186,7 +186,7 @@ function(builtin_register_target compiler_rt_path name)
                                       ${COMMON_CMAKE_ARGS}
                                       ${${name}_extra_args}
                            USE_TOOLCHAIN
-                           FOLDER "Compiler-RT"
+                           FOLDER "compiler-rt"
                            ${EXTRA_ARGS} ${ARG_EXTRA_ARGS})
 endfunction()
 
@@ -217,15 +217,22 @@ if(compiler_rt_path)
     add_custom_target(install-builtins-stripped)
     set_target_properties(
       builtins install-builtins install-builtins-stripped
-      PROPERTIES FOLDER "Compiler-RT"
+      PROPERTIES FOLDER "compiler-rt"
     )
   endif()
 
   foreach(target ${builtin_targets})
     check_apple_target(${target} builtin)
 
+    # builtins-spirv64* targets will invoke llvm-link to combine all
+    # bitcode from static archive library into libclang_rt.builtins.bc.
+    # Need to add dependency on llvm-link for it.
+    set(builtin_deps clang-resource-headers)
+    if(target MATCHES "^spirv64" AND TARGET llvm-link)
+      list(APPEND builtin_deps llvm-link)
+    endif()
     builtin_register_target(${compiler_rt_path} ${target}
-      DEPENDS clang-resource-headers
+      DEPENDS ${builtin_deps}
       CMAKE_ARGS -DLLVM_DEFAULT_TARGET_TRIPLE=${target}
       EXTRA_ARGS TARGET_TRIPLE ${target})
 
@@ -619,34 +626,6 @@ if(build_runtimes)
     endforeach()
   endif()
   if("openmp" IN_LIST LLVM_ENABLE_RUNTIMES OR "offload" IN_LIST LLVM_ENABLE_RUNTIMES)
-    # With ROCm 6.3 the ROCr runtime and the thunk layer share a single repository.
-    # No need to provide a separate path for ROCt.
-    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR)
-
-      set(rocr_extra_cmake_args "")
-      if(THEROCK_AMDGPU_TARGETS)
-        # Pass the list of AMDGPU targets to ROCr runtime
-        list(APPEND rocr_extra_cmake_args "-DTHEROCK_AMDGPU_TARGETS=${THEROCK_AMDGPU_TARGETS}")
-      endif()
-
-      if(NOT DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH)
-        message(SEND_ERROR "External ROCr requires setting LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH")
-      endif()
-
-      message(STATUS "Add external unified ROCr: ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}")
-      ExternalProject_Add(rocr-runtime
-        SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}
-        DEPENDS clang llvm-link lld opt llvm-objcopy
-        INSTALL_COMMAND ""
-        CMAKE_ARGS -DBUILD_SHARED_LIBS=ON
-                   -DIMAGE_SUPPORT=OFF
-                   -DLLVM_RUNTIME_OPENMP=ON
-                   -DCMAKE_PREFIX_PATH=${__cmake_prefix_path}
-                   ${rocr_extra_cmake_args}
-                   ${extra_cmake_args})
-      set(HSA_DEP rocr-runtime)
-    endif()
-
     # omptarget device RTL depends on device libs, leading to circular dependency in build scripts.
     # Providing path to the sources enables to build them as part of compiler build, which
     # removes the ciruclar dependency on the script-side.
@@ -674,13 +653,7 @@ if(build_runtimes)
       endif()
     endif()
 
-    if("AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
-      set(AMDGPU_ARCH_DEP amdgpu-arch)
-    endif()
-    if (${LIBOMPTARGET_BUILD_DEVICE_FORTRT})
-      set(FORTRT_DEP FortranRuntime)
-    endif()
-    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP} ${AMDGPU_ARCH_DEP} ${FORTRT_DEP})
+    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch)
       if(TARGET ${dep})
         list(APPEND extra_deps ${dep})
       endif()
@@ -772,7 +745,7 @@ if(build_runtimes)
         add_custom_target(check-builtins)
         set_target_properties(
           check-builtins
-          PROPERTIES FOLDER "Compiler-RT"
+          PROPERTIES FOLDER "compiler-rt"
         )
       endif()
       if(LLVM_RUNTIME_DISTRIBUTION_COMPONENTS)

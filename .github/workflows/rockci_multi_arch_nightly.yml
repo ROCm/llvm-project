@@ -72,6 +72,8 @@ jobs:
       baseline_run_id: ${{ inputs.baseline_run_id || '' }}
       build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
       build_jax: false
+      repository: "ROCm/TheRock"
+      ref: ${{ vars.THEROCK_CI_MAIN_REF || '' }}        
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
@@ -91,6 +93,8 @@ jobs:
       rocm_rpm_package_version: ${{ needs.setup.outputs.rocm_rpm_package_version }}
       test_type: 'full'
       changed_projects: ${{ inputs.changed_projects || '' }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}        
     permissions:
       contents: read
       id-token: write
@@ -111,6 +115,8 @@ jobs:
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: 'full'
       changed_projects: ${{ inputs.changed_projects || '' }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}        
     permissions:
       contents: read
       id-token: write
@@ -121,6 +127,9 @@ jobs:
     needs:
       - windows_build_and_test
       - linux_build_and_test
+    permissions:
+      contents: read
+      actions: read        
     with:
         JOB_NAME_TO_MATCH: "Linux::release / Build Multi-Arch Stages / math-libs (gfx94X-dcgpu, gfx942, linux-gfx942-1gpu-ccs-csp-ossci-rocm, false) / Stage - Math Libs (gfx94X-dcgpu)"
     secrets: inherit

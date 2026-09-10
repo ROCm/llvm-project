@@ -14,6 +14,11 @@ MATH_MANGLE(len3)(half x, half y, half z)
     float fy = (float)y;
     float fz = (float)z;
     float d2 = BUILTIN_FMA_F32(fx, fx, BUILTIN_FMA_F32(fy, fy, fz*fz));
-    return (half)BUILTIN_AMDGPU_SQRT_F32(d2);
+    half ret = (half)BUILTIN_AMDGPU_SQRT_F32(d2);
+    if (!FINITE_ONLY_OPT())
+        ret = (BUILTIN_ISINF_F16(x) |
+               BUILTIN_ISINF_F16(y) |
+               BUILTIN_ISINF_F16(z)) ? PINF_F16 : ret;
+    return ret;
 }
 

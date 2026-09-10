@@ -4,7 +4,7 @@
 // COM: instructions or kernel revision tags to transform, so return a
 // COM: byte-identical successful output after validating that shape.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: %llvm-readobj --sections --symbols --notes %t.elf \
 // RUN:   | %FileCheck --check-prefix=SHAPE --implicit-check-not=.kd %s
 // SHAPE: Name: .text
@@ -40,7 +40,7 @@
 
 // RUN: sed 's/^\.set claimed_function, 0$/.set claimed_function, 1/' \
 // RUN:   %s > %t.function.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.function.s -o %t.function.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.function.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -51,7 +51,7 @@
 
 // RUN: sed 's/^\.set claimed_other_function, 0$/.set claimed_other_function, 1/' \
 // RUN:   %s > %t.other-function.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.other-function.s -o %t.other-function.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 \
 // RUN:   hotswap-rewrite %t.other-function.elf \
@@ -63,7 +63,7 @@
 
 // RUN: sed 's/^\.set executable_section, 0$/.set executable_section, 1/' \
 // RUN:   %s > %t.executable.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.executable.s -o %t.executable.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.executable.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -74,7 +74,7 @@
 
 // RUN: sed 's/^\.set claimed_descriptor, 0$/.set claimed_descriptor, 1/' \
 // RUN:   %s > %t.descriptor.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.descriptor.s -o %t.descriptor.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.descriptor.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -85,7 +85,7 @@
 
 // RUN: sed 's/^\.set claimed_kernel, 0$/.set claimed_kernel, 1/' \
 // RUN:   %s > %t.kernel.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.kernel.s -o %t.kernel.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.kernel.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -95,7 +95,7 @@
 
 // RUN: sed 's/^\.set malformed_metadata, 0$/.set malformed_metadata, 1/' \
 // RUN:   %s > %t.malformed.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.malformed.s -o %t.malformed.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.malformed.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

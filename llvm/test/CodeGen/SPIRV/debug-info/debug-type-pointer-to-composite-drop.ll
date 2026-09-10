@@ -26,7 +26,7 @@ entry:
 
 ; S *p. Only the pointer is retained; S is reached through the pointee.
 !4 = !{!5}
-!5 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !7, size: 64, addressSpace: 4)
+!5 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !7, size: 64, dwarfAddressSpace: 4)
 !7 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "S", file: !3, line: 1, size: 32, elements: !8)
 !8 = !{!9}
 !9 = !DIDerivedType(tag: DW_TAG_member, name: "x", file: !3, line: 2, baseType: !10, size: 32)

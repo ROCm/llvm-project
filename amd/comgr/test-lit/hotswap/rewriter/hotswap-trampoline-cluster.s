@@ -3,7 +3,7 @@
 // COM: bits [15:0] cleared on A0, while preserving the incoming M0 value for
 // COM: surrounding code.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -73,7 +73,7 @@
 // COM: emitted, so the API reports ERROR instead of returning unsafe code.
 // RUN: sed -e 's/.amdhsa_next_free_sgpr 16/.amdhsa_next_free_sgpr 106/' \
 // RUN:     -e 's/.sgpr_count: 16/.sgpr_count: 106/' %s > %t.highsgpr.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.highsgpr.s -o %t.highsgpr.elf
 // RUN: hotswap-rewrite %t.highsgpr.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

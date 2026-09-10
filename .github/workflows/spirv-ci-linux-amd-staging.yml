@@ -29,7 +29,7 @@ jobs:
   # =====================================================================
   build:
     name: Build
-    runs-on: azure-linux-scale-rocm
+    runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 120
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
@@ -343,7 +343,7 @@ jobs:
   test_translator_lit:
     name: Test SPIRV translator lit
     needs: build
-    runs-on: azure-linux-scale-rocm
+    runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 30
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
@@ -458,7 +458,7 @@ jobs:
   test_codegen:
     name: Test LLVM SPIRV codegen
     needs: build
-    runs-on: azure-linux-scale-rocm
+    runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 15
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
@@ -509,7 +509,7 @@ jobs:
   test_comgr:
     name: Test Comgr
     needs: build
-    runs-on: azure-linux-scale-rocm
+    runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 30
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
@@ -577,7 +577,7 @@ jobs:
   pick_runner:
     name: Select gfx942 test runner
     needs: [build]
-    runs-on: azure-linux-scale-rocm
+    runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 5
     outputs:
       test_runs_on: ${{ steps.pick.outputs.label }}
@@ -609,7 +609,9 @@ jobs:
     name: Test rocm-examples
     needs: [build, pick_runner]
     runs-on: ${{ needs.pick_runner.outputs.test_runs_on }}
-    timeout-minutes: 45
+    # Match the translator's spirv-ci-linux.yml (#268): the gfx942 runner is
+    # slow/contended and 45m was cutting the job before it could finish.
+    timeout-minutes: 240
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
       options: |

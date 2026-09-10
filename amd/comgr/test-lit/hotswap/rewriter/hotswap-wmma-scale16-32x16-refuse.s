@@ -2,7 +2,7 @@
 // COM: assembled into its own object so every rejection is exercised
 // COM: independently.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   -Wa,-defsym,CASE=1 %s -o %t.da.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.da.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
@@ -11,7 +11,7 @@
 // D-A: destination overlaps matrix A
 // D-A: RESULT: ERROR
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   -Wa,-defsym,CASE=2 %s -o %t.db.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.db.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
@@ -20,7 +20,7 @@
 // D-B: destination overlaps matrix B
 // D-B: RESULT: ERROR
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   -Wa,-defsym,CASE=3 %s -o %t.ab.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.ab.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
@@ -29,7 +29,7 @@
 // A-B: matrix A overlaps matrix B
 // A-B: RESULT: ERROR
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   -Wa,-defsym,CASE=4 %s -o %t.dc.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.dc.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
@@ -38,7 +38,7 @@
 // D-C: partial destination/src2 overlap
 // D-C: RESULT: ERROR
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   -Wa,-defsym,CASE=5 %s -o %t.ac.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.ac.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
@@ -47,7 +47,7 @@
 // A-C: matrix A overlaps src2
 // A-C: RESULT: ERROR
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   -Wa,-defsym,CASE=6 %s -o %t.scale-matrix.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite \
 // RUN:   %t.scale-matrix.elf \
@@ -57,7 +57,7 @@
 // SCALE: scale pair overlaps a staged matrix operand
 // SCALE: RESULT: ERROR
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   -Wa,-defsym,CASE=7 %s -o %t.scale-scale.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite \
 // RUN:   %t.scale-scale.elf \

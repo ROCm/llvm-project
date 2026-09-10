@@ -2,7 +2,7 @@
 // COM: already reserved for their return edge. The source PC plus one shared
 // COM: relocation-neutral delta selects a sparse branch stub in the pool.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf 2>&1 | %FileCheck --check-prefix=LOG %s
@@ -27,7 +27,7 @@
 // COM: foreign run is branch-reachable from every source below, the affine
 // COM: planner must not use it as a gateway for a different function.
 // RUN: sed 's|^// FOREIGN-ONLY:|  |' %s > %t.foreign.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.foreign.s -o %t.foreign.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.foreign.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

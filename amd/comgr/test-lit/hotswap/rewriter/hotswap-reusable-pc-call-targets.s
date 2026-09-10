@@ -5,7 +5,7 @@
 // COM: padding. A selector bypass would leave the target unknown and must
 // COM: continue to fail closed.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf 2>&1 | %FileCheck --check-prefix=LOG %s
@@ -20,7 +20,7 @@
 
 // RUN: sed 's/^\.set unsafe_selector, 0$/.set unsafe_selector, 1/' \
 // RUN:   %s > %t.bypass.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.bypass.s -o %t.bypass.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.bypass.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -50,7 +50,7 @@
 
 // RUN: sed 's/^\.set overlap_delta, 0$/.set overlap_delta, 1/' \
 // RUN:   %s > %t.overlap.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.overlap.s -o %t.overlap.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.overlap.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -59,7 +59,7 @@
 
 // RUN: sed 's/^\.set clobber_target, 0$/.set clobber_target, 1/' \
 // RUN:   %s > %t.clobber.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.clobber.s -o %t.clobber.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.clobber.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -68,7 +68,7 @@
 
 // RUN: sed 's/^\.set clobber_bootstrap, 0$/.set clobber_bootstrap, 1/' \
 // RUN:   %s > %t.bootstrap-clobber.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.bootstrap-clobber.s -o %t.bootstrap-clobber.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite \
 // RUN:   %t.bootstrap-clobber.elf amdgcn-amd-amdhsa--gfx1250 \
@@ -77,7 +77,7 @@
 
 // RUN: sed 's/^\.set tail_escape, 0$/.set tail_escape, 1/' \
 // RUN:   %s > %t.tail.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.tail.s -o %t.tail.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.tail.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -86,7 +86,7 @@
 
 // RUN: sed 's/^\.set indirect_escape, 0$/.set indirect_escape, 1/' \
 // RUN:   %s > %t.indirect.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.indirect.s -o %t.indirect.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.indirect.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -95,7 +95,7 @@
 
 // RUN: sed 's/^\.set external_entry, 0$/.set external_entry, 1/' \
 // RUN:   %s > %t.external.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.external.s -o %t.external.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.external.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -104,7 +104,7 @@
 
 // RUN: sed 's/^\.set outside_selector, 0$/.set outside_selector, 1/' \
 // RUN:   %s > %t.outside.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.outside.s -o %t.outside.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.outside.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -127,7 +127,7 @@
 // resolve: its bytes could clobber the target pair or divert control flow.
 // RUN: sed 's/^\.set undecoded_gap, 0$/.set undecoded_gap, 1/' \
 // RUN:   %s > %t.undecoded.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.undecoded.s -o %t.undecoded.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.undecoded.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -139,7 +139,7 @@
 // visit must not survive.
 // RUN: sed 's/^\.set reconverge_reload, 0$/.set reconverge_reload, 1/' \
 // RUN:   %s > %t.reconverge.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.reconverge.s -o %t.reconverge.elf
 // RUN: env AMD_COMGR_EMIT_VERBOSE_LOGS=1 hotswap-rewrite %t.reconverge.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

@@ -20,7 +20,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Support/TargetSelect.h"
 #include "gtest/gtest.h"
 
 #include <algorithm>
@@ -28,38 +27,10 @@
 #include <functional>
 #include <iterator>
 #include <limits>
-#include <mutex>
 #include <vector>
 
 using namespace COMGR;
 using namespace COMGR::hotswap;
-
-// --------------------------------------------------------------------------
-// Test-only stub definition of COMGR::ensureLLVMInitialized.
-//
-// hotswap::initLLVM() calls COMGR::ensureLLVMInitialized() (normally defined
-// in comgr.cpp) to register the AMDGPU target. The production definition
-// lives in libamd_comgr, which we don't want to link into the unit-test
-// binary (it drags in the full Comgr compiler pipeline). Providing this
-// stub here keeps the test binary minimal while matching the production
-// registration behaviour for the target components we exercise.
-//
-// Stubbing is safe because this translation unit is linked into
-// HotswapMCTests only, never into libamd_comgr.
-// --------------------------------------------------------------------------
-namespace COMGR {
-void ensureLLVMInitialized() {
-  static std::once_flag Once;
-  std::call_once(Once, []() {
-    LLVMInitializeAMDGPUTargetInfo();
-    LLVMInitializeAMDGPUTargetMC();
-    LLVMInitializeAMDGPUDisassembler();
-    LLVMInitializeAMDGPUAsmParser();
-    LLVMInitializeAMDGPUAsmPrinter();
-    LLVMInitializeAMDGPUTarget();
-  });
-}
-} // namespace COMGR
 
 // Build a TargetIdentifier for the gfx1250 test subtarget without features --
 // production callers go through parseTargetIdentifier; here we populate

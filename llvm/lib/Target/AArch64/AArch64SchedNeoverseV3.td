@@ -24,6 +24,7 @@ def NeoverseV3Model : SchedMachineModel {
   list<Predicate> UnsupportedFeatures = !listconcat(SMEUnsupported.F,
                                                     SVE2p1Unsupported.F,
                                                     [HasSVE2p1, HasSVEB16B16,
+                                                     HasSVEBFSCALE,
                                                      HasCPA, HasCSSC, HasMOPS, HasMOPS_GO]);
 }
 
@@ -1647,6 +1648,7 @@ def : InstRW<[V3Write_4c_2V02], (instrs URECPEv4i32, URSQRTEv4i32)>;
 // ASIMD reciprocal and square root estimate, D-form F32 and scalar forms
 def : InstRW<[V3Write_3c_1V02], (instrs FRECPEv1f16, FRECPEv1i32,
                                         FRECPEv1i64, FRECPEv2f32,
+                                        FRECPEv2f64, FRSQRTEv2f64,
                                         FRSQRTEv1f16, FRSQRTEv1i32,
                                         FRSQRTEv1i64, FRSQRTEv2f32)>;
 
@@ -2472,7 +2474,7 @@ def : InstRW<[V3Write_2c_1V], (instregex "^F(MAX|MIN)(NM)?_ZPm[IZ]_[HSD]",
                                          "^F(MAX|MIN)(NM)?_ZPZ[IZ]_[HSD]")>;
 
 // Floating point multiply
-def : InstRW<[V3Write_3c_1V], (instregex "^(FSCALE|FMULX)_ZPmZ_[HSD]",
+def : InstRW<[V3Write_3c_1V], (instregex "^(FSCALE|FMULX)_(ZPmZ|ZPZZ)_[HSD]",
                                          "^FMULX_ZPZZ_[HSD]",
                                          "^FMUL_(ZPm[IZ]|ZZZI?)_[HSD]",
                                          "^FMUL_ZPZ[IZ]_[HSD]")>;

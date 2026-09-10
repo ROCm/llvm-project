@@ -1228,7 +1228,6 @@ def SI_SPILL_S32_TO_VGPR : PseudoInstSI <(outs VGPR_32:$vdst),
   let hasSideEffects = 0;
   let mayLoad = 0;
   let mayStore = 0;
-  let VALU = 1;
   let hasExtraDefRegAllocReq = 1;
   let Constraints = "$vdst = $vdst_in";
 }
@@ -1240,7 +1239,6 @@ def SI_RESTORE_S32_FROM_VGPR : PseudoInstSI <(outs SReg_32:$sdst),
   let hasSideEffects = 0;
   let mayLoad = 0;
   let mayStore = 0;
-  let VALU = 1;
   let hasExtraSrcRegAllocReq = 1;
 }
 } // End Spill = 1, VALU = 1, isConvergent = 1
@@ -1431,18 +1429,6 @@ def : GCNPat <
 def : GCNPat <
   (int_amdgcn_wqm_demote (i1 (not i1:$src))),
   (SI_DEMOTE_I1 SCSrc_i1:$src, -1)
->;
-
-  // TODO: we could add more variants for other types of conditionals
-
-def : GCNPat <
-  (i64 (int_amdgcn_icmp i1:$src, (i1 0), (i32 33))),
-  (COPY $src) // Return the SGPRs representing i1 src
->;
-
-def : GCNPat <
-  (i32 (int_amdgcn_icmp i1:$src, (i1 0), (i32 33))),
-  (COPY $src) // Return the SGPRs representing i1 src
 >;
 
 //===----------------------------------------------------------------------===//
@@ -1935,7 +1921,7 @@ foreach Index = 0-31 in {
 // 16-bit bitcast
 foreach vt = Reg16Types.types in {
   foreach st = Reg16Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VGPR_32>;
       def : BitConvert <vt, st, SReg_32>;
     }
@@ -1945,7 +1931,7 @@ foreach vt = Reg16Types.types in {
 // 32-bit bitcast
 foreach vt = Reg32DataTypes.types in {
   foreach st = Reg32DataTypes.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VGPR_32>;
       def : BitConvert <vt, st, SReg_32>;
     }
@@ -1956,7 +1942,7 @@ foreach vt = Reg32DataTypes.types in {
 // 64-bit bitcast
 foreach vt = Reg64DataTypes.types in {
   foreach st = Reg64DataTypes.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_64>;
     }
   }
@@ -1966,7 +1952,7 @@ foreach vt = Reg64DataTypes.types in {
 // 96-bit bitcast
 foreach vt = Reg96Types.types in {
   foreach st = Reg96Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, SGPR_96>;
     }
   }
@@ -1976,7 +1962,7 @@ foreach vt = Reg96Types.types in {
 // 128-bit bitcast
 foreach vt = Reg128Types.types in {
   foreach st = Reg128Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_128>;
       def : BitConvert <vt, st, SReg_128>;
     }
@@ -1987,7 +1973,7 @@ foreach vt = Reg128Types.types in {
 // 160-bit bitcast
 foreach vt = Reg160Types.types in {
   foreach st = Reg160Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_160>;
       def : BitConvert <vt, st, SReg_160>;
     }
@@ -1997,7 +1983,7 @@ foreach vt = Reg160Types.types in {
 // 192-bit bitcast
 foreach vt = Reg192Types.types in {
   foreach st = Reg192Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_192>;
       def : BitConvert <vt, st, SReg_192>;
     }
@@ -2007,7 +1993,7 @@ foreach vt = Reg192Types.types in {
 // 224-bit bitcast
 foreach vt = Reg224Types.types in {
   foreach st = Reg224Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_224>;
       def : BitConvert <vt, st, SReg_224>;
     }
@@ -2018,7 +2004,7 @@ foreach vt = Reg224Types.types in {
 // 256-bit bitcast
 foreach vt = Reg256Types.types in {
   foreach st = Reg256Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_256>;
       def : BitConvert <vt, st, SReg_256>;
     }
@@ -2029,7 +2015,7 @@ foreach vt = Reg256Types.types in {
 // 288-bit bitcast
 foreach vt = Reg288Types.types in {
   foreach st = Reg288Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_288>;
       def : BitConvert <vt, st, SReg_288>;
     }
@@ -2039,7 +2025,7 @@ foreach vt = Reg288Types.types in {
 // 320-bit bitcast
 foreach vt = Reg320Types.types in {
   foreach st = Reg320Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_320>;
       def : BitConvert <vt, st, SReg_320>;
     }
@@ -2049,7 +2035,7 @@ foreach vt = Reg320Types.types in {
 // 320-bit bitcast
 foreach vt = Reg352Types.types in {
   foreach st = Reg352Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_352>;
       def : BitConvert <vt, st, SReg_352>;
     }
@@ -2059,7 +2045,7 @@ foreach vt = Reg352Types.types in {
 // 384-bit bitcast
 foreach vt = Reg384Types.types in {
   foreach st = Reg384Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_384>;
       def : BitConvert <vt, st, SReg_384>;
     }
@@ -2069,7 +2055,7 @@ foreach vt = Reg384Types.types in {
 // 512-bit bitcast
 foreach vt = Reg512Types.types in {
   foreach st = Reg512Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_512>;
       def : BitConvert <vt, st, SReg_512>;
     }
@@ -2080,7 +2066,7 @@ foreach vt = Reg512Types.types in {
 // 1024-bit bitcast
 foreach vt = Reg1024Types.types in {
   foreach st = Reg1024Types.types in {
-    if !not(!eq (vt, st)) then {
+    if !ne(vt, st) then {
       def : BitConvert <vt, st, VReg_1024>;
       def : BitConvert <vt, st, SReg_1024>;
     }
@@ -3102,20 +3088,22 @@ defm : SI_INDIRECT_Pattern <v32i32, i32, "V32">;
 // SAD Patterns
 //===----------------------------------------------------------------------===//
 
-def : GCNPat <
-  (add (sub_oneuse (umax i32:$src0, i32:$src1),
-                   (umin i32:$src0, i32:$src1)),
-       i32:$src2),
-  (V_SAD_U32_e64 $src0, $src1, $src2, (i1 0))
->;
+let SubtargetPredicate = HasSadInsts in {
+  def : GCNPat <
+    (add (sub_oneuse (umax i32:$src0, i32:$src1),
+                    (umin i32:$src0, i32:$src1)),
+        i32:$src2),
+    (V_SAD_U32_e64 $src0, $src1, $src2, (i1 0))
+  >;
 
-def : GCNPat <
-  (add (select_oneuse (i1 (setugt i32:$src0, i32:$src1)),
-                      (sub i32:$src0, i32:$src1),
-                      (sub i32:$src1, i32:$src0)),
-       i32:$src2),
-  (V_SAD_U32_e64 $src0, $src1, $src2, (i1 0))
->;
+  def : GCNPat <
+    (add (select_oneuse (i1 (setugt i32:$src0, i32:$src1)),
+                        (sub i32:$src0, i32:$src1),
+                        (sub i32:$src1, i32:$src0)),
+        i32:$src2),
+    (V_SAD_U32_e64 $src0, $src1, $src2, (i1 0))
+  >;
+} // End SubtargetPredicate = HasSadInsts
 
 //===----------------------------------------------------------------------===//
 // Conversion Patterns
@@ -4106,17 +4094,16 @@ def : GCNPat <
   (V_LSHL_OR_B32_e64 VGPR_32:$src_hi, (i32 16), VSrc_b32:$src2)
 >;
 
-// Real-true16: high source is a VGPR_16, so OR it into the high half of src2
-// with v_or_b16 and assemble the 32-bit result with a REG_SEQUENCE.
+// Real-true16: high source is a VGPR_16. Widen it to a 32-bit register and
+// fold into v_lshl_or_b32.
 let True16Predicate = UseRealTrue16Insts in
 def : GCNPat <
   (i32 (DivergentBinFrag<or>
     (i32 (bitconvert (v2i16 (build_vector (i16 0), (i16 VGPR_16:$src_hi))))),
     i32:$src2)),
-  (REG_SEQUENCE VGPR_32,
-    (i16 (EXTRACT_SUBREG (i32 (COPY_TO_REGCLASS $src2, VGPR_32)), lo16)), lo16,
-    (V_OR_B16_t16_e64 (i32 0), VGPR_16:$src_hi,
-                      (i32 0), (i16 (EXTRACT_SUBREG (i32 (COPY_TO_REGCLASS $src2, VGPR_32)), hi16))), hi16)
+  (V_LSHL_OR_B32_e64
+    (i32 (REG_SEQUENCE VGPR_32, VGPR_16:$src_hi, lo16, (i16 (IMPLICIT_DEF)), hi16)),
+    (i32 16), VSrc_b32:$src2)
 >;
 
 // With multiple uses of the shift, this will duplicate the shift and
@@ -4387,18 +4374,18 @@ def : GCNPat<
 
 multiclass BFMPatterns <ValueType vt, PatFrag SHL, PatFrag ADD, InstSI BFM> {
   def : GCNPat <
-    (vt (SHL (vt (add (vt (shl 1, vt:$a)), -1)), vt:$b)),
+    (vt (SHL (vt (add (vt (shl 1, i32:$a)), -1)), i32:$b)),
     (BFM $a, $b)
   >;
 
   def : GCNPat <
-    (vt (ADD (vt (shl 1, vt:$a)), -1)),
+    (vt (ADD (vt (shl 1, i32:$a)), -1)),
     (BFM $a, (i32 0))
   >;
 }
 
 defm : BFMPatterns <i32, UniformBinFrag<shl>, UniformBinFrag<add>, S_BFM_B32>;
-// FIXME: defm : BFMPatterns <i64, UniformBinFrag<shl>, UniformBinFrag<add>, S_BFM_B64>;
+defm : BFMPatterns <i64, UniformBinFrag<shl>, UniformBinFrag<add>, S_BFM_B64>;
 defm : BFMPatterns <i32, DivergentBinFrag<shl>, DivergentBinFrag<add>, V_BFM_B32_e64>;
 
 // Bitfield extract patterns

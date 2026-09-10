@@ -492,6 +492,12 @@ Interface::startTargetDataRetrieveTrace(int64_t SrcDeviceId, void *SrcPtrBegin,
 
 ompt_record_ompt_t *Interface::stopTargetDataMovementTraceAsync(
     ompt_record_ompt_t *DataPtr, uint64_t NanosStart, uint64_t NanosEnd) {
+  // No trace record was assigned for this event, so there is nothing to
+  // complete. Callers are expected to filter these events, but the plugins may
+  // reach this entry point directly.
+  if (DataPtr == nullptr)
+    return nullptr;
+
   // Finalize the data that comes from the plugin.
   DataPtr->time = NanosStart;
   auto Record = static_cast<ompt_record_target_data_op_t *>(
@@ -516,6 +522,10 @@ ompt_record_ompt_t *Interface::startTargetSubmitTrace(int64_t DeviceId,
   ompt_record_ompt_t *DataPtr = (ompt_record_ompt_t *)TRM->assignCursor(
       ompt_callback_target_submit, DeviceId);
 
+  // This event will not be traced
+  if (DataPtr == nullptr)
+    return nullptr;
+
   // Set all known entries and leave remaining to the stop function
   setTraceRecordCommon(DataPtr, ompt_callback_target_submit);
   DataPtr->time = 0; // Set to sanity value and let "stop" function fix it
@@ -532,6 +542,12 @@ ompt_record_ompt_t *
 Interface::stopTargetSubmitTraceAsync(ompt_record_ompt_t *DataPtr,
                                       unsigned int NumTeams,
                                       uint64_t NanosStart, uint64_t NanosStop) {
+  // No trace record was assigned for this event, so there is nothing to
+  // complete. Callers are expected to filter these events, but the plugins may
+  // reach this entry point directly.
+  if (DataPtr == nullptr)
+    return nullptr;
+
   // Common fields
   DataPtr->time = NanosStart;
   // Submit specific

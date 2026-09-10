@@ -1570,7 +1570,7 @@ class EndToEndTests(unittest.TestCase):
                 source: str | bytes | os.PathLike[str] | os.PathLike[bytes],
                 destination: str | bytes | os.PathLike[str] | os.PathLike[bytes],
             ) -> None:
-                if Path(os.fsdecode(destination)) == output:
+                if Path(os.fsdecode(destination)) == output.resolve():
                     raise KeyboardInterrupt()
                 real_replace(source, destination)
 

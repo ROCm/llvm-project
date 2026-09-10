@@ -150,7 +150,7 @@ bb86:                                             ; preds = %bb
   br label %bb141
 
 bb96:                                             ; preds = %bb
-  %tmp97 = fcmp oeq float %tmp84, 0x7FF0000000000000
+  %tmp97 = fcmp oeq float %tmp84, +inf
   br i1 %tmp97, label %bb98, label %bb141
 
 bb98:                                             ; preds = %bb96
@@ -163,7 +163,7 @@ bb98:                                             ; preds = %bb96
   %tmp105 = tail call float @llvm.fmuladd.f32(float %tmp102, float %tmp102, float %tmp104)
   %tmp106 = tail call float @llvm.fmuladd.f32(float %tmp101, float %tmp101, float %tmp105)
   %tmp107 = tail call float @llvm.fmuladd.f32(float %tmp100, float %tmp100, float %tmp106)
-  %tmp108 = fcmp oeq float %tmp107, 0x7FF0000000000000
+  %tmp108 = fcmp oeq float %tmp107, +inf
   br i1 %tmp108, label %bb109, label %bb141
 
 bb109:                                            ; preds = %bb98
@@ -365,10 +365,10 @@ declare void @llvm.dbg.value(metadata, metadata, metadata)
 !81 = !{!82}
 !82 = !DISubrange(count: 4)
 !83 = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
-!84 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !85, size: 32, addressSpace: 1)
+!84 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !85, size: 32, dwarfAddressSpace: 1)
 !85 = !DIDerivedType(tag: DW_TAG_const_type, baseType: !86)
 !86 = !DIBasicType(name: "half", size: 16, encoding: DW_ATE_float)
-!87 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !86, size: 32, addressSpace: 1)
+!87 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !86, size: 32, dwarfAddressSpace: 1)
 !88 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !89, size: 64)
 !89 = !DIDerivedType(tag: DW_TAG_typedef, name: "Face", file: !4, line: 1993, baseType: !90)
 !90 = distinct !DICompositeType(tag: DW_TAG_structure_type, file: !4, line: 1981, size: 640, elements: !91)

@@ -80,6 +80,7 @@ llvm_map_components_to_libnames(COMGR_TEST_UNIT_MC_LIBS
 
 target_link_libraries(HotswapMCTests PRIVATE
   ${COMGR_GTEST_LIBS}
+  comgr-test-llvm-init
   ${COMGR_TEST_UNIT_MC_LIBS}
   ${LLVM_PTHREAD_LIB})
 

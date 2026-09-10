@@ -30,7 +30,7 @@ MATH_PRIVATE(sincosred2)(float x, float y)
 
     float cxy = t + MATH_MAD(x2*x2, MATH_MAD(x2, MATH_MAD(x2, MATH_MAD(x2, c3, c2), c1), c0), MATH_MAD(x, -y, v));
 
-    float sxy = MATH_MAD(x2, MATH_MAD(x2, s3, s2), s1);
+    float sxy = PE2(x2, s3, s2, s1);
     sxy = x - MATH_MAD(-x3, s0, MATH_MAD(x2, MATH_MAD(-x3, sxy, 0.5f*y), -y));
 
     struct scret ret;

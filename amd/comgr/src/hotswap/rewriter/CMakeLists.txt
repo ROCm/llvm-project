@@ -1,8 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 # --- LLVM ---------------------------------------------------------------------
 if(NOT TARGET LLVMSupport)
   find_package(LLVM REQUIRED CONFIG)
@@ -50,7 +47,11 @@ endif()
 # on any class with a virtual method.
 llvm_update_compile_flags(hotswap-rewriter)
 
-set_target_properties(hotswap-rewriter PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(hotswap-rewriter PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS No
+  POSITION_INDEPENDENT_CODE ON)
 
 # These TUs land directly in amd_comgr and define exported amd_comgr_hotswap_*
 # API functions, so they must be built with AMD_COMGR_EXPORT for AMD_COMGR_API

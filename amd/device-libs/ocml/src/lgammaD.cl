@@ -7,10 +7,16 @@
 
 #include "mathD.h"
 
+struct ret_t {
+    double value;
+    int sign;
+};
+
+extern CONSTATTR struct ret_t MATH_PRIVATE(lgamma_r_impl)(double x);
+
 double
 MATH_MANGLE(lgamma)(double x)
 {
-    int s;
-    return MATH_MANGLE(lgamma_r)(x, &s);
+    return MATH_PRIVATE(lgamma_r_impl)(x).value;
 }
 

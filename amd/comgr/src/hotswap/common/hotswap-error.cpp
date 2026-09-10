@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "hotswap-error.h"
+#include "hotswap/common/hotswap-error.h"
 
 namespace COMGR::hotswap {
 

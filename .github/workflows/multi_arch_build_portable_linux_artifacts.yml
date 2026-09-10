@@ -58,7 +58,7 @@ on:
       build_runs_on:
         description: "Build runner label (selected by configure script with weighted distribution)"
         type: string
-        default: "aws-linux-scale-rocm-prod"
+        default: "aws-linux-scale-rocm-large"
       repository:
         description: "Repository to checkout. Defaults to github.repository."
         type: string
@@ -75,8 +75,7 @@ on:
 jobs:
   build_stage:
     name: ${{ inputs.stage_display_name }}
-    runs-on: azure-linux-scale-rocm    #temp until aws access is provided
-    #runs-on: ${{ inputs.build_runs_on }}
+    runs-on: ${{ inputs.build_runs_on }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     permissions:
       id-token: write
@@ -98,8 +97,8 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}
 
       - name: Checkout external repository
         if: ${{ inputs.external_repo_config != '' }}
@@ -111,6 +110,7 @@ jobs:
 
       - name: Submodule PR update (covers parameterised and PR creation)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd-staging
+ 
       - name: Install python deps
         run: pip install -r requirements.txt
 
@@ -140,6 +140,39 @@ jobs:
             --amdgpu-families="${{ inputs.amdgpu_family }}" \
             --output-dir="${BUILD_DIR}" \
             --bootstrap
+ 
+      # Temp fix for the assertion on - this needs to be removed once the merge happens
+      - name: Carry wave32 EXEC CFI patch - temp for assertion on (TheRock #6102)
+        if: ${{ env.LLVM_ASSERTIONS == '1' }}
+        run: |
+          set -x
+          git config --global --add safe.directory "$PWD"
+          mkdir -p patches/amd-mainline/llvm-project
+          git fetch --no-tags --depth 1 https://github.com/ROCm/TheRock.git \
+            d9189b378f8fdc2525acaf6975deee29538ba48d
+          git show FETCH_HEAD:patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch \
+            > patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
+ 
+      - name: Carry ObjectYAML VERS part size fix - temp for assertion on (llvm/llvm-project 221137)
+        if: ${{ env.LLVM_ASSERTIONS == '1' }}
+        run: |
+          set -x
+          git config --global --add safe.directory "$PWD"
+          mkdir -p patches/amd-mainline/llvm-project
+          git fetch --no-tags --depth 2 https://github.com/llvm/llvm-project.git \
+            refs/pull/221137/head
+          git format-patch -1 --stdout FETCH_HEAD \
+            > patches/amd-mainline/llvm-project/0002-ObjectYAML-VERS-part-size.patch
+
+      - name: Carry mlir-pdll-lsp-server link fix - temp for assertion on (llvm/llvm-project 220123)
+        if: ${{ env.LLVM_ASSERTIONS == '1' }}
+        run: |
+          set -x
+          git config --global --add safe.directory "$PWD"
+          git fetch --no-tags --depth 2 https://github.com/llvm/llvm-project.git \
+            14cdf0c5f29976d682b51fdfb6038ed67acca82b
+          git format-patch -1 --stdout FETCH_HEAD \
+            > patches/amd-mainline/llvm-project/0003-mlir-pdll-lsp-server-link.patch
 
       - name: Fetch sources
         timeout-minutes: 30
@@ -215,15 +248,26 @@ jobs:
         run: |
           python3 build_tools/github_actions/detect_failed_logs.py
 
-      - name: LIT (llvm, clang, flang, mlir, lld) / COMGR Lit & CTest
+      - name: LIT (llvm, clang, flang, mlir, lld)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/lit-comgr-tests@amd-staging
         continue-on-error: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         env:
           BUILD_DIR: ${{ env.BUILD_DIR }}
         with:
           stage_name: ${{ inputs.stage_name }}
- 
-      - name: Run build tests
+
+      - name: Run build tests (Comgr, blocking)
+        if: ${{ !cancelled() && inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: ${{ contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
+        env:
+          TEATIME_FORCE_INTERACTIVE: 1
+        run: |
+          cmake --build "${BUILD_DIR}" --target build-test-amd-comgr -- -k 0
+
+      # Remaining build tests (e.g. rocjitsu, mirage) still run and report, but
+      # are not yet gating. Comgr is split out above so its failures block CI.
+      # TODO(#6112): rocjitsu tests are being moved out; drop this step once done.
+      - name: Run build tests (other, non-blocking)
         if: ${{ !cancelled() && inputs.stage_name == 'compiler-runtime' }}
         continue-on-error: true
         env:

@@ -98,9 +98,7 @@ void HIPSPV::Linker::constructLinkAndEmitSpirvCommand(
   StringRef Target =
       "generic"; // SPIR-V is generic, no specific target ID like -mcpu
   tools::AddStaticDeviceLibsLinking(C, *this, JA, Inputs, Args, LinkArgs, Arch,
-                                    Target, /*IsBitCodeSDL=*/true,
-                                    /*PostClangLink=*/false);
-
+                                    Target, /*IsBitCodeSDL=*/true);
   tools::constructLLVMLinkCommand(C, *this, JA, Inputs, LinkArgs, Output, Args,
                                   TempFile);
 
@@ -461,14 +459,4 @@ void HIPSPVToolChain::adjustDebugInfoKind(
   // since the driver defaults it to NoDebugInfo.
   (void)DebugInfoKind;
   (void)Args;
-}
-
-LTOKind HIPSPVToolChain::getLTOMode(const llvm::opt::ArgList &Args,
-                                    Action::OffloadKind Kind) const {
-  // The old offload driver pipeline does not support LTO output types. Only
-  // default to LTO with the new driver.
-  if (!Args.hasFlag(options::OPT_offload_new_driver,
-                    options::OPT_no_offload_new_driver, true))
-    return LTOK_None;
-  return ToolChain::getLTOMode(Args, Kind);
 }

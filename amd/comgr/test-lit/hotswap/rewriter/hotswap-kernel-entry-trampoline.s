@@ -2,7 +2,7 @@
 // COM: enabled. This multi-kernel layout uses aligned appended stubs because a
 // COM: direct prefix would misalign later kernel entries.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
@@ -72,7 +72,7 @@
 
 // COM: The alignment fallback needs a scratch SGPR pair for its appended stubs.
 // RUN: sed 's/.sgpr_count: 8/.sgpr_count: 105/' %s > %t.highsgpr.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.highsgpr.s -o %t.highsgpr.elf
 // RUN: hotswap-rewrite %t.highsgpr.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \

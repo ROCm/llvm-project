@@ -57,7 +57,8 @@ protected:
   void initCandidate(SchedCandidate &Cand, SUnit *SU, bool AtTop,
                      const RegPressureTracker &RPTracker,
                      const SIRegisterInfo *SRI, unsigned SGPRPressure,
-                     unsigned VGPRPressure, bool IsBottomUp);
+                     unsigned VGPRPressure, unsigned AGPRPressure,
+                     bool IsBottomUp);
 
   /// Estimate how many cycles \p SU must wait due to structural hazards at the
   /// current boundary cycle. Returns zero when no stall is required.
@@ -91,6 +92,8 @@ protected:
   unsigned SGPRExcessLimit;
 
   unsigned VGPRExcessLimit;
+
+  unsigned AGPRExcessLimit;
 
   unsigned TargetOccupancy;
 
@@ -135,6 +138,8 @@ public:
   unsigned SGPRCriticalLimit;
 
   unsigned VGPRCriticalLimit;
+
+  unsigned AGPRCriticalLimit;
 
   unsigned SGPRLimitBias = 0;
 
@@ -367,9 +372,6 @@ protected:
 
   // RP after scheduling the current region.
   GCNRegPressure PressureAfter;
-
-  // Whether checkScheduling reverted the schedule for the current region.
-  bool ScheduleReverted = false;
 
   std::vector<std::unique_ptr<ScheduleDAGMutation>> SavedMutations;
 
@@ -720,14 +722,11 @@ private:
     std::vector<MachineInstr *> OrigMIOrder;
     /// Maximum pressure recorded in the region.
     GCNRegPressure MaxPressure;
-    /// Whether the region was already reverted by per-region checkScheduling.
-    bool AlreadyReverted = false;
 
     RegionSchedRevert(unsigned RegionIdx, ArrayRef<MachineInstr *> OrigMIOrder,
-                      const GCNRegPressure &MaxPressure,
-                      bool AlreadyReverted = false)
+                      const GCNRegPressure &MaxPressure)
         : RegionIdx(RegionIdx), OrigMIOrder(OrigMIOrder),
-          MaxPressure(MaxPressure), AlreadyReverted(AlreadyReverted) {}
+          MaxPressure(MaxPressure) {}
   };
   /// After re-scheduling, contains pre-re-scheduling data for all re-scheduled
   /// regions.

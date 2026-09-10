@@ -109,6 +109,12 @@ void *OmptTracingBufferMgr::assignCursor(ompt_callbacks_t Type,
                                                         &TotalBytes);
 
   // The caller should handle nullptr by not tracing for this event.
+  // TODO: A tool may decline to provide a buffer by setting '*bytes' to zero.
+  //       Per OpenMP 5.2 (p. 498, l. 12-16) recording of events for the device
+  //       must then be disabled until the next 'ompt_start_trace', instead of
+  //       issuing a buffer request per event as we do here. OpenMP 6.0
+  //       (p. 775, l. 21 - p. 776, l. 6) extends this to buffers smaller than
+  //       requested.
   if (NewBuffer == nullptr || TotalBytes < RecSize)
     return nullptr;
 

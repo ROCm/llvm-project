@@ -208,7 +208,7 @@ add_custom_target(opencl-c-base.inc_target DEPENDS ${INC_DIR}/opencl-c-base.inc)
 add_dependencies(amd_comgr opencl-c-base.inc_target)
 
 set(TARGETS_DEFS "")
-list(APPEND TARGETS_DEFS "#ifndef AMD_DEVICE_LIBS_TARGET\n#define AMD_DEVICE_LIBS_TARGET(t)\n#endif")
+list(APPEND TARGETS_DEFS "#ifndef AMD_DEVICE_LIBS_TARGET\n#define AMD_DEVICE_LIBS_TARGET(t, n)\n#endif")
 list(APPEND TARGETS_DEFS "#ifndef AMD_DEVICE_LIBS_GFXIP\n#define AMD_DEVICE_LIBS_GFXIP(t, g)\n#endif")
 list(APPEND TARGETS_DEFS "#ifndef AMD_DEVICE_LIBS_FUNCTION\n#define AMD_DEVICE_LIBS_FUNCTION(t, f)\n#endif")
 list(APPEND TARGETS_DEFS "")
@@ -217,7 +217,8 @@ foreach(AMDGCN_LIB_TARGET ${AMD_DEVICE_LIBS_TARGETS})
   # identifier so we need to replace - with _.
   string(REPLACE "-" "_" AMDGCN_LIB_TARGET_ID ${AMDGCN_LIB_TARGET})
 
-  list(APPEND TARGETS_DEFS "AMD_DEVICE_LIBS_TARGET(${AMDGCN_LIB_TARGET_ID})")
+  list(APPEND TARGETS_DEFS
+    "AMD_DEVICE_LIBS_TARGET(${AMDGCN_LIB_TARGET_ID}, \"${AMDGCN_LIB_TARGET}\")")
   # Generate function to select libraries for a given GFXIP number.
   if (${AMDGCN_LIB_TARGET} MATCHES "^oclc_isa_version_.+$")
     string(REGEX REPLACE "^oclc_isa_version_(.+)$" "\\1" gfxip ${AMDGCN_LIB_TARGET})

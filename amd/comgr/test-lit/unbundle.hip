@@ -18,9 +18,9 @@
 // RUN: unbundle %t.compressed-bundle.bc hip-amdgcn-amd-amdhsa-unknown-gfx1030 %t.compressed.gfx1030.bc
 // RUN: %llvm-dis %t.compressed.gfx1030.bc -o - | %FileCheck --check-prefixes=BOTH,GFX10 %s
 //
-// BOTH: target triple = "amdgcn-amd-amdhsa"
-// GFX9: "target-cpu"="gfx900"
-// GFX10: "target-cpu"="gfx1030"
+// BOTH: target datalayout =
+// GFX9: {{target triple = "amdgpu9\.00-amd-amdhsa"|"target-cpu"="gfx900"}}
+// GFX10: {{target triple = "amdgpu10\.30-amd-amdhsa"|"target-cpu"="gfx1030"}}
 
 __attribute__((device))
 void add_value(float* a, float* b, float* res) {

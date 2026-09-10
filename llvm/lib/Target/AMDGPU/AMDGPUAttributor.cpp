@@ -14,7 +14,6 @@
 #include "AMDGPUTargetMachine.h"
 #include "GCNSubtarget.h"
 #include "Utils/AMDGPUBaseInfo.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsR600.h"
 #include "llvm/Target/TargetMachine.h"
@@ -781,32 +780,7 @@ private:
       }
     }
 
-    // Finally check callees.
-
-    // This is called on each callee; false means callee shouldn't have
-    // no-flat-scratch-init.
-    auto CheckForNoFlatScratchInit = [&](Instruction &I) {
-      const auto &CB = cast<CallBase>(I);
-      const Function *Callee = CB.getCalledFunction();
-
-      // Callee == 0 for inline asm or indirect call with known callees.
-      // In the latter case, updateImpl() already checked the callees and we
-      // know their FLAT_SCRATCH_INIT bit is set.
-      // If function has indirect call with unknown callees, the bit is
-      // already removed in updateImpl() and execution won't reach here.
-      if (!Callee)
-        return true;
-
-      return Callee->getIntrinsicID() !=
-             Intrinsic::amdgcn_addrspacecast_nonnull;
-    };
-
-    UsedAssumedInformation = false;
-    // If any callee is false (i.e. need FlatScratchInit),
-    // checkForAllCallLikeInstructions returns false, in which case this
-    // function returns true.
-    return !A.checkForAllCallLikeInstructions(CheckForNoFlatScratchInit, *this,
-                                              UsedAssumedInformation);
+    return false;
   }
 };
 
@@ -1610,17 +1584,10 @@ static bool runImpl(SetVector<Function *> &Functions, bool IsModulePass,
   AC.DeleteFns = DeleteFns;
   AC.DefaultInitializeLiveInternals = false;
   AC.IndirectCalleeSpecializationCallback =
-      [&TM](Attributor &A, const AbstractAttribute &AA, CallBase &CB,
-            Function &Callee, unsigned NumAssumedCallees) {
-        if (AMDGPU::isEntryFunctionCC(Callee.getCallingConv()))
-          return false;
-        // Singleton functions can be specialized.
-        if (NumAssumedCallees == 1)
-          return true;
-        // Otherwise specialize uniform values.
-        const auto &TTI = TM.getTargetTransformInfo(*CB.getCaller());
-        return TTI.getValueUniformity(CB.getCalledOperand()) ==
-               ValueUniformity::AlwaysUniform;
+      [](Attributor &A, const AbstractAttribute &AA, CallBase &CB,
+         Function &Callee, unsigned NumAssumedCallees) {
+        return !AMDGPU::isEntryFunctionCC(Callee.getCallingConv()) &&
+               (NumAssumedCallees <= IndirectCallSpecializationThreshold);
       };
   AC.IPOAmendableCB = [](const Function &F) {
     return F.getCallingConv() == CallingConv::AMDGPU_KERNEL;

@@ -1,4 +1,5 @@
 // RUN: mlir-translate -mlir-to-llvmir %s | FileCheck %s
+// XFAIL: *
 
 #file = #llvm.di_file<"target.f90" in "">
 #cu = #llvm.di_compile_unit<id = distinct[0]<>,

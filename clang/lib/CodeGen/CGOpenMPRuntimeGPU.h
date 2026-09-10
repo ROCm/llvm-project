@@ -168,35 +168,6 @@ public:
   /// Initialization for a specialized kernel.
   llvm::Value *initSpecializedKernel(CodeGenFunction &CGF);
 
-  std::pair<llvm::Value *, llvm::Value *>
-  getXteamRedFunctionPtrs(CodeGenFunction &CGF, llvm::Type *RedVarType,
-                          CodeGenModule::XteamRedOpKind Opcode);
-
-  /// Generate a call to cross-team operation.
-  llvm::Value *getXteamRedOperation(CodeGenFunction &CGF, llvm::Value *Val,
-                                    llvm::Value *OrigVarPtr,
-                                    llvm::Value *DTeamVals,
-                                    llvm::Value *DTeamsDonePtr,
-                                    llvm::Value *ThreadStartIndex,
-                                    llvm::Value *NumTeams, int BlockSize,
-                                    CodeGenModule::XteamRedOpKind, bool IsFast);
-
-  /// Emit call to Cross-team scan entry points
-  llvm::Value *
-  getXteamScanSum(CodeGenFunction &CGF, llvm::Value *Val, llvm::Value *SumPtr,
-                  llvm::Value *DTeamVals, llvm::Value *DTeamsDonePtr,
-                  llvm::Value *DScanStorage, llvm::Value *ThreadStartIndex,
-                  llvm::Value *NumTeams, int BlockSize, bool IsFast);
-
-  /// Emit calls to Cross-team scan Phase 2 entry points
-  llvm::Value *getXteamScanPhaseTwo(CodeGenFunction &CGF, llvm::Value *Val,
-                                    llvm::Value *SegmentSize,
-                                    llvm::Value *DTeamVals,
-                                    llvm::Value *DScanStorage,
-                                    llvm::Value *DSegmentVals,
-                                    llvm::Value *ThreadStartIndex,
-                                    int BlockSize, bool IsInclusiveScan);
-
   // Returns whether the hint expressions for an architecture should be
   // evaluated to decide which kind of atomic ops should be generated.
   bool needsHintsForFastFPAtomics() override final;

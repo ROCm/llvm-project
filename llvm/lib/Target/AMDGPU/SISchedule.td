@@ -498,20 +498,20 @@ def : HWWriteRes<WriteSALUDummy, [HWSALU],  2>;
 
 }  // End SchedModel = GFX12SpeedModel
 
-def PredIsGFX1250B0 : SchedPredicate<[{
-  MI->getMF()->getSubtarget<GCNSubtarget>().hasGFX1250B0()
+def PredIsGFX1250_Unrestricted : SchedPredicate<[{
+  !MI->getMF()->getSubtarget<GCNSubtarget>().hasGFX1250_STRICT()
 }]>;
 
 // On B0, an f8f6f4 wmma runs in 4 cycles when both matrix inputs are f4.
 def PredIsBothF4AndB0_WMMA_SCALE : SchedPredicate<[{
-  MI->getMF()->getSubtarget<GCNSubtarget>().hasGFX1250B0() &&
+  MI->getMF()->getSubtarget<GCNSubtarget>().hasGFX1250_Unrestricted() &&
   TII->getNamedOperand(*MI, AMDGPU::OpName::matrix_a_fmt)->getImm() == AMDGPU::WMMA::MATRIX_FMT_FP4 &&
   TII->getNamedOperand(*MI, AMDGPU::OpName::matrix_b_fmt)->getImm() == AMDGPU::WMMA::MATRIX_FMT_FP4
 }]>;
 
 // On B0, an f8f6f4 wmma with any f8 input runs in 8 cycles (halved from A0's 16).
 def PredIsF8AndB0_WMMA_SCALE : SchedPredicate<[{
-  MI->getMF()->getSubtarget<GCNSubtarget>().hasGFX1250B0() &&
+  MI->getMF()->getSubtarget<GCNSubtarget>().hasGFX1250_Unrestricted() &&
   (TII->getNamedOperand(*MI, AMDGPU::OpName::matrix_a_fmt)->getImm() <= AMDGPU::WMMA::MATRIX_FMT_BF8 ||
    TII->getNamedOperand(*MI, AMDGPU::OpName::matrix_b_fmt)->getImm() <= AMDGPU::WMMA::MATRIX_FMT_BF8)
 }]>;
@@ -546,7 +546,7 @@ def WriteWMMAScale_16X16X128_F8F6F4 : SchedWriteVariant<[
 
 // 16x16x64 FP8/BF8 wmma latency: 4 cycles on B0, 8 cycles on A0.
 def WriteWMMA_16X16X64_FP8BF8 : SchedWriteVariant<[
-    SchedVar<PredIsGFX1250B0, [WriteXDL1PassWMMA]>,
+    SchedVar<PredIsGFX1250_Unrestricted, [WriteXDL1PassWMMA]>,
     SchedVar<NoSchedPred, [WriteXDL2PassWMMA]>
 ]>;
 

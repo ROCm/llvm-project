@@ -10,9 +10,12 @@
 #define COMGR_SYMBOL_H_
 
 #include "amd_comgr.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/Object/ObjectFile.h"
 
 namespace COMGR {
+
+struct DataObject;
 
 struct SymbolContext {
   SymbolContext();
@@ -27,19 +30,28 @@ struct SymbolContext {
   uint64_t Value;
 };
 
+// Everything amd_comgr_symbol_get_info reports, so a name lookup never has to
+// revisit the object file.
+struct SymbolInfo {
+  uint64_t Value;
+  uint64_t Size;
+  amd_comgr_symbol_type_t Type;
+  bool Undefined;
+};
+
 class SymbolHelper {
 
 public:
   amd_comgr_symbol_type_t mapToComgrSymbolType(uint8_t ELFSymbolType);
 
-  llvm::Expected<llvm::object::OwningBinary<llvm::object::Binary>>
-  createBinary(llvm::StringRef InBuffer);
+  // Both return nullptr when DataP->Data is not an object file.
+  llvm::object::ObjectFile *getCachedObjectFile(DataObject *DataP);
+  const llvm::StringMap<SymbolInfo> *getSymbolIndex(DataObject *DataP);
 
-  SymbolContext *createBinary(llvm::StringRef InBuffer, const char *Name,
-                              amd_comgr_data_kind_t Kind);
+  SymbolContext *createBinary(DataObject *DataP, const char *Name);
 
   amd_comgr_status_t
-  iterateTable(llvm::StringRef InBuffer, amd_comgr_data_kind_t Kind,
+  iterateTable(DataObject *DataP,
                amd_comgr_status_t (*Callback)(amd_comgr_symbol_t, void *),
                void *UserData);
 

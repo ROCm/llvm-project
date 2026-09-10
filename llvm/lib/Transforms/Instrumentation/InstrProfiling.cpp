@@ -23,7 +23,6 @@
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/Frontend/Offloading/Utility.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
@@ -1908,6 +1907,7 @@ InstrLowerer::getOrCreateRegionBitmaps(InstrProfMCDCBitmapInstBase *Inc) {
           /*AlignInBits=*/0,
           Annotations);
       BitmapPtr->addDebugInfo(DICounter);
+      DB.finalizeSubprogram(SP);
       DB.finalize();
     }
 
@@ -1984,6 +1984,7 @@ InstrLowerer::getOrCreateRegionCounters(InstrProfCntrInstBase *Inc) {
           /*Decl=*/nullptr, /*TemplateParams=*/nullptr,
           llvm::dwarf::DW_MSPACE_LLVM_none, /*AlignInBits=*/0, Annotations);
       CounterPtr->addDebugInfo(DICounter);
+      DB.finalizeSubprogram(SP);
       DB.finalize();
     }
 

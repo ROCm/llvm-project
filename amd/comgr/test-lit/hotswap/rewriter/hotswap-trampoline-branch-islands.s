@@ -2,7 +2,7 @@
 // COM: branches through safe alignment holes. Each hop preserves SCC and the
 // COM: trampoline return uses the accepted SGPR-backed set-PC sequence.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
 // RUN:   --output %t.out.elf | %FileCheck --check-prefix=API %s

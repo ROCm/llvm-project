@@ -2,8 +2,8 @@
 ! near/on device when utilised in USM mode.
 ! REQUIRES: clang, flang, amdgpu
 
-! RUN: %clang -c -fopenmp -fopenmp-targets=amdgpu-amd-amdhsa \
-! RUN:   %S/../../Inputs/target-use-dev-ptr.c -o target-use-dev-ptr_c.o
+! RUN: %clang-generic -c %S/../../Inputs/target-use-dev-ptr.c \
+! RUN:   -o target-use-dev-ptr_c.o
 ! RUN: %libomptarget-compile-fortran-generic target-use-dev-ptr_c.o
 ! RUN: env HSA_XNACK=1 \
 ! RUN: %libomptarget-run-generic | %fcheck-generic
@@ -25,7 +25,7 @@ program use_device_test
     end interface
     type(c_ptr) :: host_alloc, device_alloc
     integer, pointer :: a
-  !$omp requires unified_shared_memory
+   !$omp requires unified_shared_memory
 
     allocate(a)
     host_alloc = C_LOC(a)

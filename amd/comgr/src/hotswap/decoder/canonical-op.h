@@ -20,7 +20,7 @@ namespace COMGR::hotswap {
 // mapping is `Unknown` and is refused. The values come from canonical-op.def.
 enum class CanonicalOp : uint16_t {
 #define CANONICAL_OP(Name) Name,
-#include "canonical-op.def"
+#include "hotswap/decoder/canonical-op.def"
 #undef CANONICAL_OP
   CanonicalOp_COUNT
 };

@@ -2,7 +2,7 @@
 // COM: D# Group 1 wg_mask bits [15:0] only when IB_STS2.CLUSTER_ID == 0.
 // COM: Cluster loads do not need the A0 M0 workaround on a B0 target.
 
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib %s -o %t.elf
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \
@@ -56,7 +56,7 @@
 
 // RUN: sed -e 's/.amdhsa_next_free_sgpr 16/.amdhsa_next_free_sgpr 106/' \
 // RUN:     -e 's/.sgpr_count: 16/.sgpr_count: 106/' %s > %t.highsgpr.s
-// RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib \
+// RUN: %clang --target=amdgpu12.50-amd-amdhsa -nostdlib \
 // RUN:   %t.highsgpr.s -o %t.highsgpr.elf
 // RUN: hotswap-rewrite %t.highsgpr.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250:gfx1250-b0-specific+ \

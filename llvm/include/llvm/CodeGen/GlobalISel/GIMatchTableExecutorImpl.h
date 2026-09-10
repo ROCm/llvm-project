@@ -871,7 +871,7 @@ bool GIMatchTableExecutor::executeMatchTable(
           (Exec.*ExecInfo.ComplexPredicates[ComplexPredicateID])(
               State.MIs[InsnID]->getOperand(OpIdx));
       if (Renderer)
-        State.Renderers[RendererID] = *Renderer;
+        State.Renderers[RendererID] = std::move(*Renderer);
       else if (handleReject() == RejectAndGiveUp)
         return false;
       break;
@@ -1332,7 +1332,7 @@ bool GIMatchTableExecutor::executeMatchTable(
       uint64_t Imm = readU64();
       assert(OutMIs[InsnID] && "Attempted to add to undefined instruction");
 
-      unsigned Width = ExecInfo.TypeObjects[TypeID].getScalarSizeInBits();
+      unsigned Width = getTypeFromIdx(TypeID).getScalarSizeInBits();
       LLVMContext &Ctx = MF->getFunction().getContext();
       OutMIs[InsnID].addCImm(
           ConstantInt::get(IntegerType::get(Ctx, Width), Imm, /*signed*/ true));

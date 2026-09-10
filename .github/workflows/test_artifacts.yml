@@ -129,8 +129,8 @@ jobs:
       - name: Checking out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}          
 
       - name: Checkout CI config
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -226,6 +226,8 @@ jobs:
       suite_list: ${{ matrix.suite_list }}
       shard: ${{ matrix.shard }}
       total_shards: "6"
+      repository: ${{ inputs.repository }}
+      ref: ${{ inputs.ref }}        
 
   test_components:
     name: 'Test ${{ matrix.components.job_name }}'

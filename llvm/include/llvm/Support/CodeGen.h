@@ -51,7 +51,7 @@ namespace llvm {
     };
   }
 
-  enum class ExceptionHandling {
+  enum class ExceptionHandling : int {
     None,     ///< No exception support
     DwarfCFI, ///< DWARF-like instruction based exceptions
     SjLj,     ///< setjmp/longjmp based exceptions
@@ -162,12 +162,6 @@ namespace llvm {
       return std::nullopt;
     return static_cast<CodeGenOptLevel>(OL);
   }
-#if 0
-  /// Get the integer \c ID of \p Level.
-  inline IDType getID(CodeGenOptLevel::Level Level) {
-    return static_cast<IDType>(Level);
-  }
-#endif
   /// Parse \p C as a single digit integer and get matching \c CodeGenLevel.
   ///
   /// Returns std::nullopt if the input is not a valid optimization level.

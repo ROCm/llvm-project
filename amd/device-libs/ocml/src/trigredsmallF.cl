@@ -25,9 +25,6 @@
 static inline struct redret
 mad_reduce(float x)
 {
-#if defined EXTRA_PRECISION
-#error Not implemented
-#else
     const float twobypi = 0x1.45f306p-1f;
 
     const float piby2_h = 0x1.921fb4p+0f;
@@ -55,7 +52,6 @@ mad_reduce(float x)
     ret.hi = MATH_MAD(-piby2_l, fn, r);
     ret.i = BUILTIN_ISNAN_F32(fn) ? 0 : ((int)fn & 0x3);
     return ret;
-#endif
 }
 
 static inline struct redret
@@ -70,22 +66,8 @@ fma_reduce(float x)
 
     struct redret ret;
 
-#if defined EXTRA_PRECISION
-    float xt = BUILTIN_FMA_F32(fn, -piby2_h, x);
-    float yh = BUILTIN_FMA_F32(fn, -piby2_m, xt);
-    float ph = fn * piby2_m;
-    float pt = BUILTIN_FMA_F32(fn, piby2_m, -ph);
-    float th = xt - ph;
-    float tt = (xt - th) - ph;
-    float yt = BUILTIN_FMA_F32(fn, -piby2_l, ((th - yh) + tt) - pt);
-    float rh = yh + yt;
-    float rt = yt - (rh - yh);
-    ret.hi = rh;
-    ret.lo = rt;
-#else
     float r = BUILTIN_FMA_F32(fn, -piby2_l, BUILTIN_FMA_F32(fn, -piby2_m, BUILTIN_FMA_F32(fn, -piby2_h, x)));
     ret.hi = r;
-#endif
 
     ret.i = BUILTIN_ISNAN_F32(fn) ? 0 : ((int)fn & 0x3);
     return ret;

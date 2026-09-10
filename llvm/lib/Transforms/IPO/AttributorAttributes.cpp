@@ -768,15 +768,6 @@ template <> struct DenseMapInfo<AA::RangeTy> {
   }
 };
 
-/// Helper for AA::PointerInfo::Access DenseMap/Set usage ignoring everythign
-/// but the instruction
-struct AccessAsInstructionInfo : DenseMapInfo<Instruction *> {
-  using Base = DenseMapInfo<Instruction *>;
-  using Access = AAPointerInfo::Access;
-  static unsigned getHashValue(const Access &A);
-  static bool isEqual(const Access &LHS, const Access &RHS);
-};
-
 } // namespace llvm
 
 /// A type to track pointer/struct usage and accesses for AAPointerInfo.
@@ -7643,6 +7634,20 @@ ChangeStatus AAHeapToStackFunction::updateImpl(Attributor &A) {
     }
 
     std::optional<APInt> Size = getSize(A, *this, AI);
+
+    // manifest() needs a size for the alloca, either the constant above or one
+    // ObjectSizeOffsetEvaluator can materialize at runtime. An allocation
+    // function with no allocsize attribute and no built-in size knowledge
+    // offers neither, however it is otherwise attributed.
+    if (!Size && !hasComputableAllocSize(AI.CB, TLI)) {
+      LLVM_DEBUG(dbgs() << "[H2S] Unsizable allocation: " << *AI.CB << "\n");
+      AI.Status = AllocationInfo::INVALID;
+      Changed = ChangeStatus::CHANGED;
+      continue;
+    }
+
+    // A globalized local is exempt from the size cap, since moving it to the
+    // stack is worthwhile however large it is, but not from the check above.
     if (!AI.IsGlobalizedLocal && MaxHeapToStackSize != -1) {
       if (!Size || Size->ugt(MaxHeapToStackSize)) {
         LLVM_DEBUG({
@@ -9606,19 +9611,6 @@ struct AAValueConstantRangeImpl : AAValueConstantRange {
     }
 
     return true;
-  }
-
-  /// See AAValueConstantRange::getKnownConstantRange(..).
-  ConstantRange
-  getKnownConstantRange(Attributor &A,
-                        const Instruction *CtxI = nullptr) const override {
-    if (!isValidCtxInstructionForOutsideAnalysis(A, CtxI,
-                                                 /* AllowAACtxI */ false))
-      return getKnown();
-
-    ConstantRange LVIR = getConstantRangeFromLVI(A, CtxI);
-    ConstantRange SCEVR = getConstantRangeFromSCEV(A, CtxI);
-    return getKnown().intersectWith(SCEVR).intersectWith(LVIR);
   }
 
   /// See AAValueConstantRange::getAssumedConstantRange(..).
@@ -12879,10 +12871,16 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
       return ChangeStatus::UNCHANGED;
 
     ChangeStatus Changed = ChangeStatus::UNCHANGED;
+    // The callees this is compared against below are functions, which live in
+    // the program address space. Normalize to that rather than to zero: they
+    // are only the same address space on a target that leaves it at the
+    // default.
+    unsigned ProgramAS = CB->getDataLayout().getProgramAddressSpace();
     Value *FP = CB->getCalledOperand();
-    if (FP->getType()->getPointerAddressSpace())
-      FP = new AddrSpaceCastInst(FP, PointerType::get(FP->getContext(), 0),
-                                 FP->getName() + ".as0", CB->getIterator());
+    if (FP->getType()->getPointerAddressSpace() != ProgramAS)
+      FP = new AddrSpaceCastInst(
+          FP, PointerType::get(FP->getContext(), ProgramAS),
+          FP->getName() + ".as" + Twine(ProgramAS), CB->getIterator());
 
     bool CBIsVoid = CB->getType()->isVoidTy();
     BasicBlock::iterator IP = CB->getIterator();

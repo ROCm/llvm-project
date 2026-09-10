@@ -749,11 +749,7 @@ static void buildFrameDebugInfo(Function &F, coro::Shape &Shape,
   // If we don't add __coro_frame to the RetainedNodes, user may get
   // `no symbol __coro_frame in context` rather than `__coro_frame`
   // is optimized out, which is more precise.
-  auto RetainedNodes = DIS->getRetainedNodes();
-  SmallVector<Metadata *, 32> RetainedNodesVec(RetainedNodes.begin(),
-                                               RetainedNodes.end());
-  RetainedNodesVec.push_back(FrameDIVar);
-  DIS->replaceOperandWith(7, (MDTuple::get(F.getContext(), RetainedNodesVec)));
+  DIS->retainNodes(&FrameDIVar, &FrameDIVar + 1);
 
   // Construct the location for the frame debug variable. The column number
   // is fake but it should be fine.
@@ -839,7 +835,10 @@ static void buildFrameLayout(Function &F, const DominatorTree &DT,
     // Add a field to store the suspend index.  This doesn't need to
     // be in the header.
     unsigned IndexBits = std::max(1U, Log2_64_Ceil(Shape.CoroSuspends.size()));
-    SwitchIndexType = Type::getIntNTy(F.getContext(), IndexBits);
+    Type *LegalTy =
+        F.getDataLayout().getSmallestLegalIntType(F.getContext(), IndexBits);
+    SwitchIndexType = LegalTy ? cast<IntegerType>(LegalTy)
+                              : Type::getIntNTy(F.getContext(), IndexBits);
 
     SwitchIndexFieldId = B.addField(SwitchIndexType, MaybeAlign());
   } else {
