@@ -323,6 +323,10 @@ static cl::opt<bool> EnableDevirtualizeSpeculatively(
     cl::desc("Enable speculative devirtualization optimization"),
     cl::init(false));
 
+static cl::opt<bool> EnableAMDGPUEarlyLoopFusion(
+  "amdgpu-enable-early-loop-fusion", cl::Hidden, cl::init(true),
+  cl::desc("Enable early loop fusion in the AMDGPU optimization pipeline"));
+
 extern cl::opt<std::string> UseCtxProfile;
 extern cl::opt<bool> PGOInstrumentColdFunctionOnly;
 
@@ -772,6 +776,8 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(
       SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
   FPM.addPass(InstCombinePass());
+  if (TM && TM->getTargetTriple().isAMDGCN() && EnableAMDGPUEarlyLoopFusion)
+    FPM.addPass(LoopFusePass());
   // The loop passes in LPM2 (LoopIdiomRecognizePass, IndVarSimplifyPass,
   // LoopDeletionPass and LoopFullUnrollPass) do not preserve MemorySSA.
   // *All* loop passes must preserve it, in order to be able to use it.
