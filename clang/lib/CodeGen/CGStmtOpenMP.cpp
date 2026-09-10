@@ -8878,11 +8878,6 @@ void CodeGenFunction::EmitOMPTargetUpdateDirective(
   CGM.getOpenMPRuntime().emitTargetDataStandAloneCall(*this, S, IfCond, Device);
 }
 
-/// A 'loop' construct is supposed to be a work distribution construct by
-/// default unless its binding region is the innermost enclosing parallel
-/// region, in which case it is a worksharing region. Because we currently
-/// have no way to know if this is true at compile time, for now emit them
-/// as inlined loops.
 void CodeGenFunction::EmitOMPGenericLoopDirective(
     const OMPGenericLoopDirective &S) {
   // Always expect a bind clause on the loop directive. It it wasn't
