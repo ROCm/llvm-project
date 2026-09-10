@@ -46,6 +46,7 @@ add_library(transpiler-raiser OBJECT
   handle-vop1.cpp
   handle-vop2.cpp
   handle-vop3.cpp
+  handle-vop3p.cpp
   handle-vop-shared.cpp
   handle-vopd.cpp
   handle-vopc.cpp
