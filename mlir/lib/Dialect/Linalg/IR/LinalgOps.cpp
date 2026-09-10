@@ -5140,24 +5140,14 @@ ElementwiseOp::getDefaultIndexingMaps(unsigned numMaps, unsigned numDims,
 }
 
 ParseResult ElementwiseOp::parse(OpAsmParser &parser, OperationState &result) {
-  // Expect e.g. `kind = #linalg.elemwise_kind<add>`
-  Attribute attr;
+  // Expect e.g. `<add>` (also accepts the full
+  // `#linalg.elementwise_kind<add>`).
+  ElementwiseKindAttr kindAttr;
   mlir::linalg::ElementwiseKind elemwiseKindVal;
-  if (parser.parseKeyword("kind") || parser.parseEqual())
+  if (parser.parseCustomAttributeWithFallback(kindAttr))
     return failure();
-
-  if (succeeded(parser.parseAttribute(attr))) {
-    auto elemwiseKindAttr = dyn_cast<ElementwiseKindAttr>(attr);
-    if (!elemwiseKindAttr)
-      return parser.emitError(parser.getCurrentLocation(),
-                              "expected ElementwiseKind attribute");
-    elemwiseKindVal = elemwiseKindAttr.getValue();
-  } else {
-    return parser.emitError(parser.getCurrentLocation(),
-                            "expected operation 'kind' attribute");
-  }
-  result.addAttribute(
-      "kind", ElementwiseKindAttr::get(parser.getContext(), elemwiseKindVal));
+  elemwiseKindVal = kindAttr.getValue();
+  result.addAttribute("kind", kindAttr);
 
   // Parse optional `indexing_maps`
   SmallVector<Attribute, 3> indexingMapsAttr;
@@ -5213,8 +5203,8 @@ ParseResult ElementwiseOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void ElementwiseOp::print(OpAsmPrinter &p) {
-  p << " kind=";
-  p.printAttribute(getKindAttr());
+  p << " ";
+  p.printStrippedAttrOrType(getKindAttr());
   SmallVector<StringRef, 3> elidedAttrs = {"operandSegmentSizes", "kind",
                                            "indexing_maps"};
   unsigned arity =
@@ -5240,7 +5230,7 @@ void ElementwiseOp::regionBuilder(
     function_ref<InFlightDiagnostic()> emitError) {
   std::optional<ElementwiseKind> elemwiseKind;
   for (auto attr : attrs) {
-    if (attr.getName() == b.getStringAttr("kind")) {
+    if (attr.getName() == "kind") {
       auto kindAttr = dyn_cast<ElementwiseKindAttr>(attr.getValue());
       if (!kindAttr) {
         if (emitError)
