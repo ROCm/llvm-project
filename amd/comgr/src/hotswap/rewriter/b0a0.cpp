@@ -4409,6 +4409,33 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
     Audit.HasUnboundedIndirectEntries = true;
   };
 
+  // Each candidate below asks which object-wide keys fall strictly inside its
+  // materialization sequence. Sorting the key sets once lets every check
+  // binary-search that span instead of rescanning the whole object per
+  // candidate, which is what made this audit quadratic in object size.
+  // Index.DirectTargetsByTarget, Index.CallEntries and
+  // Index.ExternalCallContinuations are already sorted by their offset key.
+  SmallVector<uint64_t, 16> SortedEntryOffsets(DeclaredEntries.begin(),
+                                               DeclaredEntries.end());
+  SortedEntryOffsets.append(ExternalEntries.begin(), ExternalEntries.end());
+  llvm::sort(SortedEntryOffsets);
+  SmallVector<uint64_t, 16> SortedFunctionEntryOffsets;
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges)
+    if (Range.Begin >= TextAddr)
+      SortedFunctionEntryOffsets.push_back(Range.Begin - TextAddr);
+  llvm::sort(SortedFunctionEntryOffsets);
+  SmallVector<uint64_t, 16> SortedSetPcTargetOffsets;
+  for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
+    if (Transfer.LocalTargetIndex)
+      SortedSetPcTargetOffsets.push_back(
+          Decoded[*Transfer.LocalTargetIndex].Offset);
+  llvm::sort(SortedSetPcTargetOffsets);
+  SmallVector<uint64_t, 16> SortedBoundedTargetOffsets;
+  for (const BoundedSetPcReturn &Return : BoundedReturns)
+    SortedBoundedTargetOffsets.append(Return.Targets.begin(),
+                                      Return.Targets.end());
+  llvm::sort(SortedBoundedTargetOffsets);
+
   for (size_t CandidateIndex = 0; CandidateIndex != FiniteSetPcTransfers.size();
        ++CandidateIndex) {
     const FiniteSetPcTransfer &Candidate = FiniteSetPcTransfers[CandidateIndex];
@@ -4417,72 +4444,69 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
         checkedAddUint64(Decoded[Candidate.SequenceEndIndex].Offset,
                          Decoded[Candidate.SequenceEndIndex].Size,
                          "finite set-PC materialization end");
-    auto isInteriorByte = [&](uint64_t Offset) {
-      return !SequenceEnd || (Offset > SequenceStart && Offset < *SequenceEnd);
-    };
+    // Interior bytes as a half-open span, so the sorted key sets can be
+    // narrowed by binary search. An unprovable sequence end leaves the entire
+    // object interior, which is exactly what the per-byte test reported, and
+    // the span search then degenerates to the full scan it used to perform.
+    uint64_t InteriorLo = SequenceEnd ? SequenceStart + 1 : 0;
+    uint64_t InteriorHi =
+        SequenceEnd ? *SequenceEnd : std::numeric_limits<uint64_t>::max();
     auto sourceIsSequence = [&](size_t InstIndex) {
       return InstIndex >= Candidate.SequenceBeginIndex &&
              InstIndex <= Candidate.SequenceEndIndex;
     };
     bool Safe = true;
-    for (uint64_t Entry : DeclaredEntries)
-      if (isInteriorByte(Entry)) {
-        Safe = false;
-        break;
-      }
+    if (llvm::lower_bound(SortedEntryOffsets, InteriorLo) !=
+        llvm::lower_bound(SortedEntryOffsets, InteriorHi))
+      Safe = false;
+    if (Safe && llvm::lower_bound(SortedFunctionEntryOffsets, InteriorLo) !=
+                    llvm::lower_bound(SortedFunctionEntryOffsets, InteriorHi))
+      Safe = false;
     if (Safe)
-      for (const ElfView::FunctionTextRange &Range : FunctionRanges)
-        if (Range.Begin >= TextAddr && isInteriorByte(Range.Begin - TextAddr)) {
+      for (SmallVectorImpl<DirectTargetSource>::const_iterator It =
+               llvm::lower_bound(
+                   Index.DirectTargetsByTarget, InteriorLo,
+                   [](const DirectTargetSource &Source, uint64_t Probe) {
+                     return Source.Target < Probe;
+                   });
+           It != Index.DirectTargetsByTarget.end() && It->Target < InteriorHi;
+           ++It)
+        if (!sourceIsSequence(It->InstIndex)) {
           Safe = false;
           break;
         }
     if (Safe)
-      for (uint64_t Entry : ExternalEntries)
-        if (isInteriorByte(Entry)) {
+      for (SmallVectorImpl<KnownCallEntry>::const_iterator It =
+               llvm::lower_bound(
+                   Index.CallEntries, InteriorLo,
+                   [](const KnownCallEntry &Entry, uint64_t Probe) {
+                     return Entry.Entry < Probe;
+                   });
+           It != Index.CallEntries.end() && It->Entry < InteriorHi; ++It)
+        if (!sourceIsSequence(Index.Calls[It->CallIndex].InstIndex)) {
           Safe = false;
           break;
         }
     if (Safe)
-      for (const DirectTargetSource &Source : Index.DirectTargetsByTarget)
-        if (isInteriorByte(Source.Target) &&
-            !sourceIsSequence(Source.InstIndex)) {
+      for (SmallVectorImpl<ExternalCallContinuation>::const_iterator It =
+               llvm::lower_bound(
+                   Index.ExternalCallContinuations, InteriorLo,
+                   [](const ExternalCallContinuation &Entry, uint64_t Probe) {
+                     return Entry.Continuation < Probe;
+                   });
+           It != Index.ExternalCallContinuations.end() &&
+           It->Continuation < InteriorHi;
+           ++It)
+        if (!sourceIsSequence(It->InstIndex)) {
           Safe = false;
           break;
         }
-    if (Safe)
-      for (const KnownCallSite &Call : Index.Calls)
-        if ((isInteriorByte(Call.Target) ||
-             isInteriorByte(Call.Continuation)) &&
-            !sourceIsSequence(Call.InstIndex)) {
-          Safe = false;
-          break;
-        }
-    if (Safe)
-      for (const ExternalCallContinuation &Call :
-           Index.ExternalCallContinuations)
-        if (isInteriorByte(Call.Continuation) &&
-            !sourceIsSequence(Call.InstIndex)) {
-          Safe = false;
-          break;
-        }
-    if (Safe)
-      for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers)
-        if (Transfer.LocalTargetIndex &&
-            isInteriorByte(Decoded[*Transfer.LocalTargetIndex].Offset)) {
-          Safe = false;
-          break;
-        }
-    if (Safe)
-      for (const BoundedSetPcReturn &Return : BoundedReturns) {
-        for (uint64_t TargetOffset : Return.Targets) {
-          if (isInteriorByte(TargetOffset)) {
-            Safe = false;
-            break;
-          }
-        }
-        if (!Safe)
-          break;
-      }
+    if (Safe && llvm::lower_bound(SortedSetPcTargetOffsets, InteriorLo) !=
+                    llvm::lower_bound(SortedSetPcTargetOffsets, InteriorHi))
+      Safe = false;
+    if (Safe && llvm::lower_bound(SortedBoundedTargetOffsets, InteriorLo) !=
+                    llvm::lower_bound(SortedBoundedTargetOffsets, InteriorHi))
+      Safe = false;
     if (!Safe)
       Audit.InvalidSetPcCandidates.set(CandidateIndex);
   }
@@ -4522,29 +4546,81 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
         PublishedProvisionalReturns.lookup(Owner.first) != 1)
       markUnboundedIndirectEntry();
 
+  // Bounded returns keyed by source index and by target offset, so the joint
+  // region audit below narrows to each region's span instead of walking every
+  // return once per region.
+  SmallVector<std::pair<size_t, size_t>, 16> SortedReturnsBySource;
+  for (size_t I = 0; I != BoundedReturns.size(); ++I)
+    SortedReturnsBySource.emplace_back(BoundedReturns[I].InstIndex, I);
+  llvm::sort(SortedReturnsBySource);
+  SmallVector<std::pair<uint64_t, size_t>, 16> SortedReturnsByTarget;
+  for (size_t I = 0; I != BoundedReturns.size(); ++I)
+    for (uint64_t Target : BoundedReturns[I].Targets)
+      SortedReturnsByTarget.emplace_back(Target, I);
+  llvm::sort(SortedReturnsByTarget);
+
   for (const SymbolLessReturnRegion &Region : SymbolLessRegions) {
-    auto containsInstructionByte = [&](uint64_t Offset) {
-      for (size_t InstIndex : Region.Instructions) {
-        const InternalDecodedInst &DI = Decoded[InstIndex];
-        std::optional<uint64_t> End = checkedAddUint64(
-            DI.Offset, DI.Size, "symbol-less joint audit instruction end");
-        if (!End || (Offset >= DI.Offset && Offset < *End))
-          return true;
+    if (Region.Instructions.empty())
+      continue;
+    // Region.Instructions and Region.Returns are sorted by the collector, and
+    // decoded offsets increase with index, so the region's first and last
+    // instructions bound both its index range and its byte span.
+    uint64_t RegionBegin = Decoded[Region.Instructions.front()].Offset;
+    uint64_t RegionEnd = 0;
+    bool ExtentProven = true;
+    for (size_t InstIndex : Region.Instructions) {
+      std::optional<uint64_t> End =
+          checkedAddUint64(Decoded[InstIndex].Offset, Decoded[InstIndex].Size,
+                           "symbol-less joint audit instruction end");
+      if (!End) {
+        ExtentProven = false;
+        break;
       }
-      return false;
-    };
-    for (const BoundedSetPcReturn &Return : BoundedReturns) {
-      if (llvm::is_contained(Region.Instructions, Return.InstIndex)) {
-        if (!llvm::is_contained(Region.Returns, Return.InstIndex))
-          markUnboundedIndirectEntry();
-        continue;
-      }
-      for (uint64_t Target : Return.Targets)
-        if (containsInstructionByte(Target)) {
-          markUnboundedIndirectEntry();
-          break;
-        }
+      RegionEnd = std::max(RegionEnd, *End);
     }
+    // An unprovable extent made every containment query report true, which
+    // reached this same conclusion for any non-empty return set.
+    if (!ExtentProven) {
+      markUnboundedIndirectEntry();
+      continue;
+    }
+    auto containsInstructionByte = [&](uint64_t Offset) {
+      if (Offset < RegionBegin || Offset >= RegionEnd)
+        return false;
+      SmallVectorImpl<size_t>::const_iterator It = llvm::upper_bound(
+          Region.Instructions, Offset, [&](uint64_t Probe, size_t InstIndex) {
+            return Probe < Decoded[InstIndex].Offset;
+          });
+      if (It == Region.Instructions.begin())
+        return false;
+      const InternalDecodedInst &DI = Decoded[*std::prev(It)];
+      return Offset - DI.Offset < DI.Size;
+    };
+    auto sourceIsInside = [&](size_t InstIndex) {
+      return std::binary_search(Region.Instructions.begin(),
+                                Region.Instructions.end(), InstIndex);
+    };
+
+    // A return whose source sits inside the region must be one it claims.
+    for (SmallVectorImpl<std::pair<size_t, size_t>>::const_iterator It =
+             llvm::lower_bound(
+                 SortedReturnsBySource,
+                 std::make_pair(Region.Instructions.front(), size_t(0)));
+         It != SortedReturnsBySource.end() &&
+         It->first <= Region.Instructions.back();
+         ++It)
+      if (sourceIsInside(It->first) &&
+          !std::binary_search(Region.Returns.begin(), Region.Returns.end(),
+                              It->first))
+        markUnboundedIndirectEntry();
+    // A return owned elsewhere may not enter any byte of the region.
+    for (SmallVectorImpl<std::pair<uint64_t, size_t>>::const_iterator It =
+             llvm::lower_bound(SortedReturnsByTarget,
+                               std::make_pair(RegionBegin, size_t(0)));
+         It != SortedReturnsByTarget.end() && It->first < RegionEnd; ++It)
+      if (!sourceIsInside(BoundedReturns[It->second].InstIndex) &&
+          containsInstructionByte(It->first))
+        markUnboundedIndirectEntry();
   }
 
   BitVector Reachable = computeFiniteControlFlowReachability(
