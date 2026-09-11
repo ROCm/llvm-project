@@ -107,12 +107,12 @@ def build_payload(
     ]
     body = [
         text_block(title, weight="Bolder", size="Large"),
-        text_block(f"- Status: {status}"),
         text_block(f"- Rock main sha: [{therock_rev}]({rock_link})"),
     ]
     if lines:
         body.append(indented("\n\n".join(lines)))
     body.append(text_block(f"- PR which did the baseline update: {pr_url}"))
+    body.append(text_block(f"- PR Status:  {status}"))
     return {
         "type": "message",
         "summary": title,
