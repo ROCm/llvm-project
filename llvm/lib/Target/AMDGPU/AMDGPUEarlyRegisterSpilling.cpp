@@ -1549,21 +1549,6 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
 
     } else if (CurLoop) {
 
-      bool HasUsesInLoopNest = llvm::any_of(
-          MRI->use_nodbg_instructions(CandidateReg), [&](MachineInstr &UseMI) {
-            MachineBasicBlock *UseMBB = UseMI.getParent();
-            MachineLoop *UseLoop = MLI->getLoopFor(UseMBB);
-            if (UseLoop && OutermostLoopOfCurLoop->contains(UseLoop) &&
-                (UseLoop->getLoopDepth() > 1))
-              return true;
-            if (UseLoop && (UseLoop->getLoopDepth() > 1))
-              return true;
-            return false;
-          });
-
-      assert(!HasUsesInLoopNest &&
-             "The candidate has uses inside a loop nest.");
-
       // For these cases, spill in defintion in order to avoid having spill and
       // restores close to one another.
       MachineBasicBlock *PreHeader = OutermostLoopOfCurLoop->getLoopPreheader();
