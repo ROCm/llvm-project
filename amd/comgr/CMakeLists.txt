@@ -101,6 +101,7 @@ set(SOURCES
   src/comgr-diagnostic-handler.cpp
   src/comgr-disassembly.cpp
   src/comgr-env.cpp
+  src/comgr-hotswap-stubs.cpp
   src/comgr-libcxx-headers.cpp
   src/comgr-logger.cpp
   src/comgr-signal.cpp
@@ -207,9 +208,9 @@ target_include_directories(amd_comgr
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# The hotswap subdirectory is added unconditionally below (around the
-# add_subdirectory(src/hotswap) line) so the OBJECT libraries are available
-# to the test-unit suite; here we opt amd_comgr into exposing the
+# The hotswap subdirectory is entered below (around the
+# add_subdirectory(src/hotswap) line), which builds the transpile-path OBJECT
+# libraries only under this option; here we opt amd_comgr into exposing the
 # `amd_comgr_hotswap_transpile` entry point. The hotswap link edges are
 # added after the curated LLVM/LLD link block below (see "hotswap link
 # edges"), not here.
@@ -682,11 +683,11 @@ if (NOT WIN32)
       ${CMAKE_DL_LIBS})
 endif()
 
-# Hotswap subproject. Builds the rewriter (byte-level rewrite path) plus, under
-# COMGR_ENABLE_HOTSWAP_TRANSPILE, the transpile-path OBJECT libraries, and
-# exports the set amd_comgr links as COMGR_HOTSWAP_LIBS. These OBJECT libraries
-# keep their LLVM deps PRIVATE, so they contribute only their objects and leave
-# the curated LLVM set linked above unchanged.
+# Hotswap subproject. Under COMGR_ENABLE_HOTSWAP_TRANSPILE, builds the
+# transpile-path OBJECT libraries and exports the set amd_comgr links as
+# COMGR_HOTSWAP_LIBS (empty otherwise). These OBJECT libraries keep their LLVM
+# deps PRIVATE, so they contribute only their objects and leave the curated LLVM
+# set linked above unchanged.
 add_subdirectory(src/hotswap)
 target_link_libraries(amd_comgr PRIVATE ${COMGR_HOTSWAP_LIBS})
 

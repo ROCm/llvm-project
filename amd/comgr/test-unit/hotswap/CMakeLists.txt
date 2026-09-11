@@ -1,5 +1,3 @@
-add_subdirectory(rewriter)
-
 # The raiser and decoder unit tests link the transpile-path OBJECT libraries,
 # entered only under COMGR_ENABLE_HOTSWAP_TRANSPILE; skip them otherwise.
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)

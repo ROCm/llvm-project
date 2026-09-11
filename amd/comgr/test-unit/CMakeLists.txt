@@ -65,9 +65,8 @@ function(comgr_configure_test_target target)
 endfunction()
 
 # Hotswap unit tests live in their own subtree mirroring src/hotswap:
-# hotswap/rewriter (byte-level rewrite path) and hotswap/raiser (IR transpiler).
-# The gtest discovery above and comgr_configure_test_target() are inherited by
-# the subdirectories.
+# hotswap/raiser (IR transpiler) and hotswap/decoder. The gtest discovery above
+# and comgr_configure_test_target() are inherited by the subdirectories.
 add_subdirectory(hotswap)
 
 # -- DemangleSymbolNameTest ---------------------------------------------------
@@ -230,15 +229,12 @@ endif()
 
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
-  COMMAND $<TARGET_FILE:HotswapElfTests>
-  COMMAND $<TARGET_FILE:HotswapMCTests>
-  COMMAND $<TARGET_FILE:HotswapProfileTests>
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
   COMMAND $<TARGET_FILE:LoggerTests>
   COMMAND $<TARGET_FILE:MetadataCacheTest>
   COMMAND $<TARGET_FILE:SymbolIndexTest>
   COMMAND $<TARGET_FILE:IncludeMaterializationTest>)
-add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapProfileTests
+add_dependencies(test-unit
   DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest
   IncludeMaterializationTest)
 
