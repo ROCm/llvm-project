@@ -34,6 +34,7 @@
 #include "comgr.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "SIDefines.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FloatingPointMode.h"
@@ -201,6 +202,9 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
 
   if (Di.VOPD)
     return handleVOPD(Ctx, Di);
+
+  if (SIInstrFlags::isMAI(*Ctx.MC.InstrInfo, Di.Inst))
+    return handleMFMA(Ctx, Di, Op);
 
   if (Di.TargetSpecificFlags & SOP1)
     return handleSOP1(Ctx, Di, Op);
