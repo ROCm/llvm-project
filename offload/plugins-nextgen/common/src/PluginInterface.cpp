@@ -287,6 +287,35 @@ Error GenericKernelTy::printLaunchInfoDetails(
   return Plugin::success();
 }
 
+/// Print the compiler's memory-traffic analysis of this kernel alongside the
+/// grid the policy asked for, so a heuristic can be refitted from a log alone.
+void GenericKernelTy::printTrafficTrace(GenericDeviceTy &GenericDevice,
+                                        uint64_t PolicyBlocks,
+                                        uint64_t LoopTripCount) const {
+  const KernelTrafficTy &C = TrafficData;
+
+  // The regime the kernel fell into, so a log carries the reason for its grid.
+  const char *Regime = "none";
+  if (PolicyBlocks) {
+    int32_t SatBytes = GenericDevice.getBandwidthSaturationBytes();
+    Regime = getStaticBlockMemSize() == 0                ? "independent"
+             : C.BytesPerIter <= CooperativeBytesPerIter ? "latency"
+             : SatBytes && C.BytesPerIter <= SatBytes ? "bandwidth"
+                                                      : "bandwidth-saturated";
+  }
+
+  fprintf(stderr,
+          "DEVID: %2d LaunchId: %u traffic arch:%s enabled:%d bytes:%d "
+          "streams:%d ld:%d/%d st:%d/%d ops:%d insts:%d lds:%uB trip:%lu "
+          "regime:%s policy_teams:%lu n:%s\n",
+          GenericDevice.getDeviceId(), getKernelLaunchId(),
+          GenericDevice.getComputeUnitKind().c_str(),
+          GenericDevice.useTrafficAwareGridPolicy(), C.BytesPerIter,
+          C.MemStreams, C.LoadBytes, C.LoadCount, C.StoreBytes, C.StoreCount,
+          C.ComputeOps, C.TotalInsts, getStaticBlockMemSize(), LoopTripCount,
+          Regime, PolicyBlocks, getName());
+}
+
 Expected<DynBlockMemConfTy>
 GenericKernelTy::prepareBlockMemory(GenericDeviceTy &GenericDevice,
                                     const KernelLaunchArgsTy &LaunchArgs,
@@ -470,6 +499,63 @@ GenericKernelTy::getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
                                                        : PreferredNumThreads);
 }
 
+uint64_t
+GenericKernelTy::getTrafficAwareNumBlocks(GenericDeviceTy &GenericDevice,
+                                          uint32_t EffectiveNumThreads,
+                                          uint64_t LoopTripCount) const {
+  if (!GenericDevice.useTrafficAwareGridPolicy() || !EffectiveNumThreads)
+    return 0;
+
+  int32_t BytesPerIter = TrafficData.BytesPerIter;
+  if (BytesPerIter < 0)
+    return 0;
+
+  // Plugins that do not report their compute units opt out by returning zero.
+  uint32_t NumComputeUnits = GenericDevice.getNumComputeUnits();
+  if (!NumComputeUnits)
+    return 0;
+
+  // Assume that no (static) share memory use means that the threads operate
+  // independently. -> Use as many blocks as there is work.
+  if (!getStaticBlockMemSize()) {
+    // Without a trip count, there is no way to say how much work we're facing.
+    if (!LoopTripCount)
+      return 0;
+    // Saturate rather than wrap: a trip count past 2^32 blocks would otherwise
+    // come back as a handful of blocks, serialising the whole loop.
+    uint64_t Blocks =
+        (LoopTripCount + EffectiveNumThreads - 1) / EffectiveNumThreads;
+    return std::min<uint64_t>(Blocks, std::numeric_limits<uint32_t>::max());
+  }
+
+  // If bytes/iter are above the threshold of latency-bound kernels, we assume
+  // that the kernel is bandwidth-bound.
+  if (BytesPerIter > CooperativeBytesPerIter) {
+    int32_t SaturationBytes = GenericDevice.getBandwidthSaturationBytes();
+    // If the bytes/iter seem to saturate bandwidth, we go with a multiplier of
+    // 1, otherwise, we get a arch-dependent multiplier.
+    uint32_t Multiplier = SaturationBytes && BytesPerIter <= SaturationBytes
+                              ? GenericDevice.getBandwidthCUMultiplier()
+                              : 1u;
+    return std::max(1u, NumComputeUnits * Multiplier);
+  }
+
+  // Bytes/iter is below the threshold -> we assume that the kernel is
+  // latency-bound.
+  uint64_t ResidentThreads =
+      GenericDevice.getHardwareParallelism() * GenericDevice.getWarpSize();
+  if (!ResidentThreads)
+    return 0;
+  uint64_t FullOccupancy = ResidentThreads / EffectiveNumThreads;
+  // The kernel uses shared memory in this regime, which (like its register
+  // usage) may allow fewer blocks to be resident than the hardware could hold.
+  if (uint64_t KernelLimit =
+          getMaxResidentBlocks(GenericDevice, EffectiveNumThreads))
+    FullOccupancy = std::min(FullOccupancy, KernelLimit);
+  return std::max<uint64_t>(
+      1, FullOccupancy * GenericDevice.getLatencyOccupancyPct() / 100);
+}
+
 uint32_t GenericKernelTy::getEffectiveNumBlocks(
     GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
     uint64_t LoopTripCount, uint32_t &EffectiveNumThreads,
@@ -490,6 +576,7 @@ uint32_t GenericKernelTy::getEffectiveNumBlocks(
                              : 1;
 
   uint64_t DefaultNumBlocks = GenericDevice.getDefaultNumBlocks();
+
   uint64_t TripCountNumBlocks = std::numeric_limits<uint64_t>::max();
   if (LoopTripCount > 0) {
     if (isSPMDMode()) {

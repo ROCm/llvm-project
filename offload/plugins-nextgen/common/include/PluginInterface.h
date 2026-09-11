@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <limits>
 #include <list>
 #include <map>
 #include <shared_mutex>
@@ -39,6 +40,7 @@
 
 #include "GenericProfiler.h"
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/Hashing.h"
@@ -64,6 +66,16 @@ namespace omp {
 namespace target {
 
 namespace plugin {
+
+/// Constants belonging to the OpenMPKernelTraffic-related grid size selection
+/// heuristic.
+///{
+/// Threshold for bytes/iter to distinguish latency-bound and bandwidth-bound
+/// kernels.
+static constexpr int32_t CooperativeBytesPerIter = 8;
+/// Occupancy target for kernels that are latency bound.
+static constexpr uint32_t LatencyOccupancyPercent = 75;
+///}
 
 struct GenericPluginTy;
 struct GenericKernelTy;
@@ -517,6 +529,8 @@ struct GenericKernelTy {
   /// Get the kernel name.
   const char *getName() const { return Name.c_str(); }
 
+  virtual uint32_t getKernelLaunchId() const { return 0; }
+
   /// Get the size of the static per-block memory consumed by the kernel.
   uint32_t getStaticBlockMemSize() const { return StaticBlockMemSize; };
 
@@ -578,6 +592,14 @@ struct GenericKernelTy {
                                             uint64_t numTeams) const {
     // This function should be overridden in the derived class.
     return AchievedOccupancy;
+  }
+
+  /// The number of blocks of \p NumThreads threads each that can be resident
+  /// on the device at once given the kernel's resource usage (registers, local
+  /// memory), or zero if unknown. Only valid after computeMaxOccupancy().
+  virtual uint64_t getMaxResidentBlocks(GenericDeviceTy &Device,
+                                        uint32_t NumThreads) const {
+    return 0;
   }
 
   /// Indicate if the kernel works in Generic SPMD, Generic or SPMD mode.
@@ -645,6 +667,10 @@ protected:
                                        uint32_t NumThreads[3],
                                        uint32_t NumBlocks[3]) const;
 
+  // Print the estimates from the OpenMPKernelTraffic pass.
+  void printTrafficTrace(GenericDeviceTy &GenericDevice, uint64_t PolicyBlocks,
+                         uint64_t LoopTripCount) const;
+
 private:
   /// Prepare the block memory buffer requested for the kernel and execute the
   /// specified fallback if necessary.
@@ -688,6 +714,14 @@ private:
   DeviceImageTy *ImagePtr = nullptr;
 
 protected:
+  /// Blocks the memory-traffic policy would like this kernel launched with, or
+  /// zero if it has no opinion: the policy is switched off, the kernel was
+  /// compiled without the traffic estimate, the plugin does not report its
+  /// compute-unit count, or the kernel needs a trip count and none is known.
+  uint64_t getTrafficAwareNumBlocks(GenericDeviceTy &GenericDevice,
+                                    uint32_t EffectiveNumThreads,
+                                    uint64_t LoopTripCount) const;
+
   /// The preferred number of threads to run the kernel.
   uint32_t PreferredNumThreads;
 
@@ -699,6 +733,11 @@ protected:
 
   /// The kernel environment, including execution flags.
   KernelEnvironmentTy KernelEnvironment;
+
+  /// The compiler's memory-traffic estimate for this kernel. Plugins that do
+  /// not read the <kernel>_kernel_traffic global leave it unset, which switches
+  /// the traffic-aware policy off for every kernel.
+  KernelTrafficTy TrafficData;
 
   /// The prototype kernel launch environment.
   KernelLaunchEnvironmentTy KernelLaunchEnvironment;
@@ -1487,6 +1526,47 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
     return OMPX_ReuseBlocksForHighTripCount;
   }
 
+  /// Whether to size the grid from the kernel's per-iteration memory traffic.
+  /// @see OMPX_TrafficAwareGridPolicy
+  bool useTrafficAwareGridPolicy() const { return OMPX_TrafficAwareGridPolicy; }
+
+  /// Traffic-aware grid policy: occupancy target for latency-bound kernels.
+  /// Zero would collapse every latency-bound kernel onto a single block, so it
+  /// is treated as unset.
+  uint32_t getLatencyOccupancyPct() const {
+    return OMPX_LatencyOccupancyPct ? OMPX_LatencyOccupancyPct
+                                    : LatencyOccupancyPercent;
+  }
+
+  /// Traffic-aware grid policy: blocks per compute unit for bandwidth-bound
+  /// kernels. Zero would collapse every bandwidth-bound kernel onto a single
+  /// block, so it is treated as unset.
+  uint32_t getBandwidthCUMultiplier() const {
+    return OMPX_BandwidthCUMultiplier.isPresent() && OMPX_BandwidthCUMultiplier
+               ? OMPX_BandwidthCUMultiplier
+               : getDefaultBandwidthCUMult();
+  }
+
+  /// Traffic-aware grid policy: bytes per iteration at which memory is
+  /// saturated at one block per compute unit.
+  /// -> Kernels above this threshold get not more than one block per CU.
+  /// Otherwise, they get getBandwidthCUMultiplier() blocks per CU.
+  int32_t getBandwidthSaturationBytes() const {
+    if (!OMPX_BandwidthSaturationBytes.isPresent())
+      return getDefaultBandwidthSaturationBytes();
+    uint32_t Requested = OMPX_BandwidthSaturationBytes;
+    return static_cast<int32_t>(
+        std::min<uint32_t>(Requested, std::numeric_limits<int32_t>::max()));
+  }
+
+  /// Plugin override for getBandwidthCUMultiplier().
+  /// Populate with per-device constants.
+  virtual uint32_t getDefaultBandwidthCUMult() const { return 1; }
+
+  /// Plugin override for getBandwidthSaturationBytes().
+  /// Populate with per-device constants.
+  virtual int32_t getDefaultBandwidthSaturationBytes() const { return 0; }
+
   /// Get the total amount of hardware parallelism supported by the target
   /// device. This is the total amount of warps or wavefronts that can be
   /// resident on the device simultaneously.
@@ -1687,6 +1767,22 @@ private:
 
   BoolEnvar OMPX_ReuseBlocksForHighTripCount =
       BoolEnvar("LIBOMPTARGET_REUSE_BLOCKS_FOR_HIGH_TRIP_COUNT", true);
+
+  /// Environment flag to enable the traffic-aware size selection policy.
+  /// See offload/docs/traffic_aware_blocks.md.
+  BoolEnvar OMPX_TrafficAwareGridPolicy =
+      BoolEnvar("LIBOMPTARGET_TRAFFIC_AWARE_GRID", false);
+
+  /// Traffic-aware grid policy: let env vars override defaults for
+  /// benchmarking/debugging purposes.
+  ///{
+  UInt32Envar OMPX_LatencyOccupancyPct = UInt32Envar(
+      "LIBOMPTARGET_TRAFFIC_LATENCY_OCCUPANCY_PCT", LatencyOccupancyPercent);
+  UInt32Envar OMPX_BandwidthCUMultiplier =
+      UInt32Envar("LIBOMPTARGET_TRAFFIC_BANDWIDTH_CU_MULT", 1);
+  UInt32Envar OMPX_BandwidthSaturationBytes =
+      UInt32Envar("LIBOMPTARGET_TRAFFIC_BANDWIDTH_SATURATION_BYTES", 0);
+  ///}
 
   /// Variable to track kernel launch for a device.
   std::atomic<uint32_t> LaunchId = 0;

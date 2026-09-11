@@ -15,8 +15,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
-#include <memory>
 #include <functional>
+#include <limits>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <sys/time.h>
@@ -51,6 +52,7 @@
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/Frontend/OpenMP/OMPGridValues.h"
+
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileOutputBuffer.h"
 #include "llvm/Support/FileSystem.h"
@@ -848,6 +850,20 @@ struct AMDGPUKernelTy : public GenericKernelTy {
       MaxNumThreads = ConstWGSize;
     }
 
+    // The compiler's memory-traffic estimate, if the image carries one. A
+    // kernel it could not analyse simply has no such global, which leaves
+    // TrafficData unset and the traffic-aware policy off for that kernel.
+    std::string TrafficName(getName());
+    TrafficName += "_kernel_traffic";
+    GlobalTy HostTraffic(TrafficName, sizeof(TrafficData), &TrafficData);
+    if (auto Err =
+            GHandler.readGlobalFromImage(Device, AMDImage, HostTraffic)) {
+      ODBG(ODT_Tool) << "Could not load " << TrafficName.c_str()
+                     << " global from kernel image";
+      consumeError(std::move(Err));
+      TrafficData = KernelTrafficTy{};
+    }
+
     ImplicitArgsSize =
         hsa_utils::getImplicitArgsSize(AMDImage.getELFABIVersion());
     ODBG(OLDT_Module) << "ELFABIVersion: " << AMDImage.getELFABIVersion();
@@ -884,6 +900,7 @@ struct AMDGPUKernelTy : public GenericKernelTy {
                                const KernelLaunchArgsTy &LaunchArgs,
                                uint32_t NumThreads[3],
                                uint32_t NumBlocks[3]) const override;
+
   /// Print the "old" AMD KernelTrace single-line format
   void printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
                                   const KernelLaunchArgsTy &LaunchArgs,
@@ -904,7 +921,7 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   /// Indicates whether or not we need to set up our own private segment size.
   bool usesDynamicStack() const { return DynamicStack; }
 
-  uint32_t getKernelLaunchId() const { return KernelLaunchId; }
+  uint32_t getKernelLaunchId() const override { return KernelLaunchId; }
 
   void setKernelLaunchId(uint32_t Id) const { KernelLaunchId = Id; }
 
@@ -916,6 +933,17 @@ struct AMDGPUKernelTy : public GenericKernelTy {
 
   /// Envar to enable occupancy-based optimization for big jump loop.
   BoolEnvar OMPX_BigJumpLoopOccupancyBasedOpt;
+
+  /// Compute the max kernel occupancy for AMD GPU
+  unsigned computeMaxOccupancy(GenericDeviceTy &Device) const override;
+
+  /// Compute the achieved kernel occupancy for AMD GPU.
+  unsigned computeAchievedOccupancy(GenericDeviceTy &Device,
+                                    uint32_t numThreads,
+                                    uint64_t numTeams) const override;
+
+  uint64_t getMaxResidentBlocks(GenericDeviceTy &Device,
+                                uint32_t NumThreads) const override;
 
 private:
   /// The kernel object to execute.
@@ -940,6 +968,12 @@ private:
   uint16_t ConstWGSize;
 
   static thread_local uint32_t KernelLaunchId;
+
+  /// Blocks the traffic-aware policy picked for the launch being prepared on
+  /// this thread, or zero if it did not apply. The traffic trace is printed
+  /// from printAMDOneLineKernelTrace, once the launch id is known, rather than
+  /// where the grid is chosen.
+  static thread_local uint64_t TrafficTracePolicyBlocks;
 
   /// Lower number of threads if tripcount is low. This should produce
   /// a larger number of teams if allowed by other constraints.
@@ -1073,6 +1107,8 @@ private:
                                  bool IsNumThreadsFromUser) const override {
     assert(!isBareMode() && "bare kernel should not call this function");
 
+    TrafficTracePolicyBlocks = 0;
+
     const auto getNumGroupsFromThreadsAndTripCount =
         [](const uint64_t TripCount, const uint32_t NumThreads) {
           return ((TripCount - 1) / NumThreads) + 1;
@@ -1083,6 +1119,30 @@ private:
       return LoopTripCount > 0 ? getNumGroupsFromThreadsAndTripCount(
                                      LoopTripCount, EffectiveNumThreads)
                                : 1;
+    }
+
+    // Apply the traffic-aware grid-size selection policy. This is meant to be a
+    // replacement of the per-mode grid selection as the traffic analysis is
+    // meant to capture the actual metrics the per-mode decision tree tried to
+    // target.
+    // Only applies if there is no number of teams requested explicitly.
+    if (UserNumBlocks == 0 && GenericDevice.getOMPNumTeams() == 0 &&
+        GenericDevice.getOMPXNumBlocksForLowTripcount(LoopTripCount) == 0) {
+      if (uint64_t NumGroups = getTrafficAwareNumBlocks(
+              GenericDevice, EffectiveNumThreads, LoopTripCount)) {
+        // Never more blocks than there is work for them.
+        uint64_t UpperBoundWork = getNumGroupsFromThreadsAndTripCount(
+            LoopTripCount, EffectiveNumThreads);
+        uint64_t UpperBoundLimit =
+            GenericDevice.getBlockLimit(EffectiveNumThreads);
+        if (LoopTripCount > 0)
+          NumGroups = std::min(NumGroups, UpperBoundWork);
+        // Never more than the launch configuration can express.
+        NumGroups = std::min(NumGroups, UpperBoundLimit);
+        if (getInfoLevel() & OMP_INFOTYPE_AMD_KERNEL_TRACE)
+          TrafficTracePolicyBlocks = NumGroups;
+        return NumGroups;
+      }
     }
 
     uint64_t NumWavesInGroup =
@@ -1261,6 +1321,7 @@ private:
           NumGroups = std::min(MaxNumGroups, LowTripCountBlocks);
         }
       }
+
       ODBG(ODT_Tool) << "xteam-red:NumCUs=" << DeviceNumCUs
                      << " xteam-red:NumGroups=" << NumGroups;
       return NumGroups;
@@ -1436,17 +1497,10 @@ private:
 
     return WaveNumByLDS;
   }
-
-  /// Compute the max kernel occupancy for AMD GPU
-  unsigned computeMaxOccupancy(GenericDeviceTy &Device) const override;
-
-  /// Compute the achieved kernel occupancy for AMD GPU.
-  unsigned computeAchievedOccupancy(GenericDeviceTy &Device,
-                                    uint32_t numThreads,
-                                    uint64_t numTeams) const override;
 };
 
 thread_local uint32_t AMDGPUKernelTy::KernelLaunchId = 0;
+thread_local uint64_t AMDGPUKernelTy::TrafficTracePolicyBlocks = 0;
 
 /// Class representing an HSA signal. Signals are used to define dependencies
 /// between asynchronous operations: kernel launches and memory transfers.
@@ -1821,10 +1875,12 @@ private:
     uint32_t LaunchId;
     uint32_t NumTeams;
     uint32_t NumThreads;
+    /// Owned by the kernel, which outlives the launch this traces.
+    const char *Name;
 
     KernelDurationTracingArgsTy()
         : Agent{0}, Signal(nullptr), TicksToTime(setTicksToTime()), DeviceId(0),
-          LaunchId(0), NumTeams(0), NumThreads(0) {}
+          LaunchId(0), NumTeams(0), NumThreads(0), Name("") {}
   };
 
   using AMDGPUStreamCallbackTy = Error(void *Data);
@@ -1859,6 +1915,12 @@ private:
     };
 
     llvm::SmallVector<ActionArgsTy> ActionArgs;
+
+    /// Arguments for the kernel-duration callback. Per slot rather than per
+    /// stream: several launches can be in flight at once, and a shared copy
+    /// would report every one of them with the newest launch's geometry and
+    /// name.
+    KernelDurationTracingArgsTy KernelDurationTracingArgs;
 
     /// Create an empty slot.
     StreamSlotTy() : Signal(nullptr), Callbacks({}), ActionArgs({}) {}
@@ -2006,9 +2068,6 @@ private:
   /// When copying data from one host buffer to another, only do it
   /// asynchronously if `MinHostToHostAsyncCopySize <= size`.
   UInt32Envar OMPX_MinHostToHostAsyncCopySize;
-
-  /// Arguments for callback function to collect kernel duration.
-  KernelDurationTracingArgsTy KernelDurationTracingArgs;
 
   struct CallbackDataType {
     HostFnType UserFn;
@@ -2235,11 +2294,11 @@ private:
     uint64_t KernelDuration =
         getKernelDuration<KernelDurationTracingArgsTy>(Args);
 
-    fprintf(
-        stderr,
-        "DeviceID: %2d LaunchID: %2d TeamsXthrds:(%4uX%4d) Duration(ns): %lu\n",
-        Args->DeviceId, Args->LaunchId, Args->NumTeams, Args->NumThreads,
-        KernelDuration);
+    fprintf(stderr,
+            "DeviceID: %2d LaunchID: %2d TeamsXthrds:(%4uX%4d) "
+            "Duration(ns): %lu n:%s\n",
+            Args->DeviceId, Args->LaunchId, Args->NumTeams, Args->NumThreads,
+            KernelDuration, Args->Name);
 
     return Plugin::success();
   }
@@ -2317,12 +2376,15 @@ public:
     // When LIBOMPTARGET_KERNEL_EXE_TIME is set, register the callback function
     // to get the kernel duration.
     if (Device.enableKernelDurationTracing()) {
+      KernelDurationTracingArgsTy &KernelDurationTracingArgs =
+          Slots[Curr].KernelDurationTracingArgs;
       KernelDurationTracingArgs.Agent = Agent;
       KernelDurationTracingArgs.Signal = OutputSignal;
       KernelDurationTracingArgs.DeviceId = Device.getDeviceId();
       KernelDurationTracingArgs.LaunchId = Kernel.getKernelLaunchId();
       KernelDurationTracingArgs.NumTeams = NumBlocks[0];
       KernelDurationTracingArgs.NumThreads = NumThreads[0];
+      KernelDurationTracingArgs.Name = Kernel.getName();
 
       if (auto Err = Slots[Curr].schedCallback(KernelDurationTracingAction,
                                                &KernelDurationTracingArgs))
@@ -3862,6 +3924,23 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   std::string getComputeUnitKind() const override { return ComputeUnitKind; }
 
   uint32_t getNumComputeUnits() const override { return NumComputeUnits; }
+
+  /// Measured with gfx90a, gfx942, and gfx950.
+  uint32_t getDefaultBandwidthCUMult() const override {
+    StringRef Arch(ComputeUnitKind);
+    return Arch.starts_with("gfx950") || Arch.starts_with("gfx942") ? 2 : 1;
+  }
+
+  /// Measured with gfx90a (saturates at every traffic level), gfx942, and
+  /// gfx950.
+  int32_t getDefaultBandwidthSaturationBytes() const override {
+    StringRef Arch(ComputeUnitKind);
+    if (Arch.starts_with("gfx950"))
+      return 36;
+    if (Arch.starts_with("gfx942"))
+      return 24;
+    return 0;
+  }
 
   /// See GenericDeviceTy::getBlockLimit(uint32_t). The HSA launch configuration
   /// is an int32_t grid representing blocks * threads. This means the block
@@ -6482,6 +6561,14 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(
         VGPRSpillCount, LaunchArgs.Tripcount, HasRPC, MaxOccupancy,
         AchievedOccupancy, getName());
   }
+
+  // Printed after the launch id has been assigned above, so the traffic line
+  // carries the same id as this launch's kernel-duration line.
+  if (TrafficTracePolicyBlocks) {
+    printTrafficTrace(GenericDevice, TrafficTracePolicyBlocks,
+                      LaunchArgs.Tripcount);
+    TrafficTracePolicyBlocks = 0;
+  }
 }
 
 Error AMDGPUKernelTy::printLaunchInfoDetails(
@@ -6849,6 +6936,26 @@ unsigned AMDGPUKernelTy::computeAchievedOccupancy(GenericDeviceTy &Device,
   AchievedOccupancy = Occupancy;
 
   return Occupancy;
+}
+
+uint64_t AMDGPUKernelTy::getMaxResidentBlocks(GenericDeviceTy &GenericDevice,
+                                              uint32_t NumThreads) const {
+  if (!MaxOccupancy || !NumThreads)
+    return 0;
+  unsigned WavesPerBlock = divideCeil(NumThreads, GenericDevice.getWarpSize());
+  unsigned BlocksPerCU = MaxOccupancy * amdgpu_arch::SIMDPerCU / WavesPerBlock;
+  // MaxOccupancy accounts for LDS at the largest block size the kernel
+  // supports. In case we're actually dealing with smaller blocks, with a
+  // smaller WavesPerBlock count, BlocksPerCU gets too large (since LDS
+  // consumption is independent of block size).
+  if (uint32_t GroupSegmentSize = KernelInfo.GroupSegmentList)
+    BlocksPerCU =
+        std::min(BlocksPerCU, amdgpu_arch::LocalMemorySize / GroupSegmentSize);
+  if (WavesPerBlock > 1)
+    BlocksPerCU = std::min(BlocksPerCU, amdgpu_arch::MaxWorkgroupNumPerCU);
+  // A block that fits the launch bounds can always run.
+  return static_cast<uint64_t>(std::max(1u, BlocksPerCU)) *
+         GenericDevice.getNumComputeUnits();
 }
 
 /// Enable profiling of HSA queues
