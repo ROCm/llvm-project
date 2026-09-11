@@ -10896,7 +10896,7 @@ struct AANoFPClassImpl : AANoFPClass {
       SimplifyQuery Q(DL, TLI, DT, AC, CtxI);
 
       KnownFPClass KnownFPClass = computeKnownFPClass(&V, fcAllFlags, Q);
-      addKnownBits(~KnownFPClass.KnownFPClasses);
+      addKnownBits(~KnownFPClass.getKnownFPClasses());
     }
 
     if (CtxI)

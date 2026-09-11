@@ -309,8 +309,7 @@ public:
   /// Extract properties from an existing DBG_VALUE instruction.
   DbgValueProperties(const MachineInstr &MI) {
     assert(MI.isDebugValue());
-    assert(MI.getDebugExpression()->isPoisoned() ||
-           MI.getDebugExpression()->getNumLocationOperands() == 0 ||
+    assert(MI.getDebugExpression()->getNumLocationOperands() == 0 ||
            MI.isDebugValueList() || MI.isUndefDebugValue());
     IsVariadic = MI.isDebugValueList();
     DIExpr = MI.getDebugExpression();
@@ -319,13 +318,20 @@ public:
   }
 
   bool isJoinable(const DbgValueProperties &Other) const {
+    // Joining pairs location operands by index, so the operand counts must
+    // agree. Equal expressions do not imply equal counts, because the same
+    // DIExpression can appear on MachineInstrs with different numbers of
+    // debug operands.
+    if (NumLocOps != Other.NumLocOps)
+      return false;
     return DIExpression::isEqualExpression(DIExpr, Indirect, Other.DIExpr,
                                            Other.Indirect);
   }
 
   bool operator==(const DbgValueProperties &Other) const {
     return std::tie(DIExpr, Indirect, IsVariadic, NumLocOps) ==
-           std::tie(Other.DIExpr, Other.Indirect, Other.IsVariadic, NumLocOps);
+           std::tie(Other.DIExpr, Other.Indirect, Other.IsVariadic,
+                    Other.NumLocOps);
   }
 
   bool operator!=(const DbgValueProperties &Other) const {
