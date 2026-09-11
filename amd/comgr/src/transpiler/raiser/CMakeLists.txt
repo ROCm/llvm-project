@@ -38,6 +38,7 @@ add_library(transpiler-raiser OBJECT
   handle-ds.cpp
   handle-flat.cpp
   handle-mubuf.cpp
+  handle-mfma.cpp
   handle-smem.cpp
   handle-sop1.cpp
   handle-sop2.cpp
@@ -51,6 +52,7 @@ add_library(transpiler-raiser OBJECT
   handle-vop-shared.cpp
   handle-vopd.cpp
   handle-vopc.cpp
+  wmma-lowering.cpp
 )
 
 if(NOT TARGET transpiler::raiser)
