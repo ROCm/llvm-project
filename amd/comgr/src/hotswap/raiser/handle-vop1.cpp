@@ -10,6 +10,7 @@
 
 #include "hotswap/decoder/canonical-op.h"
 #include "hotswap/decoder/decoded-inst.h"
+#include "hotswap/raiser/handle-vop-cross-lane.h"
 #include "hotswap/raiser/handle-vop-shared.h"
 #include "hotswap/raiser/operand-resolver.h"
 #include "hotswap/raiser/raise-context.h"
@@ -34,6 +35,8 @@ Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_FFBL_B32:
   case CanonicalOp::V_FFBH_I32:
     return raiseUnaryBit32(Ctx, Di, Op);
+  case CanonicalOp::V_READFIRSTLANE_B32:
+    return raiseReadFirstLane32(Ctx, Di, Op);
   default:
     return unsupportedInstruction(Ctx, Di);
   }
