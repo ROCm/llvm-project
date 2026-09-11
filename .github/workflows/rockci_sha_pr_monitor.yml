@@ -1,43 +1,39 @@
 # Copyright Advanced Micro Devices, Inc.
 # SPDX-License-Identifier: MIT
 
-# Watches RockCI SHA-gate PRs (heads automation/rockci-therock-*).
-# Nothing else calls this file. GitHub starts it from PR / CI events.
+# Posts one Teams card when every check on a cron SHA-gate PR has finished.
+# Status is the overall PR rollup (success / failure / cancelled), not a
+# single workflow. Dispatch validation PRs are skipped.
 
 name: RockCI SHA PR monitor
 
 on:
-  # Only SHA-gate PRs: they are the only PRs that touch the baseline JSON.
-  pull_request:
-    types:
-      - closed
-    paths:
-      - .github/rockci-sha/therock-ci-main-ref.json
-  # Only CI runs whose head is a SHA-gate branch, so ordinary Multi-Arch CI
-  # runs never start this workflow.
-  workflow_run:
-    workflows:
-      - Multi-Arch CI amd-staging
+  check_suite:
     types:
       - completed
-    branches:
-      - automation/rockci-therock-**
+
+concurrency:
+  group: rockci-sha-pr-monitor-${{ github.event.check_suite.head_sha }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  actions: read
+  checks: read
   pull-requests: read
 
 env:
   JSON_PATH: .github/rockci-sha/therock-ci-main-ref.json
 
 jobs:
-  pr-closed:
-    name: Notify SHA PR merged or closed
+  notify:
+    name: Notify overall PR check status
+    # Only the cron SHA-gate PRs: automation branch, open PR against
+    # amd-staging, and the baseline JSON is the only file the PR touches.
     if: >-
       github.repository == 'ROCm/llvm-project' &&
-      github.event_name == 'pull_request' &&
-      startsWith(github.event.pull_request.head.ref, 'automation/rockci-therock-')
+      startsWith(github.event.check_suite.head_branch, 'automation/rockci-therock-main-ref-') &&
+      github.event.check_suite.pull_requests[0] != null &&
+      github.event.check_suite.pull_requests[0].base.ref == 'amd-staging'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout notifier
@@ -46,148 +42,117 @@ jobs:
           sparse-checkout: .github/workflows
           persist-credentials: false
 
-      - name: Build Teams payload from PR
-        id: payload
+      - name: Resolve SHA, PR, and overall check status
+        id: baseline
         env:
           GH_TOKEN: ${{ github.token }}
-          MERGED: ${{ github.event.pull_request.merged }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
-          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          READ_REF="${MERGE_SHA:-$HEAD_SHA}"
-          THEROCK_REF="$(gh api \
-            "repos/${GITHUB_REPOSITORY}/contents/${JSON_PATH}?ref=${READ_REF}" \
-            --jq '.content' 2>/dev/null \
-            | base64 -d \
-            | jq -r '.therock_rev // empty' || true)"
-
-          if [[ "$MERGED" == "true" ]]; then
-            TITLE="RockCI TheRock baseline merged to ${BASE_BRANCH}"
-            STATE="merged"
-          else
-            TITLE="RockCI SHA PR closed without merging"
-            STATE="closed without merge"
-          fi
-
-          FACTS="$(jq -n \
-            --arg repo "$GITHUB_REPOSITORY" \
-            --arg head "$HEAD_BRANCH" \
-            --arg base "$BASE_BRANCH" \
-            --arg state "$STATE" \
-            --arg sha "$THEROCK_REF" \
-            --arg pr "$PR_URL" \
-            '[
-              {"title":"Repository","value":$repo},
-              {"title":"Head","value":$head},
-              {"title":"Base","value":$base},
-              {"title":"State","value":$state},
-              {"title":"TheRock SHA","value":$sha},
-              {"title":"Pull request","value":$pr}
-            ]')"
-
-          {
-            echo "title=${TITLE}"
-            echo "facts<<EOF"
-            echo "$FACTS"
-            echo "EOF"
-            echo "details=${PR_TITLE}"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Post to Teams
-        continue-on-error: true
-        env:
-          TEAMS_WEBHOOK_URL: ${{ secrets.ROCM_SHA_NOTIFIER }}
-          NOTIFY_TITLE: ${{ steps.payload.outputs.title }}
-          NOTIFY_FACTS_JSON: ${{ steps.payload.outputs.facts }}
-          NOTIFY_DETAILS: ${{ steps.payload.outputs.details }}
-        run: python3 .github/workflows/rockci_sha_pr_notify.py
-
-  ci-finished:
-    name: Notify SHA PR CI result
-    if: >-
-      github.repository == 'ROCm/llvm-project' &&
-      github.event_name == 'workflow_run' &&
-      startsWith(github.event.workflow_run.head_branch, 'automation/rockci-therock-')
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout notifier
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          sparse-checkout: .github/workflows
-          persist-credentials: false
-
-      - name: Build Teams payload from CI run
-        id: payload
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.check_suite.head_branch }}
+          HEAD_SHA: ${{ github.event.check_suite.head_sha }}
+          SUITE_UPDATED: ${{ github.event.check_suite.updated_at }}
         run: |
           set -euo pipefail
           PR_JSON="$(gh pr list \
             --repo "$GITHUB_REPOSITORY" \
             --head "$HEAD_BRANCH" \
             --state open \
-            --json url,title,baseRefName \
+            --json url,baseRefName \
             --jq '.[0]')"
           if [[ -z "$PR_JSON" || "$PR_JSON" == "null" ]]; then
             PR_JSON="$(gh pr list \
               --repo "$GITHUB_REPOSITORY" \
               --head "$HEAD_BRANCH" \
               --state merged \
-              --json url,title,baseRefName \
+              --json url,baseRefName \
               --jq '.[0]')"
           fi
-          PR_URL="$(echo "${PR_JSON:-{}}" | jq -r '.url // empty')"
-          PR_TITLE="$(echo "${PR_JSON:-{}}" | jq -r '.title // empty')"
-          BASE_REF="$(echo "${PR_JSON:-{}}" | jq -r '.baseRefName // empty')"
+          if [[ -z "$PR_JSON" || "$PR_JSON" == "null" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "No SHA-gate PR found for ${HEAD_BRANCH}; skipping."
+            exit 0
+          fi
+          PR_URL="$(jq -r '.url' <<<"$PR_JSON")"
+          BASE_BRANCH="$(jq -r '.baseRefName // "amd-staging"' <<<"$PR_JSON")"
 
-          THEROCK_REF="$(gh api \
+          # A SHA-gate PR only ever touches the baseline JSON.
+          CHANGED="$(gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" \
+            --json files --jq '[.files[].path] | join(",")')"
+          if [[ "$CHANGED" != "$JSON_PATH" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "PR touches ${CHANGED}; not a SHA-gate PR. Skipping."
+            exit 0
+          fi
+
+          ROLLUP="$(gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" \
+            --json statusCheckRollup)"
+          echo "$ROLLUP" | jq -r '
+            .statusCheckRollup // []
+            | map(select(.name != "RockCI SHA PR monitor"
+                         and .name != "Notify overall PR check status"))
+            | .[]
+            | "\(.name) status=\(.status // "") conclusion=\(.conclusion // "")"
+          '
+
+          READY="$(echo "$ROLLUP" | jq -r '
+            [
+              .statusCheckRollup // []
+              | .[]
+              | select(.name != "RockCI SHA PR monitor"
+                       and .name != "Notify overall PR check status")
+              | select((.status // "") != "COMPLETED" and (.status // "") != "")
+            ] | if length == 0 then "true" else "false" end
+          ')"
+          if [[ "$READY" != "true" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "PR checks are still running; waiting for a later suite."
+            exit 0
+          fi
+
+          STATUS="$(echo "$ROLLUP" | jq -r '
+            [
+              .statusCheckRollup // []
+              | .[]
+              | select(.name != "RockCI SHA PR monitor"
+                       and .name != "Notify overall PR check status")
+              | (.conclusion // "")
+            ] as $c
+            | if any($c[]; . == "FAILURE" or . == "TIMED_OUT"
+                or . == "STARTUP_FAILURE" or . == "ACTION_REQUIRED") then
+                "failure"
+              elif any($c[]; . == "CANCELLED") then
+                "cancelled"
+              else
+                "success"
+              end
+          ')"
+
+          THEROCK_REV="$(gh api \
             "repos/${GITHUB_REPOSITORY}/contents/${JSON_PATH}?ref=${HEAD_SHA}" \
-            --jq '.content' 2>/dev/null \
+            --jq '.content' \
             | base64 -d \
-            | jq -r '.therock_rev // empty' || true)"
-
-          TITLE="RockCI SHA PR CI ${CONCLUSION}"
-          FACTS="$(jq -n \
-            --arg repo "$GITHUB_REPOSITORY" \
-            --arg head "$HEAD_BRANCH" \
-            --arg base "$BASE_REF" \
-            --arg status "$CONCLUSION" \
-            --arg sha "$THEROCK_REF" \
-            --arg pr "$PR_URL" \
-            --arg run "$RUN_URL" \
-            '[
-              {"title":"Repository","value":$repo},
-              {"title":"Head","value":$head},
-              {"title":"Base","value":$base},
-              {"title":"CI","value":$status},
-              {"title":"TheRock SHA","value":$sha},
-              {"title":"Pull request","value":$pr},
-              {"title":"Workflow run","value":$run}
-            ]')"
+            | jq -r '.therock_rev // empty')"
+          if [[ ! "$THEROCK_REV" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::No therock_rev in ${JSON_PATH} at ${HEAD_SHA}."
+            exit 1
+          fi
 
           {
-            echo "title=${TITLE}"
-            echo "facts<<EOF"
-            echo "$FACTS"
-            echo "EOF"
-            echo "details=${PR_TITLE}"
+            echo "ready=true"
+            echo "therock_rev=${THEROCK_REV}"
+            echo "pr_url=${PR_URL}"
+            echo "base_branch=${BASE_BRANCH}"
+            echo "status=${STATUS}"
+            echo "card_date=${SUITE_UPDATED}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Post to Teams
+        if: steps.baseline.outputs.ready == 'true'
         continue-on-error: true
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.ROCM_SHA_NOTIFIER }}
-          NOTIFY_TITLE: ${{ steps.payload.outputs.title }}
-          NOTIFY_FACTS_JSON: ${{ steps.payload.outputs.facts }}
-          NOTIFY_DETAILS: ${{ steps.payload.outputs.details }}
+          GH_TOKEN: ${{ github.token }}
+          THEROCK_REV: ${{ steps.baseline.outputs.therock_rev }}
+          BASE_BRANCH: ${{ steps.baseline.outputs.base_branch }}
+          PR_STATUS: ${{ steps.baseline.outputs.status }}
+          CARD_DATE: ${{ steps.baseline.outputs.card_date }}
+          PR_URL: ${{ steps.baseline.outputs.pr_url }}
         run: python3 .github/workflows/rockci_sha_pr_notify.py
-
