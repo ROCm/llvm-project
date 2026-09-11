@@ -13,7 +13,9 @@
 #include "hotswap/decoder/decoded-inst.h"
 #include "hotswap/raiser/operand-resolver.h"
 #include "hotswap/raiser/raise-context.h"
+#include "hotswap/raiser/wmma-lowering.h"
 
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/IR/Constants.h"
@@ -149,6 +151,71 @@ Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+Expected<Value *> readWMMAAccumulator(RaiseContext &Ctx, const DecodedInst &Di,
+                                      OperandResolver &Op,
+                                      Type *AccumulatorTy) {
+  if (Op.nSrcs() < 3)
+    return unsupported(Ctx, Di, "WMMA requires an accumulator source");
+  Expected<std::optional<ParsedReg>> Source = Op.srcReg(2);
+  if (!Source)
+    return Source.takeError();
+  if (*Source)
+    return Ctx.registers().regFile().readRegVec(Ctx.B, **Source, AccumulatorTy);
+  if (!Di.isImm(Op.srcIdx(2)) || Di.getImm(Op.srcIdx(2)) != 0)
+    return unsupported(Ctx, Di,
+                       "only a zero immediate WMMA accumulator is supported");
+  return ConstantAggregateZero::get(AccumulatorTy);
+}
+
+Error raiseWMMA(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
+                WMMAInputType InputType) {
+  if (Ctx.Projection.sourceWaveSize() != 32 ||
+      Ctx.Projection.targetWaveSize() != 64)
+    return unsupported(Ctx, Di, "WMMA remapping requires wave32 to wave64");
+  if (!Ctx.Projection.TargetSTI.hasFeature(AMDGPU::FeatureMAIInsts))
+    return unsupported(Ctx, Di, "target ISA does not support MFMA");
+  if (Op.nSrcs() < 3)
+    return unsupported(Ctx, Di, "WMMA requires three source operands");
+
+  for (unsigned I = 0; I != 3; ++I) {
+    if (Op.srcMod(I) != 0)
+      return unsupported(Ctx, Di, "WMMA source modifiers are not supported");
+  }
+  Expected<bool> Clamp = readClamp(Ctx, Di);
+  if (!Clamp)
+    return Clamp.takeError();
+  if (*Clamp)
+    return unsupported(Ctx, Di, "WMMA clamp is not supported");
+
+  Expected<ParsedReg> Destination = Op.dst();
+  if (!Destination)
+    return Destination.takeError();
+  Expected<std::optional<ParsedReg>> SourceA = Op.srcReg(0);
+  if (!SourceA)
+    return SourceA.takeError();
+  Expected<std::optional<ParsedReg>> SourceB = Op.srcReg(1);
+  if (!SourceB)
+    return SourceB.takeError();
+  if (!*SourceA || !*SourceB)
+    return unsupported(Ctx, Di, "WMMA matrix inputs must be registers");
+
+  Type *InputTy = FixedVectorType::get(Ctx.B.getInt32Ty(), 8);
+  Type *ElementTy =
+      InputType == WMMAInputType::IU8 ? Ctx.B.getInt32Ty() : Ctx.B.getFloatTy();
+  Type *AccumulatorTy = FixedVectorType::get(ElementTy, 8);
+  AllocaRegFile &Registers = Ctx.registers().regFile();
+  Value *A = Registers.readRegVec(Ctx.B, **SourceA, InputTy);
+  Value *B = Registers.readRegVec(Ctx.B, **SourceB, InputTy);
+  Expected<Value *> C = readWMMAAccumulator(Ctx, Di, Op, AccumulatorTy);
+  if (!C)
+    return C.takeError();
+  Expected<Value *> Result = emitWMMAtoMFMA(Ctx, A, B, *C, InputType);
+  if (!Result)
+    return Result.takeError();
+  Ctx.registers().writeRegVec(*Destination, *Result);
+  return Error::success();
+}
+
 } // namespace
 
 Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
@@ -164,6 +231,12 @@ Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
     return raisePackedFloatBinary(
         Ctx, Di, Op, Ctx.B.getFloatTy(), /*IsF32=*/true,
         /*IsAdd=*/Di.CanonOp == CanonicalOp::V_PK_ADD_F32);
+  case CanonicalOp::V_WMMA_F32_16x16x32_F16:
+    return raiseWMMA(Ctx, Di, Op, WMMAInputType::F16);
+  case CanonicalOp::V_WMMA_F32_16x16x32_BF16:
+    return raiseWMMA(Ctx, Di, Op, WMMAInputType::BF16);
+  case CanonicalOp::V_WMMA_I32_16x16x64_IU8:
+    return raiseWMMA(Ctx, Di, Op, WMMAInputType::IU8);
   default:
     return unsupported(Ctx, Di);
   }
