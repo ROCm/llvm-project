@@ -4695,49 +4695,83 @@ static FiniteControlFlowAudit auditFiniteIndirectControlFlow(
   return Audit;
 }
 
-static bool
-hasKnownControlFlowEntry(ArrayRef<uint64_t> DeclaredEntries,
-                         ArrayRef<BoundedSetPcReturn> BoundedReturns,
-                         const DenseMap<size_t, size_t> &BoundedReturnPositions,
-                         const ControlFlowScanIndex &Index,
-                         uint64_t SequenceStart, uint64_t SequenceEnd) {
-  for (uint64_t Entry : DeclaredEntries)
-    if (Entry > SequenceStart && Entry <= SequenceEnd)
-      return true;
+/// Sorted key sets probed by hasKnownControlFlowEntry. The query is asked once
+/// per branch or call site, so building these once keeps each answer a binary
+/// search rather than a whole-object scan.
+struct ControlFlowEntryProbe {
+  SmallVector<uint64_t, 16> DeclaredEntries;
+  SmallVector<uint64_t, 16> BoundedSetPcTargets;
+  /// Set when some set-PC source has no bounded return set at all. Such a
+  /// source can enter any sequence, so it answers every query on its own.
+  bool HasUnboundedSetPcSource = false;
+};
 
+static ControlFlowEntryProbe buildControlFlowEntryProbe(
+    ArrayRef<uint64_t> DeclaredEntries,
+    ArrayRef<BoundedSetPcReturn> BoundedReturns,
+    const DenseMap<size_t, size_t> &BoundedReturnPositions,
+    const ControlFlowScanIndex &Index) {
+  ControlFlowEntryProbe Probe;
+  Probe.DeclaredEntries.assign(DeclaredEntries.begin(), DeclaredEntries.end());
+  llvm::sort(Probe.DeclaredEntries);
   for (size_t InstIndex : Index.SetPcIndices) {
     DenseMap<size_t, size_t>::const_iterator It =
         BoundedReturnPositions.find(InstIndex);
-    if (It == BoundedReturnPositions.end())
-      return true;
-    const BoundedSetPcReturn &Return = BoundedReturns[It->second];
-    for (uint64_t Target : Return.Targets)
-      if (Target > SequenceStart && Target <= SequenceEnd)
-        return true;
+    if (It == BoundedReturnPositions.end()) {
+      Probe.HasUnboundedSetPcSource = true;
+      continue;
+    }
+    Probe.BoundedSetPcTargets.append(BoundedReturns[It->second].Targets.begin(),
+                                     BoundedReturns[It->second].Targets.end());
   }
+  llvm::sort(Probe.BoundedSetPcTargets);
+  return Probe;
+}
 
+/// Whether any proven control-flow entry lands inside the materialized
+/// sequence (SequenceStart, SequenceEnd]. Every key set is sorted by offset, so
+/// each is answered by locating the first key past SequenceStart.
+static bool hasKnownControlFlowEntry(const ControlFlowEntryProbe &Probe,
+                                     const ControlFlowScanIndex &Index,
+                                     uint64_t SequenceStart,
+                                     uint64_t SequenceEnd) {
+  auto spanHasOffset = [&](ArrayRef<uint64_t> Sorted) {
+    ArrayRef<uint64_t>::iterator It = llvm::upper_bound(Sorted, SequenceStart);
+    return It != Sorted.end() && *It <= SequenceEnd;
+  };
+  if (spanHasOffset(Probe.DeclaredEntries))
+    return true;
+  if (Probe.HasUnboundedSetPcSource || spanHasOffset(Probe.BoundedSetPcTargets))
+    return true;
   if (Index.HasUnboundedIndirectEntry)
     return true;
 
-  auto EntersSequence = [&](uint64_t Target) {
-    return Target > SequenceStart && Target <= SequenceEnd;
-  };
-  for (const KnownCallSite &Call : Index.Calls)
-    if (EntersSequence(Call.Target) || EntersSequence(Call.Continuation))
-      return true;
-  for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
-    if (EntersSequence(Call.Continuation))
-      return true;
+  // CallEntries carries both the target and the continuation of every known
+  // call, sorted by offset, so a single probe covers both.
+  SmallVectorImpl<KnownCallEntry>::const_iterator Call =
+      llvm::upper_bound(Index.CallEntries, SequenceStart,
+                        [](uint64_t Offset, const KnownCallEntry &Entry) {
+                          return Offset < Entry.Entry;
+                        });
+  if (Call != Index.CallEntries.end() && Call->Entry <= SequenceEnd)
+    return true;
+  SmallVectorImpl<ExternalCallContinuation>::const_iterator External =
+      llvm::upper_bound(
+          Index.ExternalCallContinuations, SequenceStart,
+          [](uint64_t Offset, const ExternalCallContinuation &Entry) {
+            return Offset < Entry.Continuation;
+          });
+  if (External != Index.ExternalCallContinuations.end() &&
+      External->Continuation <= SequenceEnd)
+    return true;
 
-  SmallVector<DirectTargetSource, 16>::const_iterator First =
+  SmallVectorImpl<DirectTargetSource>::const_iterator First =
       llvm::upper_bound(Index.DirectTargetsByTarget, SequenceStart,
                         [](uint64_t Target, const DirectTargetSource &Source) {
                           return Target < Source.Target;
                         });
-  if (First != Index.DirectTargetsByTarget.end() &&
-      First->Target <= SequenceEnd)
-    return true;
-  return false;
+  return First != Index.DirectTargetsByTarget.end() &&
+         First->Target <= SequenceEnd;
 }
 
 struct WellFormedAbiEntrySet {
@@ -6624,6 +6658,10 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
   DenseMap<size_t, size_t> BoundedReturnPositions;
   for (size_t I = 0; I != BoundedReturns.size(); ++I)
     BoundedReturnPositions.try_emplace(BoundedReturns[I].InstIndex, I);
+  // Neither the index nor the bounded return set changes below, so the entry
+  // probe is built once and shared by every query.
+  ControlFlowEntryProbe EntryProbe = buildControlFlowEntryProbe(
+      DeclaredEntries, BoundedReturns, BoundedReturnPositions, *Index);
 
   // Canonical one-shot materializations also participate in the reusable
   // reaching-value solver so CFG joins can prove their exact path. Preserve
@@ -6635,9 +6673,8 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
     size_t I = Entry.first;
     if (ReusableCalls[I].empty())
       continue;
-    if (hasKnownControlFlowEntry(
-            DeclaredEntries, BoundedReturns, BoundedReturnPositions, *Index,
-            Entry.second.SequenceStart, Entry.second.SequenceEnd)) {
+    if (hasKnownControlFlowEntry(EntryProbe, *Index, Entry.second.SequenceStart,
+                                 Entry.second.SequenceEnd)) {
       ReusableCalls[I].clear();
       continue;
     }
@@ -6698,8 +6735,7 @@ std::optional<DirectControlFlowInfo> collectDirectBranchTargets(
         DenseMap<size_t, PcMaterializedCallInfo>::const_iterator Materialized =
             Index->MaterializedCalls.find(InstIndex);
         if (Materialized != Index->MaterializedCalls.end() &&
-            !hasKnownControlFlowEntry(DeclaredEntries, BoundedReturns,
-                                      BoundedReturnPositions, *Index,
+            !hasKnownControlFlowEntry(EntryProbe, *Index,
                                       Materialized->second.SequenceStart,
                                       Materialized->second.SequenceEnd))
           Target = Materialized->second.Target;
