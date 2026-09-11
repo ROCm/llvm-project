@@ -84,11 +84,12 @@ def text_block(text: str, **extra) -> dict:
 
 
 def indented(text: str) -> dict:
+    """Teams flattens nested markdown lists, so indent with a spacer column."""
     return {
         "type": "ColumnSet",
         "spacing": "None",
         "columns": [
-            {"type": "Column", "width": "24px", "items": []},
+            {"type": "Column", "width": "8px", "items": []},
             {"type": "Column", "width": "stretch", "items": [text_block(text)]},
         ],
     }
@@ -112,7 +113,7 @@ def build_payload(
     if lines:
         body.append(indented("\n\n".join(lines)))
     body.append(text_block(f"- PR which did the baseline update: {pr_url}"))
-    body.append(text_block(f"- PR Status:  {status}"))
+    body.append(text_block(f"- PR Status: **{status}**"))
     return {
         "type": "message",
         "summary": title,
