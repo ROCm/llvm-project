@@ -753,16 +753,20 @@ static uint32_t getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
                                                : KernelEnv.PreferredNumThreads);
 }
 
+/// The OMP_NUM_TEAMS environment variable, or zero if unset.
+static int32_t getOMPNumTeams() {
+  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
+  return OMP_NumTeams;
+}
+
 /// Get the maximum number of blocks the device can launch for a kernel using
 /// \p NumThreads threads per block, further limited by OMP_NUM_TEAMS if the
 /// user set it.
 static uint32_t getDeviceBlockLimit(GenericDeviceTy &GenericDevice,
                                     uint32_t NumThreads) {
-  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
-
   uint32_t BlockLimit = GenericDevice.getBlockLimit(NumThreads);
-  if (OMP_NumTeams > 0)
-    return std::min(BlockLimit, uint32_t(OMP_NumTeams));
+  if (getOMPNumTeams() > 0)
+    return std::min(BlockLimit, uint32_t(getOMPNumTeams()));
   return BlockLimit;
 }
 
@@ -866,6 +870,160 @@ getEffectiveNumBlocks(GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
                   getDeviceBlockLimit(GenericDevice, EffectiveNumThreads));
 }
 
+/// Constants and environment variables of the traffic-aware grid size
+/// selection policy. See offload/docs/traffic_aware_grid.md.
+///{
+/// Threshold for bytes/iter to distinguish latency-bound and bandwidth-bound
+/// kernels.
+static constexpr int32_t CooperativeBytesPerIter = 8;
+/// Occupancy target for kernels that are latency bound.
+static constexpr uint32_t LatencyOccupancyPercent = 75;
+
+/// Whether to size the grid from the kernel's per-iteration memory traffic.
+static bool useTrafficAwareGridPolicy() {
+  static BoolEnvar OMPX_TrafficAwareGridPolicy(
+      "LIBOMPTARGET_TRAFFIC_AWARE_GRID", false);
+  return OMPX_TrafficAwareGridPolicy;
+}
+
+/// Occupancy target for latency-bound kernels. Zero would collapse every
+/// latency-bound kernel onto a single block, so it is treated as unset.
+static uint32_t getLatencyOccupancyPct() {
+  static UInt32Envar OMPX_LatencyOccupancyPct(
+      "LIBOMPTARGET_TRAFFIC_LATENCY_OCCUPANCY_PCT", 0);
+  return OMPX_LatencyOccupancyPct ? OMPX_LatencyOccupancyPct
+                                  : LatencyOccupancyPercent;
+}
+
+/// Blocks per compute unit for bandwidth-bound kernels below the saturation
+/// threshold. Zero would collapse every such kernel onto a single block, so it
+/// is treated as unset.
+static uint32_t getBandwidthCUMultiplier(GenericDeviceTy &GenericDevice) {
+  static UInt32Envar OMPX_BandwidthCUMultiplier(
+      "LIBOMPTARGET_TRAFFIC_BANDWIDTH_CU_MULT", 0);
+  return OMPX_BandwidthCUMultiplier ? OMPX_BandwidthCUMultiplier
+                                    : GenericDevice.getDefaultBandwidthCUMult();
+}
+
+/// Bytes per iteration at which memory is saturated at one block per compute
+/// unit. Kernels above this threshold get not more than one block per CU.
+static int32_t getBandwidthSaturationBytes(GenericDeviceTy &GenericDevice) {
+  static UInt32Envar OMPX_BandwidthSaturationBytes(
+      "LIBOMPTARGET_TRAFFIC_BANDWIDTH_SATURATION_BYTES", 0);
+  if (!OMPX_BandwidthSaturationBytes.isPresent())
+    return GenericDevice.getDefaultBandwidthSaturationBytes();
+  uint32_t Requested = OMPX_BandwidthSaturationBytes;
+  return static_cast<int32_t>(
+      std::min<uint32_t>(Requested, std::numeric_limits<int32_t>::max()));
+}
+///}
+
+/// Blocks the traffic-aware policy would like \p Kernel launched with, or zero
+/// if it has no opinion: the kernel was compiled without the traffic estimate,
+/// the plugin does not report its compute-unit count, or the kernel needs a
+/// trip count and none is known. \p Regime is set to the regime the kernel
+/// fell into.
+static uint64_t getTrafficAwareNumBlocks(GenericDeviceTy &GenericDevice,
+                                         const GenericKernelTy &Kernel,
+                                         const KernelLaunchInfoTy &Info,
+                                         uint32_t EffectiveNumThreads,
+                                         uint64_t LoopTripCount,
+                                         TrafficRegimeTy &Regime) {
+  Regime = TrafficRegimeTy::None;
+  if (!EffectiveNumThreads)
+    return 0;
+
+  int32_t BytesPerIter = Info.Traffic.BytesPerIter;
+  if (BytesPerIter < 0)
+    return 0;
+
+  // Plugins that do not report their compute units opt out by returning zero.
+  uint32_t NumComputeUnits = GenericDevice.getNumComputeUnits();
+  if (!NumComputeUnits)
+    return 0;
+
+  // Assume that no (static) share memory use means that the threads operate
+  // independently. -> Use as many blocks as there is work.
+  if (!Info.StaticBlockMemSize) {
+    // Without a trip count, there is no way to say how much work we're facing.
+    if (!LoopTripCount)
+      return 0;
+    Regime = TrafficRegimeTy::Independent;
+    // Saturate rather than wrap: a trip count past 2^32 blocks would otherwise
+    // come back as a handful of blocks, serialising the whole loop.
+    uint64_t Blocks =
+        (LoopTripCount + EffectiveNumThreads - 1) / EffectiveNumThreads;
+    return std::min<uint64_t>(Blocks, std::numeric_limits<uint32_t>::max());
+  }
+
+  // If bytes/iter are above the threshold of latency-bound kernels, we assume
+  // that the kernel is bandwidth-bound.
+  if (BytesPerIter > CooperativeBytesPerIter) {
+    int32_t SaturationBytes = getBandwidthSaturationBytes(GenericDevice);
+    // If the bytes/iter seem to saturate bandwidth, we go with a multiplier of
+    // 1, otherwise, we get a arch-dependent multiplier.
+    bool Saturated = !SaturationBytes || BytesPerIter > SaturationBytes;
+    Regime = Saturated ? TrafficRegimeTy::BandwidthSaturated
+                       : TrafficRegimeTy::Bandwidth;
+    uint32_t Multiplier =
+        Saturated ? 1u : getBandwidthCUMultiplier(GenericDevice);
+    return std::max(1u, NumComputeUnits * Multiplier);
+  }
+
+  // Bytes/iter is below the threshold -> we assume that the kernel is
+  // latency-bound.
+  uint64_t ResidentThreads =
+      GenericDevice.getHardwareParallelism() * GenericDevice.getWarpSize();
+  if (!ResidentThreads)
+    return 0;
+  Regime = TrafficRegimeTy::Latency;
+  uint64_t FullOccupancy = ResidentThreads / EffectiveNumThreads;
+  // The kernel uses shared memory in this regime, which (like its register
+  // usage) may allow fewer blocks to be resident than the hardware could hold.
+  if (uint64_t KernelLimit =
+          Kernel.getMaxResidentBlocks(GenericDevice, EffectiveNumThreads))
+    FullOccupancy = std::min(FullOccupancy, KernelLimit);
+  return std::max<uint64_t>(
+      1, FullOccupancy * getLatencyOccupancyPct() / 100);
+}
+
+/// Apply the traffic-aware grid size selection policy to the effective number
+/// of blocks \p NumBlocks, computed for \p NumThreads threads per block. This
+/// is meant to be a replacement of the per-mode grid selection as the traffic
+/// analysis is meant to capture the actual metrics the per-mode decision tree
+/// tried to target.
+/// Only applies if there is no number of teams requested explicitly.
+static void applyTrafficAwareGridPolicy(GenericDeviceTy &GenericDevice,
+                                        const GenericKernelTy &Kernel,
+                                        KernelLaunchArgsTy &LaunchArgs,
+                                        uint32_t NumThreads,
+                                        uint32_t &NumBlocks) {
+  KernelLaunchInfoTy &Info = LaunchArgs.KernelLaunchInfo;
+  // No-Loop kernels rely on one thread per iteration.
+  if (!useTrafficAwareGridPolicy() || Info.isNoLoopMode())
+    return;
+  uint64_t LoopTripCount = LaunchArgs.Tripcount;
+  if (LaunchArgs.UserNumBlocks[0] > 0 || getOMPNumTeams() > 0 ||
+      GenericDevice.getOMPXNumBlocksForLowTripcount(LoopTripCount) > 0)
+    return;
+
+  TrafficRegimeTy Regime;
+  uint64_t PolicyBlocks = getTrafficAwareNumBlocks(
+      GenericDevice, Kernel, Info, NumThreads, LoopTripCount, Regime);
+  if (!PolicyBlocks)
+    return;
+
+  // Never more blocks than there is work for them.
+  if (LoopTripCount > 0)
+    PolicyBlocks = std::min<uint64_t>(
+        PolicyBlocks, ((LoopTripCount - 1) / NumThreads) + 1);
+  // Never more than the launch configuration can express.
+  PolicyBlocks = std::min<uint64_t>(PolicyBlocks,
+                                    GenericDevice.getBlockLimit(NumThreads));
+  Info.TrafficDecision = TrafficGridDecisionTy{PolicyBlocks, Regime};
+  NumBlocks = PolicyBlocks;
+}
+
 /// Build the base KernelLaunchArgsTy for a launch from the public
 /// KernelArgsTy and the kernel's cached launch-geometry properties.
 static KernelLaunchArgsTy buildLaunchArgs(const KernelArgsTy &KernelArgs,
@@ -949,6 +1107,10 @@ static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
           GenericDevice, EffectiveNumBlocks, LaunchArgs.Tripcount,
           EffectiveNumThreads, StrictThreads, ThreadLimitFromUser, KernelEnv);
   }
+
+  if (!StrictBlocks)
+    applyTrafficAwareGridPolicy(GenericDevice, Kernel, LaunchArgs,
+                                EffectiveNumThreads, EffectiveNumBlocks);
 
   LaunchArgs.UserThreadLimit[0] = EffectiveNumThreads;
   LaunchArgs.UserNumBlocks[0] = EffectiveNumBlocks;

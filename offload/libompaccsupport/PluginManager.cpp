@@ -683,6 +683,13 @@ static int loadImagesOntoDevice(DeviceTy &Device) {
               LaunchInfo.MaxNumThreads = ConstWGSize;
             }
 
+            // The compiler's memory-traffic estimate for the traffic-aware
+            // grid policy. An image compiled without it has no such global,
+            // which keeps the policy off for the kernel.
+            if (!ReadImageGlobal("_kernel_traffic", &LaunchInfo.Traffic,
+                                 sizeof(LaunchInfo.Traffic)))
+              LaunchInfo.Traffic = KernelTrafficTy{};
+
             Device.setKernelLaunchInfo(DeviceEntry.Address, LaunchInfo);
           }
         }
