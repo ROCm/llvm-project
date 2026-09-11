@@ -31,7 +31,7 @@ jobs:
     # amd-staging, and the baseline JSON is the only file the PR touches.
     if: >-
       github.repository == 'ROCm/llvm-project' &&
-      startsWith(github.event.check_suite.head_branch, 'automation/rockci-therock-main-ref-') &&
+      startsWith(github.event.check_suite.head_branch, 'automation/rockci-therock-') &&
       github.event.check_suite.pull_requests[0] != null &&
       github.event.check_suite.pull_requests[0].base.ref == 'amd-staging'
     runs-on: ubuntu-24.04
