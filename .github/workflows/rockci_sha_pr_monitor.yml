@@ -64,7 +64,7 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/contents/${JSON_PATH}?ref=${READ_REF}" \
             --jq '.content' 2>/dev/null \
             | base64 -d \
-            | jq -r '.therock_ref // empty' || true)"
+            | jq -r '.therock_rev // empty' || true)"
 
           if [[ "$MERGED" == "true" ]]; then
             TITLE="RockCI TheRock baseline merged to ${BASE_BRANCH}"
@@ -153,7 +153,7 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/contents/${JSON_PATH}?ref=${HEAD_SHA}" \
             --jq '.content' 2>/dev/null \
             | base64 -d \
-            | jq -r '.therock_ref // empty' || true)"
+            | jq -r '.therock_rev // empty' || true)"
 
           TITLE="RockCI SHA PR CI ${CONCLUSION}"
           FACTS="$(jq -n \
