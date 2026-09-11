@@ -318,6 +318,7 @@ static const Entry kCanonTable[] = {
     E(V_FFBH_U32_e64, V_FFBH_U32),
     E(V_FFBL_B32_e64, V_FFBL_B32),
     E(V_FFBH_I32_e64, V_FFBH_I32),
+    E(V_READFIRSTLANE_B32, V_READFIRSTLANE_B32),
     // gfx10 renamed the assembly mnemonics but retained these pseudos.
     E(V_ADD_U32_e64, V_ADD_NC_U32),
     E(V_SUB_U32_e64, V_SUB_NC_U32),
@@ -410,6 +411,8 @@ static const Entry kCanonTable[] = {
     E(V_BFI_B32_e64, V_BFI_B32),
     E(V_BITOP3_B32_e64, V_BITOP3_B32),
     E(V_PERM_B32_e64, V_PERM_B32),
+    E(V_READLANE_B32, V_READLANE_B32),
+    E(V_WRITELANE_B32, V_WRITELANE_B32),
     E(V_LSHRREV_B64_e64, V_LSHRREV_B64),
     E(V_ASHRREV_I64_e64, V_ASHRREV_I64),
     E(V_LSHL_ADD_U64_e64, V_LSHL_ADD_U64),

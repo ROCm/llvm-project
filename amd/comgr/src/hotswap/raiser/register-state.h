@@ -110,6 +110,8 @@ public:
   // Write V to the register Pr names, at the register's width. VGPR and AGPR
   // writes are predicated on EXEC; scalar writes commit for the whole wave.
   void writeReg32(ParsedReg Pr, llvm::Value *V);
+  // Write a per-lane register without applying the modeled EXEC mask.
+  void writeReg32IgnoringExec(ParsedReg Pr, llvm::Value *V);
   void writeReg64(ParsedReg Pr, llvm::Value *V);
   // Write a value spanning more than two dwords, such as an image descriptor.
   void writeRegVec(ParsedReg Pr, llvm::Value *V);
