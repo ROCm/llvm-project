@@ -1,14 +1,12 @@
 ! RUN: %flang_fc1 -fopenmp -emit-fir %s -o - | FileCheck %s
-! XFAIL: *
+
 ! Check that this testcase is lowered to FIR successfully.
 
-! CHECK: %[[ONE:.*]] = arith.constant 1 : i32
+! CHECK: %[[ONE:.*]] = arith.constant 1 : i64
 ! CHECK: %[[DECL_N:.*]] = fir.declare %{{.*}} {uniq_name = "_QMtestEn"} : (!fir.ref<i64>) -> !fir.ref<i64>
 ! CHECK: %[[HOST_N:.*]] = fir.load %[[DECL_N]] : !fir.ref<i64>
-! CHECK: %[[HOST_LB:.*]] = fir.convert %[[ONE]] : (i32) -> i64
-! CHECK: %[[HOST_STEP:.*]] = fir.convert %[[ONE]] : (i32) -> i64
 ! CHECK:      omp.target
-! CHECK-SAME: host_eval(%[[HOST_LB]] -> %[[LB:[[:alnum:]]+]], %[[HOST_N]] -> %[[UB:[[:alnum:]]+]], %[[HOST_STEP]] -> %[[STEP:[[:alnum:]]+]] : i64, i64, i64)
+! CHECK-SAME: host_eval(%[[ONE]] -> %[[LB:[[:alnum:]]+]], %[[HOST_N]] -> %[[UB:[[:alnum:]]+]], %[[ONE]] -> %[[STEP:[[:alnum:]]+]] : i64, i64, i64)
 ! CHECK:      omp.teams
 ! CHECK:      omp.parallel
 ! CHECK:      omp.distribute
