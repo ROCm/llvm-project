@@ -25,7 +25,6 @@ add_clang_subdirectory(clang-installapi)
 if(HAVE_CLANG_REPL_SUPPORT)
   add_clang_subdirectory(clang-repl)
 endif()
-add_clang_subdirectory(clang-hip)
 
 if(CLANG_INCLUDE_TESTS)
   add_clang_subdirectory(c-index-test)
