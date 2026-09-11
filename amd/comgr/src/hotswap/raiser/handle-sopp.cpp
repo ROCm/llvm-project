@@ -144,6 +144,19 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   case CanonicalOp::S_MONITOR_SLEEP:
     return raiseSleep(Ctx, Di);
 
+  case CanonicalOp::S_SET_VGPR_MSB: {
+    int16_t ImmediateIndex = COMGR::hotswap::getNamedOperandIdx(
+        Di.Inst.getOpcode(), AMDGPU::OpName::simm16);
+    assert(ImmediateIndex >= 0 && "s_set_vgpr_msb encodes simm16");
+    std::optional<int64_t> Immediate =
+        evalOperandAsConst(Di.Inst, ImmediateIndex);
+    assert(Immediate && "s_set_vgpr_msb simm16 is always immediate");
+    // SIMM16[15:8] records the preceding mode; only the low-byte fields select
+    // the VGPR banks used by subsequent instructions.
+    Ctx.registers().setVgprMsBs(static_cast<uint8_t>(*Immediate & UINT8_MAX));
+    return Error::success();
+  }
+
   // None of these changes program state the raised IR represents. A wakeup
   // releases a wave sleeping until an external event, and such a sleep does
   // not raise, so no wave of a raised kernel is waiting for one.

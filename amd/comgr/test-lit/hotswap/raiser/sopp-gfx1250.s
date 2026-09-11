@@ -10,6 +10,11 @@
 ; RUN:   --emit-ir=setprio_kernel,setprio_inc_wg_kernel \
 ; RUN:   --target-isa=gfx942 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=PRIO-CROSS
+; RUN: %hotswap_transpile_cli %t.hsaco --isa=gfx1250 \
+; RUN:   --dump-decoded=vgpr_msb_kernel \
+; RUN:   | %FileCheck %s --check-prefix=MSB-DECODE
+; RUN: %hotswap_transpile_cli %t.hsaco --isa=gfx1250 --target-isa=gfx942 \
+; RUN:   --emit-ir=vgpr_msb_kernel | %FileCheck %s --check-prefix=MSB-IR
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -102,6 +107,24 @@ wakeup_kernel:
 ; WAKEUP-NEXT: }
 	s_endpgm
 
+	.globl	vgpr_msb_kernel
+	.p2align	8
+	.type	vgpr_msb_kernel,@function
+
+; MSB-DECODE: S_SET_VGPR_MSB  s_set_vgpr_msb 64
+; MSB-DECODE: S_SET_VGPR_MSB  s_set_vgpr_msb 0x4004
+; MSB-IR-LABEL: define amdgpu_kernel void @vgpr_msb_kernel(
+vgpr_msb_kernel:
+	v_mov_b32_e32 v2, s0
+	v_mov_b32_e32 v3, s1
+	s_set_vgpr_msb 0x40
+	v_mov_b32_e32 v1, v0
+	s_set_vgpr_msb 0x4004
+; MSB-IR: store i32 {{.+}}, ptr addrspace(1) {{.+}}, align 4
+	global_store_dword v[2:3], v1, off
+; MSB-IR: ret void
+	s_endpgm
+
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel waits_kernel
@@ -133,6 +156,13 @@ wakeup_kernel:
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel vgpr_msb_kernel
+		.amdhsa_kernarg_size 8
+		.amdhsa_user_sgpr_kernarg_segment_ptr 1
+		.amdhsa_system_vgpr_workitem_id 0
+		.amdhsa_next_free_vgpr 258
+		.amdhsa_next_free_sgpr 2
 	.end_amdhsa_kernel
 	.text
 	.amdgpu_metadata
@@ -203,6 +233,17 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         wakeup_kernel.kd
     .vgpr_count:     1
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 8
+    .max_flat_workgroup_size: 1024
+    .name:           vgpr_msb_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     2
+    .symbol:         vgpr_msb_kernel.kd
+    .vgpr_count:     258
     .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
