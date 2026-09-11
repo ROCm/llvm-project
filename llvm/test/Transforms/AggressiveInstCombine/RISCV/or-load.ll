@@ -3,7 +3,7 @@
 ; RUN: opt < %s -passes=aggressive-instcombine -S -mtriple riscv64be -mattr=+unaligned-scalar-mem | FileCheck %s --check-prefixes=ALL,BE,RV64BE
 ; RUN: opt < %s -passes=aggressive-instcombine -S -mtriple riscv32 -mattr=+unaligned-scalar-mem | FileCheck %s --check-prefixes=ALL,LE,RV32LE
 ; RUN: opt < %s -passes=aggressive-instcombine -S -mtriple riscv32be -mattr=+unaligned-scalar-mem | FileCheck %s --check-prefixes=ALL,BE,RV32BE
-
+; REQUIRES: stability
 define i16 @loadCombine_2consecutive(ptr %p) {
 ; LE-LABEL: @loadCombine_2consecutive(
 ; LE-NEXT:    [[L1:%.*]] = load i16, ptr [[P:%.*]], align 1
