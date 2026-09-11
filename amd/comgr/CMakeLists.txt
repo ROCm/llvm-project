@@ -112,7 +112,7 @@ set(SOURCES
   src/time-stat/time-stat.cpp)
 
 # Code-object metadata and symbol helpers, built once as an internal OBJECT
-# library so amd_comgr and the hotswap test drivers link the same objects
+# library so amd_comgr and the transpiler test drivers link the same objects
 # instead of recompiling these sources with divergent flags. The drivers need
 # the buffer-facing getMetadataRoot / getElfIsaName / lookupSymbolByName entry
 # points without the amd_comgr C API; sharing the objects keeps a single
@@ -121,14 +121,14 @@ set(COMGR_OBJECT_UTILS_SOURCES
   src/comgr-metadata.cpp
   src/comgr-symbol.cpp)
 
-# Hotswap IR transpiler (raiser), opt-in. The raiser lives under
-# amd/comgr/src/hotswap/raiser as a private COMGR subproject. When enabled, we
-# link the hotswap::raiser OBJECT library into amd_comgr (its TUs land directly
-# in amd_comgr.so so hotswap files can call comgr-metadata helpers
+# Transpiler IR transpiler (raiser), opt-in. The raiser lives under
+# amd/comgr/src/transpiler/raiser as a private COMGR subproject. When enabled, we
+# link the transpiler::raiser OBJECT library into amd_comgr (its TUs land directly
+# in amd_comgr.so so transpiler files can call comgr-metadata helpers
 # without a layering inversion) and compile the transpile entry point. When
-# disabled, the amd_comgr_hotswap_transpile API is simply not provided.
-option(COMGR_ENABLE_HOTSWAP_TRANSPILE
-  "Build the hotswap-raiser-backed amd_comgr_hotswap_transpile entry point" OFF)
+# disabled, the amd_comgr_transpile API is simply not provided.
+option(COMGR_ENABLE_TRANSPILER
+  "Build the transpiler-raiser-backed amd_comgr_transpile entry point" OFF)
 
 # Add Windows resource file for version info
 if(WIN32)
@@ -208,14 +208,14 @@ target_include_directories(amd_comgr
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# The hotswap subdirectory is entered below (around the
-# add_subdirectory(src/hotswap) line), which builds the transpile-path OBJECT
+# The transpiler subdirectory is entered below (around the
+# add_subdirectory(src/transpiler) line), which builds the transpile-path OBJECT
 # libraries only under this option; here we opt amd_comgr into exposing the
-# `amd_comgr_hotswap_transpile` entry point. The hotswap link edges are
-# added after the curated LLVM/LLD link block below (see "hotswap link
+# `amd_comgr_transpile` entry point. The transpiler link edges are
+# added after the curated LLVM/LLD link block below (see "transpiler link
 # edges"), not here.
-if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
-  target_compile_definitions(amd_comgr PRIVATE COMGR_ENABLE_HOTSWAP_TRANSPILE=1)
+if(COMGR_ENABLE_TRANSPILER)
+  target_compile_definitions(amd_comgr PRIVATE COMGR_ENABLE_TRANSPILER=1)
 endif()
 
 message("")
@@ -452,7 +452,7 @@ target_include_directories(amd_comgr
 
 # Internal OBJECT library for the shared metadata / symbol helpers. Compiled
 # once with the same flags and include roots as amd_comgr, then linked into both
-# amd_comgr and the hotswap test drivers, so the drivers reuse the exact same
+# amd_comgr and the transpiler test drivers, so the drivers reuse the exact same
 # objects (and the buffer-facing getMetadataRoot / getElfIsaName /
 # lookupSymbolByName entry points) instead of recompiling the sources with
 # divergent flags. Per-function/data sections let a standalone driver drop the
@@ -683,13 +683,13 @@ if (NOT WIN32)
       ${CMAKE_DL_LIBS})
 endif()
 
-# Hotswap subproject. Under COMGR_ENABLE_HOTSWAP_TRANSPILE, builds the
+# Transpiler subproject. Under COMGR_ENABLE_TRANSPILER, builds the
 # transpile-path OBJECT libraries and exports the set amd_comgr links as
-# COMGR_HOTSWAP_LIBS (empty otherwise). These OBJECT libraries keep their LLVM
+# COMGR_TRANSPILER_LIBS (empty otherwise). These OBJECT libraries keep their LLVM
 # deps PRIVATE, so they contribute only their objects and leave the curated LLVM
 # set linked above unchanged.
-add_subdirectory(src/hotswap)
-target_link_libraries(amd_comgr PRIVATE ${COMGR_HOTSWAP_LIBS})
+add_subdirectory(src/transpiler)
+target_link_libraries(amd_comgr PRIVATE ${COMGR_TRANSPILER_LIBS})
 
 include(CTest)
 

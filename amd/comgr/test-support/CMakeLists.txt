@@ -1,5 +1,5 @@
 # Objects shared by the test binaries under test-lit and test-unit. Those link
-# the hotswap OBJECT libraries directly rather than amd_comgr, so they have to
+# the transpiler OBJECT libraries directly rather than amd_comgr, so they have to
 # supply the pieces of Comgr those objects call into.
 #
 # An OBJECT library rather than a source listed per target: the consumers span

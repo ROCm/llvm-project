@@ -24,8 +24,8 @@ if config.comgr_spirv_translator_available:
     config.available_features.add("comgr-has-spirv-translator")
 if config.comgr_amdgpu_target_available:
     config.available_features.add("comgr-has-amdgpu-target")
-if config.comgr_hotswap_transpile_available:
-    config.available_features.add("comgr-has-hotswap-transpile")
+if config.comgr_transpiler_available:
+    config.available_features.add("comgr-has-transpiler")
 
 # The AMDGPU device AddressSanitizer runtime (libclang_rt.asan.a for
 # amdgcn-amd-amdhsa) is a separately built artifact. The asan tests link it,
@@ -135,5 +135,5 @@ config.substitutions.append(
 # Interpreter used to run Python test helpers (e.g. enumerate-isa-check.py).
 config.substitutions.append(("%python", _fwd(sys.executable)))
 config.substitutions.append(
-    ("%hotswap_transpile_cli", _fwd(config.comgr_obj_dir, "hotswap_transpile_cli"))
+    ("%transpile_cli", _fwd(config.comgr_obj_dir, "transpile_cli"))
 )
