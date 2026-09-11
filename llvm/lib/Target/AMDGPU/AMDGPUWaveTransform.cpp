@@ -1716,29 +1716,52 @@ void ControlFlowRewriter::rewrite() {
     // Retarget the MBB operand to the appropriate wave-successor and
     // transfer the indirect-target attributes onto the new target.
     if (Info.InlineAsmBrMI) {
-      for (MachineOperand &MO : Info.InlineAsmBrMI->operands()) {
-        if (!MO.isMBB())
-          continue;
-        if (Node->Block->isSuccessor(MO.getMBB())) {
-          LiveCallbrTargets.insert(MO.getMBB());
-          continue;
-        }
-        MachineBasicBlock *NewTarget;
-        if (Node->Successors.size() == 1) {
-          NewTarget = Node->Successors[0]->Block;
-        } else {
-          auto LaneSucc =
-              llvm::find_if(Node->LaneSuccessors, [=](const auto &succ) {
-                return succ.Lane == Info.OrigSuccCond;
-              });
-          assert(LaneSucc != Node->LaneSuccessors.end());
-          NewTarget = LaneSucc->Wave->Block;
-        }
-        StaleCallbrTargets.insert(MO.getMBB());
+      if (Node->Successors.size() == 1) {
+        // Identify and mark the lone Node successor as the new alive indirect
+        // target.
+        MachineBasicBlock *NewTarget = Node->Successors[0]->Block;
+
         LiveCallbrTargets.insert(NewTarget);
         NewTarget->setIsInlineAsmBrIndirectTarget();
         NewTarget->setLabelMustBeEmitted();
-        MO.setMBB(NewTarget);
+
+        // Mark all the INLINEASM_BR indirect target operands as stale and
+        // retarget them to the new indirect target.
+        for (MachineOperand &MO : Info.InlineAsmBrMI->operands()) {
+          if (!MO.isMBB())
+            continue;
+
+          StaleCallbrTargets.insert(MO.getMBB());
+          MO.setMBB(NewTarget);
+        }
+      } else {
+        // Identify and mark the lane successor corresponding to the
+        // OrigSuccCond as the new alive indirect target.
+        LaneEdge *LaneSucc =
+            llvm::find_if(Node->LaneSuccessors, [=](const auto &Succ) {
+              return Succ.Lane == Info.OrigSuccCond;
+            });
+        assert(LaneSucc != Node->LaneSuccessors.end());
+        MachineBasicBlock *NewTarget = LaneSucc->Wave->Block;
+
+        LiveCallbrTargets.insert(NewTarget);
+        NewTarget->setIsInlineAsmBrIndirectTarget();
+        NewTarget->setLabelMustBeEmitted();
+
+        // Mark all the non-successor INLINEASM_BR indirect target operands as
+        // stale and retarget them to the new indirect target.
+        for (MachineOperand &MO : Info.InlineAsmBrMI->operands()) {
+          if (!MO.isMBB())
+            continue;
+
+          if (Node->Block->isSuccessor(MO.getMBB())) {
+            LiveCallbrTargets.insert(MO.getMBB());
+            continue;
+          }
+
+          StaleCallbrTargets.insert(MO.getMBB());
+          MO.setMBB(NewTarget);
+        }
       }
     }
 
