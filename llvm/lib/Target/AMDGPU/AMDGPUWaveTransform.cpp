@@ -1537,17 +1537,16 @@ void ControlFlowRewriter::prepareWaveCfg() {
     }
 
     // Identify the indirect target (OrigSuccCond) of a callbr, which acts as
-    // an opaque uniform branch. mayHaveInlineAsmBr() only reports that some
-    // successor is flagged as an indirect target, so scan for the presence of
-    // an INLINEASM_BR.
+    // an opaque uniform branch.
     if (Node->Block->mayHaveInlineAsmBr()) {
+      // As callbr can have inline asm, scan the block for an INLINEASM_BR.
       auto InlineAsmBrIt =
           llvm::find_if(*Node->Block, [](const MachineInstr &MI) {
             return MI.getOpcode() == TargetOpcode::INLINEASM_BR;
           });
 
       if (InlineAsmBrIt != Node->Block->end()) {
-        // INLINEASM_BR captures its indirect target as an MBB operand.
+        // Scan MBB operands of INLINEASM_BR for its implicit indirect target.
         Info.InlineAsmBrMI = &*InlineAsmBrIt;
         for (const MachineOperand &MO : InlineAsmBrIt->operands()) {
           if (!MO.isMBB())
@@ -1561,6 +1560,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
         // GlobalISel currently lowers the indirect target of an intrinsic
         // callbr (llvm.amdgcn.kill) as a successor flagged with
         // setIsInlineAsmBrIndirectTarget(), without an INLINEASM_BR.
+        // So, scan the lane successors for an implicit indirect target.
         //
         // TODO-WAVETRANSFORM: update this scan when GlobalISel changes how it
         // lowers callbr (llvm.amdgcn.kill).
