@@ -5858,8 +5858,9 @@ const char *Driver::GetNamedOutputPath(Compilation &C, const JobAction &JA,
     // separate object. Append the arch suffix to avoid all arches writing to
     // the same filename and overwriting each other.
     // HIP offload uses getOffloadingArch(); CUDA/other uses BoundArch.
-    const char *OffloadArch = JA.getOffloadingArch();
-    StringRef ArchSuffix = OffloadArch ? StringRef(OffloadArch) : BoundArch;
+    BoundArch OffloadArch = JA.getOffloadingArch();
+    StringRef ArchSuffix =
+        OffloadArch ? OffloadArch.ArchName : StringRef(BoundArchStr);
     if (MultipleArchs && !ArchSuffix.empty()) {
       llvm::sys::path::replace_extension(Filename, "");
       Filename += "-";
