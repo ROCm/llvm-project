@@ -548,6 +548,12 @@ void RegisterState::writeReg32(ParsedReg Pr, Value *V) {
   }
 }
 
+void RegisterState::writeReg32IgnoringExec(ParsedReg Pr, Value *V) {
+  assert((Pr.RegKind == ParsedReg::VGPR || Pr.RegKind == ParsedReg::AGPR) &&
+         "unpredicated register write requires a per-lane register");
+  Regs.writeReg32(B, Pr, V);
+}
+
 void RegisterState::writeReg64(ParsedReg Pr, Value *V) {
   if (Pr.RegKind == ParsedReg::NOREG)
     return;

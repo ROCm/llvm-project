@@ -11,6 +11,7 @@
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
+#include "transpiler/raiser/handle-vop-cross-lane.h"
 #include "transpiler/raiser/handle-vop-shared.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
@@ -420,6 +421,10 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     return Clamp.takeError();
 
   switch (Di.CanonOp) {
+  case CanonicalOp::V_READLANE_B32:
+    return raiseReadLane32(Ctx, Di, Op);
+  case CanonicalOp::V_WRITELANE_B32:
+    return raiseWriteLane32(Ctx, Di, Op);
   case CanonicalOp::V_MOV_B32:
     if (*Clamp)
       return unsupportedInstruction(Ctx, Di,
