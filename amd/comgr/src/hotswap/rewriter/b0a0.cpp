@@ -4012,12 +4012,47 @@ static SmallVector<SymbolLessReturnRegion, 8> collectSymbolLessReturnRegions(
   for (size_t I = 0; I != Decoded.size(); ++I)
     OffsetToIndex.try_emplace(Decoded[I].Offset, I);
 
+  // Every provenance check below asks whether some global offset or source
+  // index falls inside the region currently being proven. Sorting the global
+  // key sets once lets each check binary-search the region's byte span instead
+  // of rescanning the whole object per candidate region, which is what made
+  // the pass quadratic in object size. Index.CallEntries,
+  // Index.DirectTargetsByTarget and Index.ExternalCallContinuations are
+  // already sorted by their offset key, so they are used directly.
+  SmallVector<uint64_t, 16> SortedEntryOffsets(DeclaredEntries.begin(),
+                                               DeclaredEntries.end());
+  SortedEntryOffsets.append(ExternalEntries.begin(), ExternalEntries.end());
+  llvm::sort(SortedEntryOffsets);
+  SmallVector<uint64_t, 16> SortedFunctionEntryOffsets;
+  for (const ElfView::FunctionTextRange &Range : FunctionRanges) {
+    if (Range.Begin < TextAddr || Range.Begin - TextAddr >= TextSize)
+      continue;
+    SortedFunctionEntryOffsets.push_back(Range.Begin - TextAddr);
+  }
+  llvm::sort(SortedFunctionEntryOffsets);
+  // Set-PC transfers keyed by the decoded index they land on, and bounded
+  // return targets keyed by target offset.
+  SmallVector<std::pair<size_t, size_t>, 16> SortedTransfersByLocalTarget;
+  for (size_t I = 0; I != FiniteSetPcTransfers.size(); ++I)
+    if (FiniteSetPcTransfers[I].LocalTargetIndex)
+      SortedTransfersByLocalTarget.emplace_back(
+          *FiniteSetPcTransfers[I].LocalTargetIndex, I);
+  llvm::sort(SortedTransfersByLocalTarget);
+  SmallVector<std::pair<uint64_t, size_t>, 16> SortedBoundedReturnTargets;
+  for (size_t I = 0; I != PreviouslyBoundedReturns.size(); ++I)
+    for (uint64_t Target : PreviouslyBoundedReturns[I].Targets)
+      SortedBoundedReturnTargets.emplace_back(Target, I);
+  llvm::sort(SortedBoundedReturnTargets);
+
   SmallVector<SymbolLessReturnRegion, 8> Regions;
   // Track overlap components as regions are proven instead of retaining every
   // overlapping instruction vector until a final quadratic pass. A value of
   // -1 is unclaimed, -2 belongs to an already-invalid overlap component, and
   // every nonnegative value names the sole still-valid owning region.
   std::vector<int64_t> RegionOwner;
+  // Reused across groups. Allocating and zeroing a Decoded.size() bitmap per
+  // group is itself quadratic; the walk below clears exactly the bits it set.
+  BitVector Visited(Decoded.size());
   for (CallGroup &Group : Groups) {
     DenseMap<uint64_t, size_t>::const_iterator Entry =
         OffsetToIndex.find(Group.Entry);
@@ -4034,7 +4069,6 @@ static SmallVector<SymbolLessReturnRegion, 8> collectSymbolLessReturnRegions(
     Region.Continuations = Group.Continuations;
 
     SmallVector<size_t, 32> Worklist{Entry->second};
-    BitVector Visited(Decoded.size());
     bool Safe = true;
     while (!Worklist.empty() && Safe) {
       size_t I = Worklist.pop_back_val();
@@ -4097,47 +4131,71 @@ static SmallVector<SymbolLessReturnRegion, 8> collectSymbolLessReturnRegions(
       }
       addSuccessor(*Fallthrough);
     }
+    // Region.Instructions lists exactly the bits this walk set, so the shared
+    // bitmap is restored without touching the rest of the object.
+    for (size_t InstIndex : Region.Instructions)
+      Visited.reset(InstIndex);
     if (!Safe || Region.Returns.empty())
       continue;
     llvm::sort(Region.Instructions);
     llvm::sort(Region.Returns);
 
-    auto containsInstructionByte = [&](uint64_t Offset) {
-      for (size_t InstIndex : Region.Instructions) {
-        const InternalDecodedInst &DI = Decoded[InstIndex];
-        std::optional<uint64_t> End = checkedAddUint64(
-            DI.Offset, DI.Size, "symbol-less return instruction end");
-        // Overflow is itself unprovable; conservatively treat the queried
-        // byte as overlapping the claimed region.
-        if (!End || (Offset >= DI.Offset && Offset < *End))
-          return true;
-      }
-      return false;
-    };
-    auto sourceIsInside = [&](size_t InstIndex) {
-      return llvm::is_contained(Region.Instructions, InstIndex);
-    };
-
-    for (uint64_t EntryOffset : DeclaredEntries)
-      if (containsInstructionByte(EntryOffset)) {
+    // The region's byte span bounds every containment query below: an offset
+    // outside [RegionBegin, RegionEnd) cannot lie in any of its instructions.
+    // Region.Instructions is sorted by decoded index and decoded offsets
+    // increase with index, so its first entry starts the span.
+    uint64_t RegionBegin = Decoded[Region.Instructions.front()].Offset;
+    uint64_t RegionEnd = 0;
+    for (size_t InstIndex : Region.Instructions) {
+      std::optional<uint64_t> End =
+          checkedAddUint64(Decoded[InstIndex].Offset, Decoded[InstIndex].Size,
+                           "symbol-less return instruction end");
+      // An unprovable extent leaves every containment answer unprovable too,
+      // so fail closed on the whole region rather than per query.
+      if (!End) {
         Safe = false;
         break;
       }
-    if (!Safe)
-      continue;
-    for (const ElfView::FunctionTextRange &Range : FunctionRanges) {
-      if (Range.Begin < TextAddr || Range.Begin - TextAddr >= TextSize)
-        continue;
-      uint64_t EntryOffset = Range.Begin - TextAddr;
-      if (EntryOffset != Region.Entry && containsInstructionByte(EntryOffset)) {
-        Safe = false;
-        break;
-      }
+      RegionEnd = std::max(RegionEnd, *End);
     }
     if (!Safe)
       continue;
-    for (uint64_t EntryOffset : ExternalEntries)
-      if (containsInstructionByte(EntryOffset)) {
+    size_t RegionFirstIndex = Region.Instructions.front();
+    size_t RegionLastIndex = Region.Instructions.back();
+
+    auto containsInstructionByte = [&](uint64_t Offset) {
+      if (Offset < RegionBegin || Offset >= RegionEnd)
+        return false;
+      // Only the last instruction starting at or before Offset can cover it.
+      SmallVectorImpl<size_t>::const_iterator It = llvm::upper_bound(
+          Region.Instructions, Offset, [&](uint64_t Probe, size_t InstIndex) {
+            return Probe < Decoded[InstIndex].Offset;
+          });
+      if (It == Region.Instructions.begin())
+        return false;
+      const InternalDecodedInst &DI = Decoded[*std::prev(It)];
+      return Offset - DI.Offset < DI.Size;
+    };
+    auto sourceIsInside = [&](size_t InstIndex) {
+      return std::binary_search(Region.Instructions.begin(),
+                                Region.Instructions.end(), InstIndex);
+    };
+
+    // Declared and external entries both reject on containment alone, so they
+    // share one sorted key set.
+    for (SmallVectorImpl<uint64_t>::const_iterator It =
+             llvm::lower_bound(SortedEntryOffsets, RegionBegin);
+         It != SortedEntryOffsets.end() && *It < RegionEnd; ++It)
+      if (containsInstructionByte(*It)) {
+        Safe = false;
+        break;
+      }
+    if (!Safe)
+      continue;
+    for (SmallVectorImpl<uint64_t>::const_iterator It =
+             llvm::lower_bound(SortedFunctionEntryOffsets, RegionBegin);
+         It != SortedFunctionEntryOffsets.end() && *It < RegionEnd; ++It)
+      if (*It != Region.Entry && containsInstructionByte(*It)) {
         Safe = false;
         break;
       }
@@ -4165,41 +4223,73 @@ static SmallVector<SymbolLessReturnRegion, 8> collectSymbolLessReturnRegions(
     if (!Safe)
       continue;
 
-    for (const KnownCallSite &Call : Index.Calls) {
+    // Index.CallEntries holds both the target and the continuation of every
+    // known call, sorted by offset, so narrowing it to the span finds exactly
+    // the calls that could touch this region. A call landing in the span twice
+    // is judged twice, which is harmless because the verdict is a pure
+    // function of the call.
+    for (SmallVectorImpl<KnownCallEntry>::const_iterator It =
+             llvm::lower_bound(Index.CallEntries, RegionBegin,
+                               [](const KnownCallEntry &Entry, uint64_t Probe) {
+                                 return Entry.Entry < Probe;
+                               });
+         It != Index.CallEntries.end() && It->Entry < RegionEnd && Safe; ++It) {
+      const KnownCallSite &Call = Index.Calls[It->CallIndex];
       bool TargetInside = containsInstructionByte(Call.Target);
       bool ContinuationInside = containsInstructionByte(Call.Continuation);
       if (!TargetInside && !ContinuationInside)
         continue;
-      if (sourceIsInside(Call.InstIndex)) {
+      if (sourceIsInside(Call.InstIndex) || ContinuationInside ||
+          Call.Target != Region.Entry ||
+          Call.ReturnRegister != Region.LinkRegister)
         Safe = false;
-        break;
-      }
-      if (ContinuationInside || Call.Target != Region.Entry ||
-          Call.ReturnRegister != Region.LinkRegister) {
-        Safe = false;
-        break;
-      }
     }
     if (!Safe)
       continue;
-    for (const ExternalCallContinuation &Call : Index.ExternalCallContinuations)
-      if (containsInstructionByte(Call.Continuation)) {
+    for (SmallVectorImpl<ExternalCallContinuation>::const_iterator It =
+             llvm::lower_bound(
+                 Index.ExternalCallContinuations, RegionBegin,
+                 [](const ExternalCallContinuation &Entry, uint64_t Probe) {
+                   return Entry.Continuation < Probe;
+                 });
+         It != Index.ExternalCallContinuations.end() &&
+         It->Continuation < RegionEnd;
+         ++It)
+      if (containsInstructionByte(It->Continuation)) {
         Safe = false;
         break;
       }
     if (!Safe)
       continue;
 
-    for (const DirectTargetSource &Source : Index.DirectTargetsByTarget) {
-      if (!containsInstructionByte(Source.Target) ||
-          sourceIsInside(Source.InstIndex))
+    // Sources of every known call supplying this region's exact entry and link
+    // pair. This is deliberately not filtered by reachability: the provenance
+    // rule is that any direct edge into the region must be such a call.
+    SmallVector<size_t, 8> EntryCallSources;
+    for (SmallVectorImpl<KnownCallEntry>::const_iterator It =
+             llvm::lower_bound(Index.CallsByTarget, Region.Entry,
+                               [](const KnownCallEntry &Entry, uint64_t Probe) {
+                                 return Entry.Entry < Probe;
+                               });
+         It != Index.CallsByTarget.end() && It->Entry == Region.Entry; ++It) {
+      const KnownCallSite &Call = Index.Calls[It->CallIndex];
+      if (Call.ReturnRegister == Region.LinkRegister)
+        EntryCallSources.push_back(Call.InstIndex);
+    }
+    llvm::sort(EntryCallSources);
+
+    for (SmallVectorImpl<DirectTargetSource>::const_iterator It =
+             llvm::lower_bound(
+                 Index.DirectTargetsByTarget, RegionBegin,
+                 [](const DirectTargetSource &Source, uint64_t Probe) {
+                   return Source.Target < Probe;
+                 });
+         It != Index.DirectTargetsByTarget.end() && It->Target < RegionEnd;
+         ++It) {
+      if (!containsInstructionByte(It->Target) || sourceIsInside(It->InstIndex))
         continue;
-      bool IsEntryCall = false;
-      for (const KnownCallSite &Call : Index.Calls)
-        IsEntryCall |= Call.InstIndex == Source.InstIndex &&
-                       Call.Target == Region.Entry &&
-                       Call.ReturnRegister == Region.LinkRegister;
-      if (!IsEntryCall) {
+      if (!std::binary_search(EntryCallSources.begin(), EntryCallSources.end(),
+                              It->InstIndex)) {
         Safe = false;
         break;
       }
@@ -4207,27 +4297,33 @@ static SmallVector<SymbolLessReturnRegion, 8> collectSymbolLessReturnRegions(
     if (!Safe)
       continue;
 
-    for (const FiniteSetPcTransfer &Transfer : FiniteSetPcTransfers) {
-      if (!Transfer.LocalTargetIndex ||
-          !llvm::is_contained(Region.Instructions,
-                              *Transfer.LocalTargetIndex) ||
-          sourceIsInside(Transfer.InstIndex))
+    // Set-PC transfers are keyed by the decoded index they land on, which is
+    // bounded by the region's first and last instruction indices.
+    for (SmallVectorImpl<std::pair<size_t, size_t>>::const_iterator It =
+             llvm::lower_bound(SortedTransfersByLocalTarget,
+                               std::make_pair(RegionFirstIndex, size_t(0)));
+         It != SortedTransfersByLocalTarget.end() &&
+         It->first <= RegionLastIndex;
+         ++It) {
+      if (!sourceIsInside(It->first) ||
+          sourceIsInside(FiniteSetPcTransfers[It->second].InstIndex))
         continue;
       Safe = false;
       break;
     }
     if (!Safe)
       continue;
-    for (const BoundedSetPcReturn &Return : PreviouslyBoundedReturns) {
-      if (sourceIsInside(Return.InstIndex))
+    for (SmallVectorImpl<std::pair<uint64_t, size_t>>::const_iterator It =
+             llvm::lower_bound(SortedBoundedReturnTargets,
+                               std::make_pair(RegionBegin, size_t(0)));
+         It != SortedBoundedReturnTargets.end() && It->first < RegionEnd;
+         ++It) {
+      if (sourceIsInside(PreviouslyBoundedReturns[It->second].InstIndex))
         continue;
-      for (uint64_t Target : Return.Targets)
-        if (containsInstructionByte(Target)) {
-          Safe = false;
-          break;
-        }
-      if (!Safe)
+      if (containsInstructionByte(It->first)) {
+        Safe = false;
         break;
+      }
     }
     if (!Safe)
       continue;
