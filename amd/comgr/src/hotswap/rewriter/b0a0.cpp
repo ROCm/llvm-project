@@ -345,14 +345,22 @@ truncateNopSledsAtDirectTargets(std::vector<NopSled> &Sleds,
   if (DirectBranchTargets.empty() || Sleds.empty())
     return;
 
+  // Each sled is truncated at the lowest direct target it contains. Sorting
+  // the target set once makes that a binary search per sled instead of a scan
+  // of every target, which is what made this quadratic in object size.
+  SmallVector<uint64_t, 32> SortedTargets(DirectBranchTargets.begin(),
+                                          DirectBranchTargets.end());
+  llvm::sort(SortedTargets);
+
   std::vector<NopSled> Filtered;
   Filtered.reserve(Sleds.size());
   uint64_t Truncated = 0;
   for (const NopSled &Sled : Sleds) {
     uint64_t End = Sled.End;
-    for (uint64_t Target : DirectBranchTargets)
-      if (Target >= Sled.Start && Target < End)
-        End = Target;
+    SmallVectorImpl<uint64_t>::const_iterator It =
+        llvm::lower_bound(SortedTargets, Sled.Start);
+    if (It != SortedTargets.end() && *It < Sled.End)
+      End = *It;
     if (End != Sled.End)
       ++Truncated;
     appendNopSledIfLarge(Filtered, Sled.Start, End, Sled.FunctionStart,
