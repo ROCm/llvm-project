@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BASE_BRANCH: amd/dev/kirthana14m/notification-template-update  
+  BASE_BRANCH: amd-staging 
   REF_FILE: .github/rockci-sha/therock-ci-main-ref.json
 
 jobs:
