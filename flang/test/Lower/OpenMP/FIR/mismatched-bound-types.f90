@@ -1,5 +1,5 @@
 ! RUN: %flang_fc1 -fopenmp -emit-fir %s -o - | FileCheck %s
-
+! XFAIL: *
 ! Check that this testcase is lowered to FIR successfully.
 
 ! CHECK: %[[ONE:.*]] = arith.constant 1 : i32

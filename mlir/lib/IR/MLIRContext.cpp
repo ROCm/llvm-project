@@ -1121,6 +1121,10 @@ void RegisteredOperationName::insert(
       value);
 }
 
+void *RegisteredOperationName::allocateModelStorage() {
+  return ::operator new(sizeof(Impl));
+}
+
 //===----------------------------------------------------------------------===//
 // AbstractType
 //===----------------------------------------------------------------------===//
