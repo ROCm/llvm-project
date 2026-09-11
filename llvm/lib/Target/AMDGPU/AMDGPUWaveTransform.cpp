@@ -1545,25 +1545,11 @@ void ControlFlowRewriter::prepareWaveCfg() {
             return MI.getOpcode() == TargetOpcode::INLINEASM_BR;
           });
 
-      if (InlineAsmBrIt != Node->Block->end()) {
-        // Scan MBB operands of INLINEASM_BR for its implicit indirect target.
+      if (InlineAsmBrIt != Node->Block->end())
         Info.InlineAsmBrMI = &*InlineAsmBrIt;
-        for (const MachineOperand &MO : InlineAsmBrIt->operands()) {
-          if (!MO.isMBB())
-            continue;
-          assert(!Info.OrigSuccCond &&
-                 "Multiple INLINEASM_BR indirect targets not yet supported");
-          Info.ImplicitBranchOpc = TargetOpcode::INLINEASM_BR;
-          Info.OrigSuccCond = ReconvergeCfg.nodeForBlock(MO.getMBB());
-        }
-      } else if (!Info.OrigSuccCond && Node->Successors.size() >= 2) {
-        // GlobalISel currently lowers the indirect target of an intrinsic
-        // callbr (llvm.amdgcn.kill) as a successor flagged with
-        // setIsInlineAsmBrIndirectTarget(), without an INLINEASM_BR.
-        // So, scan the lane successors for an implicit indirect target.
-        //
-        // TODO-WAVETRANSFORM: update this scan when GlobalISel changes how it
-        // lowers callbr (llvm.amdgcn.kill).
+
+      // Scan the lane successors for implicit indirect target.
+      if (!Info.OrigSuccCond) {
         for (const LaneEdge &LaneSucc : Node->LaneSuccessors) {
           if (!LaneSucc.Lane->Block->isInlineAsmBrIndirectTarget())
             continue;
