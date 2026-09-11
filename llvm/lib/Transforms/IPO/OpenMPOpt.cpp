@@ -4612,16 +4612,10 @@ struct AAKernelInfoFunction : AAKernelInfo {
     IsWorker->setDebugLoc(DLoc);
     CondBrInst::Create(IsWorker, IsWorkerCheckBB, UserCodeEntryBB, InitBB);
 
-    // How many of the block's threads can be worker threads is a property of
-    // the launch geometry, which the runtime knows and the block size alone
-    // does not determine: a target may host the main thread in a whole warp
-    // above the workers, or in a single thread above them. Ask the runtime
-    // rather than subtracting a warp here, or the workers in between are left
-    // in neither group, waiting for no parallel region while it is handed
-    // iterations. The mode is passed in rather than left for the runtime to
-    // look up, because this runs before the state machine's first barrier and
-    // so before the shared flag holding it is visible here. It is a constant:
-    // a custom state machine is only ever built for a generic-mode kernel.
+    // How much of the block the main thread takes is the runtime's to know, so
+    // ask it rather than subtracting a warp here. The mode is passed in because
+    // this runs before the barrier that would make the shared one visible; it
+    // is a constant, a custom state machine being built only for generic mode.
     Module &M = *Kernel->getParent();
     FunctionCallee MaxTeamThreadsFn =
         OMPInfoCache.OMPBuilder.getOrCreateRuntimeFunction(
