@@ -4299,7 +4299,6 @@ genTargetOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
 
           if (!mapperIdName.empty()) {
             bool isPointer = semantics::IsPointer(sym);
-            bool isAllocatable = semantics::IsAllocatable(sym);
             bool hasDefaultMapper =
                 converter.getModuleOp().lookupSymbol(mapperIdName);
             // Avoid attaching implicit default mappers to pointer captures.
@@ -4310,8 +4309,7 @@ genTargetOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
             // mapper when the type requires one; a flat record does not.
             if (!isPointer &&
                 (hasDefaultMapper ||
-                 (isAllocatable &&
-                  requiresImplicitDefaultDeclareMapper(*typeSpec)))) {
+                 (requiresImplicitDefaultDeclareMapper(*typeSpec)))) {
               if (!hasDefaultMapper) {
                 if (auto recordType = mlir::dyn_cast_or_null<fir::RecordType>(
                         converter.genType(*typeSpec)))
