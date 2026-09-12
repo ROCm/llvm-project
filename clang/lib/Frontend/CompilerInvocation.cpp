@@ -3918,11 +3918,6 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
       GenerateArg(Consumer, OPT_fopenmp_version_EQ, Twine(Opts.OpenMP));
   }
 
-  if (Opts.OpenMPTargetIgnoreEnvVars)
-    GenerateArg(Consumer, OPT_fopenmp_target_ignore_env_vars);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_ignore_env_vars);
-
   if (Opts.OpenMPTargetBigJumpLoop)
     GenerateArg(Consumer, OPT_fopenmp_target_big_jump_loop);
   else
@@ -4432,10 +4427,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   Opts.OpenMPTargetXteamReductionBlockSize = getLastArgIntValue(
       Args, options::OPT_fopenmp_target_xteam_reduction_blocksize_EQ,
       Opts.OpenMPTargetXteamReductionBlockSize, Diags);
-
-  Opts.OpenMPTargetIgnoreEnvVars =
-      Args.hasFlag(options::OPT_fopenmp_target_ignore_env_vars,
-                   options::OPT_fno_openmp_target_ignore_env_vars, false);
 
   Opts.OpenMPTargetBigJumpLoop =
       Args.hasFlag(options::OPT_fopenmp_target_big_jump_loop,

@@ -4284,14 +4284,6 @@ def fopenmp_target_xteam_reduction_blocksize_EQ : Joined<["-"], "fopenmp-target-
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
   HelpText<"Number of threads in a block used by GPU cross-team reduction "
            "kernels">;
-def fopenmp_target_ignore_env_vars : Flag<["-"], "fopenmp-target-ignore-env-vars">, Group<f_Group>, 
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Assert that device related environment variables can be ignored while generating code">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetIgnoreEnvVars">>;
-def fno_openmp_target_ignore_env_vars : Flag<["-"], "fno-openmp-target-ignore-env-vars">, Group<f_Group>, 
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
-  HelpText<"Assert that device related environment variables cannot be ignored while generating code">,
-  MarshallingInfoFlag<LangOpts<"OpenMPTargetIgnoreEnvVars">>;
 def fopenmp_target_big_jump_loop : Flag<["-"], "fopenmp-target-big-jump-loop">, Group<f_Group>, 
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
   HelpText<"Use the big-jump-loop code generation technique if possible">,
