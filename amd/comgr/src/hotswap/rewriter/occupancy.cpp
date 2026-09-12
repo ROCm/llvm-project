@@ -29,9 +29,16 @@ namespace hotswap {
 
 std::optional<SubtargetOccupancyLimits>
 getSubtargetOccupancyLimits(StringRef Processor) {
+  AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(Processor);
+  if (Kind == AMDGPU::GK_NONE || AMDGPU::isPseudoTarget(Kind) ||
+      Processor != AMDGPU::getArchNameAMDGCN(Kind)) {
+    log() << "hotswap: error: no occupancy limits for processor '" << Processor
+          << "'.\n";
+    return std::nullopt;
+  }
+
   // The rewriter sees a finished code object and cannot tell CU mode from WGP
   // mode, so assume the full-SIMD block the metadata has always reported.
-  AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(Processor);
   unsigned EUsPerCU = AMDGPU::getNumWorkGroupSIMDs(/*FullSIMDMode=*/true);
   unsigned MaxWavesPerCU = AMDGPU::getMaxWavesPerEU(Kind) * EUsPerCU;
 
@@ -42,17 +49,9 @@ getSubtargetOccupancyLimits(StringRef Processor) {
   unsigned VgprAllocGranule = AMDGPU::getVGPRAllocGranule(Kind, HasWave32);
   unsigned TotalNumVgprs = AMDGPU::getTotalNumVGPRs(Kind, HasWave32);
 
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR)                                   \
-  if (Processor == PROCESSOR)                                                  \
-    return SubtargetOccupancyLimits{                                           \
-        EUsPerCU,         MaxWavesPerCU, AMDGPU::getMaxFlatWorkGroupSize(),    \
-        VgprAllocGranule, TotalNumVgprs, HasWave32};
-#include "comgr-isa-metadata.def"
-#undef HANDLE_ISA
-
-  log() << "hotswap: error: no occupancy limits for processor '" << Processor
-        << "'.\n";
-  return std::nullopt;
+  return SubtargetOccupancyLimits{
+      EUsPerCU,         MaxWavesPerCU, AMDGPU::getMaxFlatWorkGroupSize(),
+      VgprAllocGranule, TotalNumVgprs, HasWave32};
 }
 
 std::optional<WorkgroupCapacity>
