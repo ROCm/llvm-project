@@ -194,15 +194,6 @@ else()
   endif()
 endif()
 
-# Allow the super-project to force static linking of LLVM/Clang into comgr.
-# When ON, LLVM symbols are hidden by comgr's version script (local: *;),
-# avoiding symbol interposition issues without requiring namespace isolation.
-option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
-if(COMGR_STATIC_LLVM)
-  set(LLVM_LINK_LLVM_DYLIB OFF)
-  set(CLANG_LINK_CLANG_DYLIB OFF)
-endif()
-
 target_include_directories(amd_comgr
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -593,6 +584,46 @@ install(FILES
   COMPONENT amd-comgr
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}")
 
+# Allow the super-project to force static linking of LLVM/Clang into comgr.
+# When ON, LLVM symbols are hidden by comgr's version script (local: *;),
+# avoiding symbol interposition issues without requiring namespace isolation.
+#
+# Placed here (immediately before the link-list selection below) so that any
+# transitive find_package(Clang) invoked from included helper modules (e.g.
+# opencl_header.cmake) cannot re-load ClangConfig.cmake / LLVMConfig.cmake
+# and silently revert these flags back to their LLVM-build-time defaults.
+option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
+if(COMGR_STATIC_LLVM)
+  set(LLVM_LINK_LLVM_DYLIB OFF)
+  set(CLANG_LINK_CLANG_DYLIB OFF)
+
+  # When LLVM was built with LLVM_BUILD_LLVM_DYLIB=ON, every imported clang*/
+  # lld* static lib (and a handful of LLVM static libs) records the dylib
+  # `LLVM` target in INTERFACE_LINK_LIBRARIES. CMake follows that interface,
+  # which silently re-introduces libLLVM.so as a DT_NEEDED of libamd_comgr.so,
+  # defeating the whole point of COMGR_STATIC_LLVM. Strip those references.
+  function(_comgr_strip_llvm_dylib_iface_dep target)
+    if(NOT TARGET ${target})
+      return()
+    endif()
+    get_target_property(_iface ${target} INTERFACE_LINK_LIBRARIES)
+    if(NOT _iface)
+      return()
+    endif()
+    set(_new_iface "")
+    foreach(_dep IN LISTS _iface)
+      if(NOT _dep STREQUAL "LLVM")
+        list(APPEND _new_iface "${_dep}")
+      endif()
+    endforeach()
+    set_property(TARGET ${target} PROPERTY INTERFACE_LINK_LIBRARIES "${_new_iface}")
+  endfunction()
+  get_property(_imported_targets DIRECTORY PROPERTY IMPORTED_TARGETS)
+  foreach(_t IN LISTS _imported_targets)
+    _comgr_strip_llvm_dylib_iface_dep(${_t})
+  endforeach()
+endif()
+
 if(NOT CLANG_LINK_CLANG_DYLIB)
   set(CLANG_LIBS
     clangBasic
@@ -621,28 +652,15 @@ endif()
 if (LLVM_LINK_LLVM_DYLIB)
   set(LLVM_LIBS LLVM ${SPIRV_DYNAMIC_LIB})
 else()
-  llvm_map_components_to_libnames(LLVM_LIBS
-    ${LLVM_TARGETS_TO_BUILD}
-    BinaryFormat
-    BitReader
-    BitWriter
-    CodeGen
-    Core
-    DebugInfoDWARF
-    Demangle
-    IRReader
-    Linker
-    MC
-    MCDisassembler
-    MCParser
-    Object
-    Option
-    Support
-    Symbolize
-    TargetParser
-    TransformUtils
-    ${SPIRV_STATIC_LIB}
-    )
+  # Full static link. Reached when LLVM was built without LLVM_BUILD_LLVM_DYLIB,
+  # or when COMGR_STATIC_LLVM forced LLVM_LINK_LLVM_DYLIB=OFF above.
+  #
+  # llvm_map_components_to_libnames(... all) does not work in downstream
+  # consumers (it reads a GLOBAL property only set during LLVM's own build),
+  # so use LLVM_AVAILABLE_LIBS exported by LLVMConfig.cmake instead.
+  set(LLVM_LIBS ${LLVM_AVAILABLE_LIBS})
+  list(REMOVE_ITEM LLVM_LIBS LLVM)  # bare `LLVM` is the dylib target
+  list(APPEND LLVM_LIBS ${SPIRV_STATIC_LIB})
 endif()
 
 target_link_options(amd_comgr
@@ -651,11 +669,24 @@ target_link_options(amd_comgr
   PRIVATE
     ${AMD_COMGR_PRIVATE_LINKER_OPTIONS})
 
-target_link_libraries(amd_comgr
-  PRIVATE
-    ${LLD_LIBS}
-    ${LLVM_LIBS}
-    ${CLANG_LIBS})
+if(NOT LLVM_LINK_LLVM_DYLIB AND UNIX AND NOT APPLE)
+  # Full set of LLVM/Clang/LLD static libs has circular deps
+  # (e.g., LLVMSupport <-> clangBasic via getStackPointer). Wrap in
+  # --start-group/--end-group so the linker performs multi-pass resolution.
+  target_link_libraries(amd_comgr
+    PRIVATE
+      "-Wl,--start-group"
+      ${LLD_LIBS}
+      ${LLVM_LIBS}
+      ${CLANG_LIBS}
+      "-Wl,--end-group")
+else()
+  target_link_libraries(amd_comgr
+    PRIVATE
+      ${LLD_LIBS}
+      ${LLVM_LIBS}
+      ${CLANG_LIBS})
+endif()
 
 if(TARGET embedded-resource-dir)
   target_link_libraries(amd_comgr PRIVATE embedded-resource-dir)
