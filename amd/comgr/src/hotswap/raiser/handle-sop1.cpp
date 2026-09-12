@@ -8,6 +8,9 @@
 
 #include "hotswap/raiser/handlers.h"
 
+#include "hotswap/decoder/decode.h"
+
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Intrinsics.h"
 
 #include <cassert>
@@ -497,6 +500,40 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Ctx.registers().writeReg32(*Dst, Result);
     Ctx.registers().regFile().storeSCC(Ctx.B, Result);
     return Error::success();
+  }
+
+  // A constant displacement names a source offset rather than an address, and
+  // a source offset leads a block, so the jump is a branch between blocks. The
+  // decode already worked out where it goes; recomputing it here would be a
+  // second chance to disagree about the target.
+  if (Di.CanonOp == CanonicalOp::S_ADD_PC_I64) {
+    if (!hasStaticBranchTarget(Di))
+      return unsupported(Ctx, Di,
+                         "displacement is not a constant, so the offset it "
+                         "jumps to is not known");
+    Expected<uint64_t> Target = staticBranchTarget(Di);
+    if (!Target)
+      return Target.takeError();
+    Ctx.B.CreateBr(Ctx.lookupBB(*Target));
+    return Error::success();
+  }
+
+  switch (Di.CanonOp) {
+  case CanonicalOp::S_GETPC_B64:
+    return unsupported(Ctx, Di,
+                       "captures a source address, which no raised "
+                       "instruction can jump to or load from");
+  case CanonicalOp::S_SETPC_B64:
+    return unsupported(
+        Ctx, Di, "jumps to a register value, which names no recovered block");
+  case CanonicalOp::S_SWAPPC_B64:
+    return unsupported(Ctx, Di,
+                       "calls through a register value and leaves behind a "
+                       "return address nothing can return to");
+  case CanonicalOp::S_RFE_B64:
+    return unsupported(Ctx, Di, "returns from an exception handler");
+  default:
+    break;
   }
 
   return unsupported(Ctx, Di);
