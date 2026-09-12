@@ -69,6 +69,9 @@ llvm::Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
 /// refusal.
 llvm::Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
                         OperandResolver &Op);
+/// Translate a supported matrix instruction to the corresponding target MFMA.
+llvm::Error handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
 /// Translate both components of a VOPD packet. Both halves read the register
 /// state that preceded the packet; their writes commit together afterwards.
 llvm::Error handleVOPD(RaiseContext &Ctx, const DecodedInst &Di);
