@@ -1,6 +1,5 @@
 ! Test lowering of Cray pointee references.
 ! RUN: bbc -emit-hlfir -fopenmp %s -o - 2>&1 | FileCheck %s
-! XFAIL: *
 module test_host_assoc_cray_pointer
   ! CHECK-LABEL: fir.global @_QMtest_host_assoc_cray_pointerEivar : i64
   real*8 var(*)
