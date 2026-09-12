@@ -4,20 +4,30 @@
 # Posts one Teams card when every check on a cron SHA-gate PR has finished.
 # Status is the overall PR rollup (success / failure / cancelled), not a
 # single workflow. Dispatch validation PRs are skipped.
+#
+# check_suite cannot be used here: GitHub never delivers it for suites that
+# Actions itself created, and every check on these PRs is an Actions run.
+# Multi-Arch CI is the long pole, so its completion starts the monitor, which
+# then waits for the remaining checks before reporting the overall result.
 
 name: RockCI SHA PR monitor
 
 on:
-  check_suite:
+  workflow_run:
+    workflows:
+      - Multi-Arch CI amd-staging
     types:
       - completed
+    branches:
+      - automation/rockci-therock-main-ref-**
 
 concurrency:
-  group: rockci-sha-pr-monitor-${{ github.event.check_suite.head_sha }}
+  group: rockci-sha-pr-monitor-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: true
 
 permissions:
   contents: read
+  actions: read
   checks: read
   pull-requests: read
 
@@ -27,13 +37,10 @@ env:
 jobs:
   notify:
     name: Notify overall PR check status
-    # Only the cron SHA-gate PRs: automation branch, open PR against
-    # amd-staging, and the baseline JSON is the only file the PR touches.
+    # Only the cron SHA-gate PRs: automation branch, plus the file check below.
     if: >-
       github.repository == 'ROCm/llvm-project' &&
-      startsWith(github.event.check_suite.head_branch, 'automation/rockci-therock-main-ref-') &&
-      github.event.check_suite.pull_requests[0] != null &&
-      github.event.check_suite.pull_requests[0].base.ref == 'amd-staging'
+      startsWith(github.event.workflow_run.head_branch, 'automation/rockci-therock-main-ref-')
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout notifier
@@ -46,9 +53,9 @@ jobs:
         id: baseline
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_BRANCH: ${{ github.event.check_suite.head_branch }}
-          HEAD_SHA: ${{ github.event.check_suite.head_sha }}
-          SUITE_UPDATED: ${{ github.event.check_suite.updated_at }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          SUITE_UPDATED: ${{ github.event.workflow_run.updated_at }}
         run: |
           set -euo pipefail
           PR_JSON="$(gh pr list \
@@ -82,8 +89,26 @@ jobs:
             exit 0
           fi
 
-          ROLLUP="$(gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" \
-            --json statusCheckRollup)"
+          # Multi-Arch CI is done, but lint/format style checks may still run.
+          for attempt in $(seq 1 60); do
+            ROLLUP="$(gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" \
+              --json statusCheckRollup)"
+            PENDING="$(echo "$ROLLUP" | jq -r '
+              [
+                .statusCheckRollup // []
+                | .[]
+                | select(.name != "RockCI SHA PR monitor"
+                         and .name != "Notify overall PR check status")
+                | select((.status // "") != "COMPLETED" and (.status // "") != "")
+              ] | length
+            ')"
+            if [[ "$PENDING" == "0" ]]; then
+              break
+            fi
+            echo "Attempt ${attempt}: ${PENDING} check(s) still running."
+            sleep 30
+          done
+
           echo "$ROLLUP" | jq -r '
             .statusCheckRollup // []
             | map(select(.name != "RockCI SHA PR monitor"
@@ -92,18 +117,9 @@ jobs:
             | "\(.name) status=\(.status // "") conclusion=\(.conclusion // "")"
           '
 
-          READY="$(echo "$ROLLUP" | jq -r '
-            [
-              .statusCheckRollup // []
-              | .[]
-              | select(.name != "RockCI SHA PR monitor"
-                       and .name != "Notify overall PR check status")
-              | select((.status // "") != "COMPLETED" and (.status // "") != "")
-            ] | if length == 0 then "true" else "false" end
-          ')"
-          if [[ "$READY" != "true" ]]; then
+          if [[ "$PENDING" != "0" ]]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "PR checks are still running; waiting for a later suite."
+            echo "::warning::${PENDING} check(s) still running after 30 minutes; no card sent."
             exit 0
           fi
 
