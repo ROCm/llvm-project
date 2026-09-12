@@ -35,7 +35,7 @@ using namespace llvm;
 
 static cl::opt<unsigned> KernargPreloadCount(
     "amdgpu-kernarg-preload-count",
-    cl::desc("How many kernel arguments to preload onto SGPRs"), cl::init(0));
+    cl::desc("How many kernel arguments to preload onto SGPRs"), cl::init(10000));
 
 static cl::opt<bool>
     EnableKernargPreload("amdgpu-kernarg-preload",
