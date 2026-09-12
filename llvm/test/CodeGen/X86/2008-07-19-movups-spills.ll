@@ -1,4 +1,10 @@
 ; RUN: llc < %s -mtriple=i686-pc-linux -mattr=sse2 | FileCheck %s
+; RUN: llc < %s -mtriple=i686-pc-linux -mattr=sse2 -regalloc-reuse-reassignment-blockers=false -o %t.uncached
+; RUN: llc < %s -mtriple=i686-pc-linux -mattr=sse2 -regalloc-reuse-reassignment-blockers -regalloc-verify-reassignment-blockers -o %t.cached
+; RUN: diff %t.uncached %t.cached
+; RUN: %if asserts %{ llc < %s -mtriple=i686-pc-linux -mattr=sse2 -regalloc-reuse-reassignment-blockers -regalloc-verify-reassignment-blockers -stats -o /dev/null 2>&1 | FileCheck %s --check-prefix=BLOCKERS %}
+; BLOCKERS-DAG: {{[1-9][0-9]*}} regalloc - Number of reused reassignment blockers
+; BLOCKERS-DAG: {{[1-9][0-9]*}} regalloc - Number of reassignment blockers reused for a different vreg
 ; PR2539
 ; PR8969 - make 32-bit linux have a 16-byte aligned stack
 ; Verify that movups is still generated with an aligned stack for the globals
