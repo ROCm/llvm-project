@@ -64,6 +64,8 @@ CODEGENOPT(PseudoProbeForProfiling, 1, 0) ///< Emit pseudo probes for sample pro
 CODEGENOPT(Underscoring, 1, 1)
 CODEGENOPT(OffloadGlobalFiltering, 1, 0)
 CODEGENOPT(DeferDescriptorMapping, 1, 0) ///< Fortran OpenMP specific optimisation for delaying descriptor mapping until target/target data regions
+CODEGENOPT(OpenMPDescriptorElision, 1, 0) ///< Fortran OpenMP specific optimisation for eliding assumed-shape array descriptors inside target regions
+CODEGENOPT(OpenMPDescriptorElisionRemarks, 1, 0) ///< Emit optimization remarks explaining why an assumed-shape array descriptor could not be elided
 
 ENUM_CODEGENOPT(FPMaxminBehavior, Fortran::common::FPMaxminBehavior, 2, Fortran::common::FPMaxminBehavior::Legacy)
 ENUM_CODEGENOPT(RelocationModel, llvm::Reloc::Model, 3, llvm::Reloc::PIC_) ///< Name of the relocation model to use.
