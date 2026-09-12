@@ -8,6 +8,7 @@
 //
 // This file implements construction of a TargetInfo object from a
 // target triple.
+// PPH triage test inner commit 1/4 (harmless).
 //
 //===----------------------------------------------------------------------===//
 
