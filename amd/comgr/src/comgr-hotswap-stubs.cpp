@@ -6,11 +6,11 @@
 //===----------------------------------------------------------------------===//
 //
 // The gfx1250 B0-to-A0 byte rewriter these entry points drove has been removed.
-// No source/target ISA pair selects an enabled transformation any more, so every
-// call takes the documented "unsupported combination" path. These definitions
-// exist only to keep the amd_comgr_3.2 and amd_comgr_3.4 symbol versions in
-// src/exportmap.in intact; drop them, the declarations, and the version nodes at
-// Comgr v4.0.
+// No source/target ISA pair selects an enabled transformation any more, so
+// every call takes the documented "unsupported combination" path. These
+// definitions exist only to keep the amd_comgr_3.2 and amd_comgr_3.4 symbol
+// versions in src/exportmap.in intact; drop them, the declarations, and the
+// version nodes at Comgr v4.0.
 //
 //===----------------------------------------------------------------------===//
 
