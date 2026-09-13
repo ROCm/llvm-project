@@ -15,6 +15,17 @@ These changes are ones which we think may surprise users when upgrading to
 Comgr v4.0 because of the opportunity they pose for disruption to existing
 code bases.
 
+- Removed the HotSwap ISA rewriter, the byte-level in-place code-object patching
+path that backed `amd_comgr_hotswap_rewrite` and
+`amd_comgr_hotswap_rewrite_with_options` (notably the gfx1250 B0-to-A0 errata
+workarounds and gfx125x entry trampolines). Both entry points are now deprecated
+stubs that always return `AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT`; they remain
+declared and exported for binary compatibility and will be removed outright in a
+future major release, along with `amd_comgr_hotswap_rewrite_flag_t` and
+`amd_comgr_hotswap_rewrite_options_t`. The `AMD_COMGR_HOTSWAP_ENTRY_STUB_SYMBOLS`
+environment variable is gone. The cross-generation IR transpiler under
+`src/hotswap` (opt-in via `COMGR_ENABLE_HOTSWAP_TRANSPILE`) is unaffected.
+
 
 New Features
 ------------

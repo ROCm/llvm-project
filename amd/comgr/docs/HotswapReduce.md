@@ -73,39 +73,37 @@ absolute script path makes the recorded reproduction argv unambiguous on the
 same filesystem. Existing regular-file argv items are resolved to absolute
 paths before the first predicate run.
 
-## PR #3646 offline differential workflow
+## Offline differential workflow
 
-An A0 runtime failure is not required. The predicate can be any deterministic
-offline check, which makes the reducer useful while validating the hotswap
-implementation in PR #3646. For a discrepant hipBLASLt or hipSOLVER case,
-first put the involved code objects and launch records in a regular bundle.
-Then use one of these predicate shapes:
+A runtime failure is not required. The predicate can be any deterministic
+offline check, which makes the reducer useful for validating a transformation
+against a reference build. For a discrepant case, first put the involved code
+objects and launch records in a regular bundle, then point the predicate at a
+wrapper that:
 
-- A wrapper rewrites the candidate with the PR #3646 build, emits its
-  structural manifest, compares it with a fixed PR #3598 reference manifest,
-  and exits with the interesting code while a difference remains.
-- A wrapper runs `hotswap-audit` over every retained object and exits with the
-  interesting code while the audit reports an invariant violation.
-- A wrapper runs `hotswap-semcheck` for the retained kernels and exits with the
-  interesting code while it returns a counterexample.
+- runs the candidate through the build under test, emits a structural
+  manifest, compares it against a fixed reference manifest, and exits with the
+  interesting code while a difference remains; or
+- runs any invariant check over every retained object and exits with the
+  interesting code while it reports a violation.
 
 For example, an offline manifest differential can be driven as:
 
 ```console
 python3 utils/hotswap/hotswap_reduce.py \
-  --bundle hipblaslt-discrepancy.json \
-  --output reduced-3646-difference \
+  --bundle discrepancy.json \
+  --output reduced-difference \
   --predicate /absolute/path/manifest-diff-predicate \
-  --predicate-arg=/absolute/path/pr3598-reference.json \
+  --predicate-arg=/absolute/path/reference.json \
   --predicate-arg='{bundle}' \
   --predicate-runs 2
 ```
 
 The wrapper owns the meaning of the comparison and the selected build. The
-reducer only sees an argv vector and an exit code, so no PR-specific opcode,
-kernel name, or library test name is encoded in its reduction logic. Keep the
-reference manifest outside the candidate bundle so ddmin cannot reduce the
-oracle itself.
+reducer only sees an argv vector and an exit code, so no transformation-specific
+opcode, kernel name, or library test name is encoded in its reduction logic.
+Keep the reference manifest outside the candidate bundle so ddmin cannot reduce
+the oracle itself.
 
 ## Input and output bundle
 
