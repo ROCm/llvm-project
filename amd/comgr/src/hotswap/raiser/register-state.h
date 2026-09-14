@@ -132,6 +132,9 @@ public:
   // lanes for per-lane side effects.
   void emitUnderExec(llvm::function_ref<void()> Body);
 
+  /// Emit Body for every lane if the source wave has any active lane.
+  void emitWithNonzeroExec(llvm::function_ref<void()> Body);
+
   // Record CmpI1 as the per-lane compare a V_CMP wrote to SGPR BaseIdx, both
   // for reuse within the block and in the cross-block shadow storage. IsPair
   // says whether the destination spans BaseIdx and its successor.
@@ -207,6 +210,10 @@ public:
   void collectAllocas(llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const;
 
 private:
+  /// Emit a conditional region while preserving register-state tracking.
+  void emitUnderCondition(llvm::Value *Condition,
+                          llvm::function_ref<void()> Body);
+
   RegisterState(llvm::IRBuilder<> &B, const WaveProjection &Projection,
                 const MCState &MC, UserSgprLayout Layout);
 
