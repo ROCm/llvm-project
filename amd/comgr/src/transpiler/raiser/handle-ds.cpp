@@ -18,7 +18,10 @@
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "Utils/AMDGPUBaseInfo.h"
 
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/Alignment.h"
@@ -31,19 +34,62 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 
-/// Return the index of a required named operand of a direct DS load.
+/// Return the index of a required named operand of a single-address DS load.
 static unsigned dsOperandIndex(const DecodedInst &Instruction,
                                AMDGPU::OpName Name) {
   const int Index =
       COMGR::transpiler::getNamedOperandIdx(Instruction.Inst.getOpcode(), Name);
   assert(Index >= 0 &&
          static_cast<unsigned>(Index) < Instruction.numOperands() &&
-         "direct DS load is missing a required operand");
+         "DS load is missing a required operand");
   return Index;
+}
+
+/// Gather eight elements per lane from LDS and pack them into the destination.
+static void emitTransposedDSLoad(RaiseContext &Context, ParsedReg Destination,
+                                 Value *ByteAddress, unsigned ElementBits) {
+  IRBuilder<> &B = Context.B;
+  Value *Lane = Context.emitLaneIdx();
+  Value *ElementOffset = B.CreateMul(B.CreateAnd(Lane, B.getInt32(7)),
+                                     B.getInt32(ElementBits / 8));
+  Value *SourceBase =
+      B.CreateAnd(Lane, B.getInt32(ElementBits == 8 ? ~15 : ~7));
+  if (ElementBits == 8) {
+    Value *Half = B.CreateAnd(B.CreateLShr(Lane, 1), B.getInt32(4));
+    SourceBase = B.CreateOr(SourceBase, Half);
+  }
+
+  // A nonzero source EXEC makes every lane generate an address and write back.
+  Context.registers().emitWithNonzeroExec([&] {
+    const unsigned ElementsPerDword = 32 / ElementBits;
+    Type *ResultType =
+        FixedVectorType::get(B.getInt32Ty(), Destination.WidthInDwords);
+    Value *Result = PoisonValue::get(ResultType);
+    for (unsigned I = 0; I < Destination.WidthInDwords; ++I) {
+      Value *Word = B.getInt32(0);
+      for (unsigned J = 0; J < ElementsPerDword; ++J) {
+        const unsigned SourceOffset = I * (ElementBits == 8 ? 8 : 2) + J;
+        Value *SourceLane = B.CreateAdd(SourceBase, B.getInt32(SourceOffset));
+        Value *Index = B.CreateMul(SourceLane, B.getInt32(4));
+        Value *Address = B.CreateIntrinsic(Intrinsic::amdgcn_ds_bpermute, {},
+                                           {Index, ByteAddress});
+        Address = B.CreateAdd(Address, ElementOffset);
+        Value *Pointer = B.CreateIntToPtr(
+            Address, PointerType::get(B.getContext(), AMDGPUAS::LOCAL_ADDRESS));
+        Value *Element =
+            B.CreateAlignedLoad(B.getIntNTy(ElementBits), Pointer, Align(1));
+        Element = B.CreateZExt(Element, B.getInt32Ty());
+        Word = B.CreateOr(Word, B.CreateShl(Element, J * ElementBits));
+      }
+      Result = B.CreateInsertElement(Result, Word, I);
+    }
+    Context.registers().regFile().writeRegVec(B, Destination, Result);
+  });
 }
 
 Error handleDS(RaiseContext &Context, const DecodedInst &Instruction) {
   unsigned WidthInDwords;
+  unsigned TransposeElementBits = 0;
   switch (Instruction.CanonOp) {
   case CanonicalOp::DS_LOAD_B32:
     WidthInDwords = 1;
@@ -54,8 +100,23 @@ Error handleDS(RaiseContext &Context, const DecodedInst &Instruction) {
   case CanonicalOp::DS_LOAD_B128:
     WidthInDwords = 4;
     break;
+  case CanonicalOp::DS_LOAD_TR8_B64:
+    WidthInDwords = 2;
+    TransposeElementBits = 8;
+    break;
+  case CanonicalOp::DS_LOAD_TR16_B128:
+    WidthInDwords = 4;
+    TransposeElementBits = 16;
+    break;
   default:
     return unsupported(Context, Instruction, "unsupported DS operation");
+  }
+
+  if (TransposeElementBits &&
+      (!AMDGPU::isGFX1250(Context.Projection.SourceSTI) ||
+       Context.Projection.sourceWaveSize() != 32)) {
+    return unsupported(Context, Instruction,
+                       "DS transpose loads require a gfx1250 wave32 source");
   }
 
   if (AMDGPU::getIsaVersion(Context.MC.SubtargetInfo->getCPU()).Major < 9) {
@@ -103,6 +164,12 @@ Error handleDS(RaiseContext &Context, const DecodedInst &Instruction) {
   Value *ByteAddress = Context.B.CreateAdd(
       *Address, Context.B.getInt32(OffsetInBytes), "lds_address");
   ByteAddress = Context.freezeMemAddr(ByteAddress);
+
+  if (TransposeElementBits) {
+    emitTransposedDSLoad(Context, *Destination, ByteAddress,
+                         TransposeElementBits);
+    return Error::success();
+  }
 
   // Inactive lanes can hold invalid addresses, so guard the load itself.
   Context.registers().emitUnderExec([&] {

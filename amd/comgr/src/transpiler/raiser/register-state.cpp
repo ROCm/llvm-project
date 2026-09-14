@@ -631,12 +631,21 @@ void RegisterState::storeAGPR32(unsigned Idx, Value *V) {
 }
 
 void RegisterState::emitUnderExec(llvm::function_ref<void()> Body) {
-  Value *Active = emitLaneActiveBit();
+  emitUnderCondition(emitLaneActiveBit(), Body);
+}
+
+void RegisterState::emitWithNonzeroExec(llvm::function_ref<void()> Body) {
+  Value *ExecNonzero = B.CreateNot(emitExecIsZero(), "exec_nonzero");
+  emitUnderCondition(ExecNonzero, Body);
+}
+
+void RegisterState::emitUnderCondition(Value *Condition,
+                                       llvm::function_ref<void()> Body) {
   BasicBlock *PreBb = B.GetInsertBlock();
   Function *F = PreBb->getParent();
   BasicBlock *DoBb = BasicBlock::Create(B.getContext(), "spe_do", F);
   BasicBlock *SkipBb = BasicBlock::Create(B.getContext(), "spe_skip", F);
-  B.CreateCondBr(Active, DoBb, SkipBb);
+  B.CreateCondBr(Condition, DoBb, SkipBb);
 
   // This splits one source block across several LLVM blocks, all of them
   // dominated by the block the state was established in, so the state survives
