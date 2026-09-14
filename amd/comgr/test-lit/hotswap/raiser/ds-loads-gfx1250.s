@@ -5,9 +5,11 @@
 ; RUN:   --emit-ir=ds_widths,ds_exec_overlap > %t.ll
 ; RUN: %FileCheck %s --check-prefixes=IR,EXEC --input-file=%t.ll \
 ; RUN:   --implicit-check-not="load {{.+}}, ptr addrspace(3)"
-; RUN: opt -passes='default<O2>' -S %t.ll -o %t.opt.ll
+; RUN: %clang --target=amdgcn-amd-amdhsa -mcpu=gfx950 -nogpulib \
+; RUN:   -x ir -O2 -S -emit-llvm %t.ll -o %t.opt.ll
 ; RUN: %FileCheck %s --check-prefix=OPT --input-file=%t.opt.ll
-; RUN: llc -mcpu=gfx950 -filetype=obj %t.opt.ll -o %t.target.o
+; RUN: %clang --target=amdgcn-amd-amdhsa -mcpu=gfx950 -nogpulib \
+; RUN:   -x ir -O2 -c %t.opt.ll -o %t.target.o
 ; RUN: %llvm-readelf --notes %t.target.o | %FileCheck %s --check-prefix=META
 ; META: .group_segment_fixed_size: 65568
 ; META: .name:           ds_widths
