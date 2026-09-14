@@ -15,9 +15,13 @@
 	.type	mfma_direct,@function
 ; IR-LABEL: define amdgpu_kernel void @mfma_direct(
 mfma_direct:
+	s_mov_b64 exec, 1
 ; DECODE: V_MFMA_F32_16x16x16_F16{{.+}}v_mfma_f32_16x16x16_f16
 ; IR: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16f16
+; IR: br i1 {{.*}}, label %exec_all_do, label %exec_all_skip
+; IR: exec_all_do:
 	v_mfma_f32_16x16x16_f16 v[4:7], v[0:1], v[2:3], v[4:7]
+	s_mov_b64 exec, -1
 ; DECODE: V_MFMA_F32_16x16x16_BF16_1K{{.+}}v_mfma_f32_16x16x16_bf16
 ; IR: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16bf16.1k
 	v_mfma_f32_16x16x16_bf16 v[4:7], v[0:1], v[2:3], v[4:7]
