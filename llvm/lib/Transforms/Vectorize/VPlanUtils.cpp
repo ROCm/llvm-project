@@ -1372,9 +1372,7 @@ void vputils::detail::pullOutPermutationsImpl(
 VPValue *vputils::reconstructSSA(VPBasicBlock *VPBB,
                                  DenseMap<VPBasicBlock *, VPValue *> &Defs) {
   assert(!Defs.empty() && "Defs shouldn't be empty");
-  assert(
-      is_contained(vp_depth_first_shallow(VPBB->getPlan()->getEntry()), VPBB) &&
-      "VPBB isn't reachable from entry");
+  assert(VPBB->getPlan() && "VPBB isn't reachable from entry");
   if (VPValue *Def = Defs.lookup(VPBB))
     return Def;
   // If the entry block is reached and there's still no def, then Defs is

@@ -2088,7 +2088,7 @@ TEST_F(VPUtilsTest, ReconstructSSAUnreachableCycle) {
   VPBB1->appendRecipe(Def1);
 
   EXPECT_DEATH(reconstructSSA(VPBB2, {{VPBB1, Def1}}),
-               "VPBB isn't reachable from entry");
+               "VPlan without any entry node without predecessors");
 }
 
 TEST_F(VPUtilsTest, ReconstructSSAUnreachableCyclePredecessor) {
@@ -2111,7 +2111,7 @@ TEST_F(VPUtilsTest, ReconstructSSAUnreachableCyclePredecessor) {
   VPBB1->appendRecipe(Def1);
 
   EXPECT_DEATH(reconstructSSA(VPBB3, {{VPBB1, Def1}}),
-               "VPBB isn't reachable from entry");
+               "VPlan without any entry node without predecessors");
 }
 #endif
 
