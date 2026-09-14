@@ -379,8 +379,7 @@ This option is `OFF` if this feature is not supported for the platform.
 ### Options for `libompd`
 
 **LIBOMP_OMPD_SUPPORT**:BOOL
-: Enable building the libompd library. The GDB plugin loads `libompd.so` with
-LLVM Support `DynamicLibrary` (not POSIX `dlopen`).
+: Enable building the libompd library.
 
 **LIBOMPD_LD_STD_FLAGS**:STRING
 : Use `-stdlibc++` instead of `-libc++` library for C++.

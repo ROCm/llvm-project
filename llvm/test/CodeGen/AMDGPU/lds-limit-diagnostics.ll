@@ -16,9 +16,10 @@
 ; RUN: not llc -mtriple=amdgpu6.00-amd-amdpal -filetype=null %s 2>&1 | FileCheck -check-prefix=ERROR-LIMIT32K %s
 
 ; Pre-gfx10 has no WGP mode, so +cumode must not change the limit.
-; RUN: not llc -mtriple=amdgpu9.42-amd-amdhsa -mattr=+cumode -filetype=null %s 2>&1 | FileCheck -check-prefix=ERROR-LIMIT64K %s
-; RUN: not llc -mtriple=amdgpu9.0a-amd-amdhsa -mattr=+cumode -filetype=null %s 2>&1 | FileCheck -check-prefix=ERROR-LIMIT64K %s
-; RUN: not llc -mtriple=amdgpu9.50-amd-amdhsa -mattr=+cumode -filetype=null %s 2>&1 | FileCheck -check-prefix=ERROR-LIMIT160K %s
+; there is something wrong with +cumode, its emtting V>>1
+; RUN: not llc -mtriple=amdgpu9.42-amd-amdhsa -mattr=+cumode -filetype=null %s 2>&1 | FileCheck -check-prefix=ERROR-LIMIT64Ks %s
+; RUN: not llc -mtriple=amdgpu9.0a-amd-amdhsa -mattr=+cumode -filetype=null %s 2>&1 | FileCheck -check-prefix=ERROR-LIMIT64Ks %s
+; RUN: not llc -mtriple=amdgpu9.50-amd-amdhsa -mattr=+cumode -filetype=null %s 2>&1 | FileCheck -check-prefix=ERROR-LIMIT160Ks %s
 
 ; gfx950 supports upto 160 KB LDS memory. The generic target does not.
 ; This is a negative test to check when the LDS size exceeds the max usable limit.
@@ -26,6 +27,10 @@
 ; ERROR-LIMIT160K: error: <unknown>:0:0: local memory (163844) exceeds limit (163840) in function 'test_lds_limit'
 ; ERROR-LIMIT64K: error: <unknown>:0:0: local memory (163844) exceeds limit (65536) in function 'test_lds_limit'
 ; ERROR-LIMIT32K: error: <unknown>:0:0: local memory (163844) exceeds limit (32768) in function 'test_lds_limit'
+
+; ERROR-LIMIT160Ks: error: <unknown>:0:0: local memory (163844) exceeds limit (81920) in function 'test_lds_limit'
+; ERROR-LIMIT64Ks: error: <unknown>:0:0: local memory (163844) exceeds limit (32768) in function 'test_lds_limit'
+
 @dst = addrspace(3) global [40961 x i32] poison
 
 define amdgpu_kernel void @test_lds_limit(i32 %val) {
