@@ -672,7 +672,7 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // semantics. Skip this if `-fsanitize=address` is set.
   const SanitizerArgs &SanArgs = getToolChain().getSanitizerArgs(Args);
   if (!SanArgs.needsAsanRt())
-    addSanitizerRuntimes(getToolChain(), Args, CmdArgs);
+    addSanitizerRuntimes(getToolChain(), Args, CmdArgs, C);
 
   if (Args.hasArg(options::OPT_stdlib))
     CmdArgs.append({"-lc", "-lm"});
