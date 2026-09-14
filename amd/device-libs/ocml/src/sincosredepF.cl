@@ -9,8 +9,11 @@
 #include "trigredF.h"
 
 CONSTATTR struct scret
-MATH_PRIVATE(sincosred2)(float x, float y)
+MATH_PRIVATE(sincosredep)(float2 xy)
 {
+    float x = xy.hi;
+    float y = xy.lo;
+
     const float c0 =  0x1.555556p-5f;
     const float c1 = -0x1.6c16b2p-10f;
     const float c2 =  0x1.a00e98p-16f;

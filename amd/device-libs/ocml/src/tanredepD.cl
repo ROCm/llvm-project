@@ -13,19 +13,22 @@
 #define NOCFLOW
 
 CONSTATTR double
-MATH_PRIVATE(tanred2)(double x, double xx, int sel)
+MATH_PRIVATE(tanredep)(double2 xy, int sel)
 {
 #if defined NOCFLOW
-    double s = sqr(con(x,xx)).hi;
+    double s = sqr(xy).hi;
     double p = s * PE13(s, 0x1.5e089c751c08cp-16, -0x1.78809a9a29f71p-15, 0x1.7746f90a8aaep-14,
                          -0x1.bb44da6fbf144p-16, 0x1.1e634a7943acfp-13, 0x1.d250fdeb68febp-13,
                          0x1.37fd9b58c4d95p-11, 0x1.7d5af15120e2cp-10, 0x1.d6d93e09491dfp-9,
                          0x1.226e12033784dp-7, 0x1.664f49ac36ae2p-6, 0x1.ba1ba1b451c21p-5,
                          0x1.11111111185b7p-3, 0x1.55555555554eep-2);
-    double2 t = fadd(con(x,xx), mul(x, p));
+    double2 t = fadd(xy, mul(xy.hi, p));
     double2 tr = frcp(t);
     return sel ? -tr.hi : t.hi;
 #else
+    double x = xy.hi;
+    double xx = xy.lo;
+
     const double piby4_lead = 0x1.921fb54442d18p-1;
     const double piby4_tail = 0x1.1a62633145c06p-55;
 

@@ -16,8 +16,8 @@ MATH_MANGLE(sin)(double x)
 
     double ax = BUILTIN_ABS_F64(x);
 
-    struct redret r = MATH_PRIVATE(trigred)(ax);
-    struct scret sc = MATH_PRIVATE(sincosred2)(r.hi, r.lo);
+    struct epredret r = MATH_PRIVATE(eptrigred)(ax);
+    struct scret sc = MATH_PRIVATE(sincosredep)(r.r);
 
     double s = (r.i & 1) == 0 ? sc.s : sc.c;
 

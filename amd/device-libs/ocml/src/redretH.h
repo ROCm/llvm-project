@@ -5,8 +5,18 @@
  * License. See LICENSE.TXT for details.
  *===------------------------------------------------------------------------*/
 
-#include "redretH.h"
+#ifndef OCML_REDRETH_H
+#define OCML_REDRETH_H
 
-extern CONSTATTR struct redret MATH_PRIVATE(trigpired)(half x);
-extern CONSTATTR struct scret MATH_PRIVATE(sincospired)(half x);
-extern CONSTATTR half MATH_PRIVATE(tanpired)(half x, short i);
+// Single-part reduced argument: x = i*(pi/2) + hi, |hi| <= pi/4.
+struct redret {
+    half hi;
+    short i;
+};
+
+struct scret {
+    half s;
+    half c;
+};
+
+#endif // OCML_REDRETH_H

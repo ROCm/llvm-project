@@ -13,9 +13,8 @@
 #include "trigredD.h"
 
 CONSTATTR double4
-MATH_PRIVATE(epsincosred2)(double x, double y)
+MATH_PRIVATE(epsincosredep)(double2 a)
 {
-    double2 a = fadd(x, y);
     double2 a2 = sqr(a);
     double2 a3 = mul(a2, a);
     double2 a4 = sqr(a2);

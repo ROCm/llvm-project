@@ -8,8 +8,8 @@
 #include "mathF.h"
 #include "trigredF.h"
 
-CONSTATTR struct redret2
-MATH_PRIVATE(trigred2small)(float x)
+CONSTATTR struct epredret
+MATH_PRIVATE(eptrigredsmall)(float x)
 {
     const float twobypi = 0x1.45f306p-1f;
     const float piby2_h = 0x1.921fb4p+0f;
@@ -28,9 +28,9 @@ MATH_PRIVATE(trigred2small)(float x)
     float rh = yh + yt;
     float rt = yt - (rh - yh);
 
-    struct redret2 ret;
-    ret.hi = rh;
-    ret.lo = rt;
+    struct epredret ret;
+    ret.r.hi = rh;
+    ret.r.lo = rt;
     ret.i = BUILTIN_ISNAN_F32(fn) ? 0 : ((int)fn & 0x3);
     return ret;
 }

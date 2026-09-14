@@ -60,8 +60,8 @@
         F0 = __e1; \
     } while(0)
     
-CONSTATTR struct redret
-MATH_PRIVATE(trigredlarge)(double x)
+CONSTATTR struct epredret
+MATH_PRIVATE(eptrigredlarge)(double x)
 {
     // Scale x by relevant part of 2/pi
     double p2 = BUILTIN_AMDGPU_TRIG_PREOP_F64(x, 0);
@@ -96,9 +96,9 @@ MATH_PRIVATE(trigredlarge)(double x)
 
     FSUM2(rh, rt, rh, rt);
 
-    struct redret ret;
-    ret.hi = rh;
-    ret.lo = rt;
+    struct epredret ret;
+    ret.r.hi = rh;
+    ret.r.lo = rt;
     ret.i = i & 0x3;
     return ret;
 }
