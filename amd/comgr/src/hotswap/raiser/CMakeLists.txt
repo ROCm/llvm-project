@@ -35,6 +35,7 @@ add_library(hotswap-raiser OBJECT
   raise-context.cpp
   operand-resolver.cpp
   flat-addr.cpp
+  handle-ds.cpp
   handle-flat.cpp
   handle-smem.cpp
   handle-sop1.cpp

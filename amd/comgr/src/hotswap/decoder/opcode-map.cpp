@@ -255,6 +255,12 @@ static const Entry kCanonTable[] = {
     E(S_LOAD_DWORDX16_SGPR_IMM, S_LOAD_B512),
     E(GLOBAL_LOAD_DWORD, GLOBAL_LOAD_B32),
     E(GLOBAL_STORE_DWORD, GLOBAL_STORE_B32),
+    E(DS_READ_B128, DS_LOAD_B128),
+    E(DS_READ_B128_gfx9, DS_LOAD_B128),
+    E(DS_READ_B32, DS_LOAD_B32),
+    E(DS_READ_B32_gfx9, DS_LOAD_B32),
+    E(DS_READ_B64, DS_LOAD_B64),
+    E(DS_READ_B64_gfx9, DS_LOAD_B64),
     // Integer comparisons. Each comparison is reached by three pseudos: the
     // plain one, the pre-GFX10 `v_cmpx` that also writes a scalar destination,
     // and the GFX10-and-later `v_cmpx` that writes EXEC alone.
