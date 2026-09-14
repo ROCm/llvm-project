@@ -1,13 +1,13 @@
 ; REQUIRES: comgr-has-hotswap-transpile
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx900 -filetype=obj %s -o %t.gfx900.o
-; RUN: %ld.lld -shared %t.gfx900.o -o %t.gfx900.hsaco
-; RUN: not %hotswap_transpile_cli %t.gfx900.hsaco --target-isa=gfx950 \
+; RUN: %llvm-mc -triple=amdgpu9-amd-amdhsa -filetype=obj %s -o %t.gfx9.o
+; RUN: %ld.lld -shared %t.gfx9.o -o %t.gfx9.hsaco
+; RUN: not %hotswap_transpile_cli %t.gfx9.hsaco --target-isa=gfx950 \
 ; RUN:   --emit-ir=ds_gds 2>&1 | %FileCheck %s --check-prefix=GDS
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx803 -filetype=obj %s -o %t.gfx803.o
+; RUN: %llvm-mc -triple=amdgpu8.03-amd-amdhsa -filetype=obj %s -o %t.gfx803.o
 ; RUN: %ld.lld -shared %t.gfx803.o -o %t.gfx803.hsaco
 ; RUN: not %hotswap_transpile_cli %t.gfx803.hsaco --target-isa=gfx950 \
 ; RUN:   --emit-ir=ds_m0 2>&1 | %FileCheck %s --check-prefix=M0
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1010 -filetype=obj %s -o %t.gfx1010.o
+; RUN: %llvm-mc -triple=amdgpu10.10-amd-amdhsa -filetype=obj %s -o %t.gfx1010.o
 ; RUN: %ld.lld -shared %t.gfx1010.o -o %t.gfx1010.hsaco
 ; RUN: not %hotswap_transpile_cli %t.gfx1010.hsaco --target-isa=gfx950 \
 ; RUN:   --emit-ir=ds_wide 2>&1 | %FileCheck %s --check-prefix=WGP
