@@ -69,6 +69,9 @@ struct DeviceTy {
   /// Try to initialize the device and return any failure.
   llvm::Error init();
 
+  /// Deinitialize the plugin device associated with this DeviceTy.
+  void deinit();
+
   /// Provide access to the mapping handler.
   MappingInfoTy &getMappingInfo() { return MappingInfo; }
 
@@ -211,9 +214,6 @@ struct DeviceTy {
   }
 
 private:
-  /// Deinitialize the device (and plugin).
-  void deinit();
-
   /// All offload entries available on this device.
   using DeviceOffloadEntriesMapTy =
       llvm::DenseMap<llvm::StringRef, OffloadEntryTy>;

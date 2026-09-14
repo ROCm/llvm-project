@@ -43,6 +43,7 @@ double llvm::omp::target::ompt::HostToDeviceOffset = .0;
 std::map<ompt_device_t *, int32_t> llvm::omp::target::ompt::Devices;
 
 int llvm::omp::target::ompt::getDeviceId(ompt_device_t *Device) {
+  assert(Devices.size() > 0 && "No device mapping entries found");
   // Block other threads, which might trigger an erase (for the same device)
   std::unique_lock<std::mutex> Lock(DeviceIdWritingMutex);
   auto DeviceIterator = Devices.find(Device);
@@ -72,6 +73,8 @@ void llvm::omp::target::ompt::setDeviceId(ompt_device_t *Device,
     return;
   }
   Devices.emplace(Device, DeviceId);
+  ODBG(ODT_Tool) << "Registered OMPT Device=" << Device
+                 << " user id=" << DeviceId;
 }
 
 void llvm::omp::target::ompt::removeDeviceId(ompt_device_t *Device) {
