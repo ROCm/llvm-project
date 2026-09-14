@@ -60,49 +60,29 @@ include_directories (${OMPD_INCLUDE_PATH})
 include_directories (${LIBOMP_INCLUDE_DIR})
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/__init__.py
-<<<<<<< HEAD
                    DEPENDS ompdModule.c ompdDLService.c ompdAPITests.c setup.py ompd/frame_filter.py ompd/__init__.py ompd/ompd_address_space.py ompd/ompd_callbacks.py ompd/ompd_handles.py ompd/ompd.py
                    COMMAND ${CMAKE_COMMAND} -E env LIBOMP_INCLUDE_DIR=${LIBOMP_INCLUDE_DIR}
                    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py -v bdist_wheel -b ${CMAKE_CURRENT_BINARY_DIR}/build -d ${CMAKE_CURRENT_BINARY_DIR}
                    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py clean --all
                    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_SOURCE_DIR}/ompd.egg-info
                    COMMAND ${Python3_EXECUTABLE} -m pip install ${PYSYSFLAG} -U -t ${CMAKE_CURRENT_BINARY_DIR}/python-module --no-index --find-links=${CMAKE_CURRENT_BINARY_DIR} ompd
-=======
-                   DEPENDS ompdModule.c ompdDLService.cpp ompdAPITests.c ompd/frame_filter.py ompd/__init__.py ompd/ompd_address_space.py ompd/ompd_callbacks.py ompd/ompd_handles.py ompd/ompd.py
-                   COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/ompd ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/
->>>>>>> 8eec838ca247
                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_custom_target(ompd_gdb_plugin ALL
                   DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/__init__.py
                   COMMENT "Building the OMPD GDB plugin")
 
-add_library (ompdModule MODULE ompdModule.c ompdAPITests.c ompdDLService.cpp)
+add_library (ompdModule MODULE ompdModule.c ompdAPITests.c ompdDLService.c)
 include_directories (
         ${LIBOMP_INCLUDE_DIR}
         ${LIBOMP_SRC_DIR}
         ${Python3_INCLUDE_DIRS}
 )
-<<<<<<< HEAD
 
-=======
-if(LLVM_INCLUDE_DIRS)
-    target_include_directories(ompdModule PRIVATE ${LLVM_INCLUDE_DIRS})
-else()
-    target_include_directories(ompdModule PRIVATE ${LLVM_INCLUDE_DIR} ${LLVM_MAIN_INCLUDE_DIR})
-endif()
->>>>>>> 8eec838ca247
 target_link_libraries (ompdModule ${Python3_LIBRARIES})
-# Use LLVM Support's DynamicLibrary, not POSIX dlopen, and not libclang-cpp.
-if(LLVM_LINK_LLVM_DYLIB)
-    target_link_libraries(ompdModule LLVM)
-else()
-    llvm_map_components_to_libnames(ompd_llvm_libs Support)
-    target_link_libraries(ompdModule ${ompd_llvm_libs})
-endif()
+target_link_libraries (ompdModule ${CMAKE_DL_LIBS})
 
 set_target_properties (ompdModule PROPERTIES PREFIX "")
-set_target_properties (ompdModule PROPERTIES LINKER_LANGUAGE CXX)
 set_target_properties (ompdModule PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/")
 
 openmp_register_meta_dep(ompd_gdb_plugin ompdModule)

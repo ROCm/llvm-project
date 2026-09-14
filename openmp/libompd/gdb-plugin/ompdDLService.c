@@ -1,5 +1,5 @@
 /*
- * ompdDLService.cpp -- Load libompd and look up OMPD API symbols.
+ * ompdDLService.c -- Load libompd and look up OMPD API symbols.
  */
 
 //===----------------------------------------------------------------------===//
@@ -12,15 +12,11 @@
 
 #include "ompdDLService.h"
 
-#include "llvm/Support/DynamicLibrary.h"
-
-#include <cstdio>
-#include <cstring>
-#include <string>
+#include <dlfcn.h>
+#include <string.h>
 
 void *ompd_library = NULL;
 
-static llvm::sys::DynamicLibrary LoadedLib;
 static char last_error[256];
 
 static void set_error(const char *msg) {
@@ -32,35 +28,41 @@ static void set_error(const char *msg) {
   last_error[sizeof(last_error) - 1] = '\0';
 }
 
-static void clear_error(void) { last_error[0] = '\0'; }
+static void clear_error(void) {
+  last_error[0] = '\0';
+  (void)dlerror();
+}
 
 int ompd_load_library(const char *name) {
+  const char *dlerr;
+
   clear_error();
   if (!name || !name[0]) {
     set_error("OMPD library path is empty");
+    ompd_library = NULL;
     return -1;
   }
 
-  std::string ErrMsg;
-  llvm::sys::DynamicLibrary NewLib =
-      llvm::sys::DynamicLibrary::getLibrary(name, &ErrMsg);
-  if (!NewLib.isValid()) {
-    set_error(ErrMsg.empty() ? "failed to load OMPD library" : ErrMsg.c_str());
+  ompd_library = dlopen(name, RTLD_LAZY);
+  dlerr = dlerror();
+  if (dlerr) {
+    set_error(dlerr);
+    ompd_library = NULL;
     return -1;
   }
-
-  if (LoadedLib.isValid())
-    llvm::sys::DynamicLibrary::closeLibrary(LoadedLib);
-  LoadedLib = NewLib;
-  ompd_library = LoadedLib.getOSSpecificHandle();
+  if (!ompd_library) {
+    set_error("dlopen returned NULL");
+    return -1;
+  }
   return 0;
 }
 
 void *ompd_get_symbol(const char *name) {
+  const char *dlerr;
   void *sym;
 
   clear_error();
-  if (!LoadedLib.isValid()) {
+  if (!ompd_library) {
     set_error("OMPD library is not loaded");
     return NULL;
   }
@@ -69,10 +71,10 @@ void *ompd_get_symbol(const char *name) {
     return NULL;
   }
 
-  sym = LoadedLib.getAddressOfSymbol(name);
-  if (!sym) {
-    snprintf(last_error, sizeof(last_error), "could not find symbol '%s'",
-             name);
+  sym = dlsym(ompd_library, name);
+  dlerr = dlerror();
+  if (dlerr) {
+    set_error(dlerr);
     return NULL;
   }
   return sym;
