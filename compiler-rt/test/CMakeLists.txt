@@ -136,10 +136,7 @@ if(COMPILER_RT_CAN_EXECUTE_TESTS)
     compiler_rt_test_runtime(interception)
 
     compiler_rt_test_runtime(lsan)
-    # The GPU UBSan tests are handled by the host.
-    if(NOT COMPILER_RT_GPU_BUILD)
-      compiler_rt_test_runtime(ubsan)
-    endif()
+    compiler_rt_test_runtime(ubsan)
     compiler_rt_test_runtime(sanitizer_common)
 
     # GNU/Hurd and OpenBSD not supporting asan, cannot run the tests

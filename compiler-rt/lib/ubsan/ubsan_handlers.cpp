@@ -19,7 +19,6 @@
 #include "ubsan_value.h"
 
 #include "sanitizer_common/sanitizer_common.h"
-#include "ubsan_handlers_internal.h"
 
 using namespace __sanitizer;
 using namespace __ubsan;
@@ -35,8 +34,6 @@ bool ignoreReport(SourceLocation SLoc, ReportOptions Opts, ErrorType ET) {
   // thread could have acquired it, but not yet printed the report.
   if (Opts.FromUnrecoverableHandler)
     return false;
-  if (Opts.FromOffload)
-    return SLoc.isDisabled();
   return SLoc.isDisabled() || IsPCSuppressed(ET, Opts.pc, SLoc.getFilename());
 }
 
@@ -86,8 +83,8 @@ extern const char *const TypeCheckKinds[] = {
     "dynamic operation on"};
 }
 
-void __ubsan::handleTypeMismatchImpl(TypeMismatchData *Data,
-                                     ValueHandle Pointer, ReportOptions Opts) {
+static void handleTypeMismatchImpl(TypeMismatchData *Data, ValueHandle Pointer,
+                                   ReportOptions Opts) {
   Location Loc = Data->Loc.acquire();
 
   uptr Alignment = (uptr)1 << Data->LogAlignment;
@@ -108,7 +105,7 @@ void __ubsan::handleTypeMismatchImpl(TypeMismatchData *Data,
 
   SymbolizedStackHolder FallbackLoc;
   if (Data->Loc.isInvalid()) {
-    FallbackLoc.reset(getReportLocation(Opts.pc, Opts.FromOffload));
+    FallbackLoc.reset(getCallerLocation(Opts.pc));
     Loc = FallbackLoc;
   }
 
@@ -135,8 +132,7 @@ void __ubsan::handleTypeMismatchImpl(TypeMismatchData *Data,
     UNREACHABLE("unexpected error type!");
   }
 
-  // Device pointers are not always host-accessible.
-  if (Pointer && !Opts.FromOffload)
+  if (Pointer)
     Diag(Pointer, DL_Note, ET, "pointer points here");
 }
 
@@ -152,11 +148,11 @@ void __ubsan::__ubsan_handle_type_mismatch_v1_abort(TypeMismatchData *Data,
   Die();
 }
 
-void __ubsan::handleAlignmentAssumptionImpl(AlignmentAssumptionData *Data,
-                                            ValueHandle Pointer,
-                                            ValueHandle Alignment,
-                                            ValueHandle Offset,
-                                            ReportOptions Opts) {
+static void handleAlignmentAssumptionImpl(AlignmentAssumptionData *Data,
+                                          ValueHandle Pointer,
+                                          ValueHandle Alignment,
+                                          ValueHandle Offset,
+                                          ReportOptions Opts) {
   Location Loc = Data->Loc.acquire();
   SourceLocation AssumptionLoc = Data->AssumptionLoc.acquire();
 
@@ -188,7 +184,7 @@ void __ubsan::handleAlignmentAssumptionImpl(AlignmentAssumptionData *Data,
   if (!AssumptionLoc.isInvalid())
     Diag(AssumptionLoc, DL_Note, ET, "alignment assumption was specified here");
 
-  Diag(Opts.FromOffload ? Loc : Location(RealPointer), DL_Note, ET,
+  Diag(RealPointer, DL_Note, ET,
        "%0address is %1 aligned, misalignment offset is %2 bytes")
       << (Offset ? "offset " : "") << ActualAlignment << MisAlignmentOffset;
 }
@@ -208,9 +204,11 @@ void __ubsan::__ubsan_handle_alignment_assumption_abort(
   Die();
 }
 
-void __ubsan::handleIntegerOverflowImpl(OverflowData *Data, ValueHandle LHS,
-                                        const char *Operator, ValueHandle RHS,
-                                        ReportOptions Opts) {
+/// \brief Common diagnostic emission for various forms of integer overflow.
+template <typename T>
+static void handleIntegerOverflowImpl(OverflowData *Data, ValueHandle LHS,
+                                      const char *Operator, T RHS,
+                                      ReportOptions Opts) {
   SourceLocation Loc = Data->Loc.acquire();
   bool IsSigned = Data->Type.isSignedIntegerTy();
   ErrorType ET = IsSigned ? ErrorType::SignedIntegerOverflow
@@ -226,18 +224,17 @@ void __ubsan::handleIntegerOverflowImpl(OverflowData *Data, ValueHandle LHS,
 
   ScopedReport R(Opts, Loc, ET);
 
-  Diag(Loc, DL_Error, ET,
-       "%0 integer overflow: "
-       "%1 %2 %3 cannot be represented in type %4")
+  Diag(Loc, DL_Error, ET, "%0 integer overflow: "
+                          "%1 %2 %3 cannot be represented in type %4")
       << (IsSigned ? "signed" : "unsigned") << Value(Data->Type, LHS)
-      << Operator << Value(Data->Type, RHS) << Data->Type;
+      << Operator << RHS << Data->Type;
 }
 
 #define UBSAN_OVERFLOW_HANDLER(handler_name, op, unrecoverable)                \
   void __ubsan::handler_name(OverflowData *Data, ValueHandle LHS,              \
                              ValueHandle RHS) {                                \
     GET_REPORT_OPTIONS(unrecoverable);                                         \
-    handleIntegerOverflowImpl(Data, LHS, op, RHS, Opts);                       \
+    handleIntegerOverflowImpl(Data, LHS, op, Value(Data->Type, RHS), Opts);    \
     if (unrecoverable)                                                         \
       Die();                                                                   \
   }
@@ -249,8 +246,8 @@ UBSAN_OVERFLOW_HANDLER(__ubsan_handle_sub_overflow_abort, "-", true)
 UBSAN_OVERFLOW_HANDLER(__ubsan_handle_mul_overflow, "*", false)
 UBSAN_OVERFLOW_HANDLER(__ubsan_handle_mul_overflow_abort, "*", true)
 
-void __ubsan::handleNegateOverflowImpl(OverflowData *Data, ValueHandle OldVal,
-                                       ReportOptions Opts) {
+static void handleNegateOverflowImpl(OverflowData *Data, ValueHandle OldVal,
+                                     ReportOptions Opts) {
   SourceLocation Loc = Data->Loc.acquire();
   bool IsSigned = Data->Type.isSignedIntegerTy();
   ErrorType ET = IsSigned ? ErrorType::SignedIntegerOverflow
@@ -286,8 +283,8 @@ void __ubsan::__ubsan_handle_negate_overflow_abort(OverflowData *Data,
   Die();
 }
 
-void __ubsan::handleDivremOverflowImpl(OverflowData *Data, ValueHandle LHS,
-                                       ValueHandle RHS, ReportOptions Opts) {
+static void handleDivremOverflowImpl(OverflowData *Data, ValueHandle LHS,
+                                     ValueHandle RHS, ReportOptions Opts) {
   SourceLocation Loc = Data->Loc.acquire();
   Value LHSVal(Data->Type, LHS);
   Value RHSVal(Data->Type, RHS);
@@ -330,9 +327,9 @@ void __ubsan::__ubsan_handle_divrem_overflow_abort(OverflowData *Data,
   Die();
 }
 
-void __ubsan::handleShiftOutOfBoundsImpl(ShiftOutOfBoundsData *Data,
-                                         ValueHandle LHS, ValueHandle RHS,
-                                         ReportOptions Opts) {
+static void handleShiftOutOfBoundsImpl(ShiftOutOfBoundsData *Data,
+                                       ValueHandle LHS, ValueHandle RHS,
+                                       ReportOptions Opts) {
   SourceLocation Loc = Data->Loc.acquire();
   Value LHSVal(Data->LHSType, LHS);
   Value RHSVal(Data->RHSType, RHS);
@@ -381,8 +378,8 @@ void __ubsan::__ubsan_handle_shift_out_of_bounds_abort(
   Die();
 }
 
-void __ubsan::handleOutOfBoundsImpl(OutOfBoundsData *Data, ValueHandle Index,
-                                    ReportOptions Opts) {
+static void handleOutOfBoundsImpl(OutOfBoundsData *Data, ValueHandle Index,
+                                  ReportOptions Opts) {
   SourceLocation Loc = Data->Loc.acquire();
   ErrorType ET = ErrorType::OutOfBoundsIndex;
 
@@ -408,10 +405,10 @@ void __ubsan::__ubsan_handle_out_of_bounds_abort(OutOfBoundsData *Data,
   Die();
 }
 
-void __ubsan::handleLocalOutOfBoundsImpl(ReportOptions Opts) {
+static void handleLocalOutOfBoundsImpl(ReportOptions Opts) {
   // FIXME: Pass more diagnostic info.
   SymbolizedStackHolder CallerLoc;
-  CallerLoc.reset(getReportLocation(Opts.pc, Opts.FromOffload));
+  CallerLoc.reset(getCallerLocation(Opts.pc));
   Location Loc;
   Loc = CallerLoc;
   ErrorType ET = ErrorType::LocalOutOfBounds;
@@ -430,8 +427,8 @@ void __ubsan::__ubsan_handle_local_out_of_bounds_abort() {
   Die();
 }
 
-void __ubsan::handleBuiltinUnreachableImpl(UnreachableData *Data,
-                                           ReportOptions Opts) {
+static void handleBuiltinUnreachableImpl(UnreachableData *Data,
+                                         ReportOptions Opts) {
   ErrorType ET = ErrorType::UnreachableCall;
   ScopedReport R(Opts, Data->Loc, ET);
   Diag(Data->Loc, DL_Error, ET,
@@ -444,8 +441,7 @@ void __ubsan::__ubsan_handle_builtin_unreachable(UnreachableData *Data) {
   Die();
 }
 
-void __ubsan::handleMissingReturnImpl(UnreachableData *Data,
-                                      ReportOptions Opts) {
+static void handleMissingReturnImpl(UnreachableData *Data, ReportOptions Opts) {
   ErrorType ET = ErrorType::MissingReturn;
   ScopedReport R(Opts, Data->Loc, ET);
   Diag(Data->Loc, DL_Error, ET,
@@ -459,8 +455,8 @@ void __ubsan::__ubsan_handle_missing_return(UnreachableData *Data) {
   Die();
 }
 
-void __ubsan::handleVLABoundNotPositive(VLABoundData *Data, ValueHandle Bound,
-                                        ReportOptions Opts) {
+static void handleVLABoundNotPositive(VLABoundData *Data, ValueHandle Bound,
+                                      ReportOptions Opts) {
   SourceLocation Loc = Data->Loc.acquire();
   ErrorType ET = ErrorType::NonPositiveVLAIndex;
 
@@ -498,11 +494,14 @@ static bool looksLikeFloatCastOverflowDataV1(void *Data) {
   // adding both bytes will be 0 or 1 (for BE or LE). If it were a filename,
   // adding two printable characters will not yield such a value. Otherwise,
   // if one of them is 0xff, this is most likely TK_Unknown type descriptor.
-  return looksLikeFloatCastOverflowDataV1Bytes(FilenameOrTypeDescriptor);
+  u16 MaybeFromTypeKind =
+      FilenameOrTypeDescriptor[0] + FilenameOrTypeDescriptor[1];
+  return MaybeFromTypeKind < 2 || FilenameOrTypeDescriptor[0] == 0xff ||
+         FilenameOrTypeDescriptor[1] == 0xff;
 }
 
-void __ubsan::handleFloatCastOverflow(void *DataPtr, ValueHandle From,
-                                      ReportOptions Opts) {
+static void handleFloatCastOverflow(void *DataPtr, ValueHandle From,
+                                    ReportOptions Opts) {
   SymbolizedStackHolder CallerLoc;
   Location Loc;
   const TypeDescriptor *FromType, *ToType;
@@ -510,7 +509,7 @@ void __ubsan::handleFloatCastOverflow(void *DataPtr, ValueHandle From,
 
   if (looksLikeFloatCastOverflowDataV1(DataPtr)) {
     auto Data = reinterpret_cast<FloatCastOverflowData *>(DataPtr);
-    CallerLoc.reset(getReportLocation(Opts.pc, Opts.FromOffload));
+    CallerLoc.reset(getCallerLocation(Opts.pc));
     Loc = CallerLoc;
     FromType = &Data->FromType;
     ToType = &Data->ToType;
@@ -542,8 +541,8 @@ void __ubsan::__ubsan_handle_float_cast_overflow_abort(void *Data,
   Die();
 }
 
-void __ubsan::handleLoadInvalidValue(InvalidValueData *Data, ValueHandle Val,
-                                     ReportOptions Opts) {
+static void handleLoadInvalidValue(InvalidValueData *Data, ValueHandle Val,
+                                   ReportOptions Opts) {
   SourceLocation Loc = Data->Loc.acquire();
   // This check could be more precise if we used different handlers for
   // -fsanitize=bool and -fsanitize=enum.
@@ -574,9 +573,9 @@ void __ubsan::__ubsan_handle_load_invalid_value_abort(InvalidValueData *Data,
   Die();
 }
 
-void __ubsan::handleImplicitConversion(ImplicitConversionData *Data,
-                                       ReportOptions Opts, ValueHandle Src,
-                                       ValueHandle Dst) {
+static void handleImplicitConversion(ImplicitConversionData *Data,
+                                     ReportOptions Opts, ValueHandle Src,
+                                     ValueHandle Dst) {
   SourceLocation Loc = Data->Loc.acquire();
   const TypeDescriptor &SrcTy = Data->FromType;
   const TypeDescriptor &DstTy = Data->ToType;
@@ -647,8 +646,7 @@ void __ubsan::__ubsan_handle_implicit_conversion_abort(
   Die();
 }
 
-void __ubsan::handleInvalidBuiltin(InvalidBuiltinData *Data,
-                                   ReportOptions Opts) {
+static void handleInvalidBuiltin(InvalidBuiltinData *Data, ReportOptions Opts) {
   SourceLocation Loc = Data->Loc.acquire();
   ErrorType ET = ErrorType::InvalidBuiltin;
 
@@ -675,8 +673,8 @@ void __ubsan::__ubsan_handle_invalid_builtin_abort(InvalidBuiltinData *Data) {
   Die();
 }
 
-void __ubsan::handleInvalidObjCCast(InvalidObjCCast *Data, ValueHandle Pointer,
-                                    ReportOptions Opts) {
+static void handleInvalidObjCCast(InvalidObjCCast *Data, ValueHandle Pointer,
+                                  ReportOptions Opts) {
   SourceLocation Loc = Data->Loc.acquire();
   ErrorType ET = ErrorType::InvalidObjCCast;
 
@@ -705,9 +703,8 @@ void __ubsan::__ubsan_handle_invalid_objc_cast_abort(InvalidObjCCast *Data,
   Die();
 }
 
-void __ubsan::handleNonNullReturn(NonNullReturnData *Data,
-                                  SourceLocation *LocPtr, ReportOptions Opts,
-                                  bool IsAttr) {
+static void handleNonNullReturn(NonNullReturnData *Data, SourceLocation *LocPtr,
+                                ReportOptions Opts, bool IsAttr) {
   if (!LocPtr)
     UNREACHABLE("source location pointer is null!");
 
@@ -754,8 +751,8 @@ void __ubsan::__ubsan_handle_nullability_return_v1_abort(
   Die();
 }
 
-void __ubsan::handleNonNullArg(NonNullArgData *Data, ReportOptions Opts,
-                               bool IsAttr) {
+static void handleNonNullArg(NonNullArgData *Data, ReportOptions Opts,
+                             bool IsAttr) {
   SourceLocation Loc = Data->Loc.acquire();
   ErrorType ET = IsAttr ? ErrorType::InvalidNullArgument
                         : ErrorType::InvalidNullArgumentWithNullability;
@@ -796,9 +793,10 @@ void __ubsan::__ubsan_handle_nullability_arg_abort(NonNullArgData *Data) {
   Die();
 }
 
-void __ubsan::handlePointerOverflowImpl(PointerOverflowData *Data,
-                                        ValueHandle Base, ValueHandle Result,
-                                        ReportOptions Opts) {
+static void handlePointerOverflowImpl(PointerOverflowData *Data,
+                                      ValueHandle Base,
+                                      ValueHandle Result,
+                                      ReportOptions Opts) {
   SourceLocation Loc = Data->Loc.acquire();
   ErrorType ET;
 
@@ -883,8 +881,8 @@ static SymbolizedStack *removeArtificialFiles(SymbolizedStack *FS) {
   return FS;
 }
 
-void __ubsan::handleCFIBadIcall(CFICheckFailData *Data, ValueHandle Function,
-                                ReportOptions Opts) {
+static void handleCFIBadIcall(CFICheckFailData *Data, ValueHandle Function,
+                              ReportOptions Opts) {
   ErrorType ET;
   switch (Data->CheckKind) {
   case CFITCK_ICall:
@@ -984,9 +982,9 @@ void __ubsan::__ubsan_handle_cfi_check_fail_abort(CFICheckFailData *Data,
   Die();
 }
 
-bool __ubsan::handleFunctionTypeMismatch(FunctionTypeMismatchData *Data,
-                                         ValueHandle Function,
-                                         ReportOptions Opts) {
+static bool handleFunctionTypeMismatch(FunctionTypeMismatchData *Data,
+                                       ValueHandle Function,
+                                       ReportOptions Opts) {
   SourceLocation CallLoc = Data->Loc.acquire();
   ErrorType ET = ErrorType::FunctionTypeMismatch;
   if (ignoreReport(CallLoc, Opts, ET))
