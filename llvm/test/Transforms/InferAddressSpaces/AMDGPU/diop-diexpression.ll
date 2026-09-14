@@ -11,9 +11,9 @@ define void @test_glob(ptr addrspace(1) %global) !dbg !3 {
 ;
   %glob_gen = addrspacecast ptr addrspace(1) %global to ptr
   %use_glob_gen = load i32, ptr %glob_gen, align 4
-  #dbg_value(ptr %glob_gen, !6, !DIExpression(DIOpArg(0, ptr)), !8)
-  #dbg_value(ptr %glob_gen, !9, !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), !8)
-  #dbg_value(ptr %glob_gen, !11, !DIExpression(DIOpArg(0, ptr), DIOpReinterpret(i64)), !8)
+    #dbg_value(ptr %glob_gen, !6, !DIExpression(DIOpArg(0, ptr)), !8)
+    #dbg_value(ptr %glob_gen, !9, !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), !8)
+    #dbg_value(ptr %glob_gen, !11, !DIExpression(DIOpArg(0, ptr), DIOpReinterpret(i64)), !8)
   ret void, !dbg !8
 }
 
@@ -27,9 +27,9 @@ define void @test_local(ptr addrspace(3) %local) !dbg !13 {
 ;
   %loc_gen = addrspacecast ptr addrspace(3) %local to ptr
   %use_loc_gen = load i32, ptr %loc_gen, align 4
-  #dbg_value(ptr %loc_gen, !14, !DIExpression(DIOpArg(0, ptr)), !15)
-  #dbg_value(ptr %loc_gen, !16, !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), !15)
-  #dbg_value(ptr %loc_gen, !17, !DIExpression(DIOpArg(0, ptr), DIOpReinterpret(i64)), !15)
+    #dbg_value(ptr %loc_gen, !14, !DIExpression(DIOpArg(0, ptr)), !15)
+    #dbg_value(ptr %loc_gen, !16, !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), !15)
+    #dbg_value(ptr %loc_gen, !17, !DIExpression(DIOpArg(0, ptr), DIOpReinterpret(i64)), !15)
   ret void
 }
 
@@ -43,9 +43,9 @@ define void @test_constant(ptr addrspace(4) %constant) !dbg !18 {
 ;
   %const_gen = addrspacecast ptr addrspace(4) %constant to ptr
   %use_const_gen = load i32, ptr %const_gen, align 4
-  #dbg_value(ptr %const_gen, !19, !DIExpression(DIOpArg(0, ptr)), !20)
-  #dbg_value(ptr %const_gen, !21, !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), !20)
-  #dbg_value(ptr %const_gen, !22, !DIExpression(DIOpArg(0, ptr), DIOpReinterpret(i64)), !20)
+    #dbg_value(ptr %const_gen, !19, !DIExpression(DIOpArg(0, ptr)), !20)
+    #dbg_value(ptr %const_gen, !21, !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), !20)
+    #dbg_value(ptr %const_gen, !22, !DIExpression(DIOpArg(0, ptr), DIOpReinterpret(i64)), !20)
   ret void
 }
 
@@ -64,11 +64,11 @@ define void @test_before_and_after(ptr addrspace(4) %constant) !dbg !23 {
   %const_gen = addrspacecast ptr addrspace(4) %constant to ptr
 
   %mask = call ptr @llvm.ptrmask.p0.i64(ptr %const_gen, i64 -2)
-  #dbg_value(ptr %mask, !24, !DIExpression(DIOpArg(0, ptr)), !26)
+    #dbg_value(ptr %mask, !24, !DIExpression(DIOpArg(0, ptr)), !26)
   %use_mask = load i32, ptr %mask, align 4
 
   %bc = getelementptr i32, ptr %const_gen, i32 42
-  #dbg_value(ptr %bc, !25, !DIExpression(DIOpArg(0, ptr)), !26)
+    #dbg_value(ptr %bc, !25, !DIExpression(DIOpArg(0, ptr)), !26)
   %use_bc = load i32, ptr %bc, align 4
 
   ret void
@@ -81,7 +81,7 @@ define void @test_no_DW_OPs(ptr addrspace(3) %local_ptr) !dbg !27 {
 ; CHECK-NEXT:    ret void
 ;
   %gen = addrspacecast ptr addrspace(3) %local_ptr to ptr
-  #dbg_value(ptr %gen, !28, !DIExpression(), !29)
+    #dbg_value(ptr %gen, !28, !DIExpression(), !29)
   %use_gen = load i32, ptr %gen, align 4
   ret void
 }
