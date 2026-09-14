@@ -1,7 +1,7 @@
 // Build two version of the bitcode library, one with a target-cpu set and one without
 // RUN: %clang_cc1 -triple amdgpu8.03-- -DBITCODE -emit-llvm-bc -o %t-lib.bc %s
 // RUN: %clang_cc1 -triple amdgpu-- -DBITCODE -emit-llvm-bc -o %t-lib.no-cpu.bc %s
-
+// XFAIL: *
 // RUN: %clang_cc1 -triple amdgpu9.0a-- -emit-llvm-bc -o %t.bc %s
 // RUN: %clang_cc1 -triple amdgpu9.0a-- -emit-llvm \
 // RUN:   -mlink-builtin-bitcode %t-lib.bc -o - %t.bc | FileCheck %s

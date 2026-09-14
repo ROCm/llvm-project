@@ -405,6 +405,7 @@ class SubtargetFeatureLDSBankCount <int Value> : SubtargetFeature <
 
 def FeatureLDSBankCount16 : SubtargetFeatureLDSBankCount<16>;
 def FeatureLDSBankCount32 : SubtargetFeatureLDSBankCount<32>;
+def FeatureLDSBankCount64 : SubtargetFeatureLDSBankCount<64>;
 
 class SubtargetFeatureInstCacheLineSize <int Value> : SubtargetFeature <
   "instcachelinesize"#Value,
@@ -503,6 +504,14 @@ defm F32ToFP6BF6ConversionScaleInsts : AMDGPUSubtargetFeature<"f32-to-fp6bf6-cvt
 
 defm F32ToF16BF16ConversionSRInsts : AMDGPUSubtargetFeature<"f32-to-f16bf16-cvt-sr-insts",
   "Has f32 to f16bf16 conversion scale instructions"
+>;
+
+defm FP6BF6ToF16BF16F32ConversionScaleInsts : AMDGPUSubtargetFeature<"fp6bf6-to-f16bf16f32-cvt-scale-insts",
+  "Has fp6bf6 to f16bf16f32 conversion scale instructions"
+>;
+
+defm Block16ConversionScaleInsts : AMDGPUSubtargetFeature<"block16-cvt-scale-insts",
+  "Has block16 conversion scale instructions"
 >;
 
 defm AshrPkInsts : AMDGPUSubtargetFeature<"ashr-pk-insts",
@@ -936,6 +945,14 @@ defm WMMA256bInsts : AMDGPUSubtargetFeature<"wmma-256b-insts",
 
 defm WMMA128bInsts : AMDGPUSubtargetFeature<"wmma-128b-insts",
   "Has WMMA instructions where A and B matrices do not have duplicated data"
+>;
+
+defm WMMAN16Insts : AMDGPUSubtargetFeature<"wmma-n16-insts",
+  "Has WMMA instructions with N = 16"
+>;
+
+defm WMMAF4Insts : AMDGPUSubtargetFeature<"wmma-f4-insts",
+  "Has WMMA_*_F4 instructions"
 >;
 
 defm SWMMACGfx1200Insts : AMDGPUSubtargetFeature<"swmmac-gfx1200-insts",
@@ -2295,7 +2312,7 @@ def FeatureISAVersion12_50_Common : FeatureSet<
    FeatureCuMode,
    Feature1024AddressableVGPRs,
    Feature64BitLiterals,
-   FeatureLDSBankCount32,
+   FeatureLDSBankCount64,
    FeatureDLInsts,
    FeatureFmacF64Inst,
    FeaturePackedFP32SingleSGPROps,
@@ -2384,6 +2401,7 @@ def FeatureISAVersion12_50_STRICT : FeatureSet<
   !listconcat(FeatureISAVersion12_50_Common.Features,
   [FeatureGFX1250_STRICT,
    FeatureAddressableLocalMemorySize327680,
+   FeatureWMMAN16Insts,
    FeatureVOP3PX2IncrementsVaVdstTwice,
    FeatureSetregVGPRMSBFixup,
    FeatureCubeInsts,
@@ -2409,6 +2427,8 @@ def FeatureISAVersion12_50_STRICT : FeatureSet<
 def FeatureISAVersion12_50 : FeatureSet<
   !listconcat(FeatureISAVersion12_50_Common.Features,
   [FeatureAddressableLocalMemorySize327680,
+   FeatureWMMAN16Insts,
+   FeatureWMMAF4Insts,
    FeatureVOP3PX2IncrementsVaVdstTwice,
    FeatureSetregVGPRMSBFixup,
    FeatureCubeInsts,
@@ -2421,6 +2441,7 @@ def FeatureISAVersion12_50 : FeatureSet<
    FeatureCvtNormInsts,
    FeatureCvtPkNormVOP2Insts,
    FeatureCvtPkNormVOP3Insts,
+   FeatureBlock16ConversionScaleInsts,
    FeatureSWMMACGfx1200Insts,
    FeatureSWMMACGfx1250Insts,
    FeatureTransCoexecutionHazard,
@@ -2434,6 +2455,8 @@ def FeatureISAVersion12_50 : FeatureSet<
 def FeatureISAVersion12_51 : FeatureSet<
   !listconcat(FeatureISAVersion12_50_Common.Features,
   [FeatureAddressableLocalMemorySize327680,
+   FeatureWMMAN16Insts,
+   FeatureWMMAF4Insts,
    FeatureFullRate64Ops,
    FeatureVOP3PX2IncrementsVaVdstTwice,
    FeatureDPALU_DPP,
@@ -2451,6 +2474,7 @@ def FeatureISAVersion12_51 : FeatureSet<
    FeatureCvtNormInsts,
    FeatureCvtPkNormVOP2Insts,
    FeatureCvtPkNormVOP3Insts,
+   FeatureBlock16ConversionScaleInsts,
    FeatureSWMMACGfx1200Insts,
    FeatureSWMMACGfx1250Insts,
    FeatureUseAddPC64Inst,
@@ -2468,6 +2492,8 @@ def FeatureISAVersion12_Generic: FeatureSet<
 def FeatureISAVersion12_5_Generic: FeatureSet<
   !listconcat(FeatureISAVersion12_50_Common.Features,
   [FeatureAddressableLocalMemorySize327680,
+   FeatureLDSBankCount64,
+   FeatureBlock16ConversionScaleInsts,
    FeatureSetregVGPRMSBFixup,
    FeatureRequiresCOV6,
    FeatureSupportsXNACK,
@@ -2548,6 +2574,7 @@ def FeatureISAVersion13 : FeatureSet<
    FeatureCvtNormInsts,
    FeatureCvtPkNormVOP2Insts,
    FeatureCvtPkNormVOP3Insts,
+   FeatureBlock16ConversionScaleInsts,
    FeatureSmemPrefetchInsts,
    FeatureAsyncLoadToLDSInsts,
 ]>;
@@ -3151,7 +3178,8 @@ def AMDGPUFrontendVisibleFeatures {
   FeatureDot9Insts, FeatureExtendedImageInsts, FeatureF16BF16ToFP6BF6ConversionScaleInsts,
   FeatureF32ToF16BF16ConversionSRInsts, FeatureF32ToFP6BF6ConversionScaleInsts, FeatureFP4ConversionScaleInsts,
   FeatureFP6BF6ConversionScaleInsts, FeatureFP8ConversionInsts, FeatureFP8ConversionScaleInsts,
-  FeatureFP8E5M3Insts, FeatureFP8Insts, FeatureFlatGlobalInsts,
+  FeatureBlock16ConversionScaleInsts, FeatureFP8E5M3Insts, FeatureFP8Insts,
+  FeatureFlatBufferGlobalAtomicFaddF64Inst, FeatureFlatGlobalInsts,
   FeatureGFX10Insts, FeatureGFX10_3Insts, FeatureGFX11Insts,
   FeatureGFX1250Insts, FeatureGFX1251GEMMInsts, FeatureGFX12Insts,
   FeatureGFX13Insts, FeatureGFX8Insts, FeatureGFX90AInsts,
@@ -3165,8 +3193,9 @@ def AMDGPUFrontendVisibleFeatures {
   FeatureSadInsts, FeatureSetPrioIncWgInst, FeatureSmemPrefetchInsts,
   FeatureTanhInsts, FeatureTensorCvtLutInsts, FeatureTransposeLoadF4F6Insts,
   FeatureVMemToLDSLoad, FeatureVmemPrefInsts, FeatureWMMA128bInsts,
-  FeatureWMMA256bInsts, FeatureXF32Insts,
-  FeatureWavefrontSize32, FeatureWavefrontSize64
+  FeatureWMMA256bInsts, FeatureWMMAN16Insts, FeatureWMMAF4Insts, FeatureXF32Insts,
+  FeatureWavefrontSize32, FeatureWavefrontSize64, FeatureSupportsWGP,
+  FeatureSupportsWave32, FeatureFastFMAF32, FeatureFastDenormalF32
   ];
 }
 
