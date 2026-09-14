@@ -623,8 +623,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
 
   (void)isXteamKernel;
 
-  // Append post-context implicit params (e.g. dyn_ptr) after all other args
-  // so they remain at the end, matching the host-side CombinedInfo ordering.
   Args.append(std::next(CD->param_begin(), CD->getContextParamPosition() + 1),
               CD->param_end());
   TargetArgs.append(
