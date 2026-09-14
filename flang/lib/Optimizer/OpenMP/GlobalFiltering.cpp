@@ -56,10 +56,11 @@ public:
       auto declareTargetIface =
           llvm::dyn_cast<mlir::omp::DeclareTargetInterface>(
               globalOp.getOperation());
-      bool hostOnlySymbol = !declareTargetIface ||
-                            !declareTargetIface.isDeclareTarget() ||
-                            declareTargetIface.getDeclareTargetDeviceType() ==
-                                omp::DeclareTargetDeviceType::host;
+      mlir::omp::DeclareTargetAttr declareTargetAttr =
+          declareTargetIface ? declareTargetIface.getDeclareTarget() : nullptr;
+      bool hostOnlySymbol =
+          !declareTargetAttr || declareTargetAttr.getDeviceType() ==
+                                    omp::DeclareTargetDeviceType::host;
 
       // Remove unused host symbols with external linkage.
       if (symbolUnused && !globalOp.getLinkage() && hostOnlySymbol)
