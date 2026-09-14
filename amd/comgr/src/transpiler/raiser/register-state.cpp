@@ -639,6 +639,31 @@ void RegisterState::writeRegVec(ParsedReg Pr, Value *V) {
   }
 }
 
+void RegisterState::writeRegVecExecAll(ParsedReg Pr, Value *V) {
+  if (Pr.RegKind == ParsedReg::NOREG)
+    return;
+  assert((Pr.RegKind == ParsedReg::VGPR || Pr.RegKind == ParsedReg::AGPR) &&
+         "EXEC-all register write must target a per-lane register");
+
+  Value *ExecIsZero = emitExecIsZero();
+  Value *ExecNonZero = B.CreateNot(ExecIsZero, "exec_nonzero");
+  BasicBlock *PreBb = B.GetInsertBlock();
+  Function *F = PreBb->getParent();
+  BasicBlock *DoBb = BasicBlock::Create(B.getContext(), "exec_all_do", F);
+  BasicBlock *SkipBb = BasicBlock::Create(B.getContext(), "exec_all_skip", F);
+  B.CreateCondBr(ExecNonZero, DoBb, SkipBb);
+
+  const BlockState Entry = blockState();
+  B.SetInsertPoint(DoBb);
+  carryStateIntoCurrentBlock();
+  Regs.writeRegVec(B, Pr, V);
+  B.CreateBr(SkipBb);
+
+  B.SetInsertPoint(SkipBb);
+  State = Entry;
+  carryStateIntoCurrentBlock();
+}
+
 void RegisterState::writeRegExecWidth(ParsedReg Pr, Value *V) {
   if (Pr.RegKind == ParsedReg::NOREG)
     return;

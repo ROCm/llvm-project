@@ -189,9 +189,16 @@ Error raiseWMMA(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
   if (Op.nSrcs() < 3)
     return unsupported(Ctx, Di, "WMMA requires three source operands");
 
-  for (unsigned I = 0; I != 3; ++I) {
-    if (Op.srcMod(I) != 0)
-      return unsupported(Ctx, Di, "WMMA source modifiers are not supported");
+  if (InputType == WMMAInputType::IU8) {
+    if (Op.srcMod(0) != SISrcMods::NEG || Op.srcMod(1) != SISrcMods::NEG ||
+        Op.srcMod(2) != 0)
+      return unsupported(Ctx, Di,
+                         "WMMA IU8 remapping requires signed matrix inputs");
+  } else {
+    for (unsigned I = 0; I != 3; ++I) {
+      if (Op.srcMod(I) != 0)
+        return unsupported(Ctx, Di, "WMMA source modifiers are not supported");
+    }
   }
   Expected<bool> Clamp = readClamp(Ctx, Di);
   if (!Clamp)
@@ -224,7 +231,7 @@ Error raiseWMMA(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
   Expected<Value *> Result = emitWMMAtoMFMA(Ctx, A, B, *C, InputType);
   if (!Result)
     return Result.takeError();
-  Ctx.registers().writeRegVec(*Destination, *Result);
+  Ctx.registers().writeRegVecExecAll(*Destination, *Result);
   return Error::success();
 }
 
