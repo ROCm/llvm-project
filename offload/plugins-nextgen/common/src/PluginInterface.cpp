@@ -23,6 +23,8 @@
 #include "print_tracing.h"
 #include "trace.h"
 
+
+
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/Support/Error.h"
@@ -2221,12 +2223,6 @@ int GenericPluginTy::prepopulate_page_table(int32_t DeviceId, void *ptr,
   }();
   T.res(R);
   return R;
-}
-
-int32_t GenericPluginTy::set_device_identifier(int32_t UserId,
-                                               int32_t DeviceId) {
-  UserDeviceIds[DeviceId] = UserId;
-  return OFFLOAD_SUCCESS;
 }
 
 // Query if [ptr, ptr+size] belongs to coarse grain memory region

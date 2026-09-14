@@ -1759,12 +1759,6 @@ struct GenericPluginTy {
   /// Get the number of active devices.
   int32_t getNumDevices() const { return NumDevices; }
 
-  /// Get the plugin-specific device identifier.
-  int32_t getUserId(int32_t DeviceId) const {
-    assert(UserDeviceIds.contains(DeviceId) && "No user-id registered");
-    return UserDeviceIds.at(DeviceId);
-  }
-
   /// Get the UID for the host device.
   static constexpr const char *getHostDeviceUid() { return "HOST"; }
 
@@ -2050,9 +2044,6 @@ public:
   /// Remove the event from the plugin.
   void set_info_flag(uint32_t NewInfoLevel);
 
-  /// Sets the offset into the devices for use by OMPT.
-  int32_t set_device_identifier(int32_t UserId, int32_t DeviceId);
-
   /// Populates the device page table.
   int prepopulate_page_table(int32_t DeviceId, void *ptr, int64_t size);
 
@@ -2063,7 +2054,7 @@ public:
   /// Set coarse_grain memory for omp_register_coarse_grain_mem
   void set_coarse_grain_mem(int32_t DeviceId, const void *ptr, int64_t size,
                             bool set_attr);
-
+  
   /// Returns if the associated storage is accessible for a given device.
   int32_t is_accessible_ptr(int32_t DeviceId, const void *Ptr, size_t Size);
 
@@ -2124,9 +2115,6 @@ private:
 
   /// Number of devices available for the plugin.
   int32_t NumDevices = 0;
-
-  /// Map of plugin device identifiers to the user device identifier.
-  llvm::DenseMap<int32_t, int32_t> UserDeviceIds;
 
   /// Array of pointers to the devices. Initially, they are all set to nullptr.
   /// Once a device is initialized, the pointer is stored in the position given
