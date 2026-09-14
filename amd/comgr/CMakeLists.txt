@@ -588,10 +588,8 @@ set(LLD_LIBS
 
 if (${COMGR_SPIRV_TRANSLATOR_AVAILABLE})
   set(SPIRV_DYNAMIC_LIB "LLVMSPIRVAMDLib")
-  set(SPIRV_STATIC_LIB "SPIRVAMDLib")
 else()
   set(SPIRV_DYNAMIC_LIB "")
-  set(SPIRV_STATIC_LIB "")
 endif()
 
 if (LLVM_LINK_LLVM_DYLIB)
@@ -605,7 +603,7 @@ else()
   # so use LLVM_AVAILABLE_LIBS exported by LLVMConfig.cmake instead.
   set(LLVM_LIBS ${LLVM_AVAILABLE_LIBS})
   list(REMOVE_ITEM LLVM_LIBS LLVM)  # bare `LLVM` is the dylib target
-  list(APPEND LLVM_LIBS ${SPIRV_STATIC_LIB})
+  # LLVM_AVAILABLE_LIBS already contains the LLVMSPIRVAMDLib target when built.
 endif()
 
 target_link_options(amd_comgr
@@ -615,15 +613,15 @@ target_link_options(amd_comgr
     ${AMD_COMGR_PRIVATE_LINKER_OPTIONS})
 
 if(NOT LLVM_LINK_LLVM_DYLIB AND UNIX AND NOT APPLE)
-  # Full set of LLVM/Clang/LLD static libs has circular deps
-  # (e.g., LLVMSupport <-> clangBasic via getStackPointer). Wrap in
-  # --start-group/--end-group so the linker performs multi-pass resolution.
+  # CMake otherwise appends transitive archives after --end-group, where their
+  # references back into earlier archives cannot be resolved by GNU ld.
+  include(ComgrStaticLibraries)
+  comgr_collect_static_libraries(COMGR_STATIC_LIBRARIES
+    ${LLD_LIBS} ${LLVM_LIBS} ${CLANG_LIBS})
   target_link_libraries(amd_comgr
     PRIVATE
       "-Wl,--start-group"
-      ${LLD_LIBS}
-      ${LLVM_LIBS}
-      ${CLANG_LIBS}
+      ${COMGR_STATIC_LIBRARIES}
       "-Wl,--end-group")
 else()
   target_link_libraries(amd_comgr
@@ -673,6 +671,16 @@ add_subdirectory(src/hotswap)
 
 include(CTest)
 if(BUILD_TESTING)
+  if(UNIX AND NOT APPLE)
+    add_test(NAME comgr-static-link
+      COMMAND "${CMAKE_CTEST_COMMAND}" --build-and-test
+        "${CMAKE_CURRENT_SOURCE_DIR}/test/static-link"
+        "${CMAKE_CURRENT_BINARY_DIR}/test/static-link"
+        --build-generator "${CMAKE_GENERATOR}"
+        --build-config "$<CONFIG>"
+        --build-options "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+        --test-command "${CMAKE_CTEST_COMMAND}" --output-on-failure)
+  endif()
   add_custom_target(check-comgr COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS amd_comgr)
   if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set_property(GLOBAL APPEND PROPERTY LLVM_ADDITIONAL_TEST_TARGETS check-comgr)
