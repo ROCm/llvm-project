@@ -116,6 +116,9 @@ public:
   void writeReg64(ParsedReg Pr, llvm::Value *V);
   // Write a value spanning more than two dwords, such as an image descriptor.
   void writeRegVec(ParsedReg Pr, llvm::Value *V);
+  // When any source lane is active, write V to every lane of a vector
+  // register. Matrix instructions use EXEC this way.
+  void writeRegVecExecAll(ParsedReg Pr, llvm::Value *V);
   // Write a wave mask at the target EXEC width.
   void writeRegExecWidth(ParsedReg Pr, llvm::Value *V);
 

@@ -37,6 +37,7 @@ add_library(hotswap-raiser OBJECT
   flat-addr.cpp
   handle-ds.cpp
   handle-flat.cpp
+  handle-mfma.cpp
   handle-smem.cpp
   handle-sop1.cpp
   handle-sop2.cpp
@@ -50,6 +51,7 @@ add_library(hotswap-raiser OBJECT
   handle-vop-shared.cpp
   handle-vopd.cpp
   handle-vopc.cpp
+  wmma-lowering.cpp
 )
 
 if(NOT TARGET hotswap::raiser)
