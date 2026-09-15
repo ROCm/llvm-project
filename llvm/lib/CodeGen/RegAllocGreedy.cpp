@@ -609,8 +609,6 @@ bool RegAllocEvictionAdvisor::canReassign(const LiveInterval &VirtReg,
   ++NumReassignCalls;
   bool Cacheable =
       Cache && VirtReg.segments.size() == 1 && !VirtReg.hasSubRanges();
-  if (Cacheable && Cache->Blockers.empty())
-    Cache->Blockers.resize(TRI->getNumRegUnits());
 
   unsigned Candidates = 0;
   unsigned BlockerHits = 0;
@@ -626,20 +624,25 @@ bool RegAllocEvictionAdvisor::canReassign(const LiveInterval &VirtReg,
           report_fatal_error("Invalid reassignment blocker result");
         return Interference;
       };
-      auto &Blocker = Cache->Blockers[static_cast<unsigned>(Unit)];
-      if (Blocker.Start.isValid() && Blocker.Tag == LiveUnion.getTag() &&
-          VirtReg.beginIndex() < Blocker.End &&
-          Blocker.Start < VirtReg.endIndex()) {
-        ++BlockerHits;
-        CrossVRegHits += Blocker.QueriedReg != VirtReg.reg();
-        return VerifyInterference(true);
+      if (!Cache->Blockers.empty()) {
+        const auto &Blocker = Cache->Blockers[static_cast<unsigned>(Unit)];
+        if (Blocker.Start.isValid() && Blocker.Tag == LiveUnion.getTag() &&
+            VirtReg.beginIndex() < Blocker.End &&
+            Blocker.Start < VirtReg.endIndex()) {
+          ++BlockerHits;
+          CrossVRegHits += Blocker.QueriedReg != VirtReg.reg();
+          return VerifyInterference(true);
+        }
       }
 
       ++UnitSearches;
       auto Interference = LiveUnion.find(VirtReg.beginIndex());
       if (Interference.valid() && Interference.start() < VirtReg.endIndex()) {
-        Blocker = {Interference.start(), Interference.stop(),
-                   LiveUnion.getTag(), VirtReg.reg()};
+        if (Cache->Blockers.empty())
+          Cache->Blockers.resize(TRI->getNumRegUnits());
+        Cache->Blockers[static_cast<unsigned>(Unit)] = {
+            Interference.start(), Interference.stop(), LiveUnion.getTag(),
+            VirtReg.reg()};
         return VerifyInterference(true);
       }
       return VerifyInterference(false);
