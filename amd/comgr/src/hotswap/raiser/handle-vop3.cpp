@@ -45,7 +45,7 @@ Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
   return Di.getImm(Idx) != 0;
 }
 
-/// Reject nonzero output multipliers on integer VOP3 instructions.
+/// Reject nonzero output multipliers.
 Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
   int Idx = COMGR::hotswap::getNamedOperandIdx(Di.Inst.getOpcode(),
                                                AMDGPU::OpName::omod);
@@ -55,7 +55,21 @@ Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
     return unsupportedInstruction(Ctx, Di, "omod operand is not immediate");
   if (Di.getImm(Idx) != 0)
     return unsupportedInstruction(Ctx, Di,
-                                  "integer output multiplier is not supported");
+                                  "output multiplier is not supported");
+  return Error::success();
+}
+
+/// Reject non-default floating-point output modifiers.
+Error requireDefaultFloatOutputModifiers(RaiseContext &Ctx,
+                                         const DecodedInst &Di) {
+  if (Error Err = requireNoOutputMultiplier(Ctx, Di))
+    return Err;
+  Expected<bool> Clamp = readClamp(Ctx, Di);
+  if (!Clamp)
+    return Clamp.takeError();
+  if (*Clamp)
+    return unsupportedInstruction(
+        Ctx, Di, "floating-point output clamp is not supported");
   return Error::success();
 }
 
@@ -306,10 +320,83 @@ Error handleTernaryMinMax(RaiseContext &Ctx, OperandResolver &Op,
   return Error::success();
 }
 
+/// Raise V_LDEXP_F32 with a floating-point significand and integer exponent.
+Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
+                        OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 2)
+    return unsupportedInstruction(Ctx, Di,
+                                  "expected one destination and two sources");
+  if (Error Err = Ctx.validateF32Environment(Di))
+    return Err;
+
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> SignificandBits = Op.srcF(0);
+  if (!SignificandBits)
+    return SignificandBits.takeError();
+  Expected<Value *> Exponent = Op.src(1);
+  if (!Exponent)
+    return Exponent.takeError();
+
+  Value *Significand =
+      Ctx.B.CreateBitCast(*SignificandBits, Ctx.B.getFloatTy());
+  Value *Result = Ctx.B.CreateIntrinsic(
+      Intrinsic::ldexp, {Ctx.B.getFloatTy(), Ctx.B.getInt32Ty()},
+      {Significand, *Exponent}, nullptr, "ldexp");
+  Value *ResultBits = Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty());
+  Ctx.registers().writeReg32(*Dst, ResultBits);
+  return Error::success();
+}
+
 } // namespace
 
 Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
+  switch (Di.CanonOp) {
+  case CanonicalOp::V_CVT_F32_I32:
+  case CanonicalOp::V_CVT_F32_U32:
+  case CanonicalOp::V_CVT_I32_F32:
+  case CanonicalOp::V_CVT_U32_F32:
+  case CanonicalOp::V_CVT_F16_F32:
+  case CanonicalOp::V_CVT_F32_F16:
+  case CanonicalOp::V_CVT_F32_UBYTE0:
+  case CanonicalOp::V_CVT_F32_UBYTE1:
+  case CanonicalOp::V_CVT_F32_UBYTE2:
+  case CanonicalOp::V_CVT_F32_UBYTE3: {
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatConversion32(Ctx, Di, Op);
+  }
+  case CanonicalOp::V_FRACT_F32:
+  case CanonicalOp::V_TRUNC_F32:
+  case CanonicalOp::V_CEIL_F32:
+  case CanonicalOp::V_RNDNE_F32:
+  case CanonicalOp::V_FLOOR_F32:
+  case CanonicalOp::V_EXP_F32:
+  case CanonicalOp::V_LOG_F32:
+  case CanonicalOp::V_RCP_F32:
+  case CanonicalOp::V_RSQ_F32:
+  case CanonicalOp::V_SQRT_F32:
+  case CanonicalOp::V_SIN_F32:
+  case CanonicalOp::V_COS_F32:
+  case CanonicalOp::V_FREXP_EXP_I32_F32:
+  case CanonicalOp::V_FREXP_MANT_F32: {
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseUnaryFloat32(Ctx, Di, Op);
+  }
+  case CanonicalOp::V_LDEXP_F32: {
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseLdexpFloat32(Ctx, Di, Op);
+  }
+  case CanonicalOp::V_CNDMASK_B32:
+    return raiseCndMask32(Ctx, Di, Op);
+  default:
+    break;
+  }
+
   if (Error Err = requireNoIntegerSourceModifiers(Ctx, Di, Op))
     return Err;
   if (Error Err = requireNoOutputMultiplier(Ctx, Di))
