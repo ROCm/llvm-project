@@ -292,9 +292,10 @@ Value *AllocaRegFile::loadExec(IRBuilder<> &B) {
 }
 
 void AllocaRegFile::storeExec(IRBuilder<> &B, Value *V) {
-  Type *ExecTy = Exec->getAllocatedType();
-  if (V->getType() != ExecTy)
-    V = B.CreateBitOrPointerCast(V, ExecTy);
+  // Narrowing would drop lanes and widening would invent them, so a mismatch
+  // here is a raiser bug rather than something to reconcile.
+  assert(V->getType() == Exec->getAllocatedType() &&
+         "EXEC store width must match the EXEC storage width");
   B.CreateStore(V, Exec);
 }
 
