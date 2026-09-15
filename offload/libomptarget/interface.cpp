@@ -428,7 +428,6 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
                          KernelArgs->ArgTypes, KernelArgs->ArgNames,
                          "Entering OpenMP kernel");
 
-#ifdef OMPTARGET_DEBUG
   ODBG_OS(ODT_Kernel, [&](llvm::raw_ostream &Os) {
     for (uint32_t I = 0; I < KernelArgs->NumArgs; ++I) {
       Os << "Entry" << llvm::format("%2d", I)
@@ -443,7 +442,6 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
          << "\n";
     }
   });
-#endif
 
   auto DeviceOrErr = PM->getDevice(DeviceId);
   if (!DeviceOrErr)
