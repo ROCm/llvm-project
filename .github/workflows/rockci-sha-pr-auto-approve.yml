@@ -1,0 +1,73 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+# Approves RockCI SHA-gate PRs as the human who owns ROCK_CI_SHA_APPROVER_TOKEN.
+# GITHUB_TOKEN and the CCI App (PR author) cannot satisfy required reviews.
+
+name: RockCI SHA PR auto-approve
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - amd-staging
+    paths:
+      - .github/rockci-sha/therock-ci-main-ref.json
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  approve:
+    name: Approve SHA-gate PR
+    if: github.repository == 'ROCm/llvm-project'
+    runs-on: ubuntu-24.04
+    env:
+      SHA_HEAD_PREFIX: automation/rockci-therock-
+      ALLOWED_FILE: .github/rockci-sha/therock-ci-main-ref.json
+    steps:
+      - name: Verify SHA-gate PR and approve
+        env:
+          GH_TOKEN: ${{ secrets.VKALLESH_GITHUB_PAT }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "::notice::ROCK_CI_SHA_APPROVER_TOKEN is empty; skipping approve."
+            exit 0
+          fi
+
+          if [[ "${HEAD_REF}" != "${SHA_HEAD_PREFIX}"* ]]; then
+            echo "Skip: head '${HEAD_REF}' is not a SHA-gate branch."
+            exit 0
+          fi
+
+          mapfile -t files < <(gh api \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --paginate \
+            --jq '.[].filename')
+          if [[ "${#files[@]}" -ne 1 || "${files[0]}" != "${ALLOWED_FILE}" ]]; then
+            echo "Skip: files changed are not only ${ALLOWED_FILE}:"
+            printf '  %s\n' "${files[@]}"
+            exit 0
+          fi
+
+          REVIEWER="$(gh api user --jq '.login')"
+          if [[ "${REVIEWER}" == "${PR_AUTHOR}" ]]; then
+            echo "::error::Approver token is the PR author (${REVIEWER}); GitHub will ignore the review."
+            exit 1
+          fi
+
+          gh pr review "${PR_NUMBER}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --approve \
+            --body "Auto-approved SHA-gate JSON update (${HEAD_REF})."
+          echo "Approved #${PR_NUMBER} as ${REVIEWER}."
+
