@@ -10,7 +10,7 @@
 #if defined(KERNEL_USE)
 extern "C" void ubsan_message(const char *msg);
 static void message(const char *msg) { ubsan_message(msg); }
-#elif SANITIZER_AMDGPU || SANITIZER_NVPTX
+#elif SANITIZER_AMDGPU_ || SANITIZER_AMDGPU || SANITIZER_NVPTX
 // Manually declared until we hook up the C headers correctly.
 extern "C" {
 struct FILE;
