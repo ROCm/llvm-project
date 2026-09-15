@@ -51,11 +51,11 @@ int main(int argc, char *argv[]) {
   Status = amd_comgr_destroy_metadata(Gfx950Meta);
   checkError(Status, "amd_comgr_destroy_metadata");
 
-  // gfx6 addresses 32 KiB of LDS, not the 64 KiB of gfx7 onwards.
+  // gfx6 has 64 KiB of LDS, with 32 KiB addressable by one workgroup.
   amd_comgr_metadata_node_t Gfx600Meta;
   Status = amd_comgr_get_isa_metadata("amdgcn-amd-amdhsa--gfx600", &Gfx600Meta);
   checkError(Status, "amd_comgr_get_isa_metadata");
-  checkMetadataString(Gfx600Meta, "LocalMemorySize", "32768");
+  checkMetadataString(Gfx600Meta, "LocalMemorySize", "65536");
   checkMetadataString(Gfx600Meta, "ImageSupport", "1");
   checkMetadataString(Gfx600Meta, "TotalNumVGPRs", "256");
   checkMetadataString(Gfx600Meta, "AddressableNumVGPRs", "256");
@@ -64,11 +64,12 @@ int main(int argc, char *argv[]) {
   Status = amd_comgr_destroy_metadata(Gfx600Meta);
   checkError(Status, "amd_comgr_destroy_metadata");
 
-  // RDNA reports two SIMDs per physical CU, not four per WGP.
   amd_comgr_metadata_node_t Gfx1030Meta;
   Status =
       amd_comgr_get_isa_metadata("amdgcn-amd-amdhsa--gfx1030", &Gfx1030Meta);
   checkError(Status, "amd_comgr_get_isa_metadata");
+  checkMetadataString(Gfx1030Meta, "LocalMemorySize", "131072");
+  // RDNA reports two SIMDs per physical CU, not four per WGP.
   checkMetadataString(Gfx1030Meta, "EUsPerCU", "2");
   checkMetadataString(Gfx1030Meta, "MaxWavesPerCU", "32");
   Status = amd_comgr_destroy_metadata(Gfx1030Meta);
