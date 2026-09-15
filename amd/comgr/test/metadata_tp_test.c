@@ -59,15 +59,19 @@ int main(int argc, char *argv[]) {
   checkMetadataString(Gfx600Meta, "ImageSupport", "1");
   checkMetadataString(Gfx600Meta, "TotalNumVGPRs", "256");
   checkMetadataString(Gfx600Meta, "AddressableNumVGPRs", "256");
+  checkMetadataString(Gfx600Meta, "EUsPerCU", "4");
+  checkMetadataString(Gfx600Meta, "MaxWavesPerCU", "40");
   Status = amd_comgr_destroy_metadata(Gfx600Meta);
   checkError(Status, "amd_comgr_destroy_metadata");
 
-  // RDNA has 128 KiB of LDS per WGP, with 64 KiB addressable by one workgroup.
   amd_comgr_metadata_node_t Gfx1030Meta;
   Status =
       amd_comgr_get_isa_metadata("amdgcn-amd-amdhsa--gfx1030", &Gfx1030Meta);
   checkError(Status, "amd_comgr_get_isa_metadata");
   checkMetadataString(Gfx1030Meta, "LocalMemorySize", "131072");
+  // RDNA reports two SIMDs per physical CU, not four per WGP.
+  checkMetadataString(Gfx1030Meta, "EUsPerCU", "2");
+  checkMetadataString(Gfx1030Meta, "MaxWavesPerCU", "32");
   Status = amd_comgr_destroy_metadata(Gfx1030Meta);
   checkError(Status, "amd_comgr_destroy_metadata");
 
