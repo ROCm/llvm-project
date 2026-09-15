@@ -43,7 +43,8 @@ static Expected<object::SectionRef> findSection(object::ObjectFile &Obj,
     if (*SecName == Name)
       return Section;
   }
-  return makeTranspilerError(formatv("findSection: no section named '{0}'", Name));
+  return makeTranspilerError(
+      formatv("findSection: no section named '{0}'", Name));
 }
 
 // Return named DocNode or nullptr if absent.
@@ -172,8 +173,8 @@ static Expected<uint32_t> readMetadataMinorVersion(msgpack::Document &Doc) {
 
 // Run LLVM's strict AMDGPU metadata verifier as the single source of truth for
 // schema and field types: it proves required fields are present and well-typed
-// so the extraction below does not re-derive that check. Transpiler keeps only the
-// semantic checks the verifier cannot express (version pair, descriptor
+// so the extraction below does not re-derive that check. Transpiler keeps only
+// the semantic checks the verifier cannot express (version pair, descriptor
 // agreement, kernarg ranges).
 static Error verifyMetadataSchema(msgpack::Document &Doc) {
   AMDGPU::HSAMD::V3::MetadataVerifier Verifier(/*Strict=*/true);
@@ -475,7 +476,8 @@ Expected<CodeObjectInfo> CodeObjectInfo::create(MemoryBufferRef ElfData) {
   if (Header.e_machine != ELF::EM_AMDGPU)
     return makeTranspilerError("code object is not an AMDGPU ELF");
   if (Header.e_ident[ELF::EI_OSABI] != ELF::ELFOSABI_AMDGPU_HSA)
-    return makeTranspilerError("code object does not use the AMDGPU HSA OS ABI");
+    return makeTranspilerError(
+        "code object does not use the AMDGPU HSA OS ABI");
 
   // Bind the descriptor and metadata ABI layout to the declared code object
   // version before interpreting either, so an unmodelled version is refused
