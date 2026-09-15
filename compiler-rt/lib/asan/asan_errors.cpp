@@ -20,6 +20,7 @@
 #include "asan_stack.h"
 #include "sanitizer_common/sanitizer_file.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
+#include "sanitizer_common/sanitizer_symbolizer_amdhsa.h"
 
 namespace __asan {
 
@@ -762,7 +763,7 @@ ErrorNonSelfAMDGPU::ErrorNonSelfAMDGPU(uptr *dev_callstack, u32 n_callstack,
 void ErrorNonSelfAMDGPU::PrintStack() {
   InternalScopedString source_location;
   source_location.AppendF("  #0 %p", (void *)callstack[0]);
-#if SANITIZER_AMDGPU
+#if SANITIZER_AMDHSA
   source_location.Append(" in ");
   __sanitizer::AMDGPUCodeObjectSymbolizer symbolizer;
   symbolizer.Init(cb_loc.fd, cb_loc.offset, cb_loc.size);

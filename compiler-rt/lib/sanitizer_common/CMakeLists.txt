@@ -3,7 +3,6 @@
 
 set(SANITIZER_SOURCES_NOTERMINATION
   sanitizer_allocator.cpp
-  sanitizer_allocator_amdgpu.cpp
   sanitizer_common.cpp
   sanitizer_deadlock_detector1.cpp
   sanitizer_deadlock_detector2.cpp
@@ -62,6 +61,7 @@ set(SANITIZER_NOLIBC_SOURCES
 
 set(SANITIZER_LIBCDEP_SOURCES
   sanitizer_common_libcdep.cpp
+  sanitizer_allocator_amdhsa.cpp
   sanitizer_allocator_checks.cpp
   sanitizer_dl.cpp
   sanitizer_linux_libcdep.cpp
@@ -88,7 +88,7 @@ set(SANITIZER_SYMBOLIZER_SOURCES
   sanitizer_stacktrace_printer.cpp
   sanitizer_stacktrace_sparc.cpp
   sanitizer_symbolizer.cpp
-  sanitizer_symbolizer_amdgpu.cpp
+  sanitizer_symbolizer_amdhsa.cpp
   sanitizer_symbolizer_libbacktrace.cpp
   sanitizer_symbolizer_libcdep.cpp
   sanitizer_symbolizer_mac.cpp
@@ -113,8 +113,11 @@ set(SANITIZER_IMPL_HEADERS
   sancov_flags.inc
   sanitizer_addrhashmap.h
   sanitizer_allocator.h
+  sanitizer_allocator_amdhsa.h
   sanitizer_allocator_checks.h
   sanitizer_allocator_combined.h
+  sanitizer_allocator_combined_device.h
+  sanitizer_allocator_device.h
   sanitizer_allocator_dlsym.h
   sanitizer_allocator_interface.h
   sanitizer_allocator_internal.h
@@ -158,6 +161,7 @@ set(SANITIZER_IMPL_HEADERS
   sanitizer_fuchsia.h
   sanitizer_getauxval.h
   sanitizer_hash.h
+  sanitizer_hsa.h
   sanitizer_interceptors_ioctl_netbsd.inc
   sanitizer_interface_internal.h
   sanitizer_internal_defs.h
@@ -197,7 +201,8 @@ set(SANITIZER_IMPL_HEADERS
   sanitizer_stoptheworld.h
   sanitizer_suppressions.h
   sanitizer_symbolizer.h
-  sanitizer_symbolizer_amdgpu.h
+  sanitizer_symbolizer_amdhsa.h
+  sanitizer_symbolizer_comgr.h
   sanitizer_symbolizer_markup_constants.h
   sanitizer_symbolizer_internal.h
   sanitizer_symbolizer_libbacktrace.h
