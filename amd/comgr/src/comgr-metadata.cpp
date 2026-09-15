@@ -541,8 +541,9 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   Root["LocalMemorySize"] = Doc.getNode(
       std::to_string(AMDGPU::getMaxHWAddressableLocalMemorySize(Kind)),
       /*Copy=*/true);
-  // The ISA metadata is mode-independent, so report the full-SIMD counts.
-  unsigned EUsPerCU = AMDGPU::getNumWorkGroupSIMDs(/*FullSIMDMode=*/true);
+  // Report physical-CU counts independently of the workgroup execution mode.
+  // GFX10+ has two SIMDs per CU; earlier targets have four.
+  unsigned EUsPerCU = Features.test(AMDGPU::FEAT_GFX10_INSTS) ? 2 : 4;
   Root["EUsPerCU"] = Doc.getNode(std::to_string(EUsPerCU), /*Copy=*/true);
   Root["MaxWavesPerCU"] = Doc.getNode(
       std::to_string(AMDGPU::getMaxWavesPerEU(Kind) * EUsPerCU), /*Copy=*/true);
