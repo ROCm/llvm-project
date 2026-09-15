@@ -53,7 +53,7 @@ llvm::Expected<RaiseResult> raiseEmptyText(llvm::StringRef SourceIsa,
                                            llvm::StringRef TargetIsa,
                                            const KernelMeta &Meta) {
   COMGR::transpiler::KernelRequest Kernel{"kernel", Meta, /*StartOffset=*/0,
-                                       /*EndOffset=*/0};
+                                          /*EndOffset=*/0};
   return raiseToIR(TextSection{}, SourceIsa, TargetIsa, Kernel);
 }
 

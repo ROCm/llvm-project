@@ -350,9 +350,10 @@ TEST_F(DecoderTest, DecodeKernelRejectsTruncatedInstruction) {
   llvm::Expected<DecodeResult> ResultOrErr =
       decodeKernel(State, Map, Text, /*KernelOffset=*/0);
   ASSERT_FALSE(static_cast<bool>(ResultOrErr));
-  EXPECT_EQ(llvm::toString(ResultOrErr.takeError()),
-            "transpiler: decodeKernel: cannot decode instruction at .text offset "
-            "0x4 (fail)");
+  EXPECT_EQ(
+      llvm::toString(ResultOrErr.takeError()),
+      "transpiler: decodeKernel: cannot decode instruction at .text offset "
+      "0x4 (fail)");
 }
 
 // -- decoded-inst bitfields ---------------------------------------------------

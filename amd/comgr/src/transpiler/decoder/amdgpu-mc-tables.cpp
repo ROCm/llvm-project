@@ -58,8 +58,8 @@ int16_t getNamedOperandIdx(uint32_t Opcode, llvm::AMDGPU::OpName Name) {
 }
 
 bool isVOPD(uint32_t Opcode) {
-  return COMGR::transpiler::getNamedOperandIdx(Opcode,
-                                            llvm::AMDGPU::OpName::src0X) >= 0;
+  return COMGR::transpiler::getNamedOperandIdx(
+             Opcode, llvm::AMDGPU::OpName::src0X) >= 0;
 }
 
 std::pair<uint32_t, uint32_t> getVOPDComponents(uint32_t Opcode) {
@@ -108,13 +108,13 @@ VOPDComponentInfo::VOPDComponentInfo(const llvm::MCInstrDesc &Desc, bool VOPD3)
   HasSrc2Acc = Desc.getOperandConstraint(3, llvm::MCOI::TIED_TO) != -1;
   SrcOperandsNum =
       COMGR::transpiler::getNamedOperandIdx(Desc.getOpcode(),
-                                         llvm::AMDGPU::OpName::src2) >= 0
+                                            llvm::AMDGPU::OpName::src2) >= 0
           ? 3
       : COMGR::transpiler::getNamedOperandIdx(Desc.getOpcode(),
-                                           llvm::AMDGPU::OpName::imm) >= 0
+                                              llvm::AMDGPU::OpName::imm) >= 0
           ? 3
       : COMGR::transpiler::getNamedOperandIdx(Desc.getOpcode(),
-                                           llvm::AMDGPU::OpName::src1) >= 0
+                                              llvm::AMDGPU::OpName::src1) >= 0
           ? 2
           : 1;
 
@@ -127,8 +127,8 @@ VOPDComponentInfo::VOPDComponentInfo(const llvm::MCInstrDesc &Desc, bool VOPD3)
              Desc.getOpcode() == llvm::AMDGPU::V_DOT2_F32_BF16) {
     NumVOPD3Mods = SrcOperandsNum;
   } else {
-    int Src0 = COMGR::transpiler::getNamedOperandIdx(Desc.getOpcode(),
-                                                  llvm::AMDGPU::OpName::src0);
+    int Src0 = COMGR::transpiler::getNamedOperandIdx(
+        Desc.getOpcode(), llvm::AMDGPU::OpName::src0);
     if (Src0 >= 0 && isFloatingPointSource(Desc, Src0)) {
       NumVOPD3Mods = SrcOperandsNum;
       if (HasSrc2Acc)
@@ -197,8 +197,8 @@ operandIndexForSlot(const llvm::MCInstrDesc &Desc,
     return std::nullopt;
   // Qualified because ADL on the argument type also finds the LLVM overload,
   // the one a dylib build does not export.
-  int16_t OperandIndex =
-      COMGR::transpiler::getNamedOperandIdx(Desc.getOpcode(), OperandNames[Slot]);
+  int16_t OperandIndex = COMGR::transpiler::getNamedOperandIdx(
+      Desc.getOpcode(), OperandNames[Slot]);
   if (OperandIndex < 0)
     return std::nullopt;
   return static_cast<unsigned>(OperandIndex);

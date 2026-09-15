@@ -29,7 +29,9 @@ public:
 
   explicit TranspilerError(const llvm::Twine &Detail) : Msg(Detail.str()) {}
 
-  void log(llvm::raw_ostream &OS) const override { OS << "transpiler: " << Msg; }
+  void log(llvm::raw_ostream &OS) const override {
+    OS << "transpiler: " << Msg;
+  }
 
   std::error_code convertToErrorCode() const override {
     return llvm::inconvertibleErrorCode();
