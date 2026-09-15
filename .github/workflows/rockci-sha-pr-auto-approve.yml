@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Verify SHA-gate PR and approve
         env:
-          GH_TOKEN: ${{ secrets.VKALLESH_GITHUB_PAT }}
+          GH_TOKEN: ${{ secrets.ROCK_CI_SHA_APPROVER_TOKEN }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
