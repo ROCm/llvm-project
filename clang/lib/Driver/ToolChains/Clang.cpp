@@ -9779,22 +9779,6 @@ void OffloadBundler::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs, Inputs, Output));
 }
 
-static bool isArchiveOfBundlesFileName(StringRef FilePath) {
-  StringRef FileName = llvm::sys::path::filename(FilePath);
-  if (!FileName.ends_with(".a"))
-    return false;
-
-
-  if (FileName.starts_with("lib")) {
-    if (FileName.contains("amdgcn") && FileName.contains("gfx"))
-      return false;
-    if (FileName.contains("nvptx") && FileName.contains("sm_"))
-      return false;
-  }
-
-  return true;
-}
-
 void OffloadPackager::ConstructJob(Compilation &C, const JobAction &JA,
                                    const InputInfo &Output,
                                    const InputInfoList &Inputs,
