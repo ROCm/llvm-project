@@ -59,14 +59,21 @@ find_package (PythonLibs REQUIRED)
 include_directories (${OMPD_INCLUDE_PATH})
 include_directories (${LIBOMP_INCLUDE_DIR})
 
+# AOMP builds this plugin with setup.py. Pass the installed LLVM headers and
+# llvm-config so the wheel can compile ompdDLService.cpp and link Support.
+find_program(OMPD_LLVM_CONFIG NAMES llvm-config
+             HINTS ${LLVM_TOOLS_BINARY_DIR} ${LLVM_INSTALL_PREFIX}/bin ${LLVM_BINARY_DIR}/bin)
+
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/__init__.py
                    DEPENDS ompdModule.c ompdDLService.cpp ompdAPITests.c setup.py ompd/frame_filter.py ompd/__init__.py ompd/ompd_address_space.py ompd/ompd_callbacks.py ompd/ompd_handles.py ompd/ompd.py
                    COMMAND ${CMAKE_COMMAND} -E env
                      "LIBOMP_INCLUDE_DIR=${LIBOMP_INCLUDE_DIR}"
                      "LLVM_MAIN_INCLUDE_DIR=${LLVM_MAIN_INCLUDE_DIR}"
+                     "LLVM_INCLUDE_DIR=${LLVM_INCLUDE_DIR}"
                      "LLVM_INCLUDE_DIRS=${LLVM_INCLUDE_DIRS}"
                      "LLVM_LIBRARY_DIR=${LLVM_LIBRARY_DIR}"
                      "LLVM_LINK_LLVM_DYLIB=${LLVM_LINK_LLVM_DYLIB}"
+                     "LLVM_CONFIG=${OMPD_LLVM_CONFIG}"
                    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py -v bdist_wheel -b ${CMAKE_CURRENT_BINARY_DIR}/build -d ${CMAKE_CURRENT_BINARY_DIR}
                    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py clean --all
                    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_SOURCE_DIR}/ompd.egg-info
@@ -92,14 +99,9 @@ target_link_libraries (ompdModule ${Python3_LIBRARIES})
 # Use LLVM Support's DynamicLibrary, not POSIX dlopen, and not libclang-cpp.
 if(LLVM_LINK_LLVM_DYLIB)
     target_link_libraries(ompdModule LLVM)
-elseif(COMMAND llvm_map_components_to_libnames)
+else()
     llvm_map_components_to_libnames(ompd_llvm_libs Support)
     target_link_libraries(ompdModule ${ompd_llvm_libs})
-else()
-    find_library(OMPD_LLVM_SUPPORT_LIB LLVMSupport
-                 HINTS ${LLVM_LIBRARY_DIR} ${LLVM_LIBRARY_DIR}/../lib
-                 REQUIRED)
-    target_link_libraries(ompdModule ${OMPD_LLVM_SUPPORT_LIB})
 endif()
 
 set_target_properties (ompdModule PROPERTIES PREFIX "")
