@@ -120,7 +120,8 @@ vgpr_msb_kernel:
 	s_set_vgpr_msb 0x40
 	v_mov_b32_e32 v1, v0
 	s_set_vgpr_msb 0x4004
-; MSB-IR: store i32 {{.+}}, ptr addrspace(1) {{.+}}, align 4
+; MSB-IR: [[HIGH_BANK_VALUE:%.+]] = load i32, ptr addrspace(5) %Vgpr769
+; MSB-IR: store i32 [[HIGH_BANK_VALUE]], ptr addrspace(1) {{.+}}, align 4
 	global_store_dword v[2:3], v1, off
 ; MSB-IR: ret void
 	s_endpgm
