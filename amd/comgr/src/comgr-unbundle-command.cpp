@@ -121,7 +121,9 @@ amd_comgr_status_t UnbundleCommand::execute(raw_ostream &LogS) {
 }
 
 CachedCommandAdaptor::ActionClass UnbundleCommand::getClass() const {
-  return clang::driver::Action::OffloadUnbundlingJobClass;
+  // Not a clang action: comgr calls llvm::OffloadBundler directly, and clang's
+  // OffloadUnbundlingJobClass was removed upstream in llvm#221093.
+  return CachedCommandAdaptor::UnbundleClass;
 }
 
 void UnbundleCommand::addOptionsIdentifier(HashAlgorithm &H) const {
