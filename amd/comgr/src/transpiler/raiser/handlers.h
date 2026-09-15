@@ -17,6 +17,8 @@
 #include "transpiler/raiser/raise_failure.h"
 
 #include "llvm/ADT/Twine.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Error.h"
 
 namespace COMGR::transpiler {
@@ -28,6 +30,23 @@ inline llvm::Error unsupported(const RaiseContext &Ctx, const DecodedInst &Di,
       RaiseFailureReason::UnsupportedInstructionForm,
       strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
       formatName(Di.TargetSpecificFlags), Detail);
+}
+
+// Wait for every memory counter the target tracks, as one sequentially
+// consistent agent-scope fence.
+//
+// Counter identities do not correspond across ISA families and no wait
+// intrinsic exists on all of them, so the fence stands in for whichever
+// counter the source named and the backend expands it for the target. The
+// source's count is dropped along with the identity, a count naming a position
+// in an issue order that raising does not preserve. Agent is the weakest scope
+// that still expands to a wait everywhere: a narrower scope drops the wait on a
+// target whose caches already order that scope, which suits a fence pairing
+// with another thread but not a counter, which only has to have retired.
+inline void emitMemoryWaitAll(RaiseContext &Ctx) {
+  llvm::IRBuilder<> &B = Ctx.B;
+  B.CreateFence(llvm::AtomicOrdering::SequentiallyConsistent,
+                B.getContext().getOrInsertSyncScopeID("agent"));
 }
 
 // Lower one instruction of the format the handler is named for, emitting into
