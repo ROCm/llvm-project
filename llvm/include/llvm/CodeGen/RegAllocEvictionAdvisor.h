@@ -12,10 +12,12 @@
 #include "llvm/ADT/Any.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/Register.h"
+#include "llvm/CodeGen/SlotIndexes.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/MC/MCRegister.h"
@@ -129,8 +131,20 @@ protected:
   LLVM_ABI RegAllocEvictionAdvisor(const MachineFunction &MF,
                                    const RAGreedy &RA);
 
+  struct ReassignmentCache {
+    struct Blocker {
+      SlotIndex Start;
+      SlotIndex End;
+      unsigned Tag = 0;
+      Register QueriedReg;
+    };
+    SmallVector<Blocker, 0> Blockers;
+  };
+
   LLVM_ABI bool canReassign(const LiveInterval &VirtReg,
                             MCRegister FromReg) const;
+  LLVM_ABI bool canReassign(const LiveInterval &VirtReg, MCRegister FromReg,
+                            ReassignmentCache *Cache) const;
 
   // Get the upper limit of elements in the given Order we need to analize.
   // TODO: is this heuristic,  we could consider learning it.
@@ -300,8 +314,8 @@ private:
   bool canEvictHintInterference(const LiveInterval &, MCRegister,
                                 const SmallVirtRegSet &) const override;
   bool canEvictInterferenceBasedOnCost(const LiveInterval &, MCRegister, bool,
-                                       EvictionCost &,
-                                       const SmallVirtRegSet &) const;
+                                       EvictionCost &, const SmallVirtRegSet &,
+                                       ReassignmentCache *) const;
   bool shouldEvict(const LiveInterval &A, bool, const LiveInterval &B,
                    bool) const;
 };
