@@ -177,6 +177,17 @@ void AmdgpuMemFuncs::RegisterSystemEventHandlers() {
   // Check if shutdown event handler is already registered
   if (atomic_compare_exchange_strong(&amdgpu_event_registered, &registered, 1,
                                      memory_order_acq_rel)) {
+    // ASan can be initialized before ROCr is loaded, for example when an
+    // application dlopen()s HIP. Retry symbol resolution after hsa_init() has
+    // loaded the runtime, and never call through an unresolved entry point.
+    if (!Init()) {
+      VReport(1,
+              "Amdgpu RegisterSystemEventHandlers: AMDGPU runtime functions "
+              "are unavailable\n");
+      atomic_store(&amdgpu_event_registered, 0, memory_order_release);
+      return;
+    }
+
     // Callback to detect and notify AMDGPU runtime shutdown
     hsa_amd_system_event_callback_t callback = [](const hsa_amd_event_t* event,
                                                   void* data) {
