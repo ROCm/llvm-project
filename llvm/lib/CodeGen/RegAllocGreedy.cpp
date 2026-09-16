@@ -625,12 +625,13 @@ bool RegAllocEvictionAdvisor::canReassign(const LiveInterval &VirtReg,
         return Interference;
       };
       if (!Cache->Blockers.empty()) {
-        const auto &Blocker = Cache->Blockers[static_cast<unsigned>(Unit)];
-        if (Blocker.Start.isValid() && Blocker.Tag == LiveUnion.getTag() &&
-            VirtReg.beginIndex() < Blocker.End &&
-            Blocker.Start < VirtReg.endIndex()) {
+        const auto &CachedBlocker = Cache->Blockers[static_cast<unsigned>(Unit)];
+        if (CachedBlocker.Start.isValid() &&
+            CachedBlocker.Tag == LiveUnion.getTag() &&
+            VirtReg.beginIndex() < CachedBlocker.End &&
+            CachedBlocker.Start < VirtReg.endIndex()) {
           ++BlockerHits;
-          CrossVRegHits += Blocker.QueriedReg != VirtReg.reg();
+          CrossVRegHits += CachedBlocker.QueriedReg != VirtReg.reg();
           return VerifyInterference(true);
         }
       }
