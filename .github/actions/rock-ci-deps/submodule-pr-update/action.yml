@@ -260,3 +260,16 @@ runs:
           echo "Wave-transform PR: building with LLVM assertions."
         fi
 
+    - name: Enable LLVM assertions for the assertions nightly
+      if: contains(github.workflow, 'Nightly Assertions')
+      shell: bash
+      run: |
+        cat > BRANCH_CONFIG.json <<'EOF'
+        {
+          "flags": {
+            "LLVM_ENABLE_ASSERTIONS": "ON"
+          }
+        }
+        EOF
+        echo "LLVM_ASSERTIONS=1" >> "$GITHUB_ENV"
+        echo "Assertions nightly: building with LLVM assertions"        
