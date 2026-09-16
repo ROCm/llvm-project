@@ -94,6 +94,7 @@ jobs:
 
       # ---- Build Comgr (standalone, against built LLVM + device-libs) ------
       - name: Configure Comgr
+        # Compiler CI exercises the opt-in transpiler; TheRock keeps its default.
         # LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR points Comgr at
         # the in-tree translator headers so COMGR_SPIRV_TRANSLATOR_AVAILABLE
         # turns ON (otherwise translator-dependent lit tests are UNSUPPORTED).
@@ -103,6 +104,7 @@ jobs:
             -DCMAKE_PREFIX_PATH="$PWD/$LLVM_BUILD;$PWD/$DEVLIBS_BUILD" \
             -DLLVM_DIR=$PWD/$LLVM_BUILD/lib/cmake/llvm \
             -DLLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR=$PWD/$TRANSLATOR_SRC \
+            -DCOMGR_ENABLE_TRANSPILER=ON \
             -DBUILD_TESTING=ON
 
       - name: Build Comgr
@@ -556,7 +558,16 @@ jobs:
         # (runs gtest binaries via its COMMAND block), then runs ctest for
         # the legacy C tests. Single target = all three test layers.
         id: check_comgr
-        run: ninja -C "$COMGR_BUILD" check-comgr
+        shell: bash
+        run: |
+          set -o pipefail
+          ninja -C "$COMGR_BUILD" check-comgr 2>&1 | tee comgr-tests.log
+          # A disabled transpiler reports UNSUPPORTED without failing lit.
+          grep -F 'PASS: Comgr :: transpiler/' comgr-tests.log
+          if grep -F 'UNSUPPORTED: Comgr :: transpiler/' comgr-tests.log; then
+            echo 'Transpiler tests must run in Compiler CI.' >&2
+            exit 1
+          fi
 
       - name: Show failed Comgr ctest output
         # check-comgr invokes ctest without --output-on-failure, so failures

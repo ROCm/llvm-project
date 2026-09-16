@@ -136,6 +136,7 @@ jobs:
         run: ninja -C build-device-libs
 
       - name: Configure Comgr
+        # Compiler CI exercises the opt-in transpiler; TheRock keeps its default.
         run: |
           PWD_WIN=$(pwd -W)
           cmake -G Ninja -S llvm-project/amd/comgr -B build-comgr \
@@ -146,6 +147,7 @@ jobs:
             -DLLVM_DIR=$PWD_WIN/build/lib/cmake/llvm \
             -DAMDDeviceLibs_DIR=$PWD_WIN/build-device-libs/lib/cmake/AMDDeviceLibs \
             -DLLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR=$PWD_WIN/llvm-project/llvm/projects/SPIRV-LLVM-Translator \
+            -DCOMGR_ENABLE_TRANSPILER=ON \
             -DBUILD_TESTING=ON
 
       - name: Build Comgr
@@ -475,4 +477,12 @@ jobs:
         id: check_comgr
         env:
           AMD_COMGR_REDIRECT_LOGS: stderr
-        run: ninja -C build-comgr check-comgr
+        run: |
+          set -o pipefail
+          ninja -C build-comgr check-comgr 2>&1 | tee comgr-tests.log
+          # A disabled transpiler reports UNSUPPORTED without failing lit.
+          grep -F 'PASS: Comgr :: transpiler/' comgr-tests.log
+          if grep -F 'UNSUPPORTED: Comgr :: transpiler/' comgr-tests.log; then
+            echo 'Transpiler tests must run in Compiler CI.' >&2
+            exit 1
+          fi
