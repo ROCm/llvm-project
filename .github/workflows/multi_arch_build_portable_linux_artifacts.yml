@@ -109,7 +109,7 @@ jobs:
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
       - name: Submodule PR update (covers parameterised and PR creation)
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd-staging # zizmor: ignore[unpinned-uses] amd-staging is the reviewed moving ref; a commit pin would need an update on every change
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd/dev/kirthana14m/assertions-on-nightly # zizmor: ignore[unpinned-uses] amd-staging is the reviewed moving ref; a commit pin would need an update on every change
  
       - name: Install python deps
         run: pip install -r requirements.txt
