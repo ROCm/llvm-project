@@ -56,6 +56,9 @@ public:
   /// Return an error unless the source f32 environment can be preserved for
   /// this instruction.
   llvm::Error validateF32Environment(const DecodedInst &Di) const;
+  /// Return an error unless the source f16 environment can be preserved for
+  /// this instruction.
+  llvm::Error validateF16Environment(const DecodedInst &Di) const;
   /// Return an error unless the source f64 environment can be preserved for
   /// this instruction.
   llvm::Error validateF64Environment(const DecodedInst &Di) const;

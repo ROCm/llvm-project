@@ -8,7 +8,12 @@
 
 #include "transpiler/raiser/operand-resolver.h"
 
+#include "transpiler/raiser/raise_failure.h"
+
+#include "SIDefines.h"
+
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/MC/MCRegisterInfo.h"
 
 #include <climits>
 
@@ -45,7 +50,35 @@ Expected<Value *> OperandResolver::srcF(unsigned I) {
   Expected<Value *> V = Ctx.registers().readOp32(Di, srcIdx(I));
   if (!V)
     return V.takeError();
-  return applyMods(I, *V);
+  if (srcMod(I) & ~(SISrcMods::NEG | SISrcMods::ABS))
+    return unsupportedInstruction(Ctx, Di, "unsupported f32 source modifier");
+  Value *Float = Ctx.B.CreateBitCast(*V, Ctx.B.getFloatTy());
+  return applyMods(I, Float);
+}
+
+Expected<Value *> OperandResolver::srcF16(unsigned I) {
+  Expected<Value *> V = Ctx.registers().readOp32(Di, srcIdx(I));
+  if (!V)
+    return V.takeError();
+
+  unsigned Modifiers = srcMod(I);
+  constexpr unsigned AllowedModifiers =
+      SISrcMods::NEG | SISrcMods::ABS | SISrcMods::OP_SEL_0;
+  if (Modifiers & ~AllowedModifiers)
+    return unsupportedInstruction(Ctx, Di, "unsupported f16 source modifier");
+
+  unsigned SourceIndex = srcIdx(I);
+  bool SourceIsHigh =
+      (Modifiers & SISrcMods::OP_SEL_0) != 0 ||
+      (Di.isReg(SourceIndex) &&
+       (Ctx.MC.RegInfo->getEncodingValue(Di.getReg(SourceIndex)) &
+        AMDGPU::HWEncoding::IS_HI16));
+  Value *SelectedBits = *V;
+  if (SourceIsHigh)
+    SelectedBits = Ctx.B.CreateLShr(SelectedBits, 16, "src.hi");
+  Value *LowBits = Ctx.B.CreateTrunc(SelectedBits, Ctx.B.getInt16Ty());
+  Value *Half = Ctx.B.CreateBitCast(LowBits, Ctx.B.getHalfTy());
+  return applyMods(I, Half);
 }
 
 Expected<std::optional<ParsedReg>> OperandResolver::srcReg(unsigned I) {

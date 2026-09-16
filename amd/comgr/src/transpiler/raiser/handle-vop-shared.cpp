@@ -14,13 +14,10 @@
 #include "transpiler/raiser/raise_failure.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
-#include "SIDefines.h"
-#include "Utils/AMDGPUBaseInfo.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
-#include "llvm/MC/MCRegisterInfo.h"
 
 using namespace llvm;
 
@@ -117,69 +114,68 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> SourceBits = Op.srcF(0);
-  if (!SourceBits)
-    return SourceBits.takeError();
-  Value *Source = Ctx.B.CreateBitCast(*SourceBits, Ctx.B.getFloatTy());
+  Expected<Value *> Source = Op.srcF(0);
+  if (!Source)
+    return Source.takeError();
 
   Value *Result;
   switch (Di.CanonOp) {
   case CanonicalOp::V_FRACT_F32:
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_fract, Source,
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_fract, *Source,
                                         nullptr, "fract");
     break;
   case CanonicalOp::V_TRUNC_F32:
     Result =
-        Ctx.B.CreateUnaryIntrinsic(Intrinsic::trunc, Source, nullptr, "trunc");
+        Ctx.B.CreateUnaryIntrinsic(Intrinsic::trunc, *Source, nullptr, "trunc");
     break;
   case CanonicalOp::V_CEIL_F32:
     Result =
-        Ctx.B.CreateUnaryIntrinsic(Intrinsic::ceil, Source, nullptr, "ceil");
+        Ctx.B.CreateUnaryIntrinsic(Intrinsic::ceil, *Source, nullptr, "ceil");
     break;
   case CanonicalOp::V_RNDNE_F32:
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::roundeven, Source, nullptr,
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::roundeven, *Source, nullptr,
                                         "rndne");
     break;
   case CanonicalOp::V_FLOOR_F32:
     Result =
-        Ctx.B.CreateUnaryIntrinsic(Intrinsic::floor, Source, nullptr, "floor");
+        Ctx.B.CreateUnaryIntrinsic(Intrinsic::floor, *Source, nullptr, "floor");
     break;
   case CanonicalOp::V_EXP_F32:
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_exp2, Source, nullptr,
-                                        "exp");
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_exp2, *Source,
+                                        nullptr, "exp");
     break;
   case CanonicalOp::V_LOG_F32:
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_log, Source, nullptr,
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_log, *Source, nullptr,
                                         "log");
     break;
   case CanonicalOp::V_RCP_F32:
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_rcp, Source, nullptr,
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_rcp, *Source, nullptr,
                                         "rcp");
     break;
   case CanonicalOp::V_RSQ_F32:
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_rsq, Source, nullptr,
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_rsq, *Source, nullptr,
                                         "rsq");
     break;
   case CanonicalOp::V_SQRT_F32:
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_sqrt, Source, nullptr,
-                                        "sqrt");
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_sqrt, *Source,
+                                        nullptr, "sqrt");
     break;
   case CanonicalOp::V_SIN_F32:
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_sin, Source, nullptr,
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_sin, *Source, nullptr,
                                         "sin");
     break;
   case CanonicalOp::V_COS_F32:
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_cos, Source, nullptr,
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_cos, *Source, nullptr,
                                         "cos");
     break;
   case CanonicalOp::V_FREXP_EXP_I32_F32:
     Result = Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_frexp_exp,
                                    {Ctx.B.getInt32Ty(), Ctx.B.getFloatTy()},
-                                   {Source}, nullptr, "frexp.exp");
+                                   {*Source}, nullptr, "frexp.exp");
     Ctx.registers().writeReg32(*Dst, Result);
     return Error::success();
   case CanonicalOp::V_FREXP_MANT_F32:
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_frexp_mant, Source,
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_frexp_mant, *Source,
                                         nullptr, "frexp.mant");
     break;
   default:
@@ -203,7 +199,7 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
   if (Error Err = Ctx.validateF32Environment(Di))
     return Err;
   if (Di.CanonOp == CanonicalOp::V_CVT_F16_F32) {
-    if (Error Err = Ctx.validateF64Environment(Di))
+    if (Error Err = Ctx.validateF16Environment(Di))
       return Err;
   }
 
@@ -226,49 +222,30 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
   }
   case CanonicalOp::V_CVT_I32_F32:
   case CanonicalOp::V_CVT_U32_F32: {
-    Expected<Value *> SourceBits = Op.srcF(0);
-    if (!SourceBits)
-      return SourceBits.takeError();
-    Value *Source = Ctx.B.CreateBitCast(*SourceBits, Ctx.B.getFloatTy());
+    Expected<Value *> Source = Op.srcF(0);
+    if (!Source)
+      return Source.takeError();
     Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_CVT_I32_F32
                            ? Intrinsic::fptosi_sat
                            : Intrinsic::fptoui_sat;
     Result = Ctx.B.CreateIntrinsic(ID, {Ctx.B.getInt32Ty(), Ctx.B.getFloatTy()},
-                                   {Source});
+                                   {*Source});
     break;
   }
   case CanonicalOp::V_CVT_F16_F32: {
-    Expected<Value *> SourceBits = Op.srcF(0);
-    if (!SourceBits)
-      return SourceBits.takeError();
-    Value *Source = Ctx.B.CreateBitCast(*SourceBits, Ctx.B.getFloatTy());
-    Value *Half = Ctx.B.CreateFPTrunc(Source, Ctx.B.getHalfTy(), "cvt");
+    Expected<Value *> Source = Op.srcF(0);
+    if (!Source)
+      return Source.takeError();
+    Value *Half = Ctx.B.CreateFPTrunc(*Source, Ctx.B.getHalfTy(), "cvt");
     Value *HalfBits = Ctx.B.CreateBitCast(Half, Ctx.B.getInt16Ty());
     Result = Ctx.B.CreateZExt(HalfBits, Ctx.B.getInt32Ty());
     break;
   }
   case CanonicalOp::V_CVT_F32_F16: {
-    Expected<Value *> SourceBits = Op.src(0);
-    if (!SourceBits)
-      return SourceBits.takeError();
-    unsigned Modifiers = Op.srcMod(0);
-    constexpr unsigned AllowedModifiers =
-        SISrcMods::NEG | SISrcMods::ABS | SISrcMods::OP_SEL_0;
-    if (Modifiers & ~AllowedModifiers)
-      return unsupportedInstruction(Ctx, Di, "unsupported source modifier");
-
-    unsigned SourceIndex = Op.srcIdx(0);
-    const MCRegisterInfo &MRI = *Ctx.MC.RegInfo;
-    bool SourceIsHigh = (Modifiers & SISrcMods::OP_SEL_0) != 0 ||
-                        (Di.isReg(SourceIndex) &&
-                         AMDGPU::isHi16Reg(Di.getReg(SourceIndex), MRI));
-    Value *SelectedBits = *SourceBits;
-    if (SourceIsHigh)
-      SelectedBits = Ctx.B.CreateLShr(SelectedBits, 16, "cvt.hi");
-    Value *LowBits = Ctx.B.CreateTrunc(SelectedBits, Ctx.B.getInt16Ty());
-    Value *Half = Ctx.B.CreateBitCast(LowBits, Ctx.B.getHalfTy());
-    Half = Op.applyMods(0, Half);
-    Value *Converted = Ctx.B.CreateFPExt(Half, Ctx.B.getFloatTy(), "cvt");
+    Expected<Value *> Source = Op.srcF16(0);
+    if (!Source)
+      return Source.takeError();
+    Value *Converted = Ctx.B.CreateFPExt(*Source, Ctx.B.getFloatTy(), "cvt");
     Result = Ctx.B.CreateBitCast(Converted, Ctx.B.getInt32Ty());
     break;
   }
@@ -279,23 +256,10 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<Value *> Source = Op.src(0);
     if (!Source)
       return Source.takeError();
-    unsigned ByteIndex;
-    switch (Di.CanonOp) {
-    case CanonicalOp::V_CVT_F32_UBYTE0:
-      ByteIndex = 0;
-      break;
-    case CanonicalOp::V_CVT_F32_UBYTE1:
-      ByteIndex = 1;
-      break;
-    case CanonicalOp::V_CVT_F32_UBYTE2:
-      ByteIndex = 2;
-      break;
-    case CanonicalOp::V_CVT_F32_UBYTE3:
-      ByteIndex = 3;
-      break;
-    default:
-      llvm_unreachable("not a byte conversion");
-    }
+    unsigned ByteIndex = Di.CanonOp == CanonicalOp::V_CVT_F32_UBYTE0   ? 0
+                         : Di.CanonOp == CanonicalOp::V_CVT_F32_UBYTE1 ? 1
+                         : Di.CanonOp == CanonicalOp::V_CVT_F32_UBYTE2 ? 2
+                                                                       : 3;
     Value *Byte = *Source;
     if (ByteIndex != 0)
       Byte = Ctx.B.CreateLShr(Byte, ByteIndex * 8, "cvt.byte.shift");
@@ -334,6 +298,7 @@ Error raiseCndMask32(RaiseContext &Ctx, const DecodedInst &Di,
     if (*KnownCondition) {
       Condition = *KnownCondition;
     } else {
+      // Use the full SGPR mask when no per-lane condition is available.
       Expected<Value *> Mask = Op.srcExecWidth(2);
       if (!Mask)
         return Mask.takeError();

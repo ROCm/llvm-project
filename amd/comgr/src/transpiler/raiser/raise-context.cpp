@@ -111,6 +111,19 @@ Error RaiseContext::validateF32Environment(const DecodedInst &Di) const {
   return Error::success();
 }
 
+Error RaiseContext::validateF16Environment(const DecodedInst &Di) const {
+  if (SourceFloatRoundMode16_64 != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedFloatingPointMode,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        Twine("f16 rounding mode ") + Twine(SourceFloatRoundMode16_64) +
+            " is unsupported");
+  }
+
+  return Error::success();
+}
+
 Error RaiseContext::validateF64Environment(const DecodedInst &Di) const {
   if (SourceFloatRoundMode16_64 != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
     return RaiseFailure::atInstruction(

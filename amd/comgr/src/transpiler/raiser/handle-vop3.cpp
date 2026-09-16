@@ -45,7 +45,7 @@ Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
   return Di.getImm(Idx) != 0;
 }
 
-/// Reject nonzero output multipliers.
+/// Reject nonzero output multipliers on integer VOP3 instructions.
 Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
   int Idx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
                                                   AMDGPU::OpName::omod);
@@ -55,15 +55,22 @@ Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
     return unsupportedInstruction(Ctx, Di, "omod operand is not immediate");
   if (Di.getImm(Idx) != 0)
     return unsupportedInstruction(Ctx, Di,
-                                  "output multiplier is not supported");
+                                  "integer output multiplier is not supported");
   return Error::success();
 }
 
 /// Reject non-default floating-point output modifiers.
 Error requireDefaultFloatOutputModifiers(RaiseContext &Ctx,
                                          const DecodedInst &Di) {
-  if (Error Err = requireNoOutputMultiplier(Ctx, Di))
-    return Err;
+  int OmodIndex = COMGR::transpiler::getNamedOperandIdx(
+      Di.Inst.getOpcode(), AMDGPU::OpName::omod);
+  if (OmodIndex >= 0) {
+    if (!Di.isImm(OmodIndex))
+      return unsupportedInstruction(Ctx, Di, "omod operand is not immediate");
+    if (Di.getImm(OmodIndex) != 0)
+      return unsupportedInstruction(
+          Ctx, Di, "floating-point output multiplier is not supported");
+  }
   Expected<bool> Clamp = readClamp(Ctx, Di);
   if (!Clamp)
     return Clamp.takeError();
@@ -332,18 +339,16 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> SignificandBits = Op.srcF(0);
-  if (!SignificandBits)
-    return SignificandBits.takeError();
+  Expected<Value *> Significand = Op.srcF(0);
+  if (!Significand)
+    return Significand.takeError();
   Expected<Value *> Exponent = Op.src(1);
   if (!Exponent)
     return Exponent.takeError();
 
-  Value *Significand =
-      Ctx.B.CreateBitCast(*SignificandBits, Ctx.B.getFloatTy());
   Value *Result = Ctx.B.CreateIntrinsic(
       Intrinsic::ldexp, {Ctx.B.getFloatTy(), Ctx.B.getInt32Ty()},
-      {Significand, *Exponent}, nullptr, "ldexp");
+      {*Significand, *Exponent}, nullptr, "ldexp");
   Value *ResultBits = Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty());
   Ctx.registers().writeReg32(*Dst, ResultBits);
   return Error::success();
@@ -356,14 +361,20 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   switch (Di.CanonOp) {
   case CanonicalOp::V_CVT_F32_I32:
   case CanonicalOp::V_CVT_F32_U32:
-  case CanonicalOp::V_CVT_I32_F32:
-  case CanonicalOp::V_CVT_U32_F32:
-  case CanonicalOp::V_CVT_F16_F32:
-  case CanonicalOp::V_CVT_F32_F16:
   case CanonicalOp::V_CVT_F32_UBYTE0:
   case CanonicalOp::V_CVT_F32_UBYTE1:
   case CanonicalOp::V_CVT_F32_UBYTE2:
   case CanonicalOp::V_CVT_F32_UBYTE3: {
+    if (Error Err = requireNoIntegerSourceModifiers(Ctx, Di, Op))
+      return Err;
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatConversion32(Ctx, Di, Op);
+  }
+  case CanonicalOp::V_CVT_I32_F32:
+  case CanonicalOp::V_CVT_U32_F32:
+  case CanonicalOp::V_CVT_F16_F32:
+  case CanonicalOp::V_CVT_F32_F16: {
     if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
       return Err;
     return raiseFloatConversion32(Ctx, Di, Op);
@@ -392,6 +403,8 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     return raiseLdexpFloat32(Ctx, Di, Op);
   }
   case CanonicalOp::V_CNDMASK_B32:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
     return raiseCndMask32(Ctx, Di, Op);
   default:
     break;
