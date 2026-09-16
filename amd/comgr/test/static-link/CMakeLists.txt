@@ -44,3 +44,58 @@ comgr_collect_static_libraries(repeated_libraries first shared)
 if(NOT "${libraries}" STREQUAL "${repeated_libraries}")
   message(FATAL_ERROR "Static library traversal leaked state between calls")
 endif()
+
+# Model LLVM packages that export both component archives and shared wrappers.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/llvm.c"
+  "int external_only(void) { return 7; }\n")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/wrapper.c"
+  "int external_only(void); int wrapper(void) { return external_only(); }\n")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/other.c"
+  "int external_only(void); int main(void) { return external_only() != 7; }\n")
+add_library(LLVM SHARED "${CMAKE_CURRENT_BINARY_DIR}/llvm.c")
+add_library(LTO SHARED "${CMAKE_CURRENT_BINARY_DIR}/wrapper.c")
+add_library(Remarks SHARED "${CMAKE_CURRENT_BINARY_DIR}/wrapper.c")
+# Avoid collisions with real LLVM libraries in the caller's loader path.
+foreach(target IN ITEMS LLVM LTO Remarks)
+  set_target_properties(${target} PROPERTIES OUTPUT_NAME "comgr-test-${target}")
+endforeach()
+target_link_libraries(LTO PRIVATE LLVM)
+target_link_libraries(Remarks PRIVATE LLVM)
+target_link_libraries(first PRIVATE LLVM)
+set_target_properties(first late PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Import in the parent directory, as a superproject can do before adding Comgr.
+add_library(imported_first STATIC IMPORTED)
+set_target_properties(imported_first PROPERTIES
+  IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}first${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  INTERFACE_LINK_LIBRARIES "dependencies;$<LINK_ONLY:LLVM>")
+foreach(config IN LISTS CMAKE_CONFIGURATION_TYPES)
+  string(TOUPPER "${config}" upper_config)
+  set_property(TARGET imported_first PROPERTY "IMPORTED_LOCATION_${upper_config}"
+    "${CMAKE_CURRENT_BINARY_DIR}/${config}/${CMAKE_STATIC_LIBRARY_PREFIX}first${CMAKE_STATIC_LIBRARY_SUFFIX}")
+endforeach()
+add_dependencies(imported_first first)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/expected.h" "#define EXPECTED 42\n")
+foreach(target IN ITEMS first imported_first)
+  set_property(TARGET ${target} APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+    "${CMAKE_CURRENT_BINARY_DIR}")
+  set_property(TARGET ${target} APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS
+    COMGR_INTERFACE_REQUIREMENT=42)
+endforeach()
+
+set(LLVM_AVAILABLE_LIBS first LLVM LTO Remarks)
+comgr_static_llvm_libraries(llvm_libraries)
+get_target_property(original_imported imported_first INTERFACE_LINK_LIBRARIES)
+get_target_property(original_builtin first INTERFACE_LINK_LIBRARIES)
+add_subdirectory(isolation)
+get_target_property(current_imported imported_first INTERFACE_LINK_LIBRARIES)
+get_target_property(current_builtin first INTERFACE_LINK_LIBRARIES)
+if(NOT original_imported STREQUAL current_imported OR
+   NOT original_builtin STREQUAL current_builtin)
+  message(FATAL_ERROR "Comgr changed another consumer's link interface")
+endif()
+
+# An independent consumer must still inherit the shared LLVM dependency.
+add_executable(other-consumer "${CMAKE_CURRENT_BINARY_DIR}/other.c")
+target_link_libraries(other-consumer PRIVATE imported_first)
+add_test(NAME run-other-consumer COMMAND other-consumer)

@@ -541,32 +541,6 @@ option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symb
 if(COMGR_STATIC_LLVM)
   set(LLVM_LINK_LLVM_DYLIB OFF)
   set(CLANG_LINK_CLANG_DYLIB OFF)
-
-  # When LLVM was built with LLVM_BUILD_LLVM_DYLIB=ON, every imported clang*/
-  # lld* static lib (and a handful of LLVM static libs) records the dylib
-  # `LLVM` target in INTERFACE_LINK_LIBRARIES. CMake follows that interface,
-  # which silently re-introduces libLLVM.so as a DT_NEEDED of libamd_comgr.so,
-  # defeating the whole point of COMGR_STATIC_LLVM. Strip those references.
-  function(_comgr_strip_llvm_dylib_iface_dep target)
-    if(NOT TARGET ${target})
-      return()
-    endif()
-    get_target_property(_iface ${target} INTERFACE_LINK_LIBRARIES)
-    if(NOT _iface)
-      return()
-    endif()
-    set(_new_iface "")
-    foreach(_dep IN LISTS _iface)
-      if(NOT _dep STREQUAL "LLVM")
-        list(APPEND _new_iface "${_dep}")
-      endif()
-    endforeach()
-    set_property(TARGET ${target} PROPERTY INTERFACE_LINK_LIBRARIES "${_new_iface}")
-  endfunction()
-  get_property(_imported_targets DIRECTORY PROPERTY IMPORTED_TARGETS)
-  foreach(_t IN LISTS _imported_targets)
-    _comgr_strip_llvm_dylib_iface_dep(${_t})
-  endforeach()
 endif()
 
 if(NOT CLANG_LINK_CLANG_DYLIB)
@@ -595,15 +569,8 @@ endif()
 if (LLVM_LINK_LLVM_DYLIB)
   set(LLVM_LIBS LLVM ${SPIRV_DYNAMIC_LIB})
 else()
-  # Full static link. Reached when LLVM was built without LLVM_BUILD_LLVM_DYLIB,
-  # or when COMGR_STATIC_LLVM forced LLVM_LINK_LLVM_DYLIB=OFF above.
-  #
-  # llvm_map_components_to_libnames(... all) does not work in downstream
-  # consumers (it reads a GLOBAL property only set during LLVM's own build),
-  # so use LLVM_AVAILABLE_LIBS exported by LLVMConfig.cmake instead.
-  set(LLVM_LIBS ${LLVM_AVAILABLE_LIBS})
-  list(REMOVE_ITEM LLVM_LIBS LLVM)  # bare `LLVM` is the dylib target
-  # LLVM_AVAILABLE_LIBS already contains the LLVMSPIRVAMDLib target when built.
+  include(ComgrStaticLibraries)
+  comgr_static_llvm_libraries(LLVM_LIBS)
 endif()
 
 target_link_options(amd_comgr
@@ -612,23 +579,17 @@ target_link_options(amd_comgr
   PRIVATE
     ${AMD_COMGR_PRIVATE_LINKER_OPTIONS})
 
-if(NOT LLVM_LINK_LLVM_DYLIB AND UNIX AND NOT APPLE)
-  # CMake otherwise appends transitive archives after --end-group, where their
-  # references back into earlier archives cannot be resolved by GNU ld.
-  include(ComgrStaticLibraries)
+if(COMGR_STATIC_LLVM)
+  # Link archive files rather than targets so their LLVM dylib interfaces do
+  # not affect Comgr. Other consumers keep the original target interfaces.
+  comgr_static_link_libraries(amd_comgr ${LLD_LIBS} ${LLVM_LIBS} ${CLANG_LIBS})
+elseif(NOT LLVM_LINK_LLVM_DYLIB AND UNIX AND NOT APPLE)
   comgr_collect_static_libraries(COMGR_STATIC_LIBRARIES
     ${LLD_LIBS} ${LLVM_LIBS} ${CLANG_LIBS})
-  target_link_libraries(amd_comgr
-    PRIVATE
-      "-Wl,--start-group"
-      ${COMGR_STATIC_LIBRARIES}
-      "-Wl,--end-group")
+  target_link_libraries(amd_comgr PRIVATE
+    "-Wl,--start-group" ${COMGR_STATIC_LIBRARIES} "-Wl,--end-group")
 else()
-  target_link_libraries(amd_comgr
-    PRIVATE
-      ${LLD_LIBS}
-      ${LLVM_LIBS}
-      ${CLANG_LIBS})
+  target_link_libraries(amd_comgr PRIVATE ${LLD_LIBS} ${LLVM_LIBS} ${CLANG_LIBS})
 endif()
 
 # hotswap transpiler link edge — must come after the curated LLVM set above so

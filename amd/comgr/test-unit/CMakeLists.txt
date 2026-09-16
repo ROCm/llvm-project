@@ -172,12 +172,11 @@ add_executable(DemangleSymbolNameTest
 target_link_libraries(DemangleSymbolNameTest PRIVATE
   ${COMGR_GTEST_LIBS}
   amd_comgr
+  LLVMSupport
   ${LLVM_PTHREAD_LIB})
 
-# Gtest's LLVM support brings in some printers for LLVM types (StringRef, etc.).
-# When building in-tree, the included headers bring in some code that depend on LLVM's abi-breaking checks.
-# This adds a dependency with LLVM's Support library.
-# We could link against Support, but since we're not using these printers we can just disable them.
+# Disable LLVM printers in this test. LLVM's prebuilt GTest main still needs
+# LLVMSupport for its ABI-check reference when assertions are enabled.
 target_compile_definitions(DemangleSymbolNameTest PRIVATE GTEST_NO_LLVM_SUPPORT=true)
 
 target_include_directories(DemangleSymbolNameTest PRIVATE
