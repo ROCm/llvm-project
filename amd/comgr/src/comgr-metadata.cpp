@@ -528,27 +528,30 @@ const char *getIsaName(size_t Index) {
 //   ImageSupport: Whether the target supports AMDGPU image instructions.
 //
 // Memory and execution limits:
-//   LocalMemorySize: Maximum LDS bytes addressable by one workgroup, from
-//     getMaxHWAddressableLocalMemorySize(); not total physical LDS capacity.
-//   LDSBankCount: LDS banks per CU in LLVM's target model. Forwarded from
-//     getLDSBankCount() without CU/WGP scaling.
-//   EUsPerCU: SIMDs per full execution block, currently four. On RDNA this
-//     is a WGP count despite the historical PerCU name.
-//   MaxWavesPerCU: Maximum resident waves per full execution block, computed
+//   LocalMemorySize: Total LDS bytes shared by workgroups in the full physical
+//     block, from getLocalMemorySize(Kind, true). On RDNA and CDNA5 this is
+//     a WGP capacity; it is not the allocation limit for one workgroup.
+//   LDSBankCount: LDS banks in LLVM's target model, forwarded from
+//     getLDSBankCount() without CU/WGP scaling. The bank set is target-dependent.
+//   EUsPerCU: SIMDs per physical CU: two with FEAT_GFX10_INSTS, otherwise four.
+//   MaxWavesPerCU: Maximum resident waves per physical CU, computed
 //     as getMaxWavesPerEU() * EUsPerCU, before kernel resource restrictions.
 //   MaxFlatWorkGroupSize: Compiler-supported maximum work-items per
 //     workgroup, currently 1024; limits the product of the dimensions.
-//   The execution counts use full-SIMD mode independently of a kernel's
-//   CU/WGP mode.
+//   These values do not select a kernel's CU/WGP mode. Account for that mode
+//   and the different LDS and execution-count domains when computing occupancy.
 //
 // Scalar registers (one SGPR holds a 32-bit value shared by a wavefront):
 //   SGPRAllocGranule: SGPRs per allocation unit in LLVM's target model.
-//   TotalNumSGPRs: SGPR capacity per SIMD reported by LLVM's target model.
+//   TotalNumSGPRs: SGPR capacity per SIMD in LLVM's occupancy model only on
+//     targets where SGPRs limit occupancy; not physical capacity on GFX10+.
 //   AddressableNumSGPRs: Maximum SGPRs addressable by one wavefront, including
 //     target-specific restrictions such as the SGPR initialization workaround.
-//   On GFX10+, SGPRAllocGranule equals AddressableNumSGPRs, and LLVM does not
-//   model SGPR use as an occupancy limit. Kernel ABI and register reservations
-//   can further constrain the register budget.
+//   On GFX10+, SGPRAllocGranule and AddressableNumSGPRs both report the fixed
+//   allowance of 106 normal SGPRs per wave, not a physical allocation quantum.
+//   TotalNumSGPRs still reports 800; LLVM does not use it to limit occupancy
+//   on these targets. Kernel ABI and register reservations can further
+//   constrain the register budget.
 //
 // Vector registers (one VGPR holds a 32-bit value for each wavefront lane):
 //   VGPRAllocGranule: VGPRs per allocation unit for a wavefront.

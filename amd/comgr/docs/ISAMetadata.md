@@ -102,29 +102,53 @@ Features:
 ## Memory and execution limits
 
 An execution unit (EU) here is a SIMD that executes wavefronts. A compute unit
-(CU) and a workgroup processor (WGP) are different resource domains on RDNA:
-a physical CU has two SIMDs, while a WGP has four. Comgr reports the full
-four-SIMD block for `EUsPerCU` and `MaxWavesPerCU`.
+(CU) and a workgroup processor (WGP) are different resource domains on RDNA
+and CDNA5: a physical CU has two SIMDs, while a WGP has four. Comgr reports
+`EUsPerCU` and `MaxWavesPerCU` per physical CU. `LocalMemorySize` instead
+describes the full physical LDS block shared by workgroups, which belongs to
+a WGP on these targets.
 
 | Entry | Unit | Description |
 | --- | --- | --- |
-| `LocalMemorySize` | Bytes per workgroup | Maximum LDS (local data share) memory that a single workgroup can address. Comgr queries `getMaxHWAddressableLocalMemorySize()`, the architectural per-workgroup cap. |
-| `LDSBankCount` | Banks per CU | Number of LDS banks in LLVM's target model, as returned by `getLDSBankCount()`. Comgr forwards this count without CU/WGP scaling. |
-| `EUsPerCU` | SIMDs per full block | Number of SIMDs in the full execution block, currently `"4"`. On RDNA this describes a WGP despite the historical `PerCU` name. Comgr queries `getNumWorkGroupSIMDs(true)`. |
-| `MaxWavesPerCU` | Wavefronts per full block | Maximum resident-wave count before restrictions from register usage, LDS usage, or workgroup layout. Comgr multiplies `getMaxWavesPerEU()` by `EUsPerCU`; on RDNA the result is a WGP total. |
+| `LocalMemorySize` | Bytes per full physical LDS block | Total LDS (local data share) capacity available to workgroups sharing the block. Comgr queries `getLocalMemorySize(Kind, /*FullSIMDMode=*/true)`, selecting the full four-SIMD block. |
+| `LDSBankCount` | Banks in LLVM's target model | Number of LDS banks returned by `getLDSBankCount()`. Comgr forwards this count without CU/WGP scaling; the bank-set domain is target-dependent. |
+| `EUsPerCU` | SIMDs per physical CU | Number of SIMDs in a physical CU: `"2"` when LLVM's `FEAT_GFX10_INSTS` feature is present, otherwise `"4"`. |
+| `MaxWavesPerCU` | Wavefronts per physical CU | Maximum resident-wave count before restrictions from register usage, LDS usage, or workgroup layout. Comgr multiplies `getMaxWavesPerEU()` by `EUsPerCU`. |
 | `MaxFlatWorkGroupSize` | Work-items per workgroup | Maximum workgroup size supported by the compiler, currently `"1024"`. For a multidimensional workgroup this limits the product of its dimensions. Comgr queries `getMaxFlatWorkGroupSize()`. |
 
-`LocalMemorySize` describes a different limit from the total physical LDS
-available to all workgroups on a CU or WGP. For example, Comgr reports 32 KiB
-for `gfx600` and 64 KiB for `gfx1030` through this per-workgroup query. These
-values must not be used as the total physical capacity when calculating
-LDS-limited occupancy. Likewise, `LDSBankCount` is not multiplied by the
-four-SIMD factor used for the execution counts.
+`LocalMemorySize` is the capacity shared by all workgroups using the full
+physical block. It is not the maximum that one workgroup can allocate. The
+following examples show the reported capacity and execution counts alongside
+the separate architectural address limit:
 
-The execution counts use full-SIMD mode independently of a kernel's CU/WGP
-execution mode. They are architectural upper bounds rather than a prediction
-of a particular kernel's occupancy. The [TargetParser declarations][target-parser]
-describe the underlying queries and their units.
+| Processor | `LocalMemorySize` (bytes) | Physical LDS block | Maximum LDS addressable by one workgroup (KiB) | `EUsPerCU` | `MaxWavesPerCU` |
+| --- | --- | --- | --- | --- | --- |
+| `gfx600` | `"65536"` (64 KiB) | CU | 32 | `"4"` | `"40"` |
+| `gfx900` | `"65536"` (64 KiB) | CU | 64 | `"4"` | `"40"` |
+| `gfx90a` | `"65536"` (64 KiB) | CU | 64 | `"4"` | `"32"` |
+| `gfx950` | `"163840"` (160 KiB) | CU | 160 | `"4"` | `"32"` |
+| `gfx1010` | `"131072"` (128 KiB) | WGP | 64 | `"2"` | `"40"` |
+| `gfx1030` | `"131072"` (128 KiB) | WGP | 64 | `"2"` | `"32"` |
+| `gfx1250` | `"327680"` (320 KiB) | WGP | 320 | `"2"` | `"32"` |
+
+The address limit column is not an additional ISA metadata field; it shows
+`getMaxHWAddressableLocalMemorySize()` for comparison. The allocation limit
+for a particular execution mode can also depend on how much of the physical
+block that mode can reach. LLVM's `getAddressableLocalMemorySize()` applies
+both limits.
+
+For example, `gfx1030` reports 128 KiB for the full WGP even when a kernel runs
+in CU mode, where only 64 KiB is available to its workgroups. Its execution
+counts still describe one physical CU: two SIMDs and 32 wave slots. Its
+`LDSBankCount` is 32 for one CU-associated bank set; Comgr does not scale it to
+the 64 banks across the WGP. In contrast, `gfx1250` reports 64 banks for its
+shared 320 KiB LDS. Account for these resource domains and the kernel's
+execution mode when calculating occupancy.
+
+These are architectural upper bounds in the compiler's target model, not a
+prediction of a particular kernel's occupancy. The
+[TargetParser declarations][target-parser] describe the underlying queries
+and their units.
 
 ## Scalar registers
 
@@ -134,18 +158,21 @@ of a wavefront.
 | Entry | Unit | Description |
 | --- | --- | --- |
 | `SGPRAllocGranule` | SGPRs per allocation unit | SGPR allocation granularity reported by `getSGPRAllocGranule()`. For targets where SGPRs limit occupancy, register use is allocated in multiples of this count. |
-| `TotalNumSGPRs` | SGPRs per SIMD | Scalar-register capacity reported by `getTotalNumSGPRs()`, used by LLVM's SGPR occupancy model on targets where that limit applies. |
+| `TotalNumSGPRs` | SGPRs per SIMD in LLVM's occupancy model | Value reported by `getTotalNumSGPRs()`, used as the scalar-register capacity only on targets where SGPRs limit occupancy. It is not a physical capacity on GFX10 and later. |
 | `AddressableNumSGPRs` | SGPRs per wavefront | Maximum number of SGPRs a wavefront can address, as returned by `getAddressableNumSGPRs()`. This includes target-specific restrictions such as the SGPR initialization workaround. |
 
 These are target-level counts. ABI requirements, special-register use, and
 trap-handler reservations can further constrain a kernel's register budget.
 They do not report the number of registers used by a compiled kernel.
 
-On GFX10 and later, `SGPRAllocGranule` equals `AddressableNumSGPRs` in LLVM's
-current model. LLVM does not treat SGPR usage as an occupancy limit on those
-targets. Consequently, the two SGPR capacity fields alone do not define a
-general occupancy formula. See the [TargetParser implementation][target-parser-impl]
-and `isSGPROccupancyLimited()` in [AMDGPUBaseInfo.cpp][base-info].
+On GFX10 and later, `SGPRAllocGranule` and `AddressableNumSGPRs` both report
+`"106"`, the fixed allowance of normal SGPRs per wavefront in LLVM's model.
+This granule does not describe a physical allocation quantum. `TotalNumSGPRs`
+still reports the legacy query value `"800"`; it does not describe the physical
+SGPR pool on those targets and must not be used to limit occupancy. LLVM does
+not treat SGPR usage as an occupancy limit on GFX10 and later. See the
+[TargetParser implementation][target-parser-impl] and
+`isSGPROccupancyLimited()` in [AMDGPUBaseInfo.cpp][base-info].
 
 ## Vector registers
 
