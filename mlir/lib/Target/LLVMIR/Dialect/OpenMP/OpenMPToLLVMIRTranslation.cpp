@@ -8939,6 +8939,65 @@ static void getTargetEntryUniqueInfo(llvm::TargetRegionEntryInfo &targetInfo,
       ompBuilder.getTargetEntryUniqueInfo(fileInfoCallBack, vfs, parentName);
 }
 
+/// Build the DIOp based expression for a variable that is located by \p loc.
+/// Such a variable is described by a location holding its address together
+/// with the type of the variable. That type is \p varType when it is known
+/// from the source of the variable, for example the type carried by a map
+/// clause, and null when it has to be deduced from the IR.
+static llvm::DIExpression *getVariableExpression(llvm::LLVMContext &context,
+                                                 llvm::Value *loc,
+                                                 llvm::Type *varType) {
+  llvm::DIExprBuilder exprBuilder(context);
+  exprBuilder.append<llvm::DIOp::Arg>(0u, loc->getType());
+  if (!loc->getType()->isPointerTy())
+    return exprBuilder.intoExpression();
+
+  if (!varType) {
+    // An alloca knows what it holds. Anything else is an opaque pointer by
+    // this point, so fall back to describing it as one.
+    if (auto *allocaInst =
+            llvm::dyn_cast<llvm::AllocaInst>(loc->stripPointerCasts()))
+      varType = allocaInst->getAllocatedType();
+    else
+      varType = loc->getType();
+  }
+  exprBuilder.append<llvm::DIOp::Deref>(varType);
+  return exprBuilder.intoExpression();
+}
+
+/// Types of the variables located by the arguments of a target kernel, which
+/// are known from the map clauses rather than from the IR.
+using VariableTypeMap = llvm::DenseMap<llvm::Value *, llvm::Type *>;
+
+/// Add DIOp based expressions to the debug records of \p func for the AMDGPU
+/// target. A record that already carries an expression is left alone.
+static void updateDebugInfoForFunction(llvm::Function *func,
+                                       const VariableTypeMap &varTypes = {}) {
+  if (!llvm::Triple(func->getParent()->getTargetTriple()).isAMDGPU())
+    return;
+
+  auto addExpression = [&](auto *record) {
+    llvm::DIExpression *old = record->getExpression();
+    if ((old != nullptr) && (old->getNumElements() != 0))
+      return;
+    // FIXME: Could this be an assert?
+    if (record->getNumVariableLocationOps() != 1u)
+      return;
+    llvm::Value *loc = record->getVariableLocationOp(0u);
+    record->setExpression(
+        getVariableExpression(func->getContext(), loc, varTypes.lookup(loc)));
+  };
+
+  for (llvm::Instruction &inst : llvm::instructions(func)) {
+    if (auto *intrinsic = dyn_cast<llvm::DbgVariableIntrinsic>(&inst))
+      addExpression(intrinsic);
+
+    for (llvm::DbgVariableRecord &record :
+         llvm::filterDbgVars(inst.getDbgRecordRange()))
+      addExpression(&record);
+  }
+}
+
 // The createDeviceArgumentAccessor function generates
 // instructions for retrieving (acessing) kernel
 // arguments inside of the device kernel for use by
@@ -8985,7 +9044,8 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
     LLVM::ModuleTranslation &moduleTranslation,
     llvm::IRBuilderBase::InsertPoint allocaIP,
     llvm::IRBuilderBase::InsertPoint codeGenIP,
-    llvm::ArrayRef<llvm::IRBuilderBase::InsertPoint> deallocIPs) {
+    llvm::ArrayRef<llvm::IRBuilderBase::InsertPoint> deallocIPs,
+    VariableTypeMap &varTypes) {
   assert(ompBuilder.Config.isTargetDevice() &&
          "function only supported for target device codegen");
   builder.restoreIP(allocaIP);
@@ -8994,6 +9054,9 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
   LLVM::TypeToLLVMIRTranslator typeToLLVMIRTranslator(
       ompBuilder.M.getContext());
   unsigned alignmentValue = 0;
+  // Type of the mapped variable, which the debug records of the kernel need
+  // and which cannot be recovered from the IR once the kernel is built.
+  llvm::Type *varType = nullptr;
   BlockArgument mlirArg;
   SmallVector<std::pair<Value, BlockArgument>> blockArgsPairs;
   cast<omp::BlockArgOpenMPOpInterface>(*targetOp).getBlockArgsPairs(
@@ -9006,6 +9069,7 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
       // Get information of alignment of mapped object
       alignmentValue = typeToLLVMIRTranslator.getPreferredAlignment(
           mapOp.getVarPtrType(), ompBuilder.M.getDataLayout());
+      varType = typeToLLVMIRTranslator.translateType(mapOp.getVarPtrType());
 
       // Find the corresponding entry block argument, which can be associated to
       // a map, use_device* or has_device* clause.
@@ -9098,6 +9162,9 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
     assert(false && "Currently unsupported capture kind");
     break;
   }
+
+  if (varType)
+    varTypes[retVal] = varType;
 
   return builder.saveIP();
 }
@@ -9790,6 +9857,11 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
     return combinedInfos;
   };
 
+  // Types of the mapped variables and the kernel they are mapped into, which
+  // the debug records of the kernel need once it has been built.
+  VariableTypeMap varTypes;
+  llvm::Function *kernelFunc = nullptr;
+
   auto argAccessorCB = [&](llvm::Argument &arg, llvm::Value *input,
                            llvm::Value *&retVal, InsertPointTy allocaIP,
                            InsertPointTy codeGenIP,
@@ -9807,9 +9879,11 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
       return codeGenIP;
     }
 
+    kernelFunc = arg.getParent();
     return createDeviceArgumentAccessor(targetOp, mapData, arg, input, retVal,
                                         builder, *ompBuilder, moduleTranslation,
-                                        allocaIP, codeGenIP, deallocIPs);
+                                        allocaIP, codeGenIP, deallocIPs,
+                                        varTypes);
   };
 
   llvm::OpenMPIRBuilder::TargetKernelRuntimeAttrs runtimeAttrs;
@@ -9922,6 +9996,9 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
   if (failed(handleError(afterIP, opInst)))
     return failure();
 
+  if (kernelFunc)
+    updateDebugInfoForFunction(kernelFunc, varTypes);
+
   builder.restoreIP(*afterIP);
 
   if (dependencies.DepArray)
@@ -9942,63 +10019,15 @@ static void updateDebugInfoForDeclareTargetVariables(
     llvm::SmallVector<llvm::DIGlobalVariableExpression *> GVEs;
     GV->getDebugInfo(GVEs);
     GV->eraseMetadata(llvm::LLVMContext::MD_dbg);
-    llvm::DIExprBuilder ExprBuilder(M->getContext());
-    unsigned int globalAS = M->getDataLayout().getDefaultGlobalsAddressSpace();
-    auto ptrTy = llvm::PointerType::get(M->getContext(), globalAS);
-    ExprBuilder.append<llvm::DIOp::Arg>(0u, ptrTy);
-    ExprBuilder.append<llvm::DIOp::Deref>(GV->getType());
+    llvm::DIExpression *expr =
+        getVariableExpression(M->getContext(), GV, GV->getValueType());
     for (auto *GVE : GVEs) {
       llvm::DIExpression *Old = GVE->getExpression();
       assert((Old == nullptr) || (Old->getNumElements() == 0));
       auto *newGVE = llvm::DIGlobalVariableExpression::get(
-          M->getContext(), GVE->getVariable(), ExprBuilder.intoExpression());
+          M->getContext(), GVE->getVariable(), expr);
       GV->addDebugInfo(newGVE);
     }
-  }
-}
-
-// This function Add DIOp based expressions to the debug records in the
-// declare target functions.
-
-static void updateDebugInfoForDeclareTargetFunctions(
-    llvm::Function *Fn, LLVM::ModuleTranslation &moduleTranslation) {
-  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
-  llvm::Module &M = ompBuilder->M;
-
-  if (!llvm::Triple(M.getTargetTriple()).isAMDGPU())
-    return;
-
-  auto AddExpression = [&](auto *DR) {
-    llvm::DIExpression *Old = DR->getExpression();
-    // Skip if an expression is already present.
-    if ((Old != nullptr) && (Old->getNumElements() != 0))
-      return;
-    // Skip if the there are multiple inputs.
-    // FIXME: Could this be an assert? More to the point, can we do this at the
-    // point of generating the intrinsics to begin with, rather than fixing them
-    // up here?
-    if (DR->getNumVariableLocationOps() != 1u)
-      return;
-    auto Loc = DR->getVariableLocationOp(0u);
-    llvm::DIExprBuilder EB(Fn->getContext());
-    if (auto AI = dyn_cast<llvm::AllocaInst>(Loc->stripPointerCasts())) {
-      DR->replaceVariableLocationOp(0u, AI);
-      EB.append<llvm::DIOp::Arg>(0u, AI->getType());
-      EB.append<llvm::DIOp::Deref>(AI->getAllocatedType());
-    } else if (Loc->getType()->isPointerTy()) {
-      EB.append<llvm::DIOp::Arg>(0u, Loc->getType());
-      EB.append<llvm::DIOp::Deref>(Loc->getType());
-    } else
-      EB.append<llvm::DIOp::Arg>(0u, Loc->getType());
-    DR->setExpression(EB.intoExpression());
-  };
-
-  for (llvm::Instruction &I : instructions(Fn)) {
-    if (auto *DDI = dyn_cast<llvm::DbgVariableIntrinsic>(&I))
-      AddExpression(DDI);
-
-    for (llvm::DbgVariableRecord &DVR : filterDbgVars(I.getDbgRecordRange()))
-      AddExpression(&DVR);
   }
 }
 
@@ -10032,7 +10061,7 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
         ompBuilder->Builder.ClearInsertionPoint();
         ompBuilder->Builder.SetCurrentDebugLocation(llvm::DebugLoc());
       } else if (llvmFunc) {
-        updateDebugInfoForDeclareTargetFunctions(llvmFunc, moduleTranslation);
+        updateDebugInfoForFunction(llvmFunc);
 
         // Device-side declare target functions are externally visible by
         // default so they can be referenced from other device translation

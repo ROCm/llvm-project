@@ -9238,25 +9238,6 @@ static void FixupDebugInfoForOutlinedFunction(
       }
     }
 
-    Module *M = Func->getParent();
-    if ((Triple(M->getTargetTriple())).isAMDGPU()) {
-      if (DR->getNumVariableLocationOps() != 1u)
-        return;
-      auto Loc = DR->getVariableLocationOp(0u);
-      llvm::DIExprBuilder ExprBuilder(Builder.getContext());
-      // Add DIOps based expressions.
-      if (auto AI = dyn_cast<llvm::AllocaInst>(Loc->stripPointerCasts())) {
-        DR->replaceVariableLocationOp(0u, AI);
-        ExprBuilder.append<llvm::DIOp::Arg>(0u, AI->getType());
-        ExprBuilder.append<llvm::DIOp::Deref>(AI->getAllocatedType());
-      } else if (Loc->getType()->isPointerTy()) {
-        ExprBuilder.append<llvm::DIOp::Arg>(0u, Loc->getType());
-        ExprBuilder.append<llvm::DIOp::Deref>(Loc->getType());
-      } else
-        ExprBuilder.append<llvm::DIOp::Arg>(0u, Loc->getType());
-      DR->setExpression(ExprBuilder.intoExpression());
-    }
-
     if (ArgNo != 0)
       DR->setVariable(GetUpdatedDIVariable(OldVar, ArgNo));
   };

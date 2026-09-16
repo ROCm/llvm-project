@@ -11,9 +11,10 @@ subroutine fff(x, y)
 
 end subroutine fff
 
-! CHECK: define{{.*}}amdgpu_kernel void @[[FN:[0-9a-zA_Z_]+]]{{.*}}!dbg ![[SP:[0-9]+]] {
-! CHECK-DAG: #dbg_declare(ptr %{{.*}}, ![[X:[0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(ptr)), {{.*}})
-! CHECK-DAG: #dbg_declare(ptr %{{.*}}, ![[Y:[0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(ptr)), {{.*}})
+! CHECK: define{{.*}}amdgpu_kernel void @[[FN:[0-9a-zA_Z_]+]](ptr %{{[0-9]+}}, ptr %{{[0-9]+}}, ptr %{{[0-9]+}}){{.*}}!dbg ![[SP:[0-9]+]]
+! CHECK-DAG: #dbg_declare(ptr %{{.*}}, ![[X:[0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(i32)), {{.*}})
+! Type of Y is a descriptor. Match only the start of its struct type.
+! CHECK-DAG: #dbg_declare(ptr %{{.*}}, ![[Y:[0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref({ ptr,{{.*}})), {{.*}})
 ! CHECK: }
 
 ! CHECK-DAG: ![[SP]] = {{.*}}!DISubprogram(name: "[[FN]]"{{.*}})
