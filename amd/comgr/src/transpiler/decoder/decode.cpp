@@ -12,9 +12,9 @@
 #include "amdgpu-mc-tables.h"
 #include "canonical-op.h"
 #include "decoded-inst.h"
-#include "transpiler/common/transpiler-error.h"
 #include "mc-state.h"
 #include "opcode-map.h"
+#include "transpiler/common/transpiler-error.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
@@ -259,7 +259,7 @@ Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
                        Half.CanonOp == CanonicalOp::V_XOR_B32 ||
                        Half.CanonOp == CanonicalOp::V_BITOP3_B32))
     BitOpIdx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                                  AMDGPU::OpName::bitop3);
+                                                     AMDGPU::OpName::bitop3);
 
   if (!Half.hasBitOp3() && BitOpIdx >= 0) {
     unsigned OperandIdx = static_cast<unsigned>(BitOpIdx);
@@ -322,8 +322,8 @@ Expected<uint64_t> soppBranchTarget(const DecodedInst &Di) {
   std::optional<int64_t> Imm = evalOperandAsConst(Di.Inst, 0);
   if (!Imm)
     return makeTranspilerError("soppBranchTarget: branch at .text offset 0x" +
-                            Twine::utohexstr(Di.Offset) +
-                            " carries no constant displacement");
+                               Twine::utohexstr(Di.Offset) +
+                               " carries no constant displacement");
 
   // The ISA reads the program counter as the address of the instruction that
   // follows the branch, and counts the displacement in dwords from there.
@@ -335,8 +335,8 @@ Expected<uint64_t> soppBranchTarget(const DecodedInst &Di) {
   // near the end of the section rather than reading as the error it is.
   if (Displacement < 0 && static_cast<uint64_t>(-Displacement) > Base)
     return makeTranspilerError("soppBranchTarget: branch at .text offset 0x" +
-                            Twine::utohexstr(Di.Offset) +
-                            " reaches back past the start of .text");
+                               Twine::utohexstr(Di.Offset) +
+                               " reaches back past the start of .text");
   return Base + static_cast<uint64_t>(Displacement);
 }
 
@@ -504,8 +504,8 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
   for (uint64_t Start : Out.BlockStarts)
     if (Start != KernelOffset && !DecodedOffsets.contains(Start))
       return makeTranspilerError("decodeKernel: branch target 0x" +
-                              Twine::utohexstr(Start) +
-                              " is not the offset of a decoded instruction");
+                                 Twine::utohexstr(Start) +
+                                 " is not the offset of a decoded instruction");
 
   return Out;
 }

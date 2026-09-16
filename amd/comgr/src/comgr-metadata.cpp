@@ -555,8 +555,9 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
       Doc.getNode(std::to_string(isTrapHandlerEnabled(Kind)), /*Copy=*/true);
   Root["ImageSupport"] = Doc.getNode(
       std::to_string(Features.test(AMDGPU::FEAT_IMAGE_INSTS)), /*Copy=*/true);
+  // Report total LDS capacity in full-SIMD mode.
   Root["LocalMemorySize"] = Doc.getNode(
-      std::to_string(AMDGPU::getMaxHWAddressableLocalMemorySize(Kind)),
+      std::to_string(AMDGPU::getLocalMemorySize(Kind, /*FullSIMDMode=*/true)),
       /*Copy=*/true);
   // Report physical-CU counts independently of the workgroup execution mode.
   // GFX10+ has two SIMDs per CU; earlier targets have four.

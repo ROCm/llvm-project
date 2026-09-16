@@ -485,7 +485,8 @@ DenseMap<unsigned, unsigned> buildMcToPseudoMap(unsigned NumOpc) {
   DenseMap<unsigned, unsigned> Result;
   for (unsigned P = 0; P < NumOpc; ++P) {
     for (unsigned Gen = 0; Gen < KNumEncodingFamilies; ++Gen) {
-      std::optional<unsigned> Mc = mappedOpcode(transpiler::getMCOpcode(P, Gen));
+      std::optional<unsigned> Mc =
+          mappedOpcode(transpiler::getMCOpcode(P, Gen));
       if (Mc && *Mc != P)
         Result.try_emplace(*Mc, P);
     }
