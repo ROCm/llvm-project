@@ -494,6 +494,75 @@ const char *getIsaName(size_t Index) {
   return getIsaInfos()[Index].IsaName.c_str();
 }
 
+// ISA metadata schema for amd_comgr_get_isa_metadata(). Keep this description
+// in sync with amd/comgr/docs/ISAMetadata.md, which provides examples and LLVM
+// reference links. These are target properties, not live device information or
+// per-kernel resource usage. Code object metadata has a separate schema.
+//
+// The root is a map. All values are strings except Features, which is a map
+// of strings. Numeric values use decimal notation; Boolean flags use "0"/"1".
+//
+// Target identity (preserving the spelling in the requested ISA name):
+//   Name: Complete requested ISA name, including feature settings.
+//   Architecture: Target triple's architecture component.
+//   Vendor: Target triple's vendor component, normally "amd".
+//   OS: Target triple's OS/runtime component, such as "amdhsa".
+//   Environment: Target triple's environment component; may be empty.
+//   Processor: Processor component of the requested name, such as "gfx90a".
+//   Version: ISA metadata format version, currently "1.0.0"; separate from
+//     the GPU ISA revision, Comgr library version, and code object version.
+//
+// Target feature settings:
+//   Features: Map containing the supported xnack and sramecc settings.
+//     xnack: XNACK memory-fault replay setting.
+//     sramecc: SRAM error-correcting code (ECC) setting.
+//     Each value is "any" when unspecified, "on" for an explicit '+', or
+//     "off" for an explicit '-'. Unsupported settings are absent; requesting
+//     one explicitly is an error. This map describes target requirements,
+//     not the current configuration of a device.
+//
+// Capabilities:
+//   TrapHandlerEnabled: Whether Comgr models trap handling as enabled;
+//     currently "1" for every supported AMDGCN target. Does not report a
+//     trap handler's register reservation or inspect an installed handler.
+//   ImageSupport: Whether the target supports AMDGPU image instructions.
+//
+// Memory and execution limits:
+//   LocalMemorySize: Total LDS bytes shared by workgroups in the full physical
+//     block, from getLocalMemorySize(Kind, true). On RDNA and CDNA5 this is
+//     a WGP capacity; it is not the allocation limit for one workgroup.
+//   LDSBankCount: LDS banks in LLVM's target model, forwarded from
+//     getLDSBankCount() without CU/WGP scaling. The bank set is
+//     target-dependent.
+//   EUsPerCU: SIMDs per physical CU: two with FEAT_GFX10_INSTS, otherwise four.
+//   MaxWavesPerCU: Maximum resident waves per physical CU, computed
+//     as getMaxWavesPerEU() * EUsPerCU, before kernel resource restrictions.
+//   MaxFlatWorkGroupSize: Compiler-supported maximum work-items per
+//     workgroup, currently 1024; limits the product of the dimensions.
+//   These values do not select a kernel's CU/WGP mode. Account for that mode
+//   and the different LDS and execution-count domains when computing occupancy.
+//
+// Scalar registers (one SGPR holds a 32-bit value shared by a wavefront):
+//   SGPRAllocGranule: SGPRs per allocation unit in LLVM's target model.
+//   TotalNumSGPRs: SGPR capacity per SIMD in LLVM's occupancy model only on
+//     targets where SGPRs limit occupancy; not physical capacity on GFX10+.
+//   AddressableNumSGPRs: Maximum SGPRs addressable by one wavefront, including
+//     target-specific restrictions such as the SGPR initialization workaround.
+//   On GFX10+, SGPRAllocGranule and AddressableNumSGPRs both report the fixed
+//   allowance of 106 normal SGPRs per wave, not a physical allocation quantum.
+//   TotalNumSGPRs still reports 800; LLVM does not use it to limit occupancy
+//   on these targets. Kernel ABI and register reservations can further
+//   constrain the register budget.
+//
+// Vector registers (one VGPR holds a 32-bit value for each wavefront lane):
+//   VGPRAllocGranule: VGPRs per allocation unit for a wavefront.
+//   TotalNumVGPRs: Wave-sized VGPR capacity per SIMD, shared by resident waves.
+//   AddressableNumVGPRs: Maximum VGPRs addressable by one wavefront; includes
+//     addressable AGPR capacity on targets with a unified register file.
+//   All three use wave32 where FEAT_GFX10_INSTS is present, otherwise wave64.
+//   The addressable count has target-specific wave-size rules; it cannot be
+//   converted by universally halving it for wave64. The queries describe
+//   static allocation without a kernel's dynamic VGPR block size.
 amd_comgr_status_t getIsaMetadata(StringRef IsaName,
                                   llvm::msgpack::Document &Doc) {
   amd_comgr_status_t Status;
