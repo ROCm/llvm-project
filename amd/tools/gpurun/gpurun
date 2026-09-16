@@ -44,6 +44,26 @@ if sys.version_info < (3, 7):
 noAmdSmi = False
 noRocmSmi = True
 
+def get_hip_enumeration_info(device):
+    """
+    Return (hip_id, hip_uuid) for a device, tolerating older amd-smi versions.
+
+    amdsmi_get_gpu_enumeration_info() is only available in newer amd-smi.
+    Older releases still expose amdsmi_get_gpu_device_uuid(), which yields the
+    same UUID; format it the way parse_rocm_smi_toponuma() does so the two
+    backends agree. These values feed debug output only, so if neither call is
+    available just report them as unknown rather than failing the launch.
+    """
+    try:
+       info = amdsmi_get_gpu_enumeration_info(device)
+       return info['hip_id'], info['hip_uuid']
+    except (NameError, AttributeError, KeyError, AmdSmiException):
+       pass
+    try:
+       return None, "GPU-" + amdsmi_get_gpu_device_uuid(device)
+    except (NameError, AttributeError, AmdSmiException):
+       return None, None
+
 def get_amd_smi_static_numa():
     """
     get the output of 'amd-smi static --numa' to extract GPU affinity
@@ -65,7 +85,7 @@ def get_amd_smi_static_numa():
           print("No GPUs on machine")
           sys.extit(1)
        for device in devices:
-          info = amdsmi_get_gpu_enumeration_info(device)
+          hip_id, uuid = get_hip_enumeration_info(device)
           node_number = amdsmi_topo_get_numa_node_number(device)
           if debug_numa > 2: print("****");print("gpu_id: ", gpu_id);print("Numa: ",node_number)
           # Ensure lists are large enough to accommodate the GPU ID
@@ -74,8 +94,8 @@ def get_amd_smi_static_numa():
           numa_node[gpu_id] = node_number
           while len(hip_uuid) <= gpu_id:
              hip_uuid.append(None)
-          hip_uuid[gpu_id] = info['hip_uuid']
-          if debug_numa > 2: print("hip_id: ", info['hip_id']); print("hip_uuid: ", info['hip_uuid'])
+          hip_uuid[gpu_id] = uuid
+          if debug_numa > 2: print("hip_id: ", hip_id); print("hip_uuid: ", uuid)
 
           try:
             affi_node = amdsmi_get_gpu_topo_numa_affinity(device)
@@ -89,8 +109,12 @@ def get_amd_smi_static_numa():
              gpu_affinity.append(None)
           gpu_affinity[gpu_id] = affi_node
           gpu_id += 1
-    except AmdSmiException as e:
-      printr(f"Error executing amd-smi: {e}")
+    except (AmdSmiException, NameError, AttributeError) as e:
+      # NameError/AttributeError mean this amd-smi predates an API gpurun uses.
+      # Report it and leave the results empty so the caller can fall back to
+      # another backend rather than launching with no topology information.
+      print(f"Error executing amd-smi: {e}")
+      return [], [], []
 
     if len(gpu_affinity) == 0:
       gpu_affinity.append(None)
@@ -485,6 +509,19 @@ if __name__ == "__main__":
        affinity_data, node_data, hip_uuid = get_amd_smi_static_numa_cli()
     elif use_amdsmi:
        affinity_data, node_data, hip_uuid = get_amd_smi_static_numa()
+       # Bindings importable but unusable (e.g. too old for an API used above).
+       # Try the same fallbacks an absent binding would get, rather than
+       # launching with no topology information.
+       if not node_data:
+          if debug_numa: print("amd-smi bindings unusable, trying amd-smi CLI")
+          cli_affinity, cli_node, cli_uuid = get_amd_smi_static_numa_cli(debug_numa)
+          if cli_node:
+             affinity_data, node_data, hip_uuid = cli_affinity, cli_node, cli_uuid
+          else:
+             if debug_numa: print("amd-smi CLI unusable, falling back to rocm-smi")
+             rs_affinity, rs_node, rs_uuid = parse_rocm_smi_toponuma()
+             if rs_node:
+                affinity_data, node_data, hip_uuid = rs_affinity, rs_node, rs_uuid
     elif noAmdSmi or use_rocmsmi:
        affinity_data, node_data, hip_uuid = parse_rocm_smi_toponuma()
     else:

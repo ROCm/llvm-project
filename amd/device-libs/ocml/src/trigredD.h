@@ -5,27 +5,17 @@
  * License. See LICENSE.TXT for details.
  *===------------------------------------------------------------------------*/
 
-struct redret {
-    double lo;
-    double hi;
-    int i;
-};
+#include "redretD.h"
 
-struct scret {
-    double s;
-    double c;
-};
-
-extern CONSTATTR struct redret MATH_PRIVATE(trigredsmall)(double x);
-extern CONSTATTR struct redret MATH_PRIVATE(trigredlarge)(double x);
-extern CONSTATTR struct redret MATH_PRIVATE(trigred)(double x);
+extern CONSTATTR struct epredret MATH_PRIVATE(eptrigredsmall)(double x);
+extern CONSTATTR struct epredret MATH_PRIVATE(eptrigredlarge)(double x);
+extern CONSTATTR struct epredret MATH_PRIVATE(eptrigred)(double x);
 
 extern CONSTATTR struct scret MATH_PRIVATE(sincosred)(double x);
-extern CONSTATTR struct scret MATH_PRIVATE(sincosred2)(double x, double y);
+extern CONSTATTR struct scret MATH_PRIVATE(sincosredep)(double2 x);
 
 // cos in .lo, sin in .hi
-extern CONSTATTR double4 MATH_PRIVATE(epsincosred2)(double x, double y);
+extern CONSTATTR double4 MATH_PRIVATE(epsincosredep)(double2 x);
 extern CONSTATTR double4 MATH_PRIVATE(epsincos)(double y);
 
-extern CONSTATTR double MATH_PRIVATE(tanred2)(double x, double xx, int sel);
-
+extern CONSTATTR double MATH_PRIVATE(tanredep)(double2 x, int sel);

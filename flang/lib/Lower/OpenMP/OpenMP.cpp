@@ -1764,13 +1764,15 @@ getImplicitMapTypeAndKind(fir::FirOpBuilder &firOpBuilder,
       }
     }
 
-    if (declareTargetOp && declareTargetOp.isDeclareTarget()) {
+    mlir::omp::DeclareTargetAttr declareTargetAttr =
+        declareTargetOp ? declareTargetOp.getDeclareTarget() : nullptr;
+    if (declareTargetAttr) {
       // OpenMP 6.0, Section 7.9.3, Line Numbers: 12-14
       // If a variable appears in an enter or link clause on a declare target
       // directive that does not have a device_type clause with the nohost
       // device-type-description then it is treated as if it had appeared in
       // a map clause with a map-type of tofrom
-      if (declareTargetOp.getDeclareTargetDeviceType() !=
+      if (declareTargetAttr.getDeviceType() !=
           mlir::omp::DeclareTargetDeviceType::nohost) {
         mapFlag |= mlir::omp::ClauseMapFlags::to;
         mapFlag |= mlir::omp::ClauseMapFlags::from;
@@ -1850,8 +1852,9 @@ markDeclareTarget(mlir::Operation *op, lower::AbstractConverter &converter,
   // likely through implicit capture (usage in another declare target
   // function/subroutine). It should be marked as any if it has been assigned
   // both host and nohost, else we skip, as there is no change
-  if (declareTargetOp.isDeclareTarget()) {
-    if (declareTargetOp.getDeclareTargetDeviceType() != deviceType)
+  if (mlir::omp::DeclareTargetAttr declareTargetAttr =
+          declareTargetOp.getDeclareTarget()) {
+    if (declareTargetAttr.getDeviceType() != deviceType)
       declareTargetOp.setDeclareTarget(mlir::omp::DeclareTargetDeviceType::any,
                                        captureClause, automap,
                                        /*implicit=*/false);

@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // Definition of `COMGR::ensureLLVMInitialized` for the test binaries that link
-// the hotswap OBJECT libraries without linking amd_comgr.
+// the transpiler OBJECT libraries without linking amd_comgr.
 //
 // amd_comgr bakes in its own copy of LLVM and hides every internal symbol, so a
 // binary that linked it for this one function would register AMDGPU into that
