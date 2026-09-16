@@ -516,10 +516,10 @@ const char *getIsaName(size_t Index) {
 //   Features: Map containing the supported xnack and sramecc settings.
 //     xnack: XNACK memory-fault replay setting.
 //     sramecc: SRAM error-correcting code (ECC) setting.
-//     Each value is "any" when unspecified, "on" for an explicit '+', or
-//     "off" for an explicit '-'. Unsupported settings are absent; requesting
-//     one explicitly is an error. This map describes target requirements,
-//     not the current configuration of a device.
+//     Each value is "any" when unspecified, permitting either on or off.
+//     An explicit '+' selects "on" (enabled required); '-' selects "off"
+//     (disabled required). These requirements apply to the requested target ID.
+//     Unsupported settings are absent; requesting one explicitly is an error.
 //
 // Capabilities:
 //   TrapHandlerEnabled: Whether Comgr models trap handling as enabled;
