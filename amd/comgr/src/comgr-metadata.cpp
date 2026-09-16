@@ -532,7 +532,8 @@ const char *getIsaName(size_t Index) {
 //     block, from getLocalMemorySize(Kind, true). On RDNA and CDNA5 this is
 //     a WGP capacity; it is not the allocation limit for one workgroup.
 //   LDSBankCount: LDS banks in LLVM's target model, forwarded from
-//     getLDSBankCount() without CU/WGP scaling. The bank set is target-dependent.
+//     getLDSBankCount() without CU/WGP scaling. The bank set is
+//     target-dependent.
 //   EUsPerCU: SIMDs per physical CU: two with FEAT_GFX10_INSTS, otherwise four.
 //   MaxWavesPerCU: Maximum resident waves per physical CU, computed
 //     as getMaxWavesPerEU() * EUsPerCU, before kernel resource restrictions.
