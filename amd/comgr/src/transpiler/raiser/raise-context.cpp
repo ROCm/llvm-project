@@ -17,11 +17,14 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Module.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/KnownBits.h"
 
 #include <utility>
 
@@ -35,7 +38,8 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
                      ArrayRef<uint8_t> SourceTextBytes,
                      uint64_t SourceTextBaseAddress,
                      ArrayRef<TextSection::ImageSection> SourceImageSections,
-                     uint64_t KernelStartOffset, uint64_t KernelEndOffset) {
+                     uint64_t KernelStartOffset, uint64_t KernelEndOffset,
+                     std::optional<bool> SourceSramEcc) {
   Expected<RegisterState> Registers =
       RegisterState::create(B, Projection, MC, Meta);
   if (!Registers)
@@ -54,11 +58,35 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
         AMDHSA_BITS_GET(Meta.ComputePgmRsrc1,
                         amdhsa::COMPUTE_PGM_RSRC1_GFX6_GFX11_ENABLE_IEEE_MODE);
   }
-  return RaiseContext(B, Projection, MC, std::move(*Registers), SourceTextBytes,
-                      SourceTextBaseAddress, SourceImageSections,
-                      KernelStartOffset, KernelEndOffset,
-                      SourceFloatRoundMode32, SourceFloatRoundMode16_64,
-                      Dx10Clamp, IeeeMode);
+  RaiseContext Context(B, Projection, MC, std::move(*Registers),
+                       SourceTextBytes, SourceTextBaseAddress,
+                       SourceImageSections, KernelStartOffset, KernelEndOffset,
+                       SourceFloatRoundMode32, SourceFloatRoundMode16_64,
+                       Dx10Clamp, IeeeMode);
+  Context.SourceSramEcc = SourceSramEcc;
+  return Context;
+}
+
+void RaiseContext::requireZeroBits(Value *Value, uint32_t Mask,
+                                   const DecodedInst &Di, StringRef Detail) {
+  assert(Value->getType()->isIntegerTy(32) && "expected a register word");
+  BitRequirements.push_back({Value, Mask, &Di, Detail});
+}
+
+Error RaiseContext::validateRequiredBits() const {
+  const DataLayout &Layout = B.GetInsertBlock()->getModule()->getDataLayout();
+  for (const RequiredBits &Requirement : BitRequirements) {
+    assert(Requirement.Value && "required value was deleted before validation");
+    KnownBits Bits = computeKnownBits(Requirement.Value, Layout);
+    if ((Bits.Zero.getZExtValue() & Requirement.Mask) != Requirement.Mask) {
+      const DecodedInst &Di = *Requirement.Instruction;
+      return RaiseFailure::atInstruction(
+          RaiseFailureReason::UnsupportedInstructionForm,
+          strippedMnemonic(MC, Di.Inst), Di.Offset,
+          formatName(Di.TargetSpecificFlags), Requirement.Detail);
+    }
+  }
+  return Error::success();
 }
 
 RaiseContext::RaiseContext(

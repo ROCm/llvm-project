@@ -37,6 +37,7 @@ add_library(transpiler-raiser OBJECT
   flat-addr.cpp
   handle-ds.cpp
   handle-flat.cpp
+  handle-mubuf.cpp
   handle-smem.cpp
   handle-sop1.cpp
   handle-sop2.cpp

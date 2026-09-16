@@ -53,6 +53,8 @@ llvm::Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
 // are recognized and the rest are refused.
 llvm::Error handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
+/// Raise raw unformatted buffer loads and stores, or return a refusal.
+llvm::Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction);
 /// Raise direct VGPR LDS loads using AMDHSA's unaligned access mode.
 /// Active accesses must lie wholly within the workgroup's LDS allocation.
 llvm::Error handleDS(RaiseContext &Context, const DecodedInst &Instruction);
