@@ -23,3 +23,9 @@ joseph to modify comgr for unbundle
 debug/merge conflicts
 10d3708a0bb8 [IndVarSimplify] Batch forgetValue calls in sinkUnusedInvariants (#219025)
 ---
+breaks: [hip-tests] clang++: error: invalid offload arch combinations:
+"Reapply "clang: Use TargetID parsing from AMDGPUTargetParser" (#213824) (#213847)"
+---
+ASAN-DEBUG lib breaks
+"[clang][DebugInfo] Emit static local variables in their lexical block scope (#213153)" (#4465) (2 hours ago) <Scott Linder>
+---

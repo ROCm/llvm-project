@@ -16,7 +16,7 @@ else()
 endif()
 canonicalize_cmake_boolean(COMGR_AMDGPU_TARGET_AVAILABLE)
 
-canonicalize_cmake_boolean(COMGR_ENABLE_HOTSWAP_TRANSPILE)
+canonicalize_cmake_boolean(COMGR_ENABLE_TRANSPILER)
 
 find_program(LLVM_LIT_PATH
   NAMES llvm-lit llvm-lit.py llvm-lit.cmd
@@ -68,8 +68,8 @@ add_comgr_lit_binary(name-expression-map c)
 add_comgr_lit_binary(isa-enumeration c)
 add_comgr_lit_binary(test-get-data-isa-name c)
 
-# The hotswap transpiler driver used by the hotswap/raiser lit tests. It links
-# the hotswap decoder, raiser, loader, and common OBJECT libraries and the
+# The transpiler driver used by the transpiler/raiser lit tests. It links
+# the transpiler decoder, raiser, loader, and common OBJECT libraries and the
 # shared comgr-object-utils objects (which carry the buffer-facing
 # getElfIsaName / getMetadataRoot / lookupSymbolByName entry points) rather than
 # recompiling the comgr sources, so the driver and amd_comgr share one set of
@@ -77,43 +77,43 @@ add_comgr_lit_binary(test-get-data-isa-name c)
 # the driver never calls and that reference the rest of comgr; --gc-sections
 # drops them (they were built with function/data sections). MSVC's default
 # /OPT:REF removes them the same way.
-if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
-  add_executable(hotswap_transpile_cli comgr-sources/hotswap_transpile_cli.cpp)
+if(COMGR_ENABLE_TRANSPILER)
+  add_executable(transpile_cli comgr-sources/transpile_cli.cpp)
   # Match the C++ standard the rest of comgr compiles with. The comgr build
   # sets it per target rather than globally, and MSVC otherwise defaults below
   # the C++17 that the LLVM headers this driver includes require.
-  set_target_properties(hotswap_transpile_cli PROPERTIES
+  set_target_properties(transpile_cli PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
     CXX_EXTENSIONS No)
   # Pick up LLVM's exception posture for the host compiler.
-  llvm_update_compile_flags(hotswap_transpile_cli)
+  llvm_update_compile_flags(transpile_cli)
   # LLVM is built without RTTI; match it explicitly so cl::opt's OptionValue
   # typeinfo is not emitted against the -fno-rtti Support library
   # (llvm_update_compile_flags does not add this in a standalone comgr build).
   if(NOT LLVM_ENABLE_RTTI)
     if(MSVC)
-      target_compile_options(hotswap_transpile_cli PRIVATE /GR-)
+      target_compile_options(transpile_cli PRIVATE /GR-)
     else()
-      target_compile_options(hotswap_transpile_cli PRIVATE -fno-rtti)
+      target_compile_options(transpile_cli PRIVATE -fno-rtti)
     endif()
   endif()
 
-  target_include_directories(hotswap_transpile_cli PRIVATE
+  target_include_directories(transpile_cli PRIVATE
     ${LLVM_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
     ${CMAKE_CURRENT_BINARY_DIR}/../include)
-  # The hotswap OBJECT libraries contribute objects only, so name the LLVM set
+  # The transpiler OBJECT libraries contribute objects only, so name the LLVM set
   # this driver needs explicitly; ${LLVM_LIBS} is the same curated set amd_comgr
   # links, already resolved to the dylib or the static components. It carries
   # the AMDGPU components the driver's LLVMInitializeAMDGPU* calls register.
-  target_link_libraries(hotswap_transpile_cli
-    PRIVATE hotswap::common hotswap::loader hotswap::decoder hotswap::raiser
+  target_link_libraries(transpile_cli
+    PRIVATE transpiler::common transpiler::loader transpiler::decoder transpiler::raiser
             comgr-object-utils comgr-test-llvm-init ${LLVM_LIBS})
   if(NOT WIN32)
-    target_link_options(hotswap_transpile_cli PRIVATE -Wl,--gc-sections)
+    target_link_options(transpile_cli PRIVATE -Wl,--gc-sections)
   endif()
-  add_dependencies(test-lit hotswap_transpile_cli)
+  add_dependencies(test-lit transpile_cli)
 endif()
 
 add_dependencies(check-comgr test-lit)

@@ -24,7 +24,7 @@ declared and exported for binary compatibility and will be removed outright in a
 future major release, along with `amd_comgr_hotswap_rewrite_flag_t` and
 `amd_comgr_hotswap_rewrite_options_t`. The `AMD_COMGR_HOTSWAP_ENTRY_STUB_SYMBOLS`
 environment variable is gone. The cross-generation IR transpiler under
-`src/hotswap` (opt-in via `COMGR_ENABLE_HOTSWAP_TRANSPILE`) is unaffected.
+`src/transpiler` (opt-in via `COMGR_ENABLE_TRANSPILER`) is unaffected.
 
 
 New Features

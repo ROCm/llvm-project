@@ -105,11 +105,22 @@ features cannot lower the translation-unit ABI level;
   This also fixes a crash when such a struct was passed or returned.
   `-fclang-abi-compat=23` restores the previous behavior. (#GH202205)
 
+- Clang now considers matrix types in its isHomogeneousAggregate() handling,
+  which can lead to differences in how structures containing matrix types are
+  classified for ABI purposes. The previous exclusion of matrix types appears
+  to have been accidental. Matrix types now follow the same rules as arrays
+  for homogeneous aggregate classification.
+  `-fclang-abi-compat=23` restores the previous behavior. (#GH218799)
+
 ### AST Dumping Potentially Breaking Changes
 
 ### Clang Frontend Potentially Breaking Changes
 
 - Templight support has been removed.
+
+- `-fstack-clash-protection` has been enabled implicitly by default for android
+  target triples (except 32b arm targets). Can be disabled via
+  `-fno-stack-clash-protection`.
 
 ### Clang Python Bindings Potentially Breaking Changes
 

@@ -1630,8 +1630,9 @@ define amdgpu_kernel void @v4i16_to_v2f32(ptr addrspace(1) %out, ptr addrspace(1
 ; GFX11-NEXT:    v_pk_add_u16 v0, s3, 4 op_sel_hi:[1,0]
 ; GFX11-NEXT:    v_pk_add_u16 v2, s2, 4 op_sel_hi:[1,0]
 ; GFX11-NEXT:    v_mov_b32_e32 v3, 0
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; GFX11-NEXT:    v_dual_add_f32 v1, 1.0, v0 :: v_dual_add_f32 v0, 1.0, v2
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_3)
+; GFX11-NEXT:    v_add_f32_e32 v1, 1.0, v0
+; GFX11-NEXT:    v_add_f32_e32 v0, 1.0, v2
 ; GFX11-NEXT:    global_store_b64 v3, v[0:1], s[0:1]
 ; GFX11-NEXT:    s_endpgm
   %load = load <4 x i16>, ptr addrspace(1) %in, align 4
@@ -1722,8 +1723,9 @@ define amdgpu_kernel void @v4f16_to_v2f32(ptr addrspace(1) %out, ptr addrspace(1
 ; GFX11-NEXT:    v_pk_add_f16 v0, s3, 4.0 op_sel_hi:[1,0]
 ; GFX11-NEXT:    v_pk_add_f16 v2, s2, 4.0 op_sel_hi:[1,0]
 ; GFX11-NEXT:    v_mov_b32_e32 v3, 0
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; GFX11-NEXT:    v_dual_add_f32 v1, 1.0, v0 :: v_dual_add_f32 v0, 1.0, v2
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_3)
+; GFX11-NEXT:    v_add_f32_e32 v1, 1.0, v0
+; GFX11-NEXT:    v_add_f32_e32 v0, 1.0, v2
 ; GFX11-NEXT:    global_store_b64 v3, v[0:1], s[0:1]
 ; GFX11-NEXT:    s_endpgm
   %load = load <4 x half>, ptr addrspace(1) %in, align 4

@@ -3,14 +3,14 @@ comgr:
     - any-glob-to-any-file:
       - amd/comgr/**
 
-hotswap:
+transpiler:
   - changed-files:
     - any-glob-to-any-file:
-      - amd/comgr/src/hotswap/**
-      - amd/comgr/test-lit/hotswap/**
-      - amd/comgr/test-unit/hotswap/**
-      - amd/comgr/test-lit/comgr-sources/hotswap*
-      - amd/comgr/utils/hotswap/**
+      - amd/comgr/src/transpiler/**
+      - amd/comgr/test-lit/transpiler/**
+      - amd/comgr/test-unit/transpiler/**
+      - amd/comgr/test-lit/comgr-sources/transpile_cli.cpp
+      - amd/comgr/utils/transpiler/**
 
 device-libs:
   - changed-files:

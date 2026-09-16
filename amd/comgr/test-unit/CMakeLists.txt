@@ -47,7 +47,7 @@ else()
 endif()
 
 # Pin C++17 and mirror LLVM's RTTI setting (avoids type_info link errors
-# against LLVM libs built with RTTI off, including hotswap::raiser
+# against LLVM libs built with RTTI off, including transpiler::raiser
 # which carries its own non-RTTI / non-exceptions compile flags via
 # llvm_update_compile_flags()).
 function(comgr_configure_test_target target)
@@ -64,10 +64,10 @@ function(comgr_configure_test_target target)
   endif()
 endfunction()
 
-# Hotswap unit tests live in their own subtree mirroring src/hotswap:
-# hotswap/raiser (IR transpiler) and hotswap/decoder. The gtest discovery above
+# Transpiler unit tests live in their own subtree mirroring src/transpiler:
+# transpiler/raiser (IR transpiler) and transpiler/decoder. The gtest discovery above
 # and comgr_configure_test_target() are inherited by the subdirectories.
-add_subdirectory(hotswap)
+add_subdirectory(transpiler)
 
 # -- DemangleSymbolNameTest ---------------------------------------------------
 
@@ -238,14 +238,14 @@ add_dependencies(test-unit
   DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest
   IncludeMaterializationTest)
 
-# The transpile-path test binaries, exported by hotswap/CMakeLists.txt in
-# COMGR_HOTSWAP_TEST_TARGETS (empty unless COMGR_ENABLE_HOTSWAP_TRANSPILE is on).
-# Adding a hotswap test updates that list, not this file.
-foreach(HotswapTest ${COMGR_HOTSWAP_TEST_TARGETS})
+# The transpile-path test binaries, exported by transpiler/CMakeLists.txt in
+# COMGR_TRANSPILER_TEST_TARGETS (empty unless COMGR_ENABLE_TRANSPILER is on).
+# Adding a transpiler test updates that list, not this file.
+foreach(TranspilerTest ${COMGR_TRANSPILER_TEST_TARGETS})
   add_custom_command(TARGET test-unit POST_BUILD
-    COMMAND $<TARGET_FILE:${HotswapTest}>)
+    COMMAND $<TARGET_FILE:${TranspilerTest}>)
 endforeach()
-if(COMGR_HOTSWAP_TEST_TARGETS)
-  add_dependencies(test-unit ${COMGR_HOTSWAP_TEST_TARGETS})
+if(COMGR_TRANSPILER_TEST_TARGETS)
+  add_dependencies(test-unit ${COMGR_TRANSPILER_TEST_TARGETS})
 endif()
 add_dependencies(check-comgr test-unit)
