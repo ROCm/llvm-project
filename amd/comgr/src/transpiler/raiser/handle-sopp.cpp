@@ -60,8 +60,8 @@ Error raiseWavePriority(RaiseContext &Ctx, const DecodedInst &Di) {
         "source wave priority composes with a dispatch-time system priority "
         "that is not available to the raise");
 
-  int16_t ImmIdx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                                      AMDGPU::OpName::simm16);
+  int16_t ImmIdx = COMGR::transpiler::getNamedOperandIdx(
+      Di.Inst.getOpcode(), AMDGPU::OpName::simm16);
   assert(ImmIdx >= 0 && "every priority write encodes simm16");
   std::optional<int64_t> Imm = evalOperandAsConst(Di.Inst, ImmIdx);
   assert(Imm && "simm16 of a priority write is always an immediate");
@@ -80,8 +80,8 @@ Error raiseWavePriority(RaiseContext &Ctx, const DecodedInst &Di) {
 // runs until another wave wakes it, so it is the wave's forward progress that
 // depends on it, not just the wave's timing.
 Error raiseSleep(RaiseContext &Ctx, const DecodedInst &Di) {
-  int16_t ImmIdx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                                      AMDGPU::OpName::simm16);
+  int16_t ImmIdx = COMGR::transpiler::getNamedOperandIdx(
+      Di.Inst.getOpcode(), AMDGPU::OpName::simm16);
   assert(ImmIdx >= 0 && "every sleep encodes simm16");
   std::optional<int64_t> Imm = evalOperandAsConst(Di.Inst, ImmIdx);
   assert(Imm && "simm16 of a sleep is always an immediate");

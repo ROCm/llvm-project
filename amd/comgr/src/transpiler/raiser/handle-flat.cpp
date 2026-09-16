@@ -50,7 +50,7 @@ static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
 
 static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di) {
   int DataIndex = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                                     AMDGPU::OpName::vdata);
+                                                        AMDGPU::OpName::vdata);
   assert(DataIndex >= 0 && "global store is missing its data operand");
   Expected<Value *> Data = Ctx.registers().readOp32(Di, DataIndex);
   if (!Data)

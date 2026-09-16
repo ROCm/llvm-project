@@ -37,7 +37,7 @@ namespace {
 /// no named operand and are necessarily unclamped.
 Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
   int Idx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                               AMDGPU::OpName::clamp);
+                                                  AMDGPU::OpName::clamp);
   if (Idx < 0)
     return false;
   if (!Di.isImm(Idx))
@@ -48,7 +48,7 @@ Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
 /// Reject nonzero output multipliers on integer VOP3 instructions.
 Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
   int Idx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                               AMDGPU::OpName::omod);
+                                                  AMDGPU::OpName::omod);
   if (Idx < 0)
     return Error::success();
   if (!Di.isImm(Idx))

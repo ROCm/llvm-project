@@ -155,8 +155,7 @@ int runDumpMeta(const CodeObjectInfo &Info, StringRef Isa,
 
   Expected<TextSection> TsOrErr = Info.textSection();
   if (!TsOrErr) {
-    errs() << "transpile_cli: .text: " << toString(TsOrErr.takeError())
-           << "\n";
+    errs() << "transpile_cli: .text: " << toString(TsOrErr.takeError()) << "\n";
     return 1;
   }
   outs() << "text_bytes: " << TsOrErr->Bytes.size() << "\n";
@@ -314,8 +313,8 @@ int main(int Argc, char **Argv) {
   if (Isa.empty()) {
     Expected<std::string> ElfIsa = COMGR::metadata::getElfIsaName(CoData);
     if (!ElfIsa) {
-      errs() << "transpile_cli: cannot read ISA from " << CoPathOpt
-             << ": " << toString(ElfIsa.takeError()) << "\n";
+      errs() << "transpile_cli: cannot read ISA from " << CoPathOpt << ": "
+             << toString(ElfIsa.takeError()) << "\n";
       return 2;
     }
     Isa = std::move(*ElfIsa);
@@ -339,8 +338,8 @@ int main(int Argc, char **Argv) {
 
   Expected<TextSection> TextOrErr = Info.textSection();
   if (!TextOrErr) {
-    errs() << "transpile_cli: could not extract .text from "
-           << CoPathOpt << ": " << toString(TextOrErr.takeError()) << "\n";
+    errs() << "transpile_cli: could not extract .text from " << CoPathOpt
+           << ": " << toString(TextOrErr.takeError()) << "\n";
     return 2;
   }
 
