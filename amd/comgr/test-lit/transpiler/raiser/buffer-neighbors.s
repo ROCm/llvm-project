@@ -1,21 +1,21 @@
 ; REQUIRES: comgr-has-transpiler
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx942 -defsym=CASE=0 -filetype=obj %s -o %t.0.o
+; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -defsym=CASE=0 -filetype=obj %s -o %t.0.o
 ; RUN: %ld.lld -shared %t.0.o -o %t.0.hsaco
 ; RUN: not %transpile_cli %t.0.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=LAYOUT
 ; LAYOUT: buffer source descriptor layout is not modeled
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx942 -defsym=CASE=1 -filetype=obj %s -o %t.1.o
+; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -defsym=CASE=1 -filetype=obj %s -o %t.1.o
 ; RUN: %ld.lld -shared %t.1.o -o %t.1.hsaco
 ; RUN: not %transpile_cli %t.1.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=FORMAT
 ; FORMAT: unsupported buffer opcode or addressing form
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx942 -defsym=CASE=2 -filetype=obj %s -o %t.2.o
+; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -defsym=CASE=2 -filetype=obj %s -o %t.2.o
 ; RUN: %ld.lld -shared %t.2.o -o %t.2.hsaco
 ; RUN: not %transpile_cli %t.2.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=LDS
 ; LDS: unsupported buffer opcode or addressing form
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx942 -defsym=CASE=3 -filetype=obj %s -o %t.3.o
+; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -defsym=CASE=3 -filetype=obj %s -o %t.3.o
 ; RUN: %ld.lld -shared %t.3.o -o %t.3.hsaco
 ; RUN: not %transpile_cli %t.3.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=TYPED
 ; TYPED: unsupported-instruction-form: tbuffer_load_format_x [Unknown]
-; RUN: not %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=4 -filetype=null %s 2>&1 | %FileCheck %s --check-prefix=ADDR64
+; RUN: not %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=4 -filetype=null %s 2>&1 | %FileCheck %s --check-prefix=ADDR64
 ; ADDR64: error: invalid operand for instruction
 ; ADDR64-NEXT: buffer_load_dword v2, v[0:1], s[4:7], 0 addr64
 

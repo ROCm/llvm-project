@@ -1,12 +1,12 @@
 ; REQUIRES: comgr-has-transpiler
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -mattr=-sramecc -filetype=obj %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -mattr=-sramecc -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --dump-decoded | %FileCheck %s --check-prefix=DECODE
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir > %t.ll
 ; RUN: %FileCheck %s --check-prefix=IR < %t.ll
-; RUN: %llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx942 -filetype=obj %t.ll -o %t.gfx942.o
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx950 --emit-ir | %llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -filetype=obj -o %t.gfx950.o
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 --emit-ir | %llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1250 -filetype=obj -o %t.gfx1250.o
+; RUN: %llc -mtriple=amdgpu9.42-amd-amdhsa -filetype=obj %t.ll -o %t.gfx942.o
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx950 --emit-ir | %llc -mtriple=amdgpu9.50-amd-amdhsa -filetype=obj -o %t.gfx950.o
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 --emit-ir | %llc -mtriple=amdgpu12.50-amd-amdhsa -filetype=obj -o %t.gfx1250.o
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250:sramecc-"
 .amdhsa_code_object_version 6

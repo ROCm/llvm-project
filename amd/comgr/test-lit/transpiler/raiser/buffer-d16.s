@@ -1,17 +1,17 @@
 ; REQUIRES: comgr-has-transpiler
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -mattr=-sramecc -defsym=INITIAL=0x12345678 -filetype=obj %s -o %t.live.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -mattr=-sramecc -defsym=INITIAL=0x12345678 -filetype=obj %s -o %t.live.o
 ; RUN: %ld.lld -shared %t.live.o -o %t.live.hsaco
 ; RUN: %transpile_cli %t.live.hsaco --target-isa=gfx942 --emit-ir | %FileCheck %s --check-prefix=LIVE
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -mattr=-sramecc -defsym=EXTENT=0 -defsym=INITIAL=0x12345678 -filetype=obj %s -o %t.off.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -mattr=-sramecc -defsym=EXTENT=0 -defsym=INITIAL=0x12345678 -filetype=obj %s -o %t.off.o
 ; RUN: %ld.lld -shared %t.off.o -o %t.off.hsaco
 ; RUN: %transpile_cli %t.off.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefix=OFF
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -mattr=+sramecc -defsym=EXTENT=0 -defsym=INITIAL=0x12345678 -filetype=obj %s -o %t.on.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -mattr=+sramecc -defsym=EXTENT=0 -defsym=INITIAL=0x12345678 -filetype=obj %s -o %t.on.o
 ; RUN: %ld.lld -shared %t.on.o -o %t.on.hsaco
 ; RUN: %transpile_cli %t.on.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefix=ZERO
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=0 -defsym=INITIAL=0 -filetype=obj %s -o %t.any.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=0 -defsym=INITIAL=0 -filetype=obj %s -o %t.any.o
 ; RUN: %ld.lld -shared %t.any.o -o %t.any.hsaco
 ; RUN: %transpile_cli %t.any.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefix=ZERO
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -mattr=+sramecc -defsym=EXTENT=3 -defsym=INITIAL=0x12345678 -filetype=obj %s -o %t.ecc.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -mattr=+sramecc -defsym=EXTENT=3 -defsym=INITIAL=0x12345678 -filetype=obj %s -o %t.ecc.o
 ; RUN: %ld.lld -shared %t.ecc.o -o %t.ecc.hsaco
 ; RUN: %transpile_cli %t.ecc.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefix=ECC
 

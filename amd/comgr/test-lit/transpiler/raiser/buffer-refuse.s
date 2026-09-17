@@ -1,5 +1,5 @@
 ; REQUIRES: comgr-has-transpiler
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=0 -filetype=obj %s -o %t.0.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=0 -filetype=obj %s -o %t.0.o
 ; RUN: %ld.lld -shared %t.0.o -o %t.0.hsaco
 ; RUN: not %transpile_cli %t.0.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=STRIDE
 ; STRIDE: in kernel 'buffer_refuse'
@@ -8,103 +8,103 @@
 ; TARGET: in kernel 'buffer_refuse'
 ; TARGET-SAME: buffer target memory behavior is not modeled
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=1 -filetype=obj %s -o %t.1.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=1 -filetype=obj %s -o %t.1.o
 ; RUN: %ld.lld -shared %t.1.o -o %t.1.hsaco
 ; RUN: not %transpile_cli %t.1.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=SCALE
 ; SCALE: in kernel 'buffer_refuse'
 ; SCALE-SAME: buffer stride and stride scale must be provably zero
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=2 -filetype=obj %s -o %t.2.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=2 -filetype=obj %s -o %t.2.o
 ; RUN: %ld.lld -shared %t.2.o -o %t.2.hsaco
 ; RUN: not %transpile_cli %t.2.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=SWIZZLE
 ; SWIZZLE: in kernel 'buffer_refuse'
 ; SWIZZLE-SAME: swizzled buffer descriptors are not modeled
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=3 -filetype=obj %s -o %t.3.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=3 -filetype=obj %s -o %t.3.o
 ; RUN: %ld.lld -shared %t.3.o -o %t.3.hsaco
 ; RUN: not %transpile_cli %t.3.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=STRUCTURED
 ; STRUCTURED: in kernel 'buffer_refuse'
 ; STRUCTURED-SAME: structured buffer bounds are not modeled
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=4 -filetype=obj %s -o %t.4.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=4 -filetype=obj %s -o %t.4.o
 ; RUN: %ld.lld -shared %t.4.o -o %t.4.hsaco
 ; RUN: not %transpile_cli %t.4.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=TYPE
 ; TYPE: in kernel 'buffer_refuse'
 ; TYPE-SAME: buffer descriptor type must be provably zero
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=5 -filetype=obj %s -o %t.5.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=5 -filetype=obj %s -o %t.5.o
 ; RUN: %ld.lld -shared %t.5.o -o %t.5.hsaco
 ; RUN: not %transpile_cli %t.5.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=RESERVED
 ; RESERVED: in kernel 'buffer_refuse'
 ; RESERVED-SAME: buffer descriptor reserved bits must be provably zero
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=6 -filetype=obj %s -o %t.6.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=6 -filetype=obj %s -o %t.6.o
 ; RUN: %ld.lld -shared %t.6.o -o %t.6.hsaco
 ; RUN: not %transpile_cli %t.6.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=IDXEN
 ; IDXEN: in kernel 'buffer_refuse'
 ; IDXEN-SAME: unsupported buffer opcode or addressing form
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=7 -filetype=obj %s -o %t.7.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=7 -filetype=obj %s -o %t.7.o
 ; RUN: %ld.lld -shared %t.7.o -o %t.7.hsaco
 ; RUN: not %transpile_cli %t.7.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=BOTHEN
 ; BOTHEN: in kernel 'buffer_refuse'
 ; BOTHEN-SAME: unsupported buffer opcode or addressing form
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=8 -filetype=obj %s -o %t.8.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=8 -filetype=obj %s -o %t.8.o
 ; RUN: %ld.lld -shared %t.8.o -o %t.8.hsaco
 ; RUN: not %transpile_cli %t.8.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=SCOPE
 ; SCOPE: in kernel 'buffer_refuse'
 ; SCOPE-SAME: non-default buffer cache policy is not modeled
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=9 -filetype=obj %s -o %t.9.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=9 -filetype=obj %s -o %t.9.o
 ; RUN: %ld.lld -shared %t.9.o -o %t.9.hsaco
 ; RUN: not %transpile_cli %t.9.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=TEMPORAL
 ; TEMPORAL: in kernel 'buffer_refuse'
 ; TEMPORAL-SAME: non-default buffer cache policy is not modeled
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=10 -filetype=obj %s -o %t.10.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=10 -filetype=obj %s -o %t.10.o
 ; RUN: %ld.lld -shared %t.10.o -o %t.10.hsaco
 ; RUN: not %transpile_cli %t.10.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=NV
 ; NV: in kernel 'buffer_refuse'
 ; NV-SAME: non-default buffer cache policy is not modeled
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=11 -filetype=obj %s -o %t.11.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=11 -filetype=obj %s -o %t.11.o
 ; RUN: %ld.lld -shared %t.11.o -o %t.11.hsaco
 ; RUN: not %transpile_cli %t.11.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=ATOMIC
 ; ATOMIC: in kernel 'buffer_refuse'
 ; ATOMIC-SAME: unsupported buffer opcode or addressing form
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=12 -filetype=obj %s -o %t.12.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=12 -filetype=obj %s -o %t.12.o
 ; RUN: %ld.lld -shared %t.12.o -o %t.12.hsaco
 ; RUN: not %transpile_cli %t.12.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=SCALAR
 ; SCALAR: in kernel 'buffer_refuse'
 ; SCALAR-SAME: VBUFFER scalar offset must be an SGPR, M0, or null
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=13 -filetype=obj %s -o %t.13.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=13 -filetype=obj %s -o %t.13.o
 ; RUN: %ld.lld -shared %t.13.o -o %t.13.hsaco
 ; RUN: not %transpile_cli %t.13.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=DYNAMIC
 ; DYNAMIC: in kernel 'buffer_refuse'
 ; DYNAMIC-SAME: buffer descriptor type must be provably zero
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=14 -filetype=obj %s -o %t.14.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=14 -filetype=obj %s -o %t.14.o
 ; RUN: %ld.lld -shared %t.14.o -o %t.14.hsaco
 ; RUN: not %transpile_cli %t.14.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=JOIN
 ; JOIN: in kernel 'buffer_refuse'
 ; JOIN-SAME: buffer descriptor type must be provably zero
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=15 -filetype=obj %s -o %t.15.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=15 -filetype=obj %s -o %t.15.o
 ; RUN: %ld.lld -shared %t.15.o -o %t.15.hsaco
 ; RUN: not %transpile_cli %t.15.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=LOOP
 ; LOOP: in kernel 'buffer_refuse'
 ; LOOP-SAME: swizzled buffer descriptors are not modeled
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=16 -filetype=obj %s -o %t.16.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=16 -filetype=obj %s -o %t.16.o
 ; RUN: %ld.lld -shared %t.16.o -o %t.16.hsaco
 ; RUN: not %transpile_cli %t.16.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=ECC
 ; ECC: in kernel 'buffer_refuse'
 ; ECC-SAME: D16 load requires a source SRAM ECC setting or a zero untouched half
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=CASE=17 -filetype=obj %s -o %t.17.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=17 -filetype=obj %s -o %t.17.o
 ; RUN: %ld.lld -shared %t.17.o -o %t.17.hsaco
 ; RUN: not %transpile_cli %t.17.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=TFE
 ; TFE: in kernel 'buffer_refuse'

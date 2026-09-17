@@ -1,5 +1,5 @@
 ; REQUIRES: comgr-has-transpiler
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -filetype=obj %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir | %FileCheck %s
 

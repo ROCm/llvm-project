@@ -1,61 +1,61 @@
 ; REQUIRES: comgr-has-transpiler
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=0 -filetype=obj %s -o %t.0.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=0 -filetype=obj %s -o %t.0.o
 ; RUN: %ld.lld -shared %t.0.o -o %t.0.hsaco
 ; RUN: %transpile_cli %t.0.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,ZERO
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=9 -filetype=obj %s -o %t.1.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=9 -filetype=obj %s -o %t.1.o
 ; RUN: %ld.lld -shared %t.1.o -o %t.1.hsaco
 ; RUN: %transpile_cli %t.1.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,ZERO
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=10 -filetype=obj %s -o %t.2.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=10 -filetype=obj %s -o %t.2.o
 ; RUN: %ld.lld -shared %t.2.o -o %t.2.hsaco
 ; RUN: %transpile_cli %t.2.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,ZERO
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=11 -filetype=obj %s -o %t.3.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=11 -filetype=obj %s -o %t.3.o
 ; RUN: %ld.lld -shared %t.3.o -o %t.3.hsaco
 ; RUN: %transpile_cli %t.3.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,ONE
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=14 -filetype=obj %s -o %t.4.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=14 -filetype=obj %s -o %t.4.o
 ; RUN: %ld.lld -shared %t.4.o -o %t.4.hsaco
 ; RUN: %transpile_cli %t.4.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,ONE
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=15 -filetype=obj %s -o %t.5.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=15 -filetype=obj %s -o %t.5.o
 ; RUN: %ld.lld -shared %t.5.o -o %t.5.hsaco
 ; RUN: %transpile_cli %t.5.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,TWO
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=18 -filetype=obj %s -o %t.6.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=18 -filetype=obj %s -o %t.6.o
 ; RUN: %ld.lld -shared %t.6.o -o %t.6.hsaco
 ; RUN: %transpile_cli %t.6.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,TWO
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=19 -filetype=obj %s -o %t.7.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=19 -filetype=obj %s -o %t.7.o
 ; RUN: %ld.lld -shared %t.7.o -o %t.7.hsaco
 ; RUN: %transpile_cli %t.7.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,THREE
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=22 -filetype=obj %s -o %t.8.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=22 -filetype=obj %s -o %t.8.o
 ; RUN: %ld.lld -shared %t.8.o -o %t.8.hsaco
 ; RUN: %transpile_cli %t.8.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,THREE
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=23 -filetype=obj %s -o %t.9.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=23 -filetype=obj %s -o %t.9.o
 ; RUN: %ld.lld -shared %t.9.o -o %t.9.hsaco
 ; RUN: %transpile_cli %t.9.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,FOUR
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=0x8000000000 -filetype=obj %s -o %t.10.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=0x8000000000 -filetype=obj %s -o %t.10.o
 ; RUN: %ld.lld -shared %t.10.o -o %t.10.hsaco
 ; RUN: %transpile_cli %t.10.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,FOUR
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=0x1ffffffffffe -filetype=obj %s -o %t.11.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=0x1ffffffffffe -filetype=obj %s -o %t.11.o
 ; RUN: %ld.lld -shared %t.11.o -o %t.11.hsaco
 ; RUN: %transpile_cli %t.11.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,FOUR
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=0x1fffffffffff -filetype=obj %s -o %t.12.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=0x1fffffffffff -filetype=obj %s -o %t.12.o
 ; RUN: %ld.lld -shared %t.12.o -o %t.12.hsaco
 ; RUN: %transpile_cli %t.12.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,FOUR
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=10 -defsym=WIDTH=64 -filetype=obj %s -o %t.64.10.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=10 -defsym=WIDTH=64 -filetype=obj %s -o %t.64.10.o
 ; RUN: %ld.lld -shared %t.64.10.o -o %t.64.10.hsaco
 ; RUN: %transpile_cli %t.64.10.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,ZERO
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=11 -defsym=WIDTH=64 -filetype=obj %s -o %t.64.11.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=11 -defsym=WIDTH=64 -filetype=obj %s -o %t.64.11.o
 ; RUN: %ld.lld -shared %t.64.11.o -o %t.64.11.hsaco
 ; RUN: %transpile_cli %t.64.11.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,ONE
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=14 -defsym=WIDTH=96 -filetype=obj %s -o %t.96.14.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=14 -defsym=WIDTH=96 -filetype=obj %s -o %t.96.14.o
 ; RUN: %ld.lld -shared %t.96.14.o -o %t.96.14.hsaco
 ; RUN: %transpile_cli %t.96.14.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,ONE
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=15 -defsym=WIDTH=96 -filetype=obj %s -o %t.96.15.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=15 -defsym=WIDTH=96 -filetype=obj %s -o %t.96.15.o
 ; RUN: %ld.lld -shared %t.96.15.o -o %t.96.15.hsaco
 ; RUN: %transpile_cli %t.96.15.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,TWO
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=10 -defsym=OFFEN=0 -filetype=obj %s -o %t.offset.10.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=10 -defsym=OFFEN=0 -filetype=obj %s -o %t.offset.10.o
 ; RUN: %ld.lld -shared %t.offset.10.o -o %t.offset.10.hsaco
 ; RUN: %transpile_cli %t.offset.10.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,ZERO
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1250 -defsym=EXTENT=11 -defsym=OFFEN=0 -filetype=obj %s -o %t.offset.11.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=11 -defsym=OFFEN=0 -filetype=obj %s -o %t.offset.11.o
 ; RUN: %ld.lld -shared %t.offset.11.o -o %t.offset.11.hsaco
 ; RUN: %transpile_cli %t.offset.11.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefixes=CHECK,ONE
 
