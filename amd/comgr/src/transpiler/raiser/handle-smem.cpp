@@ -121,9 +121,9 @@ scalarOffsetIsZero(RaiseContext &Ctx, const DecodedInst &Di, unsigned Index) {
 }
 
 // Materialise a scalar load whose base addresses the source code object rather
-// than the memory the raised kernel runs against. Every dword it names is a
-// literal the source compiled in, so each is written to its destination
-// register as a constant.
+// than the memory that the raised kernel runs against. Every dword it names is
+// a literal compiled into the source, so each one becomes a constant written
+// to its destination register.
 static Error loadFromSourceImage(RaiseContext &Ctx, const DecodedInst &Di,
                                  ParsedReg Destination, uint64_t BaseAddress,
                                  int64_t ImmediateOffset,
@@ -132,7 +132,7 @@ static Error loadFromSourceImage(RaiseContext &Ctx, const DecodedInst &Di,
       addSourceImageByteOffset(Ctx, Di, BaseAddress, ImmediateOffset);
   if (!Address)
     return Address.takeError();
-  // The low address bits the hardware ignores are dropped here too, so a
+  // This also drops the low address bits that the hardware ignores, so a
   // misaligned offset reads what the source read rather than failing.
   uint64_t DwordBytes = DwordSmemAddressAlignment.value();
   SmallVector<uint32_t, 16> Dwords;
@@ -232,7 +232,7 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   if (Base->WidthInDwords != 2)
     invalidOperandLayout(Ctx.MC, Di, "scalar load base is not two dwords");
 
-  // A base the source computed from its own program counter addresses the
+  // A base computed by the source from its own program counter addresses the
   // source code object. Nothing of the source image is mapped where the raised
   // kernel runs, so the load is answered from the captured image instead of
   // being emitted, which would read target memory at a source address.

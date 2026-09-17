@@ -9,6 +9,7 @@
 #include "transpiler/raiser/handlers.h"
 
 #include "transpiler/decoder/decode.h"
+#include "transpiler/decoder/setpc-analysis.h"
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
@@ -21,6 +22,7 @@
 #include <iterator>
 #include <optional>
 #include <string>
+#include <variant>
 
 using namespace llvm;
 
@@ -41,6 +43,39 @@ static std::string heldWaveMaskWidths(const RaiseContext &Ctx) {
           " bits wide and EXEC holds " +
           Twine(Ctx.Projection.execStorageTy()->getIntegerBitWidth()) + " bits")
       .str();
+}
+
+// Refuse a register-indirect control transfer that the analysis could not
+// resolve, phrasing each reason to follow the mnemonic in the diagnostic.
+static Error refuseSetPc(RaiseContext &Ctx, const DecodedInst &Di,
+                         const SetPcUnresolvable &Site) {
+  std::string Pair =
+      (Twine("s[") + Twine(Site.Detail) + ":" + Twine(Site.Detail + 1) + "]")
+          .str();
+  switch (Site.Why) {
+  case SetPcRefusal::NotARegisterPair:
+    return unsupported(Ctx, Di,
+                       "reads its target from something other than a scalar "
+                       "register pair");
+  case SetPcRefusal::PairWrittenWithoutOffset:
+    return unsupported(Ctx, Di,
+                       (Twine("reads ") + Pair +
+                        ", which its block writes without computing a source "
+                        "offset in it")
+                           .str());
+  case SetPcRefusal::PairNeverHeldOffset:
+    return unsupported(Ctx, Di,
+                       (Twine("reads ") + Pair +
+                        ", which nothing in its block gives a source offset")
+                           .str());
+  case SetPcRefusal::TargetNotAnInstruction:
+    return unsupported(Ctx, Di,
+                       (Twine("reaches source offset 0x") +
+                        Twine::utohexstr(Site.Detail) +
+                        ", which no decoded instruction starts at")
+                           .str());
+  }
+  llvm_unreachable("unhandled set-pc refusal");
 }
 
 // Write V to Dst at the width the opcode operates on.
@@ -736,6 +771,39 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
+  // A jump through a register names no offset of its own, so it goes wherever
+  // the analysis found in the pair that it reads. That offset leads a block,
+  // reported by the analysis before any block was made, so the jump becomes a
+  // branch to it. A call additionally leaves behind the offset it returns to,
+  // which is the source address of the instruction after it, the same value
+  // that a program-counter capture there would have produced.
+  if (Di.CanonOp == CanonicalOp::S_SETPC_B64 ||
+      Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
+    const SetPcSite *Site = Ctx.setPcSite(Di.Offset);
+    assert(Site && "every register-indirect transfer is classified");
+    if (const SetPcUnresolvable *Why = std::get_if<SetPcUnresolvable>(Site))
+      return refuseSetPc(Ctx, Di, *Why);
+
+    if (Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
+      Expected<ParsedReg> Dst = Op.dst();
+      if (!Dst)
+        return Dst.takeError();
+      if (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx)
+        return unsupported(Ctx, Di,
+                           "leaves its return address outside an SGPR pair, "
+                           "which is not tracked as one");
+      uint64_t ReturnAddress =
+          Ctx.sourceTextBaseAddress() + Di.Offset + Di.sizeInBytes();
+      Ctx.registers().writeReg64(
+          *Dst, ConstantInt::get(Ctx.B.getInt64Ty(), ReturnAddress));
+      Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                    ReturnAddress);
+    }
+
+    Ctx.B.CreateBr(Ctx.lookupBB(std::get<SetPcDirect>(*Site).Target));
+    return Error::success();
+  }
+
   switch (Di.CanonOp) {
   // The source splits a barrier in two: this arrival, which does not block,
   // and a release in SOPP, which does. The raise has one barrier, and it
@@ -773,13 +841,6 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::S_WAKEUP_BARRIER_M0:
     return unsupported(Ctx, Di, "wakes the waves waiting on a named barrier");
 
-  case CanonicalOp::S_SETPC_B64:
-    return unsupported(
-        Ctx, Di, "jumps to a register value, which names no recovered block");
-  case CanonicalOp::S_SWAPPC_B64:
-    return unsupported(Ctx, Di,
-                       "calls through a register value and leaves behind a "
-                       "return address nothing can return to");
   case CanonicalOp::S_RFE_B64:
     return unsupported(Ctx, Di, "returns from an exception handler");
 

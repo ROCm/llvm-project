@@ -19,8 +19,8 @@
 
 namespace COMGR::transpiler {
 
-// Move a source code-object address forward by a signed byte offset, or
-// backward by one. An address that leaves the address space names nothing in
+// Move a source code-object address by a signed byte offset, adding it or
+// subtracting it. An address that leaves the address space names nothing in
 // the source image, so the arithmetic is refused rather than wrapped.
 llvm::Expected<uint64_t> addSourceImageByteOffset(RaiseContext &Ctx,
                                                   const DecodedInst &Di,

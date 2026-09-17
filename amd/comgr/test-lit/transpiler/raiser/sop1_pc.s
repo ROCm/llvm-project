@@ -124,7 +124,7 @@ backward_exit:
 	.p2align	8
 	.type	setpc_kernel,@function
 setpc_kernel:
-; SETPC: unsupported-instruction-form: s_set_pc_i64 {{.+}} :: jumps to a register value
+; SETPC: unsupported-instruction-form: s_set_pc_i64 {{.+}} :: reads s[10:11], which nothing in its block gives a source offset
 	s_set_pc_i64 s[10:11]
 	s_endpgm
 
@@ -132,9 +132,8 @@ setpc_kernel:
 	.p2align	8
 	.type	swappc_kernel,@function
 swappc_kernel:
-; A call whose target the raise cannot resolve to a block, and whose return
-; address it has nowhere to put.
-; SWAPPC: unsupported-instruction-form: s_swap_pc_i64 {{.+}} :: calls through a register value
+; A call whose target the raise cannot resolve to a block.
+; SWAPPC: unsupported-instruction-form: s_swap_pc_i64 {{.+}} :: reads s[10:11], which nothing in its block gives a source offset
 	s_swap_pc_i64 s[12:13], s[10:11]
 	s_endpgm
 

@@ -24,18 +24,22 @@ namespace {
 
 constexpr uint64_t DwordBytes = 4;
 
-// Move SourceAddress by Magnitude bytes in the direction Backwards names.
-Expected<uint64_t> moveSourceImageAddress(RaiseContext &Ctx,
-                                          const DecodedInst &Di,
-                                          uint64_t SourceAddress,
-                                          uint64_t Magnitude, bool Backwards) {
-  if (Backwards) {
+} // namespace
+
+Expected<uint64_t> addSourceImageByteOffset(RaiseContext &Ctx,
+                                            const DecodedInst &Di,
+                                            uint64_t SourceAddress,
+                                            int64_t ByteOffset) {
+  if (ByteOffset < 0) {
+    // Negate in unsigned so that the most negative offset keeps its magnitude.
+    uint64_t Magnitude = -static_cast<uint64_t>(ByteOffset);
     if (SourceAddress < Magnitude)
       return unsupported(Ctx, Di,
                          "moves a source address before the start of the "
                          "address space");
     return SourceAddress - Magnitude;
   }
+  uint64_t Magnitude = static_cast<uint64_t>(ByteOffset);
   if (Magnitude > std::numeric_limits<uint64_t>::max() - SourceAddress)
     return unsupported(Ctx, Di,
                        "moves a source address past the end of the address "
@@ -43,29 +47,17 @@ Expected<uint64_t> moveSourceImageAddress(RaiseContext &Ctx,
   return SourceAddress + Magnitude;
 }
 
-// Distance an offset names, as an unsigned count of bytes. The negation is
-// unsigned so that the most negative offset keeps its magnitude.
-uint64_t byteOffsetMagnitude(int64_t ByteOffset) {
-  uint64_t Magnitude = static_cast<uint64_t>(ByteOffset);
-  return ByteOffset < 0 ? -Magnitude : Magnitude;
-}
-
-} // namespace
-
-Expected<uint64_t> addSourceImageByteOffset(RaiseContext &Ctx,
-                                            const DecodedInst &Di,
-                                            uint64_t SourceAddress,
-                                            int64_t ByteOffset) {
-  return moveSourceImageAddress(
-      Ctx, Di, SourceAddress, byteOffsetMagnitude(ByteOffset), ByteOffset < 0);
-}
-
 Expected<uint64_t> subtractSourceImageByteOffset(RaiseContext &Ctx,
                                                  const DecodedInst &Di,
                                                  uint64_t SourceAddress,
                                                  int64_t ByteOffset) {
-  return moveSourceImageAddress(
-      Ctx, Di, SourceAddress, byteOffsetMagnitude(ByteOffset), ByteOffset >= 0);
+  // The most negative offset has no negation that fits, so subtracting it is
+  // refused rather than wrapped.
+  if (ByteOffset == std::numeric_limits<int64_t>::min())
+    return unsupported(Ctx, Di,
+                       "subtracts an offset whose negation does not fit in a "
+                       "source address");
+  return addSourceImageByteOffset(Ctx, Di, SourceAddress, -ByteOffset);
 }
 
 std::optional<uint32_t> readSourceImageDword(const RaiseContext &Ctx,

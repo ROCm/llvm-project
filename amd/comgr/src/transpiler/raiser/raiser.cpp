@@ -25,6 +25,7 @@
 #include "transpiler/decoder/decode.h"
 #include "transpiler/decoder/mc-state.h"
 #include "transpiler/decoder/opcode-map.h"
+#include "transpiler/decoder/setpc-analysis.h"
 #include "transpiler/raiser/handlers.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
@@ -321,6 +322,15 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   if (!Decoded)
     return Decoded.takeError();
 
+  // A jump through a register names no offset that the decode can follow, so
+  // the blocks it leads to are only known once the analysis has worked out the
+  // values behind them. Merging those offsets here, before any block is made,
+  // lets the handler find the block that its jump targets.
+  SetPcAnalysis SetPc =
+      analyzeSetPc(Decoded->Insts, Decoded->BlockStarts, Env.Source.MC);
+  Decoded->BlockStarts.insert(SetPc.ExtraBlockStarts.begin(),
+                              SetPc.ExtraBlockStarts.end());
+
   LLVMContext &C = M.getContext();
 
   // Replication is the only projection policy the raiser can select: a target
@@ -337,7 +347,7 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   IRBuilder<> B(Entry);
 
   Expected<RaiseContext> Ctx = RaiseContext::create(
-      B, Projection, Env.Source.MC, Meta, Text.Bytes, Text.Address,
+      B, Projection, Env.Source.MC, SetPc, Meta, Text.Bytes, Text.Address,
       Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset);
   if (!Ctx)
     return Ctx.takeError();

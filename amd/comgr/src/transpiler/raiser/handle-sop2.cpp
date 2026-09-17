@@ -35,14 +35,16 @@ Expected<BinaryOperands> readBinary64x32(OperandResolver &Op) {
   return BinaryOperands{*Dst, *Src0, *Src1};
 }
 
-// Source code-object address a 64-bit add or subtract of a constant leads to,
-// so that a PC-relative chain still names a source address once it reaches the
-// load that reads from it, or no value when neither side names one. Both
-// operand orders count for the add; only an address on the left counts for the
-// subtract, since a constant minus an address is no address at all.
+// The source code-object address reached by a 64-bit add or subtract of a
+// constant, so that a PC-relative chain still names a source address by the
+// time it reaches the load that reads from it. No value when neither side
+// names an address. Both operand orders count for the add; only an address on
+// the left counts for the subtract, since a constant minus an address is no
+// address at all.
 //
-// Reading the sources is what dates this: the destination may name the same
-// register pair, and writing it drops whatever address that pair held.
+// The sources are read before the destination is written, because the
+// destination may name the same register pair, and writing that pair drops
+// whatever address it held.
 Expected<std::optional<uint64_t>> sourceImageResult(RaiseContext &Ctx,
                                                     const DecodedInst &Di,
                                                     OperandResolver &Op,
