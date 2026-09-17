@@ -34,6 +34,12 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 
+// libLLVM.so does not export AMDGPU::isGFX1250.
+static bool isGFX1250(const MCSubtargetInfo &STI) {
+  return STI.getFeatureBits()[AMDGPU::FeatureGFX1250Insts] &&
+         !STI.getFeatureBits()[AMDGPU::FeatureGFX13];
+}
+
 /// Return the index of a required named operand of a single-address DS load.
 static unsigned dsOperandIndex(const DecodedInst &Instruction,
                                AMDGPU::OpName Name) {
@@ -112,9 +118,8 @@ Error handleDS(RaiseContext &Context, const DecodedInst &Instruction) {
     return unsupported(Context, Instruction, "unsupported DS operation");
   }
 
-  if (TransposeElementBits &&
-      (!AMDGPU::isGFX1250(Context.Projection.SourceSTI) ||
-       Context.Projection.sourceWaveSize() != 32)) {
+  if (TransposeElementBits && (!isGFX1250(Context.Projection.SourceSTI) ||
+                               Context.Projection.sourceWaveSize() != 32)) {
     return unsupported(Context, Instruction,
                        "DS transpose loads require a gfx1250 wave32 source");
   }
