@@ -65,9 +65,10 @@ protected:
         : Mod("raise_context_test", LLVMCtx), B(LLVMCtx),
           Projection(*Mc.SubtargetInfo, *Mc.SubtargetInfo, B.getInt32Ty(),
                      B.getInt64Ty()),
-          Kernel(Function::Create(
-              FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
-              Function::ExternalLinkage, "kernel", Mod)),
+          Kernel(Function::Create(FunctionType::get(B.getVoidTy(),
+                                                    {B.getInt32Ty()},
+                                                    /*isVarArg=*/false),
+                                  Function::ExternalLinkage, "kernel", Mod)),
           Entry(BasicBlock::Create(LLVMCtx, "entry", Kernel)) {
       B.SetInsertPoint(Entry);
       Ctx.emplace(cantFail(RaiseContext::create(
@@ -167,7 +168,7 @@ TEST_F(RaiseContextTest, RequiredBitsRejectUnknownAndNonzeroValues) {
     ContextEnvironment Context(Mc);
     Value *Word = Context.B.getInt32(64);
     if (Unknown)
-      Word = UndefValue::get(Context.B.getInt32Ty());
+      Word = Context.Kernel->getArg(0);
     Context.Ctx->requireZeroBits(Word, 64, Instruction, "nonzero bits");
     Error Result = Context.Ctx->validateRequiredBits();
     ASSERT_TRUE(static_cast<bool>(Result));
