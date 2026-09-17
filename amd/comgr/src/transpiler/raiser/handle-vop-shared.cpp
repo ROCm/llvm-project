@@ -140,6 +140,10 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
     Result =
         Ctx.B.CreateUnaryIntrinsic(Intrinsic::floor, *Source, nullptr, "floor");
     break;
+  // These intrinsics directly model the source VALU operations, including
+  // their approximate results and denormal behavior. V_SIN_F32 and V_COS_F32
+  // also interpret their inputs as fractions of 2*pi. Generic LLVM math
+  // intrinsics have libm semantics and may require refinement sequences.
   case CanonicalOp::V_EXP_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_exp2, *Source,
                                         nullptr, "exp");
