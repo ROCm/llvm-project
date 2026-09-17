@@ -35,6 +35,7 @@ add_library(transpiler-raiser OBJECT
   raise-context.cpp
   operand-resolver.cpp
   flat-addr.cpp
+  source-image.cpp
   handle-ds.cpp
   handle-flat.cpp
   handle-smem.cpp

@@ -383,6 +383,26 @@ Expected<ParsedReg> RegisterState::parseReg(const DecodedInst &Di,
           MRI.getName(Reg) + "' (enc=0x" + Twine::utohexstr(Enc) + ")");
 }
 
+Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
+                                           unsigned OpIdx,
+                                           const ParsedReg &Pr) {
+  if (Pr.RegKind != ParsedReg::SGPR || !Pr.BaseIdx)
+    return Error::success();
+  for (unsigned I = 0; I != Pr.WidthInDwords; ++I) {
+    if (!mayHoldSourceImageAddress(*Pr.BaseIdx + I))
+      continue;
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedInstructionForm,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        Twine("operand-read: '") + MC.RegInfo->getName(Di.getReg(OpIdx)) +
+            "' may hold a source code-object address, which names a place in "
+            "the source image rather than anything the raised kernel can "
+            "address");
+  }
+  return Error::success();
+}
+
 Expected<Value *> RegisterState::readOp32(const DecodedInst &Di,
                                           unsigned OpIdx) {
   IntegerType *I32Ty = B.getInt32Ty();
@@ -391,6 +411,8 @@ Expected<Value *> RegisterState::readOp32(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
+    if (Error Err = refuseSourceImageRead(Di, OpIdx, Pr))
+      return Err;
     if (Pr.RegKind == ParsedReg::VCC) {
       Value *Mask = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
       return emitSourceWaveMask32(B, Projection, Mask, Pr, "vcc_src_wave");
@@ -477,6 +499,8 @@ Expected<Value *> RegisterState::readOp64(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
+    if (Error Err = refuseSourceImageRead(Di, OpIdx, Pr))
+      return Err;
     if (Pr.RegKind == ParsedReg::VCC)
       return Regs.readVCCAsWaveMask(B, I64Ty);
     if (Pr.RegKind == ParsedReg::EXEC) {
@@ -693,6 +717,8 @@ Expected<Value *> RegisterState::readOpExecWidth(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
+    if (Error Err = refuseSourceImageRead(Di, OpIdx, Pr))
+      return Err;
     if (Pr.RegKind == ParsedReg::VCC)
       return Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
     if (Pr.RegKind == ParsedReg::EXEC)
@@ -886,6 +912,7 @@ Value *RegisterState::loadSgprWaveMaskValid(unsigned BaseIdx) const {
 void RegisterState::invalidateSgprWaveMaskI1(unsigned BaseIdx) {
   blockState().LastSgprWaveMaskI1.erase(BaseIdx);
   blockState().SourceImageSgprPairAddrShadow.erase(BaseIdx);
+  blockState().DefinedSgprs.insert(BaseIdx);
   if (BaseIdx < SgprShadows.size()) {
     B.CreateStore(B.getFalse(), SgprShadows[BaseIdx].WaveMaskValid);
     B.CreateStore(B.getFalse(), SgprShadows[BaseIdx].SourceWavePairValid);
@@ -922,6 +949,31 @@ RegisterState::lookupSourceImageSgprPairAddr(unsigned BaseIdx) {
   if (It == Recorded.end())
     return std::nullopt;
   return It->second;
+}
+
+bool RegisterState::droppedSourceImageSgprPairAddr(unsigned BaseIdx) {
+  if (!SourceImageSgprPairs.contains(BaseIdx) ||
+      blockState().SourceImageSgprPairAddrShadow.contains(BaseIdx))
+    return false;
+  // A block that wrote both halves itself holds what it wrote there, whatever
+  // the block that computed the address left in them.
+  const DenseSet<unsigned> &Defined = blockState().DefinedSgprs;
+  return !Defined.contains(BaseIdx) || !Defined.contains(BaseIdx + 1);
+}
+
+bool RegisterState::mayHoldSourceImageAddress(unsigned Idx) {
+  // A pair is keyed by its low SGPR, so this register is the low half of the
+  // pair keyed at its own index and the high half of the one before it.
+  auto PairCarriesAddress = [&](unsigned BaseIdx) {
+    if (!SourceImageSgprPairs.contains(BaseIdx))
+      return false;
+    if (blockState().SourceImageSgprPairAddrShadow.contains(BaseIdx))
+      return true;
+    // Another block recorded the address, and this one holds what that block
+    // left there unless it has written the register itself.
+    return !blockState().DefinedSgprs.contains(Idx);
+  };
+  return PairCarriesAddress(Idx) || (Idx > 0 && PairCarriesAddress(Idx - 1));
 }
 
 void RegisterState::updateM0Const(Value *V) {
