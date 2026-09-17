@@ -8,6 +8,8 @@
 
 #include "transpiler/raiser/handlers.h"
 
+#include "transpiler/raiser/source-image.h"
+
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 
 #include "llvm/IR/Constants.h"
@@ -31,6 +33,98 @@ Expected<BinaryOperands> readBinary64x32(OperandResolver &Op) {
   if (!Src1)
     return Src1.takeError();
   return BinaryOperands{*Dst, *Src0, *Src1};
+}
+
+// Compute the source code-object address a 64-bit add or subtract produces, so
+// that a PC-relative chain still names a source address by the time it reaches
+// the load that reads from it. Return no value if neither operand names one.
+// Either operand order works for an add, but only an address on the left works
+// for a subtract, because a constant minus an address is not an address.
+Expected<std::optional<uint64_t>> sourceImageResult(RaiseContext &Ctx,
+                                                    const DecodedInst &Di,
+                                                    OperandResolver &Op,
+                                                    bool IsSubtract) {
+  std::optional<uint64_t> SourceAddress[2];
+  std::optional<uint64_t> Displacement[2];
+  for (unsigned I = 0; I != 2; ++I) {
+    unsigned Index = Op.srcIdx(I);
+    if (Di.isImm(Index)) {
+      Displacement[I] = Di.getImm(Index);
+      continue;
+    }
+    Expected<std::optional<uint64_t>> Address =
+        sourceImageOperandAddr(Ctx, Di, Index);
+    if (!Address)
+      return Address.takeError();
+    SourceAddress[I] = *Address;
+  }
+
+  // Negating an unsigned displacement is well defined and wraps the same way
+  // the hardware subtract does.
+  if (SourceAddress[0] && Displacement[1])
+    return moveSourceImageAddress(Ctx, Di, *SourceAddress[0],
+                                  IsSubtract ? -*Displacement[1]
+                                             : *Displacement[1]);
+  if (!IsSubtract && SourceAddress[1] && Displacement[0])
+    return moveSourceImageAddress(Ctx, Di, *SourceAddress[1], *Displacement[0]);
+
+  // An operand naming a source address that the cases above do not carry
+  // forward is refused rather than dropped, because a load off the result
+  // would read target memory at whatever the arithmetic left there.
+  if (SourceAddress[0] && SourceAddress[1])
+    return unsupported(Ctx, Di,
+                       "combines two source addresses, which names nothing in "
+                       "the source code object");
+  if (IsSubtract && SourceAddress[1])
+    return unsupported(Ctx, Di,
+                       "subtracts a source address from a constant, which is "
+                       "no source address");
+  if (SourceAddress[0] || SourceAddress[1])
+    return unsupported(Ctx, Di,
+                       "displaces a source address by a register value only "
+                       "the running kernel knows");
+  return std::nullopt;
+}
+
+// Emit a 64-bit scalar add or subtract instruction, carrying along the source
+// code-object address it displaces.
+//
+// Read the operands before writing the destination, because the destination may
+// name the same register pair and writing it drops the address that pair held.
+Error emitBinaryInst64(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op, bool IsSubtract) {
+  // The displaced address is known here, so write it as the constant it is
+  // rather than reading the operands, which refuse to answer a read that would
+  // let a source address escape into the target program.
+  Expected<std::optional<uint64_t>> SourceAddress =
+      sourceImageResult(Ctx, Di, Op, IsSubtract);
+  if (!SourceAddress)
+    return SourceAddress.takeError();
+  if (*SourceAddress) {
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    // Only an SGPR pair carries a source address forward. Writing one anywhere
+    // else would drop it, and a later load off that register would read target
+    // memory at a source address.
+    if (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx)
+      return unsupported(Ctx, Di,
+                         "puts a source address outside an SGPR pair, which "
+                         "is not tracked as one");
+    Ctx.registers().writeReg64(
+        *Dst, ConstantInt::get(Ctx.B.getInt64Ty(), **SourceAddress));
+    Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                  **SourceAddress);
+    return Error::success();
+  }
+
+  Expected<BinaryOperands> Args = Op.readBinary64();
+  if (!Args)
+    return Args.takeError();
+  Value *Result = IsSubtract ? Ctx.B.CreateSub(Args->Src0, Args->Src1, "sub64")
+                             : Ctx.B.CreateAdd(Args->Src0, Args->Src1, "add64");
+  Ctx.registers().writeReg64(Args->Dst, Result);
+  return Error::success();
 }
 
 // Set SCC if Result is nonzero.
@@ -343,22 +437,10 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     Ctx.registers().writeReg64(Args->Dst, Result);
     return Error::success();
   }
-  case CanonicalOp::S_ADD_NC_U64: {
-    Expected<BinaryOperands> Args = Op.readBinary64();
-    if (!Args)
-      return Args.takeError();
-    Value *Result = Ctx.B.CreateAdd(Args->Src0, Args->Src1, "add64");
-    Ctx.registers().writeReg64(Args->Dst, Result);
-    return Error::success();
-  }
-  case CanonicalOp::S_SUB_NC_U64: {
-    Expected<BinaryOperands> Args = Op.readBinary64();
-    if (!Args)
-      return Args.takeError();
-    Value *Result = Ctx.B.CreateSub(Args->Src0, Args->Src1, "sub64");
-    Ctx.registers().writeReg64(Args->Dst, Result);
-    return Error::success();
-  }
+  case CanonicalOp::S_ADD_NC_U64:
+    return emitBinaryInst64(Ctx, Di, Op, /*IsSubtract=*/false);
+  case CanonicalOp::S_SUB_NC_U64:
+    return emitBinaryInst64(Ctx, Di, Op, /*IsSubtract=*/true);
 
   case CanonicalOp::S_MIN_I32: {
     Expected<BinaryOperands> Args = Op.readBinary32();

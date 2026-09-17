@@ -9,6 +9,7 @@
 #include "transpiler/raiser/handlers.h"
 
 #include "transpiler/decoder/decode.h"
+#include "transpiler/raiser/source-image.h"
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
@@ -396,10 +397,35 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src = Op.src(0, Is64);
-    if (!Src)
-      return Src.takeError();
-    writeDst(Ctx.registers(), *Dst, *Src, Is64);
+    // A copy of a pair holding a source code-object address holds the same
+    // address, and loads off the copy still have to read it from the image.
+    // Take the address from the pair rather than reading the registers, which
+    // refuse to answer a read that would let the address escape.
+    std::optional<uint64_t> SourceAddress;
+    if (Is64) {
+      Expected<std::optional<uint64_t>> Read =
+          sourceImageOperandAddr(Ctx, Di, Op.srcIdx(0));
+      if (!Read)
+        return Read.takeError();
+      SourceAddress = *Read;
+    }
+    if (SourceAddress && (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx))
+      return unsupported(Ctx, Di,
+                         "puts a source address outside an SGPR pair, which "
+                         "is not tracked as one");
+    Value *SrcValue = nullptr;
+    if (SourceAddress) {
+      SrcValue = ConstantInt::get(Ctx.B.getInt64Ty(), *SourceAddress);
+    } else {
+      Expected<Value *> Src = Op.src(0, Is64);
+      if (!Src)
+        return Src.takeError();
+      SrcValue = *Src;
+    }
+    writeDst(Ctx.registers(), *Dst, SrcValue, Is64);
+    if (SourceAddress)
+      Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                    *SourceAddress);
     return Error::success();
   }
 
@@ -713,6 +739,29 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
+  // The captured address is where the next instruction sits in the source code
+  // object, which the decode already knows as a constant. Nothing in the raised
+  // kernel runs at that address, so the value only stands for what the source
+  // image holds there. Track the pair as a source address so that a
+  // PC-relative scalar load off it reads the literal the source meant instead
+  // of reaching into target memory.
+  if (Di.CanonOp == CanonicalOp::S_GETPC_B64) {
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    if (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx)
+      return unsupported(Ctx, Di,
+                         "captures a source address outside an SGPR pair, "
+                         "which is not tracked as one");
+    uint64_t NextInstAddress =
+        Ctx.sourceTextBaseAddress() + Di.Offset + Di.sizeInBytes();
+    Ctx.registers().writeReg64(
+        *Dst, ConstantInt::get(Ctx.B.getInt64Ty(), NextInstAddress));
+    Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                  NextInstAddress);
+    return Error::success();
+  }
+
   switch (Di.CanonOp) {
   // The source splits a barrier in two: this arrival, which does not block,
   // and a release in SOPP, which does. The raise has one barrier, and it
@@ -750,10 +799,6 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::S_WAKEUP_BARRIER_M0:
     return unsupported(Ctx, Di, "wakes the waves waiting on a named barrier");
 
-  case CanonicalOp::S_GETPC_B64:
-    return unsupported(Ctx, Di,
-                       "captures a source address, which no raised "
-                       "instruction can jump to or load from");
   case CanonicalOp::S_SETPC_B64:
     return unsupported(
         Ctx, Di, "jumps to a register value, which names no recovered block");
