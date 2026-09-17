@@ -8,6 +8,8 @@
 
 #include "transpiler/raiser/handlers.h"
 
+#include "transpiler/raiser/source-image.h"
+
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 
 #include "llvm/IR/Constants.h"
@@ -31,6 +33,65 @@ Expected<BinaryOperands> readBinary64x32(OperandResolver &Op) {
   if (!Src1)
     return Src1.takeError();
   return BinaryOperands{*Dst, *Src0, *Src1};
+}
+
+// Source code-object address a 64-bit add or subtract of a constant leads to,
+// so that a PC-relative chain still names a source address once it reaches the
+// load that reads from it, or no value when neither side names one. Both
+// operand orders count for the add; only an address on the left counts for the
+// subtract, since a constant minus an address is no address at all.
+//
+// Reading the sources is what dates this: the destination may name the same
+// register pair, and writing it drops whatever address that pair held.
+Expected<std::optional<uint64_t>> sourceImageResult(RaiseContext &Ctx,
+                                                    const DecodedInst &Di,
+                                                    OperandResolver &Op,
+                                                    bool IsSubtract) {
+  std::optional<uint64_t> SourceAddress[2];
+  std::optional<int64_t> Constant[2];
+  for (unsigned I = 0; I != 2; ++I) {
+    unsigned Index = Op.srcIdx(I);
+    if (Di.isImm(Index)) {
+      Constant[I] = Di.getImm(Index);
+      continue;
+    }
+    Expected<ParsedReg> Src = Ctx.registers().parseReg(Di, Index);
+    if (!Src)
+      return Src.takeError();
+    if (Src->RegKind == ParsedReg::SGPR && Src->BaseIdx)
+      SourceAddress[I] =
+          Ctx.registers().lookupSourceImageSgprPairAddr(*Src->BaseIdx);
+  }
+
+  if (SourceAddress[0] && Constant[1])
+    return IsSubtract ? subtractSourceImageByteOffset(
+                            Ctx, Di, *SourceAddress[0], *Constant[1])
+                      : addSourceImageByteOffset(Ctx, Di, *SourceAddress[0],
+                                                 *Constant[1]);
+  if (!IsSubtract && SourceAddress[1] && Constant[0])
+    return addSourceImageByteOffset(Ctx, Di, *SourceAddress[1], *Constant[0]);
+  return std::nullopt;
+}
+
+// Emit a 64-bit scalar add or subtract, keeping the source code-object address
+// it displaces.
+Error emitBinary64(RaiseContext &Ctx, const DecodedInst &Di,
+                   OperandResolver &Op, bool IsSubtract) {
+  Expected<BinaryOperands> Args = Op.readBinary64();
+  if (!Args)
+    return Args.takeError();
+  Expected<std::optional<uint64_t>> SourceAddress =
+      sourceImageResult(Ctx, Di, Op, IsSubtract);
+  if (!SourceAddress)
+    return SourceAddress.takeError();
+  Value *Result = IsSubtract ? Ctx.B.CreateSub(Args->Src0, Args->Src1, "sub64")
+                             : Ctx.B.CreateAdd(Args->Src0, Args->Src1, "add64");
+  Ctx.registers().writeReg64(Args->Dst, Result);
+  if (*SourceAddress && Args->Dst.RegKind == ParsedReg::SGPR &&
+      Args->Dst.BaseIdx)
+    Ctx.registers().recordSourceImageSgprPairAddr(*Args->Dst.BaseIdx,
+                                                  **SourceAddress);
+  return Error::success();
 }
 
 // Set SCC if Result is nonzero.
@@ -343,22 +404,10 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     Ctx.registers().writeReg64(Args->Dst, Result);
     return Error::success();
   }
-  case CanonicalOp::S_ADD_NC_U64: {
-    Expected<BinaryOperands> Args = Op.readBinary64();
-    if (!Args)
-      return Args.takeError();
-    Value *Result = Ctx.B.CreateAdd(Args->Src0, Args->Src1, "add64");
-    Ctx.registers().writeReg64(Args->Dst, Result);
-    return Error::success();
-  }
-  case CanonicalOp::S_SUB_NC_U64: {
-    Expected<BinaryOperands> Args = Op.readBinary64();
-    if (!Args)
-      return Args.takeError();
-    Value *Result = Ctx.B.CreateSub(Args->Src0, Args->Src1, "sub64");
-    Ctx.registers().writeReg64(Args->Dst, Result);
-    return Error::success();
-  }
+  case CanonicalOp::S_ADD_NC_U64:
+    return emitBinary64(Ctx, Di, Op, /*IsSubtract=*/false);
+  case CanonicalOp::S_SUB_NC_U64:
+    return emitBinary64(Ctx, Di, Op, /*IsSubtract=*/true);
 
   case CanonicalOp::S_MIN_I32: {
     Expected<BinaryOperands> Args = Op.readBinary32();
