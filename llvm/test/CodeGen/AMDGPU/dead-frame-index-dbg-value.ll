@@ -1,5 +1,5 @@
-; RUN: llc -O0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 < %s | FileCheck %s
-; RUN: llc -O0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 < %s | FileCheck %s
+; RUN: llc -O0 -mtriple=amdgpu11.00-amd-amdhsa < %s | FileCheck %s
+; RUN: llc -O0 -mtriple=amdgpu9.00-amd-amdhsa < %s | FileCheck %s
 
 ; Check that debug values referencing eliminated frame indices don't crash.
 ; The AMDGPU backend can eliminate spill slots during frame finalization
@@ -27,7 +27,7 @@ entry:
 !2 = !{}
 !3 = !{i32 2, !"Debug Info Version", i32 3}
 !4 = !{i32 1, !"amdhsa_code_object_version", i32 500}
-!6 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !7, size: 64, addressSpace: 1)
+!6 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !7, size: 64, dwarfAddressSpace: 1)
 !7 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "Buffer", file: !1, line: 1, size: 512, flags: DIFlagTypePassByValue, elements: !2)
 !10 = distinct !DISubprogram(name: "test_dbg_value_dead_frame_idx", scope: !1, file: !1, line: 10, type: !11, scopeLine: 10, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0)
 !11 = !DISubroutineType(types: !12)

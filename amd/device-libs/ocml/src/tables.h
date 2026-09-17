@@ -39,6 +39,18 @@ extern __constant double TABLE_MANGLE(M64_J0)[];
 extern __constant double TABLE_MANGLE(M64_J1)[];
 extern __constant double TABLE_MANGLE(M64_Y0)[];
 extern __constant double TABLE_MANGLE(M64_Y1)[];
+extern __constant float TABLE_MANGLE(LGAMMAF_NEG_ZP)[];
+extern __constant float TABLE_MANGLE(LGAMMAF_NEG_S3_ZBP)[];
+extern __constant float TABLE_MANGLE(LGAMMAF_NEG_S3_ZAP)[];
+extern __constant float TABLE_MANGLE(LGAMMAF_NEG_S3_ZFB)[];
+extern __constant float TABLE_MANGLE(LGAMMAF_NEG_S3_ZFA)[];
+extern __constant float TABLE_MANGLE(LGAMMAF_NEG_S3_DD)[];
+extern __constant double TABLE_MANGLE(LGAMMA_NEG_ZP)[];
+extern __constant double TABLE_MANGLE(LGAMMA_NEG_S3_ZBP)[];
+extern __constant double TABLE_MANGLE(LGAMMA_NEG_S3_ZAP)[];
+extern __constant double TABLE_MANGLE(LGAMMA_NEG_S3_ZFB)[];
+extern __constant double TABLE_MANGLE(LGAMMA_NEG_S3_ZFA)[];
+extern __constant double TABLE_MANGLE(LGAMMA_NEG_S3_DD)[];
 
 #define USE_TABLE(TYPE,PTR,NAME) \
     __constant TYPE * PTR = TABLE_MANGLE(NAME)

@@ -9,14 +9,36 @@
 #ifndef COMGR_ENV_H
 #define COMGR_ENV_H
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
+
+namespace llvm {
+class raw_ostream;
+} // namespace llvm
 
 namespace COMGR {
 namespace env {
 
+enum class LogLevel {
+  None = 0,
+  Error,
+  Warning,
+  Info,
+  Debug,
+};
+
+/// Parse @p Requested (AMD_COMGR_LOG_LEVEL, may be empty) into a threshold.
+/// When empty or not an integer, returns Debug if @p VerboseFallback is set.
+LogLevel parseLogLevel(llvm::StringRef Requested, bool VerboseFallback);
+
+/// Resolve the log level from AMD_COMGR_LOG_LEVEL, using the
+/// AMD_COMGR_EMIT_VERBOSE_LOGS back-compat fallback via parseLogLevel().
+LogLevel resolveLogLevel();
+
 /// Return whether the environment requests temps be saved.
 bool shouldSaveTemps();
 bool shouldSaveLLVMTemps();
+
 std::optional<bool> shouldUseVFS();
 
 /// If the environment requests logs be redirected, return the string identifier
@@ -39,6 +61,10 @@ llvm::StringRef getTimeStatisticsGranularity();
 /// otherwise return the default LLVM path.
 llvm::StringRef getLLVMPath();
 
+/// Return the clang binary path used by Comgr's in-process driver and
+/// resource-dir VFS construction.
+llvm::StringRef getClangBinaryPath();
+
 /// If environment variable AMD_COMGR_CACHE_POLICY is set, return the
 /// environment variable, otherwise return empty
 llvm::StringRef getCachePolicy();
@@ -46,11 +72,21 @@ llvm::StringRef getCachePolicy();
 /// If environment variable AMD_COMGR_CACHE_DIR is set, return the environment
 /// variable, otherwise return the default path: On Linux it's typically
 /// $HOME/.cache/comgr_cache (depends on XDG_CACHE_HOME)
-llvm::StringRef getCacheDirectory();
+std::optional<llvm::SmallString<256>>
+getCacheDirectory(llvm::raw_ostream &LogS);
 
 /// If environment variable AMD_COMGR_DRIVER_OPTIONS_APPEND is set, return the
 /// space-separated options to append to clang driver invocations.
 llvm::StringRef getDriverOptionsAppend();
+
+/// Override for embedded libc++ header injection.
+///   Auto    - detect system C++ headers and skip embedded if found (default).
+///   Force   - always inject embedded headers, ignore detection.
+///   Disable - never inject embedded headers, regardless of detection.
+enum class EmbeddedLibcxxMode { Auto, Force, Disable };
+
+/// Read AMD_COMGR_USE_EMBEDDED_LIBCXX. Defaults to Auto.
+EmbeddedLibcxxMode getEmbeddedLibcxxMode();
 
 } // namespace env
 } // namespace COMGR

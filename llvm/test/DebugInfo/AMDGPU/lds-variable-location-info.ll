@@ -1,7 +1,6 @@
 ; RUN: llc -O0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -verify-machineinstrs -filetype=obj < %s | llvm-dwarfdump -v -debug-info - | FileCheck %s
 @fun.variable_name = internal addrspace(3) global i32 undef, align 4, !dbg !0
 
-
 ; CHECK: {{.*}}DW_TAG_variable
 ; CHECK-NEXT: DW_AT_name {{.*}}"variable_name"
 ; CHECK-NEXT: DW_AT_type
@@ -30,12 +29,12 @@ attributes #0 = { nounwind }
 
 !0 = !DIGlobalVariableExpression(var: !1, expr: !DIExpression(DW_OP_constu, 2, DW_OP_swap, DW_OP_xderef))
 !1 = distinct !DIGlobalVariable(name: "variable_name", scope: !2, file: !3, line: 2, type: !6, isLocal: true, isDefinition: true)
-!2 = distinct !DISubprogram(name: "fun", scope: !3, file: !3, line: 1, type: !4, scopeLine: 1, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !7, retainedNodes: !8)
+!2 = distinct !DISubprogram(name: "fun", scope: !3, file: !3, line: 1, type: !4, scopeLine: 1, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !7, retainedNodes: !9)
 !3 = !DIFile(filename: "file", directory: "dir")
 !4 = !DISubroutineType(cc: DW_CC_LLVM_DeviceKernel, types: !5)
 !5 = !{null, !6}
 !6 = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
-!7 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, producer: "clang", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, enums: !8, globals: !9, nameTableKind: None)
+!7 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, producer: "clang", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, enums: !8, globals: !8, nameTableKind: None)
 !8 = !{}
 !9 = !{!0}
 !10 = !{i32 2, !"Dwarf Version", i32 5}

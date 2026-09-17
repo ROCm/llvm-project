@@ -5,17 +5,8 @@
  * License. See LICENSE.TXT for details.
  *===------------------------------------------------------------------------*/
 
-struct redret {
-    half hi;
-    short i;
-};
-
-struct scret {
-    half s;
-    half c;
-};
+#include "redretH.h"
 
 extern CONSTATTR struct redret  MATH_PRIVATE(trigred)(half x);
 extern CONSTATTR struct scret  MATH_PRIVATE(sincosred)(half x);
 extern CONSTATTR half MATH_PRIVATE(tanred)(half x, short i);
-

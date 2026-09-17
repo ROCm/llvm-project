@@ -117,8 +117,8 @@ bool WebAssemblyRegisterInfo::eliminateFrameIndex(
   unsigned FIRegOperand = FrameRegister;
   if (FrameOffset) {
     // Create i32/64.add SP, offset and make it the operand.
-    const TargetRegisterClass *PtrRC =
-        MRI.getTargetRegisterInfo()->getPointerRegClass();
+    const TargetRegisterClass *PtrRC = TII->getRegClass(
+        TII->get(WebAssemblyFrameLowering::getOpcConst(MF)), 0);
     Register OffsetOp = MRI.createVirtualRegister(PtrRC);
     BuildMI(MBB, *II, II->getDebugLoc(),
             TII->get(WebAssemblyFrameLowering::getOpcConst(MF)),
@@ -180,12 +180,23 @@ static const TargetRegisterClass &getRegClassForBank(const RegisterBank &RB) {
 }
 
 const TargetRegisterClass *
-WebAssemblyRegisterInfo::getConstrainedRegClassForOperand(
-    const MachineOperand &MO, const MachineRegisterInfo &MRI) const {
-  assert(MO.isReg());
+WebAssemblyRegisterInfo::getConstrainedRegClassForReg(
+    Register Reg, const MachineRegisterInfo &MRI) const {
+  if (Reg.isPhysical()) {
+    switch (Reg.id()) {
+    case WebAssembly::SP32:
+    case WebAssembly::FP32:
+      return &WebAssembly::I32RegClass;
+    case WebAssembly::SP64:
+    case WebAssembly::FP64:
+      return &WebAssembly::I64RegClass;
+      break;
+    default:
+      return nullptr;
+    }
+  }
 
-  const RegClassOrRegBank &RegClassOrBank =
-      MRI.getRegClassOrRegBank(MO.getReg());
+  const RegClassOrRegBank &RegClassOrBank = MRI.getRegClassOrRegBank(Reg);
 
   if (RegClassOrBank.isNull())
     return nullptr;

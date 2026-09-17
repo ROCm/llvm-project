@@ -30,8 +30,6 @@ const char *Action::getClassName(ActionClass AC) {
   case AnalyzeJobClass:
     return "analyzer";
   case CompileJobClass: return "compiler";
-  case FortranFrontendJobClass:
-    return "fortranfrontend";
   case BackendJobClass: return "backend";
   case AssembleJobClass: return "assembler";
   case IfsMergeJobClass: return "interface-stub-merger";
@@ -42,8 +40,6 @@ const char *Action::getClassName(ActionClass AC) {
   case VerifyPCHJobClass: return "verify-pch";
   case OffloadBundlingJobClass:
     return "clang-offload-bundler";
-  case OffloadUnbundlingJobClass:
-    return "clang-offload-unbundler";
   case OffloadPackagerJobClass:
     return "llvm-offload-binary";
   case LinkerWrapperJobClass:
@@ -64,12 +60,6 @@ const char *Action::getClassName(ActionClass AC) {
 void Action::propagateDeviceOffloadInfo(OffloadKind OKind, BoundArch OArch,
                                         const ToolChain *OToolChain) {
   // Offload action set its own kinds on their dependences.
-  // But we still need to preserve OffloadingDeviceKind and OffloadingArch
-  // where toplevel action is an unbundle.
-  // HIP assumes offload kind and offload arch of OffloadAction to be
-  // determined by its ctor and not to be changed by subsequent actions,
-  // otherwise the following use case will break:
-  // compile -> offload -> bundle -> offload.
   if (Kind == OffloadClass) {
     if (OKind != OFK_HIP) {
       OffloadingDeviceKind = OKind;
@@ -77,9 +67,6 @@ void Action::propagateDeviceOffloadInfo(OffloadKind OKind, BoundArch OArch,
     }
     return;
   }
-  // Unbundling actions use the host kinds.
-  if (Kind == OffloadUnbundlingJobClass)
-    return;
 
   assert((OffloadingDeviceKind == OKind || OffloadingDeviceKind == OFK_None) &&
          "Setting device kind to a different device??");
@@ -448,11 +435,6 @@ void OffloadBundlingJobAction::anchor() {}
 OffloadBundlingJobAction::OffloadBundlingJobAction(ActionList &Inputs)
     : JobAction(OffloadBundlingJobClass, Inputs, Inputs.back()->getType()) {}
 
-void OffloadUnbundlingJobAction::anchor() {}
-
-OffloadUnbundlingJobAction::OffloadUnbundlingJobAction(Action *Input)
-    : JobAction(OffloadUnbundlingJobClass, Input, Input->getType()) {}
-
 void OffloadPackagerJobAction::anchor() {}
 
 OffloadPackagerJobAction::OffloadPackagerJobAction(ActionList &Inputs,
@@ -483,5 +465,5 @@ BinaryTranslatorJobAction::BinaryTranslatorJobAction(Action *Input,
 
 void ObjcopyJobAction::anchor() {}
 
-ObjcopyJobAction::ObjcopyJobAction(Action *Input, types::ID Type)
-    : JobAction(ObjcopyJobClass, Input, Type) {}
+ObjcopyJobAction::ObjcopyJobAction(ActionList &Inputs, types::ID Type)
+    : JobAction(ObjcopyJobClass, Inputs, Type) {}

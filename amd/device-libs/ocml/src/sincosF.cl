@@ -16,11 +16,11 @@ MATH_MANGLE(sincos)(float x, __private float *cp)
 
     float ax = BUILTIN_ABS_F32(x);
 
-    struct redret r = MATH_PRIVATE(trigred)(ax);
-
 #if defined EXTRA_PRECISION
-    struct scret sc = MATH_PRIVATE(sincosred2)(r.hi, r.lo);
+    struct epredret r = MATH_PRIVATE(eptrigred)(ax);
+    struct scret sc = MATH_PRIVATE(sincosredep)(r.r);
 #else
+    struct redret r = MATH_PRIVATE(trigred)(ax);
     struct scret sc = MATH_PRIVATE(sincosred)(r.hi);
 #endif
 

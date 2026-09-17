@@ -440,6 +440,7 @@ public:
   // Helper methods
 
   std::string GetFilePath(const char *Name) const;
+  std::optional<std::string> GetFilePathIfExists(const char *Name) const;
   std::string GetProgramPath(const char *Name) const;
 
   /// Returns the linker path, respecting the -fuse-ld= argument to determine
@@ -758,14 +759,6 @@ public:
   AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &CC1Args) const;
 
-  /// \brief Add the flang arguments for system include paths.
-  ///
-  /// This routine is responsible for adding the -stdinc argument to
-  /// include headers and module files from standard system header directories.
-  virtual void
-  AddFlangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
-                            llvm::opt::ArgStringList &Flang1Args) const {}
-
   /// Add options that need to be passed to cc1 for this target that could add
   /// commands to the compilation to transform an input.
   virtual void
@@ -803,6 +796,10 @@ public:
   // GetCXXStdlibType - Determine the C++ standard library type to use with the
   // given compilation arguments.
   virtual CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const;
+
+  // GetCXXStdlibName - Determine the name of the C++ standard library to use
+  // with the given compilation arguments.
+  virtual StringRef GetCXXStdlibName(const llvm::opt::ArgList &Args) const;
 
   // GetUnwindLibType - Determine the unwind library type to use with the
   // given compilation arguments.
@@ -932,7 +929,9 @@ public:
       return;
     }
 
-    if (TT.isAMDGPU()) {
+    if (TT.isAMDGCN()) {
+      // Fixup legacy "amdgcn" triples to "amdgpu"
+      TT.setArch(llvm::Triple::amdgpu, TT.getSubArch());
       if (TT.getVendor() == llvm::Triple::UnknownVendor)
         TT.setVendor(llvm::Triple::AMD);
       if (TT.getOS() == llvm::Triple::UnknownOS)

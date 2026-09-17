@@ -10,17 +10,37 @@
 #define AMD_COMGR_TIME_STAT_H
 
 #include "perf-timer.h"
+#include "ts-interface.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Format.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "amd_comgr.h"
+#include <algorithm>
+#include <functional>
 #include <iostream>
+#include <limits>
+#include <memory>
+#include <mutex>
+
+#ifndef _WIN32
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace COMGR {
 namespace TimeStatistics {
 
 struct ProfileData {
-  double TimeTaken;
-  int Counter;
+  double TimeTaken = 0.0;
+  int Counter = 0;
+  // Extra columns produced by batch-merged callers (mergeStats). Defaulted so
+  // ProfilePoint-based callers, which only record wall time, are unaffected.
+  uint64_t Patches = 0;
+  double MinTime = std::numeric_limits<double>::max();
+  double MaxTime = 0.0;
 };
 
 class PerfStats {
@@ -29,22 +49,46 @@ class PerfStats {
       pLog;
   PerfTimer PT;
 
+  // Guards ProfileDataMap so AddToStats / mergeStats / dumpPerfStats are safe
+  // under concurrent Comgr calls.
+  std::mutex Mtx;
   llvm::StringMap<ProfileData> ProfileDataMap;
 
 public:
   PerfStats() {}
   bool Init(std::string LogFile) {
     std::error_code EC;
-    std::unique_ptr<llvm::raw_fd_ostream> LogF(
-        new (std::nothrow)
-            llvm::raw_fd_ostream(LogFile, EC, llvm::sys::fs::OF_Text));
+    std::unique_ptr<llvm::raw_fd_ostream> LogF;
+#ifndef _WIN32
+    // Open with O_NOFOLLOW so a symlink pre-planted at the log path is not
+    // followed. The path may be caller-influenced (AMD_COMGR_REDIRECT_LOGS) or
+    // default to a CWD-relative file, so refuse to write through a symlink.
+    // The mode matches raw_fd_ostream's default (all_read | all_write); the
+    // process umask applies as usual.
+    int FD = ::open(LogFile.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW,
+                    llvm::sys::fs::all_read | llvm::sys::fs::all_write);
+    if (FD < 0) {
+      EC = std::error_code(errno, std::generic_category());
+    } else {
+      LogF.reset(new (std::nothrow)
+                     llvm::raw_fd_ostream(FD, /*shouldClose=*/true));
+      if (!LogF) {
+        ::close(FD);
+        EC = std::make_error_code(std::errc::not_enough_memory);
+      }
+    }
+#else
+    LogF.reset(new (std::nothrow)
+                   llvm::raw_fd_ostream(LogFile, EC, llvm::sys::fs::OF_Text));
+    if (!EC && !LogF)
+      EC = std::make_error_code(std::errc::not_enough_memory);
+#endif
     if (EC) {
-      std::cerr << "Failed to open log file " << LogFile << "for perf stats "
+      std::cerr << "Failed to open log file " << LogFile << " for perf stats "
                 << EC.message() << "\n ";
       return false;
-    } else {
-      pLog = std::move(LogF);
     }
+    pLog = std::move(LogF);
 
     // Initialize Timer
     if (!PT.Init())
@@ -56,17 +100,55 @@ public:
   double getCurrentTime() { return PT.getCurrentTime(); }
 
   void AddToStats(llvm::StringRef Name, double TimeTaken) {
-    ProfileDataMap[Name].TimeTaken += TimeTaken;
-    ProfileDataMap[Name].Counter++;
+    std::scoped_lock Lock(Mtx);
+    ProfileData &D = ProfileDataMap[Name];
+    D.TimeTaken += TimeTaken;
+    D.Counter++;
+    D.MinTime = std::min(D.MinTime, TimeTaken);
+    D.MaxTime = std::max(D.MaxTime, TimeTaken);
+  }
+
+  // Fold many pre-aggregated rows in under a single lock so hot-path producers
+  // can accumulate lock-free and merge once.
+  void mergeStats(llvm::ArrayRef<PerfStatRecord> Records) {
+    std::scoped_lock Lock(Mtx);
+    for (const PerfStatRecord &R : Records) {
+      ProfileData &D = ProfileDataMap[R.Name];
+      D.TimeTaken += R.TimeTaken;
+      D.Counter += static_cast<int>(R.Calls);
+      D.Patches += R.Patches;
+      if (R.Calls) {
+        D.MinTime = std::min(D.MinTime, R.MinTime);
+        D.MaxTime = std::max(D.MaxTime, R.MaxTime);
+      }
+    }
   }
 
   void dumpPerfStats() {
+    std::scoped_lock Lock(Mtx);
+    llvm::StringRef Unit = env::getTimeStatisticsGranularity();
     for (const auto &Item : ProfileDataMap) {
+      const ProfileData &D = Item.getValue();
+      const double MinT =
+          D.MinTime == std::numeric_limits<double>::max() ? 0.0 : D.MinTime;
+      // Keep the granularity unit last so existing consumers that anchor on it
+      // (e.g. the time-statistics.cl "grep 'ms$'" check) still match; the extra
+      // columns are inserted before it.
       *pLog << llvm::format("%-50s", Item.getKey().str().c_str())
-            << llvm::format("%6d", Item.getValue().Counter) << " calls "
-            << llvm::format("%10.4f", Item.getValue().TimeTaken) << " "
-            << env::getTimeStatisticsGranularity() << "\n";
+            << llvm::format("%6d", D.Counter) << " calls "
+            << llvm::format("%10.4f", D.TimeTaken)
+            << llvm::format("  min %10.4f  max %10.4f  patches %6llu", MinT,
+                            D.MaxTime,
+                            static_cast<unsigned long long>(D.Patches))
+            << " " << Unit << "\n";
     }
+  }
+
+  // Snapshot an aggregated row by name for unit tests; returns a zeroed
+  // ProfileData when the row is absent. Locks like the other accessors.
+  ProfileData lookupForTest(llvm::StringRef Name) {
+    std::scoped_lock Lock(Mtx);
+    return ProfileDataMap.lookup(Name);
   }
 };
 

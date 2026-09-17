@@ -394,8 +394,8 @@ Do not set the text data sections to be writable, page align sections.
 Disable target-specific relaxations. For x86-64 this disables R_X86_64_GOTPCRELX and R_X86_64_REX_GOTPCRELX GOT optimization.
 .It Fl -no-rosegment
 Do not put read-only non-executable sections in their own segment.
-.It Fl -no-undefined-version
-Report version scripts that refer undefined symbols.
+.It Fl -undefined-version
+Do not report version scripts that refer to undefined symbols.
 .It Fl -no-undefined
 Report unresolved symbols even if the linker is creating a shared library.
 .It Fl -no-warn-mismatch
@@ -582,7 +582,10 @@ version.txt containing the output of ld.lld --version.
 The archive when
 unpacked can be used to re-run the linker with the same options and input files.
 .It Fl -retain-symbols-file Ns = Ns Ar file
-Retain only the symbols listed in the file.
+Keep only the symbols listed in
+.Ar file
+in the static symbol table, along with symbols referenced by emitted relocations.
+This does not affect the dynamic symbol table.
 .It Fl -rpath Ns = Ns Ar value , Fl R Ar value
 Add a
 .Dv DT_RUNPATH

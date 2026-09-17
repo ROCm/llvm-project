@@ -200,14 +200,16 @@ endif()
   add_test(NAME ${test_name}
     COMMAND "${name}")
   add_dependencies(check-comgr ${name})
-  # Windows binaries have no equivalent to RPATH, so we must set their PATH to
-  # include the .lib/.dll directory.
+  # Windows binaries have no equivalent to RPATH, so we must prepend the
+  # .lib/.dll directory to their PATH. Use ENVIRONMENT_MODIFICATION so the
+  # inherited PATH is preserved (transitive DLL deps like zstd.dll live there).
   if (UNIX)
     set_tests_properties(${test_name}
       PROPERTIES ENVIRONMENT "AMD_COMGR_CACHE=0;")
   else()
-    set_tests_properties(${test_name}
-      PROPERTIES ENVIRONMENT "PATH=$<TARGET_LINKER_FILE_DIR:amd_comgr>;AMD_COMGR_CACHE=0;")
+    set_tests_properties(${test_name} PROPERTIES
+      ENVIRONMENT_MODIFICATION
+      "PATH=path_list_prepend:$<TARGET_LINKER_FILE_DIR:amd_comgr>;AMD_COMGR_CACHE=set:0")
   endif()
 endmacro()
 
@@ -228,12 +230,12 @@ add_comgr_test(compile_source_with_device_libs_to_bc_test c)
 add_comgr_test(compile_source_with_device_libs_to_bc_with_vfs_test c)
 add_comgr_test(assemble_test c)
 add_comgr_test(link_test c)
-add_comgr_test(get_data_isa_name_test c)
 add_comgr_test(include_subdirectory_test c)
 add_comgr_test(fail_to_build_driver c)
 add_comgr_test(file_map c)
 add_comgr_test(symbolize_test c)
 add_comgr_test(mangled_names_test c)
+add_comgr_test(time_stat_symlink_test c)
 # Disabled due to AddressSanitizer limitation with multithreaded programs
 add_comgr_test(multithread_test cpp)
 add_comgr_test(nested_kernel_test c)
@@ -245,3 +247,13 @@ add_comgr_test(compile_hip_to_relocatable c)
 #add_comgr_test(compile_hip_with_libcxx_test c)
 add_comgr_test(mangled_names_hip_test c)
 #add_comgr_test(unbundle_hip_test c)
+
+add_test(
+  NAME comgr_transpiler_reduce_test
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/utils/test_reduce.py")
+set_tests_properties(
+  comgr_transpiler_reduce_test
+  PROPERTIES
+    ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1"
+    TIMEOUT 120)

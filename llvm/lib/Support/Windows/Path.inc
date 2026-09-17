@@ -342,7 +342,7 @@ std::error_code create_symlink(const Twine &to, const Twine &from) {
   // The Win32 API normally allows forward slashes, but under some cases it does
   // not correctly handle them in the target of a symlink.
   SmallString<128> ToStr;
-  llvm::sys::path::native(to, ToStr);
+  llvm::sys::path::native(to, ToStr, llvm::sys::path::Style::windows_backslash);
 
   SmallVector<wchar_t, 128> WideFrom;
   SmallVector<wchar_t, 128> WideTo;
@@ -588,8 +588,9 @@ static std::error_code setDeleteDisposition(HANDLE Handle, bool Delete) {
   if (!IsLocal)
     return errc::not_supported;
 
-  // The file is on a local drive, set the DeleteFile to true.
-  Disposition.DeleteFile = Delete;
+  // The file is on a local drive, we can safely set FILE_DISPOSITION_INFO's
+  // flag.
+  Disposition.DeleteFile = true;
   if (!SetFileInformationByHandle(Handle, FileDispositionInfo, &Disposition,
                                   sizeof(Disposition)))
     return mapWindowsError(::GetLastError());
@@ -1818,6 +1819,7 @@ std::error_code readlink(const Twine &path, SmallVectorImpl<char> &dest) {
   if (std::error_code EC = UTF16ToUTF8(Target, TargetLen, dest))
     return EC;
 
+  llvm::sys::path::native(dest);
   return std::error_code();
 }
 

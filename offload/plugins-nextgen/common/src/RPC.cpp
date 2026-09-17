@@ -21,10 +21,6 @@ using namespace llvm;
 using namespace omp;
 using namespace target;
 
-#ifdef OFFLOAD_ENABLE_EMISSARY_APIS
-#include "Emissary.h"
-#endif
-
 template <uint32_t NumLanes>
 rpc::RPCStatus handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
                                     rpc::Server::Port &Port) {
@@ -67,63 +63,6 @@ rpc::RPCStatus handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
     });
     break;
   }
-#ifdef OFFLOAD_ENABLE_EMISSARY_APIS
-  case ALT_LIBC_MALLOC: {
-    Port.recv_and_send([&](rpc::Buffer *Buffer, uint32_t) {
-      auto PtrOrErr =
-          Device.allocate(Buffer->data[0], nullptr, TARGET_ALLOC_DEVICE);
-      void *Ptr = nullptr;
-      if (!PtrOrErr)
-        consumeError(PtrOrErr.takeError());
-      else
-        Ptr = *PtrOrErr;
-      Buffer->data[0] = reinterpret_cast<uintptr_t>(Ptr);
-    });
-    break;
-  }
-  case ALT_LIBC_FREE: {
-    Port.recv([&](rpc::Buffer *Buffer, uint32_t) {
-      if (auto Error = Device.free(reinterpret_cast<void *>(Buffer->data[0]),
-                                   TARGET_ALLOC_DEVICE)) {
-        consumeError(std::move(Error));
-      }
-    });
-    break;
-  }
-  case EMISSARY_PREMALLOC: {
-    Port.recv_and_send([&](rpc::Buffer *Buffer, uint32_t) {
-      size_t sz = (size_t)Buffer->data[0];
-      Buffer->data[0] = reinterpret_cast<uintptr_t>(Device.getFree_ArgBuf(sz));
-    });
-    break;
-  }
-  case EMISSARY_FREE: {
-    void *Args[NumLanes] = {nullptr};
-    Port.recv([&](rpc::Buffer *buffer, uint32_t ID) {
-      Args[ID] = reinterpret_cast<void *>(buffer->data[0]);
-      Device.moveBusyToFree_ArgBuf(Args[ID]);
-    });
-    break;
-  }
-  case OFFLOAD_EMISSARY: {
-    // uint64_t Sizes[NumLanes] = {0};
-    unsigned long long Results[NumLanes] = {0};
-    void *Args[NumLanes] = {nullptr};
-    Port.recv([&](rpc::Buffer *buffer, uint32_t ID) {
-      Args[ID] = reinterpret_cast<void *>(buffer->data[0]);
-      Results[ID] = Emissary((char *)Args[ID]);
-    });
-    Port.send([&](rpc::Buffer *Buffer, uint32_t ID) {
-      Device.moveBusyToFree_ArgBuf(Args[ID]);
-      Buffer->data[0] = static_cast<uint64_t>(Results[ID]);
-    });
-    break;
-  }
-#else
-  case EMISSARY_PREMALLOC:
-  case EMISSARY_FREE:
-  case OFFLOAD_EMISSARY:
-#endif
   default:
     return rpc::RPC_UNHANDLED_OPCODE;
     break;
@@ -268,32 +207,40 @@ RPCServerTy::isDeviceUsingRPC(plugin::GenericDeviceTy &Device,
 Error RPCServerTy::initDevice(plugin::GenericDeviceTy &Device,
                               plugin::GenericGlobalHandlerTy &Handler,
                               plugin::DeviceImageTy &Image) {
+  std::lock_guard<decltype(BufferMutex)> Lock(BufferMutex);
   uint64_t NumPorts =
       std::min(Device.requestedRPCPortCount(), rpc::MAX_PORT_COUNT);
-  auto RPCBufferOrErr = Device.allocate(
-      rpc::Server::allocation_size(Device.getRPCNumLanes(), NumPorts), nullptr,
-      TARGET_ALLOC_HOST);
-  if (!RPCBufferOrErr)
-    return RPCBufferOrErr.takeError();
+  void *RPCBuffer = Buffers[Device.getDeviceId()];
+  if (!RPCBuffer) {
+    auto RPCBufferOrErr = Device.allocate(
+        rpc::Server::allocation_size(Device.getRPCNumLanes(), NumPorts),
+        nullptr, TARGET_ALLOC_HOST);
+    if (!RPCBufferOrErr)
+      return RPCBufferOrErr.takeError();
 
-  void *RPCBuffer = *RPCBufferOrErr;
-  if (!RPCBuffer)
-    return plugin::Plugin::error(
-        error::ErrorCode::UNKNOWN,
-        "failed to initialize RPC server for device %d", Device.getDeviceId());
+    RPCBuffer = *RPCBufferOrErr;
+    if (!RPCBuffer)
+      return plugin::Plugin::error(
+          error::ErrorCode::UNKNOWN,
+          "failed to initialize RPC server for device %d",
+          Device.getDeviceId());
 
-  // The doorbell is used by AMDGPU targets to let the server thread be
-  // descheduled. It is optional and will be ignored if the fields are null.
-  rpc::Doorbell Doorbell{};
-  if (auto Err = Device.Plugin.initRPCDoorbell(Doorbell.value, Doorbell.mailbox,
-                                               Doorbell.event_id))
-    return Err;
+    // The doorbell is used by AMDGPU targets to let the server thread be
+    // descheduled. It is optional and will be ignored if the fields are null.
+    rpc::Doorbell Doorbell{};
+    if (auto Err = Device.Plugin.initRPCDoorbell(
+            Doorbell.value, Doorbell.mailbox, Doorbell.event_id))
+      return Err;
 
-  auto *DoorbellPtr = reinterpret_cast<rpc::Doorbell *>(
-      static_cast<uint8_t *>(RPCBuffer) + rpc::Server::doorbell_offset());
-  std::memcpy(DoorbellPtr, &Doorbell, sizeof(rpc::Doorbell));
+    auto *DoorbellPtr = reinterpret_cast<rpc::Doorbell *>(
+        static_cast<uint8_t *>(RPCBuffer) + rpc::Server::doorbell_offset());
+    std::memcpy(DoorbellPtr, &Doorbell, sizeof(rpc::Doorbell));
 
-  // Get the address of the RPC client from the device.
+    Buffers[Device.getDeviceId()] = RPCBuffer;
+    Devices[Device.getDeviceId()] = &Device;
+  }
+
+  // Each image has its own client that must point at the shared buffer.
   plugin::GlobalTy ClientGlobal("__llvm_rpc_client", sizeof(rpc::Client));
   if (auto Err =
           Handler.getGlobalMetadataFromDevice(Device, Image, ClientGlobal))
@@ -303,9 +250,6 @@ Error RPCServerTy::initDevice(plugin::GenericDeviceTy &Device,
   if (auto Err = Device.dataSubmit(ClientGlobal.getPtr(), &client,
                                    sizeof(rpc::Client), nullptr))
     return Err;
-  std::lock_guard<decltype(BufferMutex)> Lock(BufferMutex);
-  Buffers[Device.getDeviceId()] = RPCBuffer;
-  Devices[Device.getDeviceId()] = &Device;
 
   return Error::success();
 }
@@ -335,7 +279,7 @@ void RPCServerTy::registerCallback(RPCServerCallbackTy FnPtr) {
 
 void RPCServerTy::setSleepFunction(std::function<void()> Sleep,
                                    std::function<void()> Wake) {
-  std::lock_guard<decltype(BufferMutex)> Lock(BufferMutex);
+  // Only called from 'initDevice', already under the BufferMutex lock.
   Thread->SleepFunction = std::move(Sleep);
   Thread->WakeFunction = std::move(Wake);
 }

@@ -1,6 +1,5 @@
 // Tests HLFIR-to-FIR conversion aspects relevant to OpenMP. For example, that
 // the correct alloca block is chosen for OMP regions.
-
 // RUN: fir-opt --convert-hlfir-to-fir %s -o - | \
 // RUN: FileCheck %s
 
@@ -12,7 +11,7 @@ func.func @_QPfoo() {
 
   %1 = fir.shape %c1 : (index) -> !fir.shape<1>
   %host_decl:2 = hlfir.declare %host_alloc(%1) {uniq_name = "_QFfooEarr"} : (!fir.ref<!fir.array<1xi32>>, !fir.shape<1>) -> (!fir.ref<!fir.array<1xi32>>, !fir.ref<!fir.array<1xi32>>)
-  %map_info = omp.map.info var_ptr(%host_decl#1 : !fir.ref<!fir.array<1xi32>>, !fir.array<1xi32>) map_clauses(implicit, tofrom) capture(ByRef)  -> !fir.ref<!fir.array<1xi32>> {name = "arr"}
+  %map_info = omp.map.info var_ptr(%host_decl#1 : !fir.ref<!fir.array<1xi32>>, !fir.array<1xi32>) map_clauses(implicit, tofrom) capture(ByRef) name("arr") -> !fir.ref<!fir.array<1xi32>>
 
   %c1_3 = arith.constant 1 : i32
   %c10 = arith.constant 10 : i32
@@ -45,7 +44,7 @@ func.func @_QPfoo() {
               // CHECK: %[[EMBOX:.*]] = fir.embox %[[TARGET_DECL]]
               // CHECK: fir.store %[[EMBOX]] to %[[TO_BOX_ALLOC]]
               // CHECK: %[[BOX_ALLOC_CONV:.*]] = fir.convert %[[TO_BOX_ALLOC]] : (!fir.ref<!fir.box<!fir.array<1xi32>>>) -> !fir.ref<!fir.box<none>>
-              // CHECK: fir.call @_FortranAAssign(%[[BOX_ALLOC_CONV]], {{.*}})
+              // CHECK: fir.call @_FortranAAssignSimple(%[[BOX_ALLOC_CONV]], {{.*}})
               hlfir.assign %27#0 to %target_decl#0 : !fir.ref<!fir.array<1xi32>>, !fir.ref<!fir.array<1xi32>>
               // CHECK: omp.yield
               omp.yield

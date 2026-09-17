@@ -1,8 +1,8 @@
-; RUN: llc -O0 -mtriple=amdgcn--amdhsa -mcpu=fiji -verify-machineinstrs -filetype=obj < %s | llvm-dwarfdump -v -debug-info - | FileCheck %s
+; RUN: llc -O0 -mtriple=amdgpu8.03--amdhsa -verify-machineinstrs -filetype=obj < %s | llvm-dwarfdump -v -debug-info - | FileCheck %s
 
 ; LLVM IR generated with the following command and OpenCL source:
 ;
-; $clang -cl-std=CL2.0 -g -O0 -target amdgcn-amd-amdhsa -S -emit-llvm <path-to-file>
+; $clang -cl-std=CL2.0 -g -O0 -target amdgpu8.03-amd-amdhsa -S -emit-llvm <path-to-file>
 ;
 ; kernel void kernel1() {
 ;   global int  addrspace(5)*FuncVar0 = 0;
@@ -103,10 +103,10 @@ entry:
 !15 = !DILocalVariable(name: "FuncVar1", scope: !7, file: !1, line: 3, type: !11, memorySpace: DW_MSPACE_LLVM_private)
 !16 = !DILocation(line: 3, column: 17, scope: !7)
 !17 = !DILocalVariable(name: "FuncVar2", scope: !7, file: !1, line: 4, type: !18, memorySpace: DW_MSPACE_LLVM_private)
-!18 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !12, size: 32, addressSpace: 2, memorySpace: DW_MSPACE_LLVM_group)
+!18 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !12, size: 32, dwarfAddressSpace: 2, memorySpace: DW_MSPACE_LLVM_group)
 !19 = !DILocation(line: 4, column: 14, scope: !7)
 !20 = !DILocalVariable(name: "FuncVar3", scope: !7, file: !1, line: 5, type: !21, memorySpace: DW_MSPACE_LLVM_private)
-!21 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !12, size: 32, addressSpace: 1, memorySpace: DW_MSPACE_LLVM_private)
+!21 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !12, size: 32, dwarfAddressSpace: 1, memorySpace: DW_MSPACE_LLVM_private)
 !22 = !DILocation(line: 5, column: 16, scope: !7)
 !23 = !DILocalVariable(name: "FuncVar4", scope: !7, file: !1, line: 6, type: !11, memorySpace: DW_MSPACE_LLVM_private)
 !24 = !DILocation(line: 6, column: 8, scope: !7)

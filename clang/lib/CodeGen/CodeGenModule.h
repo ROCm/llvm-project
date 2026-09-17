@@ -423,77 +423,6 @@ public:
   /// Map construct statement to corresponding metadata for a NoLoop kernel.
   using NoLoopKernelMap = llvm::DenseMap<const Stmt *, NoLoopKernelInfo>;
 
-  /// Xteam reduction operators supported today.
-  enum XteamRedOpKind {
-    XR_OP_unknown = 0,
-    // Valid values must be power of 2.
-    XR_OP_add = 1,
-    XR_OP_min = 2,
-    XR_OP_max = 4
-  };
-
-  /// Map a reduction variable to the corresponding metadata. The metadata
-  /// contains
-  // the reduction expression, the coorresponding Xteam local aggregator var,
-  // and the start arg position in the offloading function signature.
-  struct XteamRedVarInfo {
-    XteamRedVarInfo(const Expr *E, Address A, size_t Pos)
-        : RedVarExpr(E), RedVarAddr(A), ArgPos(Pos), Opcode(XR_OP_unknown) {}
-    XteamRedVarInfo() = delete;
-
-    /// Reduction variable expression, populated during initial analysis
-    const Expr *RedVarExpr;
-    /// Address of local reduction variable used in device codegen.
-    Address RedVarAddr;
-    /// Argument position for the corresponding metadata in the outlined
-    /// signature, populated during signature generation. Used for device
-    /// codegen only.
-    size_t ArgPos;
-    /// Reduction operator type: currently one of add, min, and max.
-    XteamRedOpKind Opcode;
-  };
-
-  using XteamRedVarMap = llvm::DenseMap<const VarDecl *, XteamRedVarInfo>;
-  using XteamRedVarVecTy = llvm::SmallVector<const VarDecl *>;
-
-  struct XteamRedKernelInfo {
-    XteamRedKernelInfo(llvm::Value *TSI, llvm::Value *NT, int BlkSz,
-                       OptKernelNestDirectives Dirs, XteamRedVarMap RVM,
-                       XteamRedVarVecTy RVV, bool F)
-        : ThreadStartIndex{TSI}, NumTeams{NT}, BlockSize{BlkSz},
-          XteamNestDirs{Dirs}, XteamRedVars{RVM}, XteamOrderedRedVar{RVV},
-          IsFast{F} {}
-
-    /// Start index of every thread used in device codegen.
-    llvm::Value *ThreadStartIndex;
-    /// Number of teams used in device codegen.
-    llvm::Value *NumTeams;
-    /// Number of threads in a block, populated during device codegen.
-    int BlockSize;
-    /// A mask of the reduction operators found in this kernel, populated
-    /// according to XteamRedOpKind.
-    uint8_t OpKindsFound;
-    /// Nested directives, generated during analysis in both host/device
-    /// codegen.
-    OptKernelNestDirectives XteamNestDirs;
-    /// Map from reduction variable to metadata, populated during analysis.
-    XteamRedVarMap XteamRedVars;
-    /// Vector of reduction variables in the same order they appear in the AST
-    XteamRedVarVecTy XteamOrderedRedVar;
-    /// Can a fast-atomic-based-version be generated?
-    bool IsFast;
-  };
-  using XteamRedKernelMap = llvm::DenseMap<const Stmt *, XteamRedKernelInfo>;
-
-  struct XteamRedCollectionInfo {
-    XteamRedCollectionInfo(XteamRedVarMap VarMap, XteamRedVarVecTy VarVec,
-                           uint8_t Ops)
-        : RedVarMap(VarMap), RedVarVector(VarVec), OpKindsFound(Ops) {}
-    XteamRedVarMap RedVarMap;
-    XteamRedVarVecTy RedVarVector;
-    uint8_t OpKindsFound;
-  };
-
 private:
   ASTContext &Context;
   const LangOptions &LangOpts;
@@ -513,9 +442,6 @@ private:
 
   /// Used by emitParallelCall
   bool isSPMDExecutionMode = false;
-
-  /// Used by Xteam Scan Codegen
-  bool isXteamScanCandidate = false;
 
   mutable std::unique_ptr<TargetCodeGenInfo> TheTargetCodeGenInfo;
 
@@ -552,15 +478,12 @@ private:
   std::unique_ptr<llvm::SanitizerStatReport> SanStats;
   StackExhaustionHandler StackHandler;
 
-  /// Statement for which Xteam reduction code is being generated currently
-  const Stmt *CurrentXteamRedStmt = nullptr;
   // Map associated statement from top-level to innermost level for optimized
   // kernels.
   Stmt2StmtMap OptKernelNestMap;
 
   NoLoopKernelMap NoLoopKernels;
   NoLoopKernelMap BigJumpLoopKernels;
-  XteamRedKernelMap XteamRedKernels;
 
   // A set of references that have only been seen via a weakref so far. This is
   // used to remove the weak of the reference if we ever see a direct reference
@@ -717,6 +640,16 @@ private:
   /// was emitted for the class.
   llvm::SmallPtrSet<const CXXRecordDecl *, 16> RequireVectorDeletingDtor;
 
+  /// Pending MSVC __global_delete variants that may need forwarding bodies.
+  /// Maps each __global_delete wrapper alias to the corresponding global
+  /// ::operator delete FunctionDecl, in insertion order.
+  llvm::MapVector<llvm::GlobalAlias *, const FunctionDecl *>
+      PendingMSVCGlobalDeletes;
+
+  /// Whether this TU contains a direct use of global ::operator delete
+  /// (indicating that __global_delete forwarding bodies should be emitted).
+  bool HasDirectGlobalDelete = false;
+
   typedef std::pair<OrderGlobalInitsOrStermFinalizers, llvm::Function *>
       GlobalInitData;
 
@@ -854,6 +787,7 @@ private:
   MetadataTypeMap MetadataIdMap;
   MetadataTypeMap VirtualMetadataIdMap;
   MetadataTypeMap GeneralizedMetadataIdMap;
+  MetadataTypeMap CallGraphMetadataIdMap;
 
   // Helps squashing blocks of TopLevelStmtDecl into a single llvm::Function
   // when used with -fincremental-extensions.
@@ -865,7 +799,8 @@ private:
   llvm::DenseMap<const CXXRecordDecl *, std::optional<PointerAuthQualifier>>
       VTablePtrAuthInfos;
   std::optional<PointerAuthQualifier>
-  computeVTPointerAuthentication(const CXXRecordDecl *ThisClass);
+  computeVTPointerAuthentication(const CXXRecordDecl *ThisClass,
+                                 bool IsVTTEntry);
 
   AtomicOptions AtomicOpts;
 
@@ -885,8 +820,6 @@ public:
   ~CodeGenModule();
 
   void clear();
-  bool isXteamScanPhaseOne = true;
-  llvm::SmallVector<llvm::Value *, 8> ReductionVars;
   const OMPExecutableDirective *OMPPresentScanDirective = nullptr;
 
   /// Finalize LLVM code generation.
@@ -1075,8 +1008,9 @@ public:
   const llvm::abi::TargetInfo &getLLVMABITargetInfo(llvm::abi::TypeBuilder &TB);
 
   /// True when -fexperimental-abi-lowering is in effect AND the active target
-  /// has an LLVMABI implementation we can route to.
-  bool shouldUseLLVMABILowering() const;
+  /// has an LLVMABI implementation that supports the given LLVM calling
+  /// convention. Unsupported CCs fall back to the legacy ABIInfo path.
+  bool shouldUseLLVMABILowering(unsigned CallingConv) const;
 
   /// Drive the experimental LLVMABI-based lowering path: map argument and
   /// return types into the LLVMABI library, ask its target lowering to fill
@@ -1311,13 +1245,14 @@ public:
                                    GlobalDecl SchemaDecl, QualType SchemaType);
 
   uint16_t getPointerAuthDeclDiscriminator(GlobalDecl GD);
-  std::optional<CGPointerAuthInfo>
-  getVTablePointerAuthInfo(CodeGenFunction *Context,
-                           const CXXRecordDecl *Record,
-                           llvm::Value *StorageAddress);
+
+  std::optional<CGPointerAuthInfo> getVTablePointerAuthInfo(
+      CodeGenFunction *Context, const CXXRecordDecl *Record,
+      llvm::Value *StorageAddress, bool IsVTTEntry = false);
 
   std::optional<PointerAuthQualifier>
-  getVTablePointerAuthentication(const CXXRecordDecl *thisClass);
+  getVTablePointerAuthentication(const CXXRecordDecl *thisClass,
+                                 bool IsVTTEntry = false);
 
   CGPointerAuthInfo EmitPointerAuthInfo(const RecordDecl *RD);
 
@@ -1718,6 +1653,11 @@ public:
   /// of the given class.
   llvm::GlobalVariable::LinkageTypes getVTableLinkage(const CXXRecordDecl *RD);
 
+  /// Returns true if a vtable with the given linkage may be emitted with more
+  /// than one address in the program, because the vtable is weak and the
+  /// target's ABI allows weak vtables to be duplicated across images.
+  bool mayVTableBeDuplicated(llvm::GlobalValue::LinkageTypes Linkage) const;
+
   /// Return the store size, in character units, of the given LLVM type.
   CharUnits GetTargetTypeStoreSize(llvm::Type *Ty) const;
 
@@ -1798,6 +1738,24 @@ public:
   /// Record that new[] was called for the class, transform vector deleting
   /// destructor definition in a form of alias to the actual definition.
   void requireVectorDestructorDefinition(const CXXRecordDecl *RD);
+
+  /// Record a pending __global_delete variant that may need a forwarding body.
+  void addPendingGlobalDelete(llvm::GlobalAlias *GlobalDeleteAlias,
+                              const FunctionDecl *OperatorDeleteFD);
+
+  /// Get or create the MSVC-compatible __global_delete wrapper for the given
+  /// global ::operator delete, registering it as a pending variant so a
+  /// forwarding body can be emitted if this TU directly uses global
+  /// ::operator delete.
+  llvm::Constant *
+  getOrCreateMSVCGlobalDeleteWrapper(const FunctionDecl *GlobOD);
+
+  /// Note that global ::operator delete is directly used in this TU.
+  void noteDirectGlobalDelete();
+
+  /// Emit __global_delete forwarding bodies for any pending variants,
+  /// if this TU directly uses global ::operator delete.
+  void emitGlobalDeleteForwardingBodies();
 
   /// Check that class need vector deleting destructor body.
   bool classNeedsVectorDestructor(const CXXRecordDecl *RD);
@@ -1888,6 +1846,22 @@ public:
   /// internal identifiers).
   llvm::Metadata *CreateMetadataIdentifierForType(QualType T);
 
+  /// Create a metadata identifier for the Call Graph Section.
+  /// This is a generalized type identifier that is guaranteed to be an
+  /// MDString.
+  llvm::Metadata *CreateMetadataIdentifierForCallGraphType(QualType T);
+
+  /// Applies C default argument promotions to a parameter type for Call Graph
+  /// Section type reconstruction.
+  QualType GetCallGraphPromotedType(QualType Ty) const;
+
+  /// Reconstructs a FunctionProtoType for an unprototyped function type
+  /// (FunctionNoProtoType) using the given parameter/argument types, applying
+  /// default argument promotions to ensure call-site and definition-site type
+  /// signatures match.
+  QualType ReconstructCallGraphPrototype(const FunctionNoProtoType *FNPT,
+                                         ArrayRef<QualType> ParamTypes) const;
+
   /// Create a metadata identifier that is intended to be used to check virtual
   /// calls via a member function pointer.
   llvm::Metadata *CreateMetadataIdentifierForVirtualMemPtrType(QualType T);
@@ -1901,11 +1875,11 @@ public:
   void createFunctionTypeMetadataForIcall(const FunctionDecl *FD,
                                           llvm::Function *F);
 
-  /// Create and attach type metadata if the function is a potential indirect
-  /// call target to support call graph section.
+  /// Create and attach callgraph metadata if the function is a potential
+  /// indirect call target to support call graph section.
   void createIndirectFunctionTypeMD(const FunctionDecl *FD, llvm::Function *F);
 
-  /// Create and attach type metadata to the given call.
+  /// Create and attach callee_type metadata to the given call.
   void createCalleeTypeMetadataForIcall(const QualType &QT, llvm::CallBase *CB);
 
   /// Set type metadata to the given function.
@@ -1978,12 +1952,6 @@ public:
   void printPostfixForExternalizedDecl(llvm::raw_ostream &OS,
                                        const Decl *D) const;
 
-  /// Under debug mode, print status of target teams loop transformation,
-  /// which should be either '#distribute' or '#parallel for'
-  void emitTargetTeamsLoopCodegenStatus(std::string StatusMsg,
-                                        const OMPExecutableDirective &D,
-                                        bool IsDevice);
-
   /// Add metadata for all nested directives for optimized kernel codegen.
   void addOptKernelNestMap(const OptKernelNestDirectives &NestDirs);
 
@@ -2005,9 +1973,6 @@ public:
 
   /// Given the order clause, can No-Loop code be generated?
   NoLoopXteamErr getNoLoopCompatibleOrderStatus(const OMPLoopDirective &LD);
-
-  NoLoopXteamErr
-  getXteamRedCompatibleThreadLimitStatus(const OMPLoopDirective &LD);
 
   /// Helper functions for generating a NoLoop kernel
   /// For a captured statement, get the single For statement, if it exists,
@@ -2039,28 +2004,12 @@ public:
     return nest_itr->second;
   }
 
-  bool isFastXteamSumReduction() {
-    return getLangOpts().OpenMPTargetFastReduction;
-  }
-
-  bool isXteamScanKernel() {
-    return (getLangOpts().OpenMPTargetXteamScan ||
-            getLangOpts().OpenMPTargetXteamNoLoopScan) &&
-           isXteamScanCandidate;
-  }
-
-  bool isXteamSegmentedScanKernel() {
-    return isXteamScanKernel() && !getLangOpts().OpenMPTargetXteamNoLoopScan;
-  }
-
   /// If we are able to generate a NoLoop kernel for this directive, return
   /// true, otherwise return false. If successful, a map is created from the
   /// top-level statement to the intermediate statements. For a combined
   /// construct, there are no intermediate statements. Used for a combined
   /// construct
   NoLoopXteamErr checkAndSetNoLoopKernel(const OMPExecutableDirective &D);
-  /// Determine if 'teams loop' can be emitted using 'parallel for'.
-  bool TeamsLoopCanBeParallelFor(const OMPExecutableDirective &D);
 
   /// Given a top-level target construct for no-loop codegen, get the
   /// intermediate OpenMP constructs
@@ -2127,151 +2076,50 @@ public:
     BigJumpLoopKernels.find(S)->second.BlockSize = BlkSz;
   }
 
-  /// If we are able to generate a Xteam reduction kernel for this directive,
-  /// return true, otherwise return false. If successful, metadata for the
-  /// reduction variables are created for subsequent codegen phases to work on.
-  NoLoopXteamErr checkAndSetXteamRedKernel(const OMPExecutableDirective &D);
-
-  /// Compute the block size to be used for a kernel.
+  /// Compute the block size implied by a single directive. Used in optimized
+  /// kernel codegen, which folds the per-directive values of a nest itself.
   int getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D);
+  /// Compute the block size of the whole kernel rooted at \p D, taking the
+  /// clauses of the nested directives into account for a kernel that is split
+  /// over several directives. See collectSPMDKernelNest().
+  /// \p IsGenericMode skips the larger cross-team reduction block size, which
+  /// does not apply to generic-mode kernels.
+  int getWorkGroupSizeSPMDKernel(const OMPExecutableDirective &D,
+                                 bool IsGenericMode = false);
+  /// Compute the block size implied by the clauses of \p NestDirs, where a
+  /// clause on a nested directive wins over one on an enclosing directive.
+  /// \p UseTeamsReductionBlockSize enables the larger cross-team reduction
+  /// block size.
+  int getWorkGroupSizeSPMDForNest(const OptKernelNestDirectives &NestDirs,
+                                  bool UseTeamsReductionBlockSize = true);
   /// Used in optimized kernel codegen, compute the block size from the nested
   /// directives.
-  int getOptKernelWorkGroupSize(const OptKernelNestDirectives &NestDirs,
-                                bool isXteamRed);
+  int getOptKernelWorkGroupSize(const OptKernelNestDirectives &NestDirs);
 
-  /// Given a ForStmt for which Xteam codegen will be done, return the
-  /// intermediate statements for a split directive.
-  const OptKernelNestDirectives &getXteamRedNestDirs(const Stmt *S) {
-    assert(isXteamRedKernel(S));
-    return XteamRedKernels.find(S)->second.XteamNestDirs;
-  }
-  const OptKernelNestDirectives &
-  getXteamRedNestDirs(const OMPExecutableDirective &D) {
-    assert(isXteamRedKernel(D) && "Expected an Xteam reduction kernel");
-    const ForStmt *FStmt = getSingleForStmt(getOptKernelKey(D));
-    return getXteamRedNestDirs(FStmt);
-  }
+  /// Collect the OpenMP directives that make up the kernel rooted at \p D,
+  /// outermost first. The same kernel may be written as a single combined
+  /// directive or split over several ones, e.g.
+  /// \code
+  ///   #pragma omp target teams distribute parallel for reduction(+:s)
+  /// \endcode
+  /// and
+  /// \code
+  ///   #pragma omp target
+  ///   #pragma omp teams reduction(+:s)
+  ///   #pragma omp distribute parallel for reduction(+:s)
+  /// \endcode
+  /// describe the same kernel, so the clauses that determine its launch bounds
+  /// have to be looked up over the whole nest instead of on \p D alone. This is
+  /// a best-effort walk: a nesting that is not recognized simply ends it.
+  void collectSPMDKernelNest(const OMPExecutableDirective &D,
+                             OptKernelNestDirectives &NestDirs);
 
-  /// Given a ForStmt for which Xteam codegen will be done, return the
-  /// corresponding metadata
-  XteamRedVarMap &getXteamRedVarMap(const Stmt *S) {
-    assert(isXteamRedKernel(S));
-    return XteamRedKernels.find(S)->second.XteamRedVars;
-  }
-
-  XteamRedVarVecTy &getXteamOrderedRedVar(const Stmt *S) {
-    assert(isXteamRedKernel(S));
-    return XteamRedKernels.find(S)->second.XteamOrderedRedVar;
-  }
-
-  llvm::Value *getXteamRedThreadStartIndex(const Stmt *S) {
-    assert(isXteamRedKernel(S));
-    return XteamRedKernels.find(S)->second.ThreadStartIndex;
-  }
-
-  /// Used during kernel codegen to retrieve the cached NumTeams.
-  llvm::Value *getXteamRedNumTeams(const Stmt *S) {
-    assert(isXteamRedKernel(S));
-    return XteamRedKernels.find(S)->second.NumTeams;
-  }
-
-  /// Used during host codegen to compute the number of teams from num_teams
-  /// clause.
-  int64_t getXteamRedNumTeamsFromClause(const OMPExecutableDirective &D);
-
-  /// Used during host codegen for traversing nested directives, looking for
-  /// num_teams clause.
-  int64_t
-  getXteamRedNumTeamsFromClause(const OptKernelNestDirectives &NestDirs);
-
-  bool isXteamRedFast(const Stmt *S) {
-    assert(isXteamRedKernel(S));
-    return XteamRedKernels.find(S)->second.IsFast;
-  }
-
-  /// Given a ForStmt for which Xteam codegen will be done, update the metadata.
-  /// \p VD is the reduction variable for which metadata is updated.
-  void updateXteamRedVarMap(const Stmt *S, const VarDecl *VD, const Expr *RVE,
-                            Address AggVarAddr) {
-    assert(isXteamRedKernel(S));
-    XteamRedVarMap &RVM = getXteamRedVarMap(S);
-    assert(RVM.find(VD) != RVM.end() && "Expected reduction variable in map");
-    RVM.find(VD)->second.RedVarExpr = RVE;
-    RVM.find(VD)->second.RedVarAddr = AggVarAddr;
-    // Another API is used to set ArgPos
-  }
-
-  void updateXteamRedVarArgPos(XteamRedVarInfo *RVInfo, size_t ArgP) {
-    assert(RVInfo);
-    RVInfo->ArgPos = ArgP;
-  }
-
-  void updateXteamRedVarOpcode(const CallExpr *Call, const VarDecl *VD,
-                               XteamRedVarMap *RedMap) {
-    XteamRedOpKind Opcode;
-    if (isOptKernelAMDGCNMax(Call))
-      Opcode = XR_OP_max;
-    else if (isOptKernelAMDGCNMin(Call))
-      Opcode = XR_OP_min;
-    else
-      llvm_unreachable("Expected either min or max");
-    updateXteamRedVarOpcode(VD, RedMap, Opcode);
-  }
-
-  void updateXteamRedVarOpcode(const VarDecl *VD, XteamRedVarMap *RedMap,
-                               XteamRedOpKind Opcode) {
-    assert(RedMap->contains(VD) && "Expected reduction variable in map");
-    RedMap->find(VD)->second.Opcode = Opcode;
-  }
-
-  void updateXteamRedKernel(const Stmt *S, llvm::Value *ThdIndex,
-                            llvm::Value *NTeams) {
-    assert(isXteamRedKernel(S));
-    auto &KernelInfo = XteamRedKernels.find(S)->second;
-    KernelInfo.ThreadStartIndex = ThdIndex;
-    KernelInfo.NumTeams = NTeams;
-  }
-
-  void updateXteamRedKernel(const Stmt *S, int BlkSz) {
-    assert(isXteamRedKernel(S));
-    XteamRedKernels.find(S)->second.BlockSize = BlkSz;
-  }
-
-  // Get the cached block size used by Xteam reduction
-  int getXteamRedBlockSize(const ForStmt *FStmt) {
-    assert(isXteamRedKernel(FStmt));
-    return XteamRedKernels.find(FStmt)->second.BlockSize;
-  }
-
-  int getXteamRedBlockSize(const OMPExecutableDirective &D) {
-    assert(isXteamRedKernel(D) && "Expected an Xteam reduction kernel");
-    const ForStmt *FStmt = getSingleForStmt(getOptKernelKey(D));
-    return getXteamRedBlockSize(FStmt);
-  }
-
-  /// Erase spec-red related metadata for the input statement
-  void resetXteamRedKernel(const Stmt *S) { XteamRedKernels.erase(S); }
-  /// Are we generating xteam reduction kernel for the statement
-  bool isXteamRedKernel(const Stmt *S) {
-    return XteamRedKernels.find(S) != XteamRedKernels.end();
-  }
-  bool isXteamRedKernel(const OMPExecutableDirective &D);
-
-  void setCurrentXteamRedStmt(const Stmt *S) { CurrentXteamRedStmt = S; }
-  const Stmt *getCurrentXteamRedStmt() { return CurrentXteamRedStmt; }
-
-  /// Return true if the provided expression accesses a variable in the provided
-  /// map, otherwise return false.
-  bool hasXteamRedVar(const Expr *E, const XteamRedVarMap &RedMap) const;
-
-  /// If present in the provided map, return the reduction variable accessed by
-  /// the provided expression, otherwise return nullptr.
-  const VarDecl *getXteamRedVarDecl(const Expr *E,
-                                    const XteamRedVarMap &RedMap) const;
-
-  /// Return true if the provided expression accesses the provided variable,
-  /// otherwise return false.
-  bool isXteamRedVarExpr(const Expr *E, const VarDecl *VD) const;
+  /// Is the kernel rooted at \p D a cross-team (teams) reduction kernel? True
+  /// when any directive of its nest is a 'teams' directive that carries a
+  /// reduction clause, whether the nest is written combined or split. This
+  /// mirrors what CodeGen actually emits, and therefore what the plugin sees
+  /// through the non-zero reduction data size of the kernel environment.
+  bool isTeamsReductionKernel(const OMPExecutableDirective &D);
 
   /// Return status indicating whether the call is an Xteam-supported host
   /// builtin.
@@ -2666,6 +2514,12 @@ private:
   /// by clang-sycl-linker during device-code splitting.
   void addSYCLModuleIdAttr(llvm::Function *Fn);
 
+  /// Embed the finalized SYCL device binary named by -foffload-include-binary
+  /// into the host module.
+  /// \return the function that registers the binary with the runtime, or null
+  /// if the binary could not be read.
+  llvm::Function *embedSYCLDeviceBinary();
+
   /// Determine whether the definition must be emitted; if this returns \c
   /// false, the definition can be emitted lazily if it's used.
   bool MustBeEmitted(const ValueDecl *D);
@@ -2694,7 +2548,8 @@ private:
                                     llvm::AttrBuilder &FuncAttrs);
 
   llvm::Metadata *CreateMetadataIdentifierImpl(QualType T, MetadataTypeMap &Map,
-                                               StringRef Suffix);
+                                               StringRef Suffix,
+                                               bool ForceString = false);
 
   /// Return success if the directives are nested in a way appropriate for
   /// specialized kernel generation. Track the component directives in
@@ -2711,27 +2566,12 @@ private:
   getNoLoopForStmtStatus(const OMPExecutableDirective &, const Stmt *);
 
   // Compute the block size used by optimized kernels.
-  int computeOptKernelBlockSize(const OptKernelNestDirectives &NestDirs,
-                                bool isXteamRed);
-
-  /// Top level checker for xteam reduction of the loop
-  std::pair<NoLoopXteamErr, bool>
-  getXteamRedForStmtStatus(const OMPExecutableDirective &, const Stmt *,
-                           XteamRedVarMap *);
+  int computeOptKernelBlockSize(const OptKernelNestDirectives &NestDirs);
 
   /// Are clauses on a combined OpenMP construct compatible with no-loop
   /// codegen?
   NoLoopXteamErr
   getNoLoopStatusForClauses(const OptKernelNestDirectives &NestDirs);
-
-  /// Are clauses on a combined OpenMP construct compatible with xteam
-  /// reduction codegen?
-  NoLoopXteamErr
-  getXteamRedStatusForClauses(const OptKernelNestDirectives &NestDirs);
-
-  /// Collect the reduction variables that may satisfy Xteam criteria
-  std::pair<NoLoopXteamErr, XteamRedCollectionInfo>
-  collectXteamRedVars(const OptKernelNestDirectives &NestDirs);
 
   /// Emit deactivation symbols for any PFP fields whose offset is taken with
   /// offsetof.

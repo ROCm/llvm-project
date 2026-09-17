@@ -18,6 +18,7 @@
 #include "llvm/TargetParser/AMDGPUTargetParser.h"
 
 #include <map>
+#include <string>
 
 namespace clang {
 namespace driver {
@@ -39,49 +40,7 @@ public:
 void getAMDGPUTargetFeatures(const Driver &D, const llvm::Triple &Triple,
                              const llvm::opt::ArgList &Args,
                              std::vector<StringRef> &Features,
-                             StringRef TcTargetID = StringRef());
-
-namespace dlr {
-llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>
-getCommonDeviceLibNames(const llvm::opt::ArgList &DriverArgs,
-                        const SanitizerArgs &SanArgs, const Driver &D,
-                        const std::string &GPUArch, bool isOpenMP,
-                        const RocmInstallationDetector &RocmInstallation,
-                        const clang::driver::Action::OffloadKind DeviceOffloadingKind = Action::OFK_OpenMP);
-
-const char *
-getCbslCommandArgs(Compilation &C, const llvm::opt::ArgList &Args,
-                   llvm::opt::ArgStringList &CbslArgs,
-                   const SmallVectorImpl<std::string> &InputFileNames,
-                   llvm::StringRef OutputFilePrefix);
-
-const char *
-getLinkCommandArgs(Compilation &C, const llvm::opt::ArgList &Args,
-                   llvm::opt::ArgStringList &LastLinkArgs, const ToolChain &TC,
-                   const llvm::Triple &Triple, llvm::StringRef TargetID,
-                   llvm::StringRef OutputFilePrefix, const char *InputFileName,
-                   const RocmInstallationDetector &RocmInstallation,
-                   llvm::opt::ArgStringList &EnvironmentLibraryPaths);
-
-const char *getOptCommandArgs(Compilation &C, const llvm::opt::ArgList &Args,
-                              llvm::opt::ArgStringList &OptArgs,
-                              const llvm::Triple &Triple,
-                              llvm::StringRef TargetID,
-                              llvm::StringRef OutputFilePrefix,
-                              const char *InputFileName);
-
-const char *
-getLlcCommandArgs(Compilation &C, const llvm::opt::ArgList &Args,
-                  llvm::opt::ArgStringList &LlcArgs, const llvm::Triple &Triple,
-                  llvm::StringRef TargetID, llvm::StringRef OutputFilePrefix,
-                  const char *InputFileName, bool OutputIsAsm = false);
-
-const char *getLldCommandArgs(
-    Compilation &C, const InputInfo &Output, const llvm::opt::ArgList &Args,
-    llvm::opt::ArgStringList &LldArgs, const llvm::Triple &Triple,
-    llvm::StringRef TargetID, const char *InputFileName,
-    const std::optional<std::string> OutputFilePrefix = std::nullopt);
-} // end namespace dlr
+                             bool ForAS = false);
 
 void addFullLTOPartitionOption(const Driver &D, const llvm::opt::ArgList &Args,
                                llvm::opt::ArgStringList &CmdArgs);
@@ -92,8 +51,18 @@ namespace toolchains {
 
 class LLVM_LIBRARY_VISIBILITY AMDGPUToolChain : public Generic_ELF {
 protected:
-  const std::map<options::ID, const StringRef> OptionsDefault;
-  unsigned CodeObjectVersion = 5;
+  const std::map<options::ID, StringRef> OptionsDefault;
+
+  // Optional host toolchain for offloading modes.
+  const ToolChain *HostTC = nullptr;
+
+  /// FIXME: Should merge 2 linkers.
+  const bool UseHIPLinker = false;
+
+  // Whether to link device libraries (for standalone OpenCL/LLVM IR
+  // compilation)
+  bool ShouldLinkDeviceLibs = false;
+
   Tool *buildLinker() const override;
   StringRef getOptionDefault(options::ID OptID) const {
     auto opt = OptionsDefault.find(OptID);
@@ -103,7 +72,10 @@ protected:
 
 public:
   AMDGPUToolChain(const Driver &D, const llvm::Triple &Triple,
-                  const llvm::opt::ArgList &Args);
+                  const llvm::opt::ArgList &Args,
+                  const ToolChain *HostTC = nullptr,
+                  Action::OffloadKind Kind = Action::OFK_None,
+                  bool ShouldLinkDeviceLibs = false);
   unsigned GetDefaultDwarfVersion() const override { return 5; }
 
   bool IsMathErrnoDefault() const override { return false; }
@@ -149,12 +121,47 @@ public:
   /// Should skip argument.
   bool shouldSkipArgument(const llvm::opt::Arg *Arg) const;
 
-  unsigned GetCodeObjectVersion() const { return CodeObjectVersion; }
-
   /// Uses amdgpu-arch tool to get arch of the system GPU. Will return error
   /// if unable to find one.
   virtual Expected<SmallVector<std::string>>
   getSystemGPUArchs(const llvm::opt::ArgList &Args) const override;
+
+  const llvm::Triple *getAuxTriple() const override {
+    return HostTC ? &HostTC->getTriple() : nullptr;
+  }
+
+  llvm::SmallVector<BitCodeLibraryInfo, 12>
+  getDeviceLibs(const llvm::opt::ArgList &Args, BoundArch BA,
+                Action::OffloadKind DeviceOffloadKind) const override;
+
+  CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const override;
+
+  void AddClangCXXStdlibIncludeArgs(
+      const llvm::opt::ArgList &Args,
+      llvm::opt::ArgStringList &CC1Args) const override;
+
+  void AddIAMCUIncludeArgs(const llvm::opt::ArgList &DriverArgs,
+                           llvm::opt::ArgStringList &CC1Args) const override;
+
+  void AddHIPIncludeArgs(const llvm::opt::ArgList &DriverArgs,
+                         llvm::opt::ArgStringList &CC1Args) const override;
+
+  VersionTuple
+  computeMSVCVersion(const Driver *D,
+                     const llvm::opt::ArgList &Args) const override;
+
+  LTOKind getDefaultLTOMode() const override;
+
+  /// We need to adjust the LTO mode based on user arguments.
+  LTOKind
+  getLTOMode(const llvm::opt::ArgList &Args,
+             Action::OffloadKind Kind = Action::OFK_None) const override;
+
+  // Returns a list of device library names shared by different languages
+  llvm::SmallVector<BitCodeLibraryInfo, 12>
+  getCommonDeviceLibNames(const llvm::opt::ArgList &DriverArgs,
+                          llvm::StringRef TargetID, llvm::StringRef GPUArch,
+                          Action::OffloadKind DeviceOffloadingKind) const;
 
 protected:
   /// The struct type returned by getParsedTargetID.
@@ -184,27 +191,6 @@ protected:
   SanitizerMask
   getSupportedSanitizers(BoundArch BA,
                          Action::OffloadKind DeviceOffloadKind) const override;
-};
-
-class LLVM_LIBRARY_VISIBILITY ROCMToolChain : public AMDGPUToolChain {
-public:
-  ROCMToolChain(const Driver &D, const llvm::Triple &Triple,
-                const llvm::opt::ArgList &Args);
-
-  llvm::opt::DerivedArgList *
-  TranslateArgs(const llvm::opt::DerivedArgList &Args, BoundArch BA,
-                Action::OffloadKind DeviceOffloadKind) const override;
-
-  void
-  addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                        llvm::opt::ArgStringList &CC1Args, BoundArch BA,
-                        Action::OffloadKind DeviceOffloadKind) const override;
-
-  // Returns a list of device library names shared by different languages
-  llvm::SmallVector<BitCodeLibraryInfo, 12>
-  getCommonDeviceLibNames(const llvm::opt::ArgList &DriverArgs,
-                          llvm::StringRef TargetID, llvm::StringRef GPUArch,
-                          Action::OffloadKind DeviceOffloadingKind) const;
 };
 
 } // end namespace toolchains

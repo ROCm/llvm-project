@@ -8,9 +8,9 @@ conventions. The agent-tool wrappers (`amd/comgr/CLAUDE.md`,
 `.cursor/rules/comgr.mdc`) point here so updates only need to be made
 once.
 
-For hotswap-subsystem-specific conventions (patch-pass authoring,
-B0/A0 rewrite invariants, hotswap test driver), see
-[`src/hotswap/HOTSWAP_CONVENTIONS.md`](src/hotswap/HOTSWAP_CONVENTIONS.md).
+For transpiler-subsystem-specific conventions (code-object input
+validation, instruction recognition, the transpiler test driver), see
+[`src/transpiler/TRANSPILER_CONVENTIONS.md`](src/transpiler/TRANSPILER_CONVENTIONS.md).
 
 ## 1. Code reuse — Comgr first, LLVM second, custom never
 
@@ -57,8 +57,8 @@ fix upstream. Do not implement a parallel version inside Comgr.
     and will fail to build.
   - No GCC/Clang-only attributes without an LLVM-portable wrapper.
 - All assembly / disassembly goes through the MC layer (e.g.,
-  `assembleSingleInst`, `parseAsmToMCInsts`). **No hardcoded
-  instruction opcodes or encoded byte sequences** — let the asm parser
+  `assembleSingleInst`, `assembleInstructions`, `parseAsmToMCInsts`). **No
+  hardcoded instruction opcodes or encoded byte sequences** — let the asm parser
   resolve them, and round-trip through `MCCodeEmitter::encodeInstruction`
   for any modification.
 - When invoking the asm parser, register the SourceMgr with `MCContext`
@@ -143,6 +143,25 @@ a feature PR.
 
 **Tests required.** Each PR is accompanied by tests aiming for 100%
 code coverage of the change being added.
+
+**Bump the version when adding a public API.** Any commit that adds a
+new `AMD_COMGR_API` function must bump the minor version in
+`VERSION.txt` and tag the new prototype(s) with a fresh
+`AMD_COMGR_VERSION_X_Y` macro in `include/amd_comgr.h.in`:
+
+- One bump per commit, not per function — a commit adding several APIs
+  bumps once and tags them all with the same new version.
+- Never reuse the current version's macro for a new API in a later
+  commit. The previous version is already owned by whatever shipped it.
+- Don't wait for an official release to bump. We don't know which
+  commit hash lands in each release, so the version must advance at the
+  moment the API is introduced.
+- Add the symbol to `src/exportmap.in` under a version node matching the
+  new tag (e.g. `@amd_comgr_NAME@_X.Y { global: ...; } @prev;`), not the
+  previous node.
+- `utils/check_api_consistency.py` only enforces `VERSION.txt >=` the
+  highest macro, so it will NOT catch a new API that reuses the current
+  version. Verify the bump by hand.
 
 **Keep the branch rebased.** Resolve conflicts before requesting
 review.

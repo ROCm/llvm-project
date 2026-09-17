@@ -23,6 +23,7 @@
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Config/abi-breaking.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
 #include <cassert>
@@ -554,6 +555,21 @@ make_filter_range(RangeT &&Range, PredicateT Pred) {
   auto B = adl_begin(Range);
   auto E = adl_end(Range);
   return make_range(FilterIteratorT(B, E, Pred), FilterIteratorT(E, E, Pred));
+}
+
+/// Return a range over \p Range containing only elements for which isa<T>
+/// holds, casting each of them to T.
+///
+/// Note: as for make_filter_range, the returned range only borrows the
+/// iterators of \p Range. Passing a temporary container is not supported, as
+/// its lifetime is not extended by the returned range; passing a temporary
+/// view, e.g. the result of drop_begin, is fine.
+template <typename T, typename RangeT> auto make_isa_range(RangeT &&Range) {
+  static_assert(
+      std::is_reference_v<decltype(*adl_begin(Range))> ||
+          !std::is_reference_v<decltype(CastTo<T>(*adl_begin(Range)))>,
+      "make_isa_range would return references into temporary elements");
+  return map_range(make_filter_range(Range, IsaPred<T>), CastTo<T>);
 }
 
 /// A pseudo-iterator adaptor that is designed to implement "early increment"
@@ -2420,8 +2436,7 @@ template <typename... Refs> struct enumerator_result<std::size_t, Refs...> {
   /// Returns the value at index `I`. This case covers references to the
   /// iteratees.
   template <std::size_t I, typename = std::enable_if_t<I != 0>>
-  friend decltype(auto)
-  get(const enumerator_result &Result) {
+  friend decltype(auto) get(const enumerator_result &Result) {
     // Note: This is a separate function from the other `get`, instead of an
     // `if constexpr` case, to work around an MSVC 19.31.31XXX compiler
     // (Visual Studio 2022 17.1) return type deduction bug.
@@ -2557,9 +2572,7 @@ auto enumerate(FirstRange &&First, RestRanges &&...Rest) {
 #ifndef NDEBUG
     // Note: Create an array instead of an initializer list to work around an
     // Apple clang 14 compiler bug.
-    size_t sizes[] = {
-        static_cast<size_t>(std::distance(adl_begin(First), adl_end(First))),
-        static_cast<size_t>(std::distance(adl_begin(Rest), adl_end(Rest)))...};
+    size_t sizes[] = {range_size(First), range_size(Rest)...};
     assert(all_equal(sizes) && "Ranges have different length");
 #endif
   }

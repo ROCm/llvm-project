@@ -45,6 +45,7 @@
 #include "llvm/Support/VersionTuple.h"
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/TargetParser/AArch64TargetParser.h"
+#include "llvm/TargetParser/AMDGPUTargetParser.h"
 #include "llvm/TargetParser/RISCVISAInfo.h"
 #include "llvm/TargetParser/TargetParser.h"
 #include "llvm/TargetParser/Triple.h"
@@ -276,10 +277,9 @@ static void processMultilibCustomFlags(Multilib::flags_list &List,
   }
 }
 
-static void getAArch64MultilibFlags(const Driver &D,
-                                          const llvm::Triple &Triple,
-                                          const llvm::opt::ArgList &Args,
-                                          Multilib::flags_list &Result) {
+static void getAArch64MultilibFlags(const Driver &D, const llvm::Triple &Triple,
+                                    const llvm::opt::ArgList &Args,
+                                    Multilib::flags_list &Result) {
   std::vector<StringRef> Features;
   tools::aarch64::getAArch64TargetFeatures(D, Triple, Args, Features,
                                            /*ForAS=*/false,
@@ -289,17 +289,17 @@ static void getAArch64MultilibFlags(const Driver &D,
                                        UnifiedFeatures.end());
   std::vector<std::string> MArch;
   for (const auto &Ext : AArch64::Extensions)
-    if (!Ext.UserVisibleName.empty())
-      if (FeatureSet.contains(Ext.PosTargetFeature))
-        MArch.push_back(Ext.UserVisibleName.str());
+    if (Ext.UserVisibleName.value())
+      if (FeatureSet.contains(AArch64::StrTab[Ext.PosTargetFeature]))
+        MArch.push_back(AArch64::StrTab[Ext.UserVisibleName].str());
   for (const auto &Ext : AArch64::Extensions)
-    if (!Ext.UserVisibleName.empty())
-      if (FeatureSet.contains(Ext.NegTargetFeature))
-        MArch.push_back(("no" + Ext.UserVisibleName).str());
+    if (Ext.UserVisibleName.value())
+      if (FeatureSet.contains(AArch64::StrTab[Ext.NegTargetFeature]))
+        MArch.push_back(("no" + AArch64::StrTab[Ext.UserVisibleName]).str());
   StringRef ArchName;
   for (const auto &ArchInfo : AArch64::ArchInfos)
-    if (FeatureSet.contains(ArchInfo->ArchFeature))
-      ArchName = ArchInfo->Name;
+    if (FeatureSet.contains(AArch64::StrTab[ArchInfo.ArchFeature]))
+      ArchName = AArch64::StrTab[ArchInfo.Name];
   if (!ArchName.empty()) {
     MArch.insert(MArch.begin(), ("-march=" + ArchName).str());
     Result.push_back(llvm::join(MArch, "+"));
@@ -644,8 +644,7 @@ static const DriverSuffix *parseDriverSuffix(StringRef ProgName, size_t &Pos) {
   return DS;
 }
 
-ParsedClangName
-ToolChain::getTargetAndModeFromProgramName(StringRef PN) {
+ParsedClangName ToolChain::getTargetAndModeFromProgramName(StringRef PN) {
   std::string ProgName = normalizeProgramName(PN);
   size_t SuffixPos;
   const DriverSuffix *DS = parseDriverSuffix(ProgName, SuffixPos);
@@ -656,8 +655,8 @@ ToolChain::getTargetAndModeFromProgramName(StringRef PN) {
   size_t LastComponent = ProgName.rfind('-', SuffixPos);
   if (LastComponent == std::string::npos)
     return ParsedClangName(ProgName.substr(0, SuffixEnd), DS->ModeFlag);
-  std::string ModeSuffix = ProgName.substr(LastComponent + 1,
-                                           SuffixEnd - LastComponent - 1);
+  std::string ModeSuffix =
+      ProgName.substr(LastComponent + 1, SuffixEnd - LastComponent - 1);
 
   // Infer target from the prefix.
   StringRef Prefix(ProgName);
@@ -716,9 +715,7 @@ Tool *ToolChain::getClang() const {
   return Clang.get();
 }
 
-Tool *ToolChain::buildAssembler() const {
-  return new tools::ClangAs(*this);
-}
+Tool *ToolChain::buildAssembler() const { return new tools::ClangAs(*this); }
 
 Tool *ToolChain::buildLinker() const {
   llvm_unreachable("Linking is not supported by this toolchain");
@@ -801,9 +798,6 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
   case Action::ObjcopyJobClass:
     llvm_unreachable("Invalid tool kind.");
 
-  case Action::FortranFrontendJobClass:
-    llvm::report_fatal_error("fortranfrontend is invalid tool kind here.");
-
   case Action::CompileJobClass:
   case Action::PrecompileJobClass:
   case Action::PreprocessJobClass:
@@ -814,7 +808,6 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
     return getClang();
 
   case Action::OffloadBundlingJobClass:
-  case Action::OffloadUnbundlingJobClass:
     return getOffloadBundler();
 
   case Action::OffloadPackagerJobClass:
@@ -852,6 +845,8 @@ static StringRef getArchNameForCompilerRTLib(const ToolChain &TC,
 StringRef ToolChain::getOSLibName() const {
   if (Triple.isOSDarwin())
     return "darwin";
+  if (Triple.isWindowsCygwinEnvironment())
+    return "cygwin";
 
   switch (Triple.getOS()) {
   case llvm::Triple::FreeBSD:
@@ -1049,10 +1044,8 @@ void ToolChain::addFlangRTLibPath(const ArgList &Args,
                    options::OPT_shared_libflangrt, getTriple().isOSAIX()))
     CmdArgs.push_back(
         getCompilerRTArgString(Args, "runtime", ToolChain::FT_Static, true));
-  else {
+  else
     CmdArgs.push_back("-lflang_rt.runtime");
-    addArchSpecificRPath(*this, Args, CmdArgs);
-  }
 }
 
 // Android target triples contain a target version. If we don't have libraries
@@ -1123,6 +1116,20 @@ ToolChain::getTargetSubDirPath(StringRef BaseDir) const {
   const llvm::Triple &T = getTriple();
   if (auto Path = getPathForTriple(T))
     return *Path;
+
+  if (T.isAMDGCN()) {
+    // Clear the subarch as a fallback.
+    // TODO: Remove this when libc and compiler-rt builds are migrated.
+    llvm::Triple AMDGPUTriple = T;
+    AMDGPUTriple.setArch(Triple::amdgpu);
+    if (auto Path = getPathForTriple(AMDGPUTriple))
+      return *Path;
+
+    // Try legacy architecture name.
+    AMDGPUTriple.setArchName("amdgcn");
+    if (auto Path = getPathForTriple(AMDGPUTriple))
+      return *Path;
+  }
 
   if (T.isOSAIX()) {
     llvm::Triple AIXTriple;
@@ -1217,6 +1224,22 @@ ToolChain::path_list ToolChain::getArchSpecificLibPaths() const {
   };
 
   AddPath({getTriple().str()});
+
+  // For AMDGPU, fall back to the subarch-stripped triple path, trying both the
+  // canonical "amdgpu" name and the legacy "amdgcn" name.
+  //
+  // TODO: Also try major subarch?
+  // TODO: Remove this when libc and compiler-rt builds are migrated.
+  if (getTriple().isAMDGCN()) {
+    llvm::Triple Canon(getTriple());
+    for (StringRef ArchName : {"amdgpu", "amdgcn"}) {
+      if (ArchName == getTriple().getArchName())
+        continue;
+      Canon.setArchName(ArchName);
+      AddPath({Canon.str()});
+    }
+  }
+
   AddPath({getOSLibName(), llvm::Triple::getArchTypeName(getArch())});
   return Paths;
 }
@@ -1243,8 +1266,10 @@ bool ToolChain::needsGCovInstrumentation(const llvm::opt::ArgList &Args) {
 }
 
 Tool *ToolChain::SelectTool(const JobAction &JA) const {
-  if (D.IsFlangMode() && getDriver().ShouldUseFlangCompiler(JA)) return getFlang();
-  if (getDriver().ShouldUseClangCompiler(JA)) return getClang();
+  if (D.IsFlangMode() && getDriver().ShouldUseFlangCompiler(JA))
+    return getFlang();
+  if (getDriver().ShouldUseClangCompiler(JA))
+    return getClang();
   Action::ActionClass AC = JA.getKind();
   if (AC == Action::AssembleJobClass && useIntegratedAs() &&
       !getTriple().isOSAIX())
@@ -1254,6 +1279,14 @@ Tool *ToolChain::SelectTool(const JobAction &JA) const {
 
 std::string ToolChain::GetFilePath(const char *Name) const {
   return D.GetFilePath(Name, *this);
+}
+
+std::optional<std::string>
+ToolChain::GetFilePathIfExists(const char *Name) const {
+  std::string Path = D.GetFilePath(Name, *this);
+  if (Path == Name)
+    return std::nullopt;
+  return Path;
 }
 
 std::string ToolChain::GetProgramPath(const char *Name) const {
@@ -1266,7 +1299,7 @@ std::string ToolChain::GetLinkerPath(bool *LinkerIsLLD) const {
 
   // Get -fuse-ld= first to prevent -Wunused-command-line-argument. -fuse-ld= is
   // considered as the linker flavor, e.g. "bfd", "gold", or "lld".
-  const Arg* A = Args.getLastArg(options::OPT_fuse_ld_EQ);
+  const Arg *A = Args.getLastArg(options::OPT_fuse_ld_EQ);
   StringRef UseLinker = A ? A->getValue() : getDriver().getPreferredLinker();
 
   // --ld-path= takes precedence over -fuse-ld= and specifies the executable
@@ -1351,9 +1384,7 @@ types::ID ToolChain::LookupTypeForExtension(StringRef Ext) const {
   return id;
 }
 
-bool ToolChain::HasNativeLLVMSupport() const {
-  return false;
-}
+bool ToolChain::HasNativeLLVMSupport() const { return false; }
 
 LTOKind ToolChain::getDefaultLTOMode() const { return LTOK_None; }
 
@@ -1419,7 +1450,8 @@ bool ToolChain::isCrossCompiling() const {
   case llvm::Triple::thumb:
   case llvm::Triple::thumbeb:
     return getArch() != llvm::Triple::arm && getArch() != llvm::Triple::thumb &&
-           getArch() != llvm::Triple::armeb && getArch() != llvm::Triple::thumbeb;
+           getArch() != llvm::Triple::armeb &&
+           getArch() != llvm::Triple::thumbeb;
   default:
     return HostTriple.getArch() != getArch();
   }
@@ -1432,7 +1464,7 @@ ObjCRuntime ToolChain::getDefaultObjCRuntime(bool isNonFragile) const {
 
 llvm::ExceptionHandling
 ToolChain::GetExceptionModel(const llvm::opt::ArgList &Args) const {
-  return llvm::ExceptionHandling::None;
+  return llvm::ExceptionHandling::Default;
 }
 
 bool ToolChain::isThreadModelSupported(const StringRef Model) const {
@@ -1484,9 +1516,10 @@ std::string ToolChain::ComputeLLVMTriple(const ArgList &Args, BoundArch BA,
   }
   case llvm::Triple::aarch64_32:
     return getTripleString().str();
-  case llvm::Triple::amdgcn: {
+  case llvm::Triple::amdgpu: {
     llvm::Triple Triple = getTriple();
-    tools::AMDGPU::setArchNameInTriple(getDriver(), Args, InputType, Triple);
+    tools::AMDGPU::setArchNameInTriple(getDriver(), Args, BA, InputType,
+                                       Triple);
     return Triple.getTriple();
   }
   case llvm::Triple::arm:
@@ -1496,6 +1529,7 @@ std::string ToolChain::ComputeLLVMTriple(const ArgList &Args, BoundArch BA,
     llvm::Triple Triple = getTriple();
     tools::arm::setArchNameInTriple(getDriver(), Args, InputType, Triple);
     tools::arm::setFloatABIInTriple(getDriver(), Args, Triple);
+    tools::arm::setEABIInTriple(getDriver(), Args, Triple);
     return Triple.getTriple();
   }
   }
@@ -1507,9 +1541,7 @@ std::string ToolChain::ComputeEffectiveClangTriple(const ArgList &Args,
   return ComputeLLVMTriple(Args, BA, InputType);
 }
 
-std::string ToolChain::computeSysRoot() const {
-  return D.SysRoot;
-}
+std::string ToolChain::computeSysRoot() const { return D.SysRoot; }
 
 void ToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
                                           ArgStringList &CC1Args) const {
@@ -1517,12 +1549,8 @@ void ToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
 }
 
 void ToolChain::addActionsFromClangTargetOptions(
-    const ArgList &DriverArgs,
-    ArgStringList &CC1Args,
-    const JobAction &JA,
-    Compilation &C,
-    const InputInfoList &Inputs) const
-{}
+    const ArgList &DriverArgs, ArgStringList &CC1Args, const JobAction &JA,
+    Compilation &C, const InputInfoList &Inputs) const {}
 
 void ToolChain::addClangTargetOptions(
     const ArgList &DriverArgs, ArgStringList &CC1Args, BoundArch BA,
@@ -1541,12 +1569,12 @@ void ToolChain::addProfileRTLibs(const llvm::opt::ArgList &Args,
   CmdArgs.push_back(getCompilerRTArgString(Args, "profile"));
 }
 
-ToolChain::RuntimeLibType ToolChain::GetRuntimeLibType(
-    const ArgList &Args) const {
+ToolChain::RuntimeLibType
+ToolChain::GetRuntimeLibType(const ArgList &Args) const {
   if (runtimeLibType)
     return *runtimeLibType;
 
-  const Arg* A = Args.getLastArg(options::OPT_rtlib_EQ);
+  const Arg *A = Args.getLastArg(options::OPT_rtlib_EQ);
   StringRef LibName = A ? A->getValue() : CLANG_DEFAULT_RTLIB;
 
   // Only use "platform" in tests to override CLANG_DEFAULT_RTLIB!
@@ -1567,8 +1595,8 @@ ToolChain::RuntimeLibType ToolChain::GetRuntimeLibType(
   return *runtimeLibType;
 }
 
-ToolChain::UnwindLibType ToolChain::GetUnwindLibType(
-    const ArgList &Args) const {
+ToolChain::UnwindLibType
+ToolChain::GetUnwindLibType(const ArgList &Args) const {
   if (unwindLibType)
     return *unwindLibType;
 
@@ -1604,7 +1632,8 @@ ToolChain::UnwindLibType ToolChain::GetUnwindLibType(
   return *unwindLibType;
 }
 
-ToolChain::CXXStdlibType ToolChain::GetCXXStdlibType(const ArgList &Args) const{
+ToolChain::CXXStdlibType
+ToolChain::GetCXXStdlibType(const ArgList &Args) const {
   if (cxxStdlibType)
     return *cxxStdlibType;
 
@@ -1627,6 +1656,16 @@ ToolChain::CXXStdlibType ToolChain::GetCXXStdlibType(const ArgList &Args) const{
   }
 
   return *cxxStdlibType;
+}
+
+StringRef ToolChain::GetCXXStdlibName(const ArgList &Args) const {
+  switch (GetCXXStdlibType(Args)) {
+  case ToolChain::CST_Libcxx:
+    return "libc++";
+  case ToolChain::CST_Libstdcxx:
+    return "libstdc++";
+  }
+  llvm_unreachable("unknown C++ standard library type");
 }
 
 ToolChain::CStdlibType ToolChain::GetCStdlibType(const ArgList &Args) const {
@@ -1802,7 +1841,7 @@ void ToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
 void ToolChain::AddFilePathLibArgs(const ArgList &Args,
                                    ArgStringList &CmdArgs) const {
   for (const auto &LibPath : getFilePaths())
-    if(LibPath.length() > 0)
+    if (LibPath.length() > 0)
       CmdArgs.push_back(Args.MakeArgString(StringRef("-L") + LibPath));
 }
 
@@ -2124,6 +2163,12 @@ void ToolChain::TranslateXarchArgs(
 static bool isXArchCompatibleTripleArch(const llvm::Triple &TT,
                                         StringRef XArchVal) {
   llvm::Triple ParsedTriple(XArchVal);
+
+  // Accept -Xarch_amdgcn for all amdgpu subarches, and -Xarch_amdgpu9 for
+  // amdgpu9.xx
+  if (TT.isAMDGCN() && ParsedTriple.isAMDGCN())
+    return llvm::AMDGPU::isSubArchCompatible(TT, ParsedTriple);
+
   return TT.getArch() == ParsedTriple.getArch() &&
          TT.getSubArch() == ParsedTriple.getSubArch();
 }
@@ -2167,4 +2212,3 @@ llvm::opt::DerivedArgList *ToolChain::TranslateXarchArgs(
   delete DAL;
   return nullptr;
 }
-

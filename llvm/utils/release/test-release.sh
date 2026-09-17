@@ -292,7 +292,7 @@ if [ $do_libs = "yes" ]; then
   fi
 fi
 if [ $do_openmp = "yes" ]; then
-  projects="${projects:+$projects;}openmp"
+  runtimes="${runtimes:+$runtimes;}openmp"
 fi
 if [ $do_bolt = "yes" ]; then
   projects="${projects:+$projects;}bolt"
@@ -369,7 +369,7 @@ function build_with_cmake_cache() {
  pushd $BuildDir/Release
  mv $InstallDir/usr/local $Package
  if [ "$use_gzip" = "yes" ]; then
-    tar cf - $Package | gzip -9c -n > $BuildDir/$Package.tar.gz
+    tar cf - $Package | gzip -9c > $BuildDir/$Package.tar.gz
   else
     tar cf - $Package | xz -9ce -T $NumJobs > $BuildDir/$Package.tar.xz
   fi
@@ -613,7 +613,7 @@ function package_release() {
     cd $BuildDir/Phase3/Release
     mv llvmCore-$Release-$RC.install/usr/local $Package
     if [ "$use_gzip" = "yes" ]; then
-      tar cf - $Package | gzip -9c -n > $BuildDir/$Package.tar.gz
+      tar cf - $Package | gzip -9c > $BuildDir/$Package.tar.gz
     else
       tar cf - $Package | xz -9ce -T $NumJobs > $BuildDir/$Package.tar.xz
     fi

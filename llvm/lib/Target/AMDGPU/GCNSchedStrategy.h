@@ -57,11 +57,8 @@ protected:
   void initCandidate(SchedCandidate &Cand, SUnit *SU, bool AtTop,
                      const RegPressureTracker &RPTracker,
                      const SIRegisterInfo *SRI, unsigned SGPRPressure,
-                     unsigned VGPRPressure, bool IsBottomUp);
-
-  /// Estimate how many cycles \p SU must wait due to structural hazards at the
-  /// current boundary cycle. Returns zero when no stall is required.
-  unsigned getStructuralStallCycles(SchedBoundary &Zone, SUnit *SU) const;
+                     unsigned VGPRPressure, unsigned AGPRPressure,
+                     bool IsBottomUp);
 
   /// Evaluates instructions in the pending queue using a subset of scheduling
   /// heuristics.
@@ -91,6 +88,8 @@ protected:
   unsigned SGPRExcessLimit;
 
   unsigned VGPRExcessLimit;
+
+  unsigned AGPRExcessLimit;
 
   unsigned TargetOccupancy;
 
@@ -135,6 +134,8 @@ public:
   unsigned SGPRCriticalLimit;
 
   unsigned VGPRCriticalLimit;
+
+  unsigned AGPRCriticalLimit;
 
   unsigned SGPRLimitBias = 0;
 
@@ -368,9 +369,6 @@ protected:
   // RP after scheduling the current region.
   GCNRegPressure PressureAfter;
 
-  // Whether checkScheduling reverted the schedule for the current region.
-  bool ScheduleReverted = false;
-
   std::vector<std::unique_ptr<ScheduleDAGMutation>> SavedMutations;
 
   GCNSchedStage(GCNSchedStageID StageID, GCNScheduleDAGMILive &DAG);
@@ -578,6 +576,10 @@ private:
     /// candidate.
     GCNRegPressure RPSave;
 
+    ScoredRemat(RegisterIdx RegIdx, unsigned NumRegions)
+        : RegIdx(RegIdx), LiveIn(NumRegions), LiveOut(NumRegions),
+          Live(NumRegions), UnpredictableRPSave(NumRegions) {}
+
     /// Execution frequency information required by scoring heuristics.
     /// Frequencies are scaled down if they are high to avoid overflow/underflow
     /// when combining them.
@@ -593,11 +595,11 @@ private:
       static const uint64_t ScaleFactor = 1024;
     };
 
-    /// Initializes the candidate with state-independent characteristics for
-    /// rematerializable register with index handle \p RegIdx. This doesn't
-    /// update the actual score (call \ref update for this).
-    void init(RegisterIdx RegIdx, const FreqInfo &Freq,
-              const Rematerializer &Remater, GCNScheduleDAGMILive &DAG);
+    /// Initializes the candidate with state-independent characteristics.
+    /// This doesn't update the actual score (call \ref update for this).
+    /// Note: LiveIn/LiveOut must be pre-populated before calling this.
+    void init(const FreqInfo &Freq, const Rematerializer &Remater,
+              GCNScheduleDAGMILive &DAG);
 
     /// Rematerializes the candidate using the \p Remater.
     void rematerialize(Rematerializer &Remater) const;
@@ -720,14 +722,11 @@ private:
     std::vector<MachineInstr *> OrigMIOrder;
     /// Maximum pressure recorded in the region.
     GCNRegPressure MaxPressure;
-    /// Whether the region was already reverted by per-region checkScheduling.
-    bool AlreadyReverted = false;
 
     RegionSchedRevert(unsigned RegionIdx, ArrayRef<MachineInstr *> OrigMIOrder,
-                      const GCNRegPressure &MaxPressure,
-                      bool AlreadyReverted = false)
+                      const GCNRegPressure &MaxPressure)
         : RegionIdx(RegionIdx), OrigMIOrder(OrigMIOrder),
-          MaxPressure(MaxPressure), AlreadyReverted(AlreadyReverted) {}
+          MaxPressure(MaxPressure) {}
   };
   /// After re-scheduling, contains pre-re-scheduling data for all re-scheduled
   /// regions.

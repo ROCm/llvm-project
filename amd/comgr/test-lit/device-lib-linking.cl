@@ -6,13 +6,14 @@
 // RUN: %llvm-dis %t-with-dev-libs.bc -o - | %FileCheck %s
 
 // COM: Verify LLVM IR text file
-// CHECK: target triple = "amdgcn-amd-amdhsa"
+// CHECK: target triple = "amd{{gcn|gpu[0-9.]+}}-amd-amdhsa"
 // CHECK: define internal float @_Z4powrff
 // CHECK: define internal float @_Z6sincosfPU3AS5f
 // CHECK: define internal float @_Z4cbrtf
 // CHECK: define internal float @__ocml_sincos_f32
-// CHECK: define internal float @__ocml_powr_f32
+// CHECK: define internal float @__ocml_pow_f32
 // CHECK: define internal noundef float @__ocml_exp_f32
+// CHECK: define internal float @__ocml_powr_f32
 // CHECK: define internal ptr addrspace(1) @__printf_alloc
 
 extern const __constant bool __oclc_finite_only_opt;

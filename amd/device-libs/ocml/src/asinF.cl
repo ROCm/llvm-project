@@ -29,10 +29,8 @@ MATH_MANGLE(asin)(float x)
     float x2 = x*x;
     float r = ax >= 0.5f ? tx : x2;
 
-    float u = r * MATH_MAD(r, MATH_MAD(r, MATH_MAD(r, MATH_MAD(r,
-                  MATH_MAD(r,
-                      0x1.38434ep-5f, 0x1.bf8bb4p-7f), 0x1.069878p-5f), 0x1.6c8362p-5f),
-                      0x1.33379p-4f), 0x1.555558p-3f);
+    float u = r * PE5(r, 0x1.38434ep-5f, 0x1.bf8bb4p-7f, 0x1.069878p-5f, 0x1.6c8362p-5f, 0x1.33379p-4f,
+                        0x1.555558p-3f);
 
     float s = MATH_FAST_SQRT(r);
     float ret = MATH_MAD(0x1.ddcb02p-1f, 0x1.aee9d6p+0f, -2.0f*MATH_MAD(s, u, s));

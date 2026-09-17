@@ -1,3 +1,4 @@
+// REQUIRES: comgr-has-amdgpu-asan-runtime
 // COM: Compile a HIP source with AddressSanitizer enabled while the Comgr
 // COM: command cache is active.
 

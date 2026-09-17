@@ -17,10 +17,10 @@ MATH_MANGLE(cexp)(float2 z)
     bool g = x > 88.0f;
     float ex = MATH_MANGLE(exp)(x - (g ? 1.0f : 0.0f));
     const float e1 =  0x1.5bf0a8p+1f;
-    cy *= g ? e1 : 1.0f;
-    sy *= g ? e1 : 1.0f;
     float rr = ex * cy;
     float ri = ex * sy;
+    rr *= g ? e1 : 1.0f;
+    ri *= g ? e1 : 1.0f;
 
     if (!FINITE_ONLY_OPT()) {
         bool finite = BUILTIN_ISFINITE_F32(y);
@@ -31,9 +31,8 @@ MATH_MANGLE(cexp)(float2 z)
         if (x == PINF_F32) {
             rr = finite ? rr : PINF_F32;
             ri = finite ? ri : QNAN_F32;
-            ri = y == 0.0f ? y : ri;
         }
-        ri = (BUILTIN_ISNAN_F32(x) & (y == 0.0f)) ? y : ri;
+        ri = y == 0.0f ? y : ri;
     }
 
     return (float2)(rr, ri);

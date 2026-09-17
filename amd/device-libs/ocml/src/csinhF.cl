@@ -40,7 +40,7 @@ MATH_MANGLE(csinh)(float2 z)
     if (!FINITE_ONLY_OPT()) {
         rr = (!BUILTIN_CLASS_F32(x, CLASS_PZER|CLASS_NZER|CLASS_PINF|CLASS_NINF) |
               BUILTIN_ISFINITE_F32(z.y)) ? rr : z.x;
-        ri = (BUILTIN_ISFINITE_F32(x) | (z.y != 0.0f)) ? ri : z.y;
+        ri = (z.y != 0.0f) ? ri : z.y;
     }
 
     return (float2)(rr, ri);

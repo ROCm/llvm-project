@@ -40,7 +40,7 @@ MATH_MANGLE(csinh)(double2 z)
     if (!FINITE_ONLY_OPT()) {
         rr = (!BUILTIN_CLASS_F64(x, CLASS_PZER|CLASS_NZER|CLASS_PINF|CLASS_NINF) |
               BUILTIN_ISFINITE_F64(z.y)) ? rr : z.x;
-        ri = (BUILTIN_ISFINITE_F64(x) | (z.y != 0.0)) ? ri : z.y;
+        ri = (z.y != 0.0) ? ri : z.y;
     }
 
     return (double2)(rr, ri);

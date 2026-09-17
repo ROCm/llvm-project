@@ -13,6 +13,7 @@
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DebugProgramInstruction.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstIterator.h"
@@ -65,6 +66,26 @@ static std::unique_ptr<Module> getLazyModuleFromAssembly(LLVMContext &Context,
   if (!ModuleOrErr)
     report_fatal_error("Could not parse bitcode module");
   return std::move(ModuleOrErr.get());
+}
+
+TEST(BitReaderTest, PreserveDistinctDIExpression) {
+  SmallString<1024> Mem;
+  LLVMContext WriteContext;
+  auto M = std::make_unique<Module>("test", WriteContext);
+  M->getOrInsertNamedMetadata("test")->addOperand(
+      DIExpression::getDistinct(WriteContext, {}));
+  writeModuleToBuffer(std::move(M), Mem);
+
+  LLVMContext ReadContext;
+  Expected<std::unique_ptr<Module>> ModuleOrErr =
+      parseBitcodeFile(MemoryBufferRef(Mem.str(), "test"), ReadContext);
+  if (!ModuleOrErr)
+    report_fatal_error("Could not parse bitcode module");
+
+  NamedMDNode *NMD = (*ModuleOrErr)->getNamedMetadata("test");
+  ASSERT_NE(NMD, nullptr);
+  ASSERT_EQ(NMD->getNumOperands(), 1u);
+  EXPECT_TRUE(cast<DIExpression>(NMD->getOperand(0))->isDistinct());
 }
 
 // Tests that lazy evaluation can parse functions out of order.

@@ -42,10 +42,11 @@ StringRef getOpenCLCBaseHeaderContents() {
 llvm::ArrayRef<std::tuple<llvm::StringRef, llvm::StringRef>>
 getDeviceLibraries() {
   static std::tuple<llvm::StringRef, llvm::StringRef> DeviceLibs[] = {
-#define AMD_DEVICE_LIBS_TARGET(target)                                         \
-  {#target ".bc",                                                              \
-   llvm::StringRef(reinterpret_cast<const char *>(target##_lib),               \
-                   target##_lib_size)},
+// name, not #target: the driver matches the file name exactly, and target has
+// '-' mangled to '_'.
+#define AMD_DEVICE_LIBS_TARGET(target, name)                                   \
+  {name ".bc", llvm::StringRef(reinterpret_cast<const char *>(target##_lib),   \
+                               target##_lib_size)},
 #include "libraries_defs.inc"
   };
   return DeviceLibs;

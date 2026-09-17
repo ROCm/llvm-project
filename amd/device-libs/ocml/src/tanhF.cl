@@ -31,9 +31,7 @@ MATH_MANGLE(tanh)(float x)
     float z;
     if (y < 0.625f) {
         float y2 = y*y;
-        float p = MATH_MAD(y2, MATH_MAD(y2, MATH_MAD(y2, MATH_MAD(y2,
-                    -0x1.758e7ap-8f, 0x1.521192p-6f), -0x1.b8389cp-5f),
-                    0x1.110704p-3f), -0x1.555532p-2f);
+        float p = PE4(y2, -0x1.758e7ap-8f, 0x1.521192p-6f, -0x1.b8389cp-5f, 0x1.110704p-3f, -0x1.555532p-2f);
         z = MATH_MAD(y2, y*p, y);
     } else {
         float t = MATH_MANGLE(exp)(2.0f * y);

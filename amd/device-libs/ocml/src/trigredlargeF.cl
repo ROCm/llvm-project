@@ -135,16 +135,7 @@ MATH_PRIVATE(trigredlarge)(float x)
     }
 
     struct redret ret;
-#if defined EXTRA_PRECISION
-    float t = rh + rt;
-    rt = rt - (t - rh);
-
-    ret.hi = t;
-    ret.lo = rt;
-#else
     ret.hi  = rh + rt;
-#endif
-
     ret.i = ((i >> 1) + (i & 1)) & 0x3;
     return ret;
 }

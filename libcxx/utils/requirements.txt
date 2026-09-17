@@ -1,8 +1,8 @@
 click
-GitPython
+llvm-lnt
 numpy
 pandas
 plotly
-statsmodels
+PyGithub
+scipy
 tabulate
-tqdm

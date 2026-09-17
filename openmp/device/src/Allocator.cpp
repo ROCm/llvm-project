@@ -30,20 +30,6 @@ extern "C" {
 [[gnu::noinline]] uint64_t __ockl_dm_alloc(uint64_t bufsz);
 [[gnu::noinline]] void __ockl_dm_dealloc(uint64_t ptr);
 
-#ifdef __AMDGPU__
-[[gnu::noinline]] void *__alt_libc_malloc(size_t sz);
-[[gnu::noinline]] void __alt_libc_free(void *ptr);
-
-[[gnu::noinline]] uint64_t __ockl_devmem_request(uint64_t addr, uint64_t size) {
-  if (size) { // allocation request
-    [[clang::noinline]] return (uint64_t)__alt_libc_malloc((size_t)size);
-  } else { // free request
-    [[clang::noinline]] __alt_libc_free((void *)addr);
-    return 0;
-  }
-}
-#endif
-
 //#if defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
 #if (defined(__AMDGPU__) || defined(__SPIRV__)) && !defined(OMPTARGET_HAS_LIBC)
 [[gnu::weak]] void *malloc(size_t Size) { return allocator::alloc(Size); }

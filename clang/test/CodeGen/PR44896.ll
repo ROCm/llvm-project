@@ -1,3 +1,4 @@
+; REQUIRES: x86-registered-target
 ; RUN: %clang -fdiscard-value-names -S %s -o /dev/null 2>&1 | FileCheck --check-prefix=WARNING %s
 ; RUN: %clang -S %s -o /dev/null 2>&1 | FileCheck --check-prefix=NOWARNING %s
 ; RUN: %clang_cc1 -emit-llvm %s -discard-value-names -o /dev/null

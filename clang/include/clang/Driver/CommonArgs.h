@@ -24,7 +24,18 @@ namespace clang {
 namespace driver {
 namespace tools {
 
-bool needFortranLibs(const Driver &D, const llvm::opt::ArgList &Args);
+struct OffloadJobsOpt {
+  enum class Kind { Missing, Invalid, Jobserver, Fixed };
+
+  Kind K = Kind::Missing;
+  llvm::opt::Arg *A = nullptr;
+  StringRef Value;
+  unsigned NumThreads = 0;
+
+  bool isValid() const { return K == Kind::Jobserver || K == Kind::Fixed; }
+};
+
+OffloadJobsOpt parseOffloadJobs(const llvm::opt::ArgList &Args);
 
 void addPathIfExists(const Driver &D, const Twine &Path,
                      ToolChain::path_list &Paths);
@@ -39,10 +50,14 @@ void addLinkerCompressDebugSectionsOption(const ToolChain &TC,
                                           const llvm::opt::ArgList &Args,
                                           llvm::opt::ArgStringList &CmdArgs);
 
+void renderDebugInfoCompressionArgs(const llvm::opt::ArgList &Args,
+                                    llvm::opt::ArgStringList &CmdArgs,
+                                    const Driver &D, const ToolChain &TC);
+
 void claimNoWarnArgs(const llvm::opt::ArgList &Args);
 
 bool addSanitizerRuntimes(const ToolChain &TC, const llvm::opt::ArgList &Args,
-                          llvm::opt::ArgStringList &CmdArgs);
+                          llvm::opt::ArgStringList &CmdArgs, Compilation &C);
 
 void linkSanitizerRuntimeDeps(const ToolChain &TC,
                               const llvm::opt::ArgList &Args,
@@ -57,30 +72,6 @@ void linkXRayRuntimeDeps(const ToolChain &TC, const llvm::opt::ArgList &Args,
 void AddRunTimeLibs(const ToolChain &TC, const Driver &D,
                     llvm::opt::ArgStringList &CmdArgs,
                     const llvm::opt::ArgList &Args);
-
-void AddStaticDeviceLibsLinking(
-    Compilation &C, const Tool &T, const JobAction &JA,
-    const InputInfoList &Inputs, const llvm::opt::ArgList &DriverArgs,
-    llvm::opt::ArgStringList &CmdArgs, StringRef Arch, StringRef TargetID,
-    bool isBitCodeSDL, bool postClangLink, bool unpackage);
-void AddStaticDeviceLibsLinking(Compilation &C, const Tool &T,
-                                const JobAction &JA,
-                                const InputInfoList &Inputs,
-                                const llvm::opt::ArgList &DriverArgs,
-                                llvm::opt::ArgStringList &CmdArgs,
-                                StringRef Arch, StringRef TargetID,
-                                bool isBitCodeSDL, bool postClangLink);
-void AddStaticDeviceLibsPostLinking(const Driver &D,
-                                    const llvm::opt::ArgList &DriverArgs,
-                                    llvm::opt::ArgStringList &CmdArgs,
-                                    StringRef Arch, StringRef TargetID,
-                                    bool isBitCodeSDL, bool postClangLink);
-void AddStaticDeviceLibs(Compilation *C, const Tool *T, const JobAction *JA,
-                         const InputInfoList *Inputs, const Driver &D,
-                         const llvm::opt::ArgList &DriverArgs,
-                         llvm::opt::ArgStringList &CmdArgs, StringRef Arch,
-                         StringRef TargetID, bool isBitCodeSDL,
-                         bool postClangLink, bool unpackage = false);
 
 const char *SplitDebugName(const JobAction &JA, const llvm::opt::ArgList &Args,
                            const InputInfo &Input, const InputInfo &Output);
@@ -147,6 +138,12 @@ void addArchSpecificRPath(const ToolChain &TC, const llvm::opt::ArgList &Args,
 void addOpenMPRuntimeLibraryPath(const ToolChain &TC,
                                  const llvm::opt::ArgList &Args,
                                  llvm::opt::ArgStringList &CmdArgs);
+
+bool addLLVMOffloadingRuntime(const Compilation &C,
+                              llvm::opt::ArgStringList &CmdArgs,
+                              const ToolChain &TC,
+                              const llvm::opt::ArgList &Args);
+
 /// Returns true, if an OpenMP runtime has been added.
 bool addOpenMPRuntime(const Compilation &C, llvm::opt::ArgStringList &CmdArgs,
                       const ToolChain &TC, const llvm::opt::ArgList &Args,
@@ -206,8 +203,7 @@ std::string getCPUName(const Driver &D, const llvm::opt::ArgList &Args,
 void getTargetFeatures(const Driver &D, const llvm::Triple &Triple,
                        const llvm::opt::ArgList &Args,
                        llvm::opt::ArgStringList &CmdArgs, bool ForAS,
-                       bool IsAux = false,
-                       const StringRef TcTargetID = StringRef());
+                       bool IsAux = false);
 
 /// Iterate \p Args and convert -mxxx to +xxx and -mno-xxx to -xxx and
 /// append it to \p Features.
@@ -237,10 +233,6 @@ void addX86AlignBranchArgs(const Driver &D, const llvm::opt::ArgList &Args,
                            llvm::opt::ArgStringList &CmdArgs, bool IsLTO,
                            const StringRef PluginOptPrefix = "");
 
-unsigned getOrCheckAMDGPUCodeObjectVersion(const Driver &D,
-                              const llvm::opt::ArgList &Args,
-                              bool Diagnose = false);
-
 void checkAMDGPUCodeObjectVersion(const Driver &D,
                                   const llvm::opt::ArgList &Args);
 
@@ -255,12 +247,21 @@ void addMachineOutlinerArgs(const Driver &D, const llvm::opt::ArgList &Args,
                             const llvm::Triple &Triple, bool IsLTO,
                             const StringRef PluginOptPrefix = "");
 
+void addSplitMachineFunctionsArgs(const Driver &D,
+                                  const llvm::opt::ArgList &Args,
+                                  llvm::opt::ArgStringList &CmdArgs,
+                                  const llvm::Triple &Triple);
+
 void addOpenMPDeviceRTL(const Driver &D, const llvm::opt::ArgList &DriverArgs,
                         llvm::opt::ArgStringList &CC1Args,
                         StringRef BitcodeSuffix, const llvm::Triple &Triple,
                         const ToolChain &HostTC);
 
-void addOpenCLBuiltinsLib(const Driver &D, const llvm::Triple &TT,
+/// Try to link libclc, depending on the target ABI and command line
+/// arguments.
+///
+/// \return true if libclc should be linked for the compile.
+bool addOpenCLBuiltinsLib(const Driver &D, const llvm::Triple &TT,
                           const llvm::opt::ArgList &DriverArgs,
                           llvm::opt::ArgStringList &CC1Args);
 
