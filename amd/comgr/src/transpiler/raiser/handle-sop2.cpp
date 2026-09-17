@@ -108,8 +108,15 @@ Expected<bool> displaceSourceImageHalf(RaiseContext &Ctx, const DecodedInst &Di,
   unsigned PairBaseIdx = IsHighHalf ? *Dst->BaseIdx - 1 : *Dst->BaseIdx;
 
   // Only adding a constant to the half itself displaces what the pair holds.
-  // Anything else computes a value the pair no longer names an address for.
-  if (!Op.isSrcReg(0) || !Di.isImm(Op.srcIdx(1)))
+  // Anything else computes a value the pair no longer names an address for. A
+  // displacement written as a difference of labels reaches the decode as an
+  // expression rather than a bare immediate, and names a constant all the
+  // same.
+  if (!Op.isSrcReg(0))
+    return false;
+  std::optional<int64_t> Displacement =
+      evalOperandAsConst(Di.Inst, Op.srcIdx(1));
+  if (!Displacement)
     return false;
   Expected<std::optional<ParsedReg>> Src0 = Op.srcReg(0);
   if (!Src0)
@@ -132,7 +139,7 @@ Expected<bool> displaceSourceImageHalf(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   uint64_t Half = IsHighHalf ? *Address >> 32 : *Address & 0xffffffff;
-  uint64_t Sum = Half + static_cast<uint32_t>(Op.srcImm(1)) + CarryIn;
+  uint64_t Sum = Half + static_cast<uint32_t>(*Displacement) + CarryIn;
   uint32_t Result = static_cast<uint32_t>(Sum);
   uint64_t Moved = IsHighHalf ? (static_cast<uint64_t>(Result) << 32) |
                                     (*Address & 0xffffffff)
