@@ -2079,7 +2079,6 @@ void ControlFlowRewriter::rewrite() {
     // secondary, the rejoin register can be used directly without the
     // accumulator machinery.
     unsigned NumDivergentPreds = 0;
-    bool IsPrimarySuccOfPred = false;
     WaveNode *SingleDivPred = nullptr;
     for (WaveNode *Pred : Secondary->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
@@ -2089,10 +2088,8 @@ void ControlFlowRewriter::rewrite() {
       // of one divergent node and the primary successor of another. And in the
       // latter case, the edge already enters with a narrowed EXEC, so it must
       // not contribute any rejoin mask.
-      if (Pred->Successors[0] == Secondary) {
-        IsPrimarySuccOfPred = true;
+      if (Pred->Successors[0] == Secondary)
         continue;
-      }
 
       NumDivergentPreds++;
       SingleDivPred = Pred;
@@ -2100,12 +2097,12 @@ void ControlFlowRewriter::rewrite() {
 
     // The accumulator is only needed when multiple divergent predecessors
     // contribute rejoin masks, or when cycle membership or non-dominance
-    // requires temporal merging across iterations. Accumulator is also needed
-    // when there is a divergence-entry edge, since the direct rejoin register
-    // is nonzero on that edge.
+    // requires temporal merging across iterations. Cycle membership here
+    // is both the contributing predecessor and the secondary, as a secondary
+    // in a loop must merge across iterations at its entry.
     bool HasSingleDivergentPred =
         (NumDivergentPreds == 1) && !SingleDivPred->Cycle &&
-        !IsPrimarySuccOfPred &&
+        !Secondary->Cycle &&
         ReconvergeCfg.getDomTree().dominates(SingleDivPred->Block,
                                              Secondary->Block);
 
