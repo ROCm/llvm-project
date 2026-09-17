@@ -6890,7 +6890,6 @@ static bool canUseAMDGPUFastFPAtomics(CodeGenFunction &CGF, LValue X,
         userRequestsAMDGPUFastFPAtomics = false;
     }
   }
-
   bool supportsFastFPAtomics =
       Context.getTargetInfo().getTriple().isAMDGCN() &&
       CGF.CGM.getOpenMPRuntime().supportFastFPAtomics() &&
