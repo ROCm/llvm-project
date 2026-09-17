@@ -245,8 +245,19 @@ int runEmitIr(const CodeObjectInfo &Info, const TextSection &Text,
                                     ExtentOrErr->Offset + ExtentOrErr->Size});
   }
 
+  // Every function symbol in the text section, so a call leaving a kernel's
+  // own extent can be followed into the helper it names.
+  Expected<SmallVector<KernelSymbolExtent>> ExtentsOrErr =
+      Info.textFunctionExtents();
+  if (!ExtentsOrErr) {
+    errs() << "transpile_cli: function extents: "
+           << toString(ExtentsOrErr.takeError()) << "\n";
+    return 1;
+  }
+  ArrayRef<KernelSymbolExtent> FunctionExtents = *ExtentsOrErr;
+
   Expected<RaiseResult> RaisedOrErr =
-      raiseToIR(Text, SourceIsa, TargetIsa, Kernels);
+      raiseToIR(Text, SourceIsa, TargetIsa, Kernels, FunctionExtents);
   if (!RaisedOrErr) {
     // The raiser only returns a module on success, so a failure has no partial
     // IR to dump; report the structured reason on stderr. It also stops at the
@@ -255,7 +266,7 @@ int runEmitIr(const CodeObjectInfo &Info, const TextSection &Text,
     bool Reported = false;
     for (const KernelRequest &Kernel : Kernels) {
       Expected<RaiseResult> OneOrErr =
-          raiseToIR(Text, SourceIsa, TargetIsa, Kernel);
+          raiseToIR(Text, SourceIsa, TargetIsa, Kernel, FunctionExtents);
       if (OneOrErr)
         continue;
       errs() << "transpile_cli: failed to raise: "

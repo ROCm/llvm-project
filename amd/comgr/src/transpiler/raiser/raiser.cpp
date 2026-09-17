@@ -310,11 +310,33 @@ Expected<RaiseEnvironment> RaiseEnvironment::create(StringRef SourceIsa,
   return Env;
 }
 
+// A half-open range of text offsets the decode has read.
+using Extent = std::pair<uint64_t, uint64_t>;
+
+static bool contains(ArrayRef<Extent> Extents, uint64_t Offset) {
+  return any_of(Extents, [&](const Extent &E) {
+    return Offset >= E.first && Offset < E.second;
+  });
+}
+
+// Fold a second decode into `Base`, keeping the instructions in source order.
+// The two are decoded from disjoint extents, so neither carries an instruction
+// the other already has.
+static void mergeDecoded(DecodeResult &Base, DecodeResult &&Extra) {
+  Base.Insts.append(std::make_move_iterator(Extra.Insts.begin()),
+                    std::make_move_iterator(Extra.Insts.end()));
+  sort(Base.Insts, [](const DecodedInst &A, const DecodedInst &B) {
+    return A.Offset < B.Offset;
+  });
+  Base.BlockStarts.insert(Extra.BlockStarts.begin(), Extra.BlockStarts.end());
+}
+
 // Raise one kernel into `M`. Everything this allocates -- the projection, the
 // builder, the register file behind the context -- describes that one kernel
 // and dies with the call; only the emitted function outlives it.
 static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
-                         const TextSection &Text, const KernelRequest &Kernel) {
+                         const TextSection &Text, const KernelRequest &Kernel,
+                         ArrayRef<KernelSymbolExtent> FunctionExtents) {
   const KernelMeta &Meta = Kernel.Meta;
   Expected<DecodeResult> Decoded = decodeKernel(
       Env.Source.MC, Env.OpcMap, Text.Bytes, Kernel.StartOffset,
@@ -324,12 +346,54 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
 
   // A jump through a register names no offset the decode could follow, so the
   // blocks such a jump leads to are only known once the values behind them
-  // have been worked out. Merging them here, before any block is made, is what
-  // lets the handler find the block its jump targets.
-  Expected<SetPcAnalysis> SetPc =
-      analyzeSetPc(Decoded->Insts, Decoded->BlockStarts, Env.Source.MC);
-  if (!SetPc)
-    return SetPc.takeError();
+  // have been worked out. A call may also leave the kernel entirely, for an
+  // outlined helper the decode never saw; following it means decoding that
+  // helper and asking again, until nothing new turns up.
+  SmallVector<Extent> Covered{{Kernel.StartOffset, Kernel.EndOffset == 0
+                                                       ? Text.Bytes.size()
+                                                       : Kernel.EndOffset}};
+  std::optional<SetPcAnalysis> SetPc;
+  for (;;) {
+    Expected<SetPcAnalysis> Analyzed =
+        analyzeSetPc(Decoded->Insts, Decoded->BlockStarts, Kernel.StartOffset,
+                     Env.Source.MC);
+    if (!Analyzed)
+      return Analyzed.takeError();
+    SetPc = std::move(*Analyzed);
+
+    bool Followed = false;
+    for (uint64_t Target : SetPc->UndecodedTargets) {
+      // An offset already covered is one the decode read straight through, so
+      // landing on no instruction there means landing inside one. Decoding
+      // again would not find an instruction that is not there.
+      if (contains(Covered, Target))
+        continue;
+      const KernelSymbolExtent *Callee =
+          find_if(FunctionExtents, [&](const KernelSymbolExtent &E) {
+            return E.Size != 0 && Target >= E.Offset &&
+                   Target < E.Offset + E.Size;
+          });
+      if (Callee == FunctionExtents.end())
+        continue;
+
+      // The callee is decoded whole and from its own entry rather than from
+      // the offset that reached it, so its block starts are the ones its own
+      // code implies.
+      Expected<DecodeResult> CalleeDecoded =
+          decodeKernel(Env.Source.MC, Env.OpcMap, Text.Bytes, Callee->Offset,
+                       Callee->Offset + Callee->Size);
+      if (!CalleeDecoded)
+        return CalleeDecoded.takeError();
+      Covered.push_back({Callee->Offset, Callee->Offset + Callee->Size});
+      mergeDecoded(*Decoded, std::move(*CalleeDecoded));
+      Followed = true;
+    }
+    if (!Followed)
+      break;
+  }
+
+  // Merging the block starts here, before any block is made, is what lets the
+  // handler find the block its jump targets.
   Decoded->BlockStarts.insert(SetPc->ExtraBlockStarts.begin(),
                               SetPc->ExtraBlockStarts.end());
 
@@ -361,6 +425,11 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   // give the entry block a predecessor, which LLVM does not allow.
   for (uint64_t Start : Decoded->BlockStarts)
     Ctx->defineBB(Start, BasicBlock::Create(C, formatv("bb_{0:x}", Start), F));
+
+  // A followed callee can sit anywhere in the text section, the kernel's own
+  // entry included, so where the raise starts is named rather than left to be
+  // whichever block the first raised instruction leads.
+  B.CreateBr(Ctx->lookupBB(Kernel.StartOffset));
 
   for (const DecodedInst &Di : Decoded->Insts) {
     BasicBlock *Open = B.GetInsertBlock();
@@ -404,7 +473,8 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
 
 Expected<RaiseResult> raiseToIR(const TextSection &Text, StringRef SourceIsa,
                                 StringRef TargetIsa,
-                                ArrayRef<KernelRequest> Kernels) {
+                                ArrayRef<KernelRequest> Kernels,
+                                ArrayRef<KernelSymbolExtent> FunctionExtents) {
   Expected<RaiseEnvironment> Env =
       RaiseEnvironment::create(SourceIsa, TargetIsa);
   if (!Env)
@@ -435,7 +505,7 @@ Expected<RaiseResult> raiseToIR(const TextSection &Text, StringRef SourceIsa,
   // point that knows which kernel of the batch is being raised, so the name and
   // the ISA pair are attached here.
   for (const KernelRequest &Kernel : Kernels)
-    if (Error Err = raiseKernel(*Env, M, Text, Kernel))
+    if (Error Err = raiseKernel(*Env, M, Text, Kernel, FunctionExtents))
       return RaiseFailure::withOrigin(std::move(Err), Kernel.Name,
                                       Env->Source.Cpu, Env->Target.Cpu);
 

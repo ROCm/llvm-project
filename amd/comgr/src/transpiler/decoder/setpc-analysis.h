@@ -64,6 +64,11 @@ struct SetPcAnalysis {
   // over and above the block starts the decode already found. Every one of
   // them is the offset of a decoded instruction.
   llvm::DenseSet<uint64_t> ExtraBlockStarts;
+  // Source offsets a transfer reaches that no decoded instruction starts at,
+  // which refused the transfers reaching them. A caller that can widen its
+  // decode to cover one of these and ask again turns that refusal into a
+  // classified transfer.
+  llvm::DenseSet<uint64_t> UndecodedTargets;
 };
 
 // Classify every register-indirect control transfer in `Insts`, which must be
@@ -83,10 +88,13 @@ struct SetPcAnalysis {
 //
 // `BlockStarts` is the block-start set of the same decode. It is read, not
 // written: the offsets the transfers add are reported separately so the caller
-// can order the merge against the rest of its decode.
+// can order the merge against the rest of its decode. `EntryOffset` is where
+// control enters, which need not be the lowest offset in `Insts`: a callee
+// followed into the decode may sit below its caller.
 llvm::Expected<SetPcAnalysis>
 analyzeSetPc(llvm::ArrayRef<DecodedInst> Insts,
-             const std::set<uint64_t> &BlockStarts, const MCState &Mc);
+             const std::set<uint64_t> &BlockStarts, uint64_t EntryOffset,
+             const MCState &Mc);
 
 } // namespace COMGR::transpiler
 
