@@ -54,7 +54,7 @@ static std::string heldWaveMaskWidths(const RaiseContext &Ctx) {
 static Error refuseSetPc(RaiseContext &Ctx, const DecodedInst &Di,
                          const SetPcUnresolvable &Site) {
   std::string Pair =
-      (Twine("s[") + Twine(Site.Detail) + ":" + Twine(Site.Detail + 1) + "]")
+      (Twine("s[") + Twine(Site.Subject) + ":" + Twine(Site.Subject + 1) + "]")
           .str();
   switch (Site.Why) {
   case SetPcRefusal::NotARegisterPair:
@@ -86,7 +86,7 @@ static Error refuseSetPc(RaiseContext &Ctx, const DecodedInst &Di,
   case SetPcRefusal::TargetNotAnInstruction:
     return unsupported(Ctx, Di,
                        (Twine("reaches source offset 0x") +
-                        Twine::utohexstr(Site.Detail) +
+                        Twine::utohexstr(Site.Subject) +
                         ", which no decoded instruction starts at")
                            .str());
   }

@@ -250,11 +250,12 @@ using TransferTargets = DenseMap<uint64_t, DenseSet<uint64_t>>;
 // Work out where every register-indirect transfer in `Insts` leads, splitting
 // the walk at `WalkBlockStarts` and drawing the edges out of a transfer from
 // `KnownTargets`. `InstOffsets` holds the offset of every decoded instruction.
-// `Insts` must not be empty.
+// Control enters at `EntryOffset`, which must lead one of the blocks. `Insts`
+// must not be empty.
 Expected<SetPcAnalysis> classifyAgainstBlockStarts(
     ArrayRef<DecodedInst> Insts, const DenseSet<uint64_t> &WalkBlockStarts,
     const DenseSet<uint64_t> &InstOffsets, const TransferTargets &KnownTargets,
-    const MCRegisterInfo &MRI) {
+    uint64_t EntryOffset, const MCRegisterInfo &MRI) {
   assert(!Insts.empty() && "the walk needs at least one instruction to split");
   assert(Insts.size() <= std::numeric_limits<unsigned>::max() &&
          "instruction and block indices are tracked as unsigned");
@@ -557,9 +558,14 @@ Expected<SetPcAnalysis> classifyAgainstBlockStarts(
   // Run the forward dataflow to a fixpoint. The lattice is bounded: a register
   // pair holds at most MaxSetPcTargets offsets before it goes to the top, and a
   // join only ever moves a value up, so the worklist runs dry.
-  Blocks[0].Reachable = true;
+  //
+  // Control enters at the entry block, which need not be the lowest-addressed
+  // one: a callee followed into the decode may sit below its caller.
+  assert(BlockOf.contains(EntryOffset) && "the entry offset leads a block");
+  unsigned EntryBlock = BlockOf.at(EntryOffset);
+  Blocks[EntryBlock].Reachable = true;
   SetVector<unsigned> Worklist;
-  Worklist.insert(0);
+  Worklist.insert(EntryBlock);
   while (!Worklist.empty()) {
     unsigned I = Worklist.pop_back_val();
 
@@ -580,8 +586,8 @@ Expected<SetPcAnalysis> classifyAgainstBlockStarts(
   // what the paths into the block leave there is what the transfer reads.
   for (const DeferredSite &Site : Deferred) {
     const Block &Blk = Blocks[Site.BlockIndex];
-    auto Refuse = [&](SetPcRefusal Why, uint64_t Detail) {
-      Result.Sites[Site.Offset] = SetPcUnresolvable{Why, Detail};
+    auto Refuse = [&](SetPcRefusal Why, uint64_t Subject) {
+      Result.Sites[Site.Offset] = SetPcUnresolvable{Why, Subject};
     };
 
     if (!Blk.Reachable) {
@@ -629,7 +635,7 @@ Expected<SetPcAnalysis> classifyAgainstBlockStarts(
 
 Expected<SetPcAnalysis> analyzeSetPc(ArrayRef<DecodedInst> Insts,
                                      const std::set<uint64_t> &BlockStarts,
-                                     const MCState &Mc) {
+                                     uint64_t EntryOffset, const MCState &Mc) {
   SetPcAnalysis Result;
   if (Insts.empty())
     return Result;
@@ -648,6 +654,8 @@ Expected<SetPcAnalysis> analyzeSetPc(ArrayRef<DecodedInst> Insts,
   // transfer reads exactly the state that the instructions before it left
   // behind.
   DenseSet<uint64_t> WalkBlockStarts(llvm::from_range, BlockStarts);
+  // Control enters here, so this leads a block however the decode was split.
+  WalkBlockStarts.insert(EntryOffset);
   for (const DecodedInst &Di : Insts) {
     if (!isRegisterIndirectTransfer(Di.CanonOp))
       continue;
@@ -678,8 +686,9 @@ Expected<SetPcAnalysis> analyzeSetPc(ArrayRef<DecodedInst> Insts,
           inconvertibleErrorCode(),
           "program-counter analysis did not settle in %zu rounds", MaxRounds);
 
-    Expected<SetPcAnalysis> Classified = classifyAgainstBlockStarts(
-        Insts, WalkBlockStarts, InstOffsets, KnownTargets, *Mc.RegInfo);
+    Expected<SetPcAnalysis> Classified =
+        classifyAgainstBlockStarts(Insts, WalkBlockStarts, InstOffsets,
+                                   KnownTargets, EntryOffset, *Mc.RegInfo);
     if (!Classified)
       return Classified.takeError();
 

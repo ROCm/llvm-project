@@ -69,10 +69,12 @@
 
 #include <cassert>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 using namespace llvm;
 
@@ -322,11 +324,59 @@ Expected<RaiseEnvironment> RaiseEnvironment::create(StringRef SourceIsa,
   return Env;
 }
 
+// A half-open range of text offsets the decode has read.
+using Extent = std::pair<uint64_t, uint64_t>;
+
+static bool contains(ArrayRef<Extent> Extents, uint64_t Offset) {
+  return any_of(Extents, [&](const Extent &E) {
+    return Offset >= E.first && Offset < E.second;
+  });
+}
+
+// The function symbol extent of `Extents` that covers `Offset`, or null when
+// none of them does.
+static const KernelSymbolExtent *
+findFunctionExtent(ArrayRef<KernelSymbolExtent> Extents, uint64_t Offset) {
+  const KernelSymbolExtent *Found =
+      find_if(Extents, [Offset](const KernelSymbolExtent &E) {
+        return Offset >= E.Offset && Offset < E.Offset + E.Size;
+      });
+  return Found == Extents.end() ? nullptr : Found;
+}
+
+// Fold a second decode into `Base`, keeping the instructions in source order.
+// The two are decoded from disjoint extents, so neither carries an instruction
+// the other already has.
+static void mergeDecoded(DecodeResult &Base, DecodeResult &&Extra) {
+  llvm::move(Extra.Insts, std::back_inserter(Base.Insts));
+  sort(Base.Insts, [](const DecodedInst &A, const DecodedInst &B) {
+    return A.Offset < B.Offset;
+  });
+  Base.BlockStarts.insert(Extra.BlockStarts.begin(), Extra.BlockStarts.end());
+}
+
+// The source offsets `SetPc` refused a transfer for because no decoded
+// instruction starts there, ascending and distinct.
+static SmallVector<uint64_t> unstartedTargets(const SetPcAnalysis &SetPc) {
+  SmallVector<uint64_t> Targets;
+  for (const SetPcSite &Site : make_second_range(SetPc.Sites)) {
+    const SetPcUnresolvable *Refused = std::get_if<SetPcUnresolvable>(&Site);
+    if (Refused && Refused->Why == SetPcRefusal::TargetNotAnInstruction)
+      Targets.push_back(Refused->Subject);
+  }
+  // `Sites` is a DenseMap, so sorting is what keeps a raise from depending on
+  // the order its buckets happen to be walked in.
+  sort(Targets);
+  Targets.erase(llvm::unique(Targets), Targets.end());
+  return Targets;
+}
+
 // Raise one kernel into `M`. Everything this allocates -- the projection, the
 // builder, the register file behind the context -- describes that one kernel
 // and dies with the call; only the emitted function outlives it.
 static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
-                         const TextSection &Text, const KernelRequest &Kernel) {
+                         const TextSection &Text, const KernelRequest &Kernel,
+                         ArrayRef<KernelSymbolExtent> FunctionExtents) {
   const KernelMeta &Meta = Kernel.Meta;
   Expected<DecodeResult> Decoded = decodeKernel(
       Env.Source.MC, Env.OpcMap, Text.Bytes, Kernel.StartOffset,
@@ -334,14 +384,62 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   if (!Decoded)
     return Decoded.takeError();
 
-  // A jump through a register names no offset that the decode can follow, so
-  // the blocks it leads to are only known once the analysis has worked out the
-  // values behind them. Merging those offsets here, before any block is made,
-  // lets the handler find the block that its jump targets.
-  Expected<SetPcAnalysis> SetPc =
-      analyzeSetPc(Decoded->Insts, Decoded->BlockStarts, Env.Source.MC);
-  if (!SetPc)
-    return SetPc.takeError();
+  // Caught here rather than at the terminator check below, which the branch
+  // into the starting block satisfies without anything having been raised.
+  if (Decoded->Insts.empty())
+    return RaiseFailure::general(RaiseFailureReason::UnterminatedKernelExtent,
+                                 "kernel extent holds no instruction");
+
+  // A jump through a register names no offset the decode could follow, so the
+  // code it reaches may be code no decode has read: a call may leave the
+  // kernel entirely, for an outlined helper the decode never saw. Decoding
+  // that helper can reveal further such jumps, so it asks again until nothing
+  // new turns up.
+  SmallVector<Extent> Covered{{Kernel.StartOffset, Kernel.EndOffset == 0
+                                                       ? Text.Bytes.size()
+                                                       : Kernel.EndOffset}};
+  std::optional<SetPcAnalysis> SetPc;
+  for (;;) {
+    Expected<SetPcAnalysis> Analyzed =
+        analyzeSetPc(Decoded->Insts, Decoded->BlockStarts, Kernel.StartOffset,
+                     Env.Source.MC);
+    if (!Analyzed)
+      return Analyzed.takeError();
+    SetPc = std::move(*Analyzed);
+
+    bool Followed = false;
+    for (uint64_t Target : unstartedTargets(*SetPc)) {
+      // A target left undecoded keeps the refusal the analysis recorded for
+      // the transfer reaching it, which `raiseInst` below reports at that
+      // instruction. Decoding either kind would not lift the refusal: an
+      // offset already covered was read straight through, so landing on no
+      // instruction there means landing inside one, and a target no function
+      // symbol covers has no extent to decode.
+      if (contains(Covered, Target))
+        continue;
+      const KernelSymbolExtent *Callee =
+          findFunctionExtent(FunctionExtents, Target);
+      if (!Callee)
+        continue;
+
+      // The callee is decoded whole and from its own entry rather than from
+      // the offset that reached it, so its block starts are the ones its own
+      // code implies.
+      Expected<DecodeResult> CalleeDecoded =
+          decodeKernel(Env.Source.MC, Env.OpcMap, Text.Bytes, Callee->Offset,
+                       Callee->Offset + Callee->Size);
+      if (!CalleeDecoded)
+        return CalleeDecoded.takeError();
+      Covered.push_back({Callee->Offset, Callee->Offset + Callee->Size});
+      mergeDecoded(*Decoded, std::move(*CalleeDecoded));
+      Followed = true;
+    }
+    if (!Followed)
+      break;
+  }
+
+  // Merging the block starts here, before any block is made, is what lets the
+  // handler find the block its jump targets.
   Decoded->BlockStarts.insert(SetPc->ExtraBlockStarts.begin(),
                               SetPc->ExtraBlockStarts.end());
 
@@ -374,6 +472,11 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   // give the entry block a predecessor, which LLVM does not allow.
   for (uint64_t Start : Decoded->BlockStarts)
     Ctx->defineBB(Start, BasicBlock::Create(C, formatv("bb_{0:x}", Start), F));
+
+  // A followed callee can sit anywhere in the text section, the kernel's own
+  // entry included, so where the raise starts is named rather than left to be
+  // whichever block the first raised instruction leads.
+  B.CreateBr(Ctx->lookupBB(Kernel.StartOffset));
 
   for (const DecodedInst &Di : Decoded->Insts) {
     BasicBlock *Open = B.GetInsertBlock();
@@ -417,7 +520,8 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
 
 Expected<RaiseResult> raiseToIR(const TextSection &Text, StringRef SourceIsa,
                                 StringRef TargetIsa,
-                                ArrayRef<KernelRequest> Kernels) {
+                                ArrayRef<KernelRequest> Kernels,
+                                ArrayRef<KernelSymbolExtent> FunctionExtents) {
   Expected<RaiseEnvironment> Env =
       RaiseEnvironment::create(SourceIsa, TargetIsa);
   if (!Env)
@@ -448,7 +552,7 @@ Expected<RaiseResult> raiseToIR(const TextSection &Text, StringRef SourceIsa,
   // point that knows which kernel of the batch is being raised, so the name and
   // the ISA pair are attached here.
   for (const KernelRequest &Kernel : Kernels)
-    if (Error Err = raiseKernel(*Env, M, Text, Kernel))
+    if (Error Err = raiseKernel(*Env, M, Text, Kernel, FunctionExtents))
       return RaiseFailure::withOrigin(std::move(Err), Kernel.Name,
                                       Env->Source.Cpu, Env->Target.Cpu);
 

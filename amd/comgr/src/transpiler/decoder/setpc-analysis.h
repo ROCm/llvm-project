@@ -54,10 +54,10 @@ struct SetPcResolved {
 // Nothing the analysis models says where control goes.
 struct SetPcUnresolvable {
   SetPcRefusal Why;
-  // What the refusal speaks about: the low register of the source pair for the
+  // What the refusal is about: the low register of the source pair for the
   // refusals that name a pair, and the computed source offset for
   // TargetNotAnInstruction. NotARegisterPair names nothing and leaves it zero.
-  uint64_t Detail;
+  uint64_t Subject;
 };
 
 // What one register-indirect control transfer was found to do. A site is one
@@ -92,9 +92,12 @@ struct SetPcAnalysis {
 // `BlockStarts` is the block-start set of the same decode. It is read, not
 // written: the offsets contributed by the transfers are reported separately so
 // that the caller can order the merge against the rest of its decode.
+// `EntryOffset` is where control enters, which need not be the lowest offset in
+// `Insts`: a callee followed into the decode may sit below its caller.
 llvm::Expected<SetPcAnalysis>
 analyzeSetPc(llvm::ArrayRef<DecodedInst> Insts,
-             const std::set<uint64_t> &BlockStarts, const MCState &Mc);
+             const std::set<uint64_t> &BlockStarts, uint64_t EntryOffset,
+             const MCState &Mc);
 
 } // namespace COMGR::transpiler
 
