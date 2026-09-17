@@ -326,10 +326,12 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   // blocks such a jump leads to are only known once the values behind them
   // have been worked out. Merging them here, before any block is made, is what
   // lets the handler find the block its jump targets.
-  SetPcAnalysis SetPc =
+  Expected<SetPcAnalysis> SetPc =
       analyzeSetPc(Decoded->Insts, Decoded->BlockStarts, Env.Source.MC);
-  Decoded->BlockStarts.insert(SetPc.ExtraBlockStarts.begin(),
-                              SetPc.ExtraBlockStarts.end());
+  if (!SetPc)
+    return SetPc.takeError();
+  Decoded->BlockStarts.insert(SetPc->ExtraBlockStarts.begin(),
+                              SetPc->ExtraBlockStarts.end());
 
   LLVMContext &C = M.getContext();
 
@@ -347,7 +349,7 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   IRBuilder<> B(Entry);
 
   Expected<RaiseContext> Ctx = RaiseContext::create(
-      B, Projection, Env.Source.MC, SetPc, Meta, Text.Bytes, Text.Address,
+      B, Projection, Env.Source.MC, *SetPc, Meta, Text.Bytes, Text.Address,
       Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset);
   if (!Ctx)
     return Ctx.takeError();
