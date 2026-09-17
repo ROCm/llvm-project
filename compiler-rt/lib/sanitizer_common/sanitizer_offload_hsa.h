@@ -35,13 +35,13 @@
   X(hsa_signal_store_screlease)           \
   X(hsa_signal_wait_scacquire)
 
-#if defined(SANITIZER_AMDGPU) && SANITIZER_AMDGPU &&                           \
+#if defined(SANITIZER_AMDHSA) && SANITIZER_AMDHSA && \
     __has_include(<hsa.h>) && __has_include(<hsa_ext_amd.h>) &&              \
     __has_include(<hsa_ven_amd_loader.h>)
-#include <hsa.h>
-#include <hsa_ext_amd.h>
-#include <hsa_ven_amd_loader.h>
-#define SANITIZER_USE_SYSTEM_HSA
+#  include <hsa.h>
+#  include <hsa_ext_amd.h>
+#  include <hsa_ven_amd_loader.h>
+#  define SANITIZER_USE_SYSTEM_HSA
 #endif
 
 extern "C" {

@@ -756,7 +756,7 @@ struct AMDGPUDeviceImageTy : public DeviceImageTy {
 private:
   /// The executable loaded on the agent.
   hsa_executable_t Executable;
-#if SANITIZER_AMDGPU
+#if SANITIZER_AMDHSA
   hsa_code_object_reader_t CodeObjectReader;
 #endif
   StringMap<offloading::amdgpu::AMDGPUKernelMetaData> KernelInfoMap;
