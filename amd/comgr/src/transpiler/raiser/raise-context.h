@@ -11,6 +11,7 @@
 
 #include "transpiler/common/kernel-meta.h"
 #include "transpiler/decoder/mc-state.h"
+#include "transpiler/decoder/setpc-analysis.h"
 #include "transpiler/loader/code-object-utils.h"
 #include "transpiler/raiser/register-state.h"
 #include "transpiler/raiser/wave-projection.h"
@@ -35,7 +36,7 @@ public:
   // the metadata disagree on the user-SGPR layout.
   static llvm::Expected<RaiseContext>
   create(llvm::IRBuilder<> &B, const WaveProjection &Projection,
-         const MCState &MC, const KernelMeta &Meta,
+         const MCState &MC, const SetPcAnalysis &SetPc, const KernelMeta &Meta,
          llvm::ArrayRef<uint8_t> SourceTextBytes,
          uint64_t SourceTextBaseAddress,
          llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
@@ -48,6 +49,13 @@ public:
   const WaveProjection &Projection;
   // MC layer for the source ISA, shared by every kernel in the code object.
   const MCState &MC;
+
+  // Where the source instruction at Offset transfers control, or null when it
+  // makes no register-indirect transfer.
+  const SetPcSite *setPcSite(uint64_t Offset) const {
+    auto It = SetPc.Sites.find(Offset);
+    return It == SetPc.Sites.end() ? nullptr : &It->second;
+  }
 
   // Source architectural registers and the operand reads and writes that
   // resolve through them.
@@ -106,8 +114,8 @@ public:
 
 private:
   RaiseContext(llvm::IRBuilder<> &B, const WaveProjection &Projection,
-               const MCState &MC, RegisterState Registers,
-               llvm::ArrayRef<uint8_t> SourceTextBytes,
+               const MCState &MC, const SetPcAnalysis &SetPc,
+               RegisterState Registers, llvm::ArrayRef<uint8_t> SourceTextBytes,
                uint64_t SourceTextBaseAddress,
                llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
                uint64_t KernelStartOffset, uint64_t KernelEndOffset,
@@ -115,6 +123,8 @@ private:
                unsigned SourceFloatRoundMode16_64, bool SourceDx10Clamp,
                bool SourceIeeeMode);
 
+  // Where the kernel's register-indirect control transfers lead.
+  const SetPcAnalysis &SetPc;
   // Source architectural registers, allocated in the entry block.
   RegisterState Registers;
   // Block raised from each source instruction offset that starts one.
