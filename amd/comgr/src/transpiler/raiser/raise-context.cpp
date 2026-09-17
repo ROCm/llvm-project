@@ -23,6 +23,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 
+#include <cassert>
 #include <utility>
 
 using namespace llvm;
@@ -81,8 +82,13 @@ RaiseContext::RaiseContext(
       SourceFp16Overflow(SourceFp16Overflow), SourceDx10Clamp(SourceDx10Clamp),
       SourceIeeeMode(SourceIeeeMode) {}
 
-Error RaiseContext::validateF32Environment(const DecodedInst &Di) const {
-  if (!Projection.TargetSTI.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
+Error RaiseContext::validateFPEnvironment(const DecodedInst &Di,
+                                          Type *Ty) const {
+  assert((Ty->isHalfTy() || Ty->isFloatTy() || Ty->isDoubleTy()) &&
+         "unsupported floating-point type");
+
+  if (Ty->isFloatTy() &&
+      !Projection.TargetSTI.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
     if (!SourceDx10Clamp) {
       return RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedFloatingPointMode,
@@ -102,20 +108,7 @@ Error RaiseContext::validateF32Environment(const DecodedInst &Di) const {
     }
   }
 
-  if (SourceFloatRoundMode32 != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
-    return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedFloatingPointMode,
-        strippedMnemonic(MC, Di.Inst), Di.Offset,
-        formatName(Di.TargetSpecificFlags),
-        Twine("f32 rounding mode ") + Twine(SourceFloatRoundMode32) +
-            " is unsupported");
-  }
-
-  return Error::success();
-}
-
-Error RaiseContext::validateF16Environment(const DecodedInst &Di) const {
-  if (SourceFp16Overflow) {
+  if (Ty->isHalfTy() && SourceFp16Overflow) {
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedFloatingPointMode,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
@@ -123,25 +116,17 @@ Error RaiseContext::validateF16Environment(const DecodedInst &Di) const {
         "FP16 overflow saturation is unsupported");
   }
 
-  if (SourceFloatRoundMode16_64 != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
+  unsigned RoundMode =
+      Ty->isFloatTy() ? SourceFloatRoundMode32 : SourceFloatRoundMode16_64;
+  if (RoundMode != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
+    StringRef TypeName = Ty->isHalfTy()    ? "f16"
+                         : Ty->isFloatTy() ? "f32"
+                                           : "f64";
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedFloatingPointMode,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags),
-        Twine("f16 rounding mode ") + Twine(SourceFloatRoundMode16_64) +
-            " is unsupported");
-  }
-
-  return Error::success();
-}
-
-Error RaiseContext::validateF64Environment(const DecodedInst &Di) const {
-  if (SourceFloatRoundMode16_64 != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
-    return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedFloatingPointMode,
-        strippedMnemonic(MC, Di.Inst), Di.Offset,
-        formatName(Di.TargetSpecificFlags),
-        Twine("f64 rounding mode ") + Twine(SourceFloatRoundMode16_64) +
+        Twine(TypeName) + " rounding mode " + Twine(RoundMode) +
             " is unsupported");
   }
 

@@ -39,7 +39,7 @@ static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
                        "expected one register destination and two sources");
   }
 
-  if (Error Err = Ctx.validateF32Environment(Di)) {
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy())) {
     return Err;
   }
 

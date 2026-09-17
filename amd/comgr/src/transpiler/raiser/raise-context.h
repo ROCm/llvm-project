@@ -53,15 +53,10 @@ public:
   // resolve through them.
   RegisterState &registers() { return Registers; }
 
-  /// Return an error unless the source f32 environment can be preserved for
-  /// this instruction.
-  llvm::Error validateF32Environment(const DecodedInst &Di) const;
-  /// Return an error unless the source f16 environment can be preserved for
-  /// this instruction.
-  llvm::Error validateF16Environment(const DecodedInst &Di) const;
-  /// Return an error unless the source f64 environment can be preserved for
-  /// this instruction.
-  llvm::Error validateF64Environment(const DecodedInst &Di) const;
+  /// Return an error unless the source floating-point environment for Ty can
+  /// be preserved for this instruction.
+  llvm::Error validateFPEnvironment(const DecodedInst &Di,
+                                    llvm::Type *Ty) const;
 
   // Source text section, and the address the source code object loads it at.
   // PC-relative literals are materialized by reading out of these.

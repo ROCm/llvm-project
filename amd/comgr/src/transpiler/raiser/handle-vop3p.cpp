@@ -117,12 +117,8 @@ Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
           Op.nSrcs() == 2) &&
          "decoded packed float instruction has unexpected operands");
 
-  if (ElementType->isFloatTy()) {
-    if (Error Err = Ctx.validateF32Environment(Di))
-      return Err;
-  } else if (Error Err = Ctx.validateF16Environment(Di)) {
+  if (Error Err = Ctx.validateFPEnvironment(Di, ElementType))
     return Err;
-  }
 
   Expected<bool> Clamp = readClamp(Ctx, Di);
   if (!Clamp)
