@@ -11,6 +11,7 @@
 #include "transpiler/common/kernel-meta.h"
 #include "transpiler/decoder/decoded-inst.h"
 #include "transpiler/decoder/mc-state.h"
+#include "transpiler/decoder/setpc-analysis.h"
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/wave-projection.h"
 
@@ -64,6 +65,7 @@ protected:
     IRBuilder<> B;
     ReplicationProjection Projection;
     Function *Kernel;
+    SetPcAnalysis SetPc;
     std::optional<RaiseContext> Ctx;
 
     explicit ContextEnvironment(const MCState &Mc)
@@ -75,7 +77,7 @@ protected:
               Function::ExternalLinkage, "kernel", Mod)) {
       B.SetInsertPoint(BasicBlock::Create(LLVMCtx, "entry", Kernel));
       Ctx.emplace(cantFail(RaiseContext::create(
-          B, Projection, Mc, KernelMeta(), ArrayRef<uint8_t>(), 0,
+          B, Projection, Mc, SetPc, KernelMeta(), ArrayRef<uint8_t>(), 0,
           ArrayRef<TextSection::ImageSection>(), 0, 0)));
     }
   };

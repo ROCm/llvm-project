@@ -1003,6 +1003,18 @@ RegisterState::lookupSourceImageSgprPairAddr(unsigned BaseIdx) {
   return It->second;
 }
 
+std::optional<bool> RegisterState::takeSourceImageCarry(unsigned BaseIdx,
+                                                        uint64_t Offset) {
+  std::optional<BlockState::SourceImageCarryState> &Pending =
+      blockState().SourceImageCarry;
+  if (!Pending || Pending->PairBaseIdx != BaseIdx ||
+      Pending->NextOffset != Offset)
+    return std::nullopt;
+  bool Carry = Pending->Carry;
+  Pending.reset();
+  return Carry;
+}
+
 bool RegisterState::droppedSourceImageSgprPairAddr(unsigned BaseIdx) {
   if (!SourceImageSgprPairs.contains(BaseIdx) ||
       blockState().SourceImageSgprPairAddrShadow.contains(BaseIdx))

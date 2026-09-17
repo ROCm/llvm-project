@@ -209,6 +209,23 @@ public:
   // the pair names a source address the raise can no longer resolve.
   bool droppedSourceImageSgprPairAddr(unsigned BaseIdx);
 
+  // Record that the low half of a split source code-object address
+  // displacement left carry Carry in SCC for SGPR pair BaseIdx, and that the
+  // high-half add consuming it starts at source offset NextOffset. That offset
+  // is the one directly after the low add, so any instruction placed between
+  // the two takes it and the carry goes unclaimed rather than being read as
+  // still belonging to the pair.
+  void recordSourceImageCarry(unsigned BaseIdx, bool Carry,
+                              uint64_t NextOffset) {
+    blockState().SourceImageCarry =
+        BlockState::SourceImageCarryState{BaseIdx, Carry, NextOffset};
+  }
+
+  // Consume the carry recorded for SGPR pair BaseIdx on behalf of a high-half
+  // add starting at source offset Offset. Return no value when no such carry
+  // is waiting.
+  std::optional<bool> takeSourceImageCarry(unsigned BaseIdx, uint64_t Offset);
+
   // Whether SGPR Idx may hold half of a source code-object address, either
   // because this block recorded one there or because a block that ran before
   // this one may have left one there.
@@ -284,6 +301,16 @@ private:
     llvm::DenseMap<unsigned, WaveMaskEntry> LastSgprWaveMaskI1;
     // Source-image addresses proven for PC-relative literal loads.
     llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
+    // Carry that the low half of a split source code-object address
+    // displacement left in SCC: the SGPR pair it displaces, the carry itself,
+    // and the source offset at which the high-half add that consumes it
+    // starts.
+    struct SourceImageCarryState {
+      unsigned PairBaseIdx;
+      bool Carry;
+      uint64_t NextOffset;
+    };
+    std::optional<SourceImageCarryState> SourceImageCarry;
     // SGPRs this block has written, and which therefore hold what this block
     // put there rather than whatever a predecessor left.
     llvm::DenseSet<unsigned> DefinedSgprs;
