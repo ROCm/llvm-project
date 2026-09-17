@@ -19,7 +19,7 @@
 
 #include "VCSVersion.inc"
 
-#error PPH triage test inner commit 3/4 - intentional clang build break
+#error PPH triage test inner commit 3/4 -- intentional clang build break
 
 namespace clang {
 
