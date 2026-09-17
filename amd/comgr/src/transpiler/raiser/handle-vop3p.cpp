@@ -23,6 +23,9 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
+#include <cassert>
+#include <optional>
+
 using namespace llvm;
 
 namespace COMGR::transpiler {
@@ -46,7 +49,9 @@ Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
 Expected<Value *> readPackedFloatSource(RaiseContext &Ctx,
                                         const DecodedInst &Di,
                                         OperandResolver &Op, unsigned Source,
-                                        Type *ElementType, bool IsF32) {
+                                        Type *ElementType) {
+  assert((ElementType->isHalfTy() || ElementType->isFloatTy()) &&
+         "unsupported packed floating-point element type");
   constexpr unsigned AllowedModifiers = SISrcMods::NEG | SISrcMods::NEG_HI |
                                         SISrcMods::OP_SEL_0 |
                                         SISrcMods::OP_SEL_1;
@@ -57,27 +62,39 @@ Expected<Value *> readPackedFloatSource(RaiseContext &Ctx,
   FixedVectorType *VectorType = FixedVectorType::get(ElementType, 2);
   Value *NaturalLow;
   Value *NaturalHigh;
-  if (IsF32 && Op.isSrcReg(Source)) {
-    Expected<Value *> SourceBits = Op.src64(Source);
-    if (!SourceBits)
-      return SourceBits.takeError();
-    Value *Vector = Ctx.B.CreateBitCast(*SourceBits, VectorType, "pk.src");
-    NaturalLow = Ctx.B.CreateExtractElement(Vector, uint64_t(0), "pk.lo");
-    NaturalHigh = Ctx.B.CreateExtractElement(Vector, uint64_t(1), "pk.hi");
-  } else if (IsF32) {
-    Expected<Value *> SourceBits = Op.src(Source);
-    if (!SourceBits)
-      return SourceBits.takeError();
-    Value *Scalar = Ctx.B.CreateBitCast(*SourceBits, ElementType, "pk.literal");
+  bool IsVectorRegister = false;
+  if (ElementType->isFloatTy()) {
+    Expected<std::optional<ParsedReg>> SourceReg = Op.srcReg(Source);
+    if (!SourceReg)
+      return SourceReg.takeError();
+    if (*SourceReg)
+      IsVectorRegister = (*SourceReg)->RegKind == ParsedReg::VGPR ||
+                         (*SourceReg)->RegKind == ParsedReg::AGPR;
+  }
+
+  Expected<Value *> SourceBits =
+      IsVectorRegister ? Op.src64(Source) : Op.src(Source);
+  if (!SourceBits)
+    return SourceBits.takeError();
+
+  if (ElementType->isFloatTy() && !IsVectorRegister) {
+    // Packed F32 scalar sources provide one value for both result channels.
+    Value *Scalar = Ctx.B.CreateBitCast(*SourceBits, ElementType, "pk.scalar");
     NaturalLow = Scalar;
     NaturalHigh = Scalar;
   } else {
-    Expected<Value *> SourceBits = Op.src(Source);
-    if (!SourceBits)
-      return SourceBits.takeError();
-    Value *Vector = Ctx.B.CreateBitCast(*SourceBits, VectorType, "pk.src");
-    NaturalLow = Ctx.B.CreateExtractElement(Vector, uint64_t(0), "pk.lo");
-    NaturalHigh = Ctx.B.CreateExtractElement(Vector, uint64_t(1), "pk.hi");
+    // Packed F16 sources and F32 vector sources carry both channel values.
+    IntegerType *ElementIntegerType =
+        ElementType->isFloatTy() ? Ctx.B.getInt32Ty() : Ctx.B.getInt16Ty();
+    unsigned ElementBitWidth = ElementIntegerType->getBitWidth();
+    Value *LowBits =
+        Ctx.B.CreateTrunc(*SourceBits, ElementIntegerType, "pk.lo.bits");
+    Value *ShiftedBits =
+        Ctx.B.CreateLShr(*SourceBits, ElementBitWidth, "pk.hi.shifted");
+    Value *HighBits =
+        Ctx.B.CreateTrunc(ShiftedBits, ElementIntegerType, "pk.hi.bits");
+    NaturalLow = Ctx.B.CreateBitCast(LowBits, ElementType, "pk.lo");
+    NaturalHigh = Ctx.B.CreateBitCast(HighBits, ElementType, "pk.hi");
   }
 
   Value *Low = Modifiers & SISrcMods::OP_SEL_0 ? NaturalHigh : NaturalLow;
@@ -88,20 +105,19 @@ Expected<Value *> readPackedFloatSource(RaiseContext &Ctx,
     High = Ctx.B.CreateFNeg(High, "pk.neg.hi");
 
   Value *Result = PoisonValue::get(VectorType);
-  Result = Ctx.B.CreateInsertElement(Result, Low, uint64_t(0), "pk.insert.lo");
-  return Ctx.B.CreateInsertElement(Result, High, uint64_t(1), "pk.insert.hi");
+  Result = Ctx.B.CreateInsertElement(Result, Low, uint64_t{0}, "pk.insert.lo");
+  return Ctx.B.CreateInsertElement(Result, High, 1, "pk.insert.hi");
 }
 
 /// Raise packed floating-point add and multiply instructions.
 Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
-                             OperandResolver &Op, Type *ElementType, bool IsF32,
+                             OperandResolver &Op, Type *ElementType,
                              bool IsAdd) {
-  if (Di.NumDefs != 1 || Di.numOperands() == 0 || !Di.isReg(0) ||
-      Op.nSrcs() != 2)
-    return unsupported(Ctx, Di,
-                       "expected one register destination and two sources");
+  assert((Di.NumDefs == 1 && Di.numOperands() != 0 && Di.isReg(0) &&
+          Op.nSrcs() == 2) &&
+         "decoded packed float instruction has unexpected operands");
 
-  if (IsF32) {
+  if (ElementType->isFloatTy()) {
     if (Error Err = Ctx.validateF32Environment(Di))
       return Err;
   } else if (Error Err = Ctx.validateF16Environment(Di)) {
@@ -116,11 +132,11 @@ Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Destination)
     return Destination.takeError();
   Expected<Value *> Source0 =
-      readPackedFloatSource(Ctx, Di, Op, 0, ElementType, IsF32);
+      readPackedFloatSource(Ctx, Di, Op, 0, ElementType);
   if (!Source0)
     return Source0.takeError();
   Expected<Value *> Source1 =
-      readPackedFloatSource(Ctx, Di, Op, 1, ElementType, IsF32);
+      readPackedFloatSource(Ctx, Di, Op, 1, ElementType);
   if (!Source1)
     return Source1.takeError();
 
@@ -140,7 +156,7 @@ Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
     Result = Ctx.B.CreateCall(Minimum, {Result, One}, "pk.clamp");
   }
 
-  if (IsF32) {
+  if (ElementType->isFloatTy()) {
     Ctx.registers().writeRegVec(*Destination, Result);
   } else {
     Value *Packed = Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty(), "pk.pack");
@@ -156,14 +172,14 @@ Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
   switch (Di.CanonOp) {
   case CanonicalOp::V_PK_ADD_F16:
   case CanonicalOp::V_PK_MUL_F16:
-    return raisePackedFloatBinary(
-        Ctx, Di, Op, Ctx.B.getHalfTy(), /*IsF32=*/false,
-        /*IsAdd=*/Di.CanonOp == CanonicalOp::V_PK_ADD_F16);
+    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getHalfTy(),
+                                  /*IsAdd=*/Di.CanonOp ==
+                                      CanonicalOp::V_PK_ADD_F16);
   case CanonicalOp::V_PK_ADD_F32:
   case CanonicalOp::V_PK_MUL_F32:
-    return raisePackedFloatBinary(
-        Ctx, Di, Op, Ctx.B.getFloatTy(), /*IsF32=*/true,
-        /*IsAdd=*/Di.CanonOp == CanonicalOp::V_PK_ADD_F32);
+    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getFloatTy(),
+                                  /*IsAdd=*/Di.CanonOp ==
+                                      CanonicalOp::V_PK_ADD_F32);
   default:
     return unsupported(Ctx, Di);
   }
