@@ -62,8 +62,8 @@ Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
 /// Reject non-default floating-point output modifiers.
 Error requireDefaultFloatOutputModifiers(RaiseContext &Ctx,
                                          const DecodedInst &Di) {
-  int OmodIndex = COMGR::transpiler::getNamedOperandIdx(
-      Di.Inst.getOpcode(), AMDGPU::OpName::omod);
+  int OmodIndex = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                        AMDGPU::OpName::omod);
   if (OmodIndex >= 0) {
     if (!Di.isImm(OmodIndex))
       return unsupportedInstruction(Ctx, Di, "omod operand is not immediate");
