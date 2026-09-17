@@ -57,6 +57,32 @@ function(comgr_static_link_libraries consumer)
   while(pending)
     list(GET pending 0 dependency)
     list(REMOVE_AT pending 0)
+    # A generator expression can contain a list. Reassemble it before
+    # inspecting it, including any nested expressions in linker flags.
+    while(dependency MATCHES [[\$<]])
+      string(REGEX MATCHALL [[\$<]] opens "${dependency}")
+      string(REGEX MATCHALL [[>]] closes "${dependency}")
+      list(LENGTH opens open_count)
+      list(LENGTH closes close_count)
+      if(open_count EQUAL close_count OR NOT pending)
+        break()
+      endif()
+      list(GET pending 0 fragment)
+      list(REMOVE_AT pending 0)
+      string(APPEND dependency ";${fragment}")
+    endwhile()
+    # LLVMSupport exports these system-only Windows dependencies. Preserve
+    # their conditions, including the optional IntelLLVM linker wrapper.
+    if(dependency MATCHES [[^\$<\$<NOT:\$<LINK_LANGUAGE:Swift>>:(.*)>$]])
+      set(delayload "${CMAKE_MATCH_1}")
+      string(REPLACE
+        "$<$<OR:$<LINK_LANG_AND_ID:C,IntelLLVM>,$<LINK_LANG_AND_ID:CXX,IntelLLVM>,$<LINK_LANG_AND_ID:Fortran,IntelLLVM>>:-Qoption,link,>"
+        "" delayload "${delayload}")
+      if(delayload STREQUAL "delayimp;-delayload:shell32.dll;-delayload:ole32.dll")
+        target_link_libraries(${consumer} PRIVATE "${dependency}")
+        continue()
+      endif()
+    endif()
     if(dependency MATCHES [[^\$<LINK_ONLY:([^<>]+)>$]])
       set(dependency "${CMAKE_MATCH_1}")
     endif()
