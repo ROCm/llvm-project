@@ -90,8 +90,7 @@ uint32_t mapping::getWarpSize() { return __gpu_num_lanes(); }
 
 uint32_t mapping::getMaxTeamThreads(bool IsSPMD) {
   uint32_t BlockSize = mapping::getNumberOfThreadsInBlock();
-  // Generic mode reserves the first warp for the main thread, so those threads
-  // are not available to the team.
+  // Generic mode reserves the first warp for the main thread.
   return BlockSize - (!IsSPMD * mapping::getWarpSize());
 }
 uint32_t mapping::getMaxTeamThreads() {
@@ -174,9 +173,8 @@ __attribute__((noinline)) uint32_t __kmpc_get_hardware_num_blocks() {
   return mapping::getNumberOfBlocksInKernel(0);
 }
 
-// The mode is passed in rather than read from the shared IsSPMDMode, which the
-// initial thread alone writes: the state machine's callers reach this before
-// the barrier that would make that write visible to them.
+// The mode is a parameter because callers reach this before the barrier that
+// would make the shared IsSPMDMode visible to them.
 [[gnu::noinline]] uint32_t __kmpc_get_max_team_threads(int32_t IsSPMD) {
   return mapping::getMaxTeamThreads(IsSPMD);
 }

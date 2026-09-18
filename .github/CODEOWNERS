@@ -17,10 +17,10 @@
 /amd/hipcc/ @david-salinas @lamb-j
 /amd/docs/ @ROCm/rocm-documentation
 
-# HotSwap specific
-/amd/comgr/src/hotswap/ @harsh-amd @ftynse
-/amd/comgr/test-unit/hotswap/ @harsh-amd @ftynse
-/amd/comgr/test-lit/hotswap/ @harsh-amd @ftynse
+# Transpiler specific
+/amd/comgr/src/transpiler/ @harsh-amd @ftynse
+/amd/comgr/test-unit/transpiler/ @harsh-amd @ftynse
+/amd/comgr/test-lit/transpiler/ @harsh-amd @ftynse
 
 /libc/ @llbm/reviewers-libc
 /bolt/ @llvm/reviewers-bolt

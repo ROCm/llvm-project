@@ -30,7 +30,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: users/kzhuravl/main
+          ref: main
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
@@ -45,4 +45,4 @@ jobs:
           UPSTREAM_BRANCH="main"
           git fetch $UPSTREAM_URL $UPSTREAM_BRANCH
           git merge --ff-only FETCH_HEAD
-          git push origin users/kzhuravl/main
+          git push origin main
