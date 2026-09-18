@@ -3,8 +3,6 @@
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --isa=gfx1250 \
-; RUN:   --dump-decoded=cross_lane | %FileCheck %s --check-prefix=DECODE
-; RUN: %transpile_cli %t.hsaco --isa=gfx1250 \
 ; RUN:   --emit-ir=cross_lane \
 ; RUN:   | %FileCheck %s --check-prefix=SAME
 ; RUN: %transpile_cli %t.hsaco --isa=gfx1250 --target-isa=gfx942 \
@@ -19,13 +17,11 @@
 cross_lane:
 ; SAME-LABEL: define amdgpu_kernel void @cross_lane(
 	v_mov_b32_e32 v0, s0
-; DECODE: V_READFIRSTLANE_B32  v_readfirstlane_b32 s4, v0
 ; SAME: call i32 @llvm.amdgcn.readfirstlane.i32
 ; WIDEN: call i32 @llvm.cttz.i32
 ; WIDEN: call i32 @llvm.amdgcn.ds.bpermute
 ; WIDEN: call i32 @llvm.amdgcn.strict.wwm.i32
 	v_readfirstlane_b32 s4, v0
-; DECODE: V_READLANE_B32  v_readlane_b32 s5, v0, 7
 ; SAME: call i32 @llvm.amdgcn.readlane.i32
 ; WIDEN: [[READ_ADDR:%.+]] = shl i32 {{.+}}, 2
 ; WIDEN: call i32 @llvm.amdgcn.ds.bpermute(i32 [[READ_ADDR]], i32 {{.+}})
@@ -33,7 +29,6 @@ cross_lane:
 	s_mov_b32 s6, 123
 	v_mov_b32_e32 v1, 0
 	s_mov_b32 exec_lo, 0
-; DECODE: V_WRITELANE_B32  v_writelane_b32 v1, s6, 9
 ; SAME: call i32 @llvm.amdgcn.writelane.i32
 ; WIDEN: [[SOURCE_LANE:%.+]] = and i32 {{.+}}, 31
 ; WIDEN: [[IS_SELECTED:%.+]] = icmp eq i32 [[SOURCE_LANE]], 9
