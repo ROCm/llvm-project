@@ -5,6 +5,8 @@
 
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_loads_gfx1250 | %FileCheck %s --check-prefix=IR
+; RUN: %transpile_cli %t.hsaco --dump-decoded=global_loads_gfx1250 \
+; RUN:   | %FileCheck %s --check-prefix=DECODE
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_load_scaled_offset 2>&1 | \
 ; RUN:   %FileCheck %s --check-prefix=SCALED-OFFSET
@@ -36,6 +38,30 @@ global_loads_gfx1250:
 ; IR: [[POINTER1:%.+]] = inttoptr i64 [[FROZEN1]] to ptr addrspace(1)
 ; IR: load i32, ptr addrspace(1) [[POINTER1]], align 4
 	global_load_b32 v1, v0, s[0:1]
+
+; DECODE: GLOBAL_LOAD_B64
+; IR: load i64, ptr addrspace(1) {{%.+}}, align 4
+	global_load_b64 v[4:5], v[2:3], off
+
+; DECODE: GLOBAL_LOAD_B96
+; IR: load <3 x i32>, ptr addrspace(1) {{%.+}}, align 4
+	global_load_b96 v[8:10], v0, s[0:1]
+
+; DECODE: GLOBAL_LOAD_B128
+; IR: load <4 x i32>, ptr addrspace(1) {{%.+}}, align 4
+	global_load_b128 v[12:15], v[2:3], off offset:4
+
+; DECODE: GLOBAL_STORE_B64
+; IR: store i64 {{.+}}, ptr addrspace(1) {{%.+}}, align 4
+	global_store_b64 v[2:3], v[4:5], off
+
+; DECODE: GLOBAL_STORE_B96
+; IR: store <3 x i32> {{.+}}, ptr addrspace(1) {{%.+}}, align 4
+	global_store_b96 v0, v[8:10], s[0:1]
+
+; DECODE: GLOBAL_STORE_B128
+; IR: store <4 x i32> {{.+}}, ptr addrspace(1) {{%.+}}, align 4
+	global_store_b128 v[2:3], v[12:15], off offset:4
 ; IR: ret void
 	s_endpgm
 
@@ -44,7 +70,7 @@ global_loads_gfx1250:
 	.type	global_load_scaled_offset,@function
 global_load_scaled_offset:
 ; SCALED-OFFSET: scaling the per-lane offset by the access size is not modeled
-	global_load_b32 v1, v0, s[0:1] offset:32 scale_offset
+	global_load_b128 v[4:7], v0, s[0:1] offset:32 scale_offset
 	s_endpgm
 
 	.section	.rodata,"a",@progbits
@@ -52,13 +78,13 @@ global_load_scaled_offset:
 	.amdhsa_kernel global_loads_gfx1250
 		.amdhsa_kernarg_size 0
 		.amdhsa_wavefront_size32 1
-		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_vgpr 16
 		.amdhsa_next_free_sgpr 2
 	.end_amdhsa_kernel
 	.amdhsa_kernel global_load_scaled_offset
 		.amdhsa_kernarg_size 0
 		.amdhsa_wavefront_size32 1
-		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_vgpr 8
 		.amdhsa_next_free_sgpr 2
 	.end_amdhsa_kernel
 	.text
@@ -74,7 +100,7 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     2
     .symbol:         global_loads_gfx1250.kd
-    .vgpr_count:     4
+    .vgpr_count:     16
     .wavefront_size: 32
   - .args: []
     .group_segment_fixed_size: 0
@@ -85,7 +111,7 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     2
     .symbol:         global_load_scaled_offset.kd
-    .vgpr_count:     4
+    .vgpr_count:     8
     .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
