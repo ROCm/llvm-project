@@ -236,6 +236,21 @@ defm XNACKOnOffModes : AMDGPUSubtargetFeature<"xnack-on-off-modes",
   InlineIgnore
 >;
 
+// XNACK is disabled if SH_MEM_CONFIG.ADDRESS_MODE = GPUVM on chips that support
+// XNACK. The current default kernel driver setting is:
+// - graphics ring: XNACK disabled
+// - compute ring: XNACK enabled
+//
+// If XNACK is enabled, the VMEM latency can be worse.
+// If XNACK is disabled, the 2 SGPRs can be used for general purposes.
+def FeatureXNACK : SubtargetFeature<"xnack",
+  "EnableXNACK",
+  "true",
+  "Enable XNACK support",
+  [FeatureSupportsXNACK],
+  InlineIgnore
+>;
+
 // Whether the hardware supports WGP (work-group processor) execution
 // mode, as opposed to the per-kernel CU-mode selection
 // (FeatureCuMode).
@@ -1172,6 +1187,12 @@ def FeatureSupportsSRAMECC : SubtargetFeature<"sramecc-support",
   "true",
   "Hardware supports SRAMECC",
   [], InlineIgnore
+>;
+
+def FeatureSRAMECC : SubtargetFeature<"sramecc",
+  "EnableSRAMECC",
+  "true",
+  "Enable SRAMECC"
 >;
 
 defm NoSdstCMPX : AMDGPUSubtargetFeature<"no-sdst-cmpx",
@@ -2448,6 +2469,7 @@ def FeatureISAVersion12_50_Common : FeatureSet<
    FeatureSetPrioIncWgInst,
    FeatureSWakeupBarrier,
    Feature45BitNumRecordsBufferResource,
+   FeatureXNACK,
    FeatureClusters,
    FeatureD16Writes32BitVgpr,
    FeatureMcastLoadInsts,
@@ -2568,6 +2590,7 @@ def FeatureISAVersion12_5_Generic: FeatureSet<
    FeatureBlock16ConversionScaleInsts,
    FeatureSetregVGPRMSBFixup,
    FeatureRequiresCOV6,
+   FeatureSupportsXNACK,
    FeatureGFX125xLowestRateWMMA,
    FeatureTransCoexecutionHazard,
    FeatureWMMACoexecutionHazards,
@@ -3029,7 +3052,7 @@ def HasUnrestrictedSOffset : Predicate<"!Subtarget->hasRestrictedSOffset()">,
 
 def D16PreservesUnusedBits :
   Predicate<"Subtarget->d16PreservesUnusedBits()">,
-  AssemblerPredicate<(all_of FeatureGFX9Insts, (not FeatureSupportsSRAMECC))>;
+  AssemblerPredicate<(all_of FeatureGFX9Insts, (not FeatureSRAMECC))>;
 
 def LDSRequiresM0Init : Predicate<"Subtarget->ldsRequiresM0Init()">;
 def NotLDSRequiresM0Init : Predicate<"!Subtarget->ldsRequiresM0Init()">;
