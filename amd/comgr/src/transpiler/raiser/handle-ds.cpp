@@ -34,7 +34,7 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 
-// libLLVM.so does not export AMDGPU::isGFX1250.
+/// Return whether \p STI describes a gfx1250 target.
 static bool isGFX1250(const MCSubtargetInfo &STI) {
   return STI.getFeatureBits()[AMDGPU::FeatureGFX1250Insts] &&
          !STI.getFeatureBits()[AMDGPU::FeatureGFX13];
