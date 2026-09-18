@@ -56,6 +56,7 @@ amd_comgr_status_t SPIRVCommand::execute(raw_ostream &LogS) {
   Opts.enableAllExtensions();
   Opts.setDesiredBIsRepresentation(SPIRV::BIsRepresentation::OpenCL20);
   Opts.setPreserveAuxData(true);
+  Opts.setSPIRVTargetTriple("amdgcn-amd-amdhsa");
 
   if (!OffloadArch.empty())
     Opts.setAMDGCNSPIRVOffloadArch(OffloadArch);
