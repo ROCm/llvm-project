@@ -276,12 +276,10 @@ using TransferTargets = DenseMap<uint64_t, DenseSet<uint64_t>>;
 // Classify every transfer in `Insts` into `Result`, splitting the walk at
 // `WalkBlockStarts` and drawing the edges out of a transfer from
 // `KnownTargets`. `InstOffsets` holds the offset of every decoded instruction.
-Error classifyAgainstBlockStarts(ArrayRef<DecodedInst> Insts,
-                                 const std::set<uint64_t> &WalkBlockStarts,
-                                 const DenseSet<uint64_t> &InstOffsets,
-                                 const TransferTargets &KnownTargets,
-                                 const MCRegisterInfo &MRI,
-                                 SetPcAnalysis &Result) {
+Error classifyAgainstBlockStarts(
+    ArrayRef<DecodedInst> Insts, const std::set<uint64_t> &WalkBlockStarts,
+    const DenseSet<uint64_t> &InstOffsets, const TransferTargets &KnownTargets,
+    uint64_t EntryOffset, const MCRegisterInfo &MRI, SetPcAnalysis &Result) {
   // One recovered block, in source order.
   struct Block {
     uint64_t Start = 0;
@@ -338,6 +336,7 @@ Error classifyAgainstBlockStarts(ArrayRef<DecodedInst> Insts,
            ", which no decoded instruction starts at")
               .str();
       Result.Sites[Di.Offset] = std::move(Site);
+      Result.UndecodedTargets.insert(Chain->Value);
       return;
     }
 
@@ -527,9 +526,15 @@ Error classifyAgainstBlockStarts(ArrayRef<DecodedInst> Insts,
   // Forward dataflow to a fixpoint. The lattice is bounded: a pair holds at
   // most kMaxSetPcTargets offsets and one incomplete bit, and a join only ever
   // adds to that, so the worklist runs dry.
-  Blocks[0].Reachable = true;
-  SmallVector<unsigned> Worklist{0};
-  DenseSet<unsigned> Queued{0};
+  //
+  // Control enters at the entry block, which need not be the lowest-addressed
+  // one: a callee followed into the decode may sit below its caller.
+  auto Entry = BlockOf.find(EntryOffset);
+  assert(Entry != BlockOf.end() && "the entry offset leads a block");
+  unsigned EntryIdx = Entry->second;
+  Blocks[EntryIdx].Reachable = true;
+  SmallVector<unsigned> Worklist{EntryIdx};
+  DenseSet<unsigned> Queued{EntryIdx};
   while (!Worklist.empty()) {
     unsigned I = Worklist.pop_back_val();
     Queued.erase(I);
@@ -600,6 +605,9 @@ Error classifyAgainstBlockStarts(ArrayRef<DecodedInst> Insts,
            ", which no decoded instruction starts at")
               .str();
       Result.Sites[Site.Offset] = std::move(Classified);
+      for (uint64_t Value : Facts->Values)
+        if (!InstOffsets.contains(Value))
+          Result.UndecodedTargets.insert(Value);
       continue;
     }
 
@@ -621,7 +629,7 @@ Error classifyAgainstBlockStarts(ArrayRef<DecodedInst> Insts,
 
 Expected<SetPcAnalysis> analyzeSetPc(ArrayRef<DecodedInst> Insts,
                                      const std::set<uint64_t> &BlockStarts,
-                                     const MCState &Mc) {
+                                     uint64_t EntryOffset, const MCState &Mc) {
   SetPcAnalysis Result;
   if (Insts.empty())
     return Result;
@@ -640,6 +648,8 @@ Expected<SetPcAnalysis> analyzeSetPc(ArrayRef<DecodedInst> Insts,
   // of its block, so the chain state a transfer reads is the state of the
   // instructions before it and of nothing else.
   std::set<uint64_t> WalkBlockStarts(BlockStarts.begin(), BlockStarts.end());
+  // Control enters here, so this leads a block however the decode was split.
+  WalkBlockStarts.insert(EntryOffset);
   for (const DecodedInst &Di : Insts) {
     if (!isRegisterIndirectTransfer(Di.CanonOp))
       continue;
@@ -658,9 +668,10 @@ Expected<SetPcAnalysis> analyzeSetPc(ArrayRef<DecodedInst> Insts,
   TransferTargets KnownTargets;
   for (;;) {
     Result.Sites.clear();
-    if (Error E =
-            classifyAgainstBlockStarts(Insts, WalkBlockStarts, InstOffsets,
-                                       KnownTargets, *Mc.RegInfo, Result))
+    Result.UndecodedTargets.clear();
+    if (Error E = classifyAgainstBlockStarts(Insts, WalkBlockStarts,
+                                             InstOffsets, KnownTargets,
+                                             EntryOffset, *Mc.RegInfo, Result))
       return std::move(E);
 
     bool Learned = false;
