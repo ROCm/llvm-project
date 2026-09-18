@@ -8,15 +8,20 @@
 
 #include "setpc-analysis.h"
 
+#include "decode.h"
 #include "mc-state.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
 
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCRegisterInfo.h"
 
+#include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <utility>
@@ -126,6 +131,24 @@ public:
     return Dirty.contains(Idx) || Dirty.contains(Idx + 1);
   }
 
+  // What every pair the block writes holds where the block ends: the source
+  // offset a completed chain names, or nothing when the writes left no offset
+  // behind. Pairs the block does not write are absent, since those keep
+  // whatever reached the block.
+  void summarize(DenseMap<unsigned, std::optional<uint64_t>> &Out) const {
+    auto Record = [&](unsigned Base) {
+      auto It = Chains.find(Base);
+      Out[Base] = It != Chains.end() && It->second.Displaced
+                      ? std::optional<uint64_t>(It->second.Value)
+                      : std::nullopt;
+    };
+    for (unsigned Idx : Dirty) {
+      Record(Idx);
+      if (Idx > 0)
+        Record(Idx - 1);
+    }
+  }
+
 private:
   DenseMap<unsigned, PcChain> Chains;
   DenseMap<unsigned, uint32_t> Scalars;
@@ -170,40 +193,115 @@ bool isRegisterIndirectTransfer(CanonicalOp Op) {
   return Op == CanonicalOp::S_SETPC_B64 || Op == CanonicalOp::S_SWAPPC_B64;
 }
 
-} // namespace
+// The source offsets one register pair may hold where a block begins. Either
+// flag makes the set unusable: some path leaves the pair holding something the
+// analysis cannot name, or more offsets reach it than may be enumerated.
+struct PairFacts {
+  SmallVector<uint64_t, 4> Values;
+  bool Unknown = false;
+  bool Overflowed = false;
+};
 
-SetPcAnalysis analyzeSetPc(ArrayRef<DecodedInst> Insts,
-                           const std::set<uint64_t> &BlockStarts,
-                           const MCState &Mc) {
-  SetPcAnalysis Result;
-  if (Insts.empty())
-    return Result;
+bool operator==(const PairFacts &A, const PairFacts &B) {
+  return A.Unknown == B.Unknown && A.Overflowed == B.Overflowed &&
+         A.Values == B.Values;
+}
 
-  const MCRegisterInfo &MRI = *Mc.RegInfo;
+// What every pair a block can be entered holding. A pair with no entry is one
+// no path reaching the block says anything about.
+using BlockFacts = DenseMap<unsigned, PairFacts>;
 
-  DenseSet<uint64_t> InstOffsets;
-  InstOffsets.reserve(Insts.size());
-  for (const DecodedInst &Di : Insts)
-    InstOffsets.insert(Di.Offset);
+// What a block leaves in the pairs it writes: the source offset it computed,
+// or nothing when its writes left no offset behind.
+using BlockEffect = DenseMap<unsigned, std::optional<uint64_t>>;
 
-  // A transfer ends the block it sits in, so what follows it leads a block of
-  // its own. For a call that block is where the callee returns to; for a jump
-  // nothing reaches it, but the instructions there still need a block to be
-  // raised into. The offset one past the last instruction leads nothing.
-  //
-  // Walking the blocks this way also keeps each transfer the last instruction
-  // of its block, so the chain state a transfer reads is the state of the
-  // instructions before it and of nothing else.
-  DenseSet<uint64_t> WalkBlockStarts(BlockStarts.begin(), BlockStarts.end());
-  for (const DecodedInst &Di : Insts) {
-    if (!isRegisterIndirectTransfer(Di.CanonOp))
+// Add the offsets of `Src` to `Dst`, keeping them ascending and distinct. Past
+// the cap the set stops growing and stands as overflowed, which refuses the
+// sites reading it rather than dispatching on a truncated table.
+void joinPairFacts(PairFacts &Dst, const PairFacts &Src) {
+  Dst.Unknown |= Src.Unknown;
+  Dst.Overflowed |= Src.Overflowed;
+  for (uint64_t Value : Src.Values) {
+    if (is_contained(Dst.Values, Value))
       continue;
-    uint64_t Fallthrough = Di.Offset + Di.sizeInBytes();
-    if (!InstOffsets.contains(Fallthrough))
-      continue;
-    WalkBlockStarts.insert(Fallthrough);
-    Result.ExtraBlockStarts.insert(Fallthrough);
+    if (Dst.Values.size() == kMaxSetPcTargets) {
+      Dst.Overflowed = true;
+      break;
+    }
+    Dst.Values.push_back(Value);
   }
+  sort(Dst.Values);
+}
+
+// Merge what one predecessor leaves into what a block is known to be entered
+// holding, answering whether that changed anything. A pair only one side names
+// is one the other leaves unknown, which is incomplete for the same reason a
+// pair written without an offset is.
+bool joinBlockFacts(BlockFacts &Dst, bool &DstSeeded, const BlockFacts &Src) {
+  if (!DstSeeded) {
+    DstSeeded = true;
+    Dst = Src;
+    return true;
+  }
+
+  BlockFacts Joined;
+  for (const auto &Entry : Dst) {
+    PairFacts Facts = Entry.second;
+    auto It = Src.find(Entry.first);
+    if (It == Src.end())
+      Facts.Unknown = true;
+    else
+      joinPairFacts(Facts, It->second);
+    Joined[Entry.first] = std::move(Facts);
+  }
+  for (const auto &Entry : Src) {
+    if (Dst.count(Entry.first))
+      continue;
+    PairFacts Facts = Entry.second;
+    Facts.Unknown = true;
+    Joined[Entry.first] = std::move(Facts);
+  }
+
+  if (Joined.size() == Dst.size() && all_of(Joined, [&](const auto &E) {
+        return Dst.lookup(E.first) == E.second;
+      }))
+    return false;
+  Dst = std::move(Joined);
+  return true;
+}
+
+// Every offset a transfer at a given source offset has been found to reach.
+using TransferTargets = DenseMap<uint64_t, DenseSet<uint64_t>>;
+
+// Classify every transfer in `Insts` into `Result`, splitting the walk at
+// `WalkBlockStarts` and drawing the edges out of a transfer from
+// `KnownTargets`. `InstOffsets` holds the offset of every decoded instruction.
+Error classifyAgainstBlockStarts(ArrayRef<DecodedInst> Insts,
+                                 const std::set<uint64_t> &WalkBlockStarts,
+                                 const DenseSet<uint64_t> &InstOffsets,
+                                 const TransferTargets &KnownTargets,
+                                 const MCRegisterInfo &MRI,
+                                 SetPcAnalysis &Result) {
+  // One recovered block, in source order.
+  struct Block {
+    uint64_t Start = 0;
+    size_t LastInst = 0;
+    BlockEffect Effect;
+    SmallVector<uint64_t> Successors;
+    BlockFacts Entry;
+    bool Reachable = false;
+  };
+  SmallVector<Block> Blocks;
+  DenseMap<uint64_t, unsigned> BlockOf;
+
+  // A transfer whose block leaves its pair alone, waiting for the dataflow to
+  // say what reaches it.
+  struct DeferredSite {
+    uint64_t Offset;
+    unsigned BlockIdx;
+    unsigned Pair;
+  };
+  SmallVector<DeferredSite> Deferred;
 
   // Resolve one transfer's source pair, recording what was found for it.
   auto classify = [&](const DecodedInst &Di, BlockState &State) {
@@ -221,11 +319,14 @@ SetPcAnalysis analyzeSetPc(ArrayRef<DecodedInst> Insts,
 
     PcChain *Chain = State.chain(*Source);
     if (!Chain || !Chain->Displaced) {
+      if (!State.pairIsDirty(*Source)) {
+        Deferred.push_back(
+            {Di.Offset, static_cast<unsigned>(Blocks.size() - 1), *Source});
+        return;
+      }
       Site.RefusalReason =
-          (Twine("reads ") + pairName(*Source) + ", which " +
-           (State.pairIsDirty(*Source)
-                ? "its block writes without computing a source offset in it"
-                : "nothing in its block gives a source offset"))
+          (Twine("reads ") + pairName(*Source) +
+           ", which its block writes without computing a source offset in it")
               .str();
       Result.Sites[Di.Offset] = std::move(Site);
       return;
@@ -244,15 +345,20 @@ SetPcAnalysis analyzeSetPc(ArrayRef<DecodedInst> Insts,
     Site.DirectTarget = Chain->Value;
     Result.Sites[Di.Offset] = std::move(Site);
     Result.ExtraBlockStarts.insert(Chain->Value);
-    // The pair is consumed here; a block reached over a back edge must not see
-    // the chain as still standing.
-    State.invalidate(*Source);
   };
 
   BlockState State;
-  for (const DecodedInst &Di : Insts) {
-    if (WalkBlockStarts.contains(Di.Offset))
+  for (size_t I = 0, E = Insts.size(); I != E; ++I) {
+    const DecodedInst &Di = Insts[I];
+    if (Blocks.empty() || WalkBlockStarts.count(Di.Offset)) {
+      if (!Blocks.empty())
+        State.summarize(Blocks.back().Effect);
       State = BlockState();
+      BlockOf[Di.Offset] = Blocks.size();
+      Blocks.push_back(Block());
+      Blocks.back().Start = Di.Offset;
+    }
+    Blocks.back().LastInst = I;
 
     switch (Di.CanonOp) {
     case CanonicalOp::S_GETPC_B64: {
@@ -368,12 +474,15 @@ SetPcAnalysis analyzeSetPc(ArrayRef<DecodedInst> Insts,
 
     case CanonicalOp::S_SWAPPC_B64: {
       classify(Di, State);
-      // The call leaves the return offset in its destination, so whatever the
-      // pair held is gone.
+      // The call writes the offset it returns to over whatever its destination
+      // held, which is a source offset like any a chain computes.
       if (Di.NumDefs >= 1 && Di.numOperands() >= 1 && Di.isReg(0)) {
         if (std::optional<unsigned> Dst = sgprIndex(MRI, Di.getReg(0))) {
           State.invalidate(*Dst);
           State.invalidate(*Dst + 1);
+          uint64_t Return = Di.Offset + Di.sizeInBytes();
+          if (InstOffsets.contains(Return))
+            State.displace(*Dst, Return);
         }
       }
       continue;
@@ -385,8 +494,188 @@ SetPcAnalysis analyzeSetPc(ArrayRef<DecodedInst> Insts,
 
     invalidateDefs(Di, MRI, State);
   }
+  State.summarize(Blocks.back().Effect);
 
-  return Result;
+  // A transfer names no offset the decode could follow, so the edges out of
+  // the block it ends are the ones already found for it: what this walk just
+  // resolved, plus whatever earlier walks reached.
+  for (unsigned I = 0, E = Blocks.size(); I != E; ++I) {
+    Block &B = Blocks[I];
+    const DecodedInst &Last = Insts[B.LastInst];
+    if (isRegisterIndirectTransfer(Last.CanonOp)) {
+      auto Site = Result.Sites.find(Last.Offset);
+      if (Site != Result.Sites.end() &&
+          Site->second.SiteKind == SetPcSite::Kind::Direct)
+        B.Successors.push_back(Site->second.DirectTarget);
+      auto Known = KnownTargets.find(Last.Offset);
+      if (Known != KnownTargets.end())
+        for (uint64_t Target : Known->second)
+          if (!is_contained(B.Successors, Target))
+            B.Successors.push_back(Target);
+      continue;
+    }
+    std::optional<uint64_t> Next;
+    if (I + 1 != E)
+      Next = Blocks[I + 1].Start;
+    Expected<SmallVector<uint64_t>> Successors =
+        computeDecodedBlockSuccessors(Last, Next);
+    if (!Successors)
+      return Successors.takeError();
+    B.Successors = std::move(*Successors);
+  }
+
+  // Forward dataflow to a fixpoint. The lattice is bounded: a pair holds at
+  // most kMaxSetPcTargets offsets and one incomplete bit, and a join only ever
+  // adds to that, so the worklist runs dry.
+  Blocks[0].Reachable = true;
+  SmallVector<unsigned> Worklist{0};
+  DenseSet<unsigned> Queued{0};
+  while (!Worklist.empty()) {
+    unsigned I = Worklist.pop_back_val();
+    Queued.erase(I);
+
+    BlockFacts Exit = Blocks[I].Entry;
+    for (const auto &Written : Blocks[I].Effect) {
+      PairFacts Facts;
+      if (Written.second)
+        Facts.Values.push_back(*Written.second);
+      else
+        Facts.Unknown = true;
+      Exit[Written.first] = std::move(Facts);
+    }
+
+    for (uint64_t Successor : Blocks[I].Successors) {
+      auto It = BlockOf.find(Successor);
+      if (It == BlockOf.end())
+        continue;
+      Block &Succ = Blocks[It->second];
+      if (!joinBlockFacts(Succ.Entry, Succ.Reachable, Exit))
+        continue;
+      if (Queued.insert(It->second).second)
+        Worklist.push_back(It->second);
+    }
+  }
+
+  // The pairs the deferred sites read are untouched by their own blocks, so
+  // what reaches each block is what its transfer reads.
+  for (const DeferredSite &Site : Deferred) {
+    SetPcSite Classified;
+    const Block &B = Blocks[Site.BlockIdx];
+    const PairFacts *Facts = B.Entry.find(Site.Pair) == B.Entry.end()
+                                 ? nullptr
+                                 : &B.Entry.find(Site.Pair)->second;
+    if (!B.Reachable || !Facts) {
+      Classified.RefusalReason =
+          (Twine("reads ") + pairName(Site.Pair) +
+           ", which nothing reaching its block gives a source offset")
+              .str();
+      Result.Sites[Site.Offset] = std::move(Classified);
+      continue;
+    }
+    if (Facts->Unknown) {
+      Classified.RefusalReason =
+          (Twine("reads ") + pairName(Site.Pair) +
+           ", which some path reaching its block leaves without a source "
+           "offset")
+              .str();
+      Result.Sites[Site.Offset] = std::move(Classified);
+      continue;
+    }
+    if (Facts->Overflowed) {
+      Classified.RefusalReason =
+          (Twine("reads ") + pairName(Site.Pair) + ", which more than " +
+           Twine(kMaxSetPcTargets) + " source offsets reach")
+              .str();
+      Result.Sites[Site.Offset] = std::move(Classified);
+      continue;
+    }
+
+    assert(!Facts->Values.empty() && "a complete pair names an offset");
+    const uint64_t *Undecoded = find_if(Facts->Values, [&](uint64_t Value) {
+      return !InstOffsets.contains(Value);
+    });
+    if (Undecoded != Facts->Values.end()) {
+      Classified.RefusalReason =
+          (Twine("reaches source offset 0x") + Twine::utohexstr(*Undecoded) +
+           ", which no decoded instruction starts at")
+              .str();
+      Result.Sites[Site.Offset] = std::move(Classified);
+      continue;
+    }
+
+    if (Facts->Values.size() == 1) {
+      Classified.SiteKind = SetPcSite::Kind::Direct;
+      Classified.DirectTarget = Facts->Values.front();
+    } else {
+      Classified.SiteKind = SetPcSite::Kind::Enumerated;
+      Classified.Targets = Facts->Values;
+    }
+    Result.ExtraBlockStarts.insert(Facts->Values.begin(), Facts->Values.end());
+    Result.Sites[Site.Offset] = std::move(Classified);
+  }
+
+  return Error::success();
+}
+
+} // namespace
+
+Expected<SetPcAnalysis> analyzeSetPc(ArrayRef<DecodedInst> Insts,
+                                     const std::set<uint64_t> &BlockStarts,
+                                     const MCState &Mc) {
+  SetPcAnalysis Result;
+  if (Insts.empty())
+    return Result;
+
+  DenseSet<uint64_t> InstOffsets;
+  InstOffsets.reserve(Insts.size());
+  for (const DecodedInst &Di : Insts)
+    InstOffsets.insert(Di.Offset);
+
+  // A transfer ends the block it sits in, so what follows it leads a block of
+  // its own. For a call that block is where the callee returns to; for a jump
+  // nothing reaches it, but the instructions there still need a block to be
+  // raised into. The offset one past the last instruction leads nothing.
+  //
+  // Walking the blocks this way also keeps each transfer the last instruction
+  // of its block, so the chain state a transfer reads is the state of the
+  // instructions before it and of nothing else.
+  std::set<uint64_t> WalkBlockStarts(BlockStarts.begin(), BlockStarts.end());
+  for (const DecodedInst &Di : Insts) {
+    if (!isRegisterIndirectTransfer(Di.CanonOp))
+      continue;
+    uint64_t Fallthrough = Di.Offset + Di.sizeInBytes();
+    if (!InstOffsets.contains(Fallthrough))
+      continue;
+    WalkBlockStarts.insert(Fallthrough);
+    Result.ExtraBlockStarts.insert(Fallthrough);
+  }
+
+  // Classifying a transfer both names a block the walk did not split at and
+  // draws an edge the walk did not have. Either changes what reaches the
+  // transfers, so the walk repeats until it learns nothing new. Both the block
+  // starts and the edges only ever grow, and there are finitely many of each,
+  // so the rounds run out.
+  TransferTargets KnownTargets;
+  for (;;) {
+    Result.Sites.clear();
+    if (Error E =
+            classifyAgainstBlockStarts(Insts, WalkBlockStarts, InstOffsets,
+                                       KnownTargets, *Mc.RegInfo, Result))
+      return std::move(E);
+
+    bool Learned = false;
+    for (uint64_t Start : Result.ExtraBlockStarts)
+      Learned |= WalkBlockStarts.insert(Start).second;
+    for (const auto &Site : Result.Sites) {
+      DenseSet<uint64_t> &Targets = KnownTargets[Site.first];
+      if (Site.second.SiteKind == SetPcSite::Kind::Direct)
+        Learned |= Targets.insert(Site.second.DirectTarget).second;
+      for (uint64_t Target : Site.second.Targets)
+        Learned |= Targets.insert(Target).second;
+    }
+    if (!Learned)
+      return Result;
+  }
 }
 
 } // namespace COMGR::transpiler

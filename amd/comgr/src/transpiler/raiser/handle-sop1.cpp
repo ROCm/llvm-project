@@ -15,7 +15,9 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #include <cassert>
 #include <cstdint>
@@ -750,6 +752,16 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     if (Site->SiteKind == SetPcSite::Kind::Unresolvable)
       return unsupported(Ctx, Di, Site->RefusalReason);
 
+    // Read the target before the call writes its destination, which may name
+    // the very pair the target comes from.
+    Value *Target = nullptr;
+    if (Site->SiteKind == SetPcSite::Kind::Enumerated) {
+      Expected<Value *> Read = Op.src64(0);
+      if (!Read)
+        return Read.takeError();
+      Target = *Read;
+    }
+
     if (Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
       Expected<ParsedReg> Dst = Op.dst();
       if (!Dst)
@@ -766,7 +778,28 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
                                                     ReturnAddress);
     }
 
-    Ctx.B.CreateBr(Ctx.lookupBB(Site->DirectTarget));
+    if (!Target) {
+      Ctx.B.CreateBr(Ctx.lookupBB(Site->DirectTarget));
+      return Error::success();
+    }
+
+    // The offsets the analysis enumerated are the only ones the pair can hold,
+    // so the fall-out-of-the-table case cannot be reached and traps rather
+    // than picking one of them.
+    BasicBlock *Trap =
+        BasicBlock::Create(Ctx.B.getContext(), formatv("trap_{0:x}", Di.Offset),
+                           Ctx.B.GetInsertBlock()->getParent());
+    SwitchInst *Dispatch =
+        Ctx.B.CreateSwitch(Target, Trap, Site->Targets.size());
+    for (uint64_t Offset : Site->Targets)
+      Dispatch->addCase(ConstantInt::get(Ctx.B.getInt64Ty(),
+                                         Ctx.sourceTextBaseAddress() + Offset),
+                        Ctx.lookupBB(Offset));
+
+    IRBuilderBase::InsertPointGuard Guard(Ctx.B);
+    Ctx.B.SetInsertPoint(Trap);
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::trap, {});
+    Ctx.B.CreateUnreachable();
     return Error::success();
   }
 
