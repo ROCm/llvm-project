@@ -522,10 +522,10 @@ define amdgpu_ps void @test15(ptr addrspace(1) %p1, ptr addrspace(3) %p2, i1 %co
   ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI56]], %stack.13, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.13, addrspace 5)
   ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI57]], %stack.14, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.14, addrspace 5)
   ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI54]], %stack.15, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.15, addrspace 5)
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI44]], %stack.8, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.8, addrspace 5)
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI52]], %stack.9, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.9, addrspace 5)
-  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI53]], %stack.10, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.10, addrspace 5)
   ; CHECK-NEXT:   SI_SPILL_V128_SAVE [[PHI59]], %stack.11, $sgpr32, 0, implicit $exec :: (store (s128) into %stack.11, align 4, addrspace 5)
+  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI53]], %stack.10, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.10, addrspace 5)
+  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI52]], %stack.9, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.9, addrspace 5)
+  ; CHECK-NEXT:   SI_SPILL_V32_SAVE [[PHI44]], %stack.8, $sgpr32, 0, implicit $exec :: (store (s32) into %stack.8, addrspace 5)
   ; CHECK-NEXT:   SI_SPILL_V128_SAVE [[PHI58]], %stack.7, $sgpr32, 0, implicit $exec :: (store (s128) into %stack.7, align 4, addrspace 5)
   ; CHECK-NEXT:   [[SI_ELSE3:%[0-9]+]]:sreg_32 = SI_ELSE [[SI_IF1]], %bb.12, implicit-def dead $exec, implicit-def dead $scc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.4
