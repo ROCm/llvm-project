@@ -40,6 +40,12 @@ struct RegisterSpillCandidate {
   LaneBitmask Mask;
 };
 
+enum class SpillPlacement {
+  AfterDefinition,     // Emit spill after the definition.
+  BeforePressurePoint, // Emit spill before the high register pressure point.
+  EndOfBlock,          // Emit spill at the end of the block.
+};
+
 /// Helper data structure for grouping together uses where the head of the group
 /// dominates all the other uses in the group.
 class DomGroup {
@@ -151,12 +157,12 @@ class AMDGPUEarlyRegisterSpilling : public MachineFunctionPass {
   /// (ii) the definition block of \p RegToSpill,
   /// (iii) the common dominator of \p CurMI and related uses.
   /// \p CurMI is the high-register-pressure point.
-  std::pair<MachineBasicBlock *, MachineBasicBlock::iterator>
+  std::pair<MachineBasicBlock *, SpillPlacement>
   getWhereToSpill(MachineInstr *CurMI, Register RegToSpill);
 
   /// Return where we have to spill if the definition of the spilled register is
   /// inside a loop. \p CurMI is the high-register-pressure point.
-  std::pair<MachineBasicBlock *, MachineBasicBlock::iterator>
+  std::pair<MachineBasicBlock *, SpillPlacement>
   getWhereToSpillIfDefintionInLoop(MachineInstr *CurMI,
                                    MachineBasicBlock *DefRegMBB);
 

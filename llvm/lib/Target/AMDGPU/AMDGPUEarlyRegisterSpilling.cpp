@@ -166,7 +166,7 @@ public:
 class SpillCandidate final : public SpillOrRestoreCandidate {
 private:
   MachineBasicBlock *SpillBlock;
-  MachineBasicBlock::iterator WhereToSpill;
+  SpillPlacement WhereToSpill;
 
 public:
   SpillCandidate(Register CandidateReg, LaneBitmask Mask, CodeGenPlan Plan,
@@ -175,13 +175,12 @@ public:
                  LiveIntervals *LIS, SlotIndexes *Indexes,
                  MachineDominatorTree *DT, const MachineLoopInfo *MLI,
                  AMDGPUNextUseAnalysis *NUA, MachineBasicBlock *SpillBlock,
-                 MachineBasicBlock::iterator WhereToSpill)
+                 SpillPlacement WhereToSpill)
       : SpillOrRestoreCandidate(CandidateReg, Mask, Plan, TRI, MRI, TII,
                                 FrameInfo, LIS, Indexes, DT, MLI, NUA),
         SpillBlock(SpillBlock), WhereToSpill(WhereToSpill) {}
 
   MachineBasicBlock *getSpillBlock() const { return SpillBlock; }
-  MachineBasicBlock::iterator getWhereToSpill() const { return WhereToSpill; }
   void generateSpillRestoreInstrs(
       MachineInstr *CurMI, DenseMap<Register, DomGroup> &RestoreRegToDomGroup,
       DenseMap<MachineLoop *, SmallVector<DomGroup>> &LoopToDomGroups) override;
@@ -342,6 +341,7 @@ void SpillCandidate::generateSpillRestoreInstrs(
   unsigned Size = TRI->getSpillSize(*RC);
   Align Alignment = TRI->getSpillAlign(*RC);
   int FI = FrameInfo->CreateSpillStackObject(Size, Alignment);
+  MachineBasicBlock *CurMBB = CurMI->getParent();
   LLVM_DEBUG(dbgs() << "------------------------------------------------\n");
   LLVM_DEBUG(dbgs() << "Plan: Emit spill/restore instructions.\n");
   LLVM_DEBUG(dbgs() << "Live interval before spilling for spilled register "
@@ -349,14 +349,34 @@ void SpillCandidate::generateSpillRestoreInstrs(
              LIS->getInterval(CandidateReg).print(dbgs()); dbgs() << "\n");
 
   // Emit the spill instruction.
-  TII->storeRegToStackSlot(*SpillBlock, WhereToSpill, CandidateReg,
+  MachineBasicBlock::iterator SpillIterator;
+  if (WhereToSpill == SpillPlacement::AfterDefinition) {
+    assert(SpillBlock == InstrOfCandidateReg->getParent() &&
+           "The definition block is wrong.");
+    if (InstrOfCandidateReg->isPHI()) {
+      SpillIterator = SpillBlock->getFirstNonPHI();
+    } else {
+      SpillIterator = InstrOfCandidateReg == &SpillBlock->instr_back()
+                          ? SpillBlock->instr_end()
+                          : InstrOfCandidateReg->getNextNode()->getIterator();
+    }
+  } else if (WhereToSpill == SpillPlacement::BeforePressurePoint) {
+    if (CurMI->isPHI()) {
+      SpillIterator = SpillBlock->getFirstNonPHI();
+    } else {
+      SpillIterator = CurMI->getIterator();
+    }
+  } else if (WhereToSpill == SpillPlacement::EndOfBlock) {
+    SpillIterator = SpillBlock->getFirstTerminator();
+    if (SpillIterator == SpillBlock->end())
+      SpillIterator = SpillBlock->instr_end();
+  }
+  TII->storeRegToStackSlot(*SpillBlock, SpillIterator, CandidateReg,
                            true, /* kill */
                            FI, RC, 0);
-  SpillInstruction = &*(std::prev(WhereToSpill));
+  SpillInstruction = &*(std::prev(SpillIterator));
   LIS->InsertMachineInstrInMaps(*SpillInstruction);
 
-  MachineBasicBlock *SpillBlock = SpillInstruction->getParent();
-  MachineBasicBlock *CurMBB = CurMI->getParent();
   LLVM_DEBUG(dbgs() << "------------------------------------------------\n");
   LLVM_DEBUG(dbgs() << "The high register pressure point is " << *CurMI);
   LLVM_DEBUG(dbgs() << "The high register pressure block is bb."
@@ -1258,14 +1278,14 @@ MachineBasicBlock *AMDGPUEarlyRegisterSpilling::findCommonDominatorToSpill(
   return CommonDominatorToSpill;
 }
 
-std::pair<MachineBasicBlock *, MachineBasicBlock::iterator>
+std::pair<MachineBasicBlock *, SpillPlacement>
 AMDGPUEarlyRegisterSpilling::getWhereToSpillIfDefintionInLoop(
     MachineInstr *CurMI, MachineBasicBlock *DefRegMBB) {
 
   MachineBasicBlock *CurMBB = CurMI->getParent();
   MachineLoop *DefInstrLoop = MLI->getLoopFor(DefRegMBB);
   MachineBasicBlock *SpillBlock = nullptr;
-  MachineBasicBlock::iterator WhereToSpill;
+  SpillPlacement WhereToSpill;
 
   SmallVector<MachineBasicBlock *> ExitBlocks;
   MachineLoop *OutermostLoop = DefInstrLoop->getOutermostLoop();
@@ -1276,18 +1296,16 @@ AMDGPUEarlyRegisterSpilling::getWhereToSpillIfDefintionInLoop(
   if (!DT->dominates(ExitBB, CurMBB))
     return {};
   if (ExitBB == CurMBB) {
-    WhereToSpill = CurMI->getIterator();
+    WhereToSpill = SpillPlacement::BeforePressurePoint;
     SpillBlock = ExitBB;
   } else {
-    WhereToSpill = ExitBB->getFirstTerminator();
-    if (WhereToSpill == ExitBB->end())
-      WhereToSpill = ExitBB->instr_end();
+    WhereToSpill = SpillPlacement::EndOfBlock;
     SpillBlock = ExitBB;
   }
   return {SpillBlock, WhereToSpill};
 }
 
-std::pair<MachineBasicBlock *, MachineBasicBlock::iterator>
+std::pair<MachineBasicBlock *, SpillPlacement>
 AMDGPUEarlyRegisterSpilling::getWhereToSpill(MachineInstr *CurMI,
                                              Register CandidateReg) {
   assert(MRI->hasOneDef(CandidateReg) &&
@@ -1304,7 +1322,7 @@ AMDGPUEarlyRegisterSpilling::getWhereToSpill(MachineInstr *CurMI,
     OutermostLoopOfCurLoop = CurLoop->getOutermostLoop();
 
   MachineBasicBlock *SpillBlock = nullptr;
-  MachineBasicBlock::iterator WhereToSpill;
+  SpillPlacement WhereToSpill;
   // case 1:
   // - the register we are about to spill (CandidateReg) is defined in loop
   // - the high register pressure (CurMI) is outside the loop
@@ -1322,9 +1340,7 @@ AMDGPUEarlyRegisterSpilling::getWhereToSpill(MachineInstr *CurMI,
     MachineBasicBlock *LoopPreheader =
         OutermostLoopOfCurLoop->getLoopPreheader();
     assert(LoopPreheader && "There is not loop preheader");
-    WhereToSpill = LoopPreheader->getFirstTerminator();
-    if (WhereToSpill == LoopPreheader->end())
-      WhereToSpill = LoopPreheader->instr_end();
+    WhereToSpill = SpillPlacement::EndOfBlock;
     SpillBlock = LoopPreheader;
   }
   // case 3:
@@ -1341,9 +1357,7 @@ AMDGPUEarlyRegisterSpilling::getWhereToSpill(MachineInstr *CurMI,
       MachineBasicBlock *LoopPreheader =
           OutermostLoopOfCurLoop->getLoopPreheader();
       assert(LoopPreheader && "There is not loop preheader");
-      WhereToSpill = LoopPreheader->getFirstTerminator();
-      if (WhereToSpill == LoopPreheader->end())
-        WhereToSpill = LoopPreheader->instr_end();
+      WhereToSpill = SpillPlacement::EndOfBlock;
       SpillBlock = LoopPreheader;
     }
   }
@@ -1351,14 +1365,14 @@ AMDGPUEarlyRegisterSpilling::getWhereToSpill(MachineInstr *CurMI,
   // - the high register pressure instruction is a PHI node
   // - we emit the spill instruction before the first non-PHI instruction
   else if (CurMI->isPHI()) {
-    WhereToSpill = CurMBB->getFirstNonPHI();
+    WhereToSpill = SpillPlacement::BeforePressurePoint;
     SpillBlock = CurMBB;
   }
   // case 5:
   // - this is the general case. We spill just before the instruction where
   // we detect high register pressure.
   else {
-    WhereToSpill = CurMI->getIterator();
+    WhereToSpill = SpillPlacement::BeforePressurePoint;
     SpillBlock = CurMBB;
   }
   return {SpillBlock, WhereToSpill};
@@ -1488,7 +1502,7 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
     NextUseDistance NextUseDist = Candidate.Dist;
     LaneBitmask Mask = Candidate.Mask;
     MachineBasicBlock *SpillBlock = nullptr;
-    MachineBasicBlock::iterator WhereToSpill;
+    SpillPlacement WhereToSpill;
     MachineInstr *InstrOfCandidateReg =
         MRI->getOneDef(CandidateReg)->getParent();
     unsigned NumOfCoveredRegs = SIRegisterInfo::getNumCoveredRegs(Mask);
@@ -1616,7 +1630,7 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
         if (LastIt == PreHeader->end())
           LastIt = PreHeader->instr_back();
         SpillBlock = PreHeader;
-        WhereToSpill = LastIt;
+        WhereToSpill = SpillPlacement::EndOfBlock;
       } else {
         std::tie(SpillBlock, WhereToSpill) =
             getWhereToSpill(CurMI, CandidateReg);
@@ -1679,25 +1693,14 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
           DominatedUses.insert(U);
 
         SpillBlock = CommonDominatorToSpill;
-        WhereToSpill = SpillBlock->getFirstTerminator();
-        if (WhereToSpill == SpillBlock->end())
-          WhereToSpill = SpillBlock->instr_end();
+        WhereToSpill = SpillPlacement::EndOfBlock;
 
         MachineInstr *InstrOfCandidateReg =
             MRI->getOneDef(CandidateReg)->getParent();
         MachineBasicBlock *DefBlock = InstrOfCandidateReg->getParent();
         if (DefBlock == SpillBlock) {
           if (InstrOfCandidateReg->isPHI()) {
-            auto FirstNonPHI = SpillBlock->getFirstNonPHI();
-            if (FirstNonPHI != SpillBlock->end() &&
-                WhereToSpill != SpillBlock->end()) {
-              for (auto It = SpillBlock->begin(); It != FirstNonPHI; ++It) {
-                if (It == WhereToSpill) {
-                  WhereToSpill = FirstNonPHI;
-                  break;
-                }
-              }
-            }
+            WhereToSpill = SpillPlacement::AfterDefinition;
           } else if (!TII->isVMEM(*InstrOfCandidateReg) &&
                      !TII->isSMRD(*InstrOfCandidateReg) &&
                      !TII->isDS(*InstrOfCandidateReg) &&
@@ -1706,10 +1709,7 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
                       (!TII->mayAccessVMEMThroughFlat(*InstrOfCandidateReg) &&
                        !TII->mayAccessLDSThroughFlat(*InstrOfCandidateReg,
                                                      TgSplit)))) {
-            WhereToSpill =
-                InstrOfCandidateReg == &DefBlock->instr_back()
-                    ? DefBlock->instr_end()
-                    : InstrOfCandidateReg->getNextNode()->getIterator();
+            WhereToSpill = SpillPlacement::AfterDefinition;
           }
         }
       }
