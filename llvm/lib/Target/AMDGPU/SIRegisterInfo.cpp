@@ -1151,14 +1151,6 @@ std::optional<unsigned> SIRegisterInfo::getDwarfRegLaneSize(int64_t DwarfReg,
 }
 
 const TargetRegisterClass *
-SIRegisterInfo::getPointerRegClass(unsigned Kind) const {
-  // This is inaccurate. It depends on the instruction and address space. The
-  // only place where we should hit this is for dealing with frame indexes /
-  // private accesses, so this is correct in that case.
-  return &AMDGPU::VGPR_32RegClass;
-}
-
-const TargetRegisterClass *
 SIRegisterInfo::getCrossCopyRegClass(const TargetRegisterClass *RC) const {
   return RC == &AMDGPU::SCC_CLASSRegClass ? &AMDGPU::SReg_32RegClass : RC;
 }
@@ -2750,7 +2742,7 @@ bool SIRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator MI,
 
       auto *MBB = MI->getParent();
       bool IsWWMRegSpill = TII->isWWMRegSpillOpcode(MI->getOpcode());
-      if (IsWWMRegSpill){
+      if (IsWWMRegSpill) {
         TII->insertScratchExecCopy(*MF, *MBB, MI, DL, MFI->getSGPRForEXECCopy(),
                                    RS->isRegUsed(AMDGPU::SCC));
       }
@@ -2837,7 +2829,7 @@ bool SIRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator MI,
 
       auto *MBB = MI->getParent();
       bool IsWWMRegSpill = TII->isWWMRegSpillOpcode(MI->getOpcode());
-      if (IsWWMRegSpill){
+      if (IsWWMRegSpill) {
         TII->insertScratchExecCopy(*MF, *MBB, MI, DL, MFI->getSGPRForEXECCopy(),
                                    RS->isRegUsed(AMDGPU::SCC));
       }
