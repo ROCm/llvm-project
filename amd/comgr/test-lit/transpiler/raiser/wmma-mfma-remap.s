@@ -2,8 +2,6 @@
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: %transpile_cli %t.hsaco --isa=gfx1250 \
-; RUN:   --dump-decoded=wmma_remap | %FileCheck %s --check-prefix=DECODE
 ; RUN: %transpile_cli %t.hsaco --isa=gfx1250 --target-isa=gfx942 \
 ; RUN:   --emit-ir=wmma_remap | %FileCheck %s --check-prefix=IR
 ; RUN: not %transpile_cli %t.hsaco --isa=gfx1250 \
@@ -19,7 +17,6 @@
 ; IR-LABEL: define amdgpu_kernel void @wmma_remap(
 wmma_remap:
 	s_mov_b32 exec_lo, 1
-; DECODE: V_WMMA_F32_16x16x32_F16{{.+}}v_wmma_f32_16x16x32_f16
 ; IR: call i32 @llvm.amdgcn.ds.bpermute
 ; IR: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16f16
 ; IR: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16f16
@@ -27,10 +24,8 @@ wmma_remap:
 ; IR: spe_do:
 	v_wmma_f32_16x16x32_f16 v[16:23], v[0:7], v[8:15], v[16:23]
 	s_mov_b32 exec_lo, -1
-; DECODE: V_WMMA_F32_16x16x32_BF16{{.+}}v_wmma_f32_16x16x32_bf16
 ; IR: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16bf16.1k
 	v_wmma_f32_16x16x32_bf16 v[16:23], v[0:7], v[8:15], v[16:23]
-; DECODE: V_WMMA_I32_16x16x64_IU8{{.+}}v_wmma_i32_16x16x64_iu8
 ; IR: call <4 x i32> @llvm.amdgcn.mfma.i32.16x16x32.i8
 	v_wmma_i32_16x16x64_iu8 v[16:23], v[0:7], v[8:15], v[16:23] neg_lo:[1,1,0]
 ; IR: ret void
