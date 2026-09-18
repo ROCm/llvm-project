@@ -460,7 +460,7 @@ BasicBlock *llvm::splitBBWithSuffix(IRBuilderBase &Builder, bool CreateBranch,
 // This function creates a fake integer value and a fake use for the integer
 // value. It returns the fake value created. This is useful in modeling the
 // extra arguments to the outlined functions.
-Value *createFakeIntVal(IRBuilderBase &Builder, Module &M,
+Value *createFakeIntVal(IRBuilderBase &Builder,
                         OpenMPIRBuilder::InsertPointTy OuterAllocaIP,
                         llvm::SmallVectorImpl<Instruction *> &ToBeDeleted,
                         OpenMPIRBuilder::InsertPointTy InnerAllocaIP,
@@ -471,19 +471,18 @@ Value *createFakeIntVal(IRBuilderBase &Builder, Module &M,
   Instruction *FakeVal;
   AllocaInst *FakeValAddr =
       Builder.CreateAlloca(IntTy, nullptr, Name + ".addr");
-  FakeVal = FakeValAddr;
-
-  if (M.getDataLayout().getAllocaAddrSpace() != 0) {
-    // Add additional casts to enforce pointers in zero address space
-    FakeVal = new AddrSpaceCastInst(
-        FakeValAddr, PointerType ::get(M.getContext(), 0), "tid.addr.ascast");
-    FakeVal->insertAfter(FakeValAddr->getIterator());
-    ToBeDeleted.push_back(FakeVal);
-  }
-
   ToBeDeleted.push_back(FakeValAddr);
 
-  if (!AsPtr) {
+  if (AsPtr) {
+    FakeVal = FakeValAddr;
+    // The runtime passes these extra arguments to the outlined function as
+    // generic pointers, so cast away a non-zero alloca address space.
+    if (FakeValAddr->getAddressSpace() != 0) {
+      FakeVal = cast<Instruction>(Builder.CreateAddrSpaceCast(
+          FakeValAddr, Builder.getPtrTy(), Name + ".ascast"));
+      ToBeDeleted.push_back(FakeVal);
+    }
+  } else {
     FakeVal = Builder.CreateLoad(IntTy, FakeValAddr, Name + ".val");
     ToBeDeleted.push_back(FakeVal);
   }
@@ -553,15 +552,16 @@ public:
 
 protected:
   virtual Instruction *
-  allocateVar(IRBuilder<>::InsertPoint AllocaIP, Type *VarType,
+  allocateVar(IRBuilder<>::InsertPoint AllocaIP, DebugLoc DL, Type *VarType,
               const Twine &Name = Twine(""),
               AddrSpaceCastInst **CastedAlloc = nullptr) override {
-    return OMPBuilder.createOMPAllocShared(AllocaIP, VarType, Name);
+    return OMPBuilder.createOMPAllocShared({AllocaIP, DL}, VarType, Name);
   }
 
   virtual Instruction *deallocateVar(IRBuilder<>::InsertPoint DeallocIP,
-                                     Value *Var, Type *VarType) override {
-    return OMPBuilder.createOMPFreeShared(DeallocIP, Var, VarType);
+                                     DebugLoc DL, Value *Var,
+                                     Type *VarType) override {
+    return OMPBuilder.createOMPFreeShared({DeallocIP, DL}, Var, VarType);
   }
 };
 
@@ -2207,12 +2207,18 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createParallel(
       Value *Ptr;
       if (UsesDeviceSharedMemory) {
         // Use device shared memory instead, if needed.
-        Ptr = createOMPAllocShared(OuterAllocIP, V.getType(),
+        Ptr = createOMPAllocShared(Builder, V.getType(),
                                    V.getName() + ".reloaded");
-        for (BasicBlock *DeallocBlock : OuterDeallocBlocks)
+        for (BasicBlock *DeallocBlock : OuterDeallocBlocks) {
+          assert(DeallocBlock->getParent() ==
+                     OuterAllocIP.getBlock()->getParent() &&
+                 "Dealloc block must be in the allocation's function to reuse "
+                 "its debug location");
           createOMPFreeShared(
-              InsertPointTy(DeallocBlock, DeallocBlock->getFirstInsertionPt()),
+              {InsertPointTy(DeallocBlock, DeallocBlock->getFirstInsertionPt()),
+               Builder.getCurrentDebugLocation()},
               Ptr, V.getType());
+        }
       } else {
         Ptr = Builder.CreateAlloca(V.getType(), nullptr,
                                    V.getName() + ".reloaded");
@@ -2428,14 +2434,15 @@ static Value *emitTaskDependencies(
   Type *DependInfo = OMPBuilder.DependInfo;
 
   Value *DepArray = nullptr;
-  OpenMPIRBuilder::InsertPointTy OldIP = Builder.saveIP();
-  Builder.SetInsertPoint(
-      OldIP.getBlock()->getParent()->getEntryBlock().getTerminator());
-
   Type *DepArrayTy = ArrayType::get(DependInfo, Dependencies.size());
-  DepArray = Builder.CreateAlloca(DepArrayTy, nullptr, ".dep.arr.addr");
-
-  Builder.restoreIP(OldIP);
+  {
+    // Use a InsertPointGuard to restore the location back along with the
+    // insertion point.
+    IRBuilderBase::InsertPointGuard IPGuard(Builder);
+    Builder.SetInsertPoint(
+        Builder.GetInsertBlock()->getParent()->getEntryBlock().getTerminator());
+    DepArray = Builder.CreateAlloca(DepArrayTy, nullptr, ".dep.arr.addr");
+  }
 
   for (const auto &[DepIdx, Dep] : enumerate(Dependencies)) {
     Value *Base =
@@ -2470,16 +2477,16 @@ void OpenMPIRBuilder::createTaskwait(const LocationDescription &Loc,
     DepArray = Dependencies.DepArray;
     NumDeps = Dependencies.NumDeps;
   } else if (!Dependencies.Deps.empty()) {
-    InsertPointTy OldIP = Builder.saveIP();
-    BasicBlock &entryBB =
-        Builder.GetInsertBlock()->getParent()->getEntryBlock();
-    Builder.SetInsertPoint(&entryBB, entryBB.getFirstInsertionPt());
-
     DepArrayTy = ArrayType::get(DependInfo, Dependencies.Deps.size());
-    DepArray = Builder.CreateAlloca(DepArrayTy, nullptr, ".dep.arr.addr");
     NumDeps = Builder.getInt32(Dependencies.Deps.size());
+    {
+      IRBuilderBase::InsertPointGuard IPGuard(Builder);
+      BasicBlock &entryBB =
+          Builder.GetInsertBlock()->getParent()->getEntryBlock();
+      Builder.SetInsertPoint(&entryBB, entryBB.getFirstInsertionPt());
+      DepArray = Builder.CreateAlloca(DepArrayTy, nullptr, ".dep.arr.addr");
+    }
 
-    Builder.restoreIP(OldIP);
     for (const auto &[DepIdx, Dep] : enumerate(Dependencies.Deps)) {
       Value *Base =
           Builder.CreateConstInBoundsGEP2_64(DepArrayTy, DepArray, 0, DepIdx);
@@ -2580,7 +2587,7 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTaskloop(
     Value *LBVal, Value *UBVal, Value *StepVal, bool Untied, Value *IfCond,
     Value *GrainSize, bool NoGroup, int Sched, Value *Final, bool Mergeable,
     Value *Priority, uint64_t NumOfCollapseLoops, TaskDupCallbackTy DupCB,
-    Value *TaskContextStructPtrVal) {
+    Value *TaskContextStructPtrVal, bool FreeAgent) {
 
   if (!updateToLocation(Loc))
     return InsertPointTy();
@@ -2621,12 +2628,12 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTaskloop(
   SmallVector<Instruction *> ToBeDeleted;
   // dummy instruction to be used as a fake argument
   OI->ExcludeArgsFromAggregate.push_back(createFakeIntVal(
-      Builder, M, AllocaIP, ToBeDeleted, TaskloopAllocaIP, "global.tid", false));
-  Value *FakeLB = createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted,
+      Builder, AllocaIP, ToBeDeleted, TaskloopAllocaIP, "global.tid", false));
+  Value *FakeLB = createFakeIntVal(Builder, AllocaIP, ToBeDeleted,
                                    TaskloopAllocaIP, "lb", false, true);
-  Value *FakeUB = createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted,
+  Value *FakeUB = createFakeIntVal(Builder, AllocaIP, ToBeDeleted,
                                    TaskloopAllocaIP, "ub", false, true);
-  Value *FakeStep = createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted,
+  Value *FakeStep = createFakeIntVal(Builder, AllocaIP, ToBeDeleted,
                                      TaskloopAllocaIP, "step", false, true);
   // For Taskloop, we want to force the bounds being the first 3 inputs in the
   // aggregate struct
@@ -2660,7 +2667,8 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTaskloop(
                        TaskloopAllocaBB, CLI, TaskDupFn, ToBeDeleted, IfCond,
                        GrainSize, NoGroup, Sched, FakeLB, FakeUB, FakeStep,
                        FakeSharedsTy, Final, Mergeable, Priority,
-                       NumOfCollapseLoops](Function &OutlinedFn) mutable {
+                       NumOfCollapseLoops,
+                       FreeAgent](Function &OutlinedFn) mutable {
     // Replace the Stale CI by appropriate RTL function call.
     assert(OutlinedFn.hasOneUse() &&
            "there must be a single user for the outlined function");
@@ -2702,6 +2710,8 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTaskloop(
     // Task is not mergeable if (Flags & 4) == 0.
     // Task is priority if (Flags & 32) == 32.
     // Task is not priority if (Flags & 32) == 0.
+    // Task is free-agent eligible if (Flags & 128) == 128.
+    // Task is not free-agent eligible if (Flags & 128) == 0.
     Value *Flags = Builder.getInt32(Untied ? 0 : 1);
     if (Final)
       Flags = Builder.CreateOr(Builder.getInt32(2), Flags);
@@ -2709,6 +2719,8 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTaskloop(
       Flags = Builder.CreateOr(Builder.getInt32(4), Flags);
     if (Priority)
       Flags = Builder.CreateOr(Builder.getInt32(32), Flags);
+    if (FreeAgent)
+      Flags = Builder.CreateOr(Builder.getInt32(128), Flags);
 
     Value *TaskSize = Builder.getInt64(
         divideCeil(M.getDataLayout().getTypeSizeInBits(Task), 8));
@@ -2928,7 +2940,7 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTask(
     ArrayRef<BasicBlock *> DeallocBlocks, BodyGenCallbackTy BodyGenCB,
     bool Tied, Value *Final, Value *IfCondition,
     const DependenciesInfo &Dependencies, const AffinityData &Affinities,
-    bool Mergeable, Value *EventHandle, Value *Priority) {
+    bool Mergeable, Value *EventHandle, Value *Priority, bool FreeAgent) {
 
   if (!updateToLocation(Loc))
     return InsertPointTy();
@@ -2973,10 +2985,10 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTask(
   // Add the thread ID argument.
   SmallVector<Instruction *, 4> ToBeDeleted;
   OI->ExcludeArgsFromAggregate.push_back(createFakeIntVal(
-      Builder, M, AllocaIP, ToBeDeleted, TaskAllocaIP, "global.tid", false));
+      Builder, AllocaIP, ToBeDeleted, TaskAllocaIP, "global.tid", false));
 
   OI->PostOutlineCB = [this, Ident, Tied, Final, IfCondition, Dependencies,
-                       Affinities, Mergeable, Priority, EventHandle,
+                       Affinities, Mergeable, Priority, EventHandle, FreeAgent,
                        TaskAllocaBB,
                        ToBeDeleted](Function &OutlinedFn) mutable {
     // Replace the Stale CI by appropriate RTL function call.
@@ -3009,6 +3021,8 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTask(
     // Task is not detachable iff (Flags & 64) == 0.
     // Task is priority iff (Flags & 32) == 32.
     // Task is not priority iff (Flags & 32) == 0.
+    // Task is free-agent eligible iff (Flags & 128) == 128.
+    // Task is not free-agent eligible iff (Flags & 128) == 0.
     // TODO: Handle the other flags.
     Value *Flags = Builder.getInt32(Tied);
     auto *ConstIfCondition = dyn_cast_or_null<ConstantInt>(IfCondition);
@@ -3025,6 +3039,8 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTask(
       Flags = Builder.CreateOr(Builder.getInt32(64), Flags);
     if (Priority)
       Flags = Builder.CreateOr(Builder.getInt32(32), Flags);
+    if (FreeAgent)
+      Flags = Builder.CreateOr(Builder.getInt32(128), Flags);
 
     // Argument - `sizeof_kmp_task_t` (TaskSize)
     // Tasksize refers to the size in bytes of kmp_task_t data structure
@@ -5573,10 +5589,10 @@ Error OpenMPIRBuilder::emitScanBasedDirectiveDeclsIR(
         Builder.CreateAdd(ScanRedInfo->Span, Builder.getInt32(1));
     for (size_t i = 0; i < ScanVars.size(); i++) {
       Type *IntPtrTy = Builder.getInt32Ty();
-      Constant *Allocsize = ConstantExpr::getSizeOf(ScanVarsType[i]);
-      Allocsize = ConstantExpr::getTruncOrBitCast(Allocsize, IntPtrTy);
-      Value *Buff = Builder.CreateMalloc(IntPtrTy, ScanVarsType[i], Allocsize,
-                                         AllocSpan, nullptr, "arr");
+      Value *Allocsize = Builder.CreateTypeSize(
+          IntPtrTy, M.getDataLayout().getTypeAllocSize(ScanVarsType[i]));
+      Value *Buff =
+          Builder.CreateMalloc(IntPtrTy, Allocsize, AllocSpan, nullptr, "arr");
       Builder.CreateStore(Buff, (*(ScanRedInfo->ScanBuffPtrs))[ScanVars[i]]);
     }
     return Error::success();
@@ -8624,9 +8640,10 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createTargetInit(
   }
 
   // Generic mode runs the main thread on a warp of its own, past thread_limit.
-  // Reserve the widest warp any target has.
+  // Reserve the widest warp any target has. Not on SPIR-V, causes problems with
+  // Level Zero.
   if (MaxThreadsVal > 0 && Attrs.ExecFlags == omp::OMP_TGT_EXEC_MODE_GENERIC &&
-      hasGridValue(T))
+      hasGridValue(T) && !T.isSPIRV())
     MaxThreadsVal = int32_t(
         std::min<int64_t>(int64_t(MaxThreadsVal) + 64,
                           int64_t(getGridValue(T, Kernel).GV_Max_WG_Size)));
@@ -9867,9 +9884,8 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::emitTargetTask(
 
   // Add the thread ID argument.
   SmallVector<Instruction *, 4> ToBeDeleted;
-  OI->ExcludeArgsFromAggregate.push_back(
-      createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted, TargetTaskAllocaIP,
-                       "global.tid", false));
+  OI->ExcludeArgsFromAggregate.push_back(createFakeIntVal(
+      Builder, AllocaIP, ToBeDeleted, TargetTaskAllocaIP, "global.tid", false));
 
   // Generate the task body which will subsequently be outlined.
   Builder.restoreIP(TargetTaskBodyIP);
@@ -11582,10 +11598,10 @@ Expected<std::pair<Value *, Value *>> OpenMPIRBuilder::emitAtomicUpdate(
   if (emitRMWOp) {
     AtomicRMWInst *RMWInst =
         Builder.CreateAtomicRMW(RMWOp, X, Expr, llvm::MaybeAlign(), AO);
+    if (IsIgnoreDenormalMode)
+      RMWInst->setMetadata(llvm::LLVMContext::MD_atomic_ignore_denormal_mode,
+                           llvm::MDNode::get(Builder.getContext(), {}));
     if (T.isAMDGPU()) {
-      if (IsIgnoreDenormalMode)
-        RMWInst->setMetadata("amdgpu.ignore.denormal.mode",
-                             llvm::MDNode::get(Builder.getContext(), {}));
       if (!IsFineGrainedMemory)
         RMWInst->setMetadata("amdgpu.no.fine.grained.memory",
                              llvm::MDNode::get(Builder.getContext(), {}));
@@ -12226,9 +12242,9 @@ OpenMPIRBuilder::createTeams(const LocationDescription &Loc,
   SmallVector<Instruction *, 8> ToBeDeleted;
   InsertPointTy OuterAllocaIP(&OuterAllocaBB, OuterAllocaBB.begin());
   OI->ExcludeArgsFromAggregate.push_back(createFakeIntVal(
-      Builder, M, OuterAllocaIP, ToBeDeleted, AllocaIP, "gid", true));
+      Builder, OuterAllocaIP, ToBeDeleted, AllocaIP, "gid", true));
   OI->ExcludeArgsFromAggregate.push_back(createFakeIntVal(
-      Builder, M, OuterAllocaIP, ToBeDeleted, AllocaIP, "tid", true));
+      Builder, OuterAllocaIP, ToBeDeleted, AllocaIP, "tid", true));
 
   auto HostPostOutlineCB = [this, Ident,
                             ToBeDeleted](Function &OutlinedFn) mutable {

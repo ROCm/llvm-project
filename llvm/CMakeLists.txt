@@ -252,6 +252,13 @@ if ("lldb" IN_LIST LLVM_ENABLE_PROJECTS)
   endif()
 endif ()
 
+if (CLANG_ENABLE_CIR AND "clang" IN_LIST LLVM_ENABLE_PROJECTS AND
+    NOT "mlir" IN_LIST LLVM_ENABLE_PROJECTS)
+  message(STATUS "Enabling MLIR as a dependency of ClangIR")
+  list(APPEND LLVM_ENABLE_PROJECTS "mlir")
+  list(APPEND LLVM_DEPENDENCY_ONLY_PROJECTS "mlir")
+endif()
+
 if ("libc" IN_LIST LLVM_ENABLE_PROJECTS)
   message(WARNING "Using LLVM_ENABLE_PROJECTS=libc is deprecated now, and will "
     "become a fatal error in a future release. Please use "
@@ -531,6 +538,7 @@ if(WIN32 AND NOT UNIX)
     set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}\\\\cmake\\\\nsis_icon.ico")
     set(CPACK_NSIS_MODIFY_PATH "ON")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL "ON")
+    set(CPACK_NSIS_MANIFEST_DPI_AWARE "ON")
     if( CMAKE_CL_64 )
       if(NOT DEFINED CPACK_NSIS_INSTALL_ROOT)
         set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES64")

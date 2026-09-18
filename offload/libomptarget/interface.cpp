@@ -428,7 +428,6 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
                          KernelArgs->ArgTypes, KernelArgs->ArgNames,
                          "Entering OpenMP kernel");
 
-#ifdef OMPTARGET_DEBUG
   ODBG_OS(ODT_Kernel, [&](llvm::raw_ostream &Os) {
     for (uint32_t I = 0; I < KernelArgs->NumArgs; ++I) {
       Os << "Entry" << llvm::format("%2d", I)
@@ -443,7 +442,6 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
          << "\n";
     }
   });
-#endif
 
   auto DeviceOrErr = PM->getDevice(DeviceId);
   if (!DeviceOrErr)
@@ -683,4 +681,11 @@ EXTERN void __tgt_register_rpc_callback(unsigned (*Callback)(void *,
   for (auto &Plugin : PM->plugins())
     if (Plugin.is_initialized() && Plugin.getNumDevices() > 0)
       Plugin.getRPCServer().registerCallback(Callback);
+}
+
+EXTERN void *__tgt_get_mapped_ptr(int64_t DeviceId, const void *HostPtr) {
+  void *TargetPtr = omp_get_mapped_ptr(HostPtr, DeviceId);
+  if (!TargetPtr)
+    return const_cast<void *>(HostPtr);
+  return TargetPtr;
 }

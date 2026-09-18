@@ -76,9 +76,7 @@ amd_comgr_status_t SPIRVCommand::execute(raw_ostream &LogS) {
 }
 
 SPIRVCommand::ActionClass SPIRVCommand::getClass() const {
-  // return an action class that is not allocated to distinguish it from any
-  // clang action
-  return clang::driver::Action::ActionClass::JobClassLast + 1;
+  return CachedCommandAdaptor::SPIRVClass;
 }
 
 void SPIRVCommand::addOptionsIdentifier(HashAlgorithm &H) const {

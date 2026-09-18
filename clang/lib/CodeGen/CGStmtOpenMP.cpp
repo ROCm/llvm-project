@@ -623,8 +623,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
 
   (void)isXteamKernel;
 
-  // Append post-context implicit params (e.g. dyn_ptr) after all other args
-  // so they remain at the end, matching the host-side CombinedInfo ordering.
   Args.append(std::next(CD->param_begin(), CD->getContextParamPosition() + 1),
               CD->param_end());
   TargetArgs.append(
@@ -6892,7 +6890,6 @@ static bool canUseAMDGPUFastFPAtomics(CodeGenFunction &CGF, LValue X,
         userRequestsAMDGPUFastFPAtomics = false;
     }
   }
-
   bool supportsFastFPAtomics =
       Context.getTargetInfo().getTriple().isAMDGCN() &&
       CGF.CGM.getOpenMPRuntime().supportFastFPAtomics() &&
@@ -8878,11 +8875,6 @@ void CodeGenFunction::EmitOMPTargetUpdateDirective(
   CGM.getOpenMPRuntime().emitTargetDataStandAloneCall(*this, S, IfCond, Device);
 }
 
-/// A 'loop' construct is supposed to be a work distribution construct by
-/// default unless its binding region is the innermost enclosing parallel
-/// region, in which case it is a worksharing region. Because we currently
-/// have no way to know if this is true at compile time, for now emit them
-/// as inlined loops.
 void CodeGenFunction::EmitOMPGenericLoopDirective(
     const OMPGenericLoopDirective &S) {
   // Always expect a bind clause on the loop directive. It it wasn't
@@ -9075,8 +9067,8 @@ void CodeGenFunction::EmitOMPTargetTeamsGenericLoopDeviceFunction(
 }
 
 static void emitTargetParallelGenericLoopRegion(
-  CodeGenFunction &CGF, const OMPTargetParallelGenericLoopDirective &S,
-  PrePostActionTy &Action) {
+    CodeGenFunction &CGF, const OMPTargetParallelGenericLoopDirective &S,
+    PrePostActionTy &Action) {
   Action.Enter(CGF);
   // Emit as 'parallel for'.
   auto &&CodeGen = [&S](CodeGenFunction &CGF, PrePostActionTy &Action) {
