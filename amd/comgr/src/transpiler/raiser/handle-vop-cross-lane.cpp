@@ -241,7 +241,6 @@ Error raiseWriteLane32(RaiseContext &Ctx, const DecodedInst &Di,
                                 "writelane.source.wave");
   }
 
-  // V_WRITELANE_B32 overrides EXEC for its VGPR write.
   Ctx.registers().regFile().writeReg32(Ctx.B, *Dst, Result);
   return Error::success();
 }
