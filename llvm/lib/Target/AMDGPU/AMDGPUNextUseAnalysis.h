@@ -334,6 +334,25 @@ public:
 
   bool isReachable(const MachineBasicBlock *From,
                    const MachineBasicBlock *To) const;
+
+  /// Calculate the loop distance from the last instruction of the outermost
+  /// loop's preheader to the last instruction of its latch.
+  /// \p MBB must be inside a loop.
+  /// \returns The shortest distance, or unreachable if there is no preheader
+  /// or no latch.
+  NextUseDistance calcOutermostLoopDistance(MachineInstr *StartMI,
+                                            MachineLoop *OutermostLoop) const;
+
+  /// Calculate the shortest weighted path from \p FromMI to \p ToMI.
+  /// Paths that exit loops are weighted to appear further away.
+  NextUseDistance calcShortestDistance(const MachineInstr *FromMI,
+                                       const MachineInstr *ToMI) const;
+
+  // This works only for the loop live-though registers and loop live-in
+  // registers of the outermost loop.
+  NextUseDistance getAdjustedNextUseDistance(
+      MachineInstr *StartMI, MachineLoop *OutermostLoop,
+      SmallVector<const MachineOperand *> &UsesForNextUseDistCalculation) const;
 };
 
 //==============================================================================

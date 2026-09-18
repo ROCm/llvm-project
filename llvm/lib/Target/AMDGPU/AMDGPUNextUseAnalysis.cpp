@@ -1387,10 +1387,50 @@ private:
     return CurTailLen + LD.Distance + getSize(LD.MBB) + Hdr + Dst + UseHeadLen;
   }
 
+public:
+  // Calculate the loop distance from the last instruction of the outermost
+  // loop's preheader to the last instruction of its latch.
+  // Returns unreachable if there is no preheader or no latch.
+  NextUseDistance calcOutermostLoopDistance(MachineInstr *StartMI,
+                                            MachineLoop *OutermostLoop) const {
+    SmallVector<MachineBasicBlock *, 2> Latches;
+    OutermostLoop->getLoopLatches(Latches);
+    NextUseDistance ShortestDist = NextUseDistance::unreachable();
+    for (MachineBasicBlock *Latch : Latches) {
+      const MachineInstr *LatchLastMI = &Latch->back();
+      NextUseDistance Dist = calcShortestDistance(StartMI, LatchLastMI);
+      if (Dist < ShortestDist)
+        ShortestDist = Dist;
+    }
+    return ShortestDist;
+  }
+
+  NextUseDistance
+  getAdjustedNextUseDistance(MachineInstr *StartMI, MachineLoop *OutermostLoop,
+                             SmallVector<const MachineOperand *>
+                                 &UsesForNextUseDistCalculation) const {
+    NextUseDistance ShortestDist = NextUseDistance::unreachable();
+    NextUseDistance CurrentDist = NextUseDistance::unreachable();
+    for (const MachineOperand *UseOp : UsesForNextUseDistCalculation) {
+      const MachineInstr *UseMI = UseOp->getParent();
+      const MachineBasicBlock *UseMBB = UseMI->getParent();
+      MachineLoop *UseLoop = MLI->getLoopFor(UseMBB);
+      if (OutermostLoop->contains(UseLoop)) {
+        CurrentDist = calcOutermostLoopDistance(StartMI, OutermostLoop);
+      } else {
+        CurrentDist = calcShortestDistance(StartMI, UseMI);
+      }
+
+      if (CurrentDist < ShortestDist)
+        ShortestDist = CurrentDist;
+    }
+    return ShortestDist;
+  }
+
   //----------------------------------------------------------------------------
   // Calculate inter-instruction distances
   //----------------------------------------------------------------------------
-private:
+public:
   // Calculate the shortest weighted path from MachineInstruction 'FromMI' to
   // 'ToMI'. It is weighted distance in that paths that exit loops are made to
   // look much further away.
@@ -1416,6 +1456,7 @@ private:
     return RV;
   }
 
+private:
   // Calculate the shortest unweighted path from MachineInstruction 'FromMI' to
   // 'ToMI'. In contrast with 'calcShortestDistance', distances are based solely
   // on basic block instruction counts and traversing a loop exit does not
@@ -2638,4 +2679,22 @@ AMDGPUNextUseAnalysisPrinterPass::run(MachineFunction &MF,
 bool AMDGPUNextUseAnalysis::isReachable(const MachineBasicBlock *From,
                                         const MachineBasicBlock *To) const {
   return Impl->isForwardReachable(From, To);
+}
+
+NextUseDistance AMDGPUNextUseAnalysis::calcOutermostLoopDistance(
+    MachineInstr *StartMI, MachineLoop *OutermostLoop) const {
+  return Impl->calcOutermostLoopDistance(StartMI, OutermostLoop);
+}
+
+NextUseDistance
+AMDGPUNextUseAnalysis::calcShortestDistance(const MachineInstr *FromMI,
+                                            const MachineInstr *ToMI) const {
+  return Impl->calcShortestDistance(FromMI, ToMI);
+}
+
+NextUseDistance AMDGPUNextUseAnalysis::getAdjustedNextUseDistance(
+    MachineInstr *StartMI, MachineLoop *OutermostLoop,
+    SmallVector<const MachineOperand *> &UsesForNextUseDistCalculation) const {
+  return Impl->getAdjustedNextUseDistance(StartMI, OutermostLoop,
+                                          UsesForNextUseDistCalculation);
 }
