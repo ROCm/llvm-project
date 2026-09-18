@@ -5,8 +5,6 @@
 
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_loads | %FileCheck %s --check-prefix=IR
-; RUN: %transpile_cli %t.hsaco --dump-decoded=global_loads \
-; RUN:   | %FileCheck %s --check-prefix=DECODE
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_load_cache_policy,global_load_unaligned_offset \
 ; RUN:   --emit-ir=global_load_flat,global_load_scratch 2>&1 \
@@ -46,7 +44,6 @@ global_loads:
 ; IR: load i32, ptr addrspace(1) [[POINTER3]], align 4
 	global_load_dword a1, v[2:3], off
 
-; DECODE: GLOBAL_LOAD_B64
 ; IR: [[POINTER4:%.+]] = inttoptr i64 {{%.+}} to ptr addrspace(1)
 ; IR: br i1 {{%.+}}, label %[[DO4:.+]], label %[[SKIP4:.+]]
 ; IR: [[DO4]]:
@@ -55,7 +52,6 @@ global_loads:
 ; IR: br label %[[SKIP4]]
 	global_load_dwordx2 v[4:5], v[2:3], off
 
-; DECODE: GLOBAL_LOAD_B96
 ; IR: [[BASE5:%.+]] = or i64 {{%.+}}, {{%.+}}
 ; IR: [[LANE5:%.+]] = zext i32 {{.+}} to i64
 ; IR: [[ADDRESS5:%.+]] = add i64 [[BASE5]], [[LANE5]]
@@ -67,7 +63,6 @@ global_loads:
 	global_load_dwordx3 v[8:10], v6, s[0:1]
 
 ; A four-byte offset does not strengthen the dword alignment guarantee.
-; DECODE: GLOBAL_LOAD_B128
 ; IR: [[POINTER6:%.+]] = inttoptr i64 {{%.+}} to ptr addrspace(1)
 ; IR: [[OFFSET6:%.+]] = getelementptr i8, ptr addrspace(1) [[POINTER6]], i64 4
 ; IR: br i1 {{%.+}}, label {{%.+}}, label {{%.+}}

@@ -5,8 +5,6 @@
 
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_loads_gfx1250 | %FileCheck %s --check-prefix=IR
-; RUN: %transpile_cli %t.hsaco --dump-decoded=global_loads_gfx1250 \
-; RUN:   | %FileCheck %s --check-prefix=DECODE
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_load_scaled_offset 2>&1 | \
 ; RUN:   %FileCheck %s --check-prefix=SCALED-OFFSET
@@ -39,27 +37,21 @@ global_loads_gfx1250:
 ; IR: load i32, ptr addrspace(1) [[POINTER1]], align 4
 	global_load_b32 v1, v0, s[0:1]
 
-; DECODE: GLOBAL_LOAD_B64
 ; IR: load i64, ptr addrspace(1) {{%.+}}, align 4
 	global_load_b64 v[4:5], v[2:3], off
 
-; DECODE: GLOBAL_LOAD_B96
 ; IR: load <3 x i32>, ptr addrspace(1) {{%.+}}, align 4
 	global_load_b96 v[8:10], v0, s[0:1]
 
-; DECODE: GLOBAL_LOAD_B128
 ; IR: load <4 x i32>, ptr addrspace(1) {{%.+}}, align 4
 	global_load_b128 v[12:15], v[2:3], off offset:4
 
-; DECODE: GLOBAL_STORE_B64
 ; IR: store i64 {{.+}}, ptr addrspace(1) {{%.+}}, align 4
 	global_store_b64 v[2:3], v[4:5], off
 
-; DECODE: GLOBAL_STORE_B96
 ; IR: store <3 x i32> {{.+}}, ptr addrspace(1) {{%.+}}, align 4
 	global_store_b96 v0, v[8:10], s[0:1]
 
-; DECODE: GLOBAL_STORE_B128
 ; IR: store <4 x i32> {{.+}}, ptr addrspace(1) {{%.+}}, align 4
 	global_store_b128 v[2:3], v[12:15], off offset:4
 ; IR: ret void

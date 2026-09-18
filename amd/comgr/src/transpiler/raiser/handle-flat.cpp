@@ -32,6 +32,7 @@ namespace COMGR::transpiler {
 // Ordinary GLOBAL dword tuples guarantee only dword alignment.
 static constexpr Align GlobalAccessAlignment = Align::Constant<4>();
 
+/// Return the transfer width in dwords, or no value for other operations.
 static std::optional<unsigned>
 globalAccessWidthInDwords(CanonicalOp Operation) {
   switch (Operation) {
@@ -52,7 +53,10 @@ globalAccessWidthInDwords(CanonicalOp Operation) {
   }
 }
 
+/// Return the LLVM IR type for a transfer of the given dword width.
 static Type *globalAccessType(IRBuilder<> &B, unsigned WidthInDwords) {
+  assert(WidthInDwords >= 1 && WidthInDwords <= 4 &&
+         "unsupported GLOBAL access width");
   if (WidthInDwords == 1)
     return B.getInt32Ty();
   if (WidthInDwords == 2)
@@ -60,6 +64,7 @@ static Type *globalAccessType(IRBuilder<> &B, unsigned WidthInDwords) {
   return FixedVectorType::get(B.getInt32Ty(), WidthInDwords);
 }
 
+/// Parse and validate the named GLOBAL data register tuple.
 static Expected<ParsedReg>
 globalDataReg(RaiseContext &Ctx, const DecodedInst &Di, AMDGPU::OpName Name,
               unsigned WidthInDwords, StringRef Role) {
@@ -80,6 +85,7 @@ globalDataReg(RaiseContext &Ctx, const DecodedInst &Di, AMDGPU::OpName Name,
   return *Reg;
 }
 
+/// Emit a GLOBAL load of the given dword width under EXEC.
 static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
                             unsigned WidthInDwords) {
   Expected<ParsedReg> Destination = globalDataReg(Ctx, Di, AMDGPU::OpName::vdst,
@@ -102,6 +108,7 @@ static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+/// Emit a GLOBAL store of the given dword width under EXEC.
 static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
                              unsigned WidthInDwords) {
   Expected<ParsedReg> DataReg =

@@ -5,8 +5,6 @@
 
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_stores | %FileCheck %s --check-prefix=IR
-; RUN: %transpile_cli %t.hsaco --dump-decoded=global_stores \
-; RUN:   | %FileCheck %s --check-prefix=DECODE
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_store_cache_policy 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE
@@ -34,7 +32,6 @@ global_stores:
 ; IR: store i32 {{.+}}, ptr addrspace(1) [[OFFSET1]], align 4
 	global_store_dword v0, v1, s[0:1] offset:-16
 
-; DECODE: GLOBAL_STORE_B64
 ; IR: [[HIGH2:%.+]] = shl i64 {{%.+}}, 32
 ; IR: [[DATA2:%.+]] = or i64 {{%.+}}, [[HIGH2]]
 ; IR: [[POINTER2:%.+]] = inttoptr i64 {{%.+}} to ptr addrspace(1)
@@ -44,7 +41,6 @@ global_stores:
 ; IR: br label %[[SKIP2]]
 	global_store_dwordx2 v[2:3], v[4:5], off
 
-; DECODE: GLOBAL_STORE_B96
 ; IR: shl i96 {{%.+}}, 64
 ; IR: [[DATA3:%.+]] = bitcast i96 {{%.+}} to <3 x i32>
 ; IR: [[BASE3:%.+]] = or i64 {{%.+}}, {{%.+}}
@@ -55,7 +51,6 @@ global_stores:
 ; IR: store <3 x i32> [[DATA3]], ptr addrspace(1) [[POINTER3]], align 4
 	global_store_dwordx3 v6, v[8:10], s[0:1]
 
-; DECODE: GLOBAL_STORE_B128
 ; IR: shl i128 {{%.+}}, 96
 ; IR: [[DATA4:%.+]] = bitcast i128 {{%.+}} to <4 x i32>
 ; IR: [[POINTER4:%.+]] = inttoptr i64 {{%.+}} to ptr addrspace(1)

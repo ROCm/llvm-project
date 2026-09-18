@@ -67,7 +67,7 @@ llvm::Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
 // Translate supported SMEM loads or return a structured refusal.
 llvm::Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
-// Translate supported VGLOBAL memory accesses, or return a structured refusal.
+/// Translate supported VGLOBAL memory accesses, or return a structured refusal.
 llvm::Error handleVGLOBAL(RaiseContext &Ctx, const DecodedInst &Di,
                           OperandResolver &Op);
 /// Raise raw unformatted buffer loads and stores, or return a refusal.
