@@ -11,12 +11,14 @@
 // COM: Dissasemble LLVM IR bitcode to LLVM IR text
 // RUN: %llvm-dis %t.translated.bc -o - | %FileCheck %s
 
-// COM: Standard SPIR-V has no AMD generator marker; the target comes from Comgr.
+// COM: Comgr selects the target for standard SPIR-V.
+
 // RUN: spirv-translator --isa amdgcn-amd-amdhsa--gfx900 %t.spv -o %t.gfx900.bc
 // RUN: %llvm-dis %t.gfx900.bc -o - | %FileCheck %s --check-prefix=GFX900
 // RUN: spirv-translator --isa amdgcn-amd-amdhsa--gfx942 %t.spv -o %t.gfx942.bc
 // RUN: %llvm-dis %t.gfx942.bc -o - | %FileCheck %s --check-prefix=GFX942
-// RUN: spirv-translator --isa amdgcn-amd-amdhsa--gfx1030 %t.spv -o %t.gfx1030.bc
+// RUN: spirv-translator --isa amdgcn-amd-amdhsa--gfx1030 %t.spv \
+// RUN:   -o %t.gfx1030.bc
 // RUN: %llvm-dis %t.gfx1030.bc -o - | %FileCheck %s --check-prefix=GFX1030
 
 // COM: Verify LLVM IR text
