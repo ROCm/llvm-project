@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 // cci-bisect conformance exercise inner commit 2/4 (harmless).
+
 #include "clang/Basic/OffloadArch.h"
 
 #include "llvm/ADT/SmallVector.h"
