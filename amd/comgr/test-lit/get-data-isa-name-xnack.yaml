@@ -1,0 +1,9 @@
+--- !ELF
+FileHeader:
+  Class:      ELFCLASS64
+  Data:       ELFDATA2LSB
+  Type:       [[TYPE=ET_REL]]
+  Machine:    EM_AMDGPU
+  OSABI:      ELFOSABI_AMDGPU_HSA
+  ABIVersion: [[ABI=4]]
+  Flags:      [ EF_AMDGPU_MACH_AMDGCN_[[GPU=GFX1250]], EF_AMDGPU_FEATURE_XNACK_[[XNACK=ON]]_V4 ]

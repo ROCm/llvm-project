@@ -400,13 +400,18 @@ amd_comgr_status_t getElfIsaNameFromElfHeader(const ELFObjectFile<ELFT> *Obj,
       ElfIsaName += ":sramecc+";
       break;
     }
-    switch (ElfHeader.e_flags & ELF::EF_AMDGPU_FEATURE_XNACK_V4) {
-    case ELF::EF_AMDGPU_FEATURE_XNACK_OFF_V4:
-      ElfIsaName += ":xnack-";
-      break;
-    case ELF::EF_AMDGPU_FEATURE_XNACK_ON_V4:
-      ElfIsaName += ":xnack+";
-      break;
+    // Always-on XNACK is not a selectable target ID feature.
+    const auto &Features =
+        AMDGPU::getFeatureBitset(AMDGPU::parseArchAMDGCN(Processor));
+    if (Features.test(AMDGPU::FEAT_XNACK_ON_OFF_MODES)) {
+      switch (ElfHeader.e_flags & ELF::EF_AMDGPU_FEATURE_XNACK_V4) {
+      case ELF::EF_AMDGPU_FEATURE_XNACK_OFF_V4:
+        ElfIsaName += ":xnack-";
+        break;
+      case ELF::EF_AMDGPU_FEATURE_XNACK_ON_V4:
+        ElfIsaName += ":xnack+";
+        break;
+      }
     }
     break;
   }
