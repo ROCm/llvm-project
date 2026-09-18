@@ -9,6 +9,7 @@
 #include "transpiler/raiser/handlers.h"
 
 #include "transpiler/decoder/decode.h"
+#include "transpiler/decoder/setpc-analysis.h"
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
@@ -736,6 +737,39 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
+  // A jump through a register names no offset of its own, so where it goes is
+  // whatever the analysis worked out the pair it reads holds. That offset leads
+  // a block, which the analysis reported before any block was made, so the
+  // jump is a branch to it. A call additionally leaves the offset it returns
+  // to behind, which is the source address of the instruction after it, the
+  // same value a program-counter capture there would have produced.
+  if (Di.CanonOp == CanonicalOp::S_SETPC_B64 ||
+      Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
+    const SetPcSite *Site = Ctx.setPcSite(Di.Offset);
+    assert(Site && "every register-indirect transfer is classified");
+    if (Site->SiteKind == SetPcSite::Kind::Unresolvable)
+      return unsupported(Ctx, Di, Site->RefusalReason);
+
+    if (Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
+      Expected<ParsedReg> Dst = Op.dst();
+      if (!Dst)
+        return Dst.takeError();
+      if (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx)
+        return unsupported(Ctx, Di,
+                           "leaves its return address outside an SGPR pair, "
+                           "which is not tracked as one");
+      uint64_t ReturnAddress =
+          Ctx.sourceTextBaseAddress() + Di.Offset + Di.sizeInBytes();
+      Ctx.registers().writeReg64(
+          *Dst, ConstantInt::get(Ctx.B.getInt64Ty(), ReturnAddress));
+      Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                    ReturnAddress);
+    }
+
+    Ctx.B.CreateBr(Ctx.lookupBB(Site->DirectTarget));
+    return Error::success();
+  }
+
   switch (Di.CanonOp) {
   // The source splits a barrier in two: this arrival, which does not block,
   // and a release in SOPP, which does. The raise has one barrier, and it
@@ -773,13 +807,6 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::S_WAKEUP_BARRIER_M0:
     return unsupported(Ctx, Di, "wakes the waves waiting on a named barrier");
 
-  case CanonicalOp::S_SETPC_B64:
-    return unsupported(
-        Ctx, Di, "jumps to a register value, which names no recovered block");
-  case CanonicalOp::S_SWAPPC_B64:
-    return unsupported(Ctx, Di,
-                       "calls through a register value and leaves behind a "
-                       "return address nothing can return to");
   case CanonicalOp::S_RFE_B64:
     return unsupported(Ctx, Di, "returns from an exception handler");
 
