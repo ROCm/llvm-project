@@ -668,6 +668,7 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
   if (CurLoop)
     OutermostLoopOfCurLoop = CurLoop->getOutermostLoop();
   unsigned CandidateCnt = 0;
+  unsigned NewCandidateCnt = 0;
   for (auto [CandidateReg, Mask] : RPTracker.getLiveRegs()) {
 
     MachineInstr *CandidateMI = MRI->getOneDef(CandidateReg)->getParent();
@@ -677,6 +678,13 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
 
     if (CandidateMI == CurMI)
       continue;
+
+    LLVM_DEBUG(NewCandidateCnt++);
+    LLVM_DEBUG({
+      dbgs() << NewCandidateCnt
+             << ": Candidate register = " << printReg(CandidateReg, TRI)
+             << "\n";
+    });
 
     MachineBasicBlock *CandidateMIMBB = CandidateMI->getParent();
     assert(!(CurMI != CandidateMI && DT->dominates(CurMI, CandidateMI) &&
@@ -696,10 +704,10 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
 
     bool IsRestore = TII->isVGPRSpill(CandidateMI->getOpcode()) &&
                      CandidateMI->mayLoad() && EnableRestoreOptimization;
-    // If the high register pressure point is inside a loop, then we spill loop
-    // live-ins and loop live-thoughs.
-    // We spill values that are defined inside a loop in the exit block of the
-    // loop when the high register pressure point is outside of the loop.
+    // If the high register pressure point is inside a loop, then we spill
+    // loop live-ins and loop live-thoughs. We spill values that are defined
+    // inside a loop in the exit block of the loop when the high register
+    // pressure point is outside of the loop.
     if (CandidateLoop && OutermostLoopOfCurLoop && !AreIndependentLoops &&
         !IsRestore)
       continue;
@@ -707,20 +715,23 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
     SmallVector<const MachineOperand *> UsesForNextUseDistCalculation;
     if (CurLoop) {
       MachineBasicBlock *PreHeader = OutermostLoopOfCurLoop->getLoopPreheader();
-      // Find the loop uses of CandidateReg.
-      MachineBasicBlock::iterator LastIt = PreHeader->getFirstTerminator();
-      if (LastIt == PreHeader->end())
-        LastIt = PreHeader->instr_back();
-      MachineInstr *LastMIPreHeader = &*(LastIt);
-      NUA->getReachableUses(CandidateReg, Mask, *LastMIPreHeader,
-                            UsesForNextUseDistCalculation);
+      MachineBasicBlock *Header = OutermostLoopOfCurLoop->getHeader();
+      MachineInstr *StartMI =
+          PreHeader->empty() ? &Header->front() : &PreHeader->back();
+      SmallVector<const MachineOperand *> ReachableUses;
+      NUA->getReachableUses(CandidateReg, Mask, *StartMI, ReachableUses);
 
-      // TODO: Split live-ranges for these cases.
+      for (const MachineOperand *ReachableMO : ReachableUses) {
+        const MachineInstr *UseMI = ReachableMO->getParent();
+        const MachineBasicBlock *UseMBB = UseMI->getParent();
+        if ((UseMBB == Header) && UseMI->isPHI())
+          continue;
+        UsesForNextUseDistCalculation.push_back(ReachableMO);
+      }
+
       if (llvm::any_of(
               UsesForNextUseDistCalculation, [&](const MachineOperand *UseMO) {
                 const MachineInstr *UseMI = UseMO->getParent();
-                if (!DT->dominates(LastMIPreHeader, UseMI))
-                  return true;
                 const MachineBasicBlock *UseMBB = UseMI->getParent();
                 MachineLoop *UseLoop = MLI->getLoopFor(UseMBB);
                 if (UseLoop && OutermostLoopOfCurLoop->contains(UseLoop) &&
@@ -737,13 +748,12 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
 
       RegNumOfUses[CandidateReg] = UsesForNextUseDistCalculation.size();
       LLVM_DEBUG(CandidateCnt++);
-      // All the live-ins are live through the backedge.
-      auto NextUseDist = NUA->getShortestDistance(
-          CandidateReg, *CandidateMI, UsesForNextUseDistCalculation);
+      auto NextUseDist = NUA->getAdjustedNextUseDistance(
+          StartMI, OutermostLoopOfCurLoop, UsesForNextUseDistCalculation);
       RegCandidates.push_back({CandidateReg, NextUseDist, Mask});
       LLVM_DEBUG({
         dbgs() << CandidateCnt
-               << ": Candidate register = " << printReg(CandidateReg, TRI)
+               << ": Loop Candidate register = " << printReg(CandidateReg, TRI)
                << " with distance = " << NextUseDist.fmt() << "\n";
       });
     } else {
@@ -1092,6 +1102,75 @@ void AMDGPUEarlyRegisterSpilling::groupUses(
 // We have to collect the unreachable uses before we emit the spill instruction.
 // This is due to the fact that some unreachable uses might become reachable if
 // we spill in common dominator.
+bool AMDGPUEarlyRegisterSpilling::classifyUsesForLoops(
+    MachineBasicBlock *SpillBlock, Register CandidateReg,
+    MachineBasicBlock *PreHeader, MachineBasicBlock *Header,
+    SetVectorType &DominatedUses, SetVectorType &NonDominatedReachableUses,
+    SetVectorType &UnreachableUses) {
+
+  std::set<MachineInstr *> Visited;
+  for (MachineInstr &U : MRI->use_nodbg_instructions(CandidateReg)) {
+    if (!Visited.insert(&U).second)
+      continue;
+
+    MachineBasicBlock *UseMBB = U.getParent();
+    MachineLoop *UseLoop = MLI->getLoopFor(UseMBB);
+    if (UseLoop && UseLoop->getLoopDepth() >= 2)
+      return true;
+
+    if (U.isPHI()) {
+      SmallVector<MachineBasicBlock *> PhiBlocks =
+          getPhiBlocksOfSpillReg(&U, CandidateReg);
+      if (PhiBlocks.empty()) {
+        // All incoming edges may be undef; treat as unreachable from
+        // SpillBlock.
+        UnreachableUses.insert(&U);
+        continue;
+      }
+
+      if (UseMBB == Header) {
+        UnreachableUses.insert(&U);
+        continue;
+      }
+
+      int Inserts = 0;
+      for (auto *PhiOpMBB : PhiBlocks) {
+        if ((PreHeader != UseMBB) && DT->dominates(PreHeader, UseMBB) &&
+            DT->dominates(SpillBlock, PhiOpMBB)) {
+          Inserts += DominatedUses.insert(&U);
+        } else if (NUA->isReachable(PreHeader, UseMBB) &&
+                   (NUA->isReachable(SpillBlock, PhiOpMBB) ||
+                    (SpillBlock == PhiOpMBB))) {
+          Inserts += NonDominatedReachableUses.insert(&U);
+        } else {
+          // The uses which are before the high register pressure point are
+          // unreachable.
+          Inserts += UnreachableUses.insert(&U);
+        }
+      }
+      assert(Inserts == 1 &&
+             "PHI has multiple uses with varying classifications");
+    } else {
+      if ((PreHeader != UseMBB) && (DT->dominates(PreHeader, UseMBB))) {
+        DominatedUses.insert(&U);
+      } else if (NUA->isReachable(PreHeader, UseMBB)) {
+        NonDominatedReachableUses.insert(&U);
+      } else {
+        // The uses which are before the high register pressure point are
+        // unreachable.
+        UnreachableUses.insert(&U);
+      }
+    }
+  }
+
+  assert((Visited.size() ==
+          (DominatedUses.size() + NonDominatedReachableUses.size() +
+           UnreachableUses.size())) &&
+         "Instruction not classified or has multiple classifications");
+
+  return false;
+}
+
 bool AMDGPUEarlyRegisterSpilling::classifyUses(
     MachineBasicBlock *SpillBlock, Register CandidateReg, MachineInstr *CurMI,
     SetVectorType &DominatedUses, SetVectorType &NonDominatedReachableUses,
@@ -1395,65 +1474,6 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
   if (CurLoop)
     OutermostLoopOfCurLoop = CurLoop->getOutermostLoop();
 
-  // It does not matter which restore instructions are pushed inside the loop
-  // because they all live through the backedge.
-  unsigned NumOfRestoresMoved = 0;
-  auto ItL = OutermostLoopOfCurLoop
-                 ? LoopToDomGroups.find(OutermostLoopOfCurLoop)
-                 : LoopToDomGroups.end();
-  if (ItL != LoopToDomGroups.end()) {
-    SmallVector<DomGroup> &RestoreCandidates = ItL->second;
-    while ((NumOfRestoresMoved < NumOfSpills) && !RestoreCandidates.empty()) {
-
-      DomGroup DG = RestoreCandidates.back();
-      RestoreCandidates.pop_back();
-
-      if (DG.isDeleted())
-        continue;
-
-      MachineInstr *Head = DG.getHead();
-      MachineInstr *OrigRestore = DG.getRestore();
-      Register OrigRestoreReg = OrigRestore->getOperand(0).getReg();
-      MachineLoop *HeadLoop = MLI->getLoopFor(Head->getParent());
-      MachineBasicBlock *HeadLoopPreheader = nullptr;
-      if (HeadLoop)
-        HeadLoopPreheader = HeadLoop->getLoopPreheader();
-
-      if (Head->isPHI() && (Head->getParent() == HeadLoopPreheader))
-        continue;
-
-      // TODO: Add support for DomGroup::CommonDominator.
-      assert(DG.getWhereToRestore() ==
-                 DomGroup::RestorePlacement::LoopPreheader &&
-             "The DomGroup is wrong.");
-      assert(HeadLoop->getLoopDepth() == 1 &&
-             "We do not support this optimization for loop nests");
-
-      // Create Candidate information.
-      LaneBitmask Mask = DG.getLaneBitmask();
-      auto Candidate = std::make_unique<RestoreCandidate>(
-          OrigRestoreReg, Mask,
-          RestoreCandidate::CodeGenPlan::MoveRestoreBeforeUseInsideLoop, TRI,
-          MRI, TII, FrameInfo, LIS, Indexes, DT, MLI, NUA);
-
-      Candidate->addGroup(DG);
-
-      unsigned NumOfCoveredRegs = SIRegisterInfo::getNumCoveredRegs(Mask);
-      NumOfRestoresMoved += NumOfCoveredRegs;
-      SpilledRegs.insert(OrigRestoreReg);
-      Candidate->generateSpillRestoreInstrs(CurMI, RestoreRegToDomGroup,
-                                            LoopToDomGroups);
-    }
-  }
-
-  if (NumOfRestoresMoved >= NumOfSpills) {
-    RPTracker.reset(*CurMI, CurMBB->end());
-    RPTracker.advance();
-    return;
-  }
-
-  NumOfSpills -= NumOfRestoresMoved;
-
   SmallVector<std::unique_ptr<SpillOrRestoreCandidate>> FinalCandidates;
   SmallVector<RegisterSpillCandidate> InitialVectorOfCandidates =
       getCandidates(CurMI, RPTracker);
@@ -1487,139 +1507,121 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
       if (DG.isDeleted())
         continue;
 
-      if (DG.getWhereToRestore() == DomGroup::RestorePlacement::LoopPreheader)
-        continue;
+      if (DG.getWhereToRestore() == DomGroup::RestorePlacement::LoopPreheader) {
+        MachineInstr *Head = DG.getHead();
+        MachineInstr *OrigRestore = DG.getRestore();
+        Register OrigRestoreReg = OrigRestore->getOperand(0).getReg();
+        MachineLoop *HeadLoop = MLI->getLoopFor(Head->getParent());
+        MachineBasicBlock *HeadLoopPreheader = nullptr;
+        if (HeadLoop)
+          HeadLoopPreheader = HeadLoop->getLoopPreheader();
 
-      MachineInstr *OrigRestore = DG.getRestore();
+        if (Head->isPHI() && (Head->getParent() == HeadLoopPreheader))
+          continue;
 
-      if (DG.size() == 1)
-        continue;
+        // TODO: Add support for DomGroup::CommonDominator.
+        assert(DG.getWhereToRestore() ==
+                   DomGroup::RestorePlacement::LoopPreheader &&
+               "The DomGroup is wrong.");
+        assert(HeadLoop->getLoopDepth() == 1 &&
+               "We do not support this optimization for loop nests");
 
-      bool HasUsesInLoopNest = false;
-      SetVectorType UsesDominatedByCurMI;
-      for (MachineInstr *U : DG.getUses()) {
-        MachineBasicBlock *UMBB = U->getParent();
-        MachineLoop *UseLoop = MLI->getLoopFor(UMBB);
-        if (UseLoop && UseLoop->getLoopDepth() >= 2) {
-          HasUsesInLoopNest = true;
-          break;
+        auto Candidate = std::make_unique<RestoreCandidate>(
+            OrigRestoreReg, Mask,
+            RestoreCandidate::CodeGenPlan::MoveRestoreBeforeUseInsideLoop, TRI,
+            MRI, TII, FrameInfo, LIS, Indexes, DT, MLI, NUA);
+
+        Candidate->addGroup(DG);
+        // Calculate the restore cost.
+        Candidate->calculateSpillRestoreCost();
+        int64_t newCost = 0;
+        if (HasFreeSubregs) {
+          newCost = Candidate->getSpillRestoreCost() +
+                    std::ceil(NumOfSpills / NumOfCoveredRegs);
+          Candidate->setSpillRestoreCost(newCost);
         }
-
-        if (U == CurMI) {
-          UsesDominatedByCurMI.insert(U);
-        } else if (CurMBB == UMBB && DT->dominates(CurMI, U)) {
-          UsesDominatedByCurMI.insert(U);
-        } else if (CurMBB != UMBB && DT->dominates(CurMBB, UMBB)) {
-          UsesDominatedByCurMI.insert(U);
-        }
-      }
-
-      if (HasUsesInLoopNest)
-        continue;
-
-      if (UsesDominatedByCurMI.empty())
-        continue;
-
-      // Assign groups to the uses.
-      std::vector<DomGroup> GroupOfUses;
-      assignUsesToGroups(CandidateReg, CurMI, UsesDominatedByCurMI, GroupOfUses,
-                         MLI);
-
-      auto Candidate = std::make_unique<RestoreCandidate>(
-          OrigRestore->getOperand(0).getReg(), Mask,
-          RestoreCandidate::CodeGenPlan::EmitNewRestoreBeforeUse, TRI, MRI, TII,
-          FrameInfo, LIS, Indexes, DT, MLI, NUA);
-
-      for (DomGroup &G : GroupOfUses)
-        Candidate->addGroup(G);
-
-      // Calculate the restore cost.
-      Candidate->calculateSpillRestoreCost();
-      int64_t newCost = 0;
-      if (HasFreeSubregs) {
-        newCost = Candidate->getSpillRestoreCost() +
-                  std::ceil(NumOfSpills / NumOfCoveredRegs);
-        Candidate->setSpillRestoreCost(newCost);
-      }
-      Candidate->setNextUseDistance(NextUseDist);
-      LLVM_DEBUG(dbgs() << "Restore cost for register = "
-                        << printReg(CandidateReg, TRI) << " = "
-                        << Candidate->getSpillRestoreCost() << "\n");
-      FinalCandidates.push_back(std::move(Candidate));
-
-    } else if (CurLoop) {
-
-      // For these cases, spill in defintion in order to avoid having spill and
-      // restores close to one another.
-      MachineBasicBlock *PreHeader = OutermostLoopOfCurLoop->getLoopPreheader();
-      MachineInstr *InstrOfCandidateReg =
-          MRI->getOneDef(CandidateReg)->getParent();
-      MachineBasicBlock::iterator LastIt = PreHeader->getFirstTerminator();
-      if (LastIt == PreHeader->end())
-        LastIt = PreHeader->instr_back();
-      SpillBlock = PreHeader;
-      WhereToSpill = LastIt;
-
-      MachineInstr *LastInstrPreHeader = &*(LastIt);
-      // The dominated uses are the ones that are dominated by the SpillBlock.
-      SetVectorType DominatedUses;
-      // The reachable uses are the ones that can be reached by the
-      // SpillBlock.
-      SetVectorType NonDominatedReachableUses;
-      // The unreachable uses are the ones that are not reachable by the
-      // SpillBlock.
-      SetVectorType UnreachableUses;
-      bool UsesInLoopNest = classifyUses(
-          SpillBlock, CandidateReg, LastInstrPreHeader, DominatedUses,
-          NonDominatedReachableUses, UnreachableUses);
-
-      if (UsesInLoopNest)
-        continue;
-
-      if (NonDominatedReachableUses.empty() && DominatedUses.empty() &&
-          !UnreachableUses.empty()) {
-        continue;
-      }
-
-      // Find the restore locations.
-      SmallVector<DomGroup> GroupOfUses;
-      groupUses(CandidateReg, SpillBlock, CurMI, DominatedUses, GroupOfUses);
-
-      // Create Candidate information.
-      assert(!MLI->getLoopFor(SpillBlock) &&
-             "There should not be a spill loop.");
-      auto Candidate = std::make_unique<SpillCandidate>(
-          CandidateReg, Mask, SpillCandidate::CodeGenPlan::EmitSpillRestore,
-          TRI, MRI, TII, FrameInfo, LIS, Indexes, DT, MLI, NUA, SpillBlock,
-          WhereToSpill);
-
-      for (DomGroup &G : GroupOfUses)
-        Candidate->addGroup(G);
-
-      // Calculate the restore cost.
-      Candidate->calculateSpillRestoreCost();
-      // Add spill cost
-      int64_t newCost = 0;
-      if (HasFreeSubregs) {
-        newCost = Candidate->getSpillRestoreCost() +
-                  std::ceil(NumOfSpills / NumOfCoveredRegs);
+        Candidate->setNextUseDistance(NextUseDist);
+        LLVM_DEBUG(dbgs() << "Restore cost for register = "
+                          << printReg(CandidateReg, TRI) << " = "
+                          << Candidate->getSpillRestoreCost() << "\n");
+        FinalCandidates.push_back(std::move(Candidate));
       } else {
-        newCost = Candidate->getSpillRestoreCost() + 1;
-      }
-      Candidate->setSpillRestoreCost(newCost);
-      Candidate->setNextUseDistance(NextUseDist);
-      LLVM_DEBUG(dbgs() << "Restore cost for register = "
-                        << printReg(CandidateReg, TRI) << " = "
-                        << Candidate->getSpillRestoreCost() << "\n");
-      FinalCandidates.push_back(std::move(Candidate));
 
+        if (DG.size() == 1)
+          continue;
+
+        MachineInstr *OrigRestore = DG.getRestore();
+        bool HasUsesInLoopNest = false;
+        SetVectorType UsesDominatedByCurMI;
+        for (MachineInstr *U : DG.getUses()) {
+          MachineBasicBlock *UMBB = U->getParent();
+          MachineLoop *UseLoop = MLI->getLoopFor(UMBB);
+          if (UseLoop && UseLoop->getLoopDepth() >= 2) {
+            HasUsesInLoopNest = true;
+            break;
+          }
+
+          if (U == CurMI) {
+            UsesDominatedByCurMI.insert(U);
+          } else if (CurMBB == UMBB && DT->dominates(CurMI, U)) {
+            UsesDominatedByCurMI.insert(U);
+          } else if (CurMBB != UMBB && DT->dominates(CurMBB, UMBB)) {
+            UsesDominatedByCurMI.insert(U);
+          }
+        }
+
+        if (HasUsesInLoopNest)
+          continue;
+
+        if (UsesDominatedByCurMI.empty())
+          continue;
+
+        // Assign groups to the uses.
+        std::vector<DomGroup> GroupOfUses;
+        assignUsesToGroups(CandidateReg, CurMI, UsesDominatedByCurMI,
+                           GroupOfUses, MLI);
+
+        auto Candidate = std::make_unique<RestoreCandidate>(
+            OrigRestore->getOperand(0).getReg(), Mask,
+            RestoreCandidate::CodeGenPlan::EmitNewRestoreBeforeUse, TRI, MRI,
+            TII, FrameInfo, LIS, Indexes, DT, MLI, NUA);
+
+        for (DomGroup &G : GroupOfUses)
+          Candidate->addGroup(G);
+
+        // Calculate the restore cost.
+        Candidate->calculateSpillRestoreCost();
+        int64_t newCost = 0;
+        if (HasFreeSubregs) {
+          newCost = Candidate->getSpillRestoreCost() +
+                    std::ceil(NumOfSpills / NumOfCoveredRegs);
+          Candidate->setSpillRestoreCost(newCost);
+        }
+        Candidate->setNextUseDistance(NextUseDist);
+        LLVM_DEBUG(dbgs() << "Restore cost for register = "
+                          << printReg(CandidateReg, TRI) << " = "
+                          << Candidate->getSpillRestoreCost() << "\n");
+        FinalCandidates.push_back(std::move(Candidate));
+      }
     } else {
 
       // Common case.
 
       // To get the restore cost we first need to find where we should emit
       // the spill instruction.
-      std::tie(SpillBlock, WhereToSpill) = getWhereToSpill(CurMI, CandidateReg);
+      if (CurLoop) {
+        MachineBasicBlock *PreHeader =
+            OutermostLoopOfCurLoop->getLoopPreheader();
+        MachineBasicBlock::iterator LastIt = PreHeader->getFirstTerminator();
+        if (LastIt == PreHeader->end())
+          LastIt = PreHeader->instr_back();
+        SpillBlock = PreHeader;
+        WhereToSpill = LastIt;
+      } else {
+        std::tie(SpillBlock, WhereToSpill) =
+            getWhereToSpill(CurMI, CandidateReg);
+      }
+
       if (SpillBlock == nullptr)
         continue;
 
@@ -1636,9 +1638,21 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
       // The unreachable uses are the ones that are not reachable by the
       // SpillBlock.
       SetVectorType UnreachableUses;
-      bool HasUsesInLoopNest =
-          classifyUses(SpillBlock, CandidateReg, CurMI, DominatedUses,
-                       NonDominatedReachableUses, UnreachableUses);
+      bool HasUsesInLoopNest = true;
+
+      if (CurLoop) {
+        MachineBasicBlock *PreHeader =
+            OutermostLoopOfCurLoop->getLoopPreheader();
+        MachineBasicBlock *Header = OutermostLoopOfCurLoop->getHeader();
+        HasUsesInLoopNest = classifyUsesForLoops(
+            SpillBlock, CandidateReg, PreHeader, Header, DominatedUses,
+            NonDominatedReachableUses, UnreachableUses);
+
+      } else {
+        HasUsesInLoopNest =
+            classifyUses(SpillBlock, CandidateReg, CurMI, DominatedUses,
+                         NonDominatedReachableUses, UnreachableUses);
+      }
 
       if (HasUsesInLoopNest)
         continue;

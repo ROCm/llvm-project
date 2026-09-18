@@ -189,6 +189,13 @@ class AMDGPUEarlyRegisterSpilling : public MachineFunctionPass {
                     SetVectorType &NonDominatedReachableUses,
                     SetVectorType &UnreachableUses);
 
+  bool classifyUsesForLoops(MachineBasicBlock *SpillBlock, Register RegToSpill,
+                            MachineBasicBlock *PreHeader,
+                            MachineBasicBlock *Header,
+                            SetVectorType &DominatedUses,
+                            SetVectorType &NonDominatedReachableUses,
+                            SetVectorType &UnreachableUses);
+
   bool hasPHIUseInSameBB(Register Reg, MachineBasicBlock *MBB);
 
   /// Calculate the initial maximum register pressure per basic block (before
