@@ -10,7 +10,7 @@
 // RUN: %llvm-dis %t.translated.bc -o - | %FileCheck %s
 
 // COM: Verify LLVM IR text
-// CHECK: target triple = "amdgcn-amd-amdhsa"
+// CHECK: target triple = "{{amdgcn|amdgpu}}-amd-amdhsa"
 // CHECK: define void @_Z11clean_valuePf
 // CHECK: define amdgpu_kernel void @_Z9add_valuePfS_S_
 

@@ -11,9 +11,21 @@
 // COM: Dissasemble LLVM IR bitcode to LLVM IR text
 // RUN: %llvm-dis %t.translated.bc -o - | %FileCheck %s
 
+// COM: Standard SPIR-V has no AMD generator marker; the target comes from Comgr.
+// RUN: spirv-translator --isa amdgcn-amd-amdhsa--gfx900 %t.spv -o %t.gfx900.bc
+// RUN: %llvm-dis %t.gfx900.bc -o - | %FileCheck %s --check-prefix=GFX900
+// RUN: spirv-translator --isa amdgcn-amd-amdhsa--gfx942 %t.spv -o %t.gfx942.bc
+// RUN: %llvm-dis %t.gfx942.bc -o - | %FileCheck %s --check-prefix=GFX942
+// RUN: spirv-translator --isa amdgcn-amd-amdhsa--gfx1030 %t.spv -o %t.gfx1030.bc
+// RUN: %llvm-dis %t.gfx1030.bc -o - | %FileCheck %s --check-prefix=GFX1030
+
 // COM: Verify LLVM IR text
-// CHECK: target triple = "spir64-unknown-unknown"
-// CHECK: define spir_kernel void @source
+// CHECK: target triple = "amdgpu-amd-amdhsa"
+// CHECK: define amdgpu_kernel void @source
+
+// GFX900: target triple = "amdgpu9.00-amd-amdhsa"
+// GFX942: target triple = "amdgpu9.42-amd-amdhsa"
+// GFX1030: target triple = "amdgpu10.30-amd-amdhsa"
 
 void kernel source(__global int *j) {
   *j += 2;
