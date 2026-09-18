@@ -204,7 +204,7 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
   if (Di.TargetSpecificFlags & SMRD)
     return handleSMEM(Ctx, Di, Op);
   if (Di.TargetSpecificFlags & FLAT)
-    return handleFLAT(Ctx, Di, Op);
+    return handleVGLOBAL(Ctx, Di, Op);
   if (Di.TargetSpecificFlags & MUBUF)
     return handleMUBUF(Ctx, Di);
   if (Di.TargetSpecificFlags & DS)

@@ -122,7 +122,8 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
-Error handleFLAT(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
+Error handleVGLOBAL(RaiseContext &Ctx, const DecodedInst &Di,
+                    OperandResolver &) {
   std::optional<unsigned> WidthInDwords = globalAccessWidthInDwords(Di.CanonOp);
   if (!WidthInDwords)
     return unsupported(Ctx, Di, "unsupported flat memory operation");
