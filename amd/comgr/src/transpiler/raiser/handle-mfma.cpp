@@ -111,7 +111,9 @@ Error handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
   Value *Result =
       Ctx.B.CreateCall(Fn, {A, B, C, CbszValue, AbidValue, BlgpValue}, "mfma");
   Result = Ctx.Projection.wrapAsWWMValue(Ctx.B, Result, "mfma.wwm");
-  Ctx.registers().writeRegVecExecAll(*Destination, Result);
+  Ctx.registers().emitWithNonzeroExec([&] {
+    Ctx.registers().regFile().writeRegVec(Ctx.B, *Destination, Result);
+  });
   return Error::success();
 }
 

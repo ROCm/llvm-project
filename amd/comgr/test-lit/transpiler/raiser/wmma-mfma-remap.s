@@ -23,8 +23,8 @@ wmma_remap:
 ; IR: call i32 @llvm.amdgcn.ds.bpermute
 ; IR: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16f16
 ; IR: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16f16
-; IR: br i1 {{.*}}, label %exec_all_do, label %exec_all_skip
-; IR: exec_all_do:
+; IR: br i1 {{.*}}, label %spe_do, label %spe_skip
+; IR: spe_do:
 	v_wmma_f32_16x16x32_f16 v[16:23], v[0:7], v[8:15], v[16:23]
 	s_mov_b32 exec_lo, -1
 ; DECODE: V_WMMA_F32_16x16x32_BF16{{.+}}v_wmma_f32_16x16x32_bf16
