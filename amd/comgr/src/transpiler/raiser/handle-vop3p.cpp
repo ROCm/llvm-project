@@ -231,7 +231,9 @@ Error raiseWMMA(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
   Expected<Value *> Result = emitWMMAtoMFMA(Ctx, A, B, *C, InputType);
   if (!Result)
     return Result.takeError();
-  Ctx.registers().writeRegVecExecAll(*Destination, *Result);
+  Ctx.registers().emitWithNonzeroExec([&] {
+    Ctx.registers().regFile().writeRegVec(Ctx.B, *Destination, *Result);
+  });
   return Error::success();
 }
 
