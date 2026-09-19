@@ -33,7 +33,6 @@ THE SOFTWARE.
 # define HIP_ROCCLR_HOME            "HIP_ROCCLR_HOME"
 # define HIP_PATH                   "HIP_PATH"
 # define ROCM_PATH                  "ROCM_PATH"
-# define CUDA_PATH                  "CUDA_PATH"
 # define HSA_PATH                   "HSA_PATH"
 # define HIP_CLANG_PATH             "HIP_CLANG_PATH"
 # define HIP_PLATFORM               "HIP_PLATFORM"
@@ -56,17 +55,12 @@ THE SOFTWARE.
 
 enum PlatformType {
   amd = 0,
-  nvidia,
-  // add new platform types to be added here
 };
 
 string PlatformTypeStr(PlatformType platform) {
   switch (platform) {
   case amd:
     return "amd";
-  case nvidia:
-    return "nvidia";
-  // add new platform types to be added here
   default:
     return "invalid platform";
   }
@@ -74,37 +68,25 @@ string PlatformTypeStr(PlatformType platform) {
 
 enum CompilerType {
   clang = 0,
-  nvcc
-  // add new compiler types to be added here
 };
-
 
 string CompilerTypeStr(CompilerType compiler) {
   switch (compiler) {
   case clang:
     return "clang";
-  case nvcc:
-    return "nvcc";
-  // add new compiler types to be added here
   default:
     return "invalid CompilerType";
   }
 }
 
-
 enum RuntimeType {
   rocclr = 0,
-  cuda
-  // add new runtime types to be added here
 };
 
 string RuntimeTypeStr(RuntimeType runtime) {
   switch (runtime) {
   case rocclr:
     return "rocclr";
-  case cuda:
-    return "cuda";
-  // add new runtime types to be added here
   default:
     return "invalid RuntimeType";
   }
@@ -140,7 +122,6 @@ struct EnvVariables {
   string hipPathEnv_ = "";
   string hipRocclrPathEnv_ = "";
   string roccmPathEnv_ = "";
-  string cudaPathEnv_ = "";
   string hsaPathEnv_ = "";
   string hipClangPathEnv_ = "";
   string hipPlatformEnv_ = "";
@@ -161,7 +142,6 @@ struct EnvVariables {
     os << "Hip Path: "                       << var.hipPathEnv_ << endl;
     os << "Hip Rocclr Path: "                << var.hipRocclrPathEnv_ << endl;
     os << "Roccm Path: "                     << var.roccmPathEnv_ << endl;
-    os << "Cuda Path: "                      << var.cudaPathEnv_ << endl;
     os << "Hsa Path: "                       << var.hsaPathEnv_ << endl;
     os << "Hip Clang Path: "                 << var.hipClangPathEnv_ << endl;
     os << "Hip Platform: "                   << var.hipPlatformEnv_ << endl;
@@ -287,8 +267,6 @@ void HipBinBase::readEnvVariables() {
     envVariables_.hipRocclrPathEnv_ = hip_rocclr;
   if (const char* roccm = std::getenv(ROCM_PATH))
     envVariables_.roccmPathEnv_ = roccm;
-  if (const char* cuda = std::getenv(CUDA_PATH))
-    envVariables_.cudaPathEnv_ = cuda;
   if (const char* hsa = std::getenv(HSA_PATH))
     envVariables_.hsaPathEnv_ = hsa;
   if (const char* hipClang = std::getenv(HIP_CLANG_PATH))
@@ -493,9 +471,9 @@ void HipBinBase::printUsage() const {
   " print ROCM_PATH (use env var if set,"
   " else determine from hip path or /opt/rocm)\n";
   cout << "  --cpp_config, -C   : print C++ compiler options\n";
-  cout << "  --compiler, -c     : print compiler (clang or nvcc)\n";
-  cout << "  --platform, -P     : print platform (amd or nvidia)\n";
-  cout << "  --runtime, -r      : print runtime (rocclr or cuda)\n";
+  cout << "  --compiler, -c     : print compiler\n";
+  cout << "  --platform, -P     : print platform\n";
+  cout << "  --runtime, -r      : print runtime\n";
   cout << "  --hipclangpath, -l : print HIP_CLANG_PATH\n";
   cout << "  --full, -f         : print full config\n";
   cout << "  --version, -v      : print hip version\n";
