@@ -30,7 +30,7 @@
 // RUN: spirv-translator %t.amdgcnspirv.spv -o %t.translated.bc
 // RUN: %llvm-dis %t.translated.bc -o - | %FileCheck --check-prefix=BC %s
 
-// BC: target triple = "amdgcn-amd-amdhsa"
+// BC: target triple = "{{amdgcn|amdgpu}}-amd-amdhsa"
 // BC: define {{.*}} @_Z9add_valuePfS_S_
 
 __attribute__((device))
