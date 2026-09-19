@@ -1521,7 +1521,8 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
       if (DG.isDeleted())
         continue;
 
-      if (DG.getWhereToRestore() == DomGroup::RestorePlacement::LoopPreheader) {
+      if (CurLoop && (DG.getWhereToRestore() ==
+                      DomGroup::RestorePlacement::LoopPreheader)) {
         MachineInstr *Head = DG.getHead();
         MachineInstr *OrigRestore = DG.getRestore();
         Register OrigRestoreReg = OrigRestore->getOperand(0).getReg();
