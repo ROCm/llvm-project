@@ -195,15 +195,6 @@ else()
   endif()
 endif()
 
-# Allow the super-project to force static linking of LLVM/Clang into comgr.
-# When ON, LLVM symbols are hidden by comgr's version script (local: *;),
-# avoiding symbol interposition issues without requiring namespace isolation.
-option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
-if(COMGR_STATIC_LLVM)
-  set(LLVM_LINK_LLVM_DYLIB OFF)
-  set(CLANG_LINK_CLANG_DYLIB OFF)
-endif()
-
 target_include_directories(amd_comgr
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -594,6 +585,20 @@ install(FILES
   COMPONENT amd-comgr
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}")
 
+# Allow the super-project to force static linking of LLVM/Clang into comgr.
+# When ON, LLVM symbols are hidden by comgr's version script (local: *;),
+# avoiding symbol interposition issues without requiring namespace isolation.
+#
+# Placed here (immediately before the link-list selection below) so that any
+# transitive find_package(Clang) invoked from included helper modules (e.g.
+# opencl_header.cmake) cannot re-load ClangConfig.cmake / LLVMConfig.cmake
+# and silently revert these flags back to their LLVM-build-time defaults.
+option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
+if(COMGR_STATIC_LLVM)
+  set(LLVM_LINK_LLVM_DYLIB OFF)
+  set(CLANG_LINK_CLANG_DYLIB OFF)
+endif()
+
 if(NOT CLANG_LINK_CLANG_DYLIB)
   set(CLANG_LIBS
     clangBasic
@@ -613,37 +618,15 @@ set(LLD_LIBS
 
 if (${COMGR_SPIRV_TRANSLATOR_AVAILABLE})
   set(SPIRV_DYNAMIC_LIB "LLVMSPIRVAMDLib")
-  set(SPIRV_STATIC_LIB "SPIRVAMDLib")
 else()
   set(SPIRV_DYNAMIC_LIB "")
-  set(SPIRV_STATIC_LIB "")
 endif()
 
 if (LLVM_LINK_LLVM_DYLIB)
   set(LLVM_LIBS LLVM ${SPIRV_DYNAMIC_LIB})
 else()
-  llvm_map_components_to_libnames(LLVM_LIBS
-    ${LLVM_TARGETS_TO_BUILD}
-    BinaryFormat
-    BitReader
-    BitWriter
-    CodeGen
-    Core
-    DebugInfoDWARF
-    Demangle
-    IRReader
-    Linker
-    MC
-    MCDisassembler
-    MCParser
-    Object
-    Option
-    Support
-    Symbolize
-    TargetParser
-    TransformUtils
-    ${SPIRV_STATIC_LIB}
-    )
+  include(ComgrStaticLibraries)
+  comgr_static_llvm_libraries(LLVM_LIBS)
 endif()
 
 target_link_options(amd_comgr
@@ -652,11 +635,18 @@ target_link_options(amd_comgr
   PRIVATE
     ${AMD_COMGR_PRIVATE_LINKER_OPTIONS})
 
-target_link_libraries(amd_comgr
-  PRIVATE
-    ${LLD_LIBS}
-    ${LLVM_LIBS}
-    ${CLANG_LIBS})
+if(COMGR_STATIC_LLVM)
+  # Link archive files rather than targets so their LLVM dylib interfaces do
+  # not affect Comgr. Other consumers keep the original target interfaces.
+  comgr_static_link_libraries(amd_comgr ${LLD_LIBS} ${LLVM_LIBS} ${CLANG_LIBS})
+elseif(NOT LLVM_LINK_LLVM_DYLIB AND UNIX AND NOT APPLE)
+  comgr_collect_static_libraries(COMGR_STATIC_LIBRARIES
+    ${LLD_LIBS} ${LLVM_LIBS} ${CLANG_LIBS})
+  target_link_libraries(amd_comgr PRIVATE
+    "-Wl,--start-group" ${COMGR_STATIC_LIBRARIES} "-Wl,--end-group")
+else()
+  target_link_libraries(amd_comgr PRIVATE ${LLD_LIBS} ${LLVM_LIBS} ${CLANG_LIBS})
+endif()
 
 if(TARGET embedded-resource-dir)
   target_link_libraries(amd_comgr PRIVATE embedded-resource-dir)
@@ -694,6 +684,16 @@ target_link_libraries(amd_comgr PRIVATE ${COMGR_TRANSPILER_LIBS})
 include(CTest)
 
 if(BUILD_TESTING)
+  if(UNIX AND NOT APPLE)
+    add_test(NAME comgr-static-link
+      COMMAND "${CMAKE_CTEST_COMMAND}" --build-and-test
+        "${CMAKE_CURRENT_SOURCE_DIR}/test/static-link"
+        "${CMAKE_CURRENT_BINARY_DIR}/test/static-link"
+        --build-generator "${CMAKE_GENERATOR}"
+        --build-config "$<CONFIG>"
+        --build-options "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+        --test-command "${CMAKE_CTEST_COMMAND}" --output-on-failure)
+  endif()
   add_custom_target(check-comgr COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS amd_comgr)
   if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set_property(GLOBAL APPEND PROPERTY LLVM_ADDITIONAL_TEST_TARGETS check-comgr)

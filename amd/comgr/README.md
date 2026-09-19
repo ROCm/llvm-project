@@ -80,10 +80,13 @@ may be enabled during development via `-DADDRESS_SANITIZER=On` during the Comgr
 **Static Comgr:** Comgr can be built as a static library by passing
 `-DCOMGR_BUILD_SHARED_LIBS=OFF` during the Comgr `cmake` step.
 
-**Static LLVM Linking:** When building Comgr as a shared library within a
-super-project, you can statically link LLVM/Clang into Comgr by passing
-`-DCOMGR_STATIC_LLVM=ON`. By default (`OFF`), Comgr respects the existing
-`LLVM_LINK_LLVM_DYLIB` and `CLANG_LINK_CLANG_DYLIB` settings.
+**Static LLVM Linking:** Pass `-DCOMGR_STATIC_LLVM=ON` to embed LLVM/Clang
+archives into the Comgr shared library. This works with standalone package
+imports, imports supplied by a parent project, and LLVM external-project
+builds. LLVM/Clang/LLD static archives must be available even when their shared
+libraries were also built. Comgr uses its own archive link list; other targets
+retain their original dependency interfaces. By default (`OFF`), Comgr respects
+`LLVM_LINK_LLVM_DYLIB` and `CLANG_LINK_CLANG_DYLIB`.
 
 **Windows DLL Name:** On Windows, the DLL is named `amd_comgr.dll` by default.
 To override this, pass `-DCOMGR_DLL_NAME=<name>.dll` during the Comgr `cmake`
