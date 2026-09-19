@@ -29,6 +29,43 @@ def MapInfoFinalizationPass
                       "regions and target data regions">];
 }
 
+def DescriptorElisionPass
+    : Pass<"omp-descriptor-elision", "mlir::ModuleOp"> {
+  let summary = "Elide descriptors for assumed-shape arrays in target regions";
+  let description = [{
+    For assumed-shape array dummy arguments that are mapped into an
+    `omp.target` region and whose descriptor is provably not required on the
+    device (i.e. the only device uses are implicit compiler-generated data
+    accesses such as element indexing, with no user-level descriptor queries
+    like SIZE/LBOUND/UBOUND, reshape, rebox or passing the descriptor to a
+    call), this pass rewrites the in-region accesses to operate directly on the
+    raw base address instead of a descriptor.
+
+    This converts the assumed-shape access into an explicit-shape style access:
+    for rank-1 arrays no extent information is required at all; for rank >= 2
+    the required leading extents are packaged as lightweight scalar (ByCopy)
+    map entries, mirroring what an explicit-shape array does today. The net
+    effect is that no descriptor is mapped to the device.
+
+    The pass is intended to run before `omp-map-info-finalization`, so that the
+    finalization pass never expands the (now non-descriptor) map into a
+    descriptor mapping.
+  }];
+  let dependentDialects = ["mlir::omp::OpenMPDialect"];
+
+  let options = [
+      Option<"enableDescriptorElision", "enable-descriptor-elision",
+             "bool", /*default=*/"false",
+             "Activates elision of descriptors for assumed-shape "
+             "arrays inside target regions when the descriptor is "
+             "provably not required on the device">,
+      Option<"emitDescriptorElisionRemarks", "descriptor-elision-remarks",
+             "bool", /*default=*/"false",
+             "Emit optimization remarks explaining why a descriptor could not "
+             "be elided (e.g. observed via SIZE/LBOUND, passed to a call, ...)">
+  ];
+}
+
 def MapsForPrivatizedSymbolsPass
     : Pass<"omp-maps-for-privatized-symbols", "mlir::func::FuncOp"> {
   let summary = "Creates MapInfoOp instances for privatized symbols when needed";

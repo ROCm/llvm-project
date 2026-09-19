@@ -35,6 +35,10 @@ bool shouldUseWorkshareLowering(mlir::Operation *op);
 std::unique_ptr<mlir::Pass> createDoConcurrentConversionPass(bool mapToDevice);
 
 std::unique_ptr<mlir::Pass> createMapInfoFinalizationPass(bool deferDescMap);
+
+std::unique_ptr<mlir::Pass>
+createDescriptorElisionPass(bool enableDescriptorElision,
+                           bool emitDescriptorElisionRemarks = false);
 } // namespace flangomp
 
 #endif // FORTRAN_OPTIMIZER_OPENMP_PASSES_H
