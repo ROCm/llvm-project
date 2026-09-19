@@ -705,6 +705,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUMarkLastScratchLoadLegacyPass(*PR);
   initializeSILowerSGPRSpillsLegacyPass(*PR);
   initializeSIFixSGPRCopiesLegacyPass(*PR);
+  initializeSISGPRCopyOptLegacyPass(*PR);
   initializeSIFixVGPRCopiesLegacyPass(*PR);
   initializeSIFoldOperandsLegacyPass(*PR);
   initializeSIPeepholeSDWALegacyPass(*PR);
@@ -2040,8 +2041,12 @@ void GCNPassConfig::addPostRegAlloc() {
 }
 
 void GCNPassConfig::addPreSched2() {
-  if (TM->getOptLevel() > CodeGenOptLevel::None)
+  if (TM->getOptLevel() > CodeGenOptLevel::None) {
+    // Hoist loop-invariant SGPR->VGPR copies (and delete dead ones) that arise
+    // from PHI resolution when values are initialized from SGPRs.
+    addPass(&SISGPRCopyOptLegacyID);
     addPass(createSIShrinkInstructionsLegacyPass());
+  }
   addPass(&SIPostRABundlerLegacyID);
 }
 
