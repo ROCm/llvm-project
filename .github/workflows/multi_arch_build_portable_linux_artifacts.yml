@@ -164,16 +164,6 @@ jobs:
           git format-patch -1 --stdout FETCH_HEAD \
             > patches/amd-mainline/llvm-project/0002-ObjectYAML-VERS-part-size.patch
 
-      - name: Carry mlir-pdll-lsp-server link fix - temp for assertion on (llvm/llvm-project 220123)
-        if: ${{ env.LLVM_ASSERTIONS == '1' }}
-        run: |
-          set -x
-          git config --global --add safe.directory "$PWD"
-          git fetch --no-tags --depth 2 https://github.com/llvm/llvm-project.git \
-            14cdf0c5f29976d682b51fdfb6038ed67acca82b
-          git format-patch -1 --stdout FETCH_HEAD \
-            > patches/amd-mainline/llvm-project/0003-mlir-pdll-lsp-server-link.patch
-
       - name: Fetch sources
         timeout-minutes: 30
         run: |
