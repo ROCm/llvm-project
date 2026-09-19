@@ -68,7 +68,7 @@ BumpAllocatorTy BumpAllocator;
 ///{
 
 void *allocator::alloc(uint64_t Size) {
-#if defined(__AMDGPU__) && defined(SANITIZER_AMDGPU)
+#if defined(__AMDGPU__) && defined(SANITIZER_AMDHSA)
   return reinterpret_cast<void *>(
       __asan_malloc_impl(Size, uint64_t(__builtin_return_address(0))));
 #elif defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
@@ -79,7 +79,7 @@ void *allocator::alloc(uint64_t Size) {
 }
 
 void allocator::free(void *Ptr) {
-#if defined(__AMDGPU__) && defined(SANITIZER_AMDGPU)
+#if defined(__AMDGPU__) && defined(SANITIZER_AMDHSA)
   __asan_free_impl(reinterpret_cast<uint64_t>(Ptr),
                    uint64_t(__builtin_return_address(0)));
 #elif defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
