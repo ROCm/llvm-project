@@ -915,14 +915,22 @@ protected:
 private:
   /// State to track fixpoint and validity.
   BooleanState BS;
+
+  /// Number of tracked accesses per accessing function, for the per-scope cap.
+  DenseMap<const Function *, unsigned> PerScopeAccesses;
 };
 
 ChangeStatus AA::PointerInfo::State::addAccess(
     Attributor &A, const AAPointerInfo::RangeList &Ranges, Instruction &I,
     std::optional<Value *> Content, AAPointerInfo::AccessKind Kind, Type *Ty,
     Instruction *RemoteI) {
+  // The cap is per accessing function; interference reasoning is scoped, so
+  // many functions with few accesses each stay precise. The absolute ceiling
+  // bounds memory.
+  const Function *AccScope = I.getFunction();
   if (MaxAccessesPerAAPointerInfo > 0 &&
-      AccessList.size() >= MaxAccessesPerAAPointerInfo)
+      (PerScopeAccesses.lookup(AccScope) >= MaxAccessesPerAAPointerInfo ||
+       AccessList.size() >= 64 * MaxAccessesPerAAPointerInfo))
     return indicatePessimisticFixpoint();
 
   RemoteI = RemoteI ? RemoteI : &I;
@@ -956,6 +964,7 @@ ChangeStatus AA::PointerInfo::State::addAccess(
            "New Access should have been at AccIndex");
     LocalList.push_back(AccIndex);
     AddToBins(AccessList[AccIndex].getRanges());
+    ++PerScopeAccesses[AccScope];
     return ChangeStatus::CHANGED;
   }
 
