@@ -10,6 +10,7 @@
 
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
+#include "transpiler/raiser/handle-vop-cross-lane.h"
 #include "transpiler/raiser/handle-vop-shared.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
@@ -60,6 +61,8 @@ Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_FREXP_EXP_I32_F32:
   case CanonicalOp::V_FREXP_MANT_F32:
     return raiseUnaryFloat32(Ctx, Di, Op);
+  case CanonicalOp::V_READFIRSTLANE_B32:
+    return raiseReadFirstLane32(Ctx, Di, Op);
   default:
     return unsupportedInstruction(Ctx, Di);
   }
