@@ -13,21 +13,22 @@
 #  error This file must be included inside sanitizer_allocator.h
 #endif
 
-struct DeviceAllocationInfo;
-#if SANITIZER_AMDGPU
-// Device memory allocation usually requires additional information, we can put
-// all the additional information into a data structure DeviceAllocationInfo.
-// This is only a parent structure since different vendors may require
-// different allocation info.
-typedef enum {
+// DeviceAllocatorT: device-mapped heap bookkeeping. Map/unmap uses the
+// primary's MapUnmapCallback. Alloc/free/pointer queries use DeviceBackend
+// (NoOpDeviceAllocator, AmdHsaDeviceAllocator, ...).
+
+enum DeviceAllocationType {
   DAT_UNKNOWN = 0,
-  DAT_AMDGPU = 1,
-} DeviceAllocationType;
+};
+
+enum DeviceAllocFailure {
+  DEV_ALLOC_FAILURE_NOT_INITIALIZED,
+  DEV_ALLOC_FAILURE_OUT_OF_RESOURCES,
+};
 
 struct DeviceAllocationInfo {
-  DeviceAllocationInfo(DeviceAllocationType type = DAT_UNKNOWN) {
-    type_ = type;
-  }
+  explicit DeviceAllocationInfo(DeviceAllocationType type = DAT_UNKNOWN)
+      : type_(type) {}
   DeviceAllocationType type_;
 };
 
@@ -37,28 +38,67 @@ struct DevicePointerInfo {
   uptr map_size;
 };
 
-#include "sanitizer_allocator_amdgpu.h"
+struct NoOpDeviceAllocator {
+  // When kEnableDeviceBackend is false, DeviceAllocatorT::Init skips device
+  // book-keeping (no ptr_array setup or InitMemFuncs at allocator init).
+  static constexpr bool kEnableDeviceBackend = false;
 
-template <class MapUnmapCallback = NoOpMapUnmapCallback>
+  static bool Init() { return false; }
+
+  static void* Allocate(uptr size, uptr alignment,
+                        DeviceAllocationInfo* da_info) {
+    (void)size;
+    (void)alignment;
+    (void)da_info;
+    return nullptr;
+  }
+
+  static void Deallocate(void* p) { (void)p; }
+
+  static bool GetPointerInfo(uptr ptr, DevicePointerInfo* ptr_info) {
+    (void)ptr;
+    (void)ptr_info;
+    return false;
+  }
+
+  static uptr GetPageSize() { return 4096; }
+
+  static bool IsRuntimeShutdown() { return false; }
+
+  static void NoteDeviceAllocatorFailure(DeviceAllocationInfo* da_info,
+                                         DeviceAllocFailure failure) {
+    (void)da_info;
+    (void)failure;
+  }
+};
+
+template <class PrimaryAllocator, class DeviceBackend = NoOpDeviceAllocator>
 class DeviceAllocatorT {
  public:
   using PtrArrayT = DefaultLargeMmapAllocatorPtrArray;
-  using DeviceMemFuncs = AmdgpuMemFuncs;
+  using MapUnmapCallback = typename PrimaryAllocator::MapUnmapCallback;
 
-  void Init(bool enable, uptr kMetadataSize) {
+  // Metadata layout mirrors the primary allocator so device-tier chunks carry
+  // the same per-chunk metadata size. Sourced from the primary template arg so
+  // callers (and any wrapper) need not thread it in.
+  void Init() {
     internal_memset(this, 0, sizeof(*this));
-    enabled_ = enable;
-    if (!enable)
+    if (!DeviceBackend::kEnableDeviceBackend)
       return;
-    kMetadataSize_ = kMetadataSize;
-    chunks_ = reinterpret_cast<uptr *>(ptr_array_.Init());
+    enabled_ = true;
+    kMetadataSize_ = PrimaryAllocator::kMetadataSize;
+    chunks_ = reinterpret_cast<uptr*>(ptr_array_.Init());
     InitMemFuncs();
   }
 
-  void *Allocate(AllocatorStats *stat, uptr size, uptr alignment,
-                 DeviceAllocationInfo *da_info) {
-    if (!da_info || !InitMemFuncs())
+  void* Allocate(AllocatorStats* stat, uptr size, uptr alignment,
+                 DeviceAllocationInfo* da_info) {
+    if (!da_info || !InitMemFuncs()) {
+      if (da_info)
+        DeviceBackend::NoteDeviceAllocatorFailure(
+            da_info, DEV_ALLOC_FAILURE_NOT_INITIALIZED);
       return nullptr;
+    }
 
     // Allocate an extra page for Metadata
     if (kMetadataSize_ + (size % page_size_) > page_size_) {
@@ -74,11 +114,16 @@ class DeviceAllocatorT {
           "WARNING: %s: DeviceAllocator allocation overflow: "
           "0x%zx bytes with 0x%zx alignment requested\n",
           SanitizerToolName, map_size, alignment);
+      DeviceBackend::NoteDeviceAllocatorFailure(
+          da_info, DEV_ALLOC_FAILURE_OUT_OF_RESOURCES);
       return nullptr;
     }
-    void *ptr = DeviceMemFuncs::Allocate(map_size, alignment, da_info);
-    if (!ptr)
+    void* ptr = DeviceBackend::Allocate(map_size, alignment, da_info);
+    if (!ptr) {
+      DeviceBackend::NoteDeviceAllocatorFailure(
+          da_info, DEV_ALLOC_FAILURE_OUT_OF_RESOURCES);
       return nullptr;
+    }
     uptr map_beg = reinterpret_cast<uptr>(ptr);
     CHECK(IsAligned(map_beg, page_size_));
     MapUnmapCallback().OnMap(map_beg, map_size);
@@ -105,10 +150,10 @@ class DeviceAllocatorT {
       stat->Add(AllocatorStatAllocated, map_size);
       stat->Add(AllocatorStatMapped, map_size);
     }
-    return reinterpret_cast<void *>(res);
+    return reinterpret_cast<void*>(res);
   }
 
-  void Deallocate(AllocatorStats *stat, void *p) {
+  void Deallocate(AllocatorStats* stat, void* p) {
     Header header, *h;
     {
       SpinMutexLock l(&mutex_);
@@ -130,7 +175,7 @@ class DeviceAllocatorT {
       stat->Sub(AllocatorStatMapped, h->map_size);
     }
     MapUnmapCallback().OnUnmap(h->map_beg, h->map_size);
-    DeviceMemFuncs::Deallocate(p);
+    DeviceBackend::Deallocate(p);
   }
 
   uptr TotalMemoryUsed() {
@@ -138,35 +183,36 @@ class DeviceAllocatorT {
     SpinMutexLock l(&mutex_);
     uptr res = 0;
     for (uptr i = 0; i < n_chunks_; i++) {
-      Header *h = GetHeader(chunks_[i], &header);
+      Header* h = GetHeader(chunks_[i], &header);
       res += RoundUpMapSize(h->map_size);
     }
     return res;
   }
 
-  bool PointerIsMine(const void *p) const {
+  bool PointerIsMine(const void* p) const {
     return GetBlockBegin(p) != nullptr;
   }
 
-  uptr GetActuallyAllocatedSize(void *p) {
+  uptr GetActuallyAllocatedSize(void* p) {
     Header header;
     uptr p_ = reinterpret_cast<uptr>(p);
-    Header *h = GetHeaderAnyPointer(p_, &header);
+    Header* h = GetHeaderAnyPointer(p_, &header);
     return h ? h->map_size : 0;
   }
 
-  void *GetMetaData(const void *p) {
+  void* GetMetaData(const void* p) {
     Header header;
     uptr p_ = reinterpret_cast<uptr>(p);
-    Header *h = GetHeaderAnyPointer(p_, &header);
-    return h ? reinterpret_cast<void *>(h->map_beg + h->map_size -
-                                        kMetadataSize_)
+    Header* h = GetHeaderAnyPointer(p_, &header);
+    return h ? reinterpret_cast<void*>(h->map_beg + h->map_size -
+                                       kMetadataSize_)
              : nullptr;
   }
 
   void* GetBlockBegin(const void* ptr) const {
     Header header;
-    if (!mem_funcs_inited_) return nullptr;
+    if (!mem_funcs_inited_)
+      return nullptr;
     uptr p = reinterpret_cast<uptr>(ptr);
     SpinMutexLock l(&mutex_);
     uptr nearest_chunk = 0;
@@ -195,18 +241,20 @@ class DeviceAllocatorT {
   void EnsureSortedChunks() {
     if (chunks_sorted_)
       return;
-    Sort(reinterpret_cast<uptr *>(chunks_), n_chunks_);
+    Sort(reinterpret_cast<uptr*>(chunks_), n_chunks_);
     chunks_sorted_ = true;
   }
 
   // This function does the same as GetBlockBegin, but is much faster.
   // Must be called with the allocator locked.
-  void *GetBlockBeginFastLocked(const void *ptr) {
-    if (!mem_funcs_inited_) return nullptr;
+  void* GetBlockBeginFastLocked(const void* ptr) {
+    if (!mem_funcs_inited_)
+      return nullptr;
     mutex_.CheckLocked();
     uptr p = reinterpret_cast<uptr>(ptr);
     uptr n = n_chunks_;
-    if (!n) return nullptr;
+    if (!n)
+      return nullptr;
     EnsureSortedChunks();
     Header header, *h;
     h = GetHeader(chunks_[n - 1], &header);
@@ -215,7 +263,7 @@ class DeviceAllocatorT {
     if (p < min_mmap_)
       return nullptr;
     if (p >= max_mmap_) {
-      // TODO (bingma): If dev_runtime_unloaded_ = true, map_size is limited
+      // TODO (bingma): When the device runtime is unloaded, map_size is limited
       // to one page and we might miss a valid 'ptr'. If we hit cases where
       // this kind of miss is unacceptable, we will need to implement a full
       // solution with higher cost
@@ -253,13 +301,15 @@ class DeviceAllocatorT {
   }
 
   void PrintStats() {
-    Printf("Stats: DeviceAllocator: allocated %zd times, "
-           "remains %zd (%zd K) max %zd M; by size logs: ",
-           stats.n_allocs, stats.n_allocs - stats.n_frees,
-           stats.currently_allocated >> 10, stats.max_allocated >> 20);
+    Printf(
+        "Stats: DeviceAllocator: allocated %zd times, "
+        "remains %zd (%zd K) max %zd M; by size logs: ",
+        stats.n_allocs, stats.n_allocs - stats.n_frees,
+        stats.currently_allocated >> 10, stats.max_allocated >> 20);
     for (uptr i = 0; i < ARRAY_SIZE(stats.by_size_log); i++) {
       uptr c = stats.by_size_log[i];
-      if (!c) continue;
+      if (!c)
+        continue;
       Printf("%zd:%zd; ", i, c);
     }
     Printf("\n");
@@ -273,7 +323,7 @@ class DeviceAllocatorT {
 
   // Iterate over all existing chunks.
   // The allocator must be locked when calling this function.
-  void ForEachChunk(ForEachChunkCallback callback, void *arg) {
+  void ForEachChunk(ForEachChunkCallback callback, void* arg) {
     EnsureSortedChunks();  // Avoid doing the sort while iterating.
     for (uptr i = 0; i < n_chunks_; i++) {
       const uptr t = chunks_[i];
@@ -283,51 +333,41 @@ class DeviceAllocatorT {
     }
   }
 
-  void ResetRuntimeUnloadedFlag() {
-    dev_runtime_unloaded_ = false;
-  }
-
  private:
   bool InitMemFuncs() {
     if (!enabled_ || mem_funcs_inited_ || mem_funcs_init_count_ >= 2) {
       return mem_funcs_inited_;
     }
-    mem_funcs_inited_ = DeviceMemFuncs::Init();
+    mem_funcs_inited_ = DeviceBackend::Init();
     mem_funcs_init_count_++;
     if (mem_funcs_inited_)
-      page_size_ = DeviceMemFuncs::GetPageSize();
+      page_size_ = DeviceBackend::GetPageSize();
     return mem_funcs_inited_;
   }
 
   typedef DevicePointerInfo Header;
 
-  Header *GetHeaderAnyPointer(uptr p, Header* h) const {
+  Header* GetHeaderAnyPointer(uptr p, Header* h) const {
     CHECK(IsAligned(p, page_size_));
-    return DeviceMemFuncs::GetPointerInfo(p, h) ? h : nullptr;
+    return DeviceBackend::GetPointerInfo(p, h) ? h : nullptr;
   }
 
   Header* GetHeader(uptr chunk, Header* h) const {
-    // Device allocator has dependency on device runtime. If device runtime
-    // is unloaded, GetPointerInfo() will fail. For such case, we can still
-    // return a valid value for map_beg, map_size will be limited to one page
-    if (LIKELY(!dev_runtime_unloaded_)) {
-      if (DeviceMemFuncs::GetPointerInfo(chunk, h))
+    // Device allocator depends on the device runtime. Query the authoritative
+    // shutdown state directly (a cheap atomic). It is reset by
+    // ClearRuntimeShutdownState() on hsa re-init, so header lookup self-heals
+    // after a shutdown/re-init cycle without a sticky per-allocator flag.
+    if (LIKELY(!DeviceBackend::IsRuntimeShutdown())) {
+      if (DeviceBackend::GetPointerInfo(chunk, h))
         return h;
-      // If GetPointerInfo() fails, we don't assume the runtime is unloaded yet.
-      // We just return a conservative single-page header. Here mark/check the
-      // runtime shutdown state
-      dev_runtime_unloaded_ = DeviceMemFuncs::IsAmdgpuRuntimeShutdown();
     }
-    // If we reach here, device runtime is unloaded.
-    // Fallback: conservative single-page header
+    // Runtime down (or GetPointerInfo failed): conservative single-page header.
     h->map_beg = chunk;
     h->map_size = page_size_;
     return h;
   }
 
-  void *GetUser(const uptr ptr) const {
-    return reinterpret_cast<void *>(ptr);
-  }
+  void* GetUser(const uptr ptr) const { return reinterpret_cast<void*>(ptr); }
 
   uptr RoundUpMapSize(uptr size) {
     return RoundUpTo(size, page_size_) + page_size_;
@@ -335,15 +375,14 @@ class DeviceAllocatorT {
 
   bool enabled_;
   bool mem_funcs_inited_;
-  mutable bool dev_runtime_unloaded_;
   // Maximum of mem_funcs_init_count_ is 2:
   //   1. The initial init called from Init(...), it could fail if
-  //      libhsa-runtime64.so is dynamically loaded with dlopen()
+  //      the device runtime is dynamically loaded with dlopen()
   //   2. A potential deferred init called by Allocate(...)
   u32 mem_funcs_init_count_;
   uptr kMetadataSize_;
   uptr page_size_;
-  uptr *chunks_;
+  uptr* chunks_;
   PtrArrayT ptr_array_;
   uptr n_chunks_;
   bool chunks_sorted_;
@@ -352,4 +391,11 @@ class DeviceAllocatorT {
   } stats;
   mutable StaticSpinMutex mutex_;
 };
-#endif  // SANITIZER_AMDGPU
+
+// Inert device tier: DeviceAllocatorT<PrimaryAllocator, NoOpDeviceAllocator>
+// (same MapUnmapCallback as primary; no device allocations). Usable as the
+// device backend for DeviceCombinedAllocator when no real device heap is
+// wired up.
+template <class PrimaryAllocator>
+using DefaultDeviceAllocator =
+    DeviceAllocatorT<PrimaryAllocator, NoOpDeviceAllocator>;
