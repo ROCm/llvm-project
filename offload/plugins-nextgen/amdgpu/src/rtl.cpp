@@ -819,34 +819,11 @@ struct AMDGPUKernelTy : public GenericKernelTy {
     // TODO: Read the kernel descriptor for the max threads per block. May be
     // read from the image.
 
-    // Get ConstWGSize for kernel from image
-    ConstWGSize = Device.getDefaultNumThreads();
-    std::string WGSizeName(getName());
-    WGSizeName += "_wg_size";
-    GlobalTy HostConstWGSize(WGSizeName, sizeof(decltype(ConstWGSize)),
-                             &ConstWGSize);
-    GenericGlobalHandlerTy &GHandler = Device.Plugin.getGlobalHandler();
-    if (auto Err =
-            GHandler.readGlobalFromImage(Device, AMDImage, HostConstWGSize)) {
-      // In case it is not found, we simply stick with the defaults.
-      // So we consume the error and print a debug message.
-      ODBG(ODT_Tool) << "Could not load " << WGSizeName.c_str()
-                     << " global from kernel image. Run with "
-                     << PreferredNumThreads << MaxNumThreads;
-      consumeError(std::move(Err));
-      assert(PreferredNumThreads > 0 && "Prefer more than 0 threads");
-      assert(MaxNumThreads > 0 && "MaxNumThreads more than 0 threads");
-    } else {
-      // Set the number of preferred and max threads to the ConstWGSize to get
-      // the exact value for kernel launch. Exception: In generic-spmd mode, we
-      // set it to the default blocksize since ConstWGSize may include the
-      // master thread which is not required.
-      PreferredNumThreads =
-          getExecutionModeFlags() == OMP_TGT_EXEC_MODE_GENERIC_SPMD
-              ? Device.getDefaultNumThreads()
-              : ConstWGSize;
-      MaxNumThreads = ConstWGSize;
-    }
+    // ConstWGSize is the block size CodeGen chose for this kernel. It is now
+    // carried by the kernel environment (Configuration.MaxThreads) rather than a
+    // dedicated <kernel>_wg_size global; GenericKernelTy::init has already set
+    // MaxNumThreads and PreferredNumThreads from it before initImpl runs.
+    ConstWGSize = MaxNumThreads;
 
     ImplicitArgsSize =
         hsa_utils::getImplicitArgsSize(AMDImage.getELFABIVersion());
