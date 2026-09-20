@@ -26,6 +26,7 @@
       defined HANDLE_DWARF_SECTION || defined HANDLE_DW_IDX ||                 \
       defined HANDLE_DW_END || defined HANDLE_DW_SECT ||                       \
       defined HANDLE_DW_APPLE_ENUM_KIND ||                                     \
+      defined HANDLE_DW_MSPACE ||                                              \
       defined HANDLE_DW_LLVM_LANG_DIALECT ||                                   \
       defined HANDLE_DW_MSPACE ||                                              \
       ( defined HANDLE_DW_ASPACE && defined HANDLE_DW_ASPACE_PRED) )
@@ -152,6 +153,10 @@
 
 #ifndef HANDLE_DW_APPLE_ENUM_KIND
 #define HANDLE_DW_APPLE_ENUM_KIND(ID, NAME)
+#endif
+
+#ifndef HANDLE_DW_MSPACE
+#define HANDLE_DW_MSPACE(ID, NAME)
 #endif
 
 #ifndef HANDLE_DW_LLVM_LANG_DIALECT
@@ -1485,6 +1490,7 @@ HANDLE_DW_SECT(8, RNGLISTS)
 #undef HANDLE_DW_END
 #undef HANDLE_DW_SECT
 #undef HANDLE_DW_APPLE_ENUM_KIND
+#undef HANDLE_DW_MSPACE
 #undef HANDLE_DW_LLVM_LANG_DIALECT
 #undef HANDLE_DW_MSPACE
 #undef HANDLE_DW_ASPACE
