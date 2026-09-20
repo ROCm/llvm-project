@@ -513,6 +513,9 @@ features cannot lower the translation-unit ABI level;
 - Improve the input size mismatch diagnostic when calling `__builtin_shufflevector` with valid
   vector element types but different sizes. (GH221791)
 
+- Suggests the correct location for an attribute written before the `using`
+  keyword of an alias-declaration. (#GH155787)
+
 ### Improvements to Clang's time-trace
 
 ### Improvements to Coverage Mapping
@@ -878,6 +881,9 @@ features cannot lower the translation-unit ABI level;
   `decltype` resolves to, e.g. `set_x(int val)` rather than
   `set_x(decltype(x) val)`. This affects the completion strings produced by
   libclang as well as those used by clangd.
+
+- Members inherited from a dependent base class that is named through an alias
+  template are suggested by code completion when relevant.
 
 ### Static Analyzer
 
