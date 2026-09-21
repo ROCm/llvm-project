@@ -45,3 +45,8 @@ runs:
       run: |
         ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-lld
 
+    - name: SQTT-Marker Lit Tests
+      shell: bash
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
+        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-sqtt-marker
