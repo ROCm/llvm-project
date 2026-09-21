@@ -72,9 +72,6 @@ private:
   void emitKernelDeinit(CodeGenFunction &CGF, EntryFunctionState &EST,
                         bool IsSPMD);
 
-  void GenerateMetaData(CodeGenModule &CGM, const OMPExecutableDirective &D,
-                        llvm::Function *&OutlinedFn, bool isSPMD);
-
   /// Helper for generic variables globalization prolog.
   void emitGenericVarsProlog(CodeGenFunction &CGF, SourceLocation Loc);
 

@@ -710,85 +710,33 @@ static bool supportsSPMDExecutionMode(CodeGenModule &CGM,
       "Unknown programming model for OpenMP directive on NVPTX target.");
 }
 
-// Create a unique global variable to indicate the flat-work-group-size
-// for this region. Values are [1..1024].
-static void setPropertyWorkGroupSize(CodeGenModule &CGM, StringRef Name,
-                                     int WGSize) {
-  auto *GVMode = new llvm::GlobalVariable(
-      CGM.getModule(), CGM.Int16Ty,
-      /*isConstant=*/true, llvm::GlobalValue::WeakAnyLinkage,
-      llvm::ConstantInt::get(CGM.Int16Ty, WGSize), Twine(Name, "_wg_size"));
-
-  CGM.addCompilerUsedGlobal(GVMode);
-}
-
-// Generic mode runs the main thread on a warp of its own, past thread_limit.
-// Keep aligned with createTargetInit in OMPIRBuilder.
-static int ComputeGenericWorkgroupSize(CodeGenModule &CGM, int WorkgroupSize) {
-  assert(WorkgroupSize >= 0);
-  const llvm::omp::GV &GridValue = CGM.getTarget().getGridValue();
-  return std::min<int>(WorkgroupSize + GridValue.GV_Warp_Size,
-                       GridValue.GV_Max_WG_Size);
-}
-
-void CGOpenMPRuntimeGPU::GenerateMetaData(CodeGenModule &CGM,
-                                          const OMPExecutableDirective &D,
-                                          llvm::Function *&OutlinedFn,
-                                          bool IsGeneric) {
-  if (!CGM.getTriple().isAMDGCN())
-    return;
-
-  int FlatAttr = 0;
-  bool flatAttrEmitted = false;
-  unsigned compileTimeThreadLimit =
-      CGM.getTarget().getGridValue().GV_Default_WG_Size;
-  bool isBigJumpLoopKernel = CGM.isBigJumpLoopKernel(D);
-  bool isNoLoopKernel = CGM.isNoLoopKernel(D);
+// Returns the flat work-group size CodeGen selects for an AMDGPU kernel, before
+// the generic-mode master warp is reserved (createTargetInit adds that warp).
+// This is the block size the runtime launches with; it is published to the
+// plugin through the kernel environment (Configuration.MaxThreads) rather than a
+// dedicated <kernel>_wg_size global.
+static int getAMDGPUFlatWorkGroupSize(CodeGenModule &CGM,
+                                      const OMPExecutableDirective &D,
+                                      bool IsGeneric) {
+  int WGSize = CGM.getTarget().getGridValue().GV_Default_WG_Size;
+  bool IsBigJumpLoop = CGM.isBigJumpLoopKernel(D);
+  bool IsNoLoop = CGM.isNoLoopKernel(D);
   // A cross-team reduction whose 'target' and 'teams' are written as separate
   // directives is rooted at a plain 'target' directive, which is neither a
   // teams nor a parallel directive. Detect it explicitly, otherwise it would
-  // fall through to the generic default block size below and get a smaller
-  // grid than the equivalent combined 'target teams' spelling.
-  bool isTeamsReductionKernel = CGM.isTeamsReductionKernel(D);
-  // If constant ThreadLimit(), set reqd_work_group_size metadata
+  // fall through to the smaller generic default block size.
+  bool IsTeamsReduction = CGM.isTeamsReductionKernel(D);
   if (isOpenMPTeamsDirective(D.getDirectiveKind()) ||
-      isOpenMPParallelDirective(D.getDirectiveKind()) ||
-      isTeamsReductionKernel || isBigJumpLoopKernel || isNoLoopKernel) {
-    // Call the work group size calculation based on kernel type.
-    if (isBigJumpLoopKernel)
-      compileTimeThreadLimit = CGM.getBigJumpLoopBlockSize(D);
-    else if (isNoLoopKernel)
-      compileTimeThreadLimit = CGM.getNoLoopBlockSize(D);
+      isOpenMPParallelDirective(D.getDirectiveKind()) || IsTeamsReduction ||
+      IsBigJumpLoop || IsNoLoop) {
+    if (IsBigJumpLoop)
+      WGSize = CGM.getBigJumpLoopBlockSize(D);
+    else if (IsNoLoop)
+      WGSize = CGM.getNoLoopBlockSize(D);
     else
-      compileTimeThreadLimit =
-          CGM.getWorkGroupSizeSPMDKernel(D, /*IsGenericMode=*/IsGeneric);
-
-    // Add kernel metadata if ThreadLimit Clause is compile time constant > 0
-    if (compileTimeThreadLimit > 0) {
-      if (IsGeneric)
-        compileTimeThreadLimit =
-            ComputeGenericWorkgroupSize(CGM, compileTimeThreadLimit);
-      FlatAttr = compileTimeThreadLimit;
-      OutlinedFn->addFnAttr("amdgpu-flat-work-group-size",
-                            "1," + llvm::utostr(compileTimeThreadLimit));
-      flatAttrEmitted = true;
-    } // end   > 0
-  } // end of amdgcn teams or parallel directive
-
-  // emit amdgpu-flat-work-group-size if not emitted already.
-  if (!flatAttrEmitted) {
-    // When outermost construct does not have teams or parallel
-    // workgroup size is still based on mode
-    int GenericModeWorkgroupSize = compileTimeThreadLimit;
-    if (IsGeneric)
-      GenericModeWorkgroupSize =
-          ComputeGenericWorkgroupSize(CGM, compileTimeThreadLimit);
-    FlatAttr = GenericModeWorkgroupSize;
-    OutlinedFn->addFnAttr("amdgpu-flat-work-group-size",
-                          "1," + llvm::utostr(GenericModeWorkgroupSize));
+      WGSize = CGM.getWorkGroupSizeSPMDKernel(D, /*IsGenericMode=*/IsGeneric);
   }
-  // Emit a kernel descriptor for runtime.
-  setPropertyWorkGroupSize(CGM, OutlinedFn->getName(), FlatAttr);
+  return WGSize;
 }
 
 void CGOpenMPRuntimeGPU::emitNonSPMDKernel(const OMPExecutableDirective &D,
@@ -830,7 +778,6 @@ void CGOpenMPRuntimeGPU::emitNonSPMDKernel(const OMPExecutableDirective &D,
   emitTargetOutlinedFunctionHelper(D, ParentName, OutlinedFn, OutlinedFnID,
                                    IsOffloadEntry, CodeGen);
   IsInTTDRegion = false;
-  GenerateMetaData(CGM, D, OutlinedFn, /*Generic*/ true);
 }
 
 void CGOpenMPRuntimeGPU::emitBareKernelEnvironment(
@@ -855,6 +802,14 @@ void CGOpenMPRuntimeGPU::emitKernelInit(const OMPExecutableDirective &D,
       IsSPMD ? llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD
              : llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_GENERIC;
   computeMinAndMaxThreadsAndTeams(D, CGF, Attrs);
+
+  // AMDGPU publishes the CodeGen-chosen block size to the runtime through the
+  // kernel environment (Configuration.MaxThreads) instead of a separate
+  // <kernel>_wg_size global. Override the clause-derived upper bound with that
+  // block size; createTargetInit widens it by one warp for generic mode.
+  if (CGM.getTriple().isAMDGCN())
+    Attrs.MaxThreads.front() =
+        getAMDGPUFlatWorkGroupSize(CGM, D, /*IsGeneric=*/!IsSPMD);
 
   CGBuilderTy &Bld = CGF.Builder;
   Bld.restoreIP(OMPBuilder.createTargetInit(Bld, Attrs));
@@ -946,8 +901,6 @@ void CGOpenMPRuntimeGPU::emitSPMDKernel(const OMPExecutableDirective &D,
   emitTargetOutlinedFunctionHelper(D, ParentName, OutlinedFn, OutlinedFnID,
                                    IsOffloadEntry, CodeGen);
   IsInTTDRegion = false;
-
-  GenerateMetaData(CGM, D, OutlinedFn, /*SPMD*/ false);
 }
 
 // Create a unique global variable to indicate the execution mode of this target
