@@ -417,9 +417,6 @@ bool SemaAMDGPU::CheckAMDGCNBuiltinFunctionCall(const TargetInfo &TI,
            SemaRef.BuiltinConstantArg(TheCall, ArgCount, Result) ||
            SemaRef.BuiltinConstantArg(TheCall, (ArgCount - 1), Result);
   }
-  case AMDGPU::BI__builtin_amdgcn_global_load_b128:
-  case AMDGPU::BI__builtin_amdgcn_global_store_b128:
-    return checkScopedMemAccessFunctionCall(TheCall);
   case AMDGPU::BI__builtin_amdgcn_wmma_i32_16x16x64_iu8:
   case AMDGPU::BI__builtin_amdgcn_swmmac_i32_16x16x128_iu8: {
     if (BuiltinID == AMDGPU::BI__builtin_amdgcn_wmma_i32_16x16x64_iu8) {
