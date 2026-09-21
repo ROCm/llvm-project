@@ -1114,7 +1114,7 @@ amd_comgr_status_t AMDGPUCompiler::createTmpDirs() {
     if (env::shouldEmitVerboseLogs()) {
       LogS << "comgr-compiler: failed to create temporary directory '"
            << TmpDirPrefix << "': " << EC.message() << "\n";
-      const char *TmpDirEnv = std::getenv("TMPDIR");
+      const char *TmpDirEnv = env::getEnv("TMPDIR");
       if (TmpDirEnv)
         LogS << "comgr-compiler: TMPDIR='" << TmpDirEnv
              << "' may not exist or be writable\n";
