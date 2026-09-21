@@ -289,7 +289,7 @@ Error decodeVOPD(DecodedInst &Di, const MCInstrInfo &MCII,
   if (!COMGR::transpiler::isVOPD(Di.Inst.getOpcode()))
     return Error::success();
 
-  Di.VOPD = std::array<DecodedInst::VOPDHalf, 2>{};
+  Di.VOPD.emplace();
   const bool IsVOPD3 = (Di.TargetSpecificFlags & AmdgpuFormat::VOPD3) != 0;
   auto [OpX, OpY] = COMGR::transpiler::getVOPDComponents(Di.Inst.getOpcode());
   const MCInstrDesc &OpXDesc = MCII.get(OpX);
