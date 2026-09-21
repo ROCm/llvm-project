@@ -67,11 +67,11 @@ llvm::Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
 // Translate supported SMEM loads or return a structured refusal.
 llvm::Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
-// Translate supported GLOBAL memory accesses, or return a structured refusal.
-// The format covers flat, global and scratch addressing; only the global forms
-// are recognized and the rest are refused.
-llvm::Error handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
-                       OperandResolver &Op);
+/// Translate supported VGLOBAL memory accesses, or return a structured refusal.
+llvm::Error handleVGLOBAL(RaiseContext &Ctx, const DecodedInst &Di,
+                          OperandResolver &Op);
+/// Raise raw unformatted buffer loads and stores, or return a refusal.
+llvm::Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction);
 /// Raise direct VGPR LDS loads using AMDHSA's unaligned access mode.
 /// Active accesses must lie wholly within the workgroup's LDS allocation.
 llvm::Error handleDS(RaiseContext &Context, const DecodedInst &Instruction);
@@ -87,6 +87,10 @@ llvm::Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
 /// refusal.
 llvm::Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
+/// Translate a supported packed VOP3 instruction, or return a structured
+/// refusal.
+llvm::Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
+                        OperandResolver &Op);
 /// Translate both components of a VOPD packet. Both halves read the register
 /// state that preceded the packet; their writes commit together afterwards.
 llvm::Error handleVOPD(RaiseContext &Ctx, const DecodedInst &Di);

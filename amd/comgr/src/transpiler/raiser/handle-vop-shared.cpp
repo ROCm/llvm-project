@@ -108,7 +108,7 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   if (Di.NumDefs != 1 || Op.nSrcs() != 1)
     return unsupportedInstruction(Ctx, Di,
                                   "expected one destination and one source");
-  if (Error Err = Ctx.validateF32Environment(Di))
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
     return Err;
 
   Expected<ParsedReg> Dst = Op.dst();
@@ -200,10 +200,10 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
       Ctx.Projection.SourceSTI.hasFeature(AMDGPU::FeatureRealTrue16Insts))
     return unsupportedInstruction(
         Ctx, Di, "true16 destination preservation is not supported");
-  if (Error Err = Ctx.validateF32Environment(Di))
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
     return Err;
   if (Di.CanonOp == CanonicalOp::V_CVT_F16_F32) {
-    if (Error Err = Ctx.validateF16Environment(Di))
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getHalfTy()))
       return Err;
   }
 

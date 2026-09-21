@@ -9,18 +9,23 @@
 #include "transpiler/raiser/raise-context.h"
 
 #include "transpiler/common/kernel-meta.h"
+#include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/mc-state.h"
 #include "transpiler/raiser/handlers.h"
+#include "transpiler/raiser/raise_failure.h"
 #include "transpiler/raiser/wave-projection.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Transforms/Utils/PromoteMemToReg.h"
 
 #include "gtest/gtest.h"
 
@@ -60,9 +65,10 @@ protected:
         : Mod("raise_context_test", LLVMCtx), B(LLVMCtx),
           Projection(*Mc.SubtargetInfo, *Mc.SubtargetInfo, B.getInt32Ty(),
                      B.getInt64Ty()),
-          Kernel(Function::Create(
-              FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
-              Function::ExternalLinkage, "kernel", Mod)),
+          Kernel(Function::Create(FunctionType::get(B.getVoidTy(),
+                                                    {B.getInt32Ty()},
+                                                    /*isVarArg=*/false),
+                                  Function::ExternalLinkage, "kernel", Mod)),
           Entry(BasicBlock::Create(LLVMCtx, "entry", Kernel)) {
       B.SetInsertPoint(Entry);
       Ctx.emplace(cantFail(RaiseContext::create(
@@ -79,6 +85,96 @@ TEST_F(RaiseContextTest, ResolvesBlocksBySourceOffset) {
   BasicBlock *Start = BasicBlock::Create(Env->LLVMCtx, "bb_start", Env->Kernel);
   Env->Ctx->defineBB(KKernelStartOffset, Start);
   EXPECT_EQ(Env->Ctx->lookupBB(KKernelStartOffset), Start);
+}
+
+TEST_F(RaiseContextTest, RequiredBitsFollowRegisterPromotion) {
+  DecodedInst Instruction;
+  AllocaInst *Word = Env->B.CreateAlloca(Env->B.getInt32Ty());
+  Env->B.CreateStore(Env->B.getInt32(63), Word);
+  Value *Read = Env->B.CreateLoad(Env->B.getInt32Ty(), Word);
+  Env->Ctx->requireZeroBits(Read, 0xffffffc0, Instruction, "nonzero bits");
+  Env->B.CreateRetVoid();
+  DominatorTree Dominators(*Env->Kernel);
+  PromoteMemToReg({Word}, Dominators);
+  if (Error Result = Env->Ctx->validateRequiredBits())
+    FAIL() << toString(std::move(Result));
+}
+
+TEST_F(RaiseContextTest, BufferRejectsMalformedOperands) {
+  Expected<MCState> State = initMCState("gfx1250");
+  ASSERT_TRUE(static_cast<bool>(State)) << toString(State.takeError());
+  unsigned Opcode = State->InstrInfo->getNumOpcodes();
+  for (unsigned I = 0; I != State->InstrInfo->getNumOpcodes(); ++I) {
+    if (State->InstrInfo->getName(I) ==
+        "BUFFER_LOAD_DWORD_VBUFFER_OFFSET_gfx12") {
+      Opcode = I;
+      break;
+    }
+  }
+  ASSERT_NE(Opcode, State->InstrInfo->getNumOpcodes());
+  unsigned OperandCount = State->InstrInfo->get(Opcode).getNumOperands();
+  for (unsigned Count : {0u, OperandCount}) {
+    ContextEnvironment Context(*State);
+    DecodedInst Instruction;
+    Instruction.Inst.setOpcode(Opcode);
+    Instruction.CanonOp = CanonicalOp::BUFFER_LOAD_B32;
+    for (unsigned I = 0; I != Count; ++I)
+      Instruction.Inst.addOperand(MCOperand::createImm(0));
+    Error Result = handleMUBUF(*Context.Ctx, Instruction);
+    ASSERT_TRUE(static_cast<bool>(Result));
+    StringRef Expected =
+        Count == 0 ? "buffer operand count does not match its encoding"
+                   : "buffer operand must be a register";
+    EXPECT_NE(toString(std::move(Result)).find(Expected.str()),
+              std::string::npos);
+  }
+
+  int OffsetIndex =
+      COMGR::transpiler::getNamedOperandIdx(Opcode, AMDGPU::OpName::offset);
+  ASSERT_GE(OffsetIndex, 0);
+  ASSERT_LT(static_cast<unsigned>(OffsetIndex), OperandCount);
+  for (MCOperand Offset :
+       {MCOperand::createImm(-1), MCOperand::createImm(0x800000),
+        MCOperand::createImm(0xffffff), MCOperand::createImm(0x1000000),
+        MCOperand::createReg(MCRegister())}) {
+    ContextEnvironment Context(*State);
+    DecodedInst Instruction;
+    Instruction.Inst.setOpcode(Opcode);
+    Instruction.CanonOp = CanonicalOp::BUFFER_LOAD_B32;
+    for (unsigned I = 0; I != OperandCount; ++I)
+      Instruction.Inst.addOperand(MCOperand::createImm(0));
+    Instruction.Inst.getOperand(OffsetIndex) = Offset;
+    Error Result = handleMUBUF(*Context.Ctx, Instruction);
+    ASSERT_TRUE(static_cast<bool>(Result));
+    handleAllErrors(std::move(Result), [](const RaiseFailure &Failure) {
+      EXPECT_EQ(Failure.reason(),
+                RaiseFailureReason::UnsupportedInstructionForm);
+      EXPECT_EQ(Failure.detail(),
+                "buffer offset must be an unsigned 23-bit immediate");
+    });
+  }
+}
+
+TEST_F(RaiseContextTest, RequiredBitsRejectUnknownAndNonzeroValues) {
+  DecodedInst Instruction;
+  for (unsigned I = 0; I != Mc.InstrInfo->getNumOpcodes(); ++I) {
+    if (Mc.InstrInfo->getName(I) == "S_ENDPGM") {
+      Instruction.Inst.setOpcode(I);
+      break;
+    }
+  }
+  Instruction.Inst.addOperand(MCOperand::createImm(0));
+  for (bool Unknown : {false, true}) {
+    ContextEnvironment Context(Mc);
+    Value *Word = Context.B.getInt32(64);
+    if (Unknown)
+      Word = Context.Kernel->getArg(0);
+    Context.Ctx->requireZeroBits(Word, 64, Instruction, "nonzero bits");
+    Error Result = Context.Ctx->validateRequiredBits();
+    ASSERT_TRUE(static_cast<bool>(Result));
+    EXPECT_NE(toString(std::move(Result)).find("nonzero bits"),
+              std::string::npos);
+  }
 }
 
 TEST_F(RaiseContextTest, SetVgprMsbUsesLowImmediateByte) {

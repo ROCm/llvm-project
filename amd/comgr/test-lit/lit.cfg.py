@@ -113,6 +113,8 @@ config.substitutions.append(("%clang", _fwd(config.llvm_tools_dir, "clang")))
 config.substitutions.append(("%llvm-as", _fwd(config.llvm_tools_dir, "llvm-as")))
 config.substitutions.append(("%llvm-dis", _fwd(config.llvm_tools_dir, "llvm-dis")))
 config.substitutions.append(("%llvm-mc", _fwd(config.llvm_tools_dir, "llvm-mc")))
+config.substitutions.append(("%llc", _fwd(config.llvm_tools_dir, "llc")))
+config.substitutions.append(("%opt", _fwd(config.llvm_tools_dir, "opt")))
 config.substitutions.append(
     ("%llvm-objcopy", _fwd(config.llvm_tools_dir, "llvm-objcopy"))
 )

@@ -30,8 +30,6 @@ class DwarfCompileUnit;
 class MCDwarfDwoLineTable;
 class MCSymbol;
 
-extern bool DisableDwarfLocations;
-
 //===----------------------------------------------------------------------===//
 /// This dwarf writer support class manages information associated with a
 /// source file.
@@ -114,9 +112,6 @@ public:
   llvm::dwarf::SourceLanguage getSourceLanguage() const;
   const DICompileUnit *getCUNode() const { return CUNode; }
   DwarfDebug &getDwarfDebug() const { return *DD; }
-
-  /// Return true if this compile unit has something to write out.
-  bool hasContent() const { return getUnitDie().hasChildren(); }
 
   /// Get string containing language specific context for a global name.
   ///
@@ -408,9 +403,6 @@ private:
 
   /// Get an anonymous type for index type.
   DIE *getIndexTyDie();
-
-  /// Set D as anonymous type for index which can be reused later.
-  void setIndexTyDie(DIE *D) { IndexTyDie = D; }
 
   virtual void finishNonUnitTypeDIE(DIE& D, const DICompositeType *CTy) = 0;
 

@@ -1,5 +1,5 @@
 // RUN: mlir-translate -mlir-to-llvmir -split-input-file %s | FileCheck %s
-// REQUIRES: stability
+
 llvm.func @foo()
 
 // CHECK-LABEL: @omp_teams_simple

@@ -333,7 +333,7 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   if (Di.NumDefs != 1 || Op.nSrcs() != 2)
     return unsupportedInstruction(Ctx, Di,
                                   "expected one destination and two sources");
-  if (Error Err = Ctx.validateF32Environment(Di))
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
     return Err;
 
   Expected<ParsedReg> Dst = Op.dst();

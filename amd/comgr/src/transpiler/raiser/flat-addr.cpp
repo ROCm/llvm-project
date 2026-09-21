@@ -31,7 +31,7 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 
-/// Returns the width of the immediate offset field in the FLAT instruction
+/// Returns the width of the immediate offset field in the VGLOBAL instruction
 /// encoding. Most subtargets use the legacy 13-bit field; dedicated features
 /// select 12- or 24-bit variants.
 static unsigned flatOffsetBits(const MCSubtargetInfo &STI) {

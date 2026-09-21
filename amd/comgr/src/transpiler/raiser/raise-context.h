@@ -16,10 +16,13 @@
 #include "transpiler/raiser/wave-projection.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Error.h"
 
 #include <cstdint>
+#include <optional>
 
 namespace COMGR::transpiler {
 
@@ -39,7 +42,8 @@ public:
          llvm::ArrayRef<uint8_t> SourceTextBytes,
          uint64_t SourceTextBaseAddress,
          llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
-         uint64_t KernelStartOffset, uint64_t KernelEndOffset);
+         uint64_t KernelStartOffset, uint64_t KernelEndOffset,
+         std::optional<bool> SourceSramEcc = std::nullopt);
 
   // Builder every handler emits into. Its insertion point moves as raising
   // progresses.
@@ -53,15 +57,20 @@ public:
   // resolve through them.
   RegisterState &registers() { return Registers; }
 
-  /// Return an error unless the source f32 environment can be preserved for
-  /// this instruction.
-  llvm::Error validateF32Environment(const DecodedInst &Di) const;
-  /// Return an error unless the source f16 environment can be preserved for
-  /// this instruction.
-  llvm::Error validateF16Environment(const DecodedInst &Di) const;
-  /// Return an error unless the source f64 environment can be preserved for
-  /// this instruction.
-  llvm::Error validateF64Environment(const DecodedInst &Di) const;
+  /// Return an error unless the source floating-point environment for Ty can
+  /// be preserved for this instruction.
+  llvm::Error validateFPEnvironment(const DecodedInst &Di,
+                                    llvm::Type *Ty) const;
+
+  /// Source SRAM ECC setting, or nothing when the code object permits either.
+  std::optional<bool> sourceSramEcc() const { return SourceSramEcc; }
+
+  /// Require masked bits to be provably zero after register promotion.
+  /// Di and Detail must outlive validateRequiredBits().
+  void requireZeroBits(llvm::Value *Value, uint32_t Mask, const DecodedInst &Di,
+                       llvm::StringRef Detail);
+  /// Refuse any bit requirement not established in the promoted register SSA.
+  llvm::Error validateRequiredBits() const;
 
   // Source text section, and the address the source code object loads it at.
   // PC-relative literals are materialized by reading out of these.
@@ -112,11 +121,23 @@ private:
                llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
                uint64_t KernelStartOffset, uint64_t KernelEndOffset,
                unsigned SourceFloatRoundMode32,
-               unsigned SourceFloatRoundMode16_64, bool SourceDx10Clamp,
-               bool SourceIeeeMode);
+               unsigned SourceFloatRoundMode16_64, bool SourceFp16Overflow,
+               bool SourceDx10Clamp, bool SourceIeeeMode);
 
   // Source architectural registers, allocated in the entry block.
   RegisterState Registers;
+
+  // Hardware mode affecting partial-register memory loads.
+  std::optional<bool> SourceSramEcc;
+
+  /// Bits whose values the lowering must establish before returning IR.
+  struct RequiredBits {
+    llvm::WeakTrackingVH Value;
+    uint32_t Mask;
+    const DecodedInst *Instruction;
+    llvm::StringRef Detail;
+  };
+  llvm::SmallVector<RequiredBits> BitRequirements;
   // Block raised from each source instruction offset that starts one.
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb;
 
@@ -133,6 +154,7 @@ private:
   // on when their descriptor fields are absent.
   unsigned SourceFloatRoundMode32 = 0;
   unsigned SourceFloatRoundMode16_64 = 0;
+  bool SourceFp16Overflow = false;
   bool SourceDx10Clamp = true;
   bool SourceIeeeMode = true;
 
