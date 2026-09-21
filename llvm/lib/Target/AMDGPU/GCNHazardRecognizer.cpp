@@ -599,7 +599,7 @@ static unsigned getHWReg(const SIInstrInfo *TII, const MachineInstr &RegInstr) {
 static bool isVALUWithSGPR(const MachineInstr &MI,
                            const MachineRegisterInfo &MRI,
                            const SIRegisterInfo &TRI) {
-  if (!SIInstrInfo::isVALU(MI))
+  if (!SIInstrInfo::isVALU(MI, false))
     return false;
 
   for (const MachineOperand &Op : MI.operands()) {
@@ -621,7 +621,7 @@ static bool isVALUWithSGPR(const MachineInstr &MI,
 static bool isVALUDefsSGPR(const MachineInstr &MI,
                            const MachineRegisterInfo &MRI,
                            const SIRegisterInfo &TRI) {
-  if (!SIInstrInfo::isVALU(MI))
+  if (!SIInstrInfo::isVALU(MI, false))
     return false;
 
   for (const MachineOperand &Op : MI.operands()) {
