@@ -1521,12 +1521,13 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
       if (DG.isDeleted())
         continue;
 
+      MachineInstr *Head = DG.getHead();
+      MachineBasicBlock *HeadMBB = Head->getParent();
       if (CurLoop && (DG.getWhereToRestore() ==
                       DomGroup::RestorePlacement::LoopPreheader)) {
-        MachineInstr *Head = DG.getHead();
         MachineInstr *OrigRestore = DG.getRestore();
         Register OrigRestoreReg = OrigRestore->getOperand(0).getReg();
-        MachineLoop *HeadLoop = MLI->getLoopFor(Head->getParent());
+        MachineLoop *HeadLoop = MLI->getLoopFor(HeadMBB);
         MachineBasicBlock *HeadLoopPreheader = nullptr;
         if (HeadLoop)
           HeadLoopPreheader = HeadLoop->getLoopPreheader();
@@ -1565,6 +1566,10 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
         for (MachineInstr *U : DG.getUses()) {
           MachineBasicBlock *UMBB = U->getParent();
           MachineLoop *UseLoop = MLI->getLoopFor(UMBB);
+
+          if (HeadMBB == UMBB)
+            continue;
+
           if (UseLoop && UseLoop->getLoopDepth() >= 2) {
             HasUsesInLoopNest = true;
             break;
