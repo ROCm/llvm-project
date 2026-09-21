@@ -7,6 +7,10 @@
 ; RUN: not %transpile_cli %t.hsaco --isa=gfx1250 \
 ; RUN:   --target-isa=gfx942 --emit-ir=wmma_unsigned 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE
+; RUN: not %transpile_cli %t.hsaco --isa=gfx1250 --target-isa=gfx908 \
+; RUN:   --emit-ir=wmma_remap 2>&1 | %FileCheck %s --check-prefix=GFX908
+; RUN: not %transpile_cli %t.hsaco --isa=gfx1250 --target-isa=gfx90a \
+; RUN:   --emit-ir=wmma_remap 2>&1 | %FileCheck %s --check-prefix=GFX90A
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -30,6 +34,11 @@ wmma_remap:
 	v_wmma_i32_16x16x64_iu8 v[16:23], v[0:7], v[8:15], v[16:23] neg_lo:[1,1,0]
 ; IR: ret void
 	s_endpgm
+
+; GFX908: unsupported-instruction-form: v_wmma_f32_16x16x32_bf16
+; GFX908-SAME: target ISA does not support mapped MFMA
+; GFX90A: unsupported-instruction-form: v_wmma_i32_16x16x64_iu8
+; GFX90A-SAME: target ISA does not support mapped MFMA
 
 	.globl	wmma_unsigned
 	.p2align	8

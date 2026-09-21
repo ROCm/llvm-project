@@ -19,6 +19,38 @@ namespace COMGR::transpiler {
 
 class RaiseContext;
 
+namespace detail {
+
+struct FragmentDwordLocation {
+  unsigned Lane;
+  unsigned Dword;
+};
+
+constexpr FragmentDwordLocation getWMMAInputDword(unsigned SourceWave,
+                                                  unsigned TargetLane,
+                                                  unsigned TargetDword,
+                                                  unsigned KHalf) {
+  unsigned LaneGroup = TargetLane / 16;
+  return {SourceWave * 32 + (LaneGroup / 2) * 16 + TargetLane % 16,
+          KHalf * 4 + (LaneGroup % 2) * 2 + TargetDword};
+}
+
+constexpr FragmentDwordLocation getWMMAAccumulatorDword(unsigned SourceWave,
+                                                        unsigned TargetLane,
+                                                        unsigned TargetDword) {
+  unsigned LaneGroup = TargetLane / 16;
+  return {SourceWave * 32 + (LaneGroup / 2) * 16 + TargetLane % 16,
+          (LaneGroup % 2) * 4 + TargetDword};
+}
+
+constexpr FragmentDwordLocation getMFMAResultDword(unsigned SourceLane,
+                                                   unsigned SourceDword) {
+  return {(SourceLane / 16) * 32 + (SourceDword / 4) * 16 + SourceLane % 16,
+          SourceDword % 4};
+}
+
+} // namespace detail
+
 enum class WMMAInputType {
   F16,
   BF16,

@@ -52,67 +52,71 @@ SmallVector<Value *> unpackDwords(IRBuilder<> &B, Value *Vector,
   return Result;
 }
 
-Value *selectByLaneGroup(IRBuilder<> &B, Value *LaneGroup, Value *V0, Value *V1,
-                         Value *V2, Value *V3) {
+Value *selectByLaneGroup(IRBuilder<> &B, Value *LaneGroup,
+                         ArrayRef<Value *> Values) {
+  assert(Values.size() == 4);
   Value *IsGroup2 = B.CreateICmpEQ(LaneGroup, B.getInt32(2), "is.group2");
-  Value *Selected = B.CreateSelect(IsGroup2, V2, V3, "group23");
+  Value *Selected = B.CreateSelect(IsGroup2, Values[2], Values[3], "group23");
   Value *IsGroup1 = B.CreateICmpEQ(LaneGroup, B.getInt32(1), "is.group1");
-  Selected = B.CreateSelect(IsGroup1, V1, Selected, "group123");
+  Selected = B.CreateSelect(IsGroup1, Values[1], Selected, "group123");
   Value *IsGroup0 = B.CreateICmpEQ(LaneGroup, B.getInt32(0), "is.group0");
-  return B.CreateSelect(IsGroup0, V0, Selected, "group");
+  return B.CreateSelect(IsGroup0, Values[0], Selected, "group");
 }
 
-// Each target 16-lane group consumes one quarter of the source K dimension.
-// The source stores alternating K quarters in its two 16-lane halves and in
-// adjacent pairs of its eight fragment dwords.
 void redistributeInput(IRBuilder<> &B, Module &M, ArrayRef<Value *> Source,
-                       Value *AddrLo, Value *AddrHi, Value *LaneGroup,
-                       MutableArrayRef<Value *> Low,
+                       unsigned SourceWave, Value *LaneInGroup,
+                       Value *LaneGroup, MutableArrayRef<Value *> Low,
                        MutableArrayRef<Value *> High) {
-  for (unsigned Gpr = 0; Gpr != 2; ++Gpr) {
-    Value *V0 = emitDSBpermute(B, M, AddrLo, Source[Gpr]);
-    Value *V1 = emitDSBpermute(B, M, AddrLo, Source[Gpr + 2]);
-    Value *V2 = emitDSBpermute(B, M, AddrHi, Source[Gpr]);
-    Value *V3 = emitDSBpermute(B, M, AddrHi, Source[Gpr + 2]);
-    Low[Gpr] = selectByLaneGroup(B, LaneGroup, V0, V1, V2, V3);
-
-    Value *U0 = emitDSBpermute(B, M, AddrLo, Source[Gpr + 4]);
-    Value *U1 = emitDSBpermute(B, M, AddrLo, Source[Gpr + 6]);
-    Value *U2 = emitDSBpermute(B, M, AddrHi, Source[Gpr + 4]);
-    Value *U3 = emitDSBpermute(B, M, AddrHi, Source[Gpr + 6]);
-    High[Gpr] = selectByLaneGroup(B, LaneGroup, U0, U1, U2, U3);
+  for (unsigned TargetDword = 0; TargetDword != 2; ++TargetDword) {
+    for (unsigned KHalf = 0; KHalf != 2; ++KHalf) {
+      SmallVector<Value *, 4> Candidates;
+      for (unsigned Group = 0; Group != 4; ++Group) {
+        detail::FragmentDwordLocation Location = detail::getWMMAInputDword(
+            SourceWave, Group * 16, TargetDword, KHalf);
+        Value *SourceLane =
+            B.CreateAdd(LaneInGroup, B.getInt32(Location.Lane), "source.lane");
+        Value *Address =
+            B.CreateShl(SourceLane, B.getInt32(2), "source.address");
+        Candidates.push_back(
+            emitDSBpermute(B, M, Address, Source[Location.Dword]));
+      }
+      (KHalf == 0 ? Low : High)[TargetDword] =
+          selectByLaneGroup(B, LaneGroup, Candidates);
+    }
   }
 }
 
-// The source accumulator stores rows 0-7 in its low lane half and rows 8-15
-// in its high half. The target stores four rows in each 16-lane group.
 void redistributeAccumulator(IRBuilder<> &B, Module &M,
-                             ArrayRef<Value *> Source, Value *AddrLo,
-                             Value *AddrHi, Value *LaneGroup,
+                             ArrayRef<Value *> Source, unsigned SourceWave,
+                             Value *LaneInGroup, Value *LaneGroup,
                              MutableArrayRef<Value *> Result) {
-  for (unsigned Gpr = 0; Gpr != 4; ++Gpr) {
-    Value *V0 = emitDSBpermute(B, M, AddrLo, Source[Gpr]);
-    Value *V1 = emitDSBpermute(B, M, AddrLo, Source[Gpr + 4]);
-    Value *V2 = emitDSBpermute(B, M, AddrHi, Source[Gpr]);
-    Value *V3 = emitDSBpermute(B, M, AddrHi, Source[Gpr + 4]);
-    Result[Gpr] = selectByLaneGroup(B, LaneGroup, V0, V1, V2, V3);
+  for (unsigned TargetDword = 0; TargetDword != 4; ++TargetDword) {
+    SmallVector<Value *, 4> Candidates;
+    for (unsigned Group = 0; Group != 4; ++Group) {
+      detail::FragmentDwordLocation Location =
+          detail::getWMMAAccumulatorDword(SourceWave, Group * 16, TargetDword);
+      Value *SourceLane =
+          B.CreateAdd(LaneInGroup, B.getInt32(Location.Lane), "source.lane");
+      Value *Address = B.CreateShl(SourceLane, B.getInt32(2), "source.address");
+      Candidates.push_back(
+          emitDSBpermute(B, M, Address, Source[Location.Dword]));
+    }
+    Result[TargetDword] = selectByLaneGroup(B, LaneGroup, Candidates);
   }
 }
 
-// Reassemble four target accumulator dwords into the source's eight-dword
-// layout. The high source row half comes from target lanes 32-63.
 void collectResult(IRBuilder<> &B, Module &M, ArrayRef<Value *> Source,
                    Value *Wave32Lane, MutableArrayRef<Value *> Result) {
   Value *LaneInHalf = B.CreateAnd(Wave32Lane, B.getInt32(15), "lane.in.half");
   Value *IsUpper = B.CreateICmpUGE(Wave32Lane, B.getInt32(16), "lane.upper");
-  Value *UpperOffset =
-      B.CreateSelect(IsUpper, B.getInt32(32), B.getInt32(0), "upper.offset");
   for (unsigned Gpr = 0; Gpr != 8; ++Gpr) {
-    Value *GprOffset = B.getInt32(Gpr >= 4 ? 16 : 0);
-    Value *LaneBase = B.CreateAdd(UpperOffset, GprOffset, "collect.base");
+    detail::FragmentDwordLocation Lower = detail::getMFMAResultDword(0, Gpr);
+    detail::FragmentDwordLocation Upper = detail::getMFMAResultDword(16, Gpr);
+    Value *LaneBase = B.CreateSelect(IsUpper, B.getInt32(Upper.Lane),
+                                     B.getInt32(Lower.Lane), "collect.base");
     Value *SourceLane = B.CreateAdd(LaneBase, LaneInHalf, "collect.lane");
     Value *Address = B.CreateShl(SourceLane, B.getInt32(2), "collect.address");
-    Result[Gpr] = emitDSBpermute(B, M, Address, Source[Gpr % 4]);
+    Result[Gpr] = emitDSBpermute(B, M, Address, Source[Lower.Dword]);
   }
 }
 
@@ -123,20 +127,17 @@ void runGroupPass(RaiseContext &Ctx, unsigned GroupBase, Value *LaneId,
   Module &M = *Builder.GetInsertBlock()->getModule();
   Value *LaneInGroup =
       Builder.CreateAnd(LaneId, Builder.getInt32(15), "matrix.lane");
-  Value *LowLane =
-      Builder.CreateAdd(LaneInGroup, Builder.getInt32(GroupBase), "low.lane");
-  Value *HighLane = Builder.CreateAdd(
-      LaneInGroup, Builder.getInt32(GroupBase + 16), "high.lane");
-  Value *AddrLo = Builder.CreateShl(LowLane, Builder.getInt32(2), "addr.lo");
-  Value *AddrHi = Builder.CreateShl(HighLane, Builder.getInt32(2), "addr.hi");
   Value *LaneGroup =
       Builder.CreateLShr(LaneId, Builder.getInt32(4), "lane.group");
+  unsigned SourceWave = GroupBase / 32;
 
   SmallVector<Value *, 2> ALow(2), AHigh(2), BLow(2), BHigh(2);
   SmallVector<Value *, 4> Accumulator(4);
-  redistributeInput(Builder, M, A, AddrLo, AddrHi, LaneGroup, ALow, AHigh);
-  redistributeInput(Builder, M, B, AddrLo, AddrHi, LaneGroup, BLow, BHigh);
-  redistributeAccumulator(Builder, M, C, AddrLo, AddrHi, LaneGroup,
+  redistributeInput(Builder, M, A, SourceWave, LaneInGroup, LaneGroup, ALow,
+                    AHigh);
+  redistributeInput(Builder, M, B, SourceWave, LaneInGroup, LaneGroup, BLow,
+                    BHigh);
+  redistributeAccumulator(Builder, M, C, SourceWave, LaneInGroup, LaneGroup,
                           Accumulator);
 
   Type *InputTy;

@@ -11,6 +11,7 @@ env:
   LLVM_BUILD: build
   DEVLIBS_BUILD: build-device-libs
   COMGR_BUILD: build-comgr
+  COMGR_TRANSPILER_BUILD: build-comgr-transpiler
   ROCR_BUILD: build-rocr
   CLR_BUILD: build-clr
   ROCPRIM_BUILD: build-rocprim
@@ -529,6 +530,24 @@ jobs:
         env:
           AMD_COMGR_REDIRECT_LOGS: stderr
         run: ctest --test-dir "$COMGR_BUILD" --output-on-failure --rerun-failed
+
+      - name: Configure Comgr transpiler tests
+        run: |
+          cmake -G Ninja -S llvm-project/amd/comgr -B "$COMGR_TRANSPILER_BUILD" \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_PREFIX_PATH="$PWD/$LLVM_BUILD;$PWD/$DEVLIBS_BUILD" \
+            -DLLVM_DIR=$PWD/$LLVM_BUILD/lib/cmake/llvm \
+            -DLLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR=$PWD/$TRANSLATOR_SRC \
+            -DCOMGR_ENABLE_TRANSPILER=ON \
+            -DBUILD_TESTING=ON
+
+      - name: Test - Comgr WMMA to MFMA remapping
+        run: |
+          ninja -C "$COMGR_TRANSPILER_BUILD" WMMALoweringTests transpile_cli
+          "$COMGR_TRANSPILER_BUILD/test-unit/transpiler/raiser/WMMALoweringTests"
+          "$LLVM_BUILD/bin/llvm-lit" -v \
+            --filter='(mfma-direct|wmma-mfma-remap)' \
+            "$COMGR_TRANSPILER_BUILD/test-lit"
 
   # =====================================================================
   # Test - rocm-examples

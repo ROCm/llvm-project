@@ -184,8 +184,12 @@ Error raiseWMMA(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
   if (Ctx.Projection.sourceWaveSize() != 32 ||
       Ctx.Projection.targetWaveSize() != 64)
     return unsupported(Ctx, Di, "WMMA remapping requires wave32 to wave64");
-  if (!Ctx.Projection.TargetSTI.hasFeature(AMDGPU::FeatureMAIInsts))
-    return unsupported(Ctx, Di, "target ISA does not support MFMA");
+  unsigned RequiredFeature =
+      InputType == WMMAInputType::F16    ? AMDGPU::FeatureMAIInsts
+      : InputType == WMMAInputType::BF16 ? AMDGPU::FeatureGFX90AInsts
+                                         : AMDGPU::FeatureGFX940Insts;
+  if (!Ctx.Projection.TargetSTI.hasFeature(RequiredFeature))
+    return unsupported(Ctx, Di, "target ISA does not support mapped MFMA");
   if (Op.nSrcs() < 3)
     return unsupported(Ctx, Di, "WMMA requires three source operands");
 
