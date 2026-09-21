@@ -122,6 +122,8 @@ void AMDGPUTTIImpl::getUnrollingPreferences(
   const Function &F = *L->getHeader()->getParent();
   UP.Threshold =
       F.getFnAttributeAsParsedInteger("amdgpu-unroll-threshold", 300);
+  UP.PartialThreshold =
+      F.getFnAttributeAsParsedInteger("amdgpu-partial-unroll-threshold", 150);
   UP.MaxCount = std::numeric_limits<unsigned>::max();
   UP.Partial = true;
 
@@ -132,10 +134,9 @@ void AMDGPUTTIImpl::getUnrollingPreferences(
   // We want to run unroll even for the loops which have been vectorized.
   UP.UnrollVectorizedLoop = true;
 
-  // If selecte Enable runtime unrolling for loops whose trip count
+  // If selected, enable runtime unrolling for loops whose trip count
   // is not known at compile time.
-  if (UnrollRuntimeDefault.getNumOccurrences())
-    UP.Runtime = UnrollRuntimeDefault;
+  UP.Runtime = UnrollRuntimeDefault;
 
   // Maximum alloca size than can fit registers. Reserve 16 registers.
   const unsigned MaxAlloca = (256 - 16) * 4;

@@ -38,6 +38,13 @@ on:
       default_container_image:
         type: string
         default: "ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98"
+    secrets:
+      BENCHMARK_DB_URL:
+        required: false
+        description: "Benchmark results database API endpoint (nightly benchmark runs only)."
+      BENCHMARK_DB_FALLBACK_URL:
+        required: false
+        description: "Fallback benchmark results database API endpoint (nightly benchmark runs only)."
 
 
 permissions:
@@ -149,7 +156,7 @@ jobs:
         if: ${{ fromJSON(inputs.component).additional_requirements_files != '' }}
         run: |
           python ./build_tools/install_additional_requirements.py \
-            --requirements-files ${{ join(fromJSON(inputs.component).additional_requirements_files, ',') }}
+            --requirements-files "${{ join(fromJSON(inputs.component).additional_requirements_files, ',') }}"
 
         # TODO(#3755): Clean this up after final sanitizer environment variable flags are determined
       - name: Enable sanitizer-specific test flags
@@ -224,8 +231,9 @@ jobs:
             --shard-index "${{ matrix.shard }}" \
             --total-shards "${{ fromJSON(inputs.component).total_shards }}" \
             --test-type "${{ fromJSON(inputs.component).test_type }}" \
-            --print-cmd \
-            ${{ fromJSON(inputs.component).fetch_artifact_args && format('--fetch-artifact-args="{0}"', fromJSON(inputs.component).fetch_artifact_args) || '' }}
+            --fetch-artifact-args="${{ fromJSON(inputs.component).fetch_artifact_args }}" \
+            --additional-requirements-files="${{ join(fromJSON(inputs.component).additional_requirements_files, ',') }}" \
+            --print-cmd                                                                     
 
       - name: Post-job cleanup GPU processes on Linux
         if: ${{ always() && runner.os == 'Linux' }}

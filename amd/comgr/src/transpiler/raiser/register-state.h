@@ -227,7 +227,10 @@ private:
                 const MCState &MC, UserSgprLayout Layout);
 
   // Give the preloaded entry SGPRs the values the source ABI hands them.
-  llvm::Error seedEntrySgprs();
+  llvm::Error seedEntrySgprs(const KernelMeta &Meta);
+
+  // Give the preloaded entry VGPRs the values the source ABI hands them.
+  void seedEntryVgprs(const KernelMeta &Meta);
 
   // Storage shadowing one SGPR across block boundaries.
   struct SgprShadow {
