@@ -28,7 +28,6 @@
       defined HANDLE_DW_APPLE_ENUM_KIND ||                                     \
       defined HANDLE_DW_MSPACE ||                                              \
       defined HANDLE_DW_LLVM_LANG_DIALECT ||                                   \
-      defined HANDLE_DW_MSPACE ||                                              \
       ( defined HANDLE_DW_ASPACE && defined HANDLE_DW_ASPACE_PRED) )
 #error "Missing macro definition of HANDLE_DW*"
 #endif
@@ -161,10 +160,6 @@
 
 #ifndef HANDLE_DW_LLVM_LANG_DIALECT
 #define HANDLE_DW_LLVM_LANG_DIALECT(ID, NAME)
-#endif
-
-#ifndef HANDLE_DW_MSPACE
-#define HANDLE_DW_MSPACE(ID, NAME)
 #endif
 
 #ifndef HANDLE_DW_ASPACE
@@ -1492,6 +1487,5 @@ HANDLE_DW_SECT(8, RNGLISTS)
 #undef HANDLE_DW_APPLE_ENUM_KIND
 #undef HANDLE_DW_MSPACE
 #undef HANDLE_DW_LLVM_LANG_DIALECT
-#undef HANDLE_DW_MSPACE
 #undef HANDLE_DW_ASPACE
 #undef HANDLE_DW_ASPACE_PRED
