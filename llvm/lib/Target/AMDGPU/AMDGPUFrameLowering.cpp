@@ -88,8 +88,17 @@ DIExpression *AMDGPUFrameLowering::lowerFIArgToFPArg(const MachineFunction &MF,
       if (!ResultType->isPointerTy())
         return Expr->getPoisoned();
 
-      unsigned PointerSizeInBits =
-          DL.getPointerSizeInBits(ResultType->getPointerAddressSpace());
+      // A frame index addresses an object in the stack address space, whatever
+      // the type of the argument says. Build the address there and convert it
+      // to the type of the argument, as the conversion keeps track of the
+      // address space the object really lives in. The argument has a different
+      // address space when the debug record describes a cast of an alloca.
+      unsigned StackAddrSpace = DL.getAllocaAddrSpace();
+      Type *StackType = ResultType->getPointerAddressSpace() == StackAddrSpace
+                            ? ResultType
+                            : PointerType::get(Context, StackAddrSpace);
+
+      unsigned PointerSizeInBits = DL.getPointerSizeInBits(StackAddrSpace);
       auto *IntTy = IntegerType::get(Context, PointerSizeInBits);
       ConstantData *WavefrontSizeLog2 = static_cast<ConstantData *>(
           ConstantInt::get(IntTy, ST.getWavefrontSizeLog2(), false));
@@ -97,8 +106,9 @@ DIExpression *AMDGPUFrameLowering::lowerFIArgToFPArg(const MachineFunction &MF,
       SmallVector<DIOp::Variant> FL = {DIOp::Reinterpret(IntTy)};
       if (!ST.hasFlatScratchEnabled())
         FL.append({DIOp::Constant(WavefrontSizeLog2), DIOp::LShr()});
-      FL.append(
-          {DIOp::Constant(C), DIOp::Add(), DIOp::Reinterpret(ResultType)});
+      FL.append({DIOp::Constant(C), DIOp::Add(), DIOp::Reinterpret(StackType)});
+      if (StackType != ResultType)
+        FL.append({DIOp::Convert(ResultType)});
       I = Builder.insert(++I, FL);
     }
   }

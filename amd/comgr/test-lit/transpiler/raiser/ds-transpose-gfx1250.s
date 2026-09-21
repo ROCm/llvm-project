@@ -43,6 +43,9 @@ tr8:
 	s_lshl_b32 s6, s6, 1
 	s_cbranch_scc1 .Linit8
 	s_mov_b32 exec_lo, -1
+; The write is predicated on the lane being active, so v0 carries the merge of
+; the written value and the id it arrived with.
+; CHECK: [[V0:%.+]] = phi i32 [ 11, {{.+}}
 	v_mov_b32 v0, 11
 ; Zero EXEC leaves every address outside allocated LDS.
 	s_cmp_eq_u32 s4, 0
@@ -87,7 +90,7 @@ tr8:
 ; CHECK-NEXT: [[WORD1:%.+]] = trunc i64 [[SHIFT1]] to i32
 ; CHECK-NEXT: br label %[[SKIP]]
 ; CHECK: [[SKIP]]:
-; CHECK-NEXT: [[DEST0:%.+]] = phi i32 [ [[WORD0]], %[[DO]] ], [ 11, %{{.+}} ]
+; CHECK-NEXT: [[DEST0:%.+]] = phi i32 [ [[WORD0]], %[[DO]] ], [ [[V0]], %{{.+}} ]
 ; CHECK-NEXT: [[DEST1:%.+]] = phi i32 [ [[WORD1]], %[[DO]] ], [ [[OLD]], %{{.+}} ]
 	ds_load_tr8_b64 v[0:1], v1 offset:7
 	s_wait_dscnt 0
@@ -116,6 +119,9 @@ tr16:
 	s_lshl_b32 s6, s6, 1
 	s_cbranch_scc1 .Linit16
 	s_mov_b32 exec_lo, -1
+; The write is predicated on the lane being active, so v0 carries the merge of
+; the written value and the id it arrived with.
+; CHECK: [[V0:%.+]] = phi i32 [ 11, {{.+}}
 	v_mov_b32 v0, 11
 ; Zero EXEC leaves every address outside allocated LDS.
 	s_cmp_eq_u32 s4, 0
@@ -163,7 +169,7 @@ tr16:
 ; CHECK-NEXT: [[WORD3:%.+]] = trunc i128 [[SHIFT3]] to i32
 ; CHECK-NEXT: br label %[[SKIP]]
 ; CHECK: [[SKIP]]:
-; CHECK-NEXT: [[DEST0:%.+]] = phi i32 [ [[WORD0]], %[[DO]] ], [ 11, %{{.+}} ]
+; CHECK-NEXT: [[DEST0:%.+]] = phi i32 [ [[WORD0]], %[[DO]] ], [ [[V0]], %{{.+}} ]
 ; CHECK-NEXT: [[DEST1:%.+]] = phi i32 [ [[WORD1]], %[[DO]] ], [ [[OLD]], %{{.+}} ]
 ; CHECK-NEXT: [[DEST2:%.+]] = phi i32 [ [[WORD2]], %[[DO]] ], [ 33, %{{.+}} ]
 ; CHECK-NEXT: [[DEST3:%.+]] = phi i32 [ [[WORD3]], %[[DO]] ], [ 44, %{{.+}} ]

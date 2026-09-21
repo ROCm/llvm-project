@@ -739,12 +739,12 @@ def __builtin_amdgcn_smfmac_f32_32x32x64_fp8_fp8 : AMDGPUBuiltin<"_Vector<16, fl
 def __builtin_amdgcn_permlane16_swap : AMDGPUBuiltin<"_Vector<2, unsigned int>(unsigned int, unsigned int, _Constant bool, _Constant bool)", [Const], "permlane16-swap">;
 def __builtin_amdgcn_permlane32_swap : AMDGPUBuiltin<"_Vector<2, unsigned int>(unsigned int, unsigned int, _Constant bool, _Constant bool)", [Const], "permlane32-swap">;
 
-def __builtin_amdgcn_ds_read_tr4_b64_v2i32 : AMDGPUBuiltin<"_Vector<2, int>(_Vector<2, int address_space<3> *>)", [Const], "gfx950-insts">;
-def __builtin_amdgcn_ds_read_tr6_b96_v3i32 : AMDGPUBuiltin<"_Vector<3, int>(_Vector<3, int address_space<3> *>)", [Const], "gfx950-insts">;
-def __builtin_amdgcn_ds_read_tr8_b64_v2i32 : AMDGPUBuiltin<"_Vector<2, int>(_Vector<2, int address_space<3> *>)", [Const], "gfx950-insts">;
-def __builtin_amdgcn_ds_read_tr16_b64_v4i16 : AMDGPUBuiltin<"_Vector<4, short>(_Vector<4, short address_space<3> *>)", [Const], "gfx950-insts">;
-def __builtin_amdgcn_ds_read_tr16_b64_v4f16 : AMDGPUBuiltin<"_Vector<4, __fp16>(_Vector<4, __fp16 address_space<3> *>)", [Const], "gfx950-insts">;
-def __builtin_amdgcn_ds_read_tr16_b64_v4bf16 : AMDGPUBuiltin<"_Vector<4, __bf16>(_Vector<4, __bf16 address_space<3> *>)", [Const], "gfx950-insts">;
+def __builtin_amdgcn_ds_read_tr4_b64_v2i32 : AMDGPUBuiltin<"_ExtVector<2, int>(_ExtVector<2, int> address_space<3> *)", [Const], "gfx950-insts">;
+def __builtin_amdgcn_ds_read_tr6_b96_v3i32 : AMDGPUBuiltin<"_ExtVector<3, int>(_ExtVector<3, int> address_space<3> *)", [Const], "gfx950-insts">;
+def __builtin_amdgcn_ds_read_tr8_b64_v2i32 : AMDGPUBuiltin<"_ExtVector<2, int>(_ExtVector<2, int> address_space<3> *)", [Const], "gfx950-insts">;
+def __builtin_amdgcn_ds_read_tr16_b64_v4i16 : AMDGPUBuiltin<"_ExtVector<4, short>(_ExtVector<4, short> address_space<3> *)", [Const], "gfx950-insts">;
+def __builtin_amdgcn_ds_read_tr16_b64_v4f16 : AMDGPUBuiltin<"_ExtVector<4, __fp16>(_ExtVector<4, __fp16> address_space<3> *)", [Const], "gfx950-insts">;
+def __builtin_amdgcn_ds_read_tr16_b64_v4bf16 : AMDGPUBuiltin<"_ExtVector<4, __bf16>(_ExtVector<4, __bf16> address_space<3> *)", [Const], "gfx950-insts">;
 
 def __builtin_amdgcn_ashr_pk_i8_i32 : AMDGPUBuiltin<"unsigned short(unsigned int, unsigned int, unsigned int)", [Const], "ashr-pk-insts">;
 def __builtin_amdgcn_ashr_pk_u8_i32 : AMDGPUBuiltin<"unsigned short(unsigned int, unsigned int, unsigned int)", [Const], "ashr-pk-insts">;
@@ -775,14 +775,14 @@ def __builtin_amdgcn_s_prefetch_inst : AMDGPUBuiltin<"void(void const *, unsigne
 }
 def __builtin_amdgcn_s_buffer_prefetch_data : AMDGPUBuiltin<"void(__amdgpu_buffer_rsrc_t, _Constant int, unsigned int)", [Const], "smem-prefetch-insts">;
 
-def __builtin_amdgcn_global_load_tr_b64_v2i32 : AMDGPUBuiltin<"_Vector<2, int>(_Vector<2, int address_space<1> *>)", [Const], "gfx12-insts,wavefrontsize32">;
-def __builtin_amdgcn_global_load_tr_b128_v8i16 : AMDGPUBuiltin<"_Vector<8, short>(_Vector<8, short address_space<1> *>)", [Const], "gfx12-insts,wavefrontsize32">;
-def __builtin_amdgcn_global_load_tr_b128_v8f16 : AMDGPUBuiltin<"_Vector<8, __fp16>(_Vector<8, __fp16 address_space<1> *>)", [Const], "gfx12-insts,wavefrontsize32">;
-def __builtin_amdgcn_global_load_tr_b128_v8bf16 : AMDGPUBuiltin<"_Vector<8, __bf16>(_Vector<8, __bf16 address_space<1> *>)", [Const], "gfx12-insts,wavefrontsize32">;
+def __builtin_amdgcn_global_load_tr_b64_v2i32 : AMDGPUBuiltin<"_ExtVector<2, int>(_ExtVector<2, int> address_space<1> *)", [Const], "gfx12-insts,wavefrontsize32">;
+def __builtin_amdgcn_global_load_tr_b128_v8i16 : AMDGPUBuiltin<"_ExtVector<8, short>(_ExtVector<8, short> address_space<1> *)", [Const], "gfx12-insts,wavefrontsize32">;
+def __builtin_amdgcn_global_load_tr_b128_v8f16 : AMDGPUBuiltin<"_ExtVector<8, __fp16>(_ExtVector<8, __fp16> address_space<1> *)", [Const], "gfx12-insts,wavefrontsize32">;
+def __builtin_amdgcn_global_load_tr_b128_v8bf16 : AMDGPUBuiltin<"_ExtVector<8, __bf16>(_ExtVector<8, __bf16> address_space<1> *)", [Const], "gfx12-insts,wavefrontsize32">;
 def __builtin_amdgcn_global_load_tr_b64_i32 : AMDGPUBuiltin<"int(int address_space<1> *)", [Const], "gfx12-insts,wavefrontsize64">;
-def __builtin_amdgcn_global_load_tr_b128_v4i16 : AMDGPUBuiltin<"_Vector<4, short>(_Vector<4, short address_space<1> *>)", [Const], "gfx12-insts,wavefrontsize64">;
-def __builtin_amdgcn_global_load_tr_b128_v4f16 : AMDGPUBuiltin<"_Vector<4, __fp16>(_Vector<4, __fp16 address_space<1> *>)", [Const], "gfx12-insts,wavefrontsize64">;
-def __builtin_amdgcn_global_load_tr_b128_v4bf16 : AMDGPUBuiltin<"_Vector<4, __bf16>(_Vector<4, __bf16 address_space<1> *>)", [Const], "gfx12-insts,wavefrontsize64">;
+def __builtin_amdgcn_global_load_tr_b128_v4i16 : AMDGPUBuiltin<"_ExtVector<4, short>(_ExtVector<4, short> address_space<1> *)", [Const], "gfx12-insts,wavefrontsize64">;
+def __builtin_amdgcn_global_load_tr_b128_v4f16 : AMDGPUBuiltin<"_ExtVector<4, __fp16>(_ExtVector<4, __fp16> address_space<1> *)", [Const], "gfx12-insts,wavefrontsize64">;
+def __builtin_amdgcn_global_load_tr_b128_v4bf16 : AMDGPUBuiltin<"_ExtVector<4, __bf16>(_ExtVector<4, __bf16> address_space<1> *)", [Const], "gfx12-insts,wavefrontsize64">;
 
 def __builtin_amdgcn_ds_bpermute_fi_b32 : AMDGPUBuiltin<"int(int, int)", [Const], "gfx12-insts">;
 
@@ -1027,18 +1027,18 @@ def __builtin_amdgcn_tensor_store_from_lds : AMDGPUBuiltin<"void(_Vector<4, unsi
 }
 
 
-def __builtin_amdgcn_global_load_tr4_b64_v2i32 : AMDGPUBuiltin<"_Vector<2, int>(_Vector<2, int address_space<1> *>)", [Const], "transpose-load-f4f6-insts,wavefrontsize32">;
-def __builtin_amdgcn_global_load_tr8_b64_v2i32 : AMDGPUBuiltin<"_Vector<2, int>(_Vector<2, int address_space<1> *>)", [Const], "gfx1250-insts,wavefrontsize32">;
-def __builtin_amdgcn_global_load_tr6_b96_v3i32 : AMDGPUBuiltin<"_Vector<3, int>(_Vector<3, int address_space<1> *>)", [Const], "transpose-load-f4f6-insts,wavefrontsize32">;
-def __builtin_amdgcn_global_load_tr16_b128_v8i16 : AMDGPUBuiltin<"_Vector<8, short>(_Vector<8, short address_space<1> *>)", [Const], "gfx1250-insts,wavefrontsize32">;
-def __builtin_amdgcn_global_load_tr16_b128_v8f16 : AMDGPUBuiltin<"_Vector<8, __fp16>(_Vector<8, __fp16 address_space<1> *>)", [Const], "gfx1250-insts,wavefrontsize32">;
-def __builtin_amdgcn_global_load_tr16_b128_v8bf16 : AMDGPUBuiltin<"_Vector<8, __bf16>(_Vector<8, __bf16 address_space<1> *>)", [Const], "gfx1250-insts,wavefrontsize32">;
-def __builtin_amdgcn_ds_load_tr4_b64_v2i32 : AMDGPUBuiltin<"_Vector<2, int>(_Vector<2, int address_space<3> *>)", [Const], "transpose-load-f4f6-insts,wavefrontsize32">;
-def __builtin_amdgcn_ds_load_tr8_b64_v2i32 : AMDGPUBuiltin<"_Vector<2, int>(_Vector<2, int address_space<3> *>)", [Const], "gfx1250-insts,wavefrontsize32">;
-def __builtin_amdgcn_ds_load_tr6_b96_v3i32 : AMDGPUBuiltin<"_Vector<3, int>(_Vector<3, int address_space<3> *>)", [Const], "transpose-load-f4f6-insts,wavefrontsize32">;
-def __builtin_amdgcn_ds_load_tr16_b128_v8i16 : AMDGPUBuiltin<"_Vector<8, short>(_Vector<8, short address_space<3> *>)", [Const], "gfx1250-insts,wavefrontsize32">;
-def __builtin_amdgcn_ds_load_tr16_b128_v8f16 : AMDGPUBuiltin<"_Vector<8, __fp16>(_Vector<8, __fp16 address_space<3> *>)", [Const], "gfx1250-insts,wavefrontsize32">;
-def __builtin_amdgcn_ds_load_tr16_b128_v8bf16 : AMDGPUBuiltin<"_Vector<8, __bf16>(_Vector<8, __bf16 address_space<3> *>)", [Const], "gfx1250-insts,wavefrontsize32">;
+def __builtin_amdgcn_global_load_tr4_b64_v2i32 : AMDGPUBuiltin<"_ExtVector<2, int>(_ExtVector<2, int> address_space<1> *)", [Const], "transpose-load-f4f6-insts,wavefrontsize32">;
+def __builtin_amdgcn_global_load_tr8_b64_v2i32 : AMDGPUBuiltin<"_ExtVector<2, int>(_ExtVector<2, int> address_space<1> *)", [Const], "gfx1250-insts,wavefrontsize32">;
+def __builtin_amdgcn_global_load_tr6_b96_v3i32 : AMDGPUBuiltin<"_ExtVector<3, int>(_ExtVector<3, int> address_space<1> *)", [Const], "transpose-load-f4f6-insts,wavefrontsize32">;
+def __builtin_amdgcn_global_load_tr16_b128_v8i16 : AMDGPUBuiltin<"_ExtVector<8, short>(_ExtVector<8, short> address_space<1> *)", [Const], "gfx1250-insts,wavefrontsize32">;
+def __builtin_amdgcn_global_load_tr16_b128_v8f16 : AMDGPUBuiltin<"_ExtVector<8, __fp16>(_ExtVector<8, __fp16> address_space<1> *)", [Const], "gfx1250-insts,wavefrontsize32">;
+def __builtin_amdgcn_global_load_tr16_b128_v8bf16 : AMDGPUBuiltin<"_ExtVector<8, __bf16>(_ExtVector<8, __bf16> address_space<1> *)", [Const], "gfx1250-insts,wavefrontsize32">;
+def __builtin_amdgcn_ds_load_tr4_b64_v2i32 : AMDGPUBuiltin<"_ExtVector<2, int>(_ExtVector<2, int> address_space<3> *)", [Const], "transpose-load-f4f6-insts,wavefrontsize32">;
+def __builtin_amdgcn_ds_load_tr8_b64_v2i32 : AMDGPUBuiltin<"_ExtVector<2, int>(_ExtVector<2, int> address_space<3> *)", [Const], "gfx1250-insts,wavefrontsize32">;
+def __builtin_amdgcn_ds_load_tr6_b96_v3i32 : AMDGPUBuiltin<"_ExtVector<3, int>(_ExtVector<3, int> address_space<3> *)", [Const], "transpose-load-f4f6-insts,wavefrontsize32">;
+def __builtin_amdgcn_ds_load_tr16_b128_v8i16 : AMDGPUBuiltin<"_ExtVector<8, short>(_ExtVector<8, short> address_space<3> *)", [Const], "gfx1250-insts,wavefrontsize32">;
+def __builtin_amdgcn_ds_load_tr16_b128_v8f16 : AMDGPUBuiltin<"_ExtVector<8, __fp16>(_ExtVector<8, __fp16> address_space<3> *)", [Const], "gfx1250-insts,wavefrontsize32">;
+def __builtin_amdgcn_ds_load_tr16_b128_v8bf16 : AMDGPUBuiltin<"_ExtVector<8, __bf16>(_ExtVector<8, __bf16> address_space<3> *)", [Const], "gfx1250-insts,wavefrontsize32">;
 
 def __builtin_amdgcn_s_setprio_inc_wg : AMDGPUBuiltin<"void(_Constant short)", [], "setprio-inc-wg-inst">;
 def __builtin_amdgcn_s_monitor_sleep : AMDGPUBuiltin<"void(_Constant short)", [], "gfx1250-insts">;

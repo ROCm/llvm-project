@@ -154,6 +154,7 @@ target_link_libraries(RaiseContextTests PRIVATE
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(RaiseContextTests PRIVATE
+  $<TARGET_PROPERTY:transpiler-raiser,INCLUDE_DIRECTORIES>
   ${LLVM_INCLUDE_DIRS}
   ${PROJECT_SOURCE_DIR}/src
   ${COMGR_GTEST_INCLUDE_DIRS}

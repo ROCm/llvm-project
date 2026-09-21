@@ -400,6 +400,9 @@ void Flang::addCodegenOptions(const ArgList &Args,
        options::OPT_fdefer_desc_map, options::OPT_fno_defer_desc_map,
        options::OPT_relaxed_c_loc});
 
+  Args.addOptOutFlag(CmdArgs, options::OPT_foptimize_sibling_calls,
+                     options::OPT_fno_optimize_sibling_calls);
+
   const llvm::Triple &Triple = getToolChain().getEffectiveTriple();
   addSeparateSectionFlags(Triple, Args, CmdArgs);
 

@@ -7,7 +7,7 @@
 ; RUN:   --emit-ir=global_loads | %FileCheck %s --check-prefix=IR
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_load_cache_policy,global_load_unaligned_offset \
-; RUN:   --emit-ir=global_load_pair,global_load_flat,global_load_scratch 2>&1 \
+; RUN:   --emit-ir=global_load_flat,global_load_scratch 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
@@ -43,6 +43,33 @@ global_loads:
 ; IR: [[POINTER3:%.+]] = inttoptr i64 {{%.+}} to ptr addrspace(1)
 ; IR: load i32, ptr addrspace(1) [[POINTER3]], align 4
 	global_load_dword a1, v[2:3], off
+
+; IR: [[POINTER4:%.+]] = inttoptr i64 {{%.+}} to ptr addrspace(1)
+; IR: br i1 {{%.+}}, label %[[DO4:.+]], label %[[SKIP4:.+]]
+; IR: [[DO4]]:
+; IR: [[LOAD4:%.+]] = load i64, ptr addrspace(1) [[POINTER4]], align 4
+; IR: lshr i64 [[LOAD4]], 32
+; IR: br label %[[SKIP4]]
+	global_load_dwordx2 v[4:5], v[2:3], off
+
+; IR: [[BASE5:%.+]] = or i64 {{%.+}}, {{%.+}}
+; IR: [[LANE5:%.+]] = zext i32 {{.+}} to i64
+; IR: [[ADDRESS5:%.+]] = add i64 [[BASE5]], [[LANE5]]
+; IR: [[POINTER5:%.+]] = inttoptr i64 [[ADDRESS5]] to ptr addrspace(1)
+; IR: br i1 {{%.+}}, label {{%.+}}, label {{%.+}}
+; IR: [[LOAD5:%.+]] = load <3 x i32>, ptr addrspace(1) [[POINTER5]], align 4
+; IR: [[PACK5:%.+]] = bitcast <3 x i32> [[LOAD5]] to i96
+; IR: lshr i96 [[PACK5]], 64
+	global_load_dwordx3 v[8:10], v6, s[0:1]
+
+; A four-byte offset does not strengthen the dword alignment guarantee.
+; IR: [[POINTER6:%.+]] = inttoptr i64 {{%.+}} to ptr addrspace(1)
+; IR: [[OFFSET6:%.+]] = getelementptr i8, ptr addrspace(1) [[POINTER6]], i64 4
+; IR: br i1 {{%.+}}, label {{%.+}}, label {{%.+}}
+; IR: [[LOAD6:%.+]] = load <4 x i32>, ptr addrspace(1) [[OFFSET6]], align 4
+; IR: [[PACK6:%.+]] = bitcast <4 x i32> [[LOAD6]] to i128
+; IR: lshr i128 [[PACK6]], 96
+	global_load_dwordx4 v[12:15], v[2:3], off offset:4
 ; IR: ret void
 	s_endpgm
 
@@ -52,7 +79,7 @@ global_loads:
 global_load_cache_policy:
 ; REFUSE:      in kernel 'global_load_cache_policy'
 ; REFUSE-SAME: non-default cache policy is not modeled
-	global_load_dword v1, v[2:3], off sc0
+	global_load_dwordx3 v[4:6], v[2:3], off sc0
 	s_endpgm
 
 	.globl	global_load_unaligned_offset
@@ -62,15 +89,6 @@ global_load_unaligned_offset:
 ; REFUSE:      in kernel 'global_load_unaligned_offset'
 ; REFUSE-SAME: immediate offset does not preserve the alignment of the access
 	global_load_dword v1, v[2:3], off offset:1
-	s_endpgm
-
-	.globl	global_load_pair
-	.p2align	8
-	.type	global_load_pair,@function
-global_load_pair:
-; REFUSE:      in kernel 'global_load_pair'
-; REFUSE-SAME: unsupported flat memory operation
-	global_load_dwordx2 v[2:3], v[2:3], off
 	s_endpgm
 
 	.globl	global_load_flat
@@ -96,25 +114,18 @@ global_load_scratch:
 	.amdhsa_kernel global_loads
 		.amdhsa_kernarg_size 32
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
-		.amdhsa_next_free_vgpr 8
+		.amdhsa_next_free_vgpr 16
 		.amdhsa_next_free_sgpr 2
 		.amdhsa_accum_offset 4
 	.end_amdhsa_kernel
 	.amdhsa_kernel global_load_cache_policy
 		.amdhsa_kernarg_size 32
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
-		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_vgpr 8
 		.amdhsa_next_free_sgpr 2
 		.amdhsa_accum_offset 4
 	.end_amdhsa_kernel
 	.amdhsa_kernel global_load_unaligned_offset
-		.amdhsa_kernarg_size 32
-		.amdhsa_user_sgpr_kernarg_segment_ptr 1
-		.amdhsa_next_free_vgpr 4
-		.amdhsa_next_free_sgpr 2
-		.amdhsa_accum_offset 4
-	.end_amdhsa_kernel
-	.amdhsa_kernel global_load_pair
 		.amdhsa_kernarg_size 32
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 4
@@ -147,7 +158,7 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     2
     .symbol:         global_loads.kd
-    .vgpr_count:     8
+    .vgpr_count:     16
     .wavefront_size: 64
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -157,7 +168,7 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     2
     .symbol:         global_load_cache_policy.kd
-    .vgpr_count:     4
+    .vgpr_count:     8
     .wavefront_size: 64
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -167,16 +178,6 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     2
     .symbol:         global_load_unaligned_offset.kd
-    .vgpr_count:     4
-    .wavefront_size: 64
-  - .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 32
-    .max_flat_workgroup_size: 1024
-    .name:           global_load_pair
-    .private_segment_fixed_size: 0
-    .sgpr_count:     2
-    .symbol:         global_load_pair.kd
     .vgpr_count:     4
     .wavefront_size: 64
   - .group_segment_fixed_size: 0

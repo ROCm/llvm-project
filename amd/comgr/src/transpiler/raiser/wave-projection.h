@@ -99,6 +99,11 @@ public:
   // splits or re-maps source waves overrides it.
   virtual llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const;
 
+  // Emit the workitem id of dimension `Dim` (0 for x) source-ISA code should
+  // observe. Only x carries the wavefront, so y and z are the target hardware
+  // values under every projection.
+  llvm::Value *emitWorkitemId(llvm::IRBuilder<> &B, unsigned Dim) const;
+
   // Emit the source wave's linear ID within its workgroup.
   virtual llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const = 0;
 

@@ -15708,8 +15708,9 @@ define <4 x float> @global_load_i8_offset_or_i64_imm_offset_4160(ptr addrspace(6
 ; GFX1250-SDAG:       ; %bb.0:
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-SDAG-NEXT:    v_mov_b32_e32 v3, 0
-; GFX1250-SDAG-NEXT:    v_or_b32_e32 v2, 0x1040, v1
+; GFX1250-SDAG-NEXT:    s_mov_b32 s0, 0x1040
+; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX1250-SDAG-NEXT:    v_dual_mov_b32 v3, 0 :: v_dual_bitop2_b32 v2, s0, v1 bitop3:0x54
 ; GFX1250-SDAG-NEXT:    global_load_b128 v[0:3], v[2:3], off
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:    s_set_pc_i64 s[30:31]
@@ -15830,8 +15831,9 @@ define <4 x float> @global_load_i8_offset_or_i64_imm_offset_4160(ptr addrspace(6
 ; GFX1250-ISEL:       ; %bb.0:
 ; GFX1250-ISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-ISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-ISEL-NEXT:    v_mov_b32_e32 v3, 0
-; GFX1250-ISEL-NEXT:    v_or_b32_e32 v2, 0x1040, v1
+; GFX1250-ISEL-NEXT:    s_mov_b32 s0, 0x1040
+; GFX1250-ISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX1250-ISEL-NEXT:    v_dual_mov_b32 v3, 0 :: v_dual_bitop2_b32 v2, s0, v1 bitop3:0x54
 ; GFX1250-ISEL-NEXT:    global_load_b128 v[0:3], v[2:3], off
 ; GFX1250-ISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-ISEL-NEXT:    s_set_pc_i64 s[30:31]
@@ -32947,8 +32949,9 @@ define <4 x float> @global_load_saddr_i8_offset_or_i64_imm_offset_4160(ptr addrs
 ; GFX1250-SDAG:       ; %bb.0:
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-SDAG-NEXT:    v_mov_b32_e32 v1, 0
-; GFX1250-SDAG-NEXT:    v_or_b32_e32 v0, 0x1040, v0
+; GFX1250-SDAG-NEXT:    s_mov_b32 s0, 0x1040
+; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX1250-SDAG-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_bitop2_b32 v0, s0, v0 bitop3:0x54
 ; GFX1250-SDAG-NEXT:    global_load_b128 v[0:3], v[0:1], off
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-SDAG-NEXT:    s_set_pc_i64 s[30:31]
@@ -33069,8 +33072,9 @@ define <4 x float> @global_load_saddr_i8_offset_or_i64_imm_offset_4160(ptr addrs
 ; GFX1250-ISEL:       ; %bb.0:
 ; GFX1250-ISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-ISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-ISEL-NEXT:    v_mov_b32_e32 v1, 0
-; GFX1250-ISEL-NEXT:    v_or_b32_e32 v0, 0x1040, v0
+; GFX1250-ISEL-NEXT:    s_mov_b32 s0, 0x1040
+; GFX1250-ISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX1250-ISEL-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_bitop2_b32 v0, s0, v0 bitop3:0x54
 ; GFX1250-ISEL-NEXT:    global_load_b128 v[0:3], v[0:1], off
 ; GFX1250-ISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-ISEL-NEXT:    s_set_pc_i64 s[30:31]

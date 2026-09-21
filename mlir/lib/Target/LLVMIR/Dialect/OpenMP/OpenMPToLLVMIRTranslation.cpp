@@ -614,6 +614,15 @@ static LogicalResult checkImplementationStatus(Operation &op) {
         checkTaskReductionByref(op, result);
       })
       .Case([&](omp::TaskwaitOp op) { checkNowait(op, result); })
+      .Case([&](omp::DispatchOp op) {
+        // OpenMP 5.1 dispatch creates an explicit task; nowait controls whether
+        // it is included. Diagnose unsupported asynchronous tasking before 5.2,
+        // where the nowait property has no effect on dispatch.
+        int64_t version = omp::getOpenMPVersionAttribute(
+            op->getParentOfType<ModuleOp>(), /*fallback=*/51);
+        if (version < 52)
+          checkNowait(op, result);
+      })
       .Case([&](omp::TaskloopContextOp op) {
         checkAllocate(op, result);
         checkInReduction(op, result);
@@ -912,6 +921,24 @@ static llvm::omp::ProcBindKind getProcBindKind(omp::ClauseProcBindKind kind) {
     return llvm::omp::ProcBindKind::OMP_PROC_BIND_spread;
   }
   llvm_unreachable("Unknown ClauseProcBindKind kind");
+}
+
+/// Convert 'dispatch' operation into LLVM IR.
+static LogicalResult
+convertOmpDispatch(Operation &opInst, llvm::IRBuilderBase &builder,
+                   LLVM::ModuleTranslation &moduleTranslation) {
+  auto dispatchOp = cast<omp::DispatchOp>(opInst);
+
+  if (failed(checkImplementationStatus(opInst)))
+    return failure();
+
+  auto &region = dispatchOp.getRegion();
+  auto result = convertOmpOpRegions(region, "omp.dispatch.region", builder,
+                                    moduleTranslation);
+  if (!result)
+    return handleError(result.takeError(), opInst);
+  builder.SetInsertPoint(*result);
+  return success();
 }
 
 /// Converts an OpenMP 'masked' operation into LLVM IR using OpenMPIRBuilder.
@@ -8127,52 +8154,6 @@ static void mapParentWithMembers(
       // members of derived types.
       mapFlag &= ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_RETURN_PARAM;
 
-
-      auto lowAndHigh = getLowAndHighAddr(parentClause);
-      highAddr = std::get<0>(std::get<1>(lowAndHigh));
-      lowAddr = std::get<0>(std::get<0>(lowAndHigh));
-      // TODO: We may want to skip arrays/array sections in this as Clang does.
-      // It appears to be an optimisation rather than a necessity though,
-      // but this requires further investigation. However, we would have to make
-      // sure to not exclude maps with bounds that ARE pointers, as these are
-      // processed as separate components, i.e. pointer + data.
-      for (auto v : overlapIdxs) {
-        auto mapDataOverlapIdx = getMapDataMemberIdx(
-            mapData,
-            cast<omp::MapInfoOp>(parentClause.getMembers()[v].getDefiningOp()));
-        auto isPtrMap = checkIfPointerMap(
-            llvm::cast<omp::MapInfoOp>(mapData.MapClause[mapDataOverlapIdx]));
-        combinedInfo.Types.emplace_back(mapFlag);
-        // TODO: set HasAttachPtr from Flang for pointee-storage entries.
-        combinedInfo.HasAttachPtr.emplace_back(false);
-        combinedInfo.DevicePointers.emplace_back(
-            llvm::OpenMPIRBuilder::DeviceInfoTy::None);
-        combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-            mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
-        combinedInfo.BasePointers.emplace_back(
-            mapData.BasePointers[mapDataIndex]);
-        combinedInfo.Mappers.emplace_back(nullptr);
-        combinedInfo.Pointers.emplace_back(lowAddr);
-        auto sizeCalc = builder.CreateIntCast(
-            builder.CreatePtrDiff(builder.getInt8Ty(),
-                                  mapData.OriginalValue[mapDataOverlapIdx],
-                                  lowAddr),
-            builder.getInt64Ty(), /*isSigned=*/true);
-        // In certain cases, we'll generate a size of 0 if we're not careful
-        // (e.g. if lowAddr happens to be the first member), which isn't
-        // correct, even if the runtimes is sometimes fine with it so, in these
-        // scenarios we select the types size instead.
-        llvm::DataLayout dataLayout = builder.GetInsertBlock()->getDataLayout();
-        auto sizeSel = builder.CreateSelect(
-            builder.CreateICmpNE(builder.getInt64(0), sizeCalc), sizeCalc,
-            isPtrMap ? builder.getInt64(dataLayout.getPointerSize())
-                     : mapData.Sizes[mapDataOverlapIdx]);
-        combinedInfo.Sizes.emplace_back(sizeSel);
-        lowAddr = builder.CreateConstGEP1_32(
-            isPtrMap ? builder.getPtrTy() : mapData.BaseType[mapDataOverlapIdx],
-            mapData.BasePointers[mapDataOverlapIdx], 1);
-      }
-
       combinedInfo.Types.emplace_back(mapFlag);
       // TODO: set HasAttachPtr from Flang for pointee-storage entries.
       combinedInfo.HasAttachPtr.emplace_back(false);
@@ -10776,6 +10757,9 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
           })
           .Case([&](omp::ParallelOp op) {
             return convertOmpParallel(op, builder, moduleTranslation);
+          })
+          .Case([&](omp::DispatchOp) {
+            return convertOmpDispatch(*op, builder, moduleTranslation);
           })
           .Case([&](omp::MaskedOp) {
             return convertOmpMasked(*op, builder, moduleTranslation);

@@ -24,7 +24,6 @@
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/MakeSupport.h"
 #include "clang/Basic/ObjCRuntime.h"
-#include "clang/Basic/TargetID.h"
 #include "clang/Basic/Version.h"
 #include "clang/Config/config.h"
 #include "clang/Driver/Action.h"
@@ -9812,7 +9811,7 @@ void OffloadPackager::ConstructJob(Compilation &C, const JobAction &JA,
 
     ArgStringList Features;
     SmallVector<StringRef> FeatureArgs;
-    getTargetFeatures(TC->getDriver(), TC->getTriple(), TCArgs, Features, false,
+    getTargetFeatures(TC->getDriver(), TC->getTriple(), TCArgs, Features,
                       false);
     llvm::copy_if(Features, std::back_inserter(FeatureArgs),
                   [](StringRef Arg) { return !Arg.starts_with("-target"); });

@@ -112,16 +112,19 @@ wakeup_kernel:
 	.type	vgpr_msb_kernel,@function
 
 ; MSB-DECODE: S_SET_VGPR_MSB  s_set_vgpr_msb 64
+; MSB-DECODE: S_SET_VGPR_MSB  s_set_vgpr_msb 0
 ; MSB-DECODE: S_SET_VGPR_MSB  s_set_vgpr_msb 0x4004
 ; MSB-IR-LABEL: define amdgpu_kernel void @vgpr_msb_kernel(
+; MSB-IR: [[WORKITEM_ID:%.+]] = call i32 @llvm.amdgcn.workitem.id.x()
 vgpr_msb_kernel:
 	v_mov_b32_e32 v2, s0
 	v_mov_b32_e32 v3, s1
 	s_set_vgpr_msb 0x40
 	v_mov_b32_e32 v1, v0
+	s_set_vgpr_msb 0
+	v_mov_b32_e32 v1, 0
 	s_set_vgpr_msb 0x4004
-; MSB-IR: [[HIGH_BANK_VALUE:%.+]] = load i32, ptr addrspace(5) %Vgpr769
-; MSB-IR: store i32 [[HIGH_BANK_VALUE]], ptr addrspace(1) {{.+}}, align 4
+; MSB-IR: store i32 [[WORKITEM_ID]], ptr addrspace(1) {{.+}}, align 4
 	global_store_dword v[2:3], v1, off
 ; MSB-IR: ret void
 	s_endpgm

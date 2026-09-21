@@ -86,17 +86,6 @@ constexpr StringLiteral kRaisedModuleName = "transpiler.raised";
 // Minimum kernarg segment alignment the AMDGPU ABI mandates.
 constexpr Align KernargSegmentAlign = Align::Constant<16>();
 
-// The bare AMDGPU processor name `Isa` denotes. Callers pass either that name
-// (`gfx942`) or a canonical target identifier
-// (`amdgcn-amd-amdhsa--gfx942:xnack-`); the MC layer accepts only the former.
-// The result points into `Isa`.
-static StringRef processorName(StringRef Isa) {
-  TargetIdentifier Ident;
-  if (parseTargetIdentifier(Isa, Ident) == AMD_COMGR_STATUS_SUCCESS)
-    return Ident.Processor;
-  return Isa;
-}
-
 /// Return the LLVM denormal mode represented by an AMDHSA descriptor field.
 static DenormalMode denormalMode(unsigned HardwareMode) {
   using Kind = DenormalMode::DenormalModeKind;
@@ -215,7 +204,9 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
   if (Di.TargetSpecificFlags & SMRD)
     return handleSMEM(Ctx, Di, Op);
   if (Di.TargetSpecificFlags & FLAT)
-    return handleFLAT(Ctx, Di, Op);
+    return handleVGLOBAL(Ctx, Di, Op);
+  if (Di.TargetSpecificFlags & MUBUF)
+    return handleMUBUF(Ctx, Di);
   if (Di.TargetSpecificFlags & DS)
     return handleDS(Ctx, Di);
 
@@ -233,6 +224,10 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
       VOP3 | VOP3P | VOPC | DPP | SDWA | VOPD3;
   if ((Di.TargetSpecificFlags & VOP3EncodingMask) == VOP3)
     return handleVOP3(Ctx, Di, Op);
+
+  constexpr uint64_t VOP3PEncodingMask = VOP3P | DPP | VOPD3;
+  if ((Di.TargetSpecificFlags & VOP3PEncodingMask) == VOP3P)
+    return handleVOP3P(Ctx, Di, Op);
 
   constexpr uint64_t VOPCEncodingMask =
       VOPC | VOP3 | VOP3P | DPP | SDWA | VOPD3;
@@ -253,6 +248,8 @@ struct IsaContext {
   MCState MC;
   // Bare AMDGPU processor the MC layer was built for.
   std::string Cpu;
+  // Explicit code-object SRAM ECC setting; absent permits either setting.
+  std::optional<bool> SramEcc;
 
   static Expected<IsaContext> create(StringRef Isa, StringRef Role);
 };
@@ -263,7 +260,18 @@ Expected<IsaContext> IsaContext::create(StringRef Isa, StringRef Role) {
   // accepts an unknown name and returns a featureless subtarget, and the
   // failure only surfaces inside createMCDisassembler, which aborts the
   // process instead of returning.
-  StringRef Cpu = processorName(Isa);
+  TargetIdentifier Identifier;
+  StringRef Cpu = Isa;
+  std::optional<bool> SramEcc;
+  if (parseTargetIdentifier(Isa, Identifier) == AMD_COMGR_STATUS_SUCCESS) {
+    Cpu = Identifier.Processor;
+    for (StringRef Feature : Identifier.Features) {
+      if (Feature == "sramecc+")
+        SramEcc = true;
+      else if (Feature == "sramecc-")
+        SramEcc = false;
+    }
+  }
   if (AMDGPU::parseArchAMDGCN(Cpu) == AMDGPU::GK_NONE)
     return RaiseFailure::general(RaiseFailureReason::BadInput,
                                  Role + " ISA '" + Isa +
@@ -277,7 +285,7 @@ Expected<IsaContext> IsaContext::create(StringRef Isa, StringRef Role) {
   if (!MC)
     return MC.takeError();
 
-  return IsaContext{std::move(*MC), Cpu.str()};
+  return IsaContext{std::move(*MC), Cpu.str(), SramEcc};
 }
 
 // What every kernel of one raise runs against: the ISA the code object was
@@ -336,9 +344,10 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   BasicBlock *Entry = BasicBlock::Create(C, "entry", F);
   IRBuilder<> B(Entry);
 
-  Expected<RaiseContext> Ctx = RaiseContext::create(
-      B, Projection, Env.Source.MC, Meta, Text.Bytes, Text.Address,
-      Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset);
+  Expected<RaiseContext> Ctx =
+      RaiseContext::create(B, Projection, Env.Source.MC, Meta, Text.Bytes,
+                           Text.Address, Text.ImageSections, Kernel.StartOffset,
+                           Kernel.EndOffset, Env.Source.SramEcc);
   if (!Ctx)
     return Ctx.takeError();
 
@@ -387,7 +396,7 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   SmallVector<AllocaInst *> Allocas;
   Ctx->registers().collectAllocas(Allocas);
   PromoteMemToReg(Allocas, DT, &AC);
-  return Error::success();
+  return Ctx->validateRequiredBits();
 }
 
 Expected<RaiseResult> raiseToIR(const TextSection &Text, StringRef SourceIsa,

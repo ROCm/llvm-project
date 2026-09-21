@@ -17,12 +17,16 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Module.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/KnownBits.h"
 
+#include <cassert>
 #include <utility>
 
 using namespace llvm;
@@ -35,7 +39,8 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
                      ArrayRef<uint8_t> SourceTextBytes,
                      uint64_t SourceTextBaseAddress,
                      ArrayRef<TextSection::ImageSection> SourceImageSections,
-                     uint64_t KernelStartOffset, uint64_t KernelEndOffset) {
+                     uint64_t KernelStartOffset, uint64_t KernelEndOffset,
+                     std::optional<bool> SourceSramEcc) {
   Expected<RegisterState> Registers =
       RegisterState::create(B, Projection, MC, Meta);
   if (!Registers)
@@ -44,6 +49,8 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_32);
   const unsigned SourceFloatRoundMode16_64 = AMDHSA_BITS_GET(
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_16_64);
+  const bool SourceFp16Overflow = AMDHSA_BITS_GET(
+      Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_GFX9_PLUS_FP16_OVFL);
   bool Dx10Clamp = true;
   bool IeeeMode = true;
   if (Projection.SourceSTI.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
@@ -54,11 +61,35 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
         AMDHSA_BITS_GET(Meta.ComputePgmRsrc1,
                         amdhsa::COMPUTE_PGM_RSRC1_GFX6_GFX11_ENABLE_IEEE_MODE);
   }
-  return RaiseContext(B, Projection, MC, std::move(*Registers), SourceTextBytes,
-                      SourceTextBaseAddress, SourceImageSections,
-                      KernelStartOffset, KernelEndOffset,
-                      SourceFloatRoundMode32, SourceFloatRoundMode16_64,
-                      Dx10Clamp, IeeeMode);
+  RaiseContext Context(B, Projection, MC, std::move(*Registers),
+                       SourceTextBytes, SourceTextBaseAddress,
+                       SourceImageSections, KernelStartOffset, KernelEndOffset,
+                       SourceFloatRoundMode32, SourceFloatRoundMode16_64,
+                       SourceFp16Overflow, Dx10Clamp, IeeeMode);
+  Context.SourceSramEcc = SourceSramEcc;
+  return Context;
+}
+
+void RaiseContext::requireZeroBits(Value *Value, uint32_t Mask,
+                                   const DecodedInst &Di, StringRef Detail) {
+  assert(Value->getType()->isIntegerTy(32) && "expected a register word");
+  BitRequirements.push_back({Value, Mask, &Di, Detail});
+}
+
+Error RaiseContext::validateRequiredBits() const {
+  const DataLayout &Layout = B.GetInsertBlock()->getModule()->getDataLayout();
+  for (const RequiredBits &Requirement : BitRequirements) {
+    assert(Requirement.Value && "required value was deleted before validation");
+    KnownBits Bits = computeKnownBits(Requirement.Value, Layout);
+    if ((Bits.Zero.getZExtValue() & Requirement.Mask) != Requirement.Mask) {
+      const DecodedInst &Di = *Requirement.Instruction;
+      return RaiseFailure::atInstruction(
+          RaiseFailureReason::UnsupportedInstructionForm,
+          strippedMnemonic(MC, Di.Inst), Di.Offset,
+          formatName(Di.TargetSpecificFlags), Requirement.Detail);
+    }
+  }
+  return Error::success();
 }
 
 RaiseContext::RaiseContext(
@@ -68,7 +99,7 @@ RaiseContext::RaiseContext(
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset,
     unsigned SourceFloatRoundMode32, unsigned SourceFloatRoundMode16_64,
-    bool SourceDx10Clamp, bool SourceIeeeMode)
+    bool SourceFp16Overflow, bool SourceDx10Clamp, bool SourceIeeeMode)
     : B(B), Projection(Projection), MC(MC), Registers(std::move(Registers)),
       SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
@@ -76,10 +107,16 @@ RaiseContext::RaiseContext(
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),
       SourceFloatRoundMode32(SourceFloatRoundMode32),
       SourceFloatRoundMode16_64(SourceFloatRoundMode16_64),
-      SourceDx10Clamp(SourceDx10Clamp), SourceIeeeMode(SourceIeeeMode) {}
+      SourceFp16Overflow(SourceFp16Overflow), SourceDx10Clamp(SourceDx10Clamp),
+      SourceIeeeMode(SourceIeeeMode) {}
 
-Error RaiseContext::validateF32Environment(const DecodedInst &Di) const {
-  if (!Projection.TargetSTI.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
+Error RaiseContext::validateFPEnvironment(const DecodedInst &Di,
+                                          Type *Ty) const {
+  assert((Ty->isHalfTy() || Ty->isFloatTy() || Ty->isDoubleTy()) &&
+         "unsupported floating-point type");
+
+  if (Ty->isFloatTy() &&
+      !Projection.TargetSTI.hasFeature(AMDGPU::FeatureDX10ClampAndIEEEMode)) {
     if (!SourceDx10Clamp) {
       return RaiseFailure::atInstruction(
           RaiseFailureReason::UnsupportedFloatingPointMode,
@@ -99,25 +136,25 @@ Error RaiseContext::validateF32Environment(const DecodedInst &Di) const {
     }
   }
 
-  if (SourceFloatRoundMode32 != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
+  if (Ty->isHalfTy() && SourceFp16Overflow) {
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedFloatingPointMode,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags),
-        Twine("f32 rounding mode ") + Twine(SourceFloatRoundMode32) +
-            " is unsupported");
+        "FP16 overflow saturation is unsupported");
   }
 
-  return Error::success();
-}
-
-Error RaiseContext::validateF64Environment(const DecodedInst &Di) const {
-  if (SourceFloatRoundMode16_64 != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
+  unsigned RoundMode =
+      Ty->isFloatTy() ? SourceFloatRoundMode32 : SourceFloatRoundMode16_64;
+  if (RoundMode != amdhsa::FLOAT_ROUND_MODE_NEAR_EVEN) {
+    StringRef TypeName = Ty->isHalfTy()    ? "f16"
+                         : Ty->isFloatTy() ? "f32"
+                                           : "f64";
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedFloatingPointMode,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags),
-        Twine("f64 rounding mode ") + Twine(SourceFloatRoundMode16_64) +
+        Twine(TypeName) + " rounding mode " + Twine(RoundMode) +
             " is unsupported");
   }
 
