@@ -1549,12 +1549,6 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
         Candidate->addGroup(DG);
         // Calculate the restore cost.
         Candidate->calculateSpillRestoreCost();
-        int64_t newCost = 0;
-        if (HasFreeSubregs) {
-          newCost = Candidate->getSpillRestoreCost() +
-                    std::ceil(NumOfSpills / NumOfCoveredRegs);
-          Candidate->setSpillRestoreCost(newCost);
-        }
         Candidate->setNextUseDistance(NextUseDist);
         LLVM_DEBUG(dbgs() << "Restore cost for register = "
                           << printReg(CandidateReg, TRI) << " = "
@@ -1606,12 +1600,6 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
 
         // Calculate the restore cost.
         Candidate->calculateSpillRestoreCost();
-        int64_t newCost = 0;
-        if (HasFreeSubregs) {
-          newCost = Candidate->getSpillRestoreCost() +
-                    std::ceil(NumOfSpills / NumOfCoveredRegs);
-          Candidate->setSpillRestoreCost(newCost);
-        }
         Candidate->setNextUseDistance(NextUseDist);
         LLVM_DEBUG(dbgs() << "Restore cost for register = "
                           << printReg(CandidateReg, TRI) << " = "
