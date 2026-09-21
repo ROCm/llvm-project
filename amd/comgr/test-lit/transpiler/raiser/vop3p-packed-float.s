@@ -16,6 +16,7 @@
 	.type	packed_float,@function
 ; CHECK-LABEL: define amdgpu_kernel void @packed_float(
 packed_float:
+; CHECK: bb_0x{{.+}}:
 ; CHECK: [[F16_SRC0_LO_BITS:%.+]] = trunc i32 {{%.+}} to i16
 ; CHECK: [[F16_SRC0_HI_SHIFTED:%.+]] = lshr i32 {{%.+}}, 16
 ; CHECK: [[F16_SRC0_HI_BITS:%.+]] = trunc i32 [[F16_SRC0_HI_SHIFTED]] to i16
