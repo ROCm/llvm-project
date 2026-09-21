@@ -18,6 +18,13 @@
 #include "OpenMP/OMPT/OmptCommonDefs.h"
 #include "OpenMP/OMPT/OmptTracing.h"
 #include "PluginManager.h"
+#ifdef OMPT_SUPPORT
+// Downstream: provides 'ompt::lookupDeviceTracingFn' and the device pointer to
+// user-device-number mapping used when emitting trace records. Reachable here
+// because 'PluginOmpt' exports its include directory as PUBLIC and 'omptarget'
+// links it into the same library as this file.
+#include "OmptDeviceTracing.h"
+#endif
 #include "Shared/APITypes.h"
 #include "Shared/Debug.h"
 #include "omptarget.h"
@@ -97,6 +104,23 @@ llvm::Error DeviceTy::init() {
                                      DeviceID);
   setTeamProcs(RTL->number_of_team_procs(RTLDeviceID));
 
+  OMPT_IF_BUILT_AND_INITIALIZED({
+    GenericDeviceTy &GenericDevice = RTL->getDevice(RTLDeviceID);
+    std::string ComputeUnitKind = GenericDevice.getComputeUnitKind();
+    auto *DevicePtr = reinterpret_cast<ompt_device_t *>(&GenericDevice);
+    // This is the only place that knows both the plugin device object and the
+    // device number OpenMP reports to the user, so it is where the two are
+    // tied together. The plugin recovers the user device number from this
+    // mapping via 'ompt::getDeviceId()' when it emits trace records.
+    ompt::setDeviceId(DevicePtr, DeviceID);
+    // Hand the tool 'lookupDeviceTracingFn' rather than 'lookupCallbackByName':
+    // it is the only lookup that resolves the device tracing entry points
+    // (ompt_set_trace_ompt, ompt_start_trace, ompt_get_record_ompt, ...).
+    performOmptCallback(device_initialize, DeviceID, ComputeUnitKind.c_str(),
+                        DevicePtr, ompt::lookupDeviceTracingFn,
+                        /*documentation=*/nullptr);
+  });
+
   // Enables recording kernels if set.
   BoolEnvar OMPX_RecordKernel("LIBOMPTARGET_RECORD", false);
   if (OMPX_RecordKernel) {
@@ -127,6 +151,20 @@ llvm::Error DeviceTy::init() {
   }
 
   return llvm::Error::success();
+}
+
+void DeviceTy::deinit() {
+  OMPT_IF_BUILT_AND_INITIALIZED({
+    performOmptCallback(device_finalize, DeviceID);
+    ompt::removeDeviceId(
+        reinterpret_cast<ompt_device_t *>(&RTL->getDevice(RTLDeviceID)));
+  });
+
+  if (auto Err = RTL->deinitDevice(RTLDeviceID)) {
+    std::string InfoMsg = toString(std::move(Err));
+    ODBG(ODT_Deinit) << "Failed to deinit device " << DeviceID << ": "
+                     << InfoMsg;
+  }
 }
 
 // Extract the mapping of host function pointers to device function pointers
@@ -229,6 +267,17 @@ DeviceTy::loadBinary(__tgt_device_image *Img) {
   if (RTL->load_binary(RTLDeviceID, Img, &Binary) != OFFLOAD_SUCCESS)
     return error::createOffloadError(error::ErrorCode::INVALID_BINARY,
                                      "failed to load binary %p", Img);
+
+  // Dispatch this before the fast-reduction probe below: that probe is a
+  // downstream addition and its device-to-host read would otherwise be
+  // reported to the tool ahead of the load of the image it reads from.
+  OMPT_IF_BUILT_AND_INITIALIZED(performOmptCallback(
+      device_load, DeviceID, /*FileName=*/nullptr, /*FileOffset=*/0,
+      /*VmaInFile=*/nullptr,
+      reinterpret_cast<uintptr_t>(Img->ImageEnd) -
+          reinterpret_cast<uintptr_t>(Img->ImageStart),
+      const_cast<void *>(Img->ImageStart),
+      /*DeviceAddr=*/nullptr, /*ModuleId=*/0));
 
   AsyncInfoTy AsyncInfo(*this);
   // From the image, read whether fast reduction is enabled (optional symbol).

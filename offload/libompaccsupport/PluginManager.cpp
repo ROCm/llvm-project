@@ -70,12 +70,19 @@ void PluginManager::deinit() {
   }
   ODBG(ODT_Deinit) << "Unloading RTLs...";
 
+
 #ifdef OMPT_SUPPORT
   assert(TraceRecordManager != nullptr &&
          "Trace record manager should have been non-null");
   delete TraceRecordManager;
   TraceRecordManager = nullptr;
 #endif
+
+  {
+    auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
+    for (DeviceTy &Device : devices(ExclusiveDevicesAccessor))
+      Device.deinit();
+  }
 
   for (auto &Plugin : Plugins) {
     if (!Plugin->is_initialized())
@@ -121,11 +128,6 @@ bool PluginManager::initializeDevice(GenericPluginTy &Plugin,
   auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
 
   int32_t UserId = ExclusiveDevicesAccessor->size();
-
-  // Set the device identifier offset in the plugin.
-#ifdef OMPT_SUPPORT
-  Plugin.set_device_identifier(UserId, DeviceId);
-#endif
 
   auto Device = std::make_unique<DeviceTy>(&Plugin, UserId, DeviceId);
   if (auto Err = Device->init()) {
