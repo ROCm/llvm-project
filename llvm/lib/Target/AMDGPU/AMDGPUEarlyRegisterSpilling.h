@@ -138,7 +138,6 @@ class AMDGPUEarlyRegisterSpilling : public MachineFunctionPass {
   DenseSet<Register> SpilledRegs;
   // We do not spill the registers that are returned by restore instructions.
   DenseMap<Register, DomGroup> RestoreRegToDomGroup;
-  DenseMap<MachineLoop *, SmallVector<DomGroup>> LoopToDomGroups;
 
   unsigned MaxVGPRs = 0;
   unsigned MaxSGPRs = 0;

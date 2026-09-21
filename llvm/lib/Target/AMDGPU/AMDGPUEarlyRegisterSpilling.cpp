@@ -108,11 +108,9 @@ protected:
   MachineInstr *emitRestore(Register SpillReg, MachineBasicBlock &InsertBB,
                             int FI);
   /// Helper function for generateSpillRestoreInstrs().
-  void emitRestoresForHead(
-      SmallVector<MachineInstr *> &RestoreInstrs,
-      SmallVector<MachineInstr *> &RestoreUses, int FI,
-      DenseMap<Register, DomGroup> &RestoreRegToDomGroup,
-      DenseMap<MachineLoop *, SmallVector<DomGroup>> &LoopToDomGroups);
+  void emitRestoresForHead(SmallVector<MachineInstr *> &RestoreInstrs,
+                           SmallVector<MachineInstr *> &RestoreUses, int FI,
+                           DenseMap<Register, DomGroup> &RestoreRegToDomGroup);
 
   int64_t loopWeight(unsigned LoopDepth) {
     // Set a limit in order not to reach the int64_t max limit.
@@ -158,8 +156,8 @@ public:
   int64_t getNormalizedCost() const { return NormalizedCost; }
   void calculateSpillRestoreCost();
   virtual void generateSpillRestoreInstrs(
-      MachineInstr *CurMI, DenseMap<Register, DomGroup> &RestoreRegToDomGroup,
-      DenseMap<MachineLoop *, SmallVector<DomGroup>> &LoopToDomGroups) = 0;
+      MachineInstr *CurMI,
+      DenseMap<Register, DomGroup> &RestoreRegToDomGroup) = 0;
   CodeGenPlan getCodeGenPlan() const { return Plan; }
 };
 
@@ -182,8 +180,8 @@ public:
 
   MachineBasicBlock *getSpillBlock() const { return SpillBlock; }
   void generateSpillRestoreInstrs(
-      MachineInstr *CurMI, DenseMap<Register, DomGroup> &RestoreRegToDomGroup,
-      DenseMap<MachineLoop *, SmallVector<DomGroup>> &LoopToDomGroups) override;
+      MachineInstr *CurMI,
+      DenseMap<Register, DomGroup> &RestoreRegToDomGroup) override;
 };
 
 class RestoreCandidate final : public SpillOrRestoreCandidate {
@@ -198,8 +196,8 @@ public:
                                 FrameInfo, LIS, Indexes, DT, MLI, NUA) {}
 
   void generateSpillRestoreInstrs(
-      MachineInstr *CurMI, DenseMap<Register, DomGroup> &RestoreRegToDomGroup,
-      DenseMap<MachineLoop *, SmallVector<DomGroup>> &LoopToDomGroups) override;
+      MachineInstr *CurMI,
+      DenseMap<Register, DomGroup> &RestoreRegToDomGroup) override;
 };
 
 void SpillOrRestoreCandidate::calculateSpillRestoreCost() {
@@ -219,8 +217,7 @@ void SpillOrRestoreCandidate::calculateSpillRestoreCost() {
 void SpillOrRestoreCandidate::emitRestoresForHead(
     SmallVector<MachineInstr *> &RestoreInstrs,
     SmallVector<MachineInstr *> &RestoreUses, int FI,
-    DenseMap<Register, DomGroup> &RestoreRegToDomGroup,
-    DenseMap<MachineLoop *, SmallVector<DomGroup>> &LoopToDomGroups) {
+    DenseMap<Register, DomGroup> &RestoreRegToDomGroup) {
 
   // For each group emit one restore for the group header in the parent block
   // of the group header or the common dominator. The rest of the uses in the
@@ -282,7 +279,6 @@ void SpillOrRestoreCandidate::emitRestoresForHead(
         OutermostLoopOfHeadLoop = HeadLoop->getOutermostLoop();
       DG.setLaneBitmask(Mask);
       DG.setRestore(Restore);
-      LoopToDomGroups[OutermostLoopOfHeadLoop].push_back(DG);
     } else {
       LLVM_DEBUG(dbgs() << "Common case.\n");
       LLVM_DEBUG(dbgs() << "The group has " << DG.size() << " use(s). \n");
@@ -332,8 +328,7 @@ void SpillOrRestoreCandidate::emitRestoresForHead(
 }
 
 void SpillCandidate::generateSpillRestoreInstrs(
-    MachineInstr *CurMI, DenseMap<Register, DomGroup> &RestoreRegToDomGroup,
-    DenseMap<MachineLoop *, SmallVector<DomGroup>> &LoopToDomGroups) {
+    MachineInstr *CurMI, DenseMap<Register, DomGroup> &RestoreRegToDomGroup) {
 
   MachineInstr *InstrOfCandidateReg = MRI->getOneDef(CandidateReg)->getParent();
   MachineInstr *SpillInstruction = nullptr;
@@ -397,8 +392,7 @@ void SpillCandidate::generateSpillRestoreInstrs(
   SmallVector<MachineInstr *> RestoreInstrs;
   SmallVector<MachineInstr *> RestoreUses;
   // Emit restore instructions for each group.
-  emitRestoresForHead(RestoreInstrs, RestoreUses, FI, RestoreRegToDomGroup,
-                      LoopToDomGroups);
+  emitRestoresForHead(RestoreInstrs, RestoreUses, FI, RestoreRegToDomGroup);
 
   // Update the live interval analysis and NUA.
   MachineBasicBlock *DefBlock = InstrOfCandidateReg->getParent();
@@ -452,8 +446,7 @@ void SpillCandidate::generateSpillRestoreInstrs(
 }
 
 void RestoreCandidate::generateSpillRestoreInstrs(
-    MachineInstr *CurMI, DenseMap<Register, DomGroup> &RestoreRegToDomGroup,
-    DenseMap<MachineLoop *, SmallVector<DomGroup>> &LoopToDomGroups) {
+    MachineInstr *CurMI, DenseMap<Register, DomGroup> &RestoreRegToDomGroup) {
 
   MachineInstr *InstrOfCandidateReg = MRI->getOneDef(CandidateReg)->getParent();
   assert(TII->isVGPRSpill(InstrOfCandidateReg->getOpcode()) &&
@@ -546,8 +539,7 @@ void RestoreCandidate::generateSpillRestoreInstrs(
     SmallVector<MachineInstr *> RestoreInstrs;
     SmallVector<MachineInstr *> RestoreUses;
     // Emit restore instructions for each group.
-    emitRestoresForHead(RestoreInstrs, RestoreUses, FI, RestoreRegToDomGroup,
-                        LoopToDomGroups);
+    emitRestoresForHead(RestoreInstrs, RestoreUses, FI, RestoreRegToDomGroup);
 
     // Update the live interval analysis.
     MachineBasicBlock *DefBlock = InstrOfCandidateReg->getParent();
@@ -1766,7 +1758,7 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
     SpilledRegs.insert(CandidateReg);
     NumOfERSSpills++;
 
-    C->generateSpillRestoreInstrs(CurMI, RestoreRegToDomGroup, LoopToDomGroups);
+    C->generateSpillRestoreInstrs(CurMI, RestoreRegToDomGroup);
   }
 
   // Reset the tracker because it has already read the next instruction which
