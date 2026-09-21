@@ -4,9 +4,14 @@
 ; RUN: %transpile_cli %t.hsaco --dump-decoded | %FileCheck %s --check-prefix=DECODE
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir > %t.ll
 ; RUN: %FileCheck %s --check-prefix=IR < %t.ll
-; RUN: %llc -mtriple=amdgpu9.42-amd-amdhsa -filetype=obj %t.ll -o %t.gfx942.o
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx950 --emit-ir | %llc -mtriple=amdgpu9.50-amd-amdhsa -filetype=obj -o %t.gfx950.o
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 --emit-ir | %llc -mtriple=amdgpu12.50-amd-amdhsa -filetype=obj -o %t.gfx1250.o
+; RUN: %if comgr-has-llc %{ %llc -mtriple=amdgpu9.42-amd-amdhsa \
+; RUN:   -filetype=obj %t.ll -o %t.gfx942.o %}
+; RUN: %if comgr-has-llc %{ %transpile_cli %t.hsaco \
+; RUN:   --target-isa=gfx950 --emit-ir | %llc -mtriple=amdgpu9.50-amd-amdhsa \
+; RUN:     -filetype=obj -o %t.gfx950.o %}
+; RUN: %if comgr-has-llc %{ %transpile_cli %t.hsaco \
+; RUN:   --target-isa=gfx1250 --emit-ir | %llc -mtriple=amdgpu12.50-amd-amdhsa \
+; RUN:     -filetype=obj -o %t.gfx1250.o %}
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250:sramecc-"
 .amdhsa_code_object_version 6

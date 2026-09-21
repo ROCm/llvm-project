@@ -26,6 +26,13 @@ if config.comgr_amdgpu_target_available:
     config.available_features.add("comgr-has-amdgpu-target")
 if config.comgr_transpiler_available:
     config.available_features.add("comgr-has-transpiler")
+if os.path.exists(
+    os.path.join(
+        config.llvm_tools_dir,
+        "llc.exe" if platform.system() == "Windows" else "llc",
+    )
+):
+    config.available_features.add("comgr-has-llc")
 
 # The AMDGPU device AddressSanitizer runtime (libclang_rt.asan.a for
 # amdgcn-amd-amdhsa) is a separately built artifact. The asan tests link it,
