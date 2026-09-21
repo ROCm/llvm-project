@@ -1,8 +1,7 @@
 # This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-load("@bazel_skylib//lib:selects.bzl", "selects")
-load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(":cc_library_wrapper.bzl", "cc_library_wrapper")
 
@@ -142,7 +141,7 @@ cc_library_wrapper(
 
 bool_flag(
     name = "llvm_enable_lzma",
-    build_setting_default = True,
+    build_setting_default = False,
 )
 
 config_setting(
@@ -150,7 +149,11 @@ config_setting(
     flag_values = {":llvm_enable_lzma": "true"},
 )
 
-cc_library_wrapper(
+# Unlike zlib and zstd there is no liblzma module in the Bazel registry, so this
+# links the system library rather than building one from source. That is why it
+# is a plain cc_library with linkopts instead of a cc_library_wrapper, and why
+# it defaults to off.
+cc_library(
     name = "lzma",
     defines = select({
         ":llvm_lzma_enabled": [
@@ -160,9 +163,9 @@ cc_library_wrapper(
             "LLVM_ENABLE_LZMA=0",
         ],
     }),
-    deps = select({
+    linkopts = select({
         ":llvm_lzma_enabled": [
-            "@llvm_xz//:lzma",
+            "-llzma",
         ],
         "//conditions:default": [],
     }),
