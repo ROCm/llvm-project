@@ -15,6 +15,7 @@
 #include "mlir/Pass/PassRegistry.h"
 
 #include <memory>
+#include <utility>
 
 namespace mlir {
 class IRMapping;
