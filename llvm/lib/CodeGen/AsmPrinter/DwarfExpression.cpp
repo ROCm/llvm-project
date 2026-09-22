@@ -579,6 +579,8 @@ bool DwarfExpression::addExpression(
   // and not any other parts of the following DWARF expression.
   assert(!IsEmittingEntryValue && "Can't emit entry value around expression");
 
+  if (!IsImplemented)
+    return false;
   IsPoisonedExpr = false;
 
   std::optional<DIExpression::ConvertOp> PrevConvertOp;
@@ -1029,7 +1031,7 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Arg Arg,
     // constant value (0) for now.
     unsigned AMDGPUGlobalAddrSpace = 1;
     unsigned AMDGPUConstantAddrSpace = 4;
-    if ((AP.TM.getTargetTriple().getArch() == Triple::amdgpu) &&
+    if ((AP.TM.getTargetTriple().isAMDGCN()) &&
         (GV->getAddressSpace() != AMDGPUGlobalAddrSpace &&
          GV->getAddressSpace() != AMDGPUConstantAddrSpace)) {
       emitConstu(0);
