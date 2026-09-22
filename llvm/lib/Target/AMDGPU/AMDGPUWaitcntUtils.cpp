@@ -66,7 +66,8 @@ HardwareLimits::HardwareLimits(const IsaVersion &IV) {
   KmcntMax = getKmcntBitMask(IV);
   XcntMax = getXcntBitMask(IV);
   AsyncMax = getAsynccntBitMask(IV);
-  VaVdstMax = DepCtr::getVaVdstBitMask();
+  VaVdstRdMax = DepCtr::getVaVdstBitMask();
+  VaVdstWrMax = DepCtr::getVaVdstBitMask();
   VmVsrcMax = DepCtr::getVmVsrcBitMask();
 }
 
@@ -89,8 +90,9 @@ unsigned HardwareLimits::get(InstCounterType T) const {
   case AMDGPU::X_CNT:
     return XcntMax;
   case AMDGPU::VA_VDST_RD:
+    return VaVdstRdMax;
   case AMDGPU::VA_VDST_WR:
-    return VaVdstMax;
+    return VaVdstWrMax;
   case AMDGPU::VM_VSRC:
     return VmVsrcMax;
   default:

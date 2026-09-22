@@ -742,6 +742,17 @@ public:
 
   bool hasVOPD3() const { return HasGFX1250Insts; }
 
+  // \returns true if the target has V_{MIN|MAX}_{I|U}64 instructions.
+  bool hasIntMinMax64() const { return HasGFX1250Insts; }
+
+  // \returns true if ISel should select the native 64-bit integer min/max
+  // instructions (V_MIN/MAX_I64/U64). False in CoExec-friendly mode, where they
+  // are expanded to v_cmp_*_i64 + v_cndmask so the scheduler is not blocked by a
+  // repeat-rate-32 op. SelectionDAG only.
+  bool useVectorInt64MinMaxInsts() const {
+    return hasIntMinMax64() && !HasCoExecFriendlyISelMode;
+  }
+
   // \returns true if the target has V_PK_{MIN|MAX}3_{I|U}16 instructions.
   bool hasPkMinMax3Insts() const { return HasGFX1250Insts; }
 

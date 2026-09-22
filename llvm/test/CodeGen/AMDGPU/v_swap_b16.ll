@@ -121,16 +121,16 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX11-TRUE16-NEXT:  .LBB1_1: ; %loop
 ; GFX11-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-TRUE16-NEXT:    v_add_nc_u32_e32 v3, -1, v3
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_3)
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.h
 ; GFX11-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX11-TRUE16-NEXT:    ; use v0.l
 ; GFX11-TRUE16-NEXT:    ;;#ASMEND
 ; GFX11-TRUE16-NEXT:    v_swap_b16 v0.h, v0.l
-; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v3
 ; GFX11-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX11-TRUE16-NEXT:    ; use v1.l
 ; GFX11-TRUE16-NEXT:    ;;#ASMEND
+; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v3
 ; GFX11-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX11-TRUE16-NEXT:    ; use v2.l
 ; GFX11-TRUE16-NEXT:    ;;#ASMEND
@@ -158,13 +158,13 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX11-FAKE16-NEXT:    ;;#ASMSTART
 ; GFX11-FAKE16-NEXT:    ; use v4
 ; GFX11-FAKE16-NEXT:    ;;#ASMEND
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_3) | instid1(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v3
 ; GFX11-FAKE16-NEXT:    ;;#ASMSTART
 ; GFX11-FAKE16-NEXT:    ; use v2
 ; GFX11-FAKE16-NEXT:    ;;#ASMEND
+; GFX11-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v3
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v2, v4
 ; GFX11-FAKE16-NEXT:    s_or_b32 s0, vcc_lo, s0
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-FAKE16-NEXT:    s_and_not1_b32 exec_lo, exec_lo, s0
 ; GFX11-FAKE16-NEXT:    s_cbranch_execnz .LBB1_1
 ; GFX11-FAKE16-NEXT:  ; %bb.2: ; %ret
@@ -184,16 +184,16 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX12-TRUE16-NEXT:  .LBB1_1: ; %loop
 ; GFX12-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-TRUE16-NEXT:    v_add_nc_u32_e32 v3, -1, v3
-; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_3)
+; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v1.l, v0.h
 ; GFX12-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX12-TRUE16-NEXT:    ; use v0.l
 ; GFX12-TRUE16-NEXT:    ;;#ASMEND
 ; GFX12-TRUE16-NEXT:    v_swap_b16 v0.h, v0.l
-; GFX12-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v3
 ; GFX12-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX12-TRUE16-NEXT:    ; use v1.l
 ; GFX12-TRUE16-NEXT:    ;;#ASMEND
+; GFX12-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v3
 ; GFX12-TRUE16-NEXT:    ;;#ASMSTART
 ; GFX12-TRUE16-NEXT:    ; use v2.l
 ; GFX12-TRUE16-NEXT:    ;;#ASMEND
@@ -226,11 +226,10 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX12-FAKE16-NEXT:    ;;#ASMSTART
 ; GFX12-FAKE16-NEXT:    ; use v4
 ; GFX12-FAKE16-NEXT:    ;;#ASMEND
-; GFX12-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; GFX12-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v3
 ; GFX12-FAKE16-NEXT:    ;;#ASMSTART
 ; GFX12-FAKE16-NEXT:    ; use v2
 ; GFX12-FAKE16-NEXT:    ;;#ASMEND
+; GFX12-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v3
 ; GFX12-FAKE16-NEXT:    v_mov_b32_e32 v2, v4
 ; GFX12-FAKE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-FAKE16-NEXT:    s_or_b32 s0, vcc_lo, s0

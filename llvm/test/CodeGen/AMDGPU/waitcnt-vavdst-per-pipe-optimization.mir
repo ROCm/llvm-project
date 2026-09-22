@@ -1,0 +1,319 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -amdgpu-expert-scheduling-mode -run-pass si-insert-waitcnts %s -o - | FileCheck -check-prefix=GCN %s
+
+# These tests demonstrate cases where per-pipe va_vdst tracking would produce
+# more optimal (less conservative) waits than the current score-promotion
+# approach. Each test includes a comment showing:
+#   - Current result (score promotion): safe but over-waits
+#   - Optimal result (per-pipe tracking): tightest correct wait
+#
+# Per-Pipe Optimization Summary
+# =============================
+#
+# The hardware va_vdst counter is a single counter incremented by all VALU
+# issues and decremented by all VALU completions. Instructions within the same
+# pipe (CSMACC, TRANS, DPMACC, XDL) retire in-order, but completions across
+# different pipes are unordered — a TRANS instruction can signal done before an
+# older CSMACC instruction.
+#
+# 32-bit accumulator XDL instructions act as a fence: when they complete, all
+# prior VALU results (all pipes) are guaranteed written back. The current
+# implementation uses "score promotion" to exploit this — when an XDL fence is
+# seen, all pending register scores are bumped to the XDL's score. This is
+# correct but conservative: it effectively treats the register write as if it
+# happened at the XDL's position, losing information about which pipe the
+# original write was on.
+#
+# A per-pipe optimization would track which pipe each write belongs to and
+# count how many instructions on OTHER pipes could complete before the write
+# (jumping ahead on the done bus). The formula:
+#
+#   total_after = number of instructions issued after the write
+#   jumpers = number of later instructions on OTHER unfenced pipes that could
+#             complete before the write's pipe retires it
+#   min_completions = jumpers + 1 (all jumpers complete, then the write itself)
+#   optimal_va_vdst = total_after - min_completions
+#
+# Within a fenced region (after a 32-bit XDL), instructions on any pipe cannot
+# jump ahead of the fence, so they don't count as jumpers for writes before the
+# fence.
+#
+# Cases where per-pipe tracking improves over score promotion:
+#
+# 1. Multiple XDL fences with TRANS: score promotion collapses the write to
+#    the first fence's score (losing the distance to the actual write), while
+#    per-pipe knows only unfenced TRANS can jump ahead.
+#
+# 2. CSMACC-only + XDL fence: score promotion over-waits because it promotes
+#    the write score to the fence. Per-pipe knows CSMACC and XDL_ORDERED are
+#    in the same ordering domain, so no jumpers exist.
+#
+# 3. CSMACC + TRANS without XDL: the current implementation falls back to
+#    wait(0) because counterOutOfOrder returns true. Per-pipe tracking could
+#    identify that same-pipe writes don't need conservative treatment.
+#
+# Implementation considerations for per-pipe tracking:
+#   - Need per-register pipe identification (which pipe wrote each register)
+#   - Need per-pipe instruction counts between write and current position
+#   - Reset jumpable counts at each 32-bit XDL fence boundary
+#   - More complex cross-BB merge logic for per-pipe state
+#   - Higher risk: a bug means insufficient waits → hardware hazards
+#   - Score promotion is ~15 lines; per-pipe would be significantly more complex
+
+---
+# Per-pipe improvement case 1: Multiple XDL fences with TRANS
+#
+# Inst  Pipe       Score
+# 1     r0=V_MOV   CSMACC   1    ← write to r0 (CSMACC pipe)
+# 2     V_ADD      CSMACC   2
+# 3     V_ADD      CSMACC   3
+# 4     V_ADD      CSMACC   4
+# 5     WMMA_F32   XDL_ORD  5    ← fence (everything before is done when 5 completes)
+# 6     V_ADD      CSMACC   6
+# 7     WMMA_F32   XDL_ORD  7    ← fence
+# 8     V_EXP      TRANS    8    ← only potential jumper for r0
+# 9     WMMA_F32   XDL_ORD  9    ← fence (clears TRANS at 8)
+# DS_WRITE r0
+#
+# Score promotion:  r0 promoted 1→5, UB=9, va_vdst(9-5) = va_vdst(4)
+# Per-pipe optimal: r0 is CSMACC, only TRANS(8) could jump ahead (1 jumper).
+#                   But TRANS(8) is fenced by WMMA(9), so it can't actually
+#                   jump ahead of anything issued before WMMA(9).
+#                   r0 is before WMMA(5), guaranteed done by inst 5.
+#                   total_after=8, all complete by fence → va_vdst(8)
+#                   Conservative bound: 1 unfenced jumper → va_vdst(7)
+# Improvement: va_vdst(4) → va_vdst(7) (3 fewer stall cycles)
+name: perpipe_multiple_xdl_fences_with_trans
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: perpipe_multiple_xdl_fences_with_trans
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_4
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30
+
+    ; Current: va_vdst(4), Optimal: va_vdst(7)
+
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr27 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr1 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Per-pipe improvement case 2: CSMACC-only + single XDL fence
+#
+# Inst  Pipe       Score
+# 1     r0=V_MOV   CSMACC   1    ← write to r0
+# 2     V_ADD      CSMACC   2
+# 3     WMMA_F32   XDL_ORD  3    ← fence, promotes r0: 1→3
+# 4     V_ADD      CSMACC   4
+# DS_WRITE r0
+#
+# Score promotion:  r0 promoted to 3, UB=4, va_vdst(4-3) = va_vdst(1)
+# Per-pipe optimal: r0 is CSMACC. No other pipes present that could jump ahead.
+#                   WMMA is XDL_ORDERED → in-order with CSMACC.
+#                   total_after=3, jumpers=0, min_completions=1 → va_vdst(2)
+#                   Actually: CSMACC pipe retires 1,2 in order, then XDL fence
+#                   guarantees 1,2 done. inst 4 is CSMACC, retires after 1,2.
+#                   So r0 is definitely done after 1 more completion → va_vdst(3)
+# Improvement: va_vdst(1) → va_vdst(3) (2 fewer stall cycles)
+name: perpipe_csmacc_only_with_xdl_fence
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: perpipe_csmacc_only_with_xdl_fence
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_1
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30
+
+    ; Current: va_vdst(1), Optimal: va_vdst(3)
+
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Per-pipe improvement case 3: CSMACC + TRANS without XDL
+# This is the most impactful case — currently forced to wait(0).
+#
+# Inst  Pipe       Score
+# 1     V_ADD      CSMACC   1
+# 2     V_ADD      CSMACC   2
+# 3     r0=V_EXP   TRANS    3    ← write to r0 (TRANS pipe)
+# 4     V_EXP      TRANS    4
+# 5     V_ADD      CSMACC   5
+# 6     V_ADD      CSMACC   6
+# DS_WRITE r0
+#
+# Current: PendingEvents={CSMACC,TRANS} → counterOOO=true → va_vdst(0)
+# Per-pipe optimal: r0 is TRANS. CSMACC(5,6) could jump ahead of TRANS(3).
+#                   But TRANS retires in-order: TRANS(3) before TRANS(4).
+#                   jumpers=2 (CSMACC 5,6), total_after=3, min=3 → va_vdst(0)
+#                   Wait — actually r0=TRANS(3), TRANS(4) retires after it,
+#                   CSMACC(5,6) may jump ahead. 2 jumpers + 1 = 3 completions.
+#                   total_after=3. va_vdst(3-3) = va_vdst(0). Same as current.
+#
+# Let's try with r0 on CSMACC instead:
+name: perpipe_csmacc_trans_no_xdl_trans_write
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: perpipe_csmacc_trans_no_xdl_trans_write
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_0
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30
+
+    ; Current: va_vdst(0), Optimal: va_vdst(0) — same for TRANS write here
+
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr30 = V_EXP_F32_e32 $vgpr31, implicit $mode, implicit $exec
+    $vgpr27 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr1 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Per-pipe improvement case 4: CSMACC write followed by TRANS, no XDL
+# Here r0 is written by CSMACC, and TRANS instructions appear after.
+#
+# Inst  Pipe       Score
+# 1     r0=V_MOV   CSMACC   1    ← write to r0 (CSMACC pipe)
+# 2     V_ADD      CSMACC   2
+# 3     V_EXP      TRANS    3    ← different pipe, could jump ahead
+# 4     V_EXP      TRANS    4    ← different pipe, could jump ahead
+# 5     V_ADD      CSMACC   5
+# 6     V_ADD      CSMACC   6
+# DS_WRITE r0
+#
+# Current: PendingEvents={CSMACC,TRANS} → counterOOO=true → va_vdst(0)
+# Per-pipe optimal: r0 is CSMACC. TRANS(3,4) could jump ahead (2 jumpers).
+#                   total_after=5, min_completions=3 → va_vdst(2)
+# Improvement: va_vdst(0) → va_vdst(2) (avoids complete stall!)
+name: perpipe_csmacc_write_with_trans_no_xdl
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: perpipe_csmacc_write_with_trans_no_xdl
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_0
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30
+
+    ; Current: va_vdst(0), Optimal: va_vdst(2)
+
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr26 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    $vgpr27 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr1 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Per-pipe improvement case 5: CSMACC write, many same-pipe after, few TRANS
+# Shows the biggest absolute improvement potential.
+#
+# Inst  Pipe       Score
+# 1     r0=V_MOV   CSMACC   1    ← write to r0
+# 2     V_ADD      CSMACC   2
+# 3     V_ADD      CSMACC   3
+# 4     V_EXP      TRANS    4    ← 1 jumper
+# 5     V_ADD      CSMACC   5
+# 6     V_ADD      CSMACC   6
+# 7     V_ADD      CSMACC   7
+# 8     V_ADD      CSMACC   8
+# DS_WRITE r0
+#
+# Current: PendingEvents={CSMACC,TRANS} → counterOOO=true → va_vdst(0)
+# Per-pipe optimal: r0 is CSMACC. Only TRANS(4) can jump ahead (1 jumper).
+#                   total_after=7, min_completions=2 → va_vdst(5)
+# Improvement: va_vdst(0) → va_vdst(5) (5 fewer stall cycles!)
+name: perpipe_csmacc_heavy_one_trans
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: perpipe_csmacc_heavy_one_trans
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_0
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30
+
+    ; Current: va_vdst(0), Optimal: va_vdst(5)
+
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr27 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr1 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr2 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr3 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Per-pipe improvement case 6: XDL fence with many CSMACC after
+# Score promotion pulls write to fence score, losing all the CSMACC
+# distance after the fence.
+#
+# Inst  Pipe       Score
+# 1     r0=V_MOV   CSMACC   1    ← write to r0
+# 2     V_ADD      CSMACC   2
+# 3     WMMA_F32   XDL_ORD  3    ← fence, promotes r0: 1→3
+# 4     V_ADD      CSMACC   4
+# 5     V_ADD      CSMACC   5
+# 6     V_ADD      CSMACC   6
+# 7     V_ADD      CSMACC   7
+# 8     V_ADD      CSMACC   8
+# DS_WRITE r0
+#
+# Score promotion:  r0 promoted to 3, UB=8, va_vdst(8-3) = va_vdst(5)
+# Per-pipe optimal: r0 is CSMACC, no other unfenced pipes can jump ahead.
+#                   XDL_ORDERED is in-order with CSMACC.
+#                   total_after=7, jumpers=0 → va_vdst(6)
+#                   Actually r0 guaranteed done by fence at inst 3,
+#                   everything after is pure profit → va_vdst(7)
+# Improvement: va_vdst(5) → va_vdst(7) (2 fewer stall cycles)
+name: perpipe_xdl_fence_many_csmacc_after
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: perpipe_xdl_fence_many_csmacc_after
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_5
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30
+
+    ; Current: va_vdst(5), Optimal: va_vdst(7)
+
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr1 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr2 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr3 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr4 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...

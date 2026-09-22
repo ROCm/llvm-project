@@ -14,6 +14,7 @@
 #define LLVM_LIB_TARGET_AMDGPU_GCNSCHEDSTRATEGY_H
 
 #include "GCNRegPressure.h"
+#include "LIRP.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
@@ -27,6 +28,7 @@ class SIMachineFunctionInfo;
 class SIRegisterInfo;
 class GCNSubtarget;
 class GCNSchedStage;
+class MachineRegisterInfo;
 
 enum class GCNSchedStageID : unsigned {
   OccInitialSchedule = 0,
@@ -35,7 +37,8 @@ enum class GCNSchedStageID : unsigned {
   ClusteredLowOccupancyReschedule = 3,
   PreRARematerialize = 4,
   ILPInitialSchedule = 5,
-  MemoryClauseInitialSchedule = 6
+  MemoryClauseInitialSchedule = 6,
+  LiveIntervalRPReschedule = 7
 };
 
 #ifndef NDEBUG
@@ -60,10 +63,6 @@ protected:
                      unsigned VGPRPressure, unsigned AGPRPressure,
                      bool IsBottomUp);
 
-  /// Estimate how many cycles \p SU must wait due to structural hazards at the
-  /// current boundary cycle. Returns zero when no stall is required.
-  unsigned getStructuralStallCycles(SchedBoundary &Zone, SUnit *SU) const;
-
   /// Evaluates instructions in the pending queue using a subset of scheduling
   /// heuristics.
   ///
@@ -72,8 +71,9 @@ protected:
   /// invisible to scheduling heuristics. However, in certain scenarios (such as
   /// avoiding register spilling), it may be beneficial to consider scheduling
   /// these not-yet-ready instructions.
-  bool tryPendingCandidate(SchedCandidate &Cand, SchedCandidate &TryCand,
-                           SchedBoundary *Zone) const;
+  virtual bool tryPendingCandidate(SchedCandidate &Cand,
+                                   SchedCandidate &TryCand,
+                                   SchedBoundary *Zone) const;
 
   void printCandidateDecision(const SchedCandidate &Current,
                               const SchedCandidate &Preferred);
@@ -84,16 +84,9 @@ protected:
                             GCNDownwardRPTracker &DownwardTracker,
                             GCNUpwardRPTracker &UpwardTracker,
                             ScheduleDAGMI *DAG, const SIRegisterInfo *SRI);
-
   std::vector<unsigned> Pressure;
 
   std::vector<unsigned> MaxPressure;
-
-  unsigned SGPRExcessLimit;
-
-  unsigned VGPRExcessLimit;
-
-  unsigned AGPRExcessLimit;
 
   unsigned TargetOccupancy;
 
@@ -110,6 +103,9 @@ protected:
 
   // GCN RP Tracker for botttom-up scheduling
   mutable GCNUpwardRPTracker UpwardTracker;
+
+  // Live interval-based RP tracker.
+  LIRPTracker LIRP;
 
   bool UseGCNTrackers = false;
 
@@ -135,6 +131,12 @@ public:
   // Bias for VGPR limits under a high register pressure.
   const unsigned HighRPVGPRBias = 7;
 
+  unsigned SGPRExcessLimit;
+
+  unsigned VGPRExcessLimit;
+
+  unsigned AGPRExcessLimit;
+
   unsigned SGPRCriticalLimit;
 
   unsigned VGPRCriticalLimit;
@@ -144,6 +146,8 @@ public:
   unsigned SGPRLimitBias = 0;
 
   unsigned VGPRLimitBias = 0;
+
+  std::optional<unsigned> VGPRExcessThresholdPercent;
 
   GCNSchedStrategy(const MachineSchedContext *C);
 
@@ -173,6 +177,16 @@ public:
   GCNDownwardRPTracker *getDownwardTracker() { return &DownwardTracker; }
 
   GCNUpwardRPTracker *getUpwardTracker() { return &UpwardTracker; }
+
+  /// \returns the LIRP tracker.
+  LIRPTracker *getLIRPTracker() { return &LIRP; }
+
+  // Index of the region currently being scheduled.
+  void setCurrentRegionIdx(unsigned Idx) { CurrentRegionIdx = Idx; }
+  unsigned getCurrentRegionIdx() const { return CurrentRegionIdx; }
+
+private:
+  unsigned CurrentRegionIdx = 0;
 };
 
 /// The goal of this scheduling strategy is to maximize kernel occupancy (i.e.
@@ -270,6 +284,7 @@ class GCNScheduleDAGMILive final : public ScheduleDAGMILive {
   friend class ClusteredLowOccStage;
   friend class PreRARematStage;
   friend class ILPInitialScheduleStage;
+  friend class LiveIntervalRPStage;
   friend class RegionPressureMap;
 
   const GCNSubtarget &ST;
@@ -800,6 +815,22 @@ public:
   MemoryClauseInitialScheduleStage(GCNSchedStageID StageID,
                                    GCNScheduleDAGMILive &DAG)
       : GCNSchedStage(StageID, DAG) {}
+};
+
+class LiveIntervalRPStage : public GCNSchedStage {
+public:
+  bool initGCNSchedStage() override;
+  void finalizeGCNSchedStage() override;
+  bool initGCNRegion() override;
+  void finalizeGCNRegion() override;
+
+  LiveIntervalRPStage(GCNSchedStageID StageID, GCNScheduleDAGMILive &DAG)
+      : GCNSchedStage(StageID, DAG) {}
+
+private:
+  unsigned SavedVGPRThresholdPercent = 0;
+  unsigned SavedVGPRExcessLimit = 0;
+  unsigned SavedVGPRCriticalLimit = 0;
 };
 
 class GCNPostScheduleDAGMILive final : public ScheduleDAGMI {

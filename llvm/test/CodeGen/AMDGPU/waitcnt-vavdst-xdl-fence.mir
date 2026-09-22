@@ -1,0 +1,443 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -amdgpu-expert-scheduling-mode -run-pass si-insert-waitcnts %s -o - | FileCheck -check-prefix=GCN %s
+
+# Test cases for va_vdst insertion with 32-bit XDL (WMMA_F32) acting as a
+# fence for all prior VALU results. The score promotion optimization bumps
+# pending VA_VDST register scores to the XDL's score, allowing the pass to
+# compute a relaxed (non-zero) va_vdst instead of the conservative wait(0).
+
+---
+# Test 1: Multiple 32-bit WMMA fences with TRANS interleaved.
+#
+# Inst  Type           Score
+# 1     r0 = V_MOV     CSMACC   1   ← write to r0
+# 2     V_ADD          CSMACC   2
+# 3     V_ADD          CSMACC   3
+# 4     V_ADD          CSMACC   4
+# 5     WMMA_F32       XDL_ORD  5   ← fence, promotes r0: 1→5
+# 6     V_ADD          CSMACC   6
+# 7     WMMA_F32       XDL_ORD  7   ← fence
+# 8     V_EXP (TRANS)  TRANS    8
+# 9     WMMA_F32       XDL_ORD  9   ← fence, clears TRANS
+# DS_WRITE r0
+#
+# Score promotion: r0 promoted to 5, UB=9 → va_vdst(9-5) = va_vdst(4)
+name: xdl_fence_multiple_wmma_f32_with_trans
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: xdl_fence_multiple_wmma_f32_with_trans
+    ; GCN: $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    ; GCN: $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: $vgpr27 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: $vgpr0 = V_ADD_F32_e32
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: $vgpr1 = V_EXP_F32_e32
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_4
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+
+    ; 1: r0 = V_MOV
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    ; 2-4: V_ADD
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr27 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; 5: WMMA_F32 (fence)
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    ; 6: V_ADD
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; 7: WMMA_F32 (fence)
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    ; 8: V_EXP (TRANS)
+    $vgpr1 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    ; 9: WMMA_F32 (fence)
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    ; DS_WRITE using r0
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Test 2: TRANS before the first XDL fence.
+#
+# Inst  Type           Score
+# 1     r0 = V_MOV     CSMACC   1   ← write to r0
+# 2     V_EXP (TRANS)  TRANS    2
+# 3     V_ADD          CSMACC   3
+# 4     V_ADD          CSMACC   4
+# 5     WMMA_F32       XDL_ORD  5   ← fence, promotes r0: 1→5, clears TRANS
+# 6     V_ADD          CSMACC   6
+# 7     WMMA_F32       XDL_ORD  7   ← fence
+# 8     V_EXP (TRANS)  TRANS    8
+# 9     WMMA_F32       XDL_ORD  9   ← fence, clears TRANS
+# DS_WRITE r0
+#
+# Score promotion: r0 promoted to 5, UB=9 → va_vdst(4)
+name: xdl_fence_trans_before_first_wmma
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: xdl_fence_trans_before_first_wmma
+    ; GCN: $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    ; GCN: $vgpr25 = V_EXP_F32_e32
+    ; GCN: $vgpr26 = V_ADD_F32_e32
+    ; GCN-NEXT: $vgpr27 = V_ADD_F32_e32
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: $vgpr0 = V_ADD_F32_e32
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: $vgpr1 = V_EXP_F32_e32
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_4
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr27 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr1 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Test 3: Cross-BB with XDL fence in predecessors.
+# Both predecessors write r0 then have CSMACC+WMMA+TRANS sequences.
+# The merge block has a WMMA fence followed by DS_WRITE using r0.
+name: xdl_fence_cross_bb
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29, $vgpr31
+    S_CBRANCH_SCC0 %bb.2, implicit undef $scc
+    S_BRANCH %bb.1
+
+  bb.1:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr27 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr1 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.2:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr27 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr1 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.3:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr30
+
+    ; GCN-LABEL: name: xdl_fence_cross_bb
+    ; GCN: bb.3:
+    ; GCN: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_4
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Test 4: 16-bit XDL (unordered) falls back to conservative wait(0).
+# V_WMMA_F16_16X16X64_FP8_FP8 has 16-bit accumulator → not ordered.
+#
+# PendingEvents: {CSMACC, XDL_WRITE} → counterOutOfOrder=true → wait(0)
+name: unordered_xdl_falls_back_to_wait0
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr22, $vgpr23, $vgpr24, $vgpr25, $vgpr26, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: unordered_xdl_falls_back_to_wait0
+    ; GCN: $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    ; GCN-NEXT: $vgpr27 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: $vgpr22_vgpr23_vgpr24_vgpr25 = V_WMMA_F16_16X16X64_FP8_FP8_w32_twoaddr
+    ; GCN: $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: S_WAITCNT_DEPCTR .VaVdst_0
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr26, $vgpr30, 0, 0, implicit $exec
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr27 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr22_vgpr23_vgpr24_vgpr25 = V_WMMA_F16_16X16X64_FP8_FP8_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr22_vgpr23_vgpr24_vgpr25, 0, 0, 0, 0, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr26, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Test 5: Simple case — only CSMACC + 32-bit XDL, no TRANS.
+#
+# 1 r0 = V_MOV  CSMACC  s=1   ← write
+# 2 V_ADD       CSMACC  s=2
+# 3 WMMA_F32    XDL_ORD s=3   ← fence, promotes r0: 1→3
+# 4 V_ADD       CSMACC  s=4
+# DS_WRITE r0
+#
+# UB=4, ScoreToWait=3 → va_vdst(1)
+name: xdl_fence_no_trans_simple
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: xdl_fence_no_trans_simple
+    ; GCN: $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    ; GCN-NEXT: $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: S_WAITCNT_DEPCTR .VaVdst_1
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Test 6: CSMACC + TRANS without any XDL — falls back to wait(0).
+# Documents known over-wait: optimal would be va_vdst(1).
+#
+# 1 V_ADD        CSMACC  s=1
+# 2 V_ADD        CSMACC  s=2
+# 3 r0 = V_EXP   TRANS   s=3   ← write to r0
+# 4 V_EXP        TRANS   s=4
+# 5 V_ADD        CSMACC  s=5
+# 6 V_ADD        CSMACC  s=6
+# DS_WRITE r0
+#
+# PendingEvents: {CSMACC, TRANS} → counterOOO=true → wait(0)
+name: csmacc_trans_no_xdl_wait0
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: csmacc_trans_no_xdl_wait0
+    ; GCN: $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: $vgpr30 = V_EXP_F32_e32 $vgpr31, implicit $mode, implicit $exec
+    ; GCN-NEXT: $vgpr27 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: $vgpr1 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    ; GCN-NEXT: S_WAITCNT_DEPCTR .VaVdst_0
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr30 = V_EXP_F32_e32 $vgpr31, implicit $mode, implicit $exec
+    $vgpr27 = V_EXP_F32_e32 $vgpr29, implicit $mode, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr1 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Test 7: WAW hazard with XDL fence.
+# v30 = V_ADD; WMMA fence (promotes v30); V_ADD; DS_READ → v30 (WAW).
+# Per the MI400 doc (4.3.7.4.1, line 5323), VALU→VGPR←VMEM is a WAW hazard
+# requiring S_WAIT_ALU VA_VDST. Verify the fence-promoted score still produces
+# the correct (relaxed) wait, not wait(0).
+#
+# Score: v30=1 (CSMACC), V_ADD=2, WMMA=3 (promotes v30: 1→3), V_ADD=4
+# DS_READ writes to v30 → WAW check on v30, score=3, UB=4 → va_vdst(1)
+name: waw_with_xdl_fence
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29
+
+    ; GCN-LABEL: name: waw_with_xdl_fence
+    ; GCN: $vgpr30 = V_ADD_F32_e32
+    ; GCN-NEXT: $vgpr25 = V_ADD_F32_e32
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: $vgpr26 = V_ADD_F32_e32
+    ; GCN-NEXT: S_WAITCNT_DEPCTR .VaVdst_1
+    ; GCN-NEXT: $vgpr30 = DS_READ_B32_gfx9
+    $vgpr30 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr30 = DS_READ_B32_gfx9 $vgpr24, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Test 8: Re-promotion blocked by `>` guard.
+# v30 = V_MOV (s=1); fence A (s=2, promotes v30: 1→2, LastXDL=2);
+# V_ADD (s=3); fence B (s=4, v30=2 NOT > LastXDL=2 → not re-promoted);
+# DS_WRITE.
+#
+# Without the guard, v30 would be promoted again to 4 → va_vdst(0).
+# With the guard, v30 stays at 2, UB=4 → va_vdst(2). This proves the guard
+# prevents over-relaxation that could violate the fence's actual completion
+# time (the second fence subsumes the first, but its semantics for v30 are
+# already captured by the first fence).
+name: re_promotion_blocked_by_guard
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29, $vgpr31
+
+    ; GCN-LABEL: name: re_promotion_blocked_by_guard
+    ; GCN: $vgpr30 = V_MOV_B32_e32
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: $vgpr0 = V_ADD_F32_e32
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_2
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Test 9: Single-block loop with backedge merge.
+# Loop body: V_ADD (writes v25); WMMA fence; V_ADD; WMMA fence; DS_READ uses v25.
+# Verifies that LastXDLOrderedVAVDSTScore merges correctly across the backedge
+# and that score promotion still produces a relaxed wait under iteration.
+name: loop_with_backedge_merge
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr28, $vgpr29
+
+    ; GCN-LABEL: name: loop_with_backedge_merge
+    ; GCN: bb.1:
+    ; GCN: $vgpr25 = V_ADD_F32_e32
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_2
+    ; GCN: $vgpr27 = DS_READ_B32_gfx9 $vgpr25
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr26 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr27 = DS_READ_B32_gfx9 $vgpr25, 0, 0, implicit $exec
+    S_CBRANCH_SCC0 %bb.1, implicit undef $scc
+
+  bb.2:
+    S_ENDPGM 0
+...
+
+---
+# Test 10: DPMACC (F64) mixed with 32-bit XDL fence.
+# F64 V_FMA is on the DPMACC pipe. The fence should clear the DPMACC pending
+# event (line 1116 in SIInsertWaitcnts.cpp) so counterOOO doesn't force wait(0).
+#
+# Score: v30=1, V_FMA_F64=2, WMMA=3 (promotes v30, clears DPMACC), V_ADD=4
+# UB=4, v30 score=3 → va_vdst(1).
+name: dpmacc_with_xdl_fence
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr40, $vgpr41, $vgpr42, $vgpr43, $vgpr44, $vgpr45, $vgpr28, $vgpr29
+
+    ; GCN-LABEL: name: dpmacc_with_xdl_fence
+    ; GCN: $vgpr30 = V_ADD_F32_e32
+    ; GCN-NEXT: $vgpr40_vgpr41 = nofpexcept V_FMA_F64_e64
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: $vgpr0 = V_ADD_F32_e32
+    ; GCN-NEXT: S_WAITCNT_DEPCTR .VaVdst_1
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    $vgpr30 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr40_vgpr41 = nofpexcept V_FMA_F64_e64 0, $vgpr42_vgpr43, 0, $vgpr44_vgpr45, 0, $vgpr40_vgpr41, 0, 0, implicit $mode, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr0 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Test 11: 32-bit SWMMAC fence in cross-BB diamond.
+# Both predecessors do V_MOV (writes v30), V_ADD, then SWMMAC_F32 fence.
+# Merge block does DS_WRITE using v30. After merge + fence, v30 is at UB
+# (promoted to fence score in both preds, fence is the last instruction)
+# → va_vdst(0). This is correct: the consumer is immediately after the fence
+# in both paths, so wait(0) is the tightest safe wait.
+name: swmmac_xdl_fence_cross_bb
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr4, $vgpr5, $vgpr24, $vgpr31, $vgpr32, $vgpr33, $vgpr34, $vgpr35, $vgpr36, $vgpr37, $vgpr38, $vgpr39, $vgpr40, $vgpr41, $vgpr42, $vgpr43, $vgpr44, $vgpr45, $vgpr46, $vgpr47, $vgpr48, $vgpr49, $vgpr50, $vgpr51, $vgpr52, $vgpr53, $vgpr54, $vgpr55, $vgpr56, $vgpr57, $vgpr58, $vgpr59, $vgpr60, $vgpr61, $vgpr62, $vgpr63, $vgpr28, $vgpr29
+    S_CBRANCH_SCC0 %bb.2, implicit undef $scc
+    S_BRANCH %bb.1
+
+  bb.1:
+    liveins: $vgpr4, $vgpr5, $vgpr24, $vgpr31, $vgpr32, $vgpr33, $vgpr34, $vgpr35, $vgpr36, $vgpr37, $vgpr38, $vgpr39, $vgpr40, $vgpr41, $vgpr42, $vgpr43, $vgpr44, $vgpr45, $vgpr46, $vgpr47, $vgpr48, $vgpr49, $vgpr50, $vgpr51, $vgpr52, $vgpr53, $vgpr54, $vgpr55, $vgpr56, $vgpr57, $vgpr58, $vgpr59, $vgpr60, $vgpr61, $vgpr62, $vgpr63, $vgpr28, $vgpr29
+
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr56_vgpr57_vgpr58_vgpr59_vgpr60_vgpr61_vgpr62_vgpr63 = V_SWMMAC_F32_16X16X128_FP8_FP8_w32_twoaddr killed $vgpr32_vgpr33_vgpr34_vgpr35_vgpr36_vgpr37_vgpr38_vgpr39, killed $vgpr40_vgpr41_vgpr42_vgpr43_vgpr44_vgpr45_vgpr46_vgpr47_vgpr48_vgpr49_vgpr50_vgpr51_vgpr52_vgpr53_vgpr54_vgpr55, killed $vgpr56_vgpr57_vgpr58_vgpr59_vgpr60_vgpr61_vgpr62_vgpr63, killed $vgpr4_vgpr5, 0, 0, 0, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.2:
+    liveins: $vgpr4, $vgpr5, $vgpr24, $vgpr31, $vgpr32, $vgpr33, $vgpr34, $vgpr35, $vgpr36, $vgpr37, $vgpr38, $vgpr39, $vgpr40, $vgpr41, $vgpr42, $vgpr43, $vgpr44, $vgpr45, $vgpr46, $vgpr47, $vgpr48, $vgpr49, $vgpr50, $vgpr51, $vgpr52, $vgpr53, $vgpr54, $vgpr55, $vgpr56, $vgpr57, $vgpr58, $vgpr59, $vgpr60, $vgpr61, $vgpr62, $vgpr63, $vgpr28, $vgpr29
+
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr25 = V_ADD_F32_e32 $vgpr28, $vgpr29, implicit $mode, implicit $exec
+    $vgpr56_vgpr57_vgpr58_vgpr59_vgpr60_vgpr61_vgpr62_vgpr63 = V_SWMMAC_F32_16X16X128_FP8_FP8_w32_twoaddr killed $vgpr32_vgpr33_vgpr34_vgpr35_vgpr36_vgpr37_vgpr38_vgpr39, killed $vgpr40_vgpr41_vgpr42_vgpr43_vgpr44_vgpr45_vgpr46_vgpr47_vgpr48_vgpr49_vgpr50_vgpr51_vgpr52_vgpr53_vgpr54_vgpr55, killed $vgpr56_vgpr57_vgpr58_vgpr59_vgpr60_vgpr61_vgpr62_vgpr63, killed $vgpr4_vgpr5, 0, 0, 0, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.3:
+    liveins: $vgpr24, $vgpr30
+
+    ; GCN-LABEL: name: swmmac_xdl_fence_cross_bb
+    ; GCN: bb.3:
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_0
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+# Test 12: XDL fence at UB (last VALU before consumer).
+# v30 = V_MOV (s=1); WMMA fence (s=2, promotes v30: 1→2); DS_WRITE.
+# v30's promoted score = 2 = UB → va_vdst(0). This is correct: the fence
+# itself hasn't completed when the DS_WRITE issues, so the consumer must
+# wait for the counter to reach 0 before reading v30. Score promotion does
+# NOT make the wait too aggressive here.
+name: fence_at_ub
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr31
+
+    ; GCN-LABEL: name: fence_at_ub
+    ; GCN: $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    ; GCN-NEXT: $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr
+    ; GCN: S_WAITCNT_DEPCTR .VaVdst_0
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...

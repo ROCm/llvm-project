@@ -27,8 +27,14 @@ static HWEvents getExpertSchedulingEventType(const MachineInstr &Inst,
     // out-of-order with respect to each other, so each of these classes
     // has its own event.
 
-    if (TII.isXDL(Inst))
+    if (TII.isXDL(Inst)) {
+      // XDL instructions whose VGPR accesses are ordered with respect to
+      // Core/Side-MACC VALU for the purposes of va_vdst get their own event.
+      if (AMDGPU::getWMMAIsVAVDSTOrderedXDL(Inst.getOpcode()))
+        return HWEvents::VGPR_XDL_ORDERED_READ |
+               HWEvents::VGPR_XDL_ORDERED_WRITE;
       return HWEvents::VGPR_XDL_READ | HWEvents::VGPR_XDL_WRITE;
+    }
 
     if (TII.isTRANS(Inst))
       return HWEvents::VGPR_TRANS_READ | HWEvents::VGPR_TRANS_WRITE;

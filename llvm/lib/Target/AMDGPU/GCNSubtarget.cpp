@@ -13,6 +13,7 @@
 
 #include "GCNSubtarget.h"
 #include "AMDGPUCallLowering.h"
+#include "AMDGPUCoExecInfo.h"
 #include "AMDGPUInstructionSelector.h"
 #include "AMDGPULegalizerInfo.h"
 #include "AMDGPURegisterBankInfo.h"
@@ -53,6 +54,13 @@ static cl::opt<unsigned>
     NSAThreshold("amdgpu-nsa-threshold",
                  cl::desc("Number of addresses from which to enable MIMG NSA."),
                  cl::init(2), cl::Hidden);
+
+static cl::opt<bool> EnableCoExecFriendlyISel(
+    "amdgpu-coexec-friendly-isel",
+    cl::desc("Avoid selecting multi-rate (repeat-rate-32) 64-bit VALU "
+             "instructions during SelectionDAG ISel (CoExec scheduler "
+             "friendly); equivalent to -mattr=+coexec-friendly-isel"),
+    cl::init(true), cl::Hidden);
 
 GCNSubtarget::~GCNSubtarget() = default;
 
@@ -127,6 +135,11 @@ GCNSubtarget &GCNSubtarget::initializeSubtargetDependencies(const Triple &TT,
   FullFS += FS;
 
   ParseSubtargetFeatures(GPU, /*TuneCPU*/ GPU, FullFS);
+
+  // Allow forcing CoExec-friendly ISel from the command line so it can be
+  // enabled without threading +coexec-friendly-isel through -mattr.
+  if (EnableCoExecFriendlyISel)
+    HasCoExecFriendlyISelMode = true;
 
   // Implement the "generic" processors, which acts as the default when no
   // generation features are enabled (e.g for -mcpu=''). HSA OS defaults to
@@ -404,6 +417,7 @@ void GCNSubtarget::overrideSchedPolicy(MachineSchedPolicy &Policy,
   if (AMDGPU::getSchedStrategy(F) == "coexec") {
     Policy.OnlyTopDown = true;
     Policy.OnlyBottomUp = false;
+    Policy.ShouldTrackLaneMasks = true;
     return;
   }
 
@@ -838,6 +852,39 @@ void GCNSubtarget::adjustSchedDependency(
   } else {
     Dep = SDep(Def, SDep::Artificial);
     return; // This is not a data dependency anymore.
+  }
+
+  // DS load/store latency is variable depending on LDS contention.
+  if (InstrInfo.isDS(*DefI) &&
+      InstrInfo.getDSLatencyMultiplier(*DefI->getMF()) != 1) {
+    // For LDS instructions, we have overrides to change default latencies.
+    unsigned Latency = InstrInfo.getInstrLatency(*DefI);
+    Dep.setLatency(Latency);
+    return;
+  }
+
+  // For GFX1250: VALU/WMMA writes VGPR that VMEM/DS reads has specific latency.
+  // Only increase the latency if the current edge has lower latency.
+  if (hasGFX1250Insts()) {
+    bool UseIsMemory =
+        InstrInfo.isDS(*UseI) || InstrInfo.isVMEM(*UseI) ||
+        InstrInfo.isFLAT(*UseI) || InstrInfo.isFLATGlobal(*UseI) ||
+        InstrInfo.isFLATScratch(*UseI) || InstrInfo.isLDSDMA(*UseI);
+    if (UseIsMemory) {
+      bool DefIsWMMA = InstrInfo.isMFMAorWMMA(*DefI);
+      bool DefIsVALU = InstrInfo.isVALU(*DefI) && !DefIsWMMA;
+
+      unsigned MinLatency = 0;
+      if (DefIsWMMA)
+        MinLatency = AMDGPU::VALUToMemLatency::WMMA;
+      else if (DefIsVALU)
+        MinLatency = AMDGPU::VALUToMemLatency::VALU;
+
+      if (MinLatency && Dep.getLatency() < MinLatency) {
+        Dep.setLatency(MinLatency);
+        return;
+      }
+    }
   }
 
   if (DefI->isBundle()) {

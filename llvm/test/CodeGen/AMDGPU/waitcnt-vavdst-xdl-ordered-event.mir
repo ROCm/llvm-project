@@ -1,0 +1,79 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -verify-machineinstrs -amdgpu-expert-scheduling-mode -run-pass si-insert-waitcnts %s -o - | FileCheck -check-prefix=GCN %s
+
+---
+name: xdl_wmma_vavdst_ordered_event
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr16, $vgpr17, $vgpr18, $vgpr19, $vgpr20, $vgpr21, $vgpr22, $vgpr23, $vgpr24, $vgpr31
+
+    ; 32-bit XDL fence promotes V_MOV score(1) to WMMA score(2), UB=2 → VaVdst_0
+    ; GCN-LABEL: name: xdl_wmma_vavdst_ordered_event
+    ; GCN: $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    ; GCN-NEXT: early-clobber $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr killed $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, killed $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, killed $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    ; GCN-NEXT: S_WAITCNT_DEPCTR .VaVdst_0
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr killed $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, killed $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, killed $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+name: xdl_swmmac_vavdst_ordered_event
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr4, $vgpr5, $vgpr24, $vgpr31, $vgpr32, $vgpr33, $vgpr34, $vgpr35, $vgpr36, $vgpr37, $vgpr38, $vgpr39, $vgpr40, $vgpr41, $vgpr42, $vgpr43, $vgpr44, $vgpr45, $vgpr46, $vgpr47, $vgpr48, $vgpr49, $vgpr50, $vgpr51, $vgpr52, $vgpr53, $vgpr54, $vgpr55, $vgpr56, $vgpr57, $vgpr58, $vgpr59, $vgpr60, $vgpr61, $vgpr62, $vgpr63
+
+    ; 32-bit XDL fence promotes V_MOV score(1) to SWMMAC score(2), UB=2 → VaVdst_0
+    ; GCN-LABEL: name: xdl_swmmac_vavdst_ordered_event
+    ; GCN: $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    ; GCN-NEXT: early-clobber $vgpr56_vgpr57_vgpr58_vgpr59_vgpr60_vgpr61_vgpr62_vgpr63 = V_SWMMAC_F32_16X16X128_FP8_FP8_w32_twoaddr killed $vgpr32_vgpr33_vgpr34_vgpr35_vgpr36_vgpr37_vgpr38_vgpr39, killed $vgpr40_vgpr41_vgpr42_vgpr43_vgpr44_vgpr45_vgpr46_vgpr47_vgpr48_vgpr49_vgpr50_vgpr51_vgpr52_vgpr53_vgpr54_vgpr55, killed $vgpr56_vgpr57_vgpr58_vgpr59_vgpr60_vgpr61_vgpr62_vgpr63, killed $vgpr4_vgpr5, 0, 0, 0, implicit $exec
+    ; GCN-NEXT: S_WAITCNT_DEPCTR .VaVdst_0
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr56_vgpr57_vgpr58_vgpr59_vgpr60_vgpr61_vgpr62_vgpr63 = V_SWMMAC_F32_16X16X128_FP8_FP8_w32_twoaddr killed $vgpr32_vgpr33_vgpr34_vgpr35_vgpr36_vgpr37_vgpr38_vgpr39, killed $vgpr40_vgpr41_vgpr42_vgpr43_vgpr44_vgpr45_vgpr46_vgpr47_vgpr48_vgpr49_vgpr50_vgpr51_vgpr52_vgpr53_vgpr54_vgpr55, killed $vgpr56_vgpr57_vgpr58_vgpr59_vgpr60_vgpr61_vgpr62_vgpr63, killed $vgpr4_vgpr5, 0, 0, 0, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+name: xdl_wmma_non_32bit_accumulator
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr12, $vgpr13, $vgpr14, $vgpr15, $vgpr22, $vgpr23, $vgpr24, $vgpr25, $vgpr26, $vgpr31
+
+    ; 16-bit accumulator XDL is unordered (not a fence), mixed with CSMACC →
+    ; counterOOO=true → VaVdst_0
+    ; GCN-LABEL: name: xdl_wmma_non_32bit_accumulator
+    ; GCN: $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    ; GCN-NEXT: early-clobber $vgpr22_vgpr23_vgpr24_vgpr25 = V_WMMA_F16_16X16X64_FP8_FP8_w32_twoaddr killed $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, killed $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, killed $vgpr22_vgpr23_vgpr24_vgpr25, 0, 0, 0, 0, implicit $exec
+    ; GCN-NEXT: S_WAITCNT_DEPCTR .VaVdst_0
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr26, $vgpr30, 0, 0, implicit $exec
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr22_vgpr23_vgpr24_vgpr25 = V_WMMA_F16_16X16X64_FP8_FP8_w32_twoaddr killed $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, killed $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, killed $vgpr22_vgpr23_vgpr24_vgpr25, 0, 0, 0, 0, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr26, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+---
+name: non_xdl_wmma_unchanged
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5, $vgpr6, $vgpr7, $vgpr8, $vgpr9, $vgpr10, $vgpr11, $vgpr24, $vgpr31
+
+    ; F32×F32 WMMA is not on the XDL pipe (excluded by IsAB_F32), only CSMACC
+    ; events pending → no OOO, UB(2)-score(1) = VaVdst_1
+    ; GCN-LABEL: name: non_xdl_wmma_unchanged
+    ; GCN: $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    ; GCN-NEXT: early-clobber $vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11 = V_WMMA_F32_16X16X4_F32_w32_twoaddr $vgpr0_vgpr1, $vgpr2_vgpr3, 8, killed $vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11, 0, -1, 0, 0, implicit $exec
+    ; GCN-NEXT: S_WAITCNT_DEPCTR .VaVdst_1
+    ; GCN-NEXT: DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    $vgpr30 = V_MOV_B32_e32 $vgpr31, implicit $exec
+    $vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11 = V_WMMA_F32_16X16X4_F32_w32_twoaddr $vgpr0_vgpr1, $vgpr2_vgpr3, 8, killed $vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11, 0, -1, 0, 0, implicit $exec
+    DS_WRITE_B32_gfx9 $vgpr24, $vgpr30, 0, 0, implicit $exec
+    S_ENDPGM 0
+...

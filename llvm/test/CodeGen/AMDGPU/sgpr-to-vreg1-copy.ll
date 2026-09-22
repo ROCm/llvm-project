@@ -14,12 +14,12 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
 ; GCN-NEXT:    s_cmp_lt_u32 s4, 2
 ; GCN-NEXT:    s_cselect_b64 s[0:1], -1, 0
 ; GCN-NEXT:    s_and_b64 s[2:3], s[0:1], exec
-; GCN-NEXT:    s_cselect_b32 s2, 1, 0
-; GCN-NEXT:    s_cselect_b32 s3, s5, 1
+; GCN-NEXT:    s_cselect_b32 s2, s5, 1
+; GCN-NEXT:    s_cselect_b32 s3, 1, 0
 ; GCN-NEXT:    s_cmp_lg_u64 s[0:1], 0
 ; GCN-NEXT:    s_addc_u32 s0, 1, 0
-; GCN-NEXT:    s_cmp_ge_u32 s3, s4
-; GCN-NEXT:    s_cselect_b32 s4, s0, s2
+; GCN-NEXT:    s_cmp_ge_u32 s2, s4
+; GCN-NEXT:    s_cselect_b32 s4, s0, s3
 ; GCN-NEXT:    s_mov_b64 s[0:1], 0
 ; GCN-NEXT:    s_mov_b64 s[2:3], 0
 ; GCN-NEXT:    s_branch .LBB0_3

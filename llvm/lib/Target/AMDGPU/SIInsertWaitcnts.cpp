@@ -60,6 +60,13 @@ static cl::opt<bool> ExpertSchedulingModeFlag(
     cl::desc("Enable expert scheduling mode 2 for all functions (GFX12+ only)"),
     cl::init(false), cl::Hidden);
 
+static cl::opt<bool> EnableVaVdstWarHazard(
+    "amdgpu-va-vdst-war-hazard",
+    cl::desc("Insert va_vdst waits for VALU write-after-read (WAR) hazards in "
+             "expert scheduling mode (gfx12+). Disable to debug the perf "
+             "impact of WAR-hazard handling."),
+    cl::init(true), cl::Hidden);
+
 namespace {
 
 template <typename EmitWaitcntFn>
@@ -112,7 +119,7 @@ namespace {
 
 // Maps values of InstCounterType to the instruction that waits on that
 // counter. Only used if GCNSubtarget::hasExtendedWaitCounts()
-// returns true, and does not cover VA_VDST or VM_VSRC.
+// returns true, and does not cover VA_VDST_RD, VA_VDST_WR or VM_VSRC.
 static const unsigned
     instrsForExtendedCounterTypes[AMDGPU::NUM_EXTENDED_INST_CNTS] = {
         AMDGPU::S_WAIT_LOADCNT,   AMDGPU::S_WAIT_DSCNT,
@@ -309,9 +316,11 @@ protected:
           HWEvents::ASYNC_ACCESS,
           HWEvents::TENSOR_ACCESS,
           HWEvents::VGPR_CSMACC_READ | HWEvents::VGPR_DPMACC_READ |
-              HWEvents::VGPR_TRANS_READ | HWEvents::VGPR_XDL_READ,
+              HWEvents::VGPR_TRANS_READ | HWEvents::VGPR_XDL_READ |
+              HWEvents::VGPR_XDL_ORDERED_READ,
           HWEvents::VGPR_CSMACC_WRITE | HWEvents::VGPR_DPMACC_WRITE |
-              HWEvents::VGPR_TRANS_WRITE | HWEvents::VGPR_XDL_WRITE,
+              HWEvents::VGPR_TRANS_WRITE | HWEvents::VGPR_XDL_WRITE |
+              HWEvents::VGPR_XDL_ORDERED_WRITE,
           HWEvents::VGPR_LDS_READ | HWEvents::VGPR_FLAT_READ |
               HWEvents::VGPR_VMEM_READ};
 
@@ -447,6 +456,8 @@ public:
                        MachineBasicBlock::instr_iterator It,
                        MachineBasicBlock &Block, WaitcntBrackets &ScoreBrackets,
                        MachineInstr *OldWaitcntInstr);
+  /// \returns all events that correspond to \p Inst.
+  HWEvents getEventsFor(const MachineInstr &Inst) const;
   void updateEventWaitcntAfter(MachineInstr &Inst,
                                WaitcntBrackets *ScoreBrackets);
   bool isNextENDPGM(MachineBasicBlock::instr_iterator It,
@@ -656,9 +667,11 @@ public:
   }
 
   void setStateOnFunctionEntryOrReturn() {
-    setScoreUB(AMDGPU::STORE_CNT,
-               getScoreUB(AMDGPU::STORE_CNT) + getLimit(AMDGPU::STORE_CNT));
-    PendingEvents |= Context->getWaitEvents(AMDGPU::STORE_CNT);
+    if (Context->ST.hasVscnt()) {
+      setScoreUB(AMDGPU::STORE_CNT,
+                 getScoreUB(AMDGPU::STORE_CNT) + getLimit(AMDGPU::STORE_CNT));
+      PendingEvents |= Context->getWaitEvents(AMDGPU::STORE_CNT);
+    }
   }
 
   ArrayRef<const MachineInstr *> getLDSDMAStores() const {
@@ -754,7 +767,12 @@ private:
   unsigned LastFlatLoadCnt = 0;
   // Remember the last GDS operation.
   unsigned LastGDS = 0;
-
+  // VA_VDST score of the most recent XDL with 32-bit accumulators. Used to
+  // prevent re-promoting register scores that were already collapsed by a
+  // prior XDL fence. Tracked separately for the write (RAW/WAW) and read (WAR)
+  // sub-counters, since each is promoted against its own score sequence.
+  unsigned LastXDLOrderedVAVDSTScore = 0;
+  unsigned LastXDLOrderedVAVDSTScoreRD = 0;
   // The score tracking logic is fragmented as follows:
   // - VMem: VGPR RegUnits and LDS DMA IDs, see the VMEMID encoding.
   // - SGPRs: SGPR RegUnits
@@ -912,6 +930,43 @@ void WaitcntBrackets::updateByEvent(HWEvents E, MachineInstr &Inst) {
   PendingEvents |= E;
   setScoreUB(T, CurrScore);
 
+  // A 32-bit accumulator XDL (WMMA/SWMMAC) acts as a fence: all prior VALU
+  // results across all pipes are guaranteed written back before it completes.
+  // Promote pending VA_VDST register scores to the XDL's score so the normal
+  // UB - ScoreToWait computation produces a relaxed (non-zero) wait instead
+  // of the conservative wait(0). Only promote scores that haven't already
+  // been collapsed by a prior XDL fence to avoid repeatedly pulling scores
+  // up to UB (which would yield wait 0). Also clear prior out-of-order event
+  // types since they are subsumed by the fence's completion guarantee.
+  if (E == HWEvents::VGPR_XDL_ORDERED_WRITE) {
+    for (auto &[ID, Info] : VMem) {
+      unsigned &Score = Info.Scores[AMDGPU::VA_VDST_WR];
+      if (Score > LastXDLOrderedVAVDSTScore && Score < CurrScore)
+        Score = CurrScore;
+    }
+    LastXDLOrderedVAVDSTScore = CurrScore;
+    PendingEvents -= HWEvents::VGPR_TRANS_WRITE;
+    PendingEvents -= HWEvents::VGPR_DPMACC_WRITE;
+    PendingEvents -= HWEvents::VGPR_XDL_WRITE;
+
+    // The ordered XDL consumes (reads) its VGPR sources by the time it
+    // completes, so its completion also fences prior VALU reads. Mirror the
+    // promotion on the WAR (read) sub-counter so a subsequent overwrite gets a
+    // relaxed wait instead of a full drain. The ordered XDL's own read was
+    // scored via VGPR_XDL_ORDERED_READ (processed before this write event), so
+    // VA_VDST_RD's current upper bound is the fence's read score.
+    unsigned CurrScoreRD = getScoreUB(AMDGPU::VA_VDST_RD);
+    for (auto &[ID, Info] : VMem) {
+      unsigned &Score = Info.Scores[AMDGPU::VA_VDST_RD];
+      if (Score > LastXDLOrderedVAVDSTScoreRD && Score < CurrScoreRD)
+        Score = CurrScoreRD;
+    }
+    LastXDLOrderedVAVDSTScoreRD = CurrScoreRD;
+    PendingEvents -= HWEvents::VGPR_TRANS_READ;
+    PendingEvents -= HWEvents::VGPR_DPMACC_READ;
+    PendingEvents -= HWEvents::VGPR_XDL_READ;
+  }
+
   const SIRegisterInfo &TRI = Context->TRI;
   const MachineRegisterInfo &MRI = Context->MRI;
   const SIInstrInfo &TII = Context->TII;
@@ -1002,8 +1057,10 @@ void WaitcntBrackets::updateByEvent(HWEvents E, MachineInstr &Inst) {
       setScoreByOperand(Op, T, CurrScore);
   } else if (T == AMDGPU::VA_VDST_RD || T == AMDGPU::VA_VDST_WR ||
              T == AMDGPU::VM_VSRC) {
-    // Match the score to the VGPR destination or source registers as
-    // appropriate
+    // Match the score to VGPR registers based on counter type:
+    // VA_VDST_RD: Track VGPR defs (writes) - wait before reads
+    // VA_VDST_WR: Track VGPR uses (reads) - wait before writes
+    // VM_VSRC: Track VGPR uses (reads) - wait before reads
     for (const MachineOperand &Op : Inst.operands()) {
       if (!Op.isReg())
         continue;
@@ -1607,6 +1664,39 @@ bool WaitcntBrackets::counterOutOfOrder(AMDGPU::InstCounterType T) const {
     return Events.size() > 1;
   }
 
+  // 32-bit accumulator XDL (VGPR_XDL_ORDERED_WRITE) acts as a fence: its
+  // completion guarantees all prior VALU results are written back. It never
+  // contributes to out-of-order completion on the VA_VDST counter. Remove it
+  // from the event set, but if no other event type remains, substitute CSMACC
+  // so that any pending TRANS/DPMACC events are still detected as OOO.
+  // TODO: Per-pipe tracking would allow computing tighter va_vdst values when
+  // mixed pipe types are pending (e.g. CSMACC write + TRANS without XDL
+  // currently forces wait(0) but only TRANS instructions can jump ahead).
+  if (T == AMDGPU::VA_VDST_WR) {
+    HWEvents Events = PendingEvents & Context->getWaitEvents(T);
+    if (Events.contains(HWEvents::VGPR_XDL_ORDERED_WRITE)) {
+      Events -= HWEvents::VGPR_XDL_ORDERED_WRITE;
+      if (!Events.contains(HWEvents::VGPR_CSMACC_WRITE) &&
+          !Events.contains(HWEvents::VGPR_XDL_WRITE))
+        Events |= HWEvents::VGPR_CSMACC_WRITE;
+    }
+    return Events.size() >= 2;
+  }
+
+  // Symmetric handling for the WAR (read) sub-counter: the ordered XDL's read
+  // (VGPR_XDL_ORDERED_READ) is fenced by its completion and does not itself
+  // contribute to out-of-order read completion.
+  if (T == AMDGPU::VA_VDST_RD) {
+    HWEvents Events = PendingEvents & Context->getWaitEvents(T);
+    if (Events.contains(HWEvents::VGPR_XDL_ORDERED_READ)) {
+      Events -= HWEvents::VGPR_XDL_ORDERED_READ;
+      if (!Events.contains(HWEvents::VGPR_CSMACC_READ) &&
+          !Events.contains(HWEvents::VGPR_XDL_READ))
+        Events |= HWEvents::VGPR_CSMACC_READ;
+    }
+    return Events.size() >= 2;
+  }
+
   return hasMixedPendingEvents(T);
 }
 
@@ -1897,7 +1987,8 @@ WaitcntGeneratorGFX12Plus::getAllZeroWaitcnt(bool IncludeVSCnt) const {
   unsigned ExpertVal = IsExpertMode ? 0 : ~0u;
   return AMDGPU::Waitcnt(0, 0, 0, IncludeVSCnt ? 0 : ~0u, 0, 0, 0,
                          ~0u /* XCNT */, ~0u /* ASYNC_CNT */,
-                         ~0u /* TENSOR_CNT */, ExpertVal, ExpertVal, ExpertVal);
+                         ~0u /* TENSOR_CNT */, ExpertVal /* VA_VDST_RD */,
+                         ExpertVal /* VA_VDST_WR */, ExpertVal /* VM_VSRC */);
 }
 
 /// Combine consecutive S_WAIT_*CNT instructions that precede \p It and
@@ -1991,8 +2082,8 @@ bool WaitcntGeneratorGFX12Plus::applyPreexistingWaitcnt(
         WaitcntDepctrInstr = &II;
       } else {
         // S_WAITCNT_DEPCTR requires special care. Don't remove a
-        // duplicate if it is waiting on things other than VA_VDST or
-        // VM_VSRC. If that is the case, just make sure the VA_VDST and
+        // duplicate if it is waiting on things other than VA_VDST_RD/WR or
+        // VM_VSRC. If that is the case, just make sure the VA_VDST_RD/WR and
         // VM_VSRC subfields of the operand are set to the "no wait"
         // values.
 
@@ -2167,8 +2258,8 @@ bool WaitcntGeneratorGFX12Plus::applyPreexistingWaitcnt(
   }
 
   if (WaitcntDepctrInstr) {
-    // Get the encoded Depctr immediate and override the VA_VDST and VM_VSRC
-    // subfields with the new required values.
+    // Get the encoded Depctr immediate and override the VA_VDST_RD/WR and
+    // VM_VSRC subfields with the new required values.
     unsigned Enc =
         TII.getNamedOperand(*WaitcntDepctrInstr, AMDGPU::OpName::simm16)
             ->getImm();
@@ -2328,9 +2419,10 @@ bool WaitcntGeneratorGFX12Plus::createNewWaitcnt(
 ///  If FlushFlags.FlushVmCnt is true, we want to flush the vmcnt counter here.
 ///  If FlushFlags.FlushDsCnt is true, we want to flush the dscnt counter here
 ///  (GFX12+ only, where DS_CNT is a separate counter).
-bool SIInsertWaitcnts::generateWaitcntInstBefore(
-    MachineInstr &MI, WaitcntBrackets &ScoreBrackets,
-    MachineInstr *OldWaitcntInstr, PreheaderFlushFlags FlushFlags) {
+bool SIInsertWaitcnts::generateWaitcntInstBefore(MachineInstr &MI,
+                                                 WaitcntBrackets &ScoreBrackets,
+                                                 MachineInstr *OldWaitcntInstr,
+                                                 PreheaderFlushFlags FlushFlags) {
   LLVM_DEBUG(dbgs() << "\n*** GenerateWaitcntInstBefore: "; MI.print(dbgs()););
 
   assert(!isNonWaitcntMetaInst(MI));
@@ -2514,12 +2606,15 @@ bool SIInsertWaitcnts::generateWaitcntInstBefore(
           ScoreBrackets.determineWaitForPhysReg(AMDGPU::VA_VDST_WR, Reg, Wait,
                                                 MI);
           if (Op.isDef()) {
-            ScoreBrackets.determineWaitForPhysReg(AMDGPU::VA_VDST_RD, Reg, Wait,
-                                                  MI);
+            // VA_VDST_RD enforces write-after-read (WAR) ordering. Gated so the
+            // perf impact can be toggled off for debugging; disabling it
+            // restores pre-WAR-hazard-fix waitcnt behavior.
+            if (EnableVaVdstWarHazard)
+              ScoreBrackets.determineWaitForPhysReg(AMDGPU::VA_VDST_RD, Reg,
+                                                    Wait, MI);
             ScoreBrackets.determineWaitForPhysReg(AMDGPU::VM_VSRC, Reg, Wait,
                                                   MI);
           }
-
           // RAW always needs an s_waitcnt. WAW needs an s_waitcnt unless the
           // previous write and this write are the same type of VMEM
           // instruction, in which case they are (in some architectures)
@@ -2589,7 +2684,7 @@ bool SIInsertWaitcnts::generateWaitcntInstBefore(
   ScoreBrackets.simplifyWaitcnt(Wait);
 
   // It is only necessary to insert an S_WAITCNT_DEPCTR instruction that
-  // waits on VA_VDST if the instruction it would precede is not a VALU
+  // waits on VA_VDST_RD/WR if the instruction it would precede is not a VALU
   // instruction, since hardware handles VALU->VGPR->VALU hazards in
   // expert scheduling mode.
   if (TII.isVALU(MI, /*AllowLDSDMA=*/false)) {
@@ -2639,6 +2734,20 @@ bool SIInsertWaitcnts::generateWaitcnt(AMDGPU::Waitcnt Wait,
                                        WaitcntBrackets &ScoreBrackets,
                                        MachineInstr *OldWaitcntInstr) {
   bool Modified = false;
+
+  // VA_VDST_RD and VA_VDST_WR are two virtual counters that share a single
+  // hardware va_vdst field: they are encoded as their minimum, and a hardware
+  // va_vdst(N) wait drains outstanding reads and writes together. Collapse both
+  // to that shared minimum before the wait is emitted and applied to the score
+  // brackets, so a wait requested for one sub-counter also clears the other.
+  // Otherwise a wait emitted for e.g. VA_VDST_WR leaves the VA_VDST_RD bracket
+  // stale and a later access re-emits a redundant va_vdst wait. Claiming both
+  // sub-counters reached the minimum is conservatively correct, since after
+  // va_vdst(N) each subset of events is also <= N.
+  unsigned VaVdst =
+      std::min(Wait.get(AMDGPU::VA_VDST_RD), Wait.get(AMDGPU::VA_VDST_WR));
+  Wait.set(AMDGPU::VA_VDST_RD, VaVdst);
+  Wait.set(AMDGPU::VA_VDST_WR, VaVdst);
 
   if (OldWaitcntInstr)
     // Try to merge the required wait with preexisting waitcnt instructions.
@@ -2904,6 +3013,14 @@ bool WaitcntBrackets::merge(const WaitcntBrackets &Other) {
 
     if (T == AMDGPU::LOAD_CNT)
       StrictDom |= mergeScore(M, LastFlatLoadCnt, Other.LastFlatLoadCnt);
+
+    if (T == AMDGPU::VA_VDST_WR)
+      StrictDom |= mergeScore(M, LastXDLOrderedVAVDSTScore,
+                              Other.LastXDLOrderedVAVDSTScore);
+
+    if (T == AMDGPU::VA_VDST_RD)
+      StrictDom |= mergeScore(M, LastXDLOrderedVAVDSTScoreRD,
+                              Other.LastXDLOrderedVAVDSTScoreRD);
 
     if (T == AMDGPU::DS_CNT) {
       StrictDom |= mergeScore(M, LastFlatDsCnt, Other.LastFlatDsCnt);

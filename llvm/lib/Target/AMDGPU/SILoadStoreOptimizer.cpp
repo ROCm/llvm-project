@@ -232,6 +232,11 @@ private:
 
   CombineInfo *checkAndPrepareMerge(CombineInfo &CI, CombineInfo &Paired);
 
+  void collectMFMAOrWMMAUsers(
+      const MachineInstr &MI,
+      SmallPtrSetImpl<const MachineInstr *> &MFMAUsers) const;
+  bool combineBlocksWMMALatencyHiding(CombineInfo &CI, CombineInfo &Paired);
+
   void copyToDestRegs(CombineInfo &CI, CombineInfo &Paired,
                       MachineBasicBlock::iterator InsertBefore,
                       const DebugLoc &DL, AMDGPU::OpName OpName,
@@ -1270,6 +1275,106 @@ SILoadStoreOptimizer::getDataRegClass(const MachineInstr &MI) const {
   return nullptr;
 }
 
+/// Collect all MFMA/WMMA instructions that transitively use a DS_READ result.
+/// This follows the def-use chain through COPY, REG_SEQUENCE, EXTRACT_SUBREG,
+/// INSERT_SUBREG, and PHI instructions to find transitive users.
+void SILoadStoreOptimizer::collectMFMAOrWMMAUsers(
+    const MachineInstr &MI,
+    SmallPtrSetImpl<const MachineInstr *> &MFMAUsers) const {
+  const MachineOperand *Dst = TII->getNamedOperand(MI, AMDGPU::OpName::vdst);
+  if (!Dst || !Dst->isReg())
+    return;
+
+  SmallVector<Register, 16> Worklist;
+  SmallPtrSet<const MachineInstr *, 32> Visited;
+  Worklist.push_back(Dst->getReg());
+
+  while (!Worklist.empty()) {
+    Register Reg = Worklist.pop_back_val();
+
+    for (const MachineInstr &UseMI : MRI->use_nodbg_instructions(Reg)) {
+      if (!Visited.insert(&UseMI).second)
+        continue;
+
+      if (SIInstrInfo::isMFMAorWMMA(UseMI) &&
+          UseMI.getParent() == MI.getParent()) {
+        MFMAUsers.insert(&UseMI);
+        continue;
+      }
+
+      unsigned Opc = UseMI.getOpcode();
+      if (Opc == AMDGPU::COPY || Opc == AMDGPU::REG_SEQUENCE ||
+          Opc == AMDGPU::EXTRACT_SUBREG || Opc == AMDGPU::INSERT_SUBREG ||
+          Opc == AMDGPU::PHI) {
+        // Follow through to the destination of these instructions
+        const MachineOperand &DefOp = UseMI.getOperand(0);
+        if (DefOp.isReg() && DefOp.isDef())
+          Worklist.push_back(DefOp.getReg());
+      }
+    }
+  }
+}
+
+/// Check if combining two DS_READ instructions would block WMMA/MFMA latency
+/// hiding in a single-block loop. This occurs when:
+/// 1. Both loads feed into MFMA/WMMA instructions
+/// 2. The loads are in a single-block loop (MBB has itself as a successor)
+/// 3. ALL MFMA/WMMA instructions in the block depend on DS_READs with the
+///    same base address (meaning combining would make all ops wait on one load)
+///
+/// In such cases, keeping the loads separate allows interleaving loads with
+/// MFMA/WMMA instructions to hide latency across loop iterations.
+bool SILoadStoreOptimizer::combineBlocksWMMALatencyHiding(CombineInfo &CI,
+                                                          CombineInfo &Paired) {
+  // Only applies to DS_READ instructions
+  if (CI.InstClass != DS_READ)
+    return false;
+
+  // Only care about single-block loops (self-loops) where all loads and WMMA
+  // ops are in the same block. In this case, keeping loads separate allows
+  // interleaving with WMMA ops from the previous iteration.
+  MachineBasicBlock *MBB = CI.I->getParent();
+  bool IsSingleBlockLoop = false;
+  for (MachineBasicBlock *Succ : MBB->successors()) {
+    if (Succ == MBB) {
+      IsSingleBlockLoop = true;
+      break;
+    }
+  }
+  if (!IsSingleBlockLoop)
+    return false;
+
+  SmallPtrSet<const MachineInstr *, 32> TheseUsers;
+  collectMFMAOrWMMAUsers(*CI.I, TheseUsers);
+  if (!TheseUsers.size())
+    return false;
+
+  SmallPtrSet<const MachineInstr *, 32> OtherUsers;
+  collectMFMAOrWMMAUsers(*Paired.I, OtherUsers);
+  if (!OtherUsers.size())
+    return false;
+
+  // Collect all MFMA/WMMA instructions in the block
+  SmallPtrSet<const MachineInstr *, 32> AllMFMAInBlock;
+  for (MachineInstr &MI : *MBB) {
+    if (SIInstrInfo::isMFMAorWMMA(MI))
+      AllMFMAInBlock.insert(&MI);
+  }
+
+  if (AllMFMAInBlock.empty())
+    return false;
+
+  SmallPtrSet<const MachineInstr *, 32> CombinedUsers;
+
+  for (auto MI : TheseUsers)
+    CombinedUsers.insert(MI);
+
+  for (auto MI : OtherUsers)
+    CombinedUsers.insert(MI);
+
+  return CombinedUsers.size() == AllMFMAInBlock.size();
+}
+
 /// This function assumes that CI comes before Paired in a basic block. Return
 /// an insertion point for the merged instruction or nullptr on failure.
 SILoadStoreOptimizer::CombineInfo *
@@ -1283,6 +1388,10 @@ SILoadStoreOptimizer::checkAndPrepareMerge(CombineInfo &CI,
 
   if (getInstSubclass(CI.I->getOpcode(), *TII) !=
       getInstSubclass(Paired.I->getOpcode(), *TII))
+    return nullptr;
+
+  // Check if combining would block WMMA/MFMA latency hiding in loops
+  if (combineBlocksWMMALatencyHiding(CI, Paired))
     return nullptr;
 
   // Check both offsets (or masks for MIMG) can be combined and fit in the

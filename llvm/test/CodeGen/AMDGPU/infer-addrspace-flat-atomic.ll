@@ -126,6 +126,8 @@ define protected amdgpu_kernel void @InferPHI(i32 %a, ptr addrspace(1) %b, doubl
 ; CHECK-NEXT:  ; %bb.2: ; %bb1
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_shared_base
 ; CHECK-NEXT:    s_cmp_eq_u32 s1, s5
+; CHECK-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_cselect_b32 s4, 1, 0
 ; CHECK-NEXT:    s_cmp_lg_u32 s4, 1
 ; CHECK-NEXT:    s_mov_b64 s[4:5], -1
@@ -133,6 +135,8 @@ define protected amdgpu_kernel void @InferPHI(i32 %a, ptr addrspace(1) %b, doubl
 ; CHECK-NEXT:  ; %bb.3: ; %atomicrmw.check.private
 ; CHECK-NEXT:    s_mov_b64 s[4:5], src_private_base
 ; CHECK-NEXT:    s_cmp_eq_u32 s1, s5
+; CHECK-NEXT:    s_cselect_b64 s[4:5], -1, 0
+; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_cselect_b32 s4, 1, 0
 ; CHECK-NEXT:    s_cmp_lg_u32 s4, 1
 ; CHECK-NEXT:    s_mov_b64 s[4:5], -1

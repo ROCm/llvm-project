@@ -51,10 +51,10 @@ define amdgpu_kernel void @cos_bf16_constant_4_strictfp(ptr addrspace(1) %out) #
 ; FAKE16-NEXT:    v_nop
 ; FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
 ; FAKE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
-; FAKE16-NEXT:    v_cos_bf16_e32 v0, 0x3f23
-; FAKE16-NEXT:    v_mov_b32_e32 v1, 0
+; FAKE16-NEXT:    v_mov_b32_e32 v0, 0
+; FAKE16-NEXT:    v_cos_bf16_e32 v1, 0x3f23
 ; FAKE16-NEXT:    s_wait_kmcnt 0x0
-; FAKE16-NEXT:    global_store_b16 v1, v0, s[0:1]
+; FAKE16-NEXT:    global_store_b16 v0, v1, s[0:1]
 ; FAKE16-NEXT:    s_endpgm
 ;
 ; REAL16-LABEL: cos_bf16_constant_4_strictfp:
@@ -64,8 +64,8 @@ define amdgpu_kernel void @cos_bf16_constant_4_strictfp(ptr addrspace(1) %out) #
 ; REAL16-NEXT:    v_nop
 ; REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
 ; REAL16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
-; REAL16-NEXT:    v_cos_bf16_e32 v0.l, 0x3f23
 ; REAL16-NEXT:    v_mov_b32_e32 v1, 0
+; REAL16-NEXT:    v_cos_bf16_e32 v0.l, 0x3f23
 ; REAL16-NEXT:    s_wait_kmcnt 0x0
 ; REAL16-NEXT:    global_store_b16 v1, v0, s[0:1]
 ; REAL16-NEXT:    s_endpgm
@@ -82,10 +82,10 @@ define amdgpu_kernel void @cos_bf16_constant_100_strictfp(ptr addrspace(1) %out)
 ; FAKE16-NEXT:    v_nop
 ; FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
 ; FAKE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
-; FAKE16-NEXT:    v_cos_bf16_e32 v0, 0x417f
-; FAKE16-NEXT:    v_mov_b32_e32 v1, 0
+; FAKE16-NEXT:    v_mov_b32_e32 v0, 0
+; FAKE16-NEXT:    v_cos_bf16_e32 v1, 0x417f
 ; FAKE16-NEXT:    s_wait_kmcnt 0x0
-; FAKE16-NEXT:    global_store_b16 v1, v0, s[0:1]
+; FAKE16-NEXT:    global_store_b16 v0, v1, s[0:1]
 ; FAKE16-NEXT:    s_endpgm
 ;
 ; REAL16-LABEL: cos_bf16_constant_100_strictfp:
@@ -95,8 +95,8 @@ define amdgpu_kernel void @cos_bf16_constant_100_strictfp(ptr addrspace(1) %out)
 ; REAL16-NEXT:    v_nop
 ; REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
 ; REAL16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
-; REAL16-NEXT:    v_cos_bf16_e32 v0.l, 0x417f
 ; REAL16-NEXT:    v_mov_b32_e32 v1, 0
+; REAL16-NEXT:    v_cos_bf16_e32 v0.l, 0x417f
 ; REAL16-NEXT:    s_wait_kmcnt 0x0
 ; REAL16-NEXT:    global_store_b16 v1, v0, s[0:1]
 ; REAL16-NEXT:    s_endpgm

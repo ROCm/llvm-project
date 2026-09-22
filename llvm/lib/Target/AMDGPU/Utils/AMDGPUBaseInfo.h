@@ -132,6 +132,7 @@ struct True16D16Info {
 struct WMMAInstInfo {
   uint32_t Opcode;
   bool is_wmma_xdl;
+  bool is_vavdst_ordered_xdl;
   bool HasMatrixScale;
 };
 
@@ -544,6 +545,9 @@ bool getMAIIsGFX940XDL(unsigned Opc);
 
 LLVM_READONLY
 bool getWMMAIsXDL(unsigned Opc);
+
+LLVM_READONLY
+bool getWMMAIsVAVDSTOrderedXDL(unsigned Opc);
 
 LLVM_READONLY
 bool getHasMatrixScale(unsigned Opc);

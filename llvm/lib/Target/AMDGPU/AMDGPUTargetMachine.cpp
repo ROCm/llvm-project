@@ -143,6 +143,12 @@
 using namespace llvm;
 using namespace llvm::PatternMatch;
 
+static cl::opt<bool> StaticSimIsSchedPerf(
+    "amdgpu-static-sim-measure-sched",
+    cl::desc("Whether or not to run StaticSim immediately after scheduling, to get a more direct measurement of scheduling"),
+    cl::Hidden, cl::init(false));
+
+
 namespace {
 //===----------------------------------------------------------------------===//
 // AMDGPU CodeGen Pass Builder interface.
@@ -633,11 +639,13 @@ diagnoseUnsupportedCoExecSchedulerSelection(const Function &F,
       DiagnosticLocation(), DS_Warning));
 }
 
+
 static bool useNoopPostScheduler(const Function &F) {
   Attribute PostSchedStrategyAttr =
       F.getFnAttribute("amdgpu-post-sched-strategy");
-  return PostSchedStrategyAttr.isValid() &&
-         PostSchedStrategyAttr.getValueAsString() == "nop";
+  if (PostSchedStrategyAttr.isValid())
+    return PostSchedStrategyAttr.getValueAsString() == "nop";
+  return AMDGPU::getSchedStrategy(F) == "coexec";
 }
 
 static cl::opt<bool> EnableRewritePartialRegUses(
@@ -735,6 +743,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPULowerVGPREncodingLegacyPass(*PR);
   initializeSIInsertHardClausesLegacyPass(*PR);
   initializeSIInsertWaitcntsLegacyPass(*PR);
+  initializeAMDGPUStaticSimulatorLegacyPass(*PR);
   initializeSIModeRegisterLegacyPass(*PR);
   initializeSIWholeQuadModeLegacyPass(*PR);
   initializeSILowerControlFlowLegacyPass(*PR);
@@ -1862,6 +1871,9 @@ void GCNPassConfig::addOptimizedRegAlloc() {
   if (EnableRewritePartialRegUses)
     insertPass(&RenameIndependentSubregsID, &GCNRewritePartialRegUsesID);
 
+  if (StaticSimIsSchedPerf)
+    insertPass(&MachineSchedulerID, &AMDGPUStaticSimulatorLegacyID);
+
   if (isPassEnabled(EnablePreRAOptimizations))
     insertPass(&MachineSchedulerID, &GCNPreRAOptimizationsID);
 
@@ -1876,6 +1888,7 @@ void GCNPassConfig::addOptimizedRegAlloc() {
   // compilation time, so we only enable it from O2.
   if (TM->getOptLevel() > CodeGenOptLevel::Less)
     insertPass(&MachineSchedulerID, &SIFormMemoryClausesID);
+
 
   TargetPassConfig::addOptimizedRegAlloc();
 }
@@ -2056,6 +2069,11 @@ void GCNPassConfig::addPreEmitPass() {
     addPass(&AMDGPUInsertDelayAluID);
 
   addPass(&BranchRelaxationPassID);
+
+  // Static simulator runs last to analyze the final machine code
+  if (!StaticSimIsSchedPerf)
+    addPass(createAMDGPUStaticSimulatorPass());
+
 }
 
 void GCNPassConfig::addPostBBSections() {
@@ -2764,6 +2782,9 @@ void AMDGPUCodeGenPassBuilder::addPreEmitPass(PassManagerWrapper &PMW) {
   }
 
   addMachineFunctionPass(BranchRelaxationPass(), PMW);
+
+  // Static simulator runs last to analyze the final machine code
+  addMachineFunctionPass(AMDGPUStaticSimulatorPass(), PMW);
 }
 
 bool AMDGPUCodeGenPassBuilder::isPassEnabled(const cl::opt<bool> &Opt,

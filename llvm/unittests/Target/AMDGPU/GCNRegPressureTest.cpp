@@ -9,6 +9,7 @@
 #include "GCNRegPressure.h"
 #include "AMDGPUUnitTests.h"
 #include "GCNSubtarget.h"
+#include "LIRP.h"
 #include "SIRegisterInfo.h"
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MIRParser/MIRParser.h"
@@ -245,4 +246,339 @@ body:             |
   // pressure must be unchanged.
   GCNRegPressure P = RPTracker.bumpDownwardPressure(UseRedef, TRI);
   EXPECT_EQ(P.getSGPRNum(), 1U);
+}
+
+class LIRPAllocTableTest : public llvm::CodeGenTestBase {
+public:
+  void SetUp() override { setUpImpl("amdgcn--", "gfx1250", ""); }
+
+  MachineFunction &getEmptyMF(StringRef Name) {
+    std::string MIR =
+        ("name: " + Name +
+         "\ntracksRegLiveness: true\n"
+         "body: |\n  bb.0:\n    S_ENDPGM 0\n...\n")
+            .str();
+    EXPECT_TRUE(parseMIR(MIR));
+    return getMF(Name);
+  }
+};
+
+// LIRP: reg pressure computation.
+TEST_F(LIRPAllocTableTest, MaxSlotPressure) {
+  MachineFunction &MF = getEmptyMF("maxslot");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  auto V = [&] { return MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass); };
+  Register A = V(), B = V(), C = V(), D = V(), E = V();
+
+  LIRPAllocTable T(MRI);
+  // Schedule (defs and last uses), in order:
+  T.open(A, 1);   // A def
+  T.open(B, 1);   // B def
+  T.close(A, 1);  // A last use (gap begins)
+  T.open(C, 1);   // C def
+  T.close(B, 1);  // B last use
+  T.open(D, 1);   // D def
+  T.close(C, 1);  // C last use
+  T.open(E, 1);   // E def
+  EXPECT_EQ(T.getRegNum(), 2U);
+
+  T.open(A, 1);   // A redef (5-cycle interference graph) ->
+                  // conflict -> rebuild
+  EXPECT_EQ(T.getRegNum(), 3U);
+}
+
+// LIRP: a wide value cannot reuse a too-small gap.
+TEST_F(LIRPAllocTableTest, TupleFragmentation) {
+  MachineFunction &MF = getEmptyMF("frag");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  auto V32 = [&] { return MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass); };
+  auto V128 = [&] {
+    return MRI.createVirtualRegister(&AMDGPU::VReg_128RegClass);
+  };
+
+  Register A = V32(), B = V32(), W = V128();
+  const uint64_t S0 = 1;       // one 32-bit slot
+  const uint64_t W4 = 0x0F;    // four contiguous 32-bit slots
+
+  LIRPAllocTable T(MRI);
+  T.open(A, S0);   // slot 0
+  T.open(B, S0);   // slot 1
+  T.close(A, S0);  // free slot 0 (a 1-wide gap)
+  T.open(W, W4);   // needs 4 contiguous slots; cannot use slot-0 hole
+  // B occupies slot 1, so W must start at slot 2 -> uses [2,6) -> 6 slots.
+  EXPECT_EQ(T.getRegNum(), 6U);
+}
+
+// LIRP: alignment forces a wide value past an odd free slot.
+TEST_F(LIRPAllocTableTest, AlignedWidePastOddSlot) {
+  MachineFunction &MF = getEmptyMF("aligned");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  auto V32 = [&] { return MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass); };
+  auto V256A2 = [&] {
+    return MRI.createVirtualRegister(&AMDGPU::VReg_256_Align2RegClass);
+  };
+
+  Register A = V32(), W = V256A2();
+  const uint64_t S0 = 1;           // one 32-bit slot
+  const uint64_t W8 = 0xFF;        // eight contiguous 32-bit slots
+
+  LIRPAllocTable T(MRI);
+  T.open(A, S0);   // slot 0
+  T.open(W, W8);   // 8 wide, align 2 -> base 2 -> [2,10)
+  EXPECT_EQ(T.getRegNum(), 10U);
+}
+
+// LIRP: a partial (single-slot) redef of a tuple conflicts with a value
+// that reused one of its slots.
+TEST_F(LIRPAllocTableTest, PartialRedef) {
+  MachineFunction &MF = getEmptyMF("partialredef");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  Register A = MRI.createVirtualRegister(&AMDGPU::VReg_64RegClass);
+  Register B = MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+  const uint64_t S0 = 1;      // slot offset 0 (sub0 of A)
+  const uint64_t A2 = 0x03;   // both of A's slots {0,1}
+
+  LIRPAllocTable T(MRI);
+  T.open(A, A2);   // A -> base 0, slots {0,1}
+  T.close(A, A2);  // free 0,1
+  T.open(B, S0);   // B -> slot 0 (reuse)
+  T.open(A, S0);   // A redefs slot 0 (owned by B) -> rebuild
+  // Rebuild places B at slot 1, max == 2.
+  EXPECT_EQ(T.getRegNum(), 2U);
+
+  T.close(B, S0);
+  T.close(A, S0);
+}
+
+// LIRP: tracker routing (SGPR vs VGPR).
+TEST_F(LIRPAllocTableTest, SlotTrackerRouting) {
+  MachineFunction &MF = getEmptyMF("routing");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  Register V0 = MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+  Register V1 = MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+  Register S0 = MRI.createVirtualRegister(&AMDGPU::SGPR_32RegClass);
+  auto Full = [&](Register R) { return MRI.getMaxLaneMaskForVReg(R); };
+  LaneBitmask None = LaneBitmask::getNone();
+
+  LIRPTracker T;
+  LIRPTracker::LiveRegSet NoLiveIns;
+  T.reset(MRI, NoLiveIns);
+  T.update(V0, None, Full(V0));
+  T.update(S0, None, Full(S0));
+  T.update(V1, None, Full(V1));
+
+  EXPECT_EQ(T.getVGPRNum(), 2U);
+  EXPECT_EQ(T.getSGPRNum(), 1U);
+}
+
+// LIRP: speculate reg pressure.
+TEST_F(LIRPAllocTableTest, SlotTrackerSpeculate) {
+  MachineFunction &MF = getEmptyMF("speculate");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  Register A = MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+  Register B = MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+  Register C = MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+  auto Full = [&](Register R) { return MRI.getMaxLaneMaskForVReg(R); };
+  using Event = LIRPTracker::Event;
+
+  LIRPTracker T;
+  LIRPTracker::LiveRegSet NoLiveIns;
+  T.reset(MRI, NoLiveIns);
+  T.update(A, LaneBitmask::getNone(), Full(A));  // A live, slot 0
+  T.update(B, LaneBitmask::getNone(), Full(B));  // B live, slot 1
+  EXPECT_EQ(T.getVGPRNum(), 2U);
+
+  // Speculate: close A, open C (new). C reuses A's freed slot -> still 2.
+  LaneBitmask None = LaneBitmask::getNone();
+  Event CloseA{A, Full(A), None}, OpenC{C, None, Full(C)};
+  auto [Sgpr, Vgpr] = T.speculate({CloseA, OpenC});
+  EXPECT_EQ(Vgpr, 2U);
+  EXPECT_EQ(Sgpr, 0U);
+  EXPECT_EQ(T.getVGPRNum(), 2U);
+
+  // Applying the same batch results in the the same pressure.
+  T.update(A, Full(A), LaneBitmask::getNone());
+  T.update(C, LaneBitmask::getNone(), Full(C));
+  EXPECT_EQ(T.getVGPRNum(), 2U);
+
+  // Speculate opening new vregs.
+  Register D = MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+  Register E = MRI.createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+  Event OpenD{D, None, Full(D)}, OpenE{E, None, Full(E)};
+  auto [Sgpr2, Vgpr2] = T.speculate({OpenD, OpenE});
+  EXPECT_EQ(Vgpr2, 4U);
+  EXPECT_EQ(Sgpr2, 0U);
+  EXPECT_EQ(T.getVGPRNum(), 2U);
+
+  T.update(D, LaneBitmask::getNone(), Full(D));
+  T.update(E, LaneBitmask::getNone(), Full(E));
+  EXPECT_EQ(T.getVGPRNum(), 4U);
+}
+
+// LIRP: true16 handling.
+TEST_F(LIRPAllocTableTest, SlotTrackerPartialLane) {
+  MachineFunction &MF = getEmptyMF("partiallane");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  const SIRegisterInfo *TRI = MF.getSubtarget<GCNSubtarget>().getRegisterInfo();
+
+  // sreg_64: two 32-bit slots (sub0/sub1), sub0 split into lo16/hi16 lanes.
+  Register A = MRI.createVirtualRegister(&AMDGPU::SReg_64RegClass);
+  auto Full = [&](Register R) { return MRI.getMaxLaneMaskForVReg(R); };
+  LaneBitmask Sub0Lo = TRI->getSubRegIndexLaneMask(AMDGPU::lo16);
+  LaneBitmask Sub0Hi = TRI->getSubRegIndexLaneMask(AMDGPU::hi16);
+  LaneBitmask None = LaneBitmask::getNone();
+
+  LIRPTracker T;
+  LIRPTracker::LiveRegSet NoLiveIns;
+  T.reset(MRI, NoLiveIns);
+
+  // allocate register -> 2 slots
+  T.update(A, None, Full(A));
+  EXPECT_EQ(T.getSGPRNum(), 2U);
+
+  // close sub0's high 16 bits,
+  // sub0's low half is still live -> slot stays occupied
+  LaneBitmask PrevMask = Full(A);
+  LaneBitmask NewMask = Full(A) & ~Sub0Hi;
+  T.update(A, PrevMask, NewMask);
+  EXPECT_EQ(T.getSGPRNum(), 2U);
+
+  // allocate new slot
+  Register B = MRI.createVirtualRegister(&AMDGPU::SGPR_32RegClass);
+  T.update(B, None, Full(B));
+  EXPECT_EQ(T.getSGPRNum(), 3U);
+
+  // close sub0's low 16 bits
+  PrevMask = NewMask;
+  NewMask &= ~Sub0Lo;
+  T.update(A, PrevMask, NewMask);
+  EXPECT_EQ(T.getSGPRNum(), 3U);
+
+  // C reuses the slot freed by A's sub0.
+  Register C = MRI.createVirtualRegister(&AMDGPU::SGPR_32RegClass);
+  T.update(C, None, Full(C));
+  EXPECT_EQ(T.getSGPRNum(), 3U);
+}
+
+TEST(RangeUnionTest, OpenClose) {
+  RangeUnion S;
+  EXPECT_TRUE(S.empty());
+  EXPECT_FALSE(S.isOpen());
+
+  S.appendOpen(10);
+  EXPECT_FALSE(S.empty());
+  EXPECT_TRUE(S.isOpen()); // last segment ends at Inf
+  EXPECT_EQ(S.segments().back().first, 10U);
+  EXPECT_EQ(S.segments().back().second, RangeUnion::Inf);
+
+  S.closeLast(20);
+  EXPECT_FALSE(S.isOpen());
+  EXPECT_EQ(S.segments().back().second, 20U);
+
+  S.appendOpen(30);
+  EXPECT_TRUE(S.isOpen());
+  EXPECT_EQ(S.segments().size(), 2U);
+  EXPECT_EQ(S.segments().back().first, 30U);
+}
+
+TEST(RangeUnionTest, Overlaps) {
+  RangeUnion U;
+  U.append(0, 10);
+  U.append(20, 30);
+
+  auto Span = [](unsigned Lo, unsigned Hi) {
+    RangeUnion S;
+    S.append(Lo, Hi);
+    return S;
+  };
+
+  EXPECT_FALSE(U.overlaps(Span(10, 20)));
+  EXPECT_TRUE(U.overlaps(Span(15, 25)));
+  EXPECT_TRUE(U.overlaps(Span(2, 5)));
+  EXPECT_FALSE(U.overlaps(Span(30, 40)));
+  EXPECT_TRUE(U.overlaps(Span(25, RangeUnion::Inf)));
+  EXPECT_FALSE(U.overlaps(Span(30, RangeUnion::Inf)));
+}
+
+TEST(RangeUnionTest, Merge) {
+  RangeUnion U;
+  U.append(0, 10);
+
+  RangeUnion Other;
+  Other.append(20, 30);
+
+  U.merge(Other);
+  ASSERT_EQ(U.segments().size(), 2U);
+  EXPECT_EQ(U.segments()[0], std::make_pair(0u, 10u));
+  EXPECT_EQ(U.segments()[1], std::make_pair(20u, 30u));
+
+  RangeUnion Other2;
+  Other2.append(12, 15);
+  U.merge(Other2);
+  ASSERT_EQ(U.segments().size(), 3U);
+  EXPECT_EQ(U.segments()[0], std::make_pair(0u, 10u));
+  EXPECT_EQ(U.segments()[1], std::make_pair(12u, 15u));
+  EXPECT_EQ(U.segments()[2], std::make_pair(20u, 30u));
+}
+
+TEST(RangeUnionTest, MergeCoalesce) {
+  {
+    RangeUnion A, B;
+    A.append(0, 10);
+    B.append(5, 20);
+    A.merge(B);
+    ASSERT_EQ(A.segments().size(), 1U);
+    EXPECT_EQ(A.segments()[0], std::make_pair(0u, 20u));
+  }
+  {
+    RangeUnion A, B;
+    A.append(0, 10);
+    B.append(10, 20);
+    A.merge(B);
+    ASSERT_EQ(A.segments().size(), 1U);
+    EXPECT_EQ(A.segments()[0], std::make_pair(0u, 20u));
+  }
+  {
+    RangeUnion A, B;
+    A.appendOpen(10);      // [10, Inf)
+    B.append(20, 30);      // inside the open range
+    A.merge(B);
+    ASSERT_EQ(A.segments().size(), 1U);
+    EXPECT_EQ(A.segments()[0], std::make_pair(10u, RangeUnion::Inf));
+  }
+  {
+    RangeUnion A, B;
+    A.append(0, 10);
+    B.append(20, 30);
+    A.merge(B);
+    EXPECT_EQ(A.segments().size(), 2U);
+  }
+  {
+    // A single incoming segment that bridges several existing ones coalesces
+    // them all into one.
+    RangeUnion A, B;
+    A.append(0, 10);
+    A.append(20, 30);
+    A.append(40, 50);
+    B.append(5, 45); // spans into [0,10), across [20,30), into [40,50)
+    A.merge(B);
+    ASSERT_EQ(A.segments().size(), 1U);
+    EXPECT_EQ(A.segments()[0], std::make_pair(0u, 50u));
+  }
+  {
+    // Bridge exactly two segments via adjacency (touch, not overlap).
+    RangeUnion A, B;
+    A.append(0, 10);
+    A.append(20, 30);
+    B.append(10, 20);
+    A.merge(B);
+    ASSERT_EQ(A.segments().size(), 1U);
+    EXPECT_EQ(A.segments()[0], std::make_pair(0u, 30u));
+  }
 }

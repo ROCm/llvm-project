@@ -1,0 +1,255 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -amdgpu-enable-static-simulator -amdgpu-static-sim-verbose -debug-only=amdgpu-static-simulator -run-pass amdgpu-static-simulator %s -o /dev/null 2>&1 | FileCheck %s
+# REQUIRES: asserts
+
+---
+# s_wait_loadcnt 0 waits for all pending VMEM loads (full latency)
+name: vmem_load_wait_full
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1
+    $vgpr10 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    S_WAIT_LOADCNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: vmem_load_wait_full
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: S_WAIT_LOADCNT 0
+# CHECK: Wait decode: LOADCNT 0 (queue 1 → 0, retired 1) → stall
+
+---
+# s_wait_storecnt 0 waits for all pending VMEM stores
+name: vmem_store_wait_full
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr2
+    GLOBAL_STORE_DWORD $vgpr0_vgpr1, $vgpr2, 0, 0, implicit $exec
+    S_WAIT_STORECNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: vmem_store_wait_full
+# CHECK: GLOBAL_STORE_DWORD
+# CHECK: S_WAIT_STORECNT 0
+# CHECK: Wait decode: STORECNT 0 (queue 1 → 0, retired 1) → stall
+
+---
+# s_wait_dscnt 0 waits for all pending DS operations
+name: ds_wait_full
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0
+    $vgpr10 = DS_READ_B32_gfx9 $vgpr0, 0, 0, implicit $exec
+    S_WAIT_DSCNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: ds_wait_full
+# CHECK: DS_READ_B32
+# CHECK: S_WAIT_DSCNT 0
+# CHECK: Wait decode: DSCNT 0 (queue 1 → 0, retired 1) → stall
+
+---
+# s_wait_xcnt provides partial VMEM wait
+# Unlike s_wait_loadcnt, operations remain in-flight after XCNT
+name: vmem_xcnt_partial_wait
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1
+    $vgpr10 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    S_WAIT_XCNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: vmem_xcnt_partial_wait
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: S_WAIT_XCNT 0
+# XCNT uses partial wait, not full VMEM latency
+# Queue size unchanged since XCNT doesn't retire operations
+# CHECK: Wait decode: XCNT 0 (queue 1 → 1) → stall
+
+---
+# Multiple VMEM loads with partial wait via XCNT
+name: multiple_vmem_xcnt
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1
+    $vgpr10 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    $vgpr11 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 4, 0, implicit $exec
+    $vgpr12 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 8, 0, implicit $exec
+    S_WAIT_XCNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: multiple_vmem_xcnt
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: S_WAIT_XCNT 0
+# All 3 loads need partial wait, operations remain in-flight
+# CHECK: Wait decode: XCNT 0 (queue 3 → 3) → stall
+
+---
+# XCNT with non-zero count: wait for all but N operations
+name: vmem_xcnt_partial_count
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1
+    $vgpr10 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    $vgpr11 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 4, 0, implicit $exec
+    $vgpr12 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 8, 0, implicit $exec
+    S_WAIT_XCNT 1
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: vmem_xcnt_partial_count
+# CHECK: S_WAIT_XCNT 1
+# With 3 pending and wait count 1, we partially wait for 2 ops
+# CHECK: Wait decode: XCNT 1 (queue 3 → 3) → stall
+
+---
+# No stall when XCNT count already satisfied
+name: xcnt_no_stall_satisfied
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1
+    $vgpr10 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    S_WAIT_XCNT 5
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: xcnt_no_stall_satisfied
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: S_WAIT_XCNT 5
+# 1 pending <= 5 wait count, no stall needed
+# CHECK: Wait decode: XCNT 5 (queue 1 → 1) → stall 0
+
+---
+# Comparison: XCNT followed by LOADCNT shows XCNT doesn't retire
+name: xcnt_then_loadcnt
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1
+    $vgpr10 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    S_WAIT_XCNT 0
+    ; After XCNT, load is still in-flight (partial wait only)
+    S_WAIT_LOADCNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: xcnt_then_loadcnt
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: S_WAIT_XCNT 0
+# CHECK: Wait decode: XCNT 0 (queue 1 → 1) → stall
+# LOADCNT sees the load still in-flight, waits remaining latency
+# CHECK: S_WAIT_LOADCNT 0
+# CHECK: Wait decode: LOADCNT 0 (queue 1 → 0, retired 1) → stall
+
+---
+# Multiple loads with staggered issue, XCNT waits from oldest issue
+name: staggered_vmem_xcnt
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr2, $vgpr3
+    $vgpr10 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    ; Some cycles pass via ALU work
+    $vgpr2 = V_ADD_F32_e32 $vgpr2, $vgpr3, implicit $mode, implicit $exec
+    $vgpr2 = V_ADD_F32_e32 $vgpr2, $vgpr3, implicit $mode, implicit $exec
+    $vgpr11 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 4, 0, implicit $exec
+    S_WAIT_XCNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: staggered_vmem_xcnt
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: V_ADD_F32_e32
+# CHECK: V_ADD_F32_e32
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: S_WAIT_XCNT 0
+# CHECK: Wait decode: XCNT 0 (queue 2 → 2) → stall
+
+---
+# VMEM stores also count for XCNT
+name: vmem_store_xcnt
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr2
+    GLOBAL_STORE_DWORD $vgpr0_vgpr1, $vgpr2, 0, 0, implicit $exec
+    S_WAIT_XCNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: vmem_store_xcnt
+# CHECK: GLOBAL_STORE_DWORD
+# CHECK: S_WAIT_XCNT 0
+# CHECK: Wait decode: XCNT 0 (queue 1 → 1) → stall
+
+---
+# Mixed loads and stores with XCNT
+name: mixed_vmem_xcnt
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr2
+    $vgpr10 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    GLOBAL_STORE_DWORD $vgpr0_vgpr1, $vgpr2, 4, 0, implicit $exec
+    $vgpr11 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 8, 0, implicit $exec
+    S_WAIT_XCNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: mixed_vmem_xcnt
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: GLOBAL_STORE_DWORD
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: S_WAIT_XCNT 0
+# 2 loads + 1 store = 3 total VMEM ops
+# CHECK: Wait decode: XCNT 0 (queue 3 → 3) → stall
+
+---
+# SMEM also counts for XCNT
+name: smem_xcnt
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $sgpr0_sgpr1
+    $sgpr8_sgpr9_sgpr10_sgpr11 = S_LOAD_DWORDX4_IMM $sgpr0_sgpr1, 0, 0
+    S_WAIT_XCNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: smem_xcnt
+# CHECK: S_LOAD_DWORDX4_IMM
+# CHECK: S_WAIT_XCNT 0
+# SMEM has shorter XCNT wait than VMEM
+# CHECK: Wait decode: XCNT 0 (queue 1 → 1) → stall
+
+---
+# Mixed VMEM and SMEM with XCNT
+name: mixed_vmem_smem_xcnt
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $sgpr0_sgpr1, $vgpr0_vgpr1
+    $vgpr10 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    $sgpr8_sgpr9 = S_LOAD_DWORDX2_IMM $sgpr0_sgpr1, 0, 0
+    S_WAIT_XCNT 0
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: mixed_vmem_smem_xcnt
+# CHECK: GLOBAL_LOAD_DWORD
+# CHECK: S_LOAD_DWORDX2_IMM
+# CHECK: S_WAIT_XCNT 0
+# 1 VMEM load + 1 SMEM = 2 total ops, VMEM dominates stall
+# CHECK: Wait decode: XCNT 0 (queue 2 → 2) → stall

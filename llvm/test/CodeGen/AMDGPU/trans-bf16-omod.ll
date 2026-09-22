@@ -13,8 +13,8 @@ define amdgpu_ps void @v_cos_bf16_mul2(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_cos_bf16_e64 v0, v0 mul:2
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_cos_bf16_e64 v0, v0 mul:2
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -24,8 +24,8 @@ define amdgpu_ps void @v_cos_bf16_mul2(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_cos_bf16_e64 v0.l, v0.l mul:2
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_cos_bf16_e64 v0.l, v0.l mul:2
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %cos = call bfloat @llvm.amdgcn.cos.bf16(bfloat %in)
@@ -41,8 +41,8 @@ define amdgpu_ps void @v_exp_bf16_mul4(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_exp_bf16_e64 v0, v0 mul:4
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_exp_bf16_e64 v0, v0 mul:4
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -52,8 +52,8 @@ define amdgpu_ps void @v_exp_bf16_mul4(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_exp_bf16_e64 v0.l, v0.l mul:4
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_exp_bf16_e64 v0.l, v0.l mul:4
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %exp = call bfloat @llvm.amdgcn.exp2.bf16(bfloat %in)
@@ -69,8 +69,8 @@ define amdgpu_ps void @v_log_bf16_div2(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_log_bf16_e64 v0, v0 div:2
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_log_bf16_e64 v0, v0 div:2
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -80,8 +80,8 @@ define amdgpu_ps void @v_log_bf16_div2(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_log_bf16_e64 v0.l, v0.l div:2
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_log_bf16_e64 v0.l, v0.l div:2
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %log = call bfloat @llvm.amdgcn.log.bf16(bfloat %in)
@@ -97,8 +97,8 @@ define amdgpu_ps void @v_cos_bf16_mul2_imm_first(bfloat %in, ptr addrspace(1) %o
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_cos_bf16_e64 v0, v0 mul:2
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_cos_bf16_e64 v0, v0 mul:2
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -108,8 +108,8 @@ define amdgpu_ps void @v_cos_bf16_mul2_imm_first(bfloat %in, ptr addrspace(1) %o
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_cos_bf16_e64 v0.l, v0.l mul:2
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_cos_bf16_e64 v0.l, v0.l mul:2
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %cos = call bfloat @llvm.amdgcn.cos.bf16(bfloat %in)
@@ -125,8 +125,8 @@ define amdgpu_ps void @v_exp_bf16_mul4_imm_first(bfloat %in, ptr addrspace(1) %o
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_exp_bf16_e64 v0, v0 mul:4
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_exp_bf16_e64 v0, v0 mul:4
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -136,8 +136,8 @@ define amdgpu_ps void @v_exp_bf16_mul4_imm_first(bfloat %in, ptr addrspace(1) %o
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_exp_bf16_e64 v0.l, v0.l mul:4
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_exp_bf16_e64 v0.l, v0.l mul:4
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %exp = call bfloat @llvm.amdgcn.exp2.bf16(bfloat %in)
@@ -153,8 +153,8 @@ define amdgpu_ps void @v_log_bf16_div2_imm_first(bfloat %in, ptr addrspace(1) %o
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_log_bf16_e64 v0, v0 div:2
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_log_bf16_e64 v0, v0 div:2
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -164,8 +164,8 @@ define amdgpu_ps void @v_log_bf16_div2_imm_first(bfloat %in, ptr addrspace(1) %o
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_log_bf16_e64 v0.l, v0.l div:2
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_log_bf16_e64 v0.l, v0.l div:2
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %log = call bfloat @llvm.amdgcn.log.bf16(bfloat %in)
@@ -182,8 +182,8 @@ define amdgpu_ps void @v_rcp_bf16_mul2(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_rcp_bf16_e64 v0, v0 mul:2
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_rcp_bf16_e64 v0, v0 mul:2
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -193,8 +193,8 @@ define amdgpu_ps void @v_rcp_bf16_mul2(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_rcp_bf16_e64 v0.l, v0.l mul:2
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_rcp_bf16_e64 v0.l, v0.l mul:2
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %rcp = call bfloat @llvm.amdgcn.rcp.bf16(bfloat %in)
@@ -210,8 +210,8 @@ define amdgpu_ps void @v_rsq_bf16_mul4(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_rsq_bf16_e64 v0, v0 mul:4
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_rsq_bf16_e64 v0, v0 mul:4
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -221,8 +221,8 @@ define amdgpu_ps void @v_rsq_bf16_mul4(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_rsq_bf16_e64 v0.l, v0.l mul:4
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_rsq_bf16_e64 v0.l, v0.l mul:4
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %rsq = call bfloat @llvm.amdgcn.rsq.bf16(bfloat %in)
@@ -238,8 +238,8 @@ define amdgpu_ps void @v_sin_bf16_div2(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_sin_bf16_e64 v0, v0 div:2
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_sin_bf16_e64 v0, v0 div:2
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -249,8 +249,8 @@ define amdgpu_ps void @v_sin_bf16_div2(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_sin_bf16_e64 v0.l, v0.l div:2
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_sin_bf16_e64 v0.l, v0.l div:2
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %sin = call bfloat @llvm.amdgcn.sin.bf16(bfloat %in)
@@ -266,8 +266,8 @@ define amdgpu_ps void @v_sqrt_bf16_mul2(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_sqrt_bf16_e64 v0, v0 mul:2
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_sqrt_bf16_e64 v0, v0 mul:2
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -277,8 +277,8 @@ define amdgpu_ps void @v_sqrt_bf16_mul2(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_sqrt_bf16_e64 v0.l, v0.l mul:2
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_sqrt_bf16_e64 v0.l, v0.l mul:2
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %sqrt = call bfloat @llvm.amdgcn.sqrt.bf16(bfloat %in)
@@ -294,8 +294,8 @@ define amdgpu_ps void @v_tanh_bf16_mul4(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_tanh_bf16_e64 v0, v0 mul:4
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_tanh_bf16_e64 v0, v0 mul:4
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -305,8 +305,8 @@ define amdgpu_ps void @v_tanh_bf16_mul4(bfloat %in, ptr addrspace(1) %out) #0 {
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_tanh_bf16_e64 v0.l, v0.l mul:4
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_tanh_bf16_e64 v0.l, v0.l mul:4
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %tanh = call bfloat @llvm.amdgcn.tanh.bf16(bfloat %in)
@@ -391,8 +391,8 @@ define amdgpu_ps void @v_cos_bf16_mul2_default_denorm_flush(bfloat %in, ptr addr
 ; SDAG-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-FAKE16-NEXT:    v_nop
 ; SDAG-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-FAKE16-NEXT:    v_cos_bf16_e64 v0, v0 mul:2
 ; SDAG-FAKE16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-FAKE16-NEXT:    v_cos_bf16_e64 v0, v0 mul:2
 ; SDAG-FAKE16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-FAKE16-NEXT:    s_endpgm
 ;
@@ -402,8 +402,8 @@ define amdgpu_ps void @v_cos_bf16_mul2_default_denorm_flush(bfloat %in, ptr addr
 ; SDAG-REAL16-NEXT:    s_mov_b64 s[64:65], 0
 ; SDAG-REAL16-NEXT:    v_nop
 ; SDAG-REAL16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; SDAG-REAL16-NEXT:    v_cos_bf16_e64 v0.l, v0.l mul:2
 ; SDAG-REAL16-NEXT:    v_dual_mov_b32 v3, v2 :: v_dual_mov_b32 v2, v1
+; SDAG-REAL16-NEXT:    v_cos_bf16_e64 v0.l, v0.l mul:2
 ; SDAG-REAL16-NEXT:    global_store_b16 v[2:3], v0, off
 ; SDAG-REAL16-NEXT:    s_endpgm
   %cos = call bfloat @llvm.amdgcn.cos.bf16(bfloat %in)

@@ -133,6 +133,10 @@ private:
   /// instructions, return the number of stall cycles until one shadow clears.
   unsigned checkMultiShadowHazard(const MachineInstr &MI) const;
 
+  /// Check if a wide COPY has enough consecutive co-exec slots.
+  /// Returns stall cycles if insufficient slots are available.
+  unsigned checkWideCopyCoExecSlots(const MachineInstr &MI) const;
+
   /// Update WMMA window state when a WMMA instruction is emitted.
   void updateWMMAWindowState(const MachineInstr &MI);
 
@@ -242,6 +246,11 @@ private:
   int checkMAIHazards(MachineInstr *MI) const;
   int checkMAIHazards908(MachineInstr *MI) const;
   int checkMAIHazards90A(MachineInstr *MI) const;
+
+  /// Check for VALU-SGPR to SALU hazard.
+  /// Returns cycles until SALU can be scheduled without hazard.
+  unsigned checkVALUSGPRHazard(const MachineInstr &MI) const;
+
   /// Pad the latency between neighboring MFMA instructions with s_nops. The
   /// percentage of wait states to fill with s_nops is specified by the command
   /// line option '-amdgpu-mfma-padding-ratio'.
@@ -311,9 +320,6 @@ public:
     return ActiveCoExecInfo;
   }
 
-  /// Get the CoExecMask for a given instruction.
-  static AMDGPU::CoExecMaskT getCoExecMaskForMI(const MachineInstr &MI,
-                                                const SIInstrInfo &TII);
   // We can only issue one instruction per cycle.
   bool atIssueLimit() const override { return true; }
   void EmitInstruction(SUnit *SU) override;

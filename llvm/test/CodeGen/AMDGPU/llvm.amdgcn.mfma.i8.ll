@@ -150,8 +150,8 @@ define amdgpu_kernel void @test_mfma_i32_32x32x8i8(ptr addrspace(1) %arg) #0 {
 ; GFX90A-SDAG-LABEL: test_mfma_i32_32x32x8i8:
 ; GFX90A-SDAG:       ; %bb.0: ; %bb
 ; GFX90A-SDAG-NEXT:    s_load_dwordx2 s[16:17], s[4:5], 0x24
-; GFX90A-SDAG-NEXT:    v_mov_b32_e32 v0, 1
-; GFX90A-SDAG-NEXT:    v_mov_b32_e32 v1, 2
+; GFX90A-SDAG-NEXT:    v_mov_b32_e32 v1, 1
+; GFX90A-SDAG-NEXT:    v_mov_b32_e32 v0, 2
 ; GFX90A-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-SDAG-NEXT:    s_load_dwordx16 s[0:15], s[16:17], 0x0
 ; GFX90A-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
@@ -172,7 +172,7 @@ define amdgpu_kernel void @test_mfma_i32_32x32x8i8(ptr addrspace(1) %arg) #0 {
 ; GFX90A-SDAG-NEXT:    v_accvgpr_write_b32 a14, s14
 ; GFX90A-SDAG-NEXT:    v_accvgpr_write_b32 a15, s15
 ; GFX90A-SDAG-NEXT:    s_nop 1
-; GFX90A-SDAG-NEXT:    v_mfma_i32_32x32x8i8 a[0:15], v0, v1, a[0:15] cbsz:1 abid:2 blgp:3
+; GFX90A-SDAG-NEXT:    v_mfma_i32_32x32x8i8 a[0:15], v1, v0, a[0:15] cbsz:1 abid:2 blgp:3
 ; GFX90A-SDAG-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX90A-SDAG-NEXT:    s_nop 15
 ; GFX90A-SDAG-NEXT:    s_nop 1
@@ -236,8 +236,8 @@ define amdgpu_kernel void @test_mfma_i32_32x32x8i8(ptr addrspace(1) %arg) #0 {
 ; GFX90A-VGPR-SDAG-LABEL: test_mfma_i32_32x32x8i8:
 ; GFX90A-VGPR-SDAG:       ; %bb.0: ; %bb
 ; GFX90A-VGPR-SDAG-NEXT:    s_load_dwordx2 s[16:17], s[4:5], 0x24
-; GFX90A-VGPR-SDAG-NEXT:    v_mov_b32_e32 v16, 1
-; GFX90A-VGPR-SDAG-NEXT:    v_mov_b32_e32 v17, 2
+; GFX90A-VGPR-SDAG-NEXT:    v_mov_b32_e32 v17, 1
+; GFX90A-VGPR-SDAG-NEXT:    v_mov_b32_e32 v16, 2
 ; GFX90A-VGPR-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-VGPR-SDAG-NEXT:    s_load_dwordx16 s[0:15], s[16:17], 0x0
 ; GFX90A-VGPR-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
@@ -250,7 +250,7 @@ define amdgpu_kernel void @test_mfma_i32_32x32x8i8(ptr addrspace(1) %arg) #0 {
 ; GFX90A-VGPR-SDAG-NEXT:    v_pk_mov_b32 v[12:13], s[12:13], s[12:13] op_sel:[0,1]
 ; GFX90A-VGPR-SDAG-NEXT:    v_pk_mov_b32 v[14:15], s[14:15], s[14:15] op_sel:[0,1]
 ; GFX90A-VGPR-SDAG-NEXT:    s_nop 1
-; GFX90A-VGPR-SDAG-NEXT:    v_mfma_i32_32x32x8i8 v[0:15], v16, v17, v[0:15] cbsz:1 abid:2 blgp:3
+; GFX90A-VGPR-SDAG-NEXT:    v_mfma_i32_32x32x8i8 v[0:15], v17, v16, v[0:15] cbsz:1 abid:2 blgp:3
 ; GFX90A-VGPR-SDAG-NEXT:    v_mov_b32_e32 v16, 0
 ; GFX90A-VGPR-SDAG-NEXT:    s_nop 15
 ; GFX90A-VGPR-SDAG-NEXT:    s_nop 1

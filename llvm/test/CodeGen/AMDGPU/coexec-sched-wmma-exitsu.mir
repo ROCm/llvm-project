@@ -1,0 +1,22 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -run-pass=machine-scheduler -amdgpu-sched-strategy=coexec -verify-misched %s -o - | FileCheck %s
+
+# A WMMA that is live-out of a fall-through region gets a dependency edge to the
+# boundary ExitSU, which has a null MI. classifyFlavor() must not dereference it.
+
+---
+name: wmma_liveout_to_exitsu
+tracksRegLiveness: true
+body: |
+  ; CHECK-LABEL: name: wmma_liveout_to_exitsu
+  bb.0:
+    successors: %bb.1
+    %0:vreg_512_align2 = IMPLICIT_DEF
+    %1:vreg_512_align2 = IMPLICIT_DEF
+    %2:vreg_256_align2 = IMPLICIT_DEF
+    %3:vgpr_32_lo256 = IMPLICIT_DEF
+    %4:vgpr_32_lo256 = IMPLICIT_DEF
+    %5:vreg_256_align2 = V_WMMA_SCALE_F32_16X16X128_F8F6F4_f8_f8_w32_threeaddr %0, %1, 0, %2, %3, %4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, implicit $exec
+
+  bb.1:
+    S_ENDPGM 0, implicit %5
+...

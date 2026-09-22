@@ -8198,10 +8198,10 @@ define amdgpu_kernel void @v_permlane16_b32_i_tid_f64(ptr addrspace(1) %out, i32
 ; GFX13-SDAG-NEXT:    s_load_b64 s[0:1], s[4:5], 0x30 nv
 ; GFX13-SDAG-NEXT:    s_load_b64 s[2:3], s[4:5], 0x24 nv
 ; GFX13-SDAG-NEXT:    v_dual_mov_b32 v3, 0x40934a00 :: v_dual_mov_b32 v2, 0
-; GFX13-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX13-SDAG-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
+; GFX13-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX13-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX13-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX13-SDAG-NEXT:    v_permlane16_b32 v3, v1, s0, s1
 ; GFX13-SDAG-NEXT:    v_permlane16_b32 v2, v0, s0, s1
 ; GFX13-SDAG-NEXT:    global_store_b64 v4, v[2:3], s[2:3]
@@ -8214,10 +8214,10 @@ define amdgpu_kernel void @v_permlane16_b32_i_tid_f64(ptr addrspace(1) %out, i32
 ; GFX13-GISEL-NEXT:    s_load_b64 s[0:1], s[4:5], 0x30 nv
 ; GFX13-GISEL-NEXT:    s_load_b64 s[2:3], s[4:5], 0x24 nv
 ; GFX13-GISEL-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_mov_b32 v3, 0x40934a00
-; GFX13-GISEL-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX13-GISEL-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
+; GFX13-GISEL-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX13-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX13-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX13-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX13-GISEL-NEXT:    v_permlane16_b32 v2, v0, s0, s1
 ; GFX13-GISEL-NEXT:    v_permlane16_b32 v3, v1, s0, s1
 ; GFX13-GISEL-NEXT:    global_store_b64 v4, v[2:3], s[2:3]
@@ -10434,10 +10434,10 @@ define amdgpu_kernel void @v_permlanex16_b32_i_tid_f64(ptr addrspace(1) %out, i3
 ; GFX13-SDAG-NEXT:    s_load_b64 s[0:1], s[4:5], 0x30 nv
 ; GFX13-SDAG-NEXT:    s_load_b64 s[2:3], s[4:5], 0x24 nv
 ; GFX13-SDAG-NEXT:    v_dual_mov_b32 v3, 0x40934a00 :: v_dual_mov_b32 v2, 0
-; GFX13-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX13-SDAG-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
+; GFX13-SDAG-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX13-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX13-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX13-SDAG-NEXT:    v_permlanex16_b32 v3, v1, s0, s1
 ; GFX13-SDAG-NEXT:    v_permlanex16_b32 v2, v0, s0, s1
 ; GFX13-SDAG-NEXT:    global_store_b64 v4, v[2:3], s[2:3]
@@ -10450,10 +10450,10 @@ define amdgpu_kernel void @v_permlanex16_b32_i_tid_f64(ptr addrspace(1) %out, i3
 ; GFX13-GISEL-NEXT:    s_load_b64 s[0:1], s[4:5], 0x30 nv
 ; GFX13-GISEL-NEXT:    s_load_b64 s[2:3], s[4:5], 0x24 nv
 ; GFX13-GISEL-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_mov_b32 v3, 0x40934a00
-; GFX13-GISEL-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX13-GISEL-NEXT:    v_cvt_f64_f32_e32 v[0:1], v0
+; GFX13-GISEL-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX13-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX13-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX13-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX13-GISEL-NEXT:    v_permlanex16_b32 v2, v0, s0, s1
 ; GFX13-GISEL-NEXT:    v_permlanex16_b32 v3, v1, s0, s1
 ; GFX13-GISEL-NEXT:    global_store_b64 v4, v[2:3], s[2:3]

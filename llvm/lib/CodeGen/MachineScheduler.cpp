@@ -3053,6 +3053,7 @@ void SchedBoundary::bumpNode(SUnit *SU) {
     LLVM_DEBUG(dbgs() << "  " << Available.getName() << " BotLatency SU("
                       << SU->NodeNum << ") " << BotLatency << "c\n");
   }
+
   // If we stall for any reason, bump the cycle.
   if (NextCycle > CurrCycle)
     bumpCycle(NextCycle);
@@ -3073,6 +3074,16 @@ void SchedBoundary::bumpNode(SUnit *SU) {
     HazardRec->EmitInstruction(SU);
     // Scheduling an instruction may have made pending instructions available.
     CheckPending = true;
+  }
+
+  // Account for extra cycles from wide COPY instructions that expand to
+  // multiple moves. This keeps SchedBoundary's cycle count in sync with
+  // the HazardRecognizer's state.
+  if (MachineInstr *MI = SU->getInstr()) {
+    if (MI->isCopy()) {
+      unsigned ExtraCycles = DAG->TII->getSchedCyclesForCopy(*MI);
+      IncMOps = std::max(IncMOps, ExtraCycles);
+    }
   }
 
   // Update CurrMOps after calling bumpCycle to handle stalls, since bumpCycle

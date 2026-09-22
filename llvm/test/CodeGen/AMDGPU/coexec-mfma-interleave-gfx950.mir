@@ -16,14 +16,14 @@ body: |
     ; CHECK-LABEL: name: mfma_16x16_interleave
     ; CHECK: %m0:areg_128_align2 = V_MFMA_F32_16X16X32_F16_e64 undef %s0:vreg_128_align2, undef %s1:vreg_128_align2, undef %acc0:areg_128_align2, 0, 0, 0, implicit $mode, implicit $exec
     ; CHECK-NEXT: %sa0:sgpr_32 = S_ADD_I32 undef $sgpr10, undef $sgpr11, implicit-def $scc
-    ; CHECK-NEXT: %a0:vgpr_32 = V_ADD_F32_e32 undef %v0:vgpr_32, undef %v1:vgpr_32, implicit $mode, implicit $exec
-    ; CHECK-NEXT: %a1:vgpr_32 = V_ADD_F32_e32 undef %v1:vgpr_32, undef %v2:vgpr_32, implicit $mode, implicit $exec
-    ; CHECK-NEXT: %m1:areg_128_align2 = V_MFMA_F32_16X16X32_F16_e64 undef %s0:vreg_128_align2, undef %s1:vreg_128_align2, undef %acc1:areg_128_align2, 0, 0, 0, implicit $mode, implicit $exec
     ; CHECK-NEXT: %sa1:sgpr_32 = S_ADD_I32 undef $sgpr12, undef $sgpr13, implicit-def $scc
-    ; CHECK-NEXT: %a2:vgpr_32 = V_ADD_F32_e32 undef %v2:vgpr_32, undef %v3:vgpr_32, implicit $mode, implicit $exec
-    ; CHECK-NEXT: %a3:vgpr_32 = V_ADD_F32_e32 undef %v3:vgpr_32, undef %v4:vgpr_32, implicit $mode, implicit $exec
-    ; CHECK-NEXT: %m2:areg_128_align2 = V_MFMA_F32_16X16X32_F16_e64 undef %s2:vreg_128_align2, undef %s3:vreg_128_align2, undef %acc2:areg_128_align2, 0, 0, 0, implicit $mode, implicit $exec
+    ; CHECK-NEXT: %a0:vgpr_32 = V_ADD_F32_e32 undef %v0:vgpr_32, undef %v1:vgpr_32, implicit $mode, implicit $exec
+    ; CHECK-NEXT: %m1:areg_128_align2 = V_MFMA_F32_16X16X32_F16_e64 undef %s0:vreg_128_align2, undef %s1:vreg_128_align2, undef %acc1:areg_128_align2, 0, 0, 0, implicit $mode, implicit $exec
     ; CHECK-NEXT: %sa2:sgpr_32 = S_ADD_I32 undef $sgpr14, undef $sgpr15, implicit-def $scc
+    ; CHECK-NEXT: %a1:vgpr_32 = V_ADD_F32_e32 undef %v1:vgpr_32, undef %v2:vgpr_32, implicit $mode, implicit $exec
+    ; CHECK-NEXT: %a2:vgpr_32 = V_ADD_F32_e32 undef %v2:vgpr_32, undef %v3:vgpr_32, implicit $mode, implicit $exec
+    ; CHECK-NEXT: %m2:areg_128_align2 = V_MFMA_F32_16X16X32_F16_e64 undef %s2:vreg_128_align2, undef %s3:vreg_128_align2, undef %acc2:areg_128_align2, 0, 0, 0, implicit $mode, implicit $exec
+    ; CHECK-NEXT: %a3:vgpr_32 = V_ADD_F32_e32 undef %v3:vgpr_32, undef %v4:vgpr_32, implicit $mode, implicit $exec
     ; CHECK-NEXT: %a4:vgpr_32 = V_ADD_F32_e32 undef %v4:vgpr_32, undef %v5:vgpr_32, implicit $mode, implicit $exec
     ; CHECK-NEXT: %a5:vgpr_32 = V_ADD_F32_e32 undef %v5:vgpr_32, undef %v0:vgpr_32, implicit $mode, implicit $exec
     ; CHECK-NEXT: S_ENDPGM 0, implicit %m0, implicit %m1, implicit %m2, implicit %a0, implicit %a1, implicit %a2, implicit %a3, implicit %a4, implicit %a5, implicit %sa0, implicit %sa1, implicit %sa2

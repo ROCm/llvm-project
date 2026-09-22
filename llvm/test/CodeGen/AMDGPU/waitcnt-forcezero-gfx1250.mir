@@ -1,0 +1,50 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -run-pass si-insert-waitcnts -amdgpu-waitcnt-forcezero=1 -o - %s | FileCheck -check-prefix=GFX1250 %s
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1200 -run-pass si-insert-waitcnts -amdgpu-waitcnt-forcezero=1 -o - %s | FileCheck -check-prefix=GFX1200 %s
+
+# XFAIL: *
+# The subtarget-aware getAllZeroWaitcnt and the separate s_wait_tensorcnt
+# emission were lost in a later merge, so gfx1250 currently waits on
+# expcnt/samplecnt/bvhcnt and never waits on xcnt/asynccnt/tensorcnt.
+
+# Check that on gfx1250, amdgpu-waitcnt-forcezero emits:
+# - s_wait_loadcnt_dscnt, s_wait_kmcnt, s_wait_xcnt, s_wait_asynccnt, s_wait_tensorcnt
+# but NOT:
+# - s_wait_expcnt (gfx1250 has no export instructions)
+# - s_wait_samplecnt, s_wait_bvhcnt (gfx1250 has no image instructions)
+#
+# On gfx1200, those counters should be emitted (except xcnt/asynccnt/tensorcnt which don't exist).
+
+# GFX1250-LABEL: name: waitcnt_forcezero_gfx1250
+# GFX1250: S_WAIT_LOADCNT_DSCNT
+# GFX1250-NEXT: S_WAIT_KMCNT 0
+# GFX1250-NEXT: S_WAIT_XCNT 0
+# GFX1250-NEXT: S_WAIT_ASYNCCNT 0
+# GFX1250-NEXT: S_WAIT_TENSORCNT 0
+# GFX1250-NEXT: S_NOP 0
+# GFX1250-NOT: S_WAIT_EXPCNT
+# GFX1250-NOT: S_WAIT_SAMPLECNT
+# GFX1250-NOT: S_WAIT_BVHCNT
+
+# GFX1200-LABEL: name: waitcnt_forcezero_gfx1250
+# GFX1200: S_WAIT_LOADCNT_DSCNT
+# GFX1200-NEXT: S_WAIT_EXPCNT 0
+# GFX1200-NEXT: S_WAIT_SAMPLECNT 0
+# GFX1200-NEXT: S_WAIT_BVHCNT 0
+# GFX1200-NEXT: S_WAIT_KMCNT 0
+# GFX1200-NEXT: S_NOP 0
+# GFX1200-NOT: S_WAIT_XCNT
+# GFX1200-NOT: S_WAIT_ASYNCCNT
+# GFX1200-NOT: S_WAIT_TENSORCNT
+
+---
+name:            waitcnt_forcezero_gfx1250
+machineFunctionInfo:
+  isEntryFunction: true
+body:             |
+  bb.0:
+    ;
+    S_NOP 0
+    S_NOP 0
+    S_NOP 0
+    S_ENDPGM 0
+...

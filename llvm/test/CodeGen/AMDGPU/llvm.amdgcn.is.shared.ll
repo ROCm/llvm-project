@@ -105,8 +105,8 @@ define amdgpu_kernel void @is_local_vgpr(ptr addrspace(1) %ptr.ptr) {
 ; GFX1250-NEXT:    global_load_b64 v[0:1], v0, s[2:3] scale_offset scope:SCOPE_SYS
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
-; GFX1250-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc_lo
-; GFX1250-NEXT:    global_store_b32 v[0:1], v0, off
+; GFX1250-NEXT:    v_cndmask_b32_e64 v1, 0, 1, vcc_lo
+; GFX1250-NEXT:    global_store_b32 v[0:1], v1, off
 ; GFX1250-NEXT:    s_endpgm
 ;
 ; CI-GISEL-LABEL: is_local_vgpr:
@@ -208,6 +208,8 @@ define amdgpu_kernel void @is_local_sgpr(ptr %ptr) {
 ; SI-NEXT:    s_load_dword s1, s[8:9], 0x33
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_cmp_eq_u32 s0, s1
+; SI-NEXT:    s_cselect_b64 s[0:1], -1, 0
+; SI-NEXT:    s_and_b64 s[0:1], s[0:1], exec
 ; SI-NEXT:    s_cselect_b32 s0, 1, 0
 ; SI-NEXT:    s_cmp_lg_u32 s0, 1
 ; SI-NEXT:    s_cbranch_scc1 .LBB1_2
@@ -229,6 +231,8 @@ define amdgpu_kernel void @is_local_sgpr(ptr %ptr) {
 ; CI-SDAG-NEXT:    s_mov_b32 flat_scratch_lo, s13
 ; CI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; CI-SDAG-NEXT:    s_cmp_eq_u32 s0, s1
+; CI-SDAG-NEXT:    s_cselect_b64 s[0:1], -1, 0
+; CI-SDAG-NEXT:    s_and_b64 s[0:1], s[0:1], exec
 ; CI-SDAG-NEXT:    s_cselect_b32 s0, 1, 0
 ; CI-SDAG-NEXT:    s_cmp_lg_u32 s0, 1
 ; CI-SDAG-NEXT:    s_cbranch_scc1 .LBB1_2
@@ -245,6 +249,8 @@ define amdgpu_kernel void @is_local_sgpr(ptr %ptr) {
 ; GFX9-SDAG-NEXT:    s_load_dword s0, s[8:9], 0x4
 ; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    s_cmp_eq_u32 s0, s1
+; GFX9-SDAG-NEXT:    s_cselect_b64 s[0:1], -1, 0
+; GFX9-SDAG-NEXT:    s_and_b64 s[0:1], s[0:1], exec
 ; GFX9-SDAG-NEXT:    s_cselect_b32 s0, 1, 0
 ; GFX9-SDAG-NEXT:    s_cmp_lg_u32 s0, 1
 ; GFX9-SDAG-NEXT:    s_cbranch_scc1 .LBB1_2
@@ -265,8 +271,10 @@ define amdgpu_kernel void @is_local_sgpr(ptr %ptr) {
 ; GFX1250-SDAG-NEXT:    s_load_b32 s0, s[4:5], 0x4 nv
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-SDAG-NEXT:    s_cmp_eq_u32 s0, s1
+; GFX1250-SDAG-NEXT:    s_cselect_b32 s0, -1, 0
+; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
+; GFX1250-SDAG-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-SDAG-NEXT:    s_cselect_b32 s0, 1, 0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-SDAG-NEXT:    s_cmp_lg_u32 s0, 1
 ; GFX1250-SDAG-NEXT:    s_cbranch_scc1 .LBB1_2
 ; GFX1250-SDAG-NEXT:  ; %bb.1: ; %bb0

@@ -648,7 +648,7 @@ def VOP_SWAP_I32 : VOPProfile<[i32, i32, untyped, untyped]> {
 let SubtargetPredicate = isGFX9Plus in {
   def V_SWAP_B32 : VOP1_Pseudo<"v_swap_b32", VOP_SWAP_I32, [], 1> {
     let Constraints = "$vdst = $src1, $vdst1 = $src0";
-    let SchedRW = [Write64Bit, Write64Bit];
+    let SchedRW = [Write64Bit, WriteVALUDummy];
   }
 
   let isReMaterializable = 1 in
@@ -893,7 +893,7 @@ let SubtargetPredicate = isGFX10Plus in {
 
     def V_SWAPREL_B32 : VOP1_Pseudo<"v_swaprel_b32", VOP_SWAP_I32, [], 1> {
       let Constraints = "$vdst = $src1, $vdst1 = $src0";
-      let SchedRW = [Write64Bit, Write64Bit];
+      let SchedRW = [Write64Bit, WriteVALUDummy];
     }
   } // End Uses = [M0]
 } // End SubtargetPredicate = isGFX10Plus
@@ -921,7 +921,7 @@ def VOP_SWAP_I16 : VOPProfile_True16<VOP_I16_I16> {
 let SubtargetPredicate = isGFX11Plus in {
   def V_SWAP_B16 : VOP1_Pseudo<"v_swap_b16", VOP_SWAP_I16, [], /* VOP1Only= */true> {
     let Constraints = "$vdst = $src1, $vdst1 = $src0";
-    let SchedRW = [Write64Bit, Write64Bit];
+    let SchedRW = [Write64Bit, WriteVALUDummy];
     let True16Predicate = UseRealTrue16Insts;
   }
   // Restrict src0 to be VGPR

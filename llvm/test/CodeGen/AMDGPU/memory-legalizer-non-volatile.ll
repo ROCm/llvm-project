@@ -311,8 +311,8 @@ define void @buffer_i32_nonatomic(ptr addrspace(7) inreg %in, ptr addrspace(7) i
 ; GFX1250-DAGISEL-NEXT:    s_mov_b32 s7, s20
 ; GFX1250-DAGISEL-NEXT:    s_mov_b32 s6, s19
 ; GFX1250-DAGISEL-NEXT:    s_mov_b32 s5, s18
-; GFX1250-DAGISEL-NEXT:    buffer_load_b32 v0, v0, s[0:3], null offen
 ; GFX1250-DAGISEL-NEXT:    s_mov_b32 s4, s17
+; GFX1250-DAGISEL-NEXT:    buffer_load_b32 v0, v0, s[0:3], null offen
 ; GFX1250-DAGISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-DAGISEL-NEXT:    buffer_store_b32 v0, v1, s[4:7], null offen
 ; GFX1250-DAGISEL-NEXT:    s_set_pc_i64 s[30:31]
@@ -325,8 +325,8 @@ define void @buffer_i32_nonatomic(ptr addrspace(7) inreg %in, ptr addrspace(7) i
 ; GFX1250-GISEL-NEXT:    s_mov_b32 s4, s17
 ; GFX1250-GISEL-NEXT:    s_mov_b32 s5, s18
 ; GFX1250-GISEL-NEXT:    s_mov_b32 s6, s19
-; GFX1250-GISEL-NEXT:    buffer_load_b32 v0, v0, s[0:3], null offen
 ; GFX1250-GISEL-NEXT:    s_mov_b32 s7, s20
+; GFX1250-GISEL-NEXT:    buffer_load_b32 v0, v0, s[0:3], null offen
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-GISEL-NEXT:    buffer_store_b32 v0, v1, s[4:7], null offen
 ; GFX1250-GISEL-NEXT:    s_set_pc_i64 s[30:31]

@@ -18,6 +18,7 @@
 #define LLVM_LIB_TARGET_AMDGPU_GCNREGPRESSURE_H
 
 #include "GCNSubtarget.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/RegisterPressure.h"
 #include <algorithm>
@@ -473,6 +474,13 @@ public:
                MachineBasicBlock::const_iterator End,
                const LiveRegSet *LiveRegsCopy = nullptr);
 
+  /// Report the per-vreg live-lane transitions \p MI would cause at the current
+  /// position.
+  void forEachDownwardTransition(
+      const MachineInstr *MI, const SIRegisterInfo *TRI,
+      function_ref<void(Register Reg, LaneBitmask PrevMask, LaneBitmask NewMask)>
+          Cb) const;
+
   /// Mostly copy/paste from CodeGen/RegisterPressure.cpp
   /// Calculate the impact \p MI will have on CurPressure and \return the
   /// speculated pressure. In order to support RP Speculation, this does not
@@ -591,6 +599,29 @@ LLVM_ABI void dumpMaxRegPressure(MachineFunction &MF,
                                  GCNRegPressure::RegKind Kind,
                                  LiveIntervals &LIS,
                                  const MachineLoopInfo *MLI);
+
+/// Compute VGPR pressure using register allocation simulation based on live
+/// interval interference.
+/// Note: This estimate is compared with the scheduler's instantaneous register
+/// pressure estimate to determine if it is too optimistic.
+/// In this case, actual RA might result in unnecessary splits or spills and
+/// we might want to reschedule the region.
+///
+/// TODO: Consider using an incremental GCNRPTracker-based implementation in
+/// the scheduler to avoid potential rescheduling of the region.
+///
+/// \param RegionBegin Start iterator of the region
+/// \param RegionEnd End iterator of the region
+/// \param LiveIns Live-in registers for the region
+/// \param LIS LiveIntervals analysis
+/// \param MRI MachineRegisterInfo
+/// \param TRI Target register info (SIRegisterInfo)
+/// \returns Estimated VGPR pressure (number of VGPRs needed)
+unsigned computeLiveIntervalVGPRPressure(
+    MachineBasicBlock::const_iterator RegionBegin,
+    MachineBasicBlock::const_iterator RegionEnd,
+    const GCNRPTracker::LiveRegSet &LiveIns, LiveIntervals &LIS,
+    const MachineRegisterInfo &MRI, const SIRegisterInfo &TRI);
 
 } // end namespace llvm
 

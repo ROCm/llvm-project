@@ -33,7 +33,7 @@ static cl::opt<unsigned> BarrierSignalWaitLatencyOpt(
     "amdgpu-barrier-signal-wait-latency",
     cl::desc("Synthetic latency between S_BARRIER_SIGNAL and S_BARRIER_WAIT "
              "to encourage scheduling independent work between them"),
-    cl::init(16), cl::Hidden);
+    cl::init(35), cl::Hidden);
 
 namespace {
 
@@ -101,7 +101,6 @@ void BarrierLatency::apply(ScheduleDAGInstrs *DAG) {
   const unsigned BarrierSignalWaitLatency = BarrierSignalWaitLatencyOpt;
   SmallVector<SUnit *, 8> RegionTDM;
   SmallVector<SUnit *, 8> RegionAsync;
-  const TargetSchedModel *SchedModel = DAG->getSchedModel();
 
   for (SUnit &SU : DAG->SUnits) {
     const MachineInstr *MI = SU.getInstr();
@@ -124,9 +123,9 @@ void BarrierLatency::apply(ScheduleDAGInstrs *DAG) {
         if (!MI->mayLoad() || MI->mayStore())
           continue;
 
-        addLatencyToEdge(PredDep, SU,
-                         SchedModel ? SchedModel->computeInstrLatency(MI, false)
-                                    : FenceLatency);
+        unsigned InstrLatency = TII->getInstrLatency(*MI);
+        setLatencyForEdge(PredDep, SU,
+                          InstrLatency ? InstrLatency : FenceLatency);
       }
     } else if (Op == AMDGPU::S_BARRIER_WAIT) {
       for (SDep &PredDep : SU.Preds) {
@@ -185,9 +184,7 @@ void BarrierLatency::apply(ScheduleDAGInstrs *DAG) {
                     : !SIInstrFlags::usesTENSOR_CNT(PredMI))
           continue;
 
-        if (!needWaitFor(Op == AMDGPU::S_WAIT_ASYNCCNT ? RegionAsync
-                                                       : RegionTDM,
-                         PredSU, WaitVal)) {
+        if (!needWaitFor(IsAsync ? RegionAsync : RegionTDM, PredSU, WaitVal)) {
           setLatencyForEdge(PredDep, SU, 1);
         }
       }

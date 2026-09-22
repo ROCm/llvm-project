@@ -6,6 +6,12 @@
 ; RUN: sed 's/CODE_OBJECT_VERSION/400/g' %s | llc -mtriple=amdgpu9.00-amd-amdhsa -mattr=+enable-flat-scratch | FileCheck -check-prefixes=FLATSCR,DEFAULTSIZE %s
 ; RUN: sed 's/CODE_OBJECT_VERSION/400/g' %s | llc -mtriple=amdgpu9.00-amd-amdhsa -mattr=+enable-flat-scratch -amdgpu-assume-dynamic-stack-object-size=1024 | FileCheck -check-prefixes=FLATSCR,ASSUME1024 %s
 
+; func_non_entry_block_static_alloca_align4 fails to compile with
+; "illegal VGPR to SGPR copy". Bisects to the InstrEmitter.cpp hunk of
+; f067d9aa134f ("using divergent/uniform information in ISel of zext"),
+; which leaves UseRC unset in EmitCopyFromReg when the first user is a
+; CopyToReg to a vreg. Reverting that hunk alone fixes it.
+
 ; FIXME: Generated test checks do not check metadata at the end of the
 ; function, so this also includes manually added checks.
 

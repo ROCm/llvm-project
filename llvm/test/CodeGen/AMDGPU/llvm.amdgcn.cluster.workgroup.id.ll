@@ -114,9 +114,9 @@ define amdgpu_kernel void @test_workgroup_id_x(ptr addrspace(1) %out) #1 {
 ; CHECK-G-UNKNOWN-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
 ; CHECK-G-UNKNOWN-NEXT:    s_and_b32 s2, ttmp6, 15
 ; CHECK-G-UNKNOWN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-G-UNKNOWN-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
+; CHECK-G-UNKNOWN-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
 ; CHECK-G-UNKNOWN-NEXT:    s_wait_kmcnt 0x0
-; CHECK-G-UNKNOWN-NEXT:    global_store_b32 v1, v0, s[0:1]
+; CHECK-G-UNKNOWN-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; CHECK-G-UNKNOWN-NEXT:    s_endpgm
 ;
 ; CHECK-G-MESA3D-LABEL: test_workgroup_id_x:
@@ -196,9 +196,9 @@ define amdgpu_kernel void @test_workgroup_id_x(ptr addrspace(1) %out) #1 {
 ; CHECK-G-MESA3D-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; CHECK-G-MESA3D-NEXT:    s_and_b32 s2, ttmp6, 15
 ; CHECK-G-MESA3D-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-G-MESA3D-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
+; CHECK-G-MESA3D-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
 ; CHECK-G-MESA3D-NEXT:    s_wait_kmcnt 0x0
-; CHECK-G-MESA3D-NEXT:    global_store_b32 v1, v0, s[0:1]
+; CHECK-G-MESA3D-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; CHECK-G-MESA3D-NEXT:    s_endpgm
   %id = call i32 @llvm.amdgcn.cluster.workgroup.id.x()
   store i32 %id, ptr addrspace(1) %out
@@ -500,9 +500,9 @@ define amdgpu_kernel void @test_workgroup_id_y(ptr addrspace(1) %out) #1 {
 ; CHECK-G-UNKNOWN-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
 ; CHECK-G-UNKNOWN-NEXT:    s_bfe_u32 s2, ttmp6, 0x40004
 ; CHECK-G-UNKNOWN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-G-UNKNOWN-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
+; CHECK-G-UNKNOWN-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
 ; CHECK-G-UNKNOWN-NEXT:    s_wait_kmcnt 0x0
-; CHECK-G-UNKNOWN-NEXT:    global_store_b32 v1, v0, s[0:1]
+; CHECK-G-UNKNOWN-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; CHECK-G-UNKNOWN-NEXT:    s_endpgm
 ;
 ; CHECK-G-MESA3D-LABEL: test_workgroup_id_y:
@@ -582,9 +582,9 @@ define amdgpu_kernel void @test_workgroup_id_y(ptr addrspace(1) %out) #1 {
 ; CHECK-G-MESA3D-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; CHECK-G-MESA3D-NEXT:    s_bfe_u32 s2, ttmp6, 0x40004
 ; CHECK-G-MESA3D-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-G-MESA3D-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
+; CHECK-G-MESA3D-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
 ; CHECK-G-MESA3D-NEXT:    s_wait_kmcnt 0x0
-; CHECK-G-MESA3D-NEXT:    global_store_b32 v1, v0, s[0:1]
+; CHECK-G-MESA3D-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; CHECK-G-MESA3D-NEXT:    s_endpgm
   %id = call i32 @llvm.amdgcn.cluster.workgroup.id.y()
   store i32 %id, ptr addrspace(1) %out
@@ -886,9 +886,9 @@ define amdgpu_kernel void @test_workgroup_id_z(ptr addrspace(1) %out) #1 {
 ; CHECK-G-UNKNOWN-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
 ; CHECK-G-UNKNOWN-NEXT:    s_bfe_u32 s2, ttmp6, 0x40008
 ; CHECK-G-UNKNOWN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-G-UNKNOWN-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
+; CHECK-G-UNKNOWN-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
 ; CHECK-G-UNKNOWN-NEXT:    s_wait_kmcnt 0x0
-; CHECK-G-UNKNOWN-NEXT:    global_store_b32 v1, v0, s[0:1]
+; CHECK-G-UNKNOWN-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; CHECK-G-UNKNOWN-NEXT:    s_endpgm
 ;
 ; CHECK-G-MESA3D-LABEL: test_workgroup_id_z:
@@ -968,9 +968,9 @@ define amdgpu_kernel void @test_workgroup_id_z(ptr addrspace(1) %out) #1 {
 ; CHECK-G-MESA3D-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; CHECK-G-MESA3D-NEXT:    s_bfe_u32 s2, ttmp6, 0x40008
 ; CHECK-G-MESA3D-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-G-MESA3D-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
+; CHECK-G-MESA3D-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
 ; CHECK-G-MESA3D-NEXT:    s_wait_kmcnt 0x0
-; CHECK-G-MESA3D-NEXT:    global_store_b32 v1, v0, s[0:1]
+; CHECK-G-MESA3D-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; CHECK-G-MESA3D-NEXT:    s_endpgm
   %id = call i32 @llvm.amdgcn.cluster.workgroup.id.z()
   store i32 %id, ptr addrspace(1) %out
@@ -1083,9 +1083,9 @@ define amdgpu_kernel void @test_workgroup_flat_id(ptr addrspace(1) %out) {
 ; CHECK-G-UNKNOWN-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
 ; CHECK-G-UNKNOWN-NEXT:    s_getreg_b32 s2, hwreg(HW_REG_IB_STS2, 21, 4)
 ; CHECK-G-UNKNOWN-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-G-UNKNOWN-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
+; CHECK-G-UNKNOWN-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
 ; CHECK-G-UNKNOWN-NEXT:    s_wait_kmcnt 0x0
-; CHECK-G-UNKNOWN-NEXT:    global_store_b32 v1, v0, s[0:1]
+; CHECK-G-UNKNOWN-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; CHECK-G-UNKNOWN-NEXT:    s_endpgm
 ;
 ; CHECK-G-MESA3D-LABEL: test_workgroup_flat_id:
@@ -1165,9 +1165,9 @@ define amdgpu_kernel void @test_workgroup_flat_id(ptr addrspace(1) %out) {
 ; CHECK-G-MESA3D-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; CHECK-G-MESA3D-NEXT:    s_getreg_b32 s2, hwreg(HW_REG_IB_STS2, 21, 4)
 ; CHECK-G-MESA3D-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; CHECK-G-MESA3D-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
+; CHECK-G-MESA3D-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
 ; CHECK-G-MESA3D-NEXT:    s_wait_kmcnt 0x0
-; CHECK-G-MESA3D-NEXT:    global_store_b32 v1, v0, s[0:1]
+; CHECK-G-MESA3D-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; CHECK-G-MESA3D-NEXT:    s_endpgm
   %id = call i32 @llvm.amdgcn.cluster.workgroup.flat.id()
   store i32 %id, ptr addrspace(1) %out

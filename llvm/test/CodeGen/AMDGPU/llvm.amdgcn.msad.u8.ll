@@ -137,14 +137,14 @@ define amdgpu_kernel void @v_msad_u8_non_immediate(ptr addrspace(1) %out, i32 %s
 ;
 ; GFX13-LABEL: v_msad_u8_non_immediate:
 ; GFX13:       ; %bb.0:
-; GFX13-NEXT:    s_clause 0x1
 ; GFX13-NEXT:    s_load_b96 s[0:2], s[4:5], 0x2c nv
-; GFX13-NEXT:    s_load_b64 s[4:5], s[4:5], 0x24 nv
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
+; GFX13-NEXT:    s_load_b64 s[2:3], s[4:5], 0x24 nv
 ; GFX13-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX13-NEXT:    v_msad_u8 v0, s0, s1, v0
-; GFX13-NEXT:    global_store_b32 v1, v0, s[4:5]
+; GFX13-NEXT:    s_wait_kmcnt 0x0
+; GFX13-NEXT:    global_store_b32 v1, v0, s[2:3]
 ; GFX13-NEXT:    s_endpgm
   %result= call i32 @llvm.amdgcn.msad.u8(i32 %src, i32 %a, i32 %b) #0
   store i32 %result, ptr addrspace(1) %out, align 4

@@ -650,14 +650,14 @@ define amdgpu_kernel void @test_rewrite_mfma_direct_copy_from_agpr_class(ptr add
 define amdgpu_kernel void @test_rewrite_mfma_direct_copy_from_agpr_class_chain(ptr addrspace(1) %arg0) #0 {
 ; CHECK-LABEL: test_rewrite_mfma_direct_copy_from_agpr_class_chain:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    v_mov_b32_e32 v1, 2.0
+; CHECK-NEXT:    v_mov_b32_e32 v34, 2.0
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def a[0:31]
 ; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    v_mov_b32_e32 v34, 4.0
+; CHECK-NEXT:    v_mov_b32_e32 v1, 4.0
 ; CHECK-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x0
 ; CHECK-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; CHECK-NEXT:    v_mfma_f32_32x32x1_2b_f32 a[0:31], v1, v34, a[0:31]
+; CHECK-NEXT:    v_mfma_f32_32x32x1_2b_f32 a[0:31], v34, v1, a[0:31]
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 0x41000000
 ; CHECK-NEXT:    v_mov_b32_e32 v34, 0x41800000
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v0, 7, v0
@@ -812,13 +812,13 @@ define amdgpu_kernel void @test_rewrite_mfma_direct_copy_from_agpr_class_subreg_
 define amdgpu_kernel void @test_rewrite_mfma_direct_copy_from_agpr_class_copy_back() #0 {
 ; CHECK-LABEL: test_rewrite_mfma_direct_copy_from_agpr_class_copy_back:
 ; CHECK:       ; %bb.0:
-; CHECK-NEXT:    v_mov_b32_e32 v32, 2.0
+; CHECK-NEXT:    v_mov_b32_e32 v33, 2.0
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; def a[0:31]
 ; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    v_mov_b32_e32 v33, 4.0
+; CHECK-NEXT:    v_mov_b32_e32 v32, 4.0
 ; CHECK-NEXT:    s_nop 1
-; CHECK-NEXT:    v_mfma_f32_32x32x1_2b_f32 a[0:31], v32, v33, a[0:31]
+; CHECK-NEXT:    v_mfma_f32_32x32x1_2b_f32 a[0:31], v33, v32, a[0:31]
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; use a[0:31]
 ; CHECK-NEXT:    ;;#ASMEND

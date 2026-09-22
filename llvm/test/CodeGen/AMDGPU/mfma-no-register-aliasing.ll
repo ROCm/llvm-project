@@ -667,8 +667,8 @@ define amdgpu_kernel void @test_mfma_f32_16x16x1f32(ptr addrspace(1) %arg) #0 {
 ; GREEDY90A-LABEL: test_mfma_f32_16x16x1f32:
 ; GREEDY90A:       ; %bb.0: ; %bb
 ; GREEDY90A-NEXT:    s_load_dwordx2 s[16:17], s[4:5], 0x24
-; GREEDY90A-NEXT:    v_mov_b32_e32 v32, 1.0
-; GREEDY90A-NEXT:    v_mov_b32_e32 v33, 2.0
+; GREEDY90A-NEXT:    v_mov_b32_e32 v33, 1.0
+; GREEDY90A-NEXT:    v_mov_b32_e32 v32, 2.0
 ; GREEDY90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GREEDY90A-NEXT:    s_load_dwordx16 s[0:15], s[16:17], 0x0
 ; GREEDY90A-NEXT:    s_waitcnt lgkmcnt(0)
@@ -681,8 +681,8 @@ define amdgpu_kernel void @test_mfma_f32_16x16x1f32(ptr addrspace(1) %arg) #0 {
 ; GREEDY90A-NEXT:    v_pk_mov_b32 v[12:13], s[12:13], s[12:13] op_sel:[0,1]
 ; GREEDY90A-NEXT:    v_pk_mov_b32 v[14:15], s[14:15], s[14:15] op_sel:[0,1]
 ; GREEDY90A-NEXT:    s_nop 1
-; GREEDY90A-NEXT:    v_mfma_f32_16x16x1f32 v[0:15], v32, v33, v[0:15]
-; GREEDY90A-NEXT:    v_mfma_f32_16x16x1f32 v[16:31], v32, v33, v[0:15]
+; GREEDY90A-NEXT:    v_mfma_f32_16x16x1f32 v[0:15], v33, v32, v[0:15]
+; GREEDY90A-NEXT:    v_mfma_f32_16x16x1f32 v[16:31], v33, v32, v[0:15]
 ; GREEDY90A-NEXT:    s_nop 10
 ; GREEDY90A-NEXT:    v_mov_b32_e32 v2, v16
 ; GREEDY90A-NEXT:    v_mov_b32_e32 v3, v17
@@ -700,7 +700,7 @@ define amdgpu_kernel void @test_mfma_f32_16x16x1f32(ptr addrspace(1) %arg) #0 {
 ; GREEDY90A-NEXT:    v_mov_b32_e32 v15, v29
 ; GREEDY90A-NEXT:    v_mov_b32_e32 v16, 0
 ; GREEDY90A-NEXT:    s_nop 0
-; GREEDY90A-NEXT:    v_mfma_f32_16x16x1f32 v[0:15], v32, v33, v[0:15]
+; GREEDY90A-NEXT:    v_mfma_f32_16x16x1f32 v[0:15], v33, v32, v[0:15]
 ; GREEDY90A-NEXT:    s_nop 10
 ; GREEDY90A-NEXT:    global_store_dwordx4 v16, v[12:15], s[16:17] offset:48
 ; GREEDY90A-NEXT:    global_store_dwordx4 v16, v[8:11], s[16:17] offset:32
@@ -711,8 +711,8 @@ define amdgpu_kernel void @test_mfma_f32_16x16x1f32(ptr addrspace(1) %arg) #0 {
 ; GREEDY942-LABEL: test_mfma_f32_16x16x1f32:
 ; GREEDY942:       ; %bb.0: ; %bb
 ; GREEDY942-NEXT:    s_load_dwordx2 s[16:17], s[4:5], 0x24
-; GREEDY942-NEXT:    v_mov_b32_e32 v32, 1.0
-; GREEDY942-NEXT:    v_mov_b32_e32 v33, 2.0
+; GREEDY942-NEXT:    v_mov_b32_e32 v33, 1.0
+; GREEDY942-NEXT:    v_mov_b32_e32 v32, 2.0
 ; GREEDY942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GREEDY942-NEXT:    s_load_dwordx16 s[0:15], s[16:17], 0x0
 ; GREEDY942-NEXT:    s_waitcnt lgkmcnt(0)
@@ -725,8 +725,8 @@ define amdgpu_kernel void @test_mfma_f32_16x16x1f32(ptr addrspace(1) %arg) #0 {
 ; GREEDY942-NEXT:    v_mov_b64_e32 v[12:13], s[12:13]
 ; GREEDY942-NEXT:    v_mov_b64_e32 v[14:15], s[14:15]
 ; GREEDY942-NEXT:    s_nop 1
-; GREEDY942-NEXT:    v_mfma_f32_16x16x1_4b_f32 v[0:15], v32, v33, v[0:15]
-; GREEDY942-NEXT:    v_mfma_f32_16x16x1_4b_f32 v[16:31], v32, v33, v[0:15]
+; GREEDY942-NEXT:    v_mfma_f32_16x16x1_4b_f32 v[0:15], v33, v32, v[0:15]
+; GREEDY942-NEXT:    v_mfma_f32_16x16x1_4b_f32 v[16:31], v33, v32, v[0:15]
 ; GREEDY942-NEXT:    s_nop 9
 ; GREEDY942-NEXT:    v_mov_b32_e32 v2, v16
 ; GREEDY942-NEXT:    v_mov_b32_e32 v3, v17
@@ -744,7 +744,7 @@ define amdgpu_kernel void @test_mfma_f32_16x16x1f32(ptr addrspace(1) %arg) #0 {
 ; GREEDY942-NEXT:    v_mov_b32_e32 v15, v29
 ; GREEDY942-NEXT:    v_mov_b32_e32 v16, 0
 ; GREEDY942-NEXT:    s_nop 0
-; GREEDY942-NEXT:    v_mfma_f32_16x16x1_4b_f32 v[0:15], v32, v33, v[0:15]
+; GREEDY942-NEXT:    v_mfma_f32_16x16x1_4b_f32 v[0:15], v33, v32, v[0:15]
 ; GREEDY942-NEXT:    s_nop 9
 ; GREEDY942-NEXT:    global_store_dwordx4 v16, v[12:15], s[16:17] offset:48
 ; GREEDY942-NEXT:    global_store_dwordx4 v16, v[8:11], s[16:17] offset:32

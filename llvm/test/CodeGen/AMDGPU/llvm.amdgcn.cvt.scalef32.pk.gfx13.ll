@@ -11,8 +11,8 @@ define amdgpu_kernel void @test_cvt_scalef32_pk32_bf6_f32_v(ptr addrspace(1) %ou
 ; GFX13-SDAG-NEXT:    s_clause 0x3
 ; GFX13-SDAG-NEXT:    s_load_b512 s[36:51], s[4:5], 0xa4 nv
 ; GFX13-SDAG-NEXT:    s_load_b512 s[8:23], s[4:5], 0xe4 nv
-; GFX13-SDAG-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
 ; GFX13-SDAG-NEXT:    s_load_b32 s2, s[4:5], 0x124 nv
+; GFX13-SDAG-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    v_dual_mov_b32 v32, 0 :: v_dual_mov_b32 v0, s36
 ; GFX13-SDAG-NEXT:    v_dual_mov_b32 v1, s37 :: v_dual_mov_b32 v2, s38
@@ -331,8 +331,8 @@ define amdgpu_kernel void @test_cvt_scalef32_pk32_fp6_f32_v(ptr addrspace(1) %ou
 ; GFX13-SDAG-NEXT:    s_clause 0x3
 ; GFX13-SDAG-NEXT:    s_load_b512 s[36:51], s[4:5], 0xa4 nv
 ; GFX13-SDAG-NEXT:    s_load_b512 s[8:23], s[4:5], 0xe4 nv
-; GFX13-SDAG-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
 ; GFX13-SDAG-NEXT:    s_load_b32 s2, s[4:5], 0x124 nv
+; GFX13-SDAG-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
 ; GFX13-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-SDAG-NEXT:    v_dual_mov_b32 v32, 0 :: v_dual_mov_b32 v0, s36
 ; GFX13-SDAG-NEXT:    v_dual_mov_b32 v1, s37 :: v_dual_mov_b32 v2, s38

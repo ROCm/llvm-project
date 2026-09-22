@@ -114,15 +114,15 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_SWMMAC_cluster(ptr 
 ; COEXEC-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
 ; COEXEC-NEXT:    v_and_b32_e32 v0, 0x3ff0, v0
 ; COEXEC-NEXT:    s_wait_kmcnt 0x0
-; COEXEC-NEXT:    v_dual_mov_b32 v49, s1 :: v_dual_add_nc_u32 v4, s0, v0
-; COEXEC-NEXT:    v_add_nc_u32_e32 v50, s1, v0
-; COEXEC-NEXT:    ds_load_b128 v[8:11], v4
-; COEXEC-NEXT:    ds_load_b128 v[12:15], v4 offset:512
-; COEXEC-NEXT:    ds_load_b128 v[16:19], v4 offset:5120
-; COEXEC-NEXT:    ds_load_b128 v[20:23], v4 offset:3072
-; COEXEC-NEXT:    ds_load_b128 v[24:27], v4 offset:1536
-; COEXEC-NEXT:    ds_load_b128 v[0:3], v4 offset:11264
-; COEXEC-NEXT:    ds_load_b128 v[4:7], v4 offset:11280
+; COEXEC-NEXT:    v_dual_add_nc_u32 v1, s0, v0 :: v_dual_add_nc_u32 v49, s1, v0
+; COEXEC-NEXT:    v_mov_b32_e32 v50, s1
+; COEXEC-NEXT:    ds_load_b128 v[8:11], v1
+; COEXEC-NEXT:    ds_load_b128 v[12:15], v1 offset:512
+; COEXEC-NEXT:    ds_load_b128 v[16:19], v1 offset:1536
+; COEXEC-NEXT:    ds_load_b128 v[20:23], v1 offset:3072
+; COEXEC-NEXT:    ds_load_b128 v[24:27], v1 offset:5120
+; COEXEC-NEXT:    ds_load_b128 v[4:7], v1 offset:11280
+; COEXEC-NEXT:    ds_load_b128 v[0:3], v1 offset:11264
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000100) size(7) SyncID(0)
 ; COEXEC-NEXT:    s_wait_dscnt 0x6
 ; COEXEC-NEXT:    v_mov_b64_e32 v[30:31], v[10:11]
@@ -142,16 +142,15 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_SWMMAC_cluster(ptr 
 ; COEXEC-NEXT:    s_wait_dscnt 0x0
 ; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[28:31], v[8:11], v[0:7], v48
 ; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[32:35], v[12:15], v[0:7], v48
-; COEXEC-NEXT:    s_delay_alu instid0(VALU_DEP_3)
-; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[44:47], v[24:27], v[0:7], v48
-; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[40:43], v[20:23], v[0:7], v48
 ; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[36:39], v[16:19], v[0:7], v48
-; COEXEC-NEXT:    ds_store_b128 v50, v[28:31]
-; COEXEC-NEXT:    ds_store_b128 v49, v[32:35] offset:512
-; COEXEC-NEXT:    ds_store_b128 v49, v[44:47] offset:1024
-; COEXEC-NEXT:    ds_store_b128 v49, v[40:43] offset:1536
+; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[40:43], v[20:23], v[0:7], v48
+; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[44:47], v[24:27], v[0:7], v48
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000008) size(5) SyncID(0)
-; COEXEC-NEXT:    ds_store_b128 v49, v[36:39] offset:2048
+; COEXEC-NEXT:    ds_store_b128 v49, v[28:31]
+; COEXEC-NEXT:    ds_store_b128 v50, v[32:35] offset:512
+; COEXEC-NEXT:    ds_store_b128 v50, v[36:39] offset:1024
+; COEXEC-NEXT:    ds_store_b128 v50, v[40:43] offset:1536
+; COEXEC-NEXT:    ds_store_b128 v50, v[44:47] offset:2048
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000200) size(5) SyncID(0)
 ; COEXEC-NEXT:    s_endpgm
 entry:
@@ -329,66 +328,66 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_SWMMAC_interleaved(
 ; COEXEC-NEXT:    s_mov_b64 s[64:65], 0
 ; COEXEC-NEXT:    v_nop
 ; COEXEC-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; COEXEC-NEXT:    v_mov_b32_e32 v16, 0
+; COEXEC-NEXT:    v_mov_b32_e32 v20, 0
 ; COEXEC-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
 ; COEXEC-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
 ; COEXEC-NEXT:    s_wait_kmcnt 0x0
-; COEXEC-NEXT:    v_mov_b32_e32 v17, s1
-; COEXEC-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; COEXEC-NEXT:    v_lshl_add_u32 v18, v0, 5, s0
-; COEXEC-NEXT:    v_lshl_add_u32 v19, v0, 4, s1
-; COEXEC-NEXT:    ds_load_b128 v[8:11], v18 offset:1024
-; COEXEC-NEXT:    ds_load_b128 v[0:3], v18
-; COEXEC-NEXT:    ds_load_b128 v[4:7], v18 offset:16
+; COEXEC-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; COEXEC-NEXT:    v_lshl_add_u32 v21, v0, 5, s0
+; COEXEC-NEXT:    v_lshl_add_u32 v16, v0, 4, s1
+; COEXEC-NEXT:    v_mov_b32_e32 v22, s1
+; COEXEC-NEXT:    ds_load_b128 v[8:11], v21 offset:1024
+; COEXEC-NEXT:    ds_load_b128 v[0:3], v21
+; COEXEC-NEXT:    ds_load_b128 v[4:7], v21 offset:16
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000100) size(3) SyncID(0)
 ; COEXEC-NEXT:    s_wait_dscnt 0x2
 ; COEXEC-NEXT:    v_mov_b64_e32 v[14:15], v[10:11]
 ; COEXEC-NEXT:    v_mov_b64_e32 v[12:13], v[8:9]
 ; COEXEC-NEXT:    s_wait_dscnt 0x0
 ; COEXEC-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[12:15], v[8:11], v[0:7], v16
+; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[12:15], v[8:11], v[0:7], v20
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
-; COEXEC-NEXT:    ds_store_b128 v19, v[12:15]
-; COEXEC-NEXT:    ds_load_b128 v[8:11], v18 offset:2560
+; COEXEC-NEXT:    ds_store_b128 v16, v[12:15]
+; COEXEC-NEXT:    ds_load_b128 v[12:15], v21 offset:2560
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000200) size(1) SyncID(0)
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000100) size(1) SyncID(0)
 ; COEXEC-NEXT:    s_wait_dscnt 0x0
-; COEXEC-NEXT:    v_mov_b64_e32 v[14:15], v[10:11]
-; COEXEC-NEXT:    v_mov_b64_e32 v[12:13], v[8:9]
+; COEXEC-NEXT:    v_mov_b64_e32 v[18:19], v[14:15]
+; COEXEC-NEXT:    v_mov_b64_e32 v[16:17], v[12:13]
 ; COEXEC-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[12:15], v[8:11], v[0:7], v16
+; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[16:19], v[12:15], v[0:7], v20
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
-; COEXEC-NEXT:    ds_store_b128 v17, v[12:15] offset:512
-; COEXEC-NEXT:    ds_load_b128 v[8:11], v18 offset:4608
+; COEXEC-NEXT:    ds_store_b128 v22, v[16:19] offset:512
+; COEXEC-NEXT:    ds_load_b128 v[8:11], v21 offset:4608
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000200) size(1) SyncID(0)
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000100) size(1) SyncID(0)
 ; COEXEC-NEXT:    s_wait_dscnt 0x0
-; COEXEC-NEXT:    v_mov_b64_e32 v[14:15], v[10:11]
-; COEXEC-NEXT:    v_mov_b64_e32 v[12:13], v[8:9]
+; COEXEC-NEXT:    v_mov_b64_e32 v[18:19], v[10:11]
+; COEXEC-NEXT:    v_mov_b64_e32 v[16:17], v[8:9]
 ; COEXEC-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[12:15], v[8:11], v[0:7], v16
+; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[16:19], v[8:11], v[0:7], v20
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
-; COEXEC-NEXT:    ds_store_b128 v17, v[12:15] offset:1024
-; COEXEC-NEXT:    ds_load_b128 v[8:11], v18 offset:7168
+; COEXEC-NEXT:    ds_store_b128 v22, v[16:19] offset:1024
+; COEXEC-NEXT:    ds_load_b128 v[12:15], v21 offset:7168
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000200) size(1) SyncID(0)
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000100) size(1) SyncID(0)
 ; COEXEC-NEXT:    s_wait_dscnt 0x0
-; COEXEC-NEXT:    v_mov_b64_e32 v[14:15], v[10:11]
-; COEXEC-NEXT:    v_mov_b64_e32 v[12:13], v[8:9]
+; COEXEC-NEXT:    v_mov_b64_e32 v[18:19], v[14:15]
+; COEXEC-NEXT:    v_mov_b64_e32 v[16:17], v[12:13]
 ; COEXEC-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[12:15], v[8:11], v[0:7], v16
+; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[16:19], v[12:15], v[0:7], v20
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
-; COEXEC-NEXT:    ds_store_b128 v17, v[12:15] offset:1536
-; COEXEC-NEXT:    ds_load_b128 v[8:11], v18 offset:10240
+; COEXEC-NEXT:    ds_store_b128 v22, v[16:19] offset:1536
+; COEXEC-NEXT:    ds_load_b128 v[8:11], v21 offset:10240
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000200) size(1) SyncID(0)
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000100) size(1) SyncID(0)
 ; COEXEC-NEXT:    s_wait_dscnt 0x0
-; COEXEC-NEXT:    v_mov_b64_e32 v[14:15], v[10:11]
-; COEXEC-NEXT:    v_mov_b64_e32 v[12:13], v[8:9]
+; COEXEC-NEXT:    v_mov_b64_e32 v[18:19], v[10:11]
+; COEXEC-NEXT:    v_mov_b64_e32 v[16:17], v[8:9]
 ; COEXEC-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[12:15], v[8:11], v[0:7], v16
+; COEXEC-NEXT:    v_swmmac_f16_16x16x32_f16 v[16:19], v[8:11], v[0:7], v20
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
-; COEXEC-NEXT:    ds_store_b128 v17, v[12:15] offset:2048
+; COEXEC-NEXT:    ds_store_b128 v22, v[16:19] offset:2048
 ; COEXEC-NEXT:    ; sched_group_barrier mask(0x00000200) size(1) SyncID(0)
 ; COEXEC-NEXT:    s_endpgm
 entry:

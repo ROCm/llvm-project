@@ -625,6 +625,12 @@ defm GFX1250Insts : AMDGPUSubtargetFeature<"gfx1250-insts",
   /*GenPredicate=*/0
 >;
 
+defm CoExecFriendlyISelMode : AMDGPUSubtargetFeature<"coexec-friendly-isel",
+  "Avoid selecting multi-rate (repeat-rate-32) 64-bit VALU instructions during "
+  "SelectionDAG ISel; expand them to cheaper sequences for the CoExec scheduler",
+  /*GenPredicate=*/0
+>;
+
 defm GFX13Insts : AMDGPUSubtargetFeature<"gfx13-insts",
   "Additional instructions for GFX13+",
   /*GenPredicate=*/0,
@@ -2463,6 +2469,7 @@ def FeatureISAVersion12_50_Common : FeatureSet<
    FeatureRealTrue16Insts,
    FeatureVMovB64Inst,
    FeatureVMulU64Inst,
+   FeatureRequiresInitialUnclausedVmem,
 ]>;
 
 def FeatureISAVersion12_50_STRICT : FeatureSet<

@@ -1222,8 +1222,8 @@ void SubtargetEmitter::genSchedClassTables(const CodeGenProcModel &ProcModel,
         std::vector<int64_t> AcquireAtCycles =
             WriteRes->getValueAsListOfInts("AcquireAtCycles");
 
-        // Check consistency of the two vectors carrying the start and
-        // stop cycles of the resources.
+        // Check consistency of the vectors carrying the cycle information
+        // of the resources.
         if (!ReleaseAtCycles.empty() &&
             ReleaseAtCycles.size() != PRVec.size()) {
           // If ReleaseAtCycles is provided, check consistency.

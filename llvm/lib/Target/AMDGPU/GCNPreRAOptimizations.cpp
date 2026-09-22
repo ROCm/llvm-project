@@ -32,15 +32,46 @@
 
 #include "GCNPreRAOptimizations.h"
 #include "AMDGPU.h"
+#include "AMDGPUCoExecInfo.h"
 #include "GCNSubtarget.h"
 #include "SIRegisterInfo.h"
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/Register.h"
+#include "llvm/CodeGen/TargetSchedule.h"
 #include "llvm/InitializePasses.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "amdgpu-pre-ra-optimizations"
+
+static cl::opt<bool>
+    EnableAntiHintsForMFMARegs("amdgpu-anti-hints-for-mfma", cl::Hidden,
+                               cl::desc("Enable Anti-Hints for "
+                                        "MFMA in GCNPreRAOptimizations stage."),
+                               cl::init(true));
+
+static cl::opt<bool>
+    EnableAntiHintsForVAVdst("amdgpu-anti-hints-for-va-vdst", cl::Hidden,
+                             cl::desc("Enable Anti-Hints for VA-VDST"),
+                             cl::init(false));
+
+static cl::opt<unsigned>
+    VAVDSTLookbackWindow("amdgpu-va-vdst-lookback-window", cl::Hidden,
+                         cl::desc("Lookback window for VA_VDST anti-hints"),
+                         cl::init(32));
+
+static cl::opt<bool>
+    EnableAntiHintsForAddr("amdgpu-anti-hints-for-addr", cl::Hidden,
+                           cl::desc("Enable Anti-Hints between memory address "
+                                    "operands and subsequent VGPR writes to "
+                                    "avoid wait xcnt"),
+                           cl::init(true));
+
+static cl::opt<unsigned>
+    AddrAntiHintWindow("amdgpu-addr-anti-hint-window", cl::Hidden,
+                       cl::desc("Window size for address anti-hints"),
+                       cl::init(16));
 
 namespace {
 
@@ -50,6 +81,7 @@ private:
   const SIRegisterInfo *TRI;
   MachineRegisterInfo *MRI;
   LiveIntervals *LIS;
+  TargetSchedModel SchedModel;
 
   bool processReg(Register Reg);
   void hintTrue16Copy(const MachineInstr &MI);
@@ -303,8 +335,274 @@ bool GCNPreRAOptimizationsImpl::run(MachineFunction &MF) {
   TII = ST.getInstrInfo();
   MRI = &MF.getRegInfo();
   TRI = ST.getRegisterInfo();
+  SchedModel.init(&ST);
 
   bool Changed = false;
+  // Add RA anti-hints to reduce WMMA/MFMA and TRANS hazard NOPs
+  if (EnableAntiHintsForMFMARegs && ST.hasGFX1250Insts()) {
+
+    // Per-MFMA/WMMA tracking to determine anti-hint eligibility for subsequent
+    // instructions within the max lookback window.
+    struct HazardInfo {
+      SmallVector<Register, 4> Regs;
+      unsigned HazardSlots;
+      unsigned HazardConsumerSince = 0;
+      AMDGPU::CoExecMaskT HazardSlotMask;
+      AMDGPU::CoExecMaskT ConsumerMask;
+    };
+
+    auto collectNamedOperand = [&](AMDGPU::OpName OpName, const char *OpNameStr,
+                                   const MachineInstr &MI,
+                                   SmallVectorImpl<Register> &Regs) {
+      const MachineOperand *MO = TII->getNamedOperand(MI, OpName);
+      if (!MO) {
+        LLVM_DEBUG(dbgs() << "    Named operand " << OpNameStr
+                          << " not found\n");
+        return;
+      }
+      if (MO->isReg() && MO->getReg().isVirtual()) {
+        Register Reg = MO->getReg();
+        const TargetRegisterClass *RC = MRI->getRegClass(Reg);
+        // Only consider VGPRs
+        if (TRI->hasVGPRs(RC))
+          Regs.push_back(Reg);
+        LLVM_DEBUG(dbgs() << "    Collected " << OpNameStr << " : "
+                          << printReg(Reg, TRI) << "\n");
+      }
+    };
+
+    auto addAntiHints = [&](const MachineInstr &MI,
+                            std::optional<HazardInfo> &HintSource) {
+      const SlotIndex CurrentSlot = LIS->getInstructionIndex(MI).getRegSlot();
+
+      for (const MachineOperand &MO : MI.operands()) {
+        if (!MO.isReg() || !MO.getReg().isVirtual())
+          continue;
+
+        if (!MO.isDef())
+          continue;
+
+        const Register CandidateReg = MO.getReg();
+        const TargetRegisterClass *CandidateRC = MRI->getRegClass(CandidateReg);
+
+        // Only process VGPR registers
+        if (!TRI->isVGPRClass(CandidateRC))
+          continue;
+        LLVM_DEBUG(dbgs() << "\nAdding antihints for: "; MI.dump();
+                   dbgs() << "\n");
+
+        for (Register HazardReg : HintSource->Regs) {
+          // Check if TRANS register is dead at current instruction
+          const LiveInterval &HazardInterval = LIS->getInterval(HazardReg);
+          if (!HazardInterval.liveAt(CurrentSlot)) {
+            MRI->addRegAllocationAntiHints(CandidateReg, HazardReg);
+            LLVM_DEBUG(dbgs()
+                       << "  Anti-hint added: " << printReg(CandidateReg, TRI)
+                       << " <--> " << printReg(HazardReg, TRI) << "\n");
+
+            Changed = true;
+          }
+        }
+      }
+    };
+
+    auto updateHintSource =
+        [&addAntiHints](std::optional<HazardInfo> &HintSource, unsigned MIMask,
+                        const MachineInstr &MI) {
+          if (!HintSource)
+            return;
+
+          if (MIMask & HintSource->ConsumerMask) {
+            addAntiHints(MI, HintSource);
+          }
+
+          if (MIMask & HintSource->HazardSlotMask) {
+            ++HintSource->HazardConsumerSince;
+          }
+
+          if (HintSource->HazardConsumerSince >= HintSource->HazardSlots)
+            HintSource = std::nullopt;
+        };
+
+    for (const MachineBasicBlock &MBB : MF) {
+      std::optional<HazardInfo> LastMFMAOrWMMA = std::nullopt;
+      std::optional<HazardInfo> LastTRANS = std::nullopt;
+
+      for (const MachineInstr &MI : MBB) {
+        if (MI.isDebugInstr())
+          continue;
+
+        if (TII->getRepeatRate(MI) > 1 &&
+            !(SIInstrInfo::isMFMAorWMMA(MI) || SIInstrInfo::isTRANS(MI))) {
+          LastMFMAOrWMMA = std::nullopt;
+          LastTRANS = std::nullopt;
+          continue;
+        }
+
+        // Handle MFMA/WMMA instructions
+        if (SIInstrInfo::isMFMAorWMMA(MI)) {
+          // WMMA / MFMA kill active Trans + WMMA / MFMA windows
+          LastMFMAOrWMMA = std::nullopt;
+          LastTRANS = std::nullopt;
+
+          SmallVector<Register, 4> MFMARegisters;
+          // Collect destination and source C (accumulator) registers
+          collectNamedOperand(AMDGPU::OpName::src0, "src0", MI, MFMARegisters);
+          collectNamedOperand(AMDGPU::OpName::src1, "src1", MI, MFMARegisters);
+          collectNamedOperand(AMDGPU::OpName::src2, "src2", MI, MFMARegisters);
+          if (!MFMARegisters.empty()) {
+            AMDGPU::CoExecInfo CEI = AMDGPU::getCoExecInfo(MI, *TII);
+            unsigned VALUSlots =
+                CEI.getCoExecStageCount(AMDGPU::CoExecMask::VALU);
+            AMDGPU::CoExecMaskT SlotMask =
+                AMDGPU::CoExecMask::VALU | AMDGPU::CoExecMask::TRANS;
+            AMDGPU::CoExecMaskT ConsumerMask =
+                SlotMask | AMDGPU::CoExecMask::VMEM | AMDGPU::CoExecMask::DS;
+            LastMFMAOrWMMA = {std::move(MFMARegisters), VALUSlots, 0u, SlotMask,
+                              ConsumerMask};
+          }
+          // MFMA / WMMA do no coexecute under other valu
+          continue;
+        }
+
+        // Handle TRANS instructions
+        if (SIInstrInfo::isTRANS(MI)) {
+          SmallVector<Register, 4> TRANSRegisters;
+          collectNamedOperand(AMDGPU::OpName::src0, "src0", MI, TRANSRegisters);
+
+          if (!TRANSRegisters.empty()) {
+            unsigned RepeatRate = TII->getRepeatRate(MI);
+            AMDGPU::CoExecMaskT SlotMask = AMDGPU::CoExecMask::VALU;
+            AMDGPU::CoExecMaskT ConsumerMask =
+                SlotMask | AMDGPU::CoExecMask::VMEM | AMDGPU::CoExecMask::DS;
+            LastTRANS = {std::move(TRANSRegisters), RepeatRate - 1, 0u,
+                         SlotMask, ConsumerMask};
+          }
+        }
+
+        AMDGPU::CoExecMaskT MIMask = AMDGPU::getCoExecMaskForMI(MI, *TII);
+
+        updateHintSource(LastMFMAOrWMMA, MIMask, MI);
+        updateHintSource(LastTRANS, MIMask, MI);
+      }
+    }
+  }
+
+  // On gfx1250 with sched.mode 2 enabled, the compiler must insert wait_alu
+  // va_vdst instructions between VALU and MEM instructions when there are WAR
+  // dependencies. Add anti-hints to try to avoid these WAR dependencies.
+  if (EnableAntiHintsForVAVdst && ST.hasGFX1250Insts()) {
+    const unsigned LookbackWindow = VAVDSTLookbackWindow;
+
+    for (const MachineBasicBlock &MBB : MF) {
+      SmallVector<Register, 64> RecentVALUSrcs;
+
+      for (const MachineInstr &MI : MBB) {
+        if (MI.isDebugInstr())
+          continue;
+
+        if (TII->isVALU(MI)) {
+          for (const MachineOperand &MO : MI.uses()) {
+            if (!MO.isReg() || !MO.getReg().isVirtual())
+              continue;
+            Register Reg = MO.getReg();
+            const TargetRegisterClass *RC = MRI->getRegClass(Reg);
+            if (TRI->hasVGPRs(RC)) {
+              if (!llvm::is_contained(RecentVALUSrcs, Reg)) {
+                RecentVALUSrcs.push_back(Reg);
+                if (RecentVALUSrcs.size() > LookbackWindow)
+                  RecentVALUSrcs.erase(RecentVALUSrcs.begin());
+              }
+            }
+          }
+        }
+
+        if ((TII->isDS(MI) || TII->isVMEM(MI)) && MI.mayLoad()) {
+          if (RecentVALUSrcs.empty())
+            continue;
+
+          for (const MachineOperand &MO : MI.defs()) {
+            if (!MO.isReg() || !MO.getReg().isVirtual())
+              continue;
+            Register DSDestReg = MO.getReg();
+            const TargetRegisterClass *RC = MRI->getRegClass(DSDestReg);
+            if (!TRI->hasVGPRs(RC))
+              continue;
+
+            for (Register VALUSrcReg : RecentVALUSrcs) {
+              if (VALUSrcReg == DSDestReg)
+                continue;
+              MRI->addRegAllocationAntiHints(DSDestReg, VALUSrcReg);
+              MRI->addRegAllocationAntiHints(VALUSrcReg, DSDestReg);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Add anti-hints between address operands of non-DS memory instructions
+  // (global/buffer loads) and subsequent VGPR writes. This helps avoid
+  // wait xcnt instructions that would otherwise be needed when a subsequent
+  // instruction overwrites the address register before the memory operation
+  // completes.
+  if (EnableAntiHintsForAddr && ST.hasGFX1250Insts()) {
+    const unsigned LookbackWindow = AddrAntiHintWindow;
+
+    for (const MachineBasicBlock &MBB : MF) {
+      // Track recent memory instruction address operands
+      SmallVector<Register, 64> RecentAddrRegs;
+
+      for (const MachineInstr &MI : MBB) {
+        if (MI.isDebugInstr())
+          continue;
+
+        // Check if this is a non-DS memory operation (FLAT/Global/Scratch/VMEM)
+        bool IsNonDSMemOp = TII->isFLAT(MI) || TII->isFLATGlobal(MI) ||
+                            TII->isFLATScratch(MI) || TII->isVMEM(MI);
+
+        if (IsNonDSMemOp) {
+          // Collect address operand (vaddr) for this memory instruction
+          if (const MachineOperand *VAddr =
+                  TII->getNamedOperand(MI, AMDGPU::OpName::vaddr)) {
+            if (VAddr->isReg() && VAddr->getReg().isVirtual()) {
+              Register AddrReg = VAddr->getReg();
+              const TargetRegisterClass *RC = MRI->getRegClass(AddrReg);
+              if (TRI->hasVGPRs(RC)) {
+                if (!llvm::is_contained(RecentAddrRegs, AddrReg)) {
+                  RecentAddrRegs.push_back(AddrReg);
+                  if (RecentAddrRegs.size() > LookbackWindow)
+                    RecentAddrRegs.erase(RecentAddrRegs.begin());
+                }
+              }
+            }
+          }
+          continue;
+        }
+
+        // For any instruction that writes a VGPR, add anti-hints between
+        // the written register and recent address registers
+        if (RecentAddrRegs.empty())
+          continue;
+
+        for (const MachineOperand &MO : MI.defs()) {
+          if (!MO.isReg() || !MO.getReg().isVirtual())
+            continue;
+          Register DefReg = MO.getReg();
+          const TargetRegisterClass *RC = MRI->getRegClass(DefReg);
+          if (!TRI->hasVGPRs(RC))
+            continue;
+
+          for (Register AddrReg : RecentAddrRegs) {
+            if (AddrReg == DefReg)
+              continue;
+            MRI->addRegAllocationAntiHints(DefReg, AddrReg);
+            MRI->addRegAllocationAntiHints(AddrReg, DefReg);
+          }
+        }
+      }
+    }
+  }
 
   for (unsigned I = 0, E = MRI->getNumVirtRegs(); I != E; ++I) {
     Register Reg = Register::index2VirtReg(I);

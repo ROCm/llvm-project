@@ -45,6 +45,13 @@ using namespace llvm;
 #include "AMDGPUGenInstrInfo.inc"
 
 namespace llvm::AMDGPU {
+struct AMDGPURepeatRateInfo {
+  uint16_t Inst;
+  uint8_t RepeatRate;
+};
+
+#define GET_GFX1250RepeatRateTable_DECL
+#define GET_GFX1250RepeatRateTable_IMPL
 #define GET_ImageDimIntrinsicTable_IMPL
 #define GET_RsrcIntrinsics_IMPL
 #include "AMDGPUGenSearchableTables.inc"
@@ -62,6 +69,17 @@ static cl::opt<bool> Fix16BitCopies(
   cl::desc("Fix copies between 32 and 16 bit registers by extending to 32 bit"),
   cl::init(true),
   cl::ReallyHidden);
+
+static cl::opt<SIInstrInfo::DSLatencyMode> DSLatency(
+    "amdgpu-ds-latency-mode", cl::desc("LDS latency mode (LDS contention)"),
+    cl::values(
+        clEnumValN(SIInstrInfo::DSLatencyMode::Fast, "fast",
+                   "Use default/pinged latency (no contention)"),
+        clEnumValN(SIInstrInfo::DSLatencyMode::Loaded, "loaded",
+                   "Use loaded latency (moderate contention, 3x latency)"),
+        clEnumValN(SIInstrInfo::DSLatencyMode::Overloaded, "overloaded",
+                   "Use overloaded latency (high contention, 5x latency)")),
+    cl::init(SIInstrInfo::DSLatencyMode::Fast), cl::Hidden);
 
 SIInstrInfo::SIInstrInfo(const GCNSubtarget &ST)
     : AMDGPUGenInstrInfo(ST, RI, AMDGPU::ADJCALLSTACKUP,
@@ -11161,12 +11179,57 @@ unsigned SIInstrInfo::getInstrLatency(const InstrItineraryData *ItinData,
     unsigned Lat = 0, Count = 0;
     for (++I; I != E && I->isBundledWithPred(); ++I) {
       ++Count;
-      Lat = std::max(Lat, SchedModel.computeInstrLatency(&*I));
+      Lat = std::max(Lat, getInstrLatency(*I));
     }
     return Lat + Count - 1;
   }
 
-  return SchedModel.computeInstrLatency(&MI);
+  return getInstrLatency(MI);
+}
+
+unsigned SIInstrInfo::getInstrLatency(const MachineInstr &MI) const {
+  if (SchedModel.hasInstrSchedModel()) {
+    unsigned Latency = SchedModel.computeInstrLatency(&MI);
+    if (isDS(MI)) {
+      Latency *= getDSLatencyMultiplier(*MI.getMF());
+    }
+    return Latency;
+  }
+
+  return 0;
+}
+
+unsigned SIInstrInfo::getSchedCyclesForCopy(const MachineInstr &MI) const {
+  if (!MI.isCopy())
+    return 1;
+
+  const MachineFunction &MF = *MI.getParent()->getParent();
+  const MachineRegisterInfo &MRI = MF.getRegInfo();
+  const MachineOperand &DstOp = MI.getOperand(0);
+  Register Dst = DstOp.getReg();
+
+  // If there's a subreg index, get the actual subreg size, not the full reg
+  // size.
+  unsigned SubReg = DstOp.getSubReg();
+  if (SubReg) {
+    unsigned SubRegSize = RI.getSubRegIdxSize(SubReg);
+    // Each 64-bit chunk requires one move instruction.
+    return (SubRegSize + 63) / 64;
+  }
+
+  const TargetRegisterClass *RC = nullptr;
+  if (Dst.isVirtual())
+    RC = MRI.getRegClass(Dst);
+  else
+    RC = RI.getPhysRegBaseClass(Dst);
+
+  if (!RC)
+    return 1;
+
+  unsigned SizeInBits = RI.getRegSizeInBits(*RC);
+  // Each 64-bit chunk requires one move instruction.
+  // 32-bit=1, 64-bit=1, 96-bit=2, 128-bit=2, 256-bit=4, etc.
+  return (SizeInBits + 63) / 64;
 }
 
 const MachineOperand &
@@ -11826,6 +11889,11 @@ void SIInstrInfo::enforceOperandRCAlignment(MachineInstr &MI,
 }
 
 unsigned SIInstrInfo::getRepeatRate(const MachineInstr &MI) const {
+  if (ST.hasGFX1250Insts()) {
+    if (const auto *Entry = AMDGPU::getGFX1250RepeatRateInfo(MI.getOpcode()))
+      return Entry->RepeatRate;
+  }
+
   if (!SchedModel.hasInstrSchedModel())
     return 0;
 
@@ -11875,4 +11943,49 @@ bool SIInstrInfo::isXDL(const MachineInstr &MI) const {
     return true;
 
   return AMDGPU::getMAIIsGFX940XDL(Opcode);
+}
+
+MachineInstr *SIInstrInfo::getNextRealInstr(MachineInstr *MI) {
+  if (!MI)
+    return nullptr;
+  for (MachineInstr *Next = MI->getNextNode(); Next;
+       Next = Next->getNextNode()) {
+    if (!Next->isDebugInstr() && !Next->isMetaInstruction() &&
+        !Next->isImplicitDef())
+      return Next;
+  }
+  return nullptr;
+}
+
+unsigned SIInstrInfo::getDSLatencyMultiplier(const MachineFunction &MF) {
+  const Function &F = MF.getFunction();
+
+  // Priority selection goes to the attribute
+  Attribute A = F.getFnAttribute("amdgpu-ds-latency-mode");
+  if (A.isValid()) {
+    StringRef Val = A.getValueAsString();
+    if (Val == "fast")
+      return 1;
+    if (Val == "loaded")
+      return 3;
+    if (Val == "overloaded")
+      return 5;
+  }
+
+  // If using coexec scheduler, default to "loaded" mode unless overridden
+  // by the command line option.
+  if (DSLatency.getNumOccurrences() == 0 &&
+      AMDGPU::getSchedStrategy(F) == "coexec")
+    return 3;
+
+  switch (DSLatency) {
+  case DSLatencyMode::Fast:
+    return 1; // Use default scheduling model latency
+  case DSLatencyMode::Loaded:
+    return 3;
+  case DSLatencyMode::Overloaded:
+    return 5;
+  }
+
+  return 1;
 }

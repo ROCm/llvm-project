@@ -594,6 +594,11 @@ bool getWMMAIsXDL(unsigned Opc) {
   return Info ? Info->is_wmma_xdl : false;
 }
 
+bool getWMMAIsVAVDSTOrderedXDL(unsigned Opc) {
+  const WMMAInstInfo *Info = getWMMAInstInfoHelper(Opc);
+  return Info ? Info->is_vavdst_ordered_xdl : false;
+}
+
 bool getHasMatrixScale(unsigned Opc) {
   const WMMAInstInfo *Info = getWMMAInstInfoHelper(Opc);
   return Info && Info->HasMatrixScale;

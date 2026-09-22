@@ -23,8 +23,8 @@
 ; GCN-MESA: s_addc_u32 s3, .Lprivate1@abs32@hi, s5
 
 ; PAL uses absolute relocations.
-; GCN-PAL:    s_add_u32 s2, .Lprivate1@abs32@lo, s4
-; GCN-PAL:    s_addc_u32 s3, .Lprivate1@abs32@hi, s5
+; GCN-PAL:    s_add_u32 s{{[0-9]+}}, .Lprivate1@abs32@lo, s4
+; GCN-PAL:    s_addc_u32 s{{[0-9]+}}, .Lprivate1@abs32@hi, s5
 ; GCN-PAL:    s_add_u32 s4, .Lprivate2@abs32@lo, s4
 ; GCN-PAL:    s_addc_u32 s5, .Lprivate2@abs32@hi, s5
 

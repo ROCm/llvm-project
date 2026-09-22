@@ -5584,8 +5584,8 @@ define amdgpu_kernel void @test_fold_canonicalize_snan0_value_f64(ptr addrspace(
 ; GFX1251-GISEL-TRUE16-NEXT:    s_mov_b64 s[64:65], 0
 ; GFX1251-GISEL-TRUE16-NEXT:    v_nop
 ; GFX1251-GISEL-TRUE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; GFX1251-GISEL-TRUE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; GFX1251-GISEL-TRUE16-NEXT:    v_mov_b64_e32 v[0:1], 0x7ff0000000000001
+; GFX1251-GISEL-TRUE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; GFX1251-GISEL-TRUE16-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX1251-GISEL-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1251-GISEL-TRUE16-NEXT:    v_max_num_f64_e32 v[0:1], 0x7ff0000000000001, v[0:1]
@@ -5612,8 +5612,8 @@ define amdgpu_kernel void @test_fold_canonicalize_snan0_value_f64(ptr addrspace(
 ; GFX1251-GISEL-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; GFX1251-GISEL-FAKE16-NEXT:    v_nop
 ; GFX1251-GISEL-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; GFX1251-GISEL-FAKE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; GFX1251-GISEL-FAKE16-NEXT:    v_mov_b64_e32 v[0:1], 0x7ff0000000000001
+; GFX1251-GISEL-FAKE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; GFX1251-GISEL-FAKE16-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX1251-GISEL-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1251-GISEL-FAKE16-NEXT:    v_max_num_f64_e32 v[0:1], 0x7ff0000000000001, v[0:1]
@@ -5881,8 +5881,8 @@ define amdgpu_kernel void @test_fold_canonicalize_snan2_value_f64(ptr addrspace(
 ; GFX1251-GISEL-TRUE16-NEXT:    s_mov_b64 s[64:65], 0
 ; GFX1251-GISEL-TRUE16-NEXT:    v_nop
 ; GFX1251-GISEL-TRUE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; GFX1251-GISEL-TRUE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; GFX1251-GISEL-TRUE16-NEXT:    v_mov_b64_e32 v[0:1], 0xfff0000000000001
+; GFX1251-GISEL-TRUE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; GFX1251-GISEL-TRUE16-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX1251-GISEL-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1251-GISEL-TRUE16-NEXT:    v_max_num_f64_e32 v[0:1], 0xfff0000000000001, v[0:1]
@@ -5909,8 +5909,8 @@ define amdgpu_kernel void @test_fold_canonicalize_snan2_value_f64(ptr addrspace(
 ; GFX1251-GISEL-FAKE16-NEXT:    s_mov_b64 s[64:65], 0
 ; GFX1251-GISEL-FAKE16-NEXT:    v_nop
 ; GFX1251-GISEL-FAKE16-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; GFX1251-GISEL-FAKE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; GFX1251-GISEL-FAKE16-NEXT:    v_mov_b64_e32 v[0:1], 0xfff0000000000001
+; GFX1251-GISEL-FAKE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
 ; GFX1251-GISEL-FAKE16-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX1251-GISEL-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX1251-GISEL-FAKE16-NEXT:    v_max_num_f64_e32 v[0:1], 0xfff0000000000001, v[0:1]
@@ -7567,13 +7567,13 @@ define amdgpu_kernel void @v_test_canonicalize_var_v2f64(ptr addrspace(1) %out) 
 ; GFX1251-NEXT:    v_nop
 ; GFX1251-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
 ; GFX1251-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0 nv
-; GFX1251-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; GFX1251-NEXT:    v_mov_b32_e32 v4, 0
+; GFX1251-NEXT:    v_and_b32_e32 v4, 0x3ff, v0
+; GFX1251-NEXT:    v_mov_b32_e32 v5, 0
 ; GFX1251-NEXT:    s_wait_kmcnt 0x0
-; GFX1251-NEXT:    global_load_b128 v[0:3], v0, s[0:1] scale_offset
+; GFX1251-NEXT:    global_load_b128 v[0:3], v4, s[0:1] scale_offset
 ; GFX1251-NEXT:    s_wait_loadcnt 0x0
 ; GFX1251-NEXT:    v_pk_max_num_f64 v[0:3], v[0:3], v[0:3]
-; GFX1251-NEXT:    global_store_b128 v4, v[0:3], s[0:1]
+; GFX1251-NEXT:    global_store_b128 v5, v[0:3], s[0:1]
 ; GFX1251-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %gep = getelementptr <2 x double>, ptr addrspace(1) %out, i32 %tid

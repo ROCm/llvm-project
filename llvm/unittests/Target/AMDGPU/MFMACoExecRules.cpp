@@ -54,5 +54,16 @@ TEST_F(AMDGPUMFMACoExecRules, GFX950) {
     // every slot, so here we check that we did not encounter the fallback
     // definition of co-exec rules.
     EXPECT_EQ(Info.Slots[0].Mask, CoExecMask::None) << MCII->getName(Op);
+    EXPECT_EQ(Info.HasScaling, AMDGPU::getHasMatrixScale(Op))
+        << MCII->getName(Op);
+    EXPECT_GT(Info.Occupancy, 0u) << MCII->getName(Op);
+    EXPECT_LT(Info.Occupancy, Info.TotalWindow) << MCII->getName(Op);
+    EXPECT_LT(Info.LastIStage, Info.TotalWindow) << MCII->getName(Op);
+
+    unsigned FirstNextMFMA = 0;
+    while (FirstNextMFMA < Info.TotalWindow &&
+           !(Info.Slots[FirstNextMFMA].Mask & CoExecMask::WMMA))
+      ++FirstNextMFMA;
+    EXPECT_EQ(FirstNextMFMA, Info.Occupancy) << MCII->getName(Op);
   }
 }

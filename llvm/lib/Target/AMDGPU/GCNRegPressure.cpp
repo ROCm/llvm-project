@@ -651,8 +651,8 @@ bool GCNDownwardRPTracker::reset(const MachineInstr &MI,
                                  MachineBasicBlock::const_iterator End,
                                  const LiveRegSet *LiveRegsCopy) {
   MBBEnd = MI.getParent()->end();
-  assert(End == MBBEnd ||
-         End->getParent()->end() == MBBEnd && "end unrelated to MI block");
+  assert((End == MBBEnd || End->getParent()->end() == MBBEnd) &&
+         "end unrelated to MI block");
   NextMI = &MI;
   NextMI = skipDebugInstructionsForward(NextMI, End);
 
@@ -819,9 +819,9 @@ Printable llvm::reportMismatch(const GCNRPTracker::LiveRegSet &LISLR,
   });
 }
 
-GCNRegPressure
-GCNDownwardRPTracker::bumpDownwardPressure(const MachineInstr *MI,
-                                           const SIRegisterInfo *TRI) const {
+void GCNDownwardRPTracker::forEachDownwardTransition(
+    const MachineInstr *MI, const SIRegisterInfo *TRI,
+    function_ref<void(Register, LaneBitmask, LaneBitmask)> Cb) const {
   assert(!MI->isDebugOrPseudoInstr() && "Expect a nondebug instruction.");
 
   SlotIndex SlotIdx;
@@ -843,7 +843,6 @@ GCNDownwardRPTracker::bumpDownwardPressure(const MachineInstr *MI,
   RegisterOperands RegOpers;
   RegOpers.collect(*MI, *TRI, *MRI, true, /*IgnoreDead=*/false);
   RegOpers.adjustLaneLiveness(LIS, *MRI, SlotIdx);
-  GCNRegPressure TempPressure = CurPressure;
   // Tracks the live mask reported by the use loop for redefined registers.
   SmallDenseMap<Register, LaneBitmask, 8> PostUseMask;
 
@@ -868,7 +867,7 @@ GCNDownwardRPTracker::bumpDownwardPressure(const MachineInstr *MI,
     LaneBitmask LiveMask = It != LiveRegs.end() ? It->second : LaneBitmask(0);
     LaneBitmask NewMask = LiveMask & ~LastUseMask;
     PostUseMask[Reg] = NewMask;
-    TempPressure.inc(Reg, LiveMask, NewMask, *MRI);
+    Cb(Reg, LiveMask, NewMask);
   }
 
   // Generate liveness for defs.
@@ -886,9 +885,19 @@ GCNDownwardRPTracker::bumpDownwardPressure(const MachineInstr *MI,
     }
 
     LaneBitmask NewMask = LiveMask | Def.LaneMask;
-    TempPressure.inc(Reg, LiveMask, NewMask, *MRI);
+    Cb(Reg, LiveMask, NewMask);
   }
+}
 
+GCNRegPressure
+GCNDownwardRPTracker::bumpDownwardPressure(const MachineInstr *MI,
+                                           const SIRegisterInfo *TRI) const {
+  GCNRegPressure TempPressure = CurPressure;
+  forEachDownwardTransition(MI, TRI,
+                            [&](Register Reg, LaneBitmask PrevMask,
+                                LaneBitmask NewMask) {
+                              TempPressure.inc(Reg, PrevMask, NewMask, *MRI);
+                            });
   return TempPressure;
 }
 
@@ -1213,3 +1222,83 @@ LLVM_DUMP_METHOD void llvm::dumpMaxRegPressure(MachineFunction &MF,
   }
 }
 #endif
+
+unsigned llvm::computeLiveIntervalVGPRPressure(
+    MachineBasicBlock::const_iterator RegionBegin,
+    MachineBasicBlock::const_iterator RegionEnd,
+    const GCNRPTracker::LiveRegSet &LiveIns, LiveIntervals &LIS,
+    const MachineRegisterInfo &MRI, const SIRegisterInfo &TRI) {
+
+  SmallVector<LiveInterval *> RegionIntervals;
+  SmallPtrSet<LiveInterval *, 32> Seen;
+
+  // Collect live-ins
+  for (const auto &[RegNum, LaneMask] : LiveIns) {
+    Register VReg(RegNum);
+    if (!VReg.isVirtual() || !LIS.hasInterval(VReg))
+      continue;
+    // Only VGPR intervals
+    if (!TRI.isVGPRClass(MRI.getRegClass(VReg)))
+      continue;
+    LiveInterval &LI = LIS.getInterval(VReg);
+    if (Seen.insert(&LI).second)
+      RegionIntervals.push_back(&LI);
+  }
+
+  // Collect defs in region
+  for (auto I = RegionBegin; I != RegionEnd; ++I) {
+    for (const MachineOperand &MO : I->operands()) {
+      if (!MO.isReg() || !MO.isDef() || !MO.getReg().isVirtual())
+        continue;
+      Register VReg = MO.getReg();
+      if (!LIS.hasInterval(VReg))
+        continue;
+      if (!TRI.isVGPRClass(MRI.getRegClass(VReg)))
+        continue;
+      LiveInterval &LI = LIS.getInterval(VReg);
+      if (Seen.insert(&LI).second)
+        RegionIntervals.push_back(&LI);
+    }
+  }
+
+  llvm::sort(RegionIntervals, [](auto *LHS, auto *RHS) {
+    return LHS->beginIndex() < RHS->beginIndex();
+  });
+
+  LiveIntervalUnion::Allocator Alloc;
+  std::vector<LiveIntervalUnion> Slots;
+  unsigned MaxSlotUsed = 0;
+
+  // Simulate greedy register allocation, assuming unlimited number
+  // of physical registers (slots)
+  for (LiveInterval *LI : RegionIntervals) {
+    const TargetRegisterClass *RC = MRI.getRegClass(LI->reg());
+    unsigned Size = TRI.getRegClassWeight(RC).RegWeight;
+    unsigned Alignment = std::max(1u, TRI.getRegClassAlignmentNumBits(RC) / 32);
+
+    unsigned Start = 0;
+    while (true) {
+      if (Slots.size() < Start + Size)
+        Slots.resize(Start + Size, LiveIntervalUnion(Alloc));
+
+      bool Fits = true;
+      for (unsigned Idx = Start; Idx < Start + Size; Idx++) {
+        LiveIntervalUnion::Query Q(*LI, Slots[Idx]);
+        if (Q.checkInterference()) {
+          Start = alignTo(Idx + 1, Alignment);
+          Fits = false;
+          break;
+        }
+      }
+
+      if (Fits) {
+        for (unsigned Idx = Start; Idx < Start + Size; Idx++)
+          Slots[Idx].unify(*LI, *LI);
+        MaxSlotUsed = std::max(MaxSlotUsed, Start + Size);
+        break;
+      }
+    }
+  }
+
+  return MaxSlotUsed;
+}

@@ -399,9 +399,9 @@ define float @v_maximum3_tree8_asymmetric_use(float %a, float %b, float %c, floa
 ; GFX1250-NEXT:    v_maximum_f32 v0, v0, v1
 ; GFX1250-NEXT:    v_maximum_f32 v1, v2, v3
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-NEXT:    v_maximum_f32 v2, v4, v7
-; GFX1250-NEXT:    v_maximum3_f32 v0, v0, v1, v2
-; GFX1250-NEXT:    global_store_b32 v[8:9], v2, off
+; GFX1250-NEXT:    v_maximum_f32 v4, v4, v7
+; GFX1250-NEXT:    v_maximum3_f32 v0, v0, v1, v4
+; GFX1250-NEXT:    global_store_b32 v[8:9], v4, off
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
                                                float %e, float %f, float %g, float %h,
                                                ptr addrspace(1) %out) {

@@ -631,10 +631,10 @@ bb:
 }
 
 ; GCN-LABEL: {{^}}s_test_smed3_i32_pat_0_multi_use_2:
-; GCN: s_max_i32
-; GCN: s_min_i32
+; GCN-DAG: s_max_i32
+; GCN-DAG: s_min_i32
+; GCN-DAG: v_med3_i32
 ; GCN-NOT: {{s_min_i32|s_max_i32}}
-; GCN: v_med3_i32
 define amdgpu_kernel void @s_test_smed3_i32_pat_0_multi_use_2(ptr addrspace(1) %arg, i32 %x, i32 %y, i32 %z) #1 {
 bb:
   %tmp0 = call i32 @smin(i32 %x, i32 %y)

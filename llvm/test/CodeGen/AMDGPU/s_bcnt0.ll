@@ -39,12 +39,14 @@ define amdgpu_ps i32 @bcnt032_ctpop_multiple_uses(i32 inreg %val0) {
 ; CHECK-NEXT:    s_bcnt1_i32_b32 s1, s0
 ; CHECK-NEXT:    s_bcnt0_i32_b32 s0, s0
 ; CHECK-NEXT:    ;;#ASMSTART
-; CHECK-NEXT:    ; use s0
-; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    s_cselect_b32 s0, 1, 0
-; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; use s1
 ; CHECK-NEXT:    ;;#ASMEND
+; CHECK-NEXT:    ;;#ASMSTART
+; CHECK-NEXT:    ; use s0
+; CHECK-NEXT:    ;;#ASMEND
+; CHECK-NEXT:    s_cselect_b64 s[0:1], -1, 0
+; CHECK-NEXT:    s_and_b64 s[0:1], s[0:1], exec
+; CHECK-NEXT:    s_cselect_b32 s0, 1, 0
 ; CHECK-NEXT:    ; return to shader part epilog
   %result = call i32 @llvm.ctpop.i32(i32 %val0)
   %result2 = sub i32 32, %result
