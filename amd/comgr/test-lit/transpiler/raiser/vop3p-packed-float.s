@@ -16,16 +16,10 @@
 	.type	packed_float,@function
 ; CHECK-LABEL: define amdgpu_kernel void @packed_float(
 packed_float:
-; CHECK: bb_0x{{.+}}:
-; CHECK: [[F16_SRC0_LO_BITS:%.+]] = trunc i32 {{%.+}} to i16
-; CHECK: [[F16_SRC0_HI_SHIFTED:%.+]] = lshr i32 {{%.+}}, 16
-; CHECK: [[F16_SRC0_HI_BITS:%.+]] = trunc i32 [[F16_SRC0_HI_SHIFTED]] to i16
-; CHECK: [[F16_SRC0_LO:%.+]] = bitcast i16 [[F16_SRC0_LO_BITS]] to half
-; CHECK: [[F16_SRC0_HI:%.+]] = bitcast i16 [[F16_SRC0_HI_BITS]] to half
-; CHECK: [[F16_NEG_LO:%.+]] = fneg half [[F16_SRC0_HI]]
+; CHECK: [[F16_NEG_LO:%.+]] = fneg half [[F16_SRC0_HI:%.+]]
 ; CHECK: [[F16_SRC0_LOW_LANE:%.+]] = insertelement <2 x half> poison, half [[F16_NEG_LO]], i64 0
 ; CHECK: [[F16_OPERAND0:%.+]] = insertelement <2 x half>
-; CHECK-SAME: [[F16_SRC0_LOW_LANE]], half [[F16_SRC0_LO]], i64 1
+; CHECK-SAME: [[F16_SRC0_LOW_LANE]], half [[F16_SRC0_LO:%.+]], i64 1
 ; CHECK: [[F16_SRC1_HI_SHIFTED:%.+]] = lshr i32 {{%.+}}, 16
 ; CHECK: [[F16_SRC1_HI_BITS:%.+]] = trunc i32 [[F16_SRC1_HI_SHIFTED]] to i16
 ; CHECK: [[F16_SRC1_HI:%.+]] = bitcast i16 [[F16_SRC1_HI_BITS]] to half
