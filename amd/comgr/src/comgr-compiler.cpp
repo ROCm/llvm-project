@@ -33,6 +33,7 @@
 #include "clang/Driver/Job.h"
 #include "clang/Driver/OffloadBundler.h"
 #include "clang/Driver/Tool.h"
+#include "clang/Driver/ToolChain.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
@@ -102,6 +103,29 @@ namespace COMGR {
 
 namespace {
 constexpr llvm::StringLiteral LinkerJobName = "amdgpu::Linker";
+constexpr llvm::StringLiteral ProfileRuntimeRelativePath =
+    "lib/amdgcn-amd-amdhsa/libclang_rt.profile.a";
+
+struct ProfileLinkOptions {
+  bool NeedsRuntime = false;
+  bool HasResourceDir = false;
+};
+
+static ProfileLinkOptions getProfileLinkOptions(ArrayRef<std::string> Options) {
+  SmallVector<const char *, 16> Args;
+  for (const std::string &Option : Options)
+    Args.push_back(Option.c_str());
+
+  unsigned MissingArgIndex;
+  unsigned MissingArgCount;
+  InputArgList ParsedArgs =
+      getDriverOptTable().ParseArgs(Args, MissingArgIndex, MissingArgCount);
+  if (MissingArgCount != 0)
+    return {};
+
+  return {ToolChain::needsProfileRT(ParsedArgs),
+          ParsedArgs.hasArg(options::OPT_resource_dir)};
+}
 
 /// \brief Helper class for representing a single invocation of the assembler.
 struct AssemblerInvocation {
@@ -2279,6 +2303,35 @@ amd_comgr_status_t AMDGPUCompiler::linkToExecutable() {
   if (ActionInfo->IsaName) {
     if (auto Status = addTargetIdentifierFlags(ActionInfo->IsaName)) {
       return Status;
+    }
+  }
+
+  ProfileLinkOptions LinkOptions =
+      getProfileLinkOptions(ActionInfo->getOptions());
+  if (LinkOptions.NeedsRuntime && !LinkOptions.HasResourceDir) {
+    ArrayRef<ResourceDirResource> Resources = getResourceDirectoryFiles();
+    bool HasProfileRuntime = llvm::any_of(Resources, [](const auto &Resource) {
+      return Resource.RelativePath == ProfileRuntimeRelativePath;
+    });
+    if (HasProfileRuntime) {
+      // LLD cannot read embedded archives from VFS. Materialize the runtime
+      // archive set before replacing the driver's resource directory.
+      for (const ResourceDirResource &Resource : Resources) {
+        if (path::extension(Resource.RelativePath) != ".a")
+          continue;
+
+        SmallString<128> ResourcePath = InputDir;
+        path::append(ResourcePath, Resource.RelativePath);
+        if (amd_comgr_status_t Status =
+                outputToFile(Resource.FileContent, ResourcePath)) {
+          LogS << "comgr: failed to materialize embedded runtime '"
+               << Resource.RelativePath << "' at '" << ResourcePath << "'\n";
+          return Status;
+        }
+      }
+
+      Args.push_back("-resource-dir");
+      Args.push_back(InputDir.c_str());
     }
   }
 

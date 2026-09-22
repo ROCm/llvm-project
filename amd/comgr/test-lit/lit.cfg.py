@@ -45,6 +45,21 @@ if glob.glob(
 ):
     config.available_features.add("comgr-has-amdgpu-asan-runtime")
 
+try:
+    with open(config.comgr_resource_dir_file, encoding="utf-8") as source:
+        embedded_resources = source.read()
+except OSError:
+    embedded_resources = ""
+
+if '"lib/amdgcn-amd-amdhsa/libclang_rt.profile.a"' in embedded_resources:
+    config.available_features.add("comgr-has-amdgpu-profile-runtime")
+
+if (
+    '"lib/amdgcn-amd-amdhsa/libclang_rt.asan.a"' in embedded_resources
+    and '"lib/amdgcn-amd-amdhsa/libclang_rt.asan_static.a"' in embedded_resources
+):
+    config.available_features.add("comgr-has-embedded-amdgpu-asan-runtime")
+
 
 # spirv-to-reloc-debuginfo checks that comgr forwards
 # -amdgpu-spill-cfi-saved-regs, which the AMD clang driver embeds for -g
