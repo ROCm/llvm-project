@@ -239,6 +239,17 @@ private:
   bool fixSetRegMode(MachineInstr *MI);
   bool fixTDM(MachineInstr *MI);
 
+  /// Wait states \p Consumer must have after \p Producer before reading as its
+  /// accumulator a register \p Producer overlaps but does not write in full.
+  int getMFMAOverlappedSrcCWaitStates(const MachineInstr &Consumer,
+                                      const MachineInstr &Producer) const;
+
+  /// Wait states \p Consumer must have after \p Producer before reading its
+  /// result through an operand that reads \p Reg, the accumulator if \p IsSrcC.
+  int getMFMAReadWaitStates(const MachineInstr &Consumer,
+                            const MachineInstr &Producer, Register Reg,
+                            bool IsSrcC) const;
+
   int checkMAIHazards(MachineInstr *MI) const;
   int checkMAIHazards908(MachineInstr *MI) const;
   int checkMAIHazards90A(MachineInstr *MI) const;
