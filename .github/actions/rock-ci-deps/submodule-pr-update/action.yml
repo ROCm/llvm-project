@@ -261,7 +261,7 @@ runs:
         fi
 
     - name: Enable LLVM assertions for the assertions nightly
-      if: contains(github.workflow, 'Nightly Assertions')
+      #if: contains(github.workflow, 'Nightly Assertions') - temporary
       shell: bash
       run: |
         cat > BRANCH_CONFIG.json <<'EOF'
