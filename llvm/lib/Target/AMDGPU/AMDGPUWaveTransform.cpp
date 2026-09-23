@@ -1710,58 +1710,52 @@ void ControlFlowRewriter::rewrite() {
 
     assert(!Info.OrigExit);
 
-    // INLINEASM_BR is not a terminator and was preserved during terminator
-    // removal. After reconvergence the original indirect target may no
-    // longer be a direct MBB successor (a flow node could've been inserted).
-    // Retarget the MBB operand to the appropriate wave-successor and
-    // transfer the indirect-target attributes onto the new target.
-    if (Info.InlineAsmBrMI) {
+    // INLINEASM_BR is not a terminator, so it survived terminator removal.
+    // Reconvergence may have inserted a flow node, leaving an MBB operand
+    // that is no longer a CFG successor. Retarget those operands to the
+    // wave successor of the original indirect dest and transfer the
+    // inlineasm-br-indirect-target attributes.
+    if (MachineInstr *CallBr = Info.InlineAsmBrMI) {
+      MachineBasicBlock *NewTarget;
+
+      // Identify and mark the lane successor corresponding to the
+      // OrigSuccCond as the new alive indirect target.
       if (Node->Successors.size() == 1) {
-        // Identify and mark the lone Node successor as the new alive indirect
-        // target.
-        MachineBasicBlock *NewTarget = Node->Successors[0]->Block;
-
-        LiveCallbrTargets.insert(NewTarget);
-        NewTarget->setIsInlineAsmBrIndirectTarget();
-        NewTarget->setLabelMustBeEmitted();
-
-        // Mark all the INLINEASM_BR indirect target operands as stale and
-        // retarget them to the new indirect target.
-        for (MachineOperand &MO : Info.InlineAsmBrMI->operands()) {
-          if (!MO.isMBB())
-            continue;
-
-          StaleCallbrTargets.insert(MO.getMBB());
-          MO.setMBB(NewTarget);
-        }
+        NewTarget = Node->Successors[0]->Block;
       } else {
-        // Identify and mark the lane successor corresponding to the
-        // OrigSuccCond as the new alive indirect target.
-        LaneEdge *LaneSucc =
-            llvm::find_if(Node->LaneSuccessors, [=](const auto &Succ) {
-              return Succ.Lane == Info.OrigSuccCond;
+        auto LaneSucc = llvm::find_if(
+            Node->LaneSuccessors,
+            [OrigSuccCond = Info.OrigSuccCond](const LaneEdge &Succ) {
+              return Succ.Lane == OrigSuccCond;
             });
-        assert(LaneSucc != Node->LaneSuccessors.end());
-        MachineBasicBlock *NewTarget = LaneSucc->Wave->Block;
+        assert(LaneSucc != Node->LaneSuccessors.end() &&
+               "missing wave successor for INLINEASM_BR indirect dest");
+        NewTarget = LaneSucc->Wave->Block;
+      }
 
-        LiveCallbrTargets.insert(NewTarget);
-        NewTarget->setIsInlineAsmBrIndirectTarget();
-        NewTarget->setLabelMustBeEmitted();
+      LiveCallbrTargets.insert(NewTarget);
+      NewTarget->setIsInlineAsmBrIndirectTarget();
+      NewTarget->setLabelMustBeEmitted();
 
-        // Mark all the non-successor INLINEASM_BR indirect target operands as
-        // stale and retarget them to the new indirect target.
-        for (MachineOperand &MO : Info.InlineAsmBrMI->operands()) {
-          if (!MO.isMBB())
-            continue;
+      // Mark all the non-successor INLINEASM_BR indirect target operands as
+      // stale and retarget them to the new alive indirect target.
+      for (MachineOperand &MO : CallBr->operands()) {
+        if (!MO.isMBB())
+          continue;
 
-          if (Node->Block->isSuccessor(MO.getMBB())) {
-            LiveCallbrTargets.insert(MO.getMBB());
-            continue;
-          }
+        MachineBasicBlock *OldTarget = MO.getMBB();
+        if (OldTarget == NewTarget)
+          continue;
 
-          StaleCallbrTargets.insert(MO.getMBB());
-          MO.setMBB(NewTarget);
+        // An indirect dest that reconvergence did not reroute (still alive wave
+        // successor) should be retained.
+        if (Node->Block->isSuccessor(OldTarget)) {
+          LiveCallbrTargets.insert(OldTarget);
+          continue;
         }
+
+        StaleCallbrTargets.insert(OldTarget);
+        MO.setMBB(NewTarget);
       }
     }
 
