@@ -1444,3 +1444,593 @@ body:             |
     $agpr0_agpr1 = V_MFMA_F64_4X4X4F64_e64 $agpr0_agpr1, $agpr0_agpr1, $agpr0_agpr1, 0, 0, 0, implicit $mode, implicit $exec
     BUFFER_STORE_DWORDX2_OFFEN_exact $vgpr2_vgpr3, $vgpr0, $sgpr0_sgpr1_sgpr2_sgpr3, 0, 0, 0, 0, implicit $exec
 ...
+# The reader is in a join block the MFMA's block reaches both directly and through
+# a long block; the direct edge decides how many wait states are missing. The two
+# functions place the join's predecessors in the two possible orders, which follows
+# the textual order of the blocks, and must be padded the same way.
+
+# The producer's block reaches the reader's block both directly and through one instruction, so the
+# window is 11 and the nearest producer one wait state away: ten are required. Taking the distance
+# through the detour leaves it two short, which is the shape a Composable Kernel FMHA backward
+# kernel hit on gfx90a. The two functions differ only in the order the join's predecessors are
+# registered, which follows the block layout, and must be padded the same.
+# GCN-LABEL: name: smfma16x16_write_vgpr_valu_read_diamond_long_edge_first
+# GCN:      bb.3:
+# GCN-NEXT: S_NOP 9
+# GCN-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+name:            smfma16x16_write_vgpr_valu_read_diamond_long_edge_first
+body:             |
+  bb.0:
+    successors: %bb.2
+    S_BRANCH %bb.2
+
+  bb.1:
+    successors: %bb.3
+    $sgpr0 = S_MOV_B32 0
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.1, %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+
+  bb.3:
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+...
+# GCN-LABEL: name: smfma16x16_write_vgpr_valu_read_diamond_short_edge_first
+# GCN:      bb.3:
+# GCN-NEXT: S_NOP 9
+# GCN-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+name:            smfma16x16_write_vgpr_valu_read_diamond_short_edge_first
+body:             |
+  bb.0:
+    successors: %bb.1
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.2, %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_SCC1 %bb.3, implicit $scc
+
+  bb.2:
+    successors: %bb.3
+    $sgpr0 = S_MOV_B32 0
+    S_BRANCH %bb.3
+
+  bb.3:
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+...
+
+# The same shape with a detour longer than the window. Reaching the producer's block the long way
+# first leaves it marked visited and the walk expired, so the direct edge is never measured and
+# nothing at all is emitted, rather than the two states the pair above is short.
+
+# GCN-LABEL: name: smfma16x16_valu_read_detour_longer_than_window
+# GCN:      bb.3:
+# GCN-NEXT: S_NOP 9
+# GCN-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+name:            smfma16x16_valu_read_detour_longer_than_window
+body:             |
+  bb.0:
+    successors: %bb.2
+    S_BRANCH %bb.2
+
+  bb.1:
+    successors: %bb.3
+    $sgpr0 = S_MOV_B32 0
+    $sgpr1 = S_MOV_B32 0
+    $sgpr2 = S_MOV_B32 0
+    $sgpr3 = S_MOV_B32 0
+    $sgpr4 = S_MOV_B32 0
+    $sgpr5 = S_MOV_B32 0
+    $sgpr6 = S_MOV_B32 0
+    $sgpr7 = S_MOV_B32 0
+    $sgpr8 = S_MOV_B32 0
+    $sgpr9 = S_MOV_B32 0
+    $sgpr10 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.1, %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+
+  bb.3:
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+...
+# An MFMA that overlaps nothing must not decide the window for one that does.
+# srcC reads v[0:3], written by the 32x32, which asks for 16 wait states, while
+# the unrelated 4x4 writing v[40:43] would ask for 2. The two functions differ
+# only in the order of the two middle blocks, so both must give the same answer.
+# GCN-LABEL: name: smfma32x32_srcc_read_unrelated_mfma_producer_block_first
+# GCN:      bb.3:
+# GCN-NEXT: S_NOP 14
+# GCN-NEXT: $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_4X4X1F32
+name:            smfma32x32_srcc_read_unrelated_mfma_producer_block_first
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15 = V_MFMA_F32_32X32X2F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.3
+    $vgpr40_vgpr41_vgpr42_vgpr43 = V_MFMA_F32_4X4X1F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr40_vgpr41_vgpr42_vgpr43, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.3:
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_4X4X1F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0
+...
+# GCN-LABEL: name: smfma32x32_srcc_read_unrelated_mfma_decoy_block_first
+# GCN:      bb.3:
+# GCN-NEXT: S_NOP 14
+# GCN-NEXT: $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_4X4X1F32
+name:            smfma32x32_srcc_read_unrelated_mfma_decoy_block_first
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.3
+    $vgpr40_vgpr41_vgpr42_vgpr43 = V_MFMA_F32_4X4X1F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr40_vgpr41_vgpr42_vgpr43, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15 = V_MFMA_F32_32X32X2F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.3:
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_4X4X1F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0
+...
+# The full-register case selects a different window: srcC is exactly the
+# producer's destination, so no wait states are required. The unrelated MFMA has
+# the producer's shape, so only the full-versus-partial distinction can change
+# the result, and recording it would pad 15 where none is needed.
+# GCN-LABEL: name: smfma32x32_full_srcc_read_unrelated_mfma
+# GCN:      bb.3:
+# GCN-NEXT: early-clobber {{.*}} = V_MFMA_F32_32X32X2F32
+name:            smfma32x32_full_srcc_read_unrelated_mfma
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15 = V_MFMA_F32_32X32X2F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.3
+    $vgpr40_vgpr41_vgpr42_vgpr43_vgpr44_vgpr45_vgpr46_vgpr47_vgpr48_vgpr49_vgpr50_vgpr51_vgpr52_vgpr53_vgpr54_vgpr55 = V_MFMA_F32_32X32X2F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr40_vgpr41_vgpr42_vgpr43_vgpr44_vgpr45_vgpr46_vgpr47_vgpr48_vgpr49_vgpr50_vgpr51_vgpr52_vgpr53_vgpr54_vgpr55, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.3:
+    $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15 = V_MFMA_F32_32X32X2F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 0, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0
+...
+# Producers of different shape reach one consumer, so the wait states required
+# and the distance have to come from the same producer. The 32x32 needs 19 and
+# is 11 wait states away, the 4x4 needs 5 and is 1 away, so 8 are required.
+# Pairing the largest window with the nearest producer would ask for 18.
+
+# GCN-LABEL: name: mfma_mixed_window_far_wide_near_narrow
+# GCN:      bb.3:
+# GCN-NEXT: S_NOP 7
+# GCN-NEXT: $vgpr16 = V_MOV_B32
+name:            mfma_mixed_window_far_wide_near_narrow
+body:             |
+  bb.0:
+    successors: %bb.2, %bb.1
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15 = V_MFMA_F32_32X32X2F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 0, 0, 0, implicit $mode, implicit $exec
+    $sgpr0 = S_MOV_B32 0
+    $sgpr1 = S_MOV_B32 0
+    $sgpr2 = S_MOV_B32 0
+    $sgpr3 = S_MOV_B32 0
+    $sgpr4 = S_MOV_B32 0
+    $sgpr5 = S_MOV_B32 0
+    $sgpr6 = S_MOV_B32 0
+    $sgpr7 = S_MOV_B32 0
+    $sgpr8 = S_MOV_B32 0
+    $sgpr9 = S_MOV_B32 0
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_4X4X1F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.3:
+    $vgpr16 = V_MOV_B32_e32 $vgpr0, implicit $exec
+    S_ENDPGM 0
+...
+# The same around a loop. The consumer in the header is reached from the entry,
+# where the 16x16 needs 11 and is 1 wait state away, and around the latch, where
+# the 4x4 needs 5. Ten are required; taking the latch's window with the entry's
+# distance would ask for 4.
+
+# GCN-LABEL: name: mfma_mixed_window_loop
+# GCN:      bb.2:
+# GCN:      S_NOP 9
+# GCN-NEXT: $vgpr16 = V_MOV_B32
+name:            mfma_mixed_window_loop
+body:             |
+  bb.0:
+    successors: %bb.1
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.2
+    $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15 = V_MFMA_F32_16X16X1F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.2
+
+  bb.2:
+    successors: %bb.3, %bb.4
+    $vgpr16 = V_MOV_B32_e32 $vgpr0, implicit $exec
+    S_CBRANCH_SCC1 %bb.4, implicit $scc
+    S_BRANCH %bb.3
+
+  bb.3:
+    successors: %bb.2
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_4X4X1F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.2
+
+  bb.4:
+    S_ENDPGM 0
+...
+# A trailing unconditional branch to another successor is not executed on the
+# edge taken into the consumer, so it must not count towards the separation.
+# Both functions place the consumer one executed branch after the producer and
+# need the same 10 wait states; they differ only in how the producer's block
+# ends.
+
+# GCN-LABEL: name: smfma16x16_valu_read_two_terminators
+# GCN:      bb.2:
+# GCN-NEXT: S_NOP 9
+# GCN-NEXT: $vgpr40 = V_MOV_B32
+name:            smfma16x16_valu_read_two_terminators
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15 = V_MFMA_F32_16X16X1F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 0, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.2
+    S_BRANCH %bb.2
+
+  bb.2:
+    $vgpr40 = V_MOV_B32_e32 $vgpr0, implicit $exec
+    S_ENDPGM 0
+...
+# bb.0 is reachable from bb.1 and from bb.3, and only the bb.3 edge skips bb.0's
+# trailing S_BRANCH %bb.1, so the two edges reach the producer at different
+# distances. Along the cheaper one the 32x32 result is 16 wait states from the
+# read and requires three more of the 19 it asks for.
+
+# GCN-LABEL: name: smfma32x32_valu_read_unexecuted_branch_on_one_edge
+# GCN:      bb.4:
+# GCN:      $sgpr5 = S_MOV_B32 0
+# GCN-NEXT: S_NOP 2
+# GCN-NEXT: $vgpr16 = V_MOV_B32
+name:            smfma32x32_valu_read_unexecuted_branch_on_one_edge
+body: |
+  bb.0:
+    successors: %bb.1, %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15 = V_MFMA_F32_32X32X2F32_vgprcd_e64 $vgpr26, $vgpr27, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 0, 0, 0, implicit $mode, implicit $exec
+    $sgpr0 = S_MOV_B32 0
+    $sgpr1 = S_MOV_B32 0
+    $sgpr2 = S_MOV_B32 0
+    S_CBRANCH_SCC1 %bb.3, implicit $scc
+    S_BRANCH %bb.1
+  bb.1:
+    successors: %bb.2, %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15 = V_MFMA_F32_16X16X1F32_vgprcd_e64 $vgpr20, $vgpr21, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 0, 0, 0, implicit $mode, implicit $exec
+    $sgpr0 = S_MOV_B32 0
+    S_CBRANCH_SCC1 %bb.3, implicit $scc
+    S_BRANCH %bb.2
+  bb.2:
+    successors: %bb.4
+    $sgpr0 = S_MOV_B32 0
+    S_BRANCH %bb.4
+  bb.3:
+    successors: %bb.4
+    $sgpr0 = S_MOV_B32 0
+    $sgpr1 = S_MOV_B32 0
+    $sgpr2 = S_MOV_B32 0
+    $sgpr3 = S_MOV_B32 0
+    $sgpr4 = S_MOV_B32 0
+    S_BRANCH %bb.4
+  bb.4:
+    $sgpr0 = S_MOV_B32 0
+    $sgpr1 = S_MOV_B32 0
+    $sgpr2 = S_MOV_B32 0
+    $sgpr3 = S_MOV_B32 0
+    $sgpr4 = S_MOV_B32 0
+    $sgpr5 = S_MOV_B32 0
+    $vgpr16 = V_MOV_B32_e32 $vgpr0, implicit $exec
+    S_ENDPGM 0
+...
+# The window and the distance have to describe the same producer here too, where the reader is
+# another MFMA. A 32x32 result read as srcA needs 19 wait states and a 4x4 needs 5; one of each
+# is a branch away, so the answer belongs to the 32x32: 18.
+
+# GCN-LABEL: name: smfma_srca_read_mixed_shapes
+# GCN:      bb.3:
+# GCN-NEXT: S_NOP 15
+# GCN-NEXT: S_NOP 1
+# GCN-NEXT: $agpr20_agpr21_agpr22_agpr23 = V_MFMA_F32_4X4X1F32
+name:            smfma_srca_read_mixed_shapes
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.3
+    $agpr0_agpr1_agpr2_agpr3_agpr4_agpr5_agpr6_agpr7_agpr8_agpr9_agpr10_agpr11_agpr12_agpr13_agpr14_agpr15 = V_MFMA_F32_32X32X2F32_e64 $vgpr1, $vgpr0, $agpr0_agpr1_agpr2_agpr3_agpr4_agpr5_agpr6_agpr7_agpr8_agpr9_agpr10_agpr11_agpr12_agpr13_agpr14_agpr15, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.3
+    $agpr0_agpr1_agpr2_agpr3 = V_MFMA_F32_4X4X1F32_e64 $vgpr1, $vgpr0, $agpr0_agpr1_agpr2_agpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.3:
+    $agpr20_agpr21_agpr22_agpr23 = V_MFMA_F32_4X4X1F32_e64 $agpr1, $vgpr0, $agpr20_agpr21_agpr22_agpr23, 0, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0
+...
+# A nearer producer whose destination is exactly the register being read as srcC needs no wait
+# states, and must not hide a farther one that overlaps it only in part and does. The 16x16
+# writing agpr[2:17] overlaps agpr[4:7] and needs 8 wait states, from one instruction away.
+
+# GCN-LABEL: name: smfma_full_srcc_producer_does_not_hide_partial
+# GCN:      V_MFMA_F32_4X4X1F32
+# GCN-NEXT: S_NOP 6
+# GCN-NEXT: $agpr4_agpr5_agpr6_agpr7 = V_MFMA_F32_4X4X1F32
+name:            smfma_full_srcc_producer_does_not_hide_partial
+body:             |
+  bb.0:
+    $agpr2_agpr3_agpr4_agpr5_agpr6_agpr7_agpr8_agpr9_agpr10_agpr11_agpr12_agpr13_agpr14_agpr15_agpr16_agpr17 = V_MFMA_F32_16X16X1F32_e64 $vgpr1, $vgpr0, $agpr2_agpr3_agpr4_agpr5_agpr6_agpr7_agpr8_agpr9_agpr10_agpr11_agpr12_agpr13_agpr14_agpr15_agpr16_agpr17, 0, 0, 0, implicit $mode, implicit $exec
+    $agpr4_agpr5_agpr6_agpr7 = V_MFMA_F32_4X4X1F32_e64 $vgpr1, $vgpr0, $agpr30_agpr31_agpr32_agpr33, 0, 0, 0, implicit $mode, implicit $exec
+    $agpr4_agpr5_agpr6_agpr7 = V_MFMA_F32_4X4X1F32_e64 $vgpr1, $vgpr0, $agpr4_agpr5_agpr6_agpr7, 0, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0
+...
+# Control leaves a block at the first terminator that transfers to the successor, so terminators
+# after it do not execute and separate nothing. Both terminators here target the consumer: when
+# the conditional branch is taken it is the only one executed, leaving the 8-pass result 1 wait
+# state away of the 11 it needs.
+
+# GCN-LABEL: name: smfma16x16_valu_read_same_target_terminators
+# GCN:      bb.1:
+# GCN-NEXT: S_NOP 9
+# GCN-NEXT: $vgpr4 = V_MOV_B32
+name:            smfma16x16_valu_read_same_target_terminators
+body:             |
+  bb.0:
+    successors: %bb.1
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.1
+
+  bb.1:
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+...
+# With two conditional branches, each successor executes a different number of them: the first
+# branch's target executes one, and the block the unconditional branch reaches executes all
+# three. The same producer is therefore 1 and 3 wait states away respectively.
+
+# GCN-LABEL: name: smfma16x16_valu_read_first_conditional_target
+# GCN:      bb.2:
+# GCN-NEXT: S_NOP 9
+# GCN-NEXT: $vgpr4 = V_MOV_B32
+name:            smfma16x16_valu_read_first_conditional_target
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2, %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_CBRANCH_EXECZ %bb.3, implicit $exec
+    S_BRANCH %bb.1
+
+  bb.1:
+    S_ENDPGM 0
+
+  bb.2:
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+
+  bb.3:
+    S_ENDPGM 0
+...
+# GCN-LABEL: name: smfma16x16_valu_read_unconditional_target
+# GCN:      bb.1:
+# GCN-NEXT: S_NOP 7
+# GCN-NEXT: $vgpr4 = V_MOV_B32
+name:            smfma16x16_valu_read_unconditional_target
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2, %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_CBRANCH_EXECZ %bb.3, implicit $exec
+    S_BRANCH %bb.1
+
+  bb.1:
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+
+  bb.2:
+    S_ENDPGM 0
+
+  bb.3:
+    S_ENDPGM 0
+...
+
+# The empty fallthrough contributes no wait states. Along bb.0 -> bb.1 -> bb.2
+# only the conditional branch executes, so the 8-pass producer is six wait
+# states before the read and requires five more of the eleven it asks for.
+
+# GCN-LABEL: name: smfma16x16_valu_read_across_empty_fallthrough
+# GCN:      bb.2:
+# GCN-NEXT: $sgpr0 = S_MOV_B32 0
+# GCN:      S_NOP 4
+# GCN-NEXT: $vgpr4 = V_MOV_B32
+name:            smfma16x16_valu_read_across_empty_fallthrough
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.3
+
+  bb.1:
+    successors: %bb.2
+
+  bb.2:
+    $sgpr0 = S_MOV_B32 0
+    $sgpr1 = S_MOV_B32 0
+    $sgpr2 = S_MOV_B32 0
+    $sgpr3 = S_MOV_B32 0
+    $sgpr4 = S_MOV_B32 0
+    $vgpr4 = V_MOV_B32_e32 $vgpr0, implicit $exec
+    S_ENDPGM 0
+
+  bb.3:
+    S_ENDPGM 0
+...
+
+# A chain of blocks holding nothing but a branch. The terminators an edge executes are
+# charged before the predecessor is entered, so a block with no other instruction offers
+# the scan no point at which to notice that the window is spent: the bound has to be
+# tested on the edge. 24 blocks is past the widest window, so nothing is required here.
+
+# GCN-LABEL: name: valu_read_across_long_branch_chain
+# GCN:      bb.24:
+# GCN-NEXT: $vgpr8 = V_MOV_B32
+name:            valu_read_across_long_branch_chain
+body: |
+  bb.0:
+    successors: %bb.1
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_4X4X1F32_vgprcd_e64 $vgpr1, $vgpr0, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.2
+    S_BRANCH %bb.2
+
+  bb.2:
+    successors: %bb.3
+    S_BRANCH %bb.3
+
+  bb.3:
+    successors: %bb.4
+    S_BRANCH %bb.4
+
+  bb.4:
+    successors: %bb.5
+    S_BRANCH %bb.5
+
+  bb.5:
+    successors: %bb.6
+    S_BRANCH %bb.6
+
+  bb.6:
+    successors: %bb.7
+    S_BRANCH %bb.7
+
+  bb.7:
+    successors: %bb.8
+    S_BRANCH %bb.8
+
+  bb.8:
+    successors: %bb.9
+    S_BRANCH %bb.9
+
+  bb.9:
+    successors: %bb.10
+    S_BRANCH %bb.10
+
+  bb.10:
+    successors: %bb.11
+    S_BRANCH %bb.11
+
+  bb.11:
+    successors: %bb.12
+    S_BRANCH %bb.12
+
+  bb.12:
+    successors: %bb.13
+    S_BRANCH %bb.13
+
+  bb.13:
+    successors: %bb.14
+    S_BRANCH %bb.14
+
+  bb.14:
+    successors: %bb.15
+    S_BRANCH %bb.15
+
+  bb.15:
+    successors: %bb.16
+    S_BRANCH %bb.16
+
+  bb.16:
+    successors: %bb.17
+    S_BRANCH %bb.17
+
+  bb.17:
+    successors: %bb.18
+    S_BRANCH %bb.18
+
+  bb.18:
+    successors: %bb.19
+    S_BRANCH %bb.19
+
+  bb.19:
+    successors: %bb.20
+    S_BRANCH %bb.20
+
+  bb.20:
+    successors: %bb.21
+    S_BRANCH %bb.21
+
+  bb.21:
+    successors: %bb.22
+    S_BRANCH %bb.22
+
+  bb.22:
+    successors: %bb.23
+    S_BRANCH %bb.23
+
+  bb.23:
+    successors: %bb.24
+    S_BRANCH %bb.24
+
+  bb.24:
+    $vgpr8 = V_MOV_B32_e32 $vgpr0, implicit $exec
+    S_ENDPGM 0
+...
