@@ -2017,18 +2017,19 @@ define void @crash_lshlrevb16_not_reg_op() {
 ; NOSDWA-LABEL: crash_lshlrevb16_not_reg_op:
 ; NOSDWA:       ; %bb.0: ; %bb0
 ; NOSDWA-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; NOSDWA-NEXT:    s_bitset1_b32 s4, 8
-; NOSDWA-NEXT:    s_and_b32 s6, s4, 0x1ff
-; NOSDWA-NEXT:    s_mov_b64 s[4:5], 0
+; NOSDWA-NEXT:    v_mov_b32_e32 v0, 1
+; NOSDWA-NEXT:    s_mov_b64 s[6:7], 0
 ; NOSDWA-NEXT:    s_and_b64 vcc, exec, -1
+; NOSDWA-NEXT:    buffer_store_byte v0, off, s[0:3], s32 offset:1
 ; NOSDWA-NEXT:  .LBB22_1: ; %bb1
 ; NOSDWA-NEXT:    ; =>This Inner Loop Header: Depth=1
-; NOSDWA-NEXT:    s_lshl_b32 s7, s4, 3
-; NOSDWA-NEXT:    s_lshr_b32 s7, s6, s7
-; NOSDWA-NEXT:    v_mov_b32_e32 v0, s4
-; NOSDWA-NEXT:    v_mov_b32_e32 v1, s5
-; NOSDWA-NEXT:    s_mov_b64 s[4:5], 1
-; NOSDWA-NEXT:    v_mov_b32_e32 v2, s7
+; NOSDWA-NEXT:    v_lshrrev_b32_e64 v1, 6, s32
+; NOSDWA-NEXT:    v_add_u32_e64 v0, s[4:5], s6, v1
+; NOSDWA-NEXT:    buffer_load_ubyte v2, v0, s[0:3], 0 offen
+; NOSDWA-NEXT:    v_mov_b32_e32 v0, s6
+; NOSDWA-NEXT:    v_mov_b32_e32 v1, s7
+; NOSDWA-NEXT:    s_mov_b64 s[6:7], 1
+; NOSDWA-NEXT:    s_waitcnt vmcnt(0)
 ; NOSDWA-NEXT:    flat_store_byte v[0:1], v2
 ; NOSDWA-NEXT:    s_mov_b64 vcc, vcc
 ; NOSDWA-NEXT:    s_cbranch_vccnz .LBB22_1
@@ -2039,18 +2040,19 @@ define void @crash_lshlrevb16_not_reg_op() {
 ; GFX89-LABEL: crash_lshlrevb16_not_reg_op:
 ; GFX89:       ; %bb.0: ; %bb0
 ; GFX89-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX89-NEXT:    s_bitset1_b32 s4, 8
-; GFX89-NEXT:    s_and_b32 s6, s4, 0x1ff
-; GFX89-NEXT:    s_mov_b64 s[4:5], 0
+; GFX89-NEXT:    v_mov_b32_e32 v0, 1
+; GFX89-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX89-NEXT:    s_and_b64 vcc, exec, -1
+; GFX89-NEXT:    buffer_store_byte v0, off, s[0:3], s32 offset:1
 ; GFX89-NEXT:  .LBB22_1: ; %bb1
 ; GFX89-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX89-NEXT:    s_lshl_b32 s7, s4, 3
-; GFX89-NEXT:    s_lshr_b32 s7, s6, s7
-; GFX89-NEXT:    v_mov_b32_e32 v0, s4
-; GFX89-NEXT:    v_mov_b32_e32 v1, s5
-; GFX89-NEXT:    s_mov_b64 s[4:5], 1
-; GFX89-NEXT:    v_mov_b32_e32 v2, s7
+; GFX89-NEXT:    v_lshrrev_b32_e64 v1, 6, s32
+; GFX89-NEXT:    v_add_u32_e64 v0, s[4:5], s6, v1
+; GFX89-NEXT:    buffer_load_ubyte v2, v0, s[0:3], 0 offen
+; GFX89-NEXT:    v_mov_b32_e32 v0, s6
+; GFX89-NEXT:    v_mov_b32_e32 v1, s7
+; GFX89-NEXT:    s_mov_b64 s[6:7], 1
+; GFX89-NEXT:    s_waitcnt vmcnt(0)
 ; GFX89-NEXT:    flat_store_byte v[0:1], v2
 ; GFX89-NEXT:    s_mov_b64 vcc, vcc
 ; GFX89-NEXT:    s_cbranch_vccnz .LBB22_1
@@ -2061,18 +2063,19 @@ define void @crash_lshlrevb16_not_reg_op() {
 ; GFX9-LABEL: crash_lshlrevb16_not_reg_op:
 ; GFX9:       ; %bb.0: ; %bb0
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    s_bitset1_b32 s4, 8
-; GFX9-NEXT:    s_and_b32 s6, s4, 0x1ff
+; GFX9-NEXT:    v_mov_b32_e32 v0, 1
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-NEXT:    s_and_b64 vcc, exec, -1
+; GFX9-NEXT:    buffer_store_byte v0, off, s[0:3], s32 offset:1
 ; GFX9-NEXT:  .LBB22_1: ; %bb1
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX9-NEXT:    s_lshl_b32 s7, s4, 3
-; GFX9-NEXT:    s_lshr_b32 s7, s6, s7
+; GFX9-NEXT:    v_lshrrev_b32_e64 v1, 6, s32
+; GFX9-NEXT:    v_add_u32_e32 v0, s4, v1
+; GFX9-NEXT:    buffer_load_ubyte v2, v0, s[0:3], 0 offen
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 1
-; GFX9-NEXT:    v_mov_b32_e32 v2, s7
+; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    flat_store_byte v[0:1], v2
 ; GFX9-NEXT:    s_mov_b64 vcc, vcc
 ; GFX9-NEXT:    s_cbranch_vccnz .LBB22_1
@@ -2083,18 +2086,19 @@ define void @crash_lshlrevb16_not_reg_op() {
 ; GFX10-LABEL: crash_lshlrevb16_not_reg_op:
 ; GFX10:       ; %bb.0: ; %bb0
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    s_bitset1_b32 s4, 8
-; GFX10-NEXT:    s_mov_b32 vcc_lo, exec_lo
-; GFX10-NEXT:    s_and_b32 s6, s4, 0x1ff
+; GFX10-NEXT:    v_mov_b32_e32 v0, 1
 ; GFX10-NEXT:    s_mov_b64 s[4:5], 0
+; GFX10-NEXT:    s_mov_b32 vcc_lo, exec_lo
+; GFX10-NEXT:    buffer_store_byte v0, off, s[0:3], s32 offset:1
 ; GFX10-NEXT:  .LBB22_1: ; %bb1
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX10-NEXT:    s_lshl_b32 s7, s4, 3
-; GFX10-NEXT:    v_mov_b32_e32 v0, s4
+; GFX10-NEXT:    v_lshrrev_b32_e64 v1, 5, s32
+; GFX10-NEXT:    v_add_nc_u32_e32 v0, s4, v1
 ; GFX10-NEXT:    v_mov_b32_e32 v1, s5
-; GFX10-NEXT:    s_lshr_b32 s4, s6, s7
-; GFX10-NEXT:    v_mov_b32_e32 v2, s4
+; GFX10-NEXT:    buffer_load_ubyte v2, v0, s[0:3], 0 offen
+; GFX10-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX10-NEXT:    s_mov_b64 s[4:5], 1
+; GFX10-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-NEXT:    flat_store_byte v[0:1], v2
 ; GFX10-NEXT:    s_cbranch_vccnz .LBB22_1
 ; GFX10-NEXT:  ; %bb.2: ; %DummyReturnBlock
