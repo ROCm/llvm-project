@@ -15,6 +15,7 @@
 #include "Shared/Environment.h"
 
 #include "ErrorReporting.h"
+#include "GenericProfiler.h"
 #include "GlobalHandler.h"
 #include "JIT.h"
 #include "Shared/Utils.h"
@@ -22,9 +23,6 @@
 #include "omptarget.h"
 #include "print_tracing.h"
 #include "trace.h"
-
-
-#include "GenericProfiler.h"
 
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
@@ -229,7 +227,6 @@ GenericDeviceTy::GenericDeviceTy(GenericPluginTy &Plugin, int32_t DeviceId,
 
 Error GenericDeviceTy::init(GenericPluginTy &Plugin,
                             GenericProfilerTy *ProfilerPtr) {
-  GenericProfilerTy &Profiler = ProfilerPtr ? *ProfilerPtr : getNoOpProfiler();
 
   if (auto Err = initImpl(Plugin, ProfilerPtr))
     return Err;
@@ -295,7 +292,6 @@ Error GenericDeviceTy::unloadBinary(DeviceImageTy *Image) {
 
 Error GenericDeviceTy::deinit(GenericPluginTy &Plugin,
                               GenericProfilerTy *ProfilerPtr) {
-  GenericProfilerTy &Profiler = ProfilerPtr ? *ProfilerPtr : getNoOpProfiler();
 
   // Run the global destructors first in case they required the RPC server.
   for (auto &I : LoadedImages) {
@@ -330,7 +326,6 @@ Expected<DeviceImageTy *>
 GenericDeviceTy::loadBinary(GenericPluginTy &Plugin, StringRef InputTgtImage,
                             PluginContextTy *Context,
                             GenericProfilerTy *ProfilerPtr) {
-  GenericProfilerTy &Profiler = ProfilerPtr ? *ProfilerPtr : getNoOpProfiler();
 
   ODBG(OLDT_Init) << "Load data from image "
                   << static_cast<const void *>(InputTgtImage.bytes_begin());
@@ -1161,7 +1156,7 @@ void GenericDeviceTy::setDeviceUidFromVendorUid(StringRef VendorUid) {
   DeviceUid = std::string(Plugin.getName()) + "-" + std::string(VendorUid);
 }
 
-Error GenericPluginTy::init() {
+Error GenericPluginTy::init(GenericProfilerTy *ProfilerPtr) {
   if (Initialized)
     return Plugin::success();
 
