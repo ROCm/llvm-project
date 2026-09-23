@@ -14,6 +14,8 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Error.h"
 
 #include <cstdint>
 #include <set>
@@ -23,49 +25,54 @@ namespace COMGR::transpiler {
 
 struct MCState;
 
-// What one register-indirect control transfer was found to do.
+// Where one indirect jump goes. An indirect jump is an s_set_pc_i64 or an
+// s_swap_pc_i64: it moves the program counter to whatever a scalar register
+// pair holds. s_swap_pc_i64 also writes the return address into a second
+// register pair, so it is a call.
 struct SetPcSite {
-  enum class Kind {
-    // Control reaches exactly one source offset, which the analysis computed
-    // from the program-counter capture and displacement feeding the transfer.
-    Direct,
-    // Nothing the analysis models says where control goes.
-    Unresolvable,
-  };
-
-  Kind SiteKind = Kind::Unresolvable;
-  // Source offset control reaches. Meaningful for Direct.
-  uint64_t DirectTarget = 0;
-  // Why the site could not be resolved, phrased to follow the mnemonic in a
-  // refusal. Meaningful for Unresolvable.
+  // Source offsets the jump reaches, ascending and distinct. The analysis
+  // resolved the jump when this is not empty.
+  llvm::SmallVector<uint64_t> Targets;
+  // Why the analysis could not say where the jump goes. Set when `Targets` is
+  // empty. The text follows the mnemonic in a refusal message.
   std::string RefusalReason;
+
+  bool isResolved() const { return !Targets.empty(); }
 };
 
-// Where the register-indirect control transfers of one decoded kernel lead.
+// Where the indirect jumps of one decoded kernel go.
 struct SetPcAnalysis {
   // One entry per s_set_pc_i64 and s_swap_pc_i64, keyed by its source offset.
   llvm::DenseMap<uint64_t, SetPcSite> Sites;
-  // Source offsets that lead a block because of a transfer classified above,
-  // over and above the block starts the decode already found. Every one of
-  // them is the offset of a decoded instruction.
+  // Block starts the analysis found on top of the ones the decode gave it.
+  // Every one is the offset of a decoded instruction. The caller must start a
+  // block at each, because the analysis split its own walk there and its
+  // answers only hold for that shape of control flow.
   llvm::DenseSet<uint64_t> ExtraBlockStarts;
 };
 
-// Classify every register-indirect control transfer in `Insts`, which must be
-// in source order, and report the block starts those transfers imply.
+// Work out where every indirect jump in `Insts` goes. `Insts` must be in
+// source order.
 //
-// The value a transfer reads is tracked within the block that makes it: a
-// program-counter capture starts a chain, a constant displacement added to it
-// carries the chain along, and any other write to the pair ends it. A transfer
-// reading a completed chain reaches the offset the chain names, and one
-// reading anything else is left unresolvable with the reason why.
+// Within a block the analysis follows the value a jump reads: a program-counter
+// capture starts a chain, adding a constant to it carries the chain along, a
+// call writes the offset it returns to, and any other write ends the chain. A
+// jump that reads a displaced chain goes to the offset that chain names.
 //
-// `BlockStarts` is the block-start set of the same decode. It is read, not
-// written: the offsets the transfers add are reported separately so the caller
-// can order the merge against the rest of its decode.
-SetPcAnalysis analyzeSetPc(llvm::ArrayRef<DecodedInst> Insts,
-                           const std::set<uint64_t> &BlockStarts,
-                           const MCState &Mc);
+// When a block does not write the register pair its jump reads, the jump reads
+// what the
+// paths into the block left there. A forward dataflow over the recovered blocks
+// collects those offsets. One offset is a plain branch and several are a
+// dispatch. If any path leaves the pair holding something the analysis cannot
+// name, it refuses the jump instead of narrowing it to the paths that did name
+// an offset.
+//
+// `BlockStarts` is the block-start set of the same decode. The analysis reads
+// it and reports the offsets it adds separately, so the caller decides when to
+// merge them into its own decode.
+llvm::Expected<SetPcAnalysis>
+analyzeSetPc(llvm::ArrayRef<DecodedInst> Insts,
+             const std::set<uint64_t> &BlockStarts, const MCState &Mc);
 
 } // namespace COMGR::transpiler
 

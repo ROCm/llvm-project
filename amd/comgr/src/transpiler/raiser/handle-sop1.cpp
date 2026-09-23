@@ -15,11 +15,14 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #include <cassert>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -738,17 +741,30 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   // A jump through a register names no offset of its own, so where it goes is
-  // whatever the analysis worked out the pair it reads holds. That offset leads
-  // a block, which the analysis reported before any block was made, so the
-  // jump is a branch to it. A call additionally leaves the offset it returns
-  // to behind, which is the source address of the instruction after it, the
-  // same value a program-counter capture there would have produced.
+  // whatever the analysis worked out the pair it reads holds. Those offsets
+  // lead blocks, which the analysis reported before any block was made. One
+  // offset is a branch and several are a switch. A call additionally leaves the
+  // offset it returns to behind, which is the source address of the instruction
+  // after it, the same value a program-counter capture there would have
+  // produced.
   if (Di.CanonOp == CanonicalOp::S_SETPC_B64 ||
       Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
     const SetPcSite *Site = Ctx.setPcSite(Di.Offset);
-    assert(Site && "every register-indirect transfer is classified");
-    if (Site->SiteKind == SetPcSite::Kind::Unresolvable)
+    assert(Site && "every indirect jump is classified");
+    if (!Site->isResolved())
       return unsupported(Ctx, Di, Site->RefusalReason);
+    assert(Site->Targets.size() <= std::numeric_limits<unsigned>::max() &&
+           "the analysis caps how many offsets one jump enumerates");
+
+    // Read the target before the call writes its destination, which may name
+    // the very pair the target comes from.
+    Value *Target = nullptr;
+    if (Site->Targets.size() > 1) {
+      Expected<Value *> Read = Op.src64(0);
+      if (!Read)
+        return Read.takeError();
+      Target = *Read;
+    }
 
     if (Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
       Expected<ParsedReg> Dst = Op.dst();
@@ -766,7 +782,28 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
                                                     ReturnAddress);
     }
 
-    Ctx.B.CreateBr(Ctx.lookupBB(Site->DirectTarget));
+    if (!Target) {
+      Ctx.B.CreateBr(Ctx.lookupBB(Site->Targets.front()));
+      return Error::success();
+    }
+
+    // The offsets the analysis enumerated are the only ones the pair can hold,
+    // so the fall-out-of-the-table case cannot be reached and traps rather
+    // than picking one of them.
+    BasicBlock *Trap =
+        BasicBlock::Create(Ctx.B.getContext(), formatv("trap_{0:x}", Di.Offset),
+                           Ctx.B.GetInsertBlock()->getParent());
+    SwitchInst *Dispatch = Ctx.B.CreateSwitch(
+        Target, Trap, static_cast<unsigned>(Site->Targets.size()));
+    for (uint64_t Offset : Site->Targets)
+      Dispatch->addCase(ConstantInt::get(Ctx.B.getInt64Ty(),
+                                         Ctx.sourceTextBaseAddress() + Offset),
+                        Ctx.lookupBB(Offset));
+
+    IRBuilderBase::InsertPointGuard Guard(Ctx.B);
+    Ctx.B.SetInsertPoint(Trap);
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::trap, {});
+    Ctx.B.CreateUnreachable();
     return Error::success();
   }
 

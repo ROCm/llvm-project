@@ -16,6 +16,8 @@
 ; RUN:   | %llvm-as -o /dev/null
 ; RUN: %transpile_cli %t.hsaco --emit-ir=swappc_call_kernel \
 ; RUN:   | %llvm-as -o /dev/null
+; RUN: %transpile_cli %t.hsaco --emit-ir=setpc_crossblock_kernel \
+; RUN:   | %llvm-as -o /dev/null
 
 ; RUN: %transpile_cli %t.hsaco --emit-ir=nosetpc_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=NOSETPC
@@ -30,7 +32,7 @@
 ; RUN:   | %FileCheck %s --check-prefix=NONPAIR
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=setpc_clobbered_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=CLOBBERED
-; RUN: not %transpile_cli %t.hsaco --emit-ir=setpc_crossblock_kernel 2>&1 \
+; RUN: %transpile_cli %t.hsaco --emit-ir=setpc_crossblock_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=CROSSBLOCK
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=setpc_midinst_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=MIDINST
@@ -167,17 +169,25 @@ setpc_clobbered_kernel:
 	.globl	setpc_crossblock_kernel
 	.p2align	8
 	.type	setpc_crossblock_kernel,@function
+; CROSSBLOCK-LABEL: define amdgpu_kernel void @setpc_crossblock_kernel(
 setpc_crossblock_kernel:
-; A chain is followed only within the block that builds it, so a branch landing
-; between the displacement and the jump leaves the jump with nothing to read.
+; The chain is built in one block and jumped through in another, so the jump
+; reads what the paths into its block left in the pair rather than anything its
+; own block computed. One offset over every path is a plain branch.
 	s_get_pc_i64 s[10:11]
-	s_add_u32 s10, s10, 16
+	s_add_u32 s10, s10, cross_target-.
+; CROSSBLOCK: br i1 {{.+}}, label %[[CROSS_JOIN:bb_.+]], label %
 	s_cbranch_scc0 cross_join
+; CROSSBLOCK: [[CROSS_JOIN]]:
 cross_join:
-; CROSSBLOCK: unsupported-instruction-form: s_set_pc_i64 {{.+}} :: reads s[10:11], which nothing in its block gives a source offset
+; CROSSBLOCK-NEXT: br label %[[CROSS_TARGET:bb_.+]]
 	s_set_pc_i64 s[10:11]
 	s_mov_b32 s2, 22
+	s_branch cross_done
+cross_target:
+; CROSSBLOCK: [[CROSS_TARGET]]: {{.*}}preds = %[[CROSS_JOIN]]
 	s_cvt_f32_u32 s3, s2
+cross_done:
 	s_endpgm
 
 	.globl	setpc_midinst_kernel
