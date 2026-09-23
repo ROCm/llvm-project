@@ -1114,10 +1114,10 @@ amd_comgr_status_t AMDGPUCompiler::createTmpDirs() {
     if (env::shouldEmitVerboseLogs()) {
       LogS << "comgr-compiler: failed to create temporary directory '"
            << TmpDirPrefix << "': " << EC.message() << "\n";
-      const char *TmpDirEnv = env::getEnv("TMPDIR");
-      if (TmpDirEnv)
-        LogS << "comgr-compiler: TMPDIR='" << TmpDirEnv
-             << "' may not exist or be writable\n";
+      SmallString<128> SystemTmpDir;
+      path::system_temp_directory(true, SystemTmpDir);
+      LogS << "comgr-compiler: '" << SystemTmpDir
+           << "' may not exist or be writable\n";
     }
     return AMD_COMGR_STATUS_ERROR;
   }

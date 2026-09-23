@@ -33,12 +33,10 @@ using namespace llvm;
 namespace COMGR {
 namespace env {
 
-const char *getEnv(const char *Name) {
+static const char *getEnv(const char *Name) {
 #if defined(_WIN32)
-  // getenv() re-encodes the value in the active ANSI code page, mangling any
-  // non-ASCII character so LLVM's path conversion rejects it. Process::GetEnv()
-  // reads the native UTF-16 value as UTF-8, but returns by value, so cache the
-  // result to match getenv()'s process-lifetime storage.
+  // getenv() mangles non-ASCII characters. Process::GetEnv() does not, but
+  // returns by value, so cache the result to match getenv()'s storage lifetime.
   static StringMap<std::optional<std::string>> Cache;
   static std::mutex CacheMutex;
   std::lock_guard<std::mutex> Lock(CacheMutex);

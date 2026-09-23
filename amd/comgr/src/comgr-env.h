@@ -19,11 +19,6 @@ class raw_ostream;
 namespace COMGR {
 namespace env {
 
-/// Read environment variable @p Name, or nullptr when unset. Unlike getenv(),
-/// returns UTF-8 on Windows and honors AT_SECURE on glibc. Storage is
-/// valid for the process lifetime.
-const char *getEnv(const char *Name);
-
 enum class LogLevel {
   None = 0,
   Error,
