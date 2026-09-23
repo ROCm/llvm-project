@@ -35,12 +35,10 @@ namespace env {
 
 const char *getEnv(const char *Name) {
 #if defined(_WIN32)
-  // getenv() hands back the value re-encoded in the active ANSI code page, so
-  // a non-ASCII value (an accented cache directory, say) is not valid UTF-8 and
-  // LLVM's UTF-8 to UTF-16 path conversion rejects it. Process::GetEnv() reads
-  // the native UTF-16 value and converts it to UTF-8 instead. It returns by
-  // value, so cache the results to give callers the process-lifetime storage
-  // getenv() would have provided.
+  // getenv() re-encodes the value in the active ANSI code page, mangling any
+  // non-ASCII character so LLVM's path conversion rejects it. Process::GetEnv()
+  // reads the native UTF-16 value as UTF-8, but returns by value, so cache the
+  // result to match getenv()'s process-lifetime storage.
   static StringMap<std::optional<std::string>> Cache;
   static std::mutex CacheMutex;
   std::lock_guard<std::mutex> Lock(CacheMutex);

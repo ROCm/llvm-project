@@ -19,11 +19,9 @@ class raw_ostream;
 namespace COMGR {
 namespace env {
 
-/// Read environment variable @p Name, or nullptr when it is not set. Prefer
-/// this over getenv(): on Windows it returns the value as UTF-8, where getenv()
-/// would return it re-encoded in the ANSI code page and corrupt any non-ASCII
-/// character, and on glibc it ignores env-controlled values under AT_SECURE via
-/// secure_getenv(). The returned storage is valid for the process lifetime.
+/// Read environment variable @p Name, or nullptr when unset. Unlike getenv(),
+/// returns UTF-8 on Windows and honors AT_SECURE on glibc. Storage is
+/// valid for the process lifetime.
 const char *getEnv(const char *Name);
 
 enum class LogLevel {
