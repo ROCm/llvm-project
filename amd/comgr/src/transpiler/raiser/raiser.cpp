@@ -38,6 +38,8 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FloatingPointMode.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
@@ -68,6 +70,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -311,24 +314,24 @@ Expected<RaiseEnvironment> RaiseEnvironment::create(StringRef SourceIsa,
 }
 
 // A half-open range of text offsets the decode has read.
-using Extent = std::pair<uint64_t, uint64_t>;
+struct Extent {
+  uint64_t Begin = 0;
+  uint64_t End = 0;
 
-static bool contains(ArrayRef<Extent> Extents, uint64_t Offset) {
-  return any_of(Extents, [&](const Extent &E) {
-    return Offset >= E.first && Offset < E.second;
-  });
-}
+  bool contains(uint64_t Offset) const {
+    return Offset >= Begin && Offset < End;
+  }
+};
 
 // Fold a second decode into `Base`, keeping the instructions in source order.
 // The two are decoded from disjoint extents, so neither carries an instruction
 // the other already has.
 static void mergeDecoded(DecodeResult &Base, DecodeResult &&Extra) {
-  Base.Insts.append(std::make_move_iterator(Extra.Insts.begin()),
-                    std::make_move_iterator(Extra.Insts.end()));
+  llvm::move(Extra.Insts, std::back_inserter(Base.Insts));
   sort(Base.Insts, [](const DecodedInst &A, const DecodedInst &B) {
     return A.Offset < B.Offset;
   });
-  Base.BlockStarts.insert(Extra.BlockStarts.begin(), Extra.BlockStarts.end());
+  set_union(Base.BlockStarts, Extra.BlockStarts);
 }
 
 // Raise one kernel into `M`. Everything this allocates -- the projection, the
@@ -361,17 +364,20 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
       return Analyzed.takeError();
     SetPc = std::move(*Analyzed);
 
+    // A target the decode is not widened to cover keeps the refusal the
+    // analysis already recorded for the transfer reaching it, which the raise
+    // reports when it gets there. Neither kind below is worth widening for: a
+    // target inside an extent already decoded points into the middle of an
+    // instruction, and reading those bytes again decodes them the same way; a
+    // target no function symbol covers says neither where to start reading nor
+    // how much.
     bool Followed = false;
     for (uint64_t Target : SetPc->UndecodedTargets) {
-      // An offset already covered is one the decode read straight through, so
-      // landing on no instruction there means landing inside one. Decoding
-      // again would not find an instruction that is not there.
-      if (contains(Covered, Target))
+      if (any_of(Covered, [&](const Extent &E) { return E.contains(Target); }))
         continue;
       const KernelSymbolExtent *Callee =
           find_if(FunctionExtents, [&](const KernelSymbolExtent &E) {
-            return E.Size != 0 && Target >= E.Offset &&
-                   Target < E.Offset + E.Size;
+            return Target >= E.Offset && Target < E.Offset + E.Size;
           });
       if (Callee == FunctionExtents.end())
         continue;

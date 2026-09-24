@@ -17,6 +17,8 @@
 ; RUN:   | %FileCheck %s --check-prefix=OUTLINED
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=unowned_call_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=UNOWNED
+; RUN: not %transpile_cli %t.hsaco --emit-ir=interior_call_kernel 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=INTERIOR
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.text
@@ -78,6 +80,23 @@ unowned_gap:
 	s_mov_b32 s2, 55
 	s_endpgm
 
+	.globl	interior_call_kernel
+	.p2align	8
+	.type	interior_call_kernel,@function
+interior_call_kernel:
+; The offset this reaches lies inside the kernel's own function symbol but two
+; bytes past an instruction boundary, so it points into the middle of an
+; instruction the decode already read. Reading those bytes again would decode
+; them the same way, so the call is refused rather than followed.
+	s_get_pc_i64 s[10:11]
+	s_add_u32 s10, s10, interior_target-.+2
+; INTERIOR: unsupported-instruction-form: s_swap_pc_i64 {{.+}} :: reaches source offset 0x{{.+}}, which no decoded instruction starts at
+	s_swap_pc_i64 s[12:13], s[10:11]
+interior_target:
+	s_mov_b32 s2, 77
+	s_endpgm
+	.size	interior_call_kernel, .-interior_call_kernel
+
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel outlined_call_kernel
@@ -86,6 +105,11 @@ unowned_gap:
 		.amdhsa_next_free_sgpr 24
 	.end_amdhsa_kernel
 	.amdhsa_kernel unowned_call_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel interior_call_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 24
@@ -114,6 +138,17 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     24
     .symbol:         unowned_call_kernel.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           interior_call_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         interior_call_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 32
 amdhsa.version: [1, 2]
