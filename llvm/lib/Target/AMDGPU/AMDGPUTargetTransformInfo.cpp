@@ -314,6 +314,14 @@ unsigned GCNTTIImpl::getNumberOfRegisters(unsigned RCID) const {
   return 4;
 }
 
+unsigned GCNTTIImpl::getRegUsageForType(Type *Ty) const {
+  auto *VT = dyn_cast<FixedVectorType>(Ty);
+  if (VT && VT->getElementType()->isIntegerTy(8) && ST->has16BitInsts())
+    return divideCeil(DL.getTypeSizeInBits(VT).getFixedValue(), 32u);
+
+  return BaseT::getRegUsageForType(Ty);
+}
+
 TypeSize
 GCNTTIImpl::getRegisterBitWidth(TargetTransformInfo::RegisterKind K) const {
   switch (K) {
