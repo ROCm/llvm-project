@@ -62,3 +62,31 @@ cc_library_wrapper(
         "//conditions:default": [],
     }),
 )
+
+bool_flag(
+    name = "llvm_enable_lzma",
+    build_setting_default = True,
+)
+
+config_setting(
+    name = "llvm_lzma_enabled",
+    flag_values = {":llvm_enable_lzma": "true"},
+)
+
+cc_library_wrapper(
+    name = "lzma",
+    defines = select({
+        ":llvm_lzma_enabled": [
+            "LLVM_ENABLE_LZMA=1",
+        ],
+        "//conditions:default": [
+            "LLVM_ENABLE_LZMA=0",
+        ],
+    }),
+    deps = select({
+        ":llvm_lzma_enabled": [
+            "@llvm_xz//:lzma",
+        ],
+        "//conditions:default": [],
+    }),
+)

@@ -204,6 +204,11 @@ jobs:
              git log --oneline -3
              cd -
  
+      - name: Comgr CI patches (transpiler)
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/comgr-patches@automation/multiarch-transpiler-ci
+        with:
+          stage_name: ${{ inputs.stage_name }}          
+
       - name: Get stage configuration
         id: stage_config
         run: |
