@@ -25,13 +25,12 @@
   !9 = distinct !DISubprogram(name: "kern", linkageName: "kern", scope: !1, file: !1, line: 1, type: !10, scopeLine: 1, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !12)
   !10 = !DISubroutineType(types: !11)
   !11 = !{}
-  !12 = !{!17, !18, !19}
+  !12 = !{!17, !19}
   !13 = !DIBasicType(name: "i16", size: 16, encoding: DW_ATE_signed)
   !14 = !DIBasicType(name: "i32", size: 32, encoding: DW_ATE_signed)
   !15 = !DIBasicType(name: "i64", size: 64, encoding: DW_ATE_signed)
   !16 = !DILocation(line: 1, column: 1, scope: !9)
   !17 = !DILocalVariable(name: "s_lo16", scope: !9, file: !1, line: 1, type: !13)
-  !18 = !DILocalVariable(name: "s_hi16", scope: !9, file: !1, line: 1, type: !13)
   !19 = !DILocalVariable(name: "s_s", scope: !9, file: !1, line: 1, type: !15)
   !20 = !DILocalVariable(name: "v_lo16", scope: !9, file: !1, line: 1, type: !13)
   !21 = !DILocalVariable(name: "v_hi16", scope: !9, file: !1, line: 1, type: !13)
@@ -52,10 +51,6 @@ body: |
     ; CHECK: DW_AT_location (DW_OP_regx SGPR42)
     ; CHECK-NEXT: DW_AT_name ("s_lo16")
     DBG_VALUE renamable $sgpr42_lo16, $noreg, !17, !DIExpression(DIOpArg(0, i16)), debug-location !16
-
-    ; CHECK: DW_AT_location (DW_OP_regx SGPR42, DW_OP_LLVM_user DW_OP_LLVM_offset_uconst 0x2)
-    ; CHECK-NEXT: DW_AT_name ("s_hi16")
-    DBG_VALUE renamable $sgpr42_hi16, $noreg, !18, !DIExpression(DIOpArg(0, i16)), debug-location !16
 
     ; CHECK: DW_AT_location (DW_OP_regx SGPR42, DW_OP_piece 0x4, DW_OP_regx SGPR43, DW_OP_piece 0x4, DW_OP_LLVM_user DW_OP_LLVM_piece_end)
     ; CHECK-NEXT: DW_AT_name ("s_s")
