@@ -16,7 +16,7 @@ declare void @llvm.dbg.value(metadata, metadata, metadata) #0
 define void @test_int_ptr_int(i64 %A) !dbg !5 {
 ; CHECK-LABEL: define void @test_int_ptr_int(
 ; CHECK-SAME: i64 [[A:%.*]]) !dbg [[DBG5:![0-9]+]] {
-; CHECK-NEXT:      #dbg_value(i64 [[A]], [[META9:![0-9]+]], !DIExpression(DIOpArg(0, i64), DIOpReinterpret(ptr)), [[META12:![0-9]+]])
+; CHECK-NEXT:      #dbg_value(i64 [[A]], [[META9:![0-9]+]], !DIExpression(DW_OP_LLVM_poisoned), [[META12:![0-9]+]])
 ; CHECK-NEXT:    call void @use_i64(i64 [[A]])
 ; CHECK-NEXT:    ret void
 ;
@@ -30,7 +30,7 @@ define void @test_int_ptr_int(i64 %A) !dbg !5 {
 define void @test_ptr_int_ptr(ptr %A) !dbg !13 {
 ; CHECK-LABEL: define void @test_ptr_int_ptr(
 ; CHECK-SAME: ptr [[A:%.*]]) !dbg [[DBG13:![0-9]+]] {
-; CHECK-NEXT:      #dbg_value(ptr [[A]], [[META15:![0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpReinterpret(i64)), [[META17:![0-9]+]])
+; CHECK-NEXT:      #dbg_value(ptr [[A]], [[META15:![0-9]+]], !DIExpression(DW_OP_LLVM_poisoned), [[META17:![0-9]+]])
 ; CHECK-NEXT:    call void @use_ptr(ptr [[A]])
 ; CHECK-NEXT:    ret void
 ;
@@ -44,7 +44,7 @@ define void @test_ptr_int_ptr(ptr %A) !dbg !13 {
 define void @test_zext_trunc(i32 %A) !dbg !18 {
 ; CHECK-LABEL: define void @test_zext_trunc(
 ; CHECK-SAME: i32 [[A:%.*]]) !dbg [[DBG18:![0-9]+]] {
-; CHECK-NEXT:      #dbg_value(i32 [[A]], [[META20:![0-9]+]], !DIExpression(DIOpArg(0, i32), DIOpZExt(i64)), [[META23:![0-9]+]])
+; CHECK-NEXT:      #dbg_value(i32 [[A]], [[META20:![0-9]+]], !DIExpression(DW_OP_LLVM_poisoned), [[META23:![0-9]+]])
 ; CHECK-NEXT:    call void @use_i32(i32 [[A]])
 ; CHECK-NEXT:    ret void
 ;
@@ -73,7 +73,7 @@ define void @test_trunc_zext(i64 %A) !dbg !24 {
 define void @test_sext_trunc(i32 %A) !dbg !29 {
 ; CHECK-LABEL: define void @test_sext_trunc(
 ; CHECK-SAME: i32 [[A:%.*]]) !dbg [[DBG29:![0-9]+]] {
-; CHECK-NEXT:      #dbg_value(i32 [[A]], [[META31:![0-9]+]], !DIExpression(DIOpArg(0, i32), DIOpSExt(i64)), [[META33:![0-9]+]])
+; CHECK-NEXT:      #dbg_value(i32 [[A]], [[META31:![0-9]+]], !DIExpression(DW_OP_LLVM_poisoned), [[META33:![0-9]+]])
 ; CHECK-NEXT:    call void @use_i32(i32 [[A]])
 ; CHECK-NEXT:    ret void
 ;

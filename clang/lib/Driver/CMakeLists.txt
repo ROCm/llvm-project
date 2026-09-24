@@ -120,5 +120,4 @@ add_clang_library(clangDriver
   clangLex
   clangOptions
   ${system_libs}
-  ${LLVM_PTHREAD_LIB}
   )

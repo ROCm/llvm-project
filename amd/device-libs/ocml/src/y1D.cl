@@ -130,14 +130,8 @@ MATH_MANGLE(y1)(double x)
         double x2 = x*x;
         double xs = x - ch - cl;
         double t = x < b0 ? x2 : xs;
-        ret = MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-              MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-              MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-              MATH_MAD(t, MATH_MAD(t,
-              p[14], p[13]), p[12]),
-              p[11]), p[10]), p[9]), p[8]),
-              p[7]), p[6]), p[5]), p[4]),
-              p[3]), p[2]), p[1]), p[0]);
+        ret = PE14(t, p[14], p[13], p[12], p[11], p[10], p[9], p[8], p[7], p[6], p[5], p[4], p[3], p[2], p[1],
+                    p[0]);
 
         if (x < b0) {
             const double twobypi = 0x1.45f306dc9c883p-1;

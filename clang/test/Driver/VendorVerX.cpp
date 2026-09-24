@@ -7,7 +7,7 @@
 // CHECK-NO-DIST-NOT: AMD AFAR drop
 
 // Check that "--version" can have extra output
-// RUN: echo "AMD AFAR drop" > /tmp/$$vers ; \
-// RUN: export LLVM_VERSION_INFO_FILE=/tmp/$$vers; \
+// RUN: echo "AMD AFAR drop" > %t.vers ; \
+// RUN: export LLVM_VERSION_INFO_FILE=%t.vers; \
 // RUN: %clang --version  | FileCheck --check-prefix=CHECK-DIST %s
 // CHECK-DIST: Distribution: AMD AFAR drop

@@ -2490,7 +2490,7 @@ static void DumpSingleReg(ucontext_t *ctx, int RegNum) {
 #      if SANITIZER_LINUX
          ctx->uc_mcontext.gregs[RegNum]
 #      elif SANITIZER_NETBSD
-         ctx->uc_mcontext.__gregs[RegNum]
+         (unsigned long long)ctx->uc_mcontext.__gregs[RegNum]
 #      endif
   );
 #    elif defined(__i386__)
@@ -2902,7 +2902,7 @@ void OnDlOpen(const char* filename, int flag) {
 #  endif
 }
 
-#if SANITIZER_AMDGPU
+#  if SANITIZER_AMDHSA
 void PatchHsaRuntimeDlopenFlag(const char *filename, int &flag) {
   if (filename && (internal_strstr(filename, "libamdhip64.so") ||
       internal_strstr(filename, "libhsa-runtime64.so") ||

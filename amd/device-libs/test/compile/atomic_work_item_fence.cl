@@ -48,5 +48,5 @@ kernel void test_invalid() {
     atomic_work_item_fence(0, memory_order_acq_rel, memory_scope_device);
 }
 
-// GCN: ![[LOCAL_MMRA]]  = !{!"amdgpu-as", !"local"}
-// GCN: ![[GLOBAL_MMRA]] = !{!"amdgpu-as", !"global"}
+// GCN: ![[LOCAL_MMRA]]  = !{!"amdgpu-synchronize-as", !"local"}
+// GCN: ![[GLOBAL_MMRA]] = !{!"amdgpu-synchronize-as", !"global"}

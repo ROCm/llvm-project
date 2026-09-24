@@ -571,6 +571,11 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       arg = "--cuda-device-only";
     }
 
+    if (trimarg == "--help" || trimarg == "-h") {
+      std::cerr << "hipcc is a legacy tool. New projects should use "
+                   "amdclang++ directly.\n"
+                << "  See https://rocm.docs.amd.com/ for migration guidance.\n";
+    }
     if (trimarg == "--version") {
       printHipVersion = 1;
     }
@@ -647,6 +652,9 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
           } else if (arg == "--hipcc-no-func-supp") {
             std::cerr << "Warning: The --hipcc-no-func-supp option has been deprecated and will be removed in the future.\n";
             funcSupp = 0;
+          } else if (hipBinUtilPtr_->stringRegexMatch(arg,
+                                                      "^--hipcc-verbose=.*")) {
+            verbose = stoi(arg.substr(arg.find('=') + 1));
           }
         } else {
           options.push_back(arg);

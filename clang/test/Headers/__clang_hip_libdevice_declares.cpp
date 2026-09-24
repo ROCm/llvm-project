@@ -9,8 +9,8 @@
 // RUN:   -include __clang_openmp_device_functions.h \
 // RUN:   -internal-isystem %S/../../lib/Headers/openmp_wrappers \
 // RUN:   -internal-isystem %S/Inputs/include \
-// RUN:   -triple amdgcn-amd-amdhsa -aux-triple x86_64-unknown-unknown -verify \
-// RUN:   -fopenmp-targets=amdgcn-amd-amdhsa -emit-llvm -fopenmp-is-target-device \
+// RUN:   -triple amdgpu-amd-amdhsa -aux-triple x86_64-unknown-unknown -verify \
+// RUN:   -fopenmp-targets=amdgpu-amd-amdhsa -emit-llvm -fopenmp-is-target-device \
 // RUN:   -o - %s | FileCheck --check-prefixes=CHECK,OPENMP,OPENMP-CPP %s
 
 // RUN: %clang_cc1 -x c -fopenmp -fvisibility=default -ffp-contract=off -no-enable-noundef-analysis \
@@ -18,15 +18,15 @@
 // RUN:   -include __clang_openmp_device_functions.h \
 // RUN:   -internal-isystem %S/../../lib/Headers/openmp_wrappers \
 // RUN:   -internal-isystem %S/Inputs/include \
-// RUN:   -triple amdgcn-amd-amdhsa -aux-triple x86_64-unknown-unknown -verify \
-// RUN:   -fopenmp-targets=amdgcn-amd-amdhsa -emit-llvm -fopenmp-is-target-device \
+// RUN:   -triple amdgpu-amd-amdhsa -aux-triple x86_64-unknown-unknown -verify \
+// RUN:   -fopenmp-targets=amdgpu-amd-amdhsa -emit-llvm -fopenmp-is-target-device \
 // RUN:   -o - %s | FileCheck --check-prefixes=CHECK,OPENMP,OPENMP-C %s
 
 // RUN: %clang_cc1 -x hip -fvisibility=default -ffp-contract=off -no-enable-noundef-analysis \
 // RUN:   -include __clang_hip_runtime_wrapper.h  \
 // RUN:   -internal-isystem %S/../../lib/Headers/cuda_wrappers \
 // RUN:   -internal-isystem %S/Inputs/include \
-// RUN:   -triple amdgcn-amd-amdhsa -aux-triple x86_64-unknown-unknown -verify \
+// RUN:   -triple amdgpu-amd-amdhsa -aux-triple x86_64-unknown-unknown -verify \
 // RUN:   -emit-llvm -fcuda-is-device -o - \
 // RUN:   -D__HIPCC_RTC__ %s | FileCheck -check-prefixes=CHECK,HIP %s
 
@@ -61,7 +61,7 @@ __attribute__((overloadable))
 // OPENMP-LABEL: define weak hidden void @_Z20attribute_check_hackv
 // OPENMP-SAME: () #[[ATTR0:[0-9]+]] {
 // OPENMP-NEXT:  entry:
-// OPENMP-NEXT:    call void @llvm.trap()
+// OPENMP-NEXT:    call void @llvm.trap() #[[ATTR4:[0-9]+]]
 // OPENMP-NEXT:    unreachable
 //
 void attribute_check_hack(void) {
@@ -75,7 +75,7 @@ void attribute_check_hack(void) {
 // CHECK-NEXT:    [[SRC_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SRC_ADDR]] to ptr
 // CHECK-NEXT:    store float [[SRC]], ptr [[SRC_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP0:%.*]] = load float, ptr [[SRC_ADDR_ASCAST]], align 4
-// CHECK-NEXT:    [[CALL:%.*]] = call float @__ocml_acos_f32(float [[TMP0]]) #[[ATTR4:[0-9]+]]
+// CHECK-NEXT:    [[CALL:%.*]] = call float @__ocml_acos_f32(float [[TMP0]]) #[[ATTR5:[0-9]+]]
 // CHECK-NEXT:    ret float [[CALL]]
 //
 TEST_FUNC_ATTRS float test_ockl_acos_f32(float src) {
@@ -110,14 +110,14 @@ TEST_FUNC_ATTRS float test_ockl_acos_f32(float src) {
 // CHECK-NEXT:    [[TMP2:%.*]] = load float, ptr [[C_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP3:%.*]] = load i8, ptr [[S_ADDR_ASCAST]], align 1
 // CHECK-NEXT:    [[LOADEDV:%.*]] = icmp ne i8 [[TMP3]], 0
-// CHECK-NEXT:    [[CALL:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP0]], <2 x half> [[TMP1]], float [[TMP2]], i1 zeroext [[LOADEDV]]) #[[ATTR4]]
+// CHECK-NEXT:    [[CALL:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP0]], <2 x half> [[TMP1]], float [[TMP2]], i1 zeroext [[LOADEDV]]) #[[ATTR5]]
 // CHECK-NEXT:    store float [[CALL]], ptr [[X_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP4:%.*]] = load <2 x half>, ptr [[A_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP5:%.*]] = load <2 x half>, ptr [[B_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP6:%.*]] = load float, ptr [[C_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP7:%.*]] = load i32, ptr [[S_INT_ADDR_ASCAST]], align 4
 // CHECK-NEXT:    [[TOBOOL:%.*]] = icmp ne i32 [[TMP7]], 0
-// CHECK-NEXT:    [[CALL1:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP4]], <2 x half> [[TMP5]], float [[TMP6]], i1 zeroext [[TOBOOL]]) #[[ATTR4]]
+// CHECK-NEXT:    [[CALL1:%.*]] = call float @__ockl_fdot2(<2 x half> [[TMP4]], <2 x half> [[TMP5]], float [[TMP6]], i1 zeroext [[TOBOOL]]) #[[ATTR5]]
 // CHECK-NEXT:    store float [[CALL1]], ptr [[Y_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP8:%.*]] = load float, ptr [[X_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP9:%.*]] = load float, ptr [[Y_ASCAST]], align 4

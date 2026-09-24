@@ -17,7 +17,7 @@ MATH_PRIVATE(trigpired)(double x)
 
     struct redret ret;
     ret.hi = MATH_MAD(t, -0.5, x);
-    ret.i = (int)t & 0x3;
+    ret.i = BUILTIN_ISNAN_F64(t) ? 0 : ((int)t & 0x3);
     return ret;
 }
 

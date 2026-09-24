@@ -768,15 +768,6 @@ template <> struct DenseMapInfo<AA::RangeTy> {
   }
 };
 
-/// Helper for AA::PointerInfo::Access DenseMap/Set usage ignoring everythign
-/// but the instruction
-struct AccessAsInstructionInfo : DenseMapInfo<Instruction *> {
-  using Base = DenseMapInfo<Instruction *>;
-  using Access = AAPointerInfo::Access;
-  static unsigned getHashValue(const Access &A);
-  static bool isEqual(const Access &LHS, const Access &RHS);
-};
-
 } // namespace llvm
 
 /// A type to track pointer/struct usage and accesses for AAPointerInfo.
@@ -5034,6 +5025,9 @@ struct AAIsDeadFunction : public AAIsDead {
     if (!AssumedLiveBlocks.insert(&BB).second)
       return false;
 
+    if (!A.isDuringDeduction())
+      return true;
+
     // We assume that all of BB is (probably) live now and if there are calls to
     // internal functions we will assume that those are now live as well. This
     // is a performance optimization for blocks with calls to a lot of internal
@@ -5041,8 +5035,16 @@ struct AAIsDeadFunction : public AAIsDead {
     for (const Instruction &I : BB)
       if (const auto *CB = dyn_cast<CallBase>(&I))
         if (auto *F = dyn_cast_if_present<Function>(CB->getCalledOperand()))
-          if (F->hasLocalLinkage())
+          if (F->hasLocalLinkage()) {
+            LLVM_DEBUG({
+              dbgs() << "[AAIsDead] Seeding live internal callee ";
+              F->printAsOperand(dbgs(), /*PrintType=*/false);
+              dbgs() << " from ";
+              BB.getParent()->printAsOperand(dbgs(), /*PrintType=*/false);
+              dbgs() << "\n";
+            });
             A.markLiveInternalFunction(*F);
+          }
     return true;
   }
 
@@ -7643,6 +7645,20 @@ ChangeStatus AAHeapToStackFunction::updateImpl(Attributor &A) {
     }
 
     std::optional<APInt> Size = getSize(A, *this, AI);
+
+    // manifest() needs a size for the alloca, either the constant above or one
+    // ObjectSizeOffsetEvaluator can materialize at runtime. An allocation
+    // function with no allocsize attribute and no built-in size knowledge
+    // offers neither, however it is otherwise attributed.
+    if (!Size && !hasComputableAllocSize(AI.CB, TLI)) {
+      LLVM_DEBUG(dbgs() << "[H2S] Unsizable allocation: " << *AI.CB << "\n");
+      AI.Status = AllocationInfo::INVALID;
+      Changed = ChangeStatus::CHANGED;
+      continue;
+    }
+
+    // A globalized local is exempt from the size cap, since moving it to the
+    // stack is worthwhile however large it is, but not from the check above.
     if (!AI.IsGlobalizedLocal && MaxHeapToStackSize != -1) {
       if (!Size || Size->ugt(MaxHeapToStackSize)) {
         LLVM_DEBUG({
@@ -9608,19 +9624,6 @@ struct AAValueConstantRangeImpl : AAValueConstantRange {
     return true;
   }
 
-  /// See AAValueConstantRange::getKnownConstantRange(..).
-  ConstantRange
-  getKnownConstantRange(Attributor &A,
-                        const Instruction *CtxI = nullptr) const override {
-    if (!isValidCtxInstructionForOutsideAnalysis(A, CtxI,
-                                                 /* AllowAACtxI */ false))
-      return getKnown();
-
-    ConstantRange LVIR = getConstantRangeFromLVI(A, CtxI);
-    ConstantRange SCEVR = getConstantRangeFromSCEV(A, CtxI);
-    return getKnown().intersectWith(SCEVR).intersectWith(LVIR);
-  }
-
   /// See AAValueConstantRange::getAssumedConstantRange(..).
   ConstantRange
   getAssumedConstantRange(Attributor &A,
@@ -10904,7 +10907,7 @@ struct AANoFPClassImpl : AANoFPClass {
       SimplifyQuery Q(DL, TLI, DT, AC, CtxI);
 
       KnownFPClass KnownFPClass = computeKnownFPClass(&V, fcAllFlags, Q);
-      addKnownBits(~KnownFPClass.KnownFPClasses);
+      addKnownBits(~KnownFPClass.getKnownFPClasses());
     }
 
     if (CtxI)
@@ -12879,10 +12882,12 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
       return ChangeStatus::UNCHANGED;
 
     ChangeStatus Changed = ChangeStatus::UNCHANGED;
+    unsigned ProgramAS = CB->getDataLayout().getProgramAddressSpace();
     Value *FP = CB->getCalledOperand();
-    if (FP->getType()->getPointerAddressSpace())
-      FP = new AddrSpaceCastInst(FP, PointerType::get(FP->getContext(), 0),
-                                 FP->getName() + ".as0", CB->getIterator());
+    if (FP->getType()->getPointerAddressSpace() != ProgramAS)
+      FP = new AddrSpaceCastInst(
+          FP, PointerType::get(FP->getContext(), ProgramAS),
+          FP->getName() + ".as" + Twine(ProgramAS), CB->getIterator());
 
     bool CBIsVoid = CB->getType()->isVoidTy();
     BasicBlock::iterator IP = CB->getIterator();

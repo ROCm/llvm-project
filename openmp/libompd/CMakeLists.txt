@@ -24,7 +24,6 @@ if(LIBOMP_OMPD_SUPPORT)
       "Install path for hwloc library")
 
     if(LIBOMP_OMPD_GDB_SUPPORT)
-        find_package(LLVM) # Required for LLVM dynamic library support
         add_subdirectory(gdb-plugin)
 		# GDB is required to run the tests
 		if (GDB_FOUND)

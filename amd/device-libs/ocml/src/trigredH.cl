@@ -21,7 +21,7 @@ MATH_PRIVATE(trigred)(half hx)
 
     struct redret ret;
     ret.hi = (half)BUILTIN_MAD_F32(fn, -pb2_c, BUILTIN_MAD_F32(fn, -pb2_b, BUILTIN_MAD_F32(fn, -pb2_a, x)));
-    ret.i =  (int)fn & 0x3;
+    ret.i = BUILTIN_ISNAN_F32(fn) ? 0 : ((int)fn & 0x3);
     return ret;
 }
 

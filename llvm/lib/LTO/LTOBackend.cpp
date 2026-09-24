@@ -341,6 +341,9 @@ static void runNewPMPasses(const Config &Conf, Module &Mod, TargetMachine *TM,
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
+  if (Conf.PassBuilderCallback)
+    Conf.PassBuilderCallback(PB);
+
   ModulePassManager MPM;
 
   if (!Conf.DisableVerify)
@@ -507,8 +510,6 @@ static void codegen(const CodegenConfig &Conf, TargetMachine *TM,
     TargetLibraryInfoImpl TLII(Mod.getTargetTriple(), TM->Options.VecLib);
     CodeGenPasses.add(new TargetLibraryInfoWrapperPass(TLII));
     CodeGenPasses.add(new RuntimeLibraryInfoWrapper(
-        Mod.getTargetTriple(), TM->Options.ExceptionModel,
-        TM->Options.FloatABIType, TM->Options.EABIVersion,
         TM->Options.MCOptions.ABIName, TM->Options.VecLib));
 
     // No need to make index available if the module is empty.

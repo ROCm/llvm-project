@@ -27,6 +27,8 @@ __constant TYPE TABLE_MANGLE(NAME) [ LENGTH ] = {
 
 #include "besselF_table.h"
 #include "besselD_table.h"
+#include "lgammaF_table.h"
+#include "lgammaD_table.h"
 
 #ifdef USE_TABLESTRUCT
 };

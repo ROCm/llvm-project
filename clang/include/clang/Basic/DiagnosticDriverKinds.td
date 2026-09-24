@@ -73,9 +73,6 @@ def err_drv_no_rocm_device_lib : Error<
   "%select{|, which requires ROCm %3 or higher}2}0; provide its path via "
   "'--rocm-path' or '--rocm-device-lib-path', or pass '-nogpulib' to build "
   "without ROCm device library">;
-def err_drv_no_asan_rt_lib : Error<
-  "AMDGPU address sanitizer runtime library (asanrtl) not found. "
-  "Please install ROCm device library which supports address sanitizer">;
 def err_drv_no_hip_runtime : Error<
   "cannot find HIP runtime; provide its path via '--rocm-path', or pass "
   "'-nogpuinc' to build without HIP runtime">;
@@ -97,6 +94,9 @@ def err_drv_no_hipspv_device_lib : Error<
 def err_drv_hipspv_no_hip_path : Error<
   "'--hip-path' must be specified when offloading to SPIR-V unless '-nogpuinc' "
   "is given">;
+
+def err_drv_sycl_no_rdc_multiple_targets : Error<
+  "'%0' is not supported with multiple SYCL offloading targets">;
 
 // SYCL Windows-specific diagnostics
 def err_drv_sycl_requires_dynamic_crt : Error<
@@ -182,9 +182,8 @@ def warn_drv_hexagon_reserved_caller_saved_reg : Warning<
 def warn_drv_unsupported_openmp_library : Warning<
   "the library '%0=%1' is not supported, OpenMP will not be enabled">,
   InGroup<OptionIgnored>;
-
 def warn_openacc_experimental : Warning<
-"OpenACC is NOT supported for AMDGPU">;
+  "OpenACC is NOT supported for AMDGPU">;
 
 def warn_openmp_default_allocate_experimental : Warning<
   "-fopenmp-default-allocate= is an experimental feature">;
@@ -202,10 +201,6 @@ def err_drv_invalid_linker_name : Error<
   "invalid linker name in argument '%0'">;
 def err_drv_invalid_rtlib_name : Error<
   "invalid runtime library name in argument '%0'">;
-def err_drv_invalid_allocatable_mode : Error<
-  "invalid semantic mode for assignments to allocatables in argument '%0'">;
-def err_drv_unsupported_fixed_line_length : Error<
-  "unsupported fixed-format line length in argument '%0'">;
 def err_drv_unsupported_rtlib_for_platform : Error<
   "unsupported runtime library '%0' for platform '%1'">;
 def err_drv_invalid_unwindlib_name : Error<
@@ -243,12 +238,10 @@ def err_drv_invalid_diagnotics_misexpect_tolerance : Error<
   "invalid argument in '%0', only integers are supported">;
 def err_drv_missing_argument : Error<
   "argument to '%0' is missing (expected %1 value%s1)">;
-def err_drv_missing_Xopenmptarget_or_march: Error<
-  "option -fopenmp-targets= requires additional options -Xopenmp-target= and -march=">,
+def err_drv_missing_Xopenmptarget_or_march : Error<
+  "option -fopenmp-targets= requires additional options "
+  "-Xopenmp-target= and -march=">,
   DefaultFatal;
-def warn_drv_missing_flang_exec : Warning<
-  "%0 not found, 'openmp-extras' package from ROCm may be missing">,
-  InGroup<InvalidCommandLineArgument>;
 def err_drv_invalid_Xarch_argument_with_args : Error<
   "invalid Xarch argument: '%0', options requiring arguments are unsupported">;
 def err_drv_Xopenmp_target_missing_triple : Error<
@@ -429,11 +422,16 @@ def err_drv_optimization_remark_format : Error<
 def err_drv_no_neon_modifier : Error<"[no]neon is not accepted as modifier, please use [no]simd instead">;
 def err_drv_invalid_omp_target : Error<"OpenMP target is invalid: '%0'">;
 def err_drv_incompatible_omp_arch : Error<"OpenMP target architecture '%0' pointer size is incompatible with host '%1'">;
+def err_drv_dyndbg_lto : Error<"'-fdynamic-debugging' incompatible with '-flto'">;
+def err_drv_dyndbg_incompatible : Error<"'-fdynamic-debugging' incompatible with '%0'">;
+def err_drv_dyndbg_ir : Error<"'-fdynamic-debugging' incompatible with IR input">;
+def warn_drv_dyndbg_req_debug : Warning<"'-fdynamic-debugging' ignored: requires debug info">,
+    InGroup<DynamicDebugging>;
 def err_drv_omp_host_target_not_supported : Error<
   "target '%0' is not a supported OpenMP host target">;
 def err_drv_expecting_fopenmp_with_fopenmp_targets : Error<
   "'-fopenmp-targets' must be used in conjunction with a '-fopenmp' option "
-  "compatible with offloading; e.g., '-fopenmp=libomp' or '-fopenmp=libiomp5' or '-fopenmp=libbolt'">;
+  "compatible with offloading; e.g., '-fopenmp=libomp' or '-fopenmp=libiomp5'">;
 def err_drv_failed_to_deduce_target_from_arch : Error<
   "failed to deduce triple for target architecture '%0'; specify the triple "
   "using '-fopenmp-targets' and '-Xopenmp-target' instead">;
@@ -679,6 +677,12 @@ def remark_printing_module_graph : Remark<
 def err_module_defined_outside_of_module_source : Error<
   "module '%0' is defined in file '%1', but module declarations are only "
   "allowed in C++ module inputs; use the '.cppm' extension or '-x c++module'">;
+def err_drv_depscan_log_path_empty : Error<
+  "'-fdepscan-log-path=' requires a non-empty file path">;
+def err_drv_depscan_log_path_inconsistent : Error<
+  "'-fdepscan-log-path' set inconsistently within a dependency scan: "
+  "%select{no log path|log path '%1'}0 conflicts with "
+  "%select{no log path|log path '%3'}2 requested earlier">;
 
 def warn_drv_delayed_template_parsing_after_cxx20 : Warning<
   "-fdelayed-template-parsing is deprecated after C++20">,
@@ -794,14 +798,6 @@ def warn_drv_global_isel_incomplete_opt : Warning<
   "-fglobal-isel support is incomplete for this architecture at the current optimization level">,
   InGroup<GlobalISel>;
 
-def warn_drv_amd_opt_removed : Warning<
-  "[AMD] proprietary optimization compiler has been removed">,
-  InGroup<UnusedCommandLineArgument>;
-
-def warn_drv_amd_opt_not_found : Warning<
-  "[AMD] proprietary optimization compiler installation was not found">,
-  InGroup<UnusedCommandLineArgument>;
-
 def warn_drv_moutline_unsupported_opt : Warning<
   "'%0' does not support '-moutline'; flag ignored">,
   InGroup<OptionIgnored>;
@@ -853,6 +849,9 @@ def err_drv_cannot_mix_options : Error<"cannot specify '%1' along with '%0'">;
 
 def err_drv_invalid_object_mode : Error<
   "OBJECT_MODE setting %0 is not recognized and is not a valid setting">;
+
+def err_drv_compile_mode_unsupported_aix : Error<
+  "32-bit compile mode is not supported. Use OBJECT_MODE=64, -maix64 or -m64">;
 
 def err_roptr_requires_data_sections: Error<"-mxcoff-roptr is supported only with -fdata-sections">;
 def err_roptr_cannot_build_shared: Error<"-mxcoff-roptr is not supported with -shared">;

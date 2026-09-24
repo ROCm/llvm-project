@@ -6,5 +6,5 @@
 // RUN:   -g \
 // RUN:   %s 2>&1 | FileCheck %s
 
-// CHECK: [[CLANG:".*clang.*"]] "-cc1"  "-triple" "amdgcn-amd-amdhsa"
+// CHECK: [[CLANG:".*clang.*"]] "-cc1"  "-triple" "amdgpu9.06-amd-amdhsa"
 // CHECK-SAME: "-dwarf-version=5"

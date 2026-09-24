@@ -9,6 +9,7 @@
 #include "ASTUtils.h"
 #include "DiagOutputUtils.h"
 #include "PtrTypesSemantics.h"
+#include "RawPtrRefSafetyModel.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DynamicRecursiveASTVisitor.h"
@@ -36,19 +37,13 @@ class RawPtrRefCallArgsChecker
 
 protected:
   mutable BugReporter *BR;
-  mutable std::optional<RetainTypeChecker> RTC;
+  const std::unique_ptr<PtrRefSafetyModel> Model;
 
 public:
-  RawPtrRefCallArgsChecker(const char *description)
-      : Bug(this, description, "WebKit coding guidelines") {}
-
-  virtual std::optional<bool> isUnsafeType(QualType) const = 0;
-  virtual std::optional<bool> isUnsafePtr(QualType) const = 0;
-  virtual bool isSafePtr(const CXXRecordDecl *Record) const = 0;
-  virtual bool isSafePtrType(const QualType type) const = 0;
-  virtual bool isSafeExpr(const Expr *) const { return false; }
-  virtual bool isSafeDecl(const Decl *) const { return false; }
-  virtual const char *typeName() const = 0;
+  RawPtrRefCallArgsChecker(const char *description,
+                           std::unique_ptr<PtrRefSafetyModel> Model)
+      : Bug(this, description, "WebKit coding guidelines"),
+        Model(std::move(Model)) {}
 
   void checkASTDecl(const TranslationUnitDecl *TUD, AnalysisManager &MGR,
                     BugReporter &BRArg) const {
@@ -75,10 +70,38 @@ public:
       }
 
       bool TraverseDecl(Decl *D) override {
+        // A template pattern is checked through its instantiations, which are
+        // traversed from the TemplateDecl itself. In the pattern the callee of
+        // a call may still be an unresolved overload set and the type of an
+        // expression may still be dependent, neither of which can be reasoned
+        // about, so don't enter it at all.
+        if (D && !isa<TemplateDecl>(D) && D->isTemplated())
+          return true;
         llvm::SaveAndRestore SavedDecl(DeclWithIssue);
         if (D && (isa<FunctionDecl>(D) || isa<ObjCMethodDecl>(D)))
           DeclWithIssue = D;
         return DynamicRecursiveASTVisitor::TraverseDecl(D);
+      }
+
+      bool TraverseLambdaExpr(LambdaExpr *L) override {
+        auto *FTD = L->getLambdaClass()->getDependentLambdaCallOperator();
+        if (!FTD)
+          return DynamicRecursiveASTVisitor::TraverseLambdaExpr(L);
+        // The body of a generic lambda is the pattern of its call operator,
+        // but it is reached from the LambdaExpr as a statement, so TraverseDecl
+        // never gets to skip it. Traverse the capture initializers, which are
+        // evaluated in the enclosing scope, and then the call operator itself,
+        // of which the pattern is skipped like any other and the instantiations
+        // are traversed. The initializers are traversed as expressions because
+        // the variable of an init capture is declared in the pattern.
+        for (unsigned I = 0, N = L->capture_size(); I != N; ++I) {
+          if (!(L->capture_begin() + I)->isExplicit())
+            continue;
+          if (auto *Init = L->capture_init_begin()[I];
+              Init && !TraverseStmt(Init))
+            return false;
+        }
+        return TraverseDecl(FTD);
       }
 
       bool VisitCallExpr(CallExpr *CE) override {
@@ -92,8 +115,8 @@ public:
       }
 
       bool VisitTypedefDecl(TypedefDecl *TD) override {
-        if (Checker->RTC)
-          Checker->RTC->visitTypedef(TD);
+        if (auto *RTC = Checker->Model->retainTypeChecker())
+          RTC->visitTypedef(TD);
         return true;
       }
 
@@ -104,7 +127,7 @@ public:
     };
 
     LocalVisitor visitor(this);
-    if (RTC)
+    if (auto *RTC = Model->retainTypeChecker())
       RTC->visitTranslationUnitDecl(TUD);
     visitor.TraverseDecl(const_cast<TranslationUnitDecl *>(TUD));
   }
@@ -124,7 +147,7 @@ public:
       if (ArgIdx) {
         auto *Arg = CE->getArg(0);
         QualType ArgType = Arg->getType().getCanonicalType();
-        std::optional<bool> IsUnsafe = isUnsafeType(ArgType);
+        std::optional<bool> IsUnsafe = Model->isUnsafeType(ArgType);
         if (IsUnsafe && *IsUnsafe && !isPtrOriginSafe(Arg))
           reportBugOnThis(F, Arg, D);
       }
@@ -182,12 +205,9 @@ public:
       return;
 
     if (auto *Receiver = E->getInstanceReceiver()) {
-      std::optional<bool> IsUnsafe = isUnsafePtr(E->getReceiverType());
+      std::optional<bool> IsUnsafe = Model->isUnsafePtr(E->getReceiverType());
       if (IsUnsafe && *IsUnsafe && !isPtrOriginSafe(Receiver)) {
         if (isAllocInit(E))
-          return;
-        auto SelectorName = E->getSelector().getNameForSlot(0);
-        if (SelectorName == "isEqual" || SelectorName == "isEqualToString")
           return;
         reportBugOnReceiver(E->getMethodDecl(), Receiver, D);
       }
@@ -203,7 +223,7 @@ public:
       bool hasParam = i < MethodDecl->param_size();
       auto *Param = hasParam ? MethodDecl->getParamDecl(i) : nullptr;
       auto ArgType = Arg->getType();
-      std::optional<bool> IsUnsafe = isUnsafePtr(ArgType);
+      std::optional<bool> IsUnsafe = Model->isUnsafePtr(ArgType);
       if (!IsUnsafe || !(*IsUnsafe))
         continue;
       if (isPtrOriginSafe(Arg))
@@ -225,7 +245,7 @@ public:
     }
     auto *ThisExpr = MemberCallExpr->getImplicitObjectArgument();
     QualType ArgType = MemberCallExpr->getObjectType().getCanonicalType();
-    std::optional<bool> IsUnsafe = isUnsafeType(ArgType);
+    std::optional<bool> IsUnsafe = Model->isUnsafeType(ArgType);
     if (!IsUnsafe || !*IsUnsafe)
       return;
 
@@ -237,7 +257,7 @@ public:
 
   void checkArg(const NamedDecl *Callee, const Expr *Arg, QualType ParamType,
                 const ParmVarDecl *Param, const Decl *DeclWithIssue) const {
-    std::optional<bool> IsUncounted = isUnsafePtr(ParamType);
+    std::optional<bool> IsUncounted = Model->isUnsafePtr(ParamType);
     if (!IsUncounted || !(*IsUncounted))
       return;
 
@@ -253,10 +273,19 @@ public:
   bool isPtrOriginSafe(const Expr *Arg) const {
     return tryToFindPtrOrigin(
         Arg, /*StopAtFirstRefCountedObj=*/true,
-        [&](const clang::CXXRecordDecl *Record) { return isSafePtr(Record); },
-        [&](const clang::QualType T) { return isSafePtrType(T); },
-        [&](const clang::Decl *D) { return isSafeDecl(D); },
-        [&](const clang::Expr *ArgOrigin, bool IsSafe) {
+        Model->checksForInteriorDestruction(),
+        [&](const clang::CXXRecordDecl *Record) {
+          return Model->isSafePtr(Record);
+        },
+        [&](const clang::QualType T) { return Model->isSafePtrType(T); },
+        [&](const clang::Decl *D) {
+          return Model->isSafeDecl(D, BR->getSourceManager());
+        },
+        // A temporary on the path to an argument's origin is safe: the full
+        // expression does not end until the call returns.
+        [&](const clang::Expr *ArgOrigin, bool IsSafe,
+            bool /*OriginDependsOnFullExpressionTemporary*/,
+            bool PtrIsLifetimeBoundToOrigin) {
           if (IsSafe)
             return true;
           if (isNullPtr(ArgOrigin))
@@ -278,7 +307,7 @@ public:
             if (isPtrOriginSafe(MCE->getImplicitObjectArgument()))
               return true;
           }
-          if (isSafeExpr(ArgOrigin))
+          if (Model->isSafeExpr(ArgOrigin, PtrIsLifetimeBoundToOrigin))
             return true;
           return false;
         });
@@ -308,7 +337,7 @@ public:
         auto *callee = MemberOp->getDirectCallee();
         if (auto *calleeDecl = dyn_cast<CXXMethodDecl>(callee)) {
           if (const CXXRecordDecl *classDecl = calleeDecl->getParent()) {
-            if (isSafePtr(classDecl))
+            if (Model->isSafePtr(classDecl))
               return true;
           }
         }
@@ -408,6 +437,7 @@ public:
     auto *ArgType = CallArg->getType().getTypePtr();
 
     if (printPointer(Os, ArgType) == PrintDeclKind::Pointer) {
+      auto *RTC = Model->retainTypeChecker();
       assert(RTC);
       if (auto *Decl = RTC->getCanonicalDecl(CallArg->getType())) {
         printQuotedQualifiedName(Os, Decl);
@@ -448,7 +478,7 @@ public:
       Os << " to ";
       printQuotedQualifiedName(Os, Callee);
     }
-    Os << ") is a raw pointer to " << typeName() << " ";
+    Os << ") is a raw pointer to " << Model->typeName() << " ";
     printTypeName(Os, CallArg->getType());
 
     PathDiagnosticLocation BSLoc(SrcLocToReport, BR->getSourceManager());
@@ -473,7 +503,7 @@ public:
       printQuotedQualifiedName(Os, Callee);
       Os << ")";
     }
-    Os << " is a raw pointer to " << typeName() << " ";
+    Os << " is a raw pointer to " << Model->typeName() << " ";
     printTypeName(Os, CallArg->getType());
 
     PathDiagnosticLocation BSLoc(SrcLocToReport, BR->getSourceManager());
@@ -499,11 +529,18 @@ public:
   }
 
   enum class PrintDeclKind { Pointee, Pointer };
-  virtual PrintDeclKind printPointer(llvm::raw_svector_ostream &Os,
-                                     const Type *T) const {
+  PrintDeclKind printPointer(llvm::raw_svector_ostream &Os,
+                             const Type *T) const {
+    // Retain/OS types are frequently spelled through a typedef (e.g. CFXXXRef);
+    // print the typedef name rather than desugaring to the pointee.
+    if (Model->retainTypeChecker() && isa<TypedefType>(T)) {
+      Os << Model->typeName() << " ";
+      return PrintDeclKind::Pointer;
+    }
     T = T->getUnqualifiedDesugaredType();
     bool IsPtr = isa<PointerType, ObjCObjectPointerType>(T);
-    Os << "raw " << (IsPtr ? "pointer" : "reference") << " to " << typeName();
+    Os << "raw " << (IsPtr ? "pointer" : "reference") << " to "
+       << Model->typeName();
     return PrintDeclKind::Pointee;
   }
 };
@@ -512,95 +549,24 @@ class UncountedCallArgsChecker final : public RawPtrRefCallArgsChecker {
 public:
   UncountedCallArgsChecker()
       : RawPtrRefCallArgsChecker("Uncounted call argument for a raw "
-                                 "pointer/reference parameter") {}
-
-  std::optional<bool> isUnsafeType(QualType QT) const final {
-    return isUncounted(QT);
-  }
-
-  std::optional<bool> isUnsafePtr(QualType QT) const final {
-    return isUncountedPtr(QT.getCanonicalType());
-  }
-
-  bool isSafePtr(const CXXRecordDecl *Record) const final {
-    return isRefCounted(Record) || isCheckedPtr(Record);
-  }
-
-  bool isSafePtrType(const QualType type) const final {
-    return isRefOrCheckedPtrType(type);
-  }
-
-  const char *typeName() const final { return "RefPtr-capable type"; }
+                                 "pointer/reference parameter",
+                                 makeRefPtrSafetyModel()) {}
 };
 
 class UncheckedCallArgsChecker final : public RawPtrRefCallArgsChecker {
 public:
   UncheckedCallArgsChecker()
       : RawPtrRefCallArgsChecker("Unchecked call argument for a raw "
-                                 "pointer/reference parameter") {}
-
-  std::optional<bool> isUnsafeType(QualType QT) const final {
-    return isUnchecked(QT);
-  }
-
-  std::optional<bool> isUnsafePtr(QualType QT) const final {
-    return isUncheckedPtr(QT.getCanonicalType());
-  }
-
-  bool isSafePtr(const CXXRecordDecl *Record) const final {
-    return isRefCounted(Record) || isCheckedPtr(Record);
-  }
-
-  bool isSafePtrType(const QualType type) const final {
-    return isRefOrCheckedPtrType(type);
-  }
-
-  bool isSafeExpr(const Expr *E) const final {
-    return isExprToGetCheckedPtrCapableMember(E);
-  }
-
-  const char *typeName() const final { return "CheckedPtr-capable type"; }
+                                 "pointer/reference parameter",
+                                 makeCheckedPtrSafetyModel()) {}
 };
 
 class UnretainedCallArgsChecker final : public RawPtrRefCallArgsChecker {
 public:
   UnretainedCallArgsChecker()
       : RawPtrRefCallArgsChecker("Unretained call argument for a raw "
-                                 "pointer/reference parameter") {
-    RTC = RetainTypeChecker();
-  }
-
-  std::optional<bool> isUnsafeType(QualType QT) const final {
-    return RTC->isUnretained(QT);
-  }
-
-  std::optional<bool> isUnsafePtr(QualType QT) const final {
-    return RTC->isUnretained(QT);
-  }
-
-  bool isSafePtr(const CXXRecordDecl *Record) const final {
-    return isRetainPtrOrOSPtr(Record);
-  }
-
-  bool isSafePtrType(const QualType type) const final {
-    return isRetainPtrOrOSPtrType(type);
-  }
-
-  bool isSafeDecl(const Decl *D) const final {
-    // Treat NS/CF globals in system header as immortal.
-    return BR->getSourceManager().isInSystemHeader(D->getLocation());
-  }
-
-  PrintDeclKind printPointer(llvm::raw_svector_ostream &Os,
-                             const Type *T) const final {
-    if (isa<TypedefType>(T)) {
-      Os << typeName() << " ";
-      return PrintDeclKind::Pointer;
-    }
-    return RawPtrRefCallArgsChecker::printPointer(Os, T);
-  }
-
-  const char *typeName() const final { return "RetainPtr-capable type"; }
+                                 "pointer/reference parameter",
+                                 makeRetainPtrSafetyModel()) {}
 };
 
 } // namespace

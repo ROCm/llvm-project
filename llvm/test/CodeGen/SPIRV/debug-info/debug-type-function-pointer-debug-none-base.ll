@@ -1,6 +1,5 @@
 ; RUN: llc --verify-machineinstrs -O0 -mtriple=spirv64-unknown-unknown --spirv-ext=+SPV_KHR_non_semantic_info %s -o - | FileCheck %s
-; TODO(#109287): spirv-val coverage remains disabled for DebugTypePointer with
-; DebugInfoNone as the base type.
+; RUN: %if spirv-tools %{ llc --verify-machineinstrs -O0 -mtriple=spirv64-unknown-unknown --spirv-ext=+SPV_KHR_non_semantic_info %s -o - -filetype=obj | spirv-val %}
 ;
 ; Pointer parameter with null baseType should lower to DebugTypePointer using
 ; DebugInfoNone as Base Type, and still be consumed by DebugTypeFunction.
@@ -33,6 +32,6 @@ entry:
 
 !6 = !DISubroutineType(cc: DW_CC_LLVM_SpirFunction, types: !7)
 !7 = !{null, !8}
-!8 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 64, addressSpace: 4)
+!8 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 64, dwarfAddressSpace: 4)
 
 !10 = distinct !DISubprogram(name: "ptr_null_base", linkageName: "ptr_null_base", scope: !1, file: !1, line: 1, type: !6, scopeLine: 1, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)

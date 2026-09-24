@@ -16,9 +16,9 @@ MATH_MANGLE(tan)(double x)
 
     double ax = BUILTIN_ABS_F64(x);
 
-    struct redret r = MATH_PRIVATE(trigred)(ax);
+    struct epredret r = MATH_PRIVATE(eptrigred)(ax);
 
-    double t = MATH_PRIVATE(tanred2)(r.hi, r.lo, r.i & 1);
+    double t = MATH_PRIVATE(tanredep)(r.r, r.i & 1);
     t = AS_DOUBLE(AS_LONG(t) ^ (AS_LONG(x) & SIGNBIT_DP64));
 
     return AS_DOUBLE(t);

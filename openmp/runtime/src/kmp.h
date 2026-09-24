@@ -1064,7 +1064,6 @@ extern omp_memspace_handle_t const llvm_omp_target_host_mem_space;
 extern omp_memspace_handle_t const llvm_omp_target_shared_mem_space;
 extern omp_memspace_handle_t const llvm_omp_target_device_mem_space;
 extern omp_memspace_handle_t const kmp_max_mem_space;
-extern omp_memspace_handle_t __kmp_def_mem_space;
 
 typedef struct {
   omp_alloctrait_key_t key;
@@ -1098,8 +1097,6 @@ extern bool __kmp_hwloc_available;
 /// Memory space informaition is shared with offload runtime.
 typedef struct kmp_memspace_t {
   omp_memspace_handle_t memspace; // predefined input memory space
-  int num_devs;
-  int *devids;
   int num_resources = 0; // number of available resources
   int *resources = nullptr; // available resources
   kmp_memspace_t *next = nullptr; // next memory space handle
@@ -1126,10 +1123,6 @@ typedef struct kmp_allocator_t {
 #endif // KMP_HWLOC_ENABLED
 } kmp_allocator_t;
 
-extern omp_memspace_handle_t
-__kmpc_get_memory_space(size_t num_devices, int device_ids[],
-                        omp_memspace_handle_t base_memory_space);
-void __kmpc_destroy_memory_space(omp_memspace_handle_t ms);
 extern omp_allocator_handle_t __kmpc_init_allocator(int gtid,
                                                     omp_memspace_handle_t,
                                                     int ntraits,
@@ -4118,6 +4111,7 @@ void kmpc_set_blocktime(int arg);
 void ompc_set_nested(int flag);
 void ompc_set_dynamic(int flag);
 void ompc_set_num_threads(int arg);
+void kmpc_set_num_threads_8(kmp_int64 arg);
 
 extern void __kmp_push_current_task_to_thread(kmp_info_t *this_thr,
                                               kmp_team_t *team, int tid);
@@ -4127,8 +4121,6 @@ extern kmp_task_t *__kmp_task_alloc(ident_t *loc_ref, kmp_int32 gtid,
                                     size_t sizeof_kmp_task_t,
                                     size_t sizeof_shareds,
                                     kmp_routine_entry_t task_entry);
-extern int __kmpc_omp_task_alloc_with_deps(ident_t *loc_ref, kmp_int32 gtid, kmp_task_t *new_task,
-                                           int ndeps, int nargs, ...); //AOCC
 extern void __kmp_init_implicit_task(ident_t *loc_ref, kmp_info_t *this_thr,
                                      kmp_team_t *team, int tid,
                                      int set_curr_task);

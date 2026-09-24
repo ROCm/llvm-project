@@ -12,7 +12,7 @@
 
 
 module attributes {llvm.target_triple = "amdgcn-amd-amdhsa", omp.is_target_device = true, dlti.dl_spec = #dlti.dl_spec<"dlti.alloca_memory_space" = 5 : ui64>} {
-  llvm.func @add(%arg0: !llvm.ptr) attributes {omp.declare_target = #omp.declaretarget<device_type = (any), capture_clause = (to)>} {
+  llvm.func @add(%arg0: !llvm.ptr) attributes {omp.declare_target = #omp.declaretarget<device_type = any, capture_clause = to>} {
     llvm.intr.dbg.declare #var_a = %arg0 : !llvm.ptr loc(#loc2)
     llvm.return
   } loc(#loc3)
@@ -23,7 +23,7 @@ module attributes {llvm.target_triple = "amdgcn-amd-amdhsa", omp.is_target_devic
 #loc3 = loc(fused<#sp>[#loc1])
 
 // CHECK: define{{.*}}@add(ptr %[[ARG:[0-9]+]]){{.*}}!dbg ![[SP:[0-9]+]] {
-// CHECK: #dbg_declare(ptr %[[ARG]], ![[A:[0-9]+]], !DIExpression()
+// CHECK: #dbg_declare(ptr %[[ARG]], ![[A:[0-9]+]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(ptr)), !{{.*}})
 // CHECK: }
 // CHECK: ![[SP]] = {{.*}}!DISubprogram(name: "add"{{.*}})
 // CHECK: ![[A]] = !DILocalVariable(name: "a", arg: 1, scope: ![[SP]]{{.*}})

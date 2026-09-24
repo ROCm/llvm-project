@@ -490,25 +490,40 @@ public:
                       ompt_callbacks_t EventType, ArgsTy... Args)
       : Arguments(Args...), beginFunction(std::get<0>(Callbacks)) {
     __tgt_async_info *AI = AsyncInfo;
-    if (isTracingEnabled(TracedDeviceId, EventType)) {
-      auto Record = begin();
 
-      // The Profiler can allocate specific data to be used to pass information
-      // from here to lower parts of the runtime system.
-      // NOTE: It is the responsibility of the programmer to ensure type
-      // compatibility and correct usage of the data. The profiler, however,
-      // OWNS the pointer and frees it at an appropriate time.
-      OmptEventInfoTy *ProfilerData =
-          reinterpret_cast<OmptEventInfoTy *>(Prof->getProfilerSpecificData());
-      ProfilerData->TraceRecord = Record;
-      ProfilerData->NumTeams = 0;
+    // Actively prevent further tracing of this event. This is only revised
+    // below, if a trace record was assigned for it. Hence, a non-null
+    // 'ProfilerData' implies a valid trace record, which the asynchronous
+    // completion handlers in the plugins rely on.
+    AI->ProfilerData = nullptr;
 
-      // Allows to pass down into the plugins via AsyncInfoTy
-      AI->ProfilerData = ProfilerData;
-    } else {
-      // Actively prevent further tracing of this event
-      AI->ProfilerData = nullptr;
-    }
+    if (!isTracingEnabled(TracedDeviceId, EventType))
+      return;
+
+    auto *Record = begin();
+
+    // A tool may decline to provide a buffer, in which case no trace record
+    // was assigned and this event will not be traced (OpenMP 5.2: a buffer
+    // request callback may set '*bytes' to zero).
+    // TODO: For conformance, no further trace records should be requested for
+    //       this device until the next 'ompt_start_trace'. Currently a buffer
+    //       request is issued per event, even after a tool declined to provide
+    //       a buffer.
+    if (Record == nullptr)
+      return;
+
+    // The Profiler can allocate specific data to be used to pass information
+    // from here to lower parts of the runtime system.
+    // NOTE: It is the responsibility of the programmer to ensure type
+    // compatibility and correct usage of the data. The profiler, however,
+    // OWNS the pointer and frees it at an appropriate time.
+    OmptEventInfoTy *ProfilerData =
+        reinterpret_cast<OmptEventInfoTy *>(Prof->getProfilerSpecificData());
+    ProfilerData->TraceRecord = Record;
+    ProfilerData->NumTeams = 0;
+
+    // Allows to pass down into the plugins via AsyncInfoTy
+    AI->ProfilerData = ProfilerData;
   }
 
 private:

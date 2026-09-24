@@ -398,11 +398,9 @@ enum MetadataCodes {
   METADATA_GENERIC_SUBRANGE = 45, // [distinct, count, lo, up, stride]
   METADATA_ARG_LIST = 46,         // [n x [type num, value num]]
   METADATA_ASSIGN_ID = 47,        // [distinct, ...]
-  METADATA_EXPR = 48,             // [distinct, ...]
-  METADATA_FRAGMENT = 49,         // []
-  METADATA_LIFETIME = 50,         // [obj, loc, n x args]
-  METADATA_SUBRANGE_TYPE = 51,    // [distinct, ...]
-  METADATA_FIXED_POINT_TYPE = 52, // [distinct, ...]
+  METADATA_SUBRANGE_TYPE = 48,    // [distinct, ...]
+  METADATA_FIXED_POINT_TYPE = 49, // [distinct, ...]
+  METADATA_PROPERTY = 50, // [distinct, name, file, line, type, backing_storage]
 };
 
 // The constants block (CONSTANTS_BLOCK_ID) describes emission for each
@@ -574,6 +572,9 @@ enum PossiblyExactOperatorOptionalFlags { PEO_EXACT = 0 };
 /// PossiblyDisjointInstOptionalFlags - Flags for serializing
 /// PossiblyDisjointInst's SubclassOptionalData contents.
 enum PossiblyDisjointInstOptionalFlags { PDI_DISJOINT = 0 };
+
+/// Flags for serializing AddrSpaceCastInst's SubclassOptionalData contents.
+enum AddrSpaceCastInstOptionalFlags { ASCI_NON_NULL = 0 };
 
 /// Mark to distinguish metadata from value in an operator bundle.
 enum MetadataOperandBundleValueMarker { OB_METADATA = 0x80000000 };
@@ -829,6 +830,7 @@ enum AttributeKindCodes {
   ATTR_KIND_NOOUTLINE = 107,
   ATTR_KIND_FLATTEN = 108,
   ATTR_KIND_NOIPA = 109,
+  ATTR_KIND_NOFREEOBJ = 110,
 
   // TODO: Get rid of this.
   // There really shouldn't be incompatible bitcode changes specific to AMD

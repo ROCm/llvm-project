@@ -99,7 +99,7 @@ private:
 /// generic kernel class.
 struct CUDAKernelTy : public GenericKernelTy {
   /// Create a CUDA kernel with a name and an execution mode.
-  CUDAKernelTy(const char *Name) : GenericKernelTy(Name), Func(nullptr) {}
+  CUDAKernelTy(StringRef Name) : GenericKernelTy(Name), Func(nullptr) {}
 
   /// Initialize the CUDA kernel.
   Error initImpl(GenericDeviceTy &GenericDevice,
@@ -142,7 +142,7 @@ struct CUDAKernelTy : public GenericKernelTy {
   /// Launch the CUDA kernel function.
   Error launchImpl(GenericDeviceTy &GenericDevice, uint32_t NumThreads[3],
                    uint32_t NumBlocks[3], uint32_t DynBlockMemSize,
-                   KernelArgsTy &KernelArgs, KernelLaunchParamsTy LaunchParams,
+                   KernelLaunchArgsTy &LaunchArgs,
                    AsyncInfoWrapperTy &AsyncInfoWrapper) const override;
 
   /// Return maximum block size for maximum occupancy
@@ -515,7 +515,7 @@ struct CUDADeviceTy : public GenericDeviceTy {
   }
 
   /// Allocate and construct a CUDA kernel.
-  Expected<GenericKernelTy &> constructKernel(const char *Name) override {
+  Expected<GenericKernelTy &> constructKernel(StringRef Name) override {
     // Allocate and construct the CUDA kernel.
     CUDAKernelTy *CUDAKernel = Plugin.allocate<CUDAKernelTy>();
     if (!CUDAKernel)
@@ -564,8 +564,8 @@ struct CUDADeviceTy : public GenericDeviceTy {
 
   /// Load the binary image into the device and allocate an image object.
   Expected<DeviceImageTy *>
-  loadBinaryImpl(std::unique_ptr<MemoryBuffer> &&TgtImage,
-                 int32_t ImageId) override {
+  loadBinaryImpl(std::unique_ptr<MemoryBuffer> &&TgtImage, int32_t ImageId,
+                 PluginContextTy * /*Context*/) override {
     if (auto Err = setContext())
       return std::move(Err);
 
@@ -593,7 +593,7 @@ struct CUDADeviceTy : public GenericDeviceTy {
     CUdeviceptr DevicePtr;
     CUresult Res;
 
-    if (Alignment > 0 && Alignment > Granularity) {
+    if (Alignment > Granularity) {
       return Plugin::error(ErrorCode::UNSUPPORTED,
                            "requested alignment (%lu) larger than maximum "
                            "supported alignment (%lu)",
@@ -816,6 +816,11 @@ struct CUDADeviceTy : public GenericDeviceTy {
     return false;
   }
 
+  /// cuMemcpyHtoDAsync is only a true asynchronous transfer when the host
+  /// buffer is page-locked. Out of pageable memory the driver has to copy the
+  /// data into staging memory of its own before it can return.
+  bool hasFastTransferWithPinnedMemory() const override { return true; }
+
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
                        AsyncInfoWrapperTy &AsyncInfoWrapper) override {
@@ -842,6 +847,20 @@ struct CUDADeviceTy : public GenericDeviceTy {
 
     CUresult Res = cuMemcpyDtoHAsync(HstPtr, (CUdeviceptr)TgtPtr, Size, Stream);
     return Plugin::check(Res, "error in cuMemcpyDtoHAsync: %s");
+  }
+
+  Error dataMemcpyImpl(void *DstPtr, const void *SrcPtr, int64_t Size,
+                       AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+    if (auto Err = setContext())
+      return Err;
+
+    CUstream Stream;
+    if (auto Err = getStream(AsyncInfoWrapper, Stream))
+      return Err;
+
+    CUresult Res =
+        cuMemcpyAsync((CUdeviceptr)DstPtr, (CUdeviceptr)SrcPtr, Size, Stream);
+    return Plugin::check(Res, "error in cuMemcpyAsync: %s");
   }
 
   /// Exchange data between two devices directly. We may use peer access if
@@ -952,18 +971,6 @@ struct CUDADeviceTy : public GenericDeviceTy {
       if (auto Err = Plugin::check(Res, "error in cuMemPrefetchAsync: %s"))
         return Err;
     }
-    return Plugin::success();
-  }
-
-  /// Initialize the async info for interoperability purposes.
-  Error initAsyncInfoImpl(AsyncInfoWrapperTy &AsyncInfoWrapper) override {
-    if (auto Err = setContext())
-      return Err;
-
-    CUstream Stream;
-    if (auto Err = getStream(AsyncInfoWrapper, Stream))
-      return Err;
-
     return Plugin::success();
   }
 
@@ -1189,7 +1196,7 @@ struct CUDADeviceTy : public GenericDeviceTy {
 
     Res = getDeviceAttrRaw(CU_DEVICE_ATTRIBUTE_WARP_SIZE, TmpInt);
     if (Res == CUDA_SUCCESS)
-      Info.add("Warp Size", TmpInt);
+      Info.add("Number of Lanes", TmpInt, "", DeviceInfo::NUM_LANES);
 
     Res = getDeviceAttrRaw(CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK, TmpInt);
     if (Res == CUDA_SUCCESS)
@@ -1484,11 +1491,11 @@ private:
 
     AsyncInfoWrapperTy AsyncInfoWrapper(*this, nullptr);
 
-    KernelArgsTy KernelArgs = {};
+    KernelLaunchArgsTy LaunchArgs = {};
     uint32_t NumBlocksAndThreads[3] = {1u, 1u, 1u};
-    auto Err = CUDAKernel.launchImpl(*this, NumBlocksAndThreads,
-                                     NumBlocksAndThreads, 0, KernelArgs,
-                                     KernelLaunchParamsTy{}, AsyncInfoWrapper);
+    auto Err =
+        CUDAKernel.launchImpl(*this, NumBlocksAndThreads, NumBlocksAndThreads,
+                              0, LaunchArgs, AsyncInfoWrapper);
 
     AsyncInfoWrapper.finalize(Err);
     if (Err)
@@ -1533,8 +1540,7 @@ private:
 Error CUDAKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                                uint32_t NumThreads[3], uint32_t NumBlocks[3],
                                uint32_t DynBlockMemSize,
-                               KernelArgsTy &KernelArgs,
-                               KernelLaunchParamsTy LaunchParams,
+                               KernelLaunchArgsTy &LaunchArgs,
                                AsyncInfoWrapperTy &AsyncInfoWrapper) const {
   CUDADeviceTy &CUDADevice = static_cast<CUDADeviceTy &>(GenericDevice);
 
@@ -1560,7 +1566,7 @@ Error CUDAKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
 
   CUlaunchAttribute CoopAttr;
   CoopAttr.id = CU_LAUNCH_ATTRIBUTE_COOPERATIVE;
-  CoopAttr.value.cooperative = KernelArgs.Flags.Cooperative;
+  CoopAttr.value.cooperative = LaunchArgs.Flags.Cooperative;
 
   CUlaunchConfig LaunchConfig = {NumBlocks[0],    NumBlocks[1],
                                  NumBlocks[2],    NumThreads[0],
@@ -1568,7 +1574,7 @@ Error CUDAKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                                  DynBlockMemSize, Stream,
                                  &CoopAttr,       1};
 
-  CUresult Res = cuLaunchKernelEx(&LaunchConfig, Func, LaunchParams.Args,
+  CUresult Res = cuLaunchKernelEx(&LaunchConfig, Func, LaunchArgs.Args,
                                   /*extra=*/nullptr);
 
   // Register a callback to indicate when the kernel is complete.
@@ -1664,6 +1670,75 @@ public:
   }
 };
 
+struct CUDAPluginContextTy final : public PluginContextTy {
+  using PluginContextTy::PluginContextTy;
+
+  Error initAsyncInfoImpl(GenericDeviceTy &Device,
+                          AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+    auto &CUDADevice = static_cast<CUDADeviceTy &>(Device);
+    if (auto Err = CUDADevice.setContext())
+      return Err;
+
+    CUstream Stream;
+    return CUDADevice.getStream(AsyncInfoWrapper, Stream);
+  }
+
+  Expected<PluginAllocInfoTy> getAllocInfo(const void *Ptr) override {
+    if (Devices.empty())
+      return Plugin::error(error::ErrorCode::NOT_FOUND,
+                           "pointer is not a known allocation in this context");
+
+    // Any device in the context can service the query; use the first.
+    auto &Ctx0 = static_cast<CUDADeviceTy &>(*Devices.front());
+    if (auto Err = Ctx0.setContext())
+      return std::move(Err);
+
+    CUdeviceptr CUPtr = reinterpret_cast<CUdeviceptr>(Ptr);
+
+    CUpointer_attribute Attrs[] = {
+        CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+        CU_POINTER_ATTRIBUTE_IS_MANAGED,
+        CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL,
+        CU_POINTER_ATTRIBUTE_RANGE_START_ADDR,
+        CU_POINTER_ATTRIBUTE_RANGE_SIZE,
+    };
+    unsigned MemType = 0;
+    int IsManaged = 0;
+    int Ordinal = -1;
+    CUdeviceptr RangeStart = 0;
+    size_t RangeSize = 0;
+    void *Data[] = {&MemType, &IsManaged, &Ordinal, &RangeStart, &RangeSize};
+    if (CUresult Res = cuPointerGetAttributes(sizeof(Attrs) / sizeof(Attrs[0]),
+                                              Attrs, Data, CUPtr))
+      return Plugin::error(error::ErrorCode::NOT_FOUND,
+                           "cuPointerGetAttributes failed: %d", Res);
+
+    TargetAllocTy Kind = TARGET_ALLOC_DEVICE;
+    if (IsManaged)
+      Kind = TARGET_ALLOC_SHARED;
+    else if (MemType == CU_MEMORYTYPE_HOST)
+      Kind = TARGET_ALLOC_HOST;
+
+    // Ordinal is the CUDA driver ordinal (matches CUdevice); compare against
+    // that rather than the offload-side device index, which can differ under
+    // CUDA_VISIBLE_DEVICES or plugin-side device filtering.
+    GenericDeviceTy *OwnerDevice = nullptr;
+    for (auto *D : Devices) {
+      auto &CD = static_cast<CUDADeviceTy &>(*D);
+      if (static_cast<int>(CD.getCUDADevice()) == Ordinal) {
+        OwnerDevice = D;
+        break;
+      }
+    }
+    if (!OwnerDevice)
+      return Plugin::error(error::ErrorCode::NOT_FOUND,
+                           "allocation owner is not a device of this context");
+
+    return PluginAllocInfoTy{OwnerDevice, Kind,
+                             reinterpret_cast<void *>(RangeStart), RangeSize};
+  }
+};
+
 /// Class implementing the CUDA-specific functionalities of the plugin.
 struct CUDAPluginTy final : public GenericPluginTy {
   /// Create a CUDA plugin.
@@ -1729,6 +1804,11 @@ struct CUDAPluginTy final : public GenericPluginTy {
     return new CUDADeviceTy(Plugin, DeviceId, NumDevices);
   }
 
+  Expected<std::unique_ptr<PluginContextTy>>
+  createPluginContext(llvm::ArrayRef<GenericDeviceTy *> Devices) override {
+    return std::make_unique<CUDAPluginContextTy>(*this, Devices);
+  }
+
   /// Creates a CUDA global handler.
   GenericGlobalHandlerTy *createGlobalHandler() override {
     return new CUDAGlobalHandlerTy();
@@ -1783,24 +1863,6 @@ struct CUDAPluginTy final : public GenericPluginTy {
     // run on any GPU with the same major revision and same or higher minor
     // revision.
     return Major == ImageMajor && Minor >= ImageMinor;
-  }
-  bool IsSystemSupportingManagedMemory() override final {
-    assert(getNumDevices());
-
-    CUdevice Device;
-    CUresult Res = cuDeviceGet(&Device, 0);
-
-    if (Res != CUDA_SUCCESS)
-      return false;
-
-    int HasManagedMemorySupport = false;
-    Res = cuDeviceGetAttribute(&HasManagedMemorySupport,
-                               CU_DEVICE_ATTRIBUTE_MANAGED_MEMORY, Device);
-
-    if (Res != CUDA_SUCCESS)
-      return false;
-
-    return HasManagedMemorySupport;
   }
 };
 

@@ -7,14 +7,6 @@ if(LLVM_VERSION_MAJOR AND NOT (CMAKE_CXX_COMPILER_ID MATCHES "[Cc]lang" AND
                       " is not 'Clang ${req_ver}'.")
 endif()
 
-option(OFFLOAD_ENABLE_EMISSARY_APIS "Enable build of GPU Emissary APIs" ON)
-if(OFFLOAD_ENABLE_EMISSARY_APIS)
-  add_definitions(-DOFFLOAD_ENABLE_EMISSARY_APIS)
-  set(emissary_sources
-    src/EmissaryPrint.cpp
-  )
-endif()
-
 set(src_files
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Allocator.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Configuration.cpp
@@ -31,12 +23,8 @@ set(src_files
   ${CMAKE_CURRENT_SOURCE_DIR}/src/DeviceUtils.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Workshare.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ExtraMapping.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/Xteamr.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/Xteams.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/DeviceMemInit.cpp
-  ${emissary_sources}
-
 )
 # Only link AMD ockl/ocml device libraries when actually building for AMDGCN.
 # The previous condition checked LLVM_TARGETS_TO_BUILD which includes all backends
@@ -118,8 +106,13 @@ target_include_directories(libompdevice PRIVATE
 target_compile_options(libompdevice PRIVATE ${compile_options} ${compile_flags})
 if(NOT "${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^spirv" AND
    NOT "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^spirv")
+  # LLVM_USE_SPLIT_DWARF puts -Wl,--gdb-index in CMAKE_EXE_LINKER_FLAGS, which
+  # every executable target inherits. A gdb index means nothing for a
+  # relocatable link that emits bitcode, and lld rejects the combination, so
+  # drop it again here.
   target_link_options(libompdevice PRIVATE
-                  "-flto" "-r" "-nostdlib" "-Wl,--lto-emit-llvm")
+                  "-flto" "-r" "-nostdlib" "-Wl,--lto-emit-llvm"
+                  "-Wl,--no-gdb-index")
 else()
   target_link_options(libompdevice PRIVATE
                   "-nostdlib" "-emit-llvm")

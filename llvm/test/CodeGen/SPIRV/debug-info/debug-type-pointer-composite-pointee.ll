@@ -34,5 +34,5 @@ entry:
 !10 = distinct !DISubprogram(name: "ptr_to_array", linkageName: "ptr_to_array", scope: !1, file: !1, line: 1, type: !6, scopeLine: 1, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !15)
 !15 = !{}
 !11 = !DILocalVariable(name: "pa", scope: !10, file: !1, line: 2, type: !16)
-!16 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !9, size: 64, addressSpace: 4)
+!16 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !9, size: 64, dwarfAddressSpace: 4)
 !14 = !DILocation(line: 2, column: 5, scope: !10)

@@ -15,6 +15,7 @@ env:
   CLR_BUILD: build-clr
   ROCPRIM_BUILD: build-rocprim
   HIPCUB_BUILD: build-hipcub
+  ROCTHRUST_BUILD: build-rocthrust
   ROCRAND_BUILD: build-rocrand
   HIPRAND_BUILD: build-hiprand
   STAGING: staging
@@ -28,7 +29,9 @@ jobs:
   # =====================================================================
   build:
     name: Build
-    runs-on: azure-linux-scale-rocm
+    outputs:
+      translator_sha: ${{ steps.resolve_translator.outputs.sha }}
+    runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 120
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
@@ -62,6 +65,13 @@ jobs:
           persist-credentials: false
 
       # ---- Build LLVM + Clang + LLD + in-tree SPIRV translator --------------
+      - name: Resolve translator SHA
+        id: resolve_translator
+        run: echo "sha=$(git -C llvm-project/llvm/projects/SPIRV-LLVM-Translator rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate translator test driver
+        run: python llvm-project/.github/scripts/test_spirv_ci_lit.py
+
       - name: Configure LLVM
         run: |
           cmake -G Ninja -S llvm-project/llvm -B "$LLVM_BUILD" \
@@ -136,6 +146,7 @@ jobs:
       - name: Configure ROCR-Runtime
         run: |
           cmake -G Ninja -S rocm-systems/projects/rocr-runtime -B "$ROCR_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=$PWD/$LLVM_BUILD/bin/clang \
             -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
             -DBUILD_SHARED_LIBS=ON \
@@ -152,6 +163,7 @@ jobs:
       - name: Configure CLR (HIP runtime)
         run: |
           cmake -G Ninja -S rocm-systems/projects/clr -B "$CLR_BUILD" \
+            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=$PWD/$LLVM_BUILD/bin/clang \
             -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
             -DBUILD_SHARED_LIBS=ON \
@@ -231,6 +243,27 @@ jobs:
           ninja -C "$HIPCUB_BUILD"
           cmake --install "$HIPCUB_BUILD" --prefix $PWD/$STAGING
 
+      # Build rocThrust (header-only; supplies thrust:: iterators to examples).
+      - name: Checkout rocThrust
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/rocThrust
+          ref: develop
+          path: rocThrust
+          persist-credentials: false
+
+      - name: Configure and install rocThrust
+        run: |
+          cmake -G Ninja -S rocThrust -B "$ROCTHRUST_BUILD" \
+            -DCMAKE_CXX_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
+            -DCMAKE_HIP_COMPILER=$PWD/$LLVM_BUILD/bin/clang++ \
+            -DCMAKE_PREFIX_PATH="$PWD/$STAGING;$PWD/$LLVM_BUILD" \
+            -DCMAKE_INSTALL_PREFIX=$PWD/$STAGING \
+            -DBUILD_TEST=OFF \
+            -DBUILD_BENCHMARK=OFF
+          ninja -C "$ROCTHRUST_BUILD"
+          cmake --install "$ROCTHRUST_BUILD" --prefix $PWD/$STAGING
+
       # Build rocRAND.
       - name: Checkout rocRAND
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -286,17 +319,20 @@ jobs:
       - name: Strip binaries
         run: |
           find "$LLVM_BUILD" "$COMGR_BUILD" "$DEVLIBS_BUILD" "$ROCR_BUILD" "$CLR_BUILD" \
-            "$ROCPRIM_BUILD" "$HIPCUB_BUILD" "$ROCRAND_BUILD" "$HIPRAND_BUILD" "$STAGING" \
+            "$ROCPRIM_BUILD" "$HIPCUB_BUILD" "$ROCTHRUST_BUILD" "$ROCRAND_BUILD" "$HIPRAND_BUILD" "$STAGING" \
             -type f \( -executable -o -name '*.so*' -o -name '*.a' \) \
             -exec strip --strip-unneeded {} + 2>/dev/null || true
 
       # Tar before upload: actions/upload-artifact@v4 strips +x bits and
       # excludes hidden files (loses FetchContent .git dirs).
+      - name: Stage translator test driver
+        run: cp llvm-project/.github/scripts/spirv_ci_lit.py build/spirv_ci_lit.py
+
       - name: Tar build trees
         run: |
           tar -cf linux-build-tree.tar \
             "$LLVM_BUILD" "$COMGR_BUILD" "$DEVLIBS_BUILD" "$ROCR_BUILD" "$CLR_BUILD" \
-            "$ROCPRIM_BUILD" "$HIPCUB_BUILD" "$ROCRAND_BUILD" "$HIPRAND_BUILD" "$STAGING"
+            "$ROCPRIM_BUILD" "$HIPCUB_BUILD" "$ROCTHRUST_BUILD" "$ROCRAND_BUILD" "$HIPRAND_BUILD" "$STAGING"
 
       - name: Upload build tree artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -319,7 +355,7 @@ jobs:
   test_translator_lit:
     name: Test SPIRV translator lit
     needs: build
-    runs-on: azure-linux-scale-rocm
+    runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 30
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
@@ -346,7 +382,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/SPIRV-LLVM-Translator
-          ref: amd-staging
+          ref: ${{ needs.build.outputs.translator_sha }}
           path: ${{ env.TRANSLATOR_SRC }}
           fetch-depth: 1
           persist-credentials: false
@@ -356,77 +392,29 @@ jobs:
         with:
           name: linux-build-tree
 
-      # touch build.ninja so it's newer than CMakeCache.txt — without it
-      # tar -m's per-file mtimes can trigger a cmake regen + cascade rebuild.
       - name: Untar build trees
         run: |
           tar -xmf linux-build-tree.tar
-          touch "$LLVM_BUILD/build.ninja" "$COMGR_BUILD/build.ninja" "$DEVLIBS_BUILD/build.ninja"
 
-      - name: Test - SPIRV Translator (check-amd-llvm-spirv) [PR head]
-        id: check_spirv_xlator
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          ninja -C "$LLVM_BUILD" check-amd-llvm-spirv 2>&1 | tee "$LLVM_BUILD/check-amd-llvm-spirv.log"
+      # Invoke lit directly: Ninja would rebuild tools after artifact extraction.
+      - name: Test - SPIRV Translator [PR head]
+        id: translator_tests
+        run: >-
+          python build/spirv_ci_lit.py --build-dir build
+          --results build/spirv-pr.json
 
-      - name: Capture PR head translator failures
-        if: always()
-        run: |
-          grep -oE '^FAIL: LLVM_SPIRV :: \S+' "$LLVM_BUILD/check-amd-llvm-spirv.log" \
-            | sort -u > "$LLVM_BUILD/spirv-fails-pr.txt"
-          echo "PR head failures:"; cat "$LLVM_BUILD/spirv-fails-pr.txt"
-
-      - name: Switch llvm-project to amd-staging tip for baseline
-        # PRs on llvm-project change llvm/clang/lld, not the translator, so the
-        # baseline-diff swap target is llvm-project. Use explicit upstream URL
-        # because `origin` may be a fork on PR runs.
-        if: always()
+      - name: Switch llvm-project to amd-staging for baseline
+        if: steps.translator_tests.outputs.has_failures == 'true'
         run: |
           cd llvm-project
           git fetch --depth=1 https://github.com/ROCm/llvm-project.git amd-staging
           git checkout FETCH_HEAD
 
-      - name: Test - SPIRV Translator [baseline amd-staging]
-        # Re-run the lit suite with llvm-project at amd-staging tip to compute
-        # the per-PR delta vs PR-head failures. Incremental rebuild — only
-        # changed LLVM libs are recompiled and the translator is relinked.
-        if: always()
-        id: check_spirv_baseline
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          # Re-configure to pick up any CMakeLists / file-list changes in the swap
-          cmake -G Ninja -S llvm-project/llvm -B "$LLVM_BUILD"
-          ninja -C "$LLVM_BUILD" check-amd-llvm-spirv 2>&1 \
-            | tee "$LLVM_BUILD/check-amd-llvm-spirv-baseline.log"
-
-      - name: Capture baseline translator failures
-        # Split from the lit step so a non-zero ninja exit (lit failures +
-        # set -o pipefail under bash -e) doesn't skip this grep.
-        if: always()
-        run: |
-          grep -oE '^FAIL: LLVM_SPIRV :: \S+' "$LLVM_BUILD/check-amd-llvm-spirv-baseline.log" \
-            | sort -u > "$LLVM_BUILD/spirv-fails-baseline.txt"
-          echo "Baseline failures:"; cat "$LLVM_BUILD/spirv-fails-baseline.txt"
-
-      # Fail the job on real regressions (PR head FAILs that aren't on
-      # amd-staging baseline). Pre-existing baseline failures don't block.
-      - name: Gate - new translator lit failures
-        if: always()
-        run: |
-          if [ ! -f "$LLVM_BUILD/spirv-fails-pr.txt" ] || [ ! -f "$LLVM_BUILD/spirv-fails-baseline.txt" ]; then
-            echo "::warning::Could not compute new-failure delta (missing pr.txt or baseline.txt); not gating."
-            exit 0
-          fi
-          new=$(comm -23 "$LLVM_BUILD/spirv-fails-pr.txt" "$LLVM_BUILD/spirv-fails-baseline.txt")
-          if [ -n "$new" ]; then
-            count=$(printf '%s\n' "$new" | wc -l)
-            echo "::error::$count new translator lit failure(s) introduced by this PR:"
-            printf '%s\n' "$new" | sed 's/^/::error::  /'
-            exit 1
-          fi
-          echo "No new translator lit failures vs amd-staging baseline."
+      - name: Build and test baseline, rejecting new translator failures
+        if: steps.translator_tests.outputs.has_failures == 'true'
+        run: >-
+          python build/spirv_ci_lit.py --build-dir build --rebuild
+          --results build/spirv-baseline.json --pr-results build/spirv-pr.json
 
   # =====================================================================
   # Test - LLVM SPIRV codegen lit suite
@@ -434,7 +422,7 @@ jobs:
   test_codegen:
     name: Test LLVM SPIRV codegen
     needs: build
-    runs-on: azure-linux-scale-rocm
+    runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 15
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
@@ -459,7 +447,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/SPIRV-LLVM-Translator
-          ref: amd-staging
+          ref: ${{ needs.build.outputs.translator_sha }}
           path: ${{ env.TRANSLATOR_SRC }}
           fetch-depth: 1
           persist-credentials: false
@@ -469,15 +457,12 @@ jobs:
         with:
           name: linux-build-tree
 
-      # touch build.ninja so it's newer than CMakeCache.txt — without it
-      # tar -m's per-file mtimes can trigger a cmake regen + cascade rebuild.
       - name: Untar build trees
         run: |
           tar -xmf linux-build-tree.tar
-          touch "$LLVM_BUILD/build.ninja" "$COMGR_BUILD/build.ninja" "$DEVLIBS_BUILD/build.ninja"
 
       - name: Test - LLVM SPIRV backend (check-llvm-codegen-spirv)
-        run: ninja -C "$LLVM_BUILD" check-llvm-codegen-spirv
+        run: python build/bin/llvm-lit -sv --no-progress-bar llvm-project/llvm/test/CodeGen/SPIRV
 
   # =====================================================================
   # Test - Comgr (lit + gtest + ctest)
@@ -485,7 +470,7 @@ jobs:
   test_comgr:
     name: Test Comgr
     needs: build
-    runs-on: azure-linux-scale-rocm
+    runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 30
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
@@ -510,7 +495,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/SPIRV-LLVM-Translator
-          ref: amd-staging
+          ref: ${{ needs.build.outputs.translator_sha }}
           path: ${{ env.TRANSLATOR_SRC }}
           fetch-depth: 1
           persist-credentials: false
@@ -553,7 +538,7 @@ jobs:
   pick_runner:
     name: Select gfx942 test runner
     needs: [build]
-    runs-on: azure-linux-scale-rocm
+    runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 5
     outputs:
       test_runs_on: ${{ steps.pick.outputs.label }}
@@ -562,7 +547,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/TheRock
-          ref: compiler/amd-staging
+          ref: main
           sparse-checkout: build_tools
           persist-credentials: false
 
@@ -571,13 +556,16 @@ jobs:
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import sys
+          from contextlib import redirect_stdout
+
           sys.path.insert(0, "build_tools/github_actions")
-          from amdgpu_family_matrix import (
-              amdgpu_family_info_matrix_presubmit as M,
-              select_weighted_label,
-          )
-          info = M["gfx94x"]["linux"]
-          label = select_weighted_label(info["test-runs-on-labels"], "gfx94X-dcgpu")
+          with redirect_stdout(sys.stderr):
+              from amdgpu_family_matrix import (
+                  amdgpu_family_info_matrix_presubmit as M,
+                  select_weighted_label,
+              )
+              info = M["gfx94x"]["linux"]
+              label = select_weighted_label(info["test-runs-on-labels"], "gfx94X-dcgpu")
           print(f"label={label}")
           PY
 
@@ -585,7 +573,9 @@ jobs:
     name: Test rocm-examples
     needs: [build, pick_runner]
     runs-on: ${{ needs.pick_runner.outputs.test_runs_on }}
-    timeout-minutes: 45
+    # Match the translator's spirv-ci-linux.yml (#268): the gfx942 runner is
+    # slow/contended and 45m was cutting the job before it could finish.
+    timeout-minutes: 240
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
       options: |

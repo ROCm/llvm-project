@@ -8,6 +8,8 @@ import lit.util
 
 from lit.llvm import llvm_config
 from lit.llvm.subst import ToolSubst
+import platform
+import mmap
 
 config.name = "ORC-RT"
 config.test_format = lit.formats.ShTest()
@@ -60,7 +62,6 @@ def add_logging_features():
     for level in levels.split():
         config.available_features.add("orc-rt-log-level-" + level.lower())
 
-
 add_logging_features()
 
 # The os_log delivery tests scrape the unified log (via `log show`), which is
@@ -86,3 +87,22 @@ if lit_config.params.get("run-os-log-tests"):
 # inherited from the developer's shell. Tests opt in with `env ORC_RT_LOG=...`.
 for var in ("ORC_RT_LOG", "ORC_RT_LOG_OUTPUT"):
     config.environment.pop(var, None)
+
+if platform.system() == "Darwin":
+    config.substitutions.append(("%macos-product-version", platform.mac_ver()[0]))
+config.substitutions.append(("%target_triple", config.target_triple))
+
+# The architecture the runtime was built for, so tests can check the triple it
+# reports against an independent source.
+config.substitutions.append(("%target-arch", config.target_triple.split("-")[0]))
+
+# Add the page size from mmap this allows us to avoid another if statement as
+# it would likely need ctypes for windows as it does not support sysconf
+config.substitutions.append(("%host-page-size", str(mmap.PAGESIZE)))
+
+# Add host OS and arch substitutions for host-detection tests.
+config.substitutions.append(("%host-arch", platform.machine()))
+if platform.system() == "Darwin":
+    config.substitutions.append(("%host-os", "macosx"))
+else:
+    config.substitutions.append(("%host-os", platform.system().lower()))

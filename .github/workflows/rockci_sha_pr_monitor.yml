@@ -1,0 +1,224 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+# Posts one Teams card when every check on a cron SHA-gate PR has finished.
+# Status is the overall PR rollup (success / failure / cancelled), not a
+# single workflow. Dispatch validation PRs are skipped.
+#
+# check_suite cannot be used here: GitHub never delivers it for suites that
+# Actions itself created. Multi-Arch CI finishing is the trigger; remaining
+# GitHub checks plus Jenkins gfx90a Test (if still pending) are polled after.
+
+name: RockCI SHA PR monitor
+
+on:
+  workflow_run:
+    workflows:
+      - Multi-Arch CI amd-staging
+    types:
+      - completed
+    branches:
+      - automation/rockci-therock-main-ref-**
+
+concurrency:
+  group: rockci-sha-pr-monitor-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  pull-requests: read
+
+# Trigger is Multi-Arch CI completed. Jenkins gfx90a Test is still included
+# in PR Status; it is often already finished by then.
+
+env:
+  JSON_PATH: .github/rockci-sha/therock-ci-main-ref.json
+  # Legacy commit status from rock-artifacts-tester (same name as the ruleset).
+  JENKINS_CONTEXT_REGEX: "^gfx90a Test$"
+
+jobs:
+  notify:
+    name: Notify overall PR check status
+    # Only the cron SHA-gate PRs: automation branch, plus the file check below.
+    if: >-
+      github.repository == 'ROCm/llvm-project' &&
+      startsWith(github.event.workflow_run.head_branch, 'automation/rockci-therock-main-ref-')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout notifier
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          sparse-checkout: .github/workflows
+          persist-credentials: false
+
+      - name: Resolve SHA, PR, and overall check status
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          SUITE_UPDATED: ${{ github.event.workflow_run.updated_at }}
+        run: |
+          set -euo pipefail
+          PR_JSON="$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head "$HEAD_BRANCH" \
+            --state open \
+            --json url,baseRefName \
+            --jq '.[0]')"
+          if [[ -z "$PR_JSON" || "$PR_JSON" == "null" ]]; then
+            PR_JSON="$(gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$HEAD_BRANCH" \
+              --state merged \
+              --json url,baseRefName \
+              --jq '.[0]')"
+          fi
+          if [[ -z "$PR_JSON" || "$PR_JSON" == "null" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "No SHA-gate PR found for ${HEAD_BRANCH}; skipping."
+            exit 0
+          fi
+          PR_URL="$(jq -r '.url' <<<"$PR_JSON")"
+          BASE_BRANCH="$(jq -r '.baseRefName // "amd-staging"' <<<"$PR_JSON")"
+
+          # A SHA-gate PR only ever touches the baseline JSON.
+          CHANGED="$(gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" \
+            --json files --jq '[.files[].path] | join(",")')"
+          if [[ "$CHANGED" != "$JSON_PATH" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "PR touches ${CHANGED}; not a SHA-gate PR. Skipping."
+            exit 0
+          fi
+
+          # In-flight only. EXPECTED = required check that never started
+          # (common after compiler-runtime fails); do not wait on it.
+          # Jenkins gfx90a Test is required only when GitHub did not already fail.
+          for attempt in $(seq 1 60); do
+            ROLLUP="$(gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" \
+              --json statusCheckRollup)"
+            COMBINED="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status")"
+
+            INFO="$(echo "$ROLLUP" | jq -c '
+              def ours:
+                (.name // "")
+                | test("RockCI SHA PR monitor|Notify overall PR check status");
+              def in_flight:
+                ((.status // "") | ascii_upcase) as $st
+                | ((.state // "") | ascii_upcase) as $sv
+                | ($st == "IN_PROGRESS" or $st == "QUEUED" or $st == "WAITING"
+                   or $st == "PENDING" or $st == "REQUESTED" or $sv == "PENDING");
+              def failed:
+                ((.conclusion // "") + " " + (.state // ""))
+                | test("FAILURE|TIMED_OUT|STARTUP_FAILURE|ACTION_REQUIRED|ERROR|CANCELLED");
+              (.statusCheckRollup // []) as $all
+              | ($all | map(select(ours | not) | select(in_flight))) as $p
+              | {
+                  pending: ($p | length),
+                  failed: any($all[]; (ours | not) and failed),
+                  names: ($p | map(.name // .context // "check") | join(","))
+                }
+            ')"
+            GHA_PENDING="$(jq -r '.pending' <<<"$INFO")"
+            GHA_FAILED="$(jq -r '.failed' <<<"$INFO")"
+            PENDING_NAMES="$(jq -r '.names' <<<"$INFO")"
+            JENKINS_COUNT="$(echo "$COMBINED" | jq -r --arg re "$JENKINS_CONTEXT_REGEX" '
+              [.statuses[]? | select(.context | test($re; "i"))] | length
+            ')"
+            JENKINS_PENDING="$(echo "$COMBINED" | jq -r --arg re "$JENKINS_CONTEXT_REGEX" '
+              [
+                .statuses[]?
+                | select(.context | test($re; "i"))
+                | select((.state // "") == "pending")
+              ] | length
+            ')"
+
+            if [[ "$GHA_PENDING" == "0" ]]; then
+              if [[ "$GHA_FAILED" == "true" || ( "$JENKINS_COUNT" != "0" && "$JENKINS_PENDING" == "0" ) ]]; then
+                break
+              fi
+            fi
+            echo "Attempt ${attempt}: gha_pending=${GHA_PENDING} gha_failed=${GHA_FAILED} jenkins_contexts=${JENKINS_COUNT} jenkins_pending=${JENKINS_PENDING} pending=${PENDING_NAMES}"
+            sleep 30
+          done
+
+          echo "$ROLLUP" | jq -r '
+            .statusCheckRollup // []
+            | .[]
+            | select((.name // "")
+                | test("RockCI SHA PR monitor|Notify overall PR check status")
+                | not)
+            | "\(.name) status=\(.status // "") conclusion=\(.conclusion // "") state=\(.state // "")"
+          '
+          echo "$COMBINED" | jq -r --arg re "$JENKINS_CONTEXT_REGEX" '
+            .statuses[]?
+            | select(.context | test($re; "i"))
+            | "jenkins \(.context) state=\(.state)"
+          '
+
+          NEED_JENKINS=1
+          if [[ "${GHA_FAILED:-false}" == "true" ]]; then
+            NEED_JENKINS=0
+          fi
+          if [[ "$GHA_PENDING" != "0" || ( "$NEED_JENKINS" == "1" && ( "$JENKINS_COUNT" == "0" || "$JENKINS_PENDING" != "0" ) ) ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::GitHub or Jenkins checks still running/missing after 30 minutes; no card sent. gha_pending=${GHA_PENDING} gha_failed=${GHA_FAILED:-} jenkins_contexts=${JENKINS_COUNT} jenkins_pending=${JENKINS_PENDING} pending=${PENDING_NAMES:-}"
+            exit 0
+          fi
+
+          STATUS="$(echo "$ROLLUP" | jq -r --arg re "$JENKINS_CONTEXT_REGEX" --argjson combined "$COMBINED" '
+            [
+              .statusCheckRollup // []
+              | .[]
+              | select(.name != "RockCI SHA PR monitor"
+                       and .name != "Notify overall PR check status")
+              | ((.conclusion // "") + " " + (.state // ""))
+            ] as $c
+            | [
+                ($combined.statuses // [])[]
+                | select(.context | test($re; "i"))
+              ] as $s
+            | if any($c[]; test("FAILURE|TIMED_OUT|STARTUP_FAILURE|ACTION_REQUIRED|ERROR"))
+                or any($s[]; (.state == "failure") or (.state == "error")) then
+                "failure"
+              elif any($c[]; test("CANCELLED")) then
+                "cancelled"
+              else
+                "success"
+              end
+          ')"
+
+          THEROCK_REV="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/contents/${JSON_PATH}?ref=${HEAD_SHA}" \
+            --jq '.content' \
+            | base64 -d \
+            | jq -r '.therock_rev // empty')"
+          if [[ ! "$THEROCK_REV" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::No therock_rev in ${JSON_PATH} at ${HEAD_SHA}."
+            exit 1
+          fi
+
+          {
+            echo "ready=true"
+            echo "therock_rev=${THEROCK_REV}"
+            echo "pr_url=${PR_URL}"
+            echo "base_branch=${BASE_BRANCH}"
+            echo "status=${STATUS}"
+            echo "card_date=${SUITE_UPDATED}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post to Teams
+        if: steps.baseline.outputs.ready == 'true'
+        continue-on-error: true
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.ROCM_SHA_NOTIFIER }}
+          GH_TOKEN: ${{ github.token }}
+          THEROCK_REV: ${{ steps.baseline.outputs.therock_rev }}
+          BASE_BRANCH: ${{ steps.baseline.outputs.base_branch }}
+          PR_STATUS: ${{ steps.baseline.outputs.status }}
+          CARD_DATE: ${{ steps.baseline.outputs.card_date }}
+          PR_URL: ${{ steps.baseline.outputs.pr_url }}
+        run: python3 .github/workflows/rockci_sha_pr_notify.py

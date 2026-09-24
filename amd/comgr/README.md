@@ -195,6 +195,9 @@ By default, the cache is enabled.
   it is directed to "$XDG_CACHE_HOME/comgr" (which defaults to
   "$USER/.cache/comgr" on Linux, and "%LOCALAPPDATA%\cache\comgr"
   on Microsoft Windows).
+  When resolving this default location, if the system's cache directory resides
+  on a remote filesystem (e.g. NFS), the cache is disabled to avoid concurrency
+  issues on shared storage.
 * `AMD_COMGR_CACHE_POLICY`: If assigned a value, the string is interpreted and
   applied to the cache pruning policy. The cache is pruned only upon program
   termination. The string format aligns with [Clang's ThinLTO cache pruning policy](https://clang.llvm.org/docs/ThinLTO.html#cache-pruning).
@@ -249,10 +252,14 @@ include:
   appended to all clang driver invocations. This can be used to inject
   additional compiler flags for debugging or experimentation without modifying
   the application code.
-* `AMD_COMGR_HOTSWAP_ENTRY_STUB_SYMBOLS`: If this is set to "1", the HotSwap
-  B0-to-B0 entry-trampoline fast path emits the debug-only `<kernel>.stub`
-  symbols for each entry stub. These symbols are skipped by default on this
-  load-time-critical path, so this variable restores them to aid in debugging.
+* `AMD_COMGR_USE_EMBEDDED_LIBCXX`: Controls Comgr's embedded libc++ header
+  fallback for HIP. If unset, Comgr uses `auto` mode. In `auto` mode,
+  Comgr first honors user include-control options such as `-nostdinc++`,
+  `-nostdinc`, and `-nostdlibinc`. If none are present, Comgr asks the
+  Clang driver whether system C++ headers are available. Embedded libc++
+  headers are used only when no system C++ headers are found. Explicit env
+  values override `auto`: `force` or `1` always uses embedded libc++
+  headers, and `disable` or `0` never uses them.
 
 ### VFS
 Comgr implements support for an in-memory, virtual filesystem (VFS) for storing

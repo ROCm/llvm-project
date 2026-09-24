@@ -249,8 +249,6 @@ enum class OpenMPOffloadMappingFlags : uint64_t {
   // dynamic.
   // This is an OpenMP extension for the sake of OpenACC support.
   OMP_MAP_OMPX_HOLD = 0x2000,
-  // Mapping is for a descriptor (a.k.a. dope vector)
-  OMP_MAP_DESCRIPTOR = 0x4000,
   // Attach pointer and pointee, after processing all other maps.
   // Applicable to map-entering directives. Does not change ref-count.
   OMP_MAP_ATTACH = 0x8000,
@@ -349,28 +347,6 @@ static inline uint32_t getBlockSizeAsPowerOfTwo(uint32_t BlockSize) {
   } while (Tmp != 0);
   return BlockSize;
 }
-
-/// AMD GPU specs for computing kernel occupancy
-namespace amdgpu_arch {
-// Local memory size
-constexpr unsigned LocalMemorySize = 32768;
-// SIMD unit per CU
-constexpr unsigned SIMDPerCU = 4;
-// Max waves each SIMD supports
-constexpr unsigned MaxWavesPerEU8 = 8;
-constexpr unsigned MaxWavesPerEU10 = 10;
-// Number of VGPR for each thread
-constexpr unsigned VGPRNumPerThread = 512;
-// flat work group size
-constexpr unsigned FlatWorkgroupSize = 1024;
-// Max number of workgroup per CU
-constexpr unsigned MaxWorkgroupNumPerCU = 16;
-// Occupancy computation conditions by SGPRs
-constexpr unsigned SGPRCountOccupancy10 = 80;
-constexpr unsigned SGPRCountOccupancy9 = 88;
-constexpr unsigned SGPRCountOccupancy8 = 100;
-
-} // end namespace amdgpu_arch
 
 } // end namespace omp
 

@@ -159,7 +159,7 @@ function(builtin_default_target compiler_rt_path)
                                                 SANITIZER
                            USE_TOOLCHAIN
                            TARGET_TRIPLE ${LLVM_TARGET_TRIPLE}
-                           FOLDER "Compiler-RT"
+                           FOLDER "compiler-rt"
                            ${EXTRA_ARGS})
 endfunction()
 
@@ -183,7 +183,7 @@ function(builtin_register_target compiler_rt_path name)
                                       ${COMMON_CMAKE_ARGS}
                                       ${${name}_extra_args}
                            USE_TOOLCHAIN
-                           FOLDER "Compiler-RT"
+                           FOLDER "compiler-rt"
                            ${EXTRA_ARGS} ${ARG_EXTRA_ARGS})
 endfunction()
 
@@ -214,15 +214,22 @@ if(compiler_rt_path)
     add_custom_target(install-builtins-stripped)
     set_target_properties(
       builtins install-builtins install-builtins-stripped
-      PROPERTIES FOLDER "Compiler-RT"
+      PROPERTIES FOLDER "compiler-rt"
     )
   endif()
 
   foreach(target ${builtin_targets})
     check_apple_target(${target} builtin)
 
+    # builtins-spirv64* targets will invoke llvm-link to combine all
+    # bitcode from static archive library into libclang_rt.builtins.bc.
+    # Need to add dependency on llvm-link for it.
+    set(builtin_deps clang-resource-headers)
+    if(target MATCHES "^spirv64" AND TARGET llvm-link)
+      list(APPEND builtin_deps llvm-link)
+    endif()
     builtin_register_target(${compiler_rt_path} ${target}
-      DEPENDS clang-resource-headers
+      DEPENDS ${builtin_deps}
       CMAKE_ARGS -DLLVM_DEFAULT_TARGET_TRIPLE=${target}
       EXTRA_ARGS TARGET_TRIPLE ${target})
 
@@ -584,12 +591,17 @@ if(build_runtimes)
   # CMAKE_PREFIX_PATH is the search path for CMake packages. In order to pass through
   # the command line interface, the CMake semicolon separator needs to be replaced
   # with $<SEMICOLON>
-  if(CMAKE_PREFIX_PATH)
-    string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
-    # Some projects require access to the LLVM lib/cmake directory
-    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+  string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
+  # Some projects require access to the LLVM lib/cmake directory, whether or not
+  # the user provided a prefix path of their own.
+  if (DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+    if(escaped_cmake_prefix_path)
       string(PREPEND escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake$<SEMICOLON>")
+    else()
+      set(escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake")
     endif()
+  endif()
+  if(escaped_cmake_prefix_path)
     list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${escaped_cmake_prefix_path}")
   endif()
 
@@ -631,33 +643,6 @@ if(build_runtimes)
     endforeach()
   endif()
   if("openmp" IN_LIST LLVM_ENABLE_RUNTIMES OR "offload" IN_LIST LLVM_ENABLE_RUNTIMES)
-    # With ROCm 6.3 the ROCr runtime and the thunk layer share a single repository.
-    # No need to provide a separate path for ROCt.
-    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR)
-
-      set(rocr_extra_cmake_args "")
-      if(THEROCK_AMDGPU_TARGETS)
-        # Pass the list of AMDGPU targets to ROCr runtime
-        list(APPEND rocr_extra_cmake_args "-DTHEROCK_AMDGPU_TARGETS=${THEROCK_AMDGPU_TARGETS}")
-      endif()
-
-      if(NOT DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH)
-        message(SEND_ERROR "External ROCr requires setting LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH")
-      endif()
-
-      message(STATUS "Add external unified ROCr: ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}")
-      ExternalProject_Add(rocr-runtime
-        SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}
-        DEPENDS clang llvm-link lld opt llvm-objcopy
-        INSTALL_COMMAND ""
-        CMAKE_ARGS -DBUILD_SHARED_LIBS=ON
-                   -DIMAGE_SUPPORT=OFF
-                   -DLLVM_RUNTIME_OPENMP=ON
-                   ${rocr_extra_cmake_args}
-                   ${extra_cmake_args})
-      set(HSA_DEP rocr-runtime)
-    endif()
-
     # omptarget device RTL depends on device libs, leading to circular dependency in build scripts.
     # Providing path to the sources enables to build them as part of compiler build, which
     # removes the ciruclar dependency on the script-side.
@@ -683,13 +668,7 @@ if(build_runtimes)
       endif()
     endif()
 
-    if("AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
-      set(AMDGPU_ARCH_DEP amdgpu-arch)
-    endif()
-    if (${LIBOMPTARGET_BUILD_DEVICE_FORTRT})
-      set(FORTRT_DEP FortranRuntime)
-    endif()
-    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP} ${AMDGPU_ARCH_DEP} ${FORTRT_DEP})
+    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch)
       if(TARGET ${dep})
         list(APPEND extra_deps ${dep})
       endif()
@@ -709,21 +688,21 @@ if(build_runtimes)
       endif()
     endforeach()
   endif()
-  if(LLVM_LIBC_GPU_BUILD)
-    set(_gpu_loader "${LLVM_TOOLS_BINARY_DIR}/llvm-gpu-loader${CMAKE_EXECUTABLE_SUFFIX}")
-    foreach(name ${LLVM_RUNTIME_TARGETS})
-      if(name MATCHES "^(amdgcn|amdgpu|nvptx)")
-        set(RUNTIMES_${name}_CMAKE_CROSSCOMPILING_EMULATOR "${_gpu_loader}" CACHE STRING "")
+  set(_gpu_loader "${LLVM_TOOLS_BINARY_DIR}/llvm-gpu-loader${CMAKE_EXECUTABLE_SUFFIX}")
+  foreach(name ${LLVM_RUNTIME_TARGETS})
+    if(name MATCHES "^amdgpu|^amdgcn|^nvptx|^spirv")
+      set(RUNTIMES_${name}_CMAKE_CROSSCOMPILING_EMULATOR "${_gpu_loader}" CACHE STRING "")
+      if(TARGET llvm-offload-binary)
+        list(APPEND extra_deps llvm-offload-binary)
       endif()
-    endforeach()
-    list(APPEND extra_cmake_args "-DLLVM_LIBC_GPU_BUILD=ON")
-    if(TARGET llvm-offload-binary)
-      list(APPEND extra_deps llvm-offload-binary)
+      if(TARGET clang-nvlink-wrapper)
+        list(APPEND extra_deps clang-nvlink-wrapper)
+      endif()
+      if(TARGET llvm-link)
+        list(APPEND extra_deps llvm-link)
+      endif()
     endif()
-    if(TARGET clang-nvlink-wrapper)
-      list(APPEND extra_deps clang-nvlink-wrapper)
-    endif()
-  endif()
+  endforeach()
   if(LLVM_LIBC_FULL_BUILD)
     list(APPEND extra_cmake_args "-DLLVM_LIBC_FULL_BUILD=ON")
   endif()
@@ -781,7 +760,7 @@ if(build_runtimes)
         add_custom_target(check-builtins)
         set_target_properties(
           check-builtins
-          PROPERTIES FOLDER "Compiler-RT"
+          PROPERTIES FOLDER "compiler-rt"
         )
       endif()
       if(LLVM_RUNTIME_DISTRIBUTION_COMPONENTS)

@@ -14,10 +14,10 @@ define void @pluto() #0 {
 ; CHECK-NEXT:    [[TMP2:%.*]] = icmp sgt i64 [[TMP1]], 0
 ; CHECK-NEXT:    [[TMP3:%.*]] = tail call <vscale x 4 x float> @llvm.vector.extract.nxv4f32.nxv16f32(<vscale x 16 x float> undef, i64 0)
 ; CHECK-NEXT:    [[TMP4:%.*]] = select i1 [[TMP2]], <vscale x 4 x float> zeroinitializer, <vscale x 4 x float> [[TMP3]]
-; CHECK-NEXT:    br label %[[BB5:.*]]
-; CHECK:       [[BB5]]:
+; CHECK-NEXT:    br label %[[SNORK_EXIT:.*]]
+; CHECK:       [[SNORK_EXIT]]:
 ; CHECK-NEXT:    tail call void @llvm.aarch64.sme.mopa.nxv4f32(i32 0, <vscale x 4 x i1> zeroinitializer, <vscale x 4 x i1> zeroinitializer, <vscale x 4 x float> zeroinitializer, <vscale x 4 x float> [[TMP4]])
-; CHECK-NEXT:    br label %[[BB5]]
+; CHECK-NEXT:    br label %[[SNORK_EXIT]]
 ;
   br label %1
 

@@ -87,6 +87,13 @@ bool PPCTargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
     // all.
   }
 
+  // _Float16 and __bf16 are enabled by default in the constructor. Disable
+  // them on AIX (ABI not yet defined), soft-float, and SPE targets.
+  if (getTriple().isOSAIX() || FloatABI == SoftFloat || HasSPE) {
+    HasFloat16 = false;
+    HasBFloat16 = false;
+  }
+
   return true;
 }
 
@@ -843,6 +850,9 @@ void PPCTargetInfo::adjust(DiagnosticsEngine &Diags, LangOptions &Opts,
   if (getTriple().isOSAIX() && Opts.EnableAIXQuadwordAtomicsABI &&
       HasQuadwordAtomics)
     MaxAtomicInlineWidth = 128;
+
+  if (getTriple().isOSAIX() && Opts.EnableAIXExtendedAltivecABI)
+    ABI = "vec-extabi";
 }
 
 llvm::SmallVector<Builtin::InfosShard>

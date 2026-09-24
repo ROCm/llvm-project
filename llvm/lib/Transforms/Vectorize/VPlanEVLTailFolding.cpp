@@ -19,6 +19,7 @@
 #include "VPlanPatternMatch.h"
 #include "VPlanTransforms.h"
 #include "VPlanUtils.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/IR/Intrinsics.h"
 
@@ -45,8 +46,7 @@ bool VPlanTransforms::simplifyKnownEVL(VPlan &Plan, ElementCount VF,
         continue;
 
       VPValue *Trunc = VPBuilder(&R).createScalarZExtOrTrunc(
-          AVL, Type::getInt32Ty(Plan.getContext()), AVLSCEV->getType(),
-          R.getDebugLoc());
+          AVL, Type::getInt32Ty(Plan.getContext()), R.getDebugLoc());
       if (Trunc != AVL) {
         auto *TruncR = cast<VPSingleDefRecipe>(Trunc);
         const DataLayout &DL = Plan.getDataLayout();
@@ -59,29 +59,6 @@ bool VPlanTransforms::simplifyKnownEVL(VPlan &Plan, ElementCount VF,
     }
   }
   return false;
-}
-
-template <typename Op0_t, typename Op1_t> struct RemoveMask_match {
-  Op0_t In;
-  Op1_t &Out;
-
-  RemoveMask_match(const Op0_t &In, Op1_t &Out) : In(In), Out(Out) {}
-
-  template <typename OpTy> bool match(OpTy *V) const {
-    if (m_Specific(In).match(V)) {
-      Out = nullptr;
-      return true;
-    }
-    return m_LogicalAnd(m_Specific(In), m_VPValue(Out)).match(V);
-  }
-};
-
-/// Match a specific mask \p In, or a combination of it (logical-and In, Out).
-/// Returns the remaining part \p Out if so, or nullptr otherwise.
-template <typename Op0_t, typename Op1_t>
-static inline RemoveMask_match<Op0_t, Op1_t> m_RemoveMask(const Op0_t &In,
-                                                          Op1_t &Out) {
-  return RemoveMask_match<Op0_t, Op1_t>(In, Out);
 }
 
 static std::optional<Intrinsic::ID> getVPDivRemIntrinsic(Intrinsic::ID IntrID) {
@@ -118,7 +95,7 @@ static VPRecipeBase *optimizeMaskToEVL(VPValue *HeaderMask,
     EVLEndPtr->insertBefore(&CurRecipe);
     // Cast EVL (i32) to match the VF operand's type.
     VPValue *EVLAsVF = VPBuilder(EVLEndPtr).createScalarZExtOrTrunc(
-        &EVL, EVLEndPtr->getOperand(1)->getScalarType(), EVL.getScalarType(),
+        &EVL, EVLEndPtr->getOperand(1)->getScalarType(),
         DebugLoc::getUnknown());
     EVLEndPtr->setOperand(1, EVLAsVF);
     return EVLEndPtr;
@@ -155,15 +132,12 @@ static VPRecipeBase *optimizeMaskToEVL(VPValue *HeaderMask,
                                       LoadR->getScalarType(), {}, {}, DL);
   }
 
-  VPValue *Stride;
-  if (match(&CurRecipe, m_Intrinsic<Intrinsic::experimental_vp_strided_load>(
-                            m_VPValue(Addr), m_VPValue(Stride),
-                            m_RemoveMask(HeaderMask, Mask),
-                            m_TruncOrSelf(m_Specific(&Plan->getVF()))))) {
-    if (!Mask)
-      Mask = Plan->getTrue();
+  if (match(&CurRecipe,
+            m_Intrinsic<Intrinsic::experimental_vp_strided_load>(
+                m_VPValue(), m_VPValue(), m_RemoveMask(HeaderMask, Mask),
+                m_TruncOrSelf(m_Specific(&Plan->getVF()))))) {
     auto *NewLoad = cast<VPWidenMemIntrinsicRecipe>(&CurRecipe)->clone();
-    NewLoad->setOperand(2, Mask);
+    NewLoad->setOperand(2, Mask ? Mask : Plan->getTrue());
     NewLoad->setOperand(3, &EVL);
     return NewLoad;
   }
@@ -189,6 +163,16 @@ static VPRecipeBase *optimizeMaskToEVL(VPValue *HeaderMask,
                                      SpliceR, EVL, Mask);
   }
 
+  if (match(&CurRecipe, m_Intrinsic<Intrinsic::experimental_vp_strided_store>(
+                            m_VPValue(), m_VPValue(), m_VPValue(),
+                            m_RemoveMask(HeaderMask, Mask),
+                            m_TruncOrSelf(m_Specific(&Plan->getVF()))))) {
+    auto *NewStore = cast<VPWidenMemIntrinsicRecipe>(&CurRecipe)->clone();
+    NewStore->setOperand(3, Mask ? Mask : Plan->getTrue());
+    NewStore->setOperand(4, &EVL);
+    return NewStore;
+  }
+
   if (auto *Rdx = dyn_cast<VPReductionRecipe>(&CurRecipe))
     if (Rdx->isConditional() &&
         match(Rdx->getCondOp(), m_RemoveMask(HeaderMask, Mask)))
@@ -208,9 +192,7 @@ static VPRecipeBase *optimizeMaskToEVL(VPValue *HeaderMask,
 
   if (match(&CurRecipe, m_LastActiveLane(m_Specific(HeaderMask)))) {
     Type *Ty = CurRecipe.getVPSingleValue()->getScalarType();
-    VPValue *ZExt =
-        VPBuilder(&CurRecipe)
-            .createScalarZExtOrTrunc(&EVL, Ty, EVL.getScalarType(), DL);
+    VPValue *ZExt = VPBuilder(&CurRecipe).createScalarZExtOrTrunc(&EVL, Ty, DL);
     return new VPInstruction(
         Instruction::Sub, {ZExt, Plan->getConstantInt(Ty, 1)},
         VPIRFlags::getDefaultFlags(Instruction::Sub), {}, DL);
@@ -236,6 +218,40 @@ static VPRecipeBase *optimizeMaskToEVL(VPValue *HeaderMask,
   return nullptr;
 }
 
+// Decompose the expression recipe and transform each contained recipe into
+// an EVL recipe.
+static bool
+optimizeExpressionRecipeToEVL(VPValue *HeaderMask, VPRecipeBase &CurRecipe,
+                              VPValue &EVL,
+                              SmallVector<VPRecipeBase *> &OldRecipes) {
+
+  auto *Expr = dyn_cast<VPExpressionRecipe>(&CurRecipe);
+  if (!Expr)
+    return false;
+
+  // Decompose first and construct with EVL recipes later.
+  SmallVector<VPSingleDefRecipe *> ExpressionRecipes(Expr->decompose());
+  SmallSetVector<VPSingleDefRecipe *, 4> UniqueExpressionRecipes(
+      from_range, ExpressionRecipes);
+
+  // Convert recipes to EVL recipes.
+  for (auto *R : UniqueExpressionRecipes)
+    if (auto *EVLR = cast_if_present<VPSingleDefRecipe>(
+            optimizeMaskToEVL(HeaderMask, *R, EVL))) {
+      EVLR->insertBefore(R);
+      R->replaceAllUsesWith(EVLR);
+      OldRecipes.push_back(R);
+      replace(ExpressionRecipes, R, EVLR);
+    }
+
+  auto *NewExpr =
+      new VPExpressionRecipe(Expr->getExpressionType(), ExpressionRecipes);
+  ExpressionRecipes.back()->replaceAllUsesWith(NewExpr);
+  NewExpr->insertBefore(Expr);
+  OldRecipes.push_back(Expr);
+  return true;
+}
+
 /// Optimize away any EVL-based header masks to VP intrinsic based recipes.
 /// The transforms here need to preserve the original semantics.
 void VPlanTransforms::optimizeEVLMasks(VPlan &Plan) {
@@ -255,6 +271,9 @@ void VPlanTransforms::optimizeEVLMasks(VPlan &Plan) {
   SmallVector<VPRecipeBase *> OldRecipes;
   for (VPUser *U : vputils::collectUsersRecursively(HeaderMask)) {
     VPRecipeBase *R = cast<VPRecipeBase>(U);
+    // Transform recipes contained by an expression recipe into EVL recipes.
+    if (optimizeExpressionRecipeToEVL(HeaderMask, *R, *EVL, OldRecipes))
+      continue;
     if (auto *NewR = optimizeMaskToEVL(HeaderMask, *R, *EVL)) {
       NewR->insertBefore(R);
       for (auto [Old, New] :
@@ -353,31 +372,12 @@ static void fixupVFUsersForEVL(VPlan &Plan, VPValue &EVL) {
   VPValue *EVLAsIdx =
       VPBuilder::getToInsertAfter(EVL.getDefiningRecipe())
           .createScalarZExtOrTrunc(&EVL, Plan.getVF().getScalarType(),
-                                   EVL.getScalarType(), DebugLoc::getUnknown());
+                                   DebugLoc::getUnknown());
 
-  assert(all_of(Plan.getVF().users(),
-                [&Plan](VPUser *U) {
-                  auto IsAllowedUser =
-                      IsaPred<VPVectorEndPointerRecipe, VPScalarIVStepsRecipe,
-                              VPWidenIntOrFpInductionRecipe,
-                              VPWidenMemIntrinsicRecipe>;
-                  if (match(U, m_Trunc(m_Specific(&Plan.getVF()))))
-                    return all_of(cast<VPSingleDefRecipe>(U)->users(),
-                                  IsAllowedUser);
-                  return IsAllowedUser(U);
-                }) &&
-         "User of VF that we can't transform to EVL.");
   Plan.getVF().replaceUsesWithIf(EVLAsIdx, [](VPUser &U, unsigned Idx) {
     return isa<VPWidenIntOrFpInductionRecipe, VPScalarIVStepsRecipe>(U);
   });
 
-  assert(all_of(Plan.getVFxUF().users(),
-                match_fn(m_CombineOr(
-                    m_c_Add(m_Specific(LoopRegion->getCanonicalIV()),
-                            m_Specific(&Plan.getVFxUF())),
-                    m_Isa<VPWidenPointerInductionRecipe>()))) &&
-         "Only users of VFxUF should be VPWidenPointerInductionRecipe and the "
-         "increment of the canonical induction.");
   Plan.getVFxUF().replaceUsesWithIf(EVLAsIdx, [](VPUser &U, unsigned Idx) {
     // Only replace uses in VPWidenPointerInductionRecipe; The increment of the
     // canonical induction must not be updated.
@@ -394,8 +394,7 @@ static void fixupVFUsersForEVL(VPlan &Plan, VPValue &EVL) {
     // Emit VPScalarCastRecipe in preheader if VF is not a 32 bits integer.
     VPBuilder Builder(LoopRegion->getPreheaderVPBB());
     MaxEVL = Builder.createScalarZExtOrTrunc(
-        MaxEVL, Type::getInt32Ty(Plan.getContext()), MaxEVL->getScalarType(),
-        DebugLoc::getUnknown());
+        MaxEVL, Type::getInt32Ty(Plan.getContext()), DebugLoc::getUnknown());
 
     Builder.setInsertPoint(Header, Header->getFirstNonPhi());
     VPValue *PrevEVL = Builder.createScalarPhi(
@@ -536,9 +535,8 @@ void VPlanTransforms::addExplicitVectorLength(
   Builder.setInsertPoint(CanonicalIVIncrement);
   VPValue *OpVPEVL = VPEVL;
 
-  auto *I32Ty = Type::getInt32Ty(Plan.getContext());
   OpVPEVL = Builder.createScalarZExtOrTrunc(
-      OpVPEVL, CanIVTy, I32Ty, CanonicalIVIncrement->getDebugLoc());
+      OpVPEVL, CanIVTy, CanonicalIVIncrement->getDebugLoc());
 
   auto *NextIter = Builder.createAdd(
       OpVPEVL, CurrentIteration, CanonicalIVIncrement->getDebugLoc(),
@@ -570,12 +568,12 @@ void VPlanTransforms::convertToVariableLengthStep(VPlan &Plan) {
 
   for (VPBasicBlock *VPBB : VPBlockUtils::blocksAs<VPBasicBlock>(
            vp_depth_first_shallow(Plan.getEntry())))
-    for (VPRecipeBase &R : VPBB->phis())
-      if (auto *PhiR = dyn_cast<VPCurrentIterationPHIRecipe>(&R)) {
-        assert(!CurrentIteration &&
-               "Found multiple CurrentIteration. Only one expected");
-        CurrentIteration = PhiR;
-      }
+    for (VPCurrentIterationPHIRecipe &PhiR :
+         make_isa_range<VPCurrentIterationPHIRecipe>(VPBB->phis())) {
+      assert(!CurrentIteration &&
+             "Found multiple CurrentIteration. Only one expected");
+      CurrentIteration = &PhiR;
+    }
 
   // Early return if it is not variable-length stepping.
   if (!CurrentIteration)

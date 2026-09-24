@@ -167,7 +167,7 @@ if(DEFINED LIBOMPTARGET_BUILD_CUDA_PLUGIN OR
 endif()
 
 if(WIN32)
-  set(LIBOMPTARGET_ALL_PLUGIN_TARGETS "")
+  set(LIBOMPTARGET_ALL_PLUGIN_TARGETS level_zero)
 
   set(LIBOMPTARGET_PLUGINS_TO_BUILD "" CACHE STRING
       "Semicolon-separated list of plugins to use: level_zero or \"all\".")
@@ -182,9 +182,9 @@ if(WIN32)
     endif()
   endforeach()
 else()
-  set(LIBOMPTARGET_ALL_PLUGIN_TARGETS amdgpu cuda)
+  set(LIBOMPTARGET_ALL_PLUGIN_TARGETS amdgpu cuda level_zero)
   set(LIBOMPTARGET_PLUGINS_TO_BUILD "all" CACHE STRING
-      "Semicolon-separated list of plugins to use: cuda, amdgpu or \"all\".")
+      "Semicolon-separated list of plugins to use: cuda, amdgpu, level_zero or \"all\".")
 
   if(LIBOMPTARGET_PLUGINS_TO_BUILD STREQUAL "all")
     set(LIBOMPTARGET_PLUGINS_TO_BUILD ${LIBOMPTARGET_ALL_PLUGIN_TARGETS})
@@ -194,13 +194,16 @@ endif()
 list(APPEND LIBOMPTARGET_PLUGINS_TO_BUILD "host")
 list(REMOVE_DUPLICATES LIBOMPTARGET_PLUGINS_TO_BUILD)
 
-if(NOT (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)|(aarch64)$"
+if(NOT (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)|(aarch64)|(riscv64)$"
         AND CMAKE_SYSTEM_NAME MATCHES "Linux"))
   if("amdgpu" IN_LIST LIBOMPTARGET_PLUGINS_TO_BUILD)
     message(STATUS "Not building AMDGPU plugin: only support AMDGPU in "
-                   "Linux x86_64, ppc64le, or aarch64 hosts")
+                   "Linux x86_64, ppc64le, aarch64, or riscv64 hosts")
     list(REMOVE_ITEM LIBOMPTARGET_PLUGINS_TO_BUILD "amdgpu")
   endif()
+endif()
+if(NOT (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)|(aarch64)$"
+        AND CMAKE_SYSTEM_NAME MATCHES "Linux"))
   if("cuda" IN_LIST LIBOMPTARGET_PLUGINS_TO_BUILD)
     message(STATUS "Not building CUDA plugin: only support CUDA in "
                    "Linux x86_64, ppc64le, or aarch64 hosts")
@@ -359,15 +362,6 @@ endif()
 include_directories(include)
 pythonize_bool(LIBOMPTARGET_OMPT_SUPPORT)
 
-if(${LLVM_LIBC_GPU_BUILD})
-  set(LIBOMPTARGET_HAS_LIBC TRUE)
-else()
-  set(LIBOMPTARGET_HAS_LIBC FALSE)
-endif()
-set(LIBOMPTARGET_GPU_LIBC_SUPPORT ${LIBOMPTARGET_HAS_LIBC} CACHE BOOL
-    "Libomptarget support for the GPU libc")
-pythonize_bool(LIBOMPTARGET_GPU_LIBC_SUPPORT)
-
 set(LIBOMPTARGET_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Various LLVM_TOOLS are needed to build libomptarget
@@ -409,21 +403,18 @@ set(LIBOMPTARGET_LLVM_LIBRARY_INTDIR "${LIBOMPTARGET_LIBRARY_DIR}" CACHE STRING
   "Path to folder where intermediate libraries will be output")
 
 if(SANITIZER_AMDGPU)
-  add_definitions(-DSANITIZER_AMDGPU=1)
+  add_definitions(-DSANITIZER_AMDHSA=1)
   # Check for COMGr package , ASan requires COMGr with minimum version 2.4
   find_package(amd_comgr QUIET 2.4.0 HINTS ${CMAKE_INSTALL_PREFIX} PATHS /opt/rocm)
 endif()
-
-# An Emissary API is a subset of Host APIs that are executed from Offload devices
-# using the offload RPC mechanism such as FORTRAN IO runtime and MPI.
-option(OFFLOAD_ENABLE_EMISSARY_APIS "Enable build of GPU Emissary APIs" ON)
-if(OFFLOAD_ENABLE_EMISSARY_APIS)
-  # Header install location
-  add_definitions(-DOFFLOAD_ENABLE_EMISSARY_APIS)
-  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../openmp/device/include/EmissaryIds.h
-    DESTINATION ${LIBOMP_HEADERS_INSTALL_PATH})
-  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../openmp/device/include/EmissaryMPI.h
-    DESTINATION ${LIBOMP_HEADERS_INSTALL_PATH})
+# If LLVM is dynamically linked we need to add its libraries.
+set(OFFLOAD_INSTALL_RPATH "$ORIGIN")
+if(LLVM_LINK_LLVM_DYLIB)
+  file(RELATIVE_PATH llvm_libdir_relpath
+       "${CMAKE_INSTALL_PREFIX}/${OFFLOAD_INSTALL_LIBDIR}"
+       "${CMAKE_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}")
+  string(REGEX REPLACE "/$" "" llvm_libdir_relpath "${llvm_libdir_relpath}")
+  list(APPEND OFFLOAD_INSTALL_RPATH "$ORIGIN/${llvm_libdir_relpath}")
 endif()
 
 add_subdirectory(tools/offload-tblgen)
@@ -433,11 +424,13 @@ add_subdirectory(plugins-nextgen)
 add_subdirectory(tools)
 add_subdirectory(docs)
 
+add_subdirectory(liboffload)
+
 if(BUILD_LIBOMPTARGET)
   add_subdirectory(libomptarget)
 endif()
 
-add_subdirectory(liboffload)
+add_subdirectory(languages)
 
 # Add tests.
 if(OFFLOAD_INCLUDE_TESTS)

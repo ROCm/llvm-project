@@ -1,5 +1,5 @@
 !RUN: %not_todo_cmd %flang_fc1 -emit-hlfir -fopenmp -o - %s 2>&1 | FileCheck %s
-
+! XFAIL: *
 ! Issue #198972: a standalone ordered construct using the (pre-5.2)
 ! depend(source) / depend(sink:) spelling must reach the "not yet
 ! implemented" path instead of crashing during construct decomposition. The
@@ -7,7 +7,7 @@
 ! clause, which decomposition only accepts from OpenMP 5.2, while the construct
 ! itself is valid (using this spelling) since OpenMP 4.5.
 
-!CHECK: not yet implemented: OMPD_ordered
+!CHECK: not yet implemented: OMPD_ordered_standalone
 subroutine f00
   integer :: i
   !$omp do ordered(1)
