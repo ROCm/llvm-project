@@ -176,6 +176,22 @@ private:
   // used on a newly inserted instruction before returning from PreEmitNoops.
   void runOnInstruction(MachineInstr *MI);
 
+  /// Wait states the instruction being checked requires after \p MI, or
+  /// nullopt if \p MI is not one it must wait for. Must return nullopt for a
+  /// terminator: the traversal charges the terminators an edge executes
+  /// without asking for their windows.
+  typedef function_ref<std::optional<int>(const MachineInstr &)> WindowForFn;
+
+  /// Returns the largest WindowFor(I) - distance(I) over the instructions
+  /// preceding CurrCycleInstr within \p MaxWindow, which must be at least
+  /// every window WindowFor can return, and zero if WindowFor accepts none.
+  ///
+  /// Instructions of different shape ask for different windows, so pairing
+  /// one instruction's window with another's distance can answer either too
+  /// low or too high; each is measured at the distance to itself, which also
+  /// makes that distance the shortest one over all paths.
+  int getMaxWindowDeficit(int MaxWindow, WindowForFn WindowFor) const;
+
   int getWaitStatesSince(IsHazardFn IsHazard, int Limit,
                          GetNumWaitStatesFn GetNumWaitStates) const;
   int getWaitStatesSince(IsHazardFn IsHazard, int Limit) const;
@@ -238,6 +254,17 @@ private:
   bool fixScratchBaseForwardingHazard(MachineInstr *MI);
   bool fixSetRegMode(MachineInstr *MI);
   bool fixTDM(MachineInstr *MI);
+
+  /// Wait states \p Consumer must have after \p Producer before reading as its
+  /// accumulator a register \p Producer overlaps but does not write in full.
+  int getMFMAOverlappedSrcCWaitStates(const MachineInstr &Consumer,
+                                      const MachineInstr &Producer) const;
+
+  /// Wait states \p Consumer must have after \p Producer before reading its
+  /// result through an operand that reads \p Reg, the accumulator if \p IsSrcC.
+  int getMFMAReadWaitStates(const MachineInstr &Consumer,
+                            const MachineInstr &Producer, Register Reg,
+                            bool IsSrcC) const;
 
   int checkMAIHazards(MachineInstr *MI) const;
   int checkMAIHazards908(MachineInstr *MI) const;
