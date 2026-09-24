@@ -109,7 +109,7 @@ jobs:
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
       - name: Submodule PR update (covers parameterised and PR creation)
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd-staging
+        uses: ./.github/actions/rock-ci-deps/submodule-pr-update
  
       - name: Install python deps
         run: pip install -r requirements.txt
@@ -184,13 +184,13 @@ jobs:
              }' > submodule-commit-${STAGE_NAME}.txt          
 
       - name: build prep (patches & hotfixes for CK, hipcc and hiprtc, tests)
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/linux-patches@amd-staging
+        uses: ./.github/actions/rock-ci-deps/linux-patches
         with:
           test_type: ${{ inputs.test_type }}
           stage_name: ${{ inputs.stage_name }}
 
       - name: Comgr CI patches (transpiler)
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/comgr-patches@automation/multiarch-transpiler-ci
+        uses: ./.github/actions/rock-ci-deps/comgr-patches
         with:
           stage_name: ${{ inputs.stage_name }}
 
@@ -254,7 +254,7 @@ jobs:
           python3 build_tools/github_actions/detect_failed_logs.py
 
       - name: LIT (llvm, clang, flang, mlir, lld)
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/lit-comgr-tests@amd-staging
+        uses: ./.github/actions/rock-ci-deps/lit-comgr-tests
         continue-on-error: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         env:
           BUILD_DIR: ${{ env.BUILD_DIR }}
