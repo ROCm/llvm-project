@@ -12,7 +12,7 @@ import lit.formats
 
 config.name = "AMD SQTT marker"
 config.test_format = lit.formats.ShTest()
-config.suffixes = [".c", ".hip", ".ll"]
+config.suffixes = [".c", ".hip", ".ll", ".unit"]
 config.excludes = ["Inputs", "legacy"]
 config.test_source_root = config.sqtt_marker_source_root
 config.test_exec_root = config.sqtt_marker_obj_root
@@ -24,8 +24,9 @@ if config.sqtt_marker_clang_tests_available:
 if config.sqtt_marker_offload_tools_available:
     config.available_features.add("sqtt-marker-has-offload-tools")
 
+unittests_bin = os.path.join(config.sqtt_marker_obj_root, "..", "unittests")
 config.environment["PATH"] = os.pathsep.join(
-    [config.llvm_tools_dir, config.environment.get("PATH", "")]
+    [config.llvm_tools_dir, unittests_bin, config.environment.get("PATH", "")]
 )
 
 
