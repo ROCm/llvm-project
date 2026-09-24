@@ -566,8 +566,7 @@ uint32_t GenericKernelTy::getEffectiveNumBlocks(
 GenericDeviceTy::GenericDeviceTy(GenericPluginTy &Plugin, int32_t DeviceId,
                                  int32_t NumDevices,
                                  const llvm::omp::GV &OMPGridValues)
-    : Plugin(Plugin), MemoryManager(nullptr), HostMemoryManager(nullptr),
-      SharedMemoryManager(nullptr), OMP_TeamLimit("OMP_TEAM_LIMIT"),
+    : Plugin(Plugin), OMP_TeamLimit("OMP_TEAM_LIMIT"),
       OMP_NumTeams("OMP_NUM_TEAMS"),
       OMP_TeamsThreadLimit("OMP_TEAMS_THREAD_LIMIT"),
       OMPX_DebugKind("LIBOMPTARGET_DEVICE_RTL_DEBUG"),
@@ -655,24 +654,6 @@ Error GenericDeviceTy::init(GenericPluginTy &Plugin) {
     GridValues.GV_Max_WG_Size =
         std::min(GridValues.GV_Max_WG_Size, uint32_t(OMP_TeamsThreadLimit));
 
-  // Enable the memory manager if required. Leave the pool disabled while
-  // allocation traces are requested, so that we don't mask use-after-free
-  // (since they don't fault if the memory is still in the pool).
-  auto [ThresholdMM, EnableMM] = MemoryManagerTy::getSizeThresholdFromEnv();
-  if (EnableMM && !OMPX_TrackAllocationTraces) {
-    if (ThresholdMM == 0)
-      ThresholdMM = getMemoryManagerSizeThreshold();
-    MemoryManager = new MemoryManagerTy(*this, ThresholdMM);
-  }
-  if (!OMPX_TrackAllocationTraces) {
-    // Keep the threshold for pooling sizes conservative since we're dealing
-    // with pinned memory for the host.
-    HostMemoryManager = new MemoryManagerTy(
-        *this, MemoryManagerTy::DefaultSizeThreshold, TARGET_ALLOC_HOST);
-    SharedMemoryManager = new MemoryManagerTy(
-        *this, MemoryManagerTy::DefaultSizeThreshold, TARGET_ALLOC_SHARED);
-  }
-
   return Plugin::success();
 }
 
@@ -713,18 +694,6 @@ Error GenericDeviceTy::deinit(GenericPluginTy &Plugin) {
     if (auto Err = unloadBinary(I))
       return Err;
   LoadedImages.clear();
-
-  // Delete the memory manager before deinitializing the device. Otherwise,
-  // we may delete device allocations after the device is deinitialized.
-  if (MemoryManager)
-    delete MemoryManager;
-  MemoryManager = nullptr;
-  if (HostMemoryManager)
-    delete HostMemoryManager;
-  HostMemoryManager = nullptr;
-  if (SharedMemoryManager)
-    delete SharedMemoryManager;
-  SharedMemoryManager = nullptr;
 
   if (RecordReplay) {
     if (auto Err = RecordReplay->deinit())
@@ -1131,30 +1100,20 @@ Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
   if (RecordReplay && RecordReplay->isRecordingOrReplaying())
     return RecordReplay->allocate(Size);
 
-  if (MemoryManagerTy *MM = getMemoryManagerFor(Kind)) {
-    auto AllocOrErr = MM->allocate(Size, HostPtr, Alignment);
-    if (!AllocOrErr)
-      return AllocOrErr.takeError();
-    Alloc = *AllocOrErr;
-    if (!Alloc)
-      return Plugin::error(ErrorCode::OUT_OF_RESOURCES,
-                           "failed to allocate from memory manager");
-  } else {
-    auto AllocOrErr = allocate(Size, HostPtr, Kind, Alignment);
-    if (!AllocOrErr)
-      return AllocOrErr.takeError();
-    Alloc = *AllocOrErr;
-    if (!Alloc)
-      return Plugin::error(ErrorCode::OUT_OF_RESOURCES,
-                           "failed to allocate from device allocator");
+  auto AllocOrErr = allocate(Size, HostPtr, Kind, Alignment);
+  if (!AllocOrErr)
+    return AllocOrErr.takeError();
+  Alloc = *AllocOrErr;
+  if (!Alloc)
+    return Plugin::error(ErrorCode::OUT_OF_RESOURCES,
+                         "failed to allocate from device allocator");
 
-    if (Alignment > 0 && !isAddrAligned(Align(Alignment), Alloc)) {
-      if (auto Err = free(Alloc, Kind))
-        return Err;
+  if (Alignment > 0 && !isAddrAligned(Align(Alignment), Alloc)) {
+    if (auto Err = free(Alloc, Kind))
+      return Err;
 
-      return Plugin::error(ErrorCode::UNSUPPORTED,
-                           "device allocator returned a misaligned pointer");
-    }
+    return Plugin::error(ErrorCode::UNSUPPORTED,
+                         "device allocator returned a misaligned pointer");
   }
 
   // Report error if the memory manager or the device allocator did not return
@@ -1224,12 +1183,8 @@ Error GenericDeviceTy::dataDelete(void *TgtPtr, TargetAllocTy Kind) {
     ATI->DeallocationTrace = StackTrace;
   }
 
-  if (MemoryManagerTy *MM = getMemoryManagerFor(Kind)) {
-    if (auto Err = MM->free(TgtPtr))
-      return Err;
-  } else if (auto Err = free(TgtPtr, Kind)) {
+  if (auto Err = free(TgtPtr, Kind))
     return Err;
-  }
 
   return Plugin::success();
 }
@@ -1331,6 +1286,114 @@ Error PluginContextTy::initAsyncInfo(GenericDeviceTy &Device,
   auto Err = initAsyncInfoImpl(Device, AsyncInfoWrapper);
   AsyncInfoWrapper.finalize(Err);
   return Err;
+}
+
+PluginContextTy::~PluginContextTy() = default;
+
+MemoryManagerTy *
+PluginContextTy::getDeviceMemoryManagerFor(GenericDeviceTy &Device,
+                                           TargetAllocTy Kind) {
+  if (Device.OMPX_TrackAllocationTraces)
+    return nullptr;
+
+  if (Kind == TARGET_ALLOC_DEFAULT)
+    Kind = TARGET_ALLOC_DEVICE;
+  assert((Kind == TARGET_ALLOC_DEVICE || Kind == TARGET_ALLOC_SHARED) &&
+         "host allocations are not device-bound");
+
+  size_t Threshold;
+  if (Kind == TARGET_ALLOC_DEVICE) {
+    auto [EnvThreshold, EnableMM] = MemoryManagerTy::getSizeThresholdFromEnv();
+    if (!EnableMM)
+      return nullptr;
+    Threshold =
+        EnvThreshold ? EnvThreshold : Device.getMemoryManagerSizeThreshold();
+  } else {
+    Threshold = MemoryManagerTy::DefaultSizeThreshold;
+  }
+
+  std::pair<GenericDeviceTy *, int> Key{&Device, static_cast<int>(Kind)};
+
+  std::lock_guard<std::mutex> Lock(MemoryManagersMutex);
+  auto It = DeviceMemoryManagers.find(Key);
+  if (It != DeviceMemoryManagers.end())
+    return It->second.get();
+
+  auto Manager = std::make_unique<MemoryManagerTy>(Device, Threshold, Kind);
+  auto *Raw = Manager.get();
+  DeviceMemoryManagers[Key] = std::move(Manager);
+  return Raw;
+}
+
+MemoryManagerTy *PluginContextTy::getHostMemoryManager() {
+  if (Devices.empty())
+    return nullptr;
+  if (Devices.front()->OMPX_TrackAllocationTraces)
+    return nullptr;
+
+  std::lock_guard<std::mutex> Lock(MemoryManagersMutex);
+  if (HostMemoryManager)
+    return HostMemoryManager.get();
+
+  HostMemoryManager = std::make_unique<MemoryManagerTy>(
+      *Devices.front(), MemoryManagerTy::DefaultSizeThreshold,
+      TARGET_ALLOC_HOST);
+  return HostMemoryManager.get();
+}
+
+Expected<void *> PluginContextTy::allocate(GenericDeviceTy &Device,
+                                           int64_t Size, void *HostPtr,
+                                           TargetAllocTy Kind,
+                                           size_t Alignment) {
+  // Record-replay hands out interior pointers into a preallocated slab so
+  // recorded kernels can re-execute at their original addresses; the MM pool
+  // must be bypassed for those allocations to reach the RR bump allocator.
+  if (auto *RR = Device.getRecordReplay(); RR && RR->isRecordingOrReplaying())
+    return Device.dataAlloc(Size, HostPtr, Kind, Alignment);
+
+  MemoryManagerTy *MM = (Kind == TARGET_ALLOC_HOST)
+                            ? getHostMemoryManager()
+                            : getDeviceMemoryManagerFor(Device, Kind);
+  if (MM)
+    return MM->allocate(Size, HostPtr, Alignment);
+  return Device.dataAlloc(Size, HostPtr, Kind, Alignment);
+}
+
+Error PluginContextTy::deallocate(void *Ptr) {
+  assert(!Devices.empty() && "context constructed without devices");
+  auto InfoOrErr = getAllocInfo(Ptr);
+  if (!InfoOrErr)
+    return InfoOrErr.takeError();
+  GenericDeviceTy *OwnerDevice = InfoOrErr->Device;
+  if (!OwnerDevice)
+    OwnerDevice = Devices.front();
+  return deallocate(*OwnerDevice, Ptr, InfoOrErr->Kind);
+}
+
+Error PluginContextTy::deallocate(GenericDeviceTy &Device, void *Ptr,
+                                  TargetAllocTy Kind) {
+  // Symmetric with allocate: record-replay allocations never entered the MM
+  // pool, so route their free through dataDelete's RR shortcut.
+  if (auto *RR = Device.getRecordReplay(); RR && RR->isRecordingOrReplaying())
+    return Device.dataDelete(Ptr, Kind);
+
+  MemoryManagerTy *MM = (Kind == TARGET_ALLOC_HOST)
+                            ? getHostMemoryManager()
+                            : getDeviceMemoryManagerFor(Device, Kind);
+  if (MM)
+    return MM->free(Ptr);
+  return Device.dataDelete(Ptr, Kind);
+}
+
+PluginContextTy &
+GenericPluginTy::getDefaultContext(GenericDeviceTy & /*Device*/) {
+  assert(DefaultContext && "default context not initialized");
+  return *DefaultContext;
+}
+
+Expected<std::unique_ptr<PluginContextTy>>
+GenericPluginTy::createDefaultPluginContext() {
+  return std::make_unique<DefaultPluginContextTy>(*this);
 }
 
 Error GenericDeviceTy::enqueueHostCall(void (*Callback)(void *), void *UserData,
@@ -1501,11 +1564,19 @@ Error GenericPluginTy::init() {
   RPCServer = new RPCServerTy(*this);
   assert(RPCServer && "Invalid RPC server");
 
+  auto DefaultCtxOrErr = createDefaultPluginContext();
+  if (!DefaultCtxOrErr)
+    return DefaultCtxOrErr.takeError();
+  DefaultContext = std::move(*DefaultCtxOrErr);
+
   return Plugin::success();
 }
 
 Error GenericPluginTy::deinit() {
   assert(Initialized && "Plugin was not initialized!");
+
+  // Release context-held resources before the devices that back them.
+  DefaultContext.reset();
 
   // Deinitialize all active devices.
   for (int32_t DeviceId = 0; DeviceId < NumDevices; ++DeviceId) {
@@ -1795,9 +1866,10 @@ void *GenericPluginTy::data_alloc(int32_t DeviceId, int64_t Size, void *HostPtr,
                                   int32_t Kind) {
   auto T = logger::log<void *>(__func__, DeviceId, Size, HostPtr, Kind);
   auto R = [&]() -> void * {
-    auto &Dev = getDevice(DeviceId);
-    auto AllocOrErr = Dev.dataAlloc(Size, HostPtr, (TargetAllocTy)Kind,
-                                    /*Alignment=*/0);
+    auto &Device = getDevice(DeviceId);
+    auto AllocOrErr = getDefaultContext(Device).allocate(
+        Device, Size, HostPtr, static_cast<TargetAllocTy>(Kind),
+        /*Alignment=*/0);
     if (!AllocOrErr) {
       auto Err = AllocOrErr.takeError();
       REPORT() << "Failure to allocate device memory: "
@@ -1816,9 +1888,9 @@ int32_t GenericPluginTy::data_delete(int32_t DeviceId, void *TgtPtr,
                                      int32_t Kind) {
   auto T = logger::log<int32_t>(__func__, DeviceId, TgtPtr, Kind);
   auto R = [&]() {
-    auto &Dev = getDevice(DeviceId);
-    auto Err = Dev.dataDelete(TgtPtr, (TargetAllocTy)Kind);
-    if (Err) {
+    auto &Device = getDevice(DeviceId);
+    if (auto Err = getDefaultContext(Device).deallocate(
+            Device, TgtPtr, static_cast<TargetAllocTy>(Kind))) {
       REPORT() << "Failure to deallocate device pointer " << TgtPtr << ": "
                << toString(std::move(Err));
       return OFFLOAD_FAIL;

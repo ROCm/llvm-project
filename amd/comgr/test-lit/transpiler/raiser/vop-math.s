@@ -93,7 +93,7 @@ vop3_math:
 ; CHECK: call float @llvm.ldexp.f32.i32
 	v_ldexp_f32 v2, v3, v4
 	s_mov_b32 s4, -1
-; CHECK: [[COND:%.+]] = trunc i64 {{.+}} to i1
+; CHECK: [[COND:%.+]] = icmp ne i64 {{.+}}, 0
 ; CHECK: select i1 [[COND]], i32
 	v_cndmask_b32_e64 v5, v6, v7, s4
 ; CHECK: ret void

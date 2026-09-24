@@ -6,9 +6,8 @@
 # single workflow. Dispatch validation PRs are skipped.
 #
 # check_suite cannot be used here: GitHub never delivers it for suites that
-# Actions itself created, and every check on these PRs is an Actions run.
-# Multi-Arch CI is the long pole, so its completion starts the monitor, which
-# then waits for the remaining checks before reporting the overall result.
+# Actions itself created. Multi-Arch CI finishing is the trigger; remaining
+# GitHub checks plus Jenkins gfx90a Test (if still pending) are polled after.
 
 name: RockCI SHA PR monitor
 
@@ -33,6 +32,7 @@ permissions:
 
 env:
   JSON_PATH: .github/rockci-sha/therock-ci-main-ref.json
+  JENKINS_CONTEXT_REGEX: "^gfx90a Test$"
 
 jobs:
   notify:
@@ -93,48 +93,74 @@ jobs:
           for attempt in $(seq 1 60); do
             ROLLUP="$(gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" \
               --json statusCheckRollup)"
-            PENDING="$(echo "$ROLLUP" | jq -r '
+            COMBINED="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status")"
+
+            GHA_PENDING="$(echo "$ROLLUP" | jq -r '            
               [
                 .statusCheckRollup // []
                 | .[]
                 | select(.name != "RockCI SHA PR monitor"
                          and .name != "Notify overall PR check status")
-                | select((.status // "") != "COMPLETED" and (.status // "") != "")
+                | select(
+                    ((.status // "") != "" and (.status // "") != "COMPLETED")
+                    or ((.state // "") == "PENDING")
+                    or ((.state // "") == "EXPECTED")
+                  )                         
               ] | length
             ')"
-            if [[ "$PENDING" == "0" ]]; then
+            JENKINS_COUNT="$(echo "$COMBINED" | jq -r --arg re "$JENKINS_CONTEXT_REGEX" '
+              [.statuses[]? | select(.context | test($re; "i"))] | length
+            ')"
+            JENKINS_PENDING="$(echo "$COMBINED" | jq -r --arg re "$JENKINS_CONTEXT_REGEX" '
+              [
+                .statuses[]?
+                | select(.context | test($re; "i"))
+                | select((.state // "") == "pending")
+              ] | length
+            ')"
+
+            if [[ "$GHA_PENDING" == "0" && "$JENKINS_COUNT" != "0" && "$JENKINS_PENDING" == "0" ]]; then
               break
             fi
-            echo "Attempt ${attempt}: ${PENDING} check(s) still running."
+            echo "Attempt ${attempt}: gha_pending=${GHA_PENDING} jenkins_contexts=${JENKINS_COUNT} jenkins_pending=${JENKINS_PENDING}"
             sleep 30
-          done
+          done            
 
           echo "$ROLLUP" | jq -r '
             .statusCheckRollup // []
             | map(select(.name != "RockCI SHA PR monitor"
                          and .name != "Notify overall PR check status"))
             | .[]
-            | "\(.name) status=\(.status // "") conclusion=\(.conclusion // "")"
+            | "\(.name) status=\(.status // "") conclusion=\(.conclusion // "") state=\(.state // "")"
           '
-
-          if [[ "$PENDING" != "0" ]]; then
+          echo "$COMBINED" | jq -r --arg re "$JENKINS_CONTEXT_REGEX" '
+            .statuses[]?
+            | select(.context | test($re; "i"))
+            | "jenkins \(.context) state=\(.state)"            
+          '
+          if [[ "$GHA_PENDING" != "0" || "$JENKINS_COUNT" == "0" || "$JENKINS_PENDING" != "0" ]]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::${PENDING} check(s) still running after 30 minutes; no card sent."
+            echo "::warning::GitHub or Jenkins checks still running/missing after 30 minutes; no card sent. gha_pending=${GHA_PENDING} jenkins_contexts=${JENKINS_COUNT} jenkins_pending=${JENKINS_PENDING}"
             exit 0
           fi
 
-          STATUS="$(echo "$ROLLUP" | jq -r '
+          STATUS="$(echo "$ROLLUP" | jq -r --arg re "$JENKINS_CONTEXT_REGEX" --argjson combined "$COMBINED" '
             [
               .statusCheckRollup // []
               | .[]
               | select(.name != "RockCI SHA PR monitor"
                        and .name != "Notify overall PR check status")
-              | (.conclusion // "")
+              | ((.conclusion // "") + " " + (.state // ""))
             ] as $c
-            | if any($c[]; . == "FAILURE" or . == "TIMED_OUT"
-                or . == "STARTUP_FAILURE" or . == "ACTION_REQUIRED") then
+            | [
+                ($combined.statuses // [])[]
+                | select(.context | test($re; "i"))
+              ] as $s
+            | if any($c[]; test("FAILURE|TIMED_OUT|STARTUP_FAILURE|ACTION_REQUIRED|ERROR"))
+                or any($s[]; (.state == "failure") or (.state == "error")) then
                 "failure"
-              elif any($c[]; . == "CANCELLED") then
+              elif any($c[]; test("CANCELLED")) then
                 "cancelled"
               else
                 "success"

@@ -29,3 +29,6 @@ breaks: [hip-tests] clang++: error: invalid offload arch combinations:
 ASAN-DEBUG lib breaks
 "[clang][DebugInfo] Emit static local variables in their lexical block scope (#213153)" (#4465) (2 hours ago) <Scott Linder>
 ---
+comgr fails to build -lzma
+[Support][lldb] Port xz (lzma) decompression from LLDB into LLVM (#220092)
+---

@@ -16,24 +16,23 @@
 	.type	packed_float,@function
 ; CHECK-LABEL: define amdgpu_kernel void @packed_float(
 packed_float:
-; CHECK: [[F16_SRC0_LO_BITS:%.+]] = trunc i32 {{%.+}} to i16
-; CHECK: [[F16_SRC0_HI_SHIFTED:%.+]] = lshr i32 {{%.+}}, 16
-; CHECK: [[F16_SRC0_HI_BITS:%.+]] = trunc i32 [[F16_SRC0_HI_SHIFTED]] to i16
-; CHECK: [[F16_SRC0_LO:%.+]] = bitcast i16 [[F16_SRC0_LO_BITS]] to half
-; CHECK: [[F16_SRC0_HI:%.+]] = bitcast i16 [[F16_SRC0_HI_BITS]] to half
-; CHECK: [[F16_NEG_LO:%.+]] = fneg half [[F16_SRC0_HI]]
+; CHECK: [[F16_SCALAR_BITS:%.+]] = call i32 @llvm.amdgcn.workgroup.id.x()
+; CHECK: bb_0x{{.+}}:
+; CHECK: [[F16_NEG_LO:%.+]] = fneg half [[F16_SRC0_HI:%.+]]
 ; CHECK: [[F16_SRC0_LOW_LANE:%.+]] = insertelement <2 x half> poison, half [[F16_NEG_LO]], i64 0
 ; CHECK: [[F16_OPERAND0:%.+]] = insertelement <2 x half>
-; CHECK-SAME: [[F16_SRC0_LOW_LANE]], half [[F16_SRC0_LO]], i64 1
-; CHECK: [[F16_SRC1_HI_SHIFTED:%.+]] = lshr i32 {{%.+}}, 16
+; CHECK-SAME: [[F16_SRC0_LOW_LANE]], half [[F16_SRC0_LO:%.+]], i64 1
+; CHECK: [[F16_SRC1_HI_SHIFTED:%.+]] = lshr i32 {{.+}}, 16
 ; CHECK: [[F16_SRC1_HI_BITS:%.+]] = trunc i32 [[F16_SRC1_HI_SHIFTED]] to i16
+; CHECK: [[F16_SRC1_LO:%.+]] = bitcast i16 {{%.+}} to half
 ; CHECK: [[F16_SRC1_HI:%.+]] = bitcast i16 [[F16_SRC1_HI_BITS]] to half
 ; CHECK: [[F16_NEG_HI:%.+]] = fneg half [[F16_SRC1_HI]]
-; CHECK: [[F16_OPERAND1:%.+]] = insertelement <2 x half>
-; CHECK-SAME: [[F16_SRC1_LOW_LANE:%.+]], half [[F16_NEG_HI]], i64 1
+; CHECK: [[F16_SRC1_LOW_LANE:%.+]] = insertelement <2 x half> poison, half [[F16_SRC1_LO]], i64 0
+; CHECK: [[F16_OPERAND1:%.+]] = insertelement <2 x half> [[F16_SRC1_LOW_LANE]],
+; CHECK-SAME: half [[F16_NEG_HI]], i64 1
 ; CHECK: fadd <2 x half> [[F16_OPERAND0]], [[F16_OPERAND1]]
 	v_pk_add_f16 v0, v1, v2 op_sel:[1,0] op_sel_hi:[0,1] neg_lo:[1,0] neg_hi:[0,1]
-; CHECK: [[F16_SCALAR_LO_BITS:%.+]] = trunc i32 [[F16_SCALAR_BITS:%.+]] to i16
+; CHECK: [[F16_SCALAR_LO_BITS:%.+]] = trunc i32 [[F16_SCALAR_BITS]] to i16
 ; CHECK: [[F16_SCALAR_HI_SHIFTED:%.+]] = lshr i32 [[F16_SCALAR_BITS]], 16
 ; CHECK: [[F16_SCALAR_HI_BITS:%.+]] = trunc i32 [[F16_SCALAR_HI_SHIFTED]] to i16
 ; CHECK: [[F16_SCALAR_LO:%.+]] = bitcast i16 [[F16_SCALAR_LO_BITS]] to half
@@ -57,14 +56,16 @@ packed_float:
 ; CHECK-SAME: [[F32_SRC0_LOW_LANE]], float [[F32_SRC0_LO]], i64 1
 ; CHECK: [[F32_SRC1_HI_SHIFTED:%.+]] = lshr i64 {{%.+}}, 32
 ; CHECK: [[F32_SRC1_HI_BITS:%.+]] = trunc i64 [[F32_SRC1_HI_SHIFTED]] to i32
+; CHECK: [[F32_SRC1_LO:%.+]] = bitcast i32 {{%.+}} to float
 ; CHECK: [[F32_SRC1_HI:%.+]] = bitcast i32 [[F32_SRC1_HI_BITS]] to float
 ; CHECK: [[F32_NEG_HI:%.+]] = fneg float [[F32_SRC1_HI]]
-; CHECK: [[F32_OPERAND1:%.+]] = insertelement <2 x float>
-; CHECK-SAME: [[F32_SRC1_LOW_LANE:%.+]], float [[F32_NEG_HI]], i64 1
+; CHECK: [[F32_SRC1_LOW_LANE:%.+]] = insertelement <2 x float> poison, float [[F32_SRC1_LO]], i64 0
+; CHECK: [[F32_OPERAND1:%.+]] = insertelement <2 x float> [[F32_SRC1_LOW_LANE]],
+; CHECK-SAME: float [[F32_NEG_HI]], i64 1
 ; CHECK: fadd <2 x float> [[F32_OPERAND0]], [[F32_OPERAND1]]
 	v_pk_add_f32 v[6:7], v[8:9], v[10:11] op_sel:[1,0] op_sel_hi:[0,1] neg_lo:[1,0] neg_hi:[0,1]
 ; CHECK: [[F32_MUL:%.+]] = fmul <2 x float> {{%.+}},
-; CHECK-SAME: <float 1.000000e+00, float 1.000000e+00>
+; CHECK-SAME: splat (float 1.000000e+00)
 ; CHECK: call <2 x float> @llvm.maxnum.v2f32(<2 x float> [[F32_MUL]]
 ; CHECK: call <2 x float> @llvm.minnum.v2f32
 	v_pk_mul_f32 v[12:13], v[14:15], 1.0 clamp
