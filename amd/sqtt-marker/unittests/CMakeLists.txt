@@ -25,7 +25,7 @@ if(TARGET llvm_gtest)
     set(GTEST_INCLUDE_DIR "")
 else()
     # Build as a separate pass
-    find_library(LLVM_GTEST_MAIN_LIB llvm_gtest PATHS ${LLVM_LIBRARY_DIRS} NO_DEFAULT_PATH)
+    find_library(LLVM_GTEST_MAIN_LIB llvm_gtest_main PATHS ${LLVM_LIBRARY_DIRS} NO_DEFAULT_PATH)
     find_library(LLVM_GTEST_LIB llvm_gtest PATHS ${LLVM_LIBRARY_DIRS} NO_DEFAULT_PATH)
     find_path(LLVM_GTEST_INCLUDE_DIR gtest/gtest.h PATHS ${LLVM_INCLUDE_DIRS} PATH_SUFFIXES llvm-gtest NO_DEFAULT_PATH)
     if(LLVM_GTEST_LIB AND LLVM_GTEST_MAIN_LIB AND LLVM_GTEST_INCLUDE_DIR)
