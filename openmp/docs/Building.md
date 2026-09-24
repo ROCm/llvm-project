@@ -258,9 +258,7 @@ The following is a selection of CMake build options recognized by the LLVM
 OpenMP libraries.
 
 [CMAKE_INSTALL_PREFIX]: https://cmake.org/cmake/help/latest/variable/CMAKE_INSTALL_PREFIX.html
-
-
-### Options for All Libraries
+[CMAKE_INSTALL_DATADIR]: https://cmake.org/cmake/help/latest/module/GNUInstallDirs.html
 
 **OPENMP_TEST_FLAGS**:STRING (default: *empty*), **OPENMP_TEST_OPENMP_FLAGS**:STRING (default: `-fopenmp`)
 : Additional command line flags passed to Clang when compiling the regression
@@ -381,6 +379,11 @@ This option is `OFF` if this feature is not supported for the platform.
 **LIBOMP_OMPD_SUPPORT**:BOOL
 : Enable building the libompd library. The GDB plugin loads `libompd.so` with
 LLVM Support `DynamicLibrary` (not POSIX `dlopen`).
+`ompdModule.so` is installed under
+[`CMAKE_INSTALL_DATADIR`][CMAKE_INSTALL_DATADIR]`/gdb/python/ompd/`. Its
+RUNPATH includes `$ORIGIN` and the relative path to `CMAKE_INSTALL_LIBDIR`
+so GDB can load LLVM Support without extra `LD_LIBRARY_PATH` when LLVM and
+OpenMP share the same prefix.
 
 **LIBOMPD_LD_STD_FLAGS**:STRING
 : Use `-stdlibc++` instead of `-libc++` library for C++.

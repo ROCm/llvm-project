@@ -12,6 +12,8 @@ llvm_install_include = os.environ.get("LLVM_INCLUDE_DIR", "")
 llvm_include_dirs = [d for d in os.environ.get("LLVM_INCLUDE_DIRS", "").split(";") if d]
 llvm_library_dir = os.environ.get("LLVM_LIBRARY_DIR", "")
 llvm_config = os.environ.get("LLVM_CONFIG", "")
+# Relative path from share/gdb/python/ompd to the install lib dir (from CMake).
+ompd_llvm_lib_rel = os.environ.get("OMPD_LLVM_LIB_REL", "../../../../lib")
 link_llvm_dylib = os.environ.get("LLVM_LINK_LLVM_DYLIB", "").upper() in (
     "1",
     "ON",
@@ -42,6 +44,11 @@ libraries = ["dl"]
 if not extra_link_args:
     libraries.append("LLVM" if link_llvm_dylib else "LLVMSupport")
 
+# $ORIGIN is the directory that contains this .so after install.
+runtime_library_dirs = ["$ORIGIN", "$ORIGIN/" + ompd_llvm_lib_rel]
+if llvm_library_dir and llvm_library_dir not in runtime_library_dirs:
+    runtime_library_dirs.append(llvm_library_dir)
+
 print("find_packages : ", find_packages())
 setup(
     name="ompd",
@@ -59,7 +66,7 @@ setup(
             ],
             include_dirs=include_dirs,
             library_dirs=library_dirs,
-            runtime_library_dirs=["$ORIGIN:$ORIGIN/../lib"],
+            runtime_library_dirs=runtime_library_dirs,
             libraries=libraries,
             extra_link_args=extra_link_args,
             language="c++",

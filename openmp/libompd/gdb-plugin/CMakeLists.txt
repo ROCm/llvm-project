@@ -64,6 +64,17 @@ include_directories (${LIBOMP_INCLUDE_DIR})
 find_program(OMPD_LLVM_CONFIG NAMES llvm-config
              HINTS ${LLVM_TOOLS_BINARY_DIR} ${LLVM_INSTALL_PREFIX}/bin ${LLVM_BINARY_DIR}/bin)
 
+# ompdModule links LLVMSupport or libLLVM. GDB loads it from
+# ${CMAKE_INSTALL_DATADIR}/gdb/python/ompd/, not from the LLVM library dir.
+# Compute the relative path once for CMake INSTALL_RPATH and setup.py.
+set(_ompd_gdb_plugin_dest "${CMAKE_INSTALL_DATADIR}/gdb/python")
+set(_ompd_mod_install_dir "${CMAKE_INSTALL_FULL_DATADIR}/gdb/python/ompd")
+set(_ompd_llvm_lib_install "${CMAKE_INSTALL_FULL_LIBDIR}")
+file(RELATIVE_PATH _ompd_llvm_lib_rel
+     "${_ompd_mod_install_dir}" "${_ompd_llvm_lib_install}")
+# Keep $ORIGIN for the CMake target property (CMake owns that escaping).
+set(_ompd_install_rpath "\$ORIGIN:\$ORIGIN/${_ompd_llvm_lib_rel}")
+
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/__init__.py
                    DEPENDS ompdModule.c ompdDLService.cpp ompdAPITests.c setup.py ompd/frame_filter.py ompd/__init__.py ompd/ompd_address_space.py ompd/ompd_callbacks.py ompd/ompd_handles.py ompd/ompd.py
                    COMMAND ${CMAKE_COMMAND} -E env
@@ -74,6 +85,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/__init_
                      "LLVM_LIBRARY_DIR=${LLVM_LIBRARY_DIR}"
                      "LLVM_LINK_LLVM_DYLIB=${LLVM_LINK_LLVM_DYLIB}"
                      "LLVM_CONFIG=${OMPD_LLVM_CONFIG}"
+                     "OMPD_LLVM_LIB_REL=${_ompd_llvm_lib_rel}"
                    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py -v bdist_wheel -b ${CMAKE_CURRENT_BINARY_DIR}/build -d ${CMAKE_CURRENT_BINARY_DIR}
                    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py clean --all
                    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_SOURCE_DIR}/ompd.egg-info
@@ -108,7 +120,23 @@ set_target_properties (ompdModule PROPERTIES PREFIX "")
 set_target_properties (ompdModule PROPERTIES LINKER_LANGUAGE CXX)
 set_target_properties (ompdModule PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd/")
 
+# install(DIRECTORY) copies files as-is and does not rewrite RPATH, so the
+# CMake-built .so must be installed with install(TARGETS).
+if(UNIX AND NOT APPLE)
+  if(LLVM_LIBRARY_DIR)
+    set_property(TARGET ompdModule APPEND PROPERTY BUILD_RPATH "${LLVM_LIBRARY_DIR}")
+  endif()
+  set_target_properties(ompdModule PROPERTIES INSTALL_RPATH "${_ompd_install_rpath}")
+endif()
+
 openmp_register_meta_dep(ompd_gdb_plugin ompdModule)
 
-install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd DESTINATION share/gdb/python/ COMPONENT openmp PATTERN ompdModule.so PERMISSIONS OWNER_READ WORLD_READ GROUP_READ OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE)
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd
+        DESTINATION ${_ompd_gdb_plugin_dest}
+        COMPONENT openmp
+        PATTERN ompdModule.so EXCLUDE
+        PATTERN "*.so" PERMISSIONS OWNER_READ WORLD_READ GROUP_READ OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE)
+install(TARGETS ompdModule
+        LIBRARY DESTINATION ${_ompd_gdb_plugin_dest}/ompd
+        COMPONENT openmp)
 
