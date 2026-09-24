@@ -254,7 +254,7 @@ jobs:
           python3 build_tools/github_actions/detect_failed_logs.py
 
       - name: LIT (llvm, clang, flang, mlir, lld)
-        uses: ,/.github/actions/rock-ci-deps/lit-comgr-tests
+        uses: ./.github/actions/rock-ci-deps/lit-comgr-tests
         continue-on-error: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:non-blocking-compiler-tests') }}
         env:
           BUILD_DIR: ${{ env.BUILD_DIR }}
