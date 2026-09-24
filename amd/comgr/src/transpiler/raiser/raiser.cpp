@@ -39,6 +39,8 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FloatingPointMode.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
@@ -325,13 +327,14 @@ Expected<RaiseEnvironment> RaiseEnvironment::create(StringRef SourceIsa,
 }
 
 // A half-open range of text offsets the decode has read.
-using Extent = std::pair<uint64_t, uint64_t>;
+struct Extent {
+  uint64_t Begin = 0;
+  uint64_t End = 0;
 
-static bool contains(ArrayRef<Extent> Extents, uint64_t Offset) {
-  return any_of(Extents, [&](const Extent &E) {
-    return Offset >= E.first && Offset < E.second;
-  });
-}
+  bool contains(uint64_t Offset) const {
+    return Offset >= Begin && Offset < End;
+  }
+};
 
 // The function symbol extent of `Extents` that covers `Offset`, or null when
 // none of them does.
@@ -352,7 +355,7 @@ static void mergeDecoded(DecodeResult &Base, DecodeResult &&Extra) {
   sort(Base.Insts, [](const DecodedInst &A, const DecodedInst &B) {
     return A.Offset < B.Offset;
   });
-  Base.BlockStarts.insert(Extra.BlockStarts.begin(), Extra.BlockStarts.end());
+  set_union(Base.BlockStarts, Extra.BlockStarts);
 }
 
 // The source offsets `SetPc` refused a transfer for because no decoded
@@ -412,10 +415,12 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
       // A target left undecoded keeps the refusal the analysis recorded for
       // the transfer reaching it, which `raiseInst` below reports at that
       // instruction. Decoding either kind would not lift the refusal: an
-      // offset already covered was read straight through, so landing on no
-      // instruction there means landing inside one, and a target no function
-      // symbol covers has no extent to decode.
-      if (contains(Covered, Target))
+      // extent already covered was read straight through, so landing on no
+      // instruction inside it means landing in the middle of one, and a target
+      // no function symbol covers says neither where to start reading nor how
+      // much.
+      if (any_of(Covered,
+                 [Target](const Extent &E) { return E.contains(Target); }))
         continue;
       const KernelSymbolExtent *Callee =
           findFunctionExtent(FunctionExtents, Target);
