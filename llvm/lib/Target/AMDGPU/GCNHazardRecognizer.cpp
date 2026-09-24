@@ -1018,7 +1018,8 @@ static int getMaxWindowDeficit(
     Pending[Distance].push_back({MBB, Start, Distance});
   };
 
-  auto Scan = [&](const Arrival &A) {
+  // Taken by value: Arrive can grow the bucket this arrival is stored in.
+  auto Scan = [&](Arrival A) {
     if (Best.lookup(A.MBB) < A.Distance)
       return; // a closer arrival has superseded this one
 
