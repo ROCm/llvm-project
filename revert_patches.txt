@@ -1,3 +1,4 @@
+reverted patches list
 ---
 gfx12.5 XNACK ELF flags break mixed-object linking and ROCr ISA lookup; see #4523
 AMDGPU: Remove xnack and sramecc subtarget features (#212792)
