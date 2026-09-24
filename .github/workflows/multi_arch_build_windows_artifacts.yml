@@ -205,7 +205,7 @@ jobs:
              cd -
  
       - name: Comgr CI patches (transpiler)
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/comgr-patches@automation/multiarch-transpiler-ci
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/comgr-patches@amd-staging
         with:
           stage_name: ${{ inputs.stage_name }}          
 
