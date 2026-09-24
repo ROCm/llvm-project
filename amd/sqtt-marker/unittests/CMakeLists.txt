@@ -19,23 +19,16 @@ set(SQTT_MARKER_UNIT_SOURCES
   SQTTMarkerTest.cpp
 )
 
-if(COMMAND add_llvm_unittest AND TARGET UnitTests)
-  add_llvm_unittest(SQTTMarkerTests ${SQTT_MARKER_UNIT_SOURCES})
-  set_output_directory(SQTTMarkerTests
-    BINARY_DIR "${LLVM_BINARY_DIR}/unittests/SQTTMarker"
-    LIBRARY_DIR "${LLVM_BINARY_DIR}/unittests/SQTTMarker")
-else()
-  find_package(GTest REQUIRED)
-  add_executable(SQTTMarkerTests ${SQTT_MARKER_UNIT_SOURCES})
-  llvm_map_components_to_libnames(SQTT_MARKER_TEST_LLVM_LIBS
-    ${LLVM_LINK_COMPONENTS})
-  target_link_libraries(SQTTMarkerTests PRIVATE
-    GTest::gtest_main
-    ${SQTT_MARKER_TEST_LLVM_LIBS}
-  )
-  include(GoogleTest)
-  gtest_discover_tests(SQTTMarkerTests)
-endif()
+find_package(GTest REQUIRED)
+add_executable(SQTTMarkerTests ${SQTT_MARKER_UNIT_SOURCES})
+llvm_map_components_to_libnames(SQTT_MARKER_TEST_LLVM_LIBS
+  ${LLVM_LINK_COMPONENTS})
+target_link_libraries(SQTTMarkerTests PRIVATE
+  GTest::gtest_main
+  ${SQTT_MARKER_TEST_LLVM_LIBS}
+)
+include(GoogleTest)
+gtest_discover_tests(SQTTMarkerTests)
 
 target_link_libraries(SQTTMarkerTests PRIVATE SQTTMarkerObjects)
 
