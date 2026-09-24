@@ -48,6 +48,7 @@
 #include "flang/Semantics/type.h"
 #include "mlir/Dialect/Complex/IR/Complex.h"
 #include "mlir/Dialect/OpenACC/OpenACC.h"
+#include "mlir/Dialect/OpenMP/OpenMPInterfaces.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/CommandLine.h"
@@ -3373,7 +3374,23 @@ void Fortran::lower::createRuntimeTypeInfoGlobal(
   std::string globalName = converter.mangleName(typeInfoSym);
   auto var = Fortran::lower::pft::Variable(typeInfoSym, /*global=*/true);
   fir::LinkageAttr linkage = getLinkageAttribute(converter, var);
-  defineGlobal(converter, var, globalName, linkage);
+  fir::GlobalOp global = defineGlobal(converter, var, globalName, linkage);
+
+  // Runtime type descriptors participate in polymorphic SELECT TYPE lowering by
+  // pointer identity. When OpenMP offload is enabled, make the compiler
+  // generated RTTI objects declare-target globals so libomptarget can translate
+  // the host descriptor pointer to the canonical device RTTI global rather than
+  // to an independent mapped copy.
+  if (converter.getFoldingContext().languageFeatures().IsEnabled(
+          Fortran::common::LanguageFeature::OpenMP)) {
+    if (auto declareTargetOp =
+            llvm::dyn_cast<mlir::omp::DeclareTargetInterface>(
+                global.getOperation()))
+      declareTargetOp.setDeclareTarget(
+          mlir::omp::DeclareTargetDeviceType::any,
+          mlir::omp::DeclareTargetCaptureClause::to,
+          /*automap=*/false, /*implicit=*/false);
+  }
 }
 
 mlir::Type Fortran::lower::getCrayPointeeBoxType(mlir::Type fortranType) {

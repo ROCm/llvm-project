@@ -68,6 +68,7 @@
 #include "flang/Support/Flags.h"
 #include "flang/Support/Version.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/OpenMP/OpenMPInterfaces.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Matchers.h"
@@ -450,6 +451,24 @@ private:
             builder, info.loc,
             mlir::StringAttr::get(builder.getContext(), tbpName),
             mlir::SymbolRefAttr::get(builder.getContext(), bindingName));
+
+        // Type-bound dispatch tables store procedure addresses in runtime
+        // TypeDescriptor metadata. If the TypeDescriptor is registered for
+        // OpenMP offload, the referenced procedures must also be available in
+        // the device image so device-side dispatch table entries can refer to
+        // device functions instead of lowering to null/poison pointers.
+        if (converter.getFoldingContext().languageFeatures().IsEnabled(
+                Fortran::common::LanguageFeature::OpenMP)) {
+          if (mlir::Operation *bindingOp =
+                  builder.getModule().lookupSymbol(bindingName))
+            if (auto declareTargetOp =
+                    llvm::dyn_cast<mlir::omp::DeclareTargetInterface>(
+                        bindingOp))
+              declareTargetOp.setDeclareTarget(
+                  mlir::omp::DeclareTargetDeviceType::any,
+                  mlir::omp::DeclareTargetCaptureClause::to,
+                  /*automap=*/false, /*implicit=*/true);
+        }
         // Propagate DEFERRED attribute on the binding to fir.dt_entry.
         if (binding.get().attrs().test(Fortran::semantics::Attr::DEFERRED))
           dtEntry->setAttr(fir::DTEntryOp::getDeferredAttrNameStr(),

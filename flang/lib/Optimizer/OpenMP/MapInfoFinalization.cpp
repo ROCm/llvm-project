@@ -516,6 +516,12 @@ public:
   /// \p parentOp is the MapInfoOp being expanded (the descriptor map before
   /// this pass splits it). Lowering attaches a NameLoc there for the Fortran
   /// map text. New ops created here use its location so NameLoc is preserved.
+  static bool shouldMapDescriptorTypeDesc(mlir::Value descriptor) {
+    auto boxTy = mlir::dyn_cast<fir::BaseBoxType>(
+        fir::unwrapRefType(descriptor.getType()));
+    return boxTy && fir::isPolymorphicType(boxTy) && fir::boxHasAddendum(boxTy);
+  }
+
   mlir::omp::MapInfoOp
   genBaseAddrMap(mlir::Location mapInfoOpLoc, mlir::Value descriptor,
                  mlir::omp::MapInfoOp parentOp,
@@ -939,6 +945,34 @@ public:
     return baseAddrType;
   }
 
+  mlir::Operation *genImplicitPointerAttachMap(
+      mlir::omp::MapInfoOp descMapOp, mlir::Value attachBase,
+      mlir::Type attachBaseType, mlir::Value pointerSlotAddr,
+      mlir::Type pointerSlotPointeeType, mlir::ValueRange bounds,
+      llvm::SmallVectorImpl<ParentAndPlacement> &mapMemberUsers,
+      mlir::Operation *target, fir::FirOpBuilder &builder,
+      mlir::omp::ClauseMapFlags refFlagType, bool isAttachAlways = false) {
+    auto implicitAttachMap = mlir::omp::MapInfoOp::create(
+        builder, descMapOp->getLoc(), attachBase.getType(), attachBase,
+        mlir::TypeAttr::get(attachBaseType),
+        builder.getAttr<mlir::omp::ClauseMapFlagsAttr>(
+            mlir::omp::ClauseMapFlags::attach | refFlagType |
+            (isAttachAlways ? mlir::omp::ClauseMapFlags::always
+                            : mlir::omp::ClauseMapFlags::none)),
+        descMapOp.getMapCaptureTypeAttr(), /*varPtrPtr=*/
+        pointerSlotAddr, mlir::TypeAttr::get(pointerSlotPointeeType),
+        /*members=*/mlir::SmallVector<mlir::Value>{},
+        /*membersIndex=*/mlir::ArrayAttr{}, bounds,
+        /*mapperId*/ mlir::FlatSymbolRefAttr(), descMapOp.getNameAttr(),
+        /*partial_map=*/builder.getBoolAttr(false));
+
+    // Has to be added to the target immediately, as we expect all maps
+    // processed by this pass to have a user that is a target.
+    addAttachMemberToTarget(descMapOp, implicitAttachMap, mapMemberUsers,
+                            builder, target);
+    return implicitAttachMap;
+  }
+
   /// This function generates an attach map, which is an type of OpenMP map that
   /// binds a pointer to its data. In the case of Fortran, this binding is
   /// primarily for binding the pointer inside of descriptors to the underlying
@@ -962,28 +996,36 @@ public:
                                        fir::BoxFieldAttr::base_addr);
 
     mlir::Type underlyingVarType = getUnderlyingVarType(baseAddr.getType());
+    mlir::Type runtimePtrType = fir::unwrapRefType(descriptor.getType());
 
-    auto implicitAttachMap = mlir::omp::MapInfoOp::create(
-        builder, descMapOp->getLoc(), descMapOp.getResult().getType(),
-        descriptor,
-        mlir::TypeAttr::get(fir::unwrapRefType(descriptor.getType())),
-        builder.getAttr<mlir::omp::ClauseMapFlagsAttr>(
-            mlir::omp::ClauseMapFlags::attach | refFlagType |
-            (isAttachAlways ? mlir::omp::ClauseMapFlags::always
-                            : mlir::omp::ClauseMapFlags::none)),
-        descMapOp.getMapCaptureTypeAttr(), /*varPtrPtr=*/
-        baseAddr, mlir::TypeAttr::get(underlyingVarType),
-        /*members=*/mlir::SmallVector<mlir::Value>{},
-        /*membersIndex=*/mlir::ArrayAttr{},
-        /*bounds=*/descMapOp.getBounds(),
-        /*mapperId*/ mlir::FlatSymbolRefAttr(), descMapOp.getNameAttr(),
-        /*partial_map=*/builder.getBoolAttr(false));
+    return genImplicitPointerAttachMap(
+        descMapOp, descriptor, runtimePtrType, baseAddr, underlyingVarType,
+        descMapOp.getBounds(), mapMemberUsers, target, builder, refFlagType,
+        isAttachAlways);
+  }
 
-    // Has to be added to the target immediately, as we expect all maps
-    // processed by this pass to have a user that is a target.
-    addAttachMemberToTarget(descMapOp, implicitAttachMap, mapMemberUsers,
-                            builder, target);
-    return implicitAttachMap;
+  [[maybe_unused]] mlir::Operation *genImplicitTypeDescAttachMap(
+      mlir::omp::MapInfoOp descMapOp, mlir::Value descriptor,
+      llvm::SmallVectorImpl<ParentAndPlacement> &mapMemberUsers,
+      mlir::Operation *target, fir::FirOpBuilder &builder,
+      mlir::omp::ClauseMapFlags refFlagType, bool isAttachAlways = false) {
+    auto typeDescFieldAddr =
+        fir::BoxOffsetOp::create(builder, descMapOp->getLoc(), descriptor,
+                                 fir::BoxFieldAttr::derived_type);
+
+    // This attach entry binds the device copy of the dynamic type descriptor to
+    // the descriptor addendum's derived_type pointer slot. The var_ptr must
+    // therefore be the address of that pointer slot in the originating
+    // descriptor, not the descriptor base address. Model both var_ptr and
+    // var_ptr_ptr as pointer-sized objects for this attach map so lowering
+    // produces an 8-byte pointer attach entry.
+    mlir::Type runtimePtrType =
+        fir::LLVMPointerType::get(builder.getContext(), builder.getI8Type());
+
+    return genImplicitPointerAttachMap(
+        descMapOp, typeDescFieldAddr, runtimePtrType, typeDescFieldAddr,
+        runtimePtrType, mlir::ValueRange{}, mapMemberUsers, target, builder,
+        refFlagType, isAttachAlways);
   }
 
   // If the operation that we are expanding with a descriptor has a user
@@ -1071,6 +1113,13 @@ public:
     if (!isAttachNever)
       genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
                            mlir::omp::ClauseMapFlags::ref_ptr, isAttachAlways);
+
+    if (shouldMapDescriptorTypeDesc(descriptor))
+      genImplicitTypeDescAttachMap(op, descriptor, mapMemberUsers, target,
+                                    builder,
+                                    mlir::omp::ClauseMapFlags::ref_ptr,
+                                    isAttachAlways);
+
     op.replaceAllUsesWith(newMapInfoOp.getResult());
     op->erase();
     return newMapInfoOp;
@@ -1188,6 +1237,13 @@ public:
                                    mlir::omp::ClauseMapFlags::ref_ptee,
                                isAttachAlways, baseAddr.getVarPtrPtr());
     }
+
+    if (shouldMapDescriptorTypeDesc(descriptor))
+      genImplicitTypeDescAttachMap(op, descriptor, mapMemberUsers, target,
+                                   builder,
+                                   mlir::omp::ClauseMapFlags::ref_ptr |
+                                       mlir::omp::ClauseMapFlags::ref_ptee,
+                                   isAttachAlways);
 
     op.replaceAllUsesWith(newMapInfoOp.getResult());
     op->erase();
