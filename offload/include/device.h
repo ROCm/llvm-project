@@ -177,6 +177,8 @@ struct DeviceTy {
   /// Ask the device whether it is an APU.
   bool checkIfAPU();
 
+  bool checkIfStrixHalo();
+
   bool checkIfGFX90a();
 
   bool checkIfMI300x();
