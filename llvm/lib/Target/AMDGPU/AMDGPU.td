@@ -1308,6 +1308,12 @@ defm WMMACoexecutionHazards : AMDGPUSubtargetFeature<"wmma-coexecution-hazards",
   /*GenPredicate=*/0
 >;
 
+defm VOPD3F64OPYSrcHazard : AMDGPUSubtargetFeature<"vopd3-f64-opy-src-hazard",
+  "Hazard when an OPY VGPR source of a VOPD3 with a 64-bit OPX names the last "
+  "VGPR allocated to the wave",
+  /*GenPredicate=*/0
+>;
+
 defm SALUFloatInsts : AMDGPUSubtargetFeature<"salu-float",
   "Has SALU floating point instructions"
 >;
@@ -2550,7 +2556,8 @@ def FeatureISAVersion12_50_Common : FeatureSet<
 
 def FeatureISAVersion12_50_STRICT : FeatureSet<
   !listconcat(FeatureISAVersion12_50_Common.Features,
-  [FeatureGFX1250_STRICT,
+  [FeatureVOPD3F64OPYSrcHazard,
+   FeatureGFX1250_STRICT,
    FeatureAddressableLocalMemorySize327680,
    FeatureLDSAllocGranularity2048,
    FeatureLDSEncodingGranularity2048,
@@ -2583,7 +2590,8 @@ def FeatureISAVersion12_50_STRICT : FeatureSet<
 
 def FeatureISAVersion12_50 : FeatureSet<
   !listconcat(FeatureISAVersion12_50_Common.Features,
-  [FeatureAddressableLocalMemorySize327680,
+  [FeatureVOPD3F64OPYSrcHazard,
+   FeatureAddressableLocalMemorySize327680,
    FeatureLDSAllocGranularity2048,
    FeatureLDSEncodingGranularity2048,
    FeatureLDSBankCount64,
@@ -2616,7 +2624,8 @@ def FeatureISAVersion12_50 : FeatureSet<
 
 def FeatureISAVersion12_51 : FeatureSet<
   !listconcat(FeatureISAVersion12_50_Common.Features,
-  [FeatureAddressableLocalMemorySize327680,
+  [FeatureVOPD3F64OPYSrcHazard,
+   FeatureAddressableLocalMemorySize327680,
    FeatureLDSAllocGranularity2048,
    FeatureLDSEncodingGranularity2048,
    FeatureLDSBankCount64,
@@ -2657,7 +2666,8 @@ def FeatureISAVersion12_Generic: FeatureSet<
 
 def FeatureISAVersion12_5_Generic: FeatureSet<
   !listconcat(FeatureISAVersion12_50_Common.Features,
-  [FeatureAddressableLocalMemorySize327680,
+  [FeatureVOPD3F64OPYSrcHazard,
+   FeatureAddressableLocalMemorySize327680,
    FeatureLDSAllocGranularity2048,
    FeatureLDSEncodingGranularity2048,
    FeatureLDSBankCount64,
