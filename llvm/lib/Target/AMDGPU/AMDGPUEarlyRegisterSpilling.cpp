@@ -975,6 +975,37 @@ static void assignUsesToGroups(Register CandidateReg, MachineInstr *CurMI,
   }
 }
 
+void AMDGPUEarlyRegisterSpilling::groupUsesInBlock(
+    std::vector<DomGroup> &Groups) {
+
+  for (unsigned Idx1 = 0, E = Groups.size(); Idx1 != E; ++Idx1) {
+    auto &G1 = Groups[Idx1];
+    if (G1.isDeleted())
+      continue;
+    // for (unsigned Idx2 = 0; Idx2 < E; ++Idx2) {
+    for (unsigned Idx2 = 0; Idx2 != E; ++Idx2) {
+      auto &G2 = Groups[Idx2];
+      if (G1.getHead() == G2.getHead())
+        continue;
+
+      if (G2.isDeleted())
+        continue;
+
+      MachineInstr *Head1 = G1.getHead();
+      MachineInstr *Head2 = G2.getHead();
+      MachineBasicBlock *RestoreBlock1 = G1.getRestoreBlock();
+      MachineBasicBlock *RestoreBlock2 = G2.getRestoreBlock();
+
+      if (RestoreBlock1 != RestoreBlock2)
+        continue;
+
+      if (DT->dominates(Head1, Head2)) {
+        G1.merge(G2);
+      }
+    }
+  }
+}
+
 void AMDGPUEarlyRegisterSpilling::groupUses(
     Register CandidateReg, MachineBasicBlock *SpillBlock, MachineInstr *CurMI,
     SetVectorType &DominatedUses, SmallVector<DomGroup> &GroupOfUses) {
@@ -1055,6 +1086,7 @@ void AMDGPUEarlyRegisterSpilling::groupUses(
       // TODO: Change this if it creates performance degradation.
       if (!shouldGroupUses(CurLoop, G1, G2, MLI))
         continue;
+
       SmallVector<MachineBasicBlock *> UseBlocks;
       for (auto *Block : G1.getUseBlocks())
         UseBlocks.push_back(Block);
@@ -1580,6 +1612,7 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
         std::vector<DomGroup> GroupOfUses;
         assignUsesToGroups(CandidateReg, CurMI, UsesDominatedByCurMI,
                            GroupOfUses, MLI);
+        groupUsesInBlock(GroupOfUses);
 
         auto Candidate = std::make_unique<RestoreCandidate>(
             OrigRestore->getOperand(0).getReg(), Mask,

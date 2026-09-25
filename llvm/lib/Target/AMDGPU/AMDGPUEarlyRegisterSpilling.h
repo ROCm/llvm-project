@@ -175,6 +175,8 @@ class AMDGPUEarlyRegisterSpilling : public MachineFunctionPass {
                  MachineInstr *CurMI, SetVectorType &DominatedUses,
                  SmallVector<DomGroup> &GroupOfUses);
 
+  void groupUsesInBlock(std::vector<DomGroup> &Groups);
+
   /// Check if it is legal or profitable to emit a restore in the common
   /// dominator.
   bool shouldEmitRestoreInCommonDominator(
