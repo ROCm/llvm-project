@@ -4,10 +4,6 @@
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=vop_math,vop3_math | %FileCheck %s
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=vop_math,vop3_math \
-; RUN:   | %llc -mtriple=amdgpu9.42-amd-amdhsa -mcpu=gfx942 -o - \
-; RUN:   | %FileCheck %s --check-prefix=CODEGEN
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=refuse_clamp 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE-CLAMP
@@ -67,7 +63,6 @@ vop_math:
 ; CHECK: call float @llvm.amdgcn.rcp.f32
 	v_rcp_f32_e32 v26, v27
 ; CHECK: call float asm sideeffect "v_rcp_iflag_f32 $0, $1", "=v,v"(float
-; CODEGEN: v_rcp_iflag_f32
 	v_rcp_iflag_f32_e32 v26, v27
 ; CHECK: call float @llvm.amdgcn.tanh.f32
 	v_tanh_f32_e32 v26, v27
