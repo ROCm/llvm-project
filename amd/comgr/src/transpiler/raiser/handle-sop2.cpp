@@ -8,11 +8,16 @@
 
 #include "transpiler/raiser/handlers.h"
 
+#include "transpiler/decoder/amdgpu-mc-tables.h"
+
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "Utils/AMDGPUBaseInfo.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+
+#include <cassert>
 
 using namespace llvm;
 
@@ -404,11 +409,16 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::S_FMAAK_F32: {
     if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
       return Err;
-    Expected<TernaryOperands> Args = Op.readTernary32();
+    Expected<BinaryOperands> Args = Op.readBinary32();
     if (!Args)
       return Args.takeError();
+    int16_t LiteralIdx = COMGR::transpiler::getNamedOperandIdx(
+        Di.Inst.getOpcode(), AMDGPU::OpName::imm);
+    assert(LiteralIdx >= 0 && "s_fmaak_f32 encodes a literal");
+    assert(Di.isImm(LiteralIdx) && "s_fmaak_f32 literal is always immediate");
     IRBuilder<> &B = Ctx.B;
-    Value *Result = emitFma(B, Args->Src0, Args->Src1, Args->Src2, "fmaak_f32");
+    Value *Literal = B.getInt32(static_cast<uint32_t>(Di.getImm(LiteralIdx)));
+    Value *Result = emitFma(B, Args->Src0, Args->Src1, Literal, "fmaak_f32");
     Value *Bits = B.CreateBitCast(Result, B.getInt32Ty());
     Ctx.registers().writeReg32(Args->Dst, Bits);
     return Error::success();
