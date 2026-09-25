@@ -161,8 +161,8 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
                                         "rcp");
     break;
   case CanonicalOp::V_RCP_IFLAG_F32:
-    Result = Ctx.B.CreateFDiv(ConstantFP::get(Ctx.B.getFloatTy(), 1.0),
-                              *Source, "rcp.iflag");
+    Result = Ctx.B.CreateFDiv(ConstantFP::get(Ctx.B.getFloatTy(), 1.0), *Source,
+                              "rcp.iflag");
     break;
   case CanonicalOp::V_RSQ_F32:
   case CanonicalOp::V_S_RSQ_F32:

@@ -186,8 +186,7 @@ Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_PK_ADD_F32:
   case CanonicalOp::V_PK_MUL_F32:
   case CanonicalOp::V_PK_FMA_F32:
-    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getFloatTy(),
-                                  Di.CanonOp);
+    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getFloatTy(), Di.CanonOp);
   default:
     return unsupported(Ctx, Di);
   }

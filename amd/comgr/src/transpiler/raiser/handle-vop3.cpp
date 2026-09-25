@@ -382,10 +382,8 @@ Error raiseFloatTernary32(RaiseContext &Ctx, const DecodedInst &Di,
 
     auto SameOperand = [&](unsigned A, unsigned B) {
       unsigned AI = Op.srcIdx(A), BI = Op.srcIdx(B);
-      return (Di.isReg(AI) && Di.isReg(BI) &&
-              Di.getReg(AI) == Di.getReg(BI)) ||
-             (Di.isImm(AI) && Di.isImm(BI) &&
-              Di.getImm(AI) == Di.getImm(BI));
+      return (Di.isReg(AI) && Di.isReg(BI) && Di.getReg(AI) == Di.getReg(BI)) ||
+             (Di.isImm(AI) && Di.isImm(BI) && Di.getImm(AI) == Di.getImm(BI));
     };
     bool NumeratorScale = SameOperand(0, 2);
     bool DenominatorScale = SameOperand(0, 1);
@@ -393,10 +391,9 @@ Error raiseFloatTernary32(RaiseContext &Ctx, const DecodedInst &Di,
       return unsupportedInstruction(Ctx, Di,
                                     "unrecognized divide scale operand shape");
     if (NumeratorScale && DenominatorScale) {
-      if (Op.srcMod(0) != Op.srcMod(1) ||
-          Op.srcMod(0) != Op.srcMod(2))
-        return unsupportedInstruction(Ctx, Di,
-                                      "asymmetric divide scale source modifiers");
+      if (Op.srcMod(0) != Op.srcMod(1) || Op.srcMod(0) != Op.srcMod(2))
+        return unsupportedInstruction(
+            Ctx, Di, "asymmetric divide scale source modifiers");
       NumeratorScale = false;
     }
     if (Op.srcMod(0) != Op.srcMod(NumeratorScale ? 2 : 1))
