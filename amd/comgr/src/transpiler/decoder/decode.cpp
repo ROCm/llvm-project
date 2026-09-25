@@ -127,7 +127,7 @@ void driftCheckTiedIn(const DecodedInst &Di, const MCInstrDesc &Desc) {
 // named-operand table, catching operand-layout changes for opcodes using srcN
 // naming. MFMA appends its source modifiers after the sources rather than
 // interleaving them, so Di.ModMap is repaired from the table instead.
-void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
+void driftCheckSrcN(const MCState &Mc, DecodedInst &Di,
                     const MCInstrDesc &Desc) {
   static constexpr AMDGPU::OpName KSrcNames[] = {
       AMDGPU::OpName::src0, AMDGPU::OpName::src1, AMDGPU::OpName::src2};
@@ -145,13 +145,13 @@ void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
   bool IsMadmk =
       ImmIdx && Src0Idx && Src1Idx && *Src0Idx < *ImmIdx && *ImmIdx < *Src1Idx;
 
-  // v_movrel{d,sd}_b32 place $vdst at operand 0 as an input, so SrcMap[0]
-  // cannot be checked against the named src0 operand.
-  bool IsMovrel = namedOperandIdx(Opc, AMDGPU::OpName::vdst) == 0u &&
-                  Desc.getNumDefs() == 0;
-  assert((!IsMovrel ||
-          StringRef(getMnemonic(Mc, Di.Inst)).starts_with("v_movrel")) &&
-         "vdst-at-0/no-defs signature matched a non-movrel opcode");
+  // Movreld destinations are inputs in their MC operand layouts.
+  StringRef Name = Mc.InstrInfo->getName(Opc);
+  bool IsMovrel = Desc.getNumDefs() == 0 &&
+                  ((Name.starts_with("V_MOVREL") &&
+                    namedOperandIdx(Opc, AMDGPU::OpName::vdst) == 0u) ||
+                   (Name.starts_with("S_MOVRELD") &&
+                    namedOperandIdx(Opc, AMDGPU::OpName::sdst) == 0u));
 
   for (unsigned K = 0; K < 3; ++K) {
     std::optional<unsigned> NamedSrc = namedOperandIdx(Opc, KSrcNames[K]);
@@ -289,7 +289,7 @@ Error decodeVOPD(DecodedInst &Di, const MCInstrInfo &MCII,
   if (!COMGR::transpiler::isVOPD(Di.Inst.getOpcode()))
     return Error::success();
 
-  Di.VOPD.emplace();
+  Di.VOPD = std::array<DecodedInst::VOPDHalf, 2>{};
   const bool IsVOPD3 = (Di.TargetSpecificFlags & AmdgpuFormat::VOPD3) != 0;
   auto [OpX, OpY] = COMGR::transpiler::getVOPDComponents(Di.Inst.getOpcode());
   const MCInstrDesc &OpXDesc = MCII.get(OpX);

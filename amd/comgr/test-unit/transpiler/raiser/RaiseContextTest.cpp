@@ -158,11 +158,12 @@ TEST_F(RaiseContextTest, BufferRejectsMalformedOperands) {
 TEST_F(RaiseContextTest, RequiredBitsRejectUnknownAndNonzeroValues) {
   DecodedInst Instruction;
   for (unsigned I = 0; I != Mc.InstrInfo->getNumOpcodes(); ++I) {
-    if (Mc.InstrInfo->getName(I) == "S_ENDPGM") {
+    if (Mc.InstrInfo->getName(I) == "S_ENDPGM_vi") {
       Instruction.Inst.setOpcode(I);
       break;
     }
   }
+  ASSERT_EQ(Mc.InstrInfo->getName(Instruction.Inst.getOpcode()), "S_ENDPGM_vi");
   Instruction.Inst.addOperand(MCOperand::createImm(0));
   for (bool Unknown : {false, true}) {
     ContextEnvironment Context(Mc);

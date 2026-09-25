@@ -21,6 +21,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
@@ -354,11 +355,202 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+Error raiseFloatTernary32(RaiseContext &Ctx, const DecodedInst &Di,
+                          OperandResolver &Op) {
+  if (Di.NumDefs < 1 || Op.nSrcs() < 3)
+    return unsupportedInstruction(Ctx, Di, "expected three float sources");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+    return Err;
+  if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+    return Err;
+
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+
+  if (Di.CanonOp == CanonicalOp::V_DIV_SCALE_F32) {
+    if (Di.NumDefs != 2 || !Di.isReg(1))
+      return unsupportedInstruction(Ctx, Di,
+                                    "expected a scale flag destination");
+    Expected<ParsedReg> FlagDst = Op.dst(1);
+    if (!FlagDst)
+      return FlagDst.takeError();
+    if (FlagDst->RegKind != ParsedReg::SGPR &&
+        FlagDst->RegKind != ParsedReg::VCC &&
+        FlagDst->RegKind != ParsedReg::NOREG)
+      return unsupportedInstruction(Ctx, Di, "invalid scale flag destination");
+
+    auto SameOperand = [&](unsigned A, unsigned B) {
+      unsigned AI = Op.srcIdx(A), BI = Op.srcIdx(B);
+      return (Di.isReg(AI) && Di.isReg(BI) && Di.getReg(AI) == Di.getReg(BI)) ||
+             (Di.isImm(AI) && Di.isImm(BI) && Di.getImm(AI) == Di.getImm(BI));
+    };
+    bool NumeratorScale = SameOperand(0, 2);
+    bool DenominatorScale = SameOperand(0, 1);
+    if (!NumeratorScale && !DenominatorScale)
+      return unsupportedInstruction(Ctx, Di,
+                                    "unrecognized divide scale operand shape");
+    if (NumeratorScale && DenominatorScale) {
+      if (Op.srcMod(0) != Op.srcMod(1) || Op.srcMod(0) != Op.srcMod(2))
+        return unsupportedInstruction(
+            Ctx, Di, "asymmetric divide scale source modifiers");
+      NumeratorScale = false;
+    }
+    if (Op.srcMod(0) != Op.srcMod(NumeratorScale ? 2 : 1))
+      return unsupportedInstruction(Ctx, Di,
+                                    "asymmetric divide scale source modifiers");
+
+    Expected<Value *> Numer = Op.srcF(NumeratorScale ? 0 : 2);
+    if (!Numer)
+      return Numer.takeError();
+    Expected<Value *> Denom = Op.srcF(1);
+    if (!Denom)
+      return Denom.takeError();
+    Value *Pair = Ctx.B.CreateIntrinsic(
+        Intrinsic::amdgcn_div_scale, {Ctx.B.getFloatTy()},
+        {*Numer, *Denom, Ctx.B.getInt1(NumeratorScale)}, nullptr, "div.scale");
+    Value *Result = Ctx.B.CreateExtractValue(Pair, 0);
+    Value *Flag = Ctx.B.CreateExtractValue(Pair, 1);
+    Ctx.registers().writeReg32(*Dst,
+                               Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
+    Flag = Ctx.B.CreateAnd(Flag, Ctx.registers().emitLaneActiveBit());
+    if (FlagDst->RegKind == ParsedReg::SGPR) {
+      Value *Mask = Ctx.Projection.ballotI1ToWidth(
+          Ctx.B, Flag, Ctx.Projection.sourceWaveMaskTy(), "div.scale.mask");
+      Ctx.registers().writeRegExecWidth(*FlagDst, Mask);
+      Ctx.registers().recordWaveMaskI1(*FlagDst, Flag);
+    } else if (FlagDst->RegKind == ParsedReg::VCC) {
+      Ctx.registers().regFile().storeVCC(Ctx.B, Flag);
+    }
+    return Error::success();
+  }
+
+  Expected<Value *> Src0 = Op.srcF(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = Op.srcF(1);
+  if (!Src1)
+    return Src1.takeError();
+  Expected<Value *> Src2 = Op.srcF(2);
+  if (!Src2)
+    return Src2.takeError();
+
+  Value *Result;
+  switch (Di.CanonOp) {
+  case CanonicalOp::V_DIV_FMAS_F32:
+    Result = Ctx.B.CreateIntrinsic(
+        Intrinsic::amdgcn_div_fmas, {Ctx.B.getFloatTy()},
+        {*Src0, *Src1, *Src2, Ctx.registers().regFile().loadVCC(Ctx.B)},
+        nullptr, "div.fmas");
+    break;
+  case CanonicalOp::V_DIV_FIXUP_F32:
+    Result =
+        Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_div_fixup, {Ctx.B.getFloatTy()},
+                              {*Src0, *Src1, *Src2}, nullptr, "div.fixup");
+    break;
+  case CanonicalOp::V_MAX3_NUM_F32:
+  case CanonicalOp::V_MIN3_NUM_F32: {
+    Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_MAX3_NUM_F32
+                           ? Intrinsic::maximumnum
+                           : Intrinsic::minimumnum;
+    Value *First = Ctx.B.CreateBinaryIntrinsic(ID, *Src0, *Src1);
+    Result = Ctx.B.CreateBinaryIntrinsic(ID, First, *Src2);
+    break;
+  }
+  case CanonicalOp::V_MED3_NUM_F32: {
+    Result = Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_fmed3,
+                                   {Ctx.B.getFloatTy()}, {*Src0, *Src1, *Src2});
+    break;
+  }
+  case CanonicalOp::V_MAXIMUM3_F32:
+  case CanonicalOp::V_MINIMUM3_F32: {
+    Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_MAXIMUM3_F32
+                           ? Intrinsic::maximum
+                           : Intrinsic::minimum;
+    Value *First = Ctx.B.CreateBinaryIntrinsic(ID, *Src0, *Src1);
+    Result = Ctx.B.CreateBinaryIntrinsic(ID, First, *Src2);
+    break;
+  }
+  case CanonicalOp::V_MAXMIN_NUM_F32:
+  case CanonicalOp::V_MINMAX_NUM_F32:
+  case CanonicalOp::V_MAXIMUMMINIMUM_F32:
+  case CanonicalOp::V_MINIMUMMAXIMUM_F32: {
+    bool Numeric = Di.CanonOp == CanonicalOp::V_MAXMIN_NUM_F32 ||
+                   Di.CanonOp == CanonicalOp::V_MINMAX_NUM_F32;
+    bool MaxFirst = Di.CanonOp == CanonicalOp::V_MAXMIN_NUM_F32 ||
+                    Di.CanonOp == CanonicalOp::V_MAXIMUMMINIMUM_F32;
+    Intrinsic::ID MaxID = Numeric ? Intrinsic::maximumnum : Intrinsic::maximum;
+    Intrinsic::ID MinID = Numeric ? Intrinsic::minimumnum : Intrinsic::minimum;
+    Value *First =
+        Ctx.B.CreateBinaryIntrinsic(MaxFirst ? MaxID : MinID, *Src0, *Src1);
+    Result =
+        Ctx.B.CreateBinaryIntrinsic(MaxFirst ? MinID : MaxID, First, *Src2);
+    break;
+  }
+  default:
+    llvm_unreachable("not a ternary F32 operation");
+  }
+  Ctx.registers().writeReg32(*Dst,
+                             Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
+  return Error::success();
+}
+
+Error raiseFloatBinary32(RaiseContext &Ctx, const DecodedInst &Di,
+                         OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 2)
+    return unsupportedInstruction(Ctx, Di, "expected two float sources");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+    return Err;
+  if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+    return Err;
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Src0 = Op.srcF(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = Op.srcF(1);
+  if (!Src1)
+    return Src1.takeError();
+  Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_MAXIMUM_F32
+                         ? Intrinsic::maximum
+                         : Intrinsic::minimum;
+  Value *Result = Ctx.B.CreateBinaryIntrinsic(ID, *Src0, *Src1);
+  Ctx.registers().writeReg32(*Dst,
+                             Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
+  return Error::success();
+}
+
 } // namespace
 
 Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
   switch (Di.CanonOp) {
+  case CanonicalOp::V_MAXIMUM_F32:
+  case CanonicalOp::V_MINIMUM_F32:
+    return raiseFloatBinary32(Ctx, Di, Op);
+  case CanonicalOp::V_CVT_F32_F64:
+  case CanonicalOp::V_CVT_F64_F32:
+  case CanonicalOp::V_CVT_F64_I32:
+  case CanonicalOp::V_CVT_F64_U32:
+  case CanonicalOp::V_CVT_I32_F64:
+  case CanonicalOp::V_CVT_U32_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatConversion64(Ctx, Di, Op);
+  case CanonicalOp::V_DIV_SCALE_F32:
+  case CanonicalOp::V_DIV_FMAS_F32:
+  case CanonicalOp::V_DIV_FIXUP_F32:
+  case CanonicalOp::V_MAX3_NUM_F32:
+  case CanonicalOp::V_MIN3_NUM_F32:
+  case CanonicalOp::V_MED3_NUM_F32:
+  case CanonicalOp::V_MAXIMUM3_F32:
+  case CanonicalOp::V_MINIMUM3_F32:
+  case CanonicalOp::V_MAXMIN_NUM_F32:
+  case CanonicalOp::V_MINMAX_NUM_F32:
+  case CanonicalOp::V_MAXIMUMMINIMUM_F32:
+  case CanonicalOp::V_MINIMUMMAXIMUM_F32:
+    return raiseFloatTernary32(Ctx, Di, Op);
   case CanonicalOp::V_CVT_F32_I32:
   case CanonicalOp::V_CVT_F32_U32:
   case CanonicalOp::V_CVT_F32_UBYTE0:
@@ -387,6 +579,13 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_EXP_F32:
   case CanonicalOp::V_LOG_F32:
   case CanonicalOp::V_RCP_F32:
+  case CanonicalOp::V_RCP_IFLAG_F32:
+  case CanonicalOp::V_TANH_F32:
+  case CanonicalOp::V_S_EXP_F32:
+  case CanonicalOp::V_S_LOG_F32:
+  case CanonicalOp::V_S_RCP_F32:
+  case CanonicalOp::V_S_RSQ_F32:
+  case CanonicalOp::V_S_SQRT_F32:
   case CanonicalOp::V_RSQ_F32:
   case CanonicalOp::V_SQRT_F32:
   case CanonicalOp::V_SIN_F32:

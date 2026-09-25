@@ -14,8 +14,10 @@
 #include "transpiler/raiser/raise_failure.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "SIDefines.h"
 
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 
@@ -145,22 +147,34 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   // also interpret their inputs as fractions of 2*pi. Generic LLVM math
   // intrinsics have libm semantics and may require refinement sequences.
   case CanonicalOp::V_EXP_F32:
+  case CanonicalOp::V_S_EXP_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_exp2, *Source,
                                         nullptr, "exp");
     break;
   case CanonicalOp::V_LOG_F32:
+  case CanonicalOp::V_S_LOG_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_log, *Source, nullptr,
                                         "log");
     break;
   case CanonicalOp::V_RCP_F32:
+  case CanonicalOp::V_S_RCP_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_rcp, *Source, nullptr,
                                         "rcp");
     break;
+  case CanonicalOp::V_RCP_IFLAG_F32:
+    Result = Ctx.B.CreateCall(
+        InlineAsm::get(
+            FunctionType::get(Ctx.B.getFloatTy(), Ctx.B.getFloatTy(), false),
+            "v_rcp_iflag_f32 $0, $1", "=v,v", true),
+        {*Source}, "rcp.iflag");
+    break;
   case CanonicalOp::V_RSQ_F32:
+  case CanonicalOp::V_S_RSQ_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_rsq, *Source, nullptr,
                                         "rsq");
     break;
   case CanonicalOp::V_SQRT_F32:
+  case CanonicalOp::V_S_SQRT_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_sqrt, *Source,
                                         nullptr, "sqrt");
     break;
@@ -171,6 +185,10 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_COS_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_cos, *Source, nullptr,
                                         "cos");
+    break;
+  case CanonicalOp::V_TANH_F32:
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_tanh, *Source,
+                                        nullptr, "tanh");
     break;
   case CanonicalOp::V_FREXP_EXP_I32_F32:
     Result = Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_frexp_exp,
@@ -277,6 +295,65 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   Ctx.registers().writeReg32(*Dst, Result);
+  return Error::success();
+}
+
+Error raiseFloatConversion64(RaiseContext &Ctx, const DecodedInst &Di,
+                             OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 1)
+    return unsupportedInstruction(Ctx, Di,
+                                  "expected one destination and one source");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getDoubleTy()))
+    return Err;
+  if (Di.CanonOp == CanonicalOp::V_CVT_F32_F64 ||
+      Di.CanonOp == CanonicalOp::V_CVT_F64_F32)
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+
+  if (Di.CanonOp == CanonicalOp::V_CVT_F64_F32) {
+    Expected<Value *> Source = Op.srcF(0);
+    if (!Source)
+      return Source.takeError();
+    Value *Result = Ctx.B.CreateFPExt(*Source, Ctx.B.getDoubleTy());
+    Ctx.registers().writeReg64(*Dst,
+                               Ctx.B.CreateBitCast(Result, Ctx.B.getInt64Ty()));
+  } else if (Di.CanonOp == CanonicalOp::V_CVT_F64_I32 ||
+             Di.CanonOp == CanonicalOp::V_CVT_F64_U32) {
+    if (Op.srcMod(0) != 0)
+      return unsupportedInstruction(
+          Ctx, Di, "integer source modifiers are not supported");
+    Expected<Value *> Source = Op.src(0);
+    if (!Source)
+      return Source.takeError();
+    Value *Result = Di.CanonOp == CanonicalOp::V_CVT_F64_I32
+                        ? Ctx.B.CreateSIToFP(*Source, Ctx.B.getDoubleTy())
+                        : Ctx.B.CreateUIToFP(*Source, Ctx.B.getDoubleTy());
+    Ctx.registers().writeReg64(*Dst,
+                               Ctx.B.CreateBitCast(Result, Ctx.B.getInt64Ty()));
+  } else {
+    if (Op.srcMod(0) & ~(SISrcMods::NEG | SISrcMods::ABS))
+      return unsupportedInstruction(Ctx, Di, "unsupported f64 source modifier");
+    Expected<Value *> Source = Op.src64(0);
+    if (!Source)
+      return Source.takeError();
+    Value *Float = Ctx.B.CreateBitCast(*Source, Ctx.B.getDoubleTy());
+    Float = Op.applyMods(0, Float);
+    Value *Result;
+    if (Di.CanonOp == CanonicalOp::V_CVT_F32_F64) {
+      Result = Ctx.B.CreateBitCast(
+          Ctx.B.CreateFPTrunc(Float, Ctx.B.getFloatTy()), Ctx.B.getInt32Ty());
+    } else {
+      Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_CVT_I32_F64
+                             ? Intrinsic::fptosi_sat
+                             : Intrinsic::fptoui_sat;
+      Result = Ctx.B.CreateIntrinsic(
+          ID, {Ctx.B.getInt32Ty(), Ctx.B.getDoubleTy()}, {Float});
+    }
+    Ctx.registers().writeReg32(*Dst, Result);
+  }
   return Error::success();
 }
 

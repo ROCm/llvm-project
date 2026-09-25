@@ -27,9 +27,9 @@ buffer_bounds:
 ; CHECK: [[BASEEXT:%.+]] = zext i32 [[BASEHI]] to i64
 ; CHECK: [[BASESHIFT:%.+]] = shl i64 [[BASEEXT]], 32
 ; CHECK: [[BASE:%.+]] = or i64 {{.+}}, [[BASESHIFT]]
-; CHECK: [[EXTENTMID:%.+]] = shl i64 {{.+}}, 7
 ; CHECK: [[EXTENTLO:%.+]] = lshr i32 {{.+}}, 25
 ; CHECK: [[EXTENTLOEXT:%.+]] = zext i32 [[EXTENTLO]] to i64
+; CHECK: [[EXTENTMID:%.+]] = shl i64 {{.+}}, 7
 ; CHECK: [[EXTENTLOW:%.+]] = or i64 [[EXTENTLOEXT]], [[EXTENTMID]]
 ; CHECK: [[EXTENTHI:%.+]] = and i32 {{.+}}, 63
 ; CHECK: [[EXTENTHIEXT:%.+]] = zext i32 [[EXTENTHI]] to i64
