@@ -24,6 +24,8 @@ namespace COMGR::transpiler {
 Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
   switch (Di.CanonOp) {
+  case CanonicalOp::V_NOP:
+    return Error::success();
   case CanonicalOp::V_MOV_B32:
     return raiseMove32(Ctx, Di, Op);
   case CanonicalOp::V_MOV_B64:
