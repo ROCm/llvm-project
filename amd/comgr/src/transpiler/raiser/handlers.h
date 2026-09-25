@@ -18,8 +18,11 @@
 
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Error.h"
+
+#include <optional>
 
 namespace COMGR::transpiler {
 
@@ -98,6 +101,18 @@ llvm::Error handleVOPD(RaiseContext &Ctx, const DecodedInst &Di);
 /// the opcode writes, or return a structured refusal.
 llvm::Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
+
+/// Return the LLVM predicate for a supported I32/U32 comparison.
+std::optional<llvm::ICmpInst::Predicate>
+getIntegerComparePredicate(CanonicalOp Opcode);
+
+/// Raise an I32/U32 comparison into its validated explicit destination and
+/// implicit condition registers. Replace the full result mask, clearing
+/// inactive lanes; cmpx narrows EXEC.
+llvm::Error raiseIntegerCompare32(RaiseContext &Ctx, const DecodedInst &Di,
+                                  OperandResolver &Op,
+                                  llvm::ICmpInst::Predicate Predicate,
+                                  std::optional<ParsedReg> Destination);
 
 } // namespace COMGR::transpiler
 
