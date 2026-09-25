@@ -93,7 +93,8 @@ static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Destination)
     return Destination.takeError();
 
-  Expected<Value *> Address = emitGlobalAddress(Ctx, Di, GlobalAccessAlignment);
+  Expected<Value *> Address =
+      emitGlobalAddress(Ctx, Di, WidthInDwords * 4, GlobalAccessAlignment);
   if (!Address)
     return Address.takeError();
 
@@ -118,7 +119,8 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
   Value *Data = Ctx.registers().regFile().readRegVec(
       Ctx.B, *DataReg, globalAccessType(Ctx.B, WidthInDwords));
 
-  Expected<Value *> Address = emitGlobalAddress(Ctx, Di, GlobalAccessAlignment);
+  Expected<Value *> Address =
+      emitGlobalAddress(Ctx, Di, WidthInDwords * 4, GlobalAccessAlignment);
   if (!Address)
     return Address.takeError();
 

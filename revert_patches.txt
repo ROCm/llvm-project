@@ -32,3 +32,6 @@ ASAN-DEBUG lib breaks
 comgr fails to build -lzma
 [Support][lldb] Port xz (lzma) decompression from LLDB into LLVM (#220092)
 ---
+breaks matlibs gfx942
+[SLP]Model gathers of extracted integer sub-fields as bitcast+permute+ext"
+---
