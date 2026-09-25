@@ -127,7 +127,7 @@ void driftCheckTiedIn(const DecodedInst &Di, const MCInstrDesc &Desc) {
 // named-operand table, catching operand-layout changes for opcodes using srcN
 // naming. MFMA appends its source modifiers after the sources rather than
 // interleaving them, so Di.ModMap is repaired from the table instead.
-void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
+void driftCheckSrcN(const MCState &Mc, DecodedInst &Di,
                     const MCInstrDesc &Desc) {
   static constexpr AMDGPU::OpName KSrcNames[] = {
       AMDGPU::OpName::src0, AMDGPU::OpName::src1, AMDGPU::OpName::src2};
