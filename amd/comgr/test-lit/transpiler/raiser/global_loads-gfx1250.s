@@ -5,9 +5,11 @@
 
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_loads_gfx1250 | %FileCheck %s --check-prefix=IR
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_load_scaled_offset 2>&1 | \
-; RUN:   %FileCheck %s --check-prefix=SCALED-OFFSET
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_scaled_offsets | %FileCheck %s --check-prefix=SCALED
+; RUN: not %transpile_cli %t.hsaco --isa=gfx1200 --target-isa=gfx942 \
+; RUN:   --emit-ir=global_scaled_offsets 2>&1 | %FileCheck %s --check-prefix=GFX1200
+; GFX1200: scale_offset is not supported on this GPU
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -57,12 +59,106 @@ global_loads_gfx1250:
 ; IR: ret void
 	s_endpgm
 
-	.globl	global_load_scaled_offset
+	.globl	global_scaled_offsets
 	.p2align	8
-	.type	global_load_scaled_offset,@function
-global_load_scaled_offset:
-; SCALED-OFFSET: scaling the per-lane offset by the access size is not modeled
+	.type	global_scaled_offsets,@function
+; SCALED-LABEL: define amdgpu_kernel void @global_scaled_offsets(
+global_scaled_offsets:
+; SCALED: [[BASE:%.+]] = or i64 {{%.+}}, {{%.+}}
+; SCALED: [[LANE:%.+]] = sext i32 {{.+}} to i64
+; SCALED-NEXT: [[SCALE:%.+]] = mul i64 [[LANE]], 4
+; SCALED-NEXT: [[ADDRESS:%.+]] = add i64 [[BASE]], [[SCALE]]
+; SCALED-NEXT: [[FROZEN:%.+]] = freeze i64 [[ADDRESS]]
+; SCALED-NEXT: [[POINTER:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SCALED-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[POINTER]], i64 -4
+; SCALED: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
+; SCALED: [[DO]]:
+; SCALED: load i32, ptr addrspace(1) [[OFFSET]], align 4
+; SCALED: br label %[[SKIP]]
+	global_load_b32 v4, v0, s[0:1] offset:-4 scale_offset
+
+; SCALED: [[BASE:%.+]] = or i64 {{%.+}}, {{%.+}}
+; SCALED: [[LANE:%.+]] = sext i32 {{.+}} to i64
+; SCALED-NEXT: [[SCALE:%.+]] = mul i64 [[LANE]], 8
+; SCALED-NEXT: [[ADDRESS:%.+]] = add i64 [[BASE]], [[SCALE]]
+; SCALED-NEXT: [[FROZEN:%.+]] = freeze i64 [[ADDRESS]]
+; SCALED-NEXT: [[POINTER:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SCALED: load i64, ptr addrspace(1) [[POINTER]], align 4
+	global_load_b64 v[4:5], v0, s[0:1] scale_offset
+
+; SCALED: [[BASE:%.+]] = or i64 {{%.+}}, {{%.+}}
+; SCALED: [[LANE:%.+]] = sext i32 {{.+}} to i64
+; SCALED-NEXT: [[SCALE:%.+]] = mul i64 [[LANE]], 12
+; SCALED-NEXT: [[ADDRESS:%.+]] = add i64 [[BASE]], [[SCALE]]
+; SCALED-NEXT: [[FROZEN:%.+]] = freeze i64 [[ADDRESS]]
+; SCALED-NEXT: [[POINTER:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SCALED: load <3 x i32>, ptr addrspace(1) [[POINTER]], align 4
+	global_load_b96 v[4:6], v0, s[0:1] scale_offset
+
+; SCALED: [[BASE:%.+]] = or i64 {{%.+}}, {{%.+}}
+; SCALED: [[LANE:%.+]] = sext i32 {{.+}} to i64
+; SCALED-NEXT: [[SCALE:%.+]] = mul i64 [[LANE]], 16
+; SCALED-NEXT: [[ADDRESS:%.+]] = add i64 [[BASE]], [[SCALE]]
+; SCALED-NEXT: [[FROZEN:%.+]] = freeze i64 [[ADDRESS]]
+; SCALED-NEXT: [[POINTER:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SCALED-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[POINTER]], i64 32
+; SCALED: load <4 x i32>, ptr addrspace(1) [[OFFSET]], align 4
 	global_load_b128 v[4:7], v0, s[0:1] offset:32 scale_offset
+
+; SCALED: [[BASE:%.+]] = or i64 {{%.+}}, {{%.+}}
+; SCALED: [[LANE:%.+]] = sext i32 {{.+}} to i64
+; SCALED-NEXT: [[SCALE:%.+]] = mul i64 [[LANE]], 4
+; SCALED-NEXT: [[ADDRESS:%.+]] = add i64 [[BASE]], [[SCALE]]
+; SCALED-NEXT: [[FROZEN:%.+]] = freeze i64 [[ADDRESS]]
+; SCALED-NEXT: [[POINTER:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SCALED-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[POINTER]], i64 -4
+; SCALED: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
+; SCALED: [[DO]]:
+; SCALED: store i32 {{.+}}, ptr addrspace(1) [[OFFSET]], align 4
+; SCALED: br label %[[SKIP]]
+	global_store_b32 v0, v4, s[0:1] offset:-4 scale_offset
+
+; SCALED: [[DATA:%.+]] = or i64 {{%.+}}, {{%.+}}
+; SCALED: [[BASE:%.+]] = or i64 {{%.+}}, {{%.+}}
+; SCALED: [[LANE:%.+]] = sext i32 {{.+}} to i64
+; SCALED-NEXT: [[SCALE:%.+]] = mul i64 [[LANE]], 8
+; SCALED-NEXT: [[ADDRESS:%.+]] = add i64 [[BASE]], [[SCALE]]
+; SCALED-NEXT: [[FROZEN:%.+]] = freeze i64 [[ADDRESS]]
+; SCALED-NEXT: [[POINTER:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SCALED: store i64 [[DATA]], ptr addrspace(1) [[POINTER]], align 4
+	global_store_b64 v0, v[4:5], s[0:1] scale_offset
+
+; SCALED: [[DATA:%.+]] = bitcast i96 {{%.+}} to <3 x i32>
+; SCALED: [[BASE:%.+]] = or i64 {{%.+}}, {{%.+}}
+; SCALED: [[LANE:%.+]] = sext i32 {{.+}} to i64
+; SCALED-NEXT: [[SCALE:%.+]] = mul i64 [[LANE]], 12
+; SCALED-NEXT: [[ADDRESS:%.+]] = add i64 [[BASE]], [[SCALE]]
+; SCALED-NEXT: [[FROZEN:%.+]] = freeze i64 [[ADDRESS]]
+; SCALED-NEXT: [[POINTER:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SCALED: store <3 x i32> [[DATA]], ptr addrspace(1) [[POINTER]], align 4
+	global_store_b96 v0, v[4:6], s[0:1] scale_offset
+
+; SCALED: [[DATA:%.+]] = bitcast i128 {{%.+}} to <4 x i32>
+; SCALED: [[BASE:%.+]] = or i64 {{%.+}}, {{%.+}}
+; SCALED: [[LANE:%.+]] = sext i32 {{.+}} to i64
+; SCALED-NEXT: [[SCALE:%.+]] = mul i64 [[LANE]], 16
+; SCALED-NEXT: [[ADDRESS:%.+]] = add i64 [[BASE]], [[SCALE]]
+; SCALED-NEXT: [[FROZEN:%.+]] = freeze i64 [[ADDRESS]]
+; SCALED-NEXT: [[POINTER:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SCALED-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[POINTER]], i64 32
+; SCALED: store <4 x i32> [[DATA]], ptr addrspace(1) [[OFFSET]], align 4
+	global_store_b128 v0, v[4:7], s[0:1] offset:32 scale_offset
+
+; SCALED: [[DATA:%.+]] = bitcast i128 {{%.+}} to <4 x i32>
+; SCALED: [[BASE:%.+]] = or i64 {{%.+}}, {{%.+}}
+; SCALED: [[LANE:%.+]] = sext i32 {{.+}} to i64
+; SCALED-NEXT: [[ADDRESS:%.+]] = add i64 [[BASE]], [[LANE]]
+; SCALED-NEXT: [[FROZEN:%.+]] = freeze i64 [[ADDRESS]]
+; SCALED-NEXT: [[POINTER:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SCALED-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[POINTER]], i64 32
+; SCALED: store <4 x i32> [[DATA]], ptr addrspace(1) [[OFFSET]], align 4
+	global_store_b128 v0, v[4:7], s[0:1] offset:32
+; SCALED: ret void
 	s_endpgm
 
 	.section	.rodata,"a",@progbits
@@ -73,7 +169,7 @@ global_load_scaled_offset:
 		.amdhsa_next_free_vgpr 16
 		.amdhsa_next_free_sgpr 2
 	.end_amdhsa_kernel
-	.amdhsa_kernel global_load_scaled_offset
+	.amdhsa_kernel global_scaled_offsets
 		.amdhsa_kernarg_size 0
 		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 8
@@ -99,10 +195,10 @@ amdhsa.kernels:
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
     .max_flat_workgroup_size: 1024
-    .name:           global_load_scaled_offset
+    .name:           global_scaled_offsets
     .private_segment_fixed_size: 0
     .sgpr_count:     2
-    .symbol:         global_load_scaled_offset.kd
+    .symbol:         global_scaled_offsets.kd
     .vgpr_count:     8
     .wavefront_size: 32
 amdhsa.version: [1, 2]
