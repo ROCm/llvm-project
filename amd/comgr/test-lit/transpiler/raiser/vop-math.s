@@ -4,6 +4,10 @@
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=vop_math,vop3_math | %FileCheck %s
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=vop_math,vop3_math \
+; RUN:   | %llc -mtriple=amdgpu9.42-amd-amdhsa -mcpu=gfx942 -o - \
+; RUN:   | %FileCheck %s --check-prefix=CODEGEN
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=refuse_clamp 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE-CLAMP
@@ -62,7 +66,8 @@ vop_math:
 	v_log_f32_e32 v24, v25
 ; CHECK: call float @llvm.amdgcn.rcp.f32
 	v_rcp_f32_e32 v26, v27
-; CHECK: fdiv float 1.000000e+00
+; CHECK: call float asm sideeffect "v_rcp_iflag_f32 $0, $1", "=v,v"(float
+; CODEGEN: v_rcp_iflag_f32
 	v_rcp_iflag_f32_e32 v26, v27
 ; CHECK: call float @llvm.amdgcn.tanh.f32
 	v_tanh_f32_e32 v26, v27
@@ -140,7 +145,7 @@ vop3_math:
 	v_max3_num_f32 v5, v0, v1, v2
 ; CHECK: call float @llvm.minimumnum.f32
 	v_min3_num_f32 v6, v0, v1, v2
-; CHECK: call float @llvm.minimumnum.f32
+; CHECK: call float @llvm.amdgcn.fmed3.f32
 	v_med3_num_f32 v7, v0, v1, v2
 ; CHECK: call float @llvm.maximum.f32
 	v_maximum_f32 v8, v0, v1

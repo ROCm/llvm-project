@@ -458,13 +458,8 @@ Error raiseFloatTernary32(RaiseContext &Ctx, const DecodedInst &Di,
     break;
   }
   case CanonicalOp::V_MED3_NUM_F32: {
-    Value *Low =
-        Ctx.B.CreateBinaryIntrinsic(Intrinsic::minimumnum, *Src0, *Src1);
-    Value *High =
-        Ctx.B.CreateBinaryIntrinsic(Intrinsic::maximumnum, *Src0, *Src1);
-    Value *Middle =
-        Ctx.B.CreateBinaryIntrinsic(Intrinsic::minimumnum, High, *Src2);
-    Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::maximumnum, Low, Middle);
+    Result = Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_fmed3,
+                                   {Ctx.B.getFloatTy()}, {*Src0, *Src1, *Src2});
     break;
   }
   case CanonicalOp::V_MAXIMUM3_F32:

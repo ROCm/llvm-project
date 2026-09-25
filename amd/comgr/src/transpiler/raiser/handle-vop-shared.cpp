@@ -17,6 +17,7 @@
 #include "SIDefines.h"
 
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 
@@ -161,8 +162,11 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
                                         "rcp");
     break;
   case CanonicalOp::V_RCP_IFLAG_F32:
-    Result = Ctx.B.CreateFDiv(ConstantFP::get(Ctx.B.getFloatTy(), 1.0), *Source,
-                              "rcp.iflag");
+    Result = Ctx.B.CreateCall(
+        InlineAsm::get(
+            FunctionType::get(Ctx.B.getFloatTy(), Ctx.B.getFloatTy(), false),
+            "v_rcp_iflag_f32 $0, $1", "=v,v", true),
+        {*Source}, "rcp.iflag");
     break;
   case CanonicalOp::V_RSQ_F32:
   case CanonicalOp::V_S_RSQ_F32:
