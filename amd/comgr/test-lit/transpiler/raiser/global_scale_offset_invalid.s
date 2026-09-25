@@ -1,29 +1,68 @@
 ; REQUIRES: comgr-has-transpiler
 
-; RUN: set -e; for case in LOAD_SCOPE LOAD_SCALED_SCOPE STORE_TH STORE_SCALED_TH NV SCALED_NV; do \
-; RUN:   %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym=$case=1 %s -o %t.o; \
-; RUN:   %ld.lld -shared %t.o -o %t.hsaco; \
-; RUN:   not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=global_invalid 2>&1 \
-; RUN:     | %FileCheck %s --check-prefix=POLICY; \
-; RUN: done
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
+; RUN:   --defsym=LOAD_SCOPE=1 %s -o %t.o
+; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
+
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
+; RUN:   --defsym=LOAD_SCALED_SCOPE=1 %s -o %t.o
+; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
+
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
+; RUN:   --defsym=STORE_TH=1 %s -o %t.o
+; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
+
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
+; RUN:   --defsym=STORE_SCALED_TH=1 %s -o %t.o
+; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
+
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
+; RUN:   --defsym=NV=1 %s -o %t.o
+; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
+
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
+; RUN:   --defsym=SCALED_NV=1 %s -o %t.o
+; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
 ; POLICY: in kernel 'global_invalid'
 ; POLICY-SAME: non-default cache policy is not modeled
 
-; RUN: set -e; for case in LOAD_NO_SADDR STORE_NO_SADDR; do \
-; RUN:   %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym=$case=1 %s -o %t.o; \
-; RUN:   %ld.lld -shared %t.o -o %t.hsaco; \
-; RUN:   not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=global_invalid 2>&1 \
-; RUN:     | %FileCheck %s --check-prefix=NO-SADDR; \
-; RUN: done
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
+; RUN:   --defsym=LOAD_NO_SADDR=1 %s -o %t.o
+; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=NO-SADDR
+
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
+; RUN:   --defsym=STORE_NO_SADDR=1 %s -o %t.o
+; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=NO-SADDR
 ; NO-SADDR: in kernel 'global_invalid'
 ; NO-SADDR-SAME: scale_offset requires an saddr base
 
-; RUN: set -e; for case in SUBDWORD ATOMIC; do \
-; RUN:   %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym=$case=1 %s -o %t.o; \
-; RUN:   %ld.lld -shared %t.o -o %t.hsaco; \
-; RUN:   not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=global_invalid 2>&1 \
-; RUN:     | %FileCheck %s --check-prefix=OPERATION; \
-; RUN: done
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
+; RUN:   --defsym=SUBDWORD=1 %s -o %t.o
+; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=OPERATION
+
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
+; RUN:   --defsym=ATOMIC=1 %s -o %t.o
+; RUN: %ld.lld -shared %t.o -o %t.hsaco
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=OPERATION
 ; OPERATION: in kernel 'global_invalid'
 ; OPERATION-SAME: unsupported flat memory operation
 
