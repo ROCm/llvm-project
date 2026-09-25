@@ -9990,28 +9990,6 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
         }
       }
 
-      if (isAMDGPU && !C.getDriver().IsFlangMode()) {
-        StringRef OOpt;
-        if (const Arg *A = Args.getLastArg(options::OPT_O_Group)) {
-          if (A->getOption().matches(options::OPT_O4) ||
-              A->getOption().matches(options::OPT_Ofast))
-            OOpt = "3";
-          else if (A->getOption().matches(options::OPT_O)) {
-            OOpt = A->getValue();
-            if (OOpt == "g")
-              OOpt = "1";
-            else if (OOpt == "s" || OOpt == "z")
-              OOpt = "2";
-          } else if (A->getOption().matches(options::OPT_O0))
-            OOpt = "0";
-        }
-
-        if (!OOpt.empty() && OOpt != "0") {
-          LinkerArgs.push_back(Args.MakeArgString(
-              "--lto-newpm-passes=default-post-link<O" + OOpt + ">"));
-        }
-      }
-
       // If no optimization level was requested we default to `-O0` for no-RDC
       // mode compilations. Others default to `lto<O2>` as standard in ld.lld.
       if (JA.getType() == types::TY_HIP_FATBIN &&
