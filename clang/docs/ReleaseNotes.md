@@ -539,6 +539,7 @@ features cannot lower the translation-unit ABI level;
   non-type template parameter. (#GH212351)
 - Fixed an assertion caused by Microsoft integer literals exceeding the maximum value. (#GH212504)
 - Fixed a crash when checking scalar type with excess braces. (#GH69213), (#GH137845), (#GH198767), (#GH207566), (#GH106180)
+- Fixed an assertion failure when a global variable in a non-default address space, such as one declared with `__seg_gs`, is mapped into an OpenMP `target` region. (#GH140069)
 - Fixed an assertion crash when instantiating a nested requirement with an invalid constraint. (#GH213575)
 - Clang now defines the GCC-compatible predefined macro `__SIG_ATOMIC_TYPE__`. (#GH213895)
 - Fixed IEEE f128 complex mul/div using the IBM f128 libcalls on powerpc. (#GH216820)
@@ -871,8 +872,7 @@ features cannot lower the translation-unit ABI level;
 - Added a new warning when the same interrupt type is specified more than
   once in a RISC-V `interrupt` attribute.
 
-- SiFive CLIC preemptible interrupt handlers now diagnose unsupported frame
-  pointers instead of producing a backend fatal error.
+- SiFive CLIC preemptible interrupt handlers now support frame pointers.
 
 - Added `-march=native` for better compatibility with ARM, AArch64, and X86. This
   option will be treated like `-mcpu=native` if `-mcpu` is not present. If
