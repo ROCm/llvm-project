@@ -873,6 +873,17 @@ static bool shouldGroupUses(MachineLoop *CurLoop, DomGroup &G1, DomGroup &G2,
   if (CurLoop)
     OutermostLoopOfCurLoop = CurLoop->getOutermostLoop();
 
+  // PHI incoming edges require a restore at the end of that specific
+  // predecessor block. Do not merge groups that would share one restore across
+  // different predecessor blocks when either group carries a PHI incoming-edge
+  // placement.
+  if ((G1.getRestoreBlock() != G2.getRestoreBlock()) &&
+      (G1.getWhereToRestore() ==
+           DomGroup::RestorePlacement::IncomingBlockOfPhi ||
+       G2.getWhereToRestore() ==
+           DomGroup::RestorePlacement::IncomingBlockOfPhi))
+    return false;
+
   // Do not group the restores if one of them is in a loop.
   if ((Head1Loop && !Head2Loop) || (!Head1Loop && Head2Loop))
     return false;
@@ -900,20 +911,6 @@ static bool shouldGroupUses(MachineLoop *CurLoop, DomGroup &G1, DomGroup &G2,
     return false;
 
   return true;
-}
-
-// PHI incoming edges require a restore at the end of that specific predecessor
-// block. Do not merge groups that would share one restore across different
-// predecessor blocks when either group carries a PHI incoming-edge placement.
-static bool mustKeepSeparatePhiRestoreBlocks(const DomGroup &G1,
-                                             const DomGroup &G2) {
-  if (G1.getRestoreBlock() == G2.getRestoreBlock())
-    return false;
-
-  return G1.getWhereToRestore() ==
-             DomGroup::RestorePlacement::IncomingBlockOfPhi ||
-         G2.getWhereToRestore() ==
-             DomGroup::RestorePlacement::IncomingBlockOfPhi;
 }
 
 static void assignUsesToGroups(Register CandidateReg, MachineInstr *CurMI,
@@ -1064,9 +1061,6 @@ void AMDGPUEarlyRegisterSpilling::groupUses(
 
       for (auto *Block : G2.getUseBlocks())
         UseBlocks.push_back(Block);
-
-      if (mustKeepSeparatePhiRestoreBlocks(G1, G2))
-        continue;
 
       if (EmitRestoreInCommonDominator) {
         MachineBasicBlock *CommonDom = DT->findNearestCommonDominator(
