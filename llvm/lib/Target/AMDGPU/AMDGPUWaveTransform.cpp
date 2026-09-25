@@ -1426,6 +1426,80 @@ private:
   std::vector<WaveNode *> NodeOrder;
   AccRegSet AccumulatorRegs;
 
+  struct OriginContrib {
+    MachineBasicBlock *Block;
+    Register Dst;
+    bool Accumulate;
+    LaneOriginInfo LOI;
+    LaneMaskKind CondKind = LaneMaskKind::None;
+    Register CondReg;
+  };
+
+  struct RejoinContrib {
+    MachineBasicBlock *Block;
+    Register Dst;
+    bool Accumulate;
+    Register PrimaryExec;
+  };
+
+  struct RejoinExec {
+    MachineBasicBlock *Block;
+    Register Dst;
+    bool Accumulate;
+  };
+
+  struct ExecTerm {
+    MachineBasicBlock *Block;
+    Register PrimaryAcc;
+    MachineBasicBlock *Succ0;
+    MachineBasicBlock *Succ1;
+  };
+
+  struct AccReset {
+    MachineBasicBlock *Block;
+    Register Acc;
+  };
+
+  SmallVector<OriginContrib, 8> ImplicitContribSectionList; // 1
+  SmallVector<OriginContrib, 8> ExplicitContribSectionList; // 2
+  SmallVector<RejoinContrib, 8> RejoinContribSectionList;   // 3a
+  SmallVector<RejoinExec, 4> RejoinExecSectionList;         // 3b
+  SmallVector<ExecTerm, 4> SetExecSectionList;              // 4a
+  SmallVector<ExecTerm, 4> SetExecZeroSectionList;          // 4b
+  SmallVector<AccReset, 4> RestoreExecSectionList;          // 5
+  SmallVector<AccReset, 4> ResetRejoinAccSectionList;       // 6
+  SmallVector<AccReset, 4> ResetPrimAccSectionList;         // 7
+  SmallVector<AccReset, 8> InitAccSectionList;              // 8
+
+  SmallPtrSet<MachineBasicBlock *, 16> WTBlocks;
+  DenseMap<WaveNode *, Register> PrimAccMap;
+  AccInstsMap WTInstrMap;
+  AccRegSet SectionTempRegs;
+  Register ZeroReg;
+
+  // LCA of Blocks. If it lies in a cycle, the immediate dominator of the
+  // outermost header (reducible cycles: that header dominates the LCA).
+  MachineBasicBlock *getInitBlock(ArrayRef<MachineBasicBlock *> Blocks,
+                                  MachineCycleInfo &CycleInfo) const;
+  void insertLaneMaskInstrs(MachineCycleInfo &CycleInfo);
+  Register freshTemp();
+  MachineInstrBuilder emit(MachineBasicBlock &Block,
+                           MachineBasicBlock::iterator I, unsigned Opc,
+                           Register Dst);
+  MachineInstrBuilder emitAtTop(MachineBasicBlock &Block, unsigned Opc,
+                                Register Dst);
+  void createSections();
+  void createRestoreExecSection();
+  void createResetPrimAccSection();
+  void createInitAccSection();
+  void createImplicitContribSection();
+  void createExplicitContribSection(AMDGPULaneMaskAnalysis &LMA);
+  void createRejoinContribSection();
+  void createRejoinExecSection();
+  void createResetRejoinAccSection();
+  void createSetExecSection();
+  void createSetExecZeroSection();
+
 public:
   ControlFlowRewriter(MachineFunction &function,
                       ReconvergeCFGHelper &ReconvergeCfg)
@@ -1660,6 +1734,442 @@ void ControlFlowRewriter::prepareWaveCfg() {
   }
 }
 
+MachineBasicBlock *ControlFlowRewriter::getInitBlock(
+    ArrayRef<MachineBasicBlock *> Blocks, MachineCycleInfo &CycleInfo) const {
+  assert(!Blocks.empty());
+  MachineDominatorTree &DomTree = ReconvergeCfg.getDomTree();
+  MachineBasicBlock *L = DomTree.findNearestCommonDominator(
+      llvm::make_range(Blocks.begin(), Blocks.end()));
+
+  if (CycleRef C = CycleInfo.getTopLevelParentCycle(L)) {
+    assert(CycleInfo.isReducible(C) && "expected a reducible cycle");
+    const MachineDomTreeNode *IDom =
+        DomTree.getNode(CycleInfo.getHeader(C))->getIDom();
+    if (!IDom)
+      return &Function.front();
+    L = IDom->getBlock();
+  }
+  return L;
+}
+
+// Schema v2 lane-mask insertion. Replaces rewrite() steps 2.1, 2.2, and 3.
+void ControlFlowRewriter::insertLaneMaskInstrs(MachineCycleInfo &CycleInfo) {
+  if (!ZeroReg)
+    ZeroReg = LMU.createLaneMaskReg();
+
+  WTBlocks.clear();
+  PrimAccMap.clear();
+
+  for (WaveNode *LaneTarget : NodeOrder) {
+    CFGNodeInfo &LaneTargetInfo = NodeInfo.find(LaneTarget)->second;
+    if (!llvm::any_of(LaneTargetInfo.OriginBranch,
+                      [](const PointerIntPair<WaveNode *, 1, bool> &OB) {
+                        return OB.getInt();
+                      }))
+      continue;
+
+    const bool HasSingleDomOrigin = LaneTargetInfo.origins.size() == 1 &&
+                                    !LaneTargetInfo.origins[0].Node->Cycle;
+
+    SmallVector<MachineBasicBlock *, 8> InitBlocks;
+    InitBlocks.push_back(LaneTarget->Block);
+    for (const LaneOriginInfo &Origin : LaneTargetInfo.origins)
+      InitBlocks.push_back(Origin.Node->Block);
+    for (const PointerIntPair<WaveNode *, 1, bool> &OB :
+         LaneTargetInfo.OriginBranch)
+      InitBlocks.push_back(OB.getPointer()->Block);
+
+    MachineBasicBlock *PrimAccInitBB = getInitBlock(InitBlocks, CycleInfo);
+    Register PrimAcc = LMU.createLaneMaskReg();
+    AccumulatorRegs.insert(PrimAcc);
+
+    WTBlocks.insert(PrimAccInitBB);
+    WTBlocks.insert(LaneTarget->Block);
+    InitAccSectionList.push_back({PrimAccInitBB, PrimAcc});
+    ResetPrimAccSectionList.push_back({LaneTarget->Block, PrimAcc});
+
+    for (const LaneOriginInfo &Origin : LaneTargetInfo.origins) {
+      WaveNode *O = Origin.Node;
+      WTBlocks.insert(O->Block);
+      const bool Accumulate = !HasSingleDomOrigin && O != LaneTarget &&
+                              O->Block != PrimAccInitBB;
+      OriginContrib Rec{O->Block, PrimAcc, Accumulate, Origin};
+      if (!Origin.CondReg || Origin.CondReg == AMDGPU::SCC)
+        ImplicitContribSectionList.push_back(Rec);
+      else
+        ExplicitContribSectionList.push_back(Rec);
+    }
+
+    for (const PointerIntPair<WaveNode *, 1, bool> &OBPair :
+         LaneTargetInfo.OriginBranch) {
+      if (!OBPair.getInt())
+        continue;
+
+      WaveNode *OB = OBPair.getPointer();
+      WTBlocks.insert(OB->Block);
+      ExecTerm Term{OB->Block, PrimAcc, OB->Successors[0]->Block,
+                    OB->Successors[1]->Block};
+      const bool InOrigins = llvm::any_of(
+          LaneTargetInfo.origins,
+          [&](const LaneOriginInfo &Origin) { return Origin.Node == OB; });
+      if (OB == LaneTarget && !InOrigins) {
+        SetExecZeroSectionList.push_back(Term);
+        PrimAccMap[OB] = ZeroReg;
+      } else {
+        SetExecSectionList.push_back(Term);
+        PrimAccMap[OB] = PrimAcc;
+      }
+    }
+  }
+
+  for (WaveNode *Secondary : NodeOrder) {
+    if (!Secondary->IsSecondary)
+      continue;
+
+    SmallVector<WaveNode *, 4> DivPreds;
+    for (WaveNode *Pred : Secondary->Predecessors) {
+      if (!Pred->IsDivergent || Pred->Successors.size() <= 1)
+        continue;
+      if (Pred->Successors[0] == Secondary)
+        continue;
+      DivPreds.push_back(Pred);
+    }
+
+    const bool HasSingleDivergentPred =
+        DivPreds.size() == 1 && !DivPreds[0]->Cycle && !Secondary->Cycle;
+
+    SmallVector<MachineBasicBlock *, 8> InitBlocks;
+    InitBlocks.push_back(Secondary->Block);
+    for (WaveNode *Pred : DivPreds)
+      InitBlocks.push_back(Pred->Block);
+
+    MachineBasicBlock *RejoinAccInitBB = getInitBlock(InitBlocks, CycleInfo);
+    Register RejoinAcc = LMU.createLaneMaskReg();
+    AccumulatorRegs.insert(RejoinAcc);
+
+    WTBlocks.insert(RejoinAccInitBB);
+    WTBlocks.insert(Secondary->Block);
+    InitAccSectionList.push_back({RejoinAccInitBB, RejoinAcc});
+
+    for (WaveNode *Pred : DivPreds) {
+      WTBlocks.insert(Pred->Block);
+      assert(PrimAccMap.contains(Pred) && "rejoin pred missing PrimAcc");
+      Register PrimaryExec = PrimAccMap.lookup(Pred);
+      const bool Accumulate =
+          !HasSingleDivergentPred && Pred->Block != RejoinAccInitBB;
+      if (PrimaryExec == ZeroReg)
+        RejoinExecSectionList.push_back({Pred->Block, RejoinAcc, Accumulate});
+      else
+        RejoinContribSectionList.push_back(
+            {Pred->Block, RejoinAcc, Accumulate, PrimaryExec});
+    }
+
+    RestoreExecSectionList.push_back({Secondary->Block, RejoinAcc});
+    ResetRejoinAccSectionList.push_back({Secondary->Block, RejoinAcc});
+  }
+}
+
+Register ControlFlowRewriter::freshTemp() {
+  Register Reg = LMU.createLaneMaskReg();
+  SectionTempRegs.insert(Reg);
+  return Reg;
+}
+
+MachineInstrBuilder
+ControlFlowRewriter::emit(MachineBasicBlock &Block,
+                          MachineBasicBlock::iterator I, unsigned Opc,
+                          Register Dst) {
+  MachineInstrBuilder MIB = BuildMI(Block, I, {}, TII.get(Opc), Dst);
+  WTInstrMap[&Block].push_back(MIB.getInstr());
+  return MIB;
+}
+
+// Inserts before getFirstNonPHI() and prepends to WTInstrMap, so a later
+// record lands above an earlier one. Callers walk their lists backwards.
+MachineInstrBuilder ControlFlowRewriter::emitAtTop(MachineBasicBlock &Block,
+                                                   unsigned Opc, Register Dst) {
+  MachineInstrBuilder MIB =
+      BuildMI(Block, Block.getFirstNonPHI(), {}, TII.get(Opc), Dst);
+  SmallVector<MachineInstr *, 8> &Instrs = WTInstrMap[&Block];
+  Instrs.insert(Instrs.begin(), MIB.getInstr());
+  return MIB;
+}
+
+// First terminator, or one instruction above a trailing INLINEASM_BR.
+static MachineBasicBlock::iterator
+saluInsertionAtEnd(MachineBasicBlock &Block) {
+  MachineBasicBlock::iterator I = Block.getFirstTerminator();
+  if (I != Block.begin() &&
+      std::prev(I)->getOpcode() == TargetOpcode::INLINEASM_BR)
+    --I;
+  return I;
+}
+
+void ControlFlowRewriter::createSections() {
+  AMDGPULaneMaskAnalysis LMA(Function);
+  createRestoreExecSection();
+  createResetPrimAccSection();
+  createInitAccSection();
+  createImplicitContribSection();
+  createExplicitContribSection(LMA);
+  createRejoinContribSection();
+  createRejoinExecSection();
+  createResetRejoinAccSection();
+  createSetExecSection();
+  createSetExecZeroSection();
+}
+
+void ControlFlowRewriter::createRestoreExecSection() {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  for (const AccReset &Rec : llvm::reverse(RestoreExecSectionList))
+    emitAtTop(*Rec.Block, LMC.OrOpc, LMC.ExecReg)
+        .addReg(LMC.ExecReg)
+        .addReg(Rec.Acc);
+}
+
+void ControlFlowRewriter::createResetPrimAccSection() {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  for (const AccReset &Rec : llvm::reverse(ResetPrimAccSectionList))
+    emitAtTop(*Rec.Block, LMC.MovOpc, Rec.Acc).addImm(0);
+}
+
+void ControlFlowRewriter::createInitAccSection() {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  for (const AccReset &Rec : llvm::reverse(InitAccSectionList))
+    emitAtTop(*Rec.Block, LMC.MovOpc, Rec.Acc).addImm(0);
+}
+
+void ControlFlowRewriter::createImplicitContribSection() {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+
+  for (OriginContrib &Rec : ImplicitContribSectionList) {
+    MachineBasicBlock::iterator I = saluInsertionAtEnd(*Rec.Block);
+    bool Invert = Rec.LOI.InvertCondition;
+    unsigned Opc;
+    if (Rec.LOI.CondReg == AMDGPU::SCC) {
+      assert(Rec.LOI.Node->Successors.size() == 1);
+      Opc = AMDGPU::S_CBRANCH_SCC1;
+    } else {
+      Opc = Rec.LOI.ImplicitBranchOpc;
+    }
+
+    auto emitCSelect = [&](bool ExecThenZero) {
+      Register Dst = Rec.Dst;
+      if (Rec.Accumulate) {
+        Rec.CondReg = freshTemp();
+        Dst = Rec.CondReg;
+      }
+      MachineInstrBuilder MIB = emit(*Rec.Block, I, LMC.CSelectOpc, Dst);
+      if (ExecThenZero)
+        MIB.addReg(LMC.ExecReg).addImm(0);
+      else
+        MIB.addImm(0).addReg(LMC.ExecReg);
+    };
+
+    if (Opc == 0 || Opc == TargetOpcode::INLINEASM_BR ||
+        (Opc == AMDGPU::S_CBRANCH_EXECNZ && !Invert) ||
+        (Opc == AMDGPU::S_CBRANCH_EXECZ && Invert)) {
+      assert(Opc != 0 || !Invert);
+      Rec.CondKind = LaneMaskKind::Exec;
+    } else if ((Opc == AMDGPU::S_CBRANCH_EXECNZ && Invert) ||
+               (Opc == AMDGPU::S_CBRANCH_EXECZ && !Invert)) {
+      Rec.CondKind = LaneMaskKind::Zero;
+    } else if ((Opc == AMDGPU::S_CBRANCH_SCC1 && !Invert) ||
+               (Opc == AMDGPU::S_CBRANCH_SCC0 && Invert)) {
+      Rec.CondKind = LaneMaskKind::Subset;
+      emitCSelect(/*ExecThenZero=*/true);
+    } else if ((Opc == AMDGPU::S_CBRANCH_SCC0 && !Invert) ||
+               (Opc == AMDGPU::S_CBRANCH_SCC1 && Invert)) {
+      Rec.CondKind = LaneMaskKind::Subset;
+      emitCSelect(/*ExecThenZero=*/false);
+    } else if (Opc == AMDGPU::S_CBRANCH_VCCNZ ||
+               Opc == AMDGPU::S_CBRANCH_VCCZ) {
+      Rec.CondKind = LaneMaskKind::Subset;
+      emit(*Rec.Block, I, LMC.AndOpc, LMC.VccReg)
+          .addReg(LMC.VccReg)
+          .addReg(LMC.VccReg);
+      emitCSelect(/*ExecThenZero=*/Invert == (Opc == AMDGPU::S_CBRANCH_VCCZ));
+    } else {
+      llvm_unreachable("unhandled implicit branch opcode");
+    }
+  }
+
+  // Merge Or defs SCC, so it follows every CSelect in the block.
+  for (OriginContrib &Rec : ImplicitContribSectionList) {
+    MachineBasicBlock::iterator I = saluInsertionAtEnd(*Rec.Block);
+    if (Rec.CondKind == LaneMaskKind::Exec) {
+      if (Rec.Accumulate)
+        emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
+            .addReg(Rec.Dst)
+            .addReg(LMC.ExecReg);
+      else
+        emit(*Rec.Block, I, AMDGPU::COPY, Rec.Dst).addReg(LMC.ExecReg);
+    } else if (Rec.CondKind == LaneMaskKind::Zero) {
+      if (!Rec.Accumulate)
+        emit(*Rec.Block, I, LMC.MovOpc, Rec.Dst).addImm(0);
+    } else if (Rec.Accumulate) {
+      emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
+          .addReg(Rec.Dst)
+          .addReg(Rec.CondReg);
+    }
+  }
+}
+
+void ControlFlowRewriter::createExplicitContribSection(
+    AMDGPULaneMaskAnalysis &LMA) {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+
+  for (OriginContrib &Rec : ExplicitContribSectionList) {
+    MachineBasicBlock::iterator I = saluInsertionAtEnd(*Rec.Block);
+    assert(!Rec.LOI.CondIsUndef && "Lane mask is undef");
+    bool Invert = Rec.LOI.InvertCondition;
+    Register PrevCond = Rec.LOI.CondReg;
+    LaneMaskKind CondKind =
+        LMU.classifyLaneMask(PrevCond, *Rec.Block, I, &LMA);
+
+    if ((CondKind == LaneMaskKind::Exec && !Invert) ||
+        (CondKind == LaneMaskKind::Zero && Invert)) {
+      if (Rec.Accumulate)
+        emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
+            .addReg(Rec.Dst)
+            .addReg(LMC.ExecReg);
+      else
+        emit(*Rec.Block, I, AMDGPU::COPY, Rec.Dst).addReg(LMC.ExecReg);
+    } else if ((CondKind == LaneMaskKind::Zero && !Invert) ||
+               (CondKind == LaneMaskKind::Exec && Invert)) {
+      if (!Rec.Accumulate)
+        emit(*Rec.Block, I, LMC.MovOpc, Rec.Dst).addImm(0);
+    } else if (CondKind == LaneMaskKind::Subset && !Invert) {
+      if (Rec.Accumulate)
+        emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
+            .addReg(Rec.Dst)
+            .addReg(PrevCond);
+      else
+        emit(*Rec.Block, I, AMDGPU::COPY, Rec.Dst).addReg(PrevCond);
+    } else if (CondKind == LaneMaskKind::Subset && Invert) {
+      if (Rec.Accumulate) {
+        Register CondReg = freshTemp();
+        emit(*Rec.Block, I, LMC.XorOpc, CondReg)
+            .addReg(PrevCond)
+            .addReg(LMC.ExecReg);
+        emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
+            .addReg(Rec.Dst)
+            .addReg(CondReg);
+      } else {
+        emit(*Rec.Block, I, LMC.XorOpc, Rec.Dst)
+            .addReg(PrevCond)
+            .addReg(LMC.ExecReg);
+      }
+    } else if (CondKind == LaneMaskKind::None && !Invert) {
+      if (Rec.Accumulate) {
+        Register CondReg = freshTemp();
+        emit(*Rec.Block, I, LMC.AndOpc, CondReg)
+            .addReg(LMC.ExecReg)
+            .addReg(PrevCond);
+        emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
+            .addReg(Rec.Dst)
+            .addReg(CondReg);
+      } else {
+        emit(*Rec.Block, I, LMC.AndOpc, Rec.Dst)
+            .addReg(LMC.ExecReg)
+            .addReg(PrevCond);
+      }
+    } else if (CondKind == LaneMaskKind::None && Invert) {
+      Register Masked = freshTemp();
+      emit(*Rec.Block, I, LMC.AndOpc, Masked)
+          .addReg(LMC.ExecReg)
+          .addReg(PrevCond);
+      if (Rec.Accumulate) {
+        Register CondReg = freshTemp();
+        emit(*Rec.Block, I, LMC.XorOpc, CondReg)
+            .addReg(Masked)
+            .addReg(LMC.ExecReg);
+        emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
+            .addReg(Rec.Dst)
+            .addReg(CondReg);
+      } else {
+        emit(*Rec.Block, I, LMC.XorOpc, Rec.Dst)
+            .addReg(Masked)
+            .addReg(LMC.ExecReg);
+      }
+    }
+  }
+}
+
+void ControlFlowRewriter::createRejoinContribSection() {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  for (const RejoinContrib &Rec : RejoinContribSectionList) {
+    MachineBasicBlock::iterator I = saluInsertionAtEnd(*Rec.Block);
+    // Driver sends ZeroReg to RejoinExecSection, so this arm does not run.
+    if (Rec.PrimaryExec == ZeroReg) {
+      if (Rec.Accumulate)
+        emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
+            .addReg(Rec.Dst)
+            .addReg(LMC.ExecReg);
+      else
+        emit(*Rec.Block, I, AMDGPU::COPY, Rec.Dst).addReg(LMC.ExecReg);
+    } else if (Rec.Accumulate) {
+      Register Rejoin = freshTemp();
+      emit(*Rec.Block, I, LMC.XorOpc, Rejoin)
+          .addReg(LMC.ExecReg)
+          .addReg(Rec.PrimaryExec);
+      emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst).addReg(Rec.Dst).addReg(Rejoin);
+    } else {
+      emit(*Rec.Block, I, LMC.XorOpc, Rec.Dst)
+          .addReg(LMC.ExecReg)
+          .addReg(Rec.PrimaryExec);
+    }
+  }
+}
+
+void ControlFlowRewriter::createRejoinExecSection() {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  for (const RejoinExec &Rec : RejoinExecSectionList) {
+    MachineBasicBlock::iterator I = saluInsertionAtEnd(*Rec.Block);
+    if (Rec.Accumulate)
+      emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
+          .addReg(Rec.Dst)
+          .addReg(LMC.ExecReg);
+    else
+      emit(*Rec.Block, I, AMDGPU::COPY, Rec.Dst).addReg(LMC.ExecReg);
+  }
+}
+
+void ControlFlowRewriter::createResetRejoinAccSection() {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  for (const AccReset &Rec : ResetRejoinAccSectionList)
+    emit(*Rec.Block, Rec.Block->getFirstTerminator(), LMC.MovOpc, Rec.Acc)
+        .addImm(0);
+}
+
+void ControlFlowRewriter::createSetExecSection() {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  for (const ExecTerm &Rec : SetExecSectionList) {
+    MachineBasicBlock::iterator I = Rec.Block->end();
+    Register Staged = freshTemp();
+    emit(*Rec.Block, I, AMDGPU::COPY, Staged).addReg(Rec.PrimaryAcc);
+    emit(*Rec.Block, I, LMC.MovOpc, Rec.PrimaryAcc).addImm(0);
+    emit(*Rec.Block, I, LMC.MovTermOpc, LMC.ExecReg).addReg(Staged);
+    BuildMI(*Rec.Block, I, {}, TII.get(AMDGPU::SI_WAVE_CF_EDGE));
+    BuildMI(*Rec.Block, I, {}, TII.get(AMDGPU::S_CBRANCH_EXECZ))
+        .addMBB(Rec.Succ1);
+    BuildMI(*Rec.Block, I, {}, TII.get(AMDGPU::S_BRANCH)).addMBB(Rec.Succ0);
+  }
+}
+
+void ControlFlowRewriter::createSetExecZeroSection() {
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  for (const ExecTerm &Rec : SetExecZeroSectionList) {
+    MachineBasicBlock::iterator I = Rec.Block->end();
+    emit(*Rec.Block, I, LMC.MovOpc, Rec.PrimaryAcc).addImm(0);
+    emit(*Rec.Block, I, LMC.MovTermOpc, LMC.ExecReg).addImm(0);
+    BuildMI(*Rec.Block, I, {}, TII.get(AMDGPU::SI_WAVE_CF_EDGE));
+    BuildMI(*Rec.Block, I, {}, TII.get(AMDGPU::S_CBRANCH_EXECZ))
+        .addMBB(Rec.Succ1);
+    BuildMI(*Rec.Block, I, {}, TII.get(AMDGPU::S_BRANCH)).addMBB(Rec.Succ0);
+  }
+}
+
 /// Replace all original terminator instructions by the terminators for
 /// establishing wave-level control flow and insert instructions for EXEC mask
 /// manipulation.
@@ -1794,6 +2304,8 @@ void ControlFlowRewriter::rewrite() {
   for (MachineBasicBlock *Stale : StaleCallbrTargets)
     if (!LiveCallbrTargets.contains(Stale))
       Stale->setIsInlineAsmBrIndirectTarget(false);
+
+  // insertLaneMaskInstrs();
 
   // Step 2: Insert lane masks and new terminators for divergent nodes.
   //
