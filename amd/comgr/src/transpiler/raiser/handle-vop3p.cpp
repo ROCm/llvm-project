@@ -109,12 +109,13 @@ Expected<Value *> readPackedFloatSource(RaiseContext &Ctx,
   return Ctx.B.CreateInsertElement(Result, High, 1, "pk.insert.hi");
 }
 
-/// Raise packed floating-point add and multiply instructions.
+/// Raise packed floating-point arithmetic instructions.
 Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
                              OperandResolver &Op, Type *ElementType,
-                             bool IsAdd) {
+                             CanonicalOp Kind) {
+  unsigned NumSources = Kind == CanonicalOp::V_PK_FMA_F32 ? 3 : 2;
   assert((Di.NumDefs == 1 && Di.numOperands() != 0 && Di.isReg(0) &&
-          Op.nSrcs() == 2) &&
+          Op.nSrcs() == NumSources) &&
          "decoded packed float instruction has unexpected operands");
 
   if (Error Err = Ctx.validateFPEnvironment(Di, ElementType))
@@ -136,8 +137,21 @@ Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Source1)
     return Source1.takeError();
 
-  Value *Result = IsAdd ? Ctx.B.CreateFAdd(*Source0, *Source1, "pk.add")
-                        : Ctx.B.CreateFMul(*Source0, *Source1, "pk.mul");
+  Value *Result;
+  if (Kind == CanonicalOp::V_PK_FMA_F32) {
+    Expected<Value *> Source2 =
+        readPackedFloatSource(Ctx, Di, Op, 2, ElementType);
+    if (!Source2)
+      return Source2.takeError();
+    Result = Ctx.B.CreateIntrinsic(Intrinsic::fma, {(*Source0)->getType()},
+                                   {*Source0, *Source1, *Source2}, nullptr,
+                                   "pk.fma");
+  } else if (Kind == CanonicalOp::V_PK_ADD_F16 ||
+             Kind == CanonicalOp::V_PK_ADD_F32) {
+    Result = Ctx.B.CreateFAdd(*Source0, *Source1, "pk.add");
+  } else {
+    Result = Ctx.B.CreateFMul(*Source0, *Source1, "pk.mul");
+  }
   if (*Clamp) {
     FixedVectorType *VectorType = FixedVectorType::get(ElementType, 2);
     Function *Maximum = Intrinsic::getOrInsertDeclaration(
@@ -168,14 +182,12 @@ Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
   switch (Di.CanonOp) {
   case CanonicalOp::V_PK_ADD_F16:
   case CanonicalOp::V_PK_MUL_F16:
-    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getHalfTy(),
-                                  /*IsAdd=*/Di.CanonOp ==
-                                      CanonicalOp::V_PK_ADD_F16);
+    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getHalfTy(), Di.CanonOp);
   case CanonicalOp::V_PK_ADD_F32:
   case CanonicalOp::V_PK_MUL_F32:
+  case CanonicalOp::V_PK_FMA_F32:
     return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getFloatTy(),
-                                  /*IsAdd=*/Di.CanonOp ==
-                                      CanonicalOp::V_PK_ADD_F32);
+                                  Di.CanonOp);
   default:
     return unsupported(Ctx, Di);
   }

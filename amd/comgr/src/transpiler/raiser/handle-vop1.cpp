@@ -45,6 +45,13 @@ Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_CVT_F32_UBYTE2:
   case CanonicalOp::V_CVT_F32_UBYTE3:
     return raiseFloatConversion32(Ctx, Di, Op);
+  case CanonicalOp::V_CVT_F32_F64:
+  case CanonicalOp::V_CVT_F64_F32:
+  case CanonicalOp::V_CVT_F64_I32:
+  case CanonicalOp::V_CVT_F64_U32:
+  case CanonicalOp::V_CVT_I32_F64:
+  case CanonicalOp::V_CVT_U32_F64:
+    return raiseFloatConversion64(Ctx, Di, Op);
   case CanonicalOp::V_FRACT_F32:
   case CanonicalOp::V_TRUNC_F32:
   case CanonicalOp::V_CEIL_F32:
@@ -53,6 +60,8 @@ Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_EXP_F32:
   case CanonicalOp::V_LOG_F32:
   case CanonicalOp::V_RCP_F32:
+  case CanonicalOp::V_RCP_IFLAG_F32:
+  case CanonicalOp::V_TANH_F32:
   case CanonicalOp::V_RSQ_F32:
   case CanonicalOp::V_SQRT_F32:
   case CanonicalOp::V_SIN_F32:
