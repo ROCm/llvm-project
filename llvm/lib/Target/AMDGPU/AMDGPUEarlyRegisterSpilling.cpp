@@ -744,6 +744,8 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
       if (llvm::any_of(
               UsesForNextUseDistCalculation, [&](const MachineOperand *UseMO) {
                 const MachineInstr *UseMI = UseMO->getParent();
+                if (TII->isFLATScratch(*UseMI))
+                  return true;
                 const MachineBasicBlock *UseMBB = UseMI->getParent();
                 MachineLoop *UseLoop = MLI->getLoopFor(UseMBB);
                 if (UseLoop && OutermostLoopOfCurLoop->contains(UseLoop) &&
@@ -772,6 +774,15 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
       NUA->getReachableUses(CandidateReg, Mask, *CurMI,
                             UsesForNextUseDistCalculation);
       if (UsesForNextUseDistCalculation.empty())
+        continue;
+
+      if (llvm::any_of(UsesForNextUseDistCalculation,
+                       [&](const MachineOperand *UseMO) {
+                         const MachineInstr *UseMI = UseMO->getParent();
+                         if (TII->isFLATScratch(*UseMI))
+                           return true;
+                         return false;
+                       }))
         continue;
 
       RegNumOfUses[CandidateReg] = UsesForNextUseDistCalculation.size();
