@@ -33,7 +33,7 @@ static cl::opt<bool>
                                  cl::init(false), cl::Hidden);
 
 static cl::opt<bool> DisableRestoreGrouping("disable-restore-grouping",
-                                            cl::init(false), cl::Hidden);
+                                            cl::init(true), cl::Hidden);
 
 static cl::opt<bool> EnableRestoreOptimization("enable-restore-optimization",
                                                cl::init(true), cl::Hidden);
@@ -861,7 +861,9 @@ bool AMDGPUEarlyRegisterSpilling::shouldEmitRestoreInCommonDominator(
 }
 
 static bool shouldGroupUses(MachineLoop *CurLoop, DomGroup &G1, DomGroup &G2,
-                            const MachineLoopInfo *MLI) {
+                            const MachineLoopInfo *MLI,
+                            MachineDominatorTree *DT,
+                            AMDGPUNextUseAnalysis *NUA) {
 
   MachineInstr *Head1 = G1.getHead();
   MachineInstr *Head2 = G2.getHead();
@@ -874,9 +876,9 @@ static bool shouldGroupUses(MachineLoop *CurLoop, DomGroup &G1, DomGroup &G2,
     OutermostLoopOfCurLoop = CurLoop->getOutermostLoop();
 
   // PHI incoming edges require a restore at the end of that specific
-  // predecessor block. Do not merge groups that would share one restore across
-  // different predecessor blocks when either group carries a PHI incoming-edge
-  // placement.
+  // predecessor block. Do not merge groups that would share one restore
+  // across different predecessor blocks when either group carries a PHI
+  // incoming-edge placement.
   if ((G1.getRestoreBlock() != G2.getRestoreBlock()) &&
       (G1.getWhereToRestore() ==
            DomGroup::RestorePlacement::IncomingBlockOfPhi ||
@@ -982,7 +984,7 @@ void AMDGPUEarlyRegisterSpilling::groupUsesInBlock(
     auto &G1 = Groups[Idx1];
     if (G1.isDeleted())
       continue;
-    // for (unsigned Idx2 = 0; Idx2 < E; ++Idx2) {
+
     for (unsigned Idx2 = 0; Idx2 != E; ++Idx2) {
       auto &G2 = Groups[Idx2];
       if (G1.getHead() == G2.getHead())
@@ -1014,6 +1016,8 @@ void AMDGPUEarlyRegisterSpilling::groupUses(
 
   std::vector<DomGroup> Groups;
   assignUsesToGroups(CandidateReg, CurMI, DominatedUses, Groups, MLI);
+
+  groupUsesInBlock(Groups);
 
   if (DisableRestoreGrouping) {
     for (auto &G1 : Groups) {
@@ -1068,7 +1072,7 @@ void AMDGPUEarlyRegisterSpilling::groupUses(
     auto &G1 = Groups[Idx1];
     if (G1.isDeleted())
       continue;
-    // for (unsigned Idx2 = 0; Idx2 < E; ++Idx2) {
+
     for (unsigned Idx2 = 0; Idx2 != E; ++Idx2) {
       auto &G2 = Groups[Idx2];
       if (G1.getHead() == G2.getHead())
@@ -1084,8 +1088,8 @@ void AMDGPUEarlyRegisterSpilling::groupUses(
       // Disable the grouping of the restore instructions for the following loop
       // scenarios.
       // TODO: Change this if it creates performance degradation.
-      if (!shouldGroupUses(CurLoop, G1, G2, MLI))
-        continue;
+      if (!shouldGroupUses(CurLoop, G1, G2, MLI, DT, NUA))
+        break;
 
       SmallVector<MachineBasicBlock *> UseBlocks;
       for (auto *Block : G1.getUseBlocks())
