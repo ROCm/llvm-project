@@ -232,6 +232,9 @@ private:
   // Give the preloaded entry VGPRs the values the source ABI hands them.
   void seedEntryVgprs(const KernelMeta &Meta);
 
+  // Give the preloaded entry VGPRs the values the source ABI hands them.
+  void seedEntryVgprs(const KernelMeta &Meta);
+
   // Storage shadowing one SGPR across block boundaries.
   struct SgprShadow {
     // Wave mask last written to this SGPR, at target EXEC width.
