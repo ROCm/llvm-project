@@ -401,6 +401,9 @@ void Flang::addCodegenOptions(const ArgList &Args,
        options::OPT_ftime_report, options::OPT_ftime_report_EQ,
        options::OPT_funroll_loops, options::OPT_fno_unroll_loops,
        options::OPT_fdefer_desc_map, options::OPT_fno_defer_desc_map,
+       options::OPT_fomp_descriptor_elision,
+       options::OPT_fno_omp_descriptor_elision,
+       options::OPT_fomp_descriptor_elision_remarks,
        options::OPT_relaxed_c_loc});
 
   Args.addOptOutFlag(CmdArgs, options::OPT_foptimize_sibling_calls,
@@ -1647,4 +1650,3 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
 Flang::Flang(const ToolChain &TC) : Tool("flang", "flang frontend", TC) {}
 
 Flang::~Flang() {}
-
