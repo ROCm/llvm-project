@@ -1198,13 +1198,6 @@ RocmInstallationDetector::getCommonBitcodeLibs(
   return BCLibs;
 }
 
-bool AMDGPUToolChain::shouldSkipArgument(const llvm::opt::Arg *A) const {
-  Option O = A->getOption();
-  if (O.matches(options::OPT_fPIE) || O.matches(options::OPT_fpie))
-    return true;
-  return false;
-}
-
 llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>
 AMDGPUToolChain::getCommonDeviceLibNames(
     const llvm::opt::ArgList &DriverArgs, llvm::StringRef TargetID,
