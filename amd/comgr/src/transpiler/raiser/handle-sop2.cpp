@@ -8,11 +8,16 @@
 
 #include "transpiler/raiser/handlers.h"
 
+#include "transpiler/decoder/amdgpu-mc-tables.h"
+
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "Utils/AMDGPUBaseInfo.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+
+#include <cassert>
 
 using namespace llvm;
 
@@ -197,6 +202,16 @@ Error handleOverflowingBinary32(RaiseContext &Ctx, OperandResolver &Op,
   return Error::success();
 }
 
+// Emit the fused multiply-add the s_fma* opcodes compute.
+Value *emitFma(IRBuilder<> &B, Value *Src0, Value *Src1, Value *Addend,
+               const Twine &Name) {
+  Value *A = B.CreateBitCast(Src0, B.getFloatTy());
+  Value *Bv = B.CreateBitCast(Src1, B.getFloatTy());
+  Value *C = B.CreateBitCast(Addend, B.getFloatTy());
+  return B.CreateIntrinsic(Intrinsic::fma, {B.getFloatTy()}, {A, Bv, C}, {},
+                           Name);
+}
+
 } // namespace
 
 // Raise one SOP2 instruction and preserve its SCC side effects.
@@ -357,6 +372,55 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
       return Args.takeError();
     Value *Result = Ctx.B.CreateSub(Args->Src0, Args->Src1, "sub64");
     Ctx.registers().writeReg64(Args->Dst, Result);
+    return Error::success();
+  }
+
+  // The scalar float opcodes carry no Defs on SCC, so the three cases below
+  // write the destination alone.
+  case CanonicalOp::S_MUL_F32: {
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+    Expected<BinaryOperands> Args = Op.readBinary32();
+    if (!Args)
+      return Args.takeError();
+    IRBuilder<> &B = Ctx.B;
+    Value *Src0 = B.CreateBitCast(Args->Src0, B.getFloatTy());
+    Value *Src1 = B.CreateBitCast(Args->Src1, B.getFloatTy());
+    Value *Result = B.CreateFMul(Src0, Src1, "mul_f32");
+    Value *Bits = B.CreateBitCast(Result, B.getInt32Ty());
+    Ctx.registers().writeReg32(Args->Dst, Bits);
+    return Error::success();
+  }
+  case CanonicalOp::S_FMAC_F32: {
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+    Expected<BinaryOperands> Args = Op.readBinary32();
+    if (!Args)
+      return Args.takeError();
+    Expected<Value *> Addend = Op.dstValue();
+    if (!Addend)
+      return Addend.takeError();
+    IRBuilder<> &B = Ctx.B;
+    Value *Result = emitFma(B, Args->Src0, Args->Src1, *Addend, "fmac_f32");
+    Value *Bits = B.CreateBitCast(Result, B.getInt32Ty());
+    Ctx.registers().writeReg32(Args->Dst, Bits);
+    return Error::success();
+  }
+  case CanonicalOp::S_FMAAK_F32: {
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+    Expected<BinaryOperands> Args = Op.readBinary32();
+    if (!Args)
+      return Args.takeError();
+    int16_t LiteralIdx = COMGR::transpiler::getNamedOperandIdx(
+        Di.Inst.getOpcode(), AMDGPU::OpName::imm);
+    assert(LiteralIdx >= 0 && "s_fmaak_f32 encodes a literal");
+    assert(Di.isImm(LiteralIdx) && "s_fmaak_f32 literal is always immediate");
+    IRBuilder<> &B = Ctx.B;
+    Value *Literal = B.getInt32(static_cast<uint32_t>(Di.getImm(LiteralIdx)));
+    Value *Result = emitFma(B, Args->Src0, Args->Src1, Literal, "fmaak_f32");
+    Value *Bits = B.CreateBitCast(Result, B.getInt32Ty());
+    Ctx.registers().writeReg32(Args->Dst, Bits);
     return Error::success();
   }
 
