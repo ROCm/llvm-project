@@ -51,5 +51,20 @@ void genAllocatableAllocate(fir::FirOpBuilder &builder, mlir::Location loc,
                             mlir::Value desc, mlir::Value hasStat = {},
                             mlir::Value errMsg = {});
 
+/// Generate a runtime call that stamps \p desc so the immediately following
+/// AllocatableAllocate will dispatch through the OpenMP runtime using the
+/// OpenMP allocator identified by \p handle.  When \p align is non-null and
+/// non-zero the allocation goes through __kmpc_aligned_alloc with that
+/// alignment; otherwise __kmpc_alloc is used.  A null \p align is treated as
+/// 0 (default alignment).  The matching AllocatableDeallocate dispatches
+/// through __kmpc_free with the same handle.
+///
+/// \p desc must be a fir::ref<fir::box<none>>; \p handle and \p align are
+/// scalar integers of any width (they will be converted to the runtime's
+/// `uintptr_t` / `size_t` types as needed).
+void genOmpAllocatorStamp(fir::FirOpBuilder &builder, mlir::Location loc,
+                          mlir::Value desc, mlir::Value handle,
+                          mlir::Value align = {});
+
 } // namespace fir::runtime
 #endif // FORTRAN_OPTIMIZER_BUILDER_RUNTIME_ALLOCATABLE_H
