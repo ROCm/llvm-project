@@ -576,11 +576,12 @@ amd_comgr_get_isa_name(
  /**
  * @brief Get a handle to the metadata of an isa name.
  *
- * The structure of the returned metadata is isa name specific and versioned
- * with details specified in
- * https://llvm.org/docs/AMDGPUUsage.html#code-object-metadata.
- * It can include information about the
- * limits for resources such as registers and memory addressing.
+ * The returned metadata describes the target's identity, supported features,
+ * and resource limits. Its structure, field descriptions, and units are
+ * documented in the Comgr ISA metadata reference:
+ * https://github.com/ROCm/llvm-project/blob/amd-staging/amd/comgr/docs/ISAMetadata.md.
+ * ISA metadata is separate from the code object metadata returned by
+ * @c amd_comgr_get_data_metadata.
  *
  * @param[in] isa_name The isa name to query.
  *
