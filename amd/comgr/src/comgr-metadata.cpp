@@ -400,13 +400,18 @@ amd_comgr_status_t getElfIsaNameFromElfHeader(const ELFObjectFile<ELFT> *Obj,
       ElfIsaName += ":sramecc+";
       break;
     }
-    switch (ElfHeader.e_flags & ELF::EF_AMDGPU_FEATURE_XNACK_V4) {
-    case ELF::EF_AMDGPU_FEATURE_XNACK_OFF_V4:
-      ElfIsaName += ":xnack-";
-      break;
-    case ELF::EF_AMDGPU_FEATURE_XNACK_ON_V4:
-      ElfIsaName += ":xnack+";
-      break;
+    // Only selectable XNACK modes belong in target IDs. Hardwired-on targets
+    // such as gfx1250 encode XNACK_ON in ELF without an :xnack+ modifier.
+    AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(Processor);
+    if (AMDGPU::getFeatureBitset(Kind).test(AMDGPU::FEAT_XNACK_ON_OFF_MODES)) {
+      switch (ElfHeader.e_flags & ELF::EF_AMDGPU_FEATURE_XNACK_V4) {
+      case ELF::EF_AMDGPU_FEATURE_XNACK_OFF_V4:
+        ElfIsaName += ":xnack-";
+        break;
+      case ELF::EF_AMDGPU_FEATURE_XNACK_ON_V4:
+        ElfIsaName += ":xnack+";
+        break;
+      }
     }
     break;
   }

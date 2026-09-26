@@ -1,0 +1,27 @@
+--- !ELF
+FileHeader:
+  Class:      ELFCLASS64
+  Data:       ELFDATA2LSB
+  Type:       ET_REL
+  Machine:    EM_AMDGPU
+  OSABI:      ELFOSABI_AMDGPU_HSA
+  ABIVersion: 0x4
+  Flags:      [ EF_AMDGPU_MACH_AMDGCN_GFX1250, EF_AMDGPU_FEATURE_XNACK_ON_V4 ]
+--- !ELF
+FileHeader:
+  Class:      ELFCLASS64
+  Data:       ELFDATA2LSB
+  Type:       ET_REL
+  Machine:    EM_AMDGPU
+  OSABI:      ELFOSABI_AMDGPU_HSA
+  ABIVersion: 0x2
+  Flags:      [ EF_AMDGPU_MACH_AMDGCN_GFX900, EF_AMDGPU_FEATURE_XNACK_ON_V4 ]
+--- !ELF
+FileHeader:
+  Class:      ELFCLASS64
+  Data:       ELFDATA2LSB
+  Type:       ET_REL
+  Machine:    EM_AMDGPU
+  OSABI:      ELFOSABI_AMDGPU_HSA
+  ABIVersion: 0x2
+  Flags:      [ EF_AMDGPU_MACH_AMDGCN_GFX900, EF_AMDGPU_FEATURE_XNACK_OFF_V4 ]
