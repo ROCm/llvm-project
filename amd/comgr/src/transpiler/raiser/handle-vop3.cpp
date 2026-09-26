@@ -419,6 +419,28 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Clamp)
     return Clamp.takeError();
 
+  if (std::optional<ICmpInst::Predicate> Predicate =
+          getIntegerComparePredicate(Di.CanonOp)) {
+    if (*Clamp)
+      return unsupportedInstruction(
+          Ctx, Di, "integer comparison clamp is not supported");
+    if (Di.NumDefs == 0 && Di.defsExec())
+      return raiseIntegerCompare32(Ctx, Di, Op, *Predicate, std::nullopt);
+    if (Di.NumDefs != 1 || Di.numOperands() == 0 || !Di.isReg(0) ||
+        !Di.getReg(0))
+      return unsupportedInstruction(Ctx, Di,
+                                    "expected a comparison mask destination");
+    Expected<ParsedReg> Destination = Op.dst();
+    if (!Destination)
+      return Destination.takeError();
+    if (Destination->RegKind != ParsedReg::SGPR &&
+        Destination->RegKind != ParsedReg::VCC &&
+        Destination->RegKind != ParsedReg::NOREG)
+      return unsupportedInstruction(Ctx, Di,
+                                    "unsupported comparison mask destination");
+    return raiseIntegerCompare32(Ctx, Di, Op, *Predicate, *Destination);
+  }
+
   switch (Di.CanonOp) {
   case CanonicalOp::V_MOV_B32:
     if (*Clamp)

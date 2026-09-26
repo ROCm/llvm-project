@@ -18,64 +18,51 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
-#include <cassert>
+#include <optional>
 
 using namespace llvm;
 
 namespace COMGR::transpiler {
 
-Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
-                 OperandResolver &Op) {
-  ICmpInst::Predicate Pred;
-  switch (Di.CanonOp) {
+std::optional<ICmpInst::Predicate>
+getIntegerComparePredicate(CanonicalOp Opcode) {
+  switch (Opcode) {
   case CanonicalOp::V_CMP_LT_I32:
-    Pred = ICmpInst::ICMP_SLT;
-    break;
+    return ICmpInst::ICMP_SLT;
   case CanonicalOp::V_CMP_EQ_I32:
-    Pred = ICmpInst::ICMP_EQ;
-    break;
+    return ICmpInst::ICMP_EQ;
   case CanonicalOp::V_CMP_LE_I32:
-    Pred = ICmpInst::ICMP_SLE;
-    break;
+    return ICmpInst::ICMP_SLE;
   case CanonicalOp::V_CMP_GT_I32:
-    Pred = ICmpInst::ICMP_SGT;
-    break;
+    return ICmpInst::ICMP_SGT;
   case CanonicalOp::V_CMP_NE_I32:
-    Pred = ICmpInst::ICMP_NE;
-    break;
+    return ICmpInst::ICMP_NE;
   case CanonicalOp::V_CMP_GE_I32:
-    Pred = ICmpInst::ICMP_SGE;
-    break;
+    return ICmpInst::ICMP_SGE;
   case CanonicalOp::V_CMP_LT_U32:
-    Pred = ICmpInst::ICMP_ULT;
-    break;
+    return ICmpInst::ICMP_ULT;
   case CanonicalOp::V_CMP_EQ_U32:
-    Pred = ICmpInst::ICMP_EQ;
-    break;
+    return ICmpInst::ICMP_EQ;
   case CanonicalOp::V_CMP_LE_U32:
-    Pred = ICmpInst::ICMP_ULE;
-    break;
+    return ICmpInst::ICMP_ULE;
   case CanonicalOp::V_CMP_GT_U32:
-    Pred = ICmpInst::ICMP_UGT;
-    break;
+    return ICmpInst::ICMP_UGT;
   case CanonicalOp::V_CMP_NE_U32:
-    Pred = ICmpInst::ICMP_NE;
-    break;
+    return ICmpInst::ICMP_NE;
   case CanonicalOp::V_CMP_GE_U32:
-    Pred = ICmpInst::ICMP_UGE;
-    break;
+    return ICmpInst::ICMP_UGE;
   default:
-    return unsupported(Ctx, Di);
+    return std::nullopt;
   }
+}
 
-  // A comparison in the plain VOPC encoding names no destination operand at
-  // all: the lane mask goes to the condition registers the opcode implicitly
-  // defines.
-  if (Di.NumDefs != 0 || Op.nSrcs() != 2) {
-    return unsupported(Ctx, Di, "expected two sources and no destination");
+Error raiseIntegerCompare32(RaiseContext &Ctx, const DecodedInst &Di,
+                            OperandResolver &Op, ICmpInst::Predicate Predicate,
+                            std::optional<ParsedReg> Destination) {
+  if (Op.nSrcs() != 2 || Op.srcIdx(0) >= Di.numOperands() ||
+      Op.srcIdx(1) >= Di.numOperands()) {
+    return unsupported(Ctx, Di, "expected two comparison sources");
   }
-  assert((Di.defsVcc() || Di.defsExec()) &&
-         "a comparison that writes neither VCC nor EXEC has no result");
 
   Expected<Value *> Src0 = Op.src(0);
   if (!Src0) {
@@ -86,43 +73,42 @@ Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
     return Src1.takeError();
   }
 
-  Value *Cmp = Ctx.B.CreateICmp(Pred, *Src0, *Src1);
+  Value *Cmp = Ctx.B.CreateICmp(Predicate, *Src0, *Src1);
   RegisterState &Regs = Ctx.registers();
 
-  // Which condition registers a comparison writes is a property of the opcode
-  // and of the source generation, and the decoder has already read it off the
-  // implicit definitions: `v_cmp` writes VCC, `v_cmpx` writes EXEC, and before
-  // GFX10 `v_cmpx` wrote both.
-  if (Di.defsVcc()) {
-    // VCC is held as the bit belonging to the lane doing the writing, so the
-    // per-lane comparison is what it wants, cleared where the lane is inactive:
-    // a comparison writes the whole mask whatever EXEC holds, and the bits of
-    // the lanes EXEC masks off read back as zero. Masking rather than skipping
-    // the write, since an inactive lane does not keep the bit it had.
-    Value *Bit = Ctx.B.CreateAnd(Cmp, Regs.emitLaneActiveBit(), "vcc_bit");
+  // Inactive lanes contribute zero even when their source values are poison.
+  Value *Bit = Ctx.B.CreateSelect(Regs.emitLaneActiveBit(), Cmp,
+                                  Ctx.B.getFalse(), "cmp_active");
+  if (Destination && Destination->RegKind == ParsedReg::SGPR) {
+    Value *Mask = Ctx.Projection.ballotI1ToWidth(
+        Ctx.B, Bit, Ctx.Projection.sourceWaveMaskTy(), "cmp_mask");
+    Regs.writeRegExecWidth(*Destination, Mask);
+    Regs.recordWaveMaskI1(*Destination, Bit);
+  }
+  if (Di.defsVcc() || (Destination && Destination->RegKind == ParsedReg::VCC)) {
     Regs.regFile().storeVCC(Ctx.B, Bit);
   }
-
   if (Di.defsExec()) {
-    // Narrowing EXEC needs the answer for the whole wave, not for the writing
-    // lane: EXEC is one mask that every lane reads, and a sign-extended
-    // per-lane bit would give each lane a private EXEC that disagrees with its
-    // neighbors. The ballot is what turns the per-lane comparison into that one
-    // mask, and taking it at the EXEC storage width keeps the AND and the store
-    // in a single type.
     Value *Mask = Ctx.Projection.ballotI1ToWidth(
-        Ctx.B, Cmp, Ctx.Projection.execStorageTy(), "cmpx_ballot");
+        Ctx.B, Bit, Ctx.Projection.execStorageTy(), "cmpx_ballot");
     Value *CurrentExec = Regs.regFile().loadExec(Ctx.B);
-    // The AND is also what clears the bits of the lanes that were inactive,
-    // which the ballot took the comparison of regardless.
     Value *NarrowedExec = Ctx.B.CreateAnd(CurrentExec, Mask, "cmpx_exec");
-    // Through RegisterState rather than the register file: the lane-active bit
-    // every following per-lane write is predicated on was derived from the
-    // EXEC being replaced and has to go with it.
     Regs.storeExec(NarrowedExec);
   }
-
   return Error::success();
+}
+
+Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
+                 OperandResolver &Op) {
+  if (Di.NumDefs != 0 || (!Di.defsVcc() && !Di.defsExec())) {
+    return unsupported(Ctx, Di, "expected an implicit comparison destination");
+  }
+  std::optional<ICmpInst::Predicate> Predicate =
+      getIntegerComparePredicate(Di.CanonOp);
+  if (!Predicate) {
+    return unsupported(Ctx, Di);
+  }
+  return raiseIntegerCompare32(Ctx, Di, Op, *Predicate, std::nullopt);
 }
 
 } // namespace COMGR::transpiler

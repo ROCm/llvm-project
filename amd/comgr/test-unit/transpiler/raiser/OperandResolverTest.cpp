@@ -11,6 +11,7 @@
 #include "transpiler/common/kernel-meta.h"
 #include "transpiler/decoder/decoded-inst.h"
 #include "transpiler/decoder/mc-state.h"
+#include "transpiler/raiser/handlers.h"
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/wave-projection.h"
 
@@ -26,6 +27,7 @@
 
 #include "gtest/gtest.h"
 
+#include <climits>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -99,6 +101,49 @@ TEST_F(OperandResolverTest, ReportsRegisterFailures) {
   ASSERT_FALSE(static_cast<bool>(Destination));
   EXPECT_NE(toString(Destination.takeError()).find("register-decode"),
             std::string::npos);
+}
+
+TEST_F(OperandResolverTest, ComparisonRejectsMalformedOperands) {
+  unsigned Opcode = findOpcode(*Mc.InstrInfo, "V_CMP_LT_U32_e64_vi");
+  ASSERT_NE(Opcode, Mc.InstrInfo->getNumOpcodes());
+  MCRegister Pair = findRegister(*Mc.RegInfo, "SGPR4_SGPR5");
+  MCRegister Scalar = findRegister(*Mc.RegInfo, "SGPR4");
+  MCRegister Vector = findRegister(*Mc.RegInfo, "VGPR0");
+  ASSERT_TRUE(Pair && Scalar && Vector);
+
+  MCOperand Source = MCOperand::createReg(Vector);
+  MCOperand Destination = MCOperand::createReg(Pair);
+  struct TestCase {
+    SmallVector<MCOperand> Operands;
+    StringRef Detail;
+  };
+  const TestCase Cases[] = {
+      {{}, "expected a comparison mask destination"},
+      {{MCOperand::createImm(0), Source, Source},
+       "expected a comparison mask destination"},
+      {{MCOperand::createReg(MCRegister()), Source, Source},
+       "expected a comparison mask destination"},
+      {{Source, Source, Source}, "register-decode"},
+      {{MCOperand::createReg(Scalar), Source, Source}, "register-decode"},
+      {{Destination, Source}, "expected two comparison sources"},
+      {{Destination, Source, Destination}, "register-decode"},
+  };
+  for (const TestCase &Case : Cases) {
+    DecodedInst Instruction;
+    Instruction.Inst.setOpcode(Opcode);
+    Instruction.CanonOp = CanonicalOp::V_CMP_LT_U32;
+    Instruction.TargetSpecificFlags = Mc.InstrInfo->get(Opcode).TSFlags;
+    Instruction.NumDefs = 1;
+    Instruction.SrcMap = {1, 2};
+    Instruction.ModMap = {UINT_MAX, UINT_MAX};
+    for (MCOperand Operand : Case.Operands)
+      Instruction.Inst.addOperand(Operand);
+    OperandResolver Resolver{*Env->Ctx, Instruction};
+    Error Result = handleVOP3(*Env->Ctx, Instruction, Resolver);
+    ASSERT_TRUE(static_cast<bool>(Result));
+    EXPECT_NE(toString(std::move(Result)).find(Case.Detail.str()),
+              std::string::npos);
+  }
 }
 
 } // namespace
