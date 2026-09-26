@@ -121,18 +121,8 @@ MATH_PRIVATE(trigredlarge)(float x)
     const float pio2ht = (float)0xfda / 0x1.0p+23f;
     const float pio2t = (float)0xa22168 / 0x1.0p+47f;
 
-    float rh, rt;
-
-    if (HAVE_FAST_FMA32() || !DAZ_OPT()) {
-        rh = q1 * pio2h;
-        rt = BUILTIN_FMA_F32(q0, pio2h, BUILTIN_FMA_F32(q1, pio2t, BUILTIN_FMA_F32(q1, pio2h, -rh)));
-    } else {
-        float q1h = AS_FLOAT(AS_UINT(q1) & 0xfffff000);
-        float q1t = q1 - q1h;
-        rh = q1 * pio2h;
-        rt = MATH_MAD(q1t, pio2ht, MATH_MAD(q1t, pio2hh, MATH_MAD(q1h, pio2ht, MATH_MAD(q1h, pio2hh, -rh)))) +
-             MATH_MAD(q0, pio2h, q1*pio2t);
-    }
+    float rh = q1 * pio2h;
+    float rt = BUILTIN_FMA_F32(q0, pio2h, BUILTIN_FMA_F32(q1, pio2t, BUILTIN_FMA_F32(q1, pio2h, -rh)));
 
     struct redret ret;
     ret.hi  = rh + rt;
