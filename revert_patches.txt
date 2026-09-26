@@ -14,17 +14,8 @@ breaks rocgdb UT
 breaks windows build: [amd-llvm] terminate called after throwing an instance of 'std::bad_alloc'
 Make][CodeGen] Add PCH for Clang CodeGen (#206018)
 ---
-breaks rocrand 4 tests
-[SLP]Vectorize single-user instructions as the last-attempt seeds
----
-breaks windows build: MSVC rejects the CRTP removal, error C2440 and C2027
-[ADT] Remove CRTP from FoldingSet and ContextualFoldingSet (NFC) (#216830)
----
 debug/merge conflicts
 10d3708a0bb8 [IndVarSimplify] Batch forgetValue calls in sinkUnusedInvariants (#219025)
----
-breaks: [hip-tests] clang++: error: invalid offload arch combinations:
-"Reapply "clang: Use TargetID parsing from AMDGPUTargetParser" (#213824) (#213847)"
 ---
 ASAN-DEBUG lib breaks
 "[clang][DebugInfo] Emit static local variables in their lexical block scope (#213153)" (#4465) (2 hours ago) <Scott Linder>
@@ -32,6 +23,6 @@ ASAN-DEBUG lib breaks
 comgr fails to build -lzma
 [Support][lldb] Port xz (lzma) decompression from LLDB into LLVM (#220092)
 ---
-breaks matlibs gfx942
-[SLP]Model gathers of extracted integer sub-fields as bitcast+permute+ext"
+needs integration: JP
+[offload] Extract OMPT out of PluginInterface  (#221726)
 ---
