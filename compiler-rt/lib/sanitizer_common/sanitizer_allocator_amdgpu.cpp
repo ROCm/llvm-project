@@ -43,6 +43,68 @@ static const size_t kPageSize_ = 4096;
 static atomic_uint8_t amdgpu_runtime_shutdown{0};
 static atomic_uint8_t amdgpu_event_registered{0};
 
+// ---------------------------------------------------------------------------
+// Re-entrancy guard against ROCr agent_memory_lock_ self-deadlock.
+//
+// ROCr's MemoryRegion::Allocate()/Free() both take the same non-recursive
+// agent_memory_lock_. With ASan's quarantine, a libc free() performed by ROCr
+// *while it holds that lock* (e.g. bind_mem_to_numa() inside an allocation)
+// can be intercepted, trigger a quarantine eviction, and recycle an older
+// device chunk -- issuing a REAL hsa_amd_memory_pool_free() that re-enters
+// MemoryRegion::Free() on the same thread and dead-locks on the same mutex.
+//
+// To break the cycle we never issue a REAL device free while this thread is
+// already executing inside a REAL device allocate/free. Instead the pointer is
+// parked on a thread-local list and flushed once the outermost real-HSA call
+// has fully unwound (and ROCr has released agent_memory_lock_).
+// ---------------------------------------------------------------------------
+
+// Nesting depth of REAL hsa allocate/free calls on the current thread.
+__attribute__((
+    tls_model("initial-exec"))) static THREADLOCAL uptr real_hsa_depth = 0;
+
+// Thread-local stack of device pointers whose REAL free was deferred because
+// it was requested from within a REAL hsa call. Bounded, intrusive storage to
+// avoid any allocation on this path.
+static const uptr kMaxDeferredFrees = 64;
+__attribute__((tls_model("initial-exec"))) static THREADLOCAL void*
+    deferred_free_ptrs[kMaxDeferredFrees];
+__attribute__((
+    tls_model("initial-exec"))) static THREADLOCAL uptr deferred_free_count = 0;
+
+namespace {
+// RAII marker for "this thread is inside a REAL hsa allocate/free".
+struct RealHsaScope {
+  RealHsaScope() { ++real_hsa_depth; }
+  ~RealHsaScope() { --real_hsa_depth; }
+};
+}  // namespace
+
+// Issue the REAL device free for a single pointer. Must only be called when it
+// is safe to take ROCr's agent_memory_lock_ (i.e. not nested inside a REAL hsa
+// call on this thread).
+static void RealDeviceFree(void* p) {
+  DevicePointerInfo DevPtrInfo;
+  if (AmdgpuMemFuncs::GetPointerInfo(reinterpret_cast<uptr>(p), &DevPtrInfo)) {
+    if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_HSA) {
+      UNUSED hsa_status_t status = hsa_amd.memory_pool_free(p);
+    } else if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR) {
+      UNUSED hsa_status_t status =
+          hsa_amd.vmem_address_free(p, DevPtrInfo.map_size);
+    }
+  }
+}
+
+// Drain any device frees that were deferred while nested inside a REAL hsa
+// call. Called once the outermost real-HSA scope has unwound.
+static void FlushDeferredDeviceFrees() {
+  // Snapshot-and-clear style: each RealDeviceFree() runs outside the guard.
+  while (deferred_free_count > 0) {
+    void* p = deferred_free_ptrs[--deferred_free_count];
+    RealDeviceFree(p);
+  }
+}
+
 #  define LOAD_HSA_FUNC_WITH_ERROR_CHECK(func, name, success)         \
     func = (decltype(func))dlsym(RTLD_NEXT, name);                    \
     if (!func) {                                                      \
@@ -109,14 +171,25 @@ void *AmdgpuMemFuncs::Allocate(uptr size, uptr alignment,
 
   AmdgpuAllocationInfo *aa_info =
       reinterpret_cast<AmdgpuAllocationInfo *>(da_info);
-  if (!aa_info->memory_pool.handle) {
-    aa_info->status = hsa_amd.vmem_address_reserve_align(
-        &aa_info->ptr, size, aa_info->address, aa_info->alignment,
-        aa_info->flags64);
-  } else {
-    aa_info->status = hsa_amd.memory_pool_allocate(
-        aa_info->memory_pool, size, aa_info->flags, &aa_info->ptr);
+  {
+    // Mark this thread as being inside a REAL hsa call. ROCr takes
+    // agent_memory_lock_ for the duration; any quarantine-driven device free
+    // that fires underneath must be deferred, not issued, to avoid re-locking
+    // the same non-recursive mutex on this thread.
+    RealHsaScope real_hsa_scope;
+    if (!aa_info->memory_pool.handle) {
+      aa_info->status = hsa_amd.vmem_address_reserve_align(
+          &aa_info->ptr, size, aa_info->address, aa_info->alignment,
+          aa_info->flags64);
+    } else {
+      aa_info->status = hsa_amd.memory_pool_allocate(
+          aa_info->memory_pool, size, aa_info->flags, &aa_info->ptr);
+    }
   }
+  // Outermost real-HSA scope has unwound here; ROCr has released its lock so
+  // it is now safe to issue any device frees that were deferred underneath.
+  if (real_hsa_depth == 0 && deferred_free_count > 0)
+    FlushDeferredDeviceFrees();
   if (aa_info->status != HSA_STATUS_SUCCESS)
     return nullptr;
 
@@ -133,15 +206,21 @@ void AmdgpuMemFuncs::Deallocate(void *p) {
     return;
   }
 
-  DevicePointerInfo DevPtrInfo;
-  if (AmdgpuMemFuncs::GetPointerInfo(reinterpret_cast<uptr>(p), &DevPtrInfo)) {
-    if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_HSA) {
-      UNUSED hsa_status_t status = hsa_amd.memory_pool_free(p);
-    } else if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_RESERVED_ADDR) {
-      UNUSED hsa_status_t status =
-          hsa_amd.vmem_address_free(p, DevPtrInfo.map_size);
+  // If we are nested inside a REAL hsa allocate/free on this thread, ROCr is
+  // currently holding agent_memory_lock_. Issuing the REAL free now would
+  // re-enter MemoryRegion::Free() and dead-lock on that same non-recursive
+  // mutex. Defer the free until the outermost real-HSA call unwinds.
+  if (real_hsa_depth > 0) {
+    if (LIKELY(deferred_free_count < kMaxDeferredFrees)) {
+      deferred_free_ptrs[deferred_free_count++] = p;
+      return;
     }
+    // Deferral list is full (pathologically deep nesting). Fall through and
+    // free directly; this is exceedingly unlikely and preserves correctness
+    // over the (already remote) risk of re-entrancy at this depth.
   }
+
+  RealDeviceFree(p);
 }
 
 bool AmdgpuMemFuncs::GetPointerInfo(uptr ptr, DevicePointerInfo* ptr_info) {
