@@ -535,6 +535,8 @@ jobs:
   # =====================================================================
 
   # Select the gfx942 test runner the same way TheRock CI does.
+  # TheRock's local matrix still lists the disabled non-CSP pool, so overlay
+  # runner labels from therock-ci-config instead of using that list directly.
   pick_runner:
     name: Select gfx942 test runner
     needs: [build]
@@ -551,8 +553,18 @@ jobs:
           sparse-checkout: build_tools
           persist-credentials: false
 
+      - name: Checkout CI config
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/therock-ci-config
+          ref: main
+          path: ci-config
+          persist-credentials: false
+
       - name: Weighted runner selection (gfx94X-dcgpu)
         id: pick
+        env:
+          CI_CONFIG_PATH: ci-config
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import sys
@@ -561,11 +573,17 @@ jobs:
           sys.path.insert(0, "build_tools/github_actions")
           with redirect_stdout(sys.stderr):
               from amdgpu_family_matrix import (
-                  amdgpu_family_info_matrix_presubmit as M,
+                  get_all_families_for_trigger_types,
+                  load_external_runner_config,
                   select_weighted_label,
               )
-              info = M["gfx94x"]["linux"]
-              label = select_weighted_label(info["test-runs-on-labels"], "gfx94X-dcgpu")
+              if load_external_runner_config() is None:
+                  raise SystemExit("therock-ci-config did not load")
+              info = get_all_families_for_trigger_types(["presubmit"])["gfx94x"]["linux"]
+              labels = info.get("test-runs-on-labels") or [
+                  {"label": info["test-runs-on"]}
+              ]
+              label = select_weighted_label(labels, "gfx94X-dcgpu")
           print(f"label={label}")
           PY
 
