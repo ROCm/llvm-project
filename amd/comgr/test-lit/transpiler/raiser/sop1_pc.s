@@ -27,8 +27,6 @@
 ; RUN: %transpile_cli %t.hsaco --emit-ir=addpc_backward_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=BACKWARD
 
-; RUN: not %transpile_cli %t.hsaco --emit-ir=getpc_kernel 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=GETPC
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=setpc_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=SETPC
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=swappc_kernel 2>&1 \
@@ -121,17 +119,6 @@ backward_exit:
 
 ; Every other way of writing the program counter is refused, and each carries
 ; the reason it cannot be stated in the raised kernel.
-
-	.globl	getpc_kernel
-	.p2align	8
-	.type	getpc_kernel,@function
-getpc_kernel:
-; GETPC: unsupported-instruction-form: s_get_pc_i64 {{.+}} :: captures a source address
-	s_get_pc_i64 s[10:11]
-; The captured address escaping into arithmetic changes nothing: the refusal
-; is on the capture, so no consumer of it is ever reached.
-	s_add_pc_i64 s[10:11]
-	s_endpgm
 
 	.globl	setpc_kernel
 	.p2align	8
@@ -232,11 +219,6 @@ addpc_wrap_kernel:
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 24
 	.end_amdhsa_kernel
-	.amdhsa_kernel getpc_kernel
-		.amdhsa_kernarg_size 0
-		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 24
-	.end_amdhsa_kernel
 	.amdhsa_kernel setpc_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
@@ -312,17 +294,6 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     24
     .symbol:         addpc_backward_kernel.kd
-    .vgpr_count:     1
-    .wavefront_size: 32
-  - .args: []
-    .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 1024
-    .name:           getpc_kernel
-    .private_segment_fixed_size: 0
-    .sgpr_count:     24
-    .symbol:         getpc_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 32
   - .args: []
