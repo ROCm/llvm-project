@@ -937,6 +937,9 @@ void AMDGPUToolChain::addClangTargetOptions(
     }
   }
 
+  if (shouldUseAMDGPUObjectLinking(*this, DriverArgs, DeviceOffloadingKind))
+    CC1Args.append({"-mllvm", "-amdgpu-enable-object-linking"});
+
   DriverArgs.AddLastArg(CC1Args, options::OPT_gpu_max_threads_per_block_EQ);
 
   // Default to "hidden" visibility, as object level linking will not be

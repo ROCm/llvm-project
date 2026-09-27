@@ -224,6 +224,14 @@ unsigned getAMDHSACodeObjectVersion(const Module &M) {
   return getDefaultAMDHSACodeObjectVersion();
 }
 
+unsigned getAMDGPUABIWavesPerEU(const Module &M) {
+  if (auto *Val = mdconst::extract_or_null<ConstantInt>(
+          M.getModuleFlag("amdgpu_abi_waves_per_eu")))
+    return Val->getZExtValue();
+
+  return 0;
+}
+
 unsigned getDefaultAMDHSACodeObjectVersion() {
   return DefaultAMDHSACodeObjectVersion;
 }
@@ -1459,6 +1467,7 @@ unsigned getAllocatedNumVGPRBlocks(const MCSubtargetInfo &STI,
       NumVGPRs,
       getVGPRAllocGranule(STI, DynamicVGPRBlockSize, EnableWavefrontSize32));
 }
+
 } // end namespace IsaInfo
 
 void initDefaultAMDKernelCodeT(AMDGPUMCKernelCodeT &KernelCode,

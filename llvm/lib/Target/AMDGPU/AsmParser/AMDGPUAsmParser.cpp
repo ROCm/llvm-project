@@ -6922,6 +6922,8 @@ bool AMDGPUAsmParser::ParseDirectiveAMDGPUInfo() {
       FI.UsesFlatScratch =
           !!(Flags & AMDGPU::FuncInfoFlags::FUNC_USES_FLAT_SCRATCH);
       FI.HasDynStack = !!(Flags & AMDGPU::FuncInfoFlags::FUNC_HAS_DYN_STACK);
+      FI.UsesWgpMode = !!(Flags & AMDGPU::FuncInfoFlags::FUNC_WGP_MODE);
+      FI.UsesWave32 = !!(Flags & AMDGPU::FuncInfoFlags::FUNC_WAVE32);
       HasScalarAttrs = true;
     } else if (Dir == "num_sgpr") {
       int64_t Val;
@@ -6946,6 +6948,12 @@ bool AMDGPUAsmParser::ParseDirectiveAMDGPUInfo() {
       if (getParser().parseAbsoluteExpression(Val))
         return true;
       FI.PrivateSegmentSize = static_cast<uint32_t>(Val);
+      HasScalarAttrs = true;
+    } else if (Dir == "occupancy") {
+      int64_t Val;
+      if (getParser().parseAbsoluteExpression(Val))
+        return true;
+      FI.Occupancy = static_cast<uint32_t>(Val);
       HasScalarAttrs = true;
     } else if (Dir == "use") {
       StringRef ResName;
@@ -10081,6 +10089,7 @@ void AMDGPUAsmParser::cvtVOPD(MCInst &Inst, const OperandVector &Operands) {
       Op.addRegOperands(Inst, 1);
       return;
     }
+    // A relocatable symbol is an expression. Encode it as a literal.
     if (Op.isImm() || Op.isExpr()) {
       Op.addImmOperands(Inst, 1);
       return;
