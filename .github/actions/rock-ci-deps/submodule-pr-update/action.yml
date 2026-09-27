@@ -2,6 +2,7 @@ name: LLVM submodule & PR-parameter setup
 description: >
   On pull_request updates amd-llvm submodule pointer to PR head and aligns
   spirv-llvm-translator and hipify with amd-staging tip.
+  For nightly, pin the amd-llvm amd-staging stip
   On workflow_dispatch downloads PR params artifact, sources env, merges upstream PRs, updates submodule pointers.
 
 inputs:
@@ -231,6 +232,24 @@ runs:
           compiler/hipify
         git submodule status
         git submodule
+
+    - name: Point compiler/amd-llvm at amd-staging tip for nightly
+      if: contains(github.workflow, 'Nightly') && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger != 'true'))
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$PWD"
+        git config --global user.email "z1-cciauto@amd.com"
+        git config --global user.name "Z1 cciauto"
+        LLVM_SHA="$(git ls-remote https://github.com/ROCm/llvm-project.git refs/heads/amd-staging | awk '{print $1}' | tr -d '[:space:]')"
+        echo "Nightly llvm-project amd-staging tip: $LLVM_SHA"
+        if [[ -z "$LLVM_SHA" || ${#LLVM_SHA} -ne 40 ]]; then
+          echo "::error::Failed to resolve ROCm/llvm-project amd-staging tip." >&2
+          exit 1
+        fi
+        git update-index --cacheinfo 160000,"$LLVM_SHA",compiler/amd-llvm
+        git commit -m "Point compiler/amd-llvm at amd-staging tip for nightly"
+        git submodule update --init --depth 1 --jobs 4 compiler/amd-llvm
+        git submodule status compiler/amd-llvm
 
     - name: Enable LLVM assertions for Wavetransform
       if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
