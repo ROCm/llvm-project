@@ -1501,6 +1501,11 @@ bool TargetTransformInfo::areTypesABICompatible(const Function *Caller,
   return TTIImpl->areTypesABICompatible(Caller, Callee, Types);
 }
 
+uint64_t TargetTransformInfo::getCallTypeId(FunctionType *FTy,
+                                            CallingConv::ID CC) const {
+  return TTIImpl->getCallTypeId(FTy, CC);
+}
+
 bool TargetTransformInfo::isIndexedLoadLegal(MemIndexedMode Mode,
                                              Type *Ty) const {
   return TTIImpl->isIndexedLoadLegal(Mode, Ty);
