@@ -6,10 +6,13 @@
 ; CHECK:       <GLOBALVAL_SUMMARY_BLOCK
 ; CHECK-NEXT:    <VERSION
 ; CHECK-NEXT:    <FLAGS
+; CHECK-NEXT:    <CALL_TYPE_IDS
 ; "op7" is a call to "callee" function.
 ; CHECK-NEXT:    <PERMODULE_PROFILE {{.*}} op7=3 op8=0 op9=[[ALIASID:[0-9]+]]
+; CHECK-NEXT:    <CALL_TYPE_IDS
 ; "another_caller" has only references but no calls.
 ; CHECK-NEXT:    <PERMODULE_PROFILE {{.*}}/>
+; CHECK-NEXT:    <CALL_TYPE_IDS
 ; CHECK-NEXT:    <PERMODULE_PROFILE {{.*}} op0=[[ALIASEEID:[0-9]+]]
 ; CHECK-NEXT:    <ALIAS {{.*}} op0=[[ALIASID]] {{.*}} op2=[[ALIASEEID]]/>
 ; CHECK-NEXT:  </GLOBALVAL_SUMMARY_BLOCK>

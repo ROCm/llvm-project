@@ -32,6 +32,7 @@
 ;; indirect call instruction.
 ; SUMMARY2-NEXT:  <VALUE_GUID {{.*}} op0=[[VFUNCDER:[0-9]+]] op1=1437699922 op2=4037658799/>
 
+; SUMMARY-NEXT:   <CALL_TYPE_IDS
 ;; <PERMODULE_PROFILE> has the format [valueid, flags, instcount, funcflags,
 ;;                                     numrefs, rorefcnt, worefcnt,
 ;;                                     m x valueid,

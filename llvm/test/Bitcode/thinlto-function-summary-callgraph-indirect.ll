@@ -20,6 +20,7 @@ target triple = "x86_64-unknown-linux-gnu"
 ;; direct1, which is called both directly and indirectly, is marked indirect,
 ;; and has the max hotness.
 ; BC: <PERMODULE_PROFILE {{.*}} op7={{[0-9]+}} op8=18 op9={{[0-9]+}} op10=18 op11={{[0-9]+}} op12=16/>
+; BC-NEXT: <CALL_TYPE_IDS
 ; BC-NEXT: <PERMODULE_PROFILE {{.*}} op7={{[0-9]+}} op8=0/>
 
 ; DIS-DAG: ^[[DIRECT1:[0-9]+]] = gv: (name: "direct1")

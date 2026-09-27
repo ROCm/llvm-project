@@ -1968,6 +1968,13 @@ public:
                                       const Function *Callee,
                                       ArrayRef<Type *> Types) const;
 
+  /// \returns The call type ID (a 64-bit hash) for a function or an indirect
+  /// call with the function type \p FTy and the calling convention \p CC. An
+  /// indirect call can reach a function only if both have the same ID. The
+  /// default is getDefaultCallTypeId. A target overrides it if its ABI lets
+  /// calls with different IR signatures reach the same function.
+  LLVM_ABI uint64_t getCallTypeId(FunctionType *FTy, CallingConv::ID CC) const;
+
   /// The type of load/store indexing.
   enum MemIndexedMode {
     MIM_Unindexed, ///< No indexing.

@@ -7936,6 +7936,11 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
   GlobalValueSummary *LastSeenSummary = nullptr;
   GlobalValue::GUID LastSeenGUID = 0;
 
+  // Track the function associated with an optional AMDGPU summary record.
+  // Unlike LastSeenGUID, this is never set for aliases or global variables.
+  std::optional<GlobalValue::GUID> CurrentFunctionGUID;
+  bool CurrentFunctionIsPrevailing = false;
+
   // Track the most recent function summary if it was prevailing, and while we
   // are not done processing any subsequent memprof records. Starting with
   // summary version 13 (tracked by MemProfAfterFunctionSummary), MemProf
@@ -7954,6 +7959,12 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
   std::vector<FunctionSummary::ConstVCall> PendingTypeTestAssumeConstVCalls,
       PendingTypeCheckedLoadConstVCalls;
   std::vector<FunctionSummary::ParamAccess> PendingParamAccesses;
+  std::optional<FunctionSummary::CallTypeIdInfo> PendingCallTypeIds;
+  auto SetPendingCallTypeIds = [&](FunctionSummary &FS) {
+    if (PendingCallTypeIds)
+      FS.setCallTypeIds(std::move(*PendingCallTypeIds));
+    PendingCallTypeIds.reset();
+  };
 
   std::vector<CallsiteInfo> PendingCallsites;
   std::vector<AllocInfo> PendingAllocs;
@@ -7988,6 +7999,12 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
     if (!MaybeBitCode)
       return MaybeBitCode.takeError();
     unsigned BitCode = MaybeBitCode.get();
+
+    // An AMDGPU entry must immediately follow its function summary.
+    if (BitCode != bitc::FS_AMDGPU_ENTRY) {
+      CurrentFunctionGUID = std::nullopt;
+      CurrentFunctionIsPrevailing = false;
+    }
 
     switch (BitCode) {
     default: // Default behavior: ignore.
@@ -8090,8 +8107,12 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
           std::move(PendingTypeCheckedLoadConstVCalls),
           std::move(PendingParamAccesses), std::move(PendingCallsites),
           std::move(PendingAllocs));
+      SetPendingCallTypeIds(*FS);
       FS->setModulePath(getThisModule()->first());
       FS->setOriginalName(GUID);
+      LastSeenGUID = VI.getGUID();
+      CurrentFunctionGUID = LastSeenGUID;
+      CurrentFunctionIsPrevailing = IsPrevailingSym;
       // Set CurrentPrevailingFS only if prevailing, so subsequent MemProf
       // records are attached (new order) or skipped.
       if (MemProfAfterFunctionSummary) {
@@ -8127,6 +8148,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
 
       auto GUID = getValueInfoFromValueId(ValueID);
       AS->setOriginalName(std::get<1>(GUID));
+      LastSeenGUID = std::get<0>(GUID).getGUID();
       TheIndex.addGlobalValueSummary(std::get<0>(GUID), std::move(AS));
       break;
     }
@@ -8241,10 +8263,13 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
           std::move(PendingTypeCheckedLoadConstVCalls),
           std::move(PendingParamAccesses), std::move(PendingCallsites),
           std::move(PendingAllocs));
+      SetPendingCallTypeIds(*FS);
       LastSeenSummary = FS.get();
       if (MemProfAfterFunctionSummary)
         CurrentPrevailingFS = FS.get();
       LastSeenGUID = VI.getGUID();
+      CurrentFunctionGUID = LastSeenGUID;
+      CurrentFunctionIsPrevailing = true;
       FS->setModulePath(ModuleIdMap[ModuleId]);
       TheIndex.addGlobalValueSummary(VI, std::move(FS));
       break;
@@ -8300,6 +8325,54 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       TheIndex.addGlobalValueSummary(VI, std::move(FS));
       break;
     }
+    case bitc::FS_AMDGPU_ENTRY: {
+      if (Record.size() < 9)
+        return error("invalid AMDGPU summary entry");
+      if (!CurrentFunctionGUID)
+        return error("amdgpu summary entry does not follow a function summary");
+
+      if (Record[0] > CallingConv::MaxID ||
+          llvm::any_of(ArrayRef(Record).slice(2, 7),
+                       [](uint64_t Value) { return !isUInt<32>(Value); }))
+        return error("invalid value in AMDGPU summary entry");
+
+      uint64_t Flags = Record[1];
+      if ((Flags & bitc::AFS_HAS_WAVES_PER_EU_MAX) &&
+          !(Flags & bitc::AFS_HAS_WAVES_PER_EU))
+        return error("invalid flags in AMDGPU summary entry");
+
+      AMDGPUFunctionSummary AFS;
+      AFS.CC = static_cast<CallingConv::ID>(Record[0]);
+      if (Flags & bitc::AFS_HAS_FLAT_WORK_GROUP_SIZE)
+        AFS.FlatWorkGroupSize = std::make_pair(
+            static_cast<uint32_t>(Record[2]), static_cast<uint32_t>(Record[3]));
+      if (Flags & bitc::AFS_HAS_WAVES_PER_EU) {
+        AMDGPUFunctionSummary::WavesPerEUInfo WavesPerEU{
+            static_cast<uint32_t>(Record[4]), std::nullopt};
+        if (Flags & bitc::AFS_HAS_WAVES_PER_EU_MAX)
+          WavesPerEU.Max = static_cast<uint32_t>(Record[5]);
+        AFS.WavesPerEU = WavesPerEU;
+      }
+      if (Flags & bitc::AFS_HAS_MAX_NUM_WORKGROUPS)
+        AFS.MaxNumWorkgroups = std::array<uint32_t, 3>{
+            static_cast<uint32_t>(Record[6]), static_cast<uint32_t>(Record[7]),
+            static_cast<uint32_t>(Record[8])};
+
+      if (!CurrentFunctionIsPrevailing) {
+        CurrentFunctionGUID = std::nullopt;
+        CurrentFunctionIsPrevailing = false;
+        break;
+      }
+
+      AMDGPUSummaryMap &Summaries = TheIndex.getAMDGPUSummaries();
+      auto [It, Inserted] = Summaries.try_emplace(*CurrentFunctionGUID, AFS);
+      if (!Inserted && !(It->second == AFS))
+        return error("conflicting AMDGPU summary entries for GUID " +
+                     Twine(*CurrentFunctionGUID));
+      CurrentFunctionGUID = std::nullopt;
+      CurrentFunctionIsPrevailing = false;
+      break;
+    }
     // FS_COMBINED_ORIGINAL_NAME: [original_name]
     case bitc::FS_COMBINED_ORIGINAL_NAME: {
       uint64_t OriginalName = Record[0];
@@ -8315,6 +8388,16 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
     case bitc::FS_TYPE_TESTS:
       assert(PendingTypeTests.empty());
       llvm::append_range(PendingTypeTests, Record);
+      break;
+
+    case bitc::FS_CALL_TYPE_IDS:
+      if (Record.empty())
+        return error("Invalid call type ID record");
+      assert(!PendingCallTypeIds);
+      PendingCallTypeIds.emplace();
+      PendingCallTypeIds->CallTypeId = Record[0];
+      llvm::append_range(PendingCallTypeIds->IndirectCallTypeIds,
+                         drop_begin(Record));
       break;
 
     case bitc::FS_TYPE_TEST_ASSUME_VCALLS:

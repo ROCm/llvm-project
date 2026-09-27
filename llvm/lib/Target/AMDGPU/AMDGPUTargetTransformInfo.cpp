@@ -29,6 +29,7 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/Support/KnownBits.h"
+#include "llvm/Support/MD5.h"
 #include <optional>
 
 using namespace llvm;
@@ -2088,6 +2089,14 @@ unsigned GCNTTIImpl::getCallerAllocaCost(const CallBase *CB,
       (Threshold * ArgAllocaSize->getFixedValue()) / AllocaSize);
 
   return AllocaThresholdBonus;
+}
+
+uint64_t GCNTTIImpl::getCallTypeId(FunctionType *FTy,
+                                   CallingConv::ID CC) const {
+  // Signatures match by the sizes of their types, not by their IR types. This
+  // is the same rule as for the type IDs in the .amdgpu.info section.
+  return MD5Hash("amdgpu.v1:cc" + utostr(CC) + ":" +
+                 AMDGPU::getFunctionTypeId(FTy, DL));
 }
 
 void GCNTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,

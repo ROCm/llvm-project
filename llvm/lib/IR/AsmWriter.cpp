@@ -3739,6 +3739,17 @@ void AssemblyWriter::printFunctionSummary(const FunctionSummary *FS) {
   if (const auto *TIdInfo = FS->getTypeIdInfo())
     printTypeIdInfo(*TIdInfo);
 
+  if (FS->callTypeId())
+    Out << ", callTypeId: " << FS->callTypeId();
+
+  if (!FS->indirectCallTypeIds().empty()) {
+    Out << ", indirectCallTypeIds: (";
+    ListSeparator LS;
+    for (GlobalValue::GUID Id : FS->indirectCallTypeIds())
+      Out << LS << Id;
+    Out << ")";
+  }
+
   // The AllocationType identifiers capture the profiled context behavior
   // reaching a specific static allocation site (possibly cloned).
   auto AllocTypeName = [](uint8_t Type) -> const char * {

@@ -862,6 +862,8 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(typeCheckedLoadVCalls);
   KEYWORD(typeTestAssumeConstVCalls);
   KEYWORD(typeCheckedLoadConstVCalls);
+  KEYWORD(callTypeId);
+  KEYWORD(indirectCallTypeIds);
   KEYWORD(vFuncId);
   KEYWORD(offset);
   KEYWORD(args);

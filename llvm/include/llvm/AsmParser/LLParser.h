@@ -437,6 +437,8 @@ namespace llvm {
     bool parseHotness(CalleeInfo::HotnessType &Hotness);
     bool parseOptionalTypeIdInfo(FunctionSummary::TypeIdInfo &TypeIdInfo);
     bool parseTypeTests(std::vector<GlobalValue::GUID> &TypeTests);
+    bool parseOptionalIndirectCallTypeIds(
+        std::vector<GlobalValue::GUID> &IndirectCallTypeIds);
     bool parseVFuncIdList(lltok::Kind Kind,
                           std::vector<FunctionSummary::VFuncId> &VFuncIdList);
     bool parseConstVCallList(

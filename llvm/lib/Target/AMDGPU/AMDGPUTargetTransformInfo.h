@@ -272,6 +272,8 @@ public:
   unsigned getCallerAllocaCost(const CallBase *CB,
                                const AllocaInst *AI) const override;
 
+  uint64_t getCallTypeId(FunctionType *FTy, CallingConv::ID CC) const override;
+
   int getInlinerVectorBonusPercent() const override {
     return InlinerVectorBonusPercent;
   }
