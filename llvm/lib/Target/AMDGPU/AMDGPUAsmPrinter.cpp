@@ -471,7 +471,7 @@ const AMDGPUMCExpr *createOccupancy(unsigned InitOcc, const MCExpr *NumSGPRs,
 }
 
 void AMDGPUAsmPrinter::validateMCResourceInfo(Function &F) {
-  if (F.isDeclaration() || !AMDGPU::isModuleEntryFunctionCC(F.getCallingConv()))
+  if (F.isDeclaration())
     return;
 
   using RIK = MCResourceInfo::ResourceInfoKind;
@@ -486,6 +486,42 @@ void AMDGPUAsmPrinter::validateMCResourceInfo(Function &F) {
     }
     return false;
   };
+
+  // Register allocation normally respects the ABI register budget. Final
+  // resource accounting can still exceed it when the IR names fixed physical
+  // registers, e.g. inline asm clobbers. Check the resolved per-function
+  // resource symbols here so object-linking metadata is not emitted for a
+  // function that cannot satisfy its ABI occupancy.
+  if (AMDGPUTargetMachine::EnableObjectLinking) {
+    const auto [BudgetVGPR, BudgetAGPR] = STM.getMaxNumVectorRegs(F);
+    const unsigned BudgetSGPR = STM.getMaxNumSGPRs(F);
+
+    auto CheckBudget = [&](RIK Kind, unsigned Budget, const char *What) {
+      MCSymbol *Sym = RI.getSymbol(FnSym->getName(), Kind, OutContext);
+      uint64_t Used;
+      if (!Sym->isVariable() ||
+          !TryGetMCExprValue(Sym->getVariableValue(), Used))
+        return false;
+      if (Used <= Budget)
+        return false;
+      F.getContext().diagnose(DiagnosticInfoResourceLimit(
+          F, What, Used, Budget, DS_Error, DK_ResourceLimit));
+      return true;
+    };
+
+    if (CheckBudget(RIK::RIK_NumVGPR, BudgetVGPR,
+                    "VGPRs under object-linking ABI"))
+      return;
+    if (CheckBudget(RIK::RIK_NumAGPR, BudgetAGPR,
+                    "AGPRs under object-linking ABI"))
+      return;
+    if (CheckBudget(RIK::RIK_NumSGPR, BudgetSGPR,
+                    "SGPRs under object-linking ABI"))
+      return;
+  }
+
+  if (!AMDGPU::isModuleEntryFunctionCC(F.getCallingConv()))
+    return;
 
   const uint64_t MaxScratchPerWorkitem =
       STM.getMaxWaveScratchSize() / STM.getWavefrontSize();
@@ -742,29 +778,24 @@ bool AMDGPUAsmPrinter::doFinalization(Module &M) {
   // LDS/named-barrier use edges, indirect calls, and address-taken type IDs).
   emitAMDGPUInfo(M);
 
-  // Assign expressions which can only be resolved when all other functions are
-  // known.
-  RI.finalize(OutContext);
-
-  // Switch section and emit all GPR maximums within the processed module.
-  OutStreamer->pushSection();
-  MCSectionELF *MaxGPRSection =
-      OutContext.getELFSection(".AMDGPU.gpr_maximums", ELF::SHT_PROGBITS, 0);
-  OutStreamer->switchSection(MaxGPRSection);
-  getTargetStreamer()->EmitMCResourceMaximums(
-      RI.getMaxVGPRSymbol(OutContext), RI.getMaxAGPRSymbol(OutContext),
-      RI.getMaxSGPRSymbol(OutContext), RI.getMaxNamedBarrierSymbol(OutContext));
-  OutStreamer->popSection();
-
-  // In the object-linking pipeline per-function resource MCExprs reference
-  // external callee symbols that cannot be evaluated here, so cross-TU limit
-  // checks would silently no-op for every non-leaf function. Defer resource
-  // sanity checking to the linker, which re-validates against the aggregated
-  // call graph in the combined .amdgpu.info metadata.
+  // Finalize non-object-linking resource propagation and emit the
+  // `amdgpu.max_num_*` fallback symbols.
   if (!AMDGPUTargetMachine::EnableObjectLinking) {
-    for (Function &F : M.functions())
-      validateMCResourceInfo(F);
+    RI.finalize(OutContext);
+
+    OutStreamer->pushSection();
+    MCSectionELF *MaxGPRSection =
+        OutContext.getELFSection(".AMDGPU.gpr_maximums", ELF::SHT_PROGBITS, 0);
+    OutStreamer->switchSection(MaxGPRSection);
+    getTargetStreamer()->EmitMCResourceMaximums(
+        RI.getMaxVGPRSymbol(OutContext), RI.getMaxAGPRSymbol(OutContext),
+        RI.getMaxSGPRSymbol(OutContext),
+        RI.getMaxNamedBarrierSymbol(OutContext));
+    OutStreamer->popSection();
   }
+
+  for (Function &F : M.functions())
+    validateMCResourceInfo(F);
 
   RI.reset();
 
@@ -930,11 +961,16 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   if (AMDGPUTargetMachine::EnableObjectLinking) {
     const AMDGPUResourceUsageAnalysisWrapperPass::FunctionResourceInfo &RU =
         *ResourceUsage;
+    uint32_t Occupancy =
+        static_cast<uint32_t>(STM.getWavesPerEU(MF.getFunction()).first);
     FunctionInfos.push_back(
         {/*NumSGPR=*/static_cast<uint32_t>(RU.NumExplicitSGPR),
          /*NumArchVGPR=*/static_cast<uint32_t>(RU.NumVGPR),
          /*NumAccVGPR=*/static_cast<uint32_t>(RU.NumAGPR),
          /*PrivateSegmentSize=*/static_cast<uint32_t>(RU.PrivateSegmentSize),
+         /*Occupancy=*/Occupancy,
+         /*UsesWgpMode=*/STM.hasSupportsWGP() && !STM.isCuModeEnabled(),
+         /*UsesWave32=*/STM.getWavefrontSize() == 32,
          /*UsesVCC=*/RU.UsesVCC,
          /*UsesFlatScratch=*/RU.UsesFlatScratch,
          /*HasDynStack=*/RU.HasDynamicallySizedStack,
