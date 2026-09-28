@@ -1,11 +1,11 @@
 ; REQUIRES: comgr-has-transpiler
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx942 -filetype=obj %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: %transpile_cli %t.hsaco --emit-ir=vop3_integer_arithmetic \
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=vop3_integer_arithmetic \
 ; RUN:   | %FileCheck %s
 
-	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
+	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
 	.globl	vop3_integer_arithmetic
@@ -22,13 +22,13 @@ vop3_integer_arithmetic:
 ; CHECK: call i64 @llvm.smin.i64
 	v_mad_i32_i24 v6, v0, v1, v2 clamp
 ; CHECK: call { i32, i1 } @llvm.uadd.with.overflow.i32
-	v_add_co_u32_e64 v7, vcc, v0, v1
+	v_add_co_u32_e64 v7, vcc_lo, v0, v1
 ; CHECK: call { i64, i1 } @llvm.uadd.with.overflow.i64
-	v_mad_u64_u32 v[10:11], vcc, v0, v1, v[2:3]
+	v_mad_u64_u32 v[10:11], vcc_lo, v0, v1, v[2:3]
 ; CHECK: call { i64, i1 } @llvm.uadd.with.overflow.i64
 ; CHECK: icmp slt i64
 ; CHECK: xor i1
-	v_mad_i64_i32 v[12:13], vcc, v0, v1, v[2:3]
+	v_mad_i64_i32 v[12:13], vcc_lo, v0, v1, v[2:3]
 ; CHECK: ret void
 	s_endpgm
 
@@ -36,9 +36,9 @@ vop3_integer_arithmetic:
 	.p2align	6, 0x0
 	.amdhsa_kernel vop3_integer_arithmetic
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 14
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 16
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.text
@@ -55,7 +55,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         vop3_integer_arithmetic.kd
     .vgpr_count:     14
-    .wavefront_size: 64
+    .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
 	.end_amdgpu_metadata

@@ -1,9 +1,9 @@
 ; REQUIRES: comgr-has-transpiler
 
-; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -filetype=obj %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 
-; RUN: %transpile_cli %t.hsaco \
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=sop1_moves_kernel,special_dst_kernel,literal_kernel \
 ; RUN:   --emit-ir=cmov_undef_kernel \
 ; RUN:   | %FileCheck %s
@@ -15,18 +15,15 @@
 
 ; A SOP1 opcode the handler does not lift is refused, not mislowered, and so is
 ; a register the raiser does not model, whether the move writes it or reads it.
-; RUN: not %transpile_cli %t.hsaco \
-; RUN:   --emit-ir=rfe_kernel,bad_dst_kernel,bad_src_kernel 2>&1 \
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=rfe_kernel,bad_src_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE
-; REFUSE:      unsupported-instruction-form: s_rfe_b64
-; REFUSE:      unsupported-instruction-form: s_mov_b32
-; REFUSE-SAME: in kernel 'bad_dst_kernel'
-; REFUSE-SAME: register-decode: unsupported register 'XNACK_MASK_LO'
+; REFUSE:      unsupported-instruction-form: s_rfe_i64
 ; REFUSE:      unsupported-instruction-form: s_mov_b32
 ; REFUSE-SAME: in kernel 'bad_src_kernel'
-; REFUSE-SAME: register-decode: unsupported register 'XNACK_MASK_LO'
+; REFUSE-SAME: register-decode: unsupported register 'SRC_SHARED_BASE_LO'
 
-	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
+	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
 	.globl	sop1_moves_kernel
@@ -77,39 +74,37 @@ sop1_moves_kernel:
 special_dst_kernel:
 ; A destination outside the general-purpose registers reaches its own slot.
 ; CHECK-LABEL: define amdgpu_kernel void @special_dst_kernel(
-; s0 is preloaded with the workgroup index, and reading M0 back hands the same
-; value to the bit reversal.
+; ttmp9 is preloaded with the workgroup index, and reading M0 back hands the
+; same value to the bit reversal.
 ; CHECK: [[WGX:%.+]] = call i32 @llvm.amdgcn.workgroup.id.x()
-	s_mov_b32 m0, s0
+	s_mov_b32 m0, ttmp9
 	s_mov_b32 s2, m0
 ; CHECK: call i32 @llvm.bitreverse.i32(i32 [[WGX]])
 	s_brev_b32 s3, s2
 
-; EXEC is stored at the wave width, and reading it back splits it into the two
-; dword halves an SGPR pair holds.
-	s_mov_b64 exec, -1
-	s_mov_b64 s[4:5], exec
-; CHECK: [[EXECLO:%.+]] = trunc i64 -1 to i32
-; CHECK: [[EXECSHR:%.+]] = lshr i64 -1, 32
-; CHECK: [[EXECHI:%.+]] = trunc i64 [[EXECSHR]] to i32
-	s_brev_b64 s[6:7], s[4:5]
+; EXEC is stored at the wave width, so a wave32 source reads it back as a
+; single dword.
+	s_mov_b32 exec_lo, -1
+	s_mov_b32 s4, exec_lo
+; CHECK: call i32 @llvm.bitreverse.i32(i32 -1)
+	s_brev_b32 s5, s4
 
 ; A VCC write is a per-lane bit, and reading VCC back reassembles the wave
 ; mask with a ballot.
-	s_mov_b32 vcc_lo, s0
+	s_mov_b32 vcc_lo, ttmp9
 	s_mov_b32 s8, vcc_lo
 ; CHECK: [[BALLOT:%.+]] = call i64 @llvm.amdgcn.ballot.i64(
 ; CHECK: [[VCCLO:%.+]] = trunc i64 [[BALLOT]] to i32
 ; CHECK: call i32 @llvm.bitreverse.i32(i32 [[VCCLO]])
 	s_brev_b32 s9, s8
 
-; s_not_b64 reaches EXEC as well, and its SCC write is the 64-bit comparison.
-	s_not_b64 exec, exec
-; CHECK: [[NOTEXEC:%.+]] = xor i64 {{.+}}, -1
-; CHECK: icmp ne i64 [[NOTEXEC]], 0
-	s_mov_b64 s[10:11], exec
-; CHECK: trunc i64 [[NOTEXEC]] to i32
-	s_brev_b64 s[12:13], s[10:11]
+; s_not_b32 reaches EXEC as well, and its SCC write is the 32-bit comparison.
+	s_not_b32 exec_lo, exec_lo
+; CHECK: [[NOTEXEC:%.+]] = xor i32 -1, -1
+; CHECK: icmp ne i32 [[NOTEXEC]], 0
+	s_mov_b32 s10, exec_lo
+; CHECK: call i32 @llvm.bitreverse.i32(i32 [[NOTEXEC]])
+	s_brev_b32 s12, s10
 ; CHECK: ret void
 	s_endpgm
 
@@ -169,69 +164,55 @@ rfe_kernel:
 	s_rfe_b64 s[0:1]
 	s_endpgm
 
-	.globl	bad_dst_kernel
-	.p2align	8
-	.type	bad_dst_kernel,@function
-bad_dst_kernel:
-	s_mov_b32 xnack_mask_lo, s0
-	s_endpgm
-
 	.globl	bad_src_kernel
 	.p2align	8
 	.type	bad_src_kernel,@function
 bad_src_kernel:
-	s_mov_b32 s0, xnack_mask_lo
+	s_mov_b32 s0, src_shared_base
 	s_endpgm
 
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel sop1_moves_kernel
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 12
-		.amdhsa_accum_offset 4
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel special_dst_kernel
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 14
-		.amdhsa_accum_offset 4
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel literal_kernel
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 6
-		.amdhsa_accum_offset 4
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel cmov_undef_kernel
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 16
-		.amdhsa_accum_offset 4
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel rfe_kernel
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 2
-		.amdhsa_accum_offset 4
-		.amdhsa_reserve_vcc 1
-	.end_amdhsa_kernel
-	.amdhsa_kernel bad_dst_kernel
-		.amdhsa_kernarg_size 0
-		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 2
-		.amdhsa_accum_offset 4
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel bad_src_kernel
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 2
-		.amdhsa_accum_offset 4
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.text
@@ -248,7 +229,7 @@ amdhsa.kernels:
     .sgpr_count:     12
     .symbol:         sop1_moves_kernel.kd
     .vgpr_count:     1
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .args: []
     .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -259,7 +240,7 @@ amdhsa.kernels:
     .sgpr_count:     14
     .symbol:         special_dst_kernel.kd
     .vgpr_count:     1
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .args: []
     .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -270,7 +251,7 @@ amdhsa.kernels:
     .sgpr_count:     6
     .symbol:         literal_kernel.kd
     .vgpr_count:     1
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .args: []
     .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -281,7 +262,7 @@ amdhsa.kernels:
     .sgpr_count:     16
     .symbol:         cmov_undef_kernel.kd
     .vgpr_count:     1
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .args: []
     .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -292,18 +273,7 @@ amdhsa.kernels:
     .sgpr_count:     2
     .symbol:         rfe_kernel.kd
     .vgpr_count:     1
-    .wavefront_size: 64
-  - .args: []
-    .group_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .kernarg_segment_size: 0
-    .max_flat_workgroup_size: 1024
-    .name:           bad_dst_kernel
-    .private_segment_fixed_size: 0
-    .sgpr_count:     2
-    .symbol:         bad_dst_kernel.kd
-    .vgpr_count:     1
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .args: []
     .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -314,7 +284,7 @@ amdhsa.kernels:
     .sgpr_count:     2
     .symbol:         bad_src_kernel.kd
     .vgpr_count:     1
-    .wavefront_size: 64
+    .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
 	.end_amdgpu_metadata
