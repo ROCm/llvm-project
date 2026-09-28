@@ -63,8 +63,8 @@ Expected<Value *> OperandResolver::srcF64(unsigned I) {
   Expected<Value *> V = src64(I);
   if (!V)
     return V.takeError();
-  if (srcMod(I) & ~(SISrcMods::NEG | SISrcMods::ABS))
-    return unsupportedInstruction(Ctx, Di, "unsupported f64 source modifier");
+  assert(!(srcMod(I) & ~(SISrcMods::NEG | SISrcMods::ABS)) &&
+         "f64 sources can only have abs/neg modifiers");
   const MCOperand &Operand = Di.Inst.getOperand(srcIdx(I));
   if (Operand.isExpr()) {
     const auto *Literal = dyn_cast<AMDGPUMCExpr>(Operand.getExpr());

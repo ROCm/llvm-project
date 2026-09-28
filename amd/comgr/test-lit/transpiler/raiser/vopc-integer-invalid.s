@@ -39,6 +39,13 @@
 ; RUN:   | %FileCheck %s --check-prefix=FLOAT16
 ; FLOAT16: unsupported-instruction-form: v_cmp_eq_f16
 
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=integer_abs 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=INTEGER-MODIFIER
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=integer_neg 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=INTEGER-MODIFIER
+; INTEGER-MODIFIER: unsupported-instruction-form: v_cmp_lt_i16
+; INTEGER-MODIFIER-SAME: integer source modifiers are not supported
+
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 
@@ -90,6 +97,16 @@
 
 	comparison_kernel float16
 	v_cmp_eq_f16_e64 s4, v0, v1
+	s_endpgm
+
+	comparison_kernel integer_abs
+; v_cmp_lt_i16_e64 s4, v0.l, v1.l with src0 ABS set.
+	.long 0xd4310104, 0x02020300
+	s_endpgm
+
+	comparison_kernel integer_neg
+; v_cmp_lt_i16_e64 s4, v0.l, v1.l with src0 NEG set.
+	.long 0xd4310004, 0x22020300
 	s_endpgm
 
 	.amdgpu_metadata
@@ -177,6 +194,26 @@ amdhsa.kernels:
     .max_flat_workgroup_size: 1024
   - .name: float16
     .symbol: float16.kd
+    .kernarg_segment_size: 0
+    .group_segment_fixed_size: 0
+    .private_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .wavefront_size: 32
+    .sgpr_count: 5
+    .vgpr_count: 4
+    .max_flat_workgroup_size: 1024
+  - .name: integer_abs
+    .symbol: integer_abs.kd
+    .kernarg_segment_size: 0
+    .group_segment_fixed_size: 0
+    .private_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .wavefront_size: 32
+    .sgpr_count: 5
+    .vgpr_count: 4
+    .max_flat_workgroup_size: 1024
+  - .name: integer_neg
+    .symbol: integer_neg.kd
     .kernarg_segment_size: 0
     .group_segment_fixed_size: 0
     .private_segment_fixed_size: 0
