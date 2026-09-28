@@ -603,6 +603,8 @@ static const Entry kCanonTable[] = {
     E(V_PK_MUL_F32, V_PK_MUL_F32),
     E(V_PK_FMA_F32, V_PK_FMA_F32),
     E(V_PK_FMA_F32_gfx1250, V_PK_FMA_F32),
+    E(V_FMA_MIX_F32_BF16, V_FMA_MIX_F32_BF16),
+    E(V_FMA_MIX_F32_BF16_gfx1250, V_FMA_MIX_F32_BF16),
     E(V_PK_ADD_F32_gfx1250, V_PK_ADD_F32),
     E(V_PK_MUL_F32_gfx1250, V_PK_MUL_F32),
     E(V_PK_ADD_U16, V_PK_ADD_U16),
