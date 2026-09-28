@@ -11,6 +11,7 @@
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
+#include "transpiler/raiser/handle-vop-shared.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/wmma-lowering.h"
@@ -32,20 +33,6 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 namespace {
-
-/// Read the VOP3P clamp operand. An absent operand is an unclamped result.
-Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
-  int Index = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                                    AMDGPU::OpName::clamp);
-  if (Index < 0)
-    return false;
-  if (!Di.isImm(static_cast<unsigned>(Index)))
-    return unsupported(Ctx, Di, "clamp operand is not immediate");
-  int64_t Clamp = Di.getImm(static_cast<unsigned>(Index));
-  if (Clamp != 0 && Clamp != 1)
-    return unsupported(Ctx, Di, "clamp operand is not 0 or 1");
-  return Clamp != 0;
-}
 
 /// Read one two-lane packed floating-point source and apply its lane controls.
 Expected<Value *> readPackedFloatSource(RaiseContext &Ctx,

@@ -33,18 +33,6 @@ using namespace llvm;
 namespace COMGR::transpiler {
 namespace {
 
-/// Read the VOP3 clamp operand. Opcodes whose encoding reserves the field have
-/// no named operand and are necessarily unclamped.
-Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
-  int Idx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                                  AMDGPU::OpName::clamp);
-  if (Idx < 0)
-    return false;
-  if (!Di.isImm(Idx))
-    return unsupportedInstruction(Ctx, Di, "clamp operand is not immediate");
-  return Di.getImm(Idx) != 0;
-}
-
 /// Reject nonzero output multipliers on integer VOP3 instructions.
 Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
   int Idx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
@@ -412,6 +400,11 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     break;
   }
 
+  // The 16-bit integer opcodes carry their register-half selection in the
+  // source modifiers, so they are raised ahead of the checks that reject them.
+  if (isInteger16Op(Di.CanonOp))
+    return handleInteger16(Ctx, Di, Op);
+
   if (Error Err = requireNoIntegerSourceModifiers(Ctx, Di, Op))
     return Err;
   if (Error Err = requireNoOutputMultiplier(Ctx, Di))
@@ -653,30 +646,8 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     if (!Args)
       return Args.takeError();
 
-    Value *Not0 = Ctx.B.CreateNot(Args->Src0);
-    Value *Not1 = Ctx.B.CreateNot(Args->Src1);
-    Value *Not2 = Ctx.B.CreateNot(Args->Src2);
-    constexpr unsigned TruthTableSize = 8;
-    constexpr uint64_t TruthTableMask = UINT64_C(0xff);
-    Value *Minterms[TruthTableSize];
-    Value *First = Ctx.B.CreateAnd(Not0, Not1);
-    Minterms[0] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[1] = Ctx.B.CreateAnd(First, Args->Src2);
-    First = Ctx.B.CreateAnd(Not0, Args->Src1);
-    Minterms[2] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[3] = Ctx.B.CreateAnd(First, Args->Src2);
-    First = Ctx.B.CreateAnd(Args->Src0, Not1);
-    Minterms[4] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[5] = Ctx.B.CreateAnd(First, Args->Src2);
-    First = Ctx.B.CreateAnd(Args->Src0, Args->Src1);
-    Minterms[6] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[7] = Ctx.B.CreateAnd(First, Args->Src2);
-    uint64_t TruthTable = static_cast<uint64_t>(Op.srcImm(3)) & TruthTableMask;
-    Value *Result = Ctx.B.getInt32(0);
-    for (unsigned I = 0; I != TruthTableSize; ++I) {
-      if (TruthTable & (UINT64_C(1) << I))
-        Result = Ctx.B.CreateOr(Result, Minterms[I], "bitop3");
-    }
+    Value *Result = emitBitOp3(Ctx.B, Args->Src0, Args->Src1, Args->Src2,
+                               static_cast<uint8_t>(Op.srcImm(3)));
     Ctx.registers().writeReg32(Args->Dst, Result);
     return Error::success();
   }

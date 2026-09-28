@@ -22,6 +22,10 @@
 
 namespace COMGR::transpiler {
 
+// Width of a vector register, and of the halves a 16-bit operation addresses.
+constexpr unsigned RegisterWidthInBits = 32;
+constexpr unsigned HalfWidthInBits = 16;
+
 // Destination and source values of a binary instruction.
 struct BinaryOperands {
   ParsedReg Dst;
@@ -73,6 +77,18 @@ struct OperandResolver {
   // Read the selected half of the I-th source as an f16 value with its
   // modifiers applied.
   llvm::Expected<llvm::Value *> srcF16(unsigned I);
+  // Read the selected half of the I-th source as an i16 value.
+  llvm::Expected<llvm::Value *> src16(unsigned I);
+  // Whether the I-th source names the high half of its 32-bit register. The
+  // true16 encodings spell the half as a register suffix and the others as an
+  // op_sel modifier bit; the two agree wherever both are present.
+  bool srcIsHighHalf(unsigned I) const;
+  // Whether the destination names the high half of its 32-bit register, which
+  // the VOP3 encodings carry as the op_sel bit in src0's modifiers.
+  bool dstIsHighHalf() const;
+  // Whether a 16-bit result leaves the other half of the destination register
+  // alone. The encodings that cannot name a destination half zero it instead.
+  bool dstKeepsOtherHalf() const;
   // Read the I-th source as a 64-bit value.
   llvm::Expected<llvm::Value *> src64(unsigned I) {
     return Ctx.registers().readOp64(Di, srcIdx(I));

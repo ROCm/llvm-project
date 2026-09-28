@@ -94,6 +94,13 @@ llvm::Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
 /// refusal.
 llvm::Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
                         OperandResolver &Op);
+/// Whether `Op` reads and writes 16-bit register halves and so is raised by
+/// `handleInteger16` rather than by the encoding's own handler.
+bool isInteger16Op(CanonicalOp Op);
+/// Translate a 16-bit integer instruction, shared by the VOP2 and VOP3
+/// encodings it appears in.
+llvm::Error handleInteger16(RaiseContext &Ctx, const DecodedInst &Di,
+                            OperandResolver &Op);
 /// Translate a supported matrix instruction to the corresponding target MFMA.
 llvm::Error handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);

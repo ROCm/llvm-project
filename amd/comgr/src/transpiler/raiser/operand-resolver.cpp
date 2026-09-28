@@ -13,6 +13,8 @@
 #include "SIDefines.h"
 
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 
 #include <climits>
@@ -56,29 +58,64 @@ Expected<Value *> OperandResolver::srcF(unsigned I) {
   return applyMods(I, Float);
 }
 
+// Whether the register named by operand `OpIdx` is a `_HI16` subregister.
+static bool namesHighHalfRegister(const DecodedInst &Di,
+                                  const MCRegisterInfo &MRI, unsigned OpIdx) {
+  return Di.isReg(OpIdx) &&
+         (MRI.getEncodingValue(Di.getReg(OpIdx)) & AMDGPU::HWEncoding::IS_HI16);
+}
+
+bool OperandResolver::srcIsHighHalf(unsigned I) const {
+  return (srcMod(I) & SISrcMods::OP_SEL_0) != 0 ||
+         namesHighHalfRegister(Di, *Ctx.MC.RegInfo, srcIdx(I));
+}
+
+bool OperandResolver::dstIsHighHalf() const {
+  return (srcMod(0) & SISrcMods::DST_OP_SEL) != 0 ||
+         namesHighHalfRegister(Di, *Ctx.MC.RegInfo, 0);
+}
+
+bool OperandResolver::dstKeepsOtherHalf() const {
+  // A VOP3 op_sel field names the destination half, and a true16 encoding
+  // names it as a 16-bit register; either way the half that is not named is
+  // left alone. The older encodings have no way to name a half and write the
+  // result zero-extended over the whole register.
+  const MCInstrDesc &Desc = Ctx.MC.InstrInfo->get(Di.Inst.getOpcode());
+  if (SIInstrFlags::hasVOP3OpSel(Desc))
+    return true;
+  int16_t DstClass = Desc.operands()[0].RegClass;
+  return DstClass >= 0 &&
+         Ctx.MC.RegInfo->getRegClass(DstClass).getSizeInBits() ==
+             HalfWidthInBits;
+}
+
+// Narrow the 32-bit register value `Bits` to the selected 16-bit half.
+static Value *selectHalf(IRBuilder<> &B, Value *Bits, bool HighHalf) {
+  if (HighHalf)
+    Bits = B.CreateLShr(Bits, HalfWidthInBits, "src.hi");
+  return B.CreateTrunc(Bits, B.getInt16Ty(), "src.i16");
+}
+
 Expected<Value *> OperandResolver::srcF16(unsigned I) {
   Expected<Value *> V = Ctx.registers().readOp32(Di, srcIdx(I));
   if (!V)
     return V.takeError();
 
-  unsigned Modifiers = srcMod(I);
   constexpr unsigned AllowedModifiers =
       SISrcMods::NEG | SISrcMods::ABS | SISrcMods::OP_SEL_0;
-  if (Modifiers & ~AllowedModifiers)
+  if (srcMod(I) & ~AllowedModifiers)
     return unsupportedInstruction(Ctx, Di, "unsupported f16 source modifier");
 
-  unsigned SourceIndex = srcIdx(I);
-  bool SourceIsHigh =
-      (Modifiers & SISrcMods::OP_SEL_0) != 0 ||
-      (Di.isReg(SourceIndex) &&
-       (Ctx.MC.RegInfo->getEncodingValue(Di.getReg(SourceIndex)) &
-        AMDGPU::HWEncoding::IS_HI16));
-  Value *SelectedBits = *V;
-  if (SourceIsHigh)
-    SelectedBits = Ctx.B.CreateLShr(SelectedBits, 16, "src.hi");
-  Value *LowBits = Ctx.B.CreateTrunc(SelectedBits, Ctx.B.getInt16Ty());
+  Value *LowBits = selectHalf(Ctx.B, *V, srcIsHighHalf(I));
   Value *Half = Ctx.B.CreateBitCast(LowBits, Ctx.B.getHalfTy());
   return applyMods(I, Half);
+}
+
+Expected<Value *> OperandResolver::src16(unsigned I) {
+  Expected<Value *> V = Ctx.registers().readOp32(Di, srcIdx(I));
+  if (!V)
+    return V.takeError();
+  return selectHalf(Ctx.B, *V, srcIsHighHalf(I));
 }
 
 Expected<std::optional<ParsedReg>> OperandResolver::srcReg(unsigned I) {
