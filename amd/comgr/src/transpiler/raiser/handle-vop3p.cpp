@@ -364,6 +364,66 @@ Error raisePackedInt16(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+Expected<Value *> readMixedBF16Source(RaiseContext &Ctx, OperandResolver &Op,
+                                      unsigned Source) {
+  unsigned Modifiers = Op.srcMod(Source);
+  Expected<Value *> Bits = Op.src(Source);
+  if (!Bits)
+    return Bits.takeError();
+
+  Value *Result;
+  if (Modifiers & SISrcMods::OP_SEL_1) {
+    Value *Selected = *Bits;
+    if (Modifiers & SISrcMods::OP_SEL_0)
+      Selected = Ctx.B.CreateLShr(Selected, 16, "mix.hi");
+    Value *HalfBits = Ctx.B.CreateTrunc(Selected, Ctx.B.getInt16Ty());
+    Value *BF16 = Ctx.B.CreateBitCast(HalfBits, Ctx.B.getBFloatTy());
+    Result = Ctx.B.CreateFPExt(BF16, Ctx.B.getFloatTy(), "mix.bf16");
+  } else {
+    Result = Ctx.B.CreateBitCast(*Bits, Ctx.B.getFloatTy());
+  }
+
+  if (Modifiers & SISrcMods::ABS)
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::fabs, Result);
+  if (Modifiers & SISrcMods::NEG)
+    Result = Ctx.B.CreateFNeg(Result);
+  return Result;
+}
+
+Error raiseFMAMixF32BF16(RaiseContext &Ctx, const DecodedInst &Di,
+                         OperandResolver &Op) {
+  assert(Di.NumDefs == 1 && Di.isReg(0) && Op.nSrcs() == 3 &&
+         "decoded FMA mix instruction has unexpected operands");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+    return Err;
+
+  Expected<bool> Clamp = readClamp(Ctx, Di);
+  if (!Clamp)
+    return Clamp.takeError();
+  Expected<ParsedReg> Destination = Op.dst();
+  if (!Destination)
+    return Destination.takeError();
+
+  Value *Sources[3];
+  for (unsigned I = 0; I != 3; ++I) {
+    Expected<Value *> Source = readMixedBF16Source(Ctx, Op, I);
+    if (!Source)
+      return Source.takeError();
+    Sources[I] = *Source;
+  }
+  Value *Result = Ctx.B.CreateIntrinsic(Intrinsic::fma, {Ctx.B.getFloatTy()},
+                                        Sources, nullptr, "mix.fma");
+  if (*Clamp) {
+    Value *Zero = ConstantFP::get(Ctx.B.getFloatTy(), 0.0);
+    Value *One = ConstantFP::get(Ctx.B.getFloatTy(), 1.0);
+    Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::maxnum, Result, Zero);
+    Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::minnum, Result, One);
+  }
+  Ctx.registers().writeReg32(
+      *Destination, Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
+  return Error::success();
+}
+
 Expected<Value *> readWMMAAccumulator(RaiseContext &Ctx, const DecodedInst &Di,
                                       OperandResolver &Op,
                                       Type *AccumulatorTy) {
@@ -474,6 +534,8 @@ Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_PK_MIN3_U16:
   case CanonicalOp::V_PK_MAX3_U16:
     return raisePackedInt16(Ctx, Di, Op);
+  case CanonicalOp::V_FMA_MIX_F32_BF16:
+    return raiseFMAMixF32BF16(Ctx, Di, Op);
   case CanonicalOp::V_WMMA_F32_16x16x32_F16:
     return raiseWMMA(Ctx, Di, Op, WMMAInputType::F16);
   case CanonicalOp::V_WMMA_F32_16x16x32_BF16:
