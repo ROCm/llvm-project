@@ -206,8 +206,6 @@ public:
           MlirModule, LLVMCtx, C.getLangOpts().OpenMP, mlirSaveTempsOutFile,
           &CI.getVirtualFileSystem());
 
-      LLVMModule->setDataLayout(C.getTargetInfo().getDataLayoutString());
-
       if (linkInModules(*LLVMModule))
         return;
 
@@ -216,8 +214,9 @@ public:
         embedSYCLDeviceBinary(*LLVMModule);
 
       BackendAction BEAction = getBackendActionFromOutputType(Action);
-      emitBackendOutput(CI, CI.getCodeGenOpts(), LLVMModule.get(), BEAction, FS,
-                        std::move(OutputStream));
+      emitBackendOutput(
+          CI, CI.getCodeGenOpts(), C.getTargetInfo().getDataLayoutString(),
+          LLVMModule.get(), BEAction, FS, std::move(OutputStream));
       break;
     }
     }
