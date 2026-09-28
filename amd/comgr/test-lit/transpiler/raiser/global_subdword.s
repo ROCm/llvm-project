@@ -45,42 +45,22 @@ s_mov_b32 exec_lo, 0x55555555
 global_load_u8 v4, v[2:3], off offset:1
 
 ; DECODE: GLOBAL_LOAD_I8 global_load_i8
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 -1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: [[VALUE:%.+]] = load i8, ptr addrspace(1) [[OFFSET]], align 1
+; IR: [[VALUE:%.+]] = load i8, ptr addrspace(1) {{%.+}}, align 1
 ; IR-NEXT: [[EXT:%.+]] = sext i8 [[VALUE]] to i32
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
-; IR-NEXT: [[PREVIOUS1:%.+]] = phi i32 [ [[EXT]], %[[DO]] ], [ [[PREVIOUS0]], {{%.+}} ]
+; IR: [[PREVIOUS1:%.+]] = phi i32 [ [[EXT]], {{%.+}} ], [ [[PREVIOUS0]], {{%.+}} ]
 global_load_i8 v4, v[2:3], off offset:-1
 
 ; DECODE: GLOBAL_LOAD_U16 global_load_u16
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: [[VALUE:%.+]] = load i16, ptr addrspace(1) [[OFFSET]], align 1
+; IR: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) {{%.+}}, i64 1
+; IR: [[VALUE:%.+]] = load i16, ptr addrspace(1) [[OFFSET]], align 1
 ; IR-NEXT: [[EXT:%.+]] = zext i16 [[VALUE]] to i32
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
-; IR-NEXT: [[PREVIOUS2:%.+]] = phi i32 [ [[EXT]], %[[DO]] ], [ [[PREVIOUS1]], {{%.+}} ]
+; IR: [[PREVIOUS2:%.+]] = phi i32 [ [[EXT]], {{%.+}} ], [ [[PREVIOUS1]], {{%.+}} ]
 global_load_u16 v4, v[2:3], off offset:1
 
 ; DECODE: GLOBAL_LOAD_I16 global_load_i16
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 -1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: [[VALUE:%.+]] = load i16, ptr addrspace(1) [[OFFSET]], align 1
+; IR: [[VALUE:%.+]] = load i16, ptr addrspace(1) {{%.+}}, align 1
 ; IR-NEXT: [[EXT:%.+]] = sext i16 [[VALUE]] to i32
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
-; IR-NEXT: [[PREVIOUS3:%.+]] = phi i32 [ [[EXT]], %[[DO]] ], [ [[PREVIOUS2]], {{%.+}} ]
+; IR: [[PREVIOUS3:%.+]] = phi i32 [ [[EXT]], {{%.+}} ], [ [[PREVIOUS2]], {{%.+}} ]
 global_load_i16 v4, v[2:3], off offset:-1
 
 ; DECODE: GLOBAL_STORE_B8 global_store_b8
@@ -97,142 +77,66 @@ global_store_b8 v[2:3], v4, off offset:1
 
 ; DECODE: GLOBAL_STORE_B16 global_store_b16
 ; IR: [[DATA:%.+]] = trunc i32 [[PREVIOUS3]] to i16
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 -1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: store i16 [[DATA]], ptr addrspace(1) [[OFFSET]], align 1
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
+; IR: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) {{%.+}}, i64 -1
+; IR: store i16 [[DATA]], ptr addrspace(1) [[OFFSET]], align 1
 global_store_b16 v[2:3], v4, off offset:-1
 
 ; DECODE: GLOBAL_STORE_D16_HI_B8 global_store_d16_hi_b8
 ; IR: [[HIGH:%.+]] = lshr i32 [[PREVIOUS3]], 16
 ; IR-NEXT: [[DATA:%.+]] = trunc i32 [[HIGH]] to i8
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: store i8 [[DATA]], ptr addrspace(1) [[OFFSET]], align 1
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
+; IR: store i8 [[DATA]], ptr addrspace(1) {{%.+}}, align 1
 global_store_d16_hi_b8 v[2:3], v4, off offset:1
 
 ; DECODE: GLOBAL_STORE_D16_HI_B16 global_store_d16_hi_b16
 ; IR: [[HIGH:%.+]] = lshr i32 [[PREVIOUS3]], 16
 ; IR-NEXT: [[DATA:%.+]] = trunc i32 [[HIGH]] to i16
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 -1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: store i16 [[DATA]], ptr addrspace(1) [[OFFSET]], align 1
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
+; IR: store i16 [[DATA]], ptr addrspace(1) {{%.+}}, align 1
 global_store_d16_hi_b16 v[2:3], v4, off offset:-1
 
 ; DECODE: GLOBAL_LOAD_U8 global_load_u8
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: [[VALUE:%.+]] = load i8, ptr addrspace(1) [[OFFSET]], align 1
+; IR: [[VALUE:%.+]] = load i8, ptr addrspace(1) {{%.+}}, align 1
 ; IR-NEXT: [[EXT:%.+]] = zext i8 [[VALUE]] to i32
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
-; IR-NEXT: [[PREVIOUS4:%.+]] = phi i32 [ [[EXT]], %[[DO]] ], [ [[PREVIOUS3]], {{%.+}} ]
+; IR: [[PREVIOUS4:%.+]] = phi i32 [ [[EXT]], {{%.+}} ], [ [[PREVIOUS3]], {{%.+}} ]
 global_load_u8 v4, v0, s[0:1] offset:1
 
 ; DECODE: GLOBAL_LOAD_I8 global_load_i8
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 -1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: [[VALUE:%.+]] = load i8, ptr addrspace(1) [[OFFSET]], align 1
+; IR: [[VALUE:%.+]] = load i8, ptr addrspace(1) {{%.+}}, align 1
 ; IR-NEXT: [[EXT:%.+]] = sext i8 [[VALUE]] to i32
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
-; IR-NEXT: [[PREVIOUS5:%.+]] = phi i32 [ [[EXT]], %[[DO]] ], [ [[PREVIOUS4]], {{%.+}} ]
+; IR: [[PREVIOUS5:%.+]] = phi i32 [ [[EXT]], {{%.+}} ], [ [[PREVIOUS4]], {{%.+}} ]
 global_load_i8 v4, v0, s[0:1] offset:-1
 
 ; DECODE: GLOBAL_LOAD_U16 global_load_u16
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: [[VALUE:%.+]] = load i16, ptr addrspace(1) [[OFFSET]], align 1
+; IR: [[VALUE:%.+]] = load i16, ptr addrspace(1) {{%.+}}, align 1
 ; IR-NEXT: [[EXT:%.+]] = zext i16 [[VALUE]] to i32
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
-; IR-NEXT: [[PREVIOUS6:%.+]] = phi i32 [ [[EXT]], %[[DO]] ], [ [[PREVIOUS5]], {{%.+}} ]
+; IR: [[PREVIOUS6:%.+]] = phi i32 [ [[EXT]], {{%.+}} ], [ [[PREVIOUS5]], {{%.+}} ]
 global_load_u16 v4, v0, s[0:1] offset:1
 
 ; DECODE: GLOBAL_LOAD_I16 global_load_i16
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 -1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: [[VALUE:%.+]] = load i16, ptr addrspace(1) [[OFFSET]], align 1
+; IR: [[VALUE:%.+]] = load i16, ptr addrspace(1) {{%.+}}, align 1
 ; IR-NEXT: [[EXT:%.+]] = sext i16 [[VALUE]] to i32
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
-; IR-NEXT: [[PREVIOUS7:%.+]] = phi i32 [ [[EXT]], %[[DO]] ], [ [[PREVIOUS6]], {{%.+}} ]
+; IR: [[PREVIOUS7:%.+]] = phi i32 [ [[EXT]], {{%.+}} ], [ [[PREVIOUS6]], {{%.+}} ]
 global_load_i16 v4, v0, s[0:1] offset:-1
 
 ; DECODE: GLOBAL_STORE_B8 global_store_b8
 ; IR: [[DATA:%.+]] = trunc i32 [[PREVIOUS7]] to i8
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: store i8 [[DATA]], ptr addrspace(1) [[OFFSET]], align 1
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
+; IR: store i8 [[DATA]], ptr addrspace(1) {{%.+}}, align 1
 global_store_b8 v0, v4, s[0:1] offset:1
 
 ; DECODE: GLOBAL_STORE_B16 global_store_b16
 ; IR: [[DATA:%.+]] = trunc i32 [[PREVIOUS7]] to i16
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 -1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: store i16 [[DATA]], ptr addrspace(1) [[OFFSET]], align 1
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
+; IR: store i16 [[DATA]], ptr addrspace(1) {{%.+}}, align 1
 global_store_b16 v0, v4, s[0:1] offset:-1
 
 ; DECODE: GLOBAL_STORE_D16_HI_B8 global_store_d16_hi_b8
 ; IR: [[HIGH:%.+]] = lshr i32 [[PREVIOUS7]], 16
 ; IR-NEXT: [[DATA:%.+]] = trunc i32 [[HIGH]] to i8
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: store i8 [[DATA]], ptr addrspace(1) [[OFFSET]], align 1
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
+; IR: store i8 [[DATA]], ptr addrspace(1) {{%.+}}, align 1
 global_store_d16_hi_b8 v0, v4, s[0:1] offset:1
 
 ; DECODE: GLOBAL_STORE_D16_HI_B16 global_store_d16_hi_b16
 ; IR: [[HIGH:%.+]] = lshr i32 [[PREVIOUS7]], 16
 ; IR-NEXT: [[DATA:%.+]] = trunc i32 [[HIGH]] to i16
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
-; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 -1
-; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
-; IR: [[DO]]:
-; IR-NEXT: store i16 [[DATA]], ptr addrspace(1) [[OFFSET]], align 1
-; IR-NEXT: br label %[[SKIP]]
-; IR: [[SKIP]]:
+; IR: store i16 [[DATA]], ptr addrspace(1) {{%.+}}, align 1
 global_store_d16_hi_b16 v0, v4, s[0:1] offset:-1
 
 ; IR: ret void
