@@ -14,7 +14,6 @@
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/raise_failure.h"
 
-#include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
@@ -23,7 +22,6 @@
 #include "llvm/Support/Error.h"
 
 #include <cstdint>
-#include <optional>
 
 using namespace llvm;
 
@@ -75,19 +73,6 @@ static Expected<ParsedReg> requireScalarDestination(RaiseContext &Ctx,
   }
 }
 
-/// Return the first source register after requiring a VGPR operand.
-static Expected<ParsedReg> requireVectorSource(RaiseContext &Ctx,
-                                               const DecodedInst &Di,
-                                               OperandResolver &Op) {
-  Expected<std::optional<ParsedReg>> Src = Op.srcReg(0);
-  if (!Src)
-    return Src.takeError();
-  if (!*Src || (**Src).RegKind != ParsedReg::VGPR)
-    return unsupportedInstruction(Ctx, Di,
-                                  "cross-lane read requires a VGPR source");
-  return **Src;
-}
-
 /// Return the bit mask applied to a source-wave lane selector.
 static Value *getSourceLaneMask(IRBuilder<> &B,
                                 const WaveProjection &Projection) {
@@ -125,6 +110,9 @@ Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
                            OperandResolver &Op) {
   if (Error Err = requireSupportedWaveDirection(Ctx, Di))
     return Err;
+  if (Ctx.Projection.targetWaveSize() > Ctx.Projection.sourceWaveSize())
+    return unsupportedInstruction(
+        Ctx, Di, "v_readfirstlane_b32 does not support wave-size widening");
   if (Op.nSrcs() != 1)
     return unsupportedInstruction(Ctx, Di, "expected one source operand");
 
@@ -135,32 +123,10 @@ Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Src)
     return Src.takeError();
 
-  Value *Result = nullptr;
-  if (Ctx.Projection.targetWaveSize() == Ctx.Projection.sourceWaveSize()) {
-    Module *M = Ctx.B.GetInsertBlock()->getModule();
-    Function *ReadFirstLane = Intrinsic::getOrInsertDeclaration(
-        M, Intrinsic::amdgcn_readfirstlane, {Ctx.B.getInt32Ty()});
-    Result = Ctx.B.CreateCall(ReadFirstLane, {*Src}, "readfirstlane");
-  } else {
-    Value *Exec = Ctx.registers().regFile().loadExec(Ctx.B);
-    Value *SourceExec = Ctx.Projection.emitCurrentSourceWaveMask(
-        Ctx.B, Exec, "readfirstlane.exec");
-    Type *MaskTy = SourceExec->getType();
-    Function *CountTrailingZeros = Intrinsic::getOrInsertDeclaration(
-        Ctx.B.GetInsertBlock()->getModule(), Intrinsic::cttz, {MaskTy});
-    Value *FirstActive =
-        Ctx.B.CreateCall(CountTrailingZeros,
-                         {SourceExec, ConstantInt::getFalse(Ctx.B.getInt1Ty())},
-                         "readfirstlane.first");
-    Value *ExecIsZero = Ctx.B.CreateICmpEQ(
-        SourceExec, ConstantInt::get(MaskTy, 0), "readfirstlane.exec.zero");
-    Value *Selected =
-        Ctx.B.CreateSelect(ExecIsZero, ConstantInt::get(MaskTy, 0), FirstActive,
-                           "readfirstlane.selected");
-    Value *SourceLane = Ctx.B.CreateZExtOrTrunc(Selected, Ctx.B.getInt32Ty(),
-                                                "readfirstlane.source.lane");
-    Result = emitSourceWaveRead(Ctx, *Src, SourceLane, "readfirstlane");
-  }
+  Module *M = Ctx.B.GetInsertBlock()->getModule();
+  Function *ReadFirstLane = Intrinsic::getOrInsertDeclaration(
+      M, Intrinsic::amdgcn_readfirstlane, {Ctx.B.getInt32Ty()});
+  Value *Result = Ctx.B.CreateCall(ReadFirstLane, {*Src}, "readfirstlane");
 
   Ctx.registers().writeReg32(*Dst, Result);
   return Error::success();
@@ -176,14 +142,13 @@ Error raiseReadLane32(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<ParsedReg> Dst = requireScalarDestination(Ctx, Di, Op);
   if (!Dst)
     return Dst.takeError();
-  Expected<ParsedReg> SrcReg = requireVectorSource(Ctx, Di, Op);
-  if (!SrcReg)
-    return SrcReg.takeError();
+  Expected<Value *> Src = Op.src(0);
+  if (!Src)
+    return Src.takeError();
   Expected<Value *> Lane = Op.src(1);
   if (!Lane)
     return Lane.takeError();
 
-  Value *Src = Ctx.registers().regFile().readReg32(Ctx.B, *SrcReg);
   Value *Lane32 =
       Ctx.B.CreateZExtOrTrunc(*Lane, Ctx.B.getInt32Ty(), "readlane.index");
   Value *SourceLane = emitSourceWaveLane(Ctx, Lane32, "readlane.source.lane");
@@ -192,9 +157,9 @@ Error raiseReadLane32(RaiseContext &Ctx, const DecodedInst &Di,
     Module *M = Ctx.B.GetInsertBlock()->getModule();
     Function *ReadLane = Intrinsic::getOrInsertDeclaration(
         M, Intrinsic::amdgcn_readlane, {Ctx.B.getInt32Ty()});
-    Result = Ctx.B.CreateCall(ReadLane, {Src, SourceLane}, "readlane");
+    Result = Ctx.B.CreateCall(ReadLane, {*Src, SourceLane}, "readlane");
   } else {
-    Result = emitSourceWaveRead(Ctx, Src, SourceLane, "readlane");
+    Result = emitSourceWaveRead(Ctx, *Src, SourceLane, "readlane");
   }
 
   Ctx.registers().writeReg32(*Dst, Result);
