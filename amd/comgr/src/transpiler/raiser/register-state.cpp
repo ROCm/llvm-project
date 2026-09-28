@@ -435,23 +435,47 @@ Expected<ParsedReg> RegisterState::parseReg(const DecodedInst &Di,
           MRI.getName(Reg) + "' (enc=0x" + Twine::utohexstr(Enc) + ")");
 }
 
+bool RegisterState::sourceImageSgprPairRecorded(unsigned Idx) const {
+  // A pair is keyed by its low SGPR, so this register belongs to the pair
+  // keyed at its own index and to the one before it.
+  return SourceImageSgprPairs.contains(Idx) ||
+         (Idx > 0 && SourceImageSgprPairs.contains(Idx - 1));
+}
+
 Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
-                                           unsigned OpIdx,
+                                           unsigned Idx) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      Twine("operand-read: 's") + Twine(Idx) +
+          "' may hold a source code-object address, which names a place in "
+          "the source image rather than anything the raised kernel can "
+          "address");
+}
+
+Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
                                            const ParsedReg &Pr) {
   if (Pr.RegKind != ParsedReg::SGPR || !Pr.BaseIdx)
     return Error::success();
   for (unsigned I = 0; I != Pr.WidthInDwords; ++I) {
-    if (!mayHoldSourceImageAddress(*Pr.BaseIdx + I))
-      continue;
-    return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedInstructionForm,
-        strippedMnemonic(MC, Di.Inst), Di.Offset,
-        formatName(Di.TargetSpecificFlags),
-        Twine("operand-read: '") + MC.RegInfo->getName(Di.getReg(OpIdx)) +
-            "' may hold a source code-object address, which names a place in "
-            "the source image rather than anything the raised kernel can "
-            "address");
+    unsigned Idx = *Pr.BaseIdx + I;
+    if (mayHoldSourceImageAddress(Idx))
+      return refuseSourceImageRead(Di, Idx);
+    // The register carries no address the raise knows of yet, and the block
+    // reading it holds whatever ran before rather than a value of its own, so
+    // an instruction the raise has still to reach can record one there.
+    if (!sourceImageSgprPairRecorded(Idx) &&
+        !blockState().DefinedSgprs.contains(Idx))
+      DeferredSourceImageReads.push_back({/*Di=*/&Di, /*Idx=*/Idx});
   }
+  return Error::success();
+}
+
+Error RegisterState::refuseDeferredSourceImageReads() {
+  for (const DeferredSourceImageRead &Read : DeferredSourceImageReads)
+    if (sourceImageSgprPairRecorded(Read.Idx))
+      return refuseSourceImageRead(*Read.Di, Read.Idx);
   return Error::success();
 }
 
@@ -463,7 +487,7 @@ Expected<Value *> RegisterState::readOp32(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
-    if (Error Err = refuseSourceImageRead(Di, OpIdx, Pr))
+    if (Error Err = refuseSourceImageRead(Di, Pr))
       return Err;
     if (Pr.RegKind == ParsedReg::VCC) {
       Value *Mask = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
@@ -551,7 +575,7 @@ Expected<Value *> RegisterState::readOp64(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
-    if (Error Err = refuseSourceImageRead(Di, OpIdx, Pr))
+    if (Error Err = refuseSourceImageRead(Di, Pr))
       return Err;
     if (Pr.RegKind == ParsedReg::VCC)
       return Regs.readVCCAsWaveMask(B, I64Ty);
@@ -769,7 +793,7 @@ Expected<Value *> RegisterState::readOpExecWidth(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
-    if (Error Err = refuseSourceImageRead(Di, OpIdx, Pr))
+    if (Error Err = refuseSourceImageRead(Di, Pr))
       return Err;
     if (Pr.RegKind == ParsedReg::VCC)
       return Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
