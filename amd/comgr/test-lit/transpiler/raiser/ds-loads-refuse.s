@@ -19,7 +19,7 @@
 	.type ds_gds,@function
 ds_gds:
 ; GDS: in kernel 'ds_gds'
-; GDS-SAME: GDS loads are not modeled
+; GDS-SAME: GDS accesses are not modeled
 	ds_read_b32 v1, v0 gds
 	s_endpgm
 
@@ -28,7 +28,7 @@ ds_gds:
 	.type ds_m0,@function
 ds_m0:
 ; M0: in kernel 'ds_m0'
-; M0-SAME: M0-bounded LDS loads are not modeled
+; M0-SAME: M0-bounded LDS accesses are not modeled
 	ds_read_b32 v1, v0
 	s_endpgm
 
@@ -38,7 +38,7 @@ ds_m0:
 ds_wide:
 ; WGP: unsupported-instruction-form: ds_read_b64 [DS]
 ; WGP-SAME: in kernel 'ds_wide'
-; WGP-SAME: wide LDS loads with the WGP misalignment bug are not modeled
+; WGP-SAME: wide LDS accesses with the WGP misalignment bug are not modeled
 	ds_read_b64 v[0:1], v0
 	s_endpgm
 
