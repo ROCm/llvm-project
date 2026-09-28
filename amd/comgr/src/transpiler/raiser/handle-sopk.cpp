@@ -48,11 +48,24 @@ Expected<Value *> readSopkImmediate(RaiseContext &Ctx, const DecodedInst &Di,
   return Ctx.B.getInt32(Value);
 }
 
+bool isUnsignedSopkCompare(CanonicalOp Kind) {
+  switch (Kind) {
+  case CanonicalOp::S_CMPK_EQ_U32:
+  case CanonicalOp::S_CMPK_LG_U32:
+  case CanonicalOp::S_CMPK_GT_U32:
+  case CanonicalOp::S_CMPK_GE_U32:
+  case CanonicalOp::S_CMPK_LT_U32:
+  case CanonicalOp::S_CMPK_LE_U32:
+    return true;
+  default:
+    return false;
+  }
+}
+
 Error handleImmediateSopk(RaiseContext &Ctx, const DecodedInst &Di,
                           OperandResolver &Op) {
   CanonicalOp Kind = Di.CanonOp;
-  bool IsUnsignedCompare =
-      Kind >= CanonicalOp::S_CMPK_EQ_U32 && Kind <= CanonicalOp::S_CMPK_LE_U32;
+  bool IsUnsignedCompare = isUnsignedSopkCompare(Kind);
   Expected<Value *> Imm = readSopkImmediate(Ctx, Di, !IsUnsignedCompare);
   if (!Imm)
     return Imm.takeError();
