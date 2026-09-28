@@ -1,6 +1,6 @@
 ; REQUIRES: comgr-has-transpiler
 
-; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -filetype=obj %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=packed_float | %FileCheck %s
@@ -8,7 +8,7 @@
 ; RUN:   --emit-ir=refuse_fp16_overflow,refuse_fp16_rounding 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE
 
-	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
+	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
 	.globl	packed_float
@@ -44,7 +44,7 @@ packed_float:
 ; CHECK: [[F16_MUL:%.+]] = fmul <2 x half> {{%.+}}, [[F16_SCALAR]]
 ; CHECK: call <2 x half> @llvm.maxnum.v2f16(<2 x half> [[F16_MUL]]
 ; CHECK: call <2 x half> @llvm.minnum.v2f16
-	v_pk_mul_f16 v3, v4, s0 clamp
+	v_pk_mul_f16 v3, v4, ttmp9 clamp
 ; CHECK: [[F32_SRC0_LO_BITS:%.+]] = trunc i64 {{%.+}} to i32
 ; CHECK: [[F32_SRC0_HI_SHIFTED:%.+]] = lshr i64 {{%.+}}, 32
 ; CHECK: [[F32_SRC0_HI_BITS:%.+]] = trunc i64 [[F32_SRC0_HI_SHIFTED]] to i32
@@ -95,18 +95,15 @@ refuse_fp16_rounding:
 	.amdhsa_kernel packed_float
 		.amdhsa_next_free_vgpr 16
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 16
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_fp16_overflow
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 		.amdhsa_fp16_overflow 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_fp16_rounding
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 		.amdhsa_float_round_mode_16_64 1
 	.end_amdhsa_kernel
 	.text
@@ -122,7 +119,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         packed_float.kd
     .vgpr_count:     16
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
@@ -132,7 +129,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         refuse_fp16_overflow.kd
     .vgpr_count:     3
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
@@ -142,7 +139,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         refuse_fp16_rounding.kd
     .vgpr_count:     3
-    .wavefront_size: 64
+    .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
 	.end_amdgpu_metadata

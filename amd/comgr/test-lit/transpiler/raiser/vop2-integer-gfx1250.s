@@ -3,7 +3,8 @@
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=vop2_integer_gfx1250 | %FileCheck %s --check-prefix=IR
+; RUN:   --emit-ir=vop2_integer_gfx1250,vcc_exec_mask \
+; RUN:   | %FileCheck %s --check-prefix=IR
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -113,12 +114,40 @@ vop2_integer_gfx1250:
 ; IR: ret void
 	s_endpgm
 
+	.globl	vcc_exec_mask
+	.p2align	8
+	.type	vcc_exec_mask,@function
+; IR-LABEL: define amdgpu_kernel void @vcc_exec_mask(
+vcc_exec_mask:
+; A carry write reaches VCC only for the lanes EXEC leaves active, so the bit
+; the following select reads is the carry ANDed with the lane-active predicate.
+	s_mov_b32 vcc_lo, -1
+	s_mov_b32 exec_lo, 1
+; IR: [[MASKED_CARRY_OUT:%.+]] = or i1 {{.+}}, {{.+}}
+	v_add_co_ci_u32_e32 v0, vcc_lo, 0, v2, vcc_lo
+; The EXEC written above is what the lane-active predicate is recomputed from.
+; IR: [[MASKED_EXEC:%.+]] = lshr i32 1, {{.+}}
+; IR: [[MASKED_BIT:%.+]] = and i32 [[MASKED_EXEC]], 1
+; IR: [[MASKED_ACTIVE:%.+]] = icmp ne i32 [[MASKED_BIT]], 0
+; IR: [[MASKED_VCC:%.+]] = and i1 [[MASKED_ACTIVE]], [[MASKED_CARRY_OUT]]
+; IR: = select i1 [[MASKED_VCC]], i32 {{.+}}, i32 11
+	v_cndmask_b32_e32 v1, 11, v2, vcc_lo
+; IR: ret void
+	s_endpgm
+
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel vop2_integer_gfx1250
 		.amdhsa_kernarg_size 0
 		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 37
+		.amdhsa_next_free_sgpr 1
+		.amdhsa_reserve_vcc 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel vcc_exec_mask
+		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
+		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
@@ -136,6 +165,17 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         vop2_integer_gfx1250.kd
     .vgpr_count:     37
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           vcc_exec_mask
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         vcc_exec_mask.kd
+    .vgpr_count:     3
     .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...

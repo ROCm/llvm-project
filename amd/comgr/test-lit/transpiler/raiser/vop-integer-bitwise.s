@@ -1,11 +1,11 @@
 ; REQUIRES: comgr-has-transpiler
 
-; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -filetype=obj %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: %transpile_cli %t.hsaco --emit-ir=vop_integer_bitwise \
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=vop_integer_bitwise \
 ; RUN:   | %FileCheck %s
 
-	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
+	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
 	.globl	vop_integer_bitwise
@@ -102,9 +102,9 @@ vop_integer_bitwise:
 	.p2align	6, 0x0
 	.amdhsa_kernel vop_integer_bitwise
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 28
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 28
 	.end_amdhsa_kernel
 	.text
 	.amdgpu_metadata
@@ -120,7 +120,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         vop_integer_bitwise.kd
     .vgpr_count:     28
-    .wavefront_size: 64
+    .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
 	.end_amdgpu_metadata

@@ -1,6 +1,6 @@
 ; REQUIRES: comgr-has-transpiler
 
-; RUN: %llvm-mc -triple=amdgpu9.42-amd-amdhsa -filetype=obj %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --dump-meta | %FileCheck %s
 
@@ -13,7 +13,7 @@
 ; entry is used.
 ; CHECK: kernel: display_name {{.+}} has_kd=1 {{.+}} extent_size=4
 
-	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
+	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
 	.globl	real_entry
@@ -25,9 +25,9 @@ real_entry:
 	.p2align	6, 0x0
 	.amdhsa_kernel real_entry
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.text
@@ -44,7 +44,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         real_entry.kd
     .vgpr_count:     1
-    .wavefront_size: 64
+    .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
 	.end_amdgpu_metadata
