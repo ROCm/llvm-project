@@ -321,7 +321,7 @@ refuse_other_block_kernel:
 	s_cbranch_scc1 .Lother_block
 	s_endpgm
 .Lother_block:
-; OTHERBLOCK: unsupported-instruction-form: s_load_b32 {{.+}} :: uses a source address another block computed, which the raise does not carry across blocks
+; OTHERBLOCK: unsupported-instruction-form: s_load_b32 {{.+}} :: uses a source address that a block boundary or a write to one half of the pair has dropped
 	s_load_b32 s3, s[0:1], 0x0
 	s_endpgm
 
@@ -337,7 +337,7 @@ refuse_clobbered_block_kernel:
 	s_mov_b32 s0, 0
 	s_endpgm
 .Lclobbered_block:
-; CLOBBERED: unsupported-instruction-form: s_load_b32 {{.+}} :: uses a source address another block computed, which the raise does not carry across blocks
+; CLOBBERED: unsupported-instruction-form: s_load_b32 {{.+}} :: uses a source address that a block boundary or a write to one half of the pair has dropped
 	s_load_b32 s3, s[0:1], 0x0
 	s_endpgm
 
