@@ -553,8 +553,7 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     Value *Src0 = B.CreateBitCast(Args->Src0, B.getFloatTy());
     Value *Src1 = B.CreateBitCast(Args->Src1, B.getFloatTy());
     Value *Result = B.CreateFMul(Src0, Src1, "mul_f32");
-    Value *Bits = B.CreateBitCast(Result, B.getInt32Ty());
-    Ctx.registers().writeReg32(Args->Dst, Bits);
+    Ctx.registers().writeReg32(Args->Dst, Result);
     return Error::success();
   }
   case CanonicalOp::S_FMAC_F32: {
@@ -568,8 +567,7 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
       return Addend.takeError();
     IRBuilder<> &B = Ctx.B;
     Value *Result = emitFma(B, Args->Src0, Args->Src1, *Addend, "fmac_f32");
-    Value *Bits = B.CreateBitCast(Result, B.getInt32Ty());
-    Ctx.registers().writeReg32(Args->Dst, Bits);
+    Ctx.registers().writeReg32(Args->Dst, Result);
     return Error::success();
   }
   case CanonicalOp::S_FMAAK_F32: {
@@ -585,8 +583,7 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     IRBuilder<> &B = Ctx.B;
     Value *Literal = B.getInt32(static_cast<uint32_t>(Di.getImm(LiteralIdx)));
     Value *Result = emitFma(B, Args->Src0, Args->Src1, Literal, "fmaak_f32");
-    Value *Bits = B.CreateBitCast(Result, B.getInt32Ty());
-    Ctx.registers().writeReg32(Args->Dst, Bits);
+    Ctx.registers().writeReg32(Args->Dst, Result);
     return Error::success();
   }
 
