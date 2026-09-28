@@ -19,6 +19,8 @@
 ; RUN:   | %FileCheck %s --check-prefix=UNOWNED
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=interior_call_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=INTERIOR
+; RUN: %transpile_cli %t.hsaco --emit-ir=late_jump_kernel \
+; RUN:   | %FileCheck %s --check-prefix=LATE
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.text
@@ -97,6 +99,28 @@ interior_target:
 	s_endpgm
 	.size	interior_call_kernel, .-interior_call_kernel
 
+	.globl	late_jump_kernel
+	.p2align	8
+	.type	late_jump_kernel,@function
+; LATE-LABEL: define amdgpu_kernel void @late_jump_kernel(
+late_jump_kernel:
+; The offset this reaches lies within the kernel's own function symbol, past an
+; `s_endpgm` the linear scan stopped at because nothing it had read led beyond
+; it. Following the jump reads from the offset it names, which brings the code
+; behind the `s_endpgm` into the decode.
+	s_get_pc_i64 s[10:11]
+	s_add_u32 s10, s10, late_target-.
+; LATE: br label %[[TARGET:bb_.+]]
+	s_set_pc_i64 s[10:11]
+	s_endpgm
+late_target:
+; LATE: [[TARGET]]:
+; LATE: uitofp i32 99 to float
+	s_mov_b32 s2, 99
+	s_cvt_f32_u32 s3, s2
+	s_endpgm
+	.size	late_jump_kernel, .-late_jump_kernel
+
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel outlined_call_kernel
@@ -110,6 +134,11 @@ interior_target:
 		.amdhsa_next_free_sgpr 24
 	.end_amdhsa_kernel
 	.amdhsa_kernel interior_call_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel late_jump_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 24
@@ -149,6 +178,17 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     24
     .symbol:         interior_call_kernel.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           late_jump_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         late_jump_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 32
 amdhsa.version: [1, 2]

@@ -326,15 +326,19 @@ Expected<RaiseEnvironment> RaiseEnvironment::create(StringRef SourceIsa,
   return Env;
 }
 
-// A half-open range of text offsets the decode has read.
-struct Extent {
-  uint64_t Begin = 0;
-  uint64_t End = 0;
-
-  bool contains(uint64_t Offset) const {
-    return Offset >= Begin && Offset < End;
-  }
-};
+// Whether `Offset` falls strictly inside one of `Insts`, which must be in
+// source order. An offset that leads an instruction is not inside one.
+static bool isInsideDecodedInstruction(ArrayRef<DecodedInst> Insts,
+                                       uint64_t Offset) {
+  const DecodedInst *After =
+      upper_bound(Insts, Offset, [](uint64_t Off, const DecodedInst &Di) {
+        return Off < Di.Offset;
+      });
+  if (After == Insts.begin())
+    return false;
+  const DecodedInst &Di = *std::prev(After);
+  return Offset > Di.Offset && Offset < Di.Offset + Di.sizeInBytes();
+}
 
 // The function symbol extent of `Extents` that covers `Offset`, or null when
 // none of them does.
@@ -394,13 +398,10 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
                                  "kernel extent holds no instruction");
 
   // A jump through a register names no offset the decode could follow, so the
-  // code it reaches may be code no decode has read: a call may leave the
-  // kernel entirely, for an outlined helper the decode never saw. Decoding
-  // that helper can reveal further such jumps, so it asks again until nothing
-  // new turns up.
-  SmallVector<Extent> Covered{{Kernel.StartOffset, Kernel.EndOffset == 0
-                                                       ? Text.Bytes.size()
-                                                       : Kernel.EndOffset}};
+  // code it reaches may be code no decode has read: an outlined helper the
+  // kernel calls, or a stretch the scan stopped short of at an `s_endpgm`.
+  // Reading from an offset the analysis reports as unstarted can reveal
+  // further such jumps, so it asks again until nothing new turns up.
   std::optional<SetPcAnalysis> SetPc;
   for (;;) {
     Expected<SetPcAnalysis> Analyzed =
@@ -412,31 +413,30 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
 
     bool Followed = false;
     for (uint64_t Target : unstartedTargets(*SetPc)) {
-      // A target left undecoded keeps the refusal the analysis recorded for
-      // the transfer reaching it, which `raiseInst` below reports at that
-      // instruction. Decoding either kind would not lift the refusal: an
-      // extent already covered was read straight through, so landing on no
-      // instruction inside it means landing in the middle of one, and a target
-      // no function symbol covers says neither where to start reading nor how
-      // much.
-      if (any_of(Covered,
-                 [Target](const Extent &E) { return E.contains(Target); }))
+      // A target left unread keeps the refusal the analysis recorded for the
+      // transfer reaching it, which `raiseInst` below reports at that
+      // instruction. Reading either kind would not lift the refusal: bytes
+      // already decoded decode the same way a second time, and a target no
+      // function symbol covers has no extent to read to.
+      if (isInsideDecodedInstruction(Decoded->Insts, Target))
         continue;
-      const KernelSymbolExtent *Callee =
+      const KernelSymbolExtent *Owner =
           findFunctionExtent(FunctionExtents, Target);
-      if (!Callee)
+      if (!Owner)
         continue;
 
-      // The callee is decoded whole and from its own entry rather than from
-      // the offset that reached it, so its block starts are the ones its own
-      // code implies.
-      Expected<DecodeResult> CalleeDecoded =
-          decodeKernel(Env.Source.MC, Env.OpcMap, Text.Bytes, Callee->Offset,
-                       Callee->Offset + Callee->Size);
-      if (!CalleeDecoded)
-        return CalleeDecoded.takeError();
-      Covered.push_back({Callee->Offset, Callee->Offset + Callee->Size});
-      mergeDecoded(*Decoded, std::move(*CalleeDecoded));
+      // Reading from the target rather than from its function's entry covers
+      // both shapes at once: a call reaches the entry anyway, and a jump over
+      // an `s_endpgm` reaches a point the enclosing function was already read
+      // past. It also keeps this decode disjoint from what is already in hand.
+      // Each round starts an instruction at a target that had none, so the
+      // rounds run out.
+      Expected<DecodeResult> Extra =
+          decodeKernel(Env.Source.MC, Env.OpcMap, Text.Bytes, Target,
+                       Owner->Offset + Owner->Size);
+      if (!Extra)
+        return Extra.takeError();
+      mergeDecoded(*Decoded, std::move(*Extra));
       Followed = true;
     }
     if (!Followed)
