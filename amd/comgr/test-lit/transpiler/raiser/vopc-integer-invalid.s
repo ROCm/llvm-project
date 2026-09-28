@@ -31,25 +31,13 @@
 ; RUN:   | %FileCheck %s --check-prefix=DPP-VOP3
 ; DPP-VOP3: unsupported-instruction-form: v_cmp_eq_u32
 
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=u16 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=U16
-; U16: unsupported-instruction-form: v_cmp_eq_u16
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=float_clamp 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=FLOAT-CLAMP
+; FLOAT-CLAMP: comparison clamp is not supported
 
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=i64 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=I64
-; I64: unsupported-instruction-form: v_cmpx_lt_i64
-
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=u64 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=U64
-; U64: unsupported-instruction-form: v_cmp_ne_u64
-
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=float_modifier 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=FLOAT-MODIFIER
-; FLOAT-MODIFIER: integer source modifiers are not supported
-
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=float_class 2>&1 \
-; RUN:   | %FileCheck %s --check-prefix=FLOAT-CLASS
-; FLOAT-CLASS: unsupported-instruction-form: v_cmp_class_f32
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=float16 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=FLOAT16
+; FLOAT16: unsupported-instruction-form: v_cmp_eq_f16
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -96,24 +84,12 @@
 	v_cmp_eq_u32_e64_dpp s4, v0, v1 quad_perm:[1,0,3,2]
 	s_endpgm
 
-	comparison_kernel u16
-	v_cmp_eq_u16_e64 s4, v0, v1
+	comparison_kernel float_clamp
+	v_cmp_lt_f32_e64 s4, v0, v1 clamp
 	s_endpgm
 
-	comparison_kernel i64
-	v_cmpx_lt_i64_e64 v[0:1], v[2:3]
-	s_endpgm
-
-	comparison_kernel u64
-	v_cmp_ne_u64_e32 vcc_lo, v[0:1], v[2:3]
-	s_endpgm
-
-	comparison_kernel float_modifier
-	v_cmp_lt_f32_e64 s4, -v0, v1
-	s_endpgm
-
-	comparison_kernel float_class
-	v_cmp_class_f32_e32 vcc_lo, v0, v1
+	comparison_kernel float16
+	v_cmp_eq_f16_e64 s4, v0, v1
 	s_endpgm
 
 	.amdgpu_metadata
@@ -189,8 +165,8 @@ amdhsa.kernels:
     .sgpr_count: 5
     .vgpr_count: 4
     .max_flat_workgroup_size: 1024
-  - .name: u16
-    .symbol: u16.kd
+  - .name: float_clamp
+    .symbol: float_clamp.kd
     .kernarg_segment_size: 0
     .group_segment_fixed_size: 0
     .private_segment_fixed_size: 0
@@ -199,38 +175,8 @@ amdhsa.kernels:
     .sgpr_count: 5
     .vgpr_count: 4
     .max_flat_workgroup_size: 1024
-  - .name: i64
-    .symbol: i64.kd
-    .kernarg_segment_size: 0
-    .group_segment_fixed_size: 0
-    .private_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .wavefront_size: 32
-    .sgpr_count: 5
-    .vgpr_count: 4
-    .max_flat_workgroup_size: 1024
-  - .name: u64
-    .symbol: u64.kd
-    .kernarg_segment_size: 0
-    .group_segment_fixed_size: 0
-    .private_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .wavefront_size: 32
-    .sgpr_count: 5
-    .vgpr_count: 4
-    .max_flat_workgroup_size: 1024
-  - .name: float_modifier
-    .symbol: float_modifier.kd
-    .kernarg_segment_size: 0
-    .group_segment_fixed_size: 0
-    .private_segment_fixed_size: 0
-    .kernarg_segment_align: 8
-    .wavefront_size: 32
-    .sgpr_count: 5
-    .vgpr_count: 4
-    .max_flat_workgroup_size: 1024
-  - .name: float_class
-    .symbol: float_class.kd
+  - .name: float16
+    .symbol: float16.kd
     .kernarg_segment_size: 0
     .group_segment_fixed_size: 0
     .private_segment_fixed_size: 0

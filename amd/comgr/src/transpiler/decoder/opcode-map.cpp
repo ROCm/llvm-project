@@ -399,45 +399,20 @@ static const Entry kCanonTable[] = {
     DS_M0(DS_WRITE2ST64_B64, DS_STORE_2ADDR_STRIDE64_B64),
     DS_M0(DS_ADD_U32, DS_ADD_U32),
     DS_M0(DS_ADD_RTN_U32, DS_ADD_RTN_U32),
-    // Integer comparisons. Each comparison is reached by three pseudos: the
-    // plain one, the pre-GFX10 `v_cmpx` that also writes a scalar destination,
-    // and the GFX10-and-later `v_cmpx` that writes EXEC alone.
-    E(V_CMP_LT_I32_e64, V_CMP_LT_I32),
-    E(V_CMPX_LT_I32_e64, V_CMP_LT_I32),
-    E(V_CMPX_LT_I32_nosdst_e64, V_CMP_LT_I32),
-    E(V_CMP_EQ_I32_e64, V_CMP_EQ_I32),
-    E(V_CMPX_EQ_I32_e64, V_CMP_EQ_I32),
-    E(V_CMPX_EQ_I32_nosdst_e64, V_CMP_EQ_I32),
-    E(V_CMP_LE_I32_e64, V_CMP_LE_I32),
-    E(V_CMPX_LE_I32_e64, V_CMP_LE_I32),
-    E(V_CMPX_LE_I32_nosdst_e64, V_CMP_LE_I32),
-    E(V_CMP_GT_I32_e64, V_CMP_GT_I32),
-    E(V_CMPX_GT_I32_e64, V_CMP_GT_I32),
-    E(V_CMPX_GT_I32_nosdst_e64, V_CMP_GT_I32),
-    E(V_CMP_NE_I32_e64, V_CMP_NE_I32),
-    E(V_CMPX_NE_I32_e64, V_CMP_NE_I32),
-    E(V_CMPX_NE_I32_nosdst_e64, V_CMP_NE_I32),
-    E(V_CMP_GE_I32_e64, V_CMP_GE_I32),
-    E(V_CMPX_GE_I32_e64, V_CMP_GE_I32),
-    E(V_CMPX_GE_I32_nosdst_e64, V_CMP_GE_I32),
-    E(V_CMP_LT_U32_e64, V_CMP_LT_U32),
-    E(V_CMPX_LT_U32_e64, V_CMP_LT_U32),
-    E(V_CMPX_LT_U32_nosdst_e64, V_CMP_LT_U32),
-    E(V_CMP_EQ_U32_e64, V_CMP_EQ_U32),
-    E(V_CMPX_EQ_U32_e64, V_CMP_EQ_U32),
-    E(V_CMPX_EQ_U32_nosdst_e64, V_CMP_EQ_U32),
-    E(V_CMP_LE_U32_e64, V_CMP_LE_U32),
-    E(V_CMPX_LE_U32_e64, V_CMP_LE_U32),
-    E(V_CMPX_LE_U32_nosdst_e64, V_CMP_LE_U32),
-    E(V_CMP_GT_U32_e64, V_CMP_GT_U32),
-    E(V_CMPX_GT_U32_e64, V_CMP_GT_U32),
-    E(V_CMPX_GT_U32_nosdst_e64, V_CMP_GT_U32),
-    E(V_CMP_NE_U32_e64, V_CMP_NE_U32),
-    E(V_CMPX_NE_U32_e64, V_CMP_NE_U32),
-    E(V_CMPX_NE_U32_nosdst_e64, V_CMP_NE_U32),
-    E(V_CMP_GE_U32_e64, V_CMP_GE_U32),
-    E(V_CMPX_GE_U32_e64, V_CMP_GE_U32),
-    E(V_CMPX_GE_U32_nosdst_e64, V_CMP_GE_U32),
+#define COMPARE_VARIANTS(Name, Suffix, Canonical) \
+    E(V_CMP_##Name##Suffix##_e64, Canonical), \
+    E(V_CMPX_##Name##Suffix##_e64, Canonical), \
+    E(V_CMPX_##Name##Suffix##_nosdst_e64, Canonical),
+#define VECTOR_COMPARE(Name, Predicate, BitWidth, SignExtendLiteral) \
+    COMPARE_VARIANTS(Name, , V_CMP_##Name)
+#define VECTOR_COMPARE16(Name, Predicate) \
+    VECTOR_COMPARE(Name, Predicate, 16, false) \
+    COMPARE_VARIANTS(Name, _t16, V_CMP_##Name) \
+    COMPARE_VARIANTS(Name, _fake16, V_CMP_##Name)
+#define VECTOR_CLASS(Name, BitWidth) \
+    COMPARE_VARIANTS(CLASS_##Name, , V_CMP_CLASS_##Name)
+#include "transpiler/decoder/vector-compare.def"
+#undef COMPARE_VARIANTS
     E(V_ADD_F32_e64, V_ADD_F32),
     E(V_MUL_F32_e64, V_MUL_F32),
     E(V_SUB_F32_e64, V_SUB_F32),

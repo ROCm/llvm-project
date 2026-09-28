@@ -346,6 +346,9 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
 
 Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
+  if (std::optional<VectorCompareInfo> Info = getVectorCompareInfo(Di.CanonOp))
+    return raiseVectorCompare(Ctx, Di, Op, *Info);
+
   switch (Di.CanonOp) {
   case CanonicalOp::V_NOP:
     return Error::success();
@@ -413,29 +416,6 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<bool> Clamp = readClamp(Ctx, Di);
   if (!Clamp)
     return Clamp.takeError();
-
-  if (std::optional<ICmpInst::Predicate> Predicate =
-          getIntegerComparePredicate(Di.CanonOp)) {
-    assert(!*Clamp && "integer comparison cannot have clamp");
-    if (Di.NumDefs == 0) {
-      assert(Di.defsExec() &&
-             "comparison without a destination must write EXEC");
-      return raiseIntegerCompare32(Ctx, Di, Op, *Predicate, std::nullopt);
-    }
-    assert(Di.NumDefs == 1 && "comparison must have one explicit destination");
-    if (!Di.isReg(0))
-      return unsupportedInstruction(Ctx, Di,
-                                    "expected a comparison mask destination");
-    Expected<ParsedReg> Destination = Op.dst();
-    if (!Destination)
-      return Destination.takeError();
-    if (Destination->RegKind != ParsedReg::SGPR &&
-        Destination->RegKind != ParsedReg::VCC &&
-        Destination->RegKind != ParsedReg::NOREG)
-      return unsupportedInstruction(Ctx, Di,
-                                    "unsupported comparison mask destination");
-    return raiseIntegerCompare32(Ctx, Di, Op, *Predicate, *Destination);
-  }
 
   switch (Di.CanonOp) {
   case CanonicalOp::V_MOV_B32:

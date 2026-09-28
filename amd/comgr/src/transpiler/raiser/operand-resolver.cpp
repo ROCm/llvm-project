@@ -10,6 +10,7 @@
 
 #include "transpiler/raiser/raise_failure.h"
 
+#include "MCTargetDesc/AMDGPUMCExpr.h"
 #include "SIDefines.h"
 
 #include "llvm/IR/Intrinsics.h"
@@ -55,6 +56,23 @@ Expected<Value *> OperandResolver::srcF(unsigned I) {
   if (srcMod(I) & ~(SISrcMods::NEG | SISrcMods::ABS))
     return unsupportedInstruction(Ctx, Di, "unsupported f32 source modifier");
   Value *Float = Ctx.B.CreateBitCast(*V, Ctx.B.getFloatTy());
+  return applyMods(I, Float);
+}
+
+Expected<Value *> OperandResolver::srcF64(unsigned I) {
+  Expected<Value *> V = src64(I);
+  if (!V)
+    return V.takeError();
+  if (srcMod(I) & ~(SISrcMods::NEG | SISrcMods::ABS))
+    return unsupportedInstruction(Ctx, Di, "unsupported f64 source modifier");
+  const MCOperand &Operand = Di.Inst.getOperand(srcIdx(I));
+  if (Operand.isExpr()) {
+    const auto *Literal = dyn_cast<AMDGPUMCExpr>(Operand.getExpr());
+    // A forced 32-bit f64 literal supplies the high word.
+    if (Literal && Literal->getKind() == AMDGPUMCExpr::AGVK_Lit)
+      *V = Ctx.B.CreateShl(*V, 32);
+  }
+  Value *Float = Ctx.B.CreateBitCast(*V, Ctx.B.getDoubleTy());
   return applyMods(I, Float);
 }
 
