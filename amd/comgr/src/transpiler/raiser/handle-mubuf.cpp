@@ -19,6 +19,7 @@
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/Alignment.h"
 
+#include <array>
 #include <cstdint>
 #include <optional>
 
@@ -250,33 +251,39 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
     Offset = Builder.CreateAdd(Offset, VectorOffset);
   }
 
-  Value *Word0 = Context.registers().readSgpr32(*Resource->BaseIdx);
-  Value *Word1 = Context.registers().readSgpr32(*Resource->BaseIdx + 1);
-  Value *Word2 = Context.registers().readSgpr32(*Resource->BaseIdx + 2);
-  Value *Word3 = Context.registers().readSgpr32(*Resource->BaseIdx + 3);
-  Context.requireZeroBits(Word3, 0xc0000000, Instruction,
+  std::array<Value *, 4> Words;
+  for (unsigned I = 0; I != Words.size(); ++I) {
+    Expected<Value *> Word =
+        Context.registers().readSgpr32(Instruction, *Resource->BaseIdx + I);
+    if (!Word)
+      return Word.takeError();
+    Words[I] = *Word;
+  }
+  Context.requireZeroBits(Words[3], 0xc0000000, Instruction,
                           "buffer descriptor type must be provably zero");
   Context.requireZeroBits(
-      Word3, 0x00000fc0, Instruction,
+      Words[3], 0x00000fc0, Instruction,
       "buffer descriptor reserved bits must be provably zero");
-  Context.requireZeroBits(Word3, 0x10000000, Instruction,
+  Context.requireZeroBits(Words[3], 0x10000000, Instruction,
                           "swizzled buffer descriptors are not modeled");
   Context.requireZeroBits(
-      Word3, 0x0ffff000, Instruction,
+      Words[3], 0x0ffff000, Instruction,
       "buffer stride and stride scale must be provably zero");
-  Context.requireZeroBits(Word3, 0x20000000, Instruction,
+  Context.requireZeroBits(Words[3], 0x20000000, Instruction,
                           "structured buffer bounds are not modeled");
 
   // The base occupies bits 56:0; NUM_RECORDS spans bits 101:57.
-  Value *BaseHigh = Builder.CreateAnd(Word1, Builder.getInt32((1u << 25) - 1));
+  Value *BaseHigh =
+      Builder.CreateAnd(Words[1], Builder.getInt32((1u << 25) - 1));
   Value *Base = Builder.CreateOr(
-      Builder.CreateZExt(Word0, Builder.getInt64Ty()),
+      Builder.CreateZExt(Words[0], Builder.getInt64Ty()),
       Builder.CreateShl(Builder.CreateZExt(BaseHigh, Builder.getInt64Ty()),
                         32));
   Value *Extent = Builder.CreateOr(
-      Builder.CreateZExt(Builder.CreateLShr(Word1, 25), Builder.getInt64Ty()),
-      Builder.CreateShl(Builder.CreateZExt(Word2, Builder.getInt64Ty()), 7));
-  Value *ExtentHigh = Builder.CreateAnd(Word3, Builder.getInt32(63));
+      Builder.CreateZExt(Builder.CreateLShr(Words[1], 25),
+                         Builder.getInt64Ty()),
+      Builder.CreateShl(Builder.CreateZExt(Words[2], Builder.getInt64Ty()), 7));
+  Value *ExtentHigh = Builder.CreateAnd(Words[3], Builder.getInt32(63));
   Extent = Builder.CreateOr(
       Extent, Builder.CreateShl(
                   Builder.CreateZExt(ExtentHigh, Builder.getInt64Ty()), 39));

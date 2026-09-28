@@ -75,9 +75,10 @@ public:
   // Read the operand at OpIdx as a 64-bit value, pairing adjacent registers.
   llvm::Expected<llvm::Value *> readOp64(const DecodedInst &Di, unsigned OpIdx);
   // Read the SGPR at Idx, or the pair based there, naming the register by
-  // index rather than by an operand.
-  llvm::Value *readSgpr32(unsigned Idx) { return Regs.loadSGPR32(B, Idx); }
-  llvm::Value *readSgpr64(unsigned Idx) { return Regs.loadSGPR64(B, Idx); }
+  // index rather than by an operand. Di is the instruction the read serves,
+  // which a refusal names.
+  llvm::Expected<llvm::Value *> readSgpr32(const DecodedInst &Di, unsigned Idx);
+  llvm::Expected<llvm::Value *> readSgpr64(const DecodedInst &Di, unsigned Idx);
   // Number of SGPRs backed by the register file.
   unsigned numSgprs() const { return static_cast<unsigned>(Regs.Sgpr.size()); }
 
@@ -194,10 +195,14 @@ public:
   // entry. Single-SGPR entries remain independent.
   void invalidateSgprWaveMaskI1(unsigned BaseIdx);
 
-  // Record that SGPR pair BaseIdx holds source code-object address Value.
+  // Record that SGPR pair BaseIdx holds source code-object address Value. The
+  // pair holds an address rather than an ordinary value, so neither half
+  // counts as written by this block any more.
   void recordSourceImageSgprPairAddr(unsigned BaseIdx, uint64_t Value) {
     blockState().SourceImageSgprPairAddrShadow[BaseIdx] = Value;
     SourceImageSgprPairs.insert(BaseIdx);
+    blockState().DefinedSgprs.erase(BaseIdx);
+    blockState().DefinedSgprs.erase(BaseIdx + 1);
   }
 
   // Return the source code-object address recorded for SGPR pair BaseIdx in
@@ -232,13 +237,15 @@ public:
 
 private:
   // Refuse a read of a register that may hold part of a source code-object
-  // address. Such an address stands for a place in the captured source image,
-  // which the raise reads at raise time; the running kernel has nothing mapped
-  // there, so a value the target program computes from it points nowhere. The
-  // handlers that do mean the source image ask for the address itself and
-  // never come through here.
-  llvm::Error refuseSourceImageRead(const DecodedInst &Di, unsigned OpIdx,
-                                    const ParsedReg &Pr);
+  // address, naming the registers either by a base index and a width in dwords
+  // or by the operand that reads them. Such an address stands for a place in
+  // the captured source image, which the raise reads at raise time; the
+  // running kernel has nothing mapped there, so a value the target program
+  // computes from it points nowhere. The handlers that do mean the source
+  // image ask for the address itself and never come through here.
+  llvm::Error refuseSourceImageRead(const DecodedInst &Di, unsigned BaseIdx,
+                                    unsigned WidthInDwords);
+  llvm::Error refuseSourceImageRead(const DecodedInst &Di, const ParsedReg &Pr);
 
   // Emit a conditional region while preserving register-state tracking.
   void emitUnderCondition(llvm::Value *Condition,
@@ -284,8 +291,8 @@ private:
     llvm::DenseMap<unsigned, WaveMaskEntry> LastSgprWaveMaskI1;
     // Source-image addresses proven for PC-relative literal loads.
     llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
-    // SGPRs this block has written, and which therefore hold what this block
-    // put there rather than whatever a predecessor left.
+    // SGPRs this block has written an ordinary value to, and which therefore
+    // hold what this block put there rather than whatever a predecessor left.
     llvm::DenseSet<unsigned> DefinedSgprs;
     // Constant value last stored to M0.
     std::optional<uint64_t> M0Const;
