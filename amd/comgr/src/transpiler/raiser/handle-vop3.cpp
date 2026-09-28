@@ -371,6 +371,33 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+Error raiseLdexpFloat64(RaiseContext &Ctx, const DecodedInst &Di,
+                        OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 2)
+    return unsupportedInstruction(Ctx, Di,
+                                  "expected one destination and two sources");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getDoubleTy()))
+    return Err;
+  if (Op.srcMod(1) != 0)
+    return unsupportedInstruction(
+        Ctx, Di, "integer exponent modifiers are not supported");
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Significand = Op.srcF64(0);
+  if (!Significand)
+    return Significand.takeError();
+  Expected<Value *> Exponent = Op.src(1);
+  if (!Exponent)
+    return Exponent.takeError();
+  Value *Result = Ctx.B.CreateIntrinsic(
+      Intrinsic::ldexp, {Ctx.B.getDoubleTy(), Ctx.B.getInt32Ty()},
+      {*Significand, *Exponent});
+  Ctx.registers().writeReg64(*Dst,
+                             Ctx.B.CreateBitCast(Result, Ctx.B.getInt64Ty()));
+  return Error::success();
+}
+
 Error raiseFloatTernary32(RaiseContext &Ctx, const DecodedInst &Di,
                           OperandResolver &Op) {
   if (Di.NumDefs < 1 || Op.nSrcs() < 3)
@@ -557,6 +584,14 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   switch (Di.CanonOp) {
   case CanonicalOp::V_NOP:
     return Error::success();
+  case CanonicalOp::V_FMAC_F32:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatMac(Ctx, Di, Op);
+  case CanonicalOp::V_FMAC_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatMac(Ctx, Di, Op);
   case CanonicalOp::V_MAXIMUM_F32:
   case CanonicalOp::V_MINIMUM_F32:
     return raiseFloatBinary32(Ctx, Di, Op);
@@ -569,6 +604,15 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
       return Err;
     return raiseFloatConversion64(Ctx, Di, Op);
+  case CanonicalOp::V_TRUNC_F64:
+  case CanonicalOp::V_CEIL_F64:
+  case CanonicalOp::V_RNDNE_F64:
+  case CanonicalOp::V_FLOOR_F64:
+  case CanonicalOp::V_RCP_F64:
+  case CanonicalOp::V_RSQ_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseUnaryFloat64(Ctx, Di, Op);
   case CanonicalOp::V_DIV_SCALE_F32:
   case CanonicalOp::V_DIV_FMAS_F32:
   case CanonicalOp::V_DIV_FIXUP_F32:
@@ -632,6 +676,10 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
       return Err;
     return raiseLdexpFloat32(Ctx, Di, Op);
   }
+  case CanonicalOp::V_LDEXP_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseLdexpFloat64(Ctx, Di, Op);
   case CanonicalOp::V_CNDMASK_B32:
     if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
       return Err;
