@@ -161,6 +161,28 @@ vop3_math:
 	v_minimummaximum_f32 v8, v0, v1, v2
 ; CHECK: call float @llvm.minimum.f32
 	v_maximumminimum_f32 v9, v0, v1, v2
+; CHECK: fpext bfloat {{.+}} to float
+; CHECK: fpext bfloat {{.+}} to float
+; CHECK: fpext bfloat {{.+}} to float
+; CHECK: call float @llvm.fma.f32
+	v_fma_mix_f32_bf16 v10, v11, v12, v13 op_sel_hi:[1,1,1]
+; CHECK: lshr i32 {{.+}}, 16
+; CHECK: fpext bfloat {{.+}} to float
+; CHECK: bitcast i32 {{.+}} to float
+; CHECK: fpext bfloat {{.+}} to float
+; CHECK: call float @llvm.fma.f32
+	v_fma_mix_f32_bf16 v10, v11, v12, v13 op_sel:[1,0,0] op_sel_hi:[1,0,1]
+; CHECK: bitcast i32 {{.+}} to float
+; CHECK: bitcast i32 {{.+}} to float
+; CHECK: bitcast i32 {{.+}} to float
+; CHECK: call float @llvm.fma.f32
+	v_fma_mix_f32_bf16 v10, v11, v12, v13 op_sel:[1,1,1] op_sel_hi:[0,0,0]
+; CHECK: call float @llvm.fabs.f32
+; CHECK: fneg float
+; CHECK: call float @llvm.fma.f32
+; CHECK: call float @llvm.maxnum.f32
+; CHECK: call float @llvm.minnum.f32
+	v_fma_mix_f32_bf16 v10, -|v11|, v12, v13 op_sel_hi:[1,0,1] clamp
 	s_mov_b32 s4, -1
 ; CHECK: [[COND:%.+]] = icmp ne i64 {{.+}}, 0
 ; CHECK: select i1 [[COND]], i32
