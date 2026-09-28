@@ -1,6 +1,6 @@
 ; REQUIRES: comgr-has-transpiler
 
-; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -filetype=obj -mcpu=gfx942 %s -o %t.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 
 ; Scalar and integer VOP1 moves both lift as register-file copies. Neither
@@ -23,7 +23,7 @@
 ; BATCH: define amdgpu_kernel void @mov_endpgm_kernel(
 ; BATCH: define amdgpu_kernel void @vmov_kernel(
 
-; The target ISA is a parameter of the raise, so a gfx942 kernel raises onto
+; The target ISA is a parameter of the raise, so a gfx1250 kernel raises onto
 ; another GPU. Nothing this kernel lifts to depends on which one, so what the
 ; run pins is that naming a second GPU stands its side of the raise up.
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx950 --emit-ir=mov_endpgm_kernel \
@@ -40,7 +40,7 @@
 ; RUN:   | %FileCheck %s --check-prefix=BADTARGET
 ; BADTARGET: target ISA 'gfxbogus' does not name an AMDGPU GPU
 
-	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
+	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
 	.text
 	.globl	mov_endpgm_kernel
@@ -63,16 +63,16 @@ vmov_kernel:
 	.p2align	6, 0x0
 	.amdhsa_kernel mov_endpgm_kernel
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel vmov_kernel
 		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
-		.amdhsa_accum_offset 4
 		.amdhsa_reserve_vcc 1
 	.end_amdhsa_kernel
 	.text
@@ -89,7 +89,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         mov_endpgm_kernel.kd
     .vgpr_count:     1
-    .wavefront_size: 64
+    .wavefront_size: 32
   - .args: []
     .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -100,7 +100,7 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         vmov_kernel.kd
     .vgpr_count:     1
-    .wavefront_size: 64
+    .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
 	.end_amdgpu_metadata

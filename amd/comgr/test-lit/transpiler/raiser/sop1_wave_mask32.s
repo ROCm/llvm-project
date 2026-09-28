@@ -75,6 +75,9 @@ quad_kernel:
 	s_wqm_b32 s3, s2
 ; CHECK: xor i32 [[WQM]], -1
 	s_not_b32 s4, s3
+; s_bcnt1_i32 counts the set bits of the mask it is handed.
+; CHECK: call i32 @llvm.ctpop.i32(i32 [[WQM]])
+	s_bcnt1_i32_b32 s5, s3
 	s_endpgm
 
 	.globl	saveexec_kernel

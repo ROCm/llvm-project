@@ -10,6 +10,8 @@
 ; RUN:   --emit-ir=setprio_kernel,setprio_inc_wg_kernel \
 ; RUN:   --target-isa=gfx942 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=PRIO-CROSS
+; RUN: not %transpile_cli %t.hsaco --emit-ir=sleep_forever_kernel 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=FOREVER
 ; RUN: %transpile_cli %t.hsaco --isa=gfx1250 \
 ; RUN:   --dump-decoded=vgpr_msb_kernel \
 ; RUN:   | %FileCheck %s --check-prefix=MSB-DECODE
@@ -85,6 +87,17 @@ sleep_kernel:
 ; SLEEP-NEXT: }
 	s_endpgm
 
+	.globl	sleep_forever_kernel
+	.p2align	8
+	.type	sleep_forever_kernel,@function
+
+sleep_forever_kernel:
+; A sleep that ends on a wakeup rather than after a bounded stall has no
+; lowering.
+; FOREVER: unsupported-sleep-forever: s_sleep [SOPP]
+	s_sleep 0x8000
+	s_endpgm
+
 	.globl	monitor_sleep_kernel
 	.p2align	8
 	.type	monitor_sleep_kernel,@function
@@ -151,6 +164,12 @@ vgpr_msb_kernel:
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
+	.amdhsa_kernel sleep_forever_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_wavefront_size32 1
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
 	.amdhsa_kernel monitor_sleep_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 1
@@ -214,6 +233,17 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         sleep_kernel.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           sleep_forever_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         sleep_forever_kernel.kd
     .vgpr_count:     1
     .wavefront_size: 32
   - .args: []
