@@ -98,6 +98,18 @@ vop_math:
 	v_cvt_i32_f64_e32 v0, v[2:3]
 ; CHECK: call i32 @llvm.fptoui.sat.i32.f64
 	v_cvt_u32_f64_e32 v0, v[2:3]
+; CHECK: call double @llvm.trunc.f64
+	v_trunc_f64_e32 v[0:1], v[2:3]
+; CHECK: call double @llvm.ceil.f64
+	v_ceil_f64_e32 v[0:1], v[2:3]
+; CHECK: call double @llvm.roundeven.f64
+	v_rndne_f64_e32 v[0:1], v[2:3]
+; CHECK: call double @llvm.floor.f64
+	v_floor_f64_e32 v[0:1], v[2:3]
+; CHECK: call double @llvm.amdgcn.rcp.f64
+	v_rcp_f64_e32 v[0:1], v[2:3]
+; CHECK: call double @llvm.amdgcn.rsq.f64
+	v_rsq_f64_e32 v[0:1], v[2:3]
 ; CHECK: ret void
 	s_endpgm
 
@@ -119,6 +131,29 @@ vop3_math:
 	v_cvt_f32_f16_e64 v10, v11.h
 ; CHECK: call float @llvm.ldexp.f32.i32
 	v_ldexp_f32 v2, v3, v4
+; CHECK: fneg double
+; CHECK: call double @llvm.ldexp.f64.i32
+	v_ldexp_f64 v[0:1], -v[2:3], v4
+; CHECK: fneg double
+; CHECK: call double @llvm.amdgcn.rcp.f64
+	v_rcp_f64_e64 v[0:1], -v[2:3]
+; CHECK: call double @llvm.fabs.f64
+; CHECK: call double @llvm.roundeven.f64
+	v_rndne_f64_e64 v[0:1], abs(v[2:3])
+; CHECK: call double @llvm.fma.f64
+	v_fmac_f64_e32 v[0:1], v[2:3], v[4:5]
+; CHECK: fneg double
+; CHECK: call double @llvm.fma.f64
+	v_fmac_f64_e64 v[0:1], -v[2:3], v[4:5]
+; CHECK: call double @llvm.fma.f64(double {{.+}}, double 1.000000e+00, double {{.+}})
+	v_fmamk_f64 v[0:1], v[2:3], 1.0, v[4:5]
+; CHECK: call float @llvm.fma.f32
+	v_fmac_f32_e32 v2, v3, v4
+; CHECK: fneg float
+; CHECK: call float @llvm.fma.f32
+	v_fmac_f32_e64 v2, -v3, v4
+; CHECK: call float @llvm.fma.f32(float {{.+}}, float 1.000000e+00, float {{.+}})
+	v_fmamk_f32 v2, v3, 1.0, v4
 ; CHECK: call float @llvm.amdgcn.exp2.f32
 	v_s_exp_f32 s0, s1
 ; CHECK: call float @llvm.amdgcn.log.f32

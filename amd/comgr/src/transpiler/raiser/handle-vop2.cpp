@@ -206,6 +206,11 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_SUBREV_F32:
     return raiseFloatBinary(Ctx, Di, Op, Instruction::FSub,
                             /*ReverseOperands=*/true);
+  case CanonicalOp::V_FMAC_F64:
+  case CanonicalOp::V_FMAMK_F64:
+  case CanonicalOp::V_FMAC_F32:
+  case CanonicalOp::V_FMAMK_F32:
+    return raiseFloatMac(Ctx, Di, Op);
 
   case CanonicalOp::V_ADD_NC_U32:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {

@@ -218,6 +218,83 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+Error raiseUnaryFloat64(RaiseContext &Ctx, const DecodedInst &Di,
+                        OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 1)
+    return unsupportedInstruction(Ctx, Di,
+                                  "expected one destination and one source");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getDoubleTy()))
+    return Err;
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Source = Op.srcF64(0);
+  if (!Source)
+    return Source.takeError();
+
+  Intrinsic::ID ID;
+  switch (Di.CanonOp) {
+  case CanonicalOp::V_TRUNC_F64:
+    ID = Intrinsic::trunc;
+    break;
+  case CanonicalOp::V_CEIL_F64:
+    ID = Intrinsic::ceil;
+    break;
+  case CanonicalOp::V_RNDNE_F64:
+    ID = Intrinsic::roundeven;
+    break;
+  case CanonicalOp::V_FLOOR_F64:
+    ID = Intrinsic::floor;
+    break;
+  case CanonicalOp::V_RCP_F64:
+    ID = Intrinsic::amdgcn_rcp;
+    break;
+  case CanonicalOp::V_RSQ_F64:
+    ID = Intrinsic::amdgcn_rsq;
+    break;
+  default:
+    llvm_unreachable("not a unary F64 operation");
+  }
+  Value *Result = Ctx.B.CreateUnaryIntrinsic(ID, *Source);
+  Ctx.registers().writeReg64(*Dst,
+                             Ctx.B.CreateBitCast(Result, Ctx.B.getInt64Ty()));
+  return Error::success();
+}
+
+Error raiseFloatMac(RaiseContext &Ctx, const DecodedInst &Di,
+                    OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 3)
+    return unsupportedInstruction(
+        Ctx, Di, "expected floating-point multiply-add operands");
+  bool Is64 = Di.CanonOp == CanonicalOp::V_FMAC_F64 ||
+              Di.CanonOp == CanonicalOp::V_FMAMK_F64;
+  Type *Ty = Is64 ? Ctx.B.getDoubleTy() : Ctx.B.getFloatTy();
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ty))
+    return Err;
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  auto Read = [&](unsigned I) { return Is64 ? Op.srcF64(I) : Op.srcF32(I); };
+  Expected<Value *> Src0 = Read(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = Read(1);
+  if (!Src1)
+    return Src1.takeError();
+  Expected<Value *> Src2 = Read(2);
+  if (!Src2)
+    return Src2.takeError();
+  Value *Result =
+      Ctx.B.CreateIntrinsic(Intrinsic::fma, {Ty}, {*Src0, *Src1, *Src2});
+  Value *Bits = Ctx.B.CreateBitCast(Result, Is64 ? Ctx.B.getInt64Ty()
+                                                 : Ctx.B.getInt32Ty());
+  if (Is64)
+    Ctx.registers().writeReg64(*Dst, Bits);
+  else
+    Ctx.registers().writeReg32(*Dst, Bits);
+  return Error::success();
+}
+
 Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
                              OperandResolver &Op) {
   if (Di.NumDefs != 1 || Op.nSrcs() != 1)
