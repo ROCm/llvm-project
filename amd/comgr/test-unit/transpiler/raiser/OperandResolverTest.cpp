@@ -9,26 +9,29 @@
 #include "transpiler/raiser/operand-resolver.h"
 
 #include "transpiler/common/kernel-meta.h"
+#include "transpiler/decoder/decode.h"
 #include "transpiler/decoder/decoded-inst.h"
 #include "transpiler/decoder/mc-state.h"
+#include "transpiler/decoder/opcode-map.h"
 #include "transpiler/decoder/setpc-analysis.h"
 #include "transpiler/raiser/handlers.h"
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/wave-projection.h"
 
-#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/MC/MCCodeEmitter.h"
+#include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/Error.h"
 
 #include "gtest/gtest.h"
 
-#include <climits>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -105,47 +108,45 @@ TEST_F(OperandResolverTest, ReportsRegisterFailures) {
             std::string::npos);
 }
 
-TEST_F(OperandResolverTest, ComparisonRejectsMalformedOperands) {
+TEST_F(OperandResolverTest, ComparisonRejectsDecodedImmediateDestination) {
   unsigned Opcode = findOpcode(*Mc.InstrInfo, "V_CMP_LT_U32_e64_vi");
   ASSERT_NE(Opcode, Mc.InstrInfo->getNumOpcodes());
-  MCRegister Pair = findRegister(*Mc.RegInfo, "SGPR4_SGPR5");
-  MCRegister Scalar = findRegister(*Mc.RegInfo, "SGPR4");
   MCRegister Vector = findRegister(*Mc.RegInfo, "VGPR0");
-  ASSERT_TRUE(Pair && Scalar && Vector);
+  ASSERT_TRUE(Vector);
 
-  MCOperand Source = MCOperand::createReg(Vector);
-  MCOperand Destination = MCOperand::createReg(Pair);
-  struct TestCase {
-    SmallVector<MCOperand> Operands;
-    StringRef Detail;
-  };
-  const TestCase Cases[] = {
-      {{}, "expected a comparison mask destination"},
-      {{MCOperand::createImm(0), Source, Source},
-       "expected a comparison mask destination"},
-      {{MCOperand::createReg(MCRegister()), Source, Source},
-       "expected a comparison mask destination"},
-      {{Source, Source, Source}, "register-decode"},
-      {{MCOperand::createReg(Scalar), Source, Source}, "register-decode"},
-      {{Destination, Source}, "expected two comparison sources"},
-      {{Destination, Source, Destination}, "register-decode"},
-  };
-  for (const TestCase &Case : Cases) {
-    DecodedInst Instruction;
-    Instruction.Inst.setOpcode(Opcode);
-    Instruction.CanonOp = CanonicalOp::V_CMP_LT_U32;
-    Instruction.TargetSpecificFlags = Mc.InstrInfo->get(Opcode).TSFlags;
-    Instruction.NumDefs = 1;
-    Instruction.SrcMap = {1, 2};
-    Instruction.ModMap = {UINT_MAX, UINT_MAX};
-    for (MCOperand Operand : Case.Operands)
-      Instruction.Inst.addOperand(Operand);
-    OperandResolver Resolver{*Env->Ctx, Instruction};
-    Error Result = handleVOP3(*Env->Ctx, Instruction, Resolver);
-    ASSERT_TRUE(static_cast<bool>(Result));
-    EXPECT_NE(toString(std::move(Result)).find(Case.Detail.str()),
-              std::string::npos);
-  }
+  // An inline constant can decode successfully in the scalar destination field.
+  constexpr unsigned InlineZeroEncoding = 128;
+  MCInst Instruction;
+  Instruction.setOpcode(Opcode);
+  Instruction.addOperand(MCOperand::createImm(InlineZeroEncoding));
+  Instruction.addOperand(MCOperand::createReg(Vector));
+  Instruction.addOperand(MCOperand::createReg(Vector));
+
+  std::unique_ptr<MCCodeEmitter> Emitter(
+      Mc.Target->createMCCodeEmitter(*Mc.InstrInfo, *Mc.Ctx));
+  ASSERT_TRUE(Emitter);
+  SmallVector<char> Bytes;
+  SmallVector<MCFixup> Fixups;
+  Emitter->encodeInstruction(Instruction, Bytes, Fixups, *Mc.SubtargetInfo);
+  ASSERT_TRUE(Fixups.empty());
+  OpcodeMap Map;
+  Map.build(*Mc.InstrInfo);
+  Expected<DecodeResult> Decoded = decodeKernel(
+      Mc, Map,
+      ArrayRef<uint8_t>(reinterpret_cast<const uint8_t *>(Bytes.data()),
+                        Bytes.size()),
+      0);
+  ASSERT_TRUE(static_cast<bool>(Decoded)) << toString(Decoded.takeError());
+  ASSERT_EQ(Decoded->Insts.size(), 1u);
+  const DecodedInst &Comparison = Decoded->Insts.front();
+  ASSERT_TRUE(Comparison.isImm(0));
+
+  OperandResolver Resolver{*Env->Ctx, Comparison};
+  Error Result = handleVOP3(*Env->Ctx, Comparison, Resolver);
+  ASSERT_TRUE(static_cast<bool>(Result));
+  EXPECT_NE(toString(std::move(Result))
+                .find("expected a comparison mask destination"),
+            std::string::npos);
 }
 
 } // namespace

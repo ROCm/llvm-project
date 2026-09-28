@@ -18,6 +18,7 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
+#include <cassert>
 #include <optional>
 
 using namespace llvm;
@@ -59,10 +60,7 @@ getIntegerComparePredicate(CanonicalOp Opcode) {
 Error raiseIntegerCompare32(RaiseContext &Ctx, const DecodedInst &Di,
                             OperandResolver &Op, ICmpInst::Predicate Predicate,
                             std::optional<ParsedReg> Destination) {
-  if (Op.nSrcs() != 2 || Op.srcIdx(0) >= Di.numOperands() ||
-      Op.srcIdx(1) >= Di.numOperands()) {
-    return unsupported(Ctx, Di, "expected two comparison sources");
-  }
+  assert(Op.nSrcs() == 2 && "integer comparison must have two sources");
 
   Expected<Value *> Src0 = Op.src(0);
   if (!Src0) {
@@ -83,15 +81,15 @@ Error raiseIntegerCompare32(RaiseContext &Ctx, const DecodedInst &Di,
     Value *Mask = Ctx.Projection.ballotI1ToWidth(
         Ctx.B, Bit, Ctx.Projection.sourceWaveMaskTy(), "cmp_mask");
     Regs.writeRegExecWidth(*Destination, Mask);
+  }
+  if (Destination)
     Regs.recordWaveMaskI1(*Destination, Bit);
-  }
-  if (Di.defsVcc() || (Destination && Destination->RegKind == ParsedReg::VCC)) {
-    Regs.regFile().storeVCC(Ctx.B, Bit);
-  }
+  if (Di.defsVcc())
+    Regs.recordWaveMaskI1(ParsedReg{ParsedReg::VCC}, Bit);
   if (Di.defsExec()) {
     Value *Mask = Ctx.Projection.ballotI1ToWidth(
         Ctx.B, Bit, Ctx.Projection.execStorageTy(), "cmpx_ballot");
-    Value *CurrentExec = Regs.regFile().loadExec(Ctx.B);
+    Value *CurrentExec = Regs.readExec();
     Value *NarrowedExec = Ctx.B.CreateAnd(CurrentExec, Mask, "cmpx_exec");
     Regs.storeExec(NarrowedExec);
   }
@@ -100,9 +98,8 @@ Error raiseIntegerCompare32(RaiseContext &Ctx, const DecodedInst &Di,
 
 Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
-  if (Di.NumDefs != 0 || (!Di.defsVcc() && !Di.defsExec())) {
-    return unsupported(Ctx, Di, "expected an implicit comparison destination");
-  }
+  assert(Di.NumDefs == 0 && (Di.defsVcc() || Di.defsExec()) &&
+         "VOPC comparison must have an implicit destination");
   std::optional<ICmpInst::Predicate> Predicate =
       getIntegerComparePredicate(Di.CanonOp);
   if (!Predicate) {

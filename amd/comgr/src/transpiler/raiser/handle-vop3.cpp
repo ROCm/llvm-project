@@ -421,13 +421,14 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
 
   if (std::optional<ICmpInst::Predicate> Predicate =
           getIntegerComparePredicate(Di.CanonOp)) {
-    if (*Clamp)
-      return unsupportedInstruction(
-          Ctx, Di, "integer comparison clamp is not supported");
-    if (Di.NumDefs == 0 && Di.defsExec())
+    assert(!*Clamp && "integer comparison cannot have clamp");
+    if (Di.NumDefs == 0) {
+      assert(Di.defsExec() &&
+             "comparison without a destination must write EXEC");
       return raiseIntegerCompare32(Ctx, Di, Op, *Predicate, std::nullopt);
-    if (Di.NumDefs != 1 || Di.numOperands() == 0 || !Di.isReg(0) ||
-        !Di.getReg(0))
+    }
+    assert(Di.NumDefs == 1 && "comparison must have one explicit destination");
+    if (!Di.isReg(0))
       return unsupportedInstruction(Ctx, Di,
                                     "expected a comparison mask destination");
     Expected<ParsedReg> Destination = Op.dst();
