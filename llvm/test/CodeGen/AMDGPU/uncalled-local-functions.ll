@@ -19,6 +19,19 @@ define internal i32 @aliased_internal_func() {
   ret i32 0
 }
 
+; CHECK: aliased_taken_func
+; CHECK:      Function info:
+; CHECK-NEXT: codeLenInByte = 12
+; CHECK-NEXT: TotalNumSgprs: 36
+; CHECK-NEXT: NumVgprs: 1
+; CHECK-NEXT: NumAgprs: 0
+; CHECK-NEXT: TotalNumVgprs: 1
+; CHECK-NEXT: ScratchSize: 0
+; CHECK-NEXT: MemoryBound: 0
+define internal i32 @aliased_taken_func() {
+  ret i32 0
+}
+
 ; CHECK-LABEL: take_alias_addr
 ; CHECK:      Function info:
 ; CHECK-NEXT: codeLenInByte = 60
@@ -34,7 +47,7 @@ define void @take_alias_addr() {
   ret void
 }
 
-; CHECK: aliased_taken_func
+; CHECK-LABEL: non_local
 ; CHECK:      Function info:
 ; CHECK-NEXT: codeLenInByte = 12
 ; CHECK-NEXT: TotalNumSgprs: 36
@@ -43,7 +56,7 @@ define void @take_alias_addr() {
 ; CHECK-NEXT: TotalNumVgprs: 1
 ; CHECK-NEXT: ScratchSize: 0
 ; CHECK-NEXT: MemoryBound: 0
-define internal i32 @aliased_taken_func() {
+define i32 @non_local() {
   ret i32 0
 }
 
@@ -57,19 +70,6 @@ define internal i32 @aliased_taken_func() {
 ; CHECK-NEXT: ScratchSize: 0
 ; CHECK-NEXT: MemoryBound: 0
 define internal i32 @addr_taken() {
-  ret i32 0
-}
-
-; CHECK-LABEL: non_local
-; CHECK:      Function info:
-; CHECK-NEXT: codeLenInByte = 12
-; CHECK-NEXT: TotalNumSgprs: 36
-; CHECK-NEXT: NumVgprs: 1
-; CHECK-NEXT: NumAgprs: 0
-; CHECK-NEXT: TotalNumVgprs: 1
-; CHECK-NEXT: ScratchSize: 0
-; CHECK-NEXT: MemoryBound: 0
-define i32 @non_local() {
   ret i32 0
 }
 
