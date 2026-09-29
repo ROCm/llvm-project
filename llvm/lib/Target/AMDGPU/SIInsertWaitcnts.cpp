@@ -50,6 +50,11 @@ static cl::opt<bool>
                                "s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)"),
                       cl::init(false), cl::Hidden);
 
+static cl::opt<bool> InvariantLoadSkipsLDSDMAWait(
+    "amdgpu-waitcnt-invariant-lds-skip-dma",
+    cl::desc("Do not wait for in-flight LDS DMA before an invariant LDS load"),
+    cl::init(true), cl::Hidden);
+
 static cl::opt<bool> ForceEmitZeroLoadFlag(
     "amdgpu-waitcnt-load-forcezero",
     cl::desc("Force all waitcnt load counters to wait until 0"),
@@ -2462,6 +2467,12 @@ bool SIInsertWaitcnts::generateWaitcntInstBefore(
           continue;
         // No need to wait before load from VMEM to LDS.
         if (TII.mayWriteLDSThroughDMA(MI))
+          continue;
+
+        // An invariant load reads memory that does not change while it is
+        // dereferenceable, so an in-flight LDS DMA cannot be writing it.
+        if (InvariantLoadSkipsLDSDMAWait && Memop->isLoad() &&
+            !Memop->isStore() && Memop->isInvariant())
           continue;
 
         // LOAD_CNT is only relevant to vgpr or LDS.
