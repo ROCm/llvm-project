@@ -51,10 +51,22 @@ cross_lane:
 	.type readfirstlane,@function
 readfirstlane:
 ; SAME-LABEL: define amdgpu_kernel void @readfirstlane(
-; SAME: call i32 @llvm.amdgcn.readfirstlane.i32
+; SAME: [[FIRST:%.+]] = call i32 @llvm.cttz.i32(i32 -1, i1 false)
+; SAME: [[ZERO:%.+]] = icmp eq i32 -1, 0
+; SAME: [[LANE:%.+]] = select i1 [[ZERO]], i32 0, i32 [[FIRST]]
+; SAME: call i32 @llvm.amdgcn.readlane.i32(i32 {{.+}}, i32 [[LANE]])
 	v_readfirstlane_b32 s4, v0
+	s_mov_b32 exec_lo, 32
+; SAME: [[FIRST:%.+]] = call i32 @llvm.cttz.i32(i32 32, i1 false)
+; SAME: [[ZERO:%.+]] = icmp eq i32 32, 0
+; SAME: [[LANE:%.+]] = select i1 [[ZERO]], i32 0, i32 [[FIRST]]
+; SAME: call i32 @llvm.amdgcn.readlane.i32(i32 {{.+}}, i32 [[LANE]])
+	v_readfirstlane_b32 s5, v0
 	s_mov_b32 exec_lo, 0
-; SAME: call i32 @llvm.amdgcn.readfirstlane.i32
+; SAME: [[FIRST:%.+]] = call i32 @llvm.cttz.i32(i32 0, i1 false)
+; SAME: [[ZERO:%.+]] = icmp eq i32 0, 0
+; SAME: [[LANE:%.+]] = select i1 [[ZERO]], i32 0, i32 [[FIRST]]
+; SAME: call i32 @llvm.amdgcn.readlane.i32(i32 {{.+}}, i32 [[LANE]])
 	v_readfirstlane_b32 s5, v0
 	s_endpgm
 
@@ -66,7 +78,11 @@ readfirstlane_different_exec:
 ; A 64-thread group gives source EXEC masks 0x20 and 0. The reads must
 ; return workitem IDs 5 and 32, respectively.
 	v_cmpx_eq_u32_e32 5, v0
-; SAME: call i32 @llvm.amdgcn.readfirstlane.i32
+; SAME: [[EXEC:%.+]] = and i32 -1, {{%.+}}
+; SAME: [[FIRST:%.+]] = call i32 @llvm.cttz.i32(i32 [[EXEC]], i1 false)
+; SAME: [[ZERO:%.+]] = icmp eq i32 [[EXEC]], 0
+; SAME: [[LANE:%.+]] = select i1 [[ZERO]], i32 0, i32 [[FIRST]]
+; SAME: call i32 @llvm.amdgcn.readlane.i32(i32 {{.+}}, i32 [[LANE]])
 	v_readfirstlane_b32 s4, v0
 	s_endpgm
 

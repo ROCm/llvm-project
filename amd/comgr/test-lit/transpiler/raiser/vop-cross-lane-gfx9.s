@@ -25,6 +25,22 @@ readlane_lds_direct:
 ; CHECK: [[SRC2:%.+]] = load i32, ptr addrspace(3) [[PTR2]]
 ; CHECK: call i32 @llvm.amdgcn.readlane.i32(i32 [[SRC2]], i32 7)
 	v_readlane_b32 s1, src_lds_direct, 7
+	s_mov_b64 exec, 0
+	s_mov_b32 exec_hi, 1
+; CHECK: [[EXEC:%.+]] = or i64 {{%.+}}, 4294967296
+; CHECK: [[FIRST:%.+]] = call i64 @llvm.cttz.i64(i64 [[EXEC]], i1 false)
+; CHECK: [[ZERO:%.+]] = icmp eq i64 [[EXEC]], 0
+; CHECK: [[LANE:%.+]] = select i1 [[ZERO]], i64 0, i64 [[FIRST]]
+; CHECK: [[LANE32:%.+]] = trunc i64 [[LANE]] to i32
+; CHECK: call i32 @llvm.amdgcn.readlane.i32(i32 {{.+}}, i32 [[LANE32]])
+	v_readfirstlane_b32 s0, v0
+	s_mov_b64 exec, 0
+; CHECK: [[FIRST:%.+]] = call i64 @llvm.cttz.i64(i64 0, i1 false)
+; CHECK: [[ZERO:%.+]] = icmp eq i64 0, 0
+; CHECK: [[LANE:%.+]] = select i1 [[ZERO]], i64 0, i64 [[FIRST]]
+; CHECK: [[LANE32:%.+]] = trunc i64 [[LANE]] to i32
+; CHECK: call i32 @llvm.amdgcn.readlane.i32(i32 {{.+}}, i32 [[LANE32]])
+	v_readfirstlane_b32 s1, v0
 	s_endpgm
 
 	.section .rodata,"a",@progbits

@@ -14,6 +14,7 @@
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/raise_failure.h"
 
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
@@ -124,9 +125,22 @@ Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
     return Src.takeError();
 
   Module *M = Ctx.B.GetInsertBlock()->getModule();
-  Function *ReadFirstLane = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_readfirstlane, {Ctx.B.getInt32Ty()});
-  Value *Result = Ctx.B.CreateCall(ReadFirstLane, {*Src}, "readfirstlane");
+  // Modeled EXEC can differ from hardware EXEC at this instruction.
+  Value *Exec = Ctx.registers().regFile().loadExec(Ctx.B);
+  Function *CountTrailingZeros =
+      Intrinsic::getOrInsertDeclaration(M, Intrinsic::cttz, {Exec->getType()});
+  Value *FirstSet = Ctx.B.CreateCall(
+      CountTrailingZeros, {Exec, Ctx.B.getFalse()}, "readfirstlane.first.set");
+  Value *ExecIsZero = Ctx.B.CreateICmpEQ(
+      Exec, ConstantInt::get(Exec->getType(), 0), "readfirstlane.exec.is.zero");
+  Value *SourceLane =
+      Ctx.B.CreateSelect(ExecIsZero, ConstantInt::get(Exec->getType(), 0),
+                         FirstSet, "readfirstlane.source.lane");
+  Value *Lane32 = Ctx.B.CreateZExtOrTrunc(SourceLane, Ctx.B.getInt32Ty(),
+                                          "readfirstlane.index");
+  Function *ReadLane = Intrinsic::getOrInsertDeclaration(
+      M, Intrinsic::amdgcn_readlane, {Ctx.B.getInt32Ty()});
+  Value *Result = Ctx.B.CreateCall(ReadLane, {*Src, Lane32}, "readfirstlane");
 
   Ctx.registers().writeReg32(*Dst, Result);
   return Error::success();
