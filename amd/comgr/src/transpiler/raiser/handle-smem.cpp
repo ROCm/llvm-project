@@ -229,6 +229,7 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   if (!Info)
     return unsupported(Ctx, Di, "unsupported scalar memory operation");
   unsigned LoadSizeInBytes = Info->SizeInBytes;
+  // Narrow loads transfer less than one dword: i8/u8/i16/u16.
   bool IsNarrowLoad = LoadSizeInBytes < MaxSmemAddressAlignment.value();
   // A narrow load extends into a single dword; wider loads fill a tuple.
   unsigned DestinationWidthInDwords =
