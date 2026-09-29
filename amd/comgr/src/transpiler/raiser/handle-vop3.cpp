@@ -17,6 +17,7 @@
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/raise_failure.h"
 
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/IR/Constants.h"
@@ -34,6 +35,33 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 namespace {
+
+Value *isNaNBits(IRBuilder<> &B, Value *Float) {
+  Value *Bits = B.CreateBitCast(Float, B.getInt32Ty());
+  Value *Magnitude = B.CreateAnd(Bits, B.getInt32(0x7fffffff));
+  return B.CreateICmpUGT(Magnitude, B.getInt32(0x7f800000));
+}
+
+Value *quietSignalingNaN(IRBuilder<> &B, Value *Source, Value *Fallback) {
+  Value *Bits = B.CreateBitCast(Source, B.getInt32Ty());
+  Value *IsNaN = isNaNBits(B, Source);
+  Value *QuietBit = B.CreateAnd(Bits, B.getInt32(0x00400000));
+  Value *IsSignaling = B.CreateICmpEQ(QuietBit, B.getInt32(0));
+  Value *SelectSource = B.CreateAnd(IsNaN, IsSignaling);
+  Value *QuietedBits = B.CreateOr(Bits, B.getInt32(0x00400000));
+  Value *Quieted = B.CreateBitCast(QuietedBits, B.getFloatTy());
+  return B.CreateSelect(SelectSource, Quieted, Fallback);
+}
+
+// Older IEEE-mode extrema quiet a signaling NaN before the next operation.
+Value *numericExtremum(IRBuilder<> &B, Intrinsic::ID ID, Value *Src0,
+                       Value *Src1, bool LegacyIeee) {
+  Value *Result = B.CreateBinaryIntrinsic(ID, Src0, Src1);
+  if (!LegacyIeee)
+    return Result;
+  Result = quietSignalingNaN(B, Src1, Result);
+  return quietSignalingNaN(B, Src0, Result);
+}
 
 /// Reject nonzero output multipliers on integer VOP3 instructions.
 Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
@@ -423,6 +451,9 @@ Error raiseFloatTernary32(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<Value *> Src2 = Op.srcF(2);
   if (!Src2)
     return Src2.takeError();
+  bool LegacyIeee = Ctx.Projection.SourceSTI.hasFeature(
+                        AMDGPU::FeatureDX10ClampAndIEEEMode) &&
+                    Ctx.sourceIeeeMode();
 
   Value *Result;
   switch (Di.CanonOp) {
@@ -442,13 +473,23 @@ Error raiseFloatTernary32(RaiseContext &Ctx, const DecodedInst &Di,
     Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_MAX3_NUM_F32
                            ? Intrinsic::maximumnum
                            : Intrinsic::minimumnum;
-    Value *First = Ctx.B.CreateBinaryIntrinsic(ID, *Src0, *Src1);
-    Result = Ctx.B.CreateBinaryIntrinsic(ID, First, *Src2);
+    Value *First = numericExtremum(Ctx.B, ID, *Src0, *Src1, LegacyIeee);
+    Result = numericExtremum(Ctx.B, ID, First, *Src2, LegacyIeee);
     break;
   }
   case CanonicalOp::V_MED3_NUM_F32: {
     Result = Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_fmed3,
                                    {Ctx.B.getFloatTy()}, {*Src0, *Src1, *Src2});
+    Value *FirstMin =
+        numericExtremum(Ctx.B, Intrinsic::minimumnum, *Src0, *Src1, LegacyIeee);
+    Value *NaNMin = numericExtremum(Ctx.B, Intrinsic::minimumnum, FirstMin,
+                                    *Src2, LegacyIeee);
+    Value *NaN0 = isNaNBits(Ctx.B, *Src0);
+    Value *NaN1 = isNaNBits(Ctx.B, *Src1);
+    Value *NaN2 = isNaNBits(Ctx.B, *Src2);
+    Value *AnyNaN = Ctx.B.CreateOr(NaN0, NaN1);
+    AnyNaN = Ctx.B.CreateOr(AnyNaN, NaN2);
+    Result = Ctx.B.CreateSelect(AnyNaN, NaNMin, Result);
     break;
   }
   case CanonicalOp::V_MAXIMUM3_F32:
