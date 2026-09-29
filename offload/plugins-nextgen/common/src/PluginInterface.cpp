@@ -2303,12 +2303,6 @@ int GenericPluginTy::prepopulate_page_table(int32_t DeviceId, void *ptr,
   return R;
 }
 
-int32_t GenericPluginTy::set_device_identifier(int32_t UserId,
-                                               int32_t DeviceId) {
-  UserDeviceIds[DeviceId] = UserId;
-  return OFFLOAD_SUCCESS;
-}
-
 // Query if [ptr, ptr+size] belongs to coarse grain memory region
 int32_t GenericPluginTy::query_coarse_grain_mem_region(int32_t DeviceId,
                                                        const void *ptr,
