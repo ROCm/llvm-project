@@ -286,6 +286,9 @@ jobs:
       - name: Post Build Upload
         if: always()
         run: |
+          curl https://raw.githubusercontent.com/linuxrocks123/rocm-bisect/refs/heads/main/generate_repro_checkout.py > generate_repro_checkout.py
+          python3 generate_repro_checkout.py > repro.source
+          tar cJvf build/artifacts/repro.source.tar.xz repro.source
           python3 build_tools/github_actions/post_build_upload.py \
             --run-id ${{ github.run_id }} \
             --artifact-group "${{ inputs.artifact_group }}" \
