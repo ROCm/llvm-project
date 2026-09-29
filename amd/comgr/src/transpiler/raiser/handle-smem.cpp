@@ -41,9 +41,9 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 
-// Every address component is aligned down to the data size, and never past a
-// dword: byte loads use the full address, 16-bit loads ignore bit 0, and wider
-// loads ignore bits [1:0].
+// Every address component is aligned down to the data size, byte loads use
+// the full address, 16-bit loads ignore bit 0, and wider loads ignore bits
+// [1:0].
 static constexpr Align MaxSmemAddressAlignment = Align::Constant<4>();
 
 // Report decoded operands that contradict the generated instruction metadata.
@@ -93,35 +93,34 @@ static unsigned requiredNamedOperandIndex(const MCState &MC,
 
 // The data size in bytes of a supported non-buffer scalar load, plus how a
 // sub-dword result reaches its destination. The size drives the address
-// alignment, the SCALE_OFFSET factor and the load type, all of which the ISA
-// derives from it.
-struct ScalarLoadShape {
+// alignment, the SCALE_OFFSET factor and the load type.
+struct ScalarLoadInfo {
   unsigned SizeInBytes;
   bool SignExtends;
 };
 
-static std::optional<ScalarLoadShape> scalarLoadShape(CanonicalOp Operation) {
+static std::optional<ScalarLoadInfo> scalarLoadInfo(CanonicalOp Operation) {
   switch (Operation) {
   case CanonicalOp::S_LOAD_I8:
-    return ScalarLoadShape{1, true};
+    return ScalarLoadInfo{1, true};
   case CanonicalOp::S_LOAD_U8:
-    return ScalarLoadShape{1, false};
+    return ScalarLoadInfo{1, false};
   case CanonicalOp::S_LOAD_I16:
-    return ScalarLoadShape{2, true};
+    return ScalarLoadInfo{2, true};
   case CanonicalOp::S_LOAD_U16:
-    return ScalarLoadShape{2, false};
+    return ScalarLoadInfo{2, false};
   case CanonicalOp::S_LOAD_B32:
-    return ScalarLoadShape{4, false};
+    return ScalarLoadInfo{4, false};
   case CanonicalOp::S_LOAD_B64:
-    return ScalarLoadShape{8, false};
+    return ScalarLoadInfo{8, false};
   case CanonicalOp::S_LOAD_B96:
-    return ScalarLoadShape{12, false};
+    return ScalarLoadInfo{12, false};
   case CanonicalOp::S_LOAD_B128:
-    return ScalarLoadShape{16, false};
+    return ScalarLoadInfo{16, false};
   case CanonicalOp::S_LOAD_B256:
-    return ScalarLoadShape{32, false};
+    return ScalarLoadInfo{32, false};
   case CanonicalOp::S_LOAD_B512:
-    return ScalarLoadShape{64, false};
+    return ScalarLoadInfo{64, false};
   default:
     return std::nullopt;
   }
@@ -226,10 +225,10 @@ emitScalarLoadAddress(IRBuilder<> &B, Value *Base, int64_t ImmediateOffset,
 }
 
 Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
-  std::optional<ScalarLoadShape> Shape = scalarLoadShape(Di.CanonOp);
-  if (!Shape)
+  std::optional<ScalarLoadInfo> Info = scalarLoadInfo(Di.CanonOp);
+  if (!Info)
     return unsupported(Ctx, Di, "unsupported scalar memory operation");
-  unsigned LoadSizeInBytes = Shape->SizeInBytes;
+  unsigned LoadSizeInBytes = Info->SizeInBytes;
   bool IsNarrowLoad = LoadSizeInBytes < MaxSmemAddressAlignment.value();
   // A narrow load extends into a single dword; wider loads fill a tuple.
   unsigned DestinationWidthInDwords =
@@ -365,7 +364,7 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
       Ctx.B.CreateAlignedLoad(LoadType, Pointer, AddressAlignment, "smem_load");
   if (IsNarrowLoad) {
     Value *Extended =
-        Shape->SignExtends
+        Info->SignExtends
             ? Ctx.B.CreateSExt(Loaded, Ctx.B.getInt32Ty(), "smem_load_sext")
             : Ctx.B.CreateZExt(Loaded, Ctx.B.getInt32Ty(), "smem_load_zext");
     Ctx.registers().writeReg32(*Destination, Extended);
