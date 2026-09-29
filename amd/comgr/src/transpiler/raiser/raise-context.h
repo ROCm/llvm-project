@@ -80,6 +80,8 @@ public:
   llvm::Error validateFPEnvironment(const DecodedInst &Di,
                                     llvm::Type *Ty) const;
 
+  bool sourceIeeeMode() const { return SourceIeeeMode; }
+
   /// Source SRAM ECC setting, or nothing when the code object permits either.
   std::optional<bool> sourceSramEcc() const { return SourceSramEcc; }
 
