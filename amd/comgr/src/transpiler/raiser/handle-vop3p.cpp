@@ -419,8 +419,8 @@ Error raiseFMAMixF32BF16(RaiseContext &Ctx, const DecodedInst &Di,
     Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::maxnum, Result, Zero);
     Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::minnum, Result, One);
   }
-  Ctx.registers().writeReg32(
-      *Destination, Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
+  Ctx.registers().writeReg32(*Destination,
+                             Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
   return Error::success();
 }
 
