@@ -1179,6 +1179,33 @@ std::optional<Instruction *>
 GCNTTIImpl::instCombineIntrinsic(InstCombiner &IC, IntrinsicInst &II) const {
   Intrinsic::ID IID = II.getIntrinsicID();
   switch (IID) {
+  case Intrinsic::amdgcn_cvt_pk_fp8_f32:
+  case Intrinsic::amdgcn_cvt_pk_bf8_f32:
+  case Intrinsic::amdgcn_cvt_pk_fp8_f32_e5m3: {
+    // cvt.pk.{fp8,bf8}(a, b, old, word_sel) writes one 16-bit half of the
+    // result and passes the other half through from `old`. If every user
+    // takes this result as its own `old` and writes the opposite half, the
+    // passed-through half of `old` is overwritten everywhere: `old` is dead.
+    // (Typical: low half then high half built into one dword, starting from
+    // `old = 0`, which would otherwise cost a v_mov per dword.)
+    Value *Old = II.getArgOperand(2);
+    if (isa<PoisonValue>(Old) || II.use_empty())
+      return std::nullopt;
+    bool WordSel = cast<ConstantInt>(II.getArgOperand(3))->isOne();
+    for (const Use &U : II.uses()) {
+      auto *User = dyn_cast<IntrinsicInst>(U.getUser());
+      if (!User || U.getOperandNo() != 2)
+        return std::nullopt;
+      Intrinsic::ID UID = User->getIntrinsicID();
+      if (UID != Intrinsic::amdgcn_cvt_pk_fp8_f32 &&
+          UID != Intrinsic::amdgcn_cvt_pk_bf8_f32 &&
+          UID != Intrinsic::amdgcn_cvt_pk_fp8_f32_e5m3)
+        return std::nullopt;
+      if (cast<ConstantInt>(User->getArgOperand(3))->isOne() == WordSel)
+        return std::nullopt;
+    }
+    return IC.replaceOperand(II, 2, PoisonValue::get(Old->getType()));
+  }
   case Intrinsic::amdgcn_implicitarg_ptr: {
     if (II.getFunction()->hasFnAttribute("amdgpu-no-implicitarg-ptr"))
       return IC.replaceInstUsesWith(II, PoisonValue::get(II.getType()));
