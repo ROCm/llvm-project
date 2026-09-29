@@ -142,6 +142,25 @@ def V_MOV_B64_PSEUDO : VPseudoInstSI <(outs VReg_64:$vdst),
   let UseNamedOperandTable = 1;
 }
 
+// Two ds_read_b128 from one address register producing a single 256-bit
+// value. Formed before register allocation from pairs of invariant LDS loads
+// (SIFormInvariantLDSReadPairs) so the register allocator sees one
+// rematerializable definition instead of a REG_SEQUENCE of two loads, and can
+// re-read the value from LDS instead of spilling it. Expanded after RA into
+// the two original ds_read_b128 (gfx9+ encoding, no M0 read).
+def DS_READ_B256_INVARIANT_PSEUDO : PseudoInstSI <
+    (outs AVLdSt_256:$vdst),
+    (ins VGPROp_32:$addr, i32imm:$offset0, i32imm:$offset1)> {
+  let mayLoad = 1;
+  let mayStore = 0;
+  let hasSideEffects = 0;
+  // Gated further by SIInstrInfo::isReMaterializableImpl (invariant MMOs).
+  let isReMaterializable = 1;
+  let Uses = [EXEC];
+  let SchedRW = [WriteLDS];
+  let UseNamedOperandTable = 1;
+}
+
 // 32-bit materialize immediate which supports AGPR or VGPR. Typically
 // this should just expand to V_MOV_B32, unless $vdst happens to be
 // allocated to an AGPR in which case it will lower to

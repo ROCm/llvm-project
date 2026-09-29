@@ -71,6 +71,12 @@ static cl::opt<bool> Fix16BitCopies(
   cl::init(true),
   cl::ReallyHidden);
 
+static cl::opt<bool> RematInvariantLDSLoads(
+    "amdgpu-remat-invariant-lds-loads",
+    cl::desc("Allow rematerialization of invariant LDS (DS) loads instead of "
+             "spilling their results"),
+    cl::init(true), cl::Hidden);
+
 SIInstrInfo::SIInstrInfo(const GCNSubtarget &ST)
     : AMDGPUGenInstrInfo(ST, RI, AMDGPU::ADJCALLSTACKUP,
                          AMDGPU::ADJCALLSTACKDOWN),
@@ -117,6 +123,32 @@ static bool nodesHaveSameOperandValue(SDNode *N0, SDNode *N1,
   return N0->getOperand(Op0Idx) == N1->getOperand(Op1Idx);
 }
 
+// An LDS load whose memory is known not to change (!invariant.load) can be
+// re-issued at its use instead of being spilled to scratch. Re-reading LDS
+// costs tens of cycles; a scratch spill costs a store plus a VMEM reload on
+// the critical path. Only plain loads qualify: no stores/atomics, no GDS,
+// and no implicit M0 read (M0 may be redefined between def and remat point,
+// e.g. by LDS DMA setup).
+static bool isRematerializableLDSLoad(const MachineInstr &MI) {
+  if (!RematInvariantLDSLoads || MI.memoperands_empty())
+    return false;
+  auto IsInvariantLDSLoad = [](const MachineMemOperand *MMO) {
+    return MMO->isLoad() && !MMO->isStore() && MMO->isInvariant() &&
+           !MMO->isVolatile() && MMO->getAddrSpace() == AMDGPUAS::LOCAL_ADDRESS;
+  };
+  if (MI.getOpcode() != AMDGPU::DS_READ_B256_INVARIANT_PSEUDO) {
+    if (!SIInstrInfo::isDS(MI) || !MI.mayLoad() || MI.mayStore() ||
+        MI.hasOrderedMemoryRef() ||
+        MI.readsRegister(AMDGPU::M0, /*TRI=*/nullptr))
+      return false;
+    int GDSIdx =
+        AMDGPU::getNamedOperandIdx(MI.getOpcode(), AMDGPU::OpName::gds);
+    if (GDSIdx != -1 && MI.getOperand(GDSIdx).getImm())
+      return false;
+  }
+  return llvm::all_of(MI.memoperands(), IsInvariantLDSLoad);
+}
+
 static bool canRemat(const MachineInstr &MI) {
 
   if (SIInstrInfo::isVOP1(MI) || SIInstrInfo::isVOP2(MI) ||
@@ -131,7 +163,7 @@ static bool canRemat(const MachineInstr &MI) {
            });
   }
 
-  return false;
+  return isRematerializableLDSLoad(MI);
 }
 
 // Split relocation flags for 64-bit global-address materialization into a
@@ -328,8 +360,12 @@ bool SIInstrInfo::resultDependsOnExec(const MachineInstr &MI) const {
 bool SIInstrInfo::isIgnorableUse(const MachineInstr &MI, unsigned OpIdx) const {
   const MachineOperand &MO = MI.getOperand(OpIdx);
   // Any implicit use of exec by VALU is not a real register read.
-  return MO.getReg() == AMDGPU::EXEC && MO.isImplicit() &&
-         isVALU(MI, /*AllowLDSDMA=*/true) && !resultDependsOnExec(MI);
+  if (MO.getReg() != AMDGPU::EXEC || !MO.isImplicit())
+    return false;
+  // Likewise for an invariant LDS load: like a VALU result, the loaded value
+  // only matters in the lanes that are active where it is used.
+  return (isVALU(MI, /*AllowLDSDMA=*/true) && !resultDependsOnExec(MI)) ||
+         isRematerializableLDSLoad(MI);
 }
 
 bool SIInstrInfo::isSafeToSink(MachineInstr &MI,
@@ -2129,6 +2165,40 @@ bool SIInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     // register allocation.
     MI.setDesc(get(AMDGPU::S_MOV_B32));
     break;
+
+  case AMDGPU::DS_READ_B256_INVARIANT_PSEUDO: {
+    // Split back into the two ds_read_b128 it was formed from.
+    Register Dst = MI.getOperand(0).getReg();
+    const MachineOperand &Addr = MI.getOperand(1);
+    int64_t Offsets[2] = {MI.getOperand(2).getImm(), MI.getOperand(3).getImm()};
+    unsigned SubRegs[2] = {AMDGPU::sub0_sub1_sub2_sub3,
+                           AMDGPU::sub4_sub5_sub6_sub7};
+    ArrayRef<MachineMemOperand *> MMOs = MI.memoperands();
+    // If the (killed) address register was allocated inside the first half of
+    // the destination, load the second half first so the address survives.
+    bool AddrInLo =
+        RI.regsOverlap(Addr.getReg(), RI.getSubReg(Dst, SubRegs[0]));
+    unsigned Order[2] = {AddrInLo ? 1u : 0u, AddrInLo ? 0u : 1u};
+    for (unsigned Step = 0; Step < 2; ++Step) {
+      unsigned Half = Order[Step];
+      bool Last = Step == 1;
+      MachineInstrBuilder Load =
+          BuildMI(MBB, MI, DL, get(AMDGPU::DS_READ_B128_gfx9),
+                  RI.getSubReg(Dst, SubRegs[Half]))
+              .addReg(Addr.getReg(), getKillRegState(Last && Addr.isKill()))
+              .addImm(Offsets[Half])
+              .addImm(0); // gds
+      // The pseudo carries the two loads' memory operands in order.
+      if (MMOs.size() == 2)
+        Load.addMemOperand(MMOs[Half]);
+      else
+        Load.cloneMemRefs(MI);
+      if (Last)
+        Load.addReg(Dst, RegState::ImplicitDefine);
+    }
+    MI.eraseFromParent();
+    break;
+  }
 
   case AMDGPU::S_XOR_B64_term:
     // This is only a terminator to get the correct spill code placement during
