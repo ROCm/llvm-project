@@ -24,9 +24,9 @@ if config.sqtt_marker_clang_tests_available:
 if config.sqtt_marker_offload_tools_available:
     config.available_features.add("sqtt-marker-has-offload-tools")
 
-unittests_bin = os.path.join(config.sqtt_marker_obj_root, "..", "unittests")
+unittests_bindir = os.path.join(config.sqtt_marker_obj_root, "..", "unittests")
 config.environment["PATH"] = os.pathsep.join(
-    [config.llvm_tools_dir, unittests_bin, config.environment.get("PATH", "")]
+    [config.llvm_tools_dir, unittests_bindir, config.environment.get("PATH", "")]
 )
 
 
