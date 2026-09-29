@@ -247,6 +247,18 @@ smem_narrow_loads:
 	s_load_i16 s8, s[0:1], 0x3
 ; IR: xor i32 [[I16_VALUE]], -1
 	s_not_b32 s9, s8
+	s_mov_b32 s10, 0x13
+; IR: [[SO16_BASE:%.+]] = and i64 {{.+}}, -2
+; IR: [[SO16_ADDRESS:%.+]] = add i64 [[SO16_BASE]], 0
+; IR: [[SO16_OFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR: [[SO16_ALIGNED:%.+]] = and i64 [[SO16_OFFSET]], -2
+; IR: [[SO16_SUM:%.+]] = add i64 [[SO16_ADDRESS]], [[SO16_ALIGNED]]
+; IR: [[SO16_POINTER:%.+]] = inttoptr i64 [[SO16_SUM]] to ptr addrspace(1)
+; IR: [[SO16_LOAD:%.+]] = load i16, ptr addrspace(1) [[SO16_POINTER]], align 2
+; IR: [[SO16_VALUE:%.+]] = zext i16 [[SO16_LOAD]] to i32
+	s_load_u16 s6, s[0:1], s10
+; IR: xor i32 [[SO16_VALUE]], -1
+	s_not_b32 s7, s6
 ; IR: ret void
 	s_endpgm
 
@@ -370,7 +382,7 @@ smem_negative_offset:
 		.amdhsa_kernarg_size 32
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 1
-		.amdhsa_next_free_sgpr 10
+		.amdhsa_next_free_sgpr 11
 	.end_amdhsa_kernel
 	.amdhsa_kernel smem_narrow_scale_offset
 		.amdhsa_kernarg_size 32
@@ -476,7 +488,7 @@ amdhsa.kernels:
     .max_flat_workgroup_size: 1024
     .name:           smem_narrow_loads
     .private_segment_fixed_size: 0
-    .sgpr_count:     10
+    .sgpr_count:     11
     .symbol:         smem_narrow_loads.kd
     .vgpr_count:     1
     .wavefront_size: 32
