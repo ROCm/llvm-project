@@ -4768,6 +4768,14 @@ bool AMDGPUDAGToDAGISel::isUniformLoad(const SDNode *N) const {
   if (Ld->isDivergent() && !AMDGPU::isUniformMMO(MMO))
     return false;
 
+  // Scalar (SMEM) loads cannot access LDS, GDS or scratch, whatever the
+  // memory operand says (e.g. an !invariant.load from LDS). Matches the
+  // GlobalISel register bank selection for G_LOAD.
+  unsigned AS = Ld->getAddressSpace();
+  if (AS == AMDGPUAS::LOCAL_ADDRESS || AS == AMDGPUAS::REGION_ADDRESS ||
+      AS == AMDGPUAS::PRIVATE_ADDRESS)
+    return false;
+
   return MMO->getSize().hasValue() &&
          Ld->getAlign() >=
              Align(std::min(MMO->getSize().getValue().getKnownMinValue(),
