@@ -30,6 +30,7 @@
 #include <cassert>
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 using namespace llvm;
 
@@ -364,9 +365,13 @@ Error raisePackedInt16(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
-Expected<Value *> readMixedBF16Source(RaiseContext &Ctx, OperandResolver &Op,
-                                      unsigned Source) {
+Expected<Value *> readMixedBF16Source(RaiseContext &Ctx, const DecodedInst &Di,
+                                      OperandResolver &Op, unsigned Source) {
   unsigned Modifiers = Op.srcMod(Source);
+  if (Modifiers & SISrcMods::OP_SEL_1) {
+    if (Error Err = Ctx.validateBF16InputDenormMode(Di))
+      return std::move(Err);
+  }
   Expected<Value *> Bits = Op.src(Source);
   if (!Bits)
     return Bits.takeError();
@@ -374,7 +379,20 @@ Expected<Value *> readMixedBF16Source(RaiseContext &Ctx, OperandResolver &Op,
   Value *Result;
   if (Modifiers & SISrcMods::OP_SEL_1) {
     Value *Selected = *Bits;
-    if (Modifiers & SISrcMods::OP_SEL_0)
+    bool InlineFloat = false;
+    // An inline floating constant occupies either BF16 half, while a literal
+    // or register supplies its raw 32-bit word.
+    if (!Op.isSrcReg(Source) && Di.sizeInBytes() == 8) {
+      uint32_t Immediate = static_cast<uint32_t>(Op.srcImm(Source));
+      int32_t SignedImmediate = static_cast<int32_t>(Immediate);
+      if (!AMDGPU::isInlinableIntLiteral(SignedImmediate) &&
+          AMDGPU::isInlinableLiteral32(SignedImmediate, true)) {
+        uint32_t Half = Immediate >> 16;
+        Selected = ConstantInt::get(Ctx.B.getInt32Ty(), Half);
+        InlineFloat = true;
+      }
+    }
+    if (!InlineFloat && (Modifiers & SISrcMods::OP_SEL_0))
       Selected = Ctx.B.CreateLShr(Selected, 16, "mix.hi");
     Value *HalfBits = Ctx.B.CreateTrunc(Selected, Ctx.B.getInt16Ty());
     Value *BF16 = Ctx.B.CreateBitCast(HalfBits, Ctx.B.getBFloatTy());
@@ -383,11 +401,7 @@ Expected<Value *> readMixedBF16Source(RaiseContext &Ctx, OperandResolver &Op,
     Result = Ctx.B.CreateBitCast(*Bits, Ctx.B.getFloatTy());
   }
 
-  if (Modifiers & SISrcMods::ABS)
-    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::fabs, Result);
-  if (Modifiers & SISrcMods::NEG)
-    Result = Ctx.B.CreateFNeg(Result);
-  return Result;
+  return Op.applyMods(Source, Result);
 }
 
 Error raiseFMAMixF32BF16(RaiseContext &Ctx, const DecodedInst &Di,
@@ -406,7 +420,7 @@ Error raiseFMAMixF32BF16(RaiseContext &Ctx, const DecodedInst &Di,
 
   Value *Sources[3];
   for (unsigned I = 0; I != 3; ++I) {
-    Expected<Value *> Source = readMixedBF16Source(Ctx, Op, I);
+    Expected<Value *> Source = readMixedBF16Source(Ctx, Di, Op, I);
     if (!Source)
       return Source.takeError();
     Sources[I] = *Source;
