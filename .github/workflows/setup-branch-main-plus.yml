@@ -53,4 +53,4 @@ jobs:
             fi
           done
           git commit --all --message="add amd-specific code"
-          git push origin main:users/kzhuravl/9-28-2026
+          git push origin main:amd-main-$(date +'%Y-%m-%d')
