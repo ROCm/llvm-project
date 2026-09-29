@@ -15,6 +15,7 @@
 
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 
+#include "MCTargetDesc/AMDGPUMCExpr.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
 
@@ -192,6 +193,9 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
                                         "cos");
     break;
   case CanonicalOp::V_TANH_F32:
+    if (!Ctx.Projection.TargetSTI.hasFeature(AMDGPU::FeatureTanhInsts))
+      return unsupportedInstruction(Ctx, Di,
+                                    "target does not support v_tanh_f32");
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_tanh, *Source,
                                         nullptr, "tanh");
     break;
@@ -344,12 +348,26 @@ Error raiseFloatConversion64(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<Value *> Source = Op.src64(0);
     if (!Source)
       return Source.takeError();
+    const MCOperand &Operand = Di.Inst.getOperand(Op.srcIdx(0));
+    if (Operand.isExpr()) {
+      const auto *Expr = dyn_cast<AMDGPUMCExpr>(Operand.getExpr());
+      if (Expr && Expr->getKind() == AMDGPUMCExpr::AGVK_Lit) {
+        // A 32-bit FP64 literal supplies the high word of the value.
+        std::optional<int64_t> Literal =
+            evalOperandAsConst(Di.Inst, Op.srcIdx(0));
+        if (!Literal)
+          return unsupportedInstruction(Ctx, Di, "unresolved FP64 literal");
+        uint64_t Bits = static_cast<uint64_t>(static_cast<uint32_t>(*Literal))
+                        << 32;
+        *Source = Ctx.B.getInt64(Bits);
+      }
+    }
     Value *Float = Ctx.B.CreateBitCast(*Source, Ctx.B.getDoubleTy());
     Float = Op.applyMods(0, Float);
     Value *Result;
     if (Di.CanonOp == CanonicalOp::V_CVT_F32_F64) {
-      Result = Ctx.B.CreateBitCast(
-          Ctx.B.CreateFPTrunc(Float, Ctx.B.getFloatTy()), Ctx.B.getInt32Ty());
+      Value *Truncated = Ctx.B.CreateFPTrunc(Float, Ctx.B.getFloatTy());
+      Result = Ctx.B.CreateBitCast(Truncated, Ctx.B.getInt32Ty());
     } else {
       Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_CVT_I32_F64
                              ? Intrinsic::fptosi_sat

@@ -4,6 +4,8 @@
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=vop_math,vop3_math | %FileCheck %s
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=literal_f64 | %FileCheck %s --check-prefix=LITERAL
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=refuse_clamp 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE-CLAMP
@@ -16,6 +18,11 @@
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=refuse_true16_destination 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE-TRUE16
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=refuse_tanh 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE-TANH
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 \
+; RUN:   --emit-ir=refuse_tanh | %FileCheck %s --check-prefix=SUPPORT-TANH
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -64,8 +71,6 @@ vop_math:
 	v_rcp_f32_e32 v26, v27
 ; CHECK: call float asm sideeffect "v_rcp_iflag_f32 $0, $1", "=v,v"(float
 	v_rcp_iflag_f32_e32 v26, v27
-; CHECK: call float @llvm.amdgcn.tanh.f32
-	v_tanh_f32_e32 v26, v27
 ; CHECK: call float @llvm.amdgcn.rsq.f32
 	v_rsq_f32_e32 v28, v29
 ; CHECK: call float @llvm.amdgcn.sqrt.f32
@@ -141,6 +146,8 @@ vop3_math:
 ; CHECK: call float @llvm.minimumnum.f32
 	v_min3_num_f32 v6, v0, v1, v2
 ; CHECK: call float @llvm.amdgcn.fmed3.f32
+; CHECK: call float @llvm.minimumnum.f32
+; CHECK: select i1 {{.+}}, float {{.+}}, float
 	v_med3_num_f32 v7, v0, v1, v2
 ; CHECK: call float @llvm.maximum.f32
 	v_maximum_f32 v8, v0, v1
@@ -159,6 +166,36 @@ vop3_math:
 ; CHECK: select i1 [[COND]], i32
 	v_cndmask_b32_e64 v5, v6, v7, s4
 ; CHECK: ret void
+	s_endpgm
+
+	.globl	literal_f64
+	.p2align	8
+	.type	literal_f64,@function
+; LITERAL-LABEL: define amdgpu_kernel void @literal_f64(
+literal_f64:
+; LITERAL: i32 1065353216
+	v_cvt_f32_f64_e32 v2, lit(0x3ff00000)
+
+; LITERAL: store i32 {{.+}}, ptr addrspace(1)
+	global_store_dword v[0:1], v2, off
+; LITERAL: call i32 @llvm.fptosi.sat.i32.f64(double 1.000000e+00)
+	v_cvt_i32_f64_e32 v2, lit(0x3ff00000)
+; LITERAL: store i32 {{.+}}, ptr addrspace(1)
+	global_store_dword v[0:1], v2, off
+; LITERAL: call i32 @llvm.fptoui.sat.i32.f64(double 1.000000e+00)
+	v_cvt_u32_f64_e32 v2, lit(0x3ff00000)
+; LITERAL: store i32 {{.+}}, ptr addrspace(1)
+	global_store_dword v[0:1], v2, off
+; LITERAL: i32 1065353216
+	v_cvt_f32_f64_e32 v2, lit64(0x3ff0000000000000)
+
+; LITERAL: store i32 {{.+}}, ptr addrspace(1)
+	global_store_dword v[0:1], v2, off
+; LITERAL: i32 1065353216
+	v_cvt_f32_f64_e32 v2, 1.0
+
+; LITERAL: store i32 {{.+}}, ptr addrspace(1)
+	global_store_dword v[0:1], v2, off
 	s_endpgm
 
 	.globl	refuse_clamp
@@ -197,6 +234,19 @@ refuse_true16_destination:
 	v_cvt_f16_f32_e32 v0.l, v1
 	s_endpgm
 
+	.globl	refuse_tanh
+	.p2align	8
+	.type	refuse_tanh,@function
+; REFUSE-TANH: unsupported-instruction-form: v_tanh_f32 [VOP1]
+; REFUSE-TANH-SAME: target does not support v_tanh_f32
+; SUPPORT-TANH-LABEL: define amdgpu_kernel void @refuse_tanh(
+; SUPPORT-TANH: call float @llvm.amdgcn.tanh.f32
+; SUPPORT-TANH: store i32 {{.+}}, ptr addrspace(1)
+refuse_tanh:
+	v_tanh_f32_e32 v0, v1
+	global_store_dword v[2:3], v0, off
+	s_endpgm
+
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel vop_math
@@ -208,6 +258,11 @@ refuse_true16_destination:
 		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 12
 		.amdhsa_next_free_sgpr 5
+	.end_amdhsa_kernel
+	.amdhsa_kernel literal_f64
+		.amdhsa_wavefront_size32 1
+		.amdhsa_next_free_vgpr 3
+		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_clamp
 		.amdhsa_wavefront_size32 1
@@ -227,6 +282,11 @@ refuse_true16_destination:
 	.amdhsa_kernel refuse_true16_destination
 		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 2
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_tanh
+		.amdhsa_wavefront_size32 1
+		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.text
@@ -252,6 +312,16 @@ amdhsa.kernels:
     .sgpr_count:     5
     .symbol:         vop3_math.kd
     .vgpr_count:     12
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           literal_f64
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         literal_f64.kd
+    .vgpr_count:     3
     .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -292,6 +362,16 @@ amdhsa.kernels:
     .sgpr_count:     1
     .symbol:         refuse_true16_destination.kd
     .vgpr_count:     2
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_tanh
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         refuse_tanh.kd
+    .vgpr_count:     4
     .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
