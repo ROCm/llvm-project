@@ -403,7 +403,7 @@ set(LIBOMPTARGET_LLVM_LIBRARY_INTDIR "${LIBOMPTARGET_LIBRARY_DIR}" CACHE STRING
   "Path to folder where intermediate libraries will be output")
 
 if(SANITIZER_AMDGPU)
-  add_definitions(-DSANITIZER_AMDGPU=1)
+  add_definitions(-DSANITIZER_AMDHSA=1)
   # Check for COMGr package , ASan requires COMGr with minimum version 2.4
   find_package(amd_comgr QUIET 2.4.0 HINTS ${CMAKE_INSTALL_PREFIX} PATHS /opt/rocm)
 endif()
@@ -424,11 +424,12 @@ add_subdirectory(plugins-nextgen)
 add_subdirectory(tools)
 add_subdirectory(docs)
 
+add_subdirectory(liboffload)
+
 if(BUILD_LIBOMPTARGET)
   add_subdirectory(libomptarget)
 endif()
 
-add_subdirectory(liboffload)
 add_subdirectory(languages)
 
 # Add tests.

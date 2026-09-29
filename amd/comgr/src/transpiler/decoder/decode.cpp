@@ -64,16 +64,26 @@ void buildSrcMap(DecodedInst &Di, const MCInstrDesc &Desc) {
   std::optional<unsigned> OldIdx = namedOperandIdx(Opc, AMDGPU::OpName::old);
   std::optional<unsigned> VdstInIdx =
       namedOperandIdx(Opc, AMDGPU::OpName::vdst_in);
+  std::optional<unsigned> ClampIdx =
+      namedOperandIdx(Opc, AMDGPU::OpName::clamp);
+  std::optional<unsigned> OmodIdx = namedOperandIdx(Opc, AMDGPU::OpName::omod);
+  std::optional<unsigned> Src0ModIdx =
+      namedOperandIdx(Opc, AMDGPU::OpName::src0_modifiers);
+  std::optional<unsigned> Src1ModIdx =
+      namedOperandIdx(Opc, AMDGPU::OpName::src1_modifiers);
+  std::optional<unsigned> Src2ModIdx =
+      namedOperandIdx(Opc, AMDGPU::OpName::src2_modifiers);
   auto OpInfos = Desc.operands();
   unsigned NumOps = Inst.getNumOperands();
   unsigned PendingModIdx = UINT_MAX;
   for (unsigned I = Di.FirstSrcIdx; I < NumOps; ++I) {
-    if (I < OpInfos.size() &&
-        OpInfos[I].OperandType == AMDGPU::OPERAND_INPUT_MODS) {
+    if ((I < OpInfos.size() &&
+         OpInfos[I].OperandType == AMDGPU::OPERAND_INPUT_MODS) ||
+        Src0ModIdx == I || Src1ModIdx == I || Src2ModIdx == I) {
       PendingModIdx = I;
       continue;
     }
-    if (OldIdx == I || VdstInIdx == I) {
+    if (OldIdx == I || VdstInIdx == I || ClampIdx == I || OmodIdx == I) {
       PendingModIdx = UINT_MAX;
       continue;
     }

@@ -68,8 +68,11 @@ struct OperandResolver {
   llvm::Expected<llvm::Value *> src(unsigned I) {
     return Ctx.registers().readOp32(Di, srcIdx(I));
   }
-  // Read the I-th source as a 32-bit value with its modifiers applied.
+  // Read the I-th source as an f32 value with its modifiers applied.
   llvm::Expected<llvm::Value *> srcF(unsigned I);
+  // Read the selected half of the I-th source as an f16 value with its
+  // modifiers applied.
+  llvm::Expected<llvm::Value *> srcF16(unsigned I);
   // Read the I-th source as a 64-bit value.
   llvm::Expected<llvm::Value *> src64(unsigned I) {
     return Ctx.registers().readOp64(Di, srcIdx(I));

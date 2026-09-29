@@ -17,9 +17,9 @@ if(COMGR_ENABLE_TRANSPILER)
   add_subdirectory(raiser)
   add_subdirectory(decoder)
   list(APPEND COMGR_TRANSPILER_TEST_TARGETS
-    RaiserScaffoldingTests WaveProjectionTests RaiseFailureTests RegFileTests
-    RegisterStateTests RaiseContextTests OperandResolverTests UserSgprLayoutTests
-    DecoderTests)
+    RaiserScaffoldingTests WaveProjectionTests WMMALoweringTests
+    RaiseFailureTests RegFileTests RegisterStateTests RaiseContextTests
+    OperandResolverTests UserSgprLayoutTests DecoderTests)
 endif()
 
 # The test binaries above, exported to the parent scope so the top-level

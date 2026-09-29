@@ -232,6 +232,16 @@ unsigned opcodeOf(MCState &State, llvm::ArrayRef<uint8_t> Bytes) {
   return Inst.getOpcode();
 }
 
+// Return the generated opcode carrying Name, failing the test if it is absent.
+unsigned opcodeNamed(const llvm::MCInstrInfo &MCII, llvm::StringRef Name) {
+  for (unsigned Opcode = 0; Opcode != MCII.getNumOpcodes(); ++Opcode) {
+    if (MCII.getName(Opcode) == Name)
+      return Opcode;
+  }
+  ADD_FAILURE() << "missing opcode " << Name.str();
+  return MCII.getNumOpcodes();
+}
+
 TEST_F(DecoderTest, OpcodeMapTagsTableEntries) {
   OpcodeMap Map;
   Map.build(*State.InstrInfo);
@@ -275,6 +285,27 @@ TEST_F(DecoderTest, OpcodeMapReturnsUnknownForUnmappedOpcode) {
   OpcodeMap Map;
   Map.build(*State.InstrInfo);
   EXPECT_EQ(Map.lookup(State.InstrInfo->getNumOpcodes()), CanonicalOp::Unknown);
+}
+
+TEST(OpcodeMap, TagsPackedFloatOpcodesOnGfx1250) {
+  llvm::Expected<MCState> StateOrErr = initMCState("gfx1250");
+  ASSERT_TRUE(static_cast<bool>(StateOrErr))
+      << llvm::toString(StateOrErr.takeError());
+  OpcodeMap Map;
+  Map.build(*StateOrErr->InstrInfo);
+
+  EXPECT_EQ(
+      Map.lookup(opcodeNamed(*StateOrErr->InstrInfo, "V_PK_ADD_F16_gfx12")),
+      CanonicalOp::V_PK_ADD_F16);
+  EXPECT_EQ(
+      Map.lookup(opcodeNamed(*StateOrErr->InstrInfo, "V_PK_MUL_F16_gfx12")),
+      CanonicalOp::V_PK_MUL_F16);
+  EXPECT_EQ(Map.lookup(opcodeNamed(*StateOrErr->InstrInfo,
+                                   "V_PK_ADD_F32_gfx1250_gfx12")),
+            CanonicalOp::V_PK_ADD_F32);
+  EXPECT_EQ(Map.lookup(opcodeNamed(*StateOrErr->InstrInfo,
+                                   "V_PK_MUL_F32_gfx1250_gfx12")),
+            CanonicalOp::V_PK_MUL_F32);
 }
 
 // -- decode -------------------------------------------------------------------

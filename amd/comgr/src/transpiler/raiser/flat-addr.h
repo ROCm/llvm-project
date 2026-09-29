@@ -22,12 +22,13 @@ namespace COMGR::transpiler {
 // global address space with the instruction's immediate byte offset folded in.
 // Both addressing forms are recognized: a per-lane 64-bit address in `vaddr`,
 // and an SGPR-pair base in `saddr` that a per-lane 32-bit offset in `vaddr` is
-// added to. AccessAlign is the alignment the access is modeled as having, which
-// the immediate offset has to preserve. Returns a structured refusal for that
-// offset, for the address-scaling modifier, and for a cache policy the raiser
-// does not model.
+// added to. For gfx1250 SADDR forms, scale_offset multiplies the signed lane
+// offset by AccessSizeInBytes. AccessAlign is the modeled alignment, which the
+// immediate offset must preserve. Returns a structured refusal for unsupported
+// addressing forms, offsets, or cache policies.
 llvm::Expected<llvm::Value *> emitGlobalAddress(RaiseContext &Ctx,
                                                 const DecodedInst &Di,
+                                                unsigned AccessSizeInBytes,
                                                 llvm::Align AccessAlign);
 
 } // namespace COMGR::transpiler

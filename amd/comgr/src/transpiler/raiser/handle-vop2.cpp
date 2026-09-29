@@ -39,7 +39,7 @@ static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
                        "expected one register destination and two sources");
   }
 
-  if (Error Err = Ctx.validateF32Environment(Di)) {
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy())) {
     return Err;
   }
 
@@ -121,18 +121,6 @@ static Error raiseBinary32ReadWriteVCC(RaiseContext &Ctx, OperandResolver &Op,
   Value *SecondVCC = Ctx.B.CreateExtractValue(Second, 1);
   Value *VCC = Ctx.B.CreateOr(FirstVCC, SecondVCC, "vcc_out");
   writeResultAndVCC(Ctx, Args->Dst, Result, VCC);
-  return Error::success();
-}
-
-// Select src1 when the current lane's VCC bit is set, otherwise src0.
-static Error raiseCndMask(RaiseContext &Ctx, OperandResolver &Op) {
-  Expected<BinaryOperands> Args = Op.readBinary32();
-  if (!Args) {
-    return Args.takeError();
-  }
-  Value *VCC = Ctx.registers().regFile().loadVCC(Ctx.B);
-  Value *Result = Ctx.B.CreateSelect(VCC, Args->Src1, Args->Src0, "cndmask");
-  Ctx.registers().writeReg32(Args->Dst, Result);
   return Error::success();
 }
 
@@ -255,7 +243,7 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return raiseBinary32ReadWriteVCC(Ctx, Op, Intrinsic::usub_with_overflow,
                                      /*ReverseOperands=*/true);
   case CanonicalOp::V_CNDMASK_B32:
-    return raiseCndMask(Ctx, Op);
+    return raiseCndMask32(Ctx, Di, Op);
 
   case CanonicalOp::V_MUL_I32_I24:
     return raiseMul24(Ctx, Op, /*IsSigned=*/true);

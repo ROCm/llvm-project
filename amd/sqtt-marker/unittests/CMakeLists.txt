@@ -19,29 +19,40 @@ set(SQTT_MARKER_UNIT_SOURCES
   SQTTMarkerTest.cpp
 )
 
-if(COMMAND add_llvm_unittest AND TARGET UnitTests)
-  add_llvm_unittest(SQTTMarkerTests ${SQTT_MARKER_UNIT_SOURCES})
-  set_output_directory(SQTTMarkerTests
-    BINARY_DIR "${LLVM_BINARY_DIR}/unittests/SQTTMarker"
-    LIBRARY_DIR "${LLVM_BINARY_DIR}/unittests/SQTTMarker")
+if(TARGET llvm_gtest)
+    # Build as an external project
+    set(GTEST_LIBS llvm_gtest_main llvm_gtest)
+    set(GTEST_INCLUDE_DIR "")
 else()
-  find_package(GTest REQUIRED)
-  add_executable(SQTTMarkerTests ${SQTT_MARKER_UNIT_SOURCES})
-  llvm_map_components_to_libnames(SQTT_MARKER_TEST_LLVM_LIBS
-    ${LLVM_LINK_COMPONENTS})
-  target_link_libraries(SQTTMarkerTests PRIVATE
-    GTest::gtest_main
-    ${SQTT_MARKER_TEST_LLVM_LIBS}
-  )
-  include(GoogleTest)
-  gtest_discover_tests(SQTTMarkerTests)
+    # Build as a separate pass
+    find_library(LLVM_GTEST_MAIN_LIB llvm_gtest_main PATHS ${LLVM_LIBRARY_DIRS} NO_DEFAULT_PATH)
+    find_library(LLVM_GTEST_LIB llvm_gtest PATHS ${LLVM_LIBRARY_DIRS} NO_DEFAULT_PATH)
+    find_path(LLVM_GTEST_INCLUDE_DIR gtest/gtest.h PATHS ${LLVM_INCLUDE_DIRS} PATH_SUFFIXES llvm-gtest NO_DEFAULT_PATH)
+    if(LLVM_GTEST_LIB AND LLVM_GTEST_MAIN_LIB AND LLVM_GTEST_INCLUDE_DIR)
+        set(GTEST_LIBS ${LLVM_GTEST_MAIN_LIB} ${LLVM_GTEST_LIB})
+        set(GTEST_INCLUDE_DIR "${LLVM_GTEST_INCLUDE_DIR}")
+    else()
+        find_package(GTest REQUIRED)
+        set(GTEST_LIBS GTest::gtest_main GTest::gtest)
+        set(GTEST_INCLUDE_DIR "")
+    endif()
 endif()
 
-target_link_libraries(SQTTMarkerTests PRIVATE SQTTMarkerObjects)
+add_executable(SQTTMarkerTests ${SQTT_MARKER_UNIT_SOURCES})
+llvm_map_components_to_libnames(SQTT_MARKER_TEST_LLVM_LIBS
+  ${LLVM_LINK_COMPONENTS})
+target_link_libraries(SQTTMarkerTests PRIVATE
+    ${GTEST_LIBS}
+    ${SQTT_MARKER_TEST_LLVM_LIBS}
+    SQTTMarkerObjects
+)
+include(GoogleTest)
+gtest_discover_tests(SQTTMarkerTests)
 
 target_include_directories(SQTTMarkerTests PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/../lib"
   ${LLVM_INCLUDE_DIRS}
+  ${GTEST_INCLUDE_DIR}
 )
 if(SQTT_MARKER_STANDALONE)
   target_compile_options(SQTTMarkerTests PRIVATE

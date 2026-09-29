@@ -34,6 +34,32 @@ Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_FFBL_B32:
   case CanonicalOp::V_FFBH_I32:
     return raiseUnaryBit32(Ctx, Di, Op);
+  case CanonicalOp::V_CVT_F32_I32:
+  case CanonicalOp::V_CVT_F32_U32:
+  case CanonicalOp::V_CVT_I32_F32:
+  case CanonicalOp::V_CVT_U32_F32:
+  case CanonicalOp::V_CVT_F16_F32:
+  case CanonicalOp::V_CVT_F32_F16:
+  case CanonicalOp::V_CVT_F32_UBYTE0:
+  case CanonicalOp::V_CVT_F32_UBYTE1:
+  case CanonicalOp::V_CVT_F32_UBYTE2:
+  case CanonicalOp::V_CVT_F32_UBYTE3:
+    return raiseFloatConversion32(Ctx, Di, Op);
+  case CanonicalOp::V_FRACT_F32:
+  case CanonicalOp::V_TRUNC_F32:
+  case CanonicalOp::V_CEIL_F32:
+  case CanonicalOp::V_RNDNE_F32:
+  case CanonicalOp::V_FLOOR_F32:
+  case CanonicalOp::V_EXP_F32:
+  case CanonicalOp::V_LOG_F32:
+  case CanonicalOp::V_RCP_F32:
+  case CanonicalOp::V_RSQ_F32:
+  case CanonicalOp::V_SQRT_F32:
+  case CanonicalOp::V_SIN_F32:
+  case CanonicalOp::V_COS_F32:
+  case CanonicalOp::V_FREXP_EXP_I32_F32:
+  case CanonicalOp::V_FREXP_MANT_F32:
+    return raiseUnaryFloat32(Ctx, Di, Op);
   default:
     return unsupportedInstruction(Ctx, Di);
   }

@@ -79,6 +79,11 @@ add_comgr_lit_binary(test-get-data-isa-name c)
 # drops them (they were built with function/data sections). MSVC's default
 # /OPT:REF removes them the same way.
 if(COMGR_ENABLE_TRANSPILER)
+  foreach(tool llc opt)
+    if(TARGET ${tool})
+      add_dependencies(test-lit ${tool})
+    endif()
+  endforeach()
   add_executable(transpile_cli comgr-sources/transpile_cli.cpp)
   # Match the C++ standard the rest of comgr compiles with. The comgr build
   # sets it per target rather than globally, and MSVC otherwise defaults below

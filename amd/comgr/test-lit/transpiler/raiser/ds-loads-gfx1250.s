@@ -38,26 +38,29 @@ ds_widths:
 	s_wait_kmcnt 0
 	v_mov_b32 v20, s2
 	v_mov_b32 v21, s3
+; The write is predicated on the lane being active, so the address the loads
+; read is the merge of the written base and the entry value v0 arrived with.
+; IR: [[BASE:%.+]] = phi i32 [ 4, {{.+}}
 	v_mov_b32 v0, 4
-; IR: [[CARRY32_ADDR:%.+]] = add i32 4, 65532
+; IR: [[CARRY32_ADDR:%.+]] = add i32 [[BASE]], 65532
 ; IR-NEXT: [[CARRY32_FROZEN:%.+]] = freeze i32 [[CARRY32_ADDR]]
 ; IR: [[CARRY32_PTR:%.+]] = inttoptr i32 [[CARRY32_FROZEN]] to ptr addrspace(3)
 ; IR-NEXT: load i32, ptr addrspace(3) [[CARRY32_PTR]], align 1
 ; OPT: load i32, ptr addrspace(3) inttoptr (i32 65536 to ptr addrspace(3))
 	ds_load_b32 v1, v0 offset:65532
-; IR: [[CARRY64_ADDR:%.+]] = add i32 4, 65532
+; IR: [[CARRY64_ADDR:%.+]] = add i32 [[BASE]], 65532
 ; IR-NEXT: [[CARRY64_FROZEN:%.+]] = freeze i32 [[CARRY64_ADDR]]
 ; IR: [[CARRY64_PTR:%.+]] = inttoptr i32 [[CARRY64_FROZEN]] to ptr addrspace(3)
 ; IR-NEXT: load i64, ptr addrspace(3) [[CARRY64_PTR]], align 1
 ; OPT: load i64, ptr addrspace(3) inttoptr (i32 65536 to ptr addrspace(3))
 	ds_load_b64 v[2:3], v0 offset:65532
-; IR: [[BYTE128_ADDR:%.+]] = add i32 4, 65533
+; IR: [[BYTE128_ADDR:%.+]] = add i32 [[BASE]], 65533
 ; IR-NEXT: [[BYTE128_FROZEN:%.+]] = freeze i32 [[BYTE128_ADDR]]
 ; IR: [[BYTE128_PTR:%.+]] = inttoptr i32 [[BYTE128_FROZEN]] to ptr addrspace(3)
 ; IR-NEXT: load <4 x i32>, ptr addrspace(3) [[BYTE128_PTR]], align 1
 ; OPT: load i128, ptr addrspace(3) inttoptr (i32 65537 to ptr addrspace(3))
 	ds_load_b128 v[4:7], v0 offset:65533
-; IR: [[MAXOFFSET_ADDR:%.+]] = add i32 4, 65535
+; IR: [[MAXOFFSET_ADDR:%.+]] = add i32 [[BASE]], 65535
 ; IR-NEXT: [[MAXOFFSET_FROZEN:%.+]] = freeze i32 [[MAXOFFSET_ADDR]]
 ; IR: [[MAXOFFSET_PTR:%.+]] = inttoptr i32 [[MAXOFFSET_FROZEN]] to ptr addrspace(3)
 ; IR-NEXT: load i32, ptr addrspace(3) [[MAXOFFSET_PTR]], align 1
@@ -173,8 +176,9 @@ ds_high_address:
 	s_wait_kmcnt 0
 	v_mov_b32 v20, s2
 	v_mov_b32 v21, s3
+; HIGH: [[BASE:%.+]] = phi i32 [ 262144, {{.+}}
 	v_mov_b32 v0, 0x40000
-; HIGH: [[ADDR:%.+]] = add i32 262144, 0
+; HIGH: [[ADDR:%.+]] = add i32 [[BASE]], 0
 ; HIGH: [[PTR:%.+]] = inttoptr i32 [[ADDR]] to ptr addrspace(3)
 ; HIGH-NEXT: [[VALUE:%.+]] = load i32, ptr addrspace(3) [[PTR]], align 1
 ; HIGH: [[DEST:%.+]] = phi i32 [ [[VALUE]], %{{.+}} ], [ undef, %{{.+}} ]

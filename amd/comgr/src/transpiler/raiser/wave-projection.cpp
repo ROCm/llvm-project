@@ -133,6 +133,10 @@ Value *WaveProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   return emitTargetWorkitemId(B, 0);
 }
 
+Value *WaveProjection::emitWorkitemId(IRBuilder<> &B, unsigned Dim) const {
+  return Dim == 0 ? emitWorkitemIdX(B) : emitTargetWorkitemId(B, Dim);
+}
+
 Value *WaveProjection::emitTargetWaveId(IRBuilder<> &B) const {
   Module *M = B.GetInsertBlock()->getModule();
   if (TargetSTI.hasFeature(AMDGPU::FeatureArchitectedSGPRs)) {

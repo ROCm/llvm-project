@@ -11,15 +11,19 @@
 
 #include "transpiler/common/kernel-meta.h"
 #include "transpiler/decoder/mc-state.h"
+#include "transpiler/decoder/setpc-analysis.h"
 #include "transpiler/loader/code-object-utils.h"
 #include "transpiler/raiser/register-state.h"
 #include "transpiler/raiser/wave-projection.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Error.h"
 
 #include <cstdint>
+#include <optional>
 
 namespace COMGR::transpiler {
 
@@ -35,11 +39,12 @@ public:
   // the metadata disagree on the user-SGPR layout.
   static llvm::Expected<RaiseContext>
   create(llvm::IRBuilder<> &B, const WaveProjection &Projection,
-         const MCState &MC, const KernelMeta &Meta,
+         const MCState &MC, const SetPcAnalysis &SetPc, const KernelMeta &Meta,
          llvm::ArrayRef<uint8_t> SourceTextBytes,
          uint64_t SourceTextBaseAddress,
          llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
-         uint64_t KernelStartOffset, uint64_t KernelEndOffset);
+         uint64_t KernelStartOffset, uint64_t KernelEndOffset,
+         std::optional<bool> SourceSramEcc = std::nullopt);
 
   // Builder every handler emits into. Its insertion point moves as raising
   // progresses.
@@ -49,16 +54,31 @@ public:
   // MC layer for the source ISA, shared by every kernel in the code object.
   const MCState &MC;
 
+  // Where the source instruction at Offset transfers control, or null when it
+  // makes no register-indirect transfer.
+  const SetPcSite *setPcSite(uint64_t Offset) const {
+    auto It = SetPc.Sites.find(Offset);
+    return It == SetPc.Sites.end() ? nullptr : &It->second;
+  }
+
   // Source architectural registers and the operand reads and writes that
   // resolve through them.
   RegisterState &registers() { return Registers; }
 
-  /// Return an error unless the source f32 environment can be preserved for
-  /// this instruction.
-  llvm::Error validateF32Environment(const DecodedInst &Di) const;
-  /// Return an error unless the source f64 environment can be preserved for
-  /// this instruction.
-  llvm::Error validateF64Environment(const DecodedInst &Di) const;
+  /// Return an error unless the source floating-point environment for Ty can
+  /// be preserved for this instruction.
+  llvm::Error validateFPEnvironment(const DecodedInst &Di,
+                                    llvm::Type *Ty) const;
+
+  /// Source SRAM ECC setting, or nothing when the code object permits either.
+  std::optional<bool> sourceSramEcc() const { return SourceSramEcc; }
+
+  /// Require masked bits to be provably zero after register promotion.
+  /// Di and Detail must outlive validateRequiredBits().
+  void requireZeroBits(llvm::Value *Value, uint32_t Mask, const DecodedInst &Di,
+                       llvm::StringRef Detail);
+  /// Refuse any bit requirement not established in the promoted register SSA.
+  llvm::Error validateRequiredBits() const;
 
   // Source text section, and the address the source code object loads it at.
   // PC-relative literals are materialized by reading out of these.
@@ -103,17 +123,31 @@ public:
 
 private:
   RaiseContext(llvm::IRBuilder<> &B, const WaveProjection &Projection,
-               const MCState &MC, RegisterState Registers,
-               llvm::ArrayRef<uint8_t> SourceTextBytes,
+               const MCState &MC, const SetPcAnalysis &SetPc,
+               RegisterState Registers, llvm::ArrayRef<uint8_t> SourceTextBytes,
                uint64_t SourceTextBaseAddress,
                llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
                uint64_t KernelStartOffset, uint64_t KernelEndOffset,
                unsigned SourceFloatRoundMode32,
-               unsigned SourceFloatRoundMode16_64, bool SourceDx10Clamp,
-               bool SourceIeeeMode);
+               unsigned SourceFloatRoundMode16_64, bool SourceFp16Overflow,
+               bool SourceDx10Clamp, bool SourceIeeeMode);
 
+  // Where the kernel's register-indirect control transfers lead.
+  const SetPcAnalysis &SetPc;
   // Source architectural registers, allocated in the entry block.
   RegisterState Registers;
+
+  // Hardware mode affecting partial-register memory loads.
+  std::optional<bool> SourceSramEcc;
+
+  /// Bits whose values the lowering must establish before returning IR.
+  struct RequiredBits {
+    llvm::WeakTrackingVH Value;
+    uint32_t Mask;
+    const DecodedInst *Instruction;
+    llvm::StringRef Detail;
+  };
+  llvm::SmallVector<RequiredBits> BitRequirements;
   // Block raised from each source instruction offset that starts one.
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb;
 
@@ -130,6 +164,7 @@ private:
   // on when their descriptor fields are absent.
   unsigned SourceFloatRoundMode32 = 0;
   unsigned SourceFloatRoundMode16_64 = 0;
+  bool SourceFp16Overflow = false;
   bool SourceDx10Clamp = true;
   bool SourceIeeeMode = true;
 

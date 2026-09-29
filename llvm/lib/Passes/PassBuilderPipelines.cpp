@@ -100,6 +100,8 @@
 #include "llvm/Transforms/Scalar/ExpandMemCmp.h"
 #include "llvm/Transforms/Scalar/Float2Int.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Scalar/GVNHoist.h"
+#include "llvm/Transforms/Scalar/GVNSink.h"
 #include "llvm/Transforms/Scalar/IndVarSimplify.h"
 #include "llvm/Transforms/Scalar/InferAlignment.h"
 #include "llvm/Transforms/Scalar/InstSimplifyPass.h"
@@ -469,8 +471,7 @@ static bool isThinLTOPreLink(ThinOrFullLTOPhase Phase) {
 // Helper to check if the current compilation phase is LTO backend
 static bool isLTOPostLink(ThinOrFullLTOPhase Phase) {
   return Phase == ThinOrFullLTOPhase::ThinLTOPostLink ||
-         Phase == ThinOrFullLTOPhase::FullLTOPostLink ||
-         Phase == ThinOrFullLTOPhase::CustomLTOPostLink;
+         Phase == ThinOrFullLTOPhase::FullLTOPostLink;
 }
 
 // Helper to check if the current compilation phase is FullLTO backend
@@ -1779,8 +1780,7 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
   instructionCountersPass(MPM, /* IsPreOptimization */ true);
   // Currently this pipeline is only invoked in an LTO pre link pass or when we
   // are not running LTO. If that changes the below checks may need updating.
-  assert(isLTOPreLink(Phase) || Phase == ThinOrFullLTOPhase::None ||
-         Phase == ThinOrFullLTOPhase::CustomLTOPostLink);
+  assert(isLTOPreLink(Phase) || Phase == ThinOrFullLTOPhase::None);
 
   // If we are invoking this in non-LTO mode, remove any MemProf related
   // attributes and metadata, as we don't know whether we are linking with

@@ -18,7 +18,9 @@
 #include "transpiler/decoder/parsed-reg.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
+#include "transpiler/raiser/source-image.h"
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Instructions.h"
@@ -106,6 +108,64 @@ static std::optional<unsigned> scalarLoadWidthInDwords(CanonicalOp Operation) {
   }
 }
 
+// Tell whether the scalar-offset operand adds nothing to the address. An
+// encoding that carries the slot but does not use it spells the operand NOREG.
+static Expected<bool>
+scalarOffsetIsZero(RaiseContext &Ctx, const DecodedInst &Di, unsigned Index) {
+  if (Di.isImm(Index))
+    return Di.getImm(Index) == 0;
+  Expected<ParsedReg> Register = Ctx.registers().parseReg(Di, Index);
+  if (!Register)
+    return Register.takeError();
+  return Register->RegKind == ParsedReg::NOREG;
+}
+
+// Answer a scalar load whose base addresses the source code object rather than
+// the memory the raised kernel runs against. Every dword it names is a literal
+// the source compiled in, so write each one to its destination register as a
+// constant.
+static Error loadFromSourceImage(RaiseContext &Ctx, const DecodedInst &Di,
+                                 ParsedReg Destination, uint64_t BaseAddress,
+                                 int64_t ImmediateOffset,
+                                 unsigned LoadWidthInDwords) {
+  // The hardware drops the low bits of the base and of the offset one by one
+  // rather than of their sum, so read what the source read instead of failing
+  // on a misaligned offset.
+  uint64_t DwordBytes = DwordSmemAddressAlignment.value();
+  Expected<uint64_t> FirstDword = moveSourceImageAddress(
+      Ctx, Di, alignDown(BaseAddress, DwordBytes),
+      alignDown(static_cast<uint64_t>(ImmediateOffset), DwordBytes));
+  if (!FirstDword)
+    return FirstDword.takeError();
+  SmallVector<uint32_t> Dwords;
+  Dwords.reserve(LoadWidthInDwords);
+  for (unsigned I = 0; I != LoadWidthInDwords; ++I) {
+    Expected<uint64_t> DwordAddress =
+        moveSourceImageAddress(Ctx, Di, *FirstDword, I * DwordBytes);
+    if (!DwordAddress)
+      return DwordAddress.takeError();
+    std::optional<uint32_t> Dword = readSourceImageDword(Ctx, *DwordAddress);
+    if (!Dword)
+      return unsupported(Ctx, Di,
+                         "reads a source address that no section of the "
+                         "source code object covers");
+    Dwords.push_back(*Dword);
+  }
+
+  if (LoadWidthInDwords == 1) {
+    Ctx.registers().writeReg32(Destination,
+                               ConstantInt::get(Ctx.B.getInt32Ty(), Dwords[0]));
+  } else if (LoadWidthInDwords == 2) {
+    uint64_t Pair = static_cast<uint64_t>(Dwords[1]) << 32 | Dwords[0];
+    Ctx.registers().writeReg64(Destination,
+                               ConstantInt::get(Ctx.B.getInt64Ty(), Pair));
+  } else {
+    Ctx.registers().writeRegVec(
+        Destination, ConstantDataVector::get(Ctx.B.getContext(), Dwords));
+  }
+  return Error::success();
+}
+
 Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   std::optional<unsigned> LoadWidthInDwords =
       scalarLoadWidthInDwords(Di.CanonOp);
@@ -147,9 +207,6 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
     if (!Di.isImm(*OffsetIndex))
       invalidOperandLayout(Ctx.MC, Di, "operand 'offset' is not an immediate");
     ImmediateOffset = Di.getImm(*OffsetIndex);
-    if (ImmediateOffset < 0)
-      return unsupported(Ctx, Di,
-                         "negative scalar load offsets are not supported");
   }
 
   Expected<ParsedReg> Destination =
@@ -174,6 +231,36 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
     invalidOperandLayout(Ctx.MC, Di, "SGPR base has no base register index");
   if (Base->WidthInDwords != 2)
     invalidOperandLayout(Ctx.MC, Di, "scalar load base is not two dwords");
+
+  // A base the source computed from its own program counter addresses the
+  // source code object. Nothing of the source image is mapped where the raised
+  // kernel runs, so answer the load from the captured image instead of emitting
+  // it, which would read target memory at a source address.
+  Expected<std::optional<uint64_t>> SourceImageBase =
+      sourceImageSgprPairAddr(Ctx, Di, *Base->BaseIdx);
+  if (!SourceImageBase)
+    return SourceImageBase.takeError();
+  if (*SourceImageBase) {
+    if (ScalarOffsetIndex) {
+      Expected<bool> IsZero = scalarOffsetIsZero(Ctx, Di, *ScalarOffsetIndex);
+      if (!IsZero)
+        return IsZero.takeError();
+      if (!*IsZero)
+        return unsupported(Ctx, Di,
+                           "reads the source code object at an offset only "
+                           "the running kernel knows");
+    }
+    return loadFromSourceImage(Ctx, Di, *Destination, **SourceImageBase,
+                               ImmediateOffset, *LoadWidthInDwords);
+  }
+
+  // The immediate is a signed byte offset, and a load off a raw address may
+  // reach backwards with it. Only the source-image path above follows it that
+  // way; the emitted load aligns the base and the offset apart, which a
+  // negative offset does not survive.
+  if (ImmediateOffset < 0)
+    return unsupported(Ctx, Di,
+                       "negative scalar load offsets are not supported");
 
   Expected<Value *> BaseValue = Ctx.registers().readOp64(Di, BaseIndex);
   if (!BaseValue)

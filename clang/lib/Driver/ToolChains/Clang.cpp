@@ -347,19 +347,6 @@ bool clang::driver::isTargetFastUsed(const ArgList &Args) {
                       options::OPT_fno_openmp_target_fast, isOFastUsed(Args));
 }
 
-/// Ignore possibility of environment variables if either
-/// -fopenmp-target-fast or -Ofast is used.
-bool clang::driver::shouldIgnoreEnvVars(const ArgList &Args) {
-  if (Args.hasFlag(options::OPT_fno_openmp_target_fast,
-                   options::OPT_fopenmp_target_fast, false))
-    return false;
-
-  if (isTargetFastUsed(Args))
-    return true;
-
-  return false;
-}
-
 /// Add -x lang to \p CmdArgs for \p Input.
 static void addDashXForInput(const ArgList &Args, const InputInfo &Input,
                              ArgStringList &CmdArgs) {
@@ -4591,6 +4578,9 @@ static void RenderDiagnosticsOptions(const Driver &D, const ArgList &Args,
   Args.addOptInFlag(CmdArgs, options::OPT_fdiagnostics_show_hotness,
                     options::OPT_fno_diagnostics_show_hotness);
 
+  Args.addOptOutFlag(CmdArgs, options::OPT_flifetime_safety_c,
+                     options::OPT_fno_lifetime_safety_c);
+
   if (const Arg *A =
           Args.getLastArg(options::OPT_fdiagnostics_hotness_threshold_EQ)) {
     std::string Opt =
@@ -5729,7 +5719,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-disable-llvm-passes");
 
     // Render target options.
-    TC.addActionsFromClangTargetOptions(Args, CmdArgs, JA, C, Inputs);
     TC.addClangTargetOptions(Args, CmdArgs, JA.getOffloadingArch(),
                              JA.getOffloadingDeviceKind());
 
@@ -6504,7 +6493,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                       /*ForAS*/ false, /*IsAux*/ true);
   }
 
-  TC.addActionsFromClangTargetOptions(Args, CmdArgs, JA, C, Inputs);
   TC.addClangTargetOptions(Args, CmdArgs, JA.getOffloadingArch(),
                            JA.getOffloadingDeviceKind());
 
@@ -7230,13 +7218,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back("-fopenmp-target-fast");
       } else
         CmdArgs.push_back("-fno-openmp-target-fast");
-
-      if (Args.hasFlag(options::OPT_fopenmp_target_ignore_env_vars,
-                       options::OPT_fno_openmp_target_ignore_env_vars,
-                       shouldIgnoreEnvVars(Args)))
-        CmdArgs.push_back("-fopenmp-target-ignore-env-vars");
-      else
-        CmdArgs.push_back("-fno-openmp-target-ignore-env-vars");
 
       if (Args.hasFlag(options::OPT_fopenmp_target_big_jump_loop,
                        options::OPT_fno_openmp_target_big_jump_loop, true))
@@ -10006,28 +9987,6 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
         } else if (ShouldForward(LinkerOptions, A, *TC)) {
           A->claim();
           A->render(Args, LinkerArgs);
-        }
-      }
-
-      if (isAMDGPU && !C.getDriver().IsFlangMode()) {
-        StringRef OOpt;
-        if (const Arg *A = Args.getLastArg(options::OPT_O_Group)) {
-          if (A->getOption().matches(options::OPT_O4) ||
-              A->getOption().matches(options::OPT_Ofast))
-            OOpt = "3";
-          else if (A->getOption().matches(options::OPT_O)) {
-            OOpt = A->getValue();
-            if (OOpt == "g")
-              OOpt = "1";
-            else if (OOpt == "s" || OOpt == "z")
-              OOpt = "2";
-          } else if (A->getOption().matches(options::OPT_O0))
-            OOpt = "0";
-        }
-
-        if (!OOpt.empty() && OOpt != "0") {
-          LinkerArgs.push_back(Args.MakeArgString(
-              "--lto-newpm-passes=default-post-link<O" + OOpt + ">"));
         }
       }
 

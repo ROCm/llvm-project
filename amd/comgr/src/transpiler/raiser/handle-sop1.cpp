@@ -9,18 +9,24 @@
 #include "transpiler/raiser/handlers.h"
 
 #include "transpiler/decoder/decode.h"
+#include "transpiler/decoder/setpc-analysis.h"
+#include "transpiler/raiser/source-image.h"
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #include <cassert>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <string>
+#include <variant>
 
 using namespace llvm;
 
@@ -41,6 +47,50 @@ static std::string heldWaveMaskWidths(const RaiseContext &Ctx) {
           " bits wide and EXEC holds " +
           Twine(Ctx.Projection.execStorageTy()->getIntegerBitWidth()) + " bits")
       .str();
+}
+
+// Refuse a register-indirect control transfer that the analysis could not
+// resolve, phrasing each reason to follow the mnemonic in the diagnostic.
+static Error refuseSetPc(RaiseContext &Ctx, const DecodedInst &Di,
+                         const SetPcUnresolvable &Site) {
+  std::string Pair =
+      (Twine("s[") + Twine(Site.Detail) + ":" + Twine(Site.Detail + 1) + "]")
+          .str();
+  switch (Site.Why) {
+  case SetPcRefusal::NotARegisterPair:
+    return unsupported(Ctx, Di,
+                       "reads its target from something other than a scalar "
+                       "register pair");
+  case SetPcRefusal::BlockUnreachable:
+    return unsupported(Ctx, Di,
+                       (Twine("reads ") + Pair +
+                        ", and no path the decode recovered reaches its block")
+                           .str());
+  case SetPcRefusal::PairWrittenWithoutOffset:
+    return unsupported(Ctx, Di,
+                       (Twine("reads ") + Pair +
+                        ", which some path writes without computing a source "
+                        "offset in it")
+                           .str());
+  case SetPcRefusal::PairNeverHeldOffset:
+    return unsupported(
+        Ctx, Di,
+        (Twine("reads ") + Pair + ", which nothing gives a source offset")
+            .str());
+  case SetPcRefusal::TooManyTargets:
+    return unsupported(Ctx, Di,
+                       (Twine("reads ") + Pair +
+                        ", which more source offsets reach than the analysis "
+                        "enumerates")
+                           .str());
+  case SetPcRefusal::TargetNotAnInstruction:
+    return unsupported(Ctx, Di,
+                       (Twine("reaches source offset 0x") +
+                        Twine::utohexstr(Site.Detail) +
+                        ", which no decoded instruction starts at")
+                           .str());
+  }
+  llvm_unreachable("unhandled set-pc refusal");
 }
 
 // Write V to Dst at the width the opcode operates on.
@@ -396,10 +446,35 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src = Op.src(0, Is64);
-    if (!Src)
-      return Src.takeError();
-    writeDst(Ctx.registers(), *Dst, *Src, Is64);
+    // A copy of a pair holding a source code-object address holds the same
+    // address, and loads off the copy still have to read it from the image.
+    // Take the address from the pair rather than reading the registers, which
+    // refuse to answer a read that would let the address escape.
+    std::optional<uint64_t> SourceAddress;
+    if (Is64) {
+      Expected<std::optional<uint64_t>> Read =
+          sourceImageOperandAddr(Ctx, Di, Op.srcIdx(0));
+      if (!Read)
+        return Read.takeError();
+      SourceAddress = *Read;
+    }
+    if (SourceAddress && (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx))
+      return unsupported(Ctx, Di,
+                         "puts a source address outside an SGPR pair, which "
+                         "is not tracked as one");
+    Value *SrcValue = nullptr;
+    if (SourceAddress) {
+      SrcValue = ConstantInt::get(Ctx.B.getInt64Ty(), *SourceAddress);
+    } else {
+      Expected<Value *> Src = Op.src(0, Is64);
+      if (!Src)
+        return Src.takeError();
+      SrcValue = *Src;
+    }
+    writeDst(Ctx.registers(), *Dst, SrcValue, Is64);
+    if (SourceAddress)
+      Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                    *SourceAddress);
     return Error::success();
   }
 
@@ -713,6 +788,102 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
+  // The captured address is where the next instruction sits in the source code
+  // object, which the decode already knows as a constant. Nothing in the raised
+  // kernel runs at that address, so the value only stands for what the source
+  // image holds there. Track the pair as a source address so that a
+  // PC-relative scalar load off it reads the literal the source meant instead
+  // of reaching into target memory.
+  if (Di.CanonOp == CanonicalOp::S_GETPC_B64) {
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    if (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx)
+      return unsupported(Ctx, Di,
+                         "captures a source address outside an SGPR pair, "
+                         "which is not tracked as one");
+    uint64_t NextInstAddress =
+        Ctx.sourceTextBaseAddress() + Di.Offset + Di.sizeInBytes();
+    Ctx.registers().writeReg64(
+        *Dst, ConstantInt::get(Ctx.B.getInt64Ty(), NextInstAddress));
+    Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                  NextInstAddress);
+    return Error::success();
+  }
+
+  // A jump through a register names no offset of its own, so it goes wherever
+  // the analysis found in the pair that it reads. Those offsets lead blocks,
+  // reported by the analysis before any block was made. One offset is a branch
+  // and several are a switch. A call additionally leaves behind the offset it
+  // returns to, which is the source address of the instruction after it, the
+  // same value that a program-counter capture there would have produced.
+  if (Di.CanonOp == CanonicalOp::S_SETPC_B64 ||
+      Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
+    const SetPcSite *Site = Ctx.setPcSite(Di.Offset);
+    assert(Site && "every register-indirect transfer is classified");
+    if (const SetPcUnresolvable *Why = std::get_if<SetPcUnresolvable>(Site))
+      return refuseSetPc(Ctx, Di, *Why);
+
+    const SetPcResolved &Resolved = std::get<SetPcResolved>(*Site);
+    assert(Resolved.Targets.size() <= std::numeric_limits<unsigned>::max() &&
+           "the analysis caps how many offsets one transfer enumerates");
+
+    // Read the target before the call writes its destination, which may name
+    // the very pair the target comes from. The pair holds a source address,
+    // which an operand read refuses because nothing in the raised kernel can
+    // address one. Here the address only picks which of the offsets the
+    // analysis enumerated this jump takes, so the pair is read as it stands.
+    Value *Target = nullptr;
+    if (Resolved.Targets.size() > 1) {
+      Expected<std::optional<ParsedReg>> Src = Op.srcReg(0);
+      if (!Src)
+        return Src.takeError();
+      assert(*Src && (*Src)->RegKind == ParsedReg::SGPR && (*Src)->BaseIdx &&
+             "a transfer reaching several offsets reads a scalar pair");
+      Target = Ctx.registers().readSgpr64(*(*Src)->BaseIdx);
+    }
+
+    if (Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
+      Expected<ParsedReg> Dst = Op.dst();
+      if (!Dst)
+        return Dst.takeError();
+      if (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx)
+        return unsupported(Ctx, Di,
+                           "leaves its return address outside an SGPR pair, "
+                           "which is not tracked as one");
+      uint64_t ReturnAddress =
+          Ctx.sourceTextBaseAddress() + Di.Offset + Di.sizeInBytes();
+      Ctx.registers().writeReg64(
+          *Dst, ConstantInt::get(Ctx.B.getInt64Ty(), ReturnAddress));
+      Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                    ReturnAddress);
+    }
+
+    if (!Target) {
+      Ctx.B.CreateBr(Ctx.lookupBB(Resolved.Targets.front()));
+      return Error::success();
+    }
+
+    // The offsets the analysis enumerated are the only ones the pair can hold,
+    // so the fall-out-of-the-table case cannot be reached and traps rather
+    // than picking one of them.
+    BasicBlock *Trap =
+        BasicBlock::Create(Ctx.B.getContext(), formatv("trap_{0:x}", Di.Offset),
+                           Ctx.B.GetInsertBlock()->getParent());
+    SwitchInst *Dispatch = Ctx.B.CreateSwitch(
+        Target, Trap, static_cast<unsigned>(Resolved.Targets.size()));
+    for (uint64_t Offset : Resolved.Targets)
+      Dispatch->addCase(ConstantInt::get(Ctx.B.getInt64Ty(),
+                                         Ctx.sourceTextBaseAddress() + Offset),
+                        Ctx.lookupBB(Offset));
+
+    IRBuilderBase::InsertPointGuard Guard(Ctx.B);
+    Ctx.B.SetInsertPoint(Trap);
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::trap, {});
+    Ctx.B.CreateUnreachable();
+    return Error::success();
+  }
+
   switch (Di.CanonOp) {
   // The source splits a barrier in two: this arrival, which does not block,
   // and a release in SOPP, which does. The raise has one barrier, and it
@@ -750,19 +921,48 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::S_WAKEUP_BARRIER_M0:
     return unsupported(Ctx, Di, "wakes the waves waiting on a named barrier");
 
-  case CanonicalOp::S_GETPC_B64:
-    return unsupported(Ctx, Di,
-                       "captures a source address, which no raised "
-                       "instruction can jump to or load from");
-  case CanonicalOp::S_SETPC_B64:
-    return unsupported(
-        Ctx, Di, "jumps to a register value, which names no recovered block");
-  case CanonicalOp::S_SWAPPC_B64:
-    return unsupported(Ctx, Di,
-                       "calls through a register value and leaves behind a "
-                       "return address nothing can return to");
   case CanonicalOp::S_RFE_B64:
     return unsupported(Ctx, Di, "returns from an exception handler");
+
+  // Free-running cycle counts are a property of the shader clock the source
+  // wave was issued against. The raised kernel runs on another one, at another
+  // rate and from another epoch, so any difference the kernel takes between two
+  // reads means something else there.
+  case CanonicalOp::S_GET_SHADER_CYCLES_U64:
+    return unsupported(Ctx, Di,
+                       "reads the source shader clock, whose rate and epoch "
+                       "the raised kernel does not share");
+
+  // Every return message answers with where the source wave sits in the
+  // hardware and in its queue: its doorbell, its dispatch, its trap handler
+  // base, its shader engine. None of that describes the wave that runs the
+  // raised kernel.
+  case CanonicalOp::S_SENDMSG_RTN_B32:
+  case CanonicalOp::S_SENDMSG_RTN_B64:
+    return unsupported(Ctx, Di,
+                       "reads back message " + Twine(Op.srcImm(0)) +
+                           ", which reports on the source wave's queue and "
+                           "hardware placement");
+
+  // The register file backs every VGPR index a source encoding can name, so
+  // the allocation this asks for is already in hand and cannot fail. Answering
+  // otherwise is not the safe direction: a source that checks SCC retries until
+  // it succeeds, so a false answer spins forever.
+  //
+  // Allocating also waits for the outstanding memory the shrinking form could
+  // otherwise strand in registers it releases, so the source may rely on this
+  // in place of a wait it does not spell out. Waiting for the stores too is
+  // wider than the hardware does and costs a raised kernel nothing here.
+  case CanonicalOp::S_ALLOC_VGPR:
+    emitMemoryWaitAll(Ctx);
+    Ctx.registers().regFile().storeSCC(Ctx.B, Ctx.B.getTrue());
+    return Error::success();
+
+  // Spends issue slots and leaves nothing behind that a later instruction can
+  // read, in either operand form.
+  case CanonicalOp::S_SLEEP_VAR:
+    return Error::success();
+
   default:
     break;
   }

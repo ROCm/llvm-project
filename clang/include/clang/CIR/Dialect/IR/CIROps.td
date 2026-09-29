@@ -188,7 +188,7 @@ defvar CIR_DynamicMemoryEffects = 0;
 //===----------------------------------------------------------------------===//
 
 def CIR_CastKind : CIR_I32Enum<"CastKind", "cast kind", [
-  I32EnumAttrCase<"bitcast", 1>,
+  I32EnumCase<"bitcast", 1>,
   // CK_LValueBitCast
   // CK_LValueToRValueBitCast
   // CK_LValueToRValue
@@ -198,49 +198,49 @@ def CIR_CastKind : CIR_I32Enum<"CastKind", "cast kind", [
   // CK_UncheckedDerivedToBase
   // CK_Dynamic
   // CK_ToUnion
-  I32EnumAttrCase<"array_to_ptrdecay", 11>,
+  I32EnumCase<"array_to_ptrdecay", 11>,
   // CK_FunctionToPointerDecay
   // CK_NullToPointer
   // CK_NullToMemberPointer
   // CK_BaseToDerivedMemberPointer
   // CK_DerivedToBaseMemberPointer
-  I32EnumAttrCase<"member_ptr_to_bool", 17>,
+  I32EnumCase<"member_ptr_to_bool", 17>,
   // CK_ReinterpretMemberPointer
   // CK_UserDefinedConversion
   // CK_ConstructorConversion
-  I32EnumAttrCase<"int_to_ptr", 21>,
-  I32EnumAttrCase<"ptr_to_int", 22>,
-  I32EnumAttrCase<"ptr_to_bool", 23>,
+  I32EnumCase<"int_to_ptr", 21>,
+  I32EnumCase<"ptr_to_int", 22>,
+  I32EnumCase<"ptr_to_bool", 23>,
   // CK_ToVoid
   // CK_MatrixCast
   // CK_VectorSplat
-  I32EnumAttrCase<"integral", 27>,
-  I32EnumAttrCase<"int_to_bool", 28>,
-  I32EnumAttrCase<"int_to_float", 29>,
+  I32EnumCase<"integral", 27>,
+  I32EnumCase<"int_to_bool", 28>,
+  I32EnumCase<"int_to_float", 29>,
   // CK_FloatingToFixedPoint
   // CK_FixedPointToFloating
   // CK_FixedPointCast
   // CK_FixedPointToIntegral
   // CK_IntegralToFixedPoint
   // CK_FixedPointToBoolean
-  I32EnumAttrCase<"float_to_int", 36>,
-  I32EnumAttrCase<"float_to_bool", 37>,
-  I32EnumAttrCase<"bool_to_int", 38>,
-  I32EnumAttrCase<"floating", 39>,
+  I32EnumCase<"float_to_int", 36>,
+  I32EnumCase<"float_to_bool", 37>,
+  I32EnumCase<"bool_to_int", 38>,
+  I32EnumCase<"floating", 39>,
   // CK_CPointerToObjCPointerCast
   // CK_BlockPointerToObjCPointerCast
   // CK_AnyPointerToBlockPointerCast
   // CK_ObjCObjectLValueCast
-  I32EnumAttrCase<"float_to_complex", 44>,
-  I32EnumAttrCase<"float_complex_to_real", 45>,
-  I32EnumAttrCase<"float_complex_to_bool", 46>,
-  I32EnumAttrCase<"float_complex", 47>,
-  I32EnumAttrCase<"float_complex_to_int_complex", 48>,
-  I32EnumAttrCase<"int_to_complex", 49>,
-  I32EnumAttrCase<"int_complex_to_real", 50>,
-  I32EnumAttrCase<"int_complex_to_bool", 51>,
-  I32EnumAttrCase<"int_complex", 52>,
-  I32EnumAttrCase<"int_complex_to_float_complex", 53>,
+  I32EnumCase<"float_to_complex", 44>,
+  I32EnumCase<"float_complex_to_real", 45>,
+  I32EnumCase<"float_complex_to_bool", 46>,
+  I32EnumCase<"float_complex", 47>,
+  I32EnumCase<"float_complex_to_int_complex", 48>,
+  I32EnumCase<"int_to_complex", 49>,
+  I32EnumCase<"int_complex_to_real", 50>,
+  I32EnumCase<"int_complex_to_bool", 51>,
+  I32EnumCase<"int_complex", 52>,
+  I32EnumCase<"int_complex_to_float_complex", 53>,
   // CK_ARCProduceObject
   // CK_ARCConsumeObject
   // CK_ARCReclaimReturnedObject
@@ -250,7 +250,7 @@ def CIR_CastKind : CIR_I32Enum<"CastKind", "cast kind", [
   // CK_CopyAndAutoreleaseBlockObject
   // CK_BuiltinFnToFnPtr
   // CK_ZeroToOCLOpaqueType
-  I32EnumAttrCase<"address_space", 63>,
+  I32EnumCase<"address_space", 63>,
   // CK_IntToOCLSampler
   // CK_HLSLVectorTruncation
   // CK_HLSLArrayRValue
@@ -259,7 +259,7 @@ def CIR_CastKind : CIR_I32Enum<"CastKind", "cast kind", [
 
   // Enums below are specific to CIR and don't have a correspondence to classic
   // codegen:
-  I32EnumAttrCase<"bool_to_float", 1000>,
+  I32EnumCase<"bool_to_float", 1000>,
 ]>;
 
 def CIR_CastKindAttr : CIR_EnumAttr<CIR_CastKind, "cast">;
@@ -316,9 +316,7 @@ def CIR_CastOp : CIR_Op<"cast", !listconcat([
     ...
     %x = cir.cast array_to_ptrdecay %0 
        : !cir.ptr<!cir.array<i32 x 10>> -> !cir.ptr<i32>
-    %y = cir.cast floating %f : !cir.double -> !cir.float {
-      fenv = #cir.fenv<>
-    }
+    %y = cir.cast floating %f : !cir.double -> !cir.float fenv<>
     ```
   }];
 
@@ -327,7 +325,8 @@ def CIR_CastOp : CIR_Op<"cast", !listconcat([
   let results = (outs CIR_AnyType:$result);
 
   let assemblyFormat = [{
-    enum($kind) $src `:` type($src) `->` type($result) attr-dict
+    enum($kind) $src `:` type($src) `->` type($result)
+    (`fenv` `` $fenv^)? attr-dict
   }];
 
   let builders = [
@@ -413,8 +412,8 @@ def CIR_BuiltinIntCastOp : CIR_Op<"builtin_int_cast", [Pure]> {
 
 def CIR_DynamicCastKind : CIR_I32Enum<
   "DynamicCastKind", "dynamic cast kind", [
-    I32EnumAttrCase<"Ptr", 0, "ptr">,
-    I32EnumAttrCase<"Ref", 1, "ref">
+    I32EnumCase<"Ptr", 0, "ptr">,
+    I32EnumCase<"Ref", 1, "ref">
 ]>;
 
 def CIR_DynamicCastKindAttr
@@ -545,6 +544,42 @@ def CIR_PtrStrideOp : CIR_Op<"ptr_stride", [
 }
 
 //===----------------------------------------------------------------------===//
+// PtrMaskOp
+//===----------------------------------------------------------------------===//
+
+def CIR_PtrMaskOp : CIR_Op<"ptr_mask", [
+  Pure, AllTypesMatch<["ptr", "result"]>
+]> {
+  let summary = "Clear bits of a pointer";
+  let description = [{
+    The `cir.ptr_mask` operation clears the bits of `ptr` that are not set in
+    `mask`.  The result stays a pointer, whereas masking it as an integer
+    would lose provenance.
+
+    `mask` must be exactly the target's pointer index width.
+
+    ```
+    %m = cir.const #cir.int<-32> : !s64i
+    %0 = cir.ptr_mask %p, %m : (!cir.ptr<!u8i>, !s64i) -> !cir.ptr<!u8i>
+    ```
+  }];
+
+  let arguments = (ins
+    CIR_PointerType:$ptr,
+    CIR_AnyFundamentalIntType:$mask
+  );
+
+  let results = (outs CIR_PointerType:$result);
+
+  let assemblyFormat = [{
+    $ptr`,` $mask `:` functional-type(operands, results) attr-dict
+  }];
+
+  let llvmOp = "PtrMaskOp";
+  let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
@@ -650,12 +685,12 @@ def CIR_SignBitOp : CIR_Op<"signbit", [Pure]> {
 
 def CIR_MemOrder : CIR_I32Enum<
   "MemOrder", "Memory order according to C++11 memory model", [
-    I32EnumAttrCase<"Relaxed", 0, "relaxed">,
-    I32EnumAttrCase<"Consume", 1, "consume">,
-    I32EnumAttrCase<"Acquire", 2, "acquire">,
-    I32EnumAttrCase<"Release", 3, "release">,
-    I32EnumAttrCase<"AcquireRelease", 4, "acq_rel">,
-    I32EnumAttrCase<"SequentiallyConsistent", 5, "seq_cst">
+    I32EnumCase<"Relaxed", 0, "relaxed">,
+    I32EnumCase<"Consume", 1, "consume">,
+    I32EnumCase<"Acquire", 2, "acquire">,
+    I32EnumCase<"Release", 3, "release">,
+    I32EnumCase<"AcquireRelease", 4, "acq_rel">,
+    I32EnumCase<"SequentiallyConsistent", 5, "seq_cst">
 ]>;
 
 def CIR_MemOrderAttr : CIR_EnumAttr<CIR_MemOrder, "mem_order">;
@@ -665,26 +700,26 @@ def CIR_MemOrderAttr : CIR_EnumAttr<CIR_MemOrder, "mem_order">;
 //===----------------------------------------------------------------------===//
 
 def CIR_SyncScopeKind : CIR_I32Enum<"SyncScopeKind", "sync scope kind", [
-  I32EnumAttrCase<"SingleThread", 0, "single_thread">,
-  I32EnumAttrCase<"System", 1, "system">,
-  I32EnumAttrCase<"Device", 2, "device">,
-  I32EnumAttrCase<"Workgroup", 3, "workgroup">,
-  I32EnumAttrCase<"Wavefront", 4, "wavefront">,
-  I32EnumAttrCase<"Cluster", 5, "cluster">,
+  I32EnumCase<"SingleThread", 0, "single_thread">,
+  I32EnumCase<"System", 1, "system">,
+  I32EnumCase<"Device", 2, "device">,
+  I32EnumCase<"Workgroup", 3, "workgroup">,
+  I32EnumCase<"Wavefront", 4, "wavefront">,
+  I32EnumCase<"Cluster", 5, "cluster">,
 
   // HIP sync scopes
-  I32EnumAttrCase<"HIPSingleThread", 6, "hip_single_thread">,
-  I32EnumAttrCase<"HIPSystem", 7, "hip_system">,
-  I32EnumAttrCase<"HIPAgent", 8, "hip_agent">,
-  I32EnumAttrCase<"HIPWorkgroup", 9, "hip_workgroup">,
-  I32EnumAttrCase<"HIPWavefront", 10, "hip_wavefront">,
-  I32EnumAttrCase<"HIPCluster", 11, "hip_cluster">,
+  I32EnumCase<"HIPSingleThread", 6, "hip_single_thread">,
+  I32EnumCase<"HIPSystem", 7, "hip_system">,
+  I32EnumCase<"HIPAgent", 8, "hip_agent">,
+  I32EnumCase<"HIPWorkgroup", 9, "hip_workgroup">,
+  I32EnumCase<"HIPWavefront", 10, "hip_wavefront">,
+  I32EnumCase<"HIPCluster", 11, "hip_cluster">,
 
   // OpenCL sync scopes
-  I32EnumAttrCase<"OpenCLWorkGroup", 12, "opencl_work_group">,
-  I32EnumAttrCase<"OpenCLDevice", 13, "opencl_device">,
-  I32EnumAttrCase<"OpenCLAllSVMDevices", 14, "opencl_all_svm_devices">,
-  I32EnumAttrCase<"OpenCLSubGroup", 15, "opencl_sub_group">,
+  I32EnumCase<"OpenCLWorkGroup", 12, "opencl_work_group">,
+  I32EnumCase<"OpenCLDevice", 13, "opencl_device">,
+  I32EnumCase<"OpenCLAllSVMDevices", 14, "opencl_all_svm_devices">,
+  I32EnumCase<"OpenCLSubGroup", 15, "opencl_sub_group">,
 ]>;
 
 def CIR_SyncScopeKindAttr : CIR_EnumAttr<CIR_SyncScopeKind, "sync_scope">;
@@ -1378,9 +1413,9 @@ def CIR_ScopeOp : CIR_RegionBranchOpBase<"scope", [
 //===----------------------------------------------------------------------===//
 
 def CIR_CleanupKind : CIR_I32Enum<"CleanupKind", "cleanup kind", [
-  I32EnumAttrCase<"Normal", 1, "normal">,
-  I32EnumAttrCase<"EH", 2, "eh">,
-  I32EnumAttrCase<"All", 3, "all">
+  I32EnumCase<"Normal", 1, "normal">,
+  I32EnumCase<"EH", 2, "eh">,
+  I32EnumCase<"All", 3, "all">
 ]>;
 
 def CIR_CleanupKindAttr : CIR_EnumAttr<CIR_CleanupKind, "cleanup"> {
@@ -1455,6 +1490,7 @@ def CIR_CleanupScopeOp : CIR_RegionBranchOpBase<"cleanup.scope", [
   ];
 
   let hasCanonicalizeMethod = 1;
+  let hasVerifier = 1;
   let hasLLVMLowering = false;
 }
 
@@ -1531,10 +1567,10 @@ def CIR_CmpThreeWayOp : CIR_Op<"cmp3way", [Pure, SameTypeOperands]> {
 //===----------------------------------------------------------------------===//
 
 def CIR_CaseOpKind : CIR_I32Enum<"CaseOpKind", "case kind", [
-  I32EnumAttrCase<"Default", 0, "default">,
-  I32EnumAttrCase<"Equal", 1, "equal">,
-  I32EnumAttrCase<"Anyof", 2, "anyof">,
-  I32EnumAttrCase<"Range", 3, "range">
+  I32EnumCase<"Default", 0, "default">,
+  I32EnumCase<"Equal", 1, "equal">,
+  I32EnumCase<"Anyof", 2, "anyof">,
+  I32EnumCase<"Range", 3, "range">
 ]>;
 
 def CIR_CaseOpKindAttr : CIR_EnumAttr<CIR_CaseOpKind, "case">;
@@ -2070,7 +2106,7 @@ def CIR_DecOp
 //===----------------------------------------------------------------------===//
 
 def CIR_MinusOp
-    : CIR_UnaryOpWithOverflowFlag<"minus", CIR_AnyIntOrVecOfIntType> {
+    : CIR_UnaryOpWithOverflowFlag<"minus", CIR_AnyIntOrVecOfIntOrBoolType> {
   let summary = "Integer unary minus (negation)";
   let description = [{
     The `cir.minus` operation negates the operand. The operand and result
@@ -2537,14 +2573,14 @@ def CIR_ForOp : CIR_LoopOpBase<"for"> {
 //===----------------------------------------------------------------------===//
 
 def CIR_CmpOpKind : CIR_I32Enum<"CmpOpKind", "compare operation kind", [
-  I32EnumAttrCase<"lt", 0>,
-  I32EnumAttrCase<"le", 1>,
-  I32EnumAttrCase<"gt", 2>,
-  I32EnumAttrCase<"ge", 3>,
-  I32EnumAttrCase<"eq", 4>,
-  I32EnumAttrCase<"ne", 5>,
-  I32EnumAttrCase<"one", 6>,
-  I32EnumAttrCase<"uno", 7>
+  I32EnumCase<"lt", 0>,
+  I32EnumCase<"le", 1>,
+  I32EnumCase<"gt", 2>,
+  I32EnumCase<"ge", 3>,
+  I32EnumCase<"eq", 4>,
+  I32EnumCase<"ne", 5>,
+  I32EnumCase<"one", 6>,
+  I32EnumCase<"uno", 7>
 ]>;
 
 def CIR_CmpOpKindAttr : CIR_EnumAttr<CIR_CmpOpKind, "cmp">;
@@ -2581,7 +2617,7 @@ def CIR_CmpOp : CIR_Op<"cmp",
     ```
     %0 = cir.cmp gt %1, %2 : !s32i
     %1 = cir.cmp eq %a, %b : !cir.ptr<!u8i>
-    %2 = cir.cmp lt %x, %y : !cir.float {fenv = #cir.fenv<>}
+    %2 = cir.cmp lt %x, %y : !cir.float fenv<>
     ```
   }];
 
@@ -2595,7 +2631,8 @@ def CIR_CmpOp : CIR_Op<"cmp",
   let results = (outs CIR_BoolType:$result);
 
   let assemblyFormat = [{
-    enum($kind) $lhs `,` $rhs `:` type($lhs) attr-dict
+    enum($kind) $lhs `,` $rhs `:` type($lhs)
+    (`fenv` `` $fenv^)? attr-dict
   }];
 
   let builders = [
@@ -2910,6 +2947,9 @@ class CIR_FPBinaryOp<string mnemonic, list<Trait> traits = []>
                    !listconcat(CIR_FenvOpTraits, traits),
                    CIR_DynamicMemoryEffects> {
   let arguments = !con(commonArgs, (ins OptionalAttr<CIR_FenvAttr>:$fenv));
+  let assemblyFormat = [{
+    $lhs `,` $rhs `:` type($lhs) (`fenv` `` $fenv^)? attr-dict
+  }];
 
   let constrainedLLVMIntrinsic = mnemonic;
 
@@ -3309,28 +3349,28 @@ def CIR_TernaryOp : CIR_RegionBranchOpBase<"ternary", [
 def CIR_GlobalLinkageKind : CIR_I32Enum<
   "GlobalLinkageKind", "linkage kind", [
     // Externally visible function
-    I32EnumAttrCase<"ExternalLinkage", 0, "external">,
+    I32EnumCase<"ExternalLinkage", 0, "external">,
     // Available for inspection, not emission.
-    I32EnumAttrCase<"AvailableExternallyLinkage", 1, "available_externally">,
+    I32EnumCase<"AvailableExternallyLinkage", 1, "available_externally">,
     // Keep one copy of function when linking (inline)
-    I32EnumAttrCase<"LinkOnceAnyLinkage", 2, "linkonce">,
+    I32EnumCase<"LinkOnceAnyLinkage", 2, "linkonce">,
     // Same, but only replaced by something equivalent.
-    I32EnumAttrCase<"LinkOnceODRLinkage", 3, "linkonce_odr">,
+    I32EnumCase<"LinkOnceODRLinkage", 3, "linkonce_odr">,
     // Keep one copy of named function when linking (weak)
-    I32EnumAttrCase<"WeakAnyLinkage", 4, "weak">,
+    I32EnumCase<"WeakAnyLinkage", 4, "weak">,
     // Same, but only replaced by something equivalent.
-    I32EnumAttrCase<"WeakODRLinkage", 5, "weak_odr">,
+    I32EnumCase<"WeakODRLinkage", 5, "weak_odr">,
     // Special purpose, only applies to global arrays
-    I32EnumAttrCase<"AppendingLinkage", 6, "appending">,
+    I32EnumCase<"AppendingLinkage", 6, "appending">,
     // Rename collisions when linking (static functions).
-    I32EnumAttrCase<"InternalLinkage", 7, "internal">,
+    I32EnumCase<"InternalLinkage", 7, "internal">,
     // Like Internal, but omit from symbol table, prefix it with
     // "cir_" to prevent clash with MLIR's symbol "private".
-    I32EnumAttrCase<"PrivateLinkage", 8, "cir_private">,
+    I32EnumCase<"PrivateLinkage", 8, "cir_private">,
     // ExternalWeak linkage description.
-    I32EnumAttrCase<"ExternalWeakLinkage", 9, "extern_weak">,
+    I32EnumCase<"ExternalWeakLinkage", 9, "extern_weak">,
     // Tentative definitions.
-    I32EnumAttrCase<"CommonLinkage", 10, "common">
+    I32EnumCase<"CommonLinkage", 10, "common">
 ]>;
 
 def CIR_GlobalLinkageKindAttr
@@ -3341,10 +3381,10 @@ def CIR_GlobalLinkageKindAttr
 // is upstreamed.
 
 def CIR_TLSModel : CIR_I32Enum<"TLSModel", "TLS model", [
-  I32EnumAttrCase<"GeneralDynamic", 1, "tls_dyn">,
-  I32EnumAttrCase<"LocalDynamic", 2, "tls_local_dyn">,
-  I32EnumAttrCase<"InitialExec", 3, "tls_init_exec">,
-  I32EnumAttrCase<"LocalExec", 4, "tls_local_exec">
+  I32EnumCase<"GeneralDynamic", 1, "tls_dyn">,
+  I32EnumCase<"LocalDynamic", 2, "tls_local_dyn">,
+  I32EnumCase<"InitialExec", 3, "tls_init_exec">,
+  I32EnumCase<"LocalExec", 4, "tls_local_exec">
 ]>;
 
 def CIR_TLSModelAttr: CIR_EnumAttr<CIR_TLSModel, "tls_model"> {
@@ -3402,6 +3442,9 @@ def CIR_GlobalOp : CIR_RegionBranchOpBase<"global", [
                        OptionalAttr<CIR_TLSModelAttr>:$tls_model,
                        OptionalAttr<CIR_ThreadLocalGlobalWrapperInitAttr>:$tls_refs,
                        OptionalAttr<AnyAttr>:$initial_value,
+                       // FIXME(cir): This eventually needs to become a
+                       // stringattr like FuncOp to allow customization of the
+                       // group name.
                        UnitProp:$comdat,
                        UnitProp:$constant,
                        UnitProp:$dso_local,
@@ -3435,6 +3478,12 @@ def CIR_GlobalOp : CIR_RegionBranchOpBase<"global", [
     custom<GlobalOpTypeAndInitialValue>($sym_type, $initial_value,
                                         $ctorRegion, $dtorRegion)
     ($annotations^)?
+    (`align` `(` $alignment^ `)`)?
+    (`ast` `(` $ast^ `)`)?
+    (`static_local_info` `` $static_local_info^)?
+    (`section` `(` $section^ `)`)?
+    (`strictfp` $strictfp^)?
+    (`init_priority` `(` $init_priority^ `)`)?
     attr-dict
   }];
 
@@ -3831,8 +3880,9 @@ def CIR_SetBitfieldOp : CIR_Op<"set_bitfield"> {
 
   let assemblyFormat = [{
     (`align` `(` $alignment^ `)`)?
-    `(`$bitfield_info`,` $addr`:`qualified(type($addr))`,`
-    $src`:`type($src) `)`  attr-dict `->` type($result) }];
+    ` ` `(`$bitfield_info`,` $addr`:`qualified(type($addr))`,`
+    $src`:`type($src) `)`
+    (`{` `is_volatile` $is_volatile^ `}`)? attr-dict `->` type($result) }];
 
   let builders = [
     OpBuilder<(ins "mlir::Type":$type,
@@ -3919,7 +3969,8 @@ def CIR_GetBitfieldOp : CIR_Op<"get_bitfield"> {
 
   let assemblyFormat = [{
     (`align` `(` $alignment^ `)`)?
-    `(`$bitfield_info `,` $addr attr-dict `:`
+    ` ` `(`$bitfield_info `,` $addr
+    (` ` `{` `is_volatile` $is_volatile^ `}`)? attr-dict `:`
     qualified(type($addr)) `)` `->` type($result) }];
 
   let builders = [
@@ -3976,7 +4027,7 @@ def CIR_GetMemberOp : CIR_Op<"get_member", [Pure]> {
   let results = (outs Res<CIR_PointerType, "">:$result);
 
   let assemblyFormat = [{
-    $addr `[` $index_attr `]` attr-dict
+    $addr `[` $index_attr `]` `{` `name` `=` $name `}` attr-dict
     `:` qualified(type($addr)) `->` qualified(type($result))
   }];
 
@@ -4183,11 +4234,11 @@ def CIR_OptionalPriorityAttr : OptionalAttr<
 // are CIR-specific and are not in sync with `llvm::CallingConv` or
 // `clang::CallingConv`.
 def CIR_CallingConv : CIR_I32Enum<"CallingConv", "calling convention", [
-  I32EnumAttrCase<"C", 0, "c">,
-  I32EnumAttrCase<"PTXKernel", 1, "ptx_kernel">,
-  I32EnumAttrCase<"SpirFunction", 2, "spir_function">,
-  I32EnumAttrCase<"SpirKernel", 3, "spir_kernel">,
-  I32EnumAttrCase<"AMDGPUKernel", 4, "amdgpu_kernel">
+  I32EnumCase<"C", 0, "c">,
+  I32EnumCase<"PTXKernel", 1, "ptx_kernel">,
+  I32EnumCase<"SpirFunction", 2, "spir_function">,
+  I32EnumCase<"SpirKernel", 3, "spir_kernel">,
+  I32EnumCase<"AMDGPUKernel", 4, "amdgpu_kernel">
 ]>;
 
 def CIR_CallingConvAttr : CIR_EnumAttr<CIR_CallingConv, "calling_conv">;
@@ -4239,6 +4290,10 @@ def CIR_FuncOp : CIR_Op<"func", [
     The `personality` attribute specifies the personality function to use for
     exception handling. This is a symbol reference to the personality function
     (e.g., `@__gxx_personality_v0` for C++ exceptions).
+
+    The 'comdat' attribute marks the function as belonging to a COMDAT group.
+    This attribute includes an optional 'group' name, which if not provided,
+    results in the function's symbol name being used.
 
     Example:
 
@@ -4292,11 +4347,13 @@ def CIR_FuncOp : CIR_Op<"func", [
       "cir::CallingConv::C"
     >:$calling_conv,
     OptionalAttr<StrAttr>:$sym_visibility,
-    UnitAttr:$comdat,
+    OptionalAttr<StrAttr>:$comdat,
+    OptionalAttr<I64Attr>:$alignment,
+    OptionalAttr<I64Attr>:$preferred_alignment,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs,
     OptionalAttr<FlatSymbolRefAttr>:$aliasee,
-    OptionalAttr<CIR_SideEffectAttr>:$side_effect,
+    OptionalAttr<CIR_MemoryEffectsAttr>:$memory_effects,
     OptionalAttr<FlatSymbolRefAttr>:$personality,
     CIR_OptionalPriorityAttr:$global_ctor_priority,
     CIR_OptionalPriorityAttr:$global_dtor_priority,
@@ -4335,6 +4392,10 @@ def CIR_FuncOp : CIR_Op<"func", [
     /// returing void)
     llvm::ArrayRef<mlir::Type> getResultTypes() {
        return getFunctionType().getReturnTypes();
+    }
+
+    void setComdat(bool) {
+      setComdat(llvm::StringRef(""));
     }
 
     //===------------------------------------------------------------------===//
@@ -4385,6 +4446,10 @@ def CIR_FuncOp : CIR_Op<"func", [
     matchAndRewriteAlias(cir::FuncOp op, llvm::StringRef aliasee, mlir::Type ty,
                          OpAdaptor adaptor,
                          mlir::ConversionPatternRewriter &rewriter) const;
+
+    mutable mlir::LLVM::ComdatOp comdatOp = nullptr;
+    mlir::SymbolRefAttr getComdatAttr(cir::FuncOp &op,
+                                      mlir::OpBuilder &builder) const;
   }];
 }
 
@@ -4466,18 +4531,24 @@ def CIR_LLVMIntrinsicCallOp : CIR_Op<"call_llvm_intrinsic"> {
 
   let results = (outs Optional<CIR_AnyType>:$result);
   let arguments = (ins
-                   StrAttr:$intrinsic_name, Variadic<CIR_AnyType>:$arg_ops);
+                   StrAttr:$intrinsic_name,
+                   OptionalAttr<CIR_FastMathFlagsAttr>:$fastmath_flags,
+                   Variadic<CIR_AnyType>:$arg_ops);
 
   let skipDefaultBuilders = 1;
 
   let assemblyFormat = [{
-    $intrinsic_name $arg_ops `:` functional-type($arg_ops, $result) attr-dict
+    $intrinsic_name $arg_ops `:` functional-type($arg_ops, $result)
+    (`fastmath` `` $fastmath_flags^)? attr-dict
   }];
 
   let builders = [
     OpBuilder<(ins "mlir::StringAttr":$intrinsic_name, "mlir::Type":$resType,
-              CArg<"mlir::ValueRange", "{}">:$operands), [{
+              CArg<"mlir::ValueRange", "{}">:$operands,
+              CArg<"cir::FastMathFlagsAttr", "{}">:$fastmath), [{
       $_state.addAttribute("intrinsic_name", intrinsic_name);
+      if (fastmath)
+        $_state.addAttribute("fastmath_flags", fastmath);
       $_state.addOperands(operands);
       if (resType)
         $_state.addTypes(resType);
@@ -4496,36 +4567,48 @@ def CIR_DeleteArrayOp : CIR_Op<"delete_array"> {
     will be translated to `cir.delete_array %ptr`.
 
     The `delete_fn` attribute specifies the operator delete function to call.
-    The `delete_params` attribute describes the parameters needed by the
-    operator delete call.
+    The optional `delete_params` attribute describes the parameters needed by
+    the operator delete call. When absent, all parameters have default values.
 
     The `element_dtor` attribute, when present, specifies the destructor to call
     on each array element before deallocation.
 
     The `dtor_may_throw` unit property, when present, indicates that the
     element destructor may throw exceptions.
+
+    The `element_align` attribute gives the element type's preferred
+    alignment in bytes, which should be the same value the corresponding `new[]`
+    uses to size its array cookie.
   }];
 
   let arguments = (ins
     CIR_PointerType:$address,
     FlatSymbolRefAttr:$delete_fn,
-    CIR_UsualDeleteParamsAttr:$delete_params,
+    OptionalAttr<CIR_UsualDeleteParamsAttr>:$delete_params,
     OptionalAttr<FlatSymbolRefAttr>:$element_dtor,
-    UnitProp:$dtor_may_throw
+    UnitProp:$dtor_may_throw,
+    I64Attr:$element_align
   );
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$address,
                    "mlir::FlatSymbolRefAttr":$delete_fn,
-                   "cir::UsualDeleteParamsAttr":$delete_params), [{
+                   "cir::UsualDeleteParamsAttr":$delete_params,
+                   "uint64_t":$element_align), [{
       build($_builder, $_state, address, delete_fn, delete_params,
             /*element_dtor=*/mlir::FlatSymbolRefAttr{},
-            /*dtor_may_throw=*/false);
+            /*dtor_may_throw=*/false,
+            $_builder.getI64IntegerAttr(element_align));
     }]>
   ];
 
   let assemblyFormat = [{
-    $address `:` qualified(type($address)) (`dtor_may_throw` $dtor_may_throw^)?
+    $address `:` qualified(type($address))
+    `delete_fn` `(` $delete_fn `)`
+    (`delete_params` `` $delete_params^)?
+    (`element_dtor` `(` $element_dtor^ `)`)?
+    (`dtor_may_throw` $dtor_may_throw^)?
+    `element_align` `(` $element_align `)`
     attr-dict
   }];
 
@@ -4598,9 +4681,11 @@ class CIR_CallOpBase<string mnemonic, list<Trait> extra_traits = []>
   dag commonArgs = (ins OptionalAttr<FlatSymbolRefAttr>:$callee,
       Variadic<CIR_AnyType>:$args,
       UnitAttr:$nothrow,
+      UnitAttr:$nounwind,
+      UnitAttr:$willreturn,
       OptionalAttr<CIR_InlineKindAttr>:$inline_kind,
       UnitAttr:$musttail,
-      DefaultValuedAttr<CIR_SideEffectAttr, "SideEffect::All">:$side_effect,
+      OptionalAttr<CIR_MemoryEffectsAttr>:$memory_effects,
       OptionalAttr<DictArrayAttr>:$arg_attrs,
       OptionalAttr<DictArrayAttr>:$res_attrs
       );
@@ -4696,7 +4781,7 @@ def CIR_TryCallOp : CIR_CallOpBase<"try_call",[
                "mlir::Block *":$normalDest,
                "mlir::Block *":$unwindDest,
                CArg<"mlir::ValueRange", "{}">:$callOperands,
-               CArg<"SideEffect", "SideEffect::All">:$sideEffect), [{
+               CArg<"cir::MemoryEffectsAttr", "{}">:$memoryEffects), [{
       $_state.addOperands(callOperands);
 
       if (callee)
@@ -4704,8 +4789,8 @@ def CIR_TryCallOp : CIR_CallOpBase<"try_call",[
       if (resType && !isa<VoidType>(resType))
         $_state.addTypes(resType);
 
-      $_state.addAttribute("side_effect",
-        SideEffectAttr::get($_builder.getContext(), sideEffect));
+      if (memoryEffects)
+        $_state.addAttribute("memory_effects", memoryEffects);
 
       // Handle branches
       $_state.addSuccessors(normalDest);
@@ -4716,7 +4801,7 @@ def CIR_TryCallOp : CIR_CallOpBase<"try_call",[
                "mlir::Block *":$normalDest,
                "mlir::Block *":$unwindDest,
                CArg<"mlir::ValueRange", "{}">:$callOperands,
-               CArg<"SideEffect", "SideEffect::All">:$sideEffect), [{
+               CArg<"cir::MemoryEffectsAttr", "{}">:$memoryEffects), [{
       ::llvm::SmallVector<mlir::Value, 4> finalCallOperands({ind_target});
       finalCallOperands.append(callOperands.begin(), callOperands.end());
       $_state.addOperands(finalCallOperands);
@@ -4724,8 +4809,8 @@ def CIR_TryCallOp : CIR_CallOpBase<"try_call",[
       if (!fn_type.hasVoidReturn())
         $_state.addTypes(fn_type.getReturnType());
 
-      $_state.addAttribute("side_effect",
-        SideEffectAttr::get($_builder.getContext(), sideEffect));
+      if (memoryEffects)
+        $_state.addAttribute("memory_effects", memoryEffects);
 
       // Handle branches
       $_state.addSuccessors(normalDest);
@@ -4739,10 +4824,10 @@ def CIR_TryCallOp : CIR_CallOpBase<"try_call",[
 //===----------------------------------------------------------------------===//
 
 def CIR_AwaitKind : CIR_I32Enum<"AwaitKind", "await kind", [
-  I32EnumAttrCase<"Init", 0, "init">,
-  I32EnumAttrCase<"User", 1, "user">,
-  I32EnumAttrCase<"Yield", 2, "yield">,
-  I32EnumAttrCase<"Final", 3, "final">
+  I32EnumCase<"Init", 0, "init">,
+  I32EnumCase<"User", 1, "user">,
+  I32EnumCase<"Yield", 2, "yield">,
+  I32EnumCase<"Final", 3, "final">
 ]>;
 
 def CIR_AwaitKindAttr : CIR_EnumAttr<CIR_AwaitKind, "await">;
@@ -5187,10 +5272,15 @@ def CIR_MemCpyOp : CIR_MemOp<"libc.memcpy"> {
     ```
   }];
 
-  let arguments = !con(commonArgs, (ins CIR_AnyFundamentalUIntType:$len));
+  let arguments = !con(commonArgs, (ins
+    CIR_AnyFundamentalUIntType:$len,
+    OptionalAttr<I64Attr>:$dst_alignment,
+    OptionalAttr<I64Attr>:$src_alignment
+  ));
 
   let assemblyFormat = [{
-    $len `bytes` `from` $src `to` $dst attr-dict
+    $len `bytes` `from` $src (`align` `(` $src_alignment^ `)`)?
+    `to` $dst (`align` `(` $dst_alignment^ `)`)? attr-dict
     `:` type($len) `,` qualified(type($src)) `->` qualified(type($dst))
   }];
 
@@ -5480,8 +5570,8 @@ def CIR_LifetimeEndOp : CIR_Op<"lifetime.end"> {
 //===----------------------------------------------------------------------===//
 
 def CIR_AsmFlavor : CIR_I32Enum<"AsmFlavor", "ATT or Intel",
-                                    [I32EnumAttrCase<"x86_att", 0>,
-                                     I32EnumAttrCase<"x86_intel", 1>]>;
+                                    [I32EnumCase<"x86_att", 0>,
+                                     I32EnumCase<"x86_intel", 1>]>;
 
 def CIR_AsmFlavorAttr : CIR_EnumAttr<CIR_AsmFlavor, "asm_flavor">;
 
@@ -6011,9 +6101,7 @@ def CIR_VecCmpOp : CIR_Op<"vec.cmp",
     ```
     %eq = cir.vec.cmp(eq, %vec_a, %vec_b) : !cir.vector<4 x !s32i>, !cir.vector<4 x !s32i>
     %lt = cir.vec.cmp(lt, %vec_a, %vec_b) : !cir.vector<4 x !s32i>, !cir.vector<4 x !s32i>
-    %gt = cir.vec.cmp(gt, %va, %vb) : !cir.vector<4 x !cir.float>, !cir.vector<4 x !s32i> {
-      fenv = #cir.fenv<>
-    }
+    %gt = cir.vec.cmp(gt, %va, %vb) : !cir.vector<4 x !cir.float>, !cir.vector<4 x !s32i> fenv<>
     ```
   }];
 
@@ -6028,7 +6116,7 @@ def CIR_VecCmpOp : CIR_Op<"vec.cmp",
 
   let assemblyFormat = [{
     `(` enum($kind) `,` $lhs `,` $rhs `)` `:` qualified(type($lhs)) `,`
-    qualified(type($result)) attr-dict
+    qualified(type($result)) (`fenv` `` $fenv^)? attr-dict
   }];
 
   let builders = [
@@ -6597,10 +6685,10 @@ def CIR_ComplexSubOp : CIR_ComplexBinOp<"complex.sub"> {
 
 def CIR_ComplexRangeKind : CIR_I32Enum<
   "ComplexRangeKind", "complex multiplication and division implementation", [
-    I32EnumAttrCase<"Full", 0, "full">,
-    I32EnumAttrCase<"Improved", 1, "improved">,
-    I32EnumAttrCase<"Promoted", 2, "promoted">,
-    I32EnumAttrCase<"Basic", 3, "basic">,
+    I32EnumCase<"Full", 0, "full">,
+    I32EnumCase<"Improved", 1, "improved">,
+    I32EnumCase<"Promoted", 2, "promoted">,
+    I32EnumCase<"Basic", 3, "basic">,
 ]>;
 
 def CIR_ComplexRangeKindAttr
@@ -6957,48 +7045,110 @@ def CIR_RotateOp : CIR_Op<"rotate", [Pure, SameOperandsAndResultType]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Funnel Shift Operations
+//===----------------------------------------------------------------------===//
+
+// Concatenate `a` and `b`, shift by `c`, and return one half of the doubled
+// width. All operands and the result share an integer or vector-of-integer
+// type.
+class CIR_FunnelShiftOp<string mnemonic, string llvmOpName>
+    : CIR_Op<mnemonic, [Pure, SameOperandsAndResultType]> {
+  let arguments = (ins
+    CIR_AnyIntOrVecOfIntType:$a,
+    CIR_AnyIntOrVecOfIntType:$b,
+    CIR_AnyIntOrVecOfIntType:$c
+  );
+
+  let results = (outs CIR_AnyIntOrVecOfIntType:$result);
+
+  let assemblyFormat = "$a `,` $b `,` $c `:` type($a) attr-dict";
+
+  let llvmOp = llvmOpName;
+}
+
+def CIR_FshlOp : CIR_FunnelShiftOp<"fshl", "FshlOp"> {
+  let summary = "Funnel shift left";
+  let description = [{
+    The `cir.fshl` operation concatenates `a` and `b` (with `a` in the high
+    half), shifts the concatenation left by `c` bit positions, and returns the
+    high half of the result. The shift amount is treated modulo the bitwidth
+    of the operands.
+
+    All operands and the result must have the same integer type or
+    vector-of-integer type.
+
+    Example:
+
+    ```
+    %r = cir.fshl %a, %b, %c : !u32i
+    %v = cir.fshl %va, %vb, %vc : !cir.vector<4 x !s32i>
+    ```
+  }];
+}
+
+def CIR_FshrOp : CIR_FunnelShiftOp<"fshr", "FshrOp"> {
+  let summary = "Funnel shift right";
+  let description = [{
+    The `cir.fshr` operation concatenates `a` and `b` (with `a` in the high
+    half), shifts the concatenation right by `c` bit positions, and returns
+    the low half of the result. The shift amount is treated modulo the bitwidth
+    of the operands.
+
+    All operands and the result must have the same integer type or
+    vector-of-integer type.
+
+    Example:
+
+    ```
+    %r = cir.fshr %a, %b, %c : !u32i
+    %v = cir.fshr %va, %vb, %vc : !cir.vector<4 x !s32i>
+    ```
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // FPClass Test Flags
 //===----------------------------------------------------------------------===//
 
 // Individual floating-point classes, one per bit (positions 0-9), matching
 // LLVM's `FPClassTest` bit layout (`llvm/ADT/FloatingPointMode.h`).  Modeled
 // as a bit-enum so `__builtin_isfpclass` can pass any combination of bits.
-def FPClass_None     : I32BitEnumAttrCaseNone<"None", "fcNone">;
-def FPClass_SNan     : I32BitEnumAttrCaseBit<"SignalingNaN", 0, "fcSNan">;
-def FPClass_QNan     : I32BitEnumAttrCaseBit<"QuietNaN", 1, "fcQNan">;
-def FPClass_NegInf   : I32BitEnumAttrCaseBit<"NegativeInfinity", 2, "fcNegInf">;
-def FPClass_NegNorm  : I32BitEnumAttrCaseBit<"NegativeNormal", 3, "fcNegNormal">;
-def FPClass_NegSub   : I32BitEnumAttrCaseBit<"NegativeSubnormal", 4,
+def FPClass_None     : I32BitEnumCaseNone<"None", "fcNone">;
+def FPClass_SNan     : I32BitEnumCaseBit<"SignalingNaN", 0, "fcSNan">;
+def FPClass_QNan     : I32BitEnumCaseBit<"QuietNaN", 1, "fcQNan">;
+def FPClass_NegInf   : I32BitEnumCaseBit<"NegativeInfinity", 2, "fcNegInf">;
+def FPClass_NegNorm  : I32BitEnumCaseBit<"NegativeNormal", 3, "fcNegNormal">;
+def FPClass_NegSub   : I32BitEnumCaseBit<"NegativeSubnormal", 4,
                                              "fcNegSubnormal">;
-def FPClass_NegZero  : I32BitEnumAttrCaseBit<"NegativeZero", 5, "fcNegZero">;
-def FPClass_PosZero  : I32BitEnumAttrCaseBit<"PositiveZero", 6, "fcPosZero">;
-def FPClass_PosSub   : I32BitEnumAttrCaseBit<"PositiveSubnormal", 7,
+def FPClass_NegZero  : I32BitEnumCaseBit<"NegativeZero", 5, "fcNegZero">;
+def FPClass_PosZero  : I32BitEnumCaseBit<"PositiveZero", 6, "fcPosZero">;
+def FPClass_PosSub   : I32BitEnumCaseBit<"PositiveSubnormal", 7,
                                              "fcPosSubnormal">;
-def FPClass_PosNorm  : I32BitEnumAttrCaseBit<"PositiveNormal", 8, "fcPosNormal">;
-def FPClass_PosInf   : I32BitEnumAttrCaseBit<"PositiveInfinity", 9, "fcPosInf">;
+def FPClass_PosNorm  : I32BitEnumCaseBit<"PositiveNormal", 8, "fcPosNormal">;
+def FPClass_PosInf   : I32BitEnumCaseBit<"PositiveInfinity", 9, "fcPosInf">;
 
 // Composite groups (aliases for combinations of the individual classes).
-def FPClass_Nan      : I32BitEnumAttrCaseGroup<"Nan",
+def FPClass_Nan      : BitEnumCaseGroup<"Nan",
     [FPClass_SNan, FPClass_QNan], "fcNan">;
-def FPClass_Inf      : I32BitEnumAttrCaseGroup<"Infinity",
+def FPClass_Inf      : BitEnumCaseGroup<"Infinity",
     [FPClass_NegInf, FPClass_PosInf], "fcInf">;
-def FPClass_Norm     : I32BitEnumAttrCaseGroup<"Normal",
+def FPClass_Norm     : BitEnumCaseGroup<"Normal",
     [FPClass_NegNorm, FPClass_PosNorm], "fcNormal">;
-def FPClass_Sub      : I32BitEnumAttrCaseGroup<"Subnormal",
+def FPClass_Sub      : BitEnumCaseGroup<"Subnormal",
     [FPClass_NegSub, FPClass_PosSub], "fcSubnormal">;
-def FPClass_Zero     : I32BitEnumAttrCaseGroup<"Zero",
+def FPClass_Zero     : BitEnumCaseGroup<"Zero",
     [FPClass_NegZero, FPClass_PosZero], "fcZero">;
-def FPClass_PosFin   : I32BitEnumAttrCaseGroup<"PositiveFinite",
+def FPClass_PosFin   : BitEnumCaseGroup<"PositiveFinite",
     [FPClass_PosNorm, FPClass_PosSub, FPClass_PosZero], "fcPosFinite">;
-def FPClass_NegFin   : I32BitEnumAttrCaseGroup<"NegativeFinite",
+def FPClass_NegFin   : BitEnumCaseGroup<"NegativeFinite",
     [FPClass_NegNorm, FPClass_NegSub, FPClass_NegZero], "fcNegFinite">;
-def FPClass_Fin      : I32BitEnumAttrCaseGroup<"Finite",
+def FPClass_Fin      : BitEnumCaseGroup<"Finite",
     [FPClass_PosFin, FPClass_NegFin], "fcFinite">;
-def FPClass_Pos      : I32BitEnumAttrCaseGroup<"Positive",
+def FPClass_Pos      : BitEnumCaseGroup<"Positive",
     [FPClass_PosFin, FPClass_PosInf], "fcPositive">;
-def FPClass_Neg      : I32BitEnumAttrCaseGroup<"Negative",
+def FPClass_Neg      : BitEnumCaseGroup<"Negative",
     [FPClass_NegFin, FPClass_NegInf], "fcNegative">;
-def FPClass_All      : I32BitEnumAttrCaseGroup<"All",
+def FPClass_All      : BitEnumCaseGroup<"All",
     [FPClass_Nan, FPClass_Inf, FPClass_Fin], "fcAllFlags">;
 
 def FPClassTestEnum
@@ -7052,10 +7202,10 @@ def CIR_IsFPClassOp : CIR_Op<"is_fp_class", [Pure]> {
 
 def CIR_AssumeBundleKind : CIR_I32Enum<
   "AssumeBundleKind", "kind of cir.assume operand bundle", [
-  I32EnumAttrCase<"None", 0>,
-  I32EnumAttrCase<"Align", 1, "align">,
-  I32EnumAttrCase<"SeparateStorage", 2, "separate_storage">,
-  I32EnumAttrCase<"Dereferenceable", 3, "dereferenceable">
+  I32EnumCase<"None", 0>,
+  I32EnumCase<"Align", 1, "align">,
+  I32EnumCase<"SeparateStorage", 2, "separate_storage">,
+  I32EnumCase<"Dereferenceable", 3, "dereferenceable">
 ]>;
 
 def CIR_AssumeBundleKindAttr
@@ -7316,7 +7466,7 @@ class CIR_UnaryFPToFPBuiltinOp<string mnemonic, string llvmOpName>
                        OptionalAttr<CIR_FenvAttr>:$fenv);
   let results = (outs CIR_AnyFloatOrVecOfFloatType:$result);
 
-  let assemblyFormat = "$src `:` type($src) attr-dict";
+  let assemblyFormat = "$src `:` type($src) (`fenv` `` $fenv^)? attr-dict";
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$src), [{
@@ -7644,7 +7794,8 @@ class CIR_UnaryFPToIntBuiltinOp<string mnemonic, string llvmOpName>
   }];
 
   let assemblyFormat = [{
-    $src `:` type($src) `->` type($result) attr-dict
+    $src `:` type($src) `->` type($result)
+    (`fenv` `` $fenv^)? attr-dict
   }];
 
   let builders = [
@@ -7710,7 +7861,8 @@ class CIR_BinaryFPToFPBuiltinOp<string mnemonic, string llvmOpName>
   let results = (outs  CIR_AnyFloatOrVecOfFloatType:$result);
 
   let assemblyFormat = [{
-    $lhs `,` $rhs `:` qualified(type($lhs)) attr-dict
+    $lhs `,` $rhs `:` qualified(type($lhs))
+    (`fenv` `` $fenv^)? attr-dict
   }];
 
   let builders = [
@@ -7861,7 +8013,9 @@ class CIR_TernaryFPToFPBuiltinOp<string mnemonic, string llvmOpName>
 
   let results = (outs CIR_AnyFloatOrVecOfFloatType:$result);
 
-  let assemblyFormat = "$a `,` $b `,` $c `:` type($a) attr-dict";
+  let assemblyFormat = [{
+    $a `,` $b `,` $c `:` type($a) (`fenv` `` $fenv^)? attr-dict
+  }];
 
   let builders = [
     OpBuilder<(ins "mlir::Type":$result, "mlir::Value":$a, "mlir::Value":$b,
@@ -8421,7 +8575,7 @@ def CIR_EhInflightOp : CIR_Op<"eh.inflight_exception"> {
     %exception_ptr, %type_id = cir.eh.inflight_exception catch_all [@_ZTIi]
     %exception_ptr, %type_id = cir.eh.inflight_exception filter [@_ZTIi]
     %exception_ptr, %type_id = cir.eh.inflight_exception [@_ZTIi] filter []
-    ``
+    ```
   }];
 
   let arguments = (ins UnitAttr:$cleanup,
@@ -8561,15 +8715,23 @@ def CIR_EhInitiateOp : CIR_Op<"eh.initiate"> {
 def CIR_EhTerminateOp : CIR_Op<"eh.terminate", [
   Terminator
 ]> {
-  let summary = "Terminate due to exception thrown during cleanup";
+  let summary = "Terminate due to an exception that must not escape";
   let description = [{
-    `cir.eh.terminate` terminates program execution when an exception is thrown
-    while executing cleanup code during exception unwinding. The C++ standard
-    requires that `std::terminate()` be called in this scenario.
+    `cir.eh.terminate` terminates program execution when an exception reaches a
+    point from which the C++ standard does not allow it to propagate, and
+    requires `std::terminate()` to be called instead. That happens when an
+    exception is thrown while executing cleanup code during unwinding, and when
+    an exception tries to escape a function that cannot throw.
 
-    This operation takes an `!cir.eh_token` from a `cir.eh.initiate` operation
-    and acts as a terminator. It is produced during CFG flattening when throwing
-    calls are found in EH cleanup regions.
+    This operation takes an `!cir.eh_token` and acts as a terminator. In
+    high-level CIR it appears as the only operation in the catch-all handler
+    region of the `cir.try` that wraps the body of a function that cannot
+    throw, where the token comes from the handler region's block argument. The
+    handler is a catch-all because such a function terminates on any escaping
+    exception, and it has no `cir.begin_catch` because the runtime helper this
+    operation lowers to performs the catch. After CFG flattening the token
+    comes from a `cir.eh.initiate` operation; flattening also produces this
+    operation for throwing calls found in EH cleanup regions.
 
     During EH ABI lowering, this is replaced with target-specific termination
     code. For the Itanium ABI, the `cir.eh.initiate` is lowered to
@@ -8578,6 +8740,16 @@ def CIR_EhTerminateOp : CIR_Op<"eh.terminate", [
     pointer, followed by an unreachable operation.
 
     Example:
+
+    ```
+    cir.try {
+      ...
+    } catch all (%eh_token : !cir.eh_token) {
+      cir.eh.terminate %eh_token : !cir.eh_token
+    }
+    ```
+
+    And after CFG flattening:
 
     ```
     ^terminate_unwind:
@@ -8909,12 +9081,12 @@ def CIR_EndCatchOp : CIR_Op<"end_catch"> {
 
 def CIR_InitCatchKind : CIR_I32Enum<
   "InitCatchKind", "", [
-    I32EnumAttrCase<"Reference", 0, "reference">,
-    I32EnumAttrCase<"Pointer", 1, "pointer">,
-    I32EnumAttrCase<"Scalar", 2, "scalar">,
-    I32EnumAttrCase<"Objc", 3, "objc">,
-    I32EnumAttrCase<"TrivialCopy", 4, "trivial_copy">,
-    I32EnumAttrCase<"NonTrivialCopy", 5, "non_trivial_copy">,
+    I32EnumCase<"Reference", 0, "reference">,
+    I32EnumCase<"Pointer", 1, "pointer">,
+    I32EnumCase<"Scalar", 2, "scalar">,
+    I32EnumCase<"Objc", 3, "objc">,
+    I32EnumCase<"TrivialCopy", 4, "trivial_copy">,
+    I32EnumCase<"NonTrivialCopy", 5, "non_trivial_copy">,
 ]>;
 
 def CIR_InitCatchKindAttr : CIR_EnumAttr<CIR_InitCatchKind, "init_catch">;
@@ -9032,23 +9204,23 @@ def CIR_TokenNoneOp : CIR_Op<"token.none", [
 
 def CIR_AtomicFetchKind : CIR_I32Enum<
   "AtomicFetchKind", "Binary opcode for atomic fetch-and-update operations", [
-    I32EnumAttrCase<"Add", 0, "add">,
-    I32EnumAttrCase<"Sub", 1, "sub">,
-    I32EnumAttrCase<"And", 2, "and">,
-    I32EnumAttrCase<"Xor", 3, "xor">,
-    I32EnumAttrCase<"Or", 4, "or">,
-    I32EnumAttrCase<"Nand", 5, "nand">,
-    I32EnumAttrCase<"Max", 6, "max">,
-    I32EnumAttrCase<"Min", 7, "min">,
-    I32EnumAttrCase<"UIncWrap", 8, "uinc_wrap">,
-    I32EnumAttrCase<"UDecWrap", 9, "udec_wrap">,
+    I32EnumCase<"Add", 0, "add">,
+    I32EnumCase<"Sub", 1, "sub">,
+    I32EnumCase<"And", 2, "and">,
+    I32EnumCase<"Xor", 3, "xor">,
+    I32EnumCase<"Or", 4, "or">,
+    I32EnumCase<"Nand", 5, "nand">,
+    I32EnumCase<"Max", 6, "max">,
+    I32EnumCase<"Min", 7, "min">,
+    I32EnumCase<"UIncWrap", 8, "uinc_wrap">,
+    I32EnumCase<"UDecWrap", 9, "udec_wrap">,
     // The primary difference between Max, Maximum, and MaximumNum is primarily
     // about how they handle floating-point inputs. See the description of the
     // CIR_AtomicFetchOp for more information.
-    I32EnumAttrCase<"Maximum", 10, "maximum">,
-    I32EnumAttrCase<"Minimum", 11, "minimum">,
-    I32EnumAttrCase<"MaximumNum", 12, "maximum_num">,
-    I32EnumAttrCase<"MinimumNum", 13, "minimum_num">
+    I32EnumCase<"Maximum", 10, "maximum">,
+    I32EnumCase<"Minimum", 11, "minimum">,
+    I32EnumCase<"MaximumNum", 12, "maximum_num">,
+    I32EnumCase<"MinimumNum", 13, "minimum_num">
 ]>;
 
 def CIR_AtomicFetchKindAttr
@@ -9269,6 +9441,7 @@ def CIR_AtomicTestAndSetOp : CIR_Op<"atomic.test_and_set"> {
 
   let assemblyFormat = [{
     enum($mem_order) $ptr
+    (`align` `(` $alignment^ `)`)?
     (`volatile` $is_volatile^)?
     `:` qualified(type($ptr)) `->` qualified(type($result)) attr-dict
   }];
@@ -9298,6 +9471,7 @@ def CIR_AtomicClearOp : CIR_Op<"atomic.clear"> {
 
   let assemblyFormat = [{
     enum($mem_order) $ptr
+    (`align` `(` $alignment^ `)`)?
     (`volatile` $is_volatile^)?
     `:` qualified(type($ptr)) attr-dict
   }];

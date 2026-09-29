@@ -29,29 +29,6 @@ runs:
       run: |
         rm -fv patches/amd-mainline/llvm-project/0001-Ensure-to-use-libamdhip64-with-major-version.patch
 
-    - name: Temp fix for hiprtc/hipcc test (Nightly)
-      shell: bash
-      if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'compiler-runtime') }}
-      run: |
-        git config --global user.email "z1-cciauto@amd.com"
-        git config --global user.name "Z1 cciauto"
-        cd compiler/amd-llvm
-        git fetch origin pull/2719/head:pr-2719
-        if ! git cherry-pick pr-2719; then
-            _conflicts="$(mktemp)"
-            trap 'rm -f "${_conflicts}"' EXIT
-            git diff --name-only --diff-filter=U >"${_conflicts}"
-            while IFS= read -r f; do
-              [ -n "${f}" ] || continue
-              git checkout --theirs -- "${f}"
-              git add -- "${f}"
-            done <"${_conflicts}"
-            GIT_EDITOR=true git cherry-pick --continue
-         fi
-         cd ../..
-         git add compiler/amd-llvm
-         git commit -m "Update amd-llvm submodule with PR 2719"
-
     - name: TheRock and llvm SHA
       shell: bash
       if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}

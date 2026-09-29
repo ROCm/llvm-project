@@ -238,7 +238,6 @@ LANGOPT(OpenMPCUDABlocksPerSM  , 32, 0, NotCompatible, "Number of blocks per SM 
 LANGOPT(OpenMPGPUThreadsPerTeam, 32, 256, NotCompatible, "Number of threads per team for GPUs.")
 LANGOPT(OpenMPTargetXteamReductionBlockSize, 32, 512, NotCompatible, "Number of threads in a block used by cross-team reduction.")
 LANGOPT(OpenMPTargetDebug , 32, 0, NotCompatible, "Enable debugging in the OpenMP offloading device RTL")
-LANGOPT(OpenMPTargetIgnoreEnvVars , 1, 0, NotCompatible, "Generate code assuming that device related environment variables can be ignored.")
 LANGOPT(OpenMPTargetBigJumpLoop , 1, 1, NotCompatible, "Use big jump loop code generation technique.")
 LANGOPT(OpenMPTargetNoLoop , 1, 1, NotCompatible, "Use no-loop code generation technique.")
 LANGOPT(OpenMPOptimisticCollapse  , 1, 0, NotCompatible, "Use at most 32 bits to represent the collapsed loop nest counter.")
@@ -532,7 +531,7 @@ LANGOPT(BoundsSafety, 1, 0, NotCompatible, "Bounds safety extension for C")
 
 LANGOPT(DebugRunLifetimeSafety, 1, 0, Benign, "Run lifetime safety analysis for C++. Does not enable warnings.")
 
-LANGOPT(EnableLifetimeSafetyInC, 1, 0, Benign, "Lifetime safety analysis for C")
+LANGOPT(EnableLifetimeSafetyInC, 1, 1, Benign, "Lifetime safety analysis for C")
 
 LANGOPT(LifetimeSafetyMaxCFGBlocks, 32, 0, Benign, "Skip LifetimeSafety analysis for functions with CFG block count exceeding this threshold. Specify 0 for no limit")
 

@@ -19,16 +19,19 @@ ds_loads:
 	s_waitcnt lgkmcnt(0)
 	v_mov_b32 v20, s2
 	v_mov_b32 v21, s3
+; The write is predicated on the lane being active, so the address the loads
+; read is the merge of the written base and the entry value v0 arrived with.
+; IR: [[BASE:%.+]] = phi i32 [ 65536, {{.+}}
 	v_mov_b32 v0, 0x10000
-; IR: [[ADDR32:%.+]] = add i32 65536, 0
+; IR: [[ADDR32:%.+]] = add i32 [[BASE]], 0
 ; IR: [[PTR32:%.+]] = inttoptr i32 [[ADDR32]] to ptr addrspace(3)
 ; IR-NEXT: load i32, ptr addrspace(3) [[PTR32]], align 1
 	ds_read_b32 v1, v0
-; IR: [[ADDR64:%.+]] = add i32 65536, 8
+; IR: [[ADDR64:%.+]] = add i32 [[BASE]], 8
 ; IR: [[PTR64:%.+]] = inttoptr i32 [[ADDR64]] to ptr addrspace(3)
 ; IR-NEXT: load i64, ptr addrspace(3) [[PTR64]], align 1
 	ds_read_b64 v[2:3], v0 offset:8
-; IR: [[ADDR128:%.+]] = add i32 65536, 16
+; IR: [[ADDR128:%.+]] = add i32 [[BASE]], 16
 ; IR: [[PTR128:%.+]] = inttoptr i32 [[ADDR128]] to ptr addrspace(3)
 ; IR-NEXT: load <4 x i32>, ptr addrspace(3) [[PTR128]], align 1
 	ds_read_b128 v[4:7], v0 offset:16
