@@ -79,6 +79,8 @@ public:
   /// be preserved for this instruction.
   llvm::Error validateFPEnvironment(const DecodedInst &Di,
                                     llvm::Type *Ty) const;
+  /// Reject BF16 inputs when the source mode flushes BF16 denormals.
+  llvm::Error validateBF16InputDenormMode(const DecodedInst &Di) const;
 
   bool sourceIeeeMode() const { return SourceIeeeMode; }
 
@@ -152,7 +154,8 @@ private:
                llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
                uint64_t KernelStartOffset, uint64_t KernelEndOffset,
                unsigned SourceFloatRoundMode32,
-               unsigned SourceFloatRoundMode16_64, bool SourceFp16Overflow,
+               unsigned SourceFloatRoundMode16_64,
+               bool SourceBF16InputDenormsFlush, bool SourceFp16Overflow,
                bool SourceDx10Clamp, bool SourceIeeeMode);
 
   // Where the kernel's register-indirect control transfers lead.
@@ -198,6 +201,7 @@ private:
   // on when their descriptor fields are absent.
   unsigned SourceFloatRoundMode32 = 0;
   unsigned SourceFloatRoundMode16_64 = 0;
+  bool SourceBF16InputDenormsFlush = false;
   bool SourceFp16Overflow = false;
   bool SourceDx10Clamp = true;
   bool SourceIeeeMode = true;

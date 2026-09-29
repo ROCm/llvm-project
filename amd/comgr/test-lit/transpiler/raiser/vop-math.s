@@ -23,6 +23,9 @@
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE-TANH
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 \
 ; RUN:   --emit-ir=refuse_tanh | %FileCheck %s --check-prefix=SUPPORT-TANH
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=refuse_bf16_denorm 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE-BF16-DENORM
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -183,6 +186,12 @@ vop3_math:
 ; CHECK: call float @llvm.maxnum.f32
 ; CHECK: call float @llvm.minnum.f32
 	v_fma_mix_f32_bf16 v10, -|v11|, v12, v13 op_sel_hi:[1,0,1] clamp
+; CHECK: call float @llvm.fma.f32(float 1.000000e+00,
+	v_fma_mix_f32_bf16 v10, 1.0, v11, 0 op_sel_hi:[1,0,0]
+; CHECK: call float @llvm.fma.f32(float 1.000000e+00,
+	v_fma_mix_f32_bf16 v10, 1.0, v11, 0 op_sel:[1,0,0] op_sel_hi:[1,0,0]
+; CHECK: call float @llvm.fma.f32(float 1.000000e+00,
+	v_fma_mix_f32_bf16 v10, 1.0, v11, 0 op_sel_hi:[0,0,0]
 	s_mov_b32 s4, -1
 ; CHECK: [[COND:%.+]] = icmp ne i32 {{.+}}, 0
 ; CHECK: select i1 [[COND]], i32
@@ -271,6 +280,15 @@ refuse_tanh:
 	global_store_dword v[2:3], v0, off
 	s_endpgm
 
+	.globl	refuse_bf16_denorm
+	.p2align	8
+	.type	refuse_bf16_denorm,@function
+; REFUSE-BF16-DENORM: unsupported-floating-point-mode: v_fma_mix_f32_bf16
+; REFUSE-BF16-DENORM-SAME: BF16 input denormal flushing is unsupported
+refuse_bf16_denorm:
+	v_fma_mix_f32_bf16 v0, v1, v2, v3 op_sel_hi:[1,0,0]
+	s_endpgm
+
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel vop_math
@@ -278,6 +296,8 @@ refuse_tanh:
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel vop3_math
+		.amdhsa_float_denorm_mode_32 3
+		.amdhsa_float_denorm_mode_16_64 3
 		.amdhsa_next_free_vgpr 12
 		.amdhsa_next_free_sgpr 5
 	.end_amdhsa_kernel
@@ -302,6 +322,13 @@ refuse_tanh:
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_tanh
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_bf16_denorm
+		.amdhsa_wavefront_size32 1
+		.amdhsa_float_denorm_mode_32 3
+		.amdhsa_float_denorm_mode_16_64 0
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
@@ -387,6 +414,16 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         refuse_tanh.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_bf16_denorm
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         refuse_bf16_denorm.kd
     .vgpr_count:     4
     .wavefront_size: 32
 amdhsa.version: [1, 2]

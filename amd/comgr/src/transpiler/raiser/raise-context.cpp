@@ -56,6 +56,11 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_32);
   const unsigned SourceFloatRoundMode16_64 = AMDHSA_BITS_GET(
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_16_64);
+  const unsigned SourceFloatDenormMode16_64 = AMDHSA_BITS_GET(
+      Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_DENORM_MODE_16_64);
+  const bool SourceBF16InputDenormsFlush =
+      SourceFloatDenormMode16_64 == amdhsa::FLOAT_DENORM_MODE_FLUSH_SRC_DST ||
+      SourceFloatDenormMode16_64 == amdhsa::FLOAT_DENORM_MODE_FLUSH_SRC;
   const bool SourceFp16Overflow = AMDHSA_BITS_GET(
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_GFX9_PLUS_FP16_OVFL);
   bool Dx10Clamp = true;
@@ -68,11 +73,11 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
         AMDHSA_BITS_GET(Meta.ComputePgmRsrc1,
                         amdhsa::COMPUTE_PGM_RSRC1_GFX6_GFX11_ENABLE_IEEE_MODE);
   }
-  RaiseContext Context(B, Projection, MC, SetPc, std::move(*Registers),
-                       SourceTextBytes, SourceTextBaseAddress,
-                       SourceImageSections, KernelStartOffset, KernelEndOffset,
-                       SourceFloatRoundMode32, SourceFloatRoundMode16_64,
-                       SourceFp16Overflow, Dx10Clamp, IeeeMode);
+  RaiseContext Context(
+      B, Projection, MC, SetPc, std::move(*Registers), SourceTextBytes,
+      SourceTextBaseAddress, SourceImageSections, KernelStartOffset,
+      KernelEndOffset, SourceFloatRoundMode32, SourceFloatRoundMode16_64,
+      SourceBF16InputDenormsFlush, SourceFp16Overflow, Dx10Clamp, IeeeMode);
   Context.SourceSramEcc = SourceSramEcc;
   return Context;
 }
@@ -179,7 +184,8 @@ RaiseContext::RaiseContext(
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset,
     unsigned SourceFloatRoundMode32, unsigned SourceFloatRoundMode16_64,
-    bool SourceFp16Overflow, bool SourceDx10Clamp, bool SourceIeeeMode)
+    bool SourceBF16InputDenormsFlush, bool SourceFp16Overflow,
+    bool SourceDx10Clamp, bool SourceIeeeMode)
     : B(B), Projection(Projection), MC(MC), SetPc(SetPc),
       Registers(std::move(Registers)), SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
@@ -187,6 +193,7 @@ RaiseContext::RaiseContext(
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),
       SourceFloatRoundMode32(SourceFloatRoundMode32),
       SourceFloatRoundMode16_64(SourceFloatRoundMode16_64),
+      SourceBF16InputDenormsFlush(SourceBF16InputDenormsFlush),
       SourceFp16Overflow(SourceFp16Overflow), SourceDx10Clamp(SourceDx10Clamp),
       SourceIeeeMode(SourceIeeeMode) {}
 
@@ -249,6 +256,16 @@ Error RaiseContext::validateFPEnvironment(const DecodedInst &Di,
   }
 
   return Error::success();
+}
+
+Error RaiseContext::validateBF16InputDenormMode(const DecodedInst &Di) const {
+  if (!SourceBF16InputDenormsFlush)
+    return Error::success();
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedFloatingPointMode,
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      "BF16 input denormal flushing is unsupported");
 }
 
 BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {
