@@ -169,6 +169,21 @@ jobs:
         if: ${{ steps.stage_config.outputs.pip_install_cmd }}
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
+      # TheRock is checked out at the workspace root and reads BRANCH_CONFIG.json
+      # from its own source root, so writing it here turns on assertions for this
+      # branch without modifying TheRock. Needs the LLVM_ENABLE_ASSERTIONS flag
+      # declared on TheRock's compiler/amd-staging (ROCm/TheRock#7291): overriding
+      # an undeclared flag default is a fatal configure error.
+      - name: Enable LLVM assertions
+        run: |
+          cat > BRANCH_CONFIG.json <<'EOF'
+          {
+            "flags": {
+              "LLVM_ENABLE_ASSERTIONS": "ON"
+            }
+          }
+          EOF
+
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
