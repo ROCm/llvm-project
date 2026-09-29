@@ -3,6 +3,18 @@ project(ComgrStaticLinkTest LANGUAGES C)
 include(../../cmake/ComgrStaticLibraries.cmake)
 enable_testing()
 
+if(COMGR_REJECT_TEST)
+  file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/reject.c" "int main(void) { return 0; }\n")
+  add_executable(reject "${CMAKE_CURRENT_BINARY_DIR}/reject.c")
+  if(COMGR_REJECT_TEST STREQUAL "conditional")
+    set(dependency "$<$<NOT:$<LINK_LANGUAGE:Swift>>:delayimp;-delayload:ole32.dll;LLVM>")
+  else()
+    set(dependency "$<$<NOT:$<LINK_LANGUAGE:Swift>>:delayimp;-delayload:ole32.dll")
+  endif()
+  comgr_static_link_libraries(reject "${dependency}")
+  return()
+endif()
+
 # The late archive refers back to a separate object in the first archive.
 # Linking only the roots in a rescan group leaves this reference unresolved.
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/entry.c"
@@ -65,10 +77,12 @@ target_link_libraries(first PRIVATE LLVM)
 set_target_properties(first late PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Import in the parent directory, as a superproject can do before adding Comgr.
+add_library(list-dependencies INTERFACE)
+target_link_libraries(list-dependencies INTERFACE "$<LINK_ONLY:late_alias;LLVM>")
 add_library(imported_first STATIC IMPORTED)
 set_target_properties(imported_first PROPERTIES
   IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}first${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  INTERFACE_LINK_LIBRARIES "dependencies;$<LINK_ONLY:LLVM>")
+  INTERFACE_LINK_LIBRARIES "dependencies;list-dependencies;$<LINK_ONLY:LLVM>")
 foreach(config IN LISTS CMAKE_CONFIGURATION_TYPES)
   string(TOUPPER "${config}" upper_config)
   set_property(TARGET imported_first PROPERTY "IMPORTED_LOCATION_${upper_config}"
@@ -102,12 +116,19 @@ add_test(NAME run-other-consumer COMMAND other-consumer)
 
 # Check the Windows LLVMSupport interface without invoking a Windows linker.
 # EXCLUDE_FROM_ALL allows this configuration regression to run on Unix too.
-foreach(wrapper IN ITEMS plain intel)
+# These flags defer loading system DLLs. Keep the fixtures independent of the
+# recognizer so changes to its whitelist cannot mask bugs.
+foreach(wrapper IN ITEMS plain intel reordered extended intel-extended)
   set(WL "")
-  if(wrapper STREQUAL "intel")
+  if(wrapper MATCHES "^intel")
     set(WL "$<$<OR:$<LINK_LANG_AND_ID:C,IntelLLVM>,$<LINK_LANG_AND_ID:CXX,IntelLLVM>,$<LINK_LANG_AND_ID:Fortran,IntelLLVM>>:-Qoption,link,>")
   endif()
   set(delayload "$<$<NOT:$<LINK_LANGUAGE:Swift>>:delayimp;${WL}-delayload:shell32.dll;${WL}-delayload:ole32.dll>")
+  if(wrapper STREQUAL "reordered")
+    set(delayload "$<$<NOT:$<LINK_LANGUAGE:Swift>>:-delayload:ole32.dll;delayimp;-delayload:shell32.dll>")
+  elseif(wrapper MATCHES "extended$")
+    set(delayload "$<$<NOT:$<LINK_LANGUAGE:Swift>>:delayimp;${WL}-delayload:ole32.dll;${WL}-delayload:shell32.dll;${WL}-delayload:advapi32.dll>")
+  endif()
   add_library(windows-support-${wrapper} INTERFACE)
   target_link_libraries(windows-support-${wrapper} INTERFACE "${delayload}" LLVM)
   add_executable(windows-consumer-${wrapper} EXCLUDE_FROM_ALL
@@ -122,3 +143,41 @@ foreach(wrapper IN ITEMS plain intel)
     message(FATAL_ERROR "Windows consumer retained the LLVM dylib")
   endif()
 endforeach()
+
+foreach(kind IN ITEMS conditional unterminated)
+  add_test(NAME reject-${kind}
+    COMMAND "${CMAKE_COMMAND}"
+      "-DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}"
+      "-DBINARY=${CMAKE_CURRENT_BINARY_DIR}/reject-${kind}"
+      "-DCOMPILER=${CMAKE_C_COMPILER}" "-DKIND=${kind}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/check-rejected.cmake")
+endforeach()
+add_subdirectory(usage)
+
+# Nested list expressions and literal brackets must leave the next item intact.
+set(expected "$<LINK_ONLY:/tmp/lib<name.a>>")
+set(pending "${expected};late")
+comgr_pop_link_dependency(actual pending)
+if(NOT actual STREQUAL expected OR NOT pending STREQUAL "late")
+  message(FATAL_ERROR "Literal brackets consumed the next link item")
+endif()
+set(expected "$<$<BOOL:1>:$<LINK_ONLY:first>;late>")
+set(pending "${expected};shared")
+comgr_pop_link_dependency(actual pending)
+if(NOT actual STREQUAL expected OR NOT pending STREQUAL "shared")
+  message(FATAL_ERROR "Nested list expression was not reconstructed")
+endif()
+
+# Link a real archive whose filename contains literal brackets.
+add_library(bracket STATIC "${CMAKE_CURRENT_BINARY_DIR}/shared.c")
+set_target_properties(bracket PROPERTIES OUTPUT_NAME "bracket<name" SUFFIX ".a>")
+foreach(config IN LISTS CMAKE_CONFIGURATION_TYPES)
+  string(TOUPPER "${config}" upper_config)
+  set_property(TARGET bracket PROPERTY "ARCHIVE_OUTPUT_DIRECTORY_${upper_config}"
+    "${CMAKE_CURRENT_BINARY_DIR}")
+endforeach()
+add_executable(bracket-consumer "${CMAKE_CURRENT_BINARY_DIR}/main.c")
+add_dependencies(bracket-consumer bracket)
+comgr_static_link_libraries(bracket-consumer first
+  "$<LINK_ONLY:${CMAKE_CURRENT_BINARY_DIR}/libbracket<name.a>>")
+add_test(NAME run-bracket-consumer COMMAND bracket-consumer)

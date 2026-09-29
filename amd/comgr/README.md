@@ -84,8 +84,7 @@ may be enabled during development via `-DADDRESS_SANITIZER=On` during the Comgr
 archives into the Comgr shared library. This works with standalone package
 imports, imports supplied by a parent project, and LLVM external-project
 builds. LLVM/Clang/LLD static archives must be available even when their shared
-libraries were also built. Comgr uses its own archive link list; other targets
-retain their original dependency interfaces. By default (`OFF`), Comgr respects
+libraries were also built. By default (`OFF`), Comgr respects
 `LLVM_LINK_LLVM_DYLIB` and `CLANG_LINK_CLANG_DYLIB`.
 
 **Windows DLL Name:** On Windows, the DLL is named `amd_comgr.dll` by default.

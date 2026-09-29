@@ -48,6 +48,60 @@ function(comgr_static_llvm_libraries output)
   set(${output} ${libraries} PARENT_SCOPE)
 endfunction()
 
+# Take one link item, joining list fragments only while inside a generator
+# expression. A literal '>' outside an expression is part of the item.
+function(comgr_pop_link_dependency output queue)
+  set(pending "${${queue}}")
+  set(dependency)
+  set(depth 0)
+  while(TRUE)
+    list(GET pending 0 fragment)
+    list(REMOVE_AT pending 0)
+    string(APPEND dependency "${fragment}")
+    string(REGEX MATCHALL [[\$<|>]] tokens "${fragment}")
+    foreach(token IN LISTS tokens)
+      if(token STREQUAL "$<")
+        math(EXPR depth "${depth} + 1")
+      elseif(depth GREATER 0)
+        math(EXPR depth "${depth} - 1")
+      endif()
+    endforeach()
+    if(depth EQUAL 0)
+      break()
+    endif()
+    if(NOT pending)
+      message(FATAL_ERROR "Unterminated Comgr link expression: ${dependency}")
+    endif()
+    string(APPEND dependency ";")
+  endwhile()
+  set(${output} "${dependency}" PARENT_SCOPE)
+  set(${queue} "${pending}" PARENT_SCOPE)
+endfunction()
+
+# LLVMSupport delays loading Windows system DLLs to reduce startup work.
+# Accept only delayimp and delay-load flags, with an optional IntelLLVM driver
+# wrapper. A conditional LLVM target must not pass as a system flag.
+function(comgr_is_delayload output dependency)
+  set(valid FALSE)
+  if(dependency MATCHES [[^\$<\$<NOT:\$<LINK_LANGUAGE:Swift>>:(.*)>$]])
+    set(flags "${CMAKE_MATCH_1}")
+    string(REPLACE
+      "$<$<OR:$<LINK_LANG_AND_ID:C,IntelLLVM>,$<LINK_LANG_AND_ID:CXX,IntelLLVM>,$<LINK_LANG_AND_ID:Fortran,IntelLLVM>>:-Qoption,link,>"
+      "" flags "${flags}")
+    set(valid TRUE)
+    foreach(flag IN LISTS flags)
+      if(NOT flag STREQUAL "delayimp" AND
+         NOT flag MATCHES [[^-delayload:[A-Za-z0-9_.-]+\.[dD][lL][lL]$]])
+        set(valid FALSE)
+      endif()
+    endforeach()
+    if(NOT "delayimp" IN_LIST flags)
+      set(valid FALSE)
+    endif()
+  endif()
+  set(${output} ${valid} PARENT_SCOPE)
+endfunction()
+
 # Flatten static-library interfaces for this consumer only. File generator
 # expressions keep archive locations valid across build configurations.
 function(comgr_static_link_libraries consumer)
@@ -55,36 +109,18 @@ function(comgr_static_link_libraries consumer)
   set(seen)
   set(libraries)
   while(pending)
-    list(GET pending 0 dependency)
-    list(REMOVE_AT pending 0)
-    # A generator expression can contain a list. Reassemble it before
-    # inspecting it, including any nested expressions in linker flags.
-    while(dependency MATCHES [[\$<]])
-      string(REGEX MATCHALL [[\$<]] opens "${dependency}")
-      string(REGEX MATCHALL [[>]] closes "${dependency}")
-      list(LENGTH opens open_count)
-      list(LENGTH closes close_count)
-      if(open_count EQUAL close_count OR NOT pending)
-        break()
-      endif()
-      list(GET pending 0 fragment)
-      list(REMOVE_AT pending 0)
-      string(APPEND dependency ";${fragment}")
-    endwhile()
-    # LLVMSupport exports these system-only Windows dependencies. Preserve
-    # their conditions, including the optional IntelLLVM linker wrapper.
-    if(dependency MATCHES [[^\$<\$<NOT:\$<LINK_LANGUAGE:Swift>>:(.*)>$]])
-      set(delayload "${CMAKE_MATCH_1}")
-      string(REPLACE
-        "$<$<OR:$<LINK_LANG_AND_ID:C,IntelLLVM>,$<LINK_LANG_AND_ID:CXX,IntelLLVM>,$<LINK_LANG_AND_ID:Fortran,IntelLLVM>>:-Qoption,link,>"
-        "" delayload "${delayload}")
-      if(delayload STREQUAL "delayimp;-delayload:shell32.dll;-delayload:ole32.dll")
-        target_link_libraries(${consumer} PRIVATE "${dependency}")
-        continue()
-      endif()
+    comgr_pop_link_dependency(dependency pending)
+    comgr_is_delayload(delayload "${dependency}")
+    if(delayload)
+      target_link_libraries(${consumer} PRIVATE "${dependency}")
+      continue()
     endif()
-    if(dependency MATCHES [[^\$<LINK_ONLY:([^<>]+)>$]])
-      set(dependency "${CMAKE_MATCH_1}")
+    if(dependency MATCHES [[^\$<LINK_ONLY:([^>$]*)>(.*)$]])
+      # The payload can itself be a list. Inspect each entry so a wrapped
+      # list cannot bypass target filtering or archive collection.
+      set(unwrapped "${CMAKE_MATCH_1}${CMAKE_MATCH_2}")
+      list(INSERT pending 0 ${unwrapped})
+      continue()
     endif()
     if(TARGET "${dependency}")
       get_target_property(aliased "${dependency}" ALIASED_TARGET)
@@ -107,23 +143,60 @@ function(comgr_static_link_libraries consumer)
     get_target_property(type "${dependency}" TYPE)
     if(NOT type STREQUAL "STATIC_LIBRARY" AND
        NOT type STREQUAL "INTERFACE_LIBRARY")
-      list(APPEND libraries "${dependency}")
+      # LINK_ONLY in an interface works with CMake versions before CMP0131.
+      # Compile requirements are collected separately below.
+      set(link_interface "${consumer}-comgr-link-only")
+      if(NOT TARGET "${link_interface}")
+        add_library("${link_interface}" INTERFACE IMPORTED)
+      endif()
+      if(NOT link_interface IN_LIST libraries)
+        list(APPEND libraries "${link_interface}")
+      endif()
+      set_property(TARGET "${link_interface}" APPEND PROPERTY
+        INTERFACE_LINK_LIBRARIES "$<LINK_ONLY:${dependency}>")
       continue()
     endif()
     if(type STREQUAL "STATIC_LIBRARY")
       list(APPEND libraries "$<TARGET_LINKER_FILE:${dependency}>")
       add_dependencies(${consumer} "${dependency}")
     endif()
-    # Copy direct usage requirements while visiting each archive's interface;
-    # linking the original target would also reintroduce its LLVM dylib edge.
+    foreach(property IN ITEMS LINK_OPTIONS LINK_DIRECTORIES)
+      get_target_property(value "${dependency}" "INTERFACE_${property}")
+      if(value)
+        set_property(TARGET ${consumer} APPEND PROPERTY "${property}" ${value})
+      endif()
+    endforeach()
+    get_target_property(dependencies "${dependency}" INTERFACE_LINK_LIBRARIES)
+    if(dependencies)
+      list(APPEND pending ${dependencies})
+    endif()
+  endwhile()
+  # LINK_ONLY suppresses compile requirements for the entire subtree. Visit
+  # public edges separately so a second, public path to a private dependency
+  # still contributes its compile requirements.
+  set(pending ${ARGN})
+  set(seen)
+  while(pending)
+    comgr_pop_link_dependency(dependency pending)
+    if(dependency MATCHES [[^\$<LINK_ONLY:]] OR
+       NOT TARGET "${dependency}")
+      continue()
+    endif()
+    get_target_property(aliased "${dependency}" ALIASED_TARGET)
+    if(aliased)
+      set(dependency "${aliased}")
+    endif()
+    if(dependency STREQUAL "LLVM" OR dependency IN_LIST seen)
+      continue()
+    endif()
+    list(APPEND seen "${dependency}")
     get_target_property(system_includes "${dependency}"
       INTERFACE_SYSTEM_INCLUDE_DIRECTORIES)
     if(system_includes)
       target_include_directories(${consumer} SYSTEM PRIVATE ${system_includes})
     endif()
-    foreach(property IN ITEMS INCLUDE_DIRECTORIES
-        COMPILE_DEFINITIONS COMPILE_OPTIONS COMPILE_FEATURES LINK_OPTIONS
-        LINK_DIRECTORIES)
+    foreach(property IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
+        COMPILE_OPTIONS COMPILE_FEATURES)
       get_target_property(value "${dependency}" "INTERFACE_${property}")
       if(value)
         set_property(TARGET ${consumer} APPEND PROPERTY "${property}" ${value})
