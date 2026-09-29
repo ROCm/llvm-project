@@ -16,7 +16,6 @@
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
-#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -44,8 +43,8 @@ Expected<Value *> readSopkImmediate(RaiseContext &Ctx, const DecodedInst &Di,
     return unsupportedInstruction(Ctx, Di,
                                   "SOPK immediate exceeds its 16-bit field");
   uint16_t Bits = static_cast<uint16_t>(Raw);
-  int32_t Value = IsSigned ? SignExtend32<16>(Bits) : Bits;
-  return Ctx.B.getInt32(Value);
+  int32_t Immediate = IsSigned ? SignExtend32<16>(Bits) : Bits;
+  return Ctx.B.getInt32(Immediate);
 }
 
 bool isUnsignedSopkCompare(CanonicalOp Kind) {
