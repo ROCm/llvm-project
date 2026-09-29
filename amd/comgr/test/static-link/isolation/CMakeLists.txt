@@ -27,4 +27,15 @@ foreach(kind IN ITEMS imported builtin)
     COMMAND "${CMAKE_COMMAND}" "-DREADELF=${CMAKE_READELF}"
       "-DLIBRARY=$<TARGET_FILE:isolated-${kind}>"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/check-dependencies.cmake")
+
+  # Standalone drivers need the same isolation as the shared library, including
+  # when the linker retains unused shared dependencies.
+  add_executable(driver-${kind} "${CMAKE_CURRENT_BINARY_DIR}/../main.c")
+  comgr_static_link_libraries(driver-${kind} ${root} shared ${llvm_libraries})
+  target_link_options(driver-${kind} PRIVATE -Wl,--no-as-needed)
+  add_test(NAME run-driver-${kind} COMMAND driver-${kind})
+  add_test(NAME driver-dependencies-${kind}
+    COMMAND "${CMAKE_COMMAND}" "-DREADELF=${CMAKE_READELF}"
+      "-DLIBRARY=$<TARGET_FILE:driver-${kind}>"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/check-dependencies.cmake")
 endforeach()
