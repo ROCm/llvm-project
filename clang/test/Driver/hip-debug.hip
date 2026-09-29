@@ -9,7 +9,7 @@
 // RUN:   -x hip --cuda-gpu-arch=gfx900 %s 2>&1 | \
 // RUN:   FileCheck -check-prefixes=DEFAULT %s
 
-// DEFAULT: {{.*}}clang{{.*}}"-triple" "amdgcn-amd-amdhsa"
+// DEFAULT: {{.*}}clang{{.*}}"-triple" "amdgpu9.00-amd-amdhsa"
 // DEFAULT-NOT: "-disable-O0-optnone"
 // DEFAULT-NOT: "-debug-info-kind=line-tables-only"
 // DEFAULT-DAG: "-debug-info-kind=constructor"
@@ -35,6 +35,6 @@
 // RUN:   -x hip --cuda-gpu-arch=gfx900 -fgpu-rdc %s 2>&1 | \
 // RUN:   FileCheck -check-prefixes=RDC %s
 
-// RDC: {{.*}}clang{{.*}}"-triple" "amdgcn-amd-amdhsa"
+// RDC: {{.*}}clang{{.*}}"-triple" "amdgpu9.00-amd-amdhsa"
 // RDC-DAG: "-mllvm" "-amdgpu-spill-cfi-saved-regs"
 // RDC-DAG: "-gheterogeneous-dwarf=diexpression"

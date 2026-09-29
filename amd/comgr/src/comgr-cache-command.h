@@ -25,6 +25,15 @@ class CachedCommandAdaptor {
 public:
   using ActionClass =
       std::underlying_type_t<clang::driver::Action::ActionClass>;
+
+  // Cache-key tags for comgr commands that have no clang driver action.
+  // Allocated above clang's range so they cannot collide with a ClangCommand;
+  // the values only need to be unique within comgr.
+  enum ComgrActionClass : ActionClass {
+    SPIRVClass = clang::driver::Action::ActionClass::JobClassLast + 1,
+    UnbundleClass,
+  };
+
   using HashAlgorithm = llvm::SHA256;
   using Identifier = llvm::SmallString<64>;
 

@@ -30,8 +30,6 @@ class DwarfCompileUnit;
 class MCDwarfDwoLineTable;
 class MCSymbol;
 
-extern bool DisableDwarfLocations;
-
 //===----------------------------------------------------------------------===//
 /// This dwarf writer support class manages information associated with a
 /// source file.
@@ -75,6 +73,7 @@ protected:
   /// DW_AT_containing_type attribute. This attribute points to a DIE that
   /// corresponds to the MDNode mapped with the subprogram DIE.
   DenseMap<DIE *, const DINode *> ContainingTypeMap;
+  DenseMap<DIE *, const DINode *> PropertyForwardMap;
 
   DwarfUnit(dwarf::Tag, const DICompileUnit *Node, AsmPrinter *A,
             DwarfDebug *DW, DwarfFile *DWU, unsigned UniqueID = 0);
@@ -113,9 +112,6 @@ public:
   llvm::dwarf::SourceLanguage getSourceLanguage() const;
   const DICompileUnit *getCUNode() const { return CUNode; }
   DwarfDebug &getDwarfDebug() const { return *DD; }
-
-  /// Return true if this compile unit has something to write out.
-  bool hasContent() const { return getUnitDie().hasChildren(); }
 
   /// Get string containing language specific context for a global name.
   ///
@@ -230,6 +226,7 @@ public:
   void addSourceLine(DIE &Die, const DILabel *L);
   void addSourceLine(DIE &Die, const DIType *Ty);
   void addSourceLine(DIE &Die, const DIObjCProperty *Ty);
+  void addSourceLine(DIE &Die, const DIProperty *P);
 
   /// Add constant value entry in variable DIE.
   void addConstantValue(DIE &Die, const ConstantInt *CI, const DIType *Ty);
@@ -280,6 +277,8 @@ public:
 
   /// Construct DIEs for types that contain vtables.
   void constructContainingTypeDIEs();
+
+  void constructPropertyForwardDIEs();
 
   /// Construct function argument DIEs.
   ///
@@ -391,6 +390,7 @@ private:
   void constructArrayTypeDIE(DIE &Buffer, const DICompositeType *CTy);
   void constructEnumTypeDIE(DIE &Buffer, const DICompositeType *CTy);
   DIE &constructMemberDIE(DIE &Buffer, const DIDerivedType *DT);
+  void constructPropertyDIE(DIE &Buffer, const DIProperty *P);
   void constructTemplateTypeParameterDIE(DIE &Buffer,
                                          const DITemplateTypeParameter *TP);
   void constructTemplateValueParameterDIE(DIE &Buffer,
@@ -403,9 +403,6 @@ private:
 
   /// Get an anonymous type for index type.
   DIE *getIndexTyDie();
-
-  /// Set D as anonymous type for index which can be reused later.
-  void setIndexTyDie(DIE *D) { IndexTyDie = D; }
 
   virtual void finishNonUnitTypeDIE(DIE& D, const DICompositeType *CTy) = 0;
 

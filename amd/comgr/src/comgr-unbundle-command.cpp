@@ -121,7 +121,7 @@ amd_comgr_status_t UnbundleCommand::execute(raw_ostream &LogS) {
 }
 
 CachedCommandAdaptor::ActionClass UnbundleCommand::getClass() const {
-  return clang::driver::Action::OffloadUnbundlingJobClass;
+  return CachedCommandAdaptor::UnbundleClass;
 }
 
 void UnbundleCommand::addOptionsIdentifier(HashAlgorithm &H) const {

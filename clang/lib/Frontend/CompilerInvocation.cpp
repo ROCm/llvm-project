@@ -572,7 +572,7 @@ static bool FixupInvocation(CompilerInvocation &Invocation,
   CodeGenOpts.LargeDataThreshold = TargetOpts.LargeDataThreshold;
 
   if (CodeGenOpts.getExceptionHandling() !=
-          CodeGenOptions::ExceptionHandlingKind::None &&
+          CodeGenOptions::ExceptionHandlingKind::Default &&
       T.isWindowsMSVCEnvironment())
     Diags.Report(diag::err_fe_invalid_exception_model)
         << static_cast<unsigned>(CodeGenOpts.getExceptionHandling()) << T.str();
@@ -1764,9 +1764,6 @@ void CompilerInvocationBase::GenerateCodeGenArgs(const CodeGenOptions &Opts,
     GenerateArg(Consumer, Opt);
   }
 
-  if (Opts.EnableAIXExtendedAltivecABI)
-    GenerateArg(Consumer, OPT_mabi_EQ_vec_extabi);
-
   if (Opts.XCOFFReadOnlyPointers)
     GenerateArg(Consumer, OPT_mxcoff_roptr);
 
@@ -1924,14 +1921,8 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
     Opts.CoveragePrefixMap.emplace_back(Split.first, Split.second);
   }
 
-  const llvm::Triple::ArchType DebugEntryValueArchs[] = {
-      llvm::Triple::x86,     llvm::Triple::x86_64, llvm::Triple::aarch64,
-      llvm::Triple::arm,     llvm::Triple::armeb,  llvm::Triple::mips,
-      llvm::Triple::mipsel,  llvm::Triple::mips64, llvm::Triple::mips64el,
-      llvm::Triple::riscv32, llvm::Triple::riscv64};
-
   if (Opts.OptimizationLevel > 0 && Opts.hasReducedDebugInfo() &&
-      llvm::is_contained(DebugEntryValueArchs, T.getArch()))
+      T.supportsDebugEntryValues())
     Opts.EmitCallSiteInfo = true;
 
   if (!Opts.EnableDIPreservationVerify && Opts.DIBugsReportFilePath.size()) {
@@ -1949,8 +1940,10 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
   Opts.UnrollLoops =
       Args.hasFlag(OPT_funroll_loops, OPT_fno_unroll_loops,
                    (Opts.OptimizationLevel > 1));
+  // Match the LLVM pipeline default (PipelineTuningOptions::LoopInterchange),
+  // which enables the pass whenever the optimization pipeline runs.
   Opts.InterchangeLoops =
-      Args.hasFlag(OPT_floop_interchange, OPT_fno_loop_interchange, false);
+      Args.hasFlag(OPT_floop_interchange, OPT_fno_loop_interchange, true);
   Opts.FuseLoops = Args.hasFlag(OPT_fexperimental_loop_fusion,
                                 OPT_fno_experimental_loop_fusion, false);
   Opts.BinutilsVersion =
@@ -3922,11 +3915,6 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
       GenerateArg(Consumer, OPT_fopenmp_version_EQ, Twine(Opts.OpenMP));
   }
 
-  if (Opts.OpenMPTargetIgnoreEnvVars)
-    GenerateArg(Consumer, OPT_fopenmp_target_ignore_env_vars);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_ignore_env_vars);
-
   if (Opts.OpenMPTargetBigJumpLoop)
     GenerateArg(Consumer, OPT_fopenmp_target_big_jump_loop);
   else
@@ -3936,26 +3924,6 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
     GenerateArg(Consumer, OPT_fopenmp_target_no_loop);
   else
     GenerateArg(Consumer, OPT_fno_openmp_target_no_loop);
-
-  if (Opts.OpenMPTargetXteamReduction)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_reduction);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_reduction);
-
-  if (Opts.OpenMPTargetFastReduction)
-    GenerateArg(Consumer, OPT_fopenmp_target_fast_reduction);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_fast_reduction);
-
-  if (Opts.OpenMPTargetXteamScan)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_scan);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_scan);
-
-  if (Opts.OpenMPTargetXteamNoLoopScan)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_no_loop_scan);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_no_loop_scan);
 
   if (Opts.OpenMPThreadSubscription)
     GenerateArg(Consumer, OPT_fopenmp_assume_threads_oversubscription);
@@ -3989,7 +3957,11 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
     GenerateArg(Consumer, OPT_fopenmp_gpu_threads_per_team_EQ,
                 Twine(Opts.OpenMPGPUThreadsPerTeam));
 
-  if (Opts.OpenMPTargetXteamReductionBlockSize != 1024)
+  // Keep this in sync with the default of OpenMPTargetXteamReductionBlockSize
+  // in LangOptions.def. Comparing against a stale default makes the generated
+  // arguments disagree with the parsed ones and turns every explicit use of
+  // '-fopenmp-target-xteam-reduction-blocksize=' into a round-trip error.
+  if (Opts.OpenMPTargetXteamReductionBlockSize != 512)
     GenerateArg(Consumer, OPT_fopenmp_target_xteam_reduction_blocksize_EQ,
                 Twine(Opts.OpenMPTargetXteamReductionBlockSize));
 
@@ -4453,10 +4425,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
       Args, options::OPT_fopenmp_target_xteam_reduction_blocksize_EQ,
       Opts.OpenMPTargetXteamReductionBlockSize, Diags);
 
-  Opts.OpenMPTargetIgnoreEnvVars =
-      Args.hasFlag(options::OPT_fopenmp_target_ignore_env_vars,
-                   options::OPT_fno_openmp_target_ignore_env_vars, false);
-
   Opts.OpenMPTargetBigJumpLoop =
       Args.hasFlag(options::OPT_fopenmp_target_big_jump_loop,
                    options::OPT_fno_openmp_target_big_jump_loop, true);
@@ -4464,22 +4432,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   Opts.OpenMPTargetNoLoop =
       Args.hasFlag(options::OPT_fopenmp_target_no_loop,
                    options::OPT_fno_openmp_target_no_loop, true);
-
-  Opts.OpenMPTargetXteamReduction =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_reduction,
-                   options::OPT_fno_openmp_target_xteam_reduction, true);
-
-  Opts.OpenMPTargetFastReduction =
-      Args.hasFlag(options::OPT_fopenmp_target_fast_reduction,
-                   options::OPT_fno_openmp_target_fast_reduction, false);
-
-  Opts.OpenMPTargetXteamScan =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_scan,
-                   options::OPT_fno_openmp_target_xteam_scan, false);
-
-  Opts.OpenMPTargetXteamNoLoopScan =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_no_loop_scan,
-                   options::OPT_fno_openmp_target_xteam_no_loop_scan, false);
 
   // Set the value of the debugging flag used in the new offloading device RTL.
   // Set either by a specific value or to a default if not specified.

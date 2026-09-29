@@ -9,7 +9,12 @@
 #ifndef COMGR_ENV_H
 #define COMGR_ENV_H
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
+
+namespace llvm {
+class raw_ostream;
+} // namespace llvm
 
 namespace COMGR {
 namespace env {
@@ -33,10 +38,6 @@ LogLevel resolveLogLevel();
 /// Return whether the environment requests temps be saved.
 bool shouldSaveTemps();
 bool shouldSaveLLVMTemps();
-
-/// True when AMD_COMGR_HOTSWAP_ENTRY_STUB_SYMBOLS is exactly "1": add the
-/// debug-only `<kernel>.stub` symbols the B0->B0 fast path skips by default.
-bool shouldAddEntryTrampolineSymbols();
 
 std::optional<bool> shouldUseVFS();
 
@@ -71,7 +72,8 @@ llvm::StringRef getCachePolicy();
 /// If environment variable AMD_COMGR_CACHE_DIR is set, return the environment
 /// variable, otherwise return the default path: On Linux it's typically
 /// $HOME/.cache/comgr_cache (depends on XDG_CACHE_HOME)
-llvm::StringRef getCacheDirectory();
+std::optional<llvm::SmallString<256>>
+getCacheDirectory(llvm::raw_ostream &LogS);
 
 /// If environment variable AMD_COMGR_DRIVER_OPTIONS_APPEND is set, return the
 /// space-separated options to append to clang driver invocations.

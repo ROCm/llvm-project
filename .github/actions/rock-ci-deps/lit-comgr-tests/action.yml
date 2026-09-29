@@ -1,6 +1,6 @@
-name: LLVM toolchain Lit and COMGR tests
+name: LLVM toolchain Lit
 description: >
-  Runs check-llvm/clang/flang/mlir/lld, COMGR llvm-lit suite, and COMGR ctest
+  Runs check-llvm/clang/flang/mlir/lld
   when stage is compiler-runtime.
 
 inputs:
@@ -45,15 +45,3 @@ runs:
       run: |
         ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-lld
 
-    - name: COMGR Lit Tests
-      shell: bash
-      if: ${{ inputs.stage_name == 'compiler-runtime' }}
-      run: |
-        "${{ inputs.build_dir }}/compiler/amd-llvm/build/bin/llvm-lit" \
-          "${{ inputs.build_dir }}/compiler/amd-comgr/build/test-lit" -v
-
-    - name: COMGR CTest
-      shell: bash
-      if: ${{ inputs.stage_name == 'compiler-runtime' }}
-      run: |
-        ctest --test-dir "${{ inputs.build_dir }}/compiler/amd-comgr/build" --output-on-failure

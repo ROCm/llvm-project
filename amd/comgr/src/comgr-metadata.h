@@ -1,4 +1,4 @@
-//===- comgr-metadata.h - Metadata query internals ------------------------===//
+//===- comgr-metadata.h - Metadata query internals -----------------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.
@@ -21,7 +21,7 @@ namespace metadata {
 amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP);
 
 // Buffer-friendly overloads for callers that hold raw code-object bytes
-// without a `DataObject` (e.g. the hotswap transpiler running over an HSACO
+// without a `DataObject` (e.g. the transpiler running over an HSACO
 // buffer), so they reach the same note walker / ISA-string formatter without
 // the public C `amd_comgr_create_data` ceremony. These preserve the underlying
 // LLVM parse error; the `DataObject` overloads above map it to a status.

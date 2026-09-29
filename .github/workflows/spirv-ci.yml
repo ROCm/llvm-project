@@ -9,7 +9,7 @@ name: SPIRV Compiler CI - amd-staging
 on:
   pull_request:
     branches: [amd-staging]
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:

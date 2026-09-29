@@ -1092,7 +1092,7 @@ struct StackDepotStats {
 // indicate that sanitizer allocator should not attempt to release memory to OS.
 const s32 kReleaseToOSIntervalNever = -1;
 
-#if SANITIZER_AMDGPU
+#if SANITIZER_AMDHSA
 void PatchHsaRuntimeDlopenFlag(const char *filename, int &flag);
 #else
 inline void PatchHsaRuntimeDlopenFlag(const char *filename, int &flag) {}

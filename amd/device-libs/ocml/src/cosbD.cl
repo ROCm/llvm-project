@@ -27,8 +27,8 @@
 double
 MATH_PRIVATE(cosb)(double x, int n, double p)
 {
-    struct redret r = MATH_PRIVATE(trigred)(x);
-    bool b = r.hi < p;
+    struct epredret r = MATH_PRIVATE(eptrigred)(x);
+    bool b = r.r.hi < p;
     r.i = (r.i - b - n) & 3;
 
     // This is a properly signed extra precise pi/4
@@ -40,11 +40,11 @@ MATH_PRIVATE(cosb)(double x, int n, double p)
     pl += sl;
     FSUM2(ph, pl, ph, pl);
 
-    FSUM2(ph, r.hi, sh, sl);
-    sl += pl + r.lo;
+    FSUM2(ph, r.r.hi, sh, sl);
+    sl += pl + r.r.lo;
     FSUM2(sh, sl, sh, sl);
 
-    struct scret sc = MATH_PRIVATE(sincosred2)(sh, sl);
+    struct scret sc = MATH_PRIVATE(sincosredep)((double2)(sl, sh));
     sc.s = -sc.s;
 
     int2 c = AS_INT2((r.i & 1) != 0 ? sc.s : sc.c);

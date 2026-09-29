@@ -35,7 +35,6 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetOptions.h"
 #include <optional>
 #include <string>
 #include <utility>
@@ -542,8 +541,7 @@ DIE &DwarfCompileUnit::updateSubprogramScopeDIE(const DISubprogram *SP,
   attachRangesOrLowHighPC(*SPDie, BB_List);
 
   if (DD->useAppleExtensionAttributes() &&
-      !DD->getCurrentFunction()->getTarget().Options.DisableFramePointerElim(
-          *DD->getCurrentFunction()))
+      !DD->getCurrentFunction()->disableFramePointerElim())
     addFlag(*SPDie, dwarf::DW_AT_APPLE_omit_frame_ptr);
 
   if (emitFuncLineTableOffsets() && LineTableSym) {
@@ -1317,19 +1315,25 @@ DIE *DwarfCompileUnit::createAndAddScopeChildren(LexicalScope *Scope,
 
   // Emit inner lexical scopes.
   auto skipLexicalScope = [this](LexicalScope *S) -> bool {
-    if (isa<DISubprogram>(S->getScopeNode()))
+    const DILocalScope *DS = S->getScopeNode();
+    if (isa<DISubprogram>(DS))
       return false;
     // Don't skip abstract lexical blocks that are scope targets for global
     // variables (e.g., function-scope statics). Those globals are emitted
     // later in endModule() and need to find the block via
     // getOrCreateContextDIE().
-    if (S->isAbstractScope() && hasGlobalVariableInScope(S->getScopeNode()))
+    if (S->isAbstractScope() && hasGlobalVariableInScope(DS))
+      return false;
+    // Create a concrete lexical block for a scope with an abstract lexical
+    // block to ensure visibility of scope-local types and static variables
+    // within the scope range.
+    if (getAbstractScopeDIEs().lookup(DS))
       return false;
     auto Vars = DU->getScopeVariables().lookup(S);
     if (!Vars.Args.empty() || !Vars.Locals.empty())
       return false;
     return includeMinimalInlineScopes() ||
-           DD->getLocalDeclsForScope(S->getScopeNode()).empty();
+           DD->getLocalDeclsForScope(DS).empty();
   };
   for (LexicalScope *LS : Scope->getChildren()) {
     // If the lexical block doesn't have non-scope children or global
@@ -1803,9 +1807,6 @@ void DwarfCompileUnit::addVariableAddress(const DbgVariable &DV, DIE &Die,
 void DwarfCompileUnit::addLocationWithExpr(DIE &Die, dwarf::Attribute Attribute,
                                            const MachineLocation &Location,
                                            ArrayRef<uint64_t> Expr) {
-  if (DisableDwarfLocations)
-    return;
-
   DIELoc *Loc = new (DIEValueAllocator) DIELoc;
   DIEDwarfExpression DwarfExpr(*Asm, *this, *Loc);
   if (Location.isIndirect())
@@ -1849,9 +1850,6 @@ void DwarfCompileUnit::addMemoryLocation(DIE &Die, dwarf::Attribute Attribute,
 void DwarfCompileUnit::addComplexAddress(const DIExpression *DIExpr, DIE &Die,
                                          dwarf::Attribute Attribute,
                                          const MachineLocation &Location) {
-  if (DisableDwarfLocations)
-    return;
-
   DIELoc *Loc = new (DIEValueAllocator) DIELoc;
   DIEDwarfExpression DwarfExpr(*Asm, *this, *Loc);
   DwarfExpr.addFragmentOffset(DIExpr);
@@ -1878,9 +1876,6 @@ void DwarfCompileUnit::addComplexAddress(const DIExpression *DIExpr, DIE &Die,
 /// Add a Dwarf loclistptr attribute data and value.
 void DwarfCompileUnit::addLocationList(DIE &Die, dwarf::Attribute Attribute,
                                        unsigned Index) {
-  if (DisableDwarfLocations)
-    return;
-
   dwarf::Form Form = (DD->getDwarfVersion() >= 5)
                          ? dwarf::DW_FORM_loclistx
                          : DD->getDwarfSectionOffsetForm();

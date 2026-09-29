@@ -1,5 +1,4 @@
 ! RUN: %flang_fc1 -triple amdgcn-amd-amdhsa -emit-llvm -fopenmp -fopenmp-is-target-device -debug-info-kind=standalone %s -o - | FileCheck  %s
-! XFAIL: *
 subroutine fff(x, y)
   implicit none
   integer :: y(:)
@@ -25,6 +24,6 @@ end subroutine fff
 
 ! CHECK-DAG: ![[SP]] = {{.*}}!DISubprogram(name: "[[FN]]"{{.*}})
 ! CHECK-DAG: ![[X]] = !DILocalVariable(name: "x", arg: 1, scope: ![[SP]]{{.*}}type: ![[INT:[0-9]+]])
-! CHECK-DAG: ![[INT]] = !DIBasicType(name: "integer", size: 32, encoding: DW_ATE_signed)
+! CHECK-DAG: ![[INT]] = !DIBasicType(name: "integer(kind=4)", size: 32, encoding: DW_ATE_signed)
 ! CHECK-DAG: ![[Y]] = !DILocalVariable(name: "y", arg: 2, scope: ![[SP]]{{.*}}type: ![[ARR:[0-9]+]])
 ! CHECK-DAG: ![[ARR]] = !DICompositeType(tag: DW_TAG_array_type, baseType: ![[INT]]{{.*}})

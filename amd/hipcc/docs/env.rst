@@ -57,6 +57,8 @@ variables. For more information about other ROCm environment variables, see
 
     * - | ``HIPCC_VERBOSE``
         | Outputs detailed information on subcommands executed during compilation.
+        | **Note:** The ``--hipcc-verbose=<n>`` command-line option provides
+        | equivalent functionality and takes precedence over this variable when both are set.
       - | 1: Displays the command to ``clang++`` or ``nvcc`` with all options (``hipcc-cmd``).
         | 2: Displays all relevant environment variables and their values.
         | 4: Displays only the arguments passed to the ``hipcc`` command (``hipcc_args``).

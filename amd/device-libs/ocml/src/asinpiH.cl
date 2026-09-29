@@ -33,7 +33,7 @@ MATH_MANGLE(asinpi)(half x)
     half r;
     if (ax <= 0.5h) {
         half s = x * x;
-        r = ax * MATH_MAD(s, MATH_MAD(s, 0x1.0b8p-5h, 0x1.a7cp-5h), 0x1.46p-2h);
+        r = ax * PE2(s, 0x1.0b8p-5h, 0x1.a7cp-5h, 0x1.46p-2h);
     } else {
         float s = BUILTIN_MAD_F32((float)ax, -0.5f, 0.5f);
         float t = BUILTIN_AMDGPU_SQRT_F32(s);

@@ -33,6 +33,7 @@
 #include "clang/Driver/Job.h"
 #include "clang/Driver/OffloadBundler.h"
 #include "clang/Driver/Tool.h"
+#include "clang/Driver/ToolChain.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
@@ -102,6 +103,29 @@ namespace COMGR {
 
 namespace {
 constexpr llvm::StringLiteral LinkerJobName = "amdgpu::Linker";
+constexpr llvm::StringLiteral ProfileRuntimeRelativePath =
+    "lib/amdgcn-amd-amdhsa/libclang_rt.profile.a";
+
+struct ProfileLinkOptions {
+  bool NeedsRuntime = false;
+  bool HasResourceDir = false;
+};
+
+static ProfileLinkOptions getProfileLinkOptions(ArrayRef<std::string> Options) {
+  SmallVector<const char *, 16> Args;
+  for (const std::string &Option : Options)
+    Args.push_back(Option.c_str());
+
+  unsigned MissingArgIndex;
+  unsigned MissingArgCount;
+  InputArgList ParsedArgs =
+      getDriverOptTable().ParseArgs(Args, MissingArgIndex, MissingArgCount);
+  if (MissingArgCount != 0)
+    return {};
+
+  return {ToolChain::needsProfileRT(ParsedArgs),
+          ParsedArgs.hasArg(options::OPT_resource_dir)};
+}
 
 /// \brief Helper class for representing a single invocation of the assembler.
 struct AssemblerInvocation {
@@ -548,14 +572,16 @@ bool executeAssembler(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
 SmallString<128> getFilePath(DataObject *Object, StringRef Dir) {
   SmallString<128> Path(Dir);
   path::append(Path, Object->Name);
+  return Path;
+}
 
-  // Create directories specified in the File Path so that the in-process driver
-  // can successfully execute clang commands that use this file path as an
-  // output argument
+// Also creates the parent directory, which only paths the in-process driver
+// writes itself need; outputToFile creates its own.
+SmallString<128> getOutputFilePath(DataObject *Object, StringRef Dir) {
+  SmallString<128> Path = getFilePath(Object, Dir);
   if (fs::create_directories(path::parent_path(Path))) {
     return SmallString<128>();
   }
-
   return Path;
 }
 
@@ -570,8 +596,7 @@ amd_comgr_status_t inputFromFile(DataObject *Object, StringRef Path) {
   if (std::error_code EC = BufOrError.getError()) {
     return AMD_COMGR_STATUS_ERROR;
   }
-  Object->setData(BufOrError.get()->getBuffer());
-  return AMD_COMGR_STATUS_SUCCESS;
+  return Object->setData(std::move(*BufOrError));
 }
 
 amd_comgr_status_t outputToFile(StringRef Data, StringRef Path) {
@@ -1113,10 +1138,10 @@ amd_comgr_status_t AMDGPUCompiler::createTmpDirs() {
     if (env::shouldEmitVerboseLogs()) {
       LogS << "comgr-compiler: failed to create temporary directory '"
            << TmpDirPrefix << "': " << EC.message() << "\n";
-      const char *TmpDirEnv = std::getenv("TMPDIR");
-      if (TmpDirEnv)
-        LogS << "comgr-compiler: TMPDIR='" << TmpDirEnv
-             << "' may not exist or be writable\n";
+      SmallString<128> SystemTmpDir;
+      path::system_temp_directory(true, SystemTmpDir);
+      LogS << "comgr-compiler: '" << SystemTmpDir
+           << "' may not exist or be writable\n";
     }
     return AMD_COMGR_STATUS_ERROR;
   }
@@ -1394,7 +1419,7 @@ AMDGPUCompiler::processFiles(amd_comgr_data_kind_t OutputKind,
       continue;
     }
     auto IncludeFilePath = getFilePath(Input, IncludeDir);
-    if (auto Status = outputToFile(Input, IncludeFilePath)) {
+    if (auto Status = materializeDataObjectData(Input, IncludeFilePath)) {
       return Status;
     }
   }
@@ -1426,7 +1451,7 @@ AMDGPUCompiler::processFiles(amd_comgr_data_kind_t OutputKind,
     sys::path::replace_extension(OutputName, OutputSuffix);
     Output->setName(OutputName);
 
-    auto OutputFilePath = getFilePath(Output, OutputDir);
+    auto OutputFilePath = getOutputFilePath(Output, OutputDir);
 
     if (auto Status =
             processFile(Input, InputFilePath.c_str(), OutputFilePath.c_str())) {
@@ -1456,7 +1481,7 @@ amd_comgr_status_t AMDGPUCompiler::addIncludeFlags() {
     SmallString<128> OpenCLCBasePath = IncludeDir;
     sys::path::append(OpenCLCBasePath, "opencl-c-base.h");
     if (auto Status =
-            outputToFile(getOpenCLCBaseHeaderContents(), OpenCLCBasePath)) {
+            outputResource(OpenCLCBasePath, getOpenCLCBaseHeaderContents())) {
       return Status;
     }
     Args.push_back("-include");
@@ -1483,7 +1508,7 @@ amd_comgr_status_t AMDGPUCompiler::addIncludeFlags() {
     }
     PrecompiledHeaders.push_back(getFilePath(Input, IncludeDir));
     auto &PrecompiledHeaderPath = PrecompiledHeaders.back();
-    if (auto Status = outputToFile(Input, PrecompiledHeaderPath)) {
+    if (auto Status = materializeDataObjectData(Input, PrecompiledHeaderPath)) {
       return Status;
     }
     Args.push_back("-include-pch");
@@ -1584,8 +1609,12 @@ amd_comgr_status_t AMDGPUCompiler::outputResource(llvm::StringRef Path,
   // TODO: We should abstract the logic of deciding whether to use the VFS
   // or the real file system within inputFromFile and outputToFile.
   if (UseVFS) {
-    if (!InMemoryFS->addFile(Path, /* ModificationTime */ 0,
-                             llvm::MemoryBuffer::getMemBuffer(FileContent))) {
+    // Not null-terminated: set_data_from_file_slice hands us a raw mapping.
+    if (!InMemoryFS->addFile(
+            Path, /* ModificationTime */ 0,
+            llvm::MemoryBuffer::getMemBuffer(FileContent, Path,
+                                             /* RequiresNullTerminator */
+                                             false))) {
       return AMD_COMGR_STATUS_ERROR;
     }
   } else {
@@ -1595,6 +1624,11 @@ amd_comgr_status_t AMDGPUCompiler::outputResource(llvm::StringRef Path,
   }
 
   return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMDGPUCompiler::materializeDataObjectData(DataObject *Object,
+                                                             StringRef Path) {
+  return outputResource(Path, StringRef(Object->Data, Object->Size));
 }
 
 amd_comgr_status_t AMDGPUCompiler::addDeviceLibraries() {
@@ -2244,7 +2278,7 @@ amd_comgr_status_t AMDGPUCompiler::linkToRelocatable() {
 
   DataObject *Output = DataObject::convert(OutputT);
   Output->setName("a.o");
-  auto OutputFilePath = getFilePath(Output, OutputDir);
+  auto OutputFilePath = getOutputFilePath(Output, OutputDir);
   Args.push_back("-o");
   Args.push_back(OutputFilePath.c_str());
 
@@ -2269,6 +2303,35 @@ amd_comgr_status_t AMDGPUCompiler::linkToExecutable() {
   if (ActionInfo->IsaName) {
     if (auto Status = addTargetIdentifierFlags(ActionInfo->IsaName)) {
       return Status;
+    }
+  }
+
+  ProfileLinkOptions LinkOptions =
+      getProfileLinkOptions(ActionInfo->getOptions());
+  if (LinkOptions.NeedsRuntime && !LinkOptions.HasResourceDir) {
+    ArrayRef<ResourceDirResource> Resources = getResourceDirectoryFiles();
+    bool HasProfileRuntime = llvm::any_of(Resources, [](const auto &Resource) {
+      return Resource.RelativePath == ProfileRuntimeRelativePath;
+    });
+    if (HasProfileRuntime) {
+      // LLD cannot read embedded archives from VFS. Materialize the runtime
+      // archive set before replacing the driver's resource directory.
+      for (const ResourceDirResource &Resource : Resources) {
+        if (path::extension(Resource.RelativePath) != ".a")
+          continue;
+
+        SmallString<128> ResourcePath = InputDir;
+        path::append(ResourcePath, Resource.RelativePath);
+        if (amd_comgr_status_t Status =
+                outputToFile(Resource.FileContent, ResourcePath)) {
+          LogS << "comgr: failed to materialize embedded runtime '"
+               << Resource.RelativePath << "' at '" << ResourcePath << "'\n";
+          return Status;
+        }
+      }
+
+      Args.push_back("-resource-dir");
+      Args.push_back(InputDir.c_str());
     }
   }
 
@@ -2305,7 +2368,7 @@ amd_comgr_status_t AMDGPUCompiler::linkToExecutable() {
 
   DataObject *Output = DataObject::convert(OutputT);
   Output->setName("a.so");
-  auto OutputFilePath = getFilePath(Output, OutputDir);
+  auto OutputFilePath = getOutputFilePath(Output, OutputDir);
   Args.push_back("-o");
   Args.push_back(OutputFilePath.c_str());
 

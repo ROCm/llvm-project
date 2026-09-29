@@ -110,6 +110,8 @@ jobs:
       baseline_run_id: ${{ inputs.baseline_run_id || '' }}
       build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
       build_jax: false
+      repository: "ROCm/TheRock"
+      ref: ""       
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
@@ -122,7 +124,6 @@ jobs:
         needs.setup.outputs.enable_build_jobs == 'true'
       }}
     uses: ./.github/workflows/multi_arch_ci_linux.yml
-    secrets: inherit
     with:
       build_config: ${{ needs.setup.outputs.linux_build_config }}
       test_labels: ${{ needs.setup.outputs.linux_test_labels }}
@@ -131,6 +132,8 @@ jobs:
       rocm_rpm_package_version: ${{ needs.setup.outputs.rocm_rpm_package_version }}
       test_type: 'quick'
       changed_projects: ${{ inputs.changed_projects || '' }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}      
     permissions:
       contents: read
       id-token: write
@@ -146,13 +149,14 @@ jobs:
         needs.setup.outputs.enable_build_jobs == 'true'
       }}
     uses: ./.github/workflows/multi_arch_ci_windows.yml
-    secrets: inherit
     with:
       build_config: ${{ needs.setup.outputs.windows_build_config }}
       test_labels: ${{ needs.setup.outputs.windows_test_labels }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: 'quick'
       changed_projects: ${{ inputs.changed_projects || '' }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}        
     permissions:
       contents: read
       id-token: write
@@ -168,7 +172,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
+          ref: ${{ needs.setup.outputs.ref }}
       - name: Evaluate workflow results
         env:
           GITHUB_TOKEN: ${{ github.token }}

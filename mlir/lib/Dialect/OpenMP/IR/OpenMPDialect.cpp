@@ -344,6 +344,48 @@ void OpenMPDialect::initialize() {
 }
 
 //===----------------------------------------------------------------------===//
+// Dialect operation attribute verification
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyDeclareTargetAttr(Operation *op, Attribute attr) {
+  if (!isa<DeclareTargetInterface>(op))
+    return op->emitError() << "omp.declare_target can only be applied to "
+                              "DeclareTargetInterface ops";
+
+  auto declareTargetAttr = dyn_cast<DeclareTargetAttr>(attr);
+  if (!declareTargetAttr)
+    return op->emitError()
+           << "omp.declare_target must be an #omp.declaretarget attribute";
+
+  if (isa<mlir::FunctionOpInterface>(op)) {
+    if (declareTargetAttr.getAutomap())
+      return op->emitOpError()
+             << "omp.declare_target 'automap' is not valid on functions";
+
+    // TODO: Disallow the `local` clause (OpenMP 6.0).
+    if (declareTargetAttr.getCaptureClause() ==
+        mlir::omp::DeclareTargetCaptureClause::link)
+      return op->emitOpError()
+             << "omp.declare_target 'link' is not valid on functions";
+  } else {
+    // TODO: Disallow the `indirect` clause (OpenMP 5.1).
+    if (declareTargetAttr.getImplicit())
+      return op->emitOpError()
+             << "omp.declare_target 'implicit' is only valid on functions";
+  }
+  return success();
+}
+
+LogicalResult
+OpenMPDialect::verifyOperationAttribute(Operation *op,
+                                        NamedAttribute attribute) {
+  if (attribute.getName() == "omp.declare_target")
+    return verifyDeclareTargetAttr(op, attribute.getValue());
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Parser and printer for Allocate Clause
 //===----------------------------------------------------------------------===//
 
@@ -680,6 +722,10 @@ static LogicalResult verifyAllocateClause(
       return op->emitError()
              << "type mismatch between allocate variable and private variable "
                 "at index "
+             << privateIndex;
+    if (allocateVar != privateVar)
+      return op->emitError()
+             << "allocate variable does not match private variable at index "
              << privateIndex;
 
     if (!privateSyms ||
@@ -2964,7 +3010,7 @@ void ParallelOp::build(OpBuilder &builder, OperationState &state,
                     /*allocate_private_indices=*/nullptr, /*if_expr=*/nullptr,
                     /*num_threads_vars=*/ValueRange(),
                     /*private_vars=*/ValueRange(),
-                    /*private_syms=*/nullptr, /*private_needs_barrier=*/nullptr,
+                    /*private_syms=*/nullptr, /*private_needs_barrier=*/false,
                     /*proc_bind_kind=*/nullptr,
                     /*reduction_mod =*/nullptr, /*reduction_vars=*/ValueRange(),
                     /*reduction_byref=*/nullptr, /*reduction_syms=*/nullptr);
@@ -3094,7 +3140,7 @@ void TeamsOp::build(OpBuilder &builder, OperationState &state,
       clauses.dynGroupprivateAccessGroup, clauses.dynGroupprivateFallback,
       clauses.dynGroupprivateSize, clauses.ifExpr, clauses.numTeamsLower,
       clauses.numTeamsUpperVars, /*private_vars=*/{}, /*private_syms=*/nullptr,
-      /*private_needs_barrier=*/nullptr, clauses.reductionMod,
+      /*private_needs_barrier=*/false, clauses.reductionMod,
       clauses.reductionVars,
       makeDenseBoolArrayAttr(ctx, clauses.reductionByref),
       makeArrayAttr(ctx, clauses.reductionSyms), clauses.threadLimitVars);
@@ -3131,7 +3177,7 @@ LogicalResult TeamsOp::verify() {
                      "in any OpenMP dialect operations");
 
   // Check for num_teams clause restrictions
-  if (failed(verifyNumTeamsClause(getOperation(), this->getNumTeamsLower(),
+  if (failed(verifyNumTeamsClause(op, this->getNumTeamsLower(),
                                   this->getNumTeamsUpperVars())))
     return failure();
 
@@ -3147,7 +3193,7 @@ LogicalResult TeamsOp::verify() {
     return failure();
 
   if (failed(verifyDynGroupprivateClause(
-          getOperation(), getDynGroupprivateAccessGroupAttr(),
+          op, getDynGroupprivateAccessGroupAttr(),
           getDynGroupprivateFallbackAttr(), getDynGroupprivateSize())))
     return failure();
 
@@ -3235,7 +3281,8 @@ LogicalResult ScopeOp::verify() {
   if (failed(verifyAllocateClause(
           getOperation(), getAllocateVars(), getAllocatorVars(),
           getAllocateAlignmentsAttr(), getAllocatePrivateIndicesAttr(),
-          getPrivateVars(), getPrivateSymsAttr())))
+          getPrivateVars(), getPrivateSymsAttr(),
+          /*requirePrivateIndices=*/true)))
     return failure();
 
   if (failed(verifyPrivateVarList(*this)))
@@ -3802,19 +3849,20 @@ LogicalResult DeclareReductionOp::verifyRegions() {
 void TaskOp::build(OpBuilder &builder, OperationState &state,
                    const TaskOperands &clauses) {
   MLIRContext *ctx = builder.getContext();
-  TaskOp::build(
-      builder, state, clauses.iterated, clauses.affinityVars,
-      clauses.allocateVars, clauses.allocatorVars,
-      makeDenseI64ArrayAttr(ctx, clauses.allocateAlignments),
-      makeDenseI64ArrayAttr(ctx, clauses.allocatePrivateIndices),
-      makeArrayAttr(ctx, clauses.dependKinds), clauses.dependVars,
-      makeArrayAttr(ctx, clauses.dependIteratedKinds), clauses.dependIterated,
-      clauses.final, clauses.ifExpr, clauses.inReductionVars,
-      makeDenseBoolArrayAttr(ctx, clauses.inReductionByref),
-      makeArrayAttr(ctx, clauses.inReductionSyms), clauses.mergeable,
-      clauses.priority, /*private_vars=*/clauses.privateVars,
-      /*private_syms=*/makeArrayAttr(ctx, clauses.privateSyms),
-      clauses.privateNeedsBarrier, clauses.untied, clauses.eventHandle);
+  TaskOp::build(builder, state, clauses.iterated, clauses.affinityVars,
+                clauses.allocateVars, clauses.allocatorVars,
+                makeDenseI64ArrayAttr(ctx, clauses.allocateAlignments),
+                makeDenseI64ArrayAttr(ctx, clauses.allocatePrivateIndices),
+                makeArrayAttr(ctx, clauses.dependKinds), clauses.dependVars,
+                makeArrayAttr(ctx, clauses.dependIteratedKinds),
+                clauses.dependIterated, clauses.final, clauses.ifExpr,
+                clauses.inReductionVars,
+                makeDenseBoolArrayAttr(ctx, clauses.inReductionByref),
+                makeArrayAttr(ctx, clauses.inReductionSyms), clauses.mergeable,
+                clauses.priority, /*private_vars=*/clauses.privateVars,
+                /*private_syms=*/makeArrayAttr(ctx, clauses.privateSyms),
+                clauses.privateNeedsBarrier, clauses.threadset, clauses.untied,
+                clauses.eventHandle);
 }
 
 LogicalResult TaskOp::verify() {
@@ -3884,7 +3932,8 @@ void TaskloopContextOp::build(OpBuilder &builder, OperationState &state,
       /*private_syms=*/makeArrayAttr(ctx, clauses.privateSyms),
       clauses.privateNeedsBarrier, clauses.reductionMod, clauses.reductionVars,
       makeDenseBoolArrayAttr(ctx, clauses.reductionByref),
-      makeArrayAttr(ctx, clauses.reductionSyms), clauses.untied);
+      makeArrayAttr(ctx, clauses.reductionSyms), clauses.threadset,
+      clauses.untied);
   state.addAttribute("omp.combined", UnitAttr::get(ctx));
 }
 
@@ -4370,7 +4419,7 @@ void CanonicalLoopOp::print(OpAsmPrinter &p) {
   p.printRegion(getRegion(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/true);
 
-  p.printOptionalAttrDict((*this)->getAttrs());
+  p.printOptionalAttrDict((*this)->getDiscardableAttrDictionary().getValue());
 }
 
 mlir::ParseResult CanonicalLoopOp::parse(::mlir::OpAsmParser &parser,
@@ -4458,7 +4507,7 @@ void UnrollHeuristicOp::build(::mlir::OpBuilder &odsBuilder,
 void UnrollHeuristicOp::print(OpAsmPrinter &p) {
   p << '(' << getApplyee() << ')';
 
-  p.printOptionalAttrDict((*this)->getAttrs());
+  p.printOptionalAttrDict((*this)->getDiscardableAttrDictionary().getValue());
 }
 
 mlir::ParseResult UnrollHeuristicOp::parse(::mlir::OpAsmParser &parser,
@@ -4511,7 +4560,7 @@ void UnrollFullOp::build(::mlir::OpBuilder &odsBuilder,
 void UnrollFullOp::print(OpAsmPrinter &p) {
   p << '(' << getApplyee() << ')';
 
-  p.printOptionalAttrDict((*this)->getAttrs());
+  p.printOptionalAttrDict((*this)->getDiscardableAttrDictionary().getValue());
 }
 
 mlir::ParseResult UnrollFullOp::parse(::mlir::OpAsmParser &parser,
@@ -4582,7 +4631,10 @@ void UnrollPartialOp::build(::mlir::OpBuilder &odsBuilder,
 void UnrollPartialOp::print(OpAsmPrinter &p) {
   p << '(' << getApplyee() << ')';
 
-  p.printOptionalAttrDict((*this)->getAttrs());
+  SmallVector<NamedAttribute> attrs((*this)->getDiscardableAttrs());
+  attrs.emplace_back(getUnrollFactorAttrName(), getUnrollFactorAttr());
+  llvm::sort(attrs);
+  p.printOptionalAttrDict(attrs);
 }
 
 mlir::ParseResult UnrollPartialOp::parse(::mlir::OpAsmParser &parser,
@@ -4827,7 +4879,8 @@ std::pair<unsigned, unsigned> FuseOp::getGenerateesODSOperandIndexAndLength() {
 
 void CriticalDeclareOp::build(OpBuilder &builder, OperationState &state,
                               const CriticalDeclareOperands &clauses) {
-  CriticalDeclareOp::build(builder, state, clauses.symName, clauses.hint);
+  CriticalDeclareOp::build(builder, state, clauses.symName,
+                           clauses.symVisibility, clauses.hint);
 }
 
 LogicalResult CriticalDeclareOp::verify() {
@@ -4962,7 +5015,7 @@ void TaskwaitOp::build(OpBuilder &builder, OperationState &state,
       /*depend_vars=*/clauses.dependVars,
       /*depend_iterated_kinds=*/makeArrayAttr(ctx, clauses.dependIteratedKinds),
       /*depend_iterated=*/ValueRange(clauses.dependIterated),
-      /*nowait=*/nullptr);
+      /*nowait=*/clauses.nowait);
 }
 
 //===----------------------------------------------------------------------===//
@@ -4975,7 +5028,7 @@ LogicalResult AtomicReadOp::verify() {
 
   int64_t version = 50;
   if (auto moduleOp = getOperation()->getParentOfType<ModuleOp>())
-    if (Attribute verAttr = moduleOp->getAttr("omp.version"))
+    if (Attribute verAttr = moduleOp->getDiscardableAttr("omp.version"))
       version = llvm::cast<VersionAttr>(verAttr).getVersion();
 
   if (auto mo = getMemoryOrder()) {
@@ -5001,7 +5054,7 @@ LogicalResult AtomicWriteOp::verify() {
 
   int64_t version = 50;
   if (auto moduleOp = getOperation()->getParentOfType<ModuleOp>())
-    if (Attribute verAttr = moduleOp->getAttr("omp.version"))
+    if (Attribute verAttr = moduleOp->getDiscardableAttr("omp.version"))
       version = llvm::cast<VersionAttr>(verAttr).getVersion();
 
   if (auto mo = getMemoryOrder()) {
@@ -5041,7 +5094,7 @@ LogicalResult AtomicUpdateOp::verify() {
 
   int64_t version = 50;
   if (auto moduleOp = getOperation()->getParentOfType<ModuleOp>())
-    if (Attribute verAttr = moduleOp->getAttr("omp.version"))
+    if (Attribute verAttr = moduleOp->getDiscardableAttr("omp.version"))
       version = llvm::cast<VersionAttr>(verAttr).getVersion();
 
   if (auto mo = getMemoryOrder()) {
@@ -5095,12 +5148,13 @@ LogicalResult AtomicCaptureOp::verifyRegions() {
   if (verifyRegionsCommon().failed())
     return mlir::failure();
 
-  if (getFirstOp()->getAttr("hint") || getSecondOp()->getAttr("hint"))
+  if (getFirstOp()->getInherentAttr("hint").value_or(Attribute{}) ||
+      getSecondOp()->getInherentAttr("hint").value_or(Attribute{}))
     return emitOpError(
         "operations inside capture region must not have hint clause");
 
-  if (getFirstOp()->getAttr("memory_order") ||
-      getSecondOp()->getAttr("memory_order"))
+  if (getFirstOp()->getInherentAttr("memory_order").value_or(Attribute{}) ||
+      getSecondOp()->getInherentAttr("memory_order").value_or(Attribute{}))
     return emitOpError(
         "operations inside capture region must not have memory_order clause");
   return success();
@@ -5272,7 +5326,7 @@ void PrivateClauseOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                             TypeRange /*result_types*/, StringAttr symName,
                             TypeAttr type) {
   PrivateClauseOp::build(
-      odsBuilder, odsState, symName, type,
+      odsBuilder, odsState, symName, /*sym_visibility=*/nullptr, type,
       DataSharingClauseTypeAttr::get(odsBuilder.getContext(),
                                      DataSharingClauseType::Private));
 }
@@ -5378,6 +5432,16 @@ LogicalResult PrivateClauseOp::verifyRegions() {
 void MaskedOp::build(OpBuilder &builder, OperationState &state,
                      const MaskedOperands &clauses) {
   MaskedOp::build(builder, state, clauses.filteredThreadId);
+}
+
+//===----------------------------------------------------------------------===//
+// Spec 5.2: Dispatch construct (7.6)
+//===----------------------------------------------------------------------===//
+
+void DispatchOp::build(OpBuilder &builder, OperationState &state,
+                       const DispatchOperands &clauses) {
+  DispatchOp::build(builder, state, clauses.nocontext, clauses.novariants,
+                    clauses.nowait);
 }
 
 //===----------------------------------------------------------------------===//

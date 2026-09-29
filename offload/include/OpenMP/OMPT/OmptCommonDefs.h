@@ -51,6 +51,9 @@
 
 #define OMPT_IF_BUILT(stmt) stmt
 
+#define OMPT_IF_BUILT_AND_INITIALIZED(stmt)                                    \
+  OMPT_IF_BUILT(performIfOmptInitialized(stmt))
+
 #define OMPT_IF_ENABLED(stmts)                                                 \
   do {                                                                         \
     if (llvm::omp::target::ompt::Initialized) {                                \
@@ -121,6 +124,7 @@ typedef uint64_t (*IdInterfaceTy)();
 #else
 #define performIfOmptInitialized(stmt)
 #define OMPT_IF_BUILT(stmt)
+#define OMPT_IF_BUILT_AND_INITIALIZED(stmt)
 #define OMPT_IF_ENABLED(stmts)
 #define OMPT_IF_TRACING_ENABLED(stmts)
 #endif // OMPT_SUPPORT

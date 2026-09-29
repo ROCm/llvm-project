@@ -30,6 +30,9 @@
 #include <omp-tools.h>
 #endif
 #include <mutex>
+#include <utility>
+
+enum TargetAllocTy : int32_t;
 
 extern "C" {
 
@@ -82,8 +85,8 @@ struct __tgt_async_info {
   void *Queue = nullptr;
 
   /// A collection of allocations that are associated with this stream and that
-  /// should be freed after finalization.
-  llvm::SmallVector<void *, 2> AssociatedAllocations;
+  /// should be freed after finalization. Also store the type of the allocation.
+  llvm::SmallVector<std::pair<void *, TargetAllocTy>, 2> AssociatedAllocations;
 
   /// Mutex to guard access to AssociatedAllocations and the Queue.
   std::mutex Mutex;

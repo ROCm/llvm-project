@@ -50,7 +50,7 @@ class PerfStats {
   PerfTimer PT;
 
   // Guards ProfileDataMap so AddToStats / mergeStats / dumpPerfStats are safe
-  // under concurrent Comgr calls (e.g. concurrent hotswap rewrites).
+  // under concurrent Comgr calls.
   std::mutex Mtx;
   llvm::StringMap<ProfileData> ProfileDataMap;
 

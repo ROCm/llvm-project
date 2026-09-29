@@ -17,8 +17,8 @@ define void @arm_mean_q7(ptr noundef %pSrc, i32 noundef %blockSize, ptr noundef 
 ; CHECK-NEXT:    br label [[WHILE_BODY1:%.*]]
 ; CHECK:       while.body:
 ; CHECK-NEXT:    [[SUM_013:%.*]] = phi i32 [ [[TMP2:%.*]], [[WHILE_BODY1]] ], [ 0, [[WHILE_BODY]] ]
-; CHECK-NEXT:    [[PSRC_ADDR_012:%.*]] = phi ptr [ [[ADD_PTR:%.*]], [[WHILE_BODY1]] ], [ [[PSRC:%.*]], [[WHILE_BODY]] ]
 ; CHECK-NEXT:    [[BLKCNT_011:%.*]] = phi i32 [ [[DEC:%.*]], [[WHILE_BODY1]] ], [ [[SHR]], [[WHILE_BODY]] ]
+; CHECK-NEXT:    [[PSRC_ADDR_012:%.*]] = phi ptr [ [[ADD_PTR:%.*]], [[WHILE_BODY1]] ], [ [[PSRC:%.*]], [[WHILE_BODY]] ]
 ; CHECK-NEXT:    [[TMP0:%.*]] = load <16 x i8>, ptr [[PSRC_ADDR_012]], align 1
 ; CHECK-NEXT:    [[TMP1:%.*]] = tail call i32 @llvm.arm.mve.addv.v16i8(<16 x i8> [[TMP0]], i32 0)
 ; CHECK-NEXT:    [[TMP2]] = add i32 [[TMP1]], [[SUM_013]]

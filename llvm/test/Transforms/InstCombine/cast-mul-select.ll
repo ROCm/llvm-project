@@ -155,33 +155,27 @@ define i32 @eval_trunc_multi_use_in_one_inst(i32 %x) {
 
 define i32 @eval_zext_multi_use_in_one_inst(i32 %x) {
 ; CHECK-LABEL: @eval_zext_multi_use_in_one_inst(
-; CHECK-NEXT:    [[T:%.*]] = trunc i32 [[X:%.*]] to i16
-; CHECK-NEXT:    [[A:%.*]] = and i16 [[T]], 5
-; CHECK-NEXT:    [[M:%.*]] = mul nuw nsw i16 [[A]], [[A]]
-; CHECK-NEXT:    [[R:%.*]] = zext nneg i16 [[M]] to i32
+; CHECK-NEXT:    [[A:%.*]] = and i32 [[X:%.*]], 5
+; CHECK-NEXT:    [[R:%.*]] = mul nuw nsw i32 [[A]], [[A]]
 ; CHECK-NEXT:    ret i32 [[R]]
 ;
 ; DBGINFO-LABEL: @eval_zext_multi_use_in_one_inst(
-; DBGINFO-NEXT:    [[T:%.*]] = trunc i32 [[X:%.*]] to i16, !dbg [[DBG69:![0-9]+]]
-; DBGINFO-NEXT:      #dbg_value(i16 [[T]], [[META64:![0-9]+]], !DIExpression(), [[DBG69]])
-; DBGINFO-NEXT:    [[A:%.*]] = and i16 [[T]], 5, !dbg [[DBG70:![0-9]+]]
-; DBGINFO-NEXT:      #dbg_value(i16 [[A]], [[META66:![0-9]+]], !DIExpression(), [[DBG70]])
-; DBGINFO-NEXT:    [[M:%.*]] = mul nuw nsw i16 [[A]], [[A]], !dbg [[DBG71:![0-9]+]]
-; DBGINFO-NEXT:      #dbg_value(i16 [[M]], [[META67:![0-9]+]], !DIExpression(), [[DBG71]])
-; DBGINFO-NEXT:    [[R:%.*]] = zext nneg i16 [[M]] to i32, !dbg [[DBG72:![0-9]+]]
-; DBGINFO-NEXT:      #dbg_value(i32 [[R]], [[META68:![0-9]+]], !DIExpression(), [[DBG72]])
-; DBGINFO-NEXT:    ret i32 [[R]], !dbg [[DBG73:![0-9]+]]
+; DBGINFO-NEXT:      #dbg_value(i32 [[X:%.*]], [[META64:![0-9]+]], !DIExpression(DW_OP_LLVM_convert, 32, DW_ATE_unsigned, DW_OP_LLVM_convert, 16, DW_ATE_unsigned, DW_OP_stack_value), [[META69:![0-9]+]])
+; DBGINFO-NEXT:    [[A:%.*]] = and i32 [[X]], 5, !dbg [[DBG70:![0-9]+]]
+; DBGINFO-NEXT:      #dbg_value(i32 [[X]], [[META66:![0-9]+]], !DIExpression(DW_OP_LLVM_convert, 32, DW_ATE_unsigned, DW_OP_LLVM_convert, 16, DW_ATE_unsigned, DW_OP_constu, 5, DW_OP_and, DW_OP_stack_value), [[DBG70]])
+; DBGINFO-NEXT:    [[M:%.*]] = mul nuw nsw i32 [[A]], [[A]], !dbg [[DBG71:![0-9]+]]
+; DBGINFO-NEXT:      #dbg_value(i32 [[M]], [[META67:![0-9]+]], !DIExpression(), [[DBG71]])
+; DBGINFO-NEXT:      #dbg_value(i32 [[M]], [[META68:![0-9]+]], !DIExpression(), [[META72:![0-9]+]])
+; DBGINFO-NEXT:    ret i32 [[M]], !dbg [[DBG73:![0-9]+]]
 ;
 ; DIOP-DBGINFO-LABEL: @eval_zext_multi_use_in_one_inst(
-; DIOP-DBGINFO-NEXT:    [[T:%.*]] = trunc i32 [[X:%.*]] to i16, !dbg [[DBG69:![0-9]+]]
-; DIOP-DBGINFO-NEXT:      #dbg_value(i16 [[T]], [[META64:![0-9]+]], !DIExpression(DIOpArg(0, i16)), [[DBG69]])
-; DIOP-DBGINFO-NEXT:    [[A:%.*]] = and i16 [[T]], 5, !dbg [[DBG70:![0-9]+]]
-; DIOP-DBGINFO-NEXT:      #dbg_value(i16 [[A]], [[META66:![0-9]+]], !DIExpression(DIOpArg(0, i16)), [[DBG70]])
-; DIOP-DBGINFO-NEXT:    [[M:%.*]] = mul nuw nsw i16 [[A]], [[A]], !dbg [[DBG71:![0-9]+]]
-; DIOP-DBGINFO-NEXT:      #dbg_value(i16 [[M]], [[META67:![0-9]+]], !DIExpression(DIOpArg(0, i16)), [[DBG71]])
-; DIOP-DBGINFO-NEXT:    [[R:%.*]] = zext nneg i16 [[M]] to i32, !dbg [[DBG72:![0-9]+]]
-; DIOP-DBGINFO-NEXT:      #dbg_value(i32 [[R]], [[META68:![0-9]+]], !DIExpression(DIOpArg(0, i32)), [[DBG72]])
-; DIOP-DBGINFO-NEXT:    ret i32 [[R]], !dbg [[DBG73:![0-9]+]]
+; DIOP-DBGINFO-NEXT:      #dbg_value(i32 [[X:%.*]], [[META64:![0-9]+]], !DIExpression(DW_OP_LLVM_poisoned), [[META69:![0-9]+]])
+; DIOP-DBGINFO-NEXT:    [[A:%.*]] = and i32 [[X]], 5, !dbg [[DBG70:![0-9]+]]
+; DIOP-DBGINFO-NEXT:      #dbg_value(i32 [[X]], [[META66:![0-9]+]], !DIExpression(DW_OP_LLVM_poisoned), [[DBG70]])
+; DIOP-DBGINFO-NEXT:    [[M:%.*]] = mul nuw nsw i32 [[A]], [[A]], !dbg [[DBG71:![0-9]+]]
+; DIOP-DBGINFO-NEXT:      #dbg_value(i32 [[M]], [[META67:![0-9]+]], !DIExpression(DIOpArg(0, i32), DIOpConvert(i16)), [[DBG71]])
+; DIOP-DBGINFO-NEXT:      #dbg_value(i32 [[M]], [[META68:![0-9]+]], !DIExpression(DIOpArg(0, i32)), [[META72:![0-9]+]])
+; DIOP-DBGINFO-NEXT:    ret i32 [[M]], !dbg [[DBG73:![0-9]+]]
 ;
   %t = trunc i32 %x to i16
   %a = and i16 %t, 5
@@ -238,7 +232,7 @@ define void @PR36225(i32 %a, i32 %b, i1 %c1, i3 %v1, i3 %v2) {
 ; CHECK-NEXT:    br i1 [[C1:%.*]], label [[FOR_BODY3_US:%.*]], label [[FOR_BODY3:%.*]]
 ; CHECK:       for.body3.us:
 ; CHECK-NEXT:    [[TOBOOL:%.*]] = icmp eq i32 [[B:%.*]], 0
-; CHECK-NEXT:    [[SPEC_SELECT:%.*]] = select i1 [[TOBOOL]], i8 0, i8 4
+; CHECK-NEXT:    [[SPEC_SELECT:%.*]] = select i1 [[TOBOOL]], i32 0, i32 4
 ; CHECK-NEXT:    switch i3 [[V1:%.*]], label [[EXIT:%.*]] [
 ; CHECK-NEXT:      i3 0, label [[FOR_END:%.*]]
 ; CHECK-NEXT:      i3 -1, label [[FOR_END]]
@@ -249,8 +243,7 @@ define void @PR36225(i32 %a, i32 %b, i1 %c1, i3 %v1, i3 %v2) {
 ; CHECK-NEXT:      i3 -1, label [[FOR_END]]
 ; CHECK-NEXT:    ]
 ; CHECK:       for.end:
-; CHECK-NEXT:    [[H:%.*]] = phi i8 [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ 0, [[FOR_BODY3]] ], [ 0, [[FOR_BODY3]] ]
-; CHECK-NEXT:    [[CONV:%.*]] = zext nneg i8 [[H]] to i32
+; CHECK-NEXT:    [[CONV:%.*]] = phi i32 [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ 0, [[FOR_BODY3]] ], [ 0, [[FOR_BODY3]] ]
 ; CHECK-NEXT:    [[CMP:%.*]] = icmp sgt i32 [[A:%.*]], [[CONV]]
 ; CHECK-NEXT:    br i1 [[CMP]], label [[EXIT]], label [[EXIT2:%.*]]
 ; CHECK:       exit2:
@@ -267,8 +260,8 @@ define void @PR36225(i32 %a, i32 %b, i1 %c1, i3 %v1, i3 %v2) {
 ; DBGINFO:       for.body3.us:
 ; DBGINFO-NEXT:    [[TOBOOL:%.*]] = icmp eq i32 [[B]], 0, !dbg [[META95]]
 ; DBGINFO-NEXT:      #dbg_value(i1 [[TOBOOL]], [[META89]], !DIExpression(), [[META95]])
-; DBGINFO-NEXT:    [[SPEC_SELECT:%.*]] = select i1 [[TOBOOL]], i8 0, i8 4, !dbg [[DBG97:![0-9]+]]
-; DBGINFO-NEXT:      #dbg_value(i8 [[SPEC_SELECT]], [[META90:![0-9]+]], !DIExpression(), [[DBG97]])
+; DBGINFO-NEXT:    [[SPEC_SELECT:%.*]] = select i1 [[TOBOOL]], i32 0, i32 4, !dbg [[DBG97:![0-9]+]]
+; DBGINFO-NEXT:      #dbg_value(i8 poison, [[META90:![0-9]+]], !DIExpression(), [[DBG97]])
 ; DBGINFO-NEXT:    switch i3 [[V1:%.*]], label [[EXIT:%.*]] [
 ; DBGINFO-NEXT:      i3 0, label [[FOR_END:%.*]]
 ; DBGINFO-NEXT:      i3 -1, label [[FOR_END]]
@@ -279,11 +272,10 @@ define void @PR36225(i32 %a, i32 %b, i1 %c1, i3 %v1, i3 %v2) {
 ; DBGINFO-NEXT:      i3 -1, label [[FOR_END]]
 ; DBGINFO-NEXT:    ], !dbg [[DBG99:![0-9]+]]
 ; DBGINFO:       for.end:
-; DBGINFO-NEXT:    [[H:%.*]] = phi i8 [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ 0, [[FOR_BODY3]] ], [ 0, [[FOR_BODY3]] ], !dbg [[DBG100:![0-9]+]]
-; DBGINFO-NEXT:      #dbg_value(i8 [[H]], [[META91:![0-9]+]], !DIExpression(), [[DBG100]])
-; DBGINFO-NEXT:    [[CONV:%.*]] = zext nneg i8 [[H]] to i32, !dbg [[DBG101:![0-9]+]]
-; DBGINFO-NEXT:      #dbg_value(i32 [[CONV]], [[META92:![0-9]+]], !DIExpression(), [[DBG101]])
-; DBGINFO-NEXT:    [[CMP:%.*]] = icmp sgt i32 [[A:%.*]], [[CONV]], !dbg [[DBG102:![0-9]+]]
+; DBGINFO-NEXT:    [[H:%.*]] = phi i32 [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ 0, [[FOR_BODY3]] ], [ 0, [[FOR_BODY3]] ], !dbg [[DBG100:![0-9]+]]
+; DBGINFO-NEXT:      #dbg_value(i32 [[H]], [[META91:![0-9]+]], !DIExpression(), [[DBG100]])
+; DBGINFO-NEXT:      #dbg_value(i32 [[H]], [[META92:![0-9]+]], !DIExpression(), [[META101:![0-9]+]])
+; DBGINFO-NEXT:    [[CMP:%.*]] = icmp sgt i32 [[A:%.*]], [[H]], !dbg [[DBG102:![0-9]+]]
 ; DBGINFO-NEXT:      #dbg_value(i1 [[CMP]], [[META93:![0-9]+]], !DIExpression(), [[DBG102]])
 ; DBGINFO-NEXT:    br i1 [[CMP]], label [[EXIT]], label [[EXIT2:%.*]], !dbg [[DBG103:![0-9]+]]
 ; DBGINFO:       exit2:
@@ -300,8 +292,8 @@ define void @PR36225(i32 %a, i32 %b, i1 %c1, i3 %v1, i3 %v2) {
 ; DIOP-DBGINFO:       for.body3.us:
 ; DIOP-DBGINFO-NEXT:    [[TOBOOL:%.*]] = icmp eq i32 [[B]], 0, !dbg [[META95]]
 ; DIOP-DBGINFO-NEXT:      #dbg_value(i1 [[TOBOOL]], [[META89]], !DIExpression(DIOpArg(0, i1), DIOpZExt(i8)), [[META95]])
-; DIOP-DBGINFO-NEXT:    [[SPEC_SELECT:%.*]] = select i1 [[TOBOOL]], i8 0, i8 4, !dbg [[DBG97:![0-9]+]]
-; DIOP-DBGINFO-NEXT:      #dbg_value(i8 [[SPEC_SELECT]], [[META90:![0-9]+]], !DIExpression(DIOpArg(0, i8)), [[DBG97]])
+; DIOP-DBGINFO-NEXT:    [[SPEC_SELECT:%.*]] = select i1 [[TOBOOL]], i32 0, i32 4, !dbg [[DBG97:![0-9]+]]
+; DIOP-DBGINFO-NEXT:      #dbg_value(i8 poison, [[META90:![0-9]+]], !DIExpression(DIOpArg(0, i8)), [[DBG97]])
 ; DIOP-DBGINFO-NEXT:    switch i3 [[V1:%.*]], label [[EXIT:%.*]] [
 ; DIOP-DBGINFO-NEXT:      i3 0, label [[FOR_END:%.*]]
 ; DIOP-DBGINFO-NEXT:      i3 -1, label [[FOR_END]]
@@ -312,11 +304,10 @@ define void @PR36225(i32 %a, i32 %b, i1 %c1, i3 %v1, i3 %v2) {
 ; DIOP-DBGINFO-NEXT:      i3 -1, label [[FOR_END]]
 ; DIOP-DBGINFO-NEXT:    ], !dbg [[DBG99:![0-9]+]]
 ; DIOP-DBGINFO:       for.end:
-; DIOP-DBGINFO-NEXT:    [[H:%.*]] = phi i8 [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ 0, [[FOR_BODY3]] ], [ 0, [[FOR_BODY3]] ], !dbg [[DBG100:![0-9]+]]
-; DIOP-DBGINFO-NEXT:      #dbg_value(i8 [[H]], [[META91:![0-9]+]], !DIExpression(DIOpArg(0, i8)), [[DBG100]])
-; DIOP-DBGINFO-NEXT:    [[CONV:%.*]] = zext nneg i8 [[H]] to i32, !dbg [[DBG101:![0-9]+]]
-; DIOP-DBGINFO-NEXT:      #dbg_value(i32 [[CONV]], [[META92:![0-9]+]], !DIExpression(DIOpArg(0, i32)), [[DBG101]])
-; DIOP-DBGINFO-NEXT:    [[CMP:%.*]] = icmp sgt i32 [[A:%.*]], [[CONV]], !dbg [[DBG102:![0-9]+]]
+; DIOP-DBGINFO-NEXT:    [[H:%.*]] = phi i32 [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ [[SPEC_SELECT]], [[FOR_BODY3_US]] ], [ 0, [[FOR_BODY3]] ], [ 0, [[FOR_BODY3]] ], !dbg [[DBG100:![0-9]+]]
+; DIOP-DBGINFO-NEXT:      #dbg_value(i32 [[H]], [[META91:![0-9]+]], !DIExpression(DIOpArg(0, i32), DIOpConvert(i8)), [[DBG100]])
+; DIOP-DBGINFO-NEXT:      #dbg_value(i32 [[H]], [[META92:![0-9]+]], !DIExpression(DIOpArg(0, i32)), [[META101:![0-9]+]])
+; DIOP-DBGINFO-NEXT:    [[CMP:%.*]] = icmp sgt i32 [[A:%.*]], [[H]], !dbg [[DBG102:![0-9]+]]
 ; DIOP-DBGINFO-NEXT:      #dbg_value(i1 [[CMP]], [[META93:![0-9]+]], !DIExpression(DIOpArg(0, i1), DIOpZExt(i8)), [[DBG102]])
 ; DIOP-DBGINFO-NEXT:    br i1 [[CMP]], label [[EXIT]], label [[EXIT2:%.*]], !dbg [[DBG103:![0-9]+]]
 ; DIOP-DBGINFO:       exit2:

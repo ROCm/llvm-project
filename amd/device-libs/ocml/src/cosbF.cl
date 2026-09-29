@@ -27,8 +27,8 @@
 float
 MATH_PRIVATE(cosb)(float x, int n, float p)
 {
-    struct redret2 r = MATH_PRIVATE(trigred2)(x);
-    bool b = r.hi < p;
+    struct epredret r = MATH_PRIVATE(eptrigred)(x);
+    bool b = r.r.hi < p;
     r.i = (r.i - b - n) & 3;
 
     float ph = AS_FLOAT(0xbf490fdb ^ (b ? SIGNBIT_SP32 : 0));
@@ -40,11 +40,11 @@ MATH_PRIVATE(cosb)(float x, int n, float p)
     pl += sl;
     FSUM2(ph, pl, ph, pl);
 
-    FSUM2(ph, r.hi, sh, sl);
-    sl += pl + r.lo;
+    FSUM2(ph, r.r.hi, sh, sl);
+    sl += pl + r.r.lo;
     FSUM2(sh, sl, sh, sl);
 
-    struct scret sc = MATH_PRIVATE(sincosred2)(sh, sl);
+    struct scret sc = MATH_PRIVATE(sincosredep)((float2)(sl, sh));
     sc.s = -sc.s;
 
     float c =  (r.i & 1) != 0 ? sc.s : sc.c;

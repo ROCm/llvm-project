@@ -221,8 +221,15 @@ if(compiler_rt_path)
   foreach(target ${builtin_targets})
     check_apple_target(${target} builtin)
 
+    # builtins-spirv64* targets will invoke llvm-link to combine all
+    # bitcode from static archive library into libclang_rt.builtins.bc.
+    # Need to add dependency on llvm-link for it.
+    set(builtin_deps clang-resource-headers)
+    if(target MATCHES "^spirv64" AND TARGET llvm-link)
+      list(APPEND builtin_deps llvm-link)
+    endif()
     builtin_register_target(${compiler_rt_path} ${target}
-      DEPENDS clang-resource-headers
+      DEPENDS ${builtin_deps}
       CMAKE_ARGS -DLLVM_DEFAULT_TARGET_TRIPLE=${target}
       EXTRA_ARGS TARGET_TRIPLE ${target})
 
@@ -387,10 +394,12 @@ function(runtime_register_target name)
     endif()
   endforeach()
 
+  set(${name}_runtime_targets)
   foreach(runtime_name ${runtime_names})
     set(${runtime_name}-${name} ${runtime_name})
     set(install-${runtime_name}-${name} install-${runtime_name})
     set(install-${runtime_name}-${name}-stripped install-${runtime_name}-stripped)
+    list(APPEND ${name}_runtime_targets ${runtime_name}-${name})
     list(APPEND ${name}_extra_targets ${runtime_name}-${name} install-${runtime_name}-${name} install-${runtime_name}-${name}-stripped)
     if(LLVM_INCLUDE_TESTS)
       set(check-${runtime_name}-${name} check-${runtime_name} )
@@ -523,6 +532,7 @@ function(runtime_register_target name)
   endforeach()
 
   add_flang_mod_deps(runtimes-${name}-build ${${name}_extra_targets})
+  set(${name}_runtime_targets ${${name}_runtime_targets} PARENT_SCOPE)
 endfunction()
 
 # Check if we have any runtimes to build.
@@ -587,7 +597,7 @@ if(build_runtimes)
   string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
   # Some projects require access to the LLVM lib/cmake directory, whether or not
   # the user provided a prefix path of their own.
-  if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+  if (DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
     if(escaped_cmake_prefix_path)
       string(PREPEND escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake$<SEMICOLON>")
     else()
@@ -636,33 +646,6 @@ if(build_runtimes)
     endforeach()
   endif()
   if("openmp" IN_LIST LLVM_ENABLE_RUNTIMES OR "offload" IN_LIST LLVM_ENABLE_RUNTIMES)
-    # With ROCm 6.3 the ROCr runtime and the thunk layer share a single repository.
-    # No need to provide a separate path for ROCt.
-    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR)
-
-      set(rocr_extra_cmake_args "")
-      if(THEROCK_AMDGPU_TARGETS)
-        # Pass the list of AMDGPU targets to ROCr runtime
-        list(APPEND rocr_extra_cmake_args "-DTHEROCK_AMDGPU_TARGETS=${THEROCK_AMDGPU_TARGETS}")
-      endif()
-
-      if(NOT DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH)
-        message(SEND_ERROR "External ROCr requires setting LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH")
-      endif()
-
-      message(STATUS "Add external unified ROCr: ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}")
-      ExternalProject_Add(rocr-runtime
-        SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}
-        DEPENDS clang llvm-link lld opt llvm-objcopy
-        INSTALL_COMMAND ""
-        CMAKE_ARGS -DBUILD_SHARED_LIBS=ON
-                   -DIMAGE_SUPPORT=OFF
-                   -DLLVM_RUNTIME_OPENMP=ON
-                   ${rocr_extra_cmake_args}
-                   ${extra_cmake_args})
-      set(HSA_DEP rocr-runtime)
-    endif()
-
     # omptarget device RTL depends on device libs, leading to circular dependency in build scripts.
     # Providing path to the sources enables to build them as part of compiler build, which
     # removes the ciruclar dependency on the script-side.
@@ -688,7 +671,7 @@ if(build_runtimes)
       endif()
     endif()
 
-    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP})
+    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch)
       if(TARGET ${dep})
         list(APPEND extra_deps ${dep})
       endif()
@@ -816,7 +799,7 @@ if(build_runtimes)
     foreach(multilib ${LLVM_RUNTIME_MULTILIBS})
       foreach(name ${LLVM_RUNTIME_MULTILIB_${multilib}_TARGETS})
         runtime_register_target(${name}+${multilib}
-          DEPENDS runtimes-${name}
+          DEPENDS ${${name}_runtime_targets}
           CMAKE_ARGS -DLLVM_DEFAULT_TARGET_TRIPLE=${name}
                      -DLLVM_RUNTIMES_LIBDIR_SUBDIR=${multilib}
                      ${extra_cmake_args}

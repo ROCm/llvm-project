@@ -295,14 +295,6 @@ bool llvm::isAllocationFn(
 }
 
 /// Tests if a value is a call or invoke to a library function that
-/// allocates memory similar to malloc or calloc.
-bool llvm::isMallocOrCallocLikeFn(const Value *V,
-                                  const TargetLibraryInfo *TLI) {
-  // TODO: Function behavior does not match name.
-  return getAllocationData(V, MallocOrOpNewLike, TLI).has_value();
-}
-
-/// Tests if a value is a call or invoke to a library function that
 /// allocates memory (either malloc, calloc, or strdup like).
 bool llvm::isAllocLikeFn(const Value *V, const TargetLibraryInfo *TLI) {
   return getAllocationData(V, AllocLike, TLI).has_value() ||
@@ -417,6 +409,14 @@ llvm::getAllocSize(const CallBase *CB, const TargetLibraryInfo *TLI,
   if (Overflow)
     return std::nullopt;
   return Size;
+}
+
+bool llvm::hasComputableAllocSize(const CallBase *CB,
+                                  const TargetLibraryInfo *TLI) {
+  // Keep this in sync with ObjectSizeOffsetEvaluator::visitCallBase, which is
+  // what actually has to produce the value.
+  std::optional<AllocFnsTy> FnData = getAllocationSize(CB, TLI);
+  return FnData && FnData->AllocTy != StrDupLike;
 }
 
 Constant *llvm::getInitialValueOfAllocation(const Value *V,
@@ -945,7 +945,7 @@ bool ObjectSizeOffsetVisitor::checkedZextOrTrunc(APInt &I) {
 }
 
 OffsetSpan ObjectSizeOffsetVisitor::visitAllocaInst(AllocaInst &I) {
-  TypeSize ElemSize = DL.getTypeAllocSize(I.getAllocatedType());
+  TypeSize ElemSize = I.getAllocationBaseSize(DL);
   if (ElemSize.isScalable() && Options.EvalMode != ObjectSizeOpts::Mode::Min)
     return ObjectSizeOffsetVisitor::unknown();
   if (!isUIntN(IntTyBits, ElemSize.getKnownMinValue()))
@@ -1332,11 +1332,8 @@ SizeOffsetValue ObjectSizeOffsetEvaluator::compute_(Value *V) {
 }
 
 SizeOffsetValue ObjectSizeOffsetEvaluator::visitAllocaInst(AllocaInst &I) {
-  if (!I.getAllocatedType()->isSized())
-    return ObjectSizeOffsetEvaluator::unknown();
-
   // must be a VLA or vscale.
-  assert(I.isArrayAllocation() || I.getAllocatedType()->isScalableTy());
+  assert(I.isArrayAllocation() || I.isScalable());
 
   // If needed, adjust the alloca's operand size to match the pointer indexing
   // size. Subsequent math operations expect the types to match.

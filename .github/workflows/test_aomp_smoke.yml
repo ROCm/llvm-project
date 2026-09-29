@@ -32,7 +32,16 @@ on:
       total_shards:
         description: Total number of AOMP shards
         type: string
-        default: "6"          
+        default: "6"
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
+        default: ""          
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+        default: ""
+          
   workflow_call:
     inputs:
       artifact_group:
@@ -59,7 +68,16 @@ on:
         type: string
       total_shards:
         type: string
-        default: "6"          
+        default: "6"
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
+        default: ""          
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
+        default: ""
+          
   push:
     branches:
       - ADHOCBUILD
@@ -124,8 +142,8 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          repository: "ROCm/TheRock"
-          ref: 'compiler/amd-staging'
+          repository: ${{ inputs.repository || github.repository }}
+          ref: ${{ inputs.ref }}          
           fetch-depth: 1
 
       - name: Pre-job cleanup Docker containers on Linux

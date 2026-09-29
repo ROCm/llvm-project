@@ -20,6 +20,7 @@
 #include "llvm/IR/LegacyPassNameParser.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/OptBisect.h"
+#include "llvm/IR/PrintPasses.h"
 #include "llvm/PassInfo.h"
 #include "llvm/PassRegistry.h"
 #include "llvm/Support/Compiler.h"
@@ -178,6 +179,8 @@ Pass *FunctionPass::createPrinterPass(raw_ostream &OS,
 }
 
 bool FunctionPass::printIRUnit(raw_ostream &OS, Function &F) {
+  if (!shouldPrintFunction(F))
+    return false;
   F.print(OS);
   return true;
 }
@@ -315,8 +318,6 @@ const char *llvm::to_string(ThinOrFullLTOPhase Phase) {
     return "FullLTOPreLink";
   case ThinOrFullLTOPhase::FullLTOPostLink:
     return "FullLTOPostLink";
-  case llvm::ThinOrFullLTOPhase::CustomLTOPostLink:
-    return "CustomLTOPostLink";
   }
   llvm_unreachable("invalid phase");
 }

@@ -672,7 +672,7 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // semantics. Skip this if `-fsanitize=address` is set.
   const SanitizerArgs &SanArgs = getToolChain().getSanitizerArgs(Args);
   if (!SanArgs.needsAsanRt())
-    addSanitizerRuntimes(getToolChain(), Args, CmdArgs);
+    addSanitizerRuntimes(getToolChain(), Args, CmdArgs, C);
 
   if (Args.hasArg(options::OPT_stdlib))
     CmdArgs.append({"-lc", "-lm"});
@@ -1074,15 +1074,8 @@ AMDGPUToolChain::getGPUArch(const llvm::opt::ArgList &DriverArgs) const {
 AMDGPUToolChain::ParsedTargetIDType
 AMDGPUToolChain::getParsedTargetID(const llvm::opt::ArgList &DriverArgs) const {
   StringRef TargetID = DriverArgs.getLastArgValue(options::OPT_mcpu_EQ);
-  // For offload toolchains (HIP, OpenMP, etc.), `getAuxTriple()` is the host;
-  // `-march=` there refers to the host CPU (e.g. haswell) and must not be
-  // parsed as an AMDGPU Target ID. Only standalone AMDGPU uses `-march=` as
-  // a legacy spelling for the GPU `-mcpu=` (see TranslateArgs when OFK_None).
-  if (TargetID.empty() && !getAuxTriple())
-    TargetID = DriverArgs.getLastArgValue(options::OPT_march_EQ);
-
   if (TargetID.empty())
-    return {std::nullopt, std::nullopt, std::nullopt};
+    return {};
 
   llvm::StringMap<bool> FeatureMap;
   auto OptionalGpuArch = parseTargetID(getTriple(), TargetID, &FeatureMap);
@@ -1098,6 +1091,21 @@ AMDGPUToolChain::checkTargetID(const llvm::opt::ArgList &DriverArgs) const {
   if (PTID.OptionalTargetID && !PTID.OptionalGPUArch) {
     getDriver().Diag(clang::diag::err_drv_bad_target_id)
         << *PTID.OptionalTargetID;
+    return PTID;
+  }
+
+  if (getTriple().getSubArch() != llvm::Triple::NoSubArch &&
+      PTID.OptionalGPUArch) {
+    llvm::AMDGPU::GPUKind Kind =
+        llvm::AMDGPU::parseArchAMDGCN(*PTID.OptionalGPUArch);
+    llvm::Triple::SubArchType KindSubArch =
+        static_cast<llvm::Triple::SubArchType>(llvm::AMDGPU::getSubArch(Kind));
+    if (getTriple().getSubArch() != KindSubArch &&
+        getTriple().getSubArch() !=
+            llvm::AMDGPU::getMajorSubArch(KindSubArch)) {
+      getDriver().Diag(clang::diag::err_target_unsupported_arch)
+          << *PTID.OptionalGPUArch << getTriple().getArchName();
+    }
   }
   return PTID;
 }
@@ -1188,13 +1196,6 @@ RocmInstallationDetector::getCommonBitcodeLibs(
     AddBCLib(ABIVerPath);
 
   return BCLibs;
-}
-
-bool AMDGPUToolChain::shouldSkipArgument(const llvm::opt::Arg *A) const {
-  Option O = A->getOption();
-  if (O.matches(options::OPT_fPIE) || O.matches(options::OPT_fpie))
-    return true;
-  return false;
 }
 
 llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>

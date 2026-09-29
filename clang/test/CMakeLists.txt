@@ -108,6 +108,7 @@ list(APPEND CLANG_TEST_DEPS
   clang-ssaf-analyzer
   clang-ssaf-format
   clang-ssaf-linker
+  clang-ssaf-src-edit-merge
   clang-sycl-linker
   diagtool
   hmaptool
@@ -123,7 +124,6 @@ if(CLANG_ENABLE_CIR)
   list(APPEND CLANG_TEST_DEPS
     cir-opt
     cir-translate
-    mlir-translate
     )
   add_subdirectory(CIR/lib)
 endif()
