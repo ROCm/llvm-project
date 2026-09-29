@@ -22,8 +22,6 @@
 #include <functional>
 #include <tuple>
 
-class OmptTracingBufferMgr;
-
 namespace llvm {
 namespace omp {
 namespace target {
@@ -64,6 +62,7 @@ public:
   /// Obtain a pointer to profiler-specific data, if any.
   virtual void *getProfilerSpecificData() { return nullptr; }
 
+  /// Returns true if profiling is enabled, false otherwise.
   virtual bool isProfilingEnabled() { return false; }
 
   /// Set the factors which are used to interpolate the device clock compared to
