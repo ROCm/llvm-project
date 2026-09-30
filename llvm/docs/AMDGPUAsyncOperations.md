@@ -35,6 +35,8 @@ Produces an asyncmark and appends it to the current sequence.
 Ensures that the length of the current sequence is at most `N` by removing
 asyncmarks from the start of the sequence if it is more than `N`.
 
+This operation is also an acquire operation without `MakeVisible` semantics.
+
 ### Completion of Asyncmarks
 
 An `asyncmark()` operation `X` that produces an asyncmark `M` is
