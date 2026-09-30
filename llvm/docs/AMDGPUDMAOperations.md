@@ -8,23 +8,23 @@
 DMA (or "Direct Memory Access") operations transfer data between different kinds
 of memory directly without occupying registers in the invoking wave. They are
 usually {ref}`asynchronous<amdgpu-async-operations>` asynchronous, and require
-the user to explicitly track completion using
-{ref}`asyncmarks<amdgpu-async-operations>`.
+additional mechanisms to {ref}`track completion<amdgpu-async-completed-at>`.
 
 All DMA operations support the same cache modifiers as ordinary load/store
 operations from registers. They cannot be performed atomically.
 
-### GFX9 DMA
+### GFX9 LDS DMA
 
-Each GFX9 DMA instruction has a synchronous counterpart (e.g.,
+Each GFX9 LDS DMA instruction has a synchronous counterpart (e.g.,
 `@llvm.amdgcn.load.to.lds` for `@llvm.amdgcn.load.async.to.lds`). The
 synchronous variants perform the same operation, but the compiler automatically
 ensures completion before their side-effects are used.
+The asynchronous variants use {ref}`amdgpu-asyncmarks` to track completion.
 
 GFX9 DMA instructions implement volatile (via `aux/cpol` bit 31) and
 nontemporal (via metadata) as if they were loads from the global address space.
 
-**Flat/Global Addressing**
+#### Flat/Global Addressing
 
 ```llvm
 void @llvm.amdgcn.load[.async].to.lds.pN(
@@ -59,7 +59,7 @@ void @llvm.amdgcn.global.load[.async].lds(
 
 This is identical to `@llvm.amdgcn.load[.async].to.lds.p1`.
 
-**Buffer Addressing**
+#### Buffer Addressing
 
 ```llvm
 void @llvm.amdgcn.{raw|struct}[.ptr].buffer.load[.async].lds(
@@ -85,13 +85,16 @@ The intrinsics differ in two orthogonal ways:
 - **ptr** vs non-ptr: The `ptr` variants use `ptr addrspace(8)` for the
   buffer resource descriptor; the non-ptr variants use `<4 x i32>`.
 
-### GFX1250
+### GFX1250 DMA Operations
+
+All GFX1250 DMA operations are asynchronous and use {ref}`amdgpu-asyncmarks` to
+track completion. There are no synchronous variants.
+
+#### LDS DMA Operations
 
 GFX1250 LDS DMA instructions implement nontemporal (via metadata) as if they
 were loads from the global address space. Tensor DMA instructions do not support
 volatile or nontemporal.
-
-**Global Addressing**
 
 ```llvm
 void @llvm.amdgcn.{global|cluster}.load.async.to.lds.b<N>(
@@ -120,7 +123,7 @@ void @llvm.amdgcn.global.store.async.from.lds.b<N>(
 
 Stores data from LDS to global memory.
 
-**Tensor Addressing**
+#### Tensor Operations
 
 ```llvm
 void @llvm.amdgcn.tensor.{load.to|store.from}.lds(
