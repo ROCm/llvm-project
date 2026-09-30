@@ -31,6 +31,8 @@
 @callee_mixed_exec_mode = weak_odr protected addrspace(1) constant i8 2
 @callee_nested_exec_mode = weak_odr protected addrspace(1) constant i8 2
 @callee_recursive_exec_mode = weak_odr protected addrspace(1) constant i8 2
+@callee_recursive_again_exec_mode = weak_odr protected addrspace(1) constant i8 2
+@no_traffic_exec_mode = weak_odr protected addrspace(1) constant i8 2
 @barrier_exec_mode = weak_odr protected addrspace(1) constant i8 1
 @opaque_barrier_exec_mode = weak_odr protected addrspace(1) constant i8 1
 @outer_opaque_exec_mode = weak_odr protected addrspace(1) constant i8 1
@@ -57,7 +59,7 @@
 
 ; Two 8-byte streams read inside the loop: 16 bytes over 2 streams. The load
 ; before the loop and the load from private scratch inside it are ignored.
-; CHECK: @spmd_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 4, i32 14 }
+; CHECK: @spmd_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 4, i32 14, i32 0 }
 define amdgpu_kernel void @spmd(ptr addrspace(1) %a, ptr addrspace(1) %b, i64 %n) {
 entry:
   %scratch.priv = alloca [128 x double], align 8, addrspace(5)
@@ -109,7 +111,7 @@ exit:
 }
 
 ; One 4-byte stream, reached only through the outlined region: 4 bytes, 1 stream.
-; CHECK: @outer_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 4, i32 1, i32 4, i32 0, i32 1, i32 0, i32 1, i32 6 }
+; CHECK: @outer_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 4, i32 1, i32 4, i32 0, i32 1, i32 0, i32 1, i32 6, i32 0 }
 define amdgpu_kernel void @outer(ptr addrspace(1) %a) {
   call void @run_region(ptr @outlined, ptr addrspace(1) %a)
   ret void
@@ -123,7 +125,7 @@ define internal void @run_region(ptr %fn, ptr addrspace(1) %arg) noinline {
 
 ; An inner loop's accesses are traffic of the enclosing iteration too, so the
 ; whole nest counts as one: 16 bytes over 2 streams.
-; CHECK: @nest_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 2, i32 13 }
+; CHECK: @nest_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 2, i32 13, i32 0 }
 define amdgpu_kernel void @nest(ptr addrspace(1) %a, ptr addrspace(1) %b, i64 %n) {
 entry:
   br label %outer
@@ -153,7 +155,7 @@ exit:
 
 ; The estimate follows the loop as the optimizer left it, so an unrolled body
 ; reports the traffic of the unrolled iteration: 32 bytes over 1 stream.
-; CHECK: @unrolled_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 32, i32 1, i32 32, i32 0, i32 4, i32 0, i32 4, i32 15 }
+; CHECK: @unrolled_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 32, i32 1, i32 32, i32 0, i32 4, i32 0, i32 4, i32 15, i32 0 }
 define amdgpu_kernel void @unrolled(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %loop
@@ -181,7 +183,7 @@ exit:
 
 ; Two copies of one loop that cannot both run: the heavier nest, 16 bytes over
 ; 2 streams, rather than their sum.
-; CHECK: @duplicated_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 1, i32 8 }
+; CHECK: @duplicated_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 1, i32 8, i32 0 }
 define amdgpu_kernel void @duplicated(ptr addrspace(1) %a, ptr addrspace(1) %b, i64 %n, i1 %spmd) {
 entry:
   br i1 %spmd, label %spmd.loop, label %generic.loop
@@ -211,8 +213,9 @@ exit:
 }
 
 ; A kernel that could not be inlined into keeps its -1: at -O0 the loops that
-; are visible are not the kernel's work loop, so any number would be wrong.
-; CHECK-NOT: @noopt_kernel_traffic
+; are visible are not the kernel's work loop, so any number would be wrong. The
+; status says why (1 = optnone).
+; CHECK: @noopt_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 1 }
 define amdgpu_kernel void @noopt(ptr addrspace(1) %a, i64 %n) noinline optnone {
 entry:
   br label %loop
@@ -244,7 +247,7 @@ entry:
 ; syntactically inside the kernel's own loop would record 8 bytes over one
 ; stream here and put the kernel in the wrong regime; the whole nest is 24 over
 ; three.
-; CHECK: @callee_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 24, i32 3, i32 24, i32 0, i32 3, i32 0, i32 3, i32 13 }
+; CHECK: @callee_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 24, i32 3, i32 24, i32 0, i32 3, i32 0, i32 3, i32 13, i32 0 }
 define amdgpu_kernel void @callee(ptr addrspace(1) %a, ptr addrspace(1) %b, ptr addrspace(1) %c, i64 %n) {
 entry:
   br label %loop
@@ -264,7 +267,7 @@ exit:
 
 ; A callee reached from two different nests contributes to each of them, rather
 ; than to whichever one happened to be walked first.
-; CHECK: @shared_callee_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 24, i32 3, i32 24, i32 0, i32 3, i32 0, i32 3, i32 13 }
+; CHECK: @shared_callee_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 24, i32 3, i32 24, i32 0, i32 3, i32 0, i32 3, i32 13, i32 0 }
 define amdgpu_kernel void @shared_callee(ptr addrspace(1) %a, ptr addrspace(1) %b, ptr addrspace(1) %c, i64 %n) {
 entry:
   br label %light
@@ -310,7 +313,7 @@ exit:
 ; estimate must not depend on whether the helper happened to be inlined. Folding
 ; gives 16 bytes over two streams; treating the two loops as rival nests would
 ; report the heavier one alone, 8 over one.
-; CHECK: @callee_loop_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 3, i32 15 }
+; CHECK: @callee_loop_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 3, i32 15, i32 0 }
 define amdgpu_kernel void @callee_loop(ptr addrspace(1) %a, ptr addrspace(1) %b, i64 %n) {
 entry:
   br label %loop
@@ -330,8 +333,9 @@ exit:
 
 ; An indirect call could carry any amount of this nest's traffic, so the kernel
 ; gets no estimate instead of a short one. The direct load is visible but would
-; be the whole record, which is the failure mode this avoids.
-; CHECK-NOT: @indirect_kernel_traffic
+; be the whole record, which is the failure mode this avoids (3 = indirect
+; call).
+; CHECK: @indirect_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 3 }
 define amdgpu_kernel void @indirect(ptr addrspace(1) %a, ptr %fn, i64 %n) {
 entry:
   br label %loop
@@ -351,7 +355,7 @@ exit:
 
 ; An aggregate copy is a memcpy rather than loads and stores: 24 bytes read from
 ; one stream and written to another, 48 bytes over 2 streams.
-; CHECK: @memcpy_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 48, i32 2, i32 24, i32 24, i32 1, i32 1, i32 1, i32 7 }
+; CHECK: @memcpy_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 48, i32 2, i32 24, i32 24, i32 1, i32 1, i32 1, i32 7, i32 0 }
 define amdgpu_kernel void @memcpy(ptr addrspace(1) %out, ptr addrspace(1) %in, i64 %n) {
 entry:
   br label %loop
@@ -372,7 +376,7 @@ exit:
 ; Only the global side of a memory intrinsic counts: the 16-byte memset of %out
 ; is a store, the copy out of %in into a private buffer is an 8-byte load. 24
 ; bytes over 2 streams.
-; CHECK: @memset_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 24, i32 2, i32 8, i32 16, i32 1, i32 1, i32 1, i32 8 }
+; CHECK: @memset_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 24, i32 2, i32 8, i32 16, i32 1, i32 1, i32 1, i32 8, i32 0 }
 define amdgpu_kernel void @memset(ptr addrspace(1) %out, ptr addrspace(1) %in, i64 %n) {
 entry:
   %tmp = alloca double, align 8, addrspace(5)
@@ -392,8 +396,9 @@ exit:
   ret void
 }
 
-; A copy of unknown length could carry any amount of traffic: no estimate.
-; CHECK-NOT: @memcpy_varlen_kernel_traffic
+; A copy of unknown length could carry any amount of traffic: no estimate
+; (5 = memory intrinsic of non-constant length).
+; CHECK: @memcpy_varlen_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 5 }
 define amdgpu_kernel void @memcpy_varlen(ptr addrspace(1) %out, ptr addrspace(1) %in, i64 %len, i64 %n) {
 entry:
   br label %loop
@@ -412,8 +417,8 @@ exit:
 }
 
 ; A declaration that may access the global memory it is passed is as opaque as
-; an indirect call: no estimate.
-; CHECK-NOT: @opaque_call_kernel_traffic
+; an indirect call: no estimate (4 = opaque call).
+; CHECK: @opaque_call_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 4 }
 define amdgpu_kernel void @opaque_call(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %loop
@@ -433,7 +438,7 @@ exit:
 
 ; A flat pointer passed to such a declaration may point to global memory, just
 ; like the pointer of a flat load or store: no estimate.
-; CHECK-NOT: @opaque_flat_call_kernel_traffic
+; CHECK: @opaque_flat_call_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 4 }
 define amdgpu_kernel void @opaque_flat_call(ptr %a, i64 %n) {
 entry:
   br label %loop
@@ -453,7 +458,7 @@ exit:
 
 ; A flat pointer that provably points to private memory does not block the
 ; estimate. One 8-byte stream.
-; CHECK: @private_flat_call_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 2, i32 7 }
+; CHECK: @private_flat_call_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 2, i32 7, i32 0 }
 define amdgpu_kernel void @private_flat_call(ptr addrspace(1) %a, i64 %n) {
 entry:
   %tmp = alloca double, align 8, addrspace(5)
@@ -476,7 +481,7 @@ exit:
 ; Declarations that cannot reach global memory do not block the estimate:
 ; lifetime markers, a call without memory effects, and one that only touches
 ; the private memory it is passed. One 8-byte stream.
-; CHECK: @harmless_calls_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 5, i32 10 }
+; CHECK: @harmless_calls_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 5, i32 10, i32 0 }
 define amdgpu_kernel void @harmless_calls(ptr addrspace(1) %a, i64 %n) {
 entry:
   %tmp = alloca double, align 8, addrspace(5)
@@ -521,7 +526,7 @@ define internal double @load_pair(ptr addrspace(1) %p, ptr addrspace(1) %q, i64 
 ; the call passes: 16 bytes over 2 streams, as if @load_one were inlined. Counting
 ; the callee once per nest, or keying its accesses by its own parameter, would
 ; give 8 over 1.
-; CHECK: @callee_twice_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 3, i32 12 }
+; CHECK: @callee_twice_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 3, i32 12, i32 0 }
 define amdgpu_kernel void @callee_twice(ptr addrspace(1) %a, ptr addrspace(1) %b, i64 %n) {
 entry:
   br label %loop
@@ -540,7 +545,7 @@ exit:
 
 ; An array accessed directly and through a call is one stream: 16 bytes over 1,
 ; not 2.
-; CHECK: @callee_mixed_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 1, i32 16, i32 0, i32 2, i32 0, i32 2, i32 10 }
+; CHECK: @callee_mixed_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 1, i32 16, i32 0, i32 2, i32 0, i32 2, i32 10, i32 0 }
 define amdgpu_kernel void @callee_mixed(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %loop
@@ -561,7 +566,7 @@ exit:
 ; Parameters are mapped through every level of calls: @load_one's accesses reach
 ; %a and %b via @load_pair's parameters, and %a is also read directly. 24 bytes
 ; over 2 streams.
-; CHECK: @callee_nested_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 24, i32 2, i32 24, i32 0, i32 3, i32 0, i32 5, i32 17 }
+; CHECK: @callee_nested_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 24, i32 2, i32 24, i32 0, i32 3, i32 0, i32 5, i32 17, i32 0 }
 define amdgpu_kernel void @callee_nested(ptr addrspace(1) %a, ptr addrspace(1) %b, i64 %n) {
 entry:
   br label %loop
@@ -595,8 +600,9 @@ exit:
   ret double %v
 }
 
-; A recursive callee may run any number of times per iteration: no estimate.
-; CHECK-NOT: @callee_recursive_kernel_traffic
+; A recursive callee may run any number of times per iteration: no estimate
+; (2 = recursive).
+; CHECK: @callee_recursive_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 2 }
 define amdgpu_kernel void @callee_recursive(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %loop
@@ -612,9 +618,46 @@ exit:
   ret void
 }
 
+; A second kernel reaching the same recursive callee gets the reason, too: a
+; callee that is not analyzable is cached along with why.
+; CHECK: @callee_recursive_again_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 2 }
+define amdgpu_kernel void @callee_recursive_again(ptr addrspace(1) %a, i64 %n) {
+entry:
+  br label %loop
+
+loop:
+  %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+  %v = call double @recurse(ptr addrspace(1) %a, i64 %i)
+  %i.next = add nuw nsw i64 %i, 1
+  %cmp = icmp ult i64 %i.next, %n
+  br i1 %cmp, label %loop, label %exit
+
+exit:
+  ret void
+}
+
+; A kernel whose loop touches no global memory more likely hides its work loop
+; than does nothing: no estimate (7 = no traffic).
+; CHECK: @no_traffic_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 7 }
+define amdgpu_kernel void @no_traffic(ptr addrspace(3) %a, i64 %n) {
+entry:
+  br label %loop
+
+loop:
+  %i = phi i64 [ 0, %entry ], [ %i.next, %loop ]
+  %p = getelementptr inbounds double, ptr addrspace(3) %a, i64 %i
+  %v = load double, ptr addrspace(3) %p, align 8
+  %i.next = add nuw nsw i64 %i, 1
+  %cmp = icmp ult i64 %i.next, %n
+  br i1 %cmp, label %loop, label %exit
+
+exit:
+  ret void
+}
+
 ; A generic-mode parallel region inside a loop brings its barriers into the
 ; nest. They synchronize but move no data: one 8-byte stream.
-; CHECK: @barrier_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 3, i32 8 }
+; CHECK: @barrier_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 3, i32 8, i32 0 }
 define amdgpu_kernel void @barrier(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %loop
@@ -637,7 +680,7 @@ declare void @llvm.amdgcn.s.barrier()
 
 ; Only barriers are exempt: another side-effecting call without memory effects
 ; may still move data, so the kernel gets no estimate.
-; CHECK-NOT: @opaque_barrier_kernel_traffic
+; CHECK: @opaque_barrier_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 4 }
 define amdgpu_kernel void @opaque_barrier(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %loop
@@ -660,7 +703,7 @@ declare void @my_barrier() convergent nounwind
 ; A declaration may run the region it is passed, but only its memory effects
 ; can say what that does. Without any, the kernel gets no estimate, even though
 ; the region's loop would be visible.
-; CHECK-NOT: @outer_opaque_kernel_traffic
+; CHECK: @outer_opaque_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 4 }
 define amdgpu_kernel void @outer_opaque(ptr addrspace(1) %a) {
   call void @__kmpc_parallel_51(ptr null, i32 0, i32 1, i32 -1, i32 -1, ptr @outlined, ptr null, ptr addrspace(1) %a, i64 1)
   ret void
@@ -682,7 +725,7 @@ define internal double @apply(ptr %fn, ptr addrspace(1) %x, i64 %i) noinline {
 
 ; A call through a parameter inside a loop runs what the caller passed for it,
 ; and the accesses are mapped through both calls: 8 bytes over 1 stream, %a.
-; CHECK: @param_call_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 3, i32 10 }
+; CHECK: @param_call_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 3, i32 10, i32 0 }
 define amdgpu_kernel void @param_call(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %loop
@@ -707,7 +750,7 @@ define internal double @apply_twice(ptr %fn, ptr addrspace(1) %x, ptr addrspace(
 
 ; Each call through the parameter counts, each with its own arguments: 16 bytes
 ; over 2 streams.
-; CHECK: @param_call_twice_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 5, i32 15 }
+; CHECK: @param_call_twice_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 5, i32 15, i32 0 }
 define amdgpu_kernel void @param_call_twice(ptr addrspace(1) %a, ptr addrspace(1) %b, i64 %n) {
 entry:
   br label %loop
@@ -726,7 +769,7 @@ exit:
 ; The same function passed two different functions is two different calls: a
 ; load from %a and a store to %b. Reusing the first call's summary for the
 ; second would report two loads.
-; CHECK: @param_call_bindings_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 8, i32 8, i32 1, i32 1, i32 5, i32 16 }
+; CHECK: @param_call_bindings_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 8, i32 8, i32 1, i32 1, i32 5, i32 16, i32 0 }
 define amdgpu_kernel void @param_call_bindings(ptr addrspace(1) %a, ptr addrspace(1) %b, i64 %n) {
 entry:
   br label %loop
@@ -750,7 +793,7 @@ define internal double @forward(ptr %f, ptr addrspace(1) %x, i64 %i) noinline {
 
 ; A function pointer forwarded through another parameter still resolves: 8
 ; bytes over 1 stream.
-; CHECK: @param_call_forwarded_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 4, i32 12 }
+; CHECK: @param_call_forwarded_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 4, i32 12, i32 0 }
 define amdgpu_kernel void @param_call_forwarded(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %loop
@@ -774,7 +817,7 @@ define internal void @stash(ptr %fn) noinline {
 
 ; Passing a function does not run it: only the direct load, 8 bytes over 1
 ; stream. Counting @load_one as well would give 16.
-; CHECK: @param_stored_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 2, i32 9 }
+; CHECK: @param_stored_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 2, i32 9, i32 0 }
 define amdgpu_kernel void @param_stored(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %loop
@@ -810,7 +853,7 @@ exit:
 
 ; One loop run with two bindings is two nests, not one: the heavier of an
 ; 8-byte load and an 8-byte store, rather than both added up (16 bytes).
-; CHECK: @loop_bindings_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 0, i32 8, i32 0, i32 1, i32 2, i32 8 }
+; CHECK: @loop_bindings_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 0, i32 8, i32 0, i32 1, i32 2, i32 8, i32 0 }
 define amdgpu_kernel void @loop_bindings(ptr addrspace(1) %a, i64 %n) {
   call void @apply_loop(ptr @load_one, ptr addrspace(1) %a, i64 %n)
   call void @apply_loop(ptr @store_one, ptr addrspace(1) %a, i64 %n)
@@ -840,7 +883,7 @@ exit:
 
 ; Flat accesses that are not provably private or LDS count as global, so the
 ; work loop in the outlined body is found: 16 bytes over 2 streams.
-; CHECK: @flat_region_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 8, i32 8, i32 1, i32 1, i32 1, i32 8 }
+; CHECK: @flat_region_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 8, i32 8, i32 1, i32 1, i32 1, i32 8, i32 0 }
 define amdgpu_kernel void @flat_region(ptr %in, ptr %out, i64 %n) {
   call void @flat_body(ptr %in, ptr %out, i64 %n)
   ret void
@@ -854,7 +897,7 @@ define internal double @flat_load(ptr %x, i64 %i) noinline {
 
 ; A global array read directly and through a flat pointer in a callee is one
 ; stream, not two: 16 bytes over 1 stream.
-; CHECK: @flat_callee_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 1, i32 16, i32 0, i32 2, i32 0, i32 2, i32 10 }
+; CHECK: @flat_callee_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 1, i32 16, i32 0, i32 2, i32 0, i32 2, i32 10, i32 0 }
 define amdgpu_kernel void @flat_callee(ptr addrspace(1) %a, i64 %n) {
 entry:
   %a.flat = addrspacecast ptr addrspace(1) %a to ptr
@@ -877,7 +920,7 @@ exit:
 ; loads and stores nor for memory intrinsics. What is left is an 8-byte load
 ; and an 8-byte copy out of the flat kernel argument %in: 16 bytes over 1
 ; stream.
-; CHECK: @flat_local_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 1, i32 16, i32 0, i32 2, i32 0, i32 1, i32 11 }
+; CHECK: @flat_local_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 1, i32 16, i32 0, i32 2, i32 0, i32 1, i32 11, i32 0 }
 define amdgpu_kernel void @flat_local(ptr %in, i64 %n) {
 entry:
   %priv = alloca [64 x double], align 8, addrspace(5)
@@ -904,7 +947,7 @@ exit:
 ; The loop of a worksharing construct is the work loop, even if the kernel has
 ; heavier loops, e.g. a cross-team reduction over the partial results of every
 ; team: 8 bytes over 1 stream, not 16 over 1.
-; CHECK: @marked_lighter_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 1, i32 6 }
+; CHECK: @marked_lighter_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 1, i32 6, i32 0 }
 define amdgpu_kernel void @marked_lighter(ptr addrspace(1) %a, ptr addrspace(1) %partials, i64 %n, i64 %teams) {
 entry:
   br label %work
@@ -933,7 +976,7 @@ exit:
 
 ; A work loop that only computes is a finding, not a failure to see the work
 ; loop: no traffic, but its compute ops.
-; CHECK: @marked_compute_only_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 3, i32 8 }
+; CHECK: @marked_compute_only_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 3, i32 8, i32 0 }
 define amdgpu_kernel void @marked_compute_only(ptr addrspace(1) %out, i64 %n) {
 entry:
   br label %loop
@@ -973,7 +1016,7 @@ exit:
 ; A nest that calls the work loop runs it, too: the loop around the call is
 ; the work loop's nest, 8 bytes over 1 stream, rather than the heavier nest
 ; after it.
-; CHECK: @marked_in_callee_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 3, i32 13 }
+; CHECK: @marked_in_callee_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 3, i32 13, i32 0 }
 define amdgpu_kernel void @marked_in_callee(ptr addrspace(1) %a, ptr addrspace(1) %partials, i64 %n, i64 %teams) {
 entry:
   br label %outer
@@ -1001,7 +1044,7 @@ exit:
 
 ; An inner loop with a constant trip count runs that many times per iteration
 ; of the nest: 4 loads of 8 bytes, 32 bytes over 1 stream.
-; CHECK: @inner_const_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 32, i32 1, i32 32, i32 0, i32 4, i32 0, i32 10, i32 34 }
+; CHECK: @inner_const_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 32, i32 1, i32 32, i32 0, i32 4, i32 0, i32 10, i32 34, i32 0 }
 define amdgpu_kernel void @inner_const(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %outer
@@ -1030,7 +1073,7 @@ exit:
 }
 
 ; An inner loop whose trip count is unknown counts once: 8 bytes over 1 stream.
-; CHECK: @inner_unknown_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 4, i32 13 }
+; CHECK: @inner_unknown_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 8, i32 1, i32 8, i32 0, i32 1, i32 0, i32 4, i32 13, i32 0 }
 define amdgpu_kernel void @inner_unknown(ptr addrspace(1) %a, i64 %n, i64 %m) {
 entry:
   br label %outer
@@ -1078,7 +1121,7 @@ exit:
 
 ; The loops of a callee run as often per call as they iterate: 32 bytes over 1
 ; stream, as if @load_four were inlined.
-; CHECK: @inner_in_callee_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 32, i32 1, i32 32, i32 0, i32 4, i32 0, i32 11, i32 36 }
+; CHECK: @inner_in_callee_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 32, i32 1, i32 32, i32 0, i32 4, i32 0, i32 11, i32 36, i32 0 }
 define amdgpu_kernel void @inner_in_callee(ptr addrspace(1) %a, i64 %n) {
 entry:
   br label %loop
@@ -1098,7 +1141,7 @@ exit:
 ; the loop around it and the one next to it do not, even though their trip
 ; counts are known, and neither does the work loop itself: 2 loads from %a and
 ; 1 from %b, 24 bytes over 2 streams.
-; CHECK: @marked_around_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 24, i32 2, i32 24, i32 0, i32 3, i32 0, i32 8, i32 31 }
+; CHECK: @marked_around_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 24, i32 2, i32 24, i32 0, i32 3, i32 0, i32 8, i32 31, i32 0 }
 define amdgpu_kernel void @marked_around(ptr addrspace(1) %a, ptr addrspace(1) %b) {
 entry:
   br label %repeat
@@ -1146,7 +1189,7 @@ exit:
 ; A pointer that selects between an array element and a private copy, e.g.
 ; the reference std::max() returns, is an access to the array: 16 bytes over
 ; 1 stream, not 2. A select between two private copies is no global access.
-; CHECK: @select_private_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 1, i32 16, i32 0, i32 2, i32 0, i32 1, i32 14 }
+; CHECK: @select_private_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 1, i32 16, i32 0, i32 2, i32 0, i32 1, i32 14, i32 0 }
 define amdgpu_kernel void @select_private(ptr %a, i64 %n) {
 entry:
   %m = alloca double, align 8, addrspace(5)
@@ -1177,7 +1220,7 @@ exit:
 
 ; A select between two arrays may reach either, so it is a stream of its own:
 ; 16 bytes over 2 streams.
-; CHECK: @select_globals_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 1, i32 10 }
+; CHECK: @select_globals_kernel_traffic = weak_odr protected addrspace(1) constant { i32, i32, i32, i32, i32, i32, i32, i32, i32 } { i32 16, i32 2, i32 16, i32 0, i32 2, i32 0, i32 1, i32 10, i32 0 }
 define amdgpu_kernel void @select_globals(ptr addrspace(1) %a, ptr addrspace(1) %b, i64 %n) {
 entry:
   br label %loop

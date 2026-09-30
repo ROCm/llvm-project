@@ -339,6 +339,29 @@ enum class WorksharingLoopType {
   DistributeForStaticLoop
 };
 
+/// Whether the OpenMPKernelTraffic pass has an estimate for a kernel, or why
+/// not.
+enum class KernelTrafficStatus : int32_t {
+  /// The image has no <kernel>_kernel_traffic global.
+  NoGlobal = -1,
+  /// The estimate is valid.
+  Valid = 0,
+  /// The kernel or a function it calls is optnone.
+  OptNone = 1,
+  /// A function reached from the kernel is recursive.
+  Recursive = 2,
+  /// An indirect call could not be resolved.
+  IndirectCall = 3,
+  /// A call to a declaration might access global memory.
+  OpaqueCall = 4,
+  /// A memory intrinsic on global memory has a non-constant length.
+  MemIntrinsicLength = 5,
+  /// A global memory access has a scalable type.
+  ScalableType = 6,
+  /// No global memory traffic was found.
+  NoTraffic = 7,
+};
+
 static inline uint32_t getBlockSizeAsPowerOfTwo(uint32_t BlockSize) {
   uint32_t Tmp = BlockSize;
   do {

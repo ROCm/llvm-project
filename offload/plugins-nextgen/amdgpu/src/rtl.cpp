@@ -850,8 +850,8 @@ struct AMDGPUKernelTy : public GenericKernelTy {
       MaxNumThreads = ConstWGSize;
     }
 
-    // The compiler's memory-traffic estimate, if the image carries one. A
-    // kernel it could not analyse simply has no such global, which leaves
+    // The compiler's memory-traffic estimate, or why it has none. An image
+    // compiled without the estimate has no such global, which leaves
     // TrafficData unset and the traffic-aware policy off for that kernel.
     std::string TrafficName(getName());
     TrafficName += "_kernel_traffic";
@@ -970,10 +970,11 @@ private:
   static thread_local uint32_t KernelLaunchId;
 
   /// Blocks the traffic-aware policy picked for the launch being prepared on
-  /// this thread, or zero if it did not apply. The traffic trace is printed
-  /// from printAMDOneLineKernelTrace, once the launch id is known, rather than
-  /// where the grid is chosen.
-  static thread_local uint64_t TrafficTracePolicyBlocks;
+  /// this thread, zero if the kernel has no estimate, or unset if no traffic
+  /// trace is to be printed. The traffic trace is printed from
+  /// printAMDOneLineKernelTrace, once the launch id is known, rather than where
+  /// the grid is chosen.
+  static thread_local std::optional<uint64_t> TrafficTracePolicyBlocks;
 
   /// Lower number of threads if tripcount is low. This should produce
   /// a larger number of teams if allowed by other constraints.
@@ -1107,7 +1108,7 @@ private:
                                  bool IsNumThreadsFromUser) const override {
     assert(!isBareMode() && "bare kernel should not call this function");
 
-    TrafficTracePolicyBlocks = 0;
+    TrafficTracePolicyBlocks.reset();
 
     const auto getNumGroupsFromThreadsAndTripCount =
         [](const uint64_t TripCount, const uint32_t NumThreads) {
@@ -1143,6 +1144,12 @@ private:
           TrafficTracePolicyBlocks = NumGroups;
         return NumGroups;
       }
+
+      // Trace that the policy fell back to the per-mode grid, with why there
+      // is no estimate if that is the reason.
+      if ((getInfoLevel() & OMP_INFOTYPE_AMD_KERNEL_TRACE) &&
+          GenericDevice.useTrafficAwareGridPolicy())
+        TrafficTracePolicyBlocks = 0;
     }
 
     uint64_t NumWavesInGroup =
@@ -1500,7 +1507,7 @@ private:
 };
 
 thread_local uint32_t AMDGPUKernelTy::KernelLaunchId = 0;
-thread_local uint64_t AMDGPUKernelTy::TrafficTracePolicyBlocks = 0;
+thread_local std::optional<uint64_t> AMDGPUKernelTy::TrafficTracePolicyBlocks;
 
 /// Class representing an HSA signal. Signals are used to define dependencies
 /// between asynchronous operations: kernel launches and memory transfers.
@@ -6563,9 +6570,9 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(
   // Printed after the launch id has been assigned above, so the traffic line
   // carries the same id as this launch's kernel-duration line.
   if (TrafficTracePolicyBlocks) {
-    printTrafficTrace(GenericDevice, TrafficTracePolicyBlocks,
+    printTrafficTrace(GenericDevice, *TrafficTracePolicyBlocks,
                       LaunchArgs.Tripcount);
-    TrafficTracePolicyBlocks = 0;
+    TrafficTracePolicyBlocks.reset();
   }
 }
 

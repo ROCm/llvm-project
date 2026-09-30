@@ -1207,7 +1207,8 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
           // that reaches the OptimizerLast callback above, but flang, or a
           // link without an optimization level, gets the default full LTO
           // pipeline, which only reaches this one. A kernel that already has
-          // an estimate is skipped, so ending up in both is harmless.
+          // a valid estimate is skipped and a failed one is retried, so ending
+          // up in both is harmless.
           if (getTargetTriple().isAMDGCN())
             PM.addPass(OpenMPKernelTrafficPass());
         }

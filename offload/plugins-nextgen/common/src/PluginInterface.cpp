@@ -287,12 +287,50 @@ Error GenericKernelTy::printLaunchInfoDetails(
   return Plugin::success();
 }
 
+/// The name a traffic trace gives \p Status.
+static const char *getTrafficStatusName(int32_t Status) {
+  switch (static_cast<KernelTrafficStatus>(Status)) {
+  case KernelTrafficStatus::NoGlobal:
+    return "no-global";
+  case KernelTrafficStatus::Valid:
+    return "valid";
+  case KernelTrafficStatus::OptNone:
+    return "optnone";
+  case KernelTrafficStatus::Recursive:
+    return "recursive";
+  case KernelTrafficStatus::IndirectCall:
+    return "indirect-call";
+  case KernelTrafficStatus::OpaqueCall:
+    return "opaque-call";
+  case KernelTrafficStatus::MemIntrinsicLength:
+    return "memintrinsic-len";
+  case KernelTrafficStatus::ScalableType:
+    return "scalable";
+  case KernelTrafficStatus::NoTraffic:
+    return "no-traffic";
+  }
+  return "unknown";
+}
+
 /// Print the compiler's memory-traffic analysis of this kernel alongside the
 /// grid the policy asked for, so a heuristic can be refitted from a log alone.
+/// For a kernel without an estimate, print why there is none instead.
 void GenericKernelTy::printTrafficTrace(GenericDeviceTy &GenericDevice,
                                         uint64_t PolicyBlocks,
                                         uint64_t LoopTripCount) const {
   const KernelTrafficTy &C = TrafficData;
+
+  if (C.Status != static_cast<int32_t>(KernelTrafficStatus::Valid)) {
+    fprintf(stderr,
+            "DEVID: %2d LaunchId: %u traffic arch:%s enabled:%d estimate:none "
+            "reason:%s lds:%uB trip:%lu n:%s\n",
+            GenericDevice.getDeviceId(), getKernelLaunchId(),
+            GenericDevice.getComputeUnitKind().c_str(),
+            GenericDevice.useTrafficAwareGridPolicy(),
+            getTrafficStatusName(C.Status), getStaticBlockMemSize(),
+            LoopTripCount, getName());
+    return;
+  }
 
   // The regime the kernel fell into, so a log carries the reason for its grid.
   const char *Regime = "none";
@@ -506,9 +544,9 @@ GenericKernelTy::getTrafficAwareNumBlocks(GenericDeviceTy &GenericDevice,
   if (!GenericDevice.useTrafficAwareGridPolicy() || !EffectiveNumThreads)
     return 0;
 
-  int32_t BytesPerIter = TrafficData.BytesPerIter;
-  if (BytesPerIter < 0)
+  if (TrafficData.Status != static_cast<int32_t>(KernelTrafficStatus::Valid))
     return 0;
+  int32_t BytesPerIter = TrafficData.BytesPerIter;
 
   // Plugins that do not report their compute units opt out by returning zero.
   uint32_t NumComputeUnits = GenericDevice.getNumComputeUnits();

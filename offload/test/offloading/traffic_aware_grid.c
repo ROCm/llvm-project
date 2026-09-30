@@ -5,12 +5,19 @@
 // The comparison is deliberately relative. The absolute block counts depend on
 // the device's resident thread capacity, so only the ordering is portable.
 //
-// The analysis that supplies the estimate only runs at -O1 and above.
+// The analysis that supplies the estimate only runs at -O1 and above. Without
+// it, the kernel trace says why a kernel has no estimate.
 //
 // RUN: %libomptarget-compile-generic -O2
 // RUN: env LIBOMPTARGET_TRAFFIC_AWARE_GRID=1 %libomptarget-run-generic 2>&1 \
 // RUN:  | %fcheck-generic
 // RUN: %libomptarget-run-generic 2>&1 | %fcheck-generic --check-prefix=DISABLED
+// RUN: %libomptarget-compile-generic -O0
+// RUN: env LIBOMPTARGET_TRAFFIC_AWARE_GRID=1 LIBOMPTARGET_KERNEL_TRACE=1 \
+// RUN:  %libomptarget-run-generic 2>&1 | %fcheck-generic --check-prefix=NOEST
+//
+// NOEST: traffic {{.*}} estimate:none reason:no-global {{.*}}_light_
+// NOEST: traffic {{.*}} estimate:none reason:no-global {{.*}}_heavy_
 //
 // REQUIRES: amdgpu
 
