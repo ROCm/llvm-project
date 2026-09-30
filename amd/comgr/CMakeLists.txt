@@ -388,6 +388,12 @@ list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS AMD_COMGR_EXPORT)
 
 include(bc2h)
 include(opencl_header)
+# opencl_header re-runs find_package(Clang); ClangConfig/LLVMConfig set the
+# dylib flags ON. Restore before any later use of those flags.
+if(COMGR_STATIC_LLVM)
+  set(LLVM_LINK_LLVM_DYLIB OFF)
+  set(CLANG_LINK_CLANG_DYLIB OFF)
+endif()
 include(DeviceLibs)
 
 # Embed libc++ headers for HIPRTC std C++ support
@@ -621,6 +627,10 @@ endif()
 
 if (LLVM_LINK_LLVM_DYLIB)
   set(LLVM_LIBS LLVM ${SPIRV_DYNAMIC_LIB})
+elseif(COMGR_STATIC_LLVM)
+  # Same umbrella the LLVM dylib provides, minus the dylib itself.
+  set(LLVM_LIBS ${LLVM_AVAILABLE_LIBS} ${SPIRV_STATIC_LIB})
+  list(REMOVE_ITEM LLVM_LIBS LLVM)
 else()
   llvm_map_components_to_libnames(LLVM_LIBS
     ${LLVM_TARGETS_TO_BUILD}
@@ -652,11 +662,59 @@ target_link_options(amd_comgr
   PRIVATE
     ${AMD_COMGR_PRIVATE_LINKER_OPTIONS})
 
-target_link_libraries(amd_comgr
-  PRIVATE
+if(COMGR_STATIC_LLVM)
+  # Imported Clang/LLD targets INTERFACE_LINK the LLVM dylib. Link archives
+  # by file so that INTERFACE is not applied. LLVM_LIBS is already the
+  # static umbrella; only walk Clang/LLD to pick up clangAST and friends.
+  # GNU ld needs --start-group for archive cycles.
+  set(_comgr_files "")
+  foreach(_t ${LLVM_LIBS})
+    if(TARGET "${_t}")
+      list(APPEND _comgr_files "$<TARGET_FILE:${_t}>")
+    endif()
+  endforeach()
+  set(_comgr_seen LLVM)
+  set(_comgr_q ${CLANG_LIBS} ${LLD_LIBS})
+  while(_comgr_q)
+    list(GET _comgr_q 0 _t)
+    list(REMOVE_AT _comgr_q 0)
+    if(_t AND NOT _t IN_LIST _comgr_seen)
+      list(APPEND _comgr_seen "${_t}")
+      if(TARGET "${_t}")
+        list(APPEND _comgr_files "$<TARGET_FILE:${_t}>")
+        get_property(_deps TARGET "${_t}" PROPERTY INTERFACE_LINK_LIBRARIES)
+        list(APPEND _comgr_q ${_deps})
+      endif()
+    endif()
+  endwhile()
+  if(UNIX AND NOT APPLE)
+    target_link_libraries(amd_comgr PRIVATE
+      "-Wl,--start-group" ${_comgr_files} "-Wl,--end-group")
+  else()
+    target_link_libraries(amd_comgr PRIVATE ${_comgr_files})
+  endif()
+  # LLVMSupport needs these; skipping INTERFACE dropped them.
+  if(LLVM_ENABLE_ZLIB)
+    target_link_libraries(amd_comgr PRIVATE ZLIB::ZLIB)
+  endif()
+  if(LLVM_ENABLE_ZSTD)
+    if(TARGET zstd::libzstd_static)
+      target_link_libraries(amd_comgr PRIVATE zstd::libzstd_static)
+    elseif(TARGET zstd::libzstd_shared)
+      target_link_libraries(amd_comgr PRIVATE zstd::libzstd_shared)
+    endif()
+  endif()
+  unset(_comgr_files)
+  unset(_comgr_seen)
+  unset(_comgr_q)
+  unset(_t)
+  unset(_deps)
+else()
+  target_link_libraries(amd_comgr PRIVATE
     ${LLD_LIBS}
     ${LLVM_LIBS}
     ${CLANG_LIBS})
+endif()
 
 if(TARGET embedded-resource-dir)
   target_link_libraries(amd_comgr PRIVATE embedded-resource-dir)
