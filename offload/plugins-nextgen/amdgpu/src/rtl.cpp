@@ -3926,19 +3926,17 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   uint32_t getNumComputeUnits() const override { return NumComputeUnits; }
 
   /// Measured with gfx90a, gfx942, and gfx950.
-  uint32_t getDefaultBandwidthCUMult() const override {
-    StringRef Arch(ComputeUnitKind);
-    return Arch.starts_with("gfx950") || Arch.starts_with("gfx942") ? 2 : 1;
-  }
+  uint32_t getDefaultBandwidthCUMult() const override { return 2; }
 
-  /// Measured with gfx90a (saturates at every traffic level), gfx942, and
-  /// gfx950.
+  /// Measured with gfx90a, gfx942, and gfx950.
   int32_t getDefaultBandwidthSaturationBytes() const override {
     StringRef Arch(ComputeUnitKind);
     if (Arch.starts_with("gfx950"))
       return 36;
     if (Arch.starts_with("gfx942"))
       return 24;
+    if (Arch.starts_with("gfx90a"))
+      return 16;
     return 0;
   }
 
