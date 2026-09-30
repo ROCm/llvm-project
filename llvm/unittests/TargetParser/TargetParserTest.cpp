@@ -3597,13 +3597,13 @@ TEST(TargetParserTest, testAMDGPUParseTargetIDString) {
   EXPECT_FALSE(
       TargetID::parseTargetIDString("amdgpu11-amd-amdhsa-unknown-gfx1200"));
 
-  // A subarchless "amdgpu" or an unrecognized "amdgpu<x>" arch is rejected,
-  // even with an otherwise valid processor.
-  EXPECT_FALSE(
+  // A subarchless "amdgpu" is the canonical spelling of the offload triple and
+  // is accepted, but an unrecognized "amdgpu<x>" suffix is rejected.
+  EXPECT_TRUE(
       TargetID::parseTargetIDString("amdgpu-amd-amdhsa-unknown-gfx900"));
   EXPECT_FALSE(
       TargetID::parseTargetIDString("amdgpufoo-amd-amdhsa-unknown-gfx900"));
-  EXPECT_FALSE(TargetID::parseTargetIDString("amdgpu-amd-amdhsa-unknown-"));
+  EXPECT_TRUE(TargetID::parseTargetIDString("amdgpu-amd-amdhsa-unknown-"));
   EXPECT_FALSE(TargetID::parseTargetIDString("amdgpufoo-amd-amdhsa-unknown"));
 
   // Constructing directly from a triple and processor+features string must
@@ -3622,12 +3622,12 @@ TEST(TargetParserTest, testAMDGPUParseTargetIDString) {
   }
 
   EXPECT_EQ(TargetID::parse(AMDHSA, "gfx908:xnack+:sramecc-")
-                ->getCanonicalFeatureString(),
+                ->getCanonicalTargetIDString(),
             "gfx908:sramecc-:xnack+");
-  EXPECT_EQ(TargetID::parse(AMDHSA, "gfx908")->getCanonicalFeatureString(),
+  EXPECT_EQ(TargetID::parse(AMDHSA, "gfx908")->getCanonicalTargetIDString(),
             "gfx908");
   EXPECT_EQ(TargetID::parse(Triple("amdgcn-amd-amdpal"), "gfx908:xnack-")
-                ->getCanonicalFeatureString(),
+                ->getCanonicalTargetIDString(),
             "gfx908:xnack-");
   EXPECT_TRUE(TargetID::parse(AMDHSA, "").has_value());
   EXPECT_FALSE(TargetID::parse(AMDHSA, "gfxbogus").has_value());
@@ -3659,7 +3659,7 @@ TEST(TargetParserTest, testAMDGPUSramEccOnOffModes) {
     ASSERT_TRUE(Default);
     EXPECT_EQ(Default->getGPUKind(), Kind);
     EXPECT_EQ(Default->getSramEccSetting(), TargetIDSetting::Any);
-    EXPECT_EQ(Default->getCanonicalFeatureString(), GPU);
+    EXPECT_EQ(Default->getCanonicalTargetIDString(), GPU);
 
     for (bool Enabled : {false, true}) {
       StringRef Mode = Enabled ? ":sramecc+" : ":sramecc-";
@@ -3669,7 +3669,7 @@ TEST(TargetParserTest, testAMDGPUSramEccOnOffModes) {
       auto Explicit = TargetID::parse(TT, Mode);
       ASSERT_TRUE(Explicit);
       EXPECT_EQ(Explicit->getSramEccSetting(), Setting);
-      EXPECT_EQ(Explicit->getCanonicalFeatureString(), ID);
+      EXPECT_EQ(Explicit->getCanonicalTargetIDString(), ID);
       EXPECT_EQ(Explicit->toString(),
                 (SubArch + "-amd-amdhsa-unknown-" + ID).str());
 #if FIXME
