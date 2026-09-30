@@ -75,8 +75,8 @@ llvm::Error handleVGLOBAL(RaiseContext &Ctx, const DecodedInst &Di,
                           OperandResolver &Op);
 /// Raise raw unformatted buffer loads and stores, or return a refusal.
 llvm::Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction);
-/// Raise direct VGPR LDS loads using AMDHSA's unaligned access mode.
-/// Active accesses must lie wholly within the workgroup's LDS allocation.
+/// Raise VGPR LDS loads, stores and atomics using AMDHSA's unaligned access
+/// mode. Active accesses must lie wholly within the workgroup's LDS allocation.
 llvm::Error handleDS(RaiseContext &Context, const DecodedInst &Instruction);
 /// Translate a supported plain VOP1 instruction, or return a structured
 /// refusal.

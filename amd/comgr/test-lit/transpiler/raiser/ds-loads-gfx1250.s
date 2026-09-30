@@ -21,7 +21,7 @@
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 \
 ; RUN:   --emit-ir=ds_high_address | %FileCheck %s --check-prefix=HIGH
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx950 \
-; RUN:   --emit-ir=ds_tr4_unsupported,ds_tr6_unsupported,ds_two_addresses 2>&1 \
+; RUN:   --emit-ir=ds_tr4_unsupported,ds_tr6_unsupported 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -208,16 +208,6 @@ ds_tr6_unsupported:
 	ds_load_tr6_b96 v[2:4], v0
 	s_endpgm
 
-	.globl ds_two_addresses
-	.p2align 8
-	.type ds_two_addresses,@function
-ds_two_addresses:
-; REFUSE: unsupported-instruction-form: ds_load_2addr_b32 [DS]
-; REFUSE-SAME: in kernel 'ds_two_addresses'
-; REFUSE-SAME: unsupported DS operation
-	ds_load_2addr_b32 v[2:3], v0 offset0:1 offset1:2
-	s_endpgm
-
 	.section .rodata,"a",@progbits
 	.p2align 6
 	.amdhsa_kernel ds_widths
@@ -253,12 +243,6 @@ ds_two_addresses:
 	.amdhsa_kernel ds_tr6_unsupported
 		.amdhsa_group_segment_fixed_size 256
 		.amdhsa_next_free_vgpr 5
-		.amdhsa_next_free_sgpr 0
-		.amdhsa_wavefront_size32 1
-	.end_amdhsa_kernel
-	.amdhsa_kernel ds_two_addresses
-		.amdhsa_group_segment_fixed_size 256
-		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 0
 		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
@@ -314,16 +298,6 @@ amdhsa.kernels:
     .max_flat_workgroup_size: 64
     .sgpr_count: 0
     .vgpr_count: 5
-    .wavefront_size: 32
-  - .name: ds_two_addresses
-    .symbol: ds_two_addresses.kd
-    .group_segment_fixed_size: 256
-    .kernarg_segment_size: 0
-    .kernarg_segment_align: 8
-    .private_segment_fixed_size: 0
-    .max_flat_workgroup_size: 64
-    .sgpr_count: 0
-    .vgpr_count: 4
     .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...

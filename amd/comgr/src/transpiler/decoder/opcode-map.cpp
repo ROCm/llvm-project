@@ -47,6 +47,10 @@ struct Entry {
 
 #define BUFFER_RAW(OP, SEM) E(OP##_OFFSET, SEM), E(OP##_OFFEN, SEM)
 
+// DS pseudos come in a pre-GFX9 form carrying an M0 operand and a GFX9-and-
+// later form without one. Both reach the same CanonicalOp.
+#define DS_M0(OP, SEM) E(OP, SEM), E(OP##_gfx9, SEM)
+
 static const Entry kCanonTable[] = {
     // clang-format off
     E(S_MOV_B32, S_MOV_B32),
@@ -365,12 +369,33 @@ static const Entry kCanonTable[] = {
     BUFFER_RAW(BUFFER_STORE_SHORT_D16_HI, BUFFER_STORE_D16_HI_B16),
     E(DS_LOAD_TR16_B128, DS_LOAD_TR16_B128),
     E(DS_LOAD_TR8_B64, DS_LOAD_TR8_B64),
-    E(DS_READ_B128, DS_LOAD_B128),
-    E(DS_READ_B128_gfx9, DS_LOAD_B128),
-    E(DS_READ_B32, DS_LOAD_B32),
-    E(DS_READ_B32_gfx9, DS_LOAD_B32),
-    E(DS_READ_B64, DS_LOAD_B64),
-    E(DS_READ_B64_gfx9, DS_LOAD_B64),
+    DS_M0(DS_READ_U8, DS_LOAD_U8),
+    DS_M0(DS_READ_I8, DS_LOAD_I8),
+    DS_M0(DS_READ_U16, DS_LOAD_U16),
+    DS_M0(DS_READ_I16, DS_LOAD_I16),
+    DS_M0(DS_READ_B32, DS_LOAD_B32),
+    DS_M0(DS_READ_B64, DS_LOAD_B64),
+    DS_M0(DS_READ_B96, DS_LOAD_B96),
+    DS_M0(DS_READ_B128, DS_LOAD_B128),
+    DS_M0(DS_WRITE_B8, DS_STORE_B8),
+    DS_M0(DS_WRITE_B16, DS_STORE_B16),
+    DS_M0(DS_WRITE_B32, DS_STORE_B32),
+    DS_M0(DS_WRITE_B64, DS_STORE_B64),
+    DS_M0(DS_WRITE_B96, DS_STORE_B96),
+    DS_M0(DS_WRITE_B128, DS_STORE_B128),
+    // The partial stores have a single pseudo each, with no GFX9 counterpart.
+    E(DS_WRITE_B8_D16_HI, DS_STORE_B8_D16_HI),
+    E(DS_WRITE_B16_D16_HI, DS_STORE_B16_D16_HI),
+    DS_M0(DS_READ2_B32, DS_LOAD_2ADDR_B32),
+    DS_M0(DS_READ2_B64, DS_LOAD_2ADDR_B64),
+    DS_M0(DS_READ2ST64_B32, DS_LOAD_2ADDR_STRIDE64_B32),
+    DS_M0(DS_READ2ST64_B64, DS_LOAD_2ADDR_STRIDE64_B64),
+    DS_M0(DS_WRITE2_B32, DS_STORE_2ADDR_B32),
+    DS_M0(DS_WRITE2_B64, DS_STORE_2ADDR_B64),
+    DS_M0(DS_WRITE2ST64_B32, DS_STORE_2ADDR_STRIDE64_B32),
+    DS_M0(DS_WRITE2ST64_B64, DS_STORE_2ADDR_STRIDE64_B64),
+    DS_M0(DS_ADD_U32, DS_ADD_U32),
+    DS_M0(DS_ADD_RTN_U32, DS_ADD_RTN_U32),
     // Integer comparisons. Each comparison is reached by three pseudos: the
     // plain one, the pre-GFX10 `v_cmpx` that also writes a scalar destination,
     // and the GFX10-and-later `v_cmpx` that writes EXEC alone.
@@ -583,6 +608,7 @@ static const Entry kCanonTable[] = {
 
 #undef E
 #undef BUFFER_RAW
+#undef DS_M0
 
 // Update this bound when SIEncodingFamily gains a new value, otherwise opcodes
 // using that encoding remain unmapped.
