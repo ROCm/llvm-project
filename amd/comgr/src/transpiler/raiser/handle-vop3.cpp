@@ -359,6 +359,8 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
 Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
   switch (Di.CanonOp) {
+  case CanonicalOp::V_NOP:
+    return Error::success();
   case CanonicalOp::V_CVT_F32_I32:
   case CanonicalOp::V_CVT_F32_U32:
   case CanonicalOp::V_CVT_F32_UBYTE0:

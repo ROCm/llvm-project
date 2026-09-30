@@ -11,6 +11,7 @@
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
 #include "transpiler/decoder/parsed-reg.h"
+#include "transpiler/raiser/handle-vop-cross-lane.h"
 #include "transpiler/raiser/handle-vop-shared.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
@@ -199,6 +200,10 @@ static Error raiseMulHi24(RaiseContext &Ctx, OperandResolver &Op,
 Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
   switch (Di.CanonOp) {
+  case CanonicalOp::V_READLANE_B32:
+    return raiseReadLane32(Ctx, Di, Op);
+  case CanonicalOp::V_WRITELANE_B32:
+    return raiseWriteLane32(Ctx, Di, Op);
   case CanonicalOp::V_ADD_F32:
     return raiseFloatBinary(Ctx, Di, Op, Instruction::FAdd,
                             /*ReverseOperands=*/false);
