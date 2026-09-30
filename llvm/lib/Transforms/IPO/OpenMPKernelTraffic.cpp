@@ -25,6 +25,7 @@
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -61,6 +62,8 @@ static constexpr StringRef ExecModeSuffix = "_exec_mode";
 /// Suffix of the global this pass emits, read back by the offload plugin.
 /// TODO: for downstream compatibility, Should be added to KLE later.
 static constexpr StringRef KernelTrafficSuffix = "_kernel_traffic";
+/// The counters in a <kernel>_kernel_traffic global, which precede its status.
+static constexpr unsigned NumTrafficCounters = 8;
 
 /// Loop property with which OpenMPWorkLoopMarkerPass marks the loop of a static
 /// worksharing construct.
@@ -229,6 +232,9 @@ struct KernelTraffic {
   bool operator>(const KernelTraffic &RHS) const { return RHS < *this; }
 };
 
+/// Valid, or why something is not analyzable.
+using TrafficStatus = omp::KernelTrafficStatus;
+
 /// Walks a kernel, bucketing the width of every access to global addrspace it
 /// performs inside a loop by underlying object, and keeps the heaviest nest.
 class TrafficEstimator {
@@ -237,14 +243,16 @@ public:
                    unsigned GlobalAS)
       : DL(DL), FAM(FAM), GlobalAS(GlobalAS) {}
 
-  /// Returns std::nullopt when the kernel cannot be analyzed meaningfully.
-  std::optional<KernelTraffic> run(Function &Kernel) {
+  /// Estimate the traffic of \p Kernel into \p Heaviest. Return why the
+  /// kernel cannot be analyzed meaningfully, or Valid.
+  TrafficStatus run(Function &Kernel, KernelTraffic &Heaviest) {
     Heaviest = KernelTraffic();
     Nests.clear();
     Visited.clear();
     FlatAS = FAM.getResult<TargetIRAnalysis>(Kernel).getFlatAddressSpace();
-    if (!visit(Kernel, Bindings()))
-      return std::nullopt;
+    if (TrafficStatus Status = visit(Kernel, Bindings());
+        Status != TrafficStatus::Valid)
+      return Status;
 
     // Once the device runtime is inlined, a kernel might have several loops
     // besides the actual work loop. Only nests that run the loop of a
@@ -269,7 +277,7 @@ public:
     }
 
     if (SawWorkLoop)
-      return Heaviest;
+      return TrafficStatus::Valid;
 
     LLVM_DEBUG(dbgs() << "openmp-kernel-traffic: " << Kernel.getName()
                       << ": no worksharing loop found, using the heaviest "
@@ -283,28 +291,29 @@ public:
     if (!Heaviest.Bytes && !Heaviest.Streams) {
       LLVM_DEBUG(dbgs() << "openmp-kernel-traffic: " << Kernel.getName()
                         << ": no traffic found -> conservative fallback\n");
-      return std::nullopt;
+      return TrafficStatus::NoTraffic;
     }
 
-    return Heaviest;
+    return TrafficStatus::Valid;
   }
 
 private:
   /// Walk \p F, which runs outside any loop nest, with its parameters bound as
   /// \p B. Follow loops and calls.
-  /// Return false if the function is not analyzable.
-  bool visit(Function &F, const Bindings &B);
+  /// Return why the function is not analyzable, or Valid.
+  TrafficStatus visit(Function &F, const Bindings &B);
 
   /// Add the instructions in \p BB, which run \p Weight times per call or per
   /// iteration of the nest \p AS describes, to \p AS. The parameters of the
   /// function \p BB is in are bound as \p B.
-  /// Return false if something is not analyzable.
-  bool accumulate(const BasicBlock &BB, AccessSummary &AS, const Bindings &B,
-                  uint64_t Weight);
+  /// Return why something is not analyzable, or Valid.
+  TrafficStatus accumulate(const BasicBlock &BB, AccessSummary &AS,
+                           const Bindings &B, uint64_t Weight);
 
   /// The accesses of one call to \p F with its parameters bound as \p B, or
-  /// null if \p F is not analyzable.
-  const AccessSummary *summarize(Function &F, const Bindings &B);
+  /// null and why \p F is not analyzable.
+  std::pair<const AccessSummary *, TrafficStatus> summarize(Function &F,
+                                                            const Bindings &B);
 
   /// Add \p Child, the summary of \p Callee, which \p Call makes \p Weight
   /// times, to \p Parent.
@@ -340,15 +349,14 @@ private:
   /// loops as two different nests, which must not be added up.
   std::map<std::pair<const Loop *, Bindings>, AccessSummary> Nests;
 
-  KernelTraffic Heaviest;
   /// Functions walked by visit(), with the binding they were walked with.
   std::set<std::pair<const Function *, Bindings>> Visited;
 
-  /// Per-call summaries, null for functions that are not analyzable. They
-  /// depend on the binding but not on the kernel, so they are kept across
-  /// kernels.
+  /// Per-call summaries, null along with why for functions that are not
+  /// analyzable. They depend on the binding but not on the kernel, so they are
+  /// kept across kernels.
   std::map<std::pair<const Function *, Bindings>,
-           std::unique_ptr<AccessSummary>>
+           std::pair<std::unique_ptr<AccessSummary>, TrafficStatus>>
       Summaries;
   /// Functions whose summary is being computed, to detect recursion.
   SmallPtrSet<const Function *, 8> InProgress;
@@ -359,13 +367,13 @@ private:
 /// We require InferAddrspace so that we see the actual addrspaces of memory
 /// accesses instead of the generic ones where possible. The rest is classified
 /// by mayBeGlobal().
-static bool isAnalyzable(const Function &F) {
+static TrafficStatus checkAnalyzable(const Function &F) {
   if (F.hasFnAttribute(Attribute::OptimizeNone)) {
     LLVM_DEBUG(dbgs() << "openmp-kernel-traffic: " << F.getName()
                       << ": not analyzable (marked as optnone)\n");
-    return false;
+    return TrafficStatus::OptNone;
   }
-  return true;
+  return TrafficStatus::Valid;
 }
 
 bool TrafficEstimator::mayAccessGlobalMemory(const CallBase &CB) const {
@@ -489,39 +497,44 @@ void TrafficEstimator::addSummary(AccessSummary &Parent,
   Parent.RunsWorkLoop |= Child.RunsWorkLoop;
 }
 
-const AccessSummary *TrafficEstimator::summarize(Function &F,
-                                                 const Bindings &B) {
+std::pair<const AccessSummary *, TrafficStatus>
+TrafficEstimator::summarize(Function &F, const Bindings &B) {
   auto Key = std::make_pair(static_cast<const Function *>(&F), B);
   if (auto It = Summaries.find(Key); It != Summaries.end())
-    return It->second.get();
+    return {It->second.first.get(), It->second.second};
 
   // Reaching a function again while it is still being summarized means it is
   // recursive and may run any number of times per iteration.
   if (!InProgress.insert(&F).second) {
     LLVM_DEBUG(dbgs() << "openmp-kernel-traffic: " << F.getName()
                       << ": not analyzable (recursive)\n");
-    return nullptr;
+    return {nullptr, TrafficStatus::Recursive};
   }
 
   // Everything the function does happens once per call, its loops as often as
   // they iterate.
   auto Sum = std::make_unique<AccessSummary>();
-  bool Analyzable = isAnalyzable(F);
-  if (Analyzable) {
+  TrafficStatus Status = checkAnalyzable(F);
+  if (Status == TrafficStatus::Valid) {
     IterationWeights Weights(F, FAM, /*CalledFromNest=*/true);
-    Analyzable = all_of(F, [&](const BasicBlock &BB) {
-      return accumulate(BB, *Sum, B, Weights.get(BB));
-    });
+    for (const BasicBlock &BB : F) {
+      Status = accumulate(BB, *Sum, B, Weights.get(BB));
+      if (Status != TrafficStatus::Valid)
+        break;
+    }
     Sum->RunsWorkLoop |= Weights.hasWorkLoop();
   }
   InProgress.erase(&F);
-  std::unique_ptr<AccessSummary> &Slot = Summaries[std::move(Key)];
-  Slot = Analyzable ? std::move(Sum) : nullptr;
-  return Slot.get();
+  if (Status != TrafficStatus::Valid)
+    Sum = nullptr;
+  auto &Slot = Summaries[std::move(Key)];
+  Slot = std::make_pair(std::move(Sum), Status);
+  return {Slot.first.get(), Slot.second};
 }
 
-bool TrafficEstimator::accumulate(const BasicBlock &BB, AccessSummary &AS,
-                                  const Bindings &B, uint64_t Weight) {
+TrafficStatus TrafficEstimator::accumulate(const BasicBlock &BB,
+                                           AccessSummary &AS, const Bindings &B,
+                                           uint64_t Weight) {
   NestCounter &T = AS.Counters;
 
   for (const Instruction &I : BB) {
@@ -542,7 +555,7 @@ bool TrafficEstimator::accumulate(const BasicBlock &BB, AccessSummary &AS,
                      << "openmp-kernel-traffic: " << I.getFunction()->getName()
                      << ": not analyzable (memory intrinsic with "
                         "non-constant length)\n");
-          return false;
+          return TrafficStatus::MemIntrinsicLength;
         }
 
         uint64_t W = Len->getZExtValue();
@@ -560,7 +573,7 @@ bool TrafficEstimator::accumulate(const BasicBlock &BB, AccessSummary &AS,
         LLVM_DEBUG(dbgs() << "openmp-kernel-traffic: "
                           << I.getFunction()->getName()
                           << ": not analyzable (unresolved indirect call)\n");
-        return false;
+        return TrafficStatus::IndirectCall;
       }
 
       if (Callee->isDeclaration()) {
@@ -571,13 +584,13 @@ bool TrafficEstimator::accumulate(const BasicBlock &BB, AccessSummary &AS,
                           << ": not analyzable (call to " << Callee->getName()
                           << " is an unresolved non-intrinsic that might "
                              "access global memory)\n");
-        return false;
+        return TrafficStatus::OpaqueCall;
       }
 
       // Every call adds the callee's accesses again, as it would if inlined.
-      const AccessSummary *Sum = summarize(*Callee, bind(*CB, B));
+      auto [Sum, Status] = summarize(*Callee, bind(*CB, B));
       if (!Sum)
-        return false;
+        return Status;
       addSummary(AS, *Sum, *CB, *Callee, Weight);
       continue;
     }
@@ -612,29 +625,30 @@ bool TrafficEstimator::accumulate(const BasicBlock &BB, AccessSummary &AS,
       LLVM_DEBUG(dbgs() << "openmp-kernel-traffic: "
                         << I.getFunction()->getName()
                         << ": not analyzable (uses scalable type)\n");
-      return false;
+      return TrafficStatus::ScalableType;
     }
 
     recordAccess(AS, Ptr, Width.getFixedValue(), isa<LoadInst>(&I), Weight);
   }
-  return true;
+  return TrafficStatus::Valid;
 }
 
-bool TrafficEstimator::visit(Function &F, const Bindings &B) {
+TrafficStatus TrafficEstimator::visit(Function &F, const Bindings &B) {
   if (!Visited.insert({&F, B}).second)
-    return true;
+    return TrafficStatus::Valid;
 
-  if (!isAnalyzable(F))
-    return false;
+  if (TrafficStatus Status = checkAnalyzable(F); Status != TrafficStatus::Valid)
+    return Status;
 
   const LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   IterationWeights Weights(F, FAM, /*CalledFromNest=*/false);
 
   for (const BasicBlock &BB : F) {
     if (const Loop *L = LI.getLoopFor(&BB)) {
-      if (!accumulate(BB, Nests[{L->getOutermostLoop(), B}], B,
-                      Weights.get(BB)))
-        return false;
+      if (TrafficStatus Status = accumulate(
+              BB, Nests[{L->getOutermostLoop(), B}], B, Weights.get(BB));
+          Status != TrafficStatus::Valid)
+        return Status;
     } else {
       // Outside any loop: prologue or epilogue, not per-iteration traffic ->
       // neither memory, nor compute ops matter (in our current model). A call
@@ -648,7 +662,7 @@ bool TrafficEstimator::visit(Function &F, const Bindings &B) {
         if (!Callee) {
           LLVM_DEBUG(dbgs() << "openmp-kernel-traffic: " << F.getName()
                             << ": not analyzable (unresolved indirect call)\n");
-          return false;
+          return TrafficStatus::IndirectCall;
         }
 
         if (Callee->isDeclaration()) {
@@ -657,50 +671,60 @@ bool TrafficEstimator::visit(Function &F, const Bindings &B) {
           LLVM_DEBUG(dbgs() << "openmp-kernel-traffic: " << F.getName()
                             << ": not analyzable (unresolved declaration that "
                                "might access global memory)\n");
-          return false;
+          return TrafficStatus::OpaqueCall;
         }
 
-        if (!visit(*Callee, bind(*CB, B)))
-          return false;
+        if (TrafficStatus Status = visit(*Callee, bind(*CB, B));
+            Status != TrafficStatus::Valid)
+          return Status;
       }
     }
   }
 
-  return true;
+  return TrafficStatus::Valid;
 }
 
-/// Emit the estimate as a standalone <kernel>_kernel_traffic global.
+/// Emit the <kernel>_kernel_traffic global of \p Kernel: \p Traffic, or -1 for
+/// every counter if there is none, followed by \p Status.
 ///
 /// The fields are written in the declaration order of KernelTrafficTy in
 /// offload/include/Shared/Environment.h, which the host plugin reads them back
 /// in; the order must not change.
-static void recordTraffic(Module &M, StringRef Name,
-                          const KernelTraffic &Traffic, unsigned GlobalAS) {
+static void recordTraffic(Function &Kernel, TrafficStatus Status,
+                          const KernelTraffic *Traffic = nullptr) {
+  Module &M = *Kernel.getParent();
   Type *Int32Ty = Type::getInt32Ty(M.getContext());
-
-  const uint64_t Fields[] = {
-      Traffic.Bytes,
-      Traffic.Streams,
-      Traffic.Counters.LoadBytes,
-      Traffic.Counters.StoreBytes,
-      Traffic.Counters.LoadCount,
-      Traffic.Counters.StoreCount,
-      Traffic.Counters.ComputeOps,
-      Traffic.Counters.TotalInsts,
-  };
-  SmallVector<Constant *, 8> Values;
-  for (uint64_t F : Fields) {
-    // The runtime reads these as signed; cap them to INT32_MAX when writing
-    // below rather than wrap so a pathological kernel cannot be mistaken for a
-    // cheap one.
-    Values.push_back(ConstantInt::getSigned(
-        Int32Ty, static_cast<int32_t>(std::min<uint64_t>(F, INT32_MAX))));
+  SmallVector<Constant *, NumTrafficCounters + 1> Values;
+  if (Traffic) {
+    const uint64_t Fields[NumTrafficCounters] = {
+        Traffic->Bytes,
+        Traffic->Streams,
+        Traffic->Counters.LoadBytes,
+        Traffic->Counters.StoreBytes,
+        Traffic->Counters.LoadCount,
+        Traffic->Counters.StoreCount,
+        Traffic->Counters.ComputeOps,
+        Traffic->Counters.TotalInsts,
+    };
+    for (uint64_t F : Fields) {
+      // The runtime reads these as signed; cap them to INT32_MAX when writing
+      // below rather than wrap so a pathological kernel cannot be mistaken for
+      // a cheap one.
+      Values.push_back(ConstantInt::getSigned(
+          Int32Ty, static_cast<int32_t>(std::min<uint64_t>(F, INT32_MAX))));
+    }
+  } else {
+    Values.append(NumTrafficCounters, ConstantInt::getSigned(Int32Ty, -1));
   }
+  Values.push_back(
+      ConstantInt::getSigned(Int32Ty, static_cast<int32_t>(Status)));
 
   Constant *Init = ConstantStruct::getAnon(Values);
-  auto *GV = new GlobalVariable(M, Init->getType(), /*isConstant=*/true,
-                                GlobalValue::WeakODRLinkage, Init, Name,
-                                nullptr, GlobalValue::NotThreadLocal, GlobalAS);
+  auto *GV = new GlobalVariable(
+      M, Init->getType(), /*isConstant=*/true, GlobalValue::WeakODRLinkage,
+      Init, Kernel.getName() + KernelTrafficSuffix, nullptr,
+      GlobalValue::NotThreadLocal,
+      M.getDataLayout().getDefaultGlobalsAddressSpace());
   GV->setVisibility(GlobalValue::ProtectedVisibility);
 
   // Nothing references it, so it has to be marked explicitly as being used.
@@ -733,29 +757,43 @@ PreservedAnalyses OpenMPKernelTrafficPass::run(Module &M,
 
   // Collected first: the loop below adds globals to the module.
   for (Function *Kernel : Kernels) {
+    // The pass may run more than once in a pipeline. Keep a valid estimate of
+    // an earlier run, but retry a failed one: the kernel may have become
+    // analyzable since.
     std::string Name = (Kernel->getName() + KernelTrafficSuffix).str();
-    if (M.getNamedValue(Name))
-      continue;
+    if (GlobalValue *Existing = M.getNamedValue(Name)) {
+      auto *GV = dyn_cast<GlobalVariable>(Existing);
+      if (!GV || !GV->hasInitializer())
+        continue;
+      auto *Status = dyn_cast_or_null<ConstantInt>(
+          GV->getInitializer()->getAggregateElement(NumTrafficCounters));
+      if (!Status ||
+          Status->getSExtValue() == static_cast<int32_t>(TrafficStatus::Valid))
+        continue;
+      removeFromUsedLists(M, [GV](Constant *C) { return C == GV; });
+      GV->eraseFromParent();
+    }
 
     ++NumKernelsAnalyzed;
-    std::optional<KernelTraffic> Traffic = Estimator.run(*Kernel);
-    if (!Traffic) {
+    KernelTraffic Traffic;
+    if (TrafficStatus Status = Estimator.run(*Kernel, Traffic);
+        Status != TrafficStatus::Valid) {
       LLVM_DEBUG(dbgs() << "openmp-kernel-traffic: " << Kernel->getName()
                         << ": not analyzable\n");
+      recordTraffic(*Kernel, Status);
       continue;
     }
 
     LLVM_DEBUG(dbgs() << "openmp-kernel-traffic: " << Kernel->getName() << ": "
-                      << Traffic->Bytes << " bytes/iter accessed over "
-                      << Traffic->Streams << " stream(s); "
-                      << Traffic->Counters.LoadBytes << " bytes/iter loaded by "
-                      << Traffic->Counters.LoadCount << " load(s); "
-                      << Traffic->Counters.StoreBytes
-                      << " bytes/iter stored by "
-                      << Traffic->Counters.StoreCount << " store(s); "
-                      << Traffic->Counters.ComputeOps << " compute ops/iter; "
-                      << Traffic->Counters.TotalInsts << " total ops/iter\n");
-    recordTraffic(M, Name, *Traffic, GlobalAS);
+                      << Traffic.Bytes << " bytes/iter accessed over "
+                      << Traffic.Streams << " stream(s); "
+                      << Traffic.Counters.LoadBytes << " bytes/iter loaded by "
+                      << Traffic.Counters.LoadCount << " load(s); "
+                      << Traffic.Counters.StoreBytes << " bytes/iter stored by "
+                      << Traffic.Counters.StoreCount << " store(s); "
+                      << Traffic.Counters.ComputeOps << " compute ops/iter; "
+                      << Traffic.Counters.TotalInsts << " total ops/iter\n");
+    recordTraffic(*Kernel, TrafficStatus::Valid, &Traffic);
     ++NumKernelsAnnotated;
   }
 

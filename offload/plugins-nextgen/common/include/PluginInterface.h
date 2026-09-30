@@ -399,12 +399,12 @@ struct KernelLaunchInfoTy {
   uint32_t RequestedNumBlocks = 0;
   /// Defaults to OMP_TGT_EXEC_MODE_BARE.
   OMPTgtExecModeFlags Mode = OMP_TGT_EXEC_MODE_BARE;
-  /// The compiler's memory-traffic estimate, read from the kernel's
-  /// <name>_kernel_traffic global. Left unset if the image has none, which
-  /// switches the traffic-aware grid policy off for the kernel.
+  /// The compiler's memory-traffic estimate, or why it has none, read from the
+  /// kernel's <name>_kernel_traffic global. Left unset if the image has none,
+  /// which switches the traffic-aware grid policy off for the kernel.
   KernelTrafficTy Traffic;
-  /// The traffic-aware grid policy's decision, set per launch if the policy
-  /// picked the number of blocks.
+  /// The traffic-aware grid policy's decision, set per launch whenever the
+  /// policy was consulted.
   std::optional<TrafficGridDecisionTy> TrafficDecision;
 
   /// Indicate if the kernel works in Bare, Generic SPMD, Generic, No-Loop

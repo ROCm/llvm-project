@@ -684,8 +684,9 @@ static int loadImagesOntoDevice(DeviceTy &Device) {
             }
 
             // The compiler's memory-traffic estimate for the traffic-aware
-            // grid policy. An image compiled without it has no such global,
-            // which keeps the policy off for the kernel.
+            // grid policy, or why it has none. An image compiled without the
+            // estimate has no such global, which keeps the policy off for the
+            // kernel.
             if (!ReadImageGlobal("_kernel_traffic", &LaunchInfo.Traffic,
                                  sizeof(LaunchInfo.Traffic)))
               LaunchInfo.Traffic = KernelTrafficTy{};

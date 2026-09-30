@@ -919,10 +919,9 @@ static int32_t getBandwidthSaturationBytes(GenericDeviceTy &GenericDevice) {
 ///}
 
 /// Blocks the traffic-aware policy would like \p Kernel launched with, or zero
-/// if it has no opinion: the kernel was compiled without the traffic estimate,
-/// the plugin does not report its compute-unit count, or the kernel needs a
-/// trip count and none is known. \p Regime is set to the regime the kernel
-/// fell into.
+/// if it has no opinion: the kernel has no traffic estimate, the plugin does
+/// not report its compute-unit count, or the kernel needs a trip count and none
+/// is known. \p Regime is set to the regime the kernel fell into.
 static uint64_t getTrafficAwareNumBlocks(GenericDeviceTy &GenericDevice,
                                          const GenericKernelTy &Kernel,
                                          const KernelLaunchInfoTy &Info,
@@ -933,9 +932,10 @@ static uint64_t getTrafficAwareNumBlocks(GenericDeviceTy &GenericDevice,
   if (!EffectiveNumThreads)
     return 0;
 
-  int32_t BytesPerIter = Info.Traffic.BytesPerIter;
-  if (BytesPerIter < 0)
+  if (Info.Traffic.Status !=
+      static_cast<int32_t>(llvm::omp::KernelTrafficStatus::Valid))
     return 0;
+  int32_t BytesPerIter = Info.Traffic.BytesPerIter;
 
   // Plugins that do not report their compute units opt out by returning zero.
   uint32_t NumComputeUnits = GenericDevice.getNumComputeUnits();
@@ -1007,9 +1007,11 @@ static void applyTrafficAwareGridPolicy(GenericDeviceTy &GenericDevice,
       GenericDevice.getOMPXNumBlocksForLowTripcount(LoopTripCount) > 0)
     return;
 
-  TrafficRegimeTy Regime;
+  // Recorded even if the policy has no opinion, so that a trace says the
+  // kernel fell back to the per-mode grid, and why if it has no estimate.
+  TrafficGridDecisionTy &Decision = Info.TrafficDecision.emplace();
   uint64_t PolicyBlocks = getTrafficAwareNumBlocks(
-      GenericDevice, Kernel, Info, NumThreads, LoopTripCount, Regime);
+      GenericDevice, Kernel, Info, NumThreads, LoopTripCount, Decision.Regime);
   if (!PolicyBlocks)
     return;
 
@@ -1020,8 +1022,7 @@ static void applyTrafficAwareGridPolicy(GenericDeviceTy &GenericDevice,
   // Never more than the launch configuration can express.
   PolicyBlocks = std::min<uint64_t>(PolicyBlocks,
                                     GenericDevice.getBlockLimit(NumThreads));
-  Info.TrafficDecision = TrafficGridDecisionTy{PolicyBlocks, Regime};
-  NumBlocks = PolicyBlocks;
+  Decision.NumBlocks = NumBlocks = PolicyBlocks;
 }
 
 /// Build the base KernelLaunchArgsTy for a launch from the public
