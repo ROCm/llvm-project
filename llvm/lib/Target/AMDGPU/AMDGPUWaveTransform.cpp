@@ -1477,6 +1477,12 @@ private:
   AccRegSet SectionTempRegs;
   Register ZeroReg;
 
+  // CopyMap[(BB, Src)] — registers copied from Src in BB.
+  // XorExecMap[(BB, R)] = S means Exec XOR R is S in BB.
+  using BBRegKey = std::pair<MachineBasicBlock *, Register>;
+  DenseMap<BBRegKey, SmallVector<Register, 2>> CopyMap;
+  DenseMap<BBRegKey, Register> XorExecMap;
+
   // LCA of Blocks. If it lies in a cycle, the immediate dominator of the
   // outermost header (reducible cycles: that header dominates the LCA).
   MachineBasicBlock *getInitBlock(ArrayRef<MachineBasicBlock *> Blocks,
@@ -1495,6 +1501,9 @@ private:
   void createImplicitContribSection();
   void createExplicitContribSection(AMDGPULaneMaskAnalysis &LMA);
   void createRejoinContribSection();
+  void noteCopy(MachineBasicBlock *BB, Register Dst, Register Src);
+  void noteXor(MachineBasicBlock *BB, Register Dst, Register Src);
+  Register lookupXorExec(MachineBasicBlock *BB, Register PrimaryExec) const;
   void createRejoinExecSection();
   void createResetRejoinAccSection();
   void createSetExecSection();
@@ -1867,6 +1876,8 @@ void ControlFlowRewriter::insertLaneMaskInstrs(MachineCycleInfo &CycleInfo) {
     RestoreExecSectionList.push_back({Secondary->Block, RejoinAcc});
     ResetRejoinAccSectionList.push_back({Secondary->Block, RejoinAcc});
   }
+
+  createSections();
 }
 
 Register ControlFlowRewriter::freshTemp() {
@@ -2015,9 +2026,39 @@ void ControlFlowRewriter::createImplicitContribSection() {
   }
 }
 
+void ControlFlowRewriter::noteCopy(MachineBasicBlock *BB, Register Dst,
+                                    Register Src) {
+  CopyMap[{BB, Src}].push_back(Dst);
+  auto XorIt = XorExecMap.find({BB, Src});
+  if (XorIt != XorExecMap.end())
+    XorExecMap[{BB, Dst}] = XorIt->second;
+}
+
+void ControlFlowRewriter::noteXor(MachineBasicBlock *BB, Register Dst,
+                                  Register Src) {
+  XorExecMap[{BB, Src}] = Dst;
+  XorExecMap[{BB, Dst}] = Src;
+  auto CopyIt = CopyMap.find({BB, Src});
+  if (CopyIt == CopyMap.end())
+    return;
+  for (Register Reg : CopyIt->second)
+    XorExecMap[{BB, Reg}] = Dst;
+}
+
+Register
+ControlFlowRewriter::lookupXorExec(MachineBasicBlock *BB,
+                                   Register PrimaryExec) const {
+  auto It = XorExecMap.find({BB, PrimaryExec});
+  if (It == XorExecMap.end())
+    return Register();
+  return It->second;
+}
+
 void ControlFlowRewriter::createExplicitContribSection(
     AMDGPULaneMaskAnalysis &LMA) {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  CopyMap.clear();
+  XorExecMap.clear();
 
   for (OriginContrib &Rec : ExplicitContribSectionList) {
     MachineBasicBlock::iterator I = saluInsertionAtEnd(*Rec.Block);
@@ -2044,14 +2085,17 @@ void ControlFlowRewriter::createExplicitContribSection(
         emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
             .addReg(Rec.Dst)
             .addReg(PrevCond);
-      else
+      else {
         emit(*Rec.Block, I, AMDGPU::COPY, Rec.Dst).addReg(PrevCond);
+        noteCopy(Rec.Block, Rec.Dst, PrevCond);
+      }
     } else if (CondKind == LaneMaskKind::Subset && Invert) {
       if (Rec.Accumulate) {
         Register CondReg = freshTemp();
         emit(*Rec.Block, I, LMC.XorOpc, CondReg)
             .addReg(PrevCond)
             .addReg(LMC.ExecReg);
+        noteXor(Rec.Block, CondReg, PrevCond);
         emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
             .addReg(Rec.Dst)
             .addReg(CondReg);
@@ -2059,6 +2103,7 @@ void ControlFlowRewriter::createExplicitContribSection(
         emit(*Rec.Block, I, LMC.XorOpc, Rec.Dst)
             .addReg(PrevCond)
             .addReg(LMC.ExecReg);
+        noteXor(Rec.Block, Rec.Dst, PrevCond);
       }
     } else if (CondKind == LaneMaskKind::None && !Invert) {
       if (Rec.Accumulate) {
@@ -2084,6 +2129,7 @@ void ControlFlowRewriter::createExplicitContribSection(
         emit(*Rec.Block, I, LMC.XorOpc, CondReg)
             .addReg(Masked)
             .addReg(LMC.ExecReg);
+        noteXor(Rec.Block, CondReg, Masked);
         emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
             .addReg(Rec.Dst)
             .addReg(CondReg);
@@ -2091,6 +2137,7 @@ void ControlFlowRewriter::createExplicitContribSection(
         emit(*Rec.Block, I, LMC.XorOpc, Rec.Dst)
             .addReg(Masked)
             .addReg(LMC.ExecReg);
+        noteXor(Rec.Block, Rec.Dst, Masked);
       }
     }
   }
@@ -2108,6 +2155,14 @@ void ControlFlowRewriter::createRejoinContribSection() {
             .addReg(LMC.ExecReg);
       else
         emit(*Rec.Block, I, AMDGPU::COPY, Rec.Dst).addReg(LMC.ExecReg);
+      continue;
+    }
+    Register S = lookupXorExec(Rec.Block, Rec.PrimaryExec);
+    if (S) {
+      if (Rec.Accumulate)
+        emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst).addReg(Rec.Dst).addReg(S);
+      else
+        emit(*Rec.Block, I, AMDGPU::COPY, Rec.Dst).addReg(S);
     } else if (Rec.Accumulate) {
       Register Rejoin = freshTemp();
       emit(*Rec.Block, I, LMC.XorOpc, Rejoin)
