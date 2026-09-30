@@ -24,12 +24,15 @@ namespace COMGR::transpiler {
 // and an SGPR-pair base in `saddr` that a per-lane 32-bit offset in `vaddr` is
 // added to. For gfx1250 SADDR forms, scale_offset multiplies the signed lane
 // offset by AccessSizeInBytes. AccessAlign is the modeled alignment, which the
-// immediate offset must preserve. Returns a structured refusal for unsupported
-// addressing forms, offsets, or cache policies.
+// immediate offset must preserve. ModeledCachePolicy names the cache-policy
+// bits the calling operation accounts for itself, beyond the scale_offset bit
+// this function consumes; any other bit is refused. Returns a structured
+// refusal for unsupported addressing forms, offsets, or cache policies.
 llvm::Expected<llvm::Value *> emitGlobalAddress(RaiseContext &Ctx,
                                                 const DecodedInst &Di,
                                                 unsigned AccessSizeInBytes,
-                                                llvm::Align AccessAlign);
+                                                llvm::Align AccessAlign,
+                                                unsigned ModeledCachePolicy);
 
 } // namespace COMGR::transpiler
 

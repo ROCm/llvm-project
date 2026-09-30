@@ -8,6 +8,8 @@
 
 #include "transpiler/raiser/handlers.h"
 
+#include "SIDefines.h"
+
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
@@ -17,10 +19,14 @@
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/reg-file.h"
 
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Value.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/Alignment.h"
+#include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Error.h"
 
 #include <optional>
@@ -38,6 +44,8 @@ globalAccessWidthInDwords(CanonicalOp Operation) {
   switch (Operation) {
   case CanonicalOp::GLOBAL_LOAD_B32:
   case CanonicalOp::GLOBAL_STORE_B32:
+  case CanonicalOp::GLOBAL_ATOMIC_ADD_U32:
+  case CanonicalOp::GLOBAL_ATOMIC_ADD_RTN_U32:
     return 1;
   case CanonicalOp::GLOBAL_LOAD_B64:
   case CanonicalOp::GLOBAL_STORE_B64:
@@ -94,7 +102,8 @@ static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
     return Destination.takeError();
 
   Expected<Value *> Address =
-      emitGlobalAddress(Ctx, Di, WidthInDwords * 4, GlobalAccessAlignment);
+      emitGlobalAddress(Ctx, Di, WidthInDwords * 4, GlobalAccessAlignment,
+                        /*ModeledCachePolicy=*/0);
   if (!Address)
     return Address.takeError();
 
@@ -120,7 +129,8 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
       Ctx.B, *DataReg, globalAccessType(Ctx.B, WidthInDwords));
 
   Expected<Value *> Address =
-      emitGlobalAddress(Ctx, Di, WidthInDwords * 4, GlobalAccessAlignment);
+      emitGlobalAddress(Ctx, Di, WidthInDwords * 4, GlobalAccessAlignment,
+                        /*ModeledCachePolicy=*/0);
   if (!Address)
     return Address.takeError();
 
@@ -128,6 +138,58 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
   // access is predicated on the lane bit of EXEC.
   Ctx.registers().emitUnderExec(
       [&] { Ctx.B.CreateAlignedStore(Data, *Address, GlobalAccessAlignment); });
+  return Error::success();
+}
+
+/// Return the cache-policy bits a GLOBAL atomic may carry that the emitted
+/// atomicrmw already accounts for. The returning flag is part of the opcode,
+/// and the temporal and scope hints only relax guarantees a sequentially
+/// consistent system-scope atomic already makes.
+static unsigned modeledAtomicCachePolicy(const MCSubtargetInfo &STI) {
+  if (STI.hasFeature(AMDGPU::FeatureGFX12Insts))
+    return AMDGPU::CPol::TH_ATOMIC_RETURN | AMDGPU::CPol::TH_ATOMIC_NT |
+           AMDGPU::CPol::SCOPE;
+  return AMDGPU::CPol::GLC | AMDGPU::CPol::SLC | AMDGPU::CPol::SCC;
+}
+
+/// Emit a GLOBAL integer atomic add under EXEC, publishing the value the
+/// memory held before the add to a destination register for the returning
+/// form.
+static Error emitGlobalAtomicAdd(RaiseContext &Ctx, const DecodedInst &Di,
+                                 unsigned WidthInDwords, bool Returns) {
+  assert(WidthInDwords == 1 && "only a 32-bit global atomic add is modeled");
+  Expected<ParsedReg> DataReg = globalDataReg(Ctx, Di, AMDGPU::OpName::vdata,
+                                              WidthInDwords, "atomic operand");
+  if (!DataReg)
+    return DataReg.takeError();
+  Value *Data = Ctx.registers().regFile().readReg32(Ctx.B, *DataReg);
+
+  std::optional<ParsedReg> Destination;
+  if (Returns) {
+    Expected<ParsedReg> Parsed = globalDataReg(Ctx, Di, AMDGPU::OpName::vdst,
+                                               WidthInDwords, "destination");
+    if (!Parsed)
+      return Parsed.takeError();
+    Destination = *Parsed;
+  }
+
+  // Unlike a plain access, an atomic is only well defined at the natural
+  // alignment of the value it operates on.
+  Align NaturalAlignment = Align(WidthInDwords * 4);
+  Expected<Value *> Address =
+      emitGlobalAddress(Ctx, Di, WidthInDwords * 4, NaturalAlignment,
+                        modeledAtomicCachePolicy(Ctx.Projection.SourceSTI));
+  if (!Address)
+    return Address.takeError();
+
+  // An atomic issued by an inactive lane must not reach memory at all.
+  Ctx.registers().emitUnderExec([&] {
+    AtomicRMWInst *Old = Ctx.B.CreateAtomicRMW(
+        AtomicRMWInst::Add, *Address, Data, NaturalAlignment,
+        AtomicOrdering::SequentiallyConsistent);
+    if (Destination)
+      Ctx.registers().regFile().writeReg32(Ctx.B, *Destination, Old);
+  });
   return Error::success();
 }
 
@@ -148,6 +210,11 @@ Error handleVGLOBAL(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::GLOBAL_STORE_B96:
   case CanonicalOp::GLOBAL_STORE_B128:
     return emitGlobalStore(Ctx, Di, *WidthInDwords);
+  case CanonicalOp::GLOBAL_ATOMIC_ADD_U32:
+  case CanonicalOp::GLOBAL_ATOMIC_ADD_RTN_U32:
+    return emitGlobalAtomicAdd(Ctx, Di, *WidthInDwords,
+                               /*Returns=*/Di.CanonOp ==
+                                   CanonicalOp::GLOBAL_ATOMIC_ADD_RTN_U32);
   default:
     llvm_unreachable("classified global memory operation has no handler");
   }

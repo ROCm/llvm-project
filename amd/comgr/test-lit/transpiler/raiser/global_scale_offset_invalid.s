@@ -105,7 +105,7 @@ global_invalid:
 	global_load_u16 v1, v0, s[0:1] scale_offset
 .endif
 .ifdef ATOMIC
-	global_atomic_add_u32 v0, v1, s[0:1] scale_offset
+	global_atomic_sub_u32 v0, v1, s[0:1] scale_offset
 .endif
 	s_endpgm
 

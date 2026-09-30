@@ -65,13 +65,14 @@ static unsigned requiredGlobalOperandIndex(const DecodedInst &Di,
 
 Expected<Value *> emitGlobalAddress(RaiseContext &Ctx, const DecodedInst &Di,
                                     unsigned AccessSizeInBytes,
-                                    Align AccessAlign) {
+                                    Align AccessAlign,
+                                    unsigned ModeledCachePolicy) {
   unsigned CachePolicyIndex =
       requiredGlobalOperandIndex(Di, AMDGPU::OpName::cpol);
   assert(Di.isImm(CachePolicyIndex) && "operand 'cpol' is not an immediate");
   int64_t CachePolicy = Di.getImm(CachePolicyIndex);
   bool ScaleOffset = CachePolicy & AMDGPU::CPol::SCAL;
-  if (CachePolicy & ~AMDGPU::CPol::SCAL)
+  if (CachePolicy & ~(AMDGPU::CPol::SCAL | ModeledCachePolicy))
     return unsupported(Ctx, Di, "non-default cache policy is not modeled");
   if (ScaleOffset &&
       !Ctx.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX1250Insts))
