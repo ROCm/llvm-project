@@ -173,10 +173,9 @@ vop3_math:
 	.type	literal_f64,@function
 ; LITERAL-LABEL: define amdgpu_kernel void @literal_f64(
 literal_f64:
-; LITERAL: i32 1065353216
+; LITERAL: store i32 1065353216, ptr addrspace(1)
 	v_cvt_f32_f64_e32 v2, lit(0x3ff00000)
 
-; LITERAL: store i32 {{.+}}, ptr addrspace(1)
 	global_store_dword v[0:1], v2, off
 ; LITERAL: call i32 @llvm.fptosi.sat.i32.f64(double 1.000000e+00)
 	v_cvt_i32_f64_e32 v2, lit(0x3ff00000)
@@ -243,6 +242,9 @@ refuse_true16_destination:
 ; SUPPORT-TANH: call float @llvm.amdgcn.tanh.f32
 ; SUPPORT-TANH: store i32 {{.+}}, ptr addrspace(1)
 refuse_tanh:
+	v_mov_b32_e32 v1, v0
+	v_mov_b32_e32 v2, v0
+	v_mov_b32_e32 v3, 0
 	v_tanh_f32_e32 v0, v1
 	global_store_dword v[2:3], v0, off
 	s_endpgm
