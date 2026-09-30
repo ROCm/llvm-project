@@ -65,13 +65,24 @@ such that:
 
 ### Using Barriers
 
-Some async operations can take a {ref}`barrier
-<amdgpu-execution-synchronization>` as an argument. A thread that depends on the
-side-effects of `A` performs a {ref}`barrier wait <amdgpu-barrier-operations>`
-operation `W` on the barrier.
+In some cases, when an instruction `X` initiates an async operation `A`, the
+completion of `A` can be tracked by a {ref}`barrier
+<amdgpu-execution-synchronization>`. This can be achieved in one of the
+following ways:
 
-`A` is said to be *completed-at* `W` when it performs a {ref}`barrier arrive
-<amdgpu-barrier-operations>` operation on the barrier and the barrier completes.
+- If `X` is a tensor instruction, the tensor descriptor may contain a barrier
+  reference which is passed to `A`, and `A` schedules a {ref}`barrier
+  arrive<amdgpu-barrier-operations>` to be performed after its own completion.
+- If `X` is an `@llvm.amdgcn.{global|cluster}.load.async.to.lds.b<N>`
+  {ref}`intrinsic<amdgpu-gfx1250-lds-dma-operations>`, then the initiating thread
+  can execute the `@llvm.amdgcn.ds.atomic.async.barrier.arrive.b64`
+  {ref}`intrinsic<amdgpu-async-barrier-arrive>` program-ordered after `X`. This
+  again initiates a {ref}`barrier arrive<amdgpu-barrier-operations>` to be
+  performed after the completion of `A`.
+
+A thread that depends on the side-effects of `A` performs a {ref}`barrier
+wait<amdgpu-barrier-operations>` operation `W` on the barrier. `A` is said to be
+*completed-at* `W` when the barrier completes.
 
 ## Examples
 

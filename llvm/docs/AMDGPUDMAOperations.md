@@ -87,8 +87,12 @@ The intrinsics differ in two orthogonal ways:
 
 ### GFX1250 DMA Operations
 
-All GFX1250 DMA operations are asynchronous and use {ref}`amdgpu-asyncmarks` to
-track completion. There are no synchronous variants.
+All GFX1250 DMA operations are asynchronous and can use
+{ref}`asyncmarks<amdgpu-asyncmarks>` to track completion. Some loads and tensor
+operations can also use {ref}`barriers<amdgpu-async-completed-at>` as described
+below. There are no synchronous variants.
+
+(amdgpu-gfx1250-lds-dma-operations)=
 
 #### LDS DMA Operations
 
@@ -123,6 +127,24 @@ void @llvm.amdgcn.global.store.async.from.lds.b<N>(
 
 Stores data from LDS to global memory.
 
+(amdgpu-async-barrier-arrive)=
+
+To track the completion of preceding asynchronous global-to-LDS loads using an
+LDS barrier, a thread can call:
+
+```llvm
+void @llvm.amdgcn.ds.atomic.async.barrier.arrive.b64(
+    ptr addrspace(3) %barrier)
+```
+
+This intrinsic initiates a barrier-arrive operation scheduled after the
+asynchronous loads previously initiated by the same thread. Once those loads
+complete, the operation arrives at `%barrier`. A {ref}`barrier
+wait<amdgpu-async-completed-at>` can then track the loads' completion. The
+barrier-arrive operation is itself tracked by AsyncCNT and can be included in an
+{ref}`asyncmark<amdgpu-asyncmarks>`. This barrier mechanism does not track
+LDS-to-global stores.
+
 #### Tensor Operations
 
 ```llvm
@@ -142,5 +164,10 @@ zero-initialized.
 
 Despite the absence of `.async` in their names, these intrinsics are
 asynchronous.
+
+The tensor descriptor can encode an optional LDS barrier. A tensor load or
+store using such a descriptor performs one {ref}`barrier
+arrive<amdgpu-barrier-operations>` when it completes. The barrier is encoded in
+the descriptor arguments rather than passed separately to these intrinsics.
 
 All arguments must be wave-uniform.
