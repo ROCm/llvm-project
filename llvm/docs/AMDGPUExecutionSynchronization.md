@@ -51,7 +51,7 @@ Each barrier *object* has the following state:
 Barrier *objects* exist within a *scope* instance (see {ref}`amdgpu-amdhsa-llvm-sync-scopes-table`),
 and thus can only be accessed by threads in the same *scope* instance.
 
-(amdgpu-execution-synchronization-barriers-execution-model-barrier-operations)=
+(amdgpu-barrier-operations)=
 
 :::{rubric} Barrier Operations
 :::
@@ -321,7 +321,7 @@ Not all barrier *objects* are *named barrier objects*, and both types can coexis
 :::
 
 The entirety of the
-{ref}`barrier operations section<amdgpu-execution-synchronization-barriers-execution-model-barrier-operations>`
+{ref}`barrier operations section<amdgpu-barrier-operations>`
 applies, with the following barrier operation being added:
 
 - Barrier *join*.
