@@ -327,7 +327,7 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> Significand = Op.srcF(0);
+  Expected<Value *> Significand = Op.srcF32(0);
   if (!Significand)
     return Significand.takeError();
   Expected<Value *> Exponent = Op.src(1);

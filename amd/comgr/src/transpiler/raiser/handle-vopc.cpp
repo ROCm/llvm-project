@@ -51,7 +51,7 @@ static Expected<Value *> readCompareSource(OperandResolver &Op, unsigned Index,
     return Op.src(Index);
   }
   if (Info.isFloat())
-    return Info.BitWidth == 64 ? Op.srcF64(Index) : Op.srcF(Index);
+    return Info.BitWidth == 64 ? Op.srcF64(Index) : Op.srcF32(Index);
 
   unsigned AllowedModifiers = Info.BitWidth == 16 ? SISrcMods::OP_SEL_0 : 0;
   if (Op.srcMod(Index) & ~AllowedModifiers)

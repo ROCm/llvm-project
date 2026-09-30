@@ -49,7 +49,7 @@ Value *OperandResolver::applyMods(unsigned I, Value *V) {
   return V;
 }
 
-Expected<Value *> OperandResolver::srcF(unsigned I) {
+Expected<Value *> OperandResolver::srcF32(unsigned I) {
   Expected<Value *> V = Ctx.registers().readOp32(Di, srcIdx(I));
   if (!V)
     return V.takeError();

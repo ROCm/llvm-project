@@ -119,7 +119,7 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> Source = Op.srcF(0);
+  Expected<Value *> Source = Op.srcF32(0);
   if (!Source)
     return Source.takeError();
 
@@ -231,7 +231,7 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
   }
   case CanonicalOp::V_CVT_I32_F32:
   case CanonicalOp::V_CVT_U32_F32: {
-    Expected<Value *> Source = Op.srcF(0);
+    Expected<Value *> Source = Op.srcF32(0);
     if (!Source)
       return Source.takeError();
     Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_CVT_I32_F32
@@ -242,7 +242,7 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
     break;
   }
   case CanonicalOp::V_CVT_F16_F32: {
-    Expected<Value *> Source = Op.srcF(0);
+    Expected<Value *> Source = Op.srcF32(0);
     if (!Source)
       return Source.takeError();
     Value *Half = Ctx.B.CreateFPTrunc(*Source, Ctx.B.getHalfTy(), "cvt");
