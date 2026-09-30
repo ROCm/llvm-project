@@ -7559,9 +7559,6 @@ change during the execution of a kernel dispatch it is not legal to perform
 stores, and atomic memory orderings are not meaningful, and all accesses are
 treated as non-atomic.
 
-A memory synchronization scope wider than work-group is not meaningful for the
-group (LDS) address space and is treated as work-group.
-
 The memory model does not support the region address space which is treated as
 non-atomic.
 
