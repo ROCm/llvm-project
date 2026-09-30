@@ -458,11 +458,6 @@ bool Compiler<Emitter>::VisitCastExpr(const CastExpr *E) {
 
   switch (E->getCastKind()) {
   case CK_LValueToRValue: {
-    // This *could* work I guess, but the current interpreter rejects (via
-    // checkLiteralType).
-    if (!Ctx.getLangOpts().HLSL && E->getType()->isConstantMatrixType())
-      return false;
-
     if (ToLValue && E->getType()->isPointerType()) {
       assert(!DiscardResult);
       if (!this->visit(SubExpr))
