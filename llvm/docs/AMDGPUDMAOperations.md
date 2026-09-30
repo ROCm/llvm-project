@@ -171,3 +171,135 @@ arrive<amdgpu-barrier-operations>` when it completes. The barrier is encoded in
 the descriptor arguments rather than passed separately to these intrinsics.
 
 All arguments must be wave-uniform.
+
+(amdgpu-lds-dma-scope)=
+
+## The "lds-dma" Scope
+
+An LDS DMA operation or a tensor DMA operation initiated by a thread does not
+belong to the corresponding instance of "singlethread" scope. Instead the DMA
+operation belongs to a scope instance determined by the target. For any target,
+this is an instance of a scope no larger than "cluster" scope. Operations in
+LLVM IR may refer to this using the "lds-dma" symbolic string.
+
+### Effect on Inclusive Scopes
+
+[This section is informational.]
+
+The symbolic mapping of "lds-dma" scope affects how the _mutually inclusive_
+relation is applied to DMA operations. When "lds-dma" scope maps to "cluster"
+scope, the operation does not belong to a lower scope instance such as
+"workgroup".
+
+Consider an operation `X` that specifies "workgroup" scope, and a DMA operation
+`Y` initiated from the same workgroup instance. On a target that performs DMA
+operations at "cluster" scope, `Y` does not belong to any "workgroup" instance.
+Thus `X` and `Y` do not have inclusive scope on this target even though they are
+both associated with the same workgroup instance. If the same program is
+rewritten so that `X` specifies "lds-dma" scope instead, then the two operations
+will always have inclusive scope, independent of target. This is also true if
+`X` specified "cluster" scope, but using "lds-dma" scope is more precise, and
+may result in a more efficient implementation.
+
+(amdgpu-dma-visibility)=
+
+### Explicit Visibility Required
+
+[This section is informational.]
+
+A DMA operation ``D`` is performed in an instance ``I`` of scope ``S``, but it
+is not included in any subscope instances of ``I``. This means that the
+availability/visibility operations implicitly performed by ``D`` **cannot** form
+an *inclusive scope* relationship with those subscopes. This requires threads to
+perform additional availability and visibility operations that ensure
+{ref}`amdgpu-location-order` in certain cases shown below.
+
+#### Wavefront Scope
+
+Consider a thread that writes to global memory and then *initiates* a DMA
+operation that reads from the same location. This previous write must be made
+available to the scope instance that contains the DMA operation.
+
+```llvm
+call @llvm.amdgcn.global.store.available(%global, %val, "lds-dma")      ; <--
+call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val_lds = load addrspace(3) %lds
+```
+
+Alternatively, the wave may perform a release fence specifying the "lds-dma"
+scope:
+
+```llvm
+store %val, ptr %global
+fence release syncscope("lds-dma")                                      ; <--
+call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val_lds = load addrspace(3) %lds
+```
+
+A similar pattern is required with a DMA operation that writes to global memory.
+
+```llvm
+call @llvm.amdgcn.global.store.async.from.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val = call @llvm.amdgcn.global.load.visible(%global, %val, "lds-dma")  ; <--
+```
+
+#### Workgroup Scope
+
+Consider the case where one wave writes to global memory and a different wave in
+the same workgroup *initiates* a DMA operation that reads from the same
+location. The first wave must make its store available to the "lds-dma" scope
+instance that contains the DMA operation.
+
+```llvm
+; wave 1
+call @llvm.amdgcn.global.store.available(%global, %val, "lds-dma")      ; <--
+store atomic release syncscope("workgroup") %flag
+
+; wave 2
+load atomic acquire syncscope("workgroup") %flag
+call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val_lds = load addrspace(3) %lds
+```
+
+Alternatively, the first wave must release its operations to a sufficiently
+large scope.
+
+```llvm
+; wave 1
+store %val, ptr addrspace(1) %global
+store atomic release syncscope("lds-dma") %flag
+
+; wave 2
+load atomic acquire syncscope("lds-dma") %flag
+call @llvm.amdgcn.global.load.async.to.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+%val_lds = load addrspace(3) %lds
+```
+
+Similarly, when one wave stores to global memory using a DMA operation and a
+different wave reads from the same location, an explicit ``make.visible`` at
+the DMA scope is needed. The workgroup fence's *MakeVisible* cannot observe
+the DMA write because the DMA is not contained in the workgroup scope
+instance.
+
+```llvm
+; wave 1
+call @llvm.amdgcn.global.store.async.from.lds(%global, %lds)
+call @llvm.amdgcn.asyncmark()
+call @llvm.amdgcn.wait.asyncmark(0)
+store atomic release syncscope("workgroup") %flag
+
+; wave 2
+load atomic acquire syncscope("workgroup") %flag
+call @llvm.amdgcn.make.ptr.visible(ptr %global, "lds-dma") ; <---
+%val = load ptr addrspace(1) %global
+```

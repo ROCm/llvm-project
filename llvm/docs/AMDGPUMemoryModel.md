@@ -44,14 +44,22 @@ A *scope* is an abstract description of sets of memory accesses and
 synchronizing operations in a multi-threaded execution environment. Each such
 set is called an *instance* of that scope, or a *scope instance* for short.
 
-- Each memory access or synchronizing operation belongs to at most one
-  instance of every scope defined by the target.
 - When an operation `X` specifies a scope `S`, it indicates the instance of
   `S` that contains `X`. This scope instance is also termed as *X's instance
   of scope S*, or just *X's scope instance* when `S` is implied by the
   context.
 - When an operation does not specify a scope, it indicates the *system*
   scope defined below.
+
+Scopes have the following properties:
+
+- Two distinct instances of the same scope do not intersect.
+- Each operation performed by the program belongs to at least one scope
+  instance.
+- If `S1` is a subscope of `S2`, then every instance `I1` of `S1` is a subset of
+  some instance `I2` of `S2`. `I1` is said to be a *subscope instance* of `I2`.
+- If two scope instances `I1` and `I2` intersect, then their intersection is
+  the smaller of `I1` and `I2`.
 
 ### LLVM scopes
 
@@ -69,8 +77,7 @@ The LLVM Language Reference defines the following {ref}`scopes<syncscope>`:
 
 ### AMDGPU scopes
 
-The AMDGPU backend further refines the LLVM scopes with the following
-target-defined scopes and constraints:
+The AMDGPU target defines the following LLVM scopes:
 
 - *system scope* (same as LLVM)
 - "agent" scope
@@ -80,17 +87,34 @@ target-defined scopes and constraints:
 - "singlethread" scope (same as LLVM)
 
 These are arranged from largest scope (*system scope*) to smallest scope
-("singlethread").
+("singlethread"). Every scope `S1` other than *system scope* is a *subscope* of
+the scopes above it in this linear arrangement.
 
-- Every instance `X` of some scope `S1` other than "singlethread" scope is
-  partitioned by the scope `S2` one level below it. Each subset defined by this
-  partition is an instance of `S2` and is called a *subscope instance* of `X`.
-- It follows that if two scope instances `X` and `Y` intersect, then their
-  intersection is the smaller of `X` and `Y`.
-- A scope `S1` is a *subscope* of a scope `S2` if every instance of `S1`
-  is a subscope instance of some instance of `S2`.
+In addition, there exists a symbolic string "lds-dma" which corresponds to one
+of the above scopes, but no higher than "cluster" scope. See
+{ref}`amdgpu-lds-dma-scope` for more information.
 
-**Inclusive Scopes**: Two operations `X` and `Y` are said to have *inclusive
+#### Containment
+
+Every operation *belongs to* an instance of a specific scope:
+
+- Operations executed by each thread *belong to* the corresponding
+  "singlethread" scope instance.
+- DMA operations *initiated by* each thread *belong to* a corresponding
+  corresponding {ref}`"lds-dma" scope<amdgpu-lds-dma-scope>` instance.
+
+Every operation is *contained* in the scope instance `I1` that it *belongs
+to*, as well as every scope instance `I2` such that `I1` is a *subscope
+instance* of `I2`.
+
+This affects how operations are related in *inclusive scopes* when determining
+availability and visibility. For example, DMA operations require
+{ref}`explicit availability and visibility<amdgpu-dma-visibility>`
+operations at scopes below the corresponding DMA scope.
+
+#### Inclusive Scopes
+
+Two operations `X` and `Y` are said to have *inclusive
 scopes* if the scope instance of each operation contains the other operation. In
 that case, the *common scope instance* `S'` of `X` and `Y` is the
 intersection of their scope instances. The scope corresponding to `S'` is also
