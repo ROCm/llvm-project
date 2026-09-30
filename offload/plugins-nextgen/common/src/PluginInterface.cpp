@@ -1116,13 +1116,6 @@ Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
                          "device allocator returned a misaligned pointer");
   }
 
-  // Report error if the memory manager or the device allocator did not return
-  // any memory buffer.
-  if (!Alloc)
-    return Plugin::error(ErrorCode::UNIMPLEMENTED,
-                         "invalid target data allocation kind or requested "
-                         "allocator not implemented yet");
-
   // Keep track of the allocation stack if we track allocation traces.
   if (OMPX_TrackAllocationTraces) {
     std::string StackTrace;
@@ -2301,12 +2294,6 @@ int GenericPluginTy::prepopulate_page_table(int32_t DeviceId, void *ptr,
   }();
   T.res(R);
   return R;
-}
-
-int32_t GenericPluginTy::set_device_identifier(int32_t UserId,
-                                               int32_t DeviceId) {
-  UserDeviceIds[DeviceId] = UserId;
-  return OFFLOAD_SUCCESS;
 }
 
 // Query if [ptr, ptr+size] belongs to coarse grain memory region

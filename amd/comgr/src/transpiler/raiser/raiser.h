@@ -56,10 +56,16 @@ struct KernelRequest {
 // come back as a `RaiseFailure`. One refused kernel refuses the whole batch,
 // since a module missing a kernel the caller asked for is not a usable partial
 // result.
-llvm::Expected<RaiseResult> raiseToIR(const TextSection &Text,
-                                      llvm::StringRef SourceIsa,
-                                      llvm::StringRef TargetIsa,
-                                      llvm::ArrayRef<KernelRequest> Kernels);
+//
+// `FunctionExtents` names the text-relative extent of every function symbol,
+// as `CodeObjectInfo::textFunctionExtents` reports it. A call whose target
+// lies outside the kernel's own extent is followed into whichever of these
+// covers it, and that callee is raised into the same function as the caller.
+// Leaving it empty refuses every such call instead.
+llvm::Expected<RaiseResult>
+raiseToIR(const TextSection &Text, llvm::StringRef SourceIsa,
+          llvm::StringRef TargetIsa, llvm::ArrayRef<KernelRequest> Kernels,
+          llvm::ArrayRef<KernelSymbolExtent> FunctionExtents = {});
 
 } // namespace COMGR::transpiler
 

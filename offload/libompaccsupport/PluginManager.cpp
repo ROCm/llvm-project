@@ -11,10 +11,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "PluginManager.h"
+#include "OffloadPolicy.h"
 #include "OpenMP/OMPT/Callback.h"
+#include "OpenMP/OMPT/Interface.h"
 #include "OpenMP/OMPT/OmptCommonDefs.h"
 #include "OpenMP/OMPT/OmptTracing.h"
-#include "OffloadPolicy.h"
+#ifdef OMPT_SUPPORT
+#include "OmptDeviceTracing.h"
+#endif
 #include "Shared/Debug.h"
 #include "Shared/Profile.h"
 #include "device.h"
@@ -23,15 +27,19 @@
 #include "llvm/Support/ErrorHandling.h"
 #include <memory>
 
+#ifdef OMPT_SUPPORT
+using namespace llvm::omp::target::ompt;
+#endif
+
 using namespace llvm;
 using namespace llvm::sys;
 using namespace llvm::omp::target::debug;
 
 PluginManager *PM = nullptr;
 
-// Every plugin exports this method to create an instance of the plugin type.
-#define PLUGIN_TARGET(Name) extern "C" GenericPluginTy *createPlugin_##Name();
-#include "Shared/Targets.def"
+namespace llvm::offload::tmp {
+GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
+} // namespace llvm::offload::tmp
 
 void PluginManager::init() {
   TIMESCOPE();
@@ -41,14 +49,21 @@ void PluginManager::init() {
   }
 
   ODBG(ODT_Init) << "Loading RTLs";
+  if (ol_result_t Res = olInit(nullptr))
+    REPORT() << "Failed to initialize liboffload: " << Res->Details;
 
-  // Attempt to create an instance of each supported plugin.
-#define PLUGIN_TARGET(Name)                                                    \
-  do {                                                                         \
-    Plugins.emplace_back(                                                      \
-        std::unique_ptr<GenericPluginTy>(createPlugin_##Name()));              \
-  } while (false);
-#include "Shared/Targets.def"
+  if (ol_result_t Res = olIteratePlatforms(
+          [](ol_platform_handle_t Platform, void *Data) {
+            auto *PM = static_cast<PluginManager *>(Data);
+            auto *Plugin =
+                llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
+            ODBG(ODT_Init) << "Adding plugin " << Plugin->getName()
+                           << " from liboffload";
+            PM->Plugins.push_back(Plugin);
+            return true;
+          },
+          this))
+    REPORT() << "Failed to iterate platforms: " << Res->Details;
 
 // At this point, we don't know whether OMPT tracing will be turned ON.
 // So we create the top-level tracing manager as long as OMPT is built in --
@@ -70,6 +85,19 @@ void PluginManager::deinit() {
   }
   ODBG(ODT_Deinit) << "Unloading RTLs...";
 
+  OMPT_IF_BUILT({
+    auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
+    for (DeviceTy &Device : devices(ExclusiveDevicesAccessor)) {
+      performIfOmptInitialized(
+          performOmptCallback(device_finalize, Device.DeviceID));
+      // Pairs the unconditional 'setDeviceId' in DeviceTy::init().
+      removeDeviceId(reinterpret_cast<ompt_device_t *>(
+          &Device.RTL->getDevice(Device.RTLDeviceID)));
+    }
+  });
+
+  // Delete only after device_finalize: tools typically flush their trace
+  // buffers from that callback, which goes through the trace record manager.
 #ifdef OMPT_SUPPORT
   assert(TraceRecordManager != nullptr &&
          "Trace record manager should have been non-null");
@@ -77,16 +105,9 @@ void PluginManager::deinit() {
   TraceRecordManager = nullptr;
 #endif
 
-  for (auto &Plugin : Plugins) {
-    if (!Plugin->is_initialized())
-      continue;
-
-    if (auto Err = Plugin->deinit()) {
-      std::string InfoMsg = toString(std::move(Err));
-      ODBG(ODT_Deinit) << "Failed to deinit plugin: " << InfoMsg;
-    }
-    Plugin.release();
-  }
+  Plugins.clear();
+  if (auto Err = olShutDown())
+    REPORT() << "Failed to denitialize liboffload: " << Err->Details;
 
   ODBG(ODT_Deinit) << "RTLs unloaded!";
 }
@@ -121,11 +142,6 @@ bool PluginManager::initializeDevice(GenericPluginTy &Plugin,
   auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
 
   int32_t UserId = ExclusiveDevicesAccessor->size();
-
-  // Set the device identifier offset in the plugin.
-#ifdef OMPT_SUPPORT
-  Plugin.set_device_identifier(UserId, DeviceId);
-#endif
 
   auto Device = std::make_unique<DeviceTy>(&Plugin, UserId, DeviceId);
   if (auto Err = Device->init()) {

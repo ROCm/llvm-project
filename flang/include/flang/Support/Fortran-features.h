@@ -92,7 +92,7 @@ ENUM_CLASS(UsageWarning, Portability, PointerToUndefinable,
     BadValueInDeadCode, AssumedTypeSizeDummy, MisplacedIgnoreTKR,
     NamelistParameter, ImpureFinalInPure, IgnoredNoReallocateLHS,
     ExperimentalOption, IoImpliedDoIndexConflict, BOZLiteralTruncation,
-    IntentInActualForDefaultIntent)
+    IntentInActualForDefaultIntent, BindCArrayDescriptor)
 
 using LanguageFeatures = EnumSet<LanguageFeature, LanguageFeature_enumSize>;
 using UsageWarnings = EnumSet<UsageWarning, UsageWarning_enumSize>;

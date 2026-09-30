@@ -61,6 +61,7 @@ add_library(transpiler-decoder OBJECT
   canonical-op.cpp
   opcode-map.cpp
   decode.cpp
+  setpc-analysis.cpp
 )
 
 if(NOT TARGET transpiler::decoder)

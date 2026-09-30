@@ -8,13 +8,17 @@
 
 #include "transpiler/raiser/handlers.h"
 
+#include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/raiser/source-image.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "Utils/AMDGPUBaseInfo.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+
+#include <cassert>
 
 using namespace llvm;
 
@@ -84,6 +88,78 @@ Expected<std::optional<uint64_t>> sourceImageResult(RaiseContext &Ctx,
                        "displaces a source address by a register value only "
                        "the running kernel knows");
   return std::nullopt;
+}
+
+// Displace one half of a source code-object address that an SGPR pair holds.
+// The split form adds a constant to the low half with s_add_u32, which leaves
+// its carry in SCC, and adds another constant plus that carry to the high half
+// with s_addc_u32. Each half is recomputed from the address the pair already
+// holds, so the pair goes on naming a place in the source image instead of the
+// read being refused. The halves wrap into one another, which is how a
+// displacement reaching backwards is written. Return false when the
+// instruction is not such a displacement, leaving it to the arithmetic path.
+Expected<bool> displaceSourceImageHalf(RaiseContext &Ctx, const DecodedInst &Di,
+                                       OperandResolver &Op, bool IsHighHalf) {
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  if (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx)
+    return false;
+  // A pair is keyed by its low SGPR, so the high half displaces the pair that
+  // starts one register earlier, and the first SGPR starts no such pair.
+  if (IsHighHalf && *Dst->BaseIdx == 0)
+    return false;
+  unsigned PairBaseIdx = IsHighHalf ? *Dst->BaseIdx - 1 : *Dst->BaseIdx;
+
+  // Only adding a constant to the half itself displaces what the pair holds.
+  // Anything else computes a value the pair no longer names an address for. A
+  // displacement written as a difference of labels reaches the decode as an
+  // expression rather than a bare immediate, and names a constant all the
+  // same.
+  if (!Op.isSrcReg(0))
+    return false;
+  std::optional<int64_t> Displacement =
+      evalOperandAsConst(Di.Inst, Op.srcIdx(1));
+  if (!Displacement)
+    return false;
+  Expected<std::optional<ParsedReg>> Src0 = Op.srcReg(0);
+  if (!Src0)
+    return Src0.takeError();
+  if ((*Src0)->RegKind != ParsedReg::SGPR || (*Src0)->BaseIdx != Dst->BaseIdx)
+    return false;
+
+  std::optional<uint64_t> Address =
+      Ctx.registers().lookupSourceImageSgprPairAddr(PairBaseIdx);
+  if (!Address)
+    return false;
+
+  uint64_t CarryIn = 0;
+  if (IsHighHalf) {
+    std::optional<bool> Pending =
+        Ctx.registers().takeSourceImageCarry(PairBaseIdx, Di.Offset);
+    if (!Pending)
+      return false;
+    CarryIn = *Pending;
+  }
+
+  uint64_t Half = IsHighHalf ? *Address >> 32 : *Address & 0xffffffff;
+  uint64_t Sum = Half + static_cast<uint32_t>(*Displacement) + CarryIn;
+  uint32_t Result = static_cast<uint32_t>(Sum);
+  uint64_t Moved = IsHighHalf ? (static_cast<uint64_t>(Result) << 32) |
+                                    (*Address & 0xffffffff)
+                              : (*Address & 0xffffffff00000000) | Result;
+
+  // Writing either half drops the address the pair held, so the displaced
+  // address is recorded once the write is done.
+  Ctx.registers().writeReg32(*Dst,
+                             ConstantInt::get(Ctx.B.getInt32Ty(), Result));
+  Ctx.registers().recordSourceImageSgprPairAddr(PairBaseIdx, Moved);
+  bool CarryOut = Sum >> 32;
+  Ctx.registers().regFile().storeSCC(Ctx.B, Ctx.B.getInt1(CarryOut));
+  if (!IsHighHalf)
+    Ctx.registers().recordSourceImageCarry(PairBaseIdx, CarryOut,
+                                           Di.Offset + Di.sizeInBytes());
+  return true;
 }
 
 // Emit a 64-bit scalar add or subtract instruction, carrying along the source
@@ -291,6 +367,16 @@ Error handleOverflowingBinary32(RaiseContext &Ctx, OperandResolver &Op,
   return Error::success();
 }
 
+// Emit the fused multiply-add the s_fma* opcodes compute.
+Value *emitFma(IRBuilder<> &B, Value *Src0, Value *Src1, Value *Addend,
+               const Twine &Name) {
+  Value *A = B.CreateBitCast(Src0, B.getFloatTy());
+  Value *Bv = B.CreateBitCast(Src1, B.getFloatTy());
+  Value *C = B.CreateBitCast(Addend, B.getFloatTy());
+  return B.CreateIntrinsic(Intrinsic::fma, {B.getFloatTy()}, {A, Bv, C}, {},
+                           Name);
+}
+
 } // namespace
 
 // Raise one SOP2 instruction and preserve its SCC side effects.
@@ -343,9 +429,16 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::S_ASHR_I64:
     return handleShift64(Ctx, Op, Instruction::AShr, "ashr64");
 
-  case CanonicalOp::S_ADD_U32:
+  case CanonicalOp::S_ADD_U32: {
+    Expected<bool> Displaced =
+        displaceSourceImageHalf(Ctx, Di, Op, /*IsHighHalf=*/false);
+    if (!Displaced)
+      return Displaced.takeError();
+    if (*Displaced)
+      return Error::success();
     return handleOverflowingBinary32(Ctx, Op, Intrinsic::uadd_with_overflow,
                                      "add", "add_carry");
+  }
   case CanonicalOp::S_ADD_I32:
     return handleOverflowingBinary32(Ctx, Op, Intrinsic::sadd_with_overflow,
                                      "add", "add_overflow");
@@ -356,6 +449,12 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return handleOverflowingBinary32(Ctx, Op, Intrinsic::ssub_with_overflow,
                                      "sub", "sub_overflow");
   case CanonicalOp::S_ADDC_U32: {
+    Expected<bool> Displaced =
+        displaceSourceImageHalf(Ctx, Di, Op, /*IsHighHalf=*/true);
+    if (!Displaced)
+      return Displaced.takeError();
+    if (*Displaced)
+      return Error::success();
     Expected<BinaryOperands> Args = Op.readBinary32();
     if (!Args)
       return Args.takeError();
@@ -441,6 +540,52 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return emitBinaryInst64(Ctx, Di, Op, /*IsSubtract=*/false);
   case CanonicalOp::S_SUB_NC_U64:
     return emitBinaryInst64(Ctx, Di, Op, /*IsSubtract=*/true);
+
+  // The scalar float opcodes carry no Defs on SCC, so the three cases below
+  // write the destination alone.
+  case CanonicalOp::S_MUL_F32: {
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+    Expected<BinaryOperands> Args = Op.readBinary32();
+    if (!Args)
+      return Args.takeError();
+    IRBuilder<> &B = Ctx.B;
+    Value *Src0 = B.CreateBitCast(Args->Src0, B.getFloatTy());
+    Value *Src1 = B.CreateBitCast(Args->Src1, B.getFloatTy());
+    Value *Result = B.CreateFMul(Src0, Src1, "mul_f32");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    return Error::success();
+  }
+  case CanonicalOp::S_FMAC_F32: {
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+    Expected<BinaryOperands> Args = Op.readBinary32();
+    if (!Args)
+      return Args.takeError();
+    Expected<Value *> Addend = Op.dstValue();
+    if (!Addend)
+      return Addend.takeError();
+    IRBuilder<> &B = Ctx.B;
+    Value *Result = emitFma(B, Args->Src0, Args->Src1, *Addend, "fmac_f32");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    return Error::success();
+  }
+  case CanonicalOp::S_FMAAK_F32: {
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+    Expected<BinaryOperands> Args = Op.readBinary32();
+    if (!Args)
+      return Args.takeError();
+    int16_t LiteralIdx = COMGR::transpiler::getNamedOperandIdx(
+        Di.Inst.getOpcode(), AMDGPU::OpName::imm);
+    assert(LiteralIdx >= 0 && "s_fmaak_f32 encodes a literal");
+    assert(Di.isImm(LiteralIdx) && "s_fmaak_f32 literal is always immediate");
+    IRBuilder<> &B = Ctx.B;
+    Value *Literal = B.getInt32(static_cast<uint32_t>(Di.getImm(LiteralIdx)));
+    Value *Result = emitFma(B, Args->Src0, Args->Src1, Literal, "fmaak_f32");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    return Error::success();
+  }
 
   case CanonicalOp::S_MIN_I32: {
     Expected<BinaryOperands> Args = Op.readBinary32();

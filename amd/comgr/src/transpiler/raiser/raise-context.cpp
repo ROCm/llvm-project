@@ -35,8 +35,8 @@ namespace COMGR::transpiler {
 
 Expected<RaiseContext>
 RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
-                     const MCState &MC, const KernelMeta &Meta,
-                     ArrayRef<uint8_t> SourceTextBytes,
+                     const MCState &MC, const SetPcAnalysis &SetPc,
+                     const KernelMeta &Meta, ArrayRef<uint8_t> SourceTextBytes,
                      uint64_t SourceTextBaseAddress,
                      ArrayRef<TextSection::ImageSection> SourceImageSections,
                      uint64_t KernelStartOffset, uint64_t KernelEndOffset,
@@ -61,7 +61,7 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
         AMDHSA_BITS_GET(Meta.ComputePgmRsrc1,
                         amdhsa::COMPUTE_PGM_RSRC1_GFX6_GFX11_ENABLE_IEEE_MODE);
   }
-  RaiseContext Context(B, Projection, MC, std::move(*Registers),
+  RaiseContext Context(B, Projection, MC, SetPc, std::move(*Registers),
                        SourceTextBytes, SourceTextBaseAddress,
                        SourceImageSections, KernelStartOffset, KernelEndOffset,
                        SourceFloatRoundMode32, SourceFloatRoundMode16_64,
@@ -94,14 +94,14 @@ Error RaiseContext::validateRequiredBits() const {
 
 RaiseContext::RaiseContext(
     IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
-    RegisterState Registers, ArrayRef<uint8_t> SourceTextBytes,
-    uint64_t SourceTextBaseAddress,
+    const SetPcAnalysis &SetPc, RegisterState Registers,
+    ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset,
     unsigned SourceFloatRoundMode32, unsigned SourceFloatRoundMode16_64,
     bool SourceFp16Overflow, bool SourceDx10Clamp, bool SourceIeeeMode)
-    : B(B), Projection(Projection), MC(MC), Registers(std::move(Registers)),
-      SourceTextBytes(SourceTextBytes),
+    : B(B), Projection(Projection), MC(MC), SetPc(SetPc),
+      Registers(std::move(Registers)), SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),

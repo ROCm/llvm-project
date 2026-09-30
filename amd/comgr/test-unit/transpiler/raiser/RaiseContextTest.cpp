@@ -11,6 +11,7 @@
 #include "transpiler/common/kernel-meta.h"
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/mc-state.h"
+#include "transpiler/decoder/setpc-analysis.h"
 #include "transpiler/raiser/handlers.h"
 #include "transpiler/raiser/raise_failure.h"
 #include "transpiler/raiser/wave-projection.h"
@@ -59,6 +60,7 @@ protected:
     ReplicationProjection Projection;
     Function *Kernel;
     BasicBlock *Entry;
+    SetPcAnalysis SetPc;
     std::optional<RaiseContext> Ctx;
 
     explicit ContextEnvironment(const MCState &Mc)
@@ -72,7 +74,7 @@ protected:
           Entry(BasicBlock::Create(LLVMCtx, "entry", Kernel)) {
       B.SetInsertPoint(Entry);
       Ctx.emplace(cantFail(RaiseContext::create(
-          B, Projection, Mc, KernelMeta(), ArrayRef<uint8_t>(), 0,
+          B, Projection, Mc, SetPc, KernelMeta(), ArrayRef<uint8_t>(), 0,
           ArrayRef<TextSection::ImageSection>(), KKernelStartOffset, 0)));
     }
   };

@@ -577,6 +577,10 @@ defm AshrPkInsts : AMDGPUSubtargetFeature<"ashr-pk-insts",
   "Has Arithmetic Shift Pack instructions"
 >;
 
+defm ExclusiveScanInsts : AMDGPUSubtargetFeature<"exclusive-scan-insts",
+  "Has exclusive scan instructions"
+>;
+
 defm CvtPkF16F32Inst : AMDGPUSubtargetFeature<"cvt-pk-f16-f32-inst",
   "Has cvt_pk_f16_f32 instruction"
 >;
@@ -1300,6 +1304,16 @@ defm VALUTransUseHazard : AMDGPUGenericAnySubtargetFeature<"valu-trans-use-hazar
 
 defm TransCoexecutionHazard : AMDGPUSubtargetFeature<"trans-coexecution-hazard",
   "Hazard when TRANS co-executes with other VALU instruction",
+  /*GenPredicate=*/0
+>;
+
+defm GFX1250VALUBlockingCycles : AMDGPUSubtargetFeature<"gfx1250-valu-blocking-cycles",
+  "VALU pipe occupancy is modeled with GFX1250BlockingCycles",
+  /*GenPredicate=*/0
+>;
+
+defm VPermPk16Hazard : AMDGPUSubtargetFeature<"vperm-pk16-hazard",
+  "V_PERM_PK16 must be immediately followed by a safe VALU (or an inserted V_NOP)",
   /*GenPredicate=*/0
 >;
 
@@ -2504,6 +2518,7 @@ def FeatureISAVersion12_50_Common : FeatureSet<
    FeatureTanhInsts,
    FeatureTensorCvtLutInsts,
    FeatureTDMInsts,
+   FeatureVPermPk16Hazard,
    FeatureTransposeLoadF4F6Insts,
    FeatureBF16TransInsts,
    FeatureBF16ConversionInsts,
@@ -2578,6 +2593,7 @@ def FeatureISAVersion12_50_STRICT : FeatureSet<
    FeatureSWMMACGfx1200Insts,
    FeatureSWMMACGfx1250Insts,
    FeatureTransCoexecutionHazard,
+   FeatureGFX1250VALUBlockingCycles,
    FeatureWMMACoexecutionHazards,
    FeatureDataCacheLineSize128,
    FeatureRequiresInitialUnclausedVmem,
@@ -2613,6 +2629,7 @@ def FeatureISAVersion12_50 : FeatureSet<
    FeatureSWMMACGfx1200Insts,
    FeatureSWMMACGfx1250Insts,
    FeatureTransCoexecutionHazard,
+   FeatureGFX1250VALUBlockingCycles,
    FeatureWMMACoexecutionHazards,
    FeatureDataCacheLineSize128,
    FeatureRequiresInitialUnclausedVmem,
@@ -2674,9 +2691,9 @@ def FeatureISAVersion12_5_Generic: FeatureSet<
    FeatureBlock16ConversionScaleInsts,
    FeatureSetregVGPRMSBFixup,
    FeatureRequiresCOV6,
-   FeatureSupportsXNACK,
    FeatureGFX125xLowestRateWMMA,
    FeatureTransCoexecutionHazard,
+   FeatureGFX1250VALUBlockingCycles,
    FeatureWMMACoexecutionHazards,
    FeatureDataCacheLineSize128,
    FeatureRequiresInitialUnclausedVmem,
@@ -2688,6 +2705,7 @@ def FeatureISAVersion13 : FeatureSet<
   [FeatureGFX13,
    FeatureGFX1250Insts,
    FeatureWaveMatchInsts,
+   FeatureExclusiveScanInsts,
    FeatureAddressableLocalMemorySize196608,
    FeatureLDSAllocGranularity1024,
    FeatureLDSEncodingGranularity1024,
@@ -3360,6 +3378,7 @@ def AMDGPUFrontendVisibleFeatures {
   FeatureF32ToF16BF16ConversionSRInsts, FeatureF32ToFP6BF6ConversionScaleInsts, FeatureFP4ConversionScaleInsts,
   FeatureFP6BF6ConversionScaleInsts, FeatureFP8ConversionInsts, FeatureFP8ConversionScaleInsts,
   FeatureBlock16ConversionScaleInsts, FeatureFP8E5M3Insts, FeatureFP8Insts,
+  FeatureFP6BF6ToF16BF16F32ConversionScaleInsts,
   FeatureFlatBufferGlobalAtomicFaddF64Inst, FeatureFlatGlobalInsts,
   FeatureGFX10Insts, FeatureGFX10_3Insts, FeatureGFX11Insts,
   FeatureGFX1250Insts, FeatureGFX1251GEMMInsts, FeatureGFX12Insts,
@@ -3375,8 +3394,8 @@ def AMDGPUFrontendVisibleFeatures {
   FeatureSadInsts, FeatureSetPrioIncWgInst, FeatureSmemPrefetchInsts,
   FeatureTDMInsts, FeatureTanhInsts, FeatureTensorCvtLutInsts,
   FeatureTransposeLoadF4F6Insts, FeatureVMemToLDSLoad, FeatureVmemPrefInsts,
-  FeatureWMMA128bInsts, FeatureWMMA256bInsts, FeatureWMMAN16Insts,
-  FeatureWMMAF4Insts, FeatureXF32Insts,
+  FeatureWaveMatchInsts, FeatureWMMA128bInsts, FeatureWMMA256bInsts,
+  FeatureWMMAN16Insts, FeatureWMMAF4Insts, FeatureXF32Insts,
   FeatureWavefrontSize32, FeatureWavefrontSize64, FeatureSupportsWGP,
   FeatureSupportsWave32, FeatureFastFMAF32, FeatureFastDenormalF32,
   FeatureSupportsXNACK, FeatureSupportsSRAMECC, FeatureXNACKOnOffModes,
