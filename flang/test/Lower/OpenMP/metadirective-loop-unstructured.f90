@@ -1,5 +1,4 @@
 ! A DO associated with a METADIRECTIVE variant whose body branches only within
-! XFAIL: *
 ! itself. The computed GO TO and its targets are all inside the loop body, so
 ! the loop keeps its structured form and the raw blocks are confined to an
 ! scf.execute_region inside omp.loop_nest. This used to be rejected as not yet
@@ -23,7 +22,7 @@
 subroutine test_static(n, a, selector)
   integer :: n, a(n), selector, i
   !$omp metadirective &
-  !$omp & when(implementation={vendor(llvm)}: do) &
+  !$omp & when(implementation={vendor(amd)}: do) &
   !$omp & otherwise(nothing)
   do i = 1, n
     go to (10, 20), selector
