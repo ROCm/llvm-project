@@ -7574,6 +7574,19 @@ void Verifier::visit(DbgVariableRecord &DVR) {
   CheckDI(DVR.getExpression()->isValid(ExprEnv, dbgs()),
           "invalid #dbg record expression", &DVR, DVR.getRawExpression());
 
+  const DIExpression *Expr = DVR.getExpression();
+  if (Expr->isValid() && !DVR.isKillLocation() &&
+      (isa<ValueAsMetadata>(MD) || isa<DIArgList>(MD))) {
+    unsigned NumLocationOps = DVR.getNumVariableLocationOps();
+    for (DIExpression::ExprOperand Op : Expr->expr_ops()) {
+      if (Op.getOp() != dwarf::DW_OP_LLVM_arg)
+        continue;
+      CheckDI(Op.getArg(0) < NumLocationOps,
+              "#dbg record expression references nonexistent location operand",
+              &DVR, Expr, BB, F);
+    }
+  }
+
   if (DVR.isDbgAssign()) {
     CheckDI(isa_and_nonnull<DIAssignID>(DVR.getRawAssignID()),
             "invalid #dbg_assign DIAssignID", &DVR, DVR.getRawAssignID(), BB,
