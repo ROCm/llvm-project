@@ -1483,11 +1483,17 @@ private:
   DenseMap<BBRegKey, SmallVector<Register, 2>> CopyMap;
   DenseMap<BBRegKey, Register> XorExecMap;
 
+  // Sparse CFG over WTBlocks. In/Out are computed locally.
+  using BlockSet = SmallPtrSet<MachineBasicBlock *, 16>;
+  DenseMap<MachineBasicBlock *, BlockSet> WTPreds;
+  DenseMap<MachineBasicBlock *, BlockSet> WTSuccs;
+
   // LCA of Blocks. If it lies in a cycle, the immediate dominator of the
   // outermost header (reducible cycles: that header dominates the LCA).
   MachineBasicBlock *getInitBlock(ArrayRef<MachineBasicBlock *> Blocks,
                                   MachineCycleInfo &CycleInfo) const;
   void insertLaneMaskInstrs(MachineCycleInfo &CycleInfo);
+  void computeSparseGraph();
   Register freshTemp();
   MachineInstrBuilder emit(MachineBasicBlock &Block,
                            MachineBasicBlock::iterator I, unsigned Opc,
@@ -1878,6 +1884,53 @@ void ControlFlowRewriter::insertLaneMaskInstrs(MachineCycleInfo &CycleInfo) {
   }
 
   createSections();
+  computeSparseGraph();
+}
+
+// Sparse edge A → B: A and B are WT blocks, and some CFG path from A to B
+// has no other WT block between them.
+// Out(B) = {B} when B is a WT block, otherwise In(B). In(B) is the union of
+// Out over CFG predecessors. RPO until fixpoint.
+void ControlFlowRewriter::computeSparseGraph() {
+  DenseMap<MachineBasicBlock *, BlockSet> In;
+  DenseMap<MachineBasicBlock *, BlockSet> Out;
+
+  ReversePostOrderTraversal<MachineFunction *> RPOT(&Function);
+  SmallVector<MachineBasicBlock *, 16> RPOBlocks(RPOT.begin(), RPOT.end());
+
+  bool OutChanged = true;
+  while (OutChanged) {
+    OutChanged = false;
+    for (MachineBasicBlock *B : RPOBlocks) {
+      BlockSet NewIn;
+      for (MachineBasicBlock *Pred : B->predecessors()) {
+        BlockSet &PredOut = Out[Pred];
+        NewIn.insert(PredOut.begin(), PredOut.end());
+      }
+      In[B] = NewIn;
+
+      BlockSet NewOut;
+      if (WTBlocks.contains(B))
+        NewOut.insert(B);
+      else
+        NewOut = std::move(NewIn);
+
+      BlockSet &CurOut = Out[B];
+      if (CurOut == NewOut)
+        continue;
+      CurOut = std::move(NewOut);
+      OutChanged = true;
+    }
+  }
+
+  WTPreds.clear();
+  WTSuccs.clear();
+  for (MachineBasicBlock *B : WTBlocks) {
+    BlockSet &Preds = In[B];
+    for (MachineBasicBlock *X : Preds)
+      WTSuccs[X].insert(B);
+    WTPreds[B] = std::move(Preds);
+  }
 }
 
 Register ControlFlowRewriter::freshTemp() {
