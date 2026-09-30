@@ -1,18 +1,6 @@
 ; REQUIRES: comgr-has-transpiler
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
-; RUN:   --defsym=LOAD_SCOPE=1 %s -o %t.o
-; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
-
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
-; RUN:   --defsym=LOAD_SCALED_SCOPE=1 %s -o %t.o
-; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
-
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
 ; RUN:   --defsym=STORE_TH=1 %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
@@ -73,12 +61,6 @@
 	.p2align 8
 	.type global_invalid,@function
 global_invalid:
-.ifdef LOAD_SCOPE
-	global_load_b32 v1, v0, s[0:1] scope:SCOPE_DEV
-.endif
-.ifdef LOAD_SCALED_SCOPE
-	global_load_b32 v1, v0, s[0:1] scale_offset scope:SCOPE_DEV
-.endif
 .ifdef STORE_TH
 	global_store_b64 v0, v[2:3], s[0:1] th:TH_STORE_NT
 .endif

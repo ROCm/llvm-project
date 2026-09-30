@@ -93,6 +93,26 @@ globalDataReg(RaiseContext &Ctx, const DecodedInst &Di, AMDGPU::OpName Name,
   return *Reg;
 }
 
+/// Return the cache-policy bits a GLOBAL load or store may carry. A GFX12+
+/// source names the memory scope in a field of its own, which the access
+/// models; earlier generations spell coherence through bits whose meaning this
+/// raiser does not establish.
+static unsigned modeledAccessCachePolicy(const MCSubtargetInfo &STI) {
+  if (STI.hasFeature(AMDGPU::FeatureGFX12Insts))
+    return AMDGPU::CPol::SCOPE;
+  return 0;
+}
+
+/// Return whether the access is coherent past the compute unit running it,
+/// which every scope above SCOPE_CU is. Such an access participates in a
+/// handshake with another workgroup, so it lifts to a volatile one: the
+/// optimizer may then neither drop nor reorder it, and the target emits the
+/// cache bits that keep it visible.
+static bool isCoherentBeyondComputeUnit(const DecodedInst &Di) {
+  return (globalCachePolicy(Di) & AMDGPU::CPol::SCOPE) !=
+         AMDGPU::CPol::SCOPE_CU;
+}
+
 /// Emit a GLOBAL load of the given dword width under EXEC.
 static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
                             unsigned WidthInDwords) {
@@ -103,16 +123,17 @@ static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
 
   Expected<Value *> Address =
       emitGlobalAddress(Ctx, Di, WidthInDwords * 4, GlobalAccessAlignment,
-                        /*ModeledCachePolicy=*/0);
+                        modeledAccessCachePolicy(Ctx.Projection.SourceSTI));
   if (!Address)
     return Address.takeError();
 
+  bool IsVolatile = isCoherentBeyondComputeUnit(Di);
   // An inactive lane holds an unconstrained address, so the load itself is
   // predicated and not only the register write it feeds.
   Ctx.registers().emitUnderExec([&] {
-    Value *Loaded =
-        Ctx.B.CreateAlignedLoad(globalAccessType(Ctx.B, WidthInDwords),
-                                *Address, GlobalAccessAlignment, "global_load");
+    Value *Loaded = Ctx.B.CreateAlignedLoad(
+        globalAccessType(Ctx.B, WidthInDwords), *Address, GlobalAccessAlignment,
+        IsVolatile, "global_load");
     Ctx.registers().regFile().writeRegVec(Ctx.B, *Destination, Loaded);
   });
   return Error::success();
@@ -130,14 +151,16 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
 
   Expected<Value *> Address =
       emitGlobalAddress(Ctx, Di, WidthInDwords * 4, GlobalAccessAlignment,
-                        /*ModeledCachePolicy=*/0);
+                        modeledAccessCachePolicy(Ctx.Projection.SourceSTI));
   if (!Address)
     return Address.takeError();
 
+  bool IsVolatile = isCoherentBeyondComputeUnit(Di);
   // A store by an inactive lane must not reach memory at all, so the whole
   // access is predicated on the lane bit of EXEC.
-  Ctx.registers().emitUnderExec(
-      [&] { Ctx.B.CreateAlignedStore(Data, *Address, GlobalAccessAlignment); });
+  Ctx.registers().emitUnderExec([&] {
+    Ctx.B.CreateAlignedStore(Data, *Address, GlobalAccessAlignment, IsVolatile);
+  });
   return Error::success();
 }
 

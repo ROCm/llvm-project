@@ -18,6 +18,11 @@
 
 namespace COMGR::transpiler {
 
+// Return the cache-policy immediate a GLOBAL memory instruction carries. The
+// bits are those of AMDGPU::CPol, whose meaning depends on the source ISA
+// generation.
+int64_t globalCachePolicy(const DecodedInst &Di);
+
 // Emit the address a GLOBAL memory instruction accesses, as a pointer into the
 // global address space with the instruction's immediate byte offset folded in.
 // Both addressing forms are recognized: a per-lane 64-bit address in `vaddr`,
