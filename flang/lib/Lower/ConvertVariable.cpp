@@ -49,6 +49,7 @@
 #include "mlir/Dialect/Complex/IR/Complex.h"
 #include "mlir/Dialect/OpenACC/OpenACC.h"
 #include "mlir/Dialect/OpenMP/OpenMPInterfaces.h"
+#include "mlir/Dialect/OpenMP/Utils/Utils.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/CommandLine.h"
@@ -3382,7 +3383,9 @@ void Fortran::lower::createRuntimeTypeInfoGlobal(
   // the host descriptor pointer to the canonical device RTTI global rather than
   // to an independent mapped copy.
   if (converter.getFoldingContext().languageFeatures().IsEnabled(
-          Fortran::common::LanguageFeature::OpenMP)) {
+          Fortran::common::LanguageFeature::OpenMP) &&
+      mlir::omp::getOpenMPVersionAttribute(converter.getModuleOp(),
+                                           /*fallback=*/0) >= 61) {
     if (auto declareTargetOp =
             llvm::dyn_cast<mlir::omp::DeclareTargetInterface>(
                 global.getOperation()))

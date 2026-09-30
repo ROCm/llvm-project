@@ -69,6 +69,7 @@
 #include "flang/Support/Version.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/OpenMP/OpenMPInterfaces.h"
+#include "mlir/Dialect/OpenMP/Utils/Utils.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Matchers.h"
@@ -502,7 +503,9 @@ private:
         // the device image so device-side dispatch table entries can refer to
         // device functions instead of lowering to null/poison pointers.
         if (converter.getFoldingContext().languageFeatures().IsEnabled(
-                Fortran::common::LanguageFeature::OpenMP)) {
+                Fortran::common::LanguageFeature::OpenMP) &&
+            mlir::omp::getOpenMPVersionAttribute(converter.getModuleOp(),
+                                                 /*fallback=*/0) >= 61) {
           if (mlir::Operation *bindingOp =
                   builder.getModule().lookupSymbol(bindingName))
             if (auto declareTargetOp =

@@ -35,6 +35,7 @@
 #include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
+#include "mlir/Dialect/OpenMP/Utils/Utils.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
@@ -516,7 +517,10 @@ public:
   /// \p parentOp is the MapInfoOp being expanded (the descriptor map before
   /// this pass splits it). Lowering attaches a NameLoc there for the Fortran
   /// map text. New ops created here use its location so NameLoc is preserved.
-  static bool shouldMapDescriptorTypeDesc(mlir::Value descriptor) {
+  static bool shouldMapDescriptorTypeDesc(mlir::Value descriptor,
+                                          bool supportsPolymorphicMap) {
+    if (!supportsPolymorphicMap)
+      return false;
     auto boxTy = mlir::dyn_cast<fir::BaseBoxType>(
         fir::unwrapRefType(descriptor.getType()));
     return boxTy && fir::isPolymorphicType(boxTy) && fir::boxHasAddendum(boxTy);
@@ -1098,7 +1102,8 @@ public:
   genRefPtrMap(mlir::omp::MapInfoOp op, fir::FirOpBuilder &builder,
                mlir::Operation *target, mlir::Value descriptor,
                llvm::SmallVectorImpl<ParentAndPlacement> &mapMemberUsers,
-               bool isAttachNever, bool isAttachAlways) {
+               bool isAttachNever, bool isAttachAlways,
+               bool supportsPolymorphicMap) {
     auto newMapInfoOp = mlir::omp::MapInfoOp::create(
         builder, op->getLoc(), op.getResult().getType(), descriptor,
         mlir::TypeAttr::get(fir::unwrapRefType(descriptor.getType())),
@@ -1114,7 +1119,7 @@ public:
       genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
                            mlir::omp::ClauseMapFlags::ref_ptr, isAttachAlways);
 
-    if (shouldMapDescriptorTypeDesc(descriptor))
+    if (shouldMapDescriptorTypeDesc(descriptor, supportsPolymorphicMap))
       genImplicitTypeDescAttachMap(op, descriptor, mapMemberUsers, target,
                                     builder,
                                     mlir::omp::ClauseMapFlags::ref_ptr,
@@ -1174,7 +1179,7 @@ public:
       llvm::SmallVectorImpl<ParentAndPlacement> &mapMemberUsers,
       bool isAttachNever, bool isAttachAlways, bool mapOnlyDescriptor,
       bool descCanBeDeferred, bool canOptimizeDescViaPrivatization,
-      mlir::FlatSymbolRefAttr mapperId) {
+      mlir::FlatSymbolRefAttr mapperId, bool supportsPolymorphicMap) {
     bool isRefPtrPtee =
         bitEnumContainsAll(op.getMapType(),
                            mlir::omp::ClauseMapFlags::ref_ptr) &&
@@ -1238,7 +1243,7 @@ public:
                                isAttachAlways, baseAddr.getVarPtrPtr());
     }
 
-    if (shouldMapDescriptorTypeDesc(descriptor))
+    if (shouldMapDescriptorTypeDesc(descriptor, supportsPolymorphicMap))
       genImplicitTypeDescAttachMap(op, descriptor, mapMemberUsers, target,
                                    builder,
                                    mlir::omp::ClauseMapFlags::ref_ptr |
@@ -1364,7 +1369,8 @@ public:
   mlir::omp::MapInfoOp genDescriptorMaps(mlir::omp::MapInfoOp op,
                                          fir::FirOpBuilder &builder,
                                          mlir::Operation *target,
-                                         bool &canOptimizeUseDeviceAddr) {
+                                         bool &canOptimizeUseDeviceAddr,
+                                         bool supportsPolymorphicMap) {
     bool descCanBeDeferred = false;
     bool canOptimizeDescViaPrivatization = false;
     llvm::SmallVector<ParentAndPlacement> mapMemberUsers;
@@ -1418,8 +1424,9 @@ public:
     // case where we do a similar style of mapping for deeper nestings.
     mlir::omp::MapInfoOp newMapInfo;
     if (isRefPtr && op.getMembers().empty()) {
-      newMapInfo = genRefPtrMap(op, builder, target, descriptor, mapMemberUsers,
-                                isAttachNever, isAttachAlways);
+      newMapInfo =
+          genRefPtrMap(op, builder, target, descriptor, mapMemberUsers,
+                       isAttachNever, isAttachAlways, supportsPolymorphicMap);
     } else if (isRefPtee) {
       newMapInfo =
           genRefPteeMap(op, builder, target, descriptor, mapMemberUsers,
@@ -1428,7 +1435,7 @@ public:
       newMapInfo = genRefPtrPteeOrDefaultMap(
           op, builder, target, descriptor, mapMemberUsers, isAttachNever,
           isAttachAlways, mapOnlyDescriptor, descCanBeDeferred,
-          canOptimizeDescViaPrivatization, mapperId);
+          canOptimizeDescViaPrivatization, mapperId, supportsPolymorphicMap);
     }
     return newMapInfo;
   }
@@ -1734,6 +1741,8 @@ public:
   // will mutate siblings of MapInfoOp.
   void runOnOperation() override {
     mlir::ModuleOp module = mlir::cast<mlir::ModuleOp>(getOperation());
+    bool supportsPolymorphicMap =
+        mlir::omp::getOpenMPVersionAttribute(module, /*fallback=*/0) >= 61;
     fir::KindMapping kindMap = fir::getKindMapping(module);
     fir::FirOpBuilder builder{module, std::move(kindMap)};
 
@@ -1791,8 +1800,10 @@ public:
           auto targetDataOp =
               llvm::dyn_cast<mlir::omp::TargetDataOp>(*targetUser);
           bool canOptimizeUseDeviceAddr = false;
-          mlir::omp::MapInfoOp newMapInfo = genDescriptorMaps(
-              op, builder, targetUser, canOptimizeUseDeviceAddr);
+          mlir::omp::MapInfoOp newMapInfo =
+              genDescriptorMaps(op, builder, targetUser,
+                                canOptimizeUseDeviceAddr,
+                                supportsPolymorphicMap);
           if (canOptimizeUseDeviceAddr && targetDataOp) {
             genOptimizedUseDeviceAddr(builder, targetDataOp, newMapInfo,
                                       module);

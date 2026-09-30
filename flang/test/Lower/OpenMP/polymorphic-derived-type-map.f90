@@ -1,4 +1,4 @@
-! RUN: %flang_fc1 -emit-hlfir -fopenmp %s -o - | FileCheck %s
+! RUN: %flang_fc1 -emit-hlfir -fopenmp -fopenmp-version=61 %s -o - | FileCheck %s
 
 module polymorphic_derived_type_map
   implicit none
@@ -34,7 +34,7 @@ end module
 ! CHECK: %[[BASE_ADDR:.*]] = fir.box_offset %{{.*}} base_addr
 ! CHECK: %[[BASE_MAP:.*]] = omp.map.info {{.*}}var_ptr_ptr(%[[BASE_ADDR]]{{.*}})
 ! CHECK: %[[DESC_MAP:.*]] = omp.map.info {{.*}}members(%[[BASE_MAP]] : {{\[}}0{{\]}}
-! CHECK: %[[BASE_ATTACH:.*]] = omp.map.info var_ptr({{.*}}!fir.llvm_ptr<i8>) {{.*}}map_clauses(attach, ref_ptr, ref_ptee){{.*}}var_ptr_ptr(%[[BASE_ADDR]]
+! CHECK: %[[BASE_ATTACH:.*]] = omp.map.info var_ptr({{.*}}) {{.*}}map_clauses(attach, ref_ptr, ref_ptee){{.*}}var_ptr_ptr(%[[BASE_ADDR]]
 ! CHECK: %[[TYPE_DESC:.*]] = fir.box_offset %{{.*}} derived_type
 ! CHECK-NOT: omp.map.info {{.*}}var_ptr_ptr(%[[TYPE_DESC]]{{.*}}!fir.type<_QM__fortran_type_infoTderivedtype>
 ! CHECK: %[[TYPE_DESC_ATTACH:.*]] = omp.map.info var_ptr(%[[TYPE_DESC]]{{.*}}!fir.llvm_ptr<i8>) {{.*}}map_clauses(attach, ref_ptr, ref_ptee){{.*}}var_ptr_ptr(%[[TYPE_DESC]]{{.*}}!fir.llvm_ptr<i8>)
@@ -43,7 +43,7 @@ end module
 ! CHECK: %[[TGT_BASE_ADDR:.*]] = fir.box_offset %{{.*}} base_addr
 ! CHECK: %[[TGT_BASE_MAP:.*]] = omp.map.info {{.*}}var_ptr_ptr(%[[TGT_BASE_ADDR]]{{.*}})
 ! CHECK: %[[TGT_DESC_MAP:.*]] = omp.map.info {{.*}}members(%[[TGT_BASE_MAP]] : {{\[}}0{{\]}}
-! CHECK: %[[TGT_BASE_ATTACH:.*]] = omp.map.info var_ptr({{.*}}!fir.llvm_ptr<i8>) {{.*}}map_clauses(attach, ref_ptr, ref_ptee){{.*}}var_ptr_ptr(%[[TGT_BASE_ADDR]]
+! CHECK: %[[TGT_BASE_ATTACH:.*]] = omp.map.info var_ptr({{.*}}) {{.*}}map_clauses(attach, ref_ptr, ref_ptee){{.*}}var_ptr_ptr(%[[TGT_BASE_ADDR]]
 ! CHECK: %[[TGT_TYPE_DESC:.*]] = fir.box_offset %{{.*}} derived_type
 ! CHECK-NOT: omp.map.info {{.*}}var_ptr_ptr(%[[TGT_TYPE_DESC]]{{.*}}!fir.type<_QM__fortran_type_infoTderivedtype>
 ! CHECK: %[[TGT_TYPE_DESC_ATTACH:.*]] = omp.map.info var_ptr(%[[TGT_TYPE_DESC]]{{.*}}!fir.llvm_ptr<i8>) {{.*}}map_clauses(attach, ref_ptr, ref_ptee){{.*}}var_ptr_ptr(%[[TGT_TYPE_DESC]]{{.*}}!fir.llvm_ptr<i8>)
