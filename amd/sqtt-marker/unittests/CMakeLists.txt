@@ -39,8 +39,10 @@ else()
 endif()
 
 add_executable(SQTTMarkerTests ${SQTT_MARKER_UNIT_SOURCES})
+set_target_properties(SQTTMarkerTests PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 llvm_map_components_to_libnames(SQTT_MARKER_TEST_LLVM_LIBS
-  ${LLVM_LINK_COMPONENTS})
+${LLVM_LINK_COMPONENTS})
 target_link_libraries(SQTTMarkerTests PRIVATE
     ${GTEST_LIBS}
     ${SQTT_MARKER_TEST_LLVM_LIBS}

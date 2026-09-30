@@ -109,13 +109,17 @@ if(COMGR_ENABLE_TRANSPILER)
     ${LLVM_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
     ${CMAKE_CURRENT_BINARY_DIR}/../include)
-  # The transpiler OBJECT libraries contribute objects only, so name the LLVM set
-  # this driver needs explicitly; ${LLVM_LIBS} is the same curated set amd_comgr
-  # links, already resolved to the dylib or the static components. It carries
-  # the AMDGPU components the driver's LLVMInitializeAMDGPU* calls register.
+  # The OBJECT libraries contribute objects only. Apply Comgr's static-link
+  # isolation to the driver too: static component targets can still carry an
+  # LLVM dylib dependency in their interfaces.
   target_link_libraries(transpile_cli
     PRIVATE transpiler::common transpiler::loader transpiler::decoder transpiler::raiser
-            comgr-object-utils comgr-test-llvm-init ${LLVM_LIBS})
+            comgr-object-utils comgr-test-llvm-init)
+  if(COMGR_STATIC_LLVM)
+    comgr_static_link_libraries(transpile_cli ${LLVM_LIBS})
+  else()
+    target_link_libraries(transpile_cli PRIVATE ${LLVM_LIBS})
+  endif()
   if(NOT WIN32)
     target_link_options(transpile_cli PRIVATE -Wl,--gc-sections)
   endif()

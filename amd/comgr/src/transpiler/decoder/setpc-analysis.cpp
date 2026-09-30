@@ -8,18 +8,24 @@
 
 #include "setpc-analysis.h"
 
+#include "decode.h"
 #include "mc-state.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <optional>
+#include <variant>
 
 using namespace llvm;
 
@@ -45,6 +51,87 @@ std::optional<unsigned> sgprIndex(const MCRegisterInfo &MRI, MCRegister Reg) {
   return MRI.getEncodingValue(Low) & AMDGPU::HWEncoding::REG_IDX_MASK;
 }
 
+// Most source offsets one transfer may reach before the analysis stops
+// enumerating and refuses it. A dispatcher a compiler wrote stays far below
+// this, so a wider fan-out is more likely a value the analysis got wrong than
+// a table it can state.
+constexpr unsigned MaxSetPcTargets = 16;
+
+// The source offsets one register pair may hold, as a dataflow lattice.
+//
+// The bottom element is the empty offset set: nothing reaches the pair. A join
+// unions the offset sets, and a value only ever moves up. The two top elements
+// carry no offsets. Both refuse the transfers that read them, and differ only
+// in the refusal they produce.
+class TargetOffsets {
+public:
+  TargetOffsets() = default;
+
+  static TargetOffsets single(uint64_t Offset) {
+    TargetOffsets Result;
+    Result.Offsets.push_back(Offset);
+    return Result;
+  }
+
+  // Top: some path leaves the pair holding a value the analysis cannot name.
+  static TargetOffsets unnameable() {
+    TargetOffsets Result;
+    Result.Top = Reason::Unnameable;
+    return Result;
+  }
+
+  bool isUnnameable() const { return Top == Reason::Unnameable; }
+  bool isTooMany() const { return Top == Reason::TooMany; }
+  bool isTop() const { return Top != Reason::None; }
+
+  // The offsets that reach the pair, ascending and distinct. Empty at the top
+  // and at the bottom alike.
+  ArrayRef<uint64_t> offsets() const { return Offsets; }
+
+  // Join `Other` into this value. Return true if this value changed, which is
+  // what keeps the worklist going.
+  bool join(const TargetOffsets &Other) {
+    if (Other.Top > Top) {
+      Top = Other.Top;
+      Offsets.clear();
+      return true;
+    }
+    if (isTop())
+      return false;
+
+    bool Changed = false;
+    for (uint64_t Offset : Other.Offsets) {
+      if (is_contained(Offsets, Offset))
+        continue;
+      if (Offsets.size() == MaxSetPcTargets) {
+        Top = Reason::TooMany;
+        Offsets.clear();
+        return true;
+      }
+      Offsets.push_back(Offset);
+      Changed = true;
+    }
+    if (Changed)
+      sort(Offsets);
+    return Changed;
+  }
+
+  // Raise this value to unnameable. Return true if that changed it.
+  bool raiseToUnnameable() { return join(unnameable()); }
+
+private:
+  // Why the value is at the top. A join keeps the larger reason, so a pair that
+  // is both unnameable and over the cap reads as unnameable.
+  enum class Reason { None, TooMany, Unnameable };
+
+  SmallVector<uint64_t> Offsets;
+  Reason Top = Reason::None;
+};
+
+// What every register pair holds at one point, keyed by the pair's low register
+// index. A pair with no entry is one the surrounding code says nothing about.
+using PairOffsets = DenseMap<unsigned, TargetOffsets>;
+
 // What the analysis knows about one scalar register within a block.
 struct RegState {
   // Whether the block writes this register at all.
@@ -57,7 +144,9 @@ struct RegState {
 
 // What the analysis knows about the scalar registers while walking one block.
 // Everything here is block-local: an offset is only followed from the capture
-// that starts it to the transfer that reads it, both within one block.
+// that starts it to the transfer that reads it, both within one block. What a
+// block leaves behind reaches the next one through the dataflow below, not
+// through this state.
 struct BlockState {
   // Record that the block writes the register at `Idx`. The write drops the
   // constant that the register held and the offsets of both pairs it belongs
@@ -74,6 +163,30 @@ struct BlockState {
     // write replaces that value.
     if (CarryPair == Idx)
       CarryPair.reset();
+  }
+
+  // Whether the block writes either half of the pair that starts at `Idx`.
+  bool pairIsWritten(unsigned Idx) const {
+    return Regs.lookup(Idx).Written || Regs.lookup(Idx + 1).Written;
+  }
+
+  // Record what every pair the block writes holds where the block ends: the
+  // source offset the pair carries, or an unnameable value when the writes left
+  // no offset behind. Pairs the block leaves alone stay out of `Out`, because
+  // they keep whatever reached the block.
+  void summarize(PairOffsets &Out) const {
+    auto Record = [&](unsigned Base) {
+      std::optional<uint64_t> Offset = Regs.lookup(Base).PairOffset;
+      Out[Base] =
+          Offset ? TargetOffsets::single(*Offset) : TargetOffsets::unnameable();
+    };
+    for (const auto &Reg : Regs) {
+      if (!Reg.second.Written)
+        continue;
+      Record(Reg.first);
+      if (Reg.first > 0)
+        Record(Reg.first - 1);
+    }
   }
 
   // Everything the block did to each register, keyed by register index.
@@ -130,73 +243,132 @@ std::optional<unsigned> destIndex(const DecodedInst &Di,
   return sgprIndex(MRI, Di.getReg(0));
 }
 
-} // namespace
+// Every offset a transfer at a given source offset has been found to reach,
+// keyed by the transfer's source offset.
+using TransferTargets = DenseMap<uint64_t, DenseSet<uint64_t>>;
 
-SetPcAnalysis analyzeSetPc(ArrayRef<DecodedInst> Insts,
-                           const std::set<uint64_t> &BlockStarts,
-                           const MCState &Mc) {
+// Work out where every register-indirect transfer in `Insts` leads, splitting
+// the walk at `WalkBlockStarts` and drawing the edges out of a transfer from
+// `KnownTargets`. `InstOffsets` holds the offset of every decoded instruction.
+// Control enters at `EntryOffset`, which must lead one of the blocks. `Insts`
+// must not be empty.
+Expected<SetPcAnalysis> classifyAgainstBlockStarts(
+    ArrayRef<DecodedInst> Insts, const DenseSet<uint64_t> &WalkBlockStarts,
+    const DenseSet<uint64_t> &InstOffsets, const TransferTargets &KnownTargets,
+    uint64_t EntryOffset, const MCRegisterInfo &MRI) {
+  assert(!Insts.empty() && "the walk needs at least one instruction to split");
+  assert(Insts.size() <= std::numeric_limits<unsigned>::max() &&
+         "instruction and block indices are tracked as unsigned");
+
+  // One recovered block, in source order.
+  struct Block {
+    // Source offset of the first instruction of the block.
+    uint64_t Start = 0;
+    // Index into `Insts` of the last instruction of the block.
+    unsigned LastInst = 0;
+    // What the block itself leaves in the register pairs it writes. Pairs it
+    // does not write are absent and keep what reached the block.
+    PairOffsets Writes;
+    // Source offsets of the blocks control can go to from here.
+    SmallVector<uint64_t> Successors;
+    // What the paths into the block leave in the register pairs, joined. Only
+    // meaningful once `Reachable` is set.
+    PairOffsets Entry;
+    // Whether the dataflow has reached this block over any path.
+    bool Reachable = false;
+
+    // Join what a predecessor leaves into `Entry`. Return true if `Entry`
+    // changed. A register pair only one side names is one the other side says
+    // nothing about, which is as incomplete as a write that left no offset
+    // behind.
+    bool joinEntry(const PairOffsets &FromPredecessor) {
+      if (!Reachable) {
+        Reachable = true;
+        Entry = FromPredecessor;
+        return true;
+      }
+
+      bool Changed = false;
+      for (auto &Held : Entry) {
+        auto It = FromPredecessor.find(Held.first);
+        Changed |= It == FromPredecessor.end() ? Held.second.raiseToUnnameable()
+                                               : Held.second.join(It->second);
+      }
+      for (const auto &Held : FromPredecessor) {
+        if (Entry.count(Held.first))
+          continue;
+        TargetOffsets Offsets = Held.second;
+        Offsets.raiseToUnnameable();
+        Entry[Held.first] = std::move(Offsets);
+        Changed = true;
+      }
+      return Changed;
+    }
+  };
+  SmallVector<Block> Blocks;
+  // Index into `Blocks` of the block starting at a source offset.
+  DenseMap<uint64_t, unsigned> BlockOf;
+
+  // A transfer whose own block leaves the register pair it reads alone. It
+  // waits for the dataflow to say what the paths into the block leave there.
+  struct DeferredSite {
+    uint64_t Offset;
+    unsigned BlockIndex;
+    unsigned PairBase;
+  };
+  SmallVector<DeferredSite> Deferred;
+
   SetPcAnalysis Result;
-  if (Insts.empty())
-    return Result;
 
-  const MCRegisterInfo &MRI = *Mc.RegInfo;
-
-  DenseSet<uint64_t> InstOffsets;
-  InstOffsets.reserve(Insts.size());
-  for (const DecodedInst &Di : Insts)
-    InstOffsets.insert(Di.Offset);
-
-  // A transfer ends the block it sits in, so whatever follows it leads a block
-  // of its own. For a call that block is where the callee returns to; for a
-  // jump nothing reaches it, but the instructions there still need a block to
-  // be raised into. The offset one past the last instruction leads nothing.
-  //
-  // Walking the blocks this way also keeps each transfer at the end of its
-  // block, so a transfer reads exactly the state that the instructions before
-  // it left behind.
-  DenseSet<uint64_t> WalkBlockStarts(llvm::from_range, BlockStarts);
-  for (const DecodedInst &Di : Insts) {
-    if (!isRegisterIndirectTransfer(Di.CanonOp))
-      continue;
-    uint64_t Fallthrough = Di.Offset + Di.sizeInBytes();
-    if (!InstOffsets.contains(Fallthrough))
-      continue;
-    WalkBlockStarts.insert(Fallthrough);
-    Result.ExtraBlockStarts.insert(Fallthrough);
-  }
-
-  // Resolve one transfer's source pair, recording what was found for it.
+  // Resolve one transfer against what its own block built, deferring it when
+  // the block says nothing about the pair it reads.
   auto resolveTransfer = [&](const DecodedInst &Di, const BlockState &State) {
-    SetPcSite Site = SetPcUnresolvable{SetPcRefusal::NotARegisterPair, 0};
     unsigned SourceIndex = Di.FirstSrcIdx;
     std::optional<unsigned> Source;
     if (SourceIndex < Di.numOperands() && Di.isReg(SourceIndex))
       Source = sgprIndex(MRI, Di.getReg(SourceIndex));
-
-    if (Source) {
-      const RegState &Low = State.Regs.lookup(*Source);
-      if (!Low.PairOffset) {
-        bool Written = Low.Written || State.Regs.lookup(*Source + 1).Written;
-        Site =
-            SetPcUnresolvable{Written ? SetPcRefusal::PairWrittenWithoutOffset
-                                      : SetPcRefusal::PairNeverHeldOffset,
-                              *Source};
-      } else if (!InstOffsets.contains(*Low.PairOffset)) {
-        Site = SetPcUnresolvable{SetPcRefusal::TargetNotAnInstruction,
-                                 *Low.PairOffset};
-      } else {
-        Site = SetPcDirect{*Low.PairOffset};
-        Result.ExtraBlockStarts.insert(*Low.PairOffset);
-      }
+    if (!Source) {
+      Result.Sites.insert(
+          {Di.Offset, SetPcUnresolvable{SetPcRefusal::NotARegisterPair, 0}});
+      return;
     }
 
-    Result.Sites.insert({Di.Offset, Site});
+    std::optional<uint64_t> Offset = State.Regs.lookup(*Source).PairOffset;
+    if (!Offset) {
+      if (!State.pairIsWritten(*Source)) {
+        Deferred.push_back(
+            {Di.Offset, static_cast<unsigned>(Blocks.size() - 1), *Source});
+        return;
+      }
+      Result.Sites.insert(
+          {Di.Offset,
+           SetPcUnresolvable{SetPcRefusal::PairWrittenWithoutOffset, *Source}});
+      return;
+    }
+
+    if (!InstOffsets.contains(*Offset)) {
+      Result.Sites.insert(
+          {Di.Offset,
+           SetPcUnresolvable{SetPcRefusal::TargetNotAnInstruction, *Offset}});
+      return;
+    }
+
+    Result.Sites.insert({Di.Offset, SetPcResolved{{*Offset}}});
+    Result.ExtraBlockStarts.insert(*Offset);
   };
 
   BlockState State;
-  for (const DecodedInst &Di : Insts) {
-    if (WalkBlockStarts.contains(Di.Offset))
+  for (unsigned I = 0, E = Insts.size(); I != E; ++I) {
+    const DecodedInst &Di = Insts[I];
+    if (Blocks.empty() || WalkBlockStarts.contains(Di.Offset)) {
+      if (!Blocks.empty())
+        State.summarize(Blocks.back().Writes);
       State = BlockState();
+      BlockOf[Di.Offset] = Blocks.size();
+      Blocks.push_back(Block());
+      Blocks.back().Start = Di.Offset;
+    }
+    Blocks.back().LastInst = I;
 
     // SCC holds the carry out of a low-half add only until the next
     // instruction writes it, so anything that writes SCC ends the relation.
@@ -329,11 +501,14 @@ SetPcAnalysis analyzeSetPc(ArrayRef<DecodedInst> Insts,
 
     case CanonicalOp::S_SWAPPC_B64: {
       resolveTransfer(Di, State);
-      // The call leaves the return offset in its destination, so whatever the
-      // pair held is gone.
+      // The call writes the offset it returns to over whatever its destination
+      // pair held, which is a source offset like any a displacement computes.
       if (std::optional<unsigned> Dst = destIndex(Di, MRI)) {
         State.writeReg(*Dst);
         State.writeReg(*Dst + 1);
+        uint64_t Return = Di.Offset + Di.sizeInBytes();
+        if (InstOffsets.contains(Return))
+          State.Regs[*Dst].PairOffset = Return;
       }
       continue;
     }
@@ -344,8 +519,197 @@ SetPcAnalysis analyzeSetPc(ArrayRef<DecodedInst> Insts,
 
     writeDefs(Di, MRI, State);
   }
+  State.summarize(Blocks.back().Writes);
+
+  // Draw the edges out of every block. A register-indirect transfer names no
+  // offset the decode could follow, so its edges are the targets already found
+  // for it: what this walk resolved, plus what the earlier walks reached.
+  //
+  // A transfer nothing has resolved yet draws no edges at all, which is
+  // optimistic: the blocks it reaches miss what it would have left them. That
+  // is sound only because a transfer still unresolved once the rounds settle
+  // refuses the whole kernel, so nothing computed from the missing edges
+  // reaches the raise.
+  for (unsigned I = 0, E = Blocks.size(); I != E; ++I) {
+    Block &Blk = Blocks[I];
+    const DecodedInst &Last = Insts[Blk.LastInst];
+    if (isRegisterIndirectTransfer(Last.CanonOp)) {
+      auto Site = Result.Sites.find(Last.Offset);
+      if (Site != Result.Sites.end())
+        if (const auto *Resolved = std::get_if<SetPcResolved>(&Site->second))
+          Blk.Successors.assign(Resolved->Targets);
+      auto Known = KnownTargets.find(Last.Offset);
+      if (Known != KnownTargets.end())
+        for (uint64_t Target : Known->second)
+          if (!is_contained(Blk.Successors, Target))
+            Blk.Successors.push_back(Target);
+      continue;
+    }
+    std::optional<uint64_t> Next;
+    if (I + 1 != E)
+      Next = Blocks[I + 1].Start;
+    Expected<SmallVector<uint64_t>> Successors =
+        computeDecodedBlockSuccessors(Last, Next);
+    if (!Successors)
+      return Successors.takeError();
+    Blk.Successors = std::move(*Successors);
+  }
+
+  // Run the forward dataflow to a fixpoint. The lattice is bounded: a register
+  // pair holds at most MaxSetPcTargets offsets before it goes to the top, and a
+  // join only ever moves a value up, so the worklist runs dry.
+  //
+  // Control enters at the entry block, which need not be the lowest-addressed
+  // one: a callee followed into the decode may sit below its caller.
+  assert(BlockOf.contains(EntryOffset) && "the entry offset leads a block");
+  unsigned EntryBlock = BlockOf.at(EntryOffset);
+  Blocks[EntryBlock].Reachable = true;
+  SetVector<unsigned> Worklist;
+  Worklist.insert(EntryBlock);
+  while (!Worklist.empty()) {
+    unsigned I = Worklist.pop_back_val();
+
+    PairOffsets Exit = Blocks[I].Entry;
+    for (const auto &Written : Blocks[I].Writes)
+      Exit[Written.first] = Written.second;
+
+    for (uint64_t Successor : Blocks[I].Successors) {
+      auto It = BlockOf.find(Successor);
+      if (It == BlockOf.end())
+        continue;
+      if (Blocks[It->second].joinEntry(Exit))
+        Worklist.insert(It->second);
+    }
+  }
+
+  // A deferred transfer reads a register pair its own block leaves alone, so
+  // what the paths into the block leave there is what the transfer reads.
+  for (const DeferredSite &Site : Deferred) {
+    const Block &Blk = Blocks[Site.BlockIndex];
+    auto Refuse = [&](SetPcRefusal Why, uint64_t Subject) {
+      Result.Sites[Site.Offset] = SetPcUnresolvable{Why, Subject};
+    };
+
+    if (!Blk.Reachable) {
+      Refuse(SetPcRefusal::BlockUnreachable, Site.PairBase);
+      continue;
+    }
+
+    auto Held = Blk.Entry.find(Site.PairBase);
+    if (Held == Blk.Entry.end()) {
+      Refuse(SetPcRefusal::PairNeverHeldOffset, Site.PairBase);
+      continue;
+    }
+
+    const TargetOffsets &Offsets = Held->second;
+    if (Offsets.isUnnameable()) {
+      Refuse(SetPcRefusal::PairWrittenWithoutOffset, Site.PairBase);
+      continue;
+    }
+    if (Offsets.isTooMany()) {
+      Refuse(SetPcRefusal::TooManyTargets, Site.PairBase);
+      continue;
+    }
+
+    assert(!Offsets.offsets().empty() &&
+           "a reachable block joins at least one predecessor, which either "
+           "names an offset or raises the pair to the top");
+    const uint64_t *Undecoded = find_if(Offsets.offsets(), [&](uint64_t Value) {
+      return !InstOffsets.contains(Value);
+    });
+    if (Undecoded != Offsets.offsets().end()) {
+      Refuse(SetPcRefusal::TargetNotAnInstruction, *Undecoded);
+      continue;
+    }
+
+    SetPcResolved Resolved;
+    Resolved.Targets.assign(Offsets.offsets());
+    Result.Sites[Site.Offset] = std::move(Resolved);
+    Result.ExtraBlockStarts.insert_range(Offsets.offsets());
+  }
 
   return Result;
+}
+
+} // namespace
+
+Expected<SetPcAnalysis> analyzeSetPc(ArrayRef<DecodedInst> Insts,
+                                     const std::set<uint64_t> &BlockStarts,
+                                     uint64_t EntryOffset, const MCState &Mc) {
+  SetPcAnalysis Result;
+  if (Insts.empty())
+    return Result;
+
+  DenseSet<uint64_t> InstOffsets;
+  InstOffsets.reserve(Insts.size());
+  for (const DecodedInst &Di : Insts)
+    InstOffsets.insert(Di.Offset);
+
+  // A transfer ends the block it sits in, so whatever follows it leads a block
+  // of its own. For a call that block is where the callee returns to; for a
+  // jump nothing falls into it, but the instructions there still need a block
+  // to be raised into. The offset one past the last instruction leads nothing.
+  //
+  // Splitting here also keeps each transfer at the end of its block, so a
+  // transfer reads exactly the state that the instructions before it left
+  // behind.
+  DenseSet<uint64_t> WalkBlockStarts(llvm::from_range, BlockStarts);
+  // Control enters here, so this leads a block however the decode was split.
+  WalkBlockStarts.insert(EntryOffset);
+  for (const DecodedInst &Di : Insts) {
+    if (!isRegisterIndirectTransfer(Di.CanonOp))
+      continue;
+    uint64_t Fallthrough = Di.Offset + Di.sizeInBytes();
+    if (InstOffsets.contains(Fallthrough))
+      WalkBlockStarts.insert(Fallthrough);
+  }
+
+  // Resolving a transfer both names a block the walk did not split at and draws
+  // an edge the walk did not have. Either changes what reaches the other
+  // transfers, so the walk repeats until it learns nothing new. Both the block
+  // starts and the edges only ever grow, so a round that learns nothing is the
+  // fixpoint.
+  //
+  // `KnownTargets` keeps every edge any round drew, including edges out of a
+  // transfer a later round stops resolving. A stale edge can carry offsets into
+  // a block along a path the final classification no longer believes in. That
+  // is harmless only because the transfer that stopped resolving refuses the
+  // whole kernel, so no answer computed from its stale edge reaches the raise.
+  //
+  // That growth also bounds the number of rounds, and a walk that runs past the
+  // bound has broken the argument. Refusing the kernel beats spinning on it.
+  const size_t MaxRounds = Insts.size() * (MaxSetPcTargets + 1) + 1;
+  TransferTargets KnownTargets;
+  for (size_t Round = 0;; ++Round) {
+    if (Round == MaxRounds)
+      return createStringError(
+          inconvertibleErrorCode(),
+          "program-counter analysis did not settle in %zu rounds", MaxRounds);
+
+    Expected<SetPcAnalysis> Classified =
+        classifyAgainstBlockStarts(Insts, WalkBlockStarts, InstOffsets,
+                                   KnownTargets, EntryOffset, *Mc.RegInfo);
+    if (!Classified)
+      return Classified.takeError();
+
+    bool Learned = false;
+    for (uint64_t Start : Classified->ExtraBlockStarts)
+      Learned |= WalkBlockStarts.insert(Start).second;
+    for (const auto &Site : Classified->Sites)
+      if (const auto *Resolved = std::get_if<SetPcResolved>(&Site.second))
+        for (uint64_t Target : Resolved->Targets)
+          Learned |= KnownTargets[Site.first].insert(Target).second;
+    if (Learned)
+      continue;
+
+    // The raise must build the blocks the analysis walked, or its answers stop
+    // holding. Report every split the walk made that the decode did not.
+    Result = std::move(*Classified);
+    Result.ExtraBlockStarts = std::move(WalkBlockStarts);
+    for (uint64_t Start : BlockStarts)
+      Result.ExtraBlockStarts.erase(Start);
+    return Result;
+  }
 }
 
 } // namespace COMGR::transpiler

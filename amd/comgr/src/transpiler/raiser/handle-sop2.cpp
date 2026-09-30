@@ -8,13 +8,17 @@
 
 #include "transpiler/raiser/handlers.h"
 
+#include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/raiser/source-image.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "Utils/AMDGPUBaseInfo.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+
+#include <cassert>
 
 using namespace llvm;
 
@@ -108,8 +112,15 @@ Expected<bool> displaceSourceImageHalf(RaiseContext &Ctx, const DecodedInst &Di,
   unsigned PairBaseIdx = IsHighHalf ? *Dst->BaseIdx - 1 : *Dst->BaseIdx;
 
   // Only adding a constant to the half itself displaces what the pair holds.
-  // Anything else computes a value the pair no longer names an address for.
-  if (!Op.isSrcReg(0) || !Di.isImm(Op.srcIdx(1)))
+  // Anything else computes a value the pair no longer names an address for. A
+  // displacement written as a difference of labels reaches the decode as an
+  // expression rather than a bare immediate, and names a constant all the
+  // same.
+  if (!Op.isSrcReg(0))
+    return false;
+  std::optional<int64_t> Displacement =
+      evalOperandAsConst(Di.Inst, Op.srcIdx(1));
+  if (!Displacement)
     return false;
   Expected<std::optional<ParsedReg>> Src0 = Op.srcReg(0);
   if (!Src0)
@@ -132,7 +143,7 @@ Expected<bool> displaceSourceImageHalf(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   uint64_t Half = IsHighHalf ? *Address >> 32 : *Address & 0xffffffff;
-  uint64_t Sum = Half + static_cast<uint32_t>(Op.srcImm(1)) + CarryIn;
+  uint64_t Sum = Half + static_cast<uint32_t>(*Displacement) + CarryIn;
   uint32_t Result = static_cast<uint32_t>(Sum);
   uint64_t Moved = IsHighHalf ? (static_cast<uint64_t>(Result) << 32) |
                                     (*Address & 0xffffffff)
@@ -356,6 +367,16 @@ Error handleOverflowingBinary32(RaiseContext &Ctx, OperandResolver &Op,
   return Error::success();
 }
 
+// Emit the fused multiply-add the s_fma* opcodes compute.
+Value *emitFma(IRBuilder<> &B, Value *Src0, Value *Src1, Value *Addend,
+               const Twine &Name) {
+  Value *A = B.CreateBitCast(Src0, B.getFloatTy());
+  Value *Bv = B.CreateBitCast(Src1, B.getFloatTy());
+  Value *C = B.CreateBitCast(Addend, B.getFloatTy());
+  return B.CreateIntrinsic(Intrinsic::fma, {B.getFloatTy()}, {A, Bv, C}, {},
+                           Name);
+}
+
 } // namespace
 
 // Raise one SOP2 instruction and preserve its SCC side effects.
@@ -519,6 +540,52 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return emitBinaryInst64(Ctx, Di, Op, /*IsSubtract=*/false);
   case CanonicalOp::S_SUB_NC_U64:
     return emitBinaryInst64(Ctx, Di, Op, /*IsSubtract=*/true);
+
+  // The scalar float opcodes carry no Defs on SCC, so the three cases below
+  // write the destination alone.
+  case CanonicalOp::S_MUL_F32: {
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+    Expected<BinaryOperands> Args = Op.readBinary32();
+    if (!Args)
+      return Args.takeError();
+    IRBuilder<> &B = Ctx.B;
+    Value *Src0 = B.CreateBitCast(Args->Src0, B.getFloatTy());
+    Value *Src1 = B.CreateBitCast(Args->Src1, B.getFloatTy());
+    Value *Result = B.CreateFMul(Src0, Src1, "mul_f32");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    return Error::success();
+  }
+  case CanonicalOp::S_FMAC_F32: {
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+    Expected<BinaryOperands> Args = Op.readBinary32();
+    if (!Args)
+      return Args.takeError();
+    Expected<Value *> Addend = Op.dstValue();
+    if (!Addend)
+      return Addend.takeError();
+    IRBuilder<> &B = Ctx.B;
+    Value *Result = emitFma(B, Args->Src0, Args->Src1, *Addend, "fmac_f32");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    return Error::success();
+  }
+  case CanonicalOp::S_FMAAK_F32: {
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+    Expected<BinaryOperands> Args = Op.readBinary32();
+    if (!Args)
+      return Args.takeError();
+    int16_t LiteralIdx = COMGR::transpiler::getNamedOperandIdx(
+        Di.Inst.getOpcode(), AMDGPU::OpName::imm);
+    assert(LiteralIdx >= 0 && "s_fmaak_f32 encodes a literal");
+    assert(Di.isImm(LiteralIdx) && "s_fmaak_f32 literal is always immediate");
+    IRBuilder<> &B = Ctx.B;
+    Value *Literal = B.getInt32(static_cast<uint32_t>(Di.getImm(LiteralIdx)));
+    Value *Result = emitFma(B, Args->Src0, Args->Src1, Literal, "fmaak_f32");
+    Ctx.registers().writeReg32(Args->Dst, Result);
+    return Error::success();
+  }
 
   case CanonicalOp::S_MIN_I32: {
     Expected<BinaryOperands> Args = Op.readBinary32();

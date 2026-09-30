@@ -23,6 +23,3 @@ ASAN-DEBUG lib breaks
 comgr fails to build -lzma
 [Support][lldb] Port xz (lzma) decompression from LLDB into LLVM (#220092)
 ---
-needs integration: JP
-[offload] Extract OMPT out of PluginInterface  (#221726)
----

@@ -931,6 +931,10 @@ def __builtin_amdgcn_swmmac_f32_16x16x32_bf8_fp8_w64 : AMDGPUBuiltin<"_Vector<4,
 def __builtin_amdgcn_swmmac_f32_16x16x32_bf8_bf8_w64 : AMDGPUBuiltin<"_Vector<4, float>(int, _Vector<2, int>, _Vector<4, float>, int)", [Const], "swmmac-gfx1200-insts,wavefrontsize64">;
 
 def __builtin_amdgcn_prng_b32 : AMDGPUBuiltin<"unsigned int(unsigned int)", [Const], "prng-inst">;
+def __builtin_amdgcn_wave_match_b32 : AMDGPUBuiltin<"unsigned int(unsigned int, unsigned int)", [Const], "wave-match-insts"> {
+  let Documentation = [DocWaveMatchB32];
+  let ArgNames = ["src0", "src1"];
+}
 def __builtin_amdgcn_cvt_scalef32_pk32_fp6_f16 : AMDGPUBuiltin<"_Vector<6, unsigned int>(_Vector<32, _Float16>, float)", [Const], "f16bf16-to-fp6bf6-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk32_bf6_f16 : AMDGPUBuiltin<"_Vector<6, unsigned int>(_Vector<32, _Float16>, float)", [Const], "f16bf16-to-fp6bf6-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk32_fp6_bf16 : AMDGPUBuiltin<"_Vector<6, unsigned int>(_Vector<32, __bf16>, float)", [Const], "f16bf16-to-fp6bf6-cvt-scale-insts">;
@@ -1083,6 +1087,30 @@ def __builtin_amdgcn_cvt_scale_pk16_f16_bf6 : AMDGPUBuiltin<"_Vector<16, _Float1
 def __builtin_amdgcn_cvt_scale_pk16_bf16_bf6 : AMDGPUBuiltin<"_Vector<16, __bf16>(_Vector<3, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "block16-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scale_pk16_f32_fp6 : AMDGPUBuiltin<"_Vector<16, float>(_Vector<3, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "block16-cvt-scale-insts">;
 def __builtin_amdgcn_cvt_scale_pk16_f32_bf6 : AMDGPUBuiltin<"_Vector<16, float>(_Vector<3, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "block16-cvt-scale-insts">;
+def __builtin_amdgcn_cvt_scale_pk32_bf16_bf6 : AMDGPUBuiltin<"_Vector<32, __bf16>(_Vector<6, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "fp6bf6-to-f16bf16f32-cvt-scale-insts,wavefrontsize32"> {
+  let Documentation = [DocCvtScalePk32BF16BF6];
+  let ArgNames = ["src", "scale", "scale_sel"];
+}
+def __builtin_amdgcn_cvt_scale_pk32_bf16_fp6 : AMDGPUBuiltin<"_Vector<32, __bf16>(_Vector<6, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "fp6bf6-to-f16bf16f32-cvt-scale-insts,wavefrontsize32"> {
+  let Documentation = [DocCvtScalePk32BF16FP6];
+  let ArgNames = ["src", "scale", "scale_sel"];
+}
+def __builtin_amdgcn_cvt_scale_pk32_f16_bf6 : AMDGPUBuiltin<"_Vector<32, _Float16>(_Vector<6, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "fp6bf6-to-f16bf16f32-cvt-scale-insts,wavefrontsize32"> {
+  let Documentation = [DocCvtScalePk32F16BF6];
+  let ArgNames = ["src", "scale", "scale_sel"];
+}
+def __builtin_amdgcn_cvt_scale_pk32_f16_fp6 : AMDGPUBuiltin<"_Vector<32, _Float16>(_Vector<6, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "fp6bf6-to-f16bf16f32-cvt-scale-insts,wavefrontsize32"> {
+  let Documentation = [DocCvtScalePk32F16FP6];
+  let ArgNames = ["src", "scale", "scale_sel"];
+}
+def __builtin_amdgcn_cvt_scale_pk32_f32_bf6 : AMDGPUBuiltin<"_Vector<32, float>(_Vector<6, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "fp6bf6-to-f16bf16f32-cvt-scale-insts,wavefrontsize32"> {
+  let Documentation = [DocCvtScalePk32F32BF6];
+  let ArgNames = ["src", "scale", "scale_sel"];
+}
+def __builtin_amdgcn_cvt_scale_pk32_f32_fp6 : AMDGPUBuiltin<"_Vector<32, float>(_Vector<6, unsigned int>, unsigned int, _Constant unsigned int)", [Const], "fp6bf6-to-f16bf16f32-cvt-scale-insts,wavefrontsize32"> {
+  let Documentation = [DocCvtScalePk32F32FP6];
+  let ArgNames = ["src", "scale", "scale_sel"];
+}
 def __builtin_amdgcn_cvt_scalef32_pk8_fp8_bf16 : AMDGPUBuiltin<"_Vector<2, unsigned int>(_Vector<8, __bf16>, float)", [Const], "gfx1250-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk8_bf8_bf16 : AMDGPUBuiltin<"_Vector<2, unsigned int>(_Vector<8, __bf16>, float)", [Const], "gfx1250-insts">;
 def __builtin_amdgcn_cvt_scalef32_pk8_fp8_f16 : AMDGPUBuiltin<"_Vector<2, unsigned int>(_Vector<8, _Float16>, float)", [Const], "gfx1250-insts">;

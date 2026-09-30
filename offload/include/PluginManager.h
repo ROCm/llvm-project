@@ -14,6 +14,7 @@
 #define OMPTARGET_PLUGIN_MANAGER_H
 
 #include "OpenMP/OMPT/OmptTracingBuffer.h"
+#include "OffloadAPI.h"
 #include "PluginInterface.h"
 
 #include "DeviceImage.h"
@@ -163,7 +164,7 @@ private:
   llvm::SmallVector<__tgt_bin_desc *> DelayedBinDesc;
 
   // List of all plugins, in use or not.
-  llvm::SmallVector<std::unique_ptr<GenericPluginTy>> Plugins;
+  llvm::SmallVector<GenericPluginTy *> Plugins;
 
   // Mapping of plugins to the OpenMP device identifier.
   llvm::DenseMap<std::pair<const GenericPluginTy *, int32_t>, int32_t>
