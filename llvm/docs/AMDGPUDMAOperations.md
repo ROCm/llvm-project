@@ -214,7 +214,7 @@ accesses to `addrspace(3)` always use the "lds-dma" scope.)
 #### Wavefront Scope
 
 Consider a thread that writes to global memory and then initiates a DMA
-operation that reads from the same location. This previous write must be made
+operation that reads from the same byte. This previous write must be made
 available to the scope instance that contains the DMA operation.
 
 ```llvm
@@ -251,7 +251,7 @@ call @llvm.amdgcn.wait.asyncmark(0)
 
 Consider the case where one wave writes to global memory and a different wave in
 the same workgroup initiates a DMA operation that reads from the same
-location. The first wave must make its store available to the "lds-dma" scope
+byte. The first wave must make its store available to the "lds-dma" scope
 instance that contains the DMA operation.
 
 ```llvm
@@ -283,7 +283,7 @@ call @llvm.amdgcn.wait.asyncmark(0)
 ```
 
 Similarly, when one wave stores to global memory using a DMA operation and a
-different wave from the same workgroup reads from the same location, an
+different wave from the same workgroup reads from the same byte, an
 additional *visibility operation* may be required. The *make-visible* operation
 performed by the acquire fence at "workgroup" scope is not sufficient when the
 DMA operation is performed in the "cluster" scope.
