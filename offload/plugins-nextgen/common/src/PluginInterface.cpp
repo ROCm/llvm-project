@@ -90,62 +90,7 @@ void AsyncInfoWrapperTy::finalize(Error &Err) {
 
 Error GenericKernelTy::init(GenericDeviceTy &GenericDevice,
                             DeviceImageTy &Image) {
-
   ImagePtr = &Image;
-
-  // Retrieve kernel environment object for the kernel.
-  std::string EnvironmentName = std::string(Name) + "_kernel_environment";
-  GenericGlobalHandlerTy &GHandler = GenericDevice.Plugin.getGlobalHandler();
-  if (GHandler.isSymbolInImage(GenericDevice, Image, EnvironmentName)) {
-    GlobalTy KernelEnv(EnvironmentName, sizeof(KernelEnvironment),
-                       &KernelEnvironment);
-    if (auto Err =
-            GHandler.readGlobalFromImage(GenericDevice, *ImagePtr, KernelEnv))
-      return Err;
-  } else {
-    KernelEnvironment = KernelEnvironmentTy{};
-    ODBG(OLDT_Kernel) << "Failed to read kernel environment for '" << getName()
-                      << "' Using default Bare (0) execution mode";
-  }
-
-  // Create a metadata object for the exec mode global (auto-generated).
-  StaticGlobalTy<llvm::omp::OMPTgtExecModeFlags> ExecModeGlobal(getName(),
-                                                                "_exec_mode");
-
-  // Retrieve execution mode for the kernel. This may fail since some kernels
-  // may not have an execution mode.
-  if (auto Err =
-          GHandler.readGlobalFromImage(GenericDevice, Image, ExecModeGlobal)) {
-    // Consume the error since it is acceptable to fail.
-    [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
-     ODBG(ODT_Init) << "Failed to read execution mode for "
-                    << getName()
-                    << ":"
-                    << ErrStr.data()
-                    << "Using default Bare (0) execution mode";
-
-    ExecutionMode = OMP_TGT_EXEC_MODE_BARE;
-  } else {
-    // Check that the retrieved execution mode is valid.
-    if (!GenericKernelTy::isValidExecutionMode(ExecModeGlobal.getValue()))
-      return Plugin::error(ErrorCode::UNKNOWN,
-                           "Invalid execution mode %d for '%s'",
-                           ExecModeGlobal.getValue(), getName());
-    ExecutionMode = ExecModeGlobal.getValue();
-  }
-
-  // Max = Config.Max > 0 ? min(Config.Max, Device.Max) : Device.Max;
-  MaxNumThreads = KernelEnvironment.Configuration.MaxThreads > 0
-                      ? std::min(KernelEnvironment.Configuration.MaxThreads,
-                                 int32_t(GenericDevice.getThreadLimit()))
-                      : GenericDevice.getThreadLimit();
-
-  // Pref = Config.Pref > 0 ? max(Config.Pref, Device.Pref) : Device.Pref;
-  PreferredNumThreads =
-      KernelEnvironment.Configuration.MinThreads > 0
-          ? std::max(KernelEnvironment.Configuration.MinThreads,
-                     int32_t(GenericDevice.getDefaultNumThreads()))
-          : GenericDevice.getDefaultNumThreads();
 
   return initImpl(GenericDevice, Image);
 }
@@ -169,11 +114,12 @@ GenericKernelTy::getKernelLaunchEnvironment(
   // modes, ~0 is returned. Note that a cross-team reduction kernel must not be
   // listed here: it is a plain SPMD kernel that needs the launch environment
   // for its reduction buffer, which is allocated below.
-  if (isBigJumpLoopMode() || isNoLoopMode())
+  if (LaunchArgs.KernelLaunchInfo.isBigJumpLoopMode() ||
+      LaunchArgs.KernelLaunchInfo.isNoLoopMode())
     return reinterpret_cast<KernelLaunchEnvironmentTy *>(~0);
 
-  const auto &RedCfg = KernelEnvironment.Configuration;
-  const bool NeedsReductionBuffer = RedCfg.ReductionDataSize != 0;
+  const bool NeedsReductionBuffer =
+      LaunchArgs.KernelLaunchInfo.ReductionDataSize != 0;
   if (NeedsReductionBuffer && LaunchArgs.OmpABIVersion < OMP_KERNEL_ARG_VERSION)
     return Plugin::error(ErrorCode::INVALID_BINARY,
                          "kernel was built against an older OpenMP "
@@ -206,7 +152,7 @@ GenericKernelTy::getKernelLaunchEnvironment(
   if (NeedsReductionBuffer) {
     // Use number of teams many buffer elements.
     auto AllocOrErr = GenericDevice.dataAlloc(
-        uint64_t(RedCfg.ReductionDataSize) * NumBlocks0,
+        uint64_t(LaunchArgs.KernelLaunchInfo.ReductionDataSize) * NumBlocks0,
         /*HostPtr=*/nullptr, TargetAllocTy::TARGET_ALLOC_DEVICE,
         /*Alignment=*/0);
     if (!AllocOrErr)
@@ -276,7 +222,8 @@ Error GenericKernelTy::printLaunchInfo(GenericDeviceTy &GenericDevice,
        "Launching kernel %s with [%u,%u,%u] blocks and [%u,%u,%u] threads in "
        "%s mode\n",
        getName(), NumBlocks[0], NumBlocks[1], NumBlocks[2], NumThreads[0],
-       NumThreads[1], NumThreads[2], getExecutionModeName());
+       NumThreads[1], NumThreads[2],
+       LaunchArgs.KernelLaunchInfo.getExecutionModeName());
   return printLaunchInfoDetails(GenericDevice, LaunchArgs, NumThreads,
                                 NumBlocks);
 }
@@ -345,7 +292,7 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
                                     LaunchArgs.UserNumBlocks[2]};
 
   // Multidimensional is only supported with bare mode for now.
-  assert(isBareMode() ||
+  assert(LaunchArgs.KernelLaunchInfo.isBareMode() ||
          EffectiveNumThreads[1] == 1 && EffectiveNumThreads[2] == 1 &&
              EffectiveNumBlocks[1] == 1 && EffectiveNumBlocks[2] == 1 &&
              "Non-bare mode should only use the first thread and block "
@@ -375,14 +322,14 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
   computeMaxOccupancy(GenericDevice);
 
   // Calculate or adjust the effective number of threads and blocks if needed.
-  if (!isBareMode()) {
+  if (!LaunchArgs.KernelLaunchInfo.isBareMode()) {
     if (!LaunchArgs.Flags.StrictThreads) {
-      EffectiveNumThreads[0] =
-          getEffectiveNumThreads(GenericDevice, EffectiveNumThreads[0]);
+      EffectiveNumThreads[0] = getEffectiveNumThreads(
+          GenericDevice, EffectiveNumThreads[0], LaunchArgs);
 
       std::pair<bool, uint32_t> AdjustInfo = adjustNumThreadsForLowTripCount(
           GenericDevice, EffectiveNumThreads[0], LaunchArgs.Tripcount,
-          LaunchArgs.UserThreadLimit);
+          LaunchArgs.UserThreadLimit, LaunchArgs);
       if (AdjustInfo.first)
         EffectiveNumThreads[0] = AdjustInfo.second;
     }
@@ -391,7 +338,7 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
       EffectiveNumBlocks[0] = getEffectiveNumBlocks(
           GenericDevice, EffectiveNumBlocks[0], LaunchArgs.Tripcount,
           EffectiveNumThreads[0], LaunchArgs.Flags.StrictThreads,
-          LaunchArgs.UserThreadLimit[0] > 0);
+          LaunchArgs.UserThreadLimit[0] > 0, LaunchArgs);
   }
 
   // The teams reduction buffer is sized from the effective number of blocks, so
@@ -454,27 +401,32 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
   return Plugin::success();
 }
 
-uint32_t
-GenericKernelTy::getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
-                                        uint32_t UserThreadLimit) const {
-  assert(!isBareMode() && "bare kernel should not call this function");
+uint32_t GenericKernelTy::getEffectiveNumThreads(
+    GenericDeviceTy &GenericDevice, uint32_t UserThreadLimit,
+    const KernelLaunchArgsTy &LaunchArgs) const {
+  assert(!LaunchArgs.KernelLaunchInfo.isBareMode() &&
+         "bare kernel should not call this function");
 
-  if (UserThreadLimit > 0 && isGenericMode()) {
+  if (UserThreadLimit > 0 && LaunchArgs.KernelLaunchInfo.isGenericMode()) {
     if (UserThreadLimit == (uint32_t)-1)
-      UserThreadLimit = PreferredNumThreads;
+      UserThreadLimit = LaunchArgs.KernelLaunchInfo.PreferredNumThreads;
     else
       UserThreadLimit += GenericDevice.getWarpSize();
   }
 
-  return std::min(MaxNumThreads, (UserThreadLimit > 0) ? UserThreadLimit
-                                                       : PreferredNumThreads);
+  return std::min(LaunchArgs.KernelLaunchInfo.MaxNumThreads,
+                  (UserThreadLimit > 0)
+                      ? UserThreadLimit
+                      : LaunchArgs.KernelLaunchInfo.PreferredNumThreads);
 }
 
 uint32_t GenericKernelTy::getEffectiveNumBlocks(
     GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
     uint64_t LoopTripCount, uint32_t &EffectiveNumThreads,
-    bool IsNumThreadsStrict, bool IsNumThreadsFromUser) const {
-  assert(!isBareMode() && "bare kernel should not call this function");
+    bool IsNumThreadsStrict, bool IsNumThreadsFromUser,
+    const KernelLaunchArgsTy &LaunchArgs) const {
+  assert(!LaunchArgs.KernelLaunchInfo.isBareMode() &&
+         "bare kernel should not call this function");
 
   // NOTE: This clamps the user-requested number of blocks to the device limit
   // rather than honoring it exactly, which is non-standard behavior. Truly
@@ -485,14 +437,14 @@ uint32_t GenericKernelTy::getEffectiveNumBlocks(
                     GenericDevice.getBlockLimit(EffectiveNumThreads));
 
   // Return the number of blocks required to cover the loop iterations.
-  if (isNoLoopMode())
+  if (LaunchArgs.KernelLaunchInfo.isNoLoopMode())
     return LoopTripCount > 0 ? (((LoopTripCount - 1) / EffectiveNumThreads) + 1)
                              : 1;
 
   uint64_t DefaultNumBlocks = GenericDevice.getDefaultNumBlocks();
   uint64_t TripCountNumBlocks = std::numeric_limits<uint64_t>::max();
   if (LoopTripCount > 0) {
-    if (isSPMDMode()) {
+    if (LaunchArgs.KernelLaunchInfo.isSPMDMode()) {
       // We have a combined construct, i.e. `target teams distribute
       // parallel for [simd]`. We launch so many blocks so that each thread
       // will execute one iteration of the loop; rounded up to the nearest
@@ -537,7 +489,8 @@ uint32_t GenericKernelTy::getEffectiveNumBlocks(
       assert(OldNumThreads >= EffectiveNumThreads &&
              "Number of threads cannot be increased!");
     } else {
-      assert((isGenericMode() || isGenericSPMDMode()) &&
+      assert((LaunchArgs.KernelLaunchInfo.isGenericMode() ||
+              LaunchArgs.KernelLaunchInfo.isGenericSPMDMode()) &&
              "Unexpected execution mode!");
       // If we reach this point, then we have a non-combined construct, i.e.
       // `teams distribute` with a nested `parallel for` and each block is

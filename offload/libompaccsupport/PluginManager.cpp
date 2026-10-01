@@ -20,12 +20,16 @@
 #include "OmptDeviceTracing.h"
 #endif
 #include "Shared/Debug.h"
+#include "Shared/Environment.h"
 #include "Shared/Profile.h"
 #include "device.h"
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <algorithm>
 #include <memory>
+#include <string>
 
 #ifdef OMPT_SUPPORT
 using namespace llvm::omp::target::ompt;
@@ -550,8 +554,99 @@ static int loadImagesOntoDevice(DeviceTy &Device) {
               REPORT() << "Failed to write symbol for USM " << Entry.SymbolName;
         } else if (Entry.Address) {
           if (Device.RTL->get_function(Binary, Entry.SymbolName,
-                                       &DeviceEntry.Address) != OFFLOAD_SUCCESS)
+                                       &DeviceEntry.Address) !=
+              OFFLOAD_SUCCESS) {
             REPORT() << "Failed to load kernel " << Entry.SymbolName;
+          } else {
+            // Read this kernel's launch-geometry properties once, from its
+            // "<name>_kernel_environment" device global, and cache them on
+            // the device for use at launch time.
+            auto ReadDeviceGlobal = [&](const char *Suffix, void *Dst,
+                                        uint64_t Size) {
+              SmallString<128> GlobalName(Entry.SymbolName);
+              GlobalName += Suffix;
+              void *DevPtr = nullptr;
+              return Device.RTL->get_global(Binary, Size, GlobalName.c_str(),
+                                            &DevPtr) == OFFLOAD_SUCCESS &&
+                     Device.RTL->data_retrieve(Device.RTLDeviceID, Dst, DevPtr,
+                                               Size) == OFFLOAD_SUCCESS;
+            };
+
+            KernelEnvironmentTy KernelEnv{};
+            if (!ReadDeviceGlobal("_kernel_environment", &KernelEnv,
+                                  sizeof(KernelEnv))) {
+              KernelEnv = KernelEnvironmentTy{};
+              KernelEnv.Configuration.ExecMode =
+                  llvm::omp::OMP_TGT_EXEC_MODE_BARE;
+              ODBG(ODT_Mapping)
+                  << "Failed to read kernel environment for '"
+                  << Entry.SymbolName << "', using default "
+                  << KernelLaunchInfoTy::getExecutionModeName(
+                         static_cast<llvm::omp::OMPTgtExecModeFlags>(
+                             KernelEnv.Configuration.ExecMode))
+                  << " execution mode";
+            }
+            const auto &Cfg = KernelEnv.Configuration;
+
+            // Downstream, "<name>_exec_mode" is authoritative: the AMD-only
+            // modes (No-Loop, Big-Jump-Loop) are only encoded there. Kernels
+            // without it keep the mode from the kernel environment.
+            auto ExecMode =
+                static_cast<llvm::omp::OMPTgtExecModeFlags>(Cfg.ExecMode);
+            uint8_t ExecModeVal = 0;
+            if (ReadDeviceGlobal("_exec_mode", &ExecModeVal,
+                                 sizeof(ExecModeVal))) {
+              ExecMode =
+                  static_cast<llvm::omp::OMPTgtExecModeFlags>(ExecModeVal);
+              if (!llvm::omp::target::plugin::GenericKernelTy::
+                      isValidExecutionMode(ExecMode)) {
+                REPORT() << "Invalid execution mode " << int(ExecModeVal)
+                         << " for '" << Entry.SymbolName << "'";
+                return OFFLOAD_FAIL;
+              }
+            }
+
+            llvm::omp::target::plugin::GenericDeviceTy &GenericDevice =
+                Device.RTL->getDevice(Device.RTLDeviceID);
+            auto *Kernel =
+                reinterpret_cast<llvm::omp::target::plugin::GenericKernelTy *>(
+                    DeviceEntry.Address);
+            KernelLaunchInfoTy LaunchInfo;
+            LaunchInfo.Mode = ExecMode;
+            LaunchInfo.ReductionDataSize = Cfg.ReductionDataSize;
+            // Max = Config.Max > 0 ? min(Config.Max, Device.Max) : Device.Max,
+            // further clamped to the kernel function's own driver-reported
+            // maximum.
+            LaunchInfo.MaxNumThreads =
+                std::min(Cfg.MaxThreads > 0
+                             ? std::min(Cfg.MaxThreads,
+                                        int32_t(GenericDevice.getThreadLimit()))
+                             : GenericDevice.getThreadLimit(),
+                         Kernel->getMaxThreads());
+            LaunchInfo.PreferredNumThreads =
+                Cfg.MinThreads > 0
+                    ? std::max(Cfg.MinThreads,
+                               int32_t(GenericDevice.getDefaultNumThreads()))
+                    : GenericDevice.getDefaultNumThreads();
+
+            // Downstream, "<name>_wg_size" (AMDGPU only) holds the block size
+            // CodeGen compiled the kernel for. If present, use it as the
+            // preferred and max number of threads to get the exact value for
+            // kernel launch. Exception: In generic-spmd mode, the preferred
+            // number is the default blocksize since the WG size may include
+            // the main thread, which is not required.
+            uint16_t ConstWGSize = 0;
+            if (ReadDeviceGlobal("_wg_size", &ConstWGSize,
+                                 sizeof(ConstWGSize))) {
+              LaunchInfo.PreferredNumThreads =
+                  LaunchInfo.isGenericSPMDMode()
+                      ? GenericDevice.getDefaultNumThreads()
+                      : ConstWGSize;
+              LaunchInfo.MaxNumThreads = ConstWGSize;
+            }
+
+            Device.setKernelLaunchInfo(DeviceEntry.Address, LaunchInfo);
+          }
         }
         ODBG(ODT_Mapping) << "Entry point " << Entry.Address << " maps to"
                           << (Entry.Size ? " global" : "") << " "
