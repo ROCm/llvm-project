@@ -64,16 +64,16 @@ define amdgpu_cs void @issue130119(i1 %arg) {
 ; CHECK-LABEL: issue130119:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v0
-; CHECK-NEXT:    s_mov_b64 s[0:1], 0
+; CHECK-NEXT:    s_mov_b64 s[6:7], 0
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; CHECK-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[0:1]
-; CHECK-NEXT:    s_mov_b64 s[0:1], -1
-; CHECK-NEXT:    s_mov_b32 s8, 0
-; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
-; CHECK-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[0:1]
+; CHECK-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[6:7]
+; CHECK-NEXT:    s_mov_b64 s[6:7], -1
 ; CHECK-NEXT:    s_mov_b64 s[2:3], 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    s_mov_b64 s[0:1], 0
+; CHECK-NEXT:    s_mov_b32 s8, 0
+; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
+; CHECK-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[6:7]
 ; CHECK-NEXT:  .LBB1_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Loop Header: Depth=1
 ; CHECK-NEXT:    ; Child Loop BB1_3 Depth 2
