@@ -33,6 +33,7 @@
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
 #include "flang/Optimizer/OpenMP/Passes.h"
 #include "mlir/Analysis/SliceAnalysis.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Dialect/OpenMP/Utils/Utils.h"
@@ -526,11 +527,38 @@ public:
     return boxTy && fir::isPolymorphicType(boxTy) && fir::boxHasAddendum(boxTy);
   }
 
+  static bool shouldMapPolymorphicDescriptorWithRuntimeElementSize(
+      mlir::Value descriptor, bool supportsPolymorphicMap) {
+    if (!supportsPolymorphicMap)
+      return false;
+    auto boxTy = mlir::dyn_cast<fir::BaseBoxType>(
+        fir::unwrapRefType(descriptor.getType()));
+    return boxTy && fir::isPolymorphicType(boxTy);
+  }
+
+  llvm::SmallVector<mlir::Value>
+  genRuntimeSizedBaseAddrBounds(mlir::Location loc, mlir::Value descriptor,
+                                fir::FirOpBuilder &builder) {
+    mlir::Type idxTy = builder.getIndexType();
+    mlir::Value zero = builder.createIntegerConstant(loc, idxTy, 0);
+    mlir::Value one = builder.createIntegerConstant(loc, idxTy, 1);
+    mlir::Value box = descriptor;
+    if (fir::isa_ref_type(box.getType()))
+      box = fir::LoadOp::create(builder, loc, box);
+    mlir::Value elemSize = fir::BoxEleSizeOp::create(builder, loc, idxTy, box);
+    mlir::Value upperBound =
+        mlir::arith::SubIOp::create(builder, loc, elemSize, one);
+    mlir::Type mapBoundsTy = builder.getType<mlir::omp::MapBoundsType>();
+    return {mlir::omp::MapBoundsOp::create(
+        builder, loc, mapBoundsTy, zero, upperBound, elemSize, one,
+        /*strideInBytes=*/true, zero)};
+  }
+
   mlir::omp::MapInfoOp
   genBaseAddrMap(mlir::Location mapInfoOpLoc, mlir::Value descriptor,
                  mlir::omp::MapInfoOp parentOp,
                  mlir::omp::ClauseMapFlags mapType, fir::FirOpBuilder &builder,
-                 bool isRefPtee = false,
+                 bool supportsPolymorphicMap, bool isRefPtee = false,
                  mlir::FlatSymbolRefAttr mapperId = mlir::FlatSymbolRefAttr()) {
     mlir::Value baseAddr = fir::BoxOffsetOp::create(
         builder, mapInfoOpLoc, descriptor, fir::BoxFieldAttr::base_addr);
@@ -546,6 +574,15 @@ public:
 
     mlir::Type underlyingDescType = fir::unwrapRefType(descriptor.getType());
 
+    llvm::SmallVector<mlir::Value> bounds(parentOp.getBounds().begin(),
+                                          parentOp.getBounds().end());
+    if (bounds.empty() &&
+        shouldMapPolymorphicDescriptorWithRuntimeElementSize(
+            descriptor, supportsPolymorphicMap)) {
+      bounds = genRuntimeSizedBaseAddrBounds(mapInfoOpLoc, descriptor, builder);
+      underlyingBaseAddrType = builder.getI8Type();
+    }
+
     // Member of the descriptor pointing at the allocated data
     return mlir::omp::MapInfoOp::create(
         builder, mapInfoOpLoc, baseAddr.getType(), descriptor,
@@ -556,8 +593,7 @@ public:
             mlir::omp::VariableCaptureKind::ByRef),
         baseAddr, mlir::TypeAttr::get(underlyingBaseAddrType),
         isRefPtee ? parentOp.getMembers() : mlir::SmallVector<mlir::Value>{},
-        isRefPtee ? parentOp.getMembersIndexAttr() : mlir::ArrayAttr{},
-        parentOp.getBounds(),
+        isRefPtee ? parentOp.getMembersIndexAttr() : mlir::ArrayAttr{}, bounds,
         /*mapperId=*/mapperId,
         /*name=*/builder.getStringAttr(""),
         /*partial_map=*/builder.getBoolAttr(false));
@@ -1144,7 +1180,7 @@ public:
                 mlir::Operation *target, mlir::Value descriptor,
                 llvm::SmallVectorImpl<ParentAndPlacement> &mapMemberUsers,
                 bool isAttachNever, bool isAttachAlways,
-                mlir::FlatSymbolRefAttr mapperId) {
+                mlir::FlatSymbolRefAttr mapperId, bool supportsPolymorphicMap) {
     // NOTE: We replace the descriptor map with the base address map. This
     // effectively replaces the descriptor's index position in any complex
     // structure mapping. This is a little different to the
@@ -1154,7 +1190,7 @@ public:
     // issues do pop up.
     auto newMapInfoOp =
         genBaseAddrMap(op.getLoc(), descriptor, op, op.getMapType(), builder,
-                       /*IsRefPtee=*/true, mapperId);
+                       supportsPolymorphicMap, /*IsRefPtee=*/true, mapperId);
 
     if (!isAttachNever)
       genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
@@ -1201,7 +1237,8 @@ public:
     if (!mapOnlyDescriptor) {
       baseAddr =
           genBaseAddrMap(op.getLoc(), descriptor, op, op.getMapType(), builder,
-                         /*IsRefPtee=*/false, mapperId);
+                         supportsPolymorphicMap, /*IsRefPtee=*/false,
+                         mapperId);
       createBaseAddrInsertion(builder, op, baseAddr, mapMemberUsers,
                               newMembersAttr, newMembers, memberIndices);
     }
@@ -1430,7 +1467,8 @@ public:
     } else if (isRefPtee) {
       newMapInfo =
           genRefPteeMap(op, builder, target, descriptor, mapMemberUsers,
-                        isAttachNever, isAttachAlways, mapperId);
+                        isAttachNever, isAttachAlways, mapperId,
+                        supportsPolymorphicMap);
     } else {
       newMapInfo = genRefPtrPteeOrDefaultMap(
           op, builder, target, descriptor, mapMemberUsers, isAttachNever,
