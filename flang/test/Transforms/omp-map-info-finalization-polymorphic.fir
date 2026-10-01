@@ -15,8 +15,11 @@ builtin.module attributes {omp.version = #omp.version<version = 61>} {
 // CHECK:         %[[BASE_ADDR:.*]] = fir.box_offset %[[ARG0]] base_addr : (!fir.ref<!fir.class<!fir.ptr<!fir.type<base_t{base:i32}>>>>) -> !fir.llvm_ptr<!fir.ref<!fir.type<base_t{base:i32}>>>
 // CHECK:         %[[BOX:.*]] = fir.load %[[ARG0]] : !fir.ref<!fir.class<!fir.ptr<!fir.type<base_t{base:i32}>>>>
 // CHECK:         %[[ELEM_SIZE:.*]] = fir.box_elesize %[[BOX]] : (!fir.class<!fir.ptr<!fir.type<base_t{base:i32}>>>) -> index
-// CHECK:         %[[UPPER:.*]] = arith.subi %[[ELEM_SIZE]], %{{.*}} : index
-// CHECK:         %[[BOUND:.*]] = omp.map.bounds lower_bound(%{{.*}} : index) upper_bound(%[[UPPER]] : index) extent(%[[ELEM_SIZE]] : index) stride(%{{.*}} : index) start_idx(%{{.*}} : index) stride_in_bytes(true)
+// CHECK:         %[[BYTE_OFFSET:.*]] = arith.muli %{{.*}}, %[[ELEM_SIZE]] : index
+// CHECK:         %[[BYTE_EXTENT:.*]] = arith.muli %{{.*}}, %[[ELEM_SIZE]] : index
+// CHECK:         %[[BYTE_END:.*]] = arith.addi %[[BYTE_OFFSET]], %[[BYTE_EXTENT]] : index
+// CHECK:         %[[UPPER:.*]] = arith.subi %[[BYTE_END]], %{{.*}} : index
+// CHECK:         %[[BOUND:.*]] = omp.map.bounds lower_bound(%[[BYTE_OFFSET]] : index) upper_bound(%[[UPPER]] : index) extent(%[[BYTE_EXTENT]] : index) stride(%{{.*}} : index) start_idx(%{{.*}} : index) stride_in_bytes(true)
 // CHECK:         %[[BASE_MAP:.*]] = omp.map.info var_ptr(%[[ARG0]] : !fir.ref<!fir.class<!fir.ptr<!fir.type<base_t{base:i32}>>>>, !fir.class<!fir.ptr<!fir.type<base_t{base:i32}>>>) map_clauses(tofrom) capture(ByRef) var_ptr_ptr(%[[BASE_ADDR]] : !fir.llvm_ptr<!fir.ref<!fir.type<base_t{base:i32}>>>, i8) bounds(%[[BOUND]]) name("") -> !fir.llvm_ptr<!fir.ref<!fir.type<base_t{base:i32}>>>
 // CHECK:         omp.map.info {{.*}} members(%[[BASE_MAP]] : [0] : !fir.llvm_ptr<!fir.ref<!fir.type<base_t{base:i32}>>>) name("obj")
 

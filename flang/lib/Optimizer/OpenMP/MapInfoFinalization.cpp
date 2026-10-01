@@ -536,8 +536,16 @@ public:
     return boxTy && fir::isPolymorphicType(boxTy);
   }
 
+  mlir::Value getAsIndex(mlir::Location loc, mlir::Value value,
+                         fir::FirOpBuilder &builder) {
+    if (value.getType() == builder.getIndexType())
+      return value;
+    return builder.createConvert(loc, builder.getIndexType(), value);
+  }
+
   llvm::SmallVector<mlir::Value>
   genRuntimeSizedBaseAddrBounds(mlir::Location loc, mlir::Value descriptor,
+                                mlir::ValueRange existingBounds,
                                 fir::FirOpBuilder &builder) {
     mlir::Type idxTy = builder.getIndexType();
     mlir::Value zero = builder.createIntegerConstant(loc, idxTy, 0);
@@ -546,11 +554,40 @@ public:
     if (fir::isa_ref_type(box.getType()))
       box = fir::LoadOp::create(builder, loc, box);
     mlir::Value elemSize = fir::BoxEleSizeOp::create(builder, loc, idxTy, box);
-    mlir::Value upperBound =
-        mlir::arith::SubIOp::create(builder, loc, elemSize, one);
+
+    mlir::Value elemCount = one;
+    mlir::Value elemOffset = zero;
+    for (mlir::Value bound : llvm::reverse(existingBounds)) {
+      auto boundOp =
+          mlir::dyn_cast_if_present<mlir::omp::MapBoundsOp>(bound.getDefiningOp());
+      if (!boundOp)
+        continue;
+      mlir::Value lowerBound = getAsIndex(loc, boundOp.getLowerBound(), builder);
+      mlir::Value upperBound = getAsIndex(loc, boundOp.getUpperBound(), builder);
+      mlir::Value extent = getAsIndex(loc, boundOp.getExtent(), builder);
+      mlir::Value boundElemCount =
+          mlir::arith::AddIOp::create(
+              builder, loc,
+              mlir::arith::SubIOp::create(builder, loc, upperBound, lowerBound),
+              one);
+      elemCount = mlir::arith::MulIOp::create(builder, loc, elemCount,
+                                              boundElemCount);
+      elemOffset = mlir::arith::AddIOp::create(
+          builder, loc, mlir::arith::MulIOp::create(builder, loc, elemOffset,
+                                                    extent),
+          lowerBound);
+    }
+
+    mlir::Value byteOffset =
+        mlir::arith::MulIOp::create(builder, loc, elemOffset, elemSize);
+    mlir::Value byteExtent =
+        mlir::arith::MulIOp::create(builder, loc, elemCount, elemSize);
+    mlir::Value upperBound = mlir::arith::SubIOp::create(
+        builder, loc,
+        mlir::arith::AddIOp::create(builder, loc, byteOffset, byteExtent), one);
     mlir::Type mapBoundsTy = builder.getType<mlir::omp::MapBoundsType>();
     return {mlir::omp::MapBoundsOp::create(
-        builder, loc, mapBoundsTy, zero, upperBound, elemSize, one,
+        builder, loc, mapBoundsTy, byteOffset, upperBound, byteExtent, one,
         /*strideInBytes=*/true, zero)};
   }
 
@@ -576,10 +613,14 @@ public:
 
     llvm::SmallVector<mlir::Value> bounds(parentOp.getBounds().begin(),
                                           parentOp.getBounds().end());
-    if (bounds.empty() &&
-        shouldMapPolymorphicDescriptorWithRuntimeElementSize(
+    if (shouldMapPolymorphicDescriptorWithRuntimeElementSize(
             descriptor, supportsPolymorphicMap)) {
-      bounds = genRuntimeSizedBaseAddrBounds(mapInfoOpLoc, descriptor, builder);
+      // For polymorphic boxes, the descriptor's elem_len is the only reliable
+      // element byte size: the dynamic type may extend the declared type.  Turn
+      // the base-address data mapping into a byte mapping so both scalar
+      // objects and arrays are sized by the runtime element length.
+      bounds = genRuntimeSizedBaseAddrBounds(mapInfoOpLoc, descriptor,
+                                             parentOp.getBounds(), builder);
       underlyingBaseAddrType = builder.getI8Type();
     }
 
