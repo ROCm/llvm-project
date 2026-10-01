@@ -14,7 +14,7 @@
 ; RUN: %FileCheck %s --check-prefix=DIFFERENT < %t.different.ll
 ; RUN: %llc -mtriple=amdgpu9.42-amd-amdhsa -filetype=obj %t.different.ll -o %t.gfx942.o
 
-; REFUSE: unsupported-wave-projection: s_mov_b32 [SOP1]
+; REFUSE: unproven-exec-containment: s_mov_b32 [SOP1]
 ; REFUSE-SAME: WaveNative cannot prove that EXEC preserves the kernel entry mask
 ; DIFFERENT-LABEL: define amdgpu_kernel void @readfirstlane_different_exec(
 ; DIFFERENT: [[WORKITEM:%.*]] = call i32 @llvm.amdgcn.workitem.id.x()

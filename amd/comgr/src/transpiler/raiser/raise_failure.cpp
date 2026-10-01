@@ -66,6 +66,12 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "device-library-link-failed";
   case RaiseFailureReason::UnsupportedWaveProjection:
     return "unsupported-wave-projection";
+  case RaiseFailureReason::NonUniformScalarState:
+    return "non-uniform-scalar-state";
+  case RaiseFailureReason::UnprovenExecContainment:
+    return "unproven-exec-containment";
+  case RaiseFailureReason::UnsupportedLaunch:
+    return "unsupported-launch";
   case RaiseFailureReason::CrossWaveLaneIdLeak:
     return "cross-wave-lane-id-leak";
   case RaiseFailureReason::CrossWaveUnrewritableShuffle:

@@ -101,9 +101,11 @@ static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
   // An inactive lane holds an unconstrained address, so the load itself is
   // predicated and not only the register write it feeds.
   Ctx.registers().emitUnderExec([&] {
-    Value *Loaded =
-        Ctx.B.CreateAlignedLoad(globalAccessType(Ctx.B, WidthInDwords),
-                                *Address, GlobalAccessAlignment, "global_load");
+    Value *Loaded = Ctx.registers().emitMemoryValue([&] {
+      return Ctx.B.CreateAlignedLoad(globalAccessType(Ctx.B, WidthInDwords),
+                                     *Address, GlobalAccessAlignment,
+                                     "global_load");
+    });
     Ctx.registers().regFile().writeRegVec(Ctx.B, *Destination, Loaded);
   });
   return Error::success();
@@ -126,8 +128,11 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
 
   // A store by an inactive lane must not reach memory at all, so the whole
   // access is predicated on the lane bit of EXEC.
-  Ctx.registers().emitUnderExec(
-      [&] { Ctx.B.CreateAlignedStore(Data, *Address, GlobalAccessAlignment); });
+  Ctx.registers().emitUnderExec([&] {
+    Ctx.registers().emitMemoryEffect([&] {
+      Ctx.B.CreateAlignedStore(Data, *Address, GlobalAccessAlignment);
+    });
+  });
   return Error::success();
 }
 

@@ -285,8 +285,10 @@ static void emitTransposedDSLoad(RaiseContext &Context, ParsedReg Destination,
         Address = B.CreateAdd(Address, ElementOffset);
         Value *Pointer = B.CreateIntToPtr(
             Address, PointerType::get(B.getContext(), AMDGPUAS::LOCAL_ADDRESS));
-        Value *Element =
-            B.CreateAlignedLoad(B.getIntNTy(ElementBits), Pointer, Align(1));
+        Value *Element = Context.registers().emitMemoryValue([&] {
+          return B.CreateAlignedLoad(B.getIntNTy(ElementBits), Pointer,
+                                     Align(1));
+        });
         Element = B.CreateZExt(Element, B.getInt32Ty());
         Word = B.CreateOr(Word, B.CreateShl(Element, J * ElementBits));
       }
@@ -352,8 +354,10 @@ static Error emitAccess(RaiseContext &Context, const DecodedInst &Instruction,
     // access is predicated on the lane bit of EXEC.
     Context.registers().emitUnderExec([&] {
       for (unsigned I = 0; I != Access.NumAccesses; ++I) {
-        Context.B.CreateAlignedStore(
-            Stored[I], emitLdsPointer(Context, ByteAddresses[I]), Unaligned);
+        Context.registers().emitMemoryEffect([&] {
+          Context.B.CreateAlignedStore(
+              Stored[I], emitLdsPointer(Context, ByteAddresses[I]), Unaligned);
+        });
       }
     });
     return Error::success();
@@ -372,9 +376,11 @@ static Error emitAccess(RaiseContext &Context, const DecodedInst &Instruction,
     for (unsigned I = 0; I != Access.NumAccesses; ++I) {
       Value *Pointer = emitLdsPointer(Context, ByteAddresses[I]);
       if (Access.isSubDword()) {
-        Value *Loaded =
-            Context.B.CreateAlignedLoad(Context.B.getIntNTy(Access.MemBits),
-                                        Pointer, Unaligned, "lds_load");
+        Value *Loaded = Context.registers().emitMemoryValue([&] {
+          return Context.B.CreateAlignedLoad(
+              Context.B.getIntNTy(Access.MemBits), Pointer, Unaligned,
+              "lds_load");
+        });
         Context.registers().regFile().writeReg32(
             Context.B, *Destination,
             Access.IsSigned
@@ -382,9 +388,11 @@ static Error emitAccess(RaiseContext &Context, const DecodedInst &Instruction,
                 : Context.B.CreateZExt(Loaded, Context.B.getInt32Ty()));
         continue;
       }
-      Value *Loaded = Context.B.CreateAlignedLoad(
-          accessType(Context.B, Access.widthInDwords()), Pointer, Unaligned,
-          "lds_load");
+      Value *Loaded = Context.registers().emitMemoryValue([&] {
+        return Context.B.CreateAlignedLoad(
+            accessType(Context.B, Access.widthInDwords()), Pointer, Unaligned,
+            "lds_load");
+      });
       ParsedReg Part = *Destination;
       Part.BaseIdx = *Destination->BaseIdx + I * Access.widthInDwords();
       Part.WidthInDwords = static_cast<uint8_t>(Access.widthInDwords());
@@ -425,11 +433,16 @@ static Error emitAtomicAdd(RaiseContext &Context,
   Context.registers().emitUnderExec([&] {
     // Unlike a plain access, an atomic is only well defined at the natural
     // alignment of the value it operates on.
-    AtomicRMWInst *Old = Context.B.CreateAtomicRMW(
-        AtomicRMWInst::Add, emitLdsPointer(Context, ByteAddress), Operand,
-        Align(MemBits / 8), AtomicOrdering::SequentiallyConsistent);
+    auto Emit = [&] {
+      return Context.B.CreateAtomicRMW(
+          AtomicRMWInst::Add, emitLdsPointer(Context, ByteAddress), Operand,
+          Align(MemBits / 8), AtomicOrdering::SequentiallyConsistent);
+    };
     if (Destination) {
+      Value *Old = Context.registers().emitMemoryValue(Emit);
       Context.registers().regFile().writeReg32(Context.B, *Destination, Old);
+    } else {
+      Context.registers().emitMemoryEffect([&] { Emit(); });
     }
   });
   return Error::success();

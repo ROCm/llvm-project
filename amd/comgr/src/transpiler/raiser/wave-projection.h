@@ -276,25 +276,10 @@ public:
   // (`NumSourceWavesPerTarget == 1`), so no constructor override is needed.
 };
 
-// ============================================================================
-// ReplicationDoubledDispatchProjection -- replication backed by a doubled
-// dispatch.
-//
-// The runtime launches the block with a `W_t / W_s`-scaled extent along the
-// wave-carrying dimension x, so each target wave hosts one source wave in lanes
-// `0..W_s-1` and exact replicas in `W_s..W_t-1`. For wave32->wave64:
-//
-//   * the runtime doubles blockDim.x (grid unchanged);
-//   * the raised kernel maps hardware workitem-id.x back to the logical source
-//     id so hardware lane `W_s + i` sees the same logical thread as lane `i`;
-//   * the raiser halves the in-kernel workgroup/grid-size query along x so
-//     loops and reduction bounds still observe the source block size.
-//
-// A lane and its replica compute identically, so they share every predicate
-// and cross-lane ops read valid duplicate data from the upper half. All of the
-// per-source-wave cross-lane machinery is inherited; this class overrides only
-// the workitem-id mapping. Utilisation is ~50%, so it is a correctness
-// fallback, not the fast path.
+/// Map each wave32 onto a wave64, with lanes 32..63 replicating lanes 0..31.
+/// Requires a one-dimensional launch of whole source waves, with workgroup and
+/// grid X extents doubled in workitems. Memory accesses commit in primary lanes
+/// and broadcast read results to replicas.
 class ReplicationDoubledDispatchProjection final
     : public ReplicationProjection {
 public:
@@ -308,9 +293,7 @@ public:
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
   llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
-  // Pack the remapped x with the source's raw y/z fields (which are already
-  // per-thread correct and become wave-uniform once x is doubled). Bypasses
-  // the base replication phantom-lane clamp.
+  // Pack logical X with the zero Y/Z fields of a supported 1D launch.
   llvm::Value *emitPackedWorkitemId(llvm::IRBuilder<> &B,
                                     unsigned NumDims) const override;
 };
