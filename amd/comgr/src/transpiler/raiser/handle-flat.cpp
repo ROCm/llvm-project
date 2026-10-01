@@ -162,9 +162,11 @@ static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
   // An inactive lane holds an unconstrained address, so the load itself is
   // predicated and not only the register write it feeds.
   Ctx.registers().emitUnderExec([&] {
-    Value *Loaded = Ctx.B.CreateAlignedLoad(
-        globalAccessType(Ctx.B, Access.SizeInBytes), *Address,
-        Access.alignment(), IsVolatile, "global_load");
+    Value *Loaded = Ctx.registers().emitMemoryValue([&] {
+      return Ctx.B.CreateAlignedLoad(
+          globalAccessType(Ctx.B, Access.SizeInBytes), *Address,
+          Access.alignment(), IsVolatile, "global_load");
+    });
     if (Access.SizeInBytes < 4) {
       Loaded = Access.DataFlags & GlobalAccess::Signed
                    ? Ctx.B.CreateSExt(Loaded, Ctx.B.getInt32Ty())
@@ -199,7 +201,9 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
   // A store by an inactive lane must not reach memory at all, so the whole
   // access is predicated on the lane bit of EXEC.
   Ctx.registers().emitUnderExec([&] {
-    Ctx.B.CreateAlignedStore(Data, *Address, Access.alignment(), IsVolatile);
+    Ctx.registers().emitMemoryEffect([&] {
+      Ctx.B.CreateAlignedStore(Data, *Address, Access.alignment(), IsVolatile);
+    });
   });
   return Error::success();
 }
@@ -247,11 +251,17 @@ static Error emitGlobalAtomicAdd(RaiseContext &Ctx, const DecodedInst &Di,
 
   // An atomic issued by an inactive lane must not reach memory at all.
   Ctx.registers().emitUnderExec([&] {
-    AtomicRMWInst *Old = Ctx.B.CreateAtomicRMW(
-        AtomicRMWInst::Add, *Address, Data, NaturalAlignment,
-        AtomicOrdering::SequentiallyConsistent);
-    if (Destination)
+    auto Emit = [&] {
+      return Ctx.B.CreateAtomicRMW(AtomicRMWInst::Add, *Address, Data,
+                                   NaturalAlignment,
+                                   AtomicOrdering::SequentiallyConsistent);
+    };
+    if (Destination) {
+      Value *Old = Ctx.registers().emitMemoryValue(Emit);
       Ctx.registers().regFile().writeReg32(Ctx.B, *Destination, Old);
+    } else {
+      Ctx.registers().emitMemoryEffect([&] { Emit(); });
+    }
   });
   return Error::success();
 }

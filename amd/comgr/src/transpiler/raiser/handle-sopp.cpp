@@ -230,6 +230,8 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::S_SETHALT:
     if (Error Err = Ctx.requirePerWaveExecution(Di))
       return Err;
+    if (Error Err = Ctx.validateHardwareEffect(Di))
+      return Err;
     Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::amdgcn_s_sethalt,
                           {Ctx.B.getInt32(Op.srcImm(0))});
     return Error::success();
@@ -307,6 +309,8 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
                              "means the same thing on every target");
 
     if (Error Err = Ctx.requirePerWaveExecution(Di))
+      return Err;
+    if (Error Err = Ctx.validateHardwareEffect(Di))
       return Err;
     Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(),
                           IsHalt ? Intrinsic::amdgcn_s_sendmsghalt

@@ -42,8 +42,8 @@ namespace COMGR::transpiler {
 static constexpr uint64_t DispatchWorkgroupSizeXOffset = 4;
 static constexpr uint64_t DispatchWorkgroupSizeYOffset = 6;
 
-static unsigned getWaveSize(const MCSubtargetInfo &STI) {
-  return STI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
+unsigned getWaveSize(const MCSubtargetInfo &Subtarget) {
+  return Subtarget.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
 }
 
 // ----------------------------------------------------------------------------
@@ -413,12 +413,10 @@ Value *ReplicationProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
 }
 
 // ----------------------------------------------------------------------------
-// ReplicationDoubledDispatchProjection.
+// ReplicatedDispatchProjection.
 //
-// Remaps the hardware workitem-id.x of a doubled-dispatch launch back onto the
-// logical source id, so hardware lane `W_s + i` (a replica) sees the same
-// logical thread as hardware lane `i`. Everything else is inherited from
-// ReplicationProjection.
+// Remaps the physical workitem-id.x onto the logical source id so replica lanes
+// observe the same source workitem as their primary lanes.
 // ----------------------------------------------------------------------------
 
 // logical_x = ((x_hw & ~(W_t-1)) >> log2(W_t/W_s)) | (x_hw & (W_s-1))
@@ -427,52 +425,55 @@ Value *ReplicationProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
 // lanes; the second term is the source lane within the wave (identical for a
 // lane and its replica). For wave32->wave64 this is
 // `((x_hw & ~63) >> 1) | (x_hw & 31)`.
-static Value *emitDoubledDispatchLogicalX(IRBuilder<> &B, Value *RawX,
-                                          unsigned SrcWaveSize,
-                                          unsigned TgtWaveSize) {
-  assert(TgtWaveSize > SrcWaveSize && (TgtWaveSize % SrcWaveSize) == 0 &&
-         "doubled-dispatch remap requires widening with an integer "
+static Value *emitReplicatedDispatchLogicalX(IRBuilder<> &B, Value *RawX,
+                                             unsigned SourceWaveSize,
+                                             unsigned TargetWaveSize) {
+  assert(TargetWaveSize > SourceWaveSize &&
+         (TargetWaveSize % SourceWaveSize) == 0 &&
+         "replicated dispatch requires widening with an integer "
          "wave-size ratio");
   Type *Ty = RawX->getType();
-  const unsigned Ratio = TgtWaveSize / SrcWaveSize;
+  const unsigned Ratio = TargetWaveSize / SourceWaveSize;
   const unsigned RatioLog2 = llvm::Log2_32(Ratio);
   Value *WaveAligned = B.CreateAnd(
-      RawX, ConstantInt::get(Ty, ~static_cast<uint64_t>(TgtWaveSize - 1u)),
-      "dd_wave_aligned");
+      RawX, ConstantInt::getSigned(Ty, -static_cast<int64_t>(TargetWaveSize)),
+      "replicated_wave_aligned");
   Value *WaveScaled = B.CreateLShr(WaveAligned, ConstantInt::get(Ty, RatioLog2),
-                                   "dd_wave_base");
-  Value *SrcLane =
-      B.CreateAnd(RawX, ConstantInt::get(Ty, SrcWaveSize - 1u), "dd_src_lane");
-  return B.CreateOr(WaveScaled, SrcLane, "dd_logical_x");
+                                   "replicated_wave_base");
+  Value *SourceLane =
+      B.CreateAnd(RawX, ConstantInt::get(Ty, SourceWaveSize - 1u),
+                  "replicated_source_lane");
+  return B.CreateOr(WaveScaled, SourceLane, "replicated_logical_x");
 }
 
-Value *
-ReplicationDoubledDispatchProjection::emitWorkitemIdX(IRBuilder<> &B) const {
+Value *ReplicatedDispatchProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   // Deliberately bypass ReplicationProjection::emitWorkitemIdX (the
-  // phantom-lane clamp): a doubled dispatch has no phantom lanes, every
-  // hardware lane is a real source thread or an exact replica of one.
+  // phantom-lane clamp) because every physical lane has a logical source lane.
   Value *Raw = WaveProjection::emitWorkitemIdX(B);
-  return emitDoubledDispatchLogicalX(B, Raw, sourceWaveSize(),
-                                     targetWaveSize());
+  return emitReplicatedDispatchLogicalX(B, Raw, sourceWaveSize(),
+                                        targetWaveSize());
 }
 
-ReplicationDoubledDispatchProjection::ReplicationDoubledDispatchProjection(
+ReplicatedDispatchProjection::ReplicatedDispatchProjection(
     const MCSubtargetInfo &Source, const MCSubtargetInfo &Target, Type *I32Ty,
     Type *I64Ty)
     : ReplicationProjection(Source, Target, I32Ty, I64Ty) {
-  DoubledDispatchFactor = targetWaveSize() / sourceWaveSize();
+  assert(targetWaveSize() > sourceWaveSize() &&
+         targetWaveSize() % sourceWaveSize() == 0 &&
+         "replicated dispatch requires widening by an integer factor");
+  ReplicationFactor = targetWaveSize() / sourceWaveSize();
+}
+
+Value *ReplicatedDispatchProjection::emitSourceWaveId(IRBuilder<> &B) const {
+  Value *X = emitTargetWorkitemId(B, 0);
+  Value *Wave = B.CreateUDiv(X, B.getInt32(targetWaveSize()));
+  return B.CreateIntrinsic(Intrinsic::amdgcn_readfirstlane, {B.getInt32Ty()},
+                           {Wave}, nullptr, "source_wave_id");
 }
 
 Value *
-ReplicationDoubledDispatchProjection::emitSourceWaveId(IRBuilder<> &B) const {
-  return emitTargetWaveId(B);
-}
-
-Value *ReplicationDoubledDispatchProjection::emitPackedWorkitemId(
-    IRBuilder<> &B, unsigned NumDims) const {
-  // Remapped x OR'd with the source's raw y/z fields. y/z are per-thread
-  // correct as launched and become wave-uniform once x is doubled, so no
-  // remap or clamp is applied to them.
+ReplicatedDispatchProjection::emitPackedWorkitemId(IRBuilder<> &B,
+                                                   unsigned NumDims) const {
   return packWorkitemId(B, emitWorkitemIdX(B), NumDims);
 }
 

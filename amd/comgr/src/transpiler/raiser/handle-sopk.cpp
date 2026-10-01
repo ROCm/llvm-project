@@ -313,6 +313,8 @@ Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di,
       Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_s_setreg);
   Ctx.requireWaveUniform(
       ValueArg, Di, "WaveNative requires uniform hardware register writes");
+  if (Error Err = Ctx.validateHardwareEffect(Di))
+    return Err;
   Ctx.B.CreateCall(Setreg, {Ctx.B.getInt32(Selector), ValueArg});
   return Error::success();
 }

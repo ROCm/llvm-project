@@ -142,6 +142,18 @@ public:
   // lanes for per-lane side effects.
   void emitUnderExec(llvm::function_ref<void()> Body);
 
+  /// Under replication, emit a memory effect only in primary lanes.
+  /// The caller supplies the instruction's EXEC and bounds predication;
+  /// Body must not update architectural registers.
+  void emitMemoryEffect(llvm::function_ref<void()> Body);
+
+  /// Under replication, read in primary lanes and broadcast results to
+  /// replicas. Scalar reads execute in lane zero, independently of source EXEC.
+  /// The caller supplies the instruction's EXEC and bounds predication and
+  /// writes back the returned value.
+  llvm::Value *emitMemoryValue(llvm::function_ref<llvm::Value *()> Body,
+                               bool IsScalar = false);
+
   // Emit Body when the source wave has any active lane in EXEC.
   void emitWithNonzeroExec(llvm::function_ref<void()> Body);
 

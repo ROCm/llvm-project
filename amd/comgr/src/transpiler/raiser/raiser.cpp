@@ -41,10 +41,12 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/IR/Attributes.h"
@@ -429,7 +431,7 @@ isKnownSubsetOfEntryExec(const Instruction &I,
 Error WaveNativeRequirements::validate(Function &F, const MCState &MC) const {
   auto Refuse = [&](const DecodedInst &Di, const Twine &Detail) {
     return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedWaveProjection,
+        RaiseFailureReason::UnprovenExecContainment,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags), Detail);
   };
@@ -457,13 +459,225 @@ Error WaveNativeRequirements::validate(Function &F, const MCState &MC) const {
   return Error::success();
 }
 
+namespace {
+enum class ProjectionKind { SameWave, WaveNative, Replicated };
+} // namespace
+
+/// Raise a decoded kernel with one projection. A failed attempt removes its
+/// function before returning, including all register and analysis state.
+static Error raiseDecodedKernel(const RaiseEnvironment &Env, Module &M,
+                                const TextSection &Text,
+                                const KernelRequest &Kernel,
+                                const DecodeResult &Decoded,
+                                const SetPcAnalysis &SetPc, TargetMachine &TM,
+                                ProjectionKind Kind,
+                                unsigned MaxWorkgroupSize) {
+  const KernelMeta &Meta = Kernel.Meta;
+  LLVMContext &C = M.getContext();
+  const MCSubtargetInfo &SourceSTI = *Env.Source.MC.SubtargetInfo;
+  const MCSubtargetInfo &TargetSTI = *Env.Target.MC.SubtargetInfo;
+  bool UseWaveNative = Kind == ProjectionKind::WaveNative;
+  bool UseReplicated = Kind == ProjectionKind::Replicated;
+  std::unique_ptr<WaveProjection> Projection;
+  if (UseReplicated)
+    Projection = std::make_unique<ReplicatedDispatchProjection>(
+        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
+  else if (UseWaveNative)
+    Projection = std::make_unique<WaveNativeProjection>(
+        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
+  else
+    Projection = std::make_unique<ReplicationProjection>(
+        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
+  Projection->setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
+
+  Function *F =
+      declareKernel(M, Kernel.Name, Meta, *Env.Source.MC.SubtargetInfo);
+  scope_exit EraseOnFailure([&] {
+    F->eraseFromParent();
+    // Intrinsics used only by a failed projection attempt must not leak into
+    // the module produced by a successful retry.
+    for (Function &Declaration : make_early_inc_range(M))
+      if (Declaration.isDeclaration() && Declaration.use_empty())
+        Declaration.eraseFromParent();
+  });
+  BasicBlock *Entry = BasicBlock::Create(C, "entry", F);
+  IRBuilder<> B(Entry);
+
+  Expected<RaiseContext> Ctx = RaiseContext::create(
+      B, *Projection, Env.Source.MC, SetPc, Meta, Text.Bytes, Text.Address,
+      Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset,
+      Env.Source.SramEcc);
+  if (!Ctx)
+    return Ctx.takeError();
+
+  if (UseReplicated)
+    F->addFnAttr("amdgpu-flat-work-group-size",
+                 formatv("{0},{1}", Projection->targetWaveSize(),
+                         MaxWorkgroupSize * Projection->replicationFactor())
+                     .str());
+
+  WaveNativeRequirements Requirements;
+  if (UseWaveNative) {
+    // The metadata bounds the launch; it does not require that exact size.
+    F->addFnAttr("amdgpu-flat-work-group-size",
+                 formatv("1,{0}", Meta.MaxFlatWorkgroupSize).str());
+    Requirements.InitialExec = Ctx->registers().readExec();
+  }
+
+  if (Meta.RequiredWorkgroupSize) {
+    SmallVector<Metadata *, 3> Dimensions;
+    unsigned Workitems = 1;
+    for (unsigned I = 0; I != 3; ++I) {
+      unsigned Size = (*Meta.RequiredWorkgroupSize)[I];
+      if (UseReplicated && I == 0)
+        Size *= 2;
+      Workitems *= Size;
+      Dimensions.push_back(ConstantAsMetadata::get(B.getInt32(Size)));
+    }
+    F->addFnAttr("amdgpu-flat-work-group-size",
+                 formatv("{0},{0}", Workitems).str());
+    F->setMetadata("reqd_work_group_size", MDNode::get(C, Dimensions));
+  }
+
+  // A block per recovered block start, all of them made before any instruction
+  // is raised so a branch reaching forward finds the block it targets. The
+  // kernel entry gets one too, rather than raising into the entry block the
+  // allocas live in: a branch back to the first instruction would otherwise
+  // give the entry block a predecessor, which LLVM does not allow.
+  for (uint64_t Start : Decoded.BlockStarts)
+    Ctx->defineBB(Start, BasicBlock::Create(C, formatv("bb_{0:x}", Start), F));
+
+  // A followed callee can sit anywhere in the text section, the kernel's own
+  // entry included, so where the raise starts is named rather than left to be
+  // whichever block the first raised instruction leads.
+  B.CreateBr(Ctx->lookupBB(Kernel.StartOffset));
+
+  for (const DecodedInst &Di : Decoded.Insts) {
+    BasicBlock *Open = B.GetInsertBlock();
+    if (Decoded.BlockStarts.count(Di.Offset)) {
+      BasicBlock *Next = Ctx->lookupBB(Di.Offset);
+      // A source block ending in something other than a control transfer
+      // reaches the block that follows it, which LLVM states as a branch.
+      if (!Open->hasTerminator())
+        B.CreateBr(Next);
+      B.SetInsertPoint(Next);
+    } else if (Open->hasTerminator()) {
+      // An instruction trailing a control transfer without leading a block
+      // start of its own is reached by nothing, and needs a block anyway for
+      // its handler to raise into.
+      B.SetInsertPoint(
+          BasicBlock::Create(C, formatv("unreached_{0:x}", Di.Offset), F));
+    }
+
+    Ctx->registers().computeVGPRAdjust(Di);
+    if (Error Err = raiseInst(*Ctx, Di))
+      return Err;
+    if (UseWaveNative || UseReplicated) {
+      if (Instruction *Term = B.GetInsertBlock()->getTerminatorOrNull()) {
+        Value *Condition = nullptr;
+        if (const auto *Branch = dyn_cast<CondBrInst>(Term))
+          Condition = Branch->getCondition();
+        else if (const auto *Switch = dyn_cast<SwitchInst>(Term))
+          Condition = Switch->getCondition();
+        if (Condition)
+          Ctx->requireWaveUniform(
+              Condition, Di,
+              "projection requires scalar control flow uniform "
+              "across the target wave");
+      } else if (UseWaveNative && instructionWritesEXEC(Di, Env.Source.MC)) {
+        Requirements.ExecWrites.emplace_back(Ctx->registers().readExec(), &Di);
+      }
+    }
+  }
+
+  // Execution reaching the end of the extent means the code is truncated or
+  // the extent is misbounded. Closing the block with a return instead would
+  // hand back a kernel that reads as having run to completion. Every earlier
+  // block is terminated on the way out of it, so the open one is the only
+  // block that can still be missing a terminator here.
+  if (!B.GetInsertBlock()->hasTerminator())
+    return RaiseFailure::general(
+        RaiseFailureReason::UnterminatedKernelExtent,
+        "kernel extent ends without an instruction that ends the program");
+
+  DominatorTree DT(*F);
+  AssumptionCache AC(*F);
+  SmallVector<AllocaInst *> Allocas;
+  Ctx->registers().collectAllocas(Allocas);
+  PromoteMemToReg(Allocas, DT, &AC);
+  if (Error Err = Ctx->validateRequiredBits())
+    return Err;
+  if (UseWaveNative || UseReplicated) {
+    if (Error Err = Ctx->validateWaveRequirements(TM, Requirements.InitialExec))
+      return Err;
+  }
+  if (UseWaveNative) {
+    if (Error Err = Requirements.validate(*F, Env.Source.MC))
+      return Err;
+  }
+  EraseOnFailure.release();
+  return Error::success();
+}
+
+/// Check the source effects and entry values the replicated mapping supports.
+static Error validateReplicatedKernel(const MCState &MC,
+                                      const DecodeResult &Decoded,
+                                      const KernelMeta &Meta) {
+  constexpr unsigned DispatchSources =
+      amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_DISPATCH_PTR |
+      amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_QUEUE_PTR |
+      amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_DISPATCH_ID;
+  if (Meta.KernelCodeProperties & DispatchSources)
+    return RaiseFailure::general(
+        RaiseFailureReason::UnsupportedWaveProjection,
+        "replicated dispatch cannot expose target dispatch or queue state");
+
+  for (const KernelArgMeta &Arg : Meta.Args) {
+    if (!StringRef(Arg.ValueKind).starts_with("hidden_"))
+      continue;
+    bool IsSourceGeometry =
+        StringSwitch<bool>(Arg.ValueKind)
+            .Cases({"hidden_global_offset_x", "hidden_global_offset_y",
+                    "hidden_global_offset_z", "hidden_block_count_x",
+                    "hidden_block_count_y", "hidden_block_count_z",
+                    "hidden_group_size_x", "hidden_group_size_y",
+                    "hidden_group_size_z", "hidden_remainder_x",
+                    "hidden_remainder_y", "hidden_remainder_z",
+                    "hidden_grid_dims", "hidden_none"},
+                   true)
+            .Default(false);
+    if (!IsSourceGeometry)
+      return RaiseFailure::general(
+          RaiseFailureReason::UnsupportedWaveProjection,
+          "replicated dispatch cannot reproduce hidden argument kind '" +
+              Arg.ValueKind + "'");
+  }
+
+  for (const DecodedInst &Di : Decoded.Insts) {
+    auto Refuse = [&](const Twine &Detail) {
+      return RaiseFailure::atInstruction(
+          RaiseFailureReason::UnsupportedWaveProjection,
+          strippedMnemonic(MC, Di.Inst), Di.Offset,
+          formatName(Di.TargetSpecificFlags), Detail);
+    };
+    if (SIInstrFlags::isMAI(*MC.InstrInfo, Di.Inst) ||
+        SIInstrFlags::isWMMA(*MC.InstrInfo, Di.Inst))
+      return Refuse("replicated dispatch does not support matrix fragments");
+    for (const MCOperand &Operand : Di.Inst)
+      if (Operand.isReg() && Operand.getReg() == AMDGPU::LDS_DIRECT)
+        return Refuse("replicated dispatch does not support LDS direct reads");
+  }
+  return Error::success();
+}
+
 // Raise one kernel into `M`. Everything this allocates -- the projection, the
 // builder, the register file behind the context -- describes that one kernel
 // and dies with the call; only the emitted function outlives it.
-static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
-                         const TextSection &Text, const KernelRequest &Kernel,
-                         ArrayRef<KernelSymbolExtent> FunctionExtents,
-                         TargetMachine &TM) {
+static Expected<KernelLaunchRequirements>
+raiseKernel(const RaiseEnvironment &Env, Module &M, const TextSection &Text,
+            const KernelRequest &Kernel,
+            ArrayRef<KernelSymbolExtent> FunctionExtents, TargetMachine &TM,
+            LaunchPolicy Policy) {
   const KernelMeta &Meta = Kernel.Meta;
   Expected<DecodeResult> Decoded = decodeKernel(
       Env.Source.MC, Env.OpcMap, Text.Bytes, Kernel.StartOffset,
@@ -528,8 +742,6 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   Decoded->BlockStarts.insert(SetPc->ExtraBlockStarts.begin(),
                               SetPc->ExtraBlockStarts.end());
 
-  LLVMContext &C = M.getContext();
-
   const MCSubtargetInfo &SourceSTI = *Env.Source.MC.SubtargetInfo;
   const MCSubtargetInfo &TargetSTI = *Env.Target.MC.SubtargetInfo;
   bool SameWaveSize = SourceSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ==
@@ -541,115 +753,70 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
         RaiseFailureReason::UnsupportedWaveProjection,
         "wave-size changes are supported only from gfx1250 to gfx942");
 
-  std::unique_ptr<WaveProjection> Projection;
-  if (UseWaveNative)
-    Projection = std::make_unique<WaveNativeProjection>(
-        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
-  else
-    Projection = std::make_unique<ReplicationProjection>(
-        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
-  Projection->setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
+  ProjectionKind Kind =
+      UseWaveNative ? ProjectionKind::WaveNative : ProjectionKind::SameWave;
+  Error Err = raiseDecodedKernel(Env, M, Text, Kernel, *Decoded, *SetPc, TM,
+                                 Kind, Meta.MaxFlatWorkgroupSize);
+  if (!Err)
+    return KernelLaunchRequirements{KernelLaunchRequirements::Kind::Unchanged,
+                                    Meta.MaxFlatWorkgroupSize,
+                                    Meta.RequiredWorkgroupSize};
+  if (!UseWaveNative || Policy != LaunchPolicy::AllowReplication)
+    return std::move(Err);
 
-  Function *F =
-      declareKernel(M, Kernel.Name, Meta, *Env.Source.MC.SubtargetInfo);
-  BasicBlock *Entry = BasicBlock::Create(C, "entry", F);
-  IRBuilder<> B(Entry);
+  bool Retry = false;
+  Err = handleErrors(std::move(Err),
+                     [&](std::unique_ptr<RaiseFailure> Failure) -> Error {
+                       switch (Failure->reason()) {
+                       case RaiseFailureReason::NonUniformScalarState:
+                       case RaiseFailureReason::UnprovenExecContainment:
+                         Retry = true;
+                         return Error::success();
+                       default:
+                         return Error(std::move(Failure));
+                       }
+                     });
+  if (Err)
+    return std::move(Err);
+  assert(Retry && "handled projection failure must request a retry");
 
-  Expected<RaiseContext> Ctx = RaiseContext::create(
-      B, *Projection, Env.Source.MC, *SetPc, Meta, Text.Bytes, Text.Address,
-      Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset,
-      Env.Source.SramEcc);
-  if (!Ctx)
-    return Ctx.takeError();
-
-  WaveNativeRequirements Requirements;
-  if (UseWaveNative) {
-    // The metadata bounds the launch; it does not require that exact size.
-    F->addFnAttr("amdgpu-flat-work-group-size",
-                 formatv("1,{0}", Meta.MaxFlatWorkgroupSize).str());
-    Requirements.InitialExec = Ctx->registers().readExec();
-  }
-
-  // A block per recovered block start, all of them made before any instruction
-  // is raised so a branch reaching forward finds the block it targets. The
-  // kernel entry gets one too, rather than raising into the entry block the
-  // allocas live in: a branch back to the first instruction would otherwise
-  // give the entry block a predecessor, which LLVM does not allow.
-  for (uint64_t Start : Decoded->BlockStarts)
-    Ctx->defineBB(Start, BasicBlock::Create(C, formatv("bb_{0:x}", Start), F));
-
-  // A followed callee can sit anywhere in the text section, the kernel's own
-  // entry included, so where the raise starts is named rather than left to be
-  // whichever block the first raised instruction leads.
-  B.CreateBr(Ctx->lookupBB(Kernel.StartOffset));
-
-  for (const DecodedInst &Di : Decoded->Insts) {
-    BasicBlock *Open = B.GetInsertBlock();
-    if (Decoded->BlockStarts.count(Di.Offset)) {
-      BasicBlock *Next = Ctx->lookupBB(Di.Offset);
-      // A source block ending in something other than a control transfer
-      // reaches the block that follows it, which LLVM states as a branch.
-      if (!Open->hasTerminator())
-        B.CreateBr(Next);
-      B.SetInsertPoint(Next);
-    } else if (Open->hasTerminator()) {
-      // An instruction trailing a control transfer without leading a block
-      // start of its own is reached by nothing, and needs a block anyway for
-      // its handler to raise into.
-      B.SetInsertPoint(
-          BasicBlock::Create(C, formatv("unreached_{0:x}", Di.Offset), F));
-    }
-
-    Ctx->registers().computeVGPRAdjust(Di);
-    if (Error Err = raiseInst(*Ctx, Di))
-      return Err;
-    if (UseWaveNative) {
-      if (Instruction *Term = B.GetInsertBlock()->getTerminatorOrNull()) {
-        Value *Condition = nullptr;
-        if (const auto *Branch = dyn_cast<CondBrInst>(Term))
-          Condition = Branch->getCondition();
-        else if (const auto *Switch = dyn_cast<SwitchInst>(Term))
-          Condition = Switch->getCondition();
-        if (Condition)
-          Ctx->requireWaveUniform(
-              Condition, Di,
-              "WaveNative requires scalar control flow uniform "
-              "across the target wave");
-      } else if (instructionWritesEXEC(Di, Env.Source.MC)) {
-        Requirements.ExecWrites.emplace_back(Ctx->registers().readExec(), &Di);
-      }
-    }
-  }
-
-  // Execution reaching the end of the extent means the code is truncated or
-  // the extent is misbounded. Closing the block with a return instead would
-  // hand back a kernel that reads as having run to completion. Every earlier
-  // block is terminated on the way out of it, so the open one is the only
-  // block that can still be missing a terminator here.
-  if (!B.GetInsertBlock()->hasTerminator())
+  if (Error Err = validateReplicatedKernel(Env.Source.MC, *Decoded, Meta))
+    return std::move(Err);
+  unsigned SourceWaveSize = getWaveSize(SourceSTI);
+  unsigned TargetWaveSize = getWaveSize(TargetSTI);
+  assert(TargetWaveSize % SourceWaveSize == 0 &&
+         "replicated dispatch requires an integer wave-size ratio");
+  unsigned ReplicationFactor = TargetWaveSize / SourceWaveSize;
+  unsigned MaxWorkgroupSize =
+      std::min(Meta.MaxFlatWorkgroupSize,
+               AMDGPU::getMaxFlatWorkGroupSize() / ReplicationFactor);
+  MaxWorkgroupSize = alignDown(MaxWorkgroupSize, SourceWaveSize);
+  if (!MaxWorkgroupSize)
     return RaiseFailure::general(
-        RaiseFailureReason::UnterminatedKernelExtent,
-        "kernel extent ends without an instruction that ends the program");
-
-  DominatorTree DT(*F);
-  AssumptionCache AC(*F);
-  SmallVector<AllocaInst *> Allocas;
-  Ctx->registers().collectAllocas(Allocas);
-  PromoteMemToReg(Allocas, DT, &AC);
-  if (UseWaveNative) {
-    if (Error Err =
-            Ctx->validateWaveNativeRequirements(TM, Requirements.InitialExec))
-      return Err;
-    if (Error Err = Requirements.validate(*F, Env.Source.MC))
-      return Err;
+        RaiseFailureReason::UnsupportedLaunch,
+        "replicated dispatch requires room for a whole source wave");
+  KernelLaunchRequirements Launch{KernelLaunchRequirements::Kind::Replicated1D,
+                                  MaxWorkgroupSize, Meta.RequiredWorkgroupSize,
+                                  SourceWaveSize, ReplicationFactor};
+  if (Meta.RequiredWorkgroupSize) {
+    Expected<LaunchDimensions> Target =
+        Launch.project(Kernel.Name, {*Meta.RequiredWorkgroupSize,
+                                     *Meta.RequiredWorkgroupSize});
+    if (!Target)
+      return Target.takeError();
   }
-  return Ctx->validateRequiredBits();
+  if (Error Err =
+          raiseDecodedKernel(Env, M, Text, Kernel, *Decoded, *SetPc, TM,
+                             ProjectionKind::Replicated, MaxWorkgroupSize))
+    return std::move(Err);
+  return Launch;
 }
 
 Expected<RaiseResult> raiseToIR(const TextSection &Text, StringRef SourceIsa,
                                 StringRef TargetIsa,
                                 ArrayRef<KernelRequest> Kernels,
-                                ArrayRef<KernelSymbolExtent> FunctionExtents) {
+                                ArrayRef<KernelSymbolExtent> FunctionExtents,
+                                LaunchPolicy Policy) {
   Expected<RaiseEnvironment> Env =
       RaiseEnvironment::create(SourceIsa, TargetIsa);
   if (!Env)
@@ -679,10 +846,17 @@ Expected<RaiseResult> raiseToIR(const TextSection &Text, StringRef SourceIsa,
   // A refusal is raised where the offending instruction is, which is below the
   // point that knows which kernel of the batch is being raised, so the name and
   // the ISA pair are attached here.
-  for (const KernelRequest &Kernel : Kernels)
-    if (Error Err = raiseKernel(*Env, M, Text, Kernel, FunctionExtents, *TM))
-      return RaiseFailure::withOrigin(std::move(Err), Kernel.Name,
+  for (const KernelRequest &Kernel : Kernels) {
+    if (Kernel.Name.empty() || Result.LaunchRequirements.contains(Kernel.Name))
+      return RaiseFailure::general(RaiseFailureReason::BadInput,
+                                   "kernel names must be nonempty and unique");
+    Expected<KernelLaunchRequirements> Launch =
+        raiseKernel(*Env, M, Text, Kernel, FunctionExtents, *TM, Policy);
+    if (!Launch)
+      return RaiseFailure::withOrigin(Launch.takeError(), Kernel.Name,
                                       Env->Source.Cpu, Env->Target.Cpu);
+    Result.LaunchRequirements.insert({Kernel.Name, *Launch});
+  }
 
   // Verify once the module is whole: a kernel is only well-formed together
   // with the intrinsic declarations its neighbours may also have added.

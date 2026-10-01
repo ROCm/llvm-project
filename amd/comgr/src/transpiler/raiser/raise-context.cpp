@@ -101,7 +101,9 @@ Error RaiseContext::validateRequiredBits() const {
 
 void RaiseContext::requireWaveUniform(Value *Operand, const DecodedInst &Di,
                                       const Twine &Detail) {
-  if (Projection.validationKind() == WaveProjection::ValidationKind::WaveNative)
+  if (Projection.validationKind() ==
+          WaveProjection::ValidationKind::WaveNative ||
+      Projection.usesReplicatedDispatch())
     UniformityRequirements.push_back({Operand, &Di, Detail.str()});
 }
 
@@ -123,8 +125,8 @@ Error RaiseContext::requirePerWaveExecution(const DecodedInst &Di) const {
   return Error::success();
 }
 
-Error RaiseContext::validateWaveNativeRequirements(
-    TargetMachine &TM, Value *KernelEntryExec) const {
+Error RaiseContext::validateWaveRequirements(TargetMachine &TM,
+                                             Value *KernelEntryExec) const {
   for (const RequiredValue &Requirement : EntryExecRequirements) {
     assert(Requirement.Operand &&
            "required value was deleted before validation");
@@ -163,7 +165,7 @@ Error RaiseContext::validateWaveNativeRequirements(
       continue;
     const DecodedInst &Di = *Requirement.Instruction;
     return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedWaveProjection,
+        RaiseFailureReason::NonUniformScalarState,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags), Requirement.Detail);
   }
@@ -187,6 +189,16 @@ RaiseContext::RaiseContext(
       SourceFloatRoundMode16_64(SourceFloatRoundMode16_64),
       SourceFp16Overflow(SourceFp16Overflow), SourceDx10Clamp(SourceDx10Clamp),
       SourceIeeeMode(SourceIeeeMode) {}
+
+Error RaiseContext::validateHardwareEffect(const DecodedInst &Di) const {
+  if (!Projection.usesReplicatedDispatch())
+    return Error::success();
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedWaveProjection,
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      "replicated dispatch does not support per-wave hardware effects");
+}
 
 Error RaiseContext::validateFPEnvironment(const DecodedInst &Di,
                                           Type *Ty) const {

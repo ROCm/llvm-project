@@ -710,6 +710,68 @@ void RegisterState::emitUnderExec(llvm::function_ref<void()> Body) {
   emitUnderCondition(emitLaneActiveBit(), Body);
 }
 
+void RegisterState::emitMemoryEffect(function_ref<void()> Body) {
+  if (!Projection.usesReplicatedDispatch()) {
+    Body();
+    return;
+  }
+  Value *Lane = Projection.emitLaneIdx(B);
+  Value *Primary = B.CreateICmpULT(
+      Lane, B.getInt32(Projection.sourceWaveSize()), "primary_lane");
+  emitUnderCondition(Primary, Body);
+}
+
+Value *RegisterState::emitMemoryValue(function_ref<Value *()> Body,
+                                      bool IsScalar) {
+  if (!Projection.usesReplicatedDispatch())
+    return Body();
+
+  Value *Lane = Projection.emitLaneIdx(B);
+  Value *Primary = B.CreateICmpULT(
+      Lane, B.getInt32(IsScalar ? 1 : Projection.sourceWaveSize()),
+      "primary_lane");
+  BasicBlock *Before = B.GetInsertBlock();
+  Value *Result = nullptr;
+  BasicBlock *ResultBlock = nullptr;
+  emitUnderCondition(Primary, [&] {
+    Result = Body();
+    ResultBlock = B.GetInsertBlock();
+    assert(Result && !ResultBlock->hasTerminator() &&
+           "memory read must produce a value and fall through");
+  });
+  Type *ResultType = Result->getType();
+  PHINode *Merged = B.CreatePHI(ResultType, 2, "memory_result");
+  Merged->addIncoming(Constant::getNullValue(ResultType), Before);
+  Merged->addIncoming(Result, ResultBlock);
+
+  unsigned BitWidth = ResultType->getPrimitiveSizeInBits();
+  assert((ResultType->isIntegerTy() || isa<FixedVectorType>(ResultType)) &&
+         (BitWidth <= 32 || BitWidth % 32 == 0) &&
+         "memory result must fit in whole register words");
+  unsigned NumWords = divideCeil(BitWidth, 32u);
+  Type *WordsType = NumWords == 1
+                        ? static_cast<Type *>(B.getInt32Ty())
+                        : FixedVectorType::get(B.getInt32Ty(), NumWords);
+  Value *Words = BitWidth < 32 ? B.CreateZExt(Merged, WordsType)
+                               : B.CreateBitCast(Merged, WordsType);
+  Value *SourceLane =
+      B.CreateAnd(Lane, B.getInt32(Projection.sourceWaveSize() - 1));
+  Value *Selector = B.CreateShl(SourceLane, 2);
+  Value *Broadcast = PoisonValue::get(WordsType);
+  for (unsigned I = 0; I != NumWords; ++I) {
+    Value *Word = NumWords == 1 ? Words : B.CreateExtractElement(Words, I);
+    // Both replicas reach this gather, so every selected primary participates.
+    Word = IsScalar ? B.CreateIntrinsic(Intrinsic::amdgcn_readlane,
+                                        {B.getInt32Ty()}, {Word, B.getInt32(0)})
+                    : B.CreateIntrinsic(Intrinsic::amdgcn_ds_bpermute, {},
+                                        {Selector, Word});
+    Broadcast =
+        NumWords == 1 ? Word : B.CreateInsertElement(Broadcast, Word, I);
+  }
+  return BitWidth < 32 ? B.CreateTrunc(Broadcast, ResultType)
+                       : B.CreateBitCast(Broadcast, ResultType);
+}
+
 void RegisterState::emitWithNonzeroExec(llvm::function_ref<void()> Body) {
   Value *ExecNonzero = B.CreateNot(emitExecIsZero(), "exec_nonzero");
   emitUnderCondition(ExecNonzero, Body);

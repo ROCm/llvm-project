@@ -339,10 +339,14 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
         if (HighHalf)
           Stored = Builder.CreateLShr(Stored, 16);
         Stored = Builder.CreateTruncOrBitCast(Stored, PayloadType);
-        Builder.CreateAlignedStore(Stored, Pointer, Align(1));
+        Context.registers().emitMemoryEffect(
+            [&] { Builder.CreateAlignedStore(Stored, Pointer, Align(1)); });
       } else {
-        Loaded = Builder.CreateAlignedLoad(PayloadType, Pointer, Align(1));
+        Loaded = Context.registers().emitMemoryValue([&] {
+          return Builder.CreateAlignedLoad(PayloadType, Pointer, Align(1));
+        });
       }
+      BasicBlock *AccessEnd = Builder.GetInsertBlock();
       Builder.CreateBr(Continue);
       Builder.SetInsertPoint(Continue);
       if (IsStore)
@@ -350,7 +354,7 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
 
       PHINode *Result = Builder.CreatePHI(PayloadType, 2);
       Result->addIncoming(Constant::getNullValue(PayloadType), Before);
-      Result->addIncoming(Loaded, AccessBlock);
+      Result->addIncoming(Loaded, AccessEnd);
       Type *ExtendedType = IsD16 ? Builder.getInt16Ty() : Builder.getInt32Ty();
       Value *Extended = IsSigned
                             ? Builder.CreateSExtOrBitCast(Result, ExtendedType)

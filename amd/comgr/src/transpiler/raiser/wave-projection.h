@@ -34,6 +34,9 @@ class MCSubtargetInfo;
 
 namespace COMGR::transpiler {
 
+/// Return the wavefront width selected by Subtarget.
+unsigned getWaveSize(const llvm::MCSubtargetInfo &Subtarget);
+
 // ============================================================================
 // WaveProjection -- the cross-wave translation policy surface.
 //
@@ -168,23 +171,12 @@ public:
   // source-wave mapping.
   bool preservesMbcntDerivedExec() const { return PreservesMbcntDerivedExec; }
 
-  // True iff this projection expects the runtime to launch the block with a
-  // `W_t / W_s`-scaled extent along `doubledDispatchDim()`, so each target wave
-  // hosts one source wave in its low `W_s` lanes with the rest as replicas.
-  // Equivalent to a scale factor above 1.
-  bool usesDoubledDispatch() const { return DoubledDispatchFactor > 1; }
+  // True iff each logical source workitem is replicated in the physical
+  // dispatch.
+  bool usesReplicatedDispatch() const { return ReplicationFactor > 1; }
 
-  // The block dimension (0=x, 1=y, 2=z) the runtime doubles when
-  // `usesDoubledDispatch()` is true. Always the fastest wave-carrying
-  // dimension (x) for the wave32->wave64 case; the higher dims that carry the
-  // divergent predicate become wave-uniform once x is doubled. Meaningless
-  // unless `usesDoubledDispatch()`.
-  unsigned doubledDispatchDim() const { return DoubledDispatchDim; }
-
-  // The integer factor by which the dispatch is scaled along
-  // `doubledDispatchDim()` (`W_t / W_s`, i.e. 2 for wave32->wave64).
-  // Meaningless unless `usesDoubledDispatch()`.
-  unsigned doubledDispatchFactor() const { return DoubledDispatchFactor; }
+  // Number of physical workitems launched for each logical source workitem.
+  unsigned replicationFactor() const { return ReplicationFactor; }
 
   // Number of source waves whose per-lane fragment data is present in each
   // target wave under this projection's mapping. Callers that synthesise
@@ -226,8 +218,7 @@ protected:
   // across virtual overrides.
   llvm::Type *ExecStorageTy;
   unsigned NumSourceWavesPerTarget = 1;
-  unsigned DoubledDispatchDim = 0;
-  unsigned DoubledDispatchFactor = 1;
+  unsigned ReplicationFactor = 1;
   bool BroadcastNarrowExecLoWrite = false;
   bool ProvidesFullWaveExecInvariant = false;
   bool SourceWaveScopedLaneOps = false;
@@ -281,41 +272,21 @@ public:
   // (`NumSourceWavesPerTarget == 1`), so no constructor override is needed.
 };
 
-// ============================================================================
-// ReplicationDoubledDispatchProjection -- replication backed by a doubled
-// dispatch.
-//
-// The runtime launches the block with a `W_t / W_s`-scaled extent along the
-// wave-carrying dimension x, so each target wave hosts one source wave in lanes
-// `0..W_s-1` and exact replicas in `W_s..W_t-1`. For wave32->wave64:
-//
-//   * the runtime doubles blockDim.x (grid unchanged);
-//   * the raised kernel maps hardware workitem-id.x back to the logical source
-//     id so hardware lane `W_s + i` sees the same logical thread as lane `i`;
-//   * the raiser halves the in-kernel workgroup/grid-size query along x so
-//     loops and reduction bounds still observe the source block size.
-//
-// A lane and its replica compute identically, so they share every predicate
-// and cross-lane ops read valid duplicate data from the upper half. All of the
-// per-source-wave cross-lane machinery is inherited; this class overrides only
-// the workitem-id mapping. Utilisation is ~50%, so it is a correctness
-// fallback, not the fast path.
-class ReplicationDoubledDispatchProjection final
-    : public ReplicationProjection {
+/// Map each source wave onto one target wave, with upper lanes replicating the
+/// corresponding source lanes. The runtime scales the one-dimensional launch
+/// by the target-to-source wave-size ratio.
+class ReplicatedDispatchProjection final : public ReplicationProjection {
 public:
-  ReplicationDoubledDispatchProjection(const llvm::MCSubtargetInfo &Source,
-                                       const llvm::MCSubtargetInfo &Target,
-                                       llvm::Type *I32Ty, llvm::Type *I64Ty);
+  ReplicatedDispatchProjection(const llvm::MCSubtargetInfo &Source,
+                               const llvm::MCSubtargetInfo &Target,
+                               llvm::Type *I32Ty, llvm::Type *I64Ty);
 
   // Remap hardware workitem-id.x to the logical source id so replica lanes
-  // alias their originals. No phantom-lane clamp: under a doubled dispatch
-  // every hardware lane maps to a valid logical thread (real or replica).
+  // alias their originals. Every physical lane maps to a valid logical thread.
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
   llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
-  // Pack the remapped x with the source's raw y/z fields (which are already
-  // per-thread correct and become wave-uniform once x is doubled). Bypasses
-  // the base replication phantom-lane clamp.
+  // Pack logical X with the zero Y/Z fields of a supported 1D launch.
   llvm::Value *emitPackedWorkitemId(llvm::IRBuilder<> &B,
                                     unsigned NumDims) const override;
 };

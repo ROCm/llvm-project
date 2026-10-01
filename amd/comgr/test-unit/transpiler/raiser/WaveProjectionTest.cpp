@@ -8,7 +8,7 @@
 
 // Unit tests for the per-projection contract on WaveProjection and its
 // subclasses. Each projection fixes its policy (EXEC storage width, source
-// waves per target wave, doubled-dispatch factor, and the exec/mbcnt
+// waves per target wave, replication factor, and the exec/mbcnt
 // predicates) in its constructor, and the raiser and its passes branch on
 // those values through a WaveProjection reference. These tests pin the value
 // each projection reports, so a constructor that forgets to set a flag, or a
@@ -37,7 +37,7 @@
 using namespace llvm;
 using COMGR::transpiler::initMCState;
 using COMGR::transpiler::MCState;
-using COMGR::transpiler::ReplicationDoubledDispatchProjection;
+using COMGR::transpiler::ReplicatedDispatchProjection;
 using COMGR::transpiler::ReplicationProjection;
 using COMGR::transpiler::ThreadLoopProjection;
 using COMGR::transpiler::WaveNativeProjection;
@@ -149,7 +149,7 @@ TEST_F(WaveProjectionContract, BaseDefaults) {
 
   DefaultTestProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
-  EXPECT_FALSE(Proj.usesDoubledDispatch());
+  EXPECT_FALSE(Proj.usesReplicatedDispatch());
   EXPECT_EQ(Proj.numSourceWavesPerTarget(), 1u);
 }
 
@@ -212,10 +212,9 @@ TEST_F(WaveProjectionContract, ThreadLoopReportsSourceWavesPerTargetRatio) {
 }
 
 // ----------------------------------------------------------------------------
-// Doubled dispatch: ReplicationDoubledDispatchProjection is the only projection
-// that asks the runtime to scale the block's x extent. The factor is W_t / W_s.
+// Replicated dispatch scales the physical X extent by the wave-size ratio.
 // ----------------------------------------------------------------------------
-TEST_F(WaveProjectionContract, ReplicationDoubledDispatch) {
+TEST_F(WaveProjectionContract, ReplicatedDispatch) {
   LLVMContext Ctx;
   auto *I32Ty = Type::getInt32Ty(Ctx);
   auto *I64Ty = Type::getInt64Ty(Ctx);
@@ -223,17 +222,13 @@ TEST_F(WaveProjectionContract, ReplicationDoubledDispatch) {
   const MCSubtargetInfo &Src = srcSTI();
   const MCSubtargetInfo &Tgt = tgtSTI();
 
-  ReplicationDoubledDispatchProjection Proj(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_TRUE(Proj.usesDoubledDispatch());
-  EXPECT_EQ(Proj.doubledDispatchFactor(), 2u);
-  EXPECT_EQ(Proj.doubledDispatchDim(), 0u);
-  // Doubled dispatch is replication underneath: one source wave per
-  // target wave, upper lanes are replicas.
+  ReplicatedDispatchProjection Proj(Src, Tgt, I32Ty, I64Ty);
+  EXPECT_TRUE(Proj.usesReplicatedDispatch());
+  EXPECT_EQ(Proj.replicationFactor(), 2u);
   EXPECT_EQ(Proj.numSourceWavesPerTarget(), 1u);
 
-  // Plain replication must not report a doubled dispatch.
   ReplicationProjection Plain(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_FALSE(Plain.usesDoubledDispatch());
+  EXPECT_FALSE(Plain.usesReplicatedDispatch());
 }
 
 // ----------------------------------------------------------------------------
