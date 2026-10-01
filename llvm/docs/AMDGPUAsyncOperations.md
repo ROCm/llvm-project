@@ -6,10 +6,13 @@
 ## Introduction
 
 Asynchronous operations are operations whose completion is not tracked
-internally by the compiler. A thread that initiates one or more async operations can use
-*asyncmarks* to track their completion.
+internally by the compiler. A thread that initiates one or more async operations
+can use execution synchronization mechanisms such as *asyncmarks* or *LDS memory
+barriers* to track their completion.
 
 - Most {ref}`DMA operations <amdgpu-dma-operations>` are asynchronous.
+
+(amdgpu-asyncmarks)=
 
 ## Asyncmarks
 
@@ -42,26 +45,59 @@ if:
 - `M` is not in the current sequence at any operation `Z` that immediately
   follows `Y` in *program-order*.
 
+(amdgpu-lds-memory-barriers)=
+
+## LDS Memory Barriers
+
+An LDS memory barrier is a barrier that uses LDS for its state. This barrier can
+track asynchronous LDS DMA loads and tensor operations, but not LDS DMA stores.
+
+```llvm
+void @llvm.amdgcn.ds.atomic.async.barrier.arrive.b64(ptr addrspace(3) %barrier)
+```
+
+This intrinsic initiates a {ref}`barrier arrive<amdgpu-barrier-operations>`
+operation scheduled after the asynchronous loads previously initiated by the
+same thread. Once those loads complete, the operation arrives at `%barrier`. A
+{ref}`barrier wait<amdgpu-async-completed-at>` can then track the loads'
+completion. The barrier-arrive operation is itself tracked by `AsyncCNT` and can
+be included in an {ref}`asyncmark<amdgpu-asyncmarks>`.
+
+(amdgpu-async-completed-at)=
+
 ## Completion of Async Operations
 
 An async operation executes outside the thread that initiated it, i.e., it is
 not related in *program-order* with any other operations from that thread. But
-the thread can use an asyncmark to ensure that the async operation is
-*completed-at* some later operation.
+a thread that depends on the side-effects of `A` can use an asyncmark or barrier
+to ensure that `A` is *completed-at* some operation in that thread.
 
-An async operation `A` *initiated-by* an instruction `I` is *completed-at* some
+### Using Asyncmarks
+
+Some async operations use asyncmarks to notify completion. Such an async
+operation `A` *initiated-by* an instruction `I` is *completed-at* some
 `wait.asyncmark()` operation `Y` if there exists an `asyncmark()` operation `X`
 such that:
 - `I` is *program-ordered* before `X`, and
 - `X` is *completed-at* `Y`.
 
-### happens-before
+### Using Barriers
 
-When an instruction `I` initiates an async operation `A`, `I` *happens-before*
-`A`.
+The completion of some async operations can be tracked using {ref}`LDS memory
+barriers<amdgpu-lds-memory-barriers>` as follows:
 
-If `A` is *completed-at* a `wait.asyncmark()` operation `Y`, then `A`
-*happens-before* `Y`.
+- The tensor descriptor passed to a tensor instruction `X` may contain a
+  reference to a barrier. When `X` initiates `A`, it also initiates a
+  {ref}`barrier arrive<amdgpu-barrier-operations>` to be performed after `A`.
+- When a thread executes an LDS DMA instruction `X`, it may executed a call to
+  `@llvm.amdgcn.ds.atomic.async.barrier.arrive.b64`
+  {ref}`intrinsic<amdgpu-lds-memory-barriers>` program-ordered after `X`. This
+  initiates a {ref}`barrier arrive<amdgpu-barrier-operations>` to be performed
+  after the async operation `A` initiated by `X`.
+
+A thread that depends on the side-effects of `A` performs a {ref}`barrier
+wait<amdgpu-barrier-operations>` operation `W` on the barrier. `A` is said to be
+*completed-at* `W` when the barrier completes.
 
 ## Examples
 
