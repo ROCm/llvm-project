@@ -312,9 +312,13 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   else if (*LoadWidthInDwords > 2)
     LoadType = FixedVectorType::get(Ctx.B.getInt32Ty(), *LoadWidthInDwords);
   Ctx.requireWaveUniform(Pointer, Di,
-                         "WaveNative requires uniform scalar memory addresses");
-  Value *Loaded = Ctx.B.CreateAlignedLoad(
-      LoadType, Pointer, DwordSmemAddressAlignment, "smem_load");
+                         "projection requires uniform scalar memory addresses");
+  Value *Loaded = Ctx.registers().emitMemoryValue(
+      [&] {
+        return Ctx.B.CreateAlignedLoad(LoadType, Pointer,
+                                       DwordSmemAddressAlignment, "smem_load");
+      },
+      /*IsScalar=*/true);
   if (*LoadWidthInDwords == 1) {
     Ctx.registers().writeReg32(*Destination, Loaded);
   } else if (*LoadWidthInDwords == 2) {

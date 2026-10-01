@@ -11,7 +11,7 @@
 
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=saveexec_kernel 2>&1 | %FileCheck %s --check-prefix=PROJECTION
-; PROJECTION: unsupported-wave-projection:
+; PROJECTION: unproven-exec-containment:
 ; PROJECTION-SAME: WaveNative cannot prove that EXEC preserves the kernel entry mask
 
 ; A 64-bit mask names lanes a 32-lane wave does not have, so combining one with

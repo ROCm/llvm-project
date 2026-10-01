@@ -70,6 +70,9 @@ public:
   // resolve through them.
   RegisterState &registers() { return Registers; }
 
+  /// Refuse hardware effects unsupported by the selected projection.
+  llvm::Error validateHardwareEffect(const DecodedInst &Di) const;
+
   /// Return an error unless the source floating-point environment for Ty can
   /// be preserved for this instruction.
   llvm::Error validateFPEnvironment(const DecodedInst &Di,
@@ -85,15 +88,15 @@ public:
   /// Refuse any bit requirement not established in the promoted register SSA.
   llvm::Error validateRequiredBits() const;
 
-  /// Require a target-wave-uniform value when packing source waves.
-  /// Di and Detail must outlive validateWaveNativeRequirements().
+  /// Require a target-wave-uniform value for a wave-size-changing projection.
+  /// Di and Detail must outlive validateWaveRequirements().
   void requireWaveUniform(llvm::Value *Operand, const DecodedInst &Di,
                           llvm::StringRef Detail);
   /// Require the entry EXEC mask at a source-wave collective.
   void requireEntryExec(const DecodedInst &Di);
   /// Validate recorded requirements after register promotion.
-  llvm::Error validateWaveNativeRequirements(llvm::TargetMachine &TM,
-                                             llvm::Value *EntryExec) const;
+  llvm::Error validateWaveRequirements(llvm::TargetMachine &TM,
+                                       llvm::Value *EntryExec) const;
 
   // Source text section, and the address the source code object loads it at.
   // PC-relative literals are materialized by reading out of these.

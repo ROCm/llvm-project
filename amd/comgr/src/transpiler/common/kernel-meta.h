@@ -65,6 +65,8 @@ struct KernelMeta {
   uint32_t GroupSegmentFixedSize = 0;
   uint32_t PrivateSegmentFixedSize = 0;
   uint32_t MaxFlatWorkgroupSize = 256;
+  /// Exact source workgroup dimensions, when required by kernel metadata.
+  std::optional<std::array<uint32_t, 3>> RequiredWorkgroupSize;
 
   /// Code object v6 `.cluster_dims`, absent when the metadata omits it. A
   /// present but all-zero value means clusters are disabled; any non-zero value

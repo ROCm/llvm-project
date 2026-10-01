@@ -34,6 +34,29 @@ There is no public C entry point for the transpiler yet; it is reachable from
 the `transpile_cli` test driver used by the `test-lit/transpiler/raiser`
 suite.
 
+## Replicated dispatch
+
+For gfx1250 wave32 to gfx942 wave64, `raiseToIR` prefers WaveNative. Passing
+`LaunchPolicy::AllowReplication` enables an independently checked fallback that
+runs each source wave on a separate target wave64.
+
+Keep each kernel's `RaiseResult::LaunchRequirements` alongside its compiled code.
+Before each launch, call `KernelLaunchRequirements::project` with the source
+dimensions and use the returned dimensions. Grid and workgroup sizes are measured
+in **workitems**. Preserve the source kernarg bytes, including hidden geometry
+arguments.
+
+Supported launches require grid and workgroup Y/Z equal to one, workgroup X
+divisible by 32 and at most 512, and complete workgroups. `project` checks the
+kernel's metadata and target limits, then doubles grid and workgroup X while
+preserving the workgroup count. The default `PreserveGeometry` policy refuses
+kernels requiring replication.
+
+The test driver's `--allow-replicated-dispatch` option prints launch requirements
+as IR comments. Supplying `--launch-grid=x,y,z` and `--launch-workgroup=x,y,z` also
+validates and prints the physical dimensions. These comments are test output and
+do not survive compilation.
+
 ## Standalone development build
 
 ```bash

@@ -362,6 +362,28 @@ static Error validateKernelAbi(const KernelMeta &Meta) {
   return Error::success();
 }
 
+/// Read an optional three-dimensional kernel metadata field.
+static Expected<std::optional<std::array<uint32_t, 3>>>
+readKernelDimensions(msgpack::MapDocNode &Kernel, StringRef Key,
+                     StringRef Name) {
+  msgpack::DocNode *Dims = findInMap(Kernel, Key);
+  if (!Dims)
+    return std::nullopt;
+  if (!Dims->isArray() || Dims->getArray().size() != 3)
+    return makeTranspilerError(
+        formatv("kernel '{0}' has malformed {1}", Name, Key));
+  std::array<uint32_t, 3> Parsed = {};
+  unsigned I = 0;
+  for (msgpack::DocNode &Dim : Dims->getArray()) {
+    std::optional<int64_t> Value = nodeAsInt(Dim);
+    if (!Value || *Value < 0 || *Value > UINT32_MAX)
+      return makeTranspilerError(
+          formatv("kernel '{0}' has malformed {1}", Name, Key));
+    Parsed[I++] = static_cast<uint32_t>(*Value);
+  }
+  return Parsed;
+}
+
 // Parse one kernel node into `Meta`, then read, validate, and cross-check its
 // descriptor. `Obj` is used only for the descriptor read. The strict schema
 // verifier has already run, so required fields are present and well-typed.
@@ -395,21 +417,26 @@ static Error parseKernel(object::ObjectFile &Obj, uint8_t CodeObjectVersion,
           /*Required=*/true, Meta.PrivateSegmentFixedSize))
     return E;
 
-  if (msgpack::DocNode *Dims = findInMap(Kernel, ".cluster_dims")) {
-    if (!Dims->isArray() || Dims->getArray().size() != 3)
-      return makeTranspilerError(
-          formatv("kernel '{0}' has malformed .cluster_dims", Name));
-    std::array<uint32_t, 3> Parsed = {};
-    unsigned I = 0;
-    for (msgpack::DocNode &Dim : Dims->getArray()) {
-      std::optional<int64_t> Value = nodeAsInt(Dim);
-      if (!Value || *Value < 0 || *Value > UINT32_MAX)
+  Expected<std::optional<std::array<uint32_t, 3>>> Required =
+      readKernelDimensions(Kernel, ".reqd_workgroup_size", Name);
+  if (!Required)
+    return Required.takeError();
+  if (*Required &&
+      llvm::any_of(**Required, [](uint32_t Dim) { return Dim != 0; })) {
+    unsigned Workitems = 1;
+    for (uint32_t Dim : **Required) {
+      if (!Dim || Dim > Meta.MaxFlatWorkgroupSize / Workitems)
         return makeTranspilerError(
-            formatv("kernel '{0}' has malformed .cluster_dims", Name));
-      Parsed[I++] = static_cast<uint32_t>(*Value);
+            formatv("kernel '{0}' has invalid .reqd_workgroup_size", Name));
+      Workitems *= Dim;
     }
-    Meta.ClusterDims = Parsed;
+    Meta.RequiredWorkgroupSize = **Required;
   }
+  Expected<std::optional<std::array<uint32_t, 3>>> Cluster =
+      readKernelDimensions(Kernel, ".cluster_dims", Name);
+  if (!Cluster)
+    return Cluster.takeError();
+  Meta.ClusterDims = *Cluster;
 
   if (msgpack::DocNode *Args = findInMap(Kernel, ".args")) {
     if (!Args->isArray())

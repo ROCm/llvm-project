@@ -66,6 +66,12 @@ enum class RaiseFailureReason : uint16_t {
   // Wave-size-obstruction refusals, split one enumerator per refusal so
   // diagnostics can bucket them without parsing the message text.
   UnsupportedWaveProjection,
+  // A source scalar value is not proven uniform across the target wave.
+  NonUniformScalarState,
+  // EXEC may enable lanes absent from the physical launch.
+  UnprovenExecContainment,
+  // Dispatch geometry violates a kernel's launch contract.
+  UnsupportedLaunch,
   CrossWaveLaneIdLeak,
   CrossWaveUnrewritableShuffle,
   CrossWaveShuffleRewritePending,

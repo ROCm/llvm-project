@@ -437,7 +437,7 @@ static Value *emitDoubledDispatchLogicalX(IRBuilder<> &B, Value *RawX,
   const unsigned Ratio = TgtWaveSize / SrcWaveSize;
   const unsigned RatioLog2 = llvm::Log2_32(Ratio);
   Value *WaveAligned = B.CreateAnd(
-      RawX, ConstantInt::get(Ty, ~static_cast<uint64_t>(TgtWaveSize - 1u)),
+      RawX, ConstantInt::getSigned(Ty, -static_cast<int64_t>(TgtWaveSize)),
       "dd_wave_aligned");
   Value *WaveScaled = B.CreateLShr(WaveAligned, ConstantInt::get(Ty, RatioLog2),
                                    "dd_wave_base");
@@ -465,14 +465,14 @@ ReplicationDoubledDispatchProjection::ReplicationDoubledDispatchProjection(
 
 Value *
 ReplicationDoubledDispatchProjection::emitSourceWaveId(IRBuilder<> &B) const {
-  return emitTargetWaveId(B);
+  Value *X = emitTargetWorkitemId(B, 0);
+  Value *Wave = B.CreateUDiv(X, B.getInt32(targetWaveSize()));
+  return B.CreateIntrinsic(Intrinsic::amdgcn_readfirstlane, {B.getInt32Ty()},
+                           {Wave}, nullptr, "source_wave_id");
 }
 
 Value *ReplicationDoubledDispatchProjection::emitPackedWorkitemId(
     IRBuilder<> &B, unsigned NumDims) const {
-  // Remapped x OR'd with the source's raw y/z fields. y/z are per-thread
-  // correct as launched and become wave-uniform once x is doubled, so no
-  // remap or clamp is applied to them.
   return packWorkitemId(B, emitWorkitemIdX(B), NumDims);
 }
 

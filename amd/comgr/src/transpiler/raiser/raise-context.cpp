@@ -101,7 +101,8 @@ Error RaiseContext::validateRequiredBits() const {
 
 void RaiseContext::requireWaveUniform(Value *Operand, const DecodedInst &Di,
                                       StringRef Detail) {
-  if (Projection.providesFullWaveExecInvariant())
+  if (Projection.providesFullWaveExecInvariant() ||
+      Projection.usesDoubledDispatch())
     UniformityRequirements.push_back({Operand, &Di, Detail});
 }
 
@@ -110,8 +111,8 @@ void RaiseContext::requireEntryExec(const DecodedInst &Di) {
     EntryExecRequirements.emplace_back(Registers.readExec(), &Di);
 }
 
-Error RaiseContext::validateWaveNativeRequirements(TargetMachine &TM,
-                                                   Value *EntryExec) const {
+Error RaiseContext::validateWaveRequirements(TargetMachine &TM,
+                                             Value *EntryExec) const {
   for (const auto &[Exec, Di] : EntryExecRequirements)
     if (Exec != EntryExec)
       return RaiseFailure::atInstruction(
@@ -141,7 +142,7 @@ Error RaiseContext::validateWaveNativeRequirements(TargetMachine &TM,
                [&](const Use &U) { return UI.isDivergentAtUse(U); })) {
       const DecodedInst &Di = *Requirement.Instruction;
       return RaiseFailure::atInstruction(
-          RaiseFailureReason::UnsupportedWaveProjection,
+          RaiseFailureReason::NonUniformScalarState,
           strippedMnemonic(MC, Di.Inst), Di.Offset,
           formatName(Di.TargetSpecificFlags), Requirement.Detail);
     }
@@ -166,6 +167,16 @@ RaiseContext::RaiseContext(
       SourceFloatRoundMode16_64(SourceFloatRoundMode16_64),
       SourceFp16Overflow(SourceFp16Overflow), SourceDx10Clamp(SourceDx10Clamp),
       SourceIeeeMode(SourceIeeeMode) {}
+
+Error RaiseContext::validateHardwareEffect(const DecodedInst &Di) const {
+  if (!Projection.usesDoubledDispatch())
+    return Error::success();
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedWaveProjection,
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      "replicated dispatch does not support per-wave hardware effects");
+}
 
 Error RaiseContext::validateFPEnvironment(const DecodedInst &Di,
                                           Type *Ty) const {
