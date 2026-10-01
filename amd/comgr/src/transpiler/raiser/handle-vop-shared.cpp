@@ -443,8 +443,12 @@ Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
                                                     AMDGPU::OpName::clamp);
   if (Index < 0)
     return false;
-  assert(Di.isImm(Index) && "clamp operand must be an immediate");
-  return Di.getImm(Index) != 0;
+  if (!Di.isImm(Index))
+    return unsupportedInstruction(Ctx, Di, "clamp operand is not immediate");
+  int64_t Clamp = Di.getImm(Index);
+  if (Clamp != 0 && Clamp != 1)
+    return unsupportedInstruction(Ctx, Di, "clamp operand is not 0 or 1");
+  return Clamp != 0;
 }
 
 Value *emitBitOp3(IRBuilder<> &B, Value *Src0, Value *Src1, Value *Src2,
@@ -491,8 +495,8 @@ Error writeDestination16(RaiseContext &Ctx, OperandResolver &Op,
         *Previous,
         ConstantInt::get(
             I32Ty, APInt::getLowBitsSet(RegisterWidthInBits, HalfWidthInBits)));
-    Merged = Ctx.B.CreateOr(KeptLow, Ctx.B.CreateShl(Bits, HalfWidthInBits),
-                            "merge.hi");
+    Value *Shifted = Ctx.B.CreateShl(Bits, HalfWidthInBits);
+    Merged = Ctx.B.CreateOr(KeptLow, Shifted, "merge.hi");
   } else {
     Value *KeptHigh = Ctx.B.CreateAnd(
         *Previous,
