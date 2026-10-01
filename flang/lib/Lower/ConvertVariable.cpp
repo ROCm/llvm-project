@@ -46,9 +46,9 @@
 #include "flang/Runtime/allocator-registry-consts.h"
 #include "flang/Semantics/tools.h"
 #include "flang/Semantics/type.h"
+#include "OpenMP/Utils.h"
 #include "mlir/Dialect/Complex/IR/Complex.h"
 #include "mlir/Dialect/OpenACC/OpenACC.h"
-#include "mlir/Dialect/OpenMP/OpenMPInterfaces.h"
 #include "mlir/Dialect/OpenMP/Utils/Utils.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
@@ -3385,15 +3385,9 @@ void Fortran::lower::createRuntimeTypeInfoGlobal(
   if (converter.getFoldingContext().languageFeatures().IsEnabled(
           Fortran::common::LanguageFeature::OpenMP) &&
       mlir::omp::getOpenMPVersionAttribute(converter.getModuleOp(),
-                                           /*fallback=*/0) >= 61) {
-    if (auto declareTargetOp =
-            llvm::dyn_cast<mlir::omp::DeclareTargetInterface>(
-                global.getOperation()))
-      declareTargetOp.setDeclareTarget(
-          mlir::omp::DeclareTargetDeviceType::any,
-          mlir::omp::DeclareTargetCaptureClause::to,
-          /*automap=*/false, /*implicit=*/false);
-  }
+                                           /*fallback=*/0) >= 61)
+    Fortran::lower::omp::markDeclareTarget(global.getOperation(),
+                                           /*implicit=*/false);
 }
 
 mlir::Type Fortran::lower::getCrayPointeeBoxType(mlir::Type fortranType) {

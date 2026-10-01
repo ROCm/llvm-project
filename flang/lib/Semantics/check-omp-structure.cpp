@@ -145,11 +145,11 @@ static const Symbol *GetBaseObjectSymbol(const parser::OmpObject &object) {
   return nullptr;
 }
 
-static bool IsPolymorphicDerivedType(const Symbol &symbol) {
+static bool IsPolymorphicType(const Symbol &symbol) {
   if (std::optional<evaluate::DynamicType> type{
           evaluate::DynamicType::From(symbol.GetUltimate())}) {
-    return type->IsPolymorphic() && !type->IsUnlimitedPolymorphic() &&
-           evaluate::GetDerivedTypeSpec(*type);
+    return type->IsPolymorphic() &&
+        (type->IsUnlimitedPolymorphic() || evaluate::GetDerivedTypeSpec(*type));
   }
   return false;
 }
@@ -823,12 +823,11 @@ void OmpStructureChecker::CheckPolymorphicMapObjects(
 
     for (const Symbol *symbol : candidates) {
       const Symbol &ultimate{symbol->GetUltimate()};
-      if (!diagnosed.insert(&ultimate).second ||
-          !IsPolymorphicDerivedType(ultimate))
+      if (!diagnosed.insert(&ultimate).second || !IsPolymorphicType(ultimate))
         continue;
 
       context_.Say(GetObjectSource(object).value_or(GetContext().clauseSource),
-          "Polymorphic derived type '%s' may not appear in a MAP clause on a target offload construct before OpenMP 6.1"_err_en_US,
+          "Polymorphic type '%s' may not appear in a MAP clause on a target offload construct before OpenMP 6.1"_err_en_US,
           ultimate.name());
     }
   }
@@ -877,12 +876,11 @@ private:
     if (!symbol)
       return;
     const Symbol &ultimate{symbol->GetUltimate()};
-    if (!diagnosed_.insert(&ultimate).second ||
-        !IsPolymorphicDerivedType(ultimate))
+    if (!diagnosed_.insert(&ultimate).second || !IsPolymorphicType(ultimate))
       return;
 
     context_.Say(source,
-        "Polymorphic derived type '%s' may not be used in a target region before OpenMP 6.1"_err_en_US,
+        "Polymorphic type '%s' may not be used in a target region before OpenMP 6.1"_err_en_US,
         ultimate.name());
   }
 

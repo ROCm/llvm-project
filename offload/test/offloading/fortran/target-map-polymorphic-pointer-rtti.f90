@@ -7,7 +7,7 @@
 !
 ! REQUIRES: flang, amdgpu
 !
-! RUN: %libomptarget-compile-fortran-run-and-check-generic
+! RUN: %libomptarget-compile-fortran-generic -fopenmp-version=61 && %libomptarget-run-generic | %fcheck-generic
 
 module polymorphic_pointer_rtti_mod
   implicit none
