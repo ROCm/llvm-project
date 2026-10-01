@@ -11,6 +11,7 @@
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
+#include "transpiler/raiser/handle-vop-cross-lane.h"
 #include "transpiler/raiser/handle-vop-shared.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
@@ -505,6 +506,10 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
       return unsupportedInstruction(
           Ctx, Di, "integer bit operation does not define clamp");
     return raiseBitCount(Ctx, Op);
+  case CanonicalOp::V_MBCNT_LO_U32_B32:
+    return raiseMaskedBitCountLow32(Ctx, Di, Op);
+  case CanonicalOp::V_MBCNT_HI_U32_B32:
+    return raiseMaskedBitCountHigh32(Ctx, Di, Op);
   case CanonicalOp::V_LSHLREV_B32:
     if (*Clamp)
       return unsupportedInstruction(

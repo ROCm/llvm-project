@@ -85,6 +85,10 @@ struct OperandResolver {
   llvm::Expected<llvm::Value *> srcExecWidth(unsigned I) {
     return Ctx.registers().readOpExecWidth(Di, srcIdx(I));
   }
+  // Read the I-th source as the current source wave's slice of a wave mask.
+  llvm::Expected<llvm::Value *> srcSourceWaveMask32(unsigned I) {
+    return Ctx.registers().readOpSourceWaveMask32(Di, srcIdx(I));
+  }
   // Read the I-th source's per-lane wave-mask value, or null when unavailable.
   llvm::Expected<llvm::Value *> srcWaveMaskI1(unsigned I) {
     return Ctx.registers().readOpWaveMaskI1(Di, srcIdx(I));
