@@ -16,7 +16,6 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVectorExtras.h"
 #include "llvm/ADT/StringSet.h"
-#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h"
 #include "llvm/DebugInfo/DWARF/DWARFCompileUnit.h"
@@ -408,9 +407,6 @@ static DIDumpOptions getDumpOpts(DWARFContext &C) {
   DumpOpts.Verbose = Verbose;
   DumpOpts.DumpNonSkeleton = DumpNonSkeleton;
   DumpOpts.RecoverableErrorHandler = C.getRecoverableErrorHandler();
-  // Address space names are target-dependent.
-  if (const object::ObjectFile *Obj = C.getDWARFObj().getFile())
-    DumpOpts.TT = Obj->makeTriple();
   // In -verify mode, print DIEs without children in error messages.
   if (Verify) {
     DumpOpts.Verbose = ErrorDetails != NoDetailsOnlySummary &&
@@ -734,8 +730,13 @@ static bool collectObjectSources(ObjectFile &Obj, DWARFContext &DICtx,
   return Result;
 }
 
-static std::unique_ptr<MCRegisterInfo> createRegInfo(const Triple &TT) {
+static std::unique_ptr<MCRegisterInfo>
+createRegInfo(const object::ObjectFile &Obj) {
   std::unique_ptr<MCRegisterInfo> MCRegInfo;
+  Triple TT;
+  TT.setArch(Triple::ArchType(Obj.getArch()));
+  TT.setVendor(Triple::UnknownVendor);
+  TT.setOS(Triple::UnknownOS);
   std::string TargetLookupError;
   const Target *TheTarget = TargetRegistry::lookupTarget(TT, TargetLookupError);
   if (!TargetLookupError.empty())
@@ -747,10 +748,7 @@ static std::unique_ptr<MCRegisterInfo> createRegInfo(const Triple &TT) {
 static bool dumpObjectFile(ObjectFile &Obj, DWARFContext &DICtx,
                            const Twine &Filename, raw_ostream &OS) {
 
-  // Register and address space names are target-dependent.
-  Triple TT = Obj.makeTriple();
-
-  auto MCRegInfo = createRegInfo(TT);
+  auto MCRegInfo = createRegInfo(Obj);
   if (!MCRegInfo)
     logAllUnhandledErrors(createStringError(inconvertibleErrorCode(),
                                             "Error in creating MCRegInfo"),
