@@ -68,9 +68,9 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_mul_lo_u32 v0, s13, v0
-; GFX11-NEXT:    v_cmp_ne_u32_e64 s22, 0, v0
-; GFX11-NEXT:    s_xor_b32 s0, s22, exec_lo
-; GFX11-NEXT:    s_mov_b32 s21, s22
+; GFX11-NEXT:    v_cmp_ne_u32_e64 s21, 0, v0
+; GFX11-NEXT:    s_xor_b32 s0, s21, exec_lo
+; GFX11-NEXT:    s_mov_b32 s22, s21
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB2_8
@@ -96,7 +96,7 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_and_b32 vcc_lo, exec_lo, s3
 ; GFX11-NEXT:    s_cbranch_vccnz .LBB2_3
 ; GFX11-NEXT:  ; %bb.4:
-; GFX11-NEXT:    s_or_b32 s21, s21, exec_lo
+; GFX11-NEXT:    s_or_b32 s22, s21, exec_lo
 ; GFX11-NEXT:    s_branch .LBB2_8
 ; GFX11-NEXT:  .LBB2_5: ; %bb15
 ; GFX11-NEXT:    s_add_u32 s8, s18, 0x58
@@ -165,10 +165,10 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_or_b32 s2, s13, s2
 ; GFX11-NEXT:    s_cbranch_vccnz .LBB2_7
 ; GFX11-NEXT:  .LBB2_8:
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s22
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s21
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s22, exec_lo, s21
-; GFX11-NEXT:    s_mov_b32 exec_lo, s21
+; GFX11-NEXT:    s_xor_b32 s21, exec_lo, s22
+; GFX11-NEXT:    s_mov_b32 exec_lo, s22
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB2_10
 ; GFX11-NEXT:  .LBB2_9: ; %bb43
@@ -185,7 +185,7 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX11-NEXT:    s_or_b32 s20, s20, exec_lo
 ; GFX11-NEXT:  .LBB2_10:
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s22
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s21
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_xor_b32 s0, exec_lo, s20
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s20
