@@ -1841,8 +1841,9 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
     for (const LaneOriginInfo &Origin : LaneTargetInfo.origins)
       InitBlocks.push_back(Origin.Node->Block);
     for (const PointerIntPair<WaveNode *, 1, bool> &OB :
-         LaneTargetInfo.OriginBranch)
+         LaneTargetInfo.OriginBranch) {
       InitBlocks.push_back(OB.getPointer()->Block);
+    }
 
     MachineBasicBlock *PrimAccInitBB = getInitBlock(InitBlocks);
     Register PrimAcc = LMU.createLaneMaskReg();
@@ -2662,12 +2663,13 @@ void ControlFlowRewriter::createExplicitContribSection(
 
     if ((CondKind == LaneMaskKind::Exec && !Invert) ||
         (CondKind == LaneMaskKind::Zero && Invert)) {
-      if (Rec.Accumulate)
+      if (Rec.Accumulate) {
         emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
             .addReg(Rec.Dst)
             .addReg(LMC.ExecReg);
-      else
+      } else {
         emit(*Rec.Block, I, AMDGPU::COPY, Rec.Dst).addReg(LMC.ExecReg);
+      }
     } else if ((CondKind == LaneMaskKind::Zero && !Invert) ||
                (CondKind == LaneMaskKind::Exec && Invert)) {
       if (!Rec.Accumulate)
