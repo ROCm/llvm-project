@@ -185,15 +185,15 @@ literal_f64:
 	v_cvt_u32_f64_e32 v2, lit(0x3ff00000)
 ; LITERAL: store i32 {{.+}}, ptr addrspace(1)
 	global_store_dword v[0:1], v2, off
-; LITERAL: i32 1065353216
+; LITERAL: [[LIT64:%.+]] = phi i32 [ 1065353216, {{%.+}} ],
 	v_cvt_f32_f64_e32 v2, lit64(0x3ff0000000000000)
 
-; LITERAL: store i32 {{.+}}, ptr addrspace(1)
+; LITERAL: store i32 [[LIT64]], ptr addrspace(1)
 	global_store_dword v[0:1], v2, off
-; LITERAL: i32 1065353216
+; LITERAL: [[INLINE:%.+]] = phi i32 [ 1065353216, {{%.+}} ],
 	v_cvt_f32_f64_e32 v2, 1.0
 
-; LITERAL: store i32 {{.+}}, ptr addrspace(1)
+; LITERAL: store i32 [[INLINE]], ptr addrspace(1)
 	global_store_dword v[0:1], v2, off
 	s_endpgm
 

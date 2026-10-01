@@ -187,9 +187,8 @@ Expected<Value *> readPackedInt16Source(RaiseContext &Ctx,
 
   IntegerType *ElementType = Ctx.B.getInt16Ty();
   Value *Low = Ctx.B.CreateTrunc(*Bits, ElementType, "pk.lo");
-  Value *High = Ctx.B.CreateTrunc(
-      Ctx.B.CreateLShr(*Bits, HalfWidthInBits, "pk.hi.shifted"), ElementType,
-      "pk.hi");
+  Value *Shifted = Ctx.B.CreateLShr(*Bits, HalfWidthInBits, "pk.hi.shifted");
+  Value *High = Ctx.B.CreateTrunc(Shifted, ElementType, "pk.hi");
 
   Value *Result = PoisonValue::get(FixedVectorType::get(ElementType, 2));
   Result = Ctx.B.CreateInsertElement(
@@ -264,9 +263,11 @@ Error raisePackedInt16(RaiseContext &Ctx, const DecodedInst &Di,
       return IsSigned ? Ctx.B.CreateSExt(V, WideType)
                       : Ctx.B.CreateZExt(V, WideType);
     };
-    Value *Product =
-        Ctx.B.CreateMul(Widen(Sources[0]), Widen(Sources[1]), "pk.mad.mul");
-    Value *Sum = Ctx.B.CreateAdd(Product, Widen(Sources[2]), "pk.mad.sum");
+    Value *Src0 = Widen(Sources[0]);
+    Value *Src1 = Widen(Sources[1]);
+    Value *Src2 = Widen(Sources[2]);
+    Value *Product = Ctx.B.CreateMul(Src0, Src1, "pk.mad.mul");
+    Value *Sum = Ctx.B.CreateAdd(Product, Src2, "pk.mad.sum");
     if (*Clamp) {
       // Zero-extended lanes cannot sum to a negative value, so only the signed
       // form needs a lower bound.
