@@ -4,6 +4,8 @@
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=vop_math,vop3_math | %FileCheck %s
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=literal_f64 | %FileCheck %s --check-prefix=LITERAL
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=refuse_clamp 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE-CLAMP
@@ -11,8 +13,16 @@
 ; RUN:   --emit-ir=refuse_omod 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE-OMOD
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=refuse_div_scale_modifiers 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE-SCALE-MODS
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=refuse_true16_destination 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE-TRUE16
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=refuse_tanh 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE-TANH
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 \
+; RUN:   --emit-ir=refuse_tanh | %FileCheck %s --check-prefix=SUPPORT-TANH
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -59,6 +69,8 @@ vop_math:
 	v_log_f32_e32 v24, v25
 ; CHECK: call float @llvm.amdgcn.rcp.f32
 	v_rcp_f32_e32 v26, v27
+; CHECK: call float asm sideeffect "v_rcp_iflag_f32 $0, $1", "=v,v"(float
+	v_rcp_iflag_f32_e32 v26, v27
 ; CHECK: call float @llvm.amdgcn.rsq.f32
 	v_rsq_f32_e32 v28, v29
 ; CHECK: call float @llvm.amdgcn.sqrt.f32
@@ -71,6 +83,18 @@ vop_math:
 	v_frexp_exp_i32_f32_e32 v36, v37
 ; CHECK: call float @llvm.amdgcn.frexp.mant.f32
 	v_frexp_mant_f32_e32 v38, v39
+; CHECK: fptrunc double
+	v_cvt_f32_f64_e32 v0, v[2:3]
+; CHECK: fpext float
+	v_cvt_f64_f32_e32 v[4:5], v6
+; CHECK: sitofp i32 {{.+}} to double
+	v_cvt_f64_i32_e32 v[4:5], v6
+; CHECK: uitofp i32 {{.+}} to double
+	v_cvt_f64_u32_e32 v[4:5], v6
+; CHECK: call i32 @llvm.fptosi.sat.i32.f64
+	v_cvt_i32_f64_e32 v0, v[2:3]
+; CHECK: call i32 @llvm.fptoui.sat.i32.f64
+	v_cvt_u32_f64_e32 v0, v[2:3]
 ; CHECK: ret void
 	s_endpgm
 
@@ -92,11 +116,85 @@ vop3_math:
 	v_cvt_f32_f16_e64 v10, v11.h
 ; CHECK: call float @llvm.ldexp.f32.i32
 	v_ldexp_f32 v2, v3, v4
+; CHECK: call float @llvm.amdgcn.exp2.f32
+	v_s_exp_f32 s0, s1
+; CHECK: call float @llvm.amdgcn.log.f32
+	v_s_log_f32 s0, s1
+; CHECK: call float @llvm.amdgcn.rcp.f32
+	v_s_rcp_f32 s0, s1
+; CHECK: call float @llvm.amdgcn.rsq.f32
+	v_s_rsq_f32 s0, s1
+; CHECK: call float @llvm.amdgcn.sqrt.f32
+	v_s_sqrt_f32 s0, s1
+; CHECK: call { float, i1 } @llvm.amdgcn.div.scale.f32
+; CHECK: [[SCALE_FLAG:%.+]] = extractvalue { float, i1 } {{%.+}}, 1
+; CHECK: call i64 @llvm.amdgcn.ballot.i64(i1
+	v_div_scale_f32 v0, s4, v1, v1, v2
+	s_mov_b32 vcc_lo, s4
+; CHECK: [[FMAS_FLAG:%.+]] = icmp ne i64
+; CHECK: call float @llvm.amdgcn.div.fmas.f32
+; CHECK-SAME: i1 [[FMAS_FLAG]])
+	v_div_fmas_f32 v3, v0, v1, v2
+; CHECK: call float @llvm.amdgcn.div.fixup.f32
+	v_div_fixup_f32 v4, v3, v1, v2
+; CHECK: call { float, i1 } @llvm.amdgcn.div.scale.f32(float {{.+}}, float {{.+}}, i1 true)
+	v_div_scale_f32 v0, vcc_lo, v0, v1, v0
+; CHECK: call { float, i1 } @llvm.amdgcn.div.scale.f32(float {{.+}}, float {{.+}}, i1 false)
+	v_div_scale_f32 v0, null, v1, v1, 1.0
+; CHECK: call float @llvm.maximumnum.f32
+	v_max3_num_f32 v5, v0, v1, v2
+; CHECK: call float @llvm.minimumnum.f32
+	v_min3_num_f32 v6, v0, v1, v2
+; CHECK: call float @llvm.amdgcn.fmed3.f32
+; CHECK: call float @llvm.minimumnum.f32
+; CHECK: select i1 {{.+}}, float {{.+}}, float
+	v_med3_num_f32 v7, v0, v1, v2
+; CHECK: call float @llvm.maximum.f32
+	v_maximum_f32 v8, v0, v1
+; CHECK: call float @llvm.minimum.f32
+	v_minimum_f32 v9, v0, v1
+; CHECK: call float @llvm.maximum.f32
+	v_maximum3_f32 v8, v0, v1, v2
+; CHECK: call float @llvm.minimum.f32
+	v_minimum3_f32 v9, v0, v1, v2
+; CHECK: call float @llvm.maximum.f32
+	v_minimummaximum_f32 v8, v0, v1, v2
+; CHECK: call float @llvm.minimum.f32
+	v_maximumminimum_f32 v9, v0, v1, v2
 	s_mov_b32 s4, -1
 ; CHECK: [[COND:%.+]] = icmp ne i64 {{.+}}, 0
 ; CHECK: select i1 [[COND]], i32
 	v_cndmask_b32_e64 v5, v6, v7, s4
 ; CHECK: ret void
+	s_endpgm
+
+	.globl	literal_f64
+	.p2align	8
+	.type	literal_f64,@function
+; LITERAL-LABEL: define amdgpu_kernel void @literal_f64(
+literal_f64:
+; LITERAL: store i32 1065353216, ptr addrspace(1)
+	v_cvt_f32_f64_e32 v2, lit(0x3ff00000)
+
+	global_store_dword v[0:1], v2, off
+; LITERAL: call i32 @llvm.fptosi.sat.i32.f64(double 1.000000e+00)
+	v_cvt_i32_f64_e32 v2, lit(0x3ff00000)
+; LITERAL: store i32 {{.+}}, ptr addrspace(1)
+	global_store_dword v[0:1], v2, off
+; LITERAL: call i32 @llvm.fptoui.sat.i32.f64(double 1.000000e+00)
+	v_cvt_u32_f64_e32 v2, lit(0x3ff00000)
+; LITERAL: store i32 {{.+}}, ptr addrspace(1)
+	global_store_dword v[0:1], v2, off
+; LITERAL: [[LIT64:%.+]] = phi i32 [ 1065353216, {{%.+}} ],
+	v_cvt_f32_f64_e32 v2, lit64(0x3ff0000000000000)
+
+; LITERAL: store i32 [[LIT64]], ptr addrspace(1)
+	global_store_dword v[0:1], v2, off
+; LITERAL: [[INLINE:%.+]] = phi i32 [ 1065353216, {{%.+}} ],
+	v_cvt_f32_f64_e32 v2, 1.0
+
+; LITERAL: store i32 [[INLINE]], ptr addrspace(1)
+	global_store_dword v[0:1], v2, off
 	s_endpgm
 
 	.globl	refuse_clamp
@@ -117,6 +215,15 @@ refuse_omod:
 	v_exp_f32_e64 v0, v1 mul:2
 	s_endpgm
 
+	.globl	refuse_div_scale_modifiers
+	.p2align	8
+	.type	refuse_div_scale_modifiers,@function
+; REFUSE-SCALE-MODS: unsupported-instruction-form: v_div_scale_f32 [VOP3]
+; REFUSE-SCALE-MODS-SAME: asymmetric divide scale source modifiers
+refuse_div_scale_modifiers:
+	v_div_scale_f32 v0, vcc_lo, -v0, v1, v0
+	s_endpgm
+
 	.globl	refuse_true16_destination
 	.p2align	8
 	.type	refuse_true16_destination,@function
@@ -124,6 +231,22 @@ refuse_omod:
 ; REFUSE-TRUE16-SAME: true16 destination preservation is not supported
 refuse_true16_destination:
 	v_cvt_f16_f32_e32 v0.l, v1
+	s_endpgm
+
+	.globl	refuse_tanh
+	.p2align	8
+	.type	refuse_tanh,@function
+; REFUSE-TANH: unsupported-instruction-form: v_tanh_f32 [VOP1]
+; REFUSE-TANH-SAME: target does not support v_tanh_f32
+; SUPPORT-TANH-LABEL: define amdgpu_kernel void @refuse_tanh(
+; SUPPORT-TANH: call float @llvm.amdgcn.tanh.f32
+; SUPPORT-TANH: store i32 {{.+}}, ptr addrspace(1)
+refuse_tanh:
+	v_mov_b32_e32 v1, v0
+	v_mov_b32_e32 v2, v0
+	v_mov_b32_e32 v3, 0
+	v_tanh_f32_e32 v0, v1
+	global_store_dword v[2:3], v0, off
 	s_endpgm
 
 	.section	.rodata,"a",@progbits
@@ -138,6 +261,11 @@ refuse_true16_destination:
 		.amdhsa_next_free_vgpr 12
 		.amdhsa_next_free_sgpr 5
 	.end_amdhsa_kernel
+	.amdhsa_kernel literal_f64
+		.amdhsa_wavefront_size32 1
+		.amdhsa_next_free_vgpr 3
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_clamp
 		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 2
@@ -148,9 +276,19 @@ refuse_true16_destination:
 		.amdhsa_next_free_vgpr 2
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_div_scale_modifiers
+		.amdhsa_wavefront_size32 1
+		.amdhsa_next_free_vgpr 2
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_true16_destination
 		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 2
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_tanh
+		.amdhsa_wavefront_size32 1
+		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.text
@@ -181,6 +319,16 @@ amdhsa.kernels:
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
     .max_flat_workgroup_size: 1024
+    .name:           literal_f64
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         literal_f64.kd
+    .vgpr_count:     3
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
     .name:           refuse_clamp
     .private_segment_fixed_size: 0
     .sgpr_count:     1
@@ -201,11 +349,31 @@ amdhsa.kernels:
     .kernarg_segment_align: 8
     .kernarg_segment_size: 0
     .max_flat_workgroup_size: 1024
+    .name:           refuse_div_scale_modifiers
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         refuse_div_scale_modifiers.kd
+    .vgpr_count:     2
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
     .name:           refuse_true16_destination
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         refuse_true16_destination.kd
     .vgpr_count:     2
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_tanh
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         refuse_tanh.kd
+    .vgpr_count:     4
     .wavefront_size: 32
 amdhsa.version: [1, 2]
 ...
