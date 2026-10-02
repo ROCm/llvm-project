@@ -418,6 +418,7 @@ Error raiseWMMA(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
   Expected<Value *> C = readWMMAAccumulator(Ctx, Di, Op, AccumulatorTy);
   if (!C)
     return C.takeError();
+  Ctx.requireKernelEntryExec(Di);
   Expected<Value *> Result = emitWMMAtoMFMA(Ctx, A, B, *C, InputType);
   if (!Result)
     return Result.takeError();

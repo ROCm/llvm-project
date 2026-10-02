@@ -4,10 +4,10 @@
 ; RUN: %transpile_cli %t.live.hsaco --target-isa=gfx942 --emit-ir | %FileCheck %s --check-prefix=LIVE
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -mattr=-sramecc -defsym=EXTENT=0 -defsym=INITIAL=0x12345678 -filetype=obj %s -o %t.off.o
 ; RUN: %ld.lld -shared %t.off.o -o %t.off.hsaco
-; RUN: %transpile_cli %t.off.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefix=OFF
+; RUN: %transpile_cli %t.off.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefix=OOB -DLOW=305397760 -DHIGH=22136
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -mattr=+sramecc -defsym=EXTENT=0 -defsym=INITIAL=0x12345678 -filetype=obj %s -o %t.on.o
 ; RUN: %ld.lld -shared %t.on.o -o %t.on.hsaco
-; RUN: %transpile_cli %t.on.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefix=ZERO
+; RUN: %transpile_cli %t.on.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefix=OOB -DLOW=0 -DHIGH=0
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=EXTENT=0 -defsym=INITIAL=0 -filetype=obj %s -o %t.any.o
 ; RUN: %ld.lld -shared %t.any.o -o %t.any.hsaco
 ; RUN: %transpile_cli %t.any.hsaco --target-isa=gfx942 --emit-ir | %opt -S -passes=instcombine,simplifycfg | %FileCheck %s --check-prefix=ZERO
@@ -21,7 +21,7 @@
 .p2align 8
 .type buffer_d16,@function
 ; LIVE-LABEL: define amdgpu_kernel void @buffer_d16(
-; OFF-LABEL: define amdgpu_kernel void @buffer_d16(
+; OOB-LABEL: define amdgpu_kernel void @buffer_d16(
 ; ZERO-LABEL: define amdgpu_kernel void @buffer_d16(
 ; ECC-LABEL: define amdgpu_kernel void @buffer_d16(
 buffer_d16:
@@ -86,10 +86,25 @@ buffer_d16:
 ; ECC: [[HIGH_B16:%.+]] = shl{{.+}}i32 [[EXT_B16]], 16
   buffer_load_d16_hi_b16 v9, off, s[4:7], null
   s_wait_loadcnt 0
-; OFF-NOT: load i8
-; OFF-NOT: load i16
-; OFF-COUNT-3: store i32 305397760, ptr addrspace(1)
-; OFF-COUNT-3: store i32 22136, ptr addrspace(1)
+; OOB-NOT: load i8
+; OOB-NOT: load i16
+; OOB: [[VALUE0:%.+]] = select i1 [[ACTIVE:%.+]], i32 [[LOW]], i32 305419896
+; OOB: [[VALUE1:%.+]] = select i1 [[ACTIVE]], i32 [[LOW]], i32 305419896
+; OOB: [[VALUE2:%.+]] = select i1 [[ACTIVE]], i32 [[LOW]], i32 305419896
+; OOB: [[VALUE3:%.+]] = select i1 [[ACTIVE]], i32 [[HIGH]], i32 305419896
+; OOB: [[VALUE4:%.+]] = select i1 [[ACTIVE]], i32 [[HIGH]], i32 305419896
+; OOB: [[VALUE5:%.+]] = select i1 [[ACTIVE]], i32 [[HIGH]], i32 305419896
+; OOB: br i1 [[ACTIVE]], label %[[STORE:.+]], label %[[EXIT:.+]]
+; OOB: [[STORE]]:
+; OOB: store i32 [[VALUE0]], ptr addrspace(1)
+; OOB: store i32 [[VALUE1]], ptr addrspace(1)
+; OOB: store i32 [[VALUE2]], ptr addrspace(1)
+; OOB: store i32 [[VALUE3]], ptr addrspace(1)
+; OOB: store i32 [[VALUE4]], ptr addrspace(1)
+; OOB: store i32 [[VALUE5]], ptr addrspace(1)
+; OOB: br label %[[EXIT]]
+; OOB: [[EXIT]]:
+; OOB-NEXT: ret void
 ; ZERO-NOT: load i8
 ; ZERO-NOT: load i16
 ; ZERO-COUNT-6: store i32 0, ptr addrspace(1)

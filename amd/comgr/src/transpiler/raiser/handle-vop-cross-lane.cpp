@@ -111,9 +111,6 @@ Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
                            OperandResolver &Op) {
   if (Error Err = requireSupportedWaveDirection(Ctx, Di))
     return Err;
-  if (Ctx.Projection.targetWaveSize() > Ctx.Projection.sourceWaveSize())
-    return unsupportedInstruction(
-        Ctx, Di, "v_readfirstlane_b32 does not support wave-size widening");
   if (Op.nSrcs() != 1)
     return unsupportedInstruction(Ctx, Di, "expected one source operand");
 
@@ -138,9 +135,14 @@ Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
                          FirstSet, "readfirstlane.source.lane");
   Value *Lane32 = Ctx.B.CreateZExtOrTrunc(SourceLane, Ctx.B.getInt32Ty(),
                                           "readfirstlane.index");
-  Function *ReadLane = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_readlane, {Ctx.B.getInt32Ty()});
-  Value *Result = Ctx.B.CreateCall(ReadLane, {*Src, Lane32}, "readfirstlane");
+  Value *Result;
+  if (Ctx.Projection.providesFullWaveExecInvariant()) {
+    Result = emitSourceWaveRead(Ctx, *Src, Lane32, "readfirstlane");
+  } else {
+    Function *ReadLane = Intrinsic::getOrInsertDeclaration(
+        M, Intrinsic::amdgcn_readlane, {Ctx.B.getInt32Ty()});
+    Result = Ctx.B.CreateCall(ReadLane, {*Src, Lane32}, "readfirstlane");
+  }
 
   Ctx.registers().writeReg32(*Dst, Result);
   return Error::success();

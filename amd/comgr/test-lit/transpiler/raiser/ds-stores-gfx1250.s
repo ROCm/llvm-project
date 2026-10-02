@@ -1,7 +1,7 @@
 ; REQUIRES: comgr-has-transpiler
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx950 \
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=ds_stores,ds_store_exec | %FileCheck %s --check-prefixes=CHECK,EXEC
 
 ; A DS store narrows the source register to the encoded width and widens to a
@@ -65,14 +65,16 @@ ds_stores:
 	.p2align 8
 	.type ds_store_exec,@function
 ; EXEC-LABEL: define amdgpu_kernel void @ds_store_exec(
+; EXEC: [[ENTRY_ACTIVE:%.+]] = call i1 @llvm.amdgcn.init.whole.wave()
 ds_store_exec:
 	v_mov_b32 v0, 4
 	v_mov_b32 v1, 7
 ; An inactive lane must not reach memory, so the store sits inside the diamond
 ; while the value it writes is read outside.
-	s_mov_b32 exec_lo, 1
+	s_and_b32 exec_lo, exec_lo, 1
 ; EXEC: [[FROZEN:%.+]] = freeze i32 {{.+}}
-; EXEC: [[ACTIVE:%.+]] = icmp ne i32 {{.+}}, 0
+; EXEC: [[MASK_ACTIVE:%.+]] = icmp ne i32 {{.+}}, 0
+; EXEC-NEXT: [[ACTIVE:%.+]] = select i1 [[ENTRY_ACTIVE]], i1 [[MASK_ACTIVE]], i1 false
 ; EXEC-NEXT: br i1 [[ACTIVE]], label %[[DO:.+]], label %[[SKIP:.+]]
 ; EXEC: [[DO]]:
 ; EXEC-NEXT: [[PTR:%.+]] = inttoptr i32 [[FROZEN]] to ptr addrspace(3)

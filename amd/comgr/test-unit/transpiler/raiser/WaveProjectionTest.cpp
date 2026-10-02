@@ -107,8 +107,8 @@ TEST_F(WaveProjectionContract, WaveNativeProvidesFullWaveExec) {
 
   WaveNativeProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_TRUE(Proj.providesFullWaveExecInvariant());
-  EXPECT_EQ(Proj.execStorageTy(), I64Ty);
-  EXPECT_TRUE(Proj.broadcastNarrowExecLoWrite());
+  EXPECT_EQ(Proj.execStorageTy(), I32Ty);
+  EXPECT_FALSE(Proj.broadcastNarrowExecLoWrite());
   EXPECT_TRUE(Proj.preservesMbcntDerivedExec());
 
   const WaveProjection &Base = Proj;

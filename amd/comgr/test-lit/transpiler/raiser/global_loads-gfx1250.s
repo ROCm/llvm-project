@@ -7,7 +7,7 @@
 ; RUN:   --emit-ir=global_loads_gfx1250 | %FileCheck %s --check-prefix=IR
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_scaled_offsets | %FileCheck %s --check-prefix=SCALED
-; RUN: not %transpile_cli %t.hsaco --isa=gfx1200 --target-isa=gfx942 \
+; RUN: not %transpile_cli %t.hsaco --isa=gfx1200 --target-isa=gfx1250 \
 ; RUN:   --emit-ir=global_scaled_offsets 2>&1 | %FileCheck %s --check-prefix=GFX1200
 ; GFX1200: scale_offset is not supported on this GPU
 
