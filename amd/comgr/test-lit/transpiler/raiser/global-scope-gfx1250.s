@@ -19,6 +19,44 @@
 	.type	global_scope,@function
 ; CHECK-LABEL: define amdgpu_kernel void @global_scope(
 global_scope:
+; CHECK: [[BYTE:%.+]] = load volatile i8, ptr addrspace(1) {{%.+}}, align 1
+; CHECK-NEXT: zext i8 [[BYTE]] to i32
+	global_load_u8 v1, v0, s[0:1] scope:SCOPE_DEV
+
+; CHECK: mul i64 {{%.+}}, 1
+; CHECK: [[BYTE:%.+]] = load volatile i8, ptr addrspace(1) {{%.+}}, align 1
+; CHECK-NEXT: sext i8 [[BYTE]] to i32
+	global_load_i8 v1, v0, s[0:1] scale_offset scope:SCOPE_SYS
+
+; CHECK: [[HALF:%.+]] = load volatile i16, ptr addrspace(1) {{%.+}}, align 1
+; CHECK-NEXT: zext i16 [[HALF]] to i32
+	global_load_u16 v1, v0, s[0:1] offset:1 scope:SCOPE_SE
+
+; CHECK: mul i64 {{%.+}}, 2
+; CHECK: [[HALF:%.+]] = load volatile i16, ptr addrspace(1) {{%.+}}, align 1
+; CHECK-NEXT: sext i16 [[HALF]] to i32
+	global_load_i16 v1, v0, s[0:1] scale_offset scope:SCOPE_DEV
+
+; CHECK: [[BYTE:%.+]] = trunc i32 {{%.+}} to i8
+; CHECK: store volatile i8 [[BYTE]], ptr addrspace(1) {{%.+}}, align 1
+	global_store_b8 v0, v1, s[0:1] scope:SCOPE_DEV
+
+; CHECK: [[HALF:%.+]] = trunc i32 {{%.+}} to i16
+; CHECK: mul i64 {{%.+}}, 2
+; CHECK: store volatile i16 [[HALF]], ptr addrspace(1) {{%.+}}, align 1
+	global_store_b16 v0, v1, s[0:1] scale_offset scope:SCOPE_SYS
+
+; CHECK: [[HIGH:%.+]] = lshr i32 {{%.+}}, 16
+; CHECK-NEXT: [[BYTE:%.+]] = trunc i32 [[HIGH]] to i8
+; CHECK: store volatile i8 [[BYTE]], ptr addrspace(1) {{%.+}}, align 1
+	global_store_d16_hi_b8 v0, v1, s[0:1] scope:SCOPE_SE
+
+; CHECK: [[HIGH:%.+]] = lshr i32 {{%.+}}, 16
+; CHECK-NEXT: [[HALF:%.+]] = trunc i32 [[HIGH]] to i16
+; CHECK: mul i64 {{%.+}}, 2
+; CHECK: store volatile i16 [[HALF]], ptr addrspace(1) {{%.+}}, align 1
+	global_store_d16_hi_b16 v0, v1, s[0:1] scale_offset scope:SCOPE_DEV
+
 ; CHECK: load volatile i32, ptr addrspace(1) {{%.+}}, align 4
 	global_load_b32 v1, v0, s[0:1] scope:SCOPE_DEV
 

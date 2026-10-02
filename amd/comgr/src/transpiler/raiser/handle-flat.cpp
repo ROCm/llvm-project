@@ -35,41 +35,72 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 
-// Ordinary GLOBAL dword tuples guarantee only dword alignment.
-static constexpr Align GlobalAccessAlignment = Align::Constant<4>();
+namespace {
 
-/// Return the transfer width in dwords, or no value for other operations.
-static std::optional<unsigned>
-globalAccessWidthInDwords(CanonicalOp Operation) {
+/// Payload and register interpretation of a GLOBAL access.
+struct GlobalAccess {
+  enum Flags { Store = 1, Signed = 2, HighHalf = 4 };
+  /// Total bytes transferred, also used to scale the lane offset.
+  unsigned SizeInBytes;
+  /// Load extension and store source selection.
+  unsigned DataFlags;
+
+  unsigned widthInDwords() const { return (SizeInBytes + 3) / 4; }
+
+  Align alignment() const {
+    // Sub-dword accesses can be byte-aligned, including halfword accesses.
+    return SizeInBytes < 4 ? Align(1) : Align(4);
+  }
+};
+
+} // namespace
+
+/// Return the payload and extension required by the opcode.
+static std::optional<GlobalAccess> globalAccess(CanonicalOp Operation) {
+  using Access = GlobalAccess;
   switch (Operation) {
+  case CanonicalOp::GLOBAL_LOAD_U8:
+    return Access{1, 0};
+  case CanonicalOp::GLOBAL_LOAD_I8:
+    return Access{1, Access::Signed};
+  case CanonicalOp::GLOBAL_LOAD_U16:
+    return Access{2, 0};
+  case CanonicalOp::GLOBAL_LOAD_I16:
+    return Access{2, Access::Signed};
   case CanonicalOp::GLOBAL_LOAD_B32:
-  case CanonicalOp::GLOBAL_STORE_B32:
-  case CanonicalOp::GLOBAL_ATOMIC_ADD_U32:
-  case CanonicalOp::GLOBAL_ATOMIC_ADD_RTN_U32:
-    return 1;
+    return Access{4, 0};
   case CanonicalOp::GLOBAL_LOAD_B64:
-  case CanonicalOp::GLOBAL_STORE_B64:
-    return 2;
+    return Access{8, 0};
   case CanonicalOp::GLOBAL_LOAD_B96:
-  case CanonicalOp::GLOBAL_STORE_B96:
-    return 3;
+    return Access{12, 0};
   case CanonicalOp::GLOBAL_LOAD_B128:
+    return Access{16, 0};
+  case CanonicalOp::GLOBAL_STORE_B8:
+    return Access{1, Access::Store};
+  case CanonicalOp::GLOBAL_STORE_B16:
+    return Access{2, Access::Store};
+  case CanonicalOp::GLOBAL_STORE_D16_HI_B8:
+    return Access{1, Access::Store | Access::HighHalf};
+  case CanonicalOp::GLOBAL_STORE_D16_HI_B16:
+    return Access{2, Access::Store | Access::HighHalf};
+  case CanonicalOp::GLOBAL_STORE_B32:
+    return Access{4, Access::Store};
+  case CanonicalOp::GLOBAL_STORE_B64:
+    return Access{8, Access::Store};
+  case CanonicalOp::GLOBAL_STORE_B96:
+    return Access{12, Access::Store};
   case CanonicalOp::GLOBAL_STORE_B128:
-    return 4;
+    return Access{16, Access::Store};
   default:
     return std::nullopt;
   }
 }
 
-/// Return the LLVM IR type for a transfer of the given dword width.
-static Type *globalAccessType(IRBuilder<> &B, unsigned WidthInDwords) {
-  assert(WidthInDwords >= 1 && WidthInDwords <= 4 &&
-         "unsupported GLOBAL access width");
-  if (WidthInDwords == 1)
-    return B.getInt32Ty();
-  if (WidthInDwords == 2)
-    return B.getInt64Ty();
-  return FixedVectorType::get(B.getInt32Ty(), WidthInDwords);
+/// Return the LLVM IR type for a transfer of the given byte width.
+static Type *globalAccessType(IRBuilder<> &B, unsigned SizeInBytes) {
+  if (SizeInBytes <= 8)
+    return B.getIntNTy(SizeInBytes * 8);
+  return FixedVectorType::get(B.getInt32Ty(), SizeInBytes / 4);
 }
 
 /// Parse and validate the named GLOBAL data register tuple.
@@ -113,16 +144,16 @@ static bool isCoherentBeyondComputeUnit(const DecodedInst &Di) {
          AMDGPU::CPol::SCOPE_CU;
 }
 
-/// Emit a GLOBAL load of the given dword width under EXEC.
+/// Emit a GLOBAL load under EXEC, extending sub-dword data to a full VGPR.
 static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
-                            unsigned WidthInDwords) {
-  Expected<ParsedReg> Destination = globalDataReg(Ctx, Di, AMDGPU::OpName::vdst,
-                                                  WidthInDwords, "destination");
+                            const GlobalAccess &Access) {
+  Expected<ParsedReg> Destination = globalDataReg(
+      Ctx, Di, AMDGPU::OpName::vdst, Access.widthInDwords(), "destination");
   if (!Destination)
     return Destination.takeError();
 
   Expected<Value *> Address =
-      emitGlobalAddress(Ctx, Di, WidthInDwords * 4, GlobalAccessAlignment,
+      emitGlobalAddress(Ctx, Di, Access.SizeInBytes, Access.alignment(),
                         modeledAccessCachePolicy(Ctx.Projection.SourceSTI));
   if (!Address)
     return Address.takeError();
@@ -132,25 +163,34 @@ static Error emitGlobalLoad(RaiseContext &Ctx, const DecodedInst &Di,
   // predicated and not only the register write it feeds.
   Ctx.registers().emitUnderExec([&] {
     Value *Loaded = Ctx.B.CreateAlignedLoad(
-        globalAccessType(Ctx.B, WidthInDwords), *Address, GlobalAccessAlignment,
-        IsVolatile, "global_load");
+        globalAccessType(Ctx.B, Access.SizeInBytes), *Address,
+        Access.alignment(), IsVolatile, "global_load");
+    if (Access.SizeInBytes < 4) {
+      Loaded = Access.DataFlags & GlobalAccess::Signed
+                   ? Ctx.B.CreateSExt(Loaded, Ctx.B.getInt32Ty())
+                   : Ctx.B.CreateZExt(Loaded, Ctx.B.getInt32Ty());
+    }
     Ctx.registers().regFile().writeRegVec(Ctx.B, *Destination, Loaded);
   });
   return Error::success();
 }
 
-/// Emit a GLOBAL store of the given dword width under EXEC.
+/// Emit a GLOBAL store under EXEC, selecting the requested source bits.
 static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
-                             unsigned WidthInDwords) {
-  Expected<ParsedReg> DataReg =
-      globalDataReg(Ctx, Di, AMDGPU::OpName::vdata, WidthInDwords, "source");
+                             const GlobalAccess &Access) {
+  Expected<ParsedReg> DataReg = globalDataReg(Ctx, Di, AMDGPU::OpName::vdata,
+                                              Access.widthInDwords(), "source");
   if (!DataReg)
     return DataReg.takeError();
   Value *Data = Ctx.registers().regFile().readRegVec(
-      Ctx.B, *DataReg, globalAccessType(Ctx.B, WidthInDwords));
+      Ctx.B, *DataReg, globalAccessType(Ctx.B, Access.widthInDwords() * 4));
+  if (Access.DataFlags & GlobalAccess::HighHalf)
+    Data = Ctx.B.CreateLShr(Data, 16);
+  if (Access.SizeInBytes < 4)
+    Data = Ctx.B.CreateTrunc(Data, globalAccessType(Ctx.B, Access.SizeInBytes));
 
   Expected<Value *> Address =
-      emitGlobalAddress(Ctx, Di, WidthInDwords * 4, GlobalAccessAlignment,
+      emitGlobalAddress(Ctx, Di, Access.SizeInBytes, Access.alignment(),
                         modeledAccessCachePolicy(Ctx.Projection.SourceSTI));
   if (!Address)
     return Address.takeError();
@@ -159,7 +199,7 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
   // A store by an inactive lane must not reach memory at all, so the whole
   // access is predicated on the lane bit of EXEC.
   Ctx.registers().emitUnderExec([&] {
-    Ctx.B.CreateAlignedStore(Data, *Address, GlobalAccessAlignment, IsVolatile);
+    Ctx.B.CreateAlignedStore(Data, *Address, Access.alignment(), IsVolatile);
   });
   return Error::success();
 }
@@ -218,29 +258,19 @@ static Error emitGlobalAtomicAdd(RaiseContext &Ctx, const DecodedInst &Di,
 
 Error handleVGLOBAL(RaiseContext &Ctx, const DecodedInst &Di,
                     OperandResolver &) {
-  std::optional<unsigned> WidthInDwords = globalAccessWidthInDwords(Di.CanonOp);
-  if (!WidthInDwords)
-    return unsupported(Ctx, Di, "unsupported flat memory operation");
-
-  switch (Di.CanonOp) {
-  case CanonicalOp::GLOBAL_LOAD_B32:
-  case CanonicalOp::GLOBAL_LOAD_B64:
-  case CanonicalOp::GLOBAL_LOAD_B96:
-  case CanonicalOp::GLOBAL_LOAD_B128:
-    return emitGlobalLoad(Ctx, Di, *WidthInDwords);
-  case CanonicalOp::GLOBAL_STORE_B32:
-  case CanonicalOp::GLOBAL_STORE_B64:
-  case CanonicalOp::GLOBAL_STORE_B96:
-  case CanonicalOp::GLOBAL_STORE_B128:
-    return emitGlobalStore(Ctx, Di, *WidthInDwords);
-  case CanonicalOp::GLOBAL_ATOMIC_ADD_U32:
-  case CanonicalOp::GLOBAL_ATOMIC_ADD_RTN_U32:
-    return emitGlobalAtomicAdd(Ctx, Di, *WidthInDwords,
+  if (Di.CanonOp == CanonicalOp::GLOBAL_ATOMIC_ADD_U32 ||
+      Di.CanonOp == CanonicalOp::GLOBAL_ATOMIC_ADD_RTN_U32)
+    return emitGlobalAtomicAdd(Ctx, Di, /*WidthInDwords=*/1,
                                /*Returns=*/Di.CanonOp ==
                                    CanonicalOp::GLOBAL_ATOMIC_ADD_RTN_U32);
-  default:
-    llvm_unreachable("classified global memory operation has no handler");
-  }
+
+  std::optional<GlobalAccess> Access = globalAccess(Di.CanonOp);
+  if (!Access)
+    return unsupported(Ctx, Di, "unsupported flat memory operation");
+
+  if (Access->DataFlags & GlobalAccess::Store)
+    return emitGlobalStore(Ctx, Di, *Access);
+  return emitGlobalLoad(Ctx, Di, *Access);
 }
 
 } // namespace COMGR::transpiler
