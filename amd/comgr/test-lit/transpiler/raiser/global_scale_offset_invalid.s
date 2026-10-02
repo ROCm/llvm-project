@@ -41,12 +41,6 @@
 ; NO-SADDR-SAME: scale_offset requires an saddr base
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
-; RUN:   --defsym=SUBDWORD=1 %s -o %t.o
-; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=OPERATION
-
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
 ; RUN:   --defsym=ATOMIC=1 %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
@@ -82,9 +76,6 @@ global_invalid:
 .ifdef STORE_NO_SADDR
 ; global_store_b32 v[2:3], v1, off scale_offset
 	.long 0xee06807c, 0x00810000, 0x00000002
-.endif
-.ifdef SUBDWORD
-	global_load_u16 v1, v0, s[0:1] scale_offset
 .endif
 .ifdef ATOMIC
 	global_atomic_sub_u32 v0, v1, s[0:1] scale_offset

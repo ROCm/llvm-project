@@ -26,6 +26,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/Alignment.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/TargetParser/AMDGPUTargetParser.h"
 
 #include <cassert>
@@ -254,6 +255,24 @@ static Value *emitLdsPointer(RaiseContext &Context, Value *ByteAddress) {
       "lds_ptr");
 }
 
+/// Substitute zero for the data an inactive lane contributes, which is what
+/// the source hardware returns to a lane that reads an inactive one.
+static Value *zeroInactiveLaneData(RaiseContext &Context, Value *Data) {
+  Value *Active = Context.registers().emitLaneActiveBit();
+  return Context.B.CreateSelect(
+      Active, Data, Constant::getNullValue(Data->getType()), "permute_data");
+}
+
+/// Write the result of a cross-lane read back to Destination, out of
+/// whole-wave mode: every target lane has to run the read for a lane to see
+/// the lane its selector named.
+static void writePermuteResult(RaiseContext &Context, ParsedReg Destination,
+                               Value *Permuted) {
+  Value *WholeWave =
+      Context.Projection.wrapAsWWMValue(Context.B, Permuted, "permute_wwm");
+  Context.registers().writeReg32(Destination, WholeWave);
+}
+
 /// Gather eight elements per lane from LDS and pack them into the destination.
 static void emitTransposedDSLoad(RaiseContext &Context, ParsedReg Destination,
                                  Value *ByteAddress, unsigned ElementBits) {
@@ -435,7 +454,183 @@ static Error emitAtomicAdd(RaiseContext &Context,
   return Error::success();
 }
 
+/// Stride a DS permute selector addresses lanes with: it names a lane by its
+/// byte offset into an array of per-lane dwords.
+static constexpr unsigned SelectorBytesPerLane = 4;
+
+/// Rebase a lane selector onto the source wave the reading lane belongs to.
+///
+/// A widening projection packs several source waves into one target wave, so a
+/// selector naming lane 0 has to reach lane 0 of the packed wave its lane
+/// belongs to rather than lane 0 of the target wave. Masking the selector down
+/// to the source wave's byte range keeps a selector the source kernel never
+/// constrained from reaching a lane of another packed wave.
+static Value *rebaseLaneSelector(RaiseContext &Context, Value *Selector) {
+  const unsigned SourceWaveSize = Context.Projection.sourceWaveSize();
+  if (SourceWaveSize == Context.Projection.targetWaveSize()) {
+    return Selector;
+  }
+  assert(isPowerOf2_32(SourceWaveSize) &&
+         "a lane index occupies whole bits only for a power-of-two wave size");
+  const unsigned LaneIndexBits = Log2_32(SourceWaveSize);
+  const unsigned LaneByteBits = Log2_32(SelectorBytesPerLane);
+
+  IRBuilder<> &B = Context.B;
+  Value *SelectorInWave = B.CreateAnd(
+      Selector,
+      B.getInt32(maskTrailingOnes<uint32_t>(LaneIndexBits + LaneByteBits)),
+      "selector_in_wave");
+  Value *LaneIdx = Context.emitLaneIdx();
+  Value *WaveBase = B.CreateAnd(
+      LaneIdx, B.getInt32(maskTrailingZeros<uint32_t>(LaneIndexBits)),
+      "wave_base");
+  Value *WaveByteBase = B.CreateShl(WaveBase, LaneByteBits, "wave_byte_base");
+  return B.CreateOr(SelectorInWave, WaveByteBase, "selector");
+}
+
+namespace {
+/// What a DS permute moves, and where.
+struct PermuteOperands {
+  /// Register the moved data lands in.
+  ParsedReg Destination;
+  /// Lane the data moves from or to, as a byte offset already biased by the
+  /// offset field and rebased onto the source wave of the lane holding it.
+  Value *Selector;
+  /// Data the lane contributes to the move.
+  Value *Data;
+};
+} // namespace
+
+/// Read the operands common to the forward and backward DS permutes.
+static Expected<PermuteOperands>
+readPermuteOperands(RaiseContext &Context, const DecodedInst &Instruction) {
+  Expected<ParsedReg> Destination =
+      dsRegister(Context, Instruction, AMDGPU::OpName::vdst,
+                 /*WidthInDwords=*/1, "destination");
+  if (!Destination) {
+    return Destination.takeError();
+  }
+  Expected<Value *> Selector = Context.registers().readOp32(
+      Instruction, dsOperandIndex(Instruction, AMDGPU::OpName::addr));
+  if (!Selector) {
+    return Selector.takeError();
+  }
+  Expected<Value *> Data = Context.registers().readOp32(
+      Instruction, dsOperandIndex(Instruction, AMDGPU::OpName::data0));
+  if (!Data) {
+    return Data.takeError();
+  }
+  // The hardware adds the offset field before dividing the selector into a
+  // lane index; the intrinsic takes the sum.
+  Value *Index = Context.B.CreateAdd(
+      *Selector,
+      Context.B.getInt32(dsOffsetField(Instruction, AMDGPU::OpName::offset)),
+      "lane_selector");
+  Value *Rebased = rebaseLaneSelector(Context, Index);
+  return PermuteOperands{*Destination, Rebased, *Data};
+}
+
+/// Raise a backward permute: every lane reads the data operand out of the
+/// source-wave lane its selector names. FetchInactive says whether the opcode
+/// is the form that reads a lane the source left inactive.
+static Error raiseBackwardPermute(RaiseContext &Context,
+                                  const DecodedInst &Instruction,
+                                  bool FetchInactive) {
+  Expected<PermuteOperands> Operands =
+      readPermuteOperands(Context, Instruction);
+  if (!Operands) {
+    return Operands.takeError();
+  }
+  // The gather runs whole-wave, so the hardware hands over every target lane's
+  // register either way. What separates the two opcodes is that the plain form
+  // returns zero for a lane the source left inactive, which zeroing that
+  // lane's contribution reproduces.
+  Value *Data = FetchInactive ? Operands->Data
+                              : zeroInactiveLaneData(Context, Operands->Data);
+  Value *Gathered = Context.B.CreateIntrinsic(Intrinsic::amdgcn_ds_bpermute, {},
+                                              {Operands->Selector, Data},
+                                              nullptr, "bpermute");
+  writePermuteResult(Context, Operands->Destination, Gathered);
+  return Error::success();
+}
+
+/// Raise a forward permute: every lane scatters its data operand to the
+/// source-wave lane its selector names, and a lane no other lane targets
+/// reads zero.
+static Error raiseForwardPermute(RaiseContext &Context,
+                                 const DecodedInst &Instruction) {
+  Expected<PermuteOperands> Operands =
+      readPermuteOperands(Context, Instruction);
+  if (!Operands) {
+    return Operands.takeError();
+  }
+  // The scatter runs whole-wave, so a lane the source left inactive has to
+  // target itself. Keeping the selector it happens to hold would overwrite the
+  // result of whichever lane that selector names, while targeting itself takes
+  // nothing from an active lane and leaves a result the write back drops.
+  IRBuilder<> &B = Context.B;
+  Value *LaneIdx = Context.emitLaneIdx();
+  Value *OwnLaneSelector =
+      B.CreateShl(LaneIdx, Log2_32(SelectorBytesPerLane), "own_lane_selector");
+  Value *Active = Context.registers().emitLaneActiveBit();
+  Value *Selector = B.CreateSelect(Active, Operands->Selector, OwnLaneSelector,
+                                   "permute_selector");
+  // The rebase keeps every collision inside one source wave, in the lane order
+  // the source had, so a contested destination resolves the way it did there.
+  Value *Scattered =
+      B.CreateIntrinsic(Intrinsic::amdgcn_ds_permute, {},
+                        {Selector, Operands->Data}, nullptr, "permute");
+  writePermuteResult(Context, Operands->Destination, Scattered);
+  return Error::success();
+}
+
+/// Raise a dword swizzle, a fixed lane permutation the offset field selects.
+///
+/// Every swizzle mode permutes within a group of at most 32 lanes and leaves
+/// bit 5 of the lane index alone, so a target wave permutes each source wave
+/// it packs on its own and the pattern carries over unchanged. The GDS operand
+/// goes unread: the swizzle reaches no memory for the bit to choose between.
+static Error raiseSwizzle(RaiseContext &Context,
+                          const DecodedInst &Instruction) {
+  Expected<ParsedReg> Destination =
+      dsRegister(Context, Instruction, AMDGPU::OpName::vdst,
+                 /*WidthInDwords=*/1, "destination");
+  if (!Destination) {
+    return Destination.takeError();
+  }
+  // The data arrives in the address operand: the swizzle takes the
+  // single-address DS encoding without addressing anything with it.
+  Expected<Value *> Data = Context.registers().readOp32(
+      Instruction, dsOperandIndex(Instruction, AMDGPU::OpName::addr));
+  if (!Data) {
+    return Data.takeError();
+  }
+
+  IRBuilder<> &B = Context.B;
+  Value *Swizzled = zeroInactiveLaneData(Context, *Data);
+  Swizzled = B.CreateIntrinsic(
+      Intrinsic::amdgcn_ds_swizzle, {},
+      {Swizzled,
+       B.getInt32(dsOffsetField(Instruction, AMDGPU::OpName::offset))},
+      nullptr, "swizzle");
+  writePermuteResult(Context, *Destination, Swizzled);
+  return Error::success();
+}
+
 Error handleDS(RaiseContext &Context, const DecodedInst &Instruction) {
+  switch (Instruction.CanonOp) {
+  case CanonicalOp::DS_BPERMUTE_B32:
+    return raiseBackwardPermute(Context, Instruction, /*FetchInactive=*/false);
+  case CanonicalOp::DS_BPERMUTE_FI_B32:
+    return raiseBackwardPermute(Context, Instruction, /*FetchInactive=*/true);
+  case CanonicalOp::DS_PERMUTE_B32:
+    return raiseForwardPermute(Context, Instruction);
+  case CanonicalOp::DS_SWIZZLE_B32:
+    return raiseSwizzle(Context, Instruction);
+  default:
+    break;
+  }
+
   std::optional<DSAccess> Access = dsAccess(Instruction.CanonOp);
   bool IsAtomicAdd = Instruction.CanonOp == CanonicalOp::DS_ADD_U32 ||
                      Instruction.CanonOp == CanonicalOp::DS_ADD_RTN_U32;
