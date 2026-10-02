@@ -883,6 +883,34 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   uint32_t getPrivateSize() const { return PrivateSize; }
   uint16_t getConstWGSize() const { return ConstWGSize; }
 
+  /// Compute the launch geometry with the AMDGPU-specific heuristics.
+  bool computeLaunchGeometry(GenericDeviceTy &GenericDevice,
+                             const KernelLaunchArgsTy &LaunchArgs,
+                             bool StrictThreads, bool StrictBlocks,
+                             uint32_t &NumThreads,
+                             uint32_t &NumBlocks) const override {
+    // The occupancy-based heuristics need the kernel's max occupancy.
+    computeMaxOccupancy(GenericDevice);
+
+    if (!StrictThreads) {
+      NumThreads =
+          getEffectiveNumThreads(GenericDevice, NumThreads, LaunchArgs);
+
+      std::pair<bool, uint32_t> AdjustInfo = adjustNumThreadsForLowTripCount(
+          GenericDevice, NumThreads, LaunchArgs.Tripcount,
+          LaunchArgs.UserThreadLimit, LaunchArgs);
+      if (AdjustInfo.first)
+        NumThreads = AdjustInfo.second;
+    }
+
+    if (!StrictBlocks)
+      NumBlocks = getEffectiveNumBlocks(
+          GenericDevice, NumBlocks, LaunchArgs.Tripcount, NumThreads,
+          StrictThreads, LaunchArgs.UserThreadLimit[0] > 0, LaunchArgs);
+
+    return true;
+  }
+
   /// Get the HSA kernel object representing the kernel function.
   uint64_t getKernelObject() const { return KernelObject; }
 
@@ -931,10 +959,11 @@ private:
 
   /// Lower number of threads if tripcount is low. This should produce
   /// a larger number of teams if allowed by other constraints.
-  std::pair<bool, uint32_t> adjustNumThreadsForLowTripCount(
-      GenericDeviceTy &GenericDevice, uint32_t BlockSize,
-      uint64_t LoopTripCount, uint32_t ThreadLimitClause[3],
-      const KernelLaunchArgsTy &LaunchArgs) const override {
+  std::pair<bool, uint32_t>
+  adjustNumThreadsForLowTripCount(GenericDeviceTy &GenericDevice,
+                                  uint32_t BlockSize, uint64_t LoopTripCount,
+                                  const uint32_t ThreadLimitClause[3],
+                                  const KernelLaunchArgsTy &LaunchArgs) const {
     const KernelLaunchInfoTy &Info = LaunchArgs.KernelLaunchInfo;
     uint32_t NumThreads = BlockSize;
 
@@ -1004,10 +1033,9 @@ private:
 
   /// Get the number of threads and blocks for the kernel based on the
   /// user-defined threads and block clauses.
-  uint32_t
-  getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
-                         uint32_t UserThreadLimit,
-                         const KernelLaunchArgsTy &LaunchArgs) const override {
+  uint32_t getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
+                                  uint32_t UserThreadLimit,
+                                  const KernelLaunchArgsTy &LaunchArgs) const {
     const KernelLaunchInfoTy &Info = LaunchArgs.KernelLaunchInfo;
     assert(!Info.isBareMode() && "bare kernel should not call this function");
 
@@ -1060,11 +1088,12 @@ private:
                                               ? UserThreadLimit
                                               : Info.PreferredNumThreads);
   }
-  uint32_t
-  getEffectiveNumBlocks(GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
-                        uint64_t LoopTripCount, uint32_t &EffectiveNumThreads,
-                        bool IsNumThreadsStrict, bool IsNumThreadsFromUser,
-                        const KernelLaunchArgsTy &LaunchArgs) const override {
+  uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
+                                 uint32_t UserNumBlocks, uint64_t LoopTripCount,
+                                 uint32_t &EffectiveNumThreads,
+                                 bool IsNumThreadsStrict,
+                                 bool IsNumThreadsFromUser,
+                                 const KernelLaunchArgsTy &LaunchArgs) const {
     const KernelLaunchInfoTy &Info = LaunchArgs.KernelLaunchInfo;
     assert(!Info.isBareMode() && "bare kernel should not call this function");
 

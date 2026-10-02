@@ -26,13 +26,11 @@
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cstdint>
-#include <limits>
 
 using namespace llvm;
 using namespace omp;
@@ -218,12 +216,6 @@ Error GenericKernelTy::printLaunchInfo(GenericDeviceTy &GenericDevice,
                                        const KernelLaunchArgsTy &LaunchArgs,
                                        uint32_t NumThreads[3],
                                        uint32_t NumBlocks[3]) const {
-  INFO(OMP_INFOTYPE_PLUGIN_KERNEL, GenericDevice.getDeviceId(),
-       "Launching kernel %s with [%u,%u,%u] blocks and [%u,%u,%u] threads in "
-       "%s mode\n",
-       getName(), NumBlocks[0], NumBlocks[1], NumBlocks[2], NumThreads[0],
-       NumThreads[1], NumThreads[2],
-       LaunchArgs.KernelLaunchInfo.getExecutionModeName());
   return printLaunchInfoDetails(GenericDevice, LaunchArgs, NumThreads,
                                 NumBlocks);
 }
@@ -291,22 +283,6 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
                                     LaunchArgs.UserNumBlocks[1],
                                     LaunchArgs.UserNumBlocks[2]};
 
-  // Multidimensional is only supported with bare mode for now.
-  assert(LaunchArgs.KernelLaunchInfo.isBareMode() ||
-         EffectiveNumThreads[1] == 1 && EffectiveNumThreads[2] == 1 &&
-             EffectiveNumBlocks[1] == 1 && EffectiveNumBlocks[2] == 1 &&
-             "Non-bare mode should only use the first thread and block "
-             "dimensions");
-
-  assert(!LaunchArgs.Flags.StrictBlocks ||
-         EffectiveNumBlocks[0] > 0 && EffectiveNumBlocks[1] > 0 &&
-             EffectiveNumBlocks[2] > 0 &&
-             "Strict requires number of blocks greater than zero");
-  assert(!LaunchArgs.Flags.StrictThreads ||
-         EffectiveNumThreads[0] > 0 && EffectiveNumThreads[1] > 0 &&
-             EffectiveNumThreads[2] > 0 &&
-             "Strict requires number of threads greater than zero");
-
   auto DynBlockMemConfOrErr = prepareBlockMemory(
       GenericDevice, LaunchArgs,
       EffectiveNumBlocks[0] * EffectiveNumBlocks[1] * EffectiveNumBlocks[2]);
@@ -321,30 +297,8 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
   // Get max occupancy for this kernel
   computeMaxOccupancy(GenericDevice);
 
-  // Calculate or adjust the effective number of threads and blocks if needed.
-  if (!LaunchArgs.KernelLaunchInfo.isBareMode()) {
-    if (!LaunchArgs.Flags.StrictThreads) {
-      EffectiveNumThreads[0] = getEffectiveNumThreads(
-          GenericDevice, EffectiveNumThreads[0], LaunchArgs);
-
-      std::pair<bool, uint32_t> AdjustInfo = adjustNumThreadsForLowTripCount(
-          GenericDevice, EffectiveNumThreads[0], LaunchArgs.Tripcount,
-          LaunchArgs.UserThreadLimit, LaunchArgs);
-      if (AdjustInfo.first)
-        EffectiveNumThreads[0] = AdjustInfo.second;
-    }
-
-    if (!LaunchArgs.Flags.StrictBlocks)
-      EffectiveNumBlocks[0] = getEffectiveNumBlocks(
-          GenericDevice, EffectiveNumBlocks[0], LaunchArgs.Tripcount,
-          EffectiveNumThreads[0], LaunchArgs.Flags.StrictThreads,
-          LaunchArgs.UserThreadLimit[0] > 0, LaunchArgs);
-  }
-
-  // The teams reduction buffer is sized from the effective number of blocks, so
-  // the grid size must be finalized before creating the launch environment.
-  // Otherwise a kernel without an explicit num_teams clause would size the
-  // buffer with the raw user value of 0 and fail to allocate.
+  // The teams reduction buffer is sized from the effective number of blocks,
+  // which libomptarget has already computed for this launch.
   auto KernelLaunchEnvOrErr =
       getKernelLaunchEnvironment(GenericDevice, LaunchArgs, DynBlockMemConf,
                                  AsyncInfoWrapper, EffectiveNumBlocks[0]);
@@ -399,121 +353,6 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
     return RecordReplay->recordEpilogue(*this, RRHandle);
   }
   return Plugin::success();
-}
-
-uint32_t GenericKernelTy::getEffectiveNumThreads(
-    GenericDeviceTy &GenericDevice, uint32_t UserThreadLimit,
-    const KernelLaunchArgsTy &LaunchArgs) const {
-  assert(!LaunchArgs.KernelLaunchInfo.isBareMode() &&
-         "bare kernel should not call this function");
-
-  if (UserThreadLimit > 0 && LaunchArgs.KernelLaunchInfo.isGenericMode()) {
-    if (UserThreadLimit == (uint32_t)-1)
-      UserThreadLimit = LaunchArgs.KernelLaunchInfo.PreferredNumThreads;
-    else
-      UserThreadLimit += GenericDevice.getWarpSize();
-  }
-
-  return std::min(LaunchArgs.KernelLaunchInfo.MaxNumThreads,
-                  (UserThreadLimit > 0)
-                      ? UserThreadLimit
-                      : LaunchArgs.KernelLaunchInfo.PreferredNumThreads);
-}
-
-uint32_t GenericKernelTy::getEffectiveNumBlocks(
-    GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
-    uint64_t LoopTripCount, uint32_t &EffectiveNumThreads,
-    bool IsNumThreadsStrict, bool IsNumThreadsFromUser,
-    const KernelLaunchArgsTy &LaunchArgs) const {
-  assert(!LaunchArgs.KernelLaunchInfo.isBareMode() &&
-         "bare kernel should not call this function");
-
-  // NOTE: This clamps the user-requested number of blocks to the device limit
-  // rather than honoring it exactly, which is non-standard behavior. Truly
-  // honoring an arbitrary value would require launching multiple kernels or
-  // reusing blocks until the requested count has been served.
-  if (UserNumBlocks > 0)
-    return std::min(UserNumBlocks,
-                    GenericDevice.getBlockLimit(EffectiveNumThreads));
-
-  // Return the number of blocks required to cover the loop iterations.
-  if (LaunchArgs.KernelLaunchInfo.isNoLoopMode())
-    return LoopTripCount > 0 ? (((LoopTripCount - 1) / EffectiveNumThreads) + 1)
-                             : 1;
-
-  uint64_t DefaultNumBlocks = GenericDevice.getDefaultNumBlocks();
-  uint64_t TripCountNumBlocks = std::numeric_limits<uint64_t>::max();
-  if (LoopTripCount > 0) {
-    if (LaunchArgs.KernelLaunchInfo.isSPMDMode()) {
-      // We have a combined construct, i.e. `target teams distribute
-      // parallel for [simd]`. We launch so many blocks so that each thread
-      // will execute one iteration of the loop; rounded up to the nearest
-      // integer. However, if that results in too few blocks, we artificially
-      // reduce the thread count per block to increase the outer parallelism.
-      auto MinThreads = GenericDevice.getMinThreadsForLowTripCountLoop();
-      MinThreads = std::min(MinThreads, EffectiveNumThreads);
-
-      // Honor the thread_limit clause; only lower the number of threads.
-      [[maybe_unused]] auto OldNumThreads = EffectiveNumThreads;
-      if (LoopTripCount >= DefaultNumBlocks * EffectiveNumThreads ||
-          IsNumThreadsFromUser || IsNumThreadsStrict) {
-        // Enough parallelism for blocks and threads.
-        TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
-        assert(IsNumThreadsFromUser ||
-               TripCountNumBlocks >= DefaultNumBlocks &&
-                   "Expected sufficient outer parallelism.");
-      } else if (LoopTripCount >= DefaultNumBlocks * MinThreads) {
-        // Enough parallelism for blocks, limit threads.
-
-        // This case is hard; for now, we force "full warps":
-        // First, compute a thread count assuming DefaultNumBlocks.
-        auto NumThreadsDefaultBlocks =
-            (LoopTripCount + DefaultNumBlocks - 1) / DefaultNumBlocks;
-        // Now get a power of two that is larger or equal.
-        auto NumThreadsDefaultBlocksP2 =
-            llvm::PowerOf2Ceil(NumThreadsDefaultBlocks);
-        // Do not increase a thread limit given be the user.
-        EffectiveNumThreads =
-            std::min(EffectiveNumThreads, uint32_t(NumThreadsDefaultBlocksP2));
-        assert(EffectiveNumThreads >= MinThreads &&
-               "Expected sufficient inner parallelism.");
-        TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
-      } else {
-        // Not enough parallelism for blocks and threads, limit both.
-        EffectiveNumThreads = std::min(EffectiveNumThreads, MinThreads);
-        TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
-      }
-
-      assert(EffectiveNumThreads * TripCountNumBlocks >= LoopTripCount &&
-             "Expected sufficient parallelism");
-      assert(OldNumThreads >= EffectiveNumThreads &&
-             "Number of threads cannot be increased!");
-    } else {
-      assert((LaunchArgs.KernelLaunchInfo.isGenericMode() ||
-              LaunchArgs.KernelLaunchInfo.isGenericSPMDMode()) &&
-             "Unexpected execution mode!");
-      // If we reach this point, then we have a non-combined construct, i.e.
-      // `teams distribute` with a nested `parallel for` and each block is
-      // assigned one iteration of the `distribute` loop. E.g.:
-      //
-      // #pragma omp target teams distribute
-      // for(...loop_tripcount...) {
-      //   #pragma omp parallel for
-      //   for(...) {}
-      // }
-      //
-      // Threads within a block will execute the iterations of the `parallel`
-      // loop.
-      TripCountNumBlocks = LoopTripCount;
-    }
-  }
-
-  uint32_t PreferredNumBlocks = TripCountNumBlocks;
-  // If the loops are long running we rather reuse blocks than spawn too many.
-  if (GenericDevice.getReuseBlocksForHighTripCount())
-    PreferredNumBlocks = std::min(TripCountNumBlocks, DefaultNumBlocks);
-  return std::min(PreferredNumBlocks,
-                  GenericDevice.getBlockLimit(EffectiveNumThreads));
 }
 
 GenericDeviceTy::GenericDeviceTy(GenericPluginTy &Plugin, int32_t DeviceId,

@@ -519,15 +519,14 @@ struct KernelLaunchArgsTy {
   uint32_t UserNumBlocks[3] = {0, 0, 0};
   /// User-requested number of threads (for x,y,z dimension).
   uint32_t UserThreadLimit[3] = {0, 0, 0};
+  /// Downstream, the plugin gets the kernel's full launch-geometry properties,
+  /// including the execution mode, which the AMDGPU plugin needs.
   KernelLaunchInfoTy KernelLaunchInfo;
   struct {
     uint64_t Cooperative : 1; // Was this kernel spawned as cooperative.
-    uint64_t StrictBlocks : 1; // The user-requested number of blocks is strict.
-    uint64_t
-        StrictThreads : 1; // The user-requested number of threads is strict.
     uint64_t DynCGroupMemFallback : 2; // The fallback for dynamic cgroup mem.
-    uint64_t Unused : 60;
-  } Flags = {0, 0, 0, 0, 0};
+    uint64_t Unused : 61;
+  } Flags = {0, 0, 0};
   /// Set by the caller when replaying a previously recorded kernel launch, so
   /// the plugin can report the outcome back; null for a normal launch.
   KernelReplayOutcomeTy *ReplayOutcome = nullptr;
@@ -637,6 +636,21 @@ struct GenericKernelTy {
     return AchievedOccupancy;
   }
 
+  /// Downstream: let the plugin compute the effective launch geometry of a
+  /// non-bare OpenMP kernel launch, i.e., the number of threads and blocks of
+  /// the first dimension. On entry, \p NumThreads and \p NumBlocks hold the
+  /// user-requested values; the ones flagged by \p StrictThreads and
+  /// \p StrictBlocks must be kept. Returns false if the plugin does not
+  /// provide its own computation, in which case libomptarget uses the
+  /// generic one.
+  virtual bool computeLaunchGeometry(GenericDeviceTy &GenericDevice,
+                                     const KernelLaunchArgsTy &LaunchArgs,
+                                     bool StrictThreads, bool StrictBlocks,
+                                     uint32_t &NumThreads,
+                                     uint32_t &NumBlocks) const {
+    return false;
+  }
+
 protected:
   /// Prints generic kernel launch information.
   Error printLaunchInfo(GenericDeviceTy &GenericDevice,
@@ -657,33 +671,6 @@ private:
   prepareBlockMemory(GenericDeviceTy &GenericDevice,
                      const KernelLaunchArgsTy &LaunchArgs,
                      uint32_t NumBlocks) const;
-
-  /// Lower number of threads if tripcount is low.
-  virtual std::pair<bool, uint32_t>
-  adjustNumThreadsForLowTripCount(GenericDeviceTy &GenericDevice,
-                                  uint32_t BlockSize, uint64_t LoopTripCount,
-                                  uint32_t ThreadLimitClause[3],
-                                  const KernelLaunchArgsTy &LaunchArgs) const {
-    return std::make_pair(false, BlockSize);
-  }
-
-  /// Get the effective number of threads for the kernel based on the
-  /// user-defined number of threads.
-  virtual uint32_t
-  getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
-                         uint32_t UserThreadLimit,
-                         const KernelLaunchArgsTy &LaunchArgs) const;
-
-  /// Get the effective number of blocks for the kernel based on the
-  /// user-defined number of blocks and the loop trip count.
-  /// The number of threads \p NumThreads can be adjusted by this method.
-  /// \p IsNumThreadsFromUser is true is \p NumThreads is defined by user via
-  /// thread_limit clause.
-  virtual uint32_t
-  getEffectiveNumBlocks(GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
-                        uint64_t LoopTripCount, uint32_t &EffectiveNumThreads,
-                        bool IsNumThreadsStrict, bool IsNumThreadsFromUser,
-                        const KernelLaunchArgsTy &LaunchArgs) const;
 
   /// The kernel name.
   std::string Name;
