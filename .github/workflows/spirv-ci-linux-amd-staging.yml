@@ -5,6 +5,23 @@
 name: HeCBench base comparison for PR 4772
 
 on:
+  workflow_call:
+
+env:
+  LLVM_BUILD: build
+  DEVLIBS_BUILD: build-device-libs
+  COMGR_BUILD: build-comgr
+  ROCR_BUILD: build-rocr
+  CLR_BUILD: build-clr
+  ROCPRIM_BUILD: build-rocprim
+  HIPCUB_BUILD: build-hipcub
+  ROCTHRUST_BUILD: build-rocthrust
+  ROCRAND_BUILD: build-rocrand
+  HIPRAND_BUILD: build-hiprand
+  STAGING: staging
+  TRANSLATOR_SRC: llvm-project/llvm/projects/SPIRV-LLVM-Translator
+
+jobs:
   build:
     name: Build
     outputs:
