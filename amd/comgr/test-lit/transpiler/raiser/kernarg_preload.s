@@ -11,12 +11,9 @@
 	.amdhsa_code_object_version 6
 	.text
 
-; The source hardware copies kernarg dwords into user SGPRs before entry. The
-; target preloads nothing, so each one is read back out of the kernarg segment
-; at the byte offset it came from. A preload offset of 2 dwords puts the first
-; one at byte 8, which is what distinguishes a seeded offset from a zeroed one.
-;
-; The kernarg pointer takes s[0:1], so the four preloaded dwords land in s2-s5.
+; Recreate the preloads from their recorded kernarg offsets. Offset 2 dwords
+; starts at byte 8, so the test catches a zero-offset implementation.
+; The pointer occupies s[0:1]; the four preloads occupy s2-s5.
 	.globl	preloaded_kernarg
 	.p2align	8
 	.type	preloaded_kernarg,@function
@@ -31,8 +28,7 @@
 ; IR: [[GEP3:%.+]] = getelementptr inbounds i8, ptr addrspace(4) [[SEG]], i64 20
 ; IR-NEXT: [[DW3:%.+]] = load i32, ptr addrspace(4) [[GEP3]], align 4
 preloaded_kernarg:
-; The sum pins which dword reached which SGPR: s2 carries byte 8 and s5 byte 20,
-; so a seed landing on the wrong register breaks the chain.
+; Use the first and last preloads so the offset-to-SGPR mapping is observable.
 ; IR: [[SUM:%.+]] = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 [[DW0]], i32 [[DW3]])
 ; IR-NEXT: [[ADD:%.+]] = extractvalue { i32, i1 } [[SUM]], 0
 	s_add_co_i32 s6, s2, s5
@@ -42,8 +38,7 @@ preloaded_kernarg:
 	global_store_b32 v3, v2, s[2:3]
 	s_endpgm
 
-; The private segment size has no target value and nothing stands in for it,
-; so the sources this does not seed still refuse.
+; Private-segment size has no equivalent target value and must still refuse.
 	.globl	private_segment_size
 	.p2align	8
 	.type	private_segment_size,@function

@@ -145,12 +145,8 @@ Error RegisterState::seedEntrySgprs(const KernelMeta &Meta) {
                    IdZ, "workgroup_id_yz"));
   }
 
-  // A preloaded kernarg SGPR holds a dword the source hardware copied out of
-  // the kernarg segment before entry. The target preloads nothing, so read the
-  // same bytes back from the segment the runtime fills: the backend lowers the
-  // load to a scalar load off the kernarg pointer, which is where the source
-  // dword came from in the first place. The layout has already checked the
-  // preload range against the segment size, so each offset is in bounds.
+  // Recreate source kernarg preloads by loading each dword from its recorded
+  // offset in the kernarg segment and seeding the corresponding source SGPR.
   for (auto [Index, LayoutEntry] : enumerate(Layout.Entries)) {
     if (LayoutEntry.SrcKind != UserSgprLayout::Source::PreloadedKernarg)
       continue;
