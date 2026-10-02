@@ -17,6 +17,14 @@ struct OperandResolver;
 struct DecodedInst;
 class RaiseContext;
 
+/// Raise V_MBCNT_LO_U32_B32.
+llvm::Error raiseMaskedBitCountLow32(RaiseContext &Ctx, const DecodedInst &Di,
+                                     OperandResolver &Op);
+
+/// Raise V_MBCNT_HI_U32_B32.
+llvm::Error raiseMaskedBitCountHigh32(RaiseContext &Ctx, const DecodedInst &Di,
+                                      OperandResolver &Op);
+
 /// Raise V_READFIRSTLANE_B32.
 llvm::Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
                                  OperandResolver &Op);

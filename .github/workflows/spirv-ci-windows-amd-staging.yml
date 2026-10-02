@@ -438,6 +438,9 @@ jobs:
       - name: Untar build trees
         run: |
           tar -xmf windows-build-tree.tar
+          # Recreate the DLL when relinking the restored tree. In-place relinks
+          # can cause DLL initialization failures on the Windows runners.
+          rm build-comgr/amd_comgr.dll
           touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
 
       - name: Test - Comgr (check-comgr)
