@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        attempt: [1, 2]
+        mode: [baseline, fresh-dll]
     runs-on: azure-windows-scale-rocm
     timeout-minutes: 30
     defaults:
@@ -91,6 +91,10 @@ jobs:
           tar -xmf windows-build-tree.tar
           touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
 
+      - name: Recreate the extracted DLL before relinking
+        if: matrix.mode == 'fresh-dll'
+        run: rm build-comgr/amd_comgr.dll
+
       - name: Reproduce original check-comgr invocation
         id: original
         continue-on-error: true
@@ -114,7 +118,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-comgr-repro-${{ matrix.attempt }}
+          name: windows-comgr-repro-${{ matrix.mode }}
           path: diagnostics
           retention-days: 7
           if-no-files-found: error

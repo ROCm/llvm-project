@@ -1,7 +1,5 @@
 """Probe original and copied Comgr DLLs after the original CI invocation."""
 
-from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import os
 from pathlib import Path
@@ -39,7 +37,30 @@ for location in [root / "build-comgr/test-lit", snapshot]:
             results.append((result.returncode, result.stdout, result.stderr))
         print(str(location), shell, results, flush=True)
 
-# Use the same EXEs and original DLL bytes, placing one fresh copy beside them.
-shutil.copyfile(original, root / "build-comgr/test-lit/amd_comgr.dll")
-result = subprocess.run([sys.executable, str(root / "build/bin/llvm-lit.py"), "-sv", "--no-progress-bar", str(root / "build-comgr/test-lit")])
-print("LIT WITH ADJACENT DLL", result.returncode, flush=True)
+# Resolve without running initializers, so a bad DLL cannot stop diagnostics.
+loader = r"""
+import ctypes, sys
+from ctypes import wintypes
+kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+kernel.LoadLibraryExW.argtypes = [wintypes.LPCWSTR, wintypes.HANDLE, wintypes.DWORD]
+kernel.LoadLibraryExW.restype = wintypes.HMODULE
+kernel.GetModuleFileNameW.argtypes = [wintypes.HMODULE, wintypes.LPWSTR, wintypes.DWORD]
+module = kernel.LoadLibraryExW(sys.argv[1], None, 1)
+if not module:
+    raise ctypes.WinError(ctypes.get_last_error())
+name = ctypes.create_unicode_buffer(32768)
+if not kernel.GetModuleFileNameW(module, name, len(name)):
+    raise ctypes.WinError(ctypes.get_last_error())
+print('RESOLVED', name.value, 'BASE', hex(module))
+"""
+for path in ['amd_comgr.dll', str(original), str(snapshot / original.name)]:
+    env = dict(config.environment)
+    env['PATH'] = os.pathsep.join([str(root / 'build-comgr'), env['PATH']])
+    result = subprocess.run([sys.executable, '-c', loader, path], cwd=root / 'build-comgr/test-lit', env=env, capture_output=True)
+    print('LOAD RESOLUTION', path, result.returncode, result.stdout, result.stderr, flush=True)
+
+# Recreate the file at its original pathname, then repeat every Comgr suite.
+original.rename(snapshot / 'in-place.dll')
+shutil.copyfile(snapshot / 'amd_comgr.dll', original)
+result = subprocess.run(['ninja', '-C', 'build-comgr', 'check-comgr'])
+print('CHECK-COMGR WITH RECREATED DLL', result.returncode, flush=True)
