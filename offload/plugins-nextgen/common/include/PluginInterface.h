@@ -511,6 +511,18 @@ struct KernelLaunchArgsTy {
   /// Downstream, the plugin gets the kernel's full launch-geometry properties,
   /// including the execution mode, which the AMDGPU plugin needs.
   KernelLaunchInfoTy KernelLaunchInfo;
+#if MOVE_2_NEWER_INFO
+  struct {
+    /// Size in bytes of a single cross-team reduction buffer element for
+    /// this kernel, or 0 if the kernel does not need a reduction buffer.
+    uint32_t ReductionDataSize = 0;
+    /// Maximum number of threads per block that this kernel may use.
+    uint32_t MaxNumThreads = 0;
+    /// Number of blocks originally requested by the program for the first
+    /// dimension (e.g., num_teams clause), or 0 if none was requested.
+    uint32_t RequestedNumBlocks = 0;
+  } KernelLaunchInfo;
+#endif
   struct {
     uint64_t Cooperative : 1; // Was this kernel spawned as cooperative.
     uint64_t Unused : 63;
