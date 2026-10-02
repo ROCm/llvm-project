@@ -1,55 +1,12 @@
-# Top-level dispatcher for the SPIRV-focused CI on amd-staging.
-# Dispatches to per-platform reusable workflows.
-#
-# SPIRV presubmit skips only for automated LLVM_MAIN_REVISION PRs: `ci:skip` plus
-# matching title/body (same rules as rockci-amd-staging.yml).
-
-name: SPIRV Compiler CI - amd-staging
+# Diagnostic run: exact base and dependency pins from PR #4772, without its patch.
+name: HeCBench base comparison for PR 4772
 
 on:
-  pull_request:
-    branches: [amd-staging]
-    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
-  cancel-in-progress: true
-
 jobs:
-  linux_release:
-    name: Linux::release
-    if: >-
-      github.event_name != 'pull_request' ||
-      (github.event.pull_request &&
-       !(
-         contains(github.event.pull_request.labels.*.name, 'ci:skip') ||
-         (
-           contains(github.event.pull_request.title, 'Update LLVM_MAIN_REVISION') ||
-           (
-             contains(github.event.pull_request.body, 'Automated update of') &&
-             contains(github.event.pull_request.body, 'LLVM_MAIN_REVISION')
-           )
-         )
-       ))
+  baseline:
     uses: ./.github/workflows/spirv-ci-linux-amd-staging.yml
-
-  windows_release:
-    name: Windows::release
-    if: >-
-      github.event_name != 'pull_request' ||
-      (github.event.pull_request &&
-       !(
-         contains(github.event.pull_request.labels.*.name, 'ci:skip') ||
-         (
-           contains(github.event.pull_request.title, 'Update LLVM_MAIN_REVISION') ||
-           (
-             contains(github.event.pull_request.body, 'Automated update of') &&
-             contains(github.event.pull_request.body, 'LLVM_MAIN_REVISION')
-           )
-         )
-       ))
-    uses: ./.github/workflows/spirv-ci-windows-amd-staging.yml
