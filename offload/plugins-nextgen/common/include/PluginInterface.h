@@ -435,6 +435,10 @@ struct KernelLaunchInfoTy {
   uint32_t MaxNumThreads = 0;
   uint32_t PreferredNumThreads = 0;
   uint32_t ReductionDataSize = 0;
+  /// Number of blocks originally requested by the program for the first
+  /// dimension (e.g., num_teams clause), or 0 if none was requested. Unlike
+  /// the other fields, this is set per launch.
+  uint32_t RequestedNumBlocks = 0;
   /// Defaults to OMP_TGT_EXEC_MODE_BARE.
   OMPTgtExecModeFlags Mode = OMP_TGT_EXEC_MODE_BARE;
 

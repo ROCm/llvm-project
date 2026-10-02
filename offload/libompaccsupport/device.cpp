@@ -628,6 +628,9 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   KernelLaunchInfoTy KernelLaunchInfo = getKernelLaunchInfo(TgtEntryPtr);
   // Downstream, the plugin gets the full launch info; see device.h.
   LaunchArgs.KernelLaunchInfo = KernelLaunchInfo;
+  // Save the requested value before computing the effective number of blocks so
+  // it can be used by record-replay mechanisms.
+  LaunchArgs.KernelLaunchInfo.RequestedNumBlocks = KernelArgs.UserNumBlocks[0];
 
   const bool StrictBlocks = KernelArgs.Flags.StrictBlocks;
   const bool StrictThreads = KernelArgs.Flags.StrictThreads;
