@@ -22,6 +22,7 @@
 #include "transpiler/raiser/raiser.h"
 
 #include "transpiler/decoder/amdgpu-formats.h"
+#include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/decode.h"
 #include "transpiler/decoder/mc-state.h"
 #include "transpiler/decoder/opcode-map.h"
@@ -38,6 +39,7 @@
 #include "SIDefines.h"
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetOperations.h"
@@ -55,6 +57,8 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Alignment.h"
@@ -62,6 +66,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
@@ -378,6 +383,75 @@ static SmallVector<uint64_t> unstartedTargets(const SetPcAnalysis &SetPc) {
   return Targets;
 }
 
+// Whether `Di` names the plain workgroup barrier in `OperandName`, the field
+// its format carries the barrier id in, rather than one of the barriers the
+// raise keeps nothing for: the cluster and trap barriers, and the named
+// barrier objects a subset of the workgroup joins.
+static bool namesWorkgroupBarrier(const DecodedInst &Di,
+                                  AMDGPU::OpName OperandName) {
+  constexpr int64_t WorkgroupBarrierId = -1;
+  int16_t Index =
+      COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(), OperandName);
+  assert(Index >= 0 && "a split barrier encodes the barrier it names");
+  std::optional<int64_t> Id = evalOperandAsConst(Di.Inst, Index);
+  assert(Id && "the immediate form of a split barrier names its id inline");
+  // Both halves carry the id in a 16-bit field, which reaches here
+  // zero-extended from the wait and sign-extended from the arrival.
+  return SignExtend64<16>(*Id) == WorkgroupBarrierId;
+}
+
+// Source offsets of the split-barrier halves that together stand for one whole
+// barrier, as the offsets of both halves of every match.
+//
+// The source splits the workgroup barrier into an arrival that does not block
+// and a wait that does. Neither half alone says what the raise can state,
+// which carries only a barrier that arrives and waits at once: standing it in
+// for an arrival holds a wave the source let run on, and standing it in for a
+// wait makes the wave arrive a second time. A wait the arrival reaches with no
+// control transfer in between is a different matter, because then the two
+// always run together and as a pair they say exactly what the whole barrier
+// says. Raising the pair at its wait keeps the point the source blocks at.
+//
+// `Insts` must be in source order and `BlockStarts` must be the final
+// block-start set, since a block start between the halves means a path reaches
+// one of them without the other.
+static DenseSet<uint64_t>
+pairSplitBarriers(ArrayRef<DecodedInst> Insts,
+                  const std::set<uint64_t> &BlockStarts, const MCState &MC) {
+  DenseSet<uint64_t> Paired;
+  std::optional<uint64_t> PendingArrival;
+  for (const DecodedInst &Di : Insts) {
+    if (BlockStarts.count(Di.Offset))
+      PendingArrival.reset();
+
+    if (Di.CanonOp == CanonicalOp::S_BARRIER_SIGNAL_IMM) {
+      // An arrival already pending is one no wait reached, and dropping it
+      // here leaves it unmatched for the handler to refuse.
+      PendingArrival.reset();
+      if (namesWorkgroupBarrier(Di, AMDGPU::OpName::src0))
+        PendingArrival = Di.Offset;
+      continue;
+    }
+
+    if (Di.CanonOp == CanonicalOp::S_BARRIER_WAIT && PendingArrival &&
+        namesWorkgroupBarrier(Di, AMDGPU::OpName::simm16)) {
+      Paired.insert(*PendingArrival);
+      Paired.insert(Di.Offset);
+      PendingArrival.reset();
+      continue;
+    }
+
+    // A block start is not raised at every control transfer: an instruction
+    // trailing one without leading a block of its own is reached by nothing.
+    // Matching across such a transfer would pair halves that never run
+    // together.
+    const MCInstrDesc &Desc = MC.InstrInfo->get(Di.Inst.getOpcode());
+    if (Desc.isTerminator() || Desc.isCall())
+      PendingArrival.reset();
+  }
+  return Paired;
+}
+
 // Raise one kernel into `M`. Everything this allocates -- the projection, the
 // builder, the register file behind the context -- describes that one kernel
 // and dies with the call; only the emitted function outlives it.
@@ -448,6 +522,12 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   Decoded->BlockStarts.insert(SetPc->ExtraBlockStarts.begin(),
                               SetPc->ExtraBlockStarts.end());
 
+  // Matched here rather than at decode, because a block start the transfers
+  // contributed can fall between two halves that the decode alone left
+  // adjacent.
+  DenseSet<uint64_t> PairedSplitBarriers =
+      pairSplitBarriers(Decoded->Insts, Decoded->BlockStarts, Env.Source.MC);
+
   LLVMContext &C = M.getContext();
 
   // Replication is the only projection policy the raiser can select: a target
@@ -464,9 +544,9 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   IRBuilder<> B(Entry);
 
   Expected<RaiseContext> Ctx = RaiseContext::create(
-      B, Projection, Env.Source.MC, *SetPc, Meta, Text.Bytes, Text.Address,
-      Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset,
-      Env.Source.SramEcc);
+      B, Projection, Env.Source.MC, *SetPc, PairedSplitBarriers, Meta,
+      Text.Bytes, Text.Address, Text.ImageSections, Kernel.StartOffset,
+      Kernel.EndOffset, Env.Source.SramEcc);
   if (!Ctx)
     return Ctx.takeError();
 
