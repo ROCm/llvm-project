@@ -55,6 +55,13 @@ Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_CVT_I32_F64:
   case CanonicalOp::V_CVT_U32_F64:
     return raiseFloatConversion64(Ctx, Di, Op);
+  case CanonicalOp::V_TRUNC_F64:
+  case CanonicalOp::V_CEIL_F64:
+  case CanonicalOp::V_RNDNE_F64:
+  case CanonicalOp::V_FLOOR_F64:
+  case CanonicalOp::V_RCP_F64:
+  case CanonicalOp::V_RSQ_F64:
+    return raiseUnaryFloat64(Ctx, Di, Op);
   case CanonicalOp::V_FRACT_F32:
   case CanonicalOp::V_TRUNC_F32:
   case CanonicalOp::V_CEIL_F32:

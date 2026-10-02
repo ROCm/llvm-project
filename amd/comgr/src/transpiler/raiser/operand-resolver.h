@@ -74,6 +74,8 @@ struct OperandResolver {
   }
   // Read the I-th source as an f32 value with its modifiers applied.
   llvm::Expected<llvm::Value *> srcF(unsigned I);
+  // Read the I-th source as an f64 value with its modifiers applied.
+  llvm::Expected<llvm::Value *> srcF64(unsigned I);
   // Read the selected half of the I-th source as an f16 value with its
   // modifiers applied.
   llvm::Expected<llvm::Value *> srcF16(unsigned I);

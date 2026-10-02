@@ -58,6 +58,16 @@ Expected<Value *> OperandResolver::srcF(unsigned I) {
   return applyMods(I, Float);
 }
 
+Expected<Value *> OperandResolver::srcF64(unsigned I) {
+  Expected<Value *> V = Ctx.registers().readOp64(Di, srcIdx(I));
+  if (!V)
+    return V.takeError();
+  if (srcMod(I) & ~(SISrcMods::NEG | SISrcMods::ABS))
+    return unsupportedInstruction(Ctx, Di, "unsupported f64 source modifier");
+  Value *Float = Ctx.B.CreateBitCast(*V, Ctx.B.getDoubleTy());
+  return applyMods(I, Float);
+}
+
 // Whether the register named by operand `OpIdx` is a `_HI16` subregister.
 static bool namesHighHalfRegister(const DecodedInst &Di,
                                   const MCRegisterInfo &MRI, unsigned OpIdx) {
