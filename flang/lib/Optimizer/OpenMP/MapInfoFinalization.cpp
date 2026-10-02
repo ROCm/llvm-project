@@ -1069,7 +1069,8 @@ public:
       llvm::SmallVectorImpl<ParentAndPlacement> &mapMemberUsers,
       mlir::Operation *target, fir::FirOpBuilder &builder,
       mlir::omp::ClauseMapFlags refFlagType, bool isAttachAlways = false,
-      mlir::Value reuseBaseAddr = mlir::Value{}) {
+      mlir::Value reuseBaseAddr = mlir::Value{},
+      bool supportsPolymorphicMap = false) {
     auto baseAddr =
         reuseBaseAddr
             ? reuseBaseAddr
@@ -1077,12 +1078,19 @@ public:
                                        fir::BoxFieldAttr::base_addr);
 
     mlir::Type underlyingVarType = getUnderlyingVarType(baseAddr.getType());
+    llvm::SmallVector<mlir::Value> bounds(descMapOp.getBounds().begin(),
+                                          descMapOp.getBounds().end());
+    if (shouldMapPolymorphicDescriptorWithRuntimeElementSize(
+            descriptor, supportsPolymorphicMap)) {
+      bounds = genRuntimeSizedBaseAddrBounds(descMapOp->getLoc(), descriptor,
+                                             descMapOp.getBounds(), builder);
+      underlyingVarType = builder.getI8Type();
+    }
     mlir::Type runtimePtrType = fir::unwrapRefType(descriptor.getType());
 
     return genImplicitPointerAttachMap(
         descMapOp, descriptor, runtimePtrType, baseAddr, underlyingVarType,
-        descMapOp.getBounds(), mapMemberUsers, target, builder, refFlagType,
-        isAttachAlways);
+        bounds, mapMemberUsers, target, builder, refFlagType, isAttachAlways);
   }
 
   [[maybe_unused]] mlir::Operation *genImplicitTypeDescAttachMap(
@@ -1194,7 +1202,9 @@ public:
 
     if (!isAttachNever)
       genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
-                           mlir::omp::ClauseMapFlags::ref_ptr, isAttachAlways);
+                           mlir::omp::ClauseMapFlags::ref_ptr, isAttachAlways,
+                           /*reuseBaseAddr=*/mlir::Value{},
+                           supportsPolymorphicMap);
 
     if (shouldMapDescriptorTypeDesc(descriptor, supportsPolymorphicMap))
       genImplicitTypeDescAttachMap(op, descriptor, mapMemberUsers, target,
@@ -1236,7 +1246,8 @@ public:
     if (!isAttachNever)
       genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
                            mlir::omp::ClauseMapFlags::ref_ptee, isAttachAlways,
-                           newMapInfoOp.getVarPtrPtr());
+                           newMapInfoOp.getVarPtrPtr(),
+                           supportsPolymorphicMap);
     op.replaceAllUsesWith(newMapInfoOp.getResult());
     op->erase();
     return newMapInfoOp;
@@ -1318,7 +1329,8 @@ public:
           genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
                                mlir::omp::ClauseMapFlags::ref_ptr |
                                    mlir::omp::ClauseMapFlags::ref_ptee,
-                               isAttachAlways, baseAddr.getVarPtrPtr());
+                               isAttachAlways, baseAddr.getVarPtrPtr(),
+                               supportsPolymorphicMap);
     }
 
     if (shouldMapDescriptorTypeDesc(descriptor, supportsPolymorphicMap))
