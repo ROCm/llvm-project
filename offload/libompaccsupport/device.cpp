@@ -918,6 +918,18 @@ static int32_t getBandwidthSaturationBytes(GenericDeviceTy &GenericDevice) {
 }
 ///}
 
+/// Blocks for which \p LoopTripCount would provide work when each block runs
+/// \p NumThreads threads. In Generic and Generic-SPMD mode, the trip count is
+/// that of the distribute loop and each block runs one iteration of it with
+/// all of its threads; otherwise, each thread runs one iteration.
+static uint64_t getNumBlocksWithWork(const KernelLaunchInfoTy &Info,
+                                     uint64_t LoopTripCount,
+                                     uint32_t NumThreads) {
+  if (Info.isGenericMode() || Info.isGenericSPMDMode())
+    return LoopTripCount;
+  return (LoopTripCount + NumThreads - 1) / NumThreads;
+}
+
 /// Blocks the traffic-aware policy would like \p Kernel launched with, or zero
 /// if it has no opinion: the kernel has no traffic estimate, the plugin does
 /// not report its compute-unit count, or the kernel needs a trip count and none
@@ -952,7 +964,7 @@ static uint64_t getTrafficAwareNumBlocks(GenericDeviceTy &GenericDevice,
     // Saturate rather than wrap: a trip count past 2^32 blocks would otherwise
     // come back as a handful of blocks, serialising the whole loop.
     uint64_t Blocks =
-        (LoopTripCount + EffectiveNumThreads - 1) / EffectiveNumThreads;
+        getNumBlocksWithWork(Info, LoopTripCount, EffectiveNumThreads);
     return std::min<uint64_t>(Blocks, std::numeric_limits<uint32_t>::max());
   }
 
@@ -1018,7 +1030,7 @@ static void applyTrafficAwareGridPolicy(GenericDeviceTy &GenericDevice,
   // Never more blocks than there is work for them.
   if (LoopTripCount > 0)
     PolicyBlocks = std::min<uint64_t>(
-        PolicyBlocks, ((LoopTripCount - 1) / NumThreads) + 1);
+        PolicyBlocks, getNumBlocksWithWork(Info, LoopTripCount, NumThreads));
   // Never more than the launch configuration can express.
   PolicyBlocks = std::min<uint64_t>(PolicyBlocks,
                                     GenericDevice.getBlockLimit(NumThreads));
