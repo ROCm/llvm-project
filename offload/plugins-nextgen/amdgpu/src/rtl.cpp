@@ -1132,8 +1132,8 @@ private:
       if (uint64_t NumGroups = getTrafficAwareNumBlocks(
               GenericDevice, EffectiveNumThreads, LoopTripCount)) {
         // Never more blocks than there is work for them.
-        uint64_t UpperBoundWork = getNumGroupsFromThreadsAndTripCount(
-            LoopTripCount, EffectiveNumThreads);
+        uint64_t UpperBoundWork =
+            getNumBlocksWithWork(LoopTripCount, EffectiveNumThreads);
         uint64_t UpperBoundLimit =
             GenericDevice.getBlockLimit(EffectiveNumThreads);
         if (LoopTripCount > 0)

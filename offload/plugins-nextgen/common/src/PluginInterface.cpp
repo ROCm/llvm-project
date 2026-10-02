@@ -561,8 +561,7 @@ GenericKernelTy::getTrafficAwareNumBlocks(GenericDeviceTy &GenericDevice,
       return 0;
     // Saturate rather than wrap: a trip count past 2^32 blocks would otherwise
     // come back as a handful of blocks, serialising the whole loop.
-    uint64_t Blocks =
-        (LoopTripCount + EffectiveNumThreads - 1) / EffectiveNumThreads;
+    uint64_t Blocks = getNumBlocksWithWork(LoopTripCount, EffectiveNumThreads);
     return std::min<uint64_t>(Blocks, std::numeric_limits<uint32_t>::max());
   }
 
@@ -592,6 +591,13 @@ GenericKernelTy::getTrafficAwareNumBlocks(GenericDeviceTy &GenericDevice,
     FullOccupancy = std::min(FullOccupancy, KernelLimit);
   return std::max<uint64_t>(
       1, FullOccupancy * GenericDevice.getLatencyOccupancyPct() / 100);
+}
+
+uint64_t GenericKernelTy::getNumBlocksWithWork(uint64_t LoopTripCount,
+                                               uint32_t NumThreads) const {
+  if (isGenericMode() || isGenericSPMDMode())
+    return LoopTripCount;
+  return (LoopTripCount + NumThreads - 1) / NumThreads;
 }
 
 uint32_t GenericKernelTy::getEffectiveNumBlocks(

@@ -722,6 +722,13 @@ protected:
                                     uint32_t EffectiveNumThreads,
                                     uint64_t LoopTripCount) const;
 
+  /// Blocks for which \p LoopTripCount would provide work when each block runs
+  /// \p NumThreads threads. In Generic and Generic-SPMD mode, the trip count
+  /// is that of the distribute loop and each block runs one iteration of it
+  /// with all of its threads; otherwise, each thread runs one iteration.
+  uint64_t getNumBlocksWithWork(uint64_t LoopTripCount,
+                                uint32_t NumThreads) const;
+
   /// The preferred number of threads to run the kernel.
   uint32_t PreferredNumThreads;
 
