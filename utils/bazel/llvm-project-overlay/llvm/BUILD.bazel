@@ -1807,6 +1807,17 @@ td_library(
     ]),
 )
 
+gentbl_cc_library(
+    name = "InstCombineCLOptionsTableGen",
+    strip_include_prefix = "lib/Transforms/InstCombine",
+    tbl_outs = {
+        "lib/Transforms/InstCombine/InstCombineCLOptions.inc": ["-gen-opt-parser-defs"],
+    },
+    tblgen = ":llvm-tblgen",
+    td_file = "lib/Transforms/InstCombine/InstCombineCLOptions.td",
+    deps = [":OptParserTdFiles"],
+)
+
 cc_library(
     name = "InstCombine",
     srcs = glob([
@@ -1818,6 +1829,8 @@ cc_library(
     deps = [
         ":Analysis",
         ":Core",
+        ":InstCombineCLOptionsTableGen",
+        ":Option",
         ":Support",
         ":Target",
         ":TransformUtils",
