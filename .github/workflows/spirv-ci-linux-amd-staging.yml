@@ -7,6 +7,9 @@ name: SPIRV Compiler CI - Linux - amd-staging
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 env:
   LLVM_BUILD: build
   DEVLIBS_BUILD: build-device-libs
@@ -604,6 +607,7 @@ jobs:
       - name: Checkout rocm-examples
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          persist-credentials: false
           repository: ROCm/rocm-examples
           ref: amd-staging
           path: rocm-examples
