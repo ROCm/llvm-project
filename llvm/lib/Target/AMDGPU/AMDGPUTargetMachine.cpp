@@ -118,6 +118,7 @@
 #include "llvm/Transforms/IPO/ExpandVariadics.h"
 #include "llvm/Transforms/IPO/GlobalDCE.h"
 #include "llvm/Transforms/IPO/Internalize.h"
+#include "llvm/Transforms/IPO/OpenMPKernelTraffic.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/EarlyCSE.h"
 #include "llvm/Transforms/Scalar/FlattenCFG.h"
@@ -1131,9 +1132,21 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
           AMDGPUAttributorOptions Opts;
           MPM.addPass(AMDGPUAttributorPass(*this, Opts, Phase));
         }
+
+        // After inlining and InferAddressSpaces.
+        if (getTargetTriple().isAMDGCN())
+          MPM.addPass(OpenMPKernelTrafficPass());
       }
     }
   });
+
+  // Before the device runtime is inlined, preparational work for
+  // OpenMPKernelTrafficPass at the end of the pipeline.
+  PB.registerFullLinkTimeOptimizationEarlyEPCallback(
+      [this](ModulePassManager &PM, OptimizationLevel Level) {
+        if (Level != OptimizationLevel::O0 && getTargetTriple().isAMDGCN())
+          PM.addPass(OpenMPWorkLoopMarkerPass());
+      });
 
   PB.registerFullLinkTimeOptimizationLastEPCallback(
       [this](ModulePassManager &PM, OptimizationLevel Level) {
@@ -1189,6 +1202,15 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
             PM.addPass(AMDGPUAttributorPass(
                 *this, Opt, ThinOrFullLTOPhase::FullLTOPostLink));
           }
+
+          // The driver runs clang's device LTO as a custom post-link pipeline
+          // that reaches the OptimizerLast callback above, but flang, or a
+          // link without an optimization level, gets the default full LTO
+          // pipeline, which only reaches this one. A kernel that already has
+          // a valid estimate is skipped and a failed one is retried, so ending
+          // up in both is harmless.
+          if (getTargetTriple().isAMDGCN())
+            PM.addPass(OpenMPKernelTrafficPass());
         }
         if (!NoKernelInfoEndLTO) {
           FunctionPassManager FPM;
