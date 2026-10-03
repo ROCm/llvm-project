@@ -978,7 +978,7 @@ static void assignUsesToGroups(Register CandidateReg, MachineInstr *CurMI,
 }
 
 void AMDGPUEarlyRegisterSpilling::groupUsesInBlock(
-    std::vector<DomGroup> &Groups) {
+    MachineLoop *CurLoop, std::vector<DomGroup> &Groups) {
 
   for (unsigned Idx1 = 0, E = Groups.size(); Idx1 != E; ++Idx1) {
     auto &G1 = Groups[Idx1];
@@ -1001,6 +1001,9 @@ void AMDGPUEarlyRegisterSpilling::groupUsesInBlock(
       if (RestoreBlock1 != RestoreBlock2)
         continue;
 
+      if (!shouldGroupUses(CurLoop, G1, G2, MLI, DT, NUA))
+        continue;
+
       if (DT->dominates(Head1, Head2)) {
         G1.merge(G2);
       }
@@ -1017,7 +1020,7 @@ void AMDGPUEarlyRegisterSpilling::groupUses(
   std::vector<DomGroup> Groups;
   assignUsesToGroups(CandidateReg, CurMI, DominatedUses, Groups, MLI);
 
-  groupUsesInBlock(Groups);
+  groupUsesInBlock(CurLoop, Groups);
 
   if (DisableRestoreGrouping) {
     for (auto &G1 : Groups) {
@@ -1616,7 +1619,7 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
         std::vector<DomGroup> GroupOfUses;
         assignUsesToGroups(CandidateReg, CurMI, UsesDominatedByCurMI,
                            GroupOfUses, MLI);
-        groupUsesInBlock(GroupOfUses);
+        groupUsesInBlock(CurLoop, GroupOfUses);
 
         auto Candidate = std::make_unique<RestoreCandidate>(
             OrigRestore->getOperand(0).getReg(), Mask,
