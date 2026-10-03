@@ -13,8 +13,13 @@
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/raise_failure.h"
 
+#include "transpiler/decoder/amdgpu-mc-tables.h"
+
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 
+#include <cassert>
+
+#include "llvm/ADT/APInt.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
@@ -114,7 +119,7 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> Source = Op.srcF(0);
+  Expected<Value *> Source = Op.srcF32(0);
   if (!Source)
     return Source.takeError();
 
@@ -226,7 +231,7 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
   }
   case CanonicalOp::V_CVT_I32_F32:
   case CanonicalOp::V_CVT_U32_F32: {
-    Expected<Value *> Source = Op.srcF(0);
+    Expected<Value *> Source = Op.srcF32(0);
     if (!Source)
       return Source.takeError();
     Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_CVT_I32_F32
@@ -237,7 +242,7 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
     break;
   }
   case CanonicalOp::V_CVT_F16_F32: {
-    Expected<Value *> Source = Op.srcF(0);
+    Expected<Value *> Source = Op.srcF32(0);
     if (!Source)
       return Source.takeError();
     Value *Half = Ctx.B.CreateFPTrunc(*Source, Ctx.B.getHalfTy(), "cvt");
@@ -280,6 +285,23 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+Expected<Value *> readCndMaskCondition(RaiseContext &Ctx, OperandResolver &Op) {
+  if (Op.nSrcs() == 2)
+    return Ctx.registers().regFile().loadVCC(Ctx.B);
+
+  Expected<Value *> KnownCondition = Op.srcWaveMaskI1(2);
+  if (!KnownCondition)
+    return KnownCondition.takeError();
+  if (*KnownCondition)
+    return *KnownCondition;
+
+  // Use the full SGPR mask when no per-lane condition is available.
+  Expected<Value *> Mask = Op.srcExecWidth(2);
+  if (!Mask)
+    return Mask.takeError();
+  return Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, *Mask);
+}
+
 Error raiseCndMask32(RaiseContext &Ctx, const DecodedInst &Di,
                      OperandResolver &Op) {
   if (Di.NumDefs != 1 || (Op.nSrcs() != 2 && Op.nSrcs() != 3))
@@ -292,25 +314,11 @@ Error raiseCndMask32(RaiseContext &Ctx, const DecodedInst &Di,
   Value *Source0 = Op.applyMods(0, Args->Src0);
   Value *Source1 = Op.applyMods(1, Args->Src1);
 
-  Value *Condition;
-  if (Op.nSrcs() == 2) {
-    Condition = Ctx.registers().regFile().loadVCC(Ctx.B);
-  } else {
-    Expected<Value *> KnownCondition = Op.srcWaveMaskI1(2);
-    if (!KnownCondition)
-      return KnownCondition.takeError();
-    if (*KnownCondition) {
-      Condition = *KnownCondition;
-    } else {
-      // Use the full SGPR mask when no per-lane condition is available.
-      Expected<Value *> Mask = Op.srcExecWidth(2);
-      if (!Mask)
-        return Mask.takeError();
-      Condition = Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, *Mask);
-    }
-  }
+  Expected<Value *> Condition = readCndMaskCondition(Ctx, Op);
+  if (!Condition)
+    return Condition.takeError();
 
-  Value *Result = Ctx.B.CreateSelect(Condition, Source1, Source0, "cndmask");
+  Value *Result = Ctx.B.CreateSelect(*Condition, Source1, Source0, "cndmask");
   Ctx.registers().writeReg32(Args->Dst, Result);
   return Error::success();
 }
@@ -333,6 +341,97 @@ Error raiseBinary64(RaiseContext &Ctx, OperandResolver &Op,
   Value *Result = Build(Ctx.B, Args->Src0, Args->Src1);
   Ctx.registers().writeReg64(Args->Dst, Result);
   return Error::success();
+}
+
+Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
+  int Index = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                    AMDGPU::OpName::clamp);
+  if (Index < 0)
+    return false;
+  assert(Di.isImm(Index) && "clamp operand must be an immediate");
+  return Di.getImm(Index) != 0;
+}
+
+Value *emitBitOp3(IRBuilder<> &B, Value *Src0, Value *Src1, Value *Src2,
+                  uint8_t TruthTable) {
+  Value *Not0 = B.CreateNot(Src0);
+  Value *Not1 = B.CreateNot(Src1);
+  Value *Not2 = B.CreateNot(Src2);
+  constexpr unsigned TruthTableSize = 8;
+  Value *Result = nullptr;
+  for (unsigned Index = 0; Index != TruthTableSize; ++Index) {
+    if (!(TruthTable & (1u << Index)))
+      continue;
+    Value *Minterm =
+        B.CreateAnd(Index & 0b100 ? Src0 : Not0, Index & 0b010 ? Src1 : Not1);
+    Minterm =
+        B.CreateAnd(Minterm, Index & 0b001 ? Src2 : Not2, "bitop3.minterm");
+    Result = Result ? B.CreateOr(Result, Minterm, "bitop3") : Minterm;
+  }
+  // An empty truth table selects no minterm and so produces zero.
+  return Result ? Result : ConstantInt::get(Src0->getType(), 0);
+}
+
+Error writeDestination16(RaiseContext &Ctx, OperandResolver &Op,
+                         Value *Result) {
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+
+  IntegerType *I32Ty = Ctx.B.getInt32Ty();
+  Value *Bits = Ctx.B.CreateZExt(Result, I32Ty, "result.i32");
+  if (!Op.dstKeepsOtherHalf()) {
+    Ctx.registers().writeReg32(*Dst, Bits);
+    return Error::success();
+  }
+
+  // LLVM IR has no partial register write, so read the destination back and
+  // merge the result into the half the instruction selects.
+  Expected<Value *> Previous = Op.dstValue();
+  if (!Previous)
+    return Previous.takeError();
+  Value *Merged;
+  if (Op.dstIsHighHalf()) {
+    Value *KeptLow = Ctx.B.CreateAnd(
+        *Previous,
+        ConstantInt::get(
+            I32Ty, APInt::getLowBitsSet(RegisterWidthInBits, HalfWidthInBits)));
+    Merged = Ctx.B.CreateOr(KeptLow, Ctx.B.CreateShl(Bits, HalfWidthInBits),
+                            "merge.hi");
+  } else {
+    Value *KeptHigh = Ctx.B.CreateAnd(
+        *Previous,
+        ConstantInt::get(I32Ty, APInt::getHighBitsSet(RegisterWidthInBits,
+                                                      HalfWidthInBits)));
+    Merged = Ctx.B.CreateOr(KeptHigh, Bits, "merge.lo");
+  }
+  Ctx.registers().writeReg32(*Dst, Merged);
+  return Error::success();
+}
+
+Value *applyFloat16SignModifiers(IRBuilder<> &B, Value *Bits, unsigned Mods) {
+  Type *I16Ty = B.getInt16Ty();
+  if (Mods & SISrcMods::ABS)
+    Bits = B.CreateAnd(
+        Bits,
+        ConstantInt::get(I16Ty, APInt::getSignedMaxValue(HalfWidthInBits)),
+        "abs16");
+  if (Mods & SISrcMods::NEG)
+    Bits = B.CreateXor(
+        Bits, ConstantInt::get(I16Ty, APInt::getSignMask(HalfWidthInBits)),
+        "neg16");
+  return Bits;
+}
+
+Error raiseBinary16(RaiseContext &Ctx, OperandResolver &Op,
+                    BinaryBuilder Build) {
+  Expected<Value *> Src0 = Op.src16(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = Op.src16(1);
+  if (!Src1)
+    return Src1.takeError();
+  return writeDestination16(Ctx, Op, Build(Ctx.B, *Src0, *Src1));
 }
 
 Value *maskShiftAmount(IRBuilder<> &B, Value *Amount, unsigned Width) {

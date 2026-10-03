@@ -1225,6 +1225,14 @@ def FeatureSRAMECC : SubtargetFeature<"sramecc",
   "Enable SRAMECC"
 >;
 
+defm SRAMECCOnOffModes : AMDGPUSubtargetFeature<"sramecc-on-off-modes",
+  "Target supports SRAMECC on/off modes",
+  /*GenPredicate=*/1,
+  /*GenAssemblerPredicate=*/0,
+  [FeatureSupportsSRAMECC],
+  InlineIgnore
+>;
+
 defm NoSdstCMPX : AMDGPUSubtargetFeature<"no-sdst-cmpx",
   "V_CMPX does not write VCC/SGPR in addition to EXEC"
 >;
@@ -2042,7 +2050,7 @@ def FeatureISAVersion9_0_MI_Common : FeatureSet<
      FeatureMAIInsts,
      FeaturePkFmacF16Inst,
      FeatureAtomicFaddNoRtnInsts,
-     FeatureSupportsSRAMECC])>;
+     FeatureSRAMECCOnOffModes])>;
 
 def FeatureISAVersion9_0_0 : FeatureSet<
   !listconcat(FeatureISAVersion9_0_Consumer_Common.Features,
@@ -2065,7 +2073,7 @@ def FeatureISAVersion9_0_6 : FeatureSet<
      FeatureDot2Insts,
      FeatureDot7Insts,
      FeatureDot10Insts,
-     FeatureSupportsSRAMECC])>;
+     FeatureSRAMECCOnOffModes])>;
 
 def FeatureISAVersion9_0_8 : FeatureSet<
   !listconcat(FeatureISAVersion9_0_MI_Common.Features,
@@ -2137,7 +2145,7 @@ def FeatureISAVersion9_4_Common : FeatureSet<
    FeatureAtomicBufferGlobalPkAddF16Insts,
    FeatureAtomicGlobalPkAddBF16Inst,
    FeatureFlatAtomicFaddF32Inst,
-   FeatureSupportsSRAMECC,
+   FeatureSRAMECCOnOffModes,
    FeaturePackedTID,
    FeatureArchitectedFlatScratch,
    FeatureFullRate64Ops,
@@ -2506,7 +2514,6 @@ def FeatureISAVersion12_50_Common : FeatureSet<
    FeatureOCPFP8ConversionInsts,
    FeatureFP8F16ConversionInsts,
    FeatureF16FP8ConversionInsts,
-   FeatureFP8E5M3Insts,
    FeaturePackedTID,
    FeatureVcmpxPermlaneHazard,
    FeatureSALUFloatInsts,
@@ -2532,7 +2539,7 @@ def FeatureISAVersion12_50_Common : FeatureSet<
    FeaturePrngInst,
    FeaturePermlane16Swap,
    FeatureAshrPkInsts,
-   FeatureSupportsSRAMECC,
+   FeatureSRAMECCOnOffModes,
    FeatureMaxHardClauseLength63,
    FeatureWaitXcnt,
    FeatureAsynccnt,
@@ -2626,6 +2633,7 @@ def FeatureISAVersion12_50 : FeatureSet<
    FeatureCvtPkNormVOP2Insts,
    FeatureCvtPkNormVOP3Insts,
    FeatureBlock16ConversionScaleInsts,
+   FeatureFP8E5M3Insts,
    FeatureSWMMACGfx1200Insts,
    FeatureSWMMACGfx1250Insts,
    FeatureTransCoexecutionHazard,
@@ -2666,6 +2674,7 @@ def FeatureISAVersion12_51 : FeatureSet<
    FeatureCvtPkNormVOP2Insts,
    FeatureCvtPkNormVOP3Insts,
    FeatureBlock16ConversionScaleInsts,
+   FeatureFP8E5M3Insts,
    FeatureSWMMACGfx1200Insts,
    FeatureSWMMACGfx1250Insts,
    FeatureUseAddPC64Inst,
@@ -2689,6 +2698,7 @@ def FeatureISAVersion12_5_Generic: FeatureSet<
    FeatureLDSEncodingGranularity2048,
    FeatureLDSBankCount64,
    FeatureBlock16ConversionScaleInsts,
+   FeatureFP8E5M3Insts,
    FeatureSetregVGPRMSBFixup,
    FeatureRequiresCOV6,
    FeatureGFX125xLowestRateWMMA,
@@ -3222,6 +3232,10 @@ def HasSDWA10 :
 def HasDPP : Predicate<"Subtarget->hasDPP()">,
   AssemblerPredicate<(all_of FeatureGCN3Encoding, FeatureDPP)>;
 
+def HasGCN3DPALU_DPP :
+  Predicate<"Subtarget->isGCN3Encoding() && Subtarget->hasDPALU_DPP()">,
+  AssemblerPredicate<(all_of FeatureGCN3Encoding, FeatureDPALU_DPP)>;
+
 def HasDPP8 : Predicate<"Subtarget->hasDPP8()">,
   AssemblerPredicate<(all_of (not FeatureGCN3Encoding), FeatureGFX10Insts, FeatureDPP8)>;
 
@@ -3399,6 +3413,7 @@ def AMDGPUFrontendVisibleFeatures {
   FeatureWavefrontSize32, FeatureWavefrontSize64, FeatureSupportsWGP,
   FeatureSupportsWave32, FeatureFastFMAF32, FeatureFastDenormalF32,
   FeatureSupportsXNACK, FeatureSupportsSRAMECC, FeatureXNACKOnOffModes,
+  FeatureSRAMECCOnOffModes,
   FeatureSGPRInitBug, FeatureApertureRegs, FeatureGetDoorbellID,
   FeatureAGPRAlloc, Feature1536VGPRs, Feature1024AddressableVGPRs,
   FeatureHalfAddressablePhysicalLocalMemory, FeatureBackOffBarrier,

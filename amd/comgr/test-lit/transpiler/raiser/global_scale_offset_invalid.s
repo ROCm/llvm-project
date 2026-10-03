@@ -1,18 +1,6 @@
 ; REQUIRES: comgr-has-transpiler
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
-; RUN:   --defsym=LOAD_SCOPE=1 %s -o %t.o
-; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
-
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
-; RUN:   --defsym=LOAD_SCALED_SCOPE=1 %s -o %t.o
-; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
-
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
 ; RUN:   --defsym=STORE_TH=1 %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
@@ -53,12 +41,6 @@
 ; NO-SADDR-SAME: scale_offset requires an saddr base
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
-; RUN:   --defsym=SUBDWORD=1 %s -o %t.o
-; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=OPERATION
-
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
 ; RUN:   --defsym=ATOMIC=1 %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
@@ -73,12 +55,6 @@
 	.p2align 8
 	.type global_invalid,@function
 global_invalid:
-.ifdef LOAD_SCOPE
-	global_load_b32 v1, v0, s[0:1] scope:SCOPE_DEV
-.endif
-.ifdef LOAD_SCALED_SCOPE
-	global_load_b32 v1, v0, s[0:1] scale_offset scope:SCOPE_DEV
-.endif
 .ifdef STORE_TH
 	global_store_b64 v0, v[2:3], s[0:1] th:TH_STORE_NT
 .endif
@@ -101,11 +77,8 @@ global_invalid:
 ; global_store_b32 v[2:3], v1, off scale_offset
 	.long 0xee06807c, 0x00810000, 0x00000002
 .endif
-.ifdef SUBDWORD
-	global_load_u16 v1, v0, s[0:1] scale_offset
-.endif
 .ifdef ATOMIC
-	global_atomic_add_u32 v0, v1, s[0:1] scale_offset
+	global_atomic_sub_u32 v0, v1, s[0:1] scale_offset
 .endif
 	s_endpgm
 

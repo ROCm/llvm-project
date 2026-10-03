@@ -94,6 +94,13 @@ llvm::Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
 /// refusal.
 llvm::Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
                         OperandResolver &Op);
+/// Whether `Op` reads and writes 16-bit register halves and so is raised by
+/// `handleInteger16` rather than by the encoding's own handler.
+bool isInteger16Op(CanonicalOp Op);
+/// Translate a 16-bit integer instruction, shared by the VOP2 and VOP3
+/// encodings it appears in.
+llvm::Error handleInteger16(RaiseContext &Ctx, const DecodedInst &Di,
+                            OperandResolver &Op);
 /// Translate a supported matrix instruction to the corresponding target MFMA.
 llvm::Error handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
@@ -105,17 +112,25 @@ llvm::Error handleVOPD(RaiseContext &Ctx, const DecodedInst &Di);
 llvm::Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
 
-/// Return the LLVM predicate for a supported I32/U32 comparison.
-std::optional<llvm::ICmpInst::Predicate>
-getIntegerComparePredicate(CanonicalOp Opcode);
+/// A comparison's operand width and predicate, or no predicate for FP class.
+struct VectorCompareInfo {
+  std::optional<llvm::CmpInst::Predicate> Predicate;
+  unsigned BitWidth;
+  // Signed I64 operands sign-extend 32-bit literals, including for eq/ne.
+  bool SignExtendLiteral = false;
 
-/// Raise an I32/U32 comparison into its validated explicit destination and
-/// implicit condition registers. Replace the full result mask, clearing
-/// inactive lanes; cmpx narrows EXEC.
-llvm::Error raiseIntegerCompare32(RaiseContext &Ctx, const DecodedInst &Di,
-                                  OperandResolver &Op,
-                                  llvm::ICmpInst::Predicate Predicate,
-                                  std::optional<ParsedReg> Destination);
+  bool isFloat() const {
+    return !Predicate || llvm::CmpInst::isFPPredicate(*Predicate);
+  }
+};
+
+/// Return the semantics of a supported vector comparison.
+std::optional<VectorCompareInfo> getVectorCompareInfo(CanonicalOp Opcode);
+
+/// Raise a vector comparison, clearing inactive result bits and narrowing EXEC
+/// for cmpx. Update every decoded explicit and implicit mask destination.
+llvm::Error raiseVectorCompare(RaiseContext &Ctx, const DecodedInst &Di,
+                               OperandResolver &Op, VectorCompareInfo Info);
 
 } // namespace COMGR::transpiler
 

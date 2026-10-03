@@ -66,7 +66,7 @@ Error handleVOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_READFIRSTLANE_B32:
     return raiseReadFirstLane32(Ctx, Di, Op);
   default:
-    return unsupportedInstruction(Ctx, Di);
+    return handleInteger16(Ctx, Di, Op);
   }
 }
 

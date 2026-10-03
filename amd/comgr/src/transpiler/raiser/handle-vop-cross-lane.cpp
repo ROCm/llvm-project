@@ -22,6 +22,7 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
+#include <cassert>
 #include <cstdint>
 
 using namespace llvm;
@@ -105,6 +106,91 @@ static Value *emitSourceWaveRead(RaiseContext &Ctx, Value *Src,
       Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_ds_bpermute);
   Value *Gathered = Ctx.B.CreateCall(BPermute, {ByteAddress, Src}, Name);
   return Ctx.Projection.wrapAsWWMValue(Ctx.B, Gathered, Name + ".wwm");
+}
+
+/// Return the mask of the lanes below the current one within its source wave.
+static Value *emitBelowSourceLaneMask(RaiseContext &Ctx, const Twine &Name) {
+  Value *SourceLane =
+      emitSourceWaveLane(Ctx, Ctx.emitLaneIdx(), Name + ".lane");
+  Value *LaneBit =
+      Ctx.B.CreateShl(Ctx.B.getInt32(1), SourceLane, Name + ".bit");
+  return Ctx.B.CreateSub(LaneBit, Ctx.B.getInt32(1), Name);
+}
+
+Error raiseMaskedBitCountLow32(RaiseContext &Ctx, const DecodedInst &Di,
+                               OperandResolver &Op) {
+  if (Error Err = requireSupportedWaveDirection(Ctx, Di))
+    return Err;
+  if (Op.nSrcs() != 2)
+    return unsupportedInstruction(Ctx, Di, "expected two source operands");
+
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> BaseCount = Op.src(1);
+  if (!BaseCount)
+    return BaseCount.takeError();
+
+  Value *Result = nullptr;
+  if (Ctx.Projection.targetWaveSize() == Ctx.Projection.sourceWaveSize()) {
+    Expected<Value *> Mask = Op.src(0);
+    if (!Mask)
+      return Mask.takeError();
+    Module *M = Ctx.B.GetInsertBlock()->getModule();
+    Function *MaskedBitCount =
+        Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_mbcnt_lo);
+    Result = Ctx.B.CreateCall(MaskedBitCount, {*Mask, *BaseCount}, "mbcnt.lo");
+  } else {
+    // The target lane id runs past the source wave, so the native intrinsic
+    // would count bits belonging to another source wave.
+    Expected<Value *> Mask = Op.srcSourceWaveMask32(0);
+    if (!Mask)
+      return Mask.takeError();
+    Value *Below = emitBelowSourceLaneMask(Ctx, "mbcnt.below");
+    Value *Selected = Ctx.B.CreateAnd(*Mask, Below, "mbcnt.selected");
+    Value *Count = Ctx.B.CreateUnaryIntrinsic(
+        Intrinsic::ctpop, Selected, /*FMFSource=*/nullptr, "mbcnt.count");
+    Result = Ctx.B.CreateAdd(Count, *BaseCount, "mbcnt.lo");
+  }
+
+  Ctx.registers().writeReg32(*Dst, Result);
+  return Error::success();
+}
+
+Error raiseMaskedBitCountHigh32(RaiseContext &Ctx, const DecodedInst &Di,
+                                OperandResolver &Op) {
+  if (Error Err = requireSupportedWaveDirection(Ctx, Di))
+    return Err;
+  if (Op.nSrcs() != 2)
+    return unsupportedInstruction(Ctx, Di, "expected two source operands");
+
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> BaseCount = Op.src(1);
+  if (!BaseCount)
+    return BaseCount.takeError();
+
+  Value *Result = nullptr;
+  if (Ctx.Projection.targetWaveSize() == Ctx.Projection.sourceWaveSize()) {
+    Expected<Value *> Mask = Op.src(0);
+    if (!Mask)
+      return Mask.takeError();
+    Module *M = Ctx.B.GetInsertBlock()->getModule();
+    Function *MaskedBitCount =
+        Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_mbcnt_hi);
+    Result = Ctx.B.CreateCall(MaskedBitCount, {*Mask, *BaseCount}, "mbcnt.hi");
+  } else {
+    // Widening only ever starts from wave32, whose lane ids stay below the
+    // high half of the wave mask. The selected bit range is therefore empty
+    // and the result is src1, independent of src0.
+    assert(Ctx.Projection.sourceWaveSize() <= 32 &&
+           "the high half of the wave mask is unreachable only from wave32");
+    Result = *BaseCount;
+  }
+
+  Ctx.registers().writeReg32(*Dst, Result);
+  return Error::success();
 }
 
 Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,

@@ -35,7 +35,7 @@ jobs:
            )
          )
        ))
-    uses: ./.github/workflows/spirv-ci-linux-amd-staging.yml
+    uses: $/.github/workflows/spirv-ci-linux-amd-staging.yml
 
   windows_release:
     name: Windows::release
@@ -52,4 +52,4 @@ jobs:
            )
          )
        ))
-    uses: ./.github/workflows/spirv-ci-windows-amd-staging.yml
+    uses: $/.github/workflows/spirv-ci-windows-amd-staging.yml

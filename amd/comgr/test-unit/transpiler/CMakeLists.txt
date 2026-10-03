@@ -19,6 +19,7 @@ if(COMGR_ENABLE_TRANSPILER)
   list(APPEND COMGR_TRANSPILER_TEST_TARGETS
     RaiserScaffoldingTests WaveProjectionTests WMMALoweringTests
     RaiseFailureTests RegFileTests RegisterStateTests RaiseContextTests
+    VectorCompareTests
     OperandResolverTests UserSgprLayoutTests DecoderTests)
 endif()
 

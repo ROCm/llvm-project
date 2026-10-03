@@ -11,6 +11,7 @@
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
+#include "transpiler/raiser/handle-vop-cross-lane.h"
 #include "transpiler/raiser/handle-vop-shared.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
@@ -32,18 +33,6 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 namespace {
-
-/// Read the VOP3 clamp operand. Opcodes whose encoding reserves the field have
-/// no named operand and are necessarily unclamped.
-Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
-  int Idx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                                  AMDGPU::OpName::clamp);
-  if (Idx < 0)
-    return false;
-  if (!Di.isImm(Idx))
-    return unsupportedInstruction(Ctx, Di, "clamp operand is not immediate");
-  return Di.getImm(Idx) != 0;
-}
 
 /// Reject nonzero output multipliers on integer VOP3 instructions.
 Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
@@ -339,7 +328,7 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> Significand = Op.srcF(0);
+  Expected<Value *> Significand = Op.srcF32(0);
   if (!Significand)
     return Significand.takeError();
   Expected<Value *> Exponent = Op.src(1);
@@ -358,6 +347,9 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
 
 Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
+  if (std::optional<VectorCompareInfo> Info = getVectorCompareInfo(Di.CanonOp))
+    return raiseVectorCompare(Ctx, Di, Op, *Info);
+
   switch (Di.CanonOp) {
   case CanonicalOp::V_NOP:
     return Error::success();
@@ -412,6 +404,11 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     break;
   }
 
+  // The 16-bit integer opcodes carry their register-half selection in the
+  // source modifiers, so they are raised ahead of the checks that reject them.
+  if (isInteger16Op(Di.CanonOp))
+    return handleInteger16(Ctx, Di, Op);
+
   if (Error Err = requireNoIntegerSourceModifiers(Ctx, Di, Op))
     return Err;
   if (Error Err = requireNoOutputMultiplier(Ctx, Di))
@@ -420,29 +417,6 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<bool> Clamp = readClamp(Ctx, Di);
   if (!Clamp)
     return Clamp.takeError();
-
-  if (std::optional<ICmpInst::Predicate> Predicate =
-          getIntegerComparePredicate(Di.CanonOp)) {
-    assert(!*Clamp && "integer comparison cannot have clamp");
-    if (Di.NumDefs == 0) {
-      assert(Di.defsExec() &&
-             "comparison without a destination must write EXEC");
-      return raiseIntegerCompare32(Ctx, Di, Op, *Predicate, std::nullopt);
-    }
-    assert(Di.NumDefs == 1 && "comparison must have one explicit destination");
-    if (!Di.isReg(0))
-      return unsupportedInstruction(Ctx, Di,
-                                    "expected a comparison mask destination");
-    Expected<ParsedReg> Destination = Op.dst();
-    if (!Destination)
-      return Destination.takeError();
-    if (Destination->RegKind != ParsedReg::SGPR &&
-        Destination->RegKind != ParsedReg::VCC &&
-        Destination->RegKind != ParsedReg::NOREG)
-      return unsupportedInstruction(Ctx, Di,
-                                    "unsupported comparison mask destination");
-    return raiseIntegerCompare32(Ctx, Di, Op, *Predicate, *Destination);
-  }
 
   switch (Di.CanonOp) {
   case CanonicalOp::V_MOV_B32:
@@ -505,6 +479,10 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
       return unsupportedInstruction(
           Ctx, Di, "integer bit operation does not define clamp");
     return raiseBitCount(Ctx, Op);
+  case CanonicalOp::V_MBCNT_LO_U32_B32:
+    return raiseMaskedBitCountLow32(Ctx, Di, Op);
+  case CanonicalOp::V_MBCNT_HI_U32_B32:
+    return raiseMaskedBitCountHigh32(Ctx, Di, Op);
   case CanonicalOp::V_LSHLREV_B32:
     if (*Clamp)
       return unsupportedInstruction(
@@ -653,30 +631,8 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     if (!Args)
       return Args.takeError();
 
-    Value *Not0 = Ctx.B.CreateNot(Args->Src0);
-    Value *Not1 = Ctx.B.CreateNot(Args->Src1);
-    Value *Not2 = Ctx.B.CreateNot(Args->Src2);
-    constexpr unsigned TruthTableSize = 8;
-    constexpr uint64_t TruthTableMask = UINT64_C(0xff);
-    Value *Minterms[TruthTableSize];
-    Value *First = Ctx.B.CreateAnd(Not0, Not1);
-    Minterms[0] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[1] = Ctx.B.CreateAnd(First, Args->Src2);
-    First = Ctx.B.CreateAnd(Not0, Args->Src1);
-    Minterms[2] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[3] = Ctx.B.CreateAnd(First, Args->Src2);
-    First = Ctx.B.CreateAnd(Args->Src0, Not1);
-    Minterms[4] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[5] = Ctx.B.CreateAnd(First, Args->Src2);
-    First = Ctx.B.CreateAnd(Args->Src0, Args->Src1);
-    Minterms[6] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[7] = Ctx.B.CreateAnd(First, Args->Src2);
-    uint64_t TruthTable = static_cast<uint64_t>(Op.srcImm(3)) & TruthTableMask;
-    Value *Result = Ctx.B.getInt32(0);
-    for (unsigned I = 0; I != TruthTableSize; ++I) {
-      if (TruthTable & (UINT64_C(1) << I))
-        Result = Ctx.B.CreateOr(Result, Minterms[I], "bitop3");
-    }
+    Value *Result = emitBitOp3(Ctx.B, Args->Src0, Args->Src1, Args->Src2,
+                               static_cast<uint8_t>(Op.srcImm(3)));
     Ctx.registers().writeReg32(Args->Dst, Result);
     return Error::success();
   }

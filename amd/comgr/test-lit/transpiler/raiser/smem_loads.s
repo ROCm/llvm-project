@@ -8,6 +8,7 @@
 ; RUN:   --emit-ir=smem_loads,smem_wide_loads,smem_wide_overlap \
 ; RUN:   --emit-ir=smem_register_offset,smem_wide_register_offset \
 ; RUN:   --emit-ir=smem_soffset_overlap,smem_scale_offset \
+; RUN:   --emit-ir=smem_narrow_loads,smem_narrow_scale_offset \
 ; RUN:   | %FileCheck %s --check-prefix=IR
 ; RUN: not %transpile_cli %t.gfx1250.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=smem_cache_policy,smem_buffer_load \
@@ -205,6 +206,110 @@ smem_scale_offset:
 ; IR: ret void
 	s_endpgm
 
+; A byte load uses the full address; a 16-bit load ignores only bit 0. Both
+; widen into a single dword, zero extending for u8/u16 and sign extending for
+; i8/i16.
+
+	.globl	smem_narrow_loads
+	.p2align	8
+	.type	smem_narrow_loads,@function
+; IR-LABEL: define amdgpu_kernel void @smem_narrow_loads(
+smem_narrow_loads:
+; IR-NOT: and i64 {{.+}}, -1
+; IR: [[U8_ADDRESS:%.+]] = add i64 {{%.+}}, 3
+; IR: [[U8_POINTER:%.+]] = inttoptr i64 [[U8_ADDRESS]] to ptr addrspace(1)
+; IR: [[U8_LOAD:%.+]] = load i8, ptr addrspace(1) [[U8_POINTER]], align 1
+; IR: [[U8_VALUE:%.+]] = zext i8 [[U8_LOAD]] to i32
+	s_load_u8 s2, s[0:1], 0x3
+; IR: xor i32 [[U8_VALUE]], -1
+	s_not_b32 s3, s2
+; IR-NOT: and i64 {{.+}}, -1
+; IR: [[I8_ADDRESS:%.+]] = add i64 {{%.+}}, 3
+; IR: [[I8_POINTER:%.+]] = inttoptr i64 [[I8_ADDRESS]] to ptr addrspace(1)
+; IR: [[I8_LOAD:%.+]] = load i8, ptr addrspace(1) [[I8_POINTER]], align 1
+; IR: [[I8_VALUE:%.+]] = sext i8 [[I8_LOAD]] to i32
+	s_load_i8 s4, s[0:1], 0x3
+; IR: xor i32 [[I8_VALUE]], -1
+	s_not_b32 s5, s4
+; IR: [[U16_BASE:%.+]] = and i64 {{%.+}}, -2
+; IR: [[U16_ADDRESS:%.+]] = add i64 [[U16_BASE]], 2
+; IR: [[U16_POINTER:%.+]] = inttoptr i64 [[U16_ADDRESS]] to ptr addrspace(1)
+; IR: [[U16_LOAD:%.+]] = load i16, ptr addrspace(1) [[U16_POINTER]], align 2
+; IR: [[U16_VALUE:%.+]] = zext i16 [[U16_LOAD]] to i32
+	s_load_u16 s6, s[0:1], 0x3
+; IR: xor i32 [[U16_VALUE]], -1
+	s_not_b32 s7, s6
+; IR: [[I16_BASE:%.+]] = and i64 {{%.+}}, -2
+; IR: [[I16_ADDRESS:%.+]] = add i64 [[I16_BASE]], 2
+; IR: [[I16_POINTER:%.+]] = inttoptr i64 [[I16_ADDRESS]] to ptr addrspace(1)
+; IR: [[I16_LOAD:%.+]] = load i16, ptr addrspace(1) [[I16_POINTER]], align 2
+; IR: [[I16_VALUE:%.+]] = sext i16 [[I16_LOAD]] to i32
+	s_load_i16 s8, s[0:1], 0x3
+; IR: xor i32 [[I16_VALUE]], -1
+	s_not_b32 s9, s8
+	s_mov_b32 s10, 0x13
+; IR: [[SO16_BASE:%.+]] = and i64 {{.+}}, -2
+; IR: [[SO16_ADDRESS:%.+]] = add i64 [[SO16_BASE]], 0
+; IR: [[SO16_OFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR: [[SO16_ALIGNED:%.+]] = and i64 [[SO16_OFFSET]], -2
+; IR: [[SO16_SUM:%.+]] = add i64 [[SO16_ADDRESS]], [[SO16_ALIGNED]]
+; IR: [[SO16_POINTER:%.+]] = inttoptr i64 [[SO16_SUM]] to ptr addrspace(1)
+; IR: [[SO16_LOAD:%.+]] = load i16, ptr addrspace(1) [[SO16_POINTER]], align 2
+; IR: [[SO16_VALUE:%.+]] = zext i16 [[SO16_LOAD]] to i32
+	s_load_u16 s6, s[0:1], s10
+; IR: xor i32 [[SO16_VALUE]], -1
+	s_not_b32 s7, s6
+; IR: ret void
+	s_endpgm
+
+; SCALE_OFFSET multiplies the SGPR element index by the data size, which is one
+; byte for u8/i8 and two for u16/i16. The scale tracks the data size, not the
+; signedness.
+
+	.globl	smem_narrow_scale_offset
+	.p2align	8
+	.type	smem_narrow_scale_offset,@function
+; IR-LABEL: define amdgpu_kernel void @smem_narrow_scale_offset(
+smem_narrow_scale_offset:
+	s_mov_b32 s8, 0x13
+; A one-byte scale is the identity, so the SGPR offset is added unscaled.
+; IR: [[SCU8_ADDRESS:%.+]] = add i64 {{%.+}}, 0
+; IR: [[SCU8_SOFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR-NOT: mul i64
+; IR: [[SCU8_SUM:%.+]] = add i64 [[SCU8_ADDRESS]], [[SCU8_SOFFSET]]
+; IR: [[SCU8_POINTER:%.+]] = inttoptr i64 [[SCU8_SUM]] to ptr addrspace(1)
+; IR: load i8, ptr addrspace(1) [[SCU8_POINTER]], align 1
+	s_load_u8 s2, s[0:1], s8 scale_offset
+; IR: [[SCI8_ADDRESS:%.+]] = add i64 {{%.+}}, 0
+; IR: [[SCI8_SOFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR-NOT: mul i64
+; IR: [[SCI8_SUM:%.+]] = add i64 [[SCI8_ADDRESS]], [[SCI8_SOFFSET]]
+; IR: [[SCI8_POINTER:%.+]] = inttoptr i64 [[SCI8_SUM]] to ptr addrspace(1)
+; IR: [[SCI8_LOAD:%.+]] = load i8, ptr addrspace(1) [[SCI8_POINTER]], align 1
+; IR: sext i8 [[SCI8_LOAD]] to i32
+	s_load_i8 s3, s[0:1], s8 scale_offset
+; IR: [[SCU16_BASE:%.+]] = and i64 {{%.+}}, -2
+; IR: [[SCU16_ADDRESS:%.+]] = add i64 [[SCU16_BASE]], 0
+; IR: [[SCU16_SOFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR: [[SCU16_SCALED:%.+]] = mul i64 [[SCU16_SOFFSET]], 2
+; IR: [[SCU16_DWORD:%.+]] = and i64 [[SCU16_SCALED]], -2
+; IR: [[SCU16_SUM:%.+]] = add i64 [[SCU16_ADDRESS]], [[SCU16_DWORD]]
+; IR: [[SCU16_POINTER:%.+]] = inttoptr i64 [[SCU16_SUM]] to ptr addrspace(1)
+; IR: load i16, ptr addrspace(1) [[SCU16_POINTER]], align 2
+	s_load_u16 s4, s[0:1], s8 scale_offset
+; IR: [[SCI16_BASE:%.+]] = and i64 {{%.+}}, -2
+; IR: [[SCI16_ADDRESS:%.+]] = add i64 [[SCI16_BASE]], 0
+; IR: [[SCI16_SOFFSET:%.+]] = zext i32 {{.+}} to i64
+; IR: [[SCI16_SCALED:%.+]] = mul i64 [[SCI16_SOFFSET]], 2
+; IR: [[SCI16_DWORD:%.+]] = and i64 [[SCI16_SCALED]], -2
+; IR: [[SCI16_SUM:%.+]] = add i64 [[SCI16_ADDRESS]], [[SCI16_DWORD]]
+; IR: [[SCI16_POINTER:%.+]] = inttoptr i64 [[SCI16_SUM]] to ptr addrspace(1)
+; IR: [[SCI16_LOAD:%.+]] = load i16, ptr addrspace(1) [[SCI16_POINTER]], align 2
+; IR: sext i16 [[SCI16_LOAD]] to i32
+	s_load_i16 s5, s[0:1], s8 scale_offset
+; IR: ret void
+	s_endpgm
+
 	.globl	smem_cache_policy
 	.p2align	8
 	.type	smem_cache_policy,@function
@@ -272,6 +377,18 @@ smem_negative_offset:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 32
+	.end_amdhsa_kernel
+	.amdhsa_kernel smem_narrow_loads
+		.amdhsa_kernarg_size 32
+		.amdhsa_user_sgpr_kernarg_segment_ptr 1
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 11
+	.end_amdhsa_kernel
+	.amdhsa_kernel smem_narrow_scale_offset
+		.amdhsa_kernarg_size 32
+		.amdhsa_user_sgpr_kernarg_segment_ptr 1
+		.amdhsa_next_free_vgpr 1
+		.amdhsa_next_free_sgpr 9
 	.end_amdhsa_kernel
 	.amdhsa_kernel smem_cache_policy
 		.amdhsa_kernarg_size 32
@@ -363,6 +480,26 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     32
     .symbol:         smem_scale_offset.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 32
+    .max_flat_workgroup_size: 1024
+    .name:           smem_narrow_loads
+    .private_segment_fixed_size: 0
+    .sgpr_count:     11
+    .symbol:         smem_narrow_loads.kd
+    .vgpr_count:     1
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 32
+    .max_flat_workgroup_size: 1024
+    .name:           smem_narrow_scale_offset
+    .private_segment_fixed_size: 0
+    .sgpr_count:     9
+    .symbol:         smem_narrow_scale_offset.kd
     .vgpr_count:     1
     .wavefront_size: 32
   - .group_segment_fixed_size: 0
