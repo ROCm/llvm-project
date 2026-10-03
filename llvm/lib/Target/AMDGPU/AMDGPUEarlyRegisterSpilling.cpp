@@ -691,19 +691,23 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
     if (CandidateMI == CurMI)
       continue;
 
-    LLVM_DEBUG(NewCandidateCnt++);
-    LLVM_DEBUG({
-      dbgs() << NewCandidateCnt
-             << ": Candidate register = " << printReg(CandidateReg, TRI)
-             << "\n";
-    });
-
+    unsigned NumOfCoveredRegs = SIRegisterInfo::getNumCoveredRegs(Mask);
+    unsigned NumOfSubregisters = TRI->getRegSizeInBits(CandidateReg, *MRI) / 32;
     MachineBasicBlock *CandidateMIMBB = CandidateMI->getParent();
     assert(!(CurMI != CandidateMI && DT->dominates(CurMI, CandidateMI) &&
              CurMBB != CandidateMIMBB &&
              NUA->isReachable(CurMBB, CandidateMIMBB)) &&
            "We expect the candidate to be defined before the high register "
            "pressure point");
+
+    LLVM_DEBUG(NewCandidateCnt++);
+    LLVM_DEBUG({
+      dbgs() << NewCandidateCnt
+             << ": Candidate register = " << printReg(CandidateReg, TRI)
+             << " has " << NumOfSubregisters << " subregisters and has "
+             << NumOfCoveredRegs << " live subregisters and the parent bb is "
+             << CandidateMIMBB->getNumber() << ".\n";
+    });
 
     // In the following check, we reject candidates which are defined in the
     // same loop nest.
@@ -1917,7 +1921,8 @@ bool AMDGPUEarlyRegisterSpilling::runOnMachineFunction(MachineFunction &MF) {
       // VGPRs.
       if (VGPRLiveRegs > (MaxVGPRs - NumOfVGPRsForSGPR)) {
         LLVM_DEBUG(dbgs() << "===========================================\n");
-        LLVM_DEBUG(dbgs() << "Current MI = " << *MI << "\n");
+        LLVM_DEBUG(dbgs() << "Current MI = " << *MI << "\n"
+                          << "Current BB = bb." << MBB->getNumber() << "\n");
         unsigned NumOfSpills = VGPRLiveRegs - MaxVGPRs + NumOfVGPRsForSGPR;
         LLVM_DEBUG(dbgs() << "Number of spills = " << NumOfSpills << "\n");
         LLVM_DEBUG(dbgs() << "VGPRLiveRegs = " << VGPRLiveRegs << "\n");
