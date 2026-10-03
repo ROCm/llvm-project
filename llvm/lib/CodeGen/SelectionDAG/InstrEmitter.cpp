@@ -785,9 +785,6 @@ void InstrEmitter::AddDbgValueLocationOps(
     case SDDbgOperand::CONST:
       MIB.add(GetMOForConstDbgOp(Op));
       break;
-    case SDDbgOperand::GLOBALADDR:
-      MIB.addGlobalAddress(Op.getGlobal());
-      break;
     }
   }
 }
@@ -808,8 +805,7 @@ InstrEmitter::EmitDbgInstrRef(SDDbgValue *SD,
   // Returns true if the given operand is not itself an instruction reference
   // but is a legal debug operand for a DBG_INSTR_REF.
   auto IsNonInstrRefOp = [](SDDbgOperand DbgOp) {
-    return DbgOp.getKind() == SDDbgOperand::CONST ||
-           DbgOp.getKind() == SDDbgOperand::GLOBALADDR;
+    return DbgOp.getKind() == SDDbgOperand::CONST;
   };
 
   // If this variable location does not depend on any instructions or contains
@@ -880,10 +876,6 @@ InstrEmitter::EmitDbgInstrRef(SDDbgValue *SD,
       }
 
       DefMI = &*MRI->def_instr_begin(VReg);
-    } else if (DbgOperand.getKind() == SDDbgOperand::GLOBALADDR) {
-      MOs.push_back(MachineOperand::CreateGA(DbgOperand.getGlobal(),
-                                             /*Offset=*/0));
-      continue;
     } else {
       assert(DbgOperand.getKind() == SDDbgOperand::CONST);
       MOs.push_back(GetMOForConstDbgOp(DbgOperand));

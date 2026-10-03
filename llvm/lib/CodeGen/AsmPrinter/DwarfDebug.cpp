@@ -319,9 +319,6 @@ static DbgValueLoc getDebugLocValue(const MachineInstr *MI) {
     } else if (Op.isTargetIndex()) {
       DbgValueLocEntries.push_back(
           DbgValueLocEntry(TargetIndexLocation(Op.getIndex(), Op.getOffset())));
-    } else if (Op.isGlobal()) {
-      DbgValueLocEntries.push_back(DbgValueLocEntry(
-          GlobalAddressLocation(Op.getGlobal(), Op.getOffset())));
     } else if (Op.isImm())
       DbgValueLocEntries.push_back(DbgValueLocEntry(Op.getImm()));
     else if (Op.isFPImm())
@@ -1850,12 +1847,9 @@ static bool validThroughout(LexicalScopes &LScopes,
   // throughout the function. This is a hack, presumably for DWARF v2 and not
   // necessarily correct. It would be much better to use a dbg.declare instead
   // if we know the constant is live throughout the scope.
-  // The address of a global is a link-time constant, so for those this is not
-  // a hack: the location genuinely does describe the variable throughout.
   if (MBB->pred_empty() &&
-      all_of(DbgValue->debug_operands(), [](const MachineOperand &Op) {
-        return Op.isImm() || Op.isGlobal();
-      }))
+      all_of(DbgValue->debug_operands(),
+             [](const MachineOperand &Op) { return Op.isImm(); }))
     return true;
 
   // Test if the location terminates before the end of the scope.
@@ -3345,15 +3339,6 @@ void DwarfDebug::emitDebugLocValue(const AsmPrinter &AP, const DIBasicType *BT,
                                    DwarfExpression &DwarfExpr) {
   auto *DIExpr = Value.getExpression();
   DIExpressionCursor ExprCursor(DIExpr);
-
-  // Determine if a global address can be expressed before emitting
-  // anything.
-  if (!DwarfExpr.canAddGlobalAddress() &&
-      any_of(Value.getLocEntries(), [](const DbgValueLocEntry &Entry) {
-        return Entry.isGlobalAddress();
-      }))
-    return;
-
   DwarfExpr.addFragmentOffset(DIExpr);
 
   if (DIExpr) {
@@ -3379,8 +3364,7 @@ void DwarfDebug::emitDebugLocValue(const AsmPrinter &AP, const DIBasicType *BT,
     const TargetRegisterInfo &TRI = *AP.MF->getSubtarget().getRegisterInfo();
     if (!DwarfExpr.addMachineRegExpression(TRI, ExprCursor, Location.getReg()))
       return;
-    DwarfExpr.addExpression(std::move(ExprCursor));
-    return;
+    return DwarfExpr.addExpression(std::move(ExprCursor));
   }
 
   // Regular entry.
@@ -3439,10 +3423,6 @@ void DwarfDebug::emitDebugLocValue(const AsmPrinter &AP, const DIBasicType *BT,
       // WebAssembly-specific encoding is supported.
       assert(AP.TM.getTargetTriple().isWasm());
       DwarfExpr.addWasmLocation(Loc.Index, static_cast<uint64_t>(Loc.Offset));
-    } else if (Entry.isGlobalAddress()) {
-      if (!DwarfExpr.addGlobalAddress(Entry.getGlobalAddress(),
-                                      Entry.getGlobalOffset()))
-        return false;
     } else if (Entry.isConstantFP()) {
       if (AP.getDwarfVersion() >= 4 && !AP.getDwarfDebug()->tuneForSCE() &&
           !Cursor) {
