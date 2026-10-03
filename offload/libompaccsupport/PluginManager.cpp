@@ -24,7 +24,6 @@
 #include "Shared/Profile.h"
 #include "device.h"
 
-#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <algorithm>
@@ -559,32 +558,44 @@ static int loadImagesOntoDevice(DeviceTy &Device) {
             REPORT() << "Failed to load kernel " << Entry.SymbolName;
           } else {
             // Read this kernel's launch-geometry properties once, from its
-            // "<name>_kernel_environment" device global, and cache them on
+            // "<name>_kernel_environment" global, and cache them on
             // the device for use at launch time.
-            auto ReadDeviceGlobal = [&](const char *Suffix, void *Dst,
-                                        uint64_t Size) {
-              SmallString<128> GlobalName(Entry.SymbolName);
-              GlobalName += Suffix;
-              void *DevPtr = nullptr;
-              return Device.RTL->get_global(Binary, Size, GlobalName.c_str(),
-                                            &DevPtr) == OFFLOAD_SUCCESS &&
-                     Device.RTL->data_retrieve(Device.RTLDeviceID, Dst, DevPtr,
-                                               Size) == OFFLOAD_SUCCESS;
+            llvm::omp::target::plugin::GenericDeviceTy &GenericDevice =
+                Device.RTL->getDevice(Device.RTLDeviceID);
+
+            // Downstream, these constant globals are read from the ELF image
+            // on the host rather than copied back from device memory. That
+            // avoids a device-to-host transfer per global and keeps the reads
+            // out of the plugin API trace (LIBOMPTARGET_KERNEL_TRACE).
+            auto ReadImageGlobal = [&](const char *Suffix, void *Dst,
+                                       uint32_t Size) {
+              llvm::omp::target::plugin::GlobalTy HostGlobal(
+                  std::string(Entry.SymbolName) + Suffix, Size, Dst);
+              auto &Image =
+                  *reinterpret_cast<llvm::omp::target::plugin::DeviceImageTy *>(
+                      Binary.handle);
+              if (auto Err = GenericDevice.Plugin.getGlobalHandler()
+                                 .readGlobalFromImage(GenericDevice, Image,
+                                                      HostGlobal)) {
+                // Not all kernels have all of these globals, e.g., No-Loop
+                // kernels have no kernel environment.
+                [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
+                ODBG(ODT_Mapping) << "Failed to read " << HostGlobal.getName()
+                                  << ": " << ErrStr;
+                return false;
+              }
+              return true;
             };
 
             KernelEnvironmentTy KernelEnv{};
-            if (!ReadDeviceGlobal("_kernel_environment", &KernelEnv,
-                                  sizeof(KernelEnv))) {
+            if (!ReadImageGlobal("_kernel_environment", &KernelEnv,
+                                 sizeof(KernelEnv))) {
               KernelEnv = KernelEnvironmentTy{};
               KernelEnv.Configuration.ExecMode =
                   llvm::omp::OMP_TGT_EXEC_MODE_BARE;
               ODBG(ODT_Mapping)
-                  << "Failed to read kernel environment for '"
-                  << Entry.SymbolName << "', using default "
-                  << KernelLaunchInfoTy::getExecutionModeName(
-                         static_cast<llvm::omp::OMPTgtExecModeFlags>(
-                             KernelEnv.Configuration.ExecMode))
-                  << " execution mode";
+                  << "No kernel environment for '" << Entry.SymbolName
+                  << "', using default launch configuration";
             }
             const auto &Cfg = KernelEnv.Configuration;
 
@@ -594,8 +605,8 @@ static int loadImagesOntoDevice(DeviceTy &Device) {
             auto ExecMode =
                 static_cast<llvm::omp::OMPTgtExecModeFlags>(Cfg.ExecMode);
             uint8_t ExecModeVal = 0;
-            if (ReadDeviceGlobal("_exec_mode", &ExecModeVal,
-                                 sizeof(ExecModeVal))) {
+            if (ReadImageGlobal("_exec_mode", &ExecModeVal,
+                                sizeof(ExecModeVal))) {
               ExecMode =
                   static_cast<llvm::omp::OMPTgtExecModeFlags>(ExecModeVal);
               if (!llvm::omp::target::plugin::GenericKernelTy::
@@ -605,9 +616,11 @@ static int loadImagesOntoDevice(DeviceTy &Device) {
                 return OFFLOAD_FAIL;
               }
             }
+            ODBG(ODT_Mapping)
+                << "Kernel '" << Entry.SymbolName << "' uses "
+                << KernelLaunchInfoTy::getExecutionModeName(ExecMode)
+                << " execution mode";
 
-            llvm::omp::target::plugin::GenericDeviceTy &GenericDevice =
-                Device.RTL->getDevice(Device.RTLDeviceID);
             auto *Kernel =
                 reinterpret_cast<llvm::omp::target::plugin::GenericKernelTy *>(
                     DeviceEntry.Address);
@@ -636,8 +649,8 @@ static int loadImagesOntoDevice(DeviceTy &Device) {
             // number is the default blocksize since the WG size may include
             // the main thread, which is not required.
             uint16_t ConstWGSize = 0;
-            if (ReadDeviceGlobal("_wg_size", &ConstWGSize,
-                                 sizeof(ConstWGSize))) {
+            if (ReadImageGlobal("_wg_size", &ConstWGSize,
+                                sizeof(ConstWGSize))) {
               LaunchInfo.PreferredNumThreads =
                   LaunchInfo.isGenericSPMDMode()
                       ? GenericDevice.getDefaultNumThreads()
