@@ -424,7 +424,9 @@ public:
       if (allocIndex == kDefaultAllocator) {
         std::free(pointer);
       } else {
-        allocatorRegistry.GetDeallocator(MapAllocIdx())(pointer);
+        // CUF / OpenMP / etc. allocators install their free function into
+        // the global allocator registry; dispatch through it uniformly.
+        allocatorRegistry.GetDeallocator(allocIndex)(pointer);
       }
       descriptor.base_addr = nullptr;
       return CFI_SUCCESS;
