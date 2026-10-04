@@ -231,6 +231,11 @@ public:
   // this one may have left one there.
   bool mayHoldSourceImageAddress(unsigned Idx);
 
+  // Refuse the reads deferred while the set of source code-object addresses
+  // this function records was still incomplete. Call once every instruction is
+  // raised, which is when that set is complete.
+  llvm::Error refuseDeferredSourceImageReads();
+
   // Track the value written to M0, which the relative-addressing opcodes need
   // as a constant to resolve the register index they name. A non-constant
   // write, and any block boundary, gives up the constant.
@@ -248,14 +253,28 @@ public:
   void collectAllocas(llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const;
 
 private:
+  // A read of an SGPR that the raise cannot yet decide, kept until it can.
+  struct DeferredSourceImageRead {
+    // Instruction the read serves, owned by the decode the raise runs over.
+    const DecodedInst *Di;
+    // SGPR the instruction reads.
+    unsigned Idx;
+  };
+
+  // Whether a source code-object address is recorded anywhere in this function
+  // into a pair covering SGPR Idx.
+  bool sourceImageSgprPairRecorded(unsigned Idx) const;
+
   // Refuse a read of a register that may hold part of a source code-object
-  // address. Such an address stands for a place in the captured source image,
+  // address, naming the register either by its index or by the operand that
+  // reads it. Such an address stands for a place in the captured source image,
   // which the raise reads at raise time; the running kernel has nothing mapped
   // there, so a value the target program computes from it points nowhere. The
-  // handlers that do mean the source image ask for the address itself and
+  // operand form defers a read it cannot yet decide rather than refusing it.
+  // The handlers that do mean the source image ask for the address itself and
   // never come through here.
-  llvm::Error refuseSourceImageRead(const DecodedInst &Di, unsigned OpIdx,
-                                    const ParsedReg &Pr);
+  llvm::Error refuseSourceImageRead(const DecodedInst &Di, unsigned Idx);
+  llvm::Error refuseSourceImageRead(const DecodedInst &Di, const ParsedReg &Pr);
 
   // Emit a conditional region while preserving register-state tracking.
   void emitUnderCondition(llvm::Value *Condition,
@@ -363,6 +382,12 @@ private:
   // nothing about the block a read happens in, and forgetting the pair there
   // would turn a refusal into a load against target memory.
   llvm::DenseSet<unsigned> SourceImageSgprPairs;
+
+  // Reads deferred until that set is complete. Instructions are raised in
+  // decode order, which says nothing about the order a branch reaching
+  // backwards runs them in, so a read can precede the instruction whose
+  // address it observes.
+  llvm::SmallVector<DeferredSourceImageRead> DeferredSourceImageReads;
 };
 
 } // namespace COMGR::transpiler

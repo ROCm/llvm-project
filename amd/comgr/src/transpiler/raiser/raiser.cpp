@@ -515,6 +515,12 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
         RaiseFailureReason::UnterminatedKernelExtent,
         "kernel extent ends without an instruction that ends the program");
 
+  // Every source code-object address the kernel records is known once every
+  // instruction is raised, so this is where the reads deferred along the way
+  // are decided.
+  if (Error Err = Ctx->registers().refuseDeferredSourceImageReads())
+    return Err;
+
   DominatorTree DT(*F);
   AssumptionCache AC(*F);
   SmallVector<AllocaInst *> Allocas;
