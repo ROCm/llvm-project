@@ -14,6 +14,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringTable.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/Triple.h"
 #include <algorithm>
@@ -583,6 +584,88 @@ unsigned AMDGPU::getMaxWavesPerEU(GPUKind AK) {
 
 unsigned AMDGPU::getMaxWavesPerEU(Triple::SubArchType SubArch) {
   return getMaxWavesPerEU(getGPUKindFromSubArch(SubArch));
+}
+
+static bool hasFeature(const AMDGPU::TargetID &Target,
+                       AMDGPU::AMDGPUFeature Feature) {
+  return AMDGPU::getFeatureBitset(Target.getGPUKind()).test(Feature);
+}
+
+bool AMDGPU::isWaveSizeSupported(const TargetID &Target, unsigned WaveSize) {
+  if (WaveSize == 32)
+    return hasFeature(Target, FEAT_SUPPORTS_WAVE32);
+  if (WaveSize == 64)
+    return !hasFeature(Target, FEAT_WAVEFRONTSIZE32);
+  return false;
+}
+
+unsigned AMDGPU::getNumExtraSGPRs(const TargetID &Target, bool VCCUsed,
+                                  bool FlatScrUsed) {
+  unsigned ExtraSGPRs = VCCUsed ? 2 : 0;
+  if (hasFeature(Target, FEAT_GFX10_INSTS))
+    return ExtraSGPRs;
+
+  if (!hasFeature(Target, FEAT_GFX8_INSTS)) {
+    if (FlatScrUsed)
+      ExtraSGPRs = 4;
+  } else {
+    if (Target.isXnackOnOrAny())
+      ExtraSGPRs = 4;
+
+    IsaVersion Version = getIsaVersion(getArchNameAMDGCN(Target.getGPUKind()));
+    if (FlatScrUsed || Version.Major >= 11 ||
+        (Version.Major == 9 && Version.Minor >= 4)) {
+      ExtraSGPRs = 6;
+    }
+  }
+
+  return ExtraSGPRs;
+}
+
+unsigned AMDGPU::getEncodedNumVGPRBlocks(const TargetID &Target,
+                                         unsigned NumVGPRs, unsigned WaveSize) {
+  bool IsWave32 = WaveSize == 32;
+  unsigned Granule;
+  if (hasFeature(Target, FEAT_GFX90A_INSTS))
+    Granule = 8;
+  else if (hasFeature(Target, FEAT_1024_ADDRESSABLE_VGPRS))
+    Granule = IsWave32 ? 16 : 8;
+  else
+    Granule = IsWave32 ? 8 : 4;
+  return divideCeil(std::max(1u, NumVGPRs), Granule) - 1;
+}
+
+unsigned AMDGPU::getNumSGPRBlocks(unsigned NumSGPRs) {
+  return divideCeil(std::max(1u, NumSGPRs), 8) - 1;
+}
+
+bool AMDGPU::isLDSSizeCompatibleWithOccupancy(const TargetID &Target,
+                                              unsigned WaveSize, bool IsCuMode,
+                                              uint64_t LDSBytes,
+                                              unsigned Occupancy) {
+  assert(Occupancy != 0 && Occupancy <= getMaxWavesPerEU(Target.getGPUKind()) &&
+         "invalid occupancy");
+  assert(WaveSize != 0 && "invalid wave size");
+
+  GPUKind Kind = Target.getGPUKind();
+  unsigned AddressableLocalMemorySize =
+      getMaxHWAddressableLocalMemorySize(Kind);
+  uint64_t Granularity = getLDSAllocGranule(Kind);
+  uint64_t AlignedLDSBytes = alignTo(LDSBytes, Granularity);
+  if (AlignedLDSBytes > AddressableLocalMemorySize)
+    return false;
+
+  bool FullSIMDMode = !hasFeature(Target, FEAT_SUPPORTS_WGP) || !IsCuMode;
+  unsigned NumSIMDs = getNumWorkGroupSIMDs(FullSIMDMode);
+
+  uint64_t LocalMemorySize = getLocalMemorySize(Kind, FullSIMDMode);
+
+  uint64_t WavesPerWorkgroup = divideCeil(1024u, WaveSize);
+  uint64_t RequiredWavesPerCU = uint64_t(Occupancy) * NumSIMDs;
+  uint64_t WorkGroupsPerCU =
+      std::max<uint64_t>(divideCeil(RequiredWavesPerCU, WavesPerWorkgroup), 1);
+
+  return AlignedLDSBytes <= LocalMemorySize / WorkGroupsPerCU;
 }
 
 StringRef AMDGPU::getCanonicalArchName(const Triple &T, StringRef Arch) {

@@ -3473,6 +3473,7 @@ bool AMDGPUAsmParser::isRegOrOperandModifier(const AsmToken &Token,
 //   -|...|
 //   -abs(...)
 //   name:...
+// "name ::" is the VOPD separator, not an opcode modifier.
 //
 bool AMDGPUAsmParser::isModifier() {
 
@@ -3480,10 +3481,15 @@ bool AMDGPUAsmParser::isModifier() {
   AsmToken NextToken[2];
   peekTokens(NextToken);
 
+  // "name:value" is an opcode modifier. The second colon of "::" is the
+  // VOPD separator, so a symbol written immediately before "::" is a literal.
+  bool IsOpcodeModifier = isOpcodeModifierWithVal(Tok, NextToken[0]) &&
+                          !NextToken[1].is(AsmToken::Colon);
+
   return isOperandModifier(Tok, NextToken[0]) ||
          (Tok.is(AsmToken::Minus) &&
           isRegOrOperandModifier(NextToken[0], NextToken[1])) ||
-         isOpcodeModifierWithVal(Tok, NextToken[0]);
+         IsOpcodeModifier;
 }
 
 // Check if the current token is an SP3 'neg' modifier.
@@ -7131,6 +7137,8 @@ bool AMDGPUAsmParser::ParseDirectiveAMDGPUInfo() {
       FI.UsesFlatScratch =
           !!(Flags & AMDGPU::FuncInfoFlags::FUNC_USES_FLAT_SCRATCH);
       FI.HasDynStack = !!(Flags & AMDGPU::FuncInfoFlags::FUNC_HAS_DYN_STACK);
+      FI.UsesWgpMode = !!(Flags & AMDGPU::FuncInfoFlags::FUNC_WGP_MODE);
+      FI.UsesWave32 = !!(Flags & AMDGPU::FuncInfoFlags::FUNC_WAVE32);
       HasScalarAttrs = true;
     } else if (Dir == "num_sgpr") {
       int64_t Val;
@@ -7155,6 +7163,12 @@ bool AMDGPUAsmParser::ParseDirectiveAMDGPUInfo() {
       if (getParser().parseAbsoluteExpression(Val))
         return true;
       FI.PrivateSegmentSize = static_cast<uint32_t>(Val);
+      HasScalarAttrs = true;
+    } else if (Dir == "occupancy") {
+      int64_t Val;
+      if (getParser().parseAbsoluteExpression(Val))
+        return true;
+      FI.Occupancy = static_cast<uint32_t>(Val);
       HasScalarAttrs = true;
     } else if (Dir == "use") {
       StringRef ResName;
@@ -10290,7 +10304,8 @@ void AMDGPUAsmParser::cvtVOPD(MCInst &Inst, const OperandVector &Operands) {
       Op.addRegOperands(Inst, 1);
       return;
     }
-    if (Op.isImm()) {
+    // A relocatable symbol is an expression. Encode it as a literal.
+    if (Op.isImm() || Op.isExpr()) {
       Op.addImmOperands(Inst, 1);
       return;
     }
