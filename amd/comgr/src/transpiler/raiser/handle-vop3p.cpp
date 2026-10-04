@@ -103,12 +103,13 @@ Expected<Value *> readPackedFloatSource(RaiseContext &Ctx,
   return Ctx.B.CreateInsertElement(Result, High, 1, "pk.insert.hi");
 }
 
-/// Raise packed floating-point add and multiply instructions.
+/// Raise packed floating-point arithmetic instructions.
 Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
                              OperandResolver &Op, Type *ElementType,
-                             bool IsAdd) {
+                             CanonicalOp Kind) {
+  unsigned NumSources = Kind == CanonicalOp::V_PK_FMA_F32 ? 3 : 2;
   assert((Di.NumDefs == 1 && Di.numOperands() != 0 && Di.isReg(0) &&
-          Op.nSrcs() == 2) &&
+          Op.nSrcs() == NumSources) &&
          "decoded packed float instruction has unexpected operands");
 
   if (Error Err = Ctx.validateFPEnvironment(Di, ElementType))
@@ -130,8 +131,21 @@ Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Source1)
     return Source1.takeError();
 
-  Value *Result = IsAdd ? Ctx.B.CreateFAdd(*Source0, *Source1, "pk.add")
-                        : Ctx.B.CreateFMul(*Source0, *Source1, "pk.mul");
+  Value *Result;
+  if (Kind == CanonicalOp::V_PK_FMA_F32) {
+    Expected<Value *> Source2 =
+        readPackedFloatSource(Ctx, Di, Op, 2, ElementType);
+    if (!Source2)
+      return Source2.takeError();
+    Result = Ctx.B.CreateIntrinsic(Intrinsic::fma, {(*Source0)->getType()},
+                                   {*Source0, *Source1, *Source2}, nullptr,
+                                   "pk.fma");
+  } else if (Kind == CanonicalOp::V_PK_ADD_F16 ||
+             Kind == CanonicalOp::V_PK_ADD_F32) {
+    Result = Ctx.B.CreateFAdd(*Source0, *Source1, "pk.add");
+  } else {
+    Result = Ctx.B.CreateFMul(*Source0, *Source1, "pk.mul");
+  }
   if (*Clamp) {
     FixedVectorType *VectorType = FixedVectorType::get(ElementType, 2);
     Function *Maximum = Intrinsic::getOrInsertDeclaration(
@@ -173,9 +187,8 @@ Expected<Value *> readPackedInt16Source(RaiseContext &Ctx,
 
   IntegerType *ElementType = Ctx.B.getInt16Ty();
   Value *Low = Ctx.B.CreateTrunc(*Bits, ElementType, "pk.lo");
-  Value *High = Ctx.B.CreateTrunc(
-      Ctx.B.CreateLShr(*Bits, HalfWidthInBits, "pk.hi.shifted"), ElementType,
-      "pk.hi");
+  Value *Shifted = Ctx.B.CreateLShr(*Bits, HalfWidthInBits, "pk.hi.shifted");
+  Value *High = Ctx.B.CreateTrunc(Shifted, ElementType, "pk.hi");
 
   Value *Result = PoisonValue::get(FixedVectorType::get(ElementType, 2));
   Result = Ctx.B.CreateInsertElement(
@@ -250,9 +263,11 @@ Error raisePackedInt16(RaiseContext &Ctx, const DecodedInst &Di,
       return IsSigned ? Ctx.B.CreateSExt(V, WideType)
                       : Ctx.B.CreateZExt(V, WideType);
     };
-    Value *Product =
-        Ctx.B.CreateMul(Widen(Sources[0]), Widen(Sources[1]), "pk.mad.mul");
-    Value *Sum = Ctx.B.CreateAdd(Product, Widen(Sources[2]), "pk.mad.sum");
+    Value *Src0 = Widen(Sources[0]);
+    Value *Src1 = Widen(Sources[1]);
+    Value *Src2 = Widen(Sources[2]);
+    Value *Product = Ctx.B.CreateMul(Src0, Src1, "pk.mad.mul");
+    Value *Sum = Ctx.B.CreateAdd(Product, Src2, "pk.mad.sum");
     if (*Clamp) {
       // Zero-extended lanes cannot sum to a negative value, so only the signed
       // form needs a lower bound.
@@ -434,14 +449,11 @@ Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
   switch (Di.CanonOp) {
   case CanonicalOp::V_PK_ADD_F16:
   case CanonicalOp::V_PK_MUL_F16:
-    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getHalfTy(),
-                                  /*IsAdd=*/Di.CanonOp ==
-                                      CanonicalOp::V_PK_ADD_F16);
+    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getHalfTy(), Di.CanonOp);
   case CanonicalOp::V_PK_ADD_F32:
   case CanonicalOp::V_PK_MUL_F32:
-    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getFloatTy(),
-                                  /*IsAdd=*/Di.CanonOp ==
-                                      CanonicalOp::V_PK_ADD_F32);
+  case CanonicalOp::V_PK_FMA_F32:
+    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getFloatTy(), Di.CanonOp);
   case CanonicalOp::V_PK_ADD_U16:
   case CanonicalOp::V_PK_ADD_I16:
   case CanonicalOp::V_PK_SUB_U16:
