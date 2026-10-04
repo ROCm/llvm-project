@@ -311,7 +311,15 @@ unsigned GCNTTIImpl::getNumberOfRegisters(unsigned RCID) const {
 
   // This is really the number of registers to fill when vectorizing /
   // interleaving loops, so we lie to avoid trying to use all registers.
-  return 4;
+  return 8;
+}
+
+unsigned GCNTTIImpl::getRegUsageForType(Type *Ty) const {
+  auto *VT = dyn_cast<FixedVectorType>(Ty);
+  if (VT && VT->getElementType()->isIntegerTy(8) && ST->has16BitInsts())
+    return divideCeil(DL.getTypeSizeInBits(VT).getFixedValue(), 32u);
+
+  return BaseT::getRegUsageForType(Ty);
 }
 
 TypeSize

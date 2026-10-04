@@ -128,6 +128,7 @@ public:
   }
 
   unsigned getNumberOfRegisters(unsigned RCID) const override;
+  unsigned getRegUsageForType(Type *Ty) const override;
   TypeSize
   getRegisterBitWidth(TargetTransformInfo::RegisterKind Vector) const override;
   unsigned getMinVectorRegisterBitWidth() const override;
