@@ -28,6 +28,7 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
+#include "llvm/Support/Alignment.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -108,8 +109,16 @@ Error RegisterState::seedEntrySgprs(const KernelMeta &Meta) {
   Seed(Layout.dispatchPtrSgpr(), Intrinsic::amdgcn_dispatch_ptr, true,
        "dispatch_ptr");
   Seed(Layout.queuePtrSgpr(), Intrinsic::amdgcn_queue_ptr, true, "queue_ptr");
-  Seed(Layout.kernargSegmentPtrSgpr(), Intrinsic::amdgcn_kernarg_segment_ptr,
-       true, "kernarg_ptr");
+  // One kernarg segment pointer serves both the SGPR pair the ABI dedicates to
+  // it and the preloaded dwords read back out of the segment below.
+  Value *KernargSegment = nullptr;
+  if (Layout.kernargSegmentPtrSgpr() || Layout.preloadedKernargLength() > 0)
+    KernargSegment =
+        B.CreateCall(Intrinsic::getOrInsertDeclaration(
+                         &M, Intrinsic::amdgcn_kernarg_segment_ptr),
+                     {}, "kernarg_ptr");
+  if (std::optional<unsigned> Sgpr = Layout.kernargSegmentPtrSgpr())
+    Regs.storeSGPR64(B, *Sgpr, KernargSegment);
   Seed(Layout.dispatchIdSgpr(), Intrinsic::amdgcn_dispatch_id, true,
        "dispatch_id");
   Seed(Layout.workgroupIdXSgpr(), Intrinsic::amdgcn_workgroup_id_x, false,
@@ -136,16 +145,28 @@ Error RegisterState::seedEntrySgprs(const KernelMeta &Meta) {
                    IdZ, "workgroup_id_yz"));
   }
 
+  // Recreate source kernarg preloads by loading each dword from its recorded
+  // offset in the kernarg segment and seeding the corresponding source SGPR.
+  for (auto [Index, LayoutEntry] : enumerate(Layout.Entries)) {
+    if (LayoutEntry.SrcKind != UserSgprLayout::Source::PreloadedKernarg)
+      continue;
+    Value *ByteOffset = B.getInt64(LayoutEntry.KernargByteOffset);
+    Value *Address = B.CreateInBoundsGEP(B.getInt8Ty(), KernargSegment,
+                                         ByteOffset, "preload_gep");
+    Value *Dword =
+        B.CreateAlignedLoad(B.getInt32Ty(), Address, Align(4), "preload_dw");
+    Regs.storeSGPR32(B, static_cast<unsigned>(Index), Dword);
+  }
+
   // No target intrinsic reproduces the remaining entry sources, which carry
-  // source private-segment, kernarg-buffer, and packed dispatch state. Refuse
-  // rather than leave them unseeded: a handler would read an undef SGPR as if
-  // it held real entry state.
+  // source private-segment and packed dispatch state. Refuse rather than leave
+  // them unseeded: a handler would read an undef SGPR as if it held real entry
+  // state.
   for (auto [Index, LayoutEntry] : enumerate(Layout.Entries)) {
     switch (LayoutEntry.SrcKind) {
     case UserSgprLayout::Source::PrivateSegmentBuffer:
     case UserSgprLayout::Source::FlatScratchInit:
     case UserSgprLayout::Source::PrivateSegmentSize:
-    case UserSgprLayout::Source::PreloadedKernarg:
     case UserSgprLayout::Source::WorkgroupInfo:
       return RaiseFailure::general(
           RaiseFailureReason::UnsupportedEntrySgprSource,
