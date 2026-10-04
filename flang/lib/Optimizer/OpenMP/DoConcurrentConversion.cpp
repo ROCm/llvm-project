@@ -207,52 +207,6 @@ static void localizeLoopLocalValue(mlir::Value local, mlir::Region &allocRegion,
 
 class DoConcurrentConversion
     : public mlir::OpConversionPattern<fir::DoConcurrentOp> {
-private:
-  struct TargetDeclareShapeCreationInfo {
-    // Note: We use `std::vector` (rather than `llvm::SmallVector` as usual) to
-    // interface more easily `ShapeShiftOp::getOrigins()` which returns
-    // `std::vector`.
-    std::vector<mlir::Value> startIndices;
-    std::vector<mlir::Value> extents;
-
-    TargetDeclareShapeCreationInfo(mlir::Value liveIn) {
-      mlir::Value shape = nullptr;
-      mlir::Operation *liveInDefiningOp = liveIn.getDefiningOp();
-      auto declareOp =
-          mlir::dyn_cast_if_present<hlfir::DeclareOp>(liveInDefiningOp);
-
-      if (declareOp != nullptr)
-        shape = declareOp.getShape();
-
-      if (!shape)
-        return;
-
-      auto shapeOp =
-          mlir::dyn_cast_if_present<fir::ShapeOp>(shape.getDefiningOp());
-      auto shapeShiftOp =
-          mlir::dyn_cast_if_present<fir::ShapeShiftOp>(shape.getDefiningOp());
-
-      if (!shapeOp && !shapeShiftOp)
-        TODO(liveIn.getLoc(),
-             "Shapes not defined by `fir.shape` or `fir.shape_shift` op's are"
-             "not supported yet.");
-
-      if (shapeShiftOp != nullptr)
-        startIndices = shapeShiftOp.getOrigins();
-
-      extents = shapeOp != nullptr
-                    ? std::vector<mlir::Value>(shapeOp.getExtents().begin(),
-                                               shapeOp.getExtents().end())
-                    : shapeShiftOp.getExtents();
-    }
-
-    bool isShapedValue() const { return !extents.empty(); }
-    bool isShapeShiftedValue() const { return !startIndices.empty(); }
-  };
-
-  using LiveInShapeInfoMap =
-      llvm::DenseMap<mlir::Value, TargetDeclareShapeCreationInfo>;
-
 public:
   using mlir::OpConversionPattern<fir::DoConcurrentOp>::OpConversionPattern;
 
@@ -307,7 +261,7 @@ public:
       genLoopNestClauseOps(doLoop.getLoc(), rewriter, loop, loopNestClauseOps,
                            isTargetDevice ? nullptr : &targetClauseOps);
 
-      LiveInShapeInfoMap liveInShapeInfoMap;
+      Fortran::utils::openmp::LiveInShapeInfoMap liveInShapeInfoMap;
       fir::FirOpBuilder builder(
           rewriter,
           fir::getKindMapping(doLoop->getParentOfType<mlir::ModuleOp>()));
@@ -316,16 +270,18 @@ public:
         bool isReductionVar = llvm::find(loop.getReduceVars(), liveIn) !=
                               loop.getReduceVars().end();
         targetClauseOps.mapVars.push_back(
-            genMapInfoOpForLiveIn(builder, liveIn, isReductionVar));
+            Fortran::utils::openmp::genMapInfoOpForLiveIn(builder, liveIn,
+                                                          isReductionVar));
         liveInShapeInfoMap.insert(
-            {liveIn, TargetDeclareShapeCreationInfo(liveIn)});
+            {liveIn,
+             Fortran::utils::openmp::TargetDeclareShapeCreationInfo(liveIn)});
       }
 
       targetClauseOps.kernelType = mlir::omp::TargetExecModeAttr::get(
           rewriter.getContext(), mlir::omp::TargetExecMode::spmd);
-      targetOp =
-          genTargetOp(doLoop.getLoc(), rewriter, mapper, loopNestLiveIns,
-                      targetClauseOps, loopNestClauseOps, liveInShapeInfoMap);
+      targetOp = Fortran::utils::openmp::genTargetOp(
+          doLoop.getLoc(), rewriter, mapper, loopNestLiveIns, targetClauseOps,
+          loopNestClauseOps, liveInShapeInfoMap);
       auto teamsOp = genTeamsOp(rewriter, loop, mapper);
       targetOp.setCombined(true);
       teamsOp.setCombined(true);
@@ -641,7 +597,8 @@ private:
               mlir::IRMapping &mapper, llvm::ArrayRef<mlir::Value> mappedVars,
               mlir::omp::TargetExtOperands &clauseOps,
               mlir::omp::LoopNestOperands &loopNestClauseOps,
-              const LiveInShapeInfoMap &liveInShapeInfoMap) const {
+              const Fortran::utils::openmp::LiveInShapeInfoMap
+                  &liveInShapeInfoMap) const {
     auto targetOp = mlir::omp::TargetOp::create(rewriter, loc, clauseOps);
     auto argIface = llvm::cast<mlir::omp::BlockArgOpenMPOpInterface>(*targetOp);
 
@@ -724,10 +681,11 @@ private:
     return targetOp;
   }
 
-  hlfir::DeclareOp genLiveInDeclare(
-      fir::FirOpBuilder &builder, mlir::omp::TargetOp targetOp,
-      mlir::Value liveInArg, mlir::omp::MapInfoOp liveInMapInfoOp,
-      const TargetDeclareShapeCreationInfo &targetShapeCreationInfo) const {
+  hlfir::DeclareOp
+  genLiveInDeclare(fir::FirOpBuilder &builder, mlir::omp::TargetOp targetOp,
+                   mlir::Value liveInArg, mlir::omp::MapInfoOp liveInMapInfoOp,
+                   const Fortran::utils::openmp::TargetDeclareShapeCreationInfo
+                       &targetShapeCreationInfo) const {
     mlir::Type liveInType = liveInArg.getType();
     std::string liveInName = liveInMapInfoOp.getName().has_value()
                                  ? liveInMapInfoOp.getName().value().str()
