@@ -818,7 +818,9 @@ struct AMDGPUKernelTy : public GenericKernelTy {
     // TODO: Read the kernel descriptor for the max threads per block. May be
     // read from the image.
 
-    // Get ConstWGSize for kernel from image
+    // Get ConstWGSize for kernel from image. The preferred and max number of
+    // threads derived from it are set up by libomptarget, together with the
+    // rest of the kernel launch info (see loadImagesOntoDevice).
     ConstWGSize = Device.getDefaultNumThreads();
     std::string WGSizeName(getName());
     WGSizeName += "_wg_size";
@@ -830,21 +832,8 @@ struct AMDGPUKernelTy : public GenericKernelTy {
       // In case it is not found, we simply stick with the defaults.
       // So we consume the error and print a debug message.
       ODBG(ODT_Tool) << "Could not load " << WGSizeName.c_str()
-                     << " global from kernel image. Run with "
-                     << PreferredNumThreads << MaxNumThreads;
+                     << " global from kernel image. Run with " << ConstWGSize;
       consumeError(std::move(Err));
-      assert(PreferredNumThreads > 0 && "Prefer more than 0 threads");
-      assert(MaxNumThreads > 0 && "MaxNumThreads more than 0 threads");
-    } else {
-      // Set the number of preferred and max threads to the ConstWGSize to get
-      // the exact value for kernel launch. Exception: In generic-spmd mode, we
-      // set it to the default blocksize since ConstWGSize may include the
-      // master thread which is not required.
-      PreferredNumThreads =
-          getExecutionModeFlags() == OMP_TGT_EXEC_MODE_GENERIC_SPMD
-              ? Device.getDefaultNumThreads()
-              : ConstWGSize;
-      MaxNumThreads = ConstWGSize;
     }
 
     ImplicitArgsSize =
@@ -894,6 +883,34 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   uint32_t getPrivateSize() const { return PrivateSize; }
   uint16_t getConstWGSize() const { return ConstWGSize; }
 
+  /// Compute the launch geometry with the AMDGPU-specific heuristics.
+  bool computeLaunchGeometry(GenericDeviceTy &GenericDevice,
+                             const KernelLaunchArgsTy &LaunchArgs,
+                             bool StrictThreads, bool StrictBlocks,
+                             uint32_t &NumThreads,
+                             uint32_t &NumBlocks) const override {
+    // The occupancy-based heuristics need the kernel's max occupancy.
+    computeMaxOccupancy(GenericDevice);
+
+    if (!StrictThreads) {
+      NumThreads =
+          getEffectiveNumThreads(GenericDevice, NumThreads, LaunchArgs);
+
+      std::pair<bool, uint32_t> AdjustInfo = adjustNumThreadsForLowTripCount(
+          GenericDevice, NumThreads, LaunchArgs.Tripcount,
+          LaunchArgs.UserThreadLimit, LaunchArgs);
+      if (AdjustInfo.first)
+        NumThreads = AdjustInfo.second;
+    }
+
+    if (!StrictBlocks)
+      NumBlocks = getEffectiveNumBlocks(
+          GenericDevice, NumBlocks, LaunchArgs.Tripcount, NumThreads,
+          StrictThreads, LaunchArgs.UserThreadLimit[0] > 0, LaunchArgs);
+
+    return true;
+  }
+
   /// Get the HSA kernel object representing the kernel function.
   uint64_t getKernelObject() const { return KernelObject; }
 
@@ -942,14 +959,18 @@ private:
 
   /// Lower number of threads if tripcount is low. This should produce
   /// a larger number of teams if allowed by other constraints.
-  std::pair<bool, uint32_t> adjustNumThreadsForLowTripCount(
-      GenericDeviceTy &GenericDevice, uint32_t BlockSize,
-      uint64_t LoopTripCount, uint32_t ThreadLimitClause[3]) const override {
+  std::pair<bool, uint32_t>
+  adjustNumThreadsForLowTripCount(GenericDeviceTy &GenericDevice,
+                                  uint32_t BlockSize, uint64_t LoopTripCount,
+                                  const uint32_t ThreadLimitClause[3],
+                                  const KernelLaunchArgsTy &LaunchArgs) const {
+    const KernelLaunchInfoTy &Info = LaunchArgs.KernelLaunchInfo;
     uint32_t NumThreads = BlockSize;
 
     // If there is an override already, do nothing. Note the different
     // default for cross-team reductions.
-    const bool IsTeamsReduction = isSPMDMode() && doesTeamsReduction();
+    const bool IsTeamsReduction =
+        Info.isSPMDMode() && Info.doesTeamsReduction();
 
     if (!IsTeamsReduction &&
         NumThreads != GenericDevice.getDefaultNumThreads() &&
@@ -975,7 +996,7 @@ private:
       return std::make_pair(false, NumThreads);
 
     // If generic or generic-SPMD kernel, do nothing.
-    if (isGenericMode() || isGenericSPMDMode())
+    if (Info.isGenericMode() || Info.isGenericSPMDMode())
       return std::make_pair(false, NumThreads);
 
     // Reduce the blocksize as long as it is above the tunable limit.
@@ -1013,13 +1034,15 @@ private:
   /// Get the number of threads and blocks for the kernel based on the
   /// user-defined threads and block clauses.
   uint32_t getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
-                                  uint32_t UserThreadLimit) const override {
-    assert(!isBareMode() && "bare kernel should not call this function");
+                                  uint32_t UserThreadLimit,
+                                  const KernelLaunchArgsTy &LaunchArgs) const {
+    const KernelLaunchInfoTy &Info = LaunchArgs.KernelLaunchInfo;
+    assert(!Info.isBareMode() && "bare kernel should not call this function");
 
     // Honor OMP_TEAMS_THREAD_LIMIT environment variable and
     // num_threads/thread_limit clause for BigJumpLoop and NoLoop kernel types.
     int32_t TeamsThreadLimitEnvVar = GenericDevice.getOMPTeamsThreadLimit();
-    if (isBigJumpLoopMode() || isNoLoopMode()) {
+    if (Info.isBigJumpLoopMode() || Info.isNoLoopMode()) {
       if (TeamsThreadLimitEnvVar > 0)
         return std::min(static_cast<int32_t>(ConstWGSize),
                         TeamsThreadLimitEnvVar);
@@ -1033,7 +1056,7 @@ private:
     // value is honored as given, as long as it fits: the upstream cross-team
     // reduction works with any block size, unlike the removed Xteamr helpers
     // that required a power of two.
-    if (isSPMDMode() && doesTeamsReduction()) {
+    if (Info.isSPMDMode() && Info.doesTeamsReduction()) {
       if (TeamsThreadLimitEnvVar > 0 &&
           TeamsThreadLimitEnvVar <= static_cast<int32_t>(ConstWGSize))
         return TeamsThreadLimitEnvVar;
@@ -1047,30 +1070,32 @@ private:
       return ConstWGSize;
     }
 
-    if (UserThreadLimit > 0 && isGenericMode()) {
+    if (UserThreadLimit > 0 && Info.isGenericMode()) {
       if (UserThreadLimit == (uint32_t)-1)
-        UserThreadLimit = PreferredNumThreads;
+        UserThreadLimit = Info.PreferredNumThreads;
       else
         UserThreadLimit += GenericDevice.getWarpSize();
     }
 
     // Limit number of threads taking into consideration the user
     // environment variable OMP_TEAMS_THREAD_LIMIT if provided.
-    uint32_t CurrentMaxNumThreads = MaxNumThreads;
+    uint32_t CurrentMaxNumThreads = Info.MaxNumThreads;
     if (TeamsThreadLimitEnvVar > 0)
       CurrentMaxNumThreads = std::min(
           static_cast<uint32_t>(TeamsThreadLimitEnvVar), CurrentMaxNumThreads);
 
     return std::min(CurrentMaxNumThreads, (UserThreadLimit > 0)
                                               ? UserThreadLimit
-                                              : PreferredNumThreads);
+                                              : Info.PreferredNumThreads);
   }
   uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
                                  uint32_t UserNumBlocks, uint64_t LoopTripCount,
                                  uint32_t &EffectiveNumThreads,
                                  bool IsNumThreadsStrict,
-                                 bool IsNumThreadsFromUser) const override {
-    assert(!isBareMode() && "bare kernel should not call this function");
+                                 bool IsNumThreadsFromUser,
+                                 const KernelLaunchArgsTy &LaunchArgs) const {
+    const KernelLaunchInfoTy &Info = LaunchArgs.KernelLaunchInfo;
+    assert(!Info.isBareMode() && "bare kernel should not call this function");
 
     const auto getNumGroupsFromThreadsAndTripCount =
         [](const uint64_t TripCount, const uint32_t NumThreads) {
@@ -1078,7 +1103,7 @@ private:
         };
     uint64_t DeviceNumCUs = GenericDevice.getNumComputeUnits(); // FIXME
 
-    if (isNoLoopMode()) {
+    if (Info.isNoLoopMode()) {
       return LoopTripCount > 0 ? getNumGroupsFromThreadsAndTripCount(
                                      LoopTripCount, EffectiveNumThreads)
                                : 1;
@@ -1087,7 +1112,7 @@ private:
     uint64_t NumWavesInGroup =
         (EffectiveNumThreads - 1) / GenericDevice.getWarpSize() + 1;
 
-    if (isBigJumpLoopMode()) {
+    if (Info.isBigJumpLoopMode()) {
       int32_t NumTeamsEnvVar = GenericDevice.getOMPNumTeams();
       uint64_t NumGroups = 1;
       // Cannot assert a non-zero tripcount. Instead, launch with 1 team if the
@@ -1151,7 +1176,7 @@ private:
     // execution mode has been removed). Recognize it via the reduction data
     // size so the AMDGPU reduction grid-size heuristic (which upstream has no
     // equivalent for) still applies.
-    if (isSPMDMode() && doesTeamsReduction()) {
+    if (Info.isSPMDMode() && Info.doesTeamsReduction()) {
       // Here's the default number of teams.
       uint64_t NumGroups = DeviceNumCUs;
       // The number of teams must not exceed this upper limit.
@@ -1278,14 +1303,14 @@ private:
     int32_t NumTeamsEnvVar = GenericDevice.getOMPNumTeams();
     uint64_t TripCountNumBlocks = std::numeric_limits<uint64_t>::max();
     if (LoopTripCount > 0) {
-      if (isSPMDMode()) {
+      if (Info.isSPMDMode()) {
         // We have a combined construct, i.e. `target teams distribute
         // parallel for [simd]`. We launch so many teams so that each thread
         // will execute one iteration of the loop. round up to the nearest
         // integer
         TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
       } else {
-        assert((isGenericMode() || isGenericSPMDMode()) &&
+        assert((Info.isGenericMode() || Info.isGenericSPMDMode()) &&
                "Unexpected execution mode!");
         // If we reach this point, then we have a non-combined construct, i.e.
         // `teams distribute` with a nested `parallel for` and each team is
@@ -1303,17 +1328,17 @@ private:
       }
     }
 
-    if (isSPMDMode() && OMPX_SPMDOccupancyBasedOpt && NumTeamsEnvVar == 0 &&
-        UserNumBlocks == 0) {
+    if (Info.isSPMDMode() && OMPX_SPMDOccupancyBasedOpt &&
+        NumTeamsEnvVar == 0 && UserNumBlocks == 0) {
       return std::min(
           TripCountNumBlocks,
           OptimizeNumTeamsBaseOccupancy(GenericDevice, EffectiveNumThreads));
     }
 
     auto getAdjustedDefaultNumBlocks =
-        [this](GenericDeviceTy &GenericDevice,
-               uint64_t DeviceNumCUs) -> uint64_t {
-      if (!isGenericSPMDMode() ||
+        [&Info](GenericDeviceTy &GenericDevice,
+                uint64_t DeviceNumCUs) -> uint64_t {
+      if (!Info.isGenericSPMDMode() ||
           GenericDevice.getOMPXGenericSpmdTeamsPerCU() == 0)
         return static_cast<uint64_t>(GenericDevice.getDefaultNumBlocks());
       return DeviceNumCUs * static_cast<uint64_t>(
@@ -1367,8 +1392,8 @@ private:
     // required to preserve the occupancy in case the inner loop tripcounts are
     // larger than the blocksize. This change is done only when the user has not
     // specified the number of teams or threads.
-    if (isGenericSPMDMode() && !IsNumThreadsFromUser && !IsNumThreadsStrict &&
-        UserNumBlocks == 0 && NumTeamsEnvVar == 0 &&
+    if (Info.isGenericSPMDMode() && !IsNumThreadsFromUser &&
+        !IsNumThreadsStrict && UserNumBlocks == 0 && NumTeamsEnvVar == 0 &&
         GenericDevice.getOMPXGenericSpmdUseSmallBlockSize()) {
       uint64_t TmpPreferredNumBlocks = PreferredNumBlocks << 1;
       while (TmpPreferredNumBlocks <= LoopTripCount &&
@@ -6459,11 +6484,12 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(
         "sgpr_spill_count:%u vgpr_spill_count:%u tripcount:%lu rpc:%d "
         "Max Occupancy: %u Achieved Occupancy: "
         "%d%% n:%s\n",
-        GenericDevice.getDeviceId(), LaunchId, getExecutionModeFlags(),
-        ConstWGSize, LaunchArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0,
-        GroupSegmentSize, getPrivateSize(), SGPRCount, VGPRCount, AGPRCount,
-        SGPRSpillCount, VGPRSpillCount, LaunchArgs.Tripcount, HasRPC,
-        MaxOccupancy, AchievedOccupancy, getName());
+        GenericDevice.getDeviceId(), LaunchId,
+        LaunchArgs.KernelLaunchInfo.getExecutionModeFlags(), ConstWGSize,
+        LaunchArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0, GroupSegmentSize,
+        getPrivateSize(), SGPRCount, VGPRCount, AGPRCount, SGPRSpillCount,
+        VGPRSpillCount, LaunchArgs.Tripcount, HasRPC, MaxOccupancy,
+        AchievedOccupancy, getName());
   } else {
 
     // This line should print exactly as the one in the old plugin.
@@ -6475,7 +6501,8 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(
         "sgpr_spill_count:%u vgpr_spill_count:%u tripcount:%lu rpc:%d "
         "Max Occupancy: %u Achieved Occupancy: "
         "%d%% n:%s\n",
-        GenericDevice.getDeviceId(), getExecutionModeFlags(), ConstWGSize,
+        GenericDevice.getDeviceId(),
+        LaunchArgs.KernelLaunchInfo.getExecutionModeFlags(), ConstWGSize,
         LaunchArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0, GroupSegmentSize,
         getPrivateSize(), SGPRCount, VGPRCount, AGPRCount, SGPRSpillCount,
         VGPRSpillCount, LaunchArgs.Tripcount, HasRPC, MaxOccupancy,

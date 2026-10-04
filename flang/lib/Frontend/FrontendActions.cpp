@@ -657,6 +657,8 @@ void CodeGenAction::lowerHLFIRToFIR() {
   if (ci.getInvocation().getFortranOpts().features.IsEnabled(
           Fortran::common::LanguageFeature::CUDA))
     config.EnableCUDA = true;
+  // Give plugins a chance to register passes at the extension points.
+  fir::invokePassPipelineConfigCallbacks(config);
   // Create the pass pipeline
   fir::createHLFIRToFIRPassPipeline(pm, enableOpenMP, config);
   (void)mlir::applyPassManagerCLOptions(pm);
@@ -801,6 +803,10 @@ void CodeGenAction::generateLLVMIR() {
     config.NSWOnLoopVarInc = false;
 
   config.ComplexRange = opts.getComplexRange();
+
+  // Give plugins a chance to register passes at the extension points, once the
+  // config is fully set up.
+  fir::invokePassPipelineConfigCallbacks(config);
 
   // Create the pass pipeline
   fir::createMLIRToLLVMPassPipeline(pm, config, getCurrentFile());

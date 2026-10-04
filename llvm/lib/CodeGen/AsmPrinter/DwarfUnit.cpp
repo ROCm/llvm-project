@@ -65,10 +65,6 @@ void DIEDwarfExpression::emitOpAddress(const GlobalVariable *GV) {
   CU.addOpAddress(getActiveDIE(), AP.getSymbol(GV));
 }
 
-void DIEDwarfExpression::emitRelocatedAddress(const MCSymbol *Sym) {
-  CU.addLabel(getActiveDIE(), dwarf::DW_FORM_addr, Sym);
-}
-
 void DIEDwarfExpression::enableTemporaryBuffer() {
   assert(!IsBuffering && "Already buffering?");
   IsBuffering = true;

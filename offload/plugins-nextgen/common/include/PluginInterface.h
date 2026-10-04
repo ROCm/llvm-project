@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <limits>
 #include <list>
 #include <map>
 #include <shared_mutex>
@@ -321,18 +322,6 @@ private:
   }
 };
 
-/// Configuration of dynamic block memory needed for launching a kernel.
-struct DynBlockMemConfTy {
-  /// The size of the dynamic block memory buffer.
-  uint32_t Size = 0;
-  /// The size of dynamic shared memory natively provided by the device.
-  uint32_t NativeSize = 0;
-  /// The fallback that was triggered (if any).
-  DynCGroupMemFallbackType Fallback = DynCGroupMemFallbackType::None;
-  /// The fallback pointer if global memory was used as alternative.
-  void *FallbackPtr = nullptr;
-};
-
 /// Tracker of virtual memory address reservations.
 template <typename HandleTy> class VMemTrackerTy {
   struct EntryTy {
@@ -430,6 +419,70 @@ public:
   }
 };
 
+struct KernelLaunchInfoTy {
+  uint32_t MaxNumThreads = 0;
+  uint32_t PreferredNumThreads = 0;
+  uint32_t ReductionDataSize = 0;
+  /// The static memory size per block of the kernel.
+  uint32_t StaticBlockMemSize = 0;
+  /// Number of blocks originally requested by the program for the first
+  /// dimension (e.g., num_teams clause), or 0 if none was requested. Unlike
+  /// the other fields, this is set per launch.
+  uint32_t RequestedNumBlocks = 0;
+  /// Defaults to OMP_TGT_EXEC_MODE_BARE.
+  OMPTgtExecModeFlags Mode = OMP_TGT_EXEC_MODE_BARE;
+
+  /// Indicate if the kernel works in Bare, Generic SPMD, Generic, No-Loop
+  /// or SPMD mode.
+  bool isBareMode() const { return Mode == OMP_TGT_EXEC_MODE_BARE; }
+  bool isGenericMode() const { return Mode == OMP_TGT_EXEC_MODE_GENERIC; }
+  bool isGenericSPMDMode() const {
+    return Mode == OMP_TGT_EXEC_MODE_GENERIC_SPMD;
+  }
+  bool isSPMDMode() const { return Mode == OMP_TGT_EXEC_MODE_SPMD; }
+  bool isNoLoopMode() const { return Mode == OMP_TGT_EXEC_MODE_SPMD_NO_LOOP; }
+  bool isBigJumpLoopMode() const {
+    return Mode == OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP;
+  }
+  // Note: there is deliberately no execution mode for a cross-team reduction.
+  // Such a kernel is a plain SPMD one; use doesTeamsReduction() below to detect
+  // it.
+
+  /// Indicate whether this kernel performs a cross-team (teams) reduction.
+  /// Signalled by a non-zero reduction data size emitted by CodeGen for the
+  /// upstream cross-team reduction path. This drives the AMDGPU reduction
+  /// grid-size heuristic now that the downstream Xteam reduction execution
+  /// mode is no longer generated.
+  bool doesTeamsReduction() const { return ReductionDataSize > 0; }
+
+  static const char *getExecutionModeName(OMPTgtExecModeFlags Mode) {
+    switch (Mode) {
+    case OMP_TGT_EXEC_MODE_BARE:
+      return "BARE";
+    case OMP_TGT_EXEC_MODE_SPMD:
+      return "SPMD";
+    case OMP_TGT_EXEC_MODE_GENERIC:
+      return "Generic";
+    case OMP_TGT_EXEC_MODE_GENERIC_SPMD:
+      return "Generic-SPMD";
+    // AMD-only execution modes
+    case OMP_TGT_EXEC_MODE_SPMD_NO_LOOP:
+      return "SPMD-No-Loop";
+    case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
+      return "SPMD-Big-Jump-Loop";
+    }
+    return "Unknown";
+  }
+
+  /// Return the display name of this kernel's execution mode, for
+  /// debug/info logging only.
+  const char *getExecutionModeName() const {
+    return getExecutionModeName(Mode);
+  }
+
+  OMPTgtExecModeFlags getExecutionModeFlags() const { return Mode; }
+};
+
 /// The subset of KernelArgsTy fields the plugin interface needs to launch a
 /// kernel, plus the resolved argument-pointer array. Unlike KernelArgsTy,
 /// this struct is populated by libomptarget on the stack for every launch,
@@ -447,11 +500,6 @@ struct KernelLaunchArgsTy {
   /// Size of the argument data in bytes, one entry per \p Args element,
   /// possibly null.
   int64_t *ArgSizes = nullptr;
-  /// Address of the element of \p Args reserved for the kernel launch
-  /// environment (dyn_ptr), or null if this launch has no such slot. The
-  /// caller owns the storage it points into; the plugin fills it in once it
-  /// has computed the actual (device-side) value.
-  void **DynPtrSlot = nullptr;
   /// Tripcount for the teams / distribute loop, 0 otherwise.
   uint64_t Tripcount = 0;
   /// Amount of dynamic cgroup memory requested.
@@ -460,14 +508,13 @@ struct KernelLaunchArgsTy {
   uint32_t UserNumBlocks[3] = {0, 0, 0};
   /// User-requested number of threads (for x,y,z dimension).
   uint32_t UserThreadLimit[3] = {0, 0, 0};
+  /// Downstream, the plugin gets the kernel's full launch-geometry properties,
+  /// including the execution mode, which the AMDGPU plugin needs.
+  KernelLaunchInfoTy KernelLaunchInfo;
   struct {
     uint64_t Cooperative : 1; // Was this kernel spawned as cooperative.
-    uint64_t StrictBlocks : 1; // The user-requested number of blocks is strict.
-    uint64_t
-        StrictThreads : 1; // The user-requested number of threads is strict.
-    uint64_t DynCGroupMemFallback : 2; // The fallback for dynamic cgroup mem.
-    uint64_t Unused : 60;
-  } Flags = {0, 0, 0, 0, 0};
+    uint64_t Unused : 63;
+  } Flags = {0, 0};
   /// Set by the caller when replaying a previously recorded kernel launch, so
   /// the plugin can report the outcome back; null for a normal launch.
   KernelReplayOutcomeTy *ReplayOutcome = nullptr;
@@ -477,9 +524,8 @@ struct KernelLaunchArgsTy {
 /// should define the specific kernel class, derive from this generic one, and
 /// implement the necessary virtual function members.
 struct GenericKernelTy {
-  /// Construct a kernel with a name and a execution mode.
-  GenericKernelTy(StringRef Name)
-      : Name(Name), PreferredNumThreads(0), MaxNumThreads(0) {}
+  /// Construct a kernel with a name.
+  GenericKernelTy(StringRef Name) : Name(Name) {}
 
   virtual ~GenericKernelTy() {}
 
@@ -490,10 +536,7 @@ struct GenericKernelTy {
 
   /// Launch the kernel on the specific device. The device must be the same
   /// one used to initialize the kernel. \p LaunchArgs.Args is the flattened
-  /// argument-pointer array to pass to the kernel, with any offsets already
-  /// resolved. \p LaunchArgs.DynPtrSlot, if non-null, points at the element
-  /// of it reserved for the kernel launch environment (dyn_ptr); the caller
-  /// owns the storage it points into.
+  /// argument-pointer array to pass to the kernel, with any offsets.
   Error launch(GenericDeviceTy &GenericDevice, KernelLaunchArgsTy &LaunchArgs,
                AsyncInfoWrapperTy &AsyncInfoWrapper) const;
   virtual Error launchImpl(GenericDeviceTy &GenericDevice,
@@ -520,28 +563,17 @@ struct GenericKernelTy {
   /// Get the size of the static per-block memory consumed by the kernel.
   uint32_t getStaticBlockMemSize() const { return StaticBlockMemSize; };
 
-  /// Get the maximum number of threads per block that this kernel may use.
-  uint32_t getMaxThreads() const { return MaxNumThreads; }
+  /// Return the maximum number of threads per block that this kernel's
+  /// underlying device function may run, as reported by the driver/backend.
+  virtual uint32_t getMaxThreads() const {
+    return std::numeric_limits<uint32_t>::max();
+  }
 
   /// Get the kernel image.
   DeviceImageTy &getImage() const {
     assert(ImagePtr && "Kernel is not initialized!");
     return *ImagePtr;
   }
-
-  /// Return the kernel environment object for kernel \p Name.
-  const KernelEnvironmentTy &getKernelEnvironmentForKernel() {
-    return KernelEnvironment;
-  }
-
-  /// Return a device pointer to a new kernel launch environment.
-  ///
-  /// \p NumBlocks0 is the number of blocks for this launch and is used to size
-  /// the reduction buffer.
-  Expected<KernelLaunchEnvironmentTy *> getKernelLaunchEnvironment(
-      GenericDeviceTy &GenericDevice, const KernelLaunchArgsTy &LaunchArgs,
-      const DynBlockMemConfTy &DynBlockMemConf,
-      AsyncInfoWrapperTy &AsyncInfoWrapper, uint32_t NumBlocks0) const;
 
   /// Indicate whether an execution mode is valid.
   static bool isValidExecutionMode(OMPTgtExecModeFlags ExecutionMode) {
@@ -580,59 +612,22 @@ struct GenericKernelTy {
     return AchievedOccupancy;
   }
 
-  /// Indicate if the kernel works in Generic SPMD, Generic or SPMD mode.
-  bool isGenericSPMDMode() const {
-    return ExecutionMode == OMP_TGT_EXEC_MODE_GENERIC_SPMD;
-  }
-  bool isGenericMode() const {
-    return ExecutionMode == OMP_TGT_EXEC_MODE_GENERIC;
-  }
-  bool isSPMDMode() const { return ExecutionMode == OMP_TGT_EXEC_MODE_SPMD; }
-  bool isBareMode() const { return ExecutionMode == OMP_TGT_EXEC_MODE_BARE; }
-
-  /// AMD-only execution modes
-  bool isBigJumpLoopMode() const {
-    return ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP;
-  }
-  bool isNoLoopMode() const {
-    return ExecutionMode == OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
-  }
-  // Note: there is deliberately no execution mode for a cross-team reduction.
-  // Such a kernel is a plain SPMD one; use doesTeamsReduction() below to detect
-  // it.
-
-  /// Indicate whether this kernel performs a cross-team (teams) reduction.
-  /// Signalled by a non-zero reduction data size emitted by CodeGen for the
-  /// upstream cross-team reduction path. This drives the AMDGPU reduction
-  /// grid-size heuristic now that the downstream Xteam reduction execution
-  /// mode is no longer generated.
-  bool doesTeamsReduction() const {
-    return KernelEnvironment.Configuration.ReductionDataSize > 0;
+  /// Downstream: let the plugin compute the effective launch geometry of a
+  /// non-bare OpenMP kernel launch, i.e., the number of threads and blocks of
+  /// the first dimension. On entry, \p NumThreads and \p NumBlocks hold the
+  /// user-requested values; the ones flagged by \p StrictThreads and
+  /// \p StrictBlocks must be kept. Returns false if the plugin does not
+  /// provide its own computation, in which case libomptarget uses the
+  /// generic one.
+  virtual bool computeLaunchGeometry(GenericDeviceTy &GenericDevice,
+                                     const KernelLaunchArgsTy &LaunchArgs,
+                                     bool StrictThreads, bool StrictBlocks,
+                                     uint32_t &NumThreads,
+                                     uint32_t &NumBlocks) const {
+    return false;
   }
 
 protected:
-  /// Get the execution mode name of the kernel.
-  const char *getExecutionModeName() const {
-    switch (ExecutionMode) {
-    case OMP_TGT_EXEC_MODE_BARE:
-      return "BARE";
-    case OMP_TGT_EXEC_MODE_SPMD:
-      return "SPMD";
-    case OMP_TGT_EXEC_MODE_GENERIC:
-      return "Generic";
-    case OMP_TGT_EXEC_MODE_GENERIC_SPMD:
-      return "Generic-SPMD";
-    // AMD-only execution modes
-    case OMP_TGT_EXEC_MODE_SPMD_NO_LOOP:
-      return "SPMD-No-Loop";
-    case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
-      return "SPMD-Big-Jump-Loop";
-    }
-    llvm_unreachable("Unknown execution mode!");
-  }
-
-  OMPTgtExecModeFlags getExecutionModeFlags() const { return ExecutionMode; }
-
   /// Prints generic kernel launch information.
   Error printLaunchInfo(GenericDeviceTy &GenericDevice,
                         const KernelLaunchArgsTy &LaunchArgs,
@@ -646,62 +641,15 @@ protected:
                                        uint32_t NumBlocks[3]) const;
 
 private:
-  /// Prepare the block memory buffer requested for the kernel and execute the
-  /// specified fallback if necessary.
-  Expected<DynBlockMemConfTy>
-  prepareBlockMemory(GenericDeviceTy &GenericDevice,
-                     const KernelLaunchArgsTy &LaunchArgs,
-                     uint32_t NumBlocks) const;
-
-  /// Lower number of threads if tripcount is low.
-  virtual std::pair<bool, uint32_t>
-  adjustNumThreadsForLowTripCount(GenericDeviceTy &GenericDevice,
-                                  uint32_t BlockSize, uint64_t LoopTripCount,
-                                  uint32_t ThreadLimitClause[3]) const {
-    return std::make_pair(false, BlockSize);
-  }
-
-  /// Get the effective number of threads for the kernel based on the
-  /// user-defined number of threads.
-  virtual uint32_t getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
-                                          uint32_t UserThreadLimit) const;
-
-  /// Get the effective number of blocks for the kernel based on the
-  /// user-defined number of blocks and the loop trip count.
-  /// The number of threads \p NumThreads can be adjusted by this method.
-  /// \p IsNumThreadsFromUser is true is \p NumThreads is defined by user via
-  /// thread_limit clause.
-  virtual uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
-                                         uint32_t UserNumBlocks,
-                                         uint64_t LoopTripCount,
-                                         uint32_t &EffectiveNumThreads,
-                                         bool IsNumThreadsStrict,
-                                         bool IsNumThreadsFromUser) const;
-
   /// The kernel name.
   std::string Name;
-
-  /// The execution flags of the kernel.
-  OMPTgtExecModeFlags ExecutionMode;
 
   /// The image that contains this kernel.
   DeviceImageTy *ImagePtr = nullptr;
 
 protected:
-  /// The preferred number of threads to run the kernel.
-  uint32_t PreferredNumThreads;
-
-  /// The maximum number of threads which the kernel could leverage.
-  uint32_t MaxNumThreads;
-
   /// The static memory sized per block.
   uint32_t StaticBlockMemSize = 0;
-
-  /// The kernel environment, including execution flags.
-  KernelEnvironmentTy KernelEnvironment;
-
-  /// The prototype kernel launch environment.
-  KernelLaunchEnvironmentTy KernelLaunchEnvironment;
 
   /// Upper-bound for the launched kernel occupancy.
   /// 0 indicates an invalid result.
@@ -1167,9 +1115,8 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual bool hasFastTransferWithPinnedMemory() const { return false; }
 
   /// Allocate a pinned host buffer to stage a kernel launch environment. The
-  /// caller owns it until it registers it with
-  /// AsyncInfoWrapperTy::freeAllocationAfterSynchronization, which releases it
-  /// once the transfer reading it has completed. Returns nullptr if staging is
+  /// caller owns it and must release it (as TARGET_ALLOC_HOST) once the
+  /// transfer reading it has completed. Returns nullptr if staging is
   /// unavailable, in which case the caller must submit the launch environment
   /// from ordinary host memory.
   KernelLaunchEnvironmentTy *getPinnedLaunchEnvBuffer();

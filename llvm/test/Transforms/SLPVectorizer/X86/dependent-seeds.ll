@@ -25,3 +25,39 @@ define { float, float, float } @test(float %x0, float %x1, float %x2, float %x3)
   %r2 = insertvalue { float, float, float } %r1, float %q3, 2
   ret { float, float, float } %r2
 }
+
+; The seeds of the second level depend on the first level ones, which are taken
+; first. They are vectorized next, fed by the vectorized first level.
+define double @second_level_seeds(ptr noalias %x, ptr noalias %y, ptr noalias %m) {
+; CHECK-LABEL: define double @second_level_seeds(
+; CHECK-SAME: ptr noalias [[X:%.*]], ptr noalias [[Y:%.*]], ptr noalias [[M:%.*]]) {
+; CHECK-NEXT:    [[Y0:%.*]] = load double, ptr [[Y]], align 8
+; CHECK-NEXT:    [[X0:%.*]] = load double, ptr [[X]], align 8
+; CHECK-NEXT:    [[TMP4:%.*]] = fadd double [[Y0]], [[X0]]
+; CHECK-NEXT:    [[TMP5:%.*]] = fadd fast double [[TMP4]], 1.000000e+00
+; CHECK-NEXT:    store double [[TMP5]], ptr [[M]], align 8
+; CHECK-NEXT:    [[Y_1:%.*]] = getelementptr i8, ptr [[Y]], i64 8
+; CHECK-NEXT:    [[Y1:%.*]] = load double, ptr [[Y_1]], align 8
+; CHECK-NEXT:    [[X_1:%.*]] = getelementptr i8, ptr [[X]], i64 8
+; CHECK-NEXT:    [[X1:%.*]] = load double, ptr [[X_1]], align 8
+; CHECK-NEXT:    [[TMP7:%.*]] = fadd double [[Y1]], [[X1]]
+; CHECK-NEXT:    [[TMP6:%.*]] = fadd fast double [[TMP7]], 1.000000e+00
+; CHECK-NEXT:    [[L:%.*]] = load double, ptr [[M]], align 8
+; CHECK-NEXT:    [[R:%.*]] = fadd double [[TMP6]], [[L]]
+; CHECK-NEXT:    ret double [[R]]
+;
+  %y0 = load double, ptr %y, align 8
+  %x0 = load double, ptr %x, align 8
+  %s0 = fadd double %y0, %x0
+  %t0 = fadd fast double %s0, 1.000000e+00
+  store double %t0, ptr %m, align 8
+  %y.1 = getelementptr i8, ptr %y, i64 8
+  %y1 = load double, ptr %y.1, align 8
+  %x.1 = getelementptr i8, ptr %x, i64 8
+  %x1 = load double, ptr %x.1, align 8
+  %s1 = fadd double %y1, %x1
+  %t1 = fadd fast double %s1, 1.000000e+00
+  %l = load double, ptr %m, align 8
+  %r = fadd double %t1, %l
+  ret double %r
+}
