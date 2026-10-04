@@ -34,6 +34,8 @@ class AsanChunk;
 struct AllocatorOptions {
   u32 quarantine_size_mb;
   u32 thread_local_quarantine_size_kb;
+  u32 device_quarantine_size_mb;
+  u32 device_thread_local_quarantine_size_kb;
   u16 min_redzone;
   u16 max_redzone;
   u8 may_return_null;
@@ -275,6 +277,10 @@ using AllocatorCache = AsanAllocator::AllocatorCache;
 
 struct AsanThreadLocalMallocStorage {
   uptr quarantine_cache[16];
+  // Separate thread-local quarantine cache for device (HSA) allocations so
+  // that a host free can never evict a device chunk (and vice versa). See
+  // the agent_memory_lock_ re-entrancy notes in asan_allocator.cpp.
+  uptr quarantine_cache_device[16];
   AllocatorCache allocator_cache;
   void CommitBack();
 
@@ -343,6 +349,7 @@ hsa_status_t asan_hsa_amd_memory_pool_allocate(
 hsa_status_t asan_hsa_amd_memory_pool_free(
   void *ptr,
   BufferedStackTrace *stack);
+hsa_status_t asan_hsa_memory_free(void* ptr, BufferedStackTrace* stack);
 hsa_status_t asan_hsa_amd_agents_allow_access(
   uint32_t num_agents, const hsa_agent_t *agents, const uint32_t *flags,
   const void *ptr,
