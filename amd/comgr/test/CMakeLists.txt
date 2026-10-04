@@ -194,23 +194,37 @@ endif()
 
   target_link_libraries("${name}"
     amd_comgr)
-  add_dependencies("${name}"
-    ${TEST_INPUT_BINARIES};${TEST_INPUT_BITCODES};${TEST_INPUT_BUNDLES};
-    ${TEST_INPUT_ARCHIVES};${TEST_INPUT_LINKED_OBJS})
-  add_test(NAME ${test_name}
-    COMMAND "${name}")
-  add_dependencies(check-comgr ${name})
-  # Windows binaries have no equivalent to RPATH, so we must prepend the
-  # .lib/.dll directory to their PATH. Use ENVIRONMENT_MODIFICATION so the
-  # inherited PATH is preserved (transitive DLL deps like zstd.dll live there).
-  if (UNIX)
-    set_tests_properties(${test_name}
-      PROPERTIES ENVIRONMENT "AMD_COMGR_CACHE=0;")
+  if(NOT "${ARGV2}" STREQUAL "NO_INPUTS")
+    add_dependencies("${name}"
+      ${TEST_INPUT_BINARIES};${TEST_INPUT_BITCODES};${TEST_INPUT_BUNDLES};
+      ${TEST_INPUT_ARCHIVES};${TEST_INPUT_LINKED_OBJS})
+  endif()
+  # ENVIRONMENT_MODIFICATION requires CMake 3.22, but standalone Comgr
+  # supports older CMake versions. Set the loader path at test time there.
+  if(CMAKE_VERSION VERSION_LESS 3.22)
+    set(comgr_test_library_dir "$<TARGET_FILE_DIR:amd_comgr>")
+    add_test(NAME ${test_name}
+      COMMAND "${CMAKE_COMMAND}"
+        "-DCOMGR_TEST_EXECUTABLE=$<TARGET_FILE:${name}>"
+        "-DCOMGR_TEST_LIBRARY_DIR=${comgr_test_library_dir}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/run_comgr_test.cmake")
   else()
+    add_test(NAME ${test_name}
+      COMMAND "${name}")
+    # Use the runtime binary directory, which may differ from the import
+    # library directory on Windows.
+    if(WIN32)
+      set(comgr_test_loader_path PATH)
+    elseif(APPLE)
+      set(comgr_test_loader_path DYLD_LIBRARY_PATH)
+    else()
+      set(comgr_test_loader_path LD_LIBRARY_PATH)
+    endif()
     set_tests_properties(${test_name} PROPERTIES
       ENVIRONMENT_MODIFICATION
-      "PATH=path_list_prepend:$<TARGET_LINKER_FILE_DIR:amd_comgr>;AMD_COMGR_CACHE=set:0")
+        "${comgr_test_loader_path}=path_list_prepend:$<TARGET_FILE_DIR:amd_comgr>;AMD_COMGR_CACHE=set:0")
   endif()
+  add_dependencies(check-comgr ${name})
 endmacro()
 
 add_comgr_test(data_test c)
@@ -224,6 +238,8 @@ add_comgr_test(symbols_test c)
 add_comgr_test(symbols_iterate_test c)
 add_comgr_test(compile_test c)
 add_comgr_test(compile_minimal_test c)
+# This test embeds its own source and needs no generated input artifacts.
+add_comgr_test(late_action_test c NO_INPUTS)
 add_comgr_test(compile_log_test c)
 add_comgr_test(compile_log_remarks_test c)
 add_comgr_test(compile_source_with_device_libs_to_bc_test c)
