@@ -8,11 +8,14 @@
 
 #include "transpiler/raiser/handle-vop-cross-lane.h"
 
+#include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/decoded-inst.h"
 #include "transpiler/decoder/parsed-reg.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/raise_failure.h"
+
+#include "SIDefines.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
@@ -24,6 +27,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <optional>
 
 using namespace llvm;
 
@@ -106,6 +110,73 @@ static Value *emitSourceWaveRead(RaiseContext &Ctx, Value *Src,
       Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_ds_bpermute);
   Value *Gathered = Ctx.B.CreateCall(BPermute, {ByteAddress, Src}, Name);
   return Ctx.Projection.wrapAsWWMValue(Ctx.B, Gathered, Name + ".wwm");
+}
+
+Error raiseDPPMove32(RaiseContext &Ctx, const DecodedInst &Di,
+                     OperandResolver &Op) {
+  if (Error Err = requireSupportedWaveDirection(Ctx, Di))
+    return Err;
+
+  auto Immediate = [&](AMDGPU::OpName Name) -> std::optional<int64_t> {
+    int Index = transpiler::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
+    if (Index < 0)
+      return std::nullopt;
+    return evalOperandAsConst(Di.Inst, Index);
+  };
+  std::optional<int64_t> Control = Immediate(AMDGPU::OpName::dpp_ctrl);
+  if (!Control || *Control < AMDGPU::DPP::ROW_SHR_FIRST ||
+      *Control > AMDGPU::DPP::ROW_SHR_LAST)
+    return unsupportedInstruction(Ctx, Di, "expected a DPP16 row_shr move");
+  if (Immediate(AMDGPU::OpName::row_mask) != 0xf ||
+      Immediate(AMDGPU::OpName::bank_mask) != 0xf ||
+      Immediate(AMDGPU::OpName::bound_ctrl) != 0)
+    return unsupportedInstruction(Ctx, Di,
+                                  "DPP move requires full row and bank masks "
+                                  "with bounds control disabled");
+  int FetchInactiveIndex =
+      transpiler::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::fi);
+  if (FetchInactiveIndex >= 0 &&
+      evalOperandAsConst(Di.Inst, FetchInactiveIndex) != 0)
+    return unsupportedInstruction(Ctx, Di, "DPP move does not support fi:1");
+  if (Op.nSrcs() == 0 || Op.srcMod(0) != 0)
+    return unsupportedInstruction(Ctx, Di, "expected an unmodified DPP source");
+
+  Expected<ParsedReg> Destination = Op.dst();
+  if (!Destination)
+    return Destination.takeError();
+  Expected<std::optional<ParsedReg>> Source = Op.srcReg(0);
+  if (!Source)
+    return Source.takeError();
+  if (Destination->RegKind != ParsedReg::VGPR || !*Source ||
+      (*Source)->RegKind != ParsedReg::VGPR)
+    return unsupportedInstruction(Ctx, Di, "DPP move requires VGPR operands");
+  Expected<Value *> Data = Op.src(0);
+  if (!Data)
+    return Data.takeError();
+
+  IRBuilder<> &B = Ctx.B;
+  constexpr unsigned RowSize = 16;
+  unsigned Shift = *Control - AMDGPU::DPP::ROW_SHR0;
+  Value *Lane = Ctx.emitLaneIdx();
+  Value *RowLane = B.CreateAnd(Lane, B.getInt32(RowSize - 1), "dpp.row.lane");
+  Value *InBounds =
+      B.CreateICmpUGE(RowLane, B.getInt32(Shift), "dpp.in.bounds");
+  Value *SourceLane = emitSourceWaveLane(
+      Ctx, B.CreateSub(Lane, B.getInt32(Shift)), "dpp.source.lane");
+  Value *Gathered = emitSourceWaveRead(Ctx, *Data, SourceLane, "dpp.data");
+
+  // The gather runs whole-wave; source EXEC, rather than target EXEC, decides
+  // whether the selected lane supplies data or the destination is preserved.
+  Value *Active =
+      B.CreateZExt(Ctx.registers().emitLaneActiveBit(), B.getInt32Ty());
+  Value *SourceActive =
+      emitSourceWaveRead(Ctx, Active, SourceLane, "dpp.active");
+  Value *Valid = B.CreateAnd(
+      InBounds, B.CreateICmpNE(SourceActive, B.getInt32(0)), "dpp.valid");
+  Value *Old = Ctx.registers().regFile().readReg32(B, *Destination);
+  Value *Result = B.CreateSelect(Valid, Gathered, Old, "dpp.move");
+  Ctx.registers().writeReg32(*Destination, Result);
+  return Error::success();
 }
 
 /// Return the mask of the lanes below the current one within its source wave.

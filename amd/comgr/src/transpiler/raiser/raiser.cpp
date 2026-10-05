@@ -26,6 +26,7 @@
 #include "transpiler/decoder/mc-state.h"
 #include "transpiler/decoder/opcode-map.h"
 #include "transpiler/decoder/setpc-analysis.h"
+#include "transpiler/raiser/handle-vop-cross-lane.h"
 #include "transpiler/raiser/handlers.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
@@ -226,6 +227,9 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
   constexpr uint64_t VOP1EncodingMask = VOP1 | VOP3 | DPP | SDWA | VOPD3;
   if ((Di.TargetSpecificFlags & VOP1EncodingMask) == VOP1)
     return handleVOP1(Ctx, Di, Op);
+  if ((Di.TargetSpecificFlags & VOP1EncodingMask) == DPP &&
+      Di.CanonOp == CanonicalOp::V_MOV_B32)
+    return raiseDPPMove32(Ctx, Di, Op);
 
   constexpr uint64_t VOP2EncodingMask =
       VOP2 | VOP3 | VOP3P | DPP | SDWA | VOPD3;
