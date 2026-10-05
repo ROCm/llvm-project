@@ -262,21 +262,13 @@ add_dependencies(test-unit
   DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest
   IncludeMaterializationTest LateActionTest)
 
-# Run the exit test against the library built here, even with an SDK loader path.
-if(APPLE)
-  add_custom_command(TARGET test-unit POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E env
-      "DYLD_LIBRARY_PATH=$<TARGET_FILE_DIR:amd_comgr>:$ENV{DYLD_LIBRARY_PATH}"
-      $<TARGET_FILE:LateActionTest>)
-elseif(UNIX)
-  add_custom_command(TARGET test-unit POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E env
-      "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:amd_comgr>:$ENV{LD_LIBRARY_PATH}"
-      $<TARGET_FILE:LateActionTest>)
-else()
-  add_custom_command(TARGET test-unit POST_BUILD
-    COMMAND $<TARGET_FILE:LateActionTest>)
-endif()
+# Read loader paths when the test runs, so later environment changes survive.
+add_custom_command(TARGET test-unit POST_BUILD
+  COMMAND ${CMAKE_COMMAND}
+    "-DTEST_EXECUTABLE=$<TARGET_FILE:LateActionTest>"
+    "-DCOMGR_LIBRARY_DIR=$<TARGET_FILE_DIR:amd_comgr>"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/RunLateActionTest.cmake"
+  VERBATIM)
 
 # The transpile-path test binaries, exported by transpiler/CMakeLists.txt in
 # COMGR_TRANSPILER_TEST_TARGETS (empty unless COMGR_ENABLE_TRANSPILER is on).

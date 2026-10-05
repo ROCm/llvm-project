@@ -12,7 +12,6 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 
 #define CHECK(Call)                                                            \
   do {                                                                         \
@@ -32,7 +31,7 @@ static int preprocess() {
 
   CHECK(amd_comgr_create_data_set(&Input));
   CHECK(amd_comgr_create_data(AMD_COMGR_DATA_KIND_SOURCE, &Data));
-  CHECK(amd_comgr_set_data(Data, std::strlen(Source), Source));
+  CHECK(amd_comgr_set_data(Data, sizeof(Source) - 1, Source));
   CHECK(amd_comgr_set_data_name(Data, "source.cl"));
   CHECK(amd_comgr_data_set_add(Input, Data));
   CHECK(amd_comgr_release_data(Data));
