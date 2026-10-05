@@ -226,6 +226,31 @@ if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
       $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:IncludeMaterializationTest>)
 endif()
 
+# -- LateActionTest -----------------------------------------------------------
+
+# This exit test supplies its own main to avoid LLVM's early filesystem setup.
+set(COMGR_LATE_ACTION_GTEST_LIBS ${COMGR_GTEST_LIBS})
+list(REMOVE_ITEM COMGR_LATE_ACTION_GTEST_LIBS
+  llvm_gtest_main GTest::gtest_main "${COMGR_LLVM_GTEST_MAIN_LIB}")
+
+add_executable(LateActionTest LateActionTest.cpp)
+target_link_libraries(LateActionTest PRIVATE
+  ${COMGR_LATE_ACTION_GTEST_LIBS}
+  amd_comgr
+  ${COMGR_TEST_UNIT_SUPPORT_LIBS}
+  ${LLVM_PTHREAD_LIB})
+target_compile_definitions(LateActionTest PRIVATE GTEST_NO_LLVM_SUPPORT=true)
+target_include_directories(LateActionTest PRIVATE
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+comgr_configure_test_target(LateActionTest)
+
+if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
+  add_custom_command(TARGET LateActionTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:LateActionTest>)
+endif()
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
@@ -235,7 +260,23 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:IncludeMaterializationTest>)
 add_dependencies(test-unit
   DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest
-  IncludeMaterializationTest)
+  IncludeMaterializationTest LateActionTest)
+
+# Run the exit test against the library built here, even with an SDK loader path.
+if(APPLE)
+  add_custom_command(TARGET test-unit POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E env
+      "DYLD_LIBRARY_PATH=$<TARGET_FILE_DIR:amd_comgr>:$ENV{DYLD_LIBRARY_PATH}"
+      $<TARGET_FILE:LateActionTest>)
+elseif(UNIX)
+  add_custom_command(TARGET test-unit POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E env
+      "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:amd_comgr>:$ENV{LD_LIBRARY_PATH}"
+      $<TARGET_FILE:LateActionTest>)
+else()
+  add_custom_command(TARGET test-unit POST_BUILD
+    COMMAND $<TARGET_FILE:LateActionTest>)
+endif()
 
 # The transpile-path test binaries, exported by transpiler/CMakeLists.txt in
 # COMGR_TRANSPILER_TEST_TARGETS (empty unless COMGR_ENABLE_TRANSPILER is on).
