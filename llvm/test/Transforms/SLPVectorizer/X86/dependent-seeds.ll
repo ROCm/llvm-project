@@ -33,15 +33,15 @@ define double @second_level_seeds(ptr noalias %x, ptr noalias %y, ptr noalias %m
 ; CHECK-SAME: ptr noalias [[X:%.*]], ptr noalias [[Y:%.*]], ptr noalias [[M:%.*]]) {
 ; CHECK-NEXT:    [[Y0:%.*]] = load double, ptr [[Y]], align 8
 ; CHECK-NEXT:    [[X0:%.*]] = load double, ptr [[X]], align 8
-; CHECK-NEXT:    [[TMP4:%.*]] = fadd double [[Y0]], [[X0]]
-; CHECK-NEXT:    [[TMP5:%.*]] = fadd fast double [[TMP4]], 1.000000e+00
+; CHECK-NEXT:    [[S0:%.*]] = fadd double [[Y0]], [[X0]]
+; CHECK-NEXT:    [[TMP5:%.*]] = fadd fast double [[S0]], 1.000000e+00
 ; CHECK-NEXT:    store double [[TMP5]], ptr [[M]], align 8
 ; CHECK-NEXT:    [[Y_1:%.*]] = getelementptr i8, ptr [[Y]], i64 8
 ; CHECK-NEXT:    [[Y1:%.*]] = load double, ptr [[Y_1]], align 8
 ; CHECK-NEXT:    [[X_1:%.*]] = getelementptr i8, ptr [[X]], i64 8
 ; CHECK-NEXT:    [[X1:%.*]] = load double, ptr [[X_1]], align 8
-; CHECK-NEXT:    [[TMP7:%.*]] = fadd double [[Y1]], [[X1]]
-; CHECK-NEXT:    [[TMP6:%.*]] = fadd fast double [[TMP7]], 1.000000e+00
+; CHECK-NEXT:    [[S1:%.*]] = fadd double [[Y1]], [[X1]]
+; CHECK-NEXT:    [[TMP6:%.*]] = fadd fast double [[S1]], 1.000000e+00
 ; CHECK-NEXT:    [[L:%.*]] = load double, ptr [[M]], align 8
 ; CHECK-NEXT:    [[R:%.*]] = fadd double [[TMP6]], [[L]]
 ; CHECK-NEXT:    ret double [[R]]
