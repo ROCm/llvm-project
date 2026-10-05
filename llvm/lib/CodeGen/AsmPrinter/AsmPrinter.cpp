@@ -869,19 +869,6 @@ void AsmPrinter::emitGlobalVariable(const GlobalVariable *GV,
       Alignment = *AlignmentGranule;
   }
 
-  // Identify globals with "SanitizedPaddedGlobal" attribute and extract
-  // the actual global variable size.
-  uint64_t ActualSize = 0;
-  if (GV->hasAttribute(Attribute::SanitizedPaddedGlobal)) {
-    StructType *ST = dyn_cast<StructType>(GV->getValueType());
-    if (ST && ST->getNumElements() == 2) {
-      auto *ET0 = ST->getElementType(0);
-      if (ET0 && isa<ArrayType>(ST->getElementType(1))) {
-        ActualSize = DL.getTypeAllocSize(ET0);
-      }
-    }
-  }
-
   for (auto &Handler : Handlers)
     Handler->setSymbolSize(GVSym, Size);
 
@@ -986,32 +973,15 @@ void AsmPrinter::emitGlobalVariable(const GlobalVariable *GV,
   }
 
   MCSymbol *EmittedInitSym = GVSym;
-  MCSymbol *SanitizedSym = nullptr;
-
-  if (GV->hasAttribute(Attribute::SanitizedPaddedGlobal)) {
-    SanitizedSym = OutContext.getOrCreateSymbol(
-        GVSym->getName() + Twine("__sanitized_padded_global"));
-    emitVisibility(SanitizedSym, GV->getVisibility(), !GV->isDeclaration());
-  }
 
   OutStreamer->switchSection(TheSection);
 
   emitLinkage(GV, EmittedInitSym);
   emitAlignment(Alignment, GV);
 
-  // Emit both original and sanitized symbols after alignment
-  if (SanitizedSym) {
-    OutStreamer->emitLabel(EmittedInitSym);
-    if (MAI.hasDotTypeDotSizeDirective())
-      OutStreamer->emitELFSize(EmittedInitSym,
-                               MCConstantExpr::create(ActualSize, OutContext));
-    EmittedInitSym = SanitizedSym;
-  }
-
   OutStreamer->emitLabel(EmittedInitSym);
   MCSymbol *LocalAlias = getSymbolPreferLocal(*GV);
-  if ((LocalAlias != EmittedInitSym) &&
-      !GV->hasAttribute(Attribute::SanitizedPaddedGlobal))
+  if (LocalAlias != EmittedInitSym)
     OutStreamer->emitLabel(LocalAlias);
 
   emitGlobalConstant(GV->getDataLayout(), GV->getInitializer());
