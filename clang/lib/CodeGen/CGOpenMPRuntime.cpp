@@ -1197,7 +1197,7 @@ struct PushAndPopStackRAII {
     // The FiniCB will still be needed but at the point where the
     // OpenMPIRBuilder is asked to construct a parallel (or similar) construct.
     auto FiniCB = [&CGF](llvm::OpenMPIRBuilder::InsertPointTy IP) {
-      assert(IP.getBlock()->end() == IP.getPoint() &&
+      assert(IP == IP.getNodeParent()->end() &&
              "Clang CG should cause non-terminated block!");
       CGBuilderTy::InsertPointGuard IPG(CGF.Builder);
       CGF.Builder.restoreIP(IP);
@@ -10641,10 +10641,8 @@ static void emitOffloadingArraysAndArgs(
   CodeGenModule &CGM = CGF.CGM;
 
   using InsertPointTy = llvm::OpenMPIRBuilder::InsertPointTy;
-  InsertPointTy AllocaIP(CGF.AllocaInsertPt->getParent(),
-                         CGF.AllocaInsertPt->getIterator());
-  InsertPointTy CodeGenIP(CGF.Builder.GetInsertBlock(),
-                          CGF.Builder.GetInsertPoint());
+  InsertPointTy AllocaIP(CGF.AllocaInsertPt->getIterator());
+  InsertPointTy CodeGenIP(CGF.Builder.GetInsertPoint());
 
   auto DeviceAddrCB = [&](unsigned int I, llvm::Value *NewDecl) {
     if (const ValueDecl *DevVD = CombinedInfo.DevicePtrDecls[I]) {
@@ -11276,7 +11274,7 @@ static void emitTargetCallKernelLaunch(
         OMPRuntime->emitTargetNumIterationsCall(CGF, D, SizeEmitter);
     auto [DynCGroupMem, DynCGroupMemFallback] = emitDynCGroupMem(D, CGF);
     llvm::OpenMPIRBuilder::InsertPointTy AllocaIP(
-        CGF.AllocaInsertPt->getParent(), CGF.AllocaInsertPt->getIterator());
+        CGF.AllocaInsertPt->getIterator());
 
     llvm::OpenMPIRBuilder::TargetDataRTArgs RTArgs(
         BasePointersArray, PointersArray, SizesArray, MapTypesArray,
@@ -11960,8 +11958,7 @@ void CGOpenMPRuntime::emitTargetDataCalls(
       }
       break;
     }
-    return InsertPointTy(CGF.Builder.GetInsertBlock(),
-                         CGF.Builder.GetInsertPoint());
+    return InsertPointTy(CGF.Builder.GetInsertPoint());
   };
 
   auto DeviceAddrCB = [&](unsigned int I, llvm::Value *NewDecl) {
@@ -11983,10 +11980,8 @@ void CGOpenMPRuntime::emitTargetDataCalls(
   // Source location for the ident struct
   llvm::Value *RTLoc = emitUpdateLocation(CGF, D.getBeginLoc());
 
-  InsertPointTy AllocaIP(CGF.AllocaInsertPt->getParent(),
-                         CGF.AllocaInsertPt->getIterator());
-  InsertPointTy CodeGenIP(CGF.Builder.GetInsertBlock(),
-                          CGF.Builder.GetInsertPoint());
+  InsertPointTy AllocaIP(CGF.AllocaInsertPt->getIterator());
+  InsertPointTy CodeGenIP(CGF.Builder.GetInsertPoint());
   llvm::OpenMPIRBuilder::LocationDescription OmpLoc(CGF.Builder);
   llvm::OpenMPIRBuilder::InsertPointTy AfterIP =
       cantFail(OMPBuilder.createTargetData(
