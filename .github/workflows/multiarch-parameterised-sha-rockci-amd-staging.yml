@@ -33,6 +33,16 @@ on:
         required: false
         type: string
         default: ""
+      ROCM_SYSTEMS_PR_URL:
+        description: "rocm-systems PR url. ex: https://github.com/ROCm/rocm-systems/pull/1. Empty keeps the TheRock pin."
+        required: false
+        type: string
+        default: ""
+      ROCM_LIBRARIES_PR_URL:
+        description: "rocm-libraries PR url. ex: https://github.com/ROCm/rocm-libraries/pull/1. Empty keeps the TheRock pin."
+        required: false
+        type: string
+        default: ""
       linux_amdgpu_families:
         type: string
         description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
@@ -88,6 +98,8 @@ jobs:
           LLVM_ROCm_PR_URL=${{ github.event.inputs.LLVM_ROCm_PR_URL }}
           SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
           HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
+          ROCM_SYSTEMS_PR_URL=${{ github.event.inputs.ROCM_SYSTEMS_PR_URL }}
+          ROCM_LIBRARIES_PR_URL=${{ github.event.inputs.ROCM_LIBRARIES_PR_URL }}
           EOF
 
       - name: Upload stored file of PR URls

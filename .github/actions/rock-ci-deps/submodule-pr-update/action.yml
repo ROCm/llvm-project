@@ -138,6 +138,8 @@ runs:
         echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
         echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
         echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
+        echo "ROCM_SYSTEMS_PR_URL=$ROCM_SYSTEMS_PR_URL" >> "$GITHUB_ENV"
+        echo "ROCM_LIBRARIES_PR_URL=$ROCM_LIBRARIES_PR_URL" >> "$GITHUB_ENV"
 
     - name: Update submodule pointers from provided parameter PR values
       if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
@@ -225,6 +227,27 @@ runs:
           echo "::error::Failed to resolve SPIRV/HIPIFY amd-staging tip SHAs." >&2
           exit 1
         fi
+
+       point_submodule_from_pr() {
+          local pr_url="$1"
+          local gitlink="$2"
+          local label="$3"
+          local sha
+          if [[ -z "$pr_url" ]]; then
+            echo "${label} PR not passed; keeping the TheRock pin."
+            return
+          fi
+          sha="$(get_pr_sha "$pr_url")"
+          if [[ -z "$sha" || ${#sha} -ne 40 ]]; then
+            echo "::error::Failed to resolve ${label} from ${pr_url}." >&2
+            exit 1
+          fi
+          echo "${label} head SHA: $sha"
+          git update-index --cacheinfo 160000,"$sha","$gitlink"
+        }
+
+        point_submodule_from_pr "${ROCM_SYSTEMS_PR_URL:-}" rocm-systems "rocm-systems"
+        point_submodule_from_pr "${ROCM_LIBRARIES_PR_URL:-}" rocm-libraries "rocm-libraries"
 
         git commit -m "Update submodule references from PR URLs"
         git submodule update --init --depth 1 --jobs 4 \
