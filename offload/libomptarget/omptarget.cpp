@@ -924,7 +924,8 @@ struct PostProcessingInfo {
 /// according to the successfulness of the operations.
 [[nodiscard]] static int
 postProcessingTargetDataEnd(DeviceTy *Device,
-                            SmallVector<PostProcessingInfo> &EntriesInfo) {
+                            SmallVector<PostProcessingInfo> &EntriesInfo,
+                            StateInfoTy &StateInfo) {
   int Ret = OFFLOAD_SUCCESS;
 
   for (auto &[HstPtrBegin, DataSize, ArgType, TPR] : EntriesInfo) {
@@ -964,10 +965,13 @@ postProcessingTargetDataEnd(DeviceTy *Device,
     // If we copied back to the host a struct/array containing pointers, or
     // Fortran descriptors (which are larger than a "void *"), we need to
     // restore the original host pointer/descriptor values from their shadow
-    // copies. If the struct is going to be deallocated, remove any remaining
-    // shadow pointer entries for this struct.
+    // copies. If the host range was not covered by an actual device-to-host
+    // retrieval in this targetDataEnd, there was no copy-back to overwrite host
+    // pointer/descriptor bytes.
     const bool HasFrom = ArgType & OMP_TGT_MAPTYPE_FROM;
-    if (HasFrom) {
+    const bool WasTransferredFrom =
+        StateInfo.wasTransferredFrom(HstPtrBegin, DataSize).has_value();
+    if (HasFrom && WasTransferredFrom) {
       Entry->foreachShadowPointerInfo([&](const ShadowPtrInfoTy &ShadowPtr) {
         const bool isZeroCopy = PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY;
         const bool isUSMMode =
@@ -1011,6 +1015,7 @@ postProcessingTargetDataEnd(DeviceTy *Device,
   }
 
   delete &EntriesInfo;
+  delete &StateInfo;
   return Ret;
 }
 
@@ -1318,12 +1323,17 @@ int targetDataEnd(ident_t *Loc, DeviceTy &Device, int32_t ArgNum,
     PostProcessingPtrs->back().TPR.getEntry()->unlock();
   }
 
-  // Add post-processing functions
-  // TODO: We might want to remove `mutable` in the future by not changing the
-  // captured variables somehow.
-  AsyncInfo.addPostProcessingFunction([=, Device = &Device]() mutable -> int {
-    return postProcessingTargetDataEnd(Device, *PostProcessingPtrs);
-  });
+  // Add post-processing functions. StateInfo is owned by the caller and may not
+  // outlive the async post-processing callback, so preserve just the
+  // transferred-from bookkeeping needed for descriptor-restore decisions.
+  auto *PostProcessingStateInfo = new StateInfoTy();
+  PostProcessingStateInfo->TransferredFromEntries =
+      StateInfo->TransferredFromEntries;
+  AsyncInfo.addPostProcessingFunction(
+      [=, Device = &Device]() mutable -> int {
+        return postProcessingTargetDataEnd(Device, *PostProcessingPtrs,
+                                           *PostProcessingStateInfo);
+      });
 
   return Ret;
 }
