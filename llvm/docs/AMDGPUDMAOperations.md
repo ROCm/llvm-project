@@ -183,6 +183,79 @@ will always have inclusive scope, independent of target. This is also true if
 `X` specified "cluster" scope, but using "lds-dma" scope is more precise, and
 may result in a more efficient implementation.
 
+(amdgpu-dma-memmodel)=
+
+## AMDGPU DMA Memory Model
+
+Each DMA operation ``D`` is performed in an instance of the corresponding DMA
+scope ``S``. In addition, the user may specify a scope ``S'`` as an argument.
+The internal operations are made available/visible at the larger of these two
+scopes:
+
+```
+Availability/Visibility Scope M = max(S, S')
+```
+
+### `program-order`
+
+When the DMA operation is performed, control flow begins from *dma_entry*
+followed in *program-order* by the following operations.
+
+```{code-block} llvm
+:caption: Global to LDS Internal Sequence
+
+dma_entry
+%tmp = load-visible ptr addrspace(1) %src, M              ; non-atomic
+store-available ptr addrspace(3) %dst, %tmp, "lds-dma"    ; non-atomic
+dma_complete
+```
+
+```{code-block} llvm
+:caption: LDS to Global Internal Sequence
+
+dma_entry
+%tmp = load-visible ptr addrspace(3) %src, "lds-dma"      ; non-atomic
+store-available ptr addrspace(1) %dst, %tmp, M            ; non-atomic
+dma_complete
+```
+
+### `completed-at`
+
+A DMA operation `D` *initiated* by an instruction `X` is *completed-at* an
+operation `Y` if:
+
+- `D` is a synchronous operation and `X` is *program-ordered* before
+  `Y`, or,
+- `D` is an asynchronous operation and a {ref}`completion
+  mechanism<amdgpu-async-completed-at>` ensures that `D` is *completed-at* `Y`.
+
+### Synchronization
+
+When an instruction `X` initiates a DMA operation `D`, let `S` be the set of
+locations that are accessed by `D`. [Informational note --- `S` typically
+contains the locations indicated by both the source and destination pointer
+operands on `X`.]
+
+`dma_entry` and `dma_complete` are both {ref}`synchronizing operations
+<amdgpu-synchronizing-operation>` that synchronize the set `S`.
+
+`X` is a synchronizing operation that synchronizes-with `dma_entry`.
+
+If `D` is a synchronous DMA operation:
+- Each memory access by `D` *inter-thread-happens-before\<S\>* `dma_complete`,
+  and,
+- `dma_complete` *inter-thread-happens-before\<S\>* any operation that follows
+  `X` in program-order.
+
+If `D` is *completed-at* a `wait.asyncmark()` operation `Y`, then the
+`dma_complete` operation performed by `D` synchronizes-with `Y`.
+
+If a DMA operation `D` is *completed-at* a {ref}`barrier
+wait<amdgpu-barrier-operations>` operation `W` then the *dma_complete* operation
+in `D` *synchronizes-with* a `fence acquire` operation `F` such that:
+- `W` is *program-ordered* before `F`, and
+- `D` is included in the scope instance of `F`.
+
 (amdgpu-dma-visibility)=
 
 ### Explicit Visibility Required
