@@ -112,7 +112,7 @@ Error RegisterState::seedEntrySgprs(const KernelMeta &Meta) {
   // One kernarg segment pointer serves both the SGPR pair the ABI dedicates to
   // it and the preloaded dwords read back out of the segment below.
   Value *KernargSegment = nullptr;
-  if (Layout.kernargSegmentPtrSgpr() || Layout.preloadedKernargLength() > 0)
+  if (Layout.needsKernargSegmentPtr())
     KernargSegment =
         B.CreateCall(Intrinsic::getOrInsertDeclaration(
                          &M, Intrinsic::amdgcn_kernarg_segment_ptr),

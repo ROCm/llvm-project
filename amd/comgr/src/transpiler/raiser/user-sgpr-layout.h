@@ -113,6 +113,14 @@ struct UserSgprLayout {
     return PreloadedKernargByteOffset;
   }
 
+  // Whether reproducing the entry state needs the kernarg segment pointer,
+  // either for the SGPR pair the ABI dedicates to it or to read the preloaded
+  // dwords back out of the segment. A preload implies at least one
+  // PreloadedKernarg entry, so the pointer is available wherever one appears.
+  bool needsKernargSegmentPtr() const {
+    return KernargSegmentPtrSgpr.has_value() || PreloadedKernargLength > 0;
+  }
+
   // Build the layout from a parsed kernel descriptor. Returns llvm::Error
   // when the descriptor is missing or internally inconsistent.
   // `sourceSTI` selects ABI-versioned fields such as gfx125's 6-bit
