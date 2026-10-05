@@ -88,7 +88,7 @@ protected:
   // are all in the same group.
   std::vector<DomGroup> GroupsOfUses;
   int64_t SpillRestoreCost = 0;
-  NextUseDistance Dist;
+  int64_t Dist;
   int64_t NormalizedSpillRestoreCost = 0;
   int64_t NormalizedCost = 0;
   CodeGenPlan Plan;
@@ -131,8 +131,7 @@ protected:
                           SlotIndexes *Indexes, MachineDominatorTree *DT,
                           const MachineLoopInfo *MLI,
                           AMDGPUNextUseAnalysis *NUA)
-      : CandidateReg(CandidateReg), Mask(Mask),
-        Dist(NextUseDistance::unreachable()), Plan(Plan), TRI(TRI), MRI(MRI),
+      : CandidateReg(CandidateReg), Mask(Mask), Plan(Plan), TRI(TRI), MRI(MRI),
         TII(TII), FrameInfo(FrameInfo), LIS(LIS), Indexes(Indexes), DT(DT),
         MLI(MLI), NUA(NUA) {}
 
@@ -144,8 +143,8 @@ public:
   auto groups() { return make_range(GroupsOfUses.begin(), GroupsOfUses.end()); }
   int64_t getSpillRestoreCost() const { return SpillRestoreCost; }
   void setSpillRestoreCost(int64_t NRC) { SpillRestoreCost = NRC; }
-  void setNextUseDistance(NextUseDistance NUD) { Dist = NUD; }
-  NextUseDistance getNextUseDistance() const { return Dist; }
+  void setNextUseDistance(int64_t NUD) { Dist = NUD; }
+  int64_t getNextUseDistance() const { return Dist; }
   void setNormalizedSpillRestoreCost(int64_t NRC) {
     NormalizedSpillRestoreCost = NRC;
   }
@@ -272,11 +271,6 @@ void SpillOrRestoreCandidate::emitRestoresForHead(
       Restore = emitRestore(CandidateReg, *HeadMBB, FI);
       Head->substituteRegister(CandidateReg, Restore->getOperand(0).getReg(), 0,
                                *TRI);
-      MachineLoop *HeadLoop = MLI->getLoopFor(Head->getParent());
-      assert(HeadLoop && "There should be a loop here.");
-      MachineLoop *OutermostLoopOfHeadLoop = nullptr;
-      if (HeadLoop)
-        OutermostLoopOfHeadLoop = HeadLoop->getOutermostLoop();
       DG.setLaneBitmask(Mask);
       DG.setRestore(Restore);
     } else {
@@ -1417,38 +1411,34 @@ static void normalizeCosts(
 
   int64_t MinSpillRestoreCost = AllCandidates[0]->getSpillRestoreCost();
   int64_t MaxSpillRestoreCost = AllCandidates[0]->getSpillRestoreCost();
-  NextUseDistance MinNextUseDist = AllCandidates[0]->getNextUseDistance();
-  NextUseDistance MaxNextUseDist = AllCandidates[0]->getNextUseDistance();
+  int64_t MinNextUseDist = AllCandidates[0]->getNextUseDistance();
+  int64_t MaxNextUseDist = AllCandidates[0]->getNextUseDistance();
 
   for (const auto &C : AllCandidates) {
     MinSpillRestoreCost =
         std::min(MinSpillRestoreCost, C->getSpillRestoreCost());
     MaxSpillRestoreCost =
         std::max(MaxSpillRestoreCost, C->getSpillRestoreCost());
-    MinNextUseDist = llvm::min(MinNextUseDist, C->getNextUseDistance());
-    MaxNextUseDist = llvm::max(MaxNextUseDist, C->getNextUseDistance());
+    MinNextUseDist = std::min(MinNextUseDist, C->getNextUseDistance());
+    MaxNextUseDist = std::max(MaxNextUseDist, C->getNextUseDistance());
   }
 
   LLVM_DEBUG(dbgs() << "------------------------------------------------\n");
   LLVM_DEBUG(dbgs() << "SpillRestoreCost (min=" << MinSpillRestoreCost
                     << ", max=" << MaxSpillRestoreCost << ")\n");
-  LLVM_DEBUG({
-    dbgs() << "NextUseDist (min=";
-    MinNextUseDist.print(dbgs());
-    dbgs() << ", max=";
-    MaxNextUseDist.print(dbgs());
-    dbgs() << ")\n";
-  });
+  LLVM_DEBUG(dbgs() << "NextUseDist (min=" << MinNextUseDist
+                    << ", max=" << MaxNextUseDist << ")\n");
 
   // Log-scale normalization.
   static constexpr int64_t Limit = 100;
-  double LogMaxNextUseDist = MaxNextUseDist.logSpanFrom(MinNextUseDist);
+  double LogMaxNextUseDist = std::log(MaxNextUseDist - MinNextUseDist + 1.0);
   double LogMaxSpillRestoreCost =
       std::log(MaxSpillRestoreCost - MinSpillRestoreCost + 1);
 
   for (auto &C : AllCandidates) {
     // Log-scale normalization for NextUseDistance.
-    double LogNextUseDist = C->getNextUseDistance().logSpanFrom(MinNextUseDist);
+    double LogNextUseDist =
+        std::log(static_cast<int64_t>(C->getNextUseDistance()) - MinNextUseDist + 1.0);
     int64_t NormalizedNextUseDist =
         (LogMaxNextUseDist > 0)
             ? static_cast<int64_t>((LogNextUseDist * Limit) / LogMaxNextUseDist)
@@ -1535,8 +1525,6 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
     MachineInstr *InstrOfCandidateReg =
         MRI->getOneDef(CandidateReg)->getParent();
     unsigned NumOfCoveredRegs = SIRegisterInfo::getNumCoveredRegs(Mask);
-    unsigned NumOfSubregisters = TRI->getRegSizeInBits(CandidateReg, *MRI) / 32;
-    bool HasFreeSubregs = NumOfCoveredRegs != NumOfSubregisters;
 
     // If the candidate register is defined in a restore instruction, we try
     // optimize the restore
@@ -1579,7 +1567,8 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
         Candidate->addGroup(DG);
         // Calculate the restore cost.
         Candidate->calculateSpillRestoreCost();
-        Candidate->setNextUseDistance(NextUseDist);
+        int64_t newDist = NextUseDist.getRawValue() * NumOfCoveredRegs;
+        Candidate->setNextUseDistance(newDist);
         LLVM_DEBUG(dbgs() << "Restore cost for register = "
                           << printReg(CandidateReg, TRI) << " = "
                           << Candidate->getSpillRestoreCost() << "\n");
@@ -1635,7 +1624,8 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
 
         // Calculate the restore cost.
         Candidate->calculateSpillRestoreCost();
-        Candidate->setNextUseDistance(NextUseDist);
+        int64_t newDist = NextUseDist.getRawValue() * NumOfCoveredRegs;
+        Candidate->setNextUseDistance(newDist);
         LLVM_DEBUG(dbgs() << "Restore cost for register = "
                           << printReg(CandidateReg, TRI) << " = "
                           << Candidate->getSpillRestoreCost() << "\n");
@@ -1757,14 +1747,10 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
       Candidate->calculateSpillRestoreCost();
       // Add spill cost
       int64_t newCost = 0;
-      if (HasFreeSubregs) {
-        newCost = Candidate->getSpillRestoreCost() +
-                  std::ceil(NumOfSpills / NumOfCoveredRegs);
-      } else {
-        newCost = Candidate->getSpillRestoreCost() + 1;
-      }
+      newCost = Candidate->getSpillRestoreCost() + 1;
       Candidate->setSpillRestoreCost(newCost);
-      Candidate->setNextUseDistance(NextUseDist);
+      int64_t newDist = NextUseDist.getRawValue() * NumOfCoveredRegs;
+      Candidate->setNextUseDistance(newDist);
       LLVM_DEBUG(dbgs() << "Restore cost for register = "
                         << printReg(CandidateReg, TRI) << " = "
                         << Candidate->getSpillRestoreCost() << "\n");
