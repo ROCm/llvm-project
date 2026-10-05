@@ -231,28 +231,30 @@ operation `Y` if:
 
 ### Synchronization
 
-Let `S` be the set of locations that are accessed by a DMA operation `D`
-initiated by an instruction `X`. [Explanatory note --- `S` typically contains
-the locations indicated by both the source and destination pointer operands on
-`X`.]
+When an instruction `X` initiates a DMA operation `D`, let `S` be the set of
+locations that are accessed by `D`. [Informational note --- `S` typically
+contains the locations indicated by both the source and destination pointer
+operands on `X`.]
 
-`X` is a {ref}`release operation <amdgpu-synchronizing-operation>`,
-`dma_entry` is an {ref}`acquire operation <amdgpu-synchronizing-operation>` that
-synchronizes the set `S`. `X` synchronizes-with the `dma_entry`.
+`dma_entry` and `dma_complete` are both {ref}`synchronizing operations
+<amdgpu-synchronizing-operation>` that synchronize the set `S`.
 
-`dma_complete` is a {ref}`release operation <amdgpu-synchronizing-operation>`
-that synchronizes the set `S`.
-- If `D` is a synchronous DMA operation, then `dma_complete` implicitly
-  *inter-thread-happens-before<`S`>* any operation that follows `X` in
-  program-order.
-- If `D` is *completed-at* a `wait.asyncmark()` operation `Y`, then the
-  `dma_complete` operation performed by `D` synchronizes-with `Y`.
-- If a DMA operation `D` is *completed-at* a {ref}`barrier
-  wait<amdgpu-barrier-operations>` operation `W` then the *dma_complete*
-  operation in `D` *synchronizes-with* a `fence acquire` operation `F` such
-  that:
-  - `W` is *program-ordered* before `F`, and
-  - `D` is included in the scope instance of `F`.
+`X` is a synchronizing operation that synchronizes-with `dma_entry`.
+
+If `D` is a synchronous DMA operation:
+- Each memory access by `D` *inter-thread-happens-before\<S\>* `dma_complete`,
+  and,
+- `dma_complete` *inter-thread-happens-before\<S\>* any operation that follows
+  `X` in program-order.
+
+If `D` is *completed-at* a `wait.asyncmark()` operation `Y`, then the
+`dma_complete` operation performed by `D` synchronizes-with `Y`.
+
+If a DMA operation `D` is *completed-at* a {ref}`barrier
+wait<amdgpu-barrier-operations>` operation `W` then the *dma_complete* operation
+in `D` *synchronizes-with* a `fence acquire` operation `F` such that:
+- `W` is *program-ordered* before `F`, and
+- `D` is included in the scope instance of `F`.
 
 (amdgpu-dma-visibility)=
 

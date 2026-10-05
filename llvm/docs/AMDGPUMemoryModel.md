@@ -33,7 +33,7 @@ executions that are valid in both models.
 ## Terminology
 
 Memory Location
-: A contiguous sequence of one or more bytes in memory. [Explanatory note ---
+: A contiguous sequence of one or more bytes in memory. [Informational note ---
   Operations described in this text usually refer to just a location as an
   operand. The syntax of the actual instruction describes how to specify the
   range, e.g., a base pointer and a size or data type.]
@@ -64,8 +64,8 @@ operations*. For example (but not limited to):
 
 A synchronizing operation specifies the set of memory locations that it
 synchronizes. If no set is explicitly mentioned, then that operation
-synchronizes all memory locations. [Explanatory note --- This is independent of
-the memory location that the operation itself might access.]
+synchronizes all memory locations. [Informational note --- This is independent
+of the memory location that the operation itself might access.]
 
 For example:
 
@@ -77,15 +77,12 @@ For example:
 : When suitably paired with an atomic operation, synchronizes all memory
   locations within the `local` address space.
 
-release operation
-: An operation that synchronizes the side-effects of prior operations from the
-  current thread to other threads. For example, an atomic or fence operation
-  with `release` ordering or higher.
+(amdgpu-release-acquire)=
 
-acquire operation
-: An operation that synchronizes the side-effects of operations from other
-  threads to later operations in the current thread. For example an atomic or
-  fence operation with `acquire` ordering or higher.
+### Acquire and Release Operations
+
+When an operation `A` synchronizes-with an operation `B`, `A` is called a
+*release operation* and `B` is called an *acquire operation*.
 
 (amdgpu-scopes)=
 
@@ -356,26 +353,26 @@ store atomic syncscope("agent") release ptr, !mmra !{!"amdgcn-av", !"none"}
 
 (amdgpu-inter-thread-happens-before)=
 
-### `inter-thread-happens-before<`S`>`
+### `inter-thread-happens-before<S>`
 
 The *inter-thread-happens-before* relation is parameterized by a *non-empty* set
 of memory locations `S`.
 
-An operation `A` *inter-thread-happens-before<`S`>* an operation `B` for the set
+An operation `A` *inter-thread-happens-before\<S\>* an operation `B` for the set
 of memory locations `S` if any of the following is true:
 
 - `A` *synchronizes-with* `B` and `S` is included in the set of memory locations
   {ref}`synchronized by<amdgpu-synchronizing-operation>` both `A` and `B`.
 - `A` accesses locations in `S` or includes `S` in the set of locations it
   synchronizes, `B` is a {ref}`release operation
-  <amdgpu-synchronizing-operation>` that includes `S` in the set of locations it
+  <amdgpu-release-acquire>` that includes `S` in the set of locations it
   synchronizes and `A` is program-ordered before `B`.
-- `A` is an {ref}`acquire operation<amdgpu-synchronizing-operation>` that
-  includes `S` in the set of locations it synchronizes, `B` accesses locations
-  in `S` or includes `S` in the set of locations it synchronizes and `A` is
+- `A` is an {ref}`acquire operation <amdgpu-release-acquire>` that includes `S`
+  in the set of locations it synchronizes, `B` accesses locations in `S` or
+  includes `S` in the set of locations it synchronizes and `A` is
   program-ordered before `B`.
-- For some operation `X`, `A` *inter-thread-happens-before<`S`>* `X` and `X`
-  *inter-thread-happens-before<`S`>* `B`.
+- For some operation `X`, `A` *inter-thread-happens-before\<S\>* `X` and `X`
+  *inter-thread-happens-before\<S\>* `B`.
 
 (amdgpu-amdgpu-happens-before)=
 
@@ -384,7 +381,7 @@ of memory locations `S` if any of the following is true:
 An operation `A` *amdgpu-happens-before* an operation `B` if:
 
 - `A` is program-ordered before `B`, or,
-- `A` *inter-thread-happens-before<`S`>* `B` for some set of locations `S`.
+- `A` *inter-thread-happens-before\<S\>* `B` for some set of locations `S`.
 
 ### Availability Operation
 
@@ -542,8 +539,8 @@ The following properties follow from the definitions above:
      - synchronizes-with
    * - Transitive inter-thread ordering
      - happens-before
-     - inter-thread-happens-before<`SC`>
-     - inter-thread-happens-before<`S`>
+     - inter-thread-happens-before\<SC\>
+     - inter-thread-happens-before\<S\>
    * - Basis for visibility
      - happens-before<br>(transitive)
      - happens-before<br>(**not** transitive)
