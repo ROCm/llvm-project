@@ -85,6 +85,15 @@ void AsyncInfoWrapperTy::finalize(Error &Err) {
     Err = Device.synchronize(AsyncInfoPtr);
   }
 
+  // With the force-synchronization escape hatch enabled, also drain external
+  // async info objects after each operation.
+  else if (shouldForceSync(Device.forceSyncOps(),
+                           AsyncInfoPtr == &LocalAsyncInfo,
+                           AsyncInfoPtr->Queue != nullptr, (bool)Err))
+    Err = Device.synchronize(AsyncInfoPtr, /*ReleaseQueue=*/false);
+
+  // Invalidate the wrapper object.
+
   AsyncInfoPtr = nullptr;
 }
 
