@@ -7,6 +7,9 @@ name: SPIRV Compiler CI - Linux - amd-staging
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 env:
   LLVM_BUILD: build
   DEVLIBS_BUILD: build-device-libs
@@ -29,6 +32,8 @@ jobs:
   # =====================================================================
   build:
     name: Build
+    outputs:
+      translator_sha: ${{ steps.resolve_translator.outputs.sha }}
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 120
     container:
@@ -63,6 +68,13 @@ jobs:
           persist-credentials: false
 
       # ---- Build LLVM + Clang + LLD + in-tree SPIRV translator --------------
+      - name: Resolve translator SHA
+        id: resolve_translator
+        run: echo "sha=$(git -C llvm-project/llvm/projects/SPIRV-LLVM-Translator rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate translator test driver
+        run: python llvm-project/.github/scripts/test_spirv_ci_lit.py
+
       - name: Configure LLVM
         run: |
           cmake -G Ninja -S llvm-project/llvm -B "$LLVM_BUILD" \
@@ -174,6 +186,15 @@ jobs:
         run: |
           mkdir -p "$STAGING/bin"
           cp -a "$LLVM_BUILD/bin/amd-llvm-spirv" "$STAGING/bin/"
+
+      # test_hecbench compiles with hipcc.
+      - name: Build and stage hipcc
+        run: |
+          cmake -G Ninja -S llvm-project/amd/hipcc -B build-hipcc \
+            -DCMAKE_BUILD_TYPE=Release
+          ninja -C build-hipcc hipcc
+          mkdir -p "$STAGING/bin"
+          cp -a build-hipcc/hipcc "$STAGING/bin/hipcc"
 
       # Create hipconfig script for rocPRIM/hipCUB detection.
       - name: Create hipconfig script
@@ -316,6 +337,9 @@ jobs:
 
       # Tar before upload: actions/upload-artifact@v4 strips +x bits and
       # excludes hidden files (loses FetchContent .git dirs).
+      - name: Stage translator test driver
+        run: cp llvm-project/.github/scripts/spirv_ci_lit.py build/spirv_ci_lit.py
+
       - name: Tar build trees
         run: |
           tar -cf linux-build-tree.tar \
@@ -370,7 +394,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/SPIRV-LLVM-Translator
-          ref: amd-staging
+          ref: ${{ needs.build.outputs.translator_sha }}
           path: ${{ env.TRANSLATOR_SRC }}
           fetch-depth: 1
           persist-credentials: false
@@ -380,77 +404,29 @@ jobs:
         with:
           name: linux-build-tree
 
-      # touch build.ninja so it's newer than CMakeCache.txt — without it
-      # tar -m's per-file mtimes can trigger a cmake regen + cascade rebuild.
       - name: Untar build trees
         run: |
           tar -xmf linux-build-tree.tar
-          touch "$LLVM_BUILD/build.ninja" "$COMGR_BUILD/build.ninja" "$DEVLIBS_BUILD/build.ninja"
 
-      - name: Test - SPIRV Translator (check-amd-llvm-spirv) [PR head]
-        id: check_spirv_xlator
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          ninja -C "$LLVM_BUILD" check-amd-llvm-spirv 2>&1 | tee "$LLVM_BUILD/check-amd-llvm-spirv.log"
+      # Invoke lit directly: Ninja would rebuild tools after artifact extraction.
+      - name: Test - SPIRV Translator [PR head]
+        id: translator_tests
+        run: >-
+          python build/spirv_ci_lit.py --build-dir build
+          --results build/spirv-pr.json
 
-      - name: Capture PR head translator failures
-        if: always()
-        run: |
-          grep -oE '^FAIL: LLVM_SPIRV :: \S+' "$LLVM_BUILD/check-amd-llvm-spirv.log" \
-            | sort -u > "$LLVM_BUILD/spirv-fails-pr.txt"
-          echo "PR head failures:"; cat "$LLVM_BUILD/spirv-fails-pr.txt"
-
-      - name: Switch llvm-project to amd-staging tip for baseline
-        # PRs on llvm-project change llvm/clang/lld, not the translator, so the
-        # baseline-diff swap target is llvm-project. Use explicit upstream URL
-        # because `origin` may be a fork on PR runs.
-        if: always()
+      - name: Switch llvm-project to amd-staging for baseline
+        if: steps.translator_tests.outputs.has_failures == 'true'
         run: |
           cd llvm-project
           git fetch --depth=1 https://github.com/ROCm/llvm-project.git amd-staging
           git checkout FETCH_HEAD
 
-      - name: Test - SPIRV Translator [baseline amd-staging]
-        # Re-run the lit suite with llvm-project at amd-staging tip to compute
-        # the per-PR delta vs PR-head failures. Incremental rebuild — only
-        # changed LLVM libs are recompiled and the translator is relinked.
-        if: always()
-        id: check_spirv_baseline
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          # Re-configure to pick up any CMakeLists / file-list changes in the swap
-          cmake -G Ninja -S llvm-project/llvm -B "$LLVM_BUILD"
-          ninja -C "$LLVM_BUILD" check-amd-llvm-spirv 2>&1 \
-            | tee "$LLVM_BUILD/check-amd-llvm-spirv-baseline.log"
-
-      - name: Capture baseline translator failures
-        # Split from the lit step so a non-zero ninja exit (lit failures +
-        # set -o pipefail under bash -e) doesn't skip this grep.
-        if: always()
-        run: |
-          grep -oE '^FAIL: LLVM_SPIRV :: \S+' "$LLVM_BUILD/check-amd-llvm-spirv-baseline.log" \
-            | sort -u > "$LLVM_BUILD/spirv-fails-baseline.txt"
-          echo "Baseline failures:"; cat "$LLVM_BUILD/spirv-fails-baseline.txt"
-
-      # Fail the job on real regressions (PR head FAILs that aren't on
-      # amd-staging baseline). Pre-existing baseline failures don't block.
-      - name: Gate - new translator lit failures
-        if: always()
-        run: |
-          if [ ! -f "$LLVM_BUILD/spirv-fails-pr.txt" ] || [ ! -f "$LLVM_BUILD/spirv-fails-baseline.txt" ]; then
-            echo "::warning::Could not compute new-failure delta (missing pr.txt or baseline.txt); not gating."
-            exit 0
-          fi
-          new=$(comm -23 "$LLVM_BUILD/spirv-fails-pr.txt" "$LLVM_BUILD/spirv-fails-baseline.txt")
-          if [ -n "$new" ]; then
-            count=$(printf '%s\n' "$new" | wc -l)
-            echo "::error::$count new translator lit failure(s) introduced by this PR:"
-            printf '%s\n' "$new" | sed 's/^/::error::  /'
-            exit 1
-          fi
-          echo "No new translator lit failures vs amd-staging baseline."
+      - name: Build and test baseline, rejecting new translator failures
+        if: steps.translator_tests.outputs.has_failures == 'true'
+        run: >-
+          python build/spirv_ci_lit.py --build-dir build --rebuild
+          --results build/spirv-baseline.json --pr-results build/spirv-pr.json
 
   # =====================================================================
   # Test - LLVM SPIRV codegen lit suite
@@ -483,7 +459,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/SPIRV-LLVM-Translator
-          ref: amd-staging
+          ref: ${{ needs.build.outputs.translator_sha }}
           path: ${{ env.TRANSLATOR_SRC }}
           fetch-depth: 1
           persist-credentials: false
@@ -493,15 +469,12 @@ jobs:
         with:
           name: linux-build-tree
 
-      # touch build.ninja so it's newer than CMakeCache.txt — without it
-      # tar -m's per-file mtimes can trigger a cmake regen + cascade rebuild.
       - name: Untar build trees
         run: |
           tar -xmf linux-build-tree.tar
-          touch "$LLVM_BUILD/build.ninja" "$COMGR_BUILD/build.ninja" "$DEVLIBS_BUILD/build.ninja"
 
       - name: Test - LLVM SPIRV backend (check-llvm-codegen-spirv)
-        run: ninja -C "$LLVM_BUILD" check-llvm-codegen-spirv
+        run: python build/bin/llvm-lit -sv --no-progress-bar llvm-project/llvm/test/CodeGen/SPIRV
 
   # =====================================================================
   # Test - Comgr (lit + gtest + ctest)
@@ -534,7 +507,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/SPIRV-LLVM-Translator
-          ref: amd-staging
+          ref: ${{ needs.build.outputs.translator_sha }}
           path: ${{ env.TRANSLATOR_SRC }}
           fetch-depth: 1
           persist-credentials: false
@@ -574,6 +547,8 @@ jobs:
   # =====================================================================
 
   # Select the gfx942 test runner the same way TheRock CI does.
+  # TheRock's local matrix still lists the disabled non-CSP pool, so overlay
+  # runner labels from therock-ci-config instead of using that list directly.
   pick_runner:
     name: Select gfx942 test runner
     needs: [build]
@@ -586,22 +561,41 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ROCm/TheRock
-          ref: compiler/amd-staging
+          ref: main
           sparse-checkout: build_tools
+          persist-credentials: false
+
+      - name: Checkout CI config
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/therock-ci-config
+          ref: main
+          path: ci-config
           persist-credentials: false
 
       - name: Weighted runner selection (gfx94X-dcgpu)
         id: pick
+        env:
+          CI_CONFIG_PATH: ci-config
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import sys
+          from contextlib import redirect_stdout
+
           sys.path.insert(0, "build_tools/github_actions")
-          from amdgpu_family_matrix import (
-              amdgpu_family_info_matrix_presubmit as M,
-              select_weighted_label,
-          )
-          info = M["gfx94x"]["linux"]
-          label = select_weighted_label(info["test-runs-on-labels"], "gfx94X-dcgpu")
+          with redirect_stdout(sys.stderr):
+              from amdgpu_family_matrix import (
+                  get_all_families_for_trigger_types,
+                  load_external_runner_config,
+                  select_weighted_label,
+              )
+              if load_external_runner_config() is None:
+                  raise SystemExit("therock-ci-config did not load")
+              info = get_all_families_for_trigger_types(["presubmit"])["gfx94x"]["linux"]
+              labels = info.get("test-runs-on-labels") or [
+                  {"label": info["test-runs-on"]}
+              ]
+              label = select_weighted_label(labels, "gfx94X-dcgpu")
           print(f"label={label}")
           PY
 
@@ -622,6 +616,7 @@ jobs:
       - name: Checkout rocm-examples
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          persist-credentials: false
           repository: ROCm/rocm-examples
           ref: amd-staging
           path: rocm-examples
@@ -709,3 +704,132 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/${{ env.STAGING }}/lib
         run: |
           ctest --test-dir examples-build-Libraries --output-on-failure -j $(nproc)
+
+  # =====================================================================
+  # Test - HeCBench (curated subset, amdgcnspirv-be backend)
+  # =====================================================================
+  # Builds + runs a curated HeCBench subset through the in-tree SPIRV backend and
+  # gates on each benchmark's self-verification. Scripts, list and pin come from
+  # the translator's .github (single source of truth; bumped there daily).
+  test_hecbench:
+    name: Test HeCBench
+    needs: [build, pick_runner]
+    runs-on: ${{ needs.pick_runner.outputs.test_runs_on }}
+    timeout-minutes: 240
+    # This image defaults inline `run:` steps to `sh`; force bash so the steps
+    # below can use arrays, process substitution, and [[ ]].
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      options: |
+        --device=/dev/kfd --device=/dev/dri  --group-add video
+
+    env:
+      SCRIPTS: ${{ github.workspace }}/SPIRV-LLVM-Translator/.github/hecbench
+      HECBENCH_LOG_DIR: ${{ github.workspace }}/SPIRV-LLVM-Translator/.github/hecbench/bench_logs_${{ github.run_id }}-${{ github.run_attempt }}_amdgcnspirv-be
+
+    steps:
+      # Translator .github only, at the Build job's SHA; subdir avoids the
+      # untarred build/ + staging/.
+      - name: Checkout SPIRV-LLVM-Translator .github (Build job SHA)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/SPIRV-LLVM-Translator
+          ref: ${{ needs.build.outputs.translator_sha }}
+          path: SPIRV-LLVM-Translator
+          sparse-checkout: .github
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Read HeCBench pin from translator
+        run: |
+          ref=$(grep -oP 'HECBENCH_REF:\s*\K\S+' \
+            SPIRV-LLVM-Translator/.github/workflows/spirv-ci-linux.yml || true)
+          # Full SHA only: immutable pin, no git option injection.
+          [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad HECBENCH_REF: '$ref'"; exit 1; }
+          echo "HECBENCH_REF=$ref" >> "$GITHUB_ENV"
+
+      - name: Download build tree artifact
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: linux-build-tree
+
+      - name: Untar build trees
+        run: tar -xmf linux-build-tree.tar
+
+      - name: Install libnuma
+        run: dnf install -y numactl-libs
+
+      # Single sparse, shallow blob:none pass over the subset + precomputed deps
+      # (ci_benchmarks.deps.txt from update_deps.sh): ~90 MB, not the full repo.
+      - name: Checkout HeCBench (pinned, sparse subset)
+        run: |
+          git init -q HeCBench
+          cd HeCBench
+          git remote add origin https://github.com/ORNL/HeCBench.git
+          git fetch -q --depth=1 --filter=blob:none origin "$HECBENCH_REF"
+          git sparse-checkout init --no-cone
+          mapfile -t paths < <(
+            grep -hvE '^[[:space:]]*(#|$)' \
+              "$SCRIPTS/ci_benchmarks.txt" "$SCRIPTS/ci_benchmarks.deps.txt" \
+              | sed 's#^#/src/#; s#$#/#')
+          git sparse-checkout set --no-cone "${paths[@]}"
+          git checkout -q FETCH_HEAD
+          echo "Checked out $(find src -maxdepth 1 -type d -name '*-hip' | wc -l) -hip dirs"
+
+      # Rewrite Makefiles for the staged ROCm, then build+run+self-verify.
+      # bench.sh always exits 0 (results land in its log dir); next step gates.
+      - name: Run HeCBench subset
+        env:
+          ROCM_PATH: ${{ github.workspace }}/${{ env.STAGING }}
+          HIP_CLANG_PATH: ${{ github.workspace }}/${{ env.LLVM_BUILD }}/bin
+          HECBENCH_SRC: ${{ github.workspace }}/HeCBench/src
+        run: |
+          # Surface the toolchain layout: does staging provide a usable hipcc?
+          echo "ROCM_PATH=$ROCM_PATH"; ls -la "$ROCM_PATH/bin" | grep -iE 'hip|clang' || true
+          "$SCRIPTS/modify_makefiles.sh"
+          FILTER=$(grep -vE '^[[:space:]]*(#|$)' "$SCRIPTS/ci_benchmarks.txt" | paste -sd,)
+          "$SCRIPTS/bench.sh" --gpu-id 0 --timeout 300 --filter "$FILTER"
+
+      - name: Gate on HeCBench results
+        if: always()
+        run: |
+          if [[ ! -d "$HECBENCH_LOG_DIR" ]]; then
+            echo "::error::No HeCBench log dir produced (run step failed early)."
+            exit 1
+          fi
+          echo "Log dir: $HECBENCH_LOG_DIR"
+          for cat in success suspect failed timeout skipped; do
+            n=$( [[ -f "$HECBENCH_LOG_DIR/$cat.log" ]] && wc -l < "$HECBENCH_LOG_DIR/$cat.log" || echo 0 )
+            echo "  $cat: $n"
+          done
+          rc=0
+          for cat in failed timeout suspect; do
+            if [[ -s "$HECBENCH_LOG_DIR/$cat.log" ]]; then
+              echo "::group::$cat"; cat "$HECBENCH_LOG_DIR/$cat.log"; echo "::endgroup::"
+              echo "::error::HeCBench $cat: $(wc -l < "$HECBENCH_LOG_DIR/$cat.log") benchmark(s)."
+              rc=1
+            fi
+          done
+          # bench.sh silently skips benchmarks it can't find or enter.
+          notrun=$(grep -vE '^[[:space:]]*(#|$)' "$SCRIPTS/ci_benchmarks.txt" | sort -u \
+            | comm -23 - <(cat "$HECBENCH_LOG_DIR"/{success,suspect,failed,timeout}.log | sort -u))
+          if [[ -n "$notrun" ]]; then
+            echo "::error::HeCBench not run: ${notrun//$'\n'/ }"
+            rc=1
+          fi
+          if [[ ! -s "$HECBENCH_LOG_DIR/success.log" ]]; then
+            echo "::error::No HeCBench benchmark succeeded — toolchain/setup problem."
+            rc=1
+          fi
+          exit $rc
+
+      - name: Upload HeCBench logs
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: hecbench-logs
+          path: ${{ env.HECBENCH_LOG_DIR }}/
+          if-no-files-found: ignore
