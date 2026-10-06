@@ -70,7 +70,7 @@ buffer_bounds:
 ; CHECK: store i32 {{.+}}, ptr addrspace(1) {{.+}}, align 1
 ; CHECK: icmp ult i64 {{.+}}, {{.+}}
 ; CHECK: store i32 {{.+}}, ptr addrspace(1) {{.+}}, align 1
-  buffer_store_b128 v[4:7], v1, s[4:7], s10 offen offset:3
+  buffer_store_b128 v[4:7], v1, s[4:7], s10 offen offset:3 nv
   s_endpgm
 
 .section .rodata,"a",@progbits
