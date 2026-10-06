@@ -236,14 +236,24 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
                           {Ctx.B.getInt32(Op.srcImm(0))});
     return Error::success();
 
-  // Entering the trap handler means running code the source queue installed,
-  // at an address the source wave holds, against state it set up. None of that
-  // is reachable from the raised kernel, and a wave that traps and never
-  // returns is not a kernel that ran.
-  case CanonicalOp::S_TRAP:
-    return unsupported(Ctx, Di,
-                       "enters trap handler " + Twine(Op.srcImm(0)) +
-                           ", which the raised kernel does not have");
+  case CanonicalOp::S_TRAP: {
+    int64_t TrapIdMask =
+        Ctx.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX1250Insts) ? 0xf
+                                                                         : 0xff;
+    int64_t TrapId = Op.srcImm(0) & TrapIdMask;
+    if (TrapId != 2 && TrapId != 3)
+      return unsupported(Ctx, Di,
+                         "enters trap handler " + Twine(TrapId) +
+                             ", which the raised kernel does not have");
+    if (Error Err = Ctx.requirePerWaveExecution(Di))
+      return Err;
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(),
+                          TrapId == 2 ? Intrinsic::trap : Intrinsic::debugtrap,
+                          {});
+    if (TrapId == 2)
+      Ctx.B.CreateUnreachable();
+    return Error::success();
+  }
 
   // Ends the wave expecting the context-save hardware to have taken its state
   // and something to restore it later. Raising this to a plain return would
