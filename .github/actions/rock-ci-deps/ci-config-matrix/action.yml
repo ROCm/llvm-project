@@ -4,7 +4,7 @@
 name: Config CI matrix
 description: >-
   Builds a fixed multi-arch CI matrix for compiler config: three Linux
-  GPU families (gfx94X-dcgpu, gfx110X-all, gfx90a), tests on gfx942 only,
+  GPU families (gfx94X-dcgpu, gfx110X-all, gfx90a, gfx125X-dcgpu), tests on gfx942 only,
   and runtime build_runs_on selection via weighted runner labels.
 
 inputs:
