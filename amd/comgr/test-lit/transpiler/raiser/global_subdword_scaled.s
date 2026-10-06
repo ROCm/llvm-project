@@ -19,8 +19,8 @@
 .type global_subdword_scaled,@function
 ; IR-LABEL: define amdgpu_kernel void @global_subdword_scaled(
 global_subdword_scaled:
-; These loads carry nv, which the raise drops; their existing IR checks verify
-; that the memory accesses are still raised.
+; Some loads and a store carry nv, which the raise drops; their existing IR
+; checks verify that the memory accesses are still raised.
 v_mov_b32 v4, 0x1234
 s_mov_b32 exec_lo, 0x55555555
 
@@ -74,7 +74,7 @@ global_store_b8 v0, v4, s[0:1] offset:1 scale_offset
 ; IR-NEXT: mul i64 [[LANE]], 2
 ; IR: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) {{%.+}}, i64 -1
 ; IR: store i16 [[DATA]], ptr addrspace(1) [[OFFSET]], align 1
-global_store_b16 v0, v4, s[0:1] offset:-1 scale_offset
+global_store_b16 v0, v4, s[0:1] offset:-1 scale_offset nv
 
 ; DECODE: GLOBAL_STORE_D16_HI_B8 global_store_d16_hi_b8
 ; IR: [[HIGH:%.+]] = lshr i32 [[PREVIOUS3]], 16
