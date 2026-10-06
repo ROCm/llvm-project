@@ -1,7 +1,7 @@
 ; REQUIRES: comgr-has-transpiler
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx950 \
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=ds_atomic_add | %FileCheck %s
 
 ; The LDS integer atomic add lifts to an atomicrmw at its natural alignment.
@@ -41,7 +41,6 @@ ds_atomic_add:
 		.amdhsa_group_segment_fixed_size 256
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 0
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdgpu_metadata
 ---

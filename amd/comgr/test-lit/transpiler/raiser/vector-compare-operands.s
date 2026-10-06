@@ -68,7 +68,10 @@ comparison_operands:
 ; CHECK: [[CMPX:%.+]] = fcmp ule float {{.+}}, {{.+}}
 ; CHECK: [[BIT:%.+]] = select i1 {{.+}}, i1 [[CMPX]], i1 false
 ; CHECK: [[BALLOT:%.+]] = call i64 @llvm.amdgcn.ballot.i64(i1 [[BIT]])
-; CHECK: [[MASK:%.+]] = trunc i64 [[BALLOT]] to i32
+; CHECK-NEXT: [[BASE:%.+]] = and i32 {{%.+}}, -32
+; CHECK-NEXT: [[SHIFT:%.+]] = zext i32 [[BASE]] to i64
+; CHECK-NEXT: [[SLICE:%.+]] = lshr i64 [[BALLOT]], [[SHIFT]]
+; CHECK-NEXT: [[MASK:%.+]] = trunc i64 [[SLICE]] to i32
 ; CHECK: [[EXEC:%.+]] = and i32 {{.+}}, [[MASK]]
 	v_cmpx_ngt_f32_e64 v0, v1
 ; CHECK: call i64 @llvm.amdgcn.ballot.i64(i1 [[SAVED]])

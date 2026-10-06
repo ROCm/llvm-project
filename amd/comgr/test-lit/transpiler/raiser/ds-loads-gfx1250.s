@@ -1,26 +1,30 @@
 ; REQUIRES: comgr-has-transpiler
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx950 \
-; RUN:   --emit-ir=ds_widths,ds_exec_overlap > %t.ll
-; RUN: %FileCheck %s --check-prefixes=IR,EXEC --input-file=%t.ll \
+; The carry tests allocate more LDS than gfx942 supports. Keep those on
+; gfx1250 and exercise all load widths with predicated addresses on gfx942.
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 --emit-ir=ds_widths > %t.ll
+; RUN: %FileCheck %s --check-prefix=IR --input-file=%t.ll \
 ; RUN:   --implicit-check-not="load {{.+}}, ptr addrspace(3)"
-; RUN: %clang --target=amdgpu9.50-amd-amdhsa -nogpulib \
+; RUN: %clang --target=amdgpu12.50-amd-amdhsa -nogpulib \
 ; RUN:   -x ir -O2 -S -emit-llvm %t.ll -o %t.opt.ll
 ; RUN: %FileCheck %s --check-prefix=OPT --input-file=%t.opt.ll
-; RUN: %clang --target=amdgpu9.50-amd-amdhsa -nogpulib \
+; RUN: %clang --target=amdgpu12.50-amd-amdhsa -nogpulib \
 ; RUN:   -x ir -O2 -c %t.opt.ll -o %t.target.o
 ; RUN: %llvm-readelf --notes %t.target.o | %FileCheck %s --check-prefix=META
 ; META: .group_segment_fixed_size: 65568
 ; META: .name:           ds_widths
-; META: .group_segment_fixed_size: 256
-; META: .name:           ds_exec_overlap
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=ds_exec_overlap | %FileCheck %s --check-prefix=EXEC \
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=ds_exec_overlap > %t.exec.ll
+; RUN: %FileCheck %s --check-prefix=EXEC --input-file=%t.exec.ll \
 ; RUN:   --implicit-check-not="load {{.+}}, ptr addrspace(3)"
+; RUN: %clang --target=amdgpu9.42-amd-amdhsa -nogpulib \
+; RUN:   -x ir -O2 -c %t.exec.ll -o %t.gfx942.o
+; RUN: %llvm-readelf --notes %t.gfx942.o | %FileCheck %s --check-prefix=EXEC-META
+; EXEC-META: .group_segment_fixed_size: 256
+; EXEC-META: .name:           ds_exec_overlap
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 \
 ; RUN:   --emit-ir=ds_high_address | %FileCheck %s --check-prefix=HIGH
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx950 \
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=ds_tr4_unsupported,ds_tr6_unsupported 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE
 
@@ -43,26 +47,22 @@ ds_widths:
 ; IR: [[BASE:%.+]] = phi i32 [ 4, {{.+}}
 	v_mov_b32 v0, 4
 ; IR: [[CARRY32_ADDR:%.+]] = add i32 [[BASE]], 65532
-; IR-NEXT: [[CARRY32_FROZEN:%.+]] = freeze i32 [[CARRY32_ADDR]]
-; IR: [[CARRY32_PTR:%.+]] = inttoptr i32 [[CARRY32_FROZEN]] to ptr addrspace(3)
+; IR: [[CARRY32_PTR:%.+]] = inttoptr i32 [[CARRY32_ADDR]] to ptr addrspace(3)
 ; IR-NEXT: load i32, ptr addrspace(3) [[CARRY32_PTR]], align 1
 ; OPT: load i32, ptr addrspace(3) inttoptr (i32 65536 to ptr addrspace(3))
 	ds_load_b32 v1, v0 offset:65532
 ; IR: [[CARRY64_ADDR:%.+]] = add i32 [[BASE]], 65532
-; IR-NEXT: [[CARRY64_FROZEN:%.+]] = freeze i32 [[CARRY64_ADDR]]
-; IR: [[CARRY64_PTR:%.+]] = inttoptr i32 [[CARRY64_FROZEN]] to ptr addrspace(3)
+; IR: [[CARRY64_PTR:%.+]] = inttoptr i32 [[CARRY64_ADDR]] to ptr addrspace(3)
 ; IR-NEXT: load i64, ptr addrspace(3) [[CARRY64_PTR]], align 1
 ; OPT: load i64, ptr addrspace(3) inttoptr (i32 65536 to ptr addrspace(3))
 	ds_load_b64 v[2:3], v0 offset:65532
 ; IR: [[BYTE128_ADDR:%.+]] = add i32 [[BASE]], 65533
-; IR-NEXT: [[BYTE128_FROZEN:%.+]] = freeze i32 [[BYTE128_ADDR]]
-; IR: [[BYTE128_PTR:%.+]] = inttoptr i32 [[BYTE128_FROZEN]] to ptr addrspace(3)
+; IR: [[BYTE128_PTR:%.+]] = inttoptr i32 [[BYTE128_ADDR]] to ptr addrspace(3)
 ; IR-NEXT: load <4 x i32>, ptr addrspace(3) [[BYTE128_PTR]], align 1
 ; OPT: load i128, ptr addrspace(3) inttoptr (i32 65537 to ptr addrspace(3))
 	ds_load_b128 v[4:7], v0 offset:65533
 ; IR: [[MAXOFFSET_ADDR:%.+]] = add i32 [[BASE]], 65535
-; IR-NEXT: [[MAXOFFSET_FROZEN:%.+]] = freeze i32 [[MAXOFFSET_ADDR]]
-; IR: [[MAXOFFSET_PTR:%.+]] = inttoptr i32 [[MAXOFFSET_FROZEN]] to ptr addrspace(3)
+; IR: [[MAXOFFSET_PTR:%.+]] = inttoptr i32 [[MAXOFFSET_ADDR]] to ptr addrspace(3)
 ; IR-NEXT: load i32, ptr addrspace(3) [[MAXOFFSET_PTR]], align 1
 ; OPT: load i32, ptr addrspace(3) inttoptr (i32 65539 to ptr addrspace(3))
 	ds_load_b32 v11, v0 offset:65535
@@ -81,6 +81,8 @@ ds_widths:
 	.p2align 8
 	.type ds_exec_overlap,@function
 ; EXEC-LABEL: define amdgpu_kernel void @ds_exec_overlap(
+; EXEC: [[ENTRY_ACTIVE:%.+]] = call i1 @llvm.amdgcn.init.whole.wave()
+; EXEC: [[ENTRY_EXEC:%.+]] = trunc i64 {{%.+}} to i32
 ds_exec_overlap:
 	s_load_b64 s[2:3], s[0:1], 0
 	s_wait_kmcnt 0
@@ -94,10 +96,13 @@ ds_exec_overlap:
 	v_mov_b32 v9, -1
 	v_mov_b32 v10, -1
 ; Inactive lanes retain invalid addresses and distinct destination values.
-; EXEC: [[EXEC:%.+]] = lshr i32 1, {{%.+}}
+; EXEC: [[MASK:%.+]] = and i32 [[ENTRY_EXEC]], 1
+; EXEC: [[EXEC:%.+]] = lshr i32 [[MASK]], {{%.+}}
 ; EXEC-NEXT: [[BIT:%.+]] = and i32 [[EXEC]], 1
-; EXEC-NEXT: [[ACTIVE:%.+]] = icmp ne i32 [[BIT]], 0
-	s_mov_b32 exec_lo, 1
+; EXEC-NEXT: [[MASK_ACTIVE:%.+]] = icmp ne i32 [[BIT]], 0
+; EXEC-NEXT: [[ACTIVE:%.+]] = select i1 [[ENTRY_ACTIVE]], i1 [[MASK_ACTIVE]], i1 false
+	s_mov_b32 s4, exec_lo
+	s_and_b32 exec_lo, exec_lo, 1
 	v_mov_b32 v4, 32
 ; EXEC: [[OLD128:%.+]] = phi i32 [ 32, %{{.+}} ], [ -1, %{{.+}} ]
 ; EXEC-NEXT: [[ADDR128:%.+]] = add i32 [[OLD128]], 0
@@ -150,7 +155,7 @@ ds_exec_overlap:
 ; EXEC-NEXT: [[DEST32_0:%.+]] = phi i32 [ [[LOAD32]], %[[DO32]] ], [ [[OLD32]], %{{.+}} ]
 	ds_load_b32 v10, v10
 	s_wait_dscnt 0
-	s_mov_b32 exec_lo, -1
+	s_mov_b32 exec_lo, s4
 ; EXEC: store i32 [[DEST128_0]], ptr addrspace(1)
 	global_store_b32 v[20:21], v4, off offset:0
 ; EXEC: store i32 [[DEST128_1]], ptr addrspace(1)
@@ -216,15 +221,13 @@ ds_tr6_unsupported:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 24
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel ds_exec_overlap
 		.amdhsa_group_segment_fixed_size 256
 		.amdhsa_kernarg_size 8
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 24
-		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
+		.amdhsa_next_free_sgpr 5
 	.end_amdhsa_kernel
 	.amdhsa_kernel ds_high_address
 		.amdhsa_group_segment_fixed_size 327680
@@ -232,19 +235,16 @@ ds_tr6_unsupported:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 24
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel ds_tr4_unsupported
 		.amdhsa_group_segment_fixed_size 256
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 0
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel ds_tr6_unsupported
 		.amdhsa_group_segment_fixed_size 256
 		.amdhsa_next_free_vgpr 5
 		.amdhsa_next_free_sgpr 0
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdgpu_metadata
 ---
@@ -266,7 +266,7 @@ amdhsa.kernels:
     .kernarg_segment_align: 8
     .private_segment_fixed_size: 0
     .max_flat_workgroup_size: 64
-    .sgpr_count: 4
+    .sgpr_count: 5
     .vgpr_count: 24
     .wavefront_size: 32
   - .name: ds_high_address

@@ -13,6 +13,8 @@
 	.type	sop2_integer_gfx1250,@function
 ; IR-LABEL: define amdgpu_kernel void @sop2_integer_gfx1250(
 sop2_integer_gfx1250:
+	; IR: br label %[[BODY:.+]]
+	; IR: [[BODY]]:
 	; IR: [[MUL_LO0:%.*]] = zext i32 {{.*}} to i64
 	; IR-NEXT: [[MUL_HI0:%.*]] = zext i32 {{.*}} to i64
 	; IR-NEXT: [[MUL_SHL0:%.*]] = shl i64 [[MUL_HI0]], 32
@@ -59,7 +61,6 @@ sop2_integer_gfx1250:
 	.p2align	6, 0x0
 	.amdhsa_kernel sop2_integer_gfx1250
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 6
 	.end_amdhsa_kernel

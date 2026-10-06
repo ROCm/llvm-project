@@ -361,6 +361,8 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   else if (DestinationWidthInDwords > 2)
     LoadType =
         FixedVectorType::get(Ctx.B.getInt32Ty(), DestinationWidthInDwords);
+  Ctx.requireWaveUniform(Pointer, Di,
+                         "WaveNative requires uniform scalar memory addresses");
   Value *Loaded =
       Ctx.B.CreateAlignedLoad(LoadType, Pointer, AddressAlignment, "smem_load");
   if (IsNarrowLoad) {

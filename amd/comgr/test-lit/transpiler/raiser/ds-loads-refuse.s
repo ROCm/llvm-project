@@ -1,15 +1,15 @@
 ; REQUIRES: comgr-has-transpiler
 ; RUN: %llvm-mc -triple=amdgpu9-amd-amdhsa -filetype=obj %s -o %t.gfx9.o
 ; RUN: %ld.lld -shared %t.gfx9.o -o %t.gfx9.hsaco
-; RUN: not %transpile_cli %t.gfx9.hsaco --target-isa=gfx950 \
+; RUN: not %transpile_cli %t.gfx9.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=ds_gds 2>&1 | %FileCheck %s --check-prefix=GDS
 ; RUN: %llvm-mc -triple=amdgpu8.03-amd-amdhsa -filetype=obj %s -o %t.gfx803.o
 ; RUN: %ld.lld -shared %t.gfx803.o -o %t.gfx803.hsaco
-; RUN: not %transpile_cli %t.gfx803.hsaco --target-isa=gfx950 \
+; RUN: not %transpile_cli %t.gfx803.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=ds_m0 2>&1 | %FileCheck %s --check-prefix=M0
 ; RUN: %llvm-mc -triple=amdgpu10.10-amd-amdhsa -filetype=obj %s -o %t.gfx1010.o
 ; RUN: %ld.lld -shared %t.gfx1010.o -o %t.gfx1010.hsaco
-; RUN: not %transpile_cli %t.gfx1010.hsaco --target-isa=gfx950 \
+; RUN: not %transpile_cli %t.gfx1010.hsaco --target-isa=gfx1010 \
 ; RUN:   --emit-ir=ds_wide 2>&1 | %FileCheck %s --check-prefix=WGP
 
 	.amdhsa_code_object_version 6
