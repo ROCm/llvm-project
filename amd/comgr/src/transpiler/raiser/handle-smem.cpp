@@ -264,6 +264,8 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   // includes the line; it does not affect the value loaded. The raised IR
   // cannot represent this hint, so accept it only for gfx12 sources and drop
   // it, using the target's default NV=0 behavior.
+  //
+  // Other cache-policy modifiers remain unsupported and are rejected below.
   int64_t CachePolicy = Di.getImm(CachePolicyIndex);
   bool ScaleScalarOffset = (CachePolicy & AMDGPU::CPol::SCAL) != 0;
   int64_t ModeledCachePolicy = AMDGPU::CPol::SCAL;
