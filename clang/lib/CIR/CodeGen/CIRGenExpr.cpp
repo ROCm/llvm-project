@@ -78,7 +78,7 @@ Address CIRGenFunction::emitAddrOfFieldStorage(Address base,
   bool addressedByFieldIndex =
       field->isPotentiallyOverlapping()
           ? layout.hasCIRField(field)
-          : !isEmptyFieldForLayout(getContext(), field);
+          : !CodeGenUtils::isEmptyFieldForLayout(getContext(), field);
   if (!addressedByFieldIndex)
     return emitAddrOfZeroSizeField(*this, base, field);
 

@@ -882,7 +882,7 @@ public:
   }
 
   void addMemcpyableField(FieldDecl *F) {
-    if (isEmptyFieldForLayout(CGF.getContext(), F))
+    if (CodeGenUtils::isEmptyFieldForLayout(CGF.getContext(), F))
       return;
     if (!FirstField)
       addInitialField(F);
@@ -1863,7 +1863,7 @@ public:
                              const CXXDestructorDecl *DD)
       : Context(Context), EHStack(EHStack), DD(DD), StartIndex(std::nullopt) {}
   void PushCleanupForField(const FieldDecl *Field) {
-    if (isEmptyFieldForLayout(Context, Field))
+    if (CodeGenUtils::isEmptyFieldForLayout(Context, Field))
       return;
     unsigned FieldIndex = Field->getFieldIndex();
     if (CodeGenUtils::fieldHasTrivialDestructorBody(Context, Field)) {
