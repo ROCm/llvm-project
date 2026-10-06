@@ -162,7 +162,14 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
     return unsupported(Context, Instruction,
                        "buffer cache policy must be an immediate");
   }
-  if (Instruction.getImm(*CacheIndex) != 0) {
+  // NV only affects whether fine-grained cache write-back or invalidation
+  // includes the line; it does not affect the value transferred. The raised IR
+  // cannot represent this hint, so accept it only for gfx12 sources and drop
+  // it, using the target's default NV=0 behavior.
+  int64_t ModeledCachePolicy = 0;
+  if (Context.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX12Insts))
+    ModeledCachePolicy |= AMDGPU::CPol::NV;
+  if (Instruction.getImm(*CacheIndex) & ~ModeledCachePolicy) {
     return unsupported(Context, Instruction,
                        "non-default buffer cache policy is not modeled");
   }

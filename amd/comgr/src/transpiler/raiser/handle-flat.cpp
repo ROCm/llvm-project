@@ -207,11 +207,12 @@ static Error emitGlobalStore(RaiseContext &Ctx, const DecodedInst &Di,
 /// Return the cache-policy bits a GLOBAL atomic may carry that the emitted
 /// atomicrmw already accounts for. The returning flag is part of the opcode,
 /// and the temporal and scope hints only relax guarantees a sequentially
-/// consistent system-scope atomic already makes.
+/// consistent system-scope atomic already makes. GFX12 also accepts NV, which
+/// the raised IR drops for the same reason a plain access does.
 static unsigned modeledAtomicCachePolicy(const MCSubtargetInfo &STI) {
   if (STI.hasFeature(AMDGPU::FeatureGFX12Insts))
     return AMDGPU::CPol::TH_ATOMIC_RETURN | AMDGPU::CPol::TH_ATOMIC_NT |
-           AMDGPU::CPol::SCOPE;
+           AMDGPU::CPol::SCOPE | AMDGPU::CPol::NV;
   return AMDGPU::CPol::GLC | AMDGPU::CPol::SLC | AMDGPU::CPol::SCC;
 }
 

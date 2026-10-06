@@ -51,7 +51,7 @@ buffer_bounds:
 ; CHECK: icmp ult i64 {{.+}}, [[EXTENT]]
 ; CHECK: load i32, ptr addrspace(1) {{.+}}, align 1
 ; CHECK: phi i32 [ 0, {{.+}} ], [ {{.+}} ]
-  buffer_load_b128 v[4:7], v1, s[4:7], s10 offen offset:3
+  buffer_load_b128 v[4:7], v1, s[4:7], s10 offen offset:3 nv
   s_wait_loadcnt 0
   global_store_b32 v0, v4, s[8:9]
   global_store_b32 v0, v5, s[8:9] offset:4

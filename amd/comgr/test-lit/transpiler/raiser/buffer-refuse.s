@@ -62,12 +62,6 @@
 ; TEMPORAL: in kernel 'buffer_refuse'
 ; TEMPORAL-SAME: non-default buffer cache policy is not modeled
 
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=10 -filetype=obj %s -o %t.10.o
-; RUN: %ld.lld -shared %t.10.o -o %t.10.hsaco
-; RUN: not %transpile_cli %t.10.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=NV
-; NV: in kernel 'buffer_refuse'
-; NV-SAME: non-default buffer cache policy is not modeled
-
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=11 -filetype=obj %s -o %t.11.o
 ; RUN: %ld.lld -shared %t.11.o -o %t.11.hsaco
 ; RUN: not %transpile_cli %t.11.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=ATOMIC
@@ -154,9 +148,6 @@ buffer_refuse:
 .endif
 .if CASE == 9
   buffer_load_b32 v1, v0, s[4:7], null offen th:TH_LOAD_NT
-.endif
-.if CASE == 10
-  buffer_load_b32 v1, off, s[4:7], null nv
 .endif
 .if CASE == 11
   buffer_atomic_add_u32 v1, v0, s[4:7], null offen
