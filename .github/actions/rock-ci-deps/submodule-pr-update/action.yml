@@ -228,7 +228,7 @@ runs:
           exit 1
         fi
 
-       point_submodule_from_pr() {
+        point_submodule_from_pr() {
           local pr_url="$1"
           local gitlink="$2"
           local label="$3"
