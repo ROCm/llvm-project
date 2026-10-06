@@ -23,8 +23,10 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PatternMatch.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/Casting.h"
@@ -394,50 +396,46 @@ TEST_F(RegisterStateTest, ProjectsMaskReadsToCurrentSourceWave) {
       << toString(SourceState.takeError());
   RegisterEnvironment Widening(*SourceState, Mc);
   Value *Lane = Widening.Projection->emitLaneIdx(Widening.B);
-  Widening.Regs->regFile().storeVCC(
-      Widening.B,
-      Widening.B.CreateICmpUGE(Lane, Widening.B.getInt32(32), "upper_wave"));
-  Widening.Regs->regFile().storeExec(Widening.B,
-                                     Widening.B.getInt64(0xFFFFFFFF00000000));
+  Value *UpperWave =
+      Widening.B.CreateICmpUGE(Lane, Widening.B.getInt32(32), "upper_wave");
+  Value *ExecMask = Widening.B.CreateSelect(UpperWave, Widening.B.getInt32(-1),
+                                            Widening.B.getInt32(0));
+  Widening.Regs->regFile().storeVCC(Widening.B, UpperWave);
+  Widening.Regs->regFile().storeExec(Widening.B, ExecMask);
 
   const unsigned Opcode = findOpcode(*SourceState->InstrInfo, "S_MOV_B32");
   ASSERT_NE(Opcode, SourceState->InstrInfo->getNumOpcodes());
-  const auto ReadRegister = [&](MCRegister Register) -> Expected<Value *> {
+  SmallVector<StoreInst *> Observed;
+  for (StringRef RegisterName :
+       {"VCC_LO", "EXEC_LO", "SRC_VCCZ", "SRC_EXECZ"}) {
+    MCRegister Register = findRegister(*SourceState->RegInfo, RegisterName);
+    ASSERT_TRUE(Register) << RegisterName.str();
     DecodedInst Instruction;
     Instruction.Inst.setOpcode(Opcode);
     Instruction.TargetSpecificFlags =
         SourceState->InstrInfo->get(Opcode).TSFlags;
     Instruction.Inst.addOperand(MCOperand::createReg(Register));
-    return Widening.Regs->readOp32(Instruction, 0);
-  };
-  const auto ExpectSourceWaveSlice = [](Value *Mask) {
-    auto *Trunc = dyn_cast<TruncInst>(Mask);
-    ASSERT_NE(Trunc, nullptr);
-    auto *Shift = dyn_cast<BinaryOperator>(Trunc->getOperand(0));
-    ASSERT_NE(Shift, nullptr);
-    EXPECT_EQ(Shift->getOpcode(), Instruction::LShr);
-  };
+    Expected<Value *> Result = Widening.Regs->readOp32(Instruction, 0);
+    ASSERT_TRUE(static_cast<bool>(Result)) << toString(Result.takeError());
+    AllocaInst *Output =
+        Widening.B.CreateAlloca(Widening.B.getInt32Ty(), nullptr, RegisterName);
+    Observed.push_back(Widening.B.CreateStore(*Result, Output));
+  }
+  Widening.B.CreateRetVoid();
+  promoteAndFold(Widening);
 
-  for (const StringRef RegisterName : {"VCC_LO", "EXEC_LO"}) {
-    const MCRegister Register =
-        findRegister(*SourceState->RegInfo, RegisterName);
-    ASSERT_TRUE(Register) << RegisterName.str();
-    Expected<Value *> Result = ReadRegister(Register);
-    ASSERT_TRUE(static_cast<bool>(Result)) << toString(Result.takeError());
-    ExpectSourceWaveSlice(*Result);
-  }
-  for (const StringRef RegisterName : {"SRC_VCCZ", "SRC_EXECZ"}) {
-    const MCRegister Register =
-        findRegister(*SourceState->RegInfo, RegisterName);
-    ASSERT_TRUE(Register) << RegisterName.str();
-    Expected<Value *> Result = ReadRegister(Register);
-    ASSERT_TRUE(static_cast<bool>(Result)) << toString(Result.takeError());
-    auto *Extend = dyn_cast<ZExtInst>(*Result);
-    ASSERT_NE(Extend, nullptr);
-    auto *Compare = dyn_cast<ICmpInst>(Extend->getOperand(0));
-    ASSERT_NE(Compare, nullptr);
-    ExpectSourceWaveSlice(Compare->getOperand(0));
-  }
+  using namespace PatternMatch;
+  const auto SourceWaveMask = m_Trunc(m_LShr(
+      m_Intrinsic<Intrinsic::amdgcn_ballot>(m_Specific(UpperWave)),
+      m_ZExt(m_And(m_Specific(Lane), m_Specific(Widening.B.getInt32(-32))))));
+  EXPECT_TRUE(match(Observed[0]->getValueOperand(), SourceWaveMask));
+  EXPECT_EQ(Observed[1]->getValueOperand(), ExecMask);
+  EXPECT_TRUE(match(
+      Observed[2]->getValueOperand(),
+      m_ZExt(m_SpecificICmp(ICmpInst::ICMP_EQ, SourceWaveMask, m_Zero()))));
+  EXPECT_TRUE(match(Observed[3]->getValueOperand(),
+                    m_ZExt(m_SpecificICmp(ICmpInst::ICMP_EQ,
+                                          m_Specific(ExecMask), m_Zero()))));
 }
 
 TEST_F(RegisterStateTest, RetainsPairWidthAcrossBlocks) {

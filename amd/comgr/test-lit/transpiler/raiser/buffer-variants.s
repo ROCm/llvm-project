@@ -7,9 +7,6 @@
 ; RUN: %llc -mtriple=amdgpu9.42-amd-amdhsa \
 ; RUN:   -filetype=obj %t.ll -o %t.gfx942.o
 ; RUN: %transpile_cli %t.hsaco \
-; RUN:   --target-isa=gfx950 --emit-ir | %llc -mtriple=amdgpu9.50-amd-amdhsa \
-; RUN:     -filetype=obj -o %t.gfx950.o
-; RUN: %transpile_cli %t.hsaco \
 ; RUN:   --target-isa=gfx1250 --emit-ir | %llc -mtriple=amdgpu12.50-amd-amdhsa \
 ; RUN:     -filetype=obj -o %t.gfx1250.o
 

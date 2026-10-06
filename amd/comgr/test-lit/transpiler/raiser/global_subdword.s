@@ -4,22 +4,22 @@
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --dump-decoded=global_subdword | %FileCheck \
 ; RUN:   %s --check-prefix=DECODE
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=global_subdword \
-; RUN:   | %FileCheck %s --check-prefix=IR
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx1100 --emit-ir=global_subdword \
+; RUN:   | %FileCheck %s --check-prefixes=IR,SAME
 
 ; RUN: %llvm-mc -triple=amdgcn-amd-amdhsa -mcpu=gfx1200 -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --dump-decoded=global_subdword | %FileCheck \
 ; RUN:   %s --check-prefix=DECODE
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=global_subdword \
-; RUN:   | %FileCheck %s --check-prefix=IR
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx1200 --emit-ir=global_subdword \
+; RUN:   | %FileCheck %s --check-prefixes=IR,SAME
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --dump-decoded=global_subdword | %FileCheck \
 ; RUN:   %s --check-prefix=DECODE
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=global_subdword \
-; RUN:   | %FileCheck %s --check-prefix=IR
+; RUN:   | %FileCheck %s --check-prefixes=IR,WIDEN
 
 .amdhsa_code_object_version 6
 .text
@@ -29,11 +29,12 @@
 ; IR-LABEL: define amdgpu_kernel void @global_subdword(
 global_subdword:
 v_mov_b32 v4, 0x1234
-s_mov_b32 exec_lo, 0x55555555
+s_and_b32 exec_lo, exec_lo, 0x55555555
 
 ; DECODE: GLOBAL_LOAD_U8 global_load_u8
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SAME: [[PTR:%.+]] = inttoptr i64 {{%.+}} to ptr addrspace(1)
+; WIDEN: [[FROZEN:%.+]] = freeze i64 {{%.+}}
+; WIDEN-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
 ; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 1
 ; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
 ; IR: [[DO]]:
@@ -65,8 +66,9 @@ global_load_i16 v4, v[2:3], off offset:-1
 
 ; DECODE: GLOBAL_STORE_B8 global_store_b8
 ; IR: [[DATA:%.+]] = trunc i32 [[PREVIOUS3]] to i8
-; IR: [[FROZEN:%.+]] = freeze i64 {{%.+}}
-; IR-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
+; SAME: [[PTR:%.+]] = inttoptr i64 {{%.+}} to ptr addrspace(1)
+; WIDEN: [[FROZEN:%.+]] = freeze i64 {{%.+}}
+; WIDEN-NEXT: [[PTR:%.+]] = inttoptr i64 [[FROZEN]] to ptr addrspace(1)
 ; IR-NEXT: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) [[PTR]], i64 1
 ; IR: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
 ; IR: [[DO]]:

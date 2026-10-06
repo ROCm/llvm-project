@@ -2,17 +2,17 @@
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx950 \
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=binary_float_kernel,scc_kernel \
 ; RUN:   | %FileCheck %s
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx950 \
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=unhandled_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=UNHANDLED
 ; UNHANDLED: unsupported-instruction-form: s_min_num_f32
 
 ; Each opcode carries its own mode guard, so each needs its own kernel: the
 ; raise stops at the first refusal.
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx950 \
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=round_mul_kernel,round_fmac_kernel,round_fmaak_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=ROUND
 ; ROUND:      unsupported-floating-point-mode: s_mul_f32 [SOP2]

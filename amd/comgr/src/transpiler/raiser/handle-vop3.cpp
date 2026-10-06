@@ -116,8 +116,8 @@ Error writeCarryOut(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Dst)
     return Dst.takeError();
 
-  Carry = Ctx.B.CreateAnd(Carry, Ctx.registers().emitLaneActiveBit(),
-                          "carry.active");
+  Carry = Ctx.B.CreateSelect(Ctx.registers().emitLaneActiveBit(), Carry,
+                             Ctx.B.getFalse(), "carry.active");
   switch (Dst->RegKind) {
   case ParsedReg::SGPR: {
     Type *MaskTy = Ctx.Projection.sourceWaveMaskTy();

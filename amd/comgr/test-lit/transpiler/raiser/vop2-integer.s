@@ -79,7 +79,7 @@ vop2_integer:
 ; IR: [[ADD_PAIR:%.+]] = call { i32, i1 } @llvm.uadd.with.overflow.i32(i32 1, i32 {{.+}})
 ; IR: [[ADD_RESULT:%.+]] = extractvalue { i32, i1 } [[ADD_PAIR]], 0
 ; IR: [[ADD_CARRY:%.+]] = extractvalue { i32, i1 } [[ADD_PAIR]], 1
-; IR: [[VCC_AFTER_ADD:%.+]] = and i1 {{.+}}, [[ADD_CARRY]]
+; IR: [[VCC_AFTER_ADD:%.+]] = select i1 {{.+}}, i1 [[ADD_CARRY]], i1 false
 	v_add_co_u32_e32 v20, vcc, 1, v1
 ; IR: [[ADDC_IN:%.+]] = zext i1 [[VCC_AFTER_ADD]] to i32
 ; IR: [[ADDC_FIRST:%.+]] = call { i32, i1 } @llvm.uadd.with.overflow.i32(i32 2, i32 {{.+}})
@@ -90,7 +90,7 @@ vop2_integer:
 ; IR: [[SUB_PAIR:%.+]] = call { i32, i1 } @llvm.usub.with.overflow.i32(i32 3, i32 {{.+}})
 ; IR: [[SUB_RESULT:%.+]] = extractvalue { i32, i1 } [[SUB_PAIR]], 0
 ; IR: [[SUB_BORROW:%.+]] = extractvalue { i32, i1 } [[SUB_PAIR]], 1
-; IR: [[VCC_AFTER_SUB:%.+]] = and i1 {{.+}}, [[SUB_BORROW]]
+; IR: [[VCC_AFTER_SUB:%.+]] = select i1 {{.+}}, i1 [[SUB_BORROW]], i1 false
 	v_sub_co_u32_e32 v22, vcc, 3, v1
 ; IR: [[SUBB_IN:%.+]] = zext i1 [[VCC_AFTER_SUB]] to i32
 ; IR: [[SUBB_FIRST:%.+]] = call { i32, i1 } @llvm.usub.with.overflow.i32(i32 4, i32 {{.+}})
@@ -100,7 +100,7 @@ vop2_integer:
 ; IR: [[SUBREV_PAIR:%.+]] = call { i32, i1 } @llvm.usub.with.overflow.i32(i32 {{.+}}, i32 5)
 ; IR: [[SUBREV_RESULT:%.+]] = extractvalue { i32, i1 } [[SUBREV_PAIR]], 0
 ; IR: [[SUBREV_BORROW:%.+]] = extractvalue { i32, i1 } [[SUBREV_PAIR]], 1
-; IR: [[VCC_AFTER_SUBREV:%.+]] = and i1 {{.+}}, [[SUBREV_BORROW]]
+; IR: [[VCC_AFTER_SUBREV:%.+]] = select i1 {{.+}}, i1 [[SUBREV_BORROW]], i1 false
 	v_subrev_co_u32_e32 v24, vcc, 5, v1
 ; IR: [[SUBBREV_IN:%.+]] = zext i1 [[VCC_AFTER_SUBREV]] to i32
 ; IR: [[SUBBREV_FIRST:%.+]] = call { i32, i1 } @llvm.usub.with.overflow.i32(i32 {{.+}}, i32 6)
@@ -108,7 +108,7 @@ vop2_integer:
 ; IR: [[SUBBREV_SECOND:%.+]] = call { i32, i1 } @llvm.usub.with.overflow.i32(i32 [[SUBBREV_DIFF]], i32 [[SUBBREV_IN]])
 ; IR: [[SUBBREV_BORROW:%.+]] = extractvalue { i32, i1 } [[SUBBREV_SECOND]], 1
 ; IR: [[SUBBREV_BORROW_OUT:%.+]] = or i1 {{.+}}, [[SUBBREV_BORROW]]
-; IR: [[VCC_AFTER_SUBBREV:%.+]] = and i1 {{.+}}, [[SUBBREV_BORROW_OUT]]
+; IR: [[VCC_AFTER_SUBBREV:%.+]] = select i1 {{.+}}, i1 [[SUBBREV_BORROW_OUT]], i1 false
 	v_subbrev_co_u32_e32 v25, vcc, 6, v1, vcc
 ; IR: = select i1 [[VCC_AFTER_SUBBREV]], i32 {{.+}}, i32 7
 	v_cndmask_b32_e32 v26, 7, v1, vcc
@@ -194,7 +194,7 @@ vcc_exec_mask:
 	s_mov_b32 exec_hi, 0
 ; IR: [[MASKED_ADD_PAIR:%.+]] = call { i32, i1 } @llvm.uadd.with.overflow.i32(i32 0, i32 {{.+}})
 ; IR: [[MASKED_ADD_CARRY:%.+]] = extractvalue { i32, i1 } [[MASKED_ADD_PAIR]], 1
-; IR: [[MASKED_VCC:%.+]] = and i1 {{.+}}, [[MASKED_ADD_CARRY]]
+; IR: [[MASKED_VCC:%.+]] = select i1 {{.+}}, i1 [[MASKED_ADD_CARRY]], i1 false
 	v_add_co_u32_e32 v0, vcc, 0, v2
 ; IR: = select i1 [[MASKED_VCC]], i32 {{.+}}, i32 11
 	v_cndmask_b32_e32 v1, 11, v2, vcc

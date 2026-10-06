@@ -41,6 +41,7 @@
 #include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetOperations.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
@@ -52,8 +53,11 @@
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/ValueHandle.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
@@ -378,12 +382,84 @@ static SmallVector<uint64_t> unstartedTargets(const SetPcAnalysis &SetPc) {
   return Targets;
 }
 
+namespace {
+/// Track source EXEC writes for validation after register promotion.
+struct WaveNativeRequirements {
+  WeakTrackingVH InitialExec;
+  SmallVector<std::pair<WeakTrackingVH, const DecodedInst *>> ExecWrites;
+
+  Error validate(Function &F, const MCState &MC) const;
+};
+} // namespace
+
+// Prove containment in the entry EXEC mask. Unrecognized expressions remain
+// unproven, including cycles with no independently established mask.
+static bool
+isKnownSubsetOfEntryExec(const Instruction &I,
+                         const SmallPtrSetImpl<const Value *> &EntrySubsets) {
+  auto IsEntrySubset = [&](const Value *V) {
+    // Only zero is a subset of every possible entry mask, including partial
+    // waves. Nonzero constants need an intersection with a proven subset.
+    if (const auto *C = dyn_cast<ConstantInt>(V))
+      return C->isZero();
+    return EntrySubsets.contains(V);
+  };
+  switch (I.getOpcode()) {
+  case Instruction::And:
+    return IsEntrySubset(I.getOperand(0)) || IsEntrySubset(I.getOperand(1));
+  case Instruction::Or:
+  case Instruction::Xor:
+    return IsEntrySubset(I.getOperand(0)) && IsEntrySubset(I.getOperand(1));
+  case Instruction::Select:
+    return IsEntrySubset(I.getOperand(1)) && IsEntrySubset(I.getOperand(2));
+  case Instruction::PHI:
+    return all_of(I.operands(), IsEntrySubset);
+  case Instruction::ZExt:
+  case Instruction::Trunc:
+    return IsEntrySubset(I.getOperand(0));
+  default:
+    return false;
+  }
+}
+
+Error WaveNativeRequirements::validate(Function &F, const MCState &MC) const {
+  auto Refuse = [&](const DecodedInst &Di, const Twine &Detail) {
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedWaveProjection,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags), Detail);
+  };
+
+  assert(InitialExec && "entry EXEC was deleted before validation");
+  SmallPtrSet<const Value *, 32> EntrySubsets;
+  EntrySubsets.insert(InitialExec);
+  bool Changed;
+  do {
+    Changed = false;
+    for (const Instruction &I : instructions(F))
+      if (!EntrySubsets.contains(&I) &&
+          isKnownSubsetOfEntryExec(I, EntrySubsets))
+        Changed |= EntrySubsets.insert(&I).second;
+  } while (Changed);
+  for (const auto &[Mask, Di] : ExecWrites) {
+    assert(Mask && "EXEC write was deleted before validation");
+    const Value *V = Mask;
+    const auto *C = dyn_cast<ConstantInt>(V);
+    if (!EntrySubsets.contains(V) && (!C || !C->isZero()))
+      return Refuse(*Di, "WaveNative cannot prove that EXEC only enables lanes "
+                         "active at kernel entry");
+  }
+
+  return Error::success();
+}
+
 // Raise one kernel into `M`. Everything this allocates -- the projection, the
 // builder, the register file behind the context -- describes that one kernel
 // and dies with the call; only the emitted function outlives it.
 static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
                          const TextSection &Text, const KernelRequest &Kernel,
-                         ArrayRef<KernelSymbolExtent> FunctionExtents) {
+                         ArrayRef<KernelSymbolExtent> FunctionExtents,
+                         TargetMachine &TM) {
   const KernelMeta &Meta = Kernel.Meta;
   Expected<DecodeResult> Decoded = decodeKernel(
       Env.Source.MC, Env.OpcMap, Text.Bytes, Kernel.StartOffset,
@@ -450,13 +526,32 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
 
   LLVMContext &C = M.getContext();
 
-  // Replication is the only projection policy the raiser can select: a target
-  // lane reads the source EXEC bit of the source lane it stands in for. What
-  // that costs when the two wave sizes differ is the policy's own business.
-  ReplicationProjection Projection(*Env.Source.MC.SubtargetInfo,
-                                   *Env.Target.MC.SubtargetInfo,
-                                   Type::getInt32Ty(C), Type::getInt64Ty(C));
-  Projection.setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
+  const MCSubtargetInfo &SourceSTI = *Env.Source.MC.SubtargetInfo;
+  const MCSubtargetInfo &TargetSTI = *Env.Target.MC.SubtargetInfo;
+  bool SameWaveSize = SourceSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ==
+                      TargetSTI.hasFeature(AMDGPU::FeatureWavefrontSize32);
+  bool UseWaveNative =
+      Env.Source.Cpu == "gfx1250" && Env.Target.Cpu == "gfx942";
+  if (!SameWaveSize && !UseWaveNative)
+    return RaiseFailure::general(
+        RaiseFailureReason::UnsupportedWaveProjection,
+        "wave-size changes are supported only from gfx1250 to gfx942");
+
+  if (UseWaveNative &&
+      !AMDHSA_BITS_GET(Meta.KernelCodeProperties,
+                       amdhsa::KERNEL_CODE_PROPERTY_ENABLE_WAVEFRONT_SIZE32))
+    return RaiseFailure::general(
+        RaiseFailureReason::UnsupportedWaveProjection,
+        "WaveNative requires a wave32 source kernel descriptor");
+
+  std::unique_ptr<WaveProjection> Projection;
+  if (UseWaveNative)
+    Projection = std::make_unique<WaveNativeProjection>(
+        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
+  else
+    Projection = std::make_unique<ReplicationProjection>(
+        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
+  Projection->setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
 
   Function *F =
       declareKernel(M, Kernel.Name, Meta, *Env.Source.MC.SubtargetInfo);
@@ -464,11 +559,19 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   IRBuilder<> B(Entry);
 
   Expected<RaiseContext> Ctx = RaiseContext::create(
-      B, Projection, Env.Source.MC, *SetPc, Meta, Text.Bytes, Text.Address,
+      B, *Projection, Env.Source.MC, *SetPc, Meta, Text.Bytes, Text.Address,
       Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset,
       Env.Source.SramEcc);
   if (!Ctx)
     return Ctx.takeError();
+
+  WaveNativeRequirements Requirements;
+  if (UseWaveNative) {
+    // The metadata bounds the launch; it does not require that exact size.
+    F->addFnAttr("amdgpu-flat-work-group-size",
+                 formatv("1,{0}", Meta.MaxFlatWorkgroupSize).str());
+    Requirements.InitialExec = Ctx->registers().readExec();
+  }
 
   // A block per recovered block start, all of them made before any instruction
   // is raised so a branch reaching forward finds the block it targets. The
@@ -503,6 +606,22 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
     Ctx->registers().computeVGPRAdjust(Di);
     if (Error Err = raiseInst(*Ctx, Di))
       return Err;
+    if (UseWaveNative) {
+      if (Instruction *Term = B.GetInsertBlock()->getTerminatorOrNull()) {
+        Value *Condition = nullptr;
+        if (const auto *Branch = dyn_cast<CondBrInst>(Term))
+          Condition = Branch->getCondition();
+        else if (const auto *Switch = dyn_cast<SwitchInst>(Term))
+          Condition = Switch->getCondition();
+        if (Condition)
+          Ctx->requireWaveUniform(
+              Condition, Di,
+              "WaveNative requires scalar control flow uniform "
+              "across the target wave");
+      } else if (instructionWritesEXEC(Di, Env.Source.MC)) {
+        Requirements.ExecWrites.emplace_back(Ctx->registers().readExec(), &Di);
+      }
+    }
   }
 
   // Execution reaching the end of the extent means the code is truncated or
@@ -520,6 +639,13 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   SmallVector<AllocaInst *> Allocas;
   Ctx->registers().collectAllocas(Allocas);
   PromoteMemToReg(Allocas, DT, &AC);
+  if (UseWaveNative) {
+    if (Error Err =
+            Ctx->validateWaveNativeRequirements(TM, Requirements.InitialExec))
+      return Err;
+    if (Error Err = Requirements.validate(*F, Env.Source.MC))
+      return Err;
+  }
   return Ctx->validateRequiredBits();
 }
 
@@ -557,7 +683,7 @@ Expected<RaiseResult> raiseToIR(const TextSection &Text, StringRef SourceIsa,
   // point that knows which kernel of the batch is being raised, so the name and
   // the ISA pair are attached here.
   for (const KernelRequest &Kernel : Kernels)
-    if (Error Err = raiseKernel(*Env, M, Text, Kernel, FunctionExtents))
+    if (Error Err = raiseKernel(*Env, M, Text, Kernel, FunctionExtents, *TM))
       return RaiseFailure::withOrigin(std::move(Err), Kernel.Name,
                                       Env->Source.Cpu, Env->Target.Cpu);
 

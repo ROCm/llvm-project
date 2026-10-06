@@ -16,7 +16,7 @@ buffer_bounds:
   s_wait_kmcnt 0
 ; CHECK: and i32 {{.+}}, 63
   s_and_b32 s7, s7, 63
-  s_mov_b32 exec_lo, 1
+  s_and_b32 exec_lo, exec_lo, 1
   v_mov_b32 v0, 0
   v_mov_b32 v1, s11
 ; CHECK: [[SCALAR:%.+]] = zext i32 {{.+}} to i64

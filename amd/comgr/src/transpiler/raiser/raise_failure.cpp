@@ -64,6 +64,8 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "unterminated-kernel-extent";
   case RaiseFailureReason::DeviceLibraryLinkFailed:
     return "device-library-link-failed";
+  case RaiseFailureReason::UnsupportedWaveProjection:
+    return "unsupported-wave-projection";
   case RaiseFailureReason::CrossWaveLaneIdLeak:
     return "cross-wave-lane-id-leak";
   case RaiseFailureReason::CrossWaveUnrewritableShuffle:

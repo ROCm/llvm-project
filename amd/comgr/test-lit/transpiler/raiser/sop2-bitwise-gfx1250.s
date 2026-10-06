@@ -25,7 +25,11 @@ sop2_bitwise_gfx1250:
 	; IR-DAG: %[[TID_Z:.*]] = call i32 @llvm.amdgcn.workitem.id.z()
 	; IR: %[[FLAT_YZ:.*]] = add i32 %[[TID_Y]], {{.*}}
 	; IR: %[[FLAT_ID:.*]] = add i32 %[[TID_X]], {{.*}}
-	; IR: %[[SOURCE_WAVE_ID:.*]] = udiv i32 %[[FLAT_ID]], 64
+	; IR: %[[TARGET_WAVE_ID:.*]] = udiv i32 %[[FLAT_ID]], 64
+	; IR-NEXT: %[[UNIFORM_WAVE_ID:.*]] = call i32 @llvm.amdgcn.readfirstlane.i32(i32 %[[TARGET_WAVE_ID]])
+	; IR-NEXT: %[[FIRST_SOURCE_WAVE:.*]] = mul i32 %[[UNIFORM_WAVE_ID]], 2
+	; IR-NEXT: %[[SOURCE_IN_TARGET:.*]] = udiv i32 {{.*}}, 32
+	; IR-NEXT: %[[SOURCE_WAVE_ID:.*]] = add i32 %[[FIRST_SOURCE_WAVE]], %[[SOURCE_IN_TARGET]]
 	; IR-NEXT: %[[WAVE_ID_MASKED:.*]] = and i32 %[[SOURCE_WAVE_ID]], 31
 	; IR: icmp ne i32 %[[WAVE_ID_MASKED]], 0
 	s_bfe_u32 s6, ttmp8, 0x50019
@@ -33,13 +37,9 @@ sop2_bitwise_gfx1250:
 	; IR: %[[BFE_AFTER_CLOBBER:.*]] = select i1 {{.*}}, i32 0, i32 {{.*}}
 	; IR: icmp ne i32 %[[BFE_AFTER_CLOBBER]], 0
 	s_bfe_u32 s6, ttmp8, 0x50019
-	s_mov_b32 exec_lo, s6
-	; IR: %and_wave_mask = and i1 {{.*}}, {{.*}}
-	; IR: call i64 @llvm.amdgcn.ballot.i64(i1 %and_wave_mask)
-	; IR: %[[SCC_BALLOT:.*]] = call i64 @llvm.amdgcn.ballot.i64(i1 %and_wave_mask)
-	; IR: %[[SCC_AT_WAVE:.*]] = lshr i64 %[[SCC_BALLOT]], {{.*}}
-	; IR-NEXT: %[[SCC_MASK:.*]] = trunc i64 %[[SCC_AT_WAVE]] to i32
-	; IR-NEXT: %[[SCC:.*]] = icmp ne i32 %[[SCC_MASK]], 0
+	s_and_b32 exec_lo, exec_lo, s6
+	; IR: %[[MASK:.*]] = and i32 {{.*}}, -1
+	; IR: %[[SCC:.*]] = icmp ne i32 %[[MASK]], 0
 	s_and_b32 s2, exec_lo, -1
 	; IR: select i1 %[[SCC]], i32 1, i32 0
 	s_cselect_b32 s3, 1, 0

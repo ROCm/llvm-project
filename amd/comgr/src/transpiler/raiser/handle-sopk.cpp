@@ -311,6 +311,8 @@ Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di,
   Module *M = Ctx.B.GetInsertBlock()->getModule();
   Function *Setreg =
       Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_s_setreg);
+  Ctx.requireWaveUniform(
+      ValueArg, Di, "WaveNative requires uniform hardware register writes");
   Ctx.B.CreateCall(Setreg, {Ctx.B.getInt32(Selector), ValueArg});
   return Error::success();
 }

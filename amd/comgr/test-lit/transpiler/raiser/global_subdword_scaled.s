@@ -7,7 +7,7 @@
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_subdword_scaled | %FileCheck %s --check-prefix=IR
 
-; RUN: not %transpile_cli %t.hsaco --isa=gfx1200 --target-isa=gfx942 \
+; RUN: not %transpile_cli %t.hsaco --isa=gfx1200 --target-isa=gfx1200 \
 ; RUN:   --emit-ir=global_subdword_scaled 2>&1 | %FileCheck %s \
 ; RUN:   --check-prefix=GPU
 ; GPU: scale_offset is not supported on this GPU
@@ -22,7 +22,7 @@ global_subdword_scaled:
 ; Some loads and a store carry nv, which the raise drops; their existing IR
 ; checks verify that the memory accesses are still raised.
 v_mov_b32 v4, 0x1234
-s_mov_b32 exec_lo, 0x55555555
+s_and_b32 exec_lo, exec_lo, 0x55555555
 
 ; DECODE: GLOBAL_LOAD_U8 global_load_u8
 ; IR: [[LANE:%.+]] = sext i32 {{.+}} to i64

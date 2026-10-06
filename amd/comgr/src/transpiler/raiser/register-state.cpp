@@ -892,23 +892,8 @@ Value *RegisterState::emitCurrentSourceWaveHasActiveLane() {
   Value *Exec = Regs.loadExec(B);
   if (!Projection.providesFullWaveExecInvariant())
     return emitLaneActiveBit();
-  unsigned SourceBits = Projection.sourceWaveSize();
-  if (SourceBits >= 64)
-    return B.CreateICmpNE(Exec, ConstantInt::get(Exec->getType(), 0),
-                          "source_wave_active");
-  Type *ExecTy = Exec->getType();
-  Value *Lane = B.CreateZExtOrTrunc(Projection.emitLaneIdx(B), ExecTy,
-                                    "source_wave_lane");
-  Value *Group = B.CreateUDiv(Lane, ConstantInt::get(ExecTy, SourceBits),
-                              "source_wave_group");
-  Value *Shift = B.CreateMul(Group, ConstantInt::get(ExecTy, SourceBits),
-                             "source_wave_shift");
-  Value *Shifted = B.CreateLShr(Exec, Shift, "source_wave_exec");
-  uint64_t Mask = (uint64_t{1} << SourceBits) - 1;
-  Value *GroupMask =
-      B.CreateAnd(Shifted, ConstantInt::get(ExecTy, Mask), "source_wave_mask");
-  return B.CreateICmpNE(GroupMask, ConstantInt::get(ExecTy, 0),
-                        "source_wave_active");
+  return B.CreateNot(emitSourceWaveMaskIsZero(B, Projection, Exec, "execz"),
+                     "source_wave_active");
 }
 
 void RegisterState::recordSourceWaveSgprPair(unsigned BaseIdx, Value *V) {

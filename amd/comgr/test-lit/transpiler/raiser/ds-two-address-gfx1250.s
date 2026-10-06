@@ -1,7 +1,7 @@
 ; REQUIRES: comgr-has-transpiler
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx950 \
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=ds_two_address_loads,ds_two_address_stores | %FileCheck %s
 
 ; Each immediate offset of a two-address DS access scales by the access width,

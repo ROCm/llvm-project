@@ -42,8 +42,9 @@ mbcnt_mask_sources:
 ; SAME-LABEL: define amdgpu_kernel void @mbcnt_mask_sources(
 ; WIDEN-LABEL: define amdgpu_kernel void @mbcnt_mask_sources(
 ; WIDEN: [[TID:%.+]] = call i32 @llvm.amdgcn.workitem.id.x()
+; WIDEN: [[ENTRY:%.+]] = trunc i64 {{%.+}} to i32
 ; SAME: [[EXEC:%.+]] = and i32 -1, {{.+}}
-; WIDEN: [[EXEC:%.+]] = and i32 -1, {{.+}}
+; WIDEN: [[EXEC:%.+]] = and i32 [[ENTRY]], {{%.+}}
 	v_cmpx_gt_u32_e64 16, v0
 ; Counting the active lanes below this one. The mask operand is EXEC, which
 ; the widening path reads as the current source wave's slice.

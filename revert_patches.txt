@@ -26,5 +26,6 @@ comgr fails to build -lzma
 breaks asan-debug build
 [DebugInfo] Support global addresses in variable locations  (#218722)" (#4800) (2 hours ago) <theRonShark>
 ---
-[Offload][OpenMP] Keep user Numblocks requested value for RecordReplay (#228345)" (21 hours ago) <Ron Lieberman>
+breaks psdb
+"[AMDGPU] Reserve ENABLE_WAVEFRONT_SIZE32 on gfx125x (#229162)"
 ---

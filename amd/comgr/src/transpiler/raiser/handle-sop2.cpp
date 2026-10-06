@@ -262,20 +262,31 @@ Value *emitBitOp(IRBuilder<> &B, BitOp Op, Value *A, Value *Bv,
 // Raise a bitwise instruction and preserve wave-mask and SCC state.
 Error handleBitOp(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
                   BitOp Kind, bool Is64, const Twine &Name) {
-  Expected<Value *> SrcMask0 = Op.srcWaveMaskI1(0);
-  if (!SrcMask0)
-    return SrcMask0.takeError();
-  Expected<Value *> SrcMask1 = Op.srcWaveMaskI1(1);
-  if (!SrcMask1)
-    return SrcMask1.takeError();
+  // With one complete source-width mask per packed wave, the scalar result
+  // determines both the mask and SCC; no per-lane shadow is needed.
+  const bool HasPerSourceWaveMasks =
+      Ctx.Projection.numSourceWavesPerTarget() > 1 &&
+      Ctx.Projection.execStorageTy() == Ctx.Projection.sourceWaveMaskTy();
+  Value *SrcMask0 = nullptr;
+  Value *SrcMask1 = nullptr;
+  if (!HasPerSourceWaveMasks) {
+    Expected<Value *> Mask0 = Op.srcWaveMaskI1(0);
+    if (!Mask0)
+      return Mask0.takeError();
+    SrcMask0 = *Mask0;
+    Expected<Value *> Mask1 = Op.srcWaveMaskI1(1);
+    if (!Mask1)
+      return Mask1.takeError();
+    SrcMask1 = *Mask1;
 
-  if (Ctx.Projection.numSourceWavesPerTarget() > 1 &&
-      (!*SrcMask0 || !*SrcMask1))
-    return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedInstructionForm,
-        strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
-        formatName(Di.TargetSpecificFlags),
-        "bitwise operands lack full-width source-wave mask state");
+    if (Ctx.Projection.numSourceWavesPerTarget() > 1 &&
+        (!SrcMask0 || !SrcMask1))
+      return RaiseFailure::atInstruction(
+          RaiseFailureReason::UnsupportedInstructionForm,
+          strippedMnemonic(Ctx.MC, Di.Inst), Di.Offset,
+          formatName(Di.TargetSpecificFlags),
+          "bitwise operands lack full-width source-wave mask state");
+  }
 
   Expected<BinaryOperands> Args = Is64 ? Op.readBinary64() : Op.readBinary32();
   if (!Args)
@@ -286,9 +297,9 @@ Error handleBitOp(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
   else
     Ctx.registers().writeReg32(Args->Dst, Result);
 
-  if (*SrcMask0 && *SrcMask1) {
+  if (SrcMask0 && SrcMask1) {
     Value *MaskI1 =
-        emitBitOp(Ctx.B, Kind, *SrcMask0, *SrcMask1, Name + "_wave_mask");
+        emitBitOp(Ctx.B, Kind, SrcMask0, SrcMask1, Name + "_wave_mask");
     Ctx.registers().recordWaveMaskI1(Args->Dst, MaskI1);
     // Complementing the second operand can set non-lane scalar bits for ORN2,
     // and the fully-negated operations do so unconditionally. Their SCC must
