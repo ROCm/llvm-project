@@ -595,6 +595,7 @@ StringRef llvm::dwarf::LanguageDescription(dwarf::SourceLanguageName Name,
   case DW_LNAME_Erlang:
   case DW_LNAME_Elixir:
   case DW_LNAME_Gleam:
+  case DW_LNAME_Roc:
     break;
   }
 

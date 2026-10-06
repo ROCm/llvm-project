@@ -63,21 +63,23 @@ static unsigned requiredGlobalOperandIndex(const DecodedInst &Di,
   return *Index;
 }
 
+int64_t globalCachePolicy(const DecodedInst &Di) {
+  unsigned Index = requiredGlobalOperandIndex(Di, AMDGPU::OpName::cpol);
+  assert(Di.isImm(Index) && "operand 'cpol' is not an immediate");
+  return Di.getImm(Index);
+}
+
 Expected<Value *> emitGlobalAddress(RaiseContext &Ctx, const DecodedInst &Di,
-                                    Align AccessAlign) {
-  unsigned CachePolicyIndex =
-      requiredGlobalOperandIndex(Di, AMDGPU::OpName::cpol);
-  assert(Di.isImm(CachePolicyIndex) && "operand 'cpol' is not an immediate");
-  int64_t CachePolicy = Di.getImm(CachePolicyIndex);
-  // Address scaling shares the cache-policy field but is an addressing mode,
-  // and one that changes what the per-lane offset below means.
-  if (CachePolicy & AMDGPU::CPol::SCAL) {
-    return unsupported(Ctx, Di,
-                       "scaling the per-lane offset by the access size is not "
-                       "modeled");
-  }
-  if (CachePolicy != 0)
+                                    unsigned AccessSizeInBytes,
+                                    Align AccessAlign,
+                                    unsigned ModeledCachePolicy) {
+  int64_t CachePolicy = globalCachePolicy(Di);
+  bool ScaleOffset = CachePolicy & AMDGPU::CPol::SCAL;
+  if (CachePolicy & ~(AMDGPU::CPol::SCAL | ModeledCachePolicy))
     return unsupported(Ctx, Di, "non-default cache policy is not modeled");
+  if (ScaleOffset &&
+      !Ctx.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX1250Insts))
+    return unsupported(Ctx, Di, "scale_offset is not supported on this GPU");
 
   // MC surfaces the immediate offset as the raw encoded field, so sign-extend
   // it from the width the source ISA encodes it in.
@@ -97,6 +99,8 @@ Expected<Value *> emitGlobalAddress(RaiseContext &Ctx, const DecodedInst &Di,
       requiredGlobalOperandIndex(Di, AMDGPU::OpName::vaddr);
   std::optional<unsigned> ScalarBaseIndex =
       globalOperandIndex(Di, AMDGPU::OpName::saddr);
+  if (ScaleOffset && !ScalarBaseIndex)
+    return unsupported(Ctx, Di, "scale_offset requires an saddr base");
 
   Value *Address = nullptr;
   if (ScalarBaseIndex) {
@@ -113,6 +117,10 @@ Expected<Value *> emitGlobalAddress(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX1250Insts)
             ? Ctx.B.CreateSExt(*LaneOffset, I64Ty, "global_lane_offset")
             : Ctx.B.CreateZExt(*LaneOffset, I64Ty, "global_lane_offset");
+    if (ScaleOffset)
+      WideLaneOffset =
+          Ctx.B.CreateMul(WideLaneOffset, Ctx.B.getInt64(AccessSizeInBytes),
+                          "global_scaled_offset");
     Address = Ctx.B.CreateAdd(*ScalarBase, WideLaneOffset, "global_addr");
   } else {
     Expected<Value *> LaneAddress =

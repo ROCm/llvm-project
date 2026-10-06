@@ -347,19 +347,6 @@ bool clang::driver::isTargetFastUsed(const ArgList &Args) {
                       options::OPT_fno_openmp_target_fast, isOFastUsed(Args));
 }
 
-/// Ignore possibility of environment variables if either
-/// -fopenmp-target-fast or -Ofast is used.
-bool clang::driver::shouldIgnoreEnvVars(const ArgList &Args) {
-  if (Args.hasFlag(options::OPT_fno_openmp_target_fast,
-                   options::OPT_fopenmp_target_fast, false))
-    return false;
-
-  if (isTargetFastUsed(Args))
-    return true;
-
-  return false;
-}
-
 /// Add -x lang to \p CmdArgs for \p Input.
 static void addDashXForInput(const ArgList &Args, const InputInfo &Input,
                              ArgStringList &CmdArgs) {
@@ -4591,6 +4578,9 @@ static void RenderDiagnosticsOptions(const Driver &D, const ArgList &Args,
   Args.addOptInFlag(CmdArgs, options::OPT_fdiagnostics_show_hotness,
                     options::OPT_fno_diagnostics_show_hotness);
 
+  Args.addOptOutFlag(CmdArgs, options::OPT_flifetime_safety_c,
+                     options::OPT_fno_lifetime_safety_c);
+
   if (const Arg *A =
           Args.getLastArg(options::OPT_fdiagnostics_hotness_threshold_EQ)) {
     std::string Opt =
@@ -5717,6 +5707,14 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       D.Diag(diag::err_drv_argument_not_allowed_with)
           << MemProfUseArg->getAsString(Args) << PGOInstrArg->getAsString(Args);
     MemProfUseArg->render(Args, CmdArgs);
+  }
+
+  auto *CopyProfArg =
+      Args.getLastArg(options::OPT_fcopyprof, options::OPT_fno_copyprof);
+  if (CopyProfArg &&
+      !CopyProfArg->getOption().matches(options::OPT_fno_copyprof)) {
+    CopyProfArg->render(Args, CmdArgs);
+    Args.AddLastArg(CmdArgs, options::OPT_fcopyprof_static_size_threshold_EQ);
   }
 
   // Embed-bitcode option.
@@ -7229,13 +7227,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       } else
         CmdArgs.push_back("-fno-openmp-target-fast");
 
-      if (Args.hasFlag(options::OPT_fopenmp_target_ignore_env_vars,
-                       options::OPT_fno_openmp_target_ignore_env_vars,
-                       shouldIgnoreEnvVars(Args)))
-        CmdArgs.push_back("-fopenmp-target-ignore-env-vars");
-      else
-        CmdArgs.push_back("-fno-openmp-target-ignore-env-vars");
-
       if (Args.hasFlag(options::OPT_fopenmp_target_big_jump_loop,
                        options::OPT_fno_openmp_target_big_jump_loop, true))
         CmdArgs.push_back("-fopenmp-target-big-jump-loop");
@@ -8294,6 +8285,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_fcomment_block_commands);
   // Forward -fparse-all-comments to -cc1.
   Args.AddAllArgs(CmdArgs, options::OPT_fparse_all_comments);
+  // Forward -fretain-comments to -cc1.
+  Args.AddAllArgs(CmdArgs, options::OPT_fretain_comments);
 
   // Turn -fplugin=name.so into -load name.so
   for (const Arg *A : Args.filtered(options::OPT_fplugin_EQ)) {
@@ -10007,28 +10000,6 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
         }
       }
 
-      if (isAMDGPU && !C.getDriver().IsFlangMode()) {
-        StringRef OOpt;
-        if (const Arg *A = Args.getLastArg(options::OPT_O_Group)) {
-          if (A->getOption().matches(options::OPT_O4) ||
-              A->getOption().matches(options::OPT_Ofast))
-            OOpt = "3";
-          else if (A->getOption().matches(options::OPT_O)) {
-            OOpt = A->getValue();
-            if (OOpt == "g")
-              OOpt = "1";
-            else if (OOpt == "s" || OOpt == "z")
-              OOpt = "2";
-          } else if (A->getOption().matches(options::OPT_O0))
-            OOpt = "0";
-        }
-
-        if (!OOpt.empty() && OOpt != "0") {
-          LinkerArgs.push_back(Args.MakeArgString(
-              "--lto-newpm-passes=default-post-link<O" + OOpt + ">"));
-        }
-      }
-
       // If no optimization level was requested we default to `-O0` for no-RDC
       // mode compilations. Others default to `lto<O2>` as standard in ld.lld.
       if (JA.getType() == types::TY_HIP_FATBIN &&
@@ -10224,13 +10195,6 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   addOffloadCompressArgs(Args, CmdArgs);
-
-  if (Arg *A = Args.getLastArg(options::OPT_offload_jobs_EQ))
-    if (StringRef(Args.getArgString(A->getIndex()))
-            .starts_with("-parallel-jobs="))
-      C.getDriver().Diag(diag::warn_drv_deprecated_arg)
-          << A->getAsString(Args) << /*hasReplacement=*/true
-          << "--offload-jobs=<N>";
 
   OffloadJobsOpt OffloadJobs = parseOffloadJobs(Args);
   if (OffloadJobs.A) {

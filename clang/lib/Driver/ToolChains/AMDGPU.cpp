@@ -667,11 +667,8 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   getToolChain().addProfileRTLibs(Args, CmdArgs);
-
-  // Divergent because asanrtl.bc does not use the standard compiler-rt
-  // semantics. Skip this if `-fsanitize=address` is set.
-  const SanitizerArgs &SanArgs = getToolChain().getSanitizerArgs(Args);
-  if (!SanArgs.needsAsanRt())
+  // FIXME: Device ASan is provided by the ROCm device library, not compiler-rt.
+  if (!getToolChain().getSanitizerArgs(Args).needsAsanRt())
     addSanitizerRuntimes(getToolChain(), Args, CmdArgs, C);
 
   if (Args.hasArg(options::OPT_stdlib))
@@ -1196,13 +1193,6 @@ RocmInstallationDetector::getCommonBitcodeLibs(
     AddBCLib(ABIVerPath);
 
   return BCLibs;
-}
-
-bool AMDGPUToolChain::shouldSkipArgument(const llvm::opt::Arg *A) const {
-  Option O = A->getOption();
-  if (O.matches(options::OPT_fPIE) || O.matches(options::OPT_fpie))
-    return true;
-  return false;
 }
 
 llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>

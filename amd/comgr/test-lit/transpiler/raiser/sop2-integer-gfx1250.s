@@ -13,6 +13,8 @@
 	.type	sop2_integer_gfx1250,@function
 ; IR-LABEL: define amdgpu_kernel void @sop2_integer_gfx1250(
 sop2_integer_gfx1250:
+	; IR: br label %[[BODY:.+]]
+	; IR: [[BODY]]:
 	; IR: [[MUL_LO0:%.*]] = zext i32 {{.*}} to i64
 	; IR-NEXT: [[MUL_HI0:%.*]] = zext i32 {{.*}} to i64
 	; IR-NEXT: [[MUL_SHL0:%.*]] = shl i64 [[MUL_HI0]], 32

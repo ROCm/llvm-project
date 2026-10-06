@@ -25,6 +25,8 @@
 #include "transpiler/decoder/decode.h"
 #include "transpiler/decoder/mc-state.h"
 #include "transpiler/decoder/opcode-map.h"
+#include "transpiler/decoder/setpc-analysis.h"
+#include "transpiler/raiser/handle-vop-cross-lane.h"
 #include "transpiler/raiser/handlers.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
@@ -34,9 +36,13 @@
 #include "comgr.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "SIDefines.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FloatingPointMode.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetOperations.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
@@ -48,8 +54,11 @@
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/ValueHandle.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
@@ -67,10 +76,12 @@
 
 #include <cassert>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 using namespace llvm;
 
@@ -191,6 +202,9 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
   if (Di.VOPD)
     return handleVOPD(Ctx, Di);
 
+  if (SIInstrFlags::isMAI(*Ctx.MC.InstrInfo, Di.Inst))
+    return handleMFMA(Ctx, Di, Op);
+
   if (Di.TargetSpecificFlags & SOP1)
     return handleSOP1(Ctx, Di, Op);
   if (Di.TargetSpecificFlags & SOP2)
@@ -213,6 +227,9 @@ static Error raiseInst(RaiseContext &Ctx, const DecodedInst &Di) {
   constexpr uint64_t VOP1EncodingMask = VOP1 | VOP3 | DPP | SDWA | VOPD3;
   if ((Di.TargetSpecificFlags & VOP1EncodingMask) == VOP1)
     return handleVOP1(Ctx, Di, Op);
+  if ((Di.TargetSpecificFlags & VOP1EncodingMask) == DPP &&
+      Di.CanonOp == CanonicalOp::V_MOV_B32)
+    return raiseDPPMove32(Ctx, Di, Op);
 
   constexpr uint64_t VOP2EncodingMask =
       VOP2 | VOP3 | VOP3P | DPP | SDWA | VOPD3;
@@ -317,11 +334,136 @@ Expected<RaiseEnvironment> RaiseEnvironment::create(StringRef SourceIsa,
   return Env;
 }
 
+// Whether `Offset` falls strictly inside one of `Insts`, which must be in
+// source order. An offset that leads an instruction is not inside one.
+static bool isInsideDecodedInstruction(ArrayRef<DecodedInst> Insts,
+                                       uint64_t Offset) {
+  const DecodedInst *After =
+      upper_bound(Insts, Offset, [](uint64_t Off, const DecodedInst &Di) {
+        return Off < Di.Offset;
+      });
+  if (After == Insts.begin())
+    return false;
+  const DecodedInst &Di = *std::prev(After);
+  return Offset > Di.Offset && Offset < Di.Offset + Di.sizeInBytes();
+}
+
+// The function symbol extent of `Extents` that covers `Offset`, or null when
+// none of them does.
+static const KernelSymbolExtent *
+findFunctionExtent(ArrayRef<KernelSymbolExtent> Extents, uint64_t Offset) {
+  const KernelSymbolExtent *Found =
+      find_if(Extents, [Offset](const KernelSymbolExtent &E) {
+        return Offset >= E.Offset && Offset < E.Offset + E.Size;
+      });
+  return Found == Extents.end() ? nullptr : Found;
+}
+
+// Fold a second decode into `Base`, keeping the instructions in source order.
+// The two are decoded from disjoint extents, so neither carries an instruction
+// the other already has.
+static void mergeDecoded(DecodeResult &Base, DecodeResult &&Extra) {
+  llvm::move(Extra.Insts, std::back_inserter(Base.Insts));
+  sort(Base.Insts, [](const DecodedInst &A, const DecodedInst &B) {
+    return A.Offset < B.Offset;
+  });
+  set_union(Base.BlockStarts, Extra.BlockStarts);
+}
+
+// The source offsets `SetPc` refused a transfer for because no decoded
+// instruction starts there, ascending and distinct.
+static SmallVector<uint64_t> unstartedTargets(const SetPcAnalysis &SetPc) {
+  SmallVector<uint64_t> Targets;
+  for (const SetPcSite &Site : make_second_range(SetPc.Sites)) {
+    const SetPcUnresolvable *Refused = std::get_if<SetPcUnresolvable>(&Site);
+    if (Refused && Refused->Why == SetPcRefusal::TargetNotAnInstruction)
+      Targets.push_back(Refused->Subject);
+  }
+  // `Sites` is a DenseMap, so sorting is what keeps a raise from depending on
+  // the order its buckets happen to be walked in.
+  sort(Targets);
+  Targets.erase(llvm::unique(Targets), Targets.end());
+  return Targets;
+}
+
+namespace {
+/// Track source EXEC writes for validation after register promotion.
+struct WaveNativeRequirements {
+  WeakTrackingVH InitialExec;
+  SmallVector<std::pair<WeakTrackingVH, const DecodedInst *>> ExecWrites;
+
+  Error validate(Function &F, const MCState &MC) const;
+};
+} // namespace
+
+// Prove containment in the entry EXEC mask. Unrecognized expressions remain
+// unproven, including cycles with no independently established mask.
+static bool
+isKnownSubsetOfEntryExec(const Instruction &I,
+                         const SmallPtrSetImpl<const Value *> &EntrySubsets) {
+  auto IsEntrySubset = [&](const Value *V) {
+    // Only zero is a subset of every possible entry mask, including partial
+    // waves. Nonzero constants need an intersection with a proven subset.
+    if (const auto *C = dyn_cast<ConstantInt>(V))
+      return C->isZero();
+    return EntrySubsets.contains(V);
+  };
+  switch (I.getOpcode()) {
+  case Instruction::And:
+    return IsEntrySubset(I.getOperand(0)) || IsEntrySubset(I.getOperand(1));
+  case Instruction::Or:
+  case Instruction::Xor:
+    return IsEntrySubset(I.getOperand(0)) && IsEntrySubset(I.getOperand(1));
+  case Instruction::Select:
+    return IsEntrySubset(I.getOperand(1)) && IsEntrySubset(I.getOperand(2));
+  case Instruction::PHI:
+    return all_of(I.operands(), IsEntrySubset);
+  case Instruction::ZExt:
+  case Instruction::Trunc:
+    return IsEntrySubset(I.getOperand(0));
+  default:
+    return false;
+  }
+}
+
+Error WaveNativeRequirements::validate(Function &F, const MCState &MC) const {
+  auto Refuse = [&](const DecodedInst &Di, const Twine &Detail) {
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedWaveProjection,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags), Detail);
+  };
+
+  assert(InitialExec && "entry EXEC was deleted before validation");
+  SmallPtrSet<const Value *, 32> EntrySubsets;
+  EntrySubsets.insert(InitialExec);
+  bool Changed;
+  do {
+    Changed = false;
+    for (const Instruction &I : instructions(F))
+      if (!EntrySubsets.contains(&I) &&
+          isKnownSubsetOfEntryExec(I, EntrySubsets))
+        Changed |= EntrySubsets.insert(&I).second;
+  } while (Changed);
+  for (const auto &[Mask, Di] : ExecWrites) {
+    assert(Mask && "EXEC write was deleted before validation");
+    const Value *V = Mask;
+    const auto *C = dyn_cast<ConstantInt>(V);
+    if (!EntrySubsets.contains(V) && (!C || !C->isZero()))
+      return Refuse(*Di, "WaveNative cannot prove that EXEC only enables lanes "
+                         "active at kernel entry");
+  }
+
+  return Error::success();
+}
+
 // Raise one kernel into `M`. Everything this allocates -- the projection, the
 // builder, the register file behind the context -- describes that one kernel
 // and dies with the call; only the emitted function outlives it.
 static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
-                         const TextSection &Text, const KernelRequest &Kernel) {
+                         const TextSection &Text, const KernelRequest &Kernel,
+                         ArrayRef<KernelSymbolExtent> FunctionExtents,
+                         TargetMachine &TM) {
   const KernelMeta &Meta = Kernel.Meta;
   Expected<DecodeResult> Decoded = decodeKernel(
       Env.Source.MC, Env.OpcMap, Text.Bytes, Kernel.StartOffset,
@@ -329,27 +471,111 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   if (!Decoded)
     return Decoded.takeError();
 
+  // Caught here rather than at the terminator check below, which the branch
+  // into the starting block satisfies without anything having been raised.
+  if (Decoded->Insts.empty())
+    return RaiseFailure::general(RaiseFailureReason::UnterminatedKernelExtent,
+                                 "kernel extent holds no instruction");
+
+  // A jump through a register names no offset the decode could follow, so the
+  // code it reaches may be code no decode has read: an outlined helper the
+  // kernel calls, or a stretch the scan stopped short of at an `s_endpgm`.
+  // Reading from an offset the analysis reports as unstarted can reveal
+  // further such jumps, so it asks again until nothing new turns up.
+  std::optional<SetPcAnalysis> SetPc;
+  for (;;) {
+    Expected<SetPcAnalysis> Analyzed =
+        analyzeSetPc(Decoded->Insts, Decoded->BlockStarts, Kernel.StartOffset,
+                     Env.Source.MC);
+    if (!Analyzed)
+      return Analyzed.takeError();
+    SetPc = std::move(*Analyzed);
+
+    bool Followed = false;
+    for (uint64_t Target : unstartedTargets(*SetPc)) {
+      // A target left unread keeps the refusal the analysis recorded for the
+      // transfer reaching it, which `raiseInst` below reports at that
+      // instruction. Reading either kind would not lift the refusal: bytes
+      // already decoded decode the same way a second time, and a target no
+      // function symbol covers has no extent to read to.
+      if (isInsideDecodedInstruction(Decoded->Insts, Target))
+        continue;
+      const KernelSymbolExtent *Owner =
+          findFunctionExtent(FunctionExtents, Target);
+      if (!Owner)
+        continue;
+
+      // Reading from the target rather than from its function's entry covers
+      // both shapes at once: a call reaches the entry anyway, and a jump over
+      // an `s_endpgm` reaches a point the enclosing function was already read
+      // past. It also keeps this decode disjoint from what is already in hand.
+      // Each round starts an instruction at a target that had none, so the
+      // rounds run out.
+      Expected<DecodeResult> Extra =
+          decodeKernel(Env.Source.MC, Env.OpcMap, Text.Bytes, Target,
+                       Owner->Offset + Owner->Size);
+      if (!Extra)
+        return Extra.takeError();
+      mergeDecoded(*Decoded, std::move(*Extra));
+      Followed = true;
+    }
+    if (!Followed)
+      break;
+  }
+
+  // Merging the block starts here, before any block is made, is what lets the
+  // handler find the block its jump targets.
+  Decoded->BlockStarts.insert(SetPc->ExtraBlockStarts.begin(),
+                              SetPc->ExtraBlockStarts.end());
+
   LLVMContext &C = M.getContext();
 
-  // Replication is the only projection policy the raiser can select: a target
-  // lane reads the source EXEC bit of the source lane it stands in for. What
-  // that costs when the two wave sizes differ is the policy's own business.
-  ReplicationProjection Projection(*Env.Source.MC.SubtargetInfo,
-                                   *Env.Target.MC.SubtargetInfo,
-                                   Type::getInt32Ty(C), Type::getInt64Ty(C));
-  Projection.setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
+  const MCSubtargetInfo &SourceSTI = *Env.Source.MC.SubtargetInfo;
+  const MCSubtargetInfo &TargetSTI = *Env.Target.MC.SubtargetInfo;
+  bool SameWaveSize = SourceSTI.hasFeature(AMDGPU::FeatureWavefrontSize32) ==
+                      TargetSTI.hasFeature(AMDGPU::FeatureWavefrontSize32);
+  bool UseWaveNative =
+      Env.Source.Cpu == "gfx1250" && Env.Target.Cpu == "gfx942";
+  if (!SameWaveSize && !UseWaveNative)
+    return RaiseFailure::general(
+        RaiseFailureReason::UnsupportedWaveProjection,
+        "wave-size changes are supported only from gfx1250 to gfx942");
+
+  if (UseWaveNative &&
+      !AMDHSA_BITS_GET(Meta.KernelCodeProperties,
+                       amdhsa::KERNEL_CODE_PROPERTY_ENABLE_WAVEFRONT_SIZE32))
+    return RaiseFailure::general(
+        RaiseFailureReason::UnsupportedWaveProjection,
+        "WaveNative requires a wave32 source kernel descriptor");
+
+  std::unique_ptr<WaveProjection> Projection;
+  if (UseWaveNative)
+    Projection = std::make_unique<WaveNativeProjection>(
+        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
+  else
+    Projection = std::make_unique<ReplicationProjection>(
+        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
+  Projection->setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
 
   Function *F =
       declareKernel(M, Kernel.Name, Meta, *Env.Source.MC.SubtargetInfo);
   BasicBlock *Entry = BasicBlock::Create(C, "entry", F);
   IRBuilder<> B(Entry);
 
-  Expected<RaiseContext> Ctx =
-      RaiseContext::create(B, Projection, Env.Source.MC, Meta, Text.Bytes,
-                           Text.Address, Text.ImageSections, Kernel.StartOffset,
-                           Kernel.EndOffset, Env.Source.SramEcc);
+  Expected<RaiseContext> Ctx = RaiseContext::create(
+      B, *Projection, Env.Source.MC, *SetPc, Meta, Text.Bytes, Text.Address,
+      Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset,
+      Env.Source.SramEcc);
   if (!Ctx)
     return Ctx.takeError();
+
+  WaveNativeRequirements Requirements;
+  if (UseWaveNative) {
+    // The metadata bounds the launch; it does not require that exact size.
+    F->addFnAttr("amdgpu-flat-work-group-size",
+                 formatv("1,{0}", Meta.MaxFlatWorkgroupSize).str());
+    Requirements.InitialExec = Ctx->registers().readExec();
+  }
 
   // A block per recovered block start, all of them made before any instruction
   // is raised so a branch reaching forward finds the block it targets. The
@@ -358,6 +584,11 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   // give the entry block a predecessor, which LLVM does not allow.
   for (uint64_t Start : Decoded->BlockStarts)
     Ctx->defineBB(Start, BasicBlock::Create(C, formatv("bb_{0:x}", Start), F));
+
+  // A followed callee can sit anywhere in the text section, the kernel's own
+  // entry included, so where the raise starts is named rather than left to be
+  // whichever block the first raised instruction leads.
+  B.CreateBr(Ctx->lookupBB(Kernel.StartOffset));
 
   for (const DecodedInst &Di : Decoded->Insts) {
     BasicBlock *Open = B.GetInsertBlock();
@@ -379,6 +610,22 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
     Ctx->registers().computeVGPRAdjust(Di);
     if (Error Err = raiseInst(*Ctx, Di))
       return Err;
+    if (UseWaveNative) {
+      if (Instruction *Term = B.GetInsertBlock()->getTerminatorOrNull()) {
+        Value *Condition = nullptr;
+        if (const auto *Branch = dyn_cast<CondBrInst>(Term))
+          Condition = Branch->getCondition();
+        else if (const auto *Switch = dyn_cast<SwitchInst>(Term))
+          Condition = Switch->getCondition();
+        if (Condition)
+          Ctx->requireWaveUniform(
+              Condition, Di,
+              "WaveNative requires scalar control flow uniform "
+              "across the target wave");
+      } else if (instructionWritesEXEC(Di, Env.Source.MC)) {
+        Requirements.ExecWrites.emplace_back(Ctx->registers().readExec(), &Di);
+      }
+    }
   }
 
   // Execution reaching the end of the extent means the code is truncated or
@@ -396,12 +643,20 @@ static Error raiseKernel(const RaiseEnvironment &Env, Module &M,
   SmallVector<AllocaInst *> Allocas;
   Ctx->registers().collectAllocas(Allocas);
   PromoteMemToReg(Allocas, DT, &AC);
+  if (UseWaveNative) {
+    if (Error Err =
+            Ctx->validateWaveNativeRequirements(TM, Requirements.InitialExec))
+      return Err;
+    if (Error Err = Requirements.validate(*F, Env.Source.MC))
+      return Err;
+  }
   return Ctx->validateRequiredBits();
 }
 
 Expected<RaiseResult> raiseToIR(const TextSection &Text, StringRef SourceIsa,
                                 StringRef TargetIsa,
-                                ArrayRef<KernelRequest> Kernels) {
+                                ArrayRef<KernelRequest> Kernels,
+                                ArrayRef<KernelSymbolExtent> FunctionExtents) {
   Expected<RaiseEnvironment> Env =
       RaiseEnvironment::create(SourceIsa, TargetIsa);
   if (!Env)
@@ -432,7 +687,7 @@ Expected<RaiseResult> raiseToIR(const TextSection &Text, StringRef SourceIsa,
   // point that knows which kernel of the batch is being raised, so the name and
   // the ISA pair are attached here.
   for (const KernelRequest &Kernel : Kernels)
-    if (Error Err = raiseKernel(*Env, M, Text, Kernel))
+    if (Error Err = raiseKernel(*Env, M, Text, Kernel, FunctionExtents, *TM))
       return RaiseFailure::withOrigin(std::move(Err), Kernel.Name,
                                       Env->Source.Cpu, Env->Target.Cpu);
 

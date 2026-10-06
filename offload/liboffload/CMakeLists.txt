@@ -19,6 +19,7 @@ foreach(plugin IN LISTS LIBOMPTARGET_PLUGINS_TO_BUILD)
     target_link_libraries(LLVMOffloadObjects PRIVATE omptarget.rtl.${plugin})
 endforeach()
 
+
 target_include_directories(LLVMOffloadObjects PUBLIC
                             ${CMAKE_CURRENT_BINARY_DIR}/API
                             ${CMAKE_CURRENT_BINARY_DIR}/../include
@@ -47,24 +48,16 @@ target_include_directories(LLVMOffload PUBLIC
                             ${CMAKE_CURRENT_SOURCE_DIR}/../include
                             )
 
-if(LIBOMP_HAVE_VERSION_SCRIPT_FLAG)
+if(LLVM_HAVE_LINK_VERSION_SCRIPT)
   target_link_libraries(LLVMOffload PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports")
 endif()
 
 target_link_options(LLVMOffload PRIVATE ${offload_link_flags})
 
-# Don't override an externally defined RPATH
-if(NOT DEFINED CMAKE_INSTALL_RPATH)
-  set_target_properties(LLVMOffload PROPERTIES
-                        POSITION_INDEPENDENT_CODE ON
-                        INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib:$ORIGIN/../../lib"
-                        BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
-else()
 set_target_properties(LLVMOffload PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       INSTALL_RPATH "${OFFLOAD_INSTALL_RPATH}"
                       BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
-endif()
 if(UNIX AND NOT APPLE)
   set_target_properties(LLVMOffload PROPERTIES
                         SOVERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}${LLVM_VERSION_SUFFIX}"

@@ -156,6 +156,13 @@ page](https://llvm.org/releases/).
   warning instead of an error. `-Wno-module-file-mismatch` can be used to
   silence even that warning.
 
+- Added `-finit-local=<val>` to initialize automatic local
+  variables that have no explicit or default initialization. Accepted values
+  are `zero` and `0x<hex-byte>` (e.g. `0xAA`). The gfortran
+  compatibility alias `-finit-local-zero` is equivalent to `-finit-local=zero`.
+  Both modes fill every storage byte including struct padding.
+  PowerPC vector locals (`vector(real(4))` etc.) are not initialized.
+
 ## Windows Support
 
 ## Fortran Language Changes in Flang

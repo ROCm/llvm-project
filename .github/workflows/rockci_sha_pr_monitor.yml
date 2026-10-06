@@ -30,8 +30,12 @@ permissions:
   checks: read
   pull-requests: read
 
+# Trigger is Multi-Arch CI completed. Jenkins gfx90a Test is still included
+# in PR Status; it is often already finished by then.
+
 env:
   JSON_PATH: .github/rockci-sha/therock-ci-main-ref.json
+  # Legacy commit status from rock-artifacts-tester (same name as the ruleset).
   JENKINS_CONTEXT_REGEX: "^gfx90a Test$"
 
 jobs:
@@ -89,26 +93,38 @@ jobs:
             exit 0
           fi
 
-          # Multi-Arch CI is done, but lint/format style checks may still run.
+          # In-flight only. EXPECTED = required check that never started
+          # (common after compiler-runtime fails); do not wait on it.
+          # Jenkins gfx90a Test is required only when GitHub did not already fail.
           for attempt in $(seq 1 60); do
             ROLLUP="$(gh pr view "$PR_URL" --repo "$GITHUB_REPOSITORY" \
               --json statusCheckRollup)"
             COMBINED="$(gh api \
               "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/status")"
 
-            GHA_PENDING="$(echo "$ROLLUP" | jq -r '            
-              [
-                .statusCheckRollup // []
-                | .[]
-                | select(.name != "RockCI SHA PR monitor"
-                         and .name != "Notify overall PR check status")
-                | select(
-                    ((.status // "") != "" and (.status // "") != "COMPLETED")
-                    or ((.state // "") == "PENDING")
-                    or ((.state // "") == "EXPECTED")
-                  )                         
-              ] | length
+            INFO="$(echo "$ROLLUP" | jq -c '
+              def ours:
+                (.name // "")
+                | test("RockCI SHA PR monitor|Notify overall PR check status");
+              def in_flight:
+                ((.status // "") | ascii_upcase) as $st
+                | ((.state // "") | ascii_upcase) as $sv
+                | ($st == "IN_PROGRESS" or $st == "QUEUED" or $st == "WAITING"
+                   or $st == "PENDING" or $st == "REQUESTED" or $sv == "PENDING");
+              def failed:
+                ((.conclusion // "") + " " + (.state // ""))
+                | test("FAILURE|TIMED_OUT|STARTUP_FAILURE|ACTION_REQUIRED|ERROR|CANCELLED");
+              (.statusCheckRollup // []) as $all
+              | ($all | map(select(ours | not) | select(in_flight))) as $p
+              | {
+                  pending: ($p | length),
+                  failed: any($all[]; (ours | not) and failed),
+                  names: ($p | map(.name // .context // "check") | join(","))
+                }
             ')"
+            GHA_PENDING="$(jq -r '.pending' <<<"$INFO")"
+            GHA_FAILED="$(jq -r '.failed' <<<"$INFO")"
+            PENDING_NAMES="$(jq -r '.names' <<<"$INFO")"
             JENKINS_COUNT="$(echo "$COMBINED" | jq -r --arg re "$JENKINS_CONTEXT_REGEX" '
               [.statuses[]? | select(.context | test($re; "i"))] | length
             ')"
@@ -120,28 +136,36 @@ jobs:
               ] | length
             ')"
 
-            if [[ "$GHA_PENDING" == "0" && "$JENKINS_COUNT" != "0" && "$JENKINS_PENDING" == "0" ]]; then
-              break
+            if [[ "$GHA_PENDING" == "0" ]]; then
+              if [[ "$GHA_FAILED" == "true" || ( "$JENKINS_COUNT" != "0" && "$JENKINS_PENDING" == "0" ) ]]; then
+                break
+              fi
             fi
-            echo "Attempt ${attempt}: gha_pending=${GHA_PENDING} jenkins_contexts=${JENKINS_COUNT} jenkins_pending=${JENKINS_PENDING}"
+            echo "Attempt ${attempt}: gha_pending=${GHA_PENDING} gha_failed=${GHA_FAILED} jenkins_contexts=${JENKINS_COUNT} jenkins_pending=${JENKINS_PENDING} pending=${PENDING_NAMES}"
             sleep 30
-          done            
+          done
 
           echo "$ROLLUP" | jq -r '
             .statusCheckRollup // []
-            | map(select(.name != "RockCI SHA PR monitor"
-                         and .name != "Notify overall PR check status"))
             | .[]
+            | select((.name // "")
+                | test("RockCI SHA PR monitor|Notify overall PR check status")
+                | not)
             | "\(.name) status=\(.status // "") conclusion=\(.conclusion // "") state=\(.state // "")"
           '
           echo "$COMBINED" | jq -r --arg re "$JENKINS_CONTEXT_REGEX" '
             .statuses[]?
             | select(.context | test($re; "i"))
-            | "jenkins \(.context) state=\(.state)"            
+            | "jenkins \(.context) state=\(.state)"
           '
-          if [[ "$GHA_PENDING" != "0" || "$JENKINS_COUNT" == "0" || "$JENKINS_PENDING" != "0" ]]; then
+
+          NEED_JENKINS=1
+          if [[ "${GHA_FAILED:-false}" == "true" ]]; then
+            NEED_JENKINS=0
+          fi
+          if [[ "$GHA_PENDING" != "0" || ( "$NEED_JENKINS" == "1" && ( "$JENKINS_COUNT" == "0" || "$JENKINS_PENDING" != "0" ) ) ]]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::GitHub or Jenkins checks still running/missing after 30 minutes; no card sent. gha_pending=${GHA_PENDING} jenkins_contexts=${JENKINS_COUNT} jenkins_pending=${JENKINS_PENDING}"
+            echo "::warning::GitHub or Jenkins checks still running/missing after 30 minutes; no card sent. gha_pending=${GHA_PENDING} gha_failed=${GHA_FAILED:-} jenkins_contexts=${JENKINS_COUNT} jenkins_pending=${JENKINS_PENDING} pending=${PENDING_NAMES:-}"
             exit 0
           fi
 

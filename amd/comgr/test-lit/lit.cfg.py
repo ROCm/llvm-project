@@ -26,6 +26,13 @@ if config.comgr_amdgpu_target_available:
     config.available_features.add("comgr-has-amdgpu-target")
 if config.comgr_transpiler_available:
     config.available_features.add("comgr-has-transpiler")
+if os.path.exists(
+    os.path.join(
+        config.llvm_tools_dir,
+        "llc.exe" if platform.system() == "Windows" else "llc",
+    )
+):
+    config.available_features.add("comgr-has-llc")
 
 # The AMDGPU device AddressSanitizer runtime (libclang_rt.asan.a for
 # amdgcn-amd-amdhsa) is a separately built artifact. The asan tests link it,
@@ -44,6 +51,21 @@ if glob.glob(
     )
 ):
     config.available_features.add("comgr-has-amdgpu-asan-runtime")
+
+try:
+    with open(config.comgr_resource_dir_file, encoding="utf-8") as source:
+        embedded_resources = source.read()
+except OSError:
+    embedded_resources = ""
+
+if '"lib/amdgcn-amd-amdhsa/libclang_rt.profile.a"' in embedded_resources:
+    config.available_features.add("comgr-has-amdgpu-profile-runtime")
+
+if (
+    '"lib/amdgcn-amd-amdhsa/libclang_rt.asan.a"' in embedded_resources
+    and '"lib/amdgcn-amd-amdhsa/libclang_rt.asan_static.a"' in embedded_resources
+):
+    config.available_features.add("comgr-has-embedded-amdgpu-asan-runtime")
 
 
 # spirv-to-reloc-debuginfo checks that comgr forwards

@@ -9,6 +9,7 @@
 #include "transpiler/raiser/handlers.h"
 
 #include "transpiler/decoder/amdgpu-formats.h"
+#include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/mc-state.h"
 #include "transpiler/raiser/raise_failure.h"
 
@@ -20,6 +21,7 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/MathExtras.h"
 
+#include <climits>
 #include <cstdint>
 #include <limits>
 
@@ -27,6 +29,119 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 namespace {
+
+// Signed SOPK operations sign extend simm16; unsigned compares zero extend it.
+Expected<Value *> readSopkImmediate(RaiseContext &Ctx, const DecodedInst &Di,
+                                    bool IsSigned) {
+  int Index = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                    AMDGPU::OpName::simm16);
+  if (Index < 0 || static_cast<unsigned>(Index) >= Di.numOperands() ||
+      !Di.isImm(Index))
+    return unsupportedInstruction(Ctx, Di, "missing SOPK immediate operand");
+  int64_t Raw = Di.getImm(Index);
+  if (Raw < INT16_MIN || Raw > UINT16_MAX)
+    return unsupportedInstruction(Ctx, Di,
+                                  "SOPK immediate exceeds its 16-bit field");
+  uint16_t Bits = static_cast<uint16_t>(Raw);
+  int32_t Immediate = IsSigned ? SignExtend32<16>(Bits) : Bits;
+  return Ctx.B.getInt32(Immediate);
+}
+
+bool isUnsignedSopkCompare(CanonicalOp Kind) {
+  switch (Kind) {
+  case CanonicalOp::S_CMPK_EQ_U32:
+  case CanonicalOp::S_CMPK_LG_U32:
+  case CanonicalOp::S_CMPK_GT_U32:
+  case CanonicalOp::S_CMPK_GE_U32:
+  case CanonicalOp::S_CMPK_LT_U32:
+  case CanonicalOp::S_CMPK_LE_U32:
+    return true;
+  default:
+    return false;
+  }
+}
+
+Error handleImmediateSopk(RaiseContext &Ctx, const DecodedInst &Di,
+                          OperandResolver &Op) {
+  CanonicalOp Kind = Di.CanonOp;
+  bool IsUnsignedCompare = isUnsignedSopkCompare(Kind);
+  Expected<Value *> Imm = readSopkImmediate(Ctx, Di, !IsUnsignedCompare);
+  if (!Imm)
+    return Imm.takeError();
+
+  if (Kind == CanonicalOp::S_MOVK_I32) {
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Ctx.registers().writeReg32(*Dst, *Imm);
+    return Error::success();
+  }
+
+  if (Op.nSrcs() == 0)
+    return unsupportedInstruction(Ctx, Di, "missing SOPK register source");
+  Expected<Value *> Source = Op.src(0);
+  if (!Source)
+    return Source.takeError();
+
+  if (Kind == CanonicalOp::S_ADDK_I32 || Kind == CanonicalOp::S_MULK_I32) {
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    Value *Result;
+    if (Kind == CanonicalOp::S_ADDK_I32) {
+      Value *Pair = Ctx.B.CreateIntrinsic(
+          Intrinsic::sadd_with_overflow, {Ctx.B.getInt32Ty()}, {*Source, *Imm});
+      Result = Ctx.B.CreateExtractValue(Pair, 0, "addk");
+      Value *Overflow = Ctx.B.CreateExtractValue(Pair, 1, "addk_scc");
+      Ctx.registers().regFile().storeSCC(Ctx.B, Overflow);
+    } else {
+      Result = Ctx.B.CreateMul(*Source, *Imm, "mulk");
+    }
+    Ctx.registers().writeReg32(*Dst, Result);
+    return Error::success();
+  }
+
+  CmpInst::Predicate Predicate;
+  switch (Kind) {
+  case CanonicalOp::S_CMPK_EQ_I32:
+  case CanonicalOp::S_CMPK_EQ_U32:
+    Predicate = CmpInst::ICMP_EQ;
+    break;
+  case CanonicalOp::S_CMPK_LG_I32:
+  case CanonicalOp::S_CMPK_LG_U32:
+    Predicate = CmpInst::ICMP_NE;
+    break;
+  case CanonicalOp::S_CMPK_GT_I32:
+    Predicate = CmpInst::ICMP_SGT;
+    break;
+  case CanonicalOp::S_CMPK_GE_I32:
+    Predicate = CmpInst::ICMP_SGE;
+    break;
+  case CanonicalOp::S_CMPK_LT_I32:
+    Predicate = CmpInst::ICMP_SLT;
+    break;
+  case CanonicalOp::S_CMPK_LE_I32:
+    Predicate = CmpInst::ICMP_SLE;
+    break;
+  case CanonicalOp::S_CMPK_GT_U32:
+    Predicate = CmpInst::ICMP_UGT;
+    break;
+  case CanonicalOp::S_CMPK_GE_U32:
+    Predicate = CmpInst::ICMP_UGE;
+    break;
+  case CanonicalOp::S_CMPK_LT_U32:
+    Predicate = CmpInst::ICMP_ULT;
+    break;
+  case CanonicalOp::S_CMPK_LE_U32:
+    Predicate = CmpInst::ICMP_ULE;
+    break;
+  default:
+    return unsupportedInstruction(Ctx, Di);
+  }
+  Value *Condition = Ctx.B.CreateICmp(Predicate, *Source, *Imm, "cmpk");
+  Ctx.registers().regFile().storeSCC(Ctx.B, Condition);
+  return Error::success();
+}
 
 enum class HardwareRegisterReadAction {
   ReturnZero, // Replace the read with zero.
@@ -196,16 +311,34 @@ Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di,
   Module *M = Ctx.B.GetInsertBlock()->getModule();
   Function *Setreg =
       Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_s_setreg);
+  Ctx.requireWaveUniform(
+      ValueArg, Di, "WaveNative requires uniform hardware register writes");
   Ctx.B.CreateCall(Setreg, {Ctx.B.getInt32(Selector), ValueArg});
   return Error::success();
 }
 
 } // namespace
 
-// Raise a hardware-register SOPK instruction.
+// Raise a supported SOPK instruction.
 Error handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
   switch (Di.CanonOp) {
+  case CanonicalOp::S_MOVK_I32:
+  case CanonicalOp::S_ADDK_I32:
+  case CanonicalOp::S_MULK_I32:
+  case CanonicalOp::S_CMPK_EQ_I32:
+  case CanonicalOp::S_CMPK_LG_I32:
+  case CanonicalOp::S_CMPK_GT_I32:
+  case CanonicalOp::S_CMPK_GE_I32:
+  case CanonicalOp::S_CMPK_LT_I32:
+  case CanonicalOp::S_CMPK_LE_I32:
+  case CanonicalOp::S_CMPK_EQ_U32:
+  case CanonicalOp::S_CMPK_LG_U32:
+  case CanonicalOp::S_CMPK_GT_U32:
+  case CanonicalOp::S_CMPK_GE_U32:
+  case CanonicalOp::S_CMPK_LT_U32:
+  case CanonicalOp::S_CMPK_LE_U32:
+    return handleImmediateSopk(Ctx, Di, Op);
   case CanonicalOp::S_GETREG_B32:
   case CanonicalOp::S_SETREG_B32:
   case CanonicalOp::S_SETREG_IMM32_B32:

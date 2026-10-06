@@ -2,6 +2,8 @@ name: LLVM submodule & PR-parameter setup
 description: >
   On pull_request updates amd-llvm submodule pointer to PR head and aligns
   spirv-llvm-translator and hipify with amd-staging tip.
+  On nightly schedule (and nightly workflow_dispatch without PR params) points
+  compiler/amd-llvm, spirv-llvm-translator, and hipify at their amd-staging tips.  
   On workflow_dispatch downloads PR params artifact, sources env, merges upstream PRs, updates submodule pointers.
 
 inputs:
@@ -231,6 +233,39 @@ runs:
           compiler/hipify
         git submodule status
         git submodule
+
+    - name: Point compiler submodules at amd-staging tip for nightly
+      if: contains(github.workflow, 'Nightly') && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger != 'true'))
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$PWD"
+        git config --global user.email "z1-cciauto@amd.com"
+        git config --global user.name "Z1 cciauto"
+        read_amd_staging_tip() {
+          git ls-remote "$1" refs/heads/amd-staging | awk '{print $1}' | tr -d '[:space:]'
+        }
+        LLVM_SHA="$(read_amd_staging_tip https://github.com/ROCm/llvm-project.git)"
+        SPIRV_SHA="$(read_amd_staging_tip https://github.com/ROCm/SPIRV-LLVM-Translator.git)"
+        HIPIFY_SHA="$(read_amd_staging_tip https://github.com/ROCm/HIPIFY.git)"
+        echo "Nightly llvm-project amd-staging tip: $LLVM_SHA"
+        echo "Nightly SPIRV amd-staging tip: $SPIRV_SHA"
+        echo "Nightly HIPIFY amd-staging tip: $HIPIFY_SHA"
+        if [[ -z "$LLVM_SHA" || ${#LLVM_SHA} -ne 40 || -z "$SPIRV_SHA" || ${#SPIRV_SHA} -ne 40 || -z "$HIPIFY_SHA" || ${#HIPIFY_SHA} -ne 40 ]]; then
+          echo "::error::Failed to resolve amd-staging tips for llvm-project, SPIRV, or HIPIFY." >&2
+          exit 1
+        fi
+        git update-index --cacheinfo 160000,"$LLVM_SHA",compiler/amd-llvm
+        git update-index --cacheinfo 160000,"$SPIRV_SHA",compiler/spirv-llvm-translator
+        git update-index --cacheinfo 160000,"$HIPIFY_SHA",compiler/hipify
+        git commit -m "Point compiler submodules at amd-staging tip for nightly"
+        git submodule update --init --depth 1 --jobs 4 \
+          compiler/amd-llvm \
+          compiler/spirv-llvm-translator \
+          compiler/hipify
+        git submodule status \
+          compiler/amd-llvm \
+          compiler/spirv-llvm-translator \
+          compiler/hipify
 
     - name: Enable LLVM assertions for Wavetransform
       if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'

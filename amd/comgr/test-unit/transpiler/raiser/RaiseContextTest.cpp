@@ -11,6 +11,7 @@
 #include "transpiler/common/kernel-meta.h"
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/mc-state.h"
+#include "transpiler/decoder/setpc-analysis.h"
 #include "transpiler/raiser/handlers.h"
 #include "transpiler/raiser/raise_failure.h"
 #include "transpiler/raiser/wave-projection.h"
@@ -59,6 +60,7 @@ protected:
     ReplicationProjection Projection;
     Function *Kernel;
     BasicBlock *Entry;
+    SetPcAnalysis SetPc;
     std::optional<RaiseContext> Ctx;
 
     explicit ContextEnvironment(const MCState &Mc)
@@ -72,7 +74,7 @@ protected:
           Entry(BasicBlock::Create(LLVMCtx, "entry", Kernel)) {
       B.SetInsertPoint(Entry);
       Ctx.emplace(cantFail(RaiseContext::create(
-          B, Projection, Mc, KernelMeta(), ArrayRef<uint8_t>(), 0,
+          B, Projection, Mc, SetPc, KernelMeta(), ArrayRef<uint8_t>(), 0,
           ArrayRef<TextSection::ImageSection>(), KKernelStartOffset, 0)));
     }
   };
@@ -157,12 +159,15 @@ TEST_F(RaiseContextTest, BufferRejectsMalformedOperands) {
 
 TEST_F(RaiseContextTest, RequiredBitsRejectUnknownAndNonzeroValues) {
   DecodedInst Instruction;
+  unsigned Opcode = Mc.InstrInfo->getNumOpcodes();
   for (unsigned I = 0; I != Mc.InstrInfo->getNumOpcodes(); ++I) {
-    if (Mc.InstrInfo->getName(I) == "S_ENDPGM") {
-      Instruction.Inst.setOpcode(I);
+    if (Mc.InstrInfo->getName(I) == "S_ENDPGM_vi") {
+      Opcode = I;
       break;
     }
   }
+  ASSERT_NE(Opcode, Mc.InstrInfo->getNumOpcodes());
+  Instruction.Inst.setOpcode(Opcode);
   Instruction.Inst.addOperand(MCOperand::createImm(0));
   for (bool Unknown : {false, true}) {
     ContextEnvironment Context(Mc);

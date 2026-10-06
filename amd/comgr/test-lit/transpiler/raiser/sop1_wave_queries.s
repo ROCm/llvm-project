@@ -62,8 +62,8 @@ sleep_var_kernel:
 ; A variable sleep spends issue slots and leaves nothing behind to read, in
 ; either operand form, so the body is the terminator.
 ; SLEEP-LABEL: define amdgpu_kernel void @sleep_var_kernel(
-; SLEEP-NOT: call
-; SLEEP: ret void
+; SLEEP: bb_0x{{.+}}:
+; SLEEP-NEXT: ret void
 ; SLEEP-NEXT: }
 	s_sleep_var 5
 	s_sleep_var s0

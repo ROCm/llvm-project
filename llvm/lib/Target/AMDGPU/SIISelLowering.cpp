@@ -2456,7 +2456,7 @@ bool SITargetLowering::isNonGlobalAddrSpace(unsigned AS) {
          AS == AMDGPUAS::PRIVATE_ADDRESS;
 }
 
-bool SITargetLowering::isFreeAddrSpaceCast(unsigned SrcAS,
+bool SITargetLowering::isFreeAddrSpaceCast(const DataLayout &DL, unsigned SrcAS,
                                            unsigned DestAS) const {
   if (SrcAS == AMDGPUAS::FLAT_ADDRESS) {
     if (DestAS == AMDGPUAS::PRIVATE_ADDRESS &&
@@ -2472,7 +2472,7 @@ bool SITargetLowering::isFreeAddrSpaceCast(unsigned SrcAS,
 
   const GCNTargetMachine &TM =
       static_cast<const GCNTargetMachine &>(getTargetMachine());
-  return TM.isNoopAddrSpaceCast(SrcAS, DestAS);
+  return TM.isNoopAddrSpaceCast(DL, SrcAS, DestAS);
 }
 
 TargetLoweringBase::LegalizeTypeAction
@@ -3688,7 +3688,8 @@ SDValue SITargetLowering::LowerFormalArguments(
 
         const GCNTargetMachine &TM =
             static_cast<const GCNTargetMachine &>(getTargetMachine());
-        if (!TM.isNoopAddrSpaceCast(AMDGPUAS::CONSTANT_ADDRESS,
+        if (!TM.isNoopAddrSpaceCast(DAG.getDataLayout(),
+                                    AMDGPUAS::CONSTANT_ADDRESS,
                                     Arg.Flags.getPointerAddrSpace())) {
           Ptr = DAG.getAddrSpaceCast(DL, VT, Ptr, AMDGPUAS::CONSTANT_ADDRESS,
                                      Arg.Flags.getPointerAddrSpace());
@@ -5373,7 +5374,8 @@ emitLoadM0FromVGPRLoop(const SIInstrInfo *TII, MachineRegisterInfo &MRI,
 
   // Update EXEC, save the original EXEC value to VCC.
   BuildMI(LoopBB, I, DL, TII->get(LMC.AndSaveExecOpc), NewExec)
-      .addReg(CondReg, RegState::Kill);
+      .addReg(CondReg, RegState::Kill)
+      .setOperandDead(3); // Dead scc
 
   MRI.setSimpleHint(NewExec, CondReg);
 
@@ -5384,7 +5386,8 @@ emitLoadM0FromVGPRLoop(const SIInstrInfo *TII, MachineRegisterInfo &MRI,
       SGPRIdxReg = MRI.createVirtualRegister(&AMDGPU::SGPR_32RegClass);
       BuildMI(LoopBB, I, DL, TII->get(AMDGPU::S_ADD_I32), SGPRIdxReg)
           .addReg(CurrentIdxReg, RegState::Kill)
-          .addImm(Offset);
+          .addImm(Offset)
+          .setOperandDead(3); // Dead scc
     }
   } else {
     // Move index from VCC into M0
@@ -5394,7 +5397,8 @@ emitLoadM0FromVGPRLoop(const SIInstrInfo *TII, MachineRegisterInfo &MRI,
     } else {
       BuildMI(LoopBB, I, DL, TII->get(AMDGPU::S_ADD_I32), AMDGPU::M0)
           .addReg(CurrentIdxReg, RegState::Kill)
-          .addImm(Offset);
+          .addImm(Offset)
+          .setOperandDead(3); // Dead scc
     }
   }
 
@@ -5402,7 +5406,8 @@ emitLoadM0FromVGPRLoop(const SIInstrInfo *TII, MachineRegisterInfo &MRI,
   MachineInstr *InsertPt =
       BuildMI(LoopBB, I, DL, TII->get(LMC.XorTermOpc), LMC.ExecReg)
           .addReg(LMC.ExecReg)
-          .addReg(NewExec);
+          .addReg(NewExec)
+          .setOperandDead(3); // Dead scc
 
   // XXX - s_xor_b64 sets scc to 1 if the result is nonzero, so can we use
   // s_cbranch_scc0?
@@ -5504,7 +5509,8 @@ static void setM0ToIndexFromSGPR(const SIInstrInfo *TII,
   } else {
     BuildMI(*MBB, I, DL, TII->get(AMDGPU::S_ADD_I32), AMDGPU::M0)
         .add(*Idx)
-        .addImm(Offset);
+        .addImm(Offset)
+        .setOperandDead(3); // Dead scc
   }
 }
 
@@ -5523,7 +5529,8 @@ static Register getIndirectSGPRIdx(const SIInstrInfo *TII,
   Register Tmp = MRI.createVirtualRegister(&AMDGPU::SReg_32_XM0RegClass);
   BuildMI(*MBB, I, DL, TII->get(AMDGPU::S_ADD_I32), Tmp)
       .add(*Idx)
-      .addImm(Offset);
+      .addImm(Offset)
+      .setOperandDead(3); // Dead scc
   return Tmp;
 }
 
@@ -5730,6 +5737,7 @@ static MachineBasicBlock *expand64BitScalarArithmetic(MachineInstr &MI,
   MachineOperand &Src1 = MI.getOperand(2);
   bool IsAdd = (MI.getOpcode() == AMDGPU::S_ADD_U64_PSEUDO);
   if (ST.hasScalarAddSub64()) {
+    // FIXME: If scc is used, this deletes the def
     unsigned Opc = IsAdd ? AMDGPU::S_ADD_U64 : AMDGPU::S_SUB_U64;
     // clang-format off
     BuildMI(*BB, MI, DL, TII->get(Opc), Dest.getReg())
@@ -5753,10 +5761,17 @@ static MachineBasicBlock *expand64BitScalarArithmetic(MachineInstr &MI,
     MachineOperand Src1Sub1 = TII->buildExtractSubRegOrImm(
         MI, MRI, Src1, BoolRC, AMDGPU::sub1, &AMDGPU::SReg_32RegClass);
 
+    const MachineOperand &ImpDefSCC = MI.getOperand(3);
+    assert(ImpDefSCC.getReg() == AMDGPU::SCC && ImpDefSCC.isDef());
+
     unsigned LoOpc = IsAdd ? AMDGPU::S_ADD_U32 : AMDGPU::S_SUB_U32;
     unsigned HiOpc = IsAdd ? AMDGPU::S_ADDC_U32 : AMDGPU::S_SUBB_U32;
     BuildMI(*BB, MI, DL, TII->get(LoOpc), DestSub0).add(Src0Sub0).add(Src1Sub0);
-    BuildMI(*BB, MI, DL, TII->get(HiOpc), DestSub1).add(Src0Sub1).add(Src1Sub1);
+    auto Hi = BuildMI(*BB, MI, DL, TII->get(HiOpc), DestSub1)
+                  .add(Src0Sub1)
+                  .add(Src1Sub1);
+    if (ImpDefSCC.isDead())
+      Hi.setOperandDead(3);
     BuildMI(*BB, MI, DL, TII->get(TargetOpcode::REG_SEQUENCE), Dest.getReg())
         .addReg(DestSub0)
         .addImm(AMDGPU::sub0)
@@ -6078,7 +6093,8 @@ static MachineBasicBlock *lowerWaveReduce(MachineInstr &MI,
 
       auto NewAccumulator =
           BuildMI(BB, MI, DL, TII->get(BitCountOpc), NumActiveLanes)
-              .addReg(ExecMask);
+              .addReg(ExecMask)
+              .setOperandDead(2); // Dead scc
 
       switch (Opc) {
       case AMDGPU::S_XOR_B32:
@@ -6136,7 +6152,8 @@ static MachineBasicBlock *lowerWaveReduce(MachineInstr &MI,
         // Take the negation of the source operand.
         BuildMI(BB, MI, DL, TII->get(AMDGPU::S_SUB_I32), NegatedVal)
             .addImm(0)
-            .addReg(SrcReg);
+            .addReg(SrcReg)
+            .setOperandDead(3); // Dead scc
         BuildMI(BB, MI, DL, TII->get(AMDGPU::S_MUL_I32), DstReg)
             .addReg(NegatedVal)
             .addReg(NewAccumulator->getOperand(0).getReg());
@@ -6411,6 +6428,8 @@ static MachineBasicBlock *lowerWaveReduce(MachineInstr &MI,
           OpInstr.addImm(0); // opsel
         if (hasOMod)
           OpInstr.addImm(0); // omod
+        if (TII->isSALU(Opc))
+          OpInstr.setOperandDead(3); // Dead scc
         if (ST.getInstrInfo()->isVALU(Opc, /*AllowLDSDMA=*/true)) {
           BuildMI(*ComputeLoop, I, DL, TII->get(AMDGPU::V_READFIRSTLANE_B32),
                   DstReg)
@@ -6526,7 +6545,8 @@ static MachineBasicBlock *lowerWaveReduce(MachineInstr &MI,
         case AMDGPU::S_SUB_U64_PSEUDO: {
           NewAccumulator = BuildMI(*ComputeLoop, I, DL, TII->get(Opc), DstReg)
                                .addReg(Accumulator->getOperand(0).getReg())
-                               .addReg(LaneValue->getOperand(0).getReg());
+                               .addReg(LaneValue->getOperand(0).getReg())
+                               .setOperandDead(3); // Dead scc
           ComputeLoop =
               expand64BitScalarArithmetic(*NewAccumulator, ComputeLoop);
           break;
@@ -6927,12 +6947,14 @@ static MachineBasicBlock *lowerWaveReduce(MachineInstr &MI,
       if (Opc == AMDGPU::S_SUB_I32) {
         BuildMI(*CurrBB, MI, DL, TII->get(AMDGPU::S_SUB_I32), NegatedReducedVal)
             .addImm(0)
-            .addReg(ReducedValSGPR);
+            .addReg(ReducedValSGPR)
+            .setOperandDead(3); // Dead scc
       } else if (Opc == AMDGPU::S_SUB_U64_PSEUDO) {
         auto NegatedValInstr =
             BuildMI(*CurrBB, MI, DL, TII->get(Opc), NegatedReducedVal)
                 .addImm(0)
-                .addReg(ReducedValSGPR);
+                .addReg(ReducedValSGPR)
+                .setOperandDead(3); // Dead scc
         CurrBB = expand64BitScalarArithmetic(*NegatedValInstr, CurrBB);
       }
       // Mark the final result as a whole-wave-mode calculation.
@@ -7336,37 +7358,13 @@ SITargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
     unsigned ReturnAddrReg = TII->getRegisterInfo().getReturnAddressReg(*MF);
 
     MachineInstrBuilder MIB;
-    MIB = BuildMI(*BB, MI, DL, TII->get(AMDGPU::SI_CALL), ReturnAddrReg);
+    MIB = BuildMI(*BB, MI, DL, TII->get(AMDGPU::SI_CALL))
+              .addDef(ReturnAddrReg, RegState::Dead);
 
     for (const MachineOperand &MO : MI.operands())
       MIB.add(MO);
 
     MIB.cloneMemRefs(MI);
-    MI.eraseFromParent();
-    return BB;
-  }
-  case AMDGPU::V_ADD_CO_U32_e32:
-  case AMDGPU::V_SUB_CO_U32_e32:
-  case AMDGPU::V_SUBREV_CO_U32_e32: {
-    // TODO: Define distinct V_*_I32_Pseudo instructions instead.
-    unsigned Opc = MI.getOpcode();
-
-    bool NeedClampOperand = false;
-    if (TII->pseudoToMCOpcode(Opc) == -1) {
-      Opc = AMDGPU::getVOPe64(Opc);
-      NeedClampOperand = true;
-    }
-
-    auto I = BuildMI(*BB, MI, DL, TII->get(Opc), MI.getOperand(0).getReg());
-    if (TII->isVOP3(*I)) {
-      I.addReg(TRI->getVCC(), RegState::Define);
-    }
-    I.add(MI.getOperand(1)).add(MI.getOperand(2));
-    if (NeedClampOperand)
-      I.addImm(0); // clamp bit for e64 encoding
-
-    TII->legalizeOperands(*I);
-
     MI.eraseFromParent();
     return BB;
   }
@@ -8705,7 +8703,7 @@ unsigned SITargetLowering::isCFIntrinsic(const SDNode *Intr) const {
 }
 
 bool SITargetLowering::shouldEmitFixup(const GlobalValue *GV) const {
-  const Triple &TT = getTargetMachine().getTargetTriple();
+  const Triple &TT = GV->getParent()->getTargetTriple();
   return (GV->getAddressSpace() == AMDGPUAS::CONSTANT_ADDRESS ||
           GV->getAddressSpace() == AMDGPUAS::CONSTANT_ADDRESS_32BIT) &&
          AMDGPU::shouldEmitConstantsToTextSection(TT);
@@ -11167,6 +11165,12 @@ SITargetLowering::LowerCONVERT_FROM_ARBITRARY_FP(SDValue Op,
     return SDValue();
 
   EVT DstVT = Op.getValueType();
+  // The custom action for a v2i8 source also reaches half conversions on
+  // targets which only have FP8-to-f32 instructions.
+  if (DstVT.getScalarType() == MVT::f16 &&
+      !Subtarget->hasFP8F16ConversionInsts())
+    return SDValue();
+
   if (IsE5M3) {
     if (DstVT.getScalarType() != MVT::f32)
       return SDValue();
@@ -19395,6 +19399,18 @@ SDValue SITargetLowering::PerformDAGCombine(SDNode *N,
     SelectionDAG &DAG = DCI.DAG;
     EVT VT = N->getValueType(0);
 
+    // When bf16 inline constants live in the upper half of the expanded fp32
+    // constant, only a splat is encodable as an inline constant. The high lane
+    // is dead here, so splat it.
+    if (VT == MVT::v2bf16 && Subtarget->hasBF16InlineConstFromUpperFP32()) {
+      auto *C = dyn_cast<ConstantFPSDNode>(N->getOperand(0));
+      if (C && AMDGPU::isInlinableLiteralBF16(
+                   C->getValueAPF().bitcastToAPInt().getSExtValue(),
+                   Subtarget->hasInv2PiInlineImm()))
+        return DAG.getBuildVector(VT, SDLoc(N),
+                                  {N->getOperand(0), N->getOperand(0)});
+    }
+
     // v2i16 (scalar_to_vector i16:x) -> v2i16 (bitcast (any_extend i16:x))
     if (VT == MVT::v2i16 || VT == MVT::v2f16 || VT == MVT::v2bf16) {
       SDLoc SL(N);
@@ -20524,6 +20540,13 @@ void SITargetLowering::computeKnownBitsForTargetInstr(
           llvm::countl_zero(getSubtarget()->getAddressableLocalMemorySize()));
       break;
     }
+    case Intrinsic::amdgcn_readfirstlane:
+    case Intrinsic::amdgcn_readlane: {
+      // Result is the data operand's value from some lane.
+      VT.computeKnownBitsImpl(MI->getOperand(2).getReg(), Known, DemandedElts,
+                              Depth + 1);
+      break;
+    }
     }
     break;
   }
@@ -20582,21 +20605,26 @@ Align SITargetLowering::computeKnownAlignForTargetInstr(
   return Align(1);
 }
 
-Align SITargetLowering::getPrefLoopAlignment(MachineLoop *ML) const {
+Align SITargetLowering::getPrefLoopAlignment(
+    MachineLoop *ML, const MachineBasicBlock *BlockToAlign) const {
   const Align PrefAlign = TargetLowering::getPrefLoopAlignment(ML);
   const Align CacheLineAlign = Align(64);
 
-  // GFX950: Prevent an 8-byte instruction at loop header from being split by
-  // the 32-byte instruction fetch window boundary. This avoids a significant
-  // fetch delay after backward branch. We use 32-byte alignment with max
-  // padding of 4 bytes (one s_nop), see getMaxPermittedBytesForAlignment().
+  // GFX950: Prevent an 8-byte instruction at the block being aligned from being
+  // split by the 32-byte instruction fetch window boundary. This avoids a
+  // significant fetch delay after a backward branch. We use 32-byte alignment
+  // with max padding of 4 bytes (one s_nop), see
+  // getMaxPermittedBytesForAlignment().
   if (ML && !DisableLoopAlignment &&
       getSubtarget()->hasLoopHeadInstSplitSensitivity()) {
-    const MachineBasicBlock *Header = ML->getHeader();
+    // Loop rotation can make the backedge destination a block other than the
+    // LoopInfo header, so prefer the block the caller is actually aligning.
+    if (!BlockToAlign)
+      BlockToAlign = ML->getHeader();
     // Respect user-specified or previously set alignment.
-    if (Header->getAlignment() != PrefAlign)
-      return Header->getAlignment();
-    if (needsFetchWindowAlignment(*Header))
+    if (BlockToAlign->getAlignment() != PrefAlign)
+      return BlockToAlign->getAlignment();
+    if (needsFetchWindowAlignment(*BlockToAlign))
       return Align(32);
   }
 
@@ -20818,13 +20846,7 @@ static bool atomicIgnoresDenormalModeOrFPModeIsFTZ(const AtomicRMWInst *RMW) {
 
   const fltSemantics &Flt = RMW->getType()->getScalarType()->getFltSemantics();
   auto DenormMode = RMW->getFunction()->getDenormalMode(Flt);
-  if (DenormMode == DenormalMode::getPreserveSign())
-    return true;
-
-  // TODO: Remove this.
-  return RMW->getFunction()
-      ->getFnAttribute("amdgpu-unsafe-fp-atomics")
-      .getValueAsBool();
+  return DenormMode == DenormalMode::getPreserveSign();
 }
 
 static OptimizationRemark emitAtomicRMWLegalRemark(const AtomicRMWInst *RMW) {
@@ -20875,7 +20897,7 @@ static bool isAtomicRMWLegalXChgTy(const AtomicRMWInst *RMW) {
     return true;
 
   if (PointerType *PT = dyn_cast<PointerType>(Ty)) {
-    const DataLayout &DL = RMW->getFunction()->getParent()->getDataLayout();
+    const DataLayout &DL = RMW->getFunction()->getDataLayout();
     unsigned BW = DL.getPointerSizeInBits(PT->getAddressSpace());
     return BW == 32 || BW == 64;
   }

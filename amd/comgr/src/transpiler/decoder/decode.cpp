@@ -145,13 +145,17 @@ void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
   bool IsMadmk =
       ImmIdx && Src0Idx && Src1Idx && *Src0Idx < *ImmIdx && *ImmIdx < *Src1Idx;
 
-  // v_movrel{d,sd}_b32 place $vdst at operand 0 as an input, so SrcMap[0]
-  // cannot be checked against the named src0 operand.
-  bool IsMovrel = namedOperandIdx(Opc, AMDGPU::OpName::vdst) == 0u &&
-                  Desc.getNumDefs() == 0;
-  assert((!IsMovrel ||
+  // Scalar MOVRELD and vector MOVREL forms place their destination at operand
+  // 0 as an input, so SrcMap[0] cannot be checked against named src0.
+  bool IsVectorMovrel = Desc.getNumDefs() == 0 &&
+                        namedOperandIdx(Opc, AMDGPU::OpName::vdst) == 0u;
+  assert((!IsVectorMovrel ||
           StringRef(getMnemonic(Mc, Di.Inst)).starts_with("v_movrel")) &&
          "vdst-at-0/no-defs signature matched a non-movrel opcode");
+  bool IsScalarMovreld =
+      Desc.getNumDefs() == 0 &&
+      namedOperandIdx(Opc, AMDGPU::OpName::sdst) == 0u &&
+      StringRef(getMnemonic(Mc, Di.Inst)).starts_with("s_movreld");
 
   for (unsigned K = 0; K < 3; ++K) {
     std::optional<unsigned> NamedSrc = namedOperandIdx(Opc, KSrcNames[K]);
@@ -160,7 +164,8 @@ void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
     std::optional<unsigned> OurSrc = K < Di.SrcMap.size()
                                          ? std::optional<unsigned>(Di.SrcMap[K])
                                          : std::nullopt;
-    bool SkipThis = (IsMadmk && K == 1) || (IsMovrel && K == 0);
+    bool SkipThis =
+        (IsMadmk && K == 1) || ((IsVectorMovrel || IsScalarMovreld) && K == 0);
     assert((SkipThis || OurSrc == NamedSrc) &&
            "srcMap disagrees with OpName::srcN table");
 

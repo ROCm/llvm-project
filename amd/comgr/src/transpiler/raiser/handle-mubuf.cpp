@@ -269,13 +269,15 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
 
   // The base occupies bits 56:0; NUM_RECORDS spans bits 101:57.
   Value *BaseHigh = Builder.CreateAnd(Word1, Builder.getInt32((1u << 25) - 1));
-  Value *Base = Builder.CreateOr(
-      Builder.CreateZExt(Word0, Builder.getInt64Ty()),
-      Builder.CreateShl(Builder.CreateZExt(BaseHigh, Builder.getInt64Ty()),
-                        32));
-  Value *Extent = Builder.CreateOr(
-      Builder.CreateZExt(Builder.CreateLShr(Word1, 25), Builder.getInt64Ty()),
-      Builder.CreateShl(Builder.CreateZExt(Word2, Builder.getInt64Ty()), 7));
+  Value *BaseLow = Builder.CreateZExt(Word0, Builder.getInt64Ty());
+  Value *BaseHighShifted =
+      Builder.CreateShl(Builder.CreateZExt(BaseHigh, Builder.getInt64Ty()), 32);
+  Value *Base = Builder.CreateOr(BaseLow, BaseHighShifted);
+  Value *ExtentLow =
+      Builder.CreateZExt(Builder.CreateLShr(Word1, 25), Builder.getInt64Ty());
+  Value *ExtentMiddle =
+      Builder.CreateShl(Builder.CreateZExt(Word2, Builder.getInt64Ty()), 7);
+  Value *Extent = Builder.CreateOr(ExtentLow, ExtentMiddle);
   Value *ExtentHigh = Builder.CreateAnd(Word3, Builder.getInt32(63));
   Extent = Builder.CreateOr(
       Extent, Builder.CreateShl(

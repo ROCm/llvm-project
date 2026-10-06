@@ -11,11 +11,15 @@
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
+#include "transpiler/raiser/handle-vop-shared.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
+#include "transpiler/raiser/wmma-lowering.h"
 
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
@@ -24,6 +28,7 @@
 #include "llvm/Support/Error.h"
 
 #include <cassert>
+#include <cstdint>
 #include <optional>
 
 using namespace llvm;
@@ -31,19 +36,8 @@ using namespace llvm;
 namespace COMGR::transpiler {
 namespace {
 
-/// Read the VOP3P clamp operand. An absent operand is an unclamped result.
-Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
-  int Index = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                                    AMDGPU::OpName::clamp);
-  if (Index < 0)
-    return false;
-  if (!Di.isImm(static_cast<unsigned>(Index)))
-    return unsupported(Ctx, Di, "clamp operand is not immediate");
-  int64_t Clamp = Di.getImm(static_cast<unsigned>(Index));
-  if (Clamp != 0 && Clamp != 1)
-    return unsupported(Ctx, Di, "clamp operand is not 0 or 1");
-  return Clamp != 0;
-}
+/// Bits of the shift count a 16-bit shift reads.
+constexpr uint16_t ShiftCountMask = HalfWidthInBits - 1;
 
 /// Read one two-lane packed floating-point source and apply its lane controls.
 Expected<Value *> readPackedFloatSource(RaiseContext &Ctx,
@@ -161,6 +155,279 @@ Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+/// Read one two-lane packed 16-bit integer source and apply its lane controls.
+/// The neg modifiers are defined on the floating-point interpretation only, so
+/// a source carrying one is refused.
+Expected<Value *> readPackedInt16Source(RaiseContext &Ctx,
+                                        const DecodedInst &Di,
+                                        OperandResolver &Op, unsigned Source) {
+  constexpr unsigned AllowedModifiers =
+      SISrcMods::OP_SEL_0 | SISrcMods::OP_SEL_1;
+  unsigned Modifiers = Op.srcMod(Source);
+  if (Modifiers & ~AllowedModifiers)
+    return unsupported(Ctx, Di, "unsupported packed integer source modifier");
+
+  Expected<Value *> Bits = Op.src(Source);
+  if (!Bits)
+    return Bits.takeError();
+
+  IntegerType *ElementType = Ctx.B.getInt16Ty();
+  Value *Low = Ctx.B.CreateTrunc(*Bits, ElementType, "pk.lo");
+  Value *High = Ctx.B.CreateTrunc(
+      Ctx.B.CreateLShr(*Bits, HalfWidthInBits, "pk.hi.shifted"), ElementType,
+      "pk.hi");
+
+  Value *Result = PoisonValue::get(FixedVectorType::get(ElementType, 2));
+  Result = Ctx.B.CreateInsertElement(
+      Result, Modifiers & SISrcMods::OP_SEL_0 ? High : Low, uint64_t{0},
+      "pk.insert.lo");
+  return Ctx.B.CreateInsertElement(
+      Result, Modifiers & SISrcMods::OP_SEL_1 ? High : Low, 1, "pk.insert.hi");
+}
+
+/// Splat `Value` across both lanes of a packed 16-bit vector.
+Constant *packedInt16Splat(IRBuilder<> &B, uint16_t Value) {
+  return ConstantVector::getSplat(ElementCount::getFixed(2), B.getInt16(Value));
+}
+
+/// Raise the packed 16-bit integer operations, which apply the same operation
+/// to both halves of each source register.
+Error raisePackedInt16(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op) {
+  bool IsTernary = Di.CanonOp == CanonicalOp::V_PK_MAD_U16 ||
+                   Di.CanonOp == CanonicalOp::V_PK_MAD_I16 ||
+                   Di.CanonOp == CanonicalOp::V_PK_MIN3_I16 ||
+                   Di.CanonOp == CanonicalOp::V_PK_MAX3_I16 ||
+                   Di.CanonOp == CanonicalOp::V_PK_MIN3_U16 ||
+                   Di.CanonOp == CanonicalOp::V_PK_MAX3_U16;
+  unsigned NumSources = IsTernary ? 3 : 2;
+  assert(Op.nSrcs() >= NumSources && "packed operation is missing a source");
+
+  Expected<bool> Clamp = readClamp(Ctx, Di);
+  if (!Clamp)
+    return Clamp.takeError();
+
+  Expected<ParsedReg> Destination = Op.dst();
+  if (!Destination)
+    return Destination.takeError();
+
+  SmallVector<Value *, 3> Sources;
+  for (unsigned I = 0; I != NumSources; ++I) {
+    Expected<Value *> Source = readPackedInt16Source(Ctx, Di, Op, I);
+    if (!Source)
+      return Source.takeError();
+    Sources.push_back(*Source);
+  }
+
+  // The shift opcodes take the count in src0 and the value in src1, and read
+  // only the four count bits the hardware honours.
+  auto RaiseShift = [&](Instruction::BinaryOps Opcode) {
+    Value *Amount = Ctx.B.CreateAnd(
+        Sources[0], packedInt16Splat(Ctx.B, ShiftCountMask), "pk.shift.amt");
+    return Ctx.B.CreateBinOp(Opcode, Sources[1], Amount, "pk.shift");
+  };
+  auto RaiseTernaryMinMax = [&](Intrinsic::ID ID) {
+    Value *First = Ctx.B.CreateBinaryIntrinsic(ID, Sources[0], Sources[1], {},
+                                               "pk.minmax3");
+    return Ctx.B.CreateBinaryIntrinsic(ID, First, Sources[2], {}, "pk.minmax3");
+  };
+  auto RaiseAddSub = [&](bool IsSub, bool IsSigned) -> Value * {
+    if (*Clamp) {
+      Intrinsic::ID ID =
+          IsSub ? (IsSigned ? Intrinsic::ssub_sat : Intrinsic::usub_sat)
+                : (IsSigned ? Intrinsic::sadd_sat : Intrinsic::uadd_sat);
+      return Ctx.B.CreateBinaryIntrinsic(ID, Sources[0], Sources[1], {},
+                                         "pk.addsub");
+    }
+    return IsSub ? Ctx.B.CreateSub(Sources[0], Sources[1], "pk.sub")
+                 : Ctx.B.CreateAdd(Sources[0], Sources[1], "pk.add");
+  };
+  // The product and sum are formed at 32 bits per lane so that a set clamp bit
+  // saturates the value the hardware computes rather than a wrapped one.
+  auto RaiseMad = [&](bool IsSigned) {
+    FixedVectorType *WideType = FixedVectorType::get(Ctx.B.getInt32Ty(), 2);
+    auto Widen = [&](Value *V) {
+      return IsSigned ? Ctx.B.CreateSExt(V, WideType)
+                      : Ctx.B.CreateZExt(V, WideType);
+    };
+    Value *Product =
+        Ctx.B.CreateMul(Widen(Sources[0]), Widen(Sources[1]), "pk.mad.mul");
+    Value *Sum = Ctx.B.CreateAdd(Product, Widen(Sources[2]), "pk.mad.sum");
+    if (*Clamp) {
+      // Zero-extended lanes cannot sum to a negative value, so only the signed
+      // form needs a lower bound.
+      if (IsSigned)
+        Sum = Ctx.B.CreateBinaryIntrinsic(
+            Intrinsic::smax, Sum,
+            ConstantVector::getSplat(ElementCount::getFixed(2),
+                                     Ctx.B.getInt32(INT16_MIN)));
+      Sum = Ctx.B.CreateBinaryIntrinsic(
+          IsSigned ? Intrinsic::smin : Intrinsic::umin, Sum,
+          ConstantVector::getSplat(
+              ElementCount::getFixed(2),
+              Ctx.B.getInt32(IsSigned ? INT16_MAX : UINT16_MAX)));
+    }
+    return Ctx.B.CreateTrunc(Sum, FixedVectorType::get(Ctx.B.getInt16Ty(), 2),
+                             "pk.mad");
+  };
+
+  Value *Result;
+  switch (Di.CanonOp) {
+  case CanonicalOp::V_PK_ADD_U16:
+    Result = RaiseAddSub(/*IsSub=*/false, /*IsSigned=*/false);
+    break;
+  case CanonicalOp::V_PK_ADD_I16:
+    Result = RaiseAddSub(/*IsSub=*/false, /*IsSigned=*/true);
+    break;
+  case CanonicalOp::V_PK_SUB_U16:
+    Result = RaiseAddSub(/*IsSub=*/true, /*IsSigned=*/false);
+    break;
+  case CanonicalOp::V_PK_SUB_I16:
+    Result = RaiseAddSub(/*IsSub=*/true, /*IsSigned=*/true);
+    break;
+  case CanonicalOp::V_PK_MAD_U16:
+    Result = RaiseMad(/*IsSigned=*/false);
+    break;
+  case CanonicalOp::V_PK_MAD_I16:
+    Result = RaiseMad(/*IsSigned=*/true);
+    break;
+  default:
+    // Every remaining opcode leaves its result unmodified, so a set clamp bit
+    // would have no representation.
+    if (*Clamp)
+      return unsupported(Ctx, Di,
+                         "packed integer operation does not define clamp");
+    switch (Di.CanonOp) {
+    case CanonicalOp::V_PK_MUL_LO_U16:
+      Result = Ctx.B.CreateMul(Sources[0], Sources[1], "pk.mul");
+      break;
+    case CanonicalOp::V_PK_LSHLREV_B16:
+      Result = RaiseShift(Instruction::Shl);
+      break;
+    case CanonicalOp::V_PK_LSHRREV_B16:
+      Result = RaiseShift(Instruction::LShr);
+      break;
+    case CanonicalOp::V_PK_ASHRREV_I16:
+      Result = RaiseShift(Instruction::AShr);
+      break;
+    case CanonicalOp::V_PK_MIN_I16:
+      Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::smin, Sources[0],
+                                           Sources[1], {}, "pk.minmax");
+      break;
+    case CanonicalOp::V_PK_MAX_I16:
+      Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::smax, Sources[0],
+                                           Sources[1], {}, "pk.minmax");
+      break;
+    case CanonicalOp::V_PK_MIN_U16:
+      Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::umin, Sources[0],
+                                           Sources[1], {}, "pk.minmax");
+      break;
+    case CanonicalOp::V_PK_MAX_U16:
+      Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::umax, Sources[0],
+                                           Sources[1], {}, "pk.minmax");
+      break;
+    case CanonicalOp::V_PK_MIN3_I16:
+      Result = RaiseTernaryMinMax(Intrinsic::smin);
+      break;
+    case CanonicalOp::V_PK_MAX3_I16:
+      Result = RaiseTernaryMinMax(Intrinsic::smax);
+      break;
+    case CanonicalOp::V_PK_MIN3_U16:
+      Result = RaiseTernaryMinMax(Intrinsic::umin);
+      break;
+    case CanonicalOp::V_PK_MAX3_U16:
+      Result = RaiseTernaryMinMax(Intrinsic::umax);
+      break;
+    default:
+      llvm_unreachable("not a packed 16-bit integer operation");
+    }
+    break;
+  }
+
+  Ctx.registers().writeReg32(
+      *Destination, Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty(), "pk.pack"));
+  return Error::success();
+}
+
+Expected<Value *> readWMMAAccumulator(RaiseContext &Ctx, const DecodedInst &Di,
+                                      OperandResolver &Op,
+                                      Type *AccumulatorTy) {
+  if (Op.nSrcs() < 3)
+    return unsupported(Ctx, Di, "WMMA requires an accumulator source");
+  Expected<std::optional<ParsedReg>> Source = Op.srcReg(2);
+  if (!Source)
+    return Source.takeError();
+  if (*Source)
+    return Ctx.registers().regFile().readRegVec(Ctx.B, **Source, AccumulatorTy);
+  if (!Di.isImm(Op.srcIdx(2)) || Di.getImm(Op.srcIdx(2)) != 0)
+    return unsupported(Ctx, Di,
+                       "only a zero immediate WMMA accumulator is supported");
+  return ConstantAggregateZero::get(AccumulatorTy);
+}
+
+Error raiseWMMA(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
+                WMMAInputType InputType) {
+  if (Ctx.Projection.sourceWaveSize() != 32 ||
+      Ctx.Projection.targetWaveSize() != 64)
+    return unsupported(Ctx, Di, "WMMA remapping requires wave32 to wave64");
+  unsigned RequiredFeature =
+      InputType == WMMAInputType::F16    ? AMDGPU::FeatureMAIInsts
+      : InputType == WMMAInputType::BF16 ? AMDGPU::FeatureGFX90AInsts
+                                         : AMDGPU::FeatureGFX940Insts;
+  if (!Ctx.Projection.TargetSTI.hasFeature(RequiredFeature))
+    return unsupported(Ctx, Di, "target ISA does not support mapped MFMA");
+  if (Op.nSrcs() < 3)
+    return unsupported(Ctx, Di, "WMMA requires three source operands");
+
+  if (InputType == WMMAInputType::IU8) {
+    if (Op.srcMod(0) != SISrcMods::NEG || Op.srcMod(1) != SISrcMods::NEG ||
+        Op.srcMod(2) != 0)
+      return unsupported(Ctx, Di,
+                         "WMMA IU8 remapping requires signed matrix inputs");
+  } else {
+    for (unsigned I = 0; I != 3; ++I) {
+      if (Op.srcMod(I) != 0)
+        return unsupported(Ctx, Di, "WMMA source modifiers are not supported");
+    }
+  }
+  Expected<bool> Clamp = readClamp(Ctx, Di);
+  if (!Clamp)
+    return Clamp.takeError();
+  if (*Clamp)
+    return unsupported(Ctx, Di, "WMMA clamp is not supported");
+
+  Expected<ParsedReg> Destination = Op.dst();
+  if (!Destination)
+    return Destination.takeError();
+  Expected<std::optional<ParsedReg>> SourceA = Op.srcReg(0);
+  if (!SourceA)
+    return SourceA.takeError();
+  Expected<std::optional<ParsedReg>> SourceB = Op.srcReg(1);
+  if (!SourceB)
+    return SourceB.takeError();
+  if (!*SourceA || !*SourceB)
+    return unsupported(Ctx, Di, "WMMA matrix inputs must be registers");
+
+  Type *InputTy = FixedVectorType::get(Ctx.B.getInt32Ty(), 8);
+  Type *ElementTy =
+      InputType == WMMAInputType::IU8 ? Ctx.B.getInt32Ty() : Ctx.B.getFloatTy();
+  Type *AccumulatorTy = FixedVectorType::get(ElementTy, 8);
+  AllocaRegFile &Registers = Ctx.registers().regFile();
+  Value *A = Registers.readRegVec(Ctx.B, **SourceA, InputTy);
+  Value *B = Registers.readRegVec(Ctx.B, **SourceB, InputTy);
+  Expected<Value *> C = readWMMAAccumulator(Ctx, Di, Op, AccumulatorTy);
+  if (!C)
+    return C.takeError();
+  Ctx.requireKernelEntryExec(Di);
+  Expected<Value *> Result = emitWMMAtoMFMA(Ctx, A, B, *C, InputType);
+  if (!Result)
+    return Result.takeError();
+  Ctx.registers().emitWithNonzeroExec([&] {
+    Ctx.registers().regFile().writeRegVec(Ctx.B, *Destination, *Result);
+  });
+  return Error::success();
+}
+
 } // namespace
 
 Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
@@ -176,6 +443,31 @@ Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
     return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getFloatTy(),
                                   /*IsAdd=*/Di.CanonOp ==
                                       CanonicalOp::V_PK_ADD_F32);
+  case CanonicalOp::V_PK_ADD_U16:
+  case CanonicalOp::V_PK_ADD_I16:
+  case CanonicalOp::V_PK_SUB_U16:
+  case CanonicalOp::V_PK_SUB_I16:
+  case CanonicalOp::V_PK_MUL_LO_U16:
+  case CanonicalOp::V_PK_MAD_U16:
+  case CanonicalOp::V_PK_MAD_I16:
+  case CanonicalOp::V_PK_LSHLREV_B16:
+  case CanonicalOp::V_PK_LSHRREV_B16:
+  case CanonicalOp::V_PK_ASHRREV_I16:
+  case CanonicalOp::V_PK_MIN_I16:
+  case CanonicalOp::V_PK_MAX_I16:
+  case CanonicalOp::V_PK_MIN_U16:
+  case CanonicalOp::V_PK_MAX_U16:
+  case CanonicalOp::V_PK_MIN3_I16:
+  case CanonicalOp::V_PK_MAX3_I16:
+  case CanonicalOp::V_PK_MIN3_U16:
+  case CanonicalOp::V_PK_MAX3_U16:
+    return raisePackedInt16(Ctx, Di, Op);
+  case CanonicalOp::V_WMMA_F32_16x16x32_F16:
+    return raiseWMMA(Ctx, Di, Op, WMMAInputType::F16);
+  case CanonicalOp::V_WMMA_F32_16x16x32_BF16:
+    return raiseWMMA(Ctx, Di, Op, WMMAInputType::BF16);
+  case CanonicalOp::V_WMMA_I32_16x16x64_IU8:
+    return raiseWMMA(Ctx, Di, Op, WMMAInputType::IU8);
   default:
     return unsupported(Ctx, Di);
   }

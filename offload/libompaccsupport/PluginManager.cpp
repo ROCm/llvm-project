@@ -11,17 +11,28 @@
 //===----------------------------------------------------------------------===//
 
 #include "PluginManager.h"
+#include "OffloadPolicy.h"
 #include "OpenMP/OMPT/Callback.h"
+#include "OpenMP/OMPT/Interface.h"
 #include "OpenMP/OMPT/OmptCommonDefs.h"
 #include "OpenMP/OMPT/OmptTracing.h"
-#include "OffloadPolicy.h"
+#ifdef OMPT_SUPPORT
+#include "OmptDeviceTracing.h"
+#endif
 #include "Shared/Debug.h"
+#include "Shared/Environment.h"
 #include "Shared/Profile.h"
 #include "device.h"
 
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <algorithm>
 #include <memory>
+#include <string>
+
+#ifdef OMPT_SUPPORT
+using namespace llvm::omp::target::ompt;
+#endif
 
 using namespace llvm;
 using namespace llvm::sys;
@@ -29,9 +40,9 @@ using namespace llvm::omp::target::debug;
 
 PluginManager *PM = nullptr;
 
-// Every plugin exports this method to create an instance of the plugin type.
-#define PLUGIN_TARGET(Name) extern "C" GenericPluginTy *createPlugin_##Name();
-#include "Shared/Targets.def"
+namespace llvm::offload::tmp {
+GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
+} // namespace llvm::offload::tmp
 
 void PluginManager::init() {
   TIMESCOPE();
@@ -41,14 +52,21 @@ void PluginManager::init() {
   }
 
   ODBG(ODT_Init) << "Loading RTLs";
+  if (ol_result_t Res = olInit(nullptr))
+    REPORT() << "Failed to initialize liboffload: " << Res->Details;
 
-  // Attempt to create an instance of each supported plugin.
-#define PLUGIN_TARGET(Name)                                                    \
-  do {                                                                         \
-    Plugins.emplace_back(                                                      \
-        std::unique_ptr<GenericPluginTy>(createPlugin_##Name()));              \
-  } while (false);
-#include "Shared/Targets.def"
+  if (ol_result_t Res = olIteratePlatforms(
+          [](ol_platform_handle_t Platform, void *Data) {
+            auto *PM = static_cast<PluginManager *>(Data);
+            auto *Plugin =
+                llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
+            ODBG(ODT_Init) << "Adding plugin " << Plugin->getName()
+                           << " from liboffload";
+            PM->Plugins.push_back(Plugin);
+            return true;
+          },
+          this))
+    REPORT() << "Failed to iterate platforms: " << Res->Details;
 
 // At this point, we don't know whether OMPT tracing will be turned ON.
 // So we create the top-level tracing manager as long as OMPT is built in --
@@ -70,6 +88,19 @@ void PluginManager::deinit() {
   }
   ODBG(ODT_Deinit) << "Unloading RTLs...";
 
+  OMPT_IF_BUILT({
+    auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
+    for (DeviceTy &Device : devices(ExclusiveDevicesAccessor)) {
+      performIfOmptInitialized(
+          performOmptCallback(device_finalize, Device.DeviceID));
+      // Pairs the unconditional 'setDeviceId' in DeviceTy::init().
+      removeDeviceId(reinterpret_cast<ompt_device_t *>(
+          &Device.RTL->getDevice(Device.RTLDeviceID)));
+    }
+  });
+
+  // Delete only after device_finalize: tools typically flush their trace
+  // buffers from that callback, which goes through the trace record manager.
 #ifdef OMPT_SUPPORT
   assert(TraceRecordManager != nullptr &&
          "Trace record manager should have been non-null");
@@ -77,16 +108,9 @@ void PluginManager::deinit() {
   TraceRecordManager = nullptr;
 #endif
 
-  for (auto &Plugin : Plugins) {
-    if (!Plugin->is_initialized())
-      continue;
-
-    if (auto Err = Plugin->deinit()) {
-      std::string InfoMsg = toString(std::move(Err));
-      ODBG(ODT_Deinit) << "Failed to deinit plugin: " << InfoMsg;
-    }
-    Plugin.release();
-  }
+  Plugins.clear();
+  if (auto Err = olShutDown())
+    REPORT() << "Failed to denitialize liboffload: " << Err->Details;
 
   ODBG(ODT_Deinit) << "RTLs unloaded!";
 }
@@ -121,11 +145,6 @@ bool PluginManager::initializeDevice(GenericPluginTy &Plugin,
   auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
 
   int32_t UserId = ExclusiveDevicesAccessor->size();
-
-  // Set the device identifier offset in the plugin.
-#ifdef OMPT_SUPPORT
-  Plugin.set_device_identifier(UserId, DeviceId);
-#endif
 
   auto Device = std::make_unique<DeviceTy>(&Plugin, UserId, DeviceId);
   if (auto Err = Device->init()) {
@@ -534,8 +553,114 @@ static int loadImagesOntoDevice(DeviceTy &Device) {
               REPORT() << "Failed to write symbol for USM " << Entry.SymbolName;
         } else if (Entry.Address) {
           if (Device.RTL->get_function(Binary, Entry.SymbolName,
-                                       &DeviceEntry.Address) != OFFLOAD_SUCCESS)
+                                       &DeviceEntry.Address) !=
+              OFFLOAD_SUCCESS) {
             REPORT() << "Failed to load kernel " << Entry.SymbolName;
+          } else {
+            // Read this kernel's launch-geometry properties once, from its
+            // "<name>_kernel_environment" global, and cache them on
+            // the device for use at launch time.
+            llvm::omp::target::plugin::GenericDeviceTy &GenericDevice =
+                Device.RTL->getDevice(Device.RTLDeviceID);
+
+            // Downstream, these constant globals are read from the ELF image
+            // on the host rather than copied back from device memory. That
+            // avoids a device-to-host transfer per global and keeps the reads
+            // out of the plugin API trace (LIBOMPTARGET_KERNEL_TRACE).
+            auto ReadImageGlobal = [&](const char *Suffix, void *Dst,
+                                       uint32_t Size) {
+              llvm::omp::target::plugin::GlobalTy HostGlobal(
+                  std::string(Entry.SymbolName) + Suffix, Size, Dst);
+              auto &Image =
+                  *reinterpret_cast<llvm::omp::target::plugin::DeviceImageTy *>(
+                      Binary.handle);
+              if (auto Err = GenericDevice.Plugin.getGlobalHandler()
+                                 .readGlobalFromImage(GenericDevice, Image,
+                                                      HostGlobal)) {
+                // Not all kernels have all of these globals, e.g., No-Loop
+                // kernels have no kernel environment.
+                [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
+                ODBG(ODT_Mapping) << "Failed to read " << HostGlobal.getName()
+                                  << ": " << ErrStr;
+                return false;
+              }
+              return true;
+            };
+
+            KernelEnvironmentTy KernelEnv{};
+            if (!ReadImageGlobal("_kernel_environment", &KernelEnv,
+                                 sizeof(KernelEnv))) {
+              KernelEnv = KernelEnvironmentTy{};
+              KernelEnv.Configuration.ExecMode =
+                  llvm::omp::OMP_TGT_EXEC_MODE_BARE;
+              ODBG(ODT_Mapping)
+                  << "No kernel environment for '" << Entry.SymbolName
+                  << "', using default launch configuration";
+            }
+            const auto &Cfg = KernelEnv.Configuration;
+
+            // Downstream, "<name>_exec_mode" is authoritative: the AMD-only
+            // modes (No-Loop, Big-Jump-Loop) are only encoded there. Kernels
+            // without it keep the mode from the kernel environment.
+            auto ExecMode =
+                static_cast<llvm::omp::OMPTgtExecModeFlags>(Cfg.ExecMode);
+            uint8_t ExecModeVal = 0;
+            if (ReadImageGlobal("_exec_mode", &ExecModeVal,
+                                sizeof(ExecModeVal))) {
+              ExecMode =
+                  static_cast<llvm::omp::OMPTgtExecModeFlags>(ExecModeVal);
+              if (!llvm::omp::target::plugin::GenericKernelTy::
+                      isValidExecutionMode(ExecMode)) {
+                REPORT() << "Invalid execution mode " << int(ExecModeVal)
+                         << " for '" << Entry.SymbolName << "'";
+                return OFFLOAD_FAIL;
+              }
+            }
+            ODBG(ODT_Mapping)
+                << "Kernel '" << Entry.SymbolName << "' uses "
+                << KernelLaunchInfoTy::getExecutionModeName(ExecMode)
+                << " execution mode";
+
+            auto *Kernel =
+                reinterpret_cast<llvm::omp::target::plugin::GenericKernelTy *>(
+                    DeviceEntry.Address);
+            KernelLaunchInfoTy LaunchInfo;
+            LaunchInfo.Mode = ExecMode;
+            LaunchInfo.ReductionDataSize = Cfg.ReductionDataSize;
+            LaunchInfo.StaticBlockMemSize = Kernel->getStaticBlockMemSize();
+            // Max = Config.Max > 0 ? min(Config.Max, Device.Max) : Device.Max,
+            // further clamped to the kernel function's own driver-reported
+            // maximum.
+            LaunchInfo.MaxNumThreads =
+                std::min(Cfg.MaxThreads > 0
+                             ? std::min(Cfg.MaxThreads,
+                                        int32_t(GenericDevice.getThreadLimit()))
+                             : GenericDevice.getThreadLimit(),
+                         Kernel->getMaxThreads());
+            LaunchInfo.PreferredNumThreads =
+                Cfg.MinThreads > 0
+                    ? std::max(Cfg.MinThreads,
+                               int32_t(GenericDevice.getDefaultNumThreads()))
+                    : GenericDevice.getDefaultNumThreads();
+
+            // Downstream, "<name>_wg_size" (AMDGPU only) holds the block size
+            // CodeGen compiled the kernel for. If present, use it as the
+            // preferred and max number of threads to get the exact value for
+            // kernel launch. Exception: In generic-spmd mode, the preferred
+            // number is the default blocksize since the WG size may include
+            // the main thread, which is not required.
+            uint16_t ConstWGSize = 0;
+            if (ReadImageGlobal("_wg_size", &ConstWGSize,
+                                sizeof(ConstWGSize))) {
+              LaunchInfo.PreferredNumThreads =
+                  LaunchInfo.isGenericSPMDMode()
+                      ? GenericDevice.getDefaultNumThreads()
+                      : ConstWGSize;
+              LaunchInfo.MaxNumThreads = ConstWGSize;
+            }
+
+            Device.setKernelLaunchInfo(DeviceEntry.Address, LaunchInfo);
+          }
         }
         ODBG(ODT_Mapping) << "Entry point " << Entry.Address << " maps to"
                           << (Entry.Size ? " global" : "") << " "

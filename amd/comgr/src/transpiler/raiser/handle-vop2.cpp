@@ -11,6 +11,7 @@
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
 #include "transpiler/decoder/parsed-reg.h"
+#include "transpiler/raiser/handle-vop-cross-lane.h"
 #include "transpiler/raiser/handle-vop-shared.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
@@ -58,26 +59,16 @@ static Error raiseFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
-// Raise a low-16-bit binary operation and zero-extend its result to 32 bits.
-static Error raiseBinary16(RaiseContext &Ctx, OperandResolver &Op,
-                           BinaryBuilder Build) {
-  return raiseBinary32(Ctx, Op, [&](IRBuilder<> &B, Value *Src0, Value *Src1) {
-    Type *I16Ty = B.getInt16Ty();
-    Value *Lhs = B.CreateTrunc(Src0, I16Ty, "src0_i16");
-    Value *Rhs = B.CreateTrunc(Src1, I16Ty, "src1_i16");
-    Value *Result = Build(B, Lhs, Rhs);
-    return B.CreateZExt(Result, B.getInt32Ty(), "result_i32");
-  });
-}
-
 // Write an EXEC-predicated vector result and store carry or borrow in VCC for
 // active source lanes.
 static void writeResultAndVCC(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
                               Value *VCC) {
   Value *LaneActive = Ctx.registers().emitLaneActiveBit();
   Ctx.registers().writeReg32(Dst, Result);
+  // Inactive lanes can have poison carry values; select keeps them out of VCC.
   Ctx.registers().regFile().storeVCC(
-      Ctx.B, Ctx.B.CreateAnd(LaneActive, VCC, "vcc_active"));
+      Ctx.B,
+      Ctx.B.CreateSelect(LaneActive, VCC, Ctx.B.getFalse(), "vcc_active"));
 }
 
 // Raise a binary operation that writes carry or borrow to VCC.
@@ -199,6 +190,10 @@ static Error raiseMulHi24(RaiseContext &Ctx, OperandResolver &Op,
 Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
   switch (Di.CanonOp) {
+  case CanonicalOp::V_READLANE_B32:
+    return raiseReadLane32(Ctx, Di, Op);
+  case CanonicalOp::V_WRITELANE_B32:
+    return raiseWriteLane32(Ctx, Di, Op);
   case CanonicalOp::V_ADD_F32:
     return raiseFloatBinary(Ctx, Di, Op, Instruction::FAdd,
                             /*ReverseOperands=*/false);
@@ -325,53 +320,6 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_LSHLREV_B64:
     return raiseShiftLeft64(Ctx, Op);
 
-  case CanonicalOp::V_ADD_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateAdd(Src0, Src1, "add16");
-    });
-  case CanonicalOp::V_SUB_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateSub(Src0, Src1, "sub16");
-    });
-  case CanonicalOp::V_SUBREV_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateSub(Src1, Src0, "subrev16");
-    });
-  case CanonicalOp::V_MUL_LO_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateMul(Src0, Src1, "mul16");
-    });
-  case CanonicalOp::V_LSHLREV_B16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      Value *Amount = maskShiftAmount(B, Src0, 16);
-      return B.CreateShl(Src1, Amount, "lshl16");
-    });
-  case CanonicalOp::V_LSHRREV_B16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      Value *Amount = maskShiftAmount(B, Src0, 16);
-      return B.CreateLShr(Src1, Amount, "lshr16");
-    });
-  case CanonicalOp::V_ASHRREV_I16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      Value *Amount = maskShiftAmount(B, Src0, 16);
-      return B.CreateAShr(Src1, Amount, "ashr16");
-    });
-  case CanonicalOp::V_MIN_I16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::smin, Src0, Src1, {}, "min16");
-    });
-  case CanonicalOp::V_MAX_I16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::smax, Src0, Src1, {}, "max16");
-    });
-  case CanonicalOp::V_MIN_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::umin, Src0, Src1, {}, "min16");
-    });
-  case CanonicalOp::V_MAX_U16:
-    return raiseBinary16(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {
-      return B.CreateBinaryIntrinsic(Intrinsic::umax, Src0, Src1, {}, "max16");
-    });
   case CanonicalOp::V_DOT2C_I32_I16:
     return raiseSignedDotAccumulate(Ctx, Op, 16);
   case CanonicalOp::V_DOT4C_I32_I8:
@@ -380,7 +328,7 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return raiseSignedDotAccumulate(Ctx, Op, 4);
 
   default:
-    return unsupported(Ctx, Di);
+    return handleInteger16(Ctx, Di, Op);
   }
 }
 

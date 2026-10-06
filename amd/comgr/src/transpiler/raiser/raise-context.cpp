@@ -15,16 +15,23 @@
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Analysis/CycleAnalysis.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Analysis/UniformityAnalysis.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PassInstrumentation.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
+#include "llvm/Target/TargetMachine.h"
 
 #include <cassert>
 #include <utility>
@@ -35,8 +42,8 @@ namespace COMGR::transpiler {
 
 Expected<RaiseContext>
 RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
-                     const MCState &MC, const KernelMeta &Meta,
-                     ArrayRef<uint8_t> SourceTextBytes,
+                     const MCState &MC, const SetPcAnalysis &SetPc,
+                     const KernelMeta &Meta, ArrayRef<uint8_t> SourceTextBytes,
                      uint64_t SourceTextBaseAddress,
                      ArrayRef<TextSection::ImageSection> SourceImageSections,
                      uint64_t KernelStartOffset, uint64_t KernelEndOffset,
@@ -61,7 +68,7 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
         AMDHSA_BITS_GET(Meta.ComputePgmRsrc1,
                         amdhsa::COMPUTE_PGM_RSRC1_GFX6_GFX11_ENABLE_IEEE_MODE);
   }
-  RaiseContext Context(B, Projection, MC, std::move(*Registers),
+  RaiseContext Context(B, Projection, MC, SetPc, std::move(*Registers),
                        SourceTextBytes, SourceTextBaseAddress,
                        SourceImageSections, KernelStartOffset, KernelEndOffset,
                        SourceFloatRoundMode32, SourceFloatRoundMode16_64,
@@ -71,9 +78,9 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
 }
 
 void RaiseContext::requireZeroBits(Value *Value, uint32_t Mask,
-                                   const DecodedInst &Di, StringRef Detail) {
+                                   const DecodedInst &Di, const Twine &Detail) {
   assert(Value->getType()->isIntegerTy(32) && "expected a register word");
-  BitRequirements.push_back({Value, Mask, &Di, Detail});
+  BitRequirements.push_back({Value, Mask, &Di, Detail.str()});
 }
 
 Error RaiseContext::validateRequiredBits() const {
@@ -92,16 +99,87 @@ Error RaiseContext::validateRequiredBits() const {
   return Error::success();
 }
 
+void RaiseContext::requireWaveUniform(Value *Operand, const DecodedInst &Di,
+                                      const Twine &Detail) {
+  if (Projection.validationKind() == WaveProjection::ValidationKind::WaveNative)
+    UniformityRequirements.push_back({Operand, &Di, Detail.str()});
+}
+
+void RaiseContext::requireKernelEntryExec(const DecodedInst &Di) {
+  if (Projection.validationKind() == WaveProjection::ValidationKind::WaveNative)
+    EntryExecRequirements.push_back(
+        {Registers.readExec(), &Di,
+         "cannot prove that source EXEC at this instruction matches its value "
+         "at kernel entry"});
+}
+
+Error RaiseContext::requirePerWaveExecution(const DecodedInst &Di) const {
+  if (Projection.validationKind() == WaveProjection::ValidationKind::WaveNative)
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedWaveProjection,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        "WaveNative does not support per-wave hardware side effects");
+  return Error::success();
+}
+
+Error RaiseContext::validateWaveNativeRequirements(
+    TargetMachine &TM, Value *KernelEntryExec) const {
+  for (const RequiredValue &Requirement : EntryExecRequirements) {
+    assert(Requirement.Operand &&
+           "required value was deleted before validation");
+    if (Requirement.Operand == KernelEntryExec)
+      continue;
+    const DecodedInst &Di = *Requirement.Instruction;
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedWaveProjection,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags), Requirement.Detail);
+  }
+
+  if (UniformityRequirements.empty())
+    return Error::success();
+
+  Function &F = *B.GetInsertBlock()->getParent();
+  FunctionAnalysisManager FAM;
+  FAM.registerPass([&] { return PassInstrumentationAnalysis(); });
+  FAM.registerPass([&] { return DominatorTreeAnalysis(); });
+  FAM.registerPass([&] { return CycleAnalysis(); });
+  FAM.registerPass([&] {
+    return TargetIRAnalysis(
+        [&](const Function &F) { return TM.getTargetTransformInfo(F); });
+  });
+  FAM.registerPass([&] { return UniformityInfoAnalysis(); });
+  // Register promotion exposes scalar data flow across source blocks.
+  const UniformityInfo &UI = FAM.getResult<UniformityInfoAnalysis>(F);
+  for (const RequiredValue &Requirement : UniformityRequirements) {
+    assert(Requirement.Operand &&
+           "required value was deleted before validation");
+    Value *Operand = Requirement.Operand;
+    if (!UI.isDivergentAtDef(Operand) &&
+        (!Operand->hasUseList() || none_of(Operand->uses(), [&](const Use &U) {
+          return UI.isDivergentAtUse(U);
+        })))
+      continue;
+    const DecodedInst &Di = *Requirement.Instruction;
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedWaveProjection,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags), Requirement.Detail);
+  }
+  return Error::success();
+}
+
 RaiseContext::RaiseContext(
     IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
-    RegisterState Registers, ArrayRef<uint8_t> SourceTextBytes,
-    uint64_t SourceTextBaseAddress,
+    const SetPcAnalysis &SetPc, RegisterState Registers,
+    ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset,
     unsigned SourceFloatRoundMode32, unsigned SourceFloatRoundMode16_64,
     bool SourceFp16Overflow, bool SourceDx10Clamp, bool SourceIeeeMode)
-    : B(B), Projection(Projection), MC(MC), Registers(std::move(Registers)),
-      SourceTextBytes(SourceTextBytes),
+    : B(B), Projection(Projection), MC(MC), SetPc(SetPc),
+      Registers(std::move(Registers)), SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),
