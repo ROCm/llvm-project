@@ -48,7 +48,7 @@ runs:
           ${{
             inputs.config_ref ||
             (github.event_name == 'pull_request' && github.sha) ||
-            'amd-staging'
+            'amd/dev/kirthana14m/rs-rl-dontmerge'
           }}
         GH_TOKEN: ${{ inputs.github_token }}
       run: python3 "${{ github.action_path }}/resolve_therock_ref.py"
