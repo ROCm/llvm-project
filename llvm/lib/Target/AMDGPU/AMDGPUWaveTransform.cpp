@@ -1390,8 +1390,6 @@ private:
     /// branch, all active lanes target this node.
     SmallVector<PointerIntPair<WaveNode *, 1, bool>, 4> OriginBranch;
 
-    // Register PrimarySuccessorExec;
-
     // Opcode for branches with implicit or opaque conditions:
     // S_CBRANCH_EXECZ/NZ S_CBRANCH_VCCZ/NZ S_CBRANCH_SCC0/1
     //   -- all active threads branch uniformly.
@@ -1443,12 +1441,6 @@ private:
     Register PrimaryExec;
   };
 
-  // struct RejoinExec {
-  //   MachineBasicBlock *Block;
-  //   Register Dst;
-  //   bool Accumulate;
-  // };
-
   struct ExecTerm {
     MachineBasicBlock *Block;
     Register PrimaryAcc;
@@ -1461,16 +1453,15 @@ private:
     Register Acc;
   };
 
-  SmallVector<OriginContrib, 8> ImplicitContribSectionList; // 1
-  SmallVector<OriginContrib, 8> ExplicitContribSectionList; // 2
-  SmallVector<RejoinContrib, 8> RejoinContribSectionList;   // 3a
-  // SmallVector<RejoinExec, 4> RejoinExecSectionList;      // 3b
-  SmallVector<ExecTerm, 4> SetExecSectionList;              // 4a
-  SmallVector<ExecTerm, 4> SetExecZeroSectionList;          // 4b
-  SmallVector<AccReset, 4> RestoreExecSectionList;          // 5
-  SmallVector<AccReset, 4> ResetRejoinAccSectionList;       // 6
-  SmallVector<AccReset, 4> ResetPrimAccSectionList;         // 7
-  SmallVector<AccReset, 8> InitAccSectionList;              // 8
+  SmallVector<OriginContrib, 8> ImplicitContribSectionList;
+  SmallVector<OriginContrib, 8> ExplicitContribSectionList;
+  SmallVector<RejoinContrib, 8> RejoinContribSectionList;
+  SmallVector<ExecTerm, 4> SetExecSectionList;
+  SmallVector<ExecTerm, 4> SetExecZeroSectionList;
+  SmallVector<AccReset, 4> RestoreExecSectionList;
+  SmallVector<AccReset, 4> ResetRejoinAccSectionList;
+  SmallVector<AccReset, 4> ResetPrimAccSectionList;
+  SmallVector<AccReset, 8> InitAccSectionList;
 
   SmallPtrSet<MachineBasicBlock *, 16> WTBlocks;
   DenseMap<WaveNode *, Register> PrimAccMap;
@@ -1540,8 +1531,6 @@ private:
   MachineInstrBuilder emit(MachineBasicBlock &Block,
                            MachineBasicBlock::iterator I, unsigned Opc,
                            Register Dst);
-  // MachineInstrBuilder emitAtTop(MachineBasicBlock &Block, unsigned Opc,
-  //                               Register Dst);
   void createSections();
   void createRestoreExecSection();
   void createResetPrimAccSection();
@@ -1552,7 +1541,6 @@ private:
   void noteCopy(MachineBasicBlock *BB, Register Dst, Register Src);
   void noteXor(MachineBasicBlock *BB, Register Dst, Register Src);
   Register lookupXorExec(MachineBasicBlock *BB, Register PrimaryExec) const;
-  // void createRejoinExecSection();
   void createResetRejoinAccSection();
   void createSetExecSection();
   void createSetExecZeroSection();
@@ -1923,12 +1911,6 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
       Register PrimaryExec = PrimAccMap.lookup(Pred);
       const bool Accumulate =
           !HasSingleDivergentPred && Pred->Block != RejoinAccInitBB;
-      // if (PrimaryExec == ZeroReg)
-      //   RejoinExecSectionList.push_back(
-      //       {Pred->Block, RejoinAcc, Accumulate});
-      // else
-      //   RejoinContribSectionList.push_back(
-      //       {Pred->Block, RejoinAcc, Accumulate, PrimaryExec});
       RejoinContribSectionList.push_back(
           {Pred->Block, RejoinAcc, Accumulate, PrimaryExec});
     }
@@ -2482,19 +2464,6 @@ ControlFlowRewriter::emit(MachineBasicBlock &Block,
   return MIB;
 }
 
-#if 0
-// Inserts before getFirstNonPHI() and prepends to WTInstrMap, so a later
-// record lands above an earlier one. Callers walk their lists backwards.
-MachineInstrBuilder ControlFlowRewriter::emitAtTop(MachineBasicBlock &Block,
-                                                   unsigned Opc, Register Dst) {
-  MachineInstrBuilder MIB =
-      BuildMI(Block, Block.getFirstNonPHI(), {}, TII.get(Opc), Dst);
-  SmallVector<MachineInstr *, 8> &Instrs = WTInstrMap[&Block];
-  Instrs.insert(Instrs.begin(), MIB.getInstr());
-  return MIB;
-}
-#endif
-
 // First terminator, or one instruction above a trailing INLINEASM_BR.
 static MachineBasicBlock::iterator
 saluInsertionAtEnd(MachineBasicBlock &Block) {
@@ -2515,7 +2484,6 @@ void ControlFlowRewriter::createSections() {
   createImplicitContribSection();
   createExplicitContribSection(LMA);
   createRejoinContribSection();
-  // createRejoinExecSection();
   createResetRejoinAccSection();
   createSetExecSection();
   createSetExecZeroSection();
@@ -2770,21 +2738,6 @@ void ControlFlowRewriter::createRejoinContribSection() {
   }
 }
 
-#if 0
-void ControlFlowRewriter::createRejoinExecSection() {
-  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
-  for (const RejoinExec &Rec : RejoinExecSectionList) {
-    MachineBasicBlock::iterator I = saluInsertionAtEnd(*Rec.Block);
-    if (Rec.Accumulate)
-      emit(*Rec.Block, I, LMC.OrOpc, Rec.Dst)
-          .addReg(Rec.Dst)
-          .addReg(LMC.ExecReg);
-    else
-      emit(*Rec.Block, I, AMDGPU::COPY, Rec.Dst).addReg(LMC.ExecReg);
-  }
-}
-#endif
-
 void ControlFlowRewriter::createResetRejoinAccSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const AccReset &Rec : ResetRejoinAccSectionList)
@@ -2824,22 +2777,6 @@ void ControlFlowRewriter::createSetExecZeroSection() {
 /// establishing wave-level control flow and insert instructions for EXEC mask
 /// manipulation.
 void ControlFlowRewriter::rewrite() {
-#if 0 // v1 Steps 2-3 only
-  AMDGPULaneMaskAnalysis LMA(Function);
-  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
-
-  Register RegZero;
-  auto getZero = [&]() {
-    if (!RegZero) {
-      RegZero = LMU.createLaneMaskReg();
-      BuildMI(Function.front(), Function.front().getFirstTerminator(), {},
-              TII.get(LMC.MovOpc), RegZero)
-          .addImm(0);
-    }
-    return RegZero;
-  };
-#endif
-
   // Track blocks that lost their INLINEASM_BR indirect-target status due
   // to retargeting and the set of blocks still referenced by some
   // surviving INLINEASM_BR. After Step 1, any stale target not in the
@@ -2958,383 +2895,6 @@ void ControlFlowRewriter::rewrite() {
       Stale->setIsInlineAsmBrIndirectTarget(false);
 
   insertLaneMaskInstrs();
-
-#if 0 // v1 Steps 2-3, replaced by insertLaneMaskInstrs()
-  // Step 2: Insert lane masks and new terminators for divergent nodes.
-  //
-  // RegMap maps (block, register) -> (masked, inverted).
-  DenseMap<std::pair<MachineBasicBlock *, Register>,
-           std::pair<Register, Register>>
-      RegMap;
-  AMDGPULaneMaskUpdater Updater(Function);
-
-  for (WaveNode *LaneTarget : NodeOrder) {
-    CFGNodeInfo &LaneTargetInfo = NodeInfo.find(LaneTarget)->second;
-
-    if (!llvm::any_of(
-            LaneTargetInfo.OriginBranch,
-            [](const auto &OriginBranch) { return OriginBranch.getInt(); })) {
-      // No divergent branches towards this node, nothing to be done.
-      continue;
-    }
-
-    // When there is only a single lane mask origin, the condition register
-    // can be used directly as the primary successor EXEC value, bypassing
-    // the accumulator machinery. This optimization requires three conditions:
-    // 1. Exactly one origin exists for this lane target.
-    // 2. The origin is not inside a loop — inside loops, lane masks must be
-    //    accumulated across iterations via the accumulator machinery.
-    // 3. The origin block dominates all divergent OriginBranch blocks where
-    //    PrimarySuccessorExec will be consumed. If any divergent OriginBranch
-    //    block is not dominated, a bypass path may exist and the accumulator
-    //    is needed to ensure the lane mask is properly initialized on all
-    //    paths.
-    bool HasSingleDomOrigin =
-        LaneTargetInfo.origins.size() == 1 &&
-        !LaneTargetInfo.origins[0].Node->Cycle &&
-        !llvm::any_of(LaneTargetInfo.OriginBranch,
-                      [&](const auto &NodeDivergentPair) {
-                        return NodeDivergentPair.getInt() &&
-                               !ReconvergeCfg.getDomTree().dominates(
-                                   LaneTargetInfo.origins[0].Node->Block,
-                                   NodeDivergentPair.getPointer()->Block);
-                      });
-    Register DirectCondReg;
-
-    // Step 2.1: Add conditions branching to LaneTarget to the Lane mask
-    // Updater. Initialize the accumulator only when multiple origins
-    // require merging.
-    if (!HasSingleDomOrigin) {
-      // FIXME: we are creating a register here only to initialize the updater
-      Updater.init();
-      Updater.addReset(*LaneTarget->Block, AMDGPULaneMaskUpdater::ResetInMiddle);
-      for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
-        if (!NodeDivergentPair.getInt())
-          continue; // not a divergent branch
-
-        Updater.addReset(*NodeDivergentPair.getPointer()->Block,
-                         AMDGPULaneMaskUpdater::ResetAtEnd);
-      }
-    }
-
-    for (const LaneOriginInfo &LaneOrigin : LaneTargetInfo.origins) {
-      Register CondReg;
-      // Default: most producers below yield a subset of EXEC; EXEC/zero cases
-      // override this.
-      LaneMaskKind CondKind = LaneMaskKind::Subset;
-      MachineBasicBlock::iterator MBBILaneOriginNodeFirstTerm =
-          LaneOrigin.Node->Block->getFirstTerminator();
-
-      if (!LaneOrigin.CondReg) {
-        switch (LaneOrigin.ImplicitBranchOpc) {
-        case 0: // Unconditional branch
-          assert(!LaneOrigin.InvertCondition);
-          CondReg = LMC.ExecReg;
-          CondKind = LaneMaskKind::Exec;
-          break;
-        case TargetOpcode::INLINEASM_BR:
-          // Opaque callbr; exec assumed invariant. Conservatively
-          // contribute all active lanes regardless of branch direction.
-          CondReg = LMC.ExecReg;
-          CondKind = LaneMaskKind::Exec;
-          break;
-        // Uniform branch with implicit condition (VCC/EXEC/SCC), or
-        // unconditional (ImplicitBranchOpc == 0).
-        // All active lanes go the same direction, so the lane
-        // contribution is either EXEC (all lanes) or 0 (no lanes).
-        case AMDGPU::S_CBRANCH_EXECNZ:
-          CondReg = LaneOrigin.InvertCondition ? getZero() : LMC.ExecReg;
-          CondKind = LaneOrigin.InvertCondition ? LaneMaskKind::Zero
-                                                : LaneMaskKind::Exec;
-          break;
-        case AMDGPU::S_CBRANCH_EXECZ:
-          CondReg = LaneOrigin.InvertCondition ? LMC.ExecReg : getZero();
-          CondKind = LaneOrigin.InvertCondition ? LaneMaskKind::Exec
-                                                : LaneMaskKind::Zero;
-          break;
-        case AMDGPU::S_CBRANCH_SCC1: {
-          CondReg = LMU.createLaneMaskReg();
-          auto MIB =
-              BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                      TII.get(LMC.CSelectOpc), CondReg);
-          if (!LaneOrigin.InvertCondition)
-            MIB.addReg(LMC.ExecReg).addImm(0);
-          else
-            MIB.addImm(0).addReg(LMC.ExecReg);
-          break;
-        }
-        case AMDGPU::S_CBRANCH_SCC0: {
-          CondReg = LMU.createLaneMaskReg();
-          auto MIB =
-              BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                      TII.get(LMC.CSelectOpc), CondReg);
-          if (!LaneOrigin.InvertCondition)
-            MIB.addImm(0).addReg(LMC.ExecReg);
-          else
-            MIB.addReg(LMC.ExecReg).addImm(0);
-          break;
-        }
-        case AMDGPU::S_CBRANCH_VCCNZ:
-        case AMDGPU::S_CBRANCH_VCCZ: {
-          // S_AND_B* VCC, VCC sets SCC (SCC = VCC != 0)
-          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                  TII.get(LMC.AndOpc), LMC.VccReg)
-              .addReg(LMC.VccReg)
-              .addReg(LMC.VccReg);
-
-          // SCC gets set when VCC!=0, implyng equivalence to VCCNZ branch;
-          // so we should flip CSELECT operands for VCCZ branch equivalent.
-          bool FlipForVCCZ =
-              (LaneOrigin.ImplicitBranchOpc == AMDGPU::S_CBRANCH_VCCZ);
-
-          CondReg = LMU.createLaneMaskReg();
-          auto MIB =
-              BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                      TII.get(LMC.CSelectOpc), CondReg);
-          if (LaneOrigin.InvertCondition == FlipForVCCZ)
-            MIB.addReg(LMC.ExecReg).addImm(0);
-          else
-            MIB.addImm(0).addReg(LMC.ExecReg);
-          break;
-        }
-        default:
-          llvm_unreachable("unhandled implicit branch opcode");
-        }
-      } else if (LaneOrigin.CondReg == AMDGPU::SCC) {
-        assert(LaneOrigin.Node->Successors.size() == 1);
-
-        // Subtle: We rely here on the fact that:
-        //  1. No other instructions have been inserted at the end of the
-        //     basic block since step 1, when the terminators were deleted --
-        //     otherwise, SCC could have been clobbered.
-        //  2. Later steps only insert instructions between the cselect here
-        //     and the terminators, where SCC no longer matters.
-        //
-        // PHI nodes may have been inserted, but those are at the beginning
-        // of the block.
-        //
-        // cond = SCC ? EXEC : 0; (or reverse)
-        CondReg = LMU.createLaneMaskReg();
-        if (!LaneOrigin.InvertCondition) {
-          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                  TII.get(LMC.CSelectOpc), CondReg)
-              .addReg(LMC.ExecReg)
-              .addImm(0);
-        } else {
-          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                  TII.get(LMC.CSelectOpc), CondReg)
-              .addImm(0)
-              .addReg(LMC.ExecReg);
-        }
-      } else {
-        assert(!LaneOrigin.CondIsUndef && "Lane mask is undef");
-        CondReg = LaneOrigin.CondReg;
-
-        // Identify how CondReg relates to EXEC so we emit the cheapest
-        // contribution instead of unconditionally masking with EXEC.
-        CondKind = LMU.classifyLaneMask(CondReg, *LaneOrigin.Node->Block,
-                                        MBBILaneOriginNodeFirstTerm, &LMA);
-
-        switch (CondKind) {
-        case LaneMaskKind::Exec:
-          // Whole-EXEC contribution (CondReg is EXEC or all-ones).
-          CondReg = LMC.ExecReg;
-          break;
-        case LaneMaskKind::Zero:
-          // No-lane contribution.
-          CondReg = getZero();
-          break;
-        case LaneMaskKind::Subset:
-          // Already a subset of EXEC; use as-is.
-          break;
-        case LaneMaskKind::None: {
-          // Superset/unknown: mask into EXEC so the value is a subset.
-          Register Prev = CondReg;
-          CondReg = LMU.createLaneMaskReg();
-          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                  TII.get(LMC.AndOpc), CondReg)
-              .addReg(LMC.ExecReg)
-              .addReg(Prev);
-          CondKind = LaneMaskKind::Subset;
-          RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
-              .first = CondReg;
-          break;
-        }
-        }
-
-        if (LaneOrigin.InvertCondition) {
-          switch (CondKind) {
-          case LaneMaskKind::Exec:
-            // !EXEC contributes no lanes.
-            CondReg = getZero();
-            CondKind = LaneMaskKind::Zero;
-            break;
-          case LaneMaskKind::Zero:
-            // !0 contributes all active lanes.
-            CondReg = LMC.ExecReg;
-            CondKind = LaneMaskKind::Exec;
-            break;
-          case LaneMaskKind::Subset: {
-            // Flip within active lanes; subset ^ EXEC is still a subset, so no
-            // further AND with EXEC is needed downstream.
-            Register Prev = CondReg;
-            CondReg = LMU.createLaneMaskReg();
-            BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                    TII.get(LMC.XorOpc), CondReg)
-                .addReg(Prev)
-                .addReg(LMC.ExecReg);
-            RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
-                .second = CondReg;
-            RegMap.try_emplace(std::make_pair(LaneOrigin.Node->Block, CondReg),
-                               CondReg, Prev);
-            break;
-          }
-          case LaneMaskKind::None:
-            llvm_unreachable("None was normalized to Subset above");
-          }
-        }
-      }
-
-      if (HasSingleDomOrigin)
-        DirectCondReg = CondReg;
-      else
-        Updater.addAvailable(*LaneOrigin.Node->Block, CondReg, CondKind);
-    }
-
-    // Step 2.2: Synthesize EXEC updates and branch instructions.
-    for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
-      if (!NodeDivergentPair.getInt())
-        continue; // not a divergent branch
-
-      WaveNode *OriginNode = NodeDivergentPair.getPointer();
-      CFGNodeInfo &OriginCFGNodeInfo = NodeInfo.find(OriginNode)->second;
-      OriginCFGNodeInfo.PrimarySuccessorExec =
-          HasSingleDomOrigin ? DirectCondReg
-                             : Updater.getMergedMask(*OriginNode->Block);
-
-      MachineBasicBlock::iterator MBBIOriginNodeEnd = OriginNode->Block->end();
-
-      // FIXME: Find a way to avoid adding MovTermOpc, instead add MovOpc. This
-      // Term operator being the first terminator, acts as an anchor point for
-      // finding the right insertion point in other parts of the Wave Transform.
-      // Since accumulator reset instructions may be added after this
-      // instruction, this move operation cannot be a terminator.
-      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
-              TII.get(LMC.MovTermOpc), LMC.ExecReg)
-          .addReg(OriginCFGNodeInfo.PrimarySuccessorExec);
-      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
-              TII.get(AMDGPU::SI_WAVE_CF_EDGE));
-      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
-              TII.get(AMDGPU::S_CBRANCH_EXECZ))
-          .addMBB(OriginNode->Successors[1]->Block);
-      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
-              TII.get(AMDGPU::S_BRANCH))
-          .addMBB(OriginNode->Successors[0]->Block);
-    }
-
-  }
-
-  // Step 3: Insert rejoin masks.
-  for (WaveNode *Secondary : ReconvergeCfg.nodes()) {
-    if (!Secondary->IsSecondary)
-      continue;
-
-    // Count divergent predecessors with multiple successors. When there
-    // is exactly one such predecessor that is acyclic and dominates the
-    // secondary, the rejoin register can be used directly without the
-    // accumulator machinery.
-    unsigned NumDivergentPreds = 0;
-    WaveNode *SingleDivPred = nullptr;
-    for (WaveNode *Pred : Secondary->Predecessors) {
-      if (!Pred->IsDivergent || Pred->Successors.size() == 1)
-        continue;
-
-      // Since Reconvergence is a per-edge property, a node can be the secondary
-      // of one divergent node and the primary successor of another. And in the
-      // latter case, the edge already enters with a narrowed EXEC, so it must
-      // not contribute any rejoin mask.
-      if (Pred->Successors[0] == Secondary)
-        continue;
-
-      NumDivergentPreds++;
-      SingleDivPred = Pred;
-    }
-
-    // The accumulator is only needed when multiple divergent predecessors
-    // contribute rejoin masks, or when cycle membership or non-dominance
-    // requires temporal merging across iterations. Cycle membership here
-    // is both the contributing predecessor and the secondary, as a secondary
-    // in a loop must merge across iterations at its entry.
-    bool HasSingleDivergentPred =
-        (NumDivergentPreds == 1) && !SingleDivPred->Cycle &&
-        !Secondary->Cycle &&
-        ReconvergeCfg.getDomTree().dominates(SingleDivPred->Block,
-                                             Secondary->Block);
-
-    if (!HasSingleDivergentPred) {
-      // FIXME: we are creating a register here only to initialize the updater
-      Updater.init();
-      Updater.addReset(*Secondary->Block, AMDGPULaneMaskUpdater::ResetAtEnd);
-    }
-
-    Register DirectRejoin;
-    for (WaveNode *Pred : Secondary->Predecessors) {
-      if (!Pred->IsDivergent || Pred->Successors.size() == 1)
-        continue;
-
-      // A node with a divergence-entry edge should not contribute any rejoin
-      // mask.
-      if (Pred->Successors[0] == Secondary)
-        continue;
-
-      CFGNodeInfo &PredInfo = NodeInfo.find(Pred)->second;
-      Register PrimaryExec = PredInfo.PrimarySuccessorExec;
-
-      Register Rejoin;
-      if (!Rejoin) {
-        // Try to find a previously generated XOR (or merely masked) value
-        // for reuse.
-        auto MapIt = RegMap.find(std::make_pair(Pred->Block, PrimaryExec));
-        if (MapIt != RegMap.end()) {
-          Rejoin = MapIt->second.second;
-          if (!Rejoin)
-            PrimaryExec = MapIt->second.first;
-        }
-      }
-
-      if (!Rejoin) {
-        Rejoin = LMU.createLaneMaskReg();
-        BuildMI(*Pred->Block, Pred->Block->getFirstTerminator(), {},
-                TII.get(LMC.XorOpc), Rejoin)
-            .addReg(LMC.ExecReg)
-            .addReg(PrimaryExec);
-      }
-
-      if (HasSingleDivergentPred)
-        DirectRejoin = Rejoin;
-      else
-        Updater.addAvailable(*Pred->Block, Rejoin, LaneMaskKind::Subset);
-    }
-
-    Register RejoinMask = HasSingleDivergentPred
-                              ? DirectRejoin
-                              : Updater.getMergedMask(*Secondary->Block);
-    BuildMI(*Secondary->Block, Secondary->Block->getFirstNonPHI(), {},
-            TII.get(LMC.OrOpc), LMC.ExecReg)
-        .addReg(LMC.ExecReg)
-        .addReg(RejoinMask);
-  }
-  Updater.insertAccumulatorResets();
-  AccumulatorRegs = std::move(Updater.getAllAccumulators());
-  Updater.cleanup();
-
-  // remove unused virtual registers def
-  if (RegZero && MRI.use_empty(RegZero)) {
-    // getVRegDef can be used since RegZero has a single def
-    MRI.getVRegDef(RegZero)->eraseFromParent();
-    RegZero = AMDGPU::NoRegister;
-  }
-#endif
 }
 
 /// This function fixes virtual register uses that have no dominating definition
@@ -3886,7 +3446,6 @@ bool AMDGPUWaveTransform::run(MachineFunction &MF) {
   // create CFG paths to a use that bypass all defs of a register, violating
   // the CFG dominance relations.
   fixMissingDominatingDefs(MF, *DomTree, *TII);
-  // cleanup(MF, CFRewriter.getAccumulatorRegs());
 
   // FIXME: restore the following 1 line:
   // UI.clear();
