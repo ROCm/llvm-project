@@ -124,13 +124,13 @@ globalDataReg(RaiseContext &Ctx, const DecodedInst &Di, AMDGPU::OpName Name,
   return *Reg;
 }
 
-/// Return the cache-policy bits a GLOBAL load or store may carry. A GFX12+
-/// source names the memory scope in a field of its own, which the access
-/// models; earlier generations spell coherence through bits whose meaning this
-/// raiser does not establish.
+/// Return cache-policy bits accepted for a plain GLOBAL access. GFX12 models
+/// SCOPE and accepts NV as a cache hint, but the raised IR drops NV because it
+/// only controls whether fine-grained cache write-back or invalidation includes
+/// the line. Treating the line as volatile is the conservative behavior.
 static unsigned modeledAccessCachePolicy(const MCSubtargetInfo &STI) {
   if (STI.hasFeature(AMDGPU::FeatureGFX12Insts))
-    return AMDGPU::CPol::SCOPE;
+    return AMDGPU::CPol::SCOPE | AMDGPU::CPol::NV;
   return 0;
 }
 
