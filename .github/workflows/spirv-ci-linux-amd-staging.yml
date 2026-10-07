@@ -826,7 +826,48 @@ jobs:
           fi
           exit $rc
 
-      - name: Upload HeCBench logs
+      - name: Record HeCBench binary sizes
+        if: always()
+        run: |
+          python3 - <<'PYTHON'
+          import csv
+          import os
+          from pathlib import Path
+
+          src = Path("HeCBench/src")
+          benchmarks = (Path(os.environ["SCRIPTS"]) / "ci_benchmarks.txt").read_text().splitlines()
+          rows: list[tuple[str, int]] = []
+          for benchmark in sorted(set(line.strip() for line in benchmarks)):
+              if not benchmark or benchmark.startswith("#"):
+                  continue
+              directory = src / benchmark
+              if Path(benchmark).name != benchmark or not directory.is_dir():
+                  raise RuntimeError(f"Invalid or missing benchmark directory: {benchmark}")
+              for path in sorted(directory.rglob("*")):
+                  if path.is_symlink() or not path.is_file() or not os.access(path, os.X_OK):
+                      continue
+                  # Exclude executable scripts; measure the unstripped ELF binaries.
+                  with path.open("rb") as binary:
+                      if binary.read(4) != b"\x7fELF":
+                          continue
+                  rows.append((path.relative_to(src).as_posix(), path.stat().st_size))
+          if not rows:
+              raise RuntimeError("No HeCBench binaries found")
+
+          report = Path(os.environ["HECBENCH_LOG_DIR"]) / "binary-sizes.csv"
+          with report.open("w", newline="") as output:
+              writer = csv.writer(output)
+              writer.writerow(("path", "size_bytes"))
+              writer.writerows(rows)
+          total = sum(size for _, size in rows)
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
+              summary.write(f"### HeCBench binary sizes\n\n{len(rows)} files, {total} bytes.\n\n")
+              summary.write("Per-file sizes: `binary-sizes.csv` in the `hecbench-logs` artifact.\n\n")
+              summary.write("Compare matching file lists; failed builds may leave partial results.\n")
+          print(f"Recorded {len(rows)} binary sizes ({total} bytes) in {report}")
+          PYTHON
+
+      - name: Upload HeCBench logs and binary sizes
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
