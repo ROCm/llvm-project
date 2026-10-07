@@ -1515,7 +1515,6 @@ private:
   RegFactMap
   meetFacts(MachineBasicBlock &BB,
             const DenseMap<MachineBasicBlock *, RegFactMap> &BBFacts) const;
-  // True when I was removed from its block.
   bool simplifyInstr(MachineInstr &MI, RegFactMap &Cur);
   void simplifyBB(MachineBasicBlock &BB, RegFactMap &Cur);
   void forwardPropSimplifier();
@@ -1525,7 +1524,6 @@ private:
   void
   computeWTLiveInfo(DenseMap<MachineBasicBlock *, VirtRegSet> &LiveIn,
                     DenseMap<MachineBasicBlock *, VirtRegSet> &LiveOut) const;
-  // True when any mapped instruction was removed.
   bool deadDefRemoval();
   Register freshTemp();
   MachineInstrBuilder emit(MachineBasicBlock &Block,
@@ -1815,10 +1813,12 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
 
   for (WaveNode *LaneTarget : NodeOrder) {
     CFGNodeInfo &LaneTargetInfo = NodeInfo.find(LaneTarget)->second;
-    if (!llvm::any_of(LaneTargetInfo.OriginBranch,
-                      [](const PointerIntPair<WaveNode *, 1, bool> &OB) {
-                        return OB.getInt();
-                      }))
+    // No divergent branches towards this node; nothing to be done.
+    if (!llvm::any_of(
+            LaneTargetInfo.OriginBranch,
+            [](const PointerIntPair<WaveNode *, 1, /*IsDivergent*/ bool> &OB) {
+              return OB.getInt();
+            }))
       continue;
 
     const bool HasSingleDomOrigin = LaneTargetInfo.origins.size() == 1 &&
@@ -1884,6 +1884,7 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
     for (WaveNode *Pred : Secondary->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() <= 1)
         continue;
+      // Pred is skipped if Secondary is it's Primary Successor
       if (Pred->Successors[0] == Secondary)
         continue;
       DivPreds.push_back(Pred);
