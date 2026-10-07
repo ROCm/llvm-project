@@ -187,7 +187,7 @@ trap_kernel:
 ; UNHANDLED-SOPP: unsupported-instruction-form: s_trap [SOPP]
 ; UNHANDLED-SOPP-SAME: enters trap handler 1, which the raised kernel does
 ; UNHANDLED-SOPP-SAME: not have
-	s_trap 1
+	s_trap 0x11
 	s_endpgm
 
 	.section	.rodata,"a",@progbits
