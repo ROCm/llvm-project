@@ -68,7 +68,8 @@ IncrementalHIPDeviceParser::GenerateDeviceObject() {
 
   ObjectContent.clear();
   auto ObjOS = std::make_unique<llvm::raw_svector_ostream>(ObjectContent);
-  emitBackendOutput(DeviceCI, CodeGenOptsForObj, PTU.TheModule.get(),
+  emitBackendOutput(DeviceCI, CodeGenOptsForObj, "",
+                    PTU.TheModule.get(),
                     Backend_EmitObj, DeviceCI.getVirtualFileSystemPtr(),
                     std::move(ObjOS));
 
