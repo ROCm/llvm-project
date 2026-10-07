@@ -12,6 +12,7 @@
 ; RUN:   --emit-ir=pcrel_mov_copy_kernel,pcrel_back_offset_kernel \
 ; RUN:   --emit-ir=pcrel_rodata_kernel \
 ; RUN:   --emit-ir=pcrel_lit32_kernel,pcrel_lit64_kernel \
+; RUN:   --emit-ir=pcrel_cmp_eq_kernel,pcrel_cmp_lg_kernel \
 ; RUN:   | %FileCheck %s
 
 ; A kernel whose source address the raise cannot resolve to a literal is
@@ -35,6 +36,8 @@
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=OTHERBLOCK
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_clobbered_block_kernel \
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=CLOBBERED
+; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_compare_dynamic_kernel \
+; RUN:   2>&1 | %FileCheck %s --check-prefix=COMPAREDYNAMIC
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_escape_low_kernel \
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=ESCAPELOW
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_escape_high_kernel \
@@ -274,6 +277,32 @@ pcrel_lit64_kernel:
 	s_endpgm
 	.long	0x23456789
 
+	.globl	pcrel_cmp_eq_kernel
+	.p2align	8
+	.type	pcrel_cmp_eq_kernel,@function
+; CHECK-LABEL: define amdgpu_kernel void @pcrel_cmp_eq_kernel(
+pcrel_cmp_eq_kernel:
+	s_get_pc_i64 s[0:1]
+; The source address is known at raise time, so compare it as a constant.
+	s_cmp_eq_u64 s[0:1], 0
+; CHECK: select i1 false, i32 1, i32 2
+	s_cselect_b32 s2, 1, 2
+	v_add_nc_u32 v0, s2, v0
+	s_endpgm
+
+	.globl	pcrel_cmp_lg_kernel
+	.p2align	8
+	.type	pcrel_cmp_lg_kernel,@function
+; CHECK-LABEL: define amdgpu_kernel void @pcrel_cmp_lg_kernel(
+pcrel_cmp_lg_kernel:
+	s_get_pc_i64 s[0:1]
+; The known source address differs from zero.
+	s_cmp_lg_u64 s[0:1], 0
+; CHECK: select i1 true, i32 1, i32 2
+	s_cselect_b32 s2, 1, 2
+	v_add_nc_u32 v0, s2, v0
+	s_endpgm
+
 ; A source address the raise cannot resolve to a literal is refused, since
 ; letting the load through would read target memory at a source address.
 
@@ -378,6 +407,16 @@ refuse_clobbered_block_kernel:
 ; the raised kernel can address, so a read that would hand either of its halves
 ; to the target program is refused.
 
+	.globl	refuse_compare_dynamic_kernel
+	.p2align	8
+	.type	refuse_compare_dynamic_kernel,@function
+refuse_compare_dynamic_kernel:
+	s_get_pc_i64 s[0:1]
+; The second operand is known only at runtime, so the comparison is refused.
+; COMPAREDYNAMIC: unsupported-instruction-form: s_cmp_eq_u64 {{.+}} :: operand-read: {{.+}} may hold a source code-object address
+	s_cmp_eq_u64 s[0:1], s[2:3]
+	s_endpgm
+
 	.globl	refuse_escape_low_kernel
 	.p2align	8
 	.type	refuse_escape_low_kernel,@function
@@ -459,6 +498,21 @@ refuse_escape_high_kernel:
 		.amdhsa_next_free_sgpr 24
 	.end_amdhsa_kernel
 	.amdhsa_kernel pcrel_lit64_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel pcrel_cmp_eq_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel pcrel_cmp_lg_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_compare_dynamic_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 24
@@ -665,6 +719,39 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     24
     .symbol:         pcrel_lit64_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           pcrel_cmp_eq_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         pcrel_cmp_eq_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           pcrel_cmp_lg_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         pcrel_cmp_lg_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_compare_dynamic_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         refuse_compare_dynamic_kernel.kd
     .vgpr_count:     4
     .wavefront_size: 32
   - .args: []

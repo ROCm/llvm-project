@@ -11,6 +11,7 @@
 #include "transpiler/decoder/amdgpu-formats.h"
 #include "transpiler/decoder/mc-state.h"
 #include "transpiler/raiser/raise_failure.h"
+#include "transpiler/raiser/source-image.h"
 
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/MathExtras.h"
@@ -139,6 +140,38 @@ Error handleIntegerCompare(RaiseContext &Ctx, OperandResolver &Op,
   return Error::success();
 }
 
+// Resolve a comparison involving a known source-image address without reading
+// it as a register in the raised kernel. Return false when the comparison
+// cannot be resolved from constants.
+Expected<bool> compareSourceImageAddr(RaiseContext &Ctx, const DecodedInst &Di,
+                                      OperandResolver &Op, bool IsEqual) {
+  std::optional<uint64_t> Known[2];
+  bool AnyAddress = false;
+  for (unsigned I = 0; I != 2; ++I) {
+    unsigned Index = Op.srcIdx(I);
+    Expected<std::optional<uint64_t>> Address =
+        sourceImageOperandAddr(Ctx, Di, Index);
+    if (!Address)
+      return Address.takeError();
+    if (*Address) {
+      Known[I] = **Address;
+      AnyAddress = true;
+      continue;
+    }
+    if (std::optional<int64_t> Constant = evalOperandAsConst(Di.Inst, Index))
+      Known[I] = static_cast<uint64_t>(*Constant);
+  }
+  // An unknown operand stays on the ordinary path, which refuses the source
+  // address read instead of guessing at the result.
+  if (!AnyAddress || !Known[0] || !Known[1])
+    return false;
+
+  bool Equal = *Known[0] == *Known[1];
+  Value *Scc = Ctx.B.getInt1(Equal == IsEqual);
+  Ctx.registers().regFile().storeSCC(Ctx.B, Scc);
+  return true;
+}
+
 // Raise a 64-bit integer comparison and write its result to SCC.
 Error handleInteger64Compare(RaiseContext &Ctx, OperandResolver &Op,
                              CmpInst::Predicate Pred) {
@@ -228,10 +261,17 @@ Error handleSOPC(RaiseContext &Ctx, const DecodedInst &Di,
   if (std::optional<CmpInst::Predicate> Pred = integerPredicate(Di.CanonOp))
     return handleIntegerCompare(Ctx, Op, *Pred);
 
-  if (Di.CanonOp == CanonicalOp::S_CMP_EQ_U64)
-    return handleInteger64Compare(Ctx, Op, CmpInst::ICMP_EQ);
-  if (Di.CanonOp == CanonicalOp::S_CMP_LG_U64)
-    return handleInteger64Compare(Ctx, Op, CmpInst::ICMP_NE);
+  if (Di.CanonOp == CanonicalOp::S_CMP_EQ_U64 ||
+      Di.CanonOp == CanonicalOp::S_CMP_LG_U64) {
+    const bool IsEqual = Di.CanonOp == CanonicalOp::S_CMP_EQ_U64;
+    Expected<bool> Settled = compareSourceImageAddr(Ctx, Di, Op, IsEqual);
+    if (!Settled)
+      return Settled.takeError();
+    if (*Settled)
+      return Error::success();
+    return handleInteger64Compare(
+        Ctx, Op, IsEqual ? CmpInst::ICMP_EQ : CmpInst::ICMP_NE);
+  }
 
   if (std::optional<CmpInst::Predicate> Pred = floatPredicate(Di.CanonOp))
     return handleFloatCompare(Ctx, Op, *Pred, isFloat16Compare(Di.CanonOp));
