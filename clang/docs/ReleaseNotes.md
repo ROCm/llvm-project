@@ -259,6 +259,11 @@ features cannot lower the translation-unit ABI level;
 
 ### New Compiler Flags
 
+- New option `-fmodules-validate-directory-dependencies` makes an implicitly
+  built module out of date when a header is added to a directory it enumerated,
+  such as an umbrella directory or the directory of an umbrella header, after it
+  was built. Off by default.
+
 - New option `-fdefined-pointer-subtraction` added to preserve stable semantics
   when subtracting pointers to unrelated objects.
 
@@ -309,6 +314,10 @@ features cannot lower the translation-unit ABI level;
 - Clang now recognizes the `[[gnu::flag_enum]]` attribute and treats it equivalent to `[[clang::flag_enum]]`
 
 - Clang now accepts `_single_inheritance` under `-fms-compatibility` as an alias for `__single_inheritance`; `_multiple_inheritance` and `_virtual_inheritance` were already correctly supported as aliases.
+
+- Fixed a bug with handling a `nonnull` attribute with an invalid argument
+  index such that it would inadvertently apply the attribute with no arguments,
+  causing all function parameters of pointer type to be considered nonnull. (#GH228670)
 
 ### Improvements to Clang's diagnostics
 
@@ -619,6 +628,8 @@ features cannot lower the translation-unit ABI level;
   inside a member function call synthesized by ``__builtin_invoke``. (#GH185241)
 - Fixed a crash in ``__builtin_dump_struct`` when ``-Werror`` promotes
   format warnings to errors. (#GH211943)
+- Fixed a crash when `__atomic_always_lock_free` or `__atomic_is_lock_free` is
+  called with a size of zero. (#GH170139, #GH120082)
 - Fixed wrong code generation in `__builtin_clear_padding` wherein the wrong
   bits of the following types were cleared: `_BitInt`, struct bitfields, and
   packed boolean vectors. (#GH215809), (#GH216063), (#GH224033)
