@@ -52,8 +52,9 @@ Expected<std::optional<uint64_t>> sourceImageResult(RaiseContext &Ctx,
   std::optional<uint64_t> Displacement[2];
   for (unsigned I = 0; I != 2; ++I) {
     unsigned Index = Op.srcIdx(I);
-    if (Di.isImm(Index)) {
-      Displacement[I] = Di.getImm(Index);
+    // A literal can decode as an immediate or an absolute expression.
+    if (std::optional<int64_t> Constant = evalOperandAsConst(Di.Inst, Index)) {
+      Displacement[I] = static_cast<uint64_t>(*Constant);
       continue;
     }
     Expected<std::optional<uint64_t>> Address =

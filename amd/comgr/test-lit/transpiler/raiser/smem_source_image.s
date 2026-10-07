@@ -11,6 +11,7 @@
 ; RUN:   --emit-ir=pcrel_sixteen_kernel,pcrel_add_kernel,pcrel_sub_kernel \
 ; RUN:   --emit-ir=pcrel_mov_copy_kernel,pcrel_back_offset_kernel \
 ; RUN:   --emit-ir=pcrel_rodata_kernel \
+; RUN:   --emit-ir=pcrel_lit32_kernel,pcrel_lit64_kernel \
 ; RUN:   | %FileCheck %s
 
 ; A kernel whose source address the raise cannot resolve to a literal is
@@ -241,6 +242,38 @@ pcrel_rodata_kernel:
 	v_add_nc_u32 v0, s2, v0
 	s_endpgm
 
+	.globl	pcrel_lit32_kernel
+	.p2align	8
+	.type	pcrel_lit32_kernel,@function
+; CHECK-LABEL: define amdgpu_kernel void @pcrel_lit32_kernel(
+pcrel_lit32_kernel:
+	s_get_pc_i64 s[0:1]
+; A 32-bit literal spelling a value an inline constant could have held is kept
+; apart from that encoding as an expression, not an immediate.
+	s_add_nc_u64 s[0:1], s[0:1], lit(0xc)
+	s_load_b32 s2, s[0:1], 0x10
+	s_wait_kmcnt 0x0
+; CHECK: add i32 878082202,
+	v_add_nc_u32 v0, s2, v0
+	s_endpgm
+	.long	0x3456789a
+
+	.globl	pcrel_lit64_kernel
+	.p2align	8
+	.type	pcrel_lit64_kernel,@function
+; CHECK-LABEL: define amdgpu_kernel void @pcrel_lit64_kernel(
+pcrel_lit64_kernel:
+	s_get_pc_i64 s[0:1]
+; A 64-bit literal reaches the decode as an expression too, and carries the
+; displacement just as the immediate forms above do.
+	s_add_nc_u64 s[0:1], s[0:1], lit64(0x10)
+	s_load_b32 s2, s[0:1], 0x10
+	s_wait_kmcnt 0x0
+; CHECK: add i32 591751049,
+	v_add_nc_u32 v0, s2, v0
+	s_endpgm
+	.long	0x23456789
+
 ; A source address the raise cannot resolve to a literal is refused, since
 ; letting the load through would read target memory at a source address.
 
@@ -416,6 +449,16 @@ refuse_escape_high_kernel:
 		.amdhsa_next_free_sgpr 24
 	.end_amdhsa_kernel
 	.amdhsa_kernel pcrel_rodata_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel pcrel_lit32_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel pcrel_lit64_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 24
@@ -600,6 +643,28 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     24
     .symbol:         pcrel_rodata_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           pcrel_lit32_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         pcrel_lit32_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           pcrel_lit64_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         pcrel_lit64_kernel.kd
     .vgpr_count:     4
     .wavefront_size: 32
   - .args: []
