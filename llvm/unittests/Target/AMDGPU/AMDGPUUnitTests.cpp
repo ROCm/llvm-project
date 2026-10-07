@@ -44,6 +44,23 @@ static cl::opt<bool> PrintCpuRegLimits(
     "print-cpu-reg-limits", cl::NotHidden, cl::init(false),
     cl::desc("force printing per AMDGPU CPU register limits"));
 
+TEST_F(AMDGPUTestBase, LocalReassignmentPolicy) {
+  for (StringRef CPU : {"gfx90a", "gfx950", "gfx1200", "gfx1250",
+                        "gfx1250-strict", "gfx1251"}) {
+    auto TM = createAMDGPUTargetMachine(Triple("amdgcn-amd-amdhsa"), CPU, "");
+    ASSERT_TRUE(TM);
+    GCNSubtarget ST(TM->getTargetTriple(), TM->getTargetCPU(), "", *TM);
+    for (CodeGenOptLevel Level :
+         {CodeGenOptLevel::None, CodeGenOptLevel::Less,
+          CodeGenOptLevel::Default, CodeGenOptLevel::Aggressive}) {
+      EXPECT_TRUE(ST.TargetSubtargetInfo::enableRALocalReassignment(Level));
+      const TargetSubtargetInfo &Subtarget = ST;
+      EXPECT_EQ(CPU != "gfx1250", Subtarget.enableRALocalReassignment(Level))
+          << CPU << " O" << static_cast<unsigned>(Level);
+    }
+  }
+}
+
 static bool checkMinMax(std::stringstream &OS, unsigned Occ, unsigned MinOcc,
                         unsigned MaxOcc,
                         std::function<unsigned(unsigned)> GetOcc,
