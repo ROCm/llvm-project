@@ -363,7 +363,7 @@ mlir::ROCDL::linkObjectCode(ArrayRef<char> objectCode, StringRef lldPath,
 
   int lldResult = llvm::sys::ExecuteAndWait(
       lldPath,
-      {"ld.lld", "-shared", tempIsaBinaryFilename, "-o", tempHsacoFilename});
+      {lldPath, "-shared", tempIsaBinaryFilename, "-o", tempHsacoFilename});
   if (lldResult != 0)
     return emitError() << "lld invocation failed";
 
