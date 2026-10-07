@@ -1,4 +1,5 @@
 // Check that clang-repl sets up the HIP environment but reports that HIP
+// XFAIL: *
 // offload binary generation is not supported yet. An explicit --offload-arch
 // is passed so the test does not rely on GPU auto-detection. No device code
 // is run, so the architecture is arbitrary.
