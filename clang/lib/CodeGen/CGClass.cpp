@@ -26,6 +26,7 @@
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "clang/CodeGenUtils/ClassUtils.h"
 #include "clang/CodeGenUtils/CodeGenUtils.h"
+#include "clang/CodeGenUtils/RecordLayoutUtils.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/Support/SaveAndRestore.h"
