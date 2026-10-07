@@ -53,7 +53,7 @@ static cl::opt<unsigned> UnrollThresholdIf(
 static cl::opt<bool>
     UnrollRuntimeDefault("amdgpu-unroll-runtime-default",
                          cl::desc("Set default runtime unrolling for AMDGPU "),
-                         cl::init(true), cl::Hidden);
+                         cl::init(false), cl::Hidden);
 
 static cl::opt<bool> UnrollRuntimeLocal(
   "amdgpu-unroll-runtime-local",
