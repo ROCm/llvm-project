@@ -41,7 +41,7 @@ bool UnbundleCommand::canCache() const {
 
 Error UnbundleCommand::splitCachedOutput(StringRef CachedBuffer,
                                          SmallVectorImpl<StringRef> &Out) {
-  for (size_t I = 0, E = Config.OutputFileNames.size(); I != E; ++I) {
+  for (StringRef OutputFilename : Config.OutputFileNames) {
     SizeFieldType OutputFileSize;
     if (CachedBuffer.size() < sizeof(OutputFileSize))
       return createStringError(std::errc::invalid_argument,
@@ -64,13 +64,14 @@ Error UnbundleCommand::splitCachedOutput(StringRef CachedBuffer,
 }
 
 Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
-  SmallVector<StringRef, 4> Contents;
+  SmallVector<StringRef> Contents;
   if (Error Err = splitCachedOutput(CachedBuffer, Contents))
     return Err;
 
-  for (size_t I = 0, E = Contents.size(); I != E; ++I) {
-    if (Error Err = CachedCommandAdaptor::writeSingleOutputFile(
-            Config.OutputFileNames[I], Contents[I]))
+  for (const auto &[OutputFilename, OutputContents] :
+       llvm::zip_equal(Config.OutputFileNames, Contents)) {
+    if (Error Err = CachedCommandAdaptor::writeSingleOutputFile(OutputFilename,
+                                                                OutputContents))
       return Err;
   }
   return Error::success();
