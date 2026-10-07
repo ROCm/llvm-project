@@ -8,11 +8,14 @@
 
 #include "transpiler/raiser/handle-vop-cross-lane.h"
 
+#include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/decoded-inst.h"
 #include "transpiler/decoder/parsed-reg.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/raise_failure.h"
+
+#include "SIDefines.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
@@ -22,7 +25,9 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
+#include <cassert>
 #include <cstdint>
+#include <optional>
 
 using namespace llvm;
 
@@ -107,13 +112,162 @@ static Value *emitSourceWaveRead(RaiseContext &Ctx, Value *Src,
   return Ctx.Projection.wrapAsWWMValue(Ctx.B, Gathered, Name + ".wwm");
 }
 
+Error raiseDPPMove32(RaiseContext &Ctx, const DecodedInst &Di,
+                     OperandResolver &Op) {
+  if (Error Err = requireSupportedWaveDirection(Ctx, Di))
+    return Err;
+
+  auto Immediate = [&](AMDGPU::OpName Name) -> std::optional<int64_t> {
+    int Index = transpiler::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
+    if (Index < 0)
+      return std::nullopt;
+    return evalOperandAsConst(Di.Inst, Index);
+  };
+  std::optional<int64_t> Control = Immediate(AMDGPU::OpName::dpp_ctrl);
+  if (!Control || *Control < AMDGPU::DPP::ROW_SHR_FIRST ||
+      *Control > AMDGPU::DPP::ROW_SHR_LAST)
+    return unsupportedInstruction(Ctx, Di, "expected a DPP16 row_shr move");
+  if (Immediate(AMDGPU::OpName::row_mask) != 0xf ||
+      Immediate(AMDGPU::OpName::bank_mask) != 0xf ||
+      Immediate(AMDGPU::OpName::bound_ctrl) != 0)
+    return unsupportedInstruction(Ctx, Di,
+                                  "DPP move requires full row and bank masks "
+                                  "with bounds control disabled");
+  int FetchInactiveIndex =
+      transpiler::getNamedOperandIdx(Di.Inst.getOpcode(), AMDGPU::OpName::fi);
+  if (FetchInactiveIndex >= 0 &&
+      evalOperandAsConst(Di.Inst, FetchInactiveIndex) != 0)
+    return unsupportedInstruction(Ctx, Di, "DPP move does not support fi:1");
+  if (Op.nSrcs() == 0 || Op.srcMod(0) != 0)
+    return unsupportedInstruction(Ctx, Di, "expected an unmodified DPP source");
+
+  Expected<ParsedReg> Destination = Op.dst();
+  if (!Destination)
+    return Destination.takeError();
+  Expected<std::optional<ParsedReg>> Source = Op.srcReg(0);
+  if (!Source)
+    return Source.takeError();
+  if (Destination->RegKind != ParsedReg::VGPR || !*Source ||
+      (*Source)->RegKind != ParsedReg::VGPR)
+    return unsupportedInstruction(Ctx, Di, "DPP move requires VGPR operands");
+  Expected<Value *> Data = Op.src(0);
+  if (!Data)
+    return Data.takeError();
+
+  IRBuilder<> &B = Ctx.B;
+  constexpr unsigned RowSize = 16;
+  unsigned Shift = *Control - AMDGPU::DPP::ROW_SHR0;
+  Value *Lane = Ctx.emitLaneIdx();
+  Value *RowLane = B.CreateAnd(Lane, B.getInt32(RowSize - 1), "dpp.row.lane");
+  Value *InBounds =
+      B.CreateICmpUGE(RowLane, B.getInt32(Shift), "dpp.in.bounds");
+  Value *SourceLane = emitSourceWaveLane(
+      Ctx, B.CreateSub(Lane, B.getInt32(Shift)), "dpp.source.lane");
+  Value *Gathered = emitSourceWaveRead(Ctx, *Data, SourceLane, "dpp.data");
+
+  // The gather runs whole-wave; source EXEC, rather than target EXEC, decides
+  // whether the selected lane supplies data or the destination is preserved.
+  Value *Active =
+      B.CreateZExt(Ctx.registers().emitLaneActiveBit(), B.getInt32Ty());
+  Value *SourceActive =
+      emitSourceWaveRead(Ctx, Active, SourceLane, "dpp.active");
+  Value *Valid = B.CreateAnd(
+      InBounds, B.CreateICmpNE(SourceActive, B.getInt32(0)), "dpp.valid");
+  Value *Old = Ctx.registers().regFile().readReg32(B, *Destination);
+  Value *Result = B.CreateSelect(Valid, Gathered, Old, "dpp.move");
+  Ctx.registers().writeReg32(*Destination, Result);
+  return Error::success();
+}
+
+/// Return the mask of the lanes below the current one within its source wave.
+static Value *emitBelowSourceLaneMask(RaiseContext &Ctx, const Twine &Name) {
+  Value *SourceLane =
+      emitSourceWaveLane(Ctx, Ctx.emitLaneIdx(), Name + ".lane");
+  Value *LaneBit =
+      Ctx.B.CreateShl(Ctx.B.getInt32(1), SourceLane, Name + ".bit");
+  return Ctx.B.CreateSub(LaneBit, Ctx.B.getInt32(1), Name);
+}
+
+Error raiseMaskedBitCountLow32(RaiseContext &Ctx, const DecodedInst &Di,
+                               OperandResolver &Op) {
+  if (Error Err = requireSupportedWaveDirection(Ctx, Di))
+    return Err;
+  if (Op.nSrcs() != 2)
+    return unsupportedInstruction(Ctx, Di, "expected two source operands");
+
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> BaseCount = Op.src(1);
+  if (!BaseCount)
+    return BaseCount.takeError();
+
+  Value *Result = nullptr;
+  if (Ctx.Projection.targetWaveSize() == Ctx.Projection.sourceWaveSize()) {
+    Expected<Value *> Mask = Op.src(0);
+    if (!Mask)
+      return Mask.takeError();
+    Module *M = Ctx.B.GetInsertBlock()->getModule();
+    Function *MaskedBitCount =
+        Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_mbcnt_lo);
+    Result = Ctx.B.CreateCall(MaskedBitCount, {*Mask, *BaseCount}, "mbcnt.lo");
+  } else {
+    // The target lane id runs past the source wave, so the native intrinsic
+    // would count bits belonging to another source wave.
+    Expected<Value *> Mask = Op.srcSourceWaveMask32(0);
+    if (!Mask)
+      return Mask.takeError();
+    Value *Below = emitBelowSourceLaneMask(Ctx, "mbcnt.below");
+    Value *Selected = Ctx.B.CreateAnd(*Mask, Below, "mbcnt.selected");
+    Value *Count = Ctx.B.CreateUnaryIntrinsic(
+        Intrinsic::ctpop, Selected, /*FMFSource=*/nullptr, "mbcnt.count");
+    Result = Ctx.B.CreateAdd(Count, *BaseCount, "mbcnt.lo");
+  }
+
+  Ctx.registers().writeReg32(*Dst, Result);
+  return Error::success();
+}
+
+Error raiseMaskedBitCountHigh32(RaiseContext &Ctx, const DecodedInst &Di,
+                                OperandResolver &Op) {
+  if (Error Err = requireSupportedWaveDirection(Ctx, Di))
+    return Err;
+  if (Op.nSrcs() != 2)
+    return unsupportedInstruction(Ctx, Di, "expected two source operands");
+
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> BaseCount = Op.src(1);
+  if (!BaseCount)
+    return BaseCount.takeError();
+
+  Value *Result = nullptr;
+  if (Ctx.Projection.targetWaveSize() == Ctx.Projection.sourceWaveSize()) {
+    Expected<Value *> Mask = Op.src(0);
+    if (!Mask)
+      return Mask.takeError();
+    Module *M = Ctx.B.GetInsertBlock()->getModule();
+    Function *MaskedBitCount =
+        Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_mbcnt_hi);
+    Result = Ctx.B.CreateCall(MaskedBitCount, {*Mask, *BaseCount}, "mbcnt.hi");
+  } else {
+    // Widening only ever starts from wave32, whose lane ids stay below the
+    // high half of the wave mask. The selected bit range is therefore empty
+    // and the result is src1, independent of src0.
+    assert(Ctx.Projection.sourceWaveSize() <= 32 &&
+           "the high half of the wave mask is unreachable only from wave32");
+    Result = *BaseCount;
+  }
+
+  Ctx.registers().writeReg32(*Dst, Result);
+  return Error::success();
+}
+
 Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
                            OperandResolver &Op) {
   if (Error Err = requireSupportedWaveDirection(Ctx, Di))
     return Err;
-  if (Ctx.Projection.targetWaveSize() > Ctx.Projection.sourceWaveSize())
-    return unsupportedInstruction(
-        Ctx, Di, "v_readfirstlane_b32 does not support wave-size widening");
   if (Op.nSrcs() != 1)
     return unsupportedInstruction(Ctx, Di, "expected one source operand");
 
@@ -138,9 +292,14 @@ Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
                          FirstSet, "readfirstlane.source.lane");
   Value *Lane32 = Ctx.B.CreateZExtOrTrunc(SourceLane, Ctx.B.getInt32Ty(),
                                           "readfirstlane.index");
-  Function *ReadLane = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_readlane, {Ctx.B.getInt32Ty()});
-  Value *Result = Ctx.B.CreateCall(ReadLane, {*Src, Lane32}, "readfirstlane");
+  Value *Result;
+  if (Ctx.Projection.providesFullWaveExecInvariant()) {
+    Result = emitSourceWaveRead(Ctx, *Src, Lane32, "readfirstlane");
+  } else {
+    Function *ReadLane = Intrinsic::getOrInsertDeclaration(
+        M, Intrinsic::amdgcn_readlane, {Ctx.B.getInt32Ty()});
+    Result = Ctx.B.CreateCall(ReadLane, {*Src, Lane32}, "readfirstlane");
+  }
 
   Ctx.registers().writeReg32(*Dst, Result);
   return Error::success();

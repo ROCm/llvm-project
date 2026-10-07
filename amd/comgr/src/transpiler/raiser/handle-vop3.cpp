@@ -11,6 +11,7 @@
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
+#include "transpiler/raiser/handle-vop-cross-lane.h"
 #include "transpiler/raiser/handle-vop-shared.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
@@ -115,8 +116,8 @@ Error writeCarryOut(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Dst)
     return Dst.takeError();
 
-  Carry = Ctx.B.CreateAnd(Carry, Ctx.registers().emitLaneActiveBit(),
-                          "carry.active");
+  Carry = Ctx.B.CreateSelect(Ctx.registers().emitLaneActiveBit(), Carry,
+                             Ctx.B.getFalse(), "carry.active");
   switch (Dst->RegKind) {
   case ParsedReg::SGPR: {
     Type *MaskTy = Ctx.Projection.sourceWaveMaskTy();
@@ -327,7 +328,7 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> Significand = Op.srcF(0);
+  Expected<Value *> Significand = Op.srcF32(0);
   if (!Significand)
     return Significand.takeError();
   Expected<Value *> Exponent = Op.src(1);
@@ -346,6 +347,9 @@ Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
 
 Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
+  if (std::optional<VectorCompareInfo> Info = getVectorCompareInfo(Di.CanonOp))
+    return raiseVectorCompare(Ctx, Di, Op, *Info);
+
   switch (Di.CanonOp) {
   case CanonicalOp::V_NOP:
     return Error::success();
@@ -414,29 +418,6 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Clamp)
     return Clamp.takeError();
 
-  if (std::optional<ICmpInst::Predicate> Predicate =
-          getIntegerComparePredicate(Di.CanonOp)) {
-    assert(!*Clamp && "integer comparison cannot have clamp");
-    if (Di.NumDefs == 0) {
-      assert(Di.defsExec() &&
-             "comparison without a destination must write EXEC");
-      return raiseIntegerCompare32(Ctx, Di, Op, *Predicate, std::nullopt);
-    }
-    assert(Di.NumDefs == 1 && "comparison must have one explicit destination");
-    if (!Di.isReg(0))
-      return unsupportedInstruction(Ctx, Di,
-                                    "expected a comparison mask destination");
-    Expected<ParsedReg> Destination = Op.dst();
-    if (!Destination)
-      return Destination.takeError();
-    if (Destination->RegKind != ParsedReg::SGPR &&
-        Destination->RegKind != ParsedReg::VCC &&
-        Destination->RegKind != ParsedReg::NOREG)
-      return unsupportedInstruction(Ctx, Di,
-                                    "unsupported comparison mask destination");
-    return raiseIntegerCompare32(Ctx, Di, Op, *Predicate, *Destination);
-  }
-
   switch (Di.CanonOp) {
   case CanonicalOp::V_MOV_B32:
     if (*Clamp)
@@ -498,6 +479,10 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
       return unsupportedInstruction(
           Ctx, Di, "integer bit operation does not define clamp");
     return raiseBitCount(Ctx, Op);
+  case CanonicalOp::V_MBCNT_LO_U32_B32:
+    return raiseMaskedBitCountLow32(Ctx, Di, Op);
+  case CanonicalOp::V_MBCNT_HI_U32_B32:
+    return raiseMaskedBitCountHigh32(Ctx, Di, Op);
   case CanonicalOp::V_LSHLREV_B32:
     if (*Clamp)
       return unsupportedInstruction(

@@ -91,7 +91,6 @@ vop_integer_bitwise:
 	.p2align	6, 0x0
 	.amdhsa_kernel vop_integer_bitwise
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 40
 		.amdhsa_next_free_sgpr 1
 		.amdhsa_reserve_vcc 1

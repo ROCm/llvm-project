@@ -8703,7 +8703,7 @@ unsigned SITargetLowering::isCFIntrinsic(const SDNode *Intr) const {
 }
 
 bool SITargetLowering::shouldEmitFixup(const GlobalValue *GV) const {
-  const Triple &TT = getTargetMachine().getTargetTriple();
+  const Triple &TT = GV->getParent()->getTargetTriple();
   return (GV->getAddressSpace() == AMDGPUAS::CONSTANT_ADDRESS ||
           GV->getAddressSpace() == AMDGPUAS::CONSTANT_ADDRESS_32BIT) &&
          AMDGPU::shouldEmitConstantsToTextSection(TT);
@@ -20846,13 +20846,7 @@ static bool atomicIgnoresDenormalModeOrFPModeIsFTZ(const AtomicRMWInst *RMW) {
 
   const fltSemantics &Flt = RMW->getType()->getScalarType()->getFltSemantics();
   auto DenormMode = RMW->getFunction()->getDenormalMode(Flt);
-  if (DenormMode == DenormalMode::getPreserveSign())
-    return true;
-
-  // TODO: Remove this.
-  return RMW->getFunction()
-      ->getFnAttribute("amdgpu-unsafe-fp-atomics")
-      .getValueAsBool();
+  return DenormMode == DenormalMode::getPreserveSign();
 }
 
 static OptimizationRemark emitAtomicRMWLegalRemark(const AtomicRMWInst *RMW) {
@@ -20903,7 +20897,7 @@ static bool isAtomicRMWLegalXChgTy(const AtomicRMWInst *RMW) {
     return true;
 
   if (PointerType *PT = dyn_cast<PointerType>(Ty)) {
-    const DataLayout &DL = RMW->getFunction()->getParent()->getDataLayout();
+    const DataLayout &DL = RMW->getFunction()->getDataLayout();
     unsigned BW = DL.getPointerSizeInBits(PT->getAddressSpace());
     return BW == 32 || BW == 64;
   }

@@ -23,6 +23,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/Alignment.h"
@@ -31,6 +32,7 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MathExtras.h"
 
+#include <climits>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -39,9 +41,10 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 
-// Supported S_LOAD_B* instructions ignore bits [1:0] of every address
-// component.
-static constexpr Align DwordSmemAddressAlignment = Align::Constant<4>();
+// Every address component is aligned down to the data size, byte loads use
+// the full address, 16-bit loads ignore bit 0, and wider loads ignore bits
+// [1:0].
+static constexpr Align MaxSmemAddressAlignment = Align::Constant<4>();
 
 // Report decoded operands that contradict the generated instruction metadata.
 [[noreturn]] static void invalidOperandLayout(const MCState &MC,
@@ -88,21 +91,36 @@ static unsigned requiredNamedOperandIndex(const MCState &MC,
   return *Index;
 }
 
-// Return the data width for a supported non-buffer scalar load.
-static std::optional<unsigned> scalarLoadWidthInDwords(CanonicalOp Operation) {
+// The data size in bytes of a supported non-buffer scalar load, plus how a
+// sub-dword result reaches its destination. The size drives the address
+// alignment, the SCALE_OFFSET factor and the load type.
+struct ScalarLoadInfo {
+  unsigned SizeInBytes;
+  bool SignExtends;
+};
+
+static std::optional<ScalarLoadInfo> scalarLoadInfo(CanonicalOp Operation) {
   switch (Operation) {
+  case CanonicalOp::S_LOAD_I8:
+    return ScalarLoadInfo{1, true};
+  case CanonicalOp::S_LOAD_U8:
+    return ScalarLoadInfo{1, false};
+  case CanonicalOp::S_LOAD_I16:
+    return ScalarLoadInfo{2, true};
+  case CanonicalOp::S_LOAD_U16:
+    return ScalarLoadInfo{2, false};
   case CanonicalOp::S_LOAD_B32:
-    return 1;
+    return ScalarLoadInfo{4, false};
   case CanonicalOp::S_LOAD_B64:
-    return 2;
+    return ScalarLoadInfo{8, false};
   case CanonicalOp::S_LOAD_B96:
-    return 3;
+    return ScalarLoadInfo{12, false};
   case CanonicalOp::S_LOAD_B128:
-    return 4;
+    return ScalarLoadInfo{16, false};
   case CanonicalOp::S_LOAD_B256:
-    return 8;
+    return ScalarLoadInfo{32, false};
   case CanonicalOp::S_LOAD_B512:
-    return 16;
+    return ScalarLoadInfo{64, false};
   default:
     return std::nullopt;
   }
@@ -131,7 +149,7 @@ static Error loadFromSourceImage(RaiseContext &Ctx, const DecodedInst &Di,
   // The hardware drops the low bits of the base and of the offset one by one
   // rather than of their sum, so read what the source read instead of failing
   // on a misaligned offset.
-  uint64_t DwordBytes = DwordSmemAddressAlignment.value();
+  uint64_t DwordBytes = MaxSmemAddressAlignment.value();
   Expected<uint64_t> FirstDword = moveSourceImageAddress(
       Ctx, Di, alignDown(BaseAddress, DwordBytes),
       alignDown(static_cast<uint64_t>(ImmediateOffset), DwordBytes));
@@ -166,11 +184,58 @@ static Error loadFromSourceImage(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+// Build the byte address a scalar load reads from:
+//
+//   Address = (Base & Mask) + alignDown(ImmediateOffset, AddressAlignment) +
+//             ((zext(ScalarOffset) [* LoadSizeInBytes]) & Mask)
+//
+// Mask clears the low alignment bits; SCALE_OFFSET applies the multiply before
+// masking. ScalarOffset is null when no SGPR offset is encoded.
+static Value *
+emitScalarLoadAddress(IRBuilder<> &B, Value *Base, int64_t ImmediateOffset,
+                      Value *ScalarOffset, bool ScalesScalarOffset,
+                      unsigned LoadSizeInBytes, Align AddressAlignment) {
+  Type *I64Ty = B.getInt64Ty();
+  // A byte load aligns to one, so it masks nothing and the address components
+  // reach the pointer unchanged.
+  bool MasksAddress = AddressAlignment > Align(1);
+  Constant *AddressMask = ConstantInt::get(
+      I64Ty, maskTrailingZeros<uint64_t>(Log2(AddressAlignment)));
+
+  Value *Address = Base;
+  if (MasksAddress)
+    Address = B.CreateAnd(Address, AddressMask, "smem_base");
+  uint64_t Offset = alignDown(static_cast<uint64_t>(ImmediateOffset),
+                              AddressAlignment.value());
+  Address = B.CreateAdd(Address, ConstantInt::get(I64Ty, Offset), "smem_addr");
+  if (!ScalarOffset)
+    return Address;
+
+  // SCALE_OFFSET treats the 32-bit SGPR value as an element index. Widen it
+  // first, then scale it by the load size.
+  Value *WideScalarOffset = B.CreateZExt(ScalarOffset, I64Ty, "smem_soff");
+  if (ScalesScalarOffset && LoadSizeInBytes > 1)
+    WideScalarOffset =
+        B.CreateMul(WideScalarOffset, ConstantInt::get(I64Ty, LoadSizeInBytes),
+                    "smem_soff_scaled");
+  if (MasksAddress)
+    WideScalarOffset =
+        B.CreateAnd(WideScalarOffset, AddressMask, "smem_soff_dword");
+  return B.CreateAdd(Address, WideScalarOffset, "smem_addr_soff");
+}
+
 Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
-  std::optional<unsigned> LoadWidthInDwords =
-      scalarLoadWidthInDwords(Di.CanonOp);
-  if (!LoadWidthInDwords)
+  std::optional<ScalarLoadInfo> Info = scalarLoadInfo(Di.CanonOp);
+  if (!Info)
     return unsupported(Ctx, Di, "unsupported scalar memory operation");
+  unsigned LoadSizeInBytes = Info->SizeInBytes;
+  // Narrow loads transfer less than one dword: i8/u8/i16/u16.
+  bool IsNarrowLoad = LoadSizeInBytes < MaxSmemAddressAlignment.value();
+  // A narrow load extends into a single dword; wider loads fill a tuple.
+  unsigned DestinationWidthInDwords =
+      IsNarrowLoad ? 1 : LoadSizeInBytes / MaxSmemAddressAlignment.value();
+  Align AddressAlignment =
+      IsNarrowLoad ? Align(LoadSizeInBytes) : MaxSmemAddressAlignment;
 
   unsigned DestinationIndex =
       requiredNamedOperandIndex(Ctx.MC, Di, AMDGPU::OpName::sdst, "sdst");
@@ -218,7 +283,7 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   if (!Destination->BaseIdx)
     invalidOperandLayout(Ctx.MC, Di,
                          "SGPR destination has no base register index");
-  if (Destination->WidthInDwords != *LoadWidthInDwords)
+  if (Destination->WidthInDwords != DestinationWidthInDwords)
     invalidOperandLayout(Ctx.MC, Di,
                          "destination width does not match the load opcode");
 
@@ -241,6 +306,13 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   if (!SourceImageBase)
     return SourceImageBase.takeError();
   if (*SourceImageBase) {
+    // The source image is read a dword at a time, which a sub-dword load does
+    // not divide into: its address needs no alignment and its result needs
+    // extending.
+    if (IsNarrowLoad)
+      return unsupported(Ctx, Di,
+                         "sub-dword scalar loads from the source code object "
+                         "are not supported");
     if (ScalarOffsetIndex) {
       Expected<bool> IsZero = scalarOffsetIsZero(Ctx, Di, *ScalarOffsetIndex);
       if (!IsZero)
@@ -251,7 +323,7 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
                            "the running kernel knows");
     }
     return loadFromSourceImage(Ctx, Di, *Destination, **SourceImageBase,
-                               ImmediateOffset, *LoadWidthInDwords);
+                               ImmediateOffset, DestinationWidthInDwords);
   }
 
   // The immediate is a signed byte offset, and a load off a raw address may
@@ -274,48 +346,34 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
     ScalarOffsetValue = *Read;
   }
 
-  Type *I64Ty = Ctx.B.getInt64Ty();
-  uint64_t AddressMask =
-      maskTrailingZeros<uint64_t>(Log2(DwordSmemAddressAlignment));
-  Value *AlignedBase = Ctx.B.CreateAnd(
-      *BaseValue, ConstantInt::get(I64Ty, AddressMask), "smem_base");
-  uint64_t Offset = alignDown(static_cast<uint64_t>(ImmediateOffset),
-                              DwordSmemAddressAlignment.value());
-  Value *Address = Ctx.B.CreateAdd(AlignedBase, ConstantInt::get(I64Ty, Offset),
-                                   "smem_addr");
-  if (ScalarOffsetValue) {
-    // SCALE_OFFSET treats the 32-bit SGPR value as an element index. Widen it
-    // first, then scale it by the load size.
-    Value *WideScalarOffset =
-        Ctx.B.CreateZExt(ScalarOffsetValue, I64Ty, "smem_soff");
-    if (ScaleScalarOffset) {
-      uint64_t ScaleFactor =
-          *LoadWidthInDwords * DwordSmemAddressAlignment.value();
-      WideScalarOffset = Ctx.B.CreateMul(WideScalarOffset,
-                                         ConstantInt::get(I64Ty, ScaleFactor),
-                                         "smem_soff_scaled");
-    }
-    // The ISA aligns the scaled offset, not the raw register, so the mask
-    // follows the multiply.
-    Value *AlignedScalarOffset =
-        Ctx.B.CreateAnd(WideScalarOffset, ConstantInt::get(I64Ty, AddressMask),
-                        "smem_soff_dword");
-    Address = Ctx.B.CreateAdd(Address, AlignedScalarOffset, "smem_addr_soff");
-  }
+  Value *Address = emitScalarLoadAddress(Ctx.B, *BaseValue, ImmediateOffset,
+                                         ScalarOffsetValue, ScaleScalarOffset,
+                                         LoadSizeInBytes, AddressAlignment);
   PointerType *PointerTy =
       PointerType::get(Ctx.B.getContext(), AMDGPUAS::GLOBAL_ADDRESS);
   Value *Pointer = Ctx.B.CreateIntToPtr(Address, PointerTy, "smem_ptr");
 
   Type *LoadType = Ctx.B.getInt32Ty();
-  if (*LoadWidthInDwords == 2)
+  if (IsNarrowLoad)
+    LoadType = Ctx.B.getIntNTy(LoadSizeInBytes * CHAR_BIT);
+  else if (DestinationWidthInDwords == 2)
     LoadType = Ctx.B.getInt64Ty();
-  else if (*LoadWidthInDwords > 2)
-    LoadType = FixedVectorType::get(Ctx.B.getInt32Ty(), *LoadWidthInDwords);
-  Value *Loaded = Ctx.B.CreateAlignedLoad(
-      LoadType, Pointer, DwordSmemAddressAlignment, "smem_load");
-  if (*LoadWidthInDwords == 1) {
+  else if (DestinationWidthInDwords > 2)
+    LoadType =
+        FixedVectorType::get(Ctx.B.getInt32Ty(), DestinationWidthInDwords);
+  Ctx.requireWaveUniform(Pointer, Di,
+                         "WaveNative requires uniform scalar memory addresses");
+  Value *Loaded =
+      Ctx.B.CreateAlignedLoad(LoadType, Pointer, AddressAlignment, "smem_load");
+  if (IsNarrowLoad) {
+    Value *Extended =
+        Info->SignExtends
+            ? Ctx.B.CreateSExt(Loaded, Ctx.B.getInt32Ty(), "smem_load_sext")
+            : Ctx.B.CreateZExt(Loaded, Ctx.B.getInt32Ty(), "smem_load_zext");
+    Ctx.registers().writeReg32(*Destination, Extended);
+  } else if (DestinationWidthInDwords == 1) {
     Ctx.registers().writeReg32(*Destination, Loaded);
-  } else if (*LoadWidthInDwords == 2) {
+  } else if (DestinationWidthInDwords == 2) {
     Ctx.registers().writeReg64(*Destination, Loaded);
   } else {
     // Every wider load is a vector of i32 written across an SGPR tuple.

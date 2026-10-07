@@ -3338,6 +3338,7 @@ void DwarfDebug::emitDebugLocValue(const AsmPrinter &AP, const DIBasicType *BT,
                                    const DbgValueLoc &Value,
                                    DwarfExpression &DwarfExpr) {
   auto *DIExpr = Value.getExpression();
+  DIExpressionCursor ExprCursor(DIExpr);
   DwarfExpr.addFragmentOffset(DIExpr);
 
   if (DIExpr) {
@@ -3347,8 +3348,6 @@ void DwarfDebug::emitDebugLocValue(const AsmPrinter &AP, const DIBasicType *BT,
       return;
     }
   }
-
-  DIExpressionCursor ExprCursor(DIExpr);
 
   // If the DIExpr is an Entry Value, we want to follow the same code path
   // regardless of whether the DBG_VALUE is variadic or not.

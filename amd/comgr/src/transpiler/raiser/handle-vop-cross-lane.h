@@ -17,6 +17,18 @@ struct OperandResolver;
 struct DecodedInst;
 class RaiseContext;
 
+/// Raise a DPP16 V_MOV_B32 row_shr with full write masks and BC = FI = 0.
+llvm::Error raiseDPPMove32(RaiseContext &Ctx, const DecodedInst &Di,
+                           OperandResolver &Op);
+
+/// Raise V_MBCNT_LO_U32_B32.
+llvm::Error raiseMaskedBitCountLow32(RaiseContext &Ctx, const DecodedInst &Di,
+                                     OperandResolver &Op);
+
+/// Raise V_MBCNT_HI_U32_B32.
+llvm::Error raiseMaskedBitCountHigh32(RaiseContext &Ctx, const DecodedInst &Di,
+                                      OperandResolver &Op);
+
 /// Raise V_READFIRSTLANE_B32.
 llvm::Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
                                  OperandResolver &Op);

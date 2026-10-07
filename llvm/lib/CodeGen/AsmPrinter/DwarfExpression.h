@@ -475,6 +475,18 @@ public:
                                    ChildrenT Children);
 
   std::optional<OpResult> traverse(DIOp::Fragment Fragment, ChildrenT Children);
+
+  /// Emit the address of \p GV displaced by \p Offset as an implicit location
+  /// description, i.e. as the value of the described entity rather than as the
+  /// address of its storage. Returns false if the address cannot be spelled in
+  /// this unit's DWARF.
+  bool addGlobalAddress(const GlobalValue *GV, int64_t Offset);
+
+  /// Whether addGlobalAddress() can spell a global's address at all. This
+  /// depends only on the DWARF version and the output form, not on the global,
+  /// so callers that cannot take back what they have already emitted can
+  /// settle it before emitting anything.
+  bool canAddGlobalAddress() const;
 };
 
 /// DwarfExpression implementation for .debug_loc entries.

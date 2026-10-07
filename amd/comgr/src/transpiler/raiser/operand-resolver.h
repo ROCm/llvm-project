@@ -72,8 +72,10 @@ struct OperandResolver {
   llvm::Expected<llvm::Value *> src(unsigned I) {
     return Ctx.registers().readOp32(Di, srcIdx(I));
   }
+  /// Read the I-th source as an f64 value with its modifiers applied.
+  llvm::Expected<llvm::Value *> srcF64(unsigned I);
   // Read the I-th source as an f32 value with its modifiers applied.
-  llvm::Expected<llvm::Value *> srcF(unsigned I);
+  llvm::Expected<llvm::Value *> srcF32(unsigned I);
   // Read the selected half of the I-th source as an f16 value with its
   // modifiers applied.
   llvm::Expected<llvm::Value *> srcF16(unsigned I);
@@ -100,6 +102,10 @@ struct OperandResolver {
   // Read the I-th source as a wave mask at target EXEC width.
   llvm::Expected<llvm::Value *> srcExecWidth(unsigned I) {
     return Ctx.registers().readOpExecWidth(Di, srcIdx(I));
+  }
+  // Read the I-th source as the current source wave's slice of a wave mask.
+  llvm::Expected<llvm::Value *> srcSourceWaveMask32(unsigned I) {
+    return Ctx.registers().readOpSourceWaveMask32(Di, srcIdx(I));
   }
   // Read the I-th source's per-lane wave-mask value, or null when unavailable.
   llvm::Expected<llvm::Value *> srcWaveMaskI1(unsigned I) {

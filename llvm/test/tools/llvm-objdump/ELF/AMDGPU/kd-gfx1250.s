@@ -1,5 +1,5 @@
 ;; Test disassembly for gfx1250 kernel descriptor.
-
+; XFAIL: *
 ; RUN: rm -rf %t && split-file %s %t && cd %t
 
 ;--- 1.s

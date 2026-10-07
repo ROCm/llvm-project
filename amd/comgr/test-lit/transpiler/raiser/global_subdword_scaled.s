@@ -7,7 +7,7 @@
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_subdword_scaled | %FileCheck %s --check-prefix=IR
 
-; RUN: not %transpile_cli %t.hsaco --isa=gfx1200 --target-isa=gfx942 \
+; RUN: not %transpile_cli %t.hsaco --isa=gfx1200 --target-isa=gfx1200 \
 ; RUN:   --emit-ir=global_subdword_scaled 2>&1 | %FileCheck %s \
 ; RUN:   --check-prefix=GPU
 ; GPU: scale_offset is not supported on this GPU
@@ -20,7 +20,7 @@
 ; IR-LABEL: define amdgpu_kernel void @global_subdword_scaled(
 global_subdword_scaled:
 v_mov_b32 v4, 0x1234
-s_mov_b32 exec_lo, 0x55555555
+s_and_b32 exec_lo, exec_lo, 0x55555555
 
 ; DECODE: GLOBAL_LOAD_U8 global_load_u8
 ; IR: [[LANE:%.+]] = sext i32 {{.+}} to i64
@@ -97,7 +97,6 @@ s_endpgm
 .p2align 6
 .amdhsa_kernel global_subdword_scaled
   .amdhsa_kernarg_size 0
-  .amdhsa_wavefront_size32 1
   .amdhsa_next_free_vgpr 8
   .amdhsa_next_free_sgpr 2
 .end_amdhsa_kernel

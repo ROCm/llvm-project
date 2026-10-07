@@ -65,6 +65,7 @@ enum class RaiseFailureReason : uint16_t {
   DeviceLibraryLinkFailed,
   // Wave-size-obstruction refusals, split one enumerator per refusal so
   // diagnostics can bucket them without parsing the message text.
+  UnsupportedWaveProjection,
   CrossWaveLaneIdLeak,
   CrossWaveUnrewritableShuffle,
   CrossWaveShuffleRewritePending,

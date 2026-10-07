@@ -8,6 +8,9 @@ name: SPIRV Compiler CI - Windows - amd-staging
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
   # =====================================================================
   # Build LLVM + Clang + amd-llvm-spirv + device-libs + Comgr.
@@ -170,7 +173,7 @@ jobs:
         run: tar -cf windows-build-tree.tar build build-comgr build-device-libs
 
       - name: Upload build tree artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-build-tree
           path: windows-build-tree.tar
@@ -250,7 +253,7 @@ jobs:
           persist-credentials: false
 
       - name: Download build tree artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-build-tree
 
@@ -348,7 +351,7 @@ jobs:
           persist-credentials: false
 
       - name: Download build tree artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-build-tree
 
@@ -429,7 +432,7 @@ jobs:
           persist-credentials: false
 
       - name: Download build tree artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-build-tree
 
@@ -438,6 +441,9 @@ jobs:
       - name: Untar build trees
         run: |
           tar -xmf windows-build-tree.tar
+          # Recreate the DLL when relinking the restored tree. In-place relinks
+          # can cause DLL initialization failures on the Windows runners.
+          rm build-comgr/amd_comgr.dll
           touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
 
       - name: Test - Comgr (check-comgr)

@@ -93,7 +93,7 @@ vop3_math:
 ; CHECK: call float @llvm.ldexp.f32.i32
 	v_ldexp_f32 v2, v3, v4
 	s_mov_b32 s4, -1
-; CHECK: [[COND:%.+]] = icmp ne i64 {{.+}}, 0
+; CHECK: [[COND:%.+]] = icmp ne i32 {{.+}}, 0
 ; CHECK: select i1 [[COND]], i32
 	v_cndmask_b32_e64 v5, v6, v7, s4
 ; CHECK: ret void
@@ -129,27 +129,22 @@ refuse_true16_destination:
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel vop_math
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 48
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel vop3_math
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 12
 		.amdhsa_next_free_sgpr 5
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_clamp
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 2
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_omod
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 2
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_true16_destination
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 2
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel

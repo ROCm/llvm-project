@@ -23,3 +23,9 @@ ASAN-DEBUG lib breaks
 comgr fails to build -lzma
 [Support][lldb] Port xz (lzma) decompression from LLDB into LLVM (#220092)
 ---
+breaks asan-debug build
+[DebugInfo] Support global addresses in variable locations  (#218722)" (#4800) (2 hours ago) <theRonShark>
+---
+breaks psdb
+"[AMDGPU] Reserve ENABLE_WAVEFRONT_SIZE32 on gfx125x (#229162)"
+---
