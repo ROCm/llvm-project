@@ -323,7 +323,7 @@ Error raiseFloatConversion64(RaiseContext &Ctx, const DecodedInst &Di,
     return Dst.takeError();
 
   if (Di.CanonOp == CanonicalOp::V_CVT_F64_F32) {
-    Expected<Value *> Source = Op.srcF(0);
+    Expected<Value *> Source = Op.srcF32(0);
     if (!Source)
       return Source.takeError();
     Value *Result = Ctx.B.CreateFPExt(*Source, Ctx.B.getDoubleTy());

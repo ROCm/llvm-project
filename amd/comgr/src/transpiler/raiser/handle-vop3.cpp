@@ -417,10 +417,10 @@ Error raiseFloatTernary32(RaiseContext &Ctx, const DecodedInst &Di,
       return unsupportedInstruction(Ctx, Di,
                                     "asymmetric divide scale source modifiers");
 
-    Expected<Value *> Numer = Op.srcF(NumeratorScale ? 0 : 2);
+    Expected<Value *> Numer = Op.srcF32(NumeratorScale ? 0 : 2);
     if (!Numer)
       return Numer.takeError();
-    Expected<Value *> Denom = Op.srcF(1);
+    Expected<Value *> Denom = Op.srcF32(1);
     if (!Denom)
       return Denom.takeError();
     Value *Pair = Ctx.B.CreateIntrinsic(
@@ -442,13 +442,13 @@ Error raiseFloatTernary32(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
-  Expected<Value *> Src0 = Op.srcF(0);
+  Expected<Value *> Src0 = Op.srcF32(0);
   if (!Src0)
     return Src0.takeError();
-  Expected<Value *> Src1 = Op.srcF(1);
+  Expected<Value *> Src1 = Op.srcF32(1);
   if (!Src1)
     return Src1.takeError();
-  Expected<Value *> Src2 = Op.srcF(2);
+  Expected<Value *> Src2 = Op.srcF32(2);
   if (!Src2)
     return Src2.takeError();
   bool LegacyIeee = Ctx.Projection.SourceSTI.hasFeature(
@@ -536,10 +536,10 @@ Error raiseFloatBinary32(RaiseContext &Ctx, const DecodedInst &Di,
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> Src0 = Op.srcF(0);
+  Expected<Value *> Src0 = Op.srcF32(0);
   if (!Src0)
     return Src0.takeError();
-  Expected<Value *> Src1 = Op.srcF(1);
+  Expected<Value *> Src1 = Op.srcF32(1);
   if (!Src1)
     return Src1.takeError();
   Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_MAXIMUM_F32
