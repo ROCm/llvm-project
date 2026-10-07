@@ -1258,7 +1258,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
                      __tgt_async_info *AsyncInfo,
                      GenericProfilerTy *ProfilerPtr = nullptr);
 
-
   // Switch memory region to coarse grain mode
   Error setCoarseGrainMemory(void *ptr, int64_t size);
   virtual Error setCoarseGrainMemoryImpl(void *ptr, int64_t size,
@@ -1426,9 +1425,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   /// Get the number of compute units
   virtual uint32_t getNumComputeUnits() const { return 0; }
-
-  /// Return the device time stamp
-  virtual uint64_t getDeviceTimeStamp() { return 0; }
 
   /// Post processing after jit backend. The ownership of \p MB will be taken.
   virtual Expected<std::unique_ptr<MemoryBuffer>>

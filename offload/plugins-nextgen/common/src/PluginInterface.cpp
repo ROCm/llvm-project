@@ -231,11 +231,6 @@ Error GenericDeviceTy::init(GenericPluginTy &Plugin,
   if (auto Err = initImpl(Plugin, ProfilerPtr))
     return Err;
 
-  if (Profiler)
-    // Invokes profiler backend to dispatch event. Required here to enable
-    // capture hardware-time slope data
-    Profiler->handleInit(this, &Plugin);
-
   // Read and reinitialize the envars that depend on the device initialization.
   // Notice these two envars may change the stack size and heap size of the
   // device, so they need the device properly initialized.
@@ -317,11 +312,9 @@ Error GenericDeviceTy::deinit(GenericPluginTy &Plugin,
     RecordReplay = nullptr;
   }
 
-  if (auto Profiler = Plugin.getProfiler(); Profiler)
-    Profiler->handleDeinit(this, &Plugin);
-
   return deinitImpl();
 }
+
 Expected<DeviceImageTy *>
 GenericDeviceTy::loadBinary(GenericPluginTy &Plugin, StringRef InputTgtImage,
                             PluginContextTy *Context,
@@ -368,9 +361,6 @@ GenericDeviceTy::loadBinary(GenericPluginTy &Plugin, StringRef InputTgtImage,
 
   if (auto Err = setupRPCServer(Plugin, *Image))
     return std::move(Err);
-
-  if (auto Profiler = Plugin.getProfiler(); Profiler)
-    Profiler->handleLoadBinary(this, &Plugin, InputTgtImage);
 
   // Call any global constructors present on the device.
   if (auto Err = callGlobalConstructors(Plugin, *Image))
