@@ -1784,8 +1784,8 @@ ControlFlowRewriter::getInitBlock(ArrayRef<MachineBasicBlock *> Blocks) const {
   assert(!Blocks.empty());
   MachineDominatorTree &DomTree = ReconvergeCfg.getDomTree();
   MachineCycleInfo &CycleInfo = ReconvergeCfg.getCycleInfo();
-  MachineBasicBlock *L = DomTree.findNearestCommonDominator(
-      llvm::make_range(Blocks.begin(), Blocks.end()));
+  MachineBasicBlock *L =
+      DomTree.findNearestCommonDominator(llvm::iterator_range(Blocks));
 
   // MachineCycleInfo predates the flow blocks; their wave node has the cycle.
   for (;;) {
@@ -1800,7 +1800,7 @@ ControlFlowRewriter::getInitBlock(ArrayRef<MachineBasicBlock *> Blocks) const {
     const MachineDomTreeNode *IDom =
         DomTree.getNode(CycleInfo.getHeader(C))->getIDom();
     if (!IDom)
-      return &Function.front();
+      llvm_unreachable("Expected cycle to have an IDom.");
     L = IDom->getBlock();
   }
 }
