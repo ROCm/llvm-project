@@ -236,10 +236,10 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
                           {Ctx.B.getInt32(Op.srcImm(0))});
     return Error::success();
 
+  // S_TRAP enters a trap handler. Only ID 2 (trap) and ID 3 (debug trap)
+  // have equivalents in the raised kernel; other IDs require the handler.
+  // gfx1250 uses SIMM16[3:0] as the ID; earlier targets use SIMM16[7:0].
   case CanonicalOp::S_TRAP: {
-    // S_TRAP enters a trap handler. Only ID 2 (trap) and ID 3 (debug trap)
-    // have equivalents in the raised kernel; other IDs require the handler.
-    // gfx1250 uses SIMM16[3:0] as the ID; earlier targets use SIMM16[7:0].
     int64_t TrapIdMask =
         Ctx.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX1250Insts) ? 0xf
                                                                          : 0xff;
