@@ -41,7 +41,7 @@
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym CASE=10 -filetype=obj %s -o %t.10.o
 ; RUN: not %transpile_cli %t.10.o --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=CASE10
 ; CASE10: unproven-exec-containment: s_mov_b32
-; CASE10-SAME: WaveNative cannot prove that EXEC only enables lanes active at kernel entry
+; CASE10-SAME: projection cannot prove that EXEC only enables lanes active at kernel entry
 ; RUN: %transpile_cli %t.10.o --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --launch-grid=64,1,1 --launch-workgroup=64,1,1 | %FileCheck %s --check-prefix=REPLICATED
 ; REPLICATED: ; launch: unsupported kind=replicated-1D-whole-wave max_workgroup_size=64 grid=128,1,1 workgroup=128,1,1
 

@@ -26,7 +26,7 @@
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=ids --allow-replicated-dispatch --launch-grid=96,1,1 --launch-workgroup=64,1,1 2>&1 | %FileCheck %s --check-prefix=EDGE
 ; EDGE: unsupported-launch in kernel 'ids' :: replicated dispatch requires complete workgroups
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=ids --allow-replicated-dispatch --launch-grid=32,2,1 --launch-workgroup=32,2,1 2>&1 | %FileCheck %s --check-prefix=MULTI
-; MULTI: unsupported-launch in kernel 'ids' :: replicated dispatch requires a one-dimensional launch
+; MULTI: unsupported-launch in kernel 'ids' :: replicated dispatch requires a one-dimensional workgroup
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=ids --allow-replicated-dispatch --launch-grid=544,1,1 --launch-workgroup=544,1,1 2>&1 | %FileCheck %s --check-prefix=LIMIT
 ; LIMIT: unsupported-launch in kernel 'ids' :: workgroup exceeds the kernel's supported launch size
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=ids --allow-replicated-dispatch --launch-grid=2147483648,1,1 --launch-workgroup=32,1,1 2>&1 | %FileCheck %s --check-prefix=OVERFLOW
@@ -56,8 +56,8 @@
 ; LARGE-REQUIRED: invalid .reqd_workgroup_size
 ; RUN: sed '/^    .reqd_workgroup_size:/s/96, 1, 1/32, 2, 1/' %s | %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj -o %t.required.o
 ; RUN: %ld.lld -shared %t.required.o -o %t.required.hsaco
-; RUN: not %transpile_cli %t.required.hsaco --target-isa=gfx942 --emit-ir=geometry --allow-replicated-dispatch 2>&1 | %FileCheck %s --check-prefix=MULTI-REQUIRED
-; MULTI-REQUIRED: replicated dispatch requires a one-dimensional launch
+; RUN: %transpile_cli %t.required.hsaco --target-isa=gfx942 --emit-ir=geometry --allow-replicated-dispatch | %FileCheck %s --check-prefix=MULTI-REQUIRED
+; MULTI-REQUIRED: ; launch: geometry kind=replicated-flattened-whole-wave
 ; RUN: sed '/^    .reqd_workgroup_size:/s/96, 1, 1/48, 1, 1/' %s | %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj -o %t.required.o
 ; RUN: %ld.lld -shared %t.required.o -o %t.required.hsaco
 ; RUN: not %transpile_cli %t.required.hsaco --target-isa=gfx942 --emit-ir=geometry --allow-replicated-dispatch 2>&1 | %FileCheck %s --check-prefix=PARTIAL-REQUIRED
@@ -65,7 +65,7 @@
 ; RUN: sed '/^    .reqd_workgroup_size:/s/96, 1, 1/544, 1, 1/' %s | %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj -o %t.required.o
 ; RUN: %ld.lld -shared %t.required.o -o %t.required.hsaco
 ; RUN: not %transpile_cli %t.required.hsaco --target-isa=gfx942 --emit-ir=geometry --allow-replicated-dispatch 2>&1 | %FileCheck %s --check-prefix=LIMIT-REQUIRED
-; LIMIT-REQUIRED: workgroup exceeds the kernel's supported launch size
+; LIMIT-REQUIRED: unproven-exec-containment:
 ; RUN: sed '/^    .reqd_workgroup_size:/s/96, 1, 1/0, 0, 0/' %s | %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj -o %t.required.o
 ; RUN: %ld.lld -shared %t.required.o -o %t.required.hsaco
 ; RUN: %transpile_cli %t.required.hsaco --target-isa=gfx942 --emit-ir=geometry --allow-replicated-dispatch > %t.required.ll

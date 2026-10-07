@@ -374,8 +374,9 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
   else if (DestinationWidthInDwords > 2)
     LoadType =
         FixedVectorType::get(Ctx.B.getInt32Ty(), DestinationWidthInDwords);
-  Ctx.requireWaveUniform(Pointer, Di,
-                         "projection requires uniform scalar memory addresses");
+  if (!Ctx.Projection.allowsDivergentScalarControlFlow())
+    Ctx.requireWaveUniform(
+        Pointer, Di, "projection requires uniform scalar memory addresses");
   Value *Loaded = Ctx.registers().emitMemoryValue(
       [&] {
         return Ctx.B.CreateAlignedLoad(LoadType, Pointer, AddressAlignment,

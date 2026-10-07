@@ -21,10 +21,12 @@
 
 #include <array>
 #include <cassert>
+#include <cstdint>
 
 namespace COMGR::transpiler {
 
 struct MCState;
+struct KernelLaunchRequirements;
 
 } // namespace COMGR::transpiler
 
@@ -33,6 +35,12 @@ class MCSubtargetInfo;
 } // namespace llvm
 
 namespace COMGR::transpiler {
+
+// Workgroup-size fields in the HSA kernel dispatch packet. The following
+// reserved i16 is included in scalar loads of the three packed sizes.
+inline constexpr unsigned DispatchWorkgroupSizeXOffset = 4;
+inline constexpr unsigned DispatchWorkgroupSizeFieldBytes = sizeof(uint16_t);
+inline constexpr unsigned DispatchWorkgroupSizesEndOffset = 12;
 
 /// Return the wavefront width selected by Subtarget.
 unsigned getWaveSize(const llvm::MCSubtargetInfo &Subtarget);
@@ -50,6 +58,10 @@ public:
   enum class ValidationKind { None, WaveNative };
 
   virtual ValidationKind validationKind() const { return ValidationKind::None; }
+  /// Whether different source waves may take different scalar branches.
+  bool allowsDivergentScalarControlFlow() const {
+    return AllowsDivergentScalarControlFlow;
+  }
 
   WaveProjection(const llvm::MCSubtargetInfo &Source,
                  const llvm::MCSubtargetInfo &Target, llvm::Type *I32Ty,
@@ -107,10 +119,12 @@ public:
   // splits or re-maps source waves overrides it.
   virtual llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const;
 
-  // Emit the workitem id of dimension `Dim` (0 for x) source-ISA code should
-  // observe. Only x carries the wavefront, so y and z are the target hardware
-  // values under every projection.
-  llvm::Value *emitWorkitemId(llvm::IRBuilder<> &B, unsigned Dim) const;
+  /// Return the logical workgroup extent along one dimension.
+  virtual llvm::Value *emitWorkgroupSize(llvm::IRBuilder<> &B,
+                                         unsigned Dim) const;
+
+  /// Return the source-visible workitem coordinate along one dimension.
+  virtual llvm::Value *emitWorkitemId(llvm::IRBuilder<> &B, unsigned Dim) const;
 
   // Emit the source wave's linear ID within its workgroup.
   virtual llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const = 0;
@@ -151,11 +165,11 @@ public:
   emitCurrentSourceWaveMask(llvm::IRBuilder<> &B, llvm::Value *Mask,
                             const llvm::Twine &Name = "source_wave_mask") const;
 
-  // True iff this projection guarantees hardware EXEC = -1 between
-  // `emitUnderExec` diamonds kernel-wide, so cross-lane collectives can run
-  // without additional EXEC scaffolding.
-  bool providesFullWaveExecInvariant() const {
-    return ProvidesFullWaveExecInvariant;
+  // True when all lanes of each participating source wave execute between
+  // `emitUnderExec` diamonds. Source-wave collectives then need no additional
+  // EXEC scaffolding, even when another source wave takes a different branch.
+  bool providesSourceWaveExecInvariant() const {
+    return ProvidesSourceWaveExecInvariant;
   }
 
   // True iff handlers should lower source-ISA lane-indexed primitives
@@ -219,8 +233,9 @@ protected:
   llvm::Type *ExecStorageTy;
   unsigned NumSourceWavesPerTarget = 1;
   unsigned ReplicationFactor = 1;
+  bool AllowsDivergentScalarControlFlow = false;
   bool BroadcastNarrowExecLoWrite = false;
-  bool ProvidesFullWaveExecInvariant = false;
+  bool ProvidesSourceWaveExecInvariant = false;
   bool SourceWaveScopedLaneOps = false;
   bool PreservesMbcntDerivedExec = false;
 
@@ -273,27 +288,36 @@ public:
 };
 
 /// Map each source wave onto one target wave, with upper lanes replicating the
-/// corresponding source lanes. The runtime scales the one-dimensional launch
-/// by the target-to-source wave-size ratio.
+/// corresponding source lanes. Each physical workgroup is one flattened,
+/// replicated source workgroup; workgroup IDs remain unchanged.
 class ReplicatedDispatchProjection final : public ReplicationProjection {
 public:
   ReplicatedDispatchProjection(const llvm::MCSubtargetInfo &Source,
                                const llvm::MCSubtargetInfo &Target,
-                               llvm::Type *I32Ty, llvm::Type *I64Ty);
+                               llvm::Type *I32Ty, llvm::Type *I64Ty,
+                               const KernelLaunchRequirements &Launch);
 
-  // Remap hardware workitem-id.x to the logical source id so replica lanes
-  // alias their originals. Every physical lane maps to a valid logical thread.
+  // Return logical X, including for lanes masked out by the entry EXEC.
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
+  llvm::Value *emitWorkitemId(llvm::IRBuilder<> &B,
+                              unsigned Dim) const override;
+  llvm::Value *emitInitialExec(llvm::IRBuilder<> &B) const override;
   llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
-  // Pack logical X with the zero Y/Z fields of a supported 1D launch.
+  // Pack reconstructed source coordinates.
   llvm::Value *emitPackedWorkitemId(llvm::IRBuilder<> &B,
                                     unsigned NumDims) const override;
+
+private:
+  llvm::Value *emitWorkgroupSize(llvm::IRBuilder<> &B,
+                                 unsigned Dim) const override;
+  const KernelLaunchRequirements &Launch;
 };
 
 /// Pack two wave32 source waves into one wave64 target wave. Each lane holds
-/// its source wave's i32 EXEC and scalar masks. Requires uniform scalar control
-/// flow and EXEC updates that do not activate lanes absent at kernel entry.
+/// its source wave's i32 EXEC and scalar masks. EXEC updates must not activate
+/// lanes absent at entry. Divergent scalar branches require barrier
+/// convergence.
 class WaveNativeProjection final : public WaveProjection {
 public:
   ValidationKind validationKind() const override {
@@ -302,7 +326,8 @@ public:
 
   WaveNativeProjection(const llvm::MCSubtargetInfo &Source,
                        const llvm::MCSubtargetInfo &Target, llvm::Type *I32Ty,
-                       llvm::Type *I64Ty);
+                       llvm::Type *I64Ty,
+                       bool AllowDivergentScalarControlFlow = false);
 
   llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 

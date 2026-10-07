@@ -94,21 +94,51 @@ cl::list<unsigned> LaunchGridOpt(
 cl::list<unsigned> LaunchWorkgroupOpt(
     "launch-workgroup", cl::CommaSeparated, cl::value_desc("x,y,z"),
     cl::desc("Source workgroup extents in workitems to validate and project."));
+cl::opt<std::string>
+    LaunchKernargOpt("launch-kernarg",
+                     cl::desc("Source kernarg bytes for launch validation."));
+cl::opt<unsigned>
+    LaunchDynamicLDSOpt("launch-dynamic-lds", cl::init(0),
+                        cl::desc("Source dynamic LDS allocation in bytes."));
+cl::list<unsigned> SpecializeWorkgroupOpt(
+    "specialize-workgroup", cl::CommaSeparated, cl::value_desc("x,y,z"),
+    cl::desc("Require these logical workgroup dimensions when raising."));
 
 Error dumpLaunchRequirements(const RaiseResult &Raised,
                              ArrayRef<std::string> Targets) {
   // Buffer the dump so a rejected launch leaves no partial result.
   std::string Dump;
   raw_string_ostream OS(Dump);
+  std::unique_ptr<MemoryBuffer> KernargBuffer;
+  ArrayRef<uint8_t> Kernarg;
+  if (!LaunchKernargOpt.empty()) {
+    ErrorOr<std::unique_ptr<MemoryBuffer>> Buffer =
+        MemoryBuffer::getFile(LaunchKernargOpt, false);
+    if (!Buffer)
+      return errorCodeToError(Buffer.getError());
+    KernargBuffer = std::move(*Buffer);
+    Kernarg = arrayRefFromStringRef(KernargBuffer->getBuffer());
+  }
   for (StringRef Name : Targets) {
     const KernelLaunchRequirements &Launch =
         Raised.LaunchRequirements.find(Name)->second;
-    bool Replicated =
-        Launch.Mapping == KernelLaunchRequirements::Kind::Replicated1D;
+    StringRef Kind;
+    switch (Launch.Mapping) {
+    case KernelLaunchRequirements::Kind::Unchanged:
+      Kind = "unchanged";
+      break;
+    case KernelLaunchRequirements::Kind::Replicated1D:
+      Kind = Launch.RequiresWholeSourceWaves ? "replicated-1D-whole-wave"
+                                             : "replicated-1D";
+      break;
+    case KernelLaunchRequirements::Kind::ReplicatedFlattened:
+      Kind = Launch.RequiresWholeSourceWaves ? "replicated-flattened-whole-wave"
+                                             : "replicated-flattened";
+      break;
+    }
     OS << "; launch: ";
     printEscapedString(Name, OS);
-    OS << " kind=" << (Replicated ? "replicated-1D-whole-wave" : "unchanged")
-       << " max_workgroup_size=" << Launch.MaxWorkgroupSize;
+    OS << " kind=" << Kind << " max_workgroup_size=" << Launch.MaxWorkgroupSize;
     if (Launch.RequiredWorkgroupSize) {
       const std::array<uint32_t, 3> &Required = *Launch.RequiredWorkgroupSize;
       OS << " required_workgroup_size=" << Required[0] << ',' << Required[1]
@@ -118,7 +148,8 @@ Error dumpLaunchRequirements(const RaiseResult &Raised,
       LaunchDimensions Source;
       llvm::copy(LaunchGridOpt, Source.Grid.begin());
       llvm::copy(LaunchWorkgroupOpt, Source.Workgroup.begin());
-      Expected<LaunchDimensions> Target = Launch.project(Name, Source);
+      Expected<LaunchDimensions> Target =
+          Launch.project(Name, Source, Kernarg, LaunchDynamicLDSOpt);
       if (!Target)
         return Target.takeError();
       OS << " grid=" << Target->Grid[0] << ',' << Target->Grid[1] << ','
@@ -292,6 +323,10 @@ int runEmitIr(const CodeObjectInfo &Info, const TextSection &Text,
 
     Kernels.push_back(KernelRequest{Target, **MetaOrErr, ExtentOrErr->Offset,
                                     ExtentOrErr->Offset + ExtentOrErr->Size});
+    if (!SpecializeWorkgroupOpt.empty()) {
+      Kernels.back().WorkgroupSize.emplace();
+      llvm::copy(SpecializeWorkgroupOpt, Kernels.back().WorkgroupSize->begin());
+    }
   }
 
   // Every function symbol in the text section, so a call leaving a kernel's
@@ -361,13 +396,20 @@ int main(int Argc, char **Argv) {
   bool DumpMeta = DumpMetaOpt.getNumOccurrences() > 0;
   bool DumpDecoded = DumpDecodedOpt.getNumOccurrences() > 0;
   bool EmitIr = EmitIrOpt.getNumOccurrences() > 0;
+  if (!SpecializeWorkgroupOpt.empty() && (SpecializeWorkgroupOpt.size() != 3 ||
+                                          !EmitIr || DumpMeta || DumpDecoded)) {
+    errs() << "transpile_cli: --specialize-workgroup requires --emit-ir and "
+              "three dimensions\n";
+    return 2;
+  }
   if (!DumpMeta && !DumpDecoded && !EmitIr) {
     errs() << "transpile_cli: no mode selected; pass --dump-meta, "
               "--dump-decoded, or --emit-ir\n";
     return 2;
   }
 
-  if ((!LaunchGridOpt.empty() || !LaunchWorkgroupOpt.empty()) &&
+  if ((!LaunchGridOpt.empty() || !LaunchWorkgroupOpt.empty() ||
+       !LaunchKernargOpt.empty() || LaunchDynamicLDSOpt.getNumOccurrences()) &&
       (!AllowReplicatedDispatchOpt || LaunchGridOpt.size() != 3 ||
        LaunchWorkgroupOpt.size() != 3)) {
     errs() << "transpile_cli: launch dimensions require "
