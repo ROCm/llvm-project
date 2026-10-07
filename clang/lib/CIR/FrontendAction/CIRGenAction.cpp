@@ -241,13 +241,6 @@ public:
           MlirModule, LLVMCtx, C.getLangOpts().OpenMP, mlirSaveTempsOutFile,
           &CI.getVirtualFileSystem());
 
-      LLVMModule->setDataLayout(C.getTargetInfo().getDataLayoutString());
-
-      for (llvm::Function &F : LLVMModule->functions())
-        if (const Decl *FD = Gen->getDeclForMangledName(F.getName()))
-          DiagConsumer.addFunctionSourceLocation(
-              F.getName(), FD->getASTContext().getFullLoc(FD->getLocation()));
-
       if (linkInModules(*LLVMModule))
         return;
 
@@ -274,8 +267,9 @@ public:
                   CI.getDiagnostics());
 
       BackendAction BEAction = getBackendActionFromOutputType(Action);
-      emitBackendOutput(CI, CI.getCodeGenOpts(), LLVMModule.get(), BEAction, FS,
-                        std::move(OutputStream));
+      emitBackendOutput(
+          CI, CI.getCodeGenOpts(), C.getTargetInfo().getDataLayoutString(),
+          LLVMModule.get(), BEAction, FS, std::move(OutputStream));
       break;
     }
     }
