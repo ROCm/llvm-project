@@ -134,6 +134,18 @@ set(CLANG_DEFAULT_UNWINDLIB libgcc CACHE STRING "")
 set(CLANG_ENABLE_CLANGD OFF CACHE BOOL "")
 set(CLANG_ENABLE_STATIC_ANALYZER OFF CACHE BOOL "")
 set(CLANG_TIDY_ENABLE_STATIC_ANALYZER OFF CACHE BOOL "")
+set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug_Python3_EXECUTABLE /opt/python-shared/cp312-cp312/bin/python3 CACHE FILEPATH "" FORCE)
+#set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug_Python3_LIBRARY /opt/python-shared/cp312-cp312/lib/libpython3.12.so CACHE FILEPATH "" FORCE)
+#set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug_Python3_INCLUDE_DIR /opt/python-shared/cp312-cp312/include/python3.12 CACHE FILEPATH "" FORCE)
+
+# Currently, in the multilib debug builds libompd uses CMAKE_INSTALL_LIBDIR for INSTALL_RPATH on ompdModule.so.
+# The default on manylinux is lib64, which is not what ROCm uses. Use lib instead.
+set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug_CMAKE_INSTALL_LIBDIR lib CACHE FILEPATH "" FORCE)
+set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug+asan_CMAKE_INSTALL_LIBDIR lib CACHE FILEPATH "" FORCE)
+
+set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug+asan_Python3_EXECUTABLE /opt/python-shared/cp312-cp312/bin/python3 CACHE FILEPATH "" FORCE)
+#set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug+asan_Python3_LIBRARY /opt/python-shared/cp312-cp312/lib/libpython3.12.so CACHE FILEPATH "" FORCE)
+#set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug+asan_Python3_INCLUDE_DIR /opt/python-shared/cp312-cp312/include/python3.12 CACHE FILEPATH "" FORCE)
 
 # Flang options. Flang and the host flang-rt must agree on this. ppc64le has a
 # native 128-bit long double and does not need libquadmath.
@@ -205,6 +217,10 @@ else()
 
   set(RUNTIMES_${ROCM_DEVICE_TRIPLE}+debug_LLVM_ENABLE_RUNTIMES "openmp" CACHE STRING "")
   set(RUNTIMES_${ROCM_DEVICE_TRIPLE}+debug_CMAKE_BUILD_TYPE Debug CACHE STRING "")
+  set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug_LIBOMP_OMPD_SUPPORT ON CACHE BOOL "")
+  set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug_LIBOMP_OMPD_GDB_SUPPORT ON CACHE BOOL "")
+  set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug+asan_LIBOMP_OMPD_SUPPORT ON CACHE BOOL "")
+  set(RUNTIMES_${ROCM_HOST_TRIPLE}+debug+asan_LIBOMP_OMPD_GDB_SUPPORT ON CACHE BOOL "")
 endif()
 
 # Distributions.
