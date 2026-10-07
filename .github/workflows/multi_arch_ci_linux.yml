@@ -104,7 +104,7 @@ jobs:
       build_variant_cmake_preset: ${{ fromJSON(inputs.build_config).build_variant_cmake_preset }}
       build_variant_suffix: ${{ fromJSON(inputs.build_config).build_variant_suffix }}
       prebuilt_stages: ${{ fromJSON(inputs.build_config).prebuilt_stages }}
-      build_runs_on: ${{ fromJSON(inputs.build_config).build_runs_on }}
+      build_runs_on: ${{ fromJSON(inputs.build_config).build_runs_on_large }}
       rocm_package_version: ${{ inputs.rocm_package_version }}
       release_type: ${{ inputs.release_type }}
       test_type: ${{ inputs.test_type }}        
@@ -118,7 +118,7 @@ jobs:
   validate_artifact_structure:
     needs: [build_multi_arch_stages]
     name: Validate Artifact Structure
-    if: ${{ !failure() && !cancelled() }}
+    if: ${{ false }} # cci-bisect: build-only probe
     uses: ./.github/workflows/test_artifacts_structure.yml
     with:
       amdgpu_families: ${{ fromJSON(inputs.build_config).dist_amdgpu_families }}
@@ -130,7 +130,7 @@ jobs:
   test_artifacts_per_family:
     needs: [copy_prebuilt_stages, build_multi_arch_stages]
     name: Test ${{ matrix.family_info.amdgpu_family }}
-    if: ${{ !failure() && !cancelled() }}
+    if: ${{ false }} # cci-bisect: build-only probe
     strategy:
       fail-fast: false
       matrix:
@@ -153,7 +153,7 @@ jobs:
   build_native_deb_packages:
     needs: [build_multi_arch_stages]
     name: Build DEB Packages
-    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).build_native_linux == true }}
+    if: ${{ false }} # cci-bisect: build-only probe
     uses: ./.github/workflows/multi_arch_build_native_linux_packages.yml
     with:
       dist_amdgpu_families: ${{ fromJSON(inputs.build_config).dist_amdgpu_families }}
@@ -168,7 +168,7 @@ jobs:
   build_native_rpm_packages:
     needs: [build_multi_arch_stages]
     name: Build RPM Packages
-    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).build_native_linux == true }}
+    if: ${{ false }} # cci-bisect: build-only probe
     uses: ./.github/workflows/multi_arch_build_native_linux_packages.yml
     with:
       dist_amdgpu_families: ${{ fromJSON(inputs.build_config).dist_amdgpu_families }}
@@ -183,7 +183,7 @@ jobs:
   test_native_packages_ubuntu2404:
     needs: [build_native_deb_packages]
     name: Test DEB Install - ubuntu2404
-    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).build_native_linux == true }}
+    if: ${{ false }} # cci-bisect: build-only probe
     uses: ./.github/workflows/test_native_linux_packages_install.yml
     with:
       package_install_url: ${{ needs.build_native_deb_packages.outputs.package_repository_url }}
@@ -200,7 +200,7 @@ jobs:
   test_native_packages_rhel10:
     needs: [build_native_rpm_packages]
     name: Test RPM Install - rhel10
-    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).build_native_linux == true }}
+    if: ${{ false }} # cci-bisect: build-only probe
     uses: ./.github/workflows/test_native_linux_packages_install.yml
     with:
       package_install_url: ${{ needs.build_native_rpm_packages.outputs.package_repository_url }}
@@ -217,7 +217,7 @@ jobs:
   test_native_packages_sles16:
     needs: [build_native_rpm_packages]
     name: Test RPM Install - sles16
-    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).build_native_linux == true }}
+    if: ${{ false }} # cci-bisect: build-only probe
     uses: ./.github/workflows/test_native_linux_packages_install.yml
     with:
       package_install_url: ${{ needs.build_native_rpm_packages.outputs.package_repository_url }}

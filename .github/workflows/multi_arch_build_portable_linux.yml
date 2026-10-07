@@ -95,7 +95,7 @@ jobs:
   # ==========================================================================
   runtime-tests:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'runtime-tests') }}
+    if: ${{ false }} # cci-bisect: only compiler-runtime,math-libs
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     with:
       stage_name: runtime-tests
@@ -156,7 +156,7 @@ jobs:
   # ==========================================================================
   comm-libs:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'comm-libs') }}
+    if: ${{ false }} # cci-bisect: only compiler-runtime,math-libs
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     with:
       stage_name: comm-libs
@@ -182,7 +182,7 @@ jobs:
   # ==========================================================================
   storage-libs:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'storage-libs') }}
+    if: ${{ false }} # cci-bisect: only compiler-runtime,math-libs
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     secrets: inherit
     with:
@@ -208,7 +208,7 @@ jobs:
   # ==========================================================================
   debug-tools:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'debug-tools') }}
+    if: ${{ false }} # cci-bisect: only compiler-runtime,math-libs
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     with:
       stage_name: debug-tools
@@ -232,7 +232,7 @@ jobs:
   # ==========================================================================
   dctools-core:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'dctools-core') }}
+    if: ${{ false }} # cci-bisect: only compiler-runtime,math-libs
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     with:
       stage_name: dctools-core
@@ -256,7 +256,7 @@ jobs:
   # ==========================================================================
   profiler-apps:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'profiler-apps') }}
+    if: ${{ false }} # cci-bisect: only compiler-runtime,math-libs
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     secrets: inherit
     with:
@@ -281,7 +281,7 @@ jobs:
   # ==========================================================================
   media-libs:
     needs: compiler-runtime
-    if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'media-libs') }}
+    if: ${{ false }} # cci-bisect: only compiler-runtime,math-libs
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     with:
       stage_name: media-libs
@@ -305,7 +305,7 @@ jobs:
   # ==========================================================================
   manifest_summary:
     needs: [compiler-runtime, math-libs, comm-libs]
-    if: ${{ always() }}
+    if: ${{ false }} # cci-bisect: no submodule-commit manifest
     runs-on: ubuntu-latest
     steps:
       - name: Download all stage submodule commit

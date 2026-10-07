@@ -110,6 +110,36 @@ jobs:
 
       - name: Submodule PR update (covers parameterised and PR creation)
         uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd-staging
+      - name: Point compiler/amd-llvm at the cci-bisect probe
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global user.email "cci-bisect@users.noreply.github.com"
+          git config --global user.name "cci-bisect"
+          PROBE_SHA="${{ github.sha }}"
+          echo "cci-bisect compiler/amd-llvm ${PROBE_SHA}"
+          git update-index --cacheinfo "160000,${PROBE_SHA},compiler/amd-llvm"
+          trim_sha() { printf '%s' "$1" | tr -d '[:space:]'; }
+          read_tip() { trim_sha "$(git ls-remote "$1" refs/heads/amd-staging | awk '{print $1}')"; }
+          SPIRV_SHA="$(read_tip https://github.com/ROCm/SPIRV-LLVM-Translator.git)"
+          HIPIFY_SHA="$(read_tip https://github.com/ROCm/HIPIFY.git)"
+          if [[ -z "${SPIRV_SHA}" || -z "${HIPIFY_SHA}" ]]; then
+            echo "::error::Failed to resolve SPIRV or HIPIFY amd-staging tip." >&2
+            exit 1
+          fi
+          echo "cci-bisect spirv-llvm-translator ${SPIRV_SHA}"
+          echo "cci-bisect hipify ${HIPIFY_SHA}"
+          git update-index --cacheinfo "160000,${SPIRV_SHA},compiler/spirv-llvm-translator"
+          git update-index --cacheinfo "160000,${HIPIFY_SHA},compiler/hipify"
+          git -c submodule.recurse=false commit -m "cci-bisect: build compiler/amd-llvm at ${PROBE_SHA}"
+          git submodule update --init --depth 1 --jobs 4 -- compiler/amd-llvm compiler/spirv-llvm-translator compiler/hipify
+          checked="$(git -C compiler/amd-llvm rev-parse HEAD)"
+          echo "cci-bisect checked out compiler/amd-llvm ${checked}"
+          if [[ "${checked}" != "${PROBE_SHA}" ]]; then
+            echo "::error::compiler/amd-llvm is ${checked}, expected ${PROBE_SHA}" >&2
+            exit 1
+          fi
+          git submodule status
  
       - name: Install python deps
         run: pip install -r requirements.txt

@@ -115,8 +115,8 @@ jobs:
       BASE_REF: '0efc7532e43c16b532fdd2887e00aec8eb69e10f'
     outputs:
       enable_build_jobs: true
-      linux_build_config: ${{ steps.convergence_config.outputs.linux_build_config }}
-      windows_build_config: ${{ steps.convergence_config.outputs.windows_build_config }}
+      linux_build_config: ${{ steps.configure.outputs.linux_build_config }}
+      windows_build_config: ${{ steps.configure.outputs.windows_build_config }}
       test_type: 'quick'
       linux_test_labels: ${{ steps.configure.outputs.linux_test_labels }}
       windows_test_labels: ${{ steps.configure.outputs.windows_test_labels }}
@@ -180,6 +180,7 @@ jobs:
           LINUX_TEST_LABELS: ${{ inputs.linux_test_labels }}
           WINDOWS_TEST_LABELS: ${{ inputs.windows_test_labels }}
           PREBUILT_STAGES: ${{ inputs.prebuilt_stages }}
+          BUILD_STAGES: compiler-runtime,math-libs
           BASELINE_RUN_ID: ${{ inputs.baseline_run_id }}
           # Skip path filtering for external repos (git sha won't exist in TheRock)
           SKIP_PATH_FILTERS: ${{ inputs.external_repo != '' && 'true' || '' }}
