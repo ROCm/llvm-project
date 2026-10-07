@@ -89,13 +89,11 @@ ds_store_exec:
 		.amdhsa_group_segment_fixed_size 256
 		.amdhsa_next_free_vgpr 12
 		.amdhsa_next_free_sgpr 0
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel ds_store_exec
 		.amdhsa_group_segment_fixed_size 256
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 0
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdgpu_metadata
 ---

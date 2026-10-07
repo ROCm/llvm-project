@@ -78,7 +78,6 @@ buffer_bounds:
 .amdhsa_kernel buffer_bounds
   .amdhsa_kernarg_size 32
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_next_free_vgpr 8
   .amdhsa_next_free_sgpr 12
 .end_amdhsa_kernel

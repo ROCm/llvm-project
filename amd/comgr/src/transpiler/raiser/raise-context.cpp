@@ -157,8 +157,9 @@ Error RaiseContext::validateWaveNativeRequirements(
            "required value was deleted before validation");
     Value *Operand = Requirement.Operand;
     if (!UI.isDivergentAtDef(Operand) &&
-        none_of(Operand->uses(),
-                [&](const Use &U) { return UI.isDivergentAtUse(U); }))
+        (!Operand->hasUseList() || none_of(Operand->uses(), [&](const Use &U) {
+          return UI.isDivergentAtUse(U);
+        })))
       continue;
     const DecodedInst &Di = *Requirement.Instruction;
     return RaiseFailure::atInstruction(

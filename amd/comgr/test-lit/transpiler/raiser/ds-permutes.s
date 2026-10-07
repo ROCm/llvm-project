@@ -131,28 +131,24 @@ swizzle:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel bpermute_fi
 		.amdhsa_kernarg_size 8
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel permute
 		.amdhsa_kernarg_size 8
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel swizzle
 		.amdhsa_kernarg_size 8
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdgpu_metadata
 ---

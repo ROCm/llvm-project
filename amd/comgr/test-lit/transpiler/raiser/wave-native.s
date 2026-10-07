@@ -310,7 +310,6 @@ matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -319,7 +318,6 @@ matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -328,7 +326,6 @@ matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -337,7 +334,6 @@ matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -346,7 +342,6 @@ matrix:
   .amdhsa_group_segment_fixed_size 32
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -355,7 +350,6 @@ matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -365,7 +359,6 @@ matrix:
 .amdhsa_kernel matrix
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
 .end_amdhsa_kernel

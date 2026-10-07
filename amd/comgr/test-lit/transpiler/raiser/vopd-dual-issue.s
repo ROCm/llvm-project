@@ -65,7 +65,6 @@ vopd_dual_issue:
 	.amdhsa_kernel vopd_dual_issue
 		.amdhsa_kernarg_size 0
 		.amdhsa_user_sgpr_count 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 8
 		.amdhsa_next_free_sgpr 1
 		.amdhsa_float_denorm_mode_32 3

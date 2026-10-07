@@ -99,7 +99,6 @@ s_endpgm
 .p2align 6
 .amdhsa_kernel global_subdword_scaled
   .amdhsa_kernarg_size 0
-  .amdhsa_wavefront_size32 1
   .amdhsa_next_free_vgpr 8
   .amdhsa_next_free_sgpr 2
 .end_amdhsa_kernel

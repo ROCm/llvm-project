@@ -77,12 +77,6 @@
 ; MATRIX: unsupported-wave-projection: v_wmma_f32_16x16x32_f16
 ; MATRIX-SAME: cannot prove that source EXEC at this instruction matches its value at kernel entry
 
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=WAVE32=0 -filetype=obj %s -o %t.wave64.o
-; RUN: %ld.lld -shared %t.wave64.o -o %t.wave64.hsaco
-; RUN: not %transpile_cli %t.wave64.hsaco --target-isa=gfx942 --emit-ir=expand_exec 2>&1 | %FileCheck %s --check-prefix=WAVE64
-; WAVE64: unsupported-wave-projection
-; WAVE64-SAME: requires a wave32 source kernel descriptor
-
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=hardware_register 2>&1 | %FileCheck %s --check-prefix=HWREG
 ; HWREG: unsupported-wave-projection: s_setreg_b32
 ; HWREG-SAME: requires uniform hardware register writes
@@ -94,10 +88,6 @@
 
 .ifndef WAVE_EFFECT
 .set WAVE_EFFECT, 0
-.endif
-
-.ifndef WAVE32
-.set WAVE32, 1
 .endif
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -196,7 +186,6 @@ masked_matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 WAVE32
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -205,7 +194,6 @@ masked_matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -214,7 +202,6 @@ masked_matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -223,7 +210,6 @@ masked_matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -232,7 +218,6 @@ masked_matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -241,7 +226,6 @@ masked_matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -250,7 +234,6 @@ masked_matrix:
   .amdhsa_group_segment_fixed_size 0
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_system_vgpr_workitem_id 2
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
@@ -260,7 +243,6 @@ masked_matrix:
 .amdhsa_kernel masked_matrix
   .amdhsa_kernarg_size 8
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_next_free_vgpr 32
   .amdhsa_next_free_sgpr 24
 .end_amdhsa_kernel

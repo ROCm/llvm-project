@@ -127,7 +127,6 @@ buffer_d16:
 .amdhsa_kernel buffer_d16
   .amdhsa_kernarg_size 24
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_next_free_vgpr 10
   .amdhsa_next_free_sgpr 10
 .end_amdhsa_kernel

@@ -74,12 +74,10 @@ mbcnt_mask_sources:
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel mbcnt_lane_id
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 3
 	.end_amdhsa_kernel
 	.amdhsa_kernel mbcnt_mask_sources
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 3
 	.end_amdhsa_kernel

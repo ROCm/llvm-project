@@ -196,7 +196,6 @@ tr16:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 13
 		.amdhsa_next_free_sgpr 8
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel tr16
 		.amdhsa_group_segment_fixed_size 528
@@ -204,7 +203,6 @@ tr16:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 13
 		.amdhsa_next_free_sgpr 8
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdgpu_metadata
 ---

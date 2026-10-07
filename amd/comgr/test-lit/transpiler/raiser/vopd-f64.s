@@ -44,7 +44,6 @@ vopd_f64_rounding:
 	.amdhsa_kernel vopd_f64
 		.amdhsa_kernarg_size 0
 		.amdhsa_user_sgpr_count 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 56
 		.amdhsa_next_free_sgpr 24
 		.amdhsa_float_denorm_mode_32 3
@@ -53,7 +52,6 @@ vopd_f64_rounding:
 	.amdhsa_kernel vopd_f64_rounding
 		.amdhsa_kernarg_size 0
 		.amdhsa_user_sgpr_count 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 6
 		.amdhsa_next_free_sgpr 1
 		.amdhsa_float_round_mode_16_64 1
