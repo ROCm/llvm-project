@@ -7,6 +7,10 @@
 ; RUN: %transpile_cli %t.hsaco --emit-ir=trap_kernel,debugtrap_kernel \
 ; RUN:   --target-isa=gfx1250 | %llc -mtriple=amdgpu12.50-amd-amdhsa \
 ; RUN:   | %FileCheck %s --check-prefix=ASM
+; RUN: not %transpile_cli %t.hsaco --emit-ir=trap_kernel \
+; RUN:   --target-isa=gfx942 2>&1 | %FileCheck %s --check-prefix=GFX942-TRAP
+; RUN: not %transpile_cli %t.hsaco --emit-ir=debugtrap_kernel \
+; RUN:   --target-isa=gfx942 2>&1 | %FileCheck %s --check-prefix=GFX942-DEBUGTRAP
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -20,6 +24,8 @@ trap_kernel:
 ; TRAP-NEXT: unreachable
 ; ASM-LABEL: trap_kernel:
 ; ASM: s_trap 2
+; GFX942-TRAP: unsupported-wave-projection: s_trap [SOPP]
+; GFX942-TRAP-SAME: WaveNative does not support per-wave hardware side effects
 	s_trap 0x12
 	s_endpgm
 
@@ -32,6 +38,8 @@ debugtrap_kernel:
 ; DEBUGTRAP-NEXT: ret void
 ; ASM-LABEL: debugtrap_kernel:
 ; ASM: s_trap 3
+; GFX942-DEBUGTRAP: unsupported-wave-projection: s_trap [SOPP]
+; GFX942-DEBUGTRAP-SAME: WaveNative does not support per-wave hardware side effects
 	s_trap 0x13
 	s_endpgm
 
