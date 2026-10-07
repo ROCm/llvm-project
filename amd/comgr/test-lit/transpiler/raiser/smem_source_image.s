@@ -12,6 +12,7 @@
 ; RUN:   --emit-ir=pcrel_mov_copy_kernel,pcrel_back_offset_kernel \
 ; RUN:   --emit-ir=pcrel_rodata_kernel \
 ; RUN:   --emit-ir=pcrel_lit32_kernel,pcrel_lit64_kernel \
+; RUN:   --emit-ir=pcrel_signed_add_kernel,pcrel_signed_back_kernel \
 ; RUN:   --emit-ir=pcrel_cmp_eq_kernel,pcrel_cmp_lg_kernel \
 ; RUN:   | %FileCheck %s
 
@@ -36,6 +37,8 @@
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=OTHERBLOCK
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_clobbered_block_kernel \
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=CLOBBERED
+; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_signed_carry_kernel \
+; RUN:   2>&1 | %FileCheck %s --check-prefix=SIGNEDCARRY
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_compare_dynamic_kernel \
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=COMPAREDYNAMIC
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_escape_low_kernel \
@@ -277,6 +280,38 @@ pcrel_lit64_kernel:
 	s_endpgm
 	.long	0x23456789
 
+	.globl	pcrel_signed_add_kernel
+	.p2align	8
+	.type	pcrel_signed_add_kernel,@function
+; CHECK-LABEL: define amdgpu_kernel void @pcrel_signed_add_kernel(
+pcrel_signed_add_kernel:
+	s_get_pc_i64 s[0:1]
+; The positive add does not carry into the unchanged high half.
+	s_add_i32 s0, s0, 8
+	s_load_b32 s2, s[0:1], 0x10
+	s_wait_kmcnt 0x0
+; CHECK: add i32 287454020,
+	v_add_nc_u32 v0, s2, v0
+	s_endpgm
+	.long	0x11223344
+
+	.globl	pcrel_signed_back_kernel
+	.p2align	8
+	.type	pcrel_signed_back_kernel,@function
+; CHECK-LABEL: define amdgpu_kernel void @pcrel_signed_back_kernel(
+pcrel_signed_back_kernel:
+	s_get_pc_i64 s[0:1]
+; The negative add carries out of the low half, so the unchanged high half
+; still represents the correct source address.
+	s_add_i32 s0, s0, 36
+	s_add_i32 s0, s0, -8
+	s_load_b32 s2, s[0:1], 0x0
+	s_wait_kmcnt 0x0
+; CHECK: add i32 -1412567278,
+	v_add_nc_u32 v0, s2, v0
+	s_endpgm
+	.long	0xabcdef12
+
 	.globl	pcrel_cmp_eq_kernel
 	.p2align	8
 	.type	pcrel_cmp_eq_kernel,@function
@@ -407,6 +442,17 @@ refuse_clobbered_block_kernel:
 ; the raised kernel can address, so a read that would hand either of its halves
 ; to the target program is refused.
 
+	.globl	refuse_signed_carry_kernel
+	.p2align	8
+	.type	refuse_signed_carry_kernel,@function
+refuse_signed_carry_kernel:
+	s_get_pc_i64 s[0:1]
+; A signed add does not produce the carry required by s_addc_u32.
+	s_add_i32 s0, s0, 8
+; SIGNEDCARRY: unsupported-instruction-form: s_add_co_ci_u32 {{.+}} :: operand-read: {{.+}} may hold a source code-object address
+	s_addc_u32 s1, s1, 0
+	s_endpgm
+
 	.globl	refuse_compare_dynamic_kernel
 	.p2align	8
 	.type	refuse_compare_dynamic_kernel,@function
@@ -498,6 +544,21 @@ refuse_escape_high_kernel:
 		.amdhsa_next_free_sgpr 24
 	.end_amdhsa_kernel
 	.amdhsa_kernel pcrel_lit64_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel pcrel_signed_add_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel pcrel_signed_back_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_signed_carry_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 24
@@ -719,6 +780,39 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     24
     .symbol:         pcrel_lit64_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           pcrel_signed_add_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         pcrel_signed_add_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           pcrel_signed_back_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         pcrel_signed_back_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_signed_carry_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         refuse_signed_carry_kernel.kd
     .vgpr_count:     4
     .wavefront_size: 32
   - .args: []

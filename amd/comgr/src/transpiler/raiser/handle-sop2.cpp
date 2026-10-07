@@ -97,10 +97,18 @@ Expected<std::optional<uint64_t>> sourceImageResult(RaiseContext &Ctx,
 // with s_addc_u32. Each half is recomputed from the address the pair already
 // holds, so the pair goes on naming a place in the source image instead of the
 // read being refused. The halves wrap into one another, which is how a
-// displacement reaching backwards is written. Return false when the
-// instruction is not such a displacement, leaving it to the arithmetic path.
+// displacement reaching backwards is written.
+//
+// s_add_i32 also displaces the low half, but sets signed overflow in SCC
+// instead of an unsigned carry. It does not form a 64-bit add, so it records no
+// carry for s_addc_u32 and accepts only displacements that leave the unchanged
+// high half correct.
+//
+// Return false when the instruction is not such a displacement, leaving it to
+// the arithmetic path.
 Expected<bool> displaceSourceImageHalf(RaiseContext &Ctx, const DecodedInst &Di,
                                        OperandResolver &Op, bool IsHighHalf) {
+  const bool IsSignedAdd = Di.CanonOp == CanonicalOp::S_ADD_I32;
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
@@ -144,20 +152,30 @@ Expected<bool> displaceSourceImageHalf(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   uint64_t Half = IsHighHalf ? *Address >> 32 : *Address & 0xffffffff;
-  uint64_t Sum = Half + static_cast<uint32_t>(*Displacement) + CarryIn;
+  uint32_t Addend = static_cast<uint32_t>(*Displacement);
+  uint64_t Sum = Half + Addend + CarryIn;
   uint32_t Result = static_cast<uint32_t>(Sum);
+  bool CarryOut = Sum >> 32;
+  // For s_add_i32, the high half stays unchanged. A positive add must not
+  // carry out of the low half; a negative add must carry out to account for
+  // its sign extension.
+  const bool Backwards = Addend >> 31;
+  if (IsSignedAdd && CarryOut != Backwards)
+    return false;
   uint64_t Moved = IsHighHalf ? (static_cast<uint64_t>(Result) << 32) |
                                     (*Address & 0xffffffff)
                               : (*Address & 0xffffffff00000000) | Result;
 
-  // Writing either half drops the address the pair held, so the displaced
-  // address is recorded once the write is done.
+  // Preserve the source-image address after updating the written half.
   Ctx.registers().writeReg32(*Dst,
                              ConstantInt::get(Ctx.B.getInt32Ty(), Result));
   Ctx.registers().recordSourceImageSgprPairAddr(PairBaseIdx, Moved);
-  bool CarryOut = Sum >> 32;
-  Ctx.registers().regFile().storeSCC(Ctx.B, Ctx.B.getInt1(CarryOut));
-  if (!IsHighHalf)
+  // s_add_i32 sets SCC on signed overflow; unsigned adds use the carry.
+  bool Overflow = ((Half >> 31) & 1) == (Addend >> 31) &&
+                  ((Half >> 31) & 1) != (Result >> 31);
+  Value *Scc = Ctx.B.getInt1(IsSignedAdd ? Overflow : CarryOut);
+  Ctx.registers().regFile().storeSCC(Ctx.B, Scc);
+  if (!IsHighHalf && !IsSignedAdd)
     Ctx.registers().recordSourceImageCarry(PairBaseIdx, CarryOut,
                                            Di.Offset + Di.sizeInBytes());
   return true;
@@ -451,9 +469,16 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
     return handleOverflowingBinary32(Ctx, Op, Intrinsic::uadd_with_overflow,
                                      "add", "add_carry");
   }
-  case CanonicalOp::S_ADD_I32:
+  case CanonicalOp::S_ADD_I32: {
+    Expected<bool> Displaced =
+        displaceSourceImageHalf(Ctx, Di, Op, /*IsHighHalf=*/false);
+    if (!Displaced)
+      return Displaced.takeError();
+    if (*Displaced)
+      return Error::success();
     return handleOverflowingBinary32(Ctx, Op, Intrinsic::sadd_with_overflow,
                                      "add", "add_overflow");
+  }
   case CanonicalOp::S_SUB_U32:
     return handleOverflowingBinary32(Ctx, Op, Intrinsic::usub_with_overflow,
                                      "sub", "sub_borrow");
