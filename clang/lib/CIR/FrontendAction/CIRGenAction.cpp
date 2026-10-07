@@ -336,17 +336,6 @@ public:
       }
     }
 
-    // CIRGen-only step: map the emitted LLVM functions back to their source
-    // declarations so backend diagnostics point at the original source.
-    auto AddFunctionSourceLocations = [&](llvm::Module &LLVMModule) {
-      for (llvm::Function &F : LLVMModule.functions())
-        if (const Decl *FD = Gen->getDeclForMangledName(F.getName()))
-          DiagConsumer.addFunctionSourceLocation(
-              F.getName(), FD->getASTContext().getFullLoc(FD->getLocation()));
-    };
-    emitCIRModuleOutput(Action, CI, MlirModule, LLVMCtx, LinkModules,
-                        DiagConsumer, std::move(OutputStream),
-                        AddFunctionSourceLocations);
   }
 
   void HandleTagDeclDefinition(TagDecl *D) override {
