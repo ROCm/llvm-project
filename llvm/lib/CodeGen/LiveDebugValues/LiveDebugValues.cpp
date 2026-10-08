@@ -35,7 +35,7 @@
 /// user to pick which implementation will be used to propagate variable
 /// locations.
 
-#define DEBUG_TYPE "livedebugvalues"
+#define DEBUG_TYPE "live-debug-values"
 
 using namespace llvm;
 
