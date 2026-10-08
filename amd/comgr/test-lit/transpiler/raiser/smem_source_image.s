@@ -41,6 +41,8 @@
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=SIGNEDCARRY
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_compare_dynamic_kernel \
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=COMPAREDYNAMIC
+; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_compare_absolute_kernel \
+; RUN:   2>&1 | %FileCheck %s --check-prefix=COMPAREABSOLUTE
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_escape_low_kernel \
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=ESCAPELOW
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_escape_high_kernel \
@@ -463,6 +465,16 @@ refuse_compare_dynamic_kernel:
 	s_cmp_eq_u64 s[0:1], s[2:3]
 	s_endpgm
 
+	.globl	refuse_compare_absolute_kernel
+	.p2align	8
+	.type	refuse_compare_absolute_kernel,@function
+refuse_compare_absolute_kernel:
+	s_get_pc_i64 s[0:1]
+; A nonzero absolute comparison can change when the code is relocated.
+; COMPAREABSOLUTE: unsupported-instruction-form: s_cmp_eq_u64 {{.+}} :: operand-read: {{.+}} may hold a source code-object address
+	s_cmp_eq_u64 s[0:1], 1
+	s_endpgm
+
 	.globl	refuse_escape_low_kernel
 	.p2align	8
 	.type	refuse_escape_low_kernel,@function
@@ -574,6 +586,11 @@ refuse_escape_high_kernel:
 		.amdhsa_next_free_sgpr 24
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_compare_dynamic_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_compare_absolute_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 24
@@ -846,6 +863,17 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     24
     .symbol:         refuse_compare_dynamic_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_compare_absolute_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         refuse_compare_absolute_kernel.kd
     .vgpr_count:     4
     .wavefront_size: 32
   - .args: []

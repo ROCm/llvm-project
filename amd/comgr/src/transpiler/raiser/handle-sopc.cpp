@@ -146,6 +146,7 @@ Error handleIntegerCompare(RaiseContext &Ctx, OperandResolver &Op,
 Expected<bool> compareSourceImageAddr(RaiseContext &Ctx, const DecodedInst &Di,
                                       OperandResolver &Op, bool IsEqual) {
   std::optional<uint64_t> Known[2];
+  bool IsSourceAddress[2] = {};
   bool AnyAddress = false;
   for (unsigned I = 0; I != 2; ++I) {
     unsigned Index = Op.srcIdx(I);
@@ -155,6 +156,7 @@ Expected<bool> compareSourceImageAddr(RaiseContext &Ctx, const DecodedInst &Di,
       return Address.takeError();
     if (*Address) {
       Known[I] = **Address;
+      IsSourceAddress[I] = true;
       AnyAddress = true;
       continue;
     }
@@ -165,6 +167,18 @@ Expected<bool> compareSourceImageAddr(RaiseContext &Ctx, const DecodedInst &Di,
   // address read instead of guessing at the result.
   if (!AnyAddress || !Known[0] || !Known[1])
     return false;
+
+  // A nonzero absolute comparison can change when the code is relocated.
+  // Comparing a valid code address with zero remains relocation-independent.
+  if (IsSourceAddress[0] != IsSourceAddress[1]) {
+    unsigned ConstantIndex = IsSourceAddress[0] ? 1 : 0;
+    if (*Known[ConstantIndex] != 0)
+      return false;
+    // A loaded code object never sits at address zero, so this comparison is
+    // settled without using the relocatable source address.
+    Ctx.registers().regFile().storeSCC(Ctx.B, Ctx.B.getInt1(!IsEqual));
+    return true;
+  }
 
   bool Equal = *Known[0] == *Known[1];
   Value *Scc = Ctx.B.getInt1(Equal == IsEqual);
