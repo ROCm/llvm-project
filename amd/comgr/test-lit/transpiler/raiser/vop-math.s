@@ -460,27 +460,22 @@ refuse_f64_rounding:
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_fmac_clamp
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_fmac_omod
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 6
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_f64_clamp
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_f64_omod
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 5
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_f64_rounding
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 1
 		.amdhsa_float_round_mode_16_64 1
