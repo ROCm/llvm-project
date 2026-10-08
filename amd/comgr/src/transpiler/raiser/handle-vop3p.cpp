@@ -376,23 +376,29 @@ Expected<Value *> readMixedBF16Source(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Bits)
     return Bits.takeError();
 
+  std::optional<uint32_t> InlineFloatBits;
+  if (!Op.isSrcReg(Source) && Di.sizeInBytes() == 8) {
+    uint32_t Immediate = static_cast<uint32_t>(Op.srcImm(Source));
+    int32_t SignedImmediate = static_cast<int32_t>(Immediate);
+    if (!AMDGPU::isInlinableIntLiteral(SignedImmediate)) {
+      if (Immediate <= UINT16_MAX &&
+          AMDGPU::isInlinableLiteralBF16(static_cast<int16_t>(Immediate), true))
+        InlineFloatBits = Immediate << 16;
+      else if (AMDGPU::isInlinableLiteral32(SignedImmediate, true))
+        InlineFloatBits = Immediate;
+    }
+  }
+  if (InlineFloatBits)
+    *Bits = ConstantInt::get(Ctx.B.getInt32Ty(), *InlineFloatBits);
+
   Value *Result;
   if (Modifiers & SISrcMods::OP_SEL_1) {
     Value *Selected = *Bits;
-    bool InlineFloat = false;
     // An inline floating constant occupies either BF16 half, while a literal
     // or register supplies its raw 32-bit word.
-    if (!Op.isSrcReg(Source) && Di.sizeInBytes() == 8) {
-      uint32_t Immediate = static_cast<uint32_t>(Op.srcImm(Source));
-      int32_t SignedImmediate = static_cast<int32_t>(Immediate);
-      if (!AMDGPU::isInlinableIntLiteral(SignedImmediate) &&
-          AMDGPU::isInlinableLiteral32(SignedImmediate, true)) {
-        uint32_t Half = Immediate >> 16;
-        Selected = ConstantInt::get(Ctx.B.getInt32Ty(), Half);
-        InlineFloat = true;
-      }
-    }
-    if (!InlineFloat && (Modifiers & SISrcMods::OP_SEL_0))
+    if (InlineFloatBits)
+      Selected = ConstantInt::get(Ctx.B.getInt32Ty(), *InlineFloatBits >> 16);
+    else if (Modifiers & SISrcMods::OP_SEL_0)
       Selected = Ctx.B.CreateLShr(Selected, 16, "mix.hi");
     Value *HalfBits = Ctx.B.CreateTrunc(Selected, Ctx.B.getInt16Ty());
     Value *BF16 = Ctx.B.CreateBitCast(HalfBits, Ctx.B.getBFloatTy());
