@@ -131,7 +131,7 @@ vop3_math:
 ; CHECK: call i64 @llvm.amdgcn.ballot.i64(i1
 	v_div_scale_f32 v0, s4, v1, v1, v2
 	s_mov_b32 vcc_lo, s4
-; CHECK: [[FMAS_FLAG:%.+]] = icmp ne i64
+; CHECK: [[FMAS_FLAG:%.+]] = icmp ne i32 {{%.+}}, 0
 ; CHECK: call float @llvm.amdgcn.div.fmas.f32
 ; CHECK-SAME: i1 [[FMAS_FLAG]])
 	v_div_fmas_f32 v3, v0, v1, v2
