@@ -1501,8 +1501,10 @@ private:
   using RegFactMap = DenseMap<Register, RegFact>;
   using VirtRegSet = SmallDenseSet<Register, 8>;
 
-  // LCA of Blocks. While it lies in a cycle, move to the immediate dominator
-  // of that cycle's outermost header (reducible: the header dominates it).
+  // If the insertion point lands on a cycle entry, move it to a block that
+  // dominates all entries. Copy of SILowerSGPRSpills::getCycleDomBB.
+  MachineBasicBlock *getCycleDomBB(CycleRef C) const;
+  // Nearest common dominator of Blocks, hoisted out of its outermost cycle.
   MachineBasicBlock *getInitBlock(ArrayRef<MachineBasicBlock *> Blocks) const;
   void insertLaneMaskInstrs();
   void computeSparseGraph();
@@ -1777,6 +1779,27 @@ void ControlFlowRewriter::prepareWaveCfg() {
   }
 }
 
+MachineBasicBlock *ControlFlowRewriter::getCycleDomBB(CycleRef C) const {
+  MachineDominatorTree &MDT = ReconvergeCfg.getDomTree();
+  MachineCycleInfo &MCI = ReconvergeCfg.getCycleInfo();
+
+  // If the insertion point lands on a cycle entry, move it to a block that
+  // dominates all entries.
+  if (MCI.isReducible(C)) {
+    if (auto *IDom = MDT.getNode(MCI.getHeader(C))->getIDom())
+      return IDom->getBlock();
+    llvm_unreachable("Expected cycle to have an IDom.");
+    return nullptr;
+  }
+
+  ArrayRef<MachineBasicBlock *> Entries = MCI.getEntries(C);
+  assert(!Entries.empty() && "Expected cycle to have at least one entry.");
+  MachineBasicBlock *EntryBB = Entries[0];
+  for (unsigned I = 1; I < Entries.size(); ++I)
+    EntryBB = MDT.findNearestCommonDominator(EntryBB, Entries[I]);
+  return EntryBB;
+}
+
 MachineBasicBlock *
 ControlFlowRewriter::getInitBlock(ArrayRef<MachineBasicBlock *> Blocks) const {
   assert(!Blocks.empty());
@@ -1785,22 +1808,10 @@ ControlFlowRewriter::getInitBlock(ArrayRef<MachineBasicBlock *> Blocks) const {
   MachineBasicBlock *L =
       DomTree.findNearestCommonDominator(llvm::iterator_range(Blocks));
 
-  // MachineCycleInfo predates the flow blocks; their wave node has the cycle.
-  for (;;) {
-    WaveNode *Node = ReconvergeCfg.nodeForBlock(L);
-    assert(Node && "block without a wave node");
-    CycleRef C = Node->Cycle;
-    if (!C)
-      return L;
-    while (CycleRef P = CycleInfo.getParentCycle(C))
-      C = P;
-    assert(CycleInfo.isReducible(C) && "expected a reducible cycle");
-    const MachineDomTreeNode *IDom =
-        DomTree.getNode(CycleInfo.getHeader(C))->getIDom();
-    if (!IDom)
-      llvm_unreachable("Expected cycle to have an IDom.");
-    L = IDom->getBlock();
-  }
+  CycleRef C = CycleInfo.getTopLevelParentCycle(L);
+  if (!C)
+    return L;
+  return getCycleDomBB(C);
 }
 
 // Schema v2 lane-mask insertion. Replaces rewrite() steps 2.1, 2.2, and 3.
@@ -3439,6 +3450,8 @@ bool AMDGPUWaveTransform::run(MachineFunction &MF) {
   DomTree->applyUpdates(CFGUpdates);
   CFGUpdates.clear();
 
+  // Recompute cycle info
+  CycleInfo->compute(MF);
 
   // Step 3: Fix up terminators and insert rejoin masks.
   CFRewriter.rewrite();
