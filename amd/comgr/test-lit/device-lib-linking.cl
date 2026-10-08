@@ -7,7 +7,8 @@
 
 // COM: Bare amdgpu ISA names must also work through compilation and device-lib
 // COM: linking, including an explicit target feature.
-// RUN: source-to-bc-with-dev-libs %s --isa=amdgpu-amd-amdhsa--gfx900:xnack+ -o %t-amdgpu.bc
+// RUN: source-to-bc-with-dev-libs %s \
+// RUN:   --isa=amdgpu-amd-amdhsa--gfx900:xnack+ -o %t-amdgpu.bc
 // RUN: %llvm-dis %t-amdgpu.bc -o - | %FileCheck %s
 // RUN: %llvm-dis %t-amdgpu.bc -o - | %FileCheck %s --check-prefix=AMDGPU
 // AMDGPU: @__oclc_ISA_version = internal {{.*}}i32 9000
