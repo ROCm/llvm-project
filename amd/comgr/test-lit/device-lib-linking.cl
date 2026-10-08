@@ -5,6 +5,13 @@
 // COM: Dissasemble LLVM IR bitcode to LLVM IR text
 // RUN: %llvm-dis %t-with-dev-libs.bc -o - | %FileCheck %s
 
+// COM: Bare amdgpu ISA names must also work through compilation and device-lib
+// COM: linking, including an explicit target feature.
+// RUN: source-to-bc-with-dev-libs %s --isa=amdgpu-amd-amdhsa--gfx900:xnack+ -o %t-amdgpu.bc
+// RUN: %llvm-dis %t-amdgpu.bc -o - | %FileCheck %s
+// RUN: %llvm-dis %t-amdgpu.bc -o - | %FileCheck %s --check-prefix=AMDGPU
+// AMDGPU: @__oclc_ISA_version = internal {{.*}}i32 9000
+
 // COM: Verify LLVM IR text file
 // CHECK: target triple = "amd{{gcn|gpu[0-9.]+}}-amd-amdhsa"
 // CHECK: define internal float @_Z4powrff
