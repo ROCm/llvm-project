@@ -456,6 +456,36 @@ Expected<ParsedReg> RegisterState::parseReg(const DecodedInst &Di,
           MRI.getName(Reg) + "' (enc=0x" + Twine::utohexstr(Enc) + ")");
 }
 
+void RegisterState::storeSCC(IRBuilder<> &B, Value *V) {
+  Regs.storeSCC(B, V);
+  blockState().DefinedScc = true;
+  blockState().SccFromSourceImage = false;
+}
+
+void RegisterState::storeSourceImageSCC(IRBuilder<> &B, Value *V) {
+  Regs.storeSCC(B, V);
+  blockState().DefinedScc = true;
+  blockState().SccFromSourceImage = true;
+  SourceImageSccWritten = true;
+}
+
+bool RegisterState::sccMayHoldSourceImageBit() {
+  if (blockState().SccFromSourceImage)
+    return true;
+  return SourceImageSccWritten && !blockState().DefinedScc;
+}
+
+Expected<Value *> RegisterState::readSCC(const DecodedInst &Di) {
+  if (sccMayHoldSourceImageBit())
+    return RaiseFailure::atInstruction(
+        RaiseFailureReason::UnsupportedInstructionForm,
+        strippedMnemonic(MC, Di.Inst), Di.Offset,
+        formatName(Di.TargetSpecificFlags),
+        "operand-read: 'scc' may hold a carry or overflow derived from a "
+        "source code-object address; relocation may change the result");
+  return Regs.loadSCC(B);
+}
+
 Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
                                            unsigned OpIdx,
                                            const ParsedReg &Pr) {
@@ -494,10 +524,12 @@ Expected<Value *> RegisterState::readOp32(const DecodedInst &Di,
       return emitSourceWaveMask32(B, Projection, Regs.loadExec(B), Pr,
                                   "exec_src_wave");
     }
-    if (Pr.RegKind == ParsedReg::SCC)
-      return B.CreateZExt(Regs.loadSCC(B), I32Ty);
-    if (Pr.RegKind == ParsedReg::SRC_SCC)
-      return B.CreateZExt(Regs.loadSCC(B), I32Ty);
+    if (Pr.RegKind == ParsedReg::SCC || Pr.RegKind == ParsedReg::SRC_SCC) {
+      Expected<Value *> Scc = readSCC(Di);
+      if (!Scc)
+        return Scc.takeError();
+      return B.CreateZExt(*Scc, I32Ty);
+    }
     if (Pr.RegKind == ParsedReg::SRC_VCCZ)
       return B.CreateZExt(emitVccIsZero(), I32Ty);
     if (Pr.RegKind == ParsedReg::SRC_EXECZ)
@@ -585,8 +617,12 @@ Expected<Value *> RegisterState::readOp64(const DecodedInst &Di,
     // These unbacked architectural registers read as zero for compute kernels.
     if (Pr.RegKind == ParsedReg::NOREG || Pr.RegKind == ParsedReg::MODE)
       return ConstantInt::get(I64Ty, 0);
-    if (Pr.RegKind == ParsedReg::SRC_SCC)
-      return B.CreateZExt(Regs.loadSCC(B), I64Ty);
+    if (Pr.RegKind == ParsedReg::SRC_SCC) {
+      Expected<Value *> Scc = readSCC(Di);
+      if (!Scc)
+        return Scc.takeError();
+      return B.CreateZExt(*Scc, I64Ty);
+    }
     if (Pr.RegKind == ParsedReg::SRC_VCCZ)
       return B.CreateZExt(emitVccIsZero(), I64Ty);
     if (Pr.RegKind == ParsedReg::SRC_EXECZ)

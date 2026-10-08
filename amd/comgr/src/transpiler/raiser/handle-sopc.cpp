@@ -136,7 +136,7 @@ Error handleIntegerCompare(RaiseContext &Ctx, OperandResolver &Op,
   if (!Src1)
     return Src1.takeError();
   Value *Result = Ctx.B.CreateICmp(Pred, *Src0, *Src1, "scmp");
-  Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+  Ctx.registers().storeSCC(Ctx.B, Result);
   return Error::success();
 }
 
@@ -176,13 +176,13 @@ Expected<bool> compareSourceImageAddr(RaiseContext &Ctx, const DecodedInst &Di,
       return false;
     // A loaded code object never sits at address zero, so this comparison is
     // settled without using the relocatable source address.
-    Ctx.registers().regFile().storeSCC(Ctx.B, Ctx.B.getInt1(!IsEqual));
+    Ctx.registers().storeSCC(Ctx.B, Ctx.B.getInt1(!IsEqual));
     return true;
   }
 
   bool Equal = *Known[0] == *Known[1];
   Value *Scc = Ctx.B.getInt1(Equal == IsEqual);
-  Ctx.registers().regFile().storeSCC(Ctx.B, Scc);
+  Ctx.registers().storeSCC(Ctx.B, Scc);
   return true;
 }
 
@@ -196,7 +196,7 @@ Error handleInteger64Compare(RaiseContext &Ctx, OperandResolver &Op,
   if (!Src1)
     return Src1.takeError();
   Value *Result = Ctx.B.CreateICmp(Pred, *Src0, *Src1, "scmp64");
-  Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+  Ctx.registers().storeSCC(Ctx.B, Result);
   return Error::success();
 }
 
@@ -223,7 +223,7 @@ Error handleFloatCompare(RaiseContext &Ctx, OperandResolver &Op,
   Value *Float1 = Ctx.B.CreateBitCast(Bits1, FloatTy, "scmpf_src");
   Value *Result = Ctx.B.CreateFCmp(Pred, Float0, Float1,
                                    FloatTy->isHalfTy() ? "scmpf16" : "scmpf");
-  Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+  Ctx.registers().storeSCC(Ctx.B, Result);
   return Error::success();
 }
 
@@ -242,7 +242,7 @@ Error handleBitCompare32(RaiseContext &Ctx, OperandResolver &Op,
   Value *Bit = Ctx.B.CreateShl(Ctx.B.getInt32(1), Amount, "bitcmp_bit");
   Value *Masked = Ctx.B.CreateAnd(*Src0, Bit, "bitcmp_mask");
   Value *Scc = Ctx.B.CreateICmp(Pred, Masked, Ctx.B.getInt32(0), "bitcmp");
-  Ctx.registers().regFile().storeSCC(Ctx.B, Scc);
+  Ctx.registers().storeSCC(Ctx.B, Scc);
   return Error::success();
 }
 
@@ -263,7 +263,7 @@ Error handleBitCompare64(RaiseContext &Ctx, OperandResolver &Op,
   Value *Bit = Ctx.B.CreateShl(Ctx.B.getInt64(1), Amount, "bitcmp_bit");
   Value *Masked = Ctx.B.CreateAnd(*Src0, Bit, "bitcmp_mask");
   Value *Scc = Ctx.B.CreateICmp(Pred, Masked, Ctx.B.getInt64(0), "bitcmp");
-  Ctx.registers().regFile().storeSCC(Ctx.B, Scc);
+  Ctx.registers().storeSCC(Ctx.B, Scc);
   return Error::success();
 }
 

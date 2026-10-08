@@ -43,6 +43,12 @@
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=COMPAREDYNAMIC
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_compare_absolute_kernel \
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=COMPAREABSOLUTE
+; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_signed_add_scc_kernel \
+; RUN:   2>&1 | %FileCheck %s --check-prefix=SIGNEDADDSCC
+; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_split_add_scc_kernel \
+; RUN:   2>&1 | %FileCheck %s --check-prefix=SPLITADDSCC
+; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_scc_other_block_kernel \
+; RUN:   2>&1 | %FileCheck %s --check-prefix=SCCOTHERBLOCK
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_escape_low_kernel \
 ; RUN:   2>&1 | %FileCheck %s --check-prefix=ESCAPELOW
 ; RUN: not %transpile_cli %t.hsaco --emit-ir=refuse_escape_high_kernel \
@@ -475,6 +481,48 @@ refuse_compare_absolute_kernel:
 	s_cmp_eq_u64 s[0:1], 1
 	s_endpgm
 
+; A displacement moves the whole 64-bit address, which the loader moves with
+; it. The carry and the overflow the halves produce along the way answer for
+; the address the ELF file records rather than the one the loader hands the
+; kernel, so SCC is refused to whatever would read it as a reliable flag.
+
+	.globl	refuse_signed_add_scc_kernel
+	.p2align	8
+	.type	refuse_signed_add_scc_kernel,@function
+refuse_signed_add_scc_kernel:
+	s_get_pc_i64 s[0:1]
+	s_add_i32 s0, s0, 8
+; SIGNEDADDSCC: unsupported-instruction-form: s_cselect_b32 {{.+}} :: operand-read: 'scc' may hold a carry or overflow derived from a source code-object address; relocation may change the result
+	s_cselect_b32 s2, 1, 2
+	s_endpgm
+
+	.globl	refuse_split_add_scc_kernel
+	.p2align	8
+	.type	refuse_split_add_scc_kernel,@function
+refuse_split_add_scc_kernel:
+; The pair displaces the address it holds, and still leaves the high half's own
+; carry behind in SCC.
+	s_get_pc_i64 s[0:1]
+	s_add_u32 s0, s0, 8
+	s_addc_u32 s1, s1, 0
+; SPLITADDSCC: unsupported-instruction-form: s_cselect_b32 {{.+}} :: operand-read: 'scc' may hold a carry or overflow derived from a source code-object address; relocation may change the result
+	s_cselect_b32 s2, 1, 2
+	s_endpgm
+
+	.globl	refuse_scc_other_block_kernel
+	.p2align	8
+	.type	refuse_scc_other_block_kernel,@function
+refuse_scc_other_block_kernel:
+; A block that does not write SCC itself reads what the blocks before it left,
+; so the refusal has to outlive the block the displacement happened in.
+	s_get_pc_i64 s[0:1]
+	s_add_u32 s0, s0, 8
+	s_branch .Lscc_other_block
+.Lscc_other_block:
+; SCCOTHERBLOCK: unsupported-instruction-form: s_cselect_b32 {{.+}} :: operand-read: 'scc' may hold a carry or overflow derived from a source code-object address; relocation may change the result
+	s_cselect_b32 s2, 1, 2
+	s_endpgm
+
 	.globl	refuse_escape_low_kernel
 	.p2align	8
 	.type	refuse_escape_low_kernel,@function
@@ -591,6 +639,21 @@ refuse_escape_high_kernel:
 		.amdhsa_next_free_sgpr 24
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_compare_absolute_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_signed_add_scc_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_split_add_scc_kernel
+		.amdhsa_kernarg_size 0
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 24
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_scc_other_block_kernel
 		.amdhsa_kernarg_size 0
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 24
@@ -874,6 +937,39 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     24
     .symbol:         refuse_compare_absolute_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_signed_add_scc_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         refuse_signed_add_scc_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_split_add_scc_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         refuse_split_add_scc_kernel.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .args: []
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_scc_other_block_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     24
+    .symbol:         refuse_scc_other_block_kernel.kd
     .vgpr_count:     4
     .wavefront_size: 32
   - .args: []
