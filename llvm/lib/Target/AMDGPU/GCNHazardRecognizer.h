@@ -191,11 +191,11 @@ private:
   /// low or too high; each is measured at the distance to itself, which also
   /// makes that distance the shortest one over all paths.
   int getMaxWindowDeficit(int MaxWindow, WindowForFn WindowFor) const;
+  int getMaxVALUWindowDeficit(int MaxWindow, WindowForFn WindowFor) const;
 
   int getWaitStatesSince(IsHazardFn IsHazard, int Limit,
                          GetNumWaitStatesFn GetNumWaitStates) const;
   int getWaitStatesSince(IsHazardFn IsHazard, int Limit) const;
-  int getWaitStatesSinceVALU(IsHazardFn IsHazard, int Limit) const;
   int getWaitStatesSinceDef(unsigned Reg, IsHazardFn IsHazardDef,
                             int Limit) const;
   int getWaitStatesSinceSetReg(IsHazardFn IsHazard, int Limit) const;
