@@ -20,6 +20,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/TargetParser/AMDGPUTargetParser.h"
 
 #include <cassert>
 #include <climits>
@@ -290,8 +291,10 @@ Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di,
 
   unsigned ReplayBit =
       llvm::countr_zero(static_cast<unsigned>(AMDGPU::Hwreg::REPLAY_MODE));
-  if (Ctx.Projection.SourceSTI.getCPU() == "gfx1250" &&
-      Ctx.Projection.TargetSTI.getCPU() == "gfx942" &&
+  if (AMDGPU::getSubArchFromGPUName(Ctx.Projection.SourceSTI.getCPU()) ==
+          Triple::AMDGPUSubArch1250 &&
+      AMDGPU::getSubArchFromGPUName(Ctx.Projection.TargetSTI.getCPU()) ==
+          Triple::AMDGPUSubArch942 &&
       Id == AMDGPU::Hwreg::ID_MODE && BitOffset <= ReplayBit &&
       BitWidth > ReplayBit - BitOffset) {
     if (Di.CanonOp == CanonicalOp::S_SETREG_IMM32_B32 &&
