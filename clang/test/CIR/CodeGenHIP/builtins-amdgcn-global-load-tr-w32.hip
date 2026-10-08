@@ -18,7 +18,7 @@
 #define __device__ __attribute__((device))
 
 typedef int    v2i __attribute__((ext_vector_type(2)));
-typedef _Float16 v8h __attribute__((ext_vector_type(8)));
+typedef __fp16 v8h __attribute__((ext_vector_type(8)));
 typedef short  v8s __attribute__((ext_vector_type(8)));
 typedef __bf16 v8y __attribute__((ext_vector_type(8)));
 
@@ -43,9 +43,9 @@ __device__ v8s test_global_load_tr_b128_v8i16(v8s_as1_ptr inptr) {
   return __builtin_amdgcn_global_load_tr_b128_v8i16(inptr);
 }
 
-// CIR-LABEL: @_Z30test_global_load_tr_b128_v8f16PU3AS1Dv8_DF16_
+// CIR-LABEL: @_Z30test_global_load_tr_b128_v8f16PU3AS1Dv8_Dh
 // CIR: cir.call_llvm_intrinsic "amdgcn.global.load.tr.b128" {{.*}} : (!cir.ptr<!cir.vector<8 x !cir.f16>, target_address_space(1)>) -> !cir.vector<8 x !cir.f16>
-// LLVM-LABEL: @_Z30test_global_load_tr_b128_v8f16PU3AS1Dv8_DF16_
+// LLVM-LABEL: @_Z30test_global_load_tr_b128_v8f16PU3AS1Dv8_Dh
 // LLVM: call{{.*}} <8 x half> @llvm.amdgcn.global.load.tr.b128.v8f16(ptr addrspace(1) %{{.*}})
 __device__ v8h test_global_load_tr_b128_v8f16(v8h_as1_ptr inptr) {
   return __builtin_amdgcn_global_load_tr_b128_v8f16(inptr);
