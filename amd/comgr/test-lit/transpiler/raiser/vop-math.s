@@ -260,7 +260,6 @@ refuse_tanh:
 		.amdhsa_next_free_sgpr 5
 	.end_amdhsa_kernel
 	.amdhsa_kernel literal_f64
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 3
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
@@ -273,7 +272,6 @@ refuse_tanh:
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_div_scale_modifiers
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 2
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
@@ -282,7 +280,6 @@ refuse_tanh:
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel refuse_tanh
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel

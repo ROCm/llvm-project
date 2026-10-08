@@ -102,10 +102,10 @@ small:
 .p2align 8
 .type unsupported,@function
 unsupported:
-; CHECK: unsupported-instruction-form: v_rcp_iflag_f32
+; CHECK: unsupported-instruction-form: v_tanh_f32
 ; CHECK-SAME: in kernel 'unsupported'
   s_mov_b32 exec_lo, -1
-  v_rcp_iflag_f32 v1, v0
+  v_tanh_f32 v1, v0
   s_endpgm
 
 .globl synchronize
