@@ -734,8 +734,11 @@ Error handleSOP2(RaiseContext &Ctx, const DecodedInst &Di,
       Expected<std::optional<ParsedReg>> SrcReg = Op.srcReg(0);
       if (!SrcReg)
         return SrcReg.takeError();
+      // An operand that resolves to no constant names no field, so it fails
+      // the match rather than standing in as one.
       if (*SrcReg && (**SrcReg).RegKind == ParsedReg::TTMP &&
-          (**SrcReg).BaseIdx == 8 && Op.srcImm(1) == 0x50019 &&
+          (**SrcReg).BaseIdx == 8 &&
+          evalOperandAsConst(Di.Inst, Op.srcIdx(1)) == 0x50019 &&
           Ctx.registers().isTTMP8EntryValueAvailable()) {
         if (!Ctx.Projection.SourceSTI.hasFeature(
                 AMDGPU::FeatureArchitectedSGPRs))

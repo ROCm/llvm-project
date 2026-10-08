@@ -116,7 +116,7 @@ struct OperandResolver {
   int64_t srcImm(unsigned I) {
     std::optional<int64_t> Constant = evalOperandAsConst(Di.Inst, srcIdx(I));
     assert(Constant && "source operand must be a constant");
-    return Constant.value_or(0);
+    return *Constant;
   }
 
   // Register the I-th destination names.
