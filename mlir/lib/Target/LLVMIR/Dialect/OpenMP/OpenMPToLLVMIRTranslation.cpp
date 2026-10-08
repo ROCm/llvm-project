@@ -8991,18 +8991,22 @@ static void getTargetEntryUniqueInfo(llvm::TargetRegionEntryInfo &targetInfo,
 }
 
 /// Build the DIOp based expression for a variable that is located by \p loc.
-/// Such a variable is described by a location holding its address together
-/// with the type of the variable. That type is \p varType when it is known
-/// from the source of the variable, for example the type carried by a map
-/// clause, and null when it has to be deduced from the IR.
+/// When \p isAddress is set, \p loc holds the address of the variable, which
+/// is described together with the type of the variable. That type is
+/// \p varType when it is known from the source of the variable, for example
+/// the type carried by a map clause, and null when it has to be deduced from
+/// the IR. Otherwise \p loc is the value of the variable.
 static llvm::DIExpression *getVariableExpression(llvm::LLVMContext &context,
                                                  llvm::Value *loc,
+                                                 bool isAddress,
                                                  llvm::Type *varType) {
   llvm::DIExprBuilder exprBuilder(context);
   exprBuilder.append<llvm::DIOp::Arg>(0u, loc->getType());
-  if (!loc->getType()->isPointerTy())
+  if (!isAddress)
     return exprBuilder.intoExpression();
 
+  assert(loc->getType()->isPointerTy() &&
+         "the address of a variable must be a pointer");
   if (!varType) {
     // An alloca knows what it holds. Anything else is an opaque pointer by
     // this point, so fall back to describing it as one.
@@ -9022,8 +9026,8 @@ using VariableTypeMap = llvm::DenseMap<llvm::Value *, llvm::Type *>;
 
 /// Add DIOp based expressions to the debug records of \p func for the AMDGPU
 /// target. A record that already carries an expression is left alone.
-static void updateDebugInfoForFunction(llvm::Function *func,
-                                       const VariableTypeMap &varTypes = {}) {
+static void updateDebugInfoForFunction(
+    llvm::Function *func, const VariableTypeMap &varTypes = VariableTypeMap{}) {
   if (!llvm::Triple(func->getParent()->getTargetTriple()).isAMDGPU())
     return;
 
@@ -9035,8 +9039,9 @@ static void updateDebugInfoForFunction(llvm::Function *func,
     if (record->getNumVariableLocationOps() != 1u)
       return;
     llvm::Value *loc = record->getVariableLocationOp(0u);
-    record->setExpression(
-        getVariableExpression(func->getContext(), loc, varTypes.lookup(loc)));
+    record->setExpression(getVariableExpression(func->getContext(), loc,
+                                                record->isAddressOfVariable(),
+                                                varTypes.lookup(loc)));
   };
 
   for (llvm::Instruction &inst : llvm::instructions(func)) {
@@ -10070,8 +10075,8 @@ static void updateDebugInfoForDeclareTargetVariables(
     llvm::SmallVector<llvm::DIGlobalVariableExpression *> GVEs;
     GV->getDebugInfo(GVEs);
     GV->eraseMetadata(llvm::LLVMContext::MD_dbg);
-    llvm::DIExpression *expr =
-        getVariableExpression(M->getContext(), GV, GV->getValueType());
+    llvm::DIExpression *expr = getVariableExpression(
+        M->getContext(), GV, /*isAddress=*/true, GV->getValueType());
     for (auto *GVE : GVEs) {
       llvm::DIExpression *Old = GVE->getExpression();
       assert((Old == nullptr) || (Old->getNumElements() == 0));
