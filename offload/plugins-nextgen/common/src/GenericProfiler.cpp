@@ -27,9 +27,15 @@ namespace target {
 namespace plugin {
 
 uint64_t GenericProfilerTy::getDeviceTimeStamp(GenericDeviceTy *D) {
-  if (D)
-    return D->getDeviceTimeStamp();
-  return 0;
+  if (!D)
+    return 0;
+
+  return D->getDeviceTimeStamp();
+}
+
+GenericProfilerTy &getNoOpProfiler() {
+  static GenericProfilerTy NoOpProfiler;
+  return NoOpProfiler;
 }
 } // namespace plugin
 } // namespace target

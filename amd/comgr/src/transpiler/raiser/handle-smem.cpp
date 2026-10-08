@@ -10,6 +10,8 @@
 
 #include "SIDefines.h"
 
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+
 #include "transpiler/decoder/amdgpu-formats.h"
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/canonical-op.h"
@@ -25,6 +27,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/Error.h"
@@ -259,13 +262,23 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
     invalidOperandLayout(Ctx.MC, Di, "operand 'cpol' is not an immediate");
   // SCALE_OFFSET is encoded in the cache-policy field but changes the address:
   // it makes the SGPR offset an element index scaled by the load size. The
-  // scale is handled below; other cache-policy modifiers remain unsupported.
+  // scale is handled below.
+  //
+  // NV only affects whether fine-grained cache write-back or invalidation
+  // includes the line; it does not affect the value loaded. The raised IR
+  // cannot represent this hint, so accept it only for gfx12 sources and drop
+  // it, using the target's default NV=0 behavior.
+  //
+  // Other cache-policy modifiers remain unsupported and are rejected below.
   int64_t CachePolicy = Di.getImm(CachePolicyIndex);
   bool ScaleScalarOffset = (CachePolicy & AMDGPU::CPol::SCAL) != 0;
-  if (CachePolicy & ~static_cast<int64_t>(AMDGPU::CPol::SCAL))
+  int64_t ModeledCachePolicy = AMDGPU::CPol::SCAL;
+  if (Ctx.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX12Insts))
+    ModeledCachePolicy |= AMDGPU::CPol::NV;
+  if (CachePolicy & ~ModeledCachePolicy)
     return unsupported(Ctx, Di,
-                       "scalar load cache-policy modifiers other than "
-                       "SCALE_OFFSET are not supported");
+                       "scalar load carries a cache-policy modifier the raise "
+                       "does not model");
 
   // The immediate and SGPR offsets are separate operands that add together.
   // An encoding may carry either or both, but not neither.
@@ -366,9 +379,13 @@ Error handleSMEM(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &) {
     LoadType =
         FixedVectorType::get(Ctx.B.getInt32Ty(), DestinationWidthInDwords);
   Ctx.requireWaveUniform(Pointer, Di,
-                         "WaveNative requires uniform scalar memory addresses");
-  Value *Loaded =
-      Ctx.B.CreateAlignedLoad(LoadType, Pointer, AddressAlignment, "smem_load");
+                         "projection requires uniform scalar memory addresses");
+  Value *Loaded = Ctx.registers().emitMemoryValue(
+      [&] {
+        return Ctx.B.CreateAlignedLoad(LoadType, Pointer, AddressAlignment,
+                                       "smem_load");
+      },
+      /*IsScalar=*/true);
   if (IsNarrowLoad) {
     Value *Extended =
         Info->SignExtends

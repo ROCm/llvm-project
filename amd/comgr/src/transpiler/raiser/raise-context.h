@@ -72,6 +72,9 @@ public:
   // resolve through them.
   RegisterState &registers() { return Registers; }
 
+  /// Refuse hardware effects unsupported by the selected projection.
+  llvm::Error validateHardwareEffect(const DecodedInst &Di) const;
+
   /// Return an error unless the source floating-point environment for Ty can
   /// be preserved for this instruction.
   llvm::Error validateFPEnvironment(const DecodedInst &Di,
@@ -86,8 +89,7 @@ public:
   /// Refuse any bit requirement not established in the promoted register SSA.
   llvm::Error validateRequiredBits() const;
 
-  /// Require a target-wave-uniform operand for WaveNative. Same-wave scalar
-  /// operands are already uniform.
+  /// Record an operand that must be uniform across a widened target wave.
   void requireWaveUniform(llvm::Value *Operand, const DecodedInst &Di,
                           const llvm::Twine &Detail);
   /// For WaveNative, require the source EXEC captured at kernel entry, which
@@ -95,11 +97,9 @@ public:
   void requireKernelEntryExec(const DecodedInst &Di);
   /// Refuse a hardware effect executed once per wave when packing source waves.
   llvm::Error requirePerWaveExecution(const DecodedInst &Di) const;
-  /// Validate requirements after register promotion. EXEC must be the same SSA
-  /// value as KernelEntryExec; uniformity must hold at definitions and uses.
-  llvm::Error
-  validateWaveNativeRequirements(llvm::TargetMachine &TM,
-                                 llvm::Value *KernelEntryExec) const;
+  /// Validate recorded EXEC and uniformity requirements after promotion.
+  llvm::Error validateWaveRequirements(llvm::TargetMachine &TM,
+                                       llvm::Value *KernelEntryExec) const;
 
   // Source text section, and the address the source code object loads it at.
   // PC-relative literals are materialized by reading out of these.

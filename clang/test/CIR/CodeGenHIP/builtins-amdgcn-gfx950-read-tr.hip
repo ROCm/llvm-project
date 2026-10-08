@@ -19,7 +19,7 @@
 
 typedef int    v2i __attribute__((ext_vector_type(2)));
 typedef int    v3i __attribute__((ext_vector_type(3)));
-typedef __fp16 v4h __attribute__((ext_vector_type(4)));
+typedef _Float16 v4h __attribute__((ext_vector_type(4)));
 typedef short  v4s __attribute__((ext_vector_type(4)));
 typedef __bf16 v4y __attribute__((ext_vector_type(4)));
 
@@ -61,9 +61,9 @@ __device__ v4s test_ds_read_tr16_b64_v4i16(v4s_as3_ptr inptr) {
   return __builtin_amdgcn_ds_read_tr16_b64_v4i16(inptr);
 }
 
-// CIR-LABEL: @_Z27test_ds_read_tr16_b64_v4f16PU3AS3Dv4_Dh
+// CIR-LABEL: @_Z27test_ds_read_tr16_b64_v4f16PU3AS3Dv4_DF16_
 // CIR: cir.call_llvm_intrinsic "amdgcn.ds.read.tr16.b64" {{.*}} : (!cir.ptr<!cir.vector<4 x !cir.f16>, target_address_space(3)>) -> !cir.vector<4 x !cir.f16>
-// LLVM-LABEL: @_Z27test_ds_read_tr16_b64_v4f16PU3AS3Dv4_Dh
+// LLVM-LABEL: @_Z27test_ds_read_tr16_b64_v4f16PU3AS3Dv4_DF16_
 // LLVM: call{{.*}} <4 x half> @llvm.amdgcn.ds.read.tr16.b64.v4f16(ptr addrspace(3) %{{.*}})
 __device__ v4h test_ds_read_tr16_b64_v4f16(v4h_as3_ptr inptr) {
   return __builtin_amdgcn_ds_read_tr16_b64_v4f16(inptr);

@@ -5,18 +5,10 @@
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_atomic_add | %FileCheck %s
 
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
-; RUN:   --defsym=UNMODELED_POLICY=1 %s -o %t.nv.o
-; RUN: %ld.lld -shared %t.nv.o -o %t.nv.hsaco
-; RUN: not %transpile_cli %t.nv.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_atomic_add 2>&1 | %FileCheck %s --check-prefix=POLICY
-; POLICY: in kernel 'global_atomic_add'
-; POLICY-SAME: non-default cache policy is not modeled
-
 ; The global integer atomic add lifts to an atomicrmw at its natural alignment.
 ; The temporal and scope hints the source carries only relax what a
 ; sequentially consistent atomic already guarantees, so they are dropped rather
-; than refused.
+; than refused, as is the nv cache hint one of them carries.
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -73,12 +65,8 @@ global_atomic_add:
 ; CHECK: [[LANE3:%.+]] = sext i32 {{.+}} to i64
 ; CHECK-NEXT: [[SCALE3:%.+]] = mul i64 [[LANE3]], 4
 ; CHECK: atomicrmw add ptr addrspace(1) {{%.+}}, i32 {{.+}} seq_cst, align 4
-	global_atomic_add_u32 v0, v1, s[0:1] scale_offset scope:SCOPE_DEV
+	global_atomic_add_u32 v0, v1, s[0:1] scale_offset scope:SCOPE_DEV nv
 
-.ifdef UNMODELED_POLICY
-; The non-volatile bit is not a hint a sequentially consistent atomic subsumes.
-	global_atomic_add_u32 v0, v1, s[0:1] nv
-.endif
 ; CHECK: ret void
 	s_endpgm
 

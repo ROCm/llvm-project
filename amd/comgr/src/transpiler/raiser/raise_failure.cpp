@@ -16,6 +16,8 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <cassert>
+
 namespace COMGR::transpiler {
 
 char RaiseFailure::ID = 0;
@@ -30,9 +32,13 @@ void RaiseFailure::log(llvm::raw_ostream &OS) const {
     OS << " @offset=0x";
     OS.write_hex(*Offset);
   }
-  if (Origin)
-    OS << " in kernel '" << Origin->KernelName << "' (" << Origin->SourceCpu
-       << " -> " << Origin->TargetCpu << ")";
+  if (Origin) {
+    OS << " in kernel '" << Origin->KernelName << "'";
+    assert(Origin->SourceCpu.empty() == Origin->TargetCpu.empty() &&
+           "failure origin must contain both processor names or neither");
+    if (!Origin->SourceCpu.empty())
+      OS << " (" << Origin->SourceCpu << " -> " << Origin->TargetCpu << ")";
+  }
   if (!Detail.empty())
     OS << " :: " << Detail;
 }
@@ -66,6 +72,12 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "device-library-link-failed";
   case RaiseFailureReason::UnsupportedWaveProjection:
     return "unsupported-wave-projection";
+  case RaiseFailureReason::NonUniformScalarState:
+    return "non-uniform-scalar-state";
+  case RaiseFailureReason::UnprovenExecContainment:
+    return "unproven-exec-containment";
+  case RaiseFailureReason::UnsupportedLaunch:
+    return "unsupported-launch";
   case RaiseFailureReason::CrossWaveLaneIdLeak:
     return "cross-wave-lane-id-leak";
   case RaiseFailureReason::CrossWaveUnrewritableShuffle:
@@ -110,8 +122,8 @@ llvm::Error RaiseFailure::inKernel(RaiseFailureReason Reason,
                                    const llvm::Twine &Detail) {
   return llvm::make_error<RaiseFailure>(
       Reason, std::string(), std::optional<std::string>(std::nullopt),
-      std::optional<uint64_t>(std::nullopt),
-      ("kernel '" + KernelName + "': " + Detail).str());
+      std::optional<uint64_t>(std::nullopt), Detail.str(),
+      FailureOrigin{KernelName.str(), std::string(), std::string()});
 }
 
 llvm::Error RaiseFailure::general(RaiseFailureReason Reason,

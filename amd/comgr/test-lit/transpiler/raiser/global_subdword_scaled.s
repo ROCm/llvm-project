@@ -19,6 +19,8 @@
 .type global_subdword_scaled,@function
 ; IR-LABEL: define amdgpu_kernel void @global_subdword_scaled(
 global_subdword_scaled:
+; Some loads and a store carry nv, which the raise drops; their existing IR
+; checks verify that the memory accesses are still raised.
 v_mov_b32 v4, 0x1234
 s_and_b32 exec_lo, exec_lo, 0x55555555
 
@@ -28,7 +30,7 @@ s_and_b32 exec_lo, exec_lo, 0x55555555
 ; IR: [[VALUE:%.+]] = load i8, ptr addrspace(1) {{%.+}}, align 1
 ; IR-NEXT: [[EXT:%.+]] = zext i8 [[VALUE]] to i32
 ; IR: [[PREVIOUS0:%.+]] = phi i32 [ [[EXT]], {{%.+}} ], [ 4660, {{%.+}} ]
-global_load_u8 v4, v0, s[0:1] offset:1 scale_offset
+global_load_u8 v4, v0, s[0:1] offset:1 scale_offset nv
 
 ; DECODE: GLOBAL_LOAD_I8 global_load_i8
 ; IR: [[LANE:%.+]] = sext i32 {{.+}} to i64
@@ -49,7 +51,7 @@ global_load_i8 v4, v0, s[0:1] offset:-1 scale_offset
 ; IR: [[VALUE:%.+]] = load i16, ptr addrspace(1) [[OFFSET]], align 1
 ; IR-NEXT: [[EXT:%.+]] = zext i16 [[VALUE]] to i32
 ; IR: [[PREVIOUS2:%.+]] = phi i32 [ [[EXT]], {{%.+}} ], [ [[PREVIOUS1]], {{%.+}} ]
-global_load_u16 v4, v0, s[0:1] offset:1 scale_offset
+global_load_u16 v4, v0, s[0:1] offset:1 scale_offset nv
 
 ; DECODE: GLOBAL_LOAD_I16 global_load_i16
 ; IR: [[LANE:%.+]] = sext i32 {{.+}} to i64
@@ -72,7 +74,7 @@ global_store_b8 v0, v4, s[0:1] offset:1 scale_offset
 ; IR-NEXT: mul i64 [[LANE]], 2
 ; IR: [[OFFSET:%.+]] = getelementptr i8, ptr addrspace(1) {{%.+}}, i64 -1
 ; IR: store i16 [[DATA]], ptr addrspace(1) [[OFFSET]], align 1
-global_store_b16 v0, v4, s[0:1] offset:-1 scale_offset
+global_store_b16 v0, v4, s[0:1] offset:-1 scale_offset nv
 
 ; DECODE: GLOBAL_STORE_D16_HI_B8 global_store_d16_hi_b8
 ; IR: [[HIGH:%.+]] = lshr i32 [[PREVIOUS3]], 16

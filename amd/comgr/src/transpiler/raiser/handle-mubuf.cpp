@@ -162,7 +162,14 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
     return unsupported(Context, Instruction,
                        "buffer cache policy must be an immediate");
   }
-  if (Instruction.getImm(*CacheIndex) != 0) {
+  // NV only affects whether fine-grained cache write-back or invalidation
+  // includes the line; it does not affect the value transferred. The raised IR
+  // cannot represent this hint, so accept it only for gfx12 sources and drop
+  // it, using the target's default NV=0 behavior.
+  int64_t ModeledCachePolicy = 0;
+  if (Context.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX12Insts))
+    ModeledCachePolicy |= AMDGPU::CPol::NV;
+  if (Instruction.getImm(*CacheIndex) & ~ModeledCachePolicy) {
     return unsupported(Context, Instruction,
                        "non-default buffer cache policy is not modeled");
   }
@@ -339,10 +346,14 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
         if (HighHalf)
           Stored = Builder.CreateLShr(Stored, 16);
         Stored = Builder.CreateTruncOrBitCast(Stored, PayloadType);
-        Builder.CreateAlignedStore(Stored, Pointer, Align(1));
+        Context.registers().emitMemoryEffect(
+            [&] { Builder.CreateAlignedStore(Stored, Pointer, Align(1)); });
       } else {
-        Loaded = Builder.CreateAlignedLoad(PayloadType, Pointer, Align(1));
+        Loaded = Context.registers().emitMemoryValue([&] {
+          return Builder.CreateAlignedLoad(PayloadType, Pointer, Align(1));
+        });
       }
+      BasicBlock *AccessEnd = Builder.GetInsertBlock();
       Builder.CreateBr(Continue);
       Builder.SetInsertPoint(Continue);
       if (IsStore)
@@ -350,7 +361,7 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
 
       PHINode *Result = Builder.CreatePHI(PayloadType, 2);
       Result->addIncoming(Constant::getNullValue(PayloadType), Before);
-      Result->addIncoming(Loaded, AccessBlock);
+      Result->addIncoming(Loaded, AccessEnd);
       Type *ExtendedType = IsD16 ? Builder.getInt16Ty() : Builder.getInt32Ty();
       Value *Extended = IsSigned
                             ? Builder.CreateSExtOrBitCast(Result, ExtendedType)

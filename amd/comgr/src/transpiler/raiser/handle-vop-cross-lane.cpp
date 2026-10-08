@@ -326,7 +326,8 @@ Error raiseReadLane32(RaiseContext &Ctx, const DecodedInst &Di,
       Ctx.B.CreateZExtOrTrunc(*Lane, Ctx.B.getInt32Ty(), "readlane.index");
   Value *SourceLane = emitSourceWaveLane(Ctx, Lane32, "readlane.source.lane");
   Value *Result = nullptr;
-  if (Ctx.Projection.targetWaveSize() == Ctx.Projection.sourceWaveSize()) {
+  if (Ctx.Projection.targetWaveSize() == Ctx.Projection.sourceWaveSize() ||
+      Ctx.Projection.usesReplicatedDispatch()) {
     Module *M = Ctx.B.GetInsertBlock()->getModule();
     Function *ReadLane = Intrinsic::getOrInsertDeclaration(
         M, Intrinsic::amdgcn_readlane, {Ctx.B.getInt32Ty()});

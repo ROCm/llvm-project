@@ -21,13 +21,6 @@
 ; RUN:   --emit-ir=global_subdword_invalid 2>&1 | %FileCheck %s \
 ; RUN:   --check-prefix=POLICY
 
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym=CASE=3 \
-; RUN:   %s -o %t.o
-; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_subdword_invalid 2>&1 | %FileCheck %s \
-; RUN:   --check-prefix=POLICY
-
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym=CASE=4 \
 ; RUN:   %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
@@ -36,13 +29,6 @@
 ; RUN:   --check-prefix=POLICY
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym=CASE=5 \
-; RUN:   %s -o %t.o
-; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_subdword_invalid 2>&1 | %FileCheck %s \
-; RUN:   --check-prefix=POLICY
-
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym=CASE=6 \
 ; RUN:   %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
@@ -84,17 +70,11 @@ global_load_i8 v4, v0, s[0:1] scale_offset scope:SCOPE_SYS th:TH_LOAD_NT
 .if CASE == 2
 global_load_u16 v4, v0, s[0:1] th:TH_LOAD_NT
 .endif
-.if CASE == 3
-global_load_i16 v4, v0, s[0:1] nv
-.endif
 .if CASE == 4
 global_store_b8 v0, v4, s[0:1] scope:SCOPE_DEV th:TH_STORE_NT
 .endif
 .if CASE == 5
 global_store_b16 v0, v4, s[0:1] scale_offset th:TH_STORE_NT
-.endif
-.if CASE == 6
-global_store_d16_hi_b8 v0, v4, s[0:1] scale_offset nv
 .endif
 .if CASE == 7
 global_store_d16_hi_b16 v0, v4, s[0:1] scale_offset scope:SCOPE_DEV th:TH_STORE_NT

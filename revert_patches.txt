@@ -10,6 +10,7 @@ breaks build of hipblaslt
 ---
 breaks rocgdb UT
 [Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
+[CIR][CodeGen][NFC] Share isEmptyFieldForLayout and isEmptyRecordForLayout (#223424)
 ---
 breaks windows build: [amd-llvm] terminate called after throwing an instance of 'std::bad_alloc'
 Make][CodeGen] Add PCH for Clang CodeGen (#206018)
@@ -25,7 +26,4 @@ comgr fails to build -lzma
 ---
 breaks asan-debug build
 [DebugInfo] Support global addresses in variable locations  (#218722)" (#4800) (2 hours ago) <theRonShark>
----
-breaks psdb
-"[AMDGPU] Reserve ENABLE_WAVEFRONT_SIZE32 on gfx125x (#229162)"
 ---

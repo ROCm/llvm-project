@@ -2168,30 +2168,28 @@ static llvm::Expected<llvm::BasicBlock *> allocatePrivateVars(
   return afterAllocatorAllocations ? afterAllocatorAllocations : afterAllocas;
 }
 
-/// This can't always be determined statically, but when we can, it is good to
-/// avoid generating compiler-added barriers which will deadlock the program.
-static bool opIsInSingleThread(mlir::Operation *op) {
-  for (mlir::Operation *parent = op->getParentOp(); parent != nullptr;
+/// A compiler-generated barrier is unsafe when only part of the current team
+/// can reach it. This cannot always be determined statically (e.g. across a
+/// function call), but the enclosing OpenMP constructs can rule it out.
+static bool opMightBeSafeForBarriers(mlir::Operation *op) {
+  for (mlir::Operation *parent = op; parent != nullptr;
        parent = parent->getParentOp()) {
-    if (mlir::isa<omp::SingleOp, omp::CriticalOp>(parent))
+    // An inner parallel construct creates a new team, even when it is nested
+    // inside a construct that only some threads of the outer team encounter.
+    if (mlir::isa<omp::ParallelOp>(parent))
       return true;
 
-    // e.g.
-    // omp.single {
-    //   omp.parallel {
-    //     op
-    //   }
-    // }
-    if (mlir::isa<omp::ParallelOp>(parent))
+    if (mlir::isa<omp::SingleOp, omp::CriticalOp, omp::MaskedOp, omp::MasterOp,
+                  omp::SectionOp>(parent))
       return false;
   }
-  return false;
+  return true;
 }
 
 static LogicalResult
 emitPrivatizationBarrier(mlir::Operation *op, llvm::IRBuilderBase &builder,
                          LLVM::ModuleTranslation &moduleTranslation) {
-  if (opIsInSingleThread(op))
+  if (!opMightBeSafeForBarriers(op))
     return success();
 
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
@@ -8213,50 +8211,6 @@ static void mapParentWithMembers(
       // members of derived types.
       mapFlag &= ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_RETURN_PARAM;
 
-#if 1//<<<<<<< HEAD
-      // TODO: We may want to skip arrays/array sections in this as Clang does.
-      // It appears to be an optimisation rather than a necessity though,
-      // but this requires further investigation. However, we would have to make
-      // sure to not exclude maps with bounds that ARE pointers, as these are
-      // processed as separate components, i.e. pointer + data.
-      for (auto v : overlapIdxs) {
-        auto mapDataOverlapIdx = getMapDataMemberIdx(
-            mapData,
-            cast<omp::MapInfoOp>(parentClause.getMembers()[v].getDefiningOp()));
-        auto isPtrMap = checkIfPointerMap(
-            llvm::cast<omp::MapInfoOp>(mapData.MapClause[mapDataOverlapIdx]));
-        combinedInfo.Types.emplace_back(mapFlag);
-        // TODO: set HasAttachPtr from Flang for pointee-storage entries.
-        combinedInfo.HasAttachPtr.emplace_back(false);
-        combinedInfo.DevicePointers.emplace_back(
-            llvm::OpenMPIRBuilder::DeviceInfoTy::None);
-        combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-            mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
-        combinedInfo.BasePointers.emplace_back(
-            mapData.BasePointers[mapDataIndex]);
-        combinedInfo.Mappers.emplace_back(nullptr);
-        combinedInfo.Pointers.emplace_back(lowAddr);
-        auto sizeCalc = builder.CreateIntCast(
-            builder.CreatePtrDiff(builder.getInt8Ty(),
-                                  mapData.OriginalValue[mapDataOverlapIdx],
-                                  lowAddr),
-            builder.getInt64Ty(), /*isSigned=*/true);
-        // In certain cases, we'll generate a size of 0 if we're not careful
-        // (e.g. if lowAddr happens to be the first member), which isn't
-        // correct, even if the runtimes is sometimes fine with it so, in these
-        // scenarios we select the types size instead.
-        llvm::DataLayout dataLayout = builder.getDataLayout();
-        auto sizeSel = builder.CreateSelect(
-            builder.CreateICmpNE(builder.getInt64(0), sizeCalc), sizeCalc,
-            isPtrMap ? builder.getInt64(dataLayout.getPointerSize())
-                     : mapData.Sizes[mapDataOverlapIdx]);
-        combinedInfo.Sizes.emplace_back(sizeSel);
-        lowAddr = builder.CreateConstGEP1_32(
-            isPtrMap ? builder.getPtrTy() : mapData.BaseType[mapDataOverlapIdx],
-            mapData.BasePointers[mapDataOverlapIdx], 1);
-      }
-
-#endif//>>>>>>> 5e2e97903dafa5b2f312aefb5db7e879820ca59e
       combinedInfo.Types.emplace_back(mapFlag);
       // TODO: set HasAttachPtr from Flang for pointee-storage entries.
       combinedInfo.HasAttachPtr.emplace_back(false);

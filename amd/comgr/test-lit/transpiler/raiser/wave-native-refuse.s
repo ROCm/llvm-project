@@ -3,16 +3,16 @@
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=expand_exec 2>&1 | %FileCheck %s --check-prefix=EXPAND-EXEC
-; EXPAND-EXEC: unsupported-wave-projection:
+; EXPAND-EXEC: unproven-exec-containment:
 ; EXPAND-EXEC-SAME: cannot prove that EXEC only enables lanes active at kernel entry
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=mask_branch 2>&1 | %FileCheck %s --check-prefix=MASK-BRANCH
-; MASK-BRANCH: unsupported-wave-projection:
+; MASK-BRANCH: non-uniform-scalar-state:
 ; MASK-BRANCH-SAME: requires scalar control flow uniform across the target wave
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=yz_branch 2>&1 | %FileCheck %s --check-prefix=YZ-BRANCH
-; YZ-BRANCH: unsupported-wave-projection:
+; YZ-BRANCH: non-uniform-scalar-state:
 ; YZ-BRANCH-SAME: requires scalar control flow uniform across the target wave
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=scalar_address 2>&1 | %FileCheck %s --check-prefix=SCALAR-ADDRESS
-; SCALAR-ADDRESS: unsupported-wave-projection:
+; SCALAR-ADDRESS: non-uniform-scalar-state:
 ; SCALAR-ADDRESS-SAME: requires uniform scalar memory addresses
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=NARROW_SCALAR_LOAD=1 -filetype=obj %s -o %t.narrow.o
 ; RUN: %ld.lld -shared %t.narrow.o -o %t.narrow.hsaco
@@ -41,6 +41,7 @@
 ; SAME-ADDRESS-NEXT: %[[PTR:.*]] = inttoptr i64 %[[ADDR]] to ptr addrspace(1)
 ; SAME-ADDRESS-NEXT: %{{.*}} = load i32, ptr addrspace(1) %[[PTR]], align 4
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=wave_message 2>&1 | %FileCheck %s --check-prefix=WAVE-MESSAGE
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=wave_message --allow-replicated-dispatch 2>&1 | %FileCheck %s --check-prefix=WAVE-MESSAGE
 ; WAVE-MESSAGE: unsupported-wave-projection: s_sendmsg [SOPP] @offset={{0x[0-9a-f]+}}
 ; WAVE-MESSAGE-SAME: does not support per-wave hardware side effects
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 --emit-ir=wave_message | %FileCheck %s --check-prefix=SEND
@@ -67,18 +68,19 @@
 ; DEALLOC: ret void
 
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=mask_loop 2>&1 | %FileCheck %s --check-prefix=MASK-LOOP
-; MASK-LOOP: unsupported-wave-projection:
+; MASK-LOOP: unproven-exec-containment:
 ; MASK-LOOP-SAME: cannot prove that EXEC only enables lanes active at kernel entry
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx90a --emit-ir=expand_exec 2>&1 | %FileCheck %s --check-prefix=DIRECTION
 ; DIRECTION: unsupported-wave-projection
 ; DIRECTION-SAME: wave-size changes are supported only from gfx1250 to gfx942
 
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=masked_matrix 2>&1 | %FileCheck %s --check-prefix=MATRIX
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=masked_matrix --allow-replicated-dispatch 2>&1 | %FileCheck %s --check-prefix=MATRIX
 ; MATRIX: unsupported-wave-projection: v_wmma_f32_16x16x32_f16
 ; MATRIX-SAME: cannot prove that source EXEC at this instruction matches its value at kernel entry
 
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=hardware_register 2>&1 | %FileCheck %s --check-prefix=HWREG
-; HWREG: unsupported-wave-projection: s_setreg_b32
+; HWREG: non-uniform-scalar-state: s_setreg_b32
 ; HWREG-SAME: requires uniform hardware register writes
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 --emit-ir=hardware_register | %FileCheck %s --check-prefix=SAME-HWREG
 ; SAME-HWREG-LABEL: define amdgpu_kernel void @hardware_register(
