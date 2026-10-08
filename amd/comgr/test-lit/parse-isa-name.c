@@ -141,7 +141,8 @@
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack+" SUCCESS
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack-" SUCCESS
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx908:xnack+:sramecc-" SUCCESS
-// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx9-4-generic:sramecc+:xnack-" SUCCESS
+// RUN: parse-isa-name \
+// RUN:   "amdgpu-amd-amdhsa--gfx9-4-generic:sramecc+:xnack-" SUCCESS
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--tahiti" SUCCESS
 // RUN: parse-isa-name "amdgpu-amd-amdhsa-unknown-gfx900" SUCCESS
 
@@ -150,7 +151,8 @@
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--generic" INVALID_ARGUMENT
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx9999" INVALID_ARGUMENT
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:sramecc+" INVALID_ARGUMENT
-// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack+:xnack-" INVALID_ARGUMENT
+// RUN: parse-isa-name \
+// RUN:   "amdgpu-amd-amdhsa--gfx900:xnack+:xnack-" INVALID_ARGUMENT
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack" INVALID_ARGUMENT
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:::" INVALID_ARGUMENT
 // RUN: parse-isa-name "amdgpu-amd-amdhsa-gfx900" INVALID_ARGUMENT
