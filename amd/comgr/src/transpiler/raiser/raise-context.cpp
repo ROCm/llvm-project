@@ -53,6 +53,15 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
                      ArrayRef<TextSection::ImageSection> SourceImageSections,
                      uint64_t KernelStartOffset, uint64_t KernelEndOffset,
                      std::optional<bool> SourceSramEcc) {
+  // SRAM ECC is always enabled on gfx1250, independently of code-object
+  // compatibility flags.
+  if (Projection.SourceSTI.getCPU() == "gfx1250") {
+    if (SourceSramEcc == false)
+      return RaiseFailure::general(
+          RaiseFailureReason::BadInput,
+          "gfx1250 source does not support disabling SRAM ECC");
+    SourceSramEcc = true;
+  }
   Expected<RegisterState> Registers =
       RegisterState::create(B, Projection, MC, Meta);
   if (!Registers)
