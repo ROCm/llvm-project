@@ -1360,13 +1360,6 @@ int32_t GenericPluginTy::isDeviceCompatible(int32_t DeviceId, StringRef Image) {
   }
 }
 
-int32_t GenericPluginTy::number_of_devices() {
-  auto T = logger::log<int32_t>(__func__);
-  auto R = [&]() { return getNumDevices(); }();
-  T.res(R);
-  return R;
-}
-
 int GenericPluginTy::number_of_team_procs(int DeviceId) {
   auto T = logger::log<int>(__func__, DeviceId);
   auto R = [&]() { return getDevice(DeviceId).getNumComputeUnits(); }();
@@ -1822,23 +1815,6 @@ int32_t GenericPluginTy::sync_event(int32_t DeviceId, void *EventPtr) {
   }();
   T.res(R);
   return R;
-}
-
-int32_t GenericPluginTy::get_event_elapsed_time(int32_t DeviceId,
-                                                void *StartEventPtr,
-                                                void *EndEventPtr,
-                                                float *ElapsedTime) {
-  auto ElapsedTimeOrErr =
-      getDevice(DeviceId).getEventElapsedTime(StartEventPtr, EndEventPtr);
-  if (!ElapsedTimeOrErr) {
-    REPORT() << "Failure to get elapsed time between events " << StartEventPtr
-             << " and " << EndEventPtr << ": "
-             << toString(ElapsedTimeOrErr.takeError());
-    return OFFLOAD_FAIL;
-  }
-
-  *ElapsedTime = *ElapsedTimeOrErr;
-  return OFFLOAD_SUCCESS;
 }
 
 int32_t GenericPluginTy::destroy_event(int32_t DeviceId, void *EventPtr) {

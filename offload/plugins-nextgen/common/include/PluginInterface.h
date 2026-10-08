@@ -1940,9 +1940,6 @@ public:
   /// Unused in current implementation.
   int32_t supports_empty_images();
 
-  /// Return the number of devices this plugin can support.
-  int32_t number_of_devices();
-
   /// Returns the number of processors available on the device.
   int number_of_team_procs(int DeviceId);
 
@@ -2003,10 +2000,8 @@ public:
   int32_t data_submit_async(int32_t DeviceId, void *TgtPtr, void *HstPtr,
                             int64_t Size, __tgt_async_info *AsyncInfoPtr);
 
-  /// Copy data from the given device.
   int32_t data_retrieve(int32_t DeviceId, void *HstPtr, void *TgtPtr,
                         int64_t Size);
-
   /// Copy data from the given device asynchronously.
   int32_t data_retrieve_async(int32_t DeviceId, void *HstPtr, void *TgtPtr,
                               int64_t Size, __tgt_async_info *AsyncInfoPtr);
@@ -2060,10 +2055,6 @@ public:
   /// Synchronize execution until an event is done.
   int32_t sync_event(int32_t DeviceId, void *EventPtr);
 
-  /// Get the elapsed time in milliseconds between two events.
-  int32_t get_event_elapsed_time(int32_t DeviceId, void *StartEventPtr,
-                                 void *EndEventPtr, float *ElapsedTime);
-
   /// Remove the event from the plugin.
   int32_t destroy_event(int32_t DeviceId, void *EventPtr);
 
@@ -2072,9 +2063,6 @@ public:
 
   /// Sets the region of memory that is considered coarse grained.
   int set_coarse_grain_mem_region(int32_t DeviceId, void *ptr, int64_t size);
-
-  /// Remove the event from the plugin.
-  void set_info_flag(uint32_t NewInfoLevel);
 
   /// Populates the device page table.
   int prepopulate_page_table(int32_t DeviceId, void *ptr, int64_t size);
@@ -2133,13 +2121,6 @@ public:
   /// Queue an asynchronous barrier in the queue associated with the interop
   /// object and return immediately.
   int32_t async_barrier(omp_interop_val_t *Interop);
-
-  /// Returns a Range over all the devices in the plugin that can be
-  /// used in a for loop:
-  /// for (&Device : GenericPluginRef.getDevicesRange()) {
-  auto getDevicesRange() {
-    return llvm::make_range(Devices.begin(), Devices.end());
-  }
 
 private:
   /// Indicates if the platform runtime has been fully initialized.
