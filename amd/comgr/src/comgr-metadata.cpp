@@ -449,6 +449,17 @@ amd_comgr_status_t getElfIsaName(DataObject *DataP, std::string &IsaName) {
 
 amd_comgr_status_t getIsaIndex(StringRef TargetIDString, size_t &Index,
                                StringRef *Processor) {
+  // Treat bare amdgpu as its legacy alias even when the LLVM TargetID parser
+  // requires the amdgpu spelling to include a subarch.
+  // TODO: Remove this normalization once Comgr's LLVM baseline includes the
+  // reland of llvm/llvm-project#213847 and accepts bare amdgpu directly.
+  // Keep the alias and round-trip tests when removing the workaround.
+  std::string LegacyTargetID;
+  if (TargetIDString.consume_front("amdgpu-")) {
+    LegacyTargetID = (Twine("amdgcn-") + TargetIDString).str();
+    TargetIDString = LegacyTargetID;
+  }
+
   // Validate the target ID and resolve the processor (derived from the subarch
   // when the name omits it).
   std::optional<AMDGPU::TargetID> TID =
