@@ -22,6 +22,7 @@
 #include "transpiler/raiser/raiser.h"
 
 #include "transpiler/decoder/amdgpu-formats.h"
+#include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/decode.h"
 #include "transpiler/decoder/mc-state.h"
 #include "transpiler/decoder/opcode-map.h"
@@ -39,6 +40,7 @@
 #include "SIDefines.h"
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -60,8 +62,11 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Alignment.h"
@@ -69,6 +74,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
@@ -390,19 +396,19 @@ static SmallVector<uint64_t> unstartedTargets(const SetPcAnalysis &SetPc) {
 
 namespace {
 /// Track source EXEC writes for validation after register promotion.
-struct WaveNativeRequirements {
+struct ExecContainmentRequirements {
   WeakTrackingVH InitialExec;
   SmallVector<std::pair<WeakTrackingVH, const DecodedInst *>> ExecWrites;
 
-  Error validate(Function &F, const MCState &MC) const;
+  Error validate(Function &F, const MCState &MC, Value *ReplicatedLaneId) const;
 };
 } // namespace
 
-// Prove containment in the entry EXEC mask. Unrecognized expressions remain
-// unproven, including cycles with no independently established mask.
-static bool
-isKnownSubsetOfEntryExec(const Instruction &I,
-                         const SmallPtrSetImpl<const Value *> &EntrySubsets) {
+// For masks, track subsets of entry EXEC; for i1 predicates, track implication
+// of the corresponding lane's entry bit. Integer casts cannot mix these bounds.
+static bool isKnownSubsetOfEntryExec(
+    const Instruction &I, const SmallPtrSetImpl<const Value *> &EntrySubsets,
+    const DominatorTree &DT, Value *ReplicatedLaneId, unsigned SourceWaveSize) {
   auto IsEntrySubset = [&](const Value *V) {
     // Only zero is a subset of every possible entry mask, including partial
     // waves. Nonzero constants need an intersection with a proven subset.
@@ -410,25 +416,59 @@ isKnownSubsetOfEntryExec(const Instruction &I,
       return C->isZero();
     return EntrySubsets.contains(V);
   };
+  using namespace PatternMatch;
   switch (I.getOpcode()) {
+  case Instruction::ICmp: {
+    Value *Mask = nullptr;
+    if (ReplicatedLaneId &&
+        match(&I, m_SpecificICmp(
+                      ICmpInst::ICMP_NE,
+                      m_And(m_LShr(m_Value(Mask),
+                                   m_And(m_Specific(ReplicatedLaneId),
+                                         m_SpecificInt(SourceWaveSize - 1))),
+                            m_One()),
+                      m_Zero())))
+      return IsEntrySubset(Mask);
+    return false;
+  }
   case Instruction::And:
     return IsEntrySubset(I.getOperand(0)) || IsEntrySubset(I.getOperand(1));
   case Instruction::Or:
   case Instruction::Xor:
     return IsEntrySubset(I.getOperand(0)) && IsEntrySubset(I.getOperand(1));
   case Instruction::Select:
+    if (I.getType()->isIntegerTy(1) && IsEntrySubset(I.getOperand(0)) &&
+        match(I.getOperand(2), m_Zero()))
+      return true;
     return IsEntrySubset(I.getOperand(1)) && IsEntrySubset(I.getOperand(2));
-  case Instruction::PHI:
-    return all_of(I.operands(), IsEntrySubset);
-  case Instruction::ZExt:
+  case Instruction::PHI: {
+    const PHINode &Phi = cast<PHINode>(I);
+    return all_of(Phi.incoming_values(), [&](const Use &Incoming) {
+      return !DT.isReachableFromEntry(Phi.getIncomingBlock(Incoming)) ||
+             IsEntrySubset(Incoming);
+    });
+  }
   case Instruction::Trunc:
-    return IsEntrySubset(I.getOperand(0));
+    // The low ballot half describes source lanes 0-31. A predicate bounded
+    // by the corresponding entry bits cannot set other bits in that half.
+    if (ReplicatedLaneId && I.getType()->isIntegerTy(SourceWaveSize)) {
+      const IntrinsicInst *Call = dyn_cast<IntrinsicInst>(I.getOperand(0));
+      if (Call && Call->getIntrinsicID() == Intrinsic::amdgcn_ballot)
+        return IsEntrySubset(Call->getArgOperand(0));
+    }
+    if (I.getType()->isIntegerTy(1))
+      return false;
+    [[fallthrough]];
+  case Instruction::ZExt:
+    return !I.getOperand(0)->getType()->isIntegerTy(1) &&
+           IsEntrySubset(I.getOperand(0));
   default:
     return false;
   }
 }
 
-Error WaveNativeRequirements::validate(Function &F, const MCState &MC) const {
+Error ExecContainmentRequirements::validate(Function &F, const MCState &MC,
+                                            Value *ReplicatedLaneId) const {
   auto Refuse = [&](const DecodedInst &Di, const Twine &Detail) {
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnprovenExecContainment,
@@ -439,20 +479,28 @@ Error WaveNativeRequirements::validate(Function &F, const MCState &MC) const {
   assert(InitialExec && "entry EXEC was deleted before validation");
   SmallPtrSet<const Value *, 32> EntrySubsets;
   EntrySubsets.insert(InitialExec);
+  DominatorTree DT(F);
+  // A reachable PHI cycle has an incoming value on its first iteration.
+  // Remove unsupported producers to prove the bound inductively, including
+  // loop-carried EXEC saves. Unreachable cycles cannot establish a bound.
+  for (const Instruction &I : instructions(F))
+    if (I.getType()->isIntegerTy() && DT.isReachableFromEntry(I.getParent()))
+      EntrySubsets.insert(&I);
   bool Changed;
   do {
     Changed = false;
     for (const Instruction &I : instructions(F))
-      if (!EntrySubsets.contains(&I) &&
-          isKnownSubsetOfEntryExec(I, EntrySubsets))
-        Changed |= EntrySubsets.insert(&I).second;
+      if (&I != InitialExec && EntrySubsets.contains(&I) &&
+          !isKnownSubsetOfEntryExec(I, EntrySubsets, DT, ReplicatedLaneId,
+                                    getWaveSize(*MC.SubtargetInfo)))
+        Changed |= EntrySubsets.erase(&I);
   } while (Changed);
   for (const auto &[Mask, Di] : ExecWrites) {
     assert(Mask && "EXEC write was deleted before validation");
     const Value *V = Mask;
     const auto *C = dyn_cast<ConstantInt>(V);
     if (!EntrySubsets.contains(V) && (!C || !C->isZero()))
-      return Refuse(*Di, "WaveNative cannot prove that EXEC only enables lanes "
+      return Refuse(*Di, "projection cannot prove that EXEC only enables lanes "
                          "active at kernel entry");
   }
 
@@ -460,8 +508,81 @@ Error WaveNativeRequirements::validate(Function &F, const MCState &MC) const {
 }
 
 namespace {
-enum class ProjectionKind { SameWave, WaveNative, Replicated };
+enum class ProjectionKind {
+  SameWave,
+  WaveNative,
+  WaveNativeDivergent,
+  Replicated
+};
 } // namespace
+
+// Whether `Di` names the plain workgroup barrier in `OperandName`, the field
+// its format carries the barrier id in, rather than one of the barriers the
+// raise keeps nothing for: the cluster and trap barriers, and the named
+// barrier objects a subset of the workgroup joins.
+static bool namesWorkgroupBarrier(const DecodedInst &Di,
+                                  AMDGPU::OpName OperandName) {
+  int16_t Index =
+      COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(), OperandName);
+  assert(Index >= 0 && "a split barrier encodes the barrier it names");
+  std::optional<int64_t> Id = evalOperandAsConst(Di.Inst, Index);
+  assert(Id && "the immediate form of a split barrier names its id inline");
+  // Both halves carry the id in a 16-bit field, which reaches here
+  // zero-extended from the wait and sign-extended from the arrival.
+  return SignExtend64<16>(*Id) == AMDGPU::Barrier::WORKGROUP;
+}
+
+// Source offsets of the split-barrier halves that together stand for one whole
+// barrier, as the offsets of both halves of every match.
+//
+// The source splits the workgroup barrier into an arrival that does not block
+// and a wait that does. Neither half alone says what the raise can state,
+// which carries only a barrier that arrives and waits at once: standing it in
+// for an arrival holds a wave the source let run on, and standing it in for a
+// wait makes the wave arrive a second time. A wait the arrival reaches with no
+// control transfer in between is a different matter, because then the two
+// always run together and as a pair they say exactly what the whole barrier
+// says. Raising the pair at its wait keeps the point the source blocks at.
+//
+// `Insts` must be in source order and `BlockStarts` must be the final
+// block-start set, since a block start between the halves means a path reaches
+// one of them without the other.
+static DenseSet<uint64_t>
+pairSplitBarriers(ArrayRef<DecodedInst> Insts,
+                  const std::set<uint64_t> &BlockStarts, const MCState &MC) {
+  DenseSet<uint64_t> Paired;
+  std::optional<uint64_t> PendingArrival;
+  for (const DecodedInst &Di : Insts) {
+    if (BlockStarts.count(Di.Offset))
+      PendingArrival.reset();
+
+    if (Di.CanonOp == CanonicalOp::S_BARRIER_SIGNAL_IMM) {
+      // An arrival already pending is one no wait reached, and dropping it
+      // here leaves it unmatched for the handler to refuse.
+      PendingArrival.reset();
+      if (namesWorkgroupBarrier(Di, AMDGPU::OpName::src0))
+        PendingArrival = Di.Offset;
+      continue;
+    }
+
+    if (Di.CanonOp == CanonicalOp::S_BARRIER_WAIT && PendingArrival &&
+        namesWorkgroupBarrier(Di, AMDGPU::OpName::simm16)) {
+      Paired.insert(*PendingArrival);
+      Paired.insert(Di.Offset);
+      PendingArrival.reset();
+      continue;
+    }
+
+    // A block start is not raised at every control transfer: an instruction
+    // trailing one without leading a block of its own is reached by nothing.
+    // Matching across such a transfer would pair halves that never run
+    // together.
+    const MCInstrDesc &Desc = MC.InstrInfo->get(Di.Inst.getOpcode());
+    if (Desc.isTerminator() || Desc.isCall())
+      PendingArrival.reset();
+  }
+  return Paired;
+}
 
 /// Raise a decoded kernel with one projection. A failed attempt removes its
 /// function before returning, including all register and analysis state.
@@ -471,20 +592,24 @@ static Error raiseDecodedKernel(const RaiseEnvironment &Env, Module &M,
                                 const DecodeResult &Decoded,
                                 const SetPcAnalysis &SetPc, TargetMachine &TM,
                                 ProjectionKind Kind,
-                                unsigned MaxWorkgroupSize) {
+                                const KernelLaunchRequirements &Launch) {
   const KernelMeta &Meta = Kernel.Meta;
   LLVMContext &C = M.getContext();
   const MCSubtargetInfo &SourceSTI = *Env.Source.MC.SubtargetInfo;
   const MCSubtargetInfo &TargetSTI = *Env.Target.MC.SubtargetInfo;
-  bool UseWaveNative = Kind == ProjectionKind::WaveNative;
+  bool UseWaveNative = Kind == ProjectionKind::WaveNative ||
+                       Kind == ProjectionKind::WaveNativeDivergent;
   bool UseReplicated = Kind == ProjectionKind::Replicated;
+  bool CheckContainment =
+      UseWaveNative || (UseReplicated && !Launch.RequiresWholeSourceWaves);
   std::unique_ptr<WaveProjection> Projection;
   if (UseReplicated)
     Projection = std::make_unique<ReplicatedDispatchProjection>(
-        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
+        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C), Launch);
   else if (UseWaveNative)
     Projection = std::make_unique<WaveNativeProjection>(
-        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
+        SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C),
+        Kind == ProjectionKind::WaveNativeDivergent);
   else
     Projection = std::make_unique<ReplicationProjection>(
         SourceSTI, TargetSTI, Type::getInt32Ty(C), Type::getInt64Ty(C));
@@ -503,34 +628,46 @@ static Error raiseDecodedKernel(const RaiseEnvironment &Env, Module &M,
   BasicBlock *Entry = BasicBlock::Create(C, "entry", F);
   IRBuilder<> B(Entry);
 
+  // Matched here rather than at decode, because a block start the transfers
+  // contributed can fall between two halves that the decode alone left
+  // adjacent.
+  DenseSet<uint64_t> PairedSplitBarriers =
+      pairSplitBarriers(Decoded.Insts, Decoded.BlockStarts, Env.Source.MC);
+
   Expected<RaiseContext> Ctx = RaiseContext::create(
-      B, *Projection, Env.Source.MC, SetPc, Meta, Text.Bytes, Text.Address,
-      Text.ImageSections, Kernel.StartOffset, Kernel.EndOffset,
-      Env.Source.SramEcc);
+      B, *Projection, Env.Source.MC, SetPc, PairedSplitBarriers, Meta,
+      Text.Bytes, Text.Address, Text.ImageSections, Kernel.StartOffset,
+      Kernel.EndOffset, Env.Source.SramEcc);
   if (!Ctx)
     return Ctx.takeError();
 
   if (UseReplicated)
-    F->addFnAttr("amdgpu-flat-work-group-size",
-                 formatv("{0},{1}", Projection->targetWaveSize(),
-                         MaxWorkgroupSize * Projection->replicationFactor())
-                     .str());
+    F->addFnAttr(
+        "amdgpu-flat-work-group-size",
+        formatv("{0},{1}", Projection->targetWaveSize(),
+                alignTo(Launch.MaxWorkgroupSize, Projection->sourceWaveSize()) *
+                    Projection->replicationFactor())
+            .str());
 
-  WaveNativeRequirements Requirements;
+  ExecContainmentRequirements Requirements;
   if (UseWaveNative) {
     // The metadata bounds the launch; it does not require that exact size.
     F->addFnAttr("amdgpu-flat-work-group-size",
                  formatv("1,{0}", Meta.MaxFlatWorkgroupSize).str());
-    Requirements.InitialExec = Ctx->registers().readExec();
   }
+  Requirements.InitialExec = Ctx->registers().readExec();
 
-  if (Meta.RequiredWorkgroupSize) {
+  if (Launch.RequiredWorkgroupSize) {
     SmallVector<Metadata *, 3> Dimensions;
+    std::array<uint32_t, 3> Required = *Launch.RequiredWorkgroupSize;
+    if (UseReplicated)
+      Required = {alignTo(Required[0] * Required[1] * Required[2],
+                          Projection->sourceWaveSize()) *
+                      Projection->replicationFactor(),
+                  1, 1};
     unsigned Workitems = 1;
     for (unsigned I = 0; I != 3; ++I) {
-      unsigned Size = (*Meta.RequiredWorkgroupSize)[I];
-      if (UseReplicated && I == 0)
-        Size *= 2;
+      unsigned Size = Required[I];
       Workitems *= Size;
       Dimensions.push_back(ConstantAsMetadata::get(B.getInt32(Size)));
     }
@@ -550,7 +687,15 @@ static Error raiseDecodedKernel(const RaiseEnvironment &Env, Module &M,
   // A followed callee can sit anywhere in the text section, the kernel's own
   // entry included, so where the raise starts is named rather than left to be
   // whichever block the first raised instruction leads.
-  B.CreateBr(Ctx->lookupBB(Kernel.StartOffset));
+  if (Projection->allowsDivergentScalarControlFlow()) {
+    BasicBlock *Exit = BasicBlock::Create(C, "absent_source_wave", F);
+    ReturnInst::Create(C, Exit);
+    Value *Present = B.CreateICmpNE(Requirements.InitialExec, B.getInt32(0),
+                                    "source_wave_present");
+    B.CreateCondBr(Present, Ctx->lookupBB(Kernel.StartOffset), Exit);
+  } else {
+    B.CreateBr(Ctx->lookupBB(Kernel.StartOffset));
+  }
 
   for (const DecodedInst &Di : Decoded.Insts) {
     BasicBlock *Open = B.GetInsertBlock();
@@ -574,17 +719,9 @@ static Error raiseDecodedKernel(const RaiseEnvironment &Env, Module &M,
       return Err;
     if (UseWaveNative || UseReplicated) {
       if (Instruction *Term = B.GetInsertBlock()->getTerminatorOrNull()) {
-        Value *Condition = nullptr;
-        if (const auto *Branch = dyn_cast<CondBrInst>(Term))
-          Condition = Branch->getCondition();
-        else if (const auto *Switch = dyn_cast<SwitchInst>(Term))
-          Condition = Switch->getCondition();
-        if (Condition)
-          Ctx->requireWaveUniform(
-              Condition, Di,
-              "projection requires scalar control flow uniform "
-              "across the target wave");
-      } else if (UseWaveNative && instructionWritesEXEC(Di, Env.Source.MC)) {
+        if (isa<CondBrInst, SwitchInst>(Term))
+          Ctx->requireScalarControlFlow(Term, Di);
+      } else if (CheckContainment && instructionWritesEXEC(Di, Env.Source.MC)) {
         Requirements.ExecWrites.emplace_back(Ctx->registers().readExec(), &Di);
       }
     }
@@ -611,10 +748,14 @@ static Error raiseDecodedKernel(const RaiseEnvironment &Env, Module &M,
     if (Error Err = Ctx->validateWaveRequirements(TM, Requirements.InitialExec))
       return Err;
   }
-  if (UseWaveNative) {
-    if (Error Err = Requirements.validate(*F, Env.Source.MC))
+  if (CheckContainment) {
+    Value *ReplicatedLaneId =
+        UseReplicated ? Projection->emitLaneIdx(B) : nullptr;
+    if (Error Err = Requirements.validate(*F, Env.Source.MC, ReplicatedLaneId))
       return Err;
   }
+  if (Error Err = Ctx->registers().validateEntrySgprs())
+    return Err;
   EraseOnFailure.release();
   return Error::success();
 }
@@ -623,15 +764,6 @@ static Error raiseDecodedKernel(const RaiseEnvironment &Env, Module &M,
 static Error validateReplicatedKernel(const MCState &MC,
                                       const DecodeResult &Decoded,
                                       const KernelMeta &Meta) {
-  constexpr unsigned DispatchSources =
-      amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_DISPATCH_PTR |
-      amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_QUEUE_PTR |
-      amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_DISPATCH_ID;
-  if (Meta.KernelCodeProperties & DispatchSources)
-    return RaiseFailure::general(
-        RaiseFailureReason::UnsupportedWaveProjection,
-        "replicated dispatch cannot expose target dispatch or queue state");
-
   for (const KernelArgMeta &Arg : Meta.Args) {
     if (!StringRef(Arg.ValueKind).starts_with("hidden_"))
       continue;
@@ -643,7 +775,8 @@ static Error validateReplicatedKernel(const MCState &MC,
                     "hidden_group_size_x", "hidden_group_size_y",
                     "hidden_group_size_z", "hidden_remainder_x",
                     "hidden_remainder_y", "hidden_remainder_z",
-                    "hidden_grid_dims", "hidden_none"},
+                    "hidden_grid_dims", "hidden_dynamic_lds_size",
+                    "hidden_none"},
                    true)
             .Default(false);
     if (!IsSourceGeometry)
@@ -660,9 +793,6 @@ static Error validateReplicatedKernel(const MCState &MC,
           strippedMnemonic(MC, Di.Inst), Di.Offset,
           formatName(Di.TargetSpecificFlags), Detail);
     };
-    if (SIInstrFlags::isMAI(*MC.InstrInfo, Di.Inst) ||
-        SIInstrFlags::isWMMA(*MC.InstrInfo, Di.Inst))
-      return Refuse("replicated dispatch does not support matrix fragments");
     for (const MCOperand &Operand : Di.Inst)
       if (Operand.isReg() && Operand.getReg() == AMDGPU::LDS_DIRECT)
         return Refuse("replicated dispatch does not support LDS direct reads");
@@ -679,6 +809,24 @@ raiseKernel(const RaiseEnvironment &Env, Module &M, const TextSection &Text,
             ArrayRef<KernelSymbolExtent> FunctionExtents, TargetMachine &TM,
             LaunchPolicy Policy) {
   const KernelMeta &Meta = Kernel.Meta;
+  std::optional<std::array<uint32_t, 3>> RequiredSize =
+      Kernel.WorkgroupSize ? Kernel.WorkgroupSize : Meta.RequiredWorkgroupSize;
+  if (Kernel.WorkgroupSize && Meta.RequiredWorkgroupSize &&
+      Kernel.WorkgroupSize != Meta.RequiredWorkgroupSize)
+    return RaiseFailure::general(
+        RaiseFailureReason::UnsupportedLaunch,
+        "specialization does not match required source workgroup dimensions");
+  if (RequiredSize) {
+    uint64_t Workitems = 1;
+    for (uint32_t Dimension : *RequiredSize) {
+      if (!Dimension || Dimension > Meta.MaxFlatWorkgroupSize ||
+          Workitems > Meta.MaxFlatWorkgroupSize / Dimension)
+        return RaiseFailure::general(
+            RaiseFailureReason::UnsupportedLaunch,
+            "invalid specialized workgroup dimensions");
+      Workitems *= Dimension;
+    }
+  }
   Expected<DecodeResult> Decoded = decodeKernel(
       Env.Source.MC, Env.OpcMap, Text.Bytes, Kernel.StartOffset,
       Kernel.EndOffset == 0 ? std::nullopt : std::optional(Kernel.EndOffset));
@@ -755,12 +903,35 @@ raiseKernel(const RaiseEnvironment &Env, Module &M, const TextSection &Text,
 
   ProjectionKind Kind =
       UseWaveNative ? ProjectionKind::WaveNative : ProjectionKind::SameWave;
+  KernelLaunchRequirements Launch{KernelLaunchRequirements::Kind::Unchanged,
+                                  Meta.MaxFlatWorkgroupSize, RequiredSize};
+  std::array<std::optional<uint32_t>, 3> GroupSizes;
+  for (const KernelArgMeta &Arg : Meta.Args) {
+    std::optional<unsigned> Dimension;
+    if (Arg.ValueKind == "hidden_group_size_x")
+      Dimension = 0;
+    else if (Arg.ValueKind == "hidden_group_size_y")
+      Dimension = 1;
+    else if (Arg.ValueKind == "hidden_group_size_z")
+      Dimension = 2;
+    if (Dimension) {
+      if (Arg.Size != sizeof(uint16_t))
+        return RaiseFailure::general(RaiseFailureReason::UnsupportedLaunch,
+                                     "hidden group size must be two bytes");
+      GroupSizes[*Dimension] = Arg.Offset;
+    }
+    if (Arg.ValueKind == "hidden_dynamic_lds_size") {
+      if (Arg.Size != sizeof(uint32_t))
+        return RaiseFailure::general(
+            RaiseFailureReason::UnsupportedLaunch,
+            "hidden dynamic LDS size must be four bytes");
+      Launch.DynamicLDSSizeArgOffset = Arg.Offset;
+    }
+  }
   Error Err = raiseDecodedKernel(Env, M, Text, Kernel, *Decoded, *SetPc, TM,
-                                 Kind, Meta.MaxFlatWorkgroupSize);
+                                 Kind, Launch);
   if (!Err)
-    return KernelLaunchRequirements{KernelLaunchRequirements::Kind::Unchanged,
-                                    Meta.MaxFlatWorkgroupSize,
-                                    Meta.RequiredWorkgroupSize};
+    return Launch;
   if (!UseWaveNative || Policy != LaunchPolicy::AllowReplication)
     return std::move(Err);
 
@@ -768,8 +939,10 @@ raiseKernel(const RaiseEnvironment &Env, Module &M, const TextSection &Text,
   Err = handleErrors(std::move(Err),
                      [&](std::unique_ptr<RaiseFailure> Failure) -> Error {
                        switch (Failure->reason()) {
+                       case RaiseFailureReason::RequiresPerSourceWaveExecution:
                        case RaiseFailureReason::NonUniformScalarState:
                        case RaiseFailureReason::UnprovenExecContainment:
+                       case RaiseFailureReason::UnprovenKernelEntryExec:
                          Retry = true;
                          return Error::success();
                        default:
@@ -780,34 +953,89 @@ raiseKernel(const RaiseEnvironment &Env, Module &M, const TextSection &Text,
     return std::move(Err);
   assert(Retry && "handled projection failure must request a retry");
 
-  if (Error Err = validateReplicatedKernel(Env.Source.MC, *Decoded, Meta))
-    return std::move(Err);
   unsigned SourceWaveSize = getWaveSize(SourceSTI);
   unsigned TargetWaveSize = getWaveSize(TargetSTI);
   assert(TargetWaveSize % SourceWaveSize == 0 &&
          "replicated dispatch requires an integer wave-size ratio");
   unsigned ReplicationFactor = TargetWaveSize / SourceWaveSize;
+  bool HasMatrix = any_of(Decoded->Insts, [&](const DecodedInst &Di) {
+    return SIInstrFlags::isMAI(*Env.Source.MC.InstrInfo, Di.Inst) ||
+           SIInstrFlags::isWMMA(*Env.Source.MC.InstrInfo, Di.Inst);
+  });
+  if (RequiredSize &&
+      uint64_t((*RequiredSize)[0]) * (*RequiredSize)[1] * (*RequiredSize)[2] >
+          AMDGPU::getMaxFlatWorkGroupSize() / ReplicationFactor &&
+      !HasMatrix) {
+    Err = raiseDecodedKernel(Env, M, Text, Kernel, *Decoded, *SetPc, TM,
+                             ProjectionKind::WaveNativeDivergent, Launch);
+    if (!Err)
+      return Launch;
+    return std::move(Err);
+  }
+
+  if (Error Err = validateReplicatedKernel(Env.Source.MC, *Decoded, Meta))
+    return std::move(Err);
   unsigned MaxWorkgroupSize =
       std::min(Meta.MaxFlatWorkgroupSize,
                AMDGPU::getMaxFlatWorkGroupSize() / ReplicationFactor);
-  MaxWorkgroupSize = alignDown(MaxWorkgroupSize, SourceWaveSize);
   if (!MaxWorkgroupSize)
     return RaiseFailure::general(
         RaiseFailureReason::UnsupportedLaunch,
         "replicated dispatch requires room for a whole source wave");
-  KernelLaunchRequirements Launch{KernelLaunchRequirements::Kind::Replicated1D,
-                                  MaxWorkgroupSize, Meta.RequiredWorkgroupSize,
-                                  SourceWaveSize, ReplicationFactor};
-  if (Meta.RequiredWorkgroupSize) {
-    Expected<LaunchDimensions> Target =
-        Launch.project(Kernel.Name, {*Meta.RequiredWorkgroupSize,
-                                     *Meta.RequiredWorkgroupSize});
-    if (!Target)
-      return Target.takeError();
+  Launch.Mapping =
+      RequiredSize && ((*RequiredSize)[1] != 1 || (*RequiredSize)[2] != 1)
+          ? KernelLaunchRequirements::Kind::ReplicatedFlattened
+          : KernelLaunchRequirements::Kind::Replicated1D;
+  Launch.MaxWorkgroupSize = MaxWorkgroupSize;
+  Launch.SourceWaveSize = SourceWaveSize;
+  Launch.ReplicationFactor = ReplicationFactor;
+  if (!RequiredSize && GroupSizes[0] && GroupSizes[1] && GroupSizes[2]) {
+    Launch.Mapping = KernelLaunchRequirements::Kind::ReplicatedFlattened;
+    Launch.WorkgroupSizeArgOffsets = {
+        {*GroupSizes[0], *GroupSizes[1], *GroupSizes[2]}};
   }
-  if (Error Err =
-          raiseDecodedKernel(Env, M, Text, Kernel, *Decoded, *SetPc, TM,
-                             ProjectionKind::Replicated, MaxWorkgroupSize))
+  Launch.RequiresWholeSourceWaves =
+      !RequiredSize && !Launch.WorkgroupSizeArgOffsets;
+  auto ValidateRequiredShape = [&]() -> Error {
+    if (!RequiredSize)
+      return Error::success();
+    const std::array<uint32_t, 3> &Size = *RequiredSize;
+    uint64_t Workitems = uint64_t(Size[0]) * Size[1] * Size[2];
+    if (Workitems > Launch.MaxWorkgroupSize)
+      return RaiseFailure::general(
+          RaiseFailureReason::UnsupportedLaunch,
+          "workgroup exceeds the kernel's supported launch size");
+    if (Launch.RequiresWholeSourceWaves && Workitems % SourceWaveSize != 0)
+      return RaiseFailure::general(
+          RaiseFailureReason::UnsupportedLaunch,
+          "replicated dispatch requires whole source waves");
+    return Error::success();
+  };
+  if (Error Err = ValidateRequiredShape())
+    return std::move(Err);
+  if (Launch.RequiresWholeSourceWaves && MaxWorkgroupSize < SourceWaveSize)
+    return RaiseFailure::general(
+        RaiseFailureReason::UnsupportedLaunch,
+        "replicated dispatch requires room for a whole source wave");
+  Err = raiseDecodedKernel(Env, M, Text, Kernel, *Decoded, *SetPc, TM,
+                           ProjectionKind::Replicated, Launch);
+  if (Err && !Launch.RequiresWholeSourceWaves) {
+    Err = handleErrors(
+        std::move(Err), [&](std::unique_ptr<RaiseFailure> Failure) -> Error {
+          if (Failure->reason() !=
+                  RaiseFailureReason::UnprovenExecContainment &&
+              Failure->reason() != RaiseFailureReason::UnprovenKernelEntryExec)
+            return Error(std::move(Failure));
+          Launch.RequiresWholeSourceWaves = true;
+          return Error::success();
+        });
+    if (!Err)
+      Err = ValidateRequiredShape();
+    if (!Err)
+      Err = raiseDecodedKernel(Env, M, Text, Kernel, *Decoded, *SetPc, TM,
+                               ProjectionKind::Replicated, Launch);
+  }
+  if (Err)
     return std::move(Err);
   return Launch;
 }

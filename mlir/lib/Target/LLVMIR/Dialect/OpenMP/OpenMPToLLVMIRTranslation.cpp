@@ -2036,7 +2036,7 @@ static llvm::Expected<llvm::BasicBlock *> allocatePrivateVars(
   llvm::BasicBlock *allocaBB = allocaIP.getNodeParent();
   llvm::Instruction *allocaTerminator = allocaBB->getTerminator();
   splitBB(allocaTerminator->getIterator(), true,
-          allocaTerminator->getStableDebugLoc(), "omp.region.after_alloca");
+          allocaTerminator->getDebugLoc(), "omp.region.after_alloca");
   // Update the allocaTerminator since the alloca block was split above.
   allocaTerminator = allocaBB->getTerminator();
   // The new terminator is an uncondition branch created by the splitBB above.
@@ -2051,7 +2051,7 @@ static llvm::Expected<llvm::BasicBlock *> allocatePrivateVars(
     allocatorTerminator = allocatorBB->getTerminator();
     afterAllocatorAllocations = splitBB(
         allocatorTerminator->getIterator(), true,
-        allocatorTerminator->getStableDebugLoc(), "omp.region.after_allocate");
+        allocatorTerminator->getDebugLoc(), "omp.region.after_allocate");
     allocatorTerminator = allocatorBB->getTerminator();
     assert(allocatorTerminator->getNumSuccessors() == 1 &&
            "This is an unconditional branch created by splitBB");
@@ -7473,6 +7473,12 @@ convertClauseMapFlags(omp::ClauseMapFlags mlirFlags) {
   return mapType;
 }
 
+static StringRef getMapClauseName(omp::MapInfoOp mapOp) {
+  if (StringAttr name = mapOp.getNameAttr())
+    return name.getValue();
+  return {};
+}
+
 static void collectMapDataFromMapOperands(
     MapInfoData &mapData, SmallVectorImpl<Value> &mapVars,
     LLVM::ModuleTranslation &moduleTranslation, DataLayout &dl,
@@ -7556,7 +7562,8 @@ static void collectMapDataFromMapOperands(
     // TODO: set HasAttachPtr from Flang for pointee-storage entries.
     mapData.HasAttachPtr.push_back(false);
     mapData.Names.push_back(LLVM::createMappingInformation(
-        mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder()));
+        mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder(),
+        getMapClauseName(mapOp)));
     mapData.DevicePointers.push_back(llvm::OpenMPIRBuilder::DeviceInfoTy::None);
 
     if (mapOp.getMapperId())
@@ -7627,7 +7634,8 @@ static void collectMapDataFromMapOperands(
         // TODO: set HasAttachPtr from Flang for pointee-storage entries.
         mapData.HasAttachPtr.push_back(false);
         mapData.Names.push_back(LLVM::createMappingInformation(
-            mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder()));
+            mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder(),
+            getMapClauseName(mapOp)));
         mapData.DevicePointers.push_back(devInfoTy);
         mapData.Mappers.push_back(nullptr);
         mapData.IsAMapping.push_back(false);
@@ -7687,7 +7695,8 @@ static void collectMapDataFromMapOperands(
       mapData.Mappers.push_back(nullptr);
     }
     mapData.Names.push_back(LLVM::createMappingInformation(
-        mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder()));
+        mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder(),
+        getMapClauseName(mapOp)));
     mapData.DevicePointers.push_back(
         isDevicePtr ? llvm::OpenMPIRBuilder::DeviceInfoTy::Pointer
                     : llvm::OpenMPIRBuilder::DeviceInfoTy::Address);
@@ -8125,7 +8134,8 @@ static void mapParentWithMembers(
   combinedInfo.Mappers.emplace_back(
       parentMapper && !parentClause.getPartialMap() ? parentMapper : nullptr);
   combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-      mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
+      mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder,
+      getMapClauseName(cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]))));
   combinedInfo.BasePointers.emplace_back(mapData.BasePointers[mapDataIndex]);
 
   // Calculate size of the parent object being mapped based on the
@@ -8198,7 +8208,9 @@ static void mapParentWithMembers(
           mapData.DevicePointers[mapDataIndex]);
       combinedInfo.Mappers.emplace_back(nullptr);
       combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-          mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
+          mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder,
+          getMapClauseName(
+              cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]))));
       combinedInfo.BasePointers.emplace_back(
           mapData.BasePointers[mapDataIndex]);
       combinedInfo.Pointers.emplace_back(mapData.Pointers[mapDataIndex]);
@@ -8211,6 +8223,50 @@ static void mapParentWithMembers(
       // members of derived types.
       mapFlag &= ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_RETURN_PARAM;
 
+      // TODO: We may want to skip arrays/array sections in this as Clang does.
+      // It appears to be an optimisation rather than a necessity though,
+      // but this requires further investigation. However, we would have to make
+      // sure to not exclude maps with bounds that ARE pointers, as these are
+      // processed as separate components, i.e. pointer + data.
+      for (auto v : overlapIdxs) {
+        auto mapDataOverlapIdx = getMapDataMemberIdx(
+            mapData,
+            cast<omp::MapInfoOp>(parentClause.getMembers()[v].getDefiningOp()));
+        auto isPtrMap = checkIfPointerMap(
+            llvm::cast<omp::MapInfoOp>(mapData.MapClause[mapDataOverlapIdx]));
+        combinedInfo.Types.emplace_back(mapFlag);
+        // TODO: set HasAttachPtr from Flang for pointee-storage entries.
+        combinedInfo.HasAttachPtr.emplace_back(false);
+        combinedInfo.DevicePointers.emplace_back(
+            llvm::OpenMPIRBuilder::DeviceInfoTy::None);
+        combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
+            mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder,
+            getMapClauseName(
+                cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]))));
+        combinedInfo.BasePointers.emplace_back(
+            mapData.BasePointers[mapDataIndex]);
+        combinedInfo.Mappers.emplace_back(nullptr);
+        combinedInfo.Pointers.emplace_back(lowAddr);
+        auto sizeCalc = builder.CreateIntCast(
+            builder.CreatePtrDiff(builder.getInt8Ty(),
+                                  mapData.OriginalValue[mapDataOverlapIdx],
+                                  lowAddr),
+            builder.getInt64Ty(), /*isSigned=*/true);
+        // In certain cases, we'll generate a size of 0 if we're not careful
+        // (e.g. if lowAddr happens to be the first member), which isn't
+        // correct, even if the runtimes is sometimes fine with it so, in these
+        // scenarios we select the types size instead.
+        llvm::DataLayout dataLayout = builder.getDataLayout();
+        auto sizeSel = builder.CreateSelect(
+            builder.CreateICmpNE(builder.getInt64(0), sizeCalc), sizeCalc,
+            isPtrMap ? builder.getInt64(dataLayout.getPointerSize())
+                     : mapData.Sizes[mapDataOverlapIdx]);
+        combinedInfo.Sizes.emplace_back(sizeSel);
+        lowAddr = builder.CreateConstGEP1_32(
+            isPtrMap ? builder.getPtrTy() : mapData.BaseType[mapDataOverlapIdx],
+            mapData.BasePointers[mapDataOverlapIdx], 1);
+      }
+
       combinedInfo.Types.emplace_back(mapFlag);
       // TODO: set HasAttachPtr from Flang for pointee-storage entries.
       combinedInfo.HasAttachPtr.emplace_back(false);
@@ -8218,7 +8274,9 @@ static void mapParentWithMembers(
           llvm::OpenMPIRBuilder::DeviceInfoTy::None);
       combinedInfo.Mappers.emplace_back(nullptr);
       combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-          mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
+          mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder,
+          getMapClauseName(
+              cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]))));
       combinedInfo.BasePointers.emplace_back(
           mapData.BasePointers[mapDataIndex]);
       combinedInfo.Pointers.emplace_back(lowAddr);

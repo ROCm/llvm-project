@@ -397,10 +397,6 @@ struct VOPCDPPAsmOnlyInfo {
   uint32_t Opcode;
 };
 
-struct VOP3CDPPAsmOnlyInfo {
-  uint32_t Opcode;
-};
-
 struct VOPDComponentInfo {
   uint16_t BaseVOP;
   uint16_t VOPDOp;
@@ -845,11 +841,6 @@ bool isDPMACCInstruction(unsigned Opc) {
 unsigned mapWMMA2AddrTo3AddrOpcode(unsigned Opc) {
   const WMMAOpcodeMappingInfo *Info = getWMMAMappingInfoFrom2AddrOpcode(Opc);
   return Info ? Info->Opcode3Addr : ~0u;
-}
-
-unsigned mapWMMA3AddrTo2AddrOpcode(unsigned Opc) {
-  const WMMAOpcodeMappingInfo *Info = getWMMAMappingInfoFrom3AddrOpcode(Opc);
-  return Info ? Info->Opcode2Addr : ~0u;
 }
 
 // Wrapper for Tablegen'd function.  enum Subtarget is not defined in any
@@ -1515,13 +1506,6 @@ unsigned getMaxNumVGPRs(const MCSubtargetInfo &STI, unsigned WavesPerEU,
   return std::min(MaxNumVGPRs, AddressableNumVGPRs);
 }
 
-unsigned getEncodedNumVGPRBlocks(const MCSubtargetInfo &STI, unsigned NumVGPRs,
-                                 std::optional<bool> EnableWavefrontSize32) {
-  return getGranulatedNumRegisterBlocks(
-             NumVGPRs, getVGPREncodingGranule(STI, EnableWavefrontSize32)) -
-         1;
-}
-
 unsigned getAllocatedNumVGPRBlocks(const MCSubtargetInfo &STI,
                                    unsigned NumVGPRs,
                                    unsigned DynamicVGPRBlockSize,
@@ -1564,14 +1548,6 @@ void initDefaultAMDKernelCodeT(AMDGPUMCKernelCodeT &KernelCode,
         S_00B848_WGP_MODE(STI.getFeatureBits().test(FeatureCuMode) ? 0 : 1) |
         S_00B848_MEM_ORDERED(1) | S_00B848_FWD_PROGRESS(1);
   }
-}
-
-bool isGroupSegment(const GlobalValue *GV) {
-  return GV->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS;
-}
-
-bool isGlobalSegment(const GlobalValue *GV) {
-  return GV->getAddressSpace() == AMDGPUAS::GLOBAL_ADDRESS;
 }
 
 bool isReadOnlySegment(const GlobalValue *GV) {
@@ -2465,10 +2441,6 @@ unsigned getDynamicVGPRBlockSize(const Function &F) {
     return BlockSize;
 
   return 0;
-}
-
-bool hasXNACK(const MCSubtargetInfo &STI) {
-  return STI.hasFeature(AMDGPU::FeatureXNACK);
 }
 
 bool hasMIMG_R128(const MCSubtargetInfo &STI) {

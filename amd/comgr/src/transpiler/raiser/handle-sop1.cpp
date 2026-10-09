@@ -556,10 +556,14 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
+    Expected<Value *> Moved = Is64 ? Ctx.registers().readSgpr64(Di, *Src)
+                                   : Ctx.registers().readSgpr32(Di, *Src);
+    if (!Moved)
+      return Moved.takeError();
     if (Is64)
-      Ctx.registers().writeReg64(*Dst, Ctx.registers().readSgpr64(*Src));
+      Ctx.registers().writeReg64(*Dst, *Moved);
     else
-      Ctx.registers().writeReg32(*Dst, Ctx.registers().readSgpr32(*Src));
+      Ctx.registers().writeReg32(*Dst, *Moved);
     return Error::success();
   }
 
@@ -601,8 +605,10 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
         displacedSgpr(Ctx, Di, /*OpIdx=*/0, (*M0 >> 16) & FieldMask, 1);
     if (!DstIdx)
       return DstIdx.takeError();
-    Ctx.registers().writeReg32(ParsedReg{ParsedReg::SGPR, *DstIdx, 1},
-                               Ctx.registers().readSgpr32(*Src));
+    Expected<Value *> Moved = Ctx.registers().readSgpr32(Di, *Src);
+    if (!Moved)
+      return Moved.takeError();
+    Ctx.registers().writeReg32(ParsedReg{ParsedReg::SGPR, *DstIdx, 1}, *Moved);
     return Error::success();
   }
 
@@ -834,7 +840,8 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     // the very pair the target comes from. The pair holds a source address,
     // which an operand read refuses because nothing in the raised kernel can
     // address one. Here the address only picks which of the offsets the
-    // analysis enumerated this jump takes, so the pair is read as it stands.
+    // analysis enumerated this jump takes, so the read goes to the register
+    // file directly, past the refusal.
     Value *Target = nullptr;
     if (Resolved.Targets.size() > 1) {
       Expected<std::optional<ParsedReg>> Src = Op.srcReg(0);
@@ -842,7 +849,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
         return Src.takeError();
       assert(*Src && (*Src)->RegKind == ParsedReg::SGPR && (*Src)->BaseIdx &&
              "a transfer reaching several offsets reads a scalar pair");
-      Target = Ctx.registers().readSgpr64(*(*Src)->BaseIdx);
+      Target = Ctx.registers().regFile().loadSGPR64(Ctx.B, *(*Src)->BaseIdx);
     }
 
     if (Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
@@ -893,11 +900,24 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   // the wave where the source let it run on. A program that made progress only
   // because the arrival did not block deadlocks under that reading, so the
   // arrival is refused rather than widened into a whole barrier.
+  //
+  // An arrival the matching release always follows is the exception: the pair
+  // is raised as the one barrier it amounts to, at the release, leaving the
+  // arrival nothing of its own to state.
   case CanonicalOp::S_BARRIER_SIGNAL_IMM:
-  case CanonicalOp::S_BARRIER_SIGNAL_M0:
+    if (Ctx.isPairedSplitBarrier(Di.Offset))
+      return Error::success();
     return unsupported(Ctx, Di,
                        "arrives at a barrier without waiting there, and the "
                        "raise has only a barrier that also waits");
+
+  // The barrier this arrives at is whichever one m0 names at run time, so
+  // which barrier it is cannot be read off the instruction and matched to a
+  // release.
+  case CanonicalOp::S_BARRIER_SIGNAL_M0:
+    return unsupported(Ctx, Di,
+                       "arrives at the barrier m0 names, which the raise "
+                       "cannot match to the wait that releases it");
 
   // The rest of the family speaks about a named barrier: a barrier a subset of
   // the workgroup joins, leaves, sizes and polls. The raise carries no barrier

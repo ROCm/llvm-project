@@ -61,6 +61,7 @@ protected:
     Function *Kernel;
     BasicBlock *Entry;
     SetPcAnalysis SetPc;
+    DenseSet<uint64_t> PairedSplitBarriers;
     std::optional<RaiseContext> Ctx;
 
     explicit ContextEnvironment(const MCState &Mc)
@@ -74,8 +75,9 @@ protected:
           Entry(BasicBlock::Create(LLVMCtx, "entry", Kernel)) {
       B.SetInsertPoint(Entry);
       Ctx.emplace(cantFail(RaiseContext::create(
-          B, Projection, Mc, SetPc, KernelMeta(), ArrayRef<uint8_t>(), 0,
-          ArrayRef<TextSection::ImageSection>(), KKernelStartOffset, 0)));
+          B, Projection, Mc, SetPc, PairedSplitBarriers, KernelMeta(),
+          ArrayRef<uint8_t>(), 0, ArrayRef<TextSection::ImageSection>(),
+          KKernelStartOffset, 0)));
     }
   };
 

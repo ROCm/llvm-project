@@ -179,8 +179,6 @@ public:
 
   int getTTmpIdx(unsigned Val) const;
 
-  const MCInstrInfo *getMCII() const { return MCII.get(); }
-
   bool isVI() const;
   bool isGFX9() const;
   bool isGFX90A() const;

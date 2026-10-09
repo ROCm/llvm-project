@@ -344,7 +344,7 @@ if(SANITIZER_AMDGPU)
 endif()
 # If LLVM is dynamically linked we need to add its libraries.
 set(OFFLOAD_INSTALL_RPATH "$ORIGIN")
-if(LLVM_LINK_LLVM_DYLIB)
+if(LLVM_LINK_LLVM_DYLIB OR LLVM_ENABLE_SHARED_LIBS)
   file(RELATIVE_PATH llvm_libdir_relpath
        "${CMAKE_INSTALL_PREFIX}/${OFFLOAD_INSTALL_LIBDIR}"
        "${CMAKE_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}")

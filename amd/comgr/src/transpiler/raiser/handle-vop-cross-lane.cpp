@@ -293,7 +293,8 @@ Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
   Value *Lane32 = Ctx.B.CreateZExtOrTrunc(SourceLane, Ctx.B.getInt32Ty(),
                                           "readfirstlane.index");
   Value *Result;
-  if (Ctx.Projection.providesFullWaveExecInvariant()) {
+  if (Ctx.Projection.providesSourceWaveExecInvariant() &&
+      Ctx.Projection.numSourceWavesPerTarget() > 1) {
     Result = emitSourceWaveRead(Ctx, *Src, Lane32, "readfirstlane");
   } else {
     Function *ReadLane = Intrinsic::getOrInsertDeclaration(

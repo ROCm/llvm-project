@@ -30,6 +30,7 @@
 #include <cassert>
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 using namespace llvm;
 
@@ -103,12 +104,13 @@ Expected<Value *> readPackedFloatSource(RaiseContext &Ctx,
   return Ctx.B.CreateInsertElement(Result, High, 1, "pk.insert.hi");
 }
 
-/// Raise packed floating-point add and multiply instructions.
+/// Raise packed floating-point arithmetic instructions.
 Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
                              OperandResolver &Op, Type *ElementType,
-                             bool IsAdd) {
+                             CanonicalOp Kind) {
+  unsigned NumSources = Kind == CanonicalOp::V_PK_FMA_F32 ? 3 : 2;
   assert((Di.NumDefs == 1 && Di.numOperands() != 0 && Di.isReg(0) &&
-          Op.nSrcs() == 2) &&
+          Op.nSrcs() == NumSources) &&
          "decoded packed float instruction has unexpected operands");
 
   if (Error Err = Ctx.validateFPEnvironment(Di, ElementType))
@@ -130,8 +132,21 @@ Error raisePackedFloatBinary(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Source1)
     return Source1.takeError();
 
-  Value *Result = IsAdd ? Ctx.B.CreateFAdd(*Source0, *Source1, "pk.add")
-                        : Ctx.B.CreateFMul(*Source0, *Source1, "pk.mul");
+  Value *Result;
+  if (Kind == CanonicalOp::V_PK_FMA_F32) {
+    Expected<Value *> Source2 =
+        readPackedFloatSource(Ctx, Di, Op, 2, ElementType);
+    if (!Source2)
+      return Source2.takeError();
+    Result = Ctx.B.CreateIntrinsic(Intrinsic::fma, {(*Source0)->getType()},
+                                   {*Source0, *Source1, *Source2}, nullptr,
+                                   "pk.fma");
+  } else if (Kind == CanonicalOp::V_PK_ADD_F16 ||
+             Kind == CanonicalOp::V_PK_ADD_F32) {
+    Result = Ctx.B.CreateFAdd(*Source0, *Source1, "pk.add");
+  } else {
+    Result = Ctx.B.CreateFMul(*Source0, *Source1, "pk.mul");
+  }
   if (*Clamp) {
     FixedVectorType *VectorType = FixedVectorType::get(ElementType, 2);
     Function *Maximum = Intrinsic::getOrInsertDeclaration(
@@ -173,9 +188,8 @@ Expected<Value *> readPackedInt16Source(RaiseContext &Ctx,
 
   IntegerType *ElementType = Ctx.B.getInt16Ty();
   Value *Low = Ctx.B.CreateTrunc(*Bits, ElementType, "pk.lo");
-  Value *High = Ctx.B.CreateTrunc(
-      Ctx.B.CreateLShr(*Bits, HalfWidthInBits, "pk.hi.shifted"), ElementType,
-      "pk.hi");
+  Value *Shifted = Ctx.B.CreateLShr(*Bits, HalfWidthInBits, "pk.hi.shifted");
+  Value *High = Ctx.B.CreateTrunc(Shifted, ElementType, "pk.hi");
 
   Value *Result = PoisonValue::get(FixedVectorType::get(ElementType, 2));
   Result = Ctx.B.CreateInsertElement(
@@ -250,9 +264,11 @@ Error raisePackedInt16(RaiseContext &Ctx, const DecodedInst &Di,
       return IsSigned ? Ctx.B.CreateSExt(V, WideType)
                       : Ctx.B.CreateZExt(V, WideType);
     };
-    Value *Product =
-        Ctx.B.CreateMul(Widen(Sources[0]), Widen(Sources[1]), "pk.mad.mul");
-    Value *Sum = Ctx.B.CreateAdd(Product, Widen(Sources[2]), "pk.mad.sum");
+    Value *Src0 = Widen(Sources[0]);
+    Value *Src1 = Widen(Sources[1]);
+    Value *Src2 = Widen(Sources[2]);
+    Value *Product = Ctx.B.CreateMul(Src0, Src1, "pk.mad.mul");
+    Value *Sum = Ctx.B.CreateAdd(Product, Src2, "pk.mad.sum");
     if (*Clamp) {
       // Zero-extended lanes cannot sum to a negative value, so only the signed
       // form needs a lower bound.
@@ -349,6 +365,85 @@ Error raisePackedInt16(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+Expected<Value *> readMixedBF16Source(RaiseContext &Ctx, const DecodedInst &Di,
+                                      OperandResolver &Op, unsigned Source) {
+  unsigned Modifiers = Op.srcMod(Source);
+  if (Modifiers & SISrcMods::OP_SEL_1) {
+    if (Error Err = Ctx.validateBF16InputDenormMode(Di))
+      return std::move(Err);
+  }
+  Expected<Value *> Bits = Op.src(Source);
+  if (!Bits)
+    return Bits.takeError();
+
+  std::optional<uint32_t> InlineFloatBits;
+  if (!Op.isSrcReg(Source) && Di.sizeInBytes() == 8) {
+    uint32_t Immediate = static_cast<uint32_t>(Op.srcImm(Source));
+    int32_t SignedImmediate = static_cast<int32_t>(Immediate);
+    if (!AMDGPU::isInlinableIntLiteral(SignedImmediate)) {
+      if (Immediate <= UINT16_MAX &&
+          AMDGPU::isInlinableLiteralBF16(static_cast<int16_t>(Immediate), true))
+        InlineFloatBits = Immediate << 16;
+      else if (AMDGPU::isInlinableLiteral32(SignedImmediate, true))
+        InlineFloatBits = Immediate;
+    }
+  }
+  if (InlineFloatBits)
+    *Bits = ConstantInt::get(Ctx.B.getInt32Ty(), *InlineFloatBits);
+
+  Value *Result;
+  if (Modifiers & SISrcMods::OP_SEL_1) {
+    Value *Selected = *Bits;
+    // An inline floating constant occupies either BF16 half, while a literal
+    // or register supplies its raw 32-bit word.
+    if (InlineFloatBits)
+      Selected = ConstantInt::get(Ctx.B.getInt32Ty(), *InlineFloatBits >> 16);
+    else if (Modifiers & SISrcMods::OP_SEL_0)
+      Selected = Ctx.B.CreateLShr(Selected, 16, "mix.hi");
+    Value *HalfBits = Ctx.B.CreateTrunc(Selected, Ctx.B.getInt16Ty());
+    Value *BF16 = Ctx.B.CreateBitCast(HalfBits, Ctx.B.getBFloatTy());
+    Result = Ctx.B.CreateFPExt(BF16, Ctx.B.getFloatTy(), "mix.bf16");
+  } else {
+    Result = Ctx.B.CreateBitCast(*Bits, Ctx.B.getFloatTy());
+  }
+
+  return Op.applyMods(Source, Result);
+}
+
+Error raiseFMAMixF32BF16(RaiseContext &Ctx, const DecodedInst &Di,
+                         OperandResolver &Op) {
+  assert(Di.NumDefs == 1 && Di.isReg(0) && Op.nSrcs() == 3 &&
+         "decoded FMA mix instruction has unexpected operands");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+    return Err;
+
+  Expected<bool> Clamp = readClamp(Ctx, Di);
+  if (!Clamp)
+    return Clamp.takeError();
+  Expected<ParsedReg> Destination = Op.dst();
+  if (!Destination)
+    return Destination.takeError();
+
+  Value *Sources[3];
+  for (unsigned I = 0; I != 3; ++I) {
+    Expected<Value *> Source = readMixedBF16Source(Ctx, Di, Op, I);
+    if (!Source)
+      return Source.takeError();
+    Sources[I] = *Source;
+  }
+  Value *Result = Ctx.B.CreateIntrinsic(Intrinsic::fma, {Ctx.B.getFloatTy()},
+                                        Sources, nullptr, "mix.fma");
+  if (*Clamp) {
+    Value *Zero = ConstantFP::get(Ctx.B.getFloatTy(), 0.0);
+    Value *One = ConstantFP::get(Ctx.B.getFloatTy(), 1.0);
+    Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::maxnum, Result, Zero);
+    Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::minnum, Result, One);
+  }
+  Ctx.registers().writeReg32(*Destination,
+                             Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
+  return Error::success();
+}
+
 Expected<Value *> readWMMAAccumulator(RaiseContext &Ctx, const DecodedInst &Di,
                                       OperandResolver &Op,
                                       Type *AccumulatorTy) {
@@ -435,14 +530,11 @@ Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
   switch (Di.CanonOp) {
   case CanonicalOp::V_PK_ADD_F16:
   case CanonicalOp::V_PK_MUL_F16:
-    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getHalfTy(),
-                                  /*IsAdd=*/Di.CanonOp ==
-                                      CanonicalOp::V_PK_ADD_F16);
+    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getHalfTy(), Di.CanonOp);
   case CanonicalOp::V_PK_ADD_F32:
   case CanonicalOp::V_PK_MUL_F32:
-    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getFloatTy(),
-                                  /*IsAdd=*/Di.CanonOp ==
-                                      CanonicalOp::V_PK_ADD_F32);
+  case CanonicalOp::V_PK_FMA_F32:
+    return raisePackedFloatBinary(Ctx, Di, Op, Ctx.B.getFloatTy(), Di.CanonOp);
   case CanonicalOp::V_PK_ADD_U16:
   case CanonicalOp::V_PK_ADD_I16:
   case CanonicalOp::V_PK_SUB_U16:
@@ -462,6 +554,8 @@ Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_PK_MIN3_U16:
   case CanonicalOp::V_PK_MAX3_U16:
     return raisePackedInt16(Ctx, Di, Op);
+  case CanonicalOp::V_FMA_MIX_F32_BF16:
+    return raiseFMAMixF32BF16(Ctx, Di, Op);
   case CanonicalOp::V_WMMA_F32_16x16x32_F16:
     return raiseWMMA(Ctx, Di, Op, WMMAInputType::F16);
   case CanonicalOp::V_WMMA_F32_16x16x32_BF16:

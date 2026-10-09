@@ -42,6 +42,8 @@ struct KernelRequest {
   const KernelMeta &Meta;
   uint64_t StartOffset;
   uint64_t EndOffset;
+  /// Optional logical workgroup specialization, enforced by the launch result.
+  std::optional<std::array<uint32_t, 3>> WorkgroupSize;
 };
 
 // Raise every kernel in `Kernels` onto `TargetIsa`, into one module of

@@ -65,8 +65,8 @@ Expected<std::optional<uint64_t>> sourceImageSgprPairAddr(RaiseContext &Ctx,
   // the raised kernel was handed.
   if (Ctx.registers().droppedSourceImageSgprPairAddr(BaseIdx))
     return unsupported(Ctx, Di,
-                       "uses a source address another block computed, which "
-                       "the raise does not carry across blocks");
+                       "uses a source address that a block boundary or a write "
+                       "to one half of the pair has dropped");
   return std::nullopt;
 }
 

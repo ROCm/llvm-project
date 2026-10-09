@@ -13,12 +13,13 @@
 .p2align 8
 .type matrix,@function
 matrix:
-; CHECK: unsupported-wave-projection: v_wmma_f32_16x16x32_f16
+; CHECK: unproven-kernel-entry-exec: v_wmma_f32_16x16x32_f16
 ; CHECK-SAME: in kernel 'matrix'
-; CHECK-SAME: replicated dispatch does not support matrix fragments
+; CHECK-SAME: cannot prove that source EXEC at this instruction matches its value at kernel entry
   s_bfe_u32 s4, ttmp8, 0x50019
   s_cmp_eq_u32 s4, 0
   s_cbranch_scc1 .Lmatrix_exit
+  s_mov_b32 exec_lo, 0
   v_wmma_f32_16x16x32_f16 v[16:23], v[0:7], v[8:15], 0
 .Lmatrix_exit:
   s_endpgm
@@ -40,7 +41,7 @@ hardware:
 message:
 ; CHECK: unsupported-wave-projection: s_sendmsg
 ; CHECK-SAME: in kernel 'message'
-; CHECK-SAME: WaveNative does not support per-wave hardware side effects
+; CHECK-SAME: replicated dispatch does not support per-wave hardware effects
   s_bfe_u32 s4, ttmp8, 0x50019
   s_cmp_eq_u32 s4, 0
   s_cbranch_scc1 .Lmessage_exit
@@ -52,30 +53,45 @@ message:
 .p2align 8
 .type dispatch,@function
 dispatch:
-; CHECK: unsupported-wave-projection
+; CHECK: unsupported-entry-sgpr-source
 ; CHECK-SAME: in kernel 'dispatch'
-; CHECK-SAME: replicated dispatch cannot expose target dispatch or queue state
+; CHECK-SAME: replicated dispatch cannot reproduce consumed entry state
   s_mov_b32 exec_lo, -1
+  s_load_b32 s8, s[0:1], 0
+  s_cmp_eq_u32 s8, 0
+  s_cbranch_scc1 .Lentry_load_use_1
+  s_mov_b32 exec_lo, 0
+.Lentry_load_use_1:
   s_endpgm
 
 .globl queue
 .p2align 8
 .type queue,@function
 queue:
-; CHECK: unsupported-wave-projection
+; CHECK: unsupported-entry-sgpr-source
 ; CHECK-SAME: in kernel 'queue'
-; CHECK-SAME: replicated dispatch cannot expose target dispatch or queue state
+; CHECK-SAME: replicated dispatch cannot reproduce consumed entry state
   s_mov_b32 exec_lo, -1
+  s_load_b32 s8, s[0:1], 0
+  s_cmp_eq_u32 s8, 0
+  s_cbranch_scc1 .Lentry_load_use_2
+  s_mov_b32 exec_lo, 0
+.Lentry_load_use_2:
   s_endpgm
 
 .globl dispatch_id
 .p2align 8
 .type dispatch_id,@function
 dispatch_id:
-; CHECK: unsupported-wave-projection
+; CHECK: unsupported-entry-sgpr-source
 ; CHECK-SAME: in kernel 'dispatch_id'
-; CHECK-SAME: replicated dispatch cannot expose target dispatch or queue state
+; CHECK-SAME: replicated dispatch cannot reproduce consumed entry state
   s_mov_b32 exec_lo, -1
+  s_load_b32 s8, s[2:3], 0
+  s_cmp_eq_u32 s8, 0
+  s_cbranch_scc1 .Lentry_load_use_3
+  s_mov_b32 exec_lo, 0
+.Lentry_load_use_3:
   s_endpgm
 
 .globl hidden
@@ -102,10 +118,10 @@ small:
 .p2align 8
 .type unsupported,@function
 unsupported:
-; CHECK: unsupported-instruction-form: v_rcp_iflag_f32
+; CHECK: unsupported-instruction-form: v_tanh_f32
 ; CHECK-SAME: in kernel 'unsupported'
   s_mov_b32 exec_lo, -1
-  v_rcp_iflag_f32 v1, v0
+  v_tanh_f32 v1, v0
   s_endpgm
 
 .globl synchronize

@@ -20,8 +20,8 @@ sopk_hwreg:
 	s_getreg_b32 s0, hwreg(HW_REG_IB_STS2, 6, 4)
 	; IR: call void @llvm.amdgcn.s.setreg(i32 2305, i32 0)
 	s_setreg_b32 hwreg(HW_REG_WAVE_MODE, 4, 2), s0
-	; IR: call void @llvm.amdgcn.s.setreg(i32 1601, i32 4097)
-	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 0x1001
+	; IR: call void @llvm.amdgcn.s.setreg(i32 2305, i32 1)
+	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 4, 2), 1
 	; The diagnostic register write is dropped.
 	s_setreg_imm32_b32 hwreg(HW_REG_IB_STS2), 7
 	; IR-NOT: call void @llvm.amdgcn.s.setreg

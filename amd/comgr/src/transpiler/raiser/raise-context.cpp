@@ -16,14 +16,19 @@
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Analysis/CycleAnalysis.h"
+#include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/UniformityAnalysis.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassInstrumentation.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -43,6 +48,7 @@ namespace COMGR::transpiler {
 Expected<RaiseContext>
 RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
                      const MCState &MC, const SetPcAnalysis &SetPc,
+                     const DenseSet<uint64_t> &PairedSplitBarriers,
                      const KernelMeta &Meta, ArrayRef<uint8_t> SourceTextBytes,
                      uint64_t SourceTextBaseAddress,
                      ArrayRef<TextSection::ImageSection> SourceImageSections,
@@ -56,6 +62,11 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_32);
   const unsigned SourceFloatRoundMode16_64 = AMDHSA_BITS_GET(
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_ROUND_MODE_16_64);
+  const unsigned SourceFloatDenormMode16_64 = AMDHSA_BITS_GET(
+      Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_FLOAT_DENORM_MODE_16_64);
+  const bool SourceBF16InputDenormsFlush =
+      SourceFloatDenormMode16_64 == amdhsa::FLOAT_DENORM_MODE_FLUSH_SRC_DST ||
+      SourceFloatDenormMode16_64 == amdhsa::FLOAT_DENORM_MODE_FLUSH_SRC;
   const bool SourceFp16Overflow = AMDHSA_BITS_GET(
       Meta.ComputePgmRsrc1, amdhsa::COMPUTE_PGM_RSRC1_GFX9_PLUS_FP16_OVFL);
   bool Dx10Clamp = true;
@@ -68,11 +79,12 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
         AMDHSA_BITS_GET(Meta.ComputePgmRsrc1,
                         amdhsa::COMPUTE_PGM_RSRC1_GFX6_GFX11_ENABLE_IEEE_MODE);
   }
-  RaiseContext Context(B, Projection, MC, SetPc, std::move(*Registers),
-                       SourceTextBytes, SourceTextBaseAddress,
-                       SourceImageSections, KernelStartOffset, KernelEndOffset,
-                       SourceFloatRoundMode32, SourceFloatRoundMode16_64,
-                       SourceFp16Overflow, Dx10Clamp, IeeeMode);
+  RaiseContext Context(
+      B, Projection, MC, SetPc, PairedSplitBarriers, std::move(*Registers),
+      SourceTextBytes, SourceTextBaseAddress, SourceImageSections,
+      KernelStartOffset, KernelEndOffset, SourceFloatRoundMode32,
+      SourceFloatRoundMode16_64, SourceBF16InputDenormsFlush,
+      SourceFp16Overflow, Dx10Clamp, IeeeMode);
   Context.SourceSramEcc = SourceSramEcc;
   return Context;
 }
@@ -108,20 +120,32 @@ void RaiseContext::requireWaveUniform(Value *Operand, const DecodedInst &Di,
 }
 
 void RaiseContext::requireKernelEntryExec(const DecodedInst &Di) {
-  if (Projection.validationKind() == WaveProjection::ValidationKind::WaveNative)
+  if (Projection.validationKind() ==
+          WaveProjection::ValidationKind::WaveNative ||
+      Projection.usesReplicatedDispatch())
     EntryExecRequirements.push_back(
         {Registers.readExec(), &Di,
          "cannot prove that source EXEC at this instruction matches its value "
          "at kernel entry"});
 }
 
+void RaiseContext::requireScalarControlFlow(Instruction *Branch,
+                                            const DecodedInst &Di) {
+  ScalarControlFlowRequirements.push_back(
+      {Branch, &Di,
+       Projection.allowsDivergentScalarControlFlow()
+           ? "source-wave branches must reconverge before a workgroup barrier"
+           : "projection requires scalar control flow uniform across the "
+             "target wave"});
+}
+
 Error RaiseContext::requirePerWaveExecution(const DecodedInst &Di) const {
   if (Projection.validationKind() == WaveProjection::ValidationKind::WaveNative)
     return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedWaveProjection,
+        RaiseFailureReason::RequiresPerSourceWaveExecution,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags),
-        "WaveNative does not support per-wave hardware side effects");
+        "instruction requires a separate target wave for each source wave");
   return Error::success();
 }
 
@@ -132,14 +156,21 @@ Error RaiseContext::validateWaveRequirements(TargetMachine &TM,
            "required value was deleted before validation");
     if (Requirement.Operand == KernelEntryExec)
       continue;
+    // For whole-wave replicated launches, all-ones is the entry mask.
+    const ConstantInt *Entry = dyn_cast<ConstantInt>(KernelEntryExec);
+    if (Projection.usesReplicatedDispatch() && Entry && Entry->isMinusOne() &&
+        computeKnownBits(Requirement.Operand,
+                         B.GetInsertBlock()->getModule()->getDataLayout())
+            .isAllOnes())
+      continue;
     const DecodedInst &Di = *Requirement.Instruction;
     return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedWaveProjection,
+        RaiseFailureReason::UnprovenKernelEntryExec,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags), Requirement.Detail);
   }
 
-  if (UniformityRequirements.empty())
+  if (UniformityRequirements.empty() && ScalarControlFlowRequirements.empty())
     return Error::success();
 
   Function &F = *B.GetInsertBlock()->getParent();
@@ -154,6 +185,40 @@ Error RaiseContext::validateWaveRequirements(TargetMachine &TM,
   FAM.registerPass([&] { return UniformityInfoAnalysis(); });
   // Register promotion exposes scalar data flow across source blocks.
   const UniformityInfo &UI = FAM.getResult<UniformityInfoAnalysis>(F);
+  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  PostDominatorTree PDT(F);
+  for (const RequiredValue &Requirement : ScalarControlFlowRequirements) {
+    Instruction *Branch = cast<Instruction>(Requirement.Operand);
+    const DecodedInst &Di = *Requirement.Instruction;
+    BasicBlock *Block = Branch->getParent();
+    // A non-returning instruction can leave decoded branches unreachable.
+    if (!DT.isReachableFromEntry(Block) || !UI.isDivergentTerminator(Branch))
+      continue;
+    if (!Projection.allowsDivergentScalarControlFlow())
+      return RaiseFailure::atInstruction(
+          RaiseFailureReason::NonUniformScalarState,
+          strippedMnemonic(MC, Di.Inst), Di.Offset,
+          formatName(Di.TargetSpecificFlags), Requirement.Detail);
+    DomTreeNodeBase<BasicBlock> *Node = PDT.getNode(Block);
+    BasicBlock *Join =
+        Node && Node->getIDom() ? Node->getIDom()->getBlock() : nullptr;
+    SmallVector<BasicBlock *> Worklist(successors(Block));
+    SmallPtrSet<BasicBlock *, 32> Visited;
+    while (!Worklist.empty()) {
+      BasicBlock *Current = Worklist.pop_back_val();
+      if (Current == Join || !Visited.insert(Current).second)
+        continue;
+      for (Instruction &I : *Current) {
+        const IntrinsicInst *Call = dyn_cast<IntrinsicInst>(&I);
+        if (Call && Call->getIntrinsicID() == Intrinsic::amdgcn_s_barrier)
+          return RaiseFailure::atInstruction(
+              RaiseFailureReason::NonUniformScalarState,
+              strippedMnemonic(MC, Di.Inst), Di.Offset,
+              formatName(Di.TargetSpecificFlags), Requirement.Detail);
+      }
+      append_range(Worklist, successors(Current));
+    }
+  }
   for (const RequiredValue &Requirement : UniformityRequirements) {
     assert(Requirement.Operand &&
            "required value was deleted before validation");
@@ -174,24 +239,29 @@ Error RaiseContext::validateWaveRequirements(TargetMachine &TM,
 
 RaiseContext::RaiseContext(
     IRBuilder<> &B, const WaveProjection &Projection, const MCState &MC,
-    const SetPcAnalysis &SetPc, RegisterState Registers,
-    ArrayRef<uint8_t> SourceTextBytes, uint64_t SourceTextBaseAddress,
+    const SetPcAnalysis &SetPc, const DenseSet<uint64_t> &PairedSplitBarriers,
+    RegisterState Registers, ArrayRef<uint8_t> SourceTextBytes,
+    uint64_t SourceTextBaseAddress,
     ArrayRef<TextSection::ImageSection> SourceImageSections,
     uint64_t KernelStartOffset, uint64_t KernelEndOffset,
     unsigned SourceFloatRoundMode32, unsigned SourceFloatRoundMode16_64,
-    bool SourceFp16Overflow, bool SourceDx10Clamp, bool SourceIeeeMode)
+    bool SourceBF16InputDenormsFlush, bool SourceFp16Overflow,
+    bool SourceDx10Clamp, bool SourceIeeeMode)
     : B(B), Projection(Projection), MC(MC), SetPc(SetPc),
-      Registers(std::move(Registers)), SourceTextBytes(SourceTextBytes),
+      PairedSplitBarriers(PairedSplitBarriers), Registers(std::move(Registers)),
+      SourceTextBytes(SourceTextBytes),
       SourceTextBaseAddress(SourceTextBaseAddress),
       SourceImageSections(SourceImageSections),
       KernelStartOffset(KernelStartOffset), KernelEndOffset(KernelEndOffset),
       SourceFloatRoundMode32(SourceFloatRoundMode32),
       SourceFloatRoundMode16_64(SourceFloatRoundMode16_64),
+      SourceBF16InputDenormsFlush(SourceBF16InputDenormsFlush),
       SourceFp16Overflow(SourceFp16Overflow), SourceDx10Clamp(SourceDx10Clamp),
       SourceIeeeMode(SourceIeeeMode) {}
 
 Error RaiseContext::validateHardwareEffect(const DecodedInst &Di) const {
-  if (!Projection.usesReplicatedDispatch())
+  if (!Projection.usesReplicatedDispatch() &&
+      !Projection.allowsDivergentScalarControlFlow())
     return Error::success();
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedWaveProjection,
@@ -249,6 +319,16 @@ Error RaiseContext::validateFPEnvironment(const DecodedInst &Di,
   }
 
   return Error::success();
+}
+
+Error RaiseContext::validateBF16InputDenormMode(const DecodedInst &Di) const {
+  if (!SourceBF16InputDenormsFlush)
+    return Error::success();
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedFloatingPointMode,
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      "BF16 input denormal flushing is unsupported");
 }
 
 BasicBlock *RaiseContext::lookupBB(uint64_t Addr) {

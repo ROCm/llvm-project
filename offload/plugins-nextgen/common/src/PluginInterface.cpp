@@ -91,6 +91,13 @@ void AsyncInfoWrapperTy::finalize(Error &Err) {
                            AsyncInfoPtr->Queue != nullptr, (bool)Err))
     Err = Device.synchronize(AsyncInfoPtr, /*ReleaseQueue=*/false);
 
+  // With the force-synchronization escape hatch enabled, also drain external
+  // async info objects after each operation.
+  else if (shouldForceSync(Device.forceSyncOps(),
+                           AsyncInfoPtr == &LocalAsyncInfo,
+                           AsyncInfoPtr->Queue != nullptr, (bool)Err))
+    Err = Device.synchronize(AsyncInfoPtr, /*ReleaseQueue=*/false);
+
   // Invalidate the wrapper object.
 
   AsyncInfoPtr = nullptr;
@@ -1059,19 +1066,6 @@ Expected<InfoTreeNode> GenericDeviceTy::obtainInfo() {
   return InfoOrErr;
 }
 
-Error GenericDeviceTy::printInfo() {
-  auto InfoOrErr = obtainInfo();
-
-  // Get the vendor-specific info entries describing the device properties.
-  if (auto Err = InfoOrErr.takeError())
-    return Err;
-
-  // Print all info entries.
-  InfoOrErr->print();
-
-  return Plugin::success();
-}
-
 Error GenericDeviceTy::createEvent(void **EventPtrStorage,
                                    bool EnableProfiling) {
   return createEventImpl(EventPtrStorage, EnableProfiling);
@@ -1360,13 +1354,6 @@ int32_t GenericPluginTy::isDeviceCompatible(int32_t DeviceId, StringRef Image) {
   }
 }
 
-int32_t GenericPluginTy::number_of_devices() {
-  auto T = logger::log<int32_t>(__func__);
-  auto R = [&]() { return getNumDevices(); }();
-  T.res(R);
-  return R;
-}
-
 int GenericPluginTy::number_of_team_procs(int DeviceId) {
   auto T = logger::log<int>(__func__, DeviceId);
   auto R = [&]() { return getDevice(DeviceId).getNumComputeUnits(); }();
@@ -1607,17 +1594,6 @@ int32_t GenericPluginTy::data_submit_async(int32_t DeviceId, void *TgtPtr,
   return R;
 }
 
-int32_t GenericPluginTy::data_retrieve(int32_t DeviceId, void *HstPtr,
-                                       void *TgtPtr, int64_t Size) {
-  auto T = logger::log<int32_t>(__func__, DeviceId, HstPtr, TgtPtr, Size);
-  auto R = [&]() {
-    return data_retrieve_async(DeviceId, HstPtr, TgtPtr, Size,
-                               /*AsyncInfoPtr=*/nullptr);
-  }();
-  T.res(R);
-  return R;
-}
-
 int32_t GenericPluginTy::data_retrieve_async(int32_t DeviceId, void *HstPtr,
                                              void *TgtPtr, int64_t Size,
                                              __tgt_async_info *AsyncInfoPtr) {
@@ -1743,22 +1719,6 @@ int32_t GenericPluginTy::query_async(int32_t DeviceId,
   return R;
 }
 
-InfoTreeNode GenericPluginTy::obtain_device_info(int32_t DeviceId) {
-  auto InfoOrErr = getDevice(DeviceId).obtainInfo();
-  if (auto Err = InfoOrErr.takeError()) {
-    REPORT() << "Failure to obtain device " << DeviceId
-             << " info: " << toString(std::move(Err));
-    return InfoTreeNode{};
-  }
-  return std::move(*InfoOrErr);
-}
-
-void GenericPluginTy::print_device_info(int32_t DeviceId) {
-  if (auto Err = getDevice(DeviceId).printInfo())
-    REPORT() << "Failure to print device " << DeviceId
-             << " info: " << toString(std::move(Err));
-}
-
 int32_t GenericPluginTy::create_event(int32_t DeviceId, void **EventPtr) {
   auto T = logger::log<int32_t>(__func__, DeviceId, EventPtr);
   auto R = [&]() {
@@ -1821,23 +1781,6 @@ int32_t GenericPluginTy::sync_event(int32_t DeviceId, void *EventPtr) {
     return OFFLOAD_SUCCESS;
   }();
   T.res(R);
-  return R;
-}
-
-int32_t GenericPluginTy::get_event_elapsed_time(int32_t DeviceId,
-                                                void *StartEventPtr,
-                                                void *EndEventPtr,
-                                                float *ElapsedTime) {
-  auto ElapsedTimeOrErr =
-      getDevice(DeviceId).getEventElapsedTime(StartEventPtr, EndEventPtr);
-  if (!ElapsedTimeOrErr) {
-    REPORT() << "Failure to get elapsed time between events " << StartEventPtr
-             << " and " << EndEventPtr << ": "
-             << toString(ElapsedTimeOrErr.takeError());
-    return OFFLOAD_FAIL;
-  }
-
-  *ElapsedTime = *ElapsedTimeOrErr;
   return OFFLOAD_SUCCESS;
 }
 

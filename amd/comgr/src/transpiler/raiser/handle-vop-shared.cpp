@@ -15,12 +15,15 @@
 
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 
+#include "MCTargetDesc/AMDGPUMCExpr.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "SIDefines.h"
 
 #include <cassert>
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 
@@ -150,22 +153,34 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   // also interpret their inputs as fractions of 2*pi. Generic LLVM math
   // intrinsics have libm semantics and may require refinement sequences.
   case CanonicalOp::V_EXP_F32:
+  case CanonicalOp::V_S_EXP_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_exp2, *Source,
                                         nullptr, "exp");
     break;
   case CanonicalOp::V_LOG_F32:
+  case CanonicalOp::V_S_LOG_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_log, *Source, nullptr,
                                         "log");
     break;
   case CanonicalOp::V_RCP_F32:
+  case CanonicalOp::V_S_RCP_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_rcp, *Source, nullptr,
                                         "rcp");
     break;
+  case CanonicalOp::V_RCP_IFLAG_F32:
+    Result = Ctx.B.CreateCall(
+        InlineAsm::get(
+            FunctionType::get(Ctx.B.getFloatTy(), Ctx.B.getFloatTy(), false),
+            "v_rcp_iflag_f32 $0, $1", "=v,v", true),
+        {*Source}, "rcp.iflag");
+    break;
   case CanonicalOp::V_RSQ_F32:
+  case CanonicalOp::V_S_RSQ_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_rsq, *Source, nullptr,
                                         "rsq");
     break;
   case CanonicalOp::V_SQRT_F32:
+  case CanonicalOp::V_S_SQRT_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_sqrt, *Source,
                                         nullptr, "sqrt");
     break;
@@ -176,6 +191,13 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_COS_F32:
     Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_cos, *Source, nullptr,
                                         "cos");
+    break;
+  case CanonicalOp::V_TANH_F32:
+    if (!Ctx.Projection.TargetSTI.hasFeature(AMDGPU::FeatureTanhInsts))
+      return unsupportedInstruction(Ctx, Di,
+                                    "target does not support v_tanh_f32");
+    Result = Ctx.B.CreateUnaryIntrinsic(Intrinsic::amdgcn_tanh, *Source,
+                                        nullptr, "tanh");
     break;
   case CanonicalOp::V_FREXP_EXP_I32_F32:
     Result = Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_frexp_exp,
@@ -193,6 +215,83 @@ Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
 
   Value *ResultBits = Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty());
   Ctx.registers().writeReg32(*Dst, ResultBits);
+  return Error::success();
+}
+
+Error raiseUnaryFloat64(RaiseContext &Ctx, const DecodedInst &Di,
+                        OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 1)
+    return unsupportedInstruction(Ctx, Di,
+                                  "expected one destination and one source");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getDoubleTy()))
+    return Err;
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Source = Op.srcF64(0);
+  if (!Source)
+    return Source.takeError();
+
+  Intrinsic::ID ID;
+  switch (Di.CanonOp) {
+  case CanonicalOp::V_TRUNC_F64:
+    ID = Intrinsic::trunc;
+    break;
+  case CanonicalOp::V_CEIL_F64:
+    ID = Intrinsic::ceil;
+    break;
+  case CanonicalOp::V_RNDNE_F64:
+    ID = Intrinsic::roundeven;
+    break;
+  case CanonicalOp::V_FLOOR_F64:
+    ID = Intrinsic::floor;
+    break;
+  case CanonicalOp::V_RCP_F64:
+    ID = Intrinsic::amdgcn_rcp;
+    break;
+  case CanonicalOp::V_RSQ_F64:
+    ID = Intrinsic::amdgcn_rsq;
+    break;
+  default:
+    llvm_unreachable("not a unary F64 operation");
+  }
+  Value *Result = Ctx.B.CreateUnaryIntrinsic(ID, *Source);
+  Ctx.registers().writeReg64(*Dst,
+                             Ctx.B.CreateBitCast(Result, Ctx.B.getInt64Ty()));
+  return Error::success();
+}
+
+Error raiseFloatMac(RaiseContext &Ctx, const DecodedInst &Di,
+                    OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 3)
+    return unsupportedInstruction(
+        Ctx, Di, "expected floating-point multiply-add operands");
+  bool Is64 = Di.CanonOp == CanonicalOp::V_FMAC_F64 ||
+              Di.CanonOp == CanonicalOp::V_FMAMK_F64;
+  Type *Ty = Is64 ? Ctx.B.getDoubleTy() : Ctx.B.getFloatTy();
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ty))
+    return Err;
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  auto Read = [&](unsigned I) { return Is64 ? Op.srcF64(I) : Op.srcF32(I); };
+  Expected<Value *> Src0 = Read(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = Read(1);
+  if (!Src1)
+    return Src1.takeError();
+  Expected<Value *> Src2 = Read(2);
+  if (!Src2)
+    return Src2.takeError();
+  Value *Result =
+      Ctx.B.CreateIntrinsic(Intrinsic::fma, {Ty}, {*Src0, *Src1, *Src2});
+  Value *Bits = Ctx.B.CreateBitCast(Result, Is64 ? Ctx.B.getInt64Ty()
+                                                 : Ctx.B.getInt32Ty());
+  if (Is64)
+    Ctx.registers().writeReg64(*Dst, Bits);
+  else
+    Ctx.registers().writeReg32(*Dst, Bits);
   return Error::success();
 }
 
@@ -285,6 +384,79 @@ Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
   return Error::success();
 }
 
+Error raiseFloatConversion64(RaiseContext &Ctx, const DecodedInst &Di,
+                             OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 1)
+    return unsupportedInstruction(Ctx, Di,
+                                  "expected one destination and one source");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getDoubleTy()))
+    return Err;
+  if (Di.CanonOp == CanonicalOp::V_CVT_F32_F64 ||
+      Di.CanonOp == CanonicalOp::V_CVT_F64_F32)
+    if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+      return Err;
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+
+  if (Di.CanonOp == CanonicalOp::V_CVT_F64_F32) {
+    Expected<Value *> Source = Op.srcF32(0);
+    if (!Source)
+      return Source.takeError();
+    Value *Result = Ctx.B.CreateFPExt(*Source, Ctx.B.getDoubleTy());
+    Ctx.registers().writeReg64(*Dst,
+                               Ctx.B.CreateBitCast(Result, Ctx.B.getInt64Ty()));
+  } else if (Di.CanonOp == CanonicalOp::V_CVT_F64_I32 ||
+             Di.CanonOp == CanonicalOp::V_CVT_F64_U32) {
+    if (Op.srcMod(0) != 0)
+      return unsupportedInstruction(
+          Ctx, Di, "integer source modifiers are not supported");
+    Expected<Value *> Source = Op.src(0);
+    if (!Source)
+      return Source.takeError();
+    Value *Result = Di.CanonOp == CanonicalOp::V_CVT_F64_I32
+                        ? Ctx.B.CreateSIToFP(*Source, Ctx.B.getDoubleTy())
+                        : Ctx.B.CreateUIToFP(*Source, Ctx.B.getDoubleTy());
+    Ctx.registers().writeReg64(*Dst,
+                               Ctx.B.CreateBitCast(Result, Ctx.B.getInt64Ty()));
+  } else {
+    if (Op.srcMod(0) & ~(SISrcMods::NEG | SISrcMods::ABS))
+      return unsupportedInstruction(Ctx, Di, "unsupported f64 source modifier");
+    Expected<Value *> Source = Op.src64(0);
+    if (!Source)
+      return Source.takeError();
+    const MCOperand &Operand = Di.Inst.getOperand(Op.srcIdx(0));
+    if (Operand.isExpr()) {
+      const auto *Expr = dyn_cast<AMDGPUMCExpr>(Operand.getExpr());
+      if (Expr && Expr->getKind() == AMDGPUMCExpr::AGVK_Lit) {
+        // A 32-bit FP64 literal supplies the high word of the value.
+        std::optional<int64_t> Literal =
+            evalOperandAsConst(Di.Inst, Op.srcIdx(0));
+        if (!Literal)
+          return unsupportedInstruction(Ctx, Di, "unresolved FP64 literal");
+        uint64_t Bits = static_cast<uint64_t>(static_cast<uint32_t>(*Literal))
+                        << 32;
+        *Source = Ctx.B.getInt64(Bits);
+      }
+    }
+    Value *Float = Ctx.B.CreateBitCast(*Source, Ctx.B.getDoubleTy());
+    Float = Op.applyMods(0, Float);
+    Value *Result;
+    if (Di.CanonOp == CanonicalOp::V_CVT_F32_F64) {
+      Value *Truncated = Ctx.B.CreateFPTrunc(Float, Ctx.B.getFloatTy());
+      Result = Ctx.B.CreateBitCast(Truncated, Ctx.B.getInt32Ty());
+    } else {
+      Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_CVT_I32_F64
+                             ? Intrinsic::fptosi_sat
+                             : Intrinsic::fptoui_sat;
+      Result = Ctx.B.CreateIntrinsic(
+          ID, {Ctx.B.getInt32Ty(), Ctx.B.getDoubleTy()}, {Float});
+    }
+    Ctx.registers().writeReg32(*Dst, Result);
+  }
+  return Error::success();
+}
+
 Expected<Value *> readCndMaskCondition(RaiseContext &Ctx, OperandResolver &Op) {
   if (Op.nSrcs() == 2)
     return Ctx.registers().regFile().loadVCC(Ctx.B);
@@ -348,8 +520,12 @@ Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
                                                     AMDGPU::OpName::clamp);
   if (Index < 0)
     return false;
-  assert(Di.isImm(Index) && "clamp operand must be an immediate");
-  return Di.getImm(Index) != 0;
+  if (!Di.isImm(Index))
+    return unsupportedInstruction(Ctx, Di, "clamp operand is not immediate");
+  int64_t Clamp = Di.getImm(Index);
+  if (Clamp != 0 && Clamp != 1)
+    return unsupportedInstruction(Ctx, Di, "clamp operand is not 0 or 1");
+  return Clamp != 0;
 }
 
 Value *emitBitOp3(IRBuilder<> &B, Value *Src0, Value *Src1, Value *Src2,
@@ -396,8 +572,8 @@ Error writeDestination16(RaiseContext &Ctx, OperandResolver &Op,
         *Previous,
         ConstantInt::get(
             I32Ty, APInt::getLowBitsSet(RegisterWidthInBits, HalfWidthInBits)));
-    Merged = Ctx.B.CreateOr(KeptLow, Ctx.B.CreateShl(Bits, HalfWidthInBits),
-                            "merge.hi");
+    Value *Shifted = Ctx.B.CreateShl(Bits, HalfWidthInBits);
+    Merged = Ctx.B.CreateOr(KeptLow, Shifted, "merge.hi");
   } else {
     Value *KeptHigh = Ctx.B.CreateAnd(
         *Previous,
