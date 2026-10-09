@@ -8,11 +8,6 @@
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=mask_branch 2>&1 | %FileCheck %s --check-prefix=MASK-BRANCH
 ; MASK-BRANCH: non-uniform-scalar-state:
 ; MASK-BRANCH-SAME: requires scalar control flow uniform across the target wave
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=UNREACHABLE_BRANCH=1 -filetype=obj %s -o %t.unreachable.o
-; RUN: %ld.lld -shared %t.unreachable.o -o %t.unreachable.hsaco
-; RUN: %transpile_cli %t.unreachable.hsaco --target-isa=gfx942 --emit-ir=mask_branch | %FileCheck %s --check-prefix=UNREACHABLE
-; UNREACHABLE-LABEL: define amdgpu_kernel void @mask_branch(
-; UNREACHABLE: ret void
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=yz_branch 2>&1 | %FileCheck %s --check-prefix=YZ-BRANCH
 ; YZ-BRANCH: non-uniform-scalar-state:
 ; YZ-BRANCH-SAME: requires scalar control flow uniform across the target wave
@@ -46,25 +41,23 @@
 ; SAME-ADDRESS-NEXT: %[[PTR:.*]] = inttoptr i64 %[[ADDR]] to ptr addrspace(1)
 ; SAME-ADDRESS-NEXT: %{{.*}} = load i32, ptr addrspace(1) %[[PTR]], align 4
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=wave_message 2>&1 | %FileCheck %s --check-prefix=WAVE-MESSAGE
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=wave_message --allow-replicated-dispatch 2>&1 | %FileCheck %s --check-prefix=REPLICATED-MESSAGE
-; REPLICATED-MESSAGE: unsupported-wave-projection: s_sendmsg
-; REPLICATED-MESSAGE-SAME: replicated dispatch does not support per-wave hardware effects
-; WAVE-MESSAGE: requires-per-source-wave-execution: s_sendmsg [SOPP] @offset={{0x[0-9a-f]+}}
-; WAVE-MESSAGE-SAME: instruction requires a separate target wave for each source wave
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=wave_message --allow-replicated-dispatch 2>&1 | %FileCheck %s --check-prefix=WAVE-MESSAGE
+; WAVE-MESSAGE: unsupported-wave-projection: s_sendmsg [SOPP] @offset={{0x[0-9a-f]+}}
+; WAVE-MESSAGE-SAME: does not support per-wave hardware side effects
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx1250 --emit-ir=wave_message | %FileCheck %s --check-prefix=SEND
 ; SEND: call void @llvm.amdgcn.s.sendmsg(
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=WAVE_EFFECT=1 -filetype=obj %s -o %t.halt.o
 ; RUN: %ld.lld -shared %t.halt.o -o %t.halt.hsaco
 ; RUN: not %transpile_cli %t.halt.hsaco --target-isa=gfx942 --emit-ir=wave_message 2>&1 | %FileCheck %s --check-prefix=HALT
-; HALT: requires-per-source-wave-execution: s_sendmsghalt [SOPP] @offset={{0x[0-9a-f]+}}
-; HALT-SAME: instruction requires a separate target wave for each source wave
+; HALT: unsupported-wave-projection: s_sendmsghalt [SOPP] @offset={{0x[0-9a-f]+}}
+; HALT-SAME: does not support per-wave hardware side effects
 ; RUN: %transpile_cli %t.halt.hsaco --target-isa=gfx1250 --emit-ir=wave_message | %FileCheck %s --check-prefix=SEND-HALT
 ; SEND-HALT: call void @llvm.amdgcn.s.sendmsghalt(
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=WAVE_EFFECT=2 -filetype=obj %s -o %t.set.o
 ; RUN: %ld.lld -shared %t.set.o -o %t.set.hsaco
 ; RUN: not %transpile_cli %t.set.hsaco --target-isa=gfx942 --emit-ir=wave_message 2>&1 | %FileCheck %s --check-prefix=SET-HALT
-; SET-HALT: requires-per-source-wave-execution: s_sethalt [SOPP] @offset={{0x[0-9a-f]+}}
-; SET-HALT-SAME: instruction requires a separate target wave for each source wave
+; SET-HALT: unsupported-wave-projection: s_sethalt [SOPP] @offset={{0x[0-9a-f]+}}
+; SET-HALT-SAME: does not support per-wave hardware side effects
 ; RUN: %transpile_cli %t.set.hsaco --target-isa=gfx1250 --emit-ir=wave_message | %FileCheck %s --check-prefix=SET
 ; SET: call void @llvm.amdgcn.s.sethalt(
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=WAVE_EFFECT=3 -filetype=obj %s -o %t.dealloc.o
@@ -74,26 +67,16 @@
 ; DEALLOC-NOT: @llvm.amdgcn.s.sendmsg
 ; DEALLOC: ret void
 
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=mask_loop 2>&1 | %FileCheck %s --check-prefix=MASK-LOOP
-; MASK-LOOP-LABEL: define amdgpu_kernel void @mask_loop(
-; MASK-LOOP: and i32 {{.+}}, 1431655765
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=UNREACHABLE_MASK_INPUT=1 -filetype=obj %s -o %t.dead-mask.o
-; RUN: %ld.lld -shared %t.dead-mask.o -o %t.dead-mask.hsaco
-; RUN: %transpile_cli %t.dead-mask.hsaco --target-isa=gfx942 --emit-ir=mask_loop | %FileCheck %s --check-prefix=DEAD-MASK
-; DEAD-MASK-LABEL: define amdgpu_kernel void @mask_loop(
-; DEAD-MASK: ret void
-; RUN: sed 's/s_and_b32 exec_lo, exec_lo, 0x55555555/s_or_b32 exec_lo, exec_lo, ttmp9/' %s | %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj -o %t.backedge.o
-; RUN: %ld.lld -shared %t.backedge.o -o %t.backedge.hsaco
-; RUN: not %transpile_cli %t.backedge.hsaco --target-isa=gfx942 --emit-ir=mask_loop 2>&1 | %FileCheck %s --check-prefix=BACKEDGE
-; BACKEDGE: unproven-exec-containment:
-; BACKEDGE-SAME: cannot prove that EXEC only enables lanes active at kernel entry
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=mask_loop 2>&1 | %FileCheck %s --check-prefix=MASK-LOOP
+; MASK-LOOP: unproven-exec-containment:
+; MASK-LOOP-SAME: cannot prove that EXEC only enables lanes active at kernel entry
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx90a --emit-ir=expand_exec 2>&1 | %FileCheck %s --check-prefix=DIRECTION
 ; DIRECTION: unsupported-wave-projection
 ; DIRECTION-SAME: wave-size changes are supported only from gfx1250 to gfx942
 
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=masked_matrix 2>&1 | %FileCheck %s --check-prefix=MATRIX
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=masked_matrix --allow-replicated-dispatch 2>&1 | %FileCheck %s --check-prefix=MATRIX
-; MATRIX: unproven-kernel-entry-exec: v_wmma_f32_16x16x32_f16
+; MATRIX: unsupported-wave-projection: v_wmma_f32_16x16x32_f16
 ; MATRIX-SAME: cannot prove that source EXEC at this instruction matches its value at kernel entry
 
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=hardware_register 2>&1 | %FileCheck %s --check-prefix=HWREG
@@ -124,9 +107,6 @@ expand_exec:
 .p2align 8
 .type mask_branch,@function
 mask_branch:
-.ifdef UNREACHABLE_BRANCH
-  s_branch .Lexit_mask
-.endif
   v_cmp_eq_u32 vcc_lo, 0, v0
   s_cbranch_vccz .Lexit_mask
   v_mov_b32 v1, 1
@@ -187,20 +167,11 @@ wave_message:
 .p2align 8
 .type mask_loop,@function
 mask_loop:
-.ifdef UNREACHABLE_MASK_INPUT
-  s_mov_b32 s4, 0
-  s_branch .Lmask_merge
-  s_mov_b32 s4, -1
-  s_branch .Lmask_merge
-.Lmask_merge:
-  s_or_b32 exec_lo, exec_lo, s4
-.else
   s_mov_b32 s4, 4
 .Lloop_mask:
   s_and_b32 exec_lo, exec_lo, 0x55555555
   s_sub_u32 s4, s4, 1
   s_cbranch_scc1 .Lloop_mask
-.endif
   s_endpgm
 
 .globl masked_matrix

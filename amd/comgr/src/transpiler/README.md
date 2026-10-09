@@ -41,9 +41,9 @@ waves in one target wave, one in each 32-lane half. Replication places two
 copies of a single source wave in those halves.
 
 Source scalar instructions execute regardless of source EXEC, so WaveNative
-runs their generated code with every lane of each participating source wave
-enabled. For source vector instructions that obey EXEC, register writes and
-memory accesses remain controlled by the source wave's EXEC mask.
+runs their generated code with all target lanes enabled. For source vector
+instructions that obey EXEC, register writes and memory accesses remain
+controlled by the source wave's EXEC mask.
 
 The hardware initializes EXEC to mark the lanes assigned to workitems by the
 launch. A workgroup with 48 workitems starts with 48 active lanes in a 64-lane
@@ -67,49 +67,46 @@ source wave without disabling either half of the target wave.
 Reading source lane 7 selects target lane 7 in the lower half and target lane
 39 in the upper half.
 
-WaveNative requires both source waves to agree on scalar branches and
-scalar-load addresses. With `LaunchPolicy::AllowReplication`, exact workgroup
-specializations of 513-1024 workitems can also support different scalar
-branches and load addresses without changing geometry. Branches must
-reconverge before workgroup barriers; this path excludes matrix instructions.
+This lowering requires the two source waves to agree on scalar branch
+decisions so they follow the same control-flow path. Scalar loads execute
+regardless of source EXEC. We require the same address across the target wave
+because lanes without source workitems may not have a valid address of their
+own.
 
 The two source waves share the target wave's hardware control registers, so
-writes must agree. Interrupt messages and halt instructions are unsupported.
+writes to those registers must agree. Interrupt messages and halt instructions
+are refused. Two source waves can each send a message, but executing the
+instruction once in the target wave would send only one. Halting the target
+wave would stop both source waves.
 
 With nonzero source EXEC, WMMA uses inputs from all 32 source lanes, including
-lanes whose EXEC bits are clear. The lowering requires EXEC at WMMA to match
-its value at kernel entry. An all-ones restoration satisfies this requirement
-only when the launch contract guarantees complete source waves.
+lanes whose EXEC bits are clear. This lowering requires EXEC at WMMA to match
+its value at kernel entry, so a source wave containing workitems cannot reach
+WMMA with EXEC zero. The entry mask may describe a partially filled wave; it
+does not have to be all ones.
 
 ## Replicated dispatch
 
 For gfx1250 wave32 to gfx942 wave64, `raiseToIR` prefers WaveNative. Passing
-`LaunchPolicy::AllowReplication` enables a checked fallback that runs each
-source wave on a separate target wave64.
-The default `PreserveGeometry` policy refuses kernels requiring replication.
+`LaunchPolicy::AllowReplication` enables an independently checked fallback that
+runs each source wave on a separate target wave64.
 
 Keep each kernel's `RaiseResult::LaunchRequirements` alongside its compiled
 code. Before each launch, call `KernelLaunchRequirements::project` with the
-kernel name, logical dimensions, actual kernarg bytes, and dynamic LDS size.
-Use its returned physical dimensions. Grid and workgroup sizes are measured in
-**workitems**. Preserve source kernarg bytes, including hidden geometry and
-`hidden_dynamic_lds_size`; the latter must match the dynamic allocation.
-Neither fixed nor dynamic LDS allocation is multiplied by replication.
+kernel name and source dimensions, then use the returned dimensions. Grid and
+workgroup sizes are measured in **workitems**. Preserve the source kernarg
+bytes, including hidden geometry arguments.
 
-Replication flattens workgroups while preserving logical workitem coordinates,
-workgroup IDs, and memory effects. Launches require complete workgroups with at
-most 512 logical workitems each, subject to source metadata and target limits.
-`project` validates these constraints and rejects grid scaling overflow.
+Supported launches require grid and workgroup Y/Z equal to one, workgroup X
+divisible by 32 and at most 512, and complete workgroups. `project` checks the
+kernel's metadata and target limits, then doubles grid and workgroup X while
+preserving the workgroup count. The default `PreserveGeometry` policy refuses
+kernels requiring replication.
 
-Multidimensional workgroups require either an exact
-`KernelRequest::WorkgroupSize` specialization (or required metadata size), or
-all three hidden group-size arguments matching the launch. Without either,
-replication requires one-dimensional workgroups containing whole source waves.
-Partial source waves additionally require known workgroup dimensions and proof
-that EXEC stays within the entry mask.
-
-Replicated kernels may read logical dispatch workgroup sizes. Other dispatch
-fields, queue state, and dispatch IDs must be unused.
+The test driver's `--allow-replicated-dispatch` option prints launch
+requirements as IR comments. Supplying `--launch-grid=x,y,z` and
+`--launch-workgroup=x,y,z` also validates and prints the physical dimensions.
+These comments are test output and do not survive compilation.
 
 ## Standalone development build
 

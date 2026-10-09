@@ -16,19 +16,14 @@
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Analysis/CycleAnalysis.h"
-#include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/UniformityAnalysis.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/CFG.h"
 #include "llvm/IR/Dominators.h"
-#include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassInstrumentation.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -120,32 +115,20 @@ void RaiseContext::requireWaveUniform(Value *Operand, const DecodedInst &Di,
 }
 
 void RaiseContext::requireKernelEntryExec(const DecodedInst &Di) {
-  if (Projection.validationKind() ==
-          WaveProjection::ValidationKind::WaveNative ||
-      Projection.usesReplicatedDispatch())
+  if (Projection.validationKind() == WaveProjection::ValidationKind::WaveNative)
     EntryExecRequirements.push_back(
         {Registers.readExec(), &Di,
          "cannot prove that source EXEC at this instruction matches its value "
          "at kernel entry"});
 }
 
-void RaiseContext::requireScalarControlFlow(Instruction *Branch,
-                                            const DecodedInst &Di) {
-  ScalarControlFlowRequirements.push_back(
-      {Branch, &Di,
-       Projection.allowsDivergentScalarControlFlow()
-           ? "source-wave branches must reconverge before a workgroup barrier"
-           : "projection requires scalar control flow uniform across the "
-             "target wave"});
-}
-
 Error RaiseContext::requirePerWaveExecution(const DecodedInst &Di) const {
   if (Projection.validationKind() == WaveProjection::ValidationKind::WaveNative)
     return RaiseFailure::atInstruction(
-        RaiseFailureReason::RequiresPerSourceWaveExecution,
+        RaiseFailureReason::UnsupportedWaveProjection,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags),
-        "instruction requires a separate target wave for each source wave");
+        "WaveNative does not support per-wave hardware side effects");
   return Error::success();
 }
 
@@ -156,21 +139,14 @@ Error RaiseContext::validateWaveRequirements(TargetMachine &TM,
            "required value was deleted before validation");
     if (Requirement.Operand == KernelEntryExec)
       continue;
-    // For whole-wave replicated launches, all-ones is the entry mask.
-    const ConstantInt *Entry = dyn_cast<ConstantInt>(KernelEntryExec);
-    if (Projection.usesReplicatedDispatch() && Entry && Entry->isMinusOne() &&
-        computeKnownBits(Requirement.Operand,
-                         B.GetInsertBlock()->getModule()->getDataLayout())
-            .isAllOnes())
-      continue;
     const DecodedInst &Di = *Requirement.Instruction;
     return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnprovenKernelEntryExec,
+        RaiseFailureReason::UnsupportedWaveProjection,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags), Requirement.Detail);
   }
 
-  if (UniformityRequirements.empty() && ScalarControlFlowRequirements.empty())
+  if (UniformityRequirements.empty())
     return Error::success();
 
   Function &F = *B.GetInsertBlock()->getParent();
@@ -185,40 +161,6 @@ Error RaiseContext::validateWaveRequirements(TargetMachine &TM,
   FAM.registerPass([&] { return UniformityInfoAnalysis(); });
   // Register promotion exposes scalar data flow across source blocks.
   const UniformityInfo &UI = FAM.getResult<UniformityInfoAnalysis>(F);
-  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  PostDominatorTree PDT(F);
-  for (const RequiredValue &Requirement : ScalarControlFlowRequirements) {
-    Instruction *Branch = cast<Instruction>(Requirement.Operand);
-    const DecodedInst &Di = *Requirement.Instruction;
-    BasicBlock *Block = Branch->getParent();
-    // A non-returning instruction can leave decoded branches unreachable.
-    if (!DT.isReachableFromEntry(Block) || !UI.isDivergentTerminator(Branch))
-      continue;
-    if (!Projection.allowsDivergentScalarControlFlow())
-      return RaiseFailure::atInstruction(
-          RaiseFailureReason::NonUniformScalarState,
-          strippedMnemonic(MC, Di.Inst), Di.Offset,
-          formatName(Di.TargetSpecificFlags), Requirement.Detail);
-    DomTreeNodeBase<BasicBlock> *Node = PDT.getNode(Block);
-    BasicBlock *Join =
-        Node && Node->getIDom() ? Node->getIDom()->getBlock() : nullptr;
-    SmallVector<BasicBlock *> Worklist(successors(Block));
-    SmallPtrSet<BasicBlock *, 32> Visited;
-    while (!Worklist.empty()) {
-      BasicBlock *Current = Worklist.pop_back_val();
-      if (Current == Join || !Visited.insert(Current).second)
-        continue;
-      for (Instruction &I : *Current) {
-        const IntrinsicInst *Call = dyn_cast<IntrinsicInst>(&I);
-        if (Call && Call->getIntrinsicID() == Intrinsic::amdgcn_s_barrier)
-          return RaiseFailure::atInstruction(
-              RaiseFailureReason::NonUniformScalarState,
-              strippedMnemonic(MC, Di.Inst), Di.Offset,
-              formatName(Di.TargetSpecificFlags), Requirement.Detail);
-      }
-      append_range(Worklist, successors(Current));
-    }
-  }
   for (const RequiredValue &Requirement : UniformityRequirements) {
     assert(Requirement.Operand &&
            "required value was deleted before validation");
@@ -260,8 +202,7 @@ RaiseContext::RaiseContext(
       SourceIeeeMode(SourceIeeeMode) {}
 
 Error RaiseContext::validateHardwareEffect(const DecodedInst &Di) const {
-  if (!Projection.usesReplicatedDispatch() &&
-      !Projection.allowsDivergentScalarControlFlow())
+  if (!Projection.usesReplicatedDispatch())
     return Error::success();
   return RaiseFailure::atInstruction(
       RaiseFailureReason::UnsupportedWaveProjection,
