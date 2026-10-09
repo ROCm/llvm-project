@@ -20,7 +20,6 @@
 #include "transpiler/raiser/wave-projection.h"
 
 #include "transpiler/decoder/mc-state.h"
-#include "transpiler/raiser/launch.h"
 
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -72,7 +71,7 @@ protected:
 } // namespace
 
 // ----------------------------------------------------------------------------
-// providesSourceWaveExecInvariant: WaveNative decouples hardware EXEC from
+// providesFullWaveExecInvariant: only WaveNative decouples hardware EXEC from
 // the modeled source mask (via init_whole_wave), so only it reports true.
 // Cross-lane collective lowerings gate on this before running.
 // ----------------------------------------------------------------------------
@@ -85,7 +84,7 @@ TEST_F(WaveProjectionContract, ReplicationDoesNotProvideFullWaveExec) {
   const MCSubtargetInfo &Tgt = tgtSTI();
 
   ReplicationProjection Proj(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_FALSE(Proj.providesSourceWaveExecInvariant());
+  EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
   EXPECT_EQ(&Proj.SourceSTI, &Src);
   EXPECT_EQ(&Proj.TargetSTI, &Tgt);
   EXPECT_EQ(Proj.sourceWaveSize(), 32u);
@@ -94,7 +93,7 @@ TEST_F(WaveProjectionContract, ReplicationDoesNotProvideFullWaveExec) {
   // Read through a base reference too: the value lives in the base subobject
   // the constructor set, so the non-virtual accessor resolves it correctly.
   const WaveProjection &Base = Proj;
-  EXPECT_FALSE(Base.providesSourceWaveExecInvariant());
+  EXPECT_FALSE(Base.providesFullWaveExecInvariant());
 }
 
 TEST_F(WaveProjectionContract, WaveNativeProvidesFullWaveExec) {
@@ -107,13 +106,13 @@ TEST_F(WaveProjectionContract, WaveNativeProvidesFullWaveExec) {
   const MCSubtargetInfo &Tgt = tgtSTI();
 
   WaveNativeProjection Proj(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_TRUE(Proj.providesSourceWaveExecInvariant());
+  EXPECT_TRUE(Proj.providesFullWaveExecInvariant());
   EXPECT_EQ(Proj.execStorageTy(), I32Ty);
   EXPECT_FALSE(Proj.broadcastNarrowExecLoWrite());
   EXPECT_TRUE(Proj.preservesMbcntDerivedExec());
 
   const WaveProjection &Base = Proj;
-  EXPECT_TRUE(Base.providesSourceWaveExecInvariant());
+  EXPECT_TRUE(Base.providesFullWaveExecInvariant());
 }
 
 // A minimal concrete projection that implements only the pure virtuals, used
@@ -149,7 +148,7 @@ TEST_F(WaveProjectionContract, BaseDefaults) {
   const MCSubtargetInfo &Tgt = tgtSTI();
 
   DefaultTestProjection Proj(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_FALSE(Proj.providesSourceWaveExecInvariant());
+  EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
   EXPECT_FALSE(Proj.usesReplicatedDispatch());
   EXPECT_EQ(Proj.numSourceWavesPerTarget(), 1u);
 }
@@ -163,12 +162,12 @@ TEST_F(WaveProjectionContract, ThreadLoop) {
   const MCSubtargetInfo &Tgt = tgtSTI();
 
   ThreadLoopProjection Proj(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_FALSE(Proj.providesSourceWaveExecInvariant());
+  EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
   EXPECT_TRUE(Proj.sourceWaveScopedLaneOps());
   EXPECT_EQ(Proj.execStorageTy(), I64Ty);
 
   const WaveProjection &Base = Proj;
-  EXPECT_FALSE(Base.providesSourceWaveExecInvariant());
+  EXPECT_FALSE(Base.providesFullWaveExecInvariant());
 }
 
 // ----------------------------------------------------------------------------
@@ -223,10 +222,8 @@ TEST_F(WaveProjectionContract, ReplicatedDispatch) {
   const MCSubtargetInfo &Src = srcSTI();
   const MCSubtargetInfo &Tgt = tgtSTI();
 
-  COMGR::transpiler::KernelLaunchRequirements Launch;
-  ReplicatedDispatchProjection Proj(Src, Tgt, I32Ty, I64Ty, Launch);
+  ReplicatedDispatchProjection Proj(Src, Tgt, I32Ty, I64Ty);
   EXPECT_TRUE(Proj.usesReplicatedDispatch());
-  EXPECT_TRUE(Proj.providesSourceWaveExecInvariant());
   EXPECT_EQ(Proj.replicationFactor(), 2u);
   EXPECT_EQ(Proj.numSourceWavesPerTarget(), 1u);
 
@@ -236,7 +233,7 @@ TEST_F(WaveProjectionContract, ReplicatedDispatch) {
 
 // ----------------------------------------------------------------------------
 // wrapAsWWMValue: an identity no-op on projections that already guarantee
-// participating source waves have full EXEC, and a strict.wwm wrapper on
+// hardware EXEC=-1 kernel-wide (WaveNative), and a single strict.wwm wrapper on
 // those that do not (Replication). The WMMA lowering relies on both behaviours.
 // ----------------------------------------------------------------------------
 namespace {

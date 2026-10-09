@@ -9,8 +9,6 @@
 #include "transpiler/raiser/launch.h"
 
 #include "transpiler/raiser/raise_failure.h"
-#include "llvm/Support/Endian.h"
-#include "llvm/Support/MathExtras.h"
 
 #include <cassert>
 
@@ -18,9 +16,9 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 
-Expected<LaunchDimensions> KernelLaunchRequirements::project(
-    StringRef KernelName, const LaunchDimensions &Source,
-    ArrayRef<uint8_t> Kernarg, uint32_t DynamicLDSSize) const {
+Expected<LaunchDimensions>
+KernelLaunchRequirements::project(StringRef KernelName,
+                                  const LaunchDimensions &Source) const {
   assert(!KernelName.empty() && "launch requirements need a kernel name");
   auto Refuse = [&](const Twine &Detail) {
     return RaiseFailure::inKernel(RaiseFailureReason::UnsupportedLaunch,
@@ -40,52 +38,25 @@ Expected<LaunchDimensions> KernelLaunchRequirements::project(
     if (Workitems > MaxWorkgroupSize)
       return Refuse("workgroup exceeds the kernel's supported launch size");
   }
-  if (RequiredWorkgroupSize)
-    for (unsigned I = 0; I != 3; ++I)
-      if (Source.Grid[I] % Source.Workgroup[I] != 0)
-        return Refuse("required workgroup dimensions need complete workgroups");
-  if (DynamicLDSSizeArgOffset) {
-    uint32_t Offset = *DynamicLDSSizeArgOffset;
-    if (Offset > Kernarg.size() || Kernarg.size() - Offset < sizeof(uint32_t))
-      return Refuse("kernarg is missing the dynamic LDS size");
-    if (support::endian::read32le(Kernarg.data() + Offset) != DynamicLDSSize)
-      return Refuse("kernarg dynamic LDS size does not match the allocation");
-  }
   if (Mapping == Kind::Unchanged)
     return Source;
 
   assert(SourceWaveSize > 0 && ReplicationFactor > 1 &&
          "invalid replicated launch requirements");
-  if (Mapping == Kind::Replicated1D &&
-      (Source.Workgroup[1] != 1 || Source.Workgroup[2] != 1))
-    return Refuse("replicated dispatch requires a one-dimensional workgroup");
-  if (RequiresWholeSourceWaves && Workitems % SourceWaveSize != 0)
+  if (Source.Workgroup[1] != 1 || Source.Workgroup[2] != 1 ||
+      Source.Grid[1] != 1 || Source.Grid[2] != 1)
+    return Refuse("replicated dispatch requires a one-dimensional launch");
+  if (Source.Workgroup[0] % SourceWaveSize != 0)
     return Refuse("replicated dispatch requires whole source waves");
-  for (unsigned I = 0; I != 3; ++I)
-    if (Source.Grid[I] % Source.Workgroup[I] != 0)
-      return Refuse("replicated dispatch requires complete workgroups");
-  if (WorkgroupSizeArgOffsets) {
-    for (unsigned I = 0; I != 3; ++I) {
-      uint32_t Offset = (*WorkgroupSizeArgOffsets)[I];
-      if (Offset > Kernarg.size() || Kernarg.size() - Offset < sizeof(uint16_t))
-        return Refuse("kernarg is missing a logical workgroup size");
-      if (support::endian::read16le(Kernarg.data() + Offset) !=
-          Source.Workgroup[I])
-        return Refuse(
-            "kernarg workgroup size does not match the logical launch");
-    }
-  }
-
-  uint64_t PhysicalWorkitems =
-      alignTo(Workitems, SourceWaveSize) * ReplicationFactor;
-  uint64_t GridX = Source.Grid[0] / Source.Workgroup[0] * PhysicalWorkitems;
-  if (GridX > UINT32_MAX)
+  if (Source.Grid[0] % Source.Workgroup[0] != 0)
+    return Refuse("replicated dispatch requires complete workgroups");
+  if (Source.Grid[0] > UINT32_MAX / ReplicationFactor)
     return Refuse("replicated grid size overflows the dispatch packet");
 
-  return LaunchDimensions{{static_cast<uint32_t>(GridX),
-                           Source.Grid[1] / Source.Workgroup[1],
-                           Source.Grid[2] / Source.Workgroup[2]},
-                          {static_cast<uint32_t>(PhysicalWorkitems), 1, 1}};
+  LaunchDimensions Target = Source;
+  Target.Grid[0] *= ReplicationFactor;
+  Target.Workgroup[0] *= ReplicationFactor;
+  return Target;
 }
 
 } // namespace COMGR::transpiler

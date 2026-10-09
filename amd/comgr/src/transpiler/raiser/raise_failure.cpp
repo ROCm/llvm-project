@@ -76,10 +76,6 @@ llvm::StringRef reasonString(RaiseFailureReason R) {
     return "non-uniform-scalar-state";
   case RaiseFailureReason::UnprovenExecContainment:
     return "unproven-exec-containment";
-  case RaiseFailureReason::RequiresPerSourceWaveExecution:
-    return "requires-per-source-wave-execution";
-  case RaiseFailureReason::UnprovenKernelEntryExec:
-    return "unproven-kernel-entry-exec";
   case RaiseFailureReason::UnsupportedLaunch:
     return "unsupported-launch";
   case RaiseFailureReason::CrossWaveLaneIdLeak:

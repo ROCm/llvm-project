@@ -15,7 +15,7 @@
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=saveexec_kernel,wrexec_kernel,exec_dst_kernel 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE
-; REFUSE-COUNT-3: projection cannot prove that EXEC only enables lanes active at kernel entry
+; REFUSE-COUNT-3: WaveNative cannot prove that EXEC only enables lanes active at kernel entry
 
 ; A 64-bit mask names lanes a 32-lane wave does not have, so combining one with
 ; EXEC is not lifted.

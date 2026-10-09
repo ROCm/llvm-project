@@ -16,7 +16,6 @@
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
@@ -26,16 +25,12 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/PatternMatch.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Transforms/InstCombine/InstCombine.h"
-#include "llvm/Transforms/Utils/Local.h"
 
 #include <algorithm>
 #include <optional>
@@ -103,13 +98,8 @@ Error RegisterState::seedEntrySgprs(const KernelMeta &Meta) {
                   const Twine &Name) {
     if (!Sgpr)
       return;
-    CallInst *V =
+    Value *V =
         B.CreateCall(Intrinsic::getOrInsertDeclaration(&M, Id), {}, Name);
-    if (Projection.usesReplicatedDispatch() &&
-        (Id == Intrinsic::amdgcn_dispatch_ptr ||
-         Id == Intrinsic::amdgcn_queue_ptr ||
-         Id == Intrinsic::amdgcn_dispatch_id))
-      UnavailableEntryValues.push_back(V);
     if (Is64)
       Regs.storeSGPR64(B, *Sgpr, V);
     else
@@ -186,90 +176,6 @@ Error RegisterState::seedEntrySgprs(const KernelMeta &Meta) {
     default:
       break;
     }
-  }
-  return Error::success();
-}
-
-Error RegisterState::validateEntrySgprs() {
-  if (UnavailableEntryValues.empty())
-    return Error::success();
-  // Fold SGPR splitting and joining before following pointer uses.
-  Function &F = *B.GetInsertBlock()->getParent();
-  PassBuilder PB;
-  LoopAnalysisManager LAM;
-  FunctionAnalysisManager FAM;
-  CGSCCAnalysisManager CGAM;
-  ModuleAnalysisManager MAM;
-  PB.registerLoopAnalyses(LAM);
-  PB.registerFunctionAnalyses(FAM);
-  PB.registerCGSCCAnalyses(CGAM);
-  PB.registerModuleAnalyses(MAM);
-  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
-  InstCombinePass().run(F, FAM);
-  for (WeakTrackingVH &Handle : UnavailableEntryValues) {
-    CallInst *Seed = dyn_cast_or_null<CallInst>(Handle);
-    if (!Seed)
-      continue;
-    SmallVector<Instruction *> Worklist{Seed};
-    SmallVector<std::pair<LoadInst *, unsigned>> DispatchLoads;
-    SmallPtrSet<Instruction *, 32> Visited;
-    Visited.insert(Seed);
-    for (size_t I = 0; I != Worklist.size(); ++I) {
-      for (User *U : Worklist[I]->users()) {
-        Instruction *Use = cast<Instruction>(U);
-        if (!Visited.insert(Use).second)
-          continue;
-        if (LoadInst *Load = dyn_cast<LoadInst>(Use)) {
-          using namespace PatternMatch;
-          ConstantInt *Offset = nullptr;
-          unsigned Bits = Load->getType()->getPrimitiveSizeInBits();
-          if (Seed->getIntrinsicID() == Intrinsic::amdgcn_dispatch_ptr &&
-              Load->isSimple() && Load->getType()->isIntOrIntVectorTy() &&
-              match(Load->getPointerOperand(),
-                    m_IntToPtr(m_Add(m_PtrToInt(m_Specific(Seed)),
-                                     m_ConstantInt(Offset)))) &&
-              Offset->getValue().ult(DispatchWorkgroupSizesEndOffset) &&
-              Offset->getZExtValue() >= DispatchWorkgroupSizeXOffset &&
-              Bits % 8 == 0 &&
-              Bits <=
-                  (DispatchWorkgroupSizesEndOffset - Offset->getZExtValue()) *
-                      8) {
-            DispatchLoads.emplace_back(Load, Offset->getZExtValue());
-            continue;
-          }
-        }
-        if (Use->mayReadOrWriteMemory() ||
-            !wouldInstructionBeTriviallyDead(Use))
-          return RaiseFailure::general(
-              RaiseFailureReason::UnsupportedEntrySgprSource,
-              "replicated dispatch cannot reproduce consumed entry state '" +
-                  Seed->getCalledFunction()->getName() + "'");
-        Worklist.push_back(Use);
-      }
-    }
-    for (const auto &[Load, Offset] : DispatchLoads) {
-      IRBuilder<> Builder(Load);
-      Value *Sizes = Builder.getInt64(0);
-      for (unsigned Dim = 0; Dim != 3; ++Dim) {
-        Value *Size = Projection.emitWorkgroupSize(Builder, Dim);
-        Size = Builder.CreateZExt(Size, Builder.getInt64Ty());
-        Size =
-            Builder.CreateShl(Size, Dim * DispatchWorkgroupSizeFieldBytes * 8);
-        Sizes = Builder.CreateOr(Sizes, Size);
-      }
-      // The packet's reserved word following Z is zero.
-      Sizes = Builder.CreateLShr(Sizes,
-                                 (Offset - DispatchWorkgroupSizeXOffset) * 8);
-      Type *BitsType =
-          Builder.getIntNTy(Load->getType()->getPrimitiveSizeInBits());
-      Value *Bits = Builder.CreateZExtOrTrunc(Sizes, BitsType);
-      Load->replaceAllUsesWith(Builder.CreateBitCast(Bits, Load->getType()));
-      Load->eraseFromParent();
-    }
-    for (Instruction *I : Worklist)
-      I->dropAllReferences();
-    for (Instruction *I : Worklist)
-      I->eraseFromParent();
   }
   return Error::success();
 }
@@ -857,21 +763,13 @@ void RegisterState::emitMemoryEffect(function_ref<void()> Body) {
 
 Value *RegisterState::emitMemoryValue(function_ref<Value *()> Body,
                                       bool IsScalar) {
-  bool PackedScalar = IsScalar && Projection.allowsDivergentScalarControlFlow();
-  if (!Projection.usesReplicatedDispatch() && !PackedScalar)
+  if (!Projection.usesReplicatedDispatch())
     return Body();
 
   Value *Lane = Projection.emitLaneIdx(B);
-  Value *SourceLane =
-      PackedScalar
-          ? B.CreateAnd(Lane, B.getInt32(Projection.sourceWaveSize() - 1))
-          : nullptr;
-  Value *Primary =
-      PackedScalar
-          ? B.CreateICmpEQ(SourceLane, B.getInt32(0))
-          : B.CreateICmpULT(
-                Lane, B.getInt32(IsScalar ? 1 : Projection.sourceWaveSize()),
-                "primary_lane");
+  Value *Primary = B.CreateICmpULT(
+      Lane, B.getInt32(IsScalar ? 1 : Projection.sourceWaveSize()),
+      "primary_lane");
   BasicBlock *Before = B.GetInsertBlock();
   Value *Result = nullptr;
   BasicBlock *ResultBlock = nullptr;
@@ -896,20 +794,17 @@ Value *RegisterState::emitMemoryValue(function_ref<Value *()> Body,
                         : FixedVectorType::get(B.getInt32Ty(), NumWords);
   Value *Words = BitWidth < 32 ? B.CreateZExt(Merged, WordsType)
                                : B.CreateBitCast(Merged, WordsType);
-  if (PackedScalar)
-    SourceLane = B.CreateSub(Lane, SourceLane, "scalar_memory_source_lane");
-  else
-    SourceLane = B.CreateAnd(Lane, B.getInt32(Projection.sourceWaveSize() - 1));
+  Value *SourceLane =
+      B.CreateAnd(Lane, B.getInt32(Projection.sourceWaveSize() - 1));
   Value *Selector = B.CreateShl(SourceLane, 2);
   Value *Broadcast = PoisonValue::get(WordsType);
   for (unsigned I = 0; I != NumWords; ++I) {
     Value *Word = NumWords == 1 ? Words : B.CreateExtractElement(Words, I);
-    // Each selected owner participates in this gather.
-    Word = IsScalar && !PackedScalar
-               ? B.CreateIntrinsic(Intrinsic::amdgcn_readlane, {B.getInt32Ty()},
-                                   {Word, B.getInt32(0)})
-               : B.CreateIntrinsic(Intrinsic::amdgcn_ds_bpermute, {},
-                                   {Selector, Word});
+    // Both replicas reach this gather, so every selected primary participates.
+    Word = IsScalar ? B.CreateIntrinsic(Intrinsic::amdgcn_readlane,
+                                        {B.getInt32Ty()}, {Word, B.getInt32(0)})
+                    : B.CreateIntrinsic(Intrinsic::amdgcn_ds_bpermute, {},
+                                        {Selector, Word});
     Broadcast =
         NumWords == 1 ? Word : B.CreateInsertElement(Broadcast, Word, I);
   }
@@ -1097,14 +992,14 @@ void RegisterState::recordWaveMaskI1(ParsedReg Dst, Value *MaskI1) {
 
 Value *RegisterState::emitCurrentSourceWaveHasActiveLane() {
   Value *Exec = Regs.loadExec(B);
-  if (!Projection.providesSourceWaveExecInvariant())
+  if (!Projection.providesFullWaveExecInvariant())
     return emitLaneActiveBit();
   return B.CreateNot(emitSourceWaveMaskIsZero(B, Projection, Exec, "execz"),
                      "source_wave_active");
 }
 
 void RegisterState::recordSourceWaveSgprPair(unsigned BaseIdx, Value *V) {
-  if (!Projection.providesSourceWaveExecInvariant()) {
+  if (!Projection.providesFullWaveExecInvariant()) {
     return;
   }
   if (BaseIdx >= SgprShadows.size()) {
@@ -1125,7 +1020,7 @@ void RegisterState::recordSourceWaveSgprPair(unsigned BaseIdx, Value *V) {
 
 Value *RegisterState::materializeSourceWaveSgprPair(unsigned BaseIdx,
                                                     Value *Fallback) {
-  if (!Projection.providesSourceWaveExecInvariant() ||
+  if (!Projection.providesFullWaveExecInvariant() ||
       BaseIdx >= SgprShadows.size()) {
     return Fallback;
   }
