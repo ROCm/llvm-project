@@ -524,13 +524,14 @@ const char *getIsaName(size_t Index) {
 //     the GPU ISA revision, Comgr library version, and code object version.
 //
 // Target feature settings:
-//   Features: Map containing the supported xnack and sramecc settings.
+//   Features: Map containing the selectable xnack and sramecc settings.
 //     xnack: XNACK memory-fault replay setting.
 //     sramecc: SRAM error-correcting code (ECC) setting.
 //     Each value is "any" when unspecified, permitting either on or off.
 //     An explicit '+' selects "on" (enabled required); '-' selects "off"
 //     (disabled required). These requirements apply to the requested target ID.
-//     Unsupported settings are absent; requesting one explicitly is an error.
+//     Features without on/off modes are absent; requesting one explicitly is
+//     an error. Hardwired-on features, such as gfx1250 xnack, are also absent.
 //
 // Capabilities:
 //   TrapHandlerEnabled: Whether Comgr models trap handling as enabled;

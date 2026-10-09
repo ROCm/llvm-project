@@ -37,7 +37,7 @@ Identity fields preserve the spelling in the requested ISA name. See LLVM's
 
 | Entry | Description |
 | --- | --- |
-| `Features` | Map of supported target feature settings; may be empty. |
+| `Features` | Map of selectable target feature settings; may be empty. |
 | `Features.xnack` | XNACK memory-fault replay setting. |
 | `Features.sramecc` | SRAM error-correcting code (ECC) setting. |
 
@@ -50,9 +50,11 @@ Each feature value is a string describing a requirement of the requested ISA:
 | `"off"` | Disabled is required for this target ID, selected by `:xnack-` or `:sramecc-`. |
 
 These requirements apply to the requested target ID, not every use of the
-processor. A feature without a selectable setting is absent; requesting it
-explicitly is an error. See LLVM's [target feature documentation][target-features]
-for code-generation and compatibility rules.
+processor. A feature without on/off modes is absent, and requesting it
+explicitly is an error. Absence does not imply the feature is disabled:
+hardwired-on features, such as XNACK on `gfx1250`, are also absent. See LLVM's
+[target feature documentation][target-features] for code-generation and
+compatibility rules.
 
 ## Capabilities
 
