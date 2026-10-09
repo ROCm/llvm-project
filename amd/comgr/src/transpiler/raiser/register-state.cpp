@@ -550,20 +550,38 @@ Expected<ParsedReg> RegisterState::parseReg(const DecodedInst &Di,
           MRI.getName(Reg) + "' (enc=0x" + Twine::utohexstr(Enc) + ")");
 }
 
+bool RegisterState::sourceImageSgprPairRecorded(unsigned Idx) const {
+  // A pair is keyed by its low SGPR, so this register belongs to the pair
+  // keyed at its own index and to the one before it.
+  return SourceImageSgprPairs.contains(Idx) ||
+         (Idx > 0 && SourceImageSgprPairs.contains(Idx - 1));
+}
+
+Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
+                                           unsigned Idx) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      Twine("operand-read: 's") + Twine(Idx) +
+          "' may hold a source code-object address, which names a place in "
+          "the source image rather than anything the raised kernel can "
+          "address");
+}
+
 Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
                                            unsigned BaseIdx,
                                            unsigned WidthInDwords) {
   for (unsigned I = 0; I != WidthInDwords; ++I) {
-    if (!mayHoldSourceImageAddress(BaseIdx + I))
-      continue;
-    return RaiseFailure::atInstruction(
-        RaiseFailureReason::UnsupportedInstructionForm,
-        strippedMnemonic(MC, Di.Inst), Di.Offset,
-        formatName(Di.TargetSpecificFlags),
-        Twine("operand-read: 's") + Twine(BaseIdx + I) +
-            "' may hold a source code-object address, which names a place in "
-            "the source image rather than anything the raised kernel can "
-            "address");
+    unsigned Idx = BaseIdx + I;
+    if (mayHoldSourceImageAddress(Idx))
+      return refuseSourceImageRead(Di, Idx);
+    // The register carries no address the raise knows of yet, and the block
+    // reading it holds whatever ran before rather than a value of its own, so
+    // an instruction the raise has still to reach can record one there.
+    if (!sourceImageSgprPairRecorded(Idx) &&
+        !blockState().DefinedSgprs.contains(Idx))
+      DeferredSourceImageReads.push_back({/*Di=*/&Di, /*Idx=*/Idx});
   }
   return Error::success();
 }
@@ -573,6 +591,13 @@ Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
   if (Pr.RegKind != ParsedReg::SGPR || !Pr.BaseIdx)
     return Error::success();
   return refuseSourceImageRead(Di, *Pr.BaseIdx, Pr.WidthInDwords);
+}
+
+Error RegisterState::refuseDeferredSourceImageReads() {
+  for (const DeferredSourceImageRead &Read : DeferredSourceImageReads)
+    if (sourceImageSgprPairRecorded(Read.Idx))
+      return refuseSourceImageRead(*Read.Di, Read.Idx);
+  return Error::success();
 }
 
 Expected<Value *> RegisterState::readSgpr32(const DecodedInst &Di,
