@@ -262,6 +262,8 @@ features cannot lower the translation-unit ABI level;
 - Added `__builtin_sort_pack` to sort a pack of types using the same
   order as `__builtin_type_order`.
 
+- Updates Unicode Names data to Unicode 18.0 (from Unicode 18.0 Beta).
+
 ### New Compiler Flags
 
 - New option `-fmodules-validate-directory-dependencies` makes an implicitly
@@ -611,6 +613,8 @@ features cannot lower the translation-unit ABI level;
   keyword, such as when deferring the last statement of a block; when
   used as the body of a conditional; or when it immediately precedes
   a `break`/`continue` statement or a `return` with no argument.
+ 
+- Clang now diagnoses arrays whose size is deduced from an initializer list when they exceed the maximum object size
 
 ### Improvements to Clang's time-trace
 
