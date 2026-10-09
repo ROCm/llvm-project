@@ -155,7 +155,8 @@ public:
   /// Return the predicate of a ballot whose bits describe lanes of the current
   /// source wave, or nullptr if unrecognized. This does not prove that the
   /// predicate is bounded by entry EXEC.
-  virtual llvm::Value *matchBallotPredicate(const llvm::Value *Mask) const {
+  virtual const llvm::Value *
+  matchBallotPredicate(const llvm::Value *Mask) const {
     return nullptr;
   }
 
@@ -275,7 +276,8 @@ public:
   llvm::Value *
   ballotI1ToWidth(llvm::IRBuilder<> &B, llvm::Value *Pred, llvm::Type *ResultTy,
                   const llvm::Twine &Name = "ballot") const override;
-  llvm::Value *matchBallotPredicate(const llvm::Value *Mask) const override;
+  const llvm::Value *
+  matchBallotPredicate(const llvm::Value *Mask) const override;
   llvm::Value *extractLaneBitFromWaveMask(llvm::IRBuilder<> &B,
                                           llvm::Value *V) const override;
 
@@ -345,7 +347,8 @@ public:
   llvm::Value *
   ballotI1ToWidth(llvm::IRBuilder<> &B, llvm::Value *Pred, llvm::Type *ResultTy,
                   const llvm::Twine &Name = "ballot") const override;
-  llvm::Value *matchBallotPredicate(const llvm::Value *Mask) const override;
+  const llvm::Value *
+  matchBallotPredicate(const llvm::Value *Mask) const override;
   llvm::Value *extractLaneBitFromWaveMask(llvm::IRBuilder<> &B,
                                           llvm::Value *V) const override;
 

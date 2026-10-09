@@ -421,8 +421,7 @@ static bool isKnownSubsetOfEntryExec(
   switch (I.getOpcode()) {
   case Instruction::ICmp: {
     Value *Mask = nullptr;
-    if (LaneId &&
-        match(&I, m_SpecificICmp(
+    if (match(&I, m_SpecificICmp(
                       ICmpInst::ICMP_NE,
                       m_And(m_LShr(m_Value(Mask),
                                    m_And(m_Specific(LaneId),
@@ -451,7 +450,7 @@ static bool isKnownSubsetOfEntryExec(
     });
   }
   case Instruction::Trunc:
-    if (Value *Predicate = Projection.matchBallotPredicate(&I))
+    if (const Value *Predicate = Projection.matchBallotPredicate(&I))
       return IsEntrySubset(Predicate);
     if (I.getType()->isIntegerTy(1))
       return false;
