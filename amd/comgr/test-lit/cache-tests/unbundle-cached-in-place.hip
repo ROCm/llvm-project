@@ -21,10 +21,11 @@
 // RUN: cmp %t.miss.bc %t.hit.bc
 //
 // With save-temps, the cache hit is written to the temporary directory.
+// Windows reads TMP and TEMP instead of TMPDIR.
 // RUN: rm -fr %t.temps && mkdir -p %t.temps
-// RUN: TMPDIR=%t.temps AMD_COMGR_SAVE_TEMPS=1 unbundle \
-// RUN:    %t.compressed-bundle.bc hip-amdgcn-amd-amdhsa-unknown-gfx900 \
-// RUN:    %t.savetemps.bc
+// RUN: TMPDIR=%t.temps TMP=%t.temps TEMP=%t.temps AMD_COMGR_SAVE_TEMPS=1 \
+// RUN:    unbundle %t.compressed-bundle.bc \
+// RUN:    hip-amdgcn-amd-amdhsa-unknown-gfx900 %t.savetemps.bc
 // RUN: cmp %t.miss.bc %t.savetemps.bc
 // RUN: ls %t.temps/comgr-*/output | %FileCheck --check-prefix=TEMPS %s
 // TEMPS: .bc
