@@ -898,11 +898,24 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   // the wave where the source let it run on. A program that made progress only
   // because the arrival did not block deadlocks under that reading, so the
   // arrival is refused rather than widened into a whole barrier.
+  //
+  // An arrival the matching release always follows is the exception: the pair
+  // is raised as the one barrier it amounts to, at the release, leaving the
+  // arrival nothing of its own to state.
   case CanonicalOp::S_BARRIER_SIGNAL_IMM:
-  case CanonicalOp::S_BARRIER_SIGNAL_M0:
+    if (Ctx.isPairedSplitBarrier(Di.Offset))
+      return Error::success();
     return unsupported(Ctx, Di,
                        "arrives at a barrier without waiting there, and the "
                        "raise has only a barrier that also waits");
+
+  // The barrier this arrives at is whichever one m0 names at run time, so
+  // which barrier it is cannot be read off the instruction and matched to a
+  // release.
+  case CanonicalOp::S_BARRIER_SIGNAL_M0:
+    return unsupported(Ctx, Di,
+                       "arrives at the barrier m0 names, which the raise "
+                       "cannot match to the wait that releases it");
 
   // The rest of the family speaks about a named barrier: a barrier a subset of
   // the workgroup joins, leaves, sizes and polls. The raise carries no barrier
