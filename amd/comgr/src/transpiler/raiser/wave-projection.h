@@ -152,6 +152,12 @@ public:
   ballotI1ToWidth(llvm::IRBuilder<> &B, llvm::Value *Pred, llvm::Type *ResultTy,
                   const llvm::Twine &Name = "ballot") const = 0;
 
+  /// Return the predicate of a recognized source-width ballot, or nullptr.
+  /// A true predicate contributes only to the corresponding source lane's bit.
+  virtual llvm::Value *matchBallotPredicate(const llvm::Value *Mask) const {
+    return nullptr;
+  }
+
   // Project a wave-level bit-mask back onto the current lane's bit (i1).
   // Inverse direction of the ballot. Per-lane i1 inputs short-circuit
   // to a direct pass-through (some callers already produce the final
@@ -268,6 +274,7 @@ public:
   llvm::Value *
   ballotI1ToWidth(llvm::IRBuilder<> &B, llvm::Value *Pred, llvm::Type *ResultTy,
                   const llvm::Twine &Name = "ballot") const override;
+  llvm::Value *matchBallotPredicate(const llvm::Value *Mask) const override;
   llvm::Value *extractLaneBitFromWaveMask(llvm::IRBuilder<> &B,
                                           llvm::Value *V) const override;
 
@@ -337,6 +344,7 @@ public:
   llvm::Value *
   ballotI1ToWidth(llvm::IRBuilder<> &B, llvm::Value *Pred, llvm::Type *ResultTy,
                   const llvm::Twine &Name = "ballot") const override;
+  llvm::Value *matchBallotPredicate(const llvm::Value *Mask) const override;
   llvm::Value *extractLaneBitFromWaveMask(llvm::IRBuilder<> &B,
                                           llvm::Value *V) const override;
 
