@@ -348,10 +348,11 @@ Value *ReplicationProjection::emitLaneActiveBit(IRBuilder<> &B,
   return B.CreateICmpNE(Bit, ConstantInt::get(ExecTy, 0), "spe_lane_active");
 }
 
-Value *ReplicationProjection::matchBallotPredicate(const Value *Mask) const {
+const Value *
+ReplicationProjection::matchBallotPredicate(const Value *Mask) const {
   using namespace PatternMatch;
-  Value *Ballot = nullptr;
-  Value *Predicate = nullptr;
+  const Value *Ballot = nullptr;
+  const Value *Predicate = nullptr;
   if (sourceWaveSize() == 32 && targetWaveSize() == 64 &&
       Mask->getType() == sourceWaveMaskTy() &&
       match(Mask, m_Trunc(m_Value(Ballot))) &&
@@ -596,10 +597,11 @@ Value *WaveNativeProjection::emitLaneActiveBit(IRBuilder<> &B,
   return B.CreateSelect(EntryActive, Active, B.getFalse(), "dispatched_active");
 }
 
-Value *WaveNativeProjection::matchBallotPredicate(const Value *Mask) const {
+const Value *
+WaveNativeProjection::matchBallotPredicate(const Value *Mask) const {
   using namespace PatternMatch;
-  Value *Ballot = nullptr;
-  Value *Predicate = nullptr;
+  const Value *Ballot = nullptr;
+  const Value *Predicate = nullptr;
   if (CachedLaneIdx && Mask->getType() == sourceWaveMaskTy() &&
       match(Mask, m_Trunc(m_LShr(m_Value(Ballot),
                                  m_ZExt(m_And(m_Specific(CachedLaneIdx),
