@@ -26,6 +26,21 @@
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=refuse_bf16_denorm 2>&1 \
 ; RUN:   | %FileCheck %s --check-prefix=REFUSE-BF16-DENORM
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=refuse_fmac_clamp 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE-FMAC-CLAMP
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=refuse_fmac_omod 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE-FMAC-OMOD
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=refuse_f64_clamp 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE-F64-CLAMP
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=refuse_f64_omod 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE-F64-OMOD
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=refuse_f64_rounding 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE-F64-ROUNDING
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
@@ -35,6 +50,7 @@
 	.type	vop_math,@function
 ; CHECK-LABEL: define amdgpu_kernel void @vop_math(
 vop_math:
+	v_mov_b32 v50, v0
 ; CHECK: sitofp i32
 	v_cvt_f32_i32_e32 v0, v1
 ; CHECK: uitofp i32
@@ -98,6 +114,26 @@ vop_math:
 	v_cvt_i32_f64_e32 v0, v[2:3]
 ; CHECK: call i32 @llvm.fptoui.sat.i32.f64
 	v_cvt_u32_f64_e32 v0, v[2:3]
+	v_mov_b32 v2, v50
+	v_mov_b32 v3, 0x3ff00000
+; CHECK: call double @llvm.trunc.f64
+	v_trunc_f64_e32 v[0:1], v[2:3]
+	global_store_dwordx2 v[48:49], v[0:1], off
+; CHECK: call double @llvm.ceil.f64
+	v_ceil_f64_e32 v[0:1], v[2:3]
+	global_store_dwordx2 v[48:49], v[0:1], off
+; CHECK: call double @llvm.roundeven.f64
+	v_rndne_f64_e32 v[0:1], v[2:3]
+	global_store_dwordx2 v[48:49], v[0:1], off
+; CHECK: call double @llvm.floor.f64
+	v_floor_f64_e32 v[0:1], v[2:3]
+	global_store_dwordx2 v[48:49], v[0:1], off
+; CHECK: call double @llvm.amdgcn.rcp.f64
+	v_rcp_f64_e32 v[0:1], v[2:3]
+	global_store_dwordx2 v[48:49], v[0:1], off
+; CHECK: call double @llvm.amdgcn.rsq.f64
+	v_rsq_f64_e32 v[0:1], v[2:3]
+	global_store_dwordx2 v[48:49], v[0:1], off
 ; CHECK: ret void
 	s_endpgm
 
@@ -106,6 +142,7 @@ vop_math:
 	.type	vop3_math,@function
 ; CHECK-LABEL: define amdgpu_kernel void @vop3_math(
 vop3_math:
+	v_mov_b32 v16, v0
 ; CHECK: [[NEG:%.+]] = fneg float
 ; CHECK: call float @llvm.amdgcn.exp2.f32(float [[NEG]])
 	v_exp_f32_e64 v0, -v1
@@ -119,6 +156,66 @@ vop3_math:
 	v_cvt_f32_f16_e64 v10, v11.h
 ; CHECK: call float @llvm.ldexp.f32.i32
 	v_ldexp_f32 v2, v3, v4
+	v_mov_b32 v6, v16
+	v_add_nc_u32 v7, v16, 1
+	v_mov_b32 v2, v6
+	v_mov_b32 v3, 0x3ff00000
+	v_mov_b32 v4, v7
+	v_mov_b32 v5, 0x40000000
+; CHECK: fneg double
+; CHECK: call double @llvm.ldexp.f64.i32
+	v_ldexp_f64 v[0:1], -v[2:3], v4
+	global_store_dwordx2 v[14:15], v[0:1], off
+; CHECK: fneg double
+; CHECK: call double @llvm.amdgcn.rcp.f64
+	v_rcp_f64_e64 v[0:1], -v[2:3]
+	global_store_dwordx2 v[14:15], v[0:1], off
+; CHECK: call double @llvm.fabs.f64
+; CHECK: call double @llvm.roundeven.f64
+	v_rndne_f64_e64 v[0:1], abs(v[2:3])
+	global_store_dwordx2 v[14:15], v[0:1], off
+; CHECK: sitofp i32 {{.+}} to double
+	v_cvt_f64_i32_e32 v[0:1], v6
+; CHECK: [[ACC64_LO_E32:%.+]] = zext i32 %Vgpr0{{[^ ,]*}} to i64
+; CHECK: [[ACC64_HI_E32:%.+]] = zext i32 %Vgpr1{{[^ ,]*}} to i64
+; CHECK: [[ACC64_SHIFT_E32:%.+]] = shl i64 [[ACC64_HI_E32]], 32
+; CHECK: [[ACC64_BITS_E32:%.+]] = or i64 [[ACC64_LO_E32]], [[ACC64_SHIFT_E32]]
+; CHECK: [[ACC64_E32:%.+]] = bitcast i64 [[ACC64_BITS_E32]] to double
+; CHECK: call double @llvm.fma.f64(double {{.+}}, double {{.+}}, double [[ACC64_E32]])
+	v_fmac_f64_e32 v[0:1], v[2:3], v[4:5]
+	global_store_dwordx2 v[14:15], v[0:1], off
+; CHECK: sitofp i32 {{.+}} to double
+	v_cvt_f64_i32_e32 v[0:1], v7
+; CHECK: [[NEG64:%.+]] = fneg double
+; CHECK: [[ACC64_LO_E64:%.+]] = zext i32 %Vgpr0{{[^ ,]*}} to i64
+; CHECK: [[ACC64_HI_E64:%.+]] = zext i32 %Vgpr1{{[^ ,]*}} to i64
+; CHECK: [[ACC64_SHIFT_E64:%.+]] = shl i64 [[ACC64_HI_E64]], 32
+; CHECK: [[ACC64_BITS_E64:%.+]] = or i64 [[ACC64_LO_E64]], [[ACC64_SHIFT_E64]]
+; CHECK: [[ACC64_E64:%.+]] = bitcast i64 [[ACC64_BITS_E64]] to double
+; CHECK: call double @llvm.fma.f64(double [[NEG64]], double {{.+}}, double [[ACC64_E64]])
+	v_fmac_f64_e64 v[0:1], -v[2:3], v[4:5]
+	global_store_dwordx2 v[14:15], v[0:1], off
+; CHECK: call double @llvm.fma.f64(double {{.+}}, double 1.500000e+00, double {{.+}})
+	v_fmamk_f64 v[0:1], v[2:3], 1.5, v[4:5]
+	global_store_dwordx2 v[14:15], v[0:1], off
+	v_cvt_f32_u32_e32 v3, v6
+	v_cvt_f32_u32_e32 v4, v7
+; CHECK: sitofp i32 {{.+}} to float
+	v_cvt_f32_i32_e32 v2, v6
+; CHECK: [[ACC32_E32:%.+]] = bitcast i32 %Vgpr2{{[^ ,]*}} to float
+; CHECK: call float @llvm.fma.f32(float {{.+}}, float {{.+}}, float [[ACC32_E32]])
+	v_fmac_f32_e32 v2, v3, v4
+	global_store_dword v[14:15], v2, off
+; CHECK: sitofp i32 {{.+}} to float
+	v_cvt_f32_i32_e32 v2, v7
+; CHECK: [[NEG32:%.+]] = fneg float
+; CHECK: [[ACC32_E64:%.+]] = bitcast i32 %Vgpr2{{[^ ,]*}} to float
+; CHECK: call float @llvm.fma.f32(float [[NEG32]], float {{.+}}, float [[ACC32_E64]])
+	v_fmac_f32_e64 v2, -v3, v4
+	global_store_dword v[14:15], v2, off
+; CHECK: call float @llvm.fma.f32(float {{.+}}, float 1.500000e+00, float {{.+}})
+	v_fmamk_f32 v2, v3, 1.5, v4
+	global_store_dword v[14:15], v2, off
 ; CHECK: call float @llvm.amdgcn.exp2.f32
 	v_s_exp_f32 s0, s1
 ; CHECK: call float @llvm.amdgcn.log.f32
@@ -289,16 +386,61 @@ refuse_bf16_denorm:
 	v_fma_mix_f32_bf16 v0, v1, v2, v3 op_sel_hi:[1,0,0]
 	s_endpgm
 
+	.globl	refuse_fmac_clamp
+	.p2align	8
+	.type	refuse_fmac_clamp,@function
+; REFUSE-FMAC-CLAMP: unsupported-instruction-form: v_fmac_f32 [VOP3]
+; REFUSE-FMAC-CLAMP-SAME: floating-point output clamp is not supported
+refuse_fmac_clamp:
+	v_fmac_f32_e64 v0, v1, v2 clamp
+	s_endpgm
+
+	.globl	refuse_fmac_omod
+	.p2align	8
+	.type	refuse_fmac_omod,@function
+; REFUSE-FMAC-OMOD: unsupported-instruction-form: v_fmac_f64 [VOP3]
+; REFUSE-FMAC-OMOD-SAME: floating-point output multiplier is not supported
+refuse_fmac_omod:
+	v_fmac_f64_e64 v[0:1], v[2:3], v[4:5] mul:2
+	s_endpgm
+
+	.globl	refuse_f64_clamp
+	.p2align	8
+	.type	refuse_f64_clamp,@function
+; REFUSE-F64-CLAMP: unsupported-instruction-form: v_rndne_f64 [VOP3]
+; REFUSE-F64-CLAMP-SAME: floating-point output clamp is not supported
+refuse_f64_clamp:
+	v_rndne_f64_e64 v[0:1], v[2:3] clamp
+	s_endpgm
+
+	.globl	refuse_f64_omod
+	.p2align	8
+	.type	refuse_f64_omod,@function
+; REFUSE-F64-OMOD: unsupported-instruction-form: v_ldexp_f64 [VOP3]
+; REFUSE-F64-OMOD-SAME: floating-point output multiplier is not supported
+refuse_f64_omod:
+	v_ldexp_f64 v[0:1], v[2:3], v4 mul:2
+	s_endpgm
+
+	.globl	refuse_f64_rounding
+	.p2align	8
+	.type	refuse_f64_rounding,@function
+; REFUSE-F64-ROUNDING: unsupported-floating-point-mode: v_trunc_f64 [VOP1]
+; REFUSE-F64-ROUNDING-SAME: f64 rounding mode 1 is unsupported
+refuse_f64_rounding:
+	v_trunc_f64_e32 v[0:1], v[2:3]
+	s_endpgm
+
 	.section	.rodata,"a",@progbits
 	.p2align	6, 0x0
 	.amdhsa_kernel vop_math
-		.amdhsa_next_free_vgpr 48
+		.amdhsa_next_free_vgpr 51
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel vop3_math
 		.amdhsa_float_denorm_mode_32 3
 		.amdhsa_float_denorm_mode_16_64 3
-		.amdhsa_next_free_vgpr 12
+		.amdhsa_next_free_vgpr 17
 		.amdhsa_next_free_sgpr 5
 	.end_amdhsa_kernel
 	.amdhsa_kernel literal_f64
@@ -331,6 +473,27 @@ refuse_bf16_denorm:
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_fmac_clamp
+		.amdhsa_next_free_vgpr 3
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_fmac_omod
+		.amdhsa_next_free_vgpr 6
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_f64_clamp
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_f64_omod
+		.amdhsa_next_free_vgpr 5
+		.amdhsa_next_free_sgpr 1
+	.end_amdhsa_kernel
+	.amdhsa_kernel refuse_f64_rounding
+		.amdhsa_next_free_vgpr 4
+		.amdhsa_next_free_sgpr 1
+		.amdhsa_float_round_mode_16_64 1
+	.end_amdhsa_kernel
 	.text
 	.amdgpu_metadata
 ---
@@ -343,7 +506,7 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         vop_math.kd
-    .vgpr_count:     48
+    .vgpr_count:     51
     .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -353,7 +516,7 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     5
     .symbol:         vop3_math.kd
-    .vgpr_count:     12
+    .vgpr_count:     17
     .wavefront_size: 32
   - .group_segment_fixed_size: 0
     .kernarg_segment_align: 8
@@ -423,6 +586,56 @@ amdhsa.kernels:
     .private_segment_fixed_size: 0
     .sgpr_count:     1
     .symbol:         refuse_bf16_denorm.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_fmac_clamp
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         refuse_fmac_clamp.kd
+    .vgpr_count:     3
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_fmac_omod
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         refuse_fmac_omod.kd
+    .vgpr_count:     6
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_f64_clamp
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         refuse_f64_clamp.kd
+    .vgpr_count:     4
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_f64_omod
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         refuse_f64_omod.kd
+    .vgpr_count:     5
+    .wavefront_size: 32
+  - .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 0
+    .max_flat_workgroup_size: 1024
+    .name:           refuse_f64_rounding
+    .private_segment_fixed_size: 0
+    .sgpr_count:     1
+    .symbol:         refuse_f64_rounding.kd
     .vgpr_count:     4
     .wavefront_size: 32
 amdhsa.version: [1, 2]

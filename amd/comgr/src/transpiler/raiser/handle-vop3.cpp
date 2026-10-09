@@ -345,30 +345,38 @@ Error handleTernaryMinMax(RaiseContext &Ctx, OperandResolver &Op,
   return Error::success();
 }
 
-/// Raise V_LDEXP_F32 with a floating-point significand and integer exponent.
-Error raiseLdexpFloat32(RaiseContext &Ctx, const DecodedInst &Di,
-                        OperandResolver &Op) {
+/// Raise an F32 or F64 ldexp with a floating-point significand and integer
+/// exponent.
+Error raiseLdexpFloat(RaiseContext &Ctx, const DecodedInst &Di,
+                      OperandResolver &Op) {
   if (Di.NumDefs != 1 || Op.nSrcs() != 2)
     return unsupportedInstruction(Ctx, Di,
                                   "expected one destination and two sources");
-  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+  bool Is64 = Di.CanonOp == CanonicalOp::V_LDEXP_F64;
+  Type *Ty = Is64 ? Ctx.B.getDoubleTy() : Ctx.B.getFloatTy();
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ty))
     return Err;
-
+  if (Op.srcMod(1) != 0)
+    return unsupportedInstruction(
+        Ctx, Di, "integer exponent modifiers are not supported");
   Expected<ParsedReg> Dst = Op.dst();
   if (!Dst)
     return Dst.takeError();
-  Expected<Value *> Significand = Op.srcF32(0);
+  Expected<Value *> Significand = Is64 ? Op.srcF64(0) : Op.srcF32(0);
   if (!Significand)
     return Significand.takeError();
   Expected<Value *> Exponent = Op.src(1);
   if (!Exponent)
     return Exponent.takeError();
-
-  Value *Result = Ctx.B.CreateIntrinsic(
-      Intrinsic::ldexp, {Ctx.B.getFloatTy(), Ctx.B.getInt32Ty()},
-      {*Significand, *Exponent}, nullptr, "ldexp");
-  Value *ResultBits = Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty());
-  Ctx.registers().writeReg32(*Dst, ResultBits);
+  Value *Result =
+      Ctx.B.CreateIntrinsic(Intrinsic::ldexp, {Ty, Ctx.B.getInt32Ty()},
+                            {*Significand, *Exponent}, nullptr, "ldexp");
+  Type *BitsTy = Is64 ? Ctx.B.getInt64Ty() : Ctx.B.getInt32Ty();
+  Value *ResultBits = Ctx.B.CreateBitCast(Result, BitsTy);
+  if (Is64)
+    Ctx.registers().writeReg64(*Dst, ResultBits);
+  else
+    Ctx.registers().writeReg32(*Dst, ResultBits);
   return Error::success();
 }
 
@@ -561,6 +569,14 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   switch (Di.CanonOp) {
   case CanonicalOp::V_NOP:
     return Error::success();
+  case CanonicalOp::V_FMAC_F32:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatMac(Ctx, Di, Op);
+  case CanonicalOp::V_FMAC_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatMac(Ctx, Di, Op);
   case CanonicalOp::V_MAXIMUM_F32:
   case CanonicalOp::V_MINIMUM_F32:
     return raiseFloatBinary32(Ctx, Di, Op);
@@ -573,6 +589,15 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
       return Err;
     return raiseFloatConversion64(Ctx, Di, Op);
+  case CanonicalOp::V_TRUNC_F64:
+  case CanonicalOp::V_CEIL_F64:
+  case CanonicalOp::V_RNDNE_F64:
+  case CanonicalOp::V_FLOOR_F64:
+  case CanonicalOp::V_RCP_F64:
+  case CanonicalOp::V_RSQ_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseUnaryFloat64(Ctx, Di, Op);
   case CanonicalOp::V_DIV_SCALE_F32:
   case CanonicalOp::V_DIV_FMAS_F32:
   case CanonicalOp::V_DIV_FIXUP_F32:
@@ -634,8 +659,12 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_LDEXP_F32: {
     if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
       return Err;
-    return raiseLdexpFloat32(Ctx, Di, Op);
+    return raiseLdexpFloat(Ctx, Di, Op);
   }
+  case CanonicalOp::V_LDEXP_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseLdexpFloat(Ctx, Di, Op);
   case CanonicalOp::V_CNDMASK_B32:
     if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
       return Err;
