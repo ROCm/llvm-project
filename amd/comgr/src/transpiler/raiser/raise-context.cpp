@@ -37,6 +37,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/TargetParser/AMDGPUTargetParser.h"
 
 #include <cassert>
 #include <utility>
@@ -55,7 +56,8 @@ RaiseContext::create(IRBuilder<> &B, const WaveProjection &Projection,
                      std::optional<bool> SourceSramEcc) {
   // SRAM ECC is always enabled on gfx1250, independently of code-object
   // compatibility flags.
-  if (Projection.SourceSTI.getCPU() == "gfx1250") {
+  if (AMDGPU::getSubArchFromGPUName(Projection.SourceSTI.getCPU()) ==
+      Triple::AMDGPUSubArch1250) {
     if (SourceSramEcc == false)
       return RaiseFailure::general(
           RaiseFailureReason::BadInput,
