@@ -16,8 +16,8 @@
 // AMDGPU MsgPack notes exactly once, and reads and validates every kernel
 // descriptor up front. Queries then read from the parsed model without
 // re-parsing. Results are `llvm::Expected`; forwarded LLVM errors keep their
-// original ErrorInfo type, transpiler-detected malformed input uses `TranspilerError`
-// from `transpiler-error.h`.
+// original ErrorInfo type, transpiler-detected malformed input uses
+// `TranspilerError` from `transpiler-error.h`.
 //
 //===----------------------------------------------------------------------===//
 

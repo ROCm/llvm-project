@@ -11,16 +11,19 @@
 #include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
+#include "transpiler/raiser/handle-vop-cross-lane.h"
 #include "transpiler/raiser/handle-vop-shared.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/raise_failure.h"
 
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
@@ -33,22 +36,37 @@ using namespace llvm;
 namespace COMGR::transpiler {
 namespace {
 
-/// Read the VOP3 clamp operand. Opcodes whose encoding reserves the field have
-/// no named operand and are necessarily unclamped.
-Expected<bool> readClamp(RaiseContext &Ctx, const DecodedInst &Di) {
-  int Idx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                               AMDGPU::OpName::clamp);
-  if (Idx < 0)
-    return false;
-  if (!Di.isImm(Idx))
-    return unsupportedInstruction(Ctx, Di, "clamp operand is not immediate");
-  return Di.getImm(Idx) != 0;
+Value *isNaNBits(IRBuilder<> &B, Value *Float) {
+  Value *Bits = B.CreateBitCast(Float, B.getInt32Ty());
+  Value *Magnitude = B.CreateAnd(Bits, B.getInt32(0x7fffffff));
+  return B.CreateICmpUGT(Magnitude, B.getInt32(0x7f800000));
+}
+
+Value *quietSignalingNaN(IRBuilder<> &B, Value *Source, Value *Fallback) {
+  Value *Bits = B.CreateBitCast(Source, B.getInt32Ty());
+  Value *IsNaN = isNaNBits(B, Source);
+  Value *QuietBit = B.CreateAnd(Bits, B.getInt32(0x00400000));
+  Value *IsSignaling = B.CreateICmpEQ(QuietBit, B.getInt32(0));
+  Value *SelectSource = B.CreateAnd(IsNaN, IsSignaling);
+  Value *QuietedBits = B.CreateOr(Bits, B.getInt32(0x00400000));
+  Value *Quieted = B.CreateBitCast(QuietedBits, B.getFloatTy());
+  return B.CreateSelect(SelectSource, Quieted, Fallback);
+}
+
+// Older IEEE-mode extrema quiet a signaling NaN before the next operation.
+Value *numericExtremum(IRBuilder<> &B, Intrinsic::ID ID, Value *Src0,
+                       Value *Src1, bool LegacyIeee) {
+  Value *Result = B.CreateBinaryIntrinsic(ID, Src0, Src1);
+  if (!LegacyIeee)
+    return Result;
+  Result = quietSignalingNaN(B, Src1, Result);
+  return quietSignalingNaN(B, Src0, Result);
 }
 
 /// Reject nonzero output multipliers on integer VOP3 instructions.
 Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
   int Idx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                               AMDGPU::OpName::omod);
+                                                  AMDGPU::OpName::omod);
   if (Idx < 0)
     return Error::success();
   if (!Di.isImm(Idx))
@@ -56,6 +74,27 @@ Error requireNoOutputMultiplier(RaiseContext &Ctx, const DecodedInst &Di) {
   if (Di.getImm(Idx) != 0)
     return unsupportedInstruction(Ctx, Di,
                                   "integer output multiplier is not supported");
+  return Error::success();
+}
+
+/// Reject non-default floating-point output modifiers.
+Error requireDefaultFloatOutputModifiers(RaiseContext &Ctx,
+                                         const DecodedInst &Di) {
+  int OmodIndex = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                        AMDGPU::OpName::omod);
+  if (OmodIndex >= 0) {
+    if (!Di.isImm(OmodIndex))
+      return unsupportedInstruction(Ctx, Di, "omod operand is not immediate");
+    if (Di.getImm(OmodIndex) != 0)
+      return unsupportedInstruction(
+          Ctx, Di, "floating-point output multiplier is not supported");
+  }
+  Expected<bool> Clamp = readClamp(Ctx, Di);
+  if (!Clamp)
+    return Clamp.takeError();
+  if (*Clamp)
+    return unsupportedInstruction(
+        Ctx, Di, "floating-point output clamp is not supported");
   return Error::success();
 }
 
@@ -106,8 +145,8 @@ Error writeCarryOut(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Dst)
     return Dst.takeError();
 
-  Carry = Ctx.B.CreateAnd(Carry, Ctx.registers().emitLaneActiveBit(),
-                          "carry.active");
+  Carry = Ctx.B.CreateSelect(Ctx.registers().emitLaneActiveBit(), Carry,
+                             Ctx.B.getFalse(), "carry.active");
   switch (Dst->RegKind) {
   case ParsedReg::SGPR: {
     Type *MaskTy = Ctx.Projection.sourceWaveMaskTy();
@@ -306,10 +345,339 @@ Error handleTernaryMinMax(RaiseContext &Ctx, OperandResolver &Op,
   return Error::success();
 }
 
+/// Raise an F32 or F64 ldexp with a floating-point significand and integer
+/// exponent.
+Error raiseLdexpFloat(RaiseContext &Ctx, const DecodedInst &Di,
+                      OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 2)
+    return unsupportedInstruction(Ctx, Di,
+                                  "expected one destination and two sources");
+  bool Is64 = Di.CanonOp == CanonicalOp::V_LDEXP_F64;
+  Type *Ty = Is64 ? Ctx.B.getDoubleTy() : Ctx.B.getFloatTy();
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ty))
+    return Err;
+  if (Op.srcMod(1) != 0)
+    return unsupportedInstruction(
+        Ctx, Di, "integer exponent modifiers are not supported");
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Significand = Is64 ? Op.srcF64(0) : Op.srcF32(0);
+  if (!Significand)
+    return Significand.takeError();
+  Expected<Value *> Exponent = Op.src(1);
+  if (!Exponent)
+    return Exponent.takeError();
+  Value *Result =
+      Ctx.B.CreateIntrinsic(Intrinsic::ldexp, {Ty, Ctx.B.getInt32Ty()},
+                            {*Significand, *Exponent}, nullptr, "ldexp");
+  Type *BitsTy = Is64 ? Ctx.B.getInt64Ty() : Ctx.B.getInt32Ty();
+  Value *ResultBits = Ctx.B.CreateBitCast(Result, BitsTy);
+  if (Is64)
+    Ctx.registers().writeReg64(*Dst, ResultBits);
+  else
+    Ctx.registers().writeReg32(*Dst, ResultBits);
+  return Error::success();
+}
+
+Error raiseFloatTernary32(RaiseContext &Ctx, const DecodedInst &Di,
+                          OperandResolver &Op) {
+  if (Di.NumDefs < 1 || Op.nSrcs() < 3)
+    return unsupportedInstruction(Ctx, Di, "expected three float sources");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+    return Err;
+  if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+    return Err;
+
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+
+  if (Di.CanonOp == CanonicalOp::V_DIV_SCALE_F32) {
+    if (Di.NumDefs != 2 || !Di.isReg(1))
+      return unsupportedInstruction(Ctx, Di,
+                                    "expected a scale flag destination");
+    Expected<ParsedReg> FlagDst = Op.dst(1);
+    if (!FlagDst)
+      return FlagDst.takeError();
+    if (FlagDst->RegKind != ParsedReg::SGPR &&
+        FlagDst->RegKind != ParsedReg::VCC &&
+        FlagDst->RegKind != ParsedReg::NOREG)
+      return unsupportedInstruction(Ctx, Di, "invalid scale flag destination");
+
+    auto SameOperand = [&](unsigned A, unsigned B) {
+      unsigned AI = Op.srcIdx(A), BI = Op.srcIdx(B);
+      return (Di.isReg(AI) && Di.isReg(BI) && Di.getReg(AI) == Di.getReg(BI)) ||
+             (Di.isImm(AI) && Di.isImm(BI) && Di.getImm(AI) == Di.getImm(BI));
+    };
+    bool NumeratorScale = SameOperand(0, 2);
+    bool DenominatorScale = SameOperand(0, 1);
+    if (!NumeratorScale && !DenominatorScale)
+      return unsupportedInstruction(Ctx, Di,
+                                    "unrecognized divide scale operand shape");
+    if (NumeratorScale && DenominatorScale) {
+      if (Op.srcMod(0) != Op.srcMod(1) || Op.srcMod(0) != Op.srcMod(2))
+        return unsupportedInstruction(
+            Ctx, Di, "asymmetric divide scale source modifiers");
+      NumeratorScale = false;
+    }
+    if (Op.srcMod(0) != Op.srcMod(NumeratorScale ? 2 : 1))
+      return unsupportedInstruction(Ctx, Di,
+                                    "asymmetric divide scale source modifiers");
+
+    Expected<Value *> Numer = Op.srcF32(NumeratorScale ? 0 : 2);
+    if (!Numer)
+      return Numer.takeError();
+    Expected<Value *> Denom = Op.srcF32(1);
+    if (!Denom)
+      return Denom.takeError();
+    Value *Pair = Ctx.B.CreateIntrinsic(
+        Intrinsic::amdgcn_div_scale, {Ctx.B.getFloatTy()},
+        {*Numer, *Denom, Ctx.B.getInt1(NumeratorScale)}, nullptr, "div.scale");
+    Value *Result = Ctx.B.CreateExtractValue(Pair, 0);
+    Value *Flag = Ctx.B.CreateExtractValue(Pair, 1);
+    Ctx.registers().writeReg32(*Dst,
+                               Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
+    Flag = Ctx.B.CreateAnd(Flag, Ctx.registers().emitLaneActiveBit());
+    if (FlagDst->RegKind == ParsedReg::SGPR) {
+      Value *Mask = Ctx.Projection.ballotI1ToWidth(
+          Ctx.B, Flag, Ctx.Projection.sourceWaveMaskTy(), "div.scale.mask");
+      Ctx.registers().writeRegExecWidth(*FlagDst, Mask);
+      Ctx.registers().recordWaveMaskI1(*FlagDst, Flag);
+    } else if (FlagDst->RegKind == ParsedReg::VCC) {
+      Ctx.registers().regFile().storeVCC(Ctx.B, Flag);
+    }
+    return Error::success();
+  }
+
+  Expected<Value *> Src0 = Op.srcF32(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = Op.srcF32(1);
+  if (!Src1)
+    return Src1.takeError();
+  Expected<Value *> Src2 = Op.srcF32(2);
+  if (!Src2)
+    return Src2.takeError();
+  bool LegacyIeee = Ctx.Projection.SourceSTI.hasFeature(
+                        AMDGPU::FeatureDX10ClampAndIEEEMode) &&
+                    Ctx.sourceIeeeMode();
+
+  Value *Result;
+  switch (Di.CanonOp) {
+  case CanonicalOp::V_DIV_FMAS_F32:
+    Result = Ctx.B.CreateIntrinsic(
+        Intrinsic::amdgcn_div_fmas, {Ctx.B.getFloatTy()},
+        {*Src0, *Src1, *Src2, Ctx.registers().regFile().loadVCC(Ctx.B)},
+        nullptr, "div.fmas");
+    break;
+  case CanonicalOp::V_DIV_FIXUP_F32:
+    Result =
+        Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_div_fixup, {Ctx.B.getFloatTy()},
+                              {*Src0, *Src1, *Src2}, nullptr, "div.fixup");
+    break;
+  case CanonicalOp::V_MAX3_NUM_F32:
+  case CanonicalOp::V_MIN3_NUM_F32: {
+    Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_MAX3_NUM_F32
+                           ? Intrinsic::maximumnum
+                           : Intrinsic::minimumnum;
+    Value *First = numericExtremum(Ctx.B, ID, *Src0, *Src1, LegacyIeee);
+    Result = numericExtremum(Ctx.B, ID, First, *Src2, LegacyIeee);
+    break;
+  }
+  case CanonicalOp::V_MED3_NUM_F32: {
+    Result = Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_fmed3,
+                                   {Ctx.B.getFloatTy()}, {*Src0, *Src1, *Src2});
+    Value *FirstMin =
+        numericExtremum(Ctx.B, Intrinsic::minimumnum, *Src0, *Src1, LegacyIeee);
+    Value *NaNMin = numericExtremum(Ctx.B, Intrinsic::minimumnum, FirstMin,
+                                    *Src2, LegacyIeee);
+    Value *NaN0 = isNaNBits(Ctx.B, *Src0);
+    Value *NaN1 = isNaNBits(Ctx.B, *Src1);
+    Value *NaN2 = isNaNBits(Ctx.B, *Src2);
+    Value *AnyNaN = Ctx.B.CreateOr(NaN0, NaN1);
+    AnyNaN = Ctx.B.CreateOr(AnyNaN, NaN2);
+    Result = Ctx.B.CreateSelect(AnyNaN, NaNMin, Result);
+    break;
+  }
+  case CanonicalOp::V_MAXIMUM3_F32:
+  case CanonicalOp::V_MINIMUM3_F32: {
+    Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_MAXIMUM3_F32
+                           ? Intrinsic::maximum
+                           : Intrinsic::minimum;
+    Value *First = Ctx.B.CreateBinaryIntrinsic(ID, *Src0, *Src1);
+    Result = Ctx.B.CreateBinaryIntrinsic(ID, First, *Src2);
+    break;
+  }
+  case CanonicalOp::V_MAXMIN_NUM_F32:
+  case CanonicalOp::V_MINMAX_NUM_F32:
+  case CanonicalOp::V_MAXIMUMMINIMUM_F32:
+  case CanonicalOp::V_MINIMUMMAXIMUM_F32: {
+    bool Numeric = Di.CanonOp == CanonicalOp::V_MAXMIN_NUM_F32 ||
+                   Di.CanonOp == CanonicalOp::V_MINMAX_NUM_F32;
+    bool MaxFirst = Di.CanonOp == CanonicalOp::V_MAXMIN_NUM_F32 ||
+                    Di.CanonOp == CanonicalOp::V_MAXIMUMMINIMUM_F32;
+    Intrinsic::ID MaxID = Numeric ? Intrinsic::maximumnum : Intrinsic::maximum;
+    Intrinsic::ID MinID = Numeric ? Intrinsic::minimumnum : Intrinsic::minimum;
+    Value *First =
+        Ctx.B.CreateBinaryIntrinsic(MaxFirst ? MaxID : MinID, *Src0, *Src1);
+    Result =
+        Ctx.B.CreateBinaryIntrinsic(MaxFirst ? MinID : MaxID, First, *Src2);
+    break;
+  }
+  default:
+    llvm_unreachable("not a ternary F32 operation");
+  }
+  Ctx.registers().writeReg32(*Dst,
+                             Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
+  return Error::success();
+}
+
+Error raiseFloatBinary32(RaiseContext &Ctx, const DecodedInst &Di,
+                         OperandResolver &Op) {
+  if (Di.NumDefs != 1 || Op.nSrcs() != 2)
+    return unsupportedInstruction(Ctx, Di, "expected two float sources");
+  if (Error Err = Ctx.validateFPEnvironment(Di, Ctx.B.getFloatTy()))
+    return Err;
+  if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+    return Err;
+  Expected<ParsedReg> Dst = Op.dst();
+  if (!Dst)
+    return Dst.takeError();
+  Expected<Value *> Src0 = Op.srcF32(0);
+  if (!Src0)
+    return Src0.takeError();
+  Expected<Value *> Src1 = Op.srcF32(1);
+  if (!Src1)
+    return Src1.takeError();
+  Intrinsic::ID ID = Di.CanonOp == CanonicalOp::V_MAXIMUM_F32
+                         ? Intrinsic::maximum
+                         : Intrinsic::minimum;
+  Value *Result = Ctx.B.CreateBinaryIntrinsic(ID, *Src0, *Src1);
+  Ctx.registers().writeReg32(*Dst,
+                             Ctx.B.CreateBitCast(Result, Ctx.B.getInt32Ty()));
+  return Error::success();
+}
+
 } // namespace
 
 Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
+  if (std::optional<VectorCompareInfo> Info = getVectorCompareInfo(Di.CanonOp))
+    return raiseVectorCompare(Ctx, Di, Op, *Info);
+
+  switch (Di.CanonOp) {
+  case CanonicalOp::V_NOP:
+    return Error::success();
+  case CanonicalOp::V_FMAC_F32:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatMac(Ctx, Di, Op);
+  case CanonicalOp::V_FMAC_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatMac(Ctx, Di, Op);
+  case CanonicalOp::V_MAXIMUM_F32:
+  case CanonicalOp::V_MINIMUM_F32:
+    return raiseFloatBinary32(Ctx, Di, Op);
+  case CanonicalOp::V_CVT_F32_F64:
+  case CanonicalOp::V_CVT_F64_F32:
+  case CanonicalOp::V_CVT_F64_I32:
+  case CanonicalOp::V_CVT_F64_U32:
+  case CanonicalOp::V_CVT_I32_F64:
+  case CanonicalOp::V_CVT_U32_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatConversion64(Ctx, Di, Op);
+  case CanonicalOp::V_TRUNC_F64:
+  case CanonicalOp::V_CEIL_F64:
+  case CanonicalOp::V_RNDNE_F64:
+  case CanonicalOp::V_FLOOR_F64:
+  case CanonicalOp::V_RCP_F64:
+  case CanonicalOp::V_RSQ_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseUnaryFloat64(Ctx, Di, Op);
+  case CanonicalOp::V_DIV_SCALE_F32:
+  case CanonicalOp::V_DIV_FMAS_F32:
+  case CanonicalOp::V_DIV_FIXUP_F32:
+  case CanonicalOp::V_MAX3_NUM_F32:
+  case CanonicalOp::V_MIN3_NUM_F32:
+  case CanonicalOp::V_MED3_NUM_F32:
+  case CanonicalOp::V_MAXIMUM3_F32:
+  case CanonicalOp::V_MINIMUM3_F32:
+  case CanonicalOp::V_MAXMIN_NUM_F32:
+  case CanonicalOp::V_MINMAX_NUM_F32:
+  case CanonicalOp::V_MAXIMUMMINIMUM_F32:
+  case CanonicalOp::V_MINIMUMMAXIMUM_F32:
+    return raiseFloatTernary32(Ctx, Di, Op);
+  case CanonicalOp::V_CVT_F32_I32:
+  case CanonicalOp::V_CVT_F32_U32:
+  case CanonicalOp::V_CVT_F32_UBYTE0:
+  case CanonicalOp::V_CVT_F32_UBYTE1:
+  case CanonicalOp::V_CVT_F32_UBYTE2:
+  case CanonicalOp::V_CVT_F32_UBYTE3: {
+    if (Error Err = requireNoIntegerSourceModifiers(Ctx, Di, Op))
+      return Err;
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatConversion32(Ctx, Di, Op);
+  }
+  case CanonicalOp::V_CVT_I32_F32:
+  case CanonicalOp::V_CVT_U32_F32:
+  case CanonicalOp::V_CVT_F16_F32:
+  case CanonicalOp::V_CVT_F32_F16: {
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseFloatConversion32(Ctx, Di, Op);
+  }
+  case CanonicalOp::V_FRACT_F32:
+  case CanonicalOp::V_TRUNC_F32:
+  case CanonicalOp::V_CEIL_F32:
+  case CanonicalOp::V_RNDNE_F32:
+  case CanonicalOp::V_FLOOR_F32:
+  case CanonicalOp::V_EXP_F32:
+  case CanonicalOp::V_LOG_F32:
+  case CanonicalOp::V_RCP_F32:
+  case CanonicalOp::V_RCP_IFLAG_F32:
+  case CanonicalOp::V_TANH_F32:
+  case CanonicalOp::V_S_EXP_F32:
+  case CanonicalOp::V_S_LOG_F32:
+  case CanonicalOp::V_S_RCP_F32:
+  case CanonicalOp::V_S_RSQ_F32:
+  case CanonicalOp::V_S_SQRT_F32:
+  case CanonicalOp::V_RSQ_F32:
+  case CanonicalOp::V_SQRT_F32:
+  case CanonicalOp::V_SIN_F32:
+  case CanonicalOp::V_COS_F32:
+  case CanonicalOp::V_FREXP_EXP_I32_F32:
+  case CanonicalOp::V_FREXP_MANT_F32: {
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseUnaryFloat32(Ctx, Di, Op);
+  }
+  case CanonicalOp::V_LDEXP_F32: {
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseLdexpFloat(Ctx, Di, Op);
+  }
+  case CanonicalOp::V_LDEXP_F64:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseLdexpFloat(Ctx, Di, Op);
+  case CanonicalOp::V_CNDMASK_B32:
+    if (Error Err = requireDefaultFloatOutputModifiers(Ctx, Di))
+      return Err;
+    return raiseCndMask32(Ctx, Di, Op);
+  default:
+    break;
+  }
+
+  // The 16-bit integer opcodes carry their register-half selection in the
+  // source modifiers, so they are raised ahead of the checks that reject them.
+  if (isInteger16Op(Di.CanonOp))
+    return handleInteger16(Ctx, Di, Op);
+
   if (Error Err = requireNoIntegerSourceModifiers(Ctx, Di, Op))
     return Err;
   if (Error Err = requireNoOutputMultiplier(Ctx, Di))
@@ -380,6 +748,10 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
       return unsupportedInstruction(
           Ctx, Di, "integer bit operation does not define clamp");
     return raiseBitCount(Ctx, Op);
+  case CanonicalOp::V_MBCNT_LO_U32_B32:
+    return raiseMaskedBitCountLow32(Ctx, Di, Op);
+  case CanonicalOp::V_MBCNT_HI_U32_B32:
+    return raiseMaskedBitCountHigh32(Ctx, Di, Op);
   case CanonicalOp::V_LSHLREV_B32:
     if (*Clamp)
       return unsupportedInstruction(
@@ -528,30 +900,8 @@ Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
     if (!Args)
       return Args.takeError();
 
-    Value *Not0 = Ctx.B.CreateNot(Args->Src0);
-    Value *Not1 = Ctx.B.CreateNot(Args->Src1);
-    Value *Not2 = Ctx.B.CreateNot(Args->Src2);
-    constexpr unsigned TruthTableSize = 8;
-    constexpr uint64_t TruthTableMask = UINT64_C(0xff);
-    Value *Minterms[TruthTableSize];
-    Value *First = Ctx.B.CreateAnd(Not0, Not1);
-    Minterms[0] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[1] = Ctx.B.CreateAnd(First, Args->Src2);
-    First = Ctx.B.CreateAnd(Not0, Args->Src1);
-    Minterms[2] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[3] = Ctx.B.CreateAnd(First, Args->Src2);
-    First = Ctx.B.CreateAnd(Args->Src0, Not1);
-    Minterms[4] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[5] = Ctx.B.CreateAnd(First, Args->Src2);
-    First = Ctx.B.CreateAnd(Args->Src0, Args->Src1);
-    Minterms[6] = Ctx.B.CreateAnd(First, Not2);
-    Minterms[7] = Ctx.B.CreateAnd(First, Args->Src2);
-    uint64_t TruthTable = static_cast<uint64_t>(Op.srcImm(3)) & TruthTableMask;
-    Value *Result = Ctx.B.getInt32(0);
-    for (unsigned I = 0; I != TruthTableSize; ++I) {
-      if (TruthTable & (UINT64_C(1) << I))
-        Result = Ctx.B.CreateOr(Result, Minterms[I], "bitop3");
-    }
+    Value *Result = emitBitOp3(Ctx.B, Args->Src0, Args->Src1, Args->Src2,
+                               static_cast<uint8_t>(Op.srcImm(3)));
     Ctx.registers().writeReg32(Args->Dst, Result);
     return Error::success();
   }

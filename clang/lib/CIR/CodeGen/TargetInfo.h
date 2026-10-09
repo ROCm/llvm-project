@@ -80,6 +80,11 @@ public:
                                           cir::LangAddressSpace::Default);
   }
 
+  /// Get the CIR value of a null pointer of type \p ptrTy, where \p qt is the
+  /// source pointer type.
+  virtual mlir::Value getNullPointer(CIRGenModule &cgm, cir::PointerType ptrTy,
+                                     QualType qt, mlir::Location loc) const;
+
   virtual mlir::Type getCUDADeviceBuiltinSurfaceDeviceType() const {
     return nullptr;
   }
@@ -184,10 +189,6 @@ public:
 
 std::unique_ptr<TargetCIRGenInfo>
 createAMDGPUTargetCIRGenInfo(CIRGenTypes &cgt);
-
-/// Check if AMDGPU protected visibility is required.
-bool requiresAMDGPUProtectedVisibility(const clang::Decl *d,
-                                       cir::VisibilityKind visibility);
 
 /// Set AMDGPU-specific function attributes for HIP kernels.
 void setAMDGPUTargetFunctionAttributes(const clang::Decl *decl,

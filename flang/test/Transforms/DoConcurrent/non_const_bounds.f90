@@ -22,7 +22,7 @@ program main
 
 end program main
 
-! CHECK: %[[N_DECL:.*]]:2 = hlfir.declare %{{.*}} dummy_scope %{{.*}} {uniq_name = "_QFFfooEn"}
+! CHECK: %[[N_DECL:.*]]:2 = hlfir.declare %{{.*}} dummy_scope %{{.*}} uniq_name("_QFFfooEn")
 
 ! CHECK: fir.load
 

@@ -1883,8 +1883,9 @@ namespace {
         IndexValues[i] = llvm::ConstantInt::get(CGM.Int32Ty, Indices[i]);
       }
 
-      llvm::Constant *location = llvm::ConstantExpr::getInBoundsGetElementPtr(
-          BaseValueTy, Base, IndexValues);
+      llvm::Constant *location = llvm::ConstantExpr::getGetElementPtr(
+          CGM.getDataLayout(), BaseValueTy, Base, IndexValues,
+          llvm::GEPNoWrapFlags::inBounds());
 
       Locations.insert({placeholder, location});
     }
@@ -2082,6 +2083,26 @@ llvm::Constant *ConstantEmitter::emitForMemory(CodeGenModule &CGM,
       }
       return Res;
     }
+  }
+
+  if (destType->isConstantMatrixType() &&
+      isMatrixRowMajor(CGM.getLangOpts(), destType)) {
+    const auto *MT = destType->castAs<ConstantMatrixType>();
+    SmallVector<llvm::Constant *, 16> Inits(MT->getNumElementsFlattened());
+    for (unsigned Row = 0; Row != MT->getNumRows(); ++Row)
+      for (unsigned Col = 0; Col != MT->getNumColumns(); ++Col)
+        Inits[MT->getRowMajorFlattenedIndex(Row, Col)] =
+            C->getAggregateElement(MT->getColumnMajorFlattenedIndex(Row, Col));
+    llvm::Constant *MemoryValue = llvm::ConstantVector::get(Inits);
+    if (destType->isConstantMatrixBoolType()) {
+      llvm::Constant *Res = llvm::ConstantFoldCastOperand(
+          llvm::Instruction::ZExt, MemoryValue,
+          CGM.getTypes().convertTypeForLoadStore(destType),
+          CGM.getDataLayout());
+      assert(Res && "Constant folding must succeed");
+      return Res;
+    }
+    return MemoryValue;
   }
 
   return C;
@@ -2664,12 +2685,10 @@ ConstantEmitter::tryEmitPrivate(const APValue &Value, QualType DestType,
     unsigned NumElts = NumRows * NumCols;
     SmallVector<llvm::Constant *, 16> Inits(NumElts);
 
-    bool IsRowMajor = isMatrixRowMajor(CGM.getLangOpts(), DestType);
-
     for (unsigned Row = 0; Row != NumRows; ++Row) {
       for (unsigned Col = 0; Col != NumCols; ++Col) {
         const APValue &Elt = Value.getMatrixElt(Row, Col);
-        unsigned Idx = MT->getFlattenedIndex(Row, Col, IsRowMajor);
+        unsigned Idx = MT->getColumnMajorFlattenedIndex(Row, Col);
         if (Elt.isInt())
           Inits[Idx] =
               llvm::ConstantInt::get(CGM.getLLVMContext(), Elt.getInt());
@@ -2752,6 +2771,8 @@ ConstantEmitter::tryEmitPrivate(const APValue &Value, QualType DestType,
   }
   case APValue::MemberPointer:
     return CGM.getCXXABI().EmitMemberPointer(Value, DestType);
+  case APValue::Reflection:
+    llvm_unreachable("std::meta::info is consteval-only type");
   }
   llvm_unreachable("Unknown APValue kind");
 }

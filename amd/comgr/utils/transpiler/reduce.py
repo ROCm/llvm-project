@@ -1618,7 +1618,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         final, reduction_log = run_from_arguments(args)
     except KeyboardInterrupt:
-        print("transpiler-reduce: interrupted; no output was published", file=sys.stderr)
+        print(
+            "transpiler-reduce: interrupted; no output was published", file=sys.stderr
+        )
         return 130
     except ReducerError as error:
         print(f"transpiler-reduce: error: {error}", file=sys.stderr)

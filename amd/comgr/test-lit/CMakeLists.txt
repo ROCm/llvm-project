@@ -61,6 +61,7 @@ add_comgr_lit_binary(unbundle c)
 add_comgr_lit_binary(unpackage c)
 add_comgr_lit_binary(get-version c)
 add_comgr_lit_binary(status-string c)
+add_comgr_lit_binary(hotswap-stubs c)
 add_comgr_lit_binary(data-action c)
 add_comgr_lit_binary(lookup-code-object c)
 add_comgr_lit_binary(parse-isa-name c)
@@ -78,6 +79,11 @@ add_comgr_lit_binary(test-get-data-isa-name c)
 # drops them (they were built with function/data sections). MSVC's default
 # /OPT:REF removes them the same way.
 if(COMGR_ENABLE_TRANSPILER)
+  foreach(tool llc opt)
+    if(TARGET ${tool})
+      add_dependencies(test-lit ${tool})
+    endif()
+  endforeach()
   add_executable(transpile_cli comgr-sources/transpile_cli.cpp)
   # Match the C++ standard the rest of comgr compiles with. The comgr build
   # sets it per target rather than globally, and MSVC otherwise defaults below
@@ -103,13 +109,17 @@ if(COMGR_ENABLE_TRANSPILER)
     ${LLVM_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
     ${CMAKE_CURRENT_BINARY_DIR}/../include)
-  # The transpiler OBJECT libraries contribute objects only, so name the LLVM set
-  # this driver needs explicitly; ${LLVM_LIBS} is the same curated set amd_comgr
-  # links, already resolved to the dylib or the static components. It carries
-  # the AMDGPU components the driver's LLVMInitializeAMDGPU* calls register.
+  # The OBJECT libraries contribute objects only. Apply Comgr's static-link
+  # isolation to the driver too: static component targets can still carry an
+  # LLVM dylib dependency in their interfaces.
   target_link_libraries(transpile_cli
     PRIVATE transpiler::common transpiler::loader transpiler::decoder transpiler::raiser
-            comgr-object-utils comgr-test-llvm-init ${LLVM_LIBS})
+            comgr-object-utils comgr-test-llvm-init)
+  if(COMGR_STATIC_LLVM)
+    comgr_static_link_libraries(transpile_cli ${LLVM_LIBS})
+  else()
+    target_link_libraries(transpile_cli PRIVATE ${LLVM_LIBS})
+  endif()
   if(NOT WIN32)
     target_link_options(transpile_cli PRIVATE -Wl,--gc-sections)
   endif()

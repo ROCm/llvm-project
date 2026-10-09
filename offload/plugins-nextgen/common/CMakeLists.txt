@@ -11,6 +11,7 @@ add_public_tablegen_target(PluginErrcodes)
 # don't want to export `PluginInterface` while `add_llvm_library` requires that.
 add_library(PluginCommon OBJECT
   src/PluginInterface.cpp
+  src/GenericProfiler.cpp
   src/GlobalHandler.cpp
   src/JIT.cpp
   src/RecordReplay.cpp
@@ -23,15 +24,15 @@ add_dependencies(PluginCommon intrinsics_gen PluginErrcodes OffloadAPI)
 
 # Only enable JIT for those targets that LLVM can support.
 set(supported_jit_targets AMDGPU NVPTX SPIRV)
-if (NOT LLVM_LINK_LLVM_DYLIB)
-  foreach(target IN LISTS supported_jit_targets)
-    if("${target}" IN_LIST LLVM_TARGETS_TO_BUILD)
-      target_compile_definitions(PluginCommon PRIVATE "LIBOMPTARGET_JIT_${target}")
+foreach(target IN LISTS supported_jit_targets)
+  if("${target}" IN_LIST LLVM_TARGETS_TO_BUILD)
+    target_compile_definitions(PluginCommon PRIVATE "LIBOMPTARGET_JIT_${target}")
+    if (NOT LLVM_LINK_LLVM_DYLIB)
       llvm_map_components_to_libnames(llvm_libs ${target})
       target_link_libraries(PluginCommon PRIVATE ${llvm_libs})
     endif()
-  endforeach()
-endif()
+  endif()
+endforeach()
 
 # Include the RPC server from the `libc` project.
 include(FindLibcCommonUtils)
@@ -65,11 +66,6 @@ target_compile_definitions(PluginCommon PRIVATE
 
 target_compile_options(PluginCommon PUBLIC ${offload_compile_flags})
 target_link_options(PluginCommon PUBLIC ${offload_link_flags})
-if (LLVM_LINK_LLVM_DYLIB)
-  target_link_libraries(PluginCommon PRIVATE LLVM)
-else()
-  target_link_libraries(PluginCommon PRIVATE LLVMProfileData)
-endif()
 
 target_include_directories(PluginCommon PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include

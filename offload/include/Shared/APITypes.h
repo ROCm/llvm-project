@@ -98,7 +98,10 @@ struct __tgt_async_info {
 
   /// Use for sync interface. When false => synchronous execution
   bool ExecAsync = true;
-  /// Maintain the actal data for OMPT.
+
+  /// Opaque handle for profiler-specific data (e.g., OMPT trace record info).
+  /// Owned by the profiler; the runtime threads this pointer through the plugin
+  /// layer to associate async operations with trace records.
   void *ProfilerData = nullptr;
 };
 

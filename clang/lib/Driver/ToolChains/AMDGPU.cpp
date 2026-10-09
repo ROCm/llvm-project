@@ -667,11 +667,8 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   getToolChain().addProfileRTLibs(Args, CmdArgs);
-
-  // Divergent because asanrtl.bc does not use the standard compiler-rt
-  // semantics. Skip this if `-fsanitize=address` is set.
-  const SanitizerArgs &SanArgs = getToolChain().getSanitizerArgs(Args);
-  if (!SanArgs.needsAsanRt())
+  // FIXME: Device ASan is provided by the ROCm device library, not compiler-rt.
+  if (!getToolChain().getSanitizerArgs(Args).needsAsanRt())
     addSanitizerRuntimes(getToolChain(), Args, CmdArgs, C);
 
   if (Args.hasArg(options::OPT_stdlib))
@@ -1074,15 +1071,8 @@ AMDGPUToolChain::getGPUArch(const llvm::opt::ArgList &DriverArgs) const {
 AMDGPUToolChain::ParsedTargetIDType
 AMDGPUToolChain::getParsedTargetID(const llvm::opt::ArgList &DriverArgs) const {
   StringRef TargetID = DriverArgs.getLastArgValue(options::OPT_mcpu_EQ);
-  // For offload toolchains (HIP, OpenMP, etc.), `getAuxTriple()` is the host;
-  // `-march=` there refers to the host CPU (e.g. haswell) and must not be
-  // parsed as an AMDGPU Target ID. Only standalone AMDGPU uses `-march=` as
-  // a legacy spelling for the GPU `-mcpu=` (see TranslateArgs when OFK_None).
-  if (TargetID.empty() && !getAuxTriple())
-    TargetID = DriverArgs.getLastArgValue(options::OPT_march_EQ);
-
   if (TargetID.empty())
-    return {std::nullopt, std::nullopt, std::nullopt};
+    return {};
 
   llvm::StringMap<bool> FeatureMap;
   auto OptionalGpuArch = parseTargetID(getTriple(), TargetID, &FeatureMap);
@@ -1203,13 +1193,6 @@ RocmInstallationDetector::getCommonBitcodeLibs(
     AddBCLib(ABIVerPath);
 
   return BCLibs;
-}
-
-bool AMDGPUToolChain::shouldSkipArgument(const llvm::opt::Arg *A) const {
-  Option O = A->getOption();
-  if (O.matches(options::OPT_fPIE) || O.matches(options::OPT_fpie))
-    return true;
-  return false;
 }
 
 llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>

@@ -808,7 +808,6 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
     return getClang();
 
   case Action::OffloadBundlingJobClass:
-  case Action::OffloadUnbundlingJobClass:
     return getOffloadBundler();
 
   case Action::OffloadPackagerJobClass:
@@ -1465,7 +1464,7 @@ ObjCRuntime ToolChain::getDefaultObjCRuntime(bool isNonFragile) const {
 
 llvm::ExceptionHandling
 ToolChain::GetExceptionModel(const llvm::opt::ArgList &Args) const {
-  return llvm::ExceptionHandling::None;
+  return llvm::ExceptionHandling::Default;
 }
 
 bool ToolChain::isThreadModelSupported(const StringRef Model) const {
@@ -1530,6 +1529,7 @@ std::string ToolChain::ComputeLLVMTriple(const ArgList &Args, BoundArch BA,
     llvm::Triple Triple = getTriple();
     tools::arm::setArchNameInTriple(getDriver(), Args, InputType, Triple);
     tools::arm::setFloatABIInTriple(getDriver(), Args, Triple);
+    tools::arm::setEABIInTriple(getDriver(), Args, Triple);
     return Triple.getTriple();
   }
   }
@@ -1547,10 +1547,6 @@ void ToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
                                           ArgStringList &CC1Args) const {
   // Each toolchain should provide the appropriate include flags.
 }
-
-void ToolChain::addActionsFromClangTargetOptions(
-    const ArgList &DriverArgs, ArgStringList &CC1Args, const JobAction &JA,
-    Compilation &C, const InputInfoList &Inputs) const {}
 
 void ToolChain::addClangTargetOptions(
     const ArgList &DriverArgs, ArgStringList &CC1Args, BoundArch BA,

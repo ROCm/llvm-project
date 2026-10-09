@@ -21,10 +21,12 @@
 
 #include <array>
 #include <cassert>
+#include <cstdint>
 
 namespace COMGR::transpiler {
 
 struct MCState;
+struct KernelLaunchRequirements;
 
 } // namespace COMGR::transpiler
 
@@ -33,6 +35,15 @@ class MCSubtargetInfo;
 } // namespace llvm
 
 namespace COMGR::transpiler {
+
+// Workgroup-size fields in the HSA kernel dispatch packet. The following
+// reserved i16 is included in scalar loads of the three packed sizes.
+inline constexpr unsigned DispatchWorkgroupSizeXOffset = 4;
+inline constexpr unsigned DispatchWorkgroupSizeFieldBytes = sizeof(uint16_t);
+inline constexpr unsigned DispatchWorkgroupSizesEndOffset = 12;
+
+/// Return the wavefront width selected by Subtarget.
+unsigned getWaveSize(const llvm::MCSubtargetInfo &Subtarget);
 
 // ============================================================================
 // WaveProjection -- the cross-wave translation policy surface.
@@ -43,6 +54,15 @@ namespace COMGR::transpiler {
 // constructs it.
 class WaveProjection {
 public:
+  /// Checks required by the projection, independent of hardware EXEC.
+  enum class ValidationKind { None, WaveNative };
+
+  virtual ValidationKind validationKind() const { return ValidationKind::None; }
+  /// Whether different source waves may take different scalar branches.
+  bool allowsDivergentScalarControlFlow() const {
+    return AllowsDivergentScalarControlFlow;
+  }
+
   WaveProjection(const llvm::MCSubtargetInfo &Source,
                  const llvm::MCSubtargetInfo &Target, llvm::Type *I32Ty,
                  llvm::Type *I64Ty);
@@ -99,6 +119,13 @@ public:
   // splits or re-maps source waves overrides it.
   virtual llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const;
 
+  /// Return the logical workgroup extent along one dimension.
+  virtual llvm::Value *emitWorkgroupSize(llvm::IRBuilder<> &B,
+                                         unsigned Dim) const;
+
+  /// Return the source-visible workitem coordinate along one dimension.
+  virtual llvm::Value *emitWorkitemId(llvm::IRBuilder<> &B, unsigned Dim) const;
+
   // Emit the source wave's linear ID within its workgroup.
   virtual llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const = 0;
 
@@ -138,11 +165,11 @@ public:
   emitCurrentSourceWaveMask(llvm::IRBuilder<> &B, llvm::Value *Mask,
                             const llvm::Twine &Name = "source_wave_mask") const;
 
-  // True iff this projection guarantees hardware EXEC = -1 between
-  // `emitUnderExec` diamonds kernel-wide, so cross-lane collectives can run
-  // without additional EXEC scaffolding.
-  bool providesFullWaveExecInvariant() const {
-    return ProvidesFullWaveExecInvariant;
+  // True when all lanes of each participating source wave execute between
+  // `emitUnderExec` diamonds. Source-wave collectives then need no additional
+  // EXEC scaffolding, even when another source wave takes a different branch.
+  bool providesSourceWaveExecInvariant() const {
+    return ProvidesSourceWaveExecInvariant;
   }
 
   // True iff handlers should lower source-ISA lane-indexed primitives
@@ -158,23 +185,12 @@ public:
   // source-wave mapping.
   bool preservesMbcntDerivedExec() const { return PreservesMbcntDerivedExec; }
 
-  // True iff this projection expects the runtime to launch the block with a
-  // `W_t / W_s`-scaled extent along `doubledDispatchDim()`, so each target wave
-  // hosts one source wave in its low `W_s` lanes with the rest as replicas.
-  // Equivalent to a scale factor above 1.
-  bool usesDoubledDispatch() const { return DoubledDispatchFactor > 1; }
+  // True iff each logical source workitem is replicated in the physical
+  // dispatch.
+  bool usesReplicatedDispatch() const { return ReplicationFactor > 1; }
 
-  // The block dimension (0=x, 1=y, 2=z) the runtime doubles when
-  // `usesDoubledDispatch()` is true. Always the fastest wave-carrying
-  // dimension (x) for the wave32->wave64 case; the higher dims that carry the
-  // divergent predicate become wave-uniform once x is doubled. Meaningless
-  // unless `usesDoubledDispatch()`.
-  unsigned doubledDispatchDim() const { return DoubledDispatchDim; }
-
-  // The integer factor by which the dispatch is scaled along
-  // `doubledDispatchDim()` (`W_t / W_s`, i.e. 2 for wave32->wave64).
-  // Meaningless unless `usesDoubledDispatch()`.
-  unsigned doubledDispatchFactor() const { return DoubledDispatchFactor; }
+  // Number of physical workitems launched for each logical source workitem.
+  unsigned replicationFactor() const { return ReplicationFactor; }
 
   // Number of source waves whose per-lane fragment data is present in each
   // target wave under this projection's mapping. Callers that synthesise
@@ -216,10 +232,10 @@ protected:
   // across virtual overrides.
   llvm::Type *ExecStorageTy;
   unsigned NumSourceWavesPerTarget = 1;
-  unsigned DoubledDispatchDim = 0;
-  unsigned DoubledDispatchFactor = 1;
+  unsigned ReplicationFactor = 1;
+  bool AllowsDivergentScalarControlFlow = false;
   bool BroadcastNarrowExecLoWrite = false;
-  bool ProvidesFullWaveExecInvariant = false;
+  bool ProvidesSourceWaveExecInvariant = false;
   bool SourceWaveScopedLaneOps = false;
   bool PreservesMbcntDerivedExec = false;
 
@@ -271,70 +287,47 @@ public:
   // (`NumSourceWavesPerTarget == 1`), so no constructor override is needed.
 };
 
-// ============================================================================
-// ReplicationDoubledDispatchProjection -- replication backed by a doubled
-// dispatch.
-//
-// The runtime launches the block with a `W_t / W_s`-scaled extent along the
-// wave-carrying dimension x, so each target wave hosts one source wave in lanes
-// `0..W_s-1` and exact replicas in `W_s..W_t-1`. For wave32->wave64:
-//
-//   * the runtime doubles blockDim.x (grid unchanged);
-//   * the raised kernel maps hardware workitem-id.x back to the logical source
-//     id so hardware lane `W_s + i` sees the same logical thread as lane `i`;
-//   * the raiser halves the in-kernel workgroup/grid-size query along x so
-//     loops and reduction bounds still observe the source block size.
-//
-// A lane and its replica compute identically, so they share every predicate
-// and cross-lane ops read valid duplicate data from the upper half. All of the
-// per-source-wave cross-lane machinery is inherited; this class overrides only
-// the workitem-id mapping. Utilisation is ~50%, so it is a correctness
-// fallback, not the fast path.
-class ReplicationDoubledDispatchProjection final
-    : public ReplicationProjection {
+/// Map each source wave onto one target wave, with upper lanes replicating the
+/// corresponding source lanes. Each physical workgroup is one flattened,
+/// replicated source workgroup; workgroup IDs remain unchanged.
+class ReplicatedDispatchProjection final : public ReplicationProjection {
 public:
-  ReplicationDoubledDispatchProjection(const llvm::MCSubtargetInfo &Source,
-                                       const llvm::MCSubtargetInfo &Target,
-                                       llvm::Type *I32Ty, llvm::Type *I64Ty);
+  ReplicatedDispatchProjection(const llvm::MCSubtargetInfo &Source,
+                               const llvm::MCSubtargetInfo &Target,
+                               llvm::Type *I32Ty, llvm::Type *I64Ty,
+                               const KernelLaunchRequirements &Launch);
 
-  // Remap hardware workitem-id.x to the logical source id so replica lanes
-  // alias their originals. No phantom-lane clamp: under a doubled dispatch
-  // every hardware lane maps to a valid logical thread (real or replica).
+  // Return logical X, including for lanes masked out by the entry EXEC.
   llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
+  llvm::Value *emitWorkitemId(llvm::IRBuilder<> &B,
+                              unsigned Dim) const override;
+  llvm::Value *emitInitialExec(llvm::IRBuilder<> &B) const override;
   llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
-  // Pack the remapped x with the source's raw y/z fields (which are already
-  // per-thread correct and become wave-uniform once x is doubled). Bypasses
-  // the base replication phantom-lane clamp.
+  // Pack reconstructed source coordinates.
   llvm::Value *emitPackedWorkitemId(llvm::IRBuilder<> &B,
                                     unsigned NumDims) const override;
+
+private:
+  llvm::Value *emitWorkgroupSize(llvm::IRBuilder<> &B,
+                                 unsigned Dim) const override;
+  const KernelLaunchRequirements &Launch;
 };
 
-// ============================================================================
-// WaveNativeProjection -- widening (wave32 -> wave64) projection
-// that preserves the full target-hardware EXEC mask.
-//
-// The EXEC alloca is sized to the target hardware wave-mask width, and each
-// target lane is treated as an independent source-thread equivalent, so a
-// data-dependent `v_cmpx` that differs on target lanes 0..31 vs 32..63 keeps
-// both halves distinct through the ballot/AND/store round trip.
-//
-// Source-width EXEC writes (`s_mov_b32 exec_lo, v`) are replicated into both
-// halves of the widened EXEC; narrowing reads take the low half. This is
-// lossless as long as the source never observes the upper half of EXEC
-// independently, which wave32 source ISAs cannot express.
-//
-// Correct only for wave32 -> wave64 widening; the constructor asserts on
-// other directions.
+/// Pack two wave32 source waves into one wave64 target wave. Each lane holds
+/// its source wave's i32 EXEC and scalar masks. EXEC updates must not activate
+/// lanes absent at entry. Divergent scalar branches require barrier
+/// convergence.
 class WaveNativeProjection final : public WaveProjection {
 public:
-  // The constructor sets the projection configuration: target-width EXEC
-  // storage, full-wave-EXEC invariant (its `emitInitialExec` forces HW
-  // EXEC=-1), broadcast-on-narrow-EXEC-write, preserved mbcnt-derived EXEC,
-  // and two source waves per target wave (lanes 0..31 and 32..63).
+  ValidationKind validationKind() const override {
+    return ValidationKind::WaveNative;
+  }
+
   WaveNativeProjection(const llvm::MCSubtargetInfo &Source,
                        const llvm::MCSubtargetInfo &Target, llvm::Type *I32Ty,
-                       llvm::Type *I64Ty);
+                       llvm::Type *I64Ty,
+                       bool AllowDivergentScalarControlFlow = false);
 
   llvm::Value *emitSourceWaveId(llvm::IRBuilder<> &B) const override;
 
@@ -346,6 +339,11 @@ public:
                   const llvm::Twine &Name = "ballot") const override;
   llvm::Value *extractLaneBitFromWaveMask(llvm::IRBuilder<> &B,
                                           llvm::Value *V) const override;
+
+private:
+  /// Per-lane i1 recording whether the lane was active at kernel entry, before
+  /// init_whole_wave enabled all target lanes. Guards per-lane source effects.
+  mutable llvm::Value *EntryActive = nullptr;
 };
 
 // ============================================================================

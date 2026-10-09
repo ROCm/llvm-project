@@ -7,14 +7,15 @@
 
 ; RUN: %transpile_cli %t.hsaco \
 ; RUN:   --emit-ir=quad_kernel,saveexec_kernel,wrexec_kernel,exec_dst_kernel \
-; RUN:   | %FileCheck %s
+; RUN:   | %FileCheck %s --check-prefixes=QUAD,CHECK
 
-; The mask an opcode here combines with EXEC is as wide as the source wave, so
-; raising the same kernels for a wave64 target has to lift them the same way.
-; The checks below holding unchanged is what pins that.
-; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=quad_kernel,saveexec_kernel,wrexec_kernel,exec_dst_kernel \
-; RUN:   | %FileCheck %s
+; WaveNative accepts the scalar mask operations, but refuses EXEC expansion.
+; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir=quad_kernel \
+; RUN:   | %FileCheck %s --check-prefix=QUAD
+; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
+; RUN:   --emit-ir=saveexec_kernel,wrexec_kernel,exec_dst_kernel 2>&1 \
+; RUN:   | %FileCheck %s --check-prefix=REFUSE
+; REFUSE-COUNT-3: projection cannot prove that EXEC only enables lanes active at kernel entry
 
 ; A 64-bit mask names lanes a 32-lane wave does not have, so combining one with
 ; EXEC is not lifted.
@@ -35,45 +36,45 @@
 	.globl	quad_kernel
 	.p2align	8
 	.type	quad_kernel,@function
-; CHECK-LABEL: define amdgpu_kernel void @quad_kernel(
+; QUAD-LABEL: define amdgpu_kernel void @quad_kernel(
 quad_kernel:
 ; A named value to start from, so the checks below pin what each opcode read.
-; CHECK: [[SRC:%.+]] = xor i32 {{.+}}, -1
+; QUAD: [[SRC:%.+]] = xor i32 {{.+}}, -1
 	s_not_b32 s1, s1
 ; s_quadmask folds each group of four bits onto the lowest bit of the group,
 ; keeps only those bits, and then halves the distance between them until they
 ; are adjacent: 0x11111111, then two bits per byte, four per halfword, eight in
 ; the low byte.
-; CHECK: [[Q_SHIFTED:%.+]] = lshr i32 [[SRC]], 2
-; CHECK: [[Q_PAIRS:%.+]] = or i32 [[SRC]], [[Q_SHIFTED]]
-; CHECK: [[Q_PAIRS_SHIFTED:%.+]] = lshr i32 [[Q_PAIRS]], 1
-; CHECK: [[Q_ANY:%.+]] = or i32 [[Q_PAIRS]], [[Q_PAIRS_SHIFTED]]
-; CHECK: [[Q_LOW:%.+]] = and i32 [[Q_ANY]], 286331153
-; CHECK: [[Q_BY3:%.+]] = lshr i32 [[Q_LOW]], 3
-; CHECK: [[Q_JOIN2:%.+]] = or i32 [[Q_LOW]], [[Q_BY3]]
-; CHECK: [[Q_KEEP2:%.+]] = and i32 [[Q_JOIN2]], 50529027
-; CHECK: [[Q_BY6:%.+]] = lshr i32 [[Q_KEEP2]], 6
-; CHECK: [[Q_JOIN4:%.+]] = or i32 [[Q_KEEP2]], [[Q_BY6]]
-; CHECK: [[Q_KEEP4:%.+]] = and i32 [[Q_JOIN4]], 983055
-; CHECK: [[Q_BY12:%.+]] = lshr i32 [[Q_KEEP4]], 12
-; CHECK: [[Q_JOIN8:%.+]] = or i32 [[Q_KEEP4]], [[Q_BY12]]
-; CHECK: [[QUADMASK:%.+]] = and i32 [[Q_JOIN8]], 255
-; CHECK: icmp ne i32 [[QUADMASK]], 0
+; QUAD: [[Q_SHIFTED:%.+]] = lshr i32 [[SRC]], 2
+; QUAD: [[Q_PAIRS:%.+]] = or i32 [[SRC]], [[Q_SHIFTED]]
+; QUAD: [[Q_PAIRS_SHIFTED:%.+]] = lshr i32 [[Q_PAIRS]], 1
+; QUAD: [[Q_ANY:%.+]] = or i32 [[Q_PAIRS]], [[Q_PAIRS_SHIFTED]]
+; QUAD: [[Q_LOW:%.+]] = and i32 [[Q_ANY]], 286331153
+; QUAD: [[Q_BY3:%.+]] = lshr i32 [[Q_LOW]], 3
+; QUAD: [[Q_JOIN2:%.+]] = or i32 [[Q_LOW]], [[Q_BY3]]
+; QUAD: [[Q_KEEP2:%.+]] = and i32 [[Q_JOIN2]], 50529027
+; QUAD: [[Q_BY6:%.+]] = lshr i32 [[Q_KEEP2]], 6
+; QUAD: [[Q_JOIN4:%.+]] = or i32 [[Q_KEEP2]], [[Q_BY6]]
+; QUAD: [[Q_KEEP4:%.+]] = and i32 [[Q_JOIN4]], 983055
+; QUAD: [[Q_BY12:%.+]] = lshr i32 [[Q_KEEP4]], 12
+; QUAD: [[Q_JOIN8:%.+]] = or i32 [[Q_KEEP4]], [[Q_BY12]]
+; QUAD: [[QUADMASK:%.+]] = and i32 [[Q_JOIN8]], 255
+; QUAD: icmp ne i32 [[QUADMASK]], 0
 	s_quadmask_b32 s2, s1
 ; s_wqm stops at the same one-bit-per-group value and spreads it back over the
 ; whole group instead of packing it.
-; CHECK: [[W_SHIFTED:%.+]] = lshr i32 [[QUADMASK]], 2
-; CHECK: [[W_PAIRS:%.+]] = or i32 [[QUADMASK]], [[W_SHIFTED]]
-; CHECK: [[W_PAIRS_SHIFTED:%.+]] = lshr i32 [[W_PAIRS]], 1
-; CHECK: [[W_ANY:%.+]] = or i32 [[W_PAIRS]], [[W_PAIRS_SHIFTED]]
-; CHECK: [[W_LOW:%.+]] = and i32 [[W_ANY]], 286331153
-; CHECK: [[W_TWO:%.+]] = shl i32 [[W_LOW]], 1
-; CHECK: [[W_HALF:%.+]] = or i32 [[W_LOW]], [[W_TWO]]
-; CHECK: [[W_FOUR:%.+]] = shl i32 [[W_HALF]], 2
-; CHECK: [[WQM:%.+]] = or i32 [[W_HALF]], [[W_FOUR]]
-; CHECK: icmp ne i32 [[WQM]], 0
+; QUAD: [[W_SHIFTED:%.+]] = lshr i32 [[QUADMASK]], 2
+; QUAD: [[W_PAIRS:%.+]] = or i32 [[QUADMASK]], [[W_SHIFTED]]
+; QUAD: [[W_PAIRS_SHIFTED:%.+]] = lshr i32 [[W_PAIRS]], 1
+; QUAD: [[W_ANY:%.+]] = or i32 [[W_PAIRS]], [[W_PAIRS_SHIFTED]]
+; QUAD: [[W_LOW:%.+]] = and i32 [[W_ANY]], 286331153
+; QUAD: [[W_TWO:%.+]] = shl i32 [[W_LOW]], 1
+; QUAD: [[W_HALF:%.+]] = or i32 [[W_LOW]], [[W_TWO]]
+; QUAD: [[W_FOUR:%.+]] = shl i32 [[W_HALF]], 2
+; QUAD: [[WQM:%.+]] = or i32 [[W_HALF]], [[W_FOUR]]
+; QUAD: icmp ne i32 [[WQM]], 0
 	s_wqm_b32 s3, s2
-; CHECK: xor i32 [[WQM]], -1
+; QUAD: xor i32 [[WQM]], -1
 	s_not_b32 s4, s3
 	s_endpgm
 

@@ -32,6 +32,13 @@ on:
         type: string
       sanity_check_only_for_family:
         type: boolean
+    secrets:
+      BENCHMARK_DB_URL:
+        required: false
+        description: "Benchmark results database API endpoint (nightly benchmark runs only)."
+      BENCHMARK_DB_FALLBACK_URL:
+        required: false
+        description: "Fallback benchmark results database API endpoint (nightly benchmark runs only)."
 
 permissions:
   contents: read
@@ -41,7 +48,6 @@ jobs:
     name: Build Artifacts
     if: ${{ inputs.use_prebuilt_artifacts == 'false' }}
     uses: ./.github/workflows/build_windows_artifacts.yml
-    secrets: inherit
     with:
       artifact_group: ${{ inputs.artifact_group }}
       amdgpu_families: ${{ inputs.amdgpu_families }}
@@ -74,7 +80,9 @@ jobs:
         inputs.benchmark_runs_on != ''
       }}
     uses: ./.github/workflows/test_benchmarks.yml
-    secrets: inherit
+    secrets:
+      BENCHMARK_DB_URL: ${{ secrets.BENCHMARK_DB_URL }}
+      BENCHMARK_DB_FALLBACK_URL: ${{ secrets.BENCHMARK_DB_FALLBACK_URL }}
     with:
       artifact_group: ${{ inputs.artifact_group }}
       amdgpu_families: ${{ inputs.amdgpu_families }}

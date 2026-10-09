@@ -128,7 +128,6 @@ static_library("Analysis") {
     "StackSafetyAnalysis.cpp",
     "StaticDataProfileInfo.cpp",
     "StructuralHash.cpp",
-    "SyntheticCountsUtils.cpp",
     "TFLiteUtils.cpp",
     "TargetLibraryInfo.cpp",
     "TargetTransformInfo.cpp",

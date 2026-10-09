@@ -65,6 +65,17 @@ enum class RaiseFailureReason : uint16_t {
   DeviceLibraryLinkFailed,
   // Wave-size-obstruction refusals, split one enumerator per refusal so
   // diagnostics can bucket them without parsing the message text.
+  UnsupportedWaveProjection,
+  // A source scalar value is not proven uniform across the target wave.
+  NonUniformScalarState,
+  // EXEC may enable lanes absent from the physical launch.
+  UnprovenExecContainment,
+  // A matrix operation needs the source mask captured at kernel entry.
+  UnprovenKernelEntryExec,
+  // A hardware instruction must execute separately for each source wave.
+  RequiresPerSourceWaveExecution,
+  // Dispatch geometry violates a kernel's launch contract.
+  UnsupportedLaunch,
   CrossWaveLaneIdLeak,
   CrossWaveUnrewritableShuffle,
   CrossWaveShuffleRewritePending,
@@ -86,7 +97,8 @@ enum class RaiseFailureReason : uint16_t {
   // target, so its value would be read as undef.
   UnsupportedEntrySgprSource,
   // The source object declares non-disabled workgroup cluster dimensions, so
-  // TTMP6 carries per-cluster state the Transpiler ABI model does not reconstruct.
+  // TTMP6 carries per-cluster state the Transpiler ABI model does not
+  // reconstruct.
   UnsupportedSourceClusterDims,
   // Source and target use different models to combine the program-controlled
   // user priority with the system-assigned priority. The dispatch-time system
@@ -103,9 +115,10 @@ enum class RaiseFailureReason : uint16_t {
 // diagnostics and tests to bucket on.
 llvm::StringRef reasonString(RaiseFailureReason R);
 
-// Which kernel of a batch raise a failure came out of, and the ISA pair that
-// raise ran under. Both processor names are the ones the MC layers were built
-// for, so they name a GPU even when the caller passed a full target identifier.
+// Which kernel of a batch raise a failure came out of, and optionally the ISA
+// pair that raise ran under. The processor names are the ones the MC layers
+// were built for, so they name a GPU even when the caller passed a full target
+// identifier.
 struct FailureOrigin {
   std::string KernelName;
   std::string SourceCpu;
@@ -164,8 +177,7 @@ struct RaiseFailure : public llvm::ErrorInfo<RaiseFailure> {
                                    llvm::StringRef Format,
                                    const llvm::Twine &Detail = {});
 
-  // Failure scoped to a whole kernel rather than one instruction. The rendered
-  // message is `kernel '<KernelName>': <Detail>`.
+  // Failure scoped to a whole kernel rather than one instruction.
   static llvm::Error inKernel(RaiseFailureReason Reason,
                               llvm::StringRef KernelName,
                               const llvm::Twine &Detail);

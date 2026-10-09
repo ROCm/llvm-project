@@ -40,7 +40,7 @@
 #  if SANITIZER_GO
 #    define SANITIZER_INTERFACE_ATTRIBUTE
 #    define SANITIZER_WEAK_ATTRIBUTE
-#  elif SANITIZER_AMDGPU_ || SANITIZER_NVPTX
+#  elif SANITIZER_AMDGPU || SANITIZER_NVPTX
 #    define SANITIZER_INTERFACE_ATTRIBUTE __attribute__((visibility("hidden")))
 #    define SANITIZER_WEAK_ATTRIBUTE __attribute__((weak))
 #  else
@@ -499,6 +499,9 @@ namespace __hwasan {
 using namespace __sanitizer;
 }
 namespace __memprof {
+using namespace __sanitizer;
+}
+namespace __copyprof {
 using namespace __sanitizer;
 }
 

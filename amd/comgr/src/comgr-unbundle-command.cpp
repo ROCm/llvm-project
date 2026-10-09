@@ -39,7 +39,8 @@ bool UnbundleCommand::canCache() const {
   return Magic == file_magic::offload_bundle_compressed;
 }
 
-Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
+Error UnbundleCommand::splitCachedOutput(StringRef CachedBuffer,
+                                         SmallVectorImpl<StringRef> &Out) {
   for (StringRef OutputFilename : Config.OutputFileNames) {
     SizeFieldType OutputFileSize;
     if (CachedBuffer.size() < sizeof(OutputFileSize))
@@ -52,17 +53,27 @@ Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
       return createStringError(std::errc::invalid_argument,
                                "Not enough bytes to read output file contents");
 
-    StringRef OutputFileContents = CachedBuffer.substr(0, OutputFileSize);
+    Out.push_back(CachedBuffer.substr(0, OutputFileSize));
     CachedBuffer = CachedBuffer.drop_front(OutputFileSize);
-
-    if (Error Err = CachedCommandAdaptor::writeSingleOutputFile(
-            OutputFilename, OutputFileContents))
-      return Err;
   }
 
   if (!CachedBuffer.empty())
     return createStringError(std::errc::invalid_argument,
                              "Bytes in cache entry not used for the output");
+  return Error::success();
+}
+
+Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
+  SmallVector<StringRef> Contents;
+  if (Error Err = splitCachedOutput(CachedBuffer, Contents))
+    return Err;
+
+  for (const auto &[OutputFilename, OutputContents] :
+       llvm::zip_equal(Config.OutputFileNames, Contents)) {
+    if (Error Err = CachedCommandAdaptor::writeSingleOutputFile(OutputFilename,
+                                                                OutputContents))
+      return Err;
+  }
   return Error::success();
 }
 

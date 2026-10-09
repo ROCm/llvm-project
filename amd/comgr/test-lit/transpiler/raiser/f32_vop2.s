@@ -18,7 +18,8 @@ f32_vop2_kernel:
 ; IR: [[ADD:%.+]] = fadd float 1.000000e+00, {{.+}}
 	v_add_f32_e32 v0, 1.0, v1
 ; IR: [[ADD_BITS:%.+]] = bitcast float [[ADD]] to i32
-; IR: [[ADD_VALUE:%.+]] = bitcast i32 [[ADD_BITS]] to float
+; IR: [[ADD_REG:%.+]] = phi i32 {{.+}}[[ADD_BITS]]{{.+}}
+; IR: [[ADD_VALUE:%.+]] = bitcast i32 [[ADD_REG]] to float
 ; IR: [[SUB:%.+]] = fsub float 2.000000e+00, [[ADD_VALUE]]
 	v_sub_f32_e32 v2, 2.0, v0
 ; IR: [[SUB_BITS:%.+]] = bitcast float [[SUB]] to i32

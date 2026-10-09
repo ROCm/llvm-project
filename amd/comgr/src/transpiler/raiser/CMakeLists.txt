@@ -26,6 +26,7 @@ add_definitions(${LLVM_DEFINITIONS})
 # files can call comgr-metadata helpers directly without a layering inversion
 # or a separate static archive.
 add_library(transpiler-raiser OBJECT
+  launch.cpp
   raiser.cpp
   raise_failure.cpp
   reg-file.cpp
@@ -35,20 +36,27 @@ add_library(transpiler-raiser OBJECT
   raise-context.cpp
   operand-resolver.cpp
   flat-addr.cpp
+  source-image.cpp
   handle-ds.cpp
   handle-flat.cpp
+  handle-mubuf.cpp
+  handle-mfma.cpp
   handle-smem.cpp
   handle-sop1.cpp
   handle-sop2.cpp
   handle-sopc.cpp
   handle-sopk.cpp
   handle-sopp.cpp
+  handle-vop-cross-lane.cpp
   handle-vop1.cpp
   handle-vop2.cpp
   handle-vop3.cpp
+  handle-vop3p.cpp
+  handle-vop-int16.cpp
   handle-vop-shared.cpp
   handle-vopd.cpp
   handle-vopc.cpp
+  wmma-lowering.cpp
 )
 
 if(NOT TARGET transpiler::raiser)

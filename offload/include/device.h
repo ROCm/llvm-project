@@ -34,11 +34,16 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include "GlobalHandler.h"
+#include "OffloadAPI.h"
 #include "PluginInterface.h"
 
 using GenericPluginTy = llvm::omp::target::plugin::GenericPluginTy;
 using DeviceInfo = llvm::omp::target::plugin::DeviceInfo;
 using InfoTreeNode = llvm::omp::target::plugin::InfoTreeNode;
+// Downstream, the kernel launch-geometry properties live in the plugin
+// interface: the AMDGPU plugin computes the launch geometry itself and needs
+// them, including the AMD-only execution modes.
+using KernelLaunchInfoTy = llvm::omp::target::plugin::KernelLaunchInfoTy;
 
 // Forward declarations.
 struct __tgt_bin_desc;
@@ -53,13 +58,14 @@ struct DeviceTy {
   /// This field is used by ompx_get_team_procs(devid).
   int32_t TeamProcs;
 
-
   /// Flag to force synchronous data transfers
   /// Controlled via environment flag OMPX_FORCE_SYNC_REGIONS
   bool ForceSynchronousTargetRegions = false;
 
+  ol_device_handle_t DeviceHandle;
 
-  DeviceTy(GenericPluginTy *RTL, int32_t DeviceID, int32_t RTLDeviceID);
+  DeviceTy(GenericPluginTy *RTL, int32_t DeviceID, int32_t RTLDeviceID,
+           ol_device_handle_t DeviceHandle);
   // DeviceTy is not copyable
   DeviceTy(const DeviceTy &D) = delete;
   DeviceTy &operator=(const DeviceTy &D) = delete;
@@ -140,9 +146,6 @@ struct DeviceTy {
   /// completed and AsyncInfo.isDone() returns true.
   int32_t queryAsync(AsyncInfoTy &AsyncInfo);
 
-  /// Calls the corresponding print device info function in the plugin.
-  bool printDeviceInfo();
-
   /// Event related interfaces.
   /// {
   /// Create an event.
@@ -198,26 +201,36 @@ struct DeviceTy {
 
   /// Get information from the device.
   template <typename T> T getInfo(DeviceInfo Info) const {
-    InfoTreeNode DevInfo = RTL->obtain_device_info(RTLDeviceID);
-
-    auto EntryOpt = DevInfo.get(Info);
-    if (!EntryOpt)
-      return 0;
-
-    auto Entry = *EntryOpt;
-    if (!std::holds_alternative<T>(Entry->Value))
+    T Value{};
+    if (olGetDeviceInfo(DeviceHandle, static_cast<ol_device_info_t>(Info),
+                        sizeof(Value), &Value))
       return T{};
-    return std::get<T>(Entry->Value);
+    return Value;
+  }
+
+  /// Record the launch-geometry properties for the kernel at \p KernelPtr,
+  /// read once at registration time from its "<name>_kernel_environment"
+  /// device global.
+  void setKernelLaunchInfo(void *KernelPtr, KernelLaunchInfoTy Info) {
+    (*KernelLaunchInfoMap.getExclusiveAccessor())[KernelPtr] = Info;
+  }
+
+  /// Return the launch-geometry properties recorded for the kernel at
+  /// \p KernelPtr, or a default-constructed KernelLaunchInfoTy if none were
+  /// recorded.
+  KernelLaunchInfoTy getKernelLaunchInfo(void *KernelPtr) {
+    return (*KernelLaunchInfoMap.getExclusiveAccessor())[KernelPtr];
   }
 
 private:
-  /// Deinitialize the device (and plugin).
-  void deinit();
-
   /// All offload entries available on this device.
   using DeviceOffloadEntriesMapTy =
       llvm::DenseMap<llvm::StringRef, OffloadEntryTy>;
   ProtectedObj<DeviceOffloadEntriesMapTy> DeviceOffloadEntries;
+
+  /// Launch-geometry properties for each kernel registered on this device.
+  using KernelLaunchInfoMapTy = llvm::DenseMap<void *, KernelLaunchInfoTy>;
+  ProtectedObj<KernelLaunchInfoMapTy> KernelLaunchInfoMap;
 
   /// Handler to collect and organize host-2-device mapping information.
   MappingInfoTy MappingInfo;

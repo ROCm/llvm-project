@@ -7,6 +7,7 @@
 #include "clang/CIR/Dialect/IR/CIRAttrs.h"
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
 #include "clang/CIR/MissingFeatures.h"
+#include "clang/CodeGenUtils/TargetUtils.h"
 
 using namespace clang;
 using namespace clang::CIRGen;
@@ -122,16 +123,28 @@ public:
 
   bool supportsLibCall() const override { return false; }
 
+  cir::CallingConv getDeviceKernelCallingConv() const override {
+    return cir::CallingConv::AMDGPUKernel;
+  }
+
+  void setCUDAKernelCallingConvention(const FunctionType *&ft) const override {
+    ft = getABIInfo().cgt.getASTContext().adjustFunctionType(
+        ft, ft->getExtInfo().withCallingConv(CC_DeviceKernel));
+  }
+
   void setTargetAttributes(const clang::Decl *decl, mlir::Operation *global,
                            CIRGenModule &cgm) const override {
     if (auto func = mlir::dyn_cast<cir::FuncOp>(global)) {
-      if (requiresAMDGPUProtectedVisibility(decl, func.getGlobalVisibility())) {
+      if (CodeGenUtils::requiresAMDGPUProtectedVisibility(
+              decl,
+              func.getGlobalVisibility() == cir::VisibilityKind::Hidden)) {
         func.setGlobalVisibility(cir::VisibilityKind::Protected);
         func.setDSOLocal(true);
       }
       setAMDGPUTargetFunctionAttributes(decl, func, cgm);
     } else if (auto gv = mlir::dyn_cast<cir::GlobalOp>(global)) {
-      if (requiresAMDGPUProtectedVisibility(decl, gv.getGlobalVisibility())) {
+      if (CodeGenUtils::requiresAMDGPUProtectedVisibility(
+              decl, gv.getGlobalVisibility() == cir::VisibilityKind::Hidden)) {
         gv.setGlobalVisibility(cir::VisibilityKind::Protected);
         gv.setDSOLocal(true);
       }
@@ -212,6 +225,13 @@ cir::CallingConv TargetCIRGenInfo::getDeviceKernelCallingConv() const {
   assert(getABIInfo().cgt.getASTContext().getLangOpts().OpenCL &&
          "Kernel calling convention only defined for OpenCL");
   return cir::CallingConv::C;
+}
+
+mlir::Value TargetCIRGenInfo::getNullPointer(CIRGenModule &cgm,
+                                             cir::PointerType ptrTy,
+                                             QualType qt,
+                                             mlir::Location loc) const {
+  return cgm.getBuilder().getNullPtr(ptrTy, loc);
 }
 
 clang::LangAS

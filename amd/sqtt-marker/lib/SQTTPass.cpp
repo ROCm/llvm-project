@@ -15,11 +15,7 @@
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Passes/PassBuilder.h"
-#if __has_include("llvm/Plugins/PassPlugin.h")
 #include "llvm/Plugins/PassPlugin.h"
-#else
-#include "llvm/Passes/PassPlugin.h"
-#endif
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
@@ -198,31 +194,48 @@ PreservedAnalyses SQTTInstrumentPass::runLate(Module &M) {
 // Plugin entry point
 // ============================================================================
 
+static void registerPassBuilderCallbacks(PassBuilder &PB) {
+  using Mode = SQTTInstrumentPass::Mode;
+  SQTTConfig Cfg = SQTTConfig::fromCommandLine();
+
+  PB.registerPipelineEarlySimplificationEPCallback(
+      [Cfg](ModulePassManager &MPM, OptimizationLevel OL, ThinOrFullLTOPhase) {
+        if (OL != OptimizationLevel::O0)
+          MPM.addPass(SQTTInstrumentPass(Cfg, Mode::Early));
+      });
+
+  PB.registerOptimizerLastEPCallback(
+      [Cfg](ModulePassManager &MPM, OptimizationLevel OL, ThinOrFullLTOPhase) {
+        if (OL != OptimizationLevel::O0)
+          MPM.addPass(SQTTInstrumentPass(Cfg, Mode::Late));
+      });
+
+  PB.registerPipelineStartEPCallback(
+      [Cfg](ModulePassManager &MPM, OptimizationLevel OL) {
+        if (OL == OptimizationLevel::O0)
+          MPM.addPass(SQTTInstrumentPass(Cfg, Mode::Late));
+      });
+}
+
+static_assert(LLVM_PLUGIN_API_VERSION == 3,
+              "SQTT marker requires plugin API version 3");
+
+static Error parseArguments(ArrayRef<const char *> Args) {
+  SmallVector<const char *, 0> Argv = {"SQTTMarkerPass"};
+  append_range(Argv, Args);
+  std::string Msg;
+  raw_string_ostream OS(Msg);
+  if (!cl::ParseCommandLineOptions(Argv.size(), Argv.data(), "", &OS))
+    return createStringError(StringRef(Msg).trim());
+  return Error::success();
+}
+
 extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
 llvmGetPassPluginInfo() {
-  return {LLVM_PLUGIN_API_VERSION, "SQTTMarkerPass", SQTT_MARKER_VERSION_STRING,
-          [](PassBuilder &PB) {
-            using Mode = SQTTInstrumentPass::Mode;
-            SQTTConfig Cfg = SQTTConfig::fromCommandLine();
-
-            PB.registerPipelineEarlySimplificationEPCallback(
-                [Cfg](ModulePassManager &MPM, OptimizationLevel OL,
-                      ThinOrFullLTOPhase) {
-                  if (OL != OptimizationLevel::O0)
-                    MPM.addPass(SQTTInstrumentPass(Cfg, Mode::Early));
-                });
-
-            PB.registerOptimizerLastEPCallback([Cfg](ModulePassManager &MPM,
-                                                     OptimizationLevel OL,
-                                                     ThinOrFullLTOPhase) {
-              if (OL != OptimizationLevel::O0)
-                MPM.addPass(SQTTInstrumentPass(Cfg, Mode::Late));
-            });
-
-            PB.registerPipelineStartEPCallback(
-                [Cfg](ModulePassManager &MPM, OptimizationLevel OL) {
-                  if (OL == OptimizationLevel::O0)
-                    MPM.addPass(SQTTInstrumentPass(Cfg, Mode::Late));
-                });
-          }};
+  return {LLVM_PLUGIN_API_VERSION,
+          "SQTTMarkerPass",
+          SQTT_MARKER_VERSION_STRING,
+          registerPassBuilderCallbacks,
+          nullptr,
+          parseArguments};
 }

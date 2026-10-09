@@ -10,6 +10,7 @@
 
 #include "transpiler/decoder/decoded-inst.h"
 #include "transpiler/decoder/mc-state.h"
+#include "transpiler/raiser/launch.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 
@@ -39,11 +40,8 @@ using namespace llvm;
 
 namespace COMGR::transpiler {
 
-static constexpr uint64_t DispatchWorkgroupSizeXOffset = 4;
-static constexpr uint64_t DispatchWorkgroupSizeYOffset = 6;
-
-static unsigned getWaveSize(const MCSubtargetInfo &STI) {
-  return STI.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
+unsigned getWaveSize(const MCSubtargetInfo &Subtarget) {
+  return Subtarget.hasFeature(AMDGPU::FeatureWavefrontSize32) ? 32 : 64;
 }
 
 // ----------------------------------------------------------------------------
@@ -133,6 +131,10 @@ Value *WaveProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   return emitTargetWorkitemId(B, 0);
 }
 
+Value *WaveProjection::emitWorkitemId(IRBuilder<> &B, unsigned Dim) const {
+  return Dim == 0 ? emitWorkitemIdX(B) : emitTargetWorkitemId(B, Dim);
+}
+
 Value *WaveProjection::emitTargetWaveId(IRBuilder<> &B) const {
   Module *M = B.GetInsertBlock()->getModule();
   if (TargetSTI.hasFeature(AMDGPU::FeatureArchitectedSGPRs)) {
@@ -144,23 +146,39 @@ Value *WaveProjection::emitTargetWaveId(IRBuilder<> &B) const {
   Function *DispatchPtrFn =
       Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_dispatch_ptr);
   Value *DispatchPtr = B.CreateCall(DispatchPtrFn, {}, "dispatch_ptr");
-  auto LoadWorkgroupSize = [&](uint64_t Offset, const Twine &Name) {
+  auto LoadWorkgroupSize = [&](uint64_t Offset, unsigned Dimension,
+                               const Twine &Name) {
     Value *Ptr = B.CreateConstInBoundsGEP1_64(B.getInt8Ty(), DispatchPtr,
                                               Offset, Name + "_ptr");
     LoadInst *Size = B.CreateAlignedLoad(B.getInt16Ty(), Ptr, Align(2), Name);
-    return B.CreateZExt(Size, B.getInt32Ty(), Name + "_i32");
+    Value *NominalSize = B.CreateZExt(Size, B.getInt32Ty(), Name + "_i32");
+    Value *GridPtr =
+        B.CreateConstGEP1_64(B.getInt8Ty(), DispatchPtr, 12 + 4 * Dimension);
+    Value *GridSize = B.CreateAlignedLoad(B.getInt32Ty(), GridPtr, Align(4));
+    Intrinsic::ID GroupId = Dimension == 0 ? Intrinsic::amdgcn_workgroup_id_x
+                                           : Intrinsic::amdgcn_workgroup_id_y;
+    Value *Group = B.CreateIntrinsic(GroupId, {}, {}, nullptr, "workgroup_id");
+    Value *Start = B.CreateMul(Group, NominalSize);
+    Value *Remaining = B.CreateSub(GridSize, Start);
+    // Edge workgroups can have shorter rows than the dispatch packet's size.
+    return B.CreateBinaryIntrinsic(Intrinsic::umin, Remaining, NominalSize);
   };
   Value *SizeX =
-      LoadWorkgroupSize(DispatchWorkgroupSizeXOffset, "workgroup_size_x");
-  Value *SizeY =
-      LoadWorkgroupSize(DispatchWorkgroupSizeYOffset, "workgroup_size_y");
+      LoadWorkgroupSize(DispatchWorkgroupSizeXOffset, 0, "workgroup_size_x");
+  Value *SizeY = LoadWorkgroupSize(DispatchWorkgroupSizeXOffset +
+                                       DispatchWorkgroupSizeFieldBytes,
+                                   1, "workgroup_size_y");
 
   Value *X = emitTargetWorkitemId(B, 0);
   Value *Y = emitTargetWorkitemId(B, 1);
   Value *Z = emitTargetWorkitemId(B, 2);
   Value *Row = B.CreateAdd(Y, B.CreateMul(Z, SizeY), "wave_flat_yz");
   Value *FlatId = B.CreateAdd(X, B.CreateMul(Row, SizeX), "wave_flat_id");
-  return B.CreateUDiv(FlatId, B.getInt32(targetWaveSize()), "target_wave_id");
+  Value *WaveId =
+      B.CreateUDiv(FlatId, B.getInt32(targetWaveSize()), "target_wave_id");
+  // Workitem IDs in lanes absent at entry need not describe this workgroup.
+  return B.CreateIntrinsic(Intrinsic::amdgcn_readfirstlane, {B.getInt32Ty()},
+                           {WaveId}, nullptr, "uniform_wave_id");
 }
 
 Value *ReplicationProjection::emitSourceWaveId(IRBuilder<> &B) const {
@@ -203,7 +221,7 @@ Value *WaveProjection::packWorkitemId(IRBuilder<> &B, Value *X,
                                       unsigned NumDims) const {
   if (NumDims < 2)
     return X;
-  Value *Y = emitTargetWorkitemId(B, 1);
+  Value *Y = emitWorkitemId(B, 1);
   Value *Packed =
       B.CreateOr(X,
                  B.CreateShl(Y, ConstantInt::get(I32Ty, WorkitemIdYBitOffset),
@@ -211,7 +229,7 @@ Value *WaveProjection::packWorkitemId(IRBuilder<> &B, Value *X,
                  "tid_xy");
   if (NumDims < 3)
     return Packed;
-  Value *Z = emitTargetWorkitemId(B, 2);
+  Value *Z = emitWorkitemId(B, 2);
   return B.CreateOr(Packed,
                     B.CreateShl(Z,
                                 ConstantInt::get(I32Ty, WorkitemIdZBitOffset),
@@ -283,7 +301,7 @@ Value *WaveProjection::emitInitialExec(IRBuilder<> &B) const {
 
 Value *WaveProjection::wrapAsWWMValue(IRBuilder<> &B, Value *V,
                                       const Twine &Name) const {
-  if (providesFullWaveExecInvariant())
+  if (providesSourceWaveExecInvariant())
     return V;
   // strict.wwm is declared llvm_any_ty, but the backend lowers only integer
   // and floating-point scalars and fixed vectors thereof. Assert on that
@@ -394,12 +412,10 @@ Value *ReplicationProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
 }
 
 // ----------------------------------------------------------------------------
-// ReplicationDoubledDispatchProjection.
+// ReplicatedDispatchProjection.
 //
-// Remaps the hardware workitem-id.x of a doubled-dispatch launch back onto the
-// logical source id, so hardware lane `W_s + i` (a replica) sees the same
-// logical thread as hardware lane `i`. Everything else is inherited from
-// ReplicationProjection.
+// Remaps the physical workitem-id.x onto the logical source id so replica lanes
+// observe the same source workitem as their primary lanes.
 // ----------------------------------------------------------------------------
 
 // logical_x = ((x_hw & ~(W_t-1)) >> log2(W_t/W_s)) | (x_hw & (W_s-1))
@@ -408,82 +424,134 @@ Value *ReplicationProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
 // lanes; the second term is the source lane within the wave (identical for a
 // lane and its replica). For wave32->wave64 this is
 // `((x_hw & ~63) >> 1) | (x_hw & 31)`.
-static Value *emitDoubledDispatchLogicalX(IRBuilder<> &B, Value *RawX,
-                                          unsigned SrcWaveSize,
-                                          unsigned TgtWaveSize) {
-  assert(TgtWaveSize > SrcWaveSize && (TgtWaveSize % SrcWaveSize) == 0 &&
-         "doubled-dispatch remap requires widening with an integer "
+static Value *emitReplicatedDispatchLogicalX(IRBuilder<> &B, Value *RawX,
+                                             unsigned SourceWaveSize,
+                                             unsigned TargetWaveSize) {
+  assert(TargetWaveSize > SourceWaveSize &&
+         (TargetWaveSize % SourceWaveSize) == 0 &&
+         "replicated dispatch requires widening with an integer "
          "wave-size ratio");
   Type *Ty = RawX->getType();
-  const unsigned Ratio = TgtWaveSize / SrcWaveSize;
+  const unsigned Ratio = TargetWaveSize / SourceWaveSize;
   const unsigned RatioLog2 = llvm::Log2_32(Ratio);
   Value *WaveAligned = B.CreateAnd(
-      RawX, ConstantInt::get(Ty, ~static_cast<uint64_t>(TgtWaveSize - 1u)),
-      "dd_wave_aligned");
+      RawX, ConstantInt::getSigned(Ty, -static_cast<int64_t>(TargetWaveSize)),
+      "replicated_wave_aligned");
   Value *WaveScaled = B.CreateLShr(WaveAligned, ConstantInt::get(Ty, RatioLog2),
-                                   "dd_wave_base");
-  Value *SrcLane =
-      B.CreateAnd(RawX, ConstantInt::get(Ty, SrcWaveSize - 1u), "dd_src_lane");
-  return B.CreateOr(WaveScaled, SrcLane, "dd_logical_x");
+                                   "replicated_wave_base");
+  Value *SourceLane =
+      B.CreateAnd(RawX, ConstantInt::get(Ty, SourceWaveSize - 1u),
+                  "replicated_source_lane");
+  return B.CreateOr(WaveScaled, SourceLane, "replicated_logical_x");
 }
 
-Value *
-ReplicationDoubledDispatchProjection::emitWorkitemIdX(IRBuilder<> &B) const {
-  // Deliberately bypass ReplicationProjection::emitWorkitemIdX (the
-  // phantom-lane clamp): a doubled dispatch has no phantom lanes, every
-  // hardware lane is a real source thread or an exact replica of one.
-  Value *Raw = WaveProjection::emitWorkitemIdX(B);
-  return emitDoubledDispatchLogicalX(B, Raw, sourceWaveSize(),
-                                     targetWaveSize());
+Value *ReplicatedDispatchProjection::emitWorkitemIdX(IRBuilder<> &B) const {
+  return emitWorkitemId(B, 0);
 }
 
-ReplicationDoubledDispatchProjection::ReplicationDoubledDispatchProjection(
+Value *ReplicatedDispatchProjection::emitWorkitemId(IRBuilder<> &B,
+                                                    unsigned Dim) const {
+  assert(Dim < 3 && "invalid workitem dimension");
+  if (Launch.Mapping == KernelLaunchRequirements::Kind::Replicated1D &&
+      Dim != 0)
+    return B.getInt32(0);
+  Value *Raw = emitTargetWorkitemId(B, 0);
+  Value *Flat = emitReplicatedDispatchLogicalX(B, Raw, sourceWaveSize(),
+                                               targetWaveSize());
+  if (Launch.Mapping == KernelLaunchRequirements::Kind::Replicated1D)
+    return Flat;
+
+  Value *SizeX = emitWorkgroupSize(B, 0);
+  if (Dim == 0)
+    return B.CreateURem(Flat, SizeX, "logical_x");
+  Value *Row = B.CreateUDiv(Flat, SizeX);
+  Value *SizeY = emitWorkgroupSize(B, 1);
+  return Dim == 1 ? B.CreateURem(Row, SizeY, "logical_y")
+                  : B.CreateUDiv(Row, SizeY, "logical_z");
+}
+
+Value *WaveProjection::emitWorkgroupSize(IRBuilder<> &B, unsigned Dim) const {
+  Value *Dispatch = B.CreateCall(Intrinsic::getOrInsertDeclaration(
+      B.GetInsertBlock()->getModule(), Intrinsic::amdgcn_dispatch_ptr));
+  Value *Address = B.CreateConstGEP1_64(
+      B.getInt8Ty(), Dispatch,
+      DispatchWorkgroupSizeXOffset + DispatchWorkgroupSizeFieldBytes * Dim);
+  Value *Size = B.CreateAlignedLoad(B.getInt16Ty(), Address, Align(2));
+  return B.CreateZExt(Size, B.getInt32Ty());
+}
+
+Value *ReplicatedDispatchProjection::emitWorkgroupSize(IRBuilder<> &B,
+                                                       unsigned Dim) const {
+  if (Launch.RequiredWorkgroupSize)
+    return B.getInt32((*Launch.RequiredWorkgroupSize)[Dim]);
+  if (!Launch.WorkgroupSizeArgOffsets) {
+    assert(Launch.Mapping == KernelLaunchRequirements::Kind::Replicated1D &&
+           Launch.RequiresWholeSourceWaves && "missing logical group sizes");
+    if (Dim != 0)
+      return B.getInt32(1);
+    Value *Physical = WaveProjection::emitWorkgroupSize(B, 0);
+    return B.CreateUDiv(Physical, B.getInt32(replicationFactor()));
+  }
+  Value *Kernarg = B.CreateCall(Intrinsic::getOrInsertDeclaration(
+      B.GetInsertBlock()->getModule(), Intrinsic::amdgcn_kernarg_segment_ptr));
+  Value *Address = B.CreateConstGEP1_64(B.getInt8Ty(), Kernarg,
+                                        (*Launch.WorkgroupSizeArgOffsets)[Dim]);
+  Value *Size = B.CreateAlignedLoad(B.getInt16Ty(), Address, Align(1));
+  return B.CreateZExt(Size, B.getInt32Ty());
+}
+
+Value *ReplicatedDispatchProjection::emitInitialExec(IRBuilder<> &B) const {
+  if (Launch.RequiresWholeSourceWaves)
+    return B.getInt32(-1);
+  Value *SizeX = emitWorkgroupSize(B, 0);
+  Value *SizeY = emitWorkgroupSize(B, 1);
+  Value *SizeZ = emitWorkgroupSize(B, 2);
+  Value *RowWorkitems = B.CreateMul(SizeX, SizeY);
+  Value *Workitems = B.CreateMul(RowWorkitems, SizeZ);
+  Value *Raw = emitTargetWorkitemId(B, 0);
+  Value *Flat = emitReplicatedDispatchLogicalX(B, Raw, sourceWaveSize(),
+                                               targetWaveSize());
+  Value *Active = B.CreateICmpULT(Flat, Workitems, "source_entry_active");
+  return ballotI1ToWidth(B, Active, sourceWaveMaskTy(), "source_entry_exec");
+}
+
+ReplicatedDispatchProjection::ReplicatedDispatchProjection(
     const MCSubtargetInfo &Source, const MCSubtargetInfo &Target, Type *I32Ty,
-    Type *I64Ty)
-    : ReplicationProjection(Source, Target, I32Ty, I64Ty) {
-  DoubledDispatchFactor = targetWaveSize() / sourceWaveSize();
+    Type *I64Ty, const KernelLaunchRequirements &Launch)
+    : ReplicationProjection(Source, Target, I32Ty, I64Ty), Launch(Launch) {
+  assert(targetWaveSize() > sourceWaveSize() &&
+         targetWaveSize() % sourceWaveSize() == 0 &&
+         "replicated dispatch requires widening by an integer factor");
+  ReplicationFactor = targetWaveSize() / sourceWaveSize();
+  ProvidesSourceWaveExecInvariant = true;
+}
+
+Value *ReplicatedDispatchProjection::emitSourceWaveId(IRBuilder<> &B) const {
+  Value *X = emitTargetWorkitemId(B, 0);
+  Value *Wave = B.CreateUDiv(X, B.getInt32(targetWaveSize()));
+  return B.CreateIntrinsic(Intrinsic::amdgcn_readfirstlane, {B.getInt32Ty()},
+                           {Wave}, nullptr, "source_wave_id");
 }
 
 Value *
-ReplicationDoubledDispatchProjection::emitSourceWaveId(IRBuilder<> &B) const {
-  return emitTargetWaveId(B);
-}
-
-Value *ReplicationDoubledDispatchProjection::emitPackedWorkitemId(
-    IRBuilder<> &B, unsigned NumDims) const {
-  // Remapped x OR'd with the source's raw y/z fields. y/z are per-thread
-  // correct as launched and become wave-uniform once x is doubled, so no
-  // remap or clamp is applied to them.
+ReplicatedDispatchProjection::emitPackedWorkitemId(IRBuilder<> &B,
+                                                   unsigned NumDims) const {
   return packWorkitemId(B, emitWorkitemIdX(B), NumDims);
 }
 
-// ----------------------------------------------------------------------------
-// WaveNativeProjection -- widening (wave32 -> wave64).
-//
-// The target is wave64, so waveMaskTy() is i64; this projection uses it for
-// both the EXEC alloca storage and the ballot/lane-active arithmetic.
-// ----------------------------------------------------------------------------
-
+// The target ballot is i64; source EXEC and scalar masks use an independent
+// i32 value per source wave. Selecting the corresponding half before
+// narrowing preserves both masks through scalar operations and SGPR saves.
 WaveNativeProjection::WaveNativeProjection(const MCSubtargetInfo &Source,
                                            const MCSubtargetInfo &Target,
-                                           Type *I32Ty, Type *I64Ty)
+                                           Type *I32Ty, Type *I64Ty,
+                                           bool AllowDivergentScalarControlFlow)
     : WaveProjection(Source, Target, I32Ty, I64Ty) {
-  // Restrict to the one direction where the widened-EXEC invariants are
-  // well-defined: same-wave needs no widening, and narrowing loses lanes
-  // regardless of policy.
-  assert((sourceWaveSize() == 32 && targetWaveSize() == 64) &&
-         "WaveNativeProjection is defined only for wave32 source -> "
-         "wave64 target widening");
-
-  // Widen EXEC storage to the target hardware mask and treat each half of the
-  // target wave as a distinct source wave. `emitInitialExec` forces HW
-  // EXEC=-1 kernel-wide, so mbcnt-derived EXEC writes project into independent
-  // target-width masks and a narrow EXEC_LO write broadcasts across both
-  // halves.
-  ExecStorageTy = waveMaskTy();
+  assert(sourceWaveSize() == 32 && targetWaveSize() == 64 &&
+         "WaveNativeProjection requires wave32 to wave64");
   NumSourceWavesPerTarget = 2;
-  BroadcastNarrowExecLoWrite = true;
-  ProvidesFullWaveExecInvariant = true;
+  AllowsDivergentScalarControlFlow = AllowDivergentScalarControlFlow;
+  ProvidesSourceWaveExecInvariant = true;
   PreservesMbcntDerivedExec = true;
 }
 
@@ -497,96 +565,45 @@ Value *WaveNativeProjection::emitSourceWaveId(IRBuilder<> &B) const {
 }
 
 Value *WaveNativeProjection::emitInitialExec(IRBuilder<> &B) const {
-  // Call `@llvm.amdgcn.init_whole_wave` to set hardware EXEC = -1 (all target
-  // lanes active) and capture the original per-lane active bit; ballot the
-  // captured bit into a wave-width mask to seed the EXEC alloca. This keeps the
-  // modeled source EXEC (read by emitUnderExec) separate from the hardware
-  // EXEC, so the kernel body runs with all lanes hardware-active while stores
-  // still honour the original mask.
-  Module *M = B.GetInsertBlock()->getModule();
-  Function *InitWw =
-      Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_init_whole_wave);
-  Value *OriginalActive = B.CreateCall(InitWw, {}, "orig_active");
-  // Ballot the per-lane i1 into a wave-width mask via the projection's own
-  // ballot so the result type matches waveMaskTy().
-  return ballotI1ToWidth(B, OriginalActive, waveMaskTy(), "saved_exec");
+  // Enable whole-wave execution for source scalar instructions and lane
+  // collectives. The intrinsic returns each lane's original activity; retain
+  // it so partial waves cannot acquire additional vector memory effects.
+  EntryActive = B.CreateIntrinsic(Intrinsic::amdgcn_init_whole_wave, {}, {},
+                                  nullptr, "orig_active");
+  return ballotI1ToWidth(B, EntryActive, sourceWaveMaskTy(), "saved_exec");
 }
 
 Value *WaveNativeProjection::emitLaneActiveBit(IRBuilder<> &B,
                                                Value *ExecVal) const {
-  // Target lane L is active iff bit L of the widened EXEC (waveMaskTy()) is
-  // set; the shift index is the full target lane id, with no modulo fold.
-  Value *LaneId = emitLaneIdx(B);
-  Type *ExecTy = ExecVal->getType();
-  assert(ExecTy == waveMaskTy() &&
-         "WaveNativeProjection requires EXEC storage to match the "
-         "target wave mask width; caller must size the alloca via "
-         "execStorageTy()");
-  Value *LaneIdInExec = B.CreateZExtOrTrunc(LaneId, ExecTy, "wn_lane_idx");
-  Value *Shifted = B.CreateLShr(ExecVal, LaneIdInExec, "wn_exec_at_lane");
-  Value *Bit = B.CreateAnd(Shifted, ConstantInt::get(ExecTy, 1), "wn_exec_bit");
-  return B.CreateICmpNE(Bit, ConstantInt::get(ExecTy, 0), "wn_lane_active");
+  assert(ExecVal->getType() == sourceWaveMaskTy() &&
+         "EXEC must have source wave width");
+  assert(EntryActive && "initial EXEC must be emitted first");
+  Value *Active = extractLaneBitFromWaveMask(B, ExecVal);
+  return B.CreateSelect(EntryActive, Active, B.getFalse(), "dispatched_active");
 }
 
 Value *WaveNativeProjection::ballotI1ToWidth(IRBuilder<> &B, Value *Pred,
                                              Type *ResultTy,
                                              const Twine &Name) const {
-  assert(Pred->getType() == B.getInt1Ty() &&
-         "ballotI1ToWidth requires an i1 predicate");
-  Module *M = B.GetInsertBlock()->getModule();
-  Function *Ballot = Intrinsic::getOrInsertDeclaration(
-      M, Intrinsic::amdgcn_ballot, {waveMaskTy()});
-  Value *WaveMask = B.CreateCall(Ballot, {Pred}, Name);
-  unsigned WantedBits = ResultTy->getPrimitiveSizeInBits();
-  unsigned WaveBits = waveMaskTy()->getPrimitiveSizeInBits();
-  assert(WantedBits <= WaveBits &&
-         "WaveNativeProjection::ballotI1ToWidth: wantedBits > waveBits "
-         "is not defined for wave32 source -> wave64 target cross-"
-         "widening; caller must request resultTy <= waveMaskTy");
-  if (WantedBits == WaveBits)
-    return WaveMask;
-  if (WantedBits < WaveBits)
-    // Narrowing the full target ballot to a source-width scalar loses the
-    // upper half (target lanes 32..63): a source instruction naming a single
-    // 32-bit SGPR destination cannot hold a 64-bit mask.
-    return B.CreateTrunc(WaveMask, ResultTy, Name + "_trunc");
-  // `wantedBits > waveBits` cannot occur for the wave32 -> wave64 direction
-  // this projection handles, so fall through without returning rather than
-  // zero-extending, which would invent bits the source wave does not have.
+  assert(Pred->getType()->isIntegerTy(1) && "expected a predicate");
+  Value *Mask = B.CreateIntrinsic(Intrinsic::amdgcn_ballot, {waveMaskTy()},
+                                  {Pred}, nullptr, Name);
+  if (ResultTy == waveMaskTy())
+    return Mask;
+  // SGPR values may differ between the two source waves. Select the slice
+  // before narrowing so ordinary scalar operations preserve both masks.
+  Mask = emitCurrentSourceWaveMask(B, Mask, Name + "_source");
+  return B.CreateZExtOrTrunc(Mask, ResultTy, Name);
 }
 
 Value *WaveNativeProjection::extractLaneBitFromWaveMask(IRBuilder<> &B,
                                                         Value *V) const {
-  if (V->getType() == B.getInt1Ty())
+  if (V->getType()->isIntegerTy(1))
     return V;
-  Type *I64Ty = B.getInt64Ty();
-  if (V->getType()->isPointerTy())
-    V = B.CreatePtrToInt(V, I64Ty);
-  Type *TargetTy = waveMaskTy();
-  unsigned SrcBits = V->getType()->getPrimitiveSizeInBits();
-  unsigned DstBits = TargetTy->getPrimitiveSizeInBits();
-  if (SrcBits < DstBits) {
-    // Widen a source-width mask back to target width by replication, so target
-    // lane K and K+W_src read the same bit. A zero-extend would leave the upper
-    // half always reading 0, deactivating target lanes 32..63 whenever EXEC is
-    // restored through a source-width SGPR.
-    Value *Zext = B.CreateZExt(V, TargetTy);
-    Value *Shifted = B.CreateShl(Zext, SrcBits);
-    V = B.CreateOr(Zext, Shifted, "wn_mask_widen");
-  } else if (SrcBits > DstBits) {
-    V = B.CreateTrunc(V, TargetTy);
-  } else if (V->getType() != TargetTy) {
-    V = B.CreateBitCast(V, TargetTy);
-  }
-  Value *LaneIdx = emitLaneIdx(B);
-  // Neutral `mask_*` names: this helper reads any wave mask as a per-lane
-  // predicate, not only VCC, so a `vcc_` prefix would mislabel SGPR sources.
-  Value *LaneIdxExt =
-      B.CreateZExtOrTrunc(LaneIdx, TargetTy, "wn_mask_lane_idx");
-  Value *Shifted = B.CreateLShr(V, LaneIdxExt, "wn_mask_at_lane");
-  Value *Bit =
-      B.CreateAnd(Shifted, ConstantInt::get(TargetTy, 1), "wn_mask_lane_bit");
-  return B.CreateICmpNE(Bit, ConstantInt::get(TargetTy, 0), "wn_mask_lane_i1");
+  V = B.CreateZExtOrTrunc(V, sourceWaveMaskTy());
+  Value *Lane = B.CreateAnd(emitLaneIdx(B), B.getInt32(31), "source_lane");
+  Value *Bit = B.CreateAnd(B.CreateLShr(V, Lane), B.getInt32(1), "mask_bit");
+  return B.CreateICmpNE(Bit, B.getInt32(0), "lane_active");
 }
 
 // ----------------------------------------------------------------------------

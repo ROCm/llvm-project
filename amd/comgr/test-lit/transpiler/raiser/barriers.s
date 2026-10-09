@@ -60,7 +60,7 @@ signal_kernel:
 	.type	signal_m0_kernel,@function
 signal_m0_kernel:
 ; SIGNAL-M0: unsupported-instruction-form: s_barrier_signal [SOP1]
-; SIGNAL-M0-SAME: arrives at a barrier without waiting there
+; SIGNAL-M0-SAME: arrives at the barrier m0 names
 	s_barrier_signal m0
 	s_endpgm
 
@@ -185,7 +185,9 @@ rfe_kernel:
 	.type	trap_kernel,@function
 trap_kernel:
 ; UNHANDLED-SOPP: unsupported-instruction-form: s_trap [SOPP]
-	s_trap 1
+; UNHANDLED-SOPP-SAME: enters trap handler 1, which the raised kernel does
+; UNHANDLED-SOPP-SAME: not have
+	s_trap 0x11
 	s_endpgm
 
 	.section	.rodata,"a",@progbits

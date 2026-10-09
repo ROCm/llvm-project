@@ -28,6 +28,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -81,6 +82,85 @@ cl::list<std::string> DumpDecodedOpt(
     "dump-decoded", cl::ValueOptional, cl::value_desc("kernel[,kernel...]"),
     cl::desc("Print the decoded instruction listing (offset, canonical op, "
              "disassembly) instead of raising."));
+
+cl::opt<bool> AllowReplicatedDispatchOpt(
+    "allow-replicated-dispatch",
+    cl::desc(
+        "Allow replicated dispatch and dump per-kernel launch requirements "
+        "as IR comments for testing."));
+cl::list<unsigned> LaunchGridOpt(
+    "launch-grid", cl::CommaSeparated, cl::value_desc("x,y,z"),
+    cl::desc("Source grid extents in workitems to validate and project."));
+cl::list<unsigned> LaunchWorkgroupOpt(
+    "launch-workgroup", cl::CommaSeparated, cl::value_desc("x,y,z"),
+    cl::desc("Source workgroup extents in workitems to validate and project."));
+cl::opt<std::string>
+    LaunchKernargOpt("launch-kernarg",
+                     cl::desc("Source kernarg bytes for launch validation."));
+cl::opt<unsigned>
+    LaunchDynamicLDSOpt("launch-dynamic-lds", cl::init(0),
+                        cl::desc("Source dynamic LDS allocation in bytes."));
+cl::list<unsigned> SpecializeWorkgroupOpt(
+    "specialize-workgroup", cl::CommaSeparated, cl::value_desc("x,y,z"),
+    cl::desc("Require these logical workgroup dimensions when raising."));
+
+Error dumpLaunchRequirements(const RaiseResult &Raised,
+                             ArrayRef<std::string> Targets) {
+  // Buffer the dump so a rejected launch leaves no partial result.
+  std::string Dump;
+  raw_string_ostream OS(Dump);
+  std::unique_ptr<MemoryBuffer> KernargBuffer;
+  ArrayRef<uint8_t> Kernarg;
+  if (!LaunchKernargOpt.empty()) {
+    ErrorOr<std::unique_ptr<MemoryBuffer>> Buffer =
+        MemoryBuffer::getFile(LaunchKernargOpt, false);
+    if (!Buffer)
+      return errorCodeToError(Buffer.getError());
+    KernargBuffer = std::move(*Buffer);
+    Kernarg = arrayRefFromStringRef(KernargBuffer->getBuffer());
+  }
+  for (StringRef Name : Targets) {
+    const KernelLaunchRequirements &Launch =
+        Raised.LaunchRequirements.find(Name)->second;
+    StringRef Kind;
+    switch (Launch.Mapping) {
+    case KernelLaunchRequirements::Kind::Unchanged:
+      Kind = "unchanged";
+      break;
+    case KernelLaunchRequirements::Kind::Replicated1D:
+      Kind = Launch.RequiresWholeSourceWaves ? "replicated-1D-whole-wave"
+                                             : "replicated-1D";
+      break;
+    case KernelLaunchRequirements::Kind::ReplicatedFlattened:
+      Kind = Launch.RequiresWholeSourceWaves ? "replicated-flattened-whole-wave"
+                                             : "replicated-flattened";
+      break;
+    }
+    OS << "; launch: ";
+    printEscapedString(Name, OS);
+    OS << " kind=" << Kind << " max_workgroup_size=" << Launch.MaxWorkgroupSize;
+    if (Launch.RequiredWorkgroupSize) {
+      const std::array<uint32_t, 3> &Required = *Launch.RequiredWorkgroupSize;
+      OS << " required_workgroup_size=" << Required[0] << ',' << Required[1]
+         << ',' << Required[2];
+    }
+    if (!LaunchGridOpt.empty()) {
+      LaunchDimensions Source;
+      llvm::copy(LaunchGridOpt, Source.Grid.begin());
+      llvm::copy(LaunchWorkgroupOpt, Source.Workgroup.begin());
+      Expected<LaunchDimensions> Target =
+          Launch.project(Name, Source, Kernarg, LaunchDynamicLDSOpt);
+      if (!Target)
+        return Target.takeError();
+      OS << " grid=" << Target->Grid[0] << ',' << Target->Grid[1] << ','
+         << Target->Grid[2] << " workgroup=" << Target->Workgroup[0] << ','
+         << Target->Workgroup[1] << ',' << Target->Workgroup[2];
+    }
+    OS << '\n';
+  }
+  outs() << Dump;
+  return Error::success();
+}
 
 // Print the ABI and descriptor fields for one kernel, in a form the lit tests
 // FileCheck.
@@ -155,8 +235,7 @@ int runDumpMeta(const CodeObjectInfo &Info, StringRef Isa,
 
   Expected<TextSection> TsOrErr = Info.textSection();
   if (!TsOrErr) {
-    errs() << "transpile_cli: .text: " << toString(TsOrErr.takeError())
-           << "\n";
+    errs() << "transpile_cli: .text: " << toString(TsOrErr.takeError()) << "\n";
     return 1;
   }
   outs() << "text_bytes: " << TsOrErr->Bytes.size() << "\n";
@@ -244,10 +323,28 @@ int runEmitIr(const CodeObjectInfo &Info, const TextSection &Text,
 
     Kernels.push_back(KernelRequest{Target, **MetaOrErr, ExtentOrErr->Offset,
                                     ExtentOrErr->Offset + ExtentOrErr->Size});
+    if (!SpecializeWorkgroupOpt.empty()) {
+      Kernels.back().WorkgroupSize.emplace();
+      llvm::copy(SpecializeWorkgroupOpt, Kernels.back().WorkgroupSize->begin());
+    }
   }
 
+  // Every function symbol in the text section, so a call leaving a kernel's
+  // own extent can be followed into the helper it names.
+  Expected<SmallVector<KernelSymbolExtent>> ExtentsOrErr =
+      Info.textFunctionExtents();
+  if (!ExtentsOrErr) {
+    errs() << "transpile_cli: function extents: "
+           << toString(ExtentsOrErr.takeError()) << "\n";
+    return 1;
+  }
+  ArrayRef<KernelSymbolExtent> FunctionExtents = *ExtentsOrErr;
+
+  LaunchPolicy Policy = AllowReplicatedDispatchOpt
+                            ? LaunchPolicy::AllowReplication
+                            : LaunchPolicy::PreserveGeometry;
   Expected<RaiseResult> RaisedOrErr =
-      raiseToIR(Text, SourceIsa, TargetIsa, Kernels);
+      raiseToIR(Text, SourceIsa, TargetIsa, Kernels, FunctionExtents, Policy);
   if (!RaisedOrErr) {
     // The raiser only returns a module on success, so a failure has no partial
     // IR to dump; report the structured reason on stderr. It also stops at the
@@ -255,8 +352,8 @@ int runEmitIr(const CodeObjectInfo &Info, const TextSection &Text,
     // what is wrong with each of them rather than only with the first.
     bool Reported = false;
     for (const KernelRequest &Kernel : Kernels) {
-      Expected<RaiseResult> OneOrErr =
-          raiseToIR(Text, SourceIsa, TargetIsa, Kernel);
+      Expected<RaiseResult> OneOrErr = raiseToIR(
+          Text, SourceIsa, TargetIsa, Kernel, FunctionExtents, Policy);
       if (OneOrErr)
         continue;
       errs() << "transpile_cli: failed to raise: "
@@ -271,6 +368,12 @@ int runEmitIr(const CodeObjectInfo &Info, const TextSection &Text,
     else
       consumeError(RaisedOrErr.takeError());
     return 1;
+  }
+  if (AllowReplicatedDispatchOpt) {
+    if (Error Err = dumpLaunchRequirements(*RaisedOrErr, Targets)) {
+      errs() << "transpile_cli: launch: " << toString(std::move(Err)) << '\n';
+      return 1;
+    }
   }
   RaisedOrErr->Module->print(outs(), nullptr);
   return 0;
@@ -293,9 +396,29 @@ int main(int Argc, char **Argv) {
   bool DumpMeta = DumpMetaOpt.getNumOccurrences() > 0;
   bool DumpDecoded = DumpDecodedOpt.getNumOccurrences() > 0;
   bool EmitIr = EmitIrOpt.getNumOccurrences() > 0;
+  if (!SpecializeWorkgroupOpt.empty() && (SpecializeWorkgroupOpt.size() != 3 ||
+                                          !EmitIr || DumpMeta || DumpDecoded)) {
+    errs() << "transpile_cli: --specialize-workgroup requires --emit-ir and "
+              "three dimensions\n";
+    return 2;
+  }
   if (!DumpMeta && !DumpDecoded && !EmitIr) {
     errs() << "transpile_cli: no mode selected; pass --dump-meta, "
               "--dump-decoded, or --emit-ir\n";
+    return 2;
+  }
+
+  if ((!LaunchGridOpt.empty() || !LaunchWorkgroupOpt.empty() ||
+       !LaunchKernargOpt.empty() || LaunchDynamicLDSOpt.getNumOccurrences()) &&
+      (!AllowReplicatedDispatchOpt || LaunchGridOpt.size() != 3 ||
+       LaunchWorkgroupOpt.size() != 3)) {
+    errs() << "transpile_cli: launch dimensions require "
+              "--allow-replicated-dispatch and three grid and workgroup "
+              "dimensions\n";
+    return 2;
+  }
+  if (AllowReplicatedDispatchOpt && (!EmitIr || DumpMeta || DumpDecoded)) {
+    errs() << "transpile_cli: --allow-replicated-dispatch requires --emit-ir\n";
     return 2;
   }
 
@@ -314,8 +437,8 @@ int main(int Argc, char **Argv) {
   if (Isa.empty()) {
     Expected<std::string> ElfIsa = COMGR::metadata::getElfIsaName(CoData);
     if (!ElfIsa) {
-      errs() << "transpile_cli: cannot read ISA from " << CoPathOpt
-             << ": " << toString(ElfIsa.takeError()) << "\n";
+      errs() << "transpile_cli: cannot read ISA from " << CoPathOpt << ": "
+             << toString(ElfIsa.takeError()) << "\n";
       return 2;
     }
     Isa = std::move(*ElfIsa);
@@ -339,8 +462,8 @@ int main(int Argc, char **Argv) {
 
   Expected<TextSection> TextOrErr = Info.textSection();
   if (!TextOrErr) {
-    errs() << "transpile_cli: could not extract .text from "
-           << CoPathOpt << ": " << toString(TextOrErr.takeError()) << "\n";
+    errs() << "transpile_cli: could not extract .text from " << CoPathOpt
+           << ": " << toString(TextOrErr.takeError()) << "\n";
     return 2;
   }
 

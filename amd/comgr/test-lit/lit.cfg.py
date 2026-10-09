@@ -26,6 +26,13 @@ if config.comgr_amdgpu_target_available:
     config.available_features.add("comgr-has-amdgpu-target")
 if config.comgr_transpiler_available:
     config.available_features.add("comgr-has-transpiler")
+if os.path.exists(
+    os.path.join(
+        config.llvm_tools_dir,
+        "llc.exe" if platform.system() == "Windows" else "llc",
+    )
+):
+    config.available_features.add("comgr-has-llc")
 
 # The AMDGPU device AddressSanitizer runtime (libclang_rt.asan.a for
 # amdgcn-amd-amdhsa) is a separately built artifact. The asan tests link it,
@@ -44,6 +51,21 @@ if glob.glob(
     )
 ):
     config.available_features.add("comgr-has-amdgpu-asan-runtime")
+
+try:
+    with open(config.comgr_resource_dir_file, encoding="utf-8") as source:
+        embedded_resources = source.read()
+except OSError:
+    embedded_resources = ""
+
+if '"lib/amdgcn-amd-amdhsa/libclang_rt.profile.a"' in embedded_resources:
+    config.available_features.add("comgr-has-amdgpu-profile-runtime")
+
+if (
+    '"lib/amdgcn-amd-amdhsa/libclang_rt.asan.a"' in embedded_resources
+    and '"lib/amdgcn-amd-amdhsa/libclang_rt.asan_static.a"' in embedded_resources
+):
+    config.available_features.add("comgr-has-embedded-amdgpu-asan-runtime")
 
 
 # spirv-to-reloc-debuginfo checks that comgr forwards
@@ -113,6 +135,8 @@ config.substitutions.append(("%clang", _fwd(config.llvm_tools_dir, "clang")))
 config.substitutions.append(("%llvm-as", _fwd(config.llvm_tools_dir, "llvm-as")))
 config.substitutions.append(("%llvm-dis", _fwd(config.llvm_tools_dir, "llvm-dis")))
 config.substitutions.append(("%llvm-mc", _fwd(config.llvm_tools_dir, "llvm-mc")))
+config.substitutions.append(("%llc", _fwd(config.llvm_tools_dir, "llc")))
+config.substitutions.append(("%opt", _fwd(config.llvm_tools_dir, "opt")))
 config.substitutions.append(
     ("%llvm-objcopy", _fwd(config.llvm_tools_dir, "llvm-objcopy"))
 )

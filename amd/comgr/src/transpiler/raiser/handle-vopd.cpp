@@ -140,9 +140,9 @@ Expected<Value *> lowerFloatingPoint(RaiseContext &Ctx, const DecodedInst &Di,
   if (IsF64) {
     if (Half.CanonOp != CanonicalOp::V_MAX_NUM_F64 &&
         Half.CanonOp != CanonicalOp::V_MIN_NUM_F64)
-      if (Error Err = Ctx.validateF64Environment(Di))
+      if (Error Err = Ctx.validateFPEnvironment(Di, Ty))
         return std::move(Err);
-  } else if (Error Err = Ctx.validateF32Environment(Di)) {
+  } else if (Error Err = Ctx.validateFPEnvironment(Di, Ty)) {
     return std::move(Err);
   }
 

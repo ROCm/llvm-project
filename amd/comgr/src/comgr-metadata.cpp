@@ -449,6 +449,17 @@ amd_comgr_status_t getElfIsaName(DataObject *DataP, std::string &IsaName) {
 
 amd_comgr_status_t getIsaIndex(StringRef TargetIDString, size_t &Index,
                                StringRef *Processor) {
+  // Treat bare amdgpu as its legacy alias even when the LLVM TargetID parser
+  // requires the amdgpu spelling to include a subarch.
+  // TODO: Remove this normalization once Comgr's LLVM baseline includes the
+  // reland of llvm/llvm-project#213847 and accepts bare amdgpu directly.
+  // Keep the alias and round-trip tests when removing the workaround.
+  std::string LegacyTargetID;
+  if (TargetIDString.consume_front("amdgpu-")) {
+    LegacyTargetID = (Twine("amdgcn-") + TargetIDString).str();
+    TargetIDString = LegacyTargetID;
+  }
+
   // Validate the target ID and resolve the processor (derived from the subarch
   // when the name omits it).
   std::optional<AMDGPU::TargetID> TID =
@@ -624,8 +635,9 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
       Doc.getNode(std::to_string(isTrapHandlerEnabled(Kind)), /*Copy=*/true);
   Root["ImageSupport"] = Doc.getNode(
       std::to_string(Features.test(AMDGPU::FEAT_IMAGE_INSTS)), /*Copy=*/true);
+  // Report total LDS capacity in full-SIMD mode.
   Root["LocalMemorySize"] = Doc.getNode(
-      std::to_string(AMDGPU::getMaxHWAddressableLocalMemorySize(Kind)),
+      std::to_string(AMDGPU::getLocalMemorySize(Kind, /*FullSIMDMode=*/true)),
       /*Copy=*/true);
   // Report physical-CU counts independently of the workgroup execution mode.
   // GFX10+ has two SIMDs per CU; earlier targets have four.

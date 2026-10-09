@@ -7,19 +7,26 @@ breaks build of hipblaslt
 ---
 breaks rocgdb UT
 [Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
+[CIR][CodeGen][NFC] Share isEmptyFieldForLayout and isEmptyRecordForLayout (#223424)
+[CIR][CodeGen][NFC] Share the bit-field and vbase layout ABI predicates (#227258
+ [CIR][CodeGen][NFC] Share hasOwnStorage (#227259)
 ---
 breaks windows build: [amd-llvm] terminate called after throwing an instance of 'std::bad_alloc'
 Make][CodeGen] Add PCH for Clang CodeGen (#206018)
 ---
-breaks rocrand 4 tests
-[SLP]Vectorize single-user instructions as the last-attempt seeds
----
-breaks windows build: MSVC rejects the CRTP removal, error C2440 and C2027
-[ADT] Remove CRTP from FoldingSet and ContextualFoldingSet (NFC) (#216830)
----
-joseph to modify comgr for unbundle
-[Clang] Clean up leftover old offloading driver tools and utilities (#221093)
----
 debug/merge conflicts
 10d3708a0bb8 [IndVarSimplify] Batch forgetValue calls in sinkUnusedInvariants (#219025)
+---
+ASAN-DEBUG lib breaks
+"[clang][DebugInfo] Emit static local variables in their lexical block scope (#213153)" (#4465) (2 hours ago) <Scott Linder>
+---
+comgr fails to build -lzma
+[Support][lldb] Port xz (lzma) decompression from LLDB into LLVM (#220092)
+---
+breaks asan-debug build
+[DebugInfo] Support global addresses in variable locations  (#218722)" (#4800) (2 hours ago) <theRonShark>
+---
+breaks gfx1250 builds ck hipBLASlt
+1e54ad11f667 Revert "[AMDGPU] Reserve ENABLE_WAVEFRONT_SIZE32 on gfx125x (#229162)"
+Revert "Reland '[Clang][AMDGPU] Change __fp16 to _Float16 in builtin definitions' (#185446)" (#4866)
 ---

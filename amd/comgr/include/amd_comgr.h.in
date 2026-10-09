@@ -1195,6 +1195,8 @@ amd_comgr_destroy_action_info(
  * or the empty string then the isa name is cleared. The isa name is defined as
  * the Code Object Target Identification string, described at
  * https://llvm.org/docs/AMDGPUUsage.html#code-object-target-identification
+ * For AMDGPU, the bare "amdgpu" architecture spelling is accepted as an alias
+ * for "amdgcn" when a supported processor is specified.
  *
  * @retval ::AMD_COMGR_STATUS_SUCCESS The function has
  * been executed successfully.

@@ -485,7 +485,7 @@ DwarfDebug::DwarfDebug(AsmPrinter *A)
 
   // Emit call-site-param debug info for GDB and LLDB, if the target supports
   // the debug entry values feature. It can also be enabled explicitly.
-  EmitDebugEntryValues = Asm->TM.Options.ShouldEmitDebugEntryValues();
+  EmitDebugEntryValues = Asm->TM.shouldEmitDebugEntryValues();
 
   // It is unclear if the GCC .debug_macro extension is well-specified
   // for split DWARF. For now, do not allow LLVM to emit it.
@@ -1076,9 +1076,7 @@ void DwarfDebug::constructCallSiteEntryDIEs(const DISubprogram &SP,
       if (PhysRegCalleeOperand) {
         bool Scalable = false;
         const MachineOperand *BaseOp = nullptr;
-        const TargetRegisterInfo &TRI =
-            *Asm->MF->getSubtarget().getRegisterInfo();
-        if (TII->getMemOperandWithOffset(MI, BaseOp, Offset, Scalable, &TRI)) {
+        if (TII->getMemOperandWithOffset(MI, BaseOp, Offset, Scalable)) {
           if (BaseOp && BaseOp->isReg() && !Scalable)
             CallTarget = MachineLocation(BaseOp->getReg(), /*Indirect*/ true);
         }
@@ -3338,6 +3336,7 @@ void DwarfDebug::emitDebugLocValue(const AsmPrinter &AP, const DIBasicType *BT,
                                    const DbgValueLoc &Value,
                                    DwarfExpression &DwarfExpr) {
   auto *DIExpr = Value.getExpression();
+  DIExpressionCursor ExprCursor(DIExpr);
   DwarfExpr.addFragmentOffset(DIExpr);
 
   if (DIExpr) {
@@ -3347,8 +3346,6 @@ void DwarfDebug::emitDebugLocValue(const AsmPrinter &AP, const DIBasicType *BT,
       return;
     }
   }
-
-  DIExpressionCursor ExprCursor(DIExpr);
 
   // If the DIExpr is an Entry Value, we want to follow the same code path
   // regardless of whether the DBG_VALUE is variadic or not.
@@ -3704,9 +3701,6 @@ void DwarfDebug::emitDebugLocImpl(MCSection *Sec) {
 
 // Emit locations into the .debug_loc/.debug_loclists section.
 void DwarfDebug::emitDebugLoc() {
-  if (DisableDwarfLocations)
-    return;
-
   emitDebugLocImpl(
       getDwarfVersion() >= 5
           ? Asm->getObjFileLowering().getDwarfLoclistsSection()
@@ -3715,9 +3709,6 @@ void DwarfDebug::emitDebugLoc() {
 
 // Emit locations into the .debug_loc.dwo/.debug_loclists.dwo section.
 void DwarfDebug::emitDebugLocDWO() {
-  if (DisableDwarfLocations)
-    return;
-
   if (getDwarfVersion() >= 5) {
     emitDebugLocImpl(
         Asm->getObjFileLowering().getDwarfLoclistsDWOSection());

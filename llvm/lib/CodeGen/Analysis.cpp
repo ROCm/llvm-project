@@ -196,6 +196,15 @@ GlobalValue *llvm::ExtractTypeInfo(Value *V) {
   return GV;
 }
 
+bool llvm::isExceptionPointerAndSelectorType(Type *Ty) {
+  auto *STy = dyn_cast<StructType>(Ty);
+  if (!STy || STy->getNumElements() != 2)
+    return false;
+  Type *ExnTy = STy->getElementType(0);
+  return (ExnTy->isPointerTy() || ExnTy->isIntegerTy()) &&
+         STy->getElementType(1)->isIntegerTy();
+}
+
 /// getFCmpCondCode - Return the ISD condition code corresponding to
 /// the given LLVM IR floating-point condition code.  This includes
 /// consideration of global floating-point math flags.
@@ -528,7 +537,6 @@ static bool nextRealType(SmallVectorImpl<Type *> &SubTypes,
 
   return true;
 }
-
 
 /// Test if the given instruction is in a position to be optimized
 /// with a tail-call. This roughly means that it's in a block with

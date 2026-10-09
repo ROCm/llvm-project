@@ -27,6 +27,7 @@
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Option/Option.h"
 #include "llvm/Support/VersionTuple.h"
+#include "llvm/Support/VirtualFileSystemFwd.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/TargetParser/Triple.h"
 #include <cassert>
@@ -44,11 +45,6 @@ class ArgList;
 class DerivedArgList;
 
 } // namespace opt
-namespace vfs {
-
-class FileSystem;
-
-} // namespace vfs
 } // namespace llvm
 
 namespace clang {
@@ -758,14 +754,6 @@ public:
   virtual void
   AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &CC1Args) const;
-
-  /// Add options that need to be passed to cc1 for this target that could add
-  /// commands to the compilation to transform an input.
-  virtual void
-  addActionsFromClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                                   llvm::opt::ArgStringList &CC1Args,
-                                   const JobAction &JA, Compilation &C,
-                                   const InputInfoList &Inputs) const;
 
   /// Add options that need to be passed to cc1 for this target.
   virtual void

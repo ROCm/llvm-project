@@ -33,8 +33,8 @@ buildSubtargetInfo(const Target &Target, StringRef Isa) {
   // Reject the bare processor name up front so malformed ISA input returns an
   // error instead.
   if (AMDGPU::parseArchAMDGCN(Isa) == AMDGPU::GK_NONE) {
-    return makeTranspilerError("buildSubtargetInfo: unknown AMDGPU processor '" +
-                            Isa + "'");
+    return makeTranspilerError(
+        "buildSubtargetInfo: unknown AMDGPU processor '" + Isa + "'");
   }
   Triple Triple(kAMDGPUTriple);
   std::unique_ptr<MCSubtargetInfo> STI(
@@ -56,8 +56,8 @@ llvm::Expected<MCState> initMCState(StringRef TargetIsa) {
   MCState State;
   State.Target = TargetRegistry::lookupTarget(Triple, LookupError);
   if (!State.Target) {
-    return makeTranspilerError("initMCState: Target lookup for '" + kAMDGPUTriple +
-                            "' failed: " + LookupError);
+    return makeTranspilerError("initMCState: Target lookup for '" +
+                               kAMDGPUTriple + "' failed: " + LookupError);
   }
 
   // Once the AMDGPU target is registered, its instr/reg tables are built from

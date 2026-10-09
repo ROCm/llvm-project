@@ -12,9 +12,9 @@
 #include "amdgpu-mc-tables.h"
 #include "canonical-op.h"
 #include "decoded-inst.h"
-#include "transpiler/common/transpiler-error.h"
 #include "mc-state.h"
 #include "opcode-map.h"
+#include "transpiler/common/transpiler-error.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
@@ -64,16 +64,26 @@ void buildSrcMap(DecodedInst &Di, const MCInstrDesc &Desc) {
   std::optional<unsigned> OldIdx = namedOperandIdx(Opc, AMDGPU::OpName::old);
   std::optional<unsigned> VdstInIdx =
       namedOperandIdx(Opc, AMDGPU::OpName::vdst_in);
+  std::optional<unsigned> ClampIdx =
+      namedOperandIdx(Opc, AMDGPU::OpName::clamp);
+  std::optional<unsigned> OmodIdx = namedOperandIdx(Opc, AMDGPU::OpName::omod);
+  std::optional<unsigned> Src0ModIdx =
+      namedOperandIdx(Opc, AMDGPU::OpName::src0_modifiers);
+  std::optional<unsigned> Src1ModIdx =
+      namedOperandIdx(Opc, AMDGPU::OpName::src1_modifiers);
+  std::optional<unsigned> Src2ModIdx =
+      namedOperandIdx(Opc, AMDGPU::OpName::src2_modifiers);
   auto OpInfos = Desc.operands();
   unsigned NumOps = Inst.getNumOperands();
   unsigned PendingModIdx = UINT_MAX;
   for (unsigned I = Di.FirstSrcIdx; I < NumOps; ++I) {
-    if (I < OpInfos.size() &&
-        OpInfos[I].OperandType == AMDGPU::OPERAND_INPUT_MODS) {
+    if ((I < OpInfos.size() &&
+         OpInfos[I].OperandType == AMDGPU::OPERAND_INPUT_MODS) ||
+        Src0ModIdx == I || Src1ModIdx == I || Src2ModIdx == I) {
       PendingModIdx = I;
       continue;
     }
-    if (OldIdx == I || VdstInIdx == I) {
+    if (OldIdx == I || VdstInIdx == I || ClampIdx == I || OmodIdx == I) {
       PendingModIdx = UINT_MAX;
       continue;
     }
@@ -117,7 +127,7 @@ void driftCheckTiedIn(const DecodedInst &Di, const MCInstrDesc &Desc) {
 // named-operand table, catching operand-layout changes for opcodes using srcN
 // naming. MFMA appends its source modifiers after the sources rather than
 // interleaving them, so Di.ModMap is repaired from the table instead.
-void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
+void driftCheckSrcN(const MCState &Mc, DecodedInst &Di,
                     const MCInstrDesc &Desc) {
   static constexpr AMDGPU::OpName KSrcNames[] = {
       AMDGPU::OpName::src0, AMDGPU::OpName::src1, AMDGPU::OpName::src2};
@@ -135,13 +145,17 @@ void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
   bool IsMadmk =
       ImmIdx && Src0Idx && Src1Idx && *Src0Idx < *ImmIdx && *ImmIdx < *Src1Idx;
 
-  // v_movrel{d,sd}_b32 place $vdst at operand 0 as an input, so SrcMap[0]
-  // cannot be checked against the named src0 operand.
-  bool IsMovrel = namedOperandIdx(Opc, AMDGPU::OpName::vdst) == 0u &&
-                  Desc.getNumDefs() == 0;
-  assert((!IsMovrel ||
+  // Scalar MOVRELD and vector MOVREL forms place their destination at operand
+  // 0 as an input, so SrcMap[0] cannot be checked against named src0.
+  bool IsVectorMovrel = Desc.getNumDefs() == 0 &&
+                        namedOperandIdx(Opc, AMDGPU::OpName::vdst) == 0u;
+  assert((!IsVectorMovrel ||
           StringRef(getMnemonic(Mc, Di.Inst)).starts_with("v_movrel")) &&
          "vdst-at-0/no-defs signature matched a non-movrel opcode");
+  bool IsScalarMovreld =
+      Desc.getNumDefs() == 0 &&
+      namedOperandIdx(Opc, AMDGPU::OpName::sdst) == 0u &&
+      StringRef(getMnemonic(Mc, Di.Inst)).starts_with("s_movreld");
 
   for (unsigned K = 0; K < 3; ++K) {
     std::optional<unsigned> NamedSrc = namedOperandIdx(Opc, KSrcNames[K]);
@@ -150,7 +164,8 @@ void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
     std::optional<unsigned> OurSrc = K < Di.SrcMap.size()
                                          ? std::optional<unsigned>(Di.SrcMap[K])
                                          : std::nullopt;
-    bool SkipThis = (IsMadmk && K == 1) || (IsMovrel && K == 0);
+    bool SkipThis =
+        (IsMadmk && K == 1) || ((IsVectorMovrel || IsScalarMovreld) && K == 0);
     assert((SkipThis || OurSrc == NamedSrc) &&
            "srcMap disagrees with OpName::srcN table");
 
@@ -259,7 +274,7 @@ Error decodeVOPDHalf(DecodedInst &Di, DecodedInst::VOPDHalf &Half,
                        Half.CanonOp == CanonicalOp::V_XOR_B32 ||
                        Half.CanonOp == CanonicalOp::V_BITOP3_B32))
     BitOpIdx = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
-                                                  AMDGPU::OpName::bitop3);
+                                                     AMDGPU::OpName::bitop3);
 
   if (!Half.hasBitOp3() && BitOpIdx >= 0) {
     unsigned OperandIdx = static_cast<unsigned>(BitOpIdx);
@@ -279,7 +294,7 @@ Error decodeVOPD(DecodedInst &Di, const MCInstrInfo &MCII,
   if (!COMGR::transpiler::isVOPD(Di.Inst.getOpcode()))
     return Error::success();
 
-  Di.VOPD.emplace();
+  Di.VOPD = std::array<DecodedInst::VOPDHalf, 2>{};
   const bool IsVOPD3 = (Di.TargetSpecificFlags & AmdgpuFormat::VOPD3) != 0;
   auto [OpX, OpY] = COMGR::transpiler::getVOPDComponents(Di.Inst.getOpcode());
   const MCInstrDesc &OpXDesc = MCII.get(OpX);
@@ -322,8 +337,8 @@ Expected<uint64_t> soppBranchTarget(const DecodedInst &Di) {
   std::optional<int64_t> Imm = evalOperandAsConst(Di.Inst, 0);
   if (!Imm)
     return makeTranspilerError("soppBranchTarget: branch at .text offset 0x" +
-                            Twine::utohexstr(Di.Offset) +
-                            " carries no constant displacement");
+                               Twine::utohexstr(Di.Offset) +
+                               " carries no constant displacement");
 
   // The ISA reads the program counter as the address of the instruction that
   // follows the branch, and counts the displacement in dwords from there.
@@ -335,8 +350,8 @@ Expected<uint64_t> soppBranchTarget(const DecodedInst &Di) {
   // near the end of the section rather than reading as the error it is.
   if (Displacement < 0 && static_cast<uint64_t>(-Displacement) > Base)
     return makeTranspilerError("soppBranchTarget: branch at .text offset 0x" +
-                            Twine::utohexstr(Di.Offset) +
-                            " reaches back past the start of .text");
+                               Twine::utohexstr(Di.Offset) +
+                               " reaches back past the start of .text");
   return Base + static_cast<uint64_t>(Displacement);
 }
 
@@ -504,8 +519,8 @@ Expected<DecodeResult> decodeKernel(const MCState &Mc, const OpcodeMap &OpcMap,
   for (uint64_t Start : Out.BlockStarts)
     if (Start != KernelOffset && !DecodedOffsets.contains(Start))
       return makeTranspilerError("decodeKernel: branch target 0x" +
-                              Twine::utohexstr(Start) +
-                              " is not the offset of a decoded instruction");
+                                 Twine::utohexstr(Start) +
+                                 " is not the offset of a decoded instruction");
 
   return Out;
 }

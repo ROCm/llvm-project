@@ -477,7 +477,9 @@ class PredicateTests(unittest.TestCase):
                 ["{input}"],
                 cache=transpiler_reduce.PredicateCache(cache_path),
             )
-            with self.assertRaisesRegex(transpiler_reduce.ReducerError, "corrupt entry"):
+            with self.assertRaisesRegex(
+                transpiler_reduce.ReducerError, "corrupt entry"
+            ):
                 recreated.evaluate(candidate)
 
     def test_persistent_cache_invalidates_changed_predicate_script(self) -> None:

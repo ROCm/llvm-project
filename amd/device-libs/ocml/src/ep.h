@@ -380,6 +380,22 @@ div(T2 a, T2 b)
     return nrm(q);
 }
 
+// scalar/scalar, 2 refinements: ~3 bits over div(T,T).
+static ATTR T2
+div2(T a, T b)
+{
+    T y = RCP(b);
+    T qhi = a * y;
+    T2 p = mul(qhi, b);
+    T2 r = fsub(a, p.hi); r.lo -= p.lo; r = nrm(r);
+    T qmi = r.hi * y;
+    r = fsub(r, mul(qmi, b));
+    T qlo = r.hi * y;
+    T2 q = fadd(qhi, qmi);
+    q.lo += qlo;
+    return nrm(q);
+}
+
 static ATTR T2
 rcp(T b)
 {

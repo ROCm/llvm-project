@@ -7,9 +7,6 @@
 # It mirrors ci.yml but uses multi_arch_build_portable_linux.yml instead of
 # ci_linux.yml. Once validated, ci.yml will be updated to use the multi-arch
 # sub-workflows directly.
-#
-# Same `ci:skip` rules as rockci-amd-staging.yml: only automated LLVM_MAIN_REVISION PRs
-# (matching title/body) skip presubmit; label alone is not enough. 
 
 name: Multi Arch Parameterised CI amd-staging
 
@@ -39,7 +36,7 @@ on:
       linux_amdgpu_families:
         type: string
         description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: "gfx94x,gfx110x,gfx90a"
+        default: "gfx94x,gfx110x,gfx90a,gfx125x"
       linux_test_labels:
         type: string
         description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
@@ -124,7 +121,6 @@ jobs:
         needs.setup.outputs.enable_build_jobs == 'true'
       }}
     uses: ./.github/workflows/multi_arch_ci_linux.yml
-    secrets: inherit
     with:
       build_config: ${{ needs.setup.outputs.linux_build_config }}
       test_labels: ${{ needs.setup.outputs.linux_test_labels }}
@@ -150,7 +146,6 @@ jobs:
         needs.setup.outputs.enable_build_jobs == 'true'
       }}
     uses: ./.github/workflows/multi_arch_ci_windows.yml
-    secrets: inherit
     with:
       build_config: ${{ needs.setup.outputs.windows_build_config }}
       test_labels: ${{ needs.setup.outputs.windows_test_labels }}

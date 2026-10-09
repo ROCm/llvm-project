@@ -113,6 +113,11 @@ struct UserSgprLayout {
     return PreloadedKernargByteOffset;
   }
 
+  // Whether entry-state seeding needs the kernarg segment pointer.
+  bool needsKernargSegmentPtr() const {
+    return KernargSegmentPtrSgpr.has_value() || PreloadedKernargLength > 0;
+  }
+
   // Build the layout from a parsed kernel descriptor. Returns llvm::Error
   // when the descriptor is missing or internally inconsistent.
   // `sourceSTI` selects ABI-versioned fields such as gfx125's 6-bit

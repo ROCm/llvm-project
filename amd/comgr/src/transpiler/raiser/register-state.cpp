@@ -16,6 +16,7 @@
 #include "SIDefines.h"
 #include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
@@ -25,10 +26,16 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PatternMatch.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Support/AMDHSAKernelDescriptor.h"
+#include "llvm/Support/Alignment.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Utils/Local.h"
 
 #include <algorithm>
 #include <optional>
@@ -37,6 +44,11 @@
 using namespace llvm;
 
 namespace COMGR::transpiler {
+
+// Where an architected-SGPR prologue leaves the workgroup id.
+constexpr unsigned ArchitectedWorkgroupIdXTtmp = 9;
+constexpr unsigned ArchitectedWorkgroupIdYZTtmp = 7;
+constexpr unsigned ArchitectedWorkgroupIdZBitOffset = 16;
 
 Expected<RegisterState> RegisterState::create(IRBuilder<> &B,
                                               const WaveProjection &Projection,
@@ -47,23 +59,57 @@ Expected<RegisterState> RegisterState::create(IRBuilder<> &B,
           Meta, Projection.SourceSTI, MC.SubtargetInfo->getCPU(), Layout))
     return std::move(Err);
   RegisterState Registers(B, Projection, MC, std::move(Layout));
-  if (Error Err = Registers.seedEntrySgprs())
+  if (Error Err = Registers.seedEntrySgprs(Meta))
     return std::move(Err);
+  Registers.seedEntryVgprs(Meta);
   return Registers;
+}
+
+// Seed the VGPRs the source ABI preloads before entry. Only the workitem id
+// arrives in a VGPR, and compute_pgm_rsrc2 says how many of its dimensions the
+// kernel asked for; the projection turns them into the value the source
+// expects to read, which on a widening raise is not the target's own id.
+void RegisterState::seedEntryVgprs(const KernelMeta &Meta) {
+  const unsigned NumDims =
+      AMDHSA_BITS_GET(Meta.ComputePgmRsrc2,
+                      amdhsa::COMPUTE_PGM_RSRC2_ENABLE_VGPR_WORKITEM_ID) +
+      1;
+  assert(NumDims <= 3 && "workitem id has three dimensions at most");
+  if (Projection.SourceSTI.hasFeature(AMDGPU::FeaturePackedTID)) {
+    Regs.storeVGPR32(B, 0, Projection.emitPackedWorkitemId(B, NumDims));
+    return;
+  }
+  // One dimension per VGPR, starting at v0, in x, y, z order.
+  for (unsigned Dim = 0; Dim < NumDims; ++Dim)
+    Regs.storeVGPR32(B, Dim, Projection.emitWorkitemId(B, Dim));
 }
 
 // Seed the SGPRs the source ABI preloads before entry with the target
 // intrinsics that produce the same values. The layout, not a fixed SGPR
 // numbering, says where each source lands: kernarg preload and the
 // enable_sgpr_* toggles legally move them.
-Error RegisterState::seedEntrySgprs() {
+Error RegisterState::seedEntrySgprs(const KernelMeta &Meta) {
+  // A cluster launch hands the cluster id over the TTMPs the workgroup id
+  // otherwise arrives in, and the id within the cluster over TTMP6, neither of
+  // which the seeding below reproduces.
+  if (Meta.hasNonDisabledClusterDims())
+    return RaiseFailure::general(
+        RaiseFailureReason::UnsupportedSourceClusterDims,
+        "the kernel declares cluster dimensions, so its entry state is not the "
+        "one the raise can reproduce on the target");
+
   Module &M = *B.GetInsertBlock()->getModule();
   auto Seed = [&](std::optional<unsigned> Sgpr, Intrinsic::ID Id, bool Is64,
                   const Twine &Name) {
     if (!Sgpr)
       return;
-    Value *V =
+    CallInst *V =
         B.CreateCall(Intrinsic::getOrInsertDeclaration(&M, Id), {}, Name);
+    if (Projection.usesReplicatedDispatch() &&
+        (Id == Intrinsic::amdgcn_dispatch_ptr ||
+         Id == Intrinsic::amdgcn_queue_ptr ||
+         Id == Intrinsic::amdgcn_dispatch_id))
+      UnavailableEntryValues.push_back(V);
     if (Is64)
       Regs.storeSGPR64(B, *Sgpr, V);
     else
@@ -73,8 +119,16 @@ Error RegisterState::seedEntrySgprs() {
   Seed(Layout.dispatchPtrSgpr(), Intrinsic::amdgcn_dispatch_ptr, true,
        "dispatch_ptr");
   Seed(Layout.queuePtrSgpr(), Intrinsic::amdgcn_queue_ptr, true, "queue_ptr");
-  Seed(Layout.kernargSegmentPtrSgpr(), Intrinsic::amdgcn_kernarg_segment_ptr,
-       true, "kernarg_ptr");
+  // One kernarg segment pointer serves both the SGPR pair the ABI dedicates to
+  // it and the preloaded dwords read back out of the segment below.
+  Value *KernargSegment = nullptr;
+  if (Layout.needsKernargSegmentPtr())
+    KernargSegment =
+        B.CreateCall(Intrinsic::getOrInsertDeclaration(
+                         &M, Intrinsic::amdgcn_kernarg_segment_ptr),
+                     {}, "kernarg_ptr");
+  if (std::optional<unsigned> Sgpr = Layout.kernargSegmentPtrSgpr())
+    Regs.storeSGPR64(B, *Sgpr, KernargSegment);
   Seed(Layout.dispatchIdSgpr(), Intrinsic::amdgcn_dispatch_id, true,
        "dispatch_id");
   Seed(Layout.workgroupIdXSgpr(), Intrinsic::amdgcn_workgroup_id_x, false,
@@ -84,16 +138,45 @@ Error RegisterState::seedEntrySgprs() {
   Seed(Layout.workgroupIdZSgpr(), Intrinsic::amdgcn_workgroup_id_z, false,
        "workgroup_id_z");
 
+  // An architected-SGPR prologue delivers the workgroup id in TTMPs instead of
+  // entry SGPRs.
+  if (Projection.SourceSTI.hasFeature(AMDGPU::FeatureArchitectedSGPRs)) {
+    auto Call = [&](Intrinsic::ID Id, const Twine &Name) {
+      return B.CreateCall(Intrinsic::getOrInsertDeclaration(&M, Id), {}, Name);
+    };
+    Value *IdZ =
+        B.CreateShl(Call(Intrinsic::amdgcn_workgroup_id_z, "workgroup_id_z"),
+                    ArchitectedWorkgroupIdZBitOffset);
+    writeReg32(ParsedReg{ParsedReg::TTMP, ArchitectedWorkgroupIdXTtmp},
+               Call(Intrinsic::amdgcn_workgroup_id_x, "workgroup_id_x"));
+    writeReg32(
+        ParsedReg{ParsedReg::TTMP, ArchitectedWorkgroupIdYZTtmp},
+        B.CreateOr(Call(Intrinsic::amdgcn_workgroup_id_y, "workgroup_id_y"),
+                   IdZ, "workgroup_id_yz"));
+  }
+
+  // Recreate source kernarg preloads by loading each dword from its recorded
+  // offset in the kernarg segment and seeding the corresponding source SGPR.
+  for (auto [Index, LayoutEntry] : enumerate(Layout.Entries)) {
+    if (LayoutEntry.SrcKind != UserSgprLayout::Source::PreloadedKernarg)
+      continue;
+    Value *ByteOffset = B.getInt64(LayoutEntry.KernargByteOffset);
+    Value *Address = B.CreateInBoundsGEP(B.getInt8Ty(), KernargSegment,
+                                         ByteOffset, "preload_gep");
+    Value *Dword =
+        B.CreateAlignedLoad(B.getInt32Ty(), Address, Align(4), "preload_dw");
+    Regs.storeSGPR32(B, static_cast<unsigned>(Index), Dword);
+  }
+
   // No target intrinsic reproduces the remaining entry sources, which carry
-  // source private-segment, kernarg-buffer, and packed dispatch state. Refuse
-  // rather than leave them unseeded: a handler would read an undef SGPR as if
-  // it held real entry state.
+  // source private-segment and packed dispatch state. Refuse rather than leave
+  // them unseeded: a handler would read an undef SGPR as if it held real entry
+  // state.
   for (auto [Index, LayoutEntry] : enumerate(Layout.Entries)) {
     switch (LayoutEntry.SrcKind) {
     case UserSgprLayout::Source::PrivateSegmentBuffer:
     case UserSgprLayout::Source::FlatScratchInit:
     case UserSgprLayout::Source::PrivateSegmentSize:
-    case UserSgprLayout::Source::PreloadedKernarg:
     case UserSgprLayout::Source::WorkgroupInfo:
       return RaiseFailure::general(
           RaiseFailureReason::UnsupportedEntrySgprSource,
@@ -103,6 +186,90 @@ Error RegisterState::seedEntrySgprs() {
     default:
       break;
     }
+  }
+  return Error::success();
+}
+
+Error RegisterState::validateEntrySgprs() {
+  if (UnavailableEntryValues.empty())
+    return Error::success();
+  // Fold SGPR splitting and joining before following pointer uses.
+  Function &F = *B.GetInsertBlock()->getParent();
+  PassBuilder PB;
+  LoopAnalysisManager LAM;
+  FunctionAnalysisManager FAM;
+  CGSCCAnalysisManager CGAM;
+  ModuleAnalysisManager MAM;
+  PB.registerLoopAnalyses(LAM);
+  PB.registerFunctionAnalyses(FAM);
+  PB.registerCGSCCAnalyses(CGAM);
+  PB.registerModuleAnalyses(MAM);
+  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+  InstCombinePass().run(F, FAM);
+  for (WeakTrackingVH &Handle : UnavailableEntryValues) {
+    CallInst *Seed = dyn_cast_or_null<CallInst>(Handle);
+    if (!Seed)
+      continue;
+    SmallVector<Instruction *> Worklist{Seed};
+    SmallVector<std::pair<LoadInst *, unsigned>> DispatchLoads;
+    SmallPtrSet<Instruction *, 32> Visited;
+    Visited.insert(Seed);
+    for (size_t I = 0; I != Worklist.size(); ++I) {
+      for (User *U : Worklist[I]->users()) {
+        Instruction *Use = cast<Instruction>(U);
+        if (!Visited.insert(Use).second)
+          continue;
+        if (LoadInst *Load = dyn_cast<LoadInst>(Use)) {
+          using namespace PatternMatch;
+          ConstantInt *Offset = nullptr;
+          unsigned Bits = Load->getType()->getPrimitiveSizeInBits();
+          if (Seed->getIntrinsicID() == Intrinsic::amdgcn_dispatch_ptr &&
+              Load->isSimple() && Load->getType()->isIntOrIntVectorTy() &&
+              match(Load->getPointerOperand(),
+                    m_IntToPtr(m_Add(m_PtrToInt(m_Specific(Seed)),
+                                     m_ConstantInt(Offset)))) &&
+              Offset->getValue().ult(DispatchWorkgroupSizesEndOffset) &&
+              Offset->getZExtValue() >= DispatchWorkgroupSizeXOffset &&
+              Bits % 8 == 0 &&
+              Bits <=
+                  (DispatchWorkgroupSizesEndOffset - Offset->getZExtValue()) *
+                      8) {
+            DispatchLoads.emplace_back(Load, Offset->getZExtValue());
+            continue;
+          }
+        }
+        if (Use->mayReadOrWriteMemory() ||
+            !wouldInstructionBeTriviallyDead(Use))
+          return RaiseFailure::general(
+              RaiseFailureReason::UnsupportedEntrySgprSource,
+              "replicated dispatch cannot reproduce consumed entry state '" +
+                  Seed->getCalledFunction()->getName() + "'");
+        Worklist.push_back(Use);
+      }
+    }
+    for (const auto &[Load, Offset] : DispatchLoads) {
+      IRBuilder<> Builder(Load);
+      Value *Sizes = Builder.getInt64(0);
+      for (unsigned Dim = 0; Dim != 3; ++Dim) {
+        Value *Size = Projection.emitWorkgroupSize(Builder, Dim);
+        Size = Builder.CreateZExt(Size, Builder.getInt64Ty());
+        Size =
+            Builder.CreateShl(Size, Dim * DispatchWorkgroupSizeFieldBytes * 8);
+        Sizes = Builder.CreateOr(Sizes, Size);
+      }
+      // The packet's reserved word following Z is zero.
+      Sizes = Builder.CreateLShr(Sizes,
+                                 (Offset - DispatchWorkgroupSizeXOffset) * 8);
+      Type *BitsType =
+          Builder.getIntNTy(Load->getType()->getPrimitiveSizeInBits());
+      Value *Bits = Builder.CreateZExtOrTrunc(Sizes, BitsType);
+      Load->replaceAllUsesWith(Builder.CreateBitCast(Bits, Load->getType()));
+      Load->eraseFromParent();
+    }
+    for (Instruction *I : Worklist)
+      I->dropAllReferences();
+    for (Instruction *I : Worklist)
+      I->eraseFromParent();
   }
   return Error::success();
 }
@@ -383,6 +550,70 @@ Expected<ParsedReg> RegisterState::parseReg(const DecodedInst &Di,
           MRI.getName(Reg) + "' (enc=0x" + Twine::utohexstr(Enc) + ")");
 }
 
+bool RegisterState::sourceImageSgprPairRecorded(unsigned Idx) const {
+  // A pair is keyed by its low SGPR, so this register belongs to the pair
+  // keyed at its own index and to the one before it.
+  return SourceImageSgprPairs.contains(Idx) ||
+         (Idx > 0 && SourceImageSgprPairs.contains(Idx - 1));
+}
+
+Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
+                                           unsigned Idx) {
+  return RaiseFailure::atInstruction(
+      RaiseFailureReason::UnsupportedInstructionForm,
+      strippedMnemonic(MC, Di.Inst), Di.Offset,
+      formatName(Di.TargetSpecificFlags),
+      Twine("operand-read: 's") + Twine(Idx) +
+          "' may hold a source code-object address, which names a place in "
+          "the source image rather than anything the raised kernel can "
+          "address");
+}
+
+Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
+                                           unsigned BaseIdx,
+                                           unsigned WidthInDwords) {
+  for (unsigned I = 0; I != WidthInDwords; ++I) {
+    unsigned Idx = BaseIdx + I;
+    if (mayHoldSourceImageAddress(Idx))
+      return refuseSourceImageRead(Di, Idx);
+    // The register carries no address the raise knows of yet, and the block
+    // reading it holds whatever ran before rather than a value of its own, so
+    // an instruction the raise has still to reach can record one there.
+    if (!sourceImageSgprPairRecorded(Idx) &&
+        !blockState().DefinedSgprs.contains(Idx))
+      DeferredSourceImageReads.push_back({/*Di=*/&Di, /*Idx=*/Idx});
+  }
+  return Error::success();
+}
+
+Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
+                                           const ParsedReg &Pr) {
+  if (Pr.RegKind != ParsedReg::SGPR || !Pr.BaseIdx)
+    return Error::success();
+  return refuseSourceImageRead(Di, *Pr.BaseIdx, Pr.WidthInDwords);
+}
+
+Error RegisterState::refuseDeferredSourceImageReads() {
+  for (const DeferredSourceImageRead &Read : DeferredSourceImageReads)
+    if (sourceImageSgprPairRecorded(Read.Idx))
+      return refuseSourceImageRead(*Read.Di, Read.Idx);
+  return Error::success();
+}
+
+Expected<Value *> RegisterState::readSgpr32(const DecodedInst &Di,
+                                            unsigned Idx) {
+  if (Error Err = refuseSourceImageRead(Di, Idx, /*WidthInDwords=*/1))
+    return Err;
+  return Regs.loadSGPR32(B, Idx);
+}
+
+Expected<Value *> RegisterState::readSgpr64(const DecodedInst &Di,
+                                            unsigned Idx) {
+  if (Error Err = refuseSourceImageRead(Di, Idx, /*WidthInDwords=*/2))
+    return Err;
+  return Regs.loadSGPR64(B, Idx);
+}
+
 Expected<Value *> RegisterState::readOp32(const DecodedInst &Di,
                                           unsigned OpIdx) {
   IntegerType *I32Ty = B.getInt32Ty();
@@ -391,6 +622,8 @@ Expected<Value *> RegisterState::readOp32(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
+    if (Error Err = refuseSourceImageRead(Di, Pr))
+      return Err;
     if (Pr.RegKind == ParsedReg::VCC) {
       Value *Mask = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
       return emitSourceWaveMask32(B, Projection, Mask, Pr, "vcc_src_wave");
@@ -477,6 +710,8 @@ Expected<Value *> RegisterState::readOp64(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
+    if (Error Err = refuseSourceImageRead(Di, Pr))
+      return Err;
     if (Pr.RegKind == ParsedReg::VCC)
       return Regs.readVCCAsWaveMask(B, I64Ty);
     if (Pr.RegKind == ParsedReg::EXEC) {
@@ -631,12 +866,94 @@ void RegisterState::storeAGPR32(unsigned Idx, Value *V) {
 }
 
 void RegisterState::emitUnderExec(llvm::function_ref<void()> Body) {
-  Value *Active = emitLaneActiveBit();
+  emitUnderCondition(emitLaneActiveBit(), Body);
+}
+
+void RegisterState::emitMemoryEffect(function_ref<void()> Body) {
+  if (!Projection.usesReplicatedDispatch()) {
+    Body();
+    return;
+  }
+  Value *Lane = Projection.emitLaneIdx(B);
+  Value *Primary = B.CreateICmpULT(
+      Lane, B.getInt32(Projection.sourceWaveSize()), "primary_lane");
+  emitUnderCondition(Primary, Body);
+}
+
+Value *RegisterState::emitMemoryValue(function_ref<Value *()> Body,
+                                      bool IsScalar) {
+  bool PackedScalar = IsScalar && Projection.allowsDivergentScalarControlFlow();
+  if (!Projection.usesReplicatedDispatch() && !PackedScalar)
+    return Body();
+
+  Value *Lane = Projection.emitLaneIdx(B);
+  Value *SourceLane =
+      PackedScalar
+          ? B.CreateAnd(Lane, B.getInt32(Projection.sourceWaveSize() - 1))
+          : nullptr;
+  Value *Primary =
+      PackedScalar
+          ? B.CreateICmpEQ(SourceLane, B.getInt32(0))
+          : B.CreateICmpULT(
+                Lane, B.getInt32(IsScalar ? 1 : Projection.sourceWaveSize()),
+                "primary_lane");
+  BasicBlock *Before = B.GetInsertBlock();
+  Value *Result = nullptr;
+  BasicBlock *ResultBlock = nullptr;
+  emitUnderCondition(Primary, [&] {
+    Result = Body();
+    ResultBlock = B.GetInsertBlock();
+    assert(Result && !ResultBlock->hasTerminator() &&
+           "memory read must produce a value and fall through");
+  });
+  Type *ResultType = Result->getType();
+  PHINode *Merged = B.CreatePHI(ResultType, 2, "memory_result");
+  Merged->addIncoming(Constant::getNullValue(ResultType), Before);
+  Merged->addIncoming(Result, ResultBlock);
+
+  unsigned BitWidth = ResultType->getPrimitiveSizeInBits();
+  assert((ResultType->isIntegerTy() || isa<FixedVectorType>(ResultType)) &&
+         (BitWidth <= 32 || BitWidth % 32 == 0) &&
+         "memory result must fit in whole register words");
+  unsigned NumWords = divideCeil(BitWidth, 32u);
+  Type *WordsType = NumWords == 1
+                        ? static_cast<Type *>(B.getInt32Ty())
+                        : FixedVectorType::get(B.getInt32Ty(), NumWords);
+  Value *Words = BitWidth < 32 ? B.CreateZExt(Merged, WordsType)
+                               : B.CreateBitCast(Merged, WordsType);
+  if (PackedScalar)
+    SourceLane = B.CreateSub(Lane, SourceLane, "scalar_memory_source_lane");
+  else
+    SourceLane = B.CreateAnd(Lane, B.getInt32(Projection.sourceWaveSize() - 1));
+  Value *Selector = B.CreateShl(SourceLane, 2);
+  Value *Broadcast = PoisonValue::get(WordsType);
+  for (unsigned I = 0; I != NumWords; ++I) {
+    Value *Word = NumWords == 1 ? Words : B.CreateExtractElement(Words, I);
+    // Each selected owner participates in this gather.
+    Word = IsScalar && !PackedScalar
+               ? B.CreateIntrinsic(Intrinsic::amdgcn_readlane, {B.getInt32Ty()},
+                                   {Word, B.getInt32(0)})
+               : B.CreateIntrinsic(Intrinsic::amdgcn_ds_bpermute, {},
+                                   {Selector, Word});
+    Broadcast =
+        NumWords == 1 ? Word : B.CreateInsertElement(Broadcast, Word, I);
+  }
+  return BitWidth < 32 ? B.CreateTrunc(Broadcast, ResultType)
+                       : B.CreateBitCast(Broadcast, ResultType);
+}
+
+void RegisterState::emitWithNonzeroExec(llvm::function_ref<void()> Body) {
+  Value *ExecNonzero = B.CreateNot(emitExecIsZero(), "exec_nonzero");
+  emitUnderCondition(ExecNonzero, Body);
+}
+
+void RegisterState::emitUnderCondition(Value *Condition,
+                                       llvm::function_ref<void()> Body) {
   BasicBlock *PreBb = B.GetInsertBlock();
   Function *F = PreBb->getParent();
   BasicBlock *DoBb = BasicBlock::Create(B.getContext(), "spe_do", F);
   BasicBlock *SkipBb = BasicBlock::Create(B.getContext(), "spe_skip", F);
-  B.CreateCondBr(Active, DoBb, SkipBb);
+  B.CreateCondBr(Condition, DoBb, SkipBb);
 
   // This splits one source block across several LLVM blocks, all of them
   // dominated by the block the state was established in, so the state survives
@@ -684,6 +1001,8 @@ Expected<Value *> RegisterState::readOpExecWidth(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
+    if (Error Err = refuseSourceImageRead(Di, Pr))
+      return Err;
     if (Pr.RegKind == ParsedReg::VCC)
       return Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
     if (Pr.RegKind == ParsedReg::EXEC)
@@ -803,29 +1122,14 @@ void RegisterState::recordWaveMaskI1(ParsedReg Dst, Value *MaskI1) {
 
 Value *RegisterState::emitCurrentSourceWaveHasActiveLane() {
   Value *Exec = Regs.loadExec(B);
-  if (!Projection.providesFullWaveExecInvariant())
+  if (!Projection.providesSourceWaveExecInvariant())
     return emitLaneActiveBit();
-  unsigned SourceBits = Projection.sourceWaveSize();
-  if (SourceBits >= 64)
-    return B.CreateICmpNE(Exec, ConstantInt::get(Exec->getType(), 0),
-                          "source_wave_active");
-  Type *ExecTy = Exec->getType();
-  Value *Lane = B.CreateZExtOrTrunc(Projection.emitLaneIdx(B), ExecTy,
-                                    "source_wave_lane");
-  Value *Group = B.CreateUDiv(Lane, ConstantInt::get(ExecTy, SourceBits),
-                              "source_wave_group");
-  Value *Shift = B.CreateMul(Group, ConstantInt::get(ExecTy, SourceBits),
-                             "source_wave_shift");
-  Value *Shifted = B.CreateLShr(Exec, Shift, "source_wave_exec");
-  uint64_t Mask = (uint64_t{1} << SourceBits) - 1;
-  Value *GroupMask =
-      B.CreateAnd(Shifted, ConstantInt::get(ExecTy, Mask), "source_wave_mask");
-  return B.CreateICmpNE(GroupMask, ConstantInt::get(ExecTy, 0),
-                        "source_wave_active");
+  return B.CreateNot(emitSourceWaveMaskIsZero(B, Projection, Exec, "execz"),
+                     "source_wave_active");
 }
 
 void RegisterState::recordSourceWaveSgprPair(unsigned BaseIdx, Value *V) {
-  if (!Projection.providesFullWaveExecInvariant()) {
+  if (!Projection.providesSourceWaveExecInvariant()) {
     return;
   }
   if (BaseIdx >= SgprShadows.size()) {
@@ -846,7 +1150,7 @@ void RegisterState::recordSourceWaveSgprPair(unsigned BaseIdx, Value *V) {
 
 Value *RegisterState::materializeSourceWaveSgprPair(unsigned BaseIdx,
                                                     Value *Fallback) {
-  if (!Projection.providesFullWaveExecInvariant() ||
+  if (!Projection.providesSourceWaveExecInvariant() ||
       BaseIdx >= SgprShadows.size()) {
     return Fallback;
   }
@@ -877,6 +1181,7 @@ Value *RegisterState::loadSgprWaveMaskValid(unsigned BaseIdx) const {
 void RegisterState::invalidateSgprWaveMaskI1(unsigned BaseIdx) {
   blockState().LastSgprWaveMaskI1.erase(BaseIdx);
   blockState().SourceImageSgprPairAddrShadow.erase(BaseIdx);
+  blockState().DefinedSgprs.insert(BaseIdx);
   if (BaseIdx < SgprShadows.size()) {
     B.CreateStore(B.getFalse(), SgprShadows[BaseIdx].WaveMaskValid);
     B.CreateStore(B.getFalse(), SgprShadows[BaseIdx].SourceWavePairValid);
@@ -913,6 +1218,43 @@ RegisterState::lookupSourceImageSgprPairAddr(unsigned BaseIdx) {
   if (It == Recorded.end())
     return std::nullopt;
   return It->second;
+}
+
+std::optional<bool> RegisterState::takeSourceImageCarry(unsigned BaseIdx,
+                                                        uint64_t Offset) {
+  std::optional<BlockState::SourceImageCarryState> &Pending =
+      blockState().SourceImageCarry;
+  if (!Pending || Pending->PairBaseIdx != BaseIdx ||
+      Pending->NextOffset != Offset)
+    return std::nullopt;
+  bool Carry = Pending->Carry;
+  Pending.reset();
+  return Carry;
+}
+
+bool RegisterState::droppedSourceImageSgprPairAddr(unsigned BaseIdx) {
+  if (!SourceImageSgprPairs.contains(BaseIdx) ||
+      blockState().SourceImageSgprPairAddrShadow.contains(BaseIdx))
+    return false;
+  // A block that wrote both halves itself holds what it wrote there, whatever
+  // the block that computed the address left in them.
+  const DenseSet<unsigned> &Defined = blockState().DefinedSgprs;
+  return !Defined.contains(BaseIdx) || !Defined.contains(BaseIdx + 1);
+}
+
+bool RegisterState::mayHoldSourceImageAddress(unsigned Idx) {
+  // A pair is keyed by its low SGPR, so this register is the low half of the
+  // pair keyed at its own index and the high half of the one before it.
+  auto PairCarriesAddress = [&](unsigned BaseIdx) {
+    if (!SourceImageSgprPairs.contains(BaseIdx))
+      return false;
+    if (blockState().SourceImageSgprPairAddrShadow.contains(BaseIdx))
+      return true;
+    // Another block recorded the address, and this one holds what that block
+    // left there unless it has written the register itself.
+    return !blockState().DefinedSgprs.contains(Idx);
+  };
+  return PairCarriesAddress(Idx) || (Idx > 0 && PairCarriesAddress(Idx - 1));
 }
 
 void RegisterState::updateM0Const(Value *V) {
