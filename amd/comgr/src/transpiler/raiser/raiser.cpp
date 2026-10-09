@@ -477,8 +477,9 @@ Error ExecContainmentRequirements::validate(Function &F, const MCState &MC,
   };
 
   assert(InitialExec && "entry EXEC was deleted before validation");
+  const Value *EntryExec = InitialExec;
   SmallPtrSet<const Value *, 32> EntrySubsets;
-  EntrySubsets.insert(InitialExec);
+  EntrySubsets.insert(EntryExec);
   DominatorTree DT(F);
   // A reachable PHI cycle has an incoming value on its first iteration.
   // Remove unsupported producers to prove the bound inductively, including
@@ -490,7 +491,7 @@ Error ExecContainmentRequirements::validate(Function &F, const MCState &MC,
   do {
     Changed = false;
     for (const Instruction &I : instructions(F))
-      if (&I != InitialExec && EntrySubsets.contains(&I) &&
+      if (&I != EntryExec && EntrySubsets.contains(&I) &&
           !isKnownSubsetOfEntryExec(I, EntrySubsets, DT, ReplicatedLaneId,
                                     getWaveSize(*MC.SubtargetInfo)))
         Changed |= EntrySubsets.erase(&I);
