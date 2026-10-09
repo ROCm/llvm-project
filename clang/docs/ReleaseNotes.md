@@ -608,6 +608,10 @@ features cannot lower the translation-unit ABI level;
  
 - Clang now diagnoses arrays whose size is deduced from an initializer list when they exceed the maximum object size
 
+- Added `-Wunsafe-buffer-usage-main-argv` as a diagnostic group under
+  `-Wunsafe-buffer-usage` to control warnings on `main`'s `argv` parameter,
+  allowing users to suppress them with `-Wno-unsafe-buffer-usage-main-argv`.
+
 ### Improvements to Clang's time-trace
 
 ### Improvements to Coverage Mapping
@@ -908,6 +912,10 @@ features cannot lower the translation-unit ABI level;
   specialization with a deduced type is instantiated from inside a lambda in
   the initializer of another specialization of the same variable template.
   (#GH134148)
+
+- Fixed an assertion failure in partial ordering of function templates whose
+  parameters use pack-indexed template template parameters (`TT...[N]<int>`)
+  with different template parameter lists. (#GH228870)
 
 #### Bug Fixes to AST Handling
 
