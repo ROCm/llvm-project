@@ -27,8 +27,8 @@ env:
 jobs:
   # =====================================================================
   # Build LLVM + Clang + amd-llvm-spirv + device-libs + Comgr.
-  # Strip binaries and upload the build trees as a single artifact for
-  # the test jobs to consume.
+  # Upload full build trees for compiler tests and a smaller compiler/runtime
+  # bundle for the GPU tests.
   # =====================================================================
   build:
     name: Build
@@ -324,7 +324,12 @@ jobs:
           ninja -C "$HIPRAND_BUILD"
           cmake --install "$HIPRAND_BUILD" --prefix $PWD/$STAGING
 
-      # ---- Strip + upload artifact -----------------------------------------
+      # The build image has libnuma from numactl-devel. Bundle it for ROCR so
+      # GPU jobs do not need to contact package repositories at test time.
+      - name: Stage libnuma
+        run: cp -L /usr/lib64/libnuma.so.1 "$STAGING/lib/libnuma.so.1"
+
+      # ---- Strip + upload artifacts ----------------------------------------
       # Strip binaries to keep the artifact under GHA's 10GB cap and shorten
       # upload/download time. Tests don't need debug symbols. `--strip-unneeded`
       # preserves dynamic symbols needed at link/load time.
@@ -351,6 +356,34 @@ jobs:
         with:
           name: linux-build-tree
           path: linux-build-tree.tar
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
+
+      # These jobs compile HIP programs but never rebuild LLVM or the runtime.
+      # Dereference aliases such as clang++ and ld.lld; tar stores shared inodes
+      # as hard links, so the bundle has no dangling links or duplicate binaries.
+      - name: Tar GPU compiler and runtime
+        run: |
+          tar --dereference -cf linux-gpu-runtime.tar \
+            "$LLVM_BUILD/lib/clang" "$STAGING" \
+            "$LLVM_BUILD/bin/clang" "$LLVM_BUILD/bin/clang++" \
+            "$LLVM_BUILD/bin/clang-linker-wrapper" \
+            "$LLVM_BUILD/bin/clang-offload-bundler" \
+            "$LLVM_BUILD/bin/llvm-offload-binary" \
+            "$LLVM_BUILD/bin/lld" "$LLVM_BUILD/bin/ld.lld" \
+            "$LLVM_BUILD/bin/llvm-ar" "$LLVM_BUILD/bin/llvm-ranlib" \
+            "$LLVM_BUILD/bin/llvm-link" "$LLVM_BUILD/bin/llvm-nm" \
+            "$LLVM_BUILD/bin/llvm-objcopy" "$LLVM_BUILD/bin/llvm-objdump" \
+            "$LLVM_BUILD/bin/llvm-readobj" "$LLVM_BUILD/bin/llvm-readelf" \
+            "$LLVM_BUILD/bin/llvm-dis" "$LLVM_BUILD/bin/llvm-mc" \
+            "$LLVM_BUILD/bin/amd-llvm-spirv"
+
+      - name: Upload GPU compiler and runtime
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: linux-gpu-runtime
+          path: linux-gpu-runtime.tar
           retention-days: 1
           compression-level: 6
           if-no-files-found: error
@@ -621,16 +654,13 @@ jobs:
           ref: amd-staging
           path: rocm-examples
 
-      - name: Download build tree artifact
+      - name: Download GPU compiler and runtime
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
-          name: linux-build-tree
+          name: linux-gpu-runtime
 
-      - name: Untar build trees
-        run: tar -xmf linux-build-tree.tar
-
-      - name: Install libnuma
-        run: dnf install -y numactl-libs
+      - name: Untar GPU compiler and runtime
+        run: tar -xf linux-gpu-runtime.tar
 
       # HIP-Basic.
       - name: ROCm Examples build HIP-Basic
@@ -751,16 +781,13 @@ jobs:
           [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad HECBENCH_REF: '$ref'"; exit 1; }
           echo "HECBENCH_REF=$ref" >> "$GITHUB_ENV"
 
-      - name: Download build tree artifact
+      - name: Download GPU compiler and runtime
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
-          name: linux-build-tree
+          name: linux-gpu-runtime
 
-      - name: Untar build trees
-        run: tar -xmf linux-build-tree.tar
-
-      - name: Install libnuma
-        run: dnf install -y numactl-libs
+      - name: Untar GPU compiler and runtime
+        run: tar -xf linux-gpu-runtime.tar
 
       # Single sparse, shallow blob:none pass over the subset + precomputed deps
       # (ci_benchmarks.deps.txt from update_deps.sh): ~90 MB, not the full repo.
