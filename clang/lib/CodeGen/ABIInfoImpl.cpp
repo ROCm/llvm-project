@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ABIInfoImpl.h"
+#include "clang/Basic/TargetInfo.h"
 
 using namespace clang;
 using namespace clang::CodeGen;
@@ -302,8 +303,23 @@ bool CodeGen::isEmptyRecord(ASTContext &Context, QualType T, bool AllowArrays,
   return true;
 }
 
+// ROCgdb reconstructs the de facto AMDGPU aggregate return/argument
+// convention from the DWARF type, allocating one register for a member whose
+// type has no non-static data members.  Dropping such members from the IR
+// record turns them into explicit padding, which the backend spreads over one
+// register per byte, so the convention no longer matches what the debugger
+// (or previously compiled device code) expects.  Keep the pre-existing rule
+// for AMDGPU until the register assignment stops depending on record layout
+// padding.
+static bool useLegacyEmptyFieldLayout(const ASTContext &Context) {
+  return Context.getTargetInfo().getTriple().isAMDGCN();
+}
+
 bool CodeGen::isEmptyFieldForLayout(const ASTContext &Context,
                                     const FieldDecl *FD) {
+  if (useLegacyEmptyFieldLayout(Context))
+    return FD->isZeroSize(Context);
+
   if (FD->isZeroLengthBitField())
     return true;
 
@@ -314,6 +330,11 @@ bool CodeGen::isEmptyFieldForLayout(const ASTContext &Context,
 }
 
 bool CodeGen::isEmptyRecordForLayout(const ASTContext &Context, QualType T) {
+  if (useLegacyEmptyFieldLayout(Context)) {
+    const auto *CXXRD = T->getAsCXXRecordDecl();
+    return CXXRD && CXXRD->isEmpty();
+  }
+
   const auto *RD = T->getAsRecordDecl();
   if (!RD)
     return false;
