@@ -5,12 +5,6 @@ rocwmma and CK needs changes
 breaks build of hipblaslt
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
-breaks rocgdb UT
-[Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
-[CIR][CodeGen][NFC] Share isEmptyFieldForLayout and isEmptyRecordForLayout (#223424)
-[CIR][CodeGen][NFC] Share the bit-field and vbase layout ABI predicates (#227258
- [CIR][CodeGen][NFC] Share hasOwnStorage (#227259)
----
 breaks windows build: [amd-llvm] terminate called after throwing an instance of 'std::bad_alloc'
 Make][CodeGen] Add PCH for Clang CodeGen (#206018)
 ---
