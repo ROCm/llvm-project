@@ -2,21 +2,22 @@
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --specialize-workgroup=1024,1,1 > %t.ll
-; RUN: %FileCheck %s < %t.ll
+; RUN: %FileCheck %s --check-prefixes=CHECK,EXEC-LOOP < %t.ll
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym FIXED_TRIPS=1 -filetype=obj %s -o %t.fixed.o
 ; RUN: %ld.lld -shared %t.fixed.o -o %t.fixed.hsaco
-; RUN: %transpile_cli %t.fixed.hsaco --target-isa=gfx942 --emit-ir --specialize-workgroup=37,1,1 | %FileCheck %s
-; RUN: %transpile_cli %t.fixed.hsaco --target-isa=gfx942 --emit-ir | %FileCheck %s
+; RUN: %transpile_cli %t.fixed.hsaco --target-isa=gfx942 --emit-ir --specialize-workgroup=37,1,1 | %FileCheck %s --check-prefixes=CHECK,FIXED-LOOP
+; RUN: %transpile_cli %t.fixed.hsaco --target-isa=gfx942 --emit-ir | %FileCheck %s --check-prefixes=CHECK,FIXED-LOOP
 ; RUN: %opt -passes='default<O2>' -verify-each %t.ll -o %t.bc
 ; RUN: %llc -mtriple=amdgpu9.42-amd-amdhsa -filetype=obj %t.bc -o %t.target.o
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym UNSAFE_INPUT=1 -defsym FIXED_TRIPS=1 -filetype=obj %s -o %t.unsafe.o
 ; RUN: %ld.lld -shared %t.unsafe.o -o %t.unsafe.hsaco
 ; RUN: not %transpile_cli %t.unsafe.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=REFUSE
+; REFUSE: unproven-exec-containment: s_or_b32 [SOP2]
+; REFUSE-SAME: in kernel 'accumulated_ballot'
+; REFUSE-SAME: cannot prove that EXEC only enables lanes active at kernel entry
 ; RUN: not %transpile_cli %t.unsafe.hsaco --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --specialize-workgroup=37,1,1 2>&1 | %FileCheck %s --check-prefix=PARTIAL
 ; PARTIAL: unsupported-launch
 ; PARTIAL-SAME: requires whole source waves
-; REFUSE: unproven-exec-containment:
-; REFUSE-SAME: cannot prove that EXEC only enables lanes active at kernel entry
 ; RUN: %transpile_cli %t.unsafe.hsaco --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --specialize-workgroup=64,1,1 2>&1 | %FileCheck %s --check-prefix=FALLBACK
 ; FALLBACK: launch: accumulated_ballot kind=replicated
 ; FALLBACK: store i32
@@ -48,6 +49,12 @@
 .p2align 8
 .type accumulated_ballot,@function
 ; CHECK-LABEL: define amdgpu_kernel void @accumulated_ballot(
+; CHECK: [[ENTRY_ACTIVE:%.+]] = call i1 @llvm.amdgcn.init.whole.wave()
+; CHECK: [[ENTRY_BALLOT:%.+]] = call i64 @llvm.amdgcn.ballot.i64(i1 [[ENTRY_ACTIVE]])
+; CHECK: [[ENTRY_BASE:%.+]] = and i32 [[LANE_ID:%.+]], -32
+; CHECK: [[ENTRY_OFFSET:%.+]] = zext i32 [[ENTRY_BASE]] to i64
+; CHECK: [[ENTRY_SLICE:%.+]] = lshr i64 [[ENTRY_BALLOT]], [[ENTRY_OFFSET]]
+; CHECK: [[ENTRY:%.+]] = trunc i64 [[ENTRY_SLICE]] to i32
 accumulated_ballot:
  s_load_b64 s[4:5], s[0:1], 0
  v_and_b32 v1, 63, v0
@@ -62,13 +69,15 @@ accumulated_ballot:
  s_mov_b32 s7, 64
  .endif
 .Lloop:
-; CHECK: [[EXEC:%.+]] = phi i32 [ [[ENTRY:%.+]], {{%.+}} ], [ [[REMAINING:%.+]], {{%.+}} ]
+; CHECK: [[COUNTER:%.+]] = phi i32 [ 0, {{%.+}} ], [ [[COUNTER_NEXT:%.+]], {{%.+}} ]
+; CHECK: [[EXEC:%.+]] = phi i32 [ [[ENTRY]], {{%.+}} ], [ [[REMAINING:%.+]], {{%.+}} ]
 ; CHECK: [[ACC:%.+]] = phi i32 [ 0, {{%.+}} ], [ [[ACC_NEXT:%.+]], {{%.+}} ]
-; CHECK: [[LANE:%.+]] = and i32 [[LANE_ID:%.+]], 31
+; CHECK: [[INCREMENT:%.+]] = add i32 1, [[COUNTER]]
+; CHECK: [[LANE:%.+]] = and i32 [[LANE_ID]], 31
 ; CHECK: [[SHIFTED:%.+]] = lshr i32 [[EXEC]], [[LANE]]
 ; CHECK: [[BIT:%.+]] = and i32 [[SHIFTED]], 1
 ; CHECK: [[ACTIVE:%.+]] = icmp ne i32 [[BIT]], 0
-; CHECK: [[DISPATCHED:%.+]] = select i1 {{%.+}}, i1 [[ACTIVE]], i1 false
+; CHECK: [[DISPATCHED:%.+]] = select i1 [[ENTRY_ACTIVE]], i1 [[ACTIVE]], i1 false
  v_add_nc_u32 v2, 1, v2
  v_cmp_ge_u32 vcc_lo, v2, v1
  s_or_b32 s6, vcc_lo, s6
@@ -96,7 +105,9 @@ accumulated_ballot:
  v_lshlrev_b32 v3, 3, v0
  v_mov_b32 v4, exec_lo
  s_wait_kmcnt 0
-; CHECK: [[PRED:%.+]] = select i1 [[DISPATCHED]], i1 {{%.+}}, i1 false
+; CHECK: [[COUNTER_NEXT]] = phi i32 [ [[INCREMENT]], {{%.+}} ], [ [[COUNTER]], {{%.+}} ]
+; CHECK: [[DONE:%.+]] = icmp uge i32 [[COUNTER_NEXT]], {{%.+}}
+; CHECK: [[PRED:%.+]] = select i1 [[DISPATCHED]], i1 [[DONE]], i1 false
 ; CHECK: [[BALLOT:%.+]] = call i64 @llvm.amdgcn.ballot.i64(i1 [[PRED]])
 ; CHECK: [[BASE:%.+]] = and i32 [[LANE_ID]], -32
 ; CHECK: [[OFFSET:%.+]] = zext i32 [[BASE]] to i64
@@ -105,9 +116,11 @@ accumulated_ballot:
 ; CHECK: [[ACC_NEXT]] = or i32 [[MASK]], [[ACC]]
 ; CHECK: [[COMPLEMENT:%.+]] = xor i32 [[ACC_NEXT]], -1
 ; CHECK: [[REMAINING]] = and i32 [[EXEC]], [[COMPLEMENT]]
-; CHECK: store i32 {{.+}}, ptr addrspace(1) {{.+}}
+; FIXED-LOOP: [[SAVED:%.+]] = phi i32 [ [[RESTORED]], {{%.+}} ], [ {{.+}}, {{%.+}} ]
+; CHECK: store i32 [[COUNTER_NEXT]], ptr addrspace(1) {{.+}}
  global_store_b32 v3, v2, s[4:5] offset:16
-; CHECK: store i32 {{.+}}, ptr addrspace(1) {{.+}}
+; EXEC-LOOP: store i32 [[RESTORED]], ptr addrspace(1) {{.+}}
+; FIXED-LOOP: store i32 [[SAVED]], ptr addrspace(1) {{.+}}
  global_store_b32 v3, v4, s[4:5] offset:20
  s_endpgm
 .section .rodata,"a",@progbits

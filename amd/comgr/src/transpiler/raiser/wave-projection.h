@@ -152,8 +152,9 @@ public:
   ballotI1ToWidth(llvm::IRBuilder<> &B, llvm::Value *Pred, llvm::Type *ResultTy,
                   const llvm::Twine &Name = "ballot") const = 0;
 
-  /// Return the predicate of a recognized source-width ballot, or nullptr.
-  /// A true predicate contributes only to the corresponding source lane's bit.
+  /// Return the predicate of a ballot whose bits describe lanes of the current
+  /// source wave, or nullptr if unrecognized. This does not prove that the
+  /// predicate is bounded by entry EXEC.
   virtual llvm::Value *matchBallotPredicate(const llvm::Value *Mask) const {
     return nullptr;
   }
