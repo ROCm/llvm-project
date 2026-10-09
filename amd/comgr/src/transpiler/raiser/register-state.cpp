@@ -551,23 +551,42 @@ Expected<ParsedReg> RegisterState::parseReg(const DecodedInst &Di,
 }
 
 Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
-                                           unsigned OpIdx,
-                                           const ParsedReg &Pr) {
-  if (Pr.RegKind != ParsedReg::SGPR || !Pr.BaseIdx)
-    return Error::success();
-  for (unsigned I = 0; I != Pr.WidthInDwords; ++I) {
-    if (!mayHoldSourceImageAddress(*Pr.BaseIdx + I))
+                                           unsigned BaseIdx,
+                                           unsigned WidthInDwords) {
+  for (unsigned I = 0; I != WidthInDwords; ++I) {
+    if (!mayHoldSourceImageAddress(BaseIdx + I))
       continue;
     return RaiseFailure::atInstruction(
         RaiseFailureReason::UnsupportedInstructionForm,
         strippedMnemonic(MC, Di.Inst), Di.Offset,
         formatName(Di.TargetSpecificFlags),
-        Twine("operand-read: '") + MC.RegInfo->getName(Di.getReg(OpIdx)) +
+        Twine("operand-read: 's") + Twine(BaseIdx + I) +
             "' may hold a source code-object address, which names a place in "
             "the source image rather than anything the raised kernel can "
             "address");
   }
   return Error::success();
+}
+
+Error RegisterState::refuseSourceImageRead(const DecodedInst &Di,
+                                           const ParsedReg &Pr) {
+  if (Pr.RegKind != ParsedReg::SGPR || !Pr.BaseIdx)
+    return Error::success();
+  return refuseSourceImageRead(Di, *Pr.BaseIdx, Pr.WidthInDwords);
+}
+
+Expected<Value *> RegisterState::readSgpr32(const DecodedInst &Di,
+                                            unsigned Idx) {
+  if (Error Err = refuseSourceImageRead(Di, Idx, /*WidthInDwords=*/1))
+    return Err;
+  return Regs.loadSGPR32(B, Idx);
+}
+
+Expected<Value *> RegisterState::readSgpr64(const DecodedInst &Di,
+                                            unsigned Idx) {
+  if (Error Err = refuseSourceImageRead(Di, Idx, /*WidthInDwords=*/2))
+    return Err;
+  return Regs.loadSGPR64(B, Idx);
 }
 
 Expected<Value *> RegisterState::readOp32(const DecodedInst &Di,
@@ -578,7 +597,7 @@ Expected<Value *> RegisterState::readOp32(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
-    if (Error Err = refuseSourceImageRead(Di, OpIdx, Pr))
+    if (Error Err = refuseSourceImageRead(Di, Pr))
       return Err;
     if (Pr.RegKind == ParsedReg::VCC) {
       Value *Mask = Regs.readVCCAsWaveMask(B, Projection.execStorageTy());
@@ -666,7 +685,7 @@ Expected<Value *> RegisterState::readOp64(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
-    if (Error Err = refuseSourceImageRead(Di, OpIdx, Pr))
+    if (Error Err = refuseSourceImageRead(Di, Pr))
       return Err;
     if (Pr.RegKind == ParsedReg::VCC)
       return Regs.readVCCAsWaveMask(B, I64Ty);
@@ -957,7 +976,7 @@ Expected<Value *> RegisterState::readOpExecWidth(const DecodedInst &Di,
     if (!Reg)
       return Reg.takeError();
     ParsedReg Pr = *Reg;
-    if (Error Err = refuseSourceImageRead(Di, OpIdx, Pr))
+    if (Error Err = refuseSourceImageRead(Di, Pr))
       return Err;
     if (Pr.RegKind == ParsedReg::VCC)
       return Regs.readVCCAsWaveMask(B, Projection.execStorageTy());

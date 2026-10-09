@@ -554,10 +554,14 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
+    Expected<Value *> Moved = Is64 ? Ctx.registers().readSgpr64(Di, *Src)
+                                   : Ctx.registers().readSgpr32(Di, *Src);
+    if (!Moved)
+      return Moved.takeError();
     if (Is64)
-      Ctx.registers().writeReg64(*Dst, Ctx.registers().readSgpr64(*Src));
+      Ctx.registers().writeReg64(*Dst, *Moved);
     else
-      Ctx.registers().writeReg32(*Dst, Ctx.registers().readSgpr32(*Src));
+      Ctx.registers().writeReg32(*Dst, *Moved);
     return Error::success();
   }
 
@@ -599,8 +603,10 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
         displacedSgpr(Ctx, Di, /*OpIdx=*/0, (*M0 >> 16) & FieldMask, 1);
     if (!DstIdx)
       return DstIdx.takeError();
-    Ctx.registers().writeReg32(ParsedReg{ParsedReg::SGPR, *DstIdx, 1},
-                               Ctx.registers().readSgpr32(*Src));
+    Expected<Value *> Moved = Ctx.registers().readSgpr32(Di, *Src);
+    if (!Moved)
+      return Moved.takeError();
+    Ctx.registers().writeReg32(ParsedReg{ParsedReg::SGPR, *DstIdx, 1}, *Moved);
     return Error::success();
   }
 
@@ -832,7 +838,8 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     // the very pair the target comes from. The pair holds a source address,
     // which an operand read refuses because nothing in the raised kernel can
     // address one. Here the address only picks which of the offsets the
-    // analysis enumerated this jump takes, so the pair is read as it stands.
+    // analysis enumerated this jump takes, so the read goes to the register
+    // file directly, past the refusal.
     Value *Target = nullptr;
     if (Resolved.Targets.size() > 1) {
       Expected<std::optional<ParsedReg>> Src = Op.srcReg(0);
@@ -840,7 +847,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
         return Src.takeError();
       assert(*Src && (*Src)->RegKind == ParsedReg::SGPR && (*Src)->BaseIdx &&
              "a transfer reaching several offsets reads a scalar pair");
-      Target = Ctx.registers().readSgpr64(*(*Src)->BaseIdx);
+      Target = Ctx.registers().regFile().loadSGPR64(Ctx.B, *(*Src)->BaseIdx);
     }
 
     if (Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
