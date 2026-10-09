@@ -498,7 +498,7 @@ bool isSupportedFeature(size_t IsaIndex, StringRef Feature) {
   return (Feature.drop_back() == "xnack" &&
           Features.test(AMDGPU::FEAT_XNACK_ON_OFF_MODES)) ||
          (Feature.drop_back() == "sramecc" &&
-          Features.test(AMDGPU::FEAT_SRAMECC_SUPPORT));
+          Features.test(AMDGPU::FEAT_SRAMECC_ON_OFF_MODES));
 }
 
 const char *getIsaName(size_t Index) {
@@ -538,7 +538,7 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   if (Features.test(AMDGPU::FEAT_XNACK_ON_OFF_MODES)) {
     FeaturesNode["xnack"] = Doc.getNode("any", /*Copy=*/true);
   }
-  if (Features.test(AMDGPU::FEAT_SRAMECC_SUPPORT)) {
+  if (Features.test(AMDGPU::FEAT_SRAMECC_ON_OFF_MODES)) {
     FeaturesNode["sramecc"] = Doc.getNode("any", /*Copy=*/true);
   }
 
