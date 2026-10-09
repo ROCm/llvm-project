@@ -1316,11 +1316,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   uint32_t getDefaultNumBlocks() const {
     return GridValues.GV_Default_Num_Teams;
   }
-
-  int32_t getOMPNumTeams() const { return OMP_NumTeams; }
-  int32_t getOMPTeamsThreadLimit() const { return OMP_TeamsThreadLimit; }
-
-  uint32_t getDebugKind() const { return OMPX_DebugKind; }
   virtual uint64_t getClockFrequency() const { return CLOCKS_PER_SEC; }
 
   virtual uint32_t getOMPXGenericSpmdTeamsPerCU() const {
@@ -1581,13 +1576,7 @@ private:
     return false;
   }
 
-  /// Environment variables defined by the OpenMP standard.
-  Int32Envar OMP_TeamLimit;
-  Int32Envar OMP_NumTeams;
-  Int32Envar OMP_TeamsThreadLimit;
-
   /// Environment variables defined by the LLVM OpenMP implementation.
-  Int32Envar OMPX_DebugKind;
   UInt64Envar OMPX_TargetStackSize;
   UInt64Envar OMPX_TargetHeapSize;
 
