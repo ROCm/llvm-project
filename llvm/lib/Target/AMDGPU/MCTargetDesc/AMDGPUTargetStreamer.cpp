@@ -671,6 +671,10 @@ void AMDGPUTargetAsmStreamer::emitAMDGPUInfo(
         Flags |= AMDGPU::FuncInfoFlags::FUNC_USES_FLAT_SCRATCH;
       if (Info->HasDynStack)
         Flags |= AMDGPU::FuncInfoFlags::FUNC_HAS_DYN_STACK;
+      if (Info->UsesWgpMode)
+        Flags |= AMDGPU::FuncInfoFlags::FUNC_WGP_MODE;
+      if (Info->UsesWave32)
+        Flags |= AMDGPU::FuncInfoFlags::FUNC_WAVE32;
       OS << "\t\t.amdgpu_flags " << llvm::to_underlying(Flags) << '\n';
       OS << "\t\t.amdgpu_num_sgpr " << Info->NumSGPR << '\n';
       OS << "\t\t.amdgpu_num_vgpr " << Info->NumArchVGPR << '\n';
@@ -678,6 +682,8 @@ void AMDGPUTargetAsmStreamer::emitAMDGPUInfo(
         OS << "\t\t.amdgpu_num_agpr " << Info->NumAccVGPR << '\n';
       OS << "\t\t.amdgpu_private_segment_size " << Info->PrivateSegmentSize
          << '\n';
+      if (Info->Occupancy)
+        OS << "\t\t.amdgpu_occupancy " << Info->Occupancy << '\n';
     }
     for (MCSymbol *Res : Uses)
       OS << "\t\t.amdgpu_use " << Res->getName() << '\n';
@@ -1151,6 +1157,10 @@ void AMDGPUTargetELFStreamer::emitAMDGPUInfo(
         Flags |= AMDGPU::FuncInfoFlags::FUNC_USES_FLAT_SCRATCH;
       if (Info->HasDynStack)
         Flags |= AMDGPU::FuncInfoFlags::FUNC_HAS_DYN_STACK;
+      if (Info->UsesWgpMode)
+        Flags |= AMDGPU::FuncInfoFlags::FUNC_WGP_MODE;
+      if (Info->UsesWave32)
+        Flags |= AMDGPU::FuncInfoFlags::FUNC_WAVE32;
       EmitU32Entry(AMDGPU::InfoKind::INFO_FLAGS, llvm::to_underlying(Flags));
       EmitU32Entry(AMDGPU::InfoKind::INFO_NUM_SGPR, Info->NumSGPR);
       EmitU32Entry(AMDGPU::InfoKind::INFO_NUM_VGPR, Info->NumArchVGPR);
@@ -1160,6 +1170,8 @@ void AMDGPUTargetELFStreamer::emitAMDGPUInfo(
         EmitU32Entry(AMDGPU::InfoKind::INFO_NUM_AGPR, Info->NumAccVGPR);
       EmitU32Entry(AMDGPU::InfoKind::INFO_PRIVATE_SEGMENT_SIZE,
                    Info->PrivateSegmentSize);
+      if (Info->Occupancy)
+        EmitU32Entry(AMDGPU::InfoKind::INFO_OCCUPANCY, Info->Occupancy);
     }
 
     for (MCSymbol *Res : Uses)
