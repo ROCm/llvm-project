@@ -110,5 +110,13 @@ set_target_properties (ompdModule PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_C
 
 openmp_register_meta_dep(ompd_gdb_plugin ompdModule)
 
-install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd DESTINATION share/gdb/python/ COMPONENT openmp PATTERN ompdModule.so PERMISSIONS OWNER_READ WORLD_READ GROUP_READ OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE)
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/python-module/ompd
+        DESTINATION ${_ompd_gdb_plugin_dest}
+        COMPONENT openmp
+        PATTERN ompdModule.so EXCLUDE)
+if(NOT OPENMP_LIBDIR_SUBDIR)
+  install(TARGETS ompdModule
+          LIBRARY DESTINATION ${_ompd_gdb_plugin_dest}/ompd
+          COMPONENT openmp)
+endif()
 
