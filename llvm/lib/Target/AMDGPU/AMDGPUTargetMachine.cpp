@@ -1506,10 +1506,6 @@ public:
     substitutePass(&PostRASchedulerID, &PostMachineSchedulerID);
   }
 
-  GCNTargetMachine &getGCNTargetMachine() const {
-    return getTM<GCNTargetMachine>();
-  }
-
   bool addPreISel() override;
   void addMachineSSAOptimization() override;
   bool addILPOpts() override;
