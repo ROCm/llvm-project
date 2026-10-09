@@ -763,10 +763,9 @@ private:
 };
 
 /// OpenMP environment variables limiting the launch geometry. Upstream, only
-/// libomptarget applies them. Downstream, the AMDGPU plugin also limits its
-/// grid values by them (see AMDGPUDeviceTy::initImpl), which the
-/// launch-geometry heuristics below rely on, and the heuristics need their raw
-/// values.
+/// libomptarget's generic launch-geometry computation applies them.
+/// Downstream, the AMDGPU launch-geometry heuristics below replace that
+/// computation and apply them themselves.
 static int32_t getOMPNumTeams() {
   static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
   return OMP_NumTeams;
@@ -1135,16 +1134,17 @@ private:
         NumGroups = getNumGroupsFromThreadsAndTripCount(LoopTripCount,
                                                         EffectiveNumThreads);
 
-      // Honor OMP_NUM_TEAMS environment variable for BigJumpLoop kernel type.
-      if (NumTeamsEnvVar > 0 &&
-          static_cast<uint32_t>(NumTeamsEnvVar) <=
-              GenericDevice.getBlockLimit(EffectiveNumThreads))
-        NumGroups = std::min(static_cast<uint64_t>(NumTeamsEnvVar), NumGroups);
       // Honor num_teams clause but lower it if tripcount dictates.
-      else if (UserNumBlocks > 0 &&
-               UserNumBlocks <=
-                   GenericDevice.getBlockLimit(EffectiveNumThreads)) {
+      if (UserNumBlocks > 0 &&
+          UserNumBlocks <= GenericDevice.getBlockLimit(EffectiveNumThreads)) {
         NumGroups = std::min(static_cast<uint64_t>(UserNumBlocks), NumGroups);
+      }
+      // Without a num_teams clause, honor OMP_NUM_TEAMS environment variable
+      // for BigJumpLoop kernel type.
+      else if (UserNumBlocks == 0 && NumTeamsEnvVar > 0 &&
+               static_cast<uint32_t>(NumTeamsEnvVar) <=
+                   GenericDevice.getBlockLimit(EffectiveNumThreads)) {
+        NumGroups = std::min(static_cast<uint64_t>(NumTeamsEnvVar), NumGroups);
       } else {
         // num_teams clause is not specified. Choose lower of tripcount-based
         // NumGroups and a value determined as follows:
@@ -1253,7 +1253,7 @@ private:
           UserNumBlocks <= GenericDevice.getBlockLimit(EffectiveNumThreads)) {
         NumGroups =
             std::min(static_cast<uint64_t>(UserNumBlocks), MaxNumGroups);
-      } else if (NumTeamsEnvVar > 0 &&
+      } else if (UserNumBlocks == 0 && NumTeamsEnvVar > 0 &&
                  static_cast<uint32_t>(NumTeamsEnvVar) <=
                      GenericDevice.getBlockLimit(EffectiveNumThreads)) {
         NumGroups =
@@ -1417,8 +1417,12 @@ private:
         TmpPreferredNumBlocks <<= 1;
       }
     }
-    return std::min(PreferredNumBlocks,
-                    (uint64_t)GenericDevice.getBlockLimit(EffectiveNumThreads));
+    // Without a num_teams clause, OMP_NUM_TEAMS is an upper bound on the
+    // number of teams.
+    uint64_t BlockLimit = GenericDevice.getBlockLimit(EffectiveNumThreads);
+    if (NumTeamsEnvVar > 0)
+      BlockLimit = std::min(BlockLimit, static_cast<uint64_t>(NumTeamsEnvVar));
+    return std::min(PreferredNumBlocks, BlockLimit);
   }
 
   /// Compute the occupancy with the constraint on the number of SGPRs
@@ -3597,15 +3601,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (GridValues.GV_Max_Teams == 0)
       return Plugin::error(ErrorCode::INVALID_ARGUMENT,
                            "maximum number of teams cannot be zero");
-
-    // Downstream: limit the maximum number of teams and threads by the
-    // OpenMP environment variables, see getOMPNumTeams().
-    if (getOMPNumTeams() > 0)
-      GridValues.GV_Max_Teams =
-          std::min(GridValues.GV_Max_Teams, uint32_t(getOMPNumTeams()));
-    if (getOMPTeamsThreadLimit() > 0)
-      GridValues.GV_Max_WG_Size = std::min(GridValues.GV_Max_WG_Size,
-                                           uint32_t(getOMPTeamsThreadLimit()));
 
     // Compute the default number of teams.
     uint32_t ComputeUnits = 0;
