@@ -17,6 +17,7 @@
 #include "transpiler/raiser/wave-projection.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/IRBuilder.h"
@@ -46,8 +47,9 @@ public:
   // the metadata disagree on the user-SGPR layout.
   static llvm::Expected<RaiseContext>
   create(llvm::IRBuilder<> &B, const WaveProjection &Projection,
-         const MCState &MC, const SetPcAnalysis &SetPc, const KernelMeta &Meta,
-         llvm::ArrayRef<uint8_t> SourceTextBytes,
+         const MCState &MC, const SetPcAnalysis &SetPc,
+         const llvm::DenseSet<uint64_t> &PairedSplitBarriers,
+         const KernelMeta &Meta, llvm::ArrayRef<uint8_t> SourceTextBytes,
          uint64_t SourceTextBaseAddress,
          llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
          uint64_t KernelStartOffset, uint64_t KernelEndOffset,
@@ -66,6 +68,13 @@ public:
   const SetPcSite *setPcSite(uint64_t Offset) const {
     auto It = SetPc.Sites.find(Offset);
     return It == SetPc.Sites.end() ? nullptr : &It->second;
+  }
+
+  // Whether the split barrier at Offset is one half of a pair that together
+  // stands for one whole barrier. A half that is not raises nothing it can
+  // state on its own and is refused.
+  bool isPairedSplitBarrier(uint64_t Offset) const {
+    return PairedSplitBarriers.contains(Offset);
   }
 
   // Source architectural registers and the operand reads and writes that
@@ -149,6 +158,7 @@ public:
 private:
   RaiseContext(llvm::IRBuilder<> &B, const WaveProjection &Projection,
                const MCState &MC, const SetPcAnalysis &SetPc,
+               const llvm::DenseSet<uint64_t> &PairedSplitBarriers,
                RegisterState Registers, llvm::ArrayRef<uint8_t> SourceTextBytes,
                uint64_t SourceTextBaseAddress,
                llvm::ArrayRef<TextSection::ImageSection> SourceImageSections,
@@ -160,6 +170,8 @@ private:
 
   // Where the kernel's register-indirect control transfers lead.
   const SetPcAnalysis &SetPc;
+  // Offsets of the split-barrier halves the raise matched into whole barriers.
+  const llvm::DenseSet<uint64_t> &PairedSplitBarriers;
   // Source architectural registers, allocated in the entry block.
   RegisterState Registers;
 

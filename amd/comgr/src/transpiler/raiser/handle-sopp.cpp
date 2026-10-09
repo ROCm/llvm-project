@@ -170,10 +170,17 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
   // in here makes the wave arrive a second time, at a barrier every other wave
   // has to reach as well. Waves the source left free to run on are held there
   // instead, which can deadlock, so the release is refused too.
+  //
+  // A release its own arrival always reaches is the exception: no wave passes
+  // here without having arrived, so the barrier that arrives and waits at once
+  // is what the two amount to, and it stands for both of them here.
   case CanonicalOp::S_BARRIER_WAIT:
-    return unsupported(Ctx, Di,
-                       "waits on a barrier it does not arrive at here, and "
-                       "the raise has only a barrier that also arrives");
+    if (!Ctx.isPairedSplitBarrier(Di.Offset))
+      return unsupported(Ctx, Di,
+                         "waits on a barrier it does not arrive at here, and "
+                         "the raise has only a barrier that also arrives");
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::amdgcn_s_barrier, {});
+    return Error::success();
 
   // Leaving takes the wave out of a named barrier's membership and reports in
   // SCC whether it was the last member out. The raise keeps no membership to
