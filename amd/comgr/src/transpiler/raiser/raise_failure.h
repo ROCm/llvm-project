@@ -70,10 +70,6 @@ enum class RaiseFailureReason : uint16_t {
   NonUniformScalarState,
   // EXEC may enable lanes absent from the physical launch.
   UnprovenExecContainment,
-  // A matrix operation needs the source mask captured at kernel entry.
-  UnprovenKernelEntryExec,
-  // A hardware instruction must execute separately for each source wave.
-  RequiresPerSourceWaveExecution,
   // Dispatch geometry violates a kernel's launch contract.
   UnsupportedLaunch,
   CrossWaveLaneIdLeak,

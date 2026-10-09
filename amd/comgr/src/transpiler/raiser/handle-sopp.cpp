@@ -235,9 +235,9 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
   // any register, and the intrinsic exists on every AMDGPU target, so the
   // immediate goes through as it stands.
   case CanonicalOp::S_SETHALT:
-    if (Error Err = Ctx.validateHardwareEffect(Di))
-      return Err;
     if (Error Err = Ctx.requirePerWaveExecution(Di))
+      return Err;
+    if (Error Err = Ctx.validateHardwareEffect(Di))
       return Err;
     Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::amdgcn_s_sethalt,
                           {Ctx.B.getInt32(Op.srcImm(0))});
@@ -328,9 +328,9 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
                              ", and the interrupt is the only message that "
                              "means the same thing on every target");
 
-    if (Error Err = Ctx.validateHardwareEffect(Di))
-      return Err;
     if (Error Err = Ctx.requirePerWaveExecution(Di))
+      return Err;
+    if (Error Err = Ctx.validateHardwareEffect(Di))
       return Err;
     Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(),
                           IsHalt ? Intrinsic::amdgcn_s_sendmsghalt

@@ -105,10 +105,8 @@ public:
   /// Record an operand that must be uniform across a widened target wave.
   void requireWaveUniform(llvm::Value *Operand, const DecodedInst &Di,
                           const llvm::Twine &Detail);
-  /// Require scalar branches to be uniform or to reconverge before barriers.
-  void requireScalarControlFlow(llvm::Instruction *Branch,
-                                const DecodedInst &Di);
-  /// Require the source EXEC captured at kernel entry.
+  /// For WaveNative, require the source EXEC captured at kernel entry, which
+  /// may describe a partial wave.
   void requireKernelEntryExec(const DecodedInst &Di);
   /// Refuse a hardware effect executed once per wave when packing source waves.
   llvm::Error requirePerWaveExecution(const DecodedInst &Di) const;
@@ -199,8 +197,6 @@ private:
   llvm::SmallVector<RequiredValue> UniformityRequirements;
   /// Source EXEC values that must equal the source mask at kernel entry.
   llvm::SmallVector<RequiredValue> EntryExecRequirements;
-  /// Scalar branch instructions checked for uniformity or barrier convergence.
-  llvm::SmallVector<RequiredValue> ScalarControlFlowRequirements;
   // Block raised from each source instruction offset that starts one.
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> OffsetToBb;
 

@@ -22,7 +22,6 @@
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Error.h"
 
 #include <cstdint>
@@ -50,10 +49,6 @@ public:
   AllocaRegFile &regFile() { return Regs; }
   // What each SGPR holds at source kernel entry.
   const UserSgprLayout &layout() const { return Layout; }
-
-  /// Reconstruct supported dispatch fields and prove other entry state unused.
-  /// All instruction and projection checks must run before this finalization.
-  llvm::Error validateEntrySgprs();
 
   // Active low byte of S_SET_VGPR_MSB. Each two-bit field selects the high
   // VGPR bank for a format-defined operand slot.
@@ -271,7 +266,6 @@ public:
   void collectAllocas(llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const;
 
 private:
-  llvm::SmallVector<llvm::WeakTrackingVH> UnavailableEntryValues;
   // Refuse a read of a register that may hold part of a source code-object
   // address, naming the registers either by a base index and a width in dwords
   // or by the operand that reads them. Such an address stands for a place in

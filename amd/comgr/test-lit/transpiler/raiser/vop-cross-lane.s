@@ -15,7 +15,7 @@
 ; RUN: %llc -mtriple=amdgpu9.42-amd-amdhsa -filetype=obj %t.different.ll -o %t.gfx942.o
 
 ; REFUSE: unproven-exec-containment: s_mov_b32 [SOP1]
-; REFUSE-SAME: projection cannot prove that EXEC only enables lanes active at kernel entry
+; REFUSE-SAME: WaveNative cannot prove that EXEC only enables lanes active at kernel entry
 ; DIFFERENT-LABEL: define amdgpu_kernel void @readfirstlane_different_exec(
 ; DIFFERENT: [[WORKITEM:%.*]] = call i32 @llvm.amdgcn.workitem.id.x()
 ; DIFFERENT: [[LANE_LO:%.*]] = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0)
