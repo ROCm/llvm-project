@@ -12863,8 +12863,8 @@ define float @flat_atomic_fmax_f32_saddr_rtn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-SDAG-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-SDAG-NEXT:    v_max_f32_e32 v4, v0, v0
-; GFX950-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-SDAG-NEXT:  .LBB118_1: ; %atomicrmw.start
 ; GFX950-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -12873,15 +12873,14 @@ define float @flat_atomic_fmax_f32_saddr_rtn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB118_1
 ; GFX950-SDAG-NEXT:  .LBB118_2: ; %atomicrmw.end
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX950-GISEL-LABEL: flat_atomic_fmax_f32_saddr_rtn:
@@ -12890,8 +12889,8 @@ define float @flat_atomic_fmax_f32_saddr_rtn(ptr inreg %ptr, float %data) {
 ; GFX950-GISEL-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-GISEL-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX950-GISEL-NEXT:    flat_load_dword v0, v[2:3] offset:40
-; GFX950-GISEL-NEXT:    v_max_f32_e32 v1, v1, v1
 ; GFX950-GISEL-NEXT:    s_mov_b64 s[0:1], 0
+; GFX950-GISEL-NEXT:    v_max_f32_e32 v1, v1, v1
 ; GFX950-GISEL-NEXT:  .LBB118_1: ; %atomicrmw.start
 ; GFX950-GISEL-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -12900,10 +12899,10 @@ define float @flat_atomic_fmax_f32_saddr_rtn(ptr inreg %ptr, float %data) {
 ; GFX950-GISEL-NEXT:    v_max_f32_e32 v4, v0, v1
 ; GFX950-GISEL-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[4:5] offset:40 sc0
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e64 s[2:3], v0, v5
-; GFX950-GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-GISEL-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v5
+; GFX950-GISEL-NEXT:    s_xor_b64 s[2:3], exec, vcc
+; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX950-GISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX950-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX950-GISEL-NEXT:    s_cbranch_execnz .LBB118_1
 ; GFX950-GISEL-NEXT:  .LBB118_2: ; %atomicrmw.end
@@ -12930,8 +12929,8 @@ define void @flat_atomic_fmax_f32_saddr_nortn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-SDAG-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-SDAG-NEXT:    v_max_f32_e32 v4, v0, v0
-; GFX950-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-SDAG-NEXT:  .LBB119_1: ; %atomicrmw.start
 ; GFX950-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -12940,15 +12939,14 @@ define void @flat_atomic_fmax_f32_saddr_nortn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB119_1
 ; GFX950-SDAG-NEXT:  .LBB119_2: ; %atomicrmw.end
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX950-GISEL-LABEL: flat_atomic_fmax_f32_saddr_nortn:
@@ -12956,8 +12954,8 @@ define void @flat_atomic_fmax_f32_saddr_nortn(ptr inreg %ptr, float %data) {
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-GISEL-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-GISEL-NEXT:    flat_load_dword v1, v[2:3] offset:40
-; GFX950-GISEL-NEXT:    v_max_f32_e32 v4, v0, v0
 ; GFX950-GISEL-NEXT:    s_mov_b64 s[0:1], 0
+; GFX950-GISEL-NEXT:    v_max_f32_e32 v4, v0, v0
 ; GFX950-GISEL-NEXT:  .LBB119_1: ; %atomicrmw.start
 ; GFX950-GISEL-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -12965,11 +12963,11 @@ define void @flat_atomic_fmax_f32_saddr_nortn(ptr inreg %ptr, float %data) {
 ; GFX950-GISEL-NEXT:    v_max_f32_e32 v0, v0, v4
 ; GFX950-GISEL-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e64 s[2:3], v0, v1
-; GFX950-GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v1
+; GFX950-GISEL-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; GFX950-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-GISEL-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX950-GISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX950-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX950-GISEL-NEXT:    s_cbranch_execnz .LBB119_1
 ; GFX950-GISEL-NEXT:  .LBB119_2: ; %atomicrmw.end
@@ -12996,8 +12994,8 @@ define float @flat_atomic_fmin_f32_saddr_rtn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-SDAG-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-SDAG-NEXT:    v_max_f32_e32 v4, v0, v0
-; GFX950-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-SDAG-NEXT:  .LBB120_1: ; %atomicrmw.start
 ; GFX950-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -13006,15 +13004,14 @@ define float @flat_atomic_fmin_f32_saddr_rtn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB120_1
 ; GFX950-SDAG-NEXT:  .LBB120_2: ; %atomicrmw.end
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX950-GISEL-LABEL: flat_atomic_fmin_f32_saddr_rtn:
@@ -13023,8 +13020,8 @@ define float @flat_atomic_fmin_f32_saddr_rtn(ptr inreg %ptr, float %data) {
 ; GFX950-GISEL-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-GISEL-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX950-GISEL-NEXT:    flat_load_dword v0, v[2:3] offset:40
-; GFX950-GISEL-NEXT:    v_max_f32_e32 v1, v1, v1
 ; GFX950-GISEL-NEXT:    s_mov_b64 s[0:1], 0
+; GFX950-GISEL-NEXT:    v_max_f32_e32 v1, v1, v1
 ; GFX950-GISEL-NEXT:  .LBB120_1: ; %atomicrmw.start
 ; GFX950-GISEL-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -13033,10 +13030,10 @@ define float @flat_atomic_fmin_f32_saddr_rtn(ptr inreg %ptr, float %data) {
 ; GFX950-GISEL-NEXT:    v_min_f32_e32 v4, v0, v1
 ; GFX950-GISEL-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[4:5] offset:40 sc0
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e64 s[2:3], v0, v5
-; GFX950-GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-GISEL-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v5
+; GFX950-GISEL-NEXT:    s_xor_b64 s[2:3], exec, vcc
+; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX950-GISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX950-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX950-GISEL-NEXT:    s_cbranch_execnz .LBB120_1
 ; GFX950-GISEL-NEXT:  .LBB120_2: ; %atomicrmw.end
@@ -13063,8 +13060,8 @@ define void @flat_atomic_fmin_f32_saddr_nortn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-SDAG-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-SDAG-NEXT:    v_max_f32_e32 v4, v0, v0
-; GFX950-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-SDAG-NEXT:  .LBB121_1: ; %atomicrmw.start
 ; GFX950-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -13073,15 +13070,14 @@ define void @flat_atomic_fmin_f32_saddr_nortn(ptr inreg %ptr, float %data) {
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB121_1
 ; GFX950-SDAG-NEXT:  .LBB121_2: ; %atomicrmw.end
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX950-GISEL-LABEL: flat_atomic_fmin_f32_saddr_nortn:
@@ -13089,8 +13085,8 @@ define void @flat_atomic_fmin_f32_saddr_nortn(ptr inreg %ptr, float %data) {
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-GISEL-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-GISEL-NEXT:    flat_load_dword v1, v[2:3] offset:40
-; GFX950-GISEL-NEXT:    v_max_f32_e32 v4, v0, v0
 ; GFX950-GISEL-NEXT:    s_mov_b64 s[0:1], 0
+; GFX950-GISEL-NEXT:    v_max_f32_e32 v4, v0, v0
 ; GFX950-GISEL-NEXT:  .LBB121_1: ; %atomicrmw.start
 ; GFX950-GISEL-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -13098,11 +13094,11 @@ define void @flat_atomic_fmin_f32_saddr_nortn(ptr inreg %ptr, float %data) {
 ; GFX950-GISEL-NEXT:    v_min_f32_e32 v0, v0, v4
 ; GFX950-GISEL-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e64 s[2:3], v0, v1
-; GFX950-GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v1
+; GFX950-GISEL-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; GFX950-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-GISEL-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX950-GISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX950-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX950-GISEL-NEXT:    s_cbranch_execnz .LBB121_1
 ; GFX950-GISEL-NEXT:  .LBB121_2: ; %atomicrmw.end
@@ -13200,9 +13196,7 @@ define <2 x half> @flat_atomic_fmax_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v5
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, vcc_lo
 ; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB124_1
@@ -13230,11 +13224,11 @@ define <2 x half> @flat_atomic_fmax_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX1250-GISEL-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-GISEL-NEXT:    flat_atomic_cmpswap_b32 v0, v2, v[4:5], s[0:1] offset:40 th:TH_ATOMIC_RETURN
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX1250-GISEL-NEXT:    v_cmp_ne_u32_e64 s3, v0, v5
-; GFX1250-GISEL-NEXT:    s_xor_b32 s4, exec_lo, s3
+; GFX1250-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v5
+; GFX1250-GISEL-NEXT:    s_xor_b32 s3, exec_lo, vcc_lo
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-GISEL-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-GISEL-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-GISEL-NEXT:    s_or_b32 s2, s2, s3
+; GFX1250-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX1250-GISEL-NEXT:    s_cbranch_execnz .LBB124_1
 ; GFX1250-GISEL-NEXT:  .LBB124_2: ; %atomicrmw.end
@@ -13246,8 +13240,8 @@ define <2 x half> @flat_atomic_fmax_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-SDAG-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-SDAG-NEXT:    v_pk_max_f16 v4, v0, v0
-; GFX950-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-SDAG-NEXT:    .p2align 5, , 4
 ; GFX950-SDAG-NEXT:  .LBB124_1: ; %atomicrmw.start
 ; GFX950-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -13258,15 +13252,14 @@ define <2 x half> @flat_atomic_fmax_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB124_1
 ; GFX950-SDAG-NEXT:  .LBB124_2: ; %atomicrmw.end
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX950-GISEL-LABEL: flat_atomic_fmax_v2f16_saddr_rtn:
@@ -13275,8 +13268,8 @@ define <2 x half> @flat_atomic_fmax_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX950-GISEL-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-GISEL-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX950-GISEL-NEXT:    flat_load_dword v0, v[2:3] offset:40
-; GFX950-GISEL-NEXT:    v_pk_max_f16 v1, v1, v1
 ; GFX950-GISEL-NEXT:    s_mov_b64 s[0:1], 0
+; GFX950-GISEL-NEXT:    v_pk_max_f16 v1, v1, v1
 ; GFX950-GISEL-NEXT:  .LBB124_1: ; %atomicrmw.start
 ; GFX950-GISEL-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -13286,10 +13279,10 @@ define <2 x half> @flat_atomic_fmax_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX950-GISEL-NEXT:    v_pk_max_f16 v4, v0, v1
 ; GFX950-GISEL-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[4:5] offset:40 sc0
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e64 s[2:3], v0, v5
-; GFX950-GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-GISEL-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v5
+; GFX950-GISEL-NEXT:    s_xor_b64 s[2:3], exec, vcc
+; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX950-GISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX950-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX950-GISEL-NEXT:    s_cbranch_execnz .LBB124_1
 ; GFX950-GISEL-NEXT:  .LBB124_2: ; %atomicrmw.end
@@ -13322,9 +13315,7 @@ define void @flat_atomic_fmax_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX1250-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v1
 ; GFX1250-SDAG-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, vcc_lo
 ; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB125_1
@@ -13350,12 +13341,12 @@ define void @flat_atomic_fmax_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX1250-GISEL-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-GISEL-NEXT:    flat_atomic_cmpswap_b32 v0, v2, v[0:1], s[0:1] offset:40 th:TH_ATOMIC_RETURN
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX1250-GISEL-NEXT:    v_cmp_ne_u32_e64 s3, v0, v1
+; GFX1250-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v1
 ; GFX1250-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX1250-GISEL-NEXT:    s_xor_b32 s4, exec_lo, s3
+; GFX1250-GISEL-NEXT:    s_xor_b32 s3, exec_lo, vcc_lo
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-GISEL-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-GISEL-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-GISEL-NEXT:    s_or_b32 s2, s2, s3
+; GFX1250-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX1250-GISEL-NEXT:    s_cbranch_execnz .LBB125_1
 ; GFX1250-GISEL-NEXT:  .LBB125_2: ; %atomicrmw.end
@@ -13367,8 +13358,8 @@ define void @flat_atomic_fmax_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-SDAG-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-SDAG-NEXT:    v_pk_max_f16 v4, v0, v0
-; GFX950-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-SDAG-NEXT:    .p2align 5, , 4
 ; GFX950-SDAG-NEXT:  .LBB125_1: ; %atomicrmw.start
 ; GFX950-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -13379,15 +13370,14 @@ define void @flat_atomic_fmax_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB125_1
 ; GFX950-SDAG-NEXT:  .LBB125_2: ; %atomicrmw.end
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX950-GISEL-LABEL: flat_atomic_fmax_v2f16_saddr_nortn:
@@ -13395,8 +13385,8 @@ define void @flat_atomic_fmax_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-GISEL-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-GISEL-NEXT:    flat_load_dword v1, v[2:3] offset:40
-; GFX950-GISEL-NEXT:    v_pk_max_f16 v4, v0, v0
 ; GFX950-GISEL-NEXT:    s_mov_b64 s[0:1], 0
+; GFX950-GISEL-NEXT:    v_pk_max_f16 v4, v0, v0
 ; GFX950-GISEL-NEXT:    .p2align 5, , 4
 ; GFX950-GISEL-NEXT:  .LBB125_1: ; %atomicrmw.start
 ; GFX950-GISEL-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -13406,11 +13396,11 @@ define void @flat_atomic_fmax_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX950-GISEL-NEXT:    v_pk_max_f16 v0, v0, v4
 ; GFX950-GISEL-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e64 s[2:3], v0, v1
-; GFX950-GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v1
+; GFX950-GISEL-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; GFX950-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-GISEL-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX950-GISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX950-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX950-GISEL-NEXT:    s_cbranch_execnz .LBB125_1
 ; GFX950-GISEL-NEXT:  .LBB125_2: ; %atomicrmw.end
@@ -13444,9 +13434,7 @@ define <2 x half> @flat_atomic_fmin_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v5
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, vcc_lo
 ; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB126_1
@@ -13474,11 +13462,11 @@ define <2 x half> @flat_atomic_fmin_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX1250-GISEL-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-GISEL-NEXT:    flat_atomic_cmpswap_b32 v0, v2, v[4:5], s[0:1] offset:40 th:TH_ATOMIC_RETURN
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX1250-GISEL-NEXT:    v_cmp_ne_u32_e64 s3, v0, v5
-; GFX1250-GISEL-NEXT:    s_xor_b32 s4, exec_lo, s3
+; GFX1250-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v5
+; GFX1250-GISEL-NEXT:    s_xor_b32 s3, exec_lo, vcc_lo
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-GISEL-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-GISEL-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-GISEL-NEXT:    s_or_b32 s2, s2, s3
+; GFX1250-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX1250-GISEL-NEXT:    s_cbranch_execnz .LBB126_1
 ; GFX1250-GISEL-NEXT:  .LBB126_2: ; %atomicrmw.end
@@ -13490,8 +13478,8 @@ define <2 x half> @flat_atomic_fmin_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-SDAG-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-SDAG-NEXT:    v_pk_max_f16 v4, v0, v0
-; GFX950-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-SDAG-NEXT:    .p2align 5, , 4
 ; GFX950-SDAG-NEXT:  .LBB126_1: ; %atomicrmw.start
 ; GFX950-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -13502,15 +13490,14 @@ define <2 x half> @flat_atomic_fmin_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB126_1
 ; GFX950-SDAG-NEXT:  .LBB126_2: ; %atomicrmw.end
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX950-GISEL-LABEL: flat_atomic_fmin_v2f16_saddr_rtn:
@@ -13519,8 +13506,8 @@ define <2 x half> @flat_atomic_fmin_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX950-GISEL-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-GISEL-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX950-GISEL-NEXT:    flat_load_dword v0, v[2:3] offset:40
-; GFX950-GISEL-NEXT:    v_pk_max_f16 v1, v1, v1
 ; GFX950-GISEL-NEXT:    s_mov_b64 s[0:1], 0
+; GFX950-GISEL-NEXT:    v_pk_max_f16 v1, v1, v1
 ; GFX950-GISEL-NEXT:  .LBB126_1: ; %atomicrmw.start
 ; GFX950-GISEL-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -13530,10 +13517,10 @@ define <2 x half> @flat_atomic_fmin_v2f16_saddr_rtn(ptr inreg %ptr, <2 x half> %
 ; GFX950-GISEL-NEXT:    v_pk_min_f16 v4, v0, v1
 ; GFX950-GISEL-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[4:5] offset:40 sc0
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e64 s[2:3], v0, v5
-; GFX950-GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-GISEL-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v5
+; GFX950-GISEL-NEXT:    s_xor_b64 s[2:3], exec, vcc
+; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX950-GISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX950-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX950-GISEL-NEXT:    s_cbranch_execnz .LBB126_1
 ; GFX950-GISEL-NEXT:  .LBB126_2: ; %atomicrmw.end
@@ -13566,9 +13553,7 @@ define void @flat_atomic_fmin_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX1250-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v1
 ; GFX1250-SDAG-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX1250-SDAG-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-SDAG-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, s4
+; GFX1250-SDAG-NEXT:    s_or_b32 s2, s2, vcc_lo
 ; GFX1250-SDAG-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX1250-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX1250-SDAG-NEXT:    s_cbranch_execnz .LBB127_1
@@ -13594,12 +13579,12 @@ define void @flat_atomic_fmin_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX1250-GISEL-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-GISEL-NEXT:    flat_atomic_cmpswap_b32 v0, v2, v[0:1], s[0:1] offset:40 th:TH_ATOMIC_RETURN
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX1250-GISEL-NEXT:    v_cmp_ne_u32_e64 s3, v0, v1
+; GFX1250-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, v0, v1
 ; GFX1250-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX1250-GISEL-NEXT:    s_xor_b32 s4, exec_lo, s3
+; GFX1250-GISEL-NEXT:    s_xor_b32 s3, exec_lo, vcc_lo
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-GISEL-NEXT:    s_or_b32 s2, s2, s4
-; GFX1250-GISEL-NEXT:    s_mov_b32 exec_lo, s3
+; GFX1250-GISEL-NEXT:    s_or_b32 s2, s2, s3
+; GFX1250-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX1250-GISEL-NEXT:    s_cbranch_execnz .LBB127_1
 ; GFX1250-GISEL-NEXT:  .LBB127_2: ; %atomicrmw.end
@@ -13611,8 +13596,8 @@ define void @flat_atomic_fmin_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-SDAG-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-SDAG-NEXT:    v_pk_max_f16 v4, v0, v0
-; GFX950-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-SDAG-NEXT:    .p2align 5, , 4
 ; GFX950-SDAG-NEXT:  .LBB127_1: ; %atomicrmw.start
 ; GFX950-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -13623,15 +13608,14 @@ define void @flat_atomic_fmin_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX950-SDAG-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-SDAG-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-SDAG-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-SDAG-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-SDAG-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-SDAG-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX950-SDAG-NEXT:    s_cbranch_execnz .LBB127_1
 ; GFX950-SDAG-NEXT:  .LBB127_2: ; %atomicrmw.end
-; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX950-GISEL-LABEL: flat_atomic_fmin_v2f16_saddr_nortn:
@@ -13639,8 +13623,8 @@ define void @flat_atomic_fmin_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-GISEL-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-GISEL-NEXT:    flat_load_dword v1, v[2:3] offset:40
-; GFX950-GISEL-NEXT:    v_pk_max_f16 v4, v0, v0
 ; GFX950-GISEL-NEXT:    s_mov_b64 s[0:1], 0
+; GFX950-GISEL-NEXT:    v_pk_max_f16 v4, v0, v0
 ; GFX950-GISEL-NEXT:    .p2align 5, , 4
 ; GFX950-GISEL-NEXT:  .LBB127_1: ; %atomicrmw.start
 ; GFX950-GISEL-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -13650,11 +13634,11 @@ define void @flat_atomic_fmin_v2f16_saddr_nortn(ptr inreg %ptr, <2 x half> %data
 ; GFX950-GISEL-NEXT:    v_pk_min_f16 v0, v0, v4
 ; GFX950-GISEL-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-GISEL-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e64 s[2:3], v0, v1
-; GFX950-GISEL-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc, v0, v1
+; GFX950-GISEL-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; GFX950-GISEL-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-GISEL-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-GISEL-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
+; GFX950-GISEL-NEXT:    s_mov_b64 exec, vcc
 ; GFX950-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX950-GISEL-NEXT:    s_cbranch_execnz .LBB127_1
 ; GFX950-GISEL-NEXT:  .LBB127_2: ; %atomicrmw.end
@@ -13749,9 +13733,7 @@ define <2 x bfloat> @flat_atomic_fmax_v2bf16_saddr_rtn(ptr inreg %ptr, <2 x bflo
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v5
 ; GFX1250-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-NEXT:    s_or_b32 s2, s2, s4
+; GFX1250-NEXT:    s_or_b32 s2, s2, vcc_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execnz .LBB130_1
@@ -13765,9 +13747,9 @@ define <2 x bfloat> @flat_atomic_fmax_v2bf16_saddr_rtn(ptr inreg %ptr, <2 x bflo
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-NEXT:    v_and_b32_e32 v4, 0xffff0000, v0
 ; GFX950-NEXT:    v_lshlrev_b32_e32 v5, 16, v0
-; GFX950-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-NEXT:    .p2align 5, , 4
 ; GFX950-NEXT:  .LBB130_1: ; %atomicrmw.start
 ; GFX950-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -13780,15 +13762,14 @@ define <2 x bfloat> @flat_atomic_fmax_v2bf16_saddr_rtn(ptr inreg %ptr, <2 x bflo
 ; GFX950-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB130_1
 ; GFX950-NEXT:  .LBB130_2: ; %atomicrmw.end
-; GFX950-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-NEXT:    s_setpc_b64 s[30:31]
   %gep.0 = getelementptr inbounds [512 x <2 x bfloat>], ptr %ptr, i64 0, i64 10
   %result = atomicrmw fmax ptr %gep.0, <2 x bfloat> %data syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory !0
@@ -13814,9 +13795,7 @@ define void @flat_atomic_fmax_v2bf16_saddr_nortn(ptr inreg %ptr, <2 x bfloat> %d
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX1250-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX1250-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-NEXT:    s_or_b32 s2, s2, s4
+; GFX1250-NEXT:    s_or_b32 s2, s2, vcc_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execnz .LBB131_1
@@ -13829,9 +13808,9 @@ define void @flat_atomic_fmax_v2bf16_saddr_nortn(ptr inreg %ptr, <2 x bfloat> %d
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-NEXT:    v_and_b32_e32 v4, 0xffff0000, v0
 ; GFX950-NEXT:    v_lshlrev_b32_e32 v5, 16, v0
-; GFX950-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-NEXT:    .p2align 5, , 4
 ; GFX950-NEXT:  .LBB131_1: ; %atomicrmw.start
 ; GFX950-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -13844,15 +13823,14 @@ define void @flat_atomic_fmax_v2bf16_saddr_nortn(ptr inreg %ptr, <2 x bfloat> %d
 ; GFX950-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB131_1
 ; GFX950-NEXT:  .LBB131_2: ; %atomicrmw.end
-; GFX950-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-NEXT:    s_setpc_b64 s[30:31]
   %gep.0 = getelementptr inbounds [512 x <2 x bfloat>], ptr %ptr, i64 0, i64 10
   %unused = atomicrmw fmax ptr %gep.0, <2 x bfloat> %data syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory !0
@@ -13879,9 +13857,7 @@ define <2 x bfloat> @flat_atomic_fmin_v2bf16_saddr_rtn(ptr inreg %ptr, <2 x bflo
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v5
 ; GFX1250-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-NEXT:    s_or_b32 s2, s2, s4
+; GFX1250-NEXT:    s_or_b32 s2, s2, vcc_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execnz .LBB132_1
@@ -13895,9 +13871,9 @@ define <2 x bfloat> @flat_atomic_fmin_v2bf16_saddr_rtn(ptr inreg %ptr, <2 x bflo
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-NEXT:    v_and_b32_e32 v4, 0xffff0000, v0
 ; GFX950-NEXT:    v_lshlrev_b32_e32 v5, 16, v0
-; GFX950-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-NEXT:    .p2align 5, , 4
 ; GFX950-NEXT:  .LBB132_1: ; %atomicrmw.start
 ; GFX950-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -13910,15 +13886,14 @@ define <2 x bfloat> @flat_atomic_fmin_v2bf16_saddr_rtn(ptr inreg %ptr, <2 x bflo
 ; GFX950-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB132_1
 ; GFX950-NEXT:  .LBB132_2: ; %atomicrmw.end
-; GFX950-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-NEXT:    s_setpc_b64 s[30:31]
   %gep.0 = getelementptr inbounds [512 x <2 x bfloat>], ptr %ptr, i64 0, i64 10
   %result = atomicrmw fmin ptr %gep.0, <2 x bfloat> %data syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory !0
@@ -13944,9 +13919,7 @@ define void @flat_atomic_fmin_v2bf16_saddr_nortn(ptr inreg %ptr, <2 x bfloat> %d
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX1250-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX1250-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s4, exec_lo, s3
-; GFX1250-NEXT:    s_or_b32 s2, s2, s4
+; GFX1250-NEXT:    s_or_b32 s2, s2, vcc_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, s3
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execnz .LBB133_1
@@ -13959,9 +13932,9 @@ define void @flat_atomic_fmin_v2bf16_saddr_nortn(ptr inreg %ptr, <2 x bfloat> %d
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-NEXT:    flat_load_dword v1, v[2:3] offset:40
+; GFX950-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-NEXT:    v_and_b32_e32 v4, 0xffff0000, v0
 ; GFX950-NEXT:    v_lshlrev_b32_e32 v5, 16, v0
-; GFX950-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-NEXT:    .p2align 5, , 4
 ; GFX950-NEXT:  .LBB133_1: ; %atomicrmw.start
 ; GFX950-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -13974,15 +13947,14 @@ define void @flat_atomic_fmin_v2bf16_saddr_nortn(ptr inreg %ptr, <2 x bfloat> %d
 ; GFX950-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] offset:40 sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
-; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; GFX950-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; GFX950-NEXT:    v_mov_b32_e32 v1, v0
-; GFX950-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
-; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
+; GFX950-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
+; GFX950-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX950-NEXT:    ; divergent control-flow edge
 ; GFX950-NEXT:    s_cbranch_execnz .LBB133_1
 ; GFX950-NEXT:  .LBB133_2: ; %atomicrmw.end
-; GFX950-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX950-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX950-NEXT:    s_setpc_b64 s[30:31]
   %gep.0 = getelementptr inbounds [512 x <2 x bfloat>], ptr %ptr, i64 0, i64 10
   %unused = atomicrmw fmin ptr %gep.0, <2 x bfloat> %data syncscope("workgroup") seq_cst, align 8, !amdgpu.no.fine.grained.memory !0

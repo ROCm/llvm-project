@@ -18,14 +18,15 @@ define amdgpu_kernel void @v_atomicrmw_fadd_bf16(ptr addrspace(1) %out, i1 %in, 
 ; GFX11-TRUE16-NEXT:    s_and_b32 s2, s2, 3
 ; GFX11-TRUE16-NEXT:    s_load_b32 s3, s[0:1], 0x0
 ; GFX11-TRUE16-NEXT:    s_lshl_b32 s2, s2, 3
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX11-TRUE16-NEXT:    s_lshl_b32 s4, 0xffff, s2
+; GFX11-TRUE16-NEXT:    s_not_b32 s4, s4
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
 ; GFX11-TRUE16-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_mov_b32_e32 v1, s3
-; GFX11-TRUE16-NEXT:    s_not_b32 s3, s4
-; GFX11-TRUE16-NEXT:    s_mov_b32 s4, 0
+; GFX11-TRUE16-NEXT:    s_mov_b32 s3, 0
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX11-TRUE16-NEXT:    v_lshlrev_b32_e32 v2, 16, v0
 ; GFX11-TRUE16-NEXT:    .p2align 6
 ; GFX11-TRUE16-NEXT:  .LBB0_1: ; %atomicrmw.start
@@ -45,7 +46,7 @@ define amdgpu_kernel void @v_atomicrmw_fadd_bf16(ptr addrspace(1) %out, i1 %in, 
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
 ; GFX11-TRUE16-NEXT:    v_lshlrev_b32_e32 v0, s2, v0
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_and_or_b32 v0, v1, s3, v0
+; GFX11-TRUE16-NEXT:    v_and_or_b32 v0, v1, s4, v0
 ; GFX11-TRUE16-NEXT:    global_atomic_cmpswap_b32 v0, v3, v[0:1], s[0:1] glc
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    buffer_gl1_inv
@@ -53,9 +54,7 @@ define amdgpu_kernel void @v_atomicrmw_fadd_bf16(ptr addrspace(1) %out, i1 %in, 
 ; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v1
 ; GFX11-TRUE16-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX11-TRUE16-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX11-TRUE16-NEXT:    s_or_b32 s4, s4, s6
+; GFX11-TRUE16-NEXT:    s_or_b32 s3, s3, vcc_lo
 ; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX11-TRUE16-NEXT:    s_cbranch_execnz .LBB0_1
@@ -75,14 +74,15 @@ define amdgpu_kernel void @v_atomicrmw_fadd_bf16(ptr addrspace(1) %out, i1 %in, 
 ; GFX11-FAKE16-NEXT:    s_and_b32 s2, s2, 3
 ; GFX11-FAKE16-NEXT:    s_load_b32 s3, s[0:1], 0x0
 ; GFX11-FAKE16-NEXT:    s_lshl_b32 s2, s2, 3
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX11-FAKE16-NEXT:    s_lshl_b32 s4, 0xffff, s2
+; GFX11-FAKE16-NEXT:    s_not_b32 s4, s4
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
 ; GFX11-FAKE16-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v1, s3
-; GFX11-FAKE16-NEXT:    s_not_b32 s3, s4
-; GFX11-FAKE16-NEXT:    s_mov_b32 s4, 0
+; GFX11-FAKE16-NEXT:    s_mov_b32 s3, 0
+; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX11-FAKE16-NEXT:    v_lshlrev_b32_e32 v2, 16, v0
 ; GFX11-FAKE16-NEXT:    .p2align 6
 ; GFX11-FAKE16-NEXT:  .LBB0_1: ; %atomicrmw.start
@@ -102,7 +102,7 @@ define amdgpu_kernel void @v_atomicrmw_fadd_bf16(ptr addrspace(1) %out, i1 %in, 
 ; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v0, 16, v0
 ; GFX11-FAKE16-NEXT:    v_lshlrev_b32_e32 v0, s2, v0
 ; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-FAKE16-NEXT:    v_and_or_b32 v0, v1, s3, v0
+; GFX11-FAKE16-NEXT:    v_and_or_b32 v0, v1, s4, v0
 ; GFX11-FAKE16-NEXT:    global_atomic_cmpswap_b32 v0, v3, v[0:1], s[0:1] glc
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    buffer_gl1_inv
@@ -110,9 +110,7 @@ define amdgpu_kernel void @v_atomicrmw_fadd_bf16(ptr addrspace(1) %out, i1 %in, 
 ; GFX11-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v1
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX11-FAKE16-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX11-FAKE16-NEXT:    s_or_b32 s4, s4, s6
+; GFX11-FAKE16-NEXT:    s_or_b32 s3, s3, vcc_lo
 ; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX11-FAKE16-NEXT:    s_cbranch_execnz .LBB0_1

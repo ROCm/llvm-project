@@ -18,18 +18,19 @@ target triple = "amdgpu9.00-mesa-mesa3d"
 define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-LABEL: main:
 ; ISA:       ; %bb.0: ; %start
-; ISA-NEXT:    v_readfirstlane_b32 s0, v0
-; ISA-NEXT:    s_mov_b32 m0, s0
-; ISA-NEXT:    s_mov_b64 s[0:1], -1
+; ISA-NEXT:    v_readfirstlane_b32 s6, v0
+; ISA-NEXT:    s_mov_b32 m0, s6
+; ISA-NEXT:    s_mov_b64 s[8:9], -1
 ; ISA-NEXT:    v_interp_p1_f32_e32 v0, v1, attr0.x
 ; ISA-NEXT:    v_cmp_nlt_f32_e32 vcc, 0, v0
-; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[0:1]
+; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[8:9]
+; ISA-NEXT:    s_mov_b64 s[8:9], 0
+; ISA-NEXT:    s_mov_b64 s[2:3], 0
+; ISA-NEXT:    s_mov_b64 s[4:5], 0
 ; ISA-NEXT:    s_mov_b64 s[0:1], 0
 ; ISA-NEXT:    s_mov_b32 s6, 0
 ; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
-; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[0:1]
-; ISA-NEXT:    s_mov_b64 s[2:3], 0
-; ISA-NEXT:    s_mov_b64 s[4:5], 0
+; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[8:9]
 ; ISA-NEXT:    s_branch .LBB0_2
 ; ISA-NEXT:  .LBB0_1: ; %Flow
 ; ISA-NEXT:    ; in Loop: Header=BB0_2 Depth=1
@@ -139,11 +140,11 @@ define amdgpu_ps void @i1_copy_assert(i1 %v4) {
 ; ISA:       ; %bb.0: ; %start
 ; ISA-NEXT:    v_and_b32_e32 v0, 1, v0
 ; ISA-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; ISA-NEXT:    s_mov_b64 s[0:1], -1
+; ISA-NEXT:    s_mov_b64 s[2:3], -1
+; ISA-NEXT:    s_mov_b64 s[0:1], 0
 ; ISA-NEXT:    s_mov_b32 s4, 0
 ; ISA-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
-; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[0:1]
-; ISA-NEXT:    s_mov_b64 s[0:1], 0
+; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[2:3]
 ; ISA-NEXT:    s_branch .LBB1_2
 ; ISA-NEXT:  .LBB1_1: ; %Flow
 ; ISA-NEXT:    ; in Loop: Header=BB1_2 Depth=1
