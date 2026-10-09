@@ -31063,7 +31063,7 @@ static bool supportedVectorShiftWithImm(EVT VT, const X86Subtarget &Subtarget,
   if (!(VT.is128BitVector() || VT.is256BitVector() || VT.is512BitVector()))
     return false;
 
-  if (VT.getScalarSizeInBits() < 16)
+  if (VT.getScalarSizeInBits() < 16 || VT.getScalarSizeInBits() > 64)
     return false;
 
   if (VT.is512BitVector() && Subtarget.useAVX512Regs() &&
@@ -31577,7 +31577,7 @@ static SDValue LowerShift(SDValue Op, const X86Subtarget &Subtarget,
     }
     APInt APIntShiftAmt;
     bool IsConstantSplat = X86::isConstantSplat(Amt, APIntShiftAmt);
-    bool Profitable = Subtarget.getCLOpts().widen_shift;
+    bool Profitable = true;
     // AVX512BW brings support for vpsllvw.
     if (WideEltSizeInBits * AmtWideElts.size() >= 512 &&
         WideEltSizeInBits < 32 && !Subtarget.hasBWI()) {
@@ -37664,7 +37664,8 @@ X86TargetLowering::EmitLoweredSelect(MachineInstr &MI,
       NextMIIt->getOpcode() == MI.getOpcode() &&
       NextMIIt->getOperand(2).getReg() == MI.getOperand(2).getReg() &&
       NextMIIt->getOperand(1).getReg() == MI.getOperand(0).getReg() &&
-      NextMIIt->getOperand(1).isKill()) {
+      ThisMBB->getParent()->getRegInfo().hasOneNonDBGUse(
+          MI.getOperand(0).getReg())) {
     return EmitLoweredCascadedSelect(MI, *NextMIIt, ThisMBB);
   }
 
