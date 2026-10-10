@@ -107,7 +107,8 @@ EXTERN int omp_get_device_from_uid(const char *DeviceUid) {
 
   auto ExclusiveDevicesAccessor = PM->getExclusiveDevicesAccessor();
   for (const DeviceTy &Device : PM->devices(ExclusiveDevicesAccessor)) {
-    if (Device.getUid() == DeviceUid) {
+    const char *Uid = Device.RTL->getDevice(Device.RTLDeviceID).getDeviceUid();
+    if (Uid && strcmp(DeviceUid, Uid) == 0) {
       DeviceNum = Device.DeviceID;
       break;
     }
@@ -135,7 +136,8 @@ EXTERN const char *omp_get_uid_from_device(int DeviceNum) {
   if (!DeviceOrErr)
     FATAL_MESSAGE(DeviceNum, "%s", toString(DeviceOrErr.takeError()).c_str());
 
-  const char *Uid = DeviceOrErr->getUid().data();
+  const char *Uid =
+      DeviceOrErr->RTL->getDevice(DeviceOrErr->RTLDeviceID).getDeviceUid();
   ODBG(ODT_Interface) << "Call to " << __func__ << " returning " << Uid;
   return Uid;
 }

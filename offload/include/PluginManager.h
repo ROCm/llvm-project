@@ -142,7 +142,14 @@ struct PluginManager {
   void addRequirements(int64_t Flags) { Requirements.addRequirements(Flags); }
 
   /// Returns the number of plugins that are active.
-  int getNumActivePlugins() const;
+  int getNumActivePlugins() const {
+    int count = 0;
+    for (auto &R : plugins())
+      if (R.is_initialized())
+        ++count;
+
+    return count;
+  }
 
   auto getTraceRecordManager() const {
     // Must be called after runtime is initialized. Since the runtime init

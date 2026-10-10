@@ -812,19 +812,3 @@ getProfilerToAttach() {
 }
 
 #endif
-
-int PluginManager::getNumActivePlugins() const {
-  int count = 0;
-  if (auto Err = iteratePlatforms(
-          [](ol_platform_handle_t Platform, void *Data) {
-            bool Active = false;
-            if (olGetPlatformInfo(Platform, OL_PLATFORM_INFO_ACTIVE,
-                                  sizeof(Active), &Active) == OL_SUCCESS &&
-                Active)
-              ++(*static_cast<int *>(Data));
-          },
-          static_cast<void *>(&count))) {
-    consumeError(std::move(Err));
-  }
-  return count;
-}
