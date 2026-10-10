@@ -20,3 +20,9 @@ comgr fails to build -lzma
 breaks asan-debug build
 [DebugInfo] Support global addresses in variable locations  (#218722)" (#4800) (2 hours ago) <theRonShark>
 ---
+--
+breaks gfx1250 builds ck hipBLASlt
+"[AMDGPU] Reserve ENABLE_WAVEFRONT_SIZE32 on gfx125x (#229162)"
+"Reland '[Clang][AMDGPU] Change __fp16 to _Float16 in builtin definitions' (#185446)" (#4866)
+[AMDGPU] Model gfx1250-strict WMMA latencies (#230204)
+----
