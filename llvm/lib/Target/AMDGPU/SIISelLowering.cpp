@@ -2548,8 +2548,7 @@ bool SITargetLowering::isUniformLoad(const LoadSDNode *Load) const {
           (Load->getAddressSpace() == AMDGPUAS::CONSTANT_ADDRESS ||
            Load->getAddressSpace() == AMDGPUAS::CONSTANT_ADDRESS_32BIT) ||
           (Load->getAddressSpace() == AMDGPUAS::GLOBAL_ADDRESS &&
-           Load->isSimple() && Subtarget->getScalarizeGlobalBehavior() &&
-           isMemOpHasNoClobberedMemOperand(Load)));
+           Load->isSimple() && isMemOpHasNoClobberedMemOperand(Load)));
 }
 
 MachinePointerInfo
@@ -13687,8 +13686,7 @@ SDValue SITargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
 
   if (AS == AMDGPUAS::CONSTANT_ADDRESS ||
       AS == AMDGPUAS::CONSTANT_ADDRESS_32BIT ||
-      (AS == AMDGPUAS::GLOBAL_ADDRESS &&
-       Subtarget->getScalarizeGlobalBehavior() && Load->isSimple() &&
+      (AS == AMDGPUAS::GLOBAL_ADDRESS && Load->isSimple() &&
        (Load->isInvariant() || isMemOpHasNoClobberedMemOperand(Load)))) {
     if ((!Op->isDivergent() || AMDGPU::isUniformMMO(MMO)) &&
         Alignment >= Align(4) && NumElements < 32) {

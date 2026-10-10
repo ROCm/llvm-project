@@ -20,3 +20,6 @@ comgr fails to build -lzma
 breaks asan-debug build
 [DebugInfo] Support global addresses in variable locations  (#218722)" (#4800) (2 hours ago) <theRonShark>
 ---
+breaks smoke/pfspecifier
+[Offload][omp] Get Plugin active count and Device UID through liboffload (#230109)
+---

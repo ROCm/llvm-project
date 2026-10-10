@@ -162,7 +162,6 @@ using namespace llvm;
 
 namespace llvm {
 extern cl::opt<std::string> UseCtxProfile;
-extern cl::opt<bool> PGOInstrumentColdFunctionOnly;
 
 static cl::opt<bool> EnableEarlyOpenMPOpt(
     "enable-early-openmp-opt", cl::init(false), cl::Hidden,
@@ -1127,11 +1126,11 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
   const bool IsCtxProfUse = !UseCtxProfile.empty() && isThinLTOPreLink(Phase);
 
   assert((Opts.instrument_cold_function_only_path.empty() ||
-          PGOInstrumentColdFunctionOnly) &&
+          isPGOInstrumentColdFunctionOnly()) &&
          "--instrument-cold-function-only-path is provided but "
          "--pgo-instrument-cold-function-only is not enabled");
   const bool IsColdFuncOnlyInstrGen =
-      PGOInstrumentColdFunctionOnly && IsPGOPreLink &&
+      isPGOInstrumentColdFunctionOnly() && IsPGOPreLink &&
       !Opts.instrument_cold_function_only_path.empty();
 
   if (IsPGOInstrGen || IsPGOInstrUse || IsMemprofUse || IsCtxProfGen ||
