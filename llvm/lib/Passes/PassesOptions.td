@@ -83,7 +83,7 @@ defm : BoolField<"hot-cold-split", "false",
   "Enable hot-cold splitting pass">;
 defm : ValueField<"instrument-cold-function-only-path", "StringRef", "",
   "File path for cold function only instrumentation(requires use with --pgo-instrument-cold-function-only)">;
-defm : BoolField<"mandatory-inlining-first", "false",
+defm : BoolField<"mandatory-inlining-first", "true",
   "Perform mandatory inlinings module-wide, before performing inlining">;
 defm : BoolField<"opt-pipeline-trigger-crash", "false",
   "Trigger crash in optimization pipeline">;
