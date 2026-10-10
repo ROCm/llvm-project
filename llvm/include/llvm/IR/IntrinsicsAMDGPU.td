@@ -4446,7 +4446,7 @@ class AMDGPUTensorLoadStore:
      llvm_i32_ty],  // cachepolicy:
                     //   bits [0-2] = th
                     //   bits [3-4] = scope
-    [ImmArg<ArgIndex<5>>, IntrWillReturn, IntrConvergent, IntrNoCallback, IntrNoFree],
+    [IntrInaccessibleMemOrArgMemOnly, ImmArg<ArgIndex<5>>, IntrWillReturn, IntrConvergent, IntrNoCallback, IntrNoFree],
     "", [SDNPMemOperand]
   >;
 
