@@ -6,13 +6,32 @@ FROM mcr.microsoft.com/dotnet/framework/sdk:4.8-windowsservercore-ltsc2022
 SHELL ["cmd", "/S", "/C"]
 
 # Download the Build Tools bootstrapper.
+# SHA-256 obtained from https://aka.ms/vs/17/release/vs_buildtools.exe
+ARG VS_BUILDTOOLS_SHA256=15bc8cfc727e099aaba861eb21a811776bcbddc603c0a3f203eba5e5a7710421
 ADD https://aka.ms/vs/17/release/vs_buildtools.exe /TEMP/vs_buildtools.exe
+RUN powershell -Command \
+    $hash = (Get-FileHash -Path 'C:\TEMP\vs_buildtools.exe' -Algorithm SHA256).Hash; \
+    if ($hash -ne $env:VS_BUILDTOOLS_SHA256) { \
+        Write-Error \"VS Build Tools hash mismatch. Expected: $env:VS_BUILDTOOLS_SHA256, Got: $hash\"; \
+        exit 1; \
+    }
 
+# Security Note: Chocolatey installation downloads and executes a script without verification.
+# TODO: Consider downloading script to file, verifying hash, then executing for better security.
+# For now, we rely on HTTPS and the chocolatey.org domain trust.
 RUN powershell -Command Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 
 # Download channel for fixed install.
+# SHA-256 obtained from https://aka.ms/vs/17/release/channel
+ARG VS_CHANNEL_SHA256=77c4e66845042ed147d0abb95c52a5dfbb505fc14949d9f277c3fb01f7c54830
 ARG CHANNEL_URL=https://aka.ms/vs/17/release/channel
 ADD ${CHANNEL_URL} /TEMP/VisualStudio.chman
+RUN powershell -Command \
+    $hash = (Get-FileHash -Path 'C:\TEMP\VisualStudio.chman' -Algorithm SHA256).Hash; \
+    if ($hash -ne $env:VS_CHANNEL_SHA256) { \
+        Write-Error \"VS Channel hash mismatch. Expected: $env:VS_CHANNEL_SHA256, Got: $hash\"; \
+        exit 1; \
+    }
 
 # Install Build Tools with C++ workload.
 #   - Documentation for docker installation
@@ -105,12 +124,20 @@ RUN powershell -Command \
 
 ARG RUNNER_VERSION=2.335.1
 ENV RUNNER_VERSION=$RUNNER_VERSION
+# SHA-256 from https://github.com/actions/runner/releases/tag/v2.335.0
+ARG RUNNER_SHA256=0422df90994cc5e2350238fb2707029fddaa156e7e4562b14e35086f94417e87
 
 RUN powershell -Command \
-    Invoke-WebRequest -Uri https://github.com/actions/runner/releases/download/v${env:RUNNER_VERSION}/actions-runner-win-x64-${env:RUNNER_VERSION}.zip -OutFile actions-runner-win.zip ; \
+    $url = \"https://github.com/actions/runner/releases/download/v${env:RUNNER_VERSION}/actions-runner-win-x64-${env:RUNNER_VERSION}.zip\"; \
+    Invoke-WebRequest -Uri $url -OutFile actions-runner-win.zip ; \
+    $hash = (Get-FileHash -Path 'actions-runner-win.zip' -Algorithm SHA256).Hash; \
+    if ($hash -ne $env:RUNNER_SHA256) { \
+        Write-Error \"Runner hash mismatch. Expected: $env:RUNNER_SHA256, Got: $hash\"; \
+        exit 1; \
+    }; \
     Add-Type -AssemblyName System.IO.Compression.FileSystem ; \
     [System.IO.Compression.ZipFile]::ExtractToDirectory('actions-runner-win.zip', $PWD) ;\
-    rm actions-runner-win.zip
+    Remove-Item 'actions-runner-win.zip'
 
 # Set the LLVM_VERSION environment variable
 ENV LLVM_VERSION=22.1.4
@@ -125,13 +152,25 @@ RUN powershell -Command \
     New-Item -Path "C:\clang" -ItemType "Directory" -Force ; \
     # --- 1. Download and extract xz --- \
     Set-Location C:\temp-download ; \
-    Invoke-WebRequest -Uri "http://github.com/tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1-windows.zip" -OutFile "xz.zip"; \
-    (Get-FileHash -Path "C:\temp-download\xz.zip" -Algorithm MD5).Hash -eq 'c3c69fdce3e825cc0b76123b36b0bcc2' ; \
+    Invoke-WebRequest -Uri "https://github.com/tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1-windows.zip" -OutFile "xz.zip"; \
+    $xzHash = (Get-FileHash -Path "C:\temp-download\xz.zip" -Algorithm SHA256).Hash; \
+    # SHA-256 from https://github.com/tukaani-project/xz/releases/tag/v5.8.1  \
+    $expectedXzHash = '62fdfde73d5c5d293bbb4a96211b29d09adbd56bc6736976e4c9fc9942ae3c67'; \
+    if ($xzHash -ne $expectedXzHash) { \
+        Write-Error \"XZ hash mismatch. Expected: $expectedXzHash, Got: $xzHash\"; \
+        exit 1; \
+    }; \
     Add-Type -AssemblyName "System.IO.Compression.FileSystem"; \
     [System.IO.Compression.ZipFile]::ExtractToDirectory('C:\temp-download\xz.zip', 'C:\xz-utils'); \ 
     # --- 2. Download and decompress Clang --- \
-    Invoke-WebRequest -Uri "http://github.com/llvm/llvm-project/releases/download/llvmorg-${env:LLVM_VERSION}/clang+llvm-${env:LLVM_VERSION}-x86_64-pc-windows-msvc.tar.xz" -OutFile "clang+llvm-${env:LLVM_VERSION}-x86_64-pc-windows-msvc.tar.xz" ; \
-    (Get-FileHash -Path "C:\temp-download\clang+llvm-${env:LLVM_VERSION}-x86_64-pc-windows-msvc.tar.xz" -Algorithm MD5).Hash -eq '0ae1d3effd9ab9d323f7fa595777f0a2' ; \
+    Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-${env:LLVM_VERSION}/clang+llvm-${env:LLVM_VERSION}-x86_64-pc-windows-msvc.tar.xz" -OutFile "clang+llvm-${env:LLVM_VERSION}-x86_64-pc-windows-msvc.tar.xz" ; \
+    $clangHash = (Get-FileHash -Path "C:\temp-download\clang+llvm-${env:LLVM_VERSION}-x86_64-pc-windows-msvc.tar.xz" -Algorithm SHA256).Hash; \
+    # SHA-256 from https://github.com/llvm/llvm-project/releases/tag/llvmorg-22.1.4  \
+    $expectedClangHash = 'ed775bdaea7087c6c1aeac9498352cfcd8610d92dc4fe9eda9aecb15ce712a2c'; \
+    if ($clangHash -ne $expectedClangHash) { \
+        Write-Error \"Clang hash mismatch. Expected: $expectedClangHash, Got: $clangHash\"; \
+        exit 1; \
+    }; \
     C:\xz-utils\bin_x86-64\xz.exe -d -qq clang+llvm-${env:LLVM_VERSION}-x86_64-pc-windows-msvc.tar.xz ; \
     # --- 3. Extract clang --- \
     C:\Windows\System32\tar.exe -xf clang+llvm-${env:LLVM_VERSION}-x86_64-pc-windows-msvc.tar -C C:\clang ; \
