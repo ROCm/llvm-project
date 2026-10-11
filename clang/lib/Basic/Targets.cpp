@@ -8,6 +8,7 @@
 //
 // This file implements construction of a TargetInfo object from a
 // target triple.
+// cci-bisect exercise inner commit 1/4 (harmless).
 //
 //===----------------------------------------------------------------------===//
 
