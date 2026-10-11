@@ -41,6 +41,9 @@ F(T##N x, T##N y) \
     return (T##N) ( SLST##N(F,T) ); \
 }
 
+#define SWRAPNT_EXT(N, F, T)                                                   \
+    ATTR T##N C(__, F)(T##N x, T##N y) { return (T##N)(SLST##N(F, T)); }
+
 #define PWRAPNT(N,F,T) \
 ATTR T##N \
 F(T##N x, T##N y) \
@@ -54,6 +57,9 @@ F(T x, T y) \
 { \
     return SNAME(F,T)(x, y); \
 }
+
+#define WRAP1T_EXT(F, T)                                                       \
+    ATTR T C(__, F)(T x, T y) { return SNAME(F, T)(x, y); }
 
 #define WRAP2T(F,T) \
 ATTR T##2 \
@@ -91,6 +97,14 @@ F(T##2 x, T##2 y) \
     WRAP2T(F,half)
 #endif
 
+#define SWRAPT_EXT(F, T)                                                       \
+    SWRAPNT_EXT(16, F, T)                                                      \
+    SWRAPNT_EXT(8, F, T)                                                       \
+    SWRAPNT_EXT(4, F, T)                                                       \
+    SWRAPNT_EXT(3, F, T)                                                       \
+    SWRAPNT_EXT(2, F, T)                                                       \
+    WRAP1T_EXT(F, T)
+
 WRAP(atan2)
 WRAP(atan2pi)
 WRAP(fdim)
@@ -102,6 +116,9 @@ WRAP(nextafter)
 WRAP(pow)
 WRAP(powr)
 WRAP(remainder)
+
+SWRAPT_EXT(pow_fast, float)
+SWRAPT_EXT(powr_fast, float)
 
 #define WRAP_ELEMENTWISE_TYPE(F, T, N, B)                                      \
     ATTR T##N F(T##N x, T##N y) { return B(x, y); }
