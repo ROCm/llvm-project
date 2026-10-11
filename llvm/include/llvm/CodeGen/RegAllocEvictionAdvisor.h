@@ -11,11 +11,13 @@
 
 #include "llvm/ADT/Any.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/Register.h"
+#include "llvm/CodeGen/SlotIndexes.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/MC/MCRegister.h"
@@ -25,6 +27,7 @@
 namespace llvm {
 class AllocationOrder;
 class LiveInterval;
+class LiveIntervalUnion;
 class LiveIntervals;
 class LiveRegMatrix;
 class MachineFunction;
@@ -129,8 +132,28 @@ protected:
   LLVM_ABI RegAllocEvictionAdvisor(const MachineFunction &MF,
                                    const RAGreedy &RA);
 
+  /// Positive blockers for one eviction search in the same LiveRegMatrix.
+  /// Do not retain this cache across assignment, liveness or SlotIndex changes.
+  struct ReassignmentCache {
+    struct Blocker {
+      SlotIndex Start;
+      SlotIndex End;
+      unsigned Tag = 0;
+    };
+    SmallDenseMap<unsigned, Blocker, 4> Blockers;
+
+    enum InterferenceKind { Free, Blocked, Cached };
+    /// Check a nonempty single-segment interval without subranges.
+    LLVM_ABI InterferenceKind checkInterference(const LiveInterval &VirtReg,
+                                                MCRegUnit Unit,
+                                                const LiveIntervalUnion &Union);
+  };
+
   LLVM_ABI bool canReassign(const LiveInterval &VirtReg,
                             MCRegister FromReg) const;
+  /// Passing nullptr preserves the uncached query path.
+  LLVM_ABI bool canReassign(const LiveInterval &VirtReg, MCRegister FromReg,
+                            ReassignmentCache *Cache) const;
 
   // Get the upper limit of elements in the given Order we need to analize.
   // TODO: is this heuristic,  we could consider learning it.
@@ -300,8 +323,8 @@ private:
   bool canEvictHintInterference(const LiveInterval &, MCRegister,
                                 const SmallVirtRegSet &) const override;
   bool canEvictInterferenceBasedOnCost(const LiveInterval &, MCRegister, bool,
-                                       EvictionCost &,
-                                       const SmallVirtRegSet &) const;
+                                       EvictionCost &, const SmallVirtRegSet &,
+                                       ReassignmentCache *) const;
   bool shouldEvict(const LiveInterval &A, bool, const LiveInterval &B,
                    bool) const;
 };
