@@ -33,6 +33,7 @@
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/Object/ObjectFile.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <vector>
@@ -918,6 +919,109 @@ struct PostProcessingInfo {
         TPR(std::move(TPR)) {}
 };
 
+static bool rangesOverlap(uintptr_t LBegin, uintptr_t LEnd, uintptr_t RBegin,
+                          uintptr_t REnd) {
+  return std::max(LBegin, RBegin) < std::min(LEnd, REnd);
+}
+
+/// Return true if [Ptr, Ptr + Size) overlaps any actual device-to-host transfer
+/// recorded for this targetDataEnd.
+static bool overlapsTransferredFrom(const StateInfoTy &StateInfo, void *Ptr,
+                                    int64_t Size) {
+  if (Size <= 0)
+    return false;
+
+  const uintptr_t Begin = reinterpret_cast<uintptr_t>(Ptr);
+  const uintptr_t End = Begin + Size;
+  for (const auto &TransferredEntry : StateInfo.TransferredFromEntries) {
+    void *TransferredPtr = TransferredEntry.first;
+    int64_t TransferredSize = TransferredEntry.second;
+    if (TransferredSize <= 0)
+      continue;
+
+    const uintptr_t TransferredBegin =
+        reinterpret_cast<uintptr_t>(TransferredPtr);
+    const uintptr_t TransferredEnd = TransferredBegin + TransferredSize;
+    if (rangesOverlap(Begin, End, TransferredBegin, TransferredEnd))
+      return true;
+  }
+
+  return false;
+}
+
+/// Restore only the bytes of \p ShadowPtr whose host range was actually
+/// overwritten by a device-to-host transfer for the current targetDataEnd list
+/// item. This avoids clobbering host pointer/descriptor updates when a FROM map
+/// was skipped because the entry was not the last user.
+static bool restoreShadowPointerInfoForTransferredBytes(
+    const StateInfoTy &StateInfo, const ShadowPtrInfoTy &ShadowPtr,
+    void *EntryHstPtrBegin, int64_t EntryDataSize) {
+  if (EntryDataSize <= 0 || ShadowPtr.PtrSize <= 0)
+    return false;
+  assert(ShadowPtr.HstPtrAddr && "Shadow host pointer address is null");
+
+  const uintptr_t EntryBegin = reinterpret_cast<uintptr_t>(EntryHstPtrBegin);
+  const uintptr_t EntryEnd = EntryBegin + EntryDataSize;
+  const uintptr_t ShadowBegin =
+      reinterpret_cast<uintptr_t>(ShadowPtr.HstPtrAddr);
+  const uintptr_t ShadowEnd = ShadowBegin + ShadowPtr.PtrSize;
+
+  bool Restored = false;
+  for (const auto &TransferredEntry : StateInfo.TransferredFromEntries) {
+    void *TransferredPtr = TransferredEntry.first;
+    int64_t TransferredSize = TransferredEntry.second;
+    if (TransferredSize <= 0)
+      continue;
+
+    const uintptr_t TransferredBegin =
+        reinterpret_cast<uintptr_t>(TransferredPtr);
+    const uintptr_t TransferredEnd = TransferredBegin + TransferredSize;
+
+    const uintptr_t RestoreBegin =
+        std::max(std::max(EntryBegin, ShadowBegin), TransferredBegin);
+    const uintptr_t RestoreEnd =
+        std::min(std::min(EntryEnd, ShadowEnd), TransferredEnd);
+    if (RestoreBegin >= RestoreEnd)
+      continue;
+
+    const size_t RestoreOffset = RestoreBegin - ShadowBegin;
+    const size_t RestoreSize = RestoreEnd - RestoreBegin;
+    const bool IsFullRestore =
+        RestoreOffset == 0 &&
+        RestoreSize == static_cast<size_t>(ShadowPtr.PtrSize);
+    const bool IsDescriptor =
+        ShadowPtr.PtrSize > static_cast<int64_t>(sizeof(void *));
+
+    if (IsFullRestore) {
+      if (IsDescriptor) {
+        ODBG(ODT_Mapping)
+            << "Restoring host descriptor " << (void *)ShadowPtr.HstPtrAddr
+            << " to its original content (" << ShadowPtr.PtrSize
+            << " bytes), containing pointee address "
+            << (void *)ShadowPtr.HstPtrContent.data();
+      } else {
+        ODBG(ODT_Mapping)
+            << "Restoring host pointer " << (void *)ShadowPtr.HstPtrAddr
+            << " to its original value "
+            << (void *)ShadowPtr.HstPtrContent.data();
+      }
+    } else {
+      ODBG(ODT_Mapping)
+          << "Restoring host " << (IsDescriptor ? "descriptor" : "pointer")
+          << " bytes [" << RestoreOffset << ", "
+          << (RestoreOffset + RestoreSize) << ") at "
+          << reinterpret_cast<void *>(RestoreBegin)
+          << " to their original content";
+    }
+
+    std::memcpy(reinterpret_cast<char *>(ShadowPtr.HstPtrAddr) + RestoreOffset,
+                ShadowPtr.HstPtrContent.data() + RestoreOffset, RestoreSize);
+    Restored = true;
+  }
+
+  return Restored;
+}
+
 } // namespace
 
 /// Applies the necessary post-processing procedures to entries listed in \p
@@ -927,7 +1031,8 @@ struct PostProcessingInfo {
 /// according to the successfulness of the operations.
 [[nodiscard]] static int
 postProcessingTargetDataEnd(DeviceTy *Device,
-                            SmallVector<PostProcessingInfo> &EntriesInfo) {
+                            SmallVector<PostProcessingInfo> &EntriesInfo,
+                            StateInfoTy &StateInfo) {
   int Ret = OFFLOAD_SUCCESS;
 
   for (auto &[HstPtrBegin, DataSize, ArgType, TPR] : EntriesInfo) {
@@ -965,33 +1070,23 @@ postProcessingTargetDataEnd(DeviceTy *Device,
     }
 
     // If we copied back to the host a struct/array containing pointers, or
-    // Fortran descriptors (which are larger than a "void *"), we need to
-    // restore the original host pointer/descriptor values from their shadow
-    // copies. If the struct is going to be deallocated, remove any remaining
-    // shadow pointer entries for this struct.
+    // Fortran descriptors (which are larger than a "void *"), restore only the
+    // shadow pointer/descriptor bytes that were actually overwritten by a FROM
+    // retrieval for this list item. A skipped FROM map with IsLast=0 should not
+    // restore anything, and a FROM map for one member should not restore shadow
+    // descriptors for unrelated members in the same map-table entry.
     const bool HasFrom = ArgType & OMP_TGT_MAPTYPE_FROM;
-    if (HasFrom) {
+    if (HasFrom && overlapsTransferredFrom(StateInfo, HstPtrBegin, DataSize)) {
+      void *EntryHstPtrBegin = HstPtrBegin;
+      int64_t EntryDataSize = DataSize;
       Entry->foreachShadowPointerInfo([&](const ShadowPtrInfoTy &ShadowPtr) {
         const bool isZeroCopy = PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY;
         const bool isUSMMode =
             PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY;
         if (isZeroCopy || isUSMMode)
           return OFFLOAD_SUCCESS;
-        constexpr int64_t VoidPtrSize = sizeof(void *);
-        if (ShadowPtr.PtrSize > VoidPtrSize) {
-          ODBG(ODT_Mapping)
-              << "Restoring host descriptor " << (void *)ShadowPtr.HstPtrAddr
-              << " to its original content (" << ShadowPtr.PtrSize
-              << " bytes), containing pointee address "
-              << (void *)ShadowPtr.HstPtrContent.data();
-        } else {
-          ODBG(ODT_Mapping)
-              << "Restoring host pointer " << (void *)ShadowPtr.HstPtrAddr
-              << " to its original value "
-              << (void *)ShadowPtr.HstPtrContent.data();
-        }
-        std::memcpy(ShadowPtr.HstPtrAddr, ShadowPtr.HstPtrContent.data(),
-                    ShadowPtr.PtrSize);
+        restoreShadowPointerInfoForTransferredBytes(
+            StateInfo, ShadowPtr, EntryHstPtrBegin, EntryDataSize);
         return OFFLOAD_SUCCESS;
       });
     }
@@ -1014,6 +1109,7 @@ postProcessingTargetDataEnd(DeviceTy *Device,
   }
 
   delete &EntriesInfo;
+  delete &StateInfo;
   return Ret;
 }
 
@@ -1321,12 +1417,17 @@ int targetDataEnd(ident_t *Loc, DeviceTy &Device, int32_t ArgNum,
     PostProcessingPtrs->back().TPR.getEntry()->unlock();
   }
 
-  // Add post-processing functions
-  // TODO: We might want to remove `mutable` in the future by not changing the
-  // captured variables somehow.
-  AsyncInfo.addPostProcessingFunction([=, Device = &Device]() mutable -> int {
-    return postProcessingTargetDataEnd(Device, *PostProcessingPtrs);
-  });
+  // Add post-processing functions. StateInfo is owned by the caller and may not
+  // outlive the async post-processing callback, so preserve just the
+  // transferred-from bookkeeping needed for descriptor-restore decisions.
+  auto *PostProcessingStateInfo = new StateInfoTy();
+  PostProcessingStateInfo->TransferredFromEntries =
+      StateInfo->TransferredFromEntries;
+  AsyncInfo.addPostProcessingFunction(
+      [=, Device = &Device]() mutable -> int {
+        return postProcessingTargetDataEnd(Device, *PostProcessingPtrs,
+                                           *PostProcessingStateInfo);
+      });
 
   return Ret;
 }
@@ -1372,8 +1473,17 @@ static int targetDataContiguous(ident_t *Loc, DeviceTy &Device, void *ArgsBase,
       return OFFLOAD_FAIL;
     }
     if (TPR.getEntry()) {
+      uintptr_t UpdatedBegin = reinterpret_cast<uintptr_t>(TgtPtrBegin);
+      uintptr_t UpdatedEnd = UpdatedBegin + ArgSize;
       int Ret = TPR.getEntry()->foreachShadowPointerInfo(
           [&](ShadowPtrInfoTy &ShadowPtr) {
+            uintptr_t ShadowBegin =
+                reinterpret_cast<uintptr_t>(ShadowPtr.TgtPtrAddr);
+            uintptr_t ShadowEnd = ShadowBegin + ShadowPtr.PtrSize;
+            if (!rangesOverlap(UpdatedBegin, UpdatedEnd, ShadowBegin,
+                               ShadowEnd))
+              return OFFLOAD_SUCCESS;
+
             constexpr int64_t VoidPtrSize = sizeof(void *);
             if (ShadowPtr.PtrSize > VoidPtrSize) {
               ODBG(ODT_Mapping)
