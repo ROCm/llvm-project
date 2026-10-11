@@ -343,7 +343,10 @@ RPC_ATTRS void sleep_briefly() {
 #if __has_builtin(__nvvm_reflect)
   if (__nvvm_reflect("__CUDA_ARCH") >= 700)
     asm("nanosleep.u32 64;" ::: "memory");
-#elif __has_builtin(__builtin_amdgcn_s_sleep)
+// FIXME:  __has_builtin(__builtin_amdgcn_s_sleep) is broken for host pass
+//         so && defined(RPC_TARGET_IS_GPU) circumvents. Remove it for upstream
+//         convergence when __has_builtin has been fixed.
+#elif __has_builtin(__builtin_amdgcn_s_sleep) && defined(RPC_TARGET_IS_GPU)
   __builtin_amdgcn_s_sleep(2);
 #elif __has_builtin(__builtin_ia32_pause)
   __builtin_ia32_pause();
