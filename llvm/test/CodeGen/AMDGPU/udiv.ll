@@ -1260,7 +1260,7 @@ define amdgpu_kernel void @udiv_i32_div_k_even(ptr addrspace(1) %out, ptr addrsp
 ; GFX1030-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX1030-NEXT:    global_load_dword v1, v0, s[2:3]
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0)
-; GFX1030-NEXT:    v_mul_hi_u32 v1, 0xfabbd9c1, v1
+; GFX1030-NEXT:    v_mul_hi_u32 v1, v1, 0xfabbd9c1
 ; GFX1030-NEXT:    v_lshrrev_b32_e32 v1, 25, v1
 ; GFX1030-NEXT:    global_store_dword v0, v1, s[0:1]
 ; GFX1030-NEXT:    s_endpgm
@@ -1357,7 +1357,7 @@ define amdgpu_kernel void @udiv_i32_div_k_odd(ptr addrspace(1) %out, ptr addrspa
 ; GFX1030-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX1030-NEXT:    global_load_dword v1, v0, s[2:3]
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0)
-; GFX1030-NEXT:    v_mul_hi_u32 v1, 0x7d5deca3, v1
+; GFX1030-NEXT:    v_mul_hi_u32 v1, v1, 0x7d5deca3
 ; GFX1030-NEXT:    v_lshrrev_b32_e32 v1, 24, v1
 ; GFX1030-NEXT:    global_store_dword v0, v1, s[0:1]
 ; GFX1030-NEXT:    s_endpgm
@@ -2242,10 +2242,10 @@ define amdgpu_kernel void @scalarize_mulhu_4xi32(ptr addrspace(1) nocapture read
 ; GFX1030-NEXT:    v_lshrrev_b32_e32 v1, 2, v1
 ; GFX1030-NEXT:    v_lshrrev_b32_e32 v2, 2, v2
 ; GFX1030-NEXT:    v_lshrrev_b32_e32 v3, 2, v3
-; GFX1030-NEXT:    v_mul_hi_u32 v0, 0x1389c755, v0
-; GFX1030-NEXT:    v_mul_hi_u32 v1, 0x1389c755, v1
-; GFX1030-NEXT:    v_mul_hi_u32 v2, 0x1389c755, v2
-; GFX1030-NEXT:    v_mul_hi_u32 v3, 0x1389c755, v3
+; GFX1030-NEXT:    v_mul_hi_u32 v0, v0, 0x1389c755
+; GFX1030-NEXT:    v_mul_hi_u32 v1, v1, 0x1389c755
+; GFX1030-NEXT:    v_mul_hi_u32 v2, v2, 0x1389c755
+; GFX1030-NEXT:    v_mul_hi_u32 v3, v3, 0x1389c755
 ; GFX1030-NEXT:    v_lshrrev_b32_e32 v0, 10, v0
 ; GFX1030-NEXT:    v_lshrrev_b32_e32 v1, 10, v1
 ; GFX1030-NEXT:    v_lshrrev_b32_e32 v2, 10, v2
@@ -2639,13 +2639,13 @@ define i64 @v_test_udiv64_mulhi_fold(i64 %arg) {
 ; GFX1030-NEXT:    v_alignbit_b32 v4, v1, v0, 5
 ; GFX1030-NEXT:    v_mov_b32_e32 v3, 0
 ; GFX1030-NEXT:    v_lshrrev_b32_e32 v5, 5, v1
-; GFX1030-NEXT:    v_mul_hi_u32 v2, 0x71b47843, v4
-; GFX1030-NEXT:    v_mad_u64_u32 v[0:1], null, 0x71b47843, v5, v[2:3]
+; GFX1030-NEXT:    v_mul_hi_u32 v2, v4, 0x71b47843
+; GFX1030-NEXT:    v_mad_u64_u32 v[0:1], null, v5, 0x71b47843, v[2:3]
 ; GFX1030-NEXT:    v_mov_b32_e32 v2, v0
-; GFX1030-NEXT:    v_mad_u64_u32 v[2:3], null, 0xa7c5ac4, v4, v[2:3]
+; GFX1030-NEXT:    v_mad_u64_u32 v[2:3], null, v4, 0xa7c5ac4, v[2:3]
 ; GFX1030-NEXT:    v_add_co_u32 v0, s4, v1, v3
 ; GFX1030-NEXT:    v_add_co_ci_u32_e64 v1, null, 0, 0, s4
-; GFX1030-NEXT:    v_mad_u64_u32 v[0:1], null, 0xa7c5ac4, v5, v[0:1]
+; GFX1030-NEXT:    v_mad_u64_u32 v[0:1], null, v5, 0xa7c5ac4, v[0:1]
 ; GFX1030-NEXT:    v_alignbit_b32 v0, v1, v0, 7
 ; GFX1030-NEXT:    v_lshrrev_b32_e32 v1, 7, v1
 ; GFX1030-NEXT:    s_setpc_b64 s[30:31]
