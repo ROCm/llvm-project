@@ -104,6 +104,23 @@ llvm::Error DeviceTy::init() {
   // Plugin devices are initialized by liboffload before a handle is published.
   setTeamProcs(RTL->number_of_team_procs(RTLDeviceID));
 
+  size_t UidSize = 0;
+  if (!olGetDeviceInfoSize(DeviceHandle, OL_DEVICE_INFO_UID, &UidSize) &&
+      UidSize > 0) {
+    Uid.resize(UidSize);
+    if (olGetDeviceInfo(DeviceHandle, OL_DEVICE_INFO_UID, UidSize, Uid.data()))
+      Uid.clear();
+    else
+      // Drop the null terminator from the size but keep it in the buffer, so
+      // that getUid() can be handed out as a C string.
+      Uid.pop_back();
+  }
+  if (Uid.empty()) {
+    ODBG(ODT_Init) << "Failed to get UID for device " << DeviceID;
+    // An empty SmallString is not guaranteed to be null-terminated.
+    Uid.c_str();
+  }
+
   OMPT_IF_BUILT({
     GenericDeviceTy &GenericDevice = RTL->getDevice(RTLDeviceID);
     auto *DevicePtr = reinterpret_cast<ompt_device_t *>(&GenericDevice);
