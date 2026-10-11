@@ -1324,7 +1324,7 @@ define amdgpu_ps void @no_skip_no_successors(float inreg %arg, float inreg %arg1
 ; GFX10-WAVE64-NEXT:  ; %bb.2: ; %bb6
 ; GFX10-WAVE64-NEXT:    s_mov_b64 exec, 0
 ; GFX10-WAVE64-NEXT:  .LBB12_3: ; %bb3
-; GFX10-WAVE64-NEXT:    v_cmp_nle_f32_e64 s[0:1], 0x3e7ae148, s0
+; GFX10-WAVE64-NEXT:    v_cmp_nge_f32_e64 s[0:1], s0, 0x3e7ae148
 ; GFX10-WAVE64-NEXT:    s_and_b64 vcc, exec, s[0:1]
 ; GFX10-WAVE64-NEXT:  ; %bb.4: ; %bb5
 ; GFX10-WAVE64-NEXT:  .LBB12_5:
@@ -1344,7 +1344,7 @@ define amdgpu_ps void @no_skip_no_successors(float inreg %arg, float inreg %arg1
 ; GFX10-WAVE32-NEXT:  ; %bb.2: ; %bb6
 ; GFX10-WAVE32-NEXT:    s_mov_b32 exec_lo, 0
 ; GFX10-WAVE32-NEXT:  .LBB12_3: ; %bb3
-; GFX10-WAVE32-NEXT:    v_cmp_nle_f32_e64 s0, 0x3e7ae148, s0
+; GFX10-WAVE32-NEXT:    v_cmp_nge_f32_e64 s0, s0, 0x3e7ae148
 ; GFX10-WAVE32-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
 ; GFX10-WAVE32-NEXT:  ; %bb.4: ; %bb5
 ; GFX10-WAVE32-NEXT:  .LBB12_5:
@@ -1365,7 +1365,7 @@ define amdgpu_ps void @no_skip_no_successors(float inreg %arg, float inreg %arg1
 ; GFX11-NEXT:  ; %bb.2: ; %bb6
 ; GFX11-NEXT:    s_mov_b64 exec, 0
 ; GFX11-NEXT:  .LBB12_3: ; %bb3
-; GFX11-NEXT:    v_cmp_nle_f32_e64 s[0:1], 0x3e7ae148, s0
+; GFX11-NEXT:    v_cmp_nge_f32_e64 s[0:1], s0, 0x3e7ae148
 ; GFX11-NEXT:    s_and_b64 vcc, exec, s[0:1]
 ; GFX11-NEXT:  ; %bb.4: ; %bb5
 ; GFX11-NEXT:  .LBB12_5:

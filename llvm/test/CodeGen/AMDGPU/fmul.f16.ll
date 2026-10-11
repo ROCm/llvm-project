@@ -474,7 +474,7 @@ define amdgpu_kernel void @fmul_v2f16_imm_a(
 ; GFX11-NEXT:    buffer_load_b32 v0, off, s[8:11], 0
 ; GFX11-NEXT:    s_mov_b32 s5, s1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_pk_mul_f16 v0, 0x44004200, v0
+; GFX11-NEXT:    v_pk_mul_f16 v0, v0, 0x44004200
 ; GFX11-NEXT:    buffer_store_b32 v0, off, s[4:7], 0
 ; GFX11-NEXT:    s_endpgm
     ptr addrspace(1) %r,
@@ -567,7 +567,7 @@ define amdgpu_kernel void @fmul_v2f16_imm_b(
 ; GFX11-NEXT:    buffer_load_b32 v0, off, s[8:11], 0
 ; GFX11-NEXT:    s_mov_b32 s5, s1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_pk_mul_f16 v0, 0x42004400, v0
+; GFX11-NEXT:    v_pk_mul_f16 v0, v0, 0x42004400
 ; GFX11-NEXT:    buffer_store_b32 v0, off, s[4:7], 0
 ; GFX11-NEXT:    s_endpgm
     ptr addrspace(1) %r,
@@ -805,8 +805,8 @@ define amdgpu_kernel void @fmul_v4f16_imm_a(
 ; GFX11-NEXT:    buffer_load_b64 v[0:1], off, s[8:11], 0
 ; GFX11-NEXT:    s_mov_b32 s5, s1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_pk_mul_f16 v1, 0x44004200, v1
-; GFX11-NEXT:    v_pk_mul_f16 v0, 0x40004800, v0
+; GFX11-NEXT:    v_pk_mul_f16 v1, v1, 0x44004200
+; GFX11-NEXT:    v_pk_mul_f16 v0, v0, 0x40004800
 ; GFX11-NEXT:    buffer_store_b64 v[0:1], off, s[4:7], 0
 ; GFX11-NEXT:    s_endpgm
     ptr addrspace(1) %r,

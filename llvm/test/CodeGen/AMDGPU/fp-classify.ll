@@ -95,7 +95,7 @@ define amdgpu_kernel void @test_not_isinf_pattern_0(ptr addrspace(1) nocapture %
 ; GFX11-NEXT:    s_load_b32 s2, s[4:5], 0x2c
 ; GFX11-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX11-NEXT:    v_cmp_nlg_f32_e64 s2, 0x7f800000, |s2|
+; GFX11-NEXT:    v_cmp_nlg_f32_e64 s2, |s2|, 0x7f800000
 ; GFX11-NEXT:    s_and_b32 s2, s2, exec_lo
 ; GFX11-NEXT:    s_cselect_b32 s2, 1, 0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
@@ -343,7 +343,7 @@ define amdgpu_kernel void @test_isfinite_not_pattern_1(ptr addrspace(1) nocaptur
 ; GFX11-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    v_cmp_o_f32_e64 s3, s2, s2
-; GFX11-NEXT:    v_cmp_neq_f32_e64 s2, 0x7f800000, s2
+; GFX11-NEXT:    v_cmp_neq_f32_e64 s2, s2, 0x7f800000
 ; GFX11-NEXT:    s_and_b32 s2, s3, s2
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_and_b32 s2, s2, exec_lo
@@ -400,7 +400,7 @@ define amdgpu_kernel void @test_isfinite_not_pattern_2(ptr addrspace(1) nocaptur
 ; GFX11-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    v_cmp_o_f32_e64 s2, s2, s2
-; GFX11-NEXT:    v_cmp_neq_f32_e64 s3, 0x7f800000, |s3|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 s3, |s3|, 0x7f800000
 ; GFX11-NEXT:    s_and_b32 s2, s2, s3
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_and_b32 s2, s2, exec_lo
@@ -460,7 +460,7 @@ define amdgpu_kernel void @test_isfinite_not_pattern_3(ptr addrspace(1) nocaptur
 ; GFX11-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    v_cmp_u_f32_e64 s3, s2, s2
-; GFX11-NEXT:    v_cmp_neq_f32_e64 s2, 0x7f800000, |s2|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 s2, |s2|, 0x7f800000
 ; GFX11-NEXT:    s_and_b32 s2, s3, s2
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_and_b32 s2, s2, exec_lo

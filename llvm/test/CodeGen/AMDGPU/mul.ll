@@ -1101,8 +1101,8 @@ define amdgpu_kernel void @v_mul64_sext_c(ptr addrspace(1) %out, ptr addrspace(1
 ; GFX10-NEXT:    buffer_load_dword v0, off, s[8:11], 0
 ; GFX10-NEXT:    s_mov_b32 s5, s1
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mul_hi_i32 v1, 0x50, v0
-; GFX10-NEXT:    v_mul_lo_u32 v0, 0x50, v0
+; GFX10-NEXT:    v_mul_hi_i32 v1, v0, 0x50
+; GFX10-NEXT:    v_mul_lo_u32 v0, v0, 0x50
 ; GFX10-NEXT:    buffer_store_dwordx2 v[0:1], off, s[4:7], 0
 ; GFX10-NEXT:    s_endpgm
 ;
@@ -1120,8 +1120,8 @@ define amdgpu_kernel void @v_mul64_sext_c(ptr addrspace(1) %out, ptr addrspace(1
 ; GFX11-NEXT:    buffer_load_b32 v0, off, s[8:11], 0
 ; GFX11-NEXT:    s_mov_b32 s5, s1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_mul_hi_i32 v1, 0x50, v0
-; GFX11-NEXT:    v_mul_lo_u32 v0, 0x50, v0
+; GFX11-NEXT:    v_mul_hi_i32 v1, v0, 0x50
+; GFX11-NEXT:    v_mul_lo_u32 v0, v0, 0x50
 ; GFX11-NEXT:    buffer_store_b64 v[0:1], off, s[4:7], 0
 ; GFX11-NEXT:    s_endpgm
 ;
@@ -1286,8 +1286,8 @@ define amdgpu_kernel void @v_mul64_zext_c(ptr addrspace(1) %out, ptr addrspace(1
 ; GFX10-NEXT:    buffer_load_dword v0, off, s[8:11], 0
 ; GFX10-NEXT:    s_mov_b32 s5, s1
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mul_hi_u32 v1, 0x50, v0
-; GFX10-NEXT:    v_mul_lo_u32 v0, 0x50, v0
+; GFX10-NEXT:    v_mul_hi_u32 v1, v0, 0x50
+; GFX10-NEXT:    v_mul_lo_u32 v0, v0, 0x50
 ; GFX10-NEXT:    buffer_store_dwordx2 v[0:1], off, s[4:7], 0
 ; GFX10-NEXT:    s_endpgm
 ;
@@ -1305,8 +1305,8 @@ define amdgpu_kernel void @v_mul64_zext_c(ptr addrspace(1) %out, ptr addrspace(1
 ; GFX11-NEXT:    buffer_load_b32 v0, off, s[8:11], 0
 ; GFX11-NEXT:    s_mov_b32 s5, s1
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_mul_hi_u32 v1, 0x50, v0
-; GFX11-NEXT:    v_mul_lo_u32 v0, 0x50, v0
+; GFX11-NEXT:    v_mul_hi_u32 v1, v0, 0x50
+; GFX11-NEXT:    v_mul_lo_u32 v0, v0, 0x50
 ; GFX11-NEXT:    buffer_store_b64 v[0:1], off, s[4:7], 0
 ; GFX11-NEXT:    s_endpgm
 ;
