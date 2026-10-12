@@ -13,10 +13,14 @@ callsite signature:
 ```
 
 This document defines an intrinsic signature family: one owner and explicit
-signature variants sharing a single intrinsic ID. Each call matches one
-declared signature; no variant supplies values for absent arguments or
-replaces another signature. Target lowering defines each signature's behavior.
-Adding a variant to an existing intrinsic is one application of this mechanism.
+signature variants sharing a base name. Each call matches one declared
+signature; no variant supplies values for absent arguments or replaces another
+signature. Target lowering defines each signature's behavior. Adding a variant
+to an existing intrinsic is one application of this mechanism.
+
+Section 2 describes the behavior of families in textual IR and bitcode, which
+does not depend on how a family is represented internally. Section 3 describes
+how a family is declared in TableGen and exposed to C++ clients.
 
 ### 1.1 Introductory Example
 
@@ -49,15 +53,13 @@ declare void @llvm.foo.f32(float)
 
 ### 1.2 Goals
 
-- Define exact, non-overlapping signatures under one intrinsic ID.
+- Define exact, non-overlapping signatures under one base name.
 - Resolve direct base-name `call`, `invoke`, and `callbr` uses from the callsite
   `FunctionType`, and accept overload-mangled owner names as input.
 - Support ordinary overload types within every signature.
 - Preserve every declared signature's function type, operands, and semantics.
 - Use the same resolver in the parser, verifier, remangler, and C++ construction
   APIs.
-- Expose the selected signature to ID-based consumers without defining their
-  signature-specific behavior.
 - Leave variant-specific behavior to target lowering.
 
 ### 1.3 Non-goals
@@ -69,11 +71,11 @@ declare void @llvm.foo.f32(float)
   callee.
 - Defining whether a target uses TableGen patterns or custom lowering.
 
-## 2. Signature Model
+## 2. Signature Model and IR Behavior
 
 An intrinsic family consists of one owner and zero or more signature variants.
-All members share one `Intrinsic::ID`; each member has a complete IIT signature
-and may contain ordinary overload types.
+Each member has a complete IIT signature and may contain ordinary overload
+types.
 
 Variants are explicit. Declaring `foo(A, B, C)` does not implicitly declare
 `foo(A, B)`. An absent parameter has no IR value and no descriptor in the
@@ -114,7 +116,7 @@ Input may use either a base name or an overload-mangled owner name. After
 selection, the module uses the selected member's signature-mangled canonical
 name. Parsing and printing can therefore change a callee's spelling without
 changing its function type or operands. For a family formed from the existing
-`llvm.fmuladd` owner and the integer-middle variant in Section 3.2:
+`llvm.fmuladd` owner and the integer-middle variant in Section 3.4:
 
 Input:
 
@@ -161,34 +163,108 @@ accepted input.
 ### 2.4 Initial Constraint: No Specificity Ranking
 
 The initial implementation does not apply a "most specific" rule. Suppose the
-family contains:
-
-```tablegen
-def int_foo_with_mode_and_scope :
-  IntrinsicSignatureVariant<
-      int_foo, [], [llvm_anyint_ty, llvm_i32_ty]>;
-```
-
-It accepts:
+family contains the signature `foo(anyint, i32)`. It accepts:
 
 ```llvm
 call void @llvm.foo.i32.i32(i32 %mode, i32 %scope)
 ```
 
-Adding this record would overlap it:
+Adding the signature `foo(i32, i32)` would overlap it. A specificity rule would
+reinterpret unchanged IR as the new signature, possibly changing properties or
+lowering. The initial implementation rejects this overlap. This is a
+conservative implementation constraint that may be relaxed as discussed in
+[Appendix A](#appendix-a-specialization-considerations).
 
-```tablegen
-def int_foo_with_i32_mode_and_scope :
-  IntrinsicSignatureVariant<
-      int_foo, [], [llvm_i32_ty, llvm_i32_ty]>;
-```
+### 2.5 Signature Rules
 
-A specificity rule would reinterpret unchanged IR as the new record, possibly
-changing properties or lowering. The initial implementation rejects this
-overlap. This is a conservative implementation constraint that may be relaxed as
-discussed in [Appendix A](#appendix-a-specialization-considerations).
+Each violation below is a TableGen error that fails the build. TableGen verifies
+the family as a whole, including symbolic constraints on overloaded types.
+Let N be the set of suffixed names the family accepts: the signature-mangled
+name of every member, plus the overload-mangled names of every member that
+accepts them (Section 3 states which members do).
 
-## 3. TableGen Interface
+- **S1.** The complete function type differs from every sibling.
+- **S2.** No two signatures accept the same concrete `FunctionType`.
+- **S3.** Every name in N denotes exactly one `FunctionType`. The bare base
+  name is exempt and always resolves from the callsite type.
+
+Two manglings of one member may produce the same string. Different function
+types may not.
+
+For example, `i32 foo()` and `void foo(i32)` are disjoint but would both
+produce `@llvm.foo.i32`, so S3 rejects the family. A proposed `float ()`
+variant of `llvm.fmuladd` would claim the owner's overload-mangled
+`@llvm.fmuladd.f32`, so S3 rejects it. These errors name the conflicting
+signatures and, where possible, a concrete type and name that exhibit the
+conflict.
+
+Further rules that depend on how a family is declared are listed with that
+representation in Section 3.
+
+### 2.6 Resolving Calls
+
+Resolution applies uniformly to `call`, `invoke`, and `callbr` because it only
+replaces the direct callee use. It does not reconstruct the instruction or
+alter operands or control-flow destinations.
+
+Existing verifier restrictions remain unchanged. In particular, `callbr`
+continues to support only inline asm-goto and selected intrinsics.
+
+A signature that accepts varargs ends with a vararg marker after its fixed
+parameters. The callsite `FunctionType`, not the actual vararg operands, selects
+the signature. A call typed as `void (i32, ...)` remains `foo(i32, ...)` even if
+its first vararg is `i8`; selecting `foo(i32, i8, ...)` requires that explicit
+function type. Vararg operands do not contribute mangling components.
+
+### 2.7 Interaction With AutoUpgrade
+
+Signature families describe current IR; AutoUpgrade independently rewrites
+superseded declarations and calls. Adding a family does not change any
+AutoUpgrade rule, its entry points, or the way it rewrites operands. The
+interaction depends on the existing input path:
+
+- For an undeclared direct call in text IR, the parser first tries the current
+  intrinsic signature. If it matches, the call is resolved without upgrading
+  it; otherwise the parser tries AutoUpgrade.
+- For an explicit text-IR declaration, the parser offers the declaration and
+  its calls to AutoUpgrade during end-of-module processing.
+- For bitcode, the reader offers intrinsic declarations to AutoUpgrade before
+  materializing and upgrading calls that use them.
+- C++ construction does not invoke AutoUpgrade.
+
+For example, `llvm.objectsize` currently has four arguments, and AutoUpgrade
+recognizes older two- and three-argument forms. A hypothetical current
+three-argument variant with the same type as an old form could be selected by
+an undeclared text-IR call, while an explicit text or bitcode declaration may
+still be upgraded. The feature neither checks for nor resolves this conflict;
+the intrinsic author is responsible for interactions with existing upgrade
+rules. TableGen validates the current signature family, not AutoUpgrade cases.
+
+For `asyncmark`, retaining the zero-argument form as a current signature means
+its all-stage behavior remains defined by AMDGPU lowering. No IR operand is
+added merely because a one-argument variant exists.
+
+### 2.8 Compatibility and Cost
+
+Base-name calls and overload-mangled owner names are accepted as described in
+Section 2.1. Unknown `llvm.` names remain errors unless existing AutoUpgrade
+recognizes them. A base name cannot be used as a first-class value because no
+callsite type is available to select a signature.
+
+Generated metadata should mark families with variants so ordinary calls avoid
+this path. Variants can be indexed by fixed parameter count and vararg bit
+before IIT matching. Declaration insertion remains shared through the module
+symbol table.
+
+## 3. Design: Shared Intrinsic ID
+
+In this design, all members of a family share one `Intrinsic::ID`. The ID
+identifies the family, not an argument layout; the selected signature is
+recovered from the callsite `FunctionType`. Only the owner accepts
+overload-mangled names as input, so N in Section 2.5 contains the owner's
+overload-mangled names and every member's signature-mangled name.
+
+### 3.1 TableGen Interface
 
 The owner remains an ordinary `Intrinsic` definition. Each additional signature
 is a named record containing a complete return type list, parameter type list,
@@ -205,7 +281,19 @@ class IntrinsicSignatureVariant<
 The record name identifies the variant in diagnostics, generated APIs, and
 target patterns; it does not create another public intrinsic ID.
 
-### 3.1 Mixed Arity and Type Overloads
+The overlap described in Section 2.4 would be spelled:
+
+```tablegen
+def int_foo_with_mode_and_scope :
+  IntrinsicSignatureVariant<
+      int_foo, [], [llvm_anyint_ty, llvm_i32_ty]>;
+
+def int_foo_with_i32_mode_and_scope :
+  IntrinsicSignatureVariant<
+      int_foo, [], [llvm_i32_ty, llvm_i32_ty]>;  // rejected: overlaps above
+```
+
+### 3.2 Mixed Arity and Type Overloads
 
 ```tablegen
 def int_foo : Intrinsic<[], [], []>;
@@ -239,9 +327,25 @@ declare void @llvm.foo.i32.i64(i32, i64)
 `(i32, i64)` signature is disjoint from `(anyint, i32)` because the scope types
 differ.
 
-### 3.2 Same-Arity Evolution
+### 3.3 Varargs
 
-A concrete alternative does not necessarily broadeni the owner to
+Each vararg signature includes a trailing `llvm_vararg_ty` after its fixed
+parameters:
+
+```tablegen
+def int_foo :
+  Intrinsic<[], [llvm_i32_ty, llvm_vararg_ty], []>;
+
+def int_foo_with_mode :
+  IntrinsicSignatureVariant<
+      int_foo, [], [llvm_i32_ty, llvm_i8_ty, llvm_vararg_ty]>;
+```
+
+Selection follows Section 2.6.
+
+### 3.4 Same-Arity Evolution
+
+A concrete alternative does not necessarily broaden the owner to
 `llvm_any_ty`:
 
 ```tablegen
@@ -273,66 +377,26 @@ are `@llvm.fmuladd.f32.f32.f32.f32` and
 overload-mangled spelling, `@llvm.fmuladd.f32`, remains valid input for its
 signature. Lowering defines the meaning of the new form.
 
-### 3.3 Validation Rules
+### 3.5 Validation Rules
 
-Each violation below is a TableGen error that fails the build. TableGen verifies
-the family as a whole, including symbolic constraints on overloaded types:
+In addition to S1 to S3, each violation below is a TableGen error:
 
-1. `owner` refers to an `Intrinsic`, not another variant.
-2. The complete function type differs from the owner and every sibling.
-3. IIT descriptors and dependent overload relationships are valid.
-4. Argument properties refer to valid indexes in the complete signature.
-5. Common semantic properties do not conflict within the family.
-6. No two records accept the same concrete `FunctionType`.
-7. Distinct accepted function types do not produce the same signature-mangled
-   name, even if their result and parameter counts differ.
-8. No signature-mangled name claims a suffixed overload-mangled owner name for
-   a different function type. The bare base name is exempt and always resolves
-   from the callsite type.
+- **T1.** `owner` refers to an `Intrinsic`, not another variant.
+- **T2.** IIT descriptors and dependent overload relationships are valid.
+- **T3.** Argument properties refer to valid indexes in the complete signature.
+- **T4.** Common semantic properties do not conflict within the family.
 
-For example, `i32 foo()` and `void foo(i32)` are disjoint but would both
-produce `@llvm.foo.i32`, so rule 7 rejects the family. A proposed
-`float ()` variant of `llvm.fmuladd` would claim the owner's
-overload-mangled `@llvm.fmuladd.f32`, so rule 8 rejects it. These errors name
-the conflicting records and, where possible, a concrete type and name that
-exhibit the conflict.
+### 3.6 Call Eligibility
 
-## 4. Resolving Calls
+Variants share the owner's ID and therefore its `callbr` eligibility.
 
-Resolution applies uniformly to `call`, `invoke`, and `callbr` because it only
-replaces the direct callee use. It does not reconstruct the instruction or
-alter operands or control-flow destinations.
-
-Existing verifier restrictions remain unchanged. In particular, `callbr`
-continues to support only inline asm-goto and selected intrinsic IDs. Variants
-share the owner's ID and therefore its `callbr` eligibility.
-
-### 4.1 Varargs
-
-Each vararg signature includes a trailing `llvm_vararg_ty` after its fixed
-parameters:
-
-```tablegen
-def int_foo :
-  Intrinsic<[], [llvm_i32_ty, llvm_vararg_ty], []>;
-
-def int_foo_with_mode :
-  IntrinsicSignatureVariant<
-      int_foo, [], [llvm_i32_ty, llvm_i8_ty, llvm_vararg_ty]>;
-```
-
-The callsite `FunctionType`, not the actual vararg operands, selects the
-variant. A call typed as `void (i32, ...)` remains the owner even if its first
-vararg is `i8`; selecting `void (i32, i8, ...)` requires that explicit function
-type. Vararg operands do not contribute mangling components.
-
-### 4.2 Target Lowering
+### 3.7 Target Lowering
 
 All family members share one intrinsic ID. Lowering can distinguish them by
 resolved signature or `FunctionType`; targets should not parse the mangled name.
 TableGen patterns and custom lowering are both supported.
 
-### 4.3 ID-Based Consumers
+### 3.8 ID-Based Consumers
 
 An intrinsic ID identifies a family, not an argument layout. When adding a
 variant, the maintainer of that ID is responsible for consumers that inspect
@@ -367,7 +431,7 @@ ID gains variants; the framework cannot discover assumptions in untouched
 switches. A guard against unhandled members in such consumers is a future
 extension, not a TableGen check on signature declarations.
 
-## 5. C++ Construction
+### 3.9 C++ Construction
 
 Existing `Intrinsic::getType`, `getName`, and `getOrInsertDeclaration` calls
 that take an ID and overload types remain owner-directed. The existing
@@ -410,45 +474,6 @@ above.
 Constructors do not invoke AutoUpgrade. Callers should obtain intrinsic
 declarations through intrinsic APIs rather than hard-coded mangled-name lookups
 in a module.
-
-## 6. Interaction With AutoUpgrade
-
-Signature families describe current IR; AutoUpgrade independently rewrites
-superseded declarations and calls. Adding a family does not change any
-AutoUpgrade rule, its entry points, or the way it rewrites operands. The
-interaction depends on the existing input path:
-
-- For an undeclared direct call in text IR, the parser first tries the current
-  intrinsic signature. If it matches, the call is resolved without upgrading
-  it; otherwise the parser tries AutoUpgrade.
-- For an explicit text-IR declaration, the parser offers the declaration and
-  its calls to AutoUpgrade during end-of-module processing.
-- For bitcode, the reader offers intrinsic declarations to AutoUpgrade before
-  materializing and upgrading calls that use them.
-- C++ construction does not invoke AutoUpgrade.
-
-For example, `llvm.objectsize` currently has four arguments, and AutoUpgrade
-recognizes older two- and three-argument forms. A hypothetical current
-three-argument variant with the same type as an old form could be selected by
-an undeclared text-IR call, while an explicit text or bitcode declaration may
-still be upgraded. The feature neither checks for nor resolves this conflict;
-the intrinsic author is responsible for interactions with existing upgrade
-rules. TableGen validates the current signature family, not AutoUpgrade cases.
-
-For `asyncmark`, retaining the zero-argument form as a current signature means
-its all-stage behavior remains defined by AMDGPU lowering. No IR operand is
-added merely because a one-argument variant exists.
-
-## 7. Compatibility and Cost
-
-Base-name calls and overload-mangled owner names are accepted as described in
-Section 2.1. Unknown `llvm.` names remain errors unless existing AutoUpgrade
-recognizes them. A base name cannot be used as a first-class value because no
-callsite type is available to select a signature.
-
-Generated metadata should mark IDs with variants so ordinary calls avoid this
-path. Variants can be indexed by fixed parameter count and vararg bit before IIT
-matching. Declaration insertion remains shared through the module symbol table.
 
 The implementation and test plan are described in
 `intrinsic-evolution-impl.md`.
