@@ -19,8 +19,11 @@ signature. Target lowering defines each signature's behavior. Adding a variant
 to an existing intrinsic is one application of this mechanism.
 
 Section 2 describes the behavior of families in textual IR and bitcode, which
-does not depend on how a family is represented internally. Section 3 describes
-how a family is declared in TableGen and exposed to C++ clients.
+does not depend on how a family is represented internally. Two designs for that
+representation follow, each describing how a family is declared in TableGen and
+exposed to C++ clients: Section 3 gives all members one `Intrinsic::ID`, while
+Section 4 gives each signature its own ID and treats the shared base name as IR
+syntax.
 
 ### 1.1 Introductory Example
 
@@ -181,7 +184,7 @@ Each violation below is a TableGen error that fails the build. TableGen verifies
 the family as a whole, including symbolic constraints on overloaded types.
 Let N be the set of suffixed names the family accepts: the signature-mangled
 name of every member, plus the overload-mangled names of every member that
-accepts them (Section 3 states which members do).
+accepts them (Sections 3 and 4 state which members do).
 
 - **S1.** The complete function type differs from every sibling.
 - **S2.** No two signatures accept the same concrete `FunctionType`.
@@ -198,8 +201,8 @@ variant of `llvm.fmuladd` would claim the owner's overload-mangled
 signatures and, where possible, a concrete type and name that exhibit the
 conflict.
 
-Further rules that depend on how a family is declared are listed with that
-representation in Section 3.
+Further rules that depend on how a family is declared are listed with each
+design in Sections 3 and 4.
 
 ### 2.6 Resolving Calls
 
@@ -477,6 +480,193 @@ in a module.
 
 The implementation and test plan are described in
 `intrinsic-evolution-impl.md`.
+
+## 4. Design: Unique Intrinsic ID per Signature
+
+In this design, every signature is an ordinary `Intrinsic` with its own
+`Intrinsic::ID`. A family is the set of IDs that share a base name; the shared
+name is IR syntax that selects among them from the callsite `FunctionType`. No
+signature is special at resolution time: the parser, verifier, and C++ clients
+resolve the base name to exactly one ID, and everything after that point sees
+an ordinary intrinsic with one fixed layout.
+
+Existing definitions remain valid. An `Intrinsic` that names no family is a
+singleton family whose base name comes from its record name, as today.
+
+### 4.1 Record Arrangements
+
+Both arrangements below produce the same generated tables: a group of IDs
+sharing a base name. The rest of this section applies to either.
+
+**Arrangement 1: owner plus referring members.** An existing `Intrinsic` is
+the owner. Each additional signature is an `Intrinsic` that refers to it and
+takes its base name and `TargetPrefix` from it:
+
+```tablegen
+class IntrinsicFamilyMember<
+    Intrinsic owner,
+    list<LLVMType> ret_types,
+    list<LLVMType> param_types,
+    list<IntrinsicProperty> intr_properties = []>
+    : Intrinsic<ret_types, param_types, intr_properties> {
+  Intrinsic FamilyOwner = owner;
+}
+
+def int_foo : Intrinsic<[], [], []>;
+
+def int_foo_with_mode :
+  IntrinsicFamilyMember<int_foo, [], [llvm_anyint_ty]>;
+```
+
+The owner is unchanged and needs no edit. It supplies only the base name and
+the grouping; it receives no special treatment in validation or lookup.
+
+**Arrangement 2: `IntrinsicFamily` record.** A family record declares what the
+members share, and each member refers to it:
+
+```tablegen
+def int_foo_family : IntrinsicFamily<"foo", /*TargetPrefix=*/"">;
+
+def int_foo :
+  Intrinsic<[], [], []> { let Family = int_foo_family; }
+
+def int_foo_with_mode :
+  Intrinsic<[], [llvm_anyint_ty], []> { let Family = int_foo_family; }
+```
+
+No signature is primary. This suits new families such as `asyncmark`. An
+existing definition joins by gaining a `Family` assignment, so it does need an
+edit. The family record carries no ID.
+
+### 4.2 Names Accepted as Input
+
+Every member has a signature-mangled canonical name. A member may also accept
+its overload-mangled names as input, controlled by a bit:
+
+```tablegen
+bit AcceptOverloadMangledName = ?;
+```
+
+A standalone `Intrinsic` and an arrangement 1 owner default to 1, so existing
+spellings keep working. An arrangement 1 member defaults to 0. In arrangement
+2, a member that needs its legacy spelling sets the bit explicitly; it defaults
+to 0 in a family with more than one member.
+
+N in Section 2.5 contains every member's signature-mangled name and the
+overload-mangled names of members whose bit is set. The bit is needed because
+overload mangling lists only overloaded positions. Without it, `foo(anyint)` and
+`foo(anyint, i32)` would both claim `@llvm.foo.i8`, and S3 would reject the
+family in Section 3.2.
+
+### 4.3 Example: Mixed Arity
+
+```tablegen
+def int_foo : Intrinsic<[], [], []>;
+
+def int_foo_with_mode :
+  IntrinsicFamilyMember<int_foo, [], [llvm_anyint_ty]>;
+
+def int_foo_with_mode_and_scope :
+  IntrinsicFamilyMember<int_foo, [], [llvm_anyint_ty, llvm_i32_ty]>;
+
+def int_foo_with_i32_mode_and_wide_scope :
+  IntrinsicFamilyMember<int_foo, [], [llvm_i32_ty, llvm_i64_ty]>;
+```
+
+This defines four IDs, `Intrinsic::foo`, `Intrinsic::foo_with_mode`,
+`Intrinsic::foo_with_mode_and_scope`, and
+`Intrinsic::foo_with_i32_mode_and_wide_scope`, and the same declarations as
+Section 3.2. The same-arity `fmuladd` example in Section 3.4 is spelled the
+same way, with `int_fmuladd` as the owner. Only `int_fmuladd` accepts
+`@llvm.fmuladd.f32` as input.
+
+### 4.4 Validation Rules
+
+S1 to S3 apply across all IDs in the family. The checks that Section 3 makes
+per variant are ordinary `Intrinsic` checks here, because each member is a
+full intrinsic:
+
+- **U1.** `FamilyOwner` or `Family` refers to a record that is not itself a
+  member of another family.
+- **U2.** All members of a family share one `TargetPrefix` and one base name.
+- **U3.** IIT descriptors, dependent overload relationships, and argument
+  property indexes are validated per ID, as for any intrinsic.
+
+There is no rule corresponding to T4. Properties belong to each ID, so members
+cannot conflict.
+
+### 4.5 Resolving Calls
+
+Lookup depends on the spelling:
+
+- A suffixed name resolves to an ID from the name alone. S3 guarantees that it
+  denotes one `FunctionType`; the callsite or declaration type is then
+  validated against that ID's signature.
+- The bare base name resolves from the callsite `FunctionType`: the family's
+  IDs are filtered by fixed parameter count and vararg bit, then matched by IIT
+  descriptors. S2 guarantees at most one match.
+
+A resolver returns an `Intrinsic::ID`:
+
+```cpp
+Expected<Intrinsic::ID> Intrinsic::resolveFamilyMember(
+    Intrinsic::ID FamilyID, FunctionType *FTy);
+```
+
+After resolution, the callee's `getIntrinsicID()` is the selected member. No
+consumer re-resolves the signature. A member is eligible for `callbr` only if
+the verifier lists its own ID; eligibility is not inherited from the owner.
+
+### 4.6 Target Lowering
+
+Each member is an ordinary ID. TableGen patterns and custom lowering match on
+it directly. A target that shares code across a family can ask
+`Intrinsic::getFamily(ID)`. Targets should not parse the mangled name.
+
+### 4.7 ID-Based Consumers
+
+An ID identifies one layout, so existing code that switches on the owner's ID
+remains correct for the owner. A new member's ID reaches the default case of
+those switches and is treated like any intrinsic the consumer does not
+recognize. A consumer that should handle a new member adds its ID, and one that
+wants family-wide behavior checks `Intrinsic::getFamily`. A missed update
+loses an optimization; it does not misread operands. No `Intrinsic::Signature`
+enumerator or `resolveIntrinsicSignature` is needed.
+
+Consumers that compare names or prefixes rather than IDs still need an audit.
+The maintainer of the family is responsible for deciding which consumers
+should recognize which members.
+
+### 4.8 C++ Construction
+
+Existing APIs that take an ID address exactly one signature. `getType`,
+`getName`, `getOrInsertDeclaration(M, ID, Tys)`, and `CreateIntrinsic` work for
+any member by its ID, so there is no owner-directed caveat. `getName` returns
+the member's signature-mangled canonical name. Overload types still do not
+identify a family member, so callers that hold only a `FunctionType` use
+`resolveFamilyMember` first.
+
+Folders keyed on an ID receive only calls to that ID, so they cannot mistake
+one signature for another. No signature-eligibility gating is needed for typed
+construction. The typed `getOrInsertDeclaration(M, ID, FTy)` of Section 3.9 is
+optional convenience here, resolving `FTy` against the family of `ID`.
+Constructors do not invoke AutoUpgrade.
+
+### 4.9 Comparison With the Shared ID Design
+
+| Aspect | Section 3: shared ID | Section 4: unique IDs |
+| :--- | :--- | :--- |
+| IDs per family | One | One per signature |
+| Existing owner definition | Unchanged | Unchanged (arrangement 1) |
+| Existing consumers of the owner ID | May misread new same-arity variants | Unaffected |
+| New consumer work | Dispatch on `Intrinsic::Signature` | Add the new ID where wanted |
+| Lowering and patterns | Resolve the signature | Match on the ID |
+| `callbr` eligibility | Inherited from the owner | Per ID |
+| Name lookup | Name to ID, then signature | Name or `FunctionType` to ID |
+| Property conflicts across members | Checked (T4) | Not possible |
+| Cost | Resolver and signature enumerators | More IDs and a family table |
+
+The implementation plan in `intrinsic-evolution-impl.md` covers Section 3.
 
 ## Appendix A: Specialization Considerations
 
