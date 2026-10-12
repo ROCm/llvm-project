@@ -79,6 +79,8 @@ public:
                                     // use is in the outermost loop.
     EmitNewRestoreBeforeUse, // Emit a restore before a use instead of using the
                              // restore of the Head of the group.
+    MoveRestoreInLoopNestPreheader, // Move the restore in the preheader of a
+                                    // loop nest (inside the outermost loop).
   };
 
 protected:
@@ -479,7 +481,7 @@ void RestoreCandidate::generateSpillRestoreInstrs(
     LLVM_DEBUG(dbgs() << "------------------------------------------------\n");
     LLVM_DEBUG(
         dbgs() << "Plan: Move restore instruction from loop preheader to "
-                  "the head isnide the loop. \n");
+                  "the head inside the loop. \n");
     LLVM_DEBUG(dbgs() << "------------------------------------------------\n");
     LLVM_DEBUG(dbgs() << "The high register pressure point is " << *CurMI);
     LLVM_DEBUG(dbgs() << "The high register pressure block is bb."
@@ -507,6 +509,70 @@ void RestoreCandidate::generateSpillRestoreInstrs(
     RestoreRegToDomGroup[OrigRestore->getOperand(0).getReg()] = DG;
 
     DG.setWhereToRestore(DomGroup::RestorePlacement::BeforeHead);
+
+    break;
+  }
+  case CodeGenPlan::MoveRestoreInLoopNestPreheader: {
+    // Move the restore that is in loop preheader inside the loop. Move the
+    // restore in the loop preheader of the loop nest.
+    assert(GroupsOfUses.size() == 1 &&
+           "This candidate cannot have more than one DomGroups.");
+    DomGroup &DG = *GroupsOfUses.begin();
+    MachineInstr *Head = DG.getHead();
+    MachineBasicBlock *RestoreBlock = DG.getRestoreBlock();
+    MachineInstr *OrigRestore = DG.getRestore();
+    assert(InstrOfCandidateReg == OrigRestore &&
+           "It should be the same instruction.");
+    // OrigRestore->moveBefore(Head);
+    OrigRestore->removeFromParent();
+    RestoreBlock->insert(RestoreBlock->getFirstTerminator(), OrigRestore);
+    updateIndexes(OrigRestore, Indexes);
+    updateLiveness(OrigRestore, LIS);
+    updateIndexes(Head, Indexes);
+    updateLiveness(Head, LIS);
+    NUA->updateInstrIds(Head);
+
+    if (OrigRestore != CurMI) {
+      updateIndexes(CurMI, Indexes);
+      updateLiveness(CurMI, LIS);
+      if (RestoreBlock != CurMBB)
+        NUA->updateInstrIds(CurMI);
+    }
+
+    LLVM_DEBUG(dbgs() << "------------------------------------------------\n");
+    LLVM_DEBUG(
+        dbgs()
+        << "Plan: Move restore instruction in loop preheader of loop nest. \n");
+    LLVM_DEBUG(dbgs() << "------------------------------------------------\n");
+    LLVM_DEBUG(dbgs() << "The high register pressure point is " << *CurMI);
+    LLVM_DEBUG(dbgs() << "The high register pressure block is bb."
+                      << CurMBB->getNumber() << "\n");
+    if (MLI->getLoopFor(CurMBB)) {
+      LLVM_DEBUG(dbgs() << "The high register pressure point is in a loop\n");
+    } else {
+      LLVM_DEBUG(
+          dbgs() << "The high register pressure point is not in a loop\n");
+    }
+    LLVM_DEBUG(dbgs() << "Candidate register = " << printReg(CandidateReg, TRI)
+                      << "\n");
+    LLVM_DEBUG(dbgs() << "Original restore = " << *OrigRestore << "\n");
+    LLVM_DEBUG(dbgs() << "Move restore at the end of bb."
+                      << RestoreBlock->getNumber() << "\n");
+    LLVM_DEBUG(
+        dbgs() << "Live interval for restored register "
+               << printReg(OrigRestore->getOperand(0).getReg(), TRI) << ": ";
+        LIS->getInterval(OrigRestore->getOperand(0).getReg()).print(dbgs());
+        dbgs() << "\n");
+
+    // Update the restore block inside the DomGroup.
+    assert(OrigRestore->getParent() == RestoreBlock &&
+           "The restore block is wrong.");
+    DG.setRestoreBlock(OrigRestore->getParent());
+
+    // Update RestoreRegToDomGroup map with the updated DomGroup.
+    RestoreRegToDomGroup[OrigRestore->getOperand(0).getReg()] = DG;
+
+    DG.setWhereToRestore(DomGroup::RestorePlacement::LoopPreheader);
 
     break;
   }
@@ -1518,41 +1584,79 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
       MachineBasicBlock *HeadMBB = Head->getParent();
       if ((DG.getWhereToRestore() ==
            DomGroup::RestorePlacement::LoopPreheader) &&
-          (CurLoop && (CurLoop == OutermostLoopOfCurLoop))) {
+          CurLoop) {
         MachineInstr *OrigRestore = DG.getRestore();
         Register OrigRestoreReg = OrigRestore->getOperand(0).getReg();
         MachineLoop *HeadLoop = MLI->getLoopFor(HeadMBB);
+        assert(HeadLoop && "Cannot move restore inside the loop.");
+        MachineBasicBlock *PreHeader =
+            OutermostLoopOfCurLoop->getLoopPreheader();
         MachineBasicBlock *HeadLoopPreheader = nullptr;
-        if (HeadLoop)
+        if (HeadLoop == OutermostLoopOfCurLoop)
           HeadLoopPreheader = HeadLoop->getLoopPreheader();
 
         if (Head->isPHI() && (Head->getParent() == HeadLoopPreheader))
           continue;
 
-        if (HeadLoop && HeadLoop->getLoopDepth() >= 2)
+        if (OrigRestore->getParent() != PreHeader)
           continue;
 
-        // TODO: Add support for DomGroup::CommonDominator.
-        assert(DG.getWhereToRestore() ==
-                   DomGroup::RestorePlacement::LoopPreheader &&
-               "The DomGroup is wrong.");
-        assert(HeadLoop->getLoopDepth() == 1 &&
-               "We do not support this optimization for loop nests");
+        if (((CurLoop == HeadLoop) || CurLoop->contains(HeadLoop)) &&
+            CurLoop->getLoopDepth() >= 2)
+          continue;
 
-        auto Candidate = std::make_unique<RestoreCandidate>(
-            OrigRestoreReg, Mask,
-            RestoreCandidate::CodeGenPlan::MoveRestoreBeforeUseInsideLoop, TRI,
-            MRI, TII, FrameInfo, LIS, Indexes, DT, MLI, NUA);
+        if (HeadLoop && HeadLoop->getLoopDepth() >= 2) {
+          assert(DG.getWhereToRestore() ==
+                     DomGroup::RestorePlacement::LoopPreheader &&
+                 "The DomGroup is wrong.");
 
-        Candidate->addGroup(DG);
-        // Calculate the restore cost.
-        Candidate->calculateSpillRestoreCost();
-        int64_t newDist = NextUseDist.getRawValue() * NumOfCoveredRegs;
-        Candidate->setNextUseDistance(newDist);
-        LLVM_DEBUG(dbgs() << "Restore cost for register = "
-                          << printReg(CandidateReg, TRI) << " = "
-                          << Candidate->getSpillRestoreCost() << "\n");
-        FinalCandidates.push_back(std::move(Candidate));
+          auto Candidate = std::make_unique<RestoreCandidate>(
+              OrigRestoreReg, Mask,
+              RestoreCandidate::CodeGenPlan::MoveRestoreInLoopNestPreheader,
+              TRI, MRI, TII, FrameInfo, LIS, Indexes, DT, MLI, NUA);
+
+          MachineLoop *UseLoop = HeadLoop;
+          while (UseLoop->getLoopDepth() > 2) {
+            UseLoop = UseLoop->getParentLoop();
+          }
+          assert(UseLoop->getLoopDepth() == 2 &&
+                 "The loop has wrong loop depth.");
+          MachineBasicBlock *UseLoopPreheader = UseLoop->getLoopPreheader();
+          DG.setRestoreBlock(UseLoopPreheader);
+
+          Candidate->addGroup(DG);
+          // Calculate the restore cost.
+          Candidate->calculateSpillRestoreCost();
+          int64_t newDist = NextUseDist.getRawValue() * NumOfCoveredRegs;
+          Candidate->setNextUseDistance(newDist);
+          LLVM_DEBUG(dbgs() << "Restore cost for register = "
+                            << printReg(CandidateReg, TRI) << " = "
+                            << Candidate->getSpillRestoreCost() << "\n");
+          FinalCandidates.push_back(std::move(Candidate));
+        } else {
+
+          // TODO: Add support for DomGroup::CommonDominator.
+          assert(DG.getWhereToRestore() ==
+                     DomGroup::RestorePlacement::LoopPreheader &&
+                 "The DomGroup is wrong.");
+          assert(HeadLoop->getLoopDepth() == 1 &&
+                 "We do not support this optimization for loop nests");
+
+          auto Candidate = std::make_unique<RestoreCandidate>(
+              OrigRestoreReg, Mask,
+              RestoreCandidate::CodeGenPlan::MoveRestoreBeforeUseInsideLoop,
+              TRI, MRI, TII, FrameInfo, LIS, Indexes, DT, MLI, NUA);
+
+          Candidate->addGroup(DG);
+          // Calculate the restore cost.
+          Candidate->calculateSpillRestoreCost();
+          int64_t newDist = NextUseDist.getRawValue() * NumOfCoveredRegs;
+          Candidate->setNextUseDistance(newDist);
+          LLVM_DEBUG(dbgs() << "Restore cost for register = "
+                            << printReg(CandidateReg, TRI) << " = "
+                            << Candidate->getSpillRestoreCost() << "\n");
+          FinalCandidates.push_back(std::move(Candidate));
+        }
       } else {
 
         if (DG.size() == 1)
