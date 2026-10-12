@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "ABIInfoImpl.h"
 #include "CGCXXABI.h"
 #include "CGObjCRuntime.h"
 #include "CGRecordLayout.h"
@@ -25,6 +26,7 @@
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/Builtins.h"
+#include "clang/CodeGenUtils/RecordLayoutUtils.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Sequence.h"
 #include "llvm/Analysis/ConstantFolding.h"
@@ -761,7 +763,7 @@ bool ConstStructBuilder::Build(const InitListExpr *ILE, bool AllowOverwrite) {
 
     // Zero-sized fields are not emitted, but their initializers may still
     // prevent emission of this struct as a constant.
-    if (Field->isZeroSize(CGM.getContext())) {
+    if (CodeGenUtils::isEmptyFieldForLayout(CGM.getContext(), Field)) {
       if (Init && Init->HasSideEffects(CGM.getContext()))
         return false;
       continue;
@@ -923,7 +925,8 @@ bool ConstStructBuilder::Build(const APValue &Val, const RecordDecl *RD,
       continue;
 
     // Don't emit anonymous bitfields or zero-sized fields.
-    if (Field->isUnnamedBitField() || Field->isZeroSize(CGM.getContext()))
+    if (Field->isUnnamedBitField() ||
+        CodeGenUtils::isEmptyFieldForLayout(CGM.getContext(), *Field))
       continue;
 
     // Emit the value of the initializer.
@@ -2840,8 +2843,10 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
 
       const auto *base = I.getType()->castAsCXXRecordDecl();
       // Ignore empty bases.
-      if (base->isEmpty() ||
-          CGM.getContext().getASTRecordLayout(base).getNonVirtualSize()
+      if (CodeGenUtils::isEmptyRecordForLayout(CGM.getContext(), I.getType()) ||
+          CGM.getContext()
+              .getASTRecordLayout(base)
+              .getNonVirtualSize()
               .isZero())
         continue;
 
@@ -2855,7 +2860,8 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
   for (const auto *Field : record->fields()) {
     // Fill in non-bitfields. (Bitfields always use a zero pattern, which we
     // will fill in later.)
-    if (!Field->isBitField() && !Field->isZeroSize(CGM.getContext())) {
+    if (!Field->isBitField() &&
+        !CodeGenUtils::isEmptyFieldForLayout(CGM.getContext(), Field)) {
       unsigned fieldIndex = layout.getLLVMFieldNo(Field);
       elements[fieldIndex] = CGM.EmitNullConstant(Field->getType());
     }
@@ -2875,7 +2881,7 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
     for (const auto &I : CXXR->vbases()) {
       const auto *base = I.getType()->castAsCXXRecordDecl();
       // Ignore empty bases.
-      if (base->isEmpty())
+      if (CodeGenUtils::isEmptyRecordForLayout(CGM.getContext(), I.getType()))
         continue;
 
       unsigned fieldIndex = layout.getVirtualBaseIndex(base);

@@ -194,20 +194,19 @@ void *targetLockExplicit(void *HostPtr, size_t Size, int DeviceNum,
     return NULL;
   }
 
-  void *RC = NULL;
-
   auto DeviceOrErr = PM->getDevice(DeviceNum);
   if (!DeviceOrErr)
     FATAL_MESSAGE(DeviceNum, "%s", toString(DeviceOrErr.takeError()).c_str());
 
-  int32_t Err = 0;
-  Err = DeviceOrErr->RTL->data_lock(DeviceNum, HostPtr, Size, &RC);
-  if (Err) {
-    ODBG(ODT_Interface) << "Could not lock ptr " << HostPtr;
+  // Register and page-lock the memory.
+  auto LockedPtrOrErr = DeviceOrErr->registerMemory(HostPtr, Size);
+  if (!LockedPtrOrErr) {
+    [[maybe_unused]] std::string ErrStr = toString(LockedPtrOrErr.takeError());
+    ODBG(ODT_Interface) << "Could not lock ptr " << HostPtr << ": " << ErrStr;
     return nullptr;
   }
-  ODBG(ODT_Interface) << Name << " returns device ptr " << RC;
-  return RC;
+  ODBG(ODT_Interface) << Name << " returns device ptr " << *LockedPtrOrErr;
+  return *LockedPtrOrErr;
 }
 
 void targetUnlockExplicit(void *HostPtr, int DeviceNum, const char *Name) {
@@ -218,7 +217,11 @@ void targetUnlockExplicit(void *HostPtr, int DeviceNum, const char *Name) {
   if (!DeviceOrErr)
     FATAL_MESSAGE(DeviceNum, "%s", toString(DeviceOrErr.takeError()).c_str());
 
-  DeviceOrErr->RTL->data_unlock(DeviceNum, HostPtr);
+  // Unregister and unlock the memory.
+  if (auto Err = DeviceOrErr->unregisterMemory(HostPtr)) {
+    [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
+    ODBG(ODT_Interface) << "Could not unlock ptr " << HostPtr << ": " << ErrStr;
+  }
   ODBG(ODT_Interface) << Name << " returns";
 }
 

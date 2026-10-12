@@ -477,8 +477,9 @@ Error ExecContainmentRequirements::validate(Function &F, const MCState &MC,
   };
 
   assert(InitialExec && "entry EXEC was deleted before validation");
+  const Value *EntryExec = InitialExec;
   SmallPtrSet<const Value *, 32> EntrySubsets;
-  EntrySubsets.insert(InitialExec);
+  EntrySubsets.insert(EntryExec);
   DominatorTree DT(F);
   // A reachable PHI cycle has an incoming value on its first iteration.
   // Remove unsupported producers to prove the bound inductively, including
@@ -490,7 +491,7 @@ Error ExecContainmentRequirements::validate(Function &F, const MCState &MC,
   do {
     Changed = false;
     for (const Instruction &I : instructions(F))
-      if (&I != InitialExec && EntrySubsets.contains(&I) &&
+      if (&I != EntryExec && EntrySubsets.contains(&I) &&
           !isKnownSubsetOfEntryExec(I, EntrySubsets, DT, ReplicatedLaneId,
                                     getWaveSize(*MC.SubtargetInfo)))
         Changed |= EntrySubsets.erase(&I);
@@ -736,6 +737,12 @@ static Error raiseDecodedKernel(const RaiseEnvironment &Env, Module &M,
     return RaiseFailure::general(
         RaiseFailureReason::UnterminatedKernelExtent,
         "kernel extent ends without an instruction that ends the program");
+
+  // Every source code-object address the kernel records is known once every
+  // instruction is raised, so this is where the reads deferred along the way
+  // are decided.
+  if (Error Err = Ctx->registers().refuseDeferredSourceImageReads())
+    return Err;
 
   DominatorTree DT(*F);
   AssumptionCache AC(*F);

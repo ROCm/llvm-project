@@ -5,6 +5,10 @@ The Comgr library provides APIs for compiling and inspecting AMDGPU code
 objects. The API is documented in the [header file](include/amd_comgr.h.in).
 The Comgr API is compatible with C99 and C++.
 
+The [ISA metadata reference](docs/ISAMetadata.md) describes every field returned
+by `amd_comgr_get_isa_metadata()`, including resource units and wave-size
+conventions.
+
 Building the Code Object Manager
 --------------------------------
 

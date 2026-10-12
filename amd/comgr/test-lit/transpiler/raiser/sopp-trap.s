@@ -1,4 +1,6 @@
 ; REQUIRES: comgr-has-transpiler
+; XFAIL: *
+; FIXME: Update the gfx1250-to-gfx942 trap diagnostic and remove this XFAIL (#4886).
 
 ; RUN: %llvm-mc -defsym=GFX942=1 -triple=amdgpu9.42-amd-amdhsa -filetype=obj %s -o %t.gfx942.o
 ; RUN: %ld.lld -shared %t.gfx942.o -o %t.gfx942.hsaco

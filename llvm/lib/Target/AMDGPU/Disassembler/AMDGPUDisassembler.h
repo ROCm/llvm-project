@@ -49,9 +49,6 @@ private:
   mutable bool HasLiteral;
   mutable std::optional<bool> EnableWavefrontSize32;
   mutable AMDGPU::TargetID TargetID;
-
-  // If the object's ELF e_flags enable xnack. TODO: Replace with TargetID
-  mutable bool XnackOnFromEFlags = false;
   unsigned CodeObjectVersion;
   const MCExpr *UCVersionW64Expr;
   const MCExpr *UCVersionW32Expr;

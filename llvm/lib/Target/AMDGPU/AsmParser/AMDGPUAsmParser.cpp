@@ -3243,6 +3243,7 @@ bool AMDGPUAsmParser::isRegOrOperandModifier(const AsmToken &Token,
 //   -|...|
 //   -abs(...)
 //   name:...
+// "name ::" is the VOPD separator, not an opcode modifier.
 //
 bool AMDGPUAsmParser::isModifier() {
 
@@ -3250,10 +3251,15 @@ bool AMDGPUAsmParser::isModifier() {
   AsmToken NextToken[2];
   peekTokens(NextToken);
 
+  // "name:value" is an opcode modifier. The second colon of "::" is the
+  // VOPD separator, so a symbol written immediately before "::" is a literal.
+  bool IsOpcodeModifier = isOpcodeModifierWithVal(Tok, NextToken[0]) &&
+                          !NextToken[1].is(AsmToken::Colon);
+
   return isOperandModifier(Tok, NextToken[0]) ||
          (Tok.is(AsmToken::Minus) &&
           isRegOrOperandModifier(NextToken[0], NextToken[1])) ||
-         isOpcodeModifierWithVal(Tok, NextToken[0]);
+         IsOpcodeModifier;
 }
 
 // Check if the current token is an SP3 'neg' modifier.
@@ -6294,8 +6300,7 @@ bool AMDGPUAsmParser::ParseDirectiveAMDHSAKernel() {
         return Error(IDRange.Start, "directive requires gfx8+", IDRange);
       if (!isUInt<1>(Val))
         return OutOfRangeError(ValRange);
-      bool XnackOn = getTargetStreamer().getTargetID()->isXnackOnOrAny() ||
-                     getSTI().hasFeature(AMDGPU::FeatureXNACK);
+      bool XnackOn = getTargetStreamer().getTargetID()->isXnackOnOrAny();
       if (Val != XnackOn) {
         return getParser().Error(
             IDRange.Start,
@@ -10060,7 +10065,7 @@ void AMDGPUAsmParser::cvtVOPD(MCInst &Inst, const OperandVector &Operands) {
       Op.addRegOperands(Inst, 1);
       return;
     }
-    if (Op.isImm()) {
+    if (Op.isImm() || Op.isExpr()) {
       Op.addImmOperands(Inst, 1);
       return;
     }

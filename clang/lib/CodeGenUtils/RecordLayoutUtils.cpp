@@ -7,15 +7,42 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/CodeGenUtils/RecordLayoutUtils.h"
+#include "clang/AST/RecordLayout.h"
 #include "clang/Basic/TargetInfo.h"
 
 namespace clang::CodeGenUtils {
+
+bool hasOwnStorage(const ASTContext &Ctx, const CXXRecordDecl *Decl,
+                   const CXXRecordDecl *Query) {
+  const ASTRecordLayout &DeclLayout = Ctx.getASTRecordLayout(Decl);
+  if (DeclLayout.isPrimaryBaseVirtual() && DeclLayout.getPrimaryBase() == Query)
+    return false;
+  for (const auto &Base : Decl->bases())
+    if (!hasOwnStorage(Ctx, Base.getType()->getAsCXXRecordDecl(), Query))
+      return false;
+  return true;
+}
 
 bool isDiscreteBitFieldABI(const ASTContext &Ctx, const RecordDecl *RD) {
   return Ctx.getTargetInfo().getCXXABI().isMicrosoft() || RD->isMsStruct(Ctx);
 }
 
+// ROCgdb reconstructs the de facto AMDGPU aggregate return/argument
+// convention from the DWARF type, allocating one register for a member whose
+// type has no non-static data members.  Dropping such members from the IR
+// record turns them into explicit padding, which the backend spreads over one
+// register per byte, so the convention no longer matches what the debugger
+// (or previously compiled device code) expects.  Keep the pre-existing rule
+// for AMDGPU until the register assignment stops depending on record layout
+// padding.
+static bool useLegacyEmptyFieldLayout(const ASTContext &Ctx) {
+  return Ctx.getTargetInfo().getTriple().isAMDGCN();
+}
+
 bool isEmptyFieldForLayout(const ASTContext &Ctx, const FieldDecl *FD) {
+  if (useLegacyEmptyFieldLayout(Ctx))
+    return FD->isZeroSize(Ctx);
+
   if (FD->isZeroLengthBitField())
     return true;
 
@@ -26,6 +53,11 @@ bool isEmptyFieldForLayout(const ASTContext &Ctx, const FieldDecl *FD) {
 }
 
 bool isEmptyRecordForLayout(const ASTContext &Ctx, QualType T) {
+  if (useLegacyEmptyFieldLayout(Ctx)) {
+    const auto *CXXRD = T->getAsCXXRecordDecl();
+    return CXXRD && CXXRD->isEmpty();
+  }
+
   const auto *RD = T->getAsRecordDecl();
   if (!RD)
     return false;
