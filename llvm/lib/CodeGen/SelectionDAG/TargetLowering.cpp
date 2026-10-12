@@ -180,6 +180,17 @@ static void setArgListEntryAttributes(TargetLoweringBase::ArgListEntry &Entry,
     Entry.IndirectType = Src.getParamStructRetType(ArgIdx);
 }
 
+TargetLoweringBase::ArgListEntry::ArgListEntry(SDValue Node, Type *Ty,
+                                               Attribute::AttrKind Attr)
+    : ArgListEntry(nullptr, Node, Ty) {
+  if (Attr == Attribute::SExt)
+    IsSExt = true;
+  else if (Attr == Attribute::ZExt)
+    IsZExt = true;
+  else if (Attr != Attribute::None)
+    llvm_unreachable("Unexpected attribute left unhandled.");
+}
+
 void TargetLoweringBase::ArgListEntry::setAttributes(const CallBase *Call,
                                                      unsigned ArgIdx) {
   setArgListEntryAttributes(*this, *Call, ArgIdx);
@@ -521,7 +532,7 @@ void TargetLowering::softenSetCCOperands(SelectionDAG &DAG, EVT VT,
 #undef FP_CMP_LIBCALL
 
   // Use the target specific return value for comparison lib calls.
-  EVT RetVT = getCmpLibcallReturnType();
+  EVT RetVT = EVT::getEVT(getCmpLibcallReturnType(*DAG.getContext()));
   SDValue Ops[2] = {NewLHS, NewRHS};
   TargetLowering::MakeLibCallOptions CallOptions;
   EVT OpsVT[2] = { OldLHS.getValueType(),
