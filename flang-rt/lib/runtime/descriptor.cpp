@@ -10,7 +10,9 @@
 #include "ISO_Fortran_util.h"
 #include "flang-rt/runtime/allocator-registry.h"
 #include "flang-rt/runtime/derived.h"
+#if !defined(RT_DEVICE_COMPILATION) && !defined(RT_GPU_TARGET)
 #include "flang-rt/runtime/environment.h"
+#endif
 #include "flang-rt/runtime/memory.h"
 #include "flang-rt/runtime/stat.h"
 #include "flang-rt/runtime/terminator.h"
@@ -180,9 +182,11 @@ RT_API_ATTRS int Descriptor::Allocate(std::int64_t *asyncObject) {
   // descriptor must be allocated/associated. Since std::malloc(0)
   // result is implementation defined, always allocate at least one byte.
   if (byteSize < 1) {
+#if !defined(RT_DEVICE_COMPILATION) && !defined(RT_GPU_TARGET)
     if (executionEnvironment.noEmptyAllocation) {
       return CFI_ERROR_MEM_ALLOCATION;
     }
+#endif
     byteSize = 1;
   }
   void *p{alloc(byteSize, alignment, asyncObject)};
