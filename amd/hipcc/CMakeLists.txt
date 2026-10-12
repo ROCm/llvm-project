@@ -202,6 +202,7 @@ install(TARGETS ${HIPCONFIG_BIN}
         COMPONENT NVIDIA
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_custom_target(link_target ALL COMMAND ${CMAKE_COMMAND} -E create_symlink \"amdclang++\" ${HIPCC_BIN})
 configure_pkg( ${HIPCC_NVIDIA} ${COMP_TYPE_NVIDIA} ${CPACK_PACKAGE_VERSION} ${PKG_MAINTAINER_NM} ${PKG_MAINTAINER_EMAIL} )
 
 # TODO: WIN32 check need to be removed if backward
