@@ -685,8 +685,6 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
     if (CandidateMI == CurMI)
       continue;
 
-    unsigned NumOfCoveredRegs = SIRegisterInfo::getNumCoveredRegs(Mask);
-    unsigned NumOfSubregisters = TRI->getRegSizeInBits(CandidateReg, *MRI) / 32;
     MachineBasicBlock *CandidateMIMBB = CandidateMI->getParent();
     assert(!(CurMI != CandidateMI && DT->dominates(CurMI, CandidateMI) &&
              CurMBB != CandidateMIMBB &&
@@ -698,9 +696,7 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
     LLVM_DEBUG({
       dbgs() << NewCandidateCnt
              << ": Candidate register = " << printReg(CandidateReg, TRI)
-             << " has " << NumOfSubregisters << " subregisters and has "
-             << NumOfCoveredRegs << " live subregisters and the parent bb is "
-             << CandidateMIMBB->getNumber() << ".\n";
+             << ".\n";
     });
 
     // In the following check, we reject candidates which are defined in the
@@ -738,20 +734,6 @@ AMDGPUEarlyRegisterSpilling::getCandidates(MachineInstr *CurMI,
           continue;
         UsesForNextUseDistCalculation.push_back(ReachableMO);
       }
-
-      if (llvm::any_of(
-              UsesForNextUseDistCalculation, [&](const MachineOperand *UseMO) {
-                const MachineInstr *UseMI = UseMO->getParent();
-                const MachineBasicBlock *UseMBB = UseMI->getParent();
-                MachineLoop *UseLoop = MLI->getLoopFor(UseMBB);
-                if (UseLoop && OutermostLoopOfCurLoop->contains(UseLoop) &&
-                    (UseLoop->getLoopDepth() > 1))
-                  return true;
-                if (UseLoop && (UseLoop->getLoopDepth() > 1))
-                  return true;
-                return false;
-              }))
-        continue;
 
       if (UsesForNextUseDistCalculation.empty())
         continue;
@@ -1157,9 +1139,6 @@ bool AMDGPUEarlyRegisterSpilling::classifyUsesForLoops(
       continue;
 
     MachineBasicBlock *UseMBB = U.getParent();
-    MachineLoop *UseLoop = MLI->getLoopFor(UseMBB);
-    if (UseLoop && UseLoop->getLoopDepth() >= 2)
-      return true;
 
     if (U.isPHI()) {
       SmallVector<MachineBasicBlock *> PhiBlocks =
@@ -1227,9 +1206,6 @@ bool AMDGPUEarlyRegisterSpilling::classifyUses(
       continue;
 
     MachineBasicBlock *UseMBB = U.getParent();
-    MachineLoop *UseLoop = MLI->getLoopFor(UseMBB);
-    if (UseLoop && UseLoop->getLoopDepth() >= 2)
-      return true;
 
     if (U.isPHI()) {
       SmallVector<MachineBasicBlock *> PhiBlocks =
@@ -1437,8 +1413,8 @@ static void normalizeCosts(
 
   for (auto &C : AllCandidates) {
     // Log-scale normalization for NextUseDistance.
-    double LogNextUseDist =
-        std::log(static_cast<int64_t>(C->getNextUseDistance()) - MinNextUseDist + 1.0);
+    double LogNextUseDist = std::log(
+        static_cast<int64_t>(C->getNextUseDistance()) - MinNextUseDist + 1.0);
     int64_t NormalizedNextUseDist =
         (LogMaxNextUseDist > 0)
             ? static_cast<int64_t>((LogNextUseDist * Limit) / LogMaxNextUseDist)
@@ -1540,8 +1516,9 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
 
       MachineInstr *Head = DG.getHead();
       MachineBasicBlock *HeadMBB = Head->getParent();
-      if (CurLoop && (DG.getWhereToRestore() ==
-                      DomGroup::RestorePlacement::LoopPreheader)) {
+      if ((DG.getWhereToRestore() ==
+           DomGroup::RestorePlacement::LoopPreheader) &&
+          (CurLoop && (CurLoop == OutermostLoopOfCurLoop))) {
         MachineInstr *OrigRestore = DG.getRestore();
         Register OrigRestoreReg = OrigRestore->getOperand(0).getReg();
         MachineLoop *HeadLoop = MLI->getLoopFor(HeadMBB);
@@ -1550,6 +1527,9 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
           HeadLoopPreheader = HeadLoop->getLoopPreheader();
 
         if (Head->isPHI() && (Head->getParent() == HeadLoopPreheader))
+          continue;
+
+        if (HeadLoop && HeadLoop->getLoopDepth() >= 2)
           continue;
 
         // TODO: Add support for DomGroup::CommonDominator.
@@ -1579,19 +1559,12 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
           continue;
 
         MachineInstr *OrigRestore = DG.getRestore();
-        bool HasUsesInLoopNest = false;
         SetVectorType UsesDominatedByCurMI;
         for (MachineInstr *U : DG.getUses()) {
           MachineBasicBlock *UMBB = U->getParent();
-          MachineLoop *UseLoop = MLI->getLoopFor(UMBB);
 
           if (HeadMBB == UMBB)
             continue;
-
-          if (UseLoop && UseLoop->getLoopDepth() >= 2) {
-            HasUsesInLoopNest = true;
-            break;
-          }
 
           if (U == CurMI) {
             UsesDominatedByCurMI.insert(U);
@@ -1601,9 +1574,6 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
             UsesDominatedByCurMI.insert(U);
           }
         }
-
-        if (HasUsesInLoopNest)
-          continue;
 
         if (UsesDominatedByCurMI.empty())
           continue;
@@ -1666,24 +1636,19 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
       // The unreachable uses are the ones that are not reachable by the
       // SpillBlock.
       SetVectorType UnreachableUses;
-      bool HasUsesInLoopNest = true;
 
       if (CurLoop) {
         MachineBasicBlock *PreHeader =
             OutermostLoopOfCurLoop->getLoopPreheader();
         MachineBasicBlock *Header = OutermostLoopOfCurLoop->getHeader();
-        HasUsesInLoopNest = classifyUsesForLoops(
-            SpillBlock, CandidateReg, PreHeader, Header, DominatedUses,
-            NonDominatedReachableUses, UnreachableUses);
+        classifyUsesForLoops(SpillBlock, CandidateReg, PreHeader, Header,
+                             DominatedUses, NonDominatedReachableUses,
+                             UnreachableUses);
 
       } else {
-        HasUsesInLoopNest =
-            classifyUses(SpillBlock, CandidateReg, CurMI, DominatedUses,
-                         NonDominatedReachableUses, UnreachableUses);
+        classifyUses(SpillBlock, CandidateReg, CurMI, DominatedUses,
+                     NonDominatedReachableUses, UnreachableUses);
       }
-
-      if (HasUsesInLoopNest)
-        continue;
 
       if (NonDominatedReachableUses.empty() && DominatedUses.empty() &&
           !UnreachableUses.empty()) {
