@@ -1691,6 +1691,55 @@ void ControlFlowRewriter::rewrite() {
     MachineBasicBlock::iterator MBBINodeEnd = Node->Block->end();
 
     if (!Info.OrigExit) {
+      // Blocks with stale indirect-target markings from the thread-level CFG
+      // (e.g. kill intrinsic lowered as callbr) may have mayHaveInlineAsmBr()
+      // set without an actual INLINEASM_BR instruction. These blocks contain
+      // only kill terminators and/or S_BRANCH. Rewire them to the direct
+      // (non-indirect-target) successor and skip further processing.
+      //
+      // This must be done before terminator removal because afterward
+      // we cannot distinguish these blocks from flow blocks that also
+      // have no terminators yet and can match mayHaveInlineAsmBr().
+      if (Node->Block->mayHaveInlineAsmBr() && !Info.InlineAsmBrMI &&
+          Node->Successors.size() == 2 &&
+          !Node->Block->terminators().empty()) {
+        bool IsCandidate = true;
+        MachineInstr *SBranch = nullptr;
+        for (MachineInstr &Term : Node->Block->terminators()) {
+          unsigned Opc = Term.getOpcode();
+          if (TII.isKillTerminator(Opc))
+            continue;
+          if (Opc == AMDGPU::S_BRANCH) {
+            SBranch = &Term;
+            continue;
+          }
+          IsCandidate = false;
+          break;
+        }
+
+        if (IsCandidate) {
+          // Find the direct successor (the one without indirect-target
+          // marking).
+          MachineBasicBlock *DirectSucc = nullptr;
+          for (MachineBasicBlock *Succ : Node->Block->successors()) {
+            if (!Succ->isInlineAsmBrIndirectTarget()) {
+              DirectSucc = Succ;
+              break;
+            }
+          }
+
+          if (DirectSucc) {
+            if (SBranch)
+              SBranch->getOperand(0).setMBB(DirectSucc);
+            else
+              BuildMI(*Node->Block, Node->Block->end(), {},
+                      TII.get(AMDGPU::S_BRANCH))
+                  .addMBB(DirectSucc);
+            continue;
+          }
+        }
+      }
+
       // Remove original terminators, preserving artificial terminators
       // (EXEC management ops), hardware-managed branches (e.g.
       // S_SUBVECTOR_LOOP) that pass through to assembly unchanged, and
