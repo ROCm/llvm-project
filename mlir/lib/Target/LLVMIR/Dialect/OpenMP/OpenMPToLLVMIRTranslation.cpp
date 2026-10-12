@@ -9085,6 +9085,15 @@ static llvm::DIExpression *getVariableExpression(llvm::LLVMContext &context,
             llvm::dyn_cast<llvm::AllocaInst>(loc->stripPointerCasts()))
       varType = allocaInst->getAllocatedType();
     else
+      // FIXME: This is wrong for every variable that reaches including the
+      // dummy arguments of a declare target function. It describes the
+      // pointer rather than what the pointer points at. It is harmless today
+      // because the DWARF emitted for DIOpArg(0, ptr), DIOpDeref(T) depends
+      // only on the address space of the pointer and not on T, but it will
+      // matter as soon as an expression reads through the dereference. The
+      // fix is to carry the type from the frontend, which means teaching both
+      // flang and the MLIR debug attributes about DIOps. That is best done
+      // once DIOp is available upstream.
       varType = loc->getType();
   }
   exprBuilder.append<llvm::DIOp::Deref>(varType);
