@@ -1486,28 +1486,6 @@ void ControlFlowRewriter::prepareWaveCfg() {
     if (!Node->Block)
       continue;
 
-    // Identify the indirect MBB target from the operands of INLINEASM_BR
-    // (OrigSuccCond). The block participates in lane mask building as a uniform
-    // conditional, conservatively contributing all active lanes.
-    if (Node->Block->mayHaveInlineAsmBr()) {
-      auto InlineAsmBrIt =
-          llvm::find_if(*Node->Block, [](const MachineInstr &MI) {
-            return MI.getOpcode() == TargetOpcode::INLINEASM_BR;
-          });
-
-      if (InlineAsmBrIt != Node->Block->end()) {
-        Info.InlineAsmBrMI = &*InlineAsmBrIt;
-        for (const MachineOperand &MO : InlineAsmBrIt->operands()) {
-          if (!MO.isMBB())
-            continue;
-          assert(!Info.OrigSuccCond &&
-                 "Multiple INLINEASM_BR indirect targets not yet supported");
-          Info.ImplicitBranchOpc = TargetOpcode::INLINEASM_BR;
-          Info.OrigSuccCond = ReconvergeCfg.nodeForBlock(MO.getMBB());
-        }
-      }
-    }
-
     bool ZVariant = false;
 
     // Analyze original terminators.
@@ -1556,6 +1534,31 @@ void ControlFlowRewriter::prepareWaveCfg() {
       assert(BlockIt != Function.end());
       assert(is_contained(Node->Block->successors(), &*BlockIt));
       Info.OrigSuccFinal = ReconvergeCfg.nodeForBlock(&*BlockIt);
+    }
+
+    // Identify the indirect target (OrigSuccCond) of a callbr, which acts as
+    // an opaque uniform branch.
+    if (Node->Block->mayHaveInlineAsmBr()) {
+      // As callbr can have inline asm, scan the block for an INLINEASM_BR.
+      auto InlineAsmBrIt =
+          llvm::find_if(*Node->Block, [](const MachineInstr &MI) {
+            return MI.getOpcode() == TargetOpcode::INLINEASM_BR;
+          });
+
+      if (InlineAsmBrIt != Node->Block->end())
+        Info.InlineAsmBrMI = &*InlineAsmBrIt;
+
+      // Scan the lane successors for implicit indirect target.
+      if (!Info.OrigSuccCond) {
+        for (const LaneEdge &LaneSucc : Node->LaneSuccessors) {
+          if (!LaneSucc.Lane->Block->isInlineAsmBrIndirectTarget())
+            continue;
+          assert(!Info.OrigSuccCond &&
+                 "Multiple implicit indirect targets not yet supported");
+          Info.ImplicitBranchOpc = TargetOpcode::INLINEASM_BR;
+          Info.OrigSuccCond = LaneSucc.Lane;
+        }
+      }
     }
 
     assert(Info.OrigExit || Node->FlowNum != 0 || Info.OrigSuccFinal);
@@ -1707,34 +1710,51 @@ void ControlFlowRewriter::rewrite() {
 
     assert(!Info.OrigExit);
 
-    // INLINEASM_BR is not a terminator and was preserved during terminator
-    // removal. After reconvergence the original indirect target may no
-    // longer be a direct MBB successor (a flow node could've been inserted).
-    // Retarget the MBB operand to the appropriate wave-successor and
-    // transfer the indirect-target attributes onto the new target.
-    if (Info.InlineAsmBrMI) {
-      for (MachineOperand &MO : Info.InlineAsmBrMI->operands()) {
+    // INLINEASM_BR is not a terminator, so it survived terminator removal.
+    // Reconvergence may have inserted a flow node, leaving an MBB operand
+    // that is no longer a CFG successor. Retarget those operands to the
+    // wave successor of the original indirect dest and transfer the
+    // inlineasm-br-indirect-target attributes.
+    if (MachineInstr *CallBr = Info.InlineAsmBrMI) {
+      MachineBasicBlock *NewTarget;
+
+      // Identify and mark the lane successor corresponding to the
+      // OrigSuccCond as the new alive indirect target.
+      if (Node->Successors.size() == 1) {
+        NewTarget = Node->Successors[0]->Block;
+      } else {
+        auto LaneSucc = llvm::find_if(
+            Node->LaneSuccessors,
+            [OrigSuccCond = Info.OrigSuccCond](const LaneEdge &Succ) {
+              return Succ.Lane == OrigSuccCond;
+            });
+        assert(LaneSucc != Node->LaneSuccessors.end() &&
+               "missing wave successor for INLINEASM_BR indirect dest");
+        NewTarget = LaneSucc->Wave->Block;
+      }
+
+      LiveCallbrTargets.insert(NewTarget);
+      NewTarget->setIsInlineAsmBrIndirectTarget();
+      NewTarget->setLabelMustBeEmitted();
+
+      // Mark all the non-successor INLINEASM_BR indirect target operands as
+      // stale and retarget them to the new alive indirect target.
+      for (MachineOperand &MO : CallBr->operands()) {
         if (!MO.isMBB())
           continue;
-        if (Node->Block->isSuccessor(MO.getMBB())) {
-          LiveCallbrTargets.insert(MO.getMBB());
+
+        MachineBasicBlock *OldTarget = MO.getMBB();
+        if (OldTarget == NewTarget)
+          continue;
+
+        // An indirect dest that reconvergence did not reroute (still alive wave
+        // successor) should be retained.
+        if (Node->Block->isSuccessor(OldTarget)) {
+          LiveCallbrTargets.insert(OldTarget);
           continue;
         }
-        MachineBasicBlock *NewTarget;
-        if (Node->Successors.size() == 1) {
-          NewTarget = Node->Successors[0]->Block;
-        } else {
-          auto LaneSucc =
-              llvm::find_if(Node->LaneSuccessors, [=](const auto &succ) {
-                return succ.Lane == Info.OrigSuccCond;
-              });
-          assert(LaneSucc != Node->LaneSuccessors.end());
-          NewTarget = LaneSucc->Wave->Block;
-        }
-        StaleCallbrTargets.insert(MO.getMBB());
-        LiveCallbrTargets.insert(NewTarget);
-        NewTarget->setIsInlineAsmBrIndirectTarget();
-        NewTarget->setLabelMustBeEmitted();
+
+        StaleCallbrTargets.insert(OldTarget);
         MO.setMBB(NewTarget);
       }
     }
