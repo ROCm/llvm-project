@@ -2,7 +2,6 @@
 
 # AMDGPU Memory Model
 
-
 ## Introduction
 
 The {ref}`LLVM memory model<memmodel>` provides broad guarantees that are
@@ -10,31 +9,105 @@ sufficient to implement inter-thread communication via memory. But in most
 communication patterns, not all memory accesses performed by a thread need to be
 exposed to other threads. Even when they do need to be exposed, not all threads
 may need to observe these memory accesses. This document describes the *AMDGPU
-memory model* that allows the user to control how the side-effects of memory
-accesses are propagated across threads. The programmer expresses this using
+memory model* that allows the user to control how the effects of write
+operations are propagated across threads. The programmer expresses this using
 **new intrinsics and metadata** as described below, and the implementation can
 then choose a more efficient mechanism to complete them, such as the cache
 policy bits in an AMDGPU device.
 
-The AMDGPU memory model allows executions that are not allowed by the LLVM
-memory model. At the same time, a simple mapping can be used to implement these
-new intrinsics and metadata using operations defined in the default LLVM memory
-model. Thus, **there exists a safe-by-default implementation** that produces
+The AMDGPU memory model defines a transitive *inter-thread-happens-before*
+relation which is then included in a non-transitive *amdgpu-happens-before*
+relation. But amdgpu-happens-before by itself is not sufficient to describe
+observable executions. Additionally, *availability* and *visibility* are
+required to describe how the effects of write operations become observable
+in other threads. This requirement is captured by *location-order*.
+
+The AMDGPU-specific intrinsics and metadata opt out of the LLVM memory model,
+and can only be explained using the AMDGPU memory model. At the same time, a
+simple mapping can be used to implement these new intrinsics and metadata using
+target-independent LLVM IR instructions. The LLVM *happens-before* order
+implements *location-order* since LLVM IR operations have the necessary
+properties. Thus, there exists a safe-by-default implementation that produces
 executions that are valid in both models.
 
 ## Terminology
 
-Memory Accesses
+Memory Location
+: A contiguous sequence of one or more bytes in memory. [Informational note ---
+  Operations described in this text usually refer to just a location as an
+  operand. The syntax of the actual instruction describes how to specify the
+  range, e.g., a base pointer and a size or data type.]
 
-: Operations that read or write locations in memory are termed as *memory
-  accesses*. Typical examples are `load`, `store` and atomic instructions,
-  as well as many intrinsics.
+Operation
+: An action performed by the implementation as part of executing an instruction.
+  A single instruction may result in one or more operations, and those
+  operations can potentially be performed outside the current thread (e.g.,
+  {ref}`amdgpu-dma-operations` are modeled as executing in their own thread).
 
-Synchronizing Operations
+Memory Access
+: An operation that returns or changes the state of memory. For example:
+  - non-atomic `load` and `store` instructions
+  - load/store operations performed by `atomic` instructions
+  - *visibility* and *availability* operations
 
-: Synchronizing operations control how the side-effects of memory accesses are
-  propagated in the system. Typical examples are atomic operations (including
-  fences) with at least `release` or `acquire` ordering.
+Side-effects of an Operation
+: The union of the set of memory locations that this operation accesses and the
+  set of memory locations that this operation synchronizes (see below).
+  [Informational note -- For a synchronizing operation `X`, the side-effects are
+  the same as the set of locations that `X` can synchronize, since the latter
+  contains the memory accesses performed by `X`.]
+
+(amdgpu-synchronizing-operation)=
+
+## Memory Synchronization
+
+Certain operations can synchronize the state of memory with memory operations
+from other threads. This is defined separately for each operation. Some examples
+of operations that can synchronize memory across threads:
+
+- `fence` with any ordering
+- `store atomic` with `release` ordering or higher
+- `load atomic` with `acquire` ordering or higher
+
+(amdgpu-synchronize-with)=
+
+### `synchronize-with`
+
+The interaction that synchronizes the state of memory is captured by the
+*synchronize-with* relation.
+
+When an operation `X` *synchronizes-with* an operation `Y`:
+- `X` and `Y` are called *synchronizing operations*,
+- `X` is called a *release operation*, and,
+- `Y` is called an *acquire operation*.
+
+### Synchronizing Sets of Locations
+
+A synchronizing operation specifies the set of memory locations that it can
+synchronize. If no set is explicitly mentioned, then that operation can
+synchronize all memory locations.
+
+A synchronizing operation that is also a memory access (e.g., an atomic
+operation) always can synchronize the locations that it accesses along with any
+additional locations specified for that operation.
+
+For example:
+
+`store atomic release %ptr`
+: An atomic store operation that synchronizes all locations in memory, including
+  the one accessed via the `%ptr` argument.
+
+`load atomic acquire %ptr !{!"amdgpu-synchronize-as", !"global"}`
+: An atomic load operation that synchronizes all locations in global memory, in
+  addition to the one accessed via the `%ptr` argument.
+
+`fence acquire !{!"amdgpu-synchronize-as", !"local"}`
+: When suitably paired with an atomic operation, synchronizes all memory
+  locations within the `local` address space.
+
+Let `S1` and `S2` be the side-effects of operations `X` and `Y` respectively. If
+`X` *synchronizes-with* `Y`, then the set of locations `S` synchronized by that
+*synchronize-with* edge is the intersection `S = S1 ∩ S2`.
 
 (amdgpu-scopes)=
 
@@ -123,33 +196,18 @@ termed as the *common scope* of `X` and `Y`.
 
 ## Availability and Visibility
 
-The AMDGPU memory model is built on top of the {ref}`happens-before<memmodel>`
-order defined by the LLVM memory model. But when one of the new intrinsics or
-metadata is used, **happens-before by itself is not sufficient** to describe its
-observable effects. Instead, the AMDGPU model uses *availability* and
-*visibility* to describe how the side-effects of these operations propagate to
-other threads.
+Availability determines how *far* the effect of a write has been forwarded in
+the system relative to that write. Visibility determines how *close* the effect
+of the same write has reached relative to an observer operation (typically a
+read).
 
-Availability determines how *far* the side-effects of a write have been
-forwarded in the system relative to that write. Visibility determines how
-*close* the side-effects of the same write have reached relative to an observer
-operation (typically a read).
+Consider a write `W` that *amdgpu-happens-before* a read `R` to the same
+address:
 
-The AMDGPU memory model *does not change the structure of happens-before*, but
-changes the rules that determine how operations may observe the side-effects of
-other operations that *happen-before* them.
-
-Consider a write `W` that `happens-before` a read `R` to the same address:
-
-- `R` can potentially observe the side-effects of `W` **only if W is
+- `R` can potentially observe the effect of `W` **only if W is
   visible** to `R`.
 - `W` can potentially be visible to `R` **only if W is first made
   available** to `R`.
-
-The instructions used in the default LLVM memory model automatically satisfy
-these necessary conditions, and hence they can be explained using the rules from
-either memory model. But the new intrinsics and metadata *opt out* of the LLVM
-memory model, and can only be explained using the AMDGPU memory model.
 
 :::{note}
 We introduce new intrinsics because metadata cannot be used to express the
@@ -173,7 +231,7 @@ cache will fail to observe this store.
 ### store-available
 
 A *store-available* operation `X` writes data to the specified location, and
-then propagates those side-effects up to its scope instance `S` and also all
+then propagates this effect on memory up to its scope instance `S` and also all
 the subscope instances of `S` that contain `X`.
 
 ```llvm
@@ -231,8 +289,8 @@ flat address resolves to `addrspace(3)`.
 :::{note}
 This is independent of the `syncscope` of an atomic access. For example, even if
 a `store atomic` to `addrspace(3)` specifies a smaller `syncscope` such as
-"wavefront", the side-effects are made available at "lds-dma" scope. In other
-words, the scope for atomicity is not always the same as the scope for
+"wavefront", the effect of this write is made available at "lds-dma" scope. In
+other words, the scope for atomicity is not always the same as the scope for
 availability/visibility.
 :::
 
@@ -251,7 +309,7 @@ operation with the widest scope supported by its address space:
   observable beyond its workgroup and the DMA operations associated with that
   workgroup.
 
-A `volatile` atomic access is not widened in this way. Its availability and
+An `atomic volatile` access is not widened in this way. Its availability and
 visibility remain limited to its `syncscope`, as described for atomic accesses
 above.
 
@@ -281,10 +339,11 @@ It only affects the synchronization of other memory accesses.
 
 ### make-available and make-visible
 
-*make-available* and *make-visible* operations propagate certain side-effects
-from or to the specified scope respectively. They are similar to the
-*store-available* and *load-visible* operations, except that their effect is not
-limited to specific locations.
+*make-available* and *make-visible* operations propagate the effects of certain
+writes from or to the specified scope respectively.
+
+A synchronizing operation is also a *make-available* or *make-visible*
+operation, but only when specified in its definition.
 
 ```llvm
 store atomic [syncscope("<target-scope>")] <ordering> [, !mmra !{!"amdgcn-av", !"none"}]
@@ -294,13 +353,17 @@ cmpxchg      [syncscope("<target-scope>")] <ordering> [, !mmra !{!"amdgcn-av", !
 fence        [syncscope("<target-scope>")] <ordering> [, !mmra !{!"amdgcn-av", !"none"}]
 ```
 
-A synchronizing operation with at least `release` ordering is a
+An `atomic` or `fence` operation with at least `release` ordering is a
 *make-available* operation with scope `syncscope`, if it is not marked as
 `!{!"amdgcn-av", !"none"}`.
 
-A synchronizing operation with at least `acquire` ordering is a
+An `atomic` or `fence` operation with at least `acquire` ordering is a
 *make-visible* operation with scope `syncscope`, if it is not marked as
 `!{!"amdgcn-av", !"none"}`.
+
+If a *make-available* or *make-visible* operation is a synchronizing operation,
+then its effect on availability and visibility is limited to the locations
+included in its *side-effects*.
 
 ```llvm
 ; This includes the following operations:
@@ -318,11 +381,34 @@ store atomic syncscope("agent") release ptr, !mmra !{!"amdgcn-av", !"none"}
 
 ## Ordering
 
-:::{note}
-**TODO:** These ordering operations affect all address spaces. We need to
-eventually make that a parameter similar to the storage class parameter on
-operations and orders in Vulkan.
-:::
+(amdgpu-inter-thread-happens-before)=
+
+### `inter-thread-happens-before<S>`
+
+The *inter-thread-happens-before* relation is parameterized by a *non-empty* set
+of memory locations `S`.
+
+An operation `A` *inter-thread-happens-before\<S\>* an operation `B` for the set
+of memory locations `S` if one of the following is true:
+
+- `A` and `B` each include `S` in their side-effects and one of the following is
+  true:
+  - `A` is *program-ordered* before `B` and `B` is a {ref}`release operation
+    <amdgpu-synchronize-with>`.
+  - `A` is an {ref}`acquire operation <amdgpu-synchronize-with>` and `A` is
+    *program-ordered* before `B`.
+  - `A` *synchronizes-with* `B`.
+- For some operation `X`, `A` *inter-thread-happens-before\<S\>* `X` and `X`
+  *inter-thread-happens-before\<S\>* `B`.
+
+(amdgpu-amdgpu-happens-before)=
+
+### `amdgpu-happens-before`
+
+An operation `A` *amdgpu-happens-before* an operation `B` if:
+
+- `A` is *program-ordered* before `B`, or,
+- `A` *inter-thread-happens-before\<S\>* `B` for some set of locations `S`.
 
 ### Availability Operation
 
@@ -337,7 +423,7 @@ following holds:
 - `X` is a *make-available* operation whose scope instance includes `W`,
   and there is an availability operation `Z` on `W` such that:
 
-  - `Z` happens-before `X`, and,
+  - `Z` *amdgpu-happens-before* `X`, and,
   - `Z`'s scope instance includes `X`.
 
 Then `X` makes `W` available in its own scope instance `S` and every
@@ -351,15 +437,15 @@ and one of the following holds:
 
 - There exists an *availability* operation `X` on write `W` such that:
 
-  - `X` happens-before `Y`, and,
-  - `X` and `Y` have inclusive scopes.
+  - `X` *amdgpu-happens-before* `Y`, and,
+  - `X` and `Y` specify inclusive scopes.
 
   Then `Y` makes `W` visible in the common scope instance `S` of `X` and
   `Y`, and every subscope instance of `S` that includes `Y`.
 
 - There exists a *visibility* operation `X` on write `W` such that:
 
-  - `X` happens-before `Y`, and,
+  - `X` *amdgpu-happens-before* `Y`, and,
   - `X` makes `W` visible in a scope instance `S1` that includes `Y`, and,
   - `X` is included in the scope instance `S2` of `Y`.
 
@@ -376,7 +462,7 @@ if `W` is program-ordered before `Y`.
 A write `W` is *location-ordered* before a write `W1` to the same address if
 there exists an availability operation `Z` on `W` such that:
 
-- `Z` happens-before `W1`, and,
+- `Z` *amdgpu-happens-before* `W1`, and,
 - `W1` is included in `Z`'s scope instance.
 
 A write `W` is *location-ordered* before a read `R` to the same address if
@@ -400,7 +486,7 @@ For each byte of a read `R`, `R` may see any write to the same byte, except:
 
 - If a write `W1` is *location-ordered* before a write `W2`, and `W2` is
   *location-ordered* before a read `R`, then `R` may not see `W1`.
-- If a read `R` is *location-ordered* before a write `W3`, then `R` may not see
+- If a read `R` *amdgpu-happens-before* a write `W3`, then `R` may not see
   `W3`.
 
 The value returned by `R` is then defined as follows:
@@ -424,11 +510,12 @@ This section is informational.
 
 The following properties follow from the definitions above:
 
-1. **Happens-before is necessary for location-order.** An access `X` is
-   *location-ordered* before an access `Y` only if `X` happens-before `Y`.
+1. **amdgpu-happens-before is necessary for location-order.** A write `W` is
+   *location-ordered* before a read `R` only if `W`
+   *amdgpu-happens-before* `R`.
    This follows from the definition of availability and visibility operations,
-   which always require a happens-before link with the preceding operation in
-   the chain.
+   which always require an *amdgpu-happens-before* link with the preceding
+   operation in the chain.
 2. **A write cannot be made available in a scope that does not contain it.** The
    definition of an availability operation `X` requires that `X`'s scope
    instance includes `W` as a precondition. Since every scope instance that
@@ -455,9 +542,57 @@ The following properties follow from the definitions above:
    operation with inclusive scopes, such that their common scope includes both
    `W` and `R`.
 
+(amdgpu-ordering-comparison)=
+
+## Comparison of Ordering Relations
+
+[This section is informational.]
+
+```{list-table}
+:header-rows: 1
+:widths: 30 20 25 25
+
+   * - Purpose
+     - C++
+     - Vulkan
+     - AMDGPU
+   * - Intra-thread ordering
+     - sequenced-before<br>(transitive)
+     - program-order<br>(transitive)
+     - program-order<br>(transitive)
+   * - Inter-thread synchronization
+     - synchronizes-with
+     - synchronizes-with
+     - synchronizes-with
+   * - Transitive inter-thread ordering
+     - happens-before
+     - inter-thread-happens-before\<SC\>
+     - inter-thread-happens-before\<S\>
+   * - Basis for visibility
+     - happens-before<br>(transitive)
+     - happens-before<br>(**not** transitive)
+     - amdgpu-happens-before<br>(**not** transitive)
+```
+
+The above table lines up roughly equivalent ordering relations across the
+C++, Vulkan, and AMDGPU memory models.
+
+- In C++, *happens-before* is transitive and serves directly as the basis of
+  *visible side effects*.
+- In Vulkan, the non-transitive *happens-before* serves as the basis of
+  *location-order*.
+- In AMDGPU, the non-transitive *amdgpu-happens-before* serves the same role.
+
+The Vulkan and AMDGPU models construct these non-transitive relations
+analogously as the union of *program-order* and *inter-thread-happens-before*.
+The difference is that the Vulkan *inter-thread-happens-before* is parameterized
+over a set of storage classes, while AMDGPU uses a set of memory locations.
+
 (amdgcn-av-vulkan)=
 
 ## The Vulkan Memory Model
+
+[This section is informational.]
 
 The AMDGPU memory model draws heavily on the Vulkan memory model. In
 particular, the following instructions are equivalent.
