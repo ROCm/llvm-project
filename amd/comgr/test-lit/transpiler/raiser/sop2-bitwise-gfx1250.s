@@ -58,7 +58,6 @@ sop2_bitwise_gfx1250:
 	.p2align	6, 0x0
 	.amdhsa_kernel sop2_bitwise_gfx1250
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_system_vgpr_workitem_id 2
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 7

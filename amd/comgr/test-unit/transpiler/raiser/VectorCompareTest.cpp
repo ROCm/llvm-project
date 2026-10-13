@@ -13,6 +13,7 @@
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/wave-projection.h"
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/IR/Dominators.h"
@@ -72,8 +73,10 @@ protected:
                          Function::ExternalLinkage, "comparison", TestModule);
     B.SetInsertPoint(BasicBlock::Create(Context, "entry", TestFunction));
     SetPcAnalysis SetPc;
-    RaiseContext Raise = cantFail(RaiseContext::create(
-        B, Projection, MC, SetPc, KernelMeta(), {}, 0, {}, 0, 0));
+    DenseSet<uint64_t> PairedSplitBarriers;
+    RaiseContext Raise = cantFail(
+        RaiseContext::create(B, Projection, MC, SetPc, PairedSplitBarriers,
+                             KernelMeta(), {}, 0, {}, 0, 0));
     Raise.registers().storeExec(B.getInt64(Active));
 
     DecodedInst Instruction;

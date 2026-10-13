@@ -15,9 +15,9 @@
 
 namespace COMGR::transpiler {
 
-class OperandResolver;
+struct OperandResolver;
 struct DecodedInst;
-struct RaiseContext;
+class RaiseContext;
 
 /// Builds the result of a two-source instruction from its already-read sources.
 using BinaryBuilder = llvm::function_ref<llvm::Value *(
@@ -38,9 +38,16 @@ llvm::Error raiseUnaryBit32(RaiseContext &Ctx, const DecodedInst &Di,
 /// Raise a unary F32 operation shared by VOP1 and VOP3 encodings.
 llvm::Error raiseUnaryFloat32(RaiseContext &Ctx, const DecodedInst &Di,
                               OperandResolver &Op);
+llvm::Error raiseUnaryFloat64(RaiseContext &Ctx, const DecodedInst &Di,
+                              OperandResolver &Op);
+
+llvm::Error raiseFloatMac(RaiseContext &Ctx, const DecodedInst &Di,
+                          OperandResolver &Op);
 
 /// Raise a 32-bit floating-point conversion shared by VOP1 and VOP3 encodings.
 llvm::Error raiseFloatConversion32(RaiseContext &Ctx, const DecodedInst &Di,
+                                   OperandResolver &Op);
+llvm::Error raiseFloatConversion64(RaiseContext &Ctx, const DecodedInst &Di,
                                    OperandResolver &Op);
 
 /// Raise V_CNDMASK_B32 with an implicit or explicit wave-mask condition.

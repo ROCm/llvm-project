@@ -71,6 +71,7 @@ protected:
     ReplicationProjection Projection;
     Function *Kernel;
     SetPcAnalysis SetPc;
+    DenseSet<uint64_t> PairedSplitBarriers;
     std::optional<RaiseContext> Ctx;
 
     explicit ContextEnvironment(const MCState &Mc)
@@ -81,9 +82,10 @@ protected:
               FunctionType::get(B.getVoidTy(), /*isVarArg=*/false),
               Function::ExternalLinkage, "kernel", Mod)) {
       B.SetInsertPoint(BasicBlock::Create(LLVMCtx, "entry", Kernel));
-      Ctx.emplace(cantFail(RaiseContext::create(
-          B, Projection, Mc, SetPc, KernelMeta(), ArrayRef<uint8_t>(), 0,
-          ArrayRef<TextSection::ImageSection>(), 0, 0)));
+      Ctx.emplace(cantFail(
+          RaiseContext::create(B, Projection, Mc, SetPc, PairedSplitBarriers,
+                               KernelMeta(), ArrayRef<uint8_t>(), 0,
+                               ArrayRef<TextSection::ImageSection>(), 0, 0)));
     }
   };
 

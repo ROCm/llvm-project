@@ -30,14 +30,12 @@ clusters_enabled:
 	.p2align	6, 0x0
 	.amdhsa_kernel clusters_disabled
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.p2align	6, 0x0
 	.amdhsa_kernel clusters_enabled
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel

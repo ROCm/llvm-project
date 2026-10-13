@@ -20,7 +20,9 @@
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/TargetParser/AMDGPUTargetParser.h"
 
+#include <cassert>
 #include <climits>
 #include <cstdint>
 #include <limits>
@@ -93,7 +95,7 @@ Error handleImmediateSopk(RaiseContext &Ctx, const DecodedInst &Di,
           Intrinsic::sadd_with_overflow, {Ctx.B.getInt32Ty()}, {*Source, *Imm});
       Result = Ctx.B.CreateExtractValue(Pair, 0, "addk");
       Value *Overflow = Ctx.B.CreateExtractValue(Pair, 1, "addk_scc");
-      Ctx.registers().regFile().storeSCC(Ctx.B, Overflow);
+      Ctx.registers().storeSCC(Ctx.B, Overflow);
     } else {
       Result = Ctx.B.CreateMul(*Source, *Imm, "mulk");
     }
@@ -139,7 +141,7 @@ Error handleImmediateSopk(RaiseContext &Ctx, const DecodedInst &Di,
     return unsupportedInstruction(Ctx, Di);
   }
   Value *Condition = Ctx.B.CreateICmp(Predicate, *Source, *Imm, "cmpk");
-  Ctx.registers().regFile().storeSCC(Ctx.B, Condition);
+  Ctx.registers().storeSCC(Ctx.B, Condition);
   return Error::success();
 }
 
@@ -287,6 +289,32 @@ Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di,
   if (Policy.Write == HardwareRegisterWriteAction::Ignore)
     return Error::success();
 
+  unsigned ReplayBit =
+      llvm::countr_zero(static_cast<unsigned>(AMDGPU::Hwreg::REPLAY_MODE));
+  if (AMDGPU::getSubArchFromGPUName(Ctx.Projection.SourceSTI.getCPU()) ==
+          Triple::AMDGPUSubArch1250 &&
+      AMDGPU::getSubArchFromGPUName(Ctx.Projection.TargetSTI.getCPU()) ==
+          Triple::AMDGPUSubArch942 &&
+      Id == AMDGPU::Hwreg::ID_MODE && BitOffset <= ReplayBit &&
+      BitWidth > ReplayBit - BitOffset) {
+    if (Di.CanonOp == CanonicalOp::S_SETREG_IMM32_B32 &&
+        BitOffset == ReplayBit && BitWidth == 1 &&
+        Di.Offset == Ctx.kernelStartOffset()) {
+      int ImmediateIndex = COMGR::transpiler::getNamedOperandIdx(
+          Di.Inst.getOpcode(), AMDGPU::OpName::imm);
+      assert(ImmediateIndex >= 0 && Di.isImm(ImmediateIndex) &&
+             "expected SETREG immediate");
+      // Replay mode constrains source register reuse, not memory visibility.
+      // The initial enable has no pending memory; target register allocation
+      // and scheduling must satisfy the target's own replay rules.
+      if (Di.getImm(ImmediateIndex) == 1)
+        return Error::success();
+    }
+    return unsupportedInstruction(
+        Ctx, Di,
+        "only immediate REPLAY_MODE enable at kernel entry is supported");
+  }
+
   bool HasExtendedVgprs =
       Ctx.Projection.SourceSTI.hasFeature(AMDGPU::Feature1024AddressableVGPRs);
   Value *ValueArg;
@@ -313,6 +341,8 @@ Error handleSetreg(RaiseContext &Ctx, const DecodedInst &Di,
       Intrinsic::getOrInsertDeclaration(M, Intrinsic::amdgcn_s_setreg);
   Ctx.requireWaveUniform(
       ValueArg, Di, "WaveNative requires uniform hardware register writes");
+  if (Error Err = Ctx.validateHardwareEffect(Di))
+    return Err;
   Ctx.B.CreateCall(Setreg, {Ctx.B.getInt32(Selector), ValueArg});
   return Error::success();
 }

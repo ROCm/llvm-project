@@ -24,12 +24,15 @@
 	.type	smem_loads,@function
 ; IR-LABEL: define amdgpu_kernel void @smem_loads(
 smem_loads:
+; Some loads carry nv, which the raise drops; their existing IR checks verify
+; that the memory accesses are still raised.
+;
 ; The i64 -4 mask clears the two low address bits.
 ; IR: [[BASE0:%.+]] = and i64 {{%.+}}, -4
 ; IR: [[ADDRESS0:%.+]] = add i64 [[BASE0]], 0
 ; IR: [[POINTER0:%.+]] = inttoptr i64 [[ADDRESS0]] to ptr addrspace(1)
 ; IR: [[LOAD128:%.+]] = load <4 x i32>, ptr addrspace(1) [[POINTER0]], align 4
-	s_load_b128 s[4:7], s[0:1], 0x3
+	s_load_b128 s[4:7], s[0:1], 0x3 nv
 ; IR: [[LOAD128_BITS:%.+]] = bitcast <4 x i32> [[LOAD128]] to i128
 ; IR: [[LOAD128_WORD2_SHIFTED:%.+]] = lshr i128 [[LOAD128_BITS]], 64
 ; IR: [[LOAD128_WORD2:%.+]] = trunc i128 [[LOAD128_WORD2_SHIFTED]] to i32
@@ -57,7 +60,7 @@ smem_loads:
 ; IR: [[ADDRESS2:%.+]] = add i64 [[BASE2]], 8
 ; IR: [[POINTER2:%.+]] = inttoptr i64 [[ADDRESS2]] to ptr addrspace(1)
 ; IR: [[LOAD32:%.+]] = load i32, ptr addrspace(1) [[POINTER2]], align 4
-	s_load_b32 s4, s[2:3], 0xb
+	s_load_b32 s4, s[2:3], 0xb nv
 ; IR: [[LOAD32_EXT:%.+]] = zext i32 [[LOAD32]] to i64
 ; IR: [[BASE3_BITS:%.+]] = or i64 [[LOAD32_EXT]], {{%.+}}
 
@@ -314,7 +317,7 @@ smem_narrow_scale_offset:
 	.p2align	8
 	.type	smem_cache_policy,@function
 smem_cache_policy:
-; REFUSE: scalar load cache-policy modifiers other than SCALE_OFFSET are not supported
+; REFUSE: scalar load carries a cache-policy modifier the raise does not model
 	s_load_b32 s2, s[0:1], 0x0 scope:SCOPE_SYS
 	s_endpgm
 

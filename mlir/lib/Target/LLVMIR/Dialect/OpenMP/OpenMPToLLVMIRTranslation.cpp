@@ -2036,7 +2036,7 @@ static llvm::Expected<llvm::BasicBlock *> allocatePrivateVars(
   llvm::BasicBlock *allocaBB = allocaIP.getNodeParent();
   llvm::Instruction *allocaTerminator = allocaBB->getTerminator();
   splitBB(allocaTerminator->getIterator(), true,
-          allocaTerminator->getStableDebugLoc(), "omp.region.after_alloca");
+          allocaTerminator->getDebugLoc(), "omp.region.after_alloca");
   // Update the allocaTerminator since the alloca block was split above.
   allocaTerminator = allocaBB->getTerminator();
   // The new terminator is an uncondition branch created by the splitBB above.
@@ -2051,7 +2051,7 @@ static llvm::Expected<llvm::BasicBlock *> allocatePrivateVars(
     allocatorTerminator = allocatorBB->getTerminator();
     afterAllocatorAllocations = splitBB(
         allocatorTerminator->getIterator(), true,
-        allocatorTerminator->getStableDebugLoc(), "omp.region.after_allocate");
+        allocatorTerminator->getDebugLoc(), "omp.region.after_allocate");
     allocatorTerminator = allocatorBB->getTerminator();
     assert(allocatorTerminator->getNumSuccessors() == 1 &&
            "This is an unconditional branch created by splitBB");
@@ -2168,30 +2168,28 @@ static llvm::Expected<llvm::BasicBlock *> allocatePrivateVars(
   return afterAllocatorAllocations ? afterAllocatorAllocations : afterAllocas;
 }
 
-/// This can't always be determined statically, but when we can, it is good to
-/// avoid generating compiler-added barriers which will deadlock the program.
-static bool opIsInSingleThread(mlir::Operation *op) {
-  for (mlir::Operation *parent = op->getParentOp(); parent != nullptr;
+/// A compiler-generated barrier is unsafe when only part of the current team
+/// can reach it. This cannot always be determined statically (e.g. across a
+/// function call), but the enclosing OpenMP constructs can rule it out.
+static bool opMightBeSafeForBarriers(mlir::Operation *op) {
+  for (mlir::Operation *parent = op; parent != nullptr;
        parent = parent->getParentOp()) {
-    if (mlir::isa<omp::SingleOp, omp::CriticalOp>(parent))
+    // An inner parallel construct creates a new team, even when it is nested
+    // inside a construct that only some threads of the outer team encounter.
+    if (mlir::isa<omp::ParallelOp>(parent))
       return true;
 
-    // e.g.
-    // omp.single {
-    //   omp.parallel {
-    //     op
-    //   }
-    // }
-    if (mlir::isa<omp::ParallelOp>(parent))
+    if (mlir::isa<omp::SingleOp, omp::CriticalOp, omp::MaskedOp, omp::MasterOp,
+                  omp::SectionOp>(parent))
       return false;
   }
-  return false;
+  return true;
 }
 
 static LogicalResult
 emitPrivatizationBarrier(mlir::Operation *op, llvm::IRBuilderBase &builder,
                          LLVM::ModuleTranslation &moduleTranslation) {
-  if (opIsInSingleThread(op))
+  if (!opMightBeSafeForBarriers(op))
     return success();
 
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
@@ -7475,6 +7473,12 @@ convertClauseMapFlags(omp::ClauseMapFlags mlirFlags) {
   return mapType;
 }
 
+static StringRef getMapClauseName(omp::MapInfoOp mapOp) {
+  if (StringAttr name = mapOp.getNameAttr())
+    return name.getValue();
+  return {};
+}
+
 static void collectMapDataFromMapOperands(
     MapInfoData &mapData, SmallVectorImpl<Value> &mapVars,
     LLVM::ModuleTranslation &moduleTranslation, DataLayout &dl,
@@ -7558,7 +7562,8 @@ static void collectMapDataFromMapOperands(
     // TODO: set HasAttachPtr from Flang for pointee-storage entries.
     mapData.HasAttachPtr.push_back(false);
     mapData.Names.push_back(LLVM::createMappingInformation(
-        mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder()));
+        mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder(),
+        getMapClauseName(mapOp)));
     mapData.DevicePointers.push_back(llvm::OpenMPIRBuilder::DeviceInfoTy::None);
 
     if (mapOp.getMapperId())
@@ -7629,7 +7634,8 @@ static void collectMapDataFromMapOperands(
         // TODO: set HasAttachPtr from Flang for pointee-storage entries.
         mapData.HasAttachPtr.push_back(false);
         mapData.Names.push_back(LLVM::createMappingInformation(
-            mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder()));
+            mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder(),
+            getMapClauseName(mapOp)));
         mapData.DevicePointers.push_back(devInfoTy);
         mapData.Mappers.push_back(nullptr);
         mapData.IsAMapping.push_back(false);
@@ -7689,7 +7695,8 @@ static void collectMapDataFromMapOperands(
       mapData.Mappers.push_back(nullptr);
     }
     mapData.Names.push_back(LLVM::createMappingInformation(
-        mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder()));
+        mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder(),
+        getMapClauseName(mapOp)));
     mapData.DevicePointers.push_back(
         isDevicePtr ? llvm::OpenMPIRBuilder::DeviceInfoTy::Pointer
                     : llvm::OpenMPIRBuilder::DeviceInfoTy::Address);
@@ -8127,7 +8134,8 @@ static void mapParentWithMembers(
   combinedInfo.Mappers.emplace_back(
       parentMapper && !parentClause.getPartialMap() ? parentMapper : nullptr);
   combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-      mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
+      mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder,
+      getMapClauseName(cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]))));
   combinedInfo.BasePointers.emplace_back(mapData.BasePointers[mapDataIndex]);
 
   // Calculate size of the parent object being mapped based on the
@@ -8200,7 +8208,9 @@ static void mapParentWithMembers(
           mapData.DevicePointers[mapDataIndex]);
       combinedInfo.Mappers.emplace_back(nullptr);
       combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-          mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
+          mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder,
+          getMapClauseName(
+              cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]))));
       combinedInfo.BasePointers.emplace_back(
           mapData.BasePointers[mapDataIndex]);
       combinedInfo.Pointers.emplace_back(mapData.Pointers[mapDataIndex]);
@@ -8213,7 +8223,6 @@ static void mapParentWithMembers(
       // members of derived types.
       mapFlag &= ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_RETURN_PARAM;
 
-#if 1//<<<<<<< HEAD
       // TODO: We may want to skip arrays/array sections in this as Clang does.
       // It appears to be an optimisation rather than a necessity though,
       // but this requires further investigation. However, we would have to make
@@ -8231,7 +8240,9 @@ static void mapParentWithMembers(
         combinedInfo.DevicePointers.emplace_back(
             llvm::OpenMPIRBuilder::DeviceInfoTy::None);
         combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-            mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
+            mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder,
+            getMapClauseName(
+                cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]))));
         combinedInfo.BasePointers.emplace_back(
             mapData.BasePointers[mapDataIndex]);
         combinedInfo.Mappers.emplace_back(nullptr);
@@ -8256,7 +8267,6 @@ static void mapParentWithMembers(
             mapData.BasePointers[mapDataOverlapIdx], 1);
       }
 
-#endif//>>>>>>> 5e2e97903dafa5b2f312aefb5db7e879820ca59e
       combinedInfo.Types.emplace_back(mapFlag);
       // TODO: set HasAttachPtr from Flang for pointee-storage entries.
       combinedInfo.HasAttachPtr.emplace_back(false);
@@ -8264,7 +8274,9 @@ static void mapParentWithMembers(
           llvm::OpenMPIRBuilder::DeviceInfoTy::None);
       combinedInfo.Mappers.emplace_back(nullptr);
       combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-          mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
+          mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder,
+          getMapClauseName(
+              cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]))));
       combinedInfo.BasePointers.emplace_back(
           mapData.BasePointers[mapDataIndex]);
       combinedInfo.Pointers.emplace_back(lowAddr);

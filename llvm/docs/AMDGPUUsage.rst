@@ -1029,6 +1029,13 @@ consumed by the AMDGPU backend during code generation.
        produce an error. Modules with **any** (absent flag) are compatible
        with any setting.
 
+       XNACK is disabled if ``SH_MEM_CONFIG.ADDRESS_MODE = GPUVM`` on chips
+       that support XNACK. The current default kernel driver setting is XNACK
+       disabled on the graphics ring and XNACK enabled on the compute ring.
+       If XNACK is enabled, the VMEM latency can be worse. If XNACK is
+       disabled, the 2 SGPRs otherwise reserved for the XNACK mask can be used
+       for general purposes.
+
    * - ``amdgpu.sramecc``
      - ``i32``
      - Error
@@ -2668,8 +2675,8 @@ cases. This will typically be used in conjunction with
 ------------------------------------------
 
 This is generic IR metadata for floating-point :ref:`atomicrmw
-<i_atomicrmw>` operations; see `'atomic.ignore.denormal.mode' Metadata
-<https://llvm.org/docs/LangRef.html#atomic-ignore-denormal-mode-metadata>`_
+<i_atomicrmw>` operations; see :ref:`'atomic.ignore.denormal.mode' Metadata
+<md_atomic.ignore.denormal.mode>`
 in the language reference for its definition. It is required to emit a
 native atomic instruction for AMDGPU global memory, which
 unconditionally flushes float denormals.
@@ -3394,14 +3401,14 @@ The AMDGPU backend uses the following ELF header:
      ``EF_AMDGPU_FEATURE_XNACK_V4``               0x300 XNACK selection mask for
                                                         ``EF_AMDGPU_FEATURE_XNACK_*_V4``
                                                         values.
-     ``EF_AMDGPU_FEATURE_XNACK_UNSUPPORTED_V4``   0x000 XNACK unsupported.
+     ``EF_AMDGPU_FEATURE_XNACK_UNSUPPORTED_V4``   0x000 XNACK mode selection unsupported.
      ``EF_AMDGPU_FEATURE_XNACK_ANY_V4``           0x100 XNACK can have any value.
      ``EF_AMDGPU_FEATURE_XNACK_OFF_V4``           0x200 XNACK disabled.
      ``EF_AMDGPU_FEATURE_XNACK_ON_V4``            0x300 XNACK enabled.
      ``EF_AMDGPU_FEATURE_SRAMECC_V4``             0xc00 SRAMECC selection mask for
                                                         ``EF_AMDGPU_FEATURE_SRAMECC_*_V4``
                                                         values.
-     ``EF_AMDGPU_FEATURE_SRAMECC_UNSUPPORTED_V4`` 0x000 SRAMECC unsupported.
+     ``EF_AMDGPU_FEATURE_SRAMECC_UNSUPPORTED_V4`` 0x000 SRAMECC mode selection unsupported.
      ``EF_AMDGPU_FEATURE_SRAMECC_ANY_V4``         0x400 SRAMECC can have any value.
      ``EF_AMDGPU_FEATURE_SRAMECC_OFF_V4``         0x800 SRAMECC disabled,
      ``EF_AMDGPU_FEATURE_SRAMECC_ON_V4``          0xc00 SRAMECC enabled.
@@ -3421,14 +3428,14 @@ The AMDGPU backend uses the following ELF header:
      ``EF_AMDGPU_FEATURE_XNACK_V4``               0x300      XNACK selection mask for
                                                              ``EF_AMDGPU_FEATURE_XNACK_*_V4``
                                                              values.
-     ``EF_AMDGPU_FEATURE_XNACK_UNSUPPORTED_V4``   0x000      XNACK unsupported.
+     ``EF_AMDGPU_FEATURE_XNACK_UNSUPPORTED_V4``   0x000      XNACK mode selection unsupported.
      ``EF_AMDGPU_FEATURE_XNACK_ANY_V4``           0x100      XNACK can have any value.
      ``EF_AMDGPU_FEATURE_XNACK_OFF_V4``           0x200      XNACK disabled.
      ``EF_AMDGPU_FEATURE_XNACK_ON_V4``            0x300      XNACK enabled.
      ``EF_AMDGPU_FEATURE_SRAMECC_V4``             0xc00      SRAMECC selection mask for
                                                              ``EF_AMDGPU_FEATURE_SRAMECC_*_V4``
                                                              values.
-     ``EF_AMDGPU_FEATURE_SRAMECC_UNSUPPORTED_V4`` 0x000      SRAMECC unsupported.
+     ``EF_AMDGPU_FEATURE_SRAMECC_UNSUPPORTED_V4`` 0x000      SRAMECC mode selection unsupported.
      ``EF_AMDGPU_FEATURE_SRAMECC_ANY_V4``         0x400      SRAMECC can have any value.
      ``EF_AMDGPU_FEATURE_SRAMECC_OFF_V4``         0x800      SRAMECC disabled,
      ``EF_AMDGPU_FEATURE_SRAMECC_ON_V4``          0xc00      SRAMECC enabled.
@@ -3438,6 +3445,18 @@ The AMDGPU backend uses the following ELF header:
                                                              of EFLAGS.
                                                              See :ref:`amdgpu-generic-processor-versioning`
      ============================================ ========== =========================================
+
+  For code object V4 and later, processors with hardwired-on XNACK, such as
+  ``gfx1250``, use ``EF_AMDGPU_FEATURE_XNACK_UNSUPPORTED_V4`` (zero) because
+  they do not support mode selection. Their XNACK behavior is implied by
+  ``EF_AMDGPU_MACH``; a zero XNACK field does not mean replay is disabled on
+  these processors.
+
+  For code object V4 and later, processors with hardwired-on SRAMECC use
+  ``EF_AMDGPU_FEATURE_SRAMECC_UNSUPPORTED_V4`` (zero) because they do not
+  support mode selection. Their SRAMECC behavior is implied by
+  ``EF_AMDGPU_MACH``; a zero SRAMECC field does not mean SRAMECC is disabled
+  on these processors.
 
   .. table:: AMDGPU ``EF_AMDGPU_MACH`` Values
      :name: amdgpu-ef-amdgpu-mach-table

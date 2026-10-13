@@ -221,7 +221,6 @@ ds_tr6_unsupported:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 24
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel ds_exec_overlap
 		.amdhsa_group_segment_fixed_size 256
@@ -229,7 +228,6 @@ ds_tr6_unsupported:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 24
 		.amdhsa_next_free_sgpr 5
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel ds_high_address
 		.amdhsa_group_segment_fixed_size 327680
@@ -237,19 +235,16 @@ ds_tr6_unsupported:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 24
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel ds_tr4_unsupported
 		.amdhsa_group_segment_fixed_size 256
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 0
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel ds_tr6_unsupported
 		.amdhsa_group_segment_fixed_size 256
 		.amdhsa_next_free_vgpr 5
 		.amdhsa_next_free_sgpr 0
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdgpu_metadata
 ---

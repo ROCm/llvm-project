@@ -1,4 +1,4 @@
-//===- MapInfoFinalization.cpp -----------------------------------------===//
+//===- MapInfoFinalization.cpp --------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -609,7 +609,7 @@ public:
         isRefPtee ? parentOp.getMembersIndexAttr() : mlir::ArrayAttr{},
         parentOp.getBounds(),
         /*mapperId=*/mapperId,
-        /*name=*/builder.getStringAttr(""),
+        /*name=*/parentOp.getNameAttr(),
         /*partial_map=*/builder.getBoolAttr(false));
   }
 

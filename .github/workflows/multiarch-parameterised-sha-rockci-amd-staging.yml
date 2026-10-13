@@ -36,7 +36,7 @@ on:
       linux_amdgpu_families:
         type: string
         description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: "gfx94x,gfx110x,gfx90a"
+        default: "gfx94x,gfx110x,gfx90a,gfx125x"
       linux_test_labels:
         type: string
         description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."

@@ -63,7 +63,7 @@ public:
   FullWaveInvariantProjection(const MCSubtargetInfo &STI, Type *I32Ty,
                               Type *I64Ty, bool FullWaveInvariant)
       : ReplicationProjection(STI, STI, I32Ty, I64Ty) {
-    ProvidesFullWaveExecInvariant = FullWaveInvariant;
+    ProvidesSourceWaveExecInvariant = FullWaveInvariant;
   }
 };
 

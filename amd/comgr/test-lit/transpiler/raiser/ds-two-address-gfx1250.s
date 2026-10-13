@@ -111,13 +111,11 @@ ds_two_address_stores:
 		.amdhsa_group_segment_fixed_size 65536
 		.amdhsa_next_free_vgpr 16
 		.amdhsa_next_free_sgpr 0
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel ds_two_address_stores
 		.amdhsa_group_segment_fixed_size 65536
 		.amdhsa_next_free_vgpr 8
 		.amdhsa_next_free_sgpr 0
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdgpu_metadata
 ---

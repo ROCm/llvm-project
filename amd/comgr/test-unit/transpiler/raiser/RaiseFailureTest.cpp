@@ -92,8 +92,10 @@ TEST(RaiseFailure, InKernelFormatsTheKernelScopedMessage) {
             EXPECT_TRUE(F.mnemonic().empty());
             EXPECT_FALSE(F.offset().has_value());
             EXPECT_FALSE(F.format().has_value());
-            EXPECT_EQ(F.detail().str(),
-                      "kernel 'my_kernel': .kd symbol not parsed");
+            EXPECT_EQ(F.detail().str(), ".kd symbol not parsed");
+            EXPECT_EQ(toLog(F),
+                      "missing-kernel-descriptor in kernel 'my_kernel' :: "
+                      ".kd symbol not parsed");
           });
 }
 

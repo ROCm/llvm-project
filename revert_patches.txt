@@ -1,15 +1,9 @@
 ---
-gfx12.5 XNACK ELF flags break mixed-object linking and ROCr ISA lookup; see #4523
-AMDGPU: Remove xnack and sramecc subtarget features (#212792)
----
 rocwmma and CK needs changes
 [AMDGPU][NFC] Change AMDGPU builtins to use ExtVector (#176033)
 ---
 breaks build of hipblaslt
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
----
-breaks rocgdb UT
-[Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
 ---
 breaks windows build: [amd-llvm] terminate called after throwing an instance of 'std::bad_alloc'
 Make][CodeGen] Add PCH for Clang CodeGen (#206018)
@@ -26,6 +20,9 @@ comgr fails to build -lzma
 breaks asan-debug build
 [DebugInfo] Support global addresses in variable locations  (#218722)" (#4800) (2 hours ago) <theRonShark>
 ---
-breaks psdb
-"[AMDGPU] Reserve ENABLE_WAVEFRONT_SIZE32 on gfx125x (#229162)"
+needs merge help
+[DebugInfo] Accept DW_OP_xderef_size and DW_OP_lit1..DW_OP_lit31. (#227839)
+---
+Defered
+Reland "[compiler-rt][asan] Add asan checks for __builtin_assume_dereferencable" (#224163)
 ---

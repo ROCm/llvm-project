@@ -25,6 +25,17 @@ int main(int argc, char *argv[]) {
   }
   else
     printf("OK\n");
+  if (Status == AMD_COMGR_STATUS_SUCCESS && argv[1][0]) {
+    size_t Size;
+    amd_comgr_(action_info_get_isa_name(DataAction, &Size, NULL));
+    char *IsaName = malloc(Size);
+    if (!IsaName)
+      fail("Failed to allocate ISA name");
+    amd_comgr_(action_info_get_isa_name(DataAction, &Size, IsaName));
+    if (strcmp(IsaName, argv[1]))
+      fail("ISA name changed: %s", IsaName);
+    free(IsaName);
+  }
   amd_comgr_(destroy_action_info(DataAction));
   return 0;
 }

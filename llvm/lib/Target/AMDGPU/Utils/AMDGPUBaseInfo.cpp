@@ -145,6 +145,11 @@ unsigned getLoadcntStorecntBitShift(unsigned VersionMajor) {
   return VersionMajor >= 12 ? 8 : 0;
 }
 
+/// \returns barrier member count bit width in M0.
+unsigned getBarrierMemberCountBitWidth(unsigned VersionMajor) {
+  return VersionMajor >= 13 ? 8 : 6;
+}
+
 /// \returns VaSdst bit width
 inline unsigned getVaSdstBitWidth() { return 3; }
 
@@ -394,10 +399,6 @@ struct VOPC64DPPInfo {
 };
 
 struct VOPCDPPAsmOnlyInfo {
-  uint32_t Opcode;
-};
-
-struct VOP3CDPPAsmOnlyInfo {
   uint32_t Opcode;
 };
 
@@ -695,7 +696,7 @@ CanBeVOPD getCanBeVOPD(unsigned Opc, unsigned EncodingFamily, bool VOPD3) {
     return {false, false};
   unsigned Key =
       (Info->VOPDOp << 5) | (EncodingFamily << 1) | (VOPD3 ? 1u : 0u);
-  const VOPDXYInfo *XYInfo = getVOPDXYInfo(Key);
+  const VOPDXYInfo *XYInfo = getVOPDXYInfo(static_cast<uint16_t>(Key));
   if (!XYInfo)
     return {false, false};
   return {XYInfo->IsX, XYInfo->IsY};
@@ -847,11 +848,6 @@ unsigned mapWMMA2AddrTo3AddrOpcode(unsigned Opc) {
   return Info ? Info->Opcode3Addr : ~0u;
 }
 
-unsigned mapWMMA3AddrTo2AddrOpcode(unsigned Opc) {
-  const WMMAOpcodeMappingInfo *Info = getWMMAMappingInfoFrom3AddrOpcode(Opc);
-  return Info ? Info->Opcode2Addr : ~0u;
-}
-
 // Wrapper for Tablegen'd function.  enum Subtarget is not defined in any
 // header files, so we need to wrap it in a function that takes unsigned
 // instead.
@@ -878,8 +874,9 @@ int getVOPDFull(unsigned OpX, unsigned OpY, unsigned EncodingFamily,
                 bool VOPD3) {
   bool IsConvertibleToBitOp = VOPD3 ? getBitOp2(OpY) : 0;
   OpY = IsConvertibleToBitOp ? (unsigned)AMDGPU::V_BITOP3_B32_e64 : OpY;
-  const VOPDInfo *Info =
-      getVOPDInfoFromComponentOpcodes(OpX, OpY, EncodingFamily, VOPD3);
+  const VOPDInfo *Info = getVOPDInfoFromComponentOpcodes(
+      static_cast<uint8_t>(OpX), static_cast<uint8_t>(OpY),
+      static_cast<uint8_t>(EncodingFamily), VOPD3);
   return Info ? Info->Opcode : -1;
 }
 
@@ -1078,75 +1075,11 @@ VOPD::InstInfo getVOPDInstInfo(unsigned VOPDOpcode,
 
 TargetID createAMDGPUTargetID(const MCSubtargetInfo &STI,
                               StringRef FeatureString) {
-  TargetID TargetID(parseArchAMDGCN(STI.getCPU()), STI.getTargetTriple(),
-                    STI.getFeatureBits().test(FeatureXNACKOnOffModes)
-                        ? TargetIDSetting::Any
-                        : TargetIDSetting::Unsupported,
-                    STI.getFeatureBits().test(FeatureSupportsSRAMECC)
-                        ? TargetIDSetting::Any
-                        : TargetIDSetting::Unsupported);
-
-  // Check if xnack or sramecc is explicitly enabled or disabled.  In the
-  // absence of the target features we assume we must generate code that can run
-  // in any environment.
-  SubtargetFeatures Features(FeatureString);
-  std::optional<bool> XnackRequested;
-  std::optional<bool> SramEccRequested;
-
-  for (const std::string &Feature : Features.getFeatures()) {
-    if (Feature == "+xnack")
-      XnackRequested = true;
-    else if (Feature == "-xnack")
-      XnackRequested = false;
-    else if (Feature == "+sramecc")
-      SramEccRequested = true;
-    else if (Feature == "-sramecc")
-      SramEccRequested = false;
-  }
-
-  // Only allow changing xnack setting if the target supports on/off modes.
-  // Targets without on/off mode support keep their initial setting
-  // (Unsupported).
-
-  bool XnackSupported = STI.getFeatureBits().test(FeatureXNACKOnOffModes);
-  bool SramEccSupported = TargetID.isSramEccSupported();
-
-  if (XnackRequested) {
-    if (XnackSupported) {
-      TargetID.setXnackSetting(*XnackRequested ? TargetIDSetting::On
-                                               : TargetIDSetting::Off);
-    } else {
-      // If a specific xnack setting was requested and this GPU does not support
-      // xnack emit a warning. Setting will remain set to "Unsupported".
-      if (*XnackRequested) {
-        errs() << "warning: xnack 'On' was requested for a processor that does "
-                  "not support it!\n";
-      } else {
-        errs() << "warning: xnack 'Off' was requested for a processor that "
-                  "does not support it!\n";
-      }
-    }
-  }
-
-  if (SramEccRequested) {
-    if (SramEccSupported) {
-      TargetID.setSramEccSetting(*SramEccRequested ? TargetIDSetting::On
-                                                   : TargetIDSetting::Off);
-    } else {
-      // If a specific sramecc setting was requested and this GPU does not
-      // support sramecc emit a warning. Setting will remain set to
-      // "Unsupported".
-      if (*SramEccRequested) {
-        errs() << "warning: sramecc 'On' was requested for a processor that "
-                  "does not support it!\n";
-      } else {
-        errs() << "warning: sramecc 'Off' was requested for a processor that "
-                  "does not support it!\n";
-      }
-    }
-  }
-
-  return TargetID;
+  // In codegen the mode comes from module flags and FeatureString is empty, so
+  // the processor defaults apply. The assembler has no target directive, so it
+  // pins the mode via the +xnack/-xnack/+sramecc/-sramecc feature string.
+  return TargetID::createFromSubtargetFeatures(STI.getTargetTriple(),
+                                               STI.getCPU(), FeatureString);
 }
 
 namespace IsaInfo {
@@ -1339,12 +1272,6 @@ unsigned getNumExtraSGPRs(const MCSubtargetInfo &STI, bool VCCUsed,
   return ExtraSGPRs;
 }
 
-unsigned getNumExtraSGPRs(const MCSubtargetInfo &STI, bool VCCUsed,
-                          bool FlatScrUsed) {
-  return getNumExtraSGPRs(STI, VCCUsed, FlatScrUsed,
-                          STI.getFeatureBits().test(AMDGPU::FeatureXNACK));
-}
-
 static unsigned getGranulatedNumRegisterBlocks(unsigned NumRegs,
                                                unsigned Granule) {
   return divideCeil(std::max(1u, NumRegs), Granule);
@@ -1514,13 +1441,6 @@ unsigned getMaxNumVGPRs(const MCSubtargetInfo &STI, unsigned WavesPerEU,
   return std::min(MaxNumVGPRs, AddressableNumVGPRs);
 }
 
-unsigned getEncodedNumVGPRBlocks(const MCSubtargetInfo &STI, unsigned NumVGPRs,
-                                 std::optional<bool> EnableWavefrontSize32) {
-  return getGranulatedNumRegisterBlocks(
-             NumVGPRs, getVGPREncodingGranule(STI, EnableWavefrontSize32)) -
-         1;
-}
-
 unsigned getAllocatedNumVGPRBlocks(const MCSubtargetInfo &STI,
                                    unsigned NumVGPRs,
                                    unsigned DynamicVGPRBlockSize,
@@ -1563,14 +1483,6 @@ void initDefaultAMDKernelCodeT(AMDGPUMCKernelCodeT &KernelCode,
         S_00B848_WGP_MODE(STI.getFeatureBits().test(FeatureCuMode) ? 0 : 1) |
         S_00B848_MEM_ORDERED(1) | S_00B848_FWD_PROGRESS(1);
   }
-}
-
-bool isGroupSegment(const GlobalValue *GV) {
-  return GV->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS;
-}
-
-bool isGlobalSegment(const GlobalValue *GV) {
-  return GV->getAddressSpace() == AMDGPUAS::GLOBAL_ADDRESS;
 }
 
 bool isReadOnlySegment(const GlobalValue *GV) {
@@ -1781,6 +1693,10 @@ unsigned getStorecntBitMask(const IsaVersion &Version) {
   return (1 << getStorecntBitWidth(Version.Major)) - 1;
 }
 
+unsigned getBarrierMemberCountBitMask(const IsaVersion &Version) {
+  return (1 << getBarrierMemberCountBitWidth(Version.Major)) - 1;
+}
+
 unsigned getWaitcntBitMask(const IsaVersion &Version) {
   unsigned VmcntLo = getBitMask(getVmcntBitShiftLo(Version.Major),
                                 getVmcntBitWidthLo(Version.Major));
@@ -1967,7 +1883,7 @@ static int encodeCustomOperandVal(const CustomOperandVal &Op,
                                   int64_t InputVal) {
   if (InputVal < 0 || InputVal > Op.Max)
     return OPR_VAL_INVALID;
-  return Op.encode(InputVal);
+  return Op.encode(static_cast<unsigned>(InputVal));
 }
 
 static int encodeCustomOperand(const CustomOperandVal *Opr, int Size,
@@ -2393,7 +2309,7 @@ bool msgSupportsStream(int64_t MsgId, int64_t OpId,
 
 void decodeMsg(unsigned Val, uint16_t &MsgId, uint16_t &OpId,
                uint16_t &StreamId, const MCSubtargetInfo &STI) {
-  MsgId = Val & getMsgIdMask(STI);
+  MsgId = static_cast<uint16_t>(Val & getMsgIdMask(STI));
   if (isGFX11Plus(STI)) {
     OpId = 0;
     StreamId = 0;
@@ -2441,7 +2357,8 @@ bool msgDoesNotUseM0(int64_t MsgId, const MCSubtargetInfo &STI) {
 //===----------------------------------------------------------------------===//
 
 unsigned getInitialPSInputAddr(const Function &F) {
-  return F.getFnAttributeAsParsedInteger("InitialPSInputAddr", 0);
+  return static_cast<unsigned>(
+      F.getFnAttributeAsParsedInteger("InitialPSInputAddr", 0));
 }
 
 bool getHasColorExport(const Function &F) {
@@ -2456,17 +2373,13 @@ bool getHasDepthExport(const Function &F) {
 }
 
 unsigned getDynamicVGPRBlockSize(const Function &F) {
-  unsigned BlockSize =
-      F.getFnAttributeAsParsedInteger("amdgpu-dynamic-vgpr-block-size", 0);
+  unsigned BlockSize = static_cast<unsigned>(
+      F.getFnAttributeAsParsedInteger("amdgpu-dynamic-vgpr-block-size", 0));
 
   if (BlockSize == 16 || BlockSize == 32)
     return BlockSize;
 
   return 0;
-}
-
-bool hasXNACK(const MCSubtargetInfo &STI) {
-  return STI.hasFeature(AMDGPU::FeatureXNACK);
 }
 
 bool hasMIMG_R128(const MCSubtargetInfo &STI) {
@@ -3532,7 +3445,7 @@ MCRegister getVGPRWithMSBs(MCRegister Reg, unsigned MSBs,
 }
 
 static std::optional<unsigned>
-convertSetRegImmToVgprMSBs(unsigned Imm, unsigned Simm16,
+convertSetRegImmToVgprMSBs(uint64_t Imm, uint64_t Simm16,
                            bool HasSetregVGPRMSBFixup) {
   constexpr unsigned VGPRMSBShift =
       llvm::countr_zero_constexpr<unsigned>(AMDGPU::Hwreg::DST_VGPR_MSB);

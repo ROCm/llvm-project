@@ -293,7 +293,8 @@ Error raiseReadFirstLane32(RaiseContext &Ctx, const DecodedInst &Di,
   Value *Lane32 = Ctx.B.CreateZExtOrTrunc(SourceLane, Ctx.B.getInt32Ty(),
                                           "readfirstlane.index");
   Value *Result;
-  if (Ctx.Projection.providesFullWaveExecInvariant()) {
+  if (Ctx.Projection.providesSourceWaveExecInvariant() &&
+      Ctx.Projection.numSourceWavesPerTarget() > 1) {
     Result = emitSourceWaveRead(Ctx, *Src, Lane32, "readfirstlane");
   } else {
     Function *ReadLane = Intrinsic::getOrInsertDeclaration(
@@ -326,7 +327,8 @@ Error raiseReadLane32(RaiseContext &Ctx, const DecodedInst &Di,
       Ctx.B.CreateZExtOrTrunc(*Lane, Ctx.B.getInt32Ty(), "readlane.index");
   Value *SourceLane = emitSourceWaveLane(Ctx, Lane32, "readlane.source.lane");
   Value *Result = nullptr;
-  if (Ctx.Projection.targetWaveSize() == Ctx.Projection.sourceWaveSize()) {
+  if (Ctx.Projection.targetWaveSize() == Ctx.Projection.sourceWaveSize() ||
+      Ctx.Projection.usesReplicatedDispatch()) {
     Module *M = Ctx.B.GetInsertBlock()->getModule();
     Function *ReadLane = Intrinsic::getOrInsertDeclaration(
         M, Intrinsic::amdgcn_readlane, {Ctx.B.getInt32Ty()});
