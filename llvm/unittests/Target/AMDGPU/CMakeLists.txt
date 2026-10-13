@@ -29,6 +29,7 @@ add_llvm_target_unittest(AMDGPUTests
   DwarfRegMappings.cpp
   ExecMayBeModifiedBeforeAnyUse.cpp
   GCNHazardRecognizerTest.cpp
+  GCNHazardWalkTest.cpp
   GCNRegPressureTest.cpp
   InstSizes.cpp
   LiveRegUnits.cpp

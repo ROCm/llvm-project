@@ -13,6 +13,7 @@
 #include "GCNHazardRecognizer.h"
 #include "AMDGPUTargetMachine.h"
 #include "AMDGPUWaitcntUtils.h"
+#include "GCNHazardWalk.h"
 #include "GCNSubtarget.h"
 #include "SIMachineFunctionInfo.h"
 #include "llvm/ADT/Statistic.h"
@@ -960,157 +961,6 @@ hasHazard(StateT InitialState,
   return false;
 }
 
-// Number of trailing terminators of \p Pred not executed on the edge to \p MBB:
-// control leaves at the first terminator branching to \p MBB, so the ones after
-// it are dead on that edge. A fallthrough executes them all.
-static unsigned countUnexecutedTerminators(const MachineBasicBlock &Pred,
-                                           const MachineBasicBlock *MBB) {
-  const SIInstrInfo &TII =
-      *Pred.getParent()->getSubtarget<GCNSubtarget>().getInstrInfo();
-  unsigned Unexecuted = 0, Passed = 0;
-  for (auto I = Pred.instr_rbegin(), E = Pred.instr_rend();
-       I != E && I->isTerminator(); ++I, ++Passed) {
-    // Only an explicit MBB destination identifies this edge; the last match is
-    // the earliest such branch in program order.
-    if (I->isBranch() && I->getNumOperands() > 0 && I->getOperand(0).isMBB() &&
-        TII.getBranchDestBlock(*I) == MBB)
-      Unexecuted = Passed;
-  }
-  return Unexecuted;
-}
-
-// Wait states \p MI adds to a distance. Inline asm may be empty, so it adds
-// none, which is the worst case.
-static unsigned
-getCountedWaitStates(const MachineInstr &MI,
-                     GCNHazardRecognizer::GetNumWaitStatesFn GetNumWaitStates) {
-  return MI.isInlineAsm() ? 0 : GetNumWaitStates(MI);
-}
-
-namespace {
-
-// Answers GCNHazardRecognizer::getMax*WindowDeficit, which documents the
-// result, by walking the CFG backwards from the instruction being checked,
-// counting distances with GetNumWaitStates. That needs the instruction in its
-// final place, so hazard recognizer mode only. Each object answers one query.
-class WindowDeficitSearch {
-public:
-  WindowDeficitSearch(
-      function_ref<std::optional<int>(const MachineInstr &)> WindowFor,
-      int MaxWindow,
-      GCNHazardRecognizer::GetNumWaitStatesFn GetNumWaitStates =
-          SIInstrInfo::getNumWaitStates)
-      : WindowFor(WindowFor), GetNumWaitStates(GetNumWaitStates),
-        MaxWindow(MaxWindow) {}
-
-  int run(const MachineInstr &MI);
-
-private:
-  // A block to scan upwards from Start, which is Distance away from the
-  // instruction being checked. In a predecessor, Start is the last instruction
-  // above the terminators, and Distance includes the ones the edge executes.
-  struct Arrival {
-    const MachineBasicBlock *MBB;
-    MachineBasicBlock::const_reverse_instr_iterator Start;
-    int Distance;
-  };
-
-  void arrive(const MachineBasicBlock *MBB,
-              MachineBasicBlock::const_reverse_instr_iterator Start,
-              int Distance);
-  void scan(Arrival A);
-
-  const function_ref<std::optional<int>(const MachineInstr &)> WindowFor;
-  const GCNHazardRecognizer::GetNumWaitStatesFn GetNumWaitStates;
-  const int MaxWindow;
-  int Deficit = 0;
-  // Pending[D] holds the arrivals at distance D, and Best the smallest distance
-  // each block has been queued at. Buckets are emptied in increasing distance,
-  // so the first arrival scanned at a block is the shortest way into it, and
-  // any later one is stale.
-  SmallVector<SmallVector<Arrival, 2>, 4> Pending;
-  DenseMap<const MachineBasicBlock *, int> Best;
-};
-
-} // end anonymous namespace
-
-void WindowDeficitSearch::arrive(
-    const MachineBasicBlock *MBB,
-    MachineBasicBlock::const_reverse_instr_iterator Start, int Distance) {
-  // No window exceeds MaxWindow, so nothing this far back can beat the deficit
-  // already found.
-  if (MaxWindow - Distance <= Deficit)
-    return;
-
-  if (Pending.empty())
-    Pending.resize(MaxWindow);
-
-  auto [It, Inserted] = Best.try_emplace(MBB, Distance);
-  if (!Inserted) {
-    if (It->second <= Distance)
-      return;
-    It->second = Distance;
-  }
-
-  assert(Distance < MaxWindow && "arrival outside the window");
-  Pending[Distance].push_back({MBB, Start, Distance});
-}
-
-// \p A is a copy because arrive() may append to the bucket it came from, which
-// can move that bucket's elements.
-void WindowDeficitSearch::scan(Arrival A) {
-  // A shorter way into this block has been queued since.
-  if (Best.lookup(A.MBB) < A.Distance)
-    return;
-
-  int Distance = A.Distance;
-  for (auto I = A.Start, E = A.MBB->instr_rend(); I != E; ++I) {
-    if (I->isBundle())
-      continue;
-
-    if (std::optional<int> Window = WindowFor(*I)) {
-      assert(*Window >= 0 && *Window <= MaxWindow && "window out of bounds");
-      Deficit = std::max(Deficit, *Window - Distance);
-    }
-
-    Distance += getCountedWaitStates(*I, GetNumWaitStates);
-
-    if (Distance >= MaxWindow)
-      return;
-  }
-
-  for (const MachineBasicBlock *Pred : A.MBB->predecessors()) {
-    auto Start = Pred->instr_rbegin(), End = Pred->instr_rend();
-    for (unsigned N = countUnexecutedTerminators(*Pred, A.MBB); N; --N)
-      ++Start;
-
-    int Executed = 0;
-    for (; Start != End && Start->isTerminator(); ++Start) {
-      assert(!WindowFor(*Start) && "terminators must not ask for a window");
-      Executed += getCountedWaitStates(*Start, GetNumWaitStates);
-    }
-
-    arrive(Pred, Start, Distance + Executed);
-  }
-}
-
-int WindowDeficitSearch::run(const MachineInstr &MI) {
-  // Only the part above MI is scanned here, so the block stays out of Best: a
-  // backedge into it must still scan it from its end.
-  scan({MI.getParent(), std::next(MI.getReverseIterator()), 0});
-
-  // Distances never shrink along a path, so a scan only queues arrivals at the
-  // distance being swept or further, and one pass over the buckets is enough.
-  // The inner loop re-reads the size because an edge that adds nothing appends
-  // to the bucket in hand; Best keeps a cycle that adds nothing from looping.
-  for (int Distance = 0; Distance < static_cast<int>(Pending.size());
-       ++Distance)
-    for (unsigned I = 0; I != Pending[Distance].size(); ++I)
-      scan(Pending[Distance][I]);
-
-  return Deficit;
-}
-
 // Returns a minimum wait states since \p I walking all predecessors.
 // Only scans until \p IsExpired does not return true.
 // Can only be run in a hazard recognizer mode.
@@ -1168,10 +1018,12 @@ getWaitStatesSince(GCNHazardRecognizer::IsHazardFn IsHazard,
                             Visited, GetNumWaitStates);
 }
 
+template <typename WindowForT>
 int GCNHazardRecognizer::getMaxWindowDeficit(int MaxWindow,
-                                             WindowForFn WindowFor) const {
+                                             WindowForT WindowFor) const {
   if (isHazardRecognizerMode())
-    return WindowDeficitSearch(WindowFor, MaxWindow).run(*CurrCycleInstr);
+    return findMaxWindowDeficit(GCNHazardWalk(*CurrCycleInstr, MaxWindow),
+                                WindowFor);
 
   // EmittedInstrs is capped and can be shorter than the widest window, which
   // costs scheduling quality only: the standalone pass still pads.
@@ -1226,14 +1078,16 @@ int GCNHazardRecognizer::getWaitStatesSince(IsHazardFn IsHazard,
   return getWaitStatesSince(IsHazard, Limit, SIInstrInfo::getNumWaitStates);
 }
 
+template <typename WindowForT>
 int GCNHazardRecognizer::getMaxVALUWindowDeficit(int MaxWindow,
-                                                 WindowForFn WindowFor) const {
+                                                 WindowForT WindowFor) const {
   if (isHazardRecognizerMode()) {
     auto GetVALUWaitStates = [](const MachineInstr &MI) -> unsigned {
       return SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/true) ? 1 : 0;
     };
-    return WindowDeficitSearch(WindowFor, MaxWindow, GetVALUWaitStates)
-        .run(*CurrCycleInstr);
+    return findMaxWindowDeficit(
+        GCNHazardWalk(*CurrCycleInstr, MaxWindow, GetVALUWaitStates),
+        WindowFor);
   }
 
   // EmittedVALUInstrs is capped at MaxVALULookAhead, so a MaxWindow beyond that
@@ -2820,16 +2674,22 @@ int GCNHazardRecognizer::checkWMMACoexecutionHazards(MachineInstr *MI) const {
       IsWMMA ? (IsLowestRateWMMA ? 17 : 9) : (IsLowestRateWMMA ? 16 : 8);
 
   auto WindowFor = [=](const MachineInstr &I) -> std::optional<int> {
-    if (!TII->isXDLWMMA(I))
+    // Called for every step, and most are no WMMA: test only the flags here.
+    if (!SIInstrInfo::isWMMA(I) && !SIInstrInfo::isSWMMAC(I))
       return std::nullopt;
-    if (IsWMMA ? !hasWMMAToWMMARegOverlap(I, *MI)
-               : !hasWMMAToVALURegOverlap(I, *MI))
-      return std::nullopt;
-    return RequiredWaitStates[getWMMAHazardInstInCategory(I, TII, TSchedModel,
-                                                          ST)];
+    return getWMMACoexecutionWindow(I, *MI, RequiredWaitStates);
   };
 
   return getMaxVALUWindowDeficit(MaxWaitStates, WindowFor);
+}
+
+std::optional<int> GCNHazardRecognizer::getWMMACoexecutionWindow(
+    const MachineInstr &WMMA, const MachineInstr &MI,
+    ArrayRef<int> RequiredWaitStates) const {
+  if (!isCoexecutionHazardFor(WMMA, MI))
+    return std::nullopt;
+  return RequiredWaitStates[getWMMAHazardInstInCategory(WMMA, &TII, TSchedModel,
+                                                        ST)];
 }
 
 bool GCNHazardRecognizer::hasWMMAToWMMARegOverlap(

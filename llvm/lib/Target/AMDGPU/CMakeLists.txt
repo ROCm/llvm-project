@@ -128,6 +128,7 @@ add_llvm_target(AMDGPUCodeGen
   GCNCreateVOPD.cpp
   GCNDPPCombine.cpp
   GCNHazardRecognizer.cpp
+  GCNHazardWalk.cpp
   GCNILPSched.cpp
   GCNIterativeScheduler.cpp
   GCNMinRegStrategy.cpp
