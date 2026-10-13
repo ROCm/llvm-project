@@ -7485,6 +7485,11 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
     if (N1.getValueType().getScalarType() == MVT::i1)
       return getNode(ISD::VECREDUCE_AND, DL, VT, N1);
     break;
+  case ISD::MASK_BEFOREFIRST:
+    // With a single lane, the result is true iff that lane is false.
+    if (VT.getVectorElementCount().isScalar())
+      return getLogicalNOT(DL, N1, VT);
+    break;
   case ISD::VECTOR_REPEAT:
     assert(N1.getValueType().isFixedLengthVector() &&
            "VECTOR_REPEAT requires a fixed-length vector operand");
@@ -14036,6 +14041,10 @@ ConstantSDNode *llvm::isConstOrConstSplat(SDValue N, const APInt &DemandedElts,
     }
   }
 
+  if (N.getOpcode() == ISD::MERGE_VALUES)
+    return isConstOrConstSplat(N.getOperand(N.getResNo()), DemandedElts,
+                               AllowUndefs, AllowTruncation);
+
   return nullptr;
 }
 
@@ -15200,9 +15209,9 @@ std::optional<bool> SelectionDAG::isBoolConstant(SDValue N) const {
   if (!Const)
     return std::nullopt;
 
-  EVT VT = N->getValueType(0);
+  EVT VT = N.getValueType();
   const APInt CVal = Const->getAPIntValue().trunc(VT.getScalarSizeInBits());
-  switch (TLI->getBooleanContents(N.getValueType())) {
+  switch (TLI->getBooleanContents(VT)) {
   case TargetLowering::ZeroOrOneBooleanContent:
     if (CVal.isOne())
       return true;
