@@ -1,4 +1,5 @@
 ; REQUIRES: comgr-has-transpiler, comgr-has-llc
+; REQUIRES stability
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --specialize-workgroup=1024,1,1 > %t.ll
