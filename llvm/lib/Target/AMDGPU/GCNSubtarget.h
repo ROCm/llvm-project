@@ -628,6 +628,8 @@ public:
   /// SRC1 X/Y are distinct VGPRs with the same parity.
   bool hasGFX11VOPDInterlockHazard() const { return getGeneration() == GFX11; }
 
+  bool hasPkF32InvalidOpSel() const { return HasGFX950Insts; }
+
   bool hasCvtScaleForwardingHazard() const { return HasGFX950Insts; }
 
   // All GFX9 targets experience a fetch delay when an instruction at the start
