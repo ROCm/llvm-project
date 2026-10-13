@@ -9,8 +9,8 @@ sufficient to implement inter-thread communication via memory. But in most
 communication patterns, not all memory accesses performed by a thread need to be
 exposed to other threads. Even when they do need to be exposed, not all threads
 may need to observe these memory accesses. This document describes the *AMDGPU
-memory model* that allows the user to control how the side-effects of memory
-accesses are propagated across threads. The programmer expresses this using
+memory model* that allows the user to control how the effects of write
+operations are propagated across threads. The programmer expresses this using
 **new intrinsics and metadata** as described below, and the implementation can
 then choose a more efficient mechanism to complete them, such as the cache
 policy bits in an AMDGPU device.
@@ -19,7 +19,7 @@ The AMDGPU memory model defines a transitive *inter-thread-happens-before*
 relation which is then included in a non-transitive *amdgpu-happens-before*
 relation. But amdgpu-happens-before by itself is not sufficient to describe
 observable executions. Additionally, *availability* and *visibility* are
-required to describe how the side-effects of memory accesses become observable
+required to describe how the effects of write operations become observable
 in other threads. This requirement is captured by *location-order*.
 
 The AMDGPU-specific intrinsics and metadata opt out of the LLVM memory model,
@@ -50,39 +50,64 @@ Memory Access
   - load/store operations performed by `atomic` instructions
   - *visibility* and *availability* operations
 
+Side-effects of an Operation
+: The union of the set of memory locations that this operation accesses and the
+  set of memory locations that this operation synchronizes (see below).
+  [Informational note -- For a synchronizing operation `X`, the side-effects are
+  the same as the set of locations that `X` can synchronize, since the latter
+  contains the memory accesses performed by `X`.]
+
 (amdgpu-synchronizing-operation)=
 
-### Synchronizing Operations
+## Memory Synchronization
 
-Certain operations propagate the side-effects of memory accesses across threads
-by *synchronizing* with other such operations. These are called *synchronizing
-operations*. For example (but not limited to):
+Certain operations can synchronize the state of memory with memory operations
+from other threads. This is defined separately for each operation. Some examples
+of operations that can synchronize memory across threads:
 
 - `fence` with any ordering
 - `store atomic` with `release` ordering or higher
 - `load atomic` with `acquire` ordering or higher
 
-A synchronizing operation specifies the set of memory locations that it
-synchronizes. If no set is explicitly mentioned, then that operation
-synchronizes all memory locations. [Informational note --- This is independent
-of the memory location that the operation itself might access.]
+(amdgpu-synchronize-with)=
+
+### `synchronize-with`
+
+The interaction that synchronizes the state of memory is captured by the
+*synchronize-with* relation.
+
+When an operation `X` *synchronizes-with* an operation `Y`:
+- `X` and `Y` are called *synchronizing operations*,
+- `X` is called a *release operation*, and,
+- `Y` is called an *acquire operation*.
+
+### Synchronizing Sets of Locations
+
+A synchronizing operation specifies the set of memory locations that it can
+synchronize. If no set is explicitly mentioned, then that operation can
+synchronize all memory locations.
+
+A synchronizing operation that is also a memory access (e.g., an atomic
+operation) always can synchronize the locations that it accesses along with any
+additional locations specified for that operation.
 
 For example:
 
 `store atomic release %ptr`
-: Atomically stores the specified value in the memory location indicated by
-  `%ptr`, and synchronizes all other memory locations.
+: An atomic store operation that synchronizes all locations in memory, including
+  the one accessed via the `%ptr` argument.
+
+`load atomic acquire %ptr !{!"amdgpu-synchronize-as", !"global"}`
+: An atomic load operation that synchronizes all locations in global memory, in
+  addition to the one accessed via the `%ptr` argument.
 
 `fence acquire !{!"amdgpu-synchronize-as", !"local"}`
 : When suitably paired with an atomic operation, synchronizes all memory
   locations within the `local` address space.
 
-(amdgpu-release-acquire)=
-
-### Acquire and Release Operations
-
-When an operation `A` synchronizes-with an operation `B`, `A` is called a
-*release operation* and `B` is called an *acquire operation*.
+Let `S1` and `S2` be the side-effects of operations `X` and `Y` respectively. If
+`X` *synchronizes-with* `Y`, then the set of locations `S` synchronized by that
+*synchronize-with* edge is the intersection `S = S1 ∩ S2`.
 
 (amdgpu-scopes)=
 
@@ -171,15 +196,15 @@ termed as the *common scope* of `X` and `Y`.
 
 ## Availability and Visibility
 
-Availability determines how *far* the side-effects of a write have been
-forwarded in the system relative to that write. Visibility determines how
-*close* the side-effects of the same write have reached relative to an observer
-operation (typically a read).
+Availability determines how *far* the effect of a write has been forwarded in
+the system relative to that write. Visibility determines how *close* the effect
+of the same write has reached relative to an observer operation (typically a
+read).
 
-Consider a write `W`d that *amdgpu-happens-before* a read `R` to the same
+Consider a write `W` that *amdgpu-happens-before* a read `R` to the same
 address:
 
-- `R` can potentially observe the side-effects of `W` **only if W is
+- `R` can potentially observe the effect of `W` **only if W is
   visible** to `R`.
 - `W` can potentially be visible to `R` **only if W is first made
   available** to `R`.
@@ -206,7 +231,7 @@ cache will fail to observe this store.
 ### store-available
 
 A *store-available* operation `X` writes data to the specified location, and
-then propagates those side-effects up to its scope instance `S` and also all
+then propagates this effect on memory up to its scope instance `S` and also all
 the subscope instances of `S` that contain `X`.
 
 ```llvm
@@ -264,8 +289,8 @@ flat address resolves to `addrspace(3)`.
 :::{note}
 This is independent of the `syncscope` of an atomic access. For example, even if
 a `store atomic` to `addrspace(3)` specifies a smaller `syncscope` such as
-"wavefront", the side-effects are made available at "lds-dma" scope. In other
-words, the scope for atomicity is not always the same as the scope for
+"wavefront", the effect of this write is made available at "lds-dma" scope. In
+other words, the scope for atomicity is not always the same as the scope for
 availability/visibility.
 :::
 
@@ -314,10 +339,11 @@ It only affects the synchronization of other memory accesses.
 
 ### make-available and make-visible
 
-*make-available* and *make-visible* operations propagate certain side-effects
-from or to the specified scope respectively. They are similar to the
-*store-available* and *load-visible* operations, except that their effect is not
-limited to specific locations.
+*make-available* and *make-visible* operations propagate the effects of certain
+writes from or to the specified scope respectively.
+
+A synchronizing operation is also a *make-available* or *make-visible*
+operation, but only when specified in its definition.
 
 ```llvm
 store atomic [syncscope("<target-scope>")] <ordering> [, !mmra !{!"amdgcn-av", !"none"}]
@@ -327,13 +353,17 @@ cmpxchg      [syncscope("<target-scope>")] <ordering> [, !mmra !{!"amdgcn-av", !
 fence        [syncscope("<target-scope>")] <ordering> [, !mmra !{!"amdgcn-av", !"none"}]
 ```
 
-A synchronizing operation with at least `release` ordering is a
+An `atomic` or `fence` operation with at least `release` ordering is a
 *make-available* operation with scope `syncscope`, if it is not marked as
 `!{!"amdgcn-av", !"none"}`.
 
-A synchronizing operation with at least `acquire` ordering is a
+An `atomic` or `fence` operation with at least `acquire` ordering is a
 *make-visible* operation with scope `syncscope`, if it is not marked as
 `!{!"amdgcn-av", !"none"}`.
+
+If a *make-available* or *make-visible* operation is a synchronizing operation,
+then its effect on availability and visibility is limited to the locations
+included in its *side-effects*.
 
 ```llvm
 ; This includes the following operations:
@@ -359,18 +389,15 @@ The *inter-thread-happens-before* relation is parameterized by a *non-empty* set
 of memory locations `S`.
 
 An operation `A` *inter-thread-happens-before\<S\>* an operation `B` for the set
-of memory locations `S` if any of the following is true:
+of memory locations `S` if one of the following is true:
 
-- `A` *synchronizes-with* `B` and `S` is included in the set of memory locations
-  {ref}`synchronized by<amdgpu-synchronizing-operation>` both `A` and `B`.
-- `A` accesses locations in `S` or includes `S` in the set of locations it
-  synchronizes, `B` is a {ref}`release operation
-  <amdgpu-release-acquire>` that includes `S` in the set of locations it
-  synchronizes and `A` is program-ordered before `B`.
-- `A` is an {ref}`acquire operation <amdgpu-release-acquire>` that includes `S`
-  in the set of locations it synchronizes, `B` accesses locations in `S` or
-  includes `S` in the set of locations it synchronizes and `A` is
-  program-ordered before `B`.
+- `A` and `B` each include `S` in their side-effects and one of the following is
+  true:
+  - `A` is *program-ordered* before `B` and `B` is a {ref}`release operation
+    <amdgpu-synchronize-with>`.
+  - `A` is an {ref}`acquire operation <amdgpu-synchronize-with>` and `A` is
+    *program-ordered* before `B`.
+  - `A` *synchronizes-with* `B`.
 - For some operation `X`, `A` *inter-thread-happens-before\<S\>* `X` and `X`
   *inter-thread-happens-before\<S\>* `B`.
 
@@ -380,7 +407,7 @@ of memory locations `S` if any of the following is true:
 
 An operation `A` *amdgpu-happens-before* an operation `B` if:
 
-- `A` is program-ordered before `B`, or,
+- `A` is *program-ordered* before `B`, or,
 - `A` *inter-thread-happens-before\<S\>* `B` for some set of locations `S`.
 
 ### Availability Operation

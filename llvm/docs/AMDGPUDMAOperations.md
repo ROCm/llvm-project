@@ -236,16 +236,13 @@ locations that are accessed by `D`. [Informational note --- `S` typically
 contains the locations indicated by both the source and destination pointer
 operands on `X`.]
 
-`dma_entry` and `dma_complete` are both {ref}`synchronizing operations
-<amdgpu-synchronizing-operation>` that synchronize the set `S`.
+`dma_entry` and `dma_complete` can each synchronize the set `S`.
 
-`X` is a synchronizing operation that synchronizes-with `dma_entry`.
+`X` synchronizes-with `dma_entry`.
 
-If `D` is a synchronous DMA operation:
-- Each memory access by `D` *inter-thread-happens-before\<S\>* `dma_complete`,
-  and,
-- `dma_complete` *inter-thread-happens-before\<S\>* any operation that follows
-  `X` in program-order.
+If `D` is a synchronous DMA operation, then `dma_complete` synchronizes-with a
+hypothetical `synchronous_dma_wait` operation that occurs in program-order after
+`X` and before any other operation in the same thread.
 
 If `D` is *completed-at* a `wait.asyncmark()` operation `Y`, then the
 `dma_complete` operation performed by `D` synchronizes-with `Y`.
