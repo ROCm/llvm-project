@@ -674,7 +674,7 @@ void RegionMixInfo::refreshFromBoundary(SchedBoundary &Zone,
     unsigned Idx =
         static_cast<unsigned>(classifyFlavor(*SU->getInstr(), SII));
     ReadyCount[Idx]++;
-    ReadyCycles[Idx] += Heurs->getHWUICyclesForSU(SU);
+    ReadyCycles[Idx] += Heurs->getHWUICyclesForMI(SU->getInstr());
   };
   for (SUnit *SU : Zone.Available.elements())
     Bump(SU);
@@ -1151,10 +1151,6 @@ CandidateHeuristics::getHWUIFromFlavor(InstructionFlavor Flavor) {
 
 unsigned CandidateHeuristics::getMaxBlockingCycles(const MCSchedClassDesc *SC,
                                                    const MachineInstr *MI) {
-  // Loads and stores are not pipelined.
-  if (MI->mayLoadOrStore())
-    return SchedModel->computeInstrLatency(MI, false);
-
   unsigned ReleaseAtCycle = 0;
   for (TargetSchedModel::ProcResIter PI = SchedModel->getWriteProcResBegin(SC),
                                      PE = SchedModel->getWriteProcResEnd(SC);
@@ -1166,32 +1162,19 @@ unsigned CandidateHeuristics::getMaxBlockingCycles(const MCSchedClassDesc *SC,
   return ReleaseAtCycle;
 }
 
-unsigned CandidateHeuristics::getHWUICyclesForSU(SUnit *SU) {
-  assert(SchedModel && SchedModel->hasInstrSchedModel());
-
-  // DS load/store latency is variable depending on LDS contention.
-  if (SII->getSubtarget().hasGFX1250Insts() && SII->isDS(*SU->getInstr())) {
-    return SII->getInstrLatency(*SU->getInstr());
-  }
-
-  return getMaxBlockingCycles(DAG->getSchedClass(SU), SU->getInstr());
-}
-
 unsigned CandidateHeuristics::getHWUICyclesForMI(MachineInstr *MI) {
   assert(SchedModel && SchedModel->hasInstrSchedModel());
-
-  // DS load/store latency is variable depending on LDS contention.
-  if (SII->getSubtarget().hasGFX1250Insts() && SII->isDS(*MI)) {
+  if (MI->mayLoadOrStore())
     return SII->getInstrLatency(*MI);
-  }
 
   return getMaxBlockingCycles(SchedModel->resolveSchedClass(MI), MI);
 }
 
 void CandidateHeuristics::updateForScheduling(SUnit *SU,
                                               SchedBoundary *Zone) {
-  auto Flavor = classifyFlavor(*SU->getInstr(), *SII);
-  unsigned Latency = getHWUICyclesForSU(SU);
+  MachineInstr *MI = SU->getInstr();
+  auto Flavor = classifyFlavor(*MI, *SII);
+  unsigned Latency = getHWUICyclesForMI(MI);
   HardwareUnitInfo *HWUI = getHWUIFromFlavor(Flavor);
   assert(HWUI);
   HWUI->markScheduled(SU, Latency);
@@ -1756,7 +1739,7 @@ void CandidateHeuristics::collectRegionSummary() {
   for (auto &SU : DAG->SUnits) {
     MachineInstr *MI = SU.getInstr();
     const InstructionFlavor Flavor = classifyFlavor(*MI, *SII);
-    HWUInfo[(int)(Flavor)].insert(&SU, getHWUICyclesForSU(&SU));
+    HWUInfo[(int)(Flavor)].insert(&SU, getHWUICyclesForMI(MI));
     unsigned CarriedLatency = getCarriedLatency(&SU);
     if (CarriedLatency)
       CarriedLatencies[MI] = CarriedLatency;
@@ -2230,7 +2213,8 @@ unsigned CandidateHeuristics::getStallCosts(SUnit *SU, SchedBoundary &Zone,
 
     // Latency comes from DS regardless of bottom-up / top-down.
     unsigned FenceStallFinish =
-        LastProducerCycle + getHWUICyclesForSU(IsTop ? LastProducer : SU);
+        LastProducerCycle +
+        getHWUICyclesForMI(IsTop ? LastProducer->getInstr() : SU->getInstr());
     return FenceStallFinish <= CurrCycle ? 0 : FenceStallFinish - CurrCycle;
   };
 
@@ -2357,8 +2341,8 @@ unsigned CandidateHeuristics::getStallCosts(SUnit *SU, SchedBoundary &Zone,
           if (ReadsDefReg) {
             // WAR latency = instruction latency + additional cycles
             unsigned InstrLatency =
-                const_cast<CandidateHeuristics *>(this)->getHWUICyclesForSU(
-                    PredSU);
+                const_cast<CandidateHeuristics *>(this)->getHWUICyclesForMI(
+                    PredMI);
             unsigned TargetCycle =
                 PredSU->TopReadyCycle + (InstrLatency * 4);
             if (TargetCycle > CurrCycle)
