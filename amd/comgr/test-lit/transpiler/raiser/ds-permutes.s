@@ -13,6 +13,7 @@
 	.p2align 8
 	.type bpermute,@function
 ; CHECK-LABEL: define amdgpu_kernel void @bpermute(
+; CHECK: call i1 @llvm.amdgcn.init.whole.wave()
 ; SAME-LABEL: define amdgpu_kernel void @bpermute(
 bpermute:
 	s_load_b64 s[2:3], s[0:1], 0
@@ -29,10 +30,9 @@ bpermute:
 ; CHECK-NEXT: [[REBASED:%.+]] = or i32 [[IN_WAVE]], [[BYTES]]
 ; CHECK-NEXT: [[DATA:%.+]] = select i1 [[ACTIVE:%.+]], i32 [[RAW:%.+]], i32 0
 ; CHECK-NEXT: [[GATHER:%.+]] = call i32 @llvm.amdgcn.ds.bpermute(i32 [[REBASED]], i32 [[DATA]])
-; CHECK-NEXT: [[RESULT:%.+]] = call i32 @llvm.amdgcn.strict.wwm.i32(i32 [[GATHER]])
 ; CHECK-NEXT: br i1 [[ACTIVE]], label %[[DO:.+]], label %[[SKIP:.+]]
 ; CHECK: [[SKIP]]:
-; CHECK-NEXT: phi i32 [ [[RESULT]], %[[DO]] ], [ undef, {{.+}} ]
+; CHECK-NEXT: phi i32 [ [[GATHER]], %[[DO]] ], [ undef, {{.+}} ]
 ; A target wave that holds one source wave addresses the lanes the source
 ; named, so the selector reaches the gather as the source computed it.
 ; SAME: [[SELECTOR:%.+]] = add i32 {{.+}}, 8
@@ -47,6 +47,7 @@ bpermute:
 	.p2align 8
 	.type bpermute_fi,@function
 ; CHECK-LABEL: define amdgpu_kernel void @bpermute_fi(
+; CHECK: call i1 @llvm.amdgcn.init.whole.wave()
 bpermute_fi:
 	s_load_b64 s[2:3], s[0:1], 0
 	s_wait_kmcnt 0
@@ -58,7 +59,9 @@ bpermute_fi:
 ; CHECK: [[IN_WAVE:%.+]] = and i32 {{.+}}, 127
 ; CHECK: [[REBASED:%.+]] = or i32 [[IN_WAVE]], {{.+}}
 ; CHECK-NEXT: [[GATHER:%.+]] = call i32 @llvm.amdgcn.ds.bpermute(i32 [[REBASED]], i32 [[RAW]])
-; CHECK-NEXT: call i32 @llvm.amdgcn.strict.wwm.i32(i32 [[GATHER]])
+; CHECK-NEXT: br i1 {{%.+}}, label %[[DO:.+]], label %[[SKIP:.+]]
+; CHECK: [[SKIP]]:
+; CHECK-NEXT: phi i32 [ [[GATHER]], %[[DO]] ], [ undef, {{.+}} ]
 	ds_bpermute_fi_b32 v3, v1, v2 offset:8
 	s_wait_dscnt 0
 	global_store_b32 v0, v3, s[2:3]
@@ -68,6 +71,7 @@ bpermute_fi:
 	.p2align 8
 	.type permute,@function
 ; CHECK-LABEL: define amdgpu_kernel void @permute(
+; CHECK: call i1 @llvm.amdgcn.init.whole.wave()
 ; SAME-LABEL: define amdgpu_kernel void @permute(
 permute:
 	s_load_b64 s[2:3], s[0:1], 0
@@ -84,10 +88,9 @@ permute:
 ; CHECK-NEXT: [[OWN:%.+]] = shl i32 [[LANE]], 2
 ; CHECK-NEXT: [[TARGET:%.+]] = select i1 [[ACTIVE:%.+]], i32 [[REBASED]], i32 [[OWN]]
 ; CHECK-NEXT: [[SCATTER:%.+]] = call i32 @llvm.amdgcn.ds.permute(i32 [[TARGET]], i32 7)
-; CHECK-NEXT: [[RESULT:%.+]] = call i32 @llvm.amdgcn.strict.wwm.i32(i32 [[SCATTER]])
 ; CHECK-NEXT: br i1 [[ACTIVE]], label %[[DO:.+]], label %[[SKIP:.+]]
 ; CHECK: [[SKIP]]:
-; CHECK-NEXT: phi i32 [ [[RESULT]], %[[DO]] ], [ undef, {{.+}} ]
+; CHECK-NEXT: phi i32 [ [[SCATTER]], %[[DO]] ], [ undef, {{.+}} ]
 ; SAME: [[SELECTOR:%.+]] = add i32 {{.+}}, 8
 ; SAME-NEXT: [[OWN:%.+]] = shl i32 {{.+}}, 2
 ; SAME-NEXT: [[TARGET:%.+]] = select i1 {{.+}}, i32 [[SELECTOR]], i32 [[OWN]]
@@ -101,6 +104,7 @@ permute:
 	.p2align 8
 	.type swizzle,@function
 ; CHECK-LABEL: define amdgpu_kernel void @swizzle(
+; CHECK: call i1 @llvm.amdgcn.init.whole.wave()
 ; SAME-LABEL: define amdgpu_kernel void @swizzle(
 swizzle:
 	s_load_b64 s[2:3], s[0:1], 0
@@ -110,10 +114,9 @@ swizzle:
 ; wider target wave unchanged and no lane index is rebased.
 ; CHECK: [[DATA:%.+]] = select i1 [[ACTIVE:%.+]], i32 7, i32 0
 ; CHECK-NEXT: [[PERMUTED:%.+]] = call i32 @llvm.amdgcn.ds.swizzle(i32 [[DATA]], i32 1055)
-; CHECK-NEXT: [[RESULT:%.+]] = call i32 @llvm.amdgcn.strict.wwm.i32(i32 [[PERMUTED]])
 ; CHECK-NEXT: br i1 [[ACTIVE]], label %[[DO:.+]], label %[[SKIP:.+]]
 ; CHECK: [[SKIP]]:
-; CHECK-NEXT: phi i32 [ [[RESULT]], %[[DO]] ], [ undef, {{.+}} ]
+; CHECK-NEXT: phi i32 [ [[PERMUTED]], %[[DO]] ], [ undef, {{.+}} ]
 ; SAME: [[DATA:%.+]] = select i1 {{.+}}, i32 7, i32 0
 ; SAME-NEXT: call i32 @llvm.amdgcn.ds.swizzle(i32 [[DATA]], i32 1055)
 	ds_swizzle_b32 v3, v2 offset:swizzle(SWAP,1)
@@ -128,28 +131,24 @@ swizzle:
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel bpermute_fi
 		.amdhsa_kernarg_size 8
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel permute
 		.amdhsa_kernarg_size 8
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdhsa_kernel swizzle
 		.amdhsa_kernarg_size 8
 		.amdhsa_user_sgpr_kernarg_segment_ptr 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 4
-		.amdhsa_wavefront_size32 1
 	.end_amdhsa_kernel
 	.amdgpu_metadata
 ---

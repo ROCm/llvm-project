@@ -506,7 +506,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     writeDst(Ctx.registers(), *Dst, Result, Is64);
     // SCC is the result compared against zero, which storeSCC does for a
     // value wider than the single bit SCC holds.
-    Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+    Ctx.registers().storeSCC(Ctx.B, Result);
     return Error::success();
   }
 
@@ -524,8 +524,10 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<Value *> Old = Is64 ? Op.dstValue64() : Op.dstValue();
     if (!Old)
       return Old.takeError();
-    Value *Moved = Ctx.B.CreateSelect(Ctx.registers().regFile().loadSCC(Ctx.B),
-                                      *Src, *Old, "s_cmov");
+    Expected<Value *> Scc = Ctx.registers().readSCC(Di);
+    if (!Scc)
+      return Scc.takeError();
+    Value *Moved = Ctx.B.CreateSelect(*Scc, *Src, *Old, "s_cmov");
     writeDst(Ctx.registers(), *Dst, Moved, Is64);
     return Error::success();
   }
@@ -554,10 +556,14 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
+    Expected<Value *> Moved = Is64 ? Ctx.registers().readSgpr64(Di, *Src)
+                                   : Ctx.registers().readSgpr32(Di, *Src);
+    if (!Moved)
+      return Moved.takeError();
     if (Is64)
-      Ctx.registers().writeReg64(*Dst, Ctx.registers().readSgpr64(*Src));
+      Ctx.registers().writeReg64(*Dst, *Moved);
     else
-      Ctx.registers().writeReg32(*Dst, Ctx.registers().readSgpr32(*Src));
+      Ctx.registers().writeReg32(*Dst, *Moved);
     return Error::success();
   }
 
@@ -599,8 +605,10 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
         displacedSgpr(Ctx, Di, /*OpIdx=*/0, (*M0 >> 16) & FieldMask, 1);
     if (!DstIdx)
       return DstIdx.takeError();
-    Ctx.registers().writeReg32(ParsedReg{ParsedReg::SGPR, *DstIdx, 1},
-                               Ctx.registers().readSgpr32(*Src));
+    Expected<Value *> Moved = Ctx.registers().readSgpr32(Di, *Src);
+    if (!Moved)
+      return Moved.takeError();
+    Ctx.registers().writeReg32(ParsedReg{ParsedReg::SGPR, *DstIdx, 1}, *Moved);
     return Error::success();
   }
 
@@ -699,7 +707,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Value *Result =
         Reduces ? emitQuadMask(Ctx.B, *Src) : emitWholeQuadMask(Ctx.B, *Src);
     writeDst(Ctx.registers(), *Dst, Result, Is64);
-    Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+    Ctx.registers().storeSCC(Ctx.B, Result);
     return Error::success();
   }
 
@@ -722,7 +730,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Value *OldExec = Ctx.registers().readExec();
     Value *NewExec = emitMaskCombine(Ctx.B, *Combine, *Src, OldExec);
     Ctx.registers().storeExec(NewExec);
-    Ctx.registers().regFile().storeSCC(Ctx.B, NewExec);
+    Ctx.registers().storeSCC(Ctx.B, NewExec);
     writeDst(Ctx.registers(), *Dst,
              Combine->Destination == MaskDestination::NewExec ? NewExec
                                                               : OldExec,
@@ -742,7 +750,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Value *Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::abs, *Src,
                                                 Ctx.B.getFalse(), {}, "s_abs");
     Ctx.registers().writeReg32(*Dst, Result);
-    Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+    Ctx.registers().storeSCC(Ctx.B, Result);
     return Error::success();
   }
 
@@ -768,7 +776,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.B.CreateUnaryIntrinsic(Intrinsic::ctpop, Counted, {}, "s_bcnt");
     Value *Result = Ctx.B.CreateZExtOrTrunc(Count, Ctx.B.getInt32Ty());
     Ctx.registers().writeReg32(*Dst, Result);
-    Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+    Ctx.registers().storeSCC(Ctx.B, Result);
     return Error::success();
   }
 
@@ -832,7 +840,8 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     // the very pair the target comes from. The pair holds a source address,
     // which an operand read refuses because nothing in the raised kernel can
     // address one. Here the address only picks which of the offsets the
-    // analysis enumerated this jump takes, so the pair is read as it stands.
+    // analysis enumerated this jump takes, so the read goes to the register
+    // file directly, past the refusal.
     Value *Target = nullptr;
     if (Resolved.Targets.size() > 1) {
       Expected<std::optional<ParsedReg>> Src = Op.srcReg(0);
@@ -840,7 +849,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
         return Src.takeError();
       assert(*Src && (*Src)->RegKind == ParsedReg::SGPR && (*Src)->BaseIdx &&
              "a transfer reaching several offsets reads a scalar pair");
-      Target = Ctx.registers().readSgpr64(*(*Src)->BaseIdx);
+      Target = Ctx.registers().regFile().loadSGPR64(Ctx.B, *(*Src)->BaseIdx);
     }
 
     if (Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
@@ -891,11 +900,24 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   // the wave where the source let it run on. A program that made progress only
   // because the arrival did not block deadlocks under that reading, so the
   // arrival is refused rather than widened into a whole barrier.
+  //
+  // An arrival the matching release always follows is the exception: the pair
+  // is raised as the one barrier it amounts to, at the release, leaving the
+  // arrival nothing of its own to state.
   case CanonicalOp::S_BARRIER_SIGNAL_IMM:
-  case CanonicalOp::S_BARRIER_SIGNAL_M0:
+    if (Ctx.isPairedSplitBarrier(Di.Offset))
+      return Error::success();
     return unsupported(Ctx, Di,
                        "arrives at a barrier without waiting there, and the "
                        "raise has only a barrier that also waits");
+
+  // The barrier this arrives at is whichever one m0 names at run time, so
+  // which barrier it is cannot be read off the instruction and matched to a
+  // release.
+  case CanonicalOp::S_BARRIER_SIGNAL_M0:
+    return unsupported(Ctx, Di,
+                       "arrives at the barrier m0 names, which the raise "
+                       "cannot match to the wait that releases it");
 
   // The rest of the family speaks about a named barrier: a barrier a subset of
   // the workgroup joins, leaves, sizes and polls. The raise carries no barrier
@@ -955,7 +977,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   // wider than the hardware does and costs a raised kernel nothing here.
   case CanonicalOp::S_ALLOC_VGPR:
     emitMemoryWaitAll(Ctx);
-    Ctx.registers().regFile().storeSCC(Ctx.B, Ctx.B.getTrue());
+    Ctx.registers().storeSCC(Ctx.B, Ctx.B.getTrue());
     return Error::success();
 
   // Spends issue slots and leaves nothing behind that a later instruction can

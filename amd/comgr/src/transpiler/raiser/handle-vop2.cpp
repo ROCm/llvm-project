@@ -65,8 +65,10 @@ static void writeResultAndVCC(RaiseContext &Ctx, ParsedReg Dst, Value *Result,
                               Value *VCC) {
   Value *LaneActive = Ctx.registers().emitLaneActiveBit();
   Ctx.registers().writeReg32(Dst, Result);
+  // Inactive lanes can have poison carry values; select keeps them out of VCC.
   Ctx.registers().regFile().storeVCC(
-      Ctx.B, Ctx.B.CreateAnd(LaneActive, VCC, "vcc_active"));
+      Ctx.B,
+      Ctx.B.CreateSelect(LaneActive, VCC, Ctx.B.getFalse(), "vcc_active"));
 }
 
 // Raise a binary operation that writes carry or borrow to VCC.
@@ -204,6 +206,11 @@ Error handleVOP2(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_SUBREV_F32:
     return raiseFloatBinary(Ctx, Di, Op, Instruction::FSub,
                             /*ReverseOperands=*/true);
+  case CanonicalOp::V_FMAC_F64:
+  case CanonicalOp::V_FMAMK_F64:
+  case CanonicalOp::V_FMAC_F32:
+  case CanonicalOp::V_FMAMK_F32:
+    return raiseFloatMac(Ctx, Di, Op);
 
   case CanonicalOp::V_ADD_NC_U32:
     return raiseBinary32(Ctx, Op, [](IRBuilder<> &B, Value *Src0, Value *Src1) {

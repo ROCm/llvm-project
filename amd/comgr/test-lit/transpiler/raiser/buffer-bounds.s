@@ -16,7 +16,7 @@ buffer_bounds:
   s_wait_kmcnt 0
 ; CHECK: and i32 {{.+}}, 63
   s_and_b32 s7, s7, 63
-  s_mov_b32 exec_lo, 1
+  s_and_b32 exec_lo, exec_lo, 1
   v_mov_b32 v0, 0
   v_mov_b32 v1, s11
 ; CHECK: [[SCALAR:%.+]] = zext i32 {{.+}} to i64
@@ -51,7 +51,7 @@ buffer_bounds:
 ; CHECK: icmp ult i64 {{.+}}, [[EXTENT]]
 ; CHECK: load i32, ptr addrspace(1) {{.+}}, align 1
 ; CHECK: phi i32 [ 0, {{.+}} ], [ {{.+}} ]
-  buffer_load_b128 v[4:7], v1, s[4:7], s10 offen offset:3
+  buffer_load_b128 v[4:7], v1, s[4:7], s10 offen offset:3 nv
   s_wait_loadcnt 0
   global_store_b32 v0, v4, s[8:9]
   global_store_b32 v0, v5, s[8:9] offset:4
@@ -70,7 +70,7 @@ buffer_bounds:
 ; CHECK: store i32 {{.+}}, ptr addrspace(1) {{.+}}, align 1
 ; CHECK: icmp ult i64 {{.+}}, {{.+}}
 ; CHECK: store i32 {{.+}}, ptr addrspace(1) {{.+}}, align 1
-  buffer_store_b128 v[4:7], v1, s[4:7], s10 offen offset:3
+  buffer_store_b128 v[4:7], v1, s[4:7], s10 offen offset:3 nv
   s_endpgm
 
 .section .rodata,"a",@progbits
@@ -78,7 +78,6 @@ buffer_bounds:
 .amdhsa_kernel buffer_bounds
   .amdhsa_kernarg_size 32
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_next_free_vgpr 8
   .amdhsa_next_free_sgpr 12
 .end_amdhsa_kernel

@@ -35,7 +35,7 @@ comgr_configure_test_target(RaiserScaffoldingTests)
 # -- WaveProjectionTests ------------------------------------------------------
 #
 # Pins the per-projection contract on WaveProjection and its subclasses (EXEC
-# storage width, source waves per target wave, doubled-dispatch factor, the
+# storage width, source waves per target wave, replication factor, the
 # exec/mbcnt predicates) and the wrapAsWWMValue emission behaviour.
 
 add_executable(WaveProjectionTests

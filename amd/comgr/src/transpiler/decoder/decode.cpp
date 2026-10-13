@@ -127,7 +127,7 @@ void driftCheckTiedIn(const DecodedInst &Di, const MCInstrDesc &Desc) {
 // named-operand table, catching operand-layout changes for opcodes using srcN
 // naming. MFMA appends its source modifiers after the sources rather than
 // interleaving them, so Di.ModMap is repaired from the table instead.
-void driftCheckSrcN([[maybe_unused]] const MCState &Mc, DecodedInst &Di,
+void driftCheckSrcN(const MCState &Mc, DecodedInst &Di,
                     const MCInstrDesc &Desc) {
   static constexpr AMDGPU::OpName KSrcNames[] = {
       AMDGPU::OpName::src0, AMDGPU::OpName::src1, AMDGPU::OpName::src2};
@@ -294,7 +294,7 @@ Error decodeVOPD(DecodedInst &Di, const MCInstrInfo &MCII,
   if (!COMGR::transpiler::isVOPD(Di.Inst.getOpcode()))
     return Error::success();
 
-  Di.VOPD.emplace();
+  Di.VOPD = std::array<DecodedInst::VOPDHalf, 2>{};
   const bool IsVOPD3 = (Di.TargetSpecificFlags & AmdgpuFormat::VOPD3) != 0;
   auto [OpX, OpY] = COMGR::transpiler::getVOPDComponents(Di.Inst.getOpcode());
   const MCInstrDesc &OpXDesc = MCII.get(OpX);

@@ -219,7 +219,7 @@ setpc_carry_clobbered_kernel:
 ; source address that nothing carries forward, which is refused where it is
 ; read rather than at the jump below.
 	s_add_u32 s20, 1, 2
-; CARRY: unsupported-instruction-form: s_add_co_ci_u32 {{.+}} :: operand-read: 'SGPR11' may hold a source code-object address
+; CARRY: unsupported-instruction-form: s_add_co_ci_u32 {{.+}} :: operand-read: 's11' may hold a source code-object address
 	s_addc_u32 s11, s11, 0
 	s_set_pc_i64 s[10:11]
 	s_endpgm
@@ -238,8 +238,11 @@ setpc_crossblock_kernel:
 ; target below sits.
 	s_get_pc_i64 s[10:11]
 	s_add_u32 s10, s10, 20
+; The branch forks the control flow and nothing more. It reads EXEC rather
+; than SCC, which the add above leaves holding a carry out of the address the
+; source image records rather than the one the loader produces.
 ; CROSSBLOCK: br i1 {{.+}}, label %[[CROSS_JOIN:bb_.+]], label %
-	s_cbranch_scc0 cross_join
+	s_cbranch_execz cross_join
 ; CROSSBLOCK: [[CROSS_JOIN]]:
 cross_join:
 ; CROSSBLOCK-NEXT: br label %[[CROSS_TARGET:bb_.+]]

@@ -69,6 +69,8 @@ packed_float:
 ; CHECK: call <2 x float> @llvm.maxnum.v2f32(<2 x float> [[F32_MUL]]
 ; CHECK: call <2 x float> @llvm.minnum.v2f32
 	v_pk_mul_f32 v[12:13], v[14:15], 1.0 clamp
+; CHECK: call <2 x float> @llvm.fma.v2f32
+	v_pk_fma_f32 v[0:1], v[2:3], v[4:5], v[6:7] neg_lo:[1,0,0]
 ; CHECK: ret void
 	s_endpgm
 

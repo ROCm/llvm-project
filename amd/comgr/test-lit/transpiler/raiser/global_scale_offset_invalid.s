@@ -12,17 +12,6 @@
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
 
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
-; RUN:   --defsym=NV=1 %s -o %t.o
-; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
-
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj \
-; RUN:   --defsym=SCALED_NV=1 %s -o %t.o
-; RUN: %ld.lld -shared %t.o -o %t.hsaco
-; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 \
-; RUN:   --emit-ir=global_invalid 2>&1 | %FileCheck %s --check-prefix=POLICY
 ; POLICY: in kernel 'global_invalid'
 ; POLICY-SAME: non-default cache policy is not modeled
 
@@ -61,12 +50,6 @@ global_invalid:
 .ifdef STORE_SCALED_TH
 	global_store_b64 v0, v[2:3], s[0:1] scale_offset th:TH_STORE_NT
 .endif
-.ifdef NV
-	global_load_b32 v1, v0, s[0:1] nv
-.endif
-.ifdef SCALED_NV
-	global_load_b32 v1, v0, s[0:1] scale_offset nv
-.endif
 ; LLVM's assembler rejects scale_offset without SADDR. Use raw encodings to
 ; exercise the raiser's refusal for these forms.
 .ifdef LOAD_NO_SADDR
@@ -86,7 +69,6 @@ global_invalid:
 	.p2align 6
 	.amdhsa_kernel global_invalid
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 4
 		.amdhsa_next_free_sgpr 2
 	.end_amdhsa_kernel

@@ -7,7 +7,7 @@
 ; RUN:   --emit-ir=global_loads_gfx1250 | %FileCheck %s --check-prefix=IR
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=global_scaled_offsets | %FileCheck %s --check-prefix=SCALED
-; RUN: not %transpile_cli %t.hsaco --isa=gfx1200 --target-isa=gfx942 \
+; RUN: not %transpile_cli %t.hsaco --isa=gfx1200 --target-isa=gfx1250 \
 ; RUN:   --emit-ir=global_scaled_offsets 2>&1 | %FileCheck %s --check-prefix=GFX1200
 ; GFX1200: scale_offset is not supported on this GPU
 
@@ -165,13 +165,11 @@ global_scaled_offsets:
 	.p2align	6, 0x0
 	.amdhsa_kernel global_loads_gfx1250
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 16
 		.amdhsa_next_free_sgpr 2
 	.end_amdhsa_kernel
 	.amdhsa_kernel global_scaled_offsets
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 8
 		.amdhsa_next_free_sgpr 2
 	.end_amdhsa_kernel

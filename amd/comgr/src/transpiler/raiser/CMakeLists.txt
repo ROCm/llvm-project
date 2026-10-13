@@ -26,6 +26,7 @@ add_definitions(${LLVM_DEFINITIONS})
 # files can call comgr-metadata helpers directly without a layering inversion
 # or a separate static archive.
 add_library(transpiler-raiser OBJECT
+  launch.cpp
   raiser.cpp
   raise_failure.cpp
   reg-file.cpp

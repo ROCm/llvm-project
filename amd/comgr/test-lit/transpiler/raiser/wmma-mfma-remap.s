@@ -20,14 +20,12 @@
 	.type	wmma_remap,@function
 ; IR-LABEL: define amdgpu_kernel void @wmma_remap(
 wmma_remap:
-	s_mov_b32 exec_lo, 1
 ; IR: call i32 @llvm.amdgcn.ds.bpermute
 ; IR: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16f16
 ; IR: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16f16
 ; IR: br i1 {{.*}}, label %spe_do, label %spe_skip
 ; IR: spe_do:
 	v_wmma_f32_16x16x32_f16 v[16:23], v[0:7], v[8:15], v[16:23]
-	s_mov_b32 exec_lo, -1
 ; IR: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x16bf16.1k
 	v_wmma_f32_16x16x32_bf16 v[16:23], v[0:7], v[8:15], v[16:23]
 ; IR: call <4 x i32> @llvm.amdgcn.mfma.i32.16x16x32.i8
@@ -35,10 +33,10 @@ wmma_remap:
 ; IR: ret void
 	s_endpgm
 
-; GFX908: unsupported-instruction-form: v_wmma_f32_16x16x32_bf16
-; GFX908-SAME: target ISA does not support mapped MFMA
-; GFX90A: unsupported-instruction-form: v_wmma_i32_16x16x64_iu8
-; GFX90A-SAME: target ISA does not support mapped MFMA
+; GFX908: unsupported-wave-projection
+; GFX908-SAME: wave-size changes are supported only from gfx1250 to gfx942
+; GFX90A: unsupported-wave-projection
+; GFX90A-SAME: wave-size changes are supported only from gfx1250 to gfx942
 
 	.globl	wmma_unsigned
 	.p2align	8

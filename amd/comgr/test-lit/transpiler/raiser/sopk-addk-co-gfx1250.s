@@ -25,7 +25,6 @@ sopk_addk_co:
 	.p2align	6, 0x0
 	.amdhsa_kernel sopk_addk_co
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
