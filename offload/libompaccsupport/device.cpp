@@ -196,6 +196,20 @@ llvm::Error DeviceTy::init() {
   return llvm::Error::success();
 }
 
+llvm::Error DeviceTy::deinit() {
+  OMPT_IF_BUILT_AND_INITIALIZED(
+      { performOmptCallback(device_finalize, DeviceID); });
+
+  if (!Context)
+    return llvm::Error::success();
+  if (auto Res = olDestroyContext(Context))
+    return createError(ErrorCode::BackendFailure,
+                       "failed to destroy context for device %d: %s", DeviceID,
+                       Res->Details);
+  Context = nullptr;
+  return llvm::Error::success();
+}
+
 // Extract the mapping of host function pointers to device function pointers
 // from the entry table. Functions marked as 'indirect' in OpenMP will have
 // offloading entries generated for them which map the host's function pointer
@@ -1095,11 +1109,26 @@ bool DeviceTy::isDataExchangable(const DeviceTy &DstDevice) {
 }
 
 int32_t DeviceTy::synchronize(AsyncInfoTy &AsyncInfo) {
-  return RTL->synchronize(RTLDeviceID, AsyncInfo);
+  ol_queue_handle_t Queue = AsyncInfo.getQueue();
+  if (!Queue)
+    return OFFLOAD_SUCCESS;
+  if (auto Res = olSyncQueue(Queue)) {
+    REPORT() << "Failure to synchronize stream " << Queue << ": "
+             << Res->Details;
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
 }
 
 int32_t DeviceTy::queryAsync(AsyncInfoTy &AsyncInfo) {
-  return RTL->query_async(RTLDeviceID, AsyncInfo);
+  ol_queue_handle_t Queue = AsyncInfo.getQueue();
+  if (!Queue)
+    return OFFLOAD_SUCCESS;
+  if (auto Res = olQueryQueue(Queue, /*IsComplete=*/nullptr)) {
+    REPORT() << "Failure to query stream " << Queue << ": " << Res->Details;
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
 }
 
 int32_t DeviceTy::createEvent(void **Event) {

@@ -102,6 +102,13 @@ void PluginManager::deinit() {
     }
   });
 
+  auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
+  for (DeviceTy &Device : devices(ExclusiveDevicesAccessor)) {
+    if (auto Err = Device.deinit())
+      REPORT() << "Failed to deinitialize device " << Device.DeviceID << ": "
+               << toString(std::move(Err));
+  }
+
   // Delete only after device_finalize: tools typically flush their trace
   // buffers from that callback, which goes through the trace record manager.
 #ifdef OMPT_SUPPORT
