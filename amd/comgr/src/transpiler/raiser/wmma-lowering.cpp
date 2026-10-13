@@ -67,12 +67,14 @@ void redistributeInput(IRBuilder<> &B, Module &M, ArrayRef<Value *> Source,
                        unsigned SourceWave, Value *LaneInGroup,
                        Value *LaneGroup, MutableArrayRef<Value *> Low,
                        MutableArrayRef<Value *> High) {
-  for (unsigned TargetDword = 0; TargetDword != Low.size(); ++TargetDword) {
-    for (unsigned KHalf = 0; KHalf != (High.empty() ? 1u : 2u); ++KHalf) {
+  unsigned InputDwords = Low.size();
+  unsigned KParts = High.empty() ? 1 : 2;
+  for (unsigned TargetDword = 0; TargetDword != InputDwords; ++TargetDword) {
+    for (unsigned KHalf = 0; KHalf != KParts; ++KHalf) {
       SmallVector<Value *, 4> Candidates;
       for (unsigned Group = 0; Group != 4; ++Group) {
         detail::FragmentDwordLocation Location = detail::getWMMAInputDword(
-            SourceWave, Group * 16, TargetDword, KHalf, Low.size());
+            SourceWave, Group * 16, TargetDword, KHalf, InputDwords);
         Value *SourceLane =
             B.CreateAdd(LaneInGroup, B.getInt32(Location.Lane), "source.lane");
         Value *Address =

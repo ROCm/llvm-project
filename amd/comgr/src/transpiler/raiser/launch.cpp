@@ -53,11 +53,11 @@ Expected<LaunchDimensions> KernelLaunchRequirements::project(
   }
   if (Mapping == Kind::Unchanged) {
     if (RequiresWholeSourceWaves && Workitems % SourceWaveSize != 0)
-      return Refuse("WMMA requires whole source waves");
+      return Refuse("launch requires whole source waves");
     if (RequiresWholeSourceWaves && SourceWaveSize > 1)
       for (unsigned I = 0; I != 3; ++I)
         if (Source.Grid[I] % Source.Workgroup[I] != 0)
-          return Refuse("WMMA requires complete workgroups");
+          return Refuse("launch requires complete workgroups");
     return Source;
   }
 

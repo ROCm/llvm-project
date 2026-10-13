@@ -2,12 +2,10 @@
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj %s -o %t.o
 ; RUN: %ld.lld -shared %t.o -o %t.hsaco
 ; RUN: %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --specialize-workgroup=64,1,1 > %t.ll
-; RUN: %FileCheck %s < %t.ll
-; RUN: %FileCheck %s --check-prefix=PACKED < %t.ll
-; PACKED: ; launch: f32 kind=unchanged
+; RUN: %FileCheck %s --check-prefix=WAVE < %t.ll
+; WAVE: ; launch: f32 kind=unchanged
 ; RUN: %opt -passes='default<O2>' -verify-each %t.ll -o %t.bc
 ; RUN: %llvm-dis %t.bc -o - | %FileCheck %s --check-prefix=OPT
-; OPT: @llvm.amdgcn.mfma.f32.16x16x4f32(float {{.+}}, float {{.+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
 ; RUN: %llc -mtriple=amdgpu9.42-amd-amdhsa -filetype=obj %t.bc -o %t.target.o
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --specialize-workgroup=16,1,1 2>&1 | %FileCheck %s --check-prefix=PARTIAL
 ; PARTIAL: WMMA requires whole source waves
@@ -58,16 +56,20 @@
 .globl f32
 .p2align 8
 .type f32,@function
-; CHECK-LABEL: define amdgpu_kernel void @f32(
+; OPT-LABEL: define amdgpu_kernel void @f32(
 f32:
   s_load_b256 s[4:11], s[0:1], 0
   v_lshlrev_b32 v31, 3, v0
-  v_lshlrev_b32 v30, 5, v0
+  v_lshlrev_b32 v30, 7, v0
   s_wait_kmcnt 0
   global_load_b64 v[0:1], v31, s[4:5]
   global_load_b64 v[8:9], v31, s[6:7]
-  global_load_b128 v[16:19], v30, s[8:9]
-  global_load_b128 v[20:23], v30, s[8:9] offset:16
+.irp base,16,20
+  v_mov_b32 v[\base], 1.0
+  v_mov_b32 v[\base+1], 2.0
+  v_mov_b32 v[\base+2], 0x40400000
+  v_mov_b32 v[\base+3], 4.0
+.endr
   s_wait_loadcnt 0
 .if CASE == 1
   v_wmma_f32_16x16x4_f32 v[16:23], v[0:1], v[8:9], v[16:23] neg_lo:[0,0,1]
@@ -79,17 +81,27 @@ f32:
 .elseif CASE == 4
   v_wmma_f32_16x16x4_f32 v[16:23], v[0:1], v[8:9], 1.0
 .else
-; CHECK: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x4f32(float {{.+}}, float {{.+}}, <4 x float> {{.+}}, i32 0, i32 0, i32 0)
+; OPT-COUNT-2: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x4f32(float {{%[^,]+}}, float {{%[^,]+}}, <4 x float> <float 1.000000e+00, float 2.000000e+00, float 3.000000e+00, float 4.000000e+00>, i32 0, i32 0, i32 0)
   v_wmma_f32_16x16x4_f32 v[16:23], v[0:1], v[8:9], v[16:23]
 .endif
   global_store_b128 v30, v[16:19], s[10:11] offset:16
   global_store_b128 v30, v[20:23], s[10:11] offset:32
-; CHECK: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x4f32
-  v_wmma_f32_16x16x4_f32 v[32:39], v[0:1], v[8:9], v[16:23]
-  global_store_b128 v30, v[32:35], s[10:11] offset:16
-; CHECK: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x4f32(float {{.+}}, float {{.+}}, <4 x float> {{.+}}, i32 0, i32 0, i32 0)
+.irp base,32,36
+  v_mov_b32 v[\base], 0x40a00000
+  v_mov_b32 v[\base+1], 0x40c00000
+  v_mov_b32 v[\base+2], 0x40e00000
+  v_mov_b32 v[\base+3], 0x41000000
+.endr
+; OPT-COUNT-2: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x4f32(float {{%[^,]+}}, float {{%[^,]+}}, <4 x float> <float 5.000000e+00, float 6.000000e+00, float 7.000000e+00, float 8.000000e+00>, i32 0, i32 0, i32 0)
+  v_wmma_f32_16x16x4_f32 v[16:23], v[0:1], v[8:9], v[32:39]
+  global_store_b128 v30, v[16:19], s[10:11] offset:48
+  global_store_b128 v30, v[20:23], s[10:11] offset:64
+; OPT-COUNT-2: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x4f32(float {{%[^,]+}}, float {{%[^,]+}}, <4 x float> zeroinitializer, i32 0, i32 0, i32 0)
   v_wmma_f32_16x16x4_f32 v[32:39], v[0:1], v[8:9], 0
-  global_store_b128 v30, v[36:39], s[10:11] offset:32
+  global_store_b128 v30, v[32:35], s[10:11] offset:80
+  global_store_b128 v30, v[36:39], s[10:11] offset:96
+; OPT-NOT: call <4 x float> @llvm.amdgcn.mfma
+; OPT: ret void
   s_endpgm
 
 .section .rodata,"a",@progbits
