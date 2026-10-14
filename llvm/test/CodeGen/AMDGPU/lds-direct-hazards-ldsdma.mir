@@ -1,0 +1,16 @@
+# RUN: llc -mtriple=amdgpu12.00 -verify-machineinstrs -run-pass post-RA-hazard-rec %s -o - | FileCheck %s
+
+# An LDSDMA is a VALU and a VMEM. One that reads the register the direct load
+# writes is the VALU producer, not the VMEM that ends the path: waitvdst 0. As
+# a VMEM it also asks for waitvsrc 0.
+
+# CHECK-LABEL: name: ldsdma_producer
+# CHECK: $vgpr1 = DS_DIRECT_LOAD 0, 0,
+---
+name: ldsdma_producer
+body: |
+  bb.0:
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 $vgpr2, $vgpr0_vgpr1, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt
+    $vgpr1 = DS_DIRECT_LOAD 15, 1, implicit $m0, implicit $exec
+    S_ENDPGM 0
+...

@@ -2142,6 +2142,41 @@ bool GCNHazardRecognizer::fixLdsBranchVmemWARHazard(MachineInstr *MI) {
   return true;
 }
 
+// The va_vdst an LDS direct load \p MI needs: the VALUs since the nearest one
+// that accesses \p VDSTReg, at most \p NoHazardWaitStates, or 0 if a
+// transcendental can be among them. Not inlined, so that the check's early exit
+// stays cheap.
+LLVM_ATTRIBUTE_NOINLINE static int
+getLdsDirectWaitVdst(const MachineInstr &MI, Register VDSTReg,
+                     const SIRegisterInfo &TRI, int NoHazardWaitStates) {
+  auto GetWaitStatesFn = [](const MachineInstr &MI) {
+    return SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/true) ? 1 : 0;
+  };
+
+  int Count = NoHazardWaitStates;
+  GCNHazardWalk Walk(MI, NoHazardWaitStates, GetWaitStatesFn);
+  for (auto [I, Distance] : Walk) {
+    if (SIInstrInfo::isVALU(I, /*AllowLDSDMA=*/true)) {
+      // Transcendentals can execute in parallel to other VALUs.
+      // This makes va_vdst count unusable with a mixture of VALU and TRANS.
+      if (SIInstrInfo::isTRANS(I)) {
+        Count = 0;
+        break;
+      }
+      // Cover both WAR and WAW
+      if (I.readsRegister(VDSTReg, &TRI) || I.modifiesRegister(VDSTReg, &TRI)) {
+        Count = std::min(Count, Distance);
+        Walk.endPath();
+        continue;
+      }
+    }
+    // Instructions which cause va_vdst==0 expire hazard
+    if (SIInstrInfo::isVMEM(I) || SIInstrInfo::isDS(I) || SIInstrInfo::isEXP(I))
+      Walk.endPath();
+  }
+  return Count;
+}
+
 bool GCNHazardRecognizer::fixLdsDirectVALUHazard(MachineInstr *MI) {
   if (!SIInstrInfo::isLDSDIR(*MI))
     return false;
@@ -2150,38 +2185,10 @@ bool GCNHazardRecognizer::fixLdsDirectVALUHazard(MachineInstr *MI) {
   const MachineOperand *VDST = TII.getNamedOperand(*MI, AMDGPU::OpName::vdst);
   const Register VDSTReg = VDST->getReg();
 
-  bool VisitedTrans = false;
-  auto IsHazardFn = [this, VDSTReg, &VisitedTrans](const MachineInstr &I) {
-    if (!SIInstrInfo::isVALU(I, /*AllowLDSDMA=*/true))
-      return false;
-    VisitedTrans = VisitedTrans || SIInstrInfo::isTRANS(I);
-    // Cover both WAR and WAW
-    return I.readsRegister(VDSTReg, &TRI) || I.modifiesRegister(VDSTReg, &TRI);
-  };
-  auto IsExpiredFn = [&](const MachineInstr &I, int WaitStates) {
-    if (WaitStates >= NoHazardWaitStates)
-      return true;
-    // Instructions which cause va_vdst==0 expire hazard
-    return SIInstrInfo::isVMEM(I) || SIInstrInfo::isDS(I) ||
-           SIInstrInfo::isEXP(I);
-  };
-  auto GetWaitStatesFn = [](const MachineInstr &MI) {
-    return SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/true) ? 1 : 0;
-  };
-
-  DenseSet<const MachineBasicBlock *> Visited;
-  auto Count = ::getWaitStatesSince(IsHazardFn, MI->getParent(),
-                                    std::next(MI->getReverseIterator()), 0,
-                                    IsExpiredFn, Visited, GetWaitStatesFn);
-
-  // Transcendentals can execute in parallel to other VALUs.
-  // This makes va_vdst count unusable with a mixture of VALU and TRANS.
-  if (VisitedTrans)
-    Count = 0;
-
   MachineOperand *WaitVdstOp =
       TII.getNamedOperand(*MI, AMDGPU::OpName::waitvdst);
-  WaitVdstOp->setImm(std::min(Count, NoHazardWaitStates));
+  WaitVdstOp->setImm(
+      getLdsDirectWaitVdst(*MI, VDSTReg, TRI, NoHazardWaitStates));
 
   return true;
 }
@@ -3011,6 +3018,21 @@ int GCNHazardRecognizer::checkNSAtoVMEMHazard(MachineInstr *MI) const {
   return NSAtoVMEMWaitStates - getWaitStatesSince(IsHazardFn, 1);
 }
 
+// The wait states of \p WaitStates an S_DENORM_MODE \p MI still needs after an
+// FP atomic. Not inlined, so that the check's early exit stays cheap.
+LLVM_ATTRIBUTE_NOINLINE static int
+getFPAtomicToDenormModeWaitStates(const MachineInstr &MI, int WaitStates) {
+  GCNHazardWalk Walk(MI, WaitStates);
+  for (auto [I, Distance] : Walk) {
+    if (SIInstrInfo::isVMEM(I) && SIInstrInfo::isFPAtomic(I))
+      return WaitStates - Distance;
+    if (SIInstrInfo::isVALU(I, /*AllowLDSDMA=*/true) ||
+        SIInstrInfo::isWaitcnt(I.getOpcode()))
+      Walk.endPath();
+  }
+  return 0;
+}
+
 int GCNHazardRecognizer::checkFPAtomicToDenormModeHazard(
     MachineInstr *MI) const {
   int FPAtomicToDenormModeWaitStates = 3;
@@ -3022,21 +3044,7 @@ int GCNHazardRecognizer::checkFPAtomicToDenormModeHazard(
   if (MI->getOpcode() != AMDGPU::S_DENORM_MODE)
     return 0;
 
-  auto IsHazardFn = [](const MachineInstr &I) {
-    if (!SIInstrInfo::isVMEM(I))
-      return false;
-    return SIInstrInfo::isFPAtomic(I);
-  };
-
-  auto IsExpiredFn = [](const MachineInstr &MI, int WaitStates) {
-    if (WaitStates >= 3 || SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/true))
-      return true;
-
-    return SIInstrInfo::isWaitcnt(MI.getOpcode());
-  };
-
-  return FPAtomicToDenormModeWaitStates -
-         ::getWaitStatesSince(IsHazardFn, MI, IsExpiredFn);
+  return getFPAtomicToDenormModeWaitStates(*MI, FPAtomicToDenormModeWaitStates);
 }
 
 int GCNHazardRecognizer::checkMAIHazards(MachineInstr *MI) const {
@@ -4352,7 +4360,6 @@ bool GCNHazardRecognizer::fixScratchBaseForwardingHazard(MachineInstr *MI) {
   const MachineRegisterInfo &MRI = MF.getRegInfo();
 
   auto IsRegDefHazard = [&](Register Reg) -> bool {
-    DenseSet<const MachineBasicBlock *> Visited;
     auto IsHazardFn = [TRI, Reg](const MachineInstr &MI) {
       return MI.modifiesRegister(Reg, TRI);
     };
@@ -4369,19 +4376,18 @@ bool GCNHazardRecognizer::fixScratchBaseForwardingHazard(MachineInstr *MI) {
       return 0;
     };
 
-    auto IsExpiredFn = [=](const MachineInstr &MI, int SgprWrites) {
+    auto IsExpiredFn = [](const MachineInstr &MI) {
       if (MI.getOpcode() == AMDGPU::S_WAITCNT_DEPCTR) {
         unsigned Wait = static_cast<unsigned>(MI.getOperand(0).getImm());
         if (AMDGPU::DepCtr::decodeFieldSaSdst(Wait) == 0 &&
             AMDGPU::DepCtr::decodeFieldVaSdst(Wait) == 0)
           return true;
       }
-      return SgprWrites >= FlatScrBaseWaitStates;
+      return false;
     };
 
-    return ::getWaitStatesSince(
-               IsHazardFn, MI->getParent(), std::next(MI->getReverseIterator()),
-               0, IsExpiredFn, Visited, IsSGPRDef) < FlatScrBaseWaitStates;
+    return hasActiveHazard(GCNHazardWalk(*MI, FlatScrBaseWaitStates, IsSGPRDef),
+                           IsHazardFn, IsExpiredFn);
   };
 
   if ((!ReadsFlatScrLo || MRI.isConstantPhysReg(AMDGPU::SGPR102) ||

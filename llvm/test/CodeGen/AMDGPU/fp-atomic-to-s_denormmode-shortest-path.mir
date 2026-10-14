@@ -1,0 +1,123 @@
+# RUN: llc -mtriple=amdgpu10.10 -verify-machineinstrs -run-pass post-RA-hazard-rec %s -o - | FileCheck %s
+
+# The FP atomic is one wait state before S_DENORM_MODE on the taken edge, where
+# only the S_CBRANCH_SCC1 executes, so two more are required: S_NOP 1. The
+# detour through bb.1 must not decide, and both spellings differ only in the
+# order the blocks are written down.
+
+# CHECK-LABEL: name: detour_first
+# CHECK:      bb.3:
+# CHECK-NEXT: S_NOP 1
+# CHECK-NEXT: S_DENORM_MODE
+---
+name: detour_first
+body: |
+  bb.0:
+    successors: %bb.2
+    S_BRANCH %bb.2
+
+  bb.1:
+    successors: %bb.3
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.3, %bb.1
+    FLAT_ATOMIC_FCMPSWAP undef $vgpr0_vgpr1, undef $vgpr2_vgpr3, 0, 0, implicit $exec, implicit $flat_scr :: (volatile load store seq_cst seq_cst (s32))
+    S_CBRANCH_SCC1 %bb.3, implicit undef $scc
+    S_BRANCH %bb.1
+
+  bb.3:
+    S_DENORM_MODE 0, implicit-def $mode, implicit $mode
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: name: producer_first
+# CHECK:      bb.3:
+# CHECK-NEXT: S_NOP 1
+# CHECK-NEXT: S_DENORM_MODE
+---
+name: producer_first
+body: |
+  bb.0:
+    successors: %bb.2
+    S_BRANCH %bb.2
+
+  bb.2:
+    successors: %bb.3, %bb.1
+    FLAT_ATOMIC_FCMPSWAP undef $vgpr0_vgpr1, undef $vgpr2_vgpr3, 0, 0, implicit $exec, implicit $flat_scr :: (volatile load store seq_cst seq_cst (s32))
+    S_CBRANCH_SCC1 %bb.3, implicit undef $scc
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.3
+    S_BRANCH %bb.3
+
+  bb.3:
+    S_DENORM_MODE 0, implicit-def $mode, implicit $mode
+    S_ENDPGM 0
+...
+
+# A VALU ends the hazard, also as a terminator the edge executes.
+
+# CHECK-LABEL: name: valu_terminator
+# CHECK:      bb.1:
+# CHECK-NEXT: S_DENORM_MODE
+---
+name: valu_terminator
+body: |
+  bb.0:
+    successors: %bb.1
+    FLAT_ATOMIC_FCMPSWAP undef $vgpr0_vgpr1, undef $vgpr2_vgpr3, 0, 0, implicit $exec, implicit $flat_scr :: (volatile load store seq_cst seq_cst (s32))
+    V_CMPX_EQ_U32_nosdst_e32_term $vgpr0, $vgpr1, implicit-def $exec, implicit $exec, implicit $mode
+
+  bb.1:
+    S_DENORM_MODE 0, implicit-def $mode, implicit $mode
+    S_ENDPGM 0
+...
+
+# Around the loop the atomic is one wait state away: S_NOP 1.
+
+# CHECK-LABEL: name: loop
+# CHECK:      S_NOP 1
+# CHECK-NEXT: S_DENORM_MODE
+---
+name: loop
+body: |
+  bb.0:
+    successors: %bb.1
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    S_DENORM_MODE 0, implicit-def $mode, implicit $mode
+    FLAT_ATOMIC_FCMPSWAP undef $vgpr0_vgpr1, undef $vgpr2_vgpr3, 0, 0, implicit $exec, implicit $flat_scr :: (volatile load store seq_cst seq_cst (s32))
+    S_CBRANCH_SCC1 %bb.1, implicit undef $scc
+
+  bb.2:
+    S_ENDPGM 0
+...
+
+# A VALU on the detour ends that path only. The atomic is two wait states away
+# on the taken edge: S_NOP 0.
+
+# CHECK-LABEL: name: expiry_on_detour
+# CHECK:      bb.2:
+# CHECK-NEXT: S_NOP 0
+# CHECK-NEXT: S_DENORM_MODE
+---
+name: expiry_on_detour
+body: |
+  bb.0:
+    successors: %bb.2, %bb.1
+    FLAT_ATOMIC_FCMPSWAP undef $vgpr0_vgpr1, undef $vgpr2_vgpr3, 0, 0, implicit $exec, implicit $flat_scr :: (volatile load store seq_cst seq_cst (s32))
+    S_NOP 0
+    S_CBRANCH_SCC1 %bb.2, implicit undef $scc
+
+  bb.1:
+    successors: %bb.2
+    $vgpr4 = V_MOV_B32_e32 0, implicit $exec
+    S_BRANCH %bb.2
+
+  bb.2:
+    S_DENORM_MODE 0, implicit-def $mode, implicit $mode
+    S_ENDPGM 0
+...

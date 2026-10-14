@@ -121,6 +121,9 @@ private:
   friend int findMaxWindowDeficit(StepsT Steps, WindowForT WindowFor);
   template <typename StepsT, typename IsHazardT>
   friend int findNearestDistance(StepsT Steps, IsHazardT IsHazard);
+  template <typename IsHazardT, typename IsExpiredT>
+  friend bool hasActiveHazard(GCNHazardWalk Walk, IsHazardT IsHazard,
+                              IsExpiredT IsExpired);
 
   // A position to continue upwards from, Distance away from the start.
   struct Cursor {
@@ -249,6 +252,24 @@ int findNearestDistance(StepsT Steps, IsHazardT IsHazard) {
     Steps.narrowBound(Distance);
   }
   return Nearest;
+}
+
+/// Whether a hazard is still active at the start of \p Walk: some path reaches
+/// a step \p IsHazard(MI) accepts without first passing one \p IsExpired(MI)
+/// accepts. A step both accept is a hazard; a meta instruction, which does not
+/// issue, is neither. Inline asm is offered to both.
+template <typename IsHazardT, typename IsExpiredT>
+bool hasActiveHazard(GCNHazardWalk Walk, IsHazardT IsHazard,
+                     IsExpiredT IsExpired) {
+  Walk.allowAnyOrder();
+  for (auto [MI, Distance] : Walk) {
+    // Only a match pays for the meta test.
+    if (IsHazard(MI) && !MI.isMetaInstruction())
+      return true;
+    if (IsExpired(MI) && !MI.isMetaInstruction())
+      Walk.endPath();
+  }
+  return false;
 }
 
 } // end namespace llvm

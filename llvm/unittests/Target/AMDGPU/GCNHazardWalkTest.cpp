@@ -243,6 +243,11 @@ TEST_F(GCNHazardWalkTest, QueriesIgnoreMeta) {
   };
   EXPECT_EQ(findMaxWindowDeficit(GCNHazardWalk(Start, 4), WindowFor), 3);
   EXPECT_EQ(findNearestDistance(GCNHazardWalk(Start, 100), UsesV1), 1);
+
+  auto IsKill = [](const MachineInstr &MI) { return name(MI) == "KILL"; };
+  auto IsV1 = [](const MachineInstr &MI) { return name(MI) == "v1"; };
+  EXPECT_FALSE(hasActiveHazard(GCNHazardWalk(Start, 100), IsKill, IsV1));
+  EXPECT_TRUE(hasActiveHazard(GCNHazardWalk(Start, 100), IsV1, IsKill));
 }
 
 // Control can come from one predecessor in more than one place: through the
@@ -847,6 +852,14 @@ TEST_F(GCNHazardWalkRandomTest, MatchesRelaxation) {
           EXPECT_EQ(findNearestDistance(GCNHazardWalk(*Start, Bound, Weight),
                                         IsHazard),
                     ExpectedNearest);
+
+          // The same matches, with paths ending at the markers as above.
+          bool ExpectedMatch = any_of(Expected, [&](const auto &Step) {
+            return IsHazard(*Step.first);
+          });
+          EXPECT_EQ(hasActiveHazard(GCNHazardWalk(*Start, Bound, Weight),
+                                    IsHazard, endsPath),
+                    ExpectedMatch);
         }
       }
     }

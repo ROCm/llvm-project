@@ -1,0 +1,188 @@
+# RUN: llc -mtriple=amdgpu11.00 -verify-machineinstrs -run-pass post-RA-hazard-rec %s -o - | FileCheck %s
+# RUN: sed 's/LDS_DIRECT_LOAD \([0-9]*\),/DS_DIRECT_LOAD \1, 1,/' %s | llc -x mir -mtriple=amdgpu12.00 -verify-machineinstrs -run-pass post-RA-hazard-rec -o - | FileCheck %s
+
+# The VALU writing $vgpr1 is six VALUs before the load on the direct edge and
+# sixteen on the detour through bb.1, which must not decide: waitvdst 6 in both
+# spellings, which differ only in the order the blocks are written down.
+
+# CHECK-LABEL: name: detour_first
+# CHECK: $vgpr1 = {{(LDS|DS)}}_DIRECT_LOAD 6,
+---
+name: detour_first
+body: |
+  bb.0:
+    successors: %bb.2
+    S_BRANCH %bb.2
+
+  bb.1:
+    successors: %bb.3
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.1, %bb.3
+    $vgpr1 = V_MOV_B32_e32 1, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.3
+
+  bb.3:
+    $vgpr1 = LDS_DIRECT_LOAD 15, implicit $m0, implicit $exec
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: name: producer_first
+# CHECK: $vgpr1 = {{(LDS|DS)}}_DIRECT_LOAD 6,
+---
+name: producer_first
+body: |
+  bb.0:
+    successors: %bb.2
+    S_BRANCH %bb.2
+
+  bb.2:
+    successors: %bb.1, %bb.3
+    $vgpr1 = V_MOV_B32_e32 1, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.3
+
+  bb.1:
+    successors: %bb.3
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.3:
+    $vgpr1 = LDS_DIRECT_LOAD 15, implicit $m0, implicit $exec
+    S_ENDPGM 0
+...
+
+# A transcendental can complete out of order, which makes the va_vdst count
+# unusable. One on the detour, which also reaches the producer, still counts:
+# waitvdst 0.
+
+# CHECK-LABEL: name: trans_on_detour
+# CHECK: $vgpr1 = {{(LDS|DS)}}_DIRECT_LOAD 0,
+---
+name: trans_on_detour
+body: |
+  bb.0:
+    successors: %bb.2
+    S_BRANCH %bb.2
+
+  bb.1:
+    successors: %bb.3
+    $vgpr21 = V_EXP_F32_e32 $vgpr20, implicit $mode, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr10 = V_MOV_B32_e32 0, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.1, %bb.3
+    $vgpr1 = V_MOV_B32_e32 1, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    S_CBRANCH_SCC1 %bb.1, implicit undef $scc
+    S_BRANCH %bb.3
+
+  bb.3:
+    $vgpr1 = LDS_DIRECT_LOAD 15, implicit $m0, implicit $exec
+    S_ENDPGM 0
+...
+
+# Inline asm is not a VALU: it neither ends the hazard nor counts, so only the
+# VALU between producer and load does: waitvdst 1.
+
+# CHECK-LABEL: name: asm_between
+# CHECK: $vgpr1 = {{(LDS|DS)}}_DIRECT_LOAD 1,
+---
+name: asm_between
+body: |
+  bb.0:
+    $vgpr1 = V_MOV_B32_e32 1, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    INLINEASM &"", 1 /* sideeffect attdialect */
+    $vgpr1 = LDS_DIRECT_LOAD 15, implicit $m0, implicit $exec
+    S_ENDPGM 0
+...
+
+# A transcendental before the producer is not in flight across it: waitvdst 2.
+
+# CHECK-LABEL: name: trans_before_producer
+# CHECK: $vgpr1 = {{(LDS|DS)}}_DIRECT_LOAD 2,
+---
+name: trans_before_producer
+body: |
+  bb.0:
+    $vgpr21 = V_EXP_F32_e32 $vgpr20, implicit $mode, implicit $exec
+    $vgpr1 = V_MOV_B32_e32 1, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr1 = LDS_DIRECT_LOAD 15, implicit $m0, implicit $exec
+    S_ENDPGM 0
+...
+
+# A DS load on the detour ends that path only: waitvdst 6 from the direct edge.
+
+# CHECK-LABEL: name: expiry_on_detour
+# CHECK: $vgpr1 = {{(LDS|DS)}}_DIRECT_LOAD 6,
+---
+name: expiry_on_detour
+body: |
+  bb.0:
+    successors: %bb.2
+    S_BRANCH %bb.2
+
+  bb.1:
+    successors: %bb.3
+    $vgpr10 = DS_READ_B32_gfx9 $vgpr12, 0, 0, implicit $exec
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.1, %bb.3
+    $vgpr1 = V_MOV_B32_e32 1, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 0, implicit $exec
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.3
+
+  bb.3:
+    $vgpr1 = LDS_DIRECT_LOAD 15, implicit $m0, implicit $exec
+    S_ENDPGM 0
+...

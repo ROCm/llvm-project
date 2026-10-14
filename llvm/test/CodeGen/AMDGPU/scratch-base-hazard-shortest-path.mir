@@ -1,0 +1,154 @@
+# RUN: llc -mtriple=amdgpu12.50 -verify-machineinstrs -run-pass post-RA-hazard-rec %s -o - | FileCheck %s
+
+# $sgpr102 is written six SGPR writes before the src_flat_scratch_base_lo read
+# on the direct edge, within the window of 10, and eleven on the detour through
+# bb.1, which must not decide: S_WAITCNT_DEPCTR in both spellings, which differ
+# only in the order the blocks are written down.
+
+# CHECK-LABEL: name: detour_first
+# CHECK:      bb.3:
+# CHECK:      S_WAITCNT_DEPCTR .VaSdst_0_SaSdst_0
+# CHECK-NEXT: V_ADD_U32_e32 $src_flat_scratch_base_lo
+---
+name: detour_first
+tracksRegLiveness: true
+body: |
+  bb.0:
+    successors: %bb.2
+    liveins: $vgpr0
+    S_BRANCH %bb.2
+
+  bb.1:
+    successors: %bb.3
+    liveins: $vgpr0
+    $sgpr10 = S_MOV_B32 0
+    $sgpr10 = S_MOV_B32 0
+    $sgpr10 = S_MOV_B32 0
+    $sgpr10 = S_MOV_B32 0
+    $sgpr10 = S_MOV_B32 0
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.1, %bb.3
+    liveins: $vgpr0
+    $sgpr102 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    S_CBRANCH_SCC1 %bb.1, implicit undef $scc
+    S_BRANCH %bb.3
+
+  bb.3:
+    liveins: $vgpr0
+    $vgpr0 = V_ADD_U32_e32 $src_flat_scratch_base_lo, $vgpr0, implicit $exec
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: name: producer_first
+# CHECK:      bb.3:
+# CHECK:      S_WAITCNT_DEPCTR .VaSdst_0_SaSdst_0
+# CHECK-NEXT: V_ADD_U32_e32 $src_flat_scratch_base_lo
+---
+name: producer_first
+tracksRegLiveness: true
+body: |
+  bb.0:
+    successors: %bb.1
+    liveins: $vgpr0
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.2, %bb.3
+    liveins: $vgpr0
+    $sgpr102 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    S_CBRANCH_SCC1 %bb.2, implicit undef $scc
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.3
+    liveins: $vgpr0
+    $sgpr10 = S_MOV_B32 0
+    $sgpr10 = S_MOV_B32 0
+    $sgpr10 = S_MOV_B32 0
+    $sgpr10 = S_MOV_B32 0
+    $sgpr10 = S_MOV_B32 0
+    S_BRANCH %bb.3
+
+  bb.3:
+    liveins: $vgpr0
+    $vgpr0 = V_ADD_U32_e32 $src_flat_scratch_base_lo, $vgpr0, implicit $exec
+    S_ENDPGM 0
+...
+
+# A wait on the detour ends that path only: S_WAITCNT_DEPCTR from the direct
+# edge.
+
+# CHECK-LABEL: name: expiry_on_detour
+# CHECK:      bb.3:
+# CHECK:      S_WAITCNT_DEPCTR .VaSdst_0_SaSdst_0
+# CHECK-NEXT: V_ADD_U32_e32 $src_flat_scratch_base_lo
+---
+name: expiry_on_detour
+tracksRegLiveness: true
+body: |
+  bb.0:
+    successors: %bb.2
+    liveins: $vgpr0
+    S_BRANCH %bb.2
+
+  bb.1:
+    successors: %bb.3
+    liveins: $vgpr0
+    S_WAITCNT_DEPCTR 0
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.1, %bb.3
+    liveins: $vgpr0
+    $sgpr102 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    S_CBRANCH_SCC1 %bb.1, implicit undef $scc
+    S_BRANCH %bb.3
+
+  bb.3:
+    liveins: $vgpr0
+    $vgpr0 = V_ADD_U32_e32 $src_flat_scratch_base_lo, $vgpr0, implicit $exec
+    S_ENDPGM 0
+...
+
+# A meta instruction is no SGPR write, even with an SGPR def: nine writes are
+# within the window of 10.
+
+# CHECK-LABEL: name: meta_sgpr_def
+# CHECK:      WAVE_BARRIER
+# CHECK-NEXT: S_WAITCNT_DEPCTR .VaSdst_0_SaSdst_0
+# CHECK-NEXT: V_ADD_U32_e32 $src_flat_scratch_base_lo
+---
+name: meta_sgpr_def
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0
+    $sgpr102 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    $sgpr11 = S_MOV_B32 0
+    WAVE_BARRIER implicit-def $sgpr12
+    $vgpr0 = V_ADD_U32_e32 $src_flat_scratch_base_lo, $vgpr0, implicit $exec
+    S_ENDPGM 0
+...
