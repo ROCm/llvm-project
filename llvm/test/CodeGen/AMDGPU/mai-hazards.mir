@@ -472,3 +472,14 @@ body:             |
     $vgpr4 = FLAT_LOAD_DWORD $vgpr2_vgpr3, 0, 0, implicit $exec, implicit $flat_scr
 ...
 ---
+# An inline-constant srcC is no register for the accvgpr write to overlap.
+# GCN-LABEL: name: mfma_imm_srcc_accvgpr_write
+# GCN:      V_MFMA
+# GCN-NEXT: V_ACCVGPR_WRITE_B32_e64
+name:            mfma_imm_srcc_accvgpr_write
+body:             |
+  bb.0:
+    $agpr0_agpr1_agpr2_agpr3 = V_MFMA_F32_4X4X1F32_e64 $vgpr0, $vgpr1, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $agpr4 = V_ACCVGPR_WRITE_B32_e64 $vgpr2, implicit $exec
+...
+---

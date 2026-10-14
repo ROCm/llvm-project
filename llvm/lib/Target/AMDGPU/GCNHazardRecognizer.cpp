@@ -3354,10 +3354,12 @@ int GCNHazardRecognizer::checkMAIHazards908(MachineInstr *MI) const {
                          this](const MachineInstr &MI) {
       if (!SIInstrInfo::isMFMA(MI))
         return false;
-      Register Reg = TII.getNamedOperand(MI, AMDGPU::OpName::src2)->getReg();
       HazardDefLatency =
           std::max(HazardDefLatency, TSchedModel.computeInstrLatency(&MI));
-      return TRI.regsOverlap(Reg, DstReg);
+      const MachineOperand *SrcC =
+          TII.getNamedOperand(MI, AMDGPU::OpName::src2);
+      assert(SrcC && "an MFMA must have a src2 operand");
+      return SrcC->isReg() && TRI.regsOverlap(SrcC->getReg(), DstReg);
     };
 
     int WaitStatesSince = getWaitStatesSince(IsSrcCMFMAFn, MaxWaitStates);
