@@ -3058,25 +3058,16 @@ int GCNHazardRecognizer::checkMFMAPadding(MachineInstr *MI) const {
   if (!SIInstrInfo::isMFMA(*MI) || MFI->getOccupancy() < 2)
     return 0;
 
-  int NeighborMFMALatency = 0;
-  auto IsNeighboringMFMA = [&NeighborMFMALatency,
-                            this](const MachineInstr &MI) {
-    if (!SIInstrInfo::isMFMA(MI))
-      return false;
-
-    NeighborMFMALatency = this->getMFMAPipelineWaitStates(MI);
-    return true;
-  };
-
+  // The ratio scales each neighbor's own pipeline latency, so a longer one
+  // further back can ask for more padding than a shorter one nearby.
   const int MaxMFMAPipelineWaitStates = 16;
-  int WaitStatesSinceNeighborMFMA =
-      getWaitStatesSince(IsNeighboringMFMA, MaxMFMAPipelineWaitStates);
-
-  int NeighborMFMAPaddingNeeded =
-      (NeighborMFMALatency * MFMAPaddingRatio / 100) -
-      WaitStatesSinceNeighborMFMA;
-
-  return std::max(0, NeighborMFMAPaddingNeeded);
+  return getMaxWindowDeficit(
+      MaxMFMAPipelineWaitStates,
+      [this](const MachineInstr &MI) -> std::optional<int> {
+        if (!SIInstrInfo::isMFMA(MI))
+          return std::nullopt;
+        return getMFMAPipelineWaitStates(MI) * MFMAPaddingRatio / 100;
+      });
 }
 
 int GCNHazardRecognizer::checkMAIHazards908(MachineInstr *MI) const {
