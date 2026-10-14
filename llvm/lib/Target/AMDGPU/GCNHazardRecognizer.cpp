@@ -3770,6 +3770,24 @@ GCNHazardRecognizer::getMFMASrcCWriteWaitStates(const MachineInstr &MFMA,
   }
 }
 
+static int getDotResultReadWaitStates(const MachineInstr &Dot,
+                                      const MachineInstr &MI, bool IsSrcC) {
+  const int DotWriteSameDotReadSrcAB = 3;
+  const int DotWriteDifferentVALURead = 3;
+  // The same opcode forwards its accumulator, so only a different one, or a
+  // read that is not the accumulator, waits.
+  if (Dot.getOpcode() != MI.getOpcode())
+    return DotWriteDifferentVALURead;
+  return IsSrcC ? 0 : DotWriteSameDotReadSrcAB;
+}
+
+static int getDotResultWriteWaitStates(const MachineInstr &Dot,
+                                       const MachineInstr &MI) {
+  const int DotWriteDifferentVALUWrite = 3;
+  // Only a dot product of a different opcode has to land first.
+  return Dot.getOpcode() != MI.getOpcode() ? DotWriteDifferentVALUWrite : 0;
+}
+
 int GCNHazardRecognizer::checkMAIVALUHazards(MachineInstr *MI) const {
   if (!ST.hasGFX90AInsts())
     return 0;
@@ -3792,15 +3810,6 @@ int GCNHazardRecognizer::checkMAIVALUHazards(MachineInstr *MI) const {
 
   unsigned Reg;
 
-  const MachineInstr *DOT = nullptr;
-  auto IsDotWriteFn = [&Reg, &DOT, this](const MachineInstr &MI) {
-    if (!SIInstrInfo::isDOT(MI) ||
-        !TRI.regsOverlap(MI.getOperand(0).getReg(), Reg))
-      return false;
-    DOT = &MI;
-    return true;
-  };
-
   bool DGEMMAfterVALUWrite = false;
   auto IsDGEMMHazard = [&DGEMMAfterVALUWrite, this](const MachineInstr &MI) {
     // Found DGEMM on reverse traversal to def.
@@ -3819,8 +3828,6 @@ int GCNHazardRecognizer::checkMAIVALUHazards(MachineInstr *MI) const {
                                            AMDGPU::OpName::src2);
 
   if (IsMemOrExport || IsVALU) {
-    const int DotWriteSameDotReadSrcAB = 3;
-    const int DotWriteDifferentVALURead = 3;
     const int DMFMABetweenVALUWriteVMEMRead = 2;
     const int MaxWaitStates =
         GFX940_XDL_N_PassWriteVgprVALUMemExpReadWaitStates(16,
@@ -3830,22 +3837,6 @@ int GCNHazardRecognizer::checkMAIVALUHazards(MachineInstr *MI) const {
       if (!Use.isReg())
         continue;
       Reg = Use.getReg();
-
-      DOT = nullptr;
-      int WaitStatesSinceDef = getWaitStatesSinceDef(Reg, IsDotWriteFn,
-                                                     MaxWaitStates);
-      if (DOT) {
-        int NeedWaitStates = 0;
-        if (DOT->getOpcode() == MI->getOpcode()) {
-          if (&Use - &MI->getOperand(0) != SrcCIdx)
-            NeedWaitStates = DotWriteSameDotReadSrcAB;
-        } else {
-          NeedWaitStates = DotWriteDifferentVALURead;
-        }
-
-        int WaitStatesNeededForUse = NeedWaitStates - WaitStatesSinceDef;
-        WaitStatesNeeded = std::max(WaitStatesNeeded, WaitStatesNeededForUse);
-      }
 
       // Workaround for HW data hazard bug observed only in GFX90A. When there
       // is a DGEMM instruction in-between a VALU and a VMEM instruction it
@@ -3863,14 +3854,19 @@ int GCNHazardRecognizer::checkMAIVALUHazards(MachineInstr *MI) const {
         }
       }
 
+      // The read waits for each dot product or MFMA that wrote Reg.
+      bool ReadsAsSrcC = &Use - &MI->getOperand(0) == SrcCIdx;
       WaitStatesNeeded = std::max(
           WaitStatesNeeded,
           getMaxWindowDeficit(
               MaxWaitStates, [&](const MachineInstr &P) -> std::optional<int> {
-                if (!SIInstrInfo::isMFMA(P) ||
-                    !TRI.regsOverlap(P.getOperand(0).getReg(), Reg))
+                if (!SIInstrInfo::isDOT(P) && !SIInstrInfo::isMFMA(P))
                   return std::nullopt;
-                return getMFMAResultReadWaitStates(P, IsMemOrExport);
+                if (!TRI.regsOverlap(P.getOperand(0).getReg(), Reg))
+                  return std::nullopt;
+                if (SIInstrInfo::isMFMA(P))
+                  return getMFMAResultReadWaitStates(P, IsMemOrExport);
+                return getDotResultReadWaitStates(P, *MI, ReadsAsSrcC);
               }));
 
       if (WaitStatesNeeded >= MaxWaitStates)
@@ -3893,28 +3889,24 @@ int GCNHazardRecognizer::checkMAIVALUHazards(MachineInstr *MI) const {
     return WaitStatesNeeded;
 
   for (const MachineOperand &Def : MI->defs()) {
-    const int DotWriteDifferentVALUWrite = 3;
     const int MaxWaitStates =
         GFX940_XDL_N_PassWriteVgprVALUWawWaitStates(16, ST.hasGFX950Insts());
     const int MaxWarWaitStates = 15;
 
     Reg = Def.getReg();
 
-    DOT = nullptr;
-    int WaitStatesSinceDef = getWaitStatesSinceDef(Reg, IsDotWriteFn,
-                                                   MaxWaitStates);
-    if (DOT && DOT->getOpcode() != MI->getOpcode())
-      WaitStatesNeeded = std::max(WaitStatesNeeded, DotWriteDifferentVALUWrite -
-                                                    WaitStatesSinceDef);
-
+    // The write waits for each dot product or MFMA that wrote Reg.
     WaitStatesNeeded = std::max(
         WaitStatesNeeded,
         getMaxWindowDeficit(
             MaxWaitStates, [&](const MachineInstr &P) -> std::optional<int> {
-              if (!SIInstrInfo::isMFMA(P) ||
-                  !TRI.regsOverlap(P.getOperand(0).getReg(), Reg))
+              if (!SIInstrInfo::isDOT(P) && !SIInstrInfo::isMFMA(P))
                 return std::nullopt;
-              return getMFMAResultWriteWaitStates(P);
+              if (!TRI.regsOverlap(P.getOperand(0).getReg(), Reg))
+                return std::nullopt;
+              if (SIInstrInfo::isMFMA(P))
+                return getMFMAResultWriteWaitStates(P);
+              return getDotResultWriteWaitStates(P, *MI);
             }));
 
     if (WaitStatesNeeded >= MaxWaitStates)
