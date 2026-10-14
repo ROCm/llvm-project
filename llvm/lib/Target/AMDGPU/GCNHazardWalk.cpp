@@ -8,10 +8,10 @@
 //
 // Dijkstra's algorithm on instruction positions, so a position is first reached
 // at its distance. A block's top is left once, so paths can only meet where
-// control leaves a block from several places: among its terminators and at the
-// body above them. Only those positions are recorded, and AtStart stops a cycle
-// back to the start. In strict order the closest cursor always moves next; in
-// any order a cursor gives way to a closer one only at those positions, since
+// control leaves a block from several places: among its exits and at the body
+// above them. Only those positions are recorded, and AtStart stops a cycle back
+// to the start. In strict order the closest cursor always moves next; in any
+// order a cursor gives way to a closer one only at those positions, since
 // between them a position has a single path to it. No cursor enters the start
 // block above the start: every path leaves the block past the instructions
 // above the start, so the first cursor came by sooner. Otherwise the current
@@ -24,20 +24,42 @@
 
 using namespace llvm;
 
-// The positions control can leave \p Pred from for \p MBB: each terminator that
+// INLINEASM_BR is not a terminator, and copies of its results can follow it,
+// but control leaves the block at it for its indirect targets. In a block that
+// may hold one, the walk takes every instruction as an exit and the asm as a
+// branch, so that the paths that enter at it meet there.
+static bool isExit(const MachineInstr &MI) {
+  return MI.isTerminator() || MI.getParent()->mayHaveInlineAsmBr();
+}
+
+static bool isBranch(const MachineInstr &MI) {
+  return MI.isBranch() || MI.getOpcode() == TargetOpcode::INLINEASM_BR;
+}
+
+static bool branchesTo(const MachineInstr &MI, const MachineBasicBlock *MBB) {
+  if (MI.getOpcode() == TargetOpcode::INLINEASM_BR)
+    return any_of(MI.operands(), [MBB](const MachineOperand &MO) {
+      return MO.isMBB() && MO.getMBB() == MBB;
+    });
+  return MI.isBranch() && MI.getNumOperands() > 0 && MI.getOperand(0).isMBB() &&
+         MI.getOperand(0).getMBB() == MBB;
+}
+
+// The positions control can leave \p Pred from for \p MBB: each exit that
 // branches to \p MBB, and the last instruction if control also falls through.
-// An edge that no terminator names is a fallthrough past every terminator.
-// Branches from \p Passed up are left out: the walk has been through them.
+// An edge that no exit names is a fallthrough past every terminator. Exits from
+// \p Passed up are left out: the walk has been through them.
 static void getEntries(
     const MachineBasicBlock &Pred, const MachineBasicBlock *MBB,
     MachineBasicBlock::const_reverse_instr_iterator Passed,
     SmallVectorImpl<MachineBasicBlock::const_reverse_instr_iterator> &Entries) {
+  // Only an indirect target is entered from an INLINEASM_BR.
+  bool AsmTarget = MBB->isInlineAsmBrIndirectTarget();
   bool Named = false, Above = false;
   for (auto I = Pred.instr_rbegin(), E = Pred.instr_rend();
-       I != E && I->isTerminator(); ++I) {
+       I != E && (I->isTerminator() || AsmTarget); ++I) {
     Above = Above || I == Passed;
-    if (I->isBranch() && I->getNumOperands() > 0 && I->getOperand(0).isMBB() &&
-        I->getOperand(0).getMBB() == MBB) {
+    if (branchesTo(*I, MBB)) {
       Named = true;
       if (!Above)
         Entries.push_back(I);
@@ -62,11 +84,10 @@ GCNHazardWalk::GCNHazardWalk(const MachineInstr &MI, int Bound, WeightFn Weight)
 }
 
 // Whether another path can reach the position of \p C too: cursors enter a
-// block at its end or at a branch, so among shared terminators paths meet
-// there.
+// block at its end or at a branch, so among shared exits paths meet there.
 bool GCNHazardWalk::isJoin(const Cursor &C) {
   return C.Shared && (C.Pos == C.MBB->instr_rbegin() ||
-                      (C.Pos != C.MBB->instr_rend() && C.Pos->isBranch()));
+                      (C.Pos != C.MBB->instr_rend() && isBranch(*C.Pos)));
 }
 
 bool GCNHazardWalk::leaveSpan() {
@@ -129,18 +150,17 @@ bool GCNHazardWalk::findStep() {
       continue;
     }
 
-    C.Shared = C.Shared && C.Pos->isTerminator();
+    C.Shared = C.Shared && isExit(*C.Pos);
 
     // A cursor that came back into the start block stops at the start. Among
-    // shared terminators it stops at the next branch, where another path may
-    // join.
+    // shared exits it stops at the next branch, where another path may join.
     SpanEnd = End;
     if (C.MBB == StartMBB && !C.FromStart)
       SpanEnd = StartPos;
     if (C.Shared) {
-      for (auto I = std::next(C.Pos);
-           I != SpanEnd && I != End && I->isTerminator(); ++I) {
-        if (I->isBranch()) {
+      for (auto I = std::next(C.Pos); I != SpanEnd && I != End && isExit(*I);
+           ++I) {
+        if (isBranch(*I)) {
           SpanEnd = I;
           break;
         }

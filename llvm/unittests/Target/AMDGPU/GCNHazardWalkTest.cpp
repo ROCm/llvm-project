@@ -511,6 +511,55 @@ TEST_F(GCNHazardWalkTest, FindMaxWindowDeficit) {
   EXPECT_EQ(findMaxWindowDeficit(GCNHazardWalk(Start, 6), WindowFor), 3);
 }
 
+// In any order, a cursor that reaches an asm goto by passing a bundle header
+// still gives way there to a closer one: v1 is 1 away through bb.1, 2 through
+// bb.0's end.
+TEST_F(GCNHazardWalkTest, AsmGotoAfterBundle) {
+  const MachineInstr &Start = parse(R"(
+  bb.0:
+    successors: %bb.2, %bb.1
+    $vgpr1 = V_MOV_B32_e32 1, implicit $exec
+    INLINEASM_BR &"", 1 /* sideeffect attdialect */, 13 /* imm */, %bb.1
+    BUNDLE implicit-def $vgpr2 {
+      $vgpr2 = V_MOV_B32_e32 2, implicit $exec
+    }
+    S_BRANCH %bb.2
+  bb.1 (inlineasm-br-indirect-target):
+    successors: %bb.2
+    S_BRANCH %bb.2
+  bb.2:
+    $vgpr0 = V_MOV_B32_e32 99, implicit $exec
+    S_ENDPGM 0
+)");
+  auto WindowFor = [](const MachineInstr &MI) -> std::optional<int> {
+    if (name(MI) != "v1")
+      return std::nullopt;
+    return 10;
+  };
+  EXPECT_EQ(findMaxWindowDeficit(GCNHazardWalk(Start, 10), WindowFor), 9);
+}
+
+// A start below an asm goto whose indirect edge leads back into its block: the
+// asm is where the walk's first path and the cycle meet.
+TEST_F(GCNHazardWalkTest, AsmGotoCycleToStartBlock) {
+  const MachineInstr &Start = parse(R"(
+  bb.0:
+    successors: %bb.1
+    $vgpr1 = V_MOV_B32_e32 1, implicit $exec
+  bb.1 (inlineasm-br-indirect-target):
+    successors: %bb.1, %bb.2
+    $vgpr2 = V_MOV_B32_e32 2, implicit $exec
+    INLINEASM_BR &"", 1 /* sideeffect attdialect */, 13 /* imm */, %bb.1
+    $vgpr3 = V_MOV_B32_e32 3, implicit $exec
+    $vgpr0 = V_MOV_B32_e32 99, implicit $exec
+    S_BRANCH %bb.2
+  bb.2:
+    S_ENDPGM 0
+)");
+  EXPECT_EQ(sorted(run(GCNHazardWalk(Start, 100))),
+            Steps({{"v3", 0}, {"INLINEASM_BR", 1}, {"v2", 1}, {"v1", 2}}));
+}
+
 // Random CFGs against a label-correcting search that relaxes every position
 // until nothing improves, written from the definitions alone.
 class GCNHazardWalkRandomTest : public GCNHazardWalkTest {
@@ -529,12 +578,13 @@ protected:
   std::string function(unsigned Index) {
     unsigned NumBlocks = 1 + random(8), Start = random(NumBlocks);
     std::string Body = "---\nname: f" + std::to_string(Index) + "\nbody: |\n";
-    int Marker = 1;
+    std::vector<std::string> Succs(NumBlocks), Terms(NumBlocks);
+    std::vector<bool> AsmTarget(NumBlocks);
     for (unsigned B = 0; B != NumBlocks; ++B) {
       bool Last = B + 1 == NumBlocks;
       unsigned X = random(NumBlocks), Y = random(NumBlocks);
-      std::string Succ, Term;
-      switch (random(Last ? 3 : 4)) {
+      std::string &Succ = Succs[B], &Term = Terms[B];
+      switch (random(Last ? 3 : 5)) {
       case 0:
         Term = Last ? "    S_ENDPGM 0\n" : "";
         Succ = Last ? "" : "%bb." + std::to_string(B + 1);
@@ -556,17 +606,45 @@ protected:
         if (!Last && X != B + 1)
           Succ += ", %bb." + std::to_string(B + 1);
         break;
-      default:
+      case 3:
         Term = "    S_CBRANCH_SCC1 %bb." + std::to_string(X) +
                ", implicit undef $scc\n    S_BRANCH %bb." + std::to_string(Y) +
                "\n";
         Succ = "%bb." + std::to_string(X);
         if (X != Y)
           Succ += ", %bb." + std::to_string(Y);
+        break;
+      default: {
+        // An instruction between the asm and the branch, as the copy of an
+        // asm result would be, runs on the edge to Y only; it may be bundled.
+        // The asm may name a second indirect target, Z.
+        unsigned Z = random(NumBlocks);
+        Term = "    INLINEASM_BR &\"\", 1 /* sideeffect attdialect */, 13 /* "
+               "imm */, %bb." +
+               std::to_string(X);
+        Succ = "%bb." + std::to_string(X);
+        if (Z != X) {
+          Term += ", 13 /* imm */, %bb." + std::to_string(Z);
+          Succ += ", %bb." + std::to_string(Z);
+        }
+        std::string Copy = "$vgpr1 = V_MOV_B32_e32 " + std::to_string(500 + B) +
+                           ", implicit $exec\n";
+        Term += random(2) ? "\n    BUNDLE implicit-def $vgpr1 {\n      " +
+                                Copy + "    }\n"
+                          : "\n    " + Copy;
+        Term += "    S_BRANCH %bb." + std::to_string(Y) + "\n";
+        if (Y != X && Y != Z)
+          Succ += ", %bb." + std::to_string(Y);
+        AsmTarget[X] = AsmTarget[Z] = true;
       }
-      Body += "  bb." + std::to_string(B) + ":\n";
-      if (!Succ.empty())
-        Body += "    successors: " + Succ + "\n";
+      }
+    }
+    int Marker = 1;
+    for (unsigned B = 0; B != NumBlocks; ++B) {
+      Body += "  bb." + std::to_string(B) +
+              (AsmTarget[B] ? " (inlineasm-br-indirect-target):\n" : ":\n");
+      if (!Succs[B].empty())
+        Body += "    successors: " + Succs[B] + "\n";
       unsigned NumInstrs = random(5), StartAt = random(NumInstrs + 1);
       for (unsigned I = 0; I <= NumInstrs; ++I) {
         if (B == Start && I == StartAt)
@@ -581,7 +659,7 @@ protected:
         Body += "    $vgpr1 = V_MOV_B32_e32 " + std::to_string(Imm) +
                 ", implicit $exec\n";
       }
-      Body += Term;
+      Body += Terms[B];
     }
     return Body;
   }
@@ -595,14 +673,20 @@ protected:
   // adds the last instruction once more, which changes no distance.
   //
   // The positions control can leave \p Pred from for \p MBB: every
-  // terminator branching to \p MBB, and the last instruction if \p Pred falls
-  // through to \p MBB or no terminator names it.
+  // terminator branching to \p MBB, an INLINEASM_BR naming it, and the last
+  // instruction if \p Pred falls through to \p MBB or nothing names it.
   static SmallVector<MachineBasicBlock::const_reverse_instr_iterator, 2>
   entries(const MachineBasicBlock &Pred, const MachineBasicBlock *MBB) {
     SmallVector<MachineBasicBlock::const_reverse_instr_iterator, 2> Result;
     for (const MachineInstr &MI : Pred.terminators())
       if (MI.isBranch() && MI.getNumOperands() > 0 &&
           MI.getOperand(0).isMBB() && MI.getOperand(0).getMBB() == MBB)
+        Result.push_back(MI.getReverseIterator());
+    for (const MachineInstr &MI : Pred.instrs())
+      if (MI.getOpcode() == TargetOpcode::INLINEASM_BR &&
+          any_of(MI.operands(), [MBB](const MachineOperand &MO) {
+            return MO.isMBB() && MO.getMBB() == MBB;
+          }))
         Result.push_back(MI.getReverseIterator());
     bool FallsThrough =
         const_cast<MachineBasicBlock &>(Pred).getFallThrough(false) == MBB;

@@ -1,0 +1,163 @@
+# RUN: llc -mtriple=amdgpu9.0a -verify-machineinstrs -run-pass post-RA-hazard-rec %s -o - | FileCheck %s
+
+# A VALU reading the result of a 16x16 MFMA must wait 11 wait states. The
+# S_NOP 7 between them is 8. On the edge to the indirect target, control leaves
+# at the INLINEASM_BR and the S_BRANCH after it does not execute: three wait
+# states remain, encoded as S_NOP 2.
+
+# CHECK-LABEL: name: indirect_target
+# CHECK:      bb.2 (inlineasm-br-indirect-target):
+# CHECK-NEXT: S_NOP 2
+# CHECK-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+---
+name: indirect_target
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_NOP 7
+    INLINEASM_BR &"", 1 /* sideeffect attdialect */, 13 /* imm */, %bb.2
+    S_BRANCH %bb.1
+
+  bb.1:
+    S_ENDPGM 0
+
+  bb.2 (inlineasm-br-indirect-target):
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+...
+
+# On the edge the S_BRANCH takes, it executes: two wait states, S_NOP 1.
+
+# CHECK-LABEL: name: branch_target
+# CHECK:      bb.1:
+# CHECK-NEXT: S_NOP 1
+# CHECK-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+---
+name: branch_target
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_NOP 7
+    INLINEASM_BR &"", 1 /* sideeffect attdialect */, 13 /* imm */, %bb.2
+    S_BRANCH %bb.1
+
+  bb.1:
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+
+  bb.2 (inlineasm-br-indirect-target):
+    S_ENDPGM 0
+...
+
+# A copy of an asm result between the asm and the branch runs on the branch
+# edge only: S_NOP 2 on the indirect edge, and one wait state more, S_NOP 0, on
+# the other.
+
+# CHECK-LABEL: name: indirect_target_after_copy
+# CHECK:      bb.2 (inlineasm-br-indirect-target):
+# CHECK-NEXT: S_NOP 2
+# CHECK-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+---
+name: indirect_target_after_copy
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_NOP 7
+    INLINEASM_BR &"", 1 /* sideeffect attdialect */, 13 /* imm */, %bb.2
+    $vgpr5 = V_MOV_B32_e32 $vgpr6, implicit $exec
+    S_BRANCH %bb.1
+
+  bb.1:
+    S_ENDPGM 0
+
+  bb.2 (inlineasm-br-indirect-target):
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: name: branch_target_after_copy
+# CHECK:      bb.1:
+# CHECK-NEXT: S_NOP 0
+# CHECK-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+---
+name: branch_target_after_copy
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_NOP 7
+    INLINEASM_BR &"", 1 /* sideeffect attdialect */, 13 /* imm */, %bb.2
+    $vgpr5 = V_MOV_B32_e32 $vgpr6, implicit $exec
+    S_BRANCH %bb.1
+
+  bb.1:
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+
+  bb.2 (inlineasm-br-indirect-target):
+    S_ENDPGM 0
+...
+
+# The asm names two indirect targets: control leaves at it for either, S_NOP 2
+# in both.
+
+# CHECK-LABEL: name: two_indirect_targets
+# CHECK:      bb.2 (inlineasm-br-indirect-target):
+# CHECK-NEXT: S_NOP 2
+# CHECK-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+# CHECK:      bb.3 (inlineasm-br-indirect-target):
+# CHECK-NEXT: S_NOP 2
+# CHECK-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+---
+name: two_indirect_targets
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2, %bb.3
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_NOP 7
+    INLINEASM_BR &"", 1 /* sideeffect attdialect */, 13 /* imm */, %bb.2, 13 /* imm */, %bb.3
+    S_BRANCH %bb.1
+
+  bb.1:
+    S_ENDPGM 0
+
+  bb.2 (inlineasm-br-indirect-target):
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+
+  bb.3 (inlineasm-br-indirect-target):
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+...
+
+# The block falls through after a copy of an asm result: the copy runs on the
+# fallthrough edge only, S_NOP 1 there and S_NOP 2 on the indirect edge.
+
+# CHECK-LABEL: name: fallthrough_after_copy
+# CHECK:      bb.1:
+# CHECK-NEXT: S_NOP 1
+# CHECK-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+# CHECK:      bb.2 (inlineasm-br-indirect-target):
+# CHECK-NEXT: S_NOP 2
+# CHECK-NEXT: $vgpr4 = V_MOV_B32_e32 $vgpr2
+---
+name: fallthrough_after_copy
+body: |
+  bb.0:
+    successors: %bb.1, %bb.2
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_NOP 7
+    INLINEASM_BR &"", 1 /* sideeffect attdialect */, 13 /* imm */, %bb.2
+    $vgpr5 = V_MOV_B32_e32 $vgpr6, implicit $exec
+
+  bb.1:
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+
+  bb.2 (inlineasm-br-indirect-target):
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+...

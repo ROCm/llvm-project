@@ -44,11 +44,9 @@ struct GCNHazardStep {
 /// instruction is no shorter and is not offered again, so whether a check ends
 /// a path may depend only on the step, not on its distance or path.
 ///
-/// A predecessor's terminators are yielded only if the edge executes them, and
-/// the start is yielded where a cycle leads back to it.
-///
-/// FIXME: The edge to an indirect target of an INLINEASM_BR leaves the
-/// predecessor at its end, so the instructions after the asm count on it too.
+/// A predecessor's terminators, and the instructions after an INLINEASM_BR, are
+/// yielded only if the edge executes them, and the start is yielded where a
+/// cycle leads back to it.
 ///
 /// A walk can be iterated once.
 class GCNHazardWalk {
@@ -118,7 +116,7 @@ private:
     const MachineBasicBlock *MBB;
     MachineBasicBlock::const_reverse_instr_iterator Pos;
     int Distance;
-    // Pos is among the terminators of a block that control leaves from several
+    // Pos is among the exits of a block that control leaves from several
     // places, so other cursors may come this way too.
     bool Shared = false;
     // The cursor the walk began with.
