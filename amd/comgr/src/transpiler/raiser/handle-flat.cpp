@@ -20,6 +20,7 @@
 #include "transpiler/raiser/reg-file.h"
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "Utils/AMDGPUBaseInfo.h"
 
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Instructions.h"
@@ -269,6 +270,20 @@ static Error emitGlobalAtomicAdd(RaiseContext &Ctx, const DecodedInst &Di,
 
 Error handleVGLOBAL(RaiseContext &Ctx, const DecodedInst &Di,
                     OperandResolver &) {
+  if (Di.CanonOp == CanonicalOp::GLOBAL_PREFETCH_B8) {
+    if (!AMDGPU::isGFX1250(Ctx.Projection.SourceSTI))
+      return unsupported(Ctx, Di, "prefetch is not modeled on this GPU");
+    int64_t CachePolicy = globalCachePolicy(Di);
+    if ((CachePolicy & ~AMDGPU::CPol::SCOPE) != AMDGPU::CPol::TH_RT ||
+        (CachePolicy & AMDGPU::CPol::SCOPE) == AMDGPU::CPol::SCOPE_CU)
+      return unsupported(Ctx, Di,
+                         "only RT prefetch with SE, DEV or SYS scope and no "
+                         "extra cache-policy bits is modeled");
+    // This speculative form returns no data and reports no faults.
+    // Its cache effects do not require an operation on the target.
+    return Error::success();
+  }
+
   if (Di.CanonOp == CanonicalOp::GLOBAL_ATOMIC_ADD_U32 ||
       Di.CanonOp == CanonicalOp::GLOBAL_ATOMIC_ADD_RTN_U32)
     return emitGlobalAtomicAdd(Ctx, Di, /*WidthInDwords=*/1,
