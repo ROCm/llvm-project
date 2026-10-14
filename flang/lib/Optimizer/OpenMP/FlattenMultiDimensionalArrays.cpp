@@ -216,18 +216,87 @@ llvm::SmallVector<BoundDimDesc> getDeviceBounds(hlfir::DeclareOp declareOp) {
   return deviceBounds;
 }
 
+mlir::Value
+calculateTotalSize(fir::FirOpBuilder &builder, mlir::Location loc,
+                   const llvm::SmallVector<BoundDimDesc> &deviceBounds) {
+  mlir::Value totalSize = nullptr;
+  for (auto bound : deviceBounds) {
+    auto int64Extent = fir::ConvertOp::create(
+        builder, loc, builder.getI64Type(), bound.Extent);
+    if (!totalSize)
+      totalSize = int64Extent;
+    else
+      totalSize =
+          mlir::arith::MulIOp::create(builder, loc, totalSize, int64Extent);
+  }
+  totalSize = fir::ShapeOp::create(builder, loc, totalSize);
+  return totalSize;
+}
+
 hlfir::DeclareOp genFlattenedArrayDeclareOp(fir::FirOpBuilder &builder,
                                             hlfir::DeclareOp declareOp,
                                             mlir::Value shape) {
 
-  std::string name = (declareOp.getUniqName().str() + ".opt");
+  std::string name = (declareOp.getUniqName().str() + ".flat");
+  auto ref = declareOp.getMemref();
+  auto refTy = mlir::cast<fir::ReferenceType>(ref.getType());
+  auto seqTy = mlir::cast<fir::SequenceType>(refTy.getEleTy());
+
+  auto flatSeqTy = fir::SequenceType::get(
+      {fir::SequenceType::getUnknownExtent()}, seqTy.getEleTy());
+  auto flattenedMemRef = fir::ConvertOp::create(
+      builder, declareOp.getLoc(), fir::ReferenceType::get(flatSeqTy), ref);
   auto newDecl = hlfir::DeclareOp::create(
-      builder, declareOp.getLoc(), declareOp.getMemref(), name, shape,
+      builder, declareOp.getLoc(), flattenedMemRef, name, shape,
       declareOp.getTypeparams(), declareOp.getDummyScope(),
       declareOp.getStorage(), declareOp.getStorageOffset(),
       declareOp.getFortranAttrsAttr(), declareOp.getDataAttrAttr());
 
   return newDecl;
+}
+
+void updateArrayAccess(fir::FirOpBuilder &builder,
+                       hlfir::DeclareOp oldDeclareOp,
+                       hlfir::DeclareOp newDeclareOp,
+                       const llvm::SmallVector<BoundDimDesc> &bounds) {
+  mlir::OpBuilder::InsertionGuard guard(builder);
+  llvm::SmallVector<hlfir::DesignateOp> oldDesignateOps;
+  for (auto it : (oldDeclareOp->getUsers())) {
+    auto designateOp = llvm::dyn_cast<hlfir::DesignateOp>(*it);
+    assert(designateOp && "Expected designate op");
+    builder.setInsertionPointAfter(designateOp);
+    auto loc = designateOp.getLoc();
+    mlir::Value linearIndex = fir::ConvertOp::create(
+        builder, loc, builder.getI64Type(), designateOp.getIndices()[0]);
+    auto one = mlir::arith::ConstantOp::create(builder, loc,
+                                               builder.getI64IntegerAttr(-1));
+    for (size_t i = 1; i < designateOp.getIndices().size(); ++i) {
+      auto int64IdxConv = fir::ConvertOp::create(
+          builder, loc, builder.getI64Type(), designateOp.getIndices()[i]);
+      mlir::Value int64IdxConvMinOne =
+          mlir::arith::AddIOp::create(builder, loc, int64IdxConv, one);
+      mlir::Value dimOffset = fir::ConvertOp::create(
+          builder, loc, builder.getI64Type(), bounds[0].Extent);
+      for (size_t dim = 1; dim < i ; ++dim) {
+        auto dimOffsetNext = fir::ConvertOp::create(
+            builder, loc, builder.getI64Type(), bounds[dim].Extent);
+        dimOffset =
+            mlir::arith::MulIOp::create(builder, loc, dimOffset, dimOffsetNext);
+      }
+      auto dimOffsetProduct = mlir::arith::MulIOp::create(
+          builder, loc, int64IdxConvMinOne, dimOffset);
+      linearIndex = mlir::arith::AddIOp::create(builder, loc, dimOffsetProduct,
+                                                linearIndex);
+    }
+    auto newDesignateOp = hlfir::DesignateOp::create(
+        builder, loc, designateOp.getResult().getType(),
+        newDeclareOp.getResult(0), {linearIndex});
+    designateOp.replaceAllUsesWith(&*newDesignateOp);
+    oldDesignateOps.push_back(designateOp);
+  }
+  for (auto it : oldDesignateOps)
+    (*it).erase();
+  oldDeclareOp.erase();
 }
 
 class FlattenMultiDimensionalArraysPass
@@ -296,11 +365,12 @@ public:
           for (auto arr : optimizableSetOfArrays.getArrays()) {
             builder.setInsertionPointAfter(arr);
             if (!totalSize) {
-              totalSize = arr.getShape();
+              totalSize = calculateTotalSize(
+                  builder, arr.getLoc(), optimizableSetOfArrays.getBounds());
             }
             auto newDecl = genFlattenedArrayDeclareOp(builder, arr, totalSize);
-            arr.replaceAllUsesWith(newDecl);
-            arr.erase();
+            updateArrayAccess(builder, arr, newDecl,
+                              optimizableSetOfArrays.getBounds());
           }
         }
       });
