@@ -262,6 +262,16 @@ private:
                             bool IsSrcC) const;
 
   int checkMAIHazards(MachineInstr *MI) const;
+  /// Wait states before \p Consumer may use \p Reg, an AGPR, as srcC if
+  /// \p IsSrcC, after \p Producer, an MFMA or a v_accvgpr_write, wrote it on
+  /// gfx908, or std::nullopt if that is no hazard.
+  std::optional<int> getMFMA908ReadWaitStates(const MachineInstr &Consumer,
+                                              const MachineInstr &Producer,
+                                              Register Reg, bool IsSrcC) const;
+  /// Wait states before a v_accvgpr_write may overwrite \p Reg, which \p MFMA
+  /// read as srcC, or std::nullopt if it did not; gfx908.
+  std::optional<int> getMFMA908SrcCWriteWaitStates(const MachineInstr &MFMA,
+                                                   Register Reg) const;
   int checkMAIHazards908(MachineInstr *MI) const;
   int checkMAIHazards90A(MachineInstr *MI) const;
   /// Wait states needed when MFMA \p Reader reads as src2/C a register that the
