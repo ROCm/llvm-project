@@ -19,13 +19,15 @@
 ; LAUNCH: replicated dispatch requires whole source waves
 ; RUN: not %transpile_cli %t.hsaco --target-isa=gfx1250 --emit-ir --allow-replicated-dispatch --specialize-workgroup=64,1,1 2>&1 | %FileCheck %s --check-prefix=TARGET
 ; TARGET: WMMA remapping requires wave32 to wave64
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym DENORM=1 %s -o %t.keep.o
-; RUN: %ld.lld -shared %t.keep.o -o %t.keep.hsaco
-; RUN: not %transpile_cli %t.keep.hsaco --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --specialize-workgroup=32,1,1 2>&1 | %FileCheck %s --check-prefix=DENORM
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym DENORM=1 %s -o %t.output-flush.o
+; RUN: %ld.lld -shared %t.output-flush.o -o %t.output-flush.hsaco
+; RUN: %transpile_cli %t.output-flush.hsaco --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --specialize-workgroup=32,1,1 > %t.output-flush.ll
+; RUN: %FileCheck %s --check-prefix=OUTPUT-FLUSH < %t.output-flush.ll
+; RUN: %llc -mtriple=amdgpu9.42-amd-amdhsa -filetype=obj %t.output-flush.ll -o %t.output-flush.target.o
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym DENORM=0 %s -o %t.flush.o
 ; RUN: %ld.lld -shared %t.flush.o -o %t.flush.hsaco
 ; RUN: not %transpile_cli %t.flush.hsaco --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --specialize-workgroup=64,1,1 2>&1 | %FileCheck %s --check-prefix=DENORM
-; DENORM: F32 WMMA requires preserved input and output denormals
+; DENORM: F32 WMMA requires preserved input denormals
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym DENORM=2 %s -o %t.input-flush.o
 ; RUN: %ld.lld -shared %t.input-flush.o -o %t.input-flush.hsaco
 ; RUN: not %transpile_cli %t.input-flush.hsaco --target-isa=gfx942 --emit-ir --allow-replicated-dispatch --specialize-workgroup=64,1,1 2>&1 | %FileCheck %s --check-prefix=DENORM
@@ -81,6 +83,7 @@ f32:
 .elseif CASE == 4
   v_wmma_f32_16x16x4_f32 v[16:23], v[0:1], v[8:9], 1.0
 .else
+; OUTPUT-FLUSH: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x4f32
 ; OPT-COUNT-2: call <4 x float> @llvm.amdgcn.mfma.f32.16x16x4f32(float {{%[^,]+}}, float {{%[^,]+}}, <4 x float> <float 1.000000e+00, float 2.000000e+00, float 3.000000e+00, float 4.000000e+00>, i32 0, i32 0, i32 0)
   v_wmma_f32_16x16x4_f32 v[16:23], v[0:1], v[8:9], v[16:23]
 .endif

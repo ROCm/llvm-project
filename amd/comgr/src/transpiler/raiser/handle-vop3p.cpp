@@ -491,11 +491,12 @@ Error raiseWMMA(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
       if (Error Err = Ctx.requirePerWaveExecution(Di))
         return Err;
 
-    // F32 MFMA honors denormal flushing, whereas WMMA preserves denormals.
-    if (Kernel->getDenormalMode(APFloat::IEEEsingle()) !=
-        DenormalMode::getIEEE())
-      return unsupported(
-          Ctx, Di, "F32 WMMA requires preserved input and output denormals");
+    // WMMA preserves denormals. F32 MFMA applies the input mode to A and B,
+    // while its accumulator and result preserve denormals unconditionally.
+    if (Kernel->getDenormalMode(APFloat::IEEEsingle()).Input !=
+        DenormalMode::IEEE)
+      return unsupported(Ctx, Di,
+                         "F32 WMMA requires preserved input denormals");
   }
 
   if (InputType == WMMAInputType::IU8) {
