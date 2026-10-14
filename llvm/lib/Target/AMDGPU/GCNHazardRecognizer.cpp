@@ -833,7 +833,7 @@ void GCNHazardRecognizer::AdvanceCycle() {
   EmittedInstrs.push_front(CurrCycleInstr);
 
   bool IsVALUOrWMMA =
-      SIInstrInfo::isVALU(*CurrCycleInstr, /*AllowLDSDMA=*/true) ||
+      SIInstrInfo::isVALU(*CurrCycleInstr, /*AllowLDSDMA=*/false) ||
       SIInstrInfo::isWMMA(*CurrCycleInstr) ||
       SIInstrInfo::isSWMMAC(*CurrCycleInstr);
   if (IsVALUOrWMMA) {
@@ -1091,8 +1091,10 @@ template <typename WindowForT>
 int GCNHazardRecognizer::getMaxVALUWindowDeficit(int MaxWindow,
                                                  WindowForT WindowFor) const {
   if (isHazardRecognizerMode()) {
+    // The window counts VALUs; LDSDMA carries the VALU flag but does not
+    // count, as in AMDGPUInsertDelayAlu.
     auto GetVALUWaitStates = [](const MachineInstr &MI) -> unsigned {
-      return SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/true) ? 1 : 0;
+      return SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/false) ? 1 : 0;
     };
     return findMaxWindowDeficit(
         GCNHazardWalk(*CurrCycleInstr, MaxWindow, GetVALUWaitStates),

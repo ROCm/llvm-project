@@ -79,6 +79,21 @@ TEST_F(GCNHazardRecognizerTest, SchedulerWMMACoexecutionDeficitCovered) {
             ScheduleHazardRecognizer::NoHazard);
 }
 
+// LDSDMA is VALU-tagged, but not a co-executable VALU: three VALUs after it
+// leave the BF16 WMMA, which asks for four, one short.
+TEST_F(GCNHazardRecognizerTest, SchedulerDoesNotCountLDSDMA) {
+  EXPECT_EQ(hazardAtLast(R"(
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 $vgpr30, $vgpr28_vgpr29, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt
+    $vgpr64 = V_ADD_U32_e32 1, $vgpr64, implicit $exec
+    $vgpr65 = V_ADD_U32_e32 1, $vgpr65, implicit $exec
+    $vgpr66 = V_ADD_U32_e32 1, $vgpr66, implicit $exec
+    $vgpr48 = V_MOV_B32_e32 $vgpr16, implicit $exec
+    S_ENDPGM 0
+)"),
+            ScheduleHazardRecognizer::Hazard);
+}
+
 class GCNHazardRecognizerGFX90ATest : public GCNHazardRecognizerTest {
 protected:
   void SetUp() override { setUpImpl("amdgcn-amd-amdhsa", "gfx90a", ""); }
