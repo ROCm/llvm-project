@@ -584,11 +584,24 @@ static VPRegionBlock *createReplicateRegion(VPReplicateRecipe *PredRecipe,
   VPBlockUtils::insertTwoBlocksAfter(Pred, Exiting, Entry);
   VPBlockUtils::connectBlocks(Pred, Exiting);
 
-  if (!PredRecipe->user_empty()) {
-    auto *PHIRecipe = new VPPredInstPHIRecipe(RecipeWithoutMask,
-                                              RecipeWithoutMask->getDebugLoc());
+  PredRecipe->replaceAllUsesWith(RecipeWithoutMask);
+  // Move the extracts of a struct result into the region, so only scalars
+  // leave it.
+  SmallVector<VPUser *> Defs = {RecipeWithoutMask};
+  if (RecipeWithoutMask->getScalarType()->isStructTy())
+    Defs = to_vector(RecipeWithoutMask->users());
+  for (VPUser *U : Defs) {
+    auto *Def = cast<VPReplicateRecipe>(U);
+    assert((Def == RecipeWithoutMask ||
+            Def->getOpcode() == Instruction::ExtractValue) &&
+           "only extracts can use a predicated struct");
+    Def->moveBefore(*Pred, Pred->end());
+    if (Def->user_empty())
+      continue;
+    auto *PHIRecipe = new VPPredInstPHIRecipe(Def, Def->getDebugLoc());
     Exiting->appendRecipe(PHIRecipe);
-    PredRecipe->replaceAllUsesWith(PHIRecipe);
+    Def->replaceAllUsesWith(PHIRecipe);
+    PHIRecipe->setOperand(0, Def);
   }
   PredRecipe->eraseFromParent();
   return Region;
@@ -2742,6 +2755,8 @@ void VPlanTransforms::optimize(VPlan &Plan) {
   RUN_VPLAN_PASS(createAndOptimizeReplicateRegions, Plan);
   RUN_VPLAN_PASS(mergeBlocksIntoPredecessors, Plan);
   RUN_VPLAN_PASS(licm, Plan);
+  RUN_VPLAN_PASS(cse, Plan);
+  RUN_VPLAN_PASS(removeDeadRecipes, Plan);
 }
 
 void VPlanTransforms::simplifyLiveInsWithSCEV(VPlan &Plan,
@@ -6008,6 +6023,11 @@ void VPlanTransforms::makeScalarizationDecisions(VPlan &Plan, VFRange &Range) {
 
       // If executing other lanes produces side-effects we can't avoid them.
       if (VPI.mayHaveSideEffects())
+        continue;
+
+      // ExtractValue takes the shape of its aggregate, decided in
+      // tryToCreateWidenNonPhiRecipe.
+      if (VPI.getOpcode() == Instruction::ExtractValue)
         continue;
 
       // We want to drop the mask operand, verify we can safely do that.
