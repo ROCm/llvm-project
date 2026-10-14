@@ -823,6 +823,53 @@ static uint32_t getDeviceBlockLimit(GenericDeviceTy &GenericDevice,
   return BlockLimit;
 }
 
+/// Size in bytes of the per-team data of a cross-team reduction above which the
+/// reduction is large rather than scalar. A few scalars reduced together still
+/// behave like a scalar reduction.
+static constexpr uint32_t LargeTeamsReductionBytes = 32;
+
+/// Get the number of blocks of \p NumThreads threads each to launch a kernel
+/// with a cross-team reduction with, or zero to size its grid like that of any
+/// other kernel.
+///
+/// Every block adds to the cost of combining the partial results of the
+/// blocks. For a large reduction, this cost dominates: one block per compute
+/// unit is enough. A scalar reduction needs more blocks to keep the memory
+/// system busy, as many as the device's number of waves per compute unit for
+/// it fills, but at least one per compute unit.
+static uint64_t
+getTeamsReductionNumBlocks(GenericDeviceTy &GenericDevice, uint32_t NumThreads,
+                           uint64_t LoopTripCount,
+                           const KernelLaunchInfoTy &KernelEnv) {
+  if (!KernelEnv.ReductionDataSize || !NumThreads)
+    return 0;
+
+  // In Generic and Generic-SPMD mode, each block runs one iteration of the
+  // distribute loop. Only large reductions have been measured there.
+  bool IsLarge = KernelEnv.ReductionDataSize > LargeTeamsReductionBytes;
+  bool IsSPMD = KernelEnv.isSPMDMode();
+  if (!IsSPMD && !(IsLarge && (KernelEnv.isGenericMode() ||
+                               KernelEnv.isGenericSPMDMode())))
+    return 0;
+
+  uint32_t ScalarWavesPerCU = GenericDevice.getTeamsReductionWavesPerCU();
+  uint64_t NumCUs = GenericDevice.getNumComputeUnits();
+  if (!ScalarWavesPerCU || !NumCUs)
+    return 0;
+
+  uint32_t WavesPerBlock =
+      llvm::divideCeil(NumThreads, GenericDevice.getWarpSize());
+  uint64_t BlocksPerCU =
+      IsLarge ? 1 : std::max(1u, ScalarWavesPerCU / WavesPerBlock);
+  uint64_t NumBlocks = NumCUs * BlocksPerCU;
+  // No more blocks than there is work for.
+  if (LoopTripCount > 0)
+    NumBlocks =
+        std::min(NumBlocks, IsSPMD ? llvm::divideCeil(LoopTripCount, NumThreads)
+                                   : LoopTripCount);
+  return NumBlocks;
+}
+
 /// Get the effective number of blocks for the kernel based on the
 /// user-defined number of blocks and the loop trip count.
 /// The number of threads \p EffectiveNumThreads can be adjusted by this
@@ -848,6 +895,11 @@ getEffectiveNumBlocks(GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
   if (KernelEnv.isNoLoopMode())
     return LoopTripCount > 0 ? (((LoopTripCount - 1) / EffectiveNumThreads) + 1)
                              : 1;
+
+  if (uint64_t NumBlocks = getTeamsReductionNumBlocks(
+          GenericDevice, EffectiveNumThreads, LoopTripCount, KernelEnv))
+    return std::min(NumBlocks, uint64_t(getDeviceBlockLimit(
+                                   GenericDevice, EffectiveNumThreads)));
 
   uint64_t DefaultNumBlocks = GenericDevice.getDefaultNumBlocks();
   uint64_t TripCountNumBlocks = std::numeric_limits<uint64_t>::max();
@@ -989,6 +1041,32 @@ static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
 
   uint32_t EffectiveNumThreads = LaunchArgs.UserThreadLimit[0];
   uint32_t EffectiveNumBlocks = LaunchArgs.UserNumBlocks[0];
+
+  // Downstream: the grid of a kernel with a cross-team reduction is sized by
+  // the size of the reduction, as in getEffectiveNumBlocks, also if the plugin
+  // computes the launch geometry itself. Only the number of threads is taken
+  // from the plugin then. A number of teams the user requested, by
+  // OMP_NUM_TEAMS or for low trip counts, is honored as the plugin would.
+  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
+  if (!StrictBlocks && EffectiveNumBlocks == 0 && OMP_NumTeams <= 0 &&
+      KernelEnv.ReductionDataSize) {
+    uint32_t NumThreads = EffectiveNumThreads;
+    uint32_t NumBlocks = EffectiveNumBlocks;
+    // Without the plugin's heuristics, getEffectiveNumBlocks applies.
+    if (Kernel.computeLaunchGeometry(GenericDevice, LaunchArgs, StrictThreads,
+                                     /*StrictBlocks=*/true, NumThreads,
+                                     NumBlocks) &&
+        !GenericDevice.getOMPXNumBlocksForLowTripcount(LaunchArgs.Tripcount)) {
+      if (uint64_t ReductionNumBlocks = getTeamsReductionNumBlocks(
+              GenericDevice, NumThreads, LaunchArgs.Tripcount, KernelEnv)) {
+        LaunchArgs.UserThreadLimit[0] = NumThreads;
+        LaunchArgs.UserNumBlocks[0] =
+            std::min(ReductionNumBlocks,
+                     uint64_t(getDeviceBlockLimit(GenericDevice, NumThreads)));
+        return;
+      }
+    }
+  }
 
   // Downstream: the plugin may compute the launch geometry itself (the AMDGPU
   // plugin does, using occupancy and other device-specific heuristics).

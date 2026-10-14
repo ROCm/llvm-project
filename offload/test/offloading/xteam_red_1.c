@@ -3,13 +3,15 @@
 // kernels under a low trip count: the kernel is launched with 32 threads per
 // team and the team count is capped at 4 x #CUs (2048 max threads per CU
 // divided by the 512 block size). The expected team count below therefore
-// depends on the device: 416 == 4 x 104 CUs on gfx90a.
+// depends on the device: 416 == 4 x 104 CUs on gfx90a. The reduction-aware
+// grid size, which would replace this heuristic, is turned off.
 //
 // Cross-team reductions are emitted as plain SPMD kernels (SGN:2) since the
 // downstream Xteam reduction execution mode (SGN:8) was removed.
 //
 // RUN: %libomptarget-compile-generic -fopenmp-target-fast -fopenmp-target-fast-reduction
-// RUN: env LIBOMPTARGET_KERNEL_TRACE=1 LIBOMPTARGET_AMDGPU_LOW_TRIPCOUNT=15360 LIBOMPTARGET_AMDGPU_ADJUST_XTEAM_RED_TEAMS=32 \
+// RUN: env LIBOMPTARGET_KERNEL_TRACE=1 LIBOMPTARGET_TEAMS_REDUCTION_GRID=0 \
+// RUN:   LIBOMPTARGET_AMDGPU_LOW_TRIPCOUNT=15360 LIBOMPTARGET_AMDGPU_ADJUST_XTEAM_RED_TEAMS=32 \
 // RUN:   %libomptarget-run-generic 2>&1 | %fcheck-generic
 
 // UNSUPPORTED: nvptx64-nvidia-cuda

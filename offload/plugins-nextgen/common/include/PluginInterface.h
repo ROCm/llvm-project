@@ -1360,6 +1360,22 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
     return OMPX_ReuseBlocksForHighTripCount;
   }
 
+  /// Get the number of waves per compute unit to launch a kernel with a scalar
+  /// cross-team reduction with, or zero to size the grid of kernels with a
+  /// cross-team reduction like that of any other kernel.
+  /// @see OMPX_TeamsReductionGrid, OMPX_TeamsReductionWavesPerCU
+  uint32_t getTeamsReductionWavesPerCU() {
+    if (!OMPX_TeamsReductionGrid)
+      return 0;
+    if (OMPX_TeamsReductionWavesPerCU > 0)
+      return OMPX_TeamsReductionWavesPerCU;
+    return getDefaultTeamsReductionWavesPerCU();
+  }
+
+  /// The device's number of waves per compute unit for a kernel with a scalar
+  /// cross-team reduction, or zero if it has not been determined for it.
+  virtual uint32_t getDefaultTeamsReductionWavesPerCU() const { return 0; }
+
   /// Get the total amount of hardware parallelism supported by the target
   /// device. This is the total amount of warps or wavefronts that can be
   /// resident on the device simultaneously.
@@ -1561,6 +1577,17 @@ private:
 
   BoolEnvar OMPX_ReuseBlocksForHighTripCount =
       BoolEnvar("LIBOMPTARGET_REUSE_BLOCKS_FOR_HIGH_TRIP_COUNT", true);
+
+  /// Environment flag to size the grid of kernels with a cross-team reduction
+  /// by the size of the reduction.
+  BoolEnvar OMPX_TeamsReductionGrid =
+      BoolEnvar("LIBOMPTARGET_TEAMS_REDUCTION_GRID", true);
+
+  /// Environment variable to override the device's number of waves per compute
+  /// unit for a kernel with a scalar cross-team reduction. Zero keeps the
+  /// device's value.
+  UInt32Envar OMPX_TeamsReductionWavesPerCU =
+      UInt32Envar("LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU", 0);
 
   /// Variable to track kernel launch for a device.
   std::atomic<uint32_t> LaunchId = 0;

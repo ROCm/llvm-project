@@ -717,6 +717,8 @@ variables is defined below.
 > - `LIBOMPTARGET_JIT_SAVE_IMAGE_FILENAME=<out:Filename> (device image file)`
 > - `LIBOMPTARGET_MIN_THREADS_FOR_LOW_TRIP_COUNT=<Num> (default: 32)`
 > - `LIBOMPTARGET_REUSE_BLOCKS_FOR_HIGH_TRIP_COUNT=[TRUE/FALSE] (default TRUE)`
+> - `LIBOMPTARGET_TEAMS_REDUCTION_GRID=[TRUE/FALSE] (default TRUE)`
+> - `LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU=<Num> (default: per device)`
 > - `OFFLOAD_TRACK_ALLOCATION_TRACES=[TRUE/FALSE] (default FALSE)`
 > - `OFFLOAD_TRACK_NUM_KERNEL_LAUNCH_TRACES=<Num> (default 0)`
 
@@ -1138,6 +1140,31 @@ be reduced below the value passed for this environment variable though.
 This environment variable can be used to control how the OpenMP runtime assigns
 blocks to loops with high trip counts. By default we reuse existing blocks
 rather than spawning new blocks.
+
+#### LIBOMPTARGET_TEAMS_REDUCTION_GRID
+
+This environment variable controls how the OpenMP runtime picks the number of
+blocks for a kernel with a cross-team reduction, e.g., `target teams distribute
+parallel for reduction(...)`, if the `num_teams` clause does not set it.
+`OMP_NUM_TEAMS` caps it as for other kernels. By default, the number of blocks
+follows from the size
+of the reduction: every block adds to the cost of combining the partial
+results. If the data reduced per team is larger than 32 bytes, one block per
+compute unit is launched. For a smaller (scalar) reduction, as many blocks as
+fill {ref}`LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU` waves per compute unit, but
+at least one per compute unit. In both cases, no more blocks are launched than
+the loop has iterations for. In Generic mode, only large reductions are sized
+this way. On devices the runtime has no number of waves for, and if this
+environment variable is set to `FALSE`, kernels with a cross-team reduction get
+the same number of blocks as other kernels.
+
+#### LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU
+
+This environment variable overrides the device's number of waves per compute
+unit for a kernel with a scalar cross-team reduction (see
+{ref}`LIBOMPTARGET_TEAMS_REDUCTION_GRID`). The default on AMDGPU devices is
+`16`. It also enables the reduction-aware grid size on devices the runtime has
+no number of waves for.
 
 #### OFFLOAD_TRACK_ALLOCATION_TRACES
 

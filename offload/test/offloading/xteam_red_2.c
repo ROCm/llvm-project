@@ -7,9 +7,11 @@
 // config table, so pin both knobs to keep this test on the path it is written
 // for, independently of the device it runs on: the occupancy-based team count
 // is a different heuristic that replaces this one, and without the adjust factor
-// the team count stays at the one-team-per-CU default.
+// the team count stays at the one-team-per-CU default. The reduction-aware
+// grid size, which would replace this heuristic, is turned off.
 // RUN: %libomptarget-compile-generic -fopenmp-target-fast
-// RUN: env LIBOMPTARGET_DEBUG=1 OMPX_XTEAMREDUCTION_OCCUPANCY_BASED_OPT=0 \
+// RUN: env LIBOMPTARGET_DEBUG=1 LIBOMPTARGET_TEAMS_REDUCTION_GRID=0 \
+// RUN:   OMPX_XTEAMREDUCTION_OCCUPANCY_BASED_OPT=0 \
 // RUN:   LIBOMPTARGET_AMDGPU_ADJUST_XTEAM_RED_TEAMS=1 \
 // RUN:   %libomptarget-run-generic 2>&1 | %fcheck-generic
 

@@ -3911,6 +3911,15 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
   uint32_t getNumComputeUnits() const override { return NumComputeUnits; }
 
+  /// See GenericDeviceTy::getDefaultTeamsReductionWavesPerCU(). Measured on
+  /// MI210, MI300A, MI300X, MI350X, and MI450: scalar reductions with many
+  /// iterations do better with more waves, ones with few iterations or much
+  /// memory traffic per iteration with fewer. 16 waves were never far from the
+  /// best. Other devices use the same value: without it, the grid of large
+  /// reductions would fall back to the generic default, which was up to 3x
+  /// slower on MI450.
+  uint32_t getDefaultTeamsReductionWavesPerCU() const override { return 16; }
+
   /// See GenericDeviceTy::getBlockLimit(uint32_t). The HSA launch configuration
   /// is an int32_t grid representing blocks * threads. This means the block
   /// limit depends on the user's requested thread count.
