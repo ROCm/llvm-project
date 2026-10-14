@@ -1082,12 +1082,8 @@ int GCNHazardRecognizer::getMaxWindowDeficit(int MaxWindow,
 
 int GCNHazardRecognizer::getWaitStatesSince(IsHazardFn IsHazard,
                                             int Limit) const {
-  if (isHazardRecognizerMode()) {
-    auto IsExpiredFn = [Limit](const MachineInstr &, int WaitStates) {
-      return WaitStates >= Limit;
-    };
-    return ::getWaitStatesSince(IsHazard, CurrCycleInstr, IsExpiredFn);
-  }
+  if (isHazardRecognizerMode())
+    return findNearestDistance(GCNHazardWalk(*CurrCycleInstr, Limit), IsHazard);
   return findNearestDistance(EmittedHistory(EmittedInstrs, Limit), IsHazard);
 }
 

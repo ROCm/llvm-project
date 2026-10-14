@@ -564,3 +564,33 @@ body:             |
     $agpr0 = V_ACCVGPR_WRITE_B32_e64 $vgpr2, implicit $exec
     S_ENDPGM 0
 ...
+
+# A load must wait 1 wait state after an accvgpr access that follows a VALU
+# write of its address within 2 wait states. One wait state apart, the load
+# waits; two apart, it does not.
+
+# GCN-LABEL: name: valu_write_one_before_accvgpr_write_then_load
+# GCN:      V_ACCVGPR_WRITE_B32_e64
+# GCN-NEXT: S_NOP 0
+# GCN-NEXT: GLOBAL_LOAD_DWORD
+name: valu_write_one_before_accvgpr_write_then_load
+body: |
+  bb.0:
+    $vgpr0 = V_MOV_B32_e32 0, implicit $exec
+    $agpr0 = V_ACCVGPR_WRITE_B32_e64 $vgpr2, implicit $exec
+    $vgpr3 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    S_ENDPGM 0
+...
+
+# GCN-LABEL: name: valu_write_two_before_accvgpr_write_then_load
+# GCN:      V_ACCVGPR_WRITE_B32_e64
+# GCN-NEXT: GLOBAL_LOAD_DWORD
+name: valu_write_two_before_accvgpr_write_then_load
+body: |
+  bb.0:
+    $vgpr0 = V_MOV_B32_e32 0, implicit $exec
+    S_NOP 0
+    $agpr0 = V_ACCVGPR_WRITE_B32_e64 $vgpr2, implicit $exec
+    $vgpr3 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec
+    S_ENDPGM 0
+...

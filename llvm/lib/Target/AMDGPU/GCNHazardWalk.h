@@ -233,14 +233,16 @@ int findMaxWindowDeficit(StepsT Steps, WindowForT WindowFor) {
 }
 
 /// The distance to the nearest of \p Steps that \p IsHazard(MI) accepts, or
-/// std::numeric_limits<int>::max() if there is none. \p Steps is as for
+/// std::numeric_limits<int>::max() if there is none. A meta instruction does
+/// not issue, so it is never the hazard. \p Steps is as for
 /// findMaxWindowDeficit.
 template <typename StepsT, typename IsHazardT>
 int findNearestDistance(StepsT Steps, IsHazardT IsHazard) {
   Steps.allowAnyOrder();
   int Nearest = std::numeric_limits<int>::max();
   for (auto [MI, Distance] : Steps) {
-    if (!IsHazard(MI))
+    // Only a match pays for the meta test.
+    if (!IsHazard(MI) || MI.isMetaInstruction())
       continue;
     // Only a nearer step can come after this one.
     Nearest = Distance;

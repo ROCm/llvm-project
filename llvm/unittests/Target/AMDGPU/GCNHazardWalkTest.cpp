@@ -242,6 +242,7 @@ TEST_F(GCNHazardWalkTest, QueriesIgnoreMeta) {
     return 4;
   };
   EXPECT_EQ(findMaxWindowDeficit(GCNHazardWalk(Start, 4), WindowFor), 3);
+  EXPECT_EQ(findNearestDistance(GCNHazardWalk(Start, 100), UsesV1), 1);
 }
 
 // Control can come from one predecessor in more than one place: through the
