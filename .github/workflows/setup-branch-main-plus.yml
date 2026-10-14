@@ -1,0 +1,56 @@
+name: setup-branch-main-plus
+
+on:
+  # Runs every day at 1 AM UTC
+  schedule:
+    - cron: '0 1 * * *'
+  # Allows manual triggering
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  # Allows to push branches
+  contents: write
+
+jobs:
+  setup-branch-main-plus:
+    if: ${{ github.repository == 'ROCm/llvm-project' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ROCM_CCIAPP_APP_ID }}
+          private-key: ${{ secrets.ROCM_CCIAPP_PRIVATE_KEY  }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Setup main plus branch
+        run: |
+          PLUS_BRANCH="amd-staging"
+          git fetch origin $PLUS_BRANCH
+          git checkout origin/$PLUS_BRANCH -- .github/patches/main/
+          git checkout origin/$PLUS_BRANCH -- amd/
+          git checkout origin/$PLUS_BRANCH -- clang/tools/amdllvm/
+          for PATCH_FILE in .github/patches/main/*; do
+            if [ -f "$PATCH_FILE" ]; then
+              echo "Applying $PATCH_FILE ..."
+              patch -p1 < $PATCH_FILE
+            fi
+          done
+          git commit --all --message="add amd-specific code"
+          git push origin main:amd-main-$(date +'%Y-%m-%d')

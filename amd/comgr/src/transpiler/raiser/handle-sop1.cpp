@@ -9,18 +9,24 @@
 #include "transpiler/raiser/handlers.h"
 
 #include "transpiler/decoder/decode.h"
+#include "transpiler/decoder/setpc-analysis.h"
+#include "transpiler/raiser/source-image.h"
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #include <cassert>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <string>
+#include <variant>
 
 using namespace llvm;
 
@@ -41,6 +47,50 @@ static std::string heldWaveMaskWidths(const RaiseContext &Ctx) {
           " bits wide and EXEC holds " +
           Twine(Ctx.Projection.execStorageTy()->getIntegerBitWidth()) + " bits")
       .str();
+}
+
+// Refuse a register-indirect control transfer that the analysis could not
+// resolve, phrasing each reason to follow the mnemonic in the diagnostic.
+static Error refuseSetPc(RaiseContext &Ctx, const DecodedInst &Di,
+                         const SetPcUnresolvable &Site) {
+  std::string Pair =
+      (Twine("s[") + Twine(Site.Subject) + ":" + Twine(Site.Subject + 1) + "]")
+          .str();
+  switch (Site.Why) {
+  case SetPcRefusal::NotARegisterPair:
+    return unsupported(Ctx, Di,
+                       "reads its target from something other than a scalar "
+                       "register pair");
+  case SetPcRefusal::BlockUnreachable:
+    return unsupported(Ctx, Di,
+                       (Twine("reads ") + Pair +
+                        ", and no path the decode recovered reaches its block")
+                           .str());
+  case SetPcRefusal::PairWrittenWithoutOffset:
+    return unsupported(Ctx, Di,
+                       (Twine("reads ") + Pair +
+                        ", which some path writes without computing a source "
+                        "offset in it")
+                           .str());
+  case SetPcRefusal::PairNeverHeldOffset:
+    return unsupported(
+        Ctx, Di,
+        (Twine("reads ") + Pair + ", which nothing gives a source offset")
+            .str());
+  case SetPcRefusal::TooManyTargets:
+    return unsupported(Ctx, Di,
+                       (Twine("reads ") + Pair +
+                        ", which more source offsets reach than the analysis "
+                        "enumerates")
+                           .str());
+  case SetPcRefusal::TargetNotAnInstruction:
+    return unsupported(Ctx, Di,
+                       (Twine("reaches source offset 0x") +
+                        Twine::utohexstr(Site.Subject) +
+                        ", which no decoded instruction starts at")
+                           .str());
+  }
+  llvm_unreachable("unhandled set-pc refusal");
 }
 
 // Write V to Dst at the width the opcode operates on.
@@ -390,16 +440,56 @@ static Value *emitMaskCombine(IRBuilder<> &B, const ExecCombine &Combine,
 
 Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
                  OperandResolver &Op) {
+  Value *MoveCondition = nullptr;
+  if (Di.CanonOp == CanonicalOp::S_CMOV_B32 ||
+      Di.CanonOp == CanonicalOp::S_CMOV_B64) {
+    Expected<Value *> Scc = Ctx.registers().readSCC(Di);
+    if (!Scc)
+      return Scc.takeError();
+    MoveCondition = *Scc;
+    if (std::optional<bool> Known = Ctx.registers().knownSCC()) {
+      if (!*Known)
+        return Error::success();
+      MoveCondition = Ctx.B.getTrue();
+    }
+  }
   if (Di.CanonOp == CanonicalOp::S_MOV_B32 ||
-      Di.CanonOp == CanonicalOp::S_MOV_B64) {
-    bool Is64 = Di.CanonOp == CanonicalOp::S_MOV_B64;
+      Di.CanonOp == CanonicalOp::S_MOV_B64 ||
+      isa_and_present<ConstantInt>(MoveCondition)) {
+    bool Is64 = Di.CanonOp == CanonicalOp::S_MOV_B64 ||
+                Di.CanonOp == CanonicalOp::S_CMOV_B64;
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
-    Expected<Value *> Src = Op.src(0, Is64);
-    if (!Src)
-      return Src.takeError();
-    writeDst(Ctx.registers(), *Dst, *Src, Is64);
+    // A copy of a pair holding a source code-object address holds the same
+    // address, and loads off the copy still have to read it from the image.
+    // Take the address from the pair rather than reading the registers, which
+    // refuse to answer a read that would let the address escape.
+    std::optional<uint64_t> SourceAddress;
+    if (Is64) {
+      Expected<std::optional<uint64_t>> Read =
+          sourceImageOperandAddr(Ctx, Di, Op.srcIdx(0));
+      if (!Read)
+        return Read.takeError();
+      SourceAddress = *Read;
+    }
+    if (SourceAddress && (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx))
+      return unsupported(Ctx, Di,
+                         "puts a source address outside an SGPR pair, which "
+                         "is not tracked as one");
+    Value *SrcValue = nullptr;
+    if (SourceAddress) {
+      SrcValue = ConstantInt::get(Ctx.B.getInt64Ty(), *SourceAddress);
+    } else {
+      Expected<Value *> Src = Op.src(0, Is64);
+      if (!Src)
+        return Src.takeError();
+      SrcValue = *Src;
+    }
+    writeDst(Ctx.registers(), *Dst, SrcValue, Is64);
+    if (SourceAddress)
+      Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                    *SourceAddress);
     return Error::success();
   }
 
@@ -431,7 +521,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     writeDst(Ctx.registers(), *Dst, Result, Is64);
     // SCC is the result compared against zero, which storeSCC does for a
     // value wider than the single bit SCC holds.
-    Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+    Ctx.registers().storeSCC(Ctx.B, Result);
     return Error::success();
   }
 
@@ -449,8 +539,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<Value *> Old = Is64 ? Op.dstValue64() : Op.dstValue();
     if (!Old)
       return Old.takeError();
-    Value *Moved = Ctx.B.CreateSelect(Ctx.registers().regFile().loadSCC(Ctx.B),
-                                      *Src, *Old, "s_cmov");
+    Value *Moved = Ctx.B.CreateSelect(MoveCondition, *Src, *Old, "s_cmov");
     writeDst(Ctx.registers(), *Dst, Moved, Is64);
     return Error::success();
   }
@@ -479,10 +568,14 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Expected<ParsedReg> Dst = Op.dst();
     if (!Dst)
       return Dst.takeError();
+    Expected<Value *> Moved = Is64 ? Ctx.registers().readSgpr64(Di, *Src)
+                                   : Ctx.registers().readSgpr32(Di, *Src);
+    if (!Moved)
+      return Moved.takeError();
     if (Is64)
-      Ctx.registers().writeReg64(*Dst, Ctx.registers().readSgpr64(*Src));
+      Ctx.registers().writeReg64(*Dst, *Moved);
     else
-      Ctx.registers().writeReg32(*Dst, Ctx.registers().readSgpr32(*Src));
+      Ctx.registers().writeReg32(*Dst, *Moved);
     return Error::success();
   }
 
@@ -524,8 +617,10 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
         displacedSgpr(Ctx, Di, /*OpIdx=*/0, (*M0 >> 16) & FieldMask, 1);
     if (!DstIdx)
       return DstIdx.takeError();
-    Ctx.registers().writeReg32(ParsedReg{ParsedReg::SGPR, *DstIdx, 1},
-                               Ctx.registers().readSgpr32(*Src));
+    Expected<Value *> Moved = Ctx.registers().readSgpr32(Di, *Src);
+    if (!Moved)
+      return Moved.takeError();
+    Ctx.registers().writeReg32(ParsedReg{ParsedReg::SGPR, *DstIdx, 1}, *Moved);
     return Error::success();
   }
 
@@ -624,7 +719,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Value *Result =
         Reduces ? emitQuadMask(Ctx.B, *Src) : emitWholeQuadMask(Ctx.B, *Src);
     writeDst(Ctx.registers(), *Dst, Result, Is64);
-    Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+    Ctx.registers().storeSCC(Ctx.B, Result);
     return Error::success();
   }
 
@@ -647,7 +742,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Value *OldExec = Ctx.registers().readExec();
     Value *NewExec = emitMaskCombine(Ctx.B, *Combine, *Src, OldExec);
     Ctx.registers().storeExec(NewExec);
-    Ctx.registers().regFile().storeSCC(Ctx.B, NewExec);
+    Ctx.registers().storeSCC(Ctx.B, NewExec);
     writeDst(Ctx.registers(), *Dst,
              Combine->Destination == MaskDestination::NewExec ? NewExec
                                                               : OldExec,
@@ -667,7 +762,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     Value *Result = Ctx.B.CreateBinaryIntrinsic(Intrinsic::abs, *Src,
                                                 Ctx.B.getFalse(), {}, "s_abs");
     Ctx.registers().writeReg32(*Dst, Result);
-    Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+    Ctx.registers().storeSCC(Ctx.B, Result);
     return Error::success();
   }
 
@@ -693,7 +788,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.B.CreateUnaryIntrinsic(Intrinsic::ctpop, Counted, {}, "s_bcnt");
     Value *Result = Ctx.B.CreateZExtOrTrunc(Count, Ctx.B.getInt32Ty());
     Ctx.registers().writeReg32(*Dst, Result);
-    Ctx.registers().regFile().storeSCC(Ctx.B, Result);
+    Ctx.registers().storeSCC(Ctx.B, Result);
     return Error::success();
   }
 
@@ -713,6 +808,103 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Error::success();
   }
 
+  // The captured address is where the next instruction sits in the source code
+  // object, which the decode already knows as a constant. Nothing in the raised
+  // kernel runs at that address, so the value only stands for what the source
+  // image holds there. Track the pair as a source address so that a
+  // PC-relative scalar load off it reads the literal the source meant instead
+  // of reaching into target memory.
+  if (Di.CanonOp == CanonicalOp::S_GETPC_B64) {
+    Expected<ParsedReg> Dst = Op.dst();
+    if (!Dst)
+      return Dst.takeError();
+    if (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx)
+      return unsupported(Ctx, Di,
+                         "captures a source address outside an SGPR pair, "
+                         "which is not tracked as one");
+    uint64_t NextInstAddress =
+        Ctx.sourceTextBaseAddress() + Di.Offset + Di.sizeInBytes();
+    Ctx.registers().writeReg64(
+        *Dst, ConstantInt::get(Ctx.B.getInt64Ty(), NextInstAddress));
+    Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                  NextInstAddress);
+    return Error::success();
+  }
+
+  // A jump through a register names no offset of its own, so it goes wherever
+  // the analysis found in the pair that it reads. Those offsets lead blocks,
+  // reported by the analysis before any block was made. One offset is a branch
+  // and several are a switch. A call additionally leaves behind the offset it
+  // returns to, which is the source address of the instruction after it, the
+  // same value that a program-counter capture there would have produced.
+  if (Di.CanonOp == CanonicalOp::S_SETPC_B64 ||
+      Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
+    const SetPcSite *Site = Ctx.setPcSite(Di.Offset);
+    assert(Site && "every register-indirect transfer is classified");
+    if (const SetPcUnresolvable *Why = std::get_if<SetPcUnresolvable>(Site))
+      return refuseSetPc(Ctx, Di, *Why);
+
+    const SetPcResolved &Resolved = std::get<SetPcResolved>(*Site);
+    assert(Resolved.Targets.size() <= std::numeric_limits<unsigned>::max() &&
+           "the analysis caps how many offsets one transfer enumerates");
+
+    // Read the target before the call writes its destination, which may name
+    // the very pair the target comes from. The pair holds a source address,
+    // which an operand read refuses because nothing in the raised kernel can
+    // address one. Here the address only picks which of the offsets the
+    // analysis enumerated this jump takes, so the read goes to the register
+    // file directly, past the refusal.
+    Value *Target = nullptr;
+    if (Resolved.Targets.size() > 1) {
+      Expected<std::optional<ParsedReg>> Src = Op.srcReg(0);
+      if (!Src)
+        return Src.takeError();
+      assert(*Src && (*Src)->RegKind == ParsedReg::SGPR && (*Src)->BaseIdx &&
+             "a transfer reaching several offsets reads a scalar pair");
+      Target = Ctx.registers().regFile().loadSGPR64(Ctx.B, *(*Src)->BaseIdx);
+    }
+
+    if (Di.CanonOp == CanonicalOp::S_SWAPPC_B64) {
+      Expected<ParsedReg> Dst = Op.dst();
+      if (!Dst)
+        return Dst.takeError();
+      if (Dst->RegKind != ParsedReg::SGPR || !Dst->BaseIdx)
+        return unsupported(Ctx, Di,
+                           "leaves its return address outside an SGPR pair, "
+                           "which is not tracked as one");
+      uint64_t ReturnAddress =
+          Ctx.sourceTextBaseAddress() + Di.Offset + Di.sizeInBytes();
+      Ctx.registers().writeReg64(
+          *Dst, ConstantInt::get(Ctx.B.getInt64Ty(), ReturnAddress));
+      Ctx.registers().recordSourceImageSgprPairAddr(*Dst->BaseIdx,
+                                                    ReturnAddress);
+    }
+
+    if (!Target) {
+      Ctx.B.CreateBr(Ctx.lookupBB(Resolved.Targets.front()));
+      return Error::success();
+    }
+
+    // The offsets the analysis enumerated are the only ones the pair can hold,
+    // so the fall-out-of-the-table case cannot be reached and traps rather
+    // than picking one of them.
+    BasicBlock *Trap =
+        BasicBlock::Create(Ctx.B.getContext(), formatv("trap_{0:x}", Di.Offset),
+                           Ctx.B.GetInsertBlock()->getParent());
+    SwitchInst *Dispatch = Ctx.B.CreateSwitch(
+        Target, Trap, static_cast<unsigned>(Resolved.Targets.size()));
+    for (uint64_t Offset : Resolved.Targets)
+      Dispatch->addCase(ConstantInt::get(Ctx.B.getInt64Ty(),
+                                         Ctx.sourceTextBaseAddress() + Offset),
+                        Ctx.lookupBB(Offset));
+
+    IRBuilderBase::InsertPointGuard Guard(Ctx.B);
+    Ctx.B.SetInsertPoint(Trap);
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::trap, {});
+    Ctx.B.CreateUnreachable();
+    return Error::success();
+  }
+
   switch (Di.CanonOp) {
   // The source splits a barrier in two: this arrival, which does not block,
   // and a release in SOPP, which does. The raise has one barrier, and it
@@ -720,11 +912,24 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   // the wave where the source let it run on. A program that made progress only
   // because the arrival did not block deadlocks under that reading, so the
   // arrival is refused rather than widened into a whole barrier.
+  //
+  // An arrival the matching release always follows is the exception: the pair
+  // is raised as the one barrier it amounts to, at the release, leaving the
+  // arrival nothing of its own to state.
   case CanonicalOp::S_BARRIER_SIGNAL_IMM:
-  case CanonicalOp::S_BARRIER_SIGNAL_M0:
+    if (Ctx.isPairedSplitBarrier(Di.Offset))
+      return Error::success();
     return unsupported(Ctx, Di,
                        "arrives at a barrier without waiting there, and the "
                        "raise has only a barrier that also waits");
+
+  // The barrier this arrives at is whichever one m0 names at run time, so
+  // which barrier it is cannot be read off the instruction and matched to a
+  // release.
+  case CanonicalOp::S_BARRIER_SIGNAL_M0:
+    return unsupported(Ctx, Di,
+                       "arrives at the barrier m0 names, which the raise "
+                       "cannot match to the wait that releases it");
 
   // The rest of the family speaks about a named barrier: a barrier a subset of
   // the workgroup joins, leaves, sizes and polls. The raise carries no barrier
@@ -750,17 +955,6 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::S_WAKEUP_BARRIER_M0:
     return unsupported(Ctx, Di, "wakes the waves waiting on a named barrier");
 
-  case CanonicalOp::S_GETPC_B64:
-    return unsupported(Ctx, Di,
-                       "captures a source address, which no raised "
-                       "instruction can jump to or load from");
-  case CanonicalOp::S_SETPC_B64:
-    return unsupported(
-        Ctx, Di, "jumps to a register value, which names no recovered block");
-  case CanonicalOp::S_SWAPPC_B64:
-    return unsupported(Ctx, Di,
-                       "calls through a register value and leaves behind a "
-                       "return address nothing can return to");
   case CanonicalOp::S_RFE_B64:
     return unsupported(Ctx, Di, "returns from an exception handler");
 
@@ -795,7 +989,7 @@ Error handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   // wider than the hardware does and costs a raised kernel nothing here.
   case CanonicalOp::S_ALLOC_VGPR:
     emitMemoryWaitAll(Ctx);
-    Ctx.registers().regFile().storeSCC(Ctx.B, Ctx.B.getTrue());
+    Ctx.registers().storeSCC(Ctx.B, Ctx.B.getTrue());
     return Error::success();
 
   // Spends issue slots and leaves nothing behind that a later instruction can

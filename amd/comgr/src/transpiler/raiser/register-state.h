@@ -18,13 +18,19 @@
 #include "transpiler/raiser/wave-projection.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Error.h"
 
 #include <cstdint>
 #include <optional>
+
+namespace llvm {
+class DominatorTree;
+}
 
 namespace COMGR::transpiler {
 
@@ -48,6 +54,10 @@ public:
   AllocaRegFile &regFile() { return Regs; }
   // What each SGPR holds at source kernel entry.
   const UserSgprLayout &layout() const { return Layout; }
+
+  /// Reconstruct supported dispatch fields and prove other entry state unused.
+  /// All instruction and projection checks must run before this finalization.
+  llvm::Error validateEntrySgprs();
 
   // Active low byte of S_SET_VGPR_MSB. Each two-bit field selects the high
   // VGPR bank for a format-defined operand slot.
@@ -73,10 +83,24 @@ public:
   llvm::Expected<llvm::Value *> readOp32(const DecodedInst &Di, unsigned OpIdx);
   // Read the operand at OpIdx as a 64-bit value, pairing adjacent registers.
   llvm::Expected<llvm::Value *> readOp64(const DecodedInst &Di, unsigned OpIdx);
+  // Store an SCC value known not to depend on a source-image address.
+  void storeSCC(llvm::IRBuilder<> &B, llvm::Value *V);
+
+  // Store an SCC value computed from a source-image address. Reads of this
+  // value are refused because relocation may change it.
+  void storeSourceImageSCC(llvm::IRBuilder<> &B, llvm::Value *V);
+
+  // Read SCC, refusing it when its value may depend on a source-image address.
+  llvm::Expected<llvm::Value *> readSCC(const DecodedInst &Di);
+
+  // Return a block-local SCC constant independent of source relocation.
+  std::optional<bool> knownSCC() { return blockState().SccConstant; }
+
   // Read the SGPR at Idx, or the pair based there, naming the register by
-  // index rather than by an operand.
-  llvm::Value *readSgpr32(unsigned Idx) { return Regs.loadSGPR32(B, Idx); }
-  llvm::Value *readSgpr64(unsigned Idx) { return Regs.loadSGPR64(B, Idx); }
+  // index rather than by an operand. Di is the instruction the read serves,
+  // which a refusal names.
+  llvm::Expected<llvm::Value *> readSgpr32(const DecodedInst &Di, unsigned Idx);
+  llvm::Expected<llvm::Value *> readSgpr64(const DecodedInst &Di, unsigned Idx);
   // Number of SGPRs backed by the register file.
   unsigned numSgprs() const { return static_cast<unsigned>(Regs.Sgpr.size()); }
 
@@ -141,6 +165,18 @@ public:
   // lanes for per-lane side effects.
   void emitUnderExec(llvm::function_ref<void()> Body);
 
+  /// Under replication, emit a memory effect only in primary lanes.
+  /// The caller supplies the instruction's EXEC and bounds predication;
+  /// Body must not update architectural registers.
+  void emitMemoryEffect(llvm::function_ref<void()> Body);
+
+  /// Under replication, read in primary lanes and broadcast results to
+  /// replicas. Scalar reads execute in lane zero, independently of source EXEC.
+  /// The caller supplies the instruction's EXEC and bounds predication and
+  /// writes back the returned value.
+  llvm::Value *emitMemoryValue(llvm::function_ref<llvm::Value *()> Body,
+                               bool IsScalar = false);
+
   // Emit Body when the source wave has any active lane in EXEC.
   void emitWithNonzeroExec(llvm::function_ref<void()> Body);
 
@@ -193,14 +229,32 @@ public:
   // entry. Single-SGPR entries remain independent.
   void invalidateSgprWaveMaskI1(unsigned BaseIdx);
 
-  // Record that SGPR pair BaseIdx holds source code-object address Value.
-  void recordSourceImageSgprPairAddr(unsigned BaseIdx, uint64_t Value) {
-    blockState().SourceImageSgprPairAddrShadow[BaseIdx] = Value;
+  // Record the source-image address held by an SGPR pair.
+  void recordSourceImageSgprPairAddr(unsigned BaseIdx, uint64_t Value);
+
+  // Return the source-image address known for this pair in the current block.
+  std::optional<uint64_t> lookupSourceImageSgprPairAddr(unsigned BaseIdx);
+
+  // Record that the low half of a split source code-object address
+  // displacement left carry Carry in SCC for SGPR pair BaseIdx, and that the
+  // high-half add consuming it starts at source offset NextOffset. That offset
+  // is the one directly after the low add, so any instruction placed between
+  // the two takes it and the carry goes unclaimed rather than being read as
+  // still belonging to the pair.
+  void recordSourceImageCarry(unsigned BaseIdx, bool Carry,
+                              uint64_t NextOffset) {
+    blockState().SourceImageCarry =
+        BlockState::SourceImageCarryState{BaseIdx, Carry, NextOffset};
   }
 
-  // Return the source code-object address recorded for SGPR pair BaseIdx in
-  // this block, if any.
-  std::optional<uint64_t> lookupSourceImageSgprPairAddr(unsigned BaseIdx);
+  // Consume the carry recorded for SGPR pair BaseIdx on behalf of a high-half
+  // add starting at source offset Offset. Return no value when no such carry
+  // is waiting.
+  std::optional<bool> takeSourceImageCarry(unsigned BaseIdx, uint64_t Offset);
+
+  // Reject deferred reads that may observe source-address bits on any reachable
+  // path. Requires SSA promotion of the register and provenance allocas.
+  llvm::Error refuseDeferredSourceImageReads(const llvm::DominatorTree &DT);
 
   // Track the value written to M0, which the relative-addressing opcodes need
   // as a constant to resolve the register index they name. A non-constant
@@ -219,6 +273,29 @@ public:
   void collectAllocas(llvm::SmallVectorImpl<llvm::AllocaInst *> &Out) const;
 
 private:
+  llvm::SmallVector<llvm::WeakTrackingVH> UnavailableEntryValues;
+
+  // An operand read whose source-address provenance needs a CFG check.
+  struct DeferredSourceImageRead {
+    const DecodedInst *Di;
+    // No index denotes SCC.
+    std::optional<unsigned> Idx;
+    llvm::WeakTrackingVH Provenance;
+    llvm::BasicBlock *Block;
+  };
+
+  // Diagnose a source-address read of an SGPR, or SCC when no index is given.
+  llvm::Error refuseSourceImageRead(const DecodedInst &Di,
+                                    std::optional<unsigned> Idx);
+
+  // Decide a read of the registers named either by a base index and a width in
+  // dwords or by the operand that reads them, refusing it when one of them
+  // holds a source code-object address and deferring it when the raise cannot
+  // yet tell.
+  llvm::Error refuseSourceImageRead(const DecodedInst &Di, unsigned BaseIdx,
+                                    unsigned WidthInDwords);
+  llvm::Error refuseSourceImageRead(const DecodedInst &Di, const ParsedReg &Pr);
+
   // Emit a conditional region while preserving register-state tracking.
   void emitUnderCondition(llvm::Value *Condition,
                           llvm::function_ref<void()> Body);
@@ -227,7 +304,10 @@ private:
                 const MCState &MC, UserSgprLayout Layout);
 
   // Give the preloaded entry SGPRs the values the source ABI hands them.
-  llvm::Error seedEntrySgprs();
+  llvm::Error seedEntrySgprs(const KernelMeta &Meta);
+
+  // Give the preloaded entry VGPRs the values the source ABI hands them.
+  void seedEntryVgprs(const KernelMeta &Meta);
 
   // Storage shadowing one SGPR across block boundaries.
   struct SgprShadow {
@@ -241,6 +321,8 @@ private:
     llvm::AllocaInst *SourceWavePair;
     // Whether SourceWavePair was ever written for this source wave.
     llvm::AllocaInst *SourceWavePairValid;
+    // Whether this dword holds part of a source-image address.
+    llvm::AllocaInst *SourceImage;
   };
 
   // A V_CMP result kept for reuse while the SGPR it wrote remains valid.
@@ -260,6 +342,19 @@ private:
     llvm::DenseMap<unsigned, WaveMaskEntry> LastSgprWaveMaskI1;
     // Source-image addresses proven for PC-relative literal loads.
     llvm::DenseMap<unsigned, uint64_t> SourceImageSgprPairAddrShadow;
+    // Carry that the low half of a split source code-object address
+    // displacement left in SCC: the SGPR pair it displaces, the carry itself,
+    // and the source offset at which the high-half add that consumes it
+    // starts.
+    struct SourceImageCarryState {
+      unsigned PairBaseIdx;
+      bool Carry;
+      uint64_t NextOffset;
+    };
+    std::optional<SourceImageCarryState> SourceImageCarry;
+    std::optional<bool> SccConstant;
+    bool SccFromSourceImage = false;
+    llvm::DenseSet<unsigned> SourceImageDwords;
     // Constant value last stored to M0.
     std::optional<uint64_t> M0Const;
     // Active low byte of S_SET_VGPR_MSB. Architectural rather than raise-time:
@@ -303,6 +398,9 @@ private:
   // Shadow storage per SGPR. Cross-block values live in allocas to avoid
   // carrying SSA values that do not dominate their uses.
   llvm::SmallVector<SgprShadow> SgprShadows;
+
+  llvm::SmallVector<DeferredSourceImageRead> DeferredSourceImageReads;
+  llvm::AllocaInst *SourceImageScc;
 };
 
 } // namespace COMGR::transpiler

@@ -19,15 +19,39 @@ int main(int argc, char *argv[]) {
   amd_comgr_data_set_t DataSetIn, DataSetBc, DataSetReloc, DataSetExec;
   amd_comgr_action_info_t DataAction;
   size_t Count;
-  const char *CompileOptions[] = {"-nogpuinc"};
-  size_t CompileOptionsCount = sizeof(CompileOptions) / sizeof(CompileOptions[0]);
+  const char *CompileOptions[3] = {"-nogpuinc"};
+  size_t CompileOptionsCount = 1;
+  int Profile = 0;
+  int AddressSanitizer = 0;
+  const char *ResourceDir = NULL;
+  const char *InputFile;
+  const char *OutputFile;
 
-  if (argc != 3) {
-    fprintf(stderr, "Usage: compile-hip-minimal <input.hip> <output.bin>\n");
+  if (argc == 4 && strcmp(argv[1], "--profile") == 0) {
+    Profile = 1;
+    InputFile = argv[2];
+    OutputFile = argv[3];
+  } else if (argc == 5 && strcmp(argv[1], "--profile-resource-dir") == 0) {
+    Profile = 1;
+    ResourceDir = argv[2];
+    InputFile = argv[3];
+    OutputFile = argv[4];
+  } else if (argc == 4 && strcmp(argv[1], "--profile-asan") == 0) {
+    Profile = 1;
+    AddressSanitizer = 1;
+    InputFile = argv[2];
+    OutputFile = argv[3];
+  } else if (argc == 3) {
+    InputFile = argv[1];
+    OutputFile = argv[2];
+  } else {
+    fprintf(stderr, "Usage: compile-hip-minimal [--profile | "
+                    "--profile-resource-dir <dir> | --profile-asan] "
+                    "<input.hip> <output.bin>\n");
     exit(1);
   }
 
-  SizeSource = setBuf(argv[1], &BufSource);
+  SizeSource = setBuf(InputFile, &BufSource);
 
   amd_comgr_(create_data_set(&DataSetIn));
   amd_comgr_(create_data(AMD_COMGR_DATA_KIND_SOURCE, &DataSource));
@@ -37,36 +61,65 @@ int main(int argc, char *argv[]) {
 
   amd_comgr_(create_action_info(&DataAction));
   amd_comgr_(action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_HIP));
-  amd_comgr_(action_info_set_isa_name(DataAction, "amdgcn-amd-amdhsa--gfx900"));
+  amd_comgr_(action_info_set_isa_name(
+      DataAction, AddressSanitizer ? "amdgcn-amd-amdhsa--gfx900:xnack+"
+                                   : "amdgcn-amd-amdhsa--gfx900"));
+
+  if (Profile)
+    CompileOptions[CompileOptionsCount++] = "-fprofile-generate";
+  if (AddressSanitizer)
+    CompileOptions[CompileOptionsCount++] = "-fsanitize=address";
+
   amd_comgr_(action_info_set_option_list(DataAction, CompileOptions,
                                          CompileOptionsCount));
 
-  amd_comgr_(create_data_set(&DataSetBc));
-  amd_comgr_(do_action(AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC,
-                       DataAction, DataSetIn, DataSetBc));
-  amd_comgr_(action_data_count(DataSetBc, AMD_COMGR_DATA_KIND_BC, &Count));
-
-  if (Count != 1) {
-    printf("AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC Failed: "
-           "produced %zu BC objects (expected 1)\n",
-           Count);
-    exit(1);
-  }
-
   amd_comgr_(create_data_set(&DataSetReloc));
-  amd_comgr_(do_action(AMD_COMGR_ACTION_CODEGEN_BC_TO_RELOCATABLE, DataAction,
-                       DataSetBc, DataSetReloc));
+  if (Profile) {
+    amd_comgr_(do_action(AMD_COMGR_ACTION_COMPILE_SOURCE_TO_RELOCATABLE,
+                         DataAction, DataSetIn, DataSetReloc));
+  } else {
+    amd_comgr_(create_data_set(&DataSetBc));
+    amd_comgr_(do_action(AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC, DataAction,
+                         DataSetIn, DataSetBc));
+    amd_comgr_(action_data_count(DataSetBc, AMD_COMGR_DATA_KIND_BC, &Count));
+
+    if (Count != 1) {
+      printf("AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC Failed: "
+             "produced %zu BC objects (expected 1)\n",
+             Count);
+      exit(1);
+    }
+
+    amd_comgr_(do_action(AMD_COMGR_ACTION_CODEGEN_BC_TO_RELOCATABLE, DataAction,
+                         DataSetBc, DataSetReloc));
+  }
   amd_comgr_(
       action_data_count(DataSetReloc, AMD_COMGR_DATA_KIND_RELOCATABLE, &Count));
   if (Count != 1) {
-    printf("AMD_COMGR_ACTION_CODEGEN_BC_TO_RELOCATABLE Failed: "
-           "produced %zu relocatable objects (expected 1)\n",
+    printf("Relocatable compilation failed: "
+           "produced %zu objects (expected 1)\n",
            Count);
     exit(1);
   }
 
   amd_comgr_(create_data_set(&DataSetExec));
-  amd_comgr_(action_info_set_option_list(DataAction, NULL, 0));
+  if (Profile) {
+    const char *LinkOptions[4] = {"-fprofile-generate"};
+    size_t LinkOptionsCount = 1;
+
+    if (AddressSanitizer)
+      LinkOptions[LinkOptionsCount++] = "-fsanitize=address";
+
+    if (ResourceDir) {
+      LinkOptions[LinkOptionsCount++] = "-resource-dir";
+      LinkOptions[LinkOptionsCount++] = ResourceDir;
+    }
+
+    amd_comgr_(
+        action_info_set_option_list(DataAction, LinkOptions, LinkOptionsCount));
+  } else {
+    amd_comgr_(action_info_set_option_list(DataAction, NULL, 0));
+  }
   amd_comgr_(do_action(AMD_COMGR_ACTION_LINK_RELOCATABLE_TO_EXECUTABLE,
                        DataAction, DataSetReloc, DataSetExec));
 
@@ -82,12 +135,14 @@ int main(int argc, char *argv[]) {
   amd_comgr_data_t DataExec;
   amd_comgr_(action_data_get_data(DataSetExec, AMD_COMGR_DATA_KIND_EXECUTABLE,
                                   0, &DataExec));
-  dumpData(DataExec, argv[2]);
+  dumpData(DataExec, OutputFile);
 
   amd_comgr_(release_data(DataSource));
   amd_comgr_(release_data(DataExec));
   amd_comgr_(destroy_data_set(DataSetIn));
-  amd_comgr_(destroy_data_set(DataSetBc));
+  if (!Profile) {
+    amd_comgr_(destroy_data_set(DataSetBc));
+  }
   amd_comgr_(destroy_data_set(DataSetReloc));
   amd_comgr_(destroy_data_set(DataSetExec));
   amd_comgr_(destroy_action_info(DataAction));

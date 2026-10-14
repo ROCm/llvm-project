@@ -468,8 +468,9 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
     Value *Merged;
     if (Half == 1) {
       Value *Mask = ConstantInt::get(ExecTy, 0xFFFFFFFFULL);
-      Merged = B.CreateOr(B.CreateAnd(Cur, Mask), B.CreateShl(V64, 32),
-                          "exec_hi_write");
+      Value *KeptLow = B.CreateAnd(Cur, Mask);
+      Value *NewHigh = B.CreateShl(V64, 32);
+      Merged = B.CreateOr(KeptLow, NewHigh, "exec_hi_write");
     } else {
       Value *Mask = ConstantInt::get(ExecTy, 0xFFFFFFFF00000000ULL);
       Merged = B.CreateOr(B.CreateAnd(Cur, Mask), V64, "exec_lo_write");

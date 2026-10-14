@@ -17,12 +17,17 @@ extern CONSTATTR struct epredret MATH_PRIVATE(eptrigredsmall)(float x);
 extern CONSTATTR struct epredret MATH_PRIVATE(eptrigredlarge)(float x);
 extern CONSTATTR struct epredret MATH_PRIVATE(eptrigred)(float x);
 
+extern CONSTATTR struct epredret MATH_PRIVATE(eptrigredsmallep)(float2 x);
+extern CONSTATTR struct epredret MATH_PRIVATE(eptrigredlargeep)(float2 x);
+extern CONSTATTR struct epredret MATH_PRIVATE(eptrigredep)(float2 x);
+
 extern CONSTATTR struct scret  MATH_PRIVATE(sincosred)(float x);
 extern CONSTATTR struct scret  MATH_PRIVATE(sincosredep)(float2 x);
 
 // cos in .lo, sin in .hi
 extern CONSTATTR float4 MATH_PRIVATE(epsincosredep)(float2 x);
 extern CONSTATTR float4 MATH_PRIVATE(epsincos)(float y);
+extern CONSTATTR float4 MATH_PRIVATE(epsincosep)(float2 x);
 
 extern CONSTATTR float MATH_PRIVATE(tanred)(float x, int regn);
 extern CONSTATTR float MATH_PRIVATE(tanredep)(float2 x, int regn);

@@ -159,6 +159,10 @@ is built only under `COMGR_ENABLE_TRANSPILER`.
   existing one.
 - Prefer `CHECK-NEXT` chains over `CHECK-DAG` blocks where order is
   deterministic.
+- Hoist every instruction-emitting operand into a local before passing
+  it to `IRBuilder`. C++ leaves argument evaluation order unspecified,
+  so nesting two of them in one `Create` call emits them in an order
+  that varies with the host compiler and breaks the `CHECK` chain.
 - Use `mtriple`, not `-target`, in RUN lines.
 - Test the current target's fields (e.g. the gfx12 field, not a stale
   gfx11 one).

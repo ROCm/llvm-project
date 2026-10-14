@@ -16,6 +16,7 @@ config.llvm_tools_dir = _fwd(r'@COMGR_LIT_LLVM_TOOLS_DIR@')
 config.llvm_root = _fwd(os.path.dirname(config.llvm_tools_dir))
 config.comgr_obj_dir = config.my_obj_root
 config.comgr_lib_dir = _fwd(os.path.dirname(config.my_obj_root))
+config.comgr_resource_dir_file = _fwd(r'@GEN_RESOURCE_DIR_FILE@')
 
 # Needed for clang, llvm-dis, etc.
 config.environment['PATH'] = os.pathsep.join([config.llvm_tools_dir,

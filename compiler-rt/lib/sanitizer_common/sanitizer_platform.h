@@ -115,6 +115,8 @@
 #  else
 #    define SANITIZER_DRIVERKIT 0
 #  endif
+#  define SANITIZER_IOSDEVICE (SANITIZER_IOS && !SANITIZER_IOSSIM)
+#  define SANITIZER_EMBEDDED_VM_LAYOUT SANITIZER_IOSDEVICE
 #else
 #  define SANITIZER_APPLE 0
 #  define SANITIZER_OSX 0
@@ -123,6 +125,8 @@
 #  define SANITIZER_TVOS 0
 #  define SANITIZER_IOSSIM 0
 #  define SANITIZER_DRIVERKIT 0
+#  define SANITIZER_IOSDEVICE 0
+#  define SANITIZER_EMBEDDED_VM_LAYOUT 0
 #endif
 
 #if defined(_WIN32)
@@ -316,9 +320,9 @@
 #endif
 
 #if defined(__AMDGPU__)
-#  define SANITIZER_AMDGPU_ 1
+#  define SANITIZER_AMDGPU 1
 #else
-#  define SANITIZER_AMDGPU_ 0
+#  define SANITIZER_AMDGPU 0
 #endif
 
 #if defined(__NVPTX__)
@@ -333,7 +337,7 @@
 #  define SANITIZER_SPIRV 0
 #endif
 
-#if SANITIZER_AMDGPU_ || SANITIZER_AMDGPU || SANITIZER_NVPTX || SANITIZER_SPIRV
+#if SANITIZER_AMDGPU || SANITIZER_NVPTX || SANITIZER_SPIRV
 #  define SANITIZER_GPU 1
 #else
 #  define SANITIZER_GPU 0
@@ -387,9 +391,9 @@
 #      define SANITIZER_MMAP_RANGE_SIZE \
         FIRST_32_SECOND_64(1ULL << 32, 1ULL << 47)
 #    else
-// Darwin iOS/ARM64 has a 36-bit VMA, 64GiB VM
+// Darwin iOS/ARM64 has a 39-bit VMA, 512GiB VM
 #      define SANITIZER_MMAP_RANGE_SIZE \
-        FIRST_32_SECOND_64(1ULL << 32, 1ULL << 36)
+        FIRST_32_SECOND_64(1ULL << 32, 1ULL << 39)
 #    endif
 #  else
 #    define SANITIZER_MMAP_RANGE_SIZE FIRST_32_SECOND_64(1ULL << 32, 1ULL << 48)

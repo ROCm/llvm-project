@@ -13,7 +13,7 @@ config.test_format = lit.formats.ShTest(
     execute_external=True, force_execute_external=True
 )
 
-config.excludes = ["comgr-sources"]
+config.excludes = ["comgr-sources", "Inputs"]
 
 config.test_source_root = os.path.dirname(__file__)
 config.test_exec_root = config.my_obj_root
@@ -26,6 +26,13 @@ if config.comgr_amdgpu_target_available:
     config.available_features.add("comgr-has-amdgpu-target")
 if config.comgr_transpiler_available:
     config.available_features.add("comgr-has-transpiler")
+if os.path.exists(
+    os.path.join(
+        config.llvm_tools_dir,
+        "llc.exe" if platform.system() == "Windows" else "llc",
+    )
+):
+    config.available_features.add("comgr-has-llc")
 
 # The AMDGPU device AddressSanitizer runtime (libclang_rt.asan.a for
 # amdgcn-amd-amdhsa) is a separately built artifact. The asan tests link it,
@@ -44,6 +51,21 @@ if glob.glob(
     )
 ):
     config.available_features.add("comgr-has-amdgpu-asan-runtime")
+
+try:
+    with open(config.comgr_resource_dir_file, encoding="utf-8") as source:
+        embedded_resources = source.read()
+except OSError:
+    embedded_resources = ""
+
+if '"lib/amdgcn-amd-amdhsa/libclang_rt.profile.a"' in embedded_resources:
+    config.available_features.add("comgr-has-amdgpu-profile-runtime")
+
+if (
+    '"lib/amdgcn-amd-amdhsa/libclang_rt.asan.a"' in embedded_resources
+    and '"lib/amdgcn-amd-amdhsa/libclang_rt.asan_static.a"' in embedded_resources
+):
+    config.available_features.add("comgr-has-embedded-amdgpu-asan-runtime")
 
 
 # spirv-to-reloc-debuginfo checks that comgr forwards
@@ -139,3 +161,35 @@ config.substitutions.append(("%python", _fwd(sys.executable)))
 config.substitutions.append(
     ("%transpile_cli", _fwd(config.comgr_obj_dir, "transpile_cli"))
 )
+
+
+# Executing translated code requires a matching device and the HIP runtime.
+_rocm_path = os.environ.get("ROCM_PATH", "/opt/rocm")
+
+
+def _has_gfx942_device():
+    enumerator = _fwd(_rocm_path, "bin", "rocm_agent_enumerator")
+    if not os.path.exists(enumerator):
+        return False
+    try:
+        out = subprocess.run(
+            [enumerator], stdout=subprocess.PIPE, check=True, timeout=30
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return b"gfx942" in out.stdout.split()
+
+
+_hip_include = _fwd(_rocm_path, "include")
+_hip_lib = _fwd(_rocm_path, "lib")
+if (
+    platform.system() == "Linux"
+    and os.path.exists(_fwd(_hip_include, "hip", "hip_runtime_api.h"))
+    and os.path.exists(_fwd(_hip_lib, "libamdhip64.so"))
+    and _has_gfx942_device()
+):
+    config.available_features.add("comgr-has-hip-gfx942")
+    config.substitutions.append(("%hip_cflags", "-I" + _hip_include))
+    config.substitutions.append(
+        ("%hip_ldflags", "-L{0} -lamdhip64 -Wl,-rpath,{0}".format(_hip_lib))
+    )

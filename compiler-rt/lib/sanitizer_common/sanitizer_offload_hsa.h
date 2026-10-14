@@ -35,13 +35,13 @@
   X(hsa_signal_store_screlease)           \
   X(hsa_signal_wait_scacquire)
 
-#if defined(SANITIZER_AMDGPU) && SANITIZER_AMDGPU &&                           \
+#if defined(SANITIZER_AMDHSA) && SANITIZER_AMDHSA && \
     __has_include(<hsa.h>) && __has_include(<hsa_ext_amd.h>) &&              \
     __has_include(<hsa_ven_amd_loader.h>)
-#include <hsa.h>
-#include <hsa_ext_amd.h>
-#include <hsa_ven_amd_loader.h>
-#define SANITIZER_USE_SYSTEM_HSA
+#  include <hsa.h>
+#  include <hsa_ext_amd.h>
+#  include <hsa_ven_amd_loader.h>
+#  define SANITIZER_USE_SYSTEM_HSA
 #endif
 
 extern "C" {
@@ -88,10 +88,12 @@ typedef enum { HSA_AMD_SEGMENT_GLOBAL = 0 } hsa_amd_segment_t;
 typedef enum {
   HSA_AMD_MEMORY_POOL_INFO_SEGMENT = 0,
   HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS = 1,
+  HSA_AMD_MEMORY_POOL_INFO_RUNTIME_ALLOC_ALLOWED = 5,
 } hsa_amd_memory_pool_info_t;
 
 typedef enum {
   HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_FINE_GRAINED = 2,
+  HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_COARSE_GRAINED = 4,
 } hsa_amd_memory_pool_global_flag_t;
 
 typedef enum {

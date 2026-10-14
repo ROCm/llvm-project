@@ -241,6 +241,16 @@ LLVM_ABI unsigned getAddressableLocalMemorySize(Triple::SubArchType SubArch,
 LLVM_ABI unsigned getLDSBankCount(GPUKind AK);
 LLVM_ABI unsigned getLDSBankCount(Triple::SubArchType SubArch);
 
+/// \returns Hardware LDS allocation granularity in bytes, used for occupancy.
+LLVM_ABI unsigned getLDSAllocGranule(GPUKind AK);
+LLVM_ABI unsigned getLDSAllocGranule(Triple::SubArchType SubArch);
+
+/// \returns LDS size encoding granularity in bytes, used for program resource
+/// registers and metadata. This can differ from the allocation granularity.
+/// Returns zero if the target has no LDS encoding granularity feature.
+LLVM_ABI unsigned getLDSEncodingGranule(GPUKind AK);
+LLVM_ABI unsigned getLDSEncodingGranule(Triple::SubArchType SubArch);
+
 /// \returns Number of SIMDs a work-group's waves run on. All four SIMDs of the
 /// functional block in full-SIMD mode, half of them otherwise.
 constexpr unsigned getNumWorkGroupSIMDs(bool FullSIMDMode) {
@@ -368,6 +378,14 @@ public:
   /// "<triple>-<processor>:<features>" directive string.
   static std::optional<TargetID>
   parseTargetIDString(StringRef TargetIDDirective);
+
+  /// Construct a TargetID for triple \p TT and processor \p CPU, taking the
+  /// xnack/sramecc modes from the subtarget \p FeatureString (a comma-separated
+  /// "+xnack,-sramecc" list). Unspecified modes keep the processor's default.
+  /// The assembler uses this because it has no target directive to carry the
+  /// mode.
+  static TargetID createFromSubtargetFeatures(const Triple &TT, StringRef CPU,
+                                              StringRef FeatureString);
 
   /// Returns true if \p Other denotes the same target as *this, i.e. the same
   /// processor and xnack/sramecc settings on a compatible triple. This is a

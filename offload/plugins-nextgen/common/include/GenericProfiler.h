@@ -28,9 +28,10 @@ namespace target {
 namespace plugin {
 
 struct GenericDeviceTy;
-struct GenericPluginTy;
 class GenericProfilerTy;
 
+/// Helper function to unpack a tuple of arguments and call a function with
+/// them.
 template <typename FunT, typename... ArgsT, size_t... IdxSequence>
 void callViaIndexSeq(FunT F, GenericProfilerTy *P, uint64_t StartNanos,
                      uint64_t EndNanos, std::tuple<ArgsT...> Args,
@@ -38,6 +39,8 @@ void callViaIndexSeq(FunT F, GenericProfilerTy *P, uint64_t StartNanos,
   F(P, StartNanos, EndNanos, std::get<IdxSequence>(Args)...);
 }
 
+/// Helper function to unpack a tuple of arguments and call a function with
+/// them.
 template <typename FunT, typename... ArgsT>
 void callViaUnpack(FunT F, GenericProfilerTy *P, uint64_t StartNanos,
                    uint64_t EndNanos, std::tuple<ArgsT...> Tup) {
@@ -45,13 +48,11 @@ void callViaUnpack(FunT F, GenericProfilerTy *P, uint64_t StartNanos,
                   std::index_sequence_for<ArgsT...>{});
 }
 
-/***
- * Abstraction layer to implement different profiler backends.
- *
- * The plugins call into the GenericProfilerTy to handle the specific events
- * with whatever specific backend was instantiated. For now, the supported
- * backends are limited to an OMPT implementation.
- */
+/// Abstraction layer to implement different profiler backends.
+///
+/// The plugins call into the GenericProfilerTy to handle the specific events
+/// with whatever specific backend was instantiated. For now, the supported
+/// backends are limited to an OMPT implementation.
 class GenericProfilerTy {
 public:
   GenericProfilerTy() = default;
@@ -60,6 +61,7 @@ public:
   /// Obtain a pointer to profiler-specific data, if any.
   virtual void *getProfilerSpecificData() { return nullptr; }
 
+  /// Returns true if profiling is enabled, false otherwise.
   virtual bool isProfilingEnabled() { return false; }
 
   /// Set the factors which are used to interpolate the device clock compared to
@@ -71,18 +73,7 @@ public:
     setTimeConversionFactorsImpl(HostToDeviceSlope, HostToDeviceOffset);
   }
 
-  /// Hook that is called when the plugin is initialized.
-  virtual void handleInit(GenericDeviceTy *Device, GenericPluginTy *Plugin) {}
-
-  /// Hook that is called when the plugin is de-initialized.
-  virtual void handleDeinit(GenericDeviceTy *Device, GenericPluginTy *Plugin) {}
-
-  /// Hook that is called when the device image is loaded.
-  virtual void handleLoadBinary(GenericDeviceTy *Device,
-                                GenericPluginTy *Plugin,
-                                const StringRef InputTgtImage) {}
-
-  /// Hook that is called when memory is allcated on the device.
+  /// Hook that is called when memory is allocated on the device.
   virtual void handleDataAlloc(uint64_t StartNanos, uint64_t EndNanos,
                                void *HostPtr, uint64_t Size, void *Data) {}
 
@@ -90,14 +81,12 @@ public:
   virtual void handleDataDelete(uint64_t StartNanos, uint64_t EndNanos,
                                 void *TgtPtr, void *Data) {}
 
-  /// TODO: Currently this is done when "generically" launcing a kernel. Should
-  /// this instead be part of the launchImpl? For OMPT, I think it is generally
-  /// required to have a "pre-launch" hook, and a "post-launch" hook.
+  /// Hook that is called before launching a kernel.
   virtual void handlePreKernelLaunch(GenericDeviceTy *Device,
                                      uint32_t NumBlocks[3],
                                      __tgt_async_info *AI) {}
 
-  /// Hook that is called when the kernel is finished to extract he specific
+  /// Hook that is called when the kernel is finished to extract the specific
   /// timing info for that kernel execution.
   virtual void handleKernelCompletion(uint64_t StartNanos, uint64_t EndNanos,
                                       void *Data) {}
@@ -108,61 +97,78 @@ public:
                                   void *Data) {}
 
   /// Allow factors for time conversion between host and device.
-  virtual void setTimeConversionFactorsImpl(double Slope, double Offset) {
-    // Empty function as default implementation
-  }
+  virtual void setTimeConversionFactorsImpl(double Slope, double Offset) {}
 
-  /// This part of the Profiler provides measurement RAII style functionality.
-  /// Use the `getXYZ` functions to obtain a handle, which will start timing on
-  /// construction and stop timing on destruction.
-  template <typename FnT, typename... ArgsT> class ProfTimerTy {
+  /// RAII style timer that measures the elapsed time between construction and
+  /// destruction, then invokes a callback with the profiler, start/end times,
+  /// and any captured arguments. It wraps an existing GenericProfiler instance
+  /// to delay the call of the ProfilerFunction (F) until this object's dtor is
+  /// called.
+  template <typename ProfilerFuncTy, typename... ProfilerFuncArgsTy>
+  class ProfTimerTy {
   public:
-    ProfTimerTy(FnT &&F, GenericProfilerTy *P, GenericDeviceTy *D, ArgsT... As)
-        : Fun(F), Prof(P), Dev(D), Args(As...) {
-      assert(Prof && "GenericProfilerTy is null");
-      assert(Dev && "GenericDeviceTy is null");
-      if (Prof)
-        StartTime = Prof->getDeviceTimeStamp(Dev);
+    /// On creation, saves the timestamp from the profiler and device, and
+    /// stores the callback function and its arguments.
+    ProfTimerTy(ProfilerFuncTy &&F, GenericProfilerTy *P, GenericDeviceTy *D,
+                ProfilerFuncArgsTy... As)
+        : ProfilerFunction(F), ProfilerInstance(P), Device(D),
+          ProfilerFuncArgs(As...) {
+      assert(ProfilerInstance && "GenericProfilerTy is null");
+      assert(Device && "GenericDeviceTy is null");
+      if (ProfilerInstance)
+        StartTime = ProfilerInstance->getDeviceTimeStamp(Device);
     }
 
+    /// On destruction, saves the end timestamp and invokes the callback
+    /// function with the profiler, start/end times, and captured arguments.
     ~ProfTimerTy() {
-      assert(Prof && "GenericProfilerTy is null");
-      assert(Dev && "GenericDeviceTy is null");
-      if (Prof) {
-        uint64_t EndTime = Prof->getDeviceTimeStamp(Dev);
-        callViaUnpack(Fun, Prof, StartTime, EndTime, Args);
+      assert(ProfilerInstance && "GenericProfilerTy is null");
+      assert(Device && "GenericDeviceTy is null");
+      if (ProfilerInstance) {
+        uint64_t EndTime = ProfilerInstance->getDeviceTimeStamp(Device);
+        callViaUnpack(ProfilerFunction, ProfilerInstance, StartTime, EndTime,
+                      ProfilerFuncArgs);
       }
     }
 
   private:
-    FnT Fun;
-    GenericProfilerTy *Prof;
-    GenericDeviceTy *Dev;
+    /// The callback function to be invoked on destruction, which takes the
+    /// profiler, start/end times, and captured arguments.
+    ProfilerFuncTy ProfilerFunction;
+    /// The profiler instance to be used for timing and invoking the callback
+    /// function.
+    GenericProfilerTy *ProfilerInstance;
+    /// The device instance to be used for timing and invoking the callback
+    /// function.
+    GenericDeviceTy *Device;
+    /// The start time of the timer, captured at construction.
     uint64_t StartTime = 0;
-    std::tuple<ArgsT...> Args;
+    /// The captured arguments to be passed to the callback function on
+    /// destruction.
+    std::tuple<ProfilerFuncArgsTy...> ProfilerFuncArgs;
   };
 
-  // Deduction guide for ProfTimerTy
-  template <typename FnT, typename... ArgsT>
-  ProfTimerTy(FnT &&, GenericProfilerTy *, ArgsT...)
-      -> ProfTimerTy<FnT, ArgsT...>;
+  template <typename ProfilerFuncTy, typename... ProfilerFuncArgsTy>
+  [[maybe_unused]]
+  ProfTimerTy(ProfilerFuncTy &&, GenericProfilerTy *, ProfilerFuncArgsTy...)
+      -> ProfTimerTy<ProfilerFuncTy, ProfilerFuncArgsTy...>;
 
-  // Mark friend to allow ProfTimerTy to access private members
-  template <typename FnT, typename... ArgsT> friend class ProfTimerTy;
+  template <typename ProfilerFuncTy, typename... ProfilerFuncArgsTy>
+  friend class ProfTimerTy;
 
-  /// Returns an RAII style timer, which will handle data allocation timing
+  /// Returns an RAII style timer, which handles data allocation timing.
   [[nodiscard]] auto getScopedDataAllocTimer(GenericDeviceTy *Dev,
                                              void *HostPtr, uint64_t Size,
                                              void *ProfData = nullptr) {
     return ProfTimerTy(
         [](GenericProfilerTy *P, auto... args) {
-          assert(P && "P was noll");
+          assert(P && "P was null");
           P->handleDataAlloc(args...);
         },
         this, Dev, HostPtr, Size, ProfData);
   }
 
-  /// Returns an RAII style timer, which will handle data deletion timing
+  /// Returns an RAII style timer, which handles data deletion timing.
   [[nodiscard]] auto getScopedDataDeleteTimer(GenericDeviceTy *Dev,
                                               void *TgtPtr,
                                               void *ProfData = nullptr) {
@@ -175,18 +181,23 @@ public:
   }
 
 protected:
-  /// Linear factor used in time interpolation
+  /// Factors to convert host time to device time. The default values are
+  /// Computed in a way Slope * Time + Offset (inspired by Score-P).
   double HostToDeviceSlope = 1.0;
-  /// Scalar offset used in time interpolation
   double HostToDeviceOffset = .0;
 
 private:
   /// Vendor-specific implementation to obtain device time.
   uint64_t getDeviceTimeStamp(GenericDeviceTy *D);
 };
+
+/// Null-object used to normalize an absent profiler. Callers that do not have a
+/// profiler pass none, and the receiving method resolves to this instance, so
+/// profiling logic never has to test for a null pointer.
+GenericProfilerTy &getNoOpProfiler();
 } // namespace plugin
 } // namespace target
 } // namespace omp
 } // namespace llvm
-  //
-#endif
+
+#endif // OFFLOAD_PLUGINS_NEXTGEN_COMMON_INCLUDE_GENERICPROFILER_H

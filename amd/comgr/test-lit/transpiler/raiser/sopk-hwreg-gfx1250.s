@@ -20,8 +20,8 @@ sopk_hwreg:
 	s_getreg_b32 s0, hwreg(HW_REG_IB_STS2, 6, 4)
 	; IR: call void @llvm.amdgcn.s.setreg(i32 2305, i32 0)
 	s_setreg_b32 hwreg(HW_REG_WAVE_MODE, 4, 2), s0
-	; IR: call void @llvm.amdgcn.s.setreg(i32 1601, i32 4097)
-	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 0x1001
+	; IR: call void @llvm.amdgcn.s.setreg(i32 2305, i32 1)
+	s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 4, 2), 1
 	; The diagnostic register write is dropped.
 	s_setreg_imm32_b32 hwreg(HW_REG_IB_STS2), 7
 	; IR-NOT: call void @llvm.amdgcn.s.setreg
@@ -42,14 +42,12 @@ refuse_dynamic_vgpr_msb:
 	.p2align	6, 0x0
 	.amdhsa_kernel sopk_hwreg
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
 	.p2align	6, 0x0
 	.amdhsa_kernel refuse_dynamic_vgpr_msb
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 1
 		.amdhsa_next_free_sgpr 1
 	.end_amdhsa_kernel
