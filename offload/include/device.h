@@ -63,6 +63,10 @@ struct DeviceGeometryPropsTy {
   uint32_t DefaultNumBlocks = 0;
   /// Maximum amount of shared memory, in bytes, a block can use in a kernel.
   uint64_t MaxBlockSharedMemSize = 0;
+  /// Number of compute units, or zero if the device does not report it.
+  uint32_t NumComputeUnits = 0;
+  /// Backend of the platform of the device.
+  ol_platform_backend_t Backend = OL_PLATFORM_BACKEND_UNKNOWN;
 };
 
 struct PluginManager;

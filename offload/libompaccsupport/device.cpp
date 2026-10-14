@@ -127,6 +127,18 @@ llvm::Error DeviceTy::initGeometryProps() {
   if (auto Err = Query(DeviceInfo::WORK_GROUP_LOCAL_MEM_SIZE,
                        GeometryProps.MaxBlockSharedMemSize))
     return Err;
+  // Not every device reports its number of compute units; zero turns off the
+  // heuristics that need it.
+  GeometryProps.NumComputeUnits =
+      getInfo<uint32_t>(DeviceInfo::NUM_COMPUTE_UNITS);
+  // Some defaults depend on the backend. If it is unknown, the generic ones
+  // apply.
+  if (auto Platform = getInfo<ol_platform_handle_t>(DeviceInfo::PLATFORM)) {
+    if (olGetPlatformInfo(Platform, OL_PLATFORM_INFO_BACKEND,
+                          sizeof(GeometryProps.Backend),
+                          &GeometryProps.Backend))
+      GeometryProps.Backend = OL_PLATFORM_BACKEND_UNKNOWN;
+  }
 
   return llvm::Error::success();
 }
@@ -859,6 +871,61 @@ static uint32_t getDeviceBlockLimit(GenericDeviceTy &GenericDevice,
   return BlockLimit;
 }
 
+/// Threshold for the reduction data size (in bytes) above which a cross-team
+/// reduction classifies as "large".
+static constexpr uint32_t LargeTeamsReductionBytes = 32;
+
+/// Get the number of blocks (each having \p NumThreads threads) to launch a
+/// kernel with a cross-team reduction, or zero to handle it like a
+/// non-reduction kernel.
+///
+/// Every block adds to the cost of combining the partial results of the blocks.
+/// For a "large" reduction (see \p LargeTeamsReductionBytes), this cost
+/// dominates -> one block / compute unit. A small/scalar reduction prefers more
+/// blocks -> as many as needed given the device's number of waves per compute
+/// unit, but at least one / compute unit.
+static uint64_t
+getXTeamReductionNumBlocks(const DeviceGeometryPropsTy &Props,
+                           uint32_t NumThreads, uint64_t LoopTripCount,
+                           const KernelLaunchInfoTy &KernelEnv) {
+  if (!KernelEnv.ReductionDataSize || !NumThreads)
+    return 0;
+
+  // In Generic and Generic-SPMD mode, each block runs one iteration of the
+  // distribute loop. For these modes, there currently is only performance data
+  // for large reductions.
+  bool IsLarge = KernelEnv.ReductionDataSize > LargeTeamsReductionBytes;
+  bool IsSPMD = KernelEnv.isSPMDMode();
+  if (!IsSPMD && !(IsLarge && (KernelEnv.isGenericMode() ||
+                               KernelEnv.isGenericSPMDMode())))
+    return 0;
+
+  // Envar to override the device's number of waves per compute unit for a
+  // kernel with a scalar cross-team reduction. Zero keeps the device's value.
+  static UInt32Envar OMPX_TeamsReductionWavesPerCU(
+      "LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU", 0);
+  uint32_t ScalarWavesPerCU = OMPX_TeamsReductionWavesPerCU.get();
+  // Measured on MI210, MI300A, MI300X, MI350X, and MI450: scalar reductions
+  // with many iterations prefer more waves, ones with fewer iterations or more
+  // memory traffic prefer less waves. 16 waves were never far from the best.
+  if (!ScalarWavesPerCU && Props.Backend == OL_PLATFORM_BACKEND_AMDGPU)
+    ScalarWavesPerCU = 16;
+  uint64_t NumCUs = Props.NumComputeUnits;
+  if (!ScalarWavesPerCU || !NumCUs)
+    return 0;
+
+  uint32_t WavesPerBlock = llvm::divideCeil(NumThreads, Props.WarpSize);
+  uint64_t BlocksPerCU =
+      IsLarge ? 1 : std::max(1u, ScalarWavesPerCU / WavesPerBlock);
+  uint64_t NumBlocks = NumCUs * BlocksPerCU;
+  // No more blocks than there is work for.
+  if (LoopTripCount > 0)
+    NumBlocks =
+        std::min(NumBlocks, IsSPMD ? llvm::divideCeil(LoopTripCount, NumThreads)
+                                   : LoopTripCount);
+  return NumBlocks;
+}
+
 /// Get the effective number of blocks for the kernel based on the
 /// user-defined number of blocks and the loop trip count.
 /// The number of threads \p EffectiveNumThreads can be adjusted by this
@@ -884,6 +951,11 @@ static uint32_t getEffectiveNumBlocks(
   if (KernelEnv.isNoLoopMode())
     return LoopTripCount > 0 ? (((LoopTripCount - 1) / EffectiveNumThreads) + 1)
                              : 1;
+
+  if (uint64_t NumBlocks = getXTeamReductionNumBlocks(
+          Props, EffectiveNumThreads, LoopTripCount, KernelEnv))
+    return std::min(NumBlocks, uint64_t(getDeviceBlockLimit(
+                                   GenericDevice, EffectiveNumThreads)));
 
   uint64_t DefaultNumBlocks = Props.DefaultNumBlocks;
   uint64_t TripCountNumBlocks = std::numeric_limits<uint64_t>::max();
@@ -1047,6 +1119,32 @@ static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
 
   uint32_t EffectiveNumThreads = LaunchArgs.UserThreadLimit[0];
   uint32_t EffectiveNumBlocks = LaunchArgs.UserNumBlocks[0];
+
+  // Downstream: the grid of a kernel with a cross-team reduction is sized by
+  // the size of the reduction, as in getEffectiveNumBlocks, also if the plugin
+  // computes the launch geometry itself. Only the number of threads is taken
+  // from the plugin then. A number of teams the user requested, by
+  // OMP_NUM_TEAMS or for low trip counts, is honored as the plugin would.
+  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
+  if (!StrictBlocks && EffectiveNumBlocks == 0 && OMP_NumTeams <= 0 &&
+      KernelEnv.ReductionDataSize) {
+    uint32_t NumThreads = EffectiveNumThreads;
+    uint32_t NumBlocks = EffectiveNumBlocks;
+    // Without the plugin's heuristics, getEffectiveNumBlocks applies.
+    if (Kernel.computeLaunchGeometry(GenericDevice, LaunchArgs, StrictThreads,
+                                     /*StrictBlocks=*/true, NumThreads,
+                                     NumBlocks) &&
+        !GenericDevice.getOMPXNumBlocksForLowTripcount(LaunchArgs.Tripcount)) {
+      if (uint64_t ReductionNumBlocks = getXTeamReductionNumBlocks(
+              Props, NumThreads, LaunchArgs.Tripcount, KernelEnv)) {
+        LaunchArgs.UserThreadLimit[0] = NumThreads;
+        LaunchArgs.UserNumBlocks[0] =
+            std::min(ReductionNumBlocks,
+                     uint64_t(getDeviceBlockLimit(GenericDevice, NumThreads)));
+        return;
+      }
+    }
+  }
 
   // Downstream: the plugin may compute the launch geometry itself (the AMDGPU
   // plugin does, using occupancy and other device-specific heuristics).
