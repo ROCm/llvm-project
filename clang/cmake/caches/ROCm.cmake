@@ -193,6 +193,19 @@ else()
   endforeach()
   foreach(_multilib debug debug+asan)
     set(RUNTIMES_${ROCM_HOST_TRIPLE}+${_multilib}_CMAKE_BUILD_TYPE Debug CACHE STRING "")
+
+    # For now set an explicit python3 path. The venv python3 does not have shared libs installed in the docker and instead uses
+    # a python install in /opt/python-shared.
+    set(_rocm_shared_python /opt/python-shared/cp310-cp310/bin/python3)
+    if(EXISTS "${_rocm_shared_python}")
+      set(RUNTIMES_${ROCM_HOST_TRIPLE}+${_multilib}_Python3_EXECUTABLE ${_rocm_shared_python} CACHE FILEPATH "" FORCE)
+    endif()
+    set(RUNTIMES_${ROCM_HOST_TRIPLE}+${_multilib}_LIBOMP_OMPD_SUPPORT ON CACHE BOOL "")
+    set(RUNTIMES_${ROCM_HOST_TRIPLE}+${_multilib}_LIBOMP_OMPD_GDB_SUPPORT ON CACHE BOOL "")
+
+    # Currently, in the multilib debug builds libompd uses CMAKE_INSTALL_LIBDIR for INSTALL_RPATH on ompdModule.so.
+    # The default on manylinux is lib64, which is not what ROCm uses. Use lib instead.
+    set(RUNTIMES_${ROCM_HOST_TRIPLE}+${_multilib}_CMAKE_INSTALL_LIBDIR lib CACHE FILEPATH "" FORCE)
   endforeach()
   # Sanitized builds use the base target's compiler-rt and leave operator new and
   # delete to the ASan runtime.
