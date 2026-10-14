@@ -36,8 +36,6 @@ class GCNSubtarget;
 class GCNHazardRecognizer final : public ScheduleHazardRecognizer {
 public:
   typedef function_ref<bool(const MachineInstr &)> IsHazardFn;
-  typedef function_ref<bool(const MachineInstr &, int WaitStates)> IsExpiredFn;
-  typedef function_ref<unsigned int(const MachineInstr &)> GetNumWaitStatesFn;
 
   /// Operating mode for the hazard recognizer. Two independent properties
   /// follow from it.
