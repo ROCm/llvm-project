@@ -7412,9 +7412,8 @@ static void preparePlanForEpilogueVectorLoop(
   // version, except for the Add itself and the canonical IV increment.
   auto *Increment = vputils::findCanonicalIVIncrement(Plan);
   assert(Increment && "Must have a canonical IV increment at this point");
-  IV->replaceUsesWithIf(Add, [Add, Increment](VPUser &U) {
-    return &U != Add && &U != Increment;
-  });
+  IV->replaceUsesWithIf(
+      Add, [Add, Increment](VPUser *U) { return U != Add && U != Increment; });
   VPInstruction *OffsetIVInc =
       VPBuilder::getToInsertAfter(Increment).createAdd(Increment, VPV);
   Increment->replaceAllUsesWith(OffsetIVInc);
@@ -7521,8 +7520,14 @@ static void preparePlanForEpilogueVectorLoop(
                  "(or negative zero)");
 
           Sub->setOperand(0, ResumeVPV);
-        } else
-          VPI->setOperand(0, ResumeVPV);
+        } else {
+          // The start vector may be shared by multiple reductions, so create
+          // a new one using the resume.
+          auto *NewStart = cast<VPInstruction>(VPI->clone());
+          NewStart->setOperand(0, ResumeVPV);
+          NewStart->insertBefore(VPI);
+          ReductionPhi->setStartValue(NewStart);
+        }
         continue;
       }
     } else {
