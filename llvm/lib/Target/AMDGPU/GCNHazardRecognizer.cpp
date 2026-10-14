@@ -1184,8 +1184,9 @@ int GCNHazardRecognizer::getMaxWindowDeficit(int MaxWindow,
       }
     }
 
-    Distance +=
-        MI ? getCountedWaitStates(*MI, SIInstrInfo::getNumWaitStates) : 1;
+    // An instruction's further wait states follow it as nullptrs. A bundle
+    // records its meta instructions too, which take none.
+    Distance += MI && (MI->isInlineAsm() || MI->isMetaInstruction()) ? 0 : 1;
 
     if (Distance >= MaxWindow)
       break;
@@ -1209,10 +1210,10 @@ int GCNHazardRecognizer::getWaitStatesSince(
       if (IsHazard(*MI))
         return WaitStates;
 
-      if (MI->isInlineAsm())
+      if (MI->isInlineAsm() || MI->isMetaInstruction())
         continue;
     }
-    WaitStates += MI ? GetNumWaitStates(*MI) : 1;
+    ++WaitStates;
 
     if (WaitStates >= Limit)
       break;

@@ -22,9 +22,11 @@ protected:
 
   // Parses \p Body, the block of a function named f, emits everything before
   // the last instruction above the terminator as a post-RA scheduler would,
-  // and asks about that last instruction. Sixteen stalls cover the data
-  // hazards of these tests, but no co-execution window, which counts VALUs.
-  ScheduleHazardRecognizer::HazardType hazardAtLast(StringRef Body) {
+  // stalls \p Stalls cycles, and asks about that last instruction. Sixteen
+  // stalls cover the data hazards of these tests, but no co-execution window,
+  // which counts VALUs.
+  ScheduleHazardRecognizer::HazardType hazardAtLast(StringRef Body,
+                                                    int Stalls = 16) {
     bool Parsed = parseMIR("---\nname: f\nbody: |\n  bb.0:\n" + Body.str());
     EXPECT_TRUE(Parsed);
     if (!Parsed)
@@ -38,7 +40,7 @@ protected:
       HR.EmitInstruction(&MI);
       HR.AdvanceCycle();
     }
-    for (int Stall = 0; Stall != 16; ++Stall)
+    for (int Stall = 0; Stall != Stalls; ++Stall)
       HR.AdvanceCycle();
     SUnit SU(&Last, 0);
     return HR.getHazardType(&SU, 0);
@@ -75,6 +77,102 @@ TEST_F(GCNHazardRecognizerTest, SchedulerWMMACoexecutionDeficitCovered) {
     S_ENDPGM 0
 )"),
             ScheduleHazardRecognizer::NoHazard);
+}
+
+class GCNHazardRecognizerGFX90ATest : public GCNHazardRecognizerTest {
+protected:
+  void SetUp() override { setUpImpl("amdgcn-amd-amdhsa", "gfx90a", ""); }
+};
+
+// S_NOP 2 is three wait states, so the lane select is three back where the read
+// needs four.
+TEST_F(GCNHazardRecognizerGFX90ATest, SchedulerCountsSNopOnce) {
+  EXPECT_EQ(hazardAtLast(R"(
+    $sgpr0 = V_READFIRSTLANE_B32 $vgpr0, implicit $exec
+    S_NOP 2
+    $sgpr1 = V_READLANE_B32 $vgpr2, $sgpr0
+    S_ENDPGM 0
+)",
+                         /*Stalls=*/0),
+            ScheduleHazardRecognizer::Hazard);
+}
+
+// The same for a window: S_NOP 6 is seven wait states of the eleven a read of
+// a 16x16 MFMA result needs. Using an AGPR makes the history long enough for
+// MFMA windows.
+TEST_F(GCNHazardRecognizerGFX90ATest, SchedulerWindowCountsSNopOnce) {
+  EXPECT_EQ(hazardAtLast(R"(
+    $agpr0 = V_ACCVGPR_WRITE_B32_e64 $vgpr20, implicit $exec
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_NOP 6
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+)",
+                         /*Stalls=*/0),
+            ScheduleHazardRecognizer::Hazard);
+}
+
+// S_NOP 3 is four wait states, all the read needs.
+TEST_F(GCNHazardRecognizerGFX90ATest, SchedulerSNopCovers) {
+  EXPECT_EQ(hazardAtLast(R"(
+    $sgpr0 = V_READFIRSTLANE_B32 $vgpr0, implicit $exec
+    S_NOP 3
+    $sgpr1 = V_READLANE_B32 $vgpr2, $sgpr0
+    S_ENDPGM 0
+)",
+                         /*Stalls=*/0),
+            ScheduleHazardRecognizer::NoHazard);
+}
+
+// S_NOP 6 and S_NOP 3 are the eleven wait states the read needs.
+TEST_F(GCNHazardRecognizerGFX90ATest, SchedulerSNopsCoverWindow) {
+  EXPECT_EQ(hazardAtLast(R"(
+    $agpr0 = V_ACCVGPR_WRITE_B32_e64 $vgpr20, implicit $exec
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_NOP 6
+    S_NOP 3
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+)",
+                         /*Stalls=*/0),
+            ScheduleHazardRecognizer::NoHazard);
+}
+
+// A bundle records its meta instructions too, and they take no wait state:
+// S_NOP 1 and the V_MOV put the lane select three back.
+TEST_F(GCNHazardRecognizerGFX90ATest, SchedulerBundledMetaTakesNoWaitState) {
+  EXPECT_EQ(hazardAtLast(R"(
+    $sgpr0 = V_READFIRSTLANE_B32 $vgpr0, implicit $exec
+    S_NOP 1
+    BUNDLE implicit-def $vgpr5, implicit-def $vgpr6, implicit $exec {
+      $vgpr5 = IMPLICIT_DEF
+      $vgpr6 = V_MOV_B32_e32 1, implicit $exec
+    }
+    $sgpr1 = V_READLANE_B32 $vgpr2, $sgpr0
+    S_ENDPGM 0
+)",
+                         /*Stalls=*/0),
+            ScheduleHazardRecognizer::Hazard);
+}
+
+// The same for a window: S_NOP 6, S_NOP 1 and the V_MOV are ten of the eleven
+// wait states the read needs.
+TEST_F(GCNHazardRecognizerGFX90ATest,
+       SchedulerWindowBundledMetaTakesNoWaitState) {
+  EXPECT_EQ(hazardAtLast(R"(
+    $agpr0 = V_ACCVGPR_WRITE_B32_e64 $vgpr20, implicit $exec
+    $vgpr0_vgpr1_vgpr2_vgpr3 = V_MFMA_F32_16X16X16F16_vgprcd_e64 $vgpr8_vgpr9, $vgpr10_vgpr11, $vgpr0_vgpr1_vgpr2_vgpr3, 0, 0, 0, implicit $mode, implicit $exec
+    S_NOP 6
+    S_NOP 1
+    BUNDLE implicit-def $vgpr30, implicit-def $vgpr31, implicit $exec {
+      $vgpr30 = IMPLICIT_DEF
+      $vgpr31 = V_MOV_B32_e32 1, implicit $exec
+    }
+    $vgpr4 = V_MOV_B32_e32 $vgpr2, implicit $exec
+    S_ENDPGM 0
+)",
+                         /*Stalls=*/0),
+            ScheduleHazardRecognizer::Hazard);
 }
 
 } // end anonymous namespace
