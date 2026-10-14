@@ -8,121 +8,154 @@
 
 #include "transpiler/raiser/handlers.h"
 
+#include "transpiler/decoder/amdgpu-mc-tables.h"
 #include "transpiler/decoder/canonical-op.h"
 #include "transpiler/decoder/decoded-inst.h"
 #include "transpiler/raiser/operand-resolver.h"
 #include "transpiler/raiser/raise-context.h"
 #include "transpiler/raiser/register-state.h"
 
+#include "MCTargetDesc/AMDGPUMCExpr.h"
+#include "SIDefines.h"
+
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Error.h"
 
 #include <cassert>
+#include <optional>
 
 using namespace llvm;
 
 namespace COMGR::transpiler {
 
-Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
-                 OperandResolver &Op) {
-  ICmpInst::Predicate Pred;
-  switch (Di.CanonOp) {
-  case CanonicalOp::V_CMP_LT_I32:
-    Pred = ICmpInst::ICMP_SLT;
-    break;
-  case CanonicalOp::V_CMP_EQ_I32:
-    Pred = ICmpInst::ICMP_EQ;
-    break;
-  case CanonicalOp::V_CMP_LE_I32:
-    Pred = ICmpInst::ICMP_SLE;
-    break;
-  case CanonicalOp::V_CMP_GT_I32:
-    Pred = ICmpInst::ICMP_SGT;
-    break;
-  case CanonicalOp::V_CMP_NE_I32:
-    Pred = ICmpInst::ICMP_NE;
-    break;
-  case CanonicalOp::V_CMP_GE_I32:
-    Pred = ICmpInst::ICMP_SGE;
-    break;
-  case CanonicalOp::V_CMP_LT_U32:
-    Pred = ICmpInst::ICMP_ULT;
-    break;
-  case CanonicalOp::V_CMP_EQ_U32:
-    Pred = ICmpInst::ICMP_EQ;
-    break;
-  case CanonicalOp::V_CMP_LE_U32:
-    Pred = ICmpInst::ICMP_ULE;
-    break;
-  case CanonicalOp::V_CMP_GT_U32:
-    Pred = ICmpInst::ICMP_UGT;
-    break;
-  case CanonicalOp::V_CMP_NE_U32:
-    Pred = ICmpInst::ICMP_NE;
-    break;
-  case CanonicalOp::V_CMP_GE_U32:
-    Pred = ICmpInst::ICMP_UGE;
-    break;
+std::optional<VectorCompareInfo> getVectorCompareInfo(CanonicalOp Opcode) {
+  switch (Opcode) {
+#define VECTOR_COMPARE(Name, Predicate, BitWidth, SignExtendLiteral)           \
+  case CanonicalOp::V_CMP_##Name:                                              \
+    return VectorCompareInfo{CmpInst::Predicate, BitWidth, SignExtendLiteral};
+#define VECTOR_CLASS(Name, BitWidth)                                           \
+  case CanonicalOp::V_CMP_CLASS_##Name:                                        \
+    return VectorCompareInfo{std::nullopt, BitWidth};
+#include "transpiler/decoder/vector-compare.def"
   default:
-    return unsupported(Ctx, Di);
+    return std::nullopt;
+  }
+}
+
+static Expected<Value *> readCompareSource(OperandResolver &Op, unsigned Index,
+                                           VectorCompareInfo Info) {
+  if (!Info.Predicate && Index == 1) {
+    assert(!Op.srcMod(Index) && "class mask cannot have source modifiers");
+    return Op.src(Index);
+  }
+  if (Info.isFloat())
+    return Info.BitWidth == 64 ? Op.srcF64(Index) : Op.srcF32(Index);
+
+  unsigned AllowedModifiers = Info.BitWidth == 16 ? SISrcMods::OP_SEL_0 : 0;
+  if (Op.srcMod(Index) & ~AllowedModifiers)
+    return unsupported(Op.Ctx, Op.Di,
+                       "integer source modifiers are not supported");
+  if (Info.BitWidth == 16)
+    return Op.src16(Index);
+  Expected<Value *> Source = Op.src(Index, Info.BitWidth == 64);
+  if (!Source)
+    return Source.takeError();
+  if (!Info.SignExtendLiteral || Op.isSrcReg(Index))
+    return *Source;
+
+  const MCOperand &Operand = Op.Di.Inst.getOperand(Op.srcIdx(Index));
+  if (Operand.isExpr()) {
+    const auto *Literal = dyn_cast<AMDGPUMCExpr>(Operand.getExpr());
+    if (Literal && Literal->getKind() == AMDGPUMCExpr::AGVK_Lit64)
+      return *Source;
+  }
+  const APInt &Bits = cast<ConstantInt>(*Source)->getValue();
+  if (Bits.getActiveBits() <= 32)
+    return Op.Ctx.B.getInt64(Bits.trunc(32).getSExtValue());
+  return *Source;
+}
+
+Error raiseVectorCompare(RaiseContext &Ctx, const DecodedInst &Di,
+                         OperandResolver &Op, VectorCompareInfo Info) {
+  assert(Op.nSrcs() == 2 && "comparison must have two sources");
+  assert(COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                               AMDGPU::OpName::omod) < 0 &&
+         "comparison cannot have an output multiplier");
+  int ClampIndex = COMGR::transpiler::getNamedOperandIdx(Di.Inst.getOpcode(),
+                                                         AMDGPU::OpName::clamp);
+  if (ClampIndex >= 0) {
+    assert(Di.isImm(ClampIndex) && "comparison clamp must be immediate");
+    if (Di.getImm(ClampIndex))
+      return unsupported(Ctx, Di, "comparison clamp is not supported");
   }
 
-  // A comparison in the plain VOPC encoding names no destination operand at
-  // all: the lane mask goes to the condition registers the opcode implicitly
-  // defines.
-  if (Di.NumDefs != 0 || Op.nSrcs() != 2) {
-    return unsupported(Ctx, Di, "expected two sources and no destination");
+  std::optional<ParsedReg> Destination;
+  if (Di.NumDefs) {
+    assert(Di.NumDefs == 1 && "comparison must have one explicit destination");
+    if (!Di.isReg(0))
+      return unsupported(Ctx, Di, "expected a comparison mask destination");
+    Expected<ParsedReg> Register = Op.dst();
+    if (!Register)
+      return Register.takeError();
+    if (Register->RegKind != ParsedReg::SGPR &&
+        Register->RegKind != ParsedReg::VCC &&
+        Register->RegKind != ParsedReg::NOREG)
+      return unsupported(Ctx, Di, "unsupported comparison mask destination");
+    Destination = *Register;
+  } else {
+    assert((Di.defsVcc() || Di.defsExec()) &&
+           "comparison must have an implicit destination");
   }
-  assert((Di.defsVcc() || Di.defsExec()) &&
-         "a comparison that writes neither VCC nor EXEC has no result");
 
-  Expected<Value *> Src0 = Op.src(0);
-  if (!Src0) {
+  Expected<Value *> Src0 = readCompareSource(Op, 0, Info);
+  if (!Src0)
     return Src0.takeError();
-  }
-  Expected<Value *> Src1 = Op.src(1);
-  if (!Src1) {
+  Expected<Value *> Src1 = readCompareSource(Op, 1, Info);
+  if (!Src1)
     return Src1.takeError();
-  }
 
-  Value *Cmp = Ctx.B.CreateICmp(Pred, *Src0, *Src1);
+  Value *Cmp;
+  if (!Info.Predicate)
+    Cmp = Ctx.B.CreateIntrinsic(Intrinsic::amdgcn_class, {(*Src0)->getType()},
+                                {*Src0, *Src1});
+  else if (Info.isFloat())
+    Cmp = Ctx.B.CreateFCmp(*Info.Predicate, *Src0, *Src1);
+  else
+    Cmp = Ctx.B.CreateICmp(*Info.Predicate, *Src0, *Src1);
   RegisterState &Regs = Ctx.registers();
 
-  // Which condition registers a comparison writes is a property of the opcode
-  // and of the source generation, and the decoder has already read it off the
-  // implicit definitions: `v_cmp` writes VCC, `v_cmpx` writes EXEC, and before
-  // GFX10 `v_cmpx` wrote both.
-  if (Di.defsVcc()) {
-    // VCC is held as the bit belonging to the lane doing the writing, so the
-    // per-lane comparison is what it wants, cleared where the lane is inactive:
-    // a comparison writes the whole mask whatever EXEC holds, and the bits of
-    // the lanes EXEC masks off read back as zero. Masking rather than skipping
-    // the write, since an inactive lane does not keep the bit it had.
-    Value *Bit = Ctx.B.CreateAnd(Cmp, Regs.emitLaneActiveBit(), "vcc_bit");
-    Regs.regFile().storeVCC(Ctx.B, Bit);
-  }
-
-  if (Di.defsExec()) {
-    // Narrowing EXEC needs the answer for the whole wave, not for the writing
-    // lane: EXEC is one mask that every lane reads, and a sign-extended
-    // per-lane bit would give each lane a private EXEC that disagrees with its
-    // neighbors. The ballot is what turns the per-lane comparison into that one
-    // mask, and taking it at the EXEC storage width keeps the AND and the store
-    // in a single type.
+  // Inactive lanes contribute zero even when their source values are poison.
+  Value *Bit = Ctx.B.CreateSelect(Regs.emitLaneActiveBit(), Cmp,
+                                  Ctx.B.getFalse(), "cmp_active");
+  if (Destination && Destination->RegKind == ParsedReg::SGPR) {
     Value *Mask = Ctx.Projection.ballotI1ToWidth(
-        Ctx.B, Cmp, Ctx.Projection.execStorageTy(), "cmpx_ballot");
-    Value *CurrentExec = Regs.regFile().loadExec(Ctx.B);
-    // The AND is also what clears the bits of the lanes that were inactive,
-    // which the ballot took the comparison of regardless.
+        Ctx.B, Bit, Ctx.Projection.sourceWaveMaskTy(), "cmp_mask");
+    Regs.writeRegExecWidth(*Destination, Mask);
+  }
+  if (Destination)
+    Regs.recordWaveMaskI1(*Destination, Bit);
+  if (Di.defsVcc())
+    Regs.recordWaveMaskI1(ParsedReg{ParsedReg::VCC}, Bit);
+  if (Di.defsExec()) {
+    Value *Mask = Ctx.Projection.ballotI1ToWidth(
+        Ctx.B, Bit, Ctx.Projection.execStorageTy(), "cmpx_ballot");
+    Value *CurrentExec = Regs.readExec();
     Value *NarrowedExec = Ctx.B.CreateAnd(CurrentExec, Mask, "cmpx_exec");
-    // Through RegisterState rather than the register file: the lane-active bit
-    // every following per-lane write is predicated on was derived from the
-    // EXEC being replaced and has to go with it.
     Regs.storeExec(NarrowedExec);
   }
-
   return Error::success();
+}
+
+Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
+                 OperandResolver &Op) {
+  assert(Di.NumDefs == 0 && (Di.defsVcc() || Di.defsExec()) &&
+         "VOPC comparison must have an implicit destination");
+  std::optional<VectorCompareInfo> Info = getVectorCompareInfo(Di.CanonOp);
+  if (!Info)
+    return unsupported(Ctx, Di);
+  return raiseVectorCompare(Ctx, Di, Op, *Info);
 }
 
 } // namespace COMGR::transpiler

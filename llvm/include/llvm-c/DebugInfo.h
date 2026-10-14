@@ -151,6 +151,7 @@ typedef enum {
   LLVMDWARFSourceLanguageErlang,
   LLVMDWARFSourceLanguageElixir,
   LLVMDWARFSourceLanguageGleam,
+  LLVMDWARFSourceLanguageRoc,
 
   // Vendor extensions:
   LLVMDWARFSourceLanguageMips_Assembler,
@@ -214,6 +215,8 @@ enum {
   LLVMDISubrangeTypeMetadataKind,
   LLVMDIFixedPointTypeMetadataKind,
   LLVMDIPropertyMetadataKind,
+  LLVMDILayerLocMetadataKind,
+  LLVMDILayerLocListMetadataKind,
 };
 typedef unsigned LLVMMetadataKind;
 

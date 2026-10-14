@@ -1,15 +1,15 @@
 ; REQUIRES: comgr-has-transpiler
 ; RUN: %llvm-mc -triple=amdgpu9-amd-amdhsa -filetype=obj %s -o %t.gfx9.o
 ; RUN: %ld.lld -shared %t.gfx9.o -o %t.gfx9.hsaco
-; RUN: not %transpile_cli %t.gfx9.hsaco --target-isa=gfx950 \
+; RUN: not %transpile_cli %t.gfx9.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=ds_gds 2>&1 | %FileCheck %s --check-prefix=GDS
 ; RUN: %llvm-mc -triple=amdgpu8.03-amd-amdhsa -filetype=obj %s -o %t.gfx803.o
 ; RUN: %ld.lld -shared %t.gfx803.o -o %t.gfx803.hsaco
-; RUN: not %transpile_cli %t.gfx803.hsaco --target-isa=gfx950 \
+; RUN: not %transpile_cli %t.gfx803.hsaco --target-isa=gfx942 \
 ; RUN:   --emit-ir=ds_m0 2>&1 | %FileCheck %s --check-prefix=M0
 ; RUN: %llvm-mc -triple=amdgpu10.10-amd-amdhsa -filetype=obj %s -o %t.gfx1010.o
 ; RUN: %ld.lld -shared %t.gfx1010.o -o %t.gfx1010.hsaco
-; RUN: not %transpile_cli %t.gfx1010.hsaco --target-isa=gfx950 \
+; RUN: not %transpile_cli %t.gfx1010.hsaco --target-isa=gfx1010 \
 ; RUN:   --emit-ir=ds_wide 2>&1 | %FileCheck %s --check-prefix=WGP
 
 	.amdhsa_code_object_version 6
@@ -19,7 +19,7 @@
 	.type ds_gds,@function
 ds_gds:
 ; GDS: in kernel 'ds_gds'
-; GDS-SAME: GDS loads are not modeled
+; GDS-SAME: GDS accesses are not modeled
 	ds_read_b32 v1, v0 gds
 	s_endpgm
 
@@ -28,7 +28,7 @@ ds_gds:
 	.type ds_m0,@function
 ds_m0:
 ; M0: in kernel 'ds_m0'
-; M0-SAME: M0-bounded LDS loads are not modeled
+; M0-SAME: M0-bounded LDS accesses are not modeled
 	ds_read_b32 v1, v0
 	s_endpgm
 
@@ -38,7 +38,7 @@ ds_m0:
 ds_wide:
 ; WGP: unsupported-instruction-form: ds_read_b64 [DS]
 ; WGP-SAME: in kernel 'ds_wide'
-; WGP-SAME: wide LDS loads with the WGP misalignment bug are not modeled
+; WGP-SAME: wide LDS accesses with the WGP misalignment bug are not modeled
 	ds_read_b64 v[0:1], v0
 	s_endpgm
 

@@ -49,8 +49,8 @@ mode_kernel:
 ; Naming the mode the raised kernel already computes in asks for nothing, so
 ; both of these lift to nothing.
 ; MODE-LABEL: define amdgpu_kernel void @mode_kernel(
-; MODE-NOT: call
-; MODE: ret void
+; MODE: bb_0x{{.+}}:
+; MODE-NEXT: ret void
 ; MODE-NEXT: }
 	s_round_mode 0x0
 	s_denorm_mode 15

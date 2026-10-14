@@ -1,32 +1,35 @@
 ; RUN: %opt -load-pass-plugin=%sqtt-marker-plugin \
-; RUN:   -sqtt-marker-scope-cu=-1 -sqtt-marker-scope-simd=-1 \
-; RUN:   -sqtt-marker-mem-barrier=none \
-; RUN:   -sqtt-marker-instrument-functions=3 \
-; RUN:   -sqtt-marker-instrument-barriers=1 \
-; RUN:   -sqtt-marker-instrument-memory=1:0 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-scope-cu=-1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-scope-simd=-1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-mem-barrier=none \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-instrument-functions=3 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-instrument-barriers=1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-instrument-memory=1:0 \
 ; RUN:   -passes='default<O2>' -S %s -o - | %FileCheck %s --check-prefix=AUTO
 ; Environment variables remain supported when no corresponding option is set.
 ; RUN: env SQTT_SCOPE_CU=-1 SQTT_SCOPE_SIMD=-1 SQTT_INSTRUMENT_BARRIERS=1 \
 ; RUN:   %opt -load-pass-plugin=%sqtt-marker-plugin -passes='default<O0>' \
 ; RUN:   -S %s -o - | %FileCheck %s --check-prefix=FENCE
 ; RUN: %opt -load-pass-plugin=%sqtt-marker-plugin \
-; RUN:   -sqtt-marker-scope-cu=-1 -sqtt-marker-scope-simd=-1 \
-; RUN:   -sqtt-marker-mem-barrier=asm \
-; RUN:   -sqtt-marker-instrument-barriers=1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-scope-cu=-1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-scope-simd=-1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-mem-barrier=asm \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-instrument-barriers=1 \
 ; RUN:   -passes='default<O0>' -S %s -o - | %FileCheck %s --check-prefix=ASM
 ; Explicit options take precedence over their environment fallbacks.
 ; RUN: env SQTT_MEM_BARRIER=fence SQTT_INSTRUMENT_BARRIERS=0 \
 ; RUN:   %opt -load-pass-plugin=%sqtt-marker-plugin \
-; RUN:   -sqtt-marker-scope-cu=-1 -sqtt-marker-scope-simd=-1 \
-; RUN:   -sqtt-marker-mem-barrier=none \
-; RUN:   -sqtt-marker-instrument-barriers=1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-scope-cu=-1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-scope-simd=-1 \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-mem-barrier=none \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-instrument-barriers=1 \
 ; RUN:   -passes='default<O0>' -S %s -o - | %FileCheck %s --check-prefix=NONE
 ; Explicit disable values override enabled environment fallbacks without a
 ; diagnostic.
 ; RUN: env SQTT_INSTRUMENT_MEMORY=1:0 SQTT_TRACE_ADDRESSES=memory \
 ; RUN:   %opt -load-pass-plugin=%sqtt-marker-plugin \
-; RUN:   -sqtt-marker-instrument-memory=off \
-; RUN:   -sqtt-marker-trace-addresses=none \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-instrument-memory=off \
+; RUN:   -plugin-arg=SQTTMarkerPass,-sqtt-marker-trace-addresses=none \
 ; RUN:   -passes='default<O0>' -S %s -o - 2>&1 | \
 ; RUN:   %FileCheck %s --check-prefix=DISABLED
 ; REQUIRES: amdgpu-registered-target

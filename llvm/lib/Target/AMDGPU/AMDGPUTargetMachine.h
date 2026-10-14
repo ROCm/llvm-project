@@ -59,7 +59,8 @@ public:
   void registerPassBuilderCallbacks(PassBuilder &PB) override;
   void registerDefaultAliasAnalyses(AAManager &) override;
 
-  bool isNoopAddrSpaceCast(unsigned SrcAS, unsigned DestAS) const override;
+  bool isNoopAddrSpaceCast(const DataLayout &DL, unsigned SrcAS,
+                           unsigned DestAS) const override;
 
   std::optional<dwarf::AddressSpace>
   mapToDWARFAddrSpace(unsigned LLVMAddrSpace) const override;

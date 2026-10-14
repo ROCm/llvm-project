@@ -8,7 +8,7 @@
 
 // Unit tests for the per-projection contract on WaveProjection and its
 // subclasses. Each projection fixes its policy (EXEC storage width, source
-// waves per target wave, doubled-dispatch factor, and the exec/mbcnt
+// waves per target wave, replication factor, and the exec/mbcnt
 // predicates) in its constructor, and the raiser and its passes branch on
 // those values through a WaveProjection reference. These tests pin the value
 // each projection reports, so a constructor that forgets to set a flag, or a
@@ -20,6 +20,7 @@
 #include "transpiler/raiser/wave-projection.h"
 
 #include "transpiler/decoder/mc-state.h"
+#include "transpiler/raiser/launch.h"
 
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -37,7 +38,7 @@
 using namespace llvm;
 using COMGR::transpiler::initMCState;
 using COMGR::transpiler::MCState;
-using COMGR::transpiler::ReplicationDoubledDispatchProjection;
+using COMGR::transpiler::ReplicatedDispatchProjection;
 using COMGR::transpiler::ReplicationProjection;
 using COMGR::transpiler::ThreadLoopProjection;
 using COMGR::transpiler::WaveNativeProjection;
@@ -71,7 +72,7 @@ protected:
 } // namespace
 
 // ----------------------------------------------------------------------------
-// providesFullWaveExecInvariant: only WaveNative decouples hardware EXEC from
+// providesSourceWaveExecInvariant: WaveNative decouples hardware EXEC from
 // the modeled source mask (via init_whole_wave), so only it reports true.
 // Cross-lane collective lowerings gate on this before running.
 // ----------------------------------------------------------------------------
@@ -84,7 +85,7 @@ TEST_F(WaveProjectionContract, ReplicationDoesNotProvideFullWaveExec) {
   const MCSubtargetInfo &Tgt = tgtSTI();
 
   ReplicationProjection Proj(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
+  EXPECT_FALSE(Proj.providesSourceWaveExecInvariant());
   EXPECT_EQ(&Proj.SourceSTI, &Src);
   EXPECT_EQ(&Proj.TargetSTI, &Tgt);
   EXPECT_EQ(Proj.sourceWaveSize(), 32u);
@@ -93,7 +94,7 @@ TEST_F(WaveProjectionContract, ReplicationDoesNotProvideFullWaveExec) {
   // Read through a base reference too: the value lives in the base subobject
   // the constructor set, so the non-virtual accessor resolves it correctly.
   const WaveProjection &Base = Proj;
-  EXPECT_FALSE(Base.providesFullWaveExecInvariant());
+  EXPECT_FALSE(Base.providesSourceWaveExecInvariant());
 }
 
 TEST_F(WaveProjectionContract, WaveNativeProvidesFullWaveExec) {
@@ -106,13 +107,13 @@ TEST_F(WaveProjectionContract, WaveNativeProvidesFullWaveExec) {
   const MCSubtargetInfo &Tgt = tgtSTI();
 
   WaveNativeProjection Proj(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_TRUE(Proj.providesFullWaveExecInvariant());
-  EXPECT_EQ(Proj.execStorageTy(), I64Ty);
-  EXPECT_TRUE(Proj.broadcastNarrowExecLoWrite());
+  EXPECT_TRUE(Proj.providesSourceWaveExecInvariant());
+  EXPECT_EQ(Proj.execStorageTy(), I32Ty);
+  EXPECT_FALSE(Proj.broadcastNarrowExecLoWrite());
   EXPECT_TRUE(Proj.preservesMbcntDerivedExec());
 
   const WaveProjection &Base = Proj;
-  EXPECT_TRUE(Base.providesFullWaveExecInvariant());
+  EXPECT_TRUE(Base.providesSourceWaveExecInvariant());
 }
 
 // A minimal concrete projection that implements only the pure virtuals, used
@@ -148,8 +149,8 @@ TEST_F(WaveProjectionContract, BaseDefaults) {
   const MCSubtargetInfo &Tgt = tgtSTI();
 
   DefaultTestProjection Proj(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
-  EXPECT_FALSE(Proj.usesDoubledDispatch());
+  EXPECT_FALSE(Proj.providesSourceWaveExecInvariant());
+  EXPECT_FALSE(Proj.usesReplicatedDispatch());
   EXPECT_EQ(Proj.numSourceWavesPerTarget(), 1u);
 }
 
@@ -162,12 +163,12 @@ TEST_F(WaveProjectionContract, ThreadLoop) {
   const MCSubtargetInfo &Tgt = tgtSTI();
 
   ThreadLoopProjection Proj(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_FALSE(Proj.providesFullWaveExecInvariant());
+  EXPECT_FALSE(Proj.providesSourceWaveExecInvariant());
   EXPECT_TRUE(Proj.sourceWaveScopedLaneOps());
   EXPECT_EQ(Proj.execStorageTy(), I64Ty);
 
   const WaveProjection &Base = Proj;
-  EXPECT_FALSE(Base.providesFullWaveExecInvariant());
+  EXPECT_FALSE(Base.providesSourceWaveExecInvariant());
 }
 
 // ----------------------------------------------------------------------------
@@ -212,10 +213,9 @@ TEST_F(WaveProjectionContract, ThreadLoopReportsSourceWavesPerTargetRatio) {
 }
 
 // ----------------------------------------------------------------------------
-// Doubled dispatch: ReplicationDoubledDispatchProjection is the only projection
-// that asks the runtime to scale the block's x extent. The factor is W_t / W_s.
+// Replicated dispatch scales the physical X extent by the wave-size ratio.
 // ----------------------------------------------------------------------------
-TEST_F(WaveProjectionContract, ReplicationDoubledDispatch) {
+TEST_F(WaveProjectionContract, ReplicatedDispatch) {
   LLVMContext Ctx;
   auto *I32Ty = Type::getInt32Ty(Ctx);
   auto *I64Ty = Type::getInt64Ty(Ctx);
@@ -223,22 +223,20 @@ TEST_F(WaveProjectionContract, ReplicationDoubledDispatch) {
   const MCSubtargetInfo &Src = srcSTI();
   const MCSubtargetInfo &Tgt = tgtSTI();
 
-  ReplicationDoubledDispatchProjection Proj(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_TRUE(Proj.usesDoubledDispatch());
-  EXPECT_EQ(Proj.doubledDispatchFactor(), 2u);
-  EXPECT_EQ(Proj.doubledDispatchDim(), 0u);
-  // Doubled dispatch is replication underneath: one source wave per
-  // target wave, upper lanes are replicas.
+  COMGR::transpiler::KernelLaunchRequirements Launch;
+  ReplicatedDispatchProjection Proj(Src, Tgt, I32Ty, I64Ty, Launch);
+  EXPECT_TRUE(Proj.usesReplicatedDispatch());
+  EXPECT_TRUE(Proj.providesSourceWaveExecInvariant());
+  EXPECT_EQ(Proj.replicationFactor(), 2u);
   EXPECT_EQ(Proj.numSourceWavesPerTarget(), 1u);
 
-  // Plain replication must not report a doubled dispatch.
   ReplicationProjection Plain(Src, Tgt, I32Ty, I64Ty);
-  EXPECT_FALSE(Plain.usesDoubledDispatch());
+  EXPECT_FALSE(Plain.usesReplicatedDispatch());
 }
 
 // ----------------------------------------------------------------------------
 // wrapAsWWMValue: an identity no-op on projections that already guarantee
-// hardware EXEC=-1 kernel-wide (WaveNative), and a single strict.wwm wrapper on
+// participating source waves have full EXEC, and a strict.wwm wrapper on
 // those that do not (Replication). The WMMA lowering relies on both behaviours.
 // ----------------------------------------------------------------------------
 namespace {
@@ -321,4 +319,66 @@ TEST_F(WaveProjectionContract, WrapAsWWMValueHandlesVectorFloatOverload) {
   EXPECT_EQ(Cb->getType(), V4f32Ty);
   ASSERT_EQ(Cb->arg_size(), 1u);
   EXPECT_EQ(Cb->getArgOperand(0)->getType(), V4f32Ty);
+}
+
+TEST_F(WaveProjectionContract, SourceWaveBallotRecognition) {
+  LLVMContext Context;
+  Module M("ballot", Context);
+  IRBuilder<> B(Context);
+  Function *F = Function::Create(
+      FunctionType::get(B.getVoidTy(),
+                        {B.getInt1Ty(), B.getInt64Ty(), B.getInt32Ty()}, false),
+      Function::ExternalLinkage, "test", M);
+  B.SetInsertPoint(BasicBlock::Create(Context, "entry", F));
+  WaveNativeProjection Native(srcSTI(), tgtSTI(), B.getInt32Ty(),
+                              B.getInt64Ty());
+  ReplicationProjection Replicated(srcSTI(), tgtSTI(), B.getInt32Ty(),
+                                   B.getInt64Ty());
+  Value *Predicate = F->getArg(0);
+  Value *Mask = Native.ballotI1ToWidth(B, Predicate, B.getInt32Ty());
+  EXPECT_EQ(Native.matchBallotPredicate(Mask), Predicate);
+  EXPECT_EQ(Replicated.matchBallotPredicate(Mask), nullptr);
+  Value *Low = Replicated.ballotI1ToWidth(B, Predicate, B.getInt32Ty());
+  EXPECT_EQ(Replicated.matchBallotPredicate(Low), Predicate);
+  EXPECT_EQ(Native.matchBallotPredicate(Low), nullptr);
+
+  Value *Lane = Native.emitLaneIdx(B);
+  Value *Ballot = B.CreateIntrinsic(Intrinsic::amdgcn_ballot, {B.getInt64Ty()},
+                                    {Predicate});
+  auto Slice = [&](Value *Bits, Value *Offset, Type *ResultTy) {
+    return B.CreateTrunc(B.CreateLShr(Bits, Offset), ResultTy);
+  };
+  Value *Base = B.CreateAnd(Lane, B.getInt32(-32));
+  Value *Offset = B.CreateZExt(Base, B.getInt64Ty());
+  EXPECT_EQ(Native.matchBallotPredicate(Slice(Ballot, Offset, B.getInt32Ty())),
+            Predicate);
+  // A fixed half cannot represent both source waves.
+  for (unsigned Shift : {0u, 32u, 64u})
+    EXPECT_EQ(Native.matchBallotPredicate(
+                  Slice(Ballot, B.getInt64(Shift), B.getInt32Ty())),
+              nullptr);
+  for (Value *WrongBase : {B.CreateAnd(Lane, B.getInt32(31)),
+                           B.CreateAnd(F->getArg(2), B.getInt32(-32))})
+    EXPECT_EQ(
+        Native.matchBallotPredicate(Slice(
+            Ballot, B.CreateZExt(WrongBase, B.getInt64Ty()), B.getInt32Ty())),
+        nullptr);
+  EXPECT_EQ(Native.matchBallotPredicate(Slice(
+                Ballot, B.CreateSExt(Base, B.getInt64Ty()), B.getInt32Ty())),
+            nullptr);
+  EXPECT_EQ(Native.matchBallotPredicate(Slice(Ballot, Offset, B.getInt16Ty())),
+            nullptr);
+  EXPECT_EQ(
+      Native.matchBallotPredicate(Slice(F->getArg(1), Offset, B.getInt32Ty())),
+      nullptr);
+  Value *NarrowBallot = B.CreateIntrinsic(Intrinsic::amdgcn_ballot,
+                                          {B.getInt32Ty()}, {Predicate});
+  EXPECT_EQ(
+      Native.matchBallotPredicate(Slice(
+          B.CreateZExt(NarrowBallot, B.getInt64Ty()), Offset, B.getInt32Ty())),
+      nullptr);
+  EXPECT_EQ(Replicated.matchBallotPredicate(
+                B.CreateTrunc(NarrowBallot, B.getInt16Ty())),
+            nullptr);
+  B.CreateRetVoid();
 }

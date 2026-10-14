@@ -11,8 +11,10 @@
 
 #include "transpiler/common/kernel-meta.h"
 #include "transpiler/loader/code-object-utils.h"
+#include "transpiler/raiser/launch.h"
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
 
@@ -28,6 +30,7 @@ namespace COMGR::transpiler {
 struct RaiseResult {
   std::unique_ptr<llvm::LLVMContext> Ctx;
   std::unique_ptr<llvm::Module> Module;
+  llvm::StringMap<KernelLaunchRequirements> LaunchRequirements;
 };
 
 // One kernel to raise: the name the lifted function takes, the metadata
@@ -39,6 +42,8 @@ struct KernelRequest {
   const KernelMeta &Meta;
   uint64_t StartOffset;
   uint64_t EndOffset;
+  /// Optional logical workgroup specialization, enforced by the launch result.
+  std::optional<std::array<uint32_t, 3>> WorkgroupSize;
 };
 
 // Raise every kernel in `Kernels` onto `TargetIsa`, into one module of
@@ -56,10 +61,22 @@ struct KernelRequest {
 // come back as a `RaiseFailure`. One refused kernel refuses the whole batch,
 // since a module missing a kernel the caller asked for is not a usable partial
 // result.
-llvm::Expected<RaiseResult> raiseToIR(const TextSection &Text,
-                                      llvm::StringRef SourceIsa,
-                                      llvm::StringRef TargetIsa,
-                                      llvm::ArrayRef<KernelRequest> Kernels);
+//
+// `FunctionExtents` names the text-relative extent of every function symbol,
+// as `CodeObjectInfo::textFunctionExtents` reports it. A call whose target
+// lies outside the kernel's own extent is followed into whichever of these
+// covers it, and that callee is raised into the same function as the caller.
+// Leaving it empty refuses every such call instead.
+//
+// Geometry is preserved by default. AllowReplication permits a per-kernel
+// fallback whose LaunchRequirements must accompany the emitted code and be
+// applied to every launch. Callers unable to carry those requirements must
+// retain PreserveGeometry.
+llvm::Expected<RaiseResult>
+raiseToIR(const TextSection &Text, llvm::StringRef SourceIsa,
+          llvm::StringRef TargetIsa, llvm::ArrayRef<KernelRequest> Kernels,
+          llvm::ArrayRef<KernelSymbolExtent> FunctionExtents = {},
+          LaunchPolicy Policy = LaunchPolicy::PreserveGeometry);
 
 } // namespace COMGR::transpiler
 

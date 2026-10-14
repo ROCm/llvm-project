@@ -18,8 +18,11 @@
 
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Error.h"
+
+#include <optional>
 
 namespace COMGR::transpiler {
 
@@ -72,8 +75,8 @@ llvm::Error handleVGLOBAL(RaiseContext &Ctx, const DecodedInst &Di,
                           OperandResolver &Op);
 /// Raise raw unformatted buffer loads and stores, or return a refusal.
 llvm::Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction);
-/// Raise direct VGPR LDS loads using AMDHSA's unaligned access mode.
-/// Active accesses must lie wholly within the workgroup's LDS allocation.
+/// Raise VGPR LDS loads, stores and atomics using AMDHSA's unaligned access
+/// mode. Active accesses must lie wholly within the workgroup's LDS allocation.
 llvm::Error handleDS(RaiseContext &Context, const DecodedInst &Instruction);
 /// Translate a supported plain VOP1 instruction, or return a structured
 /// refusal.
@@ -91,6 +94,16 @@ llvm::Error handleVOP3(RaiseContext &Ctx, const DecodedInst &Di,
 /// refusal.
 llvm::Error handleVOP3P(RaiseContext &Ctx, const DecodedInst &Di,
                         OperandResolver &Op);
+/// Whether `Op` reads and writes 16-bit register halves and so is raised by
+/// `handleInteger16` rather than by the encoding's own handler.
+bool isInteger16Op(CanonicalOp Op);
+/// Translate a 16-bit integer instruction, shared by the VOP2 and VOP3
+/// encodings it appears in.
+llvm::Error handleInteger16(RaiseContext &Ctx, const DecodedInst &Di,
+                            OperandResolver &Op);
+/// Translate a supported matrix instruction to the corresponding target MFMA.
+llvm::Error handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
+                       OperandResolver &Op);
 /// Translate both components of a VOPD packet. Both halves read the register
 /// state that preceded the packet; their writes commit together afterwards.
 llvm::Error handleVOPD(RaiseContext &Ctx, const DecodedInst &Di);
@@ -98,6 +111,26 @@ llvm::Error handleVOPD(RaiseContext &Ctx, const DecodedInst &Di);
 /// the opcode writes, or return a structured refusal.
 llvm::Error handleVOPC(RaiseContext &Ctx, const DecodedInst &Di,
                        OperandResolver &Op);
+
+/// A comparison's operand width and predicate, or no predicate for FP class.
+struct VectorCompareInfo {
+  std::optional<llvm::CmpInst::Predicate> Predicate;
+  unsigned BitWidth;
+  // Signed I64 operands sign-extend 32-bit literals, including for eq/ne.
+  bool SignExtendLiteral = false;
+
+  bool isFloat() const {
+    return !Predicate || llvm::CmpInst::isFPPredicate(*Predicate);
+  }
+};
+
+/// Return the semantics of a supported vector comparison.
+std::optional<VectorCompareInfo> getVectorCompareInfo(CanonicalOp Opcode);
+
+/// Raise a vector comparison, clearing inactive result bits and narrowing EXEC
+/// for cmpx. Update every decoded explicit and implicit mask destination.
+llvm::Error raiseVectorCompare(RaiseContext &Ctx, const DecodedInst &Di,
+                               OperandResolver &Op, VectorCompareInfo Info);
 
 } // namespace COMGR::transpiler
 

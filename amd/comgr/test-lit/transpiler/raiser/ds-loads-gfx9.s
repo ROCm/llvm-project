@@ -51,7 +51,7 @@ ds_loads:
 ds_agpr:
 ; REFUSE: unsupported-instruction-form: ds_read_b32 [DS]
 ; REFUSE-SAME: in kernel 'ds_agpr'
-; REFUSE-SAME: DS loads require a VGPR destination
+; REFUSE-SAME: DS destination must be a VGPR
 	ds_read_b32 a0, v0
 	s_endpgm
 

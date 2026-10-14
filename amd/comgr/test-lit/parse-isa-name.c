@@ -135,8 +135,26 @@
 // RUN: parse-isa-name "amdgpu99.99-amd-amdhsa--" INVALID_ARGUMENT
 // RUN: parse-isa-name "amdgcn-amd-amdhsa--" INVALID_ARGUMENT
 
-// COM: The forward-looking "amdgpu" arch must always carry a subarch; a bare
-// COM: "amdgpu" is rejected even with a valid processor appended.
-// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900" INVALID_ARGUMENT
-// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack+" INVALID_ARGUMENT
+// COM: Bare amdgpu is an alias for amdgcn when a processor is specified,
+// COM: regardless of whether LLVM's TargetID parser accepts that spelling.
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900" SUCCESS
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack+" SUCCESS
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack-" SUCCESS
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx908:xnack+:sramecc-" SUCCESS
+// RUN: parse-isa-name \
+// RUN:   "amdgpu-amd-amdhsa--gfx9-4-generic:sramecc+:xnack-" SUCCESS
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--tahiti" SUCCESS
+// RUN: parse-isa-name "amdgpu-amd-amdhsa-unknown-gfx900" SUCCESS
+
+// COM: The alias still requires a known processor and valid feature modifiers.
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--generic" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx9999" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:sramecc+" INVALID_ARGUMENT
+// RUN: parse-isa-name \
+// RUN:   "amdgpu-amd-amdhsa--gfx900:xnack+:xnack-" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:::" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa-gfx900" INVALID_ARGUMENT
+// RUN: parse-isa-name " amdgpu-amd-amdhsa--gfx900" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900 " INVALID_ARGUMENT

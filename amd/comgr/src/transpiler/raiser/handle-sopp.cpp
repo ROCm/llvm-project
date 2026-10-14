@@ -170,10 +170,17 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
   // in here makes the wave arrive a second time, at a barrier every other wave
   // has to reach as well. Waves the source left free to run on are held there
   // instead, which can deadlock, so the release is refused too.
+  //
+  // A release its own arrival always reaches is the exception: no wave passes
+  // here without having arrived, so the barrier that arrives and waits at once
+  // is what the two amount to, and it stands for both of them here.
   case CanonicalOp::S_BARRIER_WAIT:
-    return unsupported(Ctx, Di,
-                       "waits on a barrier it does not arrive at here, and "
-                       "the raise has only a barrier that also arrives");
+    if (!Ctx.isPairedSplitBarrier(Di.Offset))
+      return unsupported(Ctx, Di,
+                         "waits on a barrier it does not arrive at here, and "
+                         "the raise has only a barrier that also arrives");
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::amdgcn_s_barrier, {});
+    return Error::success();
 
   // Leaving takes the wave out of a named barrier's membership and reports in
   // SCC whether it was the last member out. The raise keeps no membership to
@@ -203,11 +210,15 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
 
     RegisterState &Regs = Ctx.registers();
     Value *Taken = nullptr;
-    if (Di.CanonOp == CanonicalOp::S_CBRANCH_SCC0)
-      Taken = Ctx.B.CreateNot(Regs.regFile().loadSCC(Ctx.B), "scc0");
-    else if (Di.CanonOp == CanonicalOp::S_CBRANCH_SCC1)
-      Taken = Regs.regFile().loadSCC(Ctx.B);
-    else if (Di.CanonOp == CanonicalOp::S_CBRANCH_VCCZ)
+    if (Di.CanonOp == CanonicalOp::S_CBRANCH_SCC0 ||
+        Di.CanonOp == CanonicalOp::S_CBRANCH_SCC1) {
+      Expected<Value *> Scc = Regs.readSCC(Di);
+      if (!Scc)
+        return Scc.takeError();
+      Taken = Di.CanonOp == CanonicalOp::S_CBRANCH_SCC0
+                  ? Ctx.B.CreateNot(*Scc, "scc0")
+                  : *Scc;
+    } else if (Di.CanonOp == CanonicalOp::S_CBRANCH_VCCZ)
       Taken = Regs.emitVccIsZero();
     else if (Di.CanonOp == CanonicalOp::S_CBRANCH_VCCNZ)
       Taken = Ctx.B.CreateNot(Regs.emitVccIsZero(), "vccnz");
@@ -228,18 +239,35 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
   // any register, and the intrinsic exists on every AMDGPU target, so the
   // immediate goes through as it stands.
   case CanonicalOp::S_SETHALT:
+    if (Error Err = Ctx.validateHardwareEffect(Di))
+      return Err;
+    if (Error Err = Ctx.requirePerWaveExecution(Di))
+      return Err;
     Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(), Intrinsic::amdgcn_s_sethalt,
                           {Ctx.B.getInt32(Op.srcImm(0))});
     return Error::success();
 
-  // Entering the trap handler means running code the source queue installed,
-  // at an address the source wave holds, against state it set up. None of that
-  // is reachable from the raised kernel, and a wave that traps and never
-  // returns is not a kernel that ran.
-  case CanonicalOp::S_TRAP:
-    return unsupported(Ctx, Di,
-                       "enters trap handler " + Twine(Op.srcImm(0)) +
-                           ", which the raised kernel does not have");
+  // S_TRAP enters a trap handler. Only ID 2 (trap) and ID 3 (debug trap)
+  // have equivalents in the raised kernel; other IDs require the handler.
+  // gfx1250 uses SIMM16[3:0] as the ID; earlier targets use SIMM16[7:0].
+  case CanonicalOp::S_TRAP: {
+    int64_t TrapIdMask =
+        Ctx.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX1250Insts) ? 0xf
+                                                                         : 0xff;
+    int64_t TrapId = Op.srcImm(0) & TrapIdMask;
+    if (TrapId != 2 && TrapId != 3)
+      return unsupported(Ctx, Di,
+                         "enters trap handler " + Twine(TrapId) +
+                             ", which the raised kernel does not have");
+    if (Error Err = Ctx.requirePerWaveExecution(Di))
+      return Err;
+    Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(),
+                          TrapId == 2 ? Intrinsic::trap : Intrinsic::debugtrap,
+                          {});
+    if (TrapId == 2)
+      Ctx.B.CreateUnreachable();
+    return Error::success();
+  }
 
   // Ends the wave expecting the context-save hardware to have taken its state
   // and something to restore it later. Raising this to a plain return would
@@ -304,6 +332,10 @@ Error handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
                              ", and the interrupt is the only message that "
                              "means the same thing on every target");
 
+    if (Error Err = Ctx.validateHardwareEffect(Di))
+      return Err;
+    if (Error Err = Ctx.requirePerWaveExecution(Di))
+      return Err;
     Ctx.B.CreateIntrinsic(Ctx.B.getVoidTy(),
                           IsHalt ? Intrinsic::amdgcn_s_sendmsghalt
                                  : Intrinsic::amdgcn_s_sendmsg,

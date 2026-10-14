@@ -106,7 +106,7 @@ vop2_integer_gfx1250:
 ; IR: [[SUBREV_SECOND:%.+]] = call { i32, i1 } @llvm.usub.with.overflow.i32(i32 [[SUBREV_DIFF]], i32 [[SUBREV_BORROW_IN]])
 ; IR: [[SUBREV_SECOND_BORROW:%.+]] = extractvalue { i32, i1 } [[SUBREV_SECOND]], 1
 ; IR: [[SUBREV_BORROW_OUT:%.+]] = or i1 {{.+}}, [[SUBREV_SECOND_BORROW]]
-; IR: [[VCC_AFTER_SUBREV:%.+]] = and i1 {{.+}}, [[SUBREV_BORROW_OUT]]
+; IR: [[VCC_AFTER_SUBREV:%.+]] = select i1 {{.+}}, i1 [[SUBREV_BORROW_OUT]], i1 false
 	v_subrev_co_ci_u32_e32 v24, vcc_lo, v0, v1, vcc_lo
 ; IR: = select i1 [[VCC_AFTER_SUBREV]], i32 {{.+}}, i32 {{.+}}
 	v_cndmask_b32_e32 v25, v0, v1, vcc_lo
@@ -117,7 +117,6 @@ vop2_integer_gfx1250:
 	.p2align	6, 0x0
 	.amdhsa_kernel vop2_integer_gfx1250
 		.amdhsa_kernarg_size 0
-		.amdhsa_wavefront_size32 1
 		.amdhsa_next_free_vgpr 37
 		.amdhsa_next_free_sgpr 1
 		.amdhsa_reserve_vcc 1

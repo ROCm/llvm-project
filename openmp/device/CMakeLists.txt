@@ -30,8 +30,8 @@ set(src_files
 # The previous condition checked LLVM_TARGETS_TO_BUILD which includes all backends
 # (e.g. X86;AMDGPU;NVPTX), causing ockl.bc/ocml.bc to be linked into NVPTX builds
 # and contaminating the NVPTX DeviceRTL bitcode with AMDGCN intrinsics.
-if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
-   "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^amdgcn")
+if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgpu|^amdgcn" OR
+   "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^amdgpu|^amdgcn")
   find_package(AMDDeviceLibs REQUIRED CONFIG
                HINTS ${CMAKE_BINARY_DIR}/../../tools/rocm-device-libs
                      ${CMAKE_BINARY_DIR}/../rocm-device-libs-prefix/src/rocm-device-libs-build

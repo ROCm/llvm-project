@@ -52,7 +52,14 @@ buffer_narrow_bounds:
 ; IN: [[HIGH_U8:%.+]] = shl{{.+}}i32 [[EXT_BYTE]], 16
   buffer_load_d16_hi_u8 v6, v1, s[4:7], s12 offen offset:OFFSET-2
   s_wait_loadcnt 0
-; OOB-COUNT-3: store i32 0, ptr addrspace(1)
+; OOB: [[FIRST0:%.+]] = select i1 [[ACTIVE:%.+]], i32 0, i32 305419896
+; OOB: [[FIRST1:%.+]] = select i1 [[ACTIVE]], i32 0, i32 305419896
+; OOB: [[FIRST2:%.+]] = select i1 [[ACTIVE]], i32 0, i32 305419896
+; OOB: br i1 [[ACTIVE]], label %[[STORE:.+]], label %{{.+}}
+; OOB: [[STORE]]:
+; OOB: store i32 [[FIRST0]], ptr addrspace(1)
+; OOB: store i32 [[FIRST1]], ptr addrspace(1)
+; OOB: store i32 [[FIRST2]], ptr addrspace(1)
 ; IN: store i32 [[U8]], ptr addrspace(1)
   global_store_b32 v0, v4, s[10:11]
 ; IN: store i32 [[LOW_U8]], ptr addrspace(1)
@@ -79,7 +86,14 @@ buffer_narrow_bounds:
 ; IN: [[HIGH_U16:%.+]] = shl{{.+}}i32 [[EXT_HALF]], 16
   buffer_load_d16_hi_b16 v6, v1, s[4:7], s12 offen offset:OFFSET-2
   s_wait_loadcnt 0
-; OOB-COUNT-3: store i32 0, ptr addrspace(1)
+; OOB: [[SECOND0:%.+]] = phi i32 [ 0, %[[STORE]] ], [ [[FIRST0]], %{{.+}} ]
+; OOB: [[SECOND1:%.+]] = select i1 [[ACTIVE]], i32 0, i32 [[FIRST1]]
+; OOB: [[SECOND2:%.+]] = select i1 [[ACTIVE]], i32 0, i32 [[FIRST2]]
+; OOB: br i1 [[ACTIVE]], label %[[STORE2:.+]], label %{{.+}}
+; OOB: [[STORE2]]:
+; OOB: store i32 [[SECOND0]], ptr addrspace(1)
+; OOB: store i32 [[SECOND1]], ptr addrspace(1)
+; OOB: store i32 [[SECOND2]], ptr addrspace(1)
 ; IN: store i32 [[U16]], ptr addrspace(1)
   global_store_b32 v0, v4, s[10:11] offset:12
 ; IN: store i32 [[LOW_U16]], ptr addrspace(1)
@@ -91,7 +105,7 @@ buffer_narrow_bounds:
 ; IN: store i16 4660, ptr addrspace(1) {{.+}}, align 1
   buffer_store_d16_hi_b16 v7, v1, s[4:7], s12 offen offset:OFFSET-2
 ; OOB-NOT: store
-; CHECK: ret void
+; CHECK: }
   s_endpgm
 
 .section .rodata,"a",@progbits
@@ -99,7 +113,6 @@ buffer_narrow_bounds:
 .amdhsa_kernel buffer_narrow_bounds
   .amdhsa_kernarg_size 16
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_next_free_vgpr 8
   .amdhsa_next_free_sgpr 13
 .end_amdhsa_kernel

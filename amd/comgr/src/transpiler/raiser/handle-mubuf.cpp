@@ -19,6 +19,7 @@
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/Alignment.h"
 
+#include <array>
 #include <cstdint>
 #include <optional>
 
@@ -162,7 +163,14 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
     return unsupported(Context, Instruction,
                        "buffer cache policy must be an immediate");
   }
-  if (Instruction.getImm(*CacheIndex) != 0) {
+  // NV only affects whether fine-grained cache write-back or invalidation
+  // includes the line; it does not affect the value transferred. The raised IR
+  // cannot represent this hint, so accept it only for gfx12 sources and drop
+  // it, using the target's default NV=0 behavior.
+  int64_t ModeledCachePolicy = 0;
+  if (Context.Projection.SourceSTI.hasFeature(AMDGPU::FeatureGFX12Insts))
+    ModeledCachePolicy |= AMDGPU::CPol::NV;
+  if (Instruction.getImm(*CacheIndex) & ~ModeledCachePolicy) {
     return unsupported(Context, Instruction,
                        "non-default buffer cache policy is not modeled");
   }
@@ -250,33 +258,40 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
     Offset = Builder.CreateAdd(Offset, VectorOffset);
   }
 
-  Value *Word0 = Context.registers().readSgpr32(*Resource->BaseIdx);
-  Value *Word1 = Context.registers().readSgpr32(*Resource->BaseIdx + 1);
-  Value *Word2 = Context.registers().readSgpr32(*Resource->BaseIdx + 2);
-  Value *Word3 = Context.registers().readSgpr32(*Resource->BaseIdx + 3);
-  Context.requireZeroBits(Word3, 0xc0000000, Instruction,
+  std::array<Value *, 4> Words;
+  for (unsigned I = 0; I != Words.size(); ++I) {
+    Expected<Value *> Word =
+        Context.registers().readSgpr32(Instruction, *Resource->BaseIdx + I);
+    if (!Word)
+      return Word.takeError();
+    Words[I] = *Word;
+  }
+  Context.requireZeroBits(Words[3], 0xc0000000, Instruction,
                           "buffer descriptor type must be provably zero");
   Context.requireZeroBits(
-      Word3, 0x00000fc0, Instruction,
+      Words[3], 0x00000fc0, Instruction,
       "buffer descriptor reserved bits must be provably zero");
-  Context.requireZeroBits(Word3, 0x10000000, Instruction,
+  Context.requireZeroBits(Words[3], 0x10000000, Instruction,
                           "swizzled buffer descriptors are not modeled");
   Context.requireZeroBits(
-      Word3, 0x0ffff000, Instruction,
+      Words[3], 0x0ffff000, Instruction,
       "buffer stride and stride scale must be provably zero");
-  Context.requireZeroBits(Word3, 0x20000000, Instruction,
+  Context.requireZeroBits(Words[3], 0x20000000, Instruction,
                           "structured buffer bounds are not modeled");
 
   // The base occupies bits 56:0; NUM_RECORDS spans bits 101:57.
-  Value *BaseHigh = Builder.CreateAnd(Word1, Builder.getInt32((1u << 25) - 1));
-  Value *Base = Builder.CreateOr(
-      Builder.CreateZExt(Word0, Builder.getInt64Ty()),
-      Builder.CreateShl(Builder.CreateZExt(BaseHigh, Builder.getInt64Ty()),
-                        32));
-  Value *Extent = Builder.CreateOr(
-      Builder.CreateZExt(Builder.CreateLShr(Word1, 25), Builder.getInt64Ty()),
-      Builder.CreateShl(Builder.CreateZExt(Word2, Builder.getInt64Ty()), 7));
-  Value *ExtentHigh = Builder.CreateAnd(Word3, Builder.getInt32(63));
+  Value *BaseHigh =
+      Builder.CreateAnd(Words[1], Builder.getInt32((1u << 25) - 1));
+  Value *BaseLow = Builder.CreateZExt(Words[0], Builder.getInt64Ty());
+  Value *BaseHighShifted =
+      Builder.CreateShl(Builder.CreateZExt(BaseHigh, Builder.getInt64Ty()), 32);
+  Value *Base = Builder.CreateOr(BaseLow, BaseHighShifted);
+  Value *ExtentLow = Builder.CreateZExt(Builder.CreateLShr(Words[1], 25),
+                                        Builder.getInt64Ty());
+  Value *ExtentMiddle =
+      Builder.CreateShl(Builder.CreateZExt(Words[2], Builder.getInt64Ty()), 7);
+  Value *Extent = Builder.CreateOr(ExtentLow, ExtentMiddle);
+  Value *ExtentHigh = Builder.CreateAnd(Words[3], Builder.getInt32(63));
   Extent = Builder.CreateOr(
       Extent, Builder.CreateShl(
                   Builder.CreateZExt(ExtentHigh, Builder.getInt64Ty()), 39));
@@ -337,10 +352,14 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
         if (HighHalf)
           Stored = Builder.CreateLShr(Stored, 16);
         Stored = Builder.CreateTruncOrBitCast(Stored, PayloadType);
-        Builder.CreateAlignedStore(Stored, Pointer, Align(1));
+        Context.registers().emitMemoryEffect(
+            [&] { Builder.CreateAlignedStore(Stored, Pointer, Align(1)); });
       } else {
-        Loaded = Builder.CreateAlignedLoad(PayloadType, Pointer, Align(1));
+        Loaded = Context.registers().emitMemoryValue([&] {
+          return Builder.CreateAlignedLoad(PayloadType, Pointer, Align(1));
+        });
       }
+      BasicBlock *AccessEnd = Builder.GetInsertBlock();
       Builder.CreateBr(Continue);
       Builder.SetInsertPoint(Continue);
       if (IsStore)
@@ -348,7 +367,7 @@ Error handleMUBUF(RaiseContext &Context, const DecodedInst &Instruction) {
 
       PHINode *Result = Builder.CreatePHI(PayloadType, 2);
       Result->addIncoming(Constant::getNullValue(PayloadType), Before);
-      Result->addIncoming(Loaded, AccessBlock);
+      Result->addIncoming(Loaded, AccessEnd);
       Type *ExtendedType = IsD16 ? Builder.getInt16Ty() : Builder.getInt32Ty();
       Value *Extended = IsSigned
                             ? Builder.CreateSExtOrBitCast(Result, ExtendedType)

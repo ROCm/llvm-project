@@ -52,8 +52,9 @@ String markers require the plugin. ID markers can be used without it:
 
 Configuration is read by the compiler process. With `hipcc` or the Clang
 driver, pass each plugin option through cc1 as
-`-Xclang -mllvm -Xclang -<option>=<value>`. With `opt`, place the option after
-`-load-pass-plugin`. Existing environment variables remain supported as
+`-Xclang -mllvm -Xclang -<option>=<value>`. With `opt` or `llc`, pass it as
+`-plugin-arg=SQTTMarkerPass,-<option>=<value>` alongside `-load-pass-plugin`.
+Existing environment variables remain supported as
 fallbacks; an explicit plugin option takes precedence.
 
 | Plugin option | Value | Environment fallback |

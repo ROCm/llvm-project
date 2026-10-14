@@ -13,13 +13,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-env.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Process.h"
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cstdlib>
+#include <mutex>
 
 #ifndef _WIN32
 #include <dlfcn.h>
@@ -27,24 +30,37 @@
 
 using namespace llvm;
 
-// Use secure_getenv() on glibc so env-controlled paths are ignored under
-// AT_SECURE; no such concept elsewhere, so fall back to getenv().
-#if defined(__GLIBC__)
-#define COMGR_GETENV secure_getenv
-#else
-#define COMGR_GETENV getenv
-#endif
-
 namespace COMGR {
 namespace env {
 
+static const char *getEnv(const char *Name) {
+#if defined(_WIN32)
+  // getenv() mangles non-ASCII characters. Process::GetEnv() does not, but
+  // returns by value, so cache the result to match getenv()'s storage lifetime.
+  static StringMap<std::optional<std::string>> Cache;
+  static std::mutex CacheMutex;
+  std::lock_guard<std::mutex> Lock(CacheMutex);
+  std::pair<StringMap<std::optional<std::string>>::iterator, bool> Entry =
+      Cache.try_emplace(Name);
+  if (Entry.second)
+    Entry.first->second = sys::Process::GetEnv(Name);
+  return Entry.first->second ? Entry.first->second->c_str() : nullptr;
+#elif defined(__GLIBC__)
+  // Use secure_getenv() on glibc so env-controlled paths are ignored under
+  // AT_SECURE; no such concept elsewhere, so fall back to getenv().
+  return secure_getenv(Name);
+#else
+  return getenv(Name);
+#endif
+}
+
 bool shouldSaveTemps() {
-  static char *SaveTemps = COMGR_GETENV("AMD_COMGR_SAVE_TEMPS");
+  static const char *SaveTemps = getEnv("AMD_COMGR_SAVE_TEMPS");
   return SaveTemps && StringRef(SaveTemps) != "0";
 }
 
 bool shouldSaveLLVMTemps() {
-  static char *SaveTemps = COMGR_GETENV("AMD_COMGR_SAVE_LLVM_TEMPS");
+  static const char *SaveTemps = getEnv("AMD_COMGR_SAVE_LLVM_TEMPS");
   return SaveTemps && StringRef(SaveTemps) != "0";
 }
 
@@ -52,7 +68,7 @@ std::optional<bool> shouldUseVFS() {
   if (shouldSaveTemps())
     return false;
 
-  static char *UseVFS = COMGR_GETENV("AMD_COMGR_USE_VFS");
+  static const char *UseVFS = getEnv("AMD_COMGR_USE_VFS");
   if (UseVFS) {
     if (StringRef(UseVFS) == "0")
       return false;
@@ -64,7 +80,7 @@ std::optional<bool> shouldUseVFS() {
 }
 
 std::optional<StringRef> getRedirectLogs() {
-  static char *RedirectLogs = COMGR_GETENV("AMD_COMGR_REDIRECT_LOGS");
+  static const char *RedirectLogs = getEnv("AMD_COMGR_REDIRECT_LOGS");
   if (!RedirectLogs || StringRef(RedirectLogs) == "0") {
     return std::nullopt;
   }
@@ -72,7 +88,7 @@ std::optional<StringRef> getRedirectLogs() {
 }
 
 bool needTimeStatistics() {
-  static char *TimeStatistics = COMGR_GETENV("AMD_COMGR_TIME_STATISTICS");
+  static const char *TimeStatistics = getEnv("AMD_COMGR_TIME_STATISTICS");
   return TimeStatistics && StringRef(TimeStatistics) != "0";
 }
 
@@ -87,7 +103,7 @@ uint32_t getGranularityUnitsPerSecond() {
 
 llvm::StringRef getTimeStatisticsGranularity() {
   static const char *TimeStatisticsGranularity =
-      COMGR_GETENV("AMD_COMGR_TIME_STATISTICS_GRANULARITY");
+      getEnv("AMD_COMGR_TIME_STATISTICS_GRANULARITY");
   if (!TimeStatisticsGranularity)
     return "ms";
   StringRef G(TimeStatisticsGranularity);
@@ -97,7 +113,7 @@ llvm::StringRef getTimeStatisticsGranularity() {
 }
 
 bool shouldEmitVerboseLogs() {
-  static char *VerboseLogs = COMGR_GETENV("AMD_COMGR_EMIT_VERBOSE_LOGS");
+  static const char *VerboseLogs = getEnv("AMD_COMGR_EMIT_VERBOSE_LOGS");
   return VerboseLogs && StringRef(VerboseLogs) != "0";
 }
 
@@ -113,7 +129,7 @@ LogLevel parseLogLevel(StringRef Requested, bool VerboseFallback) {
 }
 
 LogLevel resolveLogLevel() {
-  static const char *LogThreshold = getenv("AMD_COMGR_LOG_LEVEL");
+  static const char *LogThreshold = getEnv("AMD_COMGR_LOG_LEVEL");
   StringRef Requested = LogThreshold ? StringRef(LogThreshold) : StringRef();
   return parseLogLevel(Requested, shouldEmitVerboseLogs());
 }
@@ -145,7 +161,7 @@ static ClangInstallPaths makeClangInstallPaths(StringRef LLVMPrefix) {
 // tree from where Comgr plants embedded headers.
 static const ClangInstallPaths &getClangInstallPaths() {
   static const ClangInstallPaths Cached = []() -> ClangInstallPaths {
-    const char *EnvLLVMPath = COMGR_GETENV("LLVM_PATH");
+    const char *EnvLLVMPath = getEnv("LLVM_PATH");
     if (EnvLLVMPath && StringRef(EnvLLVMPath) != "")
       return makeClangInstallPaths(EnvLLVMPath);
 
@@ -192,18 +208,18 @@ llvm::StringRef getClangBinaryPath() {
 }
 
 StringRef getCachePolicy() {
-  static const char *EnvCachePolicy = COMGR_GETENV("AMD_COMGR_CACHE_POLICY");
+  static const char *EnvCachePolicy = getEnv("AMD_COMGR_CACHE_POLICY");
   return EnvCachePolicy ? EnvCachePolicy : "";
 }
 
 std::optional<SmallString<256>> getCacheDirectory(raw_ostream &LogS) {
   // By default the cache is enabled
-  static const char *Enable = COMGR_GETENV("AMD_COMGR_CACHE");
+  static const char *Enable = getEnv("AMD_COMGR_CACHE");
   bool CacheDisabled = StringRef(Enable) == "0";
   if (CacheDisabled)
     return std::nullopt;
 
-  StringRef EnvCacheDirectory = COMGR_GETENV("AMD_COMGR_CACHE_DIR");
+  StringRef EnvCacheDirectory = getEnv("AMD_COMGR_CACHE_DIR");
   if (!EnvCacheDirectory.empty())
     return {EnvCacheDirectory};
 
@@ -226,12 +242,12 @@ std::optional<SmallString<256>> getCacheDirectory(raw_ostream &LogS) {
 }
 
 StringRef getDriverOptionsAppend() {
-  static const char *Options = COMGR_GETENV("AMD_COMGR_DRIVER_OPTIONS_APPEND");
+  static const char *Options = getEnv("AMD_COMGR_DRIVER_OPTIONS_APPEND");
   return Options ? Options : "";
 }
 
 EmbeddedLibcxxMode getEmbeddedLibcxxMode() {
-  static const char *V = std::getenv("AMD_COMGR_USE_EMBEDDED_LIBCXX");
+  static const char *V = getEnv("AMD_COMGR_USE_EMBEDDED_LIBCXX");
   if (!V)
     return EmbeddedLibcxxMode::Auto;
   StringRef S(V);

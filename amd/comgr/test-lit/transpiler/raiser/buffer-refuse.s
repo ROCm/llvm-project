@@ -62,12 +62,6 @@
 ; TEMPORAL: in kernel 'buffer_refuse'
 ; TEMPORAL-SAME: non-default buffer cache policy is not modeled
 
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=10 -filetype=obj %s -o %t.10.o
-; RUN: %ld.lld -shared %t.10.o -o %t.10.hsaco
-; RUN: not %transpile_cli %t.10.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=NV
-; NV: in kernel 'buffer_refuse'
-; NV-SAME: non-default buffer cache policy is not modeled
-
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=11 -filetype=obj %s -o %t.11.o
 ; RUN: %ld.lld -shared %t.11.o -o %t.11.hsaco
 ; RUN: not %transpile_cli %t.11.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=ATOMIC
@@ -98,11 +92,11 @@
 ; LOOP: in kernel 'buffer_refuse'
 ; LOOP-SAME: swizzled buffer descriptors are not modeled
 
-; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=16 -filetype=obj %s -o %t.16.o
+; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -mattr=-sramecc -defsym=CASE=16 -filetype=obj %s -o %t.16.o
 ; RUN: %ld.lld -shared %t.16.o -o %t.16.hsaco
 ; RUN: not %transpile_cli %t.16.hsaco --target-isa=gfx942 --emit-ir 2>&1 | %FileCheck %s --check-prefix=ECC
 ; ECC: in kernel 'buffer_refuse'
-; ECC-SAME: D16 load requires a source SRAM ECC setting or a zero untouched half
+; ECC-SAME: gfx1250 source does not support disabling SRAM ECC
 
 ; RUN: %llvm-mc -triple=amdgpu12.50-amd-amdhsa -defsym=CASE=17 -filetype=obj %s -o %t.17.o
 ; RUN: %ld.lld -shared %t.17.o -o %t.17.hsaco
@@ -155,9 +149,6 @@ buffer_refuse:
 .if CASE == 9
   buffer_load_b32 v1, v0, s[4:7], null offen th:TH_LOAD_NT
 .endif
-.if CASE == 10
-  buffer_load_b32 v1, off, s[4:7], null nv
-.endif
 .if CASE == 11
   buffer_atomic_add_u32 v1, v0, s[4:7], null offen
 .endif
@@ -196,7 +187,6 @@ buffer_refuse:
 .amdhsa_kernel buffer_refuse
   .amdhsa_kernarg_size 16
   .amdhsa_user_sgpr_kernarg_segment_ptr 1
-  .amdhsa_wavefront_size32 1
   .amdhsa_next_free_vgpr 4
   .amdhsa_next_free_sgpr 8
 .end_amdhsa_kernel
