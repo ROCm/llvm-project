@@ -491,12 +491,11 @@ Error raiseWMMA(RaiseContext &Ctx, const DecodedInst &Di, OperandResolver &Op,
       if (Error Err = Ctx.requirePerWaveExecution(Di))
         return Err;
 
-    // WMMA preserves denormals. F32 MFMA applies the input mode to A and B,
-    // while its accumulator and result preserve denormals unconditionally.
-    if (Kernel->getDenormalMode(APFloat::IEEEsingle()).Input !=
-        DenormalMode::IEEE)
-      return unsupported(Ctx, Di,
-                         "F32 WMMA requires preserved input denormals");
+    // F32 WMMA preserves denormals, so the mapped MFMA must do the same.
+    if (Kernel->getDenormalMode(APFloat::IEEEsingle()) !=
+        DenormalMode::getIEEE())
+      return unsupported(
+          Ctx, Di, "F32 WMMA requires preserved input and output denormals");
   }
 
   if (InputType == WMMAInputType::IU8) {
