@@ -420,8 +420,10 @@ void createOpenMPFIRPassPipeline(mlir::PassManager &pm,
   pm.addPass(flangomp::createMapInfoFinalizationPass(opts.deferDescMap));
 
   pm.addPass(flangomp::createGenericLoopConversionPass());
-  if (opts.isTargetDevice && opts.enableOffloadGlobalFiltering)
+  pm.addPass(flangomp::createFlattenMultiDimensionalArraysPass());
+  if (opts.isTargetDevice && opts.enableOffloadGlobalFiltering) {
     pm.addPass(flangomp::createGlobalFilteringPass());
+  }
 }
 
 void createDebugPasses(mlir::PassManager &pm,
