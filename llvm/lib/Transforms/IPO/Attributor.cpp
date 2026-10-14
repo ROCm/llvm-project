@@ -2509,13 +2509,10 @@ ChangeStatus Attributor::cleanupIR() {
       auto *CB = cast<CallBase>(U->getUser());
       if (CB->isArgOperand(U)) {
         unsigned Idx = CB->getArgOperandNo(U);
-        // Drop all attributes that make passing undef UB, e.g., dereferenceable
-        // implies noundef.
-        AttributeMask UBImplying = AttributeFuncs::getUBImplyingAttributes();
-        CB->removeParamAttrs(Idx, UBImplying);
+        CB->removeParamAttr(Idx, Attribute::NoUndef);
         auto *Callee = dyn_cast_if_present<Function>(CB->getCalledOperand());
         if (Callee && Callee->arg_size() > Idx)
-          Callee->removeParamAttrs(Idx, UBImplying);
+          Callee->removeParamAttr(Idx, Attribute::NoUndef);
       }
     }
     if (isa<Constant>(NewV) && isa<CondBrInst>(U->getUser())) {
