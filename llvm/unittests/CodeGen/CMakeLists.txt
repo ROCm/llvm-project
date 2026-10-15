@@ -41,6 +41,7 @@ add_llvm_unittest(CodeGenTests
   MachineOperandTest.cpp
   MIR2VecTest.cpp
   RegAllocBasicTest.cpp
+  RegAllocEvictionAdvisorTest.cpp
   RegAllocScoreTest.cpp
   RegisterPressureTest.cpp
   RegisterTest.cpp

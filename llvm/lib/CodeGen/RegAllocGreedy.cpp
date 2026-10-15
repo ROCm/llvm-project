@@ -82,6 +82,11 @@ using namespace llvm;
 STATISTIC(NumGlobalSplits, "Number of split global live ranges");
 STATISTIC(NumLocalSplits,  "Number of split local live ranges");
 STATISTIC(NumEvicted,      "Number of interferences evicted");
+STATISTIC(NumReassignBlockerHits, "Number of reused reassignment blockers");
+
+static cl::opt<bool> VerifyReassignmentBlockers(
+    "regalloc-verify-reassignment-blockers", cl::Hidden, cl::init(false),
+    cl::desc("Verify reassignment blocker checks with an uncached query"));
 
 static cl::opt<SplitEditor::ComplementSpillMode> SplitSpillMode(
     "split-spill-mode", cl::Hidden,
@@ -587,15 +592,66 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
 //                         Interference eviction
 //===----------------------------------------------------------------------===//
 
+RegAllocEvictionAdvisor::ReassignmentCache::InterferenceKind
+RegAllocEvictionAdvisor::ReassignmentCache::checkInterference(
+    const LiveInterval &VirtReg, MCRegUnit Unit,
+    const LiveIntervalUnion &Union) {
+  assert(VirtReg.segments.size() == 1 && !VirtReg.hasSubRanges());
+  auto CachedBlocker = Blockers.find(static_cast<unsigned>(Unit));
+  if (CachedBlocker != Blockers.end()) {
+    const Blocker &Entry = CachedBlocker->second;
+    if (Entry.Tag == Union.getTag() && VirtReg.beginIndex() < Entry.End &&
+        Entry.Start < VirtReg.endIndex())
+      return Cached;
+  }
+
+  auto Interference = Union.find(VirtReg.beginIndex());
+  if (!Interference.valid() || Interference.start() >= VirtReg.endIndex())
+    return Free;
+
+  Blockers.insert_or_assign(
+      static_cast<unsigned>(Unit),
+      Blocker{Interference.start(), Interference.stop(), Union.getTag()});
+  return Blocked;
+}
+
 bool RegAllocEvictionAdvisor::canReassign(const LiveInterval &VirtReg,
                                           MCRegister FromReg) const {
+  return canReassign(VirtReg, FromReg, nullptr);
+}
+
+bool RegAllocEvictionAdvisor::canReassign(const LiveInterval &VirtReg,
+                                          MCRegister FromReg,
+                                          ReassignmentCache *Cache) const {
+  bool Cacheable =
+      Cache && VirtReg.segments.size() == 1 && !VirtReg.hasSubRanges();
+
+#if LLVM_ENABLE_STATS
+  const bool TrackStats = Cacheable && AreStatisticsEnabled();
+  unsigned BlockerHits = 0;
+#endif
   auto HasRegUnitInterference = [&](MCRegUnit Unit) {
+    auto &LiveUnion = Matrix->getLiveUnions()[static_cast<unsigned>(Unit)];
+    if (Cacheable) {
+      auto Kind = Cache->checkInterference(VirtReg, Unit, LiveUnion);
+#if LLVM_ENABLE_STATS
+      if (TrackStats && Kind == ReassignmentCache::Cached)
+        ++BlockerHits;
+#endif
+      bool Interference = Kind != ReassignmentCache::Free;
+      if (VerifyReassignmentBlockers &&
+          Interference !=
+              LiveIntervalUnion::Query(VirtReg, LiveUnion).checkInterference())
+        report_fatal_error("Invalid reassignment blocker result");
+      return Interference;
+    }
+
     // Instantiate a "subquery", not to be confused with the Queries array.
-    LiveIntervalUnion::Query SubQ(
-        VirtReg, Matrix->getLiveUnions()[static_cast<unsigned>(Unit)]);
+    LiveIntervalUnion::Query SubQ(VirtReg, LiveUnion);
     return SubQ.checkInterference();
   };
 
+  bool CanReassign = false;
   for (MCRegister Reg :
        AllocationOrder::create(VirtReg.reg(), *VRM, RegClassInfo, Matrix)) {
     if (Reg == FromReg)
@@ -605,10 +661,15 @@ bool RegAllocEvictionAdvisor::canReassign(const LiveInterval &VirtReg,
       LLVM_DEBUG(dbgs() << "can reassign: " << VirtReg << " from "
                         << printReg(FromReg, TRI) << " to "
                         << printReg(Reg, TRI) << '\n');
-      return true;
+      CanReassign = true;
+      break;
     }
   }
-  return false;
+#if LLVM_ENABLE_STATS
+  if (TrackStats)
+    NumReassignBlockerHits += BlockerHits;
+#endif
+  return CanReassign;
 }
 
 /// evictInterference - Evict any interferring registers that prevent VirtReg
