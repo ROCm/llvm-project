@@ -9111,7 +9111,7 @@ static void updateDebugInfoForFunction(
   if (!llvm::Triple(func->getParent()->getTargetTriple()).isAMDGPU())
     return;
 
-  auto addExpression = [&](auto *record) {
+  auto addExpression = [&](llvm::DbgVariableRecord *record) {
     llvm::DIExpression *old = record->getExpression();
     if ((old != nullptr) && (old->getNumElements() != 0))
       return;
@@ -9124,14 +9124,10 @@ static void updateDebugInfoForFunction(
                                                 varTypes.lookup(loc)));
   };
 
-  for (llvm::Instruction &inst : llvm::instructions(func)) {
-    if (auto *intrinsic = dyn_cast<llvm::DbgVariableIntrinsic>(&inst))
-      addExpression(intrinsic);
-
+  for (llvm::Instruction &inst : llvm::instructions(func))
     for (llvm::DbgVariableRecord &record :
          llvm::filterDbgVars(inst.getDbgRecordRange()))
       addExpression(&record);
-  }
 }
 
 // The createDeviceArgumentAccessor function generates
@@ -10016,10 +10012,9 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
     }
 
     kernelFunc = arg.getParent();
-    return createDeviceArgumentAccessor(targetOp, mapData, arg, input, retVal,
-                                        builder, *ompBuilder, moduleTranslation,
-                                        allocaIP, codeGenIP, deallocIPs,
-                                        varTypes);
+    return createDeviceArgumentAccessor(
+        targetOp, mapData, arg, input, retVal, builder, *ompBuilder,
+        moduleTranslation, allocaIP, codeGenIP, deallocIPs, varTypes);
   };
 
   llvm::OpenMPIRBuilder::TargetKernelRuntimeAttrs runtimeAttrs;
