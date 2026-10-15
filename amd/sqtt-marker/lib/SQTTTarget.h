@@ -23,6 +23,8 @@
 
 #include "SQTTConfig.h"
 
+using namespace llvm;
+
 constexpr llvm::StringLiteral SqttMarkerHeaderMetadata = "sqtt.marker_header";
 constexpr llvm::StringLiteral SqttRawPayloadMetadata = "sqtt.raw_payload";
 constexpr llvm::StringLiteral SqttPayloadGroupMetadata = "sqtt.payload_group";
@@ -106,7 +108,7 @@ inline llvm::Value *getMemoryPointer(llvm::Instruction *I) {
 
 inline bool isCountedInstruction(const llvm::Instruction &I) {
   return !llvm::isa<llvm::PHINode>(I) && !llvm::isa<llvm::AllocaInst>(I) &&
-         !I.isDebugOrPseudoInst() && !llvm::isa<llvm::UnreachableInst>(I);
+         !llvm::isa<PseudoProbeInst>(I) && !llvm::isa<llvm::UnreachableInst>(I);
 }
 
 inline unsigned instructionCost(const llvm::Instruction &I) {
