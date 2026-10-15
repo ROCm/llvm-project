@@ -18,7 +18,6 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassInstrumentation.h"
@@ -74,7 +73,7 @@ TripletResult IR2VecTool::generateTriplets(const Function &F) const {
 
   for (const BasicBlock &BB : F) {
     for (const auto &I : BB) {
-      if (isa<PseudoProbeInst>(I))
+      if (I.isDebugOrPseudoInst())
         continue;
       unsigned Opcode = Vocabulary::getIndex(I.getOpcode());
       unsigned TypeID = Vocabulary::getIndex(I.getType()->getTypeID());

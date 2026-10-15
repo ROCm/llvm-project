@@ -7193,7 +7193,8 @@ bool VectorCombine::run() {
     Instruction *I = &BB.front();
     while (I) {
       NextInst = I->getNextNode();
-      MadeChange |= FoldInst(*I);
+      if (!I->isDebugOrPseudoInst())
+        MadeChange |= FoldInst(*I);
       I = NextInst;
     }
   }

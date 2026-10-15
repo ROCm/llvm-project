@@ -322,7 +322,7 @@ static bool HasAddressTaken(const Instruction *AI, TypeSize AllocSize,
       // Ignore intrinsics that do not become real instructions.
       // TODO: Narrow this to intrinsics that have store-like effects.
       const auto *CI = cast<CallInst>(I);
-      if (!isa<PseudoProbeInst>(CI) && !CI->isLifetimeStartOrEnd())
+      if (!CI->isDebugOrPseudoInst() && !CI->isLifetimeStartOrEnd())
         return true;
       break;
     }

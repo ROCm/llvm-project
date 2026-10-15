@@ -76,7 +76,7 @@ static bool isEmptyFunction(Function *F) {
     return false;
   BasicBlock &Entry = F->getEntryBlock();
   for (auto &I : Entry) {
-    if (isa<PseudoProbeInst>(I))
+    if (I.isDebugOrPseudoInst())
       continue;
     if (auto *RI = dyn_cast<ReturnInst>(&I))
       return !RI->getReturnValue();

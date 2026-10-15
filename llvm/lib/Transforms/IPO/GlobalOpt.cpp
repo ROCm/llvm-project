@@ -2373,7 +2373,7 @@ static bool IsEmptyAtExitFunction(const Function &Fn) {
     return false;
 
   for (const auto &I : Fn.getEntryBlock()) {
-    if (isa<PseudoProbeInst>(I))
+    if (I.isDebugOrPseudoInst())
       continue;
     if (isa<ReturnInst>(I))
       return true;

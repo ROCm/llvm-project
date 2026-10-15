@@ -1074,7 +1074,7 @@ OffsetSpan ObjectSizeOffsetVisitor::findLoadOffsetRange(
   do {
     Instruction &I = *From;
 
-    if (isa<PseudoProbeInst>(I))
+    if (I.isDebugOrPseudoInst())
       continue;
 
     if (++ScannedInstCount > MaxInstsToScan)
