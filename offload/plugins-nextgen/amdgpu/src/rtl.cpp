@@ -767,19 +767,6 @@ private:
   uint16_t ELFABIVersion;
 };
 
-/// OpenMP environment variables limiting the launch geometry. Upstream, only
-/// libomptarget's generic launch-geometry computation applies them.
-/// Downstream, the AMDGPU launch-geometry heuristics below replace that
-/// computation and apply them themselves.
-static int32_t getOMPNumTeams() {
-  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
-  return OMP_NumTeams;
-}
-static int32_t getOMPTeamsThreadLimit() {
-  static Int32Envar OMP_TeamsThreadLimit("OMP_TEAMS_THREAD_LIMIT");
-  return OMP_TeamsThreadLimit;
-}
-
 /// Class implementing the AMDGPU kernel functionalities which derives from the
 /// generic kernel class.
 struct AMDGPUKernelTy : public GenericKernelTy {
@@ -896,24 +883,6 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   uint32_t getPrivateSize() const { return PrivateSize; }
   uint16_t getConstWGSize() const { return ConstWGSize; }
 
-  /// Compute the launch geometry of a big-jump-loop kernel, which the generic
-  /// heuristics do not know. All other kernels use the generic heuristics.
-  bool computeLaunchGeometry(GenericDeviceTy &GenericDevice,
-                             const KernelLaunchArgsTy &LaunchArgs,
-                             bool StrictThreads, bool StrictBlocks,
-                             uint32_t &NumThreads,
-                             uint32_t &NumBlocks) const override {
-    if (!LaunchArgs.KernelLaunchInfo.isBigJumpLoopMode())
-      return false;
-
-    if (!StrictThreads)
-      NumThreads = getBigJumpLoopNumThreads(NumThreads);
-    if (!StrictBlocks)
-      NumBlocks = getBigJumpLoopNumBlocks(GenericDevice, NumBlocks,
-                                          LaunchArgs.Tripcount, NumThreads);
-    return true;
-  }
-
   /// Get the HSA kernel object representing the kernel function.
   uint64_t getKernelObject() const { return KernelObject; }
 
@@ -950,47 +919,6 @@ private:
   uint16_t ConstWGSize;
 
   static thread_local uint32_t KernelLaunchId;
-
-  /// Get the number of threads for a big-jump-loop kernel: the block size
-  /// CodeGen compiled it for, or less if the user asks for less with
-  /// OMP_TEAMS_THREAD_LIMIT or the thread_limit clause.
-  uint32_t getBigJumpLoopNumThreads(uint32_t UserThreadLimit) const {
-    int32_t TeamsThreadLimitEnvVar = getOMPTeamsThreadLimit();
-    if (TeamsThreadLimitEnvVar > 0)
-      return std::min(static_cast<int32_t>(ConstWGSize),
-                      TeamsThreadLimitEnvVar);
-    if ((UserThreadLimit > 0) && (UserThreadLimit != (uint32_t)-1))
-      return std::min(static_cast<uint32_t>(ConstWGSize), UserThreadLimit);
-    return ConstWGSize;
-  }
-
-  /// Get the number of blocks for a big-jump-loop kernel: one thread per
-  /// iteration, up to LIBOMPTARGET_AMDGPU_BIG_JUMP_LOOP_MAX_TOTAL_TEAMS blocks,
-  /// or fewer if the user asks for fewer with the num_teams clause or
-  /// OMP_NUM_TEAMS.
-  uint32_t getBigJumpLoopNumBlocks(GenericDeviceTy &GenericDevice,
-                                   uint32_t UserNumBlocks,
-                                   uint64_t LoopTripCount,
-                                   uint32_t NumThreads) const {
-    // Cannot assert a non-zero tripcount. Instead, launch with 1 team if the
-    // tripcount is indeed zero.
-    uint64_t NumGroups = 1;
-    if (LoopTripCount > 0)
-      NumGroups = ((LoopTripCount - 1) / NumThreads) + 1;
-
-    uint64_t BlockLimit = GenericDevice.getBlockLimit(NumThreads);
-    int32_t NumTeamsEnvVar = getOMPNumTeams();
-    if (UserNumBlocks > 0 && UserNumBlocks <= BlockLimit)
-      NumGroups = std::min(static_cast<uint64_t>(UserNumBlocks), NumGroups);
-    else if (UserNumBlocks == 0 && NumTeamsEnvVar > 0 &&
-             static_cast<uint64_t>(NumTeamsEnvVar) <= BlockLimit)
-      NumGroups = std::min(static_cast<uint64_t>(NumTeamsEnvVar), NumGroups);
-    else
-      NumGroups = std::min(
-          NumGroups, static_cast<uint64_t>(
-                         GenericDevice.getOMPXBigJumpLoopMaxTotalTeams()));
-    return std::min(NumGroups, BlockLimit);
-  }
 
   /// Compute the occupancy with the constraint on the number of SGPRs
   /// Follow the logic on the backend
@@ -2872,8 +2800,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         OMPX_NumQueues("LIBOMPTARGET_AMDGPU_NUM_HSA_QUEUES", 4),
         OMPX_QueueSize("LIBOMPTARGET_AMDGPU_HSA_QUEUE_SIZE", 512),
         OMPX_DefaultTeamsPerCU("LIBOMPTARGET_AMDGPU_TEAMS_PER_CU", 4),
-        OMPX_BigJumpLoopMaxTotalTeams(
-            "LIBOMPTARGET_AMDGPU_BIG_JUMP_LOOP_MAX_TOTAL_TEAMS", 1024 * 1024),
         OMPX_MaxAsyncCopyBytes("LIBOMPTARGET_AMDGPU_MAX_ASYNC_COPY_BYTES",
                                64 * 1024),
         OMPX_InitialNumSignals("LIBOMPTARGET_AMDGPU_NUM_INITIAL_HSA_SIGNALS",
@@ -2930,10 +2856,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     }
     // Otherwise use the regular environment variable
     return OMPX_NumQueues;
-  }
-
-  virtual uint32_t getOMPXBigJumpLoopMaxTotalTeams() const override {
-    return OMPX_BigJumpLoopMaxTotalTeams;
   }
 
   uint64_t getDeviceTimeStamp() override { return getSystemTimestampInNs(); }
@@ -4742,10 +4664,6 @@ private:
   /// of compute units (CUs) the device has:
   ///   #default_teams = OMPX_DefaultTeamsPerCU * #CUs.
   UInt32Envar OMPX_DefaultTeamsPerCU;
-
-  /// Envar controlling the maximum number of teams per device for
-  /// Big-Jump-Loop kernels.
-  UInt32Envar OMPX_BigJumpLoopMaxTotalTeams;
 
   /// Envar specifying the maximum size in bytes where the memory copies are
   /// asynchronous operations. Up to this transfer size, the memory copies are

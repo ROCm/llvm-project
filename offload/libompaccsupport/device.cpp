@@ -879,6 +879,9 @@ static uint32_t getDeviceBlockLimit(GenericDeviceTy &GenericDevice,
 /// reduction classifies as "large".
 static constexpr uint32_t LargeTeamsReductionBytes = 32;
 
+/// Downstream: maximum number of blocks of a big-jump-loop kernel.
+static constexpr uint64_t BigJumpLoopMaxNumBlocks = 1024 * 1024;
+
 /// Get the number of blocks (each having \p NumThreads threads) to launch a
 /// kernel with a cross-team reduction, or zero to handle it like a
 /// non-reduction kernel.
@@ -967,9 +970,19 @@ static uint32_t getEffectiveNumBlocks(
                     getDeviceBlockLimit(GenericDevice, EffectiveNumThreads));
 
   // Return the number of blocks required to cover the loop iterations.
-  if (KernelEnv.isNoLoopMode())
-    return LoopTripCount > 0 ? (((LoopTripCount - 1) / EffectiveNumThreads) + 1)
-                             : 1;
+  // Downstream: a big-jump-loop kernel has no per-block overhead, so it also
+  // gets one thread per iteration. It loops over the grid, so the number of
+  // blocks may be capped. Only AMDGPU devices run big-jump-loop kernels.
+  if (KernelEnv.isNoLoopMode() || KernelEnv.isBigJumpLoopMode()) {
+    uint64_t NumBlocks =
+        LoopTripCount > 0 ? llvm::divideCeil(LoopTripCount, EffectiveNumThreads)
+                          : 1;
+    if (KernelEnv.isBigJumpLoopMode())
+      NumBlocks = std::min(
+          {NumBlocks, BigJumpLoopMaxNumBlocks,
+           uint64_t(getDeviceBlockLimit(GenericDevice, EffectiveNumThreads))});
+    return NumBlocks;
+  }
 
   if (uint64_t NumBlocks = getXTeamReductionNumBlocks(
           Props, EffectiveNumThreads, LoopTripCount, KernelEnv))
@@ -1136,7 +1149,6 @@ static void checkLaunchInvariants(const KernelLaunchArgsTy &LaunchArgs,
 /// Calculate or adjust, in place, the effective number of threads and blocks
 /// for the first dimension, unless the caller requested strict counts.
 static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
-                                    const GenericKernelTy &Kernel,
                                     const DeviceGeometryPropsTy &Props,
                                     KernelLaunchArgsTy &LaunchArgs,
                                     const KernelArgsTy &KernelArgs,
@@ -1155,26 +1167,16 @@ static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
   const bool ThreadLimitFromUser = LaunchArgs.UserThreadLimit[0] > 0;
 
   uint32_t EffectiveNumThreads = LaunchArgs.UserThreadLimit[0];
-  uint32_t EffectiveNumBlocks = LaunchArgs.UserNumBlocks[0];
+  if (!StrictThreads)
+    EffectiveNumThreads =
+        getEffectiveNumThreads(Props, EffectiveNumThreads, KernelEnv);
 
-  // Downstream: the plugin may compute the launch geometry itself (the AMDGPU
-  // plugin does for big-jump-loop kernels, which only exist downstream).
-  // Otherwise, fall back to the generic computation.
-  if (!Kernel.computeLaunchGeometry(GenericDevice, LaunchArgs, StrictThreads,
-                                    StrictBlocks, EffectiveNumThreads,
-                                    EffectiveNumBlocks)) {
-    if (!StrictThreads)
-      EffectiveNumThreads =
-          getEffectiveNumThreads(Props, EffectiveNumThreads, KernelEnv);
-
-    if (!StrictBlocks)
-      EffectiveNumBlocks = getEffectiveNumBlocks(
-          GenericDevice, Props, EffectiveNumBlocks, LaunchArgs.Tripcount,
-          EffectiveNumThreads, StrictThreads, ThreadLimitFromUser, KernelEnv);
-  }
+  if (!StrictBlocks)
+    LaunchArgs.UserNumBlocks[0] = getEffectiveNumBlocks(
+        GenericDevice, Props, LaunchArgs.UserNumBlocks[0], LaunchArgs.Tripcount,
+        EffectiveNumThreads, StrictThreads, ThreadLimitFromUser, KernelEnv);
 
   LaunchArgs.UserThreadLimit[0] = EffectiveNumThreads;
-  LaunchArgs.UserNumBlocks[0] = EffectiveNumBlocks;
 }
 
 /// Flatten the kernel arguments into \p LaunchArgs.Args. Returns the address
@@ -1285,8 +1287,8 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   }
 
   checkLaunchInvariants(LaunchArgs, KernelArgs, KernelLaunchInfo);
-  adjustEffectiveGeometry(GenericDevice, *Kernel, GeometryProps, LaunchArgs,
-                          KernelArgs, KernelLaunchInfo);
+  adjustEffectiveGeometry(GenericDevice, GeometryProps, LaunchArgs, KernelArgs,
+                          KernelLaunchInfo);
 
   void **DynPtrSlot = resolveArgsAndDynPtrSlot(
       KernelArgs, TgtVarsPtr, TgtOffsets, Args, Ptrs, ArgSizes, LaunchArgs);

@@ -42,8 +42,8 @@ using GenericPluginTy = llvm::omp::target::plugin::GenericPluginTy;
 using DeviceInfo = llvm::omp::target::plugin::DeviceInfo;
 using InfoTreeNode = llvm::omp::target::plugin::InfoTreeNode;
 // Downstream, the kernel launch-geometry properties live in the plugin
-// interface: the AMDGPU plugin computes the launch geometry itself and needs
-// them, including the AMD-only execution modes.
+// interface: the AMDGPU plugin reads them, including the AMD-only execution
+// modes, e.g., for its kernel trace.
 using KernelLaunchInfoTy = llvm::omp::target::plugin::KernelLaunchInfoTy;
 
 // Forward declarations.
