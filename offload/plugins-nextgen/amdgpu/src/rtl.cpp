@@ -3911,6 +3911,13 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
   uint32_t getNumComputeUnits() const override { return NumComputeUnits; }
 
+  /// See GenericDeviceTy::getDefaultNumBlocksGenericSPMD().
+  uint32_t getDefaultNumBlocksGenericSPMD() const override {
+    if (!OMPX_GenericSpmdTeamsPerCU)
+      return getDefaultNumBlocks();
+    return NumComputeUnits * OMPX_GenericSpmdTeamsPerCU;
+  }
+
   /// See GenericDeviceTy::getDefaultTeamsReductionWavesPerCU(). Measured on
   /// MI210, MI300A, MI300X, MI350X, and MI450: scalar reductions with many
   /// iterations do better with more waves, ones with few iterations or much

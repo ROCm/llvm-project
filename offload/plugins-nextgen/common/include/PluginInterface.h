@@ -1289,6 +1289,10 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   uint32_t getDefaultNumBlocks() const {
     return GridValues.GV_Default_Num_Teams;
   }
+  /// Get the default number of blocks for a kernel in Generic-SPMD mode.
+  virtual uint32_t getDefaultNumBlocksGenericSPMD() const {
+    return getDefaultNumBlocks();
+  }
   virtual uint64_t getClockFrequency() const { return CLOCKS_PER_SEC; }
 
   virtual uint32_t getOMPXGenericSpmdTeamsPerCU() const {
