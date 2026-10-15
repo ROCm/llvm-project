@@ -106,7 +106,7 @@ inline llvm::Value *getMemoryPointer(llvm::Instruction *I) {
 
 inline bool isCountedInstruction(const llvm::Instruction &I) {
   return !llvm::isa<llvm::PHINode>(I) && !llvm::isa<llvm::AllocaInst>(I) &&
-         !isa<PseudoProbeInst>(I) && !llvm::isa<llvm::UnreachableInst>(I);
+         !llvm::isa<PseudoProbeInst>(I) && !llvm::isa<llvm::UnreachableInst>(I);
 }
 
 inline unsigned instructionCost(const llvm::Instruction &I) {
