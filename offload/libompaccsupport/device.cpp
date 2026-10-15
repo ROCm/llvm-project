@@ -81,9 +81,9 @@ int HostDataToTargetTy::addEventIfNecessary(DeviceTy &Device,
 }
 
 DeviceTy::DeviceTy(GenericPluginTy *RTL, int32_t DeviceID, int32_t RTLDeviceID,
-                   ol_device_handle_t DeviceHandle)
+                   ol_device_handle_t DeviceHandle, PluginManager *PM)
     : DeviceID(DeviceID), RTL(RTL), RTLDeviceID(RTLDeviceID),
-      ForceSynchronousTargetRegions(false), DeviceHandle(DeviceHandle),
+      ForceSynchronousTargetRegions(false), DeviceHandle(DeviceHandle), PM(PM),
       MappingInfo(*this) {}
 
 DeviceTy::~DeviceTy() {
@@ -96,7 +96,8 @@ DeviceTy::~DeviceTy() {
 
 /// Used to set the asynchronous execution mode
 inline void setAsyncInfoSynchronous(__tgt_async_info *AI, bool SetSynchronous) {
-  if (SetSynchronous)
+  // AI is null if the AsyncInfoTy failed to create its queue.
+  if (SetSynchronous && AI)
     AI->ExecAsync = false;
 }
 
@@ -104,6 +105,10 @@ llvm::Error DeviceTy::init() {
   // Plugin devices are initialized by liboffload before a handle is published.
   setTeamProcs(RTL->number_of_team_procs(RTLDeviceID));
 
+  if (auto Res = olCreateContext(1, &DeviceHandle, &Context))
+    return createError(ErrorCode::BackendFailure,
+                       "failed to create context for device %d: %s", DeviceID,
+                       Res->Details);
   size_t UidSize = 0;
   if (!olGetDeviceInfoSize(DeviceHandle, OL_DEVICE_INFO_UID, &UidSize) &&
       UidSize > 0) {
@@ -193,6 +198,24 @@ llvm::Error DeviceTy::init() {
                          "failed to initialize RR in device %d\n", DeviceID);
   }
 
+  return llvm::Error::success();
+}
+
+llvm::Error DeviceTy::deinit() {
+  OMPT_IF_BUILT({
+    performIfOmptInitialized(performOmptCallback(device_finalize, DeviceID));
+    // Pairs the unconditional 'setDeviceId' in DeviceTy::init().
+    ompt::removeDeviceId(
+        reinterpret_cast<ompt_device_t *>(&RTL->getDevice(RTLDeviceID)));
+  });
+
+  if (!Context)
+    return llvm::Error::success();
+  if (auto Res = olDestroyContext(Context))
+    return createError(ErrorCode::BackendFailure,
+                       "failed to destroy context for device %d: %s", DeviceID,
+                       Res->Details);
+  Context = nullptr;
   return llvm::Error::success();
 }
 
@@ -386,6 +409,24 @@ int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
   return RTL->data_delete(RTLDeviceID, TgtAllocBegin, Kind);
 }
 
+llvm::Expected<void *> DeviceTy::allocCtxMem(int64_t Size,
+                                             ol_alloc_type_t Type) {
+  void *Ptr = nullptr;
+  if (auto Res = olMemAlloc(Context, DeviceHandle, Type, Size, &Ptr))
+    return createError(ErrorCode::BackendFailure,
+                       "failed to allocate %" PRId64 " bytes on device %d: %s",
+                       Size, DeviceID, Res->Details);
+  return Ptr;
+}
+
+llvm::Error DeviceTy::freeCtxMem(void *Ptr) {
+  if (auto Res = olMemFree(Context, Ptr))
+    return createError(ErrorCode::BackendFailure,
+                       "failed to free memory %p on device %d: %s", Ptr,
+                       DeviceID, Res->Details);
+  return llvm::Error::success();
+}
+
 // Submit data to device
 int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
                              AsyncInfoTy &AsyncInfo, HostDataToTargetTy *Entry,
@@ -570,16 +611,17 @@ struct DynBlockMemConfTy {
 /// Prepare the block memory buffer requested for the kernel and execute the
 /// specified fallback if necessary.
 static llvm::Expected<DynBlockMemConfTy>
-prepareBlockMemory(GenericDeviceTy &GenericDevice,
-                   const KernelLaunchInfoTy &KernelEnv, uint32_t DynCGroupMem,
+prepareBlockMemory(DeviceTy &Device, const KernelLaunchInfoTy &KernelEnv,
+                   uint32_t DynCGroupMem,
                    DynCGroupMemFallbackType DynCGroupMemFallback,
-                   uint32_t NumBlocks) {
+                   uint64_t NumBlocks) {
 
   // If the fallback is abort, don't try to adjust the block memory size.
   if (DynCGroupMemFallback == DynCGroupMemFallbackType::Abort)
     return DynBlockMemConfTy{DynCGroupMem, DynCGroupMem,
                              DynCGroupMemFallbackType::Abort, nullptr};
 
+  GenericDeviceTy &GenericDevice = Device.RTL->getDevice(Device.RTLDeviceID);
   uint32_t MaxBlockMemSize = GenericDevice.getMaxBlockSharedMemSize();
   uint32_t DynBlockMemSize = DynCGroupMem;
   uint32_t TotalBlockMemSize = KernelEnv.StaticBlockMemSize + DynBlockMemSize;
@@ -596,9 +638,8 @@ prepareBlockMemory(GenericDeviceTy &GenericDevice,
       DynBlockMemSize = 0;
     } else {
       // Get global memory as fallback.
-      auto AllocOrErr = GenericDevice.dataAlloc(
-          NumBlocks * DynBlockMemSize,
-          /*HostPtr=*/nullptr, TARGET_ALLOC_DEVICE, /*Alignment=*/0);
+      auto AllocOrErr = Device.allocCtxMem(
+          NumBlocks * uint64_t(DynBlockMemSize), OL_ALLOC_TYPE_DEVICE);
       if (!AllocOrErr)
         return AllocOrErr.takeError();
       DynFallbackPtr = *AllocOrErr;
@@ -608,12 +649,26 @@ prepareBlockMemory(GenericDeviceTy &GenericDevice,
                            DynFallbackPtr};
 }
 
-static void freeAfterSynchronization(GenericDeviceTy &GenericDevice,
-                                     AsyncInfoTy &AsyncInfo, void *Ptr,
-                                     TargetAllocTy Kind) {
+static void freeAfterSynchronization(DeviceTy &Device, AsyncInfoTy &AsyncInfo,
+                                     void *Ptr) {
+  AsyncInfo.addPostProcessingFunction([&Device, Ptr]() -> int {
+    if (auto Err = Device.freeCtxMem(Ptr)) {
+      REPORT() << "Failure to free device memory " << Ptr << ": "
+               << toString(std::move(Err));
+      return OFFLOAD_FAIL;
+    }
+    return OFFLOAD_SUCCESS;
+  });
+}
+
+/// Downstream: free \p Ptr, which was allocated through the plugin's
+/// allocator with \p Kind, once \p AsyncInfo is synchronized.
+static void freePluginMemAfterSynchronization(GenericDeviceTy &GenericDevice,
+                                              AsyncInfoTy &AsyncInfo, void *Ptr,
+                                              TargetAllocTy Kind) {
   AsyncInfo.addPostProcessingFunction([&GenericDevice, Ptr, Kind]() -> int {
     if (auto Err = GenericDevice.dataDelete(Ptr, Kind)) {
-      REPORT() << "Failure to free device memory " << Ptr << ": "
+      REPORT() << "Failure to free memory " << Ptr << ": "
                << toString(std::move(Err));
       return OFFLOAD_FAIL;
     }
@@ -626,10 +681,12 @@ static void freeAfterSynchronization(GenericDeviceTy &GenericDevice,
 /// the number of blocks for this launch and is used to size the reduction
 /// buffer.
 static llvm::Expected<KernelLaunchEnvironmentTy *> getKernelLaunchEnvironment(
-    GenericDeviceTy &GenericDevice, const KernelLaunchArgsTy &LaunchArgs,
+    DeviceTy &Device, const KernelLaunchArgsTy &LaunchArgs,
     const KernelLaunchInfoTy &KernelEnv,
     const DynBlockMemConfTy &DynBlockMemConf, uint32_t DynCGroupMem,
     void **DynPtrSlot, AsyncInfoTy &AsyncInfo, uint32_t NumBlocks0) {
+  GenericDeviceTy &GenericDevice = Device.RTL->getDevice(Device.RTLDeviceID);
+
   // Ctor/Dtor have no arguments, replaying uses the original kernel launch
   // environment, and launches with no reserved dyn_ptr slot (e.g. older
   // compiler versions, or non-OpenMP launches) have nowhere to store one.
@@ -656,15 +713,13 @@ static llvm::Expected<KernelLaunchEnvironmentTy *> getKernelLaunchEnvironment(
   if (!NeedsReductionBuffer && !DynCGroupMem)
     return reinterpret_cast<KernelLaunchEnvironmentTy *>(~0);
 
-  auto AllocOrErr = GenericDevice.dataAlloc(
-      sizeof(KernelLaunchEnvironmentTy),
-      /*HostPtr=*/nullptr, TARGET_ALLOC_DEVICE, /*Alignment=*/0);
+  auto AllocOrErr = Device.allocCtxMem(sizeof(KernelLaunchEnvironmentTy),
+                                       OL_ALLOC_TYPE_DEVICE);
   if (!AllocOrErr)
     return AllocOrErr.takeError();
 
   // Remember to free the memory later.
-  freeAfterSynchronization(GenericDevice, AsyncInfo, *AllocOrErr,
-                           TARGET_ALLOC_DEVICE);
+  freeAfterSynchronization(Device, AsyncInfo, *AllocOrErr);
 
   // Use the KLE in the __tgt_async_info to ensure a stable address for the
   // async data transfer.
@@ -678,15 +733,14 @@ static llvm::Expected<KernelLaunchEnvironmentTy *> getKernelLaunchEnvironment(
 
   if (NeedsReductionBuffer) {
     // Use number of teams many buffer elements.
-    auto ReductionAllocOrErr = GenericDevice.dataAlloc(
-        uint64_t(KernelEnv.ReductionDataSize) * NumBlocks0,
-        /*HostPtr=*/nullptr, TARGET_ALLOC_DEVICE, /*Alignment=*/0);
+    auto ReductionAllocOrErr =
+        Device.allocCtxMem(uint64_t(KernelEnv.ReductionDataSize) * NumBlocks0,
+                           OL_ALLOC_TYPE_DEVICE);
     if (!ReductionAllocOrErr)
       return ReductionAllocOrErr.takeError();
     LocalKLE.ReductionBuffer = *ReductionAllocOrErr;
     // Remember to free the memory later.
-    freeAfterSynchronization(GenericDevice, AsyncInfo, *ReductionAllocOrErr,
-                             TARGET_ALLOC_DEVICE);
+    freeAfterSynchronization(Device, AsyncInfo, *ReductionAllocOrErr);
   }
 
   // Downstream: stage the launch environment in pinned memory if the plugin
@@ -725,8 +779,8 @@ static llvm::Expected<KernelLaunchEnvironmentTy *> getKernelLaunchEnvironment(
   // observes the queue as complete release it while the transfer is still in
   // flight.
   if (PinnedKLE)
-    freeAfterSynchronization(GenericDevice, AsyncInfo, PinnedKLE,
-                             TARGET_ALLOC_HOST);
+    freePluginMemAfterSynchronization(GenericDevice, AsyncInfo, PinnedKLE,
+                                      TARGET_ALLOC_HOST);
 
   return static_cast<KernelLaunchEnvironmentTy *>(*AllocOrErr);
 }
@@ -1005,29 +1059,26 @@ static void **resolveArgsAndDynPtrSlot(KernelArgsTy &KernelArgs,
 /// launch has a reserved dyn_ptr slot (\p DynPtrSlot), the device-side kernel
 /// launch environment.
 static llvm::Error
-prepareDynamicLaunchState(GenericDeviceTy &GenericDevice,
-                          const KernelLaunchInfoTy &KernelEnv,
+prepareDynamicLaunchState(DeviceTy &Device, const KernelLaunchInfoTy &KernelEnv,
                           KernelLaunchArgsTy &LaunchArgs, uint32_t DynCGroupMem,
                           DynCGroupMemFallbackType DynCGroupMemFallback,
                           void **DynPtrSlot, AsyncInfoTy &AsyncInfo) {
-  uint32_t NumBlocksTotal = LaunchArgs.UserNumBlocks[0] *
+  uint64_t NumBlocksTotal = uint64_t(LaunchArgs.UserNumBlocks[0]) *
                             LaunchArgs.UserNumBlocks[1] *
                             LaunchArgs.UserNumBlocks[2];
-  auto DynBlockMemConfOrErr =
-      prepareBlockMemory(GenericDevice, KernelEnv, DynCGroupMem,
-                         DynCGroupMemFallback, NumBlocksTotal);
+  auto DynBlockMemConfOrErr = prepareBlockMemory(
+      Device, KernelEnv, DynCGroupMem, DynCGroupMemFallback, NumBlocksTotal);
   if (!DynBlockMemConfOrErr)
     return DynBlockMemConfOrErr.takeError();
 
   DynBlockMemConfTy &DynBlockMemConf = *DynBlockMemConfOrErr;
   LaunchArgs.DynCGroupMem = DynBlockMemConf.NativeSize;
   if (DynBlockMemConf.FallbackPtr)
-    freeAfterSynchronization(GenericDevice, AsyncInfo,
-                             DynBlockMemConf.FallbackPtr, TARGET_ALLOC_DEVICE);
+    freeAfterSynchronization(Device, AsyncInfo, DynBlockMemConf.FallbackPtr);
 
   auto KernelLaunchEnvOrErr = getKernelLaunchEnvironment(
-      GenericDevice, LaunchArgs, KernelEnv, DynBlockMemConf, DynCGroupMem,
-      DynPtrSlot, AsyncInfo, LaunchArgs.UserNumBlocks[0]);
+      Device, LaunchArgs, KernelEnv, DynBlockMemConf, DynCGroupMem, DynPtrSlot,
+      AsyncInfo, LaunchArgs.UserNumBlocks[0]);
   if (!KernelLaunchEnvOrErr)
     return KernelLaunchEnvOrErr.takeError();
 
@@ -1066,7 +1117,7 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   auto DynCGroupMemFallback = static_cast<DynCGroupMemFallbackType>(
       KernelArgs.Flags.DynCGroupMemFallback);
   if (auto Err = prepareDynamicLaunchState(
-          GenericDevice, KernelLaunchInfo, LaunchArgs, KernelArgs.DynCGroupMem,
+          *this, KernelLaunchInfo, LaunchArgs, KernelArgs.DynCGroupMem,
           DynCGroupMemFallback, DynPtrSlot, AsyncInfo)) {
     REPORT() << "Failure to prepare launch state for kernel " << TgtEntryPtr
              << ": " << toString(std::move(Err));
@@ -1095,11 +1146,26 @@ bool DeviceTy::isDataExchangable(const DeviceTy &DstDevice) {
 }
 
 int32_t DeviceTy::synchronize(AsyncInfoTy &AsyncInfo) {
-  return RTL->synchronize(RTLDeviceID, AsyncInfo);
+  ol_queue_handle_t Queue = AsyncInfo.getQueue();
+  if (!Queue)
+    return OFFLOAD_SUCCESS;
+  if (auto Res = olSyncQueue(Queue)) {
+    REPORT() << "Failure to synchronize stream " << Queue << ": "
+             << Res->Details;
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
 }
 
 int32_t DeviceTy::queryAsync(AsyncInfoTy &AsyncInfo) {
-  return RTL->query_async(RTLDeviceID, AsyncInfo);
+  ol_queue_handle_t Queue = AsyncInfo.getQueue();
+  if (!Queue)
+    return OFFLOAD_SUCCESS;
+  if (auto Res = olQueryQueue(Queue, /*IsComplete=*/nullptr)) {
+    REPORT() << "Failure to query stream " << Queue << ": " << Res->Details;
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
 }
 
 int32_t DeviceTy::createEvent(void **Event) {

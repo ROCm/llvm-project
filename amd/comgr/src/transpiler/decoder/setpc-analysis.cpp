@@ -67,9 +67,10 @@ class TargetOffsets {
 public:
   TargetOffsets() = default;
 
-  static TargetOffsets single(uint64_t Offset) {
+  static TargetOffsets single(uint64_t Offset, bool Incomplete = false) {
     TargetOffsets Result;
     Result.Offsets.push_back(Offset);
+    Result.Incomplete = Incomplete;
     return Result;
   }
 
@@ -83,6 +84,7 @@ public:
   bool isUnnameable() const { return Top == Reason::Unnameable; }
   bool isTooMany() const { return Top == Reason::TooMany; }
   bool isTop() const { return Top != Reason::None; }
+  bool isIncomplete() const { return Incomplete; }
 
   // The offsets that reach the pair, ascending and distinct. Empty at the top
   // and at the bottom alike.
@@ -99,7 +101,8 @@ public:
     if (isTop())
       return false;
 
-    bool Changed = false;
+    bool Changed = Other.Incomplete && !Incomplete;
+    Incomplete |= Other.Incomplete;
     for (uint64_t Offset : Other.Offsets) {
       if (is_contained(Offsets, Offset))
         continue;
@@ -126,6 +129,8 @@ private:
 
   SmallVector<uint64_t> Offsets;
   Reason Top = Reason::None;
+  // Some path has not completed its split address calculation.
+  bool Incomplete = false;
 };
 
 // What every register pair holds at one point, keyed by the pair's low register
@@ -140,6 +145,8 @@ struct RegState {
   std::optional<uint32_t> Constant;
   // The source offset carried by the pair that starts at this register.
   std::optional<uint64_t> PairOffset;
+  enum AddressKind { Complete, PendingCarry, Incomplete };
+  AddressKind PairAddressKind = Complete;
 };
 
 // What the analysis knows about the scalar registers while walking one block.
@@ -157,6 +164,7 @@ struct BlockState {
     Reg.Written = true;
     Reg.Constant.reset();
     Reg.PairOffset.reset();
+    Reg.PairAddressKind = RegState::Complete;
     if (Idx > 0)
       Regs[Idx - 1].PairOffset.reset();
     // A pending carry belongs to the value that the low add produced, and this
@@ -177,8 +185,10 @@ struct BlockState {
   void summarize(PairOffsets &Out) const {
     auto Record = [&](unsigned Base) {
       std::optional<uint64_t> Offset = Regs.lookup(Base).PairOffset;
-      Out[Base] =
-          Offset ? TargetOffsets::single(*Offset) : TargetOffsets::unnameable();
+      Out[Base] = Offset ? TargetOffsets::single(
+                               *Offset, Regs.lookup(Base).PairAddressKind !=
+                                            RegState::Complete)
+                         : TargetOffsets::unnameable();
     };
     for (const auto &Reg : Regs) {
       if (!Reg.second.Written)
@@ -391,6 +401,7 @@ Expected<SetPcAnalysis> classifyAgainstBlockStarts(
       continue;
     }
 
+    case CanonicalOp::S_ADD_I32:
     case CanonicalOp::S_ADD_U32: {
       // A displacement added to the offset that a pair already carries, or a
       // plain constant fold that a later add can use as its addend.
@@ -410,6 +421,9 @@ Expected<SetPcAnalysis> classifyAgainstBlockStarts(
         State.Regs[*Dst].Constant = *Src0Imm + *Src1Imm;
         continue;
       }
+      // Signed overflow cannot carry a displacement into the high half.
+      if (Di.CanonOp == CanonicalOp::S_ADD_I32)
+        break;
       std::optional<unsigned> Src0Idx;
       if (Di.isReg(Src0))
         Src0Idx = sgprIndex(MRI, Di.getReg(Src0));
@@ -427,8 +441,12 @@ Expected<SetPcAnalysis> classifyAgainstBlockStarts(
       if (!Addend)
         break;
       uint64_t Target = *Base + *Addend;
+      RegState::AddressKind Kind = State.Regs.lookup(*Dst).PairAddressKind;
       State.writeReg(*Dst);
       State.Regs[*Dst].PairOffset = Target;
+      State.Regs[*Dst].PairAddressKind = Kind == RegState::Complete
+                                             ? RegState::PendingCarry
+                                             : RegState::Incomplete;
       // A high-half add may now consume the carry out of this add.
       State.CarryPair = *Dst;
       continue;
@@ -458,9 +476,28 @@ Expected<SetPcAnalysis> classifyAgainstBlockStarts(
       std::optional<uint32_t> Addend = immediate32(Di.Inst, Src1);
       if (!Addend)
         break;
+      RegState::AddressKind Kind = State.Regs.lookup(Low).PairAddressKind;
+      assert(I != 0 && "carry comes from a preceding low-half add");
+      const DecodedInst &LowAdd = Insts[I - 1];
+      unsigned LowSource = LowAdd.FirstSrcIdx + 1;
+      // Applying the current carry cannot recover an earlier lost carry.
+      if (Kind == RegState::PendingCarry &&
+          LowAdd.CanonOp == CanonicalOp::S_ADD_U32 &&
+          LowAdd.Offset + LowAdd.sizeInBytes() == Di.Offset &&
+          LowAdd.isReg(LowSource)) {
+        std::optional<unsigned> Index =
+            sgprIndex(MRI, LowAdd.getReg(LowSource));
+        if (Index)
+          if (std::optional<uint32_t> Constant =
+                  State.Regs.lookup(*Index).Constant)
+            Result.RegisterDisplacements[LowAdd.Offset] = *Constant;
+      }
       State.writeReg(*Dst);
       State.Regs[Low].PairOffset =
           *Target + (static_cast<uint64_t>(*Addend) << 32);
+      State.Regs[Low].PairAddressKind = Kind == RegState::PendingCarry
+                                            ? RegState::Complete
+                                            : RegState::Incomplete;
       continue;
     }
 
@@ -489,9 +526,11 @@ Expected<SetPcAnalysis> classifyAgainstBlockStarts(
       if (!Displacement)
         break;
       uint64_t Target = *Base + static_cast<uint64_t>(*Displacement);
+      RegState::AddressKind Kind = State.Regs.lookup(*Dst).PairAddressKind;
       State.writeReg(*Dst);
       State.writeReg(*Dst + 1);
       State.Regs[*Dst].PairOffset = Target;
+      State.Regs[*Dst].PairAddressKind = Kind;
       continue;
     }
 
@@ -581,6 +620,12 @@ Expected<SetPcAnalysis> classifyAgainstBlockStarts(
         Worklist.insert(It->second);
     }
   }
+
+  for (const Block &Blk : Blocks)
+    if (Blk.Reachable)
+      for (const auto &[Base, Offsets] : Blk.Entry)
+        if (Offsets.offsets().size() == 1 && !Offsets.isIncomplete())
+          Result.EntryOffsets[Blk.Start][Base] = Offsets.offsets().front();
 
   // A deferred transfer reads a register pair its own block leaves alone, so
   // what the paths into the block leave there is what the transfer reads.
