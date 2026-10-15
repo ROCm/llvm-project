@@ -1295,41 +1295,7 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   }
   virtual uint64_t getClockFrequency() const { return CLOCKS_PER_SEC; }
 
-  virtual uint32_t getOMPXGenericSpmdTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXBigJumpLoopTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getXTeamRedTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
   virtual uint32_t getOMPXBigJumpLoopMaxTotalTeams() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXLowTripCount() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t
-  getOMPXNumBlocksForLowTripcount(uint64_t LoopTripCount) const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXAdjustNumTeamsForSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXAdjustNumTeamsForXteamRedSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual bool getOMPXXTeamReductionOccupancyBasedOpt() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual bool getOMPXGenericSpmdUseSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXXteamBlockSize() const {
     llvm_unreachable("Unimplemented");
   }
 

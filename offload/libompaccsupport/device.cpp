@@ -1065,34 +1065,8 @@ static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
   uint32_t EffectiveNumThreads = LaunchArgs.UserThreadLimit[0];
   uint32_t EffectiveNumBlocks = LaunchArgs.UserNumBlocks[0];
 
-  // Downstream: the grid of a kernel with a cross-team reduction is sized by
-  // the size of the reduction, as in getEffectiveNumBlocks, also if the plugin
-  // computes the launch geometry itself. Only the number of threads is taken
-  // from the plugin then. A number of teams the user requested, by
-  // OMP_NUM_TEAMS or for low trip counts, is honored as the plugin would.
-  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
-  if (!StrictBlocks && EffectiveNumBlocks == 0 && OMP_NumTeams <= 0 &&
-      KernelEnv.ReductionDataSize) {
-    uint32_t NumThreads = EffectiveNumThreads;
-    uint32_t NumBlocks = EffectiveNumBlocks;
-    // Without the plugin's heuristics, getEffectiveNumBlocks applies.
-    if (Kernel.computeLaunchGeometry(GenericDevice, LaunchArgs, StrictThreads,
-                                     /*StrictBlocks=*/true, NumThreads,
-                                     NumBlocks) &&
-        !GenericDevice.getOMPXNumBlocksForLowTripcount(LaunchArgs.Tripcount)) {
-      if (uint64_t ReductionNumBlocks = getTeamsReductionNumBlocks(
-              GenericDevice, NumThreads, LaunchArgs.Tripcount, KernelEnv)) {
-        LaunchArgs.UserThreadLimit[0] = NumThreads;
-        LaunchArgs.UserNumBlocks[0] =
-            std::min(ReductionNumBlocks,
-                     uint64_t(getDeviceBlockLimit(GenericDevice, NumThreads)));
-        return;
-      }
-    }
-  }
-
   // Downstream: the plugin may compute the launch geometry itself (the AMDGPU
-  // plugin does, using occupancy and other device-specific heuristics).
+  // plugin does for big-jump-loop kernels, which only exist downstream).
   // Otherwise, fall back to the generic computation.
   if (!Kernel.computeLaunchGeometry(GenericDevice, LaunchArgs, StrictThreads,
                                     StrictBlocks, EffectiveNumThreads,
