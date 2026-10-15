@@ -45,7 +45,7 @@ static bool isPayloadSequence(CallInst *Header, CallInst *Payload,
   for (Instruction *I = Header->getNextNode(); I != Payload;
        I = I ? I->getNextNode() : nullptr)
     if (!I || (I->getMetadata(SqttPayloadGroupMetadata) != Group &&
-               !I->isDebugOrPseudoInst() && !I->isLifetimeStartOrEnd()))
+               !isa<PseudoProbeInst>(I)) && !I->isLifetimeStartOrEnd()))
       return false;
   return true;
 }
