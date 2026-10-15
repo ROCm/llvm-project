@@ -2482,6 +2482,16 @@ static const DIExpression *computeExprForSpill(
          "Expected inlined-at fields to agree");
 
   const DIExpression *Expr = MI.getDebugExpression();
+  if (Expr->holdsOldElements() && MI.isNonListDebugValue()) {
+    if (!MI.isIndirectDebugValue()) {
+      if (!Expr->isComplex() || Expr->isImplicit())
+        return Expr;
+    } else {
+      assert(MI.getDebugOffset().getImm() == 0 &&
+             "DBG_VALUE with nonzero offset");
+    }
+  }
+
   SmallBitVector SpilledOpIndexes(MI.getNumDebugOperands());
   for (const MachineOperand *Op : SpilledOperands)
     SpilledOpIndexes.set(MI.getDebugOperandIndex(Op));
