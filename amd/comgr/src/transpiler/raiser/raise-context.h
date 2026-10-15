@@ -70,7 +70,8 @@ public:
     return It == SetPc.Sites.end() ? nullptr : &It->second;
   }
 
-  // Constant register addend of a low-half add with an adjacent carry add.
+  // Constant register addend of a complete address's low-half add with an
+  // adjacent matching carry add.
   std::optional<uint32_t>
   sourceImageRegisterDisplacement(uint64_t Offset) const {
     auto It = SetPc.RegisterDisplacements.find(Offset);

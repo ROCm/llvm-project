@@ -1,7 +1,7 @@
 ; REQUIRES: comgr-has-transpiler, comgr-has-llc
 
 ; RUN: for case in SIGNED UNSIGNED LOAD DYNAMIC CLOBBER LOW_SCC HIGH_SCC \
-; RUN:             ESCAPE COMPARE NO_CARRY SIGNED_LOW BAD_TARGET; do \
+; RUN:             ESCAPE COMPARE NO_CARRY SIGNED_LOW BAD_TARGET LOST_CARRY; do \
 ; RUN:   %llvm-mc -triple=amdgpu12.50-amd-amdhsa -filetype=obj --defsym=$case=1 %s -o %t.$case.o && \
 ; RUN:   %ld.lld -shared %t.$case.o -o %t.$case.hsaco || exit 1; \
 ; RUN: done
@@ -17,7 +17,7 @@
 ; RUN:   %llc -mtriple=amdgpu9.42-amd-amdhsa -filetype=obj %t.$case.bc -o %t.$case.target.o || exit 1; \
 ; RUN: done
 
-; RUN: for case in DYNAMIC CLOBBER LOW_SCC NO_CARRY SIGNED_LOW; do \
+; RUN: for case in DYNAMIC CLOBBER LOW_SCC NO_CARRY SIGNED_LOW LOST_CARRY; do \
 ; RUN:   not %transpile_cli %t.$case.hsaco --target-isa=gfx942 --emit-ir 2>&1 \
 ; RUN:     | %FileCheck %s --check-prefix=UNRESOLVED || exit 1; \
 ; RUN: done
@@ -56,10 +56,16 @@ register_displacement:
 .Lcapture:
   s_get_pc_i64 s[8:9]
 .Lpc:
+.ifdef LOST_CARRY
+  s_add_co_i32 s10, .Lforward-.Lpc-3, 4
+  ; The next low add overwrites this carry before it reaches the high half.
+  s_add_co_u32 s8, s8, -1
+.else
 .ifdef UNSIGNED
   s_add_co_u32 s10, .Lforward-.Lpc-4, 4
 .else
   s_add_co_i32 s10, .Lforward-.Lpc-4, 4
+.endif
 .endif
 .ifdef DYNAMIC
   s_mov_b32 s10, s0
@@ -76,10 +82,14 @@ register_displacement:
   s_cselect_b32 s11, 0, 1
 .endif
 .ifndef NO_CARRY
+.ifdef LOST_CARRY
+  s_add_co_ci_u32 s9, s9, -1
+.else
 .ifdef BAD_TARGET
   s_add_co_ci_u32 s9, s9, 1
 .else
   s_add_co_ci_u32 s9, s9, 0
+.endif
 .endif
 .endif
 .ifdef HIGH_SCC

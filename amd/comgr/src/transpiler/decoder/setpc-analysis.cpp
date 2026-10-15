@@ -480,8 +480,9 @@ Expected<SetPcAnalysis> classifyAgainstBlockStarts(
       assert(I != 0 && "carry comes from a preceding low-half add");
       const DecodedInst &LowAdd = Insts[I - 1];
       unsigned LowSource = LowAdd.FirstSrcIdx + 1;
-      // A low-half result depends on relocation until its carry is applied.
-      if (LowAdd.CanonOp == CanonicalOp::S_ADD_U32 &&
+      // Applying the current carry cannot recover an earlier lost carry.
+      if (Kind == RegState::PendingCarry &&
+          LowAdd.CanonOp == CanonicalOp::S_ADD_U32 &&
           LowAdd.Offset + LowAdd.sizeInBytes() == Di.Offset &&
           LowAdd.isReg(LowSource)) {
         std::optional<unsigned> Index =

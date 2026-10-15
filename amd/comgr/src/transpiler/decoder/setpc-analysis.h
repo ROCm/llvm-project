@@ -70,8 +70,8 @@ struct SetPcAnalysis {
   llvm::DenseMap<uint64_t, SetPcSite> Sites;
   // Complete singleton source offsets at block entry, keyed by block and pair.
   llvm::DenseMap<uint64_t, llvm::DenseMap<unsigned, uint64_t>> EntryOffsets;
-  // Constant register addends of low-half adds immediately followed by their
-  // matching high-half carry adds, keyed by the low instruction's offset.
+  // Constant register addends of low-half adds that displace complete addresses
+  // and have adjacent matching carry adds, keyed by the low instruction offset.
   llvm::DenseMap<uint64_t, uint32_t> RegisterDisplacements;
   // Block starts the analysis found on top of the ones the decode gave it.
   // Every one is the offset of a decoded instruction. The caller must start a
