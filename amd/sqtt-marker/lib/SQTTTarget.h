@@ -19,6 +19,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 
 #include "SQTTConfig.h"
@@ -106,7 +107,7 @@ inline llvm::Value *getMemoryPointer(llvm::Instruction *I) {
 
 inline bool isCountedInstruction(const llvm::Instruction &I) {
   return !llvm::isa<llvm::PHINode>(I) && !llvm::isa<llvm::AllocaInst>(I) &&
-         !I.isDebugOrPseudoInst() && !llvm::isa<llvm::UnreachableInst>(I);
+         !llvm::isa<PseudoProbeInst>(I) && !llvm::isa<llvm::UnreachableInst>(I);
 }
 
 inline unsigned instructionCost(const llvm::Instruction &I) {
