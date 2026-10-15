@@ -1503,6 +1503,7 @@ private:
 
   // If the insertion point lands on a cycle entry, move it to a block that
   // dominates all entries. Copy of SILowerSGPRSpills::getCycleDomBB.
+  // TODO-WAVETRANSFORM: Factor this into a common file before upstreaming.
   MachineBasicBlock *getCycleDomBB(CycleRef C) const;
   // Nearest common dominator of Blocks, hoisted out of its outermost cycle.
   MachineBasicBlock *getInitBlock(ArrayRef<MachineBasicBlock *> Blocks) const;
@@ -1887,25 +1888,25 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
     }
   }
 
-  for (WaveNode *Secondary : NodeOrder) {
-    if (!Secondary->IsSecondary)
+  for (WaveNode *Node : NodeOrder) {
+    if (!Node->IsSecondary)
       continue;
-
+    // Node is secondary block
     SmallVector<WaveNode *, 4> DivPreds;
-    for (WaveNode *Pred : Secondary->Predecessors) {
+    for (WaveNode *Pred : Node->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() <= 1)
         continue;
-      // Pred is skipped if Secondary is it's Primary Successor
-      if (Pred->Successors[0] == Secondary)
+      // Pred is skipped if Node is it's Primary Successor
+      if (Pred->Successors[0] == Node)
         continue;
       DivPreds.push_back(Pred);
     }
 
     const bool HasSingleDivergentPred =
-        DivPreds.size() == 1 && !DivPreds[0]->Cycle && !Secondary->Cycle;
+        DivPreds.size() == 1 && !DivPreds[0]->Cycle && !Node->Cycle;
 
     SmallVector<MachineBasicBlock *, 8> InitBlocks;
-    InitBlocks.push_back(Secondary->Block);
+    InitBlocks.push_back(Node->Block);
     for (WaveNode *Pred : DivPreds)
       InitBlocks.push_back(Pred->Block);
 
@@ -1914,7 +1915,7 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
     AccumulatorRegs.insert(RejoinAcc);
 
     WTBlocks.insert(RejoinAccInitBB);
-    WTBlocks.insert(Secondary->Block);
+    WTBlocks.insert(Node->Block);
     InitAccSectionList.push_back({RejoinAccInitBB, RejoinAcc});
 
     for (WaveNode *Pred : DivPreds) {
@@ -1927,8 +1928,8 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
           {Pred->Block, RejoinAcc, Accumulate, PrimaryExec});
     }
 
-    RestoreExecSectionList.push_back({Secondary->Block, RejoinAcc});
-    ResetRejoinAccSectionList.push_back({Secondary->Block, RejoinAcc});
+    RestoreExecSectionList.push_back({Node->Block, RejoinAcc});
+    ResetRejoinAccSectionList.push_back({Node->Block, RejoinAcc});
   }
 
   createSections();
@@ -1988,6 +1989,7 @@ void ControlFlowRewriter::computeSparseGraph() {
   }
 }
 
+// Virtual registers among MI's explicit uses.
 static SmallVector<Register, 2> virtualUses(const MachineInstr &MI) {
   SmallVector<Register, 2> Regs;
   for (const MachineOperand &MO : MI.explicit_uses())
@@ -1996,6 +1998,7 @@ static SmallVector<Register, 2> virtualUses(const MachineInstr &MI) {
   return Regs;
 }
 
+// Virtual registers among MI's defs.
 static SmallVector<Register, 2> virtualDefs(const MachineInstr &MI) {
   SmallVector<Register, 2> Regs;
   for (const MachineOperand &MO : MI.defs())
@@ -2031,6 +2034,7 @@ static Register valueDest(const MachineInstr &MI) {
   return MO.getReg();
 }
 
+// Register at operand Idx, or an empty register.
 static Register regOperand(const MachineInstr &MI, unsigned Idx) {
   if (Idx >= MI.getNumOperands())
     return Register();
@@ -2040,6 +2044,7 @@ static Register regOperand(const MachineInstr &MI, unsigned Idx) {
   return MO.getReg();
 }
 
+// Drop Dead from Instrs and erase those instructions.
 static void eraseMappedInstrs(SmallVectorImpl<MachineInstr *> &Instrs,
                               ArrayRef<MachineInstr *> Dead) {
   SmallPtrSet<MachineInstr *, 8> DeadSet;
@@ -2060,11 +2065,13 @@ bool ControlFlowRewriter::canAliasTo(Register R) const {
   return R.isVirtual() && (MRI.hasOneDef(R) || AccumulatorRegs.contains(R));
 }
 
+// True when Cur records R as known zero.
 bool ControlFlowRewriter::isZeroFact(const RegFactMap &Cur, Register R) const {
   RegFactMap::const_iterator It = Cur.find(R);
   return It != Cur.end() && It->second.isZero();
 }
 
+// Set Dst's fact from Src: copy Src's fact, or alias Src.
 void ControlFlowRewriter::setFactFrom(RegFactMap &Cur, Register Dst,
                                       Register Src) const {
   RegFactMap::iterator It = Cur.find(Src);
@@ -2079,6 +2086,7 @@ void ControlFlowRewriter::setFactFrom(RegFactMap &Cur, Register Dst,
     Cur.erase(Dst);
 }
 
+// Rewrite MI as a move of zero.
 void ControlFlowRewriter::replaceWithMov0(MachineInstr &MI) {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   MI.setDesc(TII.get(LMC.MovOpc));
@@ -2088,6 +2096,7 @@ void ControlFlowRewriter::replaceWithMov0(MachineInstr &MI) {
   ++NumCleanupInstrsOptimized;
 }
 
+// Rewrite MI as a copy of Src.
 void ControlFlowRewriter::replaceWithCopy(MachineInstr &MI, Register Src) {
   MI.setDesc(TII.get(AMDGPU::COPY));
   while (MI.getNumOperands() > 1)
@@ -2096,6 +2105,7 @@ void ControlFlowRewriter::replaceWithCopy(MachineInstr &MI, Register Src) {
   ++NumCleanupInstrsOptimized;
 }
 
+// Facts shared by every sparse predecessor of BB.
 ControlFlowRewriter::RegFactMap ControlFlowRewriter::meetFacts(
     MachineBasicBlock &BB,
     const DenseMap<MachineBasicBlock *, RegFactMap> &BBFacts) const {
@@ -2144,6 +2154,7 @@ ControlFlowRewriter::RegFactMap ControlFlowRewriter::meetFacts(
   return Cur;
 }
 
+// Fold MI from known facts. True means delete MI.
 bool ControlFlowRewriter::simplifyInstr(MachineInstr &MI, RegFactMap &Cur) {
   for (MachineOperand &MO : MI.explicit_uses()) {
     if (!MO.isReg() || !MO.getReg().isVirtual())
@@ -2248,6 +2259,7 @@ bool ControlFlowRewriter::simplifyInstr(MachineInstr &MI, RegFactMap &Cur) {
   return false;
 }
 
+// Simplify each tracked instruction in BB.
 void ControlFlowRewriter::simplifyBB(MachineBasicBlock &BB, RegFactMap &Cur) {
   AccInstsMap::iterator MapIt = WTInstrMap.find(&BB);
   if (MapIt == WTInstrMap.end())
@@ -2379,6 +2391,7 @@ bool ControlFlowRewriter::dropGlobalDead(MachineBasicBlock &BB,
   return true;
 }
 
+// Live-in and live-out of virtual regs over WT blocks.
 void ControlFlowRewriter::computeWTLiveInfo(
     DenseMap<MachineBasicBlock *, VirtRegSet> &LiveIn,
     DenseMap<MachineBasicBlock *, VirtRegSet> &LiveOut) const {
@@ -2461,12 +2474,14 @@ bool ControlFlowRewriter::deadDefRemoval() {
   return Dropped;
 }
 
+// Allocate a lane-mask temporary.
 Register ControlFlowRewriter::freshTemp() {
   Register Reg = LMU.createLaneMaskReg();
   SectionTempRegs.insert(Reg);
   return Reg;
 }
 
+// Insert Dst = Opc at I and record it for later cleanup.
 MachineInstrBuilder
 ControlFlowRewriter::emit(MachineBasicBlock &Block,
                           MachineBasicBlock::iterator I, unsigned Opc,
@@ -2486,6 +2501,7 @@ saluInsertionAtEnd(MachineBasicBlock &Block) {
   return I;
 }
 
+// Emit every recorded lane-mask section.
 void ControlFlowRewriter::createSections() {
   AMDGPULaneMaskAnalysis LMA(Function);
   for (MachineBasicBlock *Block : WTBlocks)
@@ -2501,6 +2517,7 @@ void ControlFlowRewriter::createSections() {
   createSetExecZeroSection();
 }
 
+// Move zero into each accumulator at its init block.
 void ControlFlowRewriter::createInitAccSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const AccReset &Rec : InitAccSectionList)
@@ -2508,6 +2525,7 @@ void ControlFlowRewriter::createInitAccSection() {
         .addImm(0);
 }
 
+// Move zero into each primary accumulator at the lane target.
 void ControlFlowRewriter::createResetPrimAccSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const AccReset &Rec : ResetPrimAccSectionList)
@@ -2515,6 +2533,7 @@ void ControlFlowRewriter::createResetPrimAccSection() {
         .addImm(0);
 }
 
+// Restore exec by or-ing it with the rejoin accumulator.
 void ControlFlowRewriter::createRestoreExecSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const AccReset &Rec : RestoreExecSectionList)
@@ -2523,6 +2542,7 @@ void ControlFlowRewriter::createRestoreExecSection() {
         .addReg(Rec.Acc);
 }
 
+// Contribute the implicit branch condition into the primary accumulator.
 void ControlFlowRewriter::createImplicitContribSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
 
@@ -2599,6 +2619,7 @@ void ControlFlowRewriter::createImplicitContribSection() {
   }
 }
 
+// Record that Dst copies Src in BB.
 void ControlFlowRewriter::noteCopy(MachineBasicBlock *BB, Register Dst,
                                     Register Src) {
   CopyMap[{BB, Src}].push_back(Dst);
@@ -2607,6 +2628,7 @@ void ControlFlowRewriter::noteCopy(MachineBasicBlock *BB, Register Dst,
     XorExecMap[{BB, Dst}] = XorIt->second;
 }
 
+// Record that Dst is exec xor Src in BB.
 void ControlFlowRewriter::noteXor(MachineBasicBlock *BB, Register Dst,
                                   Register Src) {
   XorExecMap[{BB, Src}] = Dst;
@@ -2618,6 +2640,7 @@ void ControlFlowRewriter::noteXor(MachineBasicBlock *BB, Register Dst,
     XorExecMap[{BB, Reg}] = Dst;
 }
 
+// Exec-xor of PrimaryExec in BB, if one was recorded.
 Register
 ControlFlowRewriter::lookupXorExec(MachineBasicBlock *BB,
                                    Register PrimaryExec) const {
@@ -2627,6 +2650,7 @@ ControlFlowRewriter::lookupXorExec(MachineBasicBlock *BB,
   return It->second;
 }
 
+// Contribute an explicit condition into the primary accumulator.
 void ControlFlowRewriter::createExplicitContribSection(
     AMDGPULaneMaskAnalysis &LMA) {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
@@ -2717,6 +2741,7 @@ void ControlFlowRewriter::createExplicitContribSection(
   }
 }
 
+// Or inverted primary exec into the rejoin accumulator.
 void ControlFlowRewriter::createRejoinContribSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const RejoinContrib &Rec : RejoinContribSectionList) {
@@ -2750,6 +2775,7 @@ void ControlFlowRewriter::createRejoinContribSection() {
   }
 }
 
+// Move zero into each rejoin accumulator at the secondary block.
 void ControlFlowRewriter::createResetRejoinAccSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const AccReset &Rec : ResetRejoinAccSectionList)
@@ -2757,6 +2783,7 @@ void ControlFlowRewriter::createResetRejoinAccSection() {
         .addImm(0);
 }
 
+// Set exec from the primary accumulator and emit the wave branch.
 void ControlFlowRewriter::createSetExecSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const ExecTerm &Rec : SetExecSectionList) {
@@ -2772,6 +2799,7 @@ void ControlFlowRewriter::createSetExecSection() {
   }
 }
 
+// Set exec to zero and emit the wave branch.
 void ControlFlowRewriter::createSetExecZeroSection() {
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
   for (const ExecTerm &Rec : SetExecZeroSectionList) {
@@ -3108,6 +3136,7 @@ class ForwardPropSimplifier {
   BlockValueMap
       OUT; // resolved Accumulator register values at end of each block.
 
+  // Rewrite MI as a move of ImmVal.
   void replaceWithMov(MachineInstr &MI, int64_t ImmVal) {
     MI.setDesc(TII.get(LMC.MovOpc));
     while (MI.getNumOperands() > 1)
@@ -3116,6 +3145,7 @@ class ForwardPropSimplifier {
     ++NumCleanupInstrsOptimized;
   }
 
+  // Rewrite MI as a copy of SrcReg.
   void replaceWithCopy(MachineInstr &MI, Register SrcReg) {
     MI.setDesc(TII.get(AMDGPU::COPY));
     while (MI.getNumOperands() > 1)
@@ -3148,6 +3178,7 @@ class ForwardPropSimplifier {
     }
   }
 
+  // Tracked value of Reg in Map, or null.
   const RegIntVariant *lookupValue(const RegValueMap &Map, Register Reg) {
     auto It = Map.find(Reg);
     return (It != Map.end()) ? &It->second : nullptr;
@@ -3288,6 +3319,7 @@ public:
                         const AccRegSet &AccRegs, AccInstsMap &AccInstMap)
       : MF(MF), TII(TII), LMC(LMC), AccRegs(AccRegs), AccInstMap(AccInstMap) {}
 
+  // Forward-propagate accumulator values to a fixed point.
   void run() {
     ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
     SmallVector<MachineBasicBlock *, 32> RPOBlocks(
