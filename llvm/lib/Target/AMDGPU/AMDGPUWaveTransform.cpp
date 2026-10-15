@@ -1400,6 +1400,12 @@ private:
     /// INLINEASM_BR instruction, if the block contains one.
     MachineInstr *InlineAsmBrMI = nullptr;
 
+    /// Original indirect-target MBB from callbr+kill lowering (when
+    /// mayHaveInlineAsmBr() but no INLINEASM_BR). Recorded in
+    /// prepareWaveCfg() before MBB rewiring replaces the thread-level
+    /// successors with wave-level successors.
+    MachineBasicBlock *OrigCallbrIndirectTarget = nullptr;
+
     explicit CFGNodeInfo(WaveNode *Node) : Node(Node) {}
   };
 
@@ -1504,6 +1510,28 @@ void ControlFlowRewriter::prepareWaveCfg() {
                  "Multiple INLINEASM_BR indirect targets not yet supported");
           Info.ImplicitBranchOpc = TargetOpcode::INLINEASM_BR;
           Info.OrigSuccCond = ReconvergeCfg.nodeForBlock(MO.getMBB());
+        }
+      } else {
+        // No INLINEASM_BR but has an indirect-target successor.
+        // Only record for kill split blocks from callbr+kill lowering —
+        // blocks whose terminators are exclusively kill terminators
+        // and/or S_BRANCH. Blocks with SI_BRCOND or other conditional
+        // branches are regular divergent blocks, not kill split blocks.
+        bool IsKillSplitBlock = !Node->Block->terminators().empty();
+        for (MachineInstr &Term : Node->Block->terminators()) {
+          unsigned Opc = Term.getOpcode();
+          if (!TII.isKillTerminator(Opc) && Opc != AMDGPU::S_BRANCH) {
+            IsKillSplitBlock = false;
+            break;
+          }
+        }
+        if (IsKillSplitBlock) {
+          for (MachineBasicBlock *Succ : Node->Block->successors()) {
+            if (Succ->isInlineAsmBrIndirectTarget()) {
+              Info.OrigCallbrIndirectTarget = Succ;
+              break;
+            }
+          }
         }
       }
     }
@@ -1678,41 +1706,31 @@ void ControlFlowRewriter::rewrite() {
     return RegZero;
   };
 
-  // Track blocks that lost their INLINEASM_BR indirect-target status due
-  // to retargeting and the set of blocks still referenced by some
-  // surviving INLINEASM_BR. After Step 1, any stale target not in the
-  // live set has its indirect-target flag cleared.
   SmallPtrSet<MachineBasicBlock *, 4> StaleCallbrTargets;
   SmallPtrSet<MachineBasicBlock *, 4> LiveCallbrTargets;
 
-  // Step 1: Remove old terminators and insert new ones for uniform branches.
+  // INLINEASM_BR is not a terminator and was preserved during terminator
+  // removal. After reconvergence the original indirect target may no
+  // longer be a direct MBB successor (a flow node could've been inserted).
+  // Retarget the MBB operand to the appropriate wave-successor and
+  // transfer the indirect-target attributes onto the new target.
+  // Also, propagate indirect-target attributes from callbr/kill lowering.
+  // After reconvergence the original indirect target may no longer be a
+  // direct MBB successor (a flow node could've been inserted). For blocks
+  // with INLINEASM_BR, retarget the MBB operand to the appropriate
+  // wave-successor. For kill split blocks from callbr+kill lowering (no
+  // INLINEASM_BR), transfer the indirect-target flag to the wave-level
+  // replacement so that the callbr/kill fix in Step 1 can detect it.
+  //
+  // This must run before Step 1.
   for (WaveNode *Node : NodeOrder) {
     CFGNodeInfo &Info = NodeInfo.find(Node)->second;
-    MachineBasicBlock::iterator MBBINodeEnd = Node->Block->end();
-
-    if (!Info.OrigExit) {
-      // Remove original terminators, preserving artificial terminators
-      // (EXEC management ops), hardware-managed branches (e.g.
-      // S_SUBVECTOR_LOOP) that pass through to assembly unchanged, and
-      // kill terminators that will be lowered later by si-wqm.
-      while (!Node->Block->empty() && Node->Block->back().isTerminator() &&
-             !isArtificialTerminator(Node->Block->back()) &&
-             !isHardwareManagedBranch(Node->Block->back()) &&
-             !TII.isKillTerminator(Node->Block->back().getOpcode()))
-        Node->Block->back().eraseFromParent();
-    }
-
-    if (Node->Successors.size() == 0)
+    if (!Info.InlineAsmBrMI && !Info.OrigCallbrIndirectTarget)
       continue;
 
-    assert(!Info.OrigExit);
-
-    // INLINEASM_BR is not a terminator and was preserved during terminator
-    // removal. After reconvergence the original indirect target may no
-    // longer be a direct MBB successor (a flow node could've been inserted).
-    // Retarget the MBB operand to the appropriate wave-successor and
-    // transfer the indirect-target attributes onto the new target.
     if (Info.InlineAsmBrMI) {
+      // INLINEASM_BR retargeting: update the MBB operand to point to the
+      // wave-level successor and transfer the indirect-target attributes.
       for (MachineOperand &MO : Info.InlineAsmBrMI->operands()) {
         if (!MO.isMBB())
           continue;
@@ -1737,7 +1755,63 @@ void ControlFlowRewriter::rewrite() {
         NewTarget->setLabelMustBeEmitted();
         MO.setMBB(NewTarget);
       }
+    } else {
+      // Kill split block from callbr+kill lowering (no INLINEASM_BR).
+      // The original indirect target was recorded in prepareWaveCfg()
+      // before MBB rewiring. Check if it is still a direct successor;
+      // if not, find the wave-level replacement via LaneSuccessors and
+      // transfer the flag.
+      MachineBasicBlock *IndirectTarget = Info.OrigCallbrIndirectTarget;
+      if (Node->Block->isSuccessor(IndirectTarget)) {
+        LiveCallbrTargets.insert(IndirectTarget);
+      } else {
+        MachineBasicBlock *NewTarget;
+        if (Node->Successors.size() == 1) {
+          NewTarget = Node->Successors[0]->Block;
+        } else {
+          WaveNode *IndirectNode = ReconvergeCfg.nodeForBlock(IndirectTarget);
+          auto LaneSucc =
+              llvm::find_if(Node->LaneSuccessors, [=](const auto &succ) {
+                return succ.Lane == IndirectNode;
+              });
+          assert(LaneSucc != Node->LaneSuccessors.end());
+          NewTarget = LaneSucc->Wave->Block;
+        }
+        StaleCallbrTargets.insert(IndirectTarget);
+        LiveCallbrTargets.insert(NewTarget);
+        NewTarget->setIsInlineAsmBrIndirectTarget();
+        NewTarget->setLabelMustBeEmitted();
+      }
     }
+  }
+
+  // Clear stale indirect-target flags on blocks that were retargeted away,
+  // unless another surviving reference still needs them.
+  for (MachineBasicBlock *Stale : StaleCallbrTargets)
+    if (!LiveCallbrTargets.contains(Stale))
+      Stale->setIsInlineAsmBrIndirectTarget(false);
+
+  // Step 1: Remove old terminators and insert new ones for uniform branches.
+  for (WaveNode *Node : NodeOrder) {
+    CFGNodeInfo &Info = NodeInfo.find(Node)->second;
+    MachineBasicBlock::iterator MBBINodeEnd = Node->Block->end();
+
+    if (!Info.OrigExit) {
+      // Remove original terminators, preserving artificial terminators
+      // (EXEC management ops), hardware-managed branches (e.g.
+      // S_SUBVECTOR_LOOP) that pass through to assembly unchanged, and
+      // kill terminators that will be lowered later by si-wqm.
+      while (!Node->Block->empty() && Node->Block->back().isTerminator() &&
+             !isArtificialTerminator(Node->Block->back()) &&
+             !isHardwareManagedBranch(Node->Block->back()) &&
+             !TII.isKillTerminator(Node->Block->back().getOpcode()))
+        Node->Block->back().eraseFromParent();
+    }
+
+    if (Node->Successors.size() == 0)
+      continue;
+
+    assert(!Info.OrigExit);
 
     if (Node->Successors.size() == 1) {
       if (Node->Block->empty() || !isArtificialTerminator(Node->Block->back()))
