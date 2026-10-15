@@ -176,14 +176,13 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-NEXT:    v_addc_co_u32_e32 v28, vcc, -1, v28, vcc
 ; GFX9-NEXT:    v_or_b32_e32 v20, v25, v27
 ; GFX9-NEXT:    v_or_b32_e32 v21, v26, v28
-; GFX9-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[20:21]
 ; GFX9-NEXT:    v_lshlrev_b64 v[0:1], 1, v[0:1]
-; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX9-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[20:21]
 ; GFX9-NEXT:    v_or3_b32 v0, v0, v12, v14
 ; GFX9-NEXT:    v_and_b32_e32 v12, 1, v33
-; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[4:5]
+; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-NEXT:    v_or3_b32 v1, v1, 0, v15
-; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; GFX9-NEXT:    v_mov_b32_e32 v21, v13
 ; GFX9-NEXT:    v_mov_b32_e32 v20, v12
 ; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
@@ -537,19 +536,19 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v5, s6
 ; GFX9-O0-NEXT:    v_cndmask_b32_e64 v4, v4, v5, s[4:5]
 ; GFX9-O0-NEXT:    v_and_b32_e64 v4, 1, v4
-; GFX9-O0-NEXT:    v_cmp_eq_u32_e64 s[4:5], v4, 1
-; GFX9-O0-NEXT:    v_writelane_b32 v31, s4, 2
-; GFX9-O0-NEXT:    v_writelane_b32 v31, s5, 3
-; GFX9-O0-NEXT:    s_or_saveexec_b64 s[20:21], -1
-; GFX9-O0-NEXT:    buffer_store_dword v31, off, s[0:3], s32 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_mov_b64 exec, s[20:21]
+; GFX9-O0-NEXT:    v_cmp_eq_u32_e64 s[6:7], v4, 1
 ; GFX9-O0-NEXT:    buffer_store_dword v2, off, s[0:3], s32 offset:12 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v3, off, s[0:3], s32 offset:16 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:4 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:8 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
+; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
+; GFX9-O0-NEXT:    v_writelane_b32 v31, s6, 2
+; GFX9-O0-NEXT:    v_writelane_b32 v31, s7, 3
+; GFX9-O0-NEXT:    s_or_saveexec_b64 s[20:21], -1
+; GFX9-O0-NEXT:    buffer_store_dword v31, off, s[0:3], s32 ; 4-byte Folded Spill
+; GFX9-O0-NEXT:    s_mov_b64 exec, s[20:21]
 ; GFX9-O0-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-O0-NEXT:    ; divergent control-flow edge
 ; GFX9-O0-NEXT:    s_cbranch_execz .LBB0_5
@@ -760,7 +759,7 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    v_or_b32_e64 v16, v16, v17
 ; GFX9-O0-NEXT:    ; kill: def $vgpr16 killed $vgpr16 def $vgpr16_vgpr17 killed $exec
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v17, v18
-; GFX9-O0-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[16:17], v[12:13]
+; GFX9-O0-NEXT:    v_cmp_eq_u64_e64 s[8:9], v[16:17], v[12:13]
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v17, v15
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v16, v14
 ; GFX9-O0-NEXT:    buffer_store_dword v16, off, s[0:3], s32 offset:140 ; 4-byte Folded Spill
@@ -805,8 +804,7 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:164 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:168 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX9-O0-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[8:9], exec
 ; GFX9-O0-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
 ; GFX9-O0-NEXT:    v_writelane_b32 v31, s6, 4
 ; GFX9-O0-NEXT:    v_writelane_b32 v31, s7, 5
@@ -1527,8 +1525,7 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[19:20]
 ; GFX9-NEXT:    v_and_b32_e32 v13, 1, v29
 ; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[4:5]
-; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; GFX9-NEXT:    v_mov_b32_e32 v20, v14
 ; GFX9-NEXT:    v_mov_b32_e32 v19, v13
 ; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
@@ -1795,19 +1792,19 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v5, s6
 ; GFX9-O0-NEXT:    v_cndmask_b32_e64 v4, v4, v5, s[4:5]
 ; GFX9-O0-NEXT:    v_and_b32_e64 v4, 1, v4
-; GFX9-O0-NEXT:    v_cmp_eq_u32_e64 s[4:5], v4, 1
-; GFX9-O0-NEXT:    v_writelane_b32 v31, s4, 2
-; GFX9-O0-NEXT:    v_writelane_b32 v31, s5, 3
-; GFX9-O0-NEXT:    s_or_saveexec_b64 s[20:21], -1
-; GFX9-O0-NEXT:    buffer_store_dword v31, off, s[0:3], s32 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_mov_b64 exec, s[20:21]
+; GFX9-O0-NEXT:    v_cmp_eq_u32_e64 s[6:7], v4, 1
 ; GFX9-O0-NEXT:    buffer_store_dword v2, off, s[0:3], s32 offset:12 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v3, off, s[0:3], s32 offset:16 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:4 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:8 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
+; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
+; GFX9-O0-NEXT:    v_writelane_b32 v31, s6, 2
+; GFX9-O0-NEXT:    v_writelane_b32 v31, s7, 3
+; GFX9-O0-NEXT:    s_or_saveexec_b64 s[20:21], -1
+; GFX9-O0-NEXT:    buffer_store_dword v31, off, s[0:3], s32 ; 4-byte Folded Spill
+; GFX9-O0-NEXT:    s_mov_b64 exec, s[20:21]
 ; GFX9-O0-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-O0-NEXT:    ; divergent control-flow edge
 ; GFX9-O0-NEXT:    s_cbranch_execz .LBB1_5
@@ -2018,7 +2015,7 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    v_or_b32_e64 v16, v16, v17
 ; GFX9-O0-NEXT:    ; kill: def $vgpr16 killed $vgpr16 def $vgpr16_vgpr17 killed $exec
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v17, v18
-; GFX9-O0-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[16:17], v[12:13]
+; GFX9-O0-NEXT:    v_cmp_eq_u64_e64 s[8:9], v[16:17], v[12:13]
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v17, v15
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v16, v14
 ; GFX9-O0-NEXT:    buffer_store_dword v16, off, s[0:3], s32 offset:112 ; 4-byte Folded Spill
@@ -2063,8 +2060,7 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:136 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:140 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX9-O0-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[8:9], exec
 ; GFX9-O0-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
 ; GFX9-O0-NEXT:    v_writelane_b32 v31, s6, 4
 ; GFX9-O0-NEXT:    v_writelane_b32 v31, s7, 5

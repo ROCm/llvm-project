@@ -21,17 +21,16 @@ define void @nested_inf_loop(i1 %0, i1 %1) {
 ; ISA-NEXT:    v_and_b32_e32 v1, 1, v1
 ; ISA-NEXT:    v_and_b32_e32 v2, 1, v0
 ; ISA-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v1
-; ISA-NEXT:    s_mov_b64 s[4:5], -1
+; ISA-NEXT:    s_mov_b64 s[10:11], -1
 ; ISA-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; ISA-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v2
-; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[4:5]
-; ISA-NEXT:    s_mov_b64 s[4:5], 0
-; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[4:5]
-; ISA-NEXT:    s_mov_b64 s[4:5], 0
-; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
+; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[10:11]
+; ISA-NEXT:    s_mov_b64 s[10:11], 0
 ; ISA-NEXT:    s_mov_b64 s[6:7], 0
 ; ISA-NEXT:    s_mov_b64 s[8:9], 0
 ; ISA-NEXT:    s_mov_b64 s[4:5], 0
+; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
+; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[10:11]
 ; ISA-NEXT:  .LBB0_1: ; %BB1
 ; ISA-NEXT:    ; =>This Loop Header: Depth=1
 ; ISA-NEXT:    ; Child Loop BB0_2 Depth 2
@@ -46,7 +45,6 @@ define void @nested_inf_loop(i1 %0, i1 %1) {
 ; ISA-NEXT:  .LBB0_2: ; %BB4
 ; ISA-NEXT:    ; Parent Loop BB0_1 Depth=1
 ; ISA-NEXT:    ; => This Inner Loop Header: Depth=2
-; ISA-NEXT:    s_mov_b64 s[14:15], 0
 ; ISA-NEXT:    ; implicit-def: $vgpr4
 ; ISA-NEXT:  ; %bb.3: ; %TransitionBlock
 ; ISA-NEXT:    ; in Loop: Header=BB0_2 Depth=2
@@ -55,7 +53,6 @@ define void @nested_inf_loop(i1 %0, i1 %1) {
 ; ISA-NEXT:    s_xor_b64 s[16:17], exec, s[14:15]
 ; ISA-NEXT:    v_mov_b32_e32 v4, v3
 ; ISA-NEXT:    s_or_b64 s[8:9], s[8:9], s[16:17]
-; ISA-NEXT:    s_mov_b64 s[16:17], 0
 ; ISA-NEXT:    s_mov_b64 exec, s[14:15]
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execnz .LBB0_2
@@ -121,13 +118,13 @@ define void @nested_inf_loop_callbr(i32 %0, i32 %1) {
 ; ISA-LABEL: nested_inf_loop_callbr:
 ; ISA:       ; %bb.0: ; %BB
 ; ISA-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; ISA-NEXT:    s_mov_b64 s[4:5], 0
 ; ISA-NEXT:    ;;#ASMSTART
 ; ISA-NEXT:    ;;#ASMEND
-; ISA-NEXT:    s_mov_b64 s[4:5], -1
-; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[4:5]
-; ISA-NEXT:    s_mov_b64 s[4:5], 0
-; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[4:5]
+; ISA-NEXT:    s_mov_b64 s[6:7], -1
+; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[6:7]
 ; ISA-NEXT:    s_mov_b64 s[6:7], 0
+; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[6:7]
 ; ISA-NEXT:  .LBB1_1: ; %BB1
 ; ISA-NEXT:    ; =>This Loop Header: Depth=1
 ; ISA-NEXT:    ; Child Loop BB1_4 Depth 2
@@ -135,7 +132,6 @@ define void @nested_inf_loop_callbr(i32 %0, i32 %1) {
 ; ISA-NEXT:    ;;#ASMEND
 ; ISA-NEXT:  .LBB1_2: ; %BB3
 ; ISA-NEXT:    ; in Loop: Header=BB1_1 Depth=1
-; ISA-NEXT:    s_mov_b64 s[6:7], 0
 ; ISA-NEXT:    ;;#ASMSTART
 ; ISA-NEXT:    ;;#ASMEND
 ; ISA-NEXT:    s_branch .LBB1_1
@@ -161,8 +157,7 @@ define void @nested_inf_loop_callbr(i32 %0, i32 %1) {
 ; ISA-NEXT:  .LBB1_7: ; %loop.exit.guard
 ; ISA-NEXT:    ; in Loop: Header=BB1_1 Depth=1
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; ISA-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; ISA-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
+; ISA-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; ISA-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; ISA-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; ISA-NEXT:    s_mov_b64 exec, s[6:7]

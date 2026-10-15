@@ -10,11 +10,10 @@ define void @machinesink_loop_variable_out_of_divergent_loop(i32 %arg, i1 %cmp49
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v3, 1, v3
 ; CHECK-NEXT:    v_and_b32_e32 v4, 1, v1
-; CHECK-NEXT:    s_mov_b32 s5, 0
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
 ; CHECK-NEXT:    s_mov_b32 s8, 0
+; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
 ; CHECK-NEXT:    s_mov_b32 s5, 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc_lo
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v4
@@ -60,15 +59,14 @@ define void @machinesink_loop_variable_out_of_divergent_loop(i32 %arg, i1 %cmp49
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s8
 ; CHECK-NEXT:    v_add_nc_u32_e32 v6, 4, v4
 ; CHECK-NEXT:    s_add_i32 s10, s10, 4
-; CHECK-NEXT:    s_mov_b32 s12, 0
 ; CHECK-NEXT:    ;;#ASMSTART
 ; CHECK-NEXT:    ; backedge
 ; CHECK-NEXT:    ;;#ASMEND
-; CHECK-NEXT:    v_cmp_lt_u32_e64 s11, v6, v0
-; CHECK-NEXT:    s_xor_b32 s8, exec_lo, s11
+; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc_lo, v6, v0
+; CHECK-NEXT:    s_xor_b32 s8, exec_lo, vcc_lo
 ; CHECK-NEXT:    s_or_b32 s9, s9, s8
 ; CHECK-NEXT:    s_mov_b32 s8, 0
-; CHECK-NEXT:    s_mov_b32 exec_lo, s11
+; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_1
 ; CHECK-NEXT:  .LBB0_5: ; %for.body51

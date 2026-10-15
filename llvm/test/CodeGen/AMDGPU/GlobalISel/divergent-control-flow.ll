@@ -224,11 +224,11 @@ bb12:
 define amdgpu_kernel void @break_loop(i32 %arg) {
 ; CHECK-LABEL: break_loop:
 ; CHECK:       ; %bb.0: ; %bb
-; CHECK-NEXT:    s_load_dword s0, s[8:9], 0x0
-; CHECK-NEXT:    ; implicit-def: $sgpr2
-; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_subrev_u32_e32 v0, s0, v0
+; CHECK-NEXT:    s_load_dword s2, s[8:9], 0x0
 ; CHECK-NEXT:    s_mov_b64 s[0:1], 0
+; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
+; CHECK-NEXT:    v_subrev_u32_e32 v0, s2, v0
+; CHECK-NEXT:    ; implicit-def: $sgpr2
 ; CHECK-NEXT:  .LBB5_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    s_add_i32 s2, s2, 1
@@ -238,10 +238,10 @@ define amdgpu_kernel void @break_loop(i32 %arg) {
 ; CHECK-NEXT:    ; in Loop: Header=BB5_1 Depth=1
 ; CHECK-NEXT:    global_load_dword v1, v[0:1], off glc
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_cmp_lt_i32_e64 s[4:5], v0, v1
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
-; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    v_cmp_lt_i32_e32 vcc, v0, v1
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB5_1
 ; CHECK-NEXT:  .LBB5_3: ; %bb9

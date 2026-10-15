@@ -608,8 +608,8 @@ define amdgpu_kernel void @v32i8_loop_carried(ptr addrspace(1) %src1, ptr addrsp
 ; GFX906-NEXT:    s_waitcnt vmcnt(0)
 ; GFX906-NEXT:    v_and_b32_sdwa v0, v1, v2 dst_sel:DWORD dst_unused:UNUSED_PAD src0_sel:WORD_1 src1_sel:DWORD
 ; GFX906-NEXT:    v_lshlrev_b32_e32 v0, 8, v0
-; GFX906-NEXT:    v_mov_b32_e32 v4, v1
 ; GFX906-NEXT:    v_and_or_b32 v3, v1, v2, v0
+; GFX906-NEXT:    v_mov_b32_e32 v4, v1
 ; GFX906-NEXT:  .LBB10_1: ; %bb.1
 ; GFX906-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX906-NEXT:    v_mov_b32_e32 v0, v4

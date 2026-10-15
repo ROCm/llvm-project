@@ -370,9 +370,7 @@ define i16 @global_one_as_atomic_min_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
+; FAKE16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
 ; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
@@ -413,9 +411,7 @@ define i16 @global_one_as_atomic_min_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
+; REAL16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; REAL16-NEXT:    s_wait_xcnt 0x0
 ; REAL16-NEXT:    s_mov_b32 exec_lo, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
@@ -460,9 +456,7 @@ define i16 @global_one_as_atomic_umin_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
+; FAKE16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
 ; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
@@ -503,9 +497,7 @@ define i16 @global_one_as_atomic_umin_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
+; REAL16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; REAL16-NEXT:    s_wait_xcnt 0x0
 ; REAL16-NEXT:    s_mov_b32 exec_lo, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
@@ -550,9 +542,7 @@ define i16 @global_one_as_atomic_max_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
+; FAKE16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
 ; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
@@ -593,9 +583,7 @@ define i16 @global_one_as_atomic_max_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
+; REAL16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; REAL16-NEXT:    s_wait_xcnt 0x0
 ; REAL16-NEXT:    s_mov_b32 exec_lo, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
@@ -640,9 +628,7 @@ define i16 @global_one_as_atomic_umax_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
+; FAKE16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
 ; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
@@ -683,9 +669,7 @@ define i16 @global_one_as_atomic_umax_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
+; REAL16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; REAL16-NEXT:    s_wait_xcnt 0x0
 ; REAL16-NEXT:    s_mov_b32 exec_lo, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
@@ -1546,9 +1530,7 @@ define i16 @flat_one_as_atomic_min_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
+; FAKE16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
 ; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
@@ -1589,9 +1571,7 @@ define i16 @flat_one_as_atomic_min_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
+; REAL16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; REAL16-NEXT:    s_wait_xcnt 0x0
 ; REAL16-NEXT:    s_mov_b32 exec_lo, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
@@ -1636,9 +1616,7 @@ define i16 @flat_one_as_atomic_umin_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
+; FAKE16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
 ; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
@@ -1679,9 +1657,7 @@ define i16 @flat_one_as_atomic_umin_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
+; REAL16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; REAL16-NEXT:    s_wait_xcnt 0x0
 ; REAL16-NEXT:    s_mov_b32 exec_lo, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
@@ -1726,9 +1702,7 @@ define i16 @flat_one_as_atomic_max_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
+; FAKE16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
 ; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
@@ -1769,9 +1743,7 @@ define i16 @flat_one_as_atomic_max_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
+; REAL16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; REAL16-NEXT:    s_wait_xcnt 0x0
 ; REAL16-NEXT:    s_mov_b32 exec_lo, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
@@ -1816,9 +1788,7 @@ define i16 @flat_one_as_atomic_umax_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; FAKE16-NEXT:    s_or_b32 s0, s0, s2
+; FAKE16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; FAKE16-NEXT:    s_wait_xcnt 0x0
 ; FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; FAKE16-NEXT:    ; divergent control-flow edge
@@ -1859,9 +1829,7 @@ define i16 @flat_one_as_atomic_umax_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v5, v7
 ; REAL16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; REAL16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; REAL16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; REAL16-NEXT:    s_or_b32 s0, s0, s2
+; REAL16-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; REAL16-NEXT:    s_wait_xcnt 0x0
 ; REAL16-NEXT:    s_mov_b32 exec_lo, s1
 ; REAL16-NEXT:    ; divergent control-flow edge
