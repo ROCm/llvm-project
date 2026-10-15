@@ -900,6 +900,19 @@ getEffectiveNumBlocks(GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
     return LoopTripCount > 0 ? (((LoopTripCount - 1) / EffectiveNumThreads) + 1)
                              : 1;
 
+  // Downstream: a big-jump-loop kernel has no per-block overhead, so it also
+  // gets one thread per iteration. It loops over the grid, so the number of
+  // blocks may be capped.
+  if (KernelEnv.isBigJumpLoopMode()) {
+    uint64_t NumBlocks =
+        LoopTripCount > 0 ? llvm::divideCeil(LoopTripCount, EffectiveNumThreads)
+                          : 1;
+    NumBlocks = std::min(
+        NumBlocks, uint64_t(GenericDevice.getOMPXBigJumpLoopMaxTotalTeams()));
+    return std::min(NumBlocks, uint64_t(getDeviceBlockLimit(
+                                   GenericDevice, EffectiveNumThreads)));
+  }
+
   if (uint64_t NumBlocks = getTeamsReductionNumBlocks(
           GenericDevice, EffectiveNumThreads, LoopTripCount, KernelEnv))
     return std::min(NumBlocks, uint64_t(getDeviceBlockLimit(
@@ -1045,7 +1058,6 @@ static void checkLaunchInvariants(const KernelLaunchArgsTy &LaunchArgs,
 /// Calculate or adjust, in place, the effective number of threads and blocks
 /// for the first dimension, unless the caller requested strict counts.
 static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
-                                    const GenericKernelTy &Kernel,
                                     KernelLaunchArgsTy &LaunchArgs,
                                     const KernelArgsTy &KernelArgs,
                                     const KernelLaunchInfoTy &KernelEnv) {
@@ -1063,26 +1075,16 @@ static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
   const bool ThreadLimitFromUser = LaunchArgs.UserThreadLimit[0] > 0;
 
   uint32_t EffectiveNumThreads = LaunchArgs.UserThreadLimit[0];
-  uint32_t EffectiveNumBlocks = LaunchArgs.UserNumBlocks[0];
+  if (!StrictThreads)
+    EffectiveNumThreads =
+        getEffectiveNumThreads(GenericDevice, EffectiveNumThreads, KernelEnv);
 
-  // Downstream: the plugin may compute the launch geometry itself (the AMDGPU
-  // plugin does for big-jump-loop kernels, which only exist downstream).
-  // Otherwise, fall back to the generic computation.
-  if (!Kernel.computeLaunchGeometry(GenericDevice, LaunchArgs, StrictThreads,
-                                    StrictBlocks, EffectiveNumThreads,
-                                    EffectiveNumBlocks)) {
-    if (!StrictThreads)
-      EffectiveNumThreads =
-          getEffectiveNumThreads(GenericDevice, EffectiveNumThreads, KernelEnv);
-
-    if (!StrictBlocks)
-      EffectiveNumBlocks = getEffectiveNumBlocks(
-          GenericDevice, EffectiveNumBlocks, LaunchArgs.Tripcount,
-          EffectiveNumThreads, StrictThreads, ThreadLimitFromUser, KernelEnv);
-  }
+  if (!StrictBlocks)
+    LaunchArgs.UserNumBlocks[0] = getEffectiveNumBlocks(
+        GenericDevice, LaunchArgs.UserNumBlocks[0], LaunchArgs.Tripcount,
+        EffectiveNumThreads, StrictThreads, ThreadLimitFromUser, KernelEnv);
 
   LaunchArgs.UserThreadLimit[0] = EffectiveNumThreads;
-  LaunchArgs.UserNumBlocks[0] = EffectiveNumBlocks;
 }
 
 /// Flatten the kernel arguments into \p LaunchArgs.Args. Returns the address
@@ -1194,7 +1196,7 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   }
 
   checkLaunchInvariants(LaunchArgs, KernelArgs, KernelLaunchInfo);
-  adjustEffectiveGeometry(GenericDevice, *Kernel, LaunchArgs, KernelArgs,
+  adjustEffectiveGeometry(GenericDevice, LaunchArgs, KernelArgs,
                           KernelLaunchInfo);
 
   void **DynPtrSlot = resolveArgsAndDynPtrSlot(

@@ -560,21 +560,6 @@ struct GenericKernelTy {
     return AchievedOccupancy;
   }
 
-  /// Downstream: let the plugin compute the effective launch geometry of a
-  /// non-bare OpenMP kernel launch, i.e., the number of threads and blocks of
-  /// the first dimension. On entry, \p NumThreads and \p NumBlocks hold the
-  /// user-requested values; the ones flagged by \p StrictThreads and
-  /// \p StrictBlocks must be kept. Returns false if the plugin does not
-  /// provide its own computation, in which case libomptarget uses the
-  /// generic one.
-  virtual bool computeLaunchGeometry(GenericDeviceTy &GenericDevice,
-                                     const KernelLaunchArgsTy &LaunchArgs,
-                                     bool StrictThreads, bool StrictBlocks,
-                                     uint32_t &NumThreads,
-                                     uint32_t &NumBlocks) const {
-    return false;
-  }
-
 protected:
   /// Prints generic kernel launch information.
   Error printLaunchInfo(GenericDeviceTy &GenericDevice,
@@ -1295,8 +1280,9 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   }
   virtual uint64_t getClockFrequency() const { return CLOCKS_PER_SEC; }
 
+  /// Get the maximum number of blocks for a big-jump-loop kernel.
   virtual uint32_t getOMPXBigJumpLoopMaxTotalTeams() const {
-    llvm_unreachable("Unimplemented");
+    return std::numeric_limits<uint32_t>::max();
   }
 
   /// Get a device-specific timestamp in nanoseconds, used by the profiler
