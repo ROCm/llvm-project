@@ -7,15 +7,15 @@
 //===----------------------------------------------------------------------===//
 //
 /// \file
-/// \brief Transform a function from thread-level to wave-level control flow
+/// \brief Transform a function from thread-level to wave-level control flow.
 ///
 /// This pass is responsible for:
 /// - Building the wave-level reconverging CFG and selecting corresponding
 ///   branch instructions.
-/// - Constructing execmasks
+/// - Constructing execmasks.
 ///
 /// TODO: In GlobalISel, this pass is additionally responsible for assigning
-///       uniform vs. divergent register banks(?)
+///       uniform vs. divergent register banks(?).
 ///
 ///
 /// \section Reconvergence transform
@@ -57,17 +57,17 @@
 ///
 //
 // TODO-NOW:
-//  - uniform in cycle / divergent outside
-//  - double-check order of successor nodes for divergent WaveNode
+//  - uniform in cycle / divergent outside.
+//  - double-check order of successor nodes for divergent WaveNode.
 //
 // TODO:
-//  - _actually_ implement HARPO
-//  - multiple function return blocks
+//  - _actually_ implement HARPO.
+//  - multiple function return blocks.
 //  - complex heart regions:
-//  -- multiple backward edges from within the pre-heart region
-//  -- multiple backward edges _into_ the pre-heart region
+//  -- multiple backward edges from within the pre-heart region.
+//  -- multiple backward edges _into_ the pre-heart region.
 //  -- second pass of core transform with post-heart regions rotated to the
-//     front
+//     front.
 //  -- extra flow nodes for back edges in the pre-heart region?
 //  -- problem of entry into the heart region: do the "second pass" of the
 //     core transform first?
@@ -184,7 +184,7 @@ struct WaveNode {
   bool IsDivergent = false;
   bool IsSecondary = false;
   unsigned OrderIndex = 0;
-  unsigned FlowNum = 0; // non-zero if flow node
+  unsigned FlowNum = 0; // non-zero if flow node.
 
   /// Used during reconverging algorithm: track known post-dominators on the
   /// fly.
@@ -204,7 +204,7 @@ struct WaveNode {
   Printable printableName() const {
     return Printable([this](raw_ostream &Out) {
       if (Block) {
-        // FIXME: remove the need to build a context everytime
+        // FIXME: remove the need to build a context everytime.
         Out << MachineSSAContext().print(Block);
       }
       if (Block && FlowNum)
@@ -271,10 +271,10 @@ public:
   using node_iterator_impl_base = iterator_adaptor_base<
       node_iterator_impl<WrappedIteratorT, WaveNodeT>, WrappedIteratorT,
       typename std::iterator_traits<WrappedIteratorT>::iterator_category,
-      WaveNodeT *, // value type
+      WaveNodeT *, // value type.
       typename std::iterator_traits<WrappedIteratorT>::difference_type,
-      WaveNodeT **, // pointer type
-      WaveNodeT *>; // reference type
+      WaveNodeT **, // pointer type.
+      WaveNodeT *>; // reference type.
 
   template <typename WrappedIteratorT, typename WaveNodeT>
   struct node_iterator_impl
@@ -454,7 +454,7 @@ public:
 
       if (!VisitedBlocks.insert(Block).second) {
         BlockStack.pop_back();
-        continue; // already visited this one
+        continue; // already visited this one.
       }
 
       // Pre-order visit of the block.
@@ -768,7 +768,7 @@ void ReconvergeCFGHelper::cleanupSimpleFlowNodes() {
       Succ->Predecessors.pop_back();
       assert(!is_contained(Succ->Predecessors, Node));
 
-      // if flow node was a secondary target, copy the flag
+      // if flow node was a secondary target, copy the flag.
       if (Node->IsSecondary)
         Succ->IsSecondary = true;
 
@@ -776,7 +776,7 @@ void ReconvergeCFGHelper::cleanupSimpleFlowNodes() {
         if (!is_contained(Succ->Predecessors, Pred))
           Succ->Predecessors.push_back(Pred);
 
-        // update LatestPostDom to avoid dangling pointers
+        // update LatestPostDom to avoid dangling pointers.
         if (Pred->LatestPostDom == Node)
           Pred->LatestPostDom = Succ;
 
@@ -1010,7 +1010,7 @@ void ReconvergeCFGHelper::prepareNodesExitCycle(CycleRef Cycle,
 /// Note: This method relies on WaveNode::LatestPostDom tracking to avoid
 /// redundant scanning.
 ///
-/// \return true if all found open edges go to \p bound
+/// \return true if all found open edges go to \p bound.
 bool ReconvergeCFGHelper::appendOpenSet(WaveNode *from, WaveNode *bound,
                                         SmallVectorImpl<WaveNode *> &OpenSet) {
   while (from != from->LatestPostDom)
@@ -1023,7 +1023,7 @@ bool ReconvergeCFGHelper::appendOpenSet(WaveNode *from, WaveNode *bound,
   do {
     WaveNode *Node = OpenSetScan.Worklist.pop_back_val();
     if (Node != Node->LatestPostDom) {
-      // Compress post-dom links on the fly
+      // Compress post-dom links on the fly.
       while (Node->LatestPostDom != Node->LatestPostDom->LatestPostDom)
         Node->LatestPostDom = Node->LatestPostDom->LatestPostDom;
       Node = Node->LatestPostDom;
@@ -1280,7 +1280,7 @@ void ReconvergeCFGHelper::verifyNodes() {
   WaveNodeSet LaneSuccs;
 
   // FIXME: these only contain assertions so are "unused variables" in release
-  // build
+  // build.
   for (WaveNode *Node : SeenNodes) {
     for (WaveNode *Pred : Node->Predecessors) {
       assert(SeenNodes.count(Pred));
@@ -1352,7 +1352,7 @@ private:
     /// Whether the condition register use was marked as undef.
     bool CondIsUndef = false;
 
-    /// Opcode of implicit branch instruction
+    /// Opcode of implicit branch instruction.
     unsigned ImplicitBranchOpc = 0;
 
     explicit LaneOriginInfo(WaveNode *Node, Register CondReg = {},
@@ -1391,7 +1391,7 @@ private:
     SmallVector<PointerIntPair<WaveNode *, 1, bool>, 4> OriginBranch;
 
     // Opcode for branches with implicit or opaque conditions:
-    // S_CBRANCH_EXECZ/NZ S_CBRANCH_VCCZ/NZ S_CBRANCH_SCC0/1
+    // S_CBRANCH_EXECZ/NZ S_CBRANCH_VCCZ/NZ S_CBRANCH_SCC0/1.
     //   -- all active threads branch uniformly.
     // INLINEASM_BR -- opaque callbr; exec assumed invariant.
     unsigned ImplicitBranchOpc = 0;
@@ -1593,7 +1593,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
           primaryLane = LaneSucc.Lane;
 #ifdef NDEBUG
           // early-out when assertions are disabled: we don't check for
-          // uniqueness in that case
+          // uniqueness in that case.
           break;
 #endif
         }
@@ -1891,12 +1891,12 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
   for (WaveNode *Node : NodeOrder) {
     if (!Node->IsSecondary)
       continue;
-    // Node is secondary block
+    // Node is secondary block.
     SmallVector<WaveNode *, 4> DivPreds;
     for (WaveNode *Pred : Node->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() <= 1)
         continue;
-      // Pred is skipped if Node is it's Primary Successor
+      // Pred is skipped if Node is it's Primary Successor.
       if (Pred->Successors[0] == Node)
         continue;
       DivPreds.push_back(Pred);
@@ -3089,20 +3089,20 @@ namespace {
 // Abstract value tracked per register: either a known-zero constant
 // (monostate) or an alias to another virtual register.
 using RegIntVariant = std::variant<std::monostate, Register>;
-// maps Register to variant
+// maps Register to variant.
 using RegValueMap = DenseMap<Register, RegIntVariant>;
-// maps MBB to variant state resolved at end off MBB
+// maps MBB to variant state resolved at end off MBB.
 using BlockValueMap = DenseMap<MachineBasicBlock *, RegValueMap>;
 
-// return known zero variant
+// return known zero variant.
 static inline RegIntVariant zeroVal() {
   return RegIntVariant{std::monostate{}};
 }
-// True iff V holds known zero variant
+// True iff V holds known zero variant.
 static inline bool isZero(const RegIntVariant &V) {
   return std::holds_alternative<std::monostate>(V);
 }
-// returns mapped register if V holds a register alias, else null
+// returns mapped register if V holds a register alias, else null.
 static inline const Register *asReg(const RegIntVariant &V) {
   return std::get_if<Register>(&V);
 }
@@ -3155,7 +3155,7 @@ class ForwardPropSimplifier {
   }
 
   // merge incoming OUT values from MBB's predecessors:
-  // IN[MBB] = Intersection of all OUT[MBB.preds]
+  // IN[MBB] = Intersection of all OUT[MBB.preds].
   void mergeIncoming(MachineBasicBlock &MBB, RegValueMap &Result) {
     if (MBB.pred_empty())
       return;
@@ -3199,10 +3199,10 @@ class ForwardPropSimplifier {
     }
   }
 
-  //  Cur[Dst] = Cur[Src], if Cur[Src] exists
-  //           = Src, if Cur[Src] does not exists and Src is virtual
+  //  Cur[Dst] = Cur[Src], if Cur[Src] exists.
+  //           = Src, if Cur[Src] does not exists and Src is virtual.
   // if none of the above hold true, it means Cur[Dst] cannot be resolved to a
-  // known 0 or a virtual sgpr register and must be removed from the map
+  // known 0 or a virtual sgpr register and must be removed from the map.
   void updateRegValueMapEntry(RegValueMap &Cur, Register Dst, Register Src) {
     if (const RegIntVariant *V = lookupValue(Cur, Src))
       Cur[Dst] = *V;
@@ -3225,7 +3225,7 @@ class ForwardPropSimplifier {
 
   // forward walk on MBB's accumulator instructions, simplifying the
   // instructions using the tracked values in Cur, simultaneously updating Cur
-  // with the new known 0 or virtual sgpr registers
+  // with the new known 0 or virtual sgpr registers.
   void forwardPropAccValues(MachineBasicBlock &MBB, RegValueMap &Cur) {
     auto MapIt = AccInstMap.find(&MBB);
     if (MapIt == AccInstMap.end())
@@ -3237,7 +3237,7 @@ class ForwardPropSimplifier {
       const unsigned Opc = MI->getOpcode();
       const Register Dst = MI->getOperand(0).getReg();
 
-      // ACC = MOV 0
+      // ACC = MOV 0.
       if (AccRegs.count(Dst) && Opc == LMC.MovOpc) {
         const MachineOperand &Imm = MI->getOperand(1);
         if (Imm.isImm() && Imm.getImm() == 0)
@@ -3247,7 +3247,7 @@ class ForwardPropSimplifier {
         continue;
       }
 
-      // ACC = COPY %vreg | ACC = COPY EXEC | ACC = COPY ACC
+      // ACC = COPY %vreg | ACC = COPY EXEC | ACC = COPY ACC.
       if (Opc == AMDGPU::COPY) {
         Register Src = MI->getOperand(1).getReg();
         if (const RegIntVariant *SrcVal = lookupValue(Cur, Src)) {
@@ -3266,13 +3266,13 @@ class ForwardPropSimplifier {
         continue;
       }
 
-      // ACC = %val AND EXEC
+      // ACC = %val AND EXEC.
       if (Opc == LMC.AndOpc) {
         Cur.erase(Dst);
         continue;
       }
 
-      // ACC = ACC OR %masked | ACC = ACC OR EXEC
+      // ACC = ACC OR %masked | ACC = ACC OR EXEC.
       if (Opc == LMC.OrOpc) {
         Register Src1 = MI->getOperand(1).getReg();
         Register Src2 = MI->getOperand(2).getReg();
@@ -3286,7 +3286,7 @@ class ForwardPropSimplifier {
         continue;
       }
 
-      // ACC = %a XOR %b
+      // ACC = %a XOR %b.
       if (Opc == LMC.XorOpc) {
         Register Src1 = MI->getOperand(1).getReg();
         Register Src2 = MI->getOperand(2).getReg();
@@ -3298,7 +3298,7 @@ class ForwardPropSimplifier {
   }
 
   // merge incoming OUT values from MBB's predecessors and forward propagate
-  // merged values to obtain updated OUT for MBB
+  // merged values to obtain updated OUT for MBB.
   bool processBlock(MachineBasicBlock &MBB) {
     RegValueMap RegValues;
     mergeIncoming(MBB, RegValues);
@@ -3306,7 +3306,7 @@ class ForwardPropSimplifier {
     auto It = OUT.find(&MBB);
 
     // OUT changes if forward propageted values are different from the current
-    // OUT for MBB or OUT value for MBB does not exist
+    // OUT for MBB or OUT value for MBB does not exist.
     bool OutChanged = (It == OUT.end() || It->second != RegValues);
     if (OutChanged)
       OUT[&MBB] = std::move(RegValues);
@@ -3323,8 +3323,8 @@ public:
   void run() {
     ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
     SmallVector<MachineBasicBlock *, 32> RPOBlocks(
-        RPOT.begin(), RPOT.end());                    // maps RPO index to MBB
-    DenseMap<MachineBasicBlock *, unsigned> RPOIndex; // maps MBB to RPO index
+        RPOT.begin(), RPOT.end());                    // maps RPO index to MBB.
+    DenseMap<MachineBasicBlock *, unsigned> RPOIndex; // maps MBB to RPO index.
     unsigned N = RPOBlocks.size();
     RPOIndex.reserve(N);
     for (unsigned I = 0, E = N; I != E; ++I)
@@ -3332,14 +3332,14 @@ public:
 
     // Ping-pong bitvector worklists indexed by RPO number.
 
-    BitVector Active(N, true); // bitvector of active MBBs
-    BitVector Next(N);         // bitvector of next MBBs
+    BitVector Active(N, true); // bitvector of active MBBs.
+    BitVector Next(N);         // bitvector of next MBBs.
 
-    // iterate until fix point : no OUT changes in any block
+    // iterate until fix point : no OUT changes in any block.
     while (Active.any()) {
       for (unsigned I : Active.set_bits()) {
         MachineBasicBlock *MBB = RPOBlocks[I];
-        if (!processBlock(*MBB)) // MBB is processed to fixed point, skip
+        if (!processBlock(*MBB)) // MBB is processed to fixed point, skip.
           continue;
         for (MachineBasicBlock *Succ : MBB->successors()) {
           auto It = RPOIndex.find(Succ);
@@ -3431,7 +3431,7 @@ bool AMDGPUWaveTransform::run(MachineFunction &MF) {
 
   TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
 
-  // Step 1: Compute reconverging Wave CFG
+  // Step 1: Compute reconverging Wave CFG.
   ReconvergeCFGHelper ReconvergeHelper(*CycleInfo, *DomTree);
   ReconvergeHelper.run();
 
@@ -3482,7 +3482,7 @@ bool AMDGPUWaveTransform::run(MachineFunction &MF) {
   DomTree->applyUpdates(CFGUpdates);
   CFGUpdates.clear();
 
-  // Recompute cycle info
+  // Recompute cycle info.
   CycleInfo->compute(MF);
 
   // Step 3: Fix up terminators and insert rejoin masks.
@@ -3522,17 +3522,17 @@ bool AMDGPUWaveTransform::run(MachineFunction &MF) {
 
   MFI->setWaveCFG(true);
 
-  return true; // assume that we changed something
+  return true; // assume that we changed something.
 }
 
 namespace {
 
 // Per-block use-def recorded for accumulator registers.
 struct AccBBUseDef {
-  AccRegSet UpwardExposedUse; // uses without a preceeding def in the same BB
+  AccRegSet UpwardExposedUse; // uses without a preceeding def in the same BB.
   AccRegSet Def;
   SmallDenseMap<Register, MachineInstr *, 4>
-      UnusedDef; // def not follwed by any use in same BB
+      UnusedDef; // def not follwed by any use in same BB.
 };
 
 // Per-block LiveIn and LiveOut sets for accumulator registers.
@@ -3546,7 +3546,7 @@ struct AccBBLiveness {
 // Computes the following for all BBs:
 // Upward exposed uses - Use of accumulator register without a preceeding def in
 // the same BB Def - Def of accumulator register UnusedDef - Def of the
-// accumulator register with no use after it in the same BB
+// accumulator register with no use after it in the same BB.
 static void
 computeAccUseDef(MachineFunction &MF, const AccRegSet &AccumulatorRegs,
                  DenseMap<MachineBasicBlock *, AccBBUseDef> &Result) {
@@ -3575,8 +3575,8 @@ computeAccUseDef(MachineFunction &MF, const AccRegSet &AccumulatorRegs,
 
 // Compute per-block LiveIn/LiveOut for accumulator registers using
 // iterative fixed-point dataflow analysis.
-//   LiveOut(B) = ∪ LiveIn(S) for all successors S of B
-//   LiveIn(B)  = Use(B) ∪ (LiveOut(B) - Def(B))
+//   LiveOut(B) = ∪ LiveIn(S) for all successors S of B.
+//   LiveIn(B)  = Use(B) ∪ (LiveOut(B) - Def(B)).
 static void
 computeAccLiveness(MachineFunction &MF,
                    const DenseMap<MachineBasicBlock *, AccBBUseDef> &UseDef,
@@ -3620,7 +3620,7 @@ computeAccLiveness(MachineFunction &MF,
 }
 
 // Build a per-MBB program-order list of all machine instrs that use or define
-// any register from the AccumulatorRegs set
+// any register from the AccumulatorRegs set.
 static void buildAccInstMap(MachineFunction &MF,
                             const AccRegSet &AccumulatorRegs,
                             AccInstsMap &AccInstMap) {
@@ -3641,7 +3641,7 @@ static void buildAccInstMap(MachineFunction &MF,
   }
 }
 
-// remove dead defs and simplify the accumulator instrs added during rewrite
+// remove dead defs and simplify the accumulator instrs added during rewrite.
 void AMDGPUWaveTransform::cleanup(MachineFunction &MF,
                                   const AccRegSet &AccumulatorRegs) {
   if (AccumulatorRegs.empty())
@@ -3653,12 +3653,12 @@ void AMDGPUWaveTransform::cleanup(MachineFunction &MF,
   const auto &LMC =
       AMDGPU::LaneMaskConstants::get(MF.getSubtarget<GCNSubtarget>());
 
-  // forward propagate accumulator values
+  // forward propagate accumulator values.
   ForwardPropSimplifier Simplifier(MF, *TII, LMC, AccumulatorRegs, AccInstMap);
   Simplifier.run();
 
   // Remove locally dead defs: def followed by re-def with no intervening use in
-  // the same BB
+  // the same BB.
   for (auto &[MBB, AccInsts] : AccInstMap) {
     DenseMap<Register, MachineInstr *> LastUnusedDef;
     SmallVector<MachineInstr *, 4> LocalDeadDefs;
@@ -3684,7 +3684,7 @@ void AMDGPUWaveTransform::cleanup(MachineFunction &MF,
       MI->eraseFromParent();
   }
 
-  // compute Use Def sets for each block
+  // compute Use Def sets for each block.
   DenseMap<MachineBasicBlock *, AccBBUseDef> AccUseDef;
   computeAccUseDef(MF, AccumulatorRegs, AccUseDef);
 
@@ -3693,7 +3693,7 @@ void AMDGPUWaveTransform::cleanup(MachineFunction &MF,
 
   // Remove globally dead defs: UnusedDef(B) - LiveOut(B).
   // These are defs defined in a BB and not used anywhere in the forward data
-  // flow
+  // flow.
   for (const auto &[MBB, UD] : AccUseDef) {
     const AccBBLiveness &L = AccLiveness.find(MBB)->second;
     for (const auto &[R, DefMI] : UD.UnusedDef) {
