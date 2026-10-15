@@ -69,3 +69,113 @@ regexes = [
   '''[A-Z][A-Z0-9_]*SHA512\s*[=:]''',
   '''[A-Z][A-Z0-9_]*MD5\s*[=:]''',
 ]
+
+# generic-api-key false positives from the llvm-project tree.
+# Each entry allowlists one literal and only the exact repo-relative path
+# that produced the finding. condition = "AND" is required: the default is
+# OR, which would skip the whole file or ignore the literal everywhere.
+
+[[allowlists]]
+description = "Clang flag documented next to 'API for HIP', not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^-fno-integrated-cc1$''']
+paths = ['''^clang/docs/UsersManual\.md$''']
+
+[[allowlists]]
+description = "Lexer pointer arithmetic (ThisTokBuf + ThisTokLen), not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^ThisTokBuf\+ThisTokLen$''']
+paths = ['''^clang/lib/Lex/LiteralSupport\.cpp$''']
+
+[[allowlists]]
+description = "Clang test target triple, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^x86_64-pc-win32$''']
+paths = ['''^clang/test/CodeGenCXX/microsoft-abi-virtual-inheritance\.cpp$''']
+
+[[allowlists]]
+description = "Itanium C++ mangled name in an interface-stub test, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^_ZNK1n1SIiEclEv$''']
+paths = ['''^clang/test/InterfaceStubs/class-template-specialization\.cpp$''']
+
+[[allowlists]]
+description = "libc++ constexpr macro, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^_LIBCPP_CONSTEXPR_SINCE_CXX26$''']
+paths = ['''^libcxx/include/__tree$''']
+
+[[allowlists]]
+description = "Placeholder PAuth platform/schema constant in an LLD test, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^0x123456789ABCDEF$''']
+paths = ['''^lld/test/ELF/aarch64-build-attributes-be\.s$''']
+
+[[allowlists]]
+description = "Documented SymStore example derived from test UUID 12345678-1234-5678-9ABC-DEF012345678, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^12345678123456789ABCDEF0123456781$''']
+paths = ['''^lldb/test/API/symstore/TestSymStore\.py$''']
+
+[[allowlists]]
+description = "crashReporterKey UUID in LLDB crash-log fixtures, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^DCEF35CB-68D5-F524-FF13-060901F52EA8$''']
+paths = [
+  '''^lldb/test/Shell/ScriptInterpreter/Python/Crashlog/Inputs/a\.out\.inline\.ips$''',
+  '''^lldb/test/Shell/ScriptInterpreter/Python/Crashlog/Inputs/a\.out\.ips$''',
+  '''^lldb/test/Shell/ScriptInterpreter/Python/Crashlog/Inputs/no_threadState\.ips$''',
+]
+
+[[allowlists]]
+description = "crashReporterKey UUID in LLDB crash-log fixtures, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^533C17C1-DBB1-4134-1FDE-68346F18AAA2$''']
+paths = [
+  '''^lldb/test/Shell/ScriptInterpreter/Python/Crashlog/Inputs/application_specific_info/asi\.txt$''',
+  '''^lldb/test/Shell/ScriptInterpreter/Python/Crashlog/Inputs/application_specific_info/leb\.txt$''',
+]
+
+[[allowlists]]
+description = "crashReporterKey UUID in an LLDB crash-log fixture, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^CDC11418-EDBF-2A49-0D83-8B441A5004B0$''']
+paths = ['''^lldb/test/Shell/ScriptInterpreter/Python/Crashlog/Inputs/interactive_crashlog/multithread-test\.ips$''']
+
+[[allowlists]]
+description = "AArch64 SM4 intrinsic class name in TableGen, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^Crypto_SM4_2Vector_Intrinsic$''']
+paths = ['''^llvm/include/llvm/IR/IntrinsicsAArch64\.td$''']
+
+[[allowlists]]
+description = "Alias-analysis struct field DecompGEP1.Offset, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^DecompGEP1\.Offset$''']
+paths = ['''^llvm/lib/Analysis/BasicAliasAnalysis\.cpp$''']
+
+[[allowlists]]
+description = "NVVM config key, not a credential."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^nvvm\.l2_prefetch_size$''']
+paths = ['''^llvm/lib/Target/NVPTX/NVPTXISelDAGToDAG\.cpp$''']
+
+[[allowlists]]
+description = "TensorFlow saved-model graph node names in an LLVM unit-test fixture, not credentials."
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^AssignVariableOp_(?:1|2|3|4|5|6|7)$''']
+paths = ['''^llvm/unittests/Analysis/Inputs/ir2native_x86_64_model/saved_model\.pbtxt$''']
