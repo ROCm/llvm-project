@@ -3505,10 +3505,9 @@ public:
   bool ActOnCXXNestedNameSpecifierDecltype(CXXScopeSpec &SS, const DeclSpec &DS,
                                            SourceLocation ColonColonLoc);
 
-  bool ActOnCXXNestedNameSpecifierIndexedPack(CXXScopeSpec &SS,
-                                              const DeclSpec &DS,
-                                              SourceLocation ColonColonLoc,
-                                              QualType Type);
+  ParsedType ActOnCXXNestedNameSpecifierIndexedPack(
+      CXXScopeSpec &SS, const DeclSpec &DS, TypeSourceInfo *PatternLoc,
+      SourceLocation ColonColonLoc, QualType Type);
 
   /// IsInvalidUnlessNestedName - This method is used for error recovery
   /// purposes to determine whether the specified identifier is only valid as
@@ -4560,6 +4559,14 @@ public:
 
   /// Push the parameters of D, which must be a function, into scope.
   void ActOnReenterFunctionContext(Scope *S, Decl *D);
+
+  /// Add \p Params to scope, so a late-parsed attribute can name them.
+  void ActOnReenterFunctionPrototypeParams(Scope *S,
+                                           ArrayRef<ParmVarDecl *> Params);
+  /// Undo the above, for when \p S outlives the attribute so no scope pop
+  /// removes them.
+  void ActOnExitFunctionPrototypeParams(Scope *S,
+                                        ArrayRef<ParmVarDecl *> Params);
   void ActOnExitFunctionContext();
 
   /// Add this decl to the scope shadowed decl chains.
@@ -15619,10 +15626,9 @@ public:
   QualType BuildDecltypeType(Expr *E, bool AsUnevaluated = true);
 
   QualType ActOnPackIndexingType(QualType Pattern, Expr *IndexExpr,
-                                 SourceLocation Loc,
-                                 SourceLocation EllipsisLoc);
+                                 SourceLocation Loc);
   QualType BuildPackIndexingType(QualType Pattern, Expr *IndexExpr,
-                                 SourceLocation Loc, SourceLocation EllipsisLoc,
+                                 SourceLocation Loc,
                                  bool FullySubstituted = false,
                                  ArrayRef<QualType> Expansions = {});
 

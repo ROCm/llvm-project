@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "PluginManager.h"
-#include "OffloadPolicy.h"
 #include "OmpAccError.h"
 #include "OpenMP/OMPT/Callback.h"
 #include "OpenMP/OMPT/Interface.h"
@@ -49,10 +48,6 @@ int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device);
 
 void PluginManager::init() {
   TIMESCOPE();
-  if (OffloadPolicy::isOffloadDisabled()) {
-    ODBG(ODT_Init) << "Offload is disabled. Skipping plugin initialization";
-    return;
-  }
 
   ODBG(ODT_Init) << "Loading RTLs";
   if (ol_result_t Res = olInit(nullptr))
@@ -84,10 +79,6 @@ void PluginManager::init() {
 
 void PluginManager::deinit() {
   TIMESCOPE();
-  if (OffloadPolicy::isOffloadDisabled()) {
-    ODBG(ODT_Deinit) << "Offload is disabled. Skipping plugin deinitialization";
-    return;
-  }
   ODBG(ODT_Deinit) << "Unloading RTLs...";
 
   auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
@@ -658,9 +649,13 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
             // Downstream, "<name>_wg_size" (AMDGPU only) holds the block size
             // CodeGen compiled the kernel for. If present, use it as the
             // preferred and max number of threads to get the exact value for
-            // kernel launch. Exception: In generic-spmd mode, the preferred
-            // number is the default blocksize since the WG size may include
-            // the main thread, which is not required.
+            // kernel launch, up to the device limit. The kernel environment
+            // holds the default number of threads as its max unless something
+            // set a lower one, which then stays a cap: OpenMPOpt limits kernels
+            // it executes with a single thread per team to one thread there.
+            // Exception: In generic-spmd mode, the preferred number is the
+            // default blocksize since the WG size may include the main thread,
+            // which is not required.
             uint16_t ConstWGSize = 0;
             if (ReadImageGlobal("_wg_size", &ConstWGSize,
                                 sizeof(ConstWGSize))) {
@@ -668,7 +663,14 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
                   LaunchInfo.isGenericSPMDMode()
                       ? GenericDevice.getDefaultNumThreads()
                       : ConstWGSize;
-              LaunchInfo.MaxNumThreads = ConstWGSize;
+              uint32_t MaxNumThreads = std::min(
+                  uint32_t(ConstWGSize), getDeviceThreadLimit(GenericDevice));
+              if (Cfg.MaxThreads > 0 &&
+                  uint32_t(Cfg.MaxThreads) <
+                      GenericDevice.getDefaultNumThreads())
+                MaxNumThreads =
+                    std::min(MaxNumThreads, uint32_t(Cfg.MaxThreads));
+              LaunchInfo.MaxNumThreads = MaxNumThreads;
             }
 
             Device.setKernelLaunchInfo(DeviceEntry.Address, LaunchInfo);
