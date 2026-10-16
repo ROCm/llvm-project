@@ -39,15 +39,15 @@
 
 ; CHECK:      0x[[NONE]]: DW_TAG_pointer_type
 ; CHECK-NEXT:               DW_AT_type
-; CHECK-NOT:                DW_AT_LLVM_address_space
+; CHECK-NOT:                DW_AT_address_class
 
 ; CHECK:      0x[[LOCAL]]: DW_TAG_pointer_type
 ; CHECK-NEXT:                DW_AT_type
-; CHECK-NEXT:                DW_AT_LLVM_address_space [DW_FORM_data4] (0x00000002 "DW_ASPACE_LLVM_AMDGPU_region")
+; CHECK-NEXT:                DW_AT_address_class [DW_FORM_data4] (0x00000002)
 
 ; CHECK:      0x[[PRIVATE]]: DW_TAG_pointer_type
 ; CHECK-NEXT:                  DW_AT_type
-; CHECK-NEXT:                  DW_AT_LLVM_address_space [DW_FORM_data4] (0x00000001 "DW_ASPACE_LLVM_AMDGPU_generic")
+; CHECK-NEXT:                  DW_AT_address_class [DW_FORM_data4] (0x00000001)
 
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
 
