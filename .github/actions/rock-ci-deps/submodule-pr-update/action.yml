@@ -4,7 +4,7 @@ description: >
   spirv-llvm-translator and hipify with amd-staging tip.
   On nightly schedule (and nightly workflow_dispatch without PR params) points
   compiler/amd-llvm, spirv-llvm-translator, and hipify at their amd-staging tips.  
-  On workflow_dispatch downloads PR params artifact, sources env, merges upstream PRs, updates submodule pointers.
+  On workflow_dispatch downloads PR params artifact, sources env, cherry-picks upstream PR commits, updates submodule pointers.
 
 inputs:
   params_artifact_name:
@@ -160,23 +160,50 @@ runs:
           trim_sha "$sha"
         }
 
-        merge_upstream_prs() {
+        cherry_pick_upstream_prs() {
           local pr_urls="$1"
-          local url repo num ref
-          git submodule update --init --depth 1000 --jobs 1 compiler/amd-llvm
+          local url repo num api_repo page body count sha picked parents
+          # Cherry-pick fetches each PR commit with its parent, so the
+          # submodule checkout only needs the pinned ROCm commit.
+          git submodule update --init --depth 1 --jobs 1 compiler/amd-llvm
           IFS=',' read -ra PR_URLS <<< "$pr_urls"
           for url in "${PR_URLS[@]}"; do
             url="$(echo "$url" | xargs)"
             [[ -z "$url" ]] && continue
             repo="$(echo "$url" | sed 's|/pull/.*||')"
             num="$(echo "$url" | sed 's|.*/pull/||')"
-            ref="upstream-pr-${num}"
-            echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
-            git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
-            git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
-              echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
+            api_repo="${repo#https://github.com/}"
+            echo "Cherry-picking upstream PR #${num} from ${url} onto ROCm/llvm-project" >&2
+            page=1
+            picked=0
+            while :; do
+              body="$(curl -fsSL \
+                -H "Accept: application/vnd.github+json" \
+                ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
+                "https://api.github.com/repos/${api_repo}/pulls/${num}/commits?per_page=100&page=${page}")"
+              count="$(printf '%s\n' "$body" | awk '/^  "sha": / { c++ } END { print c+0 }')"
+              [[ "$count" -eq 0 ]] && break
+              while read -r sha; do
+                [[ -z "$sha" ]] && continue
+                git -C compiler/amd-llvm fetch --depth=2 "${repo}.git" "$sha"
+                parents="$(git -C compiler/amd-llvm rev-list --parents -n 1 "$sha" | wc -w)"
+                if [[ "$parents" -gt 2 ]]; then
+                  git -C compiler/amd-llvm cherry-pick -m 1 --no-edit "$sha"
+                else
+                  git -C compiler/amd-llvm cherry-pick --no-edit "$sha"
+                fi || {
+                  echo "::error::Failed to cherry-pick ${sha} from upstream PR #${num} onto ROCm/llvm-project amd-staging." >&2
+                  exit 1
+                }
+                picked=$((picked + 1))
+              done < <(printf '%s\n' "$body" | awk -F'"' '/^  "sha": / { print $4 }')
+              [[ "$count" -lt 100 ]] && break
+              page=$((page + 1))
+            done
+            if [[ "$picked" -eq 0 ]]; then
+              echo "::error::No commits found for upstream PR #${num} (${url})." >&2
               exit 1
-            }
+            fi
           done
           MERGED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
         }
@@ -187,7 +214,7 @@ runs:
           LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
           echo "ROCm LLVM head SHA: $LLVM_SHA"
         elif [[ -n "${LLVM_PR_URL:-}" ]]; then
-          merge_upstream_prs "$LLVM_PR_URL"
+          cherry_pick_upstream_prs "$LLVM_PR_URL"
           LLVM_SHA="$MERGED_LLVM_SHA"
           echo "Final upstream LLVM SHA: $LLVM_SHA" >&2
         fi
