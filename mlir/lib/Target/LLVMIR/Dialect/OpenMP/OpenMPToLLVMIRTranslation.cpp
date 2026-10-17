@@ -8082,6 +8082,10 @@ static void mapParentWithMembers(
       llvm::cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]);
   auto *parentMapper = mapData.Mappers[mapDataIndex];
 
+  // maybe we don't enter this function and try just applying  member_of
+  bool parentIsPrivatizedAttachMap =
+      isPrivatizeableAttachMap(parentClause.getMapType());
+
   auto getLowAndHighAddr = [&builder, &mapData,
                             &moduleTranslation](omp::MapInfoOp mapOp) {
     llvm::Value *lowAddr, *highAddr;
@@ -8147,7 +8151,9 @@ static void mapParentWithMembers(
     baseFlag |= (parentFlags & preserve);
   }
 
-  combinedInfo.Types.emplace_back(baseFlag);
+  llvm::Value *lowAddr, *highAddr;
+  combinedInfo.Types.emplace_back(
+      parentIsPrivatizedAttachMap ? mapData.Types[mapDataIndex] : baseFlag);
   // TODO: set HasAttachPtr from Flang for pointee-storage entries.
   combinedInfo.HasAttachPtr.emplace_back(false);
   combinedInfo.DevicePointers.emplace_back(
@@ -8169,8 +8175,10 @@ static void mapParentWithMembers(
   // Fortran pointers and allocatables, the mapping of the pointed to
   // data by the descriptor (which itself, is a structure containing
   // runtime information on the dynamically allocated data).
-  llvm::Value *lowAddr, *highAddr;
-  if (!parentClause.getPartialMap()) {
+  if (parentIsPrivatizedAttachMap) {
+    combinedInfo.Sizes.push_back(mapData.Sizes[mapDataIndex]);
+    combinedInfo.Pointers.emplace_back(mapData.Pointers[mapDataIndex]);
+  } else if (!parentClause.getPartialMap()) {
     lowAddr = builder.CreatePointerCast(mapData.Pointers[mapDataIndex],
                                         builder.getPtrTy());
     highAddr = builder.CreatePointerCast(
@@ -8178,19 +8186,21 @@ static void mapParentWithMembers(
                                    mapData.Pointers[mapDataIndex], 1),
         builder.getPtrTy());
     combinedInfo.Pointers.emplace_back(mapData.Pointers[mapDataIndex]);
+    combinedInfo.Sizes.push_back(builder.CreateIntCast(
+        builder.CreatePtrDiff(builder.getInt8Ty(), highAddr, lowAddr),
+        builder.getInt64Ty(),
+        /*isSigned=*/false));
   } else {
     auto lowAndHigh = getLowAndHighAddr(parentClause);
     highAddr = std::get<0>(std::get<1>(lowAndHigh));
     lowAddr = std::get<0>(std::get<0>(lowAndHigh));
     combinedInfo.Pointers.emplace_back(
         mapData.BasePointers[std::get<1>(std::get<0>(lowAndHigh))]);
+    combinedInfo.Sizes.push_back(builder.CreateIntCast(
+        builder.CreatePtrDiff(builder.getInt8Ty(), highAddr, lowAddr),
+        builder.getInt64Ty(),
+        /*isSigned=*/false));
   }
-
-  llvm::Value *size = builder.CreateIntCast(
-      builder.CreatePtrDiff(builder.getInt8Ty(), highAddr, lowAddr),
-      builder.getInt64Ty(),
-      /*isSigned=*/false);
-  combinedInfo.Sizes.push_back(size);
 
   // This creates the initial MEMBER_OF mapping that consists of
   // the parent/top level container (same as above effectively, except
@@ -8198,7 +8208,7 @@ static void mapParentWithMembers(
   // indicates the true mape type (tofrom etc.). This parent mapping is
   // only relevant if the structure in its totality is being mapped,
   // otherwise the above suffices.
-  if (!parentClause.getPartialMap()) {
+  if (!parentClause.getPartialMap() && !parentIsPrivatizedAttachMap) {
     // TODO: This will need to be expanded to include the whole host of logic
     // for the map flags that Clang currently supports (e.g. it should do some
     // further case specific flag modifications). For the moment, it handles
@@ -8213,18 +8223,18 @@ static void mapParentWithMembers(
     llvm::SmallVector<size_t> overlapIdxs;
     getOverlappedMembers(overlapIdxs, parentClause);
 
-    // When we only have one overlap we skip the case that tries to segment the
-    // mapping as best it can without creating holes. This is because in these
-    // scenarios we have a singular map, so can reduce the complexity of the
-    // map or we have a pointer/descriptor map, in which case segmenting the
-    // map based on pointee record members doesn't make sense and will cause
-    // runtime issues. TODO: For the latter case we need a clearer method of
-    // checking this, the method is a tad overkill and non-obvious.
+    // When we only have one overlap we skip the case that tries to segment
+    // the mapping as best it can without creating holes. This is because in
+    // these scenarios we have a singular map, so can reduce the complexity of
+    // the map or we have a pointer/descriptor map, in which case segmenting
+    // the map based on pointee record members doesn't make sense and will
+    // cause runtime issues. TODO: For the latter case we need a clearer
+    // method of checking this, the method is a tad overkill and non-obvious.
     //
-    // The cases for close and update are unique edge cases where the segmenting
-    // does not play well with the runtime currently.
+    // The cases for close and update are unique edge cases where the
+    // segmenting does not play well with the runtime currently.
     if (targetDirective == TargetDirectiveEnumTy::TargetUpdate || hasMapClose ||
-        overlapIdxs.size() == 1) {
+        overlapIdxs.size() == 1 || parentIsPrivatizedAttachMap) {
       combinedInfo.Types.emplace_back(mapFlag);
       // TODO: set HasAttachPtr from Flang for pointee-storage entries.
       combinedInfo.HasAttachPtr.emplace_back(false);
@@ -8237,9 +8247,12 @@ static void mapParentWithMembers(
               cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]))));
       combinedInfo.BasePointers.emplace_back(
           mapData.BasePointers[mapDataIndex]);
-      combinedInfo.Pointers.emplace_back(mapData.Pointers[mapDataIndex]);
+      combinedInfo.Pointers.emplace_back(
+          parentIsPrivatizedAttachMap ? mapData.BasePointers[mapDataIndex]
+                                      : mapData.Pointers[mapDataIndex]);
       combinedInfo.Sizes.emplace_back(mapData.Sizes[mapDataIndex]);
     } else {
+      llvm::errs() << "bottom 1 \n";
       // Currently, the return parameter should be the over-riding parent in
       // cases where we have a return parameter that is echoed to all members,
       // the main case of this currently is with fortran descriptors. It may
@@ -8329,9 +8342,10 @@ static void processMapWithMembersOf(LLVM::ModuleTranslation &moduleTranslation,
   // array cases for the moment. This only ever applies to the parent, so it is
   // checked once here rather than inside the loop below.
   bool parentIsPrivatizeableAttach =
-      isPrivatizeableAttachMap(parentClause.getMapType());
+      isPrivatizeableAttachMap(parentClause.getMapType()) &&
+      parentClause.getMembers().size() <= 1;
   for (auto [i, idx] : llvm::enumerate(mapInfoIdx)) {
-    bool emitParentMap = i == 0 && !parentIsPrivatizeableAttach;
+    bool emitParentMap = i == 0;
     if (emitParentMap) {
       mapParentWithMembers(moduleTranslation, builder, ompBuilder, dl,
                            combinedInfo, mapData, idx, memberOfFlag,
