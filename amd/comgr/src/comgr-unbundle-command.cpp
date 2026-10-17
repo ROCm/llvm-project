@@ -15,14 +15,49 @@
 #include <comgr-unbundle-command.h>
 
 #include <clang/Driver/OffloadBundler.h>
+#include <llvm/ADT/STLExtras.h>
 #include <llvm/BinaryFormat/Magic.h>
 #include <llvm/Object/OffloadBundle.h>
+#include <llvm/Support/Endian.h>
 
 namespace COMGR {
 using namespace llvm;
 using namespace clang;
 
 using SizeFieldType = uint32_t;
+
+namespace {
+
+// Magic of the binary bundle format written by the offload bundler. It is
+// followed by the number of bundles and a table of bundle offsets, sizes and
+// triples. See clang/lib/Driver/OffloadBundler.cpp for the full layout.
+constexpr const char BinaryBundleMagic[] = "__CLANG_OFFLOAD_BUNDLE__";
+constexpr size_t BinaryBundleMagicSize = sizeof(BinaryBundleMagic) - 1;
+
+/// Append \p Data to \p Out, prefixed with its size. This is the format used
+/// for the contents of each output in the cache entry.
+void appendSizePrefixed(SmallVectorImpl<char> &Out, StringRef Data) {
+  SizeFieldType Size = Data.size();
+  size_t Offset = Out.size();
+  Out.resize_for_overwrite(Offset + sizeof(Size) + Data.size());
+  memcpy(Out.data() + Offset, &Size, sizeof(Size));
+  memcpy(Out.data() + Offset + sizeof(Size), Data.data(), Data.size());
+}
+
+/// Find the index of the first requested target that \p Triple is compatible
+/// with, or std::nullopt if there is none.
+std::optional<size_t> findCompatibleTarget(StringRef Triple,
+                                           const OffloadBundlerConfig &Config) {
+  OffloadTargetInfo CodeObjectInfo(Triple, Config);
+  for (auto [Index, Target] : llvm::enumerate(Config.TargetNames)) {
+    if (isCodeObjectCompatible(CodeObjectInfo,
+                               OffloadTargetInfo(Target, Config)))
+      return static_cast<size_t>(Index);
+  }
+  return std::nullopt;
+}
+
+} // namespace
 
 bool UnbundleCommand::canCache() const {
   // The header format for AR files is not the same as object files
@@ -68,17 +103,25 @@ Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
   if (Error Err = splitCachedOutput(CachedBuffer, Contents))
     return Err;
 
-  for (const auto &[OutputFilename, OutputContents] :
-       llvm::zip_equal(Config.OutputFileNames, Contents)) {
-    if (Error Err = CachedCommandAdaptor::writeSingleOutputFile(OutputFilename,
-                                                                OutputContents))
-      return Err;
+  for (StringRef Content : Contents) {
+    std::unique_ptr<MemoryBuffer> Output =
+        MemoryBuffer::getMemBufferCopy(Content);
+    if (!Output)
+      return createStringError(std::errc::not_enough_memory,
+                               "Failed to allocate unbundled output");
+    OutputBuffers.push_back(std::move(Output));
   }
   return Error::success();
 }
 
 Expected<StringRef> UnbundleCommand::readExecuteOutput() {
-  size_t OutputSize = 0;
+  // The outputs were unbundled in memory, frame them for the cache entry.
+  if (!OutputBuffers.empty()) {
+    for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
+      appendSizePrefixed(OutputBuffer, Output->getBuffer());
+    return StringRef(OutputBuffer.data(), OutputBuffer.size());
+  }
+
   for (StringRef OutputFilename : Config.OutputFileNames) {
     auto MaybeOneOutput =
         CachedCommandAdaptor::readSingleOutputFile(OutputFilename);
@@ -86,19 +129,178 @@ Expected<StringRef> UnbundleCommand::readExecuteOutput() {
       return MaybeOneOutput.takeError();
 
     const MemoryBuffer &OneOutputBuffer = **MaybeOneOutput;
-    SizeFieldType OneOutputFileSize = OneOutputBuffer.getBufferSize();
-
-    OutputBuffer.resize_for_overwrite(OutputSize + sizeof(OneOutputFileSize) +
-                                      OneOutputFileSize);
-
-    memcpy(OutputBuffer.data() + OutputSize, &OneOutputFileSize,
-           sizeof(OneOutputFileSize));
-    OutputSize += sizeof(OneOutputFileSize);
-    memcpy(OutputBuffer.data() + OutputSize, OneOutputBuffer.getBufferStart(),
-           OneOutputFileSize);
-    OutputSize += OneOutputFileSize;
+    appendSizePrefixed(OutputBuffer, OneOutputBuffer.getBuffer());
   }
   return OutputBuffer;
+}
+
+Expected<bool> UnbundleCommand::executeInMemory() {
+  // Archives and uncompressed bundles are handled by the file-based path.
+  if (Kind == AMD_COMGR_DATA_KIND_AR_BUNDLE)
+    return false;
+  assert(Config.TargetNames.size() == Config.OutputFileNames.size());
+
+  StringRef InputFileName = Config.InputFileNames.front();
+  ErrorOr<std::unique_ptr<MemoryBuffer>> MaybeInputBuffer =
+      MemoryBuffer::getFile(InputFileName, /*IsText=*/false,
+                            /*RequiresNullTerminator=*/false);
+  if (!MaybeInputBuffer) {
+    std::error_code EC = MaybeInputBuffer.getError();
+    return createStringError(EC, Twine("Failed to open ") + InputFileName +
+                                     " : " + EC.message() + "\n");
+  }
+  StringRef Input = (*MaybeInputBuffer)->getBuffer();
+
+  // The worklist holds the index of each target that has not been unbundled
+  // yet. The outputs are collected separately so that falling back to the
+  // file-based path does not leave partial results behind.
+  SmallVector<size_t, 4> Worklist;
+  for (auto [Index, Target] : llvm::enumerate(Config.TargetNames)) {
+    if (!checkOffloadBundleID(Target))
+      return createStringError(std::errc::invalid_argument,
+                               "invalid bundle id from bundle config");
+    Worklist.push_back(Index);
+  }
+
+  SmallVector<std::unique_ptr<MemoryBuffer>, 4> Outputs(
+      Config.TargetNames.size());
+  bool FoundHostBundle = false;
+
+  // The input may contain multiple concatenated bundles; drain the worklist
+  // across all of them, as OffloadBundler::UnbundleFiles() does.
+  size_t Offset = 0;
+  size_t NextBundleStart = 0;
+  while (NextBundleStart != StringRef::npos && Offset < Input.size()) {
+    StringRef Remaining = Input.drop_front(Offset);
+    if (identify_magic(Remaining) != file_magic::offload_bundle_compressed)
+      return false;
+
+    // Locate this bundle's end and the next bundle from the header size.
+    size_t CurBundleEnd = StringRef::npos;
+    Expected<object::CompressedOffloadBundle::CompressedBundleHeader> Header =
+        object::CompressedOffloadBundle::CompressedBundleHeader::tryParse(
+            Remaining);
+    if (Header)
+      CurBundleEnd = Header->FileSize.value_or(StringRef::npos);
+    else
+      consumeError(Header.takeError());
+
+    if (CurBundleEnd != StringRef::npos) {
+      NextBundleStart = Remaining.find("CCOB", CurBundleEnd);
+    } else {
+      // Legacy bundle without a recorded size: fall back to magic scanning.
+      NextBundleStart = Remaining.find("CCOB", 4);
+      CurBundleEnd = NextBundleStart;
+    }
+
+    ErrorOr<std::unique_ptr<MemoryBuffer>> BlobOrErr =
+        MemoryBuffer::getMemBuffer(Remaining.take_front(CurBundleEnd),
+                                   InputFileName,
+                                   /*RequiresNullTerminator=*/false);
+    if (!BlobOrErr) {
+      std::error_code EC = BlobOrErr.getError();
+      return createStringError(EC, Twine("Failed to open ") + InputFileName +
+                                       " : " + EC.message() + "\n");
+    }
+
+    Expected<std::unique_ptr<MemoryBuffer>> DecompressedOrErr =
+        object::CompressedOffloadBundle::decompress(**BlobOrErr);
+    if (!DecompressedOrErr)
+      return DecompressedOrErr.takeError();
+
+    StringRef Decompressed = (*DecompressedOrErr)->getBuffer();
+
+    // Only the binary bundle format can be read without a file. Anything
+    // else, such as an object file carrying the bundles in its sections, is
+    // left to the file-based path.
+    if (identify_magic(Decompressed) != file_magic::offload_bundle)
+      return false;
+
+    // Read the number of bundles and the table of bundle offsets, sizes and
+    // triples that follows the magic.
+    size_t ReadChars = BinaryBundleMagicSize;
+    if (ReadChars + sizeof(uint64_t) > Decompressed.size())
+      return false;
+    uint64_t NumberOfBundles =
+        support::endian::read64le(Decompressed.data() + ReadChars);
+    ReadChars += sizeof(uint64_t);
+
+    for (uint64_t I = 0; I < NumberOfBundles && !Worklist.empty(); ++I) {
+      if (ReadChars + 3 * sizeof(uint64_t) > Decompressed.size())
+        return false;
+      uint64_t BundleOffset =
+          support::endian::read64le(Decompressed.data() + ReadChars);
+      ReadChars += sizeof(uint64_t);
+      uint64_t BundleSize =
+          support::endian::read64le(Decompressed.data() + ReadChars);
+      ReadChars += sizeof(uint64_t);
+      uint64_t TripleSize =
+          support::endian::read64le(Decompressed.data() + ReadChars);
+      ReadChars += sizeof(uint64_t);
+      if (ReadChars + TripleSize > Decompressed.size())
+        return false;
+      StringRef Triple = Decompressed.substr(ReadChars, TripleSize);
+      ReadChars += TripleSize;
+
+      // Check that the offset and size make sense.
+      if (!BundleOffset || BundleOffset + BundleSize > Decompressed.size())
+        return false;
+
+      std::optional<size_t> Target = findCompatibleTarget(Triple, Config);
+      if (!Target)
+        continue;
+
+      StringRef Bundle = Decompressed.substr(BundleOffset, BundleSize);
+      Outputs[*Target] = MemoryBuffer::getMemBufferCopy(Bundle);
+      if (!Outputs[*Target])
+        return createStringError(std::errc::not_enough_memory,
+                                 "Failed to allocate unbundled output");
+
+      llvm::erase(Worklist, *Target);
+
+      if (OffloadTargetInfo(Triple, Config).hasHostKind())
+        FoundHostBundle = true;
+    }
+
+    if (NextBundleStart != StringRef::npos)
+      Offset += NextBundleStart;
+  }
+
+  // Leave the cases that the file-based path reports as errors to it.
+  if (!Config.AllowMissingBundles && !Worklist.empty())
+    return false;
+
+  // If no bundles were found, the file-based path assumes the input is the
+  // host bundle and copies it to the host targets, leaving the rest empty.
+  if (Worklist.size() == Config.TargetNames.size()) {
+    for (size_t Index : Worklist) {
+      StringRef Target = Config.TargetNames[Index];
+      Outputs[Index] = OffloadTargetInfo(Target, Config).hasHostKind()
+                           ? MemoryBuffer::getMemBufferCopy(Input)
+                           : MemoryBuffer::getMemBufferCopy("");
+      if (!Outputs[Index])
+        return createStringError(std::errc::not_enough_memory,
+                                 "Failed to allocate unbundled output");
+    }
+    OutputBuffers = std::move(Outputs);
+    return true;
+  }
+
+  if (!FoundHostBundle && Config.HostInputIndex != ~0u &&
+      !Config.AllowMissingBundles)
+    return false;
+
+  // Any target that was not found gets an empty output, as the file-based
+  // path does.
+  for (size_t Index : Worklist) {
+    Outputs[Index] = MemoryBuffer::getMemBufferCopy("");
+    if (!Outputs[Index])
+      return createStringError(std::errc::not_enough_memory,
+                               "Failed to allocate unbundled output");
+  }
+
+  OutputBuffers = std::move(Outputs);
+  return true;
 }
 
 amd_comgr_status_t UnbundleCommand::execute(raw_ostream &LogS) {
@@ -109,6 +311,16 @@ amd_comgr_status_t UnbundleCommand::execute(raw_ostream &LogS) {
   switch (Kind) {
   case AMD_COMGR_DATA_KIND_BC_BUNDLE:
   case AMD_COMGR_DATA_KIND_OBJ_BUNDLE: {
+    // Unbundle compressed bundles in memory. This avoids writing and reading
+    // back the unbundled images, which can be much larger than the bundle.
+    Expected<bool> InMemory = executeInMemory();
+    if (!InMemory) {
+      logAllUnhandledErrors(InMemory.takeError(), LogS, "Unbundle Error: ");
+      return AMD_COMGR_STATUS_ERROR;
+    }
+    if (*InMemory)
+      return AMD_COMGR_STATUS_SUCCESS;
+
     if (Error Err = Bundler.UnbundleFiles()) {
       logAllUnhandledErrors(std::move(Err), LogS, "Unbundle Error: ");
       return AMD_COMGR_STATUS_ERROR;

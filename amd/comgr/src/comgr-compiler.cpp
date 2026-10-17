@@ -1914,6 +1914,7 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
     }
 
     // Add new bitcodes to OutSetT
+    size_t OutputIndex = 0;
     for (StringRef OutputFilePath : BundlerConfig.OutputFileNames) {
 
       amd_comgr_data_t ResultT;
@@ -1925,8 +1926,18 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       ScopedDataObjectReleaser SDOR(ResultT);
 
       DataObject *Result = DataObject::convert(ResultT);
-      if (auto Status = inputFromFile(Result, OutputFilePath))
+      if (Unbundle.hasInMemoryOutputs()) {
+        // UnbundleCommand owns the unbundled contents, hand ownership to the
+        // data object to avoid a round trip through the file system.
+        std::unique_ptr<MemoryBuffer> Contents =
+            Unbundle.takeOutputBuffer(OutputIndex);
+        if (!Contents)
+          return AMD_COMGR_STATUS_ERROR;
+        if (auto Status = Result->setData(std::move(Contents)))
+          return Status;
+      } else if (auto Status = inputFromFile(Result, OutputFilePath)) {
         return Status;
+      }
 
       StringRef OutputFileName = sys::path::filename(OutputFilePath);
       Result->setName(OutputFileName);
@@ -1934,6 +1945,8 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT)) {
         return Status;
       }
+
+      ++OutputIndex;
     }
   }
 
