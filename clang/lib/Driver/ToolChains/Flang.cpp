@@ -403,6 +403,8 @@ void Flang::addCodegenOptions(const ArgList &Args,
        options::OPT_ftime_report, options::OPT_ftime_report_EQ,
        options::OPT_funroll_loops, options::OPT_fno_unroll_loops,
        options::OPT_fdefer_desc_map, options::OPT_fno_defer_desc_map,
+       options::OPT_fimplicit_default_mapper_allocatable_members,
+       options::OPT_fno_implicit_default_mapper_allocatable_members,
        options::OPT_relaxed_c_loc});
 
   Args.addOptOutFlag(CmdArgs, options::OPT_foptimize_sibling_calls,
