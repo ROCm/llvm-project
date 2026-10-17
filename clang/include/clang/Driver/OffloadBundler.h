@@ -92,6 +92,12 @@ struct OffloadTargetInfo {
   std::string str() const;
 };
 
+/// Checks if a code object \p CodeObjectInfo is compatible with a given
+/// target \p TargetInfo.
+/// @link https://clang.llvm.org/docs/ClangOffloadBundler.html#bundle-entry-id
+bool isCodeObjectCompatible(const OffloadTargetInfo &CodeObjectInfo,
+                            const OffloadTargetInfo &TargetInfo);
+
 /// Check whether the bundle id is in the following format:
 /// <kind>-<triple>[-<target id>[:target features]]
 /// <triple> := <arch>-<vendor>-<os>-<env>
