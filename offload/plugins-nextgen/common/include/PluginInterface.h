@@ -560,21 +560,6 @@ struct GenericKernelTy {
     return AchievedOccupancy;
   }
 
-  /// Downstream: let the plugin compute the effective launch geometry of a
-  /// non-bare OpenMP kernel launch, i.e., the number of threads and blocks of
-  /// the first dimension. On entry, \p NumThreads and \p NumBlocks hold the
-  /// user-requested values; the ones flagged by \p StrictThreads and
-  /// \p StrictBlocks must be kept. Returns false if the plugin does not
-  /// provide its own computation, in which case libomptarget uses the
-  /// generic one.
-  virtual bool computeLaunchGeometry(GenericDeviceTy &GenericDevice,
-                                     const KernelLaunchArgsTy &LaunchArgs,
-                                     bool StrictThreads, bool StrictBlocks,
-                                     uint32_t &NumThreads,
-                                     uint32_t &NumBlocks) const {
-    return false;
-  }
-
 protected:
   /// Prints generic kernel launch information.
   Error printLaunchInfo(GenericDeviceTy &GenericDevice,
@@ -1289,44 +1274,15 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   uint32_t getDefaultNumBlocks() const {
     return GridValues.GV_Default_Num_Teams;
   }
+  /// Get the default number of blocks for a kernel in Generic-SPMD mode.
+  virtual uint32_t getDefaultNumBlocksGenericSPMD() const {
+    return getDefaultNumBlocks();
+  }
   virtual uint64_t getClockFrequency() const { return CLOCKS_PER_SEC; }
 
-  virtual uint32_t getOMPXGenericSpmdTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXBigJumpLoopTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getXTeamRedTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
+  /// Get the maximum number of blocks for a big-jump-loop kernel.
   virtual uint32_t getOMPXBigJumpLoopMaxTotalTeams() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXLowTripCount() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t
-  getOMPXNumBlocksForLowTripcount(uint64_t LoopTripCount) const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXAdjustNumTeamsForSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXAdjustNumTeamsForXteamRedSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual bool getOMPXXTeamReductionOccupancyBasedOpt() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual bool getOMPXGenericSpmdUseSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXXteamBlockSize() const {
-    llvm_unreachable("Unimplemented");
+    return std::numeric_limits<uint32_t>::max();
   }
 
   /// Get a device-specific timestamp in nanoseconds, used by the profiler
@@ -1359,6 +1315,22 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   bool getReuseBlocksForHighTripCount() {
     return OMPX_ReuseBlocksForHighTripCount;
   }
+
+  /// Get the number of waves per compute unit to launch a kernel with a scalar
+  /// cross-team reduction with, or zero to size the grid of kernels with a
+  /// cross-team reduction like that of any other kernel.
+  /// @see OMPX_TeamsReductionGrid, OMPX_TeamsReductionWavesPerCU
+  uint32_t getTeamsReductionWavesPerCU() {
+    if (!OMPX_TeamsReductionGrid)
+      return 0;
+    if (OMPX_TeamsReductionWavesPerCU > 0)
+      return OMPX_TeamsReductionWavesPerCU;
+    return getDefaultTeamsReductionWavesPerCU();
+  }
+
+  /// The device's number of waves per compute unit for a kernel with a scalar
+  /// cross-team reduction, or zero if it has not been determined for it.
+  virtual uint32_t getDefaultTeamsReductionWavesPerCU() const { return 0; }
 
   /// Get the total amount of hardware parallelism supported by the target
   /// device. This is the total amount of warps or wavefronts that can be
@@ -1561,6 +1533,17 @@ private:
 
   BoolEnvar OMPX_ReuseBlocksForHighTripCount =
       BoolEnvar("LIBOMPTARGET_REUSE_BLOCKS_FOR_HIGH_TRIP_COUNT", true);
+
+  /// Environment flag to size the grid of kernels with a cross-team reduction
+  /// by the size of the reduction.
+  BoolEnvar OMPX_TeamsReductionGrid =
+      BoolEnvar("LIBOMPTARGET_TEAMS_REDUCTION_GRID", true);
+
+  /// Environment variable to override the device's number of waves per compute
+  /// unit for a kernel with a scalar cross-team reduction. Zero keeps the
+  /// device's value.
+  UInt32Envar OMPX_TeamsReductionWavesPerCU =
+      UInt32Envar("LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU", 0);
 
   /// Variable to track kernel launch for a device.
   std::atomic<uint32_t> LaunchId = 0;

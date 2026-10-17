@@ -810,17 +810,68 @@ static uint32_t getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
                                                : KernelEnv.PreferredNumThreads);
 }
 
+/// Get the number of teams the user set with OMP_NUM_TEAMS, or zero.
+static uint32_t getOMPNumTeams() {
+  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
+  return OMP_NumTeams > 0 ? uint32_t(OMP_NumTeams) : 0;
+}
+
 /// Get the maximum number of blocks the device can launch for a kernel using
 /// \p NumThreads threads per block, further limited by OMP_NUM_TEAMS if the
 /// user set it.
 static uint32_t getDeviceBlockLimit(GenericDeviceTy &GenericDevice,
                                     uint32_t NumThreads) {
-  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
-
   uint32_t BlockLimit = GenericDevice.getBlockLimit(NumThreads);
-  if (OMP_NumTeams > 0)
-    return std::min(BlockLimit, uint32_t(OMP_NumTeams));
+  if (uint32_t NumTeams = getOMPNumTeams())
+    return std::min(BlockLimit, NumTeams);
   return BlockLimit;
+}
+
+/// Size in bytes of the per-team data of a cross-team reduction above which the
+/// reduction is large rather than scalar. A few scalars reduced together still
+/// behave like a scalar reduction.
+static constexpr uint32_t LargeTeamsReductionBytes = 32;
+
+/// Get the number of blocks of \p NumThreads threads each to launch a kernel
+/// with a cross-team reduction with, or zero to size its grid like that of any
+/// other kernel.
+///
+/// Every block adds to the cost of combining the partial results of the
+/// blocks. For a large reduction, this cost dominates: one block per compute
+/// unit is enough. A scalar reduction needs more blocks to keep the memory
+/// system busy, as many as the device's number of waves per compute unit for
+/// it fills, but at least one per compute unit.
+static uint64_t
+getTeamsReductionNumBlocks(GenericDeviceTy &GenericDevice, uint32_t NumThreads,
+                           uint64_t LoopTripCount,
+                           const KernelLaunchInfoTy &KernelEnv) {
+  if (!KernelEnv.ReductionDataSize || !NumThreads)
+    return 0;
+
+  // In Generic and Generic-SPMD mode, each block runs one iteration of the
+  // distribute loop. Only large reductions have been measured there.
+  bool IsLarge = KernelEnv.ReductionDataSize > LargeTeamsReductionBytes;
+  bool IsSPMD = KernelEnv.isSPMDMode();
+  if (!IsSPMD && !(IsLarge && (KernelEnv.isGenericMode() ||
+                               KernelEnv.isGenericSPMDMode())))
+    return 0;
+
+  uint32_t ScalarWavesPerCU = GenericDevice.getTeamsReductionWavesPerCU();
+  uint64_t NumCUs = GenericDevice.getNumComputeUnits();
+  if (!ScalarWavesPerCU || !NumCUs)
+    return 0;
+
+  uint32_t WavesPerBlock =
+      llvm::divideCeil(NumThreads, GenericDevice.getWarpSize());
+  uint64_t BlocksPerCU =
+      IsLarge ? 1 : std::max(1u, ScalarWavesPerCU / WavesPerBlock);
+  uint64_t NumBlocks = NumCUs * BlocksPerCU;
+  // No more blocks than there is work for.
+  if (LoopTripCount > 0)
+    NumBlocks =
+        std::min(NumBlocks, IsSPMD ? llvm::divideCeil(LoopTripCount, NumThreads)
+                                   : LoopTripCount);
+  return NumBlocks;
 }
 
 /// Get the effective number of blocks for the kernel based on the
@@ -849,7 +900,28 @@ getEffectiveNumBlocks(GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
     return LoopTripCount > 0 ? (((LoopTripCount - 1) / EffectiveNumThreads) + 1)
                              : 1;
 
-  uint64_t DefaultNumBlocks = GenericDevice.getDefaultNumBlocks();
+  // Downstream: a big-jump-loop kernel has no per-block overhead, so it also
+  // gets one thread per iteration. It loops over the grid, so the number of
+  // blocks may be capped.
+  if (KernelEnv.isBigJumpLoopMode()) {
+    uint64_t NumBlocks =
+        LoopTripCount > 0 ? llvm::divideCeil(LoopTripCount, EffectiveNumThreads)
+                          : 1;
+    NumBlocks = std::min(
+        NumBlocks, uint64_t(GenericDevice.getOMPXBigJumpLoopMaxTotalTeams()));
+    return std::min(NumBlocks, uint64_t(getDeviceBlockLimit(
+                                   GenericDevice, EffectiveNumThreads)));
+  }
+
+  if (uint64_t NumBlocks = getTeamsReductionNumBlocks(
+          GenericDevice, EffectiveNumThreads, LoopTripCount, KernelEnv))
+    return std::min(NumBlocks, uint64_t(getDeviceBlockLimit(
+                                   GenericDevice, EffectiveNumThreads)));
+
+  uint64_t DefaultNumBlocks =
+      KernelEnv.isGenericSPMDMode()
+          ? GenericDevice.getDefaultNumBlocksGenericSPMD()
+          : GenericDevice.getDefaultNumBlocks();
   uint64_t TripCountNumBlocks = std::numeric_limits<uint64_t>::max();
   if (LoopTripCount > 0) {
     if (KernelEnv.isSPMDMode()) {
@@ -919,6 +991,22 @@ getEffectiveNumBlocks(GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
   // If the loops are long running we rather reuse blocks than spawn too many.
   if (GenericDevice.getReuseBlocksForHighTripCount())
     PreferredNumBlocks = std::min(TripCountNumBlocks, DefaultNumBlocks);
+
+  // In Generic-SPMD mode, the threads of a block run the iterations of the
+  // inner parallel loops, whose trip counts are unknown. If they are lower than
+  // the number of threads, most threads idle. So trade threads for blocks, down
+  // to one warp per block, as long as the distribute loop has an iteration for
+  // every block. This keeps the device as busy if the inner trip counts are
+  // high. Neither is done if the user set the number of threads or teams.
+  if (KernelEnv.isGenericSPMDMode() && !IsNumThreadsFromUser &&
+      !IsNumThreadsStrict && !getOMPNumTeams()) {
+    while (uint64_t(PreferredNumBlocks) * 2 <= LoopTripCount &&
+           EffectiveNumThreads > GenericDevice.getWarpSize()) {
+      EffectiveNumThreads /= 2;
+      PreferredNumBlocks *= 2;
+    }
+  }
+
   return std::min(PreferredNumBlocks,
                   getDeviceBlockLimit(GenericDevice, EffectiveNumThreads));
 }
@@ -970,7 +1058,6 @@ static void checkLaunchInvariants(const KernelLaunchArgsTy &LaunchArgs,
 /// Calculate or adjust, in place, the effective number of threads and blocks
 /// for the first dimension, unless the caller requested strict counts.
 static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
-                                    const GenericKernelTy &Kernel,
                                     KernelLaunchArgsTy &LaunchArgs,
                                     const KernelArgsTy &KernelArgs,
                                     const KernelLaunchInfoTy &KernelEnv) {
@@ -988,26 +1075,16 @@ static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
   const bool ThreadLimitFromUser = LaunchArgs.UserThreadLimit[0] > 0;
 
   uint32_t EffectiveNumThreads = LaunchArgs.UserThreadLimit[0];
-  uint32_t EffectiveNumBlocks = LaunchArgs.UserNumBlocks[0];
+  if (!StrictThreads)
+    EffectiveNumThreads =
+        getEffectiveNumThreads(GenericDevice, EffectiveNumThreads, KernelEnv);
 
-  // Downstream: the plugin may compute the launch geometry itself (the AMDGPU
-  // plugin does, using occupancy and other device-specific heuristics).
-  // Otherwise, fall back to the generic computation.
-  if (!Kernel.computeLaunchGeometry(GenericDevice, LaunchArgs, StrictThreads,
-                                    StrictBlocks, EffectiveNumThreads,
-                                    EffectiveNumBlocks)) {
-    if (!StrictThreads)
-      EffectiveNumThreads =
-          getEffectiveNumThreads(GenericDevice, EffectiveNumThreads, KernelEnv);
-
-    if (!StrictBlocks)
-      EffectiveNumBlocks = getEffectiveNumBlocks(
-          GenericDevice, EffectiveNumBlocks, LaunchArgs.Tripcount,
-          EffectiveNumThreads, StrictThreads, ThreadLimitFromUser, KernelEnv);
-  }
+  if (!StrictBlocks)
+    LaunchArgs.UserNumBlocks[0] = getEffectiveNumBlocks(
+        GenericDevice, LaunchArgs.UserNumBlocks[0], LaunchArgs.Tripcount,
+        EffectiveNumThreads, StrictThreads, ThreadLimitFromUser, KernelEnv);
 
   LaunchArgs.UserThreadLimit[0] = EffectiveNumThreads;
-  LaunchArgs.UserNumBlocks[0] = EffectiveNumBlocks;
 }
 
 /// Flatten the kernel arguments into \p LaunchArgs.Args. Returns the address
@@ -1119,7 +1196,7 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   }
 
   checkLaunchInvariants(LaunchArgs, KernelArgs, KernelLaunchInfo);
-  adjustEffectiveGeometry(GenericDevice, *Kernel, LaunchArgs, KernelArgs,
+  adjustEffectiveGeometry(GenericDevice, LaunchArgs, KernelArgs,
                           KernelLaunchInfo);
 
   void **DynPtrSlot = resolveArgsAndDynPtrSlot(
