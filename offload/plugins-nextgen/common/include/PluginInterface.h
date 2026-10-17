@@ -17,6 +17,7 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <optional>
 #include <shared_mutex>
 #include <variant>
 #include <vector>
@@ -361,6 +362,23 @@ public:
   }
 };
 
+/// The regime the traffic-aware grid policy put a kernel launch in. See
+/// offload/docs/traffic_aware_grid.md.
+enum class TrafficRegimeTy : uint8_t {
+  None,
+  Independent,
+  Latency,
+  Bandwidth,
+  BandwidthSaturated,
+};
+
+/// What the traffic-aware grid policy decided for a kernel launch.
+struct TrafficGridDecisionTy {
+  /// Blocks the policy picked, or zero if it had no opinion.
+  uint64_t NumBlocks = 0;
+  TrafficRegimeTy Regime = TrafficRegimeTy::None;
+};
+
 struct KernelLaunchInfoTy {
   uint32_t MaxNumThreads = 0;
   uint32_t PreferredNumThreads = 0;
@@ -369,6 +387,13 @@ struct KernelLaunchInfoTy {
   uint32_t StaticBlockMemSize = 0;
   /// Defaults to OMP_TGT_EXEC_MODE_BARE.
   OMPTgtExecModeFlags Mode = OMP_TGT_EXEC_MODE_BARE;
+  /// The compiler's memory-traffic estimate, or why it has none, read from the
+  /// kernel's <name>_kernel_traffic global. Left unset if the image has none,
+  /// which switches the traffic-aware grid policy off for the kernel.
+  KernelTrafficTy Traffic;
+  /// The traffic-aware grid policy's decision, set per launch whenever the
+  /// policy was consulted.
+  std::optional<TrafficGridDecisionTy> TrafficDecision;
 
   /// Indicate if the kernel works in Bare, Generic SPMD, Generic, No-Loop
   /// or SPMD mode.
@@ -560,7 +585,22 @@ struct GenericKernelTy {
     return false;
   }
 
+  virtual uint32_t getKernelLaunchId() const { return 0; }
+
+  /// The number of blocks of \p NumThreads threads each that can be resident
+  /// on the device at once given the kernel's resource usage (registers, local
+  /// memory), or zero if unknown. Only valid after computeMaxOccupancy().
+  virtual uint64_t getMaxResidentBlocks(GenericDeviceTy &Device,
+                                        uint32_t NumThreads) const {
+    return 0;
+  }
+
 protected:
+  /// Print the estimates from the OpenMPKernelTraffic pass along with the
+  /// traffic-aware grid policy's decision for this launch, if it made one.
+  void printTrafficTrace(GenericDeviceTy &GenericDevice,
+                         const KernelLaunchArgsTy &LaunchArgs) const;
+
   /// Prints generic kernel launch information.
   Error printLaunchInfo(GenericDeviceTy &GenericDevice,
                         const KernelLaunchArgsTy &LaunchArgs,
@@ -1349,6 +1389,16 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// device. This is the total amount of warps or wavefronts that can be
   /// resident on the device simultaneously.
   virtual uint64_t getHardwareParallelism() const { return 0; }
+
+  /// Traffic-aware grid policy: blocks per compute unit for bandwidth-bound
+  /// kernels below the saturation threshold. Populate with per-device
+  /// constants.
+  virtual uint32_t getDefaultBandwidthCUMult() const { return 1; }
+
+  /// Traffic-aware grid policy: bytes per iteration at which memory is
+  /// saturated at one block per compute unit. Populate with per-device
+  /// constants.
+  virtual int32_t getDefaultBandwidthSaturationBytes() const { return 0; }
 
   /// Get the RPC server running on this device.
   RPCServerTy *getRPCServer() const { return RPCServer; }

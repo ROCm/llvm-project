@@ -673,6 +673,14 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
               LaunchInfo.MaxNumThreads = MaxNumThreads;
             }
 
+            // The compiler's memory-traffic estimate for the traffic-aware
+            // grid policy, or why it has none. An image compiled without the
+            // estimate has no such global, which keeps the policy off for the
+            // kernel.
+            if (!ReadImageGlobal("_kernel_traffic", &LaunchInfo.Traffic,
+                                 sizeof(LaunchInfo.Traffic)))
+              LaunchInfo.Traffic = KernelTrafficTy{};
+
             Device.setKernelLaunchInfo(DeviceEntry.Address, LaunchInfo);
           }
         }
