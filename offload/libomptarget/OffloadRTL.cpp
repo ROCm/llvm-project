@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "OpenMP/OffloadRTL.h"
+#include "OffloadPolicy.h"
 #include "OpenMP/OMPT/Callback.h"
 #include "PluginManager.h"
 
@@ -18,6 +19,7 @@
 #include "Shared/Profile.h"
 
 using namespace llvm::omp::target::debug;
+using llvm::omp::target::OmpPluginManager;
 
 static std::mutex &getPluginMutex() {
   static std::mutex Mutex;
@@ -26,7 +28,7 @@ static std::mutex &getPluginMutex() {
 static uint32_t RefCount = 0;
 std::atomic<bool> RTLAlive{false};
 std::atomic<int> RTLOngoingSyncs{0};
-PluginManager *PM = nullptr;
+OmpPluginManager *PM = nullptr;
 
 /// Check deleted and deprecated features, such as environment variables.
 static void checkRuntimeEnvironment() {
@@ -44,19 +46,29 @@ void initRuntime() {
 
   checkRuntimeEnvironment();
 
-  if (PM == nullptr)
-    PM = new PluginManager();
-
   RefCount++;
   if (RefCount == 1) {
+    assert(!PM && "Runtime already initialized");
+    PM = new llvm::omp::target::OmpPluginManager();
+
     ODBG(ODT_Init) << "Init offload library!";
 #ifdef OMPT_SUPPORT
     // Initialize OMPT first
     llvm::omp::target::ompt::connectLibrary();
 #endif
 
-    PM->init();
+    if (!OffloadPolicy::isOffloadDisabled())
+      PM->init();
+    else
+      ODBG(ODT_Init) << "Offload is disabled. Skipping plugin initialization";
     PM->registerDelayedLibraries();
+    // After all plugins are initialized, register atExit cleanup handlers.
+    std::atexit([]() {
+      // Interop cleanup should be done before the plugins are deinitialized as
+      // the backend libraries may be already unloaded.
+      if (PM)
+        PM->InteropTbl.clear();
+    });
 
     // RTL initialization is complete
     RTLAlive = true;
@@ -76,7 +88,11 @@ void deinitRuntime() {
                      << RTLOngoingSyncs.load();
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    PM->deinit();
+    if (!OffloadPolicy::isOffloadDisabled())
+      PM->deinit();
+    else
+      ODBG(ODT_Deinit)
+          << "Offload is disabled. Skipping plugin deinitialization";
     delete PM;
     PM = nullptr;
   }

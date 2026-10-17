@@ -1924,6 +1924,38 @@ hostParallelCallback(OpenMPIRBuilder *OMPIRBuilder, Function &OutlinedFn,
   unsigned NumCapturedVars = OutlinedFn.arg_size() - /* tid & bounded tid */ 2;
 
   CallInst *CI = cast<CallInst>(OutlinedFn.user_back());
+
+  // CodeExtractor creates an alloca aggregate struct containing pointers to all
+  // the captured values. The address of this struct is then passed as a
+  // parameter to the outlined function. This parameter of the outlined function
+  // can be marked noalias because CodeExractor + this host OpenMP lowering
+  // maintains the following invariants:
+  // - The caller initializes the fields before starting any callbacks.
+  // - Neither the caller, OpenMP runtime, nor callbacks modify the structure
+  //   while callbacks are executing.
+  // - The callbacks only load captured values from the structure; they do not
+  //   use it to write results back to the caller. This is generated code; the
+  //   user has no way to modify the structure directly.
+  //
+  // Multiple callbacks may read the same structure. This is allowed by noalias,
+  // which permits aliasing accesses to memory that is not modified during the
+  // call.
+  //
+  // The synchronous fork keeps the structure alive until all callbacks return,
+  // which justifies nofreeobj. Neither attribute extends to the objects pointed
+  // to by the captured fields.
+  if (NumCapturedVars) {
+    assert(NumCapturedVars == 1 && "Expected an aggregate capture argument");
+    assert(isa<AllocaInst>(CI->getArgOperand(2)) &&
+           cast<AllocaInst>(CI->getArgOperand(2))
+               ->getAllocatedType()
+               ->isStructTy() &&
+           "Expected a stack-allocated capture structure");
+
+    OutlinedFn.addParamAttr(2, Attribute::NoAlias);
+    OutlinedFn.addParamAttr(2, Attribute::NoFreeObj);
+  }
+
   CI->getParent()->setName("omp_parallel");
   Builder.SetInsertPoint(CI);
 
@@ -6164,8 +6196,7 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::applyStaticWorkshareLoop(
       getOrCreateRuntimeFunction(M, omp::OMPRTL___kmpc_for_static_fini);
 
   // Allocate space for computed loop bounds as expected by the "init" function.
-  Builder.SetInsertPoint(
-      AllocaIP.getNodeParent()->getFirstNonPHIOrDbgOrAlloca());
+  Builder.SetInsertPoint(AllocaIP.getNodeParent()->getFirstNonPHIOrAlloca());
 
   Type *I32Type = Type::getInt32Ty(M.getContext());
   Value *PLastIter = Builder.CreateAlloca(I32Type, nullptr, "p.lastiter");
@@ -6920,8 +6951,7 @@ OpenMPIRBuilder::applyDynamicWorkshareLoop(DebugLoc DL, CanonicalLoopInfo *CLI,
   FunctionCallee DynamicNext = getKmpcForDynamicNextForType(IVTy, M, *this);
 
   // Allocate space for computed loop bounds as expected by the "init" function.
-  Builder.SetInsertPoint(
-      AllocaIP.getNodeParent()->getFirstNonPHIOrDbgOrAlloca());
+  Builder.SetInsertPoint(AllocaIP.getNodeParent()->getFirstNonPHIOrAlloca());
   Type *I32Type = Type::getInt32Ty(M.getContext());
   Value *PLastIter = Builder.CreateAlloca(I32Type, nullptr, "p.lastiter");
   Value *PLowerBound = Builder.CreateAlloca(IVTy, nullptr, "p.lowerbound");
@@ -9266,52 +9296,6 @@ static void FixupDebugInfoForOutlinedFunction(
       }
     }
 
-    Module *M = Func->getParent();
-    if ((Triple(M->getTargetTriple())).isAMDGPU()) {
-      // For target side, the ArgAccessorFuncCB/createDeviceArgumentAccessor
-      // adds following for the kenel arguments.
-      // %3 = alloca ptr, align 8, addrspace(5), !dbg !26
-      // %4 = addrspacecast ptr addrspace(5) %3 to ptr, !dbg !26
-      // store ptr %1, ptr %4, align 8, !dbg !26
-
-      // For arguments that are passed by ref, there is an extra load like the
-      // following.
-      // %8 = load ptr, ptr %4, align 8
-      //
-      // The debug record at this moment may be pointing to %8 (in above
-      // snippet) as location of variable. The AMDGPU backend drops the debug
-      // info for variable in such cases. So we change the location to alloca
-      // instead.
-      if (DR->getNumVariableLocationOps() != 1u)
-        return;
-      auto Loc = DR->getVariableLocationOp(0u);
-      bool PassByRef = false;
-      if (llvm::LoadInst *Load = dyn_cast<llvm::LoadInst>(Loc)) {
-        Loc = Load->getPointerOperand();
-        PassByRef = true;
-      }
-      // Add DIOps based expression. Note that we generate an extra indirection
-      // if an argument is mapped by reference. The first reads the pointer
-      // from alloca and 2nd read the value of the variable from that pointer.
-      // We have 2 options for the variables that are mapped byRef.
-      // 1. Use a single indirection but change the type to the reference to the
-      // original type. It will show up in the debugger as
-      // "x=@0x7ffeec820000: 5"
-      // This is similar to what clang does.
-      // 2. Use double indirection and keep the original type. It will show up
-      // in debugger as "x=5". This approached is used here as it is
-      // consistent with the normal fortran parameters display.
-      if (auto AI = dyn_cast<llvm::AllocaInst>(Loc->stripPointerCasts())) {
-        DR->replaceVariableLocationOp(0u, AI);
-        llvm::DIExprBuilder ExprBuilder(Builder.getContext());
-        ExprBuilder.append<llvm::DIOp::Arg>(0u, AI->getType());
-        if (PassByRef)
-          ExprBuilder.append<llvm::DIOp::Deref>(AI->getAllocatedType());
-        ExprBuilder.append<llvm::DIOp::Deref>(AI->getAllocatedType());
-        DR->setExpression(ExprBuilder.intoExpression());
-      }
-    }
-
     if (ArgNo != 0)
       DR->setVariable(GetUpdatedDIVariable(OldVar, ArgNo));
   };
@@ -9481,7 +9465,7 @@ static Expected<Function *> createOutlinedFunction(
   Builder.SetInsertPoint(EntryBB->getFirstNonPHIIt());
   auto AllocaIP = Builder.saveIP();
 
-  Builder.SetInsertPoint(UserCodeEntryBB->getFirstNonPHIOrDbg());
+  Builder.SetInsertPoint(UserCodeEntryBB->getFirstNonPHIOrPseudoProbe());
 
   // Do not include the artificial dyn_ptr argument.
   const auto &ArgRange = make_range(Func->arg_begin(), Func->arg_end() - 1);
