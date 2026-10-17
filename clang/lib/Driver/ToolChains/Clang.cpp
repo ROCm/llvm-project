@@ -10100,26 +10100,18 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
       if (DeviceLTOMode == LTOK_Full)
         CmdArgs.push_back(Args.MakeArgString(
             "--device-compiler=" + TC->getTripleString() + "=-flto=full"));
-      else if (DeviceLTOMode == LTOK_Thin) {
+      else if (DeviceLTOMode == LTOK_Thin)
         CmdArgs.push_back(Args.MakeArgString(
             "--device-compiler=" + TC->getTripleString() + "=-flto=thin"));
-        if (TC->getTriple().isAMDGPU()) {
-          CmdArgs.push_back(
-              Args.MakeArgString("--device-linker=" + TC->getTripleString() +
-                                 "=-plugin-opt=-force-import-all"));
-          CmdArgs.push_back(
-              Args.MakeArgString("--device-linker=" + TC->getTripleString() +
-                                 "=-plugin-opt=-avail-extern-to-local"));
-          CmdArgs.push_back(Args.MakeArgString(
-              "--device-linker=" + TC->getTripleString() +
-              "=-plugin-opt=-avail-extern-gv-in-addrspace-to-local=3"));
-          if (Kind == Action::OFK_OpenMP) {
-            CmdArgs.push_back(
-                Args.MakeArgString("--device-linker=" + TC->getTripleString() +
-                                   "=-plugin-opt=-amdgpu-internalize-symbols"));
-          }
-        }
-      }
+
+      // Except for the per-TU HIP non-RDC fat binary job (the same condition
+      // as SuppressHIPNoRDCVerbose), this job links relocatable device code,
+      // even if `-fgpu-rdc` is not on the link command line.
+      if (shouldUseAMDGPUObjectLinking(*TC, ToolChainArgs, Kind,
+                                       /*AssumeRDC=*/!SuppressHIPNoRDCVerbose))
+        CmdArgs.push_back(
+            Args.MakeArgString("--device-linker=" + TC->getTripleString() +
+                               "=-plugin-opt=-amdgpu-enable-object-linking"));
     }
   }
 

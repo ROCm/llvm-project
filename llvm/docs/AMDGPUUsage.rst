@@ -2757,8 +2757,10 @@ The AMDGPU backend supports the following LLVM IR attributes.
                                                       CLANG attribute [CLANG-ATTR]_. This is an optimization hint,
                                                       and the backend may not be able to satisfy the request. If
                                                       the specified range is incompatible with the function's
-                                                      "amdgpu-flat-work-group-size" value, the implied occupancy
-                                                      bounds by the workgroup size takes precedence.
+                                                      "amdgpu-flat-work-group-size" value, the occupancy bounds
+                                                      implied by the workgroup size take precedence. Under object
+                                                      linking, this hint cannot lower the ABI occupancy budget;
+                                                      see :ref:`amdgpu-abi-occupancy`.
 
      "amdgpu-ieee" true/false.                        GFX6-GFX11 (Except GFX11.7) Only
                                                       Specify whether the function expects the IEEE field of the
@@ -3177,6 +3179,144 @@ unit's worst case (i.e, maxima) ``num_vgpr``, ``num_agpr``, and
 ``numbered_sgpr`` which may be referenced and used by the aforementioned
 symbolic expressions. These three symbols are ``amdgcn.max_num_vgpr``,
 ``amdgcn.max_num_agpr``, and ``amdgcn.max_num_sgpr``.
+
+.. _amdgpu-object-linking:
+
+Object Linking
+--------------
+
+Object linking lets the linker combine separately compiled AMDGPU relocatable
+objects correctly. The backend records per-function information in the
+``.amdgpu.info`` section (see :ref:`amdgpu-info-section`) and emits LDS and
+named barrier variables as symbols. The linker then assigns LDS offsets and
+named barrier IDs, and propagates resource usage (registers, stack, and LDS)
+through the call graph across translation units.
+
+The backend option ``-amdgpu-enable-object-linking`` turns on object linking.
+It is off by default.
+
+When Clang Enables Object Linking
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Object linking is necessary when the backend emits relocatable objects that
+are linked with each other. For offload compilation, the Clang driver turns on
+object linking only in relocatable device code (RDC) mode, and only when
+device LTO is disabled or is ThinLTO. HIP uses RDC mode with ``-fgpu-rdc``.
+OpenMP offloading always uses RDC mode.
+
+  .. table:: Object Linking in the Clang Driver
+     :name: amdgpu-object-linking-driver-table
+
+     ============ =========================== ==================================
+     Mode         Device LTO                  Object Linking
+     ============ =========================== ==================================
+     Non-RDC      Any                         Off. Each translation unit is a
+                                              complete device program.
+     RDC          Full (default)              Off. The device program is
+                                              compiled as one module.
+     RDC          ThinLTO                     On. Each ThinLTO backend emits a
+                                              relocatable object.
+     RDC          Disabled                    On. Each device compilation
+                                              emits a relocatable object.
+     ============ =========================== ==================================
+
+When object linking is on, the driver passes ``-amdgpu-enable-object-linking``
+to the device compilation and passes it to the device link through
+``-plugin-opt``. The driver has no option to control object linking. SPIR-V
+device code does not use AMDGPU object linking.
+
+Why Object Linking Is Opt-In
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Cross-translation-unit function calls and data access in device code must be
+supported correctly, but they are less common than whole-program compilation.
+Object linking is opt-in so that this support does not reduce code quality or
+break other users of the backend:
+
+* Many users of the AMDGPU backend do not need object linking. These include
+  Clang in direct compilation and offload compilation, ``llc`` with IR from
+  other front ends, and any tool that only uses the AMDGPU backend. Most of
+  these users do not call functions or access data across translation units.
+  An opt-out option would require all of them to turn it off explicitly.
+* Object linking changes code generation, even if no function call or data
+  access crosses a translation unit:
+
+  * External LDS variables use relocations instead of constant addresses.
+  * Functions use the ABI occupancy as a floor (see
+    :ref:`amdgpu-abi-occupancy`). This can limit the number of registers and
+    cause more spills.
+  * Promotion of ``alloca`` to LDS or vectors gets a smaller budget, because it
+    uses the same occupancy.
+
+* An object compiled with object linking is not complete until the linker
+  resolves it. It needs a linker that implements AMDGPU object linking. Flows
+  that use another linker, an older linker, or a custom loader do not work with
+  these objects.
+* Most compilation flows already see the whole program in one module, so
+  object linking gives them no benefit. These include RDC mode with full LTO,
+  non-RDC mode, and run-time compilers.
+* Only the compiler driver knows whether a relocatable object is linked with
+  other objects, because this depends on the build mode. The backend cannot
+  make this decision.
+* All AMDGPU regression tests that do not set
+  ``-amdgpu-enable-object-linking`` test code generation without object
+  linking. If object linking were on by default, thousands of tests would need
+  an opt-out option.
+
+Unsupported Configurations
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A device link must not mix bitcode compiled with full LTO and relocatable
+objects compiled with object linking. Full LTO does not use object linking, so
+its output has no ``.amdgpu.info`` information. The linker reports an error for
+some of these cases, for example when code compiled with object linking calls a
+function that has no ``.amdgpu.info`` information. The linker cannot detect all
+of these cases.
+
+.. _amdgpu-abi-occupancy:
+
+ABI Occupancy (Object Linking)
+------------------------------
+
+When object linking is enabled, the AMDGPU backend no longer assumes
+whole-program visibility. Individual translation units must agree on an ABI that
+callers and callees can rely on without seeing each other's register usage. The
+compiler enforces this by using an *ABI occupancy* as a resource-budget floor
+for separately compiled functions. The default ABI occupancy is the number of
+waves per EU required to support a 1024-workitem workgroup:
+
+``ceil(ceil(1024 / wavefront-size) / EUs-per-CU)``.
+
+For example, on ``gfx900`` (wave64, 4 EUs/CU) the default ABI occupancy is
+``ceil(ceil(1024 / 64) / 4) = 4``, yielding a VGPR budget of
+``getMaxNumVGPRs(4) = 64``. On a gfx12 target such as ``gfx1200`` (wave32,
+4 EUs/CU), the default ABI occupancy is ``ceil(ceil(1024 / 32) / 4) = 8``,
+yielding a VGPR budget of ``getMaxNumVGPRs(8) = 192``.
+
+The ``amdgpu_abi_waves_per_eu`` module flag overrides the default ABI occupancy
+floor for a module. A value lower than the default accepts a looser ABI
+contract; a value higher than the default requests a stricter one. Any compiler
+driver option that exposes this control should set the module flag in generated
+IR rather than passing the value directly to the backend.
+
+``amdgpu-flat-work-group-size`` is ABI-significant. If a function carries this
+attribute, the occupancy implied by its maximum flat workgroup size replaces
+the default ABI occupancy for that function, so it can either raise or lower the
+register budget.
+
+``amdgpu-waves-per-eu`` remains a hint, and it does not define the ABI
+occupancy. It affects the ABI register budget only if the backend accepts it as
+an effective occupancy request. In that case, a minimum higher than the ABI
+occupancy makes the register budget stricter; a lower minimum cannot lower the
+ABI budget. The maximum side of an accepted ``amdgpu-waves-per-eu`` hint can
+still cap occupancy by inflating reported resource usage. Under object linking,
+the effective maximum used for this inflation is raised to at least the ABI
+occupancy, so the emitted resource usage does not describe a looser contract
+than the ABI budget.
+
+The backend records the register-budget occupancy in each function's
+``.amdgpu.info`` metadata so link-time object linking can reject incompatible
+occupancy contracts across translation units.
 
 .. _amdgpu-elf-code-object:
 
@@ -3626,11 +3766,10 @@ if needed.
 .. _amdgpu-info-section:
 
 ``.amdgpu.info``
-  Per-function metadata for AMDGPU object linking, emitted only in relocatable
-  code objects when object linking is enabled
-  (``-amdgpu-enable-object-linking``).  The linker uses this section to
-  propagate resource usage (registers, stack, LDS) and resolve call graph
-  dependencies across translation units.
+  Per-function metadata emitted only in relocatable code objects when object
+  linking is enabled.  The linker uses this section to propagate resource usage
+  (registers, stack, LDS) and resolve call graph dependencies across
+  translation units.
 
   Each entry uses a tagged, length-prefixed binary encoding:
 
@@ -3659,6 +3798,7 @@ if needed.
      8     ``INFO_CALL``                  8B symbol ref; direct call edge
      9     ``INFO_INDIRECT_CALL``         u32 strtab offset; indirect call type-ID
      10    ``INFO_TYPEID``                u32 strtab offset; function type-ID
+     11    ``INFO_OCCUPANCY``             u32; occupancy used to compile the function
      ===== ============================== ==========================================
 
   .. table:: AMDGPU Info Function Flags (``INFO_FLAGS``)
@@ -3670,6 +3810,8 @@ if needed.
      0x1   ``FUNC_USES_VCC``           Function uses the VCC register
      0x2   ``FUNC_USES_FLAT_SCRATCH``  Function uses flat scratch addressing
      0x4   ``FUNC_HAS_DYN_STACK``      Function has dynamic stack allocation
+     0x8   ``FUNC_WGP_MODE``           Function uses WGP execution mode
+     0x10  ``FUNC_WAVE32``             Function uses wave32; otherwise wave64
      ===== =========================== ==========================================
 
   Symbol references (``INFO_FUNC``, ``INFO_USE``, ``INFO_CALL``) generate
@@ -22090,6 +22232,7 @@ The following sub-directives may appear inside the block:
      ``.amdgpu_num_vgpr`` *value*           Architectural VGPRs used (u32)
      ``.amdgpu_num_agpr`` *value*           Accumulator VGPRs used (u32)
      ``.amdgpu_private_segment_size`` *n*   Private segment size in bytes (u32)
+     ``.amdgpu_occupancy`` *value*          Occupancy used to compile the function (u32)
      ``.amdgpu_use`` *symbol*               Resource dependency (LDS or barrier)
      ``.amdgpu_call`` *symbol*              Direct call edge to *symbol*
      ``.amdgpu_indirect_call`` *"type-id"*  Indirect call with given type-ID string
@@ -22106,6 +22249,7 @@ Example:
      .amdgpu_num_vgpr 32
      .amdgpu_num_agpr 0
      .amdgpu_private_segment_size 0
+     .amdgpu_occupancy 4
      .amdgpu_use lds_var
      .amdgpu_call helper
      .amdgpu_indirect_call "vi"
