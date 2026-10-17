@@ -458,7 +458,8 @@ static LogicalResult checkImplementationStatus(Operation &op) {
       result = todo("ompx_bare");
   };
   auto checkDepend = [&todo](auto op, LogicalResult &result) {
-    if (!op.getDependVars().empty() || op.getDependKinds())
+    if (!op.getDependVars().empty() || op.getDependKinds() ||
+        !op.getDependIterated().empty() || op.getDependIteratedKinds())
       result = todo("depend");
   };
   auto checkHint = [](auto op, LogicalResult &) {
@@ -2890,8 +2891,9 @@ private:
 /// mlir::omp::IteratorOp for lowering to LLVM IR.
 ///
 /// It computes the per-dimension trip counts and the total linearized trip
-/// count, casted to i64. These are used to build a canonical loop and to
-/// reconstruct the physical induction variables inside the loop body.
+/// count as i64. Bounds and steps keep their declared type so that the
+/// physical induction variables can be reconstructed in that type inside the
+/// loop body.
 class IteratorInfo {
 private:
   llvm::SmallVector<llvm::Value *> lowerBounds;
@@ -2900,18 +2902,6 @@ private:
   llvm::SmallVector<llvm::Value *> trips;
   unsigned dims;
   llvm::Value *totalTrips;
-
-  llvm::Value *lookUpAsI64(mlir::Value val, const LLVM::ModuleTranslation &mt,
-                           llvm::IRBuilderBase &builder) {
-    llvm::Value *v = mt.lookupValue(val);
-    if (!v)
-      return nullptr;
-    if (v->getType()->isIntegerTy(64))
-      return v;
-    if (v->getType()->isIntegerTy())
-      return builder.CreateSExtOrTrunc(v, builder.getInt64Ty());
-    return nullptr;
-  }
 
 public:
   IteratorInfo(mlir::omp::IteratorOp itersOp,
@@ -2924,12 +2914,12 @@ public:
     trips.resize(dims);
 
     for (unsigned d = 0; d < dims; ++d) {
-      llvm::Value *lb = lookUpAsI64(itersOp.getLoopLowerBounds()[d],
-                                    moduleTranslation, builder);
-      llvm::Value *ub = lookUpAsI64(itersOp.getLoopUpperBounds()[d],
-                                    moduleTranslation, builder);
+      llvm::Value *lb =
+          moduleTranslation.lookupValue(itersOp.getLoopLowerBounds()[d]);
+      llvm::Value *ub =
+          moduleTranslation.lookupValue(itersOp.getLoopUpperBounds()[d]);
       llvm::Value *st =
-          lookUpAsI64(itersOp.getLoopSteps()[d], moduleTranslation, builder);
+          moduleTranslation.lookupValue(itersOp.getLoopSteps()[d]);
       assert(lb && ub && st &&
              "Expect lowerBounds, upperBounds, and steps in IteratorOp");
       assert((!llvm::isa<llvm::ConstantInt>(st) ||
@@ -2940,11 +2930,18 @@ public:
       upperBounds[d] = ub;
       steps[d] = st;
 
-      // trips = ((ub - lb) / step) + 1  (inclusive ub, assume positive step)
-      llvm::Value *diff = builder.CreateSub(ub, lb);
-      llvm::Value *div = builder.CreateSDiv(diff, st);
-      trips[d] = builder.CreateAdd(
-          div, llvm::ConstantInt::get(builder.getInt64Ty(), 1));
+      // Use a direction-aware count so an empty range contributes no entries.
+      // Widen by one bit so the span between the bounds cannot overflow.
+      llvm::Type *countTy =
+          builder.getIntNTy(lb->getType()->getIntegerBitWidth() + 1);
+      llvm::Value *start = builder.CreateSExt(lb, countTy);
+      llvm::Value *stop = builder.CreateSExt(ub, countTy);
+      llvm::Value *step = builder.CreateSExt(st, countTy);
+      llvm::Value *count =
+          moduleTranslation.getOpenMPBuilder()->calculateCanonicalLoopTripCount(
+              builder, start, stop, step, /*IsSigned=*/true,
+              /*InclusiveStop=*/true);
+      trips[d] = builder.CreateZExtOrTrunc(count, builder.getInt64Ty());
     }
 
     totalTrips = llvm::ConstantInt::get(builder.getInt64Ty(), 1);
@@ -3072,11 +3069,10 @@ static void fillAffinityLocators(Operation::operand_range affinityVars,
   }
 }
 
-static mlir::LogicalResult
-convertIteratorRegion(llvm::Value *linearIV, IteratorInfo &iterInfo,
-                      mlir::Block &iteratorRegionBlock,
-                      llvm::IRBuilderBase &builder,
-                      LLVM::ModuleTranslation &moduleTranslation) {
+static mlir::LogicalResult convertIteratorRegion(
+    llvm::Value *linearIV, IteratorInfo &iterInfo, mlir::Region &iteratorRegion,
+    llvm::IRBuilderBase &builder, LLVM::ModuleTranslation &moduleTranslation) {
+  mlir::Block &entryBlock = iteratorRegion.front();
   llvm::Value *tmp = linearIV;
   for (int d = (int)iterInfo.getDims() - 1; d >= 0; --d) {
     llvm::Value *trip = iterInfo.getTrips()[d];
@@ -3086,20 +3082,47 @@ convertIteratorRegion(llvm::Value *linearIV, IteratorInfo &iterInfo,
     tmp = builder.CreateUDiv(tmp, trip);
 
     // physIV_d = lb_d + idx_d * step_d
+    idx =
+        builder.CreateZExtOrTrunc(idx, iterInfo.getLowerBounds()[d]->getType());
     llvm::Value *physIV = builder.CreateAdd(
         iterInfo.getLowerBounds()[d],
         builder.CreateMul(idx, iterInfo.getSteps()[d]), "omp.it.phys_iv");
 
-    moduleTranslation.mapValue(iteratorRegionBlock.getArgument(d), physIV);
+    moduleTranslation.mapValue(entryBlock.getArgument(d), physIV);
   }
 
   // Translate the iterator region into the loop body.
-  moduleTranslation.mapBlock(&iteratorRegionBlock, builder.GetInsertBlock());
-  if (mlir::failed(moduleTranslation.convertBlock(iteratorRegionBlock,
-                                                  /*ignoreArguments=*/true,
-                                                  builder))) {
-    return mlir::failure();
+  if (iteratorRegion.hasOneBlock()) {
+    moduleTranslation.mapBlock(&entryBlock, builder.GetInsertBlock());
+    return moduleTranslation.convertBlock(entryBlock, /*ignoreArguments=*/true,
+                                          builder);
   }
+
+  // Unlike convertOmpOpRegions, do not forward the yielded value through a PHI:
+  // it may have no LLVM type (e.g. `!omp.affinity_entry_ty`). The unique
+  // `omp.yield` block is the continuation's only predecessor, so callers can
+  // look up the yielded value directly.
+  llvm::BasicBlock *continuation =
+      splitBB(builder, true, "omp.iterator.region.cont");
+  llvm::Instruction *sourceBranch = builder.GetInsertBlock()->getTerminator();
+  for (mlir::Block &block : iteratorRegion)
+    moduleTranslation.mapBlock(
+        &block,
+        llvm::BasicBlock::Create(builder.getContext(), "omp.iterator.region",
+                                 continuation->getParent(), continuation));
+  sourceBranch->setSuccessor(0, moduleTranslation.lookupBlock(&entryBlock));
+
+  for (mlir::Block *block : getBlocksSortedByDominance(iteratorRegion)) {
+    llvm::IRBuilderBase::InsertPointGuard guard(builder);
+    if (failed(moduleTranslation.convertBlock(*block, block->isEntryBlock(),
+                                              builder)))
+      return mlir::failure();
+    if (isa<omp::YieldOp>(block->getTerminator()))
+      builder.CreateBr(continuation);
+  }
+  LLVM::detail::connectPHINodes(iteratorRegion, moduleTranslation);
+
+  builder.SetInsertPoint(continuation);
   return mlir::success();
 }
 
@@ -3112,7 +3135,6 @@ fillIteratorLoop(mlir::omp::IteratorOp itersOp, llvm::IRBuilderBase &builder,
                  IteratorInfo &iterInfo, llvm::StringRef loopName,
                  IteratorStoreEntryTy genStoreEntry) {
   mlir::Region &itersRegion = itersOp.getRegion();
-  mlir::Block &iteratorRegionBlock = itersRegion.front();
 
   llvm::OpenMPIRBuilder::LocationDescription loc(builder);
 
@@ -3121,14 +3143,13 @@ fillIteratorLoop(mlir::omp::IteratorOp itersOp, llvm::IRBuilderBase &builder,
     llvm::IRBuilderBase::InsertPointGuard guard(builder);
     builder.restoreIP(bodyIP);
 
-    if (failed(convertIteratorRegion(linearIV, iterInfo, iteratorRegionBlock,
-                                     builder, moduleTranslation))) {
+    if (failed(convertIteratorRegion(linearIV, iterInfo, itersRegion, builder,
+                                     moduleTranslation))) {
       return llvm::make_error<llvm::StringError>(
           "failed to convert iterator region", llvm::inconvertibleErrorCode());
     }
 
-    auto yield =
-        mlir::dyn_cast<mlir::omp::YieldOp>(iteratorRegionBlock.getTerminator());
+    mlir::omp::YieldOp yield = itersOp.getYieldOp();
     assert(yield && yield.getResults().size() == 1 &&
            "expect omp.yield in iterator region to have one result");
 
@@ -8226,50 +8247,6 @@ static void mapParentWithMembers(
       // members of derived types.
       mapFlag &= ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_RETURN_PARAM;
 
-      // TODO: We may want to skip arrays/array sections in this as Clang does.
-      // It appears to be an optimisation rather than a necessity though,
-      // but this requires further investigation. However, we would have to make
-      // sure to not exclude maps with bounds that ARE pointers, as these are
-      // processed as separate components, i.e. pointer + data.
-      for (auto v : overlapIdxs) {
-        auto mapDataOverlapIdx = getMapDataMemberIdx(
-            mapData,
-            cast<omp::MapInfoOp>(parentClause.getMembers()[v].getDefiningOp()));
-        auto isPtrMap = checkIfPointerMap(
-            llvm::cast<omp::MapInfoOp>(mapData.MapClause[mapDataOverlapIdx]));
-        combinedInfo.Types.emplace_back(mapFlag);
-        // TODO: set HasAttachPtr from Flang for pointee-storage entries.
-        combinedInfo.HasAttachPtr.emplace_back(false);
-        combinedInfo.DevicePointers.emplace_back(
-            llvm::OpenMPIRBuilder::DeviceInfoTy::None);
-        combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-            mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder,
-            getMapClauseName(
-                cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]))));
-        combinedInfo.BasePointers.emplace_back(
-            mapData.BasePointers[mapDataIndex]);
-        combinedInfo.Mappers.emplace_back(nullptr);
-        combinedInfo.Pointers.emplace_back(lowAddr);
-        auto sizeCalc = builder.CreateIntCast(
-            builder.CreatePtrDiff(builder.getInt8Ty(),
-                                  mapData.OriginalValue[mapDataOverlapIdx],
-                                  lowAddr),
-            builder.getInt64Ty(), /*isSigned=*/true);
-        // In certain cases, we'll generate a size of 0 if we're not careful
-        // (e.g. if lowAddr happens to be the first member), which isn't
-        // correct, even if the runtimes is sometimes fine with it so, in these
-        // scenarios we select the types size instead.
-        llvm::DataLayout dataLayout = builder.getDataLayout();
-        auto sizeSel = builder.CreateSelect(
-            builder.CreateICmpNE(builder.getInt64(0), sizeCalc), sizeCalc,
-            isPtrMap ? builder.getInt64(dataLayout.getPointerSize())
-                     : mapData.Sizes[mapDataOverlapIdx]);
-        combinedInfo.Sizes.emplace_back(sizeSel);
-        lowAddr = builder.CreateConstGEP1_32(
-            isPtrMap ? builder.getPtrTy() : mapData.BaseType[mapDataOverlapIdx],
-            mapData.BasePointers[mapDataOverlapIdx], 1);
-      }
-
       combinedInfo.Types.emplace_back(mapFlag);
       // TODO: set HasAttachPtr from Flang for pointee-storage entries.
       combinedInfo.HasAttachPtr.emplace_back(false);
@@ -9061,6 +9038,75 @@ static void getTargetEntryUniqueInfo(llvm::TargetRegionEntryInfo &targetInfo,
       ompBuilder.getTargetEntryUniqueInfo(fileInfoCallBack, vfs, parentName);
 }
 
+/// Build the DIOp based expression for a variable that is located by \p loc.
+/// When \p isAddress is set, \p loc holds the address of the variable, which
+/// is described together with the type of the variable. That type is
+/// \p varType when it is known from the source of the variable, for example
+/// the type carried by a map clause, and null when it has to be deduced from
+/// the IR. Otherwise \p loc is the value of the variable.
+static llvm::DIExpression *getVariableExpression(llvm::LLVMContext &context,
+                                                 llvm::Value *loc,
+                                                 bool isAddress,
+                                                 llvm::Type *varType) {
+  llvm::DIExprBuilder exprBuilder(context);
+  exprBuilder.append<llvm::DIOp::Arg>(0u, loc->getType());
+  if (!isAddress)
+    return exprBuilder.intoExpression();
+
+  assert(loc->getType()->isPointerTy() &&
+         "the address of a variable must be a pointer");
+  if (!varType) {
+    // An alloca knows what it holds. Anything else is an opaque pointer by
+    // this point, so fall back to describing it as one.
+    if (auto *allocaInst =
+            llvm::dyn_cast<llvm::AllocaInst>(loc->stripPointerCasts()))
+      varType = allocaInst->getAllocatedType();
+    else
+      // FIXME: This is wrong for every variable that reaches including the
+      // dummy arguments of a declare target function. It describes the
+      // pointer rather than what the pointer points at. It is harmless today
+      // because the DWARF emitted for DIOpArg(0, ptr), DIOpDeref(T) depends
+      // only on the address space of the pointer and not on T, but it will
+      // matter as soon as an expression reads through the dereference. The
+      // fix is to carry the type from the frontend, which means teaching both
+      // flang and the MLIR debug attributes about DIOps. That is best done
+      // once DIOp is available upstream.
+      varType = loc->getType();
+  }
+  exprBuilder.append<llvm::DIOp::Deref>(varType);
+  return exprBuilder.intoExpression();
+}
+
+/// Types of the variables located by the arguments of a target kernel, which
+/// are known from the map clauses rather than from the IR.
+using VariableTypeMap = llvm::DenseMap<llvm::Value *, llvm::Type *>;
+
+/// Add DIOp based expressions to the debug records of \p func for the AMDGPU
+/// target. A record that already carries an expression is left alone.
+static void updateDebugInfoForFunction(
+    llvm::Function *func, const VariableTypeMap &varTypes = VariableTypeMap{}) {
+  if (!llvm::Triple(func->getParent()->getTargetTriple()).isAMDGPU())
+    return;
+
+  auto addExpression = [&](llvm::DbgVariableRecord *record) {
+    llvm::DIExpression *old = record->getExpression();
+    if ((old != nullptr) && (old->getNumElements() != 0))
+      return;
+    // FIXME: Could this be an assert?
+    if (record->getNumVariableLocationOps() != 1u)
+      return;
+    llvm::Value *loc = record->getVariableLocationOp(0u);
+    record->setExpression(getVariableExpression(func->getContext(), loc,
+                                                record->isAddressOfVariable(),
+                                                varTypes.lookup(loc)));
+  };
+
+  for (llvm::Instruction &inst : llvm::instructions(func))
+    for (llvm::DbgVariableRecord &record :
+         llvm::filterDbgVars(inst.getDbgRecordRange()))
+      addExpression(&record);
+}
+
 // The createDeviceArgumentAccessor function generates
 // instructions for retrieving (acessing) kernel
 // arguments inside of the device kernel for use by
@@ -9107,7 +9153,8 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
     LLVM::ModuleTranslation &moduleTranslation,
     llvm::IRBuilderBase::InsertPoint allocaIP,
     llvm::IRBuilderBase::InsertPoint codeGenIP,
-    llvm::ArrayRef<llvm::IRBuilderBase::InsertPoint> deallocIPs) {
+    llvm::ArrayRef<llvm::IRBuilderBase::InsertPoint> deallocIPs,
+    VariableTypeMap &varTypes) {
   assert(ompBuilder.Config.isTargetDevice() &&
          "function only supported for target device codegen");
   builder.restoreIP(allocaIP);
@@ -9116,6 +9163,9 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
   LLVM::TypeToLLVMIRTranslator typeToLLVMIRTranslator(
       ompBuilder.M.getContext());
   unsigned alignmentValue = 0;
+  // Type of the mapped variable, which the debug records of the kernel need
+  // and which cannot be recovered from the IR once the kernel is built.
+  llvm::Type *varType = nullptr;
   BlockArgument mlirArg;
   SmallVector<std::pair<Value, BlockArgument>> blockArgsPairs;
   cast<omp::BlockArgOpenMPOpInterface>(*targetOp).getBlockArgsPairs(
@@ -9128,6 +9178,7 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
       // Get information of alignment of mapped object
       alignmentValue = typeToLLVMIRTranslator.getPreferredAlignment(
           mapOp.getVarPtrType(), ompBuilder.M.getDataLayout());
+      varType = typeToLLVMIRTranslator.translateType(mapOp.getVarPtrType());
 
       // Find the corresponding entry block argument, which can be associated to
       // a map, use_device* or has_device* clause.
@@ -9220,6 +9271,9 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
     assert(false && "Currently unsupported capture kind");
     break;
   }
+
+  if (varType)
+    varTypes[retVal] = varType;
 
   return builder.saveIP();
 }
@@ -9912,6 +9966,11 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
     return combinedInfos;
   };
 
+  // Types of the mapped variables and the kernel they are mapped into, which
+  // the debug records of the kernel need once it has been built.
+  VariableTypeMap varTypes;
+  llvm::Function *kernelFunc = nullptr;
+
   auto argAccessorCB = [&](llvm::Argument &arg, llvm::Value *input,
                            llvm::Value *&retVal, InsertPointTy allocaIP,
                            InsertPointTy codeGenIP,
@@ -9929,9 +9988,10 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
       return codeGenIP;
     }
 
-    return createDeviceArgumentAccessor(targetOp, mapData, arg, input, retVal,
-                                        builder, *ompBuilder, moduleTranslation,
-                                        allocaIP, codeGenIP, deallocIPs);
+    kernelFunc = arg.getParent();
+    return createDeviceArgumentAccessor(
+        targetOp, mapData, arg, input, retVal, builder, *ompBuilder,
+        moduleTranslation, allocaIP, codeGenIP, deallocIPs, varTypes);
   };
 
   llvm::OpenMPIRBuilder::TargetKernelRuntimeAttrs runtimeAttrs;
@@ -10044,6 +10104,9 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
   if (failed(handleError(afterIP, opInst)))
     return failure();
 
+  if (kernelFunc)
+    updateDebugInfoForFunction(kernelFunc, varTypes);
+
   builder.restoreIP(*afterIP);
 
   if (dependencies.DepArray)
@@ -10064,63 +10127,15 @@ static void updateDebugInfoForDeclareTargetVariables(
     llvm::SmallVector<llvm::DIGlobalVariableExpression *> GVEs;
     GV->getDebugInfo(GVEs);
     GV->eraseMetadata(llvm::LLVMContext::MD_dbg);
-    llvm::DIExprBuilder ExprBuilder(M->getContext());
-    unsigned int globalAS = M->getDataLayout().getDefaultGlobalsAddressSpace();
-    auto ptrTy = llvm::PointerType::get(M->getContext(), globalAS);
-    ExprBuilder.append<llvm::DIOp::Arg>(0u, ptrTy);
-    ExprBuilder.append<llvm::DIOp::Deref>(GV->getType());
+    llvm::DIExpression *expr = getVariableExpression(
+        M->getContext(), GV, /*isAddress=*/true, GV->getValueType());
     for (auto *GVE : GVEs) {
       llvm::DIExpression *Old = GVE->getExpression();
       assert((Old == nullptr) || (Old->getNumElements() == 0));
       auto *newGVE = llvm::DIGlobalVariableExpression::get(
-          M->getContext(), GVE->getVariable(), ExprBuilder.intoExpression());
+          M->getContext(), GVE->getVariable(), expr);
       GV->addDebugInfo(newGVE);
     }
-  }
-}
-
-// This function Add DIOp based expressions to the debug records in the
-// declare target functions.
-
-static void updateDebugInfoForDeclareTargetFunctions(
-    llvm::Function *Fn, LLVM::ModuleTranslation &moduleTranslation) {
-  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
-  llvm::Module &M = ompBuilder->M;
-
-  if (!llvm::Triple(M.getTargetTriple()).isAMDGPU())
-    return;
-
-  auto AddExpression = [&](auto *DR) {
-    llvm::DIExpression *Old = DR->getExpression();
-    // Skip if an expression is already present.
-    if ((Old != nullptr) && (Old->getNumElements() != 0))
-      return;
-    // Skip if the there are multiple inputs.
-    // FIXME: Could this be an assert? More to the point, can we do this at the
-    // point of generating the intrinsics to begin with, rather than fixing them
-    // up here?
-    if (DR->getNumVariableLocationOps() != 1u)
-      return;
-    auto Loc = DR->getVariableLocationOp(0u);
-    llvm::DIExprBuilder EB(Fn->getContext());
-    if (auto AI = dyn_cast<llvm::AllocaInst>(Loc->stripPointerCasts())) {
-      DR->replaceVariableLocationOp(0u, AI);
-      EB.append<llvm::DIOp::Arg>(0u, AI->getType());
-      EB.append<llvm::DIOp::Deref>(AI->getAllocatedType());
-    } else if (Loc->getType()->isPointerTy()) {
-      EB.append<llvm::DIOp::Arg>(0u, Loc->getType());
-      EB.append<llvm::DIOp::Deref>(Loc->getType());
-    } else
-      EB.append<llvm::DIOp::Arg>(0u, Loc->getType());
-    DR->setExpression(EB.intoExpression());
-  };
-
-  for (llvm::Instruction &I : instructions(Fn)) {
-    if (auto *DDI = dyn_cast<llvm::DbgVariableIntrinsic>(&I))
-      AddExpression(DDI);
-
-    for (llvm::DbgVariableRecord &DVR : filterDbgVars(I.getDbgRecordRange()))
-      AddExpression(&DVR);
   }
 }
 
@@ -10154,7 +10169,7 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
         ompBuilder->Builder.ClearInsertionPoint();
         ompBuilder->Builder.SetCurrentDebugLocation(llvm::DebugLoc());
       } else if (llvmFunc) {
-        updateDebugInfoForDeclareTargetFunctions(llvmFunc, moduleTranslation);
+        updateDebugInfoForFunction(llvmFunc);
 
         // Device-side declare target functions are externally visible by
         // default so they can be referenced from other device translation

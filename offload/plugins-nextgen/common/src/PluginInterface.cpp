@@ -1573,6 +1573,7 @@ int32_t GenericPluginTy::launch_kernel(int32_t DeviceId, void *TgtEntryPtr,
   return R;
 }
 
+#if 0//<<<<<<< HEAD
 int32_t GenericPluginTy::create_event(int32_t DeviceId, void **EventPtr) {
   auto T = logger::log<int32_t>(__func__, DeviceId, EventPtr);
   auto R = [&]() {
@@ -1653,7 +1654,7 @@ int32_t GenericPluginTy::destroy_event(int32_t DeviceId, void *EventPtr) {
   T.res(R);
   return R;
 }
-
+#endif
 // Register mapped or allocated memory (with omp_target_alloc or omp_alloc)
 // as coarse grain
 // \arg DeviceId is the ID of the device for which the memory should be switched
@@ -1726,22 +1727,6 @@ void GenericPluginTy::set_coarse_grain_mem(int32_t DeviceId, const void *ptr,
              << toString(std::move(Err)).data();
   T.res(0);
   return;
-}
-
-int32_t GenericPluginTy::is_accessible_ptr(int32_t DeviceId, const void *Ptr,
-                                           size_t Size) {
-  auto HandleError = [&](Error Err) -> bool {
-    std::string ErrStr = toString(std::move(Err));
-    ODBG(OLDT_Device) << "Failure while checking accessibility of pointer "
-                      << Ptr << " for device " << DeviceId << ": " << ErrStr;
-    return false;
-  };
-
-  auto AccessibleOrErr = getDevice(DeviceId).isAccessiblePtr(Ptr, Size);
-  if (Error Err = AccessibleOrErr.takeError())
-    return HandleError(std::move(Err));
-
-  return *AccessibleOrErr;
 }
 
 int32_t GenericPluginTy::get_global(__tgt_device_binary Binary, uint64_t Size,
