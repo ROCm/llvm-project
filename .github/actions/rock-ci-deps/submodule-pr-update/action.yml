@@ -4,7 +4,7 @@ description: >
   spirv-llvm-translator and hipify with amd-staging tip.
   On nightly schedule (and nightly workflow_dispatch without PR params) points
   compiler/amd-llvm, spirv-llvm-translator, and hipify at their amd-staging tips.  
-  On workflow_dispatch downloads PR params artifact, sources env, merges upstream PRs, updates submodule pointers.
+  On workflow_dispatch downloads PR params artifact, sources env, merges upstream PR heads onto the amd-staging tip, updates submodule pointers.
 
 inputs:
   params_artifact_name:
@@ -151,6 +151,11 @@ runs:
           printf '%s' "$1" | tr -d '[:space:]'
         }
 
+        read_amd_staging_tip() {
+          local repo_url="$1"
+          trim_sha "$(git ls-remote "${repo_url}" refs/heads/amd-staging | awk '{print $1}')"
+        }
+
         get_pr_sha() {
           local pr_url="$1"
           local base_repo_url pr_num sha
@@ -162,7 +167,16 @@ runs:
 
         merge_upstream_prs() {
           local pr_urls="$1"
-          local url repo num ref
+          local url repo num base_sha
+          # Merge the upstream PR head onto the current ROCm amd-staging tip.
+          # Depth 1000 keeps the shared ancestor available for the merge.
+          base_sha="$(read_amd_staging_tip https://github.com/ROCm/llvm-project.git)"
+          if [[ -z "$base_sha" || ${#base_sha} -ne 40 ]]; then
+            echo "::error::Failed to resolve ROCm/llvm-project amd-staging tip." >&2
+            exit 1
+          fi
+          echo "Checking out ROCm/llvm-project amd-staging tip ${base_sha} before merge" >&2
+          git update-index --cacheinfo 160000,"$base_sha",compiler/amd-llvm
           git submodule update --init --depth 1000 --jobs 1 compiler/amd-llvm
           IFS=',' read -ra PR_URLS <<< "$pr_urls"
           for url in "${PR_URLS[@]}"; do
@@ -170,11 +184,10 @@ runs:
             [[ -z "$url" ]] && continue
             repo="$(echo "$url" | sed 's|/pull/.*||')"
             num="$(echo "$url" | sed 's|.*/pull/||')"
-            ref="upstream-pr-${num}"
-            echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
-            git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
-            git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
-              echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
+            echo "Merging upstream PR #${num} from ${url} onto ROCm/llvm-project amd-staging" >&2
+            git -C compiler/amd-llvm fetch --depth=1000 "${repo}.git" "refs/pull/${num}/head"
+            git -C compiler/amd-llvm merge --no-edit FETCH_HEAD || {
+              echo "::error::Failed to merge upstream PR #${num} onto ROCm/llvm-project amd-staging." >&2
               exit 1
             }
           done
@@ -196,11 +209,6 @@ runs:
           git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
         fi
 
-        read_amd_staging_tip() {
-          local repo_url="$1"
-          trim_sha "$(git ls-remote "${repo_url}" refs/heads/amd-staging | awk '{print $1}')"
-        }
-        
         if [[ -n "${SPIRV_PR_URL:-}" ]]; then
           SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
           echo "SPIRV head SHA: $SPIRV_SHA"
