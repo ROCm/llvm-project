@@ -8,13 +8,13 @@
 # ci_linux.yml. Once validated, ci.yml will be updated to use the multi-arch
 # sub-workflows directly.
 
-name: Multi Arch Parameterised CI amd-staging
+name: LLVM trunk commit verifier
 
 on:
   workflow_dispatch:
     inputs:
-      LLVM_PR_URL:
-        description: "LLVM upstream PR urls(supports multi PR separated by ,). ex: https://github.com/llvm/llvm-project/pull/1"
+      LLVM_UPSTREAM_REF:
+        description: "Upstream llvm/llvm-project PR URL, commit SHA, branch, or fork shorthand owner:branch. Comma-separated values are merged in order. ex: https://github.com/llvm/llvm-project/pull/1 or fmeum:coverage-skipped-comment-fixes"
         required: false
         type: string
         default: ""
@@ -35,16 +35,16 @@ on:
         default: ""
       linux_amdgpu_families:
         type: string
-        description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: "gfx94x,gfx110x,gfx90a,gfx125x"
+        description: "Comma-separated Linux GPU families. Leave both family inputs empty to run the default Linux and Windows sets. Setting only this input skips Windows. Setting only the Windows input skips Linux."
+        default: ""
       linux_test_labels:
         type: string
         description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
         default: ""
       windows_amdgpu_families:
         type: string
-        description: "Insert comma-separated list of Windows GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: "gfx1151"
+        description: "Comma-separated Windows GPU families. Leave both family inputs empty to run the default Linux and Windows sets. Setting only this input skips Linux. Setting only the Linux input skips Windows."
+        default: ""
       windows_test_labels:
         type: string
         description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
@@ -84,7 +84,7 @@ jobs:
       - name: Store LLVM, HIPIFY and SPIRV PR URLs into file
         run: |
           cat > ${{ github.run_id }}_PR_params.env <<'EOF'
-          LLVM_PR_URL=${{ github.event.inputs.LLVM_PR_URL }}
+          LLVM_UPSTREAM_REF=${{ github.event.inputs.LLVM_UPSTREAM_REF }}
           LLVM_ROCm_PR_URL=${{ github.event.inputs.LLVM_ROCm_PR_URL }}
           SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
           HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
@@ -99,8 +99,11 @@ jobs:
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"
-      linux_amdgpu_families: ${{ github.event.inputs.linux_amdgpu_families }}
-      windows_amdgpu_families: ${{ github.event.inputs.windows_amdgpu_families }}              
+      # Both empty: default Linux and Windows families. Only one set: run
+      # that platform and pass "none" for the other so setup skips it.
+      linux_amdgpu_families: ${{ (github.event.inputs.linux_amdgpu_families == '' && github.event.inputs.windows_amdgpu_families == '') && 'gfx94x,gfx110x,gfx90a,gfx125x' || github.event.inputs.linux_amdgpu_families || 'none' }}
+      windows_amdgpu_families: ${{ (github.event.inputs.linux_amdgpu_families == '' && github.event.inputs.windows_amdgpu_families == '') && 'gfx1151' || github.event.inputs.windows_amdgpu_families || 'none' }}
+      use_configured_families: true              
       linux_test_labels: ${{ inputs.linux_test_labels || '' }}
       windows_test_labels: ${{ inputs.windows_test_labels || '' }}
       prebuilt_stages: ${{ inputs.prebuilt_stages || '' }}
@@ -115,11 +118,7 @@ jobs:
     needs:
       - setup
       - multiple_pr_sha_params
-    if: >-
-      ${{
-        needs.setup.outputs.linux_build_config != '' &&
-        needs.setup.outputs.enable_build_jobs == 'true'
-      }}
+    if: ${{ needs.setup.outputs.linux_build_config && needs.setup.outputs.enable_build_jobs == 'true' }}
     uses: ./.github/workflows/multi_arch_ci_linux.yml
     with:
       build_config: ${{ needs.setup.outputs.linux_build_config }}
@@ -140,11 +139,7 @@ jobs:
     needs:
       - setup
       - multiple_pr_sha_params
-    if: >-
-      ${{
-        needs.setup.outputs.windows_build_config != '' &&
-        needs.setup.outputs.enable_build_jobs == 'true'
-      }}
+    if: ${{ needs.setup.outputs.windows_build_config && needs.setup.outputs.enable_build_jobs == 'true' }}
     uses: ./.github/workflows/multi_arch_ci_windows.yml
     with:
       build_config: ${{ needs.setup.outputs.windows_build_config }}

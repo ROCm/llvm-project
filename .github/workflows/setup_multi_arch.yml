@@ -67,6 +67,10 @@ on:
         description: "JSON object with 'repository' (e.g., 'ROCm/rocm-libraries') and 'ref' fields for external repo builds."
         type: string
         default: ""
+      use_configured_families:
+        description: "Use the family list from configure_multi_arch_ci.py. Otherwise the hardcoded ci-config matrix is published."
+        type: boolean
+        default: false
     outputs:
       enable_build_jobs:
         description: Whether to enable build jobs.
@@ -115,8 +119,8 @@ jobs:
       BASE_REF: '0efc7532e43c16b532fdd2887e00aec8eb69e10f'
     outputs:
       enable_build_jobs: true
-      linux_build_config: ${{ steps.convergence_config.outputs.linux_build_config }}
-      windows_build_config: ${{ steps.convergence_config.outputs.windows_build_config }}
+      linux_build_config: ${{ inputs.use_configured_families && steps.family_tests.outputs.linux_build_config || !inputs.use_configured_families && steps.convergence_config.outputs.linux_build_config || '' }}
+      windows_build_config: ${{ inputs.use_configured_families && steps.family_tests.outputs.windows_build_config || !inputs.use_configured_families && steps.convergence_config.outputs.windows_build_config || '' }}
       test_type: 'quick'
       linux_test_labels: ${{ steps.configure.outputs.linux_test_labels }}
       windows_test_labels: ${{ steps.configure.outputs.windows_test_labels }}
@@ -188,6 +192,39 @@ jobs:
           # (e.g., adding test runners for architectures not enabled in TheRock's default config)
           EXTERNAL_FAMILY_OVERRIDES: ${{ inputs.external_repo != '' && toJSON(fromJSON(inputs.external_repo).family_overrides) || '' }}            
         run: python ./build_tools/github_actions/configure_multi_arch_ci.py
+
+      # Match the regular multi-arch matrix: only gfx942 (gfx94X-dcgpu) has a
+      # test runner. Other selected families are still built.
+      - name: Keep tests on gfx942 only
+        id: family_tests
+        if: inputs.use_configured_families
+        env:
+          LINUX_BUILD_CONFIG: ${{ steps.configure.outputs.linux_build_config }}
+          WINDOWS_BUILD_CONFIG: ${{ steps.configure.outputs.windows_build_config }}
+        run: |
+          python3 - << 'PY'
+          import json
+          import os
+
+          tested = {"gfx94X-dcgpu"}
+
+          def rewrite(raw):
+              if not raw:
+                  return ""
+              config = json.loads(raw)
+              for family in config.get("per_family_info") or []:
+                  if family.get("amdgpu_family") in tested:
+                      continue
+                  family["test-runs-on"] = ""
+                  family["tests_enabled"] = False
+                  family["sanity_check_only_for_family"] = True
+                  family["bypass_tests_for_releases"] = True
+              return json.dumps(config)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"linux_build_config={rewrite(os.environ.get('LINUX_BUILD_CONFIG', ''))}\n")
+              out.write(f"windows_build_config={rewrite(os.environ.get('WINDOWS_BUILD_CONFIG', ''))}\n")
+          PY
 
       - name: Build Test CI Config matrix
         id: convergence_config

@@ -72,7 +72,7 @@ on:
 jobs:
   build_stage:
     name: ${{ inputs.stage_display_name }}
-    runs-on: ${{ inputs.build_runs_on }}
+    runs-on: ${{ inputs.build_runs_on || 'aws-windows-scale-rocm-prod-mix' }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     permissions:
       id-token: write
@@ -110,7 +110,7 @@ jobs:
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
       - name: Submodule PR update (covers parameterised and PR creation)
-        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd-staging
+        uses: ROCm/llvm-project/.github/actions/rock-ci-deps/submodule-pr-update@amd-compiler-ci
 
       - name: "Map Current Directory to L Drive"
         id: subst
@@ -192,6 +192,13 @@ jobs:
           git config --global core.symlinks true
           git config --global core.longpaths true
           python build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1 ${EXTERNAL_FETCH_SOURCES_ARGS}
+
+      - name: Show recent llvm-project commits
+        if: inputs.stage_name == 'compiler-runtime'
+        run: |
+          git config --global --add safe.directory "$PWD"
+          git config --global --add safe.directory "$PWD/compiler/amd-llvm"
+          git -C compiler/amd-llvm log --oneline -10
 
       - name: TheRock and llvm SHA
         if: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full')) && inputs.stage_name == 'compiler-runtime' }}

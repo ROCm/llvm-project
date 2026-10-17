@@ -4,7 +4,7 @@ description: >
   spirv-llvm-translator and hipify with amd-staging tip.
   On nightly schedule (and nightly workflow_dispatch without PR params) points
   compiler/amd-llvm, spirv-llvm-translator, and hipify at their amd-staging tips.  
-  On workflow_dispatch downloads PR params artifact, sources env, merges upstream PRs, updates submodule pointers.
+  On workflow_dispatch downloads PR params artifact, sources env, merges an upstream PR, commit, or branch onto the amd-staging tip, updates submodule pointers.
 
 inputs:
   params_artifact_name:
@@ -134,7 +134,7 @@ runs:
         set -a
         source "./${{ github.run_id }}_PR_params.env"
         set +a
-        echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
+        echo "LLVM_UPSTREAM_REF=${LLVM_UPSTREAM_REF:-${LLVM_PR_URL:-}}" >> "$GITHUB_ENV"
         echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
         echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
         echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
@@ -151,6 +151,11 @@ runs:
           printf '%s' "$1" | tr -d '[:space:]'
         }
 
+        read_amd_staging_tip() {
+          local repo_url="$1"
+          trim_sha "$(git ls-remote "${repo_url}" refs/heads/amd-staging | awk '{print $1}')"
+        }
+
         get_pr_sha() {
           local pr_url="$1"
           local base_repo_url pr_num sha
@@ -160,23 +165,84 @@ runs:
           trim_sha "$sha"
         }
 
-        merge_upstream_prs() {
-          local pr_urls="$1"
-          local url repo num ref
+        merge_upstream_refs() {
+          local refs="$1"
+          local item repo num sha branch base_sha owner
+          local upstream_git="https://github.com/llvm/llvm-project.git"
+          # Merge each upstream PR, commit, or branch onto the current ROCm
+          # amd-staging tip. Depth 1000 keeps the shared ancestor available.
+          base_sha="$(read_amd_staging_tip https://github.com/ROCm/llvm-project.git)"
+          if [[ -z "$base_sha" || ${#base_sha} -ne 40 ]]; then
+            echo "::error::Failed to resolve ROCm/llvm-project amd-staging tip." >&2
+            exit 1
+          fi
+          echo "Checking out ROCm/llvm-project amd-staging tip ${base_sha} before merge" >&2
+          git update-index --cacheinfo 160000,"$base_sha",compiler/amd-llvm
           git submodule update --init --depth 1000 --jobs 1 compiler/amd-llvm
-          IFS=',' read -ra PR_URLS <<< "$pr_urls"
-          for url in "${PR_URLS[@]}"; do
-            url="$(echo "$url" | xargs)"
-            [[ -z "$url" ]] && continue
-            repo="$(echo "$url" | sed 's|/pull/.*||')"
-            num="$(echo "$url" | sed 's|.*/pull/||')"
-            ref="upstream-pr-${num}"
-            echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
-            git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
-            git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
-              echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
+          merge_fetch_head() {
+            local label="$1"
+            git -C compiler/amd-llvm merge --no-edit FETCH_HEAD || {
+              echo "::error::Failed to merge ${label} onto ROCm/llvm-project amd-staging." >&2
               exit 1
             }
+          }
+          # Fetch into a fixed local ref. A refspec is source:dest, so a
+          # branch name that contains ':' would be split if passed directly.
+          fetch_branch() {
+            local remote_git="$1"
+            local branch="$2"
+            local label="$3"
+            git -C compiler/amd-llvm fetch --depth=1000 "$remote_git" \
+              "+refs/heads/${branch}:refs/remotes/upstream-verify/head" || {
+              echo "::error::Failed to fetch ${label}." >&2
+              exit 1
+            }
+            merge_fetch_head "$label"
+          }
+          IFS=',' read -ra REFS <<< "$refs"
+          for item in "${REFS[@]}"; do
+            item="$(echo "$item" | xargs)"
+            [[ -z "$item" ]] && continue
+            if [[ "$item" == *"/pull/"* ]]; then
+              repo="$(echo "$item" | sed 's|/pull/.*||')"
+              num="$(echo "$item" | sed 's|.*/pull/||' | sed 's|[^0-9].*||')"
+              echo "Merging upstream PR #${num} from ${item} onto ROCm/llvm-project amd-staging" >&2
+              git -C compiler/amd-llvm fetch --depth=1000 "${repo}.git" "refs/pull/${num}/head" || {
+                echo "::error::Failed to fetch upstream PR #${num}." >&2
+                exit 1
+              }
+              merge_fetch_head "upstream PR #${num}"
+            elif [[ "$item" == *"/commit/"* ]]; then
+              sha="$(echo "$item" | sed 's|.*/commit/||' | sed 's|[/#?].*||')"
+              echo "Merging upstream commit ${sha} onto ROCm/llvm-project amd-staging" >&2
+              git -C compiler/amd-llvm fetch --depth=1000 "$upstream_git" "$sha" || {
+                echo "::error::Failed to fetch upstream commit ${sha}." >&2
+                exit 1
+              }
+              merge_fetch_head "upstream commit ${sha}"
+            elif [[ "$item" == *"/tree/"* ]]; then
+              repo="$(echo "$item" | sed 's|/tree/.*||')"
+              branch="$(echo "$item" | sed 's|.*/tree/||' | sed 's|[?#].*||')"
+              echo "Merging branch ${branch} from ${repo} onto ROCm/llvm-project amd-staging" >&2
+              fetch_branch "${repo}.git" "$branch" "branch ${branch} from ${repo}"
+            elif [[ "$item" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+              echo "Merging upstream commit ${item} onto ROCm/llvm-project amd-staging" >&2
+              git -C compiler/amd-llvm fetch --depth=1000 "$upstream_git" "$item" || {
+                echo "::error::Failed to fetch upstream commit ${item}." >&2
+                exit 1
+              }
+              merge_fetch_head "upstream commit ${item}"
+            elif [[ "$item" != *"://"* && "$item" == *":"* ]]; then
+              # GitHub fork shorthand: owner:branch
+              owner="${item%%:*}"
+              branch="${item#*:}"
+              repo="https://github.com/${owner}/llvm-project"
+              echo "Merging ${owner}/llvm-project branch ${branch} onto ROCm/llvm-project amd-staging" >&2
+              fetch_branch "${repo}.git" "$branch" "${owner}/llvm-project branch ${branch}"
+            else
+              echo "Merging upstream branch ${item} onto ROCm/llvm-project amd-staging" >&2
+              fetch_branch "$upstream_git" "$item" "upstream branch ${item}"
+            fi
           done
           MERGED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
         }
@@ -186,8 +252,8 @@ runs:
         if [[ -n "${LLVM_ROCm_PR_URL:-}" ]]; then
           LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
           echo "ROCm LLVM head SHA: $LLVM_SHA"
-        elif [[ -n "${LLVM_PR_URL:-}" ]]; then
-          merge_upstream_prs "$LLVM_PR_URL"
+        elif [[ -n "${LLVM_UPSTREAM_REF:-}" ]]; then
+          merge_upstream_refs "$LLVM_UPSTREAM_REF"
           LLVM_SHA="$MERGED_LLVM_SHA"
           echo "Final upstream LLVM SHA: $LLVM_SHA" >&2
         fi
@@ -196,11 +262,6 @@ runs:
           git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
         fi
 
-        read_amd_staging_tip() {
-          local repo_url="$1"
-          trim_sha "$(git ls-remote "${repo_url}" refs/heads/amd-staging | awk '{print $1}')"
-        }
-        
         if [[ -n "${SPIRV_PR_URL:-}" ]]; then
           SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
           echo "SPIRV head SHA: $SPIRV_SHA"
