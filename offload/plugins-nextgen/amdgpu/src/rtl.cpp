@@ -1139,10 +1139,12 @@ private:
         NumGroups = getNumGroupsFromThreadsAndTripCount(LoopTripCount,
                                                         EffectiveNumThreads);
 
-      // Honor num_teams clause but lower it if tripcount dictates.
+      // Honor the num_teams clause. Since OpenMP 5.1, num_teams(N) is also a
+      // lower bound, so do not lower it even if the tripcount needs fewer
+      // teams; the surplus teams just get no iterations.
       if (UserNumBlocks > 0 &&
           UserNumBlocks <= GenericDevice.getBlockLimit(EffectiveNumThreads)) {
-        NumGroups = std::min(static_cast<uint64_t>(UserNumBlocks), NumGroups);
+        NumGroups = UserNumBlocks;
       }
       // Without a num_teams clause, honor OMP_NUM_TEAMS environment variable
       // for BigJumpLoop kernel type.
