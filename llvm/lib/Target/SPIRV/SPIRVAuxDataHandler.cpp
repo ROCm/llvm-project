@@ -63,10 +63,7 @@ SPIRVAuxDataHandler::SPIRVAuxDataHandler(AsmPrinter &AP, const Module &M)
       LinkagePreservedGOs.push_back(&GO);
 }
 
-bool SPIRVAuxDataHandler::hasWork() const {
-  return SPVPreserveAuxData ||
-         Mod.getTargetTriple().getVendor() == Triple::VendorType::AMD;
-}
+bool SPIRVAuxDataHandler::hasWork() const { return SPVPreserveAuxData; }
 
 void SPIRVAuxDataHandler::prepareModuleOutput(const SPIRVSubtarget &ST,
                                               SPIRV::ModuleAnalysisInfo &MAI) {
