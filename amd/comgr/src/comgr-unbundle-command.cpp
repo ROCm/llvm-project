@@ -20,6 +20,8 @@
 #include <llvm/Object/OffloadBundle.h>
 #include <llvm/Support/Endian.h>
 
+#include <memory>
+
 namespace COMGR {
 using namespace llvm;
 using namespace clang;
@@ -43,6 +45,26 @@ void appendSizePrefixed(SmallVectorImpl<char> &Out, StringRef Data) {
   memcpy(Out.data() + Offset, &Size, sizeof(Size));
   memcpy(Out.data() + Offset + sizeof(Size), Data.data(), Data.size());
 }
+
+/// A MemoryBuffer that views a subrange of \p Owner and keeps it alive.
+///
+/// A compressed bundle expands to an image far larger than the bundle itself,
+/// and every requested target is a subrange of that image. Copying each
+/// subrange would duplicate the image once per target, so the outputs share
+/// the decompressed buffer instead.
+class SharedSubBuffer final : public MemoryBuffer {
+public:
+  SharedSubBuffer(std::shared_ptr<MemoryBuffer> Owner, StringRef Slice)
+      : Owner(std::move(Owner)) {
+    init(Slice.data(), Slice.data() + Slice.size(),
+         /*RequiresNullTerminator=*/false);
+  }
+
+  BufferKind getBufferKind() const override { return MemoryBuffer_Malloc; }
+
+private:
+  std::shared_ptr<MemoryBuffer> Owner;
+};
 
 /// Find the index of the first requested target that \p Triple is compatible
 /// with, or std::nullopt if there is none.
@@ -117,6 +139,14 @@ Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
 Expected<StringRef> UnbundleCommand::readExecuteOutput() {
   // The outputs were unbundled in memory, frame them for the cache entry.
   if (!OutputBuffers.empty()) {
+    // Size the buffer up front. Appending an image much larger than the
+    // SmallString's inline capacity would otherwise reallocate and copy the
+    // whole image more than once.
+    size_t TotalSize = 0;
+    for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
+      TotalSize += sizeof(SizeFieldType) + Output->getBufferSize();
+    OutputBuffer.reserve(TotalSize);
+
     for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
       appendSizePrefixed(OutputBuffer, Output->getBuffer());
     return StringRef(OutputBuffer.data(), OutputBuffer.size());
@@ -208,7 +238,12 @@ Expected<bool> UnbundleCommand::executeInMemory() {
     if (!DecompressedOrErr)
       return DecompressedOrErr.takeError();
 
-    StringRef Decompressed = (*DecompressedOrErr)->getBuffer();
+    // The outputs are subranges of this buffer, so they share ownership of it
+    // rather than copying their contents.
+    std::shared_ptr<MemoryBuffer> DecompressedOwner =
+        std::move(*DecompressedOrErr);
+
+    StringRef Decompressed = DecompressedOwner->getBuffer();
 
     // Only the binary bundle format can be read without a file. Anything
     // else, such as an object file carrying the bundles in its sections, is
@@ -251,10 +286,8 @@ Expected<bool> UnbundleCommand::executeInMemory() {
         continue;
 
       StringRef Bundle = Decompressed.substr(BundleOffset, BundleSize);
-      Outputs[*Target] = MemoryBuffer::getMemBufferCopy(Bundle);
-      if (!Outputs[*Target])
-        return createStringError(std::errc::not_enough_memory,
-                                 "Failed to allocate unbundled output");
+      Outputs[*Target] =
+          std::make_unique<SharedSubBuffer>(DecompressedOwner, Bundle);
 
       llvm::erase(Worklist, *Target);
 
