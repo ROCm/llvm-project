@@ -281,6 +281,17 @@ private:
   /// S_NOP 1
   /// V_MFMA_F32_4X4X1F32
   int checkMFMAPadding(MachineInstr *MI) const;
+  /// Wait states before a VALU, or a memory or export instruction if
+  /// \p IsMemOrExport, may read a register \p MFMA wrote.
+  int getMFMAResultReadWaitStates(const MachineInstr &MFMA,
+                                  bool IsMemOrExport) const;
+  /// Wait states before a VALU or a memory instruction may overwrite a
+  /// register \p MFMA wrote.
+  int getMFMAResultWriteWaitStates(const MachineInstr &MFMA) const;
+  /// Wait states before a VALU or a memory instruction may overwrite \p Reg,
+  /// which \p MFMA read as srcC, or std::nullopt if it did not.
+  std::optional<int> getMFMASrcCWriteWaitStates(const MachineInstr &MFMA,
+                                                Register Reg) const;
   int checkMAIVALUHazards(MachineInstr *MI) const;
   int checkMAILdStHazards(MachineInstr *MI) const;
   int checkPermlaneHazards(MachineInstr *MI) const;
