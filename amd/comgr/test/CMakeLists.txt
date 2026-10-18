@@ -100,10 +100,10 @@ macro(add_test_input_compressed_bundle name input payload_output output
     OUTPUT "${output}" "${uncompressed_output}"
     COMMAND "$<TARGET_FILE:clang-offload-bundler>" --compress --type=bc
     --targets=hip-amdgcn-amd-amdhsa-unknown-gfx900
-    --input="${payload_output}" --output="${output}"
+    "--input=${payload_output}" "--output=${output}"
     COMMAND "$<TARGET_FILE:clang-offload-bundler>" --type=bc
     --targets=hip-amdgcn-amd-amdhsa-unknown-gfx900
-    --input="${payload_output}" --output="${uncompressed_output}"
+    "--input=${payload_output}" "--output=${uncompressed_output}"
     VERBATIM
     DEPENDS clang-offload-bundler "${payload_output}")
   add_custom_target("${name}"
@@ -281,6 +281,16 @@ add_comgr_test(compile_hip_to_relocatable c)
 #add_comgr_test(compile_hip_with_libcxx_test c)
 add_comgr_test(mangled_names_hip_test c)
 add_comgr_test(unbundle_compressed_test c)
+add_comgr_test(unbundle_compressed_edge_cases_test cpp)
+set_target_properties(unbundle_compressed_edge_cases_test PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED Yes
+  CXX_EXTENSIONS No)
+llvm_map_components_to_libnames(COMGR_UNBUNDLE_TEST_LIBS Object Support)
+target_link_libraries(unbundle_compressed_edge_cases_test
+  ${COMGR_UNBUNDLE_TEST_LIBS})
+target_include_directories(unbundle_compressed_edge_cases_test PRIVATE
+  ${LLVM_INCLUDE_DIRS})
 #add_comgr_test(unbundle_hip_test c)
 
 add_test(

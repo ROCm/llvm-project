@@ -591,16 +591,23 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
   if (!DecompressedData)
     return createStringError(std::errc::not_enough_memory,
                              "could not allocate decompressed buffer");
-  DebugCompressionType CompressionType =
+  size_t ActualSize = UncompressedSize;
+  auto *Destination =
+      reinterpret_cast<uint8_t *>(DecompressedData->getBufferStart());
+  Error DecompressionError =
       CompressionFormat == compression::Format::Zlib
-          ? DebugCompressionType::Zlib
-          : DebugCompressionType::Zstd;
-  if (Error DecompressionError = compression::decompress(
-          CompressionType, arrayRefFromStringRef(CompressedData),
-          reinterpret_cast<uint8_t *>(DecompressedData->getBufferStart()),
-          UncompressedSize))
+          ? compression::zlib::decompress(arrayRefFromStringRef(CompressedData),
+                                          Destination, ActualSize)
+          : compression::zstd::decompress(arrayRefFromStringRef(CompressedData),
+                                          Destination, ActualSize);
+  if (DecompressionError)
     return createStringError("could not decompress embedded file contents: " +
                              toString(std::move(DecompressionError)));
+
+  std::unique_ptr<MemoryBuffer> ResultBuffer = std::move(DecompressedData);
+  if (ActualSize != UncompressedSize)
+    ResultBuffer = MemoryBuffer::getMemBufferCopy(
+        ResultBuffer->getBuffer().take_front(ActualSize));
 
   if (VerboseStream) {
     DecompressTimer.stopTimer();
@@ -615,8 +622,8 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
     MD5 Hash;
     MD5::MD5Result Result;
     Hash.update(ArrayRef<uint8_t>(
-        reinterpret_cast<const uint8_t *>(DecompressedData->getBufferStart()),
-        DecompressedData->getBufferSize()));
+        reinterpret_cast<const uint8_t *>(ResultBuffer->getBufferStart()),
+        ResultBuffer->getBufferSize()));
     Hash.final(Result);
     uint64_t RecalculatedHash = Result.low();
     HashRecalcTimer.stopTimer();
@@ -650,5 +657,5 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
         << "Hashes match: " << (HashMatch ? "Yes" : "No") << "\n";
   }
 
-  return std::move(DecompressedData);
+  return std::move(ResultBuffer);
 }

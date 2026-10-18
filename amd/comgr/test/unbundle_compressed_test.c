@@ -97,8 +97,8 @@ static void unbundleAndCheck(const char *BundlePath, const char *PayloadPath) {
   Status =
       amd_comgr_action_info_set_language(ActionInfo, AMD_COMGR_LANGUAGE_HIP);
   checkError(Status, "set_language");
-  Status = amd_comgr_action_info_set_bundle_entry_ids(ActionInfo,
-                                                      BundleEntryIDs, 2);
+  Status =
+      amd_comgr_action_info_set_bundle_entry_ids(ActionInfo, BundleEntryIDs, 2);
   checkError(Status, "set_bundle_entry_ids");
 
   Status = amd_comgr_create_data_set(&DataSetUnbundled);
@@ -110,9 +110,8 @@ static void unbundleAndCheck(const char *BundlePath, const char *PayloadPath) {
   checkCount(BundlePath, DataSetUnbundled, AMD_COMGR_DATA_KIND_BC, 2);
 
   // The bundle holds no host bundle, so the host output is empty.
-  Status = amd_comgr_action_data_get_data(DataSetUnbundled,
-                                          AMD_COMGR_DATA_KIND_BC, 0,
-                                          &DataElement);
+  Status = amd_comgr_action_data_get_data(
+      DataSetUnbundled, AMD_COMGR_DATA_KIND_BC, 0, &DataElement);
   checkError(Status, "host:amd_comgr_action_data_get_data");
   Status = amd_comgr_get_data(DataElement, &Size, NULL);
   checkError(Status, "host:amd_comgr_get_data");
@@ -123,9 +122,8 @@ static void unbundleAndCheck(const char *BundlePath, const char *PayloadPath) {
   checkError(Status, "host:amd_comgr_release_data");
 
   // The gfx900 output holds the file that was bundled.
-  Status = amd_comgr_action_data_get_data(DataSetUnbundled,
-                                          AMD_COMGR_DATA_KIND_BC, 1,
-                                          &DataElement);
+  Status = amd_comgr_action_data_get_data(
+      DataSetUnbundled, AMD_COMGR_DATA_KIND_BC, 1, &DataElement);
   checkError(Status, "device:amd_comgr_action_data_get_data");
   checkName(DataElement, "square-hip-amdgcn-amd-amdhsa-unknown-gfx900.bc");
   checkContents(DataElement, PayloadPath);

@@ -32,7 +32,7 @@ private:
   // memory.
   llvm::SmallVector<std::unique_ptr<llvm::MemoryBuffer>, 4> OutputBuffers;
 
-  /// Unbundle a compressed bundle into OutputBuffer without writing any file.
+  /// Unbundle a compressed bundle into OutputBuffers without writing any file.
   /// Returns false if the input is not a compressed bundle whose contents are
   /// in the binary bundle format, in which case the caller must use the
   /// file-based OffloadBundler API.

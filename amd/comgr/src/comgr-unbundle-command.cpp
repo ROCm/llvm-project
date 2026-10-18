@@ -16,6 +16,7 @@
 
 #include <clang/Driver/OffloadBundler.h>
 #include <llvm/ADT/STLExtras.h>
+#include <llvm/ADT/StringMap.h>
 #include <llvm/BinaryFormat/Magic.h>
 #include <llvm/Object/OffloadBundle.h>
 #include <llvm/Support/Endian.h>
@@ -65,19 +66,6 @@ public:
 private:
   std::shared_ptr<MemoryBuffer> Owner;
 };
-
-/// Find the index of the first requested target that \p Triple is compatible
-/// with, or std::nullopt if there is none.
-std::optional<size_t> findCompatibleTarget(StringRef Triple,
-                                           const OffloadBundlerConfig &Config) {
-  OffloadTargetInfo CodeObjectInfo(Triple, Config);
-  for (auto [Index, Target] : llvm::enumerate(Config.TargetNames)) {
-    if (isCodeObjectCompatible(CodeObjectInfo,
-                               OffloadTargetInfo(Target, Config)))
-      return static_cast<size_t>(Index);
-  }
-  return std::nullopt;
-}
 
 } // namespace
 
@@ -184,12 +172,13 @@ Expected<bool> UnbundleCommand::executeInMemory() {
   // The worklist holds the index of each target that has not been unbundled
   // yet. The outputs are collected separately so that falling back to the
   // file-based path does not leave partial results behind.
-  SmallVector<size_t, 4> Worklist;
+  StringMap<size_t> Worklist;
   for (auto [Index, Target] : llvm::enumerate(Config.TargetNames)) {
     if (!checkOffloadBundleID(Target))
       return createStringError(std::errc::invalid_argument,
                                "invalid bundle id from bundle config");
-    Worklist.push_back(Index);
+    if (!Worklist.try_emplace(Target, Index).second)
+      return false;
   }
 
   SmallVector<std::unique_ptr<MemoryBuffer>, 4> Outputs(
@@ -205,17 +194,25 @@ Expected<bool> UnbundleCommand::executeInMemory() {
     if (identify_magic(Remaining) != file_magic::offload_bundle_compressed)
       return false;
 
+    if (Remaining.size() < 8)
+      return createStringError("compressed bundle header size too small");
+    uint16_t Version = support::endian::read16le(Remaining.data() + 4);
+    if (Version < 1 || Version > 3)
+      return createStringError("unknown compressed bundle version");
+
     // Locate this bundle's end and the next bundle from the header size.
     size_t CurBundleEnd = StringRef::npos;
     Expected<object::CompressedOffloadBundle::CompressedBundleHeader> Header =
         object::CompressedOffloadBundle::CompressedBundleHeader::tryParse(
             Remaining);
-    if (Header)
-      CurBundleEnd = Header->FileSize.value_or(StringRef::npos);
-    else
-      consumeError(Header.takeError());
+    if (!Header)
+      return Header.takeError();
+    CurBundleEnd = Header->FileSize.value_or(StringRef::npos);
 
     if (CurBundleEnd != StringRef::npos) {
+      size_t HeaderSize = Version == 2 ? 24 : 32;
+      if (CurBundleEnd < HeaderSize || CurBundleEnd > Remaining.size())
+        return createStringError("invalid compressed bundle size");
       NextBundleStart = Remaining.find("CCOB", CurBundleEnd);
     } else {
       // Legacy bundle without a recorded size: fall back to magic scanning.
@@ -255,14 +252,16 @@ Expected<bool> UnbundleCommand::executeInMemory() {
     // triples that follows the magic.
     size_t ReadChars = BinaryBundleMagicSize;
     if (ReadChars + sizeof(uint64_t) > Decompressed.size())
-      return false;
+      return createStringError("truncated binary bundle header");
     uint64_t NumberOfBundles =
         support::endian::read64le(Decompressed.data() + ReadChars);
     ReadChars += sizeof(uint64_t);
 
-    for (uint64_t I = 0; I < NumberOfBundles && !Worklist.empty(); ++I) {
-      if (ReadChars + 3 * sizeof(uint64_t) > Decompressed.size())
-        return false;
+    StringMap<StringRef> Bundles;
+    for (uint64_t BundleIndex = 0; BundleIndex < NumberOfBundles;
+         ++BundleIndex) {
+      if (Decompressed.size() - ReadChars < 3 * sizeof(uint64_t))
+        return createStringError("truncated binary bundle header");
       uint64_t BundleOffset =
           support::endian::read64le(Decompressed.data() + ReadChars);
       ReadChars += sizeof(uint64_t);
@@ -272,24 +271,38 @@ Expected<bool> UnbundleCommand::executeInMemory() {
       uint64_t TripleSize =
           support::endian::read64le(Decompressed.data() + ReadChars);
       ReadChars += sizeof(uint64_t);
-      if (ReadChars + TripleSize > Decompressed.size())
-        return false;
+      if (TripleSize > Decompressed.size() - ReadChars)
+        return createStringError("truncated binary bundle target");
       StringRef Triple = Decompressed.substr(ReadChars, TripleSize);
       ReadChars += TripleSize;
 
       // Check that the offset and size make sense.
-      if (!BundleOffset || BundleOffset + BundleSize > Decompressed.size())
-        return false;
+      if (!BundleOffset || BundleOffset > Decompressed.size() ||
+          BundleSize > Decompressed.size() - BundleOffset)
+        return createStringError("invalid binary bundle range");
 
-      std::optional<size_t> Target = findCompatibleTarget(Triple, Config);
-      if (!Target)
+      Bundles[Triple] = Decompressed.substr(BundleOffset, BundleSize);
+    }
+
+    for (const auto &Bundle : Bundles) {
+      if (Worklist.empty())
+        break;
+      StringRef Triple = Bundle.getKey();
+      if (!checkOffloadBundleID(Triple))
+        return createStringError(std::errc::invalid_argument,
+                                 "invalid bundle id read from the bundle");
+      auto Target = llvm::find_if(Worklist, [&](const auto &Entry) {
+        return isCodeObjectCompatible(
+            OffloadTargetInfo(Triple, Config),
+            OffloadTargetInfo(Entry.getKey(), Config));
+      });
+      if (Target == Worklist.end())
         continue;
 
-      StringRef Bundle = Decompressed.substr(BundleOffset, BundleSize);
-      Outputs[*Target] =
-          std::make_unique<SharedSubBuffer>(DecompressedOwner, Bundle);
+      Outputs[Target->second] =
+          std::make_unique<SharedSubBuffer>(DecompressedOwner, Bundle.second);
 
-      llvm::erase(Worklist, *Target);
+      Worklist.erase(Target);
 
       if (OffloadTargetInfo(Triple, Config).hasHostKind())
         FoundHostBundle = true;
@@ -306,8 +319,9 @@ Expected<bool> UnbundleCommand::executeInMemory() {
   // If no bundles were found, the file-based path assumes the input is the
   // host bundle and copies it to the host targets, leaving the rest empty.
   if (Worklist.size() == Config.TargetNames.size()) {
-    for (size_t Index : Worklist) {
-      StringRef Target = Config.TargetNames[Index];
+    for (const auto &Entry : Worklist) {
+      size_t Index = Entry.second;
+      StringRef Target = Entry.getKey();
       Outputs[Index] = OffloadTargetInfo(Target, Config).hasHostKind()
                            ? MemoryBuffer::getMemBufferCopy(Input)
                            : MemoryBuffer::getMemBufferCopy("");
@@ -325,7 +339,8 @@ Expected<bool> UnbundleCommand::executeInMemory() {
 
   // Any target that was not found gets an empty output, as the file-based
   // path does.
-  for (size_t Index : Worklist) {
+  for (const auto &Entry : Worklist) {
+    size_t Index = Entry.second;
     Outputs[Index] = MemoryBuffer::getMemBufferCopy("");
     if (!Outputs[Index])
       return createStringError(std::errc::not_enough_memory,
