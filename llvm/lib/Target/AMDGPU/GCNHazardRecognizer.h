@@ -187,8 +187,9 @@ private:
   template <typename WindowForT>
   int getMaxVALUWindowDeficit(int MaxWindow, WindowForT WindowFor) const;
 
-  int getWaitStatesSince(IsHazardFn IsHazard, int Limit,
-                         GetNumWaitStatesFn GetNumWaitStates) const;
+  /// Returns the distance to the nearest preceding instruction that
+  /// \p IsHazard accepts, or std::numeric_limits<int>::max() if there is none
+  /// within \p Limit.
   int getWaitStatesSince(IsHazardFn IsHazard, int Limit) const;
   int getWaitStatesSinceDef(unsigned Reg, IsHazardFn IsHazardDef,
                             int Limit) const;

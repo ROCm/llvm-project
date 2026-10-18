@@ -24,6 +24,7 @@
 #include "llvm/Support/Compiler.h"
 #include <algorithm>
 #include <iterator>
+#include <limits>
 #include <optional>
 
 namespace llvm {
@@ -33,6 +34,32 @@ namespace llvm {
 struct GCNHazardStep {
   const MachineInstr &MI;
   int Distance;
+};
+
+/// A minimal iterator for range-for loops over \p RangeT, which provides
+/// getStep() and advance(), false at the end. Copies share the range;
+/// advancing one invalidates the others.
+template <typename RangeT> class GCNHazardStepIterator {
+public:
+  GCNHazardStepIterator() = default;
+  GCNHazardStep operator*() const { return Range->getStep(); }
+  LLVM_ATTRIBUTE_ALWAYS_INLINE GCNHazardStepIterator &operator++() {
+    if (!Range->advance())
+      Range = nullptr;
+    return *this;
+  }
+  bool operator==(const GCNHazardStepIterator &RHS) const {
+    return Range == RHS.Range;
+  }
+  bool operator!=(const GCNHazardStepIterator &RHS) const {
+    return Range != RHS.Range;
+  }
+
+private:
+  friend RangeT;
+  explicit GCNHazardStepIterator(RangeT *Range) : Range(Range) {}
+
+  RangeT *Range = nullptr;
 };
 
 /// Walks the CFG backwards from an instruction and yields each instruction
@@ -65,26 +92,7 @@ public:
 
   GCNHazardWalk(const GCNHazardWalk &) = delete;
 
-  /// A minimal iterator for range-for loops. Copies share the walk;
-  /// advancing one invalidates the others.
-  class iterator {
-  public:
-    iterator() = default;
-    GCNHazardStep operator*() const { return Walk->getStep(); }
-    LLVM_ATTRIBUTE_ALWAYS_INLINE iterator &operator++() {
-      if (!Walk->advance())
-        Walk = nullptr;
-      return *this;
-    }
-    bool operator==(const iterator &RHS) const { return Walk == RHS.Walk; }
-    bool operator!=(const iterator &RHS) const { return Walk != RHS.Walk; }
-
-  private:
-    friend GCNHazardWalk;
-    explicit iterator(GCNHazardWalk *Walk) : Walk(Walk) {}
-
-    GCNHazardWalk *Walk = nullptr;
-  };
+  using iterator = GCNHazardStepIterator<GCNHazardWalk>;
 
   iterator begin() {
     assert(!Started && "a walk is a single pass");
@@ -108,8 +116,11 @@ public:
   int getBound() const { return Bound; }
 
 private:
-  template <typename WindowForT>
-  friend int findMaxWindowDeficit(GCNHazardWalk Walk, WindowForT WindowFor);
+  friend iterator;
+  template <typename StepsT, typename WindowForT>
+  friend int findMaxWindowDeficit(StepsT Steps, WindowForT WindowFor);
+  template <typename StepsT, typename IsHazardT>
+  friend int findNearestDistance(StepsT Steps, IsHazardT IsHazard);
 
   // A position to continue upwards from, Distance away from the start.
   struct Cursor {
@@ -195,16 +206,18 @@ private:
       Reached;
 };
 
-/// The largest Window - Distance over the steps of \p Walk, or 0 if none is
-/// positive. \p WindowFor(MI) gives MI's window, at most the walk's bound, or
-/// std::nullopt; it is a template parameter so that it is inlined. A meta
-/// instruction, which does not issue, has no window.
-template <typename WindowForT>
-int findMaxWindowDeficit(GCNHazardWalk Walk, WindowForT WindowFor) {
-  const int MaxWindow = Walk.getBound();
-  Walk.allowAnyOrder();
+/// The largest Window - Distance over \p Steps, or 0 if none is positive.
+/// \p Steps is a GCNHazardWalk or another single-pass range of GCNHazardStep
+/// with getBound(), narrowBound() and allowAnyOrder(). \p WindowFor(MI) gives
+/// MI's window, at most the bound, or std::nullopt; it is a template parameter
+/// so that it is inlined. A meta instruction, which does not issue, has no
+/// window.
+template <typename StepsT, typename WindowForT>
+int findMaxWindowDeficit(StepsT Steps, WindowForT WindowFor) {
+  const int MaxWindow = Steps.getBound();
+  Steps.allowAnyOrder();
   int Deficit = 0;
-  for (auto [MI, Distance] : Walk) {
+  for (auto [MI, Distance] : Steps) {
     std::optional<int> Window = WindowFor(MI);
     // Only a window pays for the meta test.
     if (!Window || MI.isMetaInstruction())
@@ -214,9 +227,26 @@ int findMaxWindowDeficit(GCNHazardWalk Walk, WindowForT WindowFor) {
       continue;
     Deficit = *Window - Distance;
     // No window exceeds MaxWindow, so nothing this far away can beat Deficit.
-    Walk.narrowBound(MaxWindow - Deficit);
+    Steps.narrowBound(MaxWindow - Deficit);
   }
   return Deficit;
+}
+
+/// The distance to the nearest of \p Steps that \p IsHazard(MI) accepts, or
+/// std::numeric_limits<int>::max() if there is none. \p Steps is as for
+/// findMaxWindowDeficit.
+template <typename StepsT, typename IsHazardT>
+int findNearestDistance(StepsT Steps, IsHazardT IsHazard) {
+  Steps.allowAnyOrder();
+  int Nearest = std::numeric_limits<int>::max();
+  for (auto [MI, Distance] : Steps) {
+    if (!IsHazard(MI))
+      continue;
+    // Only a nearer step can come after this one.
+    Nearest = Distance;
+    Steps.narrowBound(Distance);
+  }
+  return Nearest;
 }
 
 } // end namespace llvm

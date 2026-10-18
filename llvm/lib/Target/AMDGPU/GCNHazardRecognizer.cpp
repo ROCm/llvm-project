@@ -1018,64 +1018,77 @@ getWaitStatesSince(GCNHazardRecognizer::IsHazardFn IsHazard,
                             Visited, GetNumWaitStates);
 }
 
+namespace {
+// The scheduler's emitted instructions, newest first, as steps for the walk's
+// queries. AdvanceCycle records each wait state after an instruction's first
+// as a nullptr, so an entry weighs one; inline asm weighs nothing, as it may be
+// empty, and neither do the meta instructions a bundle records. A history is
+// one path, so any order is nearest first. An S_NOP n is a step at distance n
+// here, after its own nullptrs, and at 0 on the walk; no check takes an S_NOP
+// for a producer.
+class EmittedHistory {
+public:
+  EmittedHistory(const std::list<MachineInstr *> &Emitted, int Bound)
+      : Pos(Emitted.begin()), End(Emitted.end()), Bound(Bound) {}
+
+  using iterator = GCNHazardStepIterator<EmittedHistory>;
+
+  iterator begin() { return findStep() ? iterator(this) : end(); }
+  iterator end() { return iterator(); }
+
+  void narrowBound(int NewBound) { Bound = std::min(Bound, NewBound); }
+  int getBound() const { return Bound; }
+  // A history is one path.
+  void allowAnyOrder() {}
+
+private:
+  friend iterator;
+
+  GCNHazardStep getStep() const { return {**Pos, Distance}; }
+
+  bool advance() {
+    Distance += (*Pos)->isInlineAsm() || (*Pos)->isMetaInstruction() ? 0 : 1;
+    ++Pos;
+    return findStep();
+  }
+
+  // Moves past the nullptrs to the next instruction below the bound.
+  bool findStep() {
+    for (; Pos != End && Distance < Bound; ++Pos) {
+      if (*Pos)
+        return true;
+      ++Distance;
+    }
+    return false;
+  }
+
+  std::list<MachineInstr *>::const_iterator Pos, End;
+  int Distance = 0;
+  int Bound;
+};
+} // end anonymous namespace
+
 template <typename WindowForT>
 int GCNHazardRecognizer::getMaxWindowDeficit(int MaxWindow,
                                              WindowForT WindowFor) const {
   if (isHazardRecognizerMode())
     return findMaxWindowDeficit(GCNHazardWalk(*CurrCycleInstr, MaxWindow),
                                 WindowFor);
-
   // EmittedInstrs is capped and can be shorter than the widest window, which
   // costs scheduling quality only: the standalone pass still pads.
-  int Deficit = 0, Distance = 0;
-  for (MachineInstr *MI : EmittedInstrs) {
-    if (MI) {
-      if (std::optional<int> Window = WindowFor(*MI)) {
-        assert(*Window >= 0 && *Window <= MaxWindow && "window out of bounds");
-        Deficit = std::max(Deficit, *Window - Distance);
-      }
-    }
-
-    // An instruction's further wait states follow it as nullptrs. A bundle
-    // records its meta instructions too, which take none.
-    Distance += MI && (MI->isInlineAsm() || MI->isMetaInstruction()) ? 0 : 1;
-
-    if (Distance >= MaxWindow)
-      break;
-  }
-  return Deficit;
-}
-
-int GCNHazardRecognizer::getWaitStatesSince(
-    IsHazardFn IsHazard, int Limit, GetNumWaitStatesFn GetNumWaitStates) const {
-  if (isHazardRecognizerMode()) {
-    auto IsExpiredFn = [Limit](const MachineInstr &, int WaitStates) {
-      return WaitStates >= Limit;
-    };
-    return ::getWaitStatesSince(IsHazard, CurrCycleInstr, IsExpiredFn,
-                                GetNumWaitStates);
-  }
-
-  int WaitStates = 0;
-  for (MachineInstr *MI : EmittedInstrs) {
-    if (MI) {
-      if (IsHazard(*MI))
-        return WaitStates;
-
-      if (MI->isInlineAsm() || MI->isMetaInstruction())
-        continue;
-    }
-    ++WaitStates;
-
-    if (WaitStates >= Limit)
-      break;
-  }
-  return std::numeric_limits<int>::max();
+  return findMaxWindowDeficit(EmittedHistory(EmittedInstrs, MaxWindow),
+                              WindowFor);
 }
 
 int GCNHazardRecognizer::getWaitStatesSince(IsHazardFn IsHazard,
                                             int Limit) const {
-  return getWaitStatesSince(IsHazard, Limit, SIInstrInfo::getNumWaitStates);
+  if (isHazardRecognizerMode()) {
+    auto IsExpiredFn = [Limit](const MachineInstr &, int WaitStates) {
+      return WaitStates >= Limit;
+    };
+    return ::getWaitStatesSince(IsHazard, CurrCycleInstr, IsExpiredFn);
+  }
+  return findNearestDistance(EmittedHistory(EmittedInstrs, Limit), IsHazard);
 }
 
 template <typename WindowForT>
@@ -1095,21 +1108,8 @@ int GCNHazardRecognizer::getMaxVALUWindowDeficit(int MaxWindow,
   // tables.
   assert(MaxWindow <= static_cast<int>(MaxVALULookAhead) &&
          "MaxWindow exceeds the EmittedVALUInstrs lookahead window");
-  int Deficit = 0, WaitStates = 0;
-  for (MachineInstr *MI : EmittedVALUInstrs) {
-    if (MI) {
-      if (std::optional<int> Window = WindowFor(*MI)) {
-        assert(*Window >= 0 && *Window <= MaxWindow && "window out of bounds");
-        Deficit = std::max(Deficit, *Window - WaitStates);
-      }
-    }
-
-    ++WaitStates;
-
-    if (WaitStates >= MaxWindow)
-      break;
-  }
-  return Deficit;
+  return findMaxWindowDeficit(EmittedHistory(EmittedVALUInstrs, MaxWindow),
+                              WindowFor);
 }
 
 int GCNHazardRecognizer::getWaitStatesSinceDef(unsigned Reg,

@@ -200,6 +200,7 @@ TEST_F(GCNHazardWalkTest, DiamondLayouts) {
 // deficit. The conditional branch is a step like any other, so it can be a
 // producer.
 TEST_F(GCNHazardWalkTest, ShortestPathInEitherLayout) {
+  auto IsV1 = [](const MachineInstr &MI) { return name(MI) == "v1"; };
   auto V1 = [](const MachineInstr &MI) -> std::optional<int> {
     return name(MI) == "v1" ? std::optional<int>(8) : std::nullopt;
   };
@@ -210,12 +211,13 @@ TEST_F(GCNHazardWalkTest, ShortestPathInEitherLayout) {
   for (const MachineInstr *Start : {LongFirst, ShortFirst}) {
     std::optional<int> Nearest;
     for (auto [MI, Distance] : GCNHazardWalk(*Start, 100)) {
-      if (name(MI) == "v1") {
+      if (IsV1(MI)) {
         Nearest = Distance;
         break;
       }
     }
     EXPECT_EQ(Nearest, 3);
+    EXPECT_EQ(findNearestDistance(GCNHazardWalk(*Start, 100), IsV1), 3);
     EXPECT_EQ(findMaxWindowDeficit(GCNHazardWalk(*Start, 8), V1), 8 - 3);
     EXPECT_EQ(findMaxWindowDeficit(GCNHazardWalk(*Start, 8), Branch), 8 - 2);
   }
@@ -832,6 +834,18 @@ TEST_F(GCNHazardWalkRandomTest, MatchesRelaxation) {
                       Bound - Distance)
                 << "any order: " << *MI;
           }
+
+          auto IsHazard = [](const MachineInstr &MI) {
+            return MI.getOpcode() == AMDGPU::V_MOV_B32_e32 &&
+                   MI.getOperand(1).getImm() % 3 == 0;
+          };
+          int ExpectedNearest = std::numeric_limits<int>::max();
+          for (auto [MI, Distance] : All)
+            if (IsHazard(*MI))
+              ExpectedNearest = std::min(ExpectedNearest, Distance);
+          EXPECT_EQ(findNearestDistance(GCNHazardWalk(*Start, Bound, Weight),
+                                        IsHazard),
+                    ExpectedNearest);
         }
       }
     }
