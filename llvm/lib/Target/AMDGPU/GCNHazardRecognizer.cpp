@@ -3448,11 +3448,6 @@ int GCNHazardRecognizer::checkMAIHazards90A(MachineInstr *MI) const {
            !SIInstrInfo::isMFMA(MI);
   };
 
-  auto IsLegacyVALUNotDotFn = [](const MachineInstr &MI) {
-    return SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/true) &&
-           !SIInstrInfo::isMFMA(MI) && !SIInstrInfo::isDOT(MI);
-  };
-
   if (!SIInstrInfo::isMFMA(*MI))
     return WaitStatesNeeded;
 
@@ -3475,19 +3470,22 @@ int GCNHazardRecognizer::checkMAIHazards90A(MachineInstr *MI) const {
       continue;
     Register Reg = Use.getReg();
 
-    WaitStatesNeededForUse = LegacyVALUNotDotWritesVGPRWaitStates -
-      getWaitStatesSinceDef(Reg, IsLegacyVALUNotDotFn, MaxWaitStates);
-    WaitStatesNeeded = std::max(WaitStatesNeeded, WaitStatesNeededForUse);
-
+    // The MFMA waits for each MFMA, or VALU other than a dot product, that
+    // wrote Reg.
     int OpNo = Use.getOperandNo();
     WaitStatesNeeded = std::max(
         WaitStatesNeeded,
         getMaxWindowDeficit(
             MaxWaitStates, [&](const MachineInstr &P) -> std::optional<int> {
-              if (!SIInstrInfo::isMFMA(P) ||
-                  !TRI.regsOverlap(P.getOperand(0).getReg(), Reg))
+              if (SIInstrInfo::isMFMA(P)) {
+                if (!TRI.regsOverlap(P.getOperand(0).getReg(), Reg))
+                  return std::nullopt;
+                return getMFMAReadWaitStates(*MI, P, Reg, OpNo == SrcCIdx);
+              }
+              if (!SIInstrInfo::isVALU(P, /*AllowLDSDMA=*/true) ||
+                  SIInstrInfo::isDOT(P) || !P.modifiesRegister(Reg, &TRI))
                 return std::nullopt;
-              return getMFMAReadWaitStates(*MI, P, Reg, OpNo == SrcCIdx);
+              return LegacyVALUNotDotWritesVGPRWaitStates;
             }));
 
     if (WaitStatesNeeded == MaxWaitStates)
