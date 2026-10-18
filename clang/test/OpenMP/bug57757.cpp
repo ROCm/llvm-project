@@ -67,7 +67,7 @@ void foo() {
 // CHECK: [[INT_TBAA13]] = !{[[META8]], [[META4]], i64 16}
 // CHECK: [[META14]] = !{[[META15:![0-9]+]]}
 // CHECK: [[META15]] = distinct !{[[META15]], [[META16:![0-9]+]], !".omp_outlined.: %.part_id."}
-// CHECK: [[META16]] = distinct !{[[META16]], i1 false, !".omp_outlined."}
+// CHECK: [[META16]] = distinct !{[[META16]], !".omp_outlined."}
 // CHECK: [[META17]] = !{[[META18:![0-9]+]]}
 // CHECK: [[META18]] = distinct !{[[META18]], [[META16]], !".omp_outlined.: %.privates."}
 // CHECK: [[INT_TBAA19]] = !{[[META4]], [[META4]], i64 0}
