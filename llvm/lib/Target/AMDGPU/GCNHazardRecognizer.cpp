@@ -3672,17 +3672,27 @@ int GCNHazardRecognizer::checkMAILdStHazards(MachineInstr *MI) const {
   auto IsAccVgprReadFn = [](const MachineInstr &MI) {
     return MI.getOpcode() == AMDGPU::V_ACCVGPR_READ_B32_e64;
   };
+  auto IsAccVgprReadOrWriteFn = [](const MachineInstr &MI) {
+    return MI.getOpcode() == AMDGPU::V_ACCVGPR_READ_B32_e64 ||
+           MI.getOpcode() == AMDGPU::V_ACCVGPR_WRITE_B32_e64;
+  };
+  auto IsVALUFn = [](const MachineInstr &MI) {
+    return SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/true) &&
+           !SIInstrInfo::isMAI(MI);
+  };
+
+  const int AccVgprReadLdStWaitStates = 2;
+  const int VALUWriteAccVgprRdWrLdStDepVALUWaitStates = 1;
+  const int MaxWaitStates = 2;
+  // An accvgpr read or write counts for a register only if a VALU wrote it
+  // shortly before this instruction, whichever access it is.
+  std::optional<int> WaitStatesSinceAccess;
 
   for (const MachineOperand &Op : MI->explicit_uses()) {
     if (!Op.isReg() || !TRI.isVGPR(MF.getRegInfo(), Op.getReg()))
       continue;
 
     Register Reg = Op.getReg();
-
-    const int AccVgprReadLdStWaitStates = 2;
-    const int VALUWriteAccVgprRdWrLdStDepVALUWaitStates = 1;
-    const int MaxWaitStates = 2;
-
     int WaitStatesNeededForUse = AccVgprReadLdStWaitStates -
       getWaitStatesSinceDef(Reg, IsAccVgprReadFn, MaxWaitStates);
     WaitStatesNeeded = std::max(WaitStatesNeeded, WaitStatesNeededForUse);
@@ -3690,21 +3700,15 @@ int GCNHazardRecognizer::checkMAILdStHazards(MachineInstr *MI) const {
     if (WaitStatesNeeded == MaxWaitStates)
       return WaitStatesNeeded; // Early exit.
 
-    auto IsVALUAccVgprRdWrCheckFn = [Reg, this](const MachineInstr &MI) {
-      if (MI.getOpcode() != AMDGPU::V_ACCVGPR_READ_B32_e64 &&
-          MI.getOpcode() != AMDGPU::V_ACCVGPR_WRITE_B32_e64)
-        return false;
-      auto IsVALUFn = [](const MachineInstr &MI) {
-        return SIInstrInfo::isVALU(MI, /*AllowLDSDMA=*/true) &&
-               !SIInstrInfo::isMAI(MI);
-      };
-      return getWaitStatesSinceDef(Reg, IsVALUFn, 2 /*MaxWaitStates*/) <
-             std::numeric_limits<int>::max();
-    };
-
-    WaitStatesNeededForUse = VALUWriteAccVgprRdWrLdStDepVALUWaitStates -
-      getWaitStatesSince(IsVALUAccVgprRdWrCheckFn, MaxWaitStates);
-    WaitStatesNeeded = std::max(WaitStatesNeeded, WaitStatesNeededForUse);
+    if (!WaitStatesSinceAccess)
+      WaitStatesSinceAccess =
+          getWaitStatesSince(IsAccVgprReadOrWriteFn, MaxWaitStates);
+    if (*WaitStatesSinceAccess != std::numeric_limits<int>::max() &&
+        getWaitStatesSinceDef(Reg, IsVALUFn, MaxWaitStates) !=
+            std::numeric_limits<int>::max())
+      WaitStatesNeeded =
+          std::max(WaitStatesNeeded, VALUWriteAccVgprRdWrLdStDepVALUWaitStates -
+                                         *WaitStatesSinceAccess);
   }
 
   return WaitStatesNeeded;
