@@ -131,6 +131,11 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # Same upstream or ROCm PR cancels its older run. Different PRs run together.
+  group: ${{ github.workflow }}-${{ inputs.LLVM_UPSTREAM_REF || inputs.LLVM_ROCm_PR_URL || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   multiple_pr_sha_params:
     runs-on: ubuntu-24.04
