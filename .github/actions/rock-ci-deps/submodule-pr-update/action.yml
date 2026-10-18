@@ -135,9 +135,10 @@ runs:
         source "./${{ github.run_id }}_PR_params.env"
         set +a
         echo "LLVM_UPSTREAM_REF=${LLVM_UPSTREAM_REF:-${LLVM_PR_URL:-}}" >> "$GITHUB_ENV"
-        echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
-        echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
-        echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
+        echo "LLVM_ROCm_PR_URL=${LLVM_ROCm_PR_URL:-}" >> "$GITHUB_ENV"
+        echo "SPIRV_REF=${SPIRV_REF:-${SPIRV_PR_URL:-}}" >> "$GITHUB_ENV"
+        echo "SPIRV_PR_URL=${SPIRV_PR_URL:-}" >> "$GITHUB_ENV"
+        echo "HIPIFY_PR_URL=${HIPIFY_PR_URL:-}" >> "$GITHUB_ENV"
 
     - name: Update submodule pointers from provided parameter PR values
       if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
@@ -247,6 +248,53 @@ runs:
           MERGED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
         }
 
+        expand_commit_sha() {
+          local repo_git="$1"
+          local short="$2"
+          local slug json full
+          slug="$(printf '%s' "$repo_git" | sed -e 's|https://github.com/||' -e 's|\.git$||')"
+          json="$(curl -fsS "https://api.github.com/repos/${slug}/commits/${short}")" || true
+          full="$(printf '%s' "$json" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[0-9a-fA-F]\{40\}"' | head -1 | grep -o '[0-9a-fA-F]\{40\}')"
+          trim_sha "$full"
+        }
+
+        # Pin compiler/spirv-llvm-translator to a PR, commit, or branch.
+        # Same ref forms as LLVM_UPSTREAM_REF. The submodule records that
+        # commit; it is not merged onto the SPIRV amd-staging tip.
+        resolve_spirv_ref() {
+          local item="$1"
+          local default_git="https://github.com/ROCm/SPIRV-LLVM-Translator.git"
+          local repo branch owner sha
+          if [[ "$item" == *"/pull/"* ]]; then
+            sha="$(get_pr_sha "$item")"
+          elif [[ "$item" == *"/commit/"* ]]; then
+            repo="$(echo "$item" | sed 's|/commit/.*||')"
+            sha="$(echo "$item" | sed 's|.*/commit/||' | sed 's|[/#?].*||')"
+            if [[ ! "$sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              sha="$(expand_commit_sha "${repo}.git" "$sha")"
+            fi
+          elif [[ "$item" == *"/tree/"* ]]; then
+            repo="$(echo "$item" | sed 's|/tree/.*||')"
+            branch="$(echo "$item" | sed 's|.*/tree/||' | sed 's|[?#].*||')"
+            sha="$(trim_sha "$(git ls-remote "${repo}.git" "refs/heads/${branch}" | awk '{print $1}')")"
+          elif [[ "$item" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            sha="$item"
+          elif [[ "$item" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+            sha="$(expand_commit_sha "$default_git" "$item")"
+          elif [[ "$item" != *"://"* && "$item" == *":"* ]]; then
+            owner="${item%%:*}"
+            branch="${item#*:}"
+            sha="$(trim_sha "$(git ls-remote "https://github.com/${owner}/SPIRV-LLVM-Translator.git" "refs/heads/${branch}" | awk '{print $1}')")"
+          else
+            sha="$(trim_sha "$(git ls-remote "$default_git" "refs/heads/${item}" | awk '{print $1}')")"
+          fi
+          if [[ ! "$sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::Failed to resolve SPIRV ref ${item}." >&2
+            exit 1
+          fi
+          printf '%s' "$sha"
+        }
+
         LLVM_SHA=""
 
         if [[ -n "${LLVM_ROCm_PR_URL:-}" ]]; then
@@ -262,13 +310,14 @@ runs:
           git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
         fi
 
-        if [[ -n "${SPIRV_PR_URL:-}" ]]; then
-          SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
-          echo "SPIRV head SHA: $SPIRV_SHA"
+        spirv_ref="${SPIRV_REF:-${SPIRV_PR_URL:-}}"
+        if [[ -n "$spirv_ref" ]]; then
+          SPIRV_SHA="$(resolve_spirv_ref "$spirv_ref")"
+          echo "SPIRV ref ${spirv_ref} -> ${SPIRV_SHA}"
           git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
         else
           SPIRV_SHA="$(read_amd_staging_tip https://github.com/ROCm/SPIRV-LLVM-Translator.git)"
-          echo "SPIRV PR NOT Passed, defaulting to the amd-staging tip : $SPIRV_SHA"
+          echo "SPIRV ref not passed, defaulting to the amd-staging tip : $SPIRV_SHA"
           git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
         fi
 
