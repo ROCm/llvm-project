@@ -194,8 +194,8 @@ jobs:
         run: python ./build_tools/github_actions/configure_multi_arch_ci.py
 
       # Match the regular multi-arch matrix: only gfx942 (gfx94X-dcgpu) has a
-      # test runner. Other selected families are still built.
-      - name: Keep tests on gfx942 only
+      # test runner, and native DEB/RPM packages are not built.
+      - name: Match regular multi-arch test and package selection
         id: family_tests
         if: inputs.use_configured_families
         env:
@@ -208,10 +208,12 @@ jobs:
 
           tested = {"gfx94X-dcgpu"}
 
-          def rewrite(raw):
+          def rewrite(raw, disable_native_linux=False):
               if not raw:
                   return ""
               config = json.loads(raw)
+              if disable_native_linux:
+                  config["build_native_linux"] = False
               for family in config.get("per_family_info") or []:
                   if family.get("amdgpu_family") in tested:
                       continue
@@ -222,7 +224,7 @@ jobs:
               return json.dumps(config)
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
-              out.write(f"linux_build_config={rewrite(os.environ.get('LINUX_BUILD_CONFIG', ''))}\n")
+              out.write(f"linux_build_config={rewrite(os.environ.get('LINUX_BUILD_CONFIG', ''), disable_native_linux=True)}\n")
               out.write(f"windows_build_config={rewrite(os.environ.get('WINDOWS_BUILD_CONFIG', ''))}\n")
           PY
 
