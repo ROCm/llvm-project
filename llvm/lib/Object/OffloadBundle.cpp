@@ -580,13 +580,25 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
   if (VerboseStream)
     DecompressTimer.startTimer();
 
-  SmallVector<uint8_t, 0> DecompressedData;
   StringRef CompressedData =
       Blob.substr(HeaderSize, TotalFileSize - HeaderSize);
 
+  // Decompress directly into the buffer that is returned to the caller.
+  // Decompressing into a SmallVector first and then copying it into a
+  // MemoryBuffer would materialize the whole image twice.
+  std::unique_ptr<WritableMemoryBuffer> DecompressedData =
+      WritableMemoryBuffer::getNewUninitMemBuffer(UncompressedSize);
+  if (!DecompressedData)
+    return createStringError(std::errc::not_enough_memory,
+                             "could not allocate decompressed buffer");
+  DebugCompressionType CompressionType =
+      CompressionFormat == compression::Format::Zlib
+          ? DebugCompressionType::Zlib
+          : DebugCompressionType::Zstd;
   if (Error DecompressionError = compression::decompress(
-          CompressionFormat, arrayRefFromStringRef(CompressedData),
-          DecompressedData, UncompressedSize))
+          CompressionType, arrayRefFromStringRef(CompressedData),
+          reinterpret_cast<uint8_t *>(DecompressedData->getBufferStart()),
+          UncompressedSize))
     return createStringError("could not decompress embedded file contents: " +
                              toString(std::move(DecompressionError)));
 
@@ -602,7 +614,9 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
     HashRecalcTimer.startTimer();
     MD5 Hash;
     MD5::MD5Result Result;
-    Hash.update(ArrayRef<uint8_t>(DecompressedData));
+    Hash.update(ArrayRef<uint8_t>(
+        reinterpret_cast<const uint8_t *>(DecompressedData->getBufferStart()),
+        DecompressedData->getBufferSize()));
     Hash.final(Result);
     uint64_t RecalculatedHash = Result.low();
     HashRecalcTimer.stopTimer();
@@ -636,5 +650,5 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
         << "Hashes match: " << (HashMatch ? "Yes" : "No") << "\n";
   }
 
-  return MemoryBuffer::getMemBufferCopy(toStringRef(DecompressedData));
+  return std::move(DecompressedData);
 }
