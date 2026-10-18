@@ -210,20 +210,6 @@ MDNode *MDBuilder::createAnonymousAARoot(StringRef Name, MDNode *Extra) {
   return Root;
 }
 
-MDNode *MDBuilder::createAnonymousAliasScopeDomain(StringRef Description,
-                                                   bool DisjointScopes) {
-  SmallVector<Metadata *, 3> Args = {
-      nullptr, createConstant(ConstantInt::getBool(Context, DisjointScopes))};
-  if (!Description.empty())
-    Args.push_back(createString(Description));
-  MDNode *Domain = MDNode::getDistinct(Context, Args);
-
-  // Replace the reserved operand with the domain node itself, as is done for
-  // any other self-referential root.
-  Domain->replaceOperandWith(0, Domain);
-  return Domain;
-}
-
 MDNode *MDBuilder::createTBAARoot(StringRef Name) {
   return MDNode::get(Context, createString(Name));
 }
@@ -240,10 +226,8 @@ MDNode *MDBuilder::createTBAANode(StringRef Name, MDNode *Parent,
   return MDNode::get(Context, {createString(Name), Parent});
 }
 
-MDNode *MDBuilder::createAliasScopeDomain(StringRef Name, bool DisjointScopes) {
-  return MDNode::get(
-      Context, {createString(Name),
-                createConstant(ConstantInt::getBool(Context, DisjointScopes))});
+MDNode *MDBuilder::createAliasScopeDomain(StringRef Name) {
+  return MDNode::get(Context, createString(Name));
 }
 
 MDNode *MDBuilder::createAliasScope(StringRef Name, MDNode *Domain) {

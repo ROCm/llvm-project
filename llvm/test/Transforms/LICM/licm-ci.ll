@@ -33,6 +33,6 @@ exit:                               ; preds = %loop
   ret i16 %reduce
 }
 
-!0 = !{!0, i1 false}
+!0 = !{!0}
 !1 = !{!1, !0}
 !2 = !{!1}

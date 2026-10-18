@@ -182,13 +182,12 @@ public:
     return createAnonymousAARoot();
   }
 
-  /// Return metadata appropriate for an alias scope domain node, described by
-  /// \p Description, whose scopes are disjoint if \p DisjointScopes is set.
+  /// Return metadata appropriate for an alias scope domain node.
   /// Each returned node is distinct from all other metadata and will never
   /// be identified (uniqued) with anything else.
-  LLVM_ABI MDNode *
-  createAnonymousAliasScopeDomain(StringRef Description = StringRef(),
-                                  bool DisjointScopes = false);
+  MDNode *createAnonymousAliasScopeDomain(StringRef Name = StringRef()) {
+    return createAnonymousAARoot(Name);
+  }
 
   /// Return metadata appropriate for an alias scope root node.
   /// Each returned node is distinct from all other metadata and will never
@@ -204,10 +203,9 @@ public:
   LLVM_ABI MDNode *createTBAARoot(StringRef Name);
 
   /// Return metadata appropriate for an alias scope domain node with
-  /// the given name, whose scopes are disjoint if \p DisjointScopes is set.
-  /// This may be identified (uniqued) with other roots with the same name.
-  LLVM_ABI MDNode *createAliasScopeDomain(StringRef Name,
-                                          bool DisjointScopes = false);
+  /// the given name. This may be identified (uniqued) with other roots with
+  /// the same name.
+  LLVM_ABI MDNode *createAliasScopeDomain(StringRef Name);
 
   /// Return metadata appropriate for an alias scope node with
   /// the given name. This may be identified (uniqued) with other scopes with

@@ -614,10 +614,9 @@ ModuleImport::processAliasScopeMetadata(const llvm::MDNode *node) {
   // Helper that creates an alias scope domain attribute.
   auto createAliasScopeDomainOp = [&](const llvm::MDNode *aliasDomain) {
     StringAttr description = nullptr;
-    StringRef descriptionStr =
-        llvm::AliasScopeDomainNode(aliasDomain).getDescription();
-    if (!descriptionStr.empty())
-      description = builder.getStringAttr(descriptionStr);
+    if (aliasDomain->getNumOperands() >= 2)
+      if (auto *operand = dyn_cast<llvm::MDString>(aliasDomain->getOperand(1)))
+        description = builder.getStringAttr(operand->getString());
     Attribute idAttr = getIdAttr(aliasDomain);
     return builder.getAttr<AliasScopeDomainAttr>(idAttr, description);
   };
