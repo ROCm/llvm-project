@@ -32,6 +32,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/ObjectFile.h"
+#include "llvm/Support/Alignment.h"
 #include "llvm/Support/TargetSelect.h"
 #include <fstream>
 #include <mutex>
@@ -620,6 +621,21 @@ amd_comgr_status_t AMD_COMGR_API
     *Size = DataP->Size;
   }
 
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_data_pointer(
+    amd_comgr_data_t Data, size_t *Size, const char **Bytes) {
+  DataObject *DataP = DataObject::convert(Data);
+  if (!DataP || !DataP->hasValidDataKind() || !Size || !Bytes)
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+
+  std::scoped_lock<std::mutex> CacheLock(DataP->CacheMutex);
+  if (!DataP->Data)
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+
+  *Size = DataP->Size;
+  *Bytes = DataP->Data;
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
@@ -1529,6 +1545,32 @@ amd_comgr_status_t AMD_COMGR_API
 
   *MetadataNode = DataMeta::convert(MetaP.release());
 
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMD_COMGR_API amd_comgr_get_elf_metadata(
+    size_t Size, const char *Bytes, amd_comgr_metadata_node_t *MetadataNode) {
+  if (!Bytes || !Size || !MetadataNode)
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+
+  std::unique_ptr<DataMeta> MetaP(new (std::nothrow) DataMeta());
+  if (!MetaP)
+    return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
+  MetaP->MetaDoc.reset(new (std::nothrow) MetaDocument());
+  if (!MetaP->MetaDoc)
+    return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
+  MetaP->DocNode = MetaP->MetaDoc->Document.getRoot();
+
+  MemoryBufferRef Input(StringRef(Bytes, Size), "");
+  std::unique_ptr<MemoryBuffer> AlignedInput;
+  if (!isAddrAligned(Align(2), Bytes)) {
+    AlignedInput = MemoryBuffer::getMemBufferCopy(Input.getBuffer());
+    Input = AlignedInput->getMemBufferRef();
+  }
+  if (errorToBool(metadata::getMetadataRoot(Input, MetaP.get())))
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+
+  *MetadataNode = DataMeta::convert(MetaP.release());
   return AMD_COMGR_STATUS_SUCCESS;
 }
 

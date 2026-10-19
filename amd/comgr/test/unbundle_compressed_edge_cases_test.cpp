@@ -111,6 +111,12 @@ static std::vector<std::string> unbundle(StringRef Input,
     Result[Index].resize(Size);
     checkError(amd_comgr_get_data(Data[Index], &Size, Result[Index].data()),
                "get bytes");
+    const char *Pointer = nullptr;
+    size_t PointerSize = 0;
+    checkError(amd_comgr_get_data_pointer(Data[Index], &PointerSize, &Pointer),
+               "borrow output");
+    if (PointerSize != Size || StringRef(Pointer, PointerSize) != Result[Index])
+      fail("borrowed output differs from copied output");
     amd_comgr_metadata_node_t Metadata = {};
     if (CheckExecutable) {
       size_t IsaSize = 0;

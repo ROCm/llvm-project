@@ -248,6 +248,12 @@ endif()
 endmacro()
 
 add_comgr_test(data_test c)
+add_comgr_test(data_pointer_test c)
+add_comgr_test(elf_metadata_view_test cpp)
+set_target_properties(elf_metadata_view_test PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED Yes
+  CXX_EXTENSIONS No)
 add_comgr_test(disasm_instr_test c)
 add_comgr_test(metadata_tp_test c)
 add_comgr_test(metadata_yaml_test c)
