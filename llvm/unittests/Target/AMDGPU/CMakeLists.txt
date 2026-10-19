@@ -31,8 +31,12 @@ add_llvm_target_unittest(AMDGPUTests
   GCNRegPressureTest.cpp
   InstSizes.cpp
   LiveRegUnits.cpp
+  NextUseAnalysisIncrementalTest.cpp
   PALMetadata.cpp
   RCIUpdateReservedRegsTest.cpp
   UniformityAnalysisTest.cpp
   MFMACoExecRules.cpp
   )
+
+target_compile_definitions(AMDGPUTests PRIVATE
+  "LLVM_AMDGPU_NEXT_USE_MIR_DIR=\"${PROJECT_SOURCE_DIR}/test/CodeGen/AMDGPU/NextUseAnalysis\"")

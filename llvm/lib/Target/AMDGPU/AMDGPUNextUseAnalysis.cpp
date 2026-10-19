@@ -1669,6 +1669,8 @@ private:
   unsigned DistanceCacheMisses = 0;
 
   void resetDistanceCache() {
+    assert(PendingCachedDistances.empty() &&
+           "resetDistanceCache called mid getNextUseDistances traversal");
     CachedDistancesMI = nullptr;
     CachedDistances.clear();
     DistanceCacheHits = 0;
@@ -1984,6 +1986,49 @@ public:
   }
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  // Incremental invalidate/update
+  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  void instrAdded(const MachineBasicBlock &BB) {
+    // Ids
+    calcInstrIds(&BB, InstrToId);
+
+    // PathInfo
+    for (auto &KV : Paths) {
+      const Path &P = KV.first;
+
+      PathInfo &PI = KV.second;
+
+      if (P.src() == P.dst() && P.src() == &BB)
+        PI.Size = calcSize(&BB);
+
+      if (!PI.ShortestDistance.has_value() &&
+          !PI.ShortestUnweightedDistance.has_value()) {
+        continue;
+      }
+
+      auto NoPathThroughBB = [this, &P, &BB]() {
+        const PathInfo *A = maybePathInfoFor(P.src(), &BB);
+        if (A && !A->Reachable)
+          return true;
+
+        const PathInfo *B = maybePathInfoFor(&BB, P.dst());
+        return B && !B->Reachable;
+      };
+      if (NoPathThroughBB())
+        continue;
+
+      PI.ShortestDistance.reset();
+      PI.ShortestUnweightedDistance.reset();
+      if (PI.EK != EdgeKind::None)
+        PI.ShortestUnweightedDistance = 0;
+    }
+
+    initializeInterBlockDistances();
+    resetDistanceCache();
+    RegUseMap.clear();
+  }
+
+  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Helper methods for printAsJson
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 private:
@@ -2284,6 +2329,10 @@ void AMDGPUNextUseAnalysis::getNextUseDistances(
   FurthestOut = Furthest;
   if (FurthestSubregOut)
     *FurthestSubregOut = FurthestSubreg;
+}
+
+void AMDGPUNextUseAnalysis::instrAdded(const MachineBasicBlock &MBB) {
+  Impl->instrAdded(MBB);
 }
 
 //==============================================================================

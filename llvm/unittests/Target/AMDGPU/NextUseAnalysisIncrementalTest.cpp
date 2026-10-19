@@ -1,0 +1,412 @@
+//===- NextUseAnalysisIncrementalTest.cpp - incremental NUA tests ---------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#include "AMDGPU.h"
+#include "AMDGPUNextUseAnalysis.h"
+#include "AMDGPUUnitTests.h"
+#include "GCNRegPressure.h"
+#include "GCNSubtarget.h"
+#include "llvm/CodeGen/LiveIntervals.h"
+#include "llvm/CodeGen/MIRParser/MIRParser.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineLoopInfo.h"
+#include "llvm/IR/Analysis.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/raw_ostream.h"
+#include "gtest/gtest.h"
+
+#include <chrono>
+#include <type_traits>
+#include <utility>
+
+using namespace llvm;
+
+#ifndef LLVM_AMDGPU_NEXT_USE_MIR_DIR
+#define LLVM_AMDGPU_NEXT_USE_MIR_DIR "test/CodeGen/AMDGPU/NextUseAnalysis"
+#endif
+
+namespace {
+
+struct NextUseSnapshot {
+  DenseMap<unsigned, int64_t> DefRegToClosestUseDist;
+  DenseMap<unsigned, int64_t> BlockSpan;
+};
+
+static void captureNextUseSnapshot(const AMDGPUNextUseAnalysis &NUA,
+                                   const MachineFunction &MF,
+                                   NextUseSnapshot &Snap) {
+  Snap.DefRegToClosestUseDist.clear();
+  Snap.BlockSpan.clear();
+  const MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  for (unsigned I = 0, E = MRI.getNumVirtRegs(); I != E; ++I) {
+    Register Reg = Register::index2VirtReg(I);
+    if (MRI.def_empty(Reg))
+      continue;
+    const MachineInstr *DefMI = MRI.getUniqueVRegDef(Reg);
+    if (!DefMI)
+      continue;
+
+    SmallVector<const MachineOperand *> Uses;
+    NUA.getReachableUses(Reg, LaneBitmask::getAll(), *DefMI, Uses);
+    NextUseDistance Dist = Uses.empty()
+                               ? NextUseDistance::unreachable()
+                               : NUA.getShortestDistance(Reg, *DefMI, Uses);
+    Snap.DefRegToClosestUseDist[Reg.id()] = Dist.getRawValue();
+  }
+
+  for (const MachineBasicBlock &MBB : MF)
+    Snap.BlockSpan[MBB.getNumber()] = NUA.getSpan(MBB).getRawValue();
+}
+
+struct UpdateQueryTiming {
+  double BeforeQueryUs = 0;
+  double IncrementalUpdateUs = 0;
+  double IncrementalQueryUs = 0;
+  double FullRebuildUs = 0;
+  double FullQueryUs = 0;
+};
+
+static double elapsedMicros(std::chrono::steady_clock::time_point Start) {
+  return std::chrono::duration<double, std::micro>(
+             std::chrono::steady_clock::now() - Start)
+      .count();
+}
+
+template <typename Fn>
+static decltype(auto) timeMicros(double &OutUs, Fn &&Body) {
+  const auto Start = std::chrono::steady_clock::now();
+  if constexpr (std::is_void_v<decltype(std::forward<Fn>(Body)())>) {
+    std::forward<Fn>(Body)();
+    OutUs = elapsedMicros(Start);
+  } else {
+    decltype(auto) Result = std::forward<Fn>(Body)();
+    OutUs = elapsedMicros(Start);
+    return Result;
+  }
+}
+
+static void reportUpdateQueryTiming(StringRef Label,
+                                    const UpdateQueryTiming &T) {
+  const double IncrementalTotalUs =
+      T.IncrementalUpdateUs + T.IncrementalQueryUs;
+  const double FullTotalUs = T.FullRebuildUs + T.FullQueryUs;
+  const double Speedup =
+      IncrementalTotalUs > 0 ? FullTotalUs / IncrementalTotalUs : 0.0;
+
+  std::string Scenario;
+  if (const testing::TestInfo *Info =
+          testing::UnitTest::GetInstance()->current_test_info()) {
+    Scenario = Info->name();
+    if (!Label.empty())
+      Scenario += ("/" + Label).str();
+  } else {
+    Scenario = Label.str();
+  }
+
+  const auto Ms = [](double Us) { return formatv("{0:F3}", Us / 1000.0); };
+
+  llvm::outs() << "[ >NUA time] speedup=" << formatv("{0:F3}", Speedup) << "x "
+               << Scenario << ": ";
+  if (T.BeforeQueryUs > 0) {
+    llvm::outs() << "before(query=" << Ms(T.BeforeQueryUs) << "ms) ";
+    testing::Test::RecordProperty(Scenario + ".before_query_ms",
+                                  Ms(T.BeforeQueryUs).str());
+  }
+  llvm::outs() << "incremental(update=" << Ms(T.IncrementalUpdateUs)
+               << "ms query=" << Ms(T.IncrementalQueryUs)
+               << "ms total=" << Ms(IncrementalTotalUs)
+               << "ms) full(rebuild=" << Ms(T.FullRebuildUs)
+               << "ms query=" << Ms(T.FullQueryUs)
+               << "ms total=" << Ms(FullTotalUs) << "ms)\n";
+
+  testing::Test::RecordProperty(Scenario + ".full_over_incremental_speedup",
+                                formatv("{0:F3}", Speedup).str());
+  testing::Test::RecordProperty(Scenario + ".incremental_update_ms",
+                                Ms(T.IncrementalUpdateUs).str());
+  testing::Test::RecordProperty(Scenario + ".incremental_query_ms",
+                                Ms(T.IncrementalQueryUs).str());
+  testing::Test::RecordProperty(Scenario + ".full_rebuild_ms",
+                                Ms(T.FullRebuildUs).str());
+  testing::Test::RecordProperty(Scenario + ".full_query_ms",
+                                Ms(T.FullQueryUs).str());
+}
+
+static void expectSnapshotsEqual(const NextUseSnapshot &Inc,
+                                 const NextUseSnapshot &Fresh) {
+  EXPECT_EQ(Inc.DefRegToClosestUseDist.size(),
+            Fresh.DefRegToClosestUseDist.size());
+  for (const auto &KV : Inc.DefRegToClosestUseDist) {
+    SCOPED_TRACE("vreg " + Twine(KV.first).str());
+    auto It = Fresh.DefRegToClosestUseDist.find(KV.first);
+    ASSERT_NE(It, Fresh.DefRegToClosestUseDist.end());
+    EXPECT_EQ(KV.second, It->second);
+  }
+
+  EXPECT_EQ(Inc.BlockSpan.size(), Fresh.BlockSpan.size());
+  for (const auto &KV : Inc.BlockSpan) {
+    SCOPED_TRACE("block " + Twine(KV.first).str());
+    auto It = Fresh.BlockSpan.find(KV.first);
+    ASSERT_NE(It, Fresh.BlockSpan.end());
+    EXPECT_EQ(KV.second, It->second);
+  }
+}
+
+static AMDGPUNextUseAnalysis &
+getNextUseAnalysis(MachineFunction &MF, MachineFunctionAnalysisManager &MFAM,
+                   AMDGPUNextUseAnalysis::Config Cfg, bool InvalidateFirst) {
+  if (InvalidateFirst)
+    MFAM.invalidate(MF, PreservedAnalyses::none());
+  AMDGPUNextUseAnalysis &NUA = MFAM.getResult<AMDGPUNextUseAnalysisPass>(MF);
+  NUA.setConfig(Cfg);
+  return NUA;
+}
+
+static void insertNop(MachineBasicBlock &MBB,
+                      MachineBasicBlock::iterator InsertPt) {
+  const GCNSubtarget &ST = MBB.getParent()->getSubtarget<GCNSubtarget>();
+  const SIInstrInfo &TII = *ST.getInstrInfo();
+  BuildMI(MBB, InsertPt, DebugLoc(), TII.get(AMDGPU::S_NOP)).addImm(0);
+}
+
+static void expectInstrAddedMatchesFreshRecompute(
+    MachineFunction &MF, MachineFunctionAnalysisManager &MFAM,
+    AMDGPUNextUseAnalysis::Config Cfg, MachineBasicBlock &ChangedMBB,
+    function_ref<void(MachineFunction &)> ModifyMF) {
+  AMDGPUNextUseAnalysis &Inc =
+      getNextUseAnalysis(MF, MFAM, Cfg, /*Invalidate*/ true);
+
+  ModifyMF(MF);
+
+  UpdateQueryTiming Timings;
+  timeMicros(Timings.IncrementalUpdateUs, [&] { //
+    Inc.instrAdded(ChangedMBB);
+  });
+  NextUseSnapshot AfterIncremental;
+  timeMicros(Timings.IncrementalQueryUs, [&] { //
+    captureNextUseSnapshot(Inc, MF, AfterIncremental);
+  });
+  AMDGPUNextUseAnalysis *FreshPtr = nullptr;
+  timeMicros(Timings.FullRebuildUs, [&] {
+    FreshPtr = &getNextUseAnalysis(MF, MFAM, Cfg, /*Invalidate*/ true);
+  });
+  AMDGPUNextUseAnalysis &Fresh = *FreshPtr;
+  NextUseSnapshot FreshSnap;
+  timeMicros(Timings.FullQueryUs, [&] { //
+    captureNextUseSnapshot(Fresh, MF, FreshSnap);
+  });
+
+  reportUpdateQueryTiming(ChangedMBB.getName(), Timings);
+  expectSnapshotsEqual(AfterIncremental, FreshSnap);
+}
+
+} // namespace
+
+class NextUseAnalysisIncrementalTest : public AMDGPUCodeGenTestBase {
+public:
+  void SetUp() override { setUpImpl("amdgpu12.00--", "", ""); }
+
+  bool parseMIRFromPath(StringRef Path) {
+    ErrorOr<std::unique_ptr<MemoryBuffer>> BufOrErr =
+        MemoryBuffer::getFile(Path);
+    if (!BufOrErr)
+      return false;
+    return parseMIR(BufOrErr.get()->getBuffer());
+  }
+
+  void parseTestForMIROrSkip() {
+    SmallString<256> Path(LLVM_AMDGPU_NEXT_USE_MIR_DIR);
+    sys::path::append(Path, "simple-loop-3blocks.mir");
+    if (!sys::fs::exists(Path))
+      GTEST_SKIP() << "MIR file not found: " << Path;
+    ASSERT_TRUE(parseMIRFromPath(Path));
+  }
+
+  static AMDGPUNextUseAnalysis::Config computeConfig() {
+    return AMDGPUNextUseAnalysis::Config::Compute();
+  }
+};
+
+TEST_F(NextUseAnalysisIncrementalTest, NoChangeInstrAddedMatchesFresh) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineBasicBlock &MBB0 = *MF.getBlockNumbered(0);
+  expectInstrAddedMatchesFreshRecompute(MF, MFAM, computeConfig(), MBB0,
+                                        [](MachineFunction &) {});
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, NopInEntryBlock) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineBasicBlock &MBB0 = *MF.getBlockNumbered(0);
+  expectInstrAddedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), MBB0,
+      [&](MachineFunction &) { insertNop(MBB0, MBB0.getFirstTerminator()); });
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, NopInLoopBody) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineBasicBlock &MBB1 = *MF.getBlockNumbered(1);
+  expectInstrAddedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), MBB1, [&](MachineFunction &) {
+        insertNop(MBB1, std::next(MBB1.getFirstNonPHI()));
+      });
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, NopInExitBlock) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineBasicBlock &MBB2 = *MF.getBlockNumbered(2);
+  expectInstrAddedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), MBB2,
+      [&](MachineFunction &) { insertNop(MBB2, MBB2.getFirstNonPHI()); });
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, TwoNopsInLoopBody) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineBasicBlock &MBB1 = *MF.getBlockNumbered(1);
+  expectInstrAddedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), MBB1, [&](MachineFunction &) {
+        auto InsertPt = std::next(MBB1.getFirstNonPHI());
+        insertNop(MBB1, InsertPt);
+        insertNop(MBB1, InsertPt);
+      });
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, NopInEntryBlockGraphicsConfig) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineBasicBlock &MBB0 = *MF.getBlockNumbered(0);
+  expectInstrAddedMatchesFreshRecompute(
+      MF, MFAM, AMDGPUNextUseAnalysis::Config::Graphics(), MBB0,
+      [&](MachineFunction &) { insertNop(MBB0, MBB0.getFirstTerminator()); });
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, AfterDistanceCacheQuery) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineBasicBlock &MBB0 = *MF.getBlockNumbered(0);
+
+  AMDGPUNextUseAnalysis &Inc =
+      getNextUseAnalysis(MF, MFAM, computeConfig(), /*Invalidate*/ true);
+  LiveIntervals &LIS = MFAM.getResult<LiveIntervalsAnalysis>(MF);
+  GCNDownwardRPTracker RPTracker(LIS);
+  AMDGPUNextUseAnalysis::UseDistancePair Furthest;
+  for (const MachineInstr &MI : MBB0) {
+    RPTracker.reset(MI, MBB0.end());
+    RPTracker.advance();
+    Inc.getNextUseDistances(RPTracker.getLiveRegs(), MI, Furthest);
+  }
+
+  UpdateQueryTiming Timings;
+  timeMicros(Timings.IncrementalUpdateUs, [&] {
+    insertNop(MBB0, MBB0.getFirstTerminator());
+    Inc.instrAdded(MBB0);
+  });
+  NextUseSnapshot AfterIncremental;
+  timeMicros(Timings.IncrementalQueryUs, [&] { //
+    captureNextUseSnapshot(Inc, MF, AfterIncremental);
+  });
+  AMDGPUNextUseAnalysis *FreshPtr = nullptr;
+  timeMicros(Timings.FullRebuildUs, [&] {
+    FreshPtr = &getNextUseAnalysis(MF, MFAM, computeConfig(),
+                                   /*Invalidate*/ true);
+  });
+  AMDGPUNextUseAnalysis &Fresh = *FreshPtr;
+  NextUseSnapshot FreshSnap;
+  timeMicros(Timings.FullQueryUs, [&] { //
+    captureNextUseSnapshot(Fresh, MF, FreshSnap);
+  });
+
+  reportUpdateQueryTiming("AfterDistanceCacheQuery", Timings);
+  expectSnapshotsEqual(AfterIncremental, FreshSnap);
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, TimingReportLoopBodyNop) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineBasicBlock &MBB1 = *MF.getBlockNumbered(1);
+
+  constexpr unsigned Iterations = 32;
+  UpdateQueryTiming Accumulated;
+
+  for (unsigned I = 0; I != Iterations; ++I) {
+    AMDGPUNextUseAnalysis &Inc =
+        getNextUseAnalysis(MF, MFAM, computeConfig(), /*Invalidate*/ true);
+    insertNop(MBB1, std::next(MBB1.getFirstNonPHI()));
+
+    UpdateQueryTiming Timings;
+    timeMicros(Timings.IncrementalUpdateUs, [&] { //
+      Inc.instrAdded(MBB1);
+    });
+    timeMicros(Timings.IncrementalQueryUs, [&] {
+      NextUseSnapshot Unused;
+      captureNextUseSnapshot(Inc, MF, Unused);
+    });
+    AMDGPUNextUseAnalysis *FreshPtr = nullptr;
+    timeMicros(Timings.FullRebuildUs, [&] {
+      FreshPtr = &getNextUseAnalysis(MF, MFAM, computeConfig(),
+                                     /*Invalidate*/ true);
+    });
+    AMDGPUNextUseAnalysis &Fresh = *FreshPtr;
+    timeMicros(Timings.FullQueryUs, [&] {
+      NextUseSnapshot Unused;
+      captureNextUseSnapshot(Fresh, MF, Unused);
+    });
+
+    Accumulated.IncrementalUpdateUs += Timings.IncrementalUpdateUs;
+    Accumulated.IncrementalQueryUs += Timings.IncrementalQueryUs;
+    Accumulated.FullRebuildUs += Timings.FullRebuildUs;
+    Accumulated.FullQueryUs += Timings.FullQueryUs;
+
+    // Drop the nop before the next iteration; instrRemoved is not on this
+    // branch yet, and the loop invalidates analysis at the start each time.
+    std::prev(MBB1.getFirstTerminator())->eraseFromParent();
+  }
+
+  Accumulated.IncrementalUpdateUs /= Iterations;
+  Accumulated.IncrementalQueryUs /= Iterations;
+  Accumulated.FullRebuildUs /= Iterations;
+  Accumulated.FullQueryUs /= Iterations;
+  reportUpdateQueryTiming("TimingReportLoopBodyNop(avg32)", Accumulated);
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, SimpleAcyclicEmbeddedMIR) {
+  StringRef MIR = R"MIR(
+--- |
+  define amdgpu_ps void @simple_acyclic() {
+  ret void
+  }
+...
+---
+name:            simple_acyclic
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    successors: %bb.1(0x80000000)
+    %0:vgpr_32 = IMPLICIT_DEF
+    %1:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
+
+  bb.1:
+    %2:vgpr_32 = V_ADD_U32_e64 %1, %0, 0, implicit $exec
+    S_NOP 0, implicit %0
+    S_ENDPGM 0
+...
+)MIR";
+  ASSERT_TRUE(parseMIR(MIR));
+  MachineFunction &MF = getMF("simple_acyclic");
+  MachineBasicBlock &MBB0 = *MF.getBlockNumbered(0);
+  expectInstrAddedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), MBB0,
+      [&](MachineFunction &) { insertNop(MBB0, MBB0.getFirstTerminator()); });
+}
