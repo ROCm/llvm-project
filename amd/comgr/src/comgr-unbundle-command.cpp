@@ -19,8 +19,10 @@
 #include <llvm/ADT/StringMap.h>
 #include <llvm/BinaryFormat/Magic.h>
 #include <llvm/Object/OffloadBundle.h>
+#include <llvm/Support/Alignment.h>
 #include <llvm/Support/Endian.h>
 
+#include <cstddef>
 #include <memory>
 
 namespace COMGR {
@@ -299,8 +301,11 @@ Expected<bool> UnbundleCommand::executeInMemory() {
       if (Target == Worklist.end())
         continue;
 
-      Outputs[Target->second] =
-          std::make_unique<SharedSubBuffer>(DecompressedOwner, Bundle.second);
+      if (isAddrAligned(Align(alignof(std::max_align_t)), Bundle.second.data()))
+        Outputs[Target->second] =
+            std::make_unique<SharedSubBuffer>(DecompressedOwner, Bundle.second);
+      else
+        Outputs[Target->second] = MemoryBuffer::getMemBufferCopy(Bundle.second);
 
       Worklist.erase(Target);
 

@@ -6,6 +6,7 @@
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -59,14 +60,18 @@ static std::string compress(StringRef Input, compression::Format Format,
 
 static std::vector<std::string> unbundle(StringRef Input,
                                          std::vector<const char *> Targets,
-                                         bool ExpectSuccess = true) {
+                                         bool ExpectSuccess = true,
+                                         bool CheckExecutable = false) {
   amd_comgr_data_set_t Inputs, Outputs;
   amd_comgr_data_t InputData;
   amd_comgr_action_info_t Action;
   checkError(amd_comgr_create_data_set(&Inputs), "create inputs");
   checkError(amd_comgr_create_data_set(&Outputs), "create outputs");
-  checkError(amd_comgr_create_data(AMD_COMGR_DATA_KIND_BC_BUNDLE, &InputData),
-             "create input");
+  auto InputKind = CheckExecutable ? AMD_COMGR_DATA_KIND_OBJ_BUNDLE
+                                   : AMD_COMGR_DATA_KIND_BC_BUNDLE;
+  auto OutputKind =
+      CheckExecutable ? AMD_COMGR_DATA_KIND_EXECUTABLE : AMD_COMGR_DATA_KIND_BC;
+  checkError(amd_comgr_create_data(InputKind, &InputData), "create input");
   checkError(amd_comgr_set_data(InputData, Input.size(), Input.data()),
              "set input");
   checkError(amd_comgr_set_data_name(InputData, "bundle"), "set name");
@@ -89,11 +94,11 @@ static std::vector<std::string> unbundle(StringRef Input,
 
   std::vector<amd_comgr_data_t> Data;
   if (ExpectSuccess) {
-    checkCount("outputs", Outputs, AMD_COMGR_DATA_KIND_BC, Targets.size());
+    checkCount("outputs", Outputs, OutputKind, Targets.size());
     Data.resize(Targets.size());
     for (size_t Index = 0; Index < Data.size(); ++Index)
-      checkError(amd_comgr_action_data_get_data(Outputs, AMD_COMGR_DATA_KIND_BC,
-                                                Index, &Data[Index]),
+      checkError(amd_comgr_action_data_get_data(Outputs, OutputKind, Index,
+                                                &Data[Index]),
                  "get output");
   }
   checkError(amd_comgr_destroy_data_set(Outputs), "destroy outputs");
@@ -106,7 +111,44 @@ static std::vector<std::string> unbundle(StringRef Input,
     Result[Index].resize(Size);
     checkError(amd_comgr_get_data(Data[Index], &Size, Result[Index].data()),
                "get bytes");
+    amd_comgr_metadata_node_t Metadata = {};
+    if (CheckExecutable) {
+      size_t IsaSize = 0;
+      checkError(amd_comgr_get_data_isa_name(Data[Index], &IsaSize, nullptr),
+                 "get output ISA size");
+      std::string Isa(IsaSize, '\0');
+      checkError(amd_comgr_get_data_isa_name(Data[Index], &IsaSize, Isa.data()),
+                 "get output ISA");
+      if (Isa.find("amdgcn-amd-amdhsa--gfx900") != 0)
+        fail("unexpected output ISA");
+      checkError(amd_comgr_get_data_metadata(Data[Index], &Metadata),
+                 "get output metadata");
+      size_t SymbolCount = 0;
+      checkError(amd_comgr_iterate_symbols(
+                     Data[Index],
+                     [](amd_comgr_symbol_t Symbol, void *UserData) {
+                       amd_comgr_symbol_type_t Type;
+                       auto Status = amd_comgr_symbol_get_info(
+                           Symbol, AMD_COMGR_SYMBOL_INFO_TYPE, &Type);
+                       if (Status == AMD_COMGR_STATUS_SUCCESS)
+                         ++*static_cast<size_t *>(UserData);
+                       return Status;
+                     },
+                     &SymbolCount),
+                 "iterate output symbols");
+      if (!SymbolCount)
+        fail("no output symbols");
+    }
     checkError(amd_comgr_release_data(Data[Index]), "release output");
+    if (CheckExecutable) {
+      amd_comgr_metadata_kind_t Kind;
+      checkError(amd_comgr_get_metadata_kind(Metadata, &Kind),
+                 "get metadata kind after releasing data");
+      if (Kind != AMD_COMGR_METADATA_KIND_MAP)
+        fail("unexpected metadata kind");
+      checkError(amd_comgr_destroy_metadata(Metadata),
+                 "destroy output metadata");
+    }
   }
   return Result;
 }
@@ -177,11 +219,23 @@ static void testFormat(compression::Format Format, uint16_t Version) {
 }
 
 int main() {
+  auto Executable = MemoryBuffer::getFile(TEST_OBJ_DIR "/shared.so");
+  if (!Executable)
+    fail("failed to open source/shared.so");
   for (auto Format : {compression::Format::Zlib, compression::Format::Zstd}) {
     if (compression::getReasonIfUnsupported(Format))
       continue;
-    for (uint16_t Version : {1, 2, 3})
+    for (uint16_t Version : {1, 2, 3}) {
       testFormat(Format, Version);
+      for (size_t Padding = 0; Padding < alignof(std::max_align_t); ++Padding) {
+        std::string HostBytes(Padding, '\0');
+        std::string Input =
+            bundle({{Host, HostBytes}, {Device, (*Executable)->getBuffer()}});
+        checkOutputs(
+            unbundle(compress(Input, Format, Version), {Device}, true, true),
+            {(*Executable)->getBuffer().str()});
+      }
+    }
   }
   unbundle("CCOB", {Device}, false);
   unbundle(StringRef("CCOB\x04\x00\x00\x00", 8), {Device}, false);
