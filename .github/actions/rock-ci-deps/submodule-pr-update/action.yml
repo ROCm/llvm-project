@@ -4,7 +4,8 @@ description: >
   spirv-llvm-translator and hipify with amd-staging tip.
   On nightly schedule (and nightly workflow_dispatch without PR params) points
   compiler/amd-llvm, spirv-llvm-translator, and hipify at their amd-staging tips.  
-  On workflow_dispatch downloads PR params artifact, sources env, merges upstream PRs, updates submodule pointers.
+  On workflow_dispatch downloads PR params artifact, sources env, applies upstream
+  PR commits on top of the pinned ROCm llvm checkout, and updates submodule pointers.
 
 inputs:
   params_artifact_name:
@@ -143,6 +144,13 @@ runs:
       if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
       shell: bash
       run: |
+        llvm_pr_url="$(printf '%s' "${LLVM_PR_URL:-}" | tr -d '[:space:]')"
+        llvm_rocm_pr_url="$(printf '%s' "${LLVM_ROCm_PR_URL:-}" | tr -d '[:space:]')"
+        if [[ -z "$llvm_pr_url" && -z "$llvm_rocm_pr_url" ]]; then
+          echo "::error::Provide LLVM_PR_URL or LLVM_ROCm_PR_URL." >&2
+          exit 1
+        fi
+ 
         git config --global --add safe.directory "$PWD"
         git config --global user.email "z1-cciauto@amd.com"
         git config --global user.name "Z1 cciauto"
@@ -160,25 +168,60 @@ runs:
           trim_sha "$sha"
         }
 
-        merge_upstream_prs() {
+        # Keep the pinned ROCm checkout (including amd/) and apply only the
+        # upstream PR's own commits on top of it.
+        apply_upstream_prs() {
           local pr_urls="$1"
-          local url repo num ref
-          git submodule update --init --depth 1000 --jobs 1 compiler/amd-llvm
+          local url owner name num patch
+          local -a PR_URLS
+
+          git config --global --add safe.directory "$PWD/compiler/amd-llvm"
+          git submodule update --init --depth 1 --jobs 1 compiler/amd-llvm || {
+            echo "::error::Failed to initialize compiler/amd-llvm at the pinned ROCm commit." >&2
+            exit 1
+          }
+
           IFS=',' read -ra PR_URLS <<< "$pr_urls"
           for url in "${PR_URLS[@]}"; do
-            url="$(echo "$url" | xargs)"
+            url="$(printf '%s' "$url" | tr -d '[:space:]')"
             [[ -z "$url" ]] && continue
-            repo="$(echo "$url" | sed 's|/pull/.*||')"
-            num="$(echo "$url" | sed 's|.*/pull/||')"
-            ref="upstream-pr-${num}"
-            echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
-            git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
-            git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
-              echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
+            if [[ ! "$url" =~ ^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(\.git)?/pull/([0-9]+) ]]; then
+              echo "::error::LLVM_PR_URL must look like https://github.com/llvm/llvm-project/pull/123 (got: ${url})." >&2
               exit 1
-            }
+            fi
+            owner="${BASH_REMATCH[1]}"
+            name="${BASH_REMATCH[2]}"
+            num="${BASH_REMATCH[4]}"
+            patch="$(mktemp)"
+
+            echo "Applying ${owner}/${name}#${num} onto the pinned ROCm llvm-project checkout"
+            if ! curl -fsSL \
+              -H "User-Agent: rock-ci-submodule-pr-update" \
+              "https://github.com/${owner}/${name}/pull/${num}.patch" \
+              -o "$patch"; then
+              echo "::error::Failed to download the patch for ${owner}/${name}#${num}." >&2
+              rm -f "$patch"
+              exit 1
+            fi
+            if ! head -1 "$patch" | grep -q '^From '; then
+              echo "::error::GitHub did not return a patch series for ${owner}/${name}#${num}." >&2
+              cat "$patch" >&2
+              rm -f "$patch"
+              exit 1
+            fi
+
+            if ! git -C compiler/amd-llvm am --no-gpg-sign --whitespace=nowarn "$patch"; then
+              echo "::error::Failed to apply ${owner}/${name}#${num} onto the pinned ROCm llvm-project checkout." >&2
+              git -C compiler/amd-llvm diff --name-only --diff-filter=U >&2 || true
+              echo "The ROCm checkout, including amd/, was left unchanged. Rebase the PR onto ROCm/llvm-project amd-staging and pass that PR as LLVM_ROCm_PR_URL." >&2
+              git -C compiler/amd-llvm am --abort || true
+              rm -f "$patch"
+              exit 1
+            fi
+            rm -f "$patch"
           done
-          MERGED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
+
+          APPLIED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
         }
 
         LLVM_SHA=""
@@ -187,9 +230,9 @@ runs:
           LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
           echo "ROCm LLVM head SHA: $LLVM_SHA"
         elif [[ -n "${LLVM_PR_URL:-}" ]]; then
-          merge_upstream_prs "$LLVM_PR_URL"
-          LLVM_SHA="$MERGED_LLVM_SHA"
-          echo "Final upstream LLVM SHA: $LLVM_SHA" >&2
+          apply_upstream_prs "$LLVM_PR_URL"
+          LLVM_SHA="$APPLIED_LLVM_SHA"
+          echo "ROCm LLVM SHA with upstream PR commits applied: $LLVM_SHA"
         fi
 
         if [[ -n "$LLVM_SHA" ]]; then
@@ -294,4 +337,3 @@ runs:
           echo "LLVM_ASSERTIONS=1" >> "$GITHUB_ENV"
           echo "Wave-transform PR: building with LLVM assertions."
         fi
-
