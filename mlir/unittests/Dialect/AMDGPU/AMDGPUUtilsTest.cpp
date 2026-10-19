@@ -58,5 +58,14 @@ TEST(ChipsetTest, Comparison) {
   EXPECT_FALSE(Chipset(9, 0, 0xa) >= Chipset(9, 4, 2));
 }
 
+TEST(ChipsetTest, HasOcpFp8) {
+  EXPECT_FALSE(hasOcpFp8(Chipset(9, 4, 2)));
+  EXPECT_TRUE(hasOcpFp8(Chipset(9, 5, 0)));
+  EXPECT_FALSE(hasOcpFp8(Chipset(11, 5, 0)));
+  EXPECT_TRUE(hasOcpFp8(Chipset(11, 7, 0)));
+  EXPECT_TRUE(hasOcpFp8(Chipset(11, 7, 2)));
+  EXPECT_TRUE(hasOcpFp8(Chipset(12, 0, 0)));
+}
+
 } // namespace
 } // namespace mlir::amdgpu
