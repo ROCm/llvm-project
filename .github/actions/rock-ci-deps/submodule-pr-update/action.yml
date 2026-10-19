@@ -173,6 +173,7 @@ runs:
         apply_upstream_prs() {
           local pr_urls="$1"
           local url owner name num patch commit_count fetch_depth pr_ref
+          local conflict_files conflict_file resolve_failed tmp
           local -a PR_URLS
 
           git config --global --add safe.directory "$PWD/compiler/amd-llvm"
@@ -224,12 +225,68 @@ runs:
             fi
 
             if ! git -C compiler/amd-llvm am --3way --no-gpg-sign --whitespace=nowarn "$patch"; then
-              echo "::error::Failed to apply ${owner}/${name}#${num} onto the pinned ROCm llvm-project checkout." >&2
-              git -C compiler/amd-llvm diff --name-only --diff-filter=U >&2 || true
-              echo "The ROCm checkout, including amd/, was left unchanged. Rebase the PR onto ROCm/llvm-project amd-staging and pass that PR as LLVM_ROCm_PR_URL." >&2
-              git -C compiler/amd-llvm am --abort || true
-              rm -f "$patch"
-              exit 1
+              conflict_files="$(git -C compiler/amd-llvm diff --name-only --diff-filter=U)"
+              # Release notes are appended by both trees and do not affect the build.
+              # Keep the ROCm copy when that is the only conflict.
+              if [[ -n "$conflict_files" ]] && ! printf '%s\n' "$conflict_files" | grep -qvE '(^|/)ReleaseNotes\.md$'; then
+                echo "Only ReleaseNotes.md conflicts for ${owner}/${name}#${num}; keeping the ROCm notes."
+                printf '%s\n' "$conflict_files" | while IFS= read -r conflict_file; do
+                  [[ -z "$conflict_file" ]] && continue
+                  git -C compiler/amd-llvm checkout --ours -- "$conflict_file"
+                  git -C compiler/amd-llvm add -- "$conflict_file"
+                done
+                if ! git -C compiler/amd-llvm -c core.editor=true am --continue; then
+                  echo "::error::Failed to continue ${owner}/${name}#${num} after ignoring ReleaseNotes.md conflicts." >&2
+                  git -C compiler/amd-llvm diff --name-only --diff-filter=U >&2 || true
+                  git -C compiler/amd-llvm am --abort || true
+                  rm -f "$patch"
+                  exit 1
+                fi
+              else
+                # Stage 2 is the ROCm file, stage 1 is the common ancestor, and
+                # stage 3 is the upstream PR. --theirs keeps every non-overlapping
+                # ROCm change and selects the upstream text only where both edited
+                # the same lines. It does not replace the whole file.
+                echo "Resolving content conflicts for ${owner}/${name}#${num} with upstream hunks:"
+                printf '%s\n' "$conflict_files"
+                resolve_failed=0
+                while IFS= read -r conflict_file; do
+                  [[ -z "$conflict_file" ]] && continue
+                  if [[ "$conflict_file" =~ (^|/)ReleaseNotes\.md$ ]]; then
+                    git -C compiler/amd-llvm checkout --ours -- "$conflict_file"
+                    git -C compiler/amd-llvm add -- "$conflict_file"
+                    continue
+                  fi
+                  tmp="$(mktemp -d)"
+                  if git -C compiler/amd-llvm cat-file -e ":1:${conflict_file}" \
+                    && git -C compiler/amd-llvm cat-file -e ":2:${conflict_file}" \
+                    && git -C compiler/amd-llvm cat-file -e ":3:${conflict_file}"; then
+                    git -C compiler/amd-llvm show ":2:${conflict_file}" > "$tmp/current"
+                    git -C compiler/amd-llvm show ":1:${conflict_file}" > "$tmp/base"
+                    git -C compiler/amd-llvm show ":3:${conflict_file}" > "$tmp/other"
+                    if git merge-file --theirs "$tmp/current" "$tmp/base" "$tmp/other"; then
+                      cp "$tmp/current" "compiler/amd-llvm/${conflict_file}"
+                      git -C compiler/amd-llvm add -- "$conflict_file"
+                    else
+                      echo "::error::Could not resolve ${conflict_file}." >&2
+                      resolve_failed=1
+                    fi
+                  else
+                    echo "::error::${conflict_file} is not a three-way content conflict, so it was not auto-resolved." >&2
+                    resolve_failed=1
+                  fi
+                  rm -rf "$tmp"
+                done <<< "$conflict_files"
+                if [[ "$resolve_failed" -ne 0 ]] \
+                  || ! git -C compiler/amd-llvm -c core.editor=true am --continue; then
+                  echo "::error::Failed to apply ${owner}/${name}#${num} onto the pinned ROCm llvm-project checkout." >&2
+                  git -C compiler/amd-llvm diff --name-only --diff-filter=U >&2 || true
+                  echo "Rebase the PR onto ROCm/llvm-project amd-staging and pass that PR as LLVM_ROCm_PR_URL." >&2
+                  git -C compiler/amd-llvm am --abort || true
+                  rm -f "$patch"
+                  exit 1
+                fi
+              fi
             fi
             rm -f "$patch"
           done
