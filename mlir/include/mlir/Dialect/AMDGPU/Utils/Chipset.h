@@ -65,6 +65,7 @@ LLVM_DEPRECATED_WITH_FIXIT(
     "test FEAT_OCP_FP8_CONVERSION_INSTS on a ROCDL::TargetInfo")
 inline bool hasOcpFp8(const Chipset &chipset) {
   return (chipset.majorVersion == 9 && chipset.minorVersion >= 5) ||
+         (chipset.majorVersion == 11 && chipset.minorVersion == 7) ||
          chipset.majorVersion >= 12;
 }
 } // namespace mlir::amdgpu
