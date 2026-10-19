@@ -150,7 +150,7 @@ runs:
           echo "::error::Provide LLVM_PR_URL or LLVM_ROCm_PR_URL." >&2
           exit 1
         fi
- 
+
         git config --global --add safe.directory "$PWD"
         git config --global user.email "z1-cciauto@amd.com"
         git config --global user.name "Z1 cciauto"
@@ -172,7 +172,7 @@ runs:
         # upstream PR's own commits on top of it.
         apply_upstream_prs() {
           local pr_urls="$1"
-          local url owner name num patch
+          local url owner name num patch commit_count fetch_depth pr_ref
           local -a PR_URLS
 
           git config --global --add safe.directory "$PWD/compiler/amd-llvm"
@@ -210,7 +210,20 @@ runs:
               exit 1
             fi
 
-            if ! git -C compiler/amd-llvm am --no-gpg-sign --whitespace=nowarn "$patch"; then
+            # Supply the PR commits and their parent so git am --3way can
+            # translate patches when upstream and ROCm only differ in context.
+            commit_count="$(grep -cE '^From [0-9a-fA-F]{40} Mon Sep 17 00:00:00 2001$' "$patch")"
+            fetch_depth=$((commit_count + 1))
+            pr_ref="refs/upstream-pr/${owner}/${name}/${num}"
+            if ! git -C compiler/amd-llvm fetch --no-tags --depth="$fetch_depth" \
+              "https://github.com/${owner}/${name}.git" \
+              "refs/pull/${num}/head:${pr_ref}"; then
+              echo "::error::Failed to fetch commit history for ${owner}/${name}#${num}." >&2
+              rm -f "$patch"
+              exit 1
+            fi
+
+            if ! git -C compiler/amd-llvm am --3way --no-gpg-sign --whitespace=nowarn "$patch"; then
               echo "::error::Failed to apply ${owner}/${name}#${num} onto the pinned ROCm llvm-project checkout." >&2
               git -C compiler/amd-llvm diff --name-only --diff-filter=U >&2 || true
               echo "The ROCm checkout, including amd/, was left unchanged. Rebase the PR onto ROCm/llvm-project amd-staging and pass that PR as LLVM_ROCm_PR_URL." >&2
