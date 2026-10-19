@@ -161,8 +161,8 @@ All arguments must be wave-uniform.
 An LDS DMA operation or a tensor DMA operation initiated by a thread does not
 belong to the corresponding instance of "singlethread" scope. Instead the DMA
 operation belongs to a scope instance determined by the target. For any target,
-this is an instance of a scope no larger than "cluster" scope. Operations in
-LLVM IR may refer to this using the "lds-dma" symbolic string.
+this is an instance of "workgroup" scope or "cluster" scope. Operations in LLVM
+IR may refer to this scope using the "lds-dma" symbolic string.
 
 ### Effect on Inclusive Scopes
 
@@ -187,75 +187,91 @@ may result in a more efficient implementation.
 
 ## AMDGPU DMA Memory Model
 
-Each DMA operation ``D`` is performed in an instance of the corresponding DMA
-scope ``S``. In addition, the user may specify a scope ``S'`` as an argument.
-The internal operations are made available/visible at the larger of these two
-scopes:
+DMA Execution Scope ("lds-dma")
+: The scope instance in which a DMA operation executes.
 
-```
-Availability/Visibility Scope M = max(S, S')
-```
+DMA A/V Scope (`S`)
+: The scope instance at which, the side-effects of a DMA operation are available
+  or visible.
 
-### `program-order`
-
-When the DMA operation is performed, control flow begins from *dma_entry*
-followed in *program-order* by the following operations.
+A dynamic instance of DMA instruction is contained in an instance of scope
+"lds-dma". In addition, the programmer can also supply a scope argument `S`. The
+side-effects of DMA operation are available/visible at an instance the larger of
+these two scopes:
 
 ```{code-block} llvm
-:caption: Global to LDS Internal Sequence
+M = max("lds-dma", S)
+```
 
-dma_entry
+### `DMA Expansion`
+
+Each dynamic instance `D` of a DMA instruction executes a hypothetical sequence
+of instructions in its "lds-dma" scope instance, as listed below:
+
+`dma_fin<D>`
+: A fictitious dynamic instance that marks the point in *program-order* just after
+  `D`.
+
+`dma_entry<D>`
+: A fictitious dynamic instance that represents the start of operations
+  performed in the "lds-dma" scope instance.
+
+`dma_complete<D>`
+: A fictitious dynamic instance that represents the end of operations performed
+  in the "lds-dma" scope instance.
+
+```{code-block} llvm
+global.load.async.to.lds(ptr %dst, ptr %src, scope S)     ; dynamic instance D
+
+dma_entry<D>
 %tmp = load-visible ptr addrspace(1) %src, M              ; non-atomic
 store-available ptr addrspace(3) %dst, %tmp, "lds-dma"    ; non-atomic
-dma_complete
+dma_complete<D>>
 ```
 
 ```{code-block} llvm
-:caption: LDS to Global Internal Sequence
+global.store.async.from.lds(ptr %dst, ptr %src, scope S)  ; dynamic instance D
 
-dma_entry
+dma_entry<D>
 %tmp = load-visible ptr addrspace(3) %src, "lds-dma"      ; non-atomic
 store-available ptr addrspace(1) %dst, %tmp, M            ; non-atomic
-dma_complete
+dma_complete<D>
 ```
 
-### `completed-at`
+### Ordering
 
-A DMA operation `D` *initiated* by an instruction `X` is *completed-at* an
-operation `Y` if:
+`D` is *program-ordered* before `dma_fin<D>` and `dma_fin<D>` is *program-ordered*
+before any other operation `X` that is *program-ordered* after `D`. [Informational
+note --- Thus, `dma_fin<D>` exists *between* `D` and anything else performed by
+the same thread.]
 
-- `D` is a synchronous operation and `X` is *program-ordered* before
-  `Y`, or,
-- `D` is an asynchronous operation and a {ref}`completion
-  mechanism<amdgpu-async-completed-at>` ensures that `D` is *completed-at* `Y`.
+The dynamic instances in the DMA sequence produced by `D` are related in
+*program-order* from top to bottom, starting from `dma_entry<D>` and ending at
+`dma_complete<D>`.
 
-### Synchronization
+`D` *synchronizes-with* `dma_entry<D>`.
 
-When an instruction `X` initiates a DMA operation `D`, let `S` be the set of
-locations that are accessed by `D`. [Informational note --- `S` typically
-contains the locations indicated by both the source and destination pointer
-operands on `X`.]
+- If `D` is a synchronous DMA operation, then `dma_complete<D>`
+  synchronizes-with `dma_fin<D>`.
+- Otherwise, `D` is an asynchronous DMA operation and its completion is tracked
+  using one of the {ref}`asynchronous completion
+  mechanisms<amdgpu-async-completed-at>`:
+  - If `D` is *completed-at* a `wait.asyncmark()` operation `Y`, then the
+    `dma_complete<D>` *synchronizes-with* `Y`.
+  - If a DMA operation `D` is *completed-at* a {ref}`barrier
+    wait<amdgpu-barrier-operations>` operation `W` then the `dma_complete<D>`
+    *synchronizes-with* a `fence acquire` operation `F` such that:
+    - `W` is *program-ordered* before `F`, and
+    - `D` is included in the scope instance of `F`.
 
-`dma_entry` and `dma_complete` can each synchronize the set `S`.
-
-`X` synchronizes-with `dma_entry`.
-
-If `D` is a synchronous DMA operation, then `dma_complete` synchronizes-with a
-hypothetical `synchronous_dma_wait` operation that occurs in program-order after
-`X` and before any other operation in the same thread.
-
-If `D` is *completed-at* a `wait.asyncmark()` operation `Y`, then the
-`dma_complete` operation performed by `D` synchronizes-with `Y`.
-
-If a DMA operation `D` is *completed-at* a {ref}`barrier
-wait<amdgpu-barrier-operations>` operation `W` then the *dma_complete* operation
-in `D` *synchronizes-with* a `fence acquire` operation `F` such that:
-- `W` is *program-ordered* before `F`, and
-- `D` is included in the scope instance of `F`.
+`dma_entry<D>` and `dma_complete<D>` each synchronize the memory locations that
+are accessed by `D`. [Informational note --- Typically this contains the
+locations indicated by both the source and destination pointer operands of the
+DMA instruction.]
 
 (amdgpu-dma-visibility)=
 
-### Explicit Visibility Required
+### Explicit A/V Operations Required
 
 [This section is informational.]
 
@@ -321,8 +337,8 @@ call @llvm.amdgcn.wait.asyncmark(0)
 %val_lds = load addrspace(3) %lds
 ```
 
-Alternatively, the first wave must release its operations to a sufficiently
-large scope.
+Alternatively, the first wave may release its operations to a sufficiently large
+scope.
 
 ```llvm
 ; wave 1
@@ -339,8 +355,8 @@ call @llvm.amdgcn.wait.asyncmark(0)
 
 Similarly, when one wave stores to global memory using a DMA operation and a
 different wave from the same workgroup reads from the same location, an explicit
-``make.visible`` at the DMA scope may be needed. The workgroup fence's
-*MakeVisible* may not be sufficient to observe the DMA write when the DMA is not
+*make-visible* at the DMA scope may be needed. The workgroup fence's
+*make-visible* may not be sufficient to observe the DMA write when the DMA is not
 contained in the workgroup scope instance.
 
 ```llvm
@@ -358,5 +374,5 @@ fence syncscope("lds-dma") acquire                                      ; <--
 
 Note how the acquire fence is used to establish visibility; it's ability to
 establish happens-before is an unintended side-effect. A better replacement
-would be to introduce an intrinsic with purel `MakeVisible` (e.g.,
-`%llvm.amdgpu.make.visible`).
+would be to introduce an intrinsic that implements *make-visible* semantics
+(e.g., `%llvm.amdgpu.make.visible`).

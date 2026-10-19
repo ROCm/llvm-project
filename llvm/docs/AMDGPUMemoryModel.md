@@ -33,16 +33,16 @@ executions that are valid in both models.
 ## Terminology
 
 Memory Location
-: A contiguous sequence of one or more bytes in memory. [Informational note ---
-  Operations described in this text usually refer to just a location as an
-  operand. The syntax of the actual instruction describes how to specify the
-  range, e.g., a base pointer and a size or data type.]
+: A set of one or more bytes in memory. [Informational note --- Operations
+  described in this text usually refer to just a location as an operand. The
+  syntax of the actual instruction describes how to specify the range, e.g., a
+  base pointer and a size or data type.]
 
 Operation
-: An action performed by the implementation as part of executing an instruction.
-  A single instruction may result in one or more operations, and those
-  operations can potentially be performed outside the current thread (e.g.,
-  {ref}`amdgpu-dma-operations` are modeled as executing in their own thread).
+: An action performed by a dynamic instance. A single dynamic instance may
+  result in one or more operations. For example, executing a `store atomic
+  release` instruction produces a store operation as well as a release
+  operation.
 
 Memory Access
 : An operation that returns or changes the state of memory. For example:
@@ -51,47 +51,45 @@ Memory Access
   - *visibility* and *availability* operations
 
 Side-effects of an Operation
-: The union of the set of memory locations that this operation accesses and the
-  set of memory locations that this operation synchronizes (see below).
-  [Informational note -- For a synchronizing operation `X`, the side-effects are
-  the same as the set of locations that `X` can synchronize, since the latter
-  contains the memory accesses performed by `X`.]
-
-(amdgpu-synchronizing-operation)=
-
-## Memory Synchronization
-
-Certain operations can synchronize the state of memory with memory operations
-from other threads. This is defined separately for each operation. Some examples
-of operations that can synchronize memory across threads:
-
-- `fence` with any ordering
-- `store atomic` with `release` ordering or higher
-- `load atomic` with `acquire` ordering or higher
+: The set of memory locations that this operation accesses or synchronizes.
 
 (amdgpu-synchronize-with)=
 
-### `synchronize-with`
+## `synchronize-with`
 
-The interaction that synchronizes the state of memory is captured by the
-*synchronize-with* relation.
+Memory synchronization relates memory operations performed by one thread with
+those in other threads. This is captured by the *synchronize-with* relation,
+which is used for constructing cross-thread relations such as
+{ref}`happens-before<memmodel>` and
+{ref}`inter-thread-happens-before<amdgpu-inter-thread-happens-before>`.
 
 When an operation `X` *synchronizes-with* an operation `Y`:
 - `X` and `Y` are called *synchronizing operations*,
 - `X` is called a *release operation*, and,
 - `Y` is called an *acquire operation*.
 
+Whether and how an operation synchronizes-with another operation is defined
+separately for each operation. Some examples of synchronizing operations:
+
+- `fence` with any ordering
+- `store atomic` with `release` ordering or higher
+- `load atomic` with `acquire` ordering or higher
+
 ### Synchronizing Sets of Locations
 
-A synchronizing operation specifies the set of memory locations that it can
-synchronize. If no set is explicitly mentioned, then that operation can
-synchronize all memory locations.
+In general, a synchronizing operation synchronizes all memory locations. But it
+can additionally constrain synchronization by explicitly specifying the set of
+memory locations that it synchronizes.
 
 A synchronizing operation that is also a memory access (e.g., an atomic
-operation) always can synchronize the locations that it accesses along with any
-additional locations specified for that operation.
+operation) includes the memory locations that it accesses in the set of memory
+locations that it synchronizes.
 
-For example:
+Let `S1` and `S2` be the set of memory locations synchronized by operations `X`
+and `Y` respectively. If `X` *synchronizes-with* `Y`, the set of locations `S`
+synchronized by that interaction is the intersection `S = S1 ∩ S2`.
+
+Examples:
 
 `store atomic release %ptr`
 : An atomic store operation that synchronizes all locations in memory, including
@@ -104,10 +102,6 @@ For example:
 `fence acquire !{!"amdgpu-synchronize-as", !"local"}`
 : When suitably paired with an atomic operation, synchronizes all memory
   locations within the `local` address space.
-
-Let `S1` and `S2` be the side-effects of operations `X` and `Y` respectively. If
-`X` *synchronizes-with* `Y`, then the set of locations `S` synchronized by that
-*synchronize-with* edge is the intersection `S = S1 ∩ S2`.
 
 (amdgpu-scopes)=
 
@@ -164,8 +158,8 @@ These are arranged from largest scope (*system scope*) to smallest scope
 the scopes above it in this linear arrangement.
 
 In addition, there exists a symbolic string
-{ref}`"lds-dma"<amdgpu-lds-dma-scope>` which corresponds to one of the above
-scopes, but no higher than "cluster" scope.
+{ref}`"lds-dma"<amdgpu-lds-dma-scope>` which can refer to either "workgroup"
+scope or "cluster" scope.
 
 #### Containment
 
@@ -342,8 +336,8 @@ It only affects the synchronization of other memory accesses.
 *make-available* and *make-visible* operations propagate the effects of certain
 writes from or to the specified scope respectively.
 
-A synchronizing operation is also a *make-available* or *make-visible*
-operation, but only when specified in its definition.
+A synchronizing operation is a *make-available* or *make-visible* operation only
+when specified in its definition.
 
 ```llvm
 store atomic [syncscope("<target-scope>")] <ordering> [, !mmra !{!"amdgcn-av", !"none"}]
@@ -388,8 +382,8 @@ store atomic syncscope("agent") release ptr, !mmra !{!"amdgcn-av", !"none"}
 The *inter-thread-happens-before* relation is parameterized by a *non-empty* set
 of memory locations `S`.
 
-An operation `A` *inter-thread-happens-before\<S\>* an operation `B` for the set
-of memory locations `S` if one of the following is true:
+An operation `A` *inter-thread-happens-before\<S\>* an operation `B` if one of
+the following is true:
 
 - `A` and `B` each include `S` in their side-effects and one of the following is
   true:
@@ -398,7 +392,7 @@ of memory locations `S` if one of the following is true:
   - `A` is an {ref}`acquire operation <amdgpu-synchronize-with>` and `A` is
     *program-ordered* before `B`.
   - `A` *synchronizes-with* `B`.
-- For some operation `X`, `A` *inter-thread-happens-before\<S\>* `X` and `X`
+- There is an operation `X`, `A` *inter-thread-happens-before\<S\>* `X` and `X`
   *inter-thread-happens-before\<S\>* `B`.
 
 (amdgpu-amdgpu-happens-before)=
@@ -456,23 +450,26 @@ and one of the following holds:
 
 ### Location Order
 
-A write `W` is *location-ordered* before an access `Y` to the same address
-if `W` is program-ordered before `Y`.
+Location order relates a write `W` to a location `S` with every other operation
+`Y` that accesses `S`.
 
-A write `W` is *location-ordered* before a write `W1` to the same address if
+A write `W` is *location-ordered* before an access `Y` to the same location if
+`W` is program-ordered before `Y`.
+
+A write `W` is *location-ordered* before a write `W1` to the same location if
 there exists an availability operation `Z` on `W` such that:
 
 - `Z` *amdgpu-happens-before* `W1`, and,
 - `W1` is included in `Z`'s scope instance.
 
-A write `W` is *location-ordered* before a read `R` to the same address if
+A write `W` is *location-ordered* before a read `R` to the same location if
 there exists a visibility operation `Z` on write `W` such that:
 
 - `Z` is `R` itself, or,
 - `Z` precedes `R` in program order.
 
 A read `R` is *location-ordered* before an access (read and/or write) `X` to the
-same address if it happens-before `X`.
+same location if it happens-before `X`.
 
 The AMDGPU memory model overrides the definition of each byte in the
 {ref}`LLVM memory model<memmodel>` as follows.
