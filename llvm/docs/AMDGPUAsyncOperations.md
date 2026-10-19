@@ -68,9 +68,9 @@ be included in an {ref}`asyncmark<amdgpu-asyncmarks>`.
 ## Completion of Async Operations
 
 An async operation executes outside the thread that initiated it, i.e., it is
-not related in *program-order* with any other operations from that thread. But
-a thread that depends on the side-effects of `A` can use an asyncmark or barrier
-to ensure that `A` is *completed-at* some operation in that thread.
+not related in *program-order* with any other operations from that thread. But a
+thread that depends on the memory accesses performed by `A` can use an asyncmark
+or barrier to ensure that `A` is *completed-at* some operation in that thread.
 
 ### Using Asyncmarks
 
@@ -95,9 +95,9 @@ barriers<amdgpu-lds-memory-barriers>` as follows:
   initiates a {ref}`barrier arrive<amdgpu-barrier-operations>` to be performed
   after the async operation `A` initiated by `X`.
 
-A thread that depends on the side-effects of `A` performs a {ref}`barrier
-wait<amdgpu-barrier-operations>` operation `W` on the barrier. `A` is said to be
-*completed-at* `W` when the barrier completes.
+A thread that depends on the memory accesses performed by `A` performs a
+{ref}`barrier wait<amdgpu-barrier-operations>` operation `W` on the barrier. `A`
+is said to be *completed-at* `W` when the barrier completes.
 
 ## Examples
 
