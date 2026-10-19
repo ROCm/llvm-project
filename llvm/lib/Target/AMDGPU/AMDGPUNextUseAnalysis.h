@@ -285,6 +285,11 @@ public:
   Config getConfig() const;
   void setConfig(Config);
 
+  bool isReachable(const MachineBasicBlock *From,
+                   const MachineBasicBlock *To) const;
+  bool isForwardReachable(const MachineBasicBlock *From,
+                          const MachineBasicBlock *To) const;
+
   void getReachableUses(Register LiveReg, LaneBitmask LaneMask,
                         const MachineInstr &MI,
                         SmallVector<const MachineOperand *> &Uses) const;

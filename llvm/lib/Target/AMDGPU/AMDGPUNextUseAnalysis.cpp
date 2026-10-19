@@ -919,19 +919,10 @@ private:
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Feature getters. Use cached results if available. If not calculate.
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-private:
-  InstrIdTy getSize(const MachineBasicBlock *BB) const {
-    return pathInfoFor(BB, BB).Size;
-  }
-
+public:
   bool isReachable(const MachineBasicBlock *From,
                    const MachineBasicBlock *To) const {
     return pathInfoFor(From, To).Reachable;
-  }
-
-  bool isReachableOrSame(const MachineBasicBlock *From,
-                         const MachineBasicBlock *To) const {
-    return From == To || pathInfoFor(From, To).Reachable;
   }
 
   bool isForwardReachable(const MachineBasicBlock *From,
@@ -943,6 +934,16 @@ private:
     return initializePathInfoForwardReachable(
         From, To,
         PI.Reachable && calcIsReachable(From, To, /*ForwardOnly*/ true));
+  }
+
+private:
+  InstrIdTy getSize(const MachineBasicBlock *BB) const {
+    return pathInfoFor(BB, BB).Size;
+  }
+
+  bool isReachableOrSame(const MachineBasicBlock *From,
+                         const MachineBasicBlock *To) const {
+    return From == To || pathInfoFor(From, To).Reachable;
   }
 
   // Return true/false if we know that 'To' is reachable or not from
@@ -2176,6 +2177,22 @@ AMDGPUNextUseAnalysis::Config AMDGPUNextUseAnalysis::getConfig() const {
 
 void AMDGPUNextUseAnalysis::setConfig(Config Cfg) { Impl->setConfig(Cfg); }
 
+bool AMDGPUNextUseAnalysis::isReachable(const MachineBasicBlock *From,
+                                        const MachineBasicBlock *To) const {
+  return Impl->isReachable(From, To);
+}
+
+bool AMDGPUNextUseAnalysis::isForwardReachable(
+    const MachineBasicBlock *From, const MachineBasicBlock *To) const {
+  return Impl->isForwardReachable(From, To);
+}
+
+void AMDGPUNextUseAnalysis::getReachableUses(
+    Register LiveReg, LaneBitmask LaneMask, const MachineInstr &MI,
+    SmallVector<const MachineOperand *> &Uses) const {
+  return Impl->getReachableUses(LiveReg, LaneMask, MI, Uses);
+}
+
 /// \Returns the next-use distance for \p LiveReg.
 NextUseDistance AMDGPUNextUseAnalysis::getShortestDistance(
     Register LiveReg, const MachineInstr &FromMI,
@@ -2207,11 +2224,6 @@ void AMDGPUNextUseAnalysis::getNextUseDistances(
   FurthestOut = Furthest;
   if (FurthestSubregOut)
     *FurthestSubregOut = FurthestSubreg;
-}
-void AMDGPUNextUseAnalysis::getReachableUses(
-    Register LiveReg, LaneBitmask LaneMask, const MachineInstr &MI,
-    SmallVector<const MachineOperand *> &Uses) const {
-  return Impl->getReachableUses(LiveReg, LaneMask, MI, Uses);
 }
 
 //==============================================================================
