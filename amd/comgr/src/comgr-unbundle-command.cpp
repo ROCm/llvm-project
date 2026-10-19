@@ -54,7 +54,8 @@ void appendSizePrefixed(SmallVectorImpl<char> &Out, StringRef Data) {
 /// A compressed bundle expands to an image far larger than the bundle itself,
 /// and every requested target is a subrange of that image. Copying each
 /// subrange would duplicate the image once per target, so the outputs share
-/// the decompressed buffer instead.
+/// the decompressed buffer instead. The whole backing buffer remains alive
+/// until its last view is released, even if only a small member is retained.
 class SharedSubBuffer final : public MemoryBuffer {
 public:
   SharedSubBuffer(std::shared_ptr<MemoryBuffer> Owner, StringRef Slice)
@@ -301,6 +302,8 @@ Expected<bool> UnbundleCommand::executeInMemory() {
       if (Target == Worklist.end())
         continue;
 
+      // Preserve allocation alignment for downstream ELF/metadata/symbol
+      // readers; a valid byte range alone is not sufficient for a shared view.
       if (isAddrAligned(Align(alignof(std::max_align_t)), Bundle.second.data()))
         Outputs[Target->second] =
             std::make_unique<SharedSubBuffer>(DecompressedOwner, Bundle.second);

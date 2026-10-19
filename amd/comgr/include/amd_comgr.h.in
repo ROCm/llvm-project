@@ -825,6 +825,9 @@ amd_comgr_get_data(
  * prevent modification of the contents while using the pointer. This call
  * does not acquire a reference. Renaming the data does not invalidate the
  * pointer. Backing storage may be shared with other data objects.
+ * The caller must synchronize against content replacement and final release
+ * for the entire duration of the borrow, not just during this call. Retaining
+ * an unbundled member may keep the whole decompressed bundle alive.
  *
  * @retval ::AMD_COMGR_STATUS_SUCCESS The pointer and size were returned.
  * @retval ::AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT @p data is invalid,
@@ -1022,7 +1025,10 @@ amd_comgr_get_data_metadata(
  * must be destroyed separately before overwriting them.
  *
  * Uses the same ELF metadata parser as @c amd_comgr_get_data_metadata,
- * without first copying an aligned ELF into a data object.
+ * without first copying an aligned ELF into a data object. Metadata payloads
+ * still use owned storage; this is not an allocation-free parser. The input
+ * may be freed or unmapped after return, even while returned metadata or its
+ * child handles remain alive.
  *
  * @retval ::AMD_COMGR_STATUS_SUCCESS Metadata was returned.
  * @retval ::AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT @p bytes or

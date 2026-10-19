@@ -630,6 +630,8 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_get_data_pointer(
   if (!DataP || !DataP->hasValidDataKind() || !Size || !Bytes)
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
 
+  // Snapshot the pointer and size together. This lock does not extend the
+  // borrow's lifetime: the caller must retain Data and prevent replacement.
   std::scoped_lock<std::mutex> CacheLock(DataP->CacheMutex);
   if (!DataP->Data)
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
@@ -1563,10 +1565,13 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_get_elf_metadata(
 
   MemoryBufferRef Input(StringRef(Bytes, Size), "");
   std::unique_ptr<MemoryBuffer> AlignedInput;
+  // LLVM's ELF reader requires two-byte base alignment. Preserve support for
+  // arbitrary caller addresses without copying the common aligned case.
   if (!isAddrAligned(Align(2), Bytes)) {
     AlignedInput = MemoryBuffer::getMemBufferCopy(Input.getBuffer());
     Input = AlignedInput->getMemBufferRef();
   }
+  // The parser owns the metadata payload; no view into Input escapes this call.
   if (errorToBool(metadata::getMetadataRoot(Input, MetaP.get())))
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
 
