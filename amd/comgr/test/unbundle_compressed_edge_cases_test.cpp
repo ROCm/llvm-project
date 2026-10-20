@@ -150,6 +150,8 @@ static std::vector<std::string> unbundle(StringRef Input,
                "borrow output");
     if (PointerSize != Size || StringRef(Pointer, PointerSize) != Result[Index])
       fail("borrowed output differs from copied output");
+    if (reinterpret_cast<uintptr_t>(Pointer) % alignof(std::max_align_t) != 0)
+      fail("borrowed output is not properly aligned");
     bool CheckMember = CheckExecutable && StringRef(Targets[Index]) != Host;
     if (VerifyCacheMapping && CheckMember) {
       bool IsAligned = (reinterpret_cast<uintptr_t>(Pointer) & 1) == 0;
@@ -346,13 +348,12 @@ int main(int argc, char **argv) {
             unbundle(compress(Input, Format, Version), {Device}, true, true,
                      VerifyCacheMapping, /*ExpectCacheMapping=*/true),
             {ExecutableContents});
-        // Cached output framing places the ELF after the host bytes and two
-        // size fields. Varying the host length exercises every cache alignment;
-        // an odd host length places the device output at an odd offset, which
-        // must take the copying fallback.
+        // Cached output framing aligns every member relative to the mapped
+        // entry. Varying the host length exercises each padding value and
+        // verifies that the device output still shares the cache mapping.
         checkOutputs(unbundle(compress(Input, Format, Version), {Host, Device},
                               true, true, VerifyCacheMapping,
-                              /*ExpectCacheMapping=*/Padding % 2 == 0),
+                              /*ExpectCacheMapping=*/true),
                      {HostBytes, ExecutableContents});
       }
     }

@@ -1974,10 +1974,10 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
             return AMD_COMGR_STATUS_ERROR;
           }
         }
-        // Cache framing does not align members. LLVM's ELF reader requires
-        // two-byte base alignment, just as for freshly decompressed members.
+        // New cache entries align members. Keep the copy fallback for legacy
+        // entries and malformed data so downstream ELF readers stay valid.
         std::unique_ptr<MemoryBuffer> Output;
-        if (isAddrAligned(Align(2), Slice.data()))
+        if (isAddrAligned(Align(alignof(std::max_align_t)), Slice.data()))
           Output = std::make_unique<SharedSliceMemoryBuffer>(Hit.Entry, Slice);
         else
           Output = MemoryBuffer::getMemBufferCopy(Slice);

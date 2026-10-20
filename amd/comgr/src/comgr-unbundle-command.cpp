@@ -42,6 +42,8 @@ constexpr const char BinaryBundleMagic[] = "__CLANG_OFFLOAD_BUNDLE__";
 constexpr size_t BinaryBundleMagicSize = sizeof(BinaryBundleMagic) - 1;
 constexpr const char CompressedBundleMagic[] = "CCOB";
 constexpr size_t CompressedBundleMagicSize = sizeof(CompressedBundleMagic) - 1;
+using CompressedBundleHeader =
+    object::CompressedOffloadBundle::CompressedBundleHeader;
 
 struct CompressedBundleRange {
   /// The end of the current bundle. A legacy bundle without a recorded size
@@ -51,26 +53,56 @@ struct CompressedBundleRange {
   size_t NextStart;
 };
 
+/// Return the size of a compressed bundle header for \p Version.
+size_t compressedBundleHeaderSize(uint16_t Version) {
+  // CCOB magic (4), version (2), method (2), then the version-specific
+  // sizes and the truncated MD5 hash (8).
+  switch (Version) {
+  case 1:
+    return 20;
+  case 2:
+    return 24;
+  case 3:
+    return 32;
+  default:
+    return 0;
+  }
+}
+
+/// Return the size of the compressed bundle at the start of \p Remaining.
+/// \p RemainingSize is the number of bytes in the complete remaining input;
+/// \p Remaining may be only the header prefix for versioned bundles.
+Expected<size_t>
+nextCompressedBundleOffset(size_t RemainingSize, StringRef Remaining,
+                           const CompressedBundleHeader &Header) {
+  if (Header.FileSize) {
+    size_t HeaderSize = compressedBundleHeaderSize(Header.Version);
+    if (*Header.FileSize < HeaderSize || *Header.FileSize > RemainingSize)
+      return createStringError("invalid compressed bundle size");
+    return *Header.FileSize;
+  }
+
+  // Version 1 has no recorded size, so locate the next magic.
+  return Remaining.find(CompressedBundleMagic, CompressedBundleMagicSize);
+}
+
 Expected<CompressedBundleRange> getCompressedBundleRange(StringRef Blob) {
   if (Blob.size() < 8)
     return createStringError("compressed bundle header size too small");
 
-  Expected<object::CompressedOffloadBundle::CompressedBundleHeader> Header =
-      object::CompressedOffloadBundle::CompressedBundleHeader::tryParse(Blob);
+  Expected<CompressedBundleHeader> Header =
+      CompressedBundleHeader::tryParse(Blob);
   if (!Header)
     return Header.takeError();
 
-  if (Header->FileSize) {
-    size_t End = *Header->FileSize;
-    size_t HeaderSize = Header->Version == 2 ? 24 : 32;
-    if (End < HeaderSize || End > Blob.size())
-      return createStringError("invalid compressed bundle size");
-    return CompressedBundleRange{End, Blob.find(CompressedBundleMagic, End)};
-  }
-
-  // Legacy bundle without a recorded size: fall back to magic scanning.
-  size_t NextStart = Blob.find(CompressedBundleMagic, CompressedBundleMagicSize);
-  return CompressedBundleRange{NextStart, NextStart};
+  Expected<size_t> Next =
+      nextCompressedBundleOffset(Blob.size(), Blob, *Header);
+  if (!Next)
+    return Next.takeError();
+  if (Header->FileSize)
+    return CompressedBundleRange{*Next,
+                                 Blob.find(CompressedBundleMagic, *Next)};
+  return CompressedBundleRange{*Next, *Next};
 }
 
 // Keep this predicate consistent with isCodeObjectCompatible in
@@ -115,70 +147,36 @@ constexpr size_t MaxCachedUncompressedSize = 64 * 1024 * 1024;
 constexpr size_t MinCompressedBundleHeaderSize = 8;
 constexpr size_t MaxCompressedBundleHeaderSize = 32;
 
-Expected<bool> compressedBundlesFitCache(StringRef InputFilename,
-                                         uint64_t InputSize) {
-  using Header = object::CompressedOffloadBundle::CompressedBundleHeader;
+// Each unbundled member is aligned to max_align_t relative to the mapped cache
+// entry and framed with its size and padding, so a cache hit can borrow the
+// member instead of copying it. The leading magic distinguishes this framing
+// from the original size-prefixed layout, which is still accepted on read.
+constexpr const char UnbundleCacheMagic[] = "CUB1";
+constexpr size_t UnbundleCacheMagicSize = sizeof(UnbundleCacheMagic) - 1;
+constexpr size_t UnbundleCacheAlignment = alignof(std::max_align_t);
+// serializeCacheEntry() prefixes the command output with an eight-byte size.
+// Align members relative to that actual position in the cache file.
+constexpr size_t UnbundleCacheContentsOffset = sizeof(uint64_t);
+static_assert(UnbundleCacheMagicSize == sizeof(SizeFieldType));
 
-  uint64_t Offset = 0;
-  while (Offset < InputSize) {
-    uint64_t RemainingSize = InputSize - Offset;
-    if (RemainingSize < MinCompressedBundleHeaderSize)
-      return createStringError("truncated compressed bundle header");
-
-    ErrorOr<std::unique_ptr<MemoryBuffer>> HeaderBuffer =
-        MemoryBuffer::getFileSlice(
-            InputFilename,
-            std::min<uint64_t>(RemainingSize, MaxCompressedBundleHeaderSize),
-            Offset);
-    if (!HeaderBuffer)
-      return createStringError(HeaderBuffer.getError(),
-                               "failed to read compressed bundle header");
-
-    StringRef HeaderBytes = (*HeaderBuffer)->getBuffer();
-    if (identify_magic(HeaderBytes) != file_magic::offload_bundle_compressed)
-      return createStringError("invalid concatenated compressed bundle");
-
-    Expected<Header> MaybeHeader = Header::tryParse(HeaderBytes);
-    if (!MaybeHeader)
-      return MaybeHeader.takeError();
-    if (MaybeHeader->UncompressedFileSize > MaxCachedUncompressedSize)
-      return false;
-
-    if (!MaybeHeader->FileSize) {
-      // Version 1 has no total size, so locate the next bundle by magic, as
-      // the in-memory unbundler does.
-      ErrorOr<std::unique_ptr<MemoryBuffer>> RemainingBuffer =
-          MemoryBuffer::getFileSlice(InputFilename, RemainingSize, Offset);
-      if (!RemainingBuffer)
-        return createStringError(RemainingBuffer.getError(),
-                                 "failed to read compressed bundle");
-      size_t NextStart = (*RemainingBuffer)
-                             ->getBuffer()
-                             .find(CompressedBundleMagic,
-                                   CompressedBundleMagicSize);
-      if (NextStart == StringRef::npos)
-        return true;
-      Offset += NextStart;
-      continue;
-    }
-
-    uint64_t BundleSize = *MaybeHeader->FileSize;
-    size_t HeaderSize = MaybeHeader->Version == 2 ? 24 : 32;
-    if (BundleSize < HeaderSize || BundleSize > RemainingSize)
-      return createStringError("invalid compressed bundle size");
-    Offset += BundleSize;
-  }
-  return true;
-}
-
-/// Append \p Data to \p Out, prefixed with its size. This is the format used
-/// for the contents of each output in the cache entry.
-void appendSizePrefixed(SmallVectorImpl<char> &Out, StringRef Data) {
+/// Append \p Data to \p Out in the aligned cache framing. The frame stores the
+/// payload size and the number of padding bytes before the payload.
+void appendAlignedOutput(SmallVectorImpl<char> &Out, StringRef Data) {
   SizeFieldType Size = Data.size();
-  size_t Offset = Out.size();
-  Out.resize_for_overwrite(Offset + sizeof(Size) + Data.size());
-  memcpy(Out.data() + Offset, &Size, sizeof(Size));
-  memcpy(Out.data() + Offset + sizeof(Size), Data.data(), Data.size());
+  size_t HeaderOffset = Out.size();
+  size_t DataOffset = HeaderOffset + 2 * sizeof(SizeFieldType);
+  size_t AlignedOffset = alignTo(DataOffset + UnbundleCacheContentsOffset,
+                                 UnbundleCacheAlignment) -
+                         UnbundleCacheContentsOffset;
+  SizeFieldType Padding = AlignedOffset - DataOffset;
+
+  Out.resize_for_overwrite(AlignedOffset + Data.size());
+  memcpy(Out.data() + HeaderOffset, &Size, sizeof(Size));
+  memcpy(Out.data() + HeaderOffset + sizeof(Size), &Padding, sizeof(Padding));
+  if (Padding)
+    memset(Out.data() + DataOffset, 0, Padding);
+  if (!Data.empty())
+    memcpy(Out.data() + AlignedOffset, Data.data(), Data.size());
 }
 
 /// A MemoryBuffer that views a subrange of \p Owner and keeps it alive.
@@ -226,18 +224,63 @@ bool UnbundleCommand::canCache() const {
   if (InputSize < MinCompressedBundleHeaderSize)
     return false;
 
-  // Only map each header prefix. Mapping the complete compressed bundle here
-  // would page in hundreds of megabytes just to decide whether to cache it.
-  Expected<bool> FitsCache = compressedBundlesFitCache(InputFilename, InputSize);
-  if (!FitsCache) {
-    consumeError(FitsCache.takeError());
-    return false;
+  // Only map the header prefix for versioned bundles. Mapping the complete
+  // compressed bundle here would page in hundreds of megabytes just to decide
+  // whether to cache it. Version 1 has no recorded size and needs a scan.
+  std::unique_ptr<MemoryBuffer> FullBuffer;
+  uint64_t Offset = 0;
+  while (Offset < InputSize) {
+    uint64_t RemainingSize = InputSize - Offset;
+    if (RemainingSize < MinCompressedBundleHeaderSize)
+      return false;
+
+    ErrorOr<std::unique_ptr<MemoryBuffer>> HeaderBuffer =
+        MemoryBuffer::getFileSlice(
+            InputFilename,
+            std::min<uint64_t>(RemainingSize, MaxCompressedBundleHeaderSize),
+            Offset);
+    if (!HeaderBuffer)
+      return true;
+
+    Expected<CompressedBundleHeader> Header =
+        CompressedBundleHeader::tryParse((*HeaderBuffer)->getBuffer());
+    if (!Header) {
+      consumeError(Header.takeError());
+      return false;
+    }
+
+    if (Header->UncompressedFileSize > MaxCachedUncompressedSize)
+      return false;
+
+    StringRef ScanData = (*HeaderBuffer)->getBuffer();
+    if (!Header->FileSize) {
+      if (!FullBuffer) {
+        ErrorOr<std::unique_ptr<MemoryBuffer>> MaybeFullBuffer =
+            MemoryBuffer::getFile(InputFilename);
+        if (!MaybeFullBuffer)
+          return true;
+        FullBuffer = std::move(*MaybeFullBuffer);
+      }
+      ScanData = FullBuffer->getBuffer().drop_front(Offset);
+    }
+
+    Expected<size_t> NextOffset =
+        nextCompressedBundleOffset(RemainingSize, ScanData, *Header);
+    if (!NextOffset) {
+      consumeError(NextOffset.takeError());
+      return false;
+    }
+    if (*NextOffset == StringRef::npos)
+      break;
+    Offset += *NextOffset;
   }
-  return *FitsCache;
+
+  return true;
 }
 
 Error UnbundleCommand::splitCachedOutput(StringRef CachedBuffer,
                                          SmallVectorImpl<StringRef> &Out) {
+  bool IsAligned = CachedBuffer.consume_front(UnbundleCacheMagic);
   for (size_t Index = 0, Count = Config.OutputFileNames.size(); Index < Count;
        ++Index) {
     SizeFieldType OutputFileSize;
@@ -246,6 +289,19 @@ Error UnbundleCommand::splitCachedOutput(StringRef CachedBuffer,
                                "Not enough bytes to read output file size");
     memcpy(&OutputFileSize, CachedBuffer.data(), sizeof(OutputFileSize));
     CachedBuffer = CachedBuffer.drop_front(sizeof(OutputFileSize));
+
+    if (IsAligned) {
+      SizeFieldType Padding;
+      if (CachedBuffer.size() < sizeof(Padding))
+        return createStringError(std::errc::invalid_argument,
+                                 "Not enough bytes to read output padding");
+      memcpy(&Padding, CachedBuffer.data(), sizeof(Padding));
+      CachedBuffer = CachedBuffer.drop_front(sizeof(Padding));
+      if (Padding > CachedBuffer.size())
+        return createStringError(std::errc::invalid_argument,
+                                 "Output padding exceeds cache entry");
+      CachedBuffer = CachedBuffer.drop_front(Padding);
+    }
 
     if (CachedBuffer.size() < OutputFileSize)
       return createStringError(std::errc::invalid_argument,
@@ -301,16 +357,22 @@ Expected<StringRef> UnbundleCommand::readExecuteOutput() {
     // Size the buffer up front. Appending an image much larger than the
     // SmallString's inline capacity would otherwise reallocate and copy the
     // whole image more than once.
-    size_t TotalSize = 0;
+    size_t TotalSize = UnbundleCacheMagicSize +
+                       OutputBuffers.size() * 2 * sizeof(SizeFieldType) +
+                       OutputBuffers.size() * (UnbundleCacheAlignment - 1);
     for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
-      TotalSize += sizeof(SizeFieldType) + Output->getBufferSize();
+      TotalSize += Output->getBufferSize();
     OutputBuffer.reserve(TotalSize);
+    OutputBuffer.append(UnbundleCacheMagic,
+                        UnbundleCacheMagic + UnbundleCacheMagicSize);
 
     for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
-      appendSizePrefixed(OutputBuffer, Output->getBuffer());
+      appendAlignedOutput(OutputBuffer, Output->getBuffer());
     return StringRef(OutputBuffer.data(), OutputBuffer.size());
   }
 
+  OutputBuffer.append(UnbundleCacheMagic,
+                      UnbundleCacheMagic + UnbundleCacheMagicSize);
   for (StringRef OutputFilename : Config.OutputFileNames) {
     auto MaybeOneOutput =
         CachedCommandAdaptor::readSingleOutputFile(OutputFilename);
@@ -318,7 +380,7 @@ Expected<StringRef> UnbundleCommand::readExecuteOutput() {
       return MaybeOneOutput.takeError();
 
     const MemoryBuffer &OneOutputBuffer = **MaybeOneOutput;
-    appendSizePrefixed(OutputBuffer, OneOutputBuffer.getBuffer());
+    appendAlignedOutput(OutputBuffer, OneOutputBuffer.getBuffer());
   }
   return OutputBuffer;
 }
@@ -451,9 +513,9 @@ Expected<bool> UnbundleCommand::executeInMemory() {
       if (Target == Worklist.end())
         continue;
 
-      // LLVM's ELF reader requires two-byte base alignment. Preserve that
-      // requirement for downstream metadata and symbol readers.
-      if (isAddrAligned(Align(2), Bundle.second.data()))
+      // Preserve the alignment needed by downstream ELF, metadata, and symbol
+      // readers; a valid byte range alone is not sufficient for a shared view.
+      if (isAddrAligned(Align(alignof(std::max_align_t)), Bundle.second.data()))
         Outputs[Target->second] =
             std::make_unique<SharedSubBuffer>(DecompressedOwner, Bundle.second);
       else
@@ -579,31 +641,33 @@ Error UnbundleCommand::addInputIdentifier(HashAlgorithm &H) const {
   size_t Offset = 0;
   while (Offset < Input.size()) {
     StringRef Remaining = Input.drop_front(Offset);
-    if (identify_magic(Remaining) != file_magic::offload_bundle_compressed)
+    if (Remaining.size() < MinCompressedBundleHeaderSize ||
+        identify_magic(Remaining) != file_magic::offload_bundle_compressed)
       return createStringError(std::errc::invalid_argument,
                                "invalid concatenated compressed bundle");
 
-    Expected<CompressedBundleRange> Range = getCompressedBundleRange(Remaining);
-    if (!Range)
-      return Range.takeError();
-
-    using Header = object::CompressedOffloadBundle::CompressedBundleHeader;
+    using Header = CompressedBundleHeader;
     Expected<Header> MaybeHeader = Header::tryParse(Remaining);
     if (!MaybeHeader)
       return MaybeHeader.takeError();
 
-    // The hash represents the uncompressed contents of this bundle.
-    // Extracting the same contents should give the same result regardless of
-    // the compression algorithm or header version. Since the hash used by the
-    // offload bundler is not cryptographic, also include the uncompressed file
-    // size. Hash every concatenated bundle because the requested target may
-    // occur only in a later one.
+    // A host target returns the original compressed bundle, so the cache key
+    // must distinguish the compression format and header version in addition
+    // to the decompressed contents. The hash used by the offload bundler is
+    // not a cryptographic hash, so also include the uncompressed file size.
+    addUInt(H, MaybeHeader->Version);
+    addUInt(H, static_cast<uint64_t>(MaybeHeader->CompressionFormat));
+    addUInt(H, MaybeHeader->FileSize.value_or(0));
     addUInt(H, MaybeHeader->Hash);
     addUInt(H, MaybeHeader->UncompressedFileSize);
 
-    if (Range->NextStart == StringRef::npos)
+    Expected<size_t> NextOffset = nextCompressedBundleOffset(
+        Remaining.size(), Remaining, *MaybeHeader);
+    if (!NextOffset)
+      return NextOffset.takeError();
+    if (*NextOffset == StringRef::npos)
       break;
-    Offset += Range->NextStart;
+    Offset += *NextOffset;
   }
   return Error::success();
 }
