@@ -194,11 +194,21 @@ public:
          /*RequiresNullTerminator=*/false);
   }
 
-  BufferKind getBufferKind() const override { return MemoryBuffer_Malloc; }
+  StringRef getBufferIdentifier() const override {
+    return Owner->getBufferIdentifier();
+  }
+  BufferKind getBufferKind() const override { return Owner->getBufferKind(); }
 
 private:
   std::shared_ptr<MemoryBuffer> Owner;
 };
+
+std::unique_ptr<MemoryBuffer> shareOrCopy(std::shared_ptr<MemoryBuffer> Owner,
+                                          StringRef Slice) {
+  if (Owner && isAddrAligned(Align(alignof(std::max_align_t)), Slice.data()))
+    return std::make_unique<SharedSubBuffer>(std::move(Owner), Slice);
+  return MemoryBuffer::getMemBufferCopy(Slice);
+}
 
 } // namespace
 
@@ -241,6 +251,9 @@ bool UnbundleCommand::canCache() const {
             Offset);
     if (!HeaderBuffer)
       return true;
+    if (identify_magic((*HeaderBuffer)->getBuffer()) !=
+        file_magic::offload_bundle_compressed)
+      return false;
 
     Expected<CompressedBundleHeader> Header =
         CompressedBundleHeader::tryParse((*HeaderBuffer)->getBuffer());
@@ -330,18 +343,18 @@ Error UnbundleCommand::saveOutputTemps() const {
 }
 
 Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
+  return restoreCachedOutput(CachedBuffer, nullptr);
+}
+
+Error UnbundleCommand::restoreCachedOutput(
+    StringRef CachedBuffer, std::shared_ptr<MemoryBuffer> Owner) {
   SmallVector<StringRef> Contents;
   if (Error Err = splitCachedOutput(CachedBuffer, Contents))
     return Err;
 
-  for (StringRef Content : Contents) {
-    std::unique_ptr<MemoryBuffer> Output =
-        MemoryBuffer::getMemBufferCopy(Content);
-    if (!Output)
-      return createStringError(std::errc::not_enough_memory,
-                               "Failed to allocate unbundled output");
-    OutputBuffers.push_back(std::move(Output));
-  }
+  OutputBuffers.clear();
+  for (StringRef Content : Contents)
+    OutputBuffers.push_back(shareOrCopy(Owner, Content));
   if (Error Err = saveOutputTemps()) {
     // A failed cache restore may retry through execute(). Do not retain
     // cached outputs if that retry falls back to the file-based path.
@@ -352,6 +365,9 @@ Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
 }
 
 Expected<StringRef> UnbundleCommand::readExecuteOutput() {
+  OutputBuffer.clear();
+  OutputBuffer.append(UnbundleCacheMagic,
+                      UnbundleCacheMagic + UnbundleCacheMagicSize);
   // The outputs were unbundled in memory, frame them for the cache entry.
   if (!OutputBuffers.empty()) {
     // Size the buffer up front. Appending an image much larger than the
@@ -363,16 +379,11 @@ Expected<StringRef> UnbundleCommand::readExecuteOutput() {
     for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
       TotalSize += Output->getBufferSize();
     OutputBuffer.reserve(TotalSize);
-    OutputBuffer.append(UnbundleCacheMagic,
-                        UnbundleCacheMagic + UnbundleCacheMagicSize);
-
     for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
       appendAlignedOutput(OutputBuffer, Output->getBuffer());
-    return StringRef(OutputBuffer.data(), OutputBuffer.size());
+    return OutputBuffer;
   }
 
-  OutputBuffer.append(UnbundleCacheMagic,
-                      UnbundleCacheMagic + UnbundleCacheMagicSize);
   for (StringRef OutputFilename : Config.OutputFileNames) {
     auto MaybeOneOutput =
         CachedCommandAdaptor::readSingleOutputFile(OutputFilename);
@@ -434,18 +445,12 @@ Expected<bool> UnbundleCommand::executeInMemory() {
     size_t CurBundleEnd = Range->End;
     NextBundleStart = Range->NextStart;
 
-    ErrorOr<std::unique_ptr<MemoryBuffer>> BlobOrErr =
-        MemoryBuffer::getMemBuffer(Remaining.take_front(CurBundleEnd),
-                                   InputFileName,
-                                   /*RequiresNullTerminator=*/false);
-    if (!BlobOrErr) {
-      std::error_code EC = BlobOrErr.getError();
-      return createStringError(EC, Twine("Failed to open ") + InputFileName +
-                                       " : " + EC.message() + "\n");
-    }
+    std::unique_ptr<MemoryBuffer> Blob = MemoryBuffer::getMemBuffer(
+        Remaining.take_front(CurBundleEnd), InputFileName,
+        /*RequiresNullTerminator=*/false);
 
     Expected<std::unique_ptr<MemoryBuffer>> DecompressedOrErr =
-        object::CompressedOffloadBundle::decompress(**BlobOrErr);
+        object::CompressedOffloadBundle::decompress(*Blob);
     if (!DecompressedOrErr)
       return DecompressedOrErr.takeError();
 
@@ -515,11 +520,7 @@ Expected<bool> UnbundleCommand::executeInMemory() {
 
       // Preserve the alignment needed by downstream ELF, metadata, and symbol
       // readers; a valid byte range alone is not sufficient for a shared view.
-      if (isAddrAligned(Align(alignof(std::max_align_t)), Bundle.second.data()))
-        Outputs[Target->second] =
-            std::make_unique<SharedSubBuffer>(DecompressedOwner, Bundle.second);
-      else
-        Outputs[Target->second] = MemoryBuffer::getMemBufferCopy(Bundle.second);
+      Outputs[Target->second] = shareOrCopy(DecompressedOwner, Bundle.second);
 
       Worklist.erase(Target);
 
@@ -535,33 +536,20 @@ Expected<bool> UnbundleCommand::executeInMemory() {
   if (!Config.AllowMissingBundles && !Worklist.empty())
     return false;
 
-  // If no bundles were found, the file-based path assumes the input is the
-  // host bundle and copies it to the host targets, leaving the rest empty.
-  if (Worklist.size() == Config.TargetNames.size()) {
-    for (const auto &Entry : Worklist) {
-      size_t Index = Entry.second;
-      StringRef Target = Entry.getKey();
-      Outputs[Index] = OffloadTargetInfo(Target, Config).hasHostKind()
-                           ? MemoryBuffer::getMemBufferCopy(Input)
-                           : MemoryBuffer::getMemBufferCopy("");
-      if (!Outputs[Index])
-        return createStringError(std::errc::not_enough_memory,
-                                 "Failed to allocate unbundled output");
-    }
-    OutputBuffers = std::move(Outputs);
-    return true;
-  }
-
-  if (!FoundHostBundle && Config.HostInputIndex != ~0u &&
+  bool NoBundlesFound = Worklist.size() == Config.TargetNames.size();
+  if (!NoBundlesFound && !FoundHostBundle && Config.HostInputIndex != ~0u &&
       !Config.AllowMissingBundles)
     return false;
 
-  // Any target that was not found gets an empty output, as the file-based
-  // path does.
+  // Missing targets get empty outputs. If no bundles matched, the file-based
+  // path instead copies the input to any requested host target.
   for (const auto &Entry : Worklist) {
-    size_t Index = Entry.second;
-    Outputs[Index] = MemoryBuffer::getMemBufferCopy("");
-    if (!Outputs[Index])
+    StringRef Contents;
+    if (NoBundlesFound &&
+        OffloadTargetInfo(Entry.getKey(), Config).hasHostKind())
+      Contents = Input;
+    Outputs[Entry.second] = MemoryBuffer::getMemBufferCopy(Contents);
+    if (!Outputs[Entry.second])
       return createStringError(std::errc::not_enough_memory,
                                "Failed to allocate unbundled output");
   }
@@ -572,6 +560,7 @@ Expected<bool> UnbundleCommand::executeInMemory() {
 
 amd_comgr_status_t UnbundleCommand::execute(raw_ostream &LogS) {
   assert(Config.InputFileNames.size() == 1);
+  OutputBuffers.clear();
 
   OffloadBundler Bundler(Config);
 
@@ -638,6 +627,13 @@ Error UnbundleCommand::addInputIdentifier(HashAlgorithm &H) const {
   }
 
   StringRef Input = (**MaybeInputBuffer).getBuffer();
+  if (llvm::any_of(Config.TargetNames, [&](StringRef Target) {
+        return checkOffloadBundleID(Target) &&
+               OffloadTargetInfo(Target, Config).hasHostKind();
+      })) {
+    addString(H, Input);
+    return Error::success();
+  }
   size_t Offset = 0;
   while (Offset < Input.size()) {
     StringRef Remaining = Input.drop_front(Offset);
@@ -651,10 +647,6 @@ Error UnbundleCommand::addInputIdentifier(HashAlgorithm &H) const {
     if (!MaybeHeader)
       return MaybeHeader.takeError();
 
-    // A host target returns the original compressed bundle, so the cache key
-    // must distinguish the compression format and header version in addition
-    // to the decompressed contents. The hash used by the offload bundler is
-    // not a cryptographic hash, so also include the uncompressed file size.
     addUInt(H, MaybeHeader->Version);
     addUInt(H, static_cast<uint64_t>(MaybeHeader->CompressionFormat));
     addUInt(H, MaybeHeader->FileSize.value_or(0));

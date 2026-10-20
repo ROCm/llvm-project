@@ -68,7 +68,6 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/OffloadBinary.h"
-#include "llvm/Support/Alignment.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -1828,23 +1827,6 @@ amd_comgr_status_t AMDGPUCompiler::compileToRelocatable() {
   return processFiles(AMD_COMGR_DATA_KIND_RELOCATABLE, ".o");
 }
 
-namespace {
-// A view of part of a shared buffer, owned through the shared pointer.
-class SharedSliceMemoryBuffer final : public MemoryBuffer {
-  std::shared_ptr<MemoryBuffer> Owner;
-
-public:
-  SharedSliceMemoryBuffer(std::shared_ptr<MemoryBuffer> Owner, StringRef Slice)
-      : Owner(std::move(Owner)) {
-    init(Slice.begin(), Slice.end(), /*RequiresNullTerminator=*/false);
-  }
-  StringRef getBufferIdentifier() const override {
-    return Owner->getBufferIdentifier();
-  }
-  BufferKind getBufferKind() const override { return Owner->getBufferKind(); }
-};
-} // namespace
-
 amd_comgr_status_t AMDGPUCompiler::unbundle() {
   if (auto Status = createTmpDirs()) {
     return Status;
@@ -1921,14 +1903,12 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
     }
 
     UnbundleCommand Unbundle(Input->DataKind, BundlerConfig);
-    // Contents of each output when they come from the cache entry in place.
-    SmallVector<StringRef> Contents;
     CommandCache::CachedOutput Hit;
     if (Cache) {
       // On a cache hit, use the cached code objects in place instead of
       // writing each one to a temporary file and copying it back. Not on
       // Windows, where a mapped cache entry could not be pruned.
-      // Save-temps writes diagnostic copies below without reading them back.
+      // Save-temps writes diagnostic copies without reading them back.
       bool InPlace = true;
 #ifdef _WIN32
       InPlace = false;
@@ -1938,10 +1918,10 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
         return Status;
 
       if (Hit.Entry) {
-        if (Error E = Unbundle.splitCachedOutput(Hit.Output, Contents)) {
+        if (Error E = Unbundle.restoreCachedOutput(Hit.Output,
+                                                   std::move(Hit.Entry))) {
           logAllUnhandledErrors(std::move(E), LogS,
                                 "Comgr cache: ignoring entry: ");
-          Contents.clear();
           if (auto Status = Unbundle.execute(LogS))
             return Status;
         }
@@ -1965,25 +1945,7 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       ScopedDataObjectReleaser SDOR(ResultT);
 
       DataObject *Result = DataObject::convert(ResultT);
-      if (!Contents.empty()) {
-        StringRef Slice = Contents[OutputIndex];
-        if (env::shouldSaveTemps()) {
-          if (Error Err = CachedCommandAdaptor::writeSingleOutputFile(
-                  OutputFilePath, Slice)) {
-            logAllUnhandledErrors(std::move(Err), LogS, "Unbundle Error: ");
-            return AMD_COMGR_STATUS_ERROR;
-          }
-        }
-        // New cache entries align members. Keep the copy fallback for legacy
-        // entries and malformed data so downstream ELF readers stay valid.
-        std::unique_ptr<MemoryBuffer> Output;
-        if (isAddrAligned(Align(alignof(std::max_align_t)), Slice.data()))
-          Output = std::make_unique<SharedSliceMemoryBuffer>(Hit.Entry, Slice);
-        else
-          Output = MemoryBuffer::getMemBufferCopy(Slice);
-        if (auto Status = Result->setData(std::move(Output)))
-          return Status;
-      } else if (Unbundle.hasInMemoryOutputs()) {
+      if (Unbundle.hasInMemoryOutputs()) {
         // UnbundleCommand owns the unbundled contents, hand ownership to the
         // data object to avoid a round trip through the file system.
         std::unique_ptr<MemoryBuffer> Contents =

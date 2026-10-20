@@ -41,6 +41,9 @@ private:
   /// Write diagnostic copies without giving up the in-memory outputs.
   llvm::Error saveOutputTemps() const;
 
+  llvm::Error splitCachedOutput(llvm::StringRef CachedBuffer,
+                                llvm::SmallVectorImpl<llvm::StringRef> &Out);
+
 public:
   UnbundleCommand(amd_comgr_data_kind_t Kind,
                   const clang::OffloadBundlerConfig &Config)
@@ -58,10 +61,9 @@ public:
 
   bool canCache() const override;
   llvm::Error writeExecuteOutput(llvm::StringRef CachedBuffer) override;
-  /// Split a cached output into the contents of each output file, in the
-  /// order of Config.OutputFileNames, without writing any file.
-  llvm::Error splitCachedOutput(llvm::StringRef CachedBuffer,
-                                llvm::SmallVectorImpl<llvm::StringRef> &Out);
+  /// Restore cached members, borrowing aligned slices when Owner is provided.
+  llvm::Error restoreCachedOutput(llvm::StringRef CachedBuffer,
+                                  std::shared_ptr<llvm::MemoryBuffer> Owner);
   llvm::Expected<llvm::StringRef> readExecuteOutput() override;
   amd_comgr_status_t execute(llvm::raw_ostream &LogS) override;
 

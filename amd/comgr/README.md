@@ -209,6 +209,27 @@ By default, the cache is enabled.
   termination. The string format aligns with [Clang's ThinLTO cache pruning policy](https://clang.llvm.org/docs/ThinLTO.html#cache-pruning).
   The default policy is set as: "prune_interval=1h:prune_expiration=0h:cache_size=75%:cache_size_bytes=30g:cache_size_files=0".
 
+### Compressed unbundling
+
+`AMD_COMGR_ACTION_UNBUNDLE` extracts compressed binary bundles in memory.
+On a cache miss, it decompresses each bundle once and selects existing members
+by their table offsets; it does not regenerate or recompile ELF images. Aligned
+members share the decompressed buffer, which stays alive until its last member
+is released. Misaligned members are copied for downstream ELF readers.
+Archives, uncompressed bundles, and unsupported layouts use the file-based path.
+
+On a cache hit, aligned members share the mapped cache entry without
+decompression. Windows copies cached members so the cache file can be pruned.
+New entries use `CUB1` framing with a size and padding count per member; legacy
+size-prefixed entries remain readable. Device-only cache keys cover every
+concatenated bundle header. Requests containing a host target hash the complete
+input because their output can include the original compressed bytes.
+
+If any bundle declares an expanded size greater than 64 MiB, COMGR bypasses
+the cache to avoid persisting another full expanded image. Such inputs are
+decompressed on each load. `AMD_COMGR_SAVE_TEMPS` writes diagnostic output files
+on cache hits, misses, and cache-disabled runs without changing buffer ownership.
+
 ### Debugging
 Comgr supports some environment variables to aid in debugging. These
 include:

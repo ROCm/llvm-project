@@ -14,17 +14,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "amd_comgr.h"
-#include "common.h"
+#include "unbundle_test.h"
 
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Object/OffloadBundle.h"
-#include "llvm/Support/Compression.h"
-#include "llvm/Support/Endian.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Support/MemoryBuffer.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -37,95 +30,25 @@
 #include <utility>
 
 using namespace llvm;
+using namespace UnbundleTest;
 
 namespace {
-constexpr char Magic[] = "__CLANG_OFFLOAD_BUNDLE__";
-constexpr char Device[] = "hip-amdgcn-amd-amdhsa-unknown-gfx900";
-constexpr char OtherDevice[] = "hip-amdgcn-amd-amdhsa-unknown-gfx906";
-constexpr char Host[] = "host-x86_64-unknown-linux-gnu";
 constexpr uint64_t MaxCachedUncompressedSize = 64 * 1024 * 1024;
-
-void appendInteger(std::string &Buffer, uint64_t Value) {
-  size_t Offset = Buffer.size();
-  Buffer.resize(Offset + sizeof(Value));
-  support::endian::write64le(Buffer.data() + Offset, Value);
-}
-
-std::string bundle(ArrayRef<std::pair<StringRef, StringRef>> Entries) {
-  uint64_t Offset = sizeof(Magic) - 1 + sizeof(uint64_t);
-  for (const auto &Entry : Entries)
-    Offset += 3 * sizeof(uint64_t) + Entry.first.size();
-
-  std::string Result = Magic;
-  appendInteger(Result, Entries.size());
-  for (const auto &Entry : Entries) {
-    appendInteger(Result, Offset);
-    appendInteger(Result, Entry.second.size());
-    appendInteger(Result, Entry.first.size());
-    Result += Entry.first;
-    Offset += Entry.second.size();
-  }
-  for (const auto &Entry : Entries)
-    Result += Entry.second;
-  return Result;
-}
-
-std::string compress(StringRef Input, compression::Format Format,
-                     uint16_t Version = 3) {
-  auto Buffer = MemoryBuffer::getMemBuffer(Input, "", false);
-  auto Compressed = object::CompressedOffloadBundle::compress(
-      compression::Params(Format), *Buffer, Version);
-  if (!Compressed)
-    fail("compress: %s", toString(Compressed.takeError()).c_str());
-  return (*Compressed)->getBuffer().str();
-}
 
 std::string unbundle(StringRef Input, bool ExpectSuccess,
                      StringRef Target = Device) {
-  amd_comgr_data_set_t Inputs, Outputs;
-  amd_comgr_data_t InputData, OutputData;
-  amd_comgr_action_info_t Action;
   std::string TargetString = Target.str();
-  const char *Targets[] = {TargetString.c_str()};
-
-  checkError(amd_comgr_create_data_set(&Inputs), "create inputs");
-  checkError(amd_comgr_create_data_set(&Outputs), "create outputs");
-  checkError(amd_comgr_create_data(AMD_COMGR_DATA_KIND_BC_BUNDLE, &InputData),
-             "create input");
-  checkError(amd_comgr_set_data(InputData, Input.size(), Input.data()),
-             "set input");
-  checkError(amd_comgr_set_data_name(InputData, "bundle"), "set name");
-  checkError(amd_comgr_data_set_add(Inputs, InputData), "add input");
-  checkError(amd_comgr_release_data(InputData), "release input");
-  checkError(amd_comgr_create_action_info(&Action), "create action");
-  checkError(amd_comgr_action_info_set_language(Action, AMD_COMGR_LANGUAGE_HIP),
-             "set language");
-  checkError(amd_comgr_action_info_set_bundle_entry_ids(Action, Targets, 1),
-             "set targets");
-
-  amd_comgr_status_t Status =
-      amd_comgr_do_action(AMD_COMGR_ACTION_UNBUNDLE, Action, Inputs, Outputs);
-  if (ExpectSuccess)
-    checkError(Status, "unbundle");
-  else if (Status == AMD_COMGR_STATUS_SUCCESS)
-    fail("malformed bundle was accepted");
+  auto Data = unbundleData(Input, {TargetString.c_str()}, ExpectSuccess);
 
   std::string Result;
   if (ExpectSuccess) {
-    checkError(amd_comgr_action_data_get_data(Outputs, AMD_COMGR_DATA_KIND_BC, 0,
-                                               &OutputData),
-               "get output");
     size_t Size = 0;
-    checkError(amd_comgr_get_data(OutputData, &Size, nullptr), "get size");
-    Result.resize(Size);
-    checkError(amd_comgr_get_data(OutputData, &Size, Result.data()),
-               "get bytes");
-    checkError(amd_comgr_release_data(OutputData), "release output");
+    const char *Bytes = nullptr;
+    checkError(amd_comgr_get_data_pointer(Data.front(), &Size, &Bytes),
+               "borrow output");
+    Result.assign(Bytes, Size);
+    checkError(amd_comgr_release_data(Data.front()), "release output");
   }
-
-  checkError(amd_comgr_destroy_action_info(Action), "destroy action");
-  checkError(amd_comgr_destroy_data_set(Inputs), "destroy inputs");
-  checkError(amd_comgr_destroy_data_set(Outputs), "destroy outputs");
   return Result;
 }
 
@@ -137,7 +60,8 @@ size_t countCacheFiles(const std::filesystem::path &CacheDir) {
   size_t Count = 0;
   for (const auto &Entry :
        std::filesystem::recursive_directory_iterator(CacheDir, EC))
-    if (Entry.is_regular_file(EC))
+    if (Entry.is_regular_file(EC) &&
+        Entry.path().filename().string().rfind("llvmcache-", 0) == 0)
       ++Count;
   return Count;
 }
@@ -233,6 +157,30 @@ int main() {
   if (unbundle(HostVersion3, true, Host) != HostVersion3)
     fail("version 3 host bundle reused the version 2 cache entry");
 
+  if (!compression::getReasonIfUnsupported(compression::Format::Zlib)) {
+    std::string Original = compress(HostBundle, compression::Format::Zlib);
+    std::string Alternate = Original;
+    // Change the zlib FLEVEL bits while leaving FDICT clear. FLEVEL is
+    // informational, so the stream still decompresses to the same bytes. The
+    // CCOB header and compressed length remain unchanged, which is exactly the
+    // case the host cache key must distinguish.
+    uint8_t CMF = static_cast<unsigned char>(Alternate[32]);
+    uint8_t FLG =
+        (static_cast<unsigned char>(Alternate[33]) ^ 0x80) & 0xc0;
+    uint16_t Header = (static_cast<uint16_t>(CMF) << 8) | FLG;
+    Header += (31 - Header % 31) % 31;
+    Alternate[32] = Header >> 8;
+    Alternate[33] = Header & 0xff;
+    if (Original.substr(0, 32) != Alternate.substr(0, 32) ||
+        Original.substr(32) == Alternate.substr(32))
+      fail("zlib mutation changed the CCOB header or compressed bytes");
+    if (unbundle(Original, true, Host) != Original ||
+        unbundle(Alternate, true, Host) != Alternate)
+      fail("host cache key ignored compressed bytes with identical headers");
+    if (unbundle(Alternate, true) != "host")
+      fail("alternate compressed representation is invalid");
+  }
+
   // A cache key must cover every concatenated bundle, not only the first
   // header. Cache an empty result for a target absent from the first bundle,
   // then verify that adding a bundle containing the target produces a miss and
@@ -244,29 +192,34 @@ int main() {
   if (unbundle(Concatenated, true, OtherDevice) != "second")
     fail("concatenated bundle reused the first bundle's cache entry");
 
+  for (uint16_t Version : {1, 2, 3}) {
+    std::string Boundary =
+        compress(bundle({{OtherDevice, "second"}}), Format, Version);
+    auto SetExpandedSize = [&](uint64_t Size) {
+      if (Version == 3)
+        support::endian::write64le(Boundary.data() + 16, Size);
+      else
+        support::endian::write32le(Boundary.data() + (Version == 1 ? 8 : 12),
+                                   Size);
+    };
+    SetExpandedSize(MaxCachedUncompressedSize);
+    size_t Before = countCacheFiles(CacheDir);
+    if (unbundle(Boundary, true, OtherDevice) != "second" ||
+        countCacheFiles(CacheDir) != Before + 1)
+      fail("bundle at the cache size limit was not cached");
+
+    SetExpandedSize(MaxCachedUncompressedSize + 1);
+    Before = countCacheFiles(CacheDir);
+    for (const std::string &Input :
+         {Boundary, Small + Boundary, Boundary + Small}) {
+      if (unbundle(Input, true, OtherDevice) != "second")
+        fail("oversized bundle output differs");
+      if (countCacheFiles(CacheDir) != Before)
+        fail("oversized bundle was written to the cache");
+    }
+  }
+
   size_t CachedBeforeLarge = countCacheFiles(CacheDir);
-  std::string Large = Small;
-  support::endian::write64le(Large.data() + 16,
-                             MaxCachedUncompressedSize + 1);
-  if (unbundle(Large, true) != "first")
-    fail("large bundle output differs");
-  if (countCacheFiles(CacheDir) != CachedBeforeLarge)
-    fail("oversized bundle was written to the cache");
-
-  std::string LargeConcatenated = Small + Large;
-  if (unbundle(LargeConcatenated, true) != "first")
-    fail("concatenated bundle output differs");
-  if (countCacheFiles(CacheDir) != CachedBeforeLarge)
-    fail("oversized concatenated bundle was written to the cache");
-
-  std::string LargeSecond = compress(bundle({{OtherDevice, "second"}}), Format);
-  support::endian::write64le(LargeSecond.data() + 16,
-                             MaxCachedUncompressedSize + 1);
-  if (unbundle(Small + LargeSecond, true, OtherDevice) != "second")
-    fail("oversized concatenated bundle output differs");
-  if (countCacheFiles(CacheDir) != CachedBeforeLarge)
-    fail("oversized concatenated bundle was written to the cache");
-
   std::string Truncated = Small.substr(0, 24);
   unbundle(Truncated, false);
   if (countCacheFiles(CacheDir) != CachedBeforeLarge)
@@ -275,6 +228,15 @@ int main() {
   unbundle("CCOB", false);
   if (countCacheFiles(CacheDir) != CachedBeforeLarge)
     fail("malformed bundle changed the cache");
+
+  for (const std::string &Input :
+       {Small + "trailing bytes",
+        Small + std::string("\0padding\0", 9) + Small}) {
+    if (unbundle(Input, true) != "first")
+      fail("padded bundle output differs");
+    if (countCacheFiles(CacheDir) != CachedBeforeLarge)
+      fail("padded bundle unexpectedly changed the cache");
+  }
 
   std::error_code EC;
   std::filesystem::remove_all(CacheDir, EC);
