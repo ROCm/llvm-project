@@ -117,6 +117,82 @@ Error GenericKernelTy::printLaunchInfoDetails(
   return Plugin::success();
 }
 
+/// The name a traffic trace gives \p Status.
+static const char *getTrafficStatusName(int32_t Status) {
+  switch (static_cast<KernelTrafficStatus>(Status)) {
+  case KernelTrafficStatus::NoGlobal:
+    return "no-global";
+  case KernelTrafficStatus::Valid:
+    return "valid";
+  case KernelTrafficStatus::OptNone:
+    return "optnone";
+  case KernelTrafficStatus::Recursive:
+    return "recursive";
+  case KernelTrafficStatus::IndirectCall:
+    return "indirect-call";
+  case KernelTrafficStatus::OpaqueCall:
+    return "opaque-call";
+  case KernelTrafficStatus::MemIntrinsicLength:
+    return "memintrinsic-len";
+  case KernelTrafficStatus::ScalableType:
+    return "scalable";
+  case KernelTrafficStatus::NoTraffic:
+    return "no-traffic";
+  }
+  return "unknown";
+}
+
+/// The name a traffic trace gives \p Regime.
+static const char *getTrafficRegimeName(TrafficRegimeTy Regime) {
+  switch (Regime) {
+  case TrafficRegimeTy::None:
+    return "none";
+  case TrafficRegimeTy::Independent:
+    return "independent";
+  case TrafficRegimeTy::Latency:
+    return "latency";
+  case TrafficRegimeTy::Bandwidth:
+    return "bandwidth";
+  case TrafficRegimeTy::BandwidthSaturated:
+    return "bandwidth-saturated";
+  }
+  return "unknown";
+}
+
+/// Print the compiler's memory-traffic analysis of this kernel alongside the
+/// grid the policy asked for, so a heuristic can be refitted from a log alone.
+/// For a kernel without an estimate, print why there is none instead.
+void GenericKernelTy::printTrafficTrace(
+    GenericDeviceTy &GenericDevice, const KernelLaunchArgsTy &LaunchArgs) const {
+  const KernelLaunchInfoTy &Info = LaunchArgs.KernelLaunchInfo;
+  if (!Info.TrafficDecision)
+    return;
+  const KernelTrafficTy &C = Info.Traffic;
+
+  if (C.Status != static_cast<int32_t>(KernelTrafficStatus::Valid)) {
+    fprintf(stderr,
+            "DEVID: %2d LaunchId: %u traffic arch:%s enabled:1 estimate:none "
+            "reason:%s lds:%uB trip:%lu n:%s\n",
+            GenericDevice.getDeviceId(), getKernelLaunchId(),
+            GenericDevice.getComputeUnitKind().c_str(),
+            getTrafficStatusName(C.Status), Info.StaticBlockMemSize,
+            LaunchArgs.Tripcount, getName());
+    return;
+  }
+
+  fprintf(stderr,
+          "DEVID: %2d LaunchId: %u traffic arch:%s enabled:1 bytes:%d "
+          "streams:%d ld:%d/%d st:%d/%d ops:%d insts:%d lds:%uB trip:%lu "
+          "regime:%s policy_teams:%lu n:%s\n",
+          GenericDevice.getDeviceId(), getKernelLaunchId(),
+          GenericDevice.getComputeUnitKind().c_str(), C.BytesPerIter,
+          C.MemStreams, C.LoadBytes, C.LoadCount, C.StoreBytes, C.StoreCount,
+          C.ComputeOps, C.TotalInsts, Info.StaticBlockMemSize,
+          LaunchArgs.Tripcount,
+          getTrafficRegimeName(Info.TrafficDecision->Regime),
+          Info.TrafficDecision->NumBlocks, getName());
+}
+
 Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice,
                               KernelLaunchArgsTy &LaunchArgs,
                               AsyncInfoWrapperTy &AsyncInfoWrapper,

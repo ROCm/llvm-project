@@ -61,6 +61,23 @@ struct ConfigurationEnvironmentTy {
   //}
 };
 
+/// What the OpenMPKernelTraffic pass measured of a kernel's work loop nest,
+/// read from its <kernel>_kernel_traffic global. The pass writes the fields in
+/// declaration order, so the order must not change.
+struct KernelTrafficTy {
+  int32_t BytesPerIter = -1;
+  int32_t MemStreams = -1;
+  int32_t LoadBytes = -1;
+  int32_t StoreBytes = -1;
+  int32_t LoadCount = -1;
+  int32_t StoreCount = -1;
+  int32_t ComputeOps = -1;
+  int32_t TotalInsts = -1;
+  /// An llvm::omp::KernelTrafficStatus: whether there is an estimate, or why
+  /// not. The default means the image has no <kernel>_kernel_traffic global.
+  int32_t Status = -1;
+};
+
 // NOTE: Please don't change the order of those members as their indices are
 // used in the middle end. Always add the new data member at the end.
 struct KernelEnvironmentTy {
