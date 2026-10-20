@@ -1885,6 +1885,7 @@ unsigned DIExpression::ExprOperand::getSize() const {
   case dwarf::DW_OP_LLVM_entry_value:
   case dwarf::DW_OP_LLVM_arg:
   case dwarf::DW_OP_regx:
+  case dwarf::DW_OP_LLVM_user:
     return 2;
   default:
     return 1;
@@ -2154,6 +2155,10 @@ bool DIExpression::isValid(
         return false;
       break;
     }
+    case dwarf::DW_OP_LLVM_user:
+      if (I->getArg(0) != dwarf::DW_OP_LLVM_offset)
+        return false;
+      break;
     case dwarf::DW_OP_swap: {
       // Must be more than one implicit element on the stack.
 
