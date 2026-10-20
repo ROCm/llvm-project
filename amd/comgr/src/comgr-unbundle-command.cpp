@@ -12,6 +12,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include <comgr-env.h>
 #include <comgr-unbundle-command.h>
 
 #include <clang/Basic/TargetID.h>
@@ -145,6 +146,18 @@ Error UnbundleCommand::splitCachedOutput(StringRef CachedBuffer,
   return Error::success();
 }
 
+Error UnbundleCommand::saveOutputTemps() const {
+  if (!env::shouldSaveTemps())
+    return Error::success();
+
+  for (const auto &[Filename, Output] :
+       llvm::zip_equal(Config.OutputFileNames, OutputBuffers))
+    if (Error Err = CachedCommandAdaptor::writeSingleOutputFile(
+            Filename, Output->getBuffer()))
+      return Err;
+  return Error::success();
+}
+
 Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
   SmallVector<StringRef> Contents;
   if (Error Err = splitCachedOutput(CachedBuffer, Contents))
@@ -157,6 +170,12 @@ Error UnbundleCommand::writeExecuteOutput(StringRef CachedBuffer) {
       return createStringError(std::errc::not_enough_memory,
                                "Failed to allocate unbundled output");
     OutputBuffers.push_back(std::move(Output));
+  }
+  if (Error Err = saveOutputTemps()) {
+    // A failed cache restore may retry through execute(). Do not retain
+    // cached outputs if that retry falls back to the file-based path.
+    OutputBuffers.clear();
+    return Err;
   }
   return Error::success();
 }
@@ -408,8 +427,13 @@ amd_comgr_status_t UnbundleCommand::execute(raw_ostream &LogS) {
       logAllUnhandledErrors(InMemory.takeError(), LogS, "Unbundle Error: ");
       return AMD_COMGR_STATUS_ERROR;
     }
-    if (*InMemory)
+    if (*InMemory) {
+      if (Error Err = saveOutputTemps()) {
+        logAllUnhandledErrors(std::move(Err), LogS, "Unbundle Error: ");
+        return AMD_COMGR_STATUS_ERROR;
+      }
       return AMD_COMGR_STATUS_SUCCESS;
+    }
 
     if (Error Err = Bundler.UnbundleFiles()) {
       logAllUnhandledErrors(std::move(Err), LogS, "Unbundle Error: ");

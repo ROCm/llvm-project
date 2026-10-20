@@ -38,6 +38,9 @@ private:
   /// file-based OffloadBundler API.
   llvm::Expected<bool> executeInMemory();
 
+  /// Write diagnostic copies without giving up the in-memory outputs.
+  llvm::Error saveOutputTemps() const;
+
 public:
   UnbundleCommand(amd_comgr_data_kind_t Kind,
                   const clang::OffloadBundlerConfig &Config)
