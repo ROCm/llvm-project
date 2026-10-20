@@ -139,10 +139,11 @@ bool isCompatibleBundle(const OffloadTargetInfo &CodeObjectInfo,
 }
 
 // Persisting a very large decompressed bundle costs more than regenerating it.
-// The cache entry has to frame and write the complete image, while the in-memory
-// unbundler can decompress the same image directly into its output buffer.
-// Keep the cache for ordinary bundles and bypass it for multi-hundred-megabyte
-// code-object collections such as hipBLASLt's per-dtype libraries.
+// The cache entry has to frame and write the complete image, while the
+// in-memory unbundler can decompress the same image directly into its output
+// buffer. Keep the cache for ordinary bundles and bypass it for
+// multi-hundred-megabyte code-object collections such as hipBLASLt's per-dtype
+// libraries.
 constexpr size_t MaxCachedUncompressedSize = 64 * 1024 * 1024;
 constexpr size_t MinCompressedBundleHeaderSize = 8;
 constexpr size_t MaxCompressedBundleHeaderSize = 32;
@@ -511,9 +512,8 @@ Expected<bool> UnbundleCommand::executeInMemory() {
         return createStringError(std::errc::invalid_argument,
                                  "invalid bundle id read from the bundle");
       auto Target = llvm::find_if(Worklist, [&](const auto &Entry) {
-        return isCompatibleBundle(
-            OffloadTargetInfo(Triple, Config),
-            OffloadTargetInfo(Entry.getKey(), Config));
+        return isCompatibleBundle(OffloadTargetInfo(Triple, Config),
+                                  OffloadTargetInfo(Entry.getKey(), Config));
       });
       if (Target == Worklist.end())
         continue;
@@ -653,8 +653,8 @@ Error UnbundleCommand::addInputIdentifier(HashAlgorithm &H) const {
     addUInt(H, MaybeHeader->Hash);
     addUInt(H, MaybeHeader->UncompressedFileSize);
 
-    Expected<size_t> NextOffset = nextCompressedBundleOffset(
-        Remaining.size(), Remaining, *MaybeHeader);
+    Expected<size_t> NextOffset =
+        nextCompressedBundleOffset(Remaining.size(), Remaining, *MaybeHeader);
     if (!NextOffset)
       return NextOffset.takeError();
     if (*NextOffset == StringRef::npos)

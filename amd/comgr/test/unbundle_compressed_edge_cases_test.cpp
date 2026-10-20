@@ -42,12 +42,10 @@ static bool isInCacheMapping(const char *Pointer, size_t Size) {
 }
 #endif
 
-static std::vector<std::string> unbundle(StringRef Input,
-                                         std::vector<const char *> Targets,
-                                         bool ExpectSuccess = true,
-                                         bool CheckExecutable = false,
-                                         bool VerifyCacheMapping = false,
-                                         bool ExpectCacheMapping = false) {
+static std::vector<std::string>
+unbundle(StringRef Input, std::vector<const char *> Targets,
+         bool ExpectSuccess = true, bool CheckExecutable = false,
+         bool VerifyCacheMapping = false, bool ExpectCacheMapping = false) {
   auto Data = unbundleData(Input, Targets, ExpectSuccess, CheckExecutable);
 
   std::vector<std::string> Result(Data.size());
@@ -294,10 +292,10 @@ int main(int argc, char **argv) {
             bundle({{Host, HostBytes}, {Device, ExecutableContents}});
         checkOutputs(unbundle(Input, {Host, Device}, true, true),
                      {HostBytes, ExecutableContents});
-        checkOutputs(
-            unbundle(compress(Input, Format, Version), {Device}, true, true,
-                     VerifyCacheMapping, /*ExpectCacheMapping=*/true),
-            {ExecutableContents});
+        checkOutputs(unbundle(compress(Input, Format, Version), {Device}, true,
+                              true, VerifyCacheMapping,
+                              /*ExpectCacheMapping=*/true),
+                     {ExecutableContents});
         // Cached output framing aligns every member relative to the mapped
         // entry. Varying the host length exercises each padding value and
         // verifies that the device output still shares the cache mapping.
