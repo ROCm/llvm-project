@@ -12,8 +12,7 @@ work.mkdir()
 env = os.environ.copy()
 env["AMD_COMGR_CACHE_DIR"] = str(work / "cache")
 env["AMD_COMGR_EMIT_VERBOSE_LOGS"] = "1"
-targets = ["host-x86_64-unknown-linux-gnu",
-           "hip-amdgcn-amd-amdhsa-unknown-gfx900"]
+targets = ["host-x86_64-unknown-linux-gnu", "hip-amdgcn-amd-amdhsa-unknown-gfx900"]
 reference = None
 for mode, cache, save in [
     ("disabled", "0", "1"),
@@ -24,8 +23,13 @@ for mode, cache, save in [
 ]:
     temps = work / mode
     temps.mkdir()
-    env.update(TMPDIR=str(temps), TMP=str(temps), TEMP=str(temps),
-               AMD_COMGR_CACHE=cache, AMD_COMGR_SAVE_TEMPS=save)
+    env.update(
+        TMPDIR=str(temps),
+        TMP=str(temps),
+        TEMP=str(temps),
+        AMD_COMGR_CACHE=cache,
+        AMD_COMGR_SAVE_TEMPS=save,
+    )
     outputs = [work / (mode + "." + str(i) + ".bc") for i in range(2)]
     args = [tool, bundle]
     for target, output in zip(targets, outputs):

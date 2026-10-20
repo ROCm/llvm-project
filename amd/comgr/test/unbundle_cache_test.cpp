@@ -95,13 +95,11 @@ void checkCacheFraming(const std::filesystem::path &CacheDir) {
     memcpy(&Padding, Contents.data() + sizeof(MemberSize), sizeof(Padding));
     if (Padding > Contents.size() - 2 * sizeof(uint32_t))
       fail("cache entry has invalid member padding");
-    if (MemberSize >
-        Contents.size() - 2 * sizeof(uint32_t) - Padding)
+    if (MemberSize > Contents.size() - 2 * sizeof(uint32_t) - Padding)
       fail("cache entry has an invalid member size");
 
     // The command output follows an eight-byte size prefix in the cache entry.
-    size_t MemberOffset =
-        sizeof(uint64_t) + 4 + 2 * sizeof(uint32_t) + Padding;
+    size_t MemberOffset = sizeof(uint64_t) + 4 + 2 * sizeof(uint32_t) + Padding;
     if (MemberOffset % alignof(std::max_align_t) != 0)
       fail("cached member is not aligned");
     return;
@@ -123,8 +121,8 @@ void setEnv(const char *Name, const char *Value) {
 
 int main() {
   SmallString<128> CacheDirBuffer;
-  if (std::error_code EC =
-          sys::fs::createUniqueDirectory("comgr-unbundle-cache", CacheDirBuffer))
+  if (std::error_code EC = sys::fs::createUniqueDirectory(
+          "comgr-unbundle-cache", CacheDirBuffer))
     fail("create cache directory: %s", EC.message().c_str());
   std::filesystem::path CacheDir(
       std::string(CacheDirBuffer.begin(), CacheDirBuffer.end()));
