@@ -203,12 +203,6 @@ static void testFormat(compression::Format Format, uint16_t Version) {
     auto Actual = unbundle(Compress(Input), {Case.Requested});
     if (Actual != std::vector<std::string>{Case.Compatible ? "payload" : ""})
       fail("unexpected compatibility: %s -> %s", Case.Provided, Case.Requested);
-#if defined(_WIN32)
-    // The file-based fallback puts the target ID in an output filename, and
-    // Windows rejects ':' in filenames. The in-memory path has no such limit.
-    if (StringRef(Case.Requested).contains(':'))
-      continue;
-#endif
     if (Actual != unbundle(Input, {Case.Requested}))
       fail("in-memory/file mismatch: %s -> %s", Case.Provided, Case.Requested);
   }
