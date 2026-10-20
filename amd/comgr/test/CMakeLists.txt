@@ -81,37 +81,6 @@ macro(add_test_input_object_file_bundle name input output)
   list(APPEND TEST_INPUT_BUNDLES "${name}")
 endmacro()
 
-# Creates target ${name} with three outputs: ${payload_output}, a bitcode file
-# for gfx900, and ${output} and ${uncompressed_output}, two bundles that both
-# hold the contents of ${payload_output}, the first compressed and the second
-# not. A test can check that unbundling either bundle recovers
-# ${payload_output} exactly, so that the compressed and uncompressed paths can
-# be compared against each other.
-macro(add_test_input_compressed_bundle name input payload_output output
-      uncompressed_output)
-  add_custom_command(
-    OUTPUT "${payload_output}"
-    COMMAND "$<TARGET_FILE:clang>" -c --offload-arch=gfx900 -emit-llvm
-    -nogpulib -nogpuinc --offload-device-only
-    "${CMAKE_CURRENT_SOURCE_DIR}/${input}" -o "${payload_output}"
-    VERBATIM
-    DEPENDS clang lld "${input}")
-  add_custom_command(
-    OUTPUT "${output}" "${uncompressed_output}"
-    COMMAND "$<TARGET_FILE:clang-offload-bundler>" --compress --type=bc
-    --targets=hip-amdgcn-amd-amdhsa-unknown-gfx900
-    "--input=${payload_output}" "--output=${output}"
-    COMMAND "$<TARGET_FILE:clang-offload-bundler>" --type=bc
-    --targets=hip-amdgcn-amd-amdhsa-unknown-gfx900
-    "--input=${payload_output}" "--output=${uncompressed_output}"
-    VERBATIM
-    DEPENDS clang-offload-bundler "${payload_output}")
-  add_custom_target("${name}"
-    DEPENDS "${payload_output}" "${output}" "${uncompressed_output}"
-    SOURCES "${input}")
-  list(APPEND TEST_INPUT_BUNDLES "${name}")
-endmacro()
-
 # Creates target ${name} and output ${output} by archiving a file.
 # ${target} should refer to the a target created in the above
 # add_test_input_bitcode() macro, and ${input} should refer
@@ -164,9 +133,6 @@ add_test_input_object_file_bundle(double source/double.hip source/double.o)
 
 add_test_input_bitcode_bundle(cube source/cube.hip source/cube.bc)
 add_test_archive(cube_archive cube source/cube.bc source/cube.a)
-
-add_test_input_compressed_bundle(square_compressed_bundle source/square.hip
-  source/square_cc_payload.bc source/square_cc.bc source/square_unc.bc)
 
 configure_file("source/linking/kernel0.cl" "source/linking/kernel0.cl" COPYONLY)
 configure_file("source/linking/kernel1.cl" "source/linking/kernel1.cl" COPYONLY)
@@ -250,10 +216,6 @@ endmacro()
 add_comgr_test(data_test c)
 add_comgr_test(data_pointer_test c)
 add_comgr_test(elf_metadata_view_test cpp)
-set_target_properties(elf_metadata_view_test PROPERTIES
-  CXX_STANDARD 17
-  CXX_STANDARD_REQUIRED Yes
-  CXX_EXTENSIONS No)
 add_comgr_test(disasm_instr_test c)
 add_comgr_test(metadata_tp_test c)
 add_comgr_test(metadata_yaml_test c)
@@ -286,24 +248,18 @@ add_comgr_test(compile_hip_test c)
 add_comgr_test(compile_hip_to_relocatable c)
 #add_comgr_test(compile_hip_with_libcxx_test c)
 add_comgr_test(mangled_names_hip_test c)
-add_comgr_test(unbundle_compressed_test c)
 add_comgr_test(unbundle_compressed_edge_cases_test cpp)
 add_comgr_test(unbundle_cache_test cpp)
-set_target_properties(unbundle_compressed_edge_cases_test PROPERTIES
-  CXX_STANDARD 17
-  CXX_STANDARD_REQUIRED Yes
-  CXX_EXTENSIONS No)
 llvm_map_components_to_libnames(COMGR_UNBUNDLE_TEST_LIBS Object Support)
-target_link_libraries(unbundle_compressed_edge_cases_test
-  ${COMGR_UNBUNDLE_TEST_LIBS})
-target_include_directories(unbundle_compressed_edge_cases_test PRIVATE
-  ${LLVM_INCLUDE_DIRS})
-set_target_properties(unbundle_cache_test PROPERTIES
+set_target_properties(elf_metadata_view_test
+  unbundle_compressed_edge_cases_test unbundle_cache_test PROPERTIES
   CXX_STANDARD 17
   CXX_STANDARD_REQUIRED Yes
   CXX_EXTENSIONS No)
-target_link_libraries(unbundle_cache_test ${COMGR_UNBUNDLE_TEST_LIBS})
-target_include_directories(unbundle_cache_test PRIVATE ${LLVM_INCLUDE_DIRS})
+foreach(target unbundle_compressed_edge_cases_test unbundle_cache_test)
+  target_link_libraries(${target} ${COMGR_UNBUNDLE_TEST_LIBS})
+  target_include_directories(${target} PRIVATE ${LLVM_INCLUDE_DIRS})
+endforeach()
 #add_comgr_test(unbundle_hip_test c)
 
 add_test(
@@ -315,7 +271,6 @@ set_tests_properties(
   PROPERTIES
     ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1"
     TIMEOUT 120)
-
 
 add_test(NAME unbundle_cached_edge_cases_test
   COMMAND "${Python3_EXECUTABLE}"

@@ -1,11 +1,5 @@
-#include "amd_comgr.h"
-#include "common.h"
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Object/OffloadBundle.h"
-#include "llvm/Support/Compression.h"
-#include "llvm/Support/Endian.h"
-#include "llvm/Support/MemoryBuffer.h"
+#include "unbundle_test.h"
+#include "llvm/Support/raw_ostream.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -17,10 +11,8 @@
 #endif
 
 using namespace llvm;
+using namespace UnbundleTest;
 
-static constexpr char Magic[] = "__CLANG_OFFLOAD_BUNDLE__";
-static constexpr char Host[] = "host-x86_64-unknown-linux-gnu";
-static constexpr char Device[] = "hip-amdgcn-amd-amdhsa-unknown-gfx900";
 static constexpr char Specific[] =
     "hip-amdgcn-amd-amdhsa-unknown-gfx900:xnack+";
 
@@ -50,95 +42,27 @@ static bool isInCacheMapping(const char *Pointer, size_t Size) {
 }
 #endif
 
-static void appendInteger(std::string &Buffer, uint64_t Value) {
-  size_t Offset = Buffer.size();
-  Buffer.resize(Offset + sizeof(Value));
-  support::endian::write64le(Buffer.data() + Offset, Value);
-}
-
-static std::string bundle(ArrayRef<std::pair<StringRef, StringRef>> Entries) {
-  uint64_t Offset = sizeof(Magic) - 1 + sizeof(uint64_t);
-  for (const auto &Entry : Entries)
-    Offset += 3 * sizeof(uint64_t) + Entry.first.size();
-  std::string Result = Magic;
-  appendInteger(Result, Entries.size());
-  for (const auto &Entry : Entries) {
-    appendInteger(Result, Offset);
-    appendInteger(Result, Entry.second.size());
-    appendInteger(Result, Entry.first.size());
-    Result += Entry.first;
-    Offset += Entry.second.size();
-  }
-  for (const auto &Entry : Entries)
-    Result += Entry.second;
-  return Result;
-}
-
-static std::string compress(StringRef Input, compression::Format Format,
-                            uint16_t Version) {
-  auto Buffer = MemoryBuffer::getMemBuffer(Input, "", false);
-  auto Compressed = object::CompressedOffloadBundle::compress(
-      compression::Params(Format), *Buffer, Version == 1 ? 2 : Version);
-  if (!Compressed)
-    fail("compress: %s", toString(Compressed.takeError()).c_str());
-  std::string Result = (*Compressed)->getBuffer().str();
-  if (Version == 1) {
-    Result.erase(8, sizeof(uint32_t));
-    support::endian::write16le(Result.data() + 4, 1);
-  }
-  return Result;
-}
-
 static std::vector<std::string> unbundle(StringRef Input,
                                          std::vector<const char *> Targets,
                                          bool ExpectSuccess = true,
                                          bool CheckExecutable = false,
                                          bool VerifyCacheMapping = false,
                                          bool ExpectCacheMapping = false) {
-  amd_comgr_data_set_t Inputs, Outputs;
-  amd_comgr_data_t InputData;
-  amd_comgr_action_info_t Action;
-  checkError(amd_comgr_create_data_set(&Inputs), "create inputs");
-  checkError(amd_comgr_create_data_set(&Outputs), "create outputs");
-  auto InputKind = CheckExecutable ? AMD_COMGR_DATA_KIND_OBJ_BUNDLE
-                                   : AMD_COMGR_DATA_KIND_BC_BUNDLE;
-  auto OutputKind =
-      CheckExecutable ? AMD_COMGR_DATA_KIND_EXECUTABLE : AMD_COMGR_DATA_KIND_BC;
-  checkError(amd_comgr_create_data(InputKind, &InputData), "create input");
-  checkError(amd_comgr_set_data(InputData, Input.size(), Input.data()),
-             "set input");
-  checkError(amd_comgr_set_data_name(InputData, "bundle"), "set name");
-  checkError(amd_comgr_data_set_add(Inputs, InputData), "add input");
-  checkError(amd_comgr_release_data(InputData), "release input");
-  checkError(amd_comgr_create_action_info(&Action), "create action");
-  checkError(amd_comgr_action_info_set_language(Action, AMD_COMGR_LANGUAGE_HIP),
-             "set language");
-  checkError(amd_comgr_action_info_set_bundle_entry_ids(Action, Targets.data(),
-                                                        Targets.size()),
-             "set targets");
-  amd_comgr_status_t Status =
-      amd_comgr_do_action(AMD_COMGR_ACTION_UNBUNDLE, Action, Inputs, Outputs);
-  if (ExpectSuccess)
-    checkError(Status, "unbundle");
-  else if (Status == AMD_COMGR_STATUS_SUCCESS)
-    fail("malformed bundle was accepted");
-  checkError(amd_comgr_destroy_action_info(Action), "destroy action");
-  checkError(amd_comgr_destroy_data_set(Inputs), "destroy inputs");
-
-  std::vector<amd_comgr_data_t> Data;
-  if (ExpectSuccess) {
-    checkCount("outputs", Outputs, OutputKind, Targets.size());
-    Data.resize(Targets.size());
-    for (size_t Index = 0; Index < Data.size(); ++Index)
-      checkError(amd_comgr_action_data_get_data(Outputs, OutputKind, Index,
-                                                &Data[Index]),
-                 "get output");
-  }
-  checkError(amd_comgr_destroy_data_set(Outputs), "destroy outputs");
+  auto Data = unbundleData(Input, Targets, ExpectSuccess, CheckExecutable);
 
   std::vector<std::string> Result(Data.size());
   for (size_t Count = Data.size(); Count; --Count) {
     size_t Index = Count - 1;
+    size_t NameSize = 0;
+    checkError(amd_comgr_get_data_name(Data[Index], &NameSize, nullptr),
+               "get name size");
+    std::string Name(NameSize, '\0');
+    checkError(amd_comgr_get_data_name(Data[Index], &NameSize, Name.data()),
+               "get name");
+    std::string ExpectedName = std::string("bundle-") + Targets[Index] +
+                               (CheckExecutable ? ".o" : ".bc");
+    if (StringRef(Name.c_str()) != ExpectedName)
+      fail("unexpected unbundled output name");
     size_t Size = 0;
     checkError(amd_comgr_get_data(Data[Index], &Size, nullptr), "get size");
     Result[Index].resize(Size);
@@ -280,6 +204,9 @@ static void testFormat(compression::Format Format, uint16_t Version) {
       unbundle(Compress(First), {"hip-amdgcn-amd-amdhsa-unknown-gfx906"}),
       {""});
   checkOutputs(unbundle(Compress(bundle({{Device, ""}})), {Device}), {""});
+  checkOutputs(unbundle(Compress("not a binary bundle"), {Device}), {""});
+  unbundle(Compress(StringRef(Magic, sizeof(Magic))), {Device}, false);
+  unbundle(Compress(First), {"invalid"}, false);
   unbundle(Compress(bundle({{"invalid", "payload"}})), {Device}, false);
 
   std::string Truncated = First;
@@ -299,12 +226,33 @@ static void testFormat(compression::Format Format, uint16_t Version) {
     support::endian::write32le(Overreported.data() + (Version == 1 ? 8 : 12),
                                First.size() + 32);
   auto Compressed = MemoryBuffer::getMemBuffer(Overreported, "", false);
-  auto Decompressed = object::CompressedOffloadBundle::decompress(*Compressed);
+  std::string Log;
+  raw_string_ostream LogStream(Log);
+  auto Decompressed =
+      object::CompressedOffloadBundle::decompress(*Compressed, &LogStream);
   if (!Decompressed)
     fail("decompress: %s", toString(Decompressed.takeError()).c_str());
   if ((*Decompressed)->getBuffer() != First)
     fail("decompression did not return the actual output size");
+  if (!StringRef(Log).contains("Hashes match: Yes"))
+    fail("decompression hash did not use the actual output size");
   checkOutputs(unbundle(Overreported, {Device}), {"first"});
+
+  std::string Underreported = Compress(First);
+  if (Version == 3)
+    support::endian::write64le(Underreported.data() + 16, First.size() - 1);
+  else
+    support::endian::write32le(Underreported.data() + (Version == 1 ? 8 : 12),
+                               First.size() - 1);
+  unbundle(Underreported, {Device}, false);
+
+  std::string BadMethod = Compress(First);
+  support::endian::write16le(BadMethod.data() + 6, UINT16_MAX);
+  unbundle(BadMethod, {Device}, false);
+
+  size_t HeaderSize = Version == 1 ? 20 : Version == 2 ? 24 : 32;
+  for (size_t Length = 8; Length < HeaderSize; ++Length)
+    unbundle(StringRef(Compress(First)).take_front(Length), {Device}, false);
 
   if (Version != 1) {
     std::string BadSize = Compress(First);
@@ -344,6 +292,8 @@ int main(int argc, char **argv) {
         std::string HostBytes(Padding, '\0');
         std::string Input =
             bundle({{Host, HostBytes}, {Device, ExecutableContents}});
+        checkOutputs(unbundle(Input, {Host, Device}, true, true),
+                     {HostBytes, ExecutableContents});
         checkOutputs(
             unbundle(compress(Input, Format, Version), {Device}, true, true,
                      VerifyCacheMapping, /*ExpectCacheMapping=*/true),
