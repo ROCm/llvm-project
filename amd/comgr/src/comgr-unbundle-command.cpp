@@ -23,6 +23,7 @@
 #include <llvm/Object/OffloadBundle.h>
 #include <llvm/Support/Alignment.h>
 #include <llvm/Support/Endian.h>
+#include <llvm/Support/FileSystem.h>
 
 #include <cstddef>
 #include <memory>
@@ -74,6 +75,15 @@ bool isCompatibleBundle(const OffloadTargetInfo &CodeObjectInfo,
   return true;
 }
 
+// Persisting a very large decompressed bundle costs more than regenerating it.
+// The cache entry has to frame and write the complete image, while the in-memory
+// unbundler can decompress the same image directly into its output buffer.
+// Keep the cache for ordinary bundles and bypass it for multi-hundred-megabyte
+// code-object collections such as hipBLASLt's per-dtype libraries.
+constexpr size_t MaxCachedUncompressedSize = 64 * 1024 * 1024;
+constexpr size_t MinCompressedBundleHeaderSize = 8;
+constexpr size_t MaxCompressedBundleHeaderSize = 32;
+
 /// Append \p Data to \p Out, prefixed with its size. This is the format used
 /// for the contents of each output in the cache entry.
 void appendSizePrefixed(SmallVectorImpl<char> &Out, StringRef Data) {
@@ -119,7 +129,35 @@ bool UnbundleCommand::canCache() const {
 
   // Check the input file magic. Handle only compressed bundles
   // It's not worth to cache other types of bundles
-  return Magic == file_magic::offload_bundle_compressed;
+  if (Magic != file_magic::offload_bundle_compressed)
+    return false;
+
+  uint64_t InputSize;
+  if (std::error_code EC = sys::fs::file_size(InputFilename, InputSize))
+    return true;
+
+  if (InputSize < MinCompressedBundleHeaderSize)
+    return false;
+
+  // Only map the header prefix. Mapping the complete compressed bundle here
+  // would page in hundreds of megabytes just to decide whether to cache it.
+  ErrorOr<std::unique_ptr<MemoryBuffer>> HeaderBuffer =
+      MemoryBuffer::getFileSlice(
+          InputFilename,
+          std::min<uint64_t>(InputSize, MaxCompressedBundleHeaderSize),
+          /*Offset=*/0);
+  if (!HeaderBuffer)
+    return true;
+
+  Expected<object::CompressedOffloadBundle::CompressedBundleHeader> Header =
+      object::CompressedOffloadBundle::CompressedBundleHeader::tryParse(
+          (*HeaderBuffer)->getBuffer());
+  if (!Header) {
+    consumeError(Header.takeError());
+    return false;
+  }
+
+  return Header->UncompressedFileSize <= MaxCachedUncompressedSize;
 }
 
 Error UnbundleCommand::splitCachedOutput(StringRef CachedBuffer,

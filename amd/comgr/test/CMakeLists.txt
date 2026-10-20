@@ -288,6 +288,7 @@ add_comgr_test(compile_hip_to_relocatable c)
 add_comgr_test(mangled_names_hip_test c)
 add_comgr_test(unbundle_compressed_test c)
 add_comgr_test(unbundle_compressed_edge_cases_test cpp)
+add_comgr_test(unbundle_cache_test cpp)
 set_target_properties(unbundle_compressed_edge_cases_test PROPERTIES
   CXX_STANDARD 17
   CXX_STANDARD_REQUIRED Yes
@@ -297,6 +298,12 @@ target_link_libraries(unbundle_compressed_edge_cases_test
   ${COMGR_UNBUNDLE_TEST_LIBS})
 target_include_directories(unbundle_compressed_edge_cases_test PRIVATE
   ${LLVM_INCLUDE_DIRS})
+set_target_properties(unbundle_cache_test PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED Yes
+  CXX_EXTENSIONS No)
+target_link_libraries(unbundle_cache_test ${COMGR_UNBUNDLE_TEST_LIBS})
+target_include_directories(unbundle_cache_test PRIVATE ${LLVM_INCLUDE_DIRS})
 #add_comgr_test(unbundle_hip_test c)
 
 add_test(
