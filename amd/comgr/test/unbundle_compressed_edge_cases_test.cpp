@@ -7,9 +7,14 @@
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
+
+#if defined(__linux__)
+#include <fstream>
+#endif
 
 using namespace llvm;
 
@@ -18,6 +23,32 @@ static constexpr char Host[] = "host-x86_64-unknown-linux-gnu";
 static constexpr char Device[] = "hip-amdgcn-amd-amdhsa-unknown-gfx900";
 static constexpr char Specific[] =
     "hip-amdgcn-amd-amdhsa-unknown-gfx900:xnack+";
+
+#if defined(__linux__)
+static bool isInCacheMapping(const char *Pointer, size_t Size) {
+  std::ifstream Maps("/proc/self/maps");
+  std::string Line;
+  uintptr_t Begin = reinterpret_cast<uintptr_t>(Pointer);
+  uintptr_t End = Begin + Size;
+  while (std::getline(Maps, Line)) {
+    size_t Dash = Line.find('-');
+    size_t Space = Line.find(' ', Dash);
+    if (Dash == std::string::npos || Space == std::string::npos ||
+        Line.find("llvmcache-") == std::string::npos)
+      continue;
+
+    uintptr_t MappingBegin;
+    uintptr_t MappingEnd;
+    if (StringRef(Line.data(), Dash).getAsInteger(16, MappingBegin) ||
+        StringRef(Line.data() + Dash + 1, Space - Dash - 1)
+            .getAsInteger(16, MappingEnd))
+      continue;
+    if (Begin >= MappingBegin && End <= MappingEnd)
+      return true;
+  }
+  return false;
+}
+#endif
 
 static void appendInteger(std::string &Buffer, uint64_t Value) {
   size_t Offset = Buffer.size();
@@ -61,7 +92,9 @@ static std::string compress(StringRef Input, compression::Format Format,
 static std::vector<std::string> unbundle(StringRef Input,
                                          std::vector<const char *> Targets,
                                          bool ExpectSuccess = true,
-                                         bool CheckExecutable = false) {
+                                         bool CheckExecutable = false,
+                                         bool VerifyCacheMapping = false,
+                                         bool ExpectCacheMapping = false) {
   amd_comgr_data_set_t Inputs, Outputs;
   amd_comgr_data_t InputData;
   amd_comgr_action_info_t Action;
@@ -118,6 +151,18 @@ static std::vector<std::string> unbundle(StringRef Input,
     if (PointerSize != Size || StringRef(Pointer, PointerSize) != Result[Index])
       fail("borrowed output differs from copied output");
     bool CheckMember = CheckExecutable && StringRef(Targets[Index]) != Host;
+    if (VerifyCacheMapping && CheckMember) {
+      bool IsAligned = (reinterpret_cast<uintptr_t>(Pointer) & 1) == 0;
+      if (!IsAligned)
+        fail("cached ELF is not two-byte aligned");
+#if defined(__linux__)
+      bool InCacheMapping = isInCacheMapping(Pointer, PointerSize);
+      if (ExpectCacheMapping && !InCacheMapping)
+        fail("aligned cached ELF does not share the cache mapping");
+      if (!ExpectCacheMapping && InCacheMapping)
+        fail("misaligned cached ELF was not copied");
+#endif
+    }
     amd_comgr_metadata_node_t Metadata = {};
     if (CheckMember) {
       size_t IsaSize = 0;
@@ -270,11 +315,23 @@ static void testFormat(compression::Format Format, uint16_t Version) {
 }
 
 int main(int argc, char **argv) {
-  const bool CachedExecutablesOnly =
-      argc == 2 && StringRef(argv[1]) == "--cached-executables";
+  bool CachedExecutablesOnly = false;
+  bool VerifyCacheMapping = false;
+  for (int Index = 1; Index < argc; ++Index) {
+    StringRef Argument(argv[Index]);
+    if (Argument == "--cached-executables")
+      CachedExecutablesOnly = true;
+    else if (Argument == "--verify-cache-mapping")
+      VerifyCacheMapping = true;
+    else
+      fail("unknown argument: %s", argv[Index]);
+  }
   auto Executable = MemoryBuffer::getFile(TEST_OBJ_DIR "/shared.so");
   if (!Executable)
     fail("failed to open source/shared.so");
+  std::string ExecutableContents = (*Executable)->getBuffer().str();
+  // Keep the cache entry large enough for MemoryBuffer::getFile to map it.
+  ExecutableContents.append(64 * 1024, '\0');
   for (auto Format : {compression::Format::Zlib, compression::Format::Zstd}) {
     if (compression::getReasonIfUnsupported(Format))
       continue;
@@ -284,15 +341,19 @@ int main(int argc, char **argv) {
       for (size_t Padding = 0; Padding < alignof(std::max_align_t); ++Padding) {
         std::string HostBytes(Padding, '\0');
         std::string Input =
-            bundle({{Host, HostBytes}, {Device, (*Executable)->getBuffer()}});
+            bundle({{Host, HostBytes}, {Device, ExecutableContents}});
         checkOutputs(
-            unbundle(compress(Input, Format, Version), {Device}, true, true),
-            {(*Executable)->getBuffer().str()});
+            unbundle(compress(Input, Format, Version), {Device}, true, true,
+                     VerifyCacheMapping, /*ExpectCacheMapping=*/true),
+            {ExecutableContents});
         // Cached output framing places the ELF after the host bytes and two
-        // size fields. Varying the host length exercises every cache alignment.
+        // size fields. Varying the host length exercises every cache alignment;
+        // an odd host length places the device output at an odd offset, which
+        // must take the copying fallback.
         checkOutputs(unbundle(compress(Input, Format, Version), {Host, Device},
-                              true, true),
-                     {HostBytes, (*Executable)->getBuffer().str()});
+                              true, true, VerifyCacheMapping,
+                              /*ExpectCacheMapping=*/Padding % 2 == 0),
+                     {HostBytes, ExecutableContents});
       }
     }
   }

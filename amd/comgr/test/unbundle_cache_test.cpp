@@ -179,6 +179,12 @@ int main() {
   if (countCacheFiles(CacheDir) != CachedAfterSmall)
     fail("oversized bundle was written to the cache");
 
+  std::string Concatenated = Small + Large;
+  if (unbundle(Concatenated, true) != "first")
+    fail("concatenated bundle output differs");
+  if (countCacheFiles(CacheDir) != CachedAfterSmall)
+    fail("oversized concatenated bundle was written to the cache");
+
   std::string Truncated = Small.substr(0, 24);
   unbundle(Truncated, false);
   if (countCacheFiles(CacheDir) != CachedAfterSmall)

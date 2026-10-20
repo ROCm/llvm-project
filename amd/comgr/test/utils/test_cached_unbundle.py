@@ -13,4 +13,8 @@ with tempfile.TemporaryDirectory(prefix="comgr-unbundle-cache-") as cache:
                AMD_COMGR_SAVE_TEMPS="0")
     subprocess.run([sys.argv[1], "--cached-executables"], env=env, check=True)
     assert list(Path(cache).glob("llvmcache-*")), "cache was not populated"
-    subprocess.run([sys.argv[1], "--cached-executables"], env=env, check=True)
+    subprocess.run(
+        [sys.argv[1], "--cached-executables", "--verify-cache-mapping"],
+        env=env,
+        check=True,
+    )

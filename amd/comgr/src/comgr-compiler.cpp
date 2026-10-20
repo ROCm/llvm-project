@@ -83,8 +83,6 @@
 
 #include "time-stat/ts-interface.h"
 
-#include <cstddef>
-
 #ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
 #include <LLVMSPIRVLib.h>
 #endif
@@ -1976,10 +1974,10 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
             return AMD_COMGR_STATUS_ERROR;
           }
         }
-        // Cache framing does not align members. Preserve the alignment needed
-        // by downstream ELF readers, just as for freshly decompressed members.
+        // Cache framing does not align members. LLVM's ELF reader requires
+        // two-byte base alignment, just as for freshly decompressed members.
         std::unique_ptr<MemoryBuffer> Output;
-        if (isAddrAligned(Align(alignof(std::max_align_t)), Slice.data()))
+        if (isAddrAligned(Align(2), Slice.data()))
           Output = std::make_unique<SharedSliceMemoryBuffer>(Hit.Entry, Slice);
         else
           Output = MemoryBuffer::getMemBufferCopy(Slice);
