@@ -311,8 +311,17 @@ amd_comgr_status_t DataObject::setName(llvm::StringRef Name) {
 
 amd_comgr_status_t DataObject::setData(llvm::StringRef Data) {
   std::scoped_lock<std::mutex> CacheLock(CacheMutex);
+  // Copy before clearing: Data may point into this object's current storage.
+  char *NewData = reinterpret_cast<char *>(malloc(Data.size() + 1));
+  if (!NewData)
+    return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
+  if (!Data.empty())
+    memcpy(NewData, Data.data(), Data.size());
+  NewData[Data.size()] = '\0';
   clearData();
-  return setCStr(this->Data, Data, &Size);
+  this->Data = NewData;
+  Size = Data.size();
+  return AMD_COMGR_STATUS_SUCCESS;
 }
 
 amd_comgr_status_t DataObject::setData(std::unique_ptr<llvm::MemoryBuffer> MB) {

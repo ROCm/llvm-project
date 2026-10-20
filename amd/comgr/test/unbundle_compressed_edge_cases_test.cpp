@@ -87,6 +87,16 @@ unbundle(StringRef Input, std::vector<const char *> Targets,
         fail("misaligned cached ELF was not copied");
 #endif
     }
+    if (Size) {
+      checkError(amd_comgr_set_data(Data[Index], PointerSize, Pointer),
+                 "replace output from its own view");
+      checkError(
+          amd_comgr_get_data_pointer(Data[Index], &PointerSize, &Pointer),
+          "borrow self-replaced output");
+      if (PointerSize != Size ||
+          StringRef(Pointer, PointerSize) != Result[Index])
+        fail("self-replacement changed output");
+    }
     amd_comgr_metadata_node_t Metadata = {};
     if (CheckMember) {
       size_t IsaSize = 0;
@@ -191,10 +201,16 @@ static void testFormat(compression::Format Format, uint16_t Version) {
        }) {
     std::string Input = bundle({{Case.Provided, "payload"}});
     auto Actual = unbundle(Compress(Input), {Case.Requested});
-    if (Actual != unbundle(Input, {Case.Requested}))
-      fail("in-memory/file mismatch: %s -> %s", Case.Provided, Case.Requested);
     if (Actual != std::vector<std::string>{Case.Compatible ? "payload" : ""})
       fail("unexpected compatibility: %s -> %s", Case.Provided, Case.Requested);
+#if defined(_WIN32)
+    // The file-based fallback puts the target ID in an output filename, and
+    // Windows rejects ':' in filenames. The in-memory path has no such limit.
+    if (StringRef(Case.Requested).contains(':'))
+      continue;
+#endif
+    if (Actual != unbundle(Input, {Case.Requested}))
+      fail("in-memory/file mismatch: %s -> %s", Case.Provided, Case.Requested);
   }
 
   checkOutputs(unbundle(Compress(First), {Host}), {Compress(First)});
