@@ -11127,24 +11127,14 @@ struct AACallEdgesCallSite : public AACallEdgesImpl {
       }
       return Change;
     }
-#ifndef  AAIndirectCallInfo_nolonger_breaks_snap_miteams
-    // Process callee metadata if available.
-    if (auto *MD = getCtxI()->getMetadata(LLVMContext::MD_callees)) {
-      for (const auto &Op : MD->operands()) {
-        Function *Callee = mdconst::dyn_extract_or_null<Function>(Op);
-        if (Callee)
-          addCalledFunction(Callee, Change);
-      }
-      return Change;
-    }
-#else
+
     if (CB->isIndirectCall())
       if (auto *IndirectCallAA = A.getAAFor<AAIndirectCallInfo>(
               *this, getIRPosition(), DepClassTy::OPTIONAL))
         if (IndirectCallAA->foreachCallee(
                 [&](Function *Fn) { return VisitValue(*Fn, CB); }))
           return Change;
-#endif
+
     // The most simple case.
     ProcessCalledOperand(CB->getCalledOperand(), CB);
 
@@ -13365,8 +13355,12 @@ struct AAInvariantLoadPointerCallSiteReturned final
       : AAInvariantLoadPointerImpl(IRP, A) {}
 
   void initialize(Attributor &A) override {
+    // Nothing is known about the result of an indirect call.
     const Function *F = getAssociatedFunction();
-    assert(F && "no associated function for return from call");
+    if (!F) {
+      indicatePessimisticFixpoint();
+      return;
+    }
 
     if (!F->isDeclaration() && !F->isIntrinsic())
       return AAInvariantLoadPointerImpl::initialize(A);

@@ -7510,6 +7510,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString("-ftime-trace=" + Twine(Name)));
     Args.AddLastArg(CmdArgs, options::OPT_ftime_trace_granularity_EQ);
     Args.AddLastArg(CmdArgs, options::OPT_ftime_trace_verbose);
+    Args.AddLastArg(CmdArgs, options::OPT_ftime_trace_compress_EQ);
   }
 
   if (Arg *A = Args.getLastArg(options::OPT_ftrapv_handler_EQ)) {
@@ -7914,12 +7915,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                              .Case("c++14", "-std=c++14")
                              .Case("c++17", "-std=c++17")
                              .Case("c++20", "-std=c++20")
+                             .Case("c++23", "-std=c++23")
                              // If you add cases below for spellings that are
                              // not in LangStandards.def, update
                              // TransferableCommand::tryParseStdArg() in
                              // lib/Tooling/InterpolatingCompilationDatabase.cpp
                              // to match.
-                             // TODO add c++23, c++26, c++29 when MSVC supports
+                             // TODO add c++26, c++29 when MSVC supports
                              // it.
                              .Case("c++23preview", "-std=c++23")
                              .Case("c++26preview", "-std=c++26")
@@ -9916,18 +9918,6 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
                                  const InputInfoList &Inputs,
                                  const ArgList &Args,
                                  const char *LinkingOutput) const {
-  bool isAMDGPU = false;
-  auto offloadTC = C.getOffloadToolChains(Action::OFK_OpenMP);
-  const auto OpenMPTCs = llvm::make_range(offloadTC.first, offloadTC.second);
-  const ToolChain *OTC;
-  for (auto &I : OpenMPTCs) {
-    OTC = I.second;
-    if (OTC->getTriple().isAMDGPU()) {
-      isAMDGPU = true;
-      break;
-    }
-  }
-
   using namespace options;
 
   // A list of permitted options that will be forwarded to the embedded device
@@ -9949,6 +9939,7 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
       OPT_ftime_trace_EQ,
       OPT_ftime_trace_granularity_EQ,
       OPT_ftime_trace_verbose,
+      OPT_ftime_trace_compress_EQ,
       OPT_opt_record_file,
       OPT_opt_record_format,
       OPT_opt_record_passes,
