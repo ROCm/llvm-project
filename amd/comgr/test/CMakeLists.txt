@@ -308,3 +308,14 @@ set_tests_properties(
   PROPERTIES
     ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1"
     TIMEOUT 120)
+
+
+add_test(NAME unbundle_cached_edge_cases_test
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/utils/test_cached_unbundle.py"
+          "$<TARGET_FILE:unbundle_compressed_edge_cases_test>")
+if(WIN32)
+  set_tests_properties(unbundle_cached_edge_cases_test PROPERTIES
+    ENVIRONMENT_MODIFICATION
+      "PATH=path_list_prepend:$<TARGET_LINKER_FILE_DIR:amd_comgr>")
+endif()

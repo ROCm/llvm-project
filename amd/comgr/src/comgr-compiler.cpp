@@ -68,6 +68,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/OffloadBinary.h"
+#include "llvm/Support/Alignment.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -81,6 +82,8 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 
 #include "time-stat/ts-interface.h"
+
+#include <cstddef>
 
 #ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
 #include <LLVMSPIRVLib.h>
@@ -1926,9 +1929,9 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
     if (Cache) {
       // On a cache hit, use the cached code objects in place instead of
       // writing each one to a temporary file and copying it back. Not on
-      // Windows, where a mapped cache entry could not be pruned, and not with
-      // save-temps, where the unbundled files are expected on disk.
-      bool InPlace = !env::shouldSaveTemps();
+      // Windows, where a mapped cache entry could not be pruned.
+      // Save-temps writes diagnostic copies below without reading them back.
+      bool InPlace = true;
 #ifdef _WIN32
       InPlace = false;
 #endif
@@ -1965,9 +1968,22 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
 
       DataObject *Result = DataObject::convert(ResultT);
       if (!Contents.empty()) {
-        if (auto Status =
-                Result->setData(std::make_unique<SharedSliceMemoryBuffer>(
-                    Hit.Entry, Contents[OutputIndex])))
+        StringRef Slice = Contents[OutputIndex];
+        if (env::shouldSaveTemps()) {
+          if (Error Err = CachedCommandAdaptor::writeSingleOutputFile(
+                  OutputFilePath, Slice)) {
+            logAllUnhandledErrors(std::move(Err), LogS, "Unbundle Error: ");
+            return AMD_COMGR_STATUS_ERROR;
+          }
+        }
+        // Cache framing does not align members. Preserve the alignment needed
+        // by downstream ELF readers, just as for freshly decompressed members.
+        std::unique_ptr<MemoryBuffer> Output;
+        if (isAddrAligned(Align(alignof(std::max_align_t)), Slice.data()))
+          Output = std::make_unique<SharedSliceMemoryBuffer>(Hit.Entry, Slice);
+        else
+          Output = MemoryBuffer::getMemBufferCopy(Slice);
+        if (auto Status = Result->setData(std::move(Output)))
           return Status;
       } else if (Unbundle.hasInMemoryOutputs()) {
         // UnbundleCommand owns the unbundled contents, hand ownership to the

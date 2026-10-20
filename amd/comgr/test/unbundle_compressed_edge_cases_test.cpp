@@ -117,8 +117,9 @@ static std::vector<std::string> unbundle(StringRef Input,
                "borrow output");
     if (PointerSize != Size || StringRef(Pointer, PointerSize) != Result[Index])
       fail("borrowed output differs from copied output");
+    bool CheckMember = CheckExecutable && StringRef(Targets[Index]) != Host;
     amd_comgr_metadata_node_t Metadata = {};
-    if (CheckExecutable) {
+    if (CheckMember) {
       size_t IsaSize = 0;
       checkError(amd_comgr_get_data_isa_name(Data[Index], &IsaSize, nullptr),
                  "get output ISA size");
@@ -146,7 +147,7 @@ static std::vector<std::string> unbundle(StringRef Input,
         fail("no output symbols");
     }
     checkError(amd_comgr_release_data(Data[Index]), "release output");
-    if (CheckExecutable) {
+    if (CheckMember) {
       amd_comgr_metadata_kind_t Kind;
       checkError(amd_comgr_get_metadata_kind(Metadata, &Kind),
                  "get metadata kind after releasing data");
@@ -268,7 +269,9 @@ static void testFormat(compression::Format Format, uint16_t Version) {
   }
 }
 
-int main() {
+int main(int argc, char **argv) {
+  const bool CachedExecutablesOnly =
+      argc == 2 && StringRef(argv[1]) == "--cached-executables";
   auto Executable = MemoryBuffer::getFile(TEST_OBJ_DIR "/shared.so");
   if (!Executable)
     fail("failed to open source/shared.so");
@@ -276,7 +279,8 @@ int main() {
     if (compression::getReasonIfUnsupported(Format))
       continue;
     for (uint16_t Version : {1, 2, 3}) {
-      testFormat(Format, Version);
+      if (!CachedExecutablesOnly)
+        testFormat(Format, Version);
       for (size_t Padding = 0; Padding < alignof(std::max_align_t); ++Padding) {
         std::string HostBytes(Padding, '\0');
         std::string Input =
@@ -284,9 +288,16 @@ int main() {
         checkOutputs(
             unbundle(compress(Input, Format, Version), {Device}, true, true),
             {(*Executable)->getBuffer().str()});
+        // Cached output framing places the ELF after the host bytes and two
+        // size fields. Varying the host length exercises every cache alignment.
+        checkOutputs(unbundle(compress(Input, Format, Version), {Host, Device},
+                              true, true),
+                     {HostBytes, (*Executable)->getBuffer().str()});
       }
     }
   }
+  if (CachedExecutablesOnly)
+    return 0;
   unbundle("CCOB", {Device}, false);
   unbundle(StringRef("CCOB\x04\x00\x00\x00", 8), {Device}, false);
   return 0;
