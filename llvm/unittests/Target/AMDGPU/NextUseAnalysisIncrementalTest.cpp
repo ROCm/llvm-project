@@ -208,6 +208,42 @@ static void expectInstrAddedMatchesFreshRecompute(
   expectSnapshotsEqual(AfterIncremental, FreshSnap);
 }
 
+static void removeMI(AMDGPUNextUseAnalysis &NUA, MachineInstr &MI) {
+  MachineBasicBlock *MBB = MI.getParent();
+  NUA.instrRemoving(MI);
+  MI.eraseFromParent();
+  NUA.instrRemoved(*MBB);
+}
+
+static void expectInstrRemovedMatchesFreshRecompute(
+    MachineFunction &MF, MachineFunctionAnalysisManager &MFAM,
+    AMDGPUNextUseAnalysis::Config Cfg, MachineBasicBlock &ChangedMBB,
+    function_ref<void(AMDGPUNextUseAnalysis &, MachineFunction &)> ModifyMF) {
+  AMDGPUNextUseAnalysis &Inc =
+      getNextUseAnalysis(MF, MFAM, Cfg, /*Invalidate*/ true);
+
+  UpdateQueryTiming Timings;
+  timeMicros(Timings.IncrementalUpdateUs, [&] { //
+    ModifyMF(Inc, MF);
+  });
+  NextUseSnapshot AfterIncremental;
+  timeMicros(Timings.IncrementalQueryUs, [&] { //
+    captureNextUseSnapshot(Inc, MF, AfterIncremental);
+  });
+  AMDGPUNextUseAnalysis *FreshPtr = nullptr;
+  timeMicros(Timings.FullRebuildUs, [&] {
+    FreshPtr = &getNextUseAnalysis(MF, MFAM, Cfg, /*Invalidate*/ true);
+  });
+  AMDGPUNextUseAnalysis &Fresh = *FreshPtr;
+  NextUseSnapshot FreshSnap;
+  timeMicros(Timings.FullQueryUs, [&] { //
+    captureNextUseSnapshot(Fresh, MF, FreshSnap);
+  });
+
+  reportUpdateQueryTiming(ChangedMBB.getName(), Timings);
+  expectSnapshotsEqual(AfterIncremental, FreshSnap);
+}
+
 } // namespace
 
 class NextUseAnalysisIncrementalTest : public AMDGPUCodeGenTestBase {
@@ -369,9 +405,8 @@ TEST_F(NextUseAnalysisIncrementalTest, TimingReportLoopBodyNop) {
     Accumulated.FullRebuildUs += Timings.FullRebuildUs;
     Accumulated.FullQueryUs += Timings.FullQueryUs;
 
-    // Drop the nop before the next iteration; instrRemoved is not on this
-    // branch yet, and the loop invalidates analysis at the start each time.
-    std::prev(MBB1.getFirstTerminator())->eraseFromParent();
+    MachineInstr &Nop = *std::prev(MBB1.getFirstTerminator());
+    removeMI(Fresh, Nop);
   }
 
   Accumulated.IncrementalUpdateUs /= Iterations;
@@ -379,6 +414,31 @@ TEST_F(NextUseAnalysisIncrementalTest, TimingReportLoopBodyNop) {
   Accumulated.FullRebuildUs /= Iterations;
   Accumulated.FullQueryUs /= Iterations;
   reportUpdateQueryTiming("TimingReportLoopBodyNop(avg32)", Accumulated);
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, RemoveNopFromEntryBlock) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineBasicBlock &MBB0 = *MF.getBlockNumbered(0);
+  expectInstrRemovedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), MBB0,
+      [&](AMDGPUNextUseAnalysis &NUA, MachineFunction &) {
+        insertNop(MBB0, MBB0.getFirstTerminator());
+        MachineInstr &Nop = *std::prev(MBB0.getFirstTerminator());
+        removeMI(NUA, Nop);
+      });
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, RemoveInstrFromLoopBody) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineBasicBlock &MBB1 = *MF.getBlockNumbered(1);
+  expectInstrRemovedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), MBB1,
+      [&](AMDGPUNextUseAnalysis &NUA, MachineFunction &) {
+        MachineInstr &MI = *std::next(MBB1.getFirstNonPHI());
+        removeMI(NUA, MI);
+      });
 }
 
 TEST_F(NextUseAnalysisIncrementalTest, SimpleAcyclicEmbeddedMIR) {

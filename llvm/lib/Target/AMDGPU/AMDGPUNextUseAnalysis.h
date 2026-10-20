@@ -343,8 +343,22 @@ public:
 
   //----------------------------------------------------------------------------
   // Incremental invalidate/update
+  //
+  // Insert: modify the block, then instrAdded(MBB).
+  //
+  // Delete (do not run analysis queries between instrRemoving and
+  // instrRemoved):
+  //   1. instrRemoving(MI) -- drop cached pointers to \p MI (esp. InstrToId)
+  //   2. erase \p MI from its block
+  //   3. instrRemoved(MBB) -- renumber ids and refresh inter-block state
   //----------------------------------------------------------------------------
+  /// Call after an instruction is inserted into \p MBB.
   void instrAdded(const MachineBasicBlock &MBB);
+
+  /// Call before \p MI is erased; clears stale instruction/operand pointers.
+  void instrRemoving(const MachineInstr &MI);
+  /// Call after an instruction is erased from \p MBB.
+  void instrRemoved(const MachineBasicBlock &MBB);
 };
 
 //==============================================================================

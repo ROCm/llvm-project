@@ -1988,7 +1988,8 @@ public:
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Incremental invalidate/update
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  void instrAdded(const MachineBasicBlock &BB) {
+  /// Shared refresh after insert or erase in \p BB (ids, paths, inter-block).
+  void updateAfterInstrChangeInBlock(const MachineBasicBlock &BB) {
     // Ids
     calcInstrIds(&BB, InstrToId);
 
@@ -2026,6 +2027,22 @@ public:
     initializeInterBlockDistances();
     resetDistanceCache();
     RegUseMap.clear();
+  }
+
+  void instrAdded(const MachineBasicBlock &BB) {
+    updateAfterInstrChangeInBlock(BB);
+  }
+
+  /// Drop cached pointers to \p MI before it is destroyed. Does not renumber;
+  /// instrRemoved must follow the erase for correct distances.
+  void instrRemoving(const MachineInstr &MI) {
+    InstrToId.erase(&MI);
+    resetDistanceCache();
+    RegUseMap.clear();
+  }
+
+  void instrRemoved(const MachineBasicBlock &BB) {
+    updateAfterInstrChangeInBlock(BB);
   }
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2333,6 +2350,14 @@ void AMDGPUNextUseAnalysis::getNextUseDistances(
 
 void AMDGPUNextUseAnalysis::instrAdded(const MachineBasicBlock &MBB) {
   Impl->instrAdded(MBB);
+}
+
+void AMDGPUNextUseAnalysis::instrRemoving(const MachineInstr &MI) {
+  Impl->instrRemoving(MI);
+}
+
+void AMDGPUNextUseAnalysis::instrRemoved(const MachineBasicBlock &MBB) {
+  Impl->instrRemoved(MBB);
 }
 
 //==============================================================================
