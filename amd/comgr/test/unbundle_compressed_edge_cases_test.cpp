@@ -183,6 +183,50 @@ static void testFormat(compression::Format Format, uint16_t Version) {
     checkOutputs(unbundle(Compress(Input), {Host, Specific, Device}),
                  unbundle(Input, {Host, Specific, Device}));
 
+  // Compare the private in-memory compatibility predicate with Clang's
+  // file-based unbundler, including asymmetric feature matching and kind/triple
+  // mismatches. Check expected results as well so both paths cannot silently
+  // select the wrong member.
+  struct CompatibilityCase {
+    const char *Provided;
+    const char *Requested;
+    bool Compatible;
+  };
+  for (const auto &Case : {
+           CompatibilityCase{Host, Host, true},
+           CompatibilityCase{Device, Specific, true},
+           CompatibilityCase{
+               "hip-amdgcn-amd-amdhsa-unknown-gfx906:xnack-",
+               "hip-amdgcn-amd-amdhsa-unknown-gfx906:sramecc+:xnack-", true},
+           CompatibilityCase{
+               "hip-amdgcn-amd-amdhsa-unknown-gfx906:sramecc+:xnack-",
+               "hip-amdgcn-amd-amdhsa-unknown-gfx906:xnack-", false},
+           CompatibilityCase{Specific, Device, false},
+           CompatibilityCase{Specific, Specific, true},
+           CompatibilityCase{
+               Specific, "hip-amdgcn-amd-amdhsa-unknown-gfx900:xnack-", false},
+           CompatibilityCase{
+               "hip-amdgcn-amd-amdhsa-unknown-gfx906:sramecc+:xnack-",
+               "hip-amdgcn-amd-amdhsa-unknown-gfx906:xnack-:sramecc+", true},
+           CompatibilityCase{Device, "hipv4-amdgcn-amd-amdhsa-unknown-gfx900",
+                             true},
+           CompatibilityCase{"hipv4-amdgcn-amd-amdhsa-unknown-gfx900", Device,
+                             true},
+           CompatibilityCase{Device, "openmp-amdgcn-amd-amdhsa-unknown-gfx900",
+                             true},
+           CompatibilityCase{Device, "hip-amdgcn-amd-amdhsa-unknown-gfx906",
+                             false},
+           CompatibilityCase{Device, "hip-amdgcn-amd-amdpal-unknown-gfx900",
+                             false},
+       }) {
+    std::string Input = bundle({{Case.Provided, "payload"}});
+    auto Actual = unbundle(Compress(Input), {Case.Requested});
+    if (Actual != unbundle(Input, {Case.Requested}))
+      fail("in-memory/file mismatch: %s -> %s", Case.Provided, Case.Requested);
+    if (Actual != std::vector<std::string>{Case.Compatible ? "payload" : ""})
+      fail("unexpected compatibility: %s -> %s", Case.Provided, Case.Requested);
+  }
+
   checkOutputs(unbundle(Compress(First), {Host}), {Compress(First)});
   checkOutputs(
       unbundle(Compress(First), {"hip-amdgcn-amd-amdhsa-unknown-gfx906"}),

@@ -14,6 +14,7 @@
 
 #include <comgr-unbundle-command.h>
 
+#include <clang/Basic/TargetID.h>
 #include <clang/Driver/OffloadBundler.h>
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/ADT/StringMap.h>
@@ -38,6 +39,39 @@ namespace {
 // triples. See clang/lib/Driver/OffloadBundler.cpp for the full layout.
 constexpr const char BinaryBundleMagic[] = "__CLANG_OFFLOAD_BUNDLE__";
 constexpr size_t BinaryBundleMagicSize = sizeof(BinaryBundleMagic) - 1;
+
+// Keep this predicate consistent with isCodeObjectCompatible in
+// clang/lib/Driver/OffloadBundler.cpp. That helper is not part of Clang's
+// public interface. Use the public target parsing APIs here so the in-memory
+// path selects the same members as the file-based unbundler.
+bool isCompatibleBundle(const OffloadTargetInfo &CodeObjectInfo,
+                        const OffloadTargetInfo &TargetInfo) {
+  if (CodeObjectInfo == TargetInfo)
+    return true;
+
+  if (!CodeObjectInfo.isOffloadKindCompatible(TargetInfo.OffloadKind) ||
+      !CodeObjectInfo.Triple.isCompatibleWith(TargetInfo.Triple))
+    return false;
+
+  StringMap<bool> CodeObjectFeatures, TargetFeatures;
+  auto CodeObjectProcessor = clang::parseTargetID(
+      CodeObjectInfo.Triple, CodeObjectInfo.TargetID, &CodeObjectFeatures);
+  auto TargetProcessor = clang::parseTargetID(
+      TargetInfo.Triple, TargetInfo.TargetID, &TargetFeatures);
+  if (!CodeObjectProcessor || !TargetProcessor ||
+      *CodeObjectProcessor != *TargetProcessor)
+    return false;
+
+  // An unspecified code-object feature accepts either target value. Every
+  // specified feature must also be specified by the target with the same value.
+  for (const auto &Feature : CodeObjectFeatures) {
+    auto TargetFeature = TargetFeatures.find(Feature.getKey());
+    if (TargetFeature == TargetFeatures.end() ||
+        TargetFeature->second != Feature.second)
+      return false;
+  }
+  return true;
+}
 
 /// Append \p Data to \p Out, prefixed with its size. This is the format used
 /// for the contents of each output in the cache entry.
@@ -295,7 +329,7 @@ Expected<bool> UnbundleCommand::executeInMemory() {
         return createStringError(std::errc::invalid_argument,
                                  "invalid bundle id read from the bundle");
       auto Target = llvm::find_if(Worklist, [&](const auto &Entry) {
-        return isCodeObjectCompatible(
+        return isCompatibleBundle(
             OffloadTargetInfo(Triple, Config),
             OffloadTargetInfo(Entry.getKey(), Config));
       });
