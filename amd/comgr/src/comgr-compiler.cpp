@@ -585,6 +585,34 @@ SmallString<128> getOutputFilePath(DataObject *Object, StringRef Dir) {
   return Path;
 }
 
+SmallString<128> getUnbundleOutputName(StringRef OutputPrefix, StringRef Entry,
+                                       StringRef FileExtension) {
+  SmallString<128> Name(OutputPrefix);
+  Name += "-";
+  Name += Entry;
+  Name += ".";
+  Name += FileExtension;
+  return Name;
+}
+
+SmallString<128> getUnbundleOutputPath(StringRef Dir, StringRef OutputPrefix,
+                                       StringRef Entry,
+                                       StringRef FileExtension) {
+  SmallString<128> Name =
+      getUnbundleOutputName(OutputPrefix, Entry, FileExtension);
+#ifdef _WIN32
+  // Feature-qualified target IDs contain ':'; Windows reserves it for drive
+  // letters and alternate data streams. Keep the public data object name
+  // independent from the temporary path.
+  for (char &C : Name)
+    if (C == ':')
+      C = '_';
+#endif
+  SmallString<128> Path(Dir);
+  path::append(Path, Name);
+  return Path;
+}
+
 // TODO: Move inputFromFile and outputToFile within AMDGPUCompiler
 //
 // Currently, we only invoke these two methods in the context of AMDGPUCompiler.
@@ -1888,9 +1916,8 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
 
     for (StringRef Entry : ActionInfo->BundleEntryIDs) {
       // Add an output file for each target
-      SmallString<128> OutputFilePath = OutputDir;
-      sys::path::append(OutputFilePath,
-                        OutputPrefix + "-" + Entry + "." + FileExtension);
+      SmallString<128> OutputFilePath =
+          getUnbundleOutputPath(OutputDir, OutputPrefix, Entry, FileExtension);
 
       BundlerConfig.TargetNames.emplace_back(Entry);
       BundlerConfig.OutputFileNames.emplace_back(OutputFilePath);
@@ -1958,8 +1985,9 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
         return Status;
       }
 
-      StringRef OutputFileName = sys::path::filename(OutputFilePath);
-      Result->setName(OutputFileName);
+      SmallString<128> OutputFileName = getUnbundleOutputName(
+          OutputPrefix, BundlerConfig.TargetNames[OutputIndex], FileExtension);
+      Result->setName(sys::path::filename(OutputFileName));
 
       if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT)) {
         return Status;
