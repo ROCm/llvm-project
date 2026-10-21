@@ -715,6 +715,10 @@ private:
           if (MBB != From)
             Unreachable.emplace_back(MBB, To);
         }
+      } else {
+        // PopOp backtracking may have appended pairs that are reachable via
+        // another branch (e.g. a join block already in Visited from a sibling).
+        Unreachable.clear();
       }
 
       if (ForwardOnly)
@@ -731,8 +735,6 @@ private:
       // Backtracking
       if (Op == PopOp) {
         IntermediatePath.pop_back();
-        if (ForwardOnly)
-          Unreachable.emplace_back(Current, To);
         continue;
       }
 
