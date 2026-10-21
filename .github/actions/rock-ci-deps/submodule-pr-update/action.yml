@@ -5,6 +5,8 @@ description: >
   On nightly schedule (and nightly workflow_dispatch without PR params) points
   compiler/amd-llvm, spirv-llvm-translator, and hipify at their amd-staging tips.  
   On workflow_dispatch downloads PR params artifact, sources env, merges upstream PRs, updates submodule pointers.
+  A cherry-pick run may instead name a branch on ROCm/llvm-project and
+  retain the other compiler submodules as TheRock pinned them.
 
 inputs:
   params_artifact_name:
@@ -138,6 +140,8 @@ runs:
         echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
         echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
         echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
+        echo "LLVM_BRANCH=$LLVM_BRANCH" >> "$GITHUB_ENV"
+        echo "RETAIN_COMPILER_SUBMODULES=$RETAIN_COMPILER_SUBMODULES" >> "$GITHUB_ENV"
 
     - name: Update submodule pointers from provided parameter PR values
       if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
@@ -158,6 +162,12 @@ runs:
           pr_num="$(echo "$pr_url" | sed 's|.*/pull/||')"
           sha="$(git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}')"
           trim_sha "$sha"
+        }
+
+        get_branch_sha() {
+          local branch="$1"
+          trim_sha "$(git ls-remote https://github.com/ROCm/llvm-project.git \
+            "refs/heads/${branch}" | awk '{print $1}')"
         }
 
         merge_upstream_prs() {
@@ -186,6 +196,15 @@ runs:
         if [[ -n "${LLVM_ROCm_PR_URL:-}" ]]; then
           LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
           echo "ROCm LLVM head SHA: $LLVM_SHA"
+        elif [[ -n "${LLVM_BRANCH:-}" ]]; then
+          # Cherry-pick testing: the developer pushed a branch rather than
+          # opening a PR, so there is no refs/pull/<n>/head to resolve.
+          LLVM_SHA="$(get_branch_sha "$LLVM_BRANCH")"
+          if [[ -z "$LLVM_SHA" ]]; then
+            echo "::error::Branch '${LLVM_BRANCH}' not found on ROCm/llvm-project." >&2
+            exit 1
+          fi
+          echo "ROCm LLVM branch ${LLVM_BRANCH} SHA: $LLVM_SHA"
         elif [[ -n "${LLVM_PR_URL:-}" ]]; then
           merge_upstream_prs "$LLVM_PR_URL"
           LLVM_SHA="$MERGED_LLVM_SHA"
@@ -201,24 +220,31 @@ runs:
           trim_sha "$(git ls-remote "${repo_url}" refs/heads/amd-staging | awk '{print $1}')"
         }
         
-        if [[ -n "${SPIRV_PR_URL:-}" ]]; then
-          SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
-          echo "SPIRV head SHA: $SPIRV_SHA"
-          git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
+        if [[ "${RETAIN_COMPILER_SUBMODULES:-}" == "true" ]]; then
+          echo "Retaining spirv-llvm-translator and hipify exactly as TheRock pinned them."
+          # Non-empty sentinels so the emptiness guard below still applies.
+          SPIRV_SHA="retained"
+          HIPIFY_SHA="retained"
         else
-          SPIRV_SHA="$(read_amd_staging_tip https://github.com/ROCm/SPIRV-LLVM-Translator.git)"
-          echo "SPIRV PR NOT Passed, defaulting to the amd-staging tip : $SPIRV_SHA"
-          git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
-        fi
+          if [[ -n "${SPIRV_PR_URL:-}" ]]; then
+            SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
+            echo "SPIRV head SHA: $SPIRV_SHA"
+            git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
+          else
+            SPIRV_SHA="$(read_amd_staging_tip https://github.com/ROCm/SPIRV-LLVM-Translator.git)"
+            echo "SPIRV PR NOT Passed, defaulting to the amd-staging tip : $SPIRV_SHA"
+            git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
+          fi
 
-        if [[ -n "${HIPIFY_PR_URL:-}" ]]; then
-          HIPIFY_SHA="$(get_pr_sha "$HIPIFY_PR_URL")"
-          echo "HIPIFY head SHA: $HIPIFY_SHA"
-          git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
-        else
-          HIPIFY_SHA="$(read_amd_staging_tip https://github.com/ROCm/HIPIFY.git)"
-          echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
-          git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
+          if [[ -n "${HIPIFY_PR_URL:-}" ]]; then
+            HIPIFY_SHA="$(get_pr_sha "$HIPIFY_PR_URL")"
+            echo "HIPIFY head SHA: $HIPIFY_SHA"
+            git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
+          else
+            HIPIFY_SHA="$(read_amd_staging_tip https://github.com/ROCm/HIPIFY.git)"
+            echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
+            git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
+          fi
         fi
 
         if [[ -z "$SPIRV_SHA" || -z "$HIPIFY_SHA" ]]; then
@@ -226,7 +252,11 @@ runs:
           exit 1
         fi
 
-        git commit -m "Update submodule references from PR URLs"
+        if git diff --cached --quiet; then
+          echo "No submodule pointer changes to commit."
+        else
+          git commit -m "Update submodule references from PR URLs"
+        fi
         git submodule update --init --depth 1 --jobs 4 \
           compiler/amd-llvm \
           compiler/spirv-llvm-translator \
