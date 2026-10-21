@@ -56,6 +56,8 @@
 #include "GCNRegPressure.h"
 #include "GCNSubtarget.h"
 
+#include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -278,6 +280,8 @@ private:
     for (const MachineBasicBlock &BB : *MF)
       calcInstrIds(&BB, InstrToId);
     initializeCfgPaths();
+    initializeReachabilityClosures();
+    LLVM_DEBUG(dumpPaths());
     initializeInterBlockDistances();
   }
 
@@ -285,6 +289,8 @@ private:
     InstrToId.clear();
     RegUseMap.clear();
     Paths.clear();
+    ReachableClosure.clear();
+    ForwardReachableClosure.clear();
 
     resetDistanceCache();
   }
@@ -403,28 +409,18 @@ private:
 
   struct PathInfo {
     EdgeKind EK;
-    bool Reachable;
-    int ForwardReachable;
     unsigned RelativeLoopDepth;
     std::optional<NextUseDistance> ShortestDistance;
     std::optional<NextUseDistance> ShortestUnweightedDistance;
     InstrIdTy Size;
 
-    PathInfo()
-        : EK(EdgeKind::None), Reachable(false), ForwardReachable(-1),
-          RelativeLoopDepth(0), Size(0) {}
+    PathInfo() : EK(EdgeKind::None), RelativeLoopDepth(0), Size(0) {}
 
     bool isBackedge() const { return EK == EdgeKind::Back; }
 
-    bool isForwardReachableSet() const { return 0 <= ForwardReachable; }
-    bool isForwardReachableUnset() const { return ForwardReachable < 0; }
-    bool isForwardReachable() const { return ForwardReachable == 1; }
-    bool isNotForwardReachable() const { return ForwardReachable == 0; }
-
     void print(raw_ostream &OS) const {
-      OS << "{ek=" << toString(EK) << " reach=" << Reachable
-         << " fwd-reach=" << ForwardReachable
-         << " loop-depth=" << RelativeLoopDepth << " size=" << Size;
+      OS << "{ek=" << toString(EK) << " loop-depth=" << RelativeLoopDepth
+         << " size=" << Size;
       if (ShortestDistance) {
         OS << " shortest-dist=";
         ShortestDistance->print(OS);
@@ -449,6 +445,20 @@ private:
   //----------------------------------------------------------------------------
   DenseMap<Path, PathInfo, Path::DenseMapInfo> Paths;
 
+  // All-pairs reachability indexed by block number. CFG-only; not rebuilt on
+  // instruction notify (see updateAfterInstrChangeInBlock). Rebuilt from
+  // initializeTables; a future CFG-edit hook must rebuild on block/edge
+  // changes.
+  std::vector<BitVector> ReachableClosure;
+  std::vector<BitVector> ForwardReachableClosure;
+
+  static bool isClosureIndex(const std::vector<BitVector> &Closure,
+                             const MachineBasicBlock *From,
+                             const MachineBasicBlock *To) {
+    const unsigned N = Closure.size();
+    return (unsigned)From->getNumber() < N && (unsigned)To->getNumber() < N;
+  }
+
   const PathInfo *maybePathInfoFor(const MachineBasicBlock *From,
                                    const MachineBasicBlock *To) const {
     auto I = Paths.find({From, To});
@@ -465,12 +475,8 @@ private:
     if (!Inserted)
       return I->second;
 
-    bool Reachable = calcIsReachable(P.src(), P.dst());
-
-    // Iterator may have been invalidated by calcIsReachable, so get a fresh
-    // reference to the slot.
-    return NonConstThis->initializePathInfo(MutablePaths.at(P), P,
-                                            EdgeKind::None, Reachable);
+    return NonConstThis->initializePathInfo(I->second, P, EdgeKind::None,
+                                            isReachable(P.src(), P.dst()));
   }
 
   const PathInfo &pathInfoFor(const MachineBasicBlock *From,
@@ -485,10 +491,8 @@ private:
   PathInfo &initializePathInfo(PathInfo &Slot, Path P, EdgeKind EK,
                                bool Reachable) {
     Slot.EK = EK;
-    Slot.Reachable = Reachable;
-    Slot.ForwardReachable = EK == EdgeKind::None ? -1 : EK == EdgeKind::Forward;
     Slot.RelativeLoopDepth =
-        Slot.Reachable ? calcRelativeLoopDepth(P.src(), P.dst()) : 0;
+        Reachable ? calcRelativeLoopDepth(P.src(), P.dst()) : 0;
     Slot.Size = P.src() == P.dst() ? calcSize(P.src()) : 0;
     if (EK != EdgeKind::None)
       Slot.ShortestUnweightedDistance = 0;
@@ -499,15 +503,6 @@ private:
     auto *NonConstThis = const_cast<AMDGPUNextUseAnalysisImpl *>(this);
     auto &MutablePaths = NonConstThis->Paths;
     return NonConstThis->initializePathInfo(MutablePaths[P], P, EK, Reachable);
-  }
-
-  bool initializePathInfoForwardReachable(const MachineBasicBlock *From,
-                                          const MachineBasicBlock *To,
-                                          bool Value) const {
-    PathInfo &Slot = getOrInitPathInfo(From, To);
-    assert(Slot.isForwardReachableUnset());
-    Slot.ForwardReachable = Value;
-    return Value;
   }
 
   NextUseDistance
@@ -528,31 +523,6 @@ private:
     assert(!Slot.ShortestUnweightedDistance.has_value());
     Slot.ShortestUnweightedDistance = Value;
     return Value;
-  }
-
-  //----------------------------------------------------------------------------
-  // initialize*Paths
-  //----------------------------------------------------------------------------
-private:
-  void initializePaths(const SmallVector<Path> &ReachablePaths,
-                       const SmallVector<Path> &UnreachablePaths) const {
-    for (const Path &P : ReachablePaths)
-      initializePathInfo(P, EdgeKind::None, true);
-    for (const Path &P : UnreachablePaths)
-      initializePathInfo(P, EdgeKind::None, false);
-  }
-
-  void
-  initializeForwardOnlyPaths(const SmallVector<Path> &ReachablePaths,
-                             const SmallVector<Path> &UnreachablePaths) const {
-    for (bool R : {true, false}) {
-      const auto &ToInit = R ? ReachablePaths : UnreachablePaths;
-      for (const Path &P : ToInit) {
-        PathInfo &Slot = getOrInitPathInfo(P.src(), P.dst());
-        assert(Slot.isForwardReachableUnset() || Slot.ForwardReachable == R);
-        Slot.ForwardReachable = R;
-      }
-    }
   }
 
   // Follow the control flow graph starting at the entry block until all blocks
@@ -599,8 +569,60 @@ private:
         initializePathInfo(P, EK, /*Reachable*/ true);
       }
     }
+  }
 
-    LLVM_DEBUG(dumpPaths());
+  void initializeReachabilityClosures() {
+    const unsigned N = MF->getNumBlockIDs();
+    ReachableClosure.assign(N, BitVector(N));
+    ForwardReachableClosure.assign(N, BitVector(N));
+
+    // Successor rows feed predecessor rows, so post order (successors before
+    // predecessors) converges in one pass on a DAG; RPO needs O(depth) passes.
+    SmallVector<const MachineBasicBlock *, 32> Order;
+    Order.reserve(N);
+    DenseSet<const MachineBasicBlock *> InOrder;
+    for (const MachineBasicBlock *MBB : post_order(MF)) {
+      Order.push_back(MBB);
+      InOrder.insert(MBB);
+    }
+    for (unsigned Num = 0; Num != N; ++Num) {
+      if (const MachineBasicBlock *MBB = MF->getBlockNumbered(Num))
+        if (!InOrder.contains(MBB))
+          Order.push_back(MBB);
+    }
+
+    const unsigned MaxIters = N + 2;
+    auto runFixpoint = [&](std::vector<BitVector> &Closure, bool ForwardOnly) {
+      for (unsigned Iter = 0; Iter != MaxIters; ++Iter) {
+        bool Changed = false;
+        for (const MachineBasicBlock *V : Order) {
+          const unsigned VNum = V->getNumber();
+          BitVector NewRow(N, false);
+          for (const MachineBasicBlock *S : V->successors()) {
+            if (ForwardOnly && isBackedge(V, S))
+              continue;
+            NewRow.set(S->getNumber());
+            NewRow |= Closure[S->getNumber()];
+          }
+          if (NewRow != Closure[VNum]) {
+            Changed = true;
+            Closure[VNum] = std::move(NewRow);
+          }
+        }
+        if (!Changed)
+          return;
+      }
+      report_fatal_error("reachability closure fixpoint did not converge");
+    };
+
+    runFixpoint(ReachableClosure, /*ForwardOnly*/ false);
+    runFixpoint(ForwardReachableClosure, /*ForwardOnly*/ true);
+
+    for (const MachineBasicBlock &V : *MF) {
+      const unsigned VNum = V.getNumber();
+      const bool OnLoop = MLI->getLoopFor(&V) != nullptr;
+      ReachableClosure[VNum][VNum] = OnLoop;
+    }
   }
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -681,91 +703,6 @@ private:
 
     // Loops are siblings of some sort.
     return findCommonParent(LoopFrom, LoopTo).second;
-  }
-
-  // Attempt to find a path from 'From' to 'To' using a depth first search. If
-  // 'ForwardOnly' is true, do not follow backedges. As a performance
-  // improvement, this may initialize reachable intermediate paths or paths we
-  // determine are unreachable.
-  bool calcIsReachable(const MachineBasicBlock *From,
-                       const MachineBasicBlock *To,
-                       bool ForwardOnly = false) const {
-    if (From == To && !MLI->getLoopFor(From))
-      return false;
-
-    if (!ForwardOnly && interBlockDistanceExists(From, To))
-      return true;
-
-    enum { VisitOp, PopOp };
-    using MBBOpPair = std::pair<const MachineBasicBlock *, int>;
-    SmallVector<MBBOpPair> Work{{From, VisitOp}};
-    DenseSet<const MachineBasicBlock *> Visited{From};
-
-    SmallVector<Path> IntermediatePath;
-    SmallVector<Path> Unreachable;
-
-    // Should be run at every function exit point.
-    auto Finally = [&](bool Reachable) {
-      // This is an optimization. For intermediate paths we found while
-      // calculating reachability for 'From' --> 'To', remember their
-      // reachability.
-      if (!Reachable) {
-        IntermediatePath.clear();
-        for (const MachineBasicBlock *MBB : Visited) {
-          if (MBB != From)
-            Unreachable.emplace_back(MBB, To);
-        }
-      } else {
-        // PopOp backtracking may have appended pairs that are reachable via
-        // another branch (e.g. a join block already in Visited from a sibling).
-        Unreachable.clear();
-      }
-
-      if (ForwardOnly)
-        initializeForwardOnlyPaths(IntermediatePath, Unreachable);
-      else
-        initializePaths(IntermediatePath, Unreachable);
-
-      return Reachable;
-    };
-
-    while (!Work.empty()) {
-      auto [Current, Op] = Work.pop_back_val();
-
-      // Backtracking
-      if (Op == PopOp) {
-        IntermediatePath.pop_back();
-        continue;
-      }
-
-      if (Current->succ_empty())
-        continue;
-
-      if (Current != From) {
-        IntermediatePath.emplace_back(Current, To);
-        Work.emplace_back(Current, PopOp);
-      }
-
-      for (const MachineBasicBlock *Succ : Current->successors()) {
-        if (ForwardOnly && isBackedge(Current, Succ))
-          continue;
-
-        if (Succ == To)
-          return Finally(true);
-
-        if (auto CachedReachable = isMaybeReachable(Succ, To, ForwardOnly)) {
-          if (CachedReachable.value())
-            return Finally(true);
-          Visited.insert(Succ);
-          continue;
-        }
-
-        if (Visited.insert(Succ).second)
-          Work.emplace_back(Succ, VisitOp);
-      }
-    }
-
-    return Finally(false);
   }
 
   //----------------------------------------------------------------------------
@@ -924,18 +861,16 @@ private:
 public:
   bool isReachable(const MachineBasicBlock *From,
                    const MachineBasicBlock *To) const {
-    return pathInfoFor(From, To).Reachable;
+    assert(From && To);
+    assert(isClosureIndex(ReachableClosure, From, To));
+    return ReachableClosure[From->getNumber()][To->getNumber()];
   }
 
   bool isForwardReachable(const MachineBasicBlock *From,
                           const MachineBasicBlock *To) const {
-    const PathInfo &PI = pathInfoFor(From, To);
-    if (PI.isForwardReachableSet())
-      return PI.isForwardReachable();
-
-    return initializePathInfoForwardReachable(
-        From, To,
-        PI.Reachable && calcIsReachable(From, To, /*ForwardOnly*/ true));
+    assert(From && To);
+    assert(isClosureIndex(ForwardReachableClosure, From, To));
+    return ForwardReachableClosure[From->getNumber()][To->getNumber()];
   }
 
 private:
@@ -945,32 +880,15 @@ private:
 
   bool isReachableOrSame(const MachineBasicBlock *From,
                          const MachineBasicBlock *To) const {
-    return From == To || pathInfoFor(From, To).Reachable;
+    return From == To || isReachable(From, To);
   }
 
-  // Return true/false if we know that 'To' is reachable or not from
-  // 'From'. Otherwise return 'std::nullopt'.
-  std::optional<bool> isMaybeReachable(const MachineBasicBlock *From,
-                                       const MachineBasicBlock *To,
-                                       bool ForwardOnly) const {
-    const PathInfo *PI = maybePathInfoFor(From, To);
-    if (!PI)
-      return std::nullopt;
-
-    if (ForwardOnly) {
-      if (PI->isForwardReachable())
-        return true;
-
-      if (PI->isNotForwardReachable())
-        return false;
-      return std::nullopt;
-    }
-    return PI->Reachable;
-  }
-
+  // Must not create path slots: the only caller runs during closure
+  // construction, where getOrInitPathInfo would read a half-built closure.
   bool isBackedge(const MachineBasicBlock *From,
                   const MachineBasicBlock *To) const {
-    return pathInfoFor(From, To).isBackedge();
+    const PathInfo *PI = maybePathInfoFor(From, To);
+    return PI && PI->isBackedge();
   }
 
   // Can be used as a substitute for DT->dominates(A, B) if A and B are in the
@@ -1592,7 +1510,8 @@ private:
       OS << "  " << printMBBReference(*P.src()) << " -> "
          << printMBBReference(*P.dst()) << ": ";
       PI.print(OS);
-      OS << '\n';
+      OS << " reach=" << isReachable(P.src(), P.dst())
+         << " fwd-reach=" << isForwardReachable(P.src(), P.dst()) << '\n';
     }
     OS << "}\n";
   }
@@ -1995,6 +1914,8 @@ public:
     // Ids
     calcInstrIds(&BB, InstrToId);
 
+    // Reachability closures depend only on CFG shape, not instruction counts.
+
     // PathInfo
     for (auto &KV : Paths) {
       const Path &P = KV.first;
@@ -2010,12 +1931,9 @@ public:
       }
 
       auto NoPathThroughBB = [this, &P, &BB]() {
-        const PathInfo *A = maybePathInfoFor(P.src(), &BB);
-        if (A && !A->Reachable)
+        if (!isReachable(P.src(), &BB))
           return true;
-
-        const PathInfo *B = maybePathInfoFor(&BB, P.dst());
-        return B && !B->Reachable;
+        return !isReachable(&BB, P.dst());
       };
       if (NoPathThroughBB())
         continue;
@@ -2135,8 +2053,9 @@ public:
       }
 
       J.attribute("edge-kind", static_cast<int>(PI.EK));
-      J.attribute("reachable", PI.Reachable);
-      J.attribute("forward-reachable", PI.ForwardReachable);
+      J.attribute("reachable", isReachable(P.src(), P.dst()));
+      J.attribute("forward-reachable",
+                  isForwardReachable(P.src(), P.dst()) ? 1 : 0);
 
       J.objectEnd();
     }
