@@ -35,6 +35,10 @@ on:
         description: "JSON config for external repo checkout (repository, ref, checkout_path, source_package, fetch_sources_args)"
         type: string
         default: ""
+      run_tests:
+        description: "Run tests after the build. False builds only."
+        type: boolean
+        default: true
       changed_projects:
         description: 'Comma-separated list of projects to test (e.g., "rocblas,hipblas" or "projects/rocblas"). Empty = run all tests.'
         type: string
@@ -130,7 +134,7 @@ jobs:
   test_artifacts_per_family:
     needs: [copy_prebuilt_stages, build_multi_arch_stages]
     name: Test ${{ matrix.family_info.amdgpu_family }}
-    if: ${{ !failure() && !cancelled() }}
+    if: ${{ !failure() && !cancelled() && inputs.run_tests }}
     strategy:
       fail-fast: false
       matrix:
