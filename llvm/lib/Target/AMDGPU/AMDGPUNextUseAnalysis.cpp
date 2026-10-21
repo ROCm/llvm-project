@@ -886,6 +886,7 @@ private:
     return getInterBlockDistanceMapValue(From, To);
   }
 
+public:
   NextUseDistance getInterBlockDistance(const MachineBasicBlock *From,
                                         const MachineBasicBlock *To,
                                         bool Unweighted) const {
@@ -904,6 +905,7 @@ private:
     return Unweighted ? BD->Unweighted : BD->Weighted;
   }
 
+private:
   NextUseDistance
   getWeightedInterBlockDistance(const MachineBasicBlock *From,
                                 const MachineBasicBlock *To) const {
@@ -2341,6 +2343,12 @@ bool AMDGPUNextUseAnalysis::isReachable(const MachineBasicBlock *From,
 bool AMDGPUNextUseAnalysis::isForwardReachable(
     const MachineBasicBlock *From, const MachineBasicBlock *To) const {
   return Impl->isForwardReachable(From, To);
+}
+
+NextUseDistance AMDGPUNextUseAnalysis::getInterBlockDistanceForTest(
+    const MachineBasicBlock *From, const MachineBasicBlock *To,
+    bool Unweighted) const {
+  return Impl->getInterBlockDistance(From, To, Unweighted);
 }
 
 void AMDGPUNextUseAnalysis::getReachableUses(

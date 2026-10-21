@@ -290,6 +290,13 @@ public:
   bool isForwardReachable(const MachineBasicBlock *From,
                           const MachineBasicBlock *To) const;
 
+  /// Test-only: raw inter-block distance as stored by the analysis, before any
+  /// instruction head/tail adjustment. \p From and \p To must differ.
+  /// Returns NextUseDistance::unreachable() when no path is recorded.
+  NextUseDistance getInterBlockDistanceForTest(const MachineBasicBlock *From,
+                                               const MachineBasicBlock *To,
+                                               bool Unweighted) const;
+
   void getReachableUses(Register LiveReg, LaneBitmask LaneMask,
                         const MachineInstr &MI,
                         SmallVector<const MachineOperand *> &Uses) const;

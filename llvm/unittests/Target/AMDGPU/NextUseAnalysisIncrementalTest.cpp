@@ -23,7 +23,11 @@
 #include "llvm/Support/raw_ostream.h"
 #include "gtest/gtest.h"
 
+#include "llvm/ADT/PostOrderIterator.h"
+
 #include <chrono>
+#include <cstdlib>
+#include <iterator>
 #include <type_traits>
 #include <utility>
 
@@ -297,6 +301,249 @@ static void expectInstrRemovedMatchesFreshRecompute(
   expectSnapshotsEqual(AfterIncremental, FreshSnap);
 }
 
+static unsigned refBlockSize(const MachineBasicBlock &BB, bool CountPhis) {
+  unsigned Size = BB.size();
+  if (!CountPhis)
+    Size -= std::distance(BB.begin(), BB.getFirstNonPHI());
+  return Size;
+}
+
+static unsigned refRelativeLoopDepth(const MachineLoopInfo &MLI,
+                                     const MachineBasicBlock *From,
+                                     const MachineBasicBlock *To) {
+  MachineLoop *LoopFrom = MLI.getLoopFor(From);
+  MachineLoop *LoopTo = MLI.getLoopFor(To);
+
+  if (!LoopFrom)
+    return 0;
+
+  if (!LoopTo)
+    return LoopFrom->getLoopDepth();
+
+  if (LoopFrom->contains(LoopTo))
+    return 0;
+
+  if (LoopTo->contains(LoopFrom))
+    return LoopFrom->getLoopDepth() - LoopTo->getLoopDepth();
+
+  unsigned Depth = 0;
+  for (MachineLoop *A = LoopFrom; A != nullptr;
+       A = A->getParentLoop(), ++Depth) {
+    if (A->contains(LoopTo))
+      return Depth;
+  }
+  return LoopFrom->getLoopDepth();
+}
+
+struct RefInterBlockDistance {
+  NextUseDistance Weighted = NextUseDistance::unreachable();
+  NextUseDistance Unweighted = NextUseDistance::unreachable();
+
+  RefInterBlockDistance() = default;
+  RefInterBlockDistance(NextUseDistance W, NextUseDistance U)
+      : Weighted(W), Unweighted(U) {}
+
+  bool operator==(const RefInterBlockDistance &O) const {
+    return Weighted == O.Weighted && Unweighted == O.Unweighted;
+  }
+  bool operator!=(const RefInterBlockDistance &O) const {
+    return !(*this == O);
+  }
+};
+
+using RefInterBlockDistanceMap =
+    DenseMap<unsigned, DenseMap<unsigned, RefInterBlockDistance>>;
+
+static RefInterBlockDistanceMap computeReferenceInterBlockDistances(
+    const MachineFunction &MF, const MachineLoopInfo &MLI, bool CountPhis) {
+  RefInterBlockDistanceMap Distances;
+
+  bool Changed = false;
+  unsigned Iterations = 0;
+  const unsigned MaxIterations = MF.getNumBlockIDs() + 2;
+  do {
+    if (++Iterations > MaxIterations) {
+      ADD_FAILURE() << "reference inter-block distance fixpoint did not "
+                       "converge";
+      return Distances;
+    }
+    Changed = false;
+    for (const MachineBasicBlock *MBB : post_order(&MF)) {
+      unsigned MBBNum = MBB->getNumber();
+
+      RefInterBlockDistanceMap::mapped_type Prev = std::move(Distances[MBBNum]);
+      RefInterBlockDistanceMap::mapped_type Curr;
+      Curr.reserve(Prev.size());
+
+      for (const MachineBasicBlock *Succ : MBB->successors())
+        Curr[Succ->getNumber()] = RefInterBlockDistance{0, 0};
+
+      for (const MachineBasicBlock *Succ : MBB->successors()) {
+        unsigned SuccNum = Succ->getNumber();
+        const unsigned UnweightedSize = refBlockSize(*Succ, CountPhis);
+
+        auto SuccRow = Distances.find(SuccNum);
+        if (SuccRow == Distances.end())
+          continue;
+
+        for (const auto &[DestBlockNum, DestDist] : SuccRow->second) {
+          if (DestBlockNum == MBBNum)
+            continue;
+
+          const MachineBasicBlock *DestMBB = MF.getBlockNumbered(DestBlockNum);
+
+          NextUseDistance UnweightedDist = NextUseDistance::unreachable();
+          if (DestDist.Unweighted.isReachable())
+            UnweightedDist = UnweightedSize + DestDist.Unweighted;
+
+          unsigned SuccToDestLoopDepth =
+              refRelativeLoopDepth(MLI, Succ, DestMBB);
+
+          NextUseDistance WeightedDist = NextUseDistance::unreachable();
+          if (DestDist.Weighted.isReachable())
+            WeightedDist =
+                DestDist.Weighted +
+                NextUseDistance::fromSize(UnweightedSize, SuccToDestLoopDepth);
+
+          auto [I, First] =
+              Curr.try_emplace(DestBlockNum, WeightedDist, UnweightedDist);
+          if (!First) {
+            RefInterBlockDistance &Slot = I->second;
+            Slot.Weighted = min(Slot.Weighted, WeightedDist);
+            Slot.Unweighted = min(Slot.Unweighted, UnweightedDist);
+          }
+        }
+      }
+      Changed |= (Prev != Curr);
+      Distances[MBBNum] = std::move(Curr);
+    }
+  } while (Changed);
+
+  return Distances;
+}
+
+static RefInterBlockDistance
+lookupReferenceDistance(const RefInterBlockDistanceMap &Table, unsigned FromNum,
+                        unsigned ToNum) {
+  auto FromIt = Table.find(FromNum);
+  if (FromIt == Table.end())
+    return {};
+  auto ToIt = FromIt->second.find(ToNum);
+  if (ToIt == FromIt->second.end())
+    return {};
+  return ToIt->second;
+}
+
+static void expectInterBlockDistancesMatchReference(
+    const AMDGPUNextUseAnalysis &NUA, const MachineFunction &MF,
+    const MachineLoopInfo &MLI, AMDGPUNextUseAnalysis::Config Cfg) {
+  const RefInterBlockDistanceMap Ref =
+      computeReferenceInterBlockDistances(MF, MLI, Cfg.CountPhis);
+
+  for (unsigned FromNum = 0, NumIds = MF.getNumBlockIDs(); FromNum != NumIds;
+       ++FromNum) {
+    const MachineBasicBlock *From = MF.getBlockNumbered(FromNum);
+    if (!From)
+      continue;
+
+    for (unsigned ToNum = 0; ToNum != NumIds; ++ToNum) {
+      if (FromNum == ToNum)
+        continue;
+      const MachineBasicBlock *To = MF.getBlockNumbered(ToNum);
+      if (!To)
+        continue;
+
+      RefInterBlockDistance ExpectedRef =
+          lookupReferenceDistance(Ref, FromNum, ToNum);
+      if (Cfg.ForwardOnly && !NUA.isForwardReachable(From, To)) {
+        ExpectedRef.Weighted = NextUseDistance::unreachable();
+        ExpectedRef.Unweighted = NextUseDistance::unreachable();
+      }
+
+      SCOPED_TRACE("blocks " + Twine(FromNum) + " -> " + Twine(ToNum) +
+                   " weighted");
+      NextUseDistance GotWeighted =
+          NUA.getInterBlockDistanceForTest(From, To, /*Unweighted*/ false);
+      EXPECT_EQ(ExpectedRef.Weighted.getRawValue(), GotWeighted.getRawValue());
+
+      SCOPED_TRACE("blocks " + Twine(FromNum) + " -> " + Twine(ToNum) +
+                   " unweighted");
+      NextUseDistance GotUnweighted =
+          NUA.getInterBlockDistanceForTest(From, To, /*Unweighted*/ true);
+      EXPECT_EQ(ExpectedRef.Unweighted.getRawValue(),
+                GotUnweighted.getRawValue());
+    }
+  }
+}
+
+class CanonicalDigest {
+  uint64_t H = 0xcbf29ce484222325ULL;
+
+public:
+  void add(StringRef S) {
+    for (char C : S) {
+      H ^= static_cast<unsigned char>(C);
+      H *= 0x100000001b3ULL;
+    }
+  }
+
+  void add(int64_t V) {
+    add(Twine(V).str());
+    add(";");
+  }
+
+  uint64_t value() const { return H; }
+};
+
+static uint64_t digestInterBlockDistances(const AMDGPUNextUseAnalysis &NUA,
+                                          const MachineFunction &MF) {
+  CanonicalDigest D;
+  for (unsigned FromNum = 0, NumIds = MF.getNumBlockIDs(); FromNum != NumIds;
+       ++FromNum) {
+    const MachineBasicBlock *From = MF.getBlockNumbered(FromNum);
+    if (!From)
+      continue;
+    for (unsigned ToNum = 0; ToNum != NumIds; ++ToNum) {
+      if (FromNum == ToNum)
+        continue;
+      const MachineBasicBlock *To = MF.getBlockNumbered(ToNum);
+      if (!To)
+        continue;
+      D.add(FromNum);
+      D.add(ToNum);
+      D.add(NUA.getInterBlockDistanceForTest(From, To, false).getRawValue());
+      D.add(NUA.getInterBlockDistanceForTest(From, To, true).getRawValue());
+    }
+  }
+  return D.value();
+}
+
+static uint64_t digestReachability(const AMDGPUNextUseAnalysis &NUA,
+                                   const MachineFunction &MF) {
+  CanonicalDigest D;
+  for (unsigned FromNum = 0, NumIds = MF.getNumBlockIDs(); FromNum != NumIds;
+       ++FromNum) {
+    const MachineBasicBlock *From = MF.getBlockNumbered(FromNum);
+    if (!From)
+      continue;
+    for (unsigned ToNum = 0; ToNum != NumIds; ++ToNum) {
+      const MachineBasicBlock *To = MF.getBlockNumbered(ToNum);
+      if (!To)
+        continue;
+      D.add(FromNum);
+      D.add(ToNum);
+      D.add(NUA.isReachable(From, To) ? 1 : 0);
+      D.add(NUA.isForwardReachable(From, To) ? 1 : 0);
+    }
+  }
+  return D.value();
+}
+
+struct MirFuncCase {
+  const char *File;
+  const char *Func;
+};
+
 } // namespace
 
 class NextUseAnalysisIncrementalTest : public AMDGPUCodeGenTestBase {
@@ -311,18 +558,172 @@ public:
     return parseMIR(BufOrErr.get()->getBuffer());
   }
 
-  void parseTestForMIROrSkip() {
+  void parseNextUseMIROrSkip(StringRef FileName) {
     SmallString<256> Path(LLVM_AMDGPU_NEXT_USE_MIR_DIR);
-    sys::path::append(Path, "simple-loop-3blocks.mir");
+    sys::path::append(Path, FileName);
     if (!sys::fs::exists(Path))
       GTEST_SKIP() << "MIR file not found: " << Path;
     ASSERT_TRUE(parseMIRFromPath(Path));
+  }
+
+  void parseTestForMIROrSkip() {
+    parseNextUseMIROrSkip("simple-loop-3blocks.mir");
+  }
+
+  void resetParsedModule() {
+    MFAM.clear();
+    FAM.clear();
+    CGAM.clear();
+    MAM.clear();
+    Mod.reset();
+    MIR.reset();
   }
 
   static AMDGPUNextUseAnalysis::Config computeConfig() {
     return AMDGPUNextUseAnalysis::Config::Compute();
   }
 };
+
+namespace {
+
+static void
+runInterBlockReferenceCheck(MirFuncCase Case, AMDGPUNextUseAnalysis::Config Cfg,
+                            NextUseAnalysisIncrementalTest &Fixture) {
+  Fixture.resetParsedModule();
+  Fixture.parseNextUseMIROrSkip(Case.File);
+  if (Fixture.IsSkipped())
+    return;
+
+  MachineFunction &MF = Fixture.getMF(Case.Func);
+  AMDGPUNextUseAnalysis &NUA =
+      getNextUseAnalysis(MF, Fixture.MFAM, Cfg, /*Invalidate*/ true);
+  const MachineLoopInfo &MLI = Fixture.MFAM.getResult<MachineLoopAnalysis>(MF);
+  expectInterBlockDistancesMatchReference(NUA, MF, MLI, Cfg);
+}
+
+struct GoldenDigestEntry {
+  const char *File;
+  const char *Func;
+  bool Compute;
+  uint64_t Distances;
+  uint64_t Reachability;
+};
+
+// Step 2 of proposal-interblock-distances replaces the reachability oracle. It
+// must leave every digest below unchanged. A digest change during step 2 means
+// the closure disagrees with calcIsReachable and is a bug, not a golden-file
+// update.
+static constexpr bool GoldenDigestsPopulated = true;
+static constexpr GoldenDigestEntry GoldenDigests[] = {
+    {"acyclic-014bb.mir", "acyclic_014bb", false, 0x1176af95ef110adULL,
+     0xaecb6c1cd15527cdULL},
+    {"acyclic-014bb.mir", "acyclic_014bb", true, 0x46424941ee1c179dULL,
+     0xaecb6c1cd15527cdULL},
+    {"complex-control-flow-15blocks.mir", "test3", false, 0x54b67024ef25cf89ULL,
+     0x7878373e7d00620dULL},
+    {"complex-control-flow-15blocks.mir", "test3", true, 0xaadd7bc05a30fcbdULL,
+     0x7878373e7d00620dULL},
+    {"double-nested-loops-complex-cfg.mir", "test15", false,
+     0xf6940ee249471d64ULL, 0x06fedd3e12c8c5bdULL},
+    {"double-nested-loops-complex-cfg.mir", "test15", true,
+     0x442de79b672b5a7bULL, 0x06fedd3e12c8c5bdULL},
+    {"acyclic-770bb.mir", "acyclic_770bb", false, 0xfa31c411f1e8744bULL,
+     0xc7bb20a425cf538dULL},
+    {"acyclic-770bb.mir", "acyclic_770bb", true, 0x29d872a6b11b77fbULL,
+     0xc7bb20a425cf538dULL},
+};
+
+static void runGoldenDigestCheck(const GoldenDigestEntry &Entry,
+                                 NextUseAnalysisIncrementalTest &Fixture) {
+  AMDGPUNextUseAnalysis::Config Cfg =
+      Entry.Compute ? AMDGPUNextUseAnalysis::Config::Compute()
+                    : AMDGPUNextUseAnalysis::Config::Graphics();
+  Fixture.resetParsedModule();
+  Fixture.parseNextUseMIROrSkip(Entry.File);
+  if (Fixture.IsSkipped())
+    return;
+
+  MachineFunction &MF = Fixture.getMF(Entry.Func);
+  AMDGPUNextUseAnalysis &NUA =
+      getNextUseAnalysis(MF, Fixture.MFAM, Cfg, /*Invalidate*/ true);
+
+  const uint64_t Distances = digestInterBlockDistances(NUA, MF);
+  const uint64_t Reachability = digestReachability(NUA, MF);
+
+  const bool Regen = getenv("NUA_GOLDEN_REGEN") != nullptr;
+  if (Regen) {
+    llvm::outs() << "  { \"" << Entry.File << "\", \"" << Entry.Func << "\", "
+                 << (Entry.Compute ? "true" : "false") << ", 0x"
+                 << Twine::utohexstr(Distances) << ", 0x"
+                 << Twine::utohexstr(Reachability) << " },\n";
+    return;
+  }
+
+  if (Distances != Entry.Distances || Reachability != Entry.Reachability) {
+    ADD_FAILURE() << Entry.File
+                  << " preset=" << (Entry.Compute ? "Compute" : "Graphics")
+                  << ": distances expected 0x"
+                  << Twine::utohexstr(Entry.Distances) << " got 0x"
+                  << Twine::utohexstr(Distances) << "; reachability expected 0x"
+                  << Twine::utohexstr(Entry.Reachability) << " got 0x"
+                  << Twine::utohexstr(Reachability)
+                  << ". If this change is intended, re-generate with "
+                     "NUA_GOLDEN_REGEN=1 and justify the diff in the commit "
+                     "message.";
+  }
+}
+
+static constexpr MirFuncCase InterBlockReferenceCorpus[] = {
+    {"simple-loop-3blocks.mir", "test4"},
+    {"sequence_2_loops.mir", "test6"},
+    {"two-sequential-loops.mir", "test7"},
+    {"triple-nested-loops.mir", "test9"},
+    {"complex-single-loop.mir", "test5"},
+    {"complex-control-flow-11blocks.mir", "test2"},
+    {"complex-control-flow-15blocks.mir", "test3"},
+    {"acyclic-014bb.mir", "acyclic_014bb"},
+    {"acyclic-cfg-with-self-loop.mir", "test11"},
+    {"complex-acyclic-cfg-with-4-self-loops.mir", "test16"},
+    {"inner_cfg_in_2_nested_loops.mir", "test10"},
+    {"if_else_with_loops_nested_in_2_outer_loops.mir", "test13"},
+    {"loop_nested_in_3_outer_loops_complex_cfg.mir", "test14"},
+    {"nested-loops-with-side-exits-a.mir", "test12"},
+    {"double-nested-loops-complex-cfg.mir", "test15"},
+    {"three-tier-ranking-nested-loops.mir", "test_proper_nested_loops"},
+};
+
+} // namespace
+
+TEST_F(NextUseAnalysisIncrementalTest, InterBlockDistanceMatchesReference) {
+  for (bool Compute : {false, true}) {
+    AMDGPUNextUseAnalysis::Config Cfg =
+        Compute ? AMDGPUNextUseAnalysis::Config::Compute()
+                : AMDGPUNextUseAnalysis::Config::Graphics();
+    for (const MirFuncCase &Case : InterBlockReferenceCorpus) {
+      SCOPED_TRACE(Twine(Case.File) + " " + (Compute ? "Compute" : "Graphics"));
+      ASSERT_NO_FATAL_FAILURE(runInterBlockReferenceCheck(Case, Cfg, *this));
+      if (IsSkipped())
+        return;
+    }
+  }
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, InterBlockDistanceGoldenDigest) {
+  if (getenv("NUA_GOLDEN_REGEN")) {
+    llvm::outs() << "static constexpr GoldenDigestEntry GoldenDigests[] = {\n";
+    for (const GoldenDigestEntry &Entry : GoldenDigests)
+      runGoldenDigestCheck(Entry, *this);
+    llvm::outs() << "};\n";
+    return;
+  }
+
+  if (!GoldenDigestsPopulated) {
+    GTEST_SKIP() << "GoldenDigests not populated; run with NUA_GOLDEN_REGEN=1";
+  }
+
+  for (const GoldenDigestEntry &Entry : GoldenDigests)
+    runGoldenDigestCheck(Entry, *this);
+}
 
 TEST_F(NextUseAnalysisIncrementalTest, NoChangeInstrAddedMatchesFresh) {
   parseTestForMIROrSkip();
