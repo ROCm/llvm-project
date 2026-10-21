@@ -359,6 +359,47 @@ public:
   void instrRemoving(const MachineInstr &MI);
   /// Call after an instruction is erased from \p MBB.
   void instrRemoved(const MachineBasicBlock &MBB);
+
+  //----------------------------------------------------------------------------
+  // Operand-level updates (no instruction inserted, erased or moved)
+  //
+  // These dirty only register-keyed caches. Instruction ids, block sizes, paths
+  // and inter-block distances are unaffected by an in-place operand change, so
+  // there is no fixpoint to rerun: cost is O(number of registers named).
+  // Dirtied entries are recomputed from MRI on the next query, so a dirty or
+  // missing entry is never reported as "no next use".
+  //
+  // Call after the rewrite, and name every register whose def/use set changed,
+  // including both sides of a rewrite. Naming extra registers only costs a
+  // recomputation; omitting the register that *gained* a use is unsafe, because
+  // a cached empty use list reads as "never used again".
+  //----------------------------------------------------------------------------
+  /// Notify that the def/use operands of \p Regs changed in place: a use was
+  /// repointed, a PHI incoming operand was rewritten, or an undef flag was
+  /// toggled. May be batched across a whole SSA repair step.
+  void regUsesChanged(ArrayRef<Register> Regs);
+
+  /// Convenience overload: each pair is a rewritten use operand and the
+  /// register it previously read. Derives the affected register set. The
+  /// operands are only read for their current register, so they must still be
+  /// live; use instrOperandsChanging when the operand list itself is resized.
+  void regUsesChanged(
+      ArrayRef<std::pair<const MachineOperand *, Register>> Rewrites);
+
+  /// Notify before \p MI's operand list changes shape -- operands added or
+  /// removed, e.g. a new incoming pair on a PHI. Growing the list reallocates
+  /// MachineInstr's operand array, dangling every cached pointer into \p MI.
+  /// Dirties the registers \p MI reads now; pair with instrOperandsChanged so
+  /// the registers it reads afterwards are dirtied too.
+  void instrOperandsChanging(const MachineInstr &MI);
+
+  /// Notify after \p MI's operand list changed shape. See
+  /// instrOperandsChanging.
+  void instrOperandsChanged(const MachineInstr &MI);
+
+  /// \Returns true when every cached use list still matches MRI, i.e. no
+  /// notification was missed. Expensive; for assertions and tests.
+  bool verifyRegUseCache() const;
 };
 
 //==============================================================================

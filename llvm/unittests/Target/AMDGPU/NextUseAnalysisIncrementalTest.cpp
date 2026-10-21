@@ -208,6 +208,59 @@ static void expectInstrAddedMatchesFreshRecompute(
   expectSnapshotsEqual(AfterIncremental, FreshSnap);
 }
 
+// Exercise the operand-level hooks: rewrite uses in place, notify, and require
+// the result to match a full rebuild. The warm-up query matters -- it populates
+// the register-keyed caches, including the empty use lists that make a missed
+// notification read as "no next use" rather than crash.
+static void expectRegUsesChangedMatchesFreshRecompute(
+    MachineFunction &MF, MachineFunctionAnalysisManager &MFAM,
+    AMDGPUNextUseAnalysis::Config Cfg, StringRef Label,
+    function_ref<void(MachineFunction &, AMDGPUNextUseAnalysis &)>
+        RewriteAndNotify) {
+  AMDGPUNextUseAnalysis &Inc =
+      getNextUseAnalysis(MF, MFAM, Cfg, /*Invalidate*/ true);
+
+  UpdateQueryTiming Timings;
+  NextUseSnapshot WarmSnap;
+  timeMicros(Timings.BeforeQueryUs,
+             [&] { captureNextUseSnapshot(Inc, MF, WarmSnap); });
+  ASSERT_TRUE(Inc.verifyRegUseCache());
+
+  timeMicros(Timings.IncrementalUpdateUs, [&] { RewriteAndNotify(MF, Inc); });
+  EXPECT_TRUE(Inc.verifyRegUseCache());
+
+  NextUseSnapshot AfterIncremental;
+  timeMicros(Timings.IncrementalQueryUs,
+             [&] { captureNextUseSnapshot(Inc, MF, AfterIncremental); });
+
+  AMDGPUNextUseAnalysis *FreshPtr = nullptr;
+  timeMicros(Timings.FullRebuildUs, [&] {
+    FreshPtr = &getNextUseAnalysis(MF, MFAM, Cfg, /*Invalidate*/ true);
+  });
+  AMDGPUNextUseAnalysis &Fresh = *FreshPtr;
+  NextUseSnapshot FreshSnap;
+  timeMicros(Timings.FullQueryUs,
+             [&] { captureNextUseSnapshot(Fresh, MF, FreshSnap); });
+
+  reportUpdateQueryTiming(Label, Timings);
+  expectSnapshotsEqual(AfterIncremental, FreshSnap);
+}
+
+// Repoint every use of \p OldReg in \p MI at \p NewReg, reporting the rewrite
+// the way SSA repair would.
+static void rewriteUsesInInstr(AMDGPUNextUseAnalysis &NUA, MachineInstr &MI,
+                               Register OldReg, Register NewReg) {
+  SmallVector<std::pair<const MachineOperand *, Register>, 4> Rewrites;
+  for (MachineOperand &MO : MI.uses()) {
+    if (!MO.isReg() || MO.getReg() != OldReg)
+      continue;
+    MO.setReg(NewReg);
+    Rewrites.emplace_back(&MO, OldReg);
+  }
+  ASSERT_FALSE(Rewrites.empty());
+  NUA.regUsesChanged(Rewrites);
+}
+
 static void removeMI(AMDGPUNextUseAnalysis &NUA, MachineInstr &MI) {
   MachineBasicBlock *MBB = MI.getParent();
   NUA.instrRemoving(MI);
@@ -438,6 +491,128 @@ TEST_F(NextUseAnalysisIncrementalTest, RemoveInstrFromLoopBody) {
       [&](AMDGPUNextUseAnalysis &NUA, MachineFunction &) {
         MachineInstr &MI = *std::next(MBB1.getFirstNonPHI());
         removeMI(NUA, MI);
+      });
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, RewriteUseInLoopBody) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  // %16 = V_LSHL_OR_B32_e64 %13, 8, %12 -- repoint the %13 use at %12.
+  Register V12 = Register::index2VirtReg(12);
+  Register V13 = Register::index2VirtReg(13);
+  MachineInstr *MI = MRI.getVRegDef(Register::index2VirtReg(16));
+  ASSERT_NE(MI, nullptr);
+
+  expectRegUsesChangedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), "RewriteUseInLoopBody",
+      [&](MachineFunction &, AMDGPUNextUseAnalysis &NUA) {
+        rewriteUsesInInstr(NUA, *MI, V13, V12);
+      });
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, RewritePhiIncomingOperand) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  // %6 = PHI %1, %bb.0, %7, %bb.1 -- repoint the bb.0 incoming value at %2.
+  Register V1 = Register::index2VirtReg(1);
+  Register V2 = Register::index2VirtReg(2);
+  MachineInstr *Phi = MRI.getVRegDef(Register::index2VirtReg(6));
+  ASSERT_NE(Phi, nullptr);
+  ASSERT_TRUE(Phi->isPHI());
+
+  expectRegUsesChangedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), "RewritePhiIncomingOperand",
+      [&](MachineFunction &, AMDGPUNextUseAnalysis &NUA) {
+        rewriteUsesInInstr(NUA, *Phi, V1, V2);
+      });
+}
+
+// The hazardous direction: a register whose cached use list is empty gains a
+// use. Without notification that empty list reads as "never used again".
+TEST_F(NextUseAnalysisIncrementalTest, RewriteUseToPreviouslyUnusedReg) {
+  StringRef MIR = R"MIR(
+--- |
+  define amdgpu_ps void @unused_def() {
+  ret void
+  }
+...
+---
+name:            unused_def
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    successors: %bb.1(0x80000000)
+    %0:vgpr_32 = IMPLICIT_DEF
+    %1:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
+
+  bb.1:
+    %2:vgpr_32 = V_ADD_U32_e64 %1, %0, 0, implicit $exec
+    S_NOP 0, implicit %0
+    S_ENDPGM 0
+...
+)MIR";
+  ASSERT_TRUE(parseMIR(MIR));
+  MachineFunction &MF = getMF("unused_def");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  Register V0 = Register::index2VirtReg(0);
+  Register V2 = Register::index2VirtReg(2);
+  ASSERT_TRUE(MRI.use_nodbg_empty(V2));
+  MachineBasicBlock &MBB1 = *MF.getBlockNumbered(1);
+  MachineInstr *Nop = &*std::next(MBB1.begin());
+  ASSERT_EQ(Nop->getOpcode(), AMDGPU::S_NOP);
+
+  expectRegUsesChangedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), "RewriteUseToPreviouslyUnusedReg",
+      [&](MachineFunction &, AMDGPUNextUseAnalysis &NUA) {
+        rewriteUsesInInstr(NUA, *Nop, V0, V2);
+      });
+}
+
+// Without the notification the same rewrite leaves the cache stale, which
+// verifyRegUseCache is there to catch.
+TEST_F(NextUseAnalysisIncrementalTest, MissedRegUsesChangedLeavesCacheStale) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  AMDGPUNextUseAnalysis &Inc =
+      getNextUseAnalysis(MF, MFAM, computeConfig(), /*Invalidate*/ true);
+  NextUseSnapshot WarmSnap;
+  captureNextUseSnapshot(Inc, MF, WarmSnap);
+  ASSERT_TRUE(Inc.verifyRegUseCache());
+
+  MachineInstr *MI = MRI.getVRegDef(Register::index2VirtReg(16));
+  ASSERT_NE(MI, nullptr);
+  for (MachineOperand &MO : MI->uses()) {
+    if (MO.isReg() && MO.getReg() == Register::index2VirtReg(13))
+      MO.setReg(Register::index2VirtReg(12));
+  }
+
+  EXPECT_FALSE(Inc.verifyRegUseCache());
+}
+
+// Growing an operand list reallocates MachineInstr's operand array, so every
+// cached pointer into that instruction has to be dropped first.
+TEST_F(NextUseAnalysisIncrementalTest, AddOperandToInstr) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  MachineInstr *MI = MRI.getVRegDef(Register::index2VirtReg(16));
+  ASSERT_NE(MI, nullptr);
+
+  expectRegUsesChangedMatchesFreshRecompute(
+      MF, MFAM, computeConfig(), "AddOperandToInstr",
+      [&](MachineFunction &MFRef, AMDGPUNextUseAnalysis &NUA) {
+        NUA.instrOperandsChanging(*MI);
+        MachineInstrBuilder(MFRef, MI).addReg(Register::index2VirtReg(14),
+                                              RegState::Implicit);
+        NUA.instrOperandsChanged(*MI);
       });
 }
 

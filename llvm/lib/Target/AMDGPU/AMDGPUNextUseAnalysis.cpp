@@ -2045,6 +2045,54 @@ public:
     updateAfterInstrChangeInBlock(BB);
   }
 
+  /// Dirty the register-keyed caches for \p Regs. Instruction ids, block sizes,
+  /// paths and inter-block distances are unaffected by an in-place operand
+  /// change, so none of them are recomputed here.
+  void regUsesChanged(ArrayRef<Register> Regs) {
+    assert(PendingCachedDistances.empty() &&
+           "regUsesChanged called mid getNextUseDistances traversal");
+    for (Register Reg : Regs) {
+      // Both are memos: getRegisterUses repopulates from MRI and a missing
+      // CachedDistances entry is a cache miss, so dropping them cannot be read
+      // as "no next use".
+      RegUseMap.erase(Reg);
+      CachedDistances.erase(Reg);
+    }
+    // CachedDistancesMI stays valid: no instruction moved.
+  }
+
+  void instrOperandsChanging(const MachineInstr &MI) {
+    SmallVector<Register, 8> Regs;
+    for (const MachineOperand &MO : MI.operands()) {
+      if (MO.isReg() && MO.getReg().isVirtual())
+        Regs.push_back(MO.getReg());
+    }
+    regUsesChanged(Regs);
+  }
+
+  void instrOperandsChanged(const MachineInstr &MI) {
+    instrOperandsChanging(MI);
+  }
+
+  /// \Returns true when every cached use list still matches MRI. Expensive;
+  /// intended for assertions and tests that exercise the notification hooks.
+  bool verifyRegUseCache() const {
+    for (const auto &[Reg, CachedUses] : RegUseMap) {
+      SmallVector<const MachineOperand *> Expected;
+      for (const MachineOperand &UseMO : MRI->use_nodbg_operands(Reg)) {
+        if (!UseMO.isUndef())
+          Expected.push_back(&UseMO);
+      }
+      if (CachedUses.size() != Expected.size())
+        return false;
+      for (const MachineOperand *MO : Expected) {
+        if (!llvm::is_contained(CachedUses, MO))
+          return false;
+      }
+    }
+    return true;
+  }
+
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // Helper methods for printAsJson
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2358,6 +2406,34 @@ void AMDGPUNextUseAnalysis::instrRemoving(const MachineInstr &MI) {
 
 void AMDGPUNextUseAnalysis::instrRemoved(const MachineBasicBlock &MBB) {
   Impl->instrRemoved(MBB);
+}
+
+void AMDGPUNextUseAnalysis::regUsesChanged(ArrayRef<Register> Regs) {
+  Impl->regUsesChanged(Regs);
+}
+
+void AMDGPUNextUseAnalysis::regUsesChanged(
+    ArrayRef<std::pair<const MachineOperand *, Register>> Rewrites) {
+  SmallVector<Register, 16> Regs;
+  Regs.reserve(Rewrites.size() * 2);
+  for (const auto &[MO, OldReg] : Rewrites) {
+    assert(MO && MO->isReg() && "use rewrite needs a register operand");
+    Regs.push_back(MO->getReg());
+    Regs.push_back(OldReg);
+  }
+  Impl->regUsesChanged(Regs);
+}
+
+void AMDGPUNextUseAnalysis::instrOperandsChanging(const MachineInstr &MI) {
+  Impl->instrOperandsChanging(MI);
+}
+
+void AMDGPUNextUseAnalysis::instrOperandsChanged(const MachineInstr &MI) {
+  Impl->instrOperandsChanged(MI);
+}
+
+bool AMDGPUNextUseAnalysis::verifyRegUseCache() const {
+  return Impl->verifyRegUseCache();
 }
 
 //==============================================================================
