@@ -980,6 +980,64 @@ getDefaultNumBlocksGenericSPMD(const DeviceGeometryPropsTy &Props) {
   return Props.NumComputeUnits * OMPX_GenericSpmdTeamsPerCU.get();
 }
 
+/// Get the number of blocks for each thread to run one iteration of a loop of
+/// \p LoopTripCount iterations. If that results in fewer than
+/// \p DefaultNumBlocks blocks, lower the number of threads per block
+/// \p EffectiveNumThreads, unless the user set it, to increase the outer
+/// parallelism.
+static uint64_t getOneIterationPerThreadNumBlocks(uint64_t LoopTripCount,
+                                                  uint64_t DefaultNumBlocks,
+                                                  uint32_t &EffectiveNumThreads,
+                                                  bool IsNumThreadsStrict,
+                                                  bool IsNumThreadsFromUser) {
+  assert(LoopTripCount > 0 && "Expected a known loop trip count");
+
+  // Envar that sets the minimum number of threads to use for such a loop.
+  static UInt32Envar OMPX_MinThreadsForLowTripCount(
+      "LIBOMPTARGET_MIN_THREADS_FOR_LOW_TRIP_COUNT", 32);
+
+  uint32_t MinThreads =
+      std::min(OMPX_MinThreadsForLowTripCount.get(), EffectiveNumThreads);
+
+  // Honor the thread_limit clause; only lower the number of threads.
+  [[maybe_unused]] auto OldNumThreads = EffectiveNumThreads;
+  uint64_t NumBlocks;
+  if (LoopTripCount >= DefaultNumBlocks * EffectiveNumThreads ||
+      IsNumThreadsFromUser || IsNumThreadsStrict) {
+    // Enough parallelism for blocks and threads.
+    NumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
+    assert(IsNumThreadsFromUser ||
+           NumBlocks >= DefaultNumBlocks &&
+               "Expected sufficient outer parallelism.");
+  } else if (LoopTripCount >= DefaultNumBlocks * MinThreads) {
+    // Enough parallelism for blocks, limit threads.
+
+    // This case is hard; for now, we force "full warps":
+    // First, compute a thread count assuming DefaultNumBlocks.
+    auto NumThreadsDefaultBlocks =
+        (LoopTripCount + DefaultNumBlocks - 1) / DefaultNumBlocks;
+    // Now get a power of two that is larger or equal.
+    auto NumThreadsDefaultBlocksP2 =
+        llvm::PowerOf2Ceil(NumThreadsDefaultBlocks);
+    // Do not increase a thread limit given be the user.
+    EffectiveNumThreads =
+        std::min(EffectiveNumThreads, uint32_t(NumThreadsDefaultBlocksP2));
+    assert(EffectiveNumThreads >= MinThreads &&
+           "Expected sufficient inner parallelism.");
+    NumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
+  } else {
+    // Not enough parallelism for blocks and threads, limit both.
+    EffectiveNumThreads = std::min(EffectiveNumThreads, MinThreads);
+    NumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
+  }
+
+  assert(EffectiveNumThreads * NumBlocks >= LoopTripCount &&
+         "Expected sufficient parallelism");
+  assert(OldNumThreads >= EffectiveNumThreads &&
+         "Number of threads cannot be increased!");
+  return NumBlocks;
+}
+
 /// Get the effective number of blocks for the kernel based on the
 /// user-defined number of blocks and the loop trip count.
 /// The number of threads \p EffectiveNumThreads can be adjusted by this
@@ -1001,14 +1059,18 @@ static uint32_t getEffectiveNumBlocks(
     return std::min(UserNumBlocks,
                     getDeviceBlockLimit(GenericDevice, EffectiveNumThreads));
 
-  // Return the number of blocks required to cover the loop iterations.
+  // Return the number of blocks required to cover the loop iterations. As for
+  // SPMD below, trade threads for blocks if the loop is short.
   // Downstream: a big-jump-loop kernel has no per-block overhead, so it also
   // gets one thread per iteration. It loops over the grid, so the number of
   // blocks may be capped. Only AMDGPU devices run big-jump-loop kernels.
   if (KernelEnv.isNoLoopMode() || KernelEnv.isBigJumpLoopMode()) {
     uint64_t NumBlocks =
-        LoopTripCount > 0 ? llvm::divideCeil(LoopTripCount, EffectiveNumThreads)
-                          : 1;
+        LoopTripCount > 0
+            ? getOneIterationPerThreadNumBlocks(
+                  LoopTripCount, Props.DefaultNumBlocks, EffectiveNumThreads,
+                  IsNumThreadsStrict, IsNumThreadsFromUser)
+            : 1;
     if (KernelEnv.isBigJumpLoopMode())
       NumBlocks = std::min(
           {NumBlocks, BigJumpLoopMaxNumBlocks,
@@ -1032,48 +1094,9 @@ static uint32_t getEffectiveNumBlocks(
       // will execute one iteration of the loop; rounded up to the nearest
       // integer. However, if that results in too few blocks, we artificially
       // reduce the thread count per block to increase the outer parallelism.
-      // Envar that sets the minimum number of threads to use for such a loop.
-      static UInt32Envar OMPX_MinThreadsForLowTripCount(
-          "LIBOMPTARGET_MIN_THREADS_FOR_LOW_TRIP_COUNT", 32);
-
-      uint32_t MinThreads =
-          std::min(OMPX_MinThreadsForLowTripCount.get(), EffectiveNumThreads);
-
-      // Honor the thread_limit clause; only lower the number of threads.
-      [[maybe_unused]] auto OldNumThreads = EffectiveNumThreads;
-      if (LoopTripCount >= DefaultNumBlocks * EffectiveNumThreads ||
-          IsNumThreadsFromUser || IsNumThreadsStrict) {
-        // Enough parallelism for blocks and threads.
-        TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
-        assert(IsNumThreadsFromUser ||
-               TripCountNumBlocks >= DefaultNumBlocks &&
-                   "Expected sufficient outer parallelism.");
-      } else if (LoopTripCount >= DefaultNumBlocks * MinThreads) {
-        // Enough parallelism for blocks, limit threads.
-
-        // This case is hard; for now, we force "full warps":
-        // First, compute a thread count assuming DefaultNumBlocks.
-        auto NumThreadsDefaultBlocks =
-            (LoopTripCount + DefaultNumBlocks - 1) / DefaultNumBlocks;
-        // Now get a power of two that is larger or equal.
-        auto NumThreadsDefaultBlocksP2 =
-            llvm::PowerOf2Ceil(NumThreadsDefaultBlocks);
-        // Do not increase a thread limit given be the user.
-        EffectiveNumThreads =
-            std::min(EffectiveNumThreads, uint32_t(NumThreadsDefaultBlocksP2));
-        assert(EffectiveNumThreads >= MinThreads &&
-               "Expected sufficient inner parallelism.");
-        TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
-      } else {
-        // Not enough parallelism for blocks and threads, limit both.
-        EffectiveNumThreads = std::min(EffectiveNumThreads, MinThreads);
-        TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
-      }
-
-      assert(EffectiveNumThreads * TripCountNumBlocks >= LoopTripCount &&
-             "Expected sufficient parallelism");
-      assert(OldNumThreads >= EffectiveNumThreads &&
-             "Number of threads cannot be increased!");
+      TripCountNumBlocks = getOneIterationPerThreadNumBlocks(
+          LoopTripCount, DefaultNumBlocks, EffectiveNumThreads,
+          IsNumThreadsStrict, IsNumThreadsFromUser);
     } else {
       assert((KernelEnv.isGenericMode() || KernelEnv.isGenericSPMDMode()) &&
              "Unexpected execution mode!");
