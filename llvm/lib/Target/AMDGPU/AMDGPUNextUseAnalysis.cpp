@@ -57,6 +57,7 @@
 #include "GCNSubtarget.h"
 
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -71,6 +72,8 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <limits>
+#include <queue>
 #include <string>
 
 using namespace llvm;
@@ -122,6 +125,17 @@ cl::opt<bool> ConfigPreciseUseModelingOpt(
 cl::opt<bool> ConfigPromoteToPreheaderOpt(
     "amdgpu-next-use-analysis-use-preheader-model", cl::Hidden,
     cl::desc("Promote loop-entry and inner-loop uses to the loop preheader"));
+
+cl::opt<unsigned> UnweightedBulkThreshold(
+    "amdgpu-next-use-unweighted-bulk-threshold", cl::init(0), cl::Hidden,
+    cl::desc("Distinct unweighted source rows before bulk fixpoint build. "
+             "0 uses the default (1)."));
+
+cl::opt<unsigned> WeightedBulkThreshold(
+    "amdgpu-next-use-weighted-bulk-threshold", cl::init(0), cl::Hidden,
+    cl::desc("Distinct weighted source rows before bulk fixpoint build. "
+             "0 uses the default (1)."));
+
 } // namespace
 
 //==============================================================================
@@ -282,7 +296,10 @@ private:
     initializeCfgPaths();
     initializeReachabilityClosures();
     LLVM_DEBUG(dumpPaths());
-    initializeInterBlockDistances();
+    if (!Cfg.InterBlockBuild.DeferBulkBuildAtInit) {
+      bulkBuildUnweightedRows();
+      bulkBuildWeightedRows();
+    }
   }
 
   void clearTables() {
@@ -291,6 +308,14 @@ private:
     Paths.clear();
     ReachableClosure.clear();
     ForwardReachableClosure.clear();
+    UnweightedRows.clear();
+    UnweightedGeneration = 1;
+    UnweightedRowsAtGeneration = 0;
+    UnweightedRowsBulkBuilt = false;
+    WeightedRows.clear();
+    WeightedGeneration = 1;
+    WeightedRowsAtGeneration = 0;
+    WeightedRowsBulkBuilt = false;
 
     resetDistanceCache();
   }
@@ -706,128 +731,420 @@ private:
   }
 
   //----------------------------------------------------------------------------
-  // Inter-block distance - the weighted and unweighted cost (i.e. "distance")
-  // to travel from one MachineBasicBlock to another.
-  //
-  // Values are pre-computed and stored in 'InterBlockDistances' using a
-  // backwards data-flow algorithm similar to the one described in 4.1 of a
-  // "Register Spilling and Live-Range Splitting for SSA-Form Programs" by
-  // Matthias Braun and Sebastian Hack, CC'09. This replaced a prior
-  // implementation based on Dijkstra's shortest path algorithm.
+  // Inter-block distance - weighted and unweighted cost between basic blocks.
+  // Unweighted rows: Dijkstra or an unweighted-only backward fixpoint (bulk).
+  // Weighted rows: destination-loop-partitioned Dijkstra or weighted fixpoint
+  // (bulk). Rows are sparse maps (destination -> distance) memoised by source
+  // block; instruction changes bump a generation instead of clearing every row.
   //----------------------------------------------------------------------------
 private:
-  struct InterBlockDistance {
-    NextUseDistance Weighted;
-    NextUseDistance Unweighted;
-    InterBlockDistance() : Weighted(-1), Unweighted(-1) {}
-    InterBlockDistance(NextUseDistance W, NextUseDistance UW)
-        : Weighted(W), Unweighted(UW) {}
-    bool operator==(const InterBlockDistance &Other) const {
-      return Weighted == Other.Weighted && Unweighted == Other.Unweighted;
-    }
-    bool operator!=(const InterBlockDistance &Other) const {
-      return !(*this == Other);
-    }
+  using InterBlockRowMap = DenseMap<unsigned, NextUseDistance>;
+  using InterBlockFixpointMap = DenseMap<unsigned, InterBlockRowMap>;
 
-    void print(raw_ostream &OS) const {
-      OS << "{W=";
-      Weighted.print(OS);
-      OS << " U=";
-      Unweighted.print(OS);
-      OS << "}";
-    }
-
-    LLVM_DUMP_METHOD void dump() const {
-      print(dbgs());
-      dbgs() << '\n';
-    }
+  struct InterBlockRow {
+    InterBlockRowMap Distances;
+    uint64_t Generation = 0;
   };
-  using InterBlockDistanceMap =
-      DenseMap<unsigned, DenseMap<unsigned, InterBlockDistance>>;
-  InterBlockDistanceMap InterBlockDistances;
 
-  void initializeInterBlockDistances() {
-    InterBlockDistanceMap Distances;
+  mutable std::vector<InterBlockRow> UnweightedRows;
+  mutable uint64_t UnweightedGeneration = 1;
+  mutable unsigned UnweightedRowsAtGeneration = 0;
+  mutable bool UnweightedRowsBulkBuilt = false;
+  mutable std::vector<InterBlockRow> WeightedRows;
+  mutable uint64_t WeightedGeneration = 1;
+  mutable unsigned WeightedRowsAtGeneration = 0;
+  mutable bool WeightedRowsBulkBuilt = false;
+
+  void ensureUnweightedRowStorage() const {
+    const unsigned N = MF->getNumBlockIDs();
+    if (UnweightedRows.size() < N)
+      UnweightedRows.resize(N);
+  }
+
+  void ensureWeightedRowStorage() const {
+    const unsigned N = MF->getNumBlockIDs();
+    if (WeightedRows.size() < N)
+      WeightedRows.resize(N);
+  }
+
+  static NextUseDistance lookupInterBlockRow(const InterBlockRowMap &Row,
+                                             unsigned ToNum) {
+    auto J = Row.find(ToNum);
+    return J == Row.end() ? NextUseDistance::unreachable() : J->second;
+  }
+
+  bool lazyUnweightedBuildTriggersBulk() const {
+    if (UnweightedRowsBulkBuilt)
+      return false;
+    const unsigned Threshold = unweightedBulkThreshold();
+    if (Threshold <= 1)
+      return UnweightedRowsAtGeneration == 0;
+    return UnweightedRowsAtGeneration + 1 >= Threshold;
+  }
+
+  bool lazyWeightedBuildTriggersBulk() const {
+    if (WeightedRowsBulkBuilt)
+      return false;
+    const unsigned Threshold = weightedBulkThreshold();
+    if (Threshold <= 1)
+      return WeightedRowsAtGeneration == 0;
+    return WeightedRowsAtGeneration + 1 >= Threshold;
+  }
+
+  void invalidateUnweightedRows() {
+    if (++UnweightedGeneration == 0) {
+      for (InterBlockRow &Row : UnweightedRows) {
+        Row.Distances.clear();
+        Row.Generation = 0;
+      }
+      UnweightedGeneration = 1;
+    }
+    UnweightedRowsAtGeneration = 0;
+    UnweightedRowsBulkBuilt = false;
+  }
+
+  void invalidateWeightedRows() {
+    if (++WeightedGeneration == 0) {
+      for (InterBlockRow &Row : WeightedRows) {
+        Row.Distances.clear();
+        Row.Generation = 0;
+      }
+      WeightedGeneration = 1;
+    }
+    WeightedRowsAtGeneration = 0;
+    WeightedRowsBulkBuilt = false;
+  }
+
+  static void installFixpointRows(std::vector<InterBlockRow> &Rows,
+                                  uint64_t Generation,
+                                  InterBlockFixpointMap &Fixpoint) {
+    for (auto &[FromNum, RowMap] : Fixpoint) {
+      InterBlockRow &Row = Rows[FromNum];
+      Row.Distances = std::move(RowMap);
+      Row.Generation = Generation;
+    }
+  }
+
+  static unsigned effectiveBulkThreshold(unsigned ConfigValue) {
+    return ConfigValue > 0 ? ConfigValue : 1;
+  }
+
+  unsigned unweightedBulkThreshold() const {
+    return effectiveBulkThreshold(Cfg.InterBlockBuild.UnweightedBulkThreshold);
+  }
+
+  unsigned weightedBulkThreshold() const {
+    return effectiveBulkThreshold(Cfg.InterBlockBuild.WeightedBulkThreshold);
+  }
+
+  MachineLoop *destLoopClass(const MachineBasicBlock *BB) const {
+    return MLI->getLoopFor(BB);
+  }
+
+  const MachineBasicBlock *
+  representativeForDestLoop(MachineLoop *DestLoop) const {
+    if (!DestLoop) {
+      for (const MachineBasicBlock &BB : *MF)
+        if (!MLI->getLoopFor(&BB))
+          return &BB;
+      return &MF->front();
+    }
+    return DestLoop->getHeader();
+  }
+
+  void collectDestLoopClasses(SmallVectorImpl<MachineLoop *> &Classes) const {
+    Classes.clear();
+    DenseSet<MachineLoop *> Seen;
+    bool HasNonLoop = false;
+    for (const MachineBasicBlock &BB : *MF) {
+      MachineLoop *L = MLI->getLoopFor(&BB);
+      if (!L)
+        HasNonLoop = true;
+      else if (Seen.insert(L).second)
+        Classes.push_back(L);
+    }
+    if (HasNonLoop)
+      Classes.insert(Classes.begin(), nullptr);
+  }
+
+  InterBlockRowMap computeUnweightedRow(const MachineBasicBlock *From) const {
+    const unsigned N = MF->getNumBlockIDs();
+    constexpr int64_t Inf = std::numeric_limits<int64_t>::max();
+
+    std::vector<int64_t> Dist(N, Inf);
+    std::vector<bool> Settled(N, false);
+
+    using QEntry = std::pair<int64_t, unsigned>;
+    std::priority_queue<QEntry, std::vector<QEntry>, std::greater<QEntry>> Q;
+
+    const unsigned FromNum = From->getNumber();
+    Dist[FromNum] = 0;
+    Q.emplace(0, FromNum);
+
+    while (!Q.empty()) {
+      const auto [D, Num] = Q.top();
+      Q.pop();
+      if (Settled[Num])
+        continue;
+      Settled[Num] = true;
+
+      const MachineBasicBlock *U = MF->getBlockNumbered(Num);
+      assert(U && "settled a block number with no block");
+
+      const int64_t Step =
+          (Num == FromNum) ? 0 : static_cast<int64_t>(getSize(U));
+
+      for (const MachineBasicBlock *V : U->successors()) {
+        const unsigned VNum = V->getNumber();
+        if (Settled[VNum])
+          continue;
+        const int64_t ND = D + Step;
+        if (ND < Dist[VNum]) {
+          Dist[VNum] = ND;
+          Q.emplace(ND, VNum);
+        }
+      }
+    }
+
+    InterBlockRowMap Row;
+    for (unsigned Num = 0; Num != N; ++Num) {
+      if (Num == FromNum)
+        continue;
+      const MachineBasicBlock *B = MF->getBlockNumbered(Num);
+      if (!B)
+        continue;
+      assert((Dist[Num] != Inf) == isReachable(From, B));
+      if (Dist[Num] != Inf)
+        Row.try_emplace(Num, NextUseDistance(Dist[Num]));
+    }
+    return Row;
+  }
+
+  static NextUseDistance addInterBlockStep(NextUseDistance Base,
+                                           NextUseDistance Step) {
+    if (Base.isUnreachable() || Step.isUnreachable())
+      return NextUseDistance::unreachable();
+    return Base + Step;
+  }
+
+  std::vector<NextUseDistance>
+  computeWeightedDistancesForDestLoop(const MachineBasicBlock *From,
+                                      MachineLoop *DestLoop) const {
+    const MachineBasicBlock *Rep = representativeForDestLoop(DestLoop);
+    assert(Rep);
+
+    const unsigned N = MF->getNumBlockIDs();
+    const unsigned FromNum = From->getNumber();
+
+    std::vector<NextUseDistance> Dist(N, NextUseDistance::unreachable());
+    std::vector<bool> Settled(N, false);
+
+    using QEntry = std::pair<int64_t, unsigned>;
+    std::priority_queue<QEntry, std::vector<QEntry>, std::greater<QEntry>> Q;
+
+    Dist[FromNum] = NextUseDistance(0);
+    Q.emplace(0, FromNum);
+
+    while (!Q.empty()) {
+      const auto [DRaw, Num] = Q.top();
+      Q.pop();
+      if (Settled[Num])
+        continue;
+      Settled[Num] = true;
+
+      const NextUseDistance D(DRaw);
+      const MachineBasicBlock *U = MF->getBlockNumbered(Num);
+      assert(U);
+
+      NextUseDistance Step(0);
+      if (Num != FromNum) {
+        Step = NextUseDistance::fromSize(getSize(U),
+                                         calcRelativeLoopDepth(U, Rep));
+      }
+
+      for (const MachineBasicBlock *V : U->successors()) {
+        const unsigned VNum = V->getNumber();
+        if (Settled[VNum])
+          continue;
+        const NextUseDistance ND = addInterBlockStep(D, Step);
+        if (ND.isUnreachable())
+          continue;
+        if (ND < Dist[VNum]) {
+          Dist[VNum] = ND;
+          Q.emplace(ND.getRawValue(), VNum);
+        }
+      }
+    }
+    return Dist;
+  }
+
+  InterBlockRowMap computeWeightedRow(const MachineBasicBlock *From) const {
+    const unsigned N = MF->getNumBlockIDs();
+    const unsigned FromNum = From->getNumber();
+    InterBlockRowMap Row;
+
+    SmallVector<MachineLoop *, 8> DestLoopClasses;
+    collectDestLoopClasses(DestLoopClasses);
+
+    for (MachineLoop *DestLoop : DestLoopClasses) {
+      std::vector<NextUseDistance> Partial =
+          computeWeightedDistancesForDestLoop(From, DestLoop);
+      for (unsigned Num = 0; Num != N; ++Num) {
+        if (Num == FromNum)
+          continue;
+        const MachineBasicBlock *B = MF->getBlockNumbered(Num);
+        if (!B || destLoopClass(B) != DestLoop)
+          continue;
+        if (Partial[Num].isReachable())
+          Row.try_emplace(Num, Partial[Num]);
+      }
+    }
+    return Row;
+  }
+
+  void bulkBuildUnweightedRows() const {
+    InterBlockFixpointMap Distances;
 
     bool Changed;
     do {
       Changed = false;
       for (const MachineBasicBlock *MBB : post_order(MF)) {
-        unsigned MBBNum = MBB->getNumber();
+        const unsigned MBBNum = MBB->getNumber();
 
-        // Save previous state for convergence check
-        InterBlockDistanceMap::mapped_type Prev = std::move(Distances[MBBNum]);
-        InterBlockDistanceMap::mapped_type Curr;
-        Curr.reserve(Prev.size());
+        InterBlockRowMap Prev = std::move(Distances[MBBNum]);
+        InterBlockRowMap Curr;
 
-        // Direct successors are distance 0 by definition: no instructions are
-        // executed between exiting MBB and entering Succ.
-        for (const MachineBasicBlock *Succ : MBB->successors())
-          Curr[Succ->getNumber()] = InterBlockDistance(0, 0);
-
-        // Propagate further destinations through each successor.
         for (const MachineBasicBlock *Succ : MBB->successors()) {
-          unsigned SuccNum = Succ->getNumber();
-          const unsigned UnweightedSize{getSize(Succ)};
+          if (Succ == MBB)
+            continue;
+          Curr.try_emplace(Succ->getNumber(), NextUseDistance(0));
+        }
 
-          for (const auto &[DestBlockNum, DestDist] : Distances[SuccNum]) {
-            // MBB -> MBB is considered unreachable (getInterBlockDistance
-            // asserts From != To).
-            if (DestBlockNum == MBBNum)
+        for (const MachineBasicBlock *Succ : MBB->successors()) {
+          const int64_t SuccSize = static_cast<int64_t>(getSize(Succ));
+          auto SuccIt = Distances.find(Succ->getNumber());
+          if (SuccIt == Distances.end())
+            continue;
+
+          for (const auto &[DestBlockNum, DestDist] : SuccIt->second) {
+            if (DestBlockNum == MBBNum || DestDist.isUnreachable())
               continue;
-
-            const MachineBasicBlock *DestMBB =
-                MF->getBlockNumbered(DestBlockNum);
-
-            const NextUseDistance UnweightedDist{UnweightedSize +
-                                                 DestDist.Unweighted};
-
-            unsigned SuccToDestLoopDepth = calcRelativeLoopDepth(Succ, DestMBB);
-
-            const NextUseDistance WeightedDist =
-                DestDist.Weighted +
-                NextUseDistance::fromSize(UnweightedSize, SuccToDestLoopDepth);
-
-            // Insert or update distances (take minimum)
-            auto [I, First] =
-                Curr.try_emplace(DestBlockNum, WeightedDist, UnweightedDist);
-            if (!First) {
-              InterBlockDistance &Slot = I->second;
-              Slot.Weighted = min(Slot.Weighted, WeightedDist);
-              Slot.Unweighted = min(Slot.Unweighted, UnweightedDist);
-            }
+            const NextUseDistance Cand(DestDist.getRawValue() + SuccSize);
+            auto [I, First] = Curr.try_emplace(DestBlockNum, Cand);
+            if (!First && Cand < I->second)
+              I->second = Cand;
           }
         }
+
         Changed |= (Prev != Curr);
         Distances[MBBNum] = std::move(Curr);
       }
     } while (Changed);
 
-    InterBlockDistances = std::move(Distances);
+    ensureUnweightedRowStorage();
+    installFixpointRows(UnweightedRows, UnweightedGeneration, Distances);
+    UnweightedRowsAtGeneration = Distances.size();
+    UnweightedRowsBulkBuilt = true;
+  }
+
+  void bulkBuildWeightedRows() const {
+    InterBlockFixpointMap Distances;
+
+    bool Changed;
+    do {
+      Changed = false;
+      for (const MachineBasicBlock *MBB : post_order(MF)) {
+        const unsigned MBBNum = MBB->getNumber();
+
+        InterBlockRowMap Prev = std::move(Distances[MBBNum]);
+        InterBlockRowMap Curr;
+
+        for (const MachineBasicBlock *Succ : MBB->successors()) {
+          if (Succ == MBB)
+            continue;
+          Curr.try_emplace(Succ->getNumber(), NextUseDistance(0));
+        }
+
+        for (const MachineBasicBlock *Succ : MBB->successors()) {
+          const unsigned UnweightedSize = getSize(Succ);
+          auto SuccIt = Distances.find(Succ->getNumber());
+          if (SuccIt == Distances.end())
+            continue;
+
+          for (const auto &[DestBlockNum, DestDist] : SuccIt->second) {
+            if (DestBlockNum == MBBNum || DestDist.isUnreachable())
+              continue;
+            const MachineBasicBlock *DestMBB =
+                MF->getBlockNumbered(DestBlockNum);
+            if (!DestMBB)
+              continue;
+            const NextUseDistance Cand = addInterBlockStep(
+                DestDist,
+                NextUseDistance::fromSize(
+                    UnweightedSize, calcRelativeLoopDepth(Succ, DestMBB)));
+            if (Cand.isUnreachable())
+              continue;
+            auto [I, First] = Curr.try_emplace(DestBlockNum, Cand);
+            if (!First && Cand < I->second)
+              I->second = Cand;
+          }
+        }
+
+        Changed |= (Prev != Curr);
+        Distances[MBBNum] = std::move(Curr);
+      }
+    } while (Changed);
+
+    ensureWeightedRowStorage();
+    installFixpointRows(WeightedRows, WeightedGeneration, Distances);
+    WeightedRowsAtGeneration = Distances.size();
+    WeightedRowsBulkBuilt = true;
     LLVM_DEBUG(dumpInterBlockDistances());
   }
 
-  const InterBlockDistance *
-  getInterBlockDistanceMapValue(const MachineBasicBlock *From,
-                                const MachineBasicBlock *To) const {
-    auto I = InterBlockDistances.find(From->getNumber());
-    if (I == InterBlockDistances.end())
-      return nullptr;
-    const InterBlockDistanceMap::mapped_type &FromSlot = I->second;
-    auto J = FromSlot.find(To->getNumber());
-    return J == FromSlot.end() ? nullptr : &J->second;
+  const InterBlockRowMap &
+  getOrBuildUnweightedRow(const MachineBasicBlock *From) const {
+    const unsigned FromNum = From->getNumber();
+    ensureUnweightedRowStorage();
+    InterBlockRow &Row = UnweightedRows[FromNum];
+    if (Row.Generation == UnweightedGeneration)
+      return Row.Distances;
+
+    if (lazyUnweightedBuildTriggersBulk()) {
+      bulkBuildUnweightedRows();
+      if (UnweightedRows[FromNum].Generation == UnweightedGeneration)
+        return UnweightedRows[FromNum].Distances;
+    }
+
+    Row.Distances = computeUnweightedRow(From);
+    Row.Generation = UnweightedGeneration;
+    ++UnweightedRowsAtGeneration;
+    return Row.Distances;
   }
 
-  bool interBlockDistanceExists(const MachineBasicBlock *From,
-                                const MachineBasicBlock *To) const {
-    return getInterBlockDistanceMapValue(From, To);
+  const InterBlockRowMap &
+  getOrBuildWeightedRow(const MachineBasicBlock *From) const {
+    const unsigned FromNum = From->getNumber();
+    ensureWeightedRowStorage();
+    InterBlockRow &Row = WeightedRows[FromNum];
+    if (Row.Generation == WeightedGeneration)
+      return Row.Distances;
+
+    if (lazyWeightedBuildTriggersBulk()) {
+      bulkBuildWeightedRows();
+      if (WeightedRows[FromNum].Generation == WeightedGeneration)
+        return WeightedRows[FromNum].Distances;
+    }
+
+    Row.Distances = computeWeightedRow(From);
+    Row.Generation = WeightedGeneration;
+    ++WeightedRowsAtGeneration;
+    return Row.Distances;
   }
 
-public:
-  NextUseDistance getInterBlockDistance(const MachineBasicBlock *From,
-                                        const MachineBasicBlock *To,
-                                        bool Unweighted) const {
-
+  NextUseDistance
+  getWeightedInterBlockDistance(const MachineBasicBlock *From,
+                                const MachineBasicBlock *To) const {
     assert(From != To && "The basic blocks should be different.");
     if (!From || !To)
       return NextUseDistance::unreachable();
@@ -835,24 +1152,28 @@ public:
     if (Cfg.ForwardOnly && !isForwardReachable(From, To))
       return NextUseDistance::unreachable();
 
-    const InterBlockDistance *BD = getInterBlockDistanceMapValue(From, To);
-    if (!BD)
-      return NextUseDistance::unreachable();
-
-    return Unweighted ? BD->Unweighted : BD->Weighted;
-  }
-
-private:
-  NextUseDistance
-  getWeightedInterBlockDistance(const MachineBasicBlock *From,
-                                const MachineBasicBlock *To) const {
-    return getInterBlockDistance(From, To, false);
+    return lookupInterBlockRow(getOrBuildWeightedRow(From), To->getNumber());
   }
 
   NextUseDistance
   getUnweightedInterBlockDistance(const MachineBasicBlock *From,
                                   const MachineBasicBlock *To) const {
-    return getInterBlockDistance(From, To, true);
+    assert(From != To && "The basic blocks should be different.");
+    if (!From || !To)
+      return NextUseDistance::unreachable();
+
+    if (Cfg.ForwardOnly && !isForwardReachable(From, To))
+      return NextUseDistance::unreachable();
+
+    return lookupInterBlockRow(getOrBuildUnweightedRow(From), To->getNumber());
+  }
+
+public:
+  NextUseDistance getInterBlockDistance(const MachineBasicBlock *From,
+                                        const MachineBasicBlock *To,
+                                        bool Unweighted) const {
+    return Unweighted ? getUnweightedInterBlockDistance(From, To)
+                      : getWeightedInterBlockDistance(From, To);
   }
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1523,9 +1844,15 @@ private:
     using Elem = std::pair<NextUseDistance, MBBPair>;
     std::vector<Elem> SortedDistances;
 
-    for (const auto &[FromNum, Dsts] : InterBlockDistances) {
-      for (const auto &[ToNum, Dist] : Dsts) {
-        SortedDistances.emplace_back(Dist.Weighted, MBBPair(FromNum, ToNum));
+    for (unsigned FromNum = 0, E = WeightedRows.size(); FromNum != E;
+         ++FromNum) {
+      const InterBlockRow &RowEntry = WeightedRows[FromNum];
+      if (RowEntry.Generation != WeightedGeneration)
+        continue;
+      for (const auto &[ToNum, Dist] : RowEntry.Distances) {
+        if (FromNum == ToNum || Dist.isUnreachable())
+          continue;
+        SortedDistances.emplace_back(Dist, MBBPair(FromNum, ToNum));
       }
     }
     llvm::sort(SortedDistances, [](const auto &A, const auto &B) {
@@ -1944,7 +2271,8 @@ public:
         PI.ShortestUnweightedDistance = 0;
     }
 
-    initializeInterBlockDistances();
+    invalidateUnweightedRows();
+    invalidateWeightedRows();
     resetDistanceCache();
     RegUseMap.clear();
   }
@@ -2133,6 +2461,11 @@ AMDGPUNextUseAnalysisImpl::AMDGPUNextUseAnalysisImpl(
     Cfg.PreciseUseModeling = ConfigPreciseUseModelingOpt;
   if (ConfigPromoteToPreheaderOpt.getNumOccurrences())
     Cfg.PromoteToPreheader = ConfigPromoteToPreheaderOpt;
+  if (UnweightedBulkThreshold.getNumOccurrences() &&
+      UnweightedBulkThreshold > 0)
+    Cfg.InterBlockBuild.UnweightedBulkThreshold = UnweightedBulkThreshold;
+  if (WeightedBulkThreshold.getNumOccurrences() && WeightedBulkThreshold > 0)
+    Cfg.InterBlockBuild.WeightedBulkThreshold = WeightedBulkThreshold;
 
   initializeTables();
 }

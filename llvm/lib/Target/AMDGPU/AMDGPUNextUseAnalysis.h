@@ -280,6 +280,17 @@ public:
       Cfg.PromoteToPreheader = true;
       return Cfg;
     }
+
+    /// When to bulk-build inter-block distance rows vs lazy per-source build.
+    /// These affect performance only, not computed distances.
+    struct InterBlockBuildPolicy {
+      /// Distinct source rows at the current generation before triggering a
+      /// bulk fixpoint. 0 means default (1).
+      unsigned UnweightedBulkThreshold = 0;
+      unsigned WeightedBulkThreshold = 0;
+      /// Skip bulk build during analysis construction (lazy tests).
+      bool DeferBulkBuildAtInit = false;
+    } InterBlockBuild;
   };
 
   Config getConfig() const;

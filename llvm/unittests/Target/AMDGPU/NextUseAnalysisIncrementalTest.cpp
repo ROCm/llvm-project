@@ -1095,6 +1095,211 @@ TEST_F(NextUseAnalysisIncrementalTest, InterBlockDistanceGoldenDigest) {
 
 namespace {
 
+static AMDGPUNextUseAnalysis::Config
+lazyInterBlockBuildConfig(AMDGPUNextUseAnalysis::Config Base, bool DeferInit,
+                          unsigned UnweightedThreshold,
+                          unsigned WeightedThreshold) {
+  Base.InterBlockBuild.DeferBulkBuildAtInit = DeferInit;
+  if (UnweightedThreshold)
+    Base.InterBlockBuild.UnweightedBulkThreshold = UnweightedThreshold;
+  if (WeightedThreshold)
+    Base.InterBlockBuild.WeightedBulkThreshold = WeightedThreshold;
+  return Base;
+}
+
+using InterBlockHalfSnapshot =
+    DenseMap<std::pair<unsigned, unsigned>, NextUseDistance>;
+
+static InterBlockHalfSnapshot
+snapshotInterBlockHalf(const AMDGPUNextUseAnalysis &NUA,
+                       const MachineFunction &MF, bool Unweighted) {
+  InterBlockHalfSnapshot Snap;
+  for (unsigned FromNum = 0, NumIds = MF.getNumBlockIDs(); FromNum != NumIds;
+       ++FromNum) {
+    const MachineBasicBlock *From = MF.getBlockNumbered(FromNum);
+    if (!From)
+      continue;
+    for (unsigned ToNum = 0; ToNum != NumIds; ++ToNum) {
+      if (FromNum == ToNum)
+        continue;
+      const MachineBasicBlock *To = MF.getBlockNumbered(ToNum);
+      if (!To)
+        continue;
+      Snap.insert({{FromNum, ToNum},
+                   NUA.getInterBlockDistanceForTest(From, To, Unweighted)});
+    }
+  }
+  return Snap;
+}
+
+static void expectInterBlockHalfMatches(const InterBlockHalfSnapshot &A,
+                                        const AMDGPUNextUseAnalysis &B,
+                                        const MachineFunction &MF,
+                                        bool Unweighted) {
+  for (unsigned FromNum = 0, NumIds = MF.getNumBlockIDs(); FromNum != NumIds;
+       ++FromNum) {
+    const MachineBasicBlock *From = MF.getBlockNumbered(FromNum);
+    if (!From)
+      continue;
+    for (unsigned ToNum = 0; ToNum != NumIds; ++ToNum) {
+      if (FromNum == ToNum)
+        continue;
+      const MachineBasicBlock *To = MF.getBlockNumbered(ToNum);
+      if (!To)
+        continue;
+      SCOPED_TRACE(Twine("blocks ") + Twine(FromNum) + " -> " + Twine(ToNum));
+      auto It = A.find({FromNum, ToNum});
+      ASSERT_NE(It, A.end());
+      EXPECT_EQ(It->second,
+                B.getInterBlockDistanceForTest(From, To, Unweighted));
+    }
+  }
+}
+
+static void touchAllInterBlockPairs(AMDGPUNextUseAnalysis &NUA,
+                                    const MachineFunction &MF,
+                                    bool Unweighted) {
+  for (unsigned FromNum = 0, NumIds = MF.getNumBlockIDs(); FromNum != NumIds;
+       ++FromNum) {
+    const MachineBasicBlock *From = MF.getBlockNumbered(FromNum);
+    if (!From)
+      continue;
+    for (unsigned ToNum = 0; ToNum != NumIds; ++ToNum) {
+      if (FromNum == ToNum)
+        continue;
+      const MachineBasicBlock *To = MF.getBlockNumbered(ToNum);
+      if (!To)
+        continue;
+      (void)NUA.getInterBlockDistanceForTest(From, To, Unweighted);
+    }
+  }
+}
+
+} // namespace
+
+TEST_F(NextUseAnalysisIncrementalTest, UnweightedDistanceLazyMatchesBulk) {
+  for (bool Compute : {false, true}) {
+    AMDGPUNextUseAnalysis::Config Cfg =
+        Compute ? AMDGPUNextUseAnalysis::Config::Compute()
+                : AMDGPUNextUseAnalysis::Config::Graphics();
+    for (const MirFuncCase &Case : InterBlockReferenceCorpus) {
+      SCOPED_TRACE(Twine(Case.File) + " " + (Compute ? "Compute" : "Graphics"));
+      resetParsedModule();
+      parseNextUseMIROrSkip(Case.File);
+      if (IsSkipped())
+        return;
+
+      MachineFunction &MF = getMF(Case.Func);
+      InterBlockHalfSnapshot LazySnap;
+      {
+        const AMDGPUNextUseAnalysis::Config LazyCfg = lazyInterBlockBuildConfig(
+            Cfg, /*DeferInit=*/true, std::numeric_limits<unsigned>::max(), 0);
+        AMDGPUNextUseAnalysis &LazyNUA =
+            getNextUseAnalysis(MF, MFAM, LazyCfg, /*Invalidate*/ true);
+        touchAllInterBlockPairs(LazyNUA, MF, /*Unweighted*/ true);
+        LazySnap = snapshotInterBlockHalf(LazyNUA, MF, /*Unweighted*/ true);
+      }
+
+      resetParsedModule();
+      parseNextUseMIROrSkip(Case.File);
+      ASSERT_FALSE(IsSkipped());
+      MachineFunction &MFBulk = getMF(Case.Func);
+      AMDGPUNextUseAnalysis &BulkNUA =
+          getNextUseAnalysis(MFBulk, MFAM, Cfg, /*Invalidate*/ true);
+
+      expectInterBlockHalfMatches(LazySnap, BulkNUA, MFBulk,
+                                  /*Unweighted*/ true);
+    }
+  }
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, WeightedDistanceLazyMatchesBulk) {
+  for (bool Compute : {false, true}) {
+    AMDGPUNextUseAnalysis::Config Cfg =
+        Compute ? AMDGPUNextUseAnalysis::Config::Compute()
+                : AMDGPUNextUseAnalysis::Config::Graphics();
+    for (const MirFuncCase &Case : InterBlockReferenceCorpus) {
+      SCOPED_TRACE(Twine(Case.File) + " " + (Compute ? "Compute" : "Graphics"));
+      resetParsedModule();
+      parseNextUseMIROrSkip(Case.File);
+      if (IsSkipped())
+        return;
+
+      MachineFunction &MF = getMF(Case.Func);
+      InterBlockHalfSnapshot LazySnap;
+      {
+        const AMDGPUNextUseAnalysis::Config LazyCfg = lazyInterBlockBuildConfig(
+            Cfg, /*DeferInit=*/true, 0, std::numeric_limits<unsigned>::max());
+        AMDGPUNextUseAnalysis &LazyNUA =
+            getNextUseAnalysis(MF, MFAM, LazyCfg, /*Invalidate*/ true);
+        touchAllInterBlockPairs(LazyNUA, MF, /*Unweighted*/ false);
+        LazySnap = snapshotInterBlockHalf(LazyNUA, MF, /*Unweighted*/ false);
+      }
+
+      resetParsedModule();
+      parseNextUseMIROrSkip(Case.File);
+      ASSERT_FALSE(IsSkipped());
+      MachineFunction &MFBulk = getMF(Case.Func);
+      AMDGPUNextUseAnalysis &BulkNUA =
+          getNextUseAnalysis(MFBulk, MFAM, Cfg, /*Invalidate*/ true);
+
+      expectInterBlockHalfMatches(LazySnap, BulkNUA, MFBulk,
+                                  /*Unweighted*/ false);
+    }
+  }
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, UnweightedDistanceAfterInstrAdded) {
+  parseTestForMIROrSkip();
+  MachineFunction &MF = getMF("test4");
+  const AMDGPUNextUseAnalysis::Config Cfg = computeConfig();
+
+  AMDGPUNextUseAnalysis &Inc =
+      getNextUseAnalysis(MF, MFAM, Cfg, /*Invalidate*/ true);
+  touchAllInterBlockPairs(Inc, MF, /*Unweighted*/ true);
+
+  DenseMap<std::pair<unsigned, unsigned>, NextUseDistance> Before;
+  for (unsigned FromNum = 0, NumIds = MF.getNumBlockIDs(); FromNum != NumIds;
+       ++FromNum) {
+    const MachineBasicBlock *From = MF.getBlockNumbered(FromNum);
+    if (!From)
+      continue;
+    for (unsigned ToNum = 0; ToNum != NumIds; ++ToNum) {
+      if (FromNum == ToNum)
+        continue;
+      const MachineBasicBlock *To = MF.getBlockNumbered(ToNum);
+      if (!To)
+        continue;
+      Before.insert(
+          {{FromNum, ToNum},
+           Inc.getInterBlockDistanceForTest(From, To, /*Unweighted*/ true)});
+    }
+  }
+
+  MachineBasicBlock &MBB1 = *MF.getBlockNumbered(1);
+  insertNop(MBB1, std::next(MBB1.getFirstNonPHI()));
+  Inc.instrAdded(MBB1);
+
+  InterBlockHalfSnapshot AfterIncremental =
+      snapshotInterBlockHalf(Inc, MF, /*Unweighted*/ true);
+
+  AMDGPUNextUseAnalysis &Fresh =
+      getNextUseAnalysis(MF, MFAM, Cfg, /*Invalidate*/ true);
+
+  bool AnyChanged = false;
+  for (const auto &[Key, Prev] : Before) {
+    auto It = AfterIncremental.find(Key);
+    ASSERT_NE(It, AfterIncremental.end());
+    if (It->second != Prev)
+      AnyChanged = true;
+  }
+  expectInterBlockHalfMatches(AfterIncremental, Fresh, MF,
+                              /*Unweighted*/ true);
+  EXPECT_TRUE(AnyChanged);
+}
+
+namespace {
+
 static bool dfsBackedge(const MachineLoopInfo &MLI,
                         const MachineBasicBlock *From,
                         const MachineBasicBlock *To) {
