@@ -1,6 +1,13 @@
 VERS1.0 {
 global:
   ol*;
+  # Emissary cross-DSO client registry (shared/emissary_rpc_server.h). This
+  # C++17 inline variable must keep default/weak binding in the final .so so
+  # it merges with the same symbol exported by out-of-tree client libraries
+  # (e.g. libemissary_mpi.so, libemissary_hdf5.so); otherwise those clients'
+  # self-registration is invisible to this library's own RPC dispatcher and
+  # every call for their EMIS_ID is reported "not supported".
+  EmissaryRegistryTable;
 local:
   *;
 };
