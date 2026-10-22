@@ -188,7 +188,7 @@ struct ReplacementIRBuilder
       : IRBuilder(
             I->getIterator(), InstSimplifyFolder(DL),
             IRBuilderCallbackInserter([this](Instruction *I) { addMD(I); })) {
-    if (BB->getParent()->getAttributes().hasFnAttr(Attribute::StrictFP))
+    if (I->getFunction()->hasFnAttribute(Attribute::StrictFP))
       this->setIsFPConstrained(true);
 
     MMRAMD = I->getMetadata(LLVMContext::MD_mmra);
@@ -398,8 +398,9 @@ bool AtomicExpandImpl::processAtomicInstr(Instruction *I) {
       MadeChange = true;
     }
 
-    MadeChange |= tryInsertFencesForAtomic(
-        LI, isAcquireOrStronger(LI->getOrdering()), AtomicOrdering::Monotonic);
+    MadeChange |=
+        tryInsertFencesForAtomic(LI, isAcquireOrStronger(LI->getOrdering()),
+                                 TLI->atomicOperationOrderAfterFenceSplit(LI));
 
     MadeChange |= tryExpandAtomicLoad(LI);
     return MadeChange;
@@ -421,8 +422,9 @@ bool AtomicExpandImpl::processAtomicInstr(Instruction *I) {
       MadeChange = true;
     }
 
-    MadeChange |= tryInsertFencesForAtomic(
-        SI, isReleaseOrStronger(SI->getOrdering()), AtomicOrdering::Monotonic);
+    MadeChange |=
+        tryInsertFencesForAtomic(SI, isReleaseOrStronger(SI->getOrdering()),
+                                 TLI->atomicOperationOrderAfterFenceSplit(SI));
 
     MadeChange |= tryExpandAtomicStore(SI);
     return MadeChange;
