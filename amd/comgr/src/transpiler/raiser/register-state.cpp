@@ -196,7 +196,7 @@ Error RegisterState::validateEntrySgprs() {
     return Error::success();
   // Fold SGPR splitting and joining before following pointer uses.
   Function &F = *B.GetInsertBlock()->getParent();
-  PassBuilder PB;
+  PassBuilder PB(F.getContext());
   LoopAnalysisManager LAM;
   FunctionAnalysisManager FAM;
   CGSCCAnalysisManager CGAM;
