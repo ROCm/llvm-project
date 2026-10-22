@@ -134,7 +134,7 @@ protected:
       FunctionAnalysisManager Functions;
       CGSCCAnalysisManager CallGraph;
       ModuleAnalysisManager Modules;
-      PassBuilder Passes(Machine.get());
+      PassBuilder Passes(Context, Machine.get());
       Passes.registerModuleAnalyses(Modules);
       Passes.registerCGSCCAnalyses(CallGraph);
       Passes.registerFunctionAnalyses(Functions);
