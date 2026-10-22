@@ -1042,6 +1042,56 @@ static uint64_t getOneIterationPerThreadNumBlocks(uint64_t LoopTripCount,
   return NumBlocks;
 }
 
+/// Downstream: the low-trip-count knobs of the former AMDGPU launch-geometry
+static uint64_t getLowTripCountOverrideNumBlocks(
+    GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
+    uint64_t LoopTripCount, uint32_t &EffectiveNumThreads,
+    bool IsNumThreadsStrict, bool IsNumThreadsFromUser,
+    const KernelLaunchInfoTy &KernelEnv) {
+  static UInt32Envar OMPX_LowTripCount("LIBOMPTARGET_AMDGPU_LOW_TRIPCOUNT", 0);
+  static UInt32Envar OMPX_NumBlocksForLowTripCount(
+      "LIBOMPTARGET_BLOCKS_FOR_LOW_TRIP_COUNT", 0);
+  static UInt32Envar OMPX_MinThreadsForLowTripCount(
+      "LIBOMPTARGET_MIN_THREADS_FOR_LOW_TRIP_COUNT", 32);
+  static Int32Envar OMP_TeamsThreadLimit("OMP_TEAMS_THREAD_LIMIT");
+
+  if (!LoopTripCount || LoopTripCount > OMPX_LowTripCount.get())
+    return 0;
+  bool IsNoLoop = KernelEnv.isNoLoopMode();
+  bool IsBigJumpLoop = KernelEnv.isBigJumpLoopMode();
+  if (!KernelEnv.isSPMDMode() && !IsNoLoop && !IsBigJumpLoop)
+    return 0;
+  if (IsNumThreadsFromUser || IsNumThreadsStrict || OMP_TeamsThreadLimit > 0)
+    return 0;
+
+  uint32_t MinThreads = OMPX_MinThreadsForLowTripCount.get();
+  uint32_t NumThreads = EffectiveNumThreads;
+  while (NumThreads > MinThreads)
+    NumThreads >>= 1;
+  if (!NumThreads)
+    return 0;
+  if (KernelEnv.doesTeamsReduction())
+    NumThreads = llvm::omp::getBlockSizeAsPowerOfTwo(NumThreads);
+  EffectiveNumThreads = NumThreads;
+
+  uint64_t TripCountNumBlocks = llvm::divideCeil(LoopTripCount, NumThreads);
+  // A no-loop kernel has no loop to run more than one iteration per thread.
+  if (IsNoLoop)
+    return TripCountNumBlocks;
+
+  uint64_t NumBlocks = TripCountNumBlocks;
+  if (UserNumBlocks > 0)
+    NumBlocks = IsBigJumpLoop ? std::min(uint64_t(UserNumBlocks), NumBlocks)
+                              : UserNumBlocks;
+  else if (uint64_t LowTripCountBlocks = OMPX_NumBlocksForLowTripCount.get())
+    NumBlocks = std::min(LowTripCountBlocks,
+                         llvm::divideCeil(LoopTripCount, MinThreads));
+  if (IsBigJumpLoop)
+    NumBlocks = std::min(NumBlocks, BigJumpLoopMaxNumBlocks);
+  return std::min(NumBlocks,
+                  uint64_t(getDeviceBlockLimit(GenericDevice, NumThreads)));
+}
+
 /// Get the effective number of blocks for the kernel based on the
 /// user-defined number of blocks and the loop trip count.
 /// The number of threads \p EffectiveNumThreads can be adjusted by this
@@ -1054,6 +1104,12 @@ static uint32_t getEffectiveNumBlocks(
     bool IsNumThreadsFromUser, const KernelLaunchInfoTy &KernelEnv) {
   assert(!KernelEnv.isBareMode() &&
          "bare kernel should not call this function");
+
+  // Downstream: opt-in override for loops with a low trip count.
+  if (uint64_t NumBlocks = getLowTripCountOverrideNumBlocks(
+          GenericDevice, UserNumBlocks, LoopTripCount, EffectiveNumThreads,
+          IsNumThreadsStrict, IsNumThreadsFromUser, KernelEnv))
+    return NumBlocks;
 
   // NOTE: This clamps the user-requested number of blocks to the device limit
   // rather than honoring it exactly, which is non-standard behavior. Truly
