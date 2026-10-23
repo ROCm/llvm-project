@@ -166,7 +166,7 @@ Every operation *belongs to* an instance of a specific scope:
 - Operations executed by each thread *belong to* the corresponding
   "singlethread" scope instance.
 - DMA operations *initiated by* each thread *belong to* a corresponding
-  corresponding {ref}`"lds-dma" scope<amdgpu-lds-dma-scope>` instance.
+  {ref}`"lds-dma" scope<amdgpu-lds-dma-scope>` instance.
 
 Every operation is *contained* in the scope instance `I1` that it *belongs
 to*, and therefore in every scope instance `I2` that has `I1` as a *subscope
@@ -408,7 +408,7 @@ at least one of the following holds:
   - `Z` *amdgpu-happens-before\<B\>* `X`, and,
   - `Z`'s scope instance includes `X`.
 
-Then `X` makes the side-effect of `W` on `B` available in its own scope instance
+Then `X` makes the effect of `W` on `B` available in its own scope instance
 `S` and every subscope instance of `S` that also includes `W`.
 
 ### Visibility Operation
@@ -422,7 +422,7 @@ includes `B` in its side-effects, and at least one of the following holds:
   - `X` and `Y` have inclusive scopes, and,
   - Their common scope instance `S` includes `W`.
 
-  Then `Y` makes the side-effect of `W` on `B` visible in `S` and every subscope
+  Then `Y` makes the effect of `W` on `B` visible in `S` and every subscope
   instance of `S` that includes `Y`.
 
 - There exists a *visibility operation* `X` on write `W` such that:
@@ -430,7 +430,7 @@ includes `B` in its side-effects, and at least one of the following holds:
   - `X` makes `W` visible in a scope instance `S1` that includes `Y`, and,
   - `X` is included in the scope instance `S2` of `Y`.
 
-  Then `Y` makes the side-effect of `W` on `B` visible in the intersection `S`
+  Then `Y` makes the effect of `W` on `B` visible in the intersection `S`
   of `S1` and `S2`, and every subscope instance of `S` that includes `Y`.
 
 (amdgpu-location-order)=
