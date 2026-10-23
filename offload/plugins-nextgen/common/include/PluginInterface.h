@@ -545,21 +545,6 @@ struct GenericKernelTy {
     return AchievedOccupancy;
   }
 
-  /// Downstream: let the plugin compute the effective launch geometry of a
-  /// non-bare OpenMP kernel launch, i.e., the number of threads and blocks of
-  /// the first dimension. On entry, \p NumThreads and \p NumBlocks hold the
-  /// user-requested values; the ones flagged by \p StrictThreads and
-  /// \p StrictBlocks must be kept. Returns false if the plugin does not
-  /// provide its own computation, in which case libomptarget uses the
-  /// generic one.
-  virtual bool computeLaunchGeometry(GenericDeviceTy &GenericDevice,
-                                     const KernelLaunchArgsTy &LaunchArgs,
-                                     bool StrictThreads, bool StrictBlocks,
-                                     uint32_t &NumThreads,
-                                     uint32_t &NumBlocks) const {
-    return false;
-  }
-
 protected:
   /// Prints generic kernel launch information.
   Error printLaunchInfo(GenericDeviceTy &GenericDevice,
@@ -1276,44 +1261,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   }
   virtual uint64_t getClockFrequency() const { return CLOCKS_PER_SEC; }
 
-  virtual uint32_t getOMPXGenericSpmdTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXBigJumpLoopTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getXTeamRedTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXBigJumpLoopMaxTotalTeams() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXLowTripCount() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t
-  getOMPXNumBlocksForLowTripcount(uint64_t LoopTripCount) const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXAdjustNumTeamsForSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXAdjustNumTeamsForXteamRedSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual bool getOMPXXTeamReductionOccupancyBasedOpt() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual bool getOMPXGenericSpmdUseSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXXteamBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-
   /// Get a device-specific timestamp in nanoseconds, used by the profiler
   /// for timing device operations. Subclasses should override this to provide
   /// hardware-accurate timestamps (e.g., via HSA system info).
@@ -1633,9 +1580,6 @@ struct GenericPluginTy {
 
   /// Get the number of active devices.
   int32_t getNumDevices() const { return NumDevices; }
-
-  /// Get the UID for the host device.
-  static constexpr const char *getHostDeviceUid() { return "HOST"; }
 
   /// Get the ELF code to recognize the binary image of this plugin.
   virtual uint16_t getMagicElfBits() const = 0;

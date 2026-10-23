@@ -262,16 +262,6 @@ foreach(target unbundle_compressed_edge_cases_test unbundle_cache_test)
 endforeach()
 #add_comgr_test(unbundle_hip_test c)
 
-add_test(
-  NAME comgr_transpiler_reduce_test
-  COMMAND "${Python3_EXECUTABLE}"
-          "${CMAKE_CURRENT_SOURCE_DIR}/utils/test_reduce.py")
-set_tests_properties(
-  comgr_transpiler_reduce_test
-  PROPERTIES
-    ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1"
-    TIMEOUT 120)
-
 add_test(NAME unbundle_cached_edge_cases_test
   COMMAND "${Python3_EXECUTABLE}"
           "${CMAKE_CURRENT_SOURCE_DIR}/utils/test_cached_unbundle.py"
