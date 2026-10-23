@@ -68,7 +68,7 @@ void test_field_initializer() {
 // OGCG:   %[[THIS:.*]] = load ptr, ptr %{{.*}}
 // OGCG:   %[[X_ADDR:.*]] = getelementptr inbounds nuw %class.Container, ptr %[[THIS]], i32 0, i32 0
 // OGCG:   store i32 0, ptr %[[X_ADDR]]
-// OGCG:   %[[CONTAINED_ADDR:.*]] = getelementptr inbounds i8, ptr %[[THIS]], i64 4
+// OGCG:   %[[CONTAINED_ADDR:.*]] = getelementptr inbounds nuw %class.Container, ptr %[[THIS]], i32 0, i32 1
 // OGCG:   call void @_ZN9ContainedC1Ei(ptr {{.*}} %[[CONTAINED_ADDR]], i32 {{.*}} 1)
 // OGCG:   invoke void @_Z8mayThrowv()
 // OGCG:           to label %[[INVOKE_CONT:.*]] unwind label %[[LPAD:.*]]

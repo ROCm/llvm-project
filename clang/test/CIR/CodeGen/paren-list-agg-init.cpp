@@ -66,7 +66,7 @@ struct F {
 };
 
 // LLVMCIR-DAG: [[STRUCT_G:%.*]] = type <{ i32, %struct.F, [3 x i8] }>
-// OGCG-DAG:    [[STRUCT_G:%.*]] = type <{ i32, [4 x i8] }>
+// OGCG-DAG:    [[STRUCT_G:%.*]] = type <{ i32, %struct.F, [3 x i8] }>
 // CIR-DAG: ![[STRUCT_G:.*]] = !cir.struct<"G" packed {data !s32i, data !rec_F, pad !cir.array<!u8i x 3>}>
 struct G {
   int a;
@@ -93,14 +93,14 @@ namespace gh61145 {
   };
 
   // LLVMCIR-DAG: [[STRUCT_S1:%.*]] = type { %"struct.gh61145::Vec" }
-  // OGCG-DAG:    [[STRUCT_S1:%.*]] = type { i8 }
+  // OGCG-DAG:    [[STRUCT_S1:%.*]] = type { %"struct.gh61145::Vec" }
   // CIR-DAG: ![[STRUCT_S1:.*]] = !cir.struct<"gh61145::S1" {data !rec_gh611453A3AVec}>
   struct S1 {
     Vec v;
   };
 
   // LLVMCIR-DAG: [[STRUCT_S2:%.*]] = type { %"struct.gh61145::Vec", i8 }
-  // OGCG-DAG:    [[STRUCT_S2:%.*]] = type { i8, i8 }
+  // OGCG-DAG:    [[STRUCT_S2:%.*]] = type { %"struct.gh61145::Vec", i8 }
   // CIR-DAG: ![[STRUCT_S2:.*]] = !cir.struct<"gh61145::S2" {data !rec_gh611453A3AVec, data !s8i}>
   struct S2 {
     Vec v;
@@ -578,7 +578,8 @@ void foo18() {
 // LLVM: [[G:%.*]] = alloca [[STRUCT_G]]
 // LLVM-NEXT: [[A:%.*]] = getelementptr {{.*}}[[STRUCT_G]], ptr [[G]], i32 0, i32 0
 // LLVM-NEXT: store i32 2, ptr [[A]], align 4
-// LLVM-NEXT: [[F:%.*]] = getelementptr {{.*}}i8, ptr [[G]], i64 4
+// LLVMCIR-NEXT: [[F:%.*]] = getelementptr {{.*}}i8, ptr [[G]], i64 4
+// OGCG-NEXT: [[F:%.*]] = getelementptr {{.*}}[[STRUCT_G]], ptr [[G]], i32 0, i32 1
 // LLVM-NEXT: call void @{{.*F.*}}(ptr noundef nonnull align 1 dereferenceable(1) [[F]], i32 noundef 1)
 // LLVM: ret void
 // CIR: cir.func no_inline dso_local @_Z5foo19v() attributes {{{.*}}nothrow, optnone} {
@@ -604,7 +605,9 @@ namespace gh61145 {
   // a.k.a. Vec::Vec()
   // LLVM-NEXT: call void @_ZN7gh611453VecC1Ev(ptr {{.*}}[[V]])
   // a.k.a. Vec::Vec(Vec&&)
-  // LLVM: call void @_ZN7gh611453VecC1EOS0_(ptr {{.*}}[[AGG_TMP_ENSURED]], ptr {{.*}}[[V]])
+  // LLVMCIR: call void @_ZN7gh611453VecC1EOS0_(ptr {{.*}}[[AGG_TMP_ENSURED]], ptr {{.*}}[[V]])
+  // OGCG: [[V1:%.*]] = getelementptr {{.*}}[[STRUCT_S1]], ptr [[AGG_TMP_ENSURED]], i32 0, i32 0
+  // OGCG-NEXT: call void @_ZN7gh611453VecC1EOS0_(ptr {{.*}}[[V1]], ptr {{.*}}[[V]])
   // a.k.a. S1::~S1()
   // LLVM: call void @_ZN7gh611452S1D1Ev(ptr {{.*}}[[AGG_TMP_ENSURED]])
   // a.k.a.Vec::~Vec()
@@ -631,7 +634,9 @@ namespace gh61145 {
   // a.k.a. Vec::Vec()
   // LLVM: call void @_ZN7gh611453VecC1Ev(ptr {{.*}}[[V]])
   // a.k.a. Vec::Vec(Vec&&)
-  // LLVM: call void @_ZN7gh611453VecC1EOS0_(ptr {{.*}}[[AGG_TMP_ENSURED]], ptr {{.*}}[[V]])
+  // LLVMCIR: call void @_ZN7gh611453VecC1EOS0_(ptr {{.*}}[[AGG_TMP_ENSURED]], ptr {{.*}}[[V]])
+  // OGCG: [[V1:%.*]] = getelementptr {{.*}}[[STRUCT_S2]], ptr [[AGG_TMP_ENSURED]], i32 0, i32 0
+  // OGCG-NEXT: call void @_ZN7gh611453VecC1EOS0_(ptr {{.*}}[[V1]], ptr {{.*}}[[V]])
   // LLVM-NEXT: [[C:%.*]] = getelementptr {{.*}}[[STRUCT_S2]], ptr [[AGG_TMP_ENSURED]], i32 0, i32
   // LLVM-NEXT: store i8 0, ptr [[C]], align 1
   // a.k.a. S2::~S2()

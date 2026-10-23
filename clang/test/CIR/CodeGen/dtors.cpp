@@ -267,7 +267,7 @@ void test_nested_dtor() {
 // LLVM:   call void @_ZN1CD1Ev(ptr {{.*}} %[[C]])
 
 // OGCG: define {{.*}} void @_ZN1DD2Ev
-// OGCG:   %[[C:.*]] = getelementptr inbounds i8, ptr %{{.*}}, i64 4
+// OGCG:   %[[C:.*]] = getelementptr inbounds nuw %struct.D, ptr %{{.*}}, i32 0, i32 1
 // OGCG:   call void @_ZN1CD1Ev(ptr {{.*}} %[[C]])
 
 struct E {
