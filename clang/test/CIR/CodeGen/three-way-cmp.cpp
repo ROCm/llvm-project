@@ -277,15 +277,17 @@ void use_pseudo_ordering(HasMember m1, HasMember m2) {
   // OGCG:   %[[CMP_TEMP:.*]] = alloca %"class.std::__1::strong_ordering"
   // OGCG:   %[[COERCE_ALLOCA:.*]] = alloca { i64, i64 }
   // OGCG:   %[[LHS_LOAD:.*]] = load ptr, ptr %[[LHS_ALLOCA]]
+  // OGCG:   %[[LHS_M:.*]] = getelementptr inbounds nuw %struct.HasMember, ptr %[[LHS_LOAD]], i32 0, i32 0
   // OGCG:   %[[RHS_LOAD:.*]] = load ptr, ptr %[[RHS_ALLOCA]]
-  // OGCG:   %[[EQ_RES:.*]] = call {{.*}}i1 @_ZNK6MembereqERKS_(ptr {{.*}}%[[LHS_LOAD]], ptr {{.*}}%[[RHS_LOAD]])
+  // OGCG:   %[[RHS_M:.*]] = getelementptr inbounds nuw %struct.HasMember, ptr %[[RHS_LOAD]], i32 0, i32 0
+  // OGCG:   %[[EQ_RES:.*]] = call {{.*}}i1 @_ZNK6MembereqERKS_(ptr {{.*}}%[[LHS_M]], ptr {{.*}}%[[RHS_M]])
   // OGCG:   br i1 %[[EQ_RES]], label %[[EQ_TRUE:.*]], label %[[EQ_FALSE:.*]]
   //
   // OGCG: [[EQ_TRUE]]:
   // OGCG:   br label %[[AFTER_COND:.*]]
   //
   // OGCG: [[EQ_FALSE]]:
-  // OGCG:   %[[LT_RES:.*]] = call {{.*}}i1 @_ZNK6MemberltERKS_(ptr {{.*}}%[[LHS_LOAD]], ptr {{.*}}%[[RHS_LOAD]])
+  // OGCG:   %[[LT_RES:.*]] = call {{.*}}i1 @_ZNK6MemberltERKS_(ptr {{.*}}%[[LHS_M]], ptr {{.*}}%[[RHS_M]])
   // OGCG:   br i1 %[[LT_RES]], label %[[LT_TRUE:.*]], label %[[LT_FALSE:.*]]
   //
   // OGCG: [[LT_TRUE]]:
@@ -296,7 +298,7 @@ void use_pseudo_ordering(HasMember m1, HasMember m2) {
   // 
   // OGCG: [[AFTER_LT]]:
   // OGCG:   %[[AFTER_LT_RES:.*]] = phi ptr [ @_ZNSt3__115strong_ordering4lessE, %[[LT_TRUE]] ], [ @_ZNSt3__115strong_ordering7greaterE, %[[LT_FALSE]] ]
-  // OGCG:   br label %cond.end5
+  // OGCG:   br label %[[AFTER_COND]]
   //
   // OGCG: [[AFTER_COND]]:
   // OGCG:   %[[MEM_EQ_RES:.*]] = phi ptr [ @_ZNSt3__115strong_ordering5equalE, %[[EQ_TRUE]] ], [ %[[AFTER_LT_RES]], %[[AFTER_LT]] ]
