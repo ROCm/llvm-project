@@ -317,7 +317,12 @@ if (LLVM_ENABLE_PROJECTS_USED OR NOT LLVM_ENABLE_PROJECTS STREQUAL "")
         # Do not cache this default: explicitly enabling the project on a later
         # configure should restore its normal test defaults.
         if(NOT DEFINED ${upper_proj}_INCLUDE_TESTS)
-          set(${upper_proj}_INCLUDE_TESTS OFF)
+          #TODO Remove once TheRock defines MLIR_INCLUDE_TESTS
+          if(upper_proj STREQUAL "MLIR")
+            set(MLIR_INCLUDE_TESTS ${LLVM_INCLUDE_TESTS})
+          else()
+            set(${upper_proj}_INCLUDE_TESTS OFF)
+          endif()
         endif()
       else()
         message(STATUS "${proj} project is enabled")
