@@ -1734,6 +1734,16 @@ private:
     return {&RegSlot, &MaskSlot};
   }
 
+  InstrIdTy getCachedDistDelta(const MachineInstr *MI) const {
+    return CachedDistancesMI ? getDistance(CachedDistancesMI, MI) : 0;
+  }
+
+  NextUseDistance getCachedDist(const LiveRegToUseMapElem *CacheElem,
+                                InstrIdTy LastDelta) const {
+    const LiveRegUse &U = CacheElem->Use;
+    return CacheElem->MIDependent ? (U.Dist - LastDelta) : U.Dist;
+  }
+
   void cacheLiveRegUse(const MachineInstr &MI, Register Reg, LaneBitmask Mask,
                        LiveRegUse U, bool MIDependent) {
     if (!DistanceCacheEnabled)
@@ -1922,8 +1932,7 @@ public:
     LaneBitmaskToUseMap UseByMask;
 
     maybeClearCachedLiveRegUses(MI);
-    const InstrIdTy LastDelta =
-        CachedDistancesMI ? getDistance(CachedDistancesMI, &MI) : 0;
+    const InstrIdTy LastDelta = getCachedDistDelta(&MI);
 
     for (auto &KV : LiveRegs) {
       const Register Reg = KV.first;
@@ -1942,8 +1951,7 @@ public:
       if (CacheMap && CacheElem) {
         MIDependent = CacheElem->MIDependent;
         U = CacheElem->Use;
-        if (MIDependent)
-          U.Dist -= LastDelta;
+        U.Dist = getCachedDist(CacheElem, LastDelta);
       } else {
         getReachableUses(Reg, LaneMask, MI, Uses);
         if (Uses.empty())
@@ -2061,6 +2069,11 @@ public:
                                       const MachineInstr &ToMI) const {
     return calcShortestDistance(&FromMI, &ToMI);
   }
+
+  NextUseDistance getNextUseDistance(Register LiveReg, LaneBitmask LaneMask,
+                                     const MachineInstr &MI,
+                                     const MachineOperand **NextUseOut,
+                                     bool IgnoreDefsAtMI);
 };
 
 AMDGPUNextUseAnalysisImpl::AMDGPUNextUseAnalysisImpl(
@@ -2131,6 +2144,34 @@ NextUseDistance AMDGPUNextUseAnalysisImpl::getShortestDistance(
   return NextUseDist;
 }
 
+NextUseDistance AMDGPUNextUseAnalysisImpl::getNextUseDistance(
+    Register LiveReg, LaneBitmask LaneMask, const MachineInstr &MI,
+    const MachineOperand **NextUseOut, bool IgnoreDefsAtMI) {
+  if (NextUseOut)
+    *NextUseOut = nullptr;
+  if (IgnoreDefsAtMI && collectDefinedRegisters(MI).contains(LiveReg))
+    return NextUseDistance::unreachable();
+
+  maybeClearCachedLiveRegUses(MI);
+  const InstrIdTy LastDelta = getCachedDistDelta(&MI);
+
+  const LiveRegToUseMapElem *CacheElem =
+      findCachedLiveRegUse(LiveReg, LaneMask, MI, LastDelta).second;
+  if (CacheElem) {
+    if (NextUseOut)
+      *NextUseOut = CacheElem->Use.Use;
+    return getCachedDist(CacheElem, LastDelta);
+  }
+
+  SmallVector<const MachineOperand *> Uses;
+  getReachableUses(LiveReg, LaneMask, MI, Uses);
+  if (Uses.empty())
+    return NextUseDistance::unreachable();
+
+  return getShortestDistance(LiveReg, LaneMask, MI, Uses, NextUseOut, nullptr,
+                             nullptr);
+}
+
 void AMDGPUNextUseAnalysisImpl::getReachableUses(
     Register Reg, LaneBitmask LaneMask, const MachineInstr &MI,
     SmallVector<const MachineOperand *> &Uses) const {
@@ -2196,6 +2237,13 @@ void AMDGPUNextUseAnalysis::getReachableUses(
     Register LiveReg, LaneBitmask LaneMask, const MachineInstr &MI,
     SmallVector<const MachineOperand *> &Uses) const {
   return Impl->getReachableUses(LiveReg, LaneMask, MI, Uses);
+}
+
+NextUseDistance AMDGPUNextUseAnalysis::getNextUseDistance(
+    Register LiveReg, LaneBitmask LaneMask, const MachineInstr &MI,
+    const MachineOperand **NextUseOut, bool IgnoreDefsAtMI) const {
+  return Impl->getNextUseDistance(LiveReg, LaneMask, MI, NextUseOut,
+                                  IgnoreDefsAtMI);
 }
 
 /// \Returns the next-use distance for \p LiveReg.

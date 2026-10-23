@@ -294,6 +294,25 @@ public:
                         const MachineInstr &MI,
                         SmallVector<const MachineOperand *> &Uses) const;
 
+  /// \Returns the shortest next-use distance from \p MI for \p LiveReg's \p
+  /// LaneMask, or unreachable() when no matching use is reachable from \p MI.
+  /// Unlike getShortestDistance(), an empty use set is not an error. May read
+  /// the per-instruction distance cache but does not populate it.
+  ///
+  /// When \p IgnoreDefsAtMI is true, registers defined by \p MI are treated as
+  /// having no reachable use.
+  NextUseDistance
+  getNextUseDistance(Register LiveReg, LaneBitmask LaneMask,
+                     const MachineInstr &MI,
+                     const MachineOperand **NextUseOut = nullptr,
+                     bool IgnoreDefsAtMI = false) const;
+
+  NextUseDistance
+  getNextUseDistance(Register LiveReg, const MachineInstr &MI,
+                     const MachineOperand **NextUseOut = nullptr) const {
+    return getNextUseDistance(LiveReg, LaneBitmask::getAll(), MI, NextUseOut);
+  }
+
   /// \Returns the shortest next-use distance from \p CurMI for \p LiveReg.
   NextUseDistance
   getShortestDistance(Register LiveReg, const MachineInstr &CurMI,
