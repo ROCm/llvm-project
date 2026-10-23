@@ -1238,7 +1238,7 @@ static bool isSignedCharDefault(const llvm::Triple &Triple) {
   case llvm::Triple::armeb:
   case llvm::Triple::thumb:
   case llvm::Triple::thumbeb:
-    if (Triple.isOSDarwin() || Triple.isOSWindows())
+    if (Triple.isOSDarwin() || Triple.isOSWindowsOrUEFI())
       return true;
     return false;
 
@@ -1481,9 +1481,9 @@ static void CollectARMPACBTIOptions(const ToolChain &TC, const ArgList &Args,
     if (Scope != "none" && Scope != "non-leaf" && Scope != "all")
       D.Diag(diag::err_drv_unsupported_option_argument)
           << A->getSpelling() << Scope;
-    // This spelling cannot express a key, and AArch64 Windows only supports
-    // B-key, so default to it there as parseBranchProtection() does.
-    Key = isAArch64 && Triple.isOSWindows() ? "b_key" : "a_key";
+    // This spelling cannot express a key, and AArch64 Windows and UEFI only
+    // support B-key, so default to it there as parseBranchProtection() does.
+    Key = isAArch64 && Triple.isOSWindowsOrUEFI() ? "b_key" : "a_key";
     IndirectBranches =
         (Triple.isOSOpenBSD() || Triple.isAndroid()) && isAArch64;
     BranchProtectionPAuthLR = false;
@@ -4186,8 +4186,8 @@ static bool RenderModulesOptions(Compilation &C, const Driver &D,
                    options::OPT_fno_modules_strict_decluse, false))
     CmdArgs.push_back("-fmodules-strict-decluse");
 
-  Args.addOptOutFlag(CmdArgs, options::OPT_fmodulemap_allow_subdirectory_search,
-                     options::OPT_fno_modulemap_allow_subdirectory_search);
+  Args.addOptInFlag(CmdArgs, options::OPT_fmodulemap_allow_subdirectory_search,
+                    options::OPT_fno_modulemap_allow_subdirectory_search);
 
   // -fno-implicit-modules turns off implicitly compiling modules on demand.
   bool ImplicitModules = false;
@@ -7446,14 +7446,16 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
             << A->getAsString(Args) << TripleStr;
     }
     if (Arg *A = Args.getLastArg(options::OPT_mnop_mcount)) {
-      if (Arch == llvm::Triple::systemz)
+      if (Arch == llvm::Triple::systemz ||
+          (TC.getTriple().isX86() && TC.getTriple().isOSBinFormatELF()))
         A->render(Args, CmdArgs);
       else
         D.Diag(diag::err_drv_unsupported_opt_for_target)
             << A->getAsString(Args) << TripleStr;
     }
     if (Arg *A = Args.getLastArg(options::OPT_mrecord_mcount)) {
-      if (Arch == llvm::Triple::systemz)
+      if (Arch == llvm::Triple::systemz ||
+          (TC.getTriple().isX86() && TC.getTriple().isOSBinFormatELF()))
         A->render(Args, CmdArgs);
       else
         D.Diag(diag::err_drv_unsupported_opt_for_target)
@@ -7510,6 +7512,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString("-ftime-trace=" + Twine(Name)));
     Args.AddLastArg(CmdArgs, options::OPT_ftime_trace_granularity_EQ);
     Args.AddLastArg(CmdArgs, options::OPT_ftime_trace_verbose);
+    Args.AddLastArg(CmdArgs, options::OPT_ftime_trace_compress_EQ);
   }
 
   if (Arg *A = Args.getLastArg(options::OPT_ftrapv_handler_EQ)) {
@@ -7914,12 +7917,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                              .Case("c++14", "-std=c++14")
                              .Case("c++17", "-std=c++17")
                              .Case("c++20", "-std=c++20")
+                             .Case("c++23", "-std=c++23")
                              // If you add cases below for spellings that are
                              // not in LangStandards.def, update
                              // TransferableCommand::tryParseStdArg() in
                              // lib/Tooling/InterpolatingCompilationDatabase.cpp
                              // to match.
-                             // TODO add c++23, c++26, c++29 when MSVC supports
+                             // TODO add c++26, c++29 when MSVC supports
                              // it.
                              .Case("c++23preview", "-std=c++23")
                              .Case("c++26preview", "-std=c++26")
@@ -9916,18 +9920,6 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
                                  const InputInfoList &Inputs,
                                  const ArgList &Args,
                                  const char *LinkingOutput) const {
-  bool isAMDGPU = false;
-  auto offloadTC = C.getOffloadToolChains(Action::OFK_OpenMP);
-  const auto OpenMPTCs = llvm::make_range(offloadTC.first, offloadTC.second);
-  const ToolChain *OTC;
-  for (auto &I : OpenMPTCs) {
-    OTC = I.second;
-    if (OTC->getTriple().isAMDGPU()) {
-      isAMDGPU = true;
-      break;
-    }
-  }
-
   using namespace options;
 
   // A list of permitted options that will be forwarded to the embedded device
@@ -9949,6 +9941,7 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
       OPT_ftime_trace_EQ,
       OPT_ftime_trace_granularity_EQ,
       OPT_ftime_trace_verbose,
+      OPT_ftime_trace_compress_EQ,
       OPT_opt_record_file,
       OPT_opt_record_format,
       OPT_opt_record_passes,

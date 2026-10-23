@@ -163,14 +163,6 @@ struct AsyncInfoWrapperTy {
     return getQueueAs<Ty>();
   }
 
-  /// Explicitly synchronize with the __tgt_async_info's pending operations
-  /// regardless of which async info this object wraps. The associated
-  /// underlying queue (if any) will not be released. Calling this function does
-  /// not obviate the need to call the finalize function later. This function is
-  /// intended for specific use cases where a synchronous operation needs to
-  /// explicitly wait for the operations already on the queue.
-  Error synchronize();
-
   /// Synchronize with the __tgt_async_info's pending operations if it's the
   /// internal async info. The error associated to the asynchronous operations
   /// issued in this queue must be provided in \p Err. This function will update
@@ -375,10 +367,6 @@ struct KernelLaunchInfoTy {
   uint32_t ReductionDataSize = 0;
   /// The static memory size per block of the kernel.
   uint32_t StaticBlockMemSize = 0;
-  /// Number of blocks originally requested by the program for the first
-  /// dimension (e.g., num_teams clause), or 0 if none was requested. Unlike
-  /// the other fields, this is set per launch.
-  uint32_t RequestedNumBlocks = 0;
   /// Defaults to OMP_TGT_EXEC_MODE_BARE.
   OMPTgtExecModeFlags Mode = OMP_TGT_EXEC_MODE_BARE;
 
@@ -462,9 +450,6 @@ struct KernelLaunchArgsTy {
     uint64_t Cooperative : 1; // Was this kernel spawned as cooperative.
     uint64_t Unused : 63;
   } Flags = {0, 0};
-  /// Set by the caller when replaying a previously recorded kernel launch, so
-  /// the plugin can report the outcome back; null for a normal launch.
-  KernelReplayOutcomeTy *ReplayOutcome = nullptr;
 };
 
 /// Class implementing common functionalities of offload kernels. Each plugin
@@ -558,21 +543,6 @@ struct GenericKernelTy {
                                             uint64_t numTeams) const {
     // This function should be overridden in the derived class.
     return AchievedOccupancy;
-  }
-
-  /// Downstream: let the plugin compute the effective launch geometry of a
-  /// non-bare OpenMP kernel launch, i.e., the number of threads and blocks of
-  /// the first dimension. On entry, \p NumThreads and \p NumBlocks hold the
-  /// user-requested values; the ones flagged by \p StrictThreads and
-  /// \p StrictBlocks must be kept. Returns false if the plugin does not
-  /// provide its own computation, in which case libomptarget uses the
-  /// generic one.
-  virtual bool computeLaunchGeometry(GenericDeviceTy &GenericDevice,
-                                     const KernelLaunchArgsTy &LaunchArgs,
-                                     bool StrictThreads, bool StrictBlocks,
-                                     uint32_t &NumThreads,
-                                     uint32_t &NumBlocks) const {
-    return false;
   }
 
 protected:
@@ -1291,44 +1261,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   }
   virtual uint64_t getClockFrequency() const { return CLOCKS_PER_SEC; }
 
-  virtual uint32_t getOMPXGenericSpmdTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXBigJumpLoopTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getXTeamRedTeamsPerCU() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXBigJumpLoopMaxTotalTeams() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXLowTripCount() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t
-  getOMPXNumBlocksForLowTripcount(uint64_t LoopTripCount) const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXAdjustNumTeamsForSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXAdjustNumTeamsForXteamRedSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual bool getOMPXXTeamReductionOccupancyBasedOpt() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual bool getOMPXGenericSpmdUseSmallBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-  virtual uint32_t getOMPXXteamBlockSize() const {
-    llvm_unreachable("Unimplemented");
-  }
-
   /// Get a device-specific timestamp in nanoseconds, used by the profiler
   /// for timing device operations. Subclasses should override this to provide
   /// hardware-accurate timestamps (e.g., via HSA system info).
@@ -1344,20 +1276,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual Expected<std::unique_ptr<MemoryBuffer>>
   doJITPostProcessing(std::unique_ptr<MemoryBuffer> MB) const {
     return std::move(MB);
-  }
-
-  /// The minimum number of threads we use for a low-trip count combined loop.
-  /// Instead of using more threads we increase the outer (block/team)
-  /// parallelism.
-  /// @see OMPX_MinThreadsForLowTripCount
-  virtual uint32_t getMinThreadsForLowTripCountLoop() {
-    return OMPX_MinThreadsForLowTripCount;
-  }
-
-  /// Whether or not to reuse blocks for high trip count loops.
-  /// @see OMPX_ReuseBlocksForHighTripCount
-  bool getReuseBlocksForHighTripCount() {
-    return OMPX_ReuseBlocksForHighTripCount;
   }
 
   /// Get the total amount of hardware parallelism supported by the target
@@ -1553,15 +1471,6 @@ private:
   UInt64Envar OMPX_TargetStackSize;
   UInt64Envar OMPX_TargetHeapSize;
 
-  /// Environment flag to set the minimum number of threads we use for a
-  /// low-trip count combined loop. Instead of using more threads we increase
-  /// the outer (block/team) parallelism.
-  UInt32Envar OMPX_MinThreadsForLowTripCount =
-      UInt32Envar("LIBOMPTARGET_MIN_THREADS_FOR_LOW_TRIP_COUNT", 32);
-
-  BoolEnvar OMPX_ReuseBlocksForHighTripCount =
-      BoolEnvar("LIBOMPTARGET_REUSE_BLOCKS_FOR_HIGH_TRIP_COUNT", true);
-
   /// Variable to track kernel launch for a device.
   std::atomic<uint32_t> LaunchId = 0;
 
@@ -1671,9 +1580,6 @@ struct GenericPluginTy {
 
   /// Get the number of active devices.
   int32_t getNumDevices() const { return NumDevices; }
-
-  /// Get the UID for the host device.
-  static constexpr const char *getHostDeviceUid() { return "HOST"; }
 
   /// Get the ELF code to recognize the binary image of this plugin.
   virtual uint16_t getMagicElfBits() const = 0;
@@ -1859,11 +1765,6 @@ public:
                                    const char *ReportFilename,
                                    const char *OutputDirPath);
 
-  /// Loads the associated binary into the plugin and returns a handle to it.
-  int32_t load_binary(int32_t DeviceId, __tgt_device_image *TgtImage,
-                      __tgt_device_binary *Binary,
-                      GenericProfilerTy *ProfilerPtr = nullptr);
-
   /// Allocates memory that is accessively to the given device.
   void *data_alloc(int32_t DeviceId, int64_t Size, void *HostPtr, int32_t Kind,
                    GenericProfilerTy *ProfilerPtr = nullptr);
@@ -1925,14 +1826,6 @@ public:
                             bool set_attr);
   /// Returns if the plugin can support automatic copy.
   int32_t use_auto_zero_copy(int32_t DeviceId);
-
-  /// Look up a global symbol in the given binary.
-  int32_t get_global(__tgt_device_binary Binary, uint64_t Size,
-                     const char *Name, void **DevicePtr);
-
-  /// Look up a kernel function in the given binary.
-  int32_t get_function(__tgt_device_binary Binary, const char *Name,
-                       void **KernelPtr);
 
   /// Perform some checks when using automatic zero copy.
   int32_t zero_copy_sanity_checks_and_diag(int32_t DeviceId,

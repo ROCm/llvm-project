@@ -41,9 +41,11 @@ using namespace llvm::omp::target::error;
 using namespace llvm::omp::target::debug;
 using namespace llvm::omp::target::helpers;
 
+using llvm::omp::target::plugin::GenericKernelTy;
 namespace llvm::offload::tmp {
 GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
 int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device);
+GenericKernelTy *__ol_tgt_GetKernelFromSymbol(ol_symbol_handle_t Symbol);
 } // namespace llvm::offload::tmp
 
 void PluginManager::init() {
@@ -471,18 +473,6 @@ void PluginManager::unregisterLib(__tgt_bin_desc *Desc) {
   ODBG(ODT_Deinit) << "Done unregistering library!";
 }
 
-/// Get the maximum number of threads per team the device supports, further
-/// limited by OMP_TEAMS_THREAD_LIMIT if the user set it.
-static uint32_t getDeviceThreadLimit(
-    llvm::omp::target::plugin::GenericDeviceTy &GenericDevice) {
-  static Int32Envar OMP_TeamsThreadLimit("OMP_TEAMS_THREAD_LIMIT");
-
-  uint32_t ThreadLimit = GenericDevice.getThreadLimit();
-  if (OMP_TeamsThreadLimit > 0)
-    return std::min(ThreadLimit, uint32_t(OMP_TeamsThreadLimit));
-  return ThreadLimit;
-}
-
 /// Map global data and execute pending ctors
 int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
   /*
@@ -519,8 +509,8 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
       }
 
       // 2) Load the image onto the given device.
-      auto BinaryOrErr = Device.loadBinary(Img);
-      if (llvm::Error Err = BinaryOrErr.takeError()) {
+      auto LoadedOrErr = Device.loadBinary(Img);
+      if (llvm::Error Err = LoadedOrErr.takeError()) {
         REPORT() << "Failed to load image " << llvm::toString(std::move(Err));
         Rc = OFFLOAD_FAIL;
         break;
@@ -534,14 +524,20 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
         if (Entry.Kind != object::OffloadKind::OFK_OpenMP)
           continue;
 
-        __tgt_device_binary &Binary = *BinaryOrErr;
+        ProgramTy &Program = *LoadedOrErr;
 
         llvm::offloading::EntryTy DeviceEntry = Entry;
         if (Entry.Size) {
-          if (!(Entry.Flags & OMP_DECLARE_TARGET_INDIRECT_VTABLE))
-            if (Device.RTL->get_global(Binary, Entry.Size, Entry.SymbolName,
-                                       &DeviceEntry.Address) != OFFLOAD_SUCCESS)
-              REPORT() << "Failed to load symbol " << Entry.SymbolName;
+          if (!(Entry.Flags & OMP_DECLARE_TARGET_INDIRECT_VTABLE)) {
+            auto AddrOrErr = Device.getAndRecordGlobalAddress(
+                Program, Entry.SymbolName, Entry.Size);
+            if (!AddrOrErr) {
+              REPORT() << "Failed to load symbol " << Entry.SymbolName << ": "
+                       << llvm::toString(AddrOrErr.takeError());
+            } else {
+              DeviceEntry.Address = *AddrOrErr;
+            }
+          }
 
           // If unified memory is active, the corresponding global is a device
           // reference to the host global. We need to initialize the pointer on
@@ -555,11 +551,15 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
                                         Entry.Size) != OFFLOAD_SUCCESS)
               REPORT() << "Failed to write symbol for USM " << Entry.SymbolName;
         } else if (Entry.Address) {
-          if (Device.RTL->get_function(Binary, Entry.SymbolName,
-                                       &DeviceEntry.Address) !=
-              OFFLOAD_SUCCESS) {
-            REPORT() << "Failed to load kernel " << Entry.SymbolName;
+          auto AddrOrErr = Program.getKernelAddress(Entry.SymbolName);
+          if (!AddrOrErr) {
+            REPORT() << "Failed to load kernel " << Entry.SymbolName << ": "
+                     << llvm::toString(AddrOrErr.takeError());
           } else {
+            GenericKernelTy *Kernel =
+                llvm::offload::tmp::__ol_tgt_GetKernelFromSymbol(*AddrOrErr);
+            DeviceEntry.Address = Kernel;
+
             // Read this kernel's launch-geometry properties once, from its
             // "<name>_kernel_environment" global, and cache them on
             // the device for use at launch time.
@@ -574,11 +574,9 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
                                        uint32_t Size) {
               llvm::omp::target::plugin::GlobalTy HostGlobal(
                   std::string(Entry.SymbolName) + Suffix, Size, Dst);
-              auto &Image =
-                  *reinterpret_cast<llvm::omp::target::plugin::DeviceImageTy *>(
-                      Binary.handle);
               if (auto Err = GenericDevice.Plugin.getGlobalHandler()
-                                 .readGlobalFromImage(GenericDevice, Image,
+                                 .readGlobalFromImage(GenericDevice,
+                                                      Kernel->getImage(),
                                                       HostGlobal)) {
                 // Not all kernels have all of these globals, e.g., No-Loop
                 // kernels have no kernel environment.
@@ -624,9 +622,6 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
                 << KernelLaunchInfoTy::getExecutionModeName(ExecMode)
                 << " execution mode";
 
-            auto *Kernel =
-                reinterpret_cast<llvm::omp::target::plugin::GenericKernelTy *>(
-                    DeviceEntry.Address);
             KernelLaunchInfoTy LaunchInfo;
             LaunchInfo.Mode = ExecMode;
             LaunchInfo.ReductionDataSize = Cfg.ReductionDataSize;
@@ -634,17 +629,17 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
             // Max = Config.Max > 0 ? min(Config.Max, Device.Max) : Device.Max,
             // further clamped to the kernel function's own driver-reported
             // maximum.
-            uint32_t DeviceThreadLimit = getDeviceThreadLimit(GenericDevice);
+            uint32_t DeviceThreadLimit = Device.getThreadLimit();
             LaunchInfo.MaxNumThreads =
                 std::min(Cfg.MaxThreads > 0 ? std::min(uint32_t(Cfg.MaxThreads),
                                                        DeviceThreadLimit)
                                             : DeviceThreadLimit,
                          Kernel->getMaxThreads());
+            uint32_t DefaultNumThreads = Device.getDefaultNumThreads();
             LaunchInfo.PreferredNumThreads =
                 Cfg.MinThreads > 0
-                    ? std::max(Cfg.MinThreads,
-                               int32_t(GenericDevice.getDefaultNumThreads()))
-                    : GenericDevice.getDefaultNumThreads();
+                    ? std::max(Cfg.MinThreads, int32_t(DefaultNumThreads))
+                    : DefaultNumThreads;
 
             // Downstream, "<name>_wg_size" (AMDGPU only) holds the block size
             // CodeGen compiled the kernel for. If present, use it as the
@@ -659,15 +654,13 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
             uint16_t ConstWGSize = 0;
             if (ReadImageGlobal("_wg_size", &ConstWGSize,
                                 sizeof(ConstWGSize))) {
-              LaunchInfo.PreferredNumThreads =
-                  LaunchInfo.isGenericSPMDMode()
-                      ? GenericDevice.getDefaultNumThreads()
-                      : ConstWGSize;
-              uint32_t MaxNumThreads = std::min(
-                  uint32_t(ConstWGSize), getDeviceThreadLimit(GenericDevice));
+              LaunchInfo.PreferredNumThreads = LaunchInfo.isGenericSPMDMode()
+                                                   ? DefaultNumThreads
+                                                   : ConstWGSize;
+              uint32_t MaxNumThreads =
+                  std::min(uint32_t(ConstWGSize), Device.getThreadLimit());
               if (Cfg.MaxThreads > 0 &&
-                  uint32_t(Cfg.MaxThreads) <
-                      GenericDevice.getDefaultNumThreads())
+                  uint32_t(Cfg.MaxThreads) < DefaultNumThreads)
                 MaxNumThreads =
                     std::min(MaxNumThreads, uint32_t(Cfg.MaxThreads));
               LaunchInfo.MaxNumThreads = MaxNumThreads;

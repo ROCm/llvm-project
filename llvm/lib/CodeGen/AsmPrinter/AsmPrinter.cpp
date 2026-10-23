@@ -1375,6 +1375,12 @@ static bool emitDebugValueComment(const MachineInstr *MI, AsmPrinter &AP) {
       OS << "!target-index(" << Op.getIndex() << "," << Op.getOffset() << ")";
       break;
     }
+    case MachineOperand::MO_GlobalAddress: {
+      Op.getGlobal()->printAsOperand(OS, /*PrintType=*/false);
+      if (Op.getOffset())
+        OS << '+' << Op.getOffset();
+      break;
+    }
     case MachineOperand::MO_Register:
     case MachineOperand::MO_FrameIndex: {
       Register Reg;
@@ -1565,7 +1571,7 @@ getBBAddrMapFeature(const MachineFunction &MF, int NumMBBSectionRanges,
           MF.hasBBSections() && NumMBBSectionRanges > 1,
           // Use static_cast to avoid breakage of tests on windows.
           static_cast<bool>(BBAddrMapSkipEmitBBEntries), HasCalls,
-          shouldEmitBBHash(), PostLinkCfgEnabled};
+          shouldEmitBBHash(), PostLinkCfgEnabled, /*FuncGUID=*/false};
 }
 
 void AsmPrinter::emitBBAddrMapSection(const MachineFunction &MF) {
@@ -2885,8 +2891,9 @@ void AsmPrinter::emitRemarksSection(remarks::RemarkStreamer &RS) {
     return;
 
   SmallString<128> Filename = *RS.getFilename();
-  sys::fs::make_absolute(Filename);
   assert(!Filename.empty() && "The filename can't be empty.");
+  assert((Filename == "-" || sys::path::is_absolute(Filename)) &&
+         "The remarks filename must be absolute.");
 
   std::string Buf;
   raw_string_ostream OS(Buf);

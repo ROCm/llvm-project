@@ -310,6 +310,8 @@ void MachineFunction::clear() {
   BasicBlockRecycler.clear(Allocator);
   CodeViewAnnotations.clear();
   VariableDbgInfos.clear();
+  CallSitesInfo.clear();
+  CalledGlobalsInfo.clear();
   if (RegInfo) {
     RegInfo->~MachineRegisterInfo();
     Allocator.Deallocate(RegInfo);
@@ -1839,14 +1841,20 @@ void MachineConstantPool::print(raw_ostream &OS) const {
 }
 
 //===----------------------------------------------------------------------===//
-// Template specialization for MachineFunction implementation of
-// ProfileSummaryInfo::getEntryCount().
+// Template specializations for MachineFunction implementations of
+// ProfileSummaryInfo::getEntryCount() and ProfileSummaryInfo::hasHotAttr().
 //===----------------------------------------------------------------------===//
 template <>
 std::optional<uint64_t>
 ProfileSummaryInfo::getEntryCount<llvm::MachineFunction>(
     const llvm::MachineFunction *F) const {
   return F->getFunction().getEntryCount();
+}
+
+template <>
+bool ProfileSummaryInfo::hasHotAttr<llvm::MachineFunction>(
+    const llvm::MachineFunction *F) const {
+  return F->getFunction().hasFnAttribute(Attribute::Hot);
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)

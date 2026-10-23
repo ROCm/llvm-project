@@ -37,7 +37,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 120
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
     steps:
       # ---- Checkout ---------------------------------------------------------
       # llvm-project at PR head (this repo) provides LLVM/Clang/LLD + amd/
@@ -403,7 +403,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 30
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
     permissions:
       contents: read
 
@@ -470,7 +470,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 15
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
 
     steps:
       - name: Checkout llvm-project (PR head)
@@ -518,7 +518,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 30
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
 
     steps:
       - name: Checkout llvm-project (PR head)
@@ -640,7 +640,7 @@ jobs:
     # slow/contended and 45m was cutting the job before it could finish.
     timeout-minutes: 240
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
       options: |
         --device=/dev/kfd --device=/dev/dri  --group-add video
 
@@ -675,8 +675,9 @@ jobs:
             -DCMAKE_PREFIX_PATH=$STAGING                                       \
             -DCMAKE_DISABLE_FIND_PACKAGE_Perl=TRUE                             \
             -DCMAKE_HIP_FLAGS="--rocm-path=$STAGING"                           \
-            -DCMAKE_HIP_LINK_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"    \
-            -DCMAKE_EXE_LINKER_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"
+            -DCMAKE_HIP_STANDARD_LIBRARIES=-lamdhip64                          \
+            -DCMAKE_HIP_LINK_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed" \
+            -DCMAKE_EXE_LINKER_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed"
           cmake --build examples-build-hip-basic -j $(nproc)
 
       - name: ROCm Examples run HIP-Basic
@@ -697,8 +698,9 @@ jobs:
             -DCMAKE_HIP_COMPILER_ROCM_ROOT=$STAGING                            \
             -DCMAKE_PREFIX_PATH=$STAGING                                       \
             -DCMAKE_HIP_FLAGS="--rocm-path=$STAGING"                           \
-            -DCMAKE_HIP_LINK_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"    \
-            -DCMAKE_EXE_LINKER_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"
+            -DCMAKE_HIP_STANDARD_LIBRARIES=-lamdhip64                          \
+            -DCMAKE_HIP_LINK_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed" \
+            -DCMAKE_EXE_LINKER_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed"
           cmake --build examples-build-Applications -j $(nproc)
 
       - name: ROCm Examples run Applications
@@ -723,10 +725,11 @@ jobs:
             -DCMAKE_HIP_ARCHITECTURES=amdgcnspirv                              \
             -DCMAKE_DISABLE_FIND_PACKAGE_Perl=TRUE                             \
             -DCMAKE_HIP_FLAGS="-DROCPRIM_DISABLE_DPP=1 --offload-new-driver --rocm-path=$STAGING -use-spirv-backend --rtlib=libgcc -unwindlib=libgcc" \
-            -DCMAKE_HIP_LINK_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--unresolved-symbols=ignore-in-shared-libs" \
+            -DCMAKE_HIP_STANDARD_LIBRARIES=-lamdhip64                          \
+            -DCMAKE_HIP_LINK_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed -Wl,--unresolved-symbols=ignore-in-shared-libs" \
             -DCMAKE_CXX_FLAGS="--rtlib=libgcc -unwindlib=libgcc"               \
-            -DCMAKE_EXE_LINKER_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--unresolved-symbols=ignore-in-shared-libs" \
-            -DCMAKE_SHARED_LINKER_FLAGS="--rtlib=libgcc -unwindlib=libgcc"
+            -DCMAKE_EXE_LINKER_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed -Wl,--unresolved-symbols=ignore-in-shared-libs" \
+            -DCMAKE_SHARED_LINKER_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed"
           cmake --build examples-build-Libraries -j $(nproc)
 
       - name: ROCm Examples run Libraries
@@ -752,7 +755,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
       options: |
         --device=/dev/kfd --device=/dev/dri  --group-add video
 

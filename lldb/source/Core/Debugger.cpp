@@ -1078,8 +1078,8 @@ Debugger::Debugger(lldb::LogOutputCallback log_callback, void *baton)
       m_error_stream_sp(std::make_shared<LockableStreamFile>(
           stderr, NativeFile::Unowned, m_output_mutex)),
       m_broadcaster_manager_sp(BroadcasterManager::MakeBroadcasterManager()),
-      m_terminal_state(), m_target_list(*this), m_platform_list(),
-      m_listener_sp(Listener::MakeListener("lldb.Debugger")),
+      m_terminal_state(), m_target_list(*this), m_target_group_list(*this),
+      m_platform_list(), m_listener_sp(Listener::MakeListener("lldb.Debugger")),
       m_source_manager_up(), m_source_file_cache(),
       m_command_interpreter_up(
           std::make_unique<CommandInterpreter>(*this, false)),
@@ -1201,6 +1201,7 @@ void Debugger::Clear() {
         target_sp->Destroy();
       }
     }
+    m_target_group_list.Clear();
     m_broadcaster_manager_sp->Clear();
 
     // Close the input file _before_ we close the input read communications
@@ -2654,7 +2655,7 @@ StructuredData::DictionarySP Debugger::GetBuildConfiguration() {
       *config_up, "zlib", LLVM_ENABLE_ZLIB,
       "A boolean value that indicates if zlib support is enabled in LLDB");
   AddBoolConfigEntry(
-      *config_up, "lzma", LLDB_ENABLE_LZMA,
+      *config_up, "lzma", LLVM_ENABLE_LZMA,
       "A boolean value that indicates if lzma support is enabled in LLDB");
   AddBoolConfigEntry(
       *config_up, "python", LLDB_ENABLE_PYTHON,

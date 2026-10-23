@@ -1565,6 +1565,12 @@ bool InstructionMatcher::isHigherPriorityThan(InstructionMatcher &B) {
   if (Operands.size() < B.Operands.size())
     return false;
 
+  // Instruction matchers involving more predicates have higher priority.
+  if (predicates_size() > B.predicates_size())
+    return true;
+  if (predicates_size() < B.predicates_size())
+    return false;
+
   for (auto &&P : zip(predicates(), B.predicates())) {
     auto L = static_cast<InstructionPredicateMatcher *>(std::get<0>(P).get());
     auto R = static_cast<InstructionPredicateMatcher *>(std::get<1>(P).get());
@@ -1580,11 +1586,6 @@ bool InstructionMatcher::isHigherPriorityThan(InstructionMatcher &B) {
     if (std::get<1>(Operand)->isHigherPriorityThan(*std::get<0>(Operand)))
       return false;
   }
-  // Instruction matchers involving more predicates have higher priority.
-  if (predicates_size() > B.predicates_size())
-    return true;
-  if (predicates_size() < B.predicates_size())
-    return false;
 
   return false;
 }
@@ -1681,8 +1682,7 @@ bool InstructionOperandMatcher::isHigherPriorityThan(
 
 //===- MachineOperandTypeMatcher -----------------------------------------===//
 
-void MachineOperandTypeMatcher::emitPredicateOpcodes(MatchTable &Table,
-                                                     RuleMatcher &Rule) const {
+void MachineOperandTypeMatcher::emitPredicateOpcodes(MatchTable &Table) const {
   Table << MatchTable::Opcode("GIM_CheckMachineOperandType")
         << MatchTable::Comment("MI") << MatchTable::ULEB128Value(InsnVarID)
         << MatchTable::Comment("Op") << MatchTable::ULEB128Value(OpIdx)

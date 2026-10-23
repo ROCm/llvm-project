@@ -208,6 +208,9 @@ if ("lldb" IN_LIST LLVM_ENABLE_PROJECTS)
   endif()
 endif ()
 
+# diable for staging
+#option(CLANG_ENABLE_CIR "Build ClangIR support into the compiler" ON)
+option(CLANG_ENABLE_CIR "Build ClangIR support into the compiler" OFF)
 if (CLANG_ENABLE_CIR AND "clang" IN_LIST LLVM_ENABLE_PROJECTS AND
     NOT "mlir" IN_LIST LLVM_ENABLE_PROJECTS)
   message(STATUS "Enabling MLIR as a dependency of ClangIR")
@@ -642,6 +645,26 @@ set(LLVM_ENABLE_ZSTD "ON" CACHE STRING "Use zstd for compression/decompression i
 
 set(LLVM_USE_STATIC_ZSTD FALSE CACHE BOOL "Use static version of zstd. Can be TRUE, FALSE")
 
+# liblzma is an LLVM dependency now, so temporarily translate LLDB's older
+# LLDB_ENABLE_LZMA; its On meant required, hence FORCE_ON.
+set(LLVM_ENABLE_LZMA_DEFAULT "ON")
+if(DEFINED LLDB_ENABLE_LZMA)
+  string(TOUPPER "${LLDB_ENABLE_LZMA}" lldb_enable_lzma)
+  if(NOT lldb_enable_lzma STREQUAL "AUTO")
+    message(DEPRECATION
+      "LLDB_ENABLE_LZMA is deprecated. Set LLVM_ENABLE_LZMA (ON, OFF or "
+      "FORCE_ON) instead; liblzma is now found by LLVM, not by LLDB.")
+    if(lldb_enable_lzma)
+      set(LLVM_ENABLE_LZMA_DEFAULT "FORCE_ON")
+    else()
+      set(LLVM_ENABLE_LZMA_DEFAULT "OFF")
+    endif()
+  endif()
+  unset(lldb_enable_lzma)
+endif()
+set(LLVM_ENABLE_LZMA "${LLVM_ENABLE_LZMA_DEFAULT}" CACHE STRING "Use liblzma for xz decompression if available. Can be ON, OFF, or FORCE_ON")
+unset(LLVM_ENABLE_LZMA_DEFAULT)
+
 set(LLVM_ENABLE_CURL "OFF" CACHE STRING "Use libcurl for the HTTP client if available. Can be ON, OFF, or FORCE_ON")
 
 set(LLVM_HAS_LOGF128 "OFF" CACHE STRING "Use logf128 to constant fold fp128 logarithm calls. Can be ON, OFF, or FORCE_ON")
@@ -933,7 +956,8 @@ else()
 endif()
 
 # Used to test building the llvm shared library with explicit symbol visibility on
-# Windows and Linux. For ELF platforms default symbols visibility is set to hidden.
+# Windows, Linux and macOS. For ELF and Mach-O platforms default symbol visibility
+# is set to hidden.
 set(LLVM_BUILD_LLVM_DYLIB_VIS FALSE CACHE BOOL "")
 mark_as_advanced(LLVM_BUILD_LLVM_DYLIB_VIS)
 
