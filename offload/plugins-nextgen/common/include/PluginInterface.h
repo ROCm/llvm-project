@@ -1739,9 +1739,6 @@ public:
   /// Unused in current implementation.
   int32_t supports_empty_images();
 
-  /// Returns the number of processors available on the device.
-  int number_of_team_procs(int DeviceId);
-
   /// Returns if this device is an APU.
   bool has_apu_device(int32_t DeviceId);
 
@@ -1754,9 +1751,6 @@ public:
   /// Returns if GFX90A coarse graining of OpenMP mapped
   /// variables is enabled under unified shared memory.
   bool is_gfx90a_coarse_grain_usm_map_enabled(int32_t DeviceId);
-
-  /// Returns non-zero if the data can be exchanged between the two devices.
-  int32_t is_data_exchangable(int32_t SrcDeviceId, int32_t DstDeviceId);
 
   /// Initializes the record and replay mechanism inside the plugin.
   int32_t initialize_record_replay(int32_t DeviceId, int64_t MemorySize,
@@ -1772,27 +1766,6 @@ public:
   /// Deallocates memory on the given device.
   int32_t data_delete(int32_t DeviceId, void *TgtPtr, int32_t Kind,
                       GenericProfilerTy *ProfilerPtr = nullptr);
-
-  /// Copy data to the given device.
-  int32_t data_submit(int32_t DeviceId, void *TgtPtr, void *HstPtr,
-                      int64_t Size);
-
-  /// Copy data to the given device asynchronously.
-  int32_t data_submit_async(int32_t DeviceId, void *TgtPtr, void *HstPtr,
-                            int64_t Size, __tgt_async_info *AsyncInfoPtr);
-
-  /// Copy data from the given device asynchronously.
-  int32_t data_retrieve_async(int32_t DeviceId, void *HstPtr, void *TgtPtr,
-                              int64_t Size, __tgt_async_info *AsyncInfoPtr);
-
-  /// Exchange memory addresses between two devices.
-  int32_t data_exchange(int32_t SrcDeviceId, void *SrcPtr, int32_t DstDeviceId,
-                        void *DstPtr, int64_t Size);
-
-  /// Exchange memory addresses between two devices asynchronously.
-  int32_t data_exchange_async(int32_t SrcDeviceId, void *SrcPtr,
-                              int DstDeviceId, void *DstPtr, int64_t Size,
-                              __tgt_async_info *AsyncInfo);
 
   /// Places a fence between previous data movements and following data
   /// movements if necessary on the device
