@@ -151,9 +151,6 @@ uint32_t DeviceTy::getThreadLimit() const {
 }
 
 llvm::Error DeviceTy::init() {
-  // Plugin devices are initialized by liboffload before a handle is published.
-  setTeamProcs(RTL->number_of_team_procs(RTLDeviceID));
-
   if (auto Res = olCreateContext(1, &DeviceHandle, &Context))
     return createError(ErrorCode::BackendFailure,
                        "failed to create context for device %d: %s", DeviceID,
