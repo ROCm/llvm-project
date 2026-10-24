@@ -798,6 +798,7 @@ documentation](CIR/index.md) for more information regarding ClangIR's status and
 
 #### Bug Fixes to Compiler Builtins
 
+- Dropped invalid ``constexpr`` specifier from ``__builtin_assume_separate_storage``, which is not supported in constexpr evaluation. (#GH225335)
 - Fixed a crash when classifying a call to a builtin with dependent arguments,
   such as when the call is used as an `auto` non-type template argument.
 - Fixed an assertion failure when diagnosing a constant evaluation failure
@@ -868,6 +869,10 @@ documentation](CIR/index.md) for more information regarding ClangIR's status and
   `extern` variable with an initializer. Static data members declared with
   `alias` are now correctly diagnosed as definitions when followed by an
   out-of-line definition. (#GH204762)
+
+- Fixed an assertion failure when generating code for an x86 function with the
+  `interrupt` attribute whose first parameter uses a typedef for a pointer
+  type. (#GH204756)
 
 #### Bug Fixes to C++ Support
 - Instantiate constexpr functions as needed before they are evaluated. (#GH73232) (#GH35052) (#GH100897)
@@ -1095,6 +1100,10 @@ documentation](CIR/index.md) for more information regarding ClangIR's status and
   whose parameter type uses pack indexing, and makes such valid matches
   succeed instead of being rejected. (#GH232220)
 
+- Fixed missing destructor cleanups and incorrect initialization for lambda
+  init-captures in default member initializers used during aggregate
+  initialization. (#GH196469)
+
 #### Bug Fixes to AST Handling
 
 - Fixed a non-deterministic ordering of unused local typedefs that made
@@ -1108,6 +1117,12 @@ documentation](CIR/index.md) for more information regarding ClangIR's status and
   when calling a explicit object member function. (#GH218829)
 
 #### Miscellaneous Bug Fixes
+
+- Fixed `clang-cl` optimization options such as `/O1`, `/O2`, and
+  `/Ox` being ignored when compiling HIP device code or using a non-MSVC
+  host toolchain. Macro definitions using `#` as the value separator and
+  `/permissive` options are also translated consistently for host and device
+  compilation.
 
 #### Miscellaneous Clang Crashes Fixed
 
@@ -1174,6 +1189,11 @@ documentation](CIR/index.md) for more information regarding ClangIR's status and
   - `__builtin_amdgcn_sicmpl`
   - `__builtin_amdgcn_fcmp`
   - `__builtin_amdgcn_fcmpf`
+
+#### BPF Support
+
+- Added `-mcpu=v5` and the `__BPF_FEATURE_HMUL` predefined macro for unsigned
+  and signed high-half multiply instructions.
 
 #### DirectX Support
 
