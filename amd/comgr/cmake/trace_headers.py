@@ -9,7 +9,7 @@ import argparse
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 # CMake build helper starts a local clang
 import sys
 import tempfile
 
@@ -46,7 +46,7 @@ def trace_headers(clang, libcxx_dir, config_site, target, headers):
     ]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603 # argument list, clang from this build
     finally:
         os.unlink(test_file)
         os.unlink(os.path.join(config_dir, '__config_site'))
