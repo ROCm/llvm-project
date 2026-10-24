@@ -531,7 +531,6 @@ void RestoreCandidate::generateSpillRestoreInstrs(
     MachineInstr *OrigRestore = DG.getRestore();
     assert(InstrOfCandidateReg == OrigRestore &&
            "It should be the same instruction.");
-    // OrigRestore->moveBefore(Head);
     OrigRestore->removeFromParent();
     RestoreBlock->insert(RestoreBlock->getFirstTerminator(), OrigRestore);
     updateIndexes(OrigRestore, Indexes);
@@ -1599,15 +1598,6 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
         assert(HeadLoop && "Cannot move restore inside the loop.");
         MachineBasicBlock *PreHeader =
             OutermostLoopOfCurLoop->getLoopPreheader();
-        MachineBasicBlock *HeadLoopPreheader = nullptr;
-        if (HeadLoop == OutermostLoopOfCurLoop)
-          HeadLoopPreheader = HeadLoop->getLoopPreheader();
-
-        if (Head->isPHI() && (Head->getParent() == HeadLoopPreheader))
-          continue;
-
-        if (OrigRestore->getParent() != PreHeader)
-          continue;
 
         assert(OrigRestore->getParent() == PreHeader &&
                "Should not process this restore here");
