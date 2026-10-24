@@ -55,6 +55,7 @@ public:
     LoopPreheader,      // Emit restore in loop preheader.
     IncomingBlockOfPhi, // Emit restore for incoming value in phi node.
     CommonDominator,    // Emit restore in common dominator.
+    FinalPosition,      // Do not move the restore again.
   };
 
 private:

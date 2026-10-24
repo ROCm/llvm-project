@@ -275,6 +275,10 @@ void SpillOrRestoreCandidate::emitRestoresForHead(
                                *TRI);
       DG.setLaneBitmask(Mask);
       DG.setRestore(Restore);
+      MachineLoop *HeadLoop = MLI->getLoopFor(HeadMBB);
+      if (HeadLoop && HeadLoop->getLoopDepth() == 1) {
+        DG.setWhereToRestore(DomGroup::RestorePlacement::FinalPosition);
+      }
     } else {
       LLVM_DEBUG(dbgs() << "Common case.\n");
       LLVM_DEBUG(dbgs() << "The group has " << DG.size() << " use(s). \n");
@@ -508,8 +512,12 @@ void RestoreCandidate::generateSpillRestoreInstrs(
     // Update RestoreRegToDomGroup map with the updated DomGroup.
     RestoreRegToDomGroup[OrigRestore->getOperand(0).getReg()] = DG;
 
-    DG.setWhereToRestore(DomGroup::RestorePlacement::BeforeHead);
-
+    MachineLoop *HeadLoop = MLI->getLoopFor(HeadMBB);
+    if (!HeadLoop) {
+      DG.setWhereToRestore(DomGroup::RestorePlacement::BeforeHead);
+    } else {
+      DG.setWhereToRestore(DomGroup::RestorePlacement::FinalPosition);
+    }
     break;
   }
   case CodeGenPlan::MoveRestoreInLoopNestPreheader: {
@@ -572,7 +580,7 @@ void RestoreCandidate::generateSpillRestoreInstrs(
     // Update RestoreRegToDomGroup map with the updated DomGroup.
     RestoreRegToDomGroup[OrigRestore->getOperand(0).getReg()] = DG;
 
-    DG.setWhereToRestore(DomGroup::RestorePlacement::LoopPreheader);
+    DG.setWhereToRestore(DomGroup::RestorePlacement::FinalPosition);
 
     break;
   }
@@ -1601,9 +1609,8 @@ void AMDGPUEarlyRegisterSpilling::spill(MachineInstr *CurMI,
         if (OrigRestore->getParent() != PreHeader)
           continue;
 
-        if (((CurLoop == HeadLoop) || CurLoop->contains(HeadLoop)) &&
-            CurLoop->getLoopDepth() >= 2)
-          continue;
+        assert(OrigRestore->getParent() == PreHeader &&
+               "Should not process this restore here");
 
         if (HeadLoop && HeadLoop->getLoopDepth() >= 2) {
           assert(DG.getWhereToRestore() ==
