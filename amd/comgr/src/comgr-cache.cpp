@@ -195,7 +195,7 @@ CommandCache::CommandCache(StringRef CacheDir, const CachePruningPolicy &Policy,
 CommandCache::~CommandCache() { prune(); }
 
 amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
-                                         raw_ostream &LogS) {
+                                         raw_ostream &LogS, CachedOutput *Hit) {
 
   if (!C.canCache()) {
     // Do not cache preprocessor commands.
@@ -244,10 +244,28 @@ amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
   // If the "AddStream" is nullptr, then the data was cached and we already
   // called the "AddBuffer" lambda.
   AddStreamFn &AddStream = *AddStreamOrErr;
-  if (!AddStream && readEntryFromCache(C, *CachedBuffer, LogS)) {
-    if (env::shouldEmitVerboseLogs())
-      LogS << "Comgr cache: found entry " << *MaybeId << " in cache.\n";
-    return AMD_COMGR_STATUS_SUCCESS;
+  if (!AddStream) {
+    bool Found = false;
+    if (Hit) {
+      StringRef CachedOutputFile;
+      StringRef CachedLogS;
+      if (Error E = deserializeCacheEntry(*CachedBuffer, CachedOutputFile,
+                                          CachedLogS)) {
+        ErrorHandler(std::move(E), "when reading the cache entry");
+      } else {
+        LogS << CachedLogS;
+        Hit->Output = CachedOutputFile;
+        Hit->Entry = std::move(CachedBuffer);
+        Found = true;
+      }
+    } else {
+      Found = readEntryFromCache(C, *CachedBuffer, LogS);
+    }
+    if (Found) {
+      if (env::shouldEmitVerboseLogs())
+        LogS << "Comgr cache: found entry " << *MaybeId << " in cache.\n";
+      return AMD_COMGR_STATUS_SUCCESS;
+    }
   }
 
   std::string CapturedLogS;
