@@ -13,7 +13,7 @@
 #
 # ===----------------------------------------------------------------------===#
 
-import subprocess
+import subprocess  # nosec B404 # lit helper starts local test tools
 import sys
 
 
@@ -21,7 +21,7 @@ def run(cmd):
     """Run cmd (a list of args), echoing it.  Exit nonzero on failure so lit
     reports the test as failed and the failing command is visible."""
     print("+ " + " ".join(cmd), flush=True)
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd)  # nosec B603 # cmd is an argument list
     if result.returncode != 0:
         sys.exit("command failed (exit %d): %s" % (result.returncode, " ".join(cmd)))
 
@@ -36,7 +36,7 @@ def main(argv):
 
     # isa-enumeration prints one ISA name (with optional feature suffixes)
     # per line.
-    enumerated = subprocess.run(
+    enumerated = subprocess.run(  # nosec B603 B607 # isa-enumeration is on the lit PATH
         ["isa-enumeration"], check=True, capture_output=True, text=True
     )
     isas = [line for line in enumerated.stdout.splitlines() if line]
