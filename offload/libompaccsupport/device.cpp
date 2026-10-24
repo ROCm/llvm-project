@@ -53,11 +53,6 @@ using namespace llvm::omp::target::error;
 using namespace llvm::omp::target::plugin;
 using namespace llvm::omp::target::debug;
 
-namespace llvm::offload::tmp {
-GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
-int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device);
-} // namespace llvm::offload::tmp
-
 int HostDataToTargetTy::addEventIfNecessary(DeviceTy &Device,
                                             AsyncInfoTy &AsyncInfo) const {
   // First, check if the user disabled atomic map transfer/malloc/dealloc.
@@ -78,16 +73,11 @@ int HostDataToTargetTy::addEventIfNecessary(DeviceTy &Device,
   return OFFLOAD_SUCCESS;
 }
 
-DeviceTy::DeviceTy(int32_t DeviceID, ol_platform_handle_t Platform,
+DeviceTy::DeviceTy(GenericPluginTy *RTL, int32_t DeviceID, int32_t RTLDeviceID,
                    ol_device_handle_t DeviceHandle, PluginManager *PM)
-<<<<<<< HEAD
     : DeviceID(DeviceID), RTL(RTL), RTLDeviceID(RTLDeviceID),
       ForceSynchronousTargetRegions(false), DeviceHandle(DeviceHandle), PM(PM),
       MappingInfo(*this) {}
-=======
-    : DeviceID(DeviceID), Platform(Platform), DeviceHandle(DeviceHandle),
-      PM(PM), MappingInfo(*this) {}
->>>>>>> 7177619fd2ca
 
 DeviceTy::~DeviceTy() {
   if (DeviceID == -1 || !(getInfoLevel() & OMP_INFOTYPE_DUMP_TABLE))
@@ -143,16 +133,12 @@ llvm::Error DeviceTy::initGeometryProps() {
       getInfo<uint32_t>(DeviceInfo::NUM_COMPUTE_UNITS);
   // Some defaults depend on the backend. If it is unknown, the generic ones
   // apply.
-<<<<<<< HEAD
   if (auto Platform = getInfo<ol_platform_handle_t>(DeviceInfo::PLATFORM)) {
     if (olGetPlatformInfo(Platform, OL_PLATFORM_INFO_BACKEND,
                           sizeof(GeometryProps.Backend),
                           &GeometryProps.Backend))
       GeometryProps.Backend = OL_PLATFORM_BACKEND_UNKNOWN;
   }
-=======
-  GeometryProps.Backend = Backend;
->>>>>>> 7177619fd2ca
 
   return llvm::Error::success();
 }
@@ -175,14 +161,6 @@ llvm::Error DeviceTy::init() {
                        Res->Details);
   IsHostDevice =
       getInfo<ol_device_type_t>(DeviceInfo::TYPE) == OL_DEVICE_TYPE_HOST;
-
-  RTL = llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
-  RTLDeviceID = llvm::offload::tmp::__ol_tgt_GetPluginDeviceId(DeviceHandle);
-
-  // Needs to be initialized before the GeometryProps.
-  if (olGetPlatformInfo(Platform, OL_PLATFORM_INFO_BACKEND, sizeof(Backend),
-                        &Backend))
-    Backend = OL_PLATFORM_BACKEND_UNKNOWN;
 
   getInfoString(DeviceInfo::UID, Uid);
   if (Uid.empty())
