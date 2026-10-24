@@ -114,19 +114,23 @@ void saveCommandOutput(CachedCommandAdaptor &C, AddStreamFn &AddStream,
   ErrorHandler(CFS->commit(), "when commiting file stream");
 }
 
-bool readEntryFromCache(CachedCommandAdaptor &C, MemoryBuffer &CachedBuffer,
-                        raw_ostream &LogS) {
+bool readEntryFromCache(CachedCommandAdaptor &C,
+                        std::unique_ptr<MemoryBuffer> &CachedBuffer,
+                        raw_ostream &LogS, CommandCache::CachedOutput *Hit) {
   auto ErrorHandler = getComgrCacheErrorHandler(LogS);
 
   StringRef CachedOutputFile;
   StringRef CachedLogS;
   if (Error E =
-          deserializeCacheEntry(CachedBuffer, CachedOutputFile, CachedLogS)) {
+          deserializeCacheEntry(*CachedBuffer, CachedOutputFile, CachedLogS)) {
     ErrorHandler(std::move(E), "when reading the cache entry");
     return false;
   }
 
-  if (Error E = C.writeExecuteOutput(CachedOutputFile)) {
+  if (Hit) {
+    Hit->Output = CachedOutputFile;
+    Hit->Entry = std::move(CachedBuffer);
+  } else if (Error E = C.writeExecuteOutput(CachedOutputFile)) {
     ErrorHandler(std::move(E), "when writing the command output");
     return false;
   }
@@ -195,7 +199,7 @@ CommandCache::CommandCache(StringRef CacheDir, const CachePruningPolicy &Policy,
 CommandCache::~CommandCache() { prune(); }
 
 amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
-                                         raw_ostream &LogS) {
+                                         raw_ostream &LogS, CachedOutput *Hit) {
 
   if (!C.canCache()) {
     // Do not cache preprocessor commands.
@@ -244,7 +248,7 @@ amd_comgr_status_t CommandCache::execute(CachedCommandAdaptor &C,
   // If the "AddStream" is nullptr, then the data was cached and we already
   // called the "AddBuffer" lambda.
   AddStreamFn &AddStream = *AddStreamOrErr;
-  if (!AddStream && readEntryFromCache(C, *CachedBuffer, LogS)) {
+  if (!AddStream && readEntryFromCache(C, CachedBuffer, LogS, Hit)) {
     if (env::shouldEmitVerboseLogs())
       LogS << "Comgr cache: found entry " << *MaybeId << " in cache.\n";
     return AMD_COMGR_STATUS_SUCCESS;

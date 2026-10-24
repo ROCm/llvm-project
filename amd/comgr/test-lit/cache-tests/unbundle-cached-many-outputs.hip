@@ -46,7 +46,7 @@
 // Make the size of the first output larger than the entry. The entry is
 // ignored and the input is unbundled again.
 // RUN: printf '\377\377\377\377' | dd of=$(ls %t.cache/llvmcache-*) bs=1 \
-// RUN:    seek=8 conv=notrunc 2>/dev/null
+// RUN:    seek=12 conv=notrunc 2>/dev/null
 // RUN: unbundle %t.compressed-bundle.bc \
 // RUN:    hip-amdgcn-amd-amdhsa-unknown-gfx900 %t.bad.0.bc \
 // RUN:    hip-amdgcn-amd-amdhsa-unknown-gfx906 %t.bad.1.bc \
