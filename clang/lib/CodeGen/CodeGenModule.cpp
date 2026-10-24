@@ -156,7 +156,7 @@ createTargetCodeGenInfo(CodeGenModule &CGM) {
     AArch64ABIKind Kind = AArch64ABIKind::AAPCS;
     if (Target.getABI() == "darwinpcs")
       Kind = AArch64ABIKind::DarwinPCS;
-    else if (Triple.isOSWindows())
+    else if (Triple.isOSWindowsOrUEFI())
       return createWindowsAArch64TargetCodeGenInfo(CGM, AArch64ABIKind::Win64);
     else if (Target.getABI() == "aapcs-soft")
       Kind = AArch64ABIKind::AAPCSSoft;
@@ -340,6 +340,8 @@ createTargetCodeGenInfo(CodeGenModule &CGM) {
     return createLoongArchTargetCodeGenInfo(
         CGM, Target.getPointerWidth(LangAS::Default), ABIFRLen);
   }
+  case llvm::Triple::xtensa:
+    return createXtensaTargetCodeGenInfo(CGM);
   }
 }
 

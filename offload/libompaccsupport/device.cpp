@@ -127,6 +127,18 @@ llvm::Error DeviceTy::initGeometryProps() {
   if (auto Err = Query(DeviceInfo::WORK_GROUP_LOCAL_MEM_SIZE,
                        GeometryProps.MaxBlockSharedMemSize))
     return Err;
+  // Not every device reports its number of compute units; zero turns off the
+  // heuristics that need it.
+  GeometryProps.NumComputeUnits =
+      getInfo<uint32_t>(DeviceInfo::NUM_COMPUTE_UNITS);
+  // Some defaults depend on the backend. If it is unknown, the generic ones
+  // apply.
+  if (auto Platform = getInfo<ol_platform_handle_t>(DeviceInfo::PLATFORM)) {
+    if (olGetPlatformInfo(Platform, OL_PLATFORM_INFO_BACKEND,
+                          sizeof(GeometryProps.Backend),
+                          &GeometryProps.Backend))
+      GeometryProps.Backend = OL_PLATFORM_BACKEND_UNKNOWN;
+  }
 
   return llvm::Error::success();
 }
@@ -281,7 +293,6 @@ DeviceTy::getAndRecordGlobalAddress(const ProgramTy &Program, const char *Name,
 static llvm::Expected<std::pair<void *, uint64_t>>
 setupIndirectCallTable(DeviceTy &Device, __tgt_device_image *Image,
                        const ProgramTy &Program) {
-  AsyncInfoTy AsyncInfo(Device);
   llvm::ArrayRef<llvm::offloading::EntryTy> Entries(Image->EntriesBegin,
                                                     Image->EntriesEnd);
   llvm::SmallVector<std::pair<void *, void *>> IndirectCallTable;
@@ -306,12 +317,8 @@ setupIndirectCallTable(DeviceTy &Device, __tgt_device_image *Image,
       void *Vtable = *VtableOrErr;
 
       // HstPtr = Entry.Address;
-      if (Device.retrieveData(&res, Vtable, PtrSize, AsyncInfo))
+      if (Device.retrieveDataSync(&res, Vtable, PtrSize))
         return createError(ErrorCode::InvalidBinary, "failed to load %s",
-                           Entry.SymbolName);
-      if (Device.synchronize(AsyncInfo))
-        return createError(ErrorCode::InvalidBinary,
-                           "failed to synchronize after retrieving %s",
                            Entry.SymbolName);
       // Calculate and emplace entire Vtable from first Vtable byte
       for (uint64_t i = 0; i < Entry.Size / PtrSize; ++i) {
@@ -333,14 +340,10 @@ setupIndirectCallTable(DeviceTy &Device, __tgt_device_image *Image,
       void *Ptr = *PtrOrErr;
 
       HstPtr = Entry.Address;
-      if (Device.retrieveData(&DevPtr, Ptr, Entry.Size, AsyncInfo))
+      if (Device.retrieveDataSync(&DevPtr, Ptr, Entry.Size))
         return createError(ErrorCode::InvalidBinary, "failed to load %s",
                            Entry.SymbolName);
     }
-    if (Device.synchronize(AsyncInfo))
-      return createError(ErrorCode::InvalidBinary,
-                         "failed to synchronize after retrieving %s",
-                         Entry.SymbolName);
   }
 
   // If we do not have any indirect globals we exit early.
@@ -354,15 +357,13 @@ setupIndirectCallTable(DeviceTy &Device, __tgt_device_image *Image,
   uint64_t TableSize =
       IndirectCallTable.size() * sizeof(std::pair<void *, void *>);
   void *DevicePtr = Device.allocData(TableSize, nullptr, TARGET_ALLOC_DEVICE);
-  if (Device.submitData(DevicePtr, IndirectCallTable.data(), TableSize,
-                        AsyncInfo, /*Entry=*/nullptr, /*HDTTMapPtr=*/nullptr,
-                        /*Loc=*/nullptr, /*Name=*/"IndirectCallTable"))
+  // The IndirectCallTable is on the stack, so the copy must be synchronous to
+  // ensure the data is copied before we return.
+  if (Device.submitDataSync(DevicePtr, IndirectCallTable.data(), TableSize,
+                            /*Entry=*/nullptr,
+                            /*HDTTMapPtr=*/nullptr, /*Loc=*/nullptr,
+                            /*Name=*/"IndirectCallTable"))
     return createError(ErrorCode::InvalidBinary, "failed to copy data");
-  // The IndirectCallTable is on the stack, so we must synchronize to ensure
-  // the data is copied before we return.
-  if (Device.synchronize(AsyncInfo))
-    return createError(ErrorCode::InvalidBinary,
-                       "failed to synchronize after copying data");
 
   return std::pair<void *, uint64_t>(DevicePtr, IndirectCallTable.size());
 }
@@ -437,10 +438,13 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
   DeviceEnvironment.HardwareParallelism =
       getInfo<uint64_t>(DeviceInfo::HARDWARE_PARALLELISM);
 
-  if (submitData(DeviceEnvironmentPtr, &DeviceEnvironment,
-                 sizeof(DeviceEnvironment), AsyncInfo, /*Entry=*/nullptr,
-                 /*HDTTMapPtr=*/nullptr, /*Loc=*/nullptr,
-                 /*Name=*/"DeviceEnvironment"))
+  // DeviceEnvironment is on the stack, so the copy must be synchronous.
+  if (submitDataSync(DeviceEnvironmentPtr, &DeviceEnvironment,
+                     sizeof(DeviceEnvironment),
+                     /*Entry=*/nullptr,
+                     /*HDTTMapPtr=*/nullptr,
+                     /*Loc=*/nullptr,
+                     /*Name=*/"DeviceEnvironment"))
     return createError(ErrorCode::InvalidBinary, "failed to copy data");
 
   return Program;
@@ -495,14 +499,51 @@ llvm::Error DeviceTy::freeCtxMem(void *Ptr) {
   return llvm::Error::success();
 }
 
+namespace llvm::offload::tmp {
+__tgt_async_info *__ol_tgt_GetAsyncInfoFromQueue(ol_queue_handle_t Queue);
+} // namespace llvm::offload::tmp
+
 // Submit data to device
 int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
                              AsyncInfoTy &AsyncInfo, HostDataToTargetTy *Entry,
                              MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                              const ident_t *Loc, const char *Name) {
+  ol_queue_handle_t Queue = AsyncInfo.getQueue();
+  if (!Queue)
+    return OFFLOAD_FAIL;
+
+  return submitDataImpl(TgtPtrBegin, HstPtrBegin, Size, Queue, Entry,
+                        HDTTMapPtr, Loc, Name);
+}
+
+// Submit data to device synchronously
+int32_t DeviceTy::submitDataSync(void *TgtPtrBegin, void *HstPtrBegin,
+                                 int64_t Size, HostDataToTargetTy *Entry,
+                                 MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
+                                 const ident_t *Loc, const char *Name) {
+  // Downstream: use a queue, so that OMPT device tracing records the transfer.
+  AsyncInfoTy AsyncInfo(*this);
+  if (submitData(TgtPtrBegin, HstPtrBegin, Size, AsyncInfo, Entry, HDTTMapPtr,
+                 Loc, Name) != OFFLOAD_SUCCESS)
+    return OFFLOAD_FAIL;
+  return AsyncInfo.synchronize();
+}
+
+int32_t DeviceTy::submitDataImpl(void *TgtPtrBegin, void *HstPtrBegin,
+                                 int64_t Size, ol_queue_handle_t Queue,
+                                 HostDataToTargetTy *Entry,
+                                 MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
+                                 const ident_t *Loc, const char *Name) {
   if (getInfoLevel() & OMP_INFOTYPE_DATA_TRANSFER)
     MappingInfo.printCopyInfo(TgtPtrBegin, HstPtrBegin, Size, /*H2D=*/true,
                               Entry, HDTTMapPtr, Loc, Name);
+
+  // Downstream: OMPT device tracing and forced synchronization act on the
+  // queue's async info. Transfers without a queue are synchronous and are
+  // not traced.
+  __tgt_async_info *AI =
+      Queue ? llvm::offload::tmp::__ol_tgt_GetAsyncInfoFromQueue(Queue)
+            : nullptr;
 
   /// RAII to establish tool anchors before and after data submit
   OMPT_IF_BUILT(
@@ -515,14 +556,20 @@ int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
       TracerInterfaceRAII TargetDataSubmitTraceRAII(
           RegionInterface
               .getTraceGenerators<ompt_target_data_transfer_to_device>(),
-          AsyncInfo, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
+          AI, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
           /*EventType=*/ompt_callback_target_data_op, omp_initial_device,
           HstPtrBegin, DeviceID, TgtPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
-  setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
-  return RTL->data_submit_async(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size,
-                                AsyncInfo);
+  setAsyncInfoSynchronous(AI, ForceSynchronousTargetRegions);
+  if (auto Res = olMemcpy(Queue, TgtPtrBegin, DeviceHandle, HstPtrBegin,
+                          /*Src=*/nullptr, Size)) {
+    REPORT() << "Failure to copy data from host to device. Pointers: host "
+             << "= " << HstPtrBegin << ", device = " << TgtPtrBegin
+             << ", size = " << Size << ": " << Res->Details;
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
 }
 
 // Retrieve data from device
@@ -531,9 +578,42 @@ int32_t DeviceTy::retrieveData(void *HstPtrBegin, void *TgtPtrBegin,
                                HostDataToTargetTy *Entry,
                                MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                                const ident_t *Loc) {
+  ol_queue_handle_t Queue = AsyncInfo.getQueue();
+  if (!Queue)
+    return OFFLOAD_FAIL;
+
+  return retrieveDataImpl(HstPtrBegin, TgtPtrBegin, Size, Queue, Entry,
+                          HDTTMapPtr, Loc);
+}
+
+// Retrieve data from device synchronously
+int32_t DeviceTy::retrieveDataSync(void *HstPtrBegin, void *TgtPtrBegin,
+                                   int64_t Size, HostDataToTargetTy *Entry,
+                                   MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
+                                   const ident_t *Loc) {
+  // Downstream: use a queue, so that OMPT device tracing records the transfer.
+  AsyncInfoTy AsyncInfo(*this);
+  if (retrieveData(HstPtrBegin, TgtPtrBegin, Size, AsyncInfo, Entry, HDTTMapPtr,
+                   Loc) != OFFLOAD_SUCCESS)
+    return OFFLOAD_FAIL;
+  return AsyncInfo.synchronize();
+}
+
+int32_t DeviceTy::retrieveDataImpl(void *HstPtrBegin, void *TgtPtrBegin,
+                                   int64_t Size, ol_queue_handle_t Queue,
+                                   HostDataToTargetTy *Entry,
+                                   MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
+                                   const ident_t *Loc) {
   if (getInfoLevel() & OMP_INFOTYPE_DATA_TRANSFER)
     MappingInfo.printCopyInfo(TgtPtrBegin, HstPtrBegin, Size, /*H2D=*/false,
                               Entry, HDTTMapPtr, Loc);
+
+  // Downstream: OMPT device tracing and forced synchronization act on the
+  // queue's async info. Transfers without a queue are synchronous and are
+  // not traced.
+  __tgt_async_info *AI =
+      Queue ? llvm::offload::tmp::__ol_tgt_GetAsyncInfoFromQueue(Queue)
+            : nullptr;
 
   /// RAII to establish tool anchors before and after data retrieval
   OMPT_IF_BUILT(
@@ -546,14 +626,20 @@ int32_t DeviceTy::retrieveData(void *HstPtrBegin, void *TgtPtrBegin,
       TracerInterfaceRAII TargetDataSubmitTraceRAII(
           RegionInterface
               .getTraceGenerators<ompt_target_data_transfer_from_device>(),
-          AsyncInfo, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
+          AI, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
           /*EventType=*/ompt_callback_target_data_op, DeviceID, TgtPtrBegin,
           omp_initial_device, HstPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
-  setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
-  return RTL->data_retrieve_async(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size,
-                                  AsyncInfo);
+  setAsyncInfoSynchronous(AI, ForceSynchronousTargetRegions);
+  if (auto Res = olMemcpy(Queue, HstPtrBegin, /*Dst=*/nullptr, TgtPtrBegin,
+                          DeviceHandle, Size)) {
+    REPORT() << "Failure to copy data from device to host. Pointers: host "
+             << "= " << HstPtrBegin << ", device = " << TgtPtrBegin
+             << ", size = " << Size << ": " << Res->Details;
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
 }
 
 // Copy data from current device to destination device directly
@@ -581,8 +667,18 @@ int32_t DeviceTy::dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
   setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
-  return RTL->data_exchange_async(RTLDeviceID, SrcPtr, DstDev.RTLDeviceID,
-                                  DstPtr, Size, AsyncInfo);
+  ol_queue_handle_t queue = AsyncInfo.getQueue();
+  if (!queue)
+    return OFFLOAD_FAIL;
+  if (auto Res = olMemcpy(queue, DstPtr, DstDev.DeviceHandle, SrcPtr,
+                          DeviceHandle, Size)) {
+    REPORT() << "Failure to copy data from device (" << RTLDeviceID
+             << ") to device (" << DstDev.RTLDeviceID
+             << "). Pointers: host = " << SrcPtr << ", device = " << DstPtr
+             << ", size = " << Size << ": " << Res->Details;
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
 }
 
 int32_t DeviceTy::dataFence(AsyncInfoTy &AsyncInfo) {
@@ -878,17 +974,206 @@ static uint32_t getEffectiveNumThreads(const DeviceGeometryPropsTy &Props,
                                                : KernelEnv.PreferredNumThreads);
 }
 
+/// Get the number of teams the user set with OMP_NUM_TEAMS, or zero.
+static uint32_t getOMPNumTeams() {
+  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
+  return OMP_NumTeams > 0 ? uint32_t(OMP_NumTeams) : 0;
+}
+
 /// Get the maximum number of blocks the device can launch for a kernel using
 /// \p NumThreads threads per block, further limited by OMP_NUM_TEAMS if the
 /// user set it.
 static uint32_t getDeviceBlockLimit(GenericDeviceTy &GenericDevice,
                                     uint32_t NumThreads) {
-  static Int32Envar OMP_NumTeams("OMP_NUM_TEAMS");
-
   uint32_t BlockLimit = GenericDevice.getBlockLimit(NumThreads);
-  if (OMP_NumTeams > 0)
-    return std::min(BlockLimit, uint32_t(OMP_NumTeams));
+  if (uint32_t NumTeams = getOMPNumTeams())
+    return std::min(BlockLimit, NumTeams);
   return BlockLimit;
+}
+
+/// Threshold for the reduction data size (in bytes) above which a cross-team
+/// reduction classifies as "large".
+static constexpr uint32_t LargeTeamsReductionBytes = 32;
+
+/// Downstream: maximum number of blocks of a big-jump-loop kernel.
+static constexpr uint64_t BigJumpLoopMaxNumBlocks = 1024 * 1024;
+
+/// Get the number of blocks (each having \p NumThreads threads) to launch a
+/// kernel with a cross-team reduction, or zero to handle it like a
+/// non-reduction kernel.
+///
+/// Every block adds to the cost of combining the partial results of the blocks.
+/// For a "large" reduction (see \p LargeTeamsReductionBytes), this cost
+/// dominates -> one block / compute unit. A small/scalar reduction prefers more
+/// blocks -> as many as needed given the device's number of waves per compute
+/// unit, but at least one / compute unit. A loop too short to give every
+/// compute unit a block is handled like a non-reduction kernel.
+static uint64_t
+getXTeamReductionNumBlocks(const DeviceGeometryPropsTy &Props,
+                           uint32_t NumThreads, uint64_t LoopTripCount,
+                           const KernelLaunchInfoTy &KernelEnv) {
+  if (!KernelEnv.ReductionDataSize || !NumThreads)
+    return 0;
+
+  // In Generic and Generic-SPMD mode, each block runs one iteration of the
+  // distribute loop. For these modes, there currently is only performance data
+  // for large reductions.
+  bool IsLarge = KernelEnv.ReductionDataSize > LargeTeamsReductionBytes;
+  bool IsSPMD = KernelEnv.isSPMDMode();
+  if (!IsSPMD && !(IsLarge && (KernelEnv.isGenericMode() ||
+                               KernelEnv.isGenericSPMDMode())))
+    return 0;
+
+  // Envar to override the device's number of waves per compute unit for a
+  // kernel with a scalar cross-team reduction. Zero keeps the device's value.
+  static UInt32Envar OMPX_TeamsReductionWavesPerCU(
+      "LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU", 0);
+  uint32_t ScalarWavesPerCU = OMPX_TeamsReductionWavesPerCU.get();
+  // Measured on MI210, MI300A, MI300X, MI350X, and MI450: scalar reductions
+  // with many iterations prefer more waves, ones with fewer iterations or more
+  // memory traffic prefer less waves. 16 waves were never far from the best.
+  if (!ScalarWavesPerCU && Props.Backend == OL_PLATFORM_BACKEND_AMDGPU)
+    ScalarWavesPerCU = 16;
+  uint64_t NumCUs = Props.NumComputeUnits;
+  if (!ScalarWavesPerCU || !NumCUs)
+    return 0;
+
+  uint32_t WavesPerBlock = llvm::divideCeil(NumThreads, Props.WarpSize);
+  uint64_t BlocksPerCU =
+      IsLarge ? 1 : std::max(1u, ScalarWavesPerCU / WavesPerBlock);
+  uint64_t NumBlocks = NumCUs * BlocksPerCU;
+  if (LoopTripCount > 0) {
+    // No more blocks than there is work for.
+    uint64_t TripCountNumBlocks =
+        IsSPMD ? llvm::divideCeil(LoopTripCount, NumThreads) : LoopTripCount;
+    if (TripCountNumBlocks < NumCUs)
+      return 0;
+    NumBlocks = std::min(NumBlocks, TripCountNumBlocks);
+  }
+  return NumBlocks;
+}
+
+/// Get the default number of blocks for a kernel in Generic-SPMD mode.
+static uint32_t
+getDefaultNumBlocksGenericSPMD(const DeviceGeometryPropsTy &Props) {
+  // Envar to set the default number of blocks per compute unit for a kernel in
+  // Generic-SPMD mode on AMDGPU devices. Zero uses the default number of blocks
+  // of other kernels.
+  static UInt32Envar OMPX_GenericSpmdTeamsPerCU(
+      "LIBOMPTARGET_AMDGPU_GENERIC_SPMD_TEAMS_PER_CU", 6);
+
+  if (Props.Backend != OL_PLATFORM_BACKEND_AMDGPU ||
+      !OMPX_GenericSpmdTeamsPerCU.get() || !Props.NumComputeUnits)
+    return Props.DefaultNumBlocks;
+  return Props.NumComputeUnits * OMPX_GenericSpmdTeamsPerCU.get();
+}
+
+/// Get the number of blocks for each thread to run one iteration of a loop of
+/// \p LoopTripCount iterations. If that results in fewer than
+/// \p DefaultNumBlocks blocks, lower the number of threads per block
+/// \p EffectiveNumThreads, unless the user set it, to increase the outer
+/// parallelism.
+static uint64_t getOneIterationPerThreadNumBlocks(uint64_t LoopTripCount,
+                                                  uint64_t DefaultNumBlocks,
+                                                  uint32_t &EffectiveNumThreads,
+                                                  bool IsNumThreadsStrict,
+                                                  bool IsNumThreadsFromUser) {
+  assert(LoopTripCount > 0 && "Expected a known loop trip count");
+
+  // Envar that sets the minimum number of threads to use for such a loop.
+  static UInt32Envar OMPX_MinThreadsForLowTripCount(
+      "LIBOMPTARGET_MIN_THREADS_FOR_LOW_TRIP_COUNT", 32);
+
+  uint32_t MinThreads =
+      std::min(OMPX_MinThreadsForLowTripCount.get(), EffectiveNumThreads);
+
+  // Honor the thread_limit clause; only lower the number of threads.
+  [[maybe_unused]] auto OldNumThreads = EffectiveNumThreads;
+  uint64_t NumBlocks;
+  if (LoopTripCount >= DefaultNumBlocks * EffectiveNumThreads ||
+      IsNumThreadsFromUser || IsNumThreadsStrict) {
+    // Enough parallelism for blocks and threads.
+    NumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
+    assert(IsNumThreadsFromUser ||
+           NumBlocks >= DefaultNumBlocks &&
+               "Expected sufficient outer parallelism.");
+  } else if (LoopTripCount >= DefaultNumBlocks * MinThreads) {
+    // Enough parallelism for blocks, limit threads.
+
+    // This case is hard; for now, we force "full warps":
+    // First, compute a thread count assuming DefaultNumBlocks.
+    auto NumThreadsDefaultBlocks =
+        (LoopTripCount + DefaultNumBlocks - 1) / DefaultNumBlocks;
+    // Now get a power of two that is larger or equal.
+    auto NumThreadsDefaultBlocksP2 =
+        llvm::PowerOf2Ceil(NumThreadsDefaultBlocks);
+    // Do not increase a thread limit given be the user.
+    EffectiveNumThreads =
+        std::min(EffectiveNumThreads, uint32_t(NumThreadsDefaultBlocksP2));
+    assert(EffectiveNumThreads >= MinThreads &&
+           "Expected sufficient inner parallelism.");
+    NumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
+  } else {
+    // Not enough parallelism for blocks and threads, limit both.
+    EffectiveNumThreads = std::min(EffectiveNumThreads, MinThreads);
+    NumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
+  }
+
+  assert(EffectiveNumThreads * NumBlocks >= LoopTripCount &&
+         "Expected sufficient parallelism");
+  assert(OldNumThreads >= EffectiveNumThreads &&
+         "Number of threads cannot be increased!");
+  return NumBlocks;
+}
+
+/// Downstream: the low-trip-count knobs of the former AMDGPU launch-geometry
+static uint64_t getLowTripCountOverrideNumBlocks(
+    GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
+    uint64_t LoopTripCount, uint32_t &EffectiveNumThreads,
+    bool IsNumThreadsStrict, bool IsNumThreadsFromUser,
+    const KernelLaunchInfoTy &KernelEnv) {
+  static UInt32Envar OMPX_LowTripCount("LIBOMPTARGET_AMDGPU_LOW_TRIPCOUNT", 0);
+  static UInt32Envar OMPX_NumBlocksForLowTripCount(
+      "LIBOMPTARGET_BLOCKS_FOR_LOW_TRIP_COUNT", 0);
+  static UInt32Envar OMPX_MinThreadsForLowTripCount(
+      "LIBOMPTARGET_MIN_THREADS_FOR_LOW_TRIP_COUNT", 32);
+  static Int32Envar OMP_TeamsThreadLimit("OMP_TEAMS_THREAD_LIMIT");
+
+  if (!LoopTripCount || LoopTripCount > OMPX_LowTripCount.get())
+    return 0;
+  bool IsNoLoop = KernelEnv.isNoLoopMode();
+  bool IsBigJumpLoop = KernelEnv.isBigJumpLoopMode();
+  if (!KernelEnv.isSPMDMode() && !IsNoLoop && !IsBigJumpLoop)
+    return 0;
+  if (IsNumThreadsFromUser || IsNumThreadsStrict || OMP_TeamsThreadLimit > 0)
+    return 0;
+
+  uint32_t MinThreads = OMPX_MinThreadsForLowTripCount.get();
+  uint32_t NumThreads = EffectiveNumThreads;
+  while (NumThreads > MinThreads)
+    NumThreads >>= 1;
+  if (!NumThreads)
+    return 0;
+  if (KernelEnv.doesTeamsReduction())
+    NumThreads = llvm::omp::getBlockSizeAsPowerOfTwo(NumThreads);
+  EffectiveNumThreads = NumThreads;
+
+  uint64_t TripCountNumBlocks = llvm::divideCeil(LoopTripCount, NumThreads);
+  // A no-loop kernel has no loop to run more than one iteration per thread.
+  if (IsNoLoop)
+    return TripCountNumBlocks;
+
+  uint64_t NumBlocks = TripCountNumBlocks;
+  if (UserNumBlocks > 0)
+    NumBlocks = IsBigJumpLoop ? std::min(uint64_t(UserNumBlocks), NumBlocks)
+                              : UserNumBlocks;
+  else if (uint64_t LowTripCountBlocks = OMPX_NumBlocksForLowTripCount.get())
+    NumBlocks = std::min(LowTripCountBlocks,
+                         llvm::divideCeil(LoopTripCount, MinThreads));
+  if (IsBigJumpLoop)
+    NumBlocks = std::min(NumBlocks, BigJumpLoopMaxNumBlocks);
+  return std::min(NumBlocks,
+                  uint64_t(getDeviceBlockLimit(GenericDevice, NumThreads)));
 }
 
 /// Get the effective number of blocks for the kernel based on the
@@ -904,6 +1189,12 @@ static uint32_t getEffectiveNumBlocks(
   assert(!KernelEnv.isBareMode() &&
          "bare kernel should not call this function");
 
+  // Downstream: opt-in override for loops with a low trip count.
+  if (uint64_t NumBlocks = getLowTripCountOverrideNumBlocks(
+          GenericDevice, UserNumBlocks, LoopTripCount, EffectiveNumThreads,
+          IsNumThreadsStrict, IsNumThreadsFromUser, KernelEnv))
+    return NumBlocks;
+
   // NOTE: This clamps the user-requested number of blocks to the device limit
   // rather than honoring it exactly, which is non-standard behavior. Truly
   // honoring an arbitrary value would require launching multiple kernels or
@@ -912,12 +1203,33 @@ static uint32_t getEffectiveNumBlocks(
     return std::min(UserNumBlocks,
                     getDeviceBlockLimit(GenericDevice, EffectiveNumThreads));
 
-  // Return the number of blocks required to cover the loop iterations.
-  if (KernelEnv.isNoLoopMode())
-    return LoopTripCount > 0 ? (((LoopTripCount - 1) / EffectiveNumThreads) + 1)
-                             : 1;
+  // Return the number of blocks required to cover the loop iterations. As for
+  // SPMD below, trade threads for blocks if the loop is short.
+  // Downstream: a big-jump-loop kernel has no per-block overhead, so it also
+  // gets one thread per iteration. It loops over the grid, so the number of
+  // blocks may be capped. Only AMDGPU devices run big-jump-loop kernels.
+  if (KernelEnv.isNoLoopMode() || KernelEnv.isBigJumpLoopMode()) {
+    uint64_t NumBlocks =
+        LoopTripCount > 0
+            ? getOneIterationPerThreadNumBlocks(
+                  LoopTripCount, Props.DefaultNumBlocks, EffectiveNumThreads,
+                  IsNumThreadsStrict, IsNumThreadsFromUser)
+            : 1;
+    if (KernelEnv.isBigJumpLoopMode())
+      NumBlocks = std::min(
+          {NumBlocks, BigJumpLoopMaxNumBlocks,
+           uint64_t(getDeviceBlockLimit(GenericDevice, EffectiveNumThreads))});
+    return NumBlocks;
+  }
 
-  uint64_t DefaultNumBlocks = Props.DefaultNumBlocks;
+  if (uint64_t NumBlocks = getXTeamReductionNumBlocks(
+          Props, EffectiveNumThreads, LoopTripCount, KernelEnv))
+    return std::min(NumBlocks, uint64_t(getDeviceBlockLimit(
+                                   GenericDevice, EffectiveNumThreads)));
+
+  uint64_t DefaultNumBlocks = KernelEnv.isGenericSPMDMode()
+                                  ? getDefaultNumBlocksGenericSPMD(Props)
+                                  : Props.DefaultNumBlocks;
   uint64_t TripCountNumBlocks = std::numeric_limits<uint64_t>::max();
   if (LoopTripCount > 0) {
     if (KernelEnv.isSPMDMode()) {
@@ -926,48 +1238,9 @@ static uint32_t getEffectiveNumBlocks(
       // will execute one iteration of the loop; rounded up to the nearest
       // integer. However, if that results in too few blocks, we artificially
       // reduce the thread count per block to increase the outer parallelism.
-      // Envar that sets the minimum number of threads to use for such a loop.
-      static UInt32Envar OMPX_MinThreadsForLowTripCount(
-          "LIBOMPTARGET_MIN_THREADS_FOR_LOW_TRIP_COUNT", 32);
-
-      uint32_t MinThreads =
-          std::min(OMPX_MinThreadsForLowTripCount.get(), EffectiveNumThreads);
-
-      // Honor the thread_limit clause; only lower the number of threads.
-      [[maybe_unused]] auto OldNumThreads = EffectiveNumThreads;
-      if (LoopTripCount >= DefaultNumBlocks * EffectiveNumThreads ||
-          IsNumThreadsFromUser || IsNumThreadsStrict) {
-        // Enough parallelism for blocks and threads.
-        TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
-        assert(IsNumThreadsFromUser ||
-               TripCountNumBlocks >= DefaultNumBlocks &&
-                   "Expected sufficient outer parallelism.");
-      } else if (LoopTripCount >= DefaultNumBlocks * MinThreads) {
-        // Enough parallelism for blocks, limit threads.
-
-        // This case is hard; for now, we force "full warps":
-        // First, compute a thread count assuming DefaultNumBlocks.
-        auto NumThreadsDefaultBlocks =
-            (LoopTripCount + DefaultNumBlocks - 1) / DefaultNumBlocks;
-        // Now get a power of two that is larger or equal.
-        auto NumThreadsDefaultBlocksP2 =
-            llvm::PowerOf2Ceil(NumThreadsDefaultBlocks);
-        // Do not increase a thread limit given be the user.
-        EffectiveNumThreads =
-            std::min(EffectiveNumThreads, uint32_t(NumThreadsDefaultBlocksP2));
-        assert(EffectiveNumThreads >= MinThreads &&
-               "Expected sufficient inner parallelism.");
-        TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
-      } else {
-        // Not enough parallelism for blocks and threads, limit both.
-        EffectiveNumThreads = std::min(EffectiveNumThreads, MinThreads);
-        TripCountNumBlocks = ((LoopTripCount - 1) / EffectiveNumThreads) + 1;
-      }
-
-      assert(EffectiveNumThreads * TripCountNumBlocks >= LoopTripCount &&
-             "Expected sufficient parallelism");
-      assert(OldNumThreads >= EffectiveNumThreads &&
-             "Number of threads cannot be increased!");
+      TripCountNumBlocks = getOneIterationPerThreadNumBlocks(
+          LoopTripCount, DefaultNumBlocks, EffectiveNumThreads,
+          IsNumThreadsStrict, IsNumThreadsFromUser);
     } else {
       assert((KernelEnv.isGenericMode() || KernelEnv.isGenericSPMDMode()) &&
              "Unexpected execution mode!");
@@ -993,6 +1266,22 @@ static uint32_t getEffectiveNumBlocks(
       "LIBOMPTARGET_REUSE_BLOCKS_FOR_HIGH_TRIP_COUNT", true);
   if (OMPX_ReuseBlocksForHighTripCount.get())
     PreferredNumBlocks = std::min(TripCountNumBlocks, DefaultNumBlocks);
+
+  // In Generic-SPMD mode, the threads of a block run the iterations of the
+  // inner parallel loops, whose trip counts are unknown. If they are lower than
+  // the number of threads, most threads idle. So trade threads for blocks, down
+  // to one warp per block, as long as the distribute loop has an iteration for
+  // every block. This keeps the device as busy if the inner trip counts are
+  // high. Neither is done if the user set the number of threads or teams.
+  if (KernelEnv.isGenericSPMDMode() && !IsNumThreadsFromUser &&
+      !IsNumThreadsStrict && !getOMPNumTeams()) {
+    while (uint64_t(PreferredNumBlocks) * 2 <= LoopTripCount &&
+           EffectiveNumThreads > Props.WarpSize) {
+      EffectiveNumThreads /= 2;
+      PreferredNumBlocks *= 2;
+    }
+  }
+
   return std::min(PreferredNumBlocks,
                   getDeviceBlockLimit(GenericDevice, EffectiveNumThreads));
 }
@@ -1059,7 +1348,6 @@ static void checkLaunchInvariants(const KernelLaunchArgsTy &LaunchArgs,
 /// Calculate or adjust, in place, the effective number of threads and blocks
 /// for the first dimension, unless the caller requested strict counts.
 static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
-                                    const GenericKernelTy &Kernel,
                                     const DeviceGeometryPropsTy &Props,
                                     KernelLaunchArgsTy &LaunchArgs,
                                     const KernelArgsTy &KernelArgs,
@@ -1078,26 +1366,16 @@ static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
   const bool ThreadLimitFromUser = LaunchArgs.UserThreadLimit[0] > 0;
 
   uint32_t EffectiveNumThreads = LaunchArgs.UserThreadLimit[0];
-  uint32_t EffectiveNumBlocks = LaunchArgs.UserNumBlocks[0];
+  if (!StrictThreads)
+    EffectiveNumThreads =
+        getEffectiveNumThreads(Props, EffectiveNumThreads, KernelEnv);
 
-  // Downstream: the plugin may compute the launch geometry itself (the AMDGPU
-  // plugin does, using occupancy and other device-specific heuristics).
-  // Otherwise, fall back to the generic computation.
-  if (!Kernel.computeLaunchGeometry(GenericDevice, LaunchArgs, StrictThreads,
-                                    StrictBlocks, EffectiveNumThreads,
-                                    EffectiveNumBlocks)) {
-    if (!StrictThreads)
-      EffectiveNumThreads =
-          getEffectiveNumThreads(Props, EffectiveNumThreads, KernelEnv);
-
-    if (!StrictBlocks)
-      EffectiveNumBlocks = getEffectiveNumBlocks(
-          GenericDevice, Props, EffectiveNumBlocks, LaunchArgs.Tripcount,
-          EffectiveNumThreads, StrictThreads, ThreadLimitFromUser, KernelEnv);
-  }
+  if (!StrictBlocks)
+    LaunchArgs.UserNumBlocks[0] = getEffectiveNumBlocks(
+        GenericDevice, Props, LaunchArgs.UserNumBlocks[0], LaunchArgs.Tripcount,
+        EffectiveNumThreads, StrictThreads, ThreadLimitFromUser, KernelEnv);
 
   LaunchArgs.UserThreadLimit[0] = EffectiveNumThreads;
-  LaunchArgs.UserNumBlocks[0] = EffectiveNumBlocks;
 }
 
 /// Flatten the kernel arguments into \p LaunchArgs.Args. Returns the address
@@ -1208,8 +1486,8 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   }
 
   checkLaunchInvariants(LaunchArgs, KernelArgs, KernelLaunchInfo);
-  adjustEffectiveGeometry(GenericDevice, *Kernel, GeometryProps, LaunchArgs,
-                          KernelArgs, KernelLaunchInfo);
+  adjustEffectiveGeometry(GenericDevice, GeometryProps, LaunchArgs, KernelArgs,
+                          KernelLaunchInfo);
 
   void **DynPtrSlot = resolveArgsAndDynPtrSlot(
       KernelArgs, TgtVarsPtr, TgtOffsets, Args, Ptrs, ArgSizes, LaunchArgs);
@@ -1269,16 +1547,6 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   }
 
   return OFFLOAD_SUCCESS;
-}
-
-// Whether data can be copied to DstDevice directly
-bool DeviceTy::isDataExchangable(const DeviceTy &DstDevice) {
-  if (RTL != DstDevice.RTL)
-    return false;
-
-  if (RTL->is_data_exchangable(RTLDeviceID, DstDevice.RTLDeviceID))
-    return true;
-  return false;
 }
 
 int32_t DeviceTy::synchronize(AsyncInfoTy &AsyncInfo) {
