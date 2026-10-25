@@ -89,7 +89,6 @@ define void @lifetime_addrspace5_and_gep_in_loop(i32 %val, i1 %c1, i1 %c2) {
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    br label [[LOOP:%.*]]
 ; CHECK:       loop:
-; CHECK-NEXT:    [[A_1:%.*]] = phi i32 [ undef, [[ENTRY:%.*]] ], [ [[A_0:%.*]], [[CLEANUP:%.*]] ]
 ; CHECK-NEXT:    call void @llvm.assume(i1 true) [ "ignore"(ptr addrspace(5) poison, i64 4) ]
 ; CHECK-NEXT:    br i1 [[C1:%.*]], label [[INIT:%.*]], label [[SKIP:%.*]]
 ; CHECK:       init:
@@ -97,9 +96,9 @@ define void @lifetime_addrspace5_and_gep_in_loop(i32 %val, i1 %c1, i1 %c2) {
 ; CHECK:       skip:
 ; CHECK-NEXT:    br label [[READ]]
 ; CHECK:       read:
-; CHECK-NEXT:    [[A_0]] = phi i32 [ [[VAL:%.*]], [[INIT]] ], [ [[A_1]], [[SKIP]] ]
+; CHECK-NEXT:    [[A_0:%.*]] = phi i32 [ [[VAL:%.*]], [[INIT]] ], [ undef, [[SKIP]] ]
 ; CHECK-NEXT:    call void @use(i32 [[A_0]])
-; CHECK-NEXT:    br label [[CLEANUP]]
+; CHECK-NEXT:    br label [[CLEANUP:%.*]]
 ; CHECK:       cleanup:
 ; CHECK-NEXT:    br i1 [[C2:%.*]], label [[LOOP]], label [[EXIT:%.*]]
 ; CHECK:       exit:
