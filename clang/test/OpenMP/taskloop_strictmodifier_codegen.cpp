@@ -356,10 +356,10 @@ struct S {
 // CHECK: [[LONG_TBAA30]] = !{[[META22]], [[META17]], i64 48}
 // CHECK: [[META31]] = !{[[META32:![0-9]+]]}
 // CHECK: [[META32]] = distinct !{[[META32]], [[META33:![0-9]+]], !".omp_outlined.: %.privates."}
-// CHECK: [[META33]] = distinct !{[[META33]], !".omp_outlined."}
+// CHECK: [[META33]] = distinct !{[[META33]], i1 false, !".omp_outlined."}
 // CHECK: [[META34]] = !{[[META35:![0-9]+]]}
 // CHECK: [[META35]] = distinct !{[[META35]], [[META36:![0-9]+]], !".omp_outlined..5: %__context"}
-// CHECK: [[META36]] = distinct !{[[META36]], !".omp_outlined..5"}
+// CHECK: [[META36]] = distinct !{[[META36]], i1 false, !".omp_outlined..5"}
 // CHECK: [[INTPTR_TBAA37]] = !{[[META38:![0-9]+]], [[META25]], i64 0}
 // CHECK: [[META38]] = !{!"_ZTSZ4mainE3$_3", [[META25]], i64 0, [[META27]], i64 8}
 // CHECK: [[META39]] = !{}
@@ -372,7 +372,7 @@ struct S {
 // CHECK: [[META46]] = !{!"p1 _ZTS1S", [[META11]], i64 0}
 // CHECK: [[META47]] = !{[[META48:![0-9]+]]}
 // CHECK: [[META48]] = distinct !{[[META48]], [[META49:![0-9]+]], !".omp_outlined..9: %__context"}
-// CHECK: [[META49]] = distinct !{[[META49]], !".omp_outlined..9"}
+// CHECK: [[META49]] = distinct !{[[META49]], i1 false, !".omp_outlined..9"}
 // CHECK: [[INTPTR_TBAA50]] = !{[[META51:![0-9]+]], [[META25]], i64 8}
 // CHECK: [[META51]] = !{!"_ZTSZN1SC1EiEUt_", [[META46]], i64 0, [[META25]], i64 8}
 //.
