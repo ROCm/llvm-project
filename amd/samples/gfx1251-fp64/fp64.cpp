@@ -1,5 +1,7 @@
 // Minimal HIP app that exercises every FP64 instruction of gfx1251.
 //
+//   hipcc -x hip -O3 --offload-arch=gfx1251 -munsafe-fp-atomics fp64.cpp -o fp64
+//
 // Each kernel covers one instruction class. The comment next to each line
 // names the gfx1251 instruction(s) it selects; `make check` compiles for
 // gfx1251 and verifies that every name in this file appears in the ISA.
