@@ -86,6 +86,7 @@
 #include <LLVMSPIRVLib.h>
 #endif
 
+#include <algorithm>
 #include <csignal>
 #include <sstream>
 
@@ -604,9 +605,7 @@ SmallString<128> getUnbundleOutputPath(StringRef Dir, StringRef OutputPrefix,
   // Feature-qualified target IDs contain ':'; Windows reserves it for drive
   // letters and alternate data streams. Keep the public data object name
   // independent from the temporary path.
-  for (char &C : Name)
-    if (C == ':')
-      C = '_';
+  std::replace(Name.begin(), Name.end(), ':', '_');
 #endif
   SmallString<128> Path(Dir);
   path::append(Path, Name);
