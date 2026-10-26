@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import sys
 
-tool, bundle, work = sys.argv[1:]
+tool, bundle, work, compiler = sys.argv[1:]
 work = Path(work).resolve()
 if work.exists():
     shutil.rmtree(work)
@@ -12,7 +12,20 @@ work.mkdir()
 env = os.environ.copy()
 env["AMD_COMGR_CACHE_DIR"] = str(work / "cache")
 env["AMD_COMGR_EMIT_VERBOSE_LOGS"] = "1"
-targets = ["host-x86_64-unknown-linux-gnu", "hip-amdgcn-amd-amdhsa-unknown-gfx900"]
+
+# The driver records the host member as "host-" followed by the triple clang
+# itself targets, so hard-coding a Linux triple would not match the member on
+# Windows. Ask the compiler that produced the bundle for that triple. A
+# mismatched host ID would otherwise still pass: Comgr allows missing bundles,
+# and the missing member becomes an empty output.
+triple = subprocess.run(
+    [compiler, "-print-effective-triple"],
+    check=True,
+    stdout=subprocess.PIPE,
+    text=True,
+).stdout.strip()
+assert triple, compiler
+targets = ["host-" + triple, "hip-amdgcn-amd-amdhsa-unknown-gfx900"]
 reference = None
 for mode, cache, save in [
     ("disabled", "0", "1"),

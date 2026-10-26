@@ -5,6 +5,6 @@
 // RUN: %clang -c -x hip --offload-arch=gfx900 -nogpulib -nogpuinc \
 // RUN:   --gpu-bundle-output --offload-device-only -emit-llvm \
 // RUN:   --offload-compress %s -o %t.bundle.bc
-// RUN: %python %S/Inputs/unbundle-save-temps.py unbundle %t.bundle.bc %t.work
+// RUN: %python %S/Inputs/unbundle-save-temps.py unbundle %t.bundle.bc %t.work %clang
 
 __attribute__((device)) void kernel() {}
