@@ -35,17 +35,40 @@ static constexpr unsigned SGPRBitSize = 32;
 static constexpr unsigned SGPRByteSize = SGPRBitSize / 8;
 static constexpr unsigned VGPRLaneBitSize = 32;
 
+// vcc_hi has no DWARF register number, and the one vcc_lo has (VCC_32) is only
+// defined in wave32. In wave64 both halves are described as part of VCC_64.
+static bool isWave64VCCHalf(const GCNSubtarget &ST, MCRegister Reg) {
+  return ST.isWave64() && (Reg == AMDGPU::VCC_LO || Reg == AMDGPU::VCC_HI);
+}
+
+// Returns true if CFI can describe a register that is saved by copying it to
+// \p Reg.
+static bool canDescribeCopyInCFI(const GCNSubtarget &ST, MCRegister Reg) {
+  const SIRegisterInfo &TRI = *ST.getRegisterInfo();
+  if (isWave64VCCHalf(ST, Reg) || TRI.getDwarfRegNum(Reg, false) >= 0)
+    return true;
+  ArrayRef<int16_t> Parts =
+      TRI.getRegSplitParts(TRI.getPhysRegBaseClass(Reg), SGPRByteSize);
+  return Parts.size() > 1 && all_of(Parts, [&](int16_t Idx) {
+           return TRI.getDwarfRegNum(TRI.getSubReg(Reg, Idx), false) >= 0;
+         });
+}
+
 // Find a register matching \p RC from \p LiveUnits which is unused and
-// available throughout the function. On failure, returns AMDGPU::NoRegister.
+// available throughout the function. If \p NeedsCFI is set, only registers
+// that CFI can describe a copy to are considered. On failure, returns
+// AMDGPU::NoRegister.
 // TODO: Rewrite the loop here to iterate over MCRegUnits instead of
 // MCRegisters. This should reduce the number of iterations and avoid redundant
 // checking.
 static MCRegister findUnusedRegister(MachineRegisterInfo &MRI,
                                      const LiveRegUnits &LiveUnits,
-                                     const TargetRegisterClass &RC) {
+                                     const TargetRegisterClass &RC,
+                                     bool NeedsCFI = false) {
+  const GCNSubtarget &ST = MRI.getMF().getSubtarget<GCNSubtarget>();
   for (MCRegister Reg : RC) {
     if (!MRI.isPhysRegUsed(Reg) && LiveUnits.available(Reg) &&
-        !MRI.isReserved(Reg))
+        !MRI.isReserved(Reg) && (!NeedsCFI || canDescribeCopyInCFI(ST, Reg)))
       return Reg;
   }
   return MCRegister();
@@ -166,7 +189,8 @@ static void getVGPRSpillLaneOrTempRegister(
   // LiveUnits should have all the callee saved registers marked as used. For
   // certain cases we skip copy to scratch SGPR.
   if (IncludeScratchCopy)
-    ScratchSGPR = findUnusedRegister(MF.getRegInfo(), LiveUnits, RC);
+    ScratchSGPR = findUnusedRegister(MF.getRegInfo(), LiveUnits, RC,
+                                     /*NeedsCFI=*/MF.needsFrameMoves());
 
   if (!ScratchSGPR) {
     int FI = FrameInfo.CreateStackObject(Size, Alignment, true, nullptr,
@@ -418,7 +442,10 @@ class PrologEpilogSGPRSpillBuilder {
         CFISuperReg = SuperReg;
       int64_t DwarfCFISuperReg = MCRI->getDwarfRegNum(CFISuperReg, false);
       int64_t DwarfDstSuperReg = MCRI->getDwarfRegNum(DstReg, false);
-      if (DwarfCFISuperReg >= 0 && DwarfDstSuperReg >= 0) {
+      if (isWave64VCCHalf(ST, DstReg)) {
+        assert(NumSubRegs == 1 && "Expected a 32-bit SGPR");
+        TFI->buildCFIForSGPRToVCCHalfCopy(MBB, MI, DL, CFISuperReg, DstReg);
+      } else if (DwarfCFISuperReg >= 0 && DwarfDstSuperReg >= 0) {
         TFI->buildCFI(MBB, MI, DL,
                       MCCFIInstruction::createRegister(
                           nullptr, DwarfCFISuperReg, DwarfDstSuperReg));
@@ -426,6 +453,7 @@ class PrologEpilogSGPRSpillBuilder {
         assert(NumSubRegs == 2 && "EXEC larger than 64-bit");
         TFI->buildCFIForRegToSGPRPairSpill(MBB, MI, DL, CFISuperReg, DstReg);
       } else {
+        assert(NumSubRegs > 1 && "Scratch SGPR has no DWARF register number");
         for (unsigned I = 0; I < NumSubRegs; ++I) {
           MCRegister SrcSubReg = TRI.getSubReg(SuperReg, SplitParts[I]);
           MCRegister DstSubReg = TRI.getSubReg(DstReg, DstSplitParts[I]);
@@ -2644,6 +2672,27 @@ MachineInstr *SIFrameLowering::buildCFIForRegToSGPRPairSpill(
 
   auto CFIInst = MCCFIInstruction::createLLVMRegisterPair(
       nullptr, DwarfReg, DwarfSGPR0, SGPRBitSize, DwarfSGPR1, SGPRBitSize);
+  return buildCFI(MBB, MBBI, DL, std::move(CFIInst));
+}
+
+MachineInstr *SIFrameLowering::buildCFIForSGPRToVCCHalfCopy(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
+    const DebugLoc &DL, MCRegister SGPR, MCRegister VCCHalf) const {
+  const MachineFunction &MF = *MBB.getParent();
+  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
+  const MCRegisterInfo &MCRI = *MF.getContext().getRegisterInfo();
+  assert(isWave64VCCHalf(ST, VCCHalf));
+
+  int DwarfSGPR = MCRI.getDwarfRegNum(SGPR, false);
+  int DwarfVCC = MCRI.getDwarfRegNum(AMDGPU::VCC, false);
+  assert(DwarfSGPR != -1 && DwarfVCC != -1);
+
+  // Describe the copy as one 32-bit lane of VCC_64: lane 0 is vcc_lo and lane 1
+  // is vcc_hi.
+  MCCFIInstruction::VectorRegisterWithLane Half{
+      unsigned(DwarfVCC), VCCHalf == AMDGPU::VCC_HI ? 1u : 0u, SGPRBitSize};
+  auto CFIInst =
+      MCCFIInstruction::createLLVMVectorRegisters(nullptr, DwarfSGPR, {Half});
   return buildCFI(MBB, MBBI, DL, std::move(CFIInst));
 }
 
