@@ -12,7 +12,6 @@
 #include "comgr.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
@@ -20,13 +19,6 @@ namespace COMGR {
 namespace metadata {
 
 amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP);
-
-/// Parse the metadata root from an in-memory ELF image without wrapping it
-/// in a DataObject. \p MB must be at least two-byte aligned; callers own
-/// that requirement. Returns the status-only contract used by the public
-/// APIs, so a malformed image and an absent metadata note are both
-/// reported as AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT.
-amd_comgr_status_t getMetadataRoot(llvm::MemoryBufferRef MB, DataMeta *MetaP);
 
 size_t getIsaCount();
 

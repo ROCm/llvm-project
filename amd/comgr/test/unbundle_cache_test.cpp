@@ -43,10 +43,10 @@ std::string unbundle(StringRef Input, bool ExpectSuccess,
   std::string Result;
   if (ExpectSuccess) {
     size_t Size = 0;
-    const char *Bytes = nullptr;
-    checkError(amd_comgr_get_data_pointer(Data.front(), &Size, &Bytes),
-               "borrow output");
-    Result.assign(Bytes, Size);
+    checkError(amd_comgr_get_data(Data.front(), &Size, nullptr), "get size");
+    Result.resize(Size);
+    checkError(amd_comgr_get_data(Data.front(), &Size, Result.data()),
+               "get output");
     checkError(amd_comgr_release_data(Data.front()), "release output");
   }
   return Result;
@@ -235,7 +235,26 @@ int main() {
       fail("padded bundle unexpectedly changed the cache");
   }
 
+  // Keep a cache-hit result alive while pruning its backing entry. In
+  // particular, Windows must copy cached members so the mapping does not
+  // prevent removal of the cache file. Use enough data to require an mmap.
+  std::string Payload(64 * 1024, 'x');
+  std::string Prunable = compress(bundle({{Device, Payload}}), Format);
+  if (unbundle(Prunable, true) != Payload)
+    fail("prunable bundle output differs");
+  auto Retained = unbundleData(Prunable, {Device});
   std::error_code EC;
   std::filesystem::remove_all(CacheDir, EC);
+  if (EC)
+    fail("could not prune cache with retained output: %s",
+         EC.message().c_str());
+  size_t Size = 0;
+  checkError(amd_comgr_get_data(Retained.front(), &Size, nullptr), "get size");
+  std::string Contents(Size, '\0');
+  checkError(amd_comgr_get_data(Retained.front(), &Size, Contents.data()),
+             "get pruned output");
+  if (Contents != Payload)
+    fail("pruning invalidated retained output");
+  checkError(amd_comgr_release_data(Retained.front()), "release pruned output");
   return 0;
 }

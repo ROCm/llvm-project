@@ -30,15 +30,13 @@ using namespace llvm::support;
 using namespace COMGR;
 
 amd_comgr_status_t COMGR::setCStr(char *&Dest, StringRef Src, size_t *Size) {
-  char *NewDest = reinterpret_cast<char *>(malloc(Src.size() + 1));
-  if (!NewDest) {
+  free(Dest);
+  Dest = reinterpret_cast<char *>(malloc(Src.size() + 1));
+  if (!Dest) {
     return AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES;
   }
-  if (!Src.empty())
-    memcpy(NewDest, Src.data(), Src.size());
-  NewDest[Src.size()] = '\0';
-  free(Dest);
-  Dest = NewDest;
+  memcpy(Dest, Src.data(), Src.size());
+  Dest[Src.size()] = '\0';
   if (Size) {
     *Size = Src.size();
   }

@@ -214,8 +214,6 @@ endif()
 endmacro()
 
 add_comgr_test(data_test c)
-add_comgr_test(data_pointer_test c)
-add_comgr_test(elf_metadata_view_test cpp)
 add_comgr_test(disasm_instr_test c)
 add_comgr_test(metadata_tp_test c)
 add_comgr_test(metadata_yaml_test c)
@@ -251,8 +249,7 @@ add_comgr_test(mangled_names_hip_test c)
 add_comgr_test(unbundle_compressed_edge_cases_test cpp)
 add_comgr_test(unbundle_cache_test cpp)
 llvm_map_components_to_libnames(COMGR_UNBUNDLE_TEST_LIBS Object Support)
-set_target_properties(elf_metadata_view_test
-  unbundle_compressed_edge_cases_test unbundle_cache_test PROPERTIES
+set_target_properties(unbundle_compressed_edge_cases_test unbundle_cache_test PROPERTIES
   CXX_STANDARD 17
   CXX_STANDARD_REQUIRED Yes
   CXX_EXTENSIONS No)

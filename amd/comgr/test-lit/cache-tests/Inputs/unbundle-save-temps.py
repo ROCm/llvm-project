@@ -25,7 +25,9 @@ triple = subprocess.run(
     text=True,
 ).stdout.strip()
 assert triple, compiler
-targets = ["host-" + triple, "hip-amdgcn-amd-amdhsa-unknown-gfx900"]
+# A generic gfx900 member is compatible with this feature-qualified request.
+# Its ':' must survive in the public name, but not in a Windows temp filename.
+targets = ["host-" + triple, "hip-amdgcn-amd-amdhsa-unknown-gfx900:xnack+"]
 reference = None
 for mode, cache, save in [
     ("disabled", "0", "1"),
@@ -57,7 +59,8 @@ for mode, cache, save in [
         saved = sorted(temps.glob("comgr-*/output/*"))
         assert len(saved) == len(targets), (mode, saved)
         for target, content in zip(targets, actual):
-            matches = [p for p in saved if p.name.endswith("-" + target + ".bc")]
+            temp_target = target.replace(":", "_") if os.name == "nt" else target
+            matches = [p for p in saved if p.name.endswith("-" + temp_target + ".bc")]
             assert len(matches) == 1, (mode, target, saved)
             assert matches[0].read_bytes() == content, (mode, target)
     else:

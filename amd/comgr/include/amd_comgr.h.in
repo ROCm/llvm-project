@@ -281,12 +281,6 @@ extern "C" {
  */
 #define AMD_COMGR_VERSION_3_5
 
-/**
- * The function was introduced or changed in version 3.6 of the interface
- * and has the symbol version string of ``"@amd_comgr_NAME@_3.6"``.
- */
-#define AMD_COMGR_VERSION_3_6
-
 /** @} */
 
 /**
@@ -813,34 +807,6 @@ amd_comgr_get_data(
   char *bytes) AMD_COMGR_VERSION_1_8;
 
 /**
- * @brief Borrow read-only data contents without copying them.
- *
- * @param[in] data The data object to query.
- * @param[out] size The size of the contents in bytes.
- * @param[out] bytes The contents, not necessarily null terminated.
- * The caller must not modify or free the contents.
- *
- * The pointer remains valid until the contents are replaced or the final
- * reference to @p data is released. The caller must retain a reference and
- * prevent modification of the contents while using the pointer. This call
- * does not acquire a reference. Renaming the data does not invalidate the
- * pointer. Backing storage may be shared with other data objects.
- * The caller must synchronize against content replacement and final release
- * for the entire duration of the borrow, not just during this call. Retaining
- * an unbundled member may keep the whole decompressed bundle alive.
- *
- * @retval ::AMD_COMGR_STATUS_SUCCESS The pointer and size were returned.
- * @retval ::AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT @p data is invalid,
- * has no contents or has an invalid kind; or @p size or @p bytes is NULL.
- * Output arguments are not modified on error.
- */
-amd_comgr_status_t AMD_COMGR_API
-amd_comgr_get_data_pointer(
-  amd_comgr_data_t data,
-  size_t *size,
-  const char **bytes) AMD_COMGR_VERSION_3_6;
-
-/**
  * @brief Get the data object name and/or name length.
  *
  * @param[in] data The data object to query.
@@ -1012,35 +978,6 @@ amd_comgr_status_t AMD_COMGR_API
 amd_comgr_get_data_metadata(
   amd_comgr_data_t data,
   amd_comgr_metadata_node_t *metadata) AMD_COMGR_VERSION_1_8;
-
-/**
- * @brief Parse ELF metadata directly from caller-owned memory.
- *
- * @param[in] size The number of readable bytes at @p bytes.
- * @param[in] bytes The ELF image. It must remain readable and unchanged
- * for this call only; the returned metadata does not borrow this memory.
- * No null terminator is required. An unaligned image may be copied.
- * @param[out] metadata The parsed metadata, owned by the caller and
- * released with @c amd_comgr_destroy_metadata. Existing metadata handles
- * must be destroyed separately before overwriting them.
- *
- * Uses the same ELF metadata parser as @c amd_comgr_get_data_metadata,
- * without first copying an aligned ELF into a data object. Metadata payloads
- * still use owned storage; this is not an allocation-free parser. The input
- * may be freed or unmapped after return, even while returned metadata or its
- * child handles remain alive.
- *
- * @retval ::AMD_COMGR_STATUS_SUCCESS Metadata was returned.
- * @retval ::AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT @p bytes or
- * @p metadata is NULL, @p size is zero, or the ELF metadata cannot be
- * parsed. The output argument is not modified on error.
- * @retval ::AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES Allocation failed.
- */
-amd_comgr_status_t AMD_COMGR_API
-amd_comgr_get_elf_metadata(
-  size_t size,
-  const char *bytes,
-  amd_comgr_metadata_node_t *metadata) AMD_COMGR_VERSION_3_6;
 
 /**
  * @brief Destroy a metadata handle.

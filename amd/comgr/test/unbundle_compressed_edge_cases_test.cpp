@@ -1,3 +1,4 @@
+#include "../src/comgr.h"
 #include "unbundle_test.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstddef>
@@ -66,10 +67,9 @@ unbundle(StringRef Input, std::vector<const char *> Targets,
     Result[Index].resize(Size);
     checkError(amd_comgr_get_data(Data[Index], &Size, Result[Index].data()),
                "get bytes");
-    const char *Pointer = nullptr;
-    size_t PointerSize = 0;
-    checkError(amd_comgr_get_data_pointer(Data[Index], &PointerSize, &Pointer),
-               "borrow output");
+    const auto *Object = COMGR::DataObject::convert(Data[Index]);
+    const char *Pointer = Object->Data;
+    size_t PointerSize = Object->Size;
     if (PointerSize != Size || StringRef(Pointer, PointerSize) != Result[Index])
       fail("borrowed output differs from copied output");
     if (reinterpret_cast<uintptr_t>(Pointer) % alignof(std::max_align_t) != 0)
@@ -86,16 +86,6 @@ unbundle(StringRef Input, std::vector<const char *> Targets,
       if (!ExpectCacheMapping && InCacheMapping)
         fail("misaligned cached ELF was not copied");
 #endif
-    }
-    if (Size) {
-      checkError(amd_comgr_set_data(Data[Index], PointerSize, Pointer),
-                 "replace output from its own view");
-      checkError(
-          amd_comgr_get_data_pointer(Data[Index], &PointerSize, &Pointer),
-          "borrow self-replaced output");
-      if (PointerSize != Size ||
-          StringRef(Pointer, PointerSize) != Result[Index])
-        fail("self-replacement changed output");
     }
     amd_comgr_metadata_node_t Metadata = {};
     if (CheckMember) {
@@ -151,6 +141,19 @@ static void testFormat(compression::Format Format, uint16_t Version) {
   };
   std::string First = bundle({{Device, "first"}});
   std::string Second = bundle({{Device, "second"}});
+  // Only the input's basename belongs in the public output name. Keep the
+  // target feature ':' intact even when a Windows temporary path sanitizes it.
+  auto Named = unbundleData(Compress(First), {Specific}, true, false,
+                            "nested/bundle.bc");
+  size_t NameSize = 0;
+  checkError(amd_comgr_get_data_name(Named.front(), &NameSize, nullptr),
+             "get nested output name size");
+  std::string Name(NameSize, '\0');
+  checkError(amd_comgr_get_data_name(Named.front(), &NameSize, Name.data()),
+             "get nested output name");
+  if (StringRef(Name.c_str()) != std::string("bundle-") + Specific + ".bc")
+    fail("nested input changed the public output name");
+  checkError(amd_comgr_release_data(Named.front()), "release nested output");
   checkOutputs(unbundle(Compress(First), {Host, Device}), {"", "first"});
   checkOutputs(unbundle(Compress(First) + Compress(Second), {Host, Device}),
                {"", "first"});
@@ -163,7 +166,7 @@ static void testFormat(compression::Format Format, uint16_t Version) {
     checkOutputs(unbundle(Compress(Input), {Host, Specific, Device}),
                  unbundle(Input, {Host, Specific, Device}));
 
-  // Compare the private in-memory compatibility predicate with Clang's
+  // Compare compressed and uncompressed inputs through Clang's
   // file-based unbundler, including asymmetric feature matching and kind/triple
   // mismatches. Check expected results as well so both paths cannot silently
   // select the wrong member.

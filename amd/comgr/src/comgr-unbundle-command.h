@@ -17,11 +17,16 @@ namespace clang {
 class OffloadBundlerConfig;
 } // namespace clang
 
+namespace llvm::vfs {
+class FileSystem;
+}
+
 namespace COMGR {
 class UnbundleCommand final : public CachedCommandAdaptor {
 private:
   amd_comgr_data_kind_t Kind;
   const clang::OffloadBundlerConfig &Config;
+  llvm::vfs::FileSystem &FS;
 
   // To avoid copies, store the output of execute, such that readExecuteOutput
   // can return a reference.
@@ -32,11 +37,8 @@ private:
   // memory.
   llvm::SmallVector<std::unique_ptr<llvm::MemoryBuffer>, 4> OutputBuffers;
 
-  /// Unbundle a compressed bundle into OutputBuffers without writing any file.
-  /// Returns false if the input is not a compressed bundle whose contents are
-  /// in the binary bundle format, in which case the caller must use the
-  /// file-based OffloadBundler API.
-  llvm::Expected<bool> executeInMemory();
+  /// Use Clang's shared unbundler to collect owned output buffers.
+  llvm::Error executeInMemory();
 
   /// Write diagnostic copies without giving up the in-memory outputs.
   llvm::Error saveOutputTemps() const;
@@ -46,8 +48,9 @@ private:
 
 public:
   UnbundleCommand(amd_comgr_data_kind_t Kind,
-                  const clang::OffloadBundlerConfig &Config)
-      : Kind(Kind), Config(Config) {}
+                  const clang::OffloadBundlerConfig &Config,
+                  llvm::vfs::FileSystem &FS)
+      : Kind(Kind), Config(Config), FS(FS) {}
 
   /// Return true if the outputs were unbundled in memory instead of being
   /// written to the files in Config.OutputFileNames.

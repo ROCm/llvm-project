@@ -86,6 +86,7 @@
 #include <LLVMSPIRVLib.h>
 #endif
 
+#include <algorithm>
 #include <csignal>
 #include <sstream>
 
@@ -582,6 +583,34 @@ SmallString<128> getOutputFilePath(DataObject *Object, StringRef Dir) {
   if (fs::create_directories(path::parent_path(Path))) {
     return SmallString<128>();
   }
+  return Path;
+}
+
+SmallString<128> getUnbundleOutputName(StringRef OutputPrefix, StringRef Entry,
+                                       StringRef FileExtension) {
+  SmallString<128> Name(OutputPrefix);
+  Name += "-";
+  Name += Entry;
+  Name += ".";
+  Name += FileExtension;
+  return Name;
+}
+
+SmallString<128> getUnbundleOutputPath(StringRef Dir, StringRef OutputPrefix,
+                                       StringRef Entry,
+                                       StringRef FileExtension) {
+#ifdef _WIN32
+  // Feature-qualified target IDs contain ':'; Windows reserves it for drive
+  // letters and alternate data streams. Sanitize only the target ID used to
+  // construct the temporary path so the public data object name is unchanged.
+  SmallString<128> SanitizedEntry(Entry);
+  std::replace(SanitizedEntry.begin(), SanitizedEntry.end(), ':', '_');
+  Entry = SanitizedEntry;
+#endif
+  SmallString<128> Name =
+      getUnbundleOutputName(OutputPrefix, Entry, FileExtension);
+  SmallString<128> Path(Dir);
+  path::append(Path, Name);
   return Path;
 }
 
@@ -1871,12 +1900,18 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       Input->Name = Buf;
     }
 
-    // Write input file system so that OffloadBundler API can process
-    // TODO: Switch write to VFS
+    // Input lives in InSet throughout this synchronous action. VFS borrows it
+    // without copying; returned output buffers retain their own storage.
     SmallString<128> InputFilePath = getFilePath(Input, InputDir);
-    if (auto Status = outputToFile(Input, InputFilePath)) {
-      return Status;
-    }
+    vfs::InMemoryFileSystem FS;
+    FS.addFile(InputFilePath, 0,
+               MemoryBuffer::getMemBuffer(StringRef(Input->Data, Input->Size),
+                                          InputFilePath, false));
+    // Archive extraction still uses files; SAVE_TEMPS keeps diagnostic inputs.
+    if (Input->DataKind == AMD_COMGR_DATA_KIND_AR_BUNDLE ||
+        env::shouldSaveTemps())
+      if (auto Status = outputToFile(Input, InputFilePath))
+        return Status;
 
     // Bundler input name
     BundlerConfig.InputFileNames.emplace_back(InputFilePath);
@@ -1888,9 +1923,8 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
 
     for (StringRef Entry : ActionInfo->BundleEntryIDs) {
       // Add an output file for each target
-      SmallString<128> OutputFilePath = OutputDir;
-      sys::path::append(OutputFilePath,
-                        OutputPrefix + "-" + Entry + "." + FileExtension);
+      SmallString<128> OutputFilePath =
+          getUnbundleOutputPath(OutputDir, OutputPrefix, Entry, FileExtension);
 
       BundlerConfig.TargetNames.emplace_back(Entry);
       BundlerConfig.OutputFileNames.emplace_back(OutputFilePath);
@@ -1902,7 +1936,7 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       }
     }
 
-    UnbundleCommand Unbundle(Input->DataKind, BundlerConfig);
+    UnbundleCommand Unbundle(Input->DataKind, BundlerConfig, FS);
     CommandCache::CachedOutput Hit;
     if (Cache) {
       // On a cache hit, use the cached code objects in place instead of
@@ -1958,7 +1992,12 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
         return Status;
       }
 
-      StringRef OutputFileName = sys::path::filename(OutputFilePath);
+      // Keep the original target ID in the public name. On Windows,
+      // path::filename would split the combined name at its last ':', so
+      // remove the input's directory before appending the target ID.
+      SmallString<128> OutputFileName = getUnbundleOutputName(
+          path::filename(OutputPrefix), BundlerConfig.TargetNames[OutputIndex],
+          FileExtension);
       Result->setName(OutputFileName);
 
       if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT)) {

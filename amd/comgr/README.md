@@ -216,7 +216,9 @@ On a cache miss, it decompresses each bundle once and selects existing members
 by their table offsets; it does not regenerate or recompile ELF images. Aligned
 members share the decompressed buffer, which stays alive until its last member
 is released. Misaligned members are copied for downstream ELF readers.
-Archives, uncompressed bundles, and unsupported layouts use the file-based path.
+Clang's existing unbundler reads inputs through a VFS and transfers owned output
+buffers to COMGR. Archives retain the file-based path; other file handlers can
+collect their existing stream output in memory. No new COMGR public API is needed.
 
 On a cache hit, aligned members share the mapped cache entry without
 decompression. Windows copies cached members so the cache file can be pruned.

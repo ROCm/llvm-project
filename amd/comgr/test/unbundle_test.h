@@ -62,7 +62,8 @@ inline std::string compress(llvm::StringRef Input,
 
 inline llvm::SmallVector<amd_comgr_data_t>
 unbundleData(llvm::StringRef Input, std::vector<const char *> Targets,
-             bool ExpectSuccess = true, bool Executable = false) {
+             bool ExpectSuccess = true, bool Executable = false,
+             const char *InputName = "bundle") {
   amd_comgr_data_set_t Inputs, Outputs;
   amd_comgr_data_t InputData;
   amd_comgr_action_info_t Action;
@@ -75,7 +76,7 @@ unbundleData(llvm::StringRef Input, std::vector<const char *> Targets,
   checkError(amd_comgr_create_data(InputKind, &InputData), "create input");
   checkError(amd_comgr_set_data(InputData, Input.size(), Input.data()),
              "set input");
-  checkError(amd_comgr_set_data_name(InputData, "bundle"), "set name");
+  checkError(amd_comgr_set_data_name(InputData, InputName), "set name");
   checkError(amd_comgr_data_set_add(Inputs, InputData), "add input");
   checkError(amd_comgr_release_data(InputData), "release input");
   checkError(amd_comgr_create_action_info(&Action), "create action");

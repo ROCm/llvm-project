@@ -17,12 +17,17 @@
 #ifndef LLVM_CLANG_DRIVER_OFFLOADBUNDLER_H
 #define LLVM_CLANG_DRIVER_OFFLOADBUNDLER_H
 
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/Error.h"
 #include "llvm/TargetParser/Triple.h"
 #include <llvm/Support/MemoryBuffer.h>
 #include <string>
+
+namespace llvm::vfs {
+class FileSystem;
+}
 
 namespace clang {
 
@@ -65,7 +70,15 @@ public:
                       const OffloadBundlerConfig &BundlerConfig);
 
   llvm::Error BundleFiles();
-  llvm::Error UnbundleFiles();
+  /// Read inputs through FS when supplied. If WriteOutput is supplied, transfer
+  /// owned output buffers to it instead of creating files. Binary members share
+  /// their decompressed storage; other formats retain the stream-based reader.
+  /// A callback may retain each buffer independently after this call returns.
+  llvm::Error UnbundleFiles(
+      llvm::vfs::FileSystem *FS = nullptr,
+      llvm::function_ref<llvm::Error(llvm::StringRef,
+                                     std::unique_ptr<llvm::MemoryBuffer>)>
+          WriteOutput = nullptr);
   llvm::Error UnbundleArchive();
 };
 
