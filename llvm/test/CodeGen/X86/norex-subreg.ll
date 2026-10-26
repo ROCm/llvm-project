@@ -1,5 +1,4 @@
 ; RUN: llc -O0 < %s -verify-machineinstrs
-; RUN: llc -O0 -regalloc-fast-tied < %s -verify-machineinstrs
 ; RUN: llc < %s -verify-machineinstrs
 target triple = "x86_64-apple-macosx10.7"
 
