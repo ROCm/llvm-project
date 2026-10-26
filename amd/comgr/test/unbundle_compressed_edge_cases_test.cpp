@@ -166,10 +166,10 @@ static void testFormat(compression::Format Format, uint16_t Version) {
     checkOutputs(unbundle(Compress(Input), {Host, Specific, Device}),
                  unbundle(Input, {Host, Specific, Device}));
 
-  // Compare compressed and uncompressed inputs through Clang's
-  // file-based unbundler, including asymmetric feature matching and kind/triple
-  // mismatches. Check expected results as well so both paths cannot silently
-  // select the wrong member.
+  // Compare compressed and uncompressed inputs through Clang's unbundler,
+  // including asymmetric feature matching and kind/triple mismatches. Check
+  // expected results as well so both paths cannot silently select the wrong
+  // member.
   struct CompatibilityCase {
     const char *Provided;
     const char *Requested;

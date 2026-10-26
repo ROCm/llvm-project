@@ -114,6 +114,9 @@ void saveCommandOutput(CachedCommandAdaptor &C, AddStreamFn &AddStream,
   ErrorHandler(CFS->commit(), "when commiting file stream");
 }
 
+/// Decode an entry and replay its log. With Hit, transfer CachedBuffer and an
+/// output view to the caller for restoration; otherwise restore through C.
+/// Return false on decoding or immediate restoration errors so C can execute.
 bool readEntryFromCache(CachedCommandAdaptor &C,
                         std::unique_ptr<MemoryBuffer> &CachedBuffer,
                         raw_ostream &LogS, CommandCache::CachedOutput *Hit) {

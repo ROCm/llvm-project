@@ -19,12 +19,15 @@ constexpr char Device[] = "hip-amdgcn-amd-amdhsa-unknown-gfx900";
 constexpr char OtherDevice[] = "hip-amdgcn-amd-amdhsa-unknown-gfx906";
 constexpr char Host[] = "host-x86_64-unknown-linux-gnu";
 
+/// Append one little-endian 64-bit field to a synthetic binary bundle.
 inline void appendInteger(std::string &Buffer, uint64_t Value) {
   size_t Offset = Buffer.size();
   Buffer.resize(Offset + sizeof(Value));
   llvm::support::endian::write64le(Buffer.data() + Offset, Value);
 }
 
+/// Build a binary bundle from (target ID, contents) pairs in the given order.
+/// Pack members without padding to exercise unaligned output handling.
 inline std::string
 bundle(llvm::ArrayRef<std::pair<llvm::StringRef, llvm::StringRef>> Entries) {
   uint64_t Offset = sizeof(Magic) - 1 + sizeof(uint64_t);
@@ -44,6 +47,8 @@ bundle(llvm::ArrayRef<std::pair<llvm::StringRef, llvm::StringRef>> Entries) {
   return Result;
 }
 
+/// Compress a fixture using the requested CCOB version. The compressor only
+/// emits v2/v3, so construct v1 by removing v2's recorded file-size field.
 inline std::string compress(llvm::StringRef Input,
                             llvm::compression::Format Format,
                             uint16_t Version = 3) {
@@ -60,6 +65,10 @@ inline std::string compress(llvm::StringRef Input,
   return Result;
 }
 
+/// Run an unbundle action and return retained output handles after destroying
+/// the action and both data sets, so callers can test independent lifetimes.
+/// The caller must release each handle. ExpectSuccess=false requires the
+/// action to fail and returns no handles; Executable selects object inputs.
 inline llvm::SmallVector<amd_comgr_data_t>
 unbundleData(llvm::StringRef Input, std::vector<const char *> Targets,
              bool ExpectSuccess = true, bool Executable = false,

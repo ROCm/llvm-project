@@ -586,6 +586,8 @@ SmallString<128> getOutputFilePath(DataObject *Object, StringRef Dir) {
   return Path;
 }
 
+/// Form OutputPrefix-Entry.FileExtension without changing the target ID.
+/// For public data names, strip directories from OutputPrefix first.
 SmallString<128> getUnbundleOutputName(StringRef OutputPrefix, StringRef Entry,
                                        StringRef FileExtension) {
   SmallString<128> Name(OutputPrefix);
@@ -596,6 +598,8 @@ SmallString<128> getUnbundleOutputName(StringRef OutputPrefix, StringRef Entry,
   return Name;
 }
 
+/// Build an output path under Dir, replacing ':' only in Entry on Windows.
+/// Public data names use getUnbundleOutputName() to preserve target features.
 SmallString<128> getUnbundleOutputPath(StringRef Dir, StringRef OutputPrefix,
                                        StringRef Entry,
                                        StringRef FileExtension) {

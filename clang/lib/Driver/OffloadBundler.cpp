@@ -168,11 +168,12 @@ static std::string getDeviceLibraryFileName(StringRef BundleFileName,
 }
 
 namespace {
-/// A member that retains its backing image after the bundler returns.
+/// A binary member view that retains its entire backing image after unbundling.
 class BundleBuffer final : public MemoryBuffer {
   std::shared_ptr<MemoryBuffer> Owner;
 
 public:
+  /// Bytes must lie within the non-null Owner; no trailing NUL is required.
   BundleBuffer(std::shared_ptr<MemoryBuffer> Owner, StringRef Bytes)
       : Owner(std::move(Owner)) {
     init(Bytes.begin(), Bytes.end(), /*RequiresNullTerminator=*/false);
@@ -210,6 +211,10 @@ public:
   /// Read the current bundle and write the result into the stream \a OS.
   virtual Error ReadBundle(raw_ostream &OS, MemoryBuffer &Input) = 0;
 
+  /// Read the bundle selected by ReadBundleStart(), before ReadBundleEnd().
+  /// The default uses ReadBundle() and copies its stream output; overrides may
+  /// return views that retain Input. The result must own its storage lifetime
+  /// independently of this handler and the caller's reference to Input.
   virtual Expected<std::unique_ptr<MemoryBuffer>>
   ReadBundleBuffer(std::shared_ptr<MemoryBuffer> Input) {
     SmallVector<char, 0> Bytes;
@@ -466,6 +471,9 @@ public:
     return Error::success();
   }
 
+  /// Return the selected member without copying, retaining Input as its owner.
+  /// ReadHeader() has validated the range; alignment and a trailing NUL are
+  /// not guaranteed for this subrange.
   Expected<std::unique_ptr<MemoryBuffer>>
   ReadBundleBuffer(std::shared_ptr<MemoryBuffer> Input) final {
     assert(CurBundleInfo != BundlesInfo.end() && "Invalid reader info!");
@@ -1293,7 +1301,6 @@ Error OffloadBundler::BundleFiles() {
   return FH->finalizeOutputFile();
 }
 
-// Unbundle the files. Return true if an error was found.
 Error OffloadBundler::UnbundleFiles(
     vfs::FileSystem *FS,
     function_ref<Error(StringRef, std::unique_ptr<MemoryBuffer>)> WriteOutput) {

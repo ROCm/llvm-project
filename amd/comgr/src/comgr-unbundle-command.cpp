@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file implements the CacheCommandAdaptor interface for
-/// llvm::OffloadBundler::Unbundle() routines that are stored in the cache.
+/// Adapts clang::OffloadBundler to COMGR's command cache and collects in-memory
+/// outputs for COMGR data objects.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -40,7 +40,7 @@ constexpr size_t CompressedBundleMagicSize = sizeof(CompressedBundleMagic) - 1;
 using CompressedBundleHeader =
     object::CompressedOffloadBundle::CompressedBundleHeader;
 
-/// Return the size of a compressed bundle header for \p Version.
+/// Return the header size for \p Version, or zero for an unsupported version.
 size_t compressedBundleHeaderSize(uint16_t Version) {
   // CCOB magic (4), version (2), method (2), then the version-specific
   // sizes and the truncated MD5 hash (8).
@@ -56,9 +56,12 @@ size_t compressedBundleHeaderSize(uint16_t Version) {
   }
 }
 
-/// Return the size of the compressed bundle at the start of \p Remaining.
-/// \p RemainingSize is the number of bytes in the complete remaining input;
-/// \p Remaining may be only the header prefix for versioned bundles.
+/// Return the next bundle's offset relative to the start of \p Remaining.
+/// RemainingSize is the total number of bytes left in the input. For v2/v3,
+/// validate the recorded size against the header size and RemainingSize;
+/// Remaining may then contain only the header prefix. For v1, Remaining must
+/// contain the full remaining input: scan for the next magic, returning
+/// StringRef::npos if this is the last bundle. Header must already be parsed.
 Expected<size_t>
 nextCompressedBundleOffset(size_t RemainingSize, StringRef Remaining,
                            const CompressedBundleHeader &Header) {
@@ -95,7 +98,9 @@ constexpr size_t UnbundleCacheContentsOffset = sizeof(uint64_t);
 static_assert(UnbundleCacheMagicSize == sizeof(SizeFieldType));
 
 /// Append \p Data to \p Out in the aligned cache framing. The frame stores the
-/// payload size and the number of padding bytes before the payload.
+/// payload size and padding count, then zero padding and the payload. Align
+/// relative to the enclosing cache file's size prefix, not Out's address.
+/// Data.size() must fit in SizeFieldType.
 void appendAlignedOutput(SmallVectorImpl<char> &Out, StringRef Data) {
   SizeFieldType Size = Data.size();
   size_t HeaderOffset = Out.size();
@@ -114,15 +119,12 @@ void appendAlignedOutput(SmallVectorImpl<char> &Out, StringRef Data) {
     memcpy(Out.data() + AlignedOffset, Data.data(), Data.size());
 }
 
-/// A MemoryBuffer that views a subrange of \p Owner and keeps it alive.
-///
-/// A compressed bundle expands to an image far larger than the bundle itself,
-/// and every requested target is a subrange of that image. Copying each
-/// subrange would duplicate the image once per target, so the outputs share
-/// the decompressed buffer instead. The whole backing buffer remains alive
-/// until its last view is released, even if only a small member is retained.
+/// A view into a decompressed buffer or mapped cache entry that retains its
+/// owner. Sharing avoids copying each member but keeps the entire backing
+/// buffer alive until its last view is released, even for a small member.
 class SharedSubBuffer final : public MemoryBuffer {
 public:
+  /// Slice must lie within the non-null Owner; no trailing NUL is required.
   SharedSubBuffer(std::shared_ptr<MemoryBuffer> Owner, StringRef Slice)
       : Owner(std::move(Owner)) {
     init(Slice.data(), Slice.data() + Slice.size(),
@@ -138,6 +140,9 @@ private:
   std::shared_ptr<MemoryBuffer> Owner;
 };
 
+/// Return storage aligned for COMGR's ELF consumers. Retain Owner when Slice
+/// is max_align_t-aligned; otherwise make an aligned copy. A null Owner always
+/// copies. If Owner is supplied, Slice must refer to storage that it owns.
 std::unique_ptr<MemoryBuffer> shareOrCopy(std::shared_ptr<MemoryBuffer> Owner,
                                           StringRef Slice) {
   if (Owner && isAddrAligned(Align(alignof(std::max_align_t)), Slice.data()))
