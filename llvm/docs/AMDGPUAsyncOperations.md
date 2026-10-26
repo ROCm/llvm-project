@@ -77,8 +77,7 @@ barrier to ensure that `A` is *completed-at* some operation in that thread.
 
 ### Using Asyncmarks
 
-Some async operations use asyncmarks to notify completion. Such an async
-operation `A` *initiated-by* an instruction `I` is *completed-at* some
+An async operation `A` *initiated-by* an instruction `I` is *completed-at* some
 `wait.asyncmark()` operation `Y` if there exists an `asyncmark()` operation `X`
 such that:
 - `I` is *program-ordered* before `X`, and
@@ -94,7 +93,7 @@ barriers<amdgpu-lds-memory-barriers>` as follows:
   {ref}`barrier arrive<amdgpu-barrier-operations>` operation `BA` to be
   performed after `A`.
 - When a thread executes an asynchronous LDS DMA load instruction `X`, it may
-  execute a call to `@llvm.amdgcn.ds.atomic.async.barrier.arrive.b64`
+  execute a call to the `@llvm.amdgcn.ds.atomic.async.barrier.arrive.b64`
   {ref}`intrinsic<amdgpu-lds-memory-barriers>` program-ordered after `X`. This
   initiates a {ref}`barrier arrive<amdgpu-barrier-operations>` operation `BA` to
   be performed after the async operation `A` initiated by `X`.

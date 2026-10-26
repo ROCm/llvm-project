@@ -12,7 +12,7 @@ mechanisms to {ref}`track completion<amdgpu-async-completed-at>`.
 All DMA operations support the same cache modifiers as ordinary load/store
 operations from registers. They cannot be performed atomically.
 
-## GFX9 LDS DMA
+## GFX9 LDS DMA Operations
 
 Each GFX9 LDS DMA instruction has a synchronous counterpart (e.g.,
 `@llvm.amdgcn.load.to.lds` for `@llvm.amdgcn.load.async.to.lds`). The
