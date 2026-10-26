@@ -31,6 +31,15 @@ int main(void) {
              "borrow again");
   if (Pointer != Again || Size != AgainSize)
     fail("view does not share storage");
+  checkError(amd_comgr_set_data(Data, Size, Pointer),
+             "replace data from its own view");
+  checkError(amd_comgr_get_data_pointer(Data, &AgainSize, &Again),
+             "borrow self-replaced data");
+  if (AgainSize != sizeof(Payload) || memcmp(Again, Payload, AgainSize))
+    fail("self-replacement changed data");
+  Pointer = Again;
+  Size = AgainSize;
+
   checkError(amd_comgr_create_data_set(&Set), "create set");
   checkError(amd_comgr_data_set_add(Set, Data), "add data");
   checkError(amd_comgr_action_data_get_data(Set, AMD_COMGR_DATA_KIND_EXECUTABLE,
