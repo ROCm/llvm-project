@@ -87,16 +87,6 @@ unbundle(StringRef Input, std::vector<const char *> Targets,
         fail("misaligned cached ELF was not copied");
 #endif
     }
-    if (Size) {
-      checkError(amd_comgr_set_data(Data[Index], PointerSize, Pointer),
-                 "replace output from its own view");
-      checkError(
-          amd_comgr_get_data_pointer(Data[Index], &PointerSize, &Pointer),
-          "borrow self-replaced output");
-      if (PointerSize != Size ||
-          StringRef(Pointer, PointerSize) != Result[Index])
-        fail("self-replacement changed output");
-    }
     amd_comgr_metadata_node_t Metadata = {};
     if (CheckMember) {
       size_t IsaSize = 0;

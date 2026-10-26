@@ -86,7 +86,6 @@
 #include <LLVMSPIRVLib.h>
 #endif
 
-#include <algorithm>
 #include <csignal>
 #include <sstream>
 
@@ -583,34 +582,6 @@ SmallString<128> getOutputFilePath(DataObject *Object, StringRef Dir) {
   if (fs::create_directories(path::parent_path(Path))) {
     return SmallString<128>();
   }
-  return Path;
-}
-
-SmallString<128> getUnbundleOutputName(StringRef OutputPrefix, StringRef Entry,
-                                       StringRef FileExtension) {
-  SmallString<128> Name(OutputPrefix);
-  Name += "-";
-  Name += Entry;
-  Name += ".";
-  Name += FileExtension;
-  return Name;
-}
-
-SmallString<128> getUnbundleOutputPath(StringRef Dir, StringRef OutputPrefix,
-                                       StringRef Entry,
-                                       StringRef FileExtension) {
-#ifdef _WIN32
-  // Feature-qualified target IDs contain ':'; Windows reserves it for drive
-  // letters and alternate data streams. Sanitize only the target ID used to
-  // construct the temporary path so the public data object name is unchanged.
-  SmallString<128> SanitizedEntry(Entry);
-  std::replace(SanitizedEntry.begin(), SanitizedEntry.end(), ':', '_');
-  Entry = SanitizedEntry;
-#endif
-  SmallString<128> Name =
-      getUnbundleOutputName(OutputPrefix, Entry, FileExtension);
-  SmallString<128> Path(Dir);
-  path::append(Path, Name);
   return Path;
 }
 
@@ -1917,8 +1888,9 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
 
     for (StringRef Entry : ActionInfo->BundleEntryIDs) {
       // Add an output file for each target
-      SmallString<128> OutputFilePath =
-          getUnbundleOutputPath(OutputDir, OutputPrefix, Entry, FileExtension);
+      SmallString<128> OutputFilePath = OutputDir;
+      sys::path::append(OutputFilePath,
+                        OutputPrefix + "-" + Entry + "." + FileExtension);
 
       BundlerConfig.TargetNames.emplace_back(Entry);
       BundlerConfig.OutputFileNames.emplace_back(OutputFilePath);
@@ -1986,11 +1958,7 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
         return Status;
       }
 
-      // OutputFileName is already a bare filename. Do not pass it through
-      // path::filename: on Windows that also splits on ':', which would truncate
-      // a feature-qualified target ID such as "gfx90a:sramecc+:xnack-".
-      SmallString<128> OutputFileName = getUnbundleOutputName(
-          OutputPrefix, BundlerConfig.TargetNames[OutputIndex], FileExtension);
+      StringRef OutputFileName = sys::path::filename(OutputFilePath);
       Result->setName(OutputFileName);
 
       if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT)) {
