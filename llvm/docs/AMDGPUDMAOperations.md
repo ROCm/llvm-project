@@ -167,20 +167,20 @@ memory and LDS, including locations specified through tensor descriptors.
 
 [This section is informational.]
 
-The symbolic mapping of "lds-dma" scope affects how the _mutually inclusive_
-relation is applied to DMA operations. When "lds-dma" scope maps to "cluster"
-scope, the operation does not belong to a lower scope instance such as
-"workgroup".
+The symbolic mapping of "lds-dma" scope affects whether a DMA operation and
+another operation have *inclusive scopes*. When "lds-dma" scope maps to
+"cluster" scope, the DMA operation does not belong to a lower scope instance
+such as "workgroup".
 
 Consider an operation `X` that specifies "workgroup" scope, and a DMA operation
 `Y` initiated from the same workgroup instance. On a target that performs DMA
 operations at "cluster" scope, `Y` does not belong to any "workgroup" instance.
-Thus `X` and `Y` do not have inclusive scope on this target even though they are
-both associated with the same workgroup instance. If the same program is
-rewritten so that `X` specifies "lds-dma" scope instead, then the two operations
-will always have inclusive scope, independent of target. This is also true if
-`X` specified "cluster" scope, but using "lds-dma" scope is more precise, and
-may result in a more efficient implementation.
+Thus `X` and `Y` do not have inclusive scopes on this target even though `Y` was
+initiated from the same workgroup instance. If the same program is rewritten so
+that `X` specifies "lds-dma" scope instead, then the two operations will always
+have inclusive scopes, independent of target. This is also true if `X` specified
+"cluster" scope, but using "lds-dma" scope is more precise, and may result in a
+more efficient implementation.
 
 (amdgpu-dma-visibility)=
 
@@ -192,9 +192,11 @@ A DMA operation ``D`` is performed in an instance ``I`` of scope ``S``, but it
 is not included in any subscope instances of ``I``. This means that the
 availability/visibility operations implicitly performed by ``D`` **cannot** form
 an *inclusive scope* relationship with operations that specify one of those
-subscopes. This requires threads to perform additional availability and
-visibility operations that ensure {ref}`amdgpu-location-order` in certain cases
-shown below.
+subscopes. For global memory accesses, this requires threads to perform
+additional availability and visibility operations that ensure
+{ref}`amdgpu-location-order` in certain cases shown below. (For LDS accesses,
+additional availability and visibility operations are not needed because
+accesses to `addrspace(3)` always use the "lds-dma" scope.)
 
 #### Wavefront Scope
 

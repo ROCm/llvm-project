@@ -81,7 +81,7 @@ The LLVM Language Reference defines the following {ref}`scopes<syncscope>`:
 
 ### AMDGPU scopes
 
-The AMDGPU target defines the following LLVM scopes:
+The AMDGPU target defines the following scopes:
 
 - *system scope* (same as LLVM)
 - "agent" scope
@@ -108,13 +108,13 @@ Every operation *belongs to* an instance of a specific scope:
   corresponding {ref}`"lds-dma" scope<amdgpu-lds-dma-scope>` instance.
 
 Every operation is *contained* in the scope instance `I1` that it *belongs
-to*, as well as every scope instance `I2` such that `I1` is a *subscope
-instance* of `I2`.
+to*, and therefore in every scope instance `I2` that has `I1` as a *subscope
+instance*.
 
 This affects how operations are related in *inclusive scopes* when determining
 availability and visibility. For example, DMA operations require {ref}`explicit
-availability and visibility<amdgpu-dma-visibility>` operations at scopes below
-the corresponding "lds-dma" scope.
+availability and visibility<amdgpu-dma-visibility>` operations at the
+corresponding "lds-dma" scope.
 
 #### Inclusive Scopes
 
