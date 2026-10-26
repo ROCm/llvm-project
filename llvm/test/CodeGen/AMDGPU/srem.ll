@@ -9988,18 +9988,18 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_or_b64 s[4:5], s[2:3], s[6:7]
 ; GCN-NEXT:    s_cmp_lg_u32 s5, 0
-; GCN-NEXT:    s_mov_b32 s5, 0
-; GCN-NEXT:    s_cbranch_scc0 .LBB19_2
+; GCN-NEXT:    s_cbranch_scc0 .LBB19_4
 ; GCN-NEXT:  ; %bb.1:
 ; GCN-NEXT:    s_ashr_i32 s4, s7, 31
-; GCN-NEXT:    s_add_u32 s6, s6, s4
+; GCN-NEXT:    s_add_u32 s8, s6, s4
 ; GCN-NEXT:    s_mov_b32 s5, s4
-; GCN-NEXT:    s_addc_u32 s7, s7, s4
-; GCN-NEXT:    s_xor_b64 s[4:5], s[6:7], s[4:5]
-; GCN-NEXT:    v_cvt_f32_u32_e32 v0, s4
-; GCN-NEXT:    v_cvt_f32_u32_e32 v1, s5
-; GCN-NEXT:    s_sub_u32 s6, 0, s4
-; GCN-NEXT:    s_subb_u32 s7, 0, s5
+; GCN-NEXT:    s_addc_u32 s9, s7, s4
+; GCN-NEXT:    s_xor_b64 s[8:9], s[8:9], s[4:5]
+; GCN-NEXT:    v_cvt_f32_u32_e32 v0, s8
+; GCN-NEXT:    v_cvt_f32_u32_e32 v1, s9
+; GCN-NEXT:    s_sub_u32 s7, 0, s8
+; GCN-NEXT:    s_subb_u32 s10, 0, s9
+; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    v_madmk_f32 v0, v1, 0x4f800000, v0
 ; GCN-NEXT:    v_rcp_f32_e32 v0, v0
 ; GCN-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
@@ -10008,115 +10008,117 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; GCN-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v1, v1
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v0, v0
-; GCN-NEXT:    v_readfirstlane_b32 s8, v1
-; GCN-NEXT:    v_readfirstlane_b32 s9, v0
-; GCN-NEXT:    s_mul_i32 s10, s6, s8
-; GCN-NEXT:    s_mul_hi_u32 s12, s6, s9
-; GCN-NEXT:    s_mul_i32 s11, s7, s9
-; GCN-NEXT:    s_add_i32 s10, s12, s10
-; GCN-NEXT:    s_add_i32 s10, s10, s11
-; GCN-NEXT:    s_mul_i32 s13, s6, s9
-; GCN-NEXT:    s_mul_i32 s12, s9, s10
-; GCN-NEXT:    s_mul_hi_u32 s14, s9, s13
-; GCN-NEXT:    s_mul_hi_u32 s11, s9, s10
-; GCN-NEXT:    s_add_u32 s12, s14, s12
-; GCN-NEXT:    s_addc_u32 s11, 0, s11
-; GCN-NEXT:    s_mul_hi_u32 s14, s8, s13
-; GCN-NEXT:    s_mul_i32 s13, s8, s13
+; GCN-NEXT:    v_readfirstlane_b32 s11, v1
+; GCN-NEXT:    v_readfirstlane_b32 s12, v0
+; GCN-NEXT:    s_mul_i32 s13, s7, s11
+; GCN-NEXT:    s_mul_hi_u32 s15, s7, s12
+; GCN-NEXT:    s_mul_i32 s14, s10, s12
+; GCN-NEXT:    s_add_i32 s13, s15, s13
+; GCN-NEXT:    s_add_i32 s13, s13, s14
+; GCN-NEXT:    s_mul_i32 s16, s7, s12
+; GCN-NEXT:    s_mul_i32 s15, s12, s13
+; GCN-NEXT:    s_mul_hi_u32 s17, s12, s16
+; GCN-NEXT:    s_mul_hi_u32 s14, s12, s13
+; GCN-NEXT:    s_add_u32 s15, s17, s15
+; GCN-NEXT:    s_addc_u32 s14, 0, s14
+; GCN-NEXT:    s_mul_hi_u32 s17, s11, s16
+; GCN-NEXT:    s_mul_i32 s16, s11, s16
+; GCN-NEXT:    s_add_u32 s15, s15, s16
+; GCN-NEXT:    s_addc_u32 s14, s14, s17
+; GCN-NEXT:    s_mul_hi_u32 s15, s11, s13
+; GCN-NEXT:    s_addc_u32 s15, s15, 0
+; GCN-NEXT:    s_mul_i32 s13, s11, s13
+; GCN-NEXT:    s_add_u32 s13, s14, s13
+; GCN-NEXT:    s_addc_u32 s14, 0, s15
 ; GCN-NEXT:    s_add_u32 s12, s12, s13
 ; GCN-NEXT:    s_addc_u32 s11, s11, s14
-; GCN-NEXT:    s_mul_hi_u32 s12, s8, s10
-; GCN-NEXT:    s_addc_u32 s12, s12, 0
-; GCN-NEXT:    s_mul_i32 s10, s8, s10
-; GCN-NEXT:    s_add_u32 s10, s11, s10
-; GCN-NEXT:    s_addc_u32 s11, 0, s12
-; GCN-NEXT:    s_add_u32 s9, s9, s10
-; GCN-NEXT:    s_addc_u32 s8, s8, s11
-; GCN-NEXT:    s_mul_i32 s10, s6, s9
-; GCN-NEXT:    s_mul_i32 s13, s6, s8
-; GCN-NEXT:    s_mul_hi_u32 s6, s6, s9
-; GCN-NEXT:    s_add_i32 s6, s6, s13
-; GCN-NEXT:    s_mul_i32 s7, s7, s9
-; GCN-NEXT:    s_add_i32 s6, s6, s7
-; GCN-NEXT:    s_mul_hi_u32 s11, s8, s10
-; GCN-NEXT:    s_mul_i32 s12, s8, s10
-; GCN-NEXT:    s_mul_i32 s13, s9, s6
-; GCN-NEXT:    s_mul_hi_u32 s10, s9, s10
-; GCN-NEXT:    s_mul_hi_u32 s7, s9, s6
-; GCN-NEXT:    s_add_u32 s10, s10, s13
-; GCN-NEXT:    s_addc_u32 s7, 0, s7
-; GCN-NEXT:    s_add_u32 s10, s10, s12
-; GCN-NEXT:    s_addc_u32 s7, s7, s11
-; GCN-NEXT:    s_mul_hi_u32 s10, s8, s6
-; GCN-NEXT:    s_addc_u32 s10, s10, 0
-; GCN-NEXT:    s_mul_i32 s6, s8, s6
-; GCN-NEXT:    s_add_u32 s6, s7, s6
-; GCN-NEXT:    s_addc_u32 s7, 0, s10
-; GCN-NEXT:    s_add_u32 s9, s9, s6
-; GCN-NEXT:    s_addc_u32 s8, s8, s7
-; GCN-NEXT:    s_ashr_i32 s6, s3, 31
-; GCN-NEXT:    s_add_u32 s2, s2, s6
-; GCN-NEXT:    s_mov_b32 s7, s6
-; GCN-NEXT:    s_addc_u32 s3, s3, s6
-; GCN-NEXT:    s_xor_b64 s[2:3], s[2:3], s[6:7]
-; GCN-NEXT:    s_mul_i32 s11, s2, s8
-; GCN-NEXT:    s_mul_hi_u32 s12, s2, s9
-; GCN-NEXT:    s_mul_hi_u32 s10, s2, s8
-; GCN-NEXT:    s_add_u32 s11, s12, s11
+; GCN-NEXT:    s_mul_i32 s13, s7, s12
+; GCN-NEXT:    s_mul_i32 s16, s7, s11
+; GCN-NEXT:    s_mul_hi_u32 s7, s7, s12
+; GCN-NEXT:    s_add_i32 s7, s7, s16
+; GCN-NEXT:    s_mul_i32 s10, s10, s12
+; GCN-NEXT:    s_add_i32 s7, s7, s10
+; GCN-NEXT:    s_mul_hi_u32 s14, s11, s13
+; GCN-NEXT:    s_mul_i32 s15, s11, s13
+; GCN-NEXT:    s_mul_i32 s16, s12, s7
+; GCN-NEXT:    s_mul_hi_u32 s13, s12, s13
+; GCN-NEXT:    s_mul_hi_u32 s10, s12, s7
+; GCN-NEXT:    s_add_u32 s13, s13, s16
 ; GCN-NEXT:    s_addc_u32 s10, 0, s10
-; GCN-NEXT:    s_mul_hi_u32 s12, s3, s9
-; GCN-NEXT:    s_mul_i32 s9, s3, s9
-; GCN-NEXT:    s_add_u32 s9, s11, s9
-; GCN-NEXT:    s_addc_u32 s9, s10, s12
-; GCN-NEXT:    s_mul_hi_u32 s10, s3, s8
-; GCN-NEXT:    s_addc_u32 s10, s10, 0
-; GCN-NEXT:    s_mul_i32 s8, s3, s8
-; GCN-NEXT:    s_add_u32 s8, s9, s8
-; GCN-NEXT:    s_addc_u32 s9, 0, s10
-; GCN-NEXT:    s_mul_i32 s9, s4, s9
-; GCN-NEXT:    s_mul_hi_u32 s10, s4, s8
-; GCN-NEXT:    s_add_i32 s9, s10, s9
-; GCN-NEXT:    s_mul_i32 s10, s5, s8
-; GCN-NEXT:    s_add_i32 s12, s9, s10
-; GCN-NEXT:    s_sub_i32 s10, s3, s12
-; GCN-NEXT:    s_mul_i32 s8, s4, s8
-; GCN-NEXT:    s_sub_u32 s2, s2, s8
-; GCN-NEXT:    s_cselect_b64 s[8:9], -1, 0
-; GCN-NEXT:    s_subb_u32 s13, s10, s5
-; GCN-NEXT:    s_sub_u32 s14, s2, s4
-; GCN-NEXT:    s_cselect_b64 s[10:11], -1, 0
-; GCN-NEXT:    s_subb_u32 s15, s13, 0
-; GCN-NEXT:    s_cmp_ge_u32 s15, s5
-; GCN-NEXT:    s_cselect_b32 s16, -1, 0
-; GCN-NEXT:    s_cmp_ge_u32 s14, s4
-; GCN-NEXT:    s_cselect_b32 s17, -1, 0
-; GCN-NEXT:    s_cmp_eq_u32 s15, s5
-; GCN-NEXT:    s_cselect_b32 s16, s17, s16
-; GCN-NEXT:    s_cmp_lg_u64 s[10:11], 0
-; GCN-NEXT:    s_subb_u32 s10, s13, s5
-; GCN-NEXT:    s_sub_u32 s11, s14, s4
-; GCN-NEXT:    s_subb_u32 s10, s10, 0
-; GCN-NEXT:    s_cmp_lg_u32 s16, 0
-; GCN-NEXT:    s_cselect_b32 s11, s11, s14
-; GCN-NEXT:    s_cselect_b32 s10, s10, s15
-; GCN-NEXT:    s_cmp_lg_u64 s[8:9], 0
-; GCN-NEXT:    s_subb_u32 s3, s3, s12
-; GCN-NEXT:    s_cmp_ge_u32 s3, s5
+; GCN-NEXT:    s_add_u32 s13, s13, s15
+; GCN-NEXT:    s_addc_u32 s10, s10, s14
+; GCN-NEXT:    s_mul_hi_u32 s13, s11, s7
+; GCN-NEXT:    s_addc_u32 s13, s13, 0
+; GCN-NEXT:    s_mul_i32 s7, s11, s7
+; GCN-NEXT:    s_add_u32 s7, s10, s7
+; GCN-NEXT:    s_addc_u32 s10, 0, s13
+; GCN-NEXT:    s_add_u32 s7, s12, s7
+; GCN-NEXT:    s_addc_u32 s14, s11, s10
+; GCN-NEXT:    s_ashr_i32 s10, s3, 31
+; GCN-NEXT:    s_add_u32 s12, s2, s10
+; GCN-NEXT:    s_mov_b32 s11, s10
+; GCN-NEXT:    s_addc_u32 s13, s3, s10
+; GCN-NEXT:    s_xor_b64 s[12:13], s[12:13], s[10:11]
+; GCN-NEXT:    s_mul_i32 s15, s12, s14
+; GCN-NEXT:    s_mul_hi_u32 s16, s12, s7
+; GCN-NEXT:    s_mul_hi_u32 s3, s12, s14
+; GCN-NEXT:    s_add_u32 s15, s16, s15
+; GCN-NEXT:    s_addc_u32 s3, 0, s3
+; GCN-NEXT:    s_mul_hi_u32 s16, s13, s7
+; GCN-NEXT:    s_mul_i32 s7, s13, s7
+; GCN-NEXT:    s_add_u32 s7, s15, s7
+; GCN-NEXT:    s_addc_u32 s3, s3, s16
+; GCN-NEXT:    s_mul_hi_u32 s7, s13, s14
+; GCN-NEXT:    s_addc_u32 s7, s7, 0
+; GCN-NEXT:    s_mul_i32 s14, s13, s14
+; GCN-NEXT:    s_add_u32 s3, s3, s14
+; GCN-NEXT:    s_addc_u32 s7, 0, s7
+; GCN-NEXT:    s_mul_i32 s7, s8, s7
+; GCN-NEXT:    s_mul_hi_u32 s14, s8, s3
+; GCN-NEXT:    s_add_i32 s7, s14, s7
+; GCN-NEXT:    s_mul_i32 s14, s9, s3
+; GCN-NEXT:    s_add_i32 s7, s7, s14
+; GCN-NEXT:    s_sub_i32 s16, s13, s7
+; GCN-NEXT:    s_mul_i32 s3, s8, s3
+; GCN-NEXT:    s_sub_u32 s3, s12, s3
+; GCN-NEXT:    s_cselect_b64 s[14:15], -1, 0
+; GCN-NEXT:    s_subb_u32 s12, s16, s9
+; GCN-NEXT:    s_sub_u32 s18, s3, s8
+; GCN-NEXT:    s_cselect_b64 s[16:17], -1, 0
+; GCN-NEXT:    s_subb_u32 s19, s12, 0
+; GCN-NEXT:    s_cmp_ge_u32 s19, s9
+; GCN-NEXT:    s_cselect_b32 s20, -1, 0
+; GCN-NEXT:    s_cmp_ge_u32 s18, s8
+; GCN-NEXT:    s_cselect_b32 s21, -1, 0
+; GCN-NEXT:    s_cmp_eq_u32 s19, s9
+; GCN-NEXT:    s_cselect_b32 s20, s21, s20
+; GCN-NEXT:    s_cmp_lg_u64 s[16:17], 0
+; GCN-NEXT:    s_subb_u32 s12, s12, s9
+; GCN-NEXT:    s_sub_u32 s16, s18, s8
+; GCN-NEXT:    s_subb_u32 s12, s12, 0
+; GCN-NEXT:    s_cmp_lg_u32 s20, 0
+; GCN-NEXT:    s_cselect_b32 s16, s16, s18
+; GCN-NEXT:    s_cselect_b32 s12, s12, s19
+; GCN-NEXT:    s_cmp_lg_u64 s[14:15], 0
+; GCN-NEXT:    s_subb_u32 s7, s13, s7
+; GCN-NEXT:    s_cmp_ge_u32 s7, s9
+; GCN-NEXT:    s_cselect_b32 s13, -1, 0
+; GCN-NEXT:    s_cmp_ge_u32 s3, s8
 ; GCN-NEXT:    s_cselect_b32 s8, -1, 0
-; GCN-NEXT:    s_cmp_ge_u32 s2, s4
-; GCN-NEXT:    s_cselect_b32 s4, -1, 0
-; GCN-NEXT:    s_cmp_eq_u32 s3, s5
-; GCN-NEXT:    s_cselect_b32 s4, s4, s8
-; GCN-NEXT:    s_cmp_lg_u32 s4, 0
-; GCN-NEXT:    s_cselect_b32 s3, s10, s3
-; GCN-NEXT:    s_cselect_b32 s2, s11, s2
-; GCN-NEXT:    s_xor_b64 s[2:3], s[2:3], s[6:7]
-; GCN-NEXT:    s_sub_u32 s4, s2, s6
-; GCN-NEXT:    s_subb_u32 s5, s3, s6
-; GCN-NEXT:    s_branch .LBB19_3
+; GCN-NEXT:    s_cmp_eq_u32 s7, s9
+; GCN-NEXT:    s_cselect_b32 s8, s8, s13
+; GCN-NEXT:    s_cmp_lg_u32 s8, 0
+; GCN-NEXT:    s_cselect_b32 s9, s12, s7
+; GCN-NEXT:    s_cselect_b32 s8, s16, s3
+; GCN-NEXT:    s_xor_b64 s[8:9], s[8:9], s[10:11]
+; GCN-NEXT:    s_sub_u32 s8, s8, s10
+; GCN-NEXT:    s_subb_u32 s9, s9, s10
+; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GCN-NEXT:    s_cbranch_scc0 .LBB19_3
 ; GCN-NEXT:  .LBB19_2:
 ; GCN-NEXT:    v_cvt_f32_u32_e32 v0, s6
 ; GCN-NEXT:    s_sub_i32 s3, 0, s6
+; GCN-NEXT:    s_mov_b32 s9, 0
 ; GCN-NEXT:    v_rcp_iflag_f32_e32 v0, v0
 ; GCN-NEXT:    v_mul_f32_e32 v0, 0x4f7ffffe, v0
 ; GCN-NEXT:    v_cvt_u32_f32_e32 v0, v0
@@ -10132,33 +10134,38 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; GCN-NEXT:    s_cselect_b32 s2, s3, s2
 ; GCN-NEXT:    s_sub_i32 s3, s2, s6
 ; GCN-NEXT:    s_cmp_ge_u32 s2, s6
-; GCN-NEXT:    s_cselect_b32 s4, s3, s2
+; GCN-NEXT:    s_cselect_b32 s8, s3, s2
 ; GCN-NEXT:  .LBB19_3: ; %.split
 ; GCN-NEXT:    v_mov_b32_e32 v2, 0
-; GCN-NEXT:    v_mov_b32_e32 v0, s4
-; GCN-NEXT:    v_mov_b32_e32 v1, s5
+; GCN-NEXT:    v_mov_b32_e32 v0, s8
+; GCN-NEXT:    v_mov_b32_e32 v1, s9
 ; GCN-NEXT:    global_store_dwordx2 v2, v[0:1], s[0:1]
 ; GCN-NEXT:    s_endpgm
+; GCN-NEXT:  .LBB19_4:
+; GCN-NEXT:    s_mov_b64 s[4:5], -1
+; GCN-NEXT:    ; implicit-def: $sgpr8_sgpr9
+; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GCN-NEXT:    s_cbranch_scc1 .LBB19_2
+; GCN-NEXT:    s_branch .LBB19_3
 ;
 ; TAHITI-LABEL: srem_i64_uniform:
 ; TAHITI:       ; %bb.0:
 ; TAHITI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
-; TAHITI-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0xd
+; TAHITI-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0xd
 ; TAHITI-NEXT:    s_waitcnt lgkmcnt(0)
-; TAHITI-NEXT:    s_or_b64 s[4:5], s[2:3], s[6:7]
-; TAHITI-NEXT:    s_cmp_lg_u32 s5, 0
-; TAHITI-NEXT:    s_mov_b32 s5, 0
-; TAHITI-NEXT:    s_cbranch_scc0 .LBB19_2
+; TAHITI-NEXT:    s_or_b64 s[6:7], s[2:3], s[4:5]
+; TAHITI-NEXT:    s_cmp_lg_u32 s7, 0
+; TAHITI-NEXT:    s_cbranch_scc0 .LBB19_4
 ; TAHITI-NEXT:  ; %bb.1:
-; TAHITI-NEXT:    s_ashr_i32 s4, s7, 31
-; TAHITI-NEXT:    s_add_u32 s6, s6, s4
-; TAHITI-NEXT:    s_mov_b32 s5, s4
-; TAHITI-NEXT:    s_addc_u32 s7, s7, s4
-; TAHITI-NEXT:    s_xor_b64 s[4:5], s[6:7], s[4:5]
-; TAHITI-NEXT:    v_cvt_f32_u32_e32 v0, s4
-; TAHITI-NEXT:    v_cvt_f32_u32_e32 v1, s5
-; TAHITI-NEXT:    s_sub_u32 s6, 0, s4
-; TAHITI-NEXT:    s_subb_u32 s7, 0, s5
+; TAHITI-NEXT:    s_ashr_i32 s6, s5, 31
+; TAHITI-NEXT:    s_add_u32 s8, s4, s6
+; TAHITI-NEXT:    s_mov_b32 s7, s6
+; TAHITI-NEXT:    s_addc_u32 s9, s5, s6
+; TAHITI-NEXT:    s_xor_b64 s[6:7], s[8:9], s[6:7]
+; TAHITI-NEXT:    v_cvt_f32_u32_e32 v0, s6
+; TAHITI-NEXT:    v_cvt_f32_u32_e32 v1, s7
+; TAHITI-NEXT:    s_sub_u32 s5, 0, s6
+; TAHITI-NEXT:    s_subb_u32 s8, 0, s7
 ; TAHITI-NEXT:    v_madmk_f32 v0, v1, 0x4f800000, v0
 ; TAHITI-NEXT:    v_rcp_f32_e32 v0, v0
 ; TAHITI-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
@@ -10167,136 +10174,139 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; TAHITI-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v0, v0
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v1, v1
-; TAHITI-NEXT:    v_mul_hi_u32 v2, s6, v0
-; TAHITI-NEXT:    v_readfirstlane_b32 s8, v1
-; TAHITI-NEXT:    v_readfirstlane_b32 s9, v0
-; TAHITI-NEXT:    s_mul_i32 s10, s6, s8
-; TAHITI-NEXT:    v_readfirstlane_b32 s13, v2
-; TAHITI-NEXT:    s_mul_i32 s11, s7, s9
-; TAHITI-NEXT:    s_mul_i32 s12, s6, s9
-; TAHITI-NEXT:    s_add_i32 s10, s13, s10
-; TAHITI-NEXT:    v_mul_hi_u32 v3, v0, s12
-; TAHITI-NEXT:    s_add_i32 s10, s10, s11
-; TAHITI-NEXT:    v_mul_hi_u32 v0, v0, s10
-; TAHITI-NEXT:    v_mul_hi_u32 v4, v1, s12
-; TAHITI-NEXT:    v_readfirstlane_b32 s11, v3
-; TAHITI-NEXT:    s_mul_i32 s13, s9, s10
-; TAHITI-NEXT:    s_add_u32 s11, s11, s13
-; TAHITI-NEXT:    v_readfirstlane_b32 s13, v0
-; TAHITI-NEXT:    v_mul_hi_u32 v0, v1, s10
-; TAHITI-NEXT:    s_addc_u32 s13, 0, s13
-; TAHITI-NEXT:    s_mul_i32 s12, s8, s12
-; TAHITI-NEXT:    v_readfirstlane_b32 s14, v4
-; TAHITI-NEXT:    s_add_u32 s11, s11, s12
-; TAHITI-NEXT:    s_addc_u32 s11, s13, s14
-; TAHITI-NEXT:    v_readfirstlane_b32 s12, v0
-; TAHITI-NEXT:    s_addc_u32 s12, s12, 0
-; TAHITI-NEXT:    s_mul_i32 s10, s8, s10
-; TAHITI-NEXT:    s_add_u32 s10, s11, s10
-; TAHITI-NEXT:    s_addc_u32 s11, 0, s12
-; TAHITI-NEXT:    s_add_u32 s9, s9, s10
-; TAHITI-NEXT:    v_mov_b32_e32 v1, s9
-; TAHITI-NEXT:    v_mul_hi_u32 v1, s6, v1
-; TAHITI-NEXT:    s_addc_u32 s8, s8, s11
-; TAHITI-NEXT:    s_mul_i32 s10, s6, s9
-; TAHITI-NEXT:    s_mul_i32 s6, s6, s8
-; TAHITI-NEXT:    v_readfirstlane_b32 s11, v1
-; TAHITI-NEXT:    s_add_i32 s6, s11, s6
-; TAHITI-NEXT:    s_mul_i32 s7, s7, s9
-; TAHITI-NEXT:    v_mov_b32_e32 v0, s10
-; TAHITI-NEXT:    s_add_i32 s6, s6, s7
-; TAHITI-NEXT:    v_mul_hi_u32 v2, s8, v0
-; TAHITI-NEXT:    v_mov_b32_e32 v1, s6
-; TAHITI-NEXT:    v_mul_hi_u32 v0, s9, v0
-; TAHITI-NEXT:    v_mul_hi_u32 v3, s9, v1
-; TAHITI-NEXT:    s_mul_i32 s11, s9, s6
-; TAHITI-NEXT:    s_mul_i32 s10, s8, s10
-; TAHITI-NEXT:    v_readfirstlane_b32 s13, v0
-; TAHITI-NEXT:    v_mul_hi_u32 v0, s8, v1
-; TAHITI-NEXT:    v_readfirstlane_b32 s12, v3
-; TAHITI-NEXT:    s_add_u32 s11, s13, s11
-; TAHITI-NEXT:    s_addc_u32 s12, 0, s12
-; TAHITI-NEXT:    v_readfirstlane_b32 s7, v2
-; TAHITI-NEXT:    s_add_u32 s10, s11, s10
-; TAHITI-NEXT:    s_addc_u32 s7, s12, s7
+; TAHITI-NEXT:    v_mul_hi_u32 v2, s5, v0
+; TAHITI-NEXT:    v_readfirstlane_b32 s9, v1
 ; TAHITI-NEXT:    v_readfirstlane_b32 s10, v0
-; TAHITI-NEXT:    s_addc_u32 s10, s10, 0
-; TAHITI-NEXT:    s_mul_i32 s6, s8, s6
-; TAHITI-NEXT:    s_add_u32 s6, s7, s6
-; TAHITI-NEXT:    s_addc_u32 s7, 0, s10
-; TAHITI-NEXT:    s_add_u32 s9, s9, s6
-; TAHITI-NEXT:    s_addc_u32 s8, s8, s7
-; TAHITI-NEXT:    s_ashr_i32 s6, s3, 31
-; TAHITI-NEXT:    s_add_u32 s2, s2, s6
-; TAHITI-NEXT:    s_mov_b32 s7, s6
-; TAHITI-NEXT:    s_addc_u32 s3, s3, s6
-; TAHITI-NEXT:    s_xor_b64 s[2:3], s[2:3], s[6:7]
-; TAHITI-NEXT:    v_mov_b32_e32 v0, s8
-; TAHITI-NEXT:    v_mul_hi_u32 v1, s2, v0
-; TAHITI-NEXT:    v_mov_b32_e32 v2, s9
-; TAHITI-NEXT:    v_mul_hi_u32 v3, s2, v2
-; TAHITI-NEXT:    s_mul_i32 s10, s2, s8
-; TAHITI-NEXT:    v_readfirstlane_b32 s11, v1
-; TAHITI-NEXT:    v_mul_hi_u32 v1, s3, v2
+; TAHITI-NEXT:    s_mul_i32 s11, s5, s9
+; TAHITI-NEXT:    v_readfirstlane_b32 s14, v2
+; TAHITI-NEXT:    s_mul_i32 s12, s8, s10
+; TAHITI-NEXT:    s_mul_i32 s13, s5, s10
+; TAHITI-NEXT:    s_add_i32 s11, s14, s11
+; TAHITI-NEXT:    v_mul_hi_u32 v3, v0, s13
+; TAHITI-NEXT:    s_add_i32 s11, s11, s12
+; TAHITI-NEXT:    v_mul_hi_u32 v0, v0, s11
+; TAHITI-NEXT:    v_mul_hi_u32 v4, v1, s13
 ; TAHITI-NEXT:    v_readfirstlane_b32 s12, v3
-; TAHITI-NEXT:    v_mul_hi_u32 v0, s3, v0
-; TAHITI-NEXT:    s_add_u32 s10, s12, s10
-; TAHITI-NEXT:    s_addc_u32 s11, 0, s11
-; TAHITI-NEXT:    s_mul_i32 s9, s3, s9
+; TAHITI-NEXT:    s_mul_i32 s14, s10, s11
+; TAHITI-NEXT:    s_add_u32 s12, s12, s14
+; TAHITI-NEXT:    v_readfirstlane_b32 s14, v0
+; TAHITI-NEXT:    v_mul_hi_u32 v0, v1, s11
+; TAHITI-NEXT:    s_addc_u32 s14, 0, s14
+; TAHITI-NEXT:    s_mul_i32 s13, s9, s13
+; TAHITI-NEXT:    v_readfirstlane_b32 s15, v4
+; TAHITI-NEXT:    s_add_u32 s12, s12, s13
+; TAHITI-NEXT:    s_addc_u32 s12, s14, s15
+; TAHITI-NEXT:    v_readfirstlane_b32 s13, v0
+; TAHITI-NEXT:    s_addc_u32 s13, s13, 0
+; TAHITI-NEXT:    s_mul_i32 s11, s9, s11
+; TAHITI-NEXT:    s_add_u32 s11, s12, s11
+; TAHITI-NEXT:    s_addc_u32 s12, 0, s13
+; TAHITI-NEXT:    s_add_u32 s10, s10, s11
+; TAHITI-NEXT:    v_mov_b32_e32 v1, s10
+; TAHITI-NEXT:    v_mul_hi_u32 v1, s5, v1
+; TAHITI-NEXT:    s_addc_u32 s9, s9, s12
+; TAHITI-NEXT:    s_mul_i32 s11, s5, s10
+; TAHITI-NEXT:    s_mul_i32 s5, s5, s9
 ; TAHITI-NEXT:    v_readfirstlane_b32 s12, v1
-; TAHITI-NEXT:    s_add_u32 s9, s10, s9
-; TAHITI-NEXT:    s_addc_u32 s9, s11, s12
-; TAHITI-NEXT:    v_readfirstlane_b32 s10, v0
-; TAHITI-NEXT:    s_addc_u32 s10, s10, 0
-; TAHITI-NEXT:    s_mul_i32 s8, s3, s8
-; TAHITI-NEXT:    s_add_u32 s8, s9, s8
-; TAHITI-NEXT:    v_mov_b32_e32 v0, s8
-; TAHITI-NEXT:    v_mul_hi_u32 v0, s4, v0
-; TAHITI-NEXT:    s_addc_u32 s9, 0, s10
-; TAHITI-NEXT:    s_mul_i32 s9, s4, s9
-; TAHITI-NEXT:    v_readfirstlane_b32 s10, v0
-; TAHITI-NEXT:    s_add_i32 s9, s10, s9
-; TAHITI-NEXT:    s_mul_i32 s10, s5, s8
-; TAHITI-NEXT:    s_add_i32 s12, s9, s10
-; TAHITI-NEXT:    s_sub_i32 s10, s3, s12
-; TAHITI-NEXT:    s_mul_i32 s8, s4, s8
-; TAHITI-NEXT:    s_sub_u32 s2, s2, s8
-; TAHITI-NEXT:    s_cselect_b64 s[8:9], -1, 0
-; TAHITI-NEXT:    s_subb_u32 s13, s10, s5
-; TAHITI-NEXT:    s_sub_u32 s14, s2, s4
-; TAHITI-NEXT:    s_cselect_b64 s[10:11], -1, 0
-; TAHITI-NEXT:    s_subb_u32 s15, s13, 0
-; TAHITI-NEXT:    s_cmp_ge_u32 s15, s5
-; TAHITI-NEXT:    s_cselect_b32 s16, -1, 0
-; TAHITI-NEXT:    s_cmp_ge_u32 s14, s4
-; TAHITI-NEXT:    s_cselect_b32 s17, -1, 0
-; TAHITI-NEXT:    s_cmp_eq_u32 s15, s5
-; TAHITI-NEXT:    s_cselect_b32 s16, s17, s16
-; TAHITI-NEXT:    s_or_b32 s10, s10, s11
-; TAHITI-NEXT:    s_subb_u32 s10, s13, s5
-; TAHITI-NEXT:    s_sub_u32 s11, s14, s4
-; TAHITI-NEXT:    s_subb_u32 s10, s10, 0
-; TAHITI-NEXT:    s_cmp_lg_u32 s16, 0
-; TAHITI-NEXT:    s_cselect_b32 s11, s11, s14
-; TAHITI-NEXT:    s_cselect_b32 s10, s10, s15
-; TAHITI-NEXT:    s_or_b32 s8, s8, s9
-; TAHITI-NEXT:    s_subb_u32 s3, s3, s12
-; TAHITI-NEXT:    s_cmp_ge_u32 s3, s5
-; TAHITI-NEXT:    s_cselect_b32 s8, -1, 0
-; TAHITI-NEXT:    s_cmp_ge_u32 s2, s4
-; TAHITI-NEXT:    s_cselect_b32 s4, -1, 0
-; TAHITI-NEXT:    s_cmp_eq_u32 s3, s5
-; TAHITI-NEXT:    s_cselect_b32 s4, s4, s8
-; TAHITI-NEXT:    s_cmp_lg_u32 s4, 0
-; TAHITI-NEXT:    s_cselect_b32 s3, s10, s3
-; TAHITI-NEXT:    s_cselect_b32 s2, s11, s2
-; TAHITI-NEXT:    s_xor_b64 s[2:3], s[2:3], s[6:7]
-; TAHITI-NEXT:    s_sub_u32 s4, s2, s6
-; TAHITI-NEXT:    s_subb_u32 s5, s3, s6
-; TAHITI-NEXT:    s_branch .LBB19_3
+; TAHITI-NEXT:    s_add_i32 s5, s12, s5
+; TAHITI-NEXT:    s_mul_i32 s8, s8, s10
+; TAHITI-NEXT:    v_mov_b32_e32 v0, s11
+; TAHITI-NEXT:    s_add_i32 s5, s5, s8
+; TAHITI-NEXT:    v_mul_hi_u32 v2, s9, v0
+; TAHITI-NEXT:    v_mov_b32_e32 v1, s5
+; TAHITI-NEXT:    v_mul_hi_u32 v0, s10, v0
+; TAHITI-NEXT:    v_mul_hi_u32 v3, s10, v1
+; TAHITI-NEXT:    s_mul_i32 s12, s10, s5
+; TAHITI-NEXT:    s_mul_i32 s11, s9, s11
+; TAHITI-NEXT:    v_readfirstlane_b32 s14, v0
+; TAHITI-NEXT:    v_mul_hi_u32 v0, s9, v1
+; TAHITI-NEXT:    v_readfirstlane_b32 s13, v3
+; TAHITI-NEXT:    s_add_u32 s12, s14, s12
+; TAHITI-NEXT:    s_addc_u32 s13, 0, s13
+; TAHITI-NEXT:    v_readfirstlane_b32 s8, v2
+; TAHITI-NEXT:    s_add_u32 s11, s12, s11
+; TAHITI-NEXT:    s_addc_u32 s8, s13, s8
+; TAHITI-NEXT:    v_readfirstlane_b32 s11, v0
+; TAHITI-NEXT:    s_addc_u32 s11, s11, 0
+; TAHITI-NEXT:    s_mul_i32 s5, s9, s5
+; TAHITI-NEXT:    s_add_u32 s5, s8, s5
+; TAHITI-NEXT:    s_addc_u32 s8, 0, s11
+; TAHITI-NEXT:    s_add_u32 s5, s10, s5
+; TAHITI-NEXT:    s_addc_u32 s14, s9, s8
+; TAHITI-NEXT:    s_ashr_i32 s10, s3, 31
+; TAHITI-NEXT:    s_add_u32 s8, s2, s10
+; TAHITI-NEXT:    s_mov_b32 s11, s10
+; TAHITI-NEXT:    s_addc_u32 s9, s3, s10
+; TAHITI-NEXT:    s_xor_b64 s[12:13], s[8:9], s[10:11]
+; TAHITI-NEXT:    v_mov_b32_e32 v0, s14
+; TAHITI-NEXT:    v_mul_hi_u32 v1, s12, v0
+; TAHITI-NEXT:    v_mov_b32_e32 v2, s5
+; TAHITI-NEXT:    v_mul_hi_u32 v3, s12, v2
+; TAHITI-NEXT:    s_mul_i32 s3, s12, s14
+; TAHITI-NEXT:    v_readfirstlane_b32 s8, v1
+; TAHITI-NEXT:    v_mul_hi_u32 v1, s13, v2
+; TAHITI-NEXT:    v_readfirstlane_b32 s9, v3
+; TAHITI-NEXT:    v_mul_hi_u32 v0, s13, v0
+; TAHITI-NEXT:    s_add_u32 s3, s9, s3
+; TAHITI-NEXT:    s_addc_u32 s8, 0, s8
+; TAHITI-NEXT:    s_mul_i32 s5, s13, s5
+; TAHITI-NEXT:    v_readfirstlane_b32 s9, v1
+; TAHITI-NEXT:    s_add_u32 s3, s3, s5
+; TAHITI-NEXT:    s_addc_u32 s3, s8, s9
+; TAHITI-NEXT:    v_readfirstlane_b32 s5, v0
+; TAHITI-NEXT:    s_addc_u32 s5, s5, 0
+; TAHITI-NEXT:    s_mul_i32 s8, s13, s14
+; TAHITI-NEXT:    s_add_u32 s3, s3, s8
+; TAHITI-NEXT:    v_mov_b32_e32 v0, s3
+; TAHITI-NEXT:    v_mul_hi_u32 v0, s6, v0
+; TAHITI-NEXT:    s_addc_u32 s5, 0, s5
+; TAHITI-NEXT:    s_mul_i32 s5, s6, s5
+; TAHITI-NEXT:    s_mov_b64 s[8:9], 0
+; TAHITI-NEXT:    v_readfirstlane_b32 s14, v0
+; TAHITI-NEXT:    s_add_i32 s5, s14, s5
+; TAHITI-NEXT:    s_mul_i32 s14, s7, s3
+; TAHITI-NEXT:    s_add_i32 s5, s5, s14
+; TAHITI-NEXT:    s_sub_i32 s16, s13, s5
+; TAHITI-NEXT:    s_mul_i32 s3, s6, s3
+; TAHITI-NEXT:    s_sub_u32 s3, s12, s3
+; TAHITI-NEXT:    s_cselect_b64 s[14:15], -1, 0
+; TAHITI-NEXT:    s_subb_u32 s12, s16, s7
+; TAHITI-NEXT:    s_sub_u32 s18, s3, s6
+; TAHITI-NEXT:    s_cselect_b64 s[16:17], -1, 0
+; TAHITI-NEXT:    s_subb_u32 s19, s12, 0
+; TAHITI-NEXT:    s_cmp_ge_u32 s19, s7
+; TAHITI-NEXT:    s_cselect_b32 s20, -1, 0
+; TAHITI-NEXT:    s_cmp_ge_u32 s18, s6
+; TAHITI-NEXT:    s_cselect_b32 s21, -1, 0
+; TAHITI-NEXT:    s_cmp_eq_u32 s19, s7
+; TAHITI-NEXT:    s_cselect_b32 s20, s21, s20
+; TAHITI-NEXT:    s_or_b32 s16, s16, s17
+; TAHITI-NEXT:    s_subb_u32 s12, s12, s7
+; TAHITI-NEXT:    s_sub_u32 s16, s18, s6
+; TAHITI-NEXT:    s_subb_u32 s12, s12, 0
+; TAHITI-NEXT:    s_cmp_lg_u32 s20, 0
+; TAHITI-NEXT:    s_cselect_b32 s16, s16, s18
+; TAHITI-NEXT:    s_cselect_b32 s12, s12, s19
+; TAHITI-NEXT:    s_or_b32 s14, s14, s15
+; TAHITI-NEXT:    s_subb_u32 s5, s13, s5
+; TAHITI-NEXT:    s_cmp_ge_u32 s5, s7
+; TAHITI-NEXT:    s_cselect_b32 s13, -1, 0
+; TAHITI-NEXT:    s_cmp_ge_u32 s3, s6
+; TAHITI-NEXT:    s_cselect_b32 s6, -1, 0
+; TAHITI-NEXT:    s_cmp_eq_u32 s5, s7
+; TAHITI-NEXT:    s_cselect_b32 s6, s6, s13
+; TAHITI-NEXT:    s_cmp_lg_u32 s6, 0
+; TAHITI-NEXT:    s_cselect_b32 s7, s12, s5
+; TAHITI-NEXT:    s_cselect_b32 s6, s16, s3
+; TAHITI-NEXT:    s_xor_b64 s[6:7], s[6:7], s[10:11]
+; TAHITI-NEXT:    s_sub_u32 s6, s6, s10
+; TAHITI-NEXT:    s_subb_u32 s7, s7, s10
+; TAHITI-NEXT:    s_and_b64 s[8:9], s[8:9], exec
+; TAHITI-NEXT:    s_cbranch_scc0 .LBB19_3
 ; TAHITI-NEXT:  .LBB19_2:
-; TAHITI-NEXT:    v_cvt_f32_u32_e32 v0, s6
-; TAHITI-NEXT:    s_sub_i32 s3, 0, s6
+; TAHITI-NEXT:    v_cvt_f32_u32_e32 v0, s4
+; TAHITI-NEXT:    s_sub_i32 s3, 0, s4
+; TAHITI-NEXT:    s_mov_b32 s7, 0
 ; TAHITI-NEXT:    v_rcp_iflag_f32_e32 v0, v0
 ; TAHITI-NEXT:    v_mul_f32_e32 v0, 0x4f7ffffe, v0
 ; TAHITI-NEXT:    v_cvt_u32_f32_e32 v0, v0
@@ -10305,41 +10315,46 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; TAHITI-NEXT:    v_add_i32_e32 v0, vcc, v0, v1
 ; TAHITI-NEXT:    v_mul_hi_u32 v0, s2, v0
 ; TAHITI-NEXT:    v_readfirstlane_b32 s3, v0
-; TAHITI-NEXT:    s_mul_i32 s3, s3, s6
+; TAHITI-NEXT:    s_mul_i32 s3, s3, s4
 ; TAHITI-NEXT:    s_sub_i32 s2, s2, s3
-; TAHITI-NEXT:    s_sub_i32 s3, s2, s6
-; TAHITI-NEXT:    s_cmp_ge_u32 s2, s6
+; TAHITI-NEXT:    s_sub_i32 s3, s2, s4
+; TAHITI-NEXT:    s_cmp_ge_u32 s2, s4
 ; TAHITI-NEXT:    s_cselect_b32 s2, s3, s2
-; TAHITI-NEXT:    s_sub_i32 s3, s2, s6
-; TAHITI-NEXT:    s_cmp_ge_u32 s2, s6
-; TAHITI-NEXT:    s_cselect_b32 s4, s3, s2
+; TAHITI-NEXT:    s_sub_i32 s3, s2, s4
+; TAHITI-NEXT:    s_cmp_ge_u32 s2, s4
+; TAHITI-NEXT:    s_cselect_b32 s6, s3, s2
 ; TAHITI-NEXT:  .LBB19_3: ; %.split
 ; TAHITI-NEXT:    s_mov_b32 s3, 0xf000
 ; TAHITI-NEXT:    s_mov_b32 s2, -1
-; TAHITI-NEXT:    v_mov_b32_e32 v0, s4
-; TAHITI-NEXT:    v_mov_b32_e32 v1, s5
+; TAHITI-NEXT:    v_mov_b32_e32 v0, s6
+; TAHITI-NEXT:    v_mov_b32_e32 v1, s7
 ; TAHITI-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
 ; TAHITI-NEXT:    s_endpgm
+; TAHITI-NEXT:  .LBB19_4:
+; TAHITI-NEXT:    s_mov_b64 s[8:9], -1
+; TAHITI-NEXT:    ; implicit-def: $sgpr6_sgpr7
+; TAHITI-NEXT:    s_and_b64 s[8:9], s[8:9], exec
+; TAHITI-NEXT:    s_cbranch_scc1 .LBB19_2
+; TAHITI-NEXT:    s_branch .LBB19_3
 ;
 ; TONGA-LABEL: srem_i64_uniform:
 ; TONGA:       ; %bb.0:
 ; TONGA-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; TONGA-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x34
+; TONGA-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x34
 ; TONGA-NEXT:    s_waitcnt lgkmcnt(0)
-; TONGA-NEXT:    s_or_b64 s[4:5], s[2:3], s[6:7]
-; TONGA-NEXT:    s_cmp_lg_u32 s5, 0
-; TONGA-NEXT:    s_mov_b32 s5, 0
-; TONGA-NEXT:    s_cbranch_scc0 .LBB19_2
+; TONGA-NEXT:    s_or_b64 s[6:7], s[2:3], s[4:5]
+; TONGA-NEXT:    s_cmp_lg_u32 s7, 0
+; TONGA-NEXT:    s_cbranch_scc0 .LBB19_4
 ; TONGA-NEXT:  ; %bb.1:
-; TONGA-NEXT:    s_ashr_i32 s4, s7, 31
-; TONGA-NEXT:    s_add_u32 s6, s6, s4
-; TONGA-NEXT:    s_mov_b32 s5, s4
-; TONGA-NEXT:    s_addc_u32 s7, s7, s4
-; TONGA-NEXT:    s_xor_b64 s[4:5], s[6:7], s[4:5]
-; TONGA-NEXT:    v_cvt_f32_u32_e32 v0, s4
-; TONGA-NEXT:    v_cvt_f32_u32_e32 v1, s5
-; TONGA-NEXT:    s_sub_u32 s8, 0, s4
-; TONGA-NEXT:    s_subb_u32 s9, 0, s5
+; TONGA-NEXT:    s_ashr_i32 s6, s5, 31
+; TONGA-NEXT:    s_add_u32 s8, s4, s6
+; TONGA-NEXT:    s_mov_b32 s7, s6
+; TONGA-NEXT:    s_addc_u32 s9, s5, s6
+; TONGA-NEXT:    s_xor_b64 s[6:7], s[8:9], s[6:7]
+; TONGA-NEXT:    v_cvt_f32_u32_e32 v0, s6
+; TONGA-NEXT:    v_cvt_f32_u32_e32 v1, s7
+; TONGA-NEXT:    s_sub_u32 s5, 0, s6
+; TONGA-NEXT:    s_subb_u32 s10, 0, s7
 ; TONGA-NEXT:    v_madmk_f32 v0, v1, 0x4f800000, v0
 ; TONGA-NEXT:    v_rcp_f32_e32 v0, v0
 ; TONGA-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
@@ -10348,15 +10363,15 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; TONGA-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v7, v1
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v8, v0
-; TONGA-NEXT:    v_mul_lo_u32 v2, s8, v7
-; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[6:7], s8, v8, 0
-; TONGA-NEXT:    v_mul_lo_u32 v3, s9, v8
+; TONGA-NEXT:    v_mul_lo_u32 v2, s5, v7
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[8:9], s5, v8, 0
+; TONGA-NEXT:    v_mul_lo_u32 v3, s10, v8
 ; TONGA-NEXT:    v_add_u32_e32 v1, vcc, v1, v2
 ; TONGA-NEXT:    v_add_u32_e32 v5, vcc, v1, v3
 ; TONGA-NEXT:    v_mul_hi_u32 v9, v8, v0
-; TONGA-NEXT:    v_mad_u64_u32 v[1:2], s[6:7], v8, v5, 0
-; TONGA-NEXT:    v_mad_u64_u32 v[3:4], s[6:7], v7, v0, 0
-; TONGA-NEXT:    v_mad_u64_u32 v[5:6], s[6:7], v7, v5, 0
+; TONGA-NEXT:    v_mad_u64_u32 v[1:2], s[8:9], v8, v5, 0
+; TONGA-NEXT:    v_mad_u64_u32 v[3:4], s[8:9], v7, v0, 0
+; TONGA-NEXT:    v_mad_u64_u32 v[5:6], s[8:9], v7, v5, 0
 ; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v9, v1
 ; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v2, vcc
 ; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v0, v3
@@ -10366,93 +10381,96 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; TONGA-NEXT:    v_add_u32_e32 v5, vcc, v8, v0
 ; TONGA-NEXT:    v_addc_u32_e32 v6, vcc, v7, v1, vcc
-; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[6:7], s8, v5, 0
-; TONGA-NEXT:    v_mul_lo_u32 v2, s8, v6
-; TONGA-NEXT:    v_mul_lo_u32 v3, s9, v5
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[8:9], s5, v5, 0
+; TONGA-NEXT:    v_mul_lo_u32 v2, s5, v6
+; TONGA-NEXT:    v_mul_lo_u32 v3, s10, v5
 ; TONGA-NEXT:    v_mul_hi_u32 v8, v5, v0
 ; TONGA-NEXT:    v_add_u32_e32 v1, vcc, v2, v1
 ; TONGA-NEXT:    v_add_u32_e32 v7, vcc, v3, v1
-; TONGA-NEXT:    v_mad_u64_u32 v[1:2], s[6:7], v5, v7, 0
-; TONGA-NEXT:    v_mad_u64_u32 v[3:4], s[6:7], v6, v0, 0
+; TONGA-NEXT:    v_mad_u64_u32 v[1:2], s[8:9], v5, v7, 0
+; TONGA-NEXT:    v_mad_u64_u32 v[3:4], s[8:9], v6, v0, 0
 ; TONGA-NEXT:    v_add_u32_e32 v8, vcc, v8, v1
-; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[6:7], v6, v7, 0
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[8:9], v6, v7, 0
 ; TONGA-NEXT:    v_addc_u32_e32 v2, vcc, 0, v2, vcc
 ; TONGA-NEXT:    v_add_u32_e32 v3, vcc, v8, v3
 ; TONGA-NEXT:    v_addc_u32_e32 v2, vcc, v2, v4, vcc
 ; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v2, v0
-; TONGA-NEXT:    s_ashr_i32 s6, s3, 31
+; TONGA-NEXT:    s_ashr_i32 s8, s3, 31
 ; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; TONGA-NEXT:    s_add_u32 s2, s2, s6
+; TONGA-NEXT:    s_add_u32 s10, s2, s8
 ; TONGA-NEXT:    v_add_u32_e32 v2, vcc, v5, v0
-; TONGA-NEXT:    s_mov_b32 s7, s6
-; TONGA-NEXT:    s_addc_u32 s3, s3, s6
+; TONGA-NEXT:    s_mov_b32 s9, s8
+; TONGA-NEXT:    s_addc_u32 s11, s3, s8
 ; TONGA-NEXT:    v_addc_u32_e32 v3, vcc, v6, v1, vcc
-; TONGA-NEXT:    s_xor_b64 s[2:3], s[2:3], s[6:7]
-; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[8:9], s2, v3, 0
-; TONGA-NEXT:    v_mul_hi_u32 v4, s2, v2
+; TONGA-NEXT:    s_xor_b64 s[12:13], s[10:11], s[8:9]
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[10:11], s12, v3, 0
+; TONGA-NEXT:    v_mul_hi_u32 v4, s12, v2
+; TONGA-NEXT:    v_readfirstlane_b32 s3, v1
+; TONGA-NEXT:    v_readfirstlane_b32 s5, v0
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[10:11], s13, v2, 0
+; TONGA-NEXT:    v_readfirstlane_b32 s10, v4
+; TONGA-NEXT:    s_add_u32 s5, s10, s5
+; TONGA-NEXT:    s_addc_u32 s3, 0, s3
+; TONGA-NEXT:    v_readfirstlane_b32 s14, v1
+; TONGA-NEXT:    v_mad_u64_u32 v[1:2], s[10:11], s13, v3, 0
+; TONGA-NEXT:    v_readfirstlane_b32 s10, v0
+; TONGA-NEXT:    s_add_u32 s5, s5, s10
+; TONGA-NEXT:    s_addc_u32 s3, s3, s14
+; TONGA-NEXT:    v_readfirstlane_b32 s5, v2
+; TONGA-NEXT:    s_addc_u32 s5, s5, 0
 ; TONGA-NEXT:    v_readfirstlane_b32 s10, v1
-; TONGA-NEXT:    v_readfirstlane_b32 s11, v0
-; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[8:9], s3, v2, 0
-; TONGA-NEXT:    v_readfirstlane_b32 s8, v4
-; TONGA-NEXT:    s_add_u32 s11, s8, s11
-; TONGA-NEXT:    s_addc_u32 s10, 0, s10
-; TONGA-NEXT:    v_readfirstlane_b32 s12, v1
-; TONGA-NEXT:    v_mad_u64_u32 v[1:2], s[8:9], s3, v3, 0
-; TONGA-NEXT:    v_readfirstlane_b32 s8, v0
-; TONGA-NEXT:    s_add_u32 s8, s11, s8
-; TONGA-NEXT:    s_addc_u32 s8, s10, s12
-; TONGA-NEXT:    v_readfirstlane_b32 s9, v2
-; TONGA-NEXT:    s_addc_u32 s10, s9, 0
-; TONGA-NEXT:    v_readfirstlane_b32 s9, v1
-; TONGA-NEXT:    s_add_u32 s11, s8, s9
-; TONGA-NEXT:    v_mov_b32_e32 v0, s11
-; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[8:9], s4, v0, 0
-; TONGA-NEXT:    s_addc_u32 s8, 0, s10
-; TONGA-NEXT:    s_mul_i32 s8, s4, s8
-; TONGA-NEXT:    v_readfirstlane_b32 s9, v1
-; TONGA-NEXT:    s_add_i32 s8, s9, s8
-; TONGA-NEXT:    s_mul_i32 s9, s5, s11
-; TONGA-NEXT:    s_add_i32 s12, s8, s9
-; TONGA-NEXT:    s_sub_i32 s10, s3, s12
-; TONGA-NEXT:    v_readfirstlane_b32 s8, v0
-; TONGA-NEXT:    s_sub_u32 s2, s2, s8
-; TONGA-NEXT:    s_cselect_b64 s[8:9], -1, 0
-; TONGA-NEXT:    s_subb_u32 s13, s10, s5
-; TONGA-NEXT:    s_sub_u32 s14, s2, s4
-; TONGA-NEXT:    s_cselect_b64 s[10:11], -1, 0
-; TONGA-NEXT:    s_subb_u32 s15, s13, 0
-; TONGA-NEXT:    s_cmp_ge_u32 s15, s5
-; TONGA-NEXT:    s_cselect_b32 s16, -1, 0
-; TONGA-NEXT:    s_cmp_ge_u32 s14, s4
-; TONGA-NEXT:    s_cselect_b32 s17, -1, 0
-; TONGA-NEXT:    s_cmp_eq_u32 s15, s5
-; TONGA-NEXT:    s_cselect_b32 s16, s17, s16
-; TONGA-NEXT:    s_cmp_lg_u64 s[10:11], 0
-; TONGA-NEXT:    s_subb_u32 s10, s13, s5
-; TONGA-NEXT:    s_sub_u32 s11, s14, s4
-; TONGA-NEXT:    s_subb_u32 s10, s10, 0
-; TONGA-NEXT:    s_cmp_lg_u32 s16, 0
-; TONGA-NEXT:    s_cselect_b32 s11, s11, s14
-; TONGA-NEXT:    s_cselect_b32 s10, s10, s15
-; TONGA-NEXT:    s_cmp_lg_u64 s[8:9], 0
-; TONGA-NEXT:    s_subb_u32 s3, s3, s12
-; TONGA-NEXT:    s_cmp_ge_u32 s3, s5
-; TONGA-NEXT:    s_cselect_b32 s8, -1, 0
-; TONGA-NEXT:    s_cmp_ge_u32 s2, s4
-; TONGA-NEXT:    s_cselect_b32 s4, -1, 0
-; TONGA-NEXT:    s_cmp_eq_u32 s3, s5
-; TONGA-NEXT:    s_cselect_b32 s4, s4, s8
-; TONGA-NEXT:    s_cmp_lg_u32 s4, 0
-; TONGA-NEXT:    s_cselect_b32 s3, s10, s3
-; TONGA-NEXT:    s_cselect_b32 s2, s11, s2
-; TONGA-NEXT:    s_xor_b64 s[2:3], s[2:3], s[6:7]
-; TONGA-NEXT:    s_sub_u32 s4, s2, s6
-; TONGA-NEXT:    s_subb_u32 s5, s3, s6
-; TONGA-NEXT:    s_branch .LBB19_3
+; TONGA-NEXT:    s_add_u32 s3, s3, s10
+; TONGA-NEXT:    v_mov_b32_e32 v0, s3
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[10:11], s6, v0, 0
+; TONGA-NEXT:    s_addc_u32 s5, 0, s5
+; TONGA-NEXT:    s_mul_i32 s5, s6, s5
+; TONGA-NEXT:    s_mul_i32 s3, s7, s3
+; TONGA-NEXT:    v_readfirstlane_b32 s14, v1
+; TONGA-NEXT:    s_add_i32 s5, s14, s5
+; TONGA-NEXT:    s_add_i32 s5, s5, s3
+; TONGA-NEXT:    s_sub_i32 s3, s13, s5
+; TONGA-NEXT:    v_readfirstlane_b32 s14, v0
+; TONGA-NEXT:    s_sub_u32 s12, s12, s14
+; TONGA-NEXT:    s_cselect_b64 s[14:15], -1, 0
+; TONGA-NEXT:    s_subb_u32 s3, s3, s7
+; TONGA-NEXT:    s_sub_u32 s18, s12, s6
+; TONGA-NEXT:    s_cselect_b64 s[16:17], -1, 0
+; TONGA-NEXT:    s_subb_u32 s19, s3, 0
+; TONGA-NEXT:    s_cmp_ge_u32 s19, s7
+; TONGA-NEXT:    s_cselect_b32 s20, -1, 0
+; TONGA-NEXT:    s_cmp_ge_u32 s18, s6
+; TONGA-NEXT:    s_cselect_b32 s21, -1, 0
+; TONGA-NEXT:    s_cmp_eq_u32 s19, s7
+; TONGA-NEXT:    s_cselect_b32 s20, s21, s20
+; TONGA-NEXT:    s_cmp_lg_u64 s[16:17], 0
+; TONGA-NEXT:    s_subb_u32 s3, s3, s7
+; TONGA-NEXT:    s_sub_u32 s16, s18, s6
+; TONGA-NEXT:    s_subb_u32 s3, s3, 0
+; TONGA-NEXT:    s_cmp_lg_u32 s20, 0
+; TONGA-NEXT:    s_cselect_b32 s16, s16, s18
+; TONGA-NEXT:    s_cselect_b32 s3, s3, s19
+; TONGA-NEXT:    s_cmp_lg_u64 s[14:15], 0
+; TONGA-NEXT:    s_subb_u32 s5, s13, s5
+; TONGA-NEXT:    s_cmp_ge_u32 s5, s7
+; TONGA-NEXT:    s_cselect_b32 s13, -1, 0
+; TONGA-NEXT:    s_cmp_ge_u32 s12, s6
+; TONGA-NEXT:    s_cselect_b32 s6, -1, 0
+; TONGA-NEXT:    s_cmp_eq_u32 s5, s7
+; TONGA-NEXT:    s_cselect_b32 s6, s6, s13
+; TONGA-NEXT:    s_cmp_lg_u32 s6, 0
+; TONGA-NEXT:    s_cselect_b32 s7, s3, s5
+; TONGA-NEXT:    s_cselect_b32 s6, s16, s12
+; TONGA-NEXT:    s_xor_b64 s[6:7], s[6:7], s[8:9]
+; TONGA-NEXT:    s_sub_u32 s6, s6, s8
+; TONGA-NEXT:    s_mov_b64 s[10:11], 0
+; TONGA-NEXT:    s_subb_u32 s7, s7, s8
+; TONGA-NEXT:    s_and_b64 s[8:9], s[10:11], exec
+; TONGA-NEXT:    s_cbranch_scc0 .LBB19_3
 ; TONGA-NEXT:  .LBB19_2:
-; TONGA-NEXT:    v_cvt_f32_u32_e32 v0, s6
-; TONGA-NEXT:    s_sub_i32 s3, 0, s6
+; TONGA-NEXT:    v_cvt_f32_u32_e32 v0, s4
+; TONGA-NEXT:    s_sub_i32 s3, 0, s4
+; TONGA-NEXT:    s_mov_b32 s7, 0
 ; TONGA-NEXT:    v_rcp_iflag_f32_e32 v0, v0
 ; TONGA-NEXT:    v_mul_f32_e32 v0, 0x4f7ffffe, v0
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v0, v0
@@ -10461,21 +10479,27 @@ define amdgpu_kernel void @srem_i64_uniform(ptr addrspace(1) %out, i64 %num, i64
 ; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v0, v1
 ; TONGA-NEXT:    v_mul_hi_u32 v0, s2, v0
 ; TONGA-NEXT:    v_readfirstlane_b32 s3, v0
-; TONGA-NEXT:    s_mul_i32 s3, s3, s6
+; TONGA-NEXT:    s_mul_i32 s3, s3, s4
 ; TONGA-NEXT:    s_sub_i32 s2, s2, s3
-; TONGA-NEXT:    s_sub_i32 s3, s2, s6
-; TONGA-NEXT:    s_cmp_ge_u32 s2, s6
+; TONGA-NEXT:    s_sub_i32 s3, s2, s4
+; TONGA-NEXT:    s_cmp_ge_u32 s2, s4
 ; TONGA-NEXT:    s_cselect_b32 s2, s3, s2
-; TONGA-NEXT:    s_sub_i32 s3, s2, s6
-; TONGA-NEXT:    s_cmp_ge_u32 s2, s6
-; TONGA-NEXT:    s_cselect_b32 s4, s3, s2
+; TONGA-NEXT:    s_sub_i32 s3, s2, s4
+; TONGA-NEXT:    s_cmp_ge_u32 s2, s4
+; TONGA-NEXT:    s_cselect_b32 s6, s3, s2
 ; TONGA-NEXT:  .LBB19_3: ; %.split
 ; TONGA-NEXT:    v_mov_b32_e32 v0, s0
 ; TONGA-NEXT:    v_mov_b32_e32 v1, s1
-; TONGA-NEXT:    v_mov_b32_e32 v2, s4
-; TONGA-NEXT:    v_mov_b32_e32 v3, s5
+; TONGA-NEXT:    v_mov_b32_e32 v2, s6
+; TONGA-NEXT:    v_mov_b32_e32 v3, s7
 ; TONGA-NEXT:    flat_store_dwordx2 v[0:1], v[2:3]
 ; TONGA-NEXT:    s_endpgm
+; TONGA-NEXT:  .LBB19_4:
+; TONGA-NEXT:    s_mov_b64 s[10:11], -1
+; TONGA-NEXT:    ; implicit-def: $sgpr6_sgpr7
+; TONGA-NEXT:    s_and_b64 s[8:9], s[10:11], exec
+; TONGA-NEXT:    s_cbranch_scc1 .LBB19_2
+; TONGA-NEXT:    s_branch .LBB19_3
 ;
 ; EG-LABEL: srem_i64_uniform:
 ; EG:       ; %bb.0:

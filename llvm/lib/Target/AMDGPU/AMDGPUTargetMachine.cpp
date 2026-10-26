@@ -1750,7 +1750,7 @@ bool GCNPassConfig::addPreISel() {
   addPass(&AMDGPUUnifyDivergentExitNodesID);
   addPass(createFixIrreduciblePass());
   addPass(createUnifyLoopExitsPass());
-  addPass(createStructurizeCFGPass(/*SkipUniformRegions=*/true));
+  addPass(createStructurizeCFGPass(false)); // true -> SkipUniformRegions
 
   addPass(createAMDGPUAnnotateUniformValuesLegacy());
   addPass(createSIAnnotateControlFlowLegacyPass());
@@ -2514,7 +2514,7 @@ void AMDGPUCodeGenPassBuilder::addPreISel(PassManagerWrapper &PMW) {
   addFunctionPass(AMDGPUUnifyDivergentExitNodesPass(), PMW);
   addFunctionPass(FixIrreduciblePass(), PMW);
   addFunctionPass(UnifyLoopExitsPass(), PMW);
-  addFunctionPass(StructurizeCFGPass(/*SkipUniformRegions=*/true), PMW);
+  addFunctionPass(StructurizeCFGPass(/*SkipUniformRegions=*/false), PMW);
 
   addFunctionPass(AMDGPUAnnotateUniformValuesPass(), PMW);
 
