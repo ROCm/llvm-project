@@ -1986,9 +1986,12 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
         return Status;
       }
 
+      // OutputFileName is already a bare filename. Do not pass it through
+      // path::filename: on Windows that also splits on ':', which would truncate
+      // a feature-qualified target ID such as "gfx90a:sramecc+:xnack-".
       SmallString<128> OutputFileName = getUnbundleOutputName(
           OutputPrefix, BundlerConfig.TargetNames[OutputIndex], FileExtension);
-      Result->setName(sys::path::filename(OutputFileName));
+      Result->setName(OutputFileName);
 
       if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT)) {
         return Status;
