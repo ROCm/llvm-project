@@ -2247,6 +2247,11 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createParallel(
         // Use device shared memory instead, if needed.
         Ptr = createOMPAllocShared(Builder, V.getType(),
                                    V.getName() + ".reloaded");
+        if (!OuterDeallocBlocks.size())
+          createOMPFreeShared({PRegExitBB->getFirstInsertionPt(),
+                               Builder.getCurrentDebugLocation()},
+                              Ptr, V.getType());
+
         for (BasicBlock *DeallocBlock : OuterDeallocBlocks) {
           assert(DeallocBlock->getParent() ==
                      OuterAllocIP.getNodeParent()->getParent() &&
