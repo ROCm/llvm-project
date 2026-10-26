@@ -599,14 +599,16 @@ SmallString<128> getUnbundleOutputName(StringRef OutputPrefix, StringRef Entry,
 SmallString<128> getUnbundleOutputPath(StringRef Dir, StringRef OutputPrefix,
                                        StringRef Entry,
                                        StringRef FileExtension) {
-  SmallString<128> Name =
-      getUnbundleOutputName(OutputPrefix, Entry, FileExtension);
 #ifdef _WIN32
   // Feature-qualified target IDs contain ':'; Windows reserves it for drive
-  // letters and alternate data streams. Keep the public data object name
-  // independent from the temporary path.
-  std::replace(Name.begin(), Name.end(), ':', '_');
+  // letters and alternate data streams. Sanitize only the target ID used to
+  // construct the temporary path so the public data object name is unchanged.
+  SmallString<128> SanitizedEntry(Entry);
+  std::replace(SanitizedEntry.begin(), SanitizedEntry.end(), ':', '_');
+  Entry = SanitizedEntry;
 #endif
+  SmallString<128> Name =
+      getUnbundleOutputName(OutputPrefix, Entry, FileExtension);
   SmallString<128> Path(Dir);
   path::append(Path, Name);
   return Path;
