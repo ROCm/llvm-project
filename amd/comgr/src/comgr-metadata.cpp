@@ -285,6 +285,15 @@ amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP) {
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
+amd_comgr_status_t getMetadataRoot(MemoryBufferRef MB, DataMeta *MetaP) {
+  auto ObjOrErr = getELFObjectFileBase(MB);
+  if (errorToBool(ObjOrErr.takeError()))
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  if (errorToBool(getMetadataRoot(ObjOrErr->get(), MetaP)))
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
 namespace {
 struct IsaInfo {
   std::string IsaName;

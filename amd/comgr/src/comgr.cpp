@@ -1581,8 +1581,8 @@ amd_comgr_status_t AMD_COMGR_API amd_comgr_get_elf_metadata(
     Input = AlignedInput->getMemBufferRef();
   }
   // The parser owns the metadata payload; no view into Input escapes this call.
-  if (errorToBool(metadata::getMetadataRoot(Input, MetaP.get())))
-    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  if (auto Status = metadata::getMetadataRoot(Input, MetaP.get()))
+    return Status;
 
   *MetadataNode = DataMeta::convert(MetaP.release());
   return AMD_COMGR_STATUS_SUCCESS;
