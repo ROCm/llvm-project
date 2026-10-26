@@ -44,7 +44,6 @@ using namespace llvm::omp::target::helpers;
 using llvm::omp::target::plugin::GenericKernelTy;
 namespace llvm::offload::tmp {
 GenericPluginTy *__ol_tgt_GetPluginFromPlatform(ol_platform_handle_t Platform);
-int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device);
 GenericKernelTy *__ol_tgt_GetKernelFromSymbol(ol_symbol_handle_t Symbol);
 } // namespace llvm::offload::tmp
 
@@ -52,8 +51,11 @@ void PluginManager::init() {
   TIMESCOPE();
 
   ODBG(ODT_Init) << "Loading RTLs";
-  if (ol_result_t Res = olInit(nullptr))
+  if (ol_result_t Res = olInit(nullptr)) {
     REPORT() << "Failed to initialize liboffload: " << Res->Details;
+    return;
+  }
+  LibOffloadInitialized = true;
 
   if (auto Err = iteratePlatforms(
           [](ol_platform_handle_t Platform, void *Data) {
@@ -100,8 +102,10 @@ void PluginManager::deinit() {
 #endif
 
   Plugins.clear();
-  if (auto Err = olShutDown())
-    REPORT() << "Failed to denitialize liboffload: " << Err->Details;
+  if (LibOffloadInitialized) {
+    if (auto Err = olShutDown())
+      REPORT() << "Failed to denitialize liboffload: " << Err->Details;
+  }
 
   ODBG(ODT_Deinit) << "RTLs unloaded!";
 }
@@ -122,21 +126,16 @@ bool PluginManager::initializeDevice(ol_device_handle_t DeviceHandle) {
     return false;
   }
 
-  GenericPluginTy &Plugin =
-      *llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(PlatformHandle);
-  int32_t DeviceId =
-      llvm::offload::tmp::__ol_tgt_GetPluginDeviceId(DeviceHandle);
-
   // Initialize the device information for the RTL we are about to use.
   auto ExclusiveDevicesAccessor = getExclusiveDevicesAccessor();
 
   int32_t UserId = ExclusiveDevicesAccessor->size();
 
   auto Device =
-      std::make_unique<DeviceTy>(&Plugin, UserId, DeviceId, DeviceHandle, this);
+      std::make_unique<DeviceTy>(UserId, PlatformHandle, DeviceHandle, this);
   if (auto Err = Device->init()) {
     std::string InfoMsg = toString(std::move(Err));
-    ODBG(ODT_Init) << "Failed to init device " << DeviceId << ": " << InfoMsg;
+    ODBG(ODT_Init) << "Failed to init device " << UserId << ": " << InfoMsg;
     return false;
   }
 
@@ -150,6 +149,8 @@ bool PluginManager::initializeDevice(ol_device_handle_t DeviceHandle) {
 }
 
 void PluginManager::initializeAllDevices() {
+  if (!LibOffloadInitialized)
+    return;
   if (auto Err = iterateDevices(
           [this](ol_device_handle_t Device) { initializeDevice(Device); })) {
     REPORT() << "Failed to iterate devices: " << toString(std::move(Err));
@@ -292,6 +293,10 @@ bool PluginManager::registerImageOnDevice(
 }
 
 void PluginManager::registerLib(__tgt_bin_desc *Desc) {
+  // There are no devices to register with if liboffload was not initialized.
+  if (!LibOffloadInitialized)
+    return;
+
   RTLsMtx.lock();
 
   // Upgrade the entries from the legacy implementation if necessary.
@@ -545,11 +550,11 @@ int PluginManager::loadImagesOntoDevice(DeviceTy &Device) {
           if (!(Entry.Flags & OMP_DECLARE_TARGET_INDIRECT_VTABLE) &&
               !(Entry.Flags & OMP_DECLARE_TARGET_INDIRECT) &&
               ((getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY) ||
-               (getRequirements() & OMPX_REQ_AUTO_ZERO_COPY)))
-            if (Device.RTL->data_submit(DeviceId, DeviceEntry.Address,
-                                        Entry.Address,
-                                        Entry.Size) != OFFLOAD_SUCCESS)
+               (getRequirements() & OMPX_REQ_AUTO_ZERO_COPY))) {
+            if (Device.submitDataSync(DeviceEntry.Address, Entry.Address,
+                                      Entry.Size) != OFFLOAD_SUCCESS)
               REPORT() << "Failed to write symbol for USM " << Entry.SymbolName;
+          }
         } else if (Entry.Address) {
           auto AddrOrErr = Program.getKernelAddress(Entry.SymbolName);
           if (!AddrOrErr) {
@@ -797,6 +802,8 @@ getProfilerToAttach() {
 #endif
 
 int PluginManager::getNumActivePlugins() const {
+  if (!LibOffloadInitialized)
+    return 0;
   int count = 0;
   if (auto Err = iteratePlatforms(
           [](ol_platform_handle_t Platform, void *Data) {
