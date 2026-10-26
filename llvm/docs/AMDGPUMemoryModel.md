@@ -74,8 +74,10 @@ separately for each operation. For example:
 ### Synchronizing Sets of Bytes
 
 A synchronizing operation specifies a candidate set `L` consisting of bytes in
-memory whose state it can synchronize across threads. If no such set is
-specified, then the operation is assumed to synchronize all bytes.
+memory whose state it can synchronize across threads (for example, using
+{ref}`!"amdgpu-synchronize-as" MMRA metadata<amdgpu-fence-as>` to restrict `L`
+to specific address spaces). If no such set is specified, then the operation is
+assumed to synchronize all bytes.
 
 A synchronizing operation that also performs a memory access (e.g., an atomic
 operation) includes the bytes that it accesses in the set `L` of bytes that it
@@ -196,7 +198,7 @@ the system relative to that write. Visibility determines how *close* the effect
 of the same write has reached relative to an observer operation (typically a
 read).
 
-Consider a write `W` that {ref}`amdgpu-happens-before` a read `R` to the same
+Consider a write `W` that {ref}`amdgpu-happens-before` a read `R` from the same
 byte `B`:
 
 - `R` can potentially observe the effect of `W` **only if W is
@@ -413,7 +415,7 @@ Then `X` makes the side-effect of `W` on `B` available in its own scope instance
 
 An operation `Y` is a *visibility operation* on a write `W` to a byte `B` if `Y`
 is a *load-visible* operation to `B`, or a *make-visible* operation that
-includes `B` in its side-effects, and any one of the following holds:
+includes `B` in its side-effects, and at least one of the following holds:
 
 - There exists an *availability operation* `X` on write `W` such that:
   - `X` *amdgpu-happens-before\<B\>* `Y`, and,
