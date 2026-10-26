@@ -26,3 +26,4 @@ See the README files in respective subdirectories for more information on these 
 - *Heterogeneous Debugging* - A prototype of debug-info supporting AMDGPU targets, affecting most parts of the compiler, is implemented as documented in `docs/AMDGPULLVMExtensionsForHeterogeneousDebugging.rst` but is an ongoing work-in-progress. Fundamental changes are expected as parts of the design are adapted for upstreaming.
 - *Address Sanitizer* - Changes were added to `santizer_common` and `asan` libraries in `compiler-rt` to support AMD GPU address sanitizer error detection and reports.  These changes are intended to be upstreamed.  The instrumentation pass changes have already been upstreamed.
 - *Reverted Patches* - For upstream patches that break internal testing, we may temporarily revert these patches until the testing issues are resolved. We maintain a list of reverted upstream patches in `llvm-project/revert_patches.txt`.
+- * Test
