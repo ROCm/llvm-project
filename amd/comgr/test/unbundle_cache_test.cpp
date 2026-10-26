@@ -163,8 +163,7 @@ int main() {
     // CCOB header and compressed length remain unchanged, which is exactly the
     // case the host cache key must distinguish.
     uint8_t CMF = static_cast<unsigned char>(Alternate[32]);
-    uint8_t FLG =
-        (static_cast<unsigned char>(Alternate[33]) ^ 0x80) & 0xc0;
+    uint8_t FLG = (static_cast<unsigned char>(Alternate[33]) ^ 0x80) & 0xc0;
     uint16_t Header = (static_cast<uint16_t>(CMF) << 8) | FLG;
     Header += (31 - Header % 31) % 31;
     Alternate[32] = Header >> 8;
