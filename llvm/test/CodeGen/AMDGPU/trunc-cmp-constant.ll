@@ -43,7 +43,7 @@ define amdgpu_kernel void @sextload_i1_to_i32_trunc_cmp_eq_0(ptr addrspace(1) %o
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    v_and_b32_e32 v0, 1, v0
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; VI-NEXT:    s_and_b64 s[0:1], vcc, exec
+; VI-NEXT:    s_cmp_lg_u64 vcc, 0
 ; VI-NEXT:    s_cselect_b32 s0, 1, 0
 ; VI-NEXT:    v_mov_b32_e32 v0, s0
 ; VI-NEXT:    buffer_store_byte v0, off, s[4:7], 0
@@ -456,7 +456,7 @@ define amdgpu_kernel void @sextload_i1_to_i32_trunc_cmp_ne_neg1(ptr addrspace(1)
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    v_and_b32_e32 v0, 1, v0
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
-; VI-NEXT:    s_and_b64 s[0:1], vcc, exec
+; VI-NEXT:    s_cmp_lg_u64 vcc, 0
 ; VI-NEXT:    s_cselect_b32 s0, 1, 0
 ; VI-NEXT:    v_mov_b32_e32 v0, s0
 ; VI-NEXT:    buffer_store_byte v0, off, s[4:7], 0

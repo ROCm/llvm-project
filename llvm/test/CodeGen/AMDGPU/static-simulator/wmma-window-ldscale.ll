@@ -3,228 +3,251 @@
 
 define amdgpu_kernel void @test() #0 {
 ; CHECK-LABEL: test:
-; CHECK:       ;=== Block: 249 cycles ===
-; CHECK-NEXT:  ; VALU:110(VOPD:95) SALU:26 VMEM:1 Ctrl:2
-; CHECK-NEXT:  ; Stall: 110 cycles (44%)
-; CHECK-NEXT:  ; FU:105 | VaSSRC:5
-; CHECK-NEXT:  ; FU: VALU:105
+; CHECK:       ;=== Block: 221 cycles ===
+; CHECK-NEXT:  ; VALU:109(VOPD:84) SALU:27 VMEM:1
+; CHECK-NEXT:  ; Stall: 84 cycles (38%)
+; CHECK-NEXT:  ; FU:84
+; CHECK-NEXT:  ; FU: VALU:84
 ; CHECK-NEXT:  ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; CHECK-NEXT:    s_mov_b64 s[64:65], 0
 ; CHECK-NEXT:    v_nop
 ; CHECK-NEXT:    global_prefetch_b8 v0, s[64:65] scope:SCOPE_SE
-; CHECK-NEXT:    v_mov_b32_e32 v0, 0
 ; CHECK-NEXT:    s_mov_b32 s16, 0
-; CHECK-NEXT:    ;Sim: Fused
-; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
-; CHECK-NEXT:    s_mov_b32 s0, s16
-; CHECK-NEXT:    s_mov_b32 s1, s16
-; CHECK-NEXT:    v_dual_mov_b32 v1, v0 :: v_dual_mov_b32 v2, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v3, v0 :: v_dual_mov_b32 v4, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v5, v0 :: v_dual_mov_b32 v6, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v7, v0 :: v_dual_mov_b32 v8, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v9, v0 :: v_dual_mov_b32 v10, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v11, v0 :: v_dual_mov_b32 v12, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v13, v0 :: v_dual_mov_b32 v14, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v15, v0 :: v_dual_mov_b32 v16, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v17, v0 :: v_dual_mov_b32 v18, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v19, v0 :: v_dual_mov_b32 v20, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v21, v0 :: v_dual_mov_b32 v22, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v23, v0 :: v_dual_mov_b32 v24, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v25, v0 :: v_dual_mov_b32 v26, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v27, v0 :: v_dual_mov_b32 v28, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v29, v0 :: v_dual_mov_b32 v30, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v31, v0 :: v_dual_mov_b32 v32, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v33, v0 :: v_dual_mov_b32 v34, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v35, v0 :: v_dual_mov_b32 v36, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v37, v0 :: v_dual_mov_b32 v38, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v39, v0 :: v_dual_mov_b32 v40, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v41, v0 :: v_dual_mov_b32 v42, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v43, v0 :: v_dual_mov_b32 v44, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v45, v0 :: v_dual_mov_b32 v46, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v47, v0 :: v_dual_mov_b32 v48, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v49, v0 :: v_dual_mov_b32 v50, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v51, v0 :: v_dual_mov_b32 v52, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v53, v0 :: v_dual_mov_b32 v54, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v55, v0 :: v_dual_mov_b32 v56, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v57, v0 :: v_dual_mov_b32 v58, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v59, v0 :: v_dual_mov_b32 v60, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v61, v0 :: v_dual_mov_b32 v62, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v63, v0 :: v_dual_mov_b32 v64, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v65, v0 :: v_dual_mov_b32 v66, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v67, v0 :: v_dual_mov_b32 v68, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v69, v0 :: v_dual_mov_b32 v70, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v71, v0 :: v_dual_mov_b32 v72, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v73, v0 :: v_dual_mov_b32 v74, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v75, v0 :: v_dual_mov_b32 v76, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v77, v0 :: v_dual_mov_b32 v78, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v79, v0 :: v_dual_mov_b32 v80, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v81, v0 :: v_dual_mov_b32 v82, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v83, v0 :: v_dual_mov_b32 v84, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v85, v0 :: v_dual_mov_b32 v86, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v87, v0 :: v_dual_mov_b32 v88, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v89, v0 :: v_dual_mov_b32 v90, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v91, v0 :: v_dual_mov_b32 v92, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v93, v0 :: v_dual_mov_b32 v94, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v95, v0 :: v_dual_mov_b32 v96, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v97, v0 :: v_dual_mov_b32 v98, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v99, v0 :: v_dual_mov_b32 v100, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v101, v0 :: v_dual_mov_b32 v102, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v103, v0 :: v_dual_mov_b32 v104, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v105, v0 :: v_dual_mov_b32 v106, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v107, v0 :: v_dual_mov_b32 v108, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v109, v0 :: v_dual_mov_b32 v110, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v111, v0 :: v_dual_mov_b32 v112, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v113, v0 :: v_dual_mov_b32 v114, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v115, v0 :: v_dual_mov_b32 v116, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v117, v0 :: v_dual_mov_b32 v118, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v119, v0 :: v_dual_mov_b32 v120, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v121, v0 :: v_dual_mov_b32 v122, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v123, v0 :: v_dual_mov_b32 v124, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v125, v0 :: v_dual_mov_b32 v126, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v127, v0 :: v_dual_mov_b32 v128, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v129, v0 :: v_dual_mov_b32 v130, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v131, v0 :: v_dual_mov_b32 v132, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v133, v0 :: v_dual_mov_b32 v134, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v135, v0 :: v_dual_mov_b32 v136, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v137, v0 :: v_dual_mov_b32 v138, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v139, v0 :: v_dual_mov_b32 v140, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v141, v0 :: v_dual_mov_b32 v142, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v143, v0 :: v_dual_mov_b32 v144, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v145, v0 :: v_dual_mov_b32 v146, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v147, v0 :: v_dual_mov_b32 v148, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v149, v0 :: v_dual_mov_b32 v150, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v151, v0 :: v_dual_mov_b32 v152, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v153, v0 :: v_dual_mov_b32 v154, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v155, v0 :: v_dual_mov_b32 v156, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v157, v0 :: v_dual_mov_b32 v158, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v159, v0 :: v_dual_mov_b32 v160, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v161, v0 :: v_dual_mov_b32 v162, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v163, v0 :: v_dual_mov_b32 v164, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v165, v0 :: v_dual_mov_b32 v166, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v167, v0 :: v_dual_mov_b32 v168, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v169, v0 :: v_dual_mov_b32 v170, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v171, v0 :: v_dual_mov_b32 v172, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v173, v0 :: v_dual_mov_b32 v174, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v175, v0 :: v_dual_mov_b32 v176, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v177, v0 :: v_dual_mov_b32 v178, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v179, v0 :: v_dual_mov_b32 v180, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v181, v0 :: v_dual_mov_b32 v182, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v183, v0 :: v_dual_mov_b32 v184, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v185, v0 :: v_dual_mov_b32 v186, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v187, v0 :: v_dual_mov_b32 v188, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($$)
-; CHECK-NEXT:    v_dual_mov_b32 v189, v0 :: v_dual_mov_b32 v190, v0
-; CHECK-NEXT:    ;Sim: Stall:1 [FU busy] Cache($)
-; CHECK-NEXT:    v_mov_b32_e32 v191, v0
-; CHECK-NEXT:    s_mov_b32 s2, s16
-; CHECK-NEXT:    s_mov_b32 s3, s16
-; CHECK-NEXT:    s_mov_b32 s4, s16
-; CHECK-NEXT:    s_mov_b32 s5, s16
-; CHECK-NEXT:    s_mov_b32 s6, s16
-; CHECK-NEXT:    s_mov_b32 s7, s16
-; CHECK-NEXT:    s_mov_b32 s8, s16
-; CHECK-NEXT:    s_mov_b32 s9, s16
-; CHECK-NEXT:    s_mov_b32 s10, s16
-; CHECK-NEXT:    s_mov_b32 s11, s16
-; CHECK-NEXT:    s_mov_b32 s12, s16
-; CHECK-NEXT:    s_mov_b32 s13, s16
-; CHECK-NEXT:    s_mov_b32 s14, s16
-; CHECK-NEXT:    s_mov_b32 s15, s16
+; CHECK-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_mov_b32 v3, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v4, 0 :: v_dual_mov_b32 v5, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v6, 0 :: v_dual_mov_b32 v7, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v8, 0 :: v_dual_mov_b32 v9, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v10, 0 :: v_dual_mov_b32 v11, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v12, 0 :: v_dual_mov_b32 v13, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v14, 0 :: v_dual_mov_b32 v15, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v16, 0 :: v_dual_mov_b32 v17, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v18, 0 :: v_dual_mov_b32 v19, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v20, 0 :: v_dual_mov_b32 v21, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v22, 0 :: v_dual_mov_b32 v23, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v24, 0 :: v_dual_mov_b32 v25, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v26, 0 :: v_dual_mov_b32 v27, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v28, 0 :: v_dual_mov_b32 v29, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v30, 0 :: v_dual_mov_b32 v31, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v32, 0 :: v_dual_mov_b32 v33, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v34, 0 :: v_dual_mov_b32 v35, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v36, 0 :: v_dual_mov_b32 v37, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v38, 0 :: v_dual_mov_b32 v39, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v40, 0 :: v_dual_mov_b32 v41, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v42, 0 :: v_dual_mov_b32 v43, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v44, 0 :: v_dual_mov_b32 v45, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v46, 0 :: v_dual_mov_b32 v47, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v48, 0 :: v_dual_mov_b32 v49, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v50, 0 :: v_dual_mov_b32 v51, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v52, 0 :: v_dual_mov_b32 v53, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v54, 0 :: v_dual_mov_b32 v55, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v56, 0 :: v_dual_mov_b32 v57, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v58, 0 :: v_dual_mov_b32 v59, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v60, 0 :: v_dual_mov_b32 v61, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v62, 0 :: v_dual_mov_b32 v63, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v64, 0 :: v_dual_mov_b32 v65, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v66, 0 :: v_dual_mov_b32 v67, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v68, 0 :: v_dual_mov_b32 v69, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v70, 0 :: v_dual_mov_b32 v71, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v72, 0 :: v_dual_mov_b32 v73, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v74, 0 :: v_dual_mov_b32 v75, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v76, 0 :: v_dual_mov_b32 v77, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v78, 0 :: v_dual_mov_b32 v79, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v80, 0 :: v_dual_mov_b32 v81, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v82, 0 :: v_dual_mov_b32 v83, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v84, 0 :: v_dual_mov_b32 v85, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v86, 0 :: v_dual_mov_b32 v87, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v88, 0 :: v_dual_mov_b32 v89, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v90, 0 :: v_dual_mov_b32 v91, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v92, 0 :: v_dual_mov_b32 v93, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v94, 0 :: v_dual_mov_b32 v95, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v96, 0 :: v_dual_mov_b32 v97, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v98, 0 :: v_dual_mov_b32 v99, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v100, 0 :: v_dual_mov_b32 v101, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v102, 0 :: v_dual_mov_b32 v103, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v104, 0 :: v_dual_mov_b32 v105, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v106, 0 :: v_dual_mov_b32 v107, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v108, 0 :: v_dual_mov_b32 v109, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v110, 0 :: v_dual_mov_b32 v111, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v112, 0 :: v_dual_mov_b32 v113, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v114, 0 :: v_dual_mov_b32 v115, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v116, 0 :: v_dual_mov_b32 v117, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v118, 0 :: v_dual_mov_b32 v119, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v120, 0 :: v_dual_mov_b32 v121, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v122, 0 :: v_dual_mov_b32 v123, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v124, 0 :: v_dual_mov_b32 v125, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v126, 0 :: v_dual_mov_b32 v127, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v128, 0 :: v_dual_mov_b32 v129, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v130, 0 :: v_dual_mov_b32 v131, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v132, 0 :: v_dual_mov_b32 v133, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v134, 0 :: v_dual_mov_b32 v135, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v136, 0 :: v_dual_mov_b32 v137, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v138, 0 :: v_dual_mov_b32 v139, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v140, 0 :: v_dual_mov_b32 v141, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v142, 0 :: v_dual_mov_b32 v143, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v144, 0 :: v_dual_mov_b32 v145, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v146, 0 :: v_dual_mov_b32 v147, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v148, 0 :: v_dual_mov_b32 v149, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v150, 0 :: v_dual_mov_b32 v151, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v152, 0 :: v_dual_mov_b32 v153, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v154, 0 :: v_dual_mov_b32 v155, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v156, 0 :: v_dual_mov_b32 v157, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v158, 0 :: v_dual_mov_b32 v159, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v160, 0 :: v_dual_mov_b32 v161, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v162, 0 :: v_dual_mov_b32 v163, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v164, 0 :: v_dual_mov_b32 v165, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_dual_mov_b32 v166, 0 :: v_dual_mov_b32 v167, 0
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
+; CHECK-NEXT:    v_mov_b32_e32 v168, 0
 ; CHECK-NEXT:    s_mov_b32 s17, s16
+; CHECK-NEXT:    v_mov_b32_e32 v169, 0
+; CHECK-NEXT:    s_mov_b32 s18, s16
+; CHECK-NEXT:    v_mov_b32_e32 v170, 0
+; CHECK-NEXT:    s_mov_b32 s19, s16
+; CHECK-NEXT:    v_mov_b32_e32 v171, 0
+; CHECK-NEXT:    s_mov_b32 s20, s16
+; CHECK-NEXT:    v_mov_b32_e32 v172, 0
+; CHECK-NEXT:    s_mov_b32 s21, s16
+; CHECK-NEXT:    v_mov_b32_e32 v173, 0
+; CHECK-NEXT:    s_mov_b32 s22, s16
+; CHECK-NEXT:    v_mov_b32_e32 v174, 0
+; CHECK-NEXT:    s_mov_b32 s23, s16
+; CHECK-NEXT:    v_mov_b32_e32 v175, 0
+; CHECK-NEXT:    s_mov_b32 s0, s16
+; CHECK-NEXT:    v_mov_b32_e32 v176, 0
+; CHECK-NEXT:    s_mov_b32 s1, s16
+; CHECK-NEXT:    v_mov_b32_e32 v177, 0
+; CHECK-NEXT:    s_mov_b32 s2, s16
+; CHECK-NEXT:    v_mov_b32_e32 v178, 0
+; CHECK-NEXT:    s_mov_b32 s3, s16
+; CHECK-NEXT:    v_mov_b32_e32 v179, 0
+; CHECK-NEXT:    s_mov_b32 s4, s16
+; CHECK-NEXT:    v_mov_b32_e32 v180, 0
+; CHECK-NEXT:    s_mov_b32 s5, s16
+; CHECK-NEXT:    v_mov_b32_e32 v181, 0
+; CHECK-NEXT:    s_mov_b32 s6, s16
+; CHECK-NEXT:    v_mov_b32_e32 v182, 0
+; CHECK-NEXT:    s_mov_b32 s7, s16
+; CHECK-NEXT:    v_mov_b32_e32 v183, 0
+; CHECK-NEXT:    s_mov_b32 s8, s16
+; CHECK-NEXT:    v_mov_b32_e32 v184, 0
+; CHECK-NEXT:    s_mov_b32 s9, s16
+; CHECK-NEXT:    v_mov_b32_e32 v185, 0
+; CHECK-NEXT:    s_mov_b32 s10, s16
+; CHECK-NEXT:    v_mov_b32_e32 v186, 0
+; CHECK-NEXT:    s_mov_b32 s11, s16
+; CHECK-NEXT:    v_mov_b32_e32 v187, 0
+; CHECK-NEXT:    s_mov_b32 s12, s16
+; CHECK-NEXT:    v_mov_b32_e32 v188, 0
+; CHECK-NEXT:    s_mov_b32 s13, s16
+; CHECK-NEXT:    v_mov_b32_e32 v189, 0
+; CHECK-NEXT:    s_mov_b32 s14, s16
+; CHECK-NEXT:    v_mov_b32_e32 v190, 0
+; CHECK-NEXT:    s_mov_b32 s15, s16
+; CHECK-NEXT:    v_mov_b32_e32 v191, 0
+; CHECK-NEXT:    s_mov_b32 s24, s16
+; CHECK-NEXT:  ;=== Block (loop): Cold=127cyc Warm=133cyc Trip=32 Scaled=4250cyc [header] ===
+; CHECK-NEXT:  ; VALU:16 SALU:2 WMMA:12 Ctrl:3
+; CHECK-NEXT:  ; Stall: 100 cycles (75%)
+; CHECK-NEXT:  ; FU:89 | WMMACoExec:6(VALU:1+Other:5) | VaSSRC:5
+; CHECK-NEXT:  ; FU: XDL:78 VALU:11
+; CHECK-NEXT:  ; Speedup: 0.95x warm vs cold
+; CHECK-NEXT:  ; WMMA efficiency: 96 / 133 cycles (72%)
+; CHECK-NEXT:  .LBB0_1: ; %loop
+; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:    ;Sim: Fused WMMA[2/10] E OK
+; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; CHECK-NEXT:    ;Sim: WMMA[3/10] I | Stall:5 [VA_SSRC blocked]
+; CHECK-NEXT:    s_add_co_i32 s24, s24, 1
+; CHECK-NEXT:    ;Sim: WMMA[9/10] V BLOCKED | Stall:1
+; CHECK-NEXT:    v_nop
+; CHECK-NEXT:    v_nop
+; CHECK-NEXT:    v_nop
+; CHECK-NEXT:    v_nop
 ; CHECK-NEXT:    v_mov_b64_e32 v[206:207], s[14:15]
 ; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
 ; CHECK-NEXT:    v_mov_b64_e32 v[204:205], s[12:13]
@@ -240,15 +263,7 @@ define amdgpu_kernel void @test() #0 {
 ; CHECK-NEXT:    v_mov_b64_e32 v[194:195], s[2:3]
 ; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
 ; CHECK-NEXT:    v_mov_b64_e32 v[192:193], s[0:1]
-; CHECK-NEXT:    ;Sim: Stall:5 [VA_SSRC blocked]
-; CHECK-NEXT:    s_mov_b32 s18, s16
-; CHECK-NEXT:    s_mov_b32 s19, s16
-; CHECK-NEXT:    s_mov_b32 s20, s16
-; CHECK-NEXT:    s_mov_b32 s21, s16
-; CHECK-NEXT:    s_mov_b32 s22, s16
-; CHECK-NEXT:    s_mov_b32 s23, s16
-; CHECK-NEXT:    ;Sim: Fused
-; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
 ; CHECK-NEXT:    v_mov_b64_e32 v[214:215], s[22:23]
 ; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
 ; CHECK-NEXT:    v_mov_b64_e32 v[212:213], s[20:21]
@@ -256,49 +271,42 @@ define amdgpu_kernel void @test() #0 {
 ; CHECK-NEXT:    v_mov_b64_e32 v[210:211], s[18:19]
 ; CHECK-NEXT:    ;Sim: Stall:1 [FU busy]
 ; CHECK-NEXT:    v_mov_b64_e32 v[208:209], s[16:17]
-; CHECK-NEXT:  ;=== Block (loop): Cold=106cyc Warm=101cyc Trip=32 Scaled=3237cyc [header] ===
-; CHECK-NEXT:  ; SALU:2 WMMA:12 Ctrl:2
-; CHECK-NEXT:  ; Stall: 85 cycles (84%)
-; CHECK-NEXT:  ; FU:78 | WMMACoExec:7(Other:7)
-; CHECK-NEXT:  ; FU: XDL:78
-; CHECK-NEXT:  ; Speedup: 1.05x warm vs cold
-; CHECK-NEXT:  ; WMMA efficiency: 96 / 101 cycles (95%)
-; CHECK-NEXT:  .LBB0_1: ; %loop
-; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    s_add_co_i32 s16, s16, 1
+; CHECK-NEXT:    ;Sim: Stall:5 [VA_SSRC blocked]
+; CHECK-NEXT:    s_cmp_lt_i32 s24, 32
 ; CHECK-NEXT:    ;Sim: Fused
-; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instid1(SALU_CYCLE_1)
-; CHECK-NEXT:    ;Sim: 0EEIEIESVV Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[176:191], v[192:207], v[208:215], v[176:191], s16, s16
+; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; CHECK-NEXT:    ;Sim: 0EEIEIESVV
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[176:191], v[192:207], v[208:215], v[176:191], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:8 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[160:175], v[192:207], v[208:215], v[160:175], s16, s16
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[160:175], v[192:207], v[208:215], v[160:175], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:7 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[144:159], v[192:207], v[208:215], v[144:159], s16, s16
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[144:159], v[192:207], v[208:215], v[144:159], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:7 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[128:143], v[192:207], v[208:215], v[128:143], s16, s16
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[128:143], v[192:207], v[208:215], v[128:143], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:7 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[112:127], v[192:207], v[208:215], v[112:127], s16, s16
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[112:127], v[192:207], v[208:215], v[112:127], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:7 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[96:111], v[192:207], v[208:215], v[96:111], s16, s16
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[96:111], v[192:207], v[208:215], v[96:111], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:7 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[80:95], v[192:207], v[208:215], v[80:95], s16, s16
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[80:95], v[192:207], v[208:215], v[80:95], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:7 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[64:79], v[192:207], v[208:215], v[64:79], s16, s16
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[64:79], v[192:207], v[208:215], v[64:79], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:7 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[48:63], v[192:207], v[208:215], v[48:63], s16, s16
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[48:63], v[192:207], v[208:215], v[48:63], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:7 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[32:47], v[192:207], v[208:215], v[32:47], s16, s16
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[32:47], v[192:207], v[208:215], v[32:47], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:7 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[16:31], v[192:207], v[208:215], v[16:31], s16, s16
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[16:31], v[192:207], v[208:215], v[16:31], s24, s24
 ; CHECK-NEXT:    ;Sim: 0EEIEIESVV | Stall:7 [FU busy] Cache($$)
-; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[0:15], v[192:207], v[208:215], v[0:15], s16, s16
-; CHECK-NEXT:    ;Sim: WMMA[1/10] E | Stall:7 [VA_SSRC blocked]
-; CHECK-NEXT:    s_cmp_lt_i32 s16, 32
-; CHECK-NEXT:    ;Sim: WMMA[9/10] V OK
+; CHECK-NEXT:    v_wmma_scale_f32_32x16x128_f4 v[0:15], v[192:207], v[208:215], v[0:15], s24, s24
+; CHECK-NEXT:    ;Sim: WMMA[1/10] E OK
 ; CHECK-NEXT:    s_cbranch_scc1 .LBB0_1
-; CHECK-NEXT:  ;=== Block: 1 cycles ===
+; CHECK-NEXT:  ;=== Block: 7 cycles ===
 ; CHECK-NEXT:  ; SALU:1
+; CHECK-NEXT:  ; Stall: 6 cycles (86%)
+; CHECK-NEXT:  ; WMMACoExec:6(Other:6)
 ; CHECK-NEXT:  ; %bb.2: ; %exit
+; CHECK-NEXT:    ;Sim: WMMA[2/10] E | Stall:6 [VA_SSRC blocked]
 ; CHECK-NEXT:    s_endpgm
 entry:
   br label %loop

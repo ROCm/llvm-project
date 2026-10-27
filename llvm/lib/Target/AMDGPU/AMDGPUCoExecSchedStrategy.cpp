@@ -3059,8 +3059,8 @@ void AMDGPUCoExecSchedStrategy::initPolicy(MachineBasicBlock::iterator Begin,
                                            MachineBasicBlock::iterator End,
                                            unsigned NumRegionInstrs) {
   GCNSchedStrategy::initPolicy(Begin, End, NumRegionInstrs);
-  assert((PreRADirection == MISched::Unspecified ||
-          PreRADirection == MISched::TopDown) &&
+  assert((getPreRADirection() == MISched::Unspecified ||
+          getPreRADirection() == MISched::TopDown) &&
          "coexec scheduler only supports top-down scheduling");
   RegionPolicy.OnlyTopDown = true;
   RegionPolicy.OnlyBottomUp = false;

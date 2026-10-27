@@ -21,6 +21,7 @@
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/Rematerializer.h"
+#include "llvm/Support/CommandLine.h"
 
 namespace llvm {
 
@@ -81,8 +82,8 @@ protected:
   void getRegisterPressures(bool AtTop, const RegPressureTracker &RPTracker,
                             SUnit *SU, std::vector<unsigned> &Pressure,
                             std::vector<unsigned> &MaxPressure,
-                            GCNDownwardRPTracker &DownwardTracker,
-                            GCNUpwardRPTracker &UpwardTracker,
+                            const GCNDownwardRPTrackerBase &DownwardTracker,
+                            const GCNUpwardRPTracker &UpwardTracker,
                             ScheduleDAGMI *DAG, const SIRegisterInfo *SRI);
   std::vector<unsigned> Pressure;
 
@@ -99,7 +100,7 @@ protected:
   SmallVectorImpl<GCNSchedStageID>::iterator CurrentStage = nullptr;
 
   // GCN RP Tracker for top-down scheduling
-  mutable GCNDownwardRPTracker DownwardTracker;
+  mutable GCNManualDownwardRPTracker DownwardTracker;
 
   // GCN RP Tracker for botttom-up scheduling
   mutable GCNUpwardRPTracker UpwardTracker;
@@ -131,17 +132,17 @@ public:
   // Bias for VGPR limits under a high register pressure.
   const unsigned HighRPVGPRBias = 7;
 
-  unsigned SGPRExcessLimit;
+  unsigned SGPRExcessLimit = 0;
 
-  unsigned VGPRExcessLimit;
+  unsigned VGPRExcessLimit = 0;
 
-  unsigned AGPRExcessLimit;
+  unsigned AGPRExcessLimit = 0;
 
-  unsigned SGPRCriticalLimit;
+  unsigned SGPRCriticalLimit = 0;
 
-  unsigned VGPRCriticalLimit;
+  unsigned VGPRCriticalLimit = 0;
 
-  unsigned AGPRCriticalLimit;
+  unsigned AGPRCriticalLimit = 0;
 
   unsigned SGPRLimitBias = 0;
 
@@ -172,11 +173,9 @@ public:
     return GCNTrackersOverride.value_or(UseGCNTrackers);
   }
 
-  GCNSchedStageID getNextStage() const;
+  GCNDownwardRPTrackerBase &getDownwardTracker() { return DownwardTracker; }
 
-  GCNDownwardRPTracker *getDownwardTracker() { return &DownwardTracker; }
-
-  GCNUpwardRPTracker *getUpwardTracker() { return &UpwardTracker; }
+  GCNUpwardRPTracker &getUpwardTracker() { return UpwardTracker; }
 
   /// \returns the LIRP tracker.
   LIRPTracker *getLIRPTracker() { return &LIRP; }
@@ -595,6 +594,10 @@ private:
     /// candidate.
     GCNRegPressure RPSave;
 
+    ScoredRemat(RegisterIdx RegIdx, unsigned NumRegions)
+        : RegIdx(RegIdx), LiveIn(NumRegions), LiveOut(NumRegions),
+          Live(NumRegions), UnpredictableRPSave(NumRegions) {}
+
     /// Execution frequency information required by scoring heuristics.
     /// Frequencies are scaled down if they are high to avoid overflow/underflow
     /// when combining them.
@@ -610,11 +613,11 @@ private:
       static const uint64_t ScaleFactor = 1024;
     };
 
-    /// Initializes the candidate with state-independent characteristics for
-    /// rematerializable register with index handle \p RegIdx. This doesn't
-    /// update the actual score (call \ref update for this).
-    void init(RegisterIdx RegIdx, const FreqInfo &Freq,
-              const Rematerializer &Remater, GCNScheduleDAGMILive &DAG);
+    /// Initializes the candidate with state-independent characteristics.
+    /// This doesn't update the actual score (call \ref update for this).
+    /// Note: LiveIn/LiveOut must be pre-populated before calling this.
+    void init(const FreqInfo &Freq, const Rematerializer &Remater,
+              GCNScheduleDAGMILive &DAG);
 
     /// Rematerializes the candidate using the \p Remater.
     void rematerialize(Rematerializer &Remater) const;
@@ -623,14 +626,6 @@ private:
     /// one target region.
     bool maybeBeneficial(const BitVector &TargetRegions,
                          ArrayRef<GCNRPTarget> RPTargets) const;
-
-    /// Rematerializes the candidate and returns the new MI. This removes the
-    /// rematerialized register from live-in/out lists in the \p DAG and updates
-    /// \p RPTargets in all affected regions. Regions in which RP savings are
-    /// not guaranteed are set in \p RecomputeRP.
-    MachineInstr *rematerialize(BitVector &RecomputeRP,
-                                SmallVectorImpl<GCNRPTarget> &RPTargets,
-                                GCNScheduleDAGMILive &DAG) const;
 
     /// Updates the rematerialization's score w.r.t. the current \p RPTargets.
     /// \p RegionFreq indicates the frequency of each region.

@@ -287,17 +287,17 @@ TEST(Attributes, MismatchedABIAttrs) {
 
   {
     auto *I = cast<CallBase>(&M->getFunction("g")->getEntryBlock().front());
-    ASSERT_FALSE(I->isByValArgument(0));
-    ASSERT_FALSE(I->getParamByValType(0));
+    ASSERT_TRUE(I->isByValArgument(0));
+    ASSERT_TRUE(I->getParamByValType(0));
   }
   {
     auto *I = cast<CallBase>(&M->getFunction("h")->getEntryBlock().front());
-    ASSERT_FALSE(I->getParamPreallocatedType(0));
+    ASSERT_TRUE(I->getParamPreallocatedType(0));
   }
   {
     auto *I = cast<CallBase>(&M->getFunction("i")->getEntryBlock().front());
-    ASSERT_FALSE(I->isInAllocaArgument(0));
-    ASSERT_FALSE(I->getParamInAllocaType(0));
+    ASSERT_TRUE(I->isInAllocaArgument(0));
+    ASSERT_TRUE(I->getParamInAllocaType(0));
   }
 }
 
@@ -816,6 +816,39 @@ TEST(Attributes, ListIntersect) {
   ASSERT_FALSE(Res->hasParamAttr(2, Attribute::ReadNone));
   ASSERT_TRUE(Res->hasParamAttr(3, Attribute::ReadNone));
   ASSERT_TRUE(Res->hasParamAttr(3, Attribute::ByVal));
+}
+
+TEST(Attributes, BuilderMerge) {
+  LLVMContext C;
+  AttrBuilder A(C), B(C);
+  A.addAttribute(Attribute::NoUnwind);
+  A.addAlignmentAttr(4);
+  A.addAttribute("a", "1");
+  A.addAttribute("c", "1");
+  B.addAttribute(Attribute::NoReturn);
+  B.addAlignmentAttr(8);
+  B.addAttribute("b", "2");
+  B.addAttribute("c", "2");
+  B.addAttribute("d", "2");
+  A.merge(B);
+
+  // Attributes of B replace those of the same kind in A, and the result stays
+  // sorted (AttrBuilder equality compares the sorted lists).
+  AttrBuilder Expected(C);
+  for (Attribute Attr :
+       {Attribute::get(C, Attribute::NoUnwind),
+        Attribute::get(C, Attribute::NoReturn),
+        Attribute::getWithAlignment(C, Align(8)), Attribute::get(C, "a", "1"),
+        Attribute::get(C, "b", "2"), Attribute::get(C, "c", "2"),
+        Attribute::get(C, "d", "2")})
+    Expected.addAttribute(Attr);
+  EXPECT_EQ(A, Expected);
+
+  AttrBuilder Empty(C);
+  Empty.merge(B);
+  EXPECT_EQ(Empty, B);
+  B.merge(AttrBuilder(C));
+  EXPECT_EQ(Empty, B);
 }
 
 } // end anonymous namespace

@@ -38,6 +38,7 @@
 #include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
 #include "llvm/CodeGen/MachineCycleAnalysis.h"
 #include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/RegisterPressure.h"
 #include "llvm/CodeGen/Rematerializer.h"
 #include "llvm/MC/LaneBitmask.h"
 #include "llvm/MC/MCSchedule.h"
@@ -253,8 +254,9 @@ static bool canUsePressureDiffs(const SUnit &SU) {
     return false;
 
   // Cannot use pressure diffs for subregister defs or with physregs, it's
-  // imprecise in both cases.
-  for (const auto &Op : SU.getInstr()->operands()) {
+  // imprecise in both cases. For a bundle, check the instructions inside it:
+  // the BUNDLE header only has implicit operands.
+  for (const auto &Op : const_mi_bundle_ops(*SU.getInstr())) {
     if (!Op.isReg() || Op.isImplicit())
       continue;
     if (Op.getReg().isPhysical() ||
@@ -267,8 +269,9 @@ static bool canUsePressureDiffs(const SUnit &SU) {
 void GCNSchedStrategy::getRegisterPressures(
     bool AtTop, const RegPressureTracker &RPTracker, SUnit *SU,
     std::vector<unsigned> &Pressure, std::vector<unsigned> &MaxPressure,
-    GCNDownwardRPTracker &DownwardTracker, GCNUpwardRPTracker &UpwardTracker,
-    ScheduleDAGMI *DAG, const SIRegisterInfo *SRI) {
+    const GCNDownwardRPTrackerBase &DownwardTracker,
+    const GCNUpwardRPTracker &UpwardTracker, ScheduleDAGMI *DAG,
+    const SIRegisterInfo *SRI) {
   // getDownwardPressure() and getUpwardPressure() make temporary changes to
   // the tracker, so we need to pass those function a non-const copy.
   RegPressureTracker &TempTracker = const_cast<RegPressureTracker &>(RPTracker);
@@ -285,8 +288,7 @@ void GCNSchedStrategy::getRegisterPressures(
   MachineInstr *MI = SU->getInstr();
   GCNRegPressure NewPressure;
   if (AtTop) {
-    GCNDownwardRPTracker TempDownwardTracker(DownwardTracker);
-    NewPressure = TempDownwardTracker.bumpDownwardPressure(MI, SRI);
+    NewPressure = DownwardTracker.bumpDownwardPressure(MI, SRI);
   } else {
     GCNUpwardRPTracker TempUpwardTracker(UpwardTracker);
     TempUpwardTracker.recede(*MI);
@@ -607,7 +609,7 @@ SUnit *GCNSchedStrategy::pickNodeBidirectional(bool &IsTopNode,
   } else {
     LLVM_DEBUG(traceCandidate(BotCand));
 #ifndef NDEBUG
-    if (VerifyScheduling) {
+    if (shouldVerifyScheduling()) {
       SchedCandidate TCand;
       TCand.reset(CandPolicy());
       pickNodeFromQueue(Bot, BotPolicy, DAG->getBotRPTracker(), TCand,
@@ -632,7 +634,7 @@ SUnit *GCNSchedStrategy::pickNodeBidirectional(bool &IsTopNode,
   } else {
     LLVM_DEBUG(traceCandidate(TopCand));
 #ifndef NDEBUG
-    if (VerifyScheduling) {
+    if (shouldVerifyScheduling()) {
       SchedCandidate TCand;
       TCand.reset(CandPolicy());
       pickNodeFromQueue(Top, TopPolicy, DAG->getTopRPTracker(), TCand,
@@ -730,8 +732,7 @@ SUnit *GCNSchedStrategy::pickNode(bool &IsTopNode) {
   if (SU->isBottomReady())
     Bot.removeReady(SU);
 
-  LLVM_DEBUG(dbgs() << "Scheduling SU(" << SU->NodeNum << ") "
-                    << *SU->getInstr());
+  LLVM_DEBUG(dbgs() << "Scheduling " << *SU << " " << *SU->getInstr());
   return SU;
 }
 
@@ -750,8 +751,7 @@ void GCNSchedStrategy::schedNode(SUnit *SU, bool IsTopNode) {
           });
     }
 
-    IsTopNode ? (void)DownwardTracker.advance(MI, false)
-              : UpwardTracker.recede(*MI);
+    IsTopNode ? DownwardTracker.advance(*MI) : UpwardTracker.recede(*MI);
   }
 
   return GenericScheduler::schedNode(SU, IsTopNode);
@@ -775,11 +775,6 @@ bool GCNSchedStrategy::advanceStage() {
 bool GCNSchedStrategy::hasNextStage() const {
   assert(CurrentStage);
   return std::next(CurrentStage) != SchedStages.end();
-}
-
-GCNSchedStageID GCNSchedStrategy::getNextStage() const {
-  assert(CurrentStage && std::next(CurrentStage) != SchedStages.end());
-  return *std::next(CurrentStage);
 }
 
 bool GCNSchedStrategy::tryPendingCandidate(SchedCandidate &Cand,
@@ -1297,8 +1292,8 @@ void GCNScheduleDAGMILive::runSchedStages() {
       if (S.useGCNTrackers()) {
         const unsigned RegionIdx = Stage->getRegionIdx();
         S.setCurrentRegionIdx(RegionIdx);
-        S.getDownwardTracker()->reset(MRI, LiveIns[RegionIdx]);
-        S.getUpwardTracker()->reset(
+        S.getDownwardTracker().reset(MRI, LiveIns[RegionIdx]);
+        S.getUpwardTracker().reset(
             MRI, RegionLiveOuts.getLiveRegsForRegionIdx(RegionIdx));
         if (EnableLIRPTracker)
           S.getLIRPTracker()->reset(MRI, LiveIns[RegionIdx]);
@@ -1591,7 +1586,12 @@ bool PreRARematStage::initGCNSchedStage() {
   // Collect candidates. We have more restrictions on what we can track here
   // compared to the rematerializer.
   SmallVector<ScoredRemat, 8> Candidates;
-  SmallVector<unsigned> CandidateOrder;
+  // Map registers to candidate indices. Use ~0u as null value
+  // since 0 is a valid index.
+  IndexedMap<unsigned, VirtReg2IndexFunctor> DefRegToCandIdx(~0u);
+  DefRegToCandIdx.resize(DAG.MRI.getNumVirtRegs());
+  const unsigned NumRegions = DAG.Regions.size();
+
   for (unsigned RegIdx = 0, E = Remater.getNumRegs(); RegIdx < E; ++RegIdx) {
     const Rematerializer::Reg &CandReg = Remater.getReg(RegIdx);
 
@@ -1645,12 +1645,41 @@ bool PreRARematStage::initGCNSchedStage() {
                      }))
       continue;
 
-    MarkedRegs.insert(CandReg.getDefReg());
-    ScoredRemat &Cand = Candidates.emplace_back();
-    Cand.init(RegIdx, FreqInfo, Remater, DAG);
+    Register DefReg = CandReg.getDefReg();
+    MarkedRegs.insert(DefReg);
+    DefRegToCandIdx[DefReg] = Candidates.size();
+    Candidates.emplace_back(RegIdx, NumRegions);
+  }
+
+  // Initialize the LiveIn and LiveOut sets of all candidates.
+  // Iterating all regions and their live regs once is considerably
+  // more efficient than querying those structures for each candidate
+  // separately in ScoredRemat::init.
+  for (unsigned I = 0; I < NumRegions; ++I) {
+    for (const auto &[Reg, Mask] : DAG.LiveIns[I]) {
+      if (!Register::isVirtualRegister(Reg))
+        continue;
+      unsigned CandIdx = DefRegToCandIdx[Reg];
+      if (CandIdx != ~0u)
+        Candidates[CandIdx].LiveIn.set(I);
+    }
+    for (const auto &[Reg, Mask] :
+         DAG.RegionLiveOuts.getLiveRegsForRegionIdx(I)) {
+      if (!Register::isVirtualRegister(Reg))
+        continue;
+      unsigned CandIdx = DefRegToCandIdx[Reg];
+      if (CandIdx != ~0u)
+        Candidates[CandIdx].LiveOut.set(I);
+    }
+  }
+
+  // Finish initializing candidates.
+  SmallVector<unsigned> CandidateOrder;
+  for (auto [CandIdx, Cand] : enumerate(Candidates)) {
+    Cand.init(FreqInfo, Remater, DAG);
     Cand.update(TargetRegions, RPTargets, FreqInfo, !TargetOcc);
     if (!Cand.hasNullScore())
-      CandidateOrder.push_back(Candidates.size() - 1);
+      CandidateOrder.push_back(CandIdx);
   }
 
   if (TargetOcc) {
@@ -2459,17 +2488,8 @@ void GCNSchedStage::modifyRegionSchedule(unsigned RegionIdx,
     }
 
     // Reset read-undef flags and update them later.
-    for (MachineOperand &Op : MI->all_defs())
-      Op.setIsUndef(false);
-    RegisterOperands RegOpers;
-    RegOpers.collect(*MI, *DAG.TRI, DAG.MRI, DAG.ShouldTrackLaneMasks, false);
-    if (DAG.ShouldTrackLaneMasks) {
-      // Adjust liveness and add missing dead+read-undef flags.
-      RegOpers.adjustLaneLiveness(*DAG.LIS, DAG.MRI, *MI);
-    } else {
-      // Adjust for missing dead-def flags.
-      RegOpers.detectDeadDefs(*MI, *DAG.LIS, DAG.MRI);
-    }
+    RegisterOperands::restoreLivenessFlags(*MI, *DAG.TRI, DAG.MRI, *DAG.LIS,
+                                           DAG.ShouldTrackLaneMasks);
     LLVM_DEBUG(dbgs() << "Scheduling " << *MI);
   }
 
@@ -3217,36 +3237,23 @@ PreRARematStage::ScoredRemat::FreqInfo::FreqInfo(
   }
 }
 
-void PreRARematStage::ScoredRemat::init(RegisterIdx RegIdx,
-                                        const FreqInfo &Freq,
+void PreRARematStage::ScoredRemat::init(const FreqInfo &Freq,
                                         const Rematerializer &Remater,
                                         GCNScheduleDAGMILive &DAG) {
-  this->RegIdx = RegIdx;
-  const unsigned NumRegions = DAG.Regions.size();
-  LiveIn.resize(NumRegions);
-  LiveOut.resize(NumRegions);
-  Live.resize(NumRegions);
-  UnpredictableRPSave.resize(NumRegions);
-
   const Rematerializer::Reg &Reg = Remater.getReg(RegIdx);
   Register DefReg = Reg.getDefReg();
   assert(Reg.Uses.size() == 1 && "expected users in single region");
   const unsigned UseRegion = Reg.Uses.begin()->first;
 
-  // Mark regions in which the rematerializable register is live.
-  for (unsigned I = 0, E = NumRegions; I != E; ++I) {
-    if (DAG.LiveIns[I].contains(DefReg))
-      LiveIn.set(I);
-    if (DAG.RegionLiveOuts.getLiveRegsForRegionIdx(I).contains(DefReg))
-      LiveOut.set(I);
+  Live |= LiveIn;
+  Live |= LiveOut;
 
+  for (unsigned I : Live.set_bits()) {
     // If the register is both unused and live-through in the region, the
     // latter's RP is guaranteed to decrease.
     if (!LiveIn[I] || !LiveOut[I] || I == UseRegion)
       UnpredictableRPSave.set(I);
   }
-  Live |= LiveIn;
-  Live |= LiveOut;
   RPSave.inc(DefReg, LaneBitmask::getNone(), Reg.Mask, DAG.MRI);
 
   // Get frequencies of defining and using regions. A rematerialization from the

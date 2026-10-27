@@ -677,3 +677,11 @@ foreach inst = !instances<Instruction>("^V_CVT_SCALE_PK16_.*_e64$") in
 // RepeatRate = 16: CVT_SCALEF32_PK32 instructions
 foreach inst = !instances<Instruction>("^V_CVT_SCALEF32_PK32_.*_e64$") in
   def : GFX1250RepeatRateEntry<inst, 16>;
+def LDSDMAIntrinsicTable : GenericTable {
+  let FilterClass = "AMDGPULDSDMAIntrinsic";
+  let CppTypeName = "LDSDMAIntrinsic";
+  let Fields = ["Intr"];
+
+  let PrimaryKey = ["Intr"];
+  let PrimaryKeyName = "lookupLDSDMAIntrinsic";
+}

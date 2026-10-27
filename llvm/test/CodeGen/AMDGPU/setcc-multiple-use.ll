@@ -14,11 +14,12 @@ define i32 @f() {
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 0
 ; CHECK-NEXT:    ds_read_b32 v0, v0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
+; CHECK-NEXT:    v_cmp_ne_u32_e64 s4, 0, v0
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; CHECK-NEXT:    s_and_b32 s4, vcc_lo, exec_lo
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
+; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s4
+; CHECK-NEXT:    s_cmp_lg_u32 vcc_lo, 0
 ; CHECK-NEXT:    s_cselect_b32 s4, 1, 0
-; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, s4, vcc_lo
+; CHECK-NEXT:    v_and_b32_e32 v0, s4, v0
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 bb:
   %i = load i32, ptr addrspace(3) zeroinitializer, align 16

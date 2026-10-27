@@ -14,7 +14,6 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/LiveInterval.h"
@@ -399,7 +398,7 @@ float TargetRegisterInfo::getSpillWeightScaleFactor(
 // Compute target-independent register allocator hints to help eliminate copies.
 bool TargetRegisterInfo::getRegAllocationHints(
     Register VirtReg, ArrayRef<MCPhysReg> Order,
-    SmallVectorImpl<MCPhysReg> &Hints, const MachineFunction &MF,
+    SmallSetVector<MCPhysReg, 16> &Hints, const MachineFunction &MF,
     const VirtRegMap *VRM, const LiveRegMatrix *Matrix) const {
   const MachineRegisterInfo &MRI = MF.getRegInfo();
   const std::pair<unsigned, SmallVector<Register, 4>> *Hints_MRI =
@@ -408,7 +407,6 @@ bool TargetRegisterInfo::getRegAllocationHints(
   if (!Hints_MRI)
     return false;
 
-  SmallSet<Register, 32> HintedRegs;
   // First hint may be a target hint.
   bool Skip = (Hints_MRI->first != 0);
   for (auto Reg : Hints_MRI->second) {
@@ -422,10 +420,6 @@ bool TargetRegisterInfo::getRegAllocationHints(
     if (VRM && Phys.isVirtual())
       Phys = VRM->getPhys(Phys);
 
-    // Don't add the same reg twice (Hints_MRI may contain multiple virtual
-    // registers allocated to the same physreg).
-    if (!HintedRegs.insert(Phys).second)
-      continue;
     // Check that Phys is a valid hint in VirtReg's register class.
     if (!Phys.isPhysical())
       continue;
@@ -438,48 +432,57 @@ bool TargetRegisterInfo::getRegAllocationHints(
       continue;
 
     // All clear, tell the register allocator to prefer this register.
-    Hints.push_back(Phys.id());
+    Hints.insert(Phys);
   }
   return false;
 }
 
-void TargetRegisterInfo::applyRegAllocationAntiHints(
-    Register VirtReg, ArrayRef<MCPhysReg> &Order,
-    SmallVectorImpl<MCPhysReg> &OrderStorage,
-    SmallVector<MCPhysReg, 16> &AntiHints, const MachineFunction &MF,
-    const VirtRegMap *VRM, const LiveRegMatrix *Matrix) const {
+bool TargetRegisterInfo::isAntiHintedReg(
+    MCPhysReg Reg, const BitVector &AntiHintedRegUnits) const {
+  return llvm::any_of(regunits(Reg), [&](MCRegUnit Unit) {
+    return AntiHintedRegUnits.test(static_cast<unsigned>(Unit));
+  });
+}
 
-  if (AntiHints.empty() || !VRM)
+void TargetRegisterInfo::applyRegAllocationAntiHints(
+    Register VirtReg, ArrayRef<MCPhysReg> Order,
+    SmallVectorImpl<MCPhysReg> &HintsAndCustomOrder, unsigned NumHints,
+    const BitVector &AntiHintedRegUnits, const MachineFunction &MF,
+    const LiveRegMatrix *Matrix, const RegisterClassInfo *RegClassInfo) const {
+
+  if (AntiHintedRegUnits.none())
     return;
 
-  auto isAntiHinted = [&](MCPhysReg Reg) {
-    return std::any_of(
-        AntiHints.begin(), AntiHints.end(),
-        [&](MCPhysReg AntiHint) { return regsOverlap(Reg, AntiHint); });
-  };
+  assert(HintsAndCustomOrder.size() == NumHints &&
+         "HintsAndCustomOrder should only contain the hints here.");
+  HintsAndCustomOrder.append(Order.begin(), Order.end());
 
-  // Copy order into storage
-  OrderStorage.clear();
-  OrderStorage.assign(Order.begin(), Order.end());
+  // Custom reordering of the allocation order.
+  filterAndSortForAntiHintedRegs(
+      VirtReg,
+      MutableArrayRef<MCPhysReg>(HintsAndCustomOrder).drop_front(NumHints),
+      AntiHintedRegUnits, MF, Matrix, RegClassInfo);
+}
 
-  // Partition non-anti-hinted register go first
-  auto PartionPoint =
-      std::stable_partition(OrderStorage.begin(), OrderStorage.end(),
-                            [&](MCPhysReg Reg) { return !isAntiHinted(Reg); });
+void TargetRegisterInfo::filterAndSortForAntiHintedRegs(
+    Register VirtReg, MutableArrayRef<MCPhysReg> CustomOrder,
+    const BitVector &AntiHintedRegUnits, const MachineFunction &MF,
+    const LiveRegMatrix *Matrix, const RegisterClassInfo *RegClassInfo) const {
 
-  Order = OrderStorage;
+  // Partition non-anti-hinted register go first.
+  [[maybe_unused]] auto *PartitionPoint = std::stable_partition(
+      CustomOrder.begin(), CustomOrder.end(),
+      [&](MCPhysReg Reg) { return !isAntiHintedReg(Reg, AntiHintedRegUnits); });
 
-  // print the details
   LLVM_DEBUG({
     size_t NonAntiHintedCount =
-        std::distance(OrderStorage.begin(), PartionPoint);
-    size_t AntiHintedCount = std::distance(PartionPoint, OrderStorage.end());
-    dbgs() << "Addded " << NonAntiHintedCount
-           << "non-anti-hinted registers first\n"
-           << "Added " << AntiHintedCount << "anit-hinted at the end!\n";
+        std::distance(CustomOrder.begin(), PartitionPoint);
+    size_t AntiHintedCount = std::distance(PartitionPoint, CustomOrder.end());
+    dbgs() << "Added " << NonAntiHintedCount
+           << " non-anti-hinted registers first\n"
+           << "Added " << AntiHintedCount
+           << " anti-hinted registers at the end\n";
   });
-
-  return;
 }
 
 bool TargetRegisterInfo::isCalleeSavedPhysReg(
