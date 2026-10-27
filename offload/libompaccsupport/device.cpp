@@ -915,7 +915,7 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
   }
 
   // Downstream: stage the launch environment in pinned memory if the plugin
-  // transfers it faster from there, so the dataSubmit below can take that path.
+  // transfers it faster from there, so the copy below can take that path.
   const void *LaunchEnvSrc = &LocalKLE;
   KernelLaunchEnvironmentTy *PinnedKLE =
       GenericDevice.getPinnedLaunchEnvBuffer();
@@ -924,26 +924,24 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
     LaunchEnvSrc = PinnedKLE;
   }
 
-  INFO(OMP_INFOTYPE_DATA_TRANSFER, GenericDevice.getDeviceId(),
-       "Copying data from host to device, HstPtr=" DPxMOD ", TgtPtr=" DPxMOD
-       ", Size=%" PRId64 ", Name=KernelLaunchEnv\n",
-       DPxPTR(LaunchEnvSrc), DPxPTR(*AllocOrErr),
-       sizeof(KernelLaunchEnvironmentTy));
-
   // Downstream: the ProfilerData at this point will have a callback for a
   // kernel launch, not a data-op. This is due to the "external" operation
   // being a kernel launch and the data submit here being an implementation
   // detail. We temporarily set the ProfilerData to nullptr, such that we
   // disable the timing etc. further down to not trigger assertions or report
-  // implementation detail.
+  // implementation detail. For the same reason, copy with olMemcpy rather
+  // than Device.submitData(), which would report an OMPT data operation.
   __tgt_async_info *AI = AsyncInfo;
   void *ProfilerData = AI->ProfilerData;
   AI->ProfilerData = nullptr;
-  auto Err = GenericDevice.dataSubmit(
-      *AllocOrErr, LaunchEnvSrc, sizeof(KernelLaunchEnvironmentTy), AsyncInfo);
+  auto Res = olMemcpy(AsyncInfo.getQueue(), *AllocOrErr, Device.DeviceHandle,
+                      LaunchEnvSrc, /*SrcDevice=*/nullptr,
+                      sizeof(KernelLaunchEnvironmentTy));
   AI->ProfilerData = ProfilerData;
-  if (Err)
-    return Err;
+  if (Res)
+    return createError(ErrorCode::BackendFailure,
+                       "failed to copy the kernel launch environment: %s",
+                       Res->Details);
 
   // Register the staging buffer only now that the transfer reading it has been
   // issued. Registering it earlier would let a concurrent finalization that
@@ -1061,15 +1059,22 @@ getXTeamReductionNumBlocks(const DeviceGeometryPropsTy &Props,
 static uint32_t
 getDefaultNumBlocksGenericSPMD(const DeviceGeometryPropsTy &Props) {
   // Envar to set the default number of blocks per compute unit for a kernel in
-  // Generic-SPMD mode on AMDGPU devices. Zero uses the default number of blocks
-  // of other kernels.
-  static UInt32Envar OMPX_GenericSpmdTeamsPerCU(
+  // Generic-SPMD mode. Currently only used on AMDGPU devices. Zero uses the
+  // default number of blocks of other kernels.
+  static UInt32Envar OMPX_GenericSPMDTeamsPerCU(
+      "LIBOMPTARGET_GENERIC_SPMD_TEAMS_PER_CU", 6);
+  // Downstream: the former name of the envar, honored if the new one is unset.
+  static UInt32Envar OMPX_AMDGPUGenericSPMDTeamsPerCU(
       "LIBOMPTARGET_AMDGPU_GENERIC_SPMD_TEAMS_PER_CU", 6);
+  uint32_t TeamsPerCU = !OMPX_GenericSPMDTeamsPerCU.isPresent() &&
+                                OMPX_AMDGPUGenericSPMDTeamsPerCU.isPresent()
+                            ? OMPX_AMDGPUGenericSPMDTeamsPerCU.get()
+                            : OMPX_GenericSPMDTeamsPerCU.get();
 
-  if (Props.Backend != OL_PLATFORM_BACKEND_AMDGPU ||
-      !OMPX_GenericSpmdTeamsPerCU.get() || !Props.NumComputeUnits)
+  if (Props.Backend != OL_PLATFORM_BACKEND_AMDGPU || !TeamsPerCU ||
+      !Props.NumComputeUnits)
     return Props.DefaultNumBlocks;
-  return Props.NumComputeUnits * OMPX_GenericSpmdTeamsPerCU.get();
+  return Props.NumComputeUnits * TeamsPerCU;
 }
 
 /// Get the number of blocks for each thread to run one iteration of a loop of
@@ -1276,11 +1281,17 @@ static uint32_t getEffectiveNumBlocks(
   // the number of threads, most threads idle. So trade threads for blocks, down
   // to one warp per block, as long as the distribute loop has an iteration for
   // every block. This keeps the device as busy if the inner trip counts are
-  // high. Neither is done if the user set the number of threads or teams.
+  // high. The trade is not done if the user set the number of threads, and the
+  // number of blocks stays within the device's limit, which OMP_NUM_TEAMS may
+  // lower.
   if (KernelEnv.isGenericSPMDMode() && !IsNumThreadsFromUser &&
-      !IsNumThreadsStrict && !getOMPNumTeams()) {
-    while (uint64_t(PreferredNumBlocks) * 2 <= LoopTripCount &&
-           EffectiveNumThreads > Props.WarpSize) {
+      !IsNumThreadsStrict) {
+    while (EffectiveNumThreads > Props.WarpSize) {
+      uint64_t MaxNumBlocks = std::min<uint64_t>(
+          LoopTripCount,
+          getDeviceBlockLimit(GenericDevice, EffectiveNumThreads / 2));
+      if (uint64_t(PreferredNumBlocks) * 2 > MaxNumBlocks)
+        break;
       EffectiveNumThreads /= 2;
       PreferredNumBlocks *= 2;
     }
