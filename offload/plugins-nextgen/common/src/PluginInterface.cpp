@@ -1201,6 +1201,10 @@ Expected<bool> GenericPluginTy::checkBitcodeImage(StringRef Image) const {
 int32_t GenericPluginTy::is_initialized() const { return Initialized; }
 
 void GenericPluginTy::check_invalid_image(__tgt_device_image *InvalidImage) {
+  // An uninitialized plugin has not loaded its device runtime library and
+  // cannot query the device state the diagnostics depend on.
+  if (!is_initialized())
+    return;
   // Check if the image was rejected because of conflicting XNACK modes.
   checkInvalidImage(InvalidImage);
 }
