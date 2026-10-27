@@ -97,11 +97,11 @@ Leading leadArr[2];
 // LLVMCIR-DAG: %struct.Middle = type { i32, %union.Empty, i32 }
 // LLVMCIR-DAG: %struct.LeadingZeroBitfield = type { %union.OnlyZeroBitfield, i32 }
 // LLVMCIR-DAG: %struct.LeadingOver = type { %union.EmptyAligned, i32, [12 x i8] }
-// OGCG-DAG:    %struct.Leading = type { [4 x i8], i32 }
-// OGCG-DAG:    %struct.Trailing = type { i32, [4 x i8] }
-// OGCG-DAG:    %struct.Middle = type { i32, [4 x i8], i32 }
-// OGCG-DAG:    %struct.LeadingZeroBitfield = type { [4 x i8], i32 }
-// OGCG-DAG:    %struct.LeadingOver = type { [16 x i8], i32, [12 x i8] }
+// OGCG-DAG:    %struct.Leading = type { %union.Empty, i32 }
+// OGCG-DAG:    %struct.Trailing = type { i32, %union.Empty }
+// OGCG-DAG:    %struct.Middle = type { i32, %union.Empty, i32 }
+// OGCG-DAG:    %struct.LeadingZeroBitfield = type { %union.OnlyZeroBitfield, i32 }
+// OGCG-DAG:    %struct.LeadingOver = type { %union.EmptyAligned, i32, [12 x i8] }
 // LLVM-DAG:    @lead = global %struct.Leading zeroinitializer, align 4
 // LLVM-DAG:    @leadOver = global %struct.LeadingOver zeroinitializer, align 16
 

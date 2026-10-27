@@ -16,12 +16,12 @@ struct HasEmpty {
 };
 // CIR-DAG: !rec_HasEmpty = !cir.struct<"HasEmpty" {data !s32i, data !rec_Empty}>
 // LLVMCIR-DAG: %struct.HasEmpty = type { i32, %struct.Empty }
-// OGCG-DAG:    %struct.HasEmpty = type { i32, [4 x i8] }
+// OGCG-DAG:    %struct.HasEmpty = type { i32, %struct.Empty }
 
 const HasEmpty globalHE = {1, {}};
 // CIR-DAG: cir.global "private" constant internal dso_local @_ZL8globalHE = #cir.const_record<{#cir.int<1> : !s32i, #cir.zero : !rec_Empty}> : !rec_HasEmpty
 // LLVMCIR-DAG: @_ZL8globalHE = internal constant %struct.HasEmpty { i32 1, %struct.Empty zeroinitializer }
-// OGCG-DAG:    @_ZL8globalHE = internal constant %struct.HasEmpty { i32 1, [4 x i8] undef }
+// OGCG-DAG:    @_ZL8globalHE = internal constant %struct.HasEmpty { i32 1, %struct.Empty undef }
 
 struct HasEmpty2 {
   Empty s;
@@ -29,12 +29,12 @@ struct HasEmpty2 {
 };
 // CIR-DAG: !rec_HasEmpty2 = !cir.struct<"HasEmpty2" {data !rec_Empty, data !s32i}>
 // LLVMCIR-DAG: %struct.HasEmpty2 = type { %struct.Empty, i32 }
-// OGCG-DAG:    %struct.HasEmpty2 = type { [4 x i8], i32 }
+// OGCG-DAG:    %struct.HasEmpty2 = type { %struct.Empty, i32 }
 
 const HasEmpty2 globalHE2 = {{}, 1};
 // CIR-DAG: cir.global "private" constant internal dso_local @_ZL9globalHE2 = #cir.const_record<{#cir.zero : !rec_Empty, #cir.int<1> : !s32i}> : !rec_HasEmpty2
 // LLVMCIR-DAG: @_ZL9globalHE2 = internal constant %struct.HasEmpty2 { %struct.Empty zeroinitializer, i32 1 }
-// OGCG-DAG:    @_ZL9globalHE2 = internal constant %struct.HasEmpty2 { [4 x i8] undef, i32 1 }
+// OGCG-DAG:    @_ZL9globalHE2 = internal constant %struct.HasEmpty2 { %struct.Empty undef, i32 1 }
 
 // Not referenced enough to be emitted in 'after'.
 struct EmptyBase{};
@@ -76,7 +76,7 @@ const D globalD = {{}, 1};
 const D2 globalD2 = {{}, 1};
 // CIR-DAG: cir.global "private" constant internal dso_local @_ZL8globalD2 = #cir.const_record<{#cir.zero : !rec_EmptyBase2, #cir.const_record<{#cir.int<1> : !s32i}> : !rec_Base2}> : !rec_D2
 // LLVMCIR-DAG: @_ZL8globalD2 = internal constant %struct.D2 { %struct.EmptyBase2 zeroinitializer, %struct.Base2 { i32 1 } }
-// OGCG-DAG:    @_ZL8globalD2 = internal constant { [4 x i8], i32 } { [4 x i8] undef, i32 1 }
+// OGCG-DAG:    @_ZL8globalD2 = internal constant { %struct.Empty, i32 } { %struct.Empty undef, i32 1 }
 
 struct hasNUA {
   [[no_unique_address]] EmptyBase eb1;
@@ -131,7 +131,7 @@ struct EmptyForLayoutOnly2 { Empty s; };
 // CIR-BEFORE-DAG: !rec_EmptyForLayoutOnly2 = !cir.struct<"EmptyForLayoutOnly2" {data !rec_Empty}>
 // CIR-AFTER-DAG: !rec_EmptyForLayoutOnly2 = !cir.struct<"EmptyForLayoutOnly2" {data !rec_Empty}>
 // LLVMCIR-DAG: %struct.EmptyForLayoutOnly2 = type { %struct.Empty }
-// OGCG-DAG: %struct.EmptyForLayoutOnly2 = type { i8 }
+// OGCG-DAG: %struct.EmptyForLayoutOnly2 = type { %struct.Empty }
 struct HoldsAbiDataViaPointer {
   int x;
   [[no_unique_address]] EmptyForLayoutOnly2 e;
@@ -139,7 +139,7 @@ struct HoldsAbiDataViaPointer {
 // CIR-BEFORE-DAG: !rec_HoldsAbiDataViaPointer = !cir.struct<"HoldsAbiDataViaPointer" {data !s32i, data !rec_EmptyForLayoutOnly2}>
 // CIR-AFTER-DAG: !rec_HoldsAbiDataViaPointer = !cir.struct<"HoldsAbiDataViaPointer" {data !s32i, data !rec_EmptyForLayoutOnly2}>
 // LLVMCIR-DAG: %struct.HoldsAbiDataViaPointer = type { i32, %struct.EmptyForLayoutOnly2 }
-// OGCG-DAG: %struct.HoldsAbiDataViaPointer = type { i32, [4 x i8] }
+// OGCG-DAG: %struct.HoldsAbiDataViaPointer = type { i32, %struct.EmptyForLayoutOnly2 }
 
 EmptyForLayoutOnly2 HoldsAbiDataViaPointer::* pm_holds = &HoldsAbiDataViaPointer::e;
 // CIR-BEFORE-DAG: cir.global external @pm_holds = #cir.data_member<[1]> : !cir.data_member<!rec_EmptyForLayoutOnly2 in !rec_HoldsAbiDataViaPointer>

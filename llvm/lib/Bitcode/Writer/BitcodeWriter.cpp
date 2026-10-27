@@ -1431,8 +1431,9 @@ static uint64_t getEncodedGVarFlags(GlobalVarSummary::GVarFlags Flags) {
 static uint64_t getEncodedHotnessCallEdgeInfo(const CalleeInfo &CI) {
   uint64_t RawFlags = 0;
 
-  RawFlags |= CI.Hotness;            // 3 bits
-  RawFlags |= (CI.HasTailCall << 3); // 1 bit
+  RawFlags |= CI.Hotness;                // 3 bits
+  RawFlags |= (CI.HasTailCall << 3);     // 1 bit
+  RawFlags |= (CI.HasIndirectCall << 4); // 1 bit
 
   return RawFlags;
 }
@@ -5043,7 +5044,7 @@ void ModuleBitcodeWriterBase::writePerModuleGlobalValueSummary() {
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 4));   // numrefs
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 4));   // rorefcnt
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 4));   // worefcnt
-  // numrefs x valueid, n x (valueid, hotness+tailcall flags)
+  // numrefs x valueid, n x (valueid, hotness+tailcall+indirectcall flags)
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Array));
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 8));
   unsigned FSCallsProfileAbbrev = Stream.EmitAbbrev(std::move(Abbv));
@@ -5300,7 +5301,7 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 4));   // numrefs
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 4));   // rorefcnt
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 4));   // worefcnt
-  // numrefs x valueid, n x (valueid, hotness+tailcall flags)
+  // numrefs x valueid, n x (valueid, hotness+tailcall+indirectcall flags)
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Array));
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 8));
   unsigned FSCallsProfileAbbrev = Stream.EmitAbbrev(std::move(Abbv));

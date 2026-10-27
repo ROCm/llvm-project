@@ -10897,6 +10897,7 @@ bool LLParser::parseOptionalCalls(
     CalleeInfo::HotnessType Hotness = CalleeInfo::HotnessType::Unknown;
     unsigned RelBF = 0;
     unsigned HasTailCall = false;
+    unsigned HasIndirectCall = false;
 
     // parse optional fields
     while (EatIfPresent(lltok::comma)) {
@@ -10917,8 +10918,15 @@ bool LLParser::parseOptionalCalls(
         if (parseToken(lltok::colon, "expected ':'") || parseFlag(HasTailCall))
           return true;
         break;
+      case lltok::kw_indirect:
+        Lex.Lex();
+        if (parseToken(lltok::colon, "expected ':'") ||
+            parseFlag(HasIndirectCall))
+          return true;
+        break;
       default:
-        return error(Lex.getLoc(), "expected hotness, relbf, or tail");
+        return error(Lex.getLoc(),
+                     "expected hotness, relbf, tail, or indirect");
       }
     }
     // Keep track of the Call array index needing a forward reference.
@@ -10926,8 +10934,8 @@ bool LLParser::parseOptionalCalls(
     // can only do so once the std::vector is finalized.
     if (VI.getRef() == FwdVIRef)
       IdToIndexMap[GVId].push_back(std::make_pair(Calls.size(), Loc));
-    Calls.push_back(
-        FunctionSummary::EdgeTy{VI, CalleeInfo(Hotness, HasTailCall)});
+    Calls.push_back(FunctionSummary::EdgeTy{
+        VI, CalleeInfo(Hotness, HasTailCall, HasIndirectCall)});
 
     if (parseToken(lltok::rparen, "expected ')' in call"))
       return true;
