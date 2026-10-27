@@ -57,8 +57,7 @@ struct MLIRContextOptions {
   llvm::cl::opt<bool> disableThreading{
       "mlir-disable-threading",
       llvm::cl::desc("Disable multi-threading within MLIR, overrides any "
-                     "further call to MLIRContext::enableMultiThreading()"),
-      llvm::cl::init(true)};
+                     "further call to MLIRContext::enableMultiThreading()")};
 
   llvm::cl::opt<bool> printOpOnDiagnostic{
       "mlir-print-op-on-diagnostic",
@@ -76,7 +75,7 @@ struct MLIRContextOptions {
 static llvm::ManagedStatic<MLIRContextOptions> clOptions;
 
 static bool isThreadingGloballyDisabled() {
-#if MLIR_ENABLE_THREADS != 0
+#if LLVM_ENABLE_THREADS != 0
   return clOptions.isConstructed() && clOptions->disableThreading;
 #else
   return true;
@@ -287,7 +286,15 @@ public:
     if (threadingIsEnabled) {
       ownedThreadPool = std::make_unique<llvm::DefaultThreadPool>();
       threadPool = ownedThreadPool.get();
+    } else {
+      disableUniquerMultithreading(true);
     }
+  }
+  /// Update the threading mode for each of the uniquers.
+  void disableUniquerMultithreading(bool disable) {
+    affineUniquer.disableMultithreading(disable);
+    attributeUniquer.disableMultithreading(disable);
+    typeUniquer.disableMultithreading(disable);
   }
   ~MLIRContextImpl() {
     for (auto typeMapping : registeredTypes)
@@ -625,10 +632,7 @@ void MLIRContext::disableMultithreading(bool disable) {
 
   impl->threadingIsEnabled = !disable;
 
-  // Update the threading mode for each of the uniquers.
-  impl->affineUniquer.disableMultithreading(disable);
-  impl->attributeUniquer.disableMultithreading(disable);
-  impl->typeUniquer.disableMultithreading(disable);
+  impl->disableUniquerMultithreading(disable);
 
   // Destroy thread pool (stop all threads) if it is no longer needed, or create
   // a new one if multithreading was re-enabled.
