@@ -19,8 +19,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "common.h"
 #include "comgr.h"
+#include "common.h"
 #include "gtest/gtest.h"
 
 #include "llvm/ADT/StringRef.h"
@@ -81,8 +81,8 @@ TEST(SetCStr, NonAliasingSource) {
 // copies nothing at all.
 
 TEST(SetCStr, SelfAliasingSource) {
-  for (size_t Length : {size_t(0), size_t(1), size_t(7), size_t(31),
-                        size_t(32), size_t(100), size_t(2048), size_t(65536)}) {
+  for (size_t Length : {size_t(0), size_t(1), size_t(7), size_t(31), size_t(32),
+                        size_t(100), size_t(2048), size_t(65536)}) {
     char *Storage = pattern(Length);
     ASSERT_NE(nullptr, Storage);
     std::vector<char> Expected(Storage, Storage + Length);
