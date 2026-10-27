@@ -1184,7 +1184,6 @@ static uint64_t getLowTripCountOverrideNumBlocks(
   return std::min(NumBlocks,
                   uint64_t(getDeviceBlockLimit(GenericDevice, NumThreads)));
 }
-
 /// Get the effective number of blocks for the kernel based on the
 /// user-defined number of blocks and the loop trip count.
 /// The number of threads \p EffectiveNumThreads can be adjusted by this
@@ -1275,7 +1274,6 @@ static uint32_t getEffectiveNumBlocks(
       "LIBOMPTARGET_REUSE_BLOCKS_FOR_HIGH_TRIP_COUNT", true);
   if (OMPX_ReuseBlocksForHighTripCount.get())
     PreferredNumBlocks = std::min(TripCountNumBlocks, DefaultNumBlocks);
-
   // In Generic-SPMD mode, the threads of a block run the iterations of the
   // inner parallel loops, whose trip counts are unknown. If they are lower than
   // the number of threads, most threads idle. So trade threads for blocks, down
@@ -1296,7 +1294,6 @@ static uint32_t getEffectiveNumBlocks(
       PreferredNumBlocks *= 2;
     }
   }
-
   return std::min(PreferredNumBlocks,
                   getDeviceBlockLimit(GenericDevice, EffectiveNumThreads));
 }

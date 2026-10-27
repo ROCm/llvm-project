@@ -1,5 +1,5 @@
 // clang-format off
-// RUN: %libomptarget-compileopt-generic -fno-openmp-target-big-jump-loop
+// RUN: %libomptarget-compileopt-generic
 // RUN: env LIBOMPTARGET_INFO=16 \
 // RUN:   %libomptarget-run-generic 2>&1 | %fcheck-generic
 // RUN: env LIBOMPTARGET_INFO=16 OMP_NUM_TEAMS=8 \

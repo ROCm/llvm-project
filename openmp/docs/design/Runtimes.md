@@ -1431,7 +1431,6 @@ distribute loop has an iteration for every team and the number of teams stays
 within the device's limit and `OMP_NUM_TEAMS`. The former name
 `LIBOMPTARGET_AMDGPU_GENERIC_SPMD_TEAMS_PER_CU` is still honored if this
 variable is not set.
-
 #### LIBOMPTARGET_AMDGPU_MAX_ASYNC_COPY_BYTES
 
 This environment variable specifies the maximum size in bytes where the memory
