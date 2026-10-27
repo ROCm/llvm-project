@@ -12,10 +12,10 @@ define amdgpu_ps void @main(i32 %arg) {
 ; GFX10-NEXT:    s_mov_b32 s0, exec_lo
 ; GFX10-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX10-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s0
-; GFX10-NEXT:    s_mov_b32 s0, 0
-; GFX10-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc_lo
 ; GFX10-NEXT:    s_mov_b32 s1, 0
+; GFX10-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc_lo
 ; GFX10-NEXT:    s_mov_b32 s4, 0
+; GFX10-NEXT:    s_mov_b32 s0, 0
 ; GFX10-NEXT:    s_branch .LBB0_2
 ; GFX10-NEXT:  .LBB0_1: ; in Loop: Header=BB0_2 Depth=1
 ; GFX10-NEXT:    s_waitcnt_depctr depctr_vm_vsrc(0)
@@ -29,9 +29,9 @@ define amdgpu_ps void @main(i32 %arg) {
 ; GFX10-NEXT:    s_cbranch_execz .LBB0_5
 ; GFX10-NEXT:  .LBB0_2: ; %bb4
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX10-NEXT:    v_cmp_ne_u32_e64 s2, 0, v1
-; GFX10-NEXT:    s_xor_b32 s5, exec_lo, s2
-; GFX10-NEXT:    s_mov_b32 exec_lo, s2
+; GFX10-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
+; GFX10-NEXT:    s_xor_b32 s5, exec_lo, vcc_lo
+; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB0_1
 ; GFX10-NEXT:  .LBB0_3: ; in Loop: Header=BB0_2 Depth=1

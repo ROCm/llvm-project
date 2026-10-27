@@ -15,20 +15,22 @@
 @lds = internal addrspace(3) global [256 x i16] undef, align 2
 
 define amdgpu_kernel void @shared_sink(ptr addrspace(1) %out, i32 %guard_limit, i1 %uni) {
+; CHECK-LABEL: shared_sink:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    s_load_dwordx2 s[2:3], s[8:9], 0x8
-; CHECK-NEXT:    v_mov_b32_e32 v1, 7
-; CHECK-NEXT:    v_lshlrev_b32_e32 v2, 1, v0
+; CHECK-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x8
+; CHECK-NEXT:    v_lshlrev_b32_e32 v1, 1, v0
+; CHECK-NEXT:    v_mov_b32_e32 v2, 7
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; CHECK-NEXT:    ds_write_b16 v2, v1
-; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    s_bitcmp1_b32 s3, 0
-; CHECK-NEXT:    s_cselect_b64 s[0:1], -1, 0
-; CHECK-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc
-; CHECK-NEXT:    v_add_u32_e32 v2, -2, v2
-; CHECK-NEXT:    s_and_b64 vcc, exec, s[0:1]
 ; CHECK-NEXT:    s_mov_b64 s[0:1], 0
-; CHECK-NEXT:    s_mov_b64 s[4:5], 0
+; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
+; CHECK-NEXT:    s_bitcmp1_b32 s5, 0
+; CHECK-NEXT:    s_cselect_b64 s[6:7], -1, 0
+; CHECK-NEXT:    s_mov_b64 s[2:3], 0
+; CHECK-NEXT:    ds_write_b16 v1, v2
+; CHECK-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc
+; CHECK-NEXT:    v_add_u32_e32 v2, -2, v1
+; CHECK-NEXT:    s_and_b64 vcc, exec, s[6:7]
+; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_barrier
 ; CHECK-NEXT:    ; implicit-def: $vgpr1
 ; CHECK-NEXT:    ; implicit-def: $vgpr1
@@ -36,18 +38,18 @@ define amdgpu_kernel void @shared_sink(ptr addrspace(1) %out, i32 %guard_limit, 
 ; CHECK-NEXT:  ; %bb.1: ; %armA
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 11
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
+; CHECK-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3
 ; CHECK-NEXT:  .LBB0_2: ; %ldsA
 ; CHECK-NEXT:    ds_read_u16 v1, v2
 ; CHECK-NEXT:  .LBB0_3: ; %joinA
-; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
-; CHECK-NEXT:    v_cmp_gt_u32_e64 s[2:3], s2, v0
+; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
+; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, s4, v0
 ; CHECK-NEXT:    v_mov_b32_e32 v2, 0
-; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
+; CHECK-NEXT:    s_xor_b64 s[2:3], exec, vcc
+; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_6
 ; CHECK-NEXT:    s_branch .LBB0_7
@@ -66,7 +68,7 @@ define amdgpu_kernel void @shared_sink(ptr addrspace(1) %out, i32 %guard_limit, 
 ; CHECK-NEXT:    v_cmp_ne_u16_e32 vcc, 7, v1
 ; CHECK-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
 ; CHECK-NEXT:  .LBB0_7: ; %exit
-; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; CHECK-NEXT:    s_load_dwordx2 s[0:1], s[8:9], 0x0
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)

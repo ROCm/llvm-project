@@ -23,9 +23,8 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB0_1
@@ -46,9 +45,8 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) {
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v5, v3
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB0_1
@@ -72,8 +70,7 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) {
 ; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX10-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX10-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, vcc_lo
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB0_1
@@ -94,9 +91,8 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) {
 ; GFX9-FLATSCR-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX9-FLATSCR-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-FLATSCR-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX9-FLATSCR-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GFX9-FLATSCR-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-FLATSCR-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
+; GFX9-FLATSCR-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; GFX9-FLATSCR-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-FLATSCR-NEXT:    ; divergent control-flow edge
 ; GFX9-FLATSCR-NEXT:    s_cbranch_execnz .LBB0_1
@@ -120,9 +116,7 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) {
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v3, v4
 ; GFX11-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX11-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execnz .LBB0_1
@@ -165,8 +159,7 @@ define i32 @atomic_nand_i32_global(ptr addrspace(1) %ptr) nounwind {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB1_1
@@ -192,9 +185,8 @@ define i32 @atomic_nand_i32_global(ptr addrspace(1) %ptr) nounwind {
 ; GFX90A-NEXT:    buffer_wbinvl1_vol
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; GFX90A-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
-; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX90A-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execnz .LBB1_1
@@ -220,8 +212,7 @@ define i32 @atomic_nand_i32_global(ptr addrspace(1) %ptr) nounwind {
 ; GFX10-NEXT:    buffer_gl0_inv
 ; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX10-NEXT:    s_xor_b32 s5, vcc_lo, exec_lo
-; GFX10-NEXT:    s_xor_b32 s6, exec_lo, s5
-; GFX10-NEXT:    s_or_b32 s4, s4, s6
+; GFX10-NEXT:    s_or_b32 s4, s4, vcc_lo
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s5
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB1_1
@@ -245,8 +236,7 @@ define i32 @atomic_nand_i32_global(ptr addrspace(1) %ptr) nounwind {
 ; GFX9-FLATSCR-NEXT:    buffer_wbinvl1_vol
 ; GFX9-FLATSCR-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; GFX9-FLATSCR-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX9-FLATSCR-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
-; GFX9-FLATSCR-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
+; GFX9-FLATSCR-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; GFX9-FLATSCR-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-FLATSCR-NEXT:    ; divergent control-flow edge
 ; GFX9-FLATSCR-NEXT:    s_cbranch_execnz .LBB1_1
@@ -273,9 +263,7 @@ define i32 @atomic_nand_i32_global(ptr addrspace(1) %ptr) nounwind {
 ; GFX11-NEXT:    buffer_gl0_inv
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX11-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-NEXT:    s_or_b32 s0, s0, s2
+; GFX11-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execnz .LBB1_1
@@ -307,9 +295,7 @@ define i32 @atomic_nand_i32_global(ptr addrspace(1) %ptr) nounwind {
 ; GFX12-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v2, v3
 ; GFX12-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; GFX12-NEXT:    s_or_b32 s0, s0, s2
+; GFX12-NEXT:    s_or_b32 s0, s0, vcc_lo
 ; GFX12-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execnz .LBB1_1

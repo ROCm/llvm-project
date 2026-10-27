@@ -437,12 +437,11 @@ define i64 @v_test_srem(i64 %x, i64 %y) {
 ; GCN-IR-NEXT:    v_add_i32_e32 v16, vcc, 1, v16
 ; GCN-IR-NEXT:    v_addc_u32_e32 v17, vcc, 0, v17, vcc
 ; GCN-IR-NEXT:    s_and_b64 s[8:9], exec, vcc
-; GCN-IR-NEXT:    s_xor_b64 s[8:9], s[8:9], exec
-; GCN-IR-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; GCN-IR-NEXT:    s_xor_b64 s[10:11], s[8:9], exec
 ; GCN-IR-NEXT:    v_mov_b32_e32 v11, v7
 ; GCN-IR-NEXT:    v_mov_b32_e32 v10, v6
-; GCN-IR-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GCN-IR-NEXT:    s_mov_b64 exec, s[8:9]
+; GCN-IR-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GCN-IR-NEXT:    s_mov_b64 exec, s[10:11]
 ; GCN-IR-NEXT:    ; divergent control-flow edge
 ; GCN-IR-NEXT:    s_cbranch_execnz .LBB1_3
 ; GCN-IR-NEXT:  .LBB1_4: ; %udiv-loop-exit
@@ -1872,12 +1871,11 @@ define i64 @v_test_srem_k_num_i64(i64 %x) {
 ; GCN-IR-NEXT:    v_add_i32_e32 v12, vcc, 1, v12
 ; GCN-IR-NEXT:    v_addc_u32_e32 v13, vcc, 0, v13, vcc
 ; GCN-IR-NEXT:    s_and_b64 s[8:9], exec, vcc
-; GCN-IR-NEXT:    s_xor_b64 s[8:9], s[8:9], exec
-; GCN-IR-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; GCN-IR-NEXT:    s_xor_b64 s[10:11], s[8:9], exec
 ; GCN-IR-NEXT:    v_mov_b32_e32 v9, v5
 ; GCN-IR-NEXT:    v_mov_b32_e32 v8, v4
-; GCN-IR-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GCN-IR-NEXT:    s_mov_b64 exec, s[8:9]
+; GCN-IR-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GCN-IR-NEXT:    s_mov_b64 exec, s[10:11]
 ; GCN-IR-NEXT:    ; divergent control-flow edge
 ; GCN-IR-NEXT:    s_cbranch_execnz .LBB11_3
 ; GCN-IR-NEXT:  .LBB11_4: ; %udiv-loop-exit
@@ -2066,12 +2064,11 @@ define i64 @v_test_srem_pow2_k_num_i64(i64 %x) {
 ; GCN-IR-NEXT:    v_add_i32_e32 v12, vcc, 1, v12
 ; GCN-IR-NEXT:    v_addc_u32_e32 v13, vcc, 0, v13, vcc
 ; GCN-IR-NEXT:    s_and_b64 s[8:9], exec, vcc
-; GCN-IR-NEXT:    s_xor_b64 s[8:9], s[8:9], exec
-; GCN-IR-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
+; GCN-IR-NEXT:    s_xor_b64 s[10:11], s[8:9], exec
 ; GCN-IR-NEXT:    v_mov_b32_e32 v9, v5
 ; GCN-IR-NEXT:    v_mov_b32_e32 v8, v4
-; GCN-IR-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
-; GCN-IR-NEXT:    s_mov_b64 exec, s[8:9]
+; GCN-IR-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GCN-IR-NEXT:    s_mov_b64 exec, s[10:11]
 ; GCN-IR-NEXT:    ; divergent control-flow edge
 ; GCN-IR-NEXT:    s_cbranch_execnz .LBB12_3
 ; GCN-IR-NEXT:  .LBB12_4: ; %udiv-loop-exit
@@ -2169,13 +2166,12 @@ define i64 @v_test_srem_pow2_k_den_i64(i64 %x) {
 ; GCN-IR-NEXT:    v_add_i32_e32 v12, vcc, 1, v12
 ; GCN-IR-NEXT:    v_addc_u32_e32 v13, vcc, 0, v13, vcc
 ; GCN-IR-NEXT:    s_and_b64 s[10:11], exec, vcc
-; GCN-IR-NEXT:    s_xor_b64 s[10:11], s[10:11], exec
-; GCN-IR-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
+; GCN-IR-NEXT:    s_xor_b64 s[12:13], s[10:11], exec
 ; GCN-IR-NEXT:    v_or_b32_e32 v3, v9, v3
 ; GCN-IR-NEXT:    v_mov_b32_e32 v9, v5
 ; GCN-IR-NEXT:    v_mov_b32_e32 v8, v4
-; GCN-IR-NEXT:    s_or_b64 s[4:5], s[4:5], s[12:13]
-; GCN-IR-NEXT:    s_mov_b64 exec, s[10:11]
+; GCN-IR-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GCN-IR-NEXT:    s_mov_b64 exec, s[12:13]
 ; GCN-IR-NEXT:    ; divergent control-flow edge
 ; GCN-IR-NEXT:    s_cbranch_execnz .LBB13_3
 ; GCN-IR-NEXT:  .LBB13_4: ; %udiv-loop-exit
@@ -2532,13 +2528,12 @@ define i64 @v_test_srem24_pow2_k_den_i64(i64 %x) {
 ; GCN-IR-NEXT:    v_add_i32_e32 v12, vcc, 1, v12
 ; GCN-IR-NEXT:    v_addc_u32_e32 v13, vcc, 0, v13, vcc
 ; GCN-IR-NEXT:    s_and_b64 s[10:11], exec, vcc
-; GCN-IR-NEXT:    s_xor_b64 s[10:11], s[10:11], exec
-; GCN-IR-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
+; GCN-IR-NEXT:    s_xor_b64 s[12:13], s[10:11], exec
 ; GCN-IR-NEXT:    v_or_b32_e32 v3, v9, v3
 ; GCN-IR-NEXT:    v_mov_b32_e32 v9, v5
 ; GCN-IR-NEXT:    v_mov_b32_e32 v8, v4
-; GCN-IR-NEXT:    s_or_b64 s[4:5], s[4:5], s[12:13]
-; GCN-IR-NEXT:    s_mov_b64 exec, s[10:11]
+; GCN-IR-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GCN-IR-NEXT:    s_mov_b64 exec, s[12:13]
 ; GCN-IR-NEXT:    ; divergent control-flow edge
 ; GCN-IR-NEXT:    s_cbranch_execnz .LBB18_3
 ; GCN-IR-NEXT:  .LBB18_4: ; %udiv-loop-exit

@@ -4,10 +4,10 @@
 define amdgpu_ps void @i1_copy_from_loop(ptr addrspace(8) inreg %rsrc, i32 %tid) {
 ; SI-LABEL: i1_copy_from_loop:
 ; SI:       ; %bb.0: ; %entry
-; SI-NEXT:    s_mov_b64 s[4:5], -1
-; SI-NEXT:    s_mov_b32 s6, 0
-; SI-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[4:5]
+; SI-NEXT:    s_mov_b64 s[8:9], -1
 ; SI-NEXT:    s_mov_b64 s[4:5], 0
+; SI-NEXT:    s_mov_b32 s6, 0
+; SI-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[8:9]
 ; SI-NEXT:  .LBB0_1: ; %for.body
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    s_cmp_lt_u32 s6, 4

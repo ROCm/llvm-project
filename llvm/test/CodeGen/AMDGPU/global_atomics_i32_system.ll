@@ -1298,9 +1298,8 @@ define void @global_atomic_sub_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB30_1
@@ -1323,9 +1322,8 @@ define void @global_atomic_sub_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB30_1
@@ -1347,9 +1345,8 @@ define void @global_atomic_sub_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB30_1
@@ -1382,9 +1379,8 @@ define void @global_atomic_sub_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB31_1
@@ -1409,9 +1405,8 @@ define void @global_atomic_sub_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB31_1
@@ -1433,9 +1428,8 @@ define void @global_atomic_sub_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB31_1
@@ -1470,8 +1464,7 @@ define i32 @global_atomic_sub_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB32_1
@@ -1496,8 +1489,7 @@ define i32 @global_atomic_sub_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB32_1
@@ -1521,8 +1513,7 @@ define i32 @global_atomic_sub_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB32_1
@@ -1557,8 +1548,7 @@ define i32 @global_atomic_sub_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB33_1
@@ -1585,8 +1575,7 @@ define i32 @global_atomic_sub_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB33_1
@@ -1609,8 +1598,7 @@ define i32 @global_atomic_sub_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB33_1
@@ -1650,9 +1638,8 @@ define amdgpu_gfx void @global_atomic_sub_i32_noret_scalar(ptr addrspace(1) inre
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB34_1
@@ -1672,9 +1659,9 @@ define amdgpu_gfx void @global_atomic_sub_i32_noret_scalar(ptr addrspace(1) inre
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB34_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -1684,9 +1671,8 @@ define amdgpu_gfx void @global_atomic_sub_i32_noret_scalar(ptr addrspace(1) inre
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB34_1
@@ -1709,9 +1695,8 @@ define amdgpu_gfx void @global_atomic_sub_i32_noret_scalar(ptr addrspace(1) inre
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB34_1
@@ -1749,9 +1734,8 @@ define amdgpu_gfx void @global_atomic_sub_i32_noret_offset_scalar(ptr addrspace(
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB35_1
@@ -1783,9 +1767,8 @@ define amdgpu_gfx void @global_atomic_sub_i32_noret_offset_scalar(ptr addrspace(
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB35_1
@@ -1808,9 +1791,8 @@ define amdgpu_gfx void @global_atomic_sub_i32_noret_offset_scalar(ptr addrspace(
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB35_1
@@ -1850,8 +1832,7 @@ define amdgpu_gfx i32 @global_atomic_sub_i32_ret_scalar(ptr addrspace(1) inreg %
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB36_1
@@ -1871,9 +1852,9 @@ define amdgpu_gfx i32 @global_atomic_sub_i32_ret_scalar(ptr addrspace(1) inreg %
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB36_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -1884,8 +1865,7 @@ define amdgpu_gfx i32 @global_atomic_sub_i32_ret_scalar(ptr addrspace(1) inreg %
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB36_1
@@ -1909,8 +1889,7 @@ define amdgpu_gfx i32 @global_atomic_sub_i32_ret_scalar(ptr addrspace(1) inreg %
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB36_1
@@ -1949,8 +1928,7 @@ define amdgpu_gfx i32 @global_atomic_sub_i32_ret_offset_scalar(ptr addrspace(1) 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB37_1
@@ -1983,8 +1961,7 @@ define amdgpu_gfx i32 @global_atomic_sub_i32_ret_offset_scalar(ptr addrspace(1) 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB37_1
@@ -2008,8 +1985,7 @@ define amdgpu_gfx i32 @global_atomic_sub_i32_ret_offset_scalar(ptr addrspace(1) 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB37_1
@@ -2157,9 +2133,8 @@ define void @global_atomic_and_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB41_1
@@ -2182,9 +2157,8 @@ define void @global_atomic_and_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB41_1
@@ -2206,9 +2180,8 @@ define void @global_atomic_and_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB41_1
@@ -2241,9 +2214,8 @@ define void @global_atomic_and_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB42_1
@@ -2268,9 +2240,8 @@ define void @global_atomic_and_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB42_1
@@ -2292,9 +2263,8 @@ define void @global_atomic_and_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB42_1
@@ -2329,8 +2299,7 @@ define i32 @global_atomic_and_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB43_1
@@ -2355,8 +2324,7 @@ define i32 @global_atomic_and_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB43_1
@@ -2380,8 +2348,7 @@ define i32 @global_atomic_and_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB43_1
@@ -2416,8 +2383,7 @@ define i32 @global_atomic_and_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB44_1
@@ -2444,8 +2410,7 @@ define i32 @global_atomic_and_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB44_1
@@ -2468,8 +2433,7 @@ define i32 @global_atomic_and_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB44_1
@@ -2509,9 +2473,8 @@ define amdgpu_gfx void @global_atomic_and_i32_noret_scalar(ptr addrspace(1) inre
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB45_1
@@ -2531,9 +2494,9 @@ define amdgpu_gfx void @global_atomic_and_i32_noret_scalar(ptr addrspace(1) inre
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB45_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -2543,9 +2506,8 @@ define amdgpu_gfx void @global_atomic_and_i32_noret_scalar(ptr addrspace(1) inre
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB45_1
@@ -2568,9 +2530,8 @@ define amdgpu_gfx void @global_atomic_and_i32_noret_scalar(ptr addrspace(1) inre
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB45_1
@@ -2608,9 +2569,8 @@ define amdgpu_gfx void @global_atomic_and_i32_noret_offset_scalar(ptr addrspace(
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB46_1
@@ -2642,9 +2602,8 @@ define amdgpu_gfx void @global_atomic_and_i32_noret_offset_scalar(ptr addrspace(
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB46_1
@@ -2667,9 +2626,8 @@ define amdgpu_gfx void @global_atomic_and_i32_noret_offset_scalar(ptr addrspace(
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB46_1
@@ -2709,8 +2667,7 @@ define amdgpu_gfx i32 @global_atomic_and_i32_ret_scalar(ptr addrspace(1) inreg %
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB47_1
@@ -2730,9 +2687,9 @@ define amdgpu_gfx i32 @global_atomic_and_i32_ret_scalar(ptr addrspace(1) inreg %
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB47_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -2743,8 +2700,7 @@ define amdgpu_gfx i32 @global_atomic_and_i32_ret_scalar(ptr addrspace(1) inreg %
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB47_1
@@ -2768,8 +2724,7 @@ define amdgpu_gfx i32 @global_atomic_and_i32_ret_scalar(ptr addrspace(1) inreg %
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB47_1
@@ -2808,8 +2763,7 @@ define amdgpu_gfx i32 @global_atomic_and_i32_ret_offset_scalar(ptr addrspace(1) 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB48_1
@@ -2842,8 +2796,7 @@ define amdgpu_gfx i32 @global_atomic_and_i32_ret_offset_scalar(ptr addrspace(1) 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB48_1
@@ -2867,8 +2820,7 @@ define amdgpu_gfx i32 @global_atomic_and_i32_ret_offset_scalar(ptr addrspace(1) 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB48_1
@@ -2980,9 +2932,8 @@ define void @global_atomic_nand_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB51_1
@@ -3006,9 +2957,8 @@ define void @global_atomic_nand_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB51_1
@@ -3031,9 +2981,8 @@ define void @global_atomic_nand_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB51_1
@@ -3067,9 +3016,8 @@ define void @global_atomic_nand_i32_noret_offset(ptr addrspace(1) %out, i32 %in)
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB52_1
@@ -3095,9 +3043,8 @@ define void @global_atomic_nand_i32_noret_offset(ptr addrspace(1) %out, i32 %in)
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB52_1
@@ -3120,9 +3067,8 @@ define void @global_atomic_nand_i32_noret_offset(ptr addrspace(1) %out, i32 %in)
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB52_1
@@ -3158,8 +3104,7 @@ define i32 @global_atomic_nand_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB53_1
@@ -3185,8 +3130,7 @@ define i32 @global_atomic_nand_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB53_1
@@ -3211,8 +3155,7 @@ define i32 @global_atomic_nand_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB53_1
@@ -3248,8 +3191,7 @@ define i32 @global_atomic_nand_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB54_1
@@ -3277,8 +3219,7 @@ define i32 @global_atomic_nand_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB54_1
@@ -3302,8 +3243,7 @@ define i32 @global_atomic_nand_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB54_1
@@ -3344,9 +3284,8 @@ define amdgpu_gfx void @global_atomic_nand_i32_noret_scalar(ptr addrspace(1) inr
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB55_1
@@ -3366,9 +3305,9 @@ define amdgpu_gfx void @global_atomic_nand_i32_noret_scalar(ptr addrspace(1) inr
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB55_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -3379,9 +3318,8 @@ define amdgpu_gfx void @global_atomic_nand_i32_noret_scalar(ptr addrspace(1) inr
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB55_1
@@ -3405,9 +3343,8 @@ define amdgpu_gfx void @global_atomic_nand_i32_noret_scalar(ptr addrspace(1) inr
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB55_1
@@ -3446,9 +3383,8 @@ define amdgpu_gfx void @global_atomic_nand_i32_noret_offset_scalar(ptr addrspace
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB56_1
@@ -3481,9 +3417,8 @@ define amdgpu_gfx void @global_atomic_nand_i32_noret_offset_scalar(ptr addrspace
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB56_1
@@ -3507,9 +3442,8 @@ define amdgpu_gfx void @global_atomic_nand_i32_noret_offset_scalar(ptr addrspace
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB56_1
@@ -3550,8 +3484,7 @@ define amdgpu_gfx i32 @global_atomic_nand_i32_ret_scalar(ptr addrspace(1) inreg 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB57_1
@@ -3571,9 +3504,9 @@ define amdgpu_gfx i32 @global_atomic_nand_i32_ret_scalar(ptr addrspace(1) inreg 
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB57_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -3585,8 +3518,7 @@ define amdgpu_gfx i32 @global_atomic_nand_i32_ret_scalar(ptr addrspace(1) inreg 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB57_1
@@ -3611,8 +3543,7 @@ define amdgpu_gfx i32 @global_atomic_nand_i32_ret_scalar(ptr addrspace(1) inreg 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB57_1
@@ -3652,8 +3583,7 @@ define amdgpu_gfx i32 @global_atomic_nand_i32_ret_offset_scalar(ptr addrspace(1)
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB58_1
@@ -3687,8 +3617,7 @@ define amdgpu_gfx i32 @global_atomic_nand_i32_ret_offset_scalar(ptr addrspace(1)
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB58_1
@@ -3713,8 +3642,7 @@ define amdgpu_gfx i32 @global_atomic_nand_i32_ret_offset_scalar(ptr addrspace(1)
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB58_1
@@ -3749,9 +3677,8 @@ define void @global_atomic_nand_i32_noret_offset__amdgpu_no_remote_memory(ptr ad
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB59_1
@@ -3777,9 +3704,8 @@ define void @global_atomic_nand_i32_noret_offset__amdgpu_no_remote_memory(ptr ad
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB59_1
@@ -3802,9 +3728,8 @@ define void @global_atomic_nand_i32_noret_offset__amdgpu_no_remote_memory(ptr ad
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB59_1
@@ -3840,8 +3765,7 @@ define i32 @global_atomic_nand_i32_ret_offset__amdgpu_no_remote_memory(ptr addrs
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB60_1
@@ -3869,8 +3793,7 @@ define i32 @global_atomic_nand_i32_ret_offset__amdgpu_no_remote_memory(ptr addrs
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB60_1
@@ -3894,8 +3817,7 @@ define i32 @global_atomic_nand_i32_ret_offset__amdgpu_no_remote_memory(ptr addrs
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB60_1
@@ -3934,9 +3856,8 @@ define void @global_atomic_or_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB61_1
@@ -3959,9 +3880,8 @@ define void @global_atomic_or_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB61_1
@@ -3983,9 +3903,8 @@ define void @global_atomic_or_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB61_1
@@ -4018,9 +3937,8 @@ define void @global_atomic_or_i32_noret_offset(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB62_1
@@ -4045,9 +3963,8 @@ define void @global_atomic_or_i32_noret_offset(ptr addrspace(1) %out, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB62_1
@@ -4069,9 +3986,8 @@ define void @global_atomic_or_i32_noret_offset(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB62_1
@@ -4106,8 +4022,7 @@ define i32 @global_atomic_or_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB63_1
@@ -4132,8 +4047,7 @@ define i32 @global_atomic_or_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB63_1
@@ -4157,8 +4071,7 @@ define i32 @global_atomic_or_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB63_1
@@ -4193,8 +4106,7 @@ define i32 @global_atomic_or_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB64_1
@@ -4221,8 +4133,7 @@ define i32 @global_atomic_or_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB64_1
@@ -4245,8 +4156,7 @@ define i32 @global_atomic_or_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB64_1
@@ -4286,9 +4196,8 @@ define amdgpu_gfx void @global_atomic_or_i32_noret_scalar(ptr addrspace(1) inreg
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB65_1
@@ -4308,9 +4217,9 @@ define amdgpu_gfx void @global_atomic_or_i32_noret_scalar(ptr addrspace(1) inreg
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB65_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -4320,9 +4229,8 @@ define amdgpu_gfx void @global_atomic_or_i32_noret_scalar(ptr addrspace(1) inreg
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB65_1
@@ -4345,9 +4253,8 @@ define amdgpu_gfx void @global_atomic_or_i32_noret_scalar(ptr addrspace(1) inreg
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB65_1
@@ -4385,9 +4292,8 @@ define amdgpu_gfx void @global_atomic_or_i32_noret_offset_scalar(ptr addrspace(1
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB66_1
@@ -4419,9 +4325,8 @@ define amdgpu_gfx void @global_atomic_or_i32_noret_offset_scalar(ptr addrspace(1
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB66_1
@@ -4444,9 +4349,8 @@ define amdgpu_gfx void @global_atomic_or_i32_noret_offset_scalar(ptr addrspace(1
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB66_1
@@ -4486,8 +4390,7 @@ define amdgpu_gfx i32 @global_atomic_or_i32_ret_scalar(ptr addrspace(1) inreg %p
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB67_1
@@ -4507,9 +4410,9 @@ define amdgpu_gfx i32 @global_atomic_or_i32_ret_scalar(ptr addrspace(1) inreg %p
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB67_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -4520,8 +4423,7 @@ define amdgpu_gfx i32 @global_atomic_or_i32_ret_scalar(ptr addrspace(1) inreg %p
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB67_1
@@ -4545,8 +4447,7 @@ define amdgpu_gfx i32 @global_atomic_or_i32_ret_scalar(ptr addrspace(1) inreg %p
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB67_1
@@ -4585,8 +4486,7 @@ define amdgpu_gfx i32 @global_atomic_or_i32_ret_offset_scalar(ptr addrspace(1) i
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB68_1
@@ -4619,8 +4519,7 @@ define amdgpu_gfx i32 @global_atomic_or_i32_ret_offset_scalar(ptr addrspace(1) i
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB68_1
@@ -4644,8 +4543,7 @@ define amdgpu_gfx i32 @global_atomic_or_i32_ret_offset_scalar(ptr addrspace(1) i
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB68_1
@@ -4793,9 +4691,8 @@ define void @global_atomic_xor_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB72_1
@@ -4818,9 +4715,8 @@ define void @global_atomic_xor_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB72_1
@@ -4842,9 +4738,8 @@ define void @global_atomic_xor_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB72_1
@@ -4877,9 +4772,8 @@ define void @global_atomic_xor_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB73_1
@@ -4904,9 +4798,8 @@ define void @global_atomic_xor_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB73_1
@@ -4928,9 +4821,8 @@ define void @global_atomic_xor_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB73_1
@@ -4965,8 +4857,7 @@ define i32 @global_atomic_xor_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB74_1
@@ -4991,8 +4882,7 @@ define i32 @global_atomic_xor_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB74_1
@@ -5016,8 +4906,7 @@ define i32 @global_atomic_xor_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB74_1
@@ -5052,8 +4941,7 @@ define i32 @global_atomic_xor_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB75_1
@@ -5080,8 +4968,7 @@ define i32 @global_atomic_xor_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB75_1
@@ -5104,8 +4991,7 @@ define i32 @global_atomic_xor_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB75_1
@@ -5145,9 +5031,8 @@ define amdgpu_gfx void @global_atomic_xor_i32_noret_scalar(ptr addrspace(1) inre
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB76_1
@@ -5167,9 +5052,9 @@ define amdgpu_gfx void @global_atomic_xor_i32_noret_scalar(ptr addrspace(1) inre
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB76_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -5179,9 +5064,8 @@ define amdgpu_gfx void @global_atomic_xor_i32_noret_scalar(ptr addrspace(1) inre
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB76_1
@@ -5204,9 +5088,8 @@ define amdgpu_gfx void @global_atomic_xor_i32_noret_scalar(ptr addrspace(1) inre
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB76_1
@@ -5244,9 +5127,8 @@ define amdgpu_gfx void @global_atomic_xor_i32_noret_offset_scalar(ptr addrspace(
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB77_1
@@ -5278,9 +5160,8 @@ define amdgpu_gfx void @global_atomic_xor_i32_noret_offset_scalar(ptr addrspace(
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB77_1
@@ -5303,9 +5184,8 @@ define amdgpu_gfx void @global_atomic_xor_i32_noret_offset_scalar(ptr addrspace(
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB77_1
@@ -5345,8 +5225,7 @@ define amdgpu_gfx i32 @global_atomic_xor_i32_ret_scalar(ptr addrspace(1) inreg %
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB78_1
@@ -5366,9 +5245,9 @@ define amdgpu_gfx i32 @global_atomic_xor_i32_ret_scalar(ptr addrspace(1) inreg %
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB78_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -5379,8 +5258,7 @@ define amdgpu_gfx i32 @global_atomic_xor_i32_ret_scalar(ptr addrspace(1) inreg %
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB78_1
@@ -5404,8 +5282,7 @@ define amdgpu_gfx i32 @global_atomic_xor_i32_ret_scalar(ptr addrspace(1) inreg %
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB78_1
@@ -5444,8 +5321,7 @@ define amdgpu_gfx i32 @global_atomic_xor_i32_ret_offset_scalar(ptr addrspace(1) 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB79_1
@@ -5478,8 +5354,7 @@ define amdgpu_gfx i32 @global_atomic_xor_i32_ret_offset_scalar(ptr addrspace(1) 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB79_1
@@ -5503,8 +5378,7 @@ define amdgpu_gfx i32 @global_atomic_xor_i32_ret_offset_scalar(ptr addrspace(1) 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB79_1
@@ -5652,9 +5526,8 @@ define void @global_atomic_max_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB83_1
@@ -5677,9 +5550,8 @@ define void @global_atomic_max_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB83_1
@@ -5701,9 +5573,8 @@ define void @global_atomic_max_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB83_1
@@ -5736,9 +5607,8 @@ define void @global_atomic_max_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB84_1
@@ -5763,9 +5633,8 @@ define void @global_atomic_max_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB84_1
@@ -5787,9 +5656,8 @@ define void @global_atomic_max_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB84_1
@@ -5824,8 +5692,7 @@ define i32 @global_atomic_max_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB85_1
@@ -5850,8 +5717,7 @@ define i32 @global_atomic_max_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB85_1
@@ -5875,8 +5741,7 @@ define i32 @global_atomic_max_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB85_1
@@ -5911,8 +5776,7 @@ define i32 @global_atomic_max_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB86_1
@@ -5939,8 +5803,7 @@ define i32 @global_atomic_max_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB86_1
@@ -5963,8 +5826,7 @@ define i32 @global_atomic_max_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB86_1
@@ -6004,9 +5866,8 @@ define amdgpu_gfx void @global_atomic_max_i32_noret_scalar(ptr addrspace(1) inre
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB87_1
@@ -6026,9 +5887,9 @@ define amdgpu_gfx void @global_atomic_max_i32_noret_scalar(ptr addrspace(1) inre
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB87_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -6038,9 +5899,8 @@ define amdgpu_gfx void @global_atomic_max_i32_noret_scalar(ptr addrspace(1) inre
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB87_1
@@ -6063,9 +5923,8 @@ define amdgpu_gfx void @global_atomic_max_i32_noret_scalar(ptr addrspace(1) inre
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB87_1
@@ -6103,9 +5962,8 @@ define amdgpu_gfx void @global_atomic_max_i32_noret_offset_scalar(ptr addrspace(
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB88_1
@@ -6137,9 +5995,8 @@ define amdgpu_gfx void @global_atomic_max_i32_noret_offset_scalar(ptr addrspace(
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB88_1
@@ -6162,9 +6019,8 @@ define amdgpu_gfx void @global_atomic_max_i32_noret_offset_scalar(ptr addrspace(
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB88_1
@@ -6204,8 +6060,7 @@ define amdgpu_gfx i32 @global_atomic_max_i32_ret_scalar(ptr addrspace(1) inreg %
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB89_1
@@ -6225,9 +6080,9 @@ define amdgpu_gfx i32 @global_atomic_max_i32_ret_scalar(ptr addrspace(1) inreg %
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB89_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -6238,8 +6093,7 @@ define amdgpu_gfx i32 @global_atomic_max_i32_ret_scalar(ptr addrspace(1) inreg %
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB89_1
@@ -6263,8 +6117,7 @@ define amdgpu_gfx i32 @global_atomic_max_i32_ret_scalar(ptr addrspace(1) inreg %
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB89_1
@@ -6303,8 +6156,7 @@ define amdgpu_gfx i32 @global_atomic_max_i32_ret_offset_scalar(ptr addrspace(1) 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB90_1
@@ -6337,8 +6189,7 @@ define amdgpu_gfx i32 @global_atomic_max_i32_ret_offset_scalar(ptr addrspace(1) 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB90_1
@@ -6362,8 +6213,7 @@ define amdgpu_gfx i32 @global_atomic_max_i32_ret_offset_scalar(ptr addrspace(1) 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB90_1
@@ -6387,10 +6237,10 @@ define amdgpu_kernel void @atomic_max_i32_addr64_offset(ptr addrspace(1) %out, i
 ; SI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; SI-NEXT:    s_add_u32 s4, s0, s4
 ; SI-NEXT:    s_addc_u32 s5, s1, s5
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x4
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    s_load_dword s3, s[4:5], 0x4
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s3
 ; SI-NEXT:  .LBB91_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_max_i32_e32 v0, s2, v1
@@ -6402,9 +6252,8 @@ define amdgpu_kernel void @atomic_max_i32_addr64_offset(ptr addrspace(1) %out, i
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SI-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[10:11]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[8:9]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB91_1
@@ -6418,27 +6267,26 @@ define amdgpu_kernel void @atomic_max_i32_addr64_offset(ptr addrspace(1) %out, i
 ; VI-NEXT:    s_ashr_i32 s5, s3, 31
 ; VI-NEXT:    s_mov_b32 s4, s3
 ; VI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
-; VI-NEXT:    s_add_u32 s0, s0, s4
-; VI-NEXT:    s_addc_u32 s1, s1, s5
-; VI-NEXT:    s_load_dword s3, s[0:1], 0x10
-; VI-NEXT:    s_add_u32 s0, s0, 16
-; VI-NEXT:    s_addc_u32 s1, s1, 0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
-; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v3, s3
+; VI-NEXT:    s_add_u32 s4, s0, s4
+; VI-NEXT:    s_addc_u32 s5, s1, s5
+; VI-NEXT:    s_load_dword s3, s[4:5], 0x10
+; VI-NEXT:    s_add_u32 s4, s4, 16
+; VI-NEXT:    s_addc_u32 s5, s5, 0
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
+; VI-NEXT:    v_mov_b32_e32 v2, s4
+; VI-NEXT:    s_waitcnt lgkmcnt(0)
+; VI-NEXT:    v_mov_b32_e32 v1, s3
+; VI-NEXT:    v_mov_b32_e32 v3, s5
 ; VI-NEXT:  .LBB91_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; VI-NEXT:    v_max_i32_e32 v2, s2, v3
-; VI-NEXT:    flat_atomic_cmpswap v2, v[0:1], v[2:3] glc
+; VI-NEXT:    v_max_i32_e32 v0, s2, v1
+; VI-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] glc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    buffer_wbinvl1_vol
-; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
+; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; VI-NEXT:    v_mov_b32_e32 v1, v0
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB91_1
@@ -6467,9 +6315,8 @@ define amdgpu_kernel void @atomic_max_i32_addr64_offset(ptr addrspace(1) %out, i
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB91_1
@@ -6488,17 +6335,17 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; SI-NEXT:    s_load_dwordx2 s[8:9], s[4:5], 0xd
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
-; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_ashr_i32 s5, s9, 31
 ; SI-NEXT:    s_mov_b32 s4, s9
 ; SI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; SI-NEXT:    s_add_u32 s4, s0, s4
 ; SI-NEXT:    s_addc_u32 s5, s1, s5
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x4
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    s_load_dword s6, s[4:5], 0x4
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB92_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_max_i32_e32 v0, s8, v1
@@ -6510,9 +6357,8 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[12:13]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB92_1
@@ -6533,16 +6379,16 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; VI-NEXT:    s_ashr_i32 s5, s7, 31
 ; VI-NEXT:    s_mov_b32 s4, s7
 ; VI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
-; VI-NEXT:    s_add_u32 s0, s0, s4
-; VI-NEXT:    s_addc_u32 s1, s1, s5
-; VI-NEXT:    s_load_dword s4, s[0:1], 0x10
-; VI-NEXT:    s_add_u32 s0, s0, 16
-; VI-NEXT:    s_addc_u32 s1, s1, 0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
-; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v2, s4
+; VI-NEXT:    s_add_u32 s4, s0, s4
+; VI-NEXT:    s_addc_u32 s5, s1, s5
+; VI-NEXT:    s_load_dword s7, s[4:5], 0x10
+; VI-NEXT:    s_add_u32 s4, s4, 16
+; VI-NEXT:    s_addc_u32 s5, s5, 0
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
+; VI-NEXT:    v_mov_b32_e32 v0, s4
+; VI-NEXT:    s_waitcnt lgkmcnt(0)
+; VI-NEXT:    v_mov_b32_e32 v2, s7
+; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:  .LBB92_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
@@ -6552,8 +6398,7 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB92_1
@@ -6575,10 +6420,10 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; GFX9-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; GFX9-NEXT:    s_add_u32 s0, s0, s4
 ; GFX9-NEXT:    s_addc_u32 s1, s1, s5
-; GFX9-NEXT:    s_load_dword s4, s[0:1], 0x10
-; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v0, s4
+; GFX9-NEXT:    s_load_dword s7, s[0:1], 0x10
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
+; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX9-NEXT:    v_mov_b32_e32 v0, s7
 ; GFX9-NEXT:  .LBB92_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, v0
@@ -6588,8 +6433,7 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB92_1
@@ -6618,10 +6462,10 @@ define amdgpu_kernel void @atomic_max_i32_addr64(ptr addrspace(1) %out, i32 %in,
 ; SI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; SI-NEXT:    s_add_u32 s4, s0, s4
 ; SI-NEXT:    s_addc_u32 s5, s1, s5
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x0
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    s_load_dword s3, s[4:5], 0x0
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s3
 ; SI-NEXT:  .LBB93_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_max_i32_e32 v0, s2, v1
@@ -6633,9 +6477,8 @@ define amdgpu_kernel void @atomic_max_i32_addr64(ptr addrspace(1) %out, i32 %in,
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SI-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[10:11]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[8:9]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB93_1
@@ -6649,25 +6492,24 @@ define amdgpu_kernel void @atomic_max_i32_addr64(ptr addrspace(1) %out, i32 %in,
 ; VI-NEXT:    s_ashr_i32 s5, s3, 31
 ; VI-NEXT:    s_mov_b32 s4, s3
 ; VI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
-; VI-NEXT:    s_add_u32 s0, s0, s4
-; VI-NEXT:    s_addc_u32 s1, s1, s5
-; VI-NEXT:    s_load_dword s3, s[0:1], 0x0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
+; VI-NEXT:    s_add_u32 s4, s0, s4
+; VI-NEXT:    s_addc_u32 s5, s1, s5
+; VI-NEXT:    s_load_dword s3, s[4:5], 0x0
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
+; VI-NEXT:    v_mov_b32_e32 v2, s4
+; VI-NEXT:    v_mov_b32_e32 v3, s5
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v3, s3
+; VI-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-NEXT:  .LBB93_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; VI-NEXT:    v_max_i32_e32 v2, s2, v3
-; VI-NEXT:    flat_atomic_cmpswap v2, v[0:1], v[2:3] glc
+; VI-NEXT:    v_max_i32_e32 v0, s2, v1
+; VI-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] glc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    buffer_wbinvl1_vol
-; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
+; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; VI-NEXT:    v_mov_b32_e32 v1, v0
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB93_1
@@ -6696,9 +6538,8 @@ define amdgpu_kernel void @atomic_max_i32_addr64(ptr addrspace(1) %out, i32 %in,
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB93_1
@@ -6716,17 +6557,17 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; SI-NEXT:    s_load_dwordx2 s[8:9], s[4:5], 0xd
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
-; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_ashr_i32 s5, s9, 31
 ; SI-NEXT:    s_mov_b32 s4, s9
 ; SI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; SI-NEXT:    s_add_u32 s4, s0, s4
 ; SI-NEXT:    s_addc_u32 s5, s1, s5
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x0
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    s_load_dword s6, s[4:5], 0x0
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB94_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_max_i32_e32 v0, s8, v1
@@ -6738,9 +6579,8 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[12:13]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB94_1
@@ -6761,14 +6601,14 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; VI-NEXT:    s_ashr_i32 s5, s7, 31
 ; VI-NEXT:    s_mov_b32 s4, s7
 ; VI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
-; VI-NEXT:    s_add_u32 s0, s0, s4
-; VI-NEXT:    s_addc_u32 s1, s1, s5
-; VI-NEXT:    s_load_dword s4, s[0:1], 0x0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
+; VI-NEXT:    s_add_u32 s4, s0, s4
+; VI-NEXT:    s_addc_u32 s5, s1, s5
+; VI-NEXT:    s_load_dword s7, s[4:5], 0x0
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
+; VI-NEXT:    v_mov_b32_e32 v0, s4
+; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v2, s4
+; VI-NEXT:    v_mov_b32_e32 v2, s7
 ; VI-NEXT:  .LBB94_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
@@ -6778,8 +6618,7 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB94_1
@@ -6801,10 +6640,10 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; GFX9-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; GFX9-NEXT:    s_add_u32 s0, s0, s4
 ; GFX9-NEXT:    s_addc_u32 s1, s1, s5
-; GFX9-NEXT:    s_load_dword s4, s[0:1], 0x0
-; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v0, s4
+; GFX9-NEXT:    s_load_dword s7, s[0:1], 0x0
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
+; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX9-NEXT:    v_mov_b32_e32 v0, s7
 ; GFX9-NEXT:  .LBB94_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, v0
@@ -6814,8 +6653,7 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB94_1
@@ -6930,9 +6768,8 @@ define void @global_atomic_umax_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB97_1
@@ -6955,9 +6792,8 @@ define void @global_atomic_umax_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB97_1
@@ -6979,9 +6815,8 @@ define void @global_atomic_umax_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB97_1
@@ -7014,9 +6849,8 @@ define void @global_atomic_umax_i32_noret_offset(ptr addrspace(1) %out, i32 %in)
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB98_1
@@ -7041,9 +6875,8 @@ define void @global_atomic_umax_i32_noret_offset(ptr addrspace(1) %out, i32 %in)
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB98_1
@@ -7065,9 +6898,8 @@ define void @global_atomic_umax_i32_noret_offset(ptr addrspace(1) %out, i32 %in)
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB98_1
@@ -7102,8 +6934,7 @@ define i32 @global_atomic_umax_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB99_1
@@ -7128,8 +6959,7 @@ define i32 @global_atomic_umax_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB99_1
@@ -7153,8 +6983,7 @@ define i32 @global_atomic_umax_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB99_1
@@ -7189,8 +7018,7 @@ define i32 @global_atomic_umax_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB100_1
@@ -7217,8 +7045,7 @@ define i32 @global_atomic_umax_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB100_1
@@ -7241,8 +7068,7 @@ define i32 @global_atomic_umax_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB100_1
@@ -7282,9 +7108,8 @@ define amdgpu_gfx void @global_atomic_umax_i32_noret_scalar(ptr addrspace(1) inr
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB101_1
@@ -7304,9 +7129,9 @@ define amdgpu_gfx void @global_atomic_umax_i32_noret_scalar(ptr addrspace(1) inr
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB101_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -7316,9 +7141,8 @@ define amdgpu_gfx void @global_atomic_umax_i32_noret_scalar(ptr addrspace(1) inr
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB101_1
@@ -7341,9 +7165,8 @@ define amdgpu_gfx void @global_atomic_umax_i32_noret_scalar(ptr addrspace(1) inr
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB101_1
@@ -7381,9 +7204,8 @@ define amdgpu_gfx void @global_atomic_umax_i32_noret_offset_scalar(ptr addrspace
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB102_1
@@ -7415,9 +7237,8 @@ define amdgpu_gfx void @global_atomic_umax_i32_noret_offset_scalar(ptr addrspace
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB102_1
@@ -7440,9 +7261,8 @@ define amdgpu_gfx void @global_atomic_umax_i32_noret_offset_scalar(ptr addrspace
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB102_1
@@ -7482,8 +7302,7 @@ define amdgpu_gfx i32 @global_atomic_umax_i32_ret_scalar(ptr addrspace(1) inreg 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB103_1
@@ -7503,9 +7322,9 @@ define amdgpu_gfx i32 @global_atomic_umax_i32_ret_scalar(ptr addrspace(1) inreg 
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB103_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -7516,8 +7335,7 @@ define amdgpu_gfx i32 @global_atomic_umax_i32_ret_scalar(ptr addrspace(1) inreg 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB103_1
@@ -7541,8 +7359,7 @@ define amdgpu_gfx i32 @global_atomic_umax_i32_ret_scalar(ptr addrspace(1) inreg 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB103_1
@@ -7581,8 +7398,7 @@ define amdgpu_gfx i32 @global_atomic_umax_i32_ret_offset_scalar(ptr addrspace(1)
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB104_1
@@ -7615,8 +7431,7 @@ define amdgpu_gfx i32 @global_atomic_umax_i32_ret_offset_scalar(ptr addrspace(1)
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB104_1
@@ -7640,8 +7455,7 @@ define amdgpu_gfx i32 @global_atomic_umax_i32_ret_offset_scalar(ptr addrspace(1)
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB104_1
@@ -7665,10 +7479,10 @@ define amdgpu_kernel void @atomic_umax_i32_addr64_offset(ptr addrspace(1) %out, 
 ; SI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; SI-NEXT:    s_add_u32 s4, s0, s4
 ; SI-NEXT:    s_addc_u32 s5, s1, s5
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x4
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    s_load_dword s3, s[4:5], 0x4
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s3
 ; SI-NEXT:  .LBB105_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_max_u32_e32 v0, s2, v1
@@ -7680,9 +7494,8 @@ define amdgpu_kernel void @atomic_umax_i32_addr64_offset(ptr addrspace(1) %out, 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SI-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[10:11]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[8:9]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB105_1
@@ -7696,27 +7509,26 @@ define amdgpu_kernel void @atomic_umax_i32_addr64_offset(ptr addrspace(1) %out, 
 ; VI-NEXT:    s_ashr_i32 s5, s3, 31
 ; VI-NEXT:    s_mov_b32 s4, s3
 ; VI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
-; VI-NEXT:    s_add_u32 s0, s0, s4
-; VI-NEXT:    s_addc_u32 s1, s1, s5
-; VI-NEXT:    s_load_dword s3, s[0:1], 0x10
-; VI-NEXT:    s_add_u32 s0, s0, 16
-; VI-NEXT:    s_addc_u32 s1, s1, 0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
-; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v3, s3
+; VI-NEXT:    s_add_u32 s4, s0, s4
+; VI-NEXT:    s_addc_u32 s5, s1, s5
+; VI-NEXT:    s_load_dword s3, s[4:5], 0x10
+; VI-NEXT:    s_add_u32 s4, s4, 16
+; VI-NEXT:    s_addc_u32 s5, s5, 0
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
+; VI-NEXT:    v_mov_b32_e32 v2, s4
+; VI-NEXT:    s_waitcnt lgkmcnt(0)
+; VI-NEXT:    v_mov_b32_e32 v1, s3
+; VI-NEXT:    v_mov_b32_e32 v3, s5
 ; VI-NEXT:  .LBB105_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; VI-NEXT:    v_max_u32_e32 v2, s2, v3
-; VI-NEXT:    flat_atomic_cmpswap v2, v[0:1], v[2:3] glc
+; VI-NEXT:    v_max_u32_e32 v0, s2, v1
+; VI-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] glc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    buffer_wbinvl1_vol
-; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
+; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; VI-NEXT:    v_mov_b32_e32 v1, v0
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB105_1
@@ -7745,9 +7557,8 @@ define amdgpu_kernel void @atomic_umax_i32_addr64_offset(ptr addrspace(1) %out, 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB105_1
@@ -7766,17 +7577,17 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64_offset(ptr addrspace(1) %o
 ; SI-NEXT:    s_load_dwordx2 s[8:9], s[4:5], 0xd
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
-; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_ashr_i32 s5, s9, 31
 ; SI-NEXT:    s_mov_b32 s4, s9
 ; SI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; SI-NEXT:    s_add_u32 s4, s0, s4
 ; SI-NEXT:    s_addc_u32 s5, s1, s5
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x4
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    s_load_dword s6, s[4:5], 0x4
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB106_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_max_u32_e32 v0, s8, v1
@@ -7788,9 +7599,8 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64_offset(ptr addrspace(1) %o
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[12:13]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB106_1
@@ -7811,16 +7621,16 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64_offset(ptr addrspace(1) %o
 ; VI-NEXT:    s_ashr_i32 s5, s7, 31
 ; VI-NEXT:    s_mov_b32 s4, s7
 ; VI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
-; VI-NEXT:    s_add_u32 s0, s0, s4
-; VI-NEXT:    s_addc_u32 s1, s1, s5
-; VI-NEXT:    s_load_dword s4, s[0:1], 0x10
-; VI-NEXT:    s_add_u32 s0, s0, 16
-; VI-NEXT:    s_addc_u32 s1, s1, 0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
-; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v2, s4
+; VI-NEXT:    s_add_u32 s4, s0, s4
+; VI-NEXT:    s_addc_u32 s5, s1, s5
+; VI-NEXT:    s_load_dword s7, s[4:5], 0x10
+; VI-NEXT:    s_add_u32 s4, s4, 16
+; VI-NEXT:    s_addc_u32 s5, s5, 0
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
+; VI-NEXT:    v_mov_b32_e32 v0, s4
+; VI-NEXT:    s_waitcnt lgkmcnt(0)
+; VI-NEXT:    v_mov_b32_e32 v2, s7
+; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:  .LBB106_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
@@ -7830,8 +7640,7 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64_offset(ptr addrspace(1) %o
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB106_1
@@ -7853,10 +7662,10 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64_offset(ptr addrspace(1) %o
 ; GFX9-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; GFX9-NEXT:    s_add_u32 s0, s0, s4
 ; GFX9-NEXT:    s_addc_u32 s1, s1, s5
-; GFX9-NEXT:    s_load_dword s4, s[0:1], 0x10
-; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v0, s4
+; GFX9-NEXT:    s_load_dword s7, s[0:1], 0x10
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
+; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX9-NEXT:    v_mov_b32_e32 v0, s7
 ; GFX9-NEXT:  .LBB106_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, v0
@@ -7866,8 +7675,7 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64_offset(ptr addrspace(1) %o
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB106_1
@@ -7890,17 +7698,17 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64(ptr addrspace(1) %out, ptr
 ; SI-NEXT:    s_load_dwordx2 s[8:9], s[4:5], 0xd
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
-; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_ashr_i32 s5, s9, 31
 ; SI-NEXT:    s_mov_b32 s4, s9
 ; SI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; SI-NEXT:    s_add_u32 s4, s0, s4
 ; SI-NEXT:    s_addc_u32 s5, s1, s5
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x0
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    s_load_dword s6, s[4:5], 0x0
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB107_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_max_u32_e32 v0, s8, v1
@@ -7912,9 +7720,8 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64(ptr addrspace(1) %out, ptr
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[12:13]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB107_1
@@ -7935,14 +7742,14 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64(ptr addrspace(1) %out, ptr
 ; VI-NEXT:    s_ashr_i32 s5, s7, 31
 ; VI-NEXT:    s_mov_b32 s4, s7
 ; VI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
-; VI-NEXT:    s_add_u32 s0, s0, s4
-; VI-NEXT:    s_addc_u32 s1, s1, s5
-; VI-NEXT:    s_load_dword s4, s[0:1], 0x0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
+; VI-NEXT:    s_add_u32 s4, s0, s4
+; VI-NEXT:    s_addc_u32 s5, s1, s5
+; VI-NEXT:    s_load_dword s7, s[4:5], 0x0
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
+; VI-NEXT:    v_mov_b32_e32 v0, s4
+; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v2, s4
+; VI-NEXT:    v_mov_b32_e32 v2, s7
 ; VI-NEXT:  .LBB107_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
@@ -7952,8 +7759,7 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64(ptr addrspace(1) %out, ptr
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB107_1
@@ -7975,10 +7781,10 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64(ptr addrspace(1) %out, ptr
 ; GFX9-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; GFX9-NEXT:    s_add_u32 s0, s0, s4
 ; GFX9-NEXT:    s_addc_u32 s1, s1, s5
-; GFX9-NEXT:    s_load_dword s4, s[0:1], 0x0
-; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v0, s4
+; GFX9-NEXT:    s_load_dword s7, s[0:1], 0x0
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
+; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX9-NEXT:    v_mov_b32_e32 v0, s7
 ; GFX9-NEXT:  .LBB107_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, v0
@@ -7988,8 +7794,7 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64(ptr addrspace(1) %out, ptr
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB107_1
@@ -8104,9 +7909,8 @@ define void @global_atomic_umin_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB110_1
@@ -8129,9 +7933,8 @@ define void @global_atomic_umin_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB110_1
@@ -8153,9 +7956,8 @@ define void @global_atomic_umin_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB110_1
@@ -8188,9 +7990,8 @@ define void @global_atomic_umin_i32_noret_offset(ptr addrspace(1) %out, i32 %in)
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB111_1
@@ -8215,9 +8016,8 @@ define void @global_atomic_umin_i32_noret_offset(ptr addrspace(1) %out, i32 %in)
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB111_1
@@ -8239,9 +8039,8 @@ define void @global_atomic_umin_i32_noret_offset(ptr addrspace(1) %out, i32 %in)
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB111_1
@@ -8276,8 +8075,7 @@ define i32 @global_atomic_umin_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB112_1
@@ -8302,8 +8100,7 @@ define i32 @global_atomic_umin_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB112_1
@@ -8327,8 +8124,7 @@ define i32 @global_atomic_umin_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB112_1
@@ -8363,8 +8159,7 @@ define i32 @global_atomic_umin_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB113_1
@@ -8391,8 +8186,7 @@ define i32 @global_atomic_umin_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB113_1
@@ -8415,8 +8209,7 @@ define i32 @global_atomic_umin_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB113_1
@@ -8456,9 +8249,8 @@ define amdgpu_gfx void @global_atomic_umin_i32_noret_scalar(ptr addrspace(1) inr
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB114_1
@@ -8478,9 +8270,9 @@ define amdgpu_gfx void @global_atomic_umin_i32_noret_scalar(ptr addrspace(1) inr
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB114_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -8490,9 +8282,8 @@ define amdgpu_gfx void @global_atomic_umin_i32_noret_scalar(ptr addrspace(1) inr
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB114_1
@@ -8515,9 +8306,8 @@ define amdgpu_gfx void @global_atomic_umin_i32_noret_scalar(ptr addrspace(1) inr
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB114_1
@@ -8555,9 +8345,8 @@ define amdgpu_gfx void @global_atomic_umin_i32_noret_offset_scalar(ptr addrspace
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB115_1
@@ -8589,9 +8378,8 @@ define amdgpu_gfx void @global_atomic_umin_i32_noret_offset_scalar(ptr addrspace
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB115_1
@@ -8614,9 +8402,8 @@ define amdgpu_gfx void @global_atomic_umin_i32_noret_offset_scalar(ptr addrspace
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB115_1
@@ -8656,8 +8443,7 @@ define amdgpu_gfx i32 @global_atomic_umin_i32_ret_scalar(ptr addrspace(1) inreg 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB116_1
@@ -8677,9 +8463,9 @@ define amdgpu_gfx i32 @global_atomic_umin_i32_ret_scalar(ptr addrspace(1) inreg 
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB116_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -8690,8 +8476,7 @@ define amdgpu_gfx i32 @global_atomic_umin_i32_ret_scalar(ptr addrspace(1) inreg 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB116_1
@@ -8715,8 +8500,7 @@ define amdgpu_gfx i32 @global_atomic_umin_i32_ret_scalar(ptr addrspace(1) inreg 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB116_1
@@ -8755,8 +8539,7 @@ define amdgpu_gfx i32 @global_atomic_umin_i32_ret_offset_scalar(ptr addrspace(1)
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB117_1
@@ -8789,8 +8572,7 @@ define amdgpu_gfx i32 @global_atomic_umin_i32_ret_offset_scalar(ptr addrspace(1)
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB117_1
@@ -8814,8 +8596,7 @@ define amdgpu_gfx i32 @global_atomic_umin_i32_ret_offset_scalar(ptr addrspace(1)
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB117_1
@@ -8926,9 +8707,8 @@ define void @global_atomic_min_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB120_1
@@ -8951,9 +8731,8 @@ define void @global_atomic_min_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB120_1
@@ -8975,9 +8754,8 @@ define void @global_atomic_min_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB120_1
@@ -9010,9 +8788,8 @@ define void @global_atomic_min_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB121_1
@@ -9037,9 +8814,8 @@ define void @global_atomic_min_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB121_1
@@ -9061,9 +8837,8 @@ define void @global_atomic_min_i32_noret_offset(ptr addrspace(1) %out, i32 %in) 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB121_1
@@ -9098,8 +8873,7 @@ define i32 @global_atomic_min_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB122_1
@@ -9124,8 +8898,7 @@ define i32 @global_atomic_min_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB122_1
@@ -9149,8 +8922,7 @@ define i32 @global_atomic_min_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB122_1
@@ -9185,8 +8957,7 @@ define i32 @global_atomic_min_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB123_1
@@ -9213,8 +8984,7 @@ define i32 @global_atomic_min_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB123_1
@@ -9237,8 +9007,7 @@ define i32 @global_atomic_min_i32_ret_offset(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB123_1
@@ -9278,9 +9047,8 @@ define amdgpu_gfx void @global_atomic_min_i32_noret_scalar(ptr addrspace(1) inre
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB124_1
@@ -9300,9 +9068,9 @@ define amdgpu_gfx void @global_atomic_min_i32_noret_scalar(ptr addrspace(1) inre
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB124_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -9312,9 +9080,8 @@ define amdgpu_gfx void @global_atomic_min_i32_noret_scalar(ptr addrspace(1) inre
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB124_1
@@ -9337,9 +9104,8 @@ define amdgpu_gfx void @global_atomic_min_i32_noret_scalar(ptr addrspace(1) inre
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB124_1
@@ -9377,9 +9143,8 @@ define amdgpu_gfx void @global_atomic_min_i32_noret_offset_scalar(ptr addrspace(
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB125_1
@@ -9411,9 +9176,8 @@ define amdgpu_gfx void @global_atomic_min_i32_noret_offset_scalar(ptr addrspace(
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB125_1
@@ -9436,9 +9200,8 @@ define amdgpu_gfx void @global_atomic_min_i32_noret_offset_scalar(ptr addrspace(
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB125_1
@@ -9478,8 +9241,7 @@ define amdgpu_gfx i32 @global_atomic_min_i32_ret_scalar(ptr addrspace(1) inreg %
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB126_1
@@ -9499,9 +9261,9 @@ define amdgpu_gfx i32 @global_atomic_min_i32_ret_scalar(ptr addrspace(1) inreg %
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB126_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -9512,8 +9274,7 @@ define amdgpu_gfx i32 @global_atomic_min_i32_ret_scalar(ptr addrspace(1) inreg %
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB126_1
@@ -9537,8 +9298,7 @@ define amdgpu_gfx i32 @global_atomic_min_i32_ret_scalar(ptr addrspace(1) inreg %
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB126_1
@@ -9577,8 +9337,7 @@ define amdgpu_gfx i32 @global_atomic_min_i32_ret_offset_scalar(ptr addrspace(1) 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB127_1
@@ -9611,8 +9370,7 @@ define amdgpu_gfx i32 @global_atomic_min_i32_ret_offset_scalar(ptr addrspace(1) 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB127_1
@@ -9636,8 +9394,7 @@ define amdgpu_gfx i32 @global_atomic_min_i32_ret_offset_scalar(ptr addrspace(1) 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB127_1
@@ -9661,10 +9418,10 @@ define amdgpu_kernel void @atomic_min_i32_addr64_offset(ptr addrspace(1) %out, i
 ; SI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; SI-NEXT:    s_add_u32 s4, s0, s4
 ; SI-NEXT:    s_addc_u32 s5, s1, s5
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x4
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    s_load_dword s3, s[4:5], 0x4
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s3
 ; SI-NEXT:  .LBB128_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_min_i32_e32 v0, s2, v1
@@ -9676,9 +9433,8 @@ define amdgpu_kernel void @atomic_min_i32_addr64_offset(ptr addrspace(1) %out, i
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SI-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[10:11]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[8:9]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB128_1
@@ -9692,27 +9448,26 @@ define amdgpu_kernel void @atomic_min_i32_addr64_offset(ptr addrspace(1) %out, i
 ; VI-NEXT:    s_ashr_i32 s5, s3, 31
 ; VI-NEXT:    s_mov_b32 s4, s3
 ; VI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
-; VI-NEXT:    s_add_u32 s0, s0, s4
-; VI-NEXT:    s_addc_u32 s1, s1, s5
-; VI-NEXT:    s_load_dword s3, s[0:1], 0x10
-; VI-NEXT:    s_add_u32 s0, s0, 16
-; VI-NEXT:    s_addc_u32 s1, s1, 0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
-; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v3, s3
+; VI-NEXT:    s_add_u32 s4, s0, s4
+; VI-NEXT:    s_addc_u32 s5, s1, s5
+; VI-NEXT:    s_load_dword s3, s[4:5], 0x10
+; VI-NEXT:    s_add_u32 s4, s4, 16
+; VI-NEXT:    s_addc_u32 s5, s5, 0
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
+; VI-NEXT:    v_mov_b32_e32 v2, s4
+; VI-NEXT:    s_waitcnt lgkmcnt(0)
+; VI-NEXT:    v_mov_b32_e32 v1, s3
+; VI-NEXT:    v_mov_b32_e32 v3, s5
 ; VI-NEXT:  .LBB128_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; VI-NEXT:    v_min_i32_e32 v2, s2, v3
-; VI-NEXT:    flat_atomic_cmpswap v2, v[0:1], v[2:3] glc
+; VI-NEXT:    v_min_i32_e32 v0, s2, v1
+; VI-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] glc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    buffer_wbinvl1_vol
-; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
+; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; VI-NEXT:    v_mov_b32_e32 v1, v0
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB128_1
@@ -9741,9 +9496,8 @@ define amdgpu_kernel void @atomic_min_i32_addr64_offset(ptr addrspace(1) %out, i
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB128_1
@@ -9762,17 +9516,17 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; SI-NEXT:    s_load_dwordx2 s[8:9], s[4:5], 0xd
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
-; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_ashr_i32 s5, s9, 31
 ; SI-NEXT:    s_mov_b32 s4, s9
 ; SI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; SI-NEXT:    s_add_u32 s4, s0, s4
 ; SI-NEXT:    s_addc_u32 s5, s1, s5
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x4
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    s_load_dword s6, s[4:5], 0x4
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB129_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_min_i32_e32 v0, s8, v1
@@ -9784,9 +9538,8 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[12:13]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB129_1
@@ -9807,16 +9560,16 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; VI-NEXT:    s_ashr_i32 s5, s7, 31
 ; VI-NEXT:    s_mov_b32 s4, s7
 ; VI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
-; VI-NEXT:    s_add_u32 s0, s0, s4
-; VI-NEXT:    s_addc_u32 s1, s1, s5
-; VI-NEXT:    s_load_dword s4, s[0:1], 0x10
-; VI-NEXT:    s_add_u32 s0, s0, 16
-; VI-NEXT:    s_addc_u32 s1, s1, 0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
-; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v2, s4
+; VI-NEXT:    s_add_u32 s4, s0, s4
+; VI-NEXT:    s_addc_u32 s5, s1, s5
+; VI-NEXT:    s_load_dword s7, s[4:5], 0x10
+; VI-NEXT:    s_add_u32 s4, s4, 16
+; VI-NEXT:    s_addc_u32 s5, s5, 0
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
+; VI-NEXT:    v_mov_b32_e32 v0, s4
+; VI-NEXT:    s_waitcnt lgkmcnt(0)
+; VI-NEXT:    v_mov_b32_e32 v2, s7
+; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:  .LBB129_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
@@ -9826,8 +9579,7 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB129_1
@@ -9849,10 +9601,10 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; GFX9-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; GFX9-NEXT:    s_add_u32 s0, s0, s4
 ; GFX9-NEXT:    s_addc_u32 s1, s1, s5
-; GFX9-NEXT:    s_load_dword s4, s[0:1], 0x10
-; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v0, s4
+; GFX9-NEXT:    s_load_dword s7, s[0:1], 0x10
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
+; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX9-NEXT:    v_mov_b32_e32 v0, s7
 ; GFX9-NEXT:  .LBB129_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, v0
@@ -9862,8 +9614,7 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB129_1
@@ -9885,13 +9636,13 @@ define amdgpu_kernel void @atomic_min_i32(ptr addrspace(1) %out, i32 %in) {
 ; SI:       ; %bb.0: ; %entry
 ; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; SI-NEXT:    s_load_dword s6, s[4:5], 0xb
-; SI-NEXT:    s_mov_b32 s3, 0xf000
-; SI-NEXT:    s_mov_b32 s2, -1
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    s_load_dword s4, s[0:1], 0x0
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s4
 ; SI-NEXT:    s_mov_b64 s[4:5], 0
+; SI-NEXT:    s_mov_b32 s3, 0xf000
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    s_load_dword s2, s[0:1], 0x0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s2
+; SI-NEXT:    s_mov_b32 s2, -1
 ; SI-NEXT:  .LBB130_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_min_i32_e32 v0, s6, v1
@@ -9903,9 +9654,8 @@ define amdgpu_kernel void @atomic_min_i32(ptr addrspace(1) %out, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; SI-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; SI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[8:9]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB130_1
@@ -9914,26 +9664,25 @@ define amdgpu_kernel void @atomic_min_i32(ptr addrspace(1) %out, i32 %in) {
 ;
 ; VI-LABEL: atomic_min_i32:
 ; VI:       ; %bb.0: ; %entry
-; VI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; VI-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x24
 ; VI-NEXT:    s_load_dword s2, s[4:5], 0x2c
-; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    s_load_dword s3, s[0:1], 0x0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v3, s3
+; VI-NEXT:    s_load_dword s3, s[6:7], 0x0
+; VI-NEXT:    v_mov_b32_e32 v2, s6
+; VI-NEXT:    v_mov_b32_e32 v3, s7
+; VI-NEXT:    s_waitcnt lgkmcnt(0)
+; VI-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-NEXT:  .LBB130_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; VI-NEXT:    v_min_i32_e32 v2, s2, v3
-; VI-NEXT:    flat_atomic_cmpswap v2, v[0:1], v[2:3] glc
+; VI-NEXT:    v_min_i32_e32 v0, s2, v1
+; VI-NEXT:    flat_atomic_cmpswap v0, v[2:3], v[0:1] glc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    buffer_wbinvl1_vol
-; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
+; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; VI-NEXT:    v_mov_b32_e32 v1, v0
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB130_1
@@ -9944,12 +9693,12 @@ define amdgpu_kernel void @atomic_min_i32(ptr addrspace(1) %out, i32 %in) {
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX9-NEXT:    s_load_dword s6, s[4:5], 0x2c
+; GFX9-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX9-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    s_load_dword s2, s[0:1], 0x0
+; GFX9-NEXT:    s_load_dword s4, s[0:1], 0x0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, s2
-; GFX9-NEXT:    s_mov_b64 s[2:3], 0
+; GFX9-NEXT:    v_mov_b32_e32 v1, s4
 ; GFX9-NEXT:  .LBB130_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_min_i32_e32 v0, s6, v1
@@ -9958,9 +9707,8 @@ define amdgpu_kernel void @atomic_min_i32(ptr addrspace(1) %out, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[2:3], s[2:3], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB130_1
@@ -9977,17 +9725,17 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; SI-NEXT:    s_load_dwordx2 s[8:9], s[4:5], 0xd
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
-; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_ashr_i32 s5, s9, 31
 ; SI-NEXT:    s_mov_b32 s4, s9
 ; SI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; SI-NEXT:    s_add_u32 s4, s0, s4
 ; SI-NEXT:    s_addc_u32 s5, s1, s5
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x0
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    s_load_dword s6, s[4:5], 0x0
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
+; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB131_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    v_min_i32_e32 v0, s8, v1
@@ -9999,9 +9747,8 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[0:1], s[0:1], s[12:13]
+; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB131_1
@@ -10022,14 +9769,14 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; VI-NEXT:    s_ashr_i32 s5, s7, 31
 ; VI-NEXT:    s_mov_b32 s4, s7
 ; VI-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
-; VI-NEXT:    s_add_u32 s0, s0, s4
-; VI-NEXT:    s_addc_u32 s1, s1, s5
-; VI-NEXT:    s_load_dword s4, s[0:1], 0x0
-; VI-NEXT:    v_mov_b32_e32 v0, s0
-; VI-NEXT:    v_mov_b32_e32 v1, s1
+; VI-NEXT:    s_add_u32 s4, s0, s4
+; VI-NEXT:    s_addc_u32 s5, s1, s5
+; VI-NEXT:    s_load_dword s7, s[4:5], 0x0
 ; VI-NEXT:    s_mov_b64 s[0:1], 0
+; VI-NEXT:    v_mov_b32_e32 v0, s4
+; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    v_mov_b32_e32 v2, s4
+; VI-NEXT:    v_mov_b32_e32 v2, s7
 ; VI-NEXT:  .LBB131_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
@@ -10039,8 +9786,7 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; VI-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
+; VI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB131_1
@@ -10062,10 +9808,10 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; GFX9-NEXT:    s_lshl_b64 s[4:5], s[4:5], 2
 ; GFX9-NEXT:    s_add_u32 s0, s0, s4
 ; GFX9-NEXT:    s_addc_u32 s1, s1, s5
-; GFX9-NEXT:    s_load_dword s4, s[0:1], 0x0
-; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v0, s4
+; GFX9-NEXT:    s_load_dword s7, s[0:1], 0x0
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
+; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX9-NEXT:    v_mov_b32_e32 v0, s7
 ; GFX9-NEXT:  .LBB131_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, v0
@@ -10075,8 +9821,7 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[8:9], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB131_1
@@ -10193,9 +9938,8 @@ define void @global_atomic_uinc_wrap_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB134_1
@@ -10220,9 +9964,8 @@ define void @global_atomic_uinc_wrap_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB134_1
@@ -10246,9 +9989,8 @@ define void @global_atomic_uinc_wrap_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB134_1
@@ -10283,9 +10025,8 @@ define void @global_atomic_uinc_wrap_i32_noret_offset(ptr addrspace(1) %out, i32
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB135_1
@@ -10312,9 +10053,8 @@ define void @global_atomic_uinc_wrap_i32_noret_offset(ptr addrspace(1) %out, i32
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB135_1
@@ -10338,9 +10078,8 @@ define void @global_atomic_uinc_wrap_i32_noret_offset(ptr addrspace(1) %out, i32
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB135_1
@@ -10377,8 +10116,7 @@ define i32 @global_atomic_uinc_wrap_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB136_1
@@ -10405,8 +10143,7 @@ define i32 @global_atomic_uinc_wrap_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB136_1
@@ -10432,8 +10169,7 @@ define i32 @global_atomic_uinc_wrap_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB136_1
@@ -10470,8 +10206,7 @@ define i32 @global_atomic_uinc_wrap_i32_ret_offset(ptr addrspace(1) %out, i32 %i
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
-; SI-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
+; SI-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB137_1
@@ -10500,8 +10235,7 @@ define i32 @global_atomic_uinc_wrap_i32_ret_offset(ptr addrspace(1) %out, i32 %i
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; VI-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB137_1
@@ -10526,8 +10260,7 @@ define i32 @global_atomic_uinc_wrap_i32_ret_offset(ptr addrspace(1) %out, i32 %i
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB137_1
@@ -10569,9 +10302,8 @@ define amdgpu_gfx void @global_atomic_uinc_wrap_i32_noret_scalar(ptr addrspace(1
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB138_1
@@ -10591,9 +10323,9 @@ define amdgpu_gfx void @global_atomic_uinc_wrap_i32_noret_scalar(ptr addrspace(1
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB138_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -10605,9 +10337,8 @@ define amdgpu_gfx void @global_atomic_uinc_wrap_i32_noret_scalar(ptr addrspace(1
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB138_1
@@ -10632,9 +10363,8 @@ define amdgpu_gfx void @global_atomic_uinc_wrap_i32_noret_scalar(ptr addrspace(1
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB138_1
@@ -10674,9 +10404,8 @@ define amdgpu_gfx void @global_atomic_uinc_wrap_i32_noret_offset_scalar(ptr addr
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
 ; SI-NEXT:    v_mov_b32_e32 v1, v2
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB139_1
@@ -10710,9 +10439,8 @@ define amdgpu_gfx void @global_atomic_uinc_wrap_i32_noret_offset_scalar(ptr addr
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB139_1
@@ -10737,9 +10465,8 @@ define amdgpu_gfx void @global_atomic_uinc_wrap_i32_noret_offset_scalar(ptr addr
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB139_1
@@ -10781,8 +10508,7 @@ define amdgpu_gfx i32 @global_atomic_uinc_wrap_i32_ret_scalar(ptr addrspace(1) i
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB140_1
@@ -10802,9 +10528,9 @@ define amdgpu_gfx i32 @global_atomic_uinc_wrap_i32_ret_scalar(ptr addrspace(1) i
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[34:35], 0
 ; VI-NEXT:  .LBB140_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -10817,8 +10543,7 @@ define amdgpu_gfx i32 @global_atomic_uinc_wrap_i32_ret_scalar(ptr addrspace(1) i
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB140_1
@@ -10844,8 +10569,7 @@ define amdgpu_gfx i32 @global_atomic_uinc_wrap_i32_ret_scalar(ptr addrspace(1) i
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB140_1
@@ -10886,8 +10610,7 @@ define amdgpu_gfx i32 @global_atomic_uinc_wrap_i32_ret_offset_scalar(ptr addrspa
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[38:39], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[38:39]
-; SI-NEXT:    s_or_b64 s[36:37], s[36:37], s[40:41]
+; SI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[38:39]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB141_1
@@ -10922,8 +10645,7 @@ define amdgpu_gfx i32 @global_atomic_uinc_wrap_i32_ret_offset_scalar(ptr addrspa
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; VI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; VI-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; VI-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[36:37]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB141_1
@@ -10949,8 +10671,7 @@ define amdgpu_gfx i32 @global_atomic_uinc_wrap_i32_ret_offset_scalar(ptr addrspa
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v3
 ; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB141_1
@@ -11064,9 +10785,8 @@ define void @global_atomic_udec_wrap_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[4:5]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[12:13]
+; SI-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[4:5]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB144_1
@@ -11092,9 +10812,8 @@ define void @global_atomic_udec_wrap_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
+; VI-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB144_1
@@ -11119,9 +10838,8 @@ define void @global_atomic_udec_wrap_i32_noret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB144_1
@@ -11157,9 +10875,8 @@ define void @global_atomic_udec_wrap_i32_noret_offset(ptr addrspace(1) %out, i32
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v5, v4
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[4:5]
 ; SI-NEXT:    v_mov_b32_e32 v4, v5
-; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[12:13]
+; SI-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[4:5]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB145_1
@@ -11187,9 +10904,8 @@ define void @global_atomic_udec_wrap_i32_noret_offset(ptr addrspace(1) %out, i32
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
 ; VI-NEXT:    v_mov_b32_e32 v4, v3
-; VI-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
+; VI-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB145_1
@@ -11214,9 +10930,8 @@ define void @global_atomic_udec_wrap_i32_noret_offset(ptr addrspace(1) %out, i32
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
 ; GFX9-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB145_1
@@ -11254,8 +10969,7 @@ define i32 @global_atomic_udec_wrap_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[4:5]
-; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[12:13]
+; SI-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[4:5]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB146_1
@@ -11283,8 +10997,7 @@ define i32 @global_atomic_udec_wrap_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; VI-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
+; VI-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB146_1
@@ -11311,8 +11024,7 @@ define i32 @global_atomic_udec_wrap_i32_ret(ptr addrspace(1) %ptr, i32 %in) {
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB146_1
@@ -11350,8 +11062,7 @@ define i32 @global_atomic_udec_wrap_i32_ret_offset(ptr addrspace(1) %out, i32 %i
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v5
 ; SI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; SI-NEXT:    s_xor_b64 s[12:13], exec, s[4:5]
-; SI-NEXT:    s_or_b64 s[6:7], s[6:7], s[12:13]
+; SI-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[4:5]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB147_1
@@ -11381,8 +11092,7 @@ define i32 @global_atomic_udec_wrap_i32_ret_offset(ptr addrspace(1) %out, i32 %i
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; VI-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; VI-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
+; VI-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[4:5]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB147_1
@@ -11408,8 +11118,7 @@ define i32 @global_atomic_udec_wrap_i32_ret_offset(ptr addrspace(1) %out, i32 %i
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
+; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB147_1
@@ -11436,8 +11145,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_scalar(ptr addrspace(1
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    buffer_load_dword v1, off, s[4:7], 0
-; SI-NEXT:    v_mov_b32_e32 v2, s34
 ; SI-NEXT:    s_mov_b64 s[38:39], 0
+; SI-NEXT:    v_mov_b32_e32 v2, s34
 ; SI-NEXT:  .LBB148_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    s_waitcnt vmcnt(0)
@@ -11453,9 +11162,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_scalar(ptr addrspace(1
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v1
 ; SI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[36:37]
 ; SI-NEXT:    v_mov_b32_e32 v1, v3
-; SI-NEXT:    s_or_b64 s[38:39], s[38:39], s[40:41]
+; SI-NEXT:    s_or_b64 s[38:39], s[38:39], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[36:37]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB148_1
@@ -11475,10 +11183,10 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_scalar(ptr addrspace(1
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v1, v[0:1]
+; VI-NEXT:    s_mov_b64 s[36:37], 0
 ; VI-NEXT:    v_mov_b32_e32 v4, s6
 ; VI-NEXT:    v_mov_b32_e32 v2, s4
 ; VI-NEXT:    v_mov_b32_e32 v3, s5
-; VI-NEXT:    s_mov_b64 s[36:37], 0
 ; VI-NEXT:  .LBB148_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -11491,9 +11199,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_scalar(ptr addrspace(1
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; VI-NEXT:    s_xor_b64 s[34:35], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[34:35]
 ; VI-NEXT:    v_mov_b32_e32 v1, v0
-; VI-NEXT:    s_or_b64 s[36:37], s[36:37], s[38:39]
+; VI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[34:35]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB148_1
@@ -11506,8 +11213,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_scalar(ptr addrspace(1
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX9-NEXT:    global_load_dword v1, v2, s[4:5]
-; GFX9-NEXT:    v_mov_b32_e32 v3, s6
 ; GFX9-NEXT:    s_mov_b64 s[36:37], 0
+; GFX9-NEXT:    v_mov_b32_e32 v3, s6
 ; GFX9-NEXT:  .LBB148_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
@@ -11520,9 +11227,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_scalar(ptr addrspace(1
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[34:35], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[34:35]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[36:37], s[36:37], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[34:35]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB148_1
@@ -11547,8 +11253,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_offset_scalar(ptr addr
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    buffer_load_dword v1, off, s[4:7], 0 offset:16
-; SI-NEXT:    v_mov_b32_e32 v2, s34
 ; SI-NEXT:    s_mov_b64 s[38:39], 0
+; SI-NEXT:    v_mov_b32_e32 v2, s34
 ; SI-NEXT:  .LBB149_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    s_waitcnt vmcnt(0)
@@ -11564,9 +11270,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_offset_scalar(ptr addr
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v1
 ; SI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[36:37]
 ; SI-NEXT:    v_mov_b32_e32 v1, v3
-; SI-NEXT:    s_or_b64 s[38:39], s[38:39], s[40:41]
+; SI-NEXT:    s_or_b64 s[38:39], s[38:39], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[36:37]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB149_1
@@ -11588,8 +11293,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_offset_scalar(ptr addr
 ; VI-NEXT:    v_mov_b32_e32 v0, s34
 ; VI-NEXT:    v_mov_b32_e32 v1, s35
 ; VI-NEXT:    flat_load_dword v3, v[0:1]
-; VI-NEXT:    v_mov_b32_e32 v4, s6
 ; VI-NEXT:    s_mov_b64 s[36:37], 0
+; VI-NEXT:    v_mov_b32_e32 v4, s6
 ; VI-NEXT:  .LBB149_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -11602,9 +11307,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_offset_scalar(ptr addr
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v3
 ; VI-NEXT:    s_xor_b64 s[34:35], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[34:35]
 ; VI-NEXT:    v_mov_b32_e32 v3, v2
-; VI-NEXT:    s_or_b64 s[36:37], s[36:37], s[38:39]
+; VI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[34:35]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB149_1
@@ -11617,8 +11321,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_offset_scalar(ptr addr
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX9-NEXT:    global_load_dword v1, v2, s[4:5] offset:16
-; GFX9-NEXT:    v_mov_b32_e32 v3, s6
 ; GFX9-NEXT:    s_mov_b64 s[36:37], 0
+; GFX9-NEXT:    v_mov_b32_e32 v3, s6
 ; GFX9-NEXT:  .LBB149_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
@@ -11631,9 +11335,8 @@ define amdgpu_gfx void @global_atomic_udec_wrap_i32_noret_offset_scalar(ptr addr
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
 ; GFX9-NEXT:    s_xor_b64 s[34:35], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[34:35]
 ; GFX9-NEXT:    v_mov_b32_e32 v1, v0
-; GFX9-NEXT:    s_or_b64 s[36:37], s[36:37], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[34:35]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB149_1
@@ -11659,8 +11362,8 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_scalar(ptr addrspace(1) i
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    buffer_load_dword v0, off, s[4:7], 0
-; SI-NEXT:    v_mov_b32_e32 v2, s34
 ; SI-NEXT:    s_mov_b64 s[38:39], 0
+; SI-NEXT:    v_mov_b32_e32 v2, s34
 ; SI-NEXT:  .LBB150_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    s_waitcnt vmcnt(0)
@@ -11677,8 +11380,7 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_scalar(ptr addrspace(1) i
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; SI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[36:37]
-; SI-NEXT:    s_or_b64 s[38:39], s[38:39], s[40:41]
+; SI-NEXT:    s_or_b64 s[38:39], s[38:39], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[36:37]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB150_1
@@ -11698,10 +11400,10 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_scalar(ptr addrspace(1) i
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    flat_load_dword v0, v[0:1]
+; VI-NEXT:    s_mov_b64 s[36:37], 0
 ; VI-NEXT:    v_mov_b32_e32 v3, s6
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
-; VI-NEXT:    s_mov_b64 s[36:37], 0
 ; VI-NEXT:  .LBB150_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -11715,8 +11417,7 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_scalar(ptr addrspace(1) i
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v5
 ; VI-NEXT:    s_xor_b64 s[34:35], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[34:35]
-; VI-NEXT:    s_or_b64 s[36:37], s[36:37], s[38:39]
+; VI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[34:35]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB150_1
@@ -11729,8 +11430,8 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_scalar(ptr addrspace(1) i
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX9-NEXT:    global_load_dword v0, v1, s[4:5]
-; GFX9-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX9-NEXT:    s_mov_b64 s[36:37], 0
+; GFX9-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX9-NEXT:  .LBB150_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
@@ -11744,8 +11445,7 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_scalar(ptr addrspace(1) i
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; GFX9-NEXT:    s_xor_b64 s[34:35], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[34:35]
-; GFX9-NEXT:    s_or_b64 s[36:37], s[36:37], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[34:35]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB150_1
@@ -11770,8 +11470,8 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_offset_scalar(ptr addrspa
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    buffer_load_dword v0, off, s[4:7], 0 offset:16
-; SI-NEXT:    v_mov_b32_e32 v2, s34
 ; SI-NEXT:    s_mov_b64 s[38:39], 0
+; SI-NEXT:    v_mov_b32_e32 v2, s34
 ; SI-NEXT:  .LBB151_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; SI-NEXT:    s_waitcnt vmcnt(0)
@@ -11788,8 +11488,7 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_offset_scalar(ptr addrspa
 ; SI-NEXT:    buffer_wbinvl1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; SI-NEXT:    s_xor_b64 s[36:37], vcc, exec
-; SI-NEXT:    s_xor_b64 s[40:41], exec, s[36:37]
-; SI-NEXT:    s_or_b64 s[38:39], s[38:39], s[40:41]
+; SI-NEXT:    s_or_b64 s[38:39], s[38:39], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[36:37]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execnz .LBB151_1
@@ -11811,8 +11510,8 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_offset_scalar(ptr addrspa
 ; VI-NEXT:    v_mov_b32_e32 v1, s34
 ; VI-NEXT:    v_mov_b32_e32 v2, s35
 ; VI-NEXT:    flat_load_dword v0, v[1:2]
-; VI-NEXT:    v_mov_b32_e32 v3, s6
 ; VI-NEXT:    s_mov_b64 s[36:37], 0
+; VI-NEXT:    v_mov_b32_e32 v3, s6
 ; VI-NEXT:  .LBB151_1: ; %atomicrmw.start
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    s_waitcnt vmcnt(0)
@@ -11826,8 +11525,7 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_offset_scalar(ptr addrspa
 ; VI-NEXT:    buffer_wbinvl1_vol
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v5
 ; VI-NEXT:    s_xor_b64 s[34:35], vcc, exec
-; VI-NEXT:    s_xor_b64 s[38:39], exec, s[34:35]
-; VI-NEXT:    s_or_b64 s[36:37], s[36:37], s[38:39]
+; VI-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; VI-NEXT:    s_mov_b64 exec, s[34:35]
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB151_1
@@ -11840,8 +11538,8 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_offset_scalar(ptr addrspa
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX9-NEXT:    global_load_dword v0, v1, s[4:5] offset:16
-; GFX9-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX9-NEXT:    s_mov_b64 s[36:37], 0
+; GFX9-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX9-NEXT:  .LBB151_1: ; %atomicrmw.start
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
@@ -11855,8 +11553,7 @@ define amdgpu_gfx i32 @global_atomic_udec_wrap_i32_ret_offset_scalar(ptr addrspa
 ; GFX9-NEXT:    buffer_wbinvl1_vol
 ; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v4
 ; GFX9-NEXT:    s_xor_b64 s[34:35], vcc, exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[34:35]
-; GFX9-NEXT:    s_or_b64 s[36:37], s[36:37], s[38:39]
+; GFX9-NEXT:    s_or_b64 s[36:37], s[36:37], vcc
 ; GFX9-NEXT:    s_mov_b64 exec, s[34:35]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB151_1

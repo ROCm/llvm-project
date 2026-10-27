@@ -176,12 +176,12 @@ define void @v_mov_b64_double(ptr addrspace(1) %ptr) {
 ; GFX13-GISEL-NEXT:    v_add_f64_e32 v[2:3], 0x4063233333333333, v[4:5]
 ; GFX13-GISEL-NEXT:    global_atomic_cmpswap_b64 v[2:3], v[0:1], v[2:5], off th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX13-GISEL-NEXT:    s_wait_loadcnt 0x0
-; GFX13-GISEL-NEXT:    v_cmp_ne_u64_e64 s1, v[2:3], v[4:5]
+; GFX13-GISEL-NEXT:    v_cmp_ne_u64_e32 vcc_lo, v[2:3], v[4:5]
 ; GFX13-GISEL-NEXT:    v_dual_mov_b32 v5, v3 :: v_dual_mov_b32 v4, v2
-; GFX13-GISEL-NEXT:    s_xor_b32 s2, exec_lo, s1
+; GFX13-GISEL-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
 ; GFX13-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX13-GISEL-NEXT:    s_or_b32 s0, s0, s2
-; GFX13-GISEL-NEXT:    s_mov_b32 exec_lo, s1
+; GFX13-GISEL-NEXT:    s_or_b32 s0, s0, s1
+; GFX13-GISEL-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX13-GISEL-NEXT:    ; divergent control-flow edge
 ; GFX13-GISEL-NEXT:    s_cbranch_execnz .LBB6_1
 ; GFX13-GISEL-NEXT:  .LBB6_2: ; %atomicrmw.end

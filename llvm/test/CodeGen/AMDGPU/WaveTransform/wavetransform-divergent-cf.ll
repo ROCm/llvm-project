@@ -269,8 +269,8 @@ define amdgpu_cs void @cascaded_if_shared_target(ptr addrspace(1) %out, i32 %val
 ; CHECK-LABEL: cascaded_if_shared_target:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v2
-; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; CHECK-NEXT:    s_mov_b64 s[0:1], 0
+; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB4_2
@@ -340,10 +340,8 @@ exit:
 ;
 ; Entry has a uniform branch (readfirstlane + scalar compare). One path
 ; enters div_block with a divergent branch; the other bypasses directly
-; to merge. Because div_block does NOT dominate merge (the bypass path
-; exists), Step3Trivial is false and the accumulator machinery is needed.
-; The accumulator is zero-initialized (s_mov_b64 s[0:1], 0) so that on
-; the bypass path the rejoin s_or_b64 correctly adds zero lanes.
+; to merge. merge's RejoinAcc is zeroed in entry (s_mov_b64 s[0:1], 0), so
+; on the bypass path the rejoin s_or_b64 adds zero lanes.
 
 define amdgpu_cs void @uniform_bypass_divergent(ptr addrspace(1) %out, i32 %val1, i32 %val2) {
 ; CHECK-LABEL: uniform_bypass_divergent:
@@ -416,16 +414,16 @@ declare i32 @llvm.amdgcn.readfirstlane(i32)
 define amdgpu_cs void @self_loop(ptr addrspace(1) %out, i32 %val) {
 ; CHECK-LABEL: self_loop:
 ; CHECK:       ; %bb.0: ; %preheader
-; CHECK-NEXT:    s_mov_b32 s2, -1
 ; CHECK-NEXT:    s_mov_b64 s[0:1], 0
+; CHECK-NEXT:    s_mov_b32 s2, -1
 ; CHECK-NEXT:  .LBB6_1: ; %loop
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    s_add_i32 s2, s2, 1
-; CHECK-NEXT:    v_cmp_lt_u32_e64 s[4:5], s2, v2
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, s2, v2
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; CHECK-NEXT:    v_mov_b32_e32 v3, s2
-; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
-; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB6_1
 ; CHECK-NEXT:  .LBB6_2: ; %exit
@@ -473,40 +471,40 @@ define amdgpu_cs void @loop_two_exits(ptr addrspace(1) %out, i32 %val1, i32 %val
 ; CHECK-LABEL: loop_two_exits:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, v3, v5
-; CHECK-NEXT:    s_mov_b32 s0, 0
+; CHECK-NEXT:    s_mov_b64 s[0:1], 0
+; CHECK-NEXT:    s_mov_b32 s2, 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc
 ; CHECK-NEXT:    s_mov_b32 s4, 0
-; CHECK-NEXT:    s_mov_b64 s[2:3], 0
 ; CHECK-NEXT:  .LBB7_1: ; %header
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    v_cmp_ge_u32_e32 vcc, s4, v4
 ; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
+; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
 ; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_4
 ; CHECK-NEXT:  .LBB7_2: ; %body
 ; CHECK-NEXT:    ; in Loop: Header=BB7_1 Depth=1
-; CHECK-NEXT:    s_ashr_i32 s1, s0, 31
-; CHECK-NEXT:    s_lshl_b64 s[6:7], s[0:1], 2
+; CHECK-NEXT:    s_ashr_i32 s3, s2, 31
+; CHECK-NEXT:    s_lshl_b64 s[6:7], s[2:3], 2
 ; CHECK-NEXT:    v_mov_b32_e32 v6, s7
 ; CHECK-NEXT:    v_add_co_u32_e32 v5, vcc, s6, v0
-; CHECK-NEXT:    v_cmp_ne_u32_e64 s[6:7], 0, v3
-; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; CHECK-NEXT:    v_addc_co_u32_e32 v6, vcc, v1, v6, vcc
-; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[8:9]
+; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, vcc
+; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
 ; CHECK-NEXT:    global_store_dword v[5:6], v2, off
-; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
+; CHECK-NEXT:    s_mov_b64 exec, vcc
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB7_4
 ; CHECK-NEXT:  .LBB7_3: ; %latch
 ; CHECK-NEXT:    ; in Loop: Header=BB7_1 Depth=1
 ; CHECK-NEXT:    s_add_i32 s4, s4, 1
-; CHECK-NEXT:    s_add_i32 s0, s0, 4
+; CHECK-NEXT:    s_add_i32 s2, s2, 4
 ; CHECK-NEXT:    s_branch .LBB7_1
 ; CHECK-NEXT:  .LBB7_4: ; %exit
-; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; CHECK-NEXT:    v_mov_b32_e32 v2, 42
 ; CHECK-NEXT:    global_store_dword v[0:1], v2, off
 ; CHECK-NEXT:    s_endpgm
