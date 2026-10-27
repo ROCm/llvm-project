@@ -539,6 +539,44 @@ static uint64_t digestReachability(const AMDGPUNextUseAnalysis &NUA,
   return D.value();
 }
 
+//===----------------------------------------------------------------------===//
+// Read-only usage pattern
+//
+// What amdgpu-next-use-printer does, and what any pass that only consumes the
+// analysis does: build once, then sweep every instruction asking for the
+// furthest next use among the registers live there, with no mutation and so no
+// notification. Timed separately from the build because the two regress for
+// different reasons.
+//===----------------------------------------------------------------------===//
+
+// One pass of the printer's furthest-distance sweep. \Returns elapsed
+// microseconds; \p Queries counts the instructions visited.
+static double runFurthestDistanceSweep(const AMDGPUNextUseAnalysis &NUA,
+                                       const MachineFunction &MF,
+                                       LiveIntervals &LIS, size_t &Queries) {
+  GCNDownwardRPTracker RPTracker(LIS);
+  AMDGPUNextUseAnalysis::UseDistancePair Furthest, FurthestSubreg;
+  DenseMap<const MachineOperand *, AMDGPUNextUseAnalysis::UseDistancePair>
+      RelevantUses;
+
+  const auto Start = std::chrono::steady_clock::now();
+  for (const MachineBasicBlock &MBB : MF) {
+    const MachineInstr *PrevMI = nullptr;
+    for (const MachineInstr &MI : MBB) {
+      if (!PrevMI || PrevMI->isPHI())
+        RPTracker.reset(MI, MBB.end());
+      RPTracker.advance();
+
+      RelevantUses.clear();
+      NUA.getNextUseDistances(RPTracker.getLiveRegs(), MI, Furthest,
+                              &FurthestSubreg, &RelevantUses);
+      ++Queries;
+      PrevMI = &MI;
+    }
+  }
+  return elapsedMicros(Start);
+}
+
 struct MirFuncCase {
   const char *File;
   const char *Func;
@@ -723,6 +761,50 @@ TEST_F(NextUseAnalysisIncrementalTest, InterBlockDistanceGoldenDigest) {
 
   for (const GoldenDigestEntry &Entry : GoldenDigests)
     runGoldenDigestCheck(Entry, *this);
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, ReadOnlySweepAcyclic770bb) {
+  parseNextUseMIROrSkip("acyclic-770bb.mir");
+  MachineFunction &MF = getMF("acyclic_770bb");
+
+  double BuildUs = 0;
+  AMDGPUNextUseAnalysis *NUAPtr = nullptr;
+  timeMicros(BuildUs, [&] {
+    NUAPtr =
+        &getNextUseAnalysis(MF, MFAM, computeConfig(), /*Invalidate*/ true);
+  });
+  AMDGPUNextUseAnalysis &NUA = *NUAPtr;
+
+  LiveIntervals &LIS = MFAM.getResult<LiveIntervalsAnalysis>(MF);
+
+  size_t ColdQueries = 0, WarmQueries = 0;
+  const double ColdUs = runFurthestDistanceSweep(NUA, MF, LIS, ColdQueries);
+  const double WarmUs = runFurthestDistanceSweep(NUA, MF, LIS, WarmQueries);
+  ASSERT_EQ(ColdQueries, WarmQueries);
+  ASSERT_GT(ColdQueries, 0u);
+
+  NextUseSnapshot Snap;
+  double DefUseUs = 0;
+  timeMicros(DefUseUs, [&] { captureNextUseSnapshot(NUA, MF, Snap); });
+  EXPECT_FALSE(Snap.DefRegToClosestUseDist.empty());
+
+  const double TotalUs = BuildUs + ColdUs + WarmUs + DefUseUs;
+
+  const auto Ms = [](double Us) { return formatv("{0:F3}", Us / 1000.0); };
+  llvm::outs() << "[ >NUA r/o ] total=" << Ms(TotalUs)
+               << "ms blocks=" << MF.size() << " queries=" << ColdQueries
+               << " build=" << Ms(BuildUs) << "ms sweep-cold=" << Ms(ColdUs)
+               << "ms sweep-warm=" << Ms(WarmUs)
+               << "ms def-to-use=" << Ms(DefUseUs) << "ms\n";
+
+  RecordProperty("read_only.total_ms", Ms(TotalUs).str());
+  RecordProperty("read_only.build_ms", Ms(BuildUs).str());
+  RecordProperty("read_only.sweep_cold_ms", Ms(ColdUs).str());
+  RecordProperty("read_only.sweep_warm_ms", Ms(WarmUs).str());
+  RecordProperty("read_only.def_to_use_ms", Ms(DefUseUs).str());
+  RecordProperty("read_only.queries", std::to_string(ColdQueries));
+
+  EXPECT_LE(WarmUs, ColdUs);
 }
 
 TEST_F(NextUseAnalysisIncrementalTest, NoChangeInstrAddedMatchesFresh) {
