@@ -44,6 +44,8 @@ struct NextUseSnapshot {
   DenseMap<unsigned, int64_t> BlockSpan;
 };
 
+using QueryDistances = DenseMap<unsigned, uint64_t>;
+
 static void captureNextUseSnapshot(const AMDGPUNextUseAnalysis &NUA,
                                    const MachineFunction &MF,
                                    NextUseSnapshot &Snap) {
@@ -540,6 +542,338 @@ static uint64_t digestReachability(const AMDGPUNextUseAnalysis &NUA,
 }
 
 //===----------------------------------------------------------------------===//
+// Simulated AMDGPUEarlyRegisterSpilling query pattern
+//
+// ERS walks blocks in reverse post order and, wherever pressure exceeds the
+// budget, ranks the registers live at that point by next-use distance, spills
+// the furthest one, and continues. Two properties distinguish it from recovery
+// and both are reproduced here:
+//
+//   - Queries are single-source per batch, but the source is the point itself
+//     only outside a loop. Inside one it is the back of the outermost enclosing
+//     loop's preheader (or the front of its header), so every pressure point in
+//     a loop nest shares a source block.
+//   - It mutates many times per function rather than once per attempt, and
+//     each spill both inserts instructions and redirects a use, so it drives
+//     instrAdded and regUsesChanged together.
+//
+// Two things are deliberately not simulated. Pressure accounting is replaced by
+// "every Nth instruction in reverse post order", since what matters here is the
+// query and notification shape, not which points ERS picks. And the spill is
+// modelled by its analysis-visible footprint -- one instruction after the def,
+// one before the redirected use, and the use rewritten to a fresh register --
+// rather than by real spill opcodes and frame indices, because only block sizes
+// and use lists feed next-use distance.
+//===----------------------------------------------------------------------===//
+struct ErsPressurePoint {
+  // Stable across analysis invalidation and instruction insertion: MBBs and
+  // MachineInstrs belong to the function, not to an analysis, and nothing here
+  // erases instructions.
+  MachineInstr *CurMI = nullptr;
+  MachineBasicBlock *Preheader = nullptr; // null outside a loop
+  MachineBasicBlock *Header = nullptr;
+  SmallVector<std::pair<Register, LaneBitmask>, 0> Candidates;
+};
+
+// ERS recomputes StartMI from the loop each time, so resolve it at query time
+// rather than caching an instruction that insertion may have displaced.
+static MachineInstr *ersQuerySource(const ErsPressurePoint &P) {
+  if (!P.Preheader)
+    return P.CurMI;
+  if (!P.Preheader->empty())
+    return &P.Preheader->back();
+  return P.Header->empty() ? nullptr : &P.Header->front();
+}
+
+static void planErsPressurePoints(MachineFunction &MF, LiveIntervals &LIS,
+                                  const MachineLoopInfo &MLI, unsigned Stride,
+                                  unsigned MaxPoints,
+                                  SmallVectorImpl<ErsPressurePoint> &Points) {
+  GCNDownwardRPTracker RPTracker(LIS);
+  ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
+  unsigned Seen = 0;
+
+  for (MachineBasicBlock *MBB : RPOT) {
+    if (MBB->empty())
+      continue;
+
+    MachineLoop *Loop = MLI.getLoopFor(MBB);
+    MachineLoop *Outermost = Loop ? Loop->getOutermostLoop() : nullptr;
+    // ERS only takes the preheader path when it has one to take.
+    MachineBasicBlock *Preheader =
+        Outermost ? Outermost->getLoopPreheader() : nullptr;
+
+    RPTracker.reset(*MBB->begin(), MBB->end());
+    RPTracker.advance();
+
+    for (MachineInstr &MI : *MBB) {
+      if (MI.isDebugInstr())
+        continue;
+
+      if (Seen++ % Stride == 0 && Points.size() < MaxPoints) {
+        ErsPressurePoint P;
+        P.CurMI = &MI;
+        if (Preheader) {
+          P.Preheader = Preheader;
+          P.Header = Outermost->getHeader();
+        }
+        for (auto [RegId, Mask] : RPTracker.getLiveRegs()) {
+          Register Reg(RegId);
+          if (!Reg.isVirtual() || !MF.getRegInfo().getUniqueVRegDef(Reg))
+            continue;
+          P.Candidates.emplace_back(Reg, Mask);
+        }
+        // getLiveRegs hands back a DenseMap; iteration order is not stable
+        // between the two replays this plan feeds.
+        llvm::sort(P.Candidates, [](const auto &A, const auto &B) {
+          return A.first.id() < B.first.id();
+        });
+        if (!P.Candidates.empty())
+          Points.push_back(std::move(P));
+      }
+
+      if (&MI == &MBB->back())
+        break;
+      if (MI.isPHI())
+        RPTracker.reset(*MI.getNextNode(), MBB->end());
+      RPTracker.advance();
+    }
+  }
+}
+
+// One ranked candidate, in ERS's terms. Dist is signed to match
+// NextUseDistance::getRawValue, whose unreachable sentinel is int64_t's max.
+struct ErsRankedCandidate {
+  Register Reg;
+  int64_t Dist = 0;
+};
+
+// Run the batch ERS runs at one pressure point: for every live candidate,
+// collect reachable uses from the single source and take the shortest distance,
+// plus the reachability probes ERS interleaves. Returns elapsed microseconds.
+static double runErsRankingQuery(const AMDGPUNextUseAnalysis &NUA,
+                                 const MachineFunction &MF,
+                                 const ErsPressurePoint &P,
+                                 SmallVectorImpl<ErsRankedCandidate> &Ranked) {
+  const MachineRegisterInfo &MRI = MF.getRegInfo();
+  MachineInstr *StartMI = ersQuerySource(P);
+  if (!StartMI)
+    return 0.0;
+  const MachineBasicBlock *CurMBB = P.CurMI->getParent();
+
+  const auto Start = std::chrono::steady_clock::now();
+  for (auto [Reg, Mask] : P.Candidates) {
+    const MachineInstr *Def = MRI.getUniqueVRegDef(Reg);
+    if (!Def || Def == StartMI)
+      continue;
+
+    // ERS asks about pairs unrelated to the query instruction, in both
+    // directions; these are served by the same table as the distances.
+    (void)NUA.isReachable(CurMBB, Def->getParent());
+
+    SmallVector<const MachineOperand *> Uses;
+    NUA.getReachableUses(Reg, Mask, *StartMI, Uses);
+
+    // Loop-header PHI uses are skipped, as in getCandidates.
+    if (P.Header)
+      llvm::erase_if(Uses, [&](const MachineOperand *MO) {
+        const MachineInstr *UseMI = MO->getParent();
+        return UseMI->isPHI() && UseMI->getParent() == P.Header;
+      });
+    if (Uses.empty())
+      continue;
+
+    const MachineBasicBlock *FirstUseMBB =
+        Uses.front()->getParent()->getParent();
+    (void)NUA.isReachable(StartMI->getParent(), FirstUseMBB);
+
+    Ranked.push_back(
+        {Reg, NUA.getShortestDistance(Reg, *StartMI, Uses).getRawValue()});
+  }
+  const double ElapsedUs = elapsedMicros(Start);
+
+  llvm::stable_sort(
+      Ranked, [](const ErsRankedCandidate &A, const ErsRankedCandidate &B) {
+        return std::tie(A.Dist, A.Reg) > std::tie(B.Dist, B.Reg);
+      });
+  return ElapsedUs;
+}
+
+// The analysis-visible footprint of spilling \p Reg: an instruction after its
+// def, an instruction defining a fresh register before the use being
+// redirected, and that use rewritten. Fills \p ChangedMBBs with every block the
+// caller must pass to instrAdded, and reports the rewrite for regUsesChanged.
+static void applyErsSpillFootprint(
+    MachineFunction &MF, Register Reg, const MachineInstr &StartMI,
+    SmallVectorImpl<MachineBasicBlock *> &ChangedMBBs,
+    SmallVectorImpl<std::pair<const MachineOperand *, Register>> &Rewrites) {
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  const SIInstrInfo &TII = *MF.getSubtarget<GCNSubtarget>().getInstrInfo();
+
+  MachineInstr *Def = MRI.getUniqueVRegDef(Reg);
+  ASSERT_NE(Def, nullptr);
+
+  // Redirect the first use reachable from the query source, which is the one
+  // ERS's reload would dominate.
+  SmallVector<const MachineOperand *> Uses;
+  MachineOperand *UseMO = nullptr;
+  for (MachineOperand &MO : MRI.use_nodbg_operands(Reg)) {
+    if (MO.isUndef() || MO.getParent() == Def)
+      continue;
+    UseMO = &MO;
+    break;
+  }
+  if (!UseMO)
+    return;
+
+  MachineInstr *UseMI = UseMO->getParent();
+  MachineBasicBlock &DefMBB = *Def->getParent();
+  MachineBasicBlock &UseMBB = *UseMI->getParent();
+
+  BuildMI(DefMBB, std::next(Def->getIterator()), Def->getDebugLoc(),
+          TII.get(AMDGPU::S_NOP))
+      .addImm(0);
+
+  Register ReloadReg = MRI.createVirtualRegister(MRI.getRegClass(Reg));
+  BuildMI(UseMBB, UseMI->getIterator(), UseMI->getDebugLoc(),
+          TII.get(AMDGPU::IMPLICIT_DEF), ReloadReg);
+
+  const Register OldReg = UseMO->getReg();
+  UseMO->setReg(ReloadReg);
+  Rewrites.emplace_back(UseMO, OldReg);
+
+  ChangedMBBs.push_back(&DefMBB);
+  if (&UseMBB != &DefMBB)
+    ChangedMBBs.push_back(&UseMBB);
+}
+
+// Walk the planned pressure points in order, keeping the analysis in sync
+// either through the notification hooks or by full rebuild, and record what
+// each batch answered.
+static void runErsSweep(MachineFunction &MF,
+                        MachineFunctionAnalysisManager &MFAM,
+                        AMDGPUNextUseAnalysis::Config Cfg, LiveIntervals &LIS,
+                        const MachineLoopInfo &MLI, bool Incremental,
+                        unsigned Stride, unsigned MaxPoints,
+                        UpdateQueryTiming &Timings,
+                        SmallVectorImpl<QueryDistances> &PerPoint) {
+  SmallVector<ErsPressurePoint, 8> Points;
+  planErsPressurePoints(MF, LIS, MLI, Stride, MaxPoints, Points);
+  ASSERT_FALSE(Points.empty());
+
+  AMDGPUNextUseAnalysis *NUA =
+      &getNextUseAnalysis(MF, MFAM, Cfg, /*Invalidate*/ true);
+
+  SmallVector<MachineBasicBlock *, 2> ChangedMBBs;
+  SmallVector<std::pair<const MachineOperand *, Register>, 2> Rewrites;
+
+  // Characterise the simulated workload, so a change in the MIR that quietly
+  // reduces it to a handful of candidates is visible rather than silent.
+  size_t TotalCandidates = 0, PreheaderSourced = 0, Notifications = 0;
+  DenseSet<const MachineBasicBlock *> SourceBlocks;
+
+  for (unsigned I = 0, E = Points.size(); I != E; ++I) {
+    SCOPED_TRACE("pressure point " + std::to_string(I));
+
+    // Catch up with the spill made at the previous point.
+    if (I != 0) {
+      const auto UpdateStart = std::chrono::steady_clock::now();
+      if (Incremental) {
+        for (MachineBasicBlock *MBB : ChangedMBBs) {
+          NUA->instrAdded(*MBB);
+          ++Notifications;
+        }
+        if (!Rewrites.empty())
+          NUA->regUsesChanged(Rewrites);
+      } else {
+        NUA = &getNextUseAnalysis(MF, MFAM, Cfg, /*Invalidate*/ true);
+      }
+      const double ElapsedUs = elapsedMicros(UpdateStart);
+      if (Incremental) {
+        Timings.IncrementalUpdateUs += ElapsedUs;
+        EXPECT_TRUE(NUA->verifyRegUseCache());
+      } else {
+        Timings.FullRebuildUs += ElapsedUs;
+      }
+    }
+
+    TotalCandidates += Points[I].Candidates.size();
+    PreheaderSourced += Points[I].Preheader != nullptr;
+    if (const MachineInstr *Src = ersQuerySource(Points[I]))
+      SourceBlocks.insert(Src->getParent());
+
+    SmallVector<ErsRankedCandidate, 32> Ranked;
+    const double QueryUs = runErsRankingQuery(*NUA, MF, Points[I], Ranked);
+    if (Incremental)
+      Timings.IncrementalQueryUs += QueryUs;
+    else
+      Timings.FullQueryUs += QueryUs;
+
+    QueryDistances Distances;
+    for (const ErsRankedCandidate &C : Ranked)
+      Distances[C.Reg.id()] = C.Dist;
+    PerPoint.push_back(std::move(Distances));
+
+    ChangedMBBs.clear();
+    Rewrites.clear();
+    if (Ranked.empty())
+      continue;
+    MachineInstr *StartMI = ersQuerySource(Points[I]);
+    ASSERT_NE(StartMI, nullptr);
+    ASSERT_NO_FATAL_FAILURE(applyErsSpillFootprint(
+        MF, Ranked.front().Reg, *StartMI, ChangedMBBs, Rewrites));
+  }
+
+  if (Incremental)
+    llvm::outs() << "[ >ERS sim ] blocks=" << MF.size()
+                 << " points=" << Points.size()
+                 << " candidates=" << TotalCandidates
+                 << " preheader-sourced=" << PreheaderSourced
+                 << " distinct-source-blocks=" << SourceBlocks.size()
+                 << " instrAdded-calls=" << Notifications << '\n';
+}
+
+// Run the sweep twice, through the hooks and by full rebuild, and require every
+// pressure point to rank identically.
+static void expectErsSweepMatchesRebuild(
+    StringRef Label, unsigned Stride, unsigned MaxPoints,
+    function_ref<void(bool Incremental, UpdateQueryTiming &,
+                      SmallVectorImpl<QueryDistances> &)>
+        RunSweep) {
+  UpdateQueryTiming Timings;
+  SmallVector<QueryDistances, 8> IncPerPoint, FullPerPoint;
+
+  ASSERT_NO_FATAL_FAILURE(RunSweep(/*Incremental*/ true, Timings, IncPerPoint));
+  if (testing::Test::IsSkipped() || IncPerPoint.empty())
+    return;
+
+  ASSERT_NO_FATAL_FAILURE(
+      RunSweep(/*Incremental*/ false, Timings, FullPerPoint));
+  if (testing::Test::IsSkipped())
+    return;
+
+  ASSERT_EQ(IncPerPoint.size(), FullPerPoint.size());
+  for (unsigned I = 0, E = IncPerPoint.size(); I != E; ++I) {
+    SCOPED_TRACE("pressure point " + std::to_string(I));
+    const QueryDistances &Inc = IncPerPoint[I];
+    const QueryDistances &Full = FullPerPoint[I];
+    EXPECT_EQ(Inc.size(), Full.size());
+    for (const auto &KV : Inc) {
+      SCOPED_TRACE("vreg " + std::to_string(KV.first));
+      auto It = Full.find(KV.first);
+      ASSERT_NE(It, Full.end());
+      EXPECT_EQ(KV.second, It->second);
+    }
+  }
+
+  reportUpdateQueryTiming((Label + "(" + Twine(IncPerPoint.size()) +
+                           "points,stride" + Twine(Stride) + ")")
+                              .str(),
+                          Timings);
+  (void)MaxPoints;
+}
+
+//===----------------------------------------------------------------------===//
 // Read-only usage pattern
 //
 // What amdgpu-next-use-printer does, and what any pass that only consumes the
@@ -805,6 +1139,28 @@ TEST_F(NextUseAnalysisIncrementalTest, ReadOnlySweepAcyclic770bb) {
   RecordProperty("read_only.queries", std::to_string(ColdQueries));
 
   EXPECT_LE(WarmUs, ColdUs);
+}
+
+TEST_F(NextUseAnalysisIncrementalTest, ErsSweepQueryPattern) {
+  constexpr unsigned Stride = 3;
+  constexpr unsigned MaxPoints = 8;
+
+  auto RunSweep = [&](bool Incremental, UpdateQueryTiming &Timings,
+                      SmallVectorImpl<QueryDistances> &PerPoint) {
+    resetParsedModule();
+    parseTestForMIROrSkip();
+    if (IsSkipped())
+      return;
+    MachineFunction &MF = getMF("test4");
+    LiveIntervals &LIS = MFAM.getResult<LiveIntervalsAnalysis>(MF);
+    const MachineLoopInfo &MLI = MFAM.getResult<MachineLoopAnalysis>(MF);
+    ASSERT_NO_FATAL_FAILURE(runErsSweep(MF, MFAM, computeConfig(), LIS, MLI,
+                                        Incremental, Stride, MaxPoints, Timings,
+                                        PerPoint));
+  };
+
+  expectErsSweepMatchesRebuild("ErsSweepQueryPattern", Stride, MaxPoints,
+                               RunSweep);
 }
 
 TEST_F(NextUseAnalysisIncrementalTest, NoChangeInstrAddedMatchesFresh) {
