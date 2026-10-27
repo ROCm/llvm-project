@@ -884,6 +884,13 @@ struct PluginContextTy {
   /// known to this context. Only valid on user-created contexts.
   virtual llvm::Expected<PluginAllocInfoTy> getAllocInfo(const void *Ptr) = 0;
 
+  /// Return the backend-native handle of this context, reinterpreted as a
+  /// void pointer.
+  virtual llvm::Expected<void *> getNativeHandle() {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "%s not supported by platform", __func__);
+  }
+
 protected:
   GenericPluginTy &Plugin;
   llvm::SmallVector<GenericDeviceTy *> Devices;
@@ -1334,6 +1341,20 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// storage is accessible
   Expected<bool> isAccessiblePtr(const void *Ptr, size_t Size);
 
+  /// Return the backend-native handle of this device, reinterpreted as a
+  /// void pointer.
+  virtual Expected<void *> getNativeHandle() {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "%s not supported by platform", __func__);
+  }
+
+  /// Return the backend-native handle of the queue held by \p AsyncInfo,
+  /// reinterpreted as a void pointer.
+  virtual Expected<void *> getNativeQueueHandle(__tgt_async_info *AsyncInfo) {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "%s not supported by platform", __func__);
+  }
+
   virtual Expected<omp_interop_val_t *>
   createInterop(int32_t InteropType, interop_spec_t &InteropSpec) {
     return Plugin::error(error::ErrorCode::UNSUPPORTED,
@@ -1738,9 +1759,6 @@ public:
 
   /// Unused in current implementation.
   int32_t supports_empty_images();
-
-  /// Returns the number of processors available on the device.
-  int number_of_team_procs(int DeviceId);
 
   /// Returns if this device is an APU.
   bool has_apu_device(int32_t DeviceId);
