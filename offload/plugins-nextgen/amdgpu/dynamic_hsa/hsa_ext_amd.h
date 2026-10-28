@@ -230,10 +230,13 @@ hsa_status_t hsa_amd_profiling_set_profiler_enabled(hsa_queue_t *queue,
 
 hsa_status_t hsa_amd_profiling_async_copy_enable(bool enable);
 
-hsa_status_t hsa_amd_profiling_get_async_copy_time(
-    hsa_signal_t signal, hsa_amd_profiling_async_copy_time_t *time);
+typedef struct hsa_amd_profiling_async_copy_time_s {
+  uint64_t start;
+  uint64_t end;
+} hsa_amd_profiling_async_copy_time_t;
 
-hsa_status_t hsa_amd_vmem_address_reserve(void **va, size_t size,
+hsa_status_t hsa_amd_profiling_get_async_copy_time(
+    hsa_signal_t signal, hsa_amd_profiling_async_copy_time_t *time);hsa_status_t hsa_amd_vmem_address_reserve(void **va, size_t size,
                                           uint64_t address, uint64_t flags);
 
 hsa_status_t hsa_amd_vmem_address_free(void *va, size_t size);

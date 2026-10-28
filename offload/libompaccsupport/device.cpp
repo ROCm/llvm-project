@@ -100,42 +100,40 @@ inline void setAsyncInfoSynchronous(__tgt_async_info *AI, bool SetSynchronous) {
 }
 
 llvm::Error DeviceTy::initGeometryProps() {
-  auto Query = [&](DeviceInfo Info, auto &Dest) -> llvm::Error {
-    if (auto Res =
-            olGetDeviceInfo(DeviceHandle, static_cast<ol_device_info_t>(Info),
-                            sizeof(Dest), &Dest))
+  auto Query = [&](ol_device_info_t Info, auto &Dest) -> llvm::Error {
+    if (auto Res = olGetDeviceInfo(DeviceHandle, Info, sizeof(Dest), &Dest))
       return createError(ErrorCode::BackendFailure,
                          "failed to get property %d of device %d: %s",
                          static_cast<int>(Info), DeviceID, Res->Details);
     return llvm::Error::success();
   };
 
-  if (auto Err = Query(DeviceInfo::NUM_LANES, GeometryProps.WarpSize))
+  if (auto Err = Query(OL_DEVICE_INFO_NUM_LANES, GeometryProps.WarpSize))
     return Err;
   // A block is one dimensional, so it is limited both by the maximum number of
   // threads a block can have and by the maximum size of its first dimension.
   uint32_t MaxBlockSize = 0;
-  if (auto Err = Query(DeviceInfo::MAX_WORK_GROUP_SIZE, MaxBlockSize))
+  if (auto Err = Query(OL_DEVICE_INFO_MAX_WORK_GROUP_SIZE, MaxBlockSize))
     return Err;
   ol_dimensions_t MaxBlockSizePerDim{};
-  if (auto Err = Query(DeviceInfo::MAX_WORK_GROUP_SIZE_PER_DIMENSION,
+  if (auto Err = Query(OL_DEVICE_INFO_MAX_WORK_GROUP_SIZE_PER_DIMENSION,
                        MaxBlockSizePerDim))
     return Err;
   GeometryProps.ThreadLimit = std::min(MaxBlockSize, MaxBlockSizePerDim.x);
-  if (auto Err = Query(DeviceInfo::LAUNCH_DEFAULT_WORK_GROUP_SIZE,
+  if (auto Err = Query(OL_DEVICE_INFO_LAUNCH_DEFAULT_WORK_GROUP_SIZE,
                        GeometryProps.DefaultNumThreads))
     return Err;
-  if (auto Err = Query(DeviceInfo::LAUNCH_DEFAULT_NUM_WORK_GROUPS,
+  if (auto Err = Query(OL_DEVICE_INFO_LAUNCH_DEFAULT_NUM_WORK_GROUPS,
                        GeometryProps.DefaultNumBlocks))
     return Err;
   // This is the same property reported by omp_get_gprivate_limit().
-  if (auto Err = Query(DeviceInfo::WORK_GROUP_LOCAL_MEM_SIZE,
+  if (auto Err = Query(OL_DEVICE_INFO_WORK_GROUP_LOCAL_MEM_SIZE,
                        GeometryProps.MaxBlockSharedMemSize))
     return Err;
   // Not every device reports its number of compute units; zero turns off the
   // heuristics that need it.
   GeometryProps.NumComputeUnits =
-      getInfo<uint32_t>(DeviceInfo::NUM_COMPUTE_UNITS);
+      getInfo<uint32_t>(OL_DEVICE_INFO_NUM_COMPUTE_UNITS);
   // Some defaults depend on the backend. If it is unknown, the generic ones
   // apply.
   GeometryProps.Backend = Backend;
@@ -157,7 +155,7 @@ llvm::Error DeviceTy::init() {
                        "failed to create context for device %d: %s", DeviceID,
                        Res->Details);
   IsHostDevice =
-      getInfo<ol_device_type_t>(DeviceInfo::TYPE) == OL_DEVICE_TYPE_HOST;
+      getInfo<ol_device_type_t>(OL_DEVICE_INFO_TYPE) == OL_DEVICE_TYPE_HOST;
 
   RTL = llvm::offload::tmp::__ol_tgt_GetPluginFromPlatform(Platform);
   RTLDeviceID = llvm::offload::tmp::__ol_tgt_GetPluginDeviceId(DeviceHandle);
@@ -167,7 +165,7 @@ llvm::Error DeviceTy::init() {
                         &Backend))
     Backend = OL_PLATFORM_BACKEND_UNKNOWN;
 
-  getInfoString(DeviceInfo::UID, Uid);
+  getInfoString(OL_DEVICE_INFO_UID, Uid);
   if (Uid.empty())
     ODBG(ODT_Init) << "Failed to get UID for device " << DeviceID;
 
@@ -192,8 +190,7 @@ llvm::Error DeviceTy::init() {
       performOmptCallback(device_initialize, DeviceID, ComputeUnitKind.c_str(),
                           DevicePtr, ompt::lookupDeviceTracingFn,
                           /*documentation=*/nullptr);
-    });
-  });
+    });  });
 
   // Envar that indicates whether mapped host buffers should be locked
   // automatically. The possible values are boolean (on/off) and a special:
@@ -438,12 +435,12 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
   DeviceEnvironment.DeviceNum = RTLDeviceID;
   DeviceEnvironment.DynamicMemSize = 0;
   DeviceEnvironment.ClockFrequency =
-      getInfo<uint64_t>(DeviceInfo::TIMESTAMP_FREQUENCY);
+      getInfo<uint64_t>(OL_DEVICE_INFO_TIMESTAMP_FREQUENCY);
   DeviceEnvironment.IndirectCallTable =
       reinterpret_cast<uintptr_t>(CallTablePairOrErr->first);
   DeviceEnvironment.IndirectCallTableSize = CallTablePairOrErr->second;
   DeviceEnvironment.HardwareParallelism =
-      getInfo<uint64_t>(DeviceInfo::HARDWARE_PARALLELISM);
+      getInfo<uint64_t>(OL_DEVICE_INFO_HARDWARE_PARALLELISM);
 
   // DeviceEnvironment is on the stack, so the copy must be synchronous.
   if (submitDataSync(DeviceEnvironmentPtr, &DeviceEnvironment,
@@ -1517,8 +1514,8 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
     return OFFLOAD_FAIL;
   }
 
-  INFO(OMP_INFOTYPE_PLUGIN_KERNEL, DeviceID,
-       "Launching kernel %s with [%u,%u,%u] blocks and [%u,%u,%u] threads in "
+  auto *Kernel = reinterpret_cast<GenericKernelTy *>(TgtEntryPtr);
+  INFO(OMP_INFOTYPE_PLUGIN_KERNEL, DeviceID,       "Launching kernel %s with [%u,%u,%u] blocks and [%u,%u,%u] threads in "
        "%s mode\n",
        Kernel->getName(), LaunchArgs.UserNumBlocks[0],
        LaunchArgs.UserNumBlocks[1], LaunchArgs.UserNumBlocks[2],
