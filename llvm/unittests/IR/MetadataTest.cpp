@@ -4494,6 +4494,8 @@ TEST_F(DIExpressionTest, isValid) {
   EXPECT_VALID(dwarf::DW_OP_deref_size, 255);
   EXPECT_VALID(dwarf::DW_OP_constu, 1, dwarf::DW_OP_swap,
                dwarf::DW_OP_xderef_size, 255);
+  EXPECT_VALID(dwarf::DW_OP_constu, 6, dwarf::DW_OP_LLVM_user,
+               dwarf::DW_OP_LLVM_offset, dwarf::DW_OP_deref);
 
   // Invalid constructions.
   EXPECT_INVALID(~0u);
@@ -4514,6 +4516,8 @@ TEST_F(DIExpressionTest, isValid) {
   EXPECT_INVALID(dwarf::DW_OP_deref_size, 256);
   EXPECT_INVALID(dwarf::DW_OP_constu, 1, dwarf::DW_OP_swap,
                  dwarf::DW_OP_xderef_size, 256);
+  EXPECT_INVALID(dwarf::DW_OP_LLVM_user);
+  EXPECT_INVALID(dwarf::DW_OP_LLVM_user, dwarf::DW_OP_LLVM_form_aspace_address);
 
   // A valid operation doesn't make a malformed suffix valid.
   EXPECT_INVALID(dwarf::DW_OP_reg0, dwarf::DW_OP_stack_value,
