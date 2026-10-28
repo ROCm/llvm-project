@@ -6,19 +6,19 @@
 
 DMA (or "Direct Memory Access") operations transfer data between different kinds
 of memory directly without occupying registers in the invoking wave. They are
-usually {ref}`asynchronous<amdgpu-async-operations>`, and require the user to
-explicitly track completion using {ref}`asyncmarks<amdgpu-async-operations>`.
+usually {ref}`asynchronous<amdgpu-async-operations>`, and require additional
+mechanisms to {ref}`track completion<amdgpu-async-completed-at>`.
 
 All DMA operations support the same cache modifiers as ordinary load/store
 operations from registers. They cannot be performed atomically.
 
-## GFX9 LDS DMA
+## GFX9 LDS DMA Operations
 
 Each GFX9 LDS DMA instruction has a synchronous counterpart (e.g.,
 `@llvm.amdgcn.load.to.lds` for `@llvm.amdgcn.load.async.to.lds`). The
 synchronous variants perform the same operation, but the compiler automatically
 ensures completion before their effects are used. The asynchronous variants use
-{ref}`asyncmarks<amdgpu-async-operations>` to track completion.
+{ref}`asyncmarks<amdgpu-asyncmarks>` to track completion.
 
 GFX9 DMA instructions implement volatile (via `aux/cpol` bit 31) and
 nontemporal (via metadata) as if they were loads from the global address space.
@@ -86,6 +86,11 @@ The intrinsics differ in two orthogonal ways:
 
 ## GFX1250 DMA Operations
 
+All GFX1250 DMA operations are asynchronous and can use
+{ref}`asyncmarks<amdgpu-asyncmarks>` to track completion. Some loads and tensor
+operations can also use {ref}`barriers<amdgpu-async-completed-at>` as described
+below. There are no synchronous variants.
+
 ### LDS DMA Operations
 
 GFX1250 LDS DMA instructions implement nontemporal (via metadata) as if they
@@ -143,7 +148,23 @@ pointer arguments or inaccessible memory.
 Despite the absence of `.async` in their names, these intrinsics are
 asynchronous.
 
+The tensor descriptor can encode an optional LDS barrier. A tensor load or
+store using such a descriptor performs one {ref}`barrier
+arrive<amdgpu-barrier-operations>` when it completes. The barrier is encoded in
+the descriptor arguments rather than passed separately to these intrinsics.
+
 All arguments must be wave-uniform.
+
+## Memory Accesses
+
+A DMA operation performs a {ref}`load-visible<amdgpu-load-visible>` operation on
+each source location and a {ref}`store-available<amdgpu-store-available>`
+operation on each destination location, both with the "lds-dma" scope defined
+below. This applies to accesses to both global memory and LDS, including
+locations specified through tensor descriptors.
+
+TODO: The relation of these memory accesses to the memory operations performed
+by other threads is currently unspecified.
 
 (amdgpu-lds-dma-scope)=
 
@@ -154,14 +175,6 @@ belong to the corresponding instance of "singlethread" scope. Instead the DMA
 operation belongs to a scope instance determined by the target. For any target,
 this is an instance of "workgroup" scope or "cluster" scope. Operations in LLVM
 IR may refer to this scope using the "lds-dma" symbolic string.
-
-### Memory Accesses
-
-A DMA operation performs a {ref}`load-visible<amdgpu-load-visible>` operation
-on each source location and a
-{ref}`store-available<amdgpu-store-available>` operation on each destination
-location, both with "lds-dma" scope. This applies to accesses to both global
-memory and LDS, including locations specified through tensor descriptors.
 
 ### Effect on Inclusive Scopes
 
