@@ -10,6 +10,7 @@ The AMD fork aims to contain all of [upstream LLVM](https://github.com/llvm/llvm
 - **amd/comgr** - The Code Object Manager API, designed to simplify linking, compiling, and inspecting code objects (code owner: [@lamb-j](https://www.github.com/lamb-j))
 - **amd/device-libs** -The sources and CMake build system for a set of AMD-specific device-side language runtime libraries (code owner: [@b-sumner](https://www.github.com/b-sumner))
 - **amd/hipcc** - A compiler driver utility that wraps clang and passes the appropriate include and library options for the target compiler and HIP infrastructure (code owner: [@david-salinas](https://www.github.com/david-salinas))
+- **amd/sqtt-marker** - An LLVM pass plugin and C device header for inserting SQTT shaderdata markers
 
 See the README files in respective subdirectories for more information on these AMD-specific projects. While the AMD fork aims to otherwise follow upstream as closely as possible, there are several outstanding differences.
 

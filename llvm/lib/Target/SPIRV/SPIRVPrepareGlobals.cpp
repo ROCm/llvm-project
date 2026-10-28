@@ -19,6 +19,8 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Debug.h"
 
+#include <string>
+
 #define DEBUG_TYPE "spirv-prepare-globals"
 
 using namespace llvm;
@@ -61,7 +63,9 @@ bool tryReplaceAliasWithAliasee(GlobalAlias &GA) {
     return false;
   }
 
-  if (AO->isInterposable()) {
+  // noipa doesn't affect which definition is used at link time, so it doesn't
+  // prevent replacing the alias.
+  if (AO->isInterposable(/*CheckNoIPA=*/false)) {
     LLVM_DEBUG(dbgs() << "Skipping interposable aliasee: " << AO->getName()
                       << "\n");
     return false;

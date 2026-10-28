@@ -15,8 +15,8 @@ MATH_PRIVATE(epsincos)(float y)
     if (!FINITE_ONLY_OPT())
         ay = BUILTIN_ISINF_F32(ay) ? QNAN_F32 : ay;
 
-    struct redret2 r = MATH_PRIVATE(trigred2)(ay);
-    float4 sc = MATH_PRIVATE(epsincosred2)(r.hi, r.lo);
+    struct epredret r = MATH_PRIVATE(eptrigred)(ay);
+    float4 sc = MATH_PRIVATE(epsincosredep)(r.r);
     float2 cr = sc.lo;
     float2 sr = sc.hi;
 

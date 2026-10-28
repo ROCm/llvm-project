@@ -21,8 +21,10 @@ define amdgpu_ps ptr addrspace(4) @v_mov_b64_pseudo_globaladdr(i1 %cond) {
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX10-NEXT:  .LBB0_1: ; %other
-; GFX10-NEXT:    v_mov_b32_e32 v0, gv@abs32@lo
-; GFX10-NEXT:    v_mov_b32_e32 v1, gv@abs32@hi
+; GFX10-NEXT:    s_mov_b32 s1, gv@abs32@hi
+; GFX10-NEXT:    s_mov_b32 s0, gv@abs32@lo
+; GFX10-NEXT:    v_mov_b32_e32 v1, s1
+; GFX10-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX10-NEXT:  .LBB0_2: ; %join
 ; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-NEXT:    v_readfirstlane_b32 s0, v0
@@ -39,8 +41,10 @@ define amdgpu_ps ptr addrspace(4) @v_mov_b64_pseudo_globaladdr(i1 %cond) {
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX11-NEXT:  .LBB0_1: ; %other
-; GFX11-NEXT:    v_mov_b32_e32 v0, gv@abs32@lo
-; GFX11-NEXT:    v_mov_b32_e32 v1, gv@abs32@hi
+; GFX11-NEXT:    s_mov_b32 s1, gv@abs32@hi
+; GFX11-NEXT:    s_mov_b32 s0, gv@abs32@lo
+; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX11-NEXT:    v_dual_mov_b32 v1, s1 :: v_dual_mov_b32 v0, s0
 ; GFX11-NEXT:  .LBB0_2: ; %join
 ; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)

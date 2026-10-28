@@ -16,4 +16,12 @@
     amd_comgr_status_t status = amd_comgr_##call;                         \
     ASSERT_EQ(AMD_COMGR_STATUS_SUCCESS, status);                          \
   } while (false)
+
+// For helpers that return a value, where ASSERT_COMGR's `return;` will not
+// compile.
+#define EXPECT_COMGR(call)                                                     \
+  do {                                                                         \
+    amd_comgr_status_t status = amd_comgr_##call;                              \
+    EXPECT_EQ(AMD_COMGR_STATUS_SUCCESS, status);                               \
+  } while (false)
 #endif // COMGR_TEST_COMMON_H

@@ -5,10 +5,10 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
 ; GCN-LABEL: copy_to_vreg_1:
 ; GCN:       ; %bb.0: ; %._crit_edge
 ; GCN-NEXT:    s_load_dword s6, s[4:5], 0x0
-; GCN-NEXT:    v_mov_b32_e32 v1, 0
 ; GCN-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; GCN-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GCN-NEXT:    s_mov_b64 s[2:3], 0
+; GCN-NEXT:    v_mov_b32_e32 v3, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_sub_i32 s7, 1, s6
 ; GCN-NEXT:    s_cmp_lt_u32 s6, 2
@@ -20,13 +20,13 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
 ; GCN-NEXT:    s_addc_u32 s0, 1, 0
 ; GCN-NEXT:    s_cmp_ge_u32 s5, s6
 ; GCN-NEXT:    s_cselect_b32 s0, s0, s4
-; GCN-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
+; GCN-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc
 ; GCN-NEXT:    v_mov_b32_e32 v4, s0
-; GCN-NEXT:    v_mov_b64_e32 v[2:3], 0
+; GCN-NEXT:    v_mov_b64_e32 v[0:1], 0
 ; GCN-NEXT:  .LBB0_1: ; %.lr.ph27
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
-; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
+; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v2
 ; GCN-NEXT:    s_or_b64 s[6:7], s[0:1], vcc
 ; GCN-NEXT:    s_xor_b64 s[0:1], s[6:7], exec
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
@@ -39,7 +39,7 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
 ; GCN-NEXT:    s_and_b64 vcc, vcc, vcc
 ; GCN-NEXT:    s_cselect_b64 s[6:7], 0, exec
 ; GCN-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
-; GCN-NEXT:    global_store_byte v[2:3], v1, off
+; GCN-NEXT:    global_store_byte v[0:1], v3, off
 ; GCN-NEXT:  .LBB0_3: ; in Loop: Header=BB0_1 Depth=1
 ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[0:1]
@@ -53,7 +53,7 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
 ; GCN-NEXT:    s_cbranch_execnz .LBB0_1
 ; GCN-NEXT:  ; %bb.5: ; %pred.store.if41
 ; GCN-NEXT:    ; in Loop: Header=BB0_1 Depth=1
-; GCN-NEXT:    global_store_byte v[2:3], v1, off
+; GCN-NEXT:    global_store_byte v[0:1], v3, off
 ; GCN-NEXT:    s_branch .LBB0_1
 ; GCN-NEXT:  .LBB0_6: ; %DummyReturnBlock
 ; GCN-NEXT:    s_endpgm

@@ -116,10 +116,9 @@ define bfloat @sitofp_i128_to_bf16(i128 %x) {
 ; SDAG-NEXT:    v_add_co_u32_e64 v0, s[4:5], 1, v0
 ; SDAG-NEXT:    v_addc_co_u32_e64 v1, s[4:5], 0, v7, s[4:5]
 ; SDAG-NEXT:    v_and_b32_e32 v4, 0x4000000, v0
-; SDAG-NEXT:    v_mov_b32_e32 v5, 0
-; SDAG-NEXT:    v_cmp_eq_u64_e64 s[4:5], 0, v[4:5]
-; SDAG-NEXT:    v_alignbit_b32 v6, v1, v0, 2
+; SDAG-NEXT:    v_cmp_eq_u32_e64 s[4:5], 0, v4
 ; SDAG-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
+; SDAG-NEXT:    v_alignbit_b32 v6, v1, v0, 2
 ; SDAG-NEXT:    s_or_b64 s[8:9], s[8:9], s[4:5]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge
@@ -414,10 +413,9 @@ define bfloat @uitofp_i128_to_bf16(i128 %x) {
 ; SDAG-NEXT:    v_add_co_u32_e64 v0, s[4:5], 1, v0
 ; SDAG-NEXT:    v_addc_co_u32_e64 v1, s[4:5], 0, v5, s[4:5]
 ; SDAG-NEXT:    v_and_b32_e32 v2, 0x4000000, v0
-; SDAG-NEXT:    v_mov_b32_e32 v3, 0
-; SDAG-NEXT:    v_cmp_eq_u64_e64 s[4:5], 0, v[2:3]
-; SDAG-NEXT:    v_alignbit_b32 v4, v1, v0, 2
+; SDAG-NEXT:    v_cmp_eq_u32_e64 s[4:5], 0, v2
 ; SDAG-NEXT:    s_xor_b64 s[6:7], s[4:5], exec
+; SDAG-NEXT:    v_alignbit_b32 v4, v1, v0, 2
 ; SDAG-NEXT:    s_or_b64 s[8:9], s[8:9], s[4:5]
 ; SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; SDAG-NEXT:    ; divergent control-flow edge

@@ -4,11 +4,15 @@
 define amdgpu_kernel void @global_atomic_fadd_ret_f32_wrong_subtarget(ptr addrspace(1) %ptr) #1 {
 ; GCN-LABEL: global_atomic_fadd_ret_f32_wrong_subtarget:
 ; GCN:       ; %bb.0:
-; GCN-NEXT:    s_mov_b64 s[6:7], exec
-; GCN-NEXT:    v_mbcnt_lo_u32_b32 v0, s6, 0
-; GCN-NEXT:    v_mbcnt_hi_u32_b32 v2, s7, v0
+; GCN-NEXT:    s_mov_b64 s[0:1], exec
+; GCN-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
+; GCN-NEXT:    v_cvt_f32_i32_e32 v0, s0
+; GCN-NEXT:    v_mbcnt_lo_u32_b32 v1, exec_lo, 0
+; GCN-NEXT:    v_mbcnt_hi_u32_b32 v2, exec_hi, v1
 ; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v2
+; GCN-NEXT:    v_mul_f32_e32 v0, 4.0, v0
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
+; GCN-NEXT:    v_readfirstlane_b32 s6, v0
 ; GCN-NEXT:    s_xor_b64 s[2:3], s[0:1], exec
 ; GCN-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc
 ; GCN-NEXT:    ; implicit-def: $vgpr0
@@ -17,18 +21,15 @@ define amdgpu_kernel void @global_atomic_fadd_ret_f32_wrong_subtarget(ptr addrsp
 ; GCN-NEXT:    s_cbranch_execz .LBB0_3
 ; GCN-NEXT:  .LBB0_1:
 ; GCN-NEXT:    s_load_dwordx2 s[2:3], s[4:5], 0x0
-; GCN-NEXT:    s_bcnt1_i32_b64 s5, s[6:7]
-; GCN-NEXT:    v_cvt_f32_ubyte0_e32 v0, s5
-; GCN-NEXT:    v_mul_f32_e32 v4, 4.0, v0
-; GCN-NEXT:    v_mov_b32_e32 v5, 0
+; GCN-NEXT:    v_mov_b32_e32 v4, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_load_dword s4, s[2:3], 0x0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_mov_b32_e32 v1, s4
 ; GCN-NEXT:  .LBB0_2: ; %atomicrmw.start
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GCN-NEXT:    v_add_f32_e32 v0, v1, v4
-; GCN-NEXT:    global_atomic_cmpswap v0, v5, v[0:1], s[2:3] glc
+; GCN-NEXT:    v_add_f32_e32 v0, s6, v1
+; GCN-NEXT:    global_atomic_cmpswap v0, v4, v[0:1], s[2:3] glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    buffer_wbinvl1
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
@@ -48,7 +49,7 @@ define amdgpu_kernel void @global_atomic_fadd_ret_f32_wrong_subtarget(ptr addrsp
 ; GCN-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; GCN-NEXT:    global_store_dword v[0:1], v0, off
 ; GCN-NEXT:    s_endpgm
-  %result = atomicrmw fadd ptr addrspace(1) %ptr, float 4.0 syncscope("agent") seq_cst, !amdgpu.no.fine.grained.memory !0, !amdgpu.ignore.denormal.mode !0
+  %result = atomicrmw fadd ptr addrspace(1) %ptr, float 4.0 syncscope("agent") seq_cst, !amdgpu.no.fine.grained.memory !0, !atomic.ignore.denormal.mode !0
   store float %result, ptr addrspace(1) poison
   ret void
 }
@@ -57,10 +58,14 @@ define amdgpu_kernel void @global_atomic_fadd_noret_f32_wrong_subtarget(ptr addr
 ; GCN-LABEL: global_atomic_fadd_noret_f32_wrong_subtarget:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_mov_b64 s[0:1], exec
-; GCN-NEXT:    v_mbcnt_lo_u32_b32 v0, s0, 0
-; GCN-NEXT:    v_mbcnt_hi_u32_b32 v0, s1, v0
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+; GCN-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
+; GCN-NEXT:    v_cvt_f32_i32_e32 v0, s0
+; GCN-NEXT:    v_mbcnt_lo_u32_b32 v1, exec_lo, 0
+; GCN-NEXT:    v_mbcnt_hi_u32_b32 v1, exec_hi, v1
+; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
+; GCN-NEXT:    v_mul_f32_e32 v0, 4.0, v0
 ; GCN-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GCN-NEXT:    v_readfirstlane_b32 s0, v0
 ; GCN-NEXT:    s_mov_b64 exec, s[2:3]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB1_2
@@ -68,16 +73,14 @@ define amdgpu_kernel void @global_atomic_fadd_noret_f32_wrong_subtarget(ptr addr
 ; GCN-NEXT:    s_endpgm
 ; GCN-NEXT:  .LBB1_2:
 ; GCN-NEXT:    s_load_dwordx2 s[2:3], s[4:5], 0x0
-; GCN-NEXT:    s_bcnt1_i32_b64 s0, s[0:1]
-; GCN-NEXT:    v_cvt_f32_ubyte0_e32 v1, s0
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
-; GCN-NEXT:    v_mul_f32_e32 v1, 4.0, v1
+; GCN-NEXT:    v_mov_b32_e32 v1, s0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    global_atomic_add_f32 v0, v1, s[2:3]
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    buffer_wbinvl1
 ; GCN-NEXT:    s_endpgm
-  %result = atomicrmw fadd ptr addrspace(1) %ptr, float 4.0 syncscope("agent") seq_cst, !amdgpu.no.fine.grained.memory !0, !amdgpu.ignore.denormal.mode !0
+  %result = atomicrmw fadd ptr addrspace(1) %ptr, float 4.0 syncscope("agent") seq_cst, !amdgpu.no.fine.grained.memory !0, !atomic.ignore.denormal.mode !0
   ret void
 }
 

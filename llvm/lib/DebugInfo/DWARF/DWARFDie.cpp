@@ -15,7 +15,7 @@
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugLine.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugLoc.h"
-#include "llvm/DebugInfo/DWARF/DWARFExpressionPrinter.h"
+#include "llvm/DebugInfo/DWARF/DWARFExpressionUnit.h"
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
 #include "llvm/DebugInfo/DWARF/DWARFTypePrinter.h"
 #include "llvm/DebugInfo/DWARF/DWARFTypeUnit.h"
@@ -23,12 +23,10 @@
 #include "llvm/DebugInfo/DWARF/LowLevel/DWARFExpression.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/DataExtractor.h"
-#include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
-#include <cinttypes>
 #include <cstdint>
 #include <string>
 
@@ -90,13 +88,12 @@ static void dumpLocationList(raw_ostream &OS, const DWARFFormValue &FormValue,
 
 static void dumpDWARFAddressSpace(raw_ostream &OS,
                                   const DWARFFormValue &FormValue,
-                                  DIDumpOptions DumpOpts) {
+                                  const DIDumpOptions &DumpOpts) {
   FormValue.dump(OS, DumpOpts);
 
-  auto AddressSpaceAsUInt = FormValue.getAsUnsignedConstant();
-  auto GetNameForDWARFAddressSpace = DumpOpts.GetNameForDWARFAddressSpace;
-  if (GetNameForDWARFAddressSpace && AddressSpaceAsUInt) {
-    StringRef ASName = GetNameForDWARFAddressSpace(*AddressSpaceAsUInt);
+  std::optional<uint64_t> AddressSpace = FormValue.getAsUnsignedConstant();
+  if (AddressSpace) {
+    StringRef ASName = DumpOpts.getNameForDWARFAddressSpace(*AddressSpace);
     if (!ASName.empty())
       OS << " \"" << ASName << "\"";
   }
@@ -266,6 +263,11 @@ static void dumpAttribute(raw_ostream &OS, const DWARFDie &Die,
     if (const char *Name =
             Die.getAttributeValueAsReferencedDie(FormValue).getName(
                 DINameKind::LinkageName))
+      OS << Space << "\"" << Name << '\"';
+  } else if (Attr == DW_AT_property_forward) {
+    if (const char *Name =
+            Die.getAttributeValueAsReferencedDie(FormValue).getName(
+                DINameKind::ShortName))
       OS << Space << "\"" << Name << '\"';
   } else if (Attr == DW_AT_APPLE_property) {
     auto PropDIE = Die.getAttributeValueAsReferencedDie(FormValue);

@@ -157,6 +157,7 @@ define amdgpu_kernel void @sgpr_if_else_valu_cmp_phi_br(ptr addrspace(1) %out, p
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0xd
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+; SI-NEXT:    v_mov_b32_e32 v2, 0
 ; SI-NEXT:    s_mov_b32 s6, 0
 ; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; SI-NEXT:    ; implicit-def: $vgpr1
@@ -166,7 +167,6 @@ define amdgpu_kernel void @sgpr_if_else_valu_cmp_phi_br(ptr addrspace(1) %out, p
 ; SI-NEXT:  .LBB3_1: ; %else
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
 ; SI-NEXT:    v_lshlrev_b32_e32 v1, 2, v0
-; SI-NEXT:    v_mov_b32_e32 v2, 0
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    buffer_load_dword v1, v[1:2], s[4:7], 0 addr64
 ; SI-NEXT:    s_waitcnt vmcnt(0)
@@ -182,9 +182,8 @@ define amdgpu_kernel void @sgpr_if_else_valu_cmp_phi_br(ptr addrspace(1) %out, p
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_mov_b64 s[4:5], s[2:3]
-; SI-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
-; SI-NEXT:    v_mov_b32_e32 v1, 0
-; SI-NEXT:    buffer_load_dword v0, v[0:1], s[4:7], 0 addr64
+; SI-NEXT:    v_lshlrev_b32_e32 v1, 2, v0
+; SI-NEXT:    buffer_load_dword v0, v[1:2], s[4:7], 0 addr64
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; SI-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc

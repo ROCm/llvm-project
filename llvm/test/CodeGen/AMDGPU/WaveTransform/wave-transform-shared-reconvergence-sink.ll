@@ -18,25 +18,25 @@ define amdgpu_kernel void @shared_sink(ptr addrspace(1) %out, i32 %guard_limit, 
 ; CHECK-LABEL: shared_sink:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x8
-; CHECK-NEXT:    v_lshlrev_b32_e32 v1, 1, v0
-; CHECK-NEXT:    v_mov_b32_e32 v2, 7
+; CHECK-NEXT:    v_lshlrev_b32_e32 v2, 1, v0
+; CHECK-NEXT:    v_mov_b32_e32 v1, 7
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; CHECK-NEXT:    s_mov_b64 s[0:1], 0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_bitcmp1_b32 s5, 0
 ; CHECK-NEXT:    s_cselect_b64 s[6:7], -1, 0
 ; CHECK-NEXT:    s_mov_b64 s[2:3], 0
-; CHECK-NEXT:    ds_write_b16 v1, v2
-; CHECK-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc
-; CHECK-NEXT:    v_add_u32_e32 v2, -2, v1
+; CHECK-NEXT:    ds_write_b16 v2, v1
+; CHECK-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
+; CHECK-NEXT:    v_add_u32_e32 v2, -2, v2
 ; CHECK-NEXT:    s_and_b64 vcc, exec, s[6:7]
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_barrier
-; CHECK-NEXT:    ; implicit-def: $vgpr1
-; CHECK-NEXT:    ; implicit-def: $vgpr1
+; CHECK-NEXT:    ; implicit-def: $vgpr3
+; CHECK-NEXT:    ; implicit-def: $vgpr3
 ; CHECK-NEXT:    s_cbranch_vccz .LBB0_4
 ; CHECK-NEXT:  ; %bb.1: ; %armA
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
+; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 11
 ; CHECK-NEXT:    s_xor_b64 s[2:3], exec, vcc
 ; CHECK-NEXT:    s_mov_b64 exec, vcc
@@ -54,7 +54,7 @@ define amdgpu_kernel void @shared_sink(ptr addrspace(1) %out, i32 %guard_limit, 
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_6
 ; CHECK-NEXT:    s_branch .LBB0_7
 ; CHECK-NEXT:  .LBB0_4: ; %armB
-; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
+; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 22
 ; CHECK-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; CHECK-NEXT:    s_mov_b64 exec, vcc

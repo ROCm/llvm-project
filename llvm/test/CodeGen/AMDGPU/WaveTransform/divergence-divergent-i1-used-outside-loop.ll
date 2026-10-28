@@ -662,17 +662,16 @@ define amdgpu_ps void @divergent_i1_freeze_used_outside_loop(i32 %n, ptr addrspa
 ; GFX1100-W64-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX1100-W64-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1100-W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
+; GFX1100-W64-NEXT:    s_ashr_i32 s3, s2, 31
 ; GFX1100-W64-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX1100-W64-NEXT:    s_mov_b64 exec, vcc
 ; GFX1100-W64-NEXT:    ; divergent control-flow edge
 ; GFX1100-W64-NEXT:    s_cbranch_execz .LBB5_1
 ; GFX1100-W64-NEXT:  .LBB5_3: ; %is.eq.zero
 ; GFX1100-W64-NEXT:    ; in Loop: Header=BB5_2 Depth=1
-; GFX1100-W64-NEXT:    s_ashr_i32 s3, s2, 31
-; GFX1100-W64-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1100-W64-NEXT:    s_lshl_b64 s[6:7], s[2:3], 2
+; GFX1100-W64-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1100-W64-NEXT:    v_add_co_u32 v5, vcc, v1, s6
-; GFX1100-W64-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1100-W64-NEXT:    v_add_co_ci_u32_e64 v6, null, s7, v2, vcc
 ; GFX1100-W64-NEXT:    global_load_b32 v5, v[5:6], off
 ; GFX1100-W64-NEXT:    s_waitcnt vmcnt(0)
@@ -710,17 +709,16 @@ define amdgpu_ps void @divergent_i1_freeze_used_outside_loop(i32 %n, ptr addrspa
 ; GFX1100-W32-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX1100-W32-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1100-W32-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v5
+; GFX1100-W32-NEXT:    s_ashr_i32 s1, s0, 31
 ; GFX1100-W32-NEXT:    s_xor_b32 s3, exec_lo, vcc_lo
 ; GFX1100-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1100-W32-NEXT:    ; divergent control-flow edge
 ; GFX1100-W32-NEXT:    s_cbranch_execz .LBB5_1
 ; GFX1100-W32-NEXT:  .LBB5_3: ; %is.eq.zero
 ; GFX1100-W32-NEXT:    ; in Loop: Header=BB5_2 Depth=1
-; GFX1100-W32-NEXT:    s_ashr_i32 s1, s0, 31
-; GFX1100-W32-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1100-W32-NEXT:    s_lshl_b64 s[4:5], s[0:1], 2
+; GFX1100-W32-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX1100-W32-NEXT:    v_add_co_u32 v5, vcc_lo, v1, s4
-; GFX1100-W32-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1100-W32-NEXT:    v_add_co_ci_u32_e64 v6, null, s5, v2, vcc_lo
 ; GFX1100-W32-NEXT:    global_load_b32 v5, v[5:6], off
 ; GFX1100-W32-NEXT:    s_waitcnt vmcnt(0)

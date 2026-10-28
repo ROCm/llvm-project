@@ -8,30 +8,30 @@
 define amdgpu_ps void @_amdgpu_ps_main(i1 %arg) {
 ; CHECK-LABEL: _amdgpu_ps_main:
 ; CHECK:       ; %bb.0: ; %bb
-; CHECK-NEXT:    s_mov_b32 s8, SCRATCH_RSRC_DWORD0
-; CHECK-NEXT:    s_mov_b32 s4, 0
-; CHECK-NEXT:    s_mov_b32 s9, SCRATCH_RSRC_DWORD1
-; CHECK-NEXT:    s_mov_b32 s10, -1
-; CHECK-NEXT:    s_mov_b32 s5, s4
-; CHECK-NEXT:    s_mov_b32 s6, s4
-; CHECK-NEXT:    s_mov_b32 s7, s4
-; CHECK-NEXT:    s_mov_b32 s11, 0x31c16000
-; CHECK-NEXT:    s_add_u32 s8, s8, s0
-; CHECK-NEXT:    s_buffer_load_dword s0, s[4:7], 0x0
-; CHECK-NEXT:    s_addc_u32 s9, s9, 0
+; CHECK-NEXT:    s_mov_b32 s4, SCRATCH_RSRC_DWORD0
+; CHECK-NEXT:    s_mov_b32 s5, SCRATCH_RSRC_DWORD1
+; CHECK-NEXT:    s_mov_b32 s6, -1
+; CHECK-NEXT:    s_mov_b32 s7, 0x31c16000
+; CHECK-NEXT:    s_add_u32 s4, s4, s0
+; CHECK-NEXT:    s_mov_b32 s0, 0
+; CHECK-NEXT:    s_addc_u32 s5, s5, 0
+; CHECK-NEXT:    s_mov_b32 s1, s0
+; CHECK-NEXT:    s_mov_b32 s2, s0
+; CHECK-NEXT:    s_mov_b32 s3, s0
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v0
+; CHECK-NEXT:    s_buffer_load_dword s2, s[0:3], 0x0
 ; CHECK-NEXT:    s_mov_b32 s32, 0
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    s_cmp_ge_i32 s0, 0
-; CHECK-NEXT:    s_cselect_b32 s0, 1, 0
-; CHECK-NEXT:    s_cmp_lg_u32 s4, 0
-; CHECK-NEXT:    s_cselect_b32 s1, -1, 0
+; CHECK-NEXT:    s_cmp_ge_i32 s2, 0
+; CHECK-NEXT:    s_cselect_b32 s1, 1, 0
 ; CHECK-NEXT:    s_cmp_lg_u32 s0, 0
-; CHECK-NEXT:    v_mov_b32_e32 v0, s1
+; CHECK-NEXT:    s_cselect_b32 s3, -1, 0
+; CHECK-NEXT:    s_cmp_lg_u32 s1, 0
+; CHECK-NEXT:    v_mov_b32_e32 v0, s3
 ; CHECK-NEXT:    s_cbranch_scc1 .LBB0_5
 ; CHECK-NEXT:  ; %bb.1: ; %bb2.preheader
-; CHECK-NEXT:    s_cmp_lg_u32 s4, 0
+; CHECK-NEXT:    s_cmp_lg_u32 s0, 0
 ; CHECK-NEXT:    s_cselect_b32 s0, -1, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v0, s0
 ; CHECK-NEXT:    s_branch .LBB0_3
@@ -42,27 +42,27 @@ define amdgpu_ps void @_amdgpu_ps_main(i1 %arg) {
 ; CHECK-NEXT:    v_cmp_ne_u32_e64 s1, 0, v0
 ; CHECK-NEXT:    s_and_b32 s0, s1, s0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s0
-; CHECK-NEXT:    s_or_b32 s0, s4, 1
-; CHECK-NEXT:    s_cmp_lt_i32 s4, 0
-; CHECK-NEXT:    s_mov_b32 s4, s0
+; CHECK-NEXT:    s_or_b32 s0, s2, 1
+; CHECK-NEXT:    s_cmp_lt_i32 s2, 0
+; CHECK-NEXT:    s_mov_b32 s2, s0
 ; CHECK-NEXT:    s_cbranch_scc0 .LBB0_5
 ; CHECK-NEXT:  .LBB0_3: ; %bb2
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    s_mov_b32 s1, exec_lo
-; CHECK-NEXT:    s_mov_b32 s2, 0
+; CHECK-NEXT:    s_mov_b32 s3, 0
 ; CHECK-NEXT:    s_xor_b32 s1, vcc_lo, s1
 ; CHECK-NEXT:    v_cmp_ne_u32_e64 s0, 0, v0
 ; CHECK-NEXT:    s_and_b32 s1, exec_lo, s1
-; CHECK-NEXT:    v_mov_b32_e32 v0, s2
-; CHECK-NEXT:    s_xor_b32 s2, s1, exec_lo
-; CHECK-NEXT:    s_xor_b32 s1, exec_lo, s2
-; CHECK-NEXT:    s_mov_b32 exec_lo, s2
+; CHECK-NEXT:    v_mov_b32_e32 v0, s3
+; CHECK-NEXT:    s_xor_b32 s3, s1, exec_lo
+; CHECK-NEXT:    s_xor_b32 s1, exec_lo, s3
+; CHECK-NEXT:    s_mov_b32 exec_lo, s3
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_4: ; %bb5
 ; CHECK-NEXT:    ; in Loop: Header=BB0_3 Depth=1
-; CHECK-NEXT:    s_mov_b32 s2, 1
-; CHECK-NEXT:    v_mov_b32_e32 v0, s2
+; CHECK-NEXT:    s_mov_b32 s3, 1
+; CHECK-NEXT:    v_mov_b32_e32 v0, s3
 ; CHECK-NEXT:    s_branch .LBB0_2
 ; CHECK-NEXT:  .LBB0_5: ; %bb12
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
@@ -71,8 +71,8 @@ define amdgpu_ps void @_amdgpu_ps_main(i1 %arg) {
 ; CHECK-NEXT:    v_mov_b32_e32 v3, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v4, 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v0, 1.0, 0, vcc_lo
-; CHECK-NEXT:    s_mov_b64 s[0:1], s[8:9]
-; CHECK-NEXT:    s_mov_b64 s[2:3], s[10:11]
+; CHECK-NEXT:    s_mov_b64 s[0:1], s[4:5]
+; CHECK-NEXT:    s_mov_b64 s[2:3], s[6:7]
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], 0
 bb:
   %i = call i32 @llvm.amdgcn.ptr.s.buffer.load.i32(ptr addrspace(8) null, i32 0, i32 0), !invariant.load !{}
@@ -81,7 +81,7 @@ bb:
 
 bb2:
   %i3 = phi i1 [ %i9, %bb6 ], [ false, %bb ]
-  %i4 = phi i32 [ %i10, %bb6 ], [ 0, %bb ]
+  %i4 = phi i32 [ %i10, %bb6 ], [ %i, %bb ]
   br i1 %arg, label %bb5, label %bb6
 
 bb5:

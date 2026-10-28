@@ -84,5 +84,7 @@ void threads_and_teams() {
 // CHECK:      "omp_target_num_teams"="22"
 // CHECK:      "omp_target_num_teams"="33"
 
-// CHECK:      "omp_target_thread_limit"="22"
+// Widened by a warp for generic mode, except on SPIRV, which does not reserve
+// one.
+// CHECK:      "omp_target_thread_limit"="{{86|22}}"
 

@@ -210,11 +210,11 @@
 ; GCN-O3-NEXT:       detect-dead-lanes
 ; GCN-O3-NEXT:       dead-mi-elimination
 ; GCN-O3-NEXT:       init-undef
-; GCN-O3-NEXT:       process-imp-defs
+; GCN-O3-NEXT:       process-implicit-defs
 ; GCN-O3-NEXT:       unreachable-mbb-elimination
-; GCN-O3-NEXT:       require<live-vars>
-; GCN-O3-NEXT:       si-opt-vgpr-liverange
+; GCN-O3-NEXT:       require<live-intervals>
 ; GCN-O3-NEXT:       require<machine-loops>
+; GCN-O3-NEXT:       si-opt-vgpr-liverange
 ; GCN-O3-NEXT:       phi-node-elimination
 ; GCN-O3-NEXT:       two-address-instruction
 ; GCN-O3-NEXT:       amdgpu-pre-wave-transform
@@ -266,6 +266,7 @@
 ; GCN-O3-NEXT:       xray-instrumentation
 ; GCN-O3-NEXT:       gcn-create-vopd
 ; GCN-O3-NEXT:       si-memory-legalizer
+; GCN-O3-NEXT:       si-post-ra-16bit-mov-folding
 ; GCN-O3-NEXT:       si-insert-waitcnts
 ; GCN-O3-NEXT:       si-mode-register
 ; GCN-O3-NEXT:       si-insert-hard-clauses

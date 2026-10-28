@@ -83,6 +83,7 @@ private:
   void PutProcEntity(llvm::raw_ostream &, const Symbol &);
   void PutDerivedType(const Symbol &, const Scope * = nullptr);
   void PutDECStructure(const Symbol &, const Scope * = nullptr);
+  void PutEnumerationType(const Symbol &);
   void PutTypeParam(llvm::raw_ostream &, const Symbol &);
   void PutUserReduction(llvm::raw_ostream &, const Symbol &);
   void PutSubprogram(const Symbol &);
@@ -108,6 +109,8 @@ private:
   SemanticsContext &context_;
 
   parser::Message &Say(const char *verb, SourceName, const std::string &,
+      parser::MessageFixedText &&, const std::string &);
+  parser::Message *Warn(SourceName, common::UsageWarning, const std::string &,
       parser::MessageFixedText &&, const std::string &);
 };
 

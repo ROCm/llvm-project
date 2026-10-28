@@ -5,6 +5,10 @@ The Comgr library provides APIs for compiling and inspecting AMDGPU code
 objects. The API is documented in the [header file](include/amd_comgr.h.in).
 The Comgr API is compatible with C99 and C++.
 
+The [ISA metadata reference](docs/ISAMetadata.md) describes every field returned
+by `amd_comgr_get_isa_metadata()`, including resource units and wave-size
+conventions.
+
 Building the Code Object Manager
 --------------------------------
 
@@ -80,10 +84,12 @@ may be enabled during development via `-DADDRESS_SANITIZER=On` during the Comgr
 **Static Comgr:** Comgr can be built as a static library by passing
 `-DCOMGR_BUILD_SHARED_LIBS=OFF` during the Comgr `cmake` step.
 
-**Static LLVM Linking:** When building Comgr as a shared library within a
-super-project, you can statically link LLVM/Clang into Comgr by passing
-`-DCOMGR_STATIC_LLVM=ON`. By default (`OFF`), Comgr respects the existing
-`LLVM_LINK_LLVM_DYLIB` and `CLANG_LINK_CLANG_DYLIB` settings.
+**Static LLVM Linking:** Pass `-DCOMGR_STATIC_LLVM=ON` to embed LLVM/Clang
+archives into the Comgr shared library. This works with standalone package
+imports, imports supplied by a parent project, and LLVM external-project
+builds. LLVM/Clang/LLD static archives must be available even when their shared
+libraries were also built. By default (`OFF`), Comgr respects
+`LLVM_LINK_LLVM_DYLIB` and `CLANG_LINK_CLANG_DYLIB`.
 
 **Windows DLL Name:** On Windows, the DLL is named `amd_comgr.dll` by default.
 To override this, pass `-DCOMGR_DLL_NAME=<name>.dll` during the Comgr `cmake`
@@ -195,6 +201,9 @@ By default, the cache is enabled.
   it is directed to "$XDG_CACHE_HOME/comgr" (which defaults to
   "$USER/.cache/comgr" on Linux, and "%LOCALAPPDATA%\cache\comgr"
   on Microsoft Windows).
+  When resolving this default location, if the system's cache directory resides
+  on a remote filesystem (e.g. NFS), the cache is disabled to avoid concurrency
+  issues on shared storage.
 * `AMD_COMGR_CACHE_POLICY`: If assigned a value, the string is interpreted and
   applied to the cache pruning policy. The cache is pruned only upon program
   termination. The string format aligns with [Clang's ThinLTO cache pruning policy](https://clang.llvm.org/docs/ThinLTO.html#cache-pruning).
@@ -249,10 +258,6 @@ include:
   appended to all clang driver invocations. This can be used to inject
   additional compiler flags for debugging or experimentation without modifying
   the application code.
-* `AMD_COMGR_HOTSWAP_ENTRY_STUB_SYMBOLS`: If this is set to "1", the HotSwap
-  B0-to-B0 entry-trampoline fast path emits the debug-only `<kernel>.stub`
-  symbols for each entry stub. These symbols are skipped by default on this
-  load-time-critical path, so this variable restores them to aid in debugging.
 * `AMD_COMGR_USE_EMBEDDED_LIBCXX`: Controls Comgr's embedded libc++ header
   fallback for HIP. If unset, Comgr uses `auto` mode. In `auto` mode,
   Comgr first honors user include-control options such as `-nostdinc++`,

@@ -26,7 +26,7 @@
 // RUN: %llvm-dis %t.bc -o - | %FileCheck %s --check-prefixes=CHECK,TRANSLATOR
 
 // COM: Verify LLVM IR contains expected functions and target triple
-// CHECK: target triple = "amdgcn-amd-amdhsa"
+// CHECK: target triple = "{{amdgcn|amdgpu}}-amd-amdhsa"
 // TRANSLATOR: define void @_Z11clean_valuePf
 // CHECK: define amdgpu_kernel void @_Z9add_valuePfS_S_
 

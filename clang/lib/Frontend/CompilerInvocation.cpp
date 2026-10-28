@@ -572,8 +572,14 @@ static bool FixupInvocation(CompilerInvocation &Invocation,
   CodeGenOpts.LargeDataThreshold = TargetOpts.LargeDataThreshold;
 
   if (CodeGenOpts.getExceptionHandling() !=
-          CodeGenOptions::ExceptionHandlingKind::None &&
+          CodeGenOptions::ExceptionHandlingKind::Default &&
       T.isWindowsMSVCEnvironment())
+    Diags.Report(diag::err_fe_invalid_exception_model)
+        << static_cast<unsigned>(CodeGenOpts.getExceptionHandling()) << T.str();
+
+  if (T.isWasm() &&
+      (CodeGenOpts.hasSjLjExceptions() || CodeGenOpts.hasSEHExceptions() ||
+       CodeGenOpts.hasDWARFExceptions()))
     Diags.Report(diag::err_fe_invalid_exception_model)
         << static_cast<unsigned>(CodeGenOpts.getExceptionHandling()) << T.str();
 
@@ -635,6 +641,10 @@ static bool FixupInvocation(CompilerInvocation &Invocation,
     Diags.Report(diag::err_drv_argument_not_allowed_with)
         << "-fdx-rootsignature-define" << GetInputKindName(IK);
 
+  if (Args.hasArg(OPT_fdx_semantic_signature_packing_mode_EQ) && !LangOpts.HLSL)
+    Diags.Report(diag::err_drv_argument_not_allowed_with)
+        << "-fdx-semantic-signature-packing-mode" << GetInputKindName(IK);
+
   if (Args.hasArg(OPT_fgpu_allow_device_init) && !LangOpts.HIP)
     Diags.Report(diag::warn_ignored_hip_only_option)
         << Args.getLastArg(OPT_fgpu_allow_device_init)->getAsString(Args);
@@ -653,6 +663,16 @@ static bool FixupInvocation(CompilerInvocation &Invocation,
       Warnings.insert(Warnings.begin(), "vector-conversion");
     if (!llvm::is_contained(Warnings, "matrix-conversion"))
       Warnings.insert(Warnings.begin(), "matrix-conversion");
+
+    // HLSL booleans in memory are i32; any non-zero value is true.
+    // Use icmp-ne rather than truncation to avoid InstCombine rewriting
+    // trunc i32 to i1 into an illegal wide <N x i1> bitcast (issue #140824).
+    if (Args.hasArg(OPT_load_bool_from_mem) &&
+        CodeGenOpts.getLoadBoolFromMem() !=
+            CodeGenOptions::BoolFromMem::NonZero)
+      Diags.Report(diag::warn_hlsl_bool_from_mem)
+          << Args.getLastArg(OPT_load_bool_from_mem)->getValue();
+    CodeGenOpts.setLoadBoolFromMem(CodeGenOptions::BoolFromMem::NonZero);
   }
 
   // When these options are used, the compiler is allowed to apply
@@ -1764,9 +1784,6 @@ void CompilerInvocationBase::GenerateCodeGenArgs(const CodeGenOptions &Opts,
     GenerateArg(Consumer, Opt);
   }
 
-  if (Opts.EnableAIXExtendedAltivecABI)
-    GenerateArg(Consumer, OPT_mabi_EQ_vec_extabi);
-
   if (Opts.XCOFFReadOnlyPointers)
     GenerateArg(Consumer, OPT_mxcoff_roptr);
 
@@ -1924,14 +1941,8 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
     Opts.CoveragePrefixMap.emplace_back(Split.first, Split.second);
   }
 
-  const llvm::Triple::ArchType DebugEntryValueArchs[] = {
-      llvm::Triple::x86,     llvm::Triple::x86_64, llvm::Triple::aarch64,
-      llvm::Triple::arm,     llvm::Triple::armeb,  llvm::Triple::mips,
-      llvm::Triple::mipsel,  llvm::Triple::mips64, llvm::Triple::mips64el,
-      llvm::Triple::riscv32, llvm::Triple::riscv64};
-
   if (Opts.OptimizationLevel > 0 && Opts.hasReducedDebugInfo() &&
-      llvm::is_contained(DebugEntryValueArchs, T.getArch()))
+      T.supportsDebugEntryValues())
     Opts.EmitCallSiteInfo = true;
 
   if (!Opts.EnableDIPreservationVerify && Opts.DIBugsReportFilePath.size()) {
@@ -1949,8 +1960,10 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
   Opts.UnrollLoops =
       Args.hasFlag(OPT_funroll_loops, OPT_fno_unroll_loops,
                    (Opts.OptimizationLevel > 1));
+  // Match the LLVM pipeline default (PipelineTuningOptions::LoopInterchange),
+  // which enables the pass whenever the optimization pipeline runs.
   Opts.InterchangeLoops =
-      Args.hasFlag(OPT_floop_interchange, OPT_fno_loop_interchange, false);
+      Args.hasFlag(OPT_floop_interchange, OPT_fno_loop_interchange, true);
   Opts.FuseLoops = Args.hasFlag(OPT_fexperimental_loop_fusion,
                                 OPT_fno_experimental_loop_fusion, false);
   Opts.BinutilsVersion =
@@ -2827,6 +2840,7 @@ static const auto &getFrontendActionTable() {
       {frontend::EmitAssembly, OPT_S},
       {frontend::EmitBC, OPT_emit_llvm_bc},
       {frontend::EmitCIR, OPT_emit_cir},
+      {frontend::EmitCIRBC, OPT_emit_cir_bc},
       {frontend::EmitHTML, OPT_emit_html},
       {frontend::EmitLLVM, OPT_emit_llvm},
       {frontend::EmitLLVMOnly, OPT_emit_llvm_only},
@@ -3190,7 +3204,7 @@ static bool ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   if (Opts.ProgramAction != frontend::GenerateModule && Opts.IsSystemModule)
     Diags.Report(diag::err_drv_argument_only_allowed_with) << "-fsystem-module"
                                                            << "-emit-module";
-  if (Args.hasArg(OPT_emit_cir))
+  if (Args.hasArg(OPT_emit_cir, OPT_emit_cir_bc))
     Opts.UseClangIRPipeline = true;
 
 #if CLANG_ENABLE_CIR
@@ -3332,6 +3346,16 @@ static bool ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
   // backend should be used instead.
   if (Opts.UseClangIRPipeline && DashX.getLanguage() == Language::LLVM_IR)
     Opts.UseClangIRPipeline = false;
+
+  // Conversely, ClangIR input can only be consumed by the CIR pipeline, so it
+  // implies -fclangir, and is an error if that pipeline is not built in.
+  if (DashX.getLanguage() == Language::CIR) {
+#if CLANG_ENABLE_CIR
+    Opts.UseClangIRPipeline = true;
+#else
+    Diags.Report(diag::err_fe_cir_not_built);
+#endif
+  }
 
   return Diags.getNumErrors() == NumErrorsBefore;
 }
@@ -3922,11 +3946,6 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
       GenerateArg(Consumer, OPT_fopenmp_version_EQ, Twine(Opts.OpenMP));
   }
 
-  if (Opts.OpenMPTargetIgnoreEnvVars)
-    GenerateArg(Consumer, OPT_fopenmp_target_ignore_env_vars);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_ignore_env_vars);
-
   if (Opts.OpenMPTargetBigJumpLoop)
     GenerateArg(Consumer, OPT_fopenmp_target_big_jump_loop);
   else
@@ -3936,26 +3955,6 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
     GenerateArg(Consumer, OPT_fopenmp_target_no_loop);
   else
     GenerateArg(Consumer, OPT_fno_openmp_target_no_loop);
-
-  if (Opts.OpenMPTargetXteamReduction)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_reduction);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_reduction);
-
-  if (Opts.OpenMPTargetFastReduction)
-    GenerateArg(Consumer, OPT_fopenmp_target_fast_reduction);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_fast_reduction);
-
-  if (Opts.OpenMPTargetXteamScan)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_scan);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_scan);
-
-  if (Opts.OpenMPTargetXteamNoLoopScan)
-    GenerateArg(Consumer, OPT_fopenmp_target_xteam_no_loop_scan);
-  else
-    GenerateArg(Consumer, OPT_fno_openmp_target_xteam_no_loop_scan);
 
   if (Opts.OpenMPThreadSubscription)
     GenerateArg(Consumer, OPT_fopenmp_assume_threads_oversubscription);
@@ -3989,7 +3988,11 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
     GenerateArg(Consumer, OPT_fopenmp_gpu_threads_per_team_EQ,
                 Twine(Opts.OpenMPGPUThreadsPerTeam));
 
-  if (Opts.OpenMPTargetXteamReductionBlockSize != 1024)
+  // Keep this in sync with the default of OpenMPTargetXteamReductionBlockSize
+  // in LangOptions.def. Comparing against a stale default makes the generated
+  // arguments disagree with the parsed ones and turns every explicit use of
+  // '-fopenmp-target-xteam-reduction-blocksize=' into a round-trip error.
+  if (Opts.OpenMPTargetXteamReductionBlockSize != 512)
     GenerateArg(Consumer, OPT_fopenmp_target_xteam_reduction_blocksize_EQ,
                 Twine(Opts.OpenMPTargetXteamReductionBlockSize));
 
@@ -4453,10 +4456,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
       Args, options::OPT_fopenmp_target_xteam_reduction_blocksize_EQ,
       Opts.OpenMPTargetXteamReductionBlockSize, Diags);
 
-  Opts.OpenMPTargetIgnoreEnvVars =
-      Args.hasFlag(options::OPT_fopenmp_target_ignore_env_vars,
-                   options::OPT_fno_openmp_target_ignore_env_vars, false);
-
   Opts.OpenMPTargetBigJumpLoop =
       Args.hasFlag(options::OPT_fopenmp_target_big_jump_loop,
                    options::OPT_fno_openmp_target_big_jump_loop, true);
@@ -4464,22 +4463,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   Opts.OpenMPTargetNoLoop =
       Args.hasFlag(options::OPT_fopenmp_target_no_loop,
                    options::OPT_fno_openmp_target_no_loop, true);
-
-  Opts.OpenMPTargetXteamReduction =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_reduction,
-                   options::OPT_fno_openmp_target_xteam_reduction, true);
-
-  Opts.OpenMPTargetFastReduction =
-      Args.hasFlag(options::OPT_fopenmp_target_fast_reduction,
-                   options::OPT_fno_openmp_target_fast_reduction, false);
-
-  Opts.OpenMPTargetXteamScan =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_scan,
-                   options::OPT_fno_openmp_target_xteam_scan, false);
-
-  Opts.OpenMPTargetXteamNoLoopScan =
-      Args.hasFlag(options::OPT_fopenmp_target_xteam_no_loop_scan,
-                   options::OPT_fno_openmp_target_xteam_no_loop_scan, false);
 
   // Set the value of the debugging flag used in the new offloading device RTL.
   // Set either by a specific value or to a default if not specified.
@@ -4848,6 +4831,7 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::EmitAssembly:
   case frontend::EmitBC:
   case frontend::EmitCIR:
+  case frontend::EmitCIRBC:
   case frontend::EmitHTML:
   case frontend::EmitLLVM:
   case frontend::EmitLLVMOnly:
@@ -4889,6 +4873,7 @@ static bool isCodeGenAction(frontend::ActionKind Action) {
   case frontend::EmitAssembly:
   case frontend::EmitBC:
   case frontend::EmitCIR:
+  case frontend::EmitCIRBC:
   case frontend::EmitHTML:
   case frontend::EmitLLVM:
   case frontend::EmitLLVMOnly:
@@ -5339,6 +5324,16 @@ bool CompilerInvocation::CreateFromArgsImpl(
           llvm::driver::ProfileInstrKind::ProfileNone)
     Diags.Report(diag::err_drv_profile_instrument_use_path_with_no_kind);
 
+  llvm::TimeTraceCompression TimeTraceCompress =
+      Res.getFrontendOpts().TimeTraceCompress;
+  if (TimeTraceCompress == llvm::TimeTraceCompression::Infer &&
+      !Res.getFrontendOpts().TimeTracePath.empty())
+    TimeTraceCompress = llvm::inferTimeTraceCompressionFromPath(
+        Res.getFrontendOpts().TimeTracePath);
+  if (TimeTraceCompress == llvm::TimeTraceCompression::Zstd &&
+      !llvm::compression::zstd::isAvailable())
+    Diags.Report(diag::err_drv_time_trace_compression_unavailable) << "zstd";
+
   FixupInvocation(Res, Diags, Args, DashX);
 
   return Diags.getNumErrors() == NumErrorsBefore;
@@ -5399,6 +5394,7 @@ std::string CompilerInvocation::computeContextHash() const {
 
   HBuilder.add(getLangOpts().ObjCRuntime);
   HBuilder.addRange(getLangOpts().CommentOpts.BlockCommandNames);
+  HBuilder.add(getLangOpts().CommentOpts.RetainCommentsFromSystemHeaders);
 
   // Extend the signature with the target options.
   HBuilder.add(getTargetOpts().Triple, getTargetOpts().CPU,
@@ -5446,6 +5442,8 @@ std::string CompilerInvocation::computeContextHash() const {
 
       HBuilder.add(UserEntry);
     }
+
+    HBuilder.addRange(getFrontendOpts().ModuleMapFiles);
 
     HBuilder.addRange(hsOpts.VFSOverlayFiles);
 
@@ -5652,6 +5650,7 @@ void CompilerInvocation::clearImplicitModuleBuildOptions() {
   getHeaderSearchOpts().ImplicitModuleMaps = false;
   getHeaderSearchOpts().ModuleCachePath.clear();
   getHeaderSearchOpts().ModulesValidateOncePerBuildSession = false;
+  getHeaderSearchOpts().ModulesValidateDirectoryDependencies = false;
   getHeaderSearchOpts().BuildSessionTimestamp = 0;
   // The specific values we canonicalize to for pruning don't affect behaviour,
   /// so use the default values so they may be dropped from the command-line.

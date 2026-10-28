@@ -124,7 +124,7 @@ endif ()
 
 # TODO: Support tests for the GPU target.
 set(FLANG_RT_INCLUDE_TESTS_default ${LLVM_INCLUDE_TESTS})
-if ("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn|^nvptx")
+if ("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgpu|^amdgcn|^nvptx")
   set(FLANG_RT_INCLUDE_TESTS_default OFF)
 elseif (NOT FLANG_RT_FORTRAN_MODULES)
   set(FLANG_RT_INCLUDE_TESTS_default OFF)
@@ -291,11 +291,19 @@ endif ()
 # directory ("flang-rt") and delegate it to the runtimes build dir.
 # AddFlangRT will add all non-EXCLUDE_FROM_ALL targets to it.
 add_custom_target(flang-rt)
+add_llvm_install_targets(install-flang-rt DEPENDS flang-rt COMPONENT flang-rt)
 
 
 ###################
 # Build Artifacts #
 ###################
+
+if(FLANG_RT_LIBDIR_SUBDIR)
+  string(APPEND RUNTIMES_OUTPUT_RESOURCE_LIB_DIR "/${FLANG_RT_LIBDIR_SUBDIR}")
+  string(APPEND RUNTIMES_INSTALL_RESOURCE_LIB_PATH "/${FLANG_RT_LIBDIR_SUBDIR}")
+  cmake_path(NORMAL_PATH RUNTIMES_OUTPUT_RESOURCE_LIB_DIR)
+  cmake_path(NORMAL_PATH RUNTIMES_INSTALL_RESOURCE_LIB_PATH)
+endif()
 
 add_subdirectory(lib)
 
@@ -305,9 +313,7 @@ endif ()
 
 if (FLANG_RT_INCLUDE_TESTS)
   add_subdirectory(test)
-  if (NOT "${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
-    add_subdirectory(unittests)
-  endif()
+  add_subdirectory(unittests)
 else ()
   add_custom_target(check-flang-rt)
 endif()
@@ -317,7 +323,10 @@ endif()
 ###################
 
 if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
-  add_llvm_install_targets(install-flang-rt-headers COMPONENT flang-rt-headers)
+  add_custom_target(flang-rt-headers)
+  add_llvm_install_targets(install-flang-rt-headers
+                           DEPENDS flang-rt-headers
+                           COMPONENT flang-rt-headers)
 
   install(DIRECTORY include/flang-rt/runtime
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/flang-rt"

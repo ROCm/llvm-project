@@ -22,8 +22,7 @@ define amdgpu_kernel void @negated_cond(ptr addrspace(1) %arg1) {
 ; GCN-NEXT:    buffer_load_dword v1, off, s[8:11], 0
 ; GCN-NEXT:    s_mov_b32 s12, s6
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v1
-; GCN-NEXT:    s_and_b64 s[2:3], exec, vcc
+; GCN-NEXT:    v_cmp_eq_u32_e64 s[2:3], 0, v1
 ; GCN-NEXT:    s_branch .LBB0_4
 ; GCN-NEXT:  .LBB0_3: ; %bb4
 ; GCN-NEXT:    ; in Loop: Header=BB0_4 Depth=2

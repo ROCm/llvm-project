@@ -109,6 +109,7 @@ define amdgpu_kernel void @undef_phi_cond_break_loop(i32 %arg) #0 {
 ; GCN-NEXT:    s_load_dword s3, s[4:5], 0x9
 ; GCN-NEXT:    s_mov_b64 s[0:1], 0
 ; GCN-NEXT:    s_mov_b32 s2, -1
+; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[0:1]
 ; GCN-NEXT:    ; implicit-def: $sgpr4
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s3, v0
@@ -116,18 +117,18 @@ define amdgpu_kernel void @undef_phi_cond_break_loop(i32 %arg) #0 {
 ; GCN-NEXT:  .LBB1_1: ; %bb1
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    s_cmp_gt_i32 s4, -1
-; GCN-NEXT:    ; implicit-def: $vgpr1
+; GCN-NEXT:    v_mov_b32_e32 v2, v1
 ; GCN-NEXT:    s_cbranch_scc1 .LBB1_3
 ; GCN-NEXT:  ; %bb.2: ; %bb4
 ; GCN-NEXT:    ; in Loop: Header=BB1_1 Depth=1
-; GCN-NEXT:    buffer_load_dword v1, off, s[0:3], 0 glc
+; GCN-NEXT:    buffer_load_dword v2, off, s[0:3], 0 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    v_cmp_ge_i32_e32 vcc, v0, v1
-; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
+; GCN-NEXT:    v_cmp_ge_i32_e32 vcc, v0, v2
+; GCN-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc
 ; GCN-NEXT:  .LBB1_3: ; %Flow
 ; GCN-NEXT:    ; in Loop: Header=BB1_1 Depth=1
 ; GCN-NEXT:    s_add_i32 s4, s4, 1
-; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
+; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
 ; GCN-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; GCN-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GCN-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
@@ -293,15 +294,15 @@ define amdgpu_kernel void @true_phi_cond_break_loop(i32 %arg) #0 {
 ;
 ; GCN-LABEL: true_phi_cond_break_loop:
 ; GCN:       ; %bb.0: ; %bb
-; GCN-NEXT:    s_load_dword s2, s[4:5], 0x9
+; GCN-NEXT:    s_load_dword s3, s[4:5], 0x9
+; GCN-NEXT:    s_mov_b64 s[4:5], -1
 ; GCN-NEXT:    s_mov_b64 s[0:1], 0
-; GCN-NEXT:    ; implicit-def: $sgpr4
-; GCN-NEXT:    s_waitcnt lgkmcnt(0)
-; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s2, v0
-; GCN-NEXT:    s_mov_b64 s[2:3], -1
-; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[2:3]
 ; GCN-NEXT:    s_mov_b32 s2, -1
+; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[4:5]
+; GCN-NEXT:    s_waitcnt lgkmcnt(0)
+; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s3, v0
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
+; GCN-NEXT:    ; implicit-def: $sgpr4
 ; GCN-NEXT:  .LBB3_1: ; %bb1
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    s_cmp_gt_i32 s4, -1
@@ -385,15 +386,15 @@ define amdgpu_kernel void @false_phi_cond_break_loop(i32 %arg) #0 {
 ;
 ; GCN-LABEL: false_phi_cond_break_loop:
 ; GCN:       ; %bb.0: ; %bb
-; GCN-NEXT:    s_load_dword s2, s[4:5], 0x9
+; GCN-NEXT:    s_load_dword s3, s[4:5], 0x9
+; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    s_mov_b64 s[0:1], 0
-; GCN-NEXT:    ; implicit-def: $sgpr4
-; GCN-NEXT:    s_waitcnt lgkmcnt(0)
-; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s2, v0
-; GCN-NEXT:    s_mov_b64 s[2:3], 0
-; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[2:3]
 ; GCN-NEXT:    s_mov_b32 s2, -1
+; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[4:5]
+; GCN-NEXT:    s_waitcnt lgkmcnt(0)
+; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s3, v0
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
+; GCN-NEXT:    ; implicit-def: $sgpr4
 ; GCN-NEXT:  .LBB4_1: ; %bb1
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    s_cmp_gt_i32 s4, -1
@@ -481,15 +482,15 @@ define amdgpu_kernel void @invert_true_phi_cond_break_loop(i32 %arg) #0 {
 ;
 ; GCN-LABEL: invert_true_phi_cond_break_loop:
 ; GCN:       ; %bb.0: ; %bb
-; GCN-NEXT:    s_load_dword s2, s[4:5], 0x9
+; GCN-NEXT:    s_load_dword s3, s[4:5], 0x9
+; GCN-NEXT:    s_mov_b64 s[4:5], -1
 ; GCN-NEXT:    s_mov_b64 s[0:1], 0
-; GCN-NEXT:    ; implicit-def: $sgpr4
-; GCN-NEXT:    s_waitcnt lgkmcnt(0)
-; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s2, v0
-; GCN-NEXT:    s_mov_b64 s[2:3], -1
-; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[2:3]
 ; GCN-NEXT:    s_mov_b32 s2, -1
+; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[4:5]
+; GCN-NEXT:    s_waitcnt lgkmcnt(0)
+; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s3, v0
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
+; GCN-NEXT:    ; implicit-def: $sgpr4
 ; GCN-NEXT:  .LBB5_1: ; %bb1
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    s_cmp_gt_i32 s4, -1

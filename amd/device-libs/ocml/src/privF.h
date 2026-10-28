@@ -22,3 +22,5 @@
 #define MATH_FAST_SQRT(X) BUILTIN_AMDGPU_SQRT_F32(X)
 
 #define MATH_SQRT(X) __ocml_sqrt_f32(X)
+
+#include "pe.h"

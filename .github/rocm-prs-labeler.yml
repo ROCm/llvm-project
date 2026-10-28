@@ -3,15 +3,6 @@ comgr:
     - any-glob-to-any-file:
       - amd/comgr/**
 
-hotswap:
-  - changed-files:
-    - any-glob-to-any-file:
-      - amd/comgr/src/hotswap/**
-      - amd/comgr/test-lit/hotswap/**
-      - amd/comgr/test-unit/hotswap/**
-      - amd/comgr/test-lit/comgr-sources/hotswap*
-      - amd/comgr/utils/*hotswap*
-
 device-libs:
   - changed-files:
     - any-glob-to-any-file:

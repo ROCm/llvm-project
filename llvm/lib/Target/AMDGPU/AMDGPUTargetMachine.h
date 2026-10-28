@@ -50,7 +50,6 @@ public:
                       std::optional<CodeModel::Model> CM, CodeGenOptLevel OL);
   ~AMDGPUTargetMachine() override;
 
-  const TargetSubtargetInfo *getSubtargetImpl() const;
   const TargetSubtargetInfo *
   getSubtargetImpl(const Function &) const override = 0;
 
@@ -61,7 +60,8 @@ public:
   void registerPassBuilderCallbacks(PassBuilder &PB) override;
   void registerDefaultAliasAnalyses(AAManager &) override;
 
-  bool isNoopAddrSpaceCast(unsigned SrcAS, unsigned DestAS) const override;
+  bool isNoopAddrSpaceCast(const DataLayout &DL, unsigned SrcAS,
+                           unsigned DestAS) const override;
 
   std::optional<dwarf::AddressSpace>
   mapToDWARFAddrSpace(unsigned LLVMAddrSpace) const override;

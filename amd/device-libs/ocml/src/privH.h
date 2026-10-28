@@ -21,3 +21,5 @@
 
 #define MATH_FAST_SQRT(X) BUILTIN_SQRT_F16(X)
 #define MATH_SQRT(X) ((half)BUILTIN_AMDGPU_SQRT_F32((float)(X)))
+
+#include "pe.h"

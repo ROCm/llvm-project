@@ -18,7 +18,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-metadata.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Object/ELFObjectFile.h"
@@ -282,53 +285,43 @@ amd_comgr_status_t getMetadataRoot(DataObject *DataP, DataMeta *MetaP) {
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-llvm::Error getMetadataRoot(MemoryBufferRef MB, DataMeta *MetaP) {
-  auto ObjOrErr = getELFObjectFileBase(MB);
-  if (!ObjOrErr)
-    return ObjOrErr.takeError();
-  return getMetadataRoot(ObjOrErr->get(), MetaP);
-}
-
+namespace {
 struct IsaInfo {
-  const char *IsaName;
-  const char *Processor;
-  unsigned ElfMachine;
-  bool TrapHandlerEnabled;
-  bool ImageSupport;
-  unsigned LDSSize;
-  unsigned LDSBankCount;
-  unsigned EUsPerCU;
-  unsigned MaxWavesPerCU;
-  unsigned MaxFlatWorkGroupSize;
-  unsigned VGPRAllocGranule;
-  unsigned TotalNumVGPRs;
-  // TODO: Update this to AvailableNumVGPRs to be more accurate
-  unsigned AddressableNumVGPRs;
-} IsaInfos[] = {
-#define HANDLE_ISA(TARGET_TRIPLE, PROCESSOR, ELF_MACHINE,                      \
-                   TRAP_HANDLER_ENABLED, IMAGE_SUPPORT, LDS_SIZE,              \
-                   LDS_BANK_COUNT, EUS_PER_CU, MAX_WAVES_PER_CU,               \
-                   MAX_FLAT_WORK_GROUP_SIZE, VGPR_ALLOC_GRANULE,               \
-                   TOTAL_NUM_VGPRS, ADDRESSABLE_NUM_VGPRS)                     \
-  {TARGET_TRIPLE "-" PROCESSOR,                                                \
-   PROCESSOR,                                                                  \
-   ELF::ELF_MACHINE,                                                           \
-   TRAP_HANDLER_ENABLED,                                                       \
-   IMAGE_SUPPORT,                                                              \
-   LDS_SIZE,                                                                   \
-   LDS_BANK_COUNT,                                                             \
-   EUS_PER_CU,                                                                 \
-   MAX_WAVES_PER_CU,                                                           \
-   MAX_FLAT_WORK_GROUP_SIZE,                                                   \
-   VGPR_ALLOC_GRANULE,                                                         \
-   TOTAL_NUM_VGPRS,                                                            \
-   ADDRESSABLE_NUM_VGPRS},
-#include "comgr-isa-metadata.def"
+  std::string IsaName;
+  AMDGPU::GPUKind Kind;
 };
 
-size_t getIsaCount() {
-  return std::distance(std::begin(IsaInfos), std::end(IsaInfos));
+ArrayRef<IsaInfo> getIsaInfos() {
+  // Own the names for the lifetime of the library: getIsaName returns pointers
+  // into these strings to callers of amd_comgr_get_isa_name.
+  static const auto IsaInfos = [] {
+    SmallVector<StringRef> Processors;
+    AMDGPU::fillValidArchListAMDGCN(Processors);
+    SmallVector<IsaInfo> Infos;
+    for (StringRef Processor : Processors) {
+      AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(Processor);
+      // TargetParser also lists aliases such as "tahiti". Enumerate only the
+      // canonical names, including generic targets and target variants.
+      if (Processor != AMDGPU::getArchNameAMDGCN(Kind))
+        continue;
+      Infos.push_back({("amdgcn-amd-amdhsa--" + Processor).str(), Kind});
+    }
+    return Infos;
+  }();
+  return IsaInfos;
 }
+
+// Every AMDGCN target Comgr supports ships a trap handler. Kept as a query so
+// per-processor exceptions can be added without reintroducing a table column.
+bool isTrapHandlerEnabled(AMDGPU::GPUKind Kind) {
+  switch (Kind) {
+  default:
+    return true;
+  }
+}
+} // namespace
+
+size_t getIsaCount() { return getIsaInfos().size(); }
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 typedef struct amdgpu_hsa_note_code_object_version_s {
@@ -339,14 +332,24 @@ typedef struct amdgpu_hsa_note_code_object_version_s {
 // NOLINTNEXTLINE(readability-identifier-naming)
 namespace {
 bool getMachInfo(unsigned Mach, std::string &Processor) {
-  auto *IsaIterator = std::find_if(
-      std::begin(IsaInfos), std::end(IsaInfos),
-      [Mach](const IsaInfo &IsaInfo) { return Mach == IsaInfo.ElfMachine; });
-  if (IsaIterator == std::end(IsaInfos)) {
+  StringRef Name;
+  switch (Mach) {
+#define X(NUM, ENUM, NAME)                                                     \
+  case ELF::ENUM:                                                              \
+    Name = NAME;                                                               \
+    break;
+    AMDGPU_MACH_LIST(X)
+#undef X
+  default:
     return false;
   }
 
-  Processor = IsaIterator->Processor;
+  // AMDGPU_MACH_LIST also covers the R600 machs, which are not AMDGCN
+  // processors.
+  if (AMDGPU::parseArchAMDGCN(Name) == AMDGPU::GK_NONE)
+    return false;
+
+  Processor = Name.str();
   return true;
 }
 
@@ -409,7 +412,7 @@ amd_comgr_status_t getElfIsaNameFromElfHeader(const ELFObjectFile<ELFT> *Obj,
 }
 } // namespace
 
-Expected<std::string> getElfIsaName(MemoryBufferRef MB) {
+static Expected<std::string> getElfIsaName(MemoryBufferRef MB) {
   auto ObjOrErr = getELFObjectFileBase(MB);
   if (!ObjOrErr)
     return ObjOrErr.takeError();
@@ -439,6 +442,17 @@ amd_comgr_status_t getElfIsaName(DataObject *DataP, std::string &IsaName) {
 
 amd_comgr_status_t getIsaIndex(StringRef TargetIDString, size_t &Index,
                                StringRef *Processor) {
+  // Treat bare amdgpu as its legacy alias even when the LLVM TargetID parser
+  // requires the amdgpu spelling to include a subarch.
+  // TODO: Remove this normalization once Comgr's LLVM baseline includes the
+  // reland of llvm/llvm-project#213847 and accepts bare amdgpu directly.
+  // Keep the alias and round-trip tests when removing the workaround.
+  std::string LegacyTargetID;
+  if (TargetIDString.consume_front("amdgpu-")) {
+    LegacyTargetID = (Twine("amdgcn-") + TargetIDString).str();
+    TargetIDString = LegacyTargetID;
+  }
+
   // Validate the target ID and resolve the processor (derived from the subarch
   // when the name omits it).
   std::optional<AMDGPU::TargetID> TID =
@@ -452,17 +466,15 @@ amd_comgr_status_t getIsaIndex(StringRef TargetIDString, size_t &Index,
     *Processor = CanonicalProcessor;
   }
 
-  // Match by processor only; TargetID already validated the rest of the triple,
-  // so the vendor/os/environ are not checked against the table (which stores an
-  // empty environment).
-  auto *IsaIterator = std::find_if(
-      std::begin(IsaInfos), std::end(IsaInfos), [&](const IsaInfo &IsaInfo) {
-        return CanonicalProcessor == IsaInfo.Processor;
-      });
-  if (IsaIterator == std::end(IsaInfos)) {
+  // TargetID already validated the triple, so match only the resolved GPU kind.
+  ArrayRef<IsaInfo> IsaInfos = getIsaInfos();
+  auto IsaIterator = llvm::find_if(IsaInfos, [&](const IsaInfo &Info) {
+    return TID->getGPUKind() == Info.Kind;
+  });
+  if (IsaIterator == IsaInfos.end()) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
-  Index = std::distance(std::begin(IsaInfos), IsaIterator);
+  Index = std::distance(IsaInfos.begin(), IsaIterator);
 
   return AMD_COMGR_STATUS_SUCCESS;
 }
@@ -473,17 +485,89 @@ bool isSupportedFeature(size_t IsaIndex, StringRef Feature) {
     return false;
   }
 
-  unsigned ArchAttr = AMDGPU::getArchAttrAMDGCN(
-      AMDGPU::parseArchAMDGCN(IsaInfos[IsaIndex].Processor));
+  const AMDGPU::AMDGPUFeatureBitset &Features =
+      AMDGPU::getFeatureBitset(getIsaInfos()[IsaIndex].Kind);
 
   return (Feature.drop_back() == "xnack" &&
-          (ArchAttr & AMDGPU::FEATURE_XNACK_ON_OFF_MODES)) ||
+          Features.test(AMDGPU::FEAT_XNACK_ON_OFF_MODES)) ||
          (Feature.drop_back() == "sramecc" &&
-          (ArchAttr & AMDGPU::FEATURE_SRAMECC));
+          Features.test(AMDGPU::FEAT_SRAMECC_ON_OFF_MODES));
 }
 
-const char *getIsaName(size_t Index) { return IsaInfos[Index].IsaName; }
+const char *getIsaName(size_t Index) {
+  return getIsaInfos()[Index].IsaName.c_str();
+}
 
+// ISA metadata schema for amd_comgr_get_isa_metadata(). Keep this description
+// in sync with amd/comgr/docs/ISAMetadata.md, which provides examples and LLVM
+// reference links. These are target properties, not live device information or
+// per-kernel resource usage. Code object metadata has a separate schema.
+//
+// The root is a map. All values are strings except Features, which is a map
+// of strings. Numeric values use decimal notation; Boolean flags use "0"/"1".
+//
+// Target identity (preserving the spelling in the requested ISA name):
+//   Name: Complete requested ISA name, including feature settings.
+//   Architecture: Target triple's architecture component.
+//   Vendor: Target triple's vendor component, normally "amd".
+//   OS: Target triple's OS/runtime component, such as "amdhsa".
+//   Environment: Target triple's environment component; may be empty.
+//   Processor: Processor component of the requested name, such as "gfx90a".
+//   Version: ISA metadata format version, currently "1.0.0"; separate from
+//     the GPU ISA revision, Comgr library version, and code object version.
+//
+// Target feature settings:
+//   Features: Map containing the selectable xnack and sramecc settings.
+//     xnack: XNACK memory-fault replay setting.
+//     sramecc: SRAM error-correcting code (ECC) setting.
+//     Each value is "any" when unspecified, permitting either on or off.
+//     An explicit '+' selects "on" (enabled required); '-' selects "off"
+//     (disabled required). These requirements apply to the requested target ID.
+//     Features without on/off modes are absent; requesting one explicitly is
+//     an error. Hardwired-on features, such as gfx1250 xnack, are also absent.
+//
+// Capabilities:
+//   TrapHandlerEnabled: Whether Comgr models trap handling as enabled;
+//     currently "1" for every supported AMDGCN target. Does not report a
+//     trap handler's register reservation or inspect an installed handler.
+//   ImageSupport: Whether the target supports AMDGPU image instructions.
+//
+// Memory and execution limits:
+//   LocalMemorySize: Total LDS bytes shared by workgroups in the full physical
+//     block, from getLocalMemorySize(Kind, true). On RDNA and CDNA5 this is
+//     a WGP capacity; it is not the allocation limit for one workgroup.
+//   LDSBankCount: LDS banks in LLVM's target model, forwarded from
+//     getLDSBankCount() without CU/WGP scaling. The bank set is
+//     target-dependent.
+//   EUsPerCU: SIMDs per physical CU: two with FEAT_GFX10_INSTS, otherwise four.
+//   MaxWavesPerCU: Maximum resident waves per physical CU, computed
+//     as getMaxWavesPerEU() * EUsPerCU, before kernel resource restrictions.
+//   MaxFlatWorkGroupSize: Compiler-supported maximum work-items per
+//     workgroup, currently 1024; limits the product of the dimensions.
+//   These values do not select a kernel's CU/WGP mode. Account for that mode
+//   and the different LDS and execution-count domains when computing occupancy.
+//
+// Scalar registers (one SGPR holds a 32-bit value shared by a wavefront):
+//   SGPRAllocGranule: SGPRs per allocation unit in LLVM's target model.
+//   TotalNumSGPRs: SGPR capacity per SIMD in LLVM's occupancy model only on
+//     targets where SGPRs limit occupancy; not physical capacity on GFX10+.
+//   AddressableNumSGPRs: Maximum SGPRs addressable by one wavefront, including
+//     target-specific restrictions such as the SGPR initialization workaround.
+//   On GFX10+, SGPRAllocGranule and AddressableNumSGPRs both report the fixed
+//   allowance of 106 normal SGPRs per wave, not a physical allocation quantum.
+//   TotalNumSGPRs still reports 800; LLVM does not use it to limit occupancy
+//   on these targets. Kernel ABI and register reservations can further
+//   constrain the register budget.
+//
+// Vector registers (one VGPR holds a 32-bit value for each wavefront lane):
+//   VGPRAllocGranule: VGPRs per allocation unit for a wavefront.
+//   TotalNumVGPRs: Wave-sized VGPR capacity per SIMD, shared by resident waves.
+//   AddressableNumVGPRs: Maximum VGPRs addressable by one wavefront; includes
+//     addressable AGPR capacity on targets with a unified register file.
+//   All three use wave32 where FEAT_GFX10_INSTS is present, otherwise wave64.
+//   The addressable count has target-specific wave-size rules; it cannot be
+//   converted by universally halving it for wave64. The queries describe
+//   static allocation without a kernel's dynamic VGPR block size.
 amd_comgr_status_t getIsaMetadata(StringRef IsaName,
                                   llvm::msgpack::Document &Doc) {
   amd_comgr_status_t Status;
@@ -510,14 +594,14 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
   Root["Processor"] = Doc.getNode(Ident.Processor, /*Copy=*/true);
   Root["Version"] = Doc.getNode("1.0.0", /*Copy=*/true);
 
-  AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(IsaInfos[IsaIndex].Processor);
-  unsigned ArchAttr = AMDGPU::getArchAttrAMDGCN(Kind);
+  AMDGPU::GPUKind Kind = getIsaInfos()[IsaIndex].Kind;
+  const AMDGPU::AMDGPUFeatureBitset &Features = AMDGPU::getFeatureBitset(Kind);
 
   auto FeaturesNode = Doc.getMapNode();
-  if (ArchAttr & AMDGPU::FEATURE_XNACK_ON_OFF_MODES) {
+  if (Features.test(AMDGPU::FEAT_XNACK_ON_OFF_MODES)) {
     FeaturesNode["xnack"] = Doc.getNode("any", /*Copy=*/true);
   }
-  if (ArchAttr & AMDGPU::FEATURE_SRAMECC) {
+  if (Features.test(AMDGPU::FEAT_SRAMECC_ON_OFF_MODES)) {
     FeaturesNode["sramecc"] = Doc.getNode("any", /*Copy=*/true);
   }
 
@@ -541,18 +625,22 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
 
   Root["Features"] = FeaturesNode;
 
-  auto Info = IsaInfos[IsaIndex];
   Root["TrapHandlerEnabled"] =
-      Doc.getNode(std::to_string(Info.TrapHandlerEnabled), /*Copy=*/true);
-  Root["ImageSupport"] =
-      Doc.getNode(std::to_string(Info.ImageSupport), /*Copy=*/true);
-  Root["LocalMemorySize"] =
-      Doc.getNode(std::to_string(Info.LDSSize), /*Copy=*/true);
-  Root["EUsPerCU"] = Doc.getNode(std::to_string(Info.EUsPerCU), /*Copy=*/true);
-  Root["MaxWavesPerCU"] =
-      Doc.getNode(std::to_string(Info.MaxWavesPerCU), /*Copy=*/true);
-  Root["MaxFlatWorkGroupSize"] =
-      Doc.getNode(std::to_string(Info.MaxFlatWorkGroupSize), /*Copy=*/true);
+      Doc.getNode(std::to_string(isTrapHandlerEnabled(Kind)), /*Copy=*/true);
+  Root["ImageSupport"] = Doc.getNode(
+      std::to_string(Features.test(AMDGPU::FEAT_IMAGE_INSTS)), /*Copy=*/true);
+  // Report total LDS capacity in full-SIMD mode.
+  Root["LocalMemorySize"] = Doc.getNode(
+      std::to_string(AMDGPU::getLocalMemorySize(Kind, /*FullSIMDMode=*/true)),
+      /*Copy=*/true);
+  // Report physical-CU counts independently of the workgroup execution mode.
+  // GFX10+ has two SIMDs per CU; earlier targets have four.
+  unsigned EUsPerCU = Features.test(AMDGPU::FEAT_GFX10_INSTS) ? 2 : 4;
+  Root["EUsPerCU"] = Doc.getNode(std::to_string(EUsPerCU), /*Copy=*/true);
+  Root["MaxWavesPerCU"] = Doc.getNode(
+      std::to_string(AMDGPU::getMaxWavesPerEU(Kind) * EUsPerCU), /*Copy=*/true);
+  Root["MaxFlatWorkGroupSize"] = Doc.getNode(
+      std::to_string(AMDGPU::getMaxFlatWorkGroupSize()), /*Copy=*/true);
   Root["SGPRAllocGranule"] =
       Doc.getNode(std::to_string(AMDGPU::getSGPRAllocGranule(Kind)),
                   /*Copy=*/true);
@@ -560,14 +648,20 @@ amd_comgr_status_t getIsaMetadata(StringRef IsaName,
       std::to_string(AMDGPU::getTotalNumSGPRs(Kind)), /*Copy=*/true);
   Root["AddressableNumSGPRs"] = Doc.getNode(
       std::to_string(AMDGPU::getAddressableNumSGPRs(Kind)), /*Copy=*/true);
+  // Report wave32 VGPR counts and allocation granularity wherever wave32
+  // exists.
+  bool IsWave32 = Features.test(AMDGPU::FEAT_GFX10_INSTS);
   Root["VGPRAllocGranule"] =
-      Doc.getNode(std::to_string(Info.VGPRAllocGranule), /*Copy=*/true);
+      Doc.getNode(std::to_string(AMDGPU::getVGPRAllocGranule(Kind, IsWave32)),
+                  /*Copy=*/true);
   Root["TotalNumVGPRs"] =
-      Doc.getNode(std::to_string(Info.TotalNumVGPRs), /*Copy=*/true);
-  Root["AddressableNumVGPRs"] =
-      Doc.getNode(std::to_string(Info.AddressableNumVGPRs), /*Copy=*/true);
+      Doc.getNode(std::to_string(AMDGPU::getTotalNumVGPRs(Kind, IsWave32)),
+                  /*Copy=*/true);
+  Root["AddressableNumVGPRs"] = Doc.getNode(
+      std::to_string(AMDGPU::getAddressableNumVGPRs(Kind, IsWave32)),
+      /*Copy=*/true);
   Root["LDSBankCount"] =
-      Doc.getNode(std::to_string(Info.LDSBankCount), /*Copy=*/true);
+      Doc.getNode(std::to_string(AMDGPU::getLDSBankCount(Kind)), /*Copy=*/true);
 
   return AMD_COMGR_STATUS_SUCCESS;
 }

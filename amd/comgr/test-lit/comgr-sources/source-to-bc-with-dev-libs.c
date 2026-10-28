@@ -22,9 +22,10 @@ int main(int argc, char *argv[]) {
                                   "-amdgpu-prelink"};
   size_t CodeGenOptionsCount =
       sizeof(CodeGenOptions) / sizeof(CodeGenOptions[0]);
-  if (argc < 4 || argc > 5) {
+  const char *IsaName = "amdgcn-amd-amdhsa--gfx900";
+  if (argc < 4 || argc > 6) {
     fprintf(stderr, "Usage: source-to-bc-with-device-libs file.cl "
-                    "[--vfs|--novfs] -o file.bc\n");
+                    "[--vfs|--novfs] [--isa=<isa-name>] -o file.bc\n");
     exit(1);
   }
 
@@ -39,13 +40,17 @@ int main(int argc, char *argv[]) {
   amd_comgr_(create_action_info(&DataAction));
   amd_comgr_(
       action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_OPENCL_1_2));
-  amd_comgr_(action_info_set_isa_name(DataAction, "amdgcn-amd-amdhsa--gfx900"));
-
-  if (!strncmp(argv[2], "--vfs", 5)) {
-    amd_comgr_(action_info_set_vfs(DataAction, true));
-  } else if (!strncmp(argv[2], "--novfs", 7)) {
-    amd_comgr_(action_info_set_vfs(DataAction, false));
+  for (int I = 2; I < argc; ++I) {
+    if (!strncmp(argv[I], "--isa=", 6)) {
+      IsaName = argv[I] + 6;
+    } else if (!strcmp(argv[I], "--vfs")) {
+      amd_comgr_(action_info_set_vfs(DataAction, true));
+    } else if (!strcmp(argv[I], "--novfs")) {
+      amd_comgr_(action_info_set_vfs(DataAction, false));
+    }
   }
+
+  amd_comgr_(action_info_set_isa_name(DataAction, IsaName));
 
   amd_comgr_(create_data_set(&DataSetBc));
   amd_comgr_(action_info_set_option_list(DataAction, CodeGenOptions,

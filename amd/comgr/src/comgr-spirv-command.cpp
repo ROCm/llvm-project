@@ -20,6 +20,8 @@
 #include <LLVMSPIRVLib.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/LLVMContext.h>
+#include <llvm/TargetParser/AMDGPUTargetParser.h>
+#include <llvm/TargetParser/Triple.h>
 
 #include <sstream>
 #endif
@@ -56,6 +58,9 @@ amd_comgr_status_t SPIRVCommand::execute(raw_ostream &LogS) {
   Opts.enableAllExtensions();
   Opts.setDesiredBIsRepresentation(SPIRV::BIsRepresentation::OpenCL20);
   Opts.setPreserveAuxData(true);
+  auto SubArch = AMDGPU::getSubArchFromGPUName(OffloadArch);
+  Triple TargetTriple(Triple::amdgpu, SubArch, Triple::AMD, Triple::AMDHSA);
+  Opts.setSPIRVTargetTriple(TargetTriple.str());
 
   if (!OffloadArch.empty())
     Opts.setAMDGCNSPIRVOffloadArch(OffloadArch);
@@ -76,9 +81,7 @@ amd_comgr_status_t SPIRVCommand::execute(raw_ostream &LogS) {
 }
 
 SPIRVCommand::ActionClass SPIRVCommand::getClass() const {
-  // return an action class that is not allocated to distinguish it from any
-  // clang action
-  return clang::driver::Action::ActionClass::JobClassLast + 1;
+  return CachedCommandAdaptor::SPIRVClass;
 }
 
 void SPIRVCommand::addOptionsIdentifier(HashAlgorithm &H) const {

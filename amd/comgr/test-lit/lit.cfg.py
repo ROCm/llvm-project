@@ -8,12 +8,12 @@ import tempfile
 import lit.formats
 
 config.name = "Comgr"
-config.suffixes = {".hip", ".cl", ".c", ".cpp", ".s"}
+config.suffixes = {".hip", ".cl", ".c", ".cpp"}
 config.test_format = lit.formats.ShTest(
     execute_external=True, force_execute_external=True
 )
 
-config.excludes = ["comgr-sources"]
+config.excludes = ["comgr-sources", "Inputs"]
 
 config.test_source_root = os.path.dirname(__file__)
 config.test_exec_root = config.my_obj_root
@@ -24,8 +24,6 @@ if config.comgr_spirv_translator_available:
     config.available_features.add("comgr-has-spirv-translator")
 if config.comgr_amdgpu_target_available:
     config.available_features.add("comgr-has-amdgpu-target")
-if config.comgr_hotswap_transpile_available:
-    config.available_features.add("comgr-has-hotswap-transpile")
 
 # The AMDGPU device AddressSanitizer runtime (libclang_rt.asan.a for
 # amdgcn-amd-amdhsa) is a separately built artifact. The asan tests link it,
@@ -44,6 +42,21 @@ if glob.glob(
     )
 ):
     config.available_features.add("comgr-has-amdgpu-asan-runtime")
+
+try:
+    with open(config.comgr_resource_dir_file, encoding="utf-8") as source:
+        embedded_resources = source.read()
+except OSError:
+    embedded_resources = ""
+
+if '"lib/amdgcn-amd-amdhsa/libclang_rt.profile.a"' in embedded_resources:
+    config.available_features.add("comgr-has-amdgpu-profile-runtime")
+
+if (
+    '"lib/amdgcn-amd-amdhsa/libclang_rt.asan.a"' in embedded_resources
+    and '"lib/amdgcn-amd-amdhsa/libclang_rt.asan_static.a"' in embedded_resources
+):
+    config.available_features.add("comgr-has-embedded-amdgpu-asan-runtime")
 
 
 # spirv-to-reloc-debuginfo checks that comgr forwards
@@ -110,8 +123,8 @@ def _fwd(*parts):
 
 # %-prefixed substitutions for LLVM tools (used as %clang, %llvm-dis, etc.)
 config.substitutions.append(("%clang", _fwd(config.llvm_tools_dir, "clang")))
+config.substitutions.append(("%llvm-as", _fwd(config.llvm_tools_dir, "llvm-as")))
 config.substitutions.append(("%llvm-dis", _fwd(config.llvm_tools_dir, "llvm-dis")))
-config.substitutions.append(("%llvm-mc", _fwd(config.llvm_tools_dir, "llvm-mc")))
 config.substitutions.append(
     ("%llvm-objcopy", _fwd(config.llvm_tools_dir, "llvm-objcopy"))
 )
@@ -133,6 +146,3 @@ config.substitutions.append(
 
 # Interpreter used to run Python test helpers (e.g. enumerate-isa-check.py).
 config.substitutions.append(("%python", _fwd(sys.executable)))
-config.substitutions.append(
-    ("%hotswap_transpile_cli", _fwd(config.comgr_obj_dir, "hotswap_transpile_cli"))
-)

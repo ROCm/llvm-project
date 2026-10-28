@@ -1,6 +1,6 @@
-; RUN: not llc -mtriple=amdgpu11.00-amd-amdhsa -stress-regalloc=4 -amdgpu-enable-rewrite-partial-reg-uses=0 -filetype=null -verify-machineinstrs %s 2>&1 | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgpu11.00-amd-amdhsa -stress-regalloc=1 -amdgpu-enable-rewrite-partial-reg-uses=0 -filetype=null -verify-machineinstrs %s 2>&1 | FileCheck %s --allow-empty
 
-; CHECK: error: <unknown>:0:0: ran out of registers during register allocation in function 'f'
+; CHECK-NOT: error:
 ; CHECK-NOT: Bad machine code
 
 define <16 x half> @f(i1 %LGV2, <16 x half> %0) {

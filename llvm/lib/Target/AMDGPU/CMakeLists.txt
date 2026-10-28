@@ -133,6 +133,7 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPULaneMaskUtils.cpp
   GCNMinRegStrategy.cpp
   GCNNSAReassign.cpp
+  GCNPreRAAntiHints.cpp
   GCNPreRAOptimizations.cpp
   GCNPreRALongBranchReg.cpp
   AMDGPUPreWaveTransform.cpp
@@ -195,6 +196,7 @@ add_llvm_target(AMDGPUCodeGen
   SIRegisterInfo.cpp
   SIShrinkInstructions.cpp
   SIWholeQuadMode.cpp
+  SIPostRA16BitMovFolding.cpp
 
   LINK_COMPONENTS
   AMDGPUDesc

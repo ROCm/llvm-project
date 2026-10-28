@@ -47,9 +47,7 @@ else()
 endif()
 
 # Pin C++17 and mirror LLVM's RTTI setting (avoids type_info link errors
-# against LLVM libs built with RTTI off, including hotswap::raiser
-# which carries its own non-RTTI / non-exceptions compile flags via
-# llvm_update_compile_flags()).
+# against LLVM libs built with RTTI off).
 function(comgr_configure_test_target target)
   set_target_properties(${target} PROPERTIES
     CXX_STANDARD 17
@@ -64,12 +62,6 @@ function(comgr_configure_test_target target)
   endif()
 endfunction()
 
-# Hotswap unit tests live in their own subtree mirroring src/hotswap:
-# hotswap/rewriter (byte-level rewrite path) and hotswap/raiser (IR transpiler).
-# The gtest discovery above and comgr_configure_test_target() are inherited by
-# the subdirectories.
-add_subdirectory(hotswap)
-
 # -- DemangleSymbolNameTest ---------------------------------------------------
 
 add_executable(DemangleSymbolNameTest
@@ -78,12 +70,11 @@ add_executable(DemangleSymbolNameTest
 target_link_libraries(DemangleSymbolNameTest PRIVATE
   ${COMGR_GTEST_LIBS}
   amd_comgr
+  LLVMSupport
   ${LLVM_PTHREAD_LIB})
 
-# Gtest's LLVM support brings in some printers for LLVM types (StringRef, etc.).
-# When building in-tree, the included headers bring in some code that depend on LLVM's abi-breaking checks.
-# This adds a dependency with LLVM's Support library.
-# We could link against Support, but since we're not using these printers we can just disable them.
+# Disable LLVM printers in this test. LLVM's prebuilt GTest main still needs
+# LLVMSupport for its ABI-check reference when assertions are enabled.
 target_compile_definitions(DemangleSymbolNameTest PRIVATE GTEST_NO_LLVM_SUPPORT=true)
 
 target_include_directories(DemangleSymbolNameTest PRIVATE
@@ -163,25 +154,80 @@ if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
       $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:MetadataCacheTest>)
 endif()
 
+# -- SymbolIndexTest ----------------------------------------------------------
+#
+# The cached object-file parse and the symbol name index are only observable as
+# state on the DataObject, so this reaches into src/comgr.h rather than going
+# through the public API alone. Reads the code object straight out of the CTest
+# suite's source tree; it is checked in, so there is no build-order dependency
+# on that suite.
+
+add_executable(SymbolIndexTest
+  SymbolIndexTest.cpp)
+
+target_link_libraries(SymbolIndexTest PRIVATE
+  ${COMGR_GTEST_LIBS}
+  amd_comgr
+  ${COMGR_TEST_UNIT_SUPPORT_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+target_compile_definitions(SymbolIndexTest PRIVATE
+  GTEST_NO_LLVM_SUPPORT=true
+  TEST_CODE_OBJECT="${CMAKE_CURRENT_SOURCE_DIR}/../test/source/legacy/shared-v3.so")
+
+target_include_directories(SymbolIndexTest PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(SymbolIndexTest)
+
+if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
+  add_custom_command(TARGET SymbolIndexTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:SymbolIndexTest>)
+endif()
+
+# -- IncludeMaterializationTest -----------------------------------------------
+#
+# Includes are served out of the in-memory VFS rather than real temp files, so
+# this runs the preprocessor with the filesystem pinned both ways via
+# amd_comgr_action_info_set_vfs. Public API only; AMDGPUCompiler's VFS state is
+# private and not exported from the shared library.
+
+add_executable(IncludeMaterializationTest
+  IncludeMaterializationTest.cpp)
+
+target_link_libraries(IncludeMaterializationTest PRIVATE
+  ${COMGR_GTEST_LIBS}
+  amd_comgr
+  ${LLVM_PTHREAD_LIB})
+
+target_compile_definitions(IncludeMaterializationTest PRIVATE
+  GTEST_NO_LLVM_SUPPORT=true)
+
+target_include_directories(IncludeMaterializationTest PRIVATE
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(IncludeMaterializationTest)
+
+if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
+  add_custom_command(TARGET IncludeMaterializationTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:IncludeMaterializationTest>)
+endif()
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
-  COMMAND $<TARGET_FILE:HotswapElfTests>
-  COMMAND $<TARGET_FILE:HotswapMCTests>
-  COMMAND $<TARGET_FILE:HotswapProfileTests>
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
   COMMAND $<TARGET_FILE:LoggerTests>
-  COMMAND $<TARGET_FILE:MetadataCacheTest>)
-add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapProfileTests
-  DemangleSymbolNameTest LoggerTests MetadataCacheTest)
+  COMMAND $<TARGET_FILE:MetadataCacheTest>
+  COMMAND $<TARGET_FILE:SymbolIndexTest>
+  COMMAND $<TARGET_FILE:IncludeMaterializationTest>)
+add_dependencies(test-unit
+  DemangleSymbolNameTest LoggerTests MetadataCacheTest SymbolIndexTest
+  IncludeMaterializationTest)
 
-# The transpile-path test binaries, exported by hotswap/CMakeLists.txt in
-# COMGR_HOTSWAP_TEST_TARGETS (empty unless COMGR_ENABLE_HOTSWAP_TRANSPILE is on).
-# Adding a hotswap test updates that list, not this file.
-foreach(HotswapTest ${COMGR_HOTSWAP_TEST_TARGETS})
-  add_custom_command(TARGET test-unit POST_BUILD
-    COMMAND $<TARGET_FILE:${HotswapTest}>)
-endforeach()
-if(COMGR_HOTSWAP_TEST_TARGETS)
-  add_dependencies(test-unit ${COMGR_HOTSWAP_TEST_TARGETS})
-endif()
 add_dependencies(check-comgr test-unit)
