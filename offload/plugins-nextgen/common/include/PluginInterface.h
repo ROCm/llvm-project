@@ -476,7 +476,8 @@ struct GenericKernelTy {
                            uint32_t NumThreads[3], uint32_t NumBlocks[3],
                            uint32_t DynBlockMemSize,
                            KernelLaunchArgsTy &LaunchArgs,
-                           AsyncInfoWrapperTy &AsyncInfoWrapper) const = 0;
+                           AsyncInfoWrapperTy &AsyncInfoWrapper,
+                           GenericProfilerTy *ProfilerPtr = nullptr) const = 0;
 
   virtual Expected<uint64_t> maxGroupSize(GenericDeviceTy &GenericDevice,
                                           uint64_t DynamicMemSize) const = 0;
@@ -1105,15 +1106,19 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   /// Submit data to the device (host to device transfer).
   Error dataSubmit(void *TgtPtr, const void *HstPtr, int64_t Size,
-                   __tgt_async_info *AsyncInfo);
+                   __tgt_async_info *AsyncInfo,
+                   GenericProfilerTy *ProfilerPtr = nullptr);
   virtual Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
-                               AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
+                               AsyncInfoWrapperTy &AsyncInfoWrapper,
+                               GenericProfilerTy *ProfilerPtr = nullptr) = 0;
 
   /// Retrieve data from the device (device to host transfer).
   Error dataRetrieve(void *HstPtr, const void *TgtPtr, int64_t Size,
-                     __tgt_async_info *AsyncInfo);
+                     __tgt_async_info *AsyncInfo,
+                     GenericProfilerTy *ProfilerPtr = nullptr);
   virtual Error dataRetrieveImpl(void *HstPtr, const void *TgtPtr, int64_t Size,
-                                 AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
+                                 AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                 GenericProfilerTy *ProfilerPtr = nullptr) = 0;
 
   /// Copy data between arbitrary memory locations.
   Error dataMemcpy(void *DstPtr, const void *SrcPtr, int64_t Size,
@@ -1121,18 +1126,16 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual Error dataMemcpyImpl(void *DstPtr, const void *SrcPtr, int64_t Size,
                                AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
 
-  /// Instert a data fence between previous data operations and the following
-  /// operations if necessary for the device
-  virtual Error dataFence(__tgt_async_info *AsyncInfo) = 0;
-
   /// Exchange data between devices (device to device transfer). Calling this
   /// function is only valid if GenericPlugin::isDataExchangable() passing the
   /// two devices returns true.
   Error dataExchange(const void *SrcPtr, GenericDeviceTy &DstDev, void *DstPtr,
-                     int64_t Size, __tgt_async_info *AsyncInfo);
+                     int64_t Size, __tgt_async_info *AsyncInfo,
+                     GenericProfilerTy *ProfilerPtr = nullptr);
   virtual Error dataExchangeImpl(const void *SrcPtr, GenericDeviceTy &DstDev,
                                  void *DstPtr, int64_t Size,
-                                 AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
+                                 AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                 GenericProfilerTy *ProfilerPtr = nullptr) = 0;
 
   /// Fill data on the device with a pattern from the host
   Error dataFill(void *TgtPtr, const void *PatternPtr, int64_t PatternSize,
@@ -1255,11 +1258,10 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// Get the number of lanes used for the RPC interface.
   virtual uint32_t getRPCNumLanes() const { return getWarpSize(); }
   uint32_t getThreadLimit() const { return GridValues.GV_Max_WG_Size; }
-  /// Get the maximum number of blocks that can be launched. The \p NumThreads
-  /// argument is the per-block thread count the kernel will be launched with.
-  virtual uint32_t getBlockLimit(uint32_t NumThreads) const {
-    return GridValues.GV_Max_Teams;
-  }
+  uint32_t getMaxNumBlocks() const { return GridValues.GV_Max_Teams; }
+  /// Get the maximum number of work items (blocks * threads) of a launch, or
+  /// zero if the device only limits the number of blocks.
+  uint64_t getMaxGridSize() const { return MaxGridSize; }
   uint32_t getDefaultNumThreads() const {
     return GridValues.GV_Default_WG_Size;
   }
@@ -1518,6 +1520,9 @@ protected:
 
   /// The default grid values used for this device.
   llvm::omp::GV GridValues;
+
+  /// Maximum number of work items of a launch, or zero if not limited.
+  uint64_t MaxGridSize = 0;
 
   /// Enumeration used for representing the current state between two devices
   /// two devices (both under the same plugin) for the peer access between them.
@@ -1787,10 +1792,6 @@ public:
   /// Deallocates memory on the given device.
   int32_t data_delete(int32_t DeviceId, void *TgtPtr, int32_t Kind,
                       GenericProfilerTy *ProfilerPtr = nullptr);
-
-  /// Places a fence between previous data movements and following data
-  /// movements if necessary on the device
-  int32_t data_fence(int32_t DeviceId, __tgt_async_info *AsyncInfo);
 
   /// Begin executing a kernel on the given device.
   int32_t launch_kernel_sync(int32_t DeviceId, void *TgtEntryPtr,
