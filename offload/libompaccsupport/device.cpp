@@ -127,6 +127,12 @@ llvm::Error DeviceTy::initGeometryProps() {
   if (auto Err = Query(DeviceInfo::LAUNCH_DEFAULT_NUM_WORK_GROUPS,
                        GeometryProps.DefaultNumBlocks))
     return Err;
+  if (auto Err = Query(DeviceInfo::LAUNCH_MAX_NUM_WORK_GROUPS,
+                       GeometryProps.MaxNumBlocks))
+    return Err;
+  if (auto Err =
+          Query(DeviceInfo::LAUNCH_MAX_GRID_SIZE, GeometryProps.MaxGridSize))
+    return Err;
   // This is the same property reported by omp_get_gprivate_limit().
   if (auto Err = Query(DeviceInfo::WORK_GROUP_LOCAL_MEM_SIZE,
                        GeometryProps.MaxBlockSharedMemSize))
@@ -981,9 +987,13 @@ static uint32_t getOMPNumTeams() {
 /// Get the maximum number of blocks the device can launch for a kernel using
 /// \p NumThreads threads per block, further limited by OMP_NUM_TEAMS if the
 /// user set it.
-static uint32_t getDeviceBlockLimit(GenericDeviceTy &GenericDevice,
+static uint32_t getDeviceBlockLimit(const DeviceGeometryPropsTy &Props,
                                     uint32_t NumThreads) {
-  uint32_t BlockLimit = GenericDevice.getBlockLimit(NumThreads);
+  uint32_t BlockLimit = Props.MaxNumBlocks;
+  // Some devices limit the total number of threads of a launch, which makes
+  // the block limit depend on the thread count.
+  if (Props.MaxGridSize && NumThreads > 0)
+    BlockLimit = std::min<uint64_t>(BlockLimit, Props.MaxGridSize / NumThreads);
   if (uint32_t NumTeams = getOMPNumTeams())
     return std::min(BlockLimit, NumTeams);
   return BlockLimit;
@@ -1133,7 +1143,7 @@ static uint64_t getOneIterationPerThreadNumBlocks(uint64_t LoopTripCount,
 
 /// Downstream: the low-trip-count knobs of the former AMDGPU launch-geometry
 static uint64_t getLowTripCountOverrideNumBlocks(
-    GenericDeviceTy &GenericDevice, uint32_t UserNumBlocks,
+    const DeviceGeometryPropsTy &Props, uint32_t UserNumBlocks,
     uint64_t LoopTripCount, uint32_t &EffectiveNumThreads,
     bool IsNumThreadsStrict, bool IsNumThreadsFromUser,
     const KernelLaunchInfoTy &KernelEnv) {
@@ -1177,8 +1187,7 @@ static uint64_t getLowTripCountOverrideNumBlocks(
                          llvm::divideCeil(LoopTripCount, MinThreads));
   if (IsBigJumpLoop)
     NumBlocks = std::min(NumBlocks, BigJumpLoopMaxNumBlocks);
-  return std::min(NumBlocks,
-                  uint64_t(getDeviceBlockLimit(GenericDevice, NumThreads)));
+  return std::min(NumBlocks, uint64_t(getDeviceBlockLimit(Props, NumThreads)));
 }
 
 /// Get the effective number of blocks for the kernel based on the
@@ -1186,17 +1195,19 @@ static uint64_t getLowTripCountOverrideNumBlocks(
 /// The number of threads \p EffectiveNumThreads can be adjusted by this
 /// method. \p IsNumThreadsFromUser is true if \p EffectiveNumThreads is
 /// defined by the user via the thread_limit clause.
-static uint32_t getEffectiveNumBlocks(
-    GenericDeviceTy &GenericDevice, const DeviceGeometryPropsTy &Props,
-    uint32_t UserNumBlocks, uint64_t LoopTripCount,
-    uint32_t &EffectiveNumThreads, bool IsNumThreadsStrict,
-    bool IsNumThreadsFromUser, const KernelLaunchInfoTy &KernelEnv) {
+static uint32_t getEffectiveNumBlocks(const DeviceGeometryPropsTy &Props,
+                                      uint32_t UserNumBlocks,
+                                      uint64_t LoopTripCount,
+                                      uint32_t &EffectiveNumThreads,
+                                      bool IsNumThreadsStrict,
+                                      bool IsNumThreadsFromUser,
+                                      const KernelLaunchInfoTy &KernelEnv) {
   assert(!KernelEnv.isBareMode() &&
          "bare kernel should not call this function");
 
   // Downstream: opt-in override for loops with a low trip count.
   if (uint64_t NumBlocks = getLowTripCountOverrideNumBlocks(
-          GenericDevice, UserNumBlocks, LoopTripCount, EffectiveNumThreads,
+          Props, UserNumBlocks, LoopTripCount, EffectiveNumThreads,
           IsNumThreadsStrict, IsNumThreadsFromUser, KernelEnv))
     return NumBlocks;
 
@@ -1206,7 +1217,7 @@ static uint32_t getEffectiveNumBlocks(
   // reusing blocks until the requested count has been served.
   if (UserNumBlocks > 0)
     return std::min(UserNumBlocks,
-                    getDeviceBlockLimit(GenericDevice, EffectiveNumThreads));
+                    getDeviceBlockLimit(Props, EffectiveNumThreads));
 
   // Return the number of blocks required to cover the loop iterations. As for
   // SPMD below, trade threads for blocks if the loop is short.
@@ -1221,16 +1232,16 @@ static uint32_t getEffectiveNumBlocks(
                   IsNumThreadsStrict, IsNumThreadsFromUser)
             : 1;
     if (KernelEnv.isBigJumpLoopMode())
-      NumBlocks = std::min(
-          {NumBlocks, BigJumpLoopMaxNumBlocks,
-           uint64_t(getDeviceBlockLimit(GenericDevice, EffectiveNumThreads))});
+      NumBlocks =
+          std::min({NumBlocks, BigJumpLoopMaxNumBlocks,
+                    uint64_t(getDeviceBlockLimit(Props, EffectiveNumThreads))});
     return NumBlocks;
   }
 
   if (uint64_t NumBlocks = getXTeamReductionNumBlocks(
           Props, EffectiveNumThreads, LoopTripCount, KernelEnv))
-    return std::min(NumBlocks, uint64_t(getDeviceBlockLimit(
-                                   GenericDevice, EffectiveNumThreads)));
+    return std::min(NumBlocks,
+                    uint64_t(getDeviceBlockLimit(Props, EffectiveNumThreads)));
 
   uint64_t DefaultNumBlocks = KernelEnv.isGenericSPMDMode()
                                   ? getDefaultNumBlocksGenericSPMD(Props)
@@ -1284,8 +1295,7 @@ static uint32_t getEffectiveNumBlocks(
       !IsNumThreadsStrict) {
     while (EffectiveNumThreads > Props.WarpSize) {
       uint64_t MaxNumBlocks = std::min<uint64_t>(
-          LoopTripCount,
-          getDeviceBlockLimit(GenericDevice, EffectiveNumThreads / 2));
+          LoopTripCount, getDeviceBlockLimit(Props, EffectiveNumThreads / 2));
       if (uint64_t(PreferredNumBlocks) * 2 > MaxNumBlocks)
         break;
       EffectiveNumThreads /= 2;
@@ -1294,7 +1304,7 @@ static uint32_t getEffectiveNumBlocks(
   }
 
   return std::min(PreferredNumBlocks,
-                  getDeviceBlockLimit(GenericDevice, EffectiveNumThreads));
+                  getDeviceBlockLimit(Props, EffectiveNumThreads));
 }
 
 /// Build the base KernelLaunchArgsTy for a launch from the public
@@ -1358,8 +1368,7 @@ static void checkLaunchInvariants(const KernelLaunchArgsTy &LaunchArgs,
 
 /// Calculate or adjust, in place, the effective number of threads and blocks
 /// for the first dimension, unless the caller requested strict counts.
-static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
-                                    const DeviceGeometryPropsTy &Props,
+static void adjustEffectiveGeometry(const DeviceGeometryPropsTy &Props,
                                     KernelLaunchArgsTy &LaunchArgs,
                                     const KernelArgsTy &KernelArgs,
                                     const KernelLaunchInfoTy &KernelEnv) {
@@ -1383,7 +1392,7 @@ static void adjustEffectiveGeometry(GenericDeviceTy &GenericDevice,
 
   if (!StrictBlocks)
     LaunchArgs.UserNumBlocks[0] = getEffectiveNumBlocks(
-        GenericDevice, Props, LaunchArgs.UserNumBlocks[0], LaunchArgs.Tripcount,
+        Props, LaunchArgs.UserNumBlocks[0], LaunchArgs.Tripcount,
         EffectiveNumThreads, StrictThreads, ThreadLimitFromUser, KernelEnv);
 
   LaunchArgs.UserThreadLimit[0] = EffectiveNumThreads;
@@ -1497,7 +1506,7 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   }
 
   checkLaunchInvariants(LaunchArgs, KernelArgs, KernelLaunchInfo);
-  adjustEffectiveGeometry(GenericDevice, GeometryProps, LaunchArgs, KernelArgs,
+  adjustEffectiveGeometry(GeometryProps, LaunchArgs, KernelArgs,
                           KernelLaunchInfo);
 
   void **DynPtrSlot = resolveArgsAndDynPtrSlot(
