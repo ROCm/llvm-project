@@ -152,6 +152,8 @@ jobs:
             d9189b378f8fdc2525acaf6975deee29538ba48d
           git show FETCH_HEAD:patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch \
             > patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
+          sed -i '/^index /d' \
+            patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
  
       - name: Carry ObjectYAML VERS part size fix - temp for assertion on (llvm/llvm-project 221137)
         if: ${{ env.LLVM_ASSERTIONS == '1' }}
@@ -162,7 +164,8 @@ jobs:
           git fetch --no-tags --depth 2 https://github.com/llvm/llvm-project.git \
             refs/pull/221137/head
           git format-patch -1 --stdout FETCH_HEAD \
-            > patches/amd-mainline/llvm-project/0002-ObjectYAML-VERS-part-size.patch
+            | sed '/^index /d' \
+            > patches/amd-mainline/llvm-project/0002-ObjectYAML-VERS-part-size.patch          
 
       - name: Fetch sources
         timeout-minutes: 30
