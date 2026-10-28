@@ -142,18 +142,18 @@ jobs:
             --bootstrap
  
       # Temp fix for the assertion on - this needs to be removed once the merge happens
-      - name: Carry wave32 EXEC CFI patch - temp for assertion on (TheRock #6102)
-        if: ${{ env.LLVM_ASSERTIONS == '1' }}
-        run: |
-          set -x
-          git config --global --add safe.directory "$PWD"
-          mkdir -p patches/amd-mainline/llvm-project
-          git fetch --no-tags --depth 1 https://github.com/ROCm/TheRock.git \
-            d9189b378f8fdc2525acaf6975deee29538ba48d
-          git show FETCH_HEAD:patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch \
-            > patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
-          sed -i '/^index /d' \
-            patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
+      #- name: Carry wave32 EXEC CFI patch - temp for assertion on (TheRock #6102)
+      #  if: ${{ env.LLVM_ASSERTIONS == '1' }}
+      #  run: |
+      #    set -x
+      #    git config --global --add safe.directory "$PWD"
+      #    mkdir -p patches/amd-mainline/llvm-project
+      #    git fetch --no-tags --depth 1 https://github.com/ROCm/TheRock.git \
+      #      d9189b378f8fdc2525acaf6975deee29538ba48d
+      #    git show FETCH_HEAD:patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch \
+      #      > patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
+      #    sed -i '/^index /d' \
+      #      patches/amd-mainline/llvm-project/0001-AMDGPU-no-EXEC-pair-CFI-for-single-subregister-EXEC.patch
  
       - name: Carry ObjectYAML VERS part size fix - temp for assertion on (llvm/llvm-project 221137)
         if: ${{ env.LLVM_ASSERTIONS == '1' }}
