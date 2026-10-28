@@ -193,10 +193,10 @@ is not included in any subscope instances of ``I``. This means that the
 availability/visibility operations implicitly performed by ``D`` **cannot** form
 an *inclusive scope* relationship with operations that specify one of those
 subscopes. For global memory accesses, this requires threads to perform
-additional availability and visibility operations that ensure
-{ref}`amdgpu-location-order` in certain cases shown below. (For LDS accesses,
-additional availability and visibility operations are not needed because
-accesses to `addrspace(3)` always use the "lds-dma" scope.)
+additional availability and visibility operations to ensure
+{ref}`amdgpu-location-order`, as illustrated by the examples below. (For LDS
+accesses, additional availability and visibility operations are not needed
+because accesses to `addrspace(3)` always use the "lds-dma" scope.)
 
 #### Wavefront Scope
 
