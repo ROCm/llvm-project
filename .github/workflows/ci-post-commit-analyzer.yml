@@ -71,6 +71,7 @@ jobs:
                   -DCMAKE_C_COMPILER=clang \
                   -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
                   -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+                  -DCMAKE_HIP_COMPILER_LAUNCHER=sccache \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                   -DLLVM_INCLUDE_TESTS=OFF \
                   -DCLANG_INCLUDE_TESTS=OFF \

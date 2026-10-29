@@ -47,6 +47,7 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_HIP_COMPILER_LAUNCHER=sccache \
             -DLLVM_TARGETS_TO_BUILD="host" \
             -DLLVM_INCLUDE_SPIRV_TOOLS_TESTS=ON \
             -DLLVM_ENABLE_PROJECTS=mlir
