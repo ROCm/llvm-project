@@ -8,10 +8,6 @@ conventions. The agent-tool wrappers (`amd/comgr/CLAUDE.md`,
 `.cursor/rules/comgr.mdc`) point here so updates only need to be made
 once.
 
-For hotswap-subsystem-specific conventions (patch-pass authoring,
-B0/A0 rewrite invariants, hotswap test driver), see
-[`src/hotswap/HOTSWAP_CONVENTIONS.md`](src/hotswap/HOTSWAP_CONVENTIONS.md).
-
 ## 1. Code reuse — Comgr first, LLVM second, custom never
 
 **Reuse existing Comgr APIs before writing new ones.** Notable hits:

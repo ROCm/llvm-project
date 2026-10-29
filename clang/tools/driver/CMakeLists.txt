@@ -91,9 +91,7 @@ if(NOT CLANG_LINKS_TO_CREATE)
   endif()
 endif()
 
-if (CLANG_ENABLE_HLSL)
-  set(HLSL_LINK clang-dxc)
-endif()
+set(HLSL_LINK clang-dxc)
 
 foreach(link ${CLANG_LINKS_TO_CREATE} ${HLSL_LINK})
   add_clang_symlink(${link} clang)

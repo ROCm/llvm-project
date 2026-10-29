@@ -1,5 +1,4 @@
 ! This test checks lowering of OpenMP DO SIMD composite constructs.
-
 ! RUN: bbc -fopenmp -emit-hlfir %s -o - | FileCheck %s
 ! RUN: %flang_fc1 -fopenmp -emit-hlfir %s -o - | FileCheck %s
 
@@ -89,15 +88,17 @@ end subroutine do_simd_array_reduction
 ! CHECK-LABEL: func.func @_QPdo_simd_private(
 subroutine do_simd_private()
   integer, allocatable :: tmp
-  ! CHECK:      %[[I_DECL:.*]]:2 = hlfir.declare %{{.*}} {uniq_name = "_QFdo_simd_privateEi"}
+  ! CHECK:      %[[I_DECL:.*]]:2 = hlfir.declare %{{.*}} uniq_name("_QFdo_simd_privateEi")
   ! CHECK:      omp.wsloop
   ! CHECK-NEXT: omp.simd
+  ! CHECK-SAME: linear(val(@{{.*}} %[[I_DECL]]#0 -> %[[I_ARG:[^ ]+]] :
   ! CHECK-SAME: private(@[[PRIV_BOX_SYM:.*]] %{{.*}} -> %[[PRIV_BOX:.*]] : !fir.ref<!fir.box<!fir.heap<i32>>>)
   ! CHECK-NEXT: omp.loop_nest (%[[IVAR:.*]]) : i32
   !$omp do simd private(tmp)
   do i=1, 10
+  ! CHECK:      %[[I_PRIV:.*]]:2 = hlfir.declare %[[I_ARG]]
   ! CHECK:      %[[PRIV_BOX_DECL:.*]]:2 = hlfir.declare %[[PRIV_BOX]]
-  ! CHECK:      hlfir.assign %[[IVAR]] to %[[I_DECL]]#0
+  ! CHECK:      hlfir.assign %[[IVAR]] to %[[I_PRIV]]#0
   ! CHECK:      %[[PRIV_BOX_LOAD:.*]] = fir.load %[[PRIV_BOX_DECL]]
   ! CHECK:      hlfir.assign %{{.*}} to %[[PRIV_BOX_DECL]]#0
   ! CHECK:      omp.yield
@@ -111,7 +112,7 @@ subroutine do_simd_lastprivate_firstprivate()
   ! CHECK:      omp.wsloop
   ! CHECK-SAME: private(@[[FIRSTPRIVATE_A_SYM:.*]] %{{.*}} -> %[[FIRSTPRIVATE_A:.*]] : !fir.ref<i32>)
   ! CHECK-NEXT: omp.simd
-  ! CHECK-SAME: linear({{.*}}#0 : !fir.ref<i32> = %{{[^:]*}} : i32)
+  ! CHECK-SAME: linear(val(@{{.*}}#0 -> %{{[^ ]+}} : !fir.ref<i32> = %{{[^:]*}} : i32))
   ! CHECK-SAME: private(@[[PRIVATE_A_SYM:.*]] %{{.*}} -> %[[PRIVATE_A:.*]] : !fir.ref<i32>)
   !$omp do simd lastprivate(a) firstprivate(a)
   do i = 1, 10

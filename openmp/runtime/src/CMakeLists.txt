@@ -86,6 +86,7 @@ else()
     kmp_atomic.cpp
     kmp_csupport.cpp
     kmp_debug.cpp
+    kmp_device_env.cpp
     kmp_itt.cpp
     kmp_invoke_microtask.cpp
     kmp_environment.cpp
@@ -98,6 +99,7 @@ else()
     kmp_str.cpp
     kmp_tasking.cpp
     kmp_threadprivate.cpp
+    kmp_traits.cpp
     kmp_utility.cpp
     kmp_barrier.cpp
     kmp_wait_release.cpp
@@ -161,6 +163,10 @@ set_source_files_properties(${LIBOMP_ASMFILES} ${LIBOMP_GNUASMFILES} PROPERTIES 
 add_definitions(-U_GLIBCXX_ASSERTIONS)
 add_definitions(-U_LIBCPP_ENABLE_ASSERTIONS)
 
+# OpenMP version and date
+add_compile_definitions(KMP_SPEC_VERSION=${LIBOMP_VERSION_MAJOR}.${LIBOMP_VERSION_MINOR})
+add_compile_definitions(KMP_SPEC_DATE=${LIBOMP_OMP_YEAR_MONTH})
+
 # Disable libstdc++ assertions, even in an LLVM_ENABLE_ASSERTIONS build, to
 # avoid an unwanted dependency on libstdc++.so.
 add_compile_definitions(_GLIBCXX_NO_ASSERTIONS)
@@ -205,12 +211,10 @@ if(LIBOMP_USE_HWLOC)
   # the options to other libraries that depend on it, e.g. libompd.
   target_include_directories(obj.omp
     PRIVATE
-    "$<BUILD_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>"
-    "$<INSTALL_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>")
+    "$<BUILD_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>")
   target_include_directories(omp
     INTERFACE
-    "$<BUILD_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>"
-    "$<INSTALL_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>")
+    "$<BUILD_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>")
 endif()
 
 if(OPENMP_MSVC_NAME_SCHEME)
@@ -438,9 +442,12 @@ else()
     install(FILES ${LIBOMP_LIBRARY_DIR}/libomp.a DESTINATION "${OPENMP_INSTALL_LIBDIR}" COMPONENT runtime)
   else()
     install(TARGETS omp ${export_to_llvmexports} EXPORT openmpTargets ${LIBOMP_INSTALL_KIND}
-            DESTINATION "${OPENMP_INSTALL_LIBDIR}")
-    install(EXPORT openmpTargets FILE openmpTargets.cmake NAMESPACE OpenMP::
-            DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp)
+            DESTINATION "${OPENMP_INSTALL_LIBDIR}" COMPONENT openmp)
+    # Multilibs share the CMake package directory with the base build.
+    if(NOT OPENMP_LIBDIR_SUBDIR)
+      install(EXPORT openmpTargets FILE openmpTargets.cmake NAMESPACE OpenMP::
+              DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp COMPONENT openmp)
+    endif()
   endif()
 
   # Create cmake configuration files
@@ -452,8 +459,10 @@ else()
    INSTALL_DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp
    PATH_VARS LIBOMP_HEADERS_INSTALL_PATH OPENMP_INSTALL_LIBDIR)
 
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/openmp-config.cmake
-          DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp)
+  if(NOT OPENMP_LIBDIR_SUBDIR)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/openmp-config.cmake
+            DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp COMPONENT openmp)
+  endif()
   install(TARGETS omp ${export_to_llvmexports} ${LIBOMP_INSTALL_KIND} DESTINATION "${OPENMP_INSTALL_LIBDIR}" COMPONENT openmp)
 
   if(LIBOMP_INSTALL_ALIASES)

@@ -45,8 +45,8 @@ bb6:
 define amdgpu_kernel void @xor_negation_icmp(i32 %N, ptr addrspace(1) %p) {
 ; OPT-O0-LABEL: name: xor_negation_icmp
 ; OPT-O0:       bb.0.entry:
-; OPT-O0:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_LT_I32_e64 killed [[LHS:%[0-9]+]], killed [[RHS:%[0-9]+]], implicit $exec
-; OPT-O0-NEXT:    SI_BRCOND %bb.1, killed [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; OPT-O0:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_LT_I32_e64 [[LHS:%[0-9]+]], [[RHS:%[0-9]+]], implicit $exec
+; OPT-O0-NEXT:    SI_BRCOND %bb.1, [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
 ; OPT-O0-NEXT:    S_BRANCH %bb.2
 entry:
   %id.x = tail call i32 @llvm.amdgcn.workitem.id.x()
@@ -65,8 +65,8 @@ exit:
 define amdgpu_kernel void @plain_divergent_branch(ptr addrspace(1) %out, i32 %arg) {
 ; CHECK-LABEL: name: plain_divergent_branch
 ; CHECK:       bb.0.entry:
-; CHECK:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_LE_U32_e64 killed [[LHS:%[0-9]+]], killed [[RHS:%[0-9]+]], implicit $exec
-; CHECK:         SI_BRCOND %bb.2, killed [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; CHECK:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_LE_U32_e64 [[LHS:%[0-9]+]], [[RHS:%[0-9]+]], implicit $exec
+; CHECK:         SI_BRCOND %bb.2, [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
 ; CHECK-NEXT:    S_BRANCH %bb.1
 entry:
   %id = call i32 @llvm.amdgcn.workitem.id.x()
@@ -84,14 +84,14 @@ if.end:
 define amdgpu_kernel void @explicit_i1_not(ptr addrspace(1) %out) {
 ; CHECK-LABEL: name: explicit_i1_not
 ; CHECK:       bb.0.entry:
-; CHECK:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 killed [[LHS:%[0-9]+]], killed [[RHS:%[0-9]+]], implicit $exec
-; CHECK:         SI_BRCOND %bb.2, killed [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; CHECK:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 [[LHS:%[0-9]+]], [[RHS:%[0-9]+]], implicit $exec
+; CHECK:         SI_BRCOND %bb.2, [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
 ; CHECK-NEXT:    S_BRANCH %bb.1
 ;
 ; OPT-O0-LABEL: name: explicit_i1_not
 ; OPT-O0:       bb.0.entry:
-; OPT-O0:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 killed [[LHS:%[0-9]+]], killed [[RHS:%[0-9]+]], implicit $exec
-; OPT-O0-NEXT:    SI_BRCOND %bb.2, killed [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; OPT-O0:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 [[LHS:%[0-9]+]], [[RHS:%[0-9]+]], implicit $exec
+; OPT-O0-NEXT:    SI_BRCOND %bb.2, [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
 ; OPT-O0-NEXT:    S_BRANCH %bb.1
 entry:
   %id = call i32 @llvm.amdgcn.workitem.id.x()
@@ -110,13 +110,13 @@ if.end:
 define amdgpu_kernel void @uniform_branch(ptr addrspace(1) %out, i32 inreg %flag) {
 ; CHECK-LABEL: name: uniform_branch
 ; CHECK:       bb.0.entry:
-; CHECK:         S_CMP_LG_U32 killed [[LHS:%[0-9]+]], killed [[RHS:%[0-9]+]], implicit-def $scc
+; CHECK:         S_CMP_LG_U32 [[LHS:%[0-9]+]], [[RHS:%[0-9]+]], implicit-def $scc
 ; CHECK:         S_CBRANCH_SCC1 %bb.2, implicit $scc
 ; CHECK-NEXT:    S_BRANCH %bb.1
 ;
 ; OPT-O0-LABEL: name: uniform_branch
 ; OPT-O0:       bb.0.entry:
-; OPT-O0:         S_CMP_EQ_U32 {{%[0-9]+}}, killed [[ZERO:%[0-9]+]], implicit-def $scc
+; OPT-O0:         S_CMP_EQ_U32 {{%[0-9]+}}, [[ZERO:%[0-9]+]], implicit-def $scc
 ; OPT-O0:         S_CBRANCH_SCC1 %bb.1, implicit $scc
 ; OPT-O0-NEXT:    S_BRANCH %bb.2
 entry:

@@ -242,13 +242,10 @@
 ; GCN-O3-NEXT:        Loop Strength Reduction
 ; GCN-O3-NEXT:      Remove unreachable blocks from the CFG
 ; GCN-O3-NEXT:      Cycle Info Analysis
-; GCN-O3-NEXT:      Post-Dominator Tree Construction
-; GCN-O3-NEXT:      Branch Probability Analysis
-; GCN-O3-NEXT:      Block Frequency Analysis
-; GCN-O3-NEXT:      Constant Hoisting
-; GCN-O3-NEXT:      Replace intrinsics with calls to vector library
 ; GCN-O3-NEXT:      Lazy Branch Probability Analysis
 ; GCN-O3-NEXT:      Lazy Block Frequency Analysis
+; GCN-O3-NEXT:      Constant Hoisting
+; GCN-O3-NEXT:      Replace intrinsics with calls to vector library
 ; GCN-O3-NEXT:      Optimization Remark Emitter
 ; GCN-O3-NEXT:      Partially inline calls to library functions
 ; GCN-O3-NEXT:      Instrument function entry/exit with calls to e.g. mcount() (post inlining)
@@ -351,8 +348,7 @@
 ; GCN-O3-NEXT:        Remove dead machine instructions
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
 ; GCN-O3-NEXT:        Machine Natural Loop Construction
-; GCN-O3-NEXT:        Machine Cycle Info Analysis
-; GCN-O3-NEXT:        Machine Block Frequency Analysis
+; GCN-O3-NEXT:        Lazy Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        Machine Register Class Info Analysis
 ; GCN-O3-NEXT:        Early Machine Loop Invariant Code Motion
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
@@ -367,6 +363,7 @@
 ; GCN-O3-NEXT:        GCN DPP Combine
 ; GCN-O3-NEXT:        SI Load Store Optimizer
 ; GCN-O3-NEXT:        SI Peephole SDWA
+; GCN-O3-NEXT:        Lazy Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
 ; GCN-O3-NEXT:        Early Machine Loop Invariant Code Motion
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
@@ -382,7 +379,8 @@
 ; GCN-O3-NEXT:        Init Undef Pass
 ; GCN-O3-NEXT:        Process Implicit Definitions
 ; GCN-O3-NEXT:        Remove unreachable machine basic blocks
-; GCN-O3-NEXT:        Live Variable Analysis
+; GCN-O3-NEXT:        Slot index numbering
+; GCN-O3-NEXT:        Live Interval Analysis
 ; GCN-O3-NEXT:        SI Optimize VGPR LiveRange
 ; GCN-O3-NEXT:        Eliminate PHI nodes for register allocation
 ; GCN-O3-NEXT:        Two-Address instruction pass
@@ -471,6 +469,7 @@
 ; GCN-O3-NEXT:        Insert XRay ops
 ; GCN-O3-NEXT:        GCN Create VOPD Instructions
 ; GCN-O3-NEXT:        SI Memory Legalizer
+; GCN-O3-NEXT:        SI post-RA 16bit Mov Folding
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
 ; GCN-O3-NEXT:        Machine Natural Loop Construction
 ; GCN-O3-NEXT:        MachinePostDominator Tree Construction

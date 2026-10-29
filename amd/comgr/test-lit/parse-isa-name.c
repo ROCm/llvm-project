@@ -13,6 +13,14 @@
 // RUN: parse-isa-name "amdgcn-amd-amdhsa--gfx1010:xnack+" SUCCESS
 // RUN: parse-isa-name "" SUCCESS
 
+// COM: Legacy aliases remain valid inputs, while unknown processors and
+// COM: placeholder targets are not supported ISAs.
+// RUN: parse-isa-name "amdgcn-amd-amdhsa--tahiti" SUCCESS
+// RUN: parse-isa-name "amdgcn-amd-amdhsa--gfx9999" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgcn-amd-amdhsa--r600" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgcn-amd-amdhsa--generic" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgcn-amd-amdhsa--generic-hsa" INVALID_ARGUMENT
+
 // COM: The forward-looking "amdgpu<subarch>" arch spelling is accepted in
 // COM: addition to the legacy "amdgcn" arch.
 // RUN: parse-isa-name "amdgpu8.03-amd-amdhsa--gfx803" SUCCESS
@@ -59,6 +67,15 @@
 // RUN: parse-isa-name "amdgpu9-amd-amdhsa--gfx900:xnack+" SUCCESS
 // RUN: parse-isa-name "amdgpu9.4-amd-amdhsa--gfx9-4-generic:xnack+:sramecc+" SUCCESS
 
+// COM: Gfx12.5 targets support explicit xnack on/off settings.
+// RUN: parse-isa-name "amdgpu12.50-amd-amdhsa--gfx1250:xnack+" SUCCESS
+// RUN: parse-isa-name "amdgpu12.50-amd-amdhsa--gfx1250:xnack-" SUCCESS
+// RUN: parse-isa-name "amdgpu12.50s-amd-amdhsa--gfx1250-strict:xnack+" SUCCESS
+// RUN: parse-isa-name "amdgpu12.50s-amd-amdhsa--gfx1250-strict:xnack-" SUCCESS
+// RUN: parse-isa-name "amdgpu12.51-amd-amdhsa--gfx1251:xnack+" SUCCESS
+// RUN: parse-isa-name "amdgpu12.51-amd-amdhsa--gfx1251:xnack-" SUCCESS
+// RUN: parse-isa-name "amdgpu12.5-amd-amdhsa--gfx12-5-generic" SUCCESS
+
 // COM: gfx900 supports xnack but not sramecc, so a sramecc feature is rejected
 // COM: regardless of the arch spelling; gfx801 supports neither sramecc nor a
 // COM: xnack+sramecc combo.
@@ -76,7 +93,6 @@
 // RUN: parse-isa-name "amdgpu10.30-amd-amdhsa--gfx1030:xnack+" INVALID_ARGUMENT
 // RUN: parse-isa-name "amdgpu11.00-amd-amdhsa--gfx1100:xnack+" INVALID_ARGUMENT
 // RUN: parse-isa-name "amdgpu12.00-amd-amdhsa--gfx1200:xnack-" INVALID_ARGUMENT
-// RUN: parse-isa-name "amdgpu12.50-amd-amdhsa--gfx1250:xnack+" INVALID_ARGUMENT
 
 // COM: The processor may be omitted; it is derived from the subarch.
 // RUN: parse-isa-name "amdgpu9.00-amd-amdhsa--" SUCCESS
@@ -127,8 +143,26 @@
 // RUN: parse-isa-name "amdgpu99.99-amd-amdhsa--" INVALID_ARGUMENT
 // RUN: parse-isa-name "amdgcn-amd-amdhsa--" INVALID_ARGUMENT
 
-// COM: The forward-looking "amdgpu" arch must always carry a subarch; a bare
-// COM: "amdgpu" is rejected even with a valid processor appended.
-// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900" INVALID_ARGUMENT
-// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack+" INVALID_ARGUMENT
+// COM: Bare amdgpu is an alias for amdgcn when a processor is specified,
+// COM: regardless of whether LLVM's TargetID parser accepts that spelling.
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900" SUCCESS
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack+" SUCCESS
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack-" SUCCESS
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx908:xnack+:sramecc-" SUCCESS
+// RUN: parse-isa-name \
+// RUN:   "amdgpu-amd-amdhsa--gfx9-4-generic:sramecc+:xnack-" SUCCESS
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--tahiti" SUCCESS
+// RUN: parse-isa-name "amdgpu-amd-amdhsa-unknown-gfx900" SUCCESS
+
+// COM: The alias still requires a known processor and valid feature modifiers.
 // RUN: parse-isa-name "amdgpu-amd-amdhsa--" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--generic" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx9999" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:sramecc+" INVALID_ARGUMENT
+// RUN: parse-isa-name \
+// RUN:   "amdgpu-amd-amdhsa--gfx900:xnack+:xnack-" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:xnack" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900:::" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa-gfx900" INVALID_ARGUMENT
+// RUN: parse-isa-name " amdgpu-amd-amdhsa--gfx900" INVALID_ARGUMENT
+// RUN: parse-isa-name "amdgpu-amd-amdhsa--gfx900 " INVALID_ARGUMENT

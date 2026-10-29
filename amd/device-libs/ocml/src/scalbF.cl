@@ -11,7 +11,7 @@ CONSTATTR float
 MATH_MANGLE(scalb)(float x, float y)
 {
     float t = BUILTIN_CLAMP_F32(y, -0x1.0p+20f, 0x1.0p+20f);
-    float n = BUILTIN_RINT_F32(t);
+    float n = BUILTIN_FLOOR_F32(t);
     float f = t - n;
     float ret = MATH_MANGLE(ldexp)(x, (int)n);
     ret = f == 0.0f ? ret : ret * MATH_MANGLE(exp2)(f);

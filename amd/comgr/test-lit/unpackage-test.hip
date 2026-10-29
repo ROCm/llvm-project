@@ -42,9 +42,9 @@
 // RUN: unpackage --expect-fail \
 // RUN: %t.corrupt.bc amdgcn-amd-amdhsa gfx900 %t.corrupt.output.bc
 //
-// BOTH: target triple = "amd{{gcn|gpu[0-9.]+}}-amd-amdhsa"
-// GFX9: "target-cpu"="gfx900"
-// GFX10: "target-cpu"="gfx1030"
+// BOTH: target datalayout =
+// GFX9: {{target triple = "amdgpu9\.00-amd-amdhsa"|"target-cpu"="gfx900"}}
+// GFX10: {{target triple = "amdgpu10\.30-amd-amdhsa"|"target-cpu"="gfx1030"}}
 
 __attribute__((device))
 void add_value(float* a, float* b, float* res) {

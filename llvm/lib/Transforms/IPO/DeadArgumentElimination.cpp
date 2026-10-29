@@ -244,6 +244,11 @@ bool DeadArgumentEliminationPass::removeDeadArgumentsFromCallers(Function &F) {
   if (!F.hasExactDefinition())
     return false;
 
+  // Prevent the allocsize argument from being replaced with poison
+  if (F.hasFnAttribute(Attribute::AllocKind) &&
+      F.hasFnAttribute(Attribute::AllocSize))
+    return false;
+
   // Functions with local linkage should already have been handled, except if
   // they are fully alive (e.g., called indirectly) and except for the fragile
   // (variadic) ones. In these cases, we may still be able to improve their
@@ -488,6 +493,13 @@ void DeadArgumentEliminationPass::surveyFunction(const Function &F) {
     return;
   }
 
+  // Prevent allocsize from being deleted
+  if (F.hasFnAttribute(Attribute::AllocKind) &&
+      F.hasFnAttribute(Attribute::AllocSize)) {
+    markFrozen(F);
+    return;
+  }
+
   unsigned RetCount = numRetVals(&F);
 
   // Assume all return values are dead
@@ -637,14 +649,14 @@ void DeadArgumentEliminationPass::markValue(const RetOrArg &RA, Liveness L,
 /// only needs to guarantee they have the same return type.
 bool DeadArgumentEliminationPass::markFnOrRetTyFrozenOnMusttail(
     const Function &F) {
-  if (F.getCallingConv() != CallingConv::SwiftTail ||
+  if (F.getCallingConv() != CallingConv::SwiftTail &&
       F.getCallingConv() != CallingConv::Tail) {
     markFrozen(F);
     return true;
-  } else {
-    markRetTyFrozen(F);
-    return false;
   }
+
+  markRetTyFrozen(F);
+  return false;
 }
 
 /// Mark the given Function as alive, meaning that it cannot be changed in any

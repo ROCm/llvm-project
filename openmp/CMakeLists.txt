@@ -62,7 +62,7 @@ else()
       "Path where built OpenMP libraries should be installed.")
 endif()
 
-set(OPENMP_INSTALL_CFGDIR "lib/cmake" CACHE STRING
+set(OPENMP_INSTALL_CFGDIR "lib${LLVM_LIBDIR_SUFFIX}/cmake" CACHE STRING
       "Path where OpenMP config should be installed")
 
 set(OPENMP_TEST_C_COMPILER_default "${LLVM_TOOLS_BINARY_DIR}/clang${CMAKE_EXECUTABLE_SUFFIX}")

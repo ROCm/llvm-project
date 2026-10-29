@@ -22,41 +22,40 @@ define amdgpu_kernel void @blender_no_live_segment_at_def_error(<4 x float> %ext
 ; CHECK-NEXT:    ; implicit-def: $sgpr20_sgpr21_sgpr22_sgpr23
 ; CHECK-NEXT:    s_cbranch_scc1 .LBB0_5
 ; CHECK-NEXT:  ; %bb.2: ; %if.else251.i.i
-; CHECK-NEXT:    s_mov_b32 s13, s15
 ; CHECK-NEXT:    s_mov_b32 s20, 0
 ; CHECK-NEXT:    s_mov_b32 s36, 0
 ; CHECK-NEXT:    s_cmp_lg_u32 s27, 0
+; CHECK-NEXT:    s_mov_b32 s17, 0
 ; CHECK-NEXT:    s_cbranch_scc1 .LBB0_4
 ; CHECK-NEXT:  ; %bb.3: ; %if.then263.i.i
-; CHECK-NEXT:    v_cmp_nlt_f32_e64 s12, s25, 0
+; CHECK-NEXT:    v_cmp_nlt_f32_e64 vcc_lo, s25, 0
 ; CHECK-NEXT:    s_mov_b32 s20, 1.0
+; CHECK-NEXT:    s_mov_b32 s17, 0x7fc00000
 ; CHECK-NEXT:    s_mov_b32 s21, s20
 ; CHECK-NEXT:    s_mov_b32 s22, s20
 ; CHECK-NEXT:    s_mov_b32 s23, s20
-; CHECK-NEXT:    s_and_b32 vcc_lo, exec_lo, s12
-; CHECK-NEXT:    s_mov_b32 s12, 0x7fc00000
 ; CHECK-NEXT:    s_cbranch_vccnz .LBB0_6
 ; CHECK-NEXT:  .LBB0_4: ; %if.end273.i.i
-; CHECK-NEXT:    s_add_u32 s18, s8, 40
-; CHECK-NEXT:    s_addc_u32 s19, s9, 0
-; CHECK-NEXT:    s_getpc_b64 s[22:23]
-; CHECK-NEXT:    s_add_u32 s22, s22, _Z3dotDv3_fS_@gotpcrel32@lo+4
-; CHECK-NEXT:    s_addc_u32 s23, s23, _Z3dotDv3_fS_@gotpcrel32@hi+12
+; CHECK-NEXT:    s_add_u32 s12, s8, 40
+; CHECK-NEXT:    s_addc_u32 s13, s9, 0
+; CHECK-NEXT:    s_getpc_b64 s[18:19]
+; CHECK-NEXT:    s_add_u32 s18, s18, _Z3dotDv3_fS_@gotpcrel32@lo+4
+; CHECK-NEXT:    s_addc_u32 s19, s19, _Z3dotDv3_fS_@gotpcrel32@hi+12
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v2, 20, v2
-; CHECK-NEXT:    s_load_dwordx2 s[22:23], s[22:23], 0x0
+; CHECK-NEXT:    s_load_dwordx2 s[18:19], s[18:19], 0x0
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v3, 10, v1
-; CHECK-NEXT:    v_add_f32_e64 v1, s12, s20
+; CHECK-NEXT:    v_add_f32_e64 v1, s17, s20
 ; CHECK-NEXT:    s_mov_b64 s[34:35], s[8:9]
-; CHECK-NEXT:    s_mov_b64 s[8:9], s[18:19]
+; CHECK-NEXT:    s_mov_b64 s[8:9], s[12:13]
 ; CHECK-NEXT:    s_mov_b32 s12, s14
 ; CHECK-NEXT:    v_or3_b32 v31, v0, v3, v2
 ; CHECK-NEXT:    v_mov_b32_e32 v0, v1
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v2, 0
+; CHECK-NEXT:    s_mov_b32 s13, s15
 ; CHECK-NEXT:    s_mov_b32 s14, s16
-; CHECK-NEXT:    ; implicit-def: $sgpr15
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    s_swappc_b64 s[30:31], s[22:23]
+; CHECK-NEXT:    s_swappc_b64 s[30:31], s[18:19]
 ; CHECK-NEXT:    s_mov_b32 s37, s36
 ; CHECK-NEXT:    s_mov_b32 s38, s36
 ; CHECK-NEXT:    s_mov_b32 s39, s36
@@ -104,7 +103,7 @@ if.then263.i.i:                                   ; preds = %if.else251.i.i
 
 if.end273.i.i:                                    ; preds = %if.then263.i.i, %if.else251.i.i
   %i = phi float [ 1.000000e+00, %if.then263.i.i ], [ 0.000000e+00, %if.else251.i.i ]
-  %i1 = phi float [ 0x7FF8000000000000, %if.then263.i.i ], [ 0.000000e+00, %if.else251.i.i ]
+  %i1 = phi float [ +qnan, %if.then263.i.i ], [ 0.000000e+00, %if.else251.i.i ]
   %extractVec278.i.i = insertelement <3 x float> zeroinitializer, float %i1, i64 0
   %extractVec3.i.i.i = insertelement <3 x float> zeroinitializer, float %i, i64 0
   %i3.i = fadd <3 x float> %extractVec278.i.i, %extractVec3.i.i.i

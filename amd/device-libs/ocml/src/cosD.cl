@@ -16,8 +16,8 @@ MATH_MANGLE(cos)(double x)
 
     double ax = BUILTIN_ABS_F64(x);
 
-    struct redret r = MATH_PRIVATE(trigred)(ax);
-    struct scret sc = MATH_PRIVATE(sincosred2)(r.hi, r.lo);
+    struct epredret r = MATH_PRIVATE(eptrigred)(ax);
+    struct scret sc = MATH_PRIVATE(sincosredep)(r.r);
     sc.s = -sc.s;
 
     long c = AS_LONG((r.i & 1) != 0 ? sc.s : sc.c);

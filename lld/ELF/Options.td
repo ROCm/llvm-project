@@ -8,9 +8,7 @@ class FF<string name> : Flag<["--"], name>;
 class JJ<string name>: Joined<["--"], name>;
 
 multiclass EEq<string name, string help> {
-  def NAME: Separate<["--"], name>;
-  def NAME # _eq: Joined<["--"], name # "=">, Alias<!cast<Separate>(NAME)>,
-    HelpText<help>;
+  def NAME: SeparateOrEq<["--"], name>, HelpText<help>;
 }
 
 multiclass BB<string name, string help1, string help2> {
@@ -24,9 +22,7 @@ class F<string name>: Flag<["--", "-"], name>;
 class J<string name>: Joined<["--", "-"], name>;
 
 multiclass Eq<string name, string help> {
-  def NAME: Separate<["--", "-"], name>;
-  def NAME # _eq: Joined<["--", "-"], name # "=">, Alias<!cast<Separate>(NAME)>,
-    HelpText<help>;
+  def NAME: SeparateOrEq<["--", "-"], name>, HelpText<help>;
 }
 
 multiclass B<string name, string help1, string help2> {
@@ -82,10 +78,6 @@ defm defsym: Eq<"defsym", "Define a symbol alias">, MetaVarName<"<symbol>=<value
 defm optimize_bb_jumps: BB<"optimize-bb-jumps",
     "Remove direct jumps at the end to the next basic block",
     "Do not remove any direct jumps at the end to the next basic block (default)">;
-
-defm fortran_common : BB<"fortran-common",
-    "Search archive members for definitions to override COMMON symbols (default)",
-    "Do not search archive members for definitions to override COMMON symbols">;
 
 defm split_stack_adjust_size
     : Eq<"split-stack-adjust-size",
@@ -529,7 +521,7 @@ defm unresolved_symbols:
   Eq<"unresolved-symbols", "Determine how to handle unresolved symbols">;
 
 defm undefined_version: B<"undefined-version",
-  "Allow unused version in version script (default)",
+  "Allow unused version in version script (disabled by default)",
   "Report version scripts that refer undefined symbols">;
 
 defm rsp_quoting: EEq<"rsp-quoting", "Quoting style for response files">,

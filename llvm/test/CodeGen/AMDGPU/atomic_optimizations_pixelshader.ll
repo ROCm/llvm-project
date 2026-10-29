@@ -26,11 +26,11 @@ define amdgpu_ps void @add_i32_constant(ptr addrspace(8) inreg %out, ptr addrspa
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB0_4
 ; GFX7-NEXT:  .LBB0_1:
-; GFX7-NEXT:    s_mov_b64 s[12:13], exec
-; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, s12, 0
-; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v0, s13, v0
+; GFX7-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, exec_lo, 0
+; GFX7-NEXT:    v_mbcnt_hi_u32_b32_e32 v0, exec_hi, v0
 ; GFX7-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX7-NEXT:    s_xor_b64 s[14:15], vcc, exec
+; GFX7-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX7-NEXT:    ; implicit-def: $vgpr1
 ; GFX7-NEXT:    s_mov_b64 exec, s[14:15]
 ; GFX7-NEXT:    ; divergent control-flow edge
@@ -65,11 +65,11 @@ define amdgpu_ps void @add_i32_constant(ptr addrspace(8) inreg %out, ptr addrspa
 ; GFX89-NEXT:    ; divergent control-flow edge
 ; GFX89-NEXT:    s_cbranch_execz .LBB0_4
 ; GFX89-NEXT:  .LBB0_1:
-; GFX89-NEXT:    s_mov_b64 s[12:13], exec
-; GFX89-NEXT:    v_mbcnt_lo_u32_b32 v0, s12, 0
-; GFX89-NEXT:    v_mbcnt_hi_u32_b32 v0, s13, v0
+; GFX89-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
+; GFX89-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX89-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX89-NEXT:    s_xor_b64 s[14:15], vcc, exec
+; GFX89-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX89-NEXT:    ; implicit-def: $vgpr1
 ; GFX89-NEXT:    s_mov_b64 exec, s[14:15]
 ; GFX89-NEXT:    ; divergent control-flow edge
@@ -104,10 +104,10 @@ define amdgpu_ps void @add_i32_constant(ptr addrspace(8) inreg %out, ptr addrspa
 ; GFX1064-NEXT:    ; divergent control-flow edge
 ; GFX1064-NEXT:    s_cbranch_execz .LBB0_4
 ; GFX1064-NEXT:  .LBB0_1:
+; GFX1064-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1064-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX1064-NEXT:    ; implicit-def: $vgpr1
-; GFX1064-NEXT:    v_mbcnt_lo_u32_b32 v0, s12, 0
-; GFX1064-NEXT:    v_mbcnt_hi_u32_b32 v0, s13, v0
+; GFX1064-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1064-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX1064-NEXT:    s_xor_b64 s[14:15], vcc, exec
 ; GFX1064-NEXT:    s_mov_b64 exec, s[14:15]
@@ -144,9 +144,9 @@ define amdgpu_ps void @add_i32_constant(ptr addrspace(8) inreg %out, ptr addrspa
 ; GFX1032-NEXT:    ; divergent control-flow edge
 ; GFX1032-NEXT:    s_cbranch_execz .LBB0_4
 ; GFX1032-NEXT:  .LBB0_1:
+; GFX1032-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1032-NEXT:    s_mov_b32 s10, exec_lo
 ; GFX1032-NEXT:    ; implicit-def: $vgpr1
-; GFX1032-NEXT:    v_mbcnt_lo_u32_b32 v0, s10, 0
 ; GFX1032-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
 ; GFX1032-NEXT:    s_xor_b32 s11, vcc_lo, exec_lo
 ; GFX1032-NEXT:    s_mov_b32 exec_lo, s11
@@ -184,14 +184,14 @@ define amdgpu_ps void @add_i32_constant(ptr addrspace(8) inreg %out, ptr addrspa
 ; GFX1164-NEXT:    ; divergent control-flow edge
 ; GFX1164-NEXT:    s_cbranch_execz .LBB0_4
 ; GFX1164-NEXT:  .LBB0_1:
+; GFX1164-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1164-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX1164-NEXT:    ; implicit-def: $vgpr1
-; GFX1164-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1164-NEXT:    v_mbcnt_lo_u32_b32 v0, s12, 0
-; GFX1164-NEXT:    v_mbcnt_hi_u32_b32 v0, s13, v0
-; GFX1164-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
+; GFX1164-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1164-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1164-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX1164-NEXT:    s_xor_b64 s[14:15], vcc, exec
+; GFX1164-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1164-NEXT:    s_mov_b64 exec, s[14:15]
 ; GFX1164-NEXT:    ; divergent control-flow edge
 ; GFX1164-NEXT:    s_cbranch_execz .LBB0_3
@@ -229,13 +229,12 @@ define amdgpu_ps void @add_i32_constant(ptr addrspace(8) inreg %out, ptr addrspa
 ; GFX1132-NEXT:    ; divergent control-flow edge
 ; GFX1132-NEXT:    s_cbranch_execz .LBB0_4
 ; GFX1132-NEXT:  .LBB0_1:
+; GFX1132-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1132-NEXT:    s_mov_b32 s10, exec_lo
 ; GFX1132-NEXT:    ; implicit-def: $vgpr1
-; GFX1132-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1132-NEXT:    v_mbcnt_lo_u32_b32 v0, s10, 0
+; GFX1132-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1132-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
 ; GFX1132-NEXT:    s_xor_b32 s11, vcc_lo, exec_lo
-; GFX1132-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1132-NEXT:    s_mov_b32 exec_lo, s11
 ; GFX1132-NEXT:    ; divergent control-flow edge
 ; GFX1132-NEXT:    s_cbranch_execz .LBB0_3
@@ -273,14 +272,14 @@ define amdgpu_ps void @add_i32_constant(ptr addrspace(8) inreg %out, ptr addrspa
 ; GFX1364-NEXT:    ; divergent control-flow edge
 ; GFX1364-NEXT:    s_cbranch_execz .LBB0_4
 ; GFX1364-NEXT:  .LBB0_1:
+; GFX1364-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1364-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX1364-NEXT:    ; implicit-def: $vgpr1
-; GFX1364-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1364-NEXT:    v_mbcnt_lo_u32_b32 v0, s12, 0
-; GFX1364-NEXT:    v_mbcnt_hi_u32_b32 v0, s13, v0
-; GFX1364-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
+; GFX1364-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1364-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GFX1364-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX1364-NEXT:    s_xor_b64 s[14:15], vcc, exec
+; GFX1364-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1364-NEXT:    s_mov_b64 exec, s[14:15]
 ; GFX1364-NEXT:    ; divergent control-flow edge
 ; GFX1364-NEXT:    s_cbranch_execz .LBB0_3
@@ -318,13 +317,12 @@ define amdgpu_ps void @add_i32_constant(ptr addrspace(8) inreg %out, ptr addrspa
 ; GFX1332-NEXT:    ; divergent control-flow edge
 ; GFX1332-NEXT:    s_cbranch_execz .LBB0_4
 ; GFX1332-NEXT:  .LBB0_1:
+; GFX1332-NEXT:    v_mbcnt_lo_u32_b32 v0, exec_lo, 0
 ; GFX1332-NEXT:    s_mov_b32 s10, exec_lo
 ; GFX1332-NEXT:    ; implicit-def: $vgpr1
-; GFX1332-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1332-NEXT:    v_mbcnt_lo_u32_b32 v0, s10, 0
+; GFX1332-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; GFX1332-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
 ; GFX1332-NEXT:    s_xor_b32 s11, vcc_lo, exec_lo
-; GFX1332-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1332-NEXT:    s_mov_b32 exec_lo, s11
 ; GFX1332-NEXT:    ; divergent control-flow edge
 ; GFX1332-NEXT:    s_cbranch_execz .LBB0_3

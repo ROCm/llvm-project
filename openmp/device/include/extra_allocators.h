@@ -14,7 +14,6 @@
 #define OPENMP_LIBOMPTARGET_DEVICERTL_INCLUDE_EXTRA_ALLOCATORS_H
 
 #include "DeviceTypes.h"
-#include "Xteamr.h"
 
 extern "C" {
 /// Tasking

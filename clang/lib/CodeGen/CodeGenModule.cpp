@@ -49,6 +49,7 @@
 #include "clang/Basic/Version.h"
 #include "clang/CodeGen/BackendUtil.h"
 #include "clang/CodeGen/ConstantInitBuilder.h"
+#include "clang/CodeGenUtils/ModuleUtils.h"
 #include "clang/Lex/Preprocessor.h"
 #include "llvm/ABI/IRTypeMapper.h"
 #include "llvm/ABI/TargetInfo.h"
@@ -90,7 +91,6 @@
 
 using namespace clang;
 using namespace CodeGen;
-using namespace llvm::omp::xteam_red;
 
 static llvm::cl::opt<bool> LimitedCoverage(
     "limited-coverage-experimental", llvm::cl::Hidden,
@@ -156,7 +156,7 @@ createTargetCodeGenInfo(CodeGenModule &CGM) {
     AArch64ABIKind Kind = AArch64ABIKind::AAPCS;
     if (Target.getABI() == "darwinpcs")
       Kind = AArch64ABIKind::DarwinPCS;
-    else if (Triple.isOSWindows())
+    else if (Triple.isOSWindowsOrUEFI())
       return createWindowsAArch64TargetCodeGenInfo(CGM, AArch64ABIKind::Win64);
     else if (Target.getABI() == "aapcs-soft")
       Kind = AArch64ABIKind::AAPCSSoft;
@@ -340,6 +340,8 @@ createTargetCodeGenInfo(CodeGenModule &CGM) {
     return createLoongArchTargetCodeGenInfo(
         CGM, Target.getPointerWidth(LangAS::Default), ABIFRLen);
   }
+  case llvm::Triple::xtensa:
+    return createXtensaTargetCodeGenInfo(CGM);
   }
 }
 
@@ -386,6 +388,29 @@ bool CodeGenModule::shouldUseLLVMABILowering(unsigned CallingConv) const {
   return false;
 }
 
+static void initializeCommonABICompatInfo(llvm::abi::ABICompatInfo &CompatInfo,
+                                          const LangOptions::ClangABI Compat) {
+  CompatInfo.IsMatrixHA = Compat > LangOptions::ClangABI::Ver23;
+}
+
+static void initializeX86ABICompatInfo(llvm::abi::X86ABICompatInfo &CompatInfo,
+                                       const llvm::Triple &T,
+                                       const LangOptions::ClangABI Compat) {
+  initializeCommonABICompatInfo(CompatInfo, Compat);
+  CompatInfo.ClassifyIntegerMMXAsSSE = Compat > LangOptions::ClangABI::Ver3_8 &&
+                                       !T.isOSDarwin() && !T.isPS() &&
+                                       !T.isOSFreeBSD();
+  CompatInfo.HonorsRevision98 = !T.isOSDarwin();
+  CompatInfo.PassInt128VectorsInMem =
+      Compat > LangOptions::ClangABI::Ver9 && (T.isOSLinux() || T.isOSNetBSD());
+  // Clang <= 20.0 did not do this, and PlayStation does not do this.
+  CompatInfo.ReturnCXXRecordGreaterThan128InMem =
+      Compat > LangOptions::ClangABI::Ver20 && !T.isPS();
+  CompatInfo.Clang11Compat = Compat <= LangOptions::ClangABI::Ver11 || T.isPS();
+  CompatInfo.ClassifyUnnamedBitFields =
+      Compat > LangOptions::ClangABI::Ver23 && !T.isPS();
+}
+
 const llvm::abi::TargetInfo &
 CodeGenModule::getLLVMABITargetInfo(llvm::abi::TypeBuilder &TB) {
   if (TheLLVMABITargetInfo)
@@ -400,20 +425,35 @@ CodeGenModule::getLLVMABITargetInfo(llvm::abi::TypeBuilder &TB) {
   case llvm::Triple::aarch64:
   case llvm::Triple::aarch64_32:
   case llvm::Triple::aarch64_be: {
+    llvm::abi::AArch64ABIOptions Opts;
     StringRef ABI = getTarget().getABI();
-    llvm::abi::AArch64ABIKind Kind = llvm::abi::AArch64ABIKind::AAPCS;
     if (ABI == "darwinpcs")
-      Kind = llvm::abi::AArch64ABIKind::DarwinPCS;
+      Opts.Kind = llvm::abi::AArch64ABIKind::DarwinPCS;
     else if (T.isOSWindows())
-      Kind = llvm::abi::AArch64ABIKind::Win64;
+      Opts.Kind = llvm::abi::AArch64ABIKind::Win64;
     else if (ABI == "aapcs-soft")
-      Kind = llvm::abi::AArch64ABIKind::AAPCSSoft;
-    TheLLVMABITargetInfo = llvm::abi::createAArch64TargetInfo(TB, Kind);
+      Opts.Kind = llvm::abi::AArch64ABIKind::AAPCSSoft;
+    else
+      Opts.Kind = llvm::abi::AArch64ABIKind::AAPCS;
+
+    Opts.IsILP32 = T.getArch() == llvm::Triple::aarch64_32;
+    Opts.IsCXX = getLangOpts().CPlusPlus;
+    Opts.IsMachO = T.isOSBinFormatMachO();
+    Opts.IsAndroidOrOHOS = T.isAndroid() || T.isOHOSFamily();
+    Opts.IsWindowsArm64EC = T.isWindowsArm64EC();
+    Opts.IsMicrosoftCXXABI = getTarget().getCXXABI().isMicrosoft();
+    Opts.IsBigEndian = !T.isLittleEndian();
+
+    initializeCommonABICompatInfo(Opts.CompatInfo,
+                                  getLangOpts().getClangABICompat());
+
+    TheLLVMABITargetInfo = llvm::abi::createAArch64TargetInfo(TB, Opts);
     return *TheLLVMABITargetInfo;
   }
 
   case llvm::Triple::bpfeb:
   case llvm::Triple::bpfel:
+    // BPF targets do not require any ABI compatibility information.
     TheLLVMABITargetInfo = llvm::abi::createBPFTargetInfo(TB);
     return *TheLLVMABITargetInfo;
 
@@ -424,19 +464,9 @@ CodeGenModule::getLLVMABITargetInfo(llvm::abi::TypeBuilder &TB) {
         : ABI == "avx"  ? llvm::abi::X86AVXABILevel::AVX
                         : llvm::abi::X86AVXABILevel::None;
 
-    llvm::abi::ABICompatInfo CompatInfo;
-    LangOptions::ClangABI Compat = getLangOpts().getClangABICompat();
-    CompatInfo.ClassifyIntegerMMXAsSSE =
-        Compat > LangOptions::ClangABI::Ver3_8 && !T.isOSDarwin() &&
-        !T.isPS() && !T.isOSFreeBSD();
-    CompatInfo.HonorsRevision98 = !T.isOSDarwin();
-    CompatInfo.PassInt128VectorsInMem = Compat > LangOptions::ClangABI::Ver9 &&
-                                        (T.isOSLinux() || T.isOSNetBSD());
-    // Clang <= 20.0 did not do this, and PlayStation does not do this.
-    CompatInfo.ReturnCXXRecordGreaterThan128InMem =
-        Compat > LangOptions::ClangABI::Ver20 && !T.isPS();
-    CompatInfo.Clang11Compat =
-        Compat <= LangOptions::ClangABI::Ver11 || T.isPS();
+    llvm::abi::X86ABICompatInfo CompatInfo;
+    initializeX86ABICompatInfo(CompatInfo, T,
+                               getLangOpts().getClangABICompat());
 
     bool Has64BitPointers = getTarget().getPointerWidth(LangAS::Default) == 64;
 
@@ -604,10 +634,10 @@ CodeGenModule::CodeGenModule(ASTContext &C,
       CodeGenOpts.CoverageNotesFile.size() ||
       CodeGenOpts.CoverageDataFile.size())
     DebugInfo.reset(new CGDebugInfo(*this));
-  else if (getTriple().isOSWindows())
-    // On Windows targets, we want to emit compiler info even if debug info is
-    // otherwise disabled. Use a temporary CGDebugInfo instance to emit only
-    // basic compiler metadata.
+  else if (getTriple().isOSWindows() || getTriple().isUEFI())
+    // On Windows and UEFI targets, we want to emit compiler info even if debug
+    // info is otherwise disabled. Use a temporary CGDebugInfo instance to emit
+    // only basic compiler metadata.
     CGDebugInfo(*this);
 
   Block.GlobalUniqueCount = 0;
@@ -1302,7 +1332,11 @@ void CodeGenModule::Release() {
         llvm::ConstantArray::get(ATy, UsedArray), "__clang_gpu_used_external");
     addCompilerUsedGlobal(GV);
   }
-  if (LangOpts.HIP) {
+  // Skip __hip_cuid_ under incremental extensions (clang-repl): a repl session
+  // is one semantic TU, so this per-TU marker is useless in host and device IR.
+  // On the host it also collides, as every module shares one CUID and emits the
+  // same symbol at JIT link.
+  if (LangOpts.HIP && !LangOpts.IncrementalExtensions) {
     // Emit a unique ID so that host and device binaries from the same
     // compilation unit can be associated.
     auto *GV = new llvm::GlobalVariable(
@@ -1384,6 +1418,11 @@ void CodeGenModule::Release() {
     // Note if we are compiling with /kernel.
     getModule().addModuleFlag(llvm::Module::Warning, "ms-kernel", 1);
   }
+  if (CodeGenOpts.HotPatch) {
+    // Note if we are compiling with /hotpatch. Min ensures that LTO only keeps
+    // it if every module was compiled with /hotpatch.
+    getModule().addModuleFlag(llvm::Module::Min, "ms-hotpatch", 1);
+  }
   if (CodeGenOpts.OptimizationLevel > 0 && CodeGenOpts.StrictVTablePointers) {
     // We don't support LTO with 2 with different StrictVTablePointers
     // FIXME: we could support it by stripping all the information introduced
@@ -1400,7 +1439,7 @@ void CodeGenModule::Release() {
                               "StrictVTablePointersRequirement",
                               llvm::MDNode::get(VMContext, Ops));
   }
-  if (getModuleDebugInfo() || getTriple().isOSWindows())
+  if (getModuleDebugInfo() || getTriple().isOSWindows() || getTriple().isUEFI())
     // We support a single version in the linked module. The LLVM
     // parser will drop debug info with a different version number
     // (and warn about it, too).
@@ -1431,6 +1470,15 @@ void CodeGenModule::Release() {
                             llvm::FloatABI::getABITypeName(FloatABI)));
   }
 
+  // Record the thread model as a module flag when it differs from the target
+  // default.
+  llvm::ThreadModel ThreadModel =
+      LangOpts.getThreadModel() == LangOptions::ThreadModelKind::Single
+          ? llvm::ThreadModel::Single
+          : llvm::ThreadModel::POSIX;
+  if (ThreadModel != getTriple().getDefaultThreadModel())
+    getModule().setThreadModel(ThreadModel);
+
   if (getTypes().isLongDoubleReferenced()) {
     const llvm::fltSemantics *flt = &getTarget().getLongDoubleFormat();
 
@@ -1448,6 +1496,19 @@ void CodeGenModule::Release() {
 
     if (Format)
       getModule().setLongDoubleFormat(*Format);
+  }
+
+  // Record the exception model as a module flag whenever it was specified, so
+  // that the flag's absence unambiguously means unspecified regardless of the
+  // target default. In the absence of a custom module flag merging behavior, an
+  // explicit non-default model could silently merge with a defaulted module.
+  llvm::ExceptionHandling ExceptionModel =
+      CodeGenOptions::toExceptionHandling(CodeGenOpts.getExceptionHandling());
+  if (ExceptionModel != llvm::ExceptionHandling::Default) {
+    getModule().addModuleFlag(
+        llvm::Module::Error, "exception-model",
+        llvm::MDString::get(getLLVMContext(),
+                            llvm::getExceptionModelName(ExceptionModel)));
   }
 
   if (getTriple().isOSzOS()) {
@@ -1483,11 +1544,11 @@ void CodeGenModule::Release() {
   llvm::Triple T = Context.getTargetInfo().getTriple();
 
   // TODO: This should probably be just generally emitted for non-empty ABI
-  // names. LoongArch actively consumes the flag, but it is excluded here.
-  // Other targets have no apparent need for the ABI name, but set a non-empty
-  // value.
+  // names. Other targets have no apparent need for the ABI name, but set a
+  // non-empty value.
   if (StringRef ABIStr = Target.getABI();
-      !ABIStr.empty() && (T.isARM() || T.isThumb() || T.isRISCV())) {
+      !ABIStr.empty() && (T.isARM() || T.isThumb() || T.isRISCV() ||
+                          T.isPPC() || T.isLoongArch() || T.isWasm())) {
     getModule().addModuleFlag(llvm::Module::Error, "target-abi",
                               llvm::MDString::get(VMContext, ABIStr));
   }
@@ -1658,6 +1719,14 @@ void CodeGenModule::Release() {
           llvm::Module::Error, "ptrauth-init-fini-address-discrimination",
           LangOpts.PointerAuthCalls && LangOpts.PointerAuthInitFini &&
               LangOpts.PointerAuthInitFiniAddressDiscrimination);
+    }
+
+    if (LangOpts.hasSignReturnAddressHardening()) {
+      TargetInfo::BranchProtectionInfo BPI(LangOpts);
+      getModule().addModuleFlag(
+          llvm::Module::Error, "sign-return-address-harden",
+          llvm::MDString::get(getLLVMContext(),
+                              BPI.getSignReturnAddressHardeningStr()));
     }
 
     if (getTriple().isOSLinux()) {
@@ -2011,7 +2080,9 @@ void CodeGenModule::EmitOpenCLMetadata() {
   // SPIR v2.0 s2.13 - The OpenCL version used by the module is stored in the
   // opencl.ocl.version named metadata node.
   // C++ for OpenCL has a distinct mapping for versions compatible with OpenCL.
-  auto CLVersion = LangOpts.getOpenCLCompatibleVersion();
+  // CUDA and HIP use OpenCL 2.0 metadata when targeting SPIR-V.
+  unsigned CLVersion =
+      LangOpts.OpenCL ? LangOpts.getOpenCLCompatibleVersion() : 200;
 
   auto EmitVersion = [this](StringRef MDName, int Version) {
     llvm::Metadata *OCLVerElts[] = {
@@ -2476,15 +2547,21 @@ static bool isUniqueInternalLinkageDecl(GlobalDecl GD,
 
 static std::string getMangledNameImpl(CodeGenModule &CGM, GlobalDecl GD,
                                       const NamedDecl *ND,
-                                      bool OmitMultiVersionMangling = false) {
+                                      bool OmitMultiVersionMangling = false,
+                                      bool IgnoreAsmLabel = false) {
   SmallString<256> Buffer;
   llvm::raw_svector_ostream Out(Buffer);
   MangleContext &MC = CGM.getCXXABI().getMangleContext();
   if (!CGM.getModuleNameHash().empty())
     MC.needsUniqueInternalLinkageNames();
-  bool ShouldMangle = MC.shouldMangleDeclName(ND);
+  bool ShouldMangle = !IgnoreAsmLabel
+                          ? MC.shouldMangleDeclName(ND)
+                          : MC.shouldMangleDeclNameIgnoringAsmLabel(ND);
   if (ShouldMangle)
-    MC.mangleName(GD.getWithDecl(ND), Out);
+    if (!IgnoreAsmLabel)
+      MC.mangleName(GD.getWithDecl(ND), Out);
+    else
+      MC.mangleNameIgnoringAsmLabel(GD.getWithDecl(ND), Out);
   else {
     IdentifierInfo *II = ND->getIdentifier();
     assert(II && "Attempt to mangle unnamed decl.");
@@ -2676,6 +2753,14 @@ StringRef CodeGenModule::getMangledName(GlobalDecl GD) {
 
   auto Result = Manglings.insert(std::make_pair(MangledName, GD));
   return MangledDeclNames[CanonicalGD] = Result.first->first();
+}
+
+std::string CodeGenModule::getMangledNameIgnoringAsmLabel(GlobalDecl GD,
+                                                          const NamedDecl *ND) {
+  std::string MangledName =
+      getMangledNameImpl(*this, GD, ND, /*OmitMultiVersionMangling=*/false,
+                         /*IgnoreAsmLabel=*/true);
+  return MangledName;
 }
 
 StringRef CodeGenModule::getBlockMangledName(GlobalDecl GD,
@@ -3073,26 +3158,6 @@ void CodeGenModule::GenKernelArgMetadata(llvm::Function *Fn,
                     llvm::MDNode::get(VMContext, argNames));
 }
 
-/// Determines whether the language options require us to model
-/// unwind exceptions.  We treat -fexceptions as mandating this
-/// except under the fragile ObjC ABI with only ObjC exceptions
-/// enabled.  This means, for example, that C with -fexceptions
-/// enables this.
-static bool hasUnwindExceptions(const LangOptions &LangOpts) {
-  // If exceptions are completely disabled, obviously this is false.
-  if (!LangOpts.Exceptions) return false;
-
-  // If C++ exceptions are enabled, this is true.
-  if (LangOpts.CXXExceptions) return true;
-
-  // If ObjC exceptions are enabled, this depends on the ABI.
-  if (LangOpts.ObjCExceptions) {
-    return LangOpts.ObjCRuntime.hasUnwindExceptions();
-  }
-
-  return true;
-}
-
 static bool requiresMemberFunctionPointerTypeMetadata(CodeGenModule &CGM,
                                                       const CXXMethodDecl *MD) {
   // Check that the type metadata can ever actually be used by a call.
@@ -3135,7 +3200,7 @@ void CodeGenModule::SetLLVMFunctionAttributesForDefinition(const Decl *D,
     B.addAttribute("stack-probe-size",
                    std::to_string(CodeGenOpts.StackProbeSize));
 
-  if (!hasUnwindExceptions(LangOpts))
+  if (!CodeGenUtils::hasUnwindExceptions(LangOpts))
     B.addAttribute(llvm::Attribute::NoUnwind);
 
   if (std::optional<llvm::Attribute::AttrKind> Attr =
@@ -3269,7 +3334,7 @@ void CodeGenModule::SetLLVMFunctionAttributesForDefinition(const Decl *D,
   if (unsigned alignment = D->getMaxAlignment() / Context.getCharWidth())
     ExplicitAlignment = llvm::Align(alignment);
   else if (LangOpts.FunctionAlignment)
-    ExplicitAlignment = llvm::Align(1ull << LangOpts.FunctionAlignment);
+    ExplicitAlignment = llvm::Align::fromLog2(LangOpts.FunctionAlignment);
 
   if (ExplicitAlignment) {
     F->setAlignment(ExplicitAlignment);
@@ -3331,6 +3396,30 @@ void CodeGenModule::addSYCLModuleIdAttr(llvm::Function *Fn) {
   Fn->addFnAttr("sycl-module-id", getModule().getModuleIdentifier());
 }
 
+// Construct a GlobalDecl suitable for linkage queries.
+// GlobalDecl(FunctionDecl *) asserts for constructors and destructors because
+// they require an explicit ctor/dtor variant. Use the complete variant since
+// the variant does not affect linkage.
+static GlobalDecl getGlobalDeclForLinkage(const FunctionDecl *FD) {
+  if (const auto *CD = dyn_cast<CXXConstructorDecl>(FD))
+    return GlobalDecl(CD, Ctor_Complete);
+  if (const auto *DD = dyn_cast<CXXDestructorDecl>(FD))
+    return GlobalDecl(DD, Dtor_Complete);
+  return GlobalDecl(FD);
+}
+
+// Returns true if FD should be kept in the object file when
+// -fkeep-inline-functions is enabled.
+static bool shouldKeepInlineFunction(llvm::GlobalValue::LinkageTypes Linkage,
+                                     const FunctionDecl *FD) {
+  // Keep inline function definitions that are available in the current
+  // translation unit. Exclude available_externally definitions, which are
+  // inlining hints whose authoritative definition is expected to be emitted by
+  // another translation unit.
+  return FD->isInlined() &&
+         Linkage != llvm::GlobalValue::AvailableExternallyLinkage;
+}
+
 void CodeGenModule::SetCommonAttributes(GlobalDecl GD, llvm::GlobalValue *GV) {
   const Decl *D = GD.getDecl();
   if (isa_and_nonnull<NamedDecl>(D))
@@ -3349,6 +3438,11 @@ void CodeGenModule::SetCommonAttributes(GlobalDecl GD, llvm::GlobalValue *GV) {
        (CodeGenOpts.KeepStaticConsts && VD->getStorageDuration() == SD_Static &&
         VD->getType().isConstQualified())))
     addUsedOrCompilerUsedGlobal(GV);
+
+  if (CodeGenOpts.KeepInlineFunctions)
+    if (const auto *FD = dyn_cast_if_present<FunctionDecl>(D))
+      if (shouldKeepInlineFunction(getFunctionLinkage(GD), FD))
+        addUsedOrCompilerUsedGlobal(GV);
 }
 
 /// Get the feature delta from the default feature map for the given target CPU.
@@ -3575,11 +3669,33 @@ void CodeGenModule::createIndirectFunctionTypeMD(const FunctionDecl *FD,
       F->getFunction().hasAddressTaken(nullptr, /*IgnoreCallbackUses=*/true,
                                        /*IgnoreAssumeLikeCalls=*/true,
                                        /*IgnoreLLVMUsed=*/false)) {
+    const FunctionDecl *Def = nullptr;
+    bool HasBody = FD->hasBody(Def);
+    if (!HasBody || !Def)
+      Def = FD;
+
+    QualType QT = Def->getType();
+    if (const auto *FNPT = QT->getAs<FunctionNoProtoType>()) {
+      // If there is no definition available in this TU for an unprototyped
+      // function declaration, skip generating incomplete callgraph metadata.
+      if (!HasBody && !Def->isThisDeclarationADefinition())
+        return;
+
+      // Reconstruct a prototype from the parameter declarations in the
+      // definition AST, applying C default argument promotions (e.g.,
+      // short -> int, float -> double). This ensures definition-side
+      // type metadata matches the promoted signatures computed at indirect
+      // call sites in CGCall.cpp (see CodeGenFunction::EmitCall).
+      SmallVector<QualType, 8> ParamTypes;
+      for (const ParmVarDecl *P : Def->parameters())
+        ParamTypes.push_back(P->getType());
+      QT = ReconstructCallGraphPrototype(FNPT, ParamTypes);
+    }
+
     F->addMetadata(
         llvm::LLVMContext::MD_callgraph,
-        *llvm::MDTuple::get(
-            getLLVMContext(),
-            {CreateMetadataIdentifierForCallGraphType(FD->getType())}));
+        *llvm::MDTuple::get(getLLVMContext(),
+                            {CreateMetadataIdentifierForCallGraphType(QT)}));
   }
 }
 
@@ -4137,28 +4253,39 @@ void CodeGenModule::EmitDeferred() {
       }
     }
 
+    // Check to see if we've already emitted this. This is necessary for a
+    // couple of reasons: first, decls can end up in the deferred-decls queue
+    // multiple times, and second, decls can end up with definitions in unusual
+    // ways (e.g. by an extern inline function acquiring a strong function
+    // redefinition). Just ignore these cases. Do this before requesting a
+    // correctly typed value for the definition, since that operation may
+    // replace an existing global whose LLVM type differs.
+    StringRef MangledName = getMangledName(D);
+    llvm::GlobalValue *GV = GetGlobalValue(MangledName);
+    if (GV && !GV->isDeclaration()) {
+      GlobalDecl ExistingGD;
+      if (lookupRepresentativeDecl(MangledName, ExistingGD) &&
+          D.getCanonicalDecl().getDecl() ==
+              ExistingGD.getCanonicalDecl().getDecl())
+        continue;
+    }
+
     // We should call GetAddrOfGlobal with IsForDefinition set to true in order
     // to get GlobalValue with exactly the type we need, not something that
     // might had been created for another decl with the same mangled name but
     // different type.
-    llvm::GlobalValue *GV = dyn_cast<llvm::GlobalValue>(
-        GetAddrOfGlobal(D, ForDefinition));
+    GV = dyn_cast<llvm::GlobalValue>(GetAddrOfGlobal(D, ForDefinition));
 
     // In case of different address spaces, we may still get a cast, even with
     // IsForDefinition equal to true. Query mangled names table to get
     // GlobalValue.
     if (!GV)
-      GV = GetGlobalValue(getMangledName(D));
+      GV = GetGlobalValue(MangledName);
 
     // Make sure GetGlobalValue returned non-null.
     assert(GV);
 
-    // Check to see if we've already emitted this.  This is necessary
-    // for a couple of reasons: first, decls can end up in the
-    // deferred-decls queue multiple times, and second, decls can end
-    // up with definitions in unusual ways (e.g. by an extern inline
-    // function acquiring a strong function redefinition).  Just
-    // ignore these cases.
+    // GetAddrOfGlobal may itself cause the declaration to be emitted.
     if (!GV->isDeclaration())
       continue;
 
@@ -4259,7 +4386,7 @@ llvm::Constant *CodeGenModule::EmitAnnotationArgs(const AnnotateAttr *Attr) {
   for (Expr *E : Exprs) {
     ID.Add(cast<clang::ConstantExpr>(E)->getAPValueResult());
   }
-  llvm::Constant *&Lookup = AnnotationArgs[ID.ComputeHash()];
+  llvm::Constant *&Lookup = AnnotationArgs[ID.computeHash()];
   if (Lookup)
     return Lookup;
 
@@ -4447,10 +4574,22 @@ bool CodeGenModule::MustBeEmitted(const ValueDecl *Global) {
         VD->getType().isConstQualified())))
     return true;
 
+  if (CodeGenOpts.KeepInlineFunctions)
+    if (const auto *FD = dyn_cast<FunctionDecl>(Global))
+      if (shouldKeepInlineFunction(
+              getFunctionLinkage(getGlobalDeclForLinkage(FD)), FD))
+        return true;
+
   return getContext().DeclMustBeEmitted(Global);
 }
 
 bool CodeGenModule::MayBeEmittedEagerly(const ValueDecl *Global) {
+  // In an OpenMP compilation Sema may defer a function's diagnostics to the end
+  // of the TU (see Sema::emitDeferredDiags). Emitting it before then would let
+  // code with pending errors reach CodeGen.
+  if (LangOpts.OpenMP && !LangOpts.OpenMPSimd && isa<FunctionDecl>(Global))
+    return false;
+
   // In OpenMP 5.0 variables and function may be marked as
   // device_type(host/nohost) and we should not emit them eagerly unless we sure
   // that they must be emitted on the host/device. To be sure we need to have
@@ -4648,14 +4787,6 @@ ConstantAddress CodeGenModule::GetWeakRefReference(const ValueDecl *VD) {
   return ConstantAddress(Aliasee, DeclTy, Alignment);
 }
 
-template <typename AttrT> static bool hasImplicitAttr(const ValueDecl *D) {
-  if (!D)
-    return false;
-  if (auto *A = D->getAttr<AttrT>())
-    return A->isImplicit();
-  return D->isImplicit();
-}
-
 static bool shouldSkipAliasEmission(const CodeGenModule &CGM,
                                     const ValueDecl *Global) {
   const LangOptions &LangOpts = CGM.getLangOpts();
@@ -4688,19 +4819,6 @@ static bool shouldSkipAliasEmission(const CodeGenModule &CGM,
   return false;
 }
 
-bool CodeGenModule::shouldEmitCUDAGlobalVar(const VarDecl *Global) const {
-  assert(LangOpts.CUDA && "Should not be called by non-CUDA languages");
-  // We need to emit host-side 'shadows' for all global
-  // device-side variables because the CUDA runtime needs their
-  // size and host-side address in order to provide access to
-  // their device-side incarnations.
-  return !LangOpts.CUDAIsDevice || Global->hasAttr<CUDADeviceAttr>() ||
-         Global->hasAttr<CUDAConstantAttr>() ||
-         Global->hasAttr<CUDASharedAttr>() ||
-         Global->getType()->isCUDADeviceBuiltinSurfaceType() ||
-         Global->getType()->isCUDADeviceBuiltinTextureType();
-}
-
 void CodeGenModule::EmitGlobal(GlobalDecl GD) {
   const auto *Global = cast<ValueDecl>(GD.getDecl());
 
@@ -4725,31 +4843,8 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
     return emitCPUDispatchDefinition(GD);
 
   // If this is CUDA, be selective about which declarations we emit.
-  // Non-constexpr non-lambda implicit host device functions are not emitted
-  // unless they are used on device side.
-  if (LangOpts.CUDA) {
-    assert((isa<FunctionDecl>(Global) || isa<VarDecl>(Global)) &&
-           "Expected Variable or Function");
-    if (const auto *VD = dyn_cast<VarDecl>(Global)) {
-      if (!shouldEmitCUDAGlobalVar(VD))
-        return;
-    } else if (LangOpts.CUDAIsDevice) {
-      const auto *FD = dyn_cast<FunctionDecl>(Global);
-      if ((!Global->hasAttr<CUDADeviceAttr>() ||
-           (LangOpts.OffloadImplicitHostDeviceTemplates &&
-            hasImplicitAttr<CUDAHostAttr>(FD) &&
-            hasImplicitAttr<CUDADeviceAttr>(FD) && !FD->isConstexpr() &&
-            !isLambdaCallOperator(FD) &&
-            !getContext().CUDAImplicitHostDeviceFunUsedByDevice.count(FD))) &&
-          !Global->hasAttr<CUDAGlobalAttr>() &&
-          !(LangOpts.HIPStdPar && isa<FunctionDecl>(Global) &&
-            !Global->hasAttr<CUDAHostAttr>()))
-        return;
-      // Device-only functions are the only things we skip.
-    } else if (!Global->hasAttr<CUDAHostAttr>() &&
-               Global->hasAttr<CUDADeviceAttr>())
-      return;
-  }
+  if (LangOpts.CUDA && !getContext().shouldEmitCUDADecl(Global))
+    return;
 
   if (LangOpts.OpenMP) {
     // If this is OpenMP, check if it is legal to emit this global normally.
@@ -4778,7 +4873,7 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
     if (FD->hasAttr<AnnotateAttr>()) {
       StringRef MangledName = getMangledName(GD);
       if (GetGlobalValue(MangledName))
-        DeferredAnnotations[MangledName] = FD;
+        DeferredAnnotations[MangledName.str()] = FD;
     }
 
     // Forward declarations are emitted lazily on first use.
@@ -5426,8 +5521,8 @@ void CodeGenModule::emitCPUDispatchDefinition(GlobalDecl GD) {
       IFunc = GI;
     }
 
-    std::string AliasName = getMangledNameImpl(
-        *this, GD, FD, /*OmitMultiVersionMangling=*/true);
+    std::string AliasName =
+        getMangledNameImpl(*this, GD, FD, /*OmitMultiVersionMangling=*/true);
     llvm::Constant *AliasFunc = GetGlobalValue(AliasName);
     if (!AliasFunc) {
       auto *GA = llvm::GlobalAlias::create(DeclTy, AS, Linkage, AliasName,
@@ -5699,7 +5794,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
   // Store the declaration associated with this function so it is potentially
   // updated by further declarations or definitions and emitted at the end.
   if (D && D->hasAttr<AnnotateAttr>())
-    DeferredAnnotations[MangledName] = cast<ValueDecl>(D);
+    DeferredAnnotations[MangledName.str()] = cast<ValueDecl>(D);
 
   // If we already created a function with the same mangled name (but different
   // type) before, take its name and add it to the list of functions to be
@@ -6361,22 +6456,7 @@ LangAS CodeGenModule::GetGlobalVarAddressSpace(const VarDecl *D) {
 }
 
 LangAS CodeGenModule::GetGlobalConstantAddressSpace() const {
-  // OpenCL v1.2 s6.5.3: a string literal is in the constant address space.
-  if (LangOpts.OpenCL)
-    return LangAS::opencl_constant;
-  if (LangOpts.SYCLIsDevice)
-    return LangAS::sycl_global;
-  if (LangOpts.HIP && LangOpts.CUDAIsDevice && getTriple().isSPIRV())
-    // For HIPSPV map literals to cuda_device (maps to CrossWorkGroup in SPIR-V)
-    // instead of default AS (maps to Generic in SPIR-V). Otherwise, we end up
-    // with OpVariable instructions with Generic storage class which is not
-    // allowed (SPIR-V V1.6 s3.42.8). Also, mapping literals to SPIR-V
-    // UniformConstant storage class is not viable as pointers to it may not be
-    // casted to Generic pointers which are used to model HIP's "flat" pointers.
-    return LangAS::cuda_device;
-  if (auto AS = getTarget().getConstantAddressSpace())
-    return *AS;
-  return LangAS::Default;
+  return CodeGenUtils::getGlobalConstantAddressSpace(LangOpts, getTarget());
 }
 
 // In address space agnostic languages, string literals are in default address
@@ -6435,38 +6515,13 @@ void CodeGenModule::MaybeHandleStaticInExternC(const SomeDecl *D,
     R.first->second = nullptr;
 }
 
-static bool shouldBeInCOMDAT(CodeGenModule &CGM, const Decl &D) {
-  if (!CGM.supportsCOMDAT())
-    return false;
-
-  if (D.hasAttr<SelectAnyAttr>())
-    return true;
-
-  GVALinkage Linkage;
-  if (auto *VD = dyn_cast<VarDecl>(&D))
-    Linkage = CGM.getContext().GetGVALinkageForVariable(VD);
-  else
-    Linkage = CGM.getContext().GetGVALinkageForFunction(cast<FunctionDecl>(&D));
-
-  switch (Linkage) {
-  case GVA_Internal:
-  case GVA_AvailableExternally:
-  case GVA_StrongExternal:
-    return false;
-  case GVA_DiscardableODR:
-  case GVA_StrongODR:
-    return true;
-  }
-  llvm_unreachable("No such linkage");
-}
-
 bool CodeGenModule::supportsCOMDAT() const {
   return getTriple().supportsCOMDAT();
 }
 
 void CodeGenModule::maybeSetTrivialComdat(const Decl &D,
                                           llvm::GlobalObject &GO) {
-  if (!shouldBeInCOMDAT(*this, D))
+  if (!CodeGenUtils::shouldBeInCOMDAT(getContext(), D))
     return;
   GO.setComdat(TheModule.getOrInsertComdat(GO.getName()));
 }
@@ -6483,6 +6538,8 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
   QualType ASTTy = D->getType();
   if (getLangOpts().OpenCL && ASTTy->isSamplerT())
     return;
+
+  // TODO(Reflection): add support for consteval-only types.
 
   // HLSL default buffer constants will be emitted during HLSLBufferDecl codegen
   if (getLangOpts().HLSL &&
@@ -6775,81 +6832,6 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
       DI->EmitGlobalVariable(GV, D);
 }
 
-static bool isVarDeclStrongDefinition(const ASTContext &Context,
-                                      CodeGenModule &CGM, const VarDecl *D,
-                                      bool NoCommon) {
-  // Don't give variables common linkage if -fno-common was specified unless it
-  // was overridden by a NoCommon attribute.
-  if ((NoCommon || D->hasAttr<NoCommonAttr>()) && !D->hasAttr<CommonAttr>())
-    return true;
-
-  // C11 6.9.2/2:
-  //   A declaration of an identifier for an object that has file scope without
-  //   an initializer, and without a storage-class specifier or with the
-  //   storage-class specifier static, constitutes a tentative definition.
-  if (D->getInit() || D->hasExternalStorage())
-    return true;
-
-  // A variable cannot be both common and exist in a section.
-  if (D->hasAttr<SectionAttr>())
-    return true;
-
-  // A variable cannot be both common and exist in a section.
-  // We don't try to determine which is the right section in the front-end.
-  // If no specialized section name is applicable, it will resort to default.
-  if (D->hasAttr<PragmaClangBSSSectionAttr>() ||
-      D->hasAttr<PragmaClangDataSectionAttr>() ||
-      D->hasAttr<PragmaClangRelroSectionAttr>() ||
-      D->hasAttr<PragmaClangRodataSectionAttr>())
-    return true;
-
-  // Thread local vars aren't considered common linkage.
-  if (D->getTLSKind())
-    return true;
-
-  // Tentative definitions marked with WeakImportAttr are true definitions.
-  if (D->hasAttr<WeakImportAttr>())
-    return true;
-
-  // A variable cannot be both common and exist in a comdat.
-  if (shouldBeInCOMDAT(CGM, *D))
-    return true;
-
-  // Declarations with a required alignment do not have common linkage in MSVC
-  // mode.
-  if (Context.getTargetInfo().getCXXABI().isMicrosoft()) {
-    if (D->hasAttr<AlignedAttr>())
-      return true;
-    QualType VarType = D->getType();
-    if (Context.isAlignmentRequired(VarType))
-      return true;
-
-    if (const auto *RD = VarType->getAsRecordDecl()) {
-      for (const FieldDecl *FD : RD->fields()) {
-        if (FD->isBitField())
-          continue;
-        if (FD->hasAttr<AlignedAttr>())
-          return true;
-        if (Context.isAlignmentRequired(FD->getType()))
-          return true;
-      }
-    }
-  }
-
-  // Microsoft's link.exe doesn't support alignments greater than 32 bytes for
-  // common symbols, so symbols with greater alignment requirements cannot be
-  // common.
-  // Other COFF linkers (ld.bfd and LLD) support arbitrary power-of-two
-  // alignments for common symbols via the aligncomm directive, so this
-  // restriction only applies to MSVC environments.
-  if (Context.getTargetInfo().getTriple().isKnownWindowsMSVCEnvironment() &&
-      Context.getTypeAlignIfKnown(D->getType()) >
-          Context.toBits(CharUnits::fromQuantity(32)))
-    return true;
-
-  return false;
-}
-
 llvm::GlobalValue::LinkageTypes
 CodeGenModule::getLLVMLinkageForDeclarator(const DeclaratorDecl *D,
                                            GVALinkage Linkage) {
@@ -6906,8 +6888,8 @@ CodeGenModule::getLLVMLinkageForDeclarator(const DeclaratorDecl *D,
   // C++ doesn't have tentative definitions and thus cannot have common
   // linkage.
   if (!getLangOpts().CPlusPlus && isa<VarDecl>(D) &&
-      !isVarDeclStrongDefinition(Context, *this, cast<VarDecl>(D),
-                                 CodeGenOpts.NoCommon))
+      !CodeGenUtils::isVarDeclStrongDefinition(Context, cast<VarDecl>(D),
+                                               CodeGenOpts.NoCommon))
     return llvm::GlobalVariable::CommonLinkage;
 
   // selectany symbols are externally visible, so use weak instead of
@@ -7054,7 +7036,7 @@ static void ReplaceUsesOfNonProtoTypeWithRealFunction(llvm::GlobalValue *Old,
 void CodeGenModule::HandleCXXStaticMemberVarInstantiation(VarDecl *VD) {
   auto DK = VD->isThisDeclarationADefinition();
   if ((DK == VarDecl::Definition && VD->hasAttr<DLLImportAttr>()) ||
-      (LangOpts.CUDA && !shouldEmitCUDAGlobalVar(VD)))
+      (LangOpts.CUDA && !getContext().shouldEmitCUDADecl(VD)))
     return;
 
   TemplateSpecializationKind TSK = VD->getTemplateSpecializationKind();
@@ -8749,8 +8731,41 @@ llvm::Metadata *CodeGenModule::CreateMetadataIdentifierGeneralized(QualType T) {
                                       ".generalized", /*ForceString=*/false);
 }
 
+// Applies C default argument promotions to a parameter type.
+//
+// FIXME: The canonical source of truth for C default argument promotion is
+// Sema::DefaultArgumentPromotion (SemaExpr.cpp), which operates on Expr*.
+// Because CodeGen only has type information (QualType from ParmVarDecl or
+// CallArg) and cannot invoke Sema without dummy expressions, we mirror the
+// promotion rules here. In the long term, this type-based logic should be
+// unified with Sema (for example, by extracting a shared type-level promotion
+// helper in ASTContext).
+QualType CodeGenModule::GetCallGraphPromotedType(QualType Ty) const {
+  if (Context.isPromotableIntegerType(Ty))
+    return Context.getPromotedIntegerType(Ty);
+  if (const auto *BT = Ty->getAs<BuiltinType>()) {
+    if (BT->getKind() == BuiltinType::Float ||
+        BT->getKind() == BuiltinType::Half)
+      return Context.DoubleTy;
+  }
+  return Ty;
+}
+
+QualType CodeGenModule::ReconstructCallGraphPrototype(
+    const FunctionNoProtoType *FNPT, ArrayRef<QualType> ParamTypes) const {
+  SmallVector<QualType, 8> PromotedParamTypes;
+  PromotedParamTypes.reserve(ParamTypes.size());
+  for (QualType PT : ParamTypes)
+    PromotedParamTypes.push_back(GetCallGraphPromotedType(PT));
+  FunctionProtoType::ExtProtoInfo EPI;
+  return Context.getFunctionType(FNPT->getReturnType(), PromotedParamTypes,
+                                 EPI);
+}
+
 llvm::Metadata *
 CodeGenModule::CreateMetadataIdentifierForCallGraphType(QualType T) {
+  if (auto *FNPT = T->getAs<FunctionNoProtoType>())
+    T = ReconstructCallGraphPrototype(FNPT, {});
   return CreateMetadataIdentifierImpl(T, CallGraphMetadataIdMap, "",
                                       /*ForceString=*/true);
 }
@@ -9077,198 +9092,6 @@ public:
 private:
   const VarDecl *LoopVar;
   bool UnsupportedStep;
-};
-
-/// Ensure xteam reduction codegen can handle the statements in the kernel loop.
-/// The visitor will reject any assignment statement if it finds a reduction
-/// variable as the lhs of an assignment statement but not of the following
-/// form: red_var += <expr> red_var = red_var + <expr> red_var = <expr> +
-/// red_var.
-/// If a reference to a reduction variable is passed to a function
-/// at a top statement level of the kernel, XteamReduction can handle it as
-/// well.
-class XteamRedExprChecker final : public ConstStmtVisitor<XteamRedExprChecker> {
-public:
-  XteamRedExprChecker(CodeGenModule &CGM, CodeGenModule::XteamRedVarMap *RVM)
-      : CGM(CGM), RedMap(RVM), IsAtTopLevel(true),
-        NxStatus(CodeGenModule::NxSuccess) {}
-  XteamRedExprChecker() = delete;
-
-  CodeGenModule::NoLoopXteamErr getNxStatus() const { return NxStatus; }
-
-  void VisitStmt(const Stmt *S) {
-    if (!S)
-      return;
-
-    if (isa<BinaryOperator>(S)) {
-      // Ensure that the reduction assignment uses a pattern Codegen
-      // can handle. For sum-reduction,
-      // Codegen currently handles red-var += <expr>,
-      // red-var = red-var + <expr> and red-var = <expr> + red-var.
-      // We punt on anything more complex.
-      const BinaryOperator *BinOpExpr = cast<BinaryOperator>(S);
-      const Expr *LHS = BinOpExpr->getLHS()->IgnoreImpCasts();
-      auto BinOpExprOp = BinOpExpr->getOpcode();
-      // Get the reduction variable, if any, from the LHS.
-      const VarDecl *RedVarDecl = CGM.getXteamRedVarDecl(LHS, *RedMap);
-      if (RedVarDecl != nullptr) { // LHS accesses a reduction variable.
-        if (BinOpExprOp == BO_Assign || BinOpExprOp == BO_AddAssign) {
-          IsAtTopLevel = true;
-          const Expr *RHS = BinOpExpr->getRHS()->IgnoreImpCasts();
-          // If operator +=, reject if RHS accesses any reduction variable.
-          if (BinOpExprOp == BO_AddAssign) {
-            // Set reduction opcode to sum.
-            CGM.updateXteamRedVarOpcode(RedVarDecl, RedMap,
-                                        CodeGenModule::XR_OP_add);
-            ValidateChildren(RHS);
-            if (NxStatus != CodeGenModule::NxSuccess)
-              return;
-          } else { // BinOpExprOp == BO_Assign
-            if (isa<BinaryOperator>(RHS)) {
-              const BinaryOperator *BinOpRHS = cast<BinaryOperator>(RHS);
-              if (BinOpRHS->getOpcode() == BO_Add) {
-                // Set reduction opcode to sum.
-                CGM.updateXteamRedVarOpcode(RedVarDecl, RedMap,
-                                            CodeGenModule::XR_OP_add);
-                const Expr *LHSBinOpRHS = BinOpRHS->getLHS()->IgnoreImpCasts();
-                const Expr *RHSBinOpRHS = BinOpRHS->getRHS()->IgnoreImpCasts();
-                // If LHS is the reduction variable, the RHS must not access any
-                // reduction variable. Similarly, vice-versa for RHS.
-                if (CGM.isXteamRedVarExpr(LHSBinOpRHS, RedVarDecl))
-                  ValidateChildren(RHSBinOpRHS);
-                else if (CGM.isXteamRedVarExpr(RHSBinOpRHS, RedVarDecl))
-                  ValidateChildren(LHSBinOpRHS);
-                else // Neither LHS nor RHS is the reduction variable.
-                  NxStatus = CodeGenModule::NxNotRedVarInBinOpRHS;
-                if (NxStatus != CodeGenModule::NxSuccess)
-                  return;
-              } else { // Not an add binary operator in the RHS for an
-                       // assignment statement.
-                NxStatus = CodeGenModule::NxNotAddOpInBinOpRHs;
-                return;
-              }
-            } else if (IsAtTopLevel &&
-                       (isa<CallExpr>(RHS) || isa<PseudoObjectExpr>(RHS))) {
-              // If a PseudoObjectExpr is found, check if it is supported by
-              // Xteam.
-              if (isa<PseudoObjectExpr>(RHS)) {
-                auto [Status, ReturnExpr] =
-                    CGM.getStatusXteamSupportedPseudoObject(
-                        cast<PseudoObjectExpr>(RHS));
-                if (Status) {
-                  NxStatus = Status;
-                  return;
-                }
-                RHS = ReturnExpr;
-              }
-              const CallExpr *Call = cast<CallExpr>(RHS);
-              if ((NxStatus = CGM.getStatusOptKernelBuiltin(Call)))
-                return;
-              // For both host and device compile, check the arguments for
-              // constraints on the reduction variable.
-              validateArgConstraints(Call);
-              if (NxStatus != CodeGenModule::NxSuccess)
-                return;
-              // A min or max operator has been identified. Add the operator to
-              // the reduction map.
-              CGM.updateXteamRedVarOpcode(Call, RedVarDecl, RedMap);
-            } else { // RHS is not a binary operator or call for assignment.
-              NxStatus = CodeGenModule::NxRhsOfAssignNotBinOpOrCall;
-              return;
-            }
-          }
-        } else { // Binary operator is neither +=, nor =.
-          NxStatus = CodeGenModule::NxBinOpNotAddAssignOrAssign;
-          return;
-        }
-      } else { // LHS of binary operator does not access any reduction variable.
-        // Ensure that RHS does not access any reduction variable either. Be
-        // paranoid, validate the LHS as well.
-        ValidateChildren(S);
-        if (NxStatus != CodeGenModule::NxSuccess)
-          return;
-      }
-      if (IsAtTopLevel)
-        IsAtTopLevel = false;
-    } // End of binary operator handling.
-    // Allow a call at the top level with a reduction variable passed by
-    // reference.
-    else if (IsAtTopLevel && isa<CallExpr>(S)) {
-      IsAtTopLevel = false;
-      validateArgConstraints(cast<CallExpr>(S));
-      if (NxStatus != CodeGenModule::NxSuccess)
-        return;
-    } // End of call expression handling.
-    else if (isa<DeclRefExpr>(S)) {
-      IsAtTopLevel = false;
-      // Not a binary operator or call, so not supported at this point. So
-      // ensure no reduction variable is accessed. Disable this check for Xteam
-      // scan because the RedVar could be read in the form of RHS of a binary
-      // operator.
-      if (CGM.hasXteamRedVar(cast<DeclRefExpr>(S), *RedMap) &&
-          !CGM.isXteamScanKernel()) {
-        NxStatus = CodeGenModule::NxNotBinOpOrCallButAccessesRedVar;
-        return;
-      }
-    } // End of DeclRefExpr handling.
-    else {
-      IsAtTopLevel = false;
-      // Recursively check the children.
-      ValidateChildren(S);
-      if (NxStatus != CodeGenModule::NxSuccess)
-        return;
-    }
-  }
-  void ValidateChildren(const Stmt *S) {
-    for (auto Child : S->children())
-      if (Child) {
-        Visit(Child);
-        if (NxStatus != CodeGenModule::NxSuccess)
-          return;
-      }
-  }
-  void validateArgConstraints(const CallExpr *Call) {
-    for (auto Child : Call->children()) {
-      if (!Child) {
-        NxStatus = CodeGenModule::NxChildOfCallIsNull;
-        return;
-      }
-      // If it is not a variable reference, recurse. If it is a
-      // variable reference, it will be appropriately handled
-      // during codegen, i.e. replaced with XteamReduction
-      // variable, if required.
-      while (isa<ImplicitCastExpr>(Child))
-        Child = cast<ImplicitCastExpr>(Child)->getSubExpr();
-      if (!isa<DeclRefExpr>(Child)) {
-        // Ensure that no reduction variable appears in Child.
-        Visit(Child);
-      }
-      if (NxStatus != CodeGenModule::NxSuccess)
-        return;
-    }
-    CodeGenFunction CGF(CGM);
-    for (unsigned ArgIndex = 0; ArgIndex < Call->getNumArgs(); ++ArgIndex) {
-      const Expr *Arg = Call->getArg(ArgIndex);
-      if (!Arg || !CGF.hasScalarEvaluationKind(Arg->getType())) {
-        NxStatus = CodeGenModule::NxNotArgScalarEval;
-        return;
-      }
-    }
-  }
-
-private:
-  CodeGenModule &CGM;
-  /// Map of reduction variables for this directive. This visitor may update
-  /// this map with the reduction operator.
-  CodeGenModule::XteamRedVarMap *RedMap;
-  /// Indicates whether the current analyzed statement is at the top level
-  /// statement list in the kernel. Set to true when the visitor is called first
-  /// and reset to false before visiting any children. There are certain
-  /// patterns that are supported at the top level but not otherwise.
-  bool IsAtTopLevel;
-  /// Set to corresponding status if codegen does not support the reduction
-  /// expression found in this kernel.
-  CodeGenModule::NoLoopXteamErr NxStatus;
 };
 
 } // namespace
@@ -9669,42 +9492,85 @@ CodeGenModule::getNoLoopForStmtStatus(const OMPExecutableDirective &D,
   return std::make_pair(NxSuccess, HasNestedGenericCall);
 }
 
-int64_t CodeGenModule::getXteamRedNumTeamsFromClause(
-    const OptKernelNestDirectives &NestDirs) {
-  for (const auto &D : NestDirs) {
-    if (D->hasClausesOfKind<OMPNumTeamsClause>()) {
-      const Expr *NumTeams =
-          D->getSingleClause<OMPNumTeamsClause>()->getNumTeams().front();
-      if (NumTeams->isIntegerConstantExpr(getContext()))
-        if (auto Constant = NumTeams->getIntegerConstantExpr(getContext()))
-          return Constant->getExtValue();
-    }
-  }
-  return 0; // num_teams not found
+/// Does any directive of \p NestDirs perform a cross-team (teams) reduction?
+static bool
+hasTeamsReduction(const CodeGenModule::OptKernelNestDirectives &NestDirs) {
+  return llvm::any_of(NestDirs, [](const OMPExecutableDirective *Dir) {
+    return isOpenMPTeamsDirective(Dir->getDirectiveKind()) &&
+           Dir->hasClausesOfKind<OMPReductionClause>();
+  });
 }
 
-int64_t
-CodeGenModule::getXteamRedNumTeamsFromClause(const OMPExecutableDirective &D) {
-  assert(isXteamRedKernel(D) && "Expected an Xteam reduction kernel");
-  return getXteamRedNumTeamsFromClause(getXteamRedNestDirs(D));
+/// Return the innermost occurrence of \p ClauseTy in \p NestDirs, or nullptr if
+/// no directive of the nest has that clause. \p NestDirs is ordered outermost
+/// first, so a clause on a nested directive takes precedence over one on an
+/// enclosing directive. That matches the choice the host side makes in
+/// getNumThreadsExprForTargetDirective(), which prefers the thread_limit of the
+/// nested 'teams' over the one of the enclosing 'target'.
+template <typename ClauseTy>
+static const ClauseTy *getInnermostClauseInNest(
+    const CodeGenModule::OptKernelNestDirectives &NestDirs) {
+  const ClauseTy *Found = nullptr;
+  for (const OMPExecutableDirective *Dir : NestDirs)
+    if (const auto *C = Dir->getSingleClause<ClauseTy>())
+      Found = C;
+  return Found;
 }
 
 int CodeGenModule::getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D) {
+  // Look at this directive alone. Callers that need the block size of a whole
+  // kernel should use getWorkGroupSizeSPMDKernel() instead.
+  OptKernelNestDirectives NestDirs;
+  NestDirs.push_back(&D);
+  return getWorkGroupSizeSPMDForNest(NestDirs);
+}
+
+int CodeGenModule::getWorkGroupSizeSPMDKernel(const OMPExecutableDirective &D,
+                                              bool IsGenericMode) {
+  // A kernel may be written as a single combined directive or split over
+  // several ones. In the latter case the clauses that determine its block size
+  // sit on the nested directives rather than on \p D, so collect the nest.
+  OptKernelNestDirectives NestDirs;
+  collectSPMDKernelNest(D, NestDirs);
+  return getWorkGroupSizeSPMDForNest(
+      NestDirs, /*UseTeamsReductionBlockSize=*/!IsGenericMode);
+}
+
+int CodeGenModule::getWorkGroupSizeSPMDForNest(
+    const OptKernelNestDirectives &NestDirs, bool UseTeamsReductionBlockSize) {
   // Honor block-size provided by command-line option. This logic must be kept
   // in sync with metadata generation. If this option is not specified on the
   // command line then the value used will be the 256.
   int WorkGroupSz = getLangOpts().OpenMPGPUThreadsPerTeam;
 
-  // Cross team reduction blocksize default may be specified separately.
-  bool isXteamRed = isXteamRedKernel(D);
-  if (isXteamRed)
-    WorkGroupSz = getLangOpts().OpenMPTargetXteamReductionBlockSize;
+  // Cross-team (teams) reductions historically used a larger default block
+  // size in AOMP (OpenMPTargetXteamReductionBlockSize, 512, settable via
+  // '-fopenmp-target-xteam-reduction-blocksize='). The upstream cross-team
+  // reduction path that now takes over uses the generic SPMD default (256),
+  // which would change the launch grid computed by the plugin's reduction
+  // heuristic. Until the upstream default is updated, keep the AOMP block size
+  // for teams-reduction kernels so the grid matches. SPMD mode only: a
+  // generic-mode kernel is launched with the generic block size anyway, so a
+  // larger one here would only lower its register budget.
+  if (UseTeamsReductionBlockSize && hasTeamsReduction(NestDirs)) {
+    int XteamRedBlockSize = getLangOpts().OpenMPTargetXteamReductionBlockSize;
+    // A block size explicitly requested on the command line overrides the
+    // clauses on the construct, as it did when these kernels were emitted by
+    // the removed Xteam reduction implementation. Exception: if the requested
+    // value is the same as the default, the clauses override, so that the
+    // clauses keep working for everyone who does not tune the block size.
+    if (XteamRedBlockSize > 0 &&
+        XteamRedBlockSize <= llvm::omp::xteam_red::MaxBlockSize &&
+        XteamRedBlockSize != llvm::omp::xteam_red::DefaultBlockSize)
+      return XteamRedBlockSize;
+    WorkGroupSz = XteamRedBlockSize;
+  }
 
   // Check block-size provided by thread_limit clause. We start with the
   // maximum thread limit and lower it if user requests a lower thread limit.
-  int ThreadLimit = isXteamRed ? llvm::omp::xteam_red::MaxBlockSize
-                               : getTarget().getGridValue().GV_Max_WG_Size;
-  const auto *ThreadLimitClause = D.getSingleClause<OMPThreadLimitClause>();
+  int ThreadLimit = getTarget().getGridValue().GV_Max_WG_Size;
+  const auto *ThreadLimitClause =
+      getInnermostClauseInNest<OMPThreadLimitClause>(NestDirs);
   if (ThreadLimitClause) {
     Expr *ThreadLimitExpr = ThreadLimitClause->getThreadLimit().front();
     clang::Expr::EvalResult Result;
@@ -9721,11 +9587,11 @@ int CodeGenModule::getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D) {
   // Set the actual number of threads if the user requests a value different
   // then the default. If the value is greater than the currently computed
   // thread limit then cap the number of threads to the thread limit.
-  int NumThreads = isXteamRed ? llvm::omp::xteam_red::DefaultBlockSize
-                              : getTarget().getGridValue().GV_Default_WG_Size;
-  const auto *NumThreadsClause = D.getSingleClause<OMPNumThreadsClause>();
+  int NumThreads = getTarget().getGridValue().GV_Default_WG_Size;
+  const auto *NumThreadsClause =
+      getInnermostClauseInNest<OMPNumThreadsClause>(NestDirs);
   if (NumThreadsClause) {
-    Expr *NumThreadsExpr = NumThreadsClause->getNumThreads();
+    Expr *NumThreadsExpr = NumThreadsClause->getNumThreads().front();
     clang::Expr::EvalResult Result;
     if (NumThreadsExpr->EvaluateAsInt(Result, getContext())) {
       NumThreads = Result.Val.getInt().getExtValue();
@@ -9740,27 +9606,21 @@ int CodeGenModule::getWorkGroupSizeSPMDHelper(const OMPExecutableDirective &D) {
   // Sanitize the workgroup size received from the command line. Its default
   // value is GV_Default_WG_Size.
   if (WorkGroupSz < 1 || WorkGroupSz > ThreadLimit)
-    WorkGroupSz = isXteamRed ? llvm::omp::xteam_red::DefaultBlockSize
-                             : getTarget().getGridValue().GV_Default_WG_Size;
+    WorkGroupSz = getTarget().getGridValue().GV_Default_WG_Size;
 
   return WorkGroupSz;
 }
 
 int CodeGenModule::getOptKernelWorkGroupSize(
-    const OptKernelNestDirectives &NestDirs, bool isXteamRed) {
-  int WGSizeDefault = isXteamRed
-                          ? llvm::omp::xteam_red::DefaultBlockSize
-                          : getTarget().getGridValue().GV_Default_WG_Size;
+    const OptKernelNestDirectives &NestDirs) {
+  int WGSizeDefault = getTarget().getGridValue().GV_Default_WG_Size;
 
-  int ThreadLimit = isXteamRed ? llvm::omp::xteam_red::MaxBlockSize
-                               : getTarget().getGridValue().GV_Max_WG_Size;
+  int ThreadLimit = getTarget().getGridValue().GV_Max_WG_Size;
 
   // Allow command-line option override clauses on the OpenMP construct.
   // Exception: If the command line value is the same as the default, the clause
   // overrides.
-  int CmdLineOption = isXteamRed
-                          ? getLangOpts().OpenMPTargetXteamReductionBlockSize
-                          : getLangOpts().OpenMPGPUThreadsPerTeam;
+  int CmdLineOption = getLangOpts().OpenMPGPUThreadsPerTeam;
   if (CmdLineOption > 0 && CmdLineOption <= ThreadLimit &&
       CmdLineOption != WGSizeDefault)
     return CmdLineOption;
@@ -9775,34 +9635,8 @@ int CodeGenModule::getOptKernelWorkGroupSize(
 }
 
 int CodeGenModule::computeOptKernelBlockSize(
-    const OptKernelNestDirectives &NestDirs, bool isXteamRed) {
-  int InitialBlockSize = getOptKernelWorkGroupSize(NestDirs, isXteamRed);
-  if (!isXteamRed)
-    return InitialBlockSize;
-  // We support block sizes that are a power of 2 for Xteam reduction.
-  return llvm::omp::getBlockSizeAsPowerOfTwo(InitialBlockSize);
-}
-
-std::pair<CodeGenModule::NoLoopXteamErr, bool>
-CodeGenModule::getXteamRedForStmtStatus(const OMPExecutableDirective &D,
-                                        const Stmt *OMPStmt,
-                                        XteamRedVarMap *RVM) {
-  auto [NxStatus, HasNestedGenericCall] = getNoLoopForStmtStatus(D, OMPStmt);
-  if (NxStatus != CodeGenModule::NxSuccess)
-    return std::make_pair(NxStatus, HasNestedGenericCall);
-  // The above check ensures that there is only one statement corresponding to
-  // the directive
-  const ForStmt *FStmt = getSingleForStmt(OMPStmt);
-  assert(FStmt != nullptr && "Unexpected missing For Stmt");
-  for (auto Child : FStmt->children())
-    if (Child) {
-      XteamRedExprChecker Chk(*this, RVM);
-      Chk.Visit(Child);
-      CodeGenModule::NoLoopXteamErr NxStatus = Chk.getNxStatus();
-      if (NxStatus != CodeGenModule::NxSuccess)
-        return std::make_pair(NxStatus, HasNestedGenericCall);
-    }
-  return std::make_pair(NxSuccess, HasNestedGenericCall);
+    const OptKernelNestDirectives &NestDirs) {
+  return getOptKernelWorkGroupSize(NestDirs);
 }
 
 CodeGenModule::NoLoopXteamErr
@@ -9848,23 +9682,6 @@ CodeGenModule::getNoLoopCompatibleOrderStatus(const OMPLoopDirective &LD) {
   return NxSuccess;
 }
 
-CodeGenModule::NoLoopXteamErr
-CodeGenModule::getXteamRedCompatibleThreadLimitStatus(
-    const OMPLoopDirective &LD) {
-  const auto *ThreadLimitClause = LD.getSingleClause<OMPThreadLimitClause>();
-  if (!ThreadLimitClause)
-    return NxSuccess;
-  Expr *ThreadLimitExpr = ThreadLimitClause->getThreadLimit().front();
-  clang::Expr::EvalResult Result;
-  if (ThreadLimitExpr->EvaluateAsInt(Result, getContext())) {
-    int ThreadLimitEval = Result.Val.getInt().getExtValue();
-    // We support thread limit >= 64
-    if (ThreadLimitEval > 63)
-      return NxSuccess;
-  }
-  return NxUnsupportedXteamRedThreadLimit;
-}
-
 CodeGenModule::NoLoopXteamErr CodeGenModule::getNoLoopStatusForClauses(
     const OptKernelNestDirectives &NestDirs) {
   for (auto &D : NestDirs) {
@@ -9885,239 +9702,6 @@ CodeGenModule::NoLoopXteamErr CodeGenModule::getNoLoopStatusForClauses(
   return getNoLoopCompatibleSchedStatus(LD);
 }
 
-CodeGenModule::NoLoopXteamErr CodeGenModule::getXteamRedStatusForClauses(
-    const OptKernelNestDirectives &NestDirs) {
-  for (auto &D : NestDirs) {
-    if (D->hasClausesOfKind<OMPDependClause>() ||
-        D->hasClausesOfKind<OMPInReductionClause>() ||
-        D->hasClausesOfKind<OMPNowaitClause>() ||
-        D->hasClausesOfKind<OMPDistScheduleClause>() ||
-        D->hasClausesOfKind<OMPLastprivateClause>() ||
-        D->hasClausesOfKind<OMPCopyinClause>() ||
-        D->hasClausesOfKind<OMPOrderedClause>())
-      return NxUnsupportedTargetClause;
-  }
-  if (!isa<OMPLoopDirective>(NestDirs.back()))
-    return NxNotLoopDirective;
-  const OMPLoopDirective &LD = cast<OMPLoopDirective>(*NestDirs.back());
-  NoLoopXteamErr NxStatus = NxSuccess;
-  if ((NxStatus = getXteamRedCompatibleThreadLimitStatus(LD)))
-    return NxStatus;
-  if ((NxStatus = getNoLoopCompatibleOrderStatus(LD)))
-    return NxStatus;
-  return getNoLoopCompatibleSchedStatus(LD);
-}
-
-/// Given a directive, collect metadata for the reduction variables for Xteam
-/// reduction, if applicable
-std::pair<CodeGenModule::NoLoopXteamErr, CodeGenModule::XteamRedCollectionInfo>
-CodeGenModule::collectXteamRedVars(const OptKernelNestDirectives &NestDirs) {
-  // Check all nest directives. A reduction clause is treated
-  // equivalently regardless the nesting level it is at -- this is
-  // because Xteam reduction is applied today for a nest that
-  // satisfies target-teams-distribute-parallel-for.
-  XteamRedVarMap VarMap;
-
-  // This vector defines the order in which Xteam metadata will always be
-  // generated.
-  XteamRedVarVecTy VarVec;
-
-  // Encode the reduction operator kinds found in this kernel.
-  uint8_t OpKindsFound = XR_OP_unknown;
-
-  auto isSumReduction = [](const Expr *AssignmentRhs) {
-    if (!isa<BinaryOperator>(AssignmentRhs) ||
-        cast<BinaryOperator>(AssignmentRhs)->getOpcode() != BO_Add)
-      return false;
-    return true;
-  };
-
-  auto getMinMaxReduction = [](const Expr *AssignmentRhs,
-                               bool isUnsignedInt) -> XteamRedOpKind {
-    // Unsigned integer not supported right now.
-    if (isUnsignedInt)
-      return XR_OP_unknown;
-    auto getVarDecl = [](const Expr *E) -> const VarDecl * {
-      if (!isa<DeclRefExpr>(E))
-        return nullptr;
-      const ValueDecl *ValDecl = cast<DeclRefExpr>(E)->getDecl();
-      if (!isa<VarDecl>(ValDecl))
-        return nullptr;
-      return cast<VarDecl>(ValDecl);
-    };
-
-    if (isa<ConditionalOperator>(AssignmentRhs)) {
-      auto CondOpExpr = cast<ConditionalOperator>(AssignmentRhs);
-      auto CondExpr = CondOpExpr->getCond();
-      if (isa<BinaryOperator>(CondExpr)) {
-        auto BinCondExpr = cast<BinaryOperator>(CondExpr);
-        BinaryOperator::Opcode Opcode = BinCondExpr->getOpcode();
-        if (Opcode == BO_GT || Opcode == BO_LT) {
-          // Found either max or min
-          // Extract the reduction variable
-          const VarDecl *RedVD =
-              getVarDecl(BinCondExpr->getRHS()->IgnoreImpCasts());
-          // This variable must match the rhs of the conditional expression.
-          if (RedVD != getVarDecl(CondOpExpr->getRHS()->IgnoreImpCasts())) {
-            return XR_OP_unknown;
-          }
-          if (Opcode == BO_GT)
-            return XR_OP_max;
-          else
-            return XR_OP_min;
-        }
-      }
-    }
-    return XR_OP_unknown;
-  };
-
-  // Either we emit Xteam code for all reduction variables or none at all.
-  // Track whether the kernel has any min/max reduction variable.
-  bool isFastReductionEnabled = getLangOpts().OpenMPTargetFastReduction;
-  for (auto &D : NestDirs) {
-    for (const auto *C : D->getClausesOfKind<OMPReductionClause>()) {
-      if (C->getModifier() == OMPC_REDUCTION_inscan)
-        isXteamScanCandidate = true;
-      for (const Expr *Ref : C->varlist()) {
-        // Only scalar variables supported today
-        if (!isa<DeclRefExpr>(Ref))
-          return std::make_pair(
-              NxNotScalarRed,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-        const ValueDecl *ValDecl = cast<DeclRefExpr>(Ref)->getDecl();
-        if (!isa<VarDecl>(ValDecl))
-          return std::make_pair(
-              NxNotScalarRed,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-
-        llvm::Type *RefType = getTypes().ConvertTypeForMem(Ref->getType());
-        // TODO support more data types
-        if (!RefType->isFloatTy() && !RefType->isDoubleTy() &&
-            !RefType->isHalfTy() && !RefType->isBFloatTy() &&
-            !RefType->isIntegerTy())
-          return std::make_pair(
-              NxUnsupportedRedType,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-        if (RefType->isIntegerTy() && RefType->getPrimitiveSizeInBits() != 16 &&
-            RefType->getPrimitiveSizeInBits() != 32 &&
-            RefType->getPrimitiveSizeInBits() != 64)
-          return std::make_pair(
-              NxUnsupportedRedIntSize,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-
-        const VarDecl *VD = cast<VarDecl>(ValDecl);
-        // Filter out duplicates
-        if (VarMap.find(VD) == VarMap.end()) {
-          // Address of the local var and arg pos will be populated later
-          XteamRedVarInfo XRVI(Ref, Address::invalid(),
-                               std::numeric_limits<size_t>::max());
-          VarMap.insert(std::make_pair(VD, XRVI));
-          VarVec.push_back(VD);
-        }
-      }
-
-      // Now make sure that we support all the operators. Today, only sum, min,
-      // and max are supported.
-      for (const Expr *Ref : C->reduction_ops()) {
-        if (!isa<BinaryOperator>(Ref))
-          return std::make_pair(
-              NxNotBinOpRed,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-        auto BinExpr = cast<BinaryOperator>(Ref);
-        if (BinExpr->getOpcode() != BO_Assign)
-          return std::make_pair(
-              NxReductionOpNotBinAssign,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-        auto BinExprRhs = BinExpr->getRHS()->IgnoreImpCasts();
-
-        // We recognize sum and min/max reductions that satisfy a specific
-        // format.
-        if (!isa<BinaryOperator>(BinExprRhs) &&
-            !isa<ConditionalOperator>(BinExprRhs))
-          return std::make_pair(
-              NxReductionOpRhsNotBinOrCond,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-
-        // Is this reduction variable min/max?
-        auto MinMaxOp = getMinMaxReduction(
-            BinExprRhs, Ref->getType()->isUnsignedIntegerType());
-        OpKindsFound |= MinMaxOp;
-
-        // Fast reduction is not compatible with Xteam min/max, so
-        // disable Xteam codegen.
-        if (MinMaxOp != XR_OP_unknown && isFastReductionEnabled) {
-          return std::make_pair(
-              NxFastReductionMinMaxNotSupported,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-        }
-        // Scan kernel codegen is not compatible with min/max, so
-        // disable Xteam codegen if a scan reduction variable is found.
-        if (OpKindsFound > XR_OP_add && isXteamScanKernel()) {
-          return std::make_pair(
-              NxScanMinMaxNotSupported,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-        }
-
-        // Now check for sum reduction
-        OpKindsFound |= isSumReduction(BinExprRhs);
-        // Unrecognized reduction operator
-        if (OpKindsFound == XR_OP_unknown) {
-          return std::make_pair(
-              NxReductionOpRhsNotMinMaxSum,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-        }
-      }
-    }
-  }
-  // We support multiple reduction operations in the same loop with the new
-  // DeviceRTL APIs. So bail out only if none was found.
-  if (VarMap.size() == 0)
-    return std::make_pair(NxNoRedVar,
-                          XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-
-  return std::make_pair(NxSuccess,
-                        XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-}
-
-bool CodeGenModule::hasXteamRedVar(const Expr *E,
-                                   const XteamRedVarMap &RedMap) const {
-  assert(E && "Unexpected null expression");
-  if (!isa<DeclRefExpr>(E))
-    return false;
-  auto *Decl = cast<DeclRefExpr>(E)->getDecl();
-  if (!isa<VarDecl>(Decl))
-    return false;
-  auto *VD = cast<VarDecl>(Decl);
-  if (RedMap.find(VD) != RedMap.end())
-    return true;
-  return false;
-}
-
-const VarDecl *
-CodeGenModule::getXteamRedVarDecl(const Expr *E,
-                                  const XteamRedVarMap &RedMap) const {
-  if (!isa<DeclRefExpr>(E))
-    return nullptr;
-  const ValueDecl *ValDecl = cast<DeclRefExpr>(E)->getDecl();
-  if (!isa<VarDecl>(ValDecl))
-    return nullptr;
-  const VarDecl *VD = cast<VarDecl>(ValDecl);
-  if (RedMap.find(VD) == RedMap.end())
-    return nullptr;
-  return VD;
-}
-
-bool CodeGenModule::isXteamRedVarExpr(const Expr *E,
-                                      const VarDecl *RedVarDecl) const {
-  if (!isa<DeclRefExpr>(E))
-    return false;
-  const ValueDecl *ValDecl = cast<DeclRefExpr>(E)->getDecl();
-  if (!isa<VarDecl>(ValDecl))
-    return false;
-  const VarDecl *VD = cast<VarDecl>(ValDecl);
-  return VD == RedVarDecl;
-}
-
 const OMPExecutableDirective *
 getNestedDirective(const OMPExecutableDirective &D) {
   const Stmt *AssocStmt = D.getAssociatedStmt();
@@ -10136,6 +9720,48 @@ getNestedDirective(const OMPExecutableDirective &D) {
   if (!isa<OMPExecutableDirective>(AssocStmt))
     return nullptr;
   return cast<OMPExecutableDirective>(AssocStmt);
+}
+
+void CodeGenModule::collectSPMDKernelNest(const OMPExecutableDirective &D,
+                                          OptKernelNestDirectives &NestDirs) {
+  NestDirs.push_back(&D);
+
+  // A plain 'target' directive is the only kernel root that carries none of
+  // the information determining the launch bounds: it has no teams level, and
+  // hence neither the reduction clause nor the thread_limit/num_threads of the
+  // teams region. Every other kernel root is a combined construct that has the
+  // teams level folded in, and its clauses keep being looked up on the
+  // directive itself.
+  if (D.getDirectiveKind() != llvm::omp::Directive::OMPD_target)
+    return;
+
+  // Only 'target' and 'teams' open a new level that may still carry the
+  // clauses determining the launch bounds of the kernel. Any other directive
+  // kind is either a combined construct that already has them all, or an
+  // innermost worksharing construct. Stop there.
+  for (const OMPExecutableDirective *Cur = &D;;) {
+    switch (Cur->getDirectiveKind()) {
+    case llvm::omp::Directive::OMPD_target:
+    case llvm::omp::Directive::OMPD_target_teams:
+    case llvm::omp::Directive::OMPD_teams:
+      break;
+    default:
+      return;
+    }
+    if (!Cur->hasAssociatedStmt())
+      return;
+    const OMPExecutableDirective *Nested = getNestedDirective(*Cur);
+    if (!Nested)
+      return;
+    NestDirs.push_back(Nested);
+    Cur = Nested;
+  }
+}
+
+bool CodeGenModule::isTeamsReductionKernel(const OMPExecutableDirective &D) {
+  OptKernelNestDirectives NestDirs;
+  collectSPMDKernelNest(D, NestDirs);
+  return hasTeamsReduction(NestDirs);
 }
 
 static bool
@@ -10256,9 +9882,8 @@ CodeGenModule::checkAndSetNoLoopKernel(const OMPExecutableDirective &D) {
   const ForStmt *FStmt = getSingleForStmt(InnermostDir.getAssociatedStmt());
   assert(FStmt && "For stmt cannot be null");
 
-  if ((getLangOpts().OpenMPTargetIgnoreEnvVars ||
-       (getLangOpts().OpenMPTeamSubscription &&
-        getLangOpts().OpenMPThreadSubscription)) &&
+  if ((getLangOpts().OpenMPTeamSubscription &&
+       getLangOpts().OpenMPThreadSubscription) &&
       ((getLangOpts().OpenMPNoNestedParallelism &&
         getLangOpts().OpenMPNoThreadState) ||
        !HasNestedGenericCall) &&
@@ -10270,10 +9895,9 @@ CodeGenModule::checkAndSetNoLoopKernel(const OMPExecutableDirective &D) {
 
     NoLoopKernels.insert(
         std::make_pair(FStmt, NoLoopKernelInfo(/*BlockSize=*/0, NestDirs)));
-    int BlockSize =
-        getLangOpts().OpenMPIsTargetDevice
-            ? computeOptKernelBlockSize(NestDirs, /*isXteamRed=*/false)
-            : 0;
+    int BlockSize = getLangOpts().OpenMPIsTargetDevice
+                        ? computeOptKernelBlockSize(NestDirs)
+                        : 0;
     if (BlockSize > 0)
       updateNoLoopKernel(FStmt, BlockSize);
     return NxSuccess;
@@ -10289,104 +9913,14 @@ CodeGenModule::checkAndSetNoLoopKernel(const OMPExecutableDirective &D) {
 
     BigJumpLoopKernels.insert(
         std::make_pair(FStmt, NoLoopKernelInfo(/*BlockSize=*/0, NestDirs)));
-    int BlockSize =
-        getLangOpts().OpenMPIsTargetDevice
-            ? computeOptKernelBlockSize(NestDirs, /*isXteamRed=*/false)
-            : 0;
+    int BlockSize = getLangOpts().OpenMPIsTargetDevice
+                        ? computeOptKernelBlockSize(NestDirs)
+                        : 0;
     if (BlockSize > 0)
       updateBigJumpLoopKernel(FStmt, BlockSize);
     return NxSuccess;
   }
   return NxOptionDisabledOrHasCall;
-}
-
-CodeGenModule::NoLoopXteamErr
-CodeGenModule::checkAndSetXteamRedKernel(const OMPExecutableDirective &D) {
-  NoLoopXteamErr NxStatus = NxSuccess;
-  if (!getLangOpts().OpenMPTargetXteamReduction)
-    return NxOptionDisabled;
-
-  OptKernelNestDirectives NestDirs;
-  if ((NxStatus = checkNest(D, &NestDirs)))
-    return NxStatus;
-
-  // For now, keep the reduction helpers separate. Revisit merging with noloop
-  // later
-  if ((NxStatus = getXteamRedStatusForClauses(NestDirs)))
-    return NxStatus;
-
-  std::pair<NoLoopXteamErr, XteamRedCollectionInfo> RedPair =
-      collectXteamRedVars(NestDirs);
-  if (RedPair.first)
-    return RedPair.first;
-
-  // Make sure CodeGen can handle the FOR statement
-  if (!D.hasAssociatedStmt())
-    return NxNoStmt;
-
-  const OMPExecutableDirective &InnermostDir = *NestDirs.back();
-  if (!InnermostDir.hasAssociatedStmt())
-    return NxNoStmt;
-
-  auto ForStmtStatus =
-      getXteamRedForStmtStatus(InnermostDir, InnermostDir.getAssociatedStmt(),
-                               &RedPair.second.RedVarMap);
-  if ((NxStatus = ForStmtStatus.first))
-    return NxStatus;
-
-  // Ensure that every reduction variable has a valid kind. Otherwise bail out.
-  for (auto &MapPair : RedPair.second.RedVarMap) {
-    auto Op = MapPair.second.Opcode;
-    if (Op != XR_OP_unknown) // valid kind already set.
-      continue;
-    // Prior analysis could not set the reduction kind. This can happen if the
-    // reduction statement is in a different function. The kind can be patched
-    // up here only if the kernel has an un-ambiguous reduction kind, i.e. only
-    // one kind of reduction operator. Otherwise, bail out.
-    uint8_t KernelRedOps = RedPair.second.OpKindsFound;
-    assert(KernelRedOps != XR_OP_unknown &&
-           "At least one reduction kind must exist");
-    if (KernelRedOps & (KernelRedOps - 1)) // multiple reduction ops
-      return NxAmbiguousRedKind;
-    MapPair.second.Opcode = static_cast<XteamRedOpKind>(KernelRedOps);
-  }
-
-  bool HasNestedGenericCall = ForStmtStatus.second;
-  if (((getLangOpts().OpenMPNoNestedParallelism &&
-        getLangOpts().OpenMPNoThreadState) ||
-       !HasNestedGenericCall)) {
-    const ForStmt *FStmt = getSingleForStmt(InnermostDir.getAssociatedStmt());
-    assert(FStmt && "For stmt cannot be null");
-    assert(!isXteamRedKernel(FStmt) && "Xteam reduction already set!");
-
-    // Now that an optimized kernel will be generated, set the nest map
-    addOptKernelNestMap(NestDirs);
-
-    // Create a map from the ForStmt, some of the info will be populated later
-    XteamRedKernels.insert(std::make_pair(
-        FStmt, XteamRedKernelInfo(
-                   /*ThreadStartIndex=*/nullptr,
-                   /*NumTeams=*/nullptr,
-                   /*BlockSize=*/0, NestDirs, RedPair.second.RedVarMap,
-                   RedPair.second.RedVarVector, isFastXteamSumReduction())));
-
-    // The blocksize has to be computed after adding this kernel to the metadata
-    // above, since the computation below depends on that metadata.
-    int BlockSize = computeOptKernelBlockSize(NestDirs, /*isXteamRed=*/true);
-    if (BlockSize > 0)
-      updateXteamRedKernel(FStmt, BlockSize);
-    return NxSuccess;
-  }
-  return NxOptionDisabledOrHasCall;
-}
-
-bool CodeGenModule::isXteamRedKernel(const OMPExecutableDirective &D) {
-  if (!D.hasAssociatedStmt())
-    return false;
-  const ForStmt *FStmt = getSingleForStmt(getOptKernelKey(D));
-  if (FStmt == nullptr)
-    return false;
-  return isXteamRedKernel(FStmt);
 }
 
 bool CodeGenModule::isBigJumpLoopKernel(const OMPExecutableDirective &D) {
@@ -10439,8 +9973,6 @@ void CodeGenModule::resetOptKernelMetadata(const Stmt *DirectiveStmt) {
   else if (isBigJumpLoopKernel(KernelForStmt))
     OptKernelMode =
         llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP;
-  else if (isXteamRedKernel(KernelForStmt))
-    OptKernelMode = llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_XTEAM_RED;
   else
     return;
 
@@ -10452,11 +9984,8 @@ void CodeGenModule::resetOptKernelMetadata(const Stmt *DirectiveStmt) {
   if (OptKernelMode ==
       llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP)
     resetNoLoopKernel(KernelForStmt);
-  else if (OptKernelMode ==
-           llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP)
-    resetBigJumpLoopKernel(KernelForStmt);
   else
-    resetXteamRedKernel(KernelForStmt);
+    resetBigJumpLoopKernel(KernelForStmt);
 
   // Now reset the split directives metadata
   for (const auto &Dir : Dirs)

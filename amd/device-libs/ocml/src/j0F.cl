@@ -71,10 +71,7 @@ MATH_MANGLE(j0)(float x)
         }
 
         x = x - ch - cl;
-        ret = MATH_MAD(x, MATH_MAD(x, MATH_MAD(x, MATH_MAD(x,
-              MATH_MAD(x, MATH_MAD(x, MATH_MAD(x, MATH_MAD(x,
-              p[8],  p[7]), p[6]), p[5]), p[4]),
-              p[3]), p[2]), p[1]), p[0]);
+        ret = PE8(x, p[8], p[7], p[6], p[5], p[4], p[3], p[2], p[1], p[0]);
     } else {
         float r = MATH_RCP(x);
         float r2 = r*r;

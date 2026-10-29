@@ -164,8 +164,7 @@ lgamma_pos(float x)
     float ret;
 
     if (x < 0x1.0p-6f) {
-        ret = MATH_MAD(x, MATH_MAD(x, MATH_MAD(x, MATH_MAD(x, z4, z3), z2), z1),
-                       -MATH_MANGLE(log)(x));
+        ret = PE4(x, z4, z3, z2, z1, -MATH_MANGLE(log)(x));
     } else if (x < 2.0f) {
         int i;
         bool c;
@@ -203,31 +202,31 @@ lgamma_pos(float x)
         switch(i) {
         case 0:
             z = y * y;
-            p1 = MATH_MAD(z, MATH_MAD(z, MATH_MAD(z, MATH_MAD(z, MATH_MAD(z, a10, a8), a6), a4), a2), a0);
-            p2 = z * MATH_MAD(z, MATH_MAD(z, MATH_MAD(z, MATH_MAD(z, MATH_MAD(z, a11, a9), a7), a5), a3), a1);
+            p1 = PE5(z, a10, a8, a6, a4, a2, a0);
+            p2 = z * PE5(z, a11, a9, a7, a5, a3, a1);
             p = MATH_MAD(y, p1, p2);
             ret += MATH_MAD(y, -0.5f, p);
             break;
         case 1:
             z = y * y;
             w = z * y;
-            p1 = MATH_MAD(w, MATH_MAD(w, MATH_MAD(w, MATH_MAD(w, t12, t9), t6), t3), t0);
-            p2 = MATH_MAD(w, MATH_MAD(w, MATH_MAD(w, MATH_MAD(w, t13, t10), t7), t4), t1);
-            p3 = MATH_MAD(w, MATH_MAD(w, MATH_MAD(w, MATH_MAD(w, t14, t11), t8), t5), t2);
+            p1 = PE4(w, t12, t9, t6, t3, t0);
+            p2 = PE4(w, t13, t10, t7, t4, t1);
+            p3 = PE4(w, t14, t11, t8, t5, t2);
             p = MATH_MAD(z, p1, -MATH_MAD(w, -MATH_MAD(y, p3, p2), tt));
             ret += tf + p;
             break;
         case 2:
-            p1 = y * MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, u5, u4), u3), u2), u1), u0);
-            p2 = MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, v5, v4), v3), v2), v1), 1.0f);
+            p1 = y * PE5(y, u5, u4, u3, u2, u1, u0);
+            p2 = PE5(y, v5, v4, v3, v2, v1, 1.0f);
             ret += MATH_MAD(y, -0.5f, MATH_FAST_DIV(p1, p2));
             break;
         }
     } else if (x < 8.0f) {  // 2 < x < 8
         int i = (int)x;
         float y = x - (float) i;
-        float p = y * MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, s6, s5), s4), s3), s2), s1), s0);
-        float q = MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, MATH_MAD(y, r6, r5), r4), r3), r2), r1), 1.0f);
+        float p = y * PE6(y, s6, s5, s4, s3, s2, s1, s0);
+        float q = PE6(y, r6, r5, r4, r3, r2, r1, 1.0f);
         ret = MATH_MAD(y, 0.5f, MATH_FAST_DIV(p, q));
 
         float y2 = y + 2.0f;

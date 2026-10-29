@@ -15,8 +15,8 @@ MATH_MANGLE(sincos)(double x, __private double * cp)
         x = BUILTIN_ISINF_F64(x) ? QNAN_F64 : x;
 
     double ax = BUILTIN_ABS_F64(x);
-    struct redret r = MATH_PRIVATE(trigred)(ax);
-    struct scret sc = MATH_PRIVATE(sincosred2)(r.hi, r.lo);
+    struct epredret r = MATH_PRIVATE(eptrigred)(ax);
+    struct scret sc = MATH_PRIVATE(sincosredep)(r.r);
 
     long flip = r.i > 1 ? SIGNBIT_DP64 : 0;
     bool odd = (r.i & 1) != 0;

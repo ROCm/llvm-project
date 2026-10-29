@@ -189,10 +189,10 @@ define amdgpu_cs void @loop_with_2breaks(ptr addrspace(1) %x, ptr addrspace(1) %
 ; GFX10-NEXT:  .LBB3_3: ; %loop.body
 ; GFX10-NEXT:    ; in Loop: Header=BB3_1 Depth=1
 ; GFX10-NEXT:    global_load_dword v6, v[0:1], off
-; GFX10-NEXT:    v_add_co_u32 v4, vcc_lo, v4, 4
-; GFX10-NEXT:    v_add_co_ci_u32_e32 v5, vcc_lo, 0, v5, vcc_lo
 ; GFX10-NEXT:    v_add_co_u32 v2, vcc_lo, v2, 4
 ; GFX10-NEXT:    v_add_co_ci_u32_e32 v3, vcc_lo, 0, v3, vcc_lo
+; GFX10-NEXT:    v_add_co_u32 v4, vcc_lo, v4, 4
+; GFX10-NEXT:    v_add_co_ci_u32_e32 v5, vcc_lo, 0, v5, vcc_lo
 ; GFX10-NEXT:    s_add_i32 s1, s1, 1
 ; GFX10-NEXT:    s_cmpk_ge_u32 s1, 0x64
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
@@ -273,12 +273,12 @@ define amdgpu_cs void @loop_with_3breaks(ptr addrspace(1) %x, ptr addrspace(1) %
 ; GFX10-NEXT:  .LBB4_4: ; %loop.body
 ; GFX10-NEXT:    ; in Loop: Header=BB4_1 Depth=1
 ; GFX10-NEXT:    global_load_dword v8, v[0:1], off
-; GFX10-NEXT:    v_add_co_u32 v6, vcc_lo, v6, 4
-; GFX10-NEXT:    v_add_co_ci_u32_e32 v7, vcc_lo, 0, v7, vcc_lo
-; GFX10-NEXT:    v_add_co_u32 v4, vcc_lo, v4, 4
-; GFX10-NEXT:    v_add_co_ci_u32_e32 v5, vcc_lo, 0, v5, vcc_lo
 ; GFX10-NEXT:    v_add_co_u32 v2, vcc_lo, v2, 4
 ; GFX10-NEXT:    v_add_co_ci_u32_e32 v3, vcc_lo, 0, v3, vcc_lo
+; GFX10-NEXT:    v_add_co_u32 v4, vcc_lo, v4, 4
+; GFX10-NEXT:    v_add_co_ci_u32_e32 v5, vcc_lo, 0, v5, vcc_lo
+; GFX10-NEXT:    v_add_co_u32 v6, vcc_lo, v6, 4
+; GFX10-NEXT:    v_add_co_ci_u32_e32 v7, vcc_lo, 0, v7, vcc_lo
 ; GFX10-NEXT:    s_add_i32 s1, s1, 1
 ; GFX10-NEXT:    s_cmpk_ge_u32 s1, 0x64
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)

@@ -66,7 +66,6 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    flat_store_dwordx2 v[44:45], v[58:59]
 ; CHECK-NEXT:    flat_store_dwordx2 v[56:57], v[62:63]
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    ; implicit-def: $sgpr15
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[54:55]
 ; CHECK-NEXT:    flat_load_dwordx2 v[0:1], v[46:47] glc
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
@@ -102,25 +101,30 @@ define amdgpu_kernel void @foo(ptr addrspace(5) %ptr5, ptr %p0, double %v0, <4 x
 ; CHECK-NEXT:    v_pk_mov_b32 v[2:3], v[44:45], v[44:45] op_sel:[0,1]
 ; CHECK-NEXT:  .LBB0_3:
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_6
 ; CHECK-NEXT:  .LBB0_4: ; %LeafBlock
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v42
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v4, 0
 ; CHECK-NEXT:    v_pk_mov_b32 v[0:1], v[42:43], v[42:43] op_sel:[0,1]
-; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], vcc
+; CHECK-NEXT:    s_or_b64 s[8:9], s[8:9], vcc
 ; CHECK-NEXT:    v_pk_mov_b32 v[2:3], v[44:45], v[44:45] op_sel:[0,1]
-; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_6
 ; CHECK-NEXT:  .LBB0_5: ; %sw.bb.i.i.i.i
+; CHECK-NEXT:    s_mov_b32 s5, s4
+; CHECK-NEXT:    s_mov_b32 s6, s4
+; CHECK-NEXT:    s_mov_b32 s7, s4
+; CHECK-NEXT:    v_pk_mov_b32 v[0:1], s[4:5], s[4:5] op_sel:[0,1]
 ; CHECK-NEXT:    v_mov_b32_e32 v4, 0
-; CHECK-NEXT:    v_mov_b32_e32 v0, 0
+; CHECK-NEXT:    v_pk_mov_b32 v[2:3], s[6:7], s[6:7] op_sel:[0,1]
 ; CHECK-NEXT:  .LBB0_6: ; %bb.1
-; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
 ; CHECK-NEXT:    s_xor_b64 exec, vcc, exec
 ; CHECK-NEXT:    ; divergent control-flow edge

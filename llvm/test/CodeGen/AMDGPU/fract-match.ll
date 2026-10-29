@@ -99,7 +99,7 @@ define float @safe_math_fract_f32(float %x, ptr addrspace(1) writeonly captures(
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -114,7 +114,7 @@ define float @safe_math_fract_f32(float %x, ptr addrspace(1) writeonly captures(
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -128,7 +128,7 @@ entry:
   %uno = fcmp uno float %x, 0.000000e+00
   %cond = select i1 %uno, float %x, float %min
   %fabs = tail call float @llvm.fabs.f32(float %x)
-  %cmpinf = fcmp oeq float %fabs, 0x7FF0000000000000
+  %cmpinf = fcmp oeq float %fabs, +inf
   %cond6 = select i1 %cmpinf, float 0.000000e+00, float %cond
   store float %floor, ptr addrspace(1) %ip, align 4
   ret float %cond6
@@ -275,7 +275,7 @@ define <3 x float> @safe_math_fract_v3f32(<3 x float> %x, ptr addrspace(1) write
   %uno = fcmp uno <3 x float> %x, <float 0.0, float poison, float 0.0>
   %cond = select <3 x i1> %uno, <3 x float> %x, <3 x float> %min
   %fabs = tail call <3 x float> @llvm.fabs.v3f32(<3 x float> %x)
-  %cmpinf = fcmp oeq <3 x float> %fabs, <float 0x7FF0000000000000, float poison, float 0x7FF0000000000000>
+  %cmpinf = fcmp oeq <3 x float> %fabs, <float +inf, float poison, float +inf>
   %cond6 = select <3 x i1> %cmpinf, <3 x float> <float 0.0, float poison, float 0.0>, <3 x float> %cond
   store <3 x float> %floor, ptr addrspace(1) %ip, align 4
   ret <3 x float> %cond6
@@ -414,7 +414,7 @@ define <2 x float> @safe_math_fract_v2f32_const_splat_poison(<2 x float> %x, ptr
   %uno = fcmp uno <2 x float> %x, zeroinitializer
   %cond = select <2 x i1> %uno, <2 x float> %x, <2 x float> %min
   %fabs = tail call <2 x float> @llvm.fabs.v2f32(<2 x float> %x)
-  %cmpinf = fcmp oeq <2 x float> %fabs, splat (float 0x7FF0000000000000)
+  %cmpinf = fcmp oeq <2 x float> %fabs, splat (float +inf)
   %cond6 = select <2 x i1> %cmpinf, <2 x float> zeroinitializer, <2 x float> %cond
   store <2 x float> %floor, ptr addrspace(1) %ip, align 4
   ret <2 x float> %cond6
@@ -497,7 +497,7 @@ define float @safe_math_fract_f32_swap(float %x, ptr addrspace(1) writeonly capt
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -512,7 +512,7 @@ define float @safe_math_fract_f32_swap(float %x, ptr addrspace(1) writeonly capt
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -526,7 +526,7 @@ entry:
   %uno = fcmp ord float %x, 0.000000e+00
   %cond = select i1 %uno, float %min, float %x
   %fabs = tail call float @llvm.fabs.f32(float %x)
-  %cmpinf = fcmp oeq float %fabs, 0x7FF0000000000000
+  %cmpinf = fcmp oeq float %fabs, +inf
   %cond6 = select i1 %cmpinf, float 0.000000e+00, float %cond
   store float %floor, ptr addrspace(1) %ip, align 4
   ret float %cond6
@@ -684,7 +684,7 @@ define float @no_nan_check_math_fract_f32(float %x, ptr addrspace(1) writeonly c
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_floor_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_sub_f32_e32 v4, v0, v3
 ; GFX11-NEXT:    global_store_b32 v[1:2], v3, off
@@ -700,7 +700,7 @@ define float @no_nan_check_math_fract_f32(float %x, ptr addrspace(1) writeonly c
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_floor_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_sub_f32_e32 v4, v0, v3
 ; GFX12-NEXT:    global_store_b32 v[1:2], v3, off
@@ -713,7 +713,7 @@ entry:
   %sub = fsub float %x, %floor
   %min = tail call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %fabs = tail call float @llvm.fabs.f32(float %x)
-  %cmpinf = fcmp oeq float %fabs, 0x7FF0000000000000
+  %cmpinf = fcmp oeq float %fabs, +inf
   %cond6 = select i1 %cmpinf, float 0.000000e+00, float %min
   store float %floor, ptr addrspace(1) %ip, align 4
   ret float %cond6
@@ -1627,7 +1627,7 @@ entry:
   %floor = tail call float @llvm.floor.f32(float %x)
   %sub = fsub float %x, %floor
   %min = tail call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
-  %uno = fcmp uno float %x, 0x7FF8000000000000
+  %uno = fcmp uno float %x, +qnan
   %cond = select i1 %uno, float %x, float %min
   ret float %cond
 }
@@ -2023,10 +2023,8 @@ define <2 x half> @basic_fract_v2f16_nonan(<2 x half> nofpclass(nan) %x) {
 ; GFX11-TRUE16-LABEL: basic_fract_v2f16_nonan:
 ; GFX11-TRUE16:       ; %bb.0: ; %entry
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 16, v0
 ; GFX11-TRUE16-NEXT:    v_fract_f16_e32 v0.l, v0.l
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; GFX11-TRUE16-NEXT:    v_fract_f16_e32 v0.h, v1.l
+; GFX11-TRUE16-NEXT:    v_fract_f16_e32 v0.h, v0.h
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: basic_fract_v2f16_nonan:
@@ -2046,10 +2044,8 @@ define <2 x half> @basic_fract_v2f16_nonan(<2 x half> nofpclass(nan) %x) {
 ; GFX12-TRUE16-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 16, v0
 ; GFX12-TRUE16-NEXT:    v_fract_f16_e32 v0.l, v0.l
-; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; GFX12-TRUE16-NEXT:    v_fract_f16_e32 v0.h, v1.l
+; GFX12-TRUE16-NEXT:    v_fract_f16_e32 v0.h, v0.h
 ; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-LABEL: basic_fract_v2f16_nonan:
@@ -2628,7 +2624,7 @@ entry:
   %uno = fcmp uno <2 x float> %x, zeroinitializer
   %cond = select <2 x i1> %uno, <2 x float> %x, <2 x float> %min
   %fabs = tail call <2 x float> @llvm.fabs.v2f32(<2 x float> %x)
-  %cmpinf = fcmp oeq <2 x float> %fabs, <float 0x7FF0000000000000, float 0x7FF0000000000000>
+  %cmpinf = fcmp oeq <2 x float> %fabs, <float +inf, float +inf>
   %cond6 = select <2 x i1> %cmpinf, <2 x float> zeroinitializer, <2 x float> %cond
   store <2 x float> %floor, ptr addrspace(1) %ip, align 4
   ret <2 x float> %cond6
@@ -2727,7 +2723,7 @@ define double @safe_math_fract_f64(double %x, ptr addrspace(1) writeonly capture
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f64_e32 v[4:5], v[0:1]
-; GFX11-NEXT:    v_cmp_neq_f64_e64 vcc_lo, 0x7ff00000, |v[0:1]|
+; GFX11-NEXT:    v_cmp_neq_f64_e64 vcc_lo, |v[0:1]|, 0x7ff00000
 ; GFX11-NEXT:    v_floor_f64_e32 v[6:7], v[0:1]
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_dual_cndmask_b32 v0, 0, v4 :: v_dual_cndmask_b32 v1, 0, v5
@@ -2742,7 +2738,7 @@ define double @safe_math_fract_f64(double %x, ptr addrspace(1) writeonly capture
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f64_e32 v[4:5], v[0:1]
-; GFX12-NEXT:    v_cmp_neq_f64_e64 vcc_lo, 0x7ff00000, |v[0:1]|
+; GFX12-NEXT:    v_cmp_neq_f64_e64 vcc_lo, |v[0:1]|, 0x7ff00000
 ; GFX12-NEXT:    v_floor_f64_e32 v[6:7], v[0:1]
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -2756,7 +2752,7 @@ entry:
   %uno = fcmp uno double %x, 0.000000e+00
   %cond = select i1 %uno, double %x, double %min
   %fabs = tail call double @llvm.fabs.f64(double %x)
-  %cmpinf = fcmp oeq double %fabs, 0x7FF0000000000000
+  %cmpinf = fcmp oeq double %fabs, +inf
   %cond6 = select i1 %cmpinf, double 0.000000e+00, double %cond
   store double %floor, ptr addrspace(1) %ip, align 4
   ret double %cond6
@@ -2870,7 +2866,7 @@ define half @safe_math_fract_f16(half %x, ptr addrspace(1) writeonly captures(no
 ; GFX11-TRUE16:       ; %bb.0: ; %entry
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_fract_f16_e32 v0.h, v0.l
-; GFX11-TRUE16-NEXT:    v_cmp_neq_f16_e64 s0, 0x7c00, |v0.l|
+; GFX11-TRUE16-NEXT:    v_cmp_neq_f16_e64 s0, |v0.l|, 0x7c00
 ; GFX11-TRUE16-NEXT:    v_floor_f16_e32 v3.l, v0.l
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX11-TRUE16-NEXT:    v_cndmask_b16 v0.l, 0, v0.h, s0
@@ -2881,7 +2877,7 @@ define half @safe_math_fract_f16(half %x, ptr addrspace(1) writeonly captures(no
 ; GFX11-FAKE16:       ; %bb.0: ; %entry
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-FAKE16-NEXT:    v_fract_f16_e32 v3, v0
-; GFX11-FAKE16-NEXT:    v_cmp_neq_f16_e64 vcc_lo, 0x7c00, |v0|
+; GFX11-FAKE16-NEXT:    v_cmp_neq_f16_e64 vcc_lo, |v0|, 0x7c00
 ; GFX11-FAKE16-NEXT:    v_floor_f16_e32 v4, v0
 ; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-FAKE16-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -2896,7 +2892,7 @@ define half @safe_math_fract_f16(half %x, ptr addrspace(1) writeonly captures(no
 ; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-TRUE16-NEXT:    v_fract_f16_e32 v0.h, v0.l
-; GFX12-TRUE16-NEXT:    v_cmp_neq_f16_e64 s0, 0x7c00, |v0.l|
+; GFX12-TRUE16-NEXT:    v_cmp_neq_f16_e64 s0, |v0.l|, 0x7c00
 ; GFX12-TRUE16-NEXT:    v_floor_f16_e32 v3.l, v0.l
 ; GFX12-TRUE16-NEXT:    s_wait_alu depctr_va_sdst(0)
 ; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_2)
@@ -2912,7 +2908,7 @@ define half @safe_math_fract_f16(half %x, ptr addrspace(1) writeonly captures(no
 ; GFX12-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-FAKE16-NEXT:    v_fract_f16_e32 v3, v0
-; GFX12-FAKE16-NEXT:    v_cmp_neq_f16_e64 vcc_lo, 0x7c00, |v0|
+; GFX12-FAKE16-NEXT:    v_cmp_neq_f16_e64 vcc_lo, |v0|, 0x7c00
 ; GFX12-FAKE16-NEXT:    v_floor_f16_e32 v4, v0
 ; GFX12-FAKE16-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -3090,17 +3086,16 @@ define <2 x half> @safe_math_fract_v2f16(<2 x half> %x, ptr addrspace(1) writeon
 ; GFX11-TRUE16-LABEL: safe_math_fract_v2f16:
 ; GFX11-TRUE16:       ; %bb.0: ; %entry
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_lshrrev_b32_e32 v4, 16, v0
 ; GFX11-TRUE16-NEXT:    v_fract_f16_e32 v3.l, v0.l
-; GFX11-TRUE16-NEXT:    v_cmp_class_f16_e64 s1, v0.l, 0x204
-; GFX11-TRUE16-NEXT:    v_floor_f16_e32 v5.l, v0.l
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(SKIP_3) | instid1(VALU_DEP_3)
-; GFX11-TRUE16-NEXT:    v_fract_f16_e32 v0.h, v4.l
-; GFX11-TRUE16-NEXT:    v_cmp_class_f16_e64 s0, v4.l, 0x204
-; GFX11-TRUE16-NEXT:    v_floor_f16_e32 v5.h, v4.l
-; GFX11-TRUE16-NEXT:    v_cndmask_b16 v0.l, v3.l, 0, s1
-; GFX11-TRUE16-NEXT:    v_cndmask_b16 v0.h, v0.h, 0, s0
-; GFX11-TRUE16-NEXT:    global_store_b32 v[1:2], v5, off
+; GFX11-TRUE16-NEXT:    v_cmp_class_f16_e64 s0, v0.l, 0x204
+; GFX11-TRUE16-NEXT:    v_floor_f16_e32 v4.l, v0.l
+; GFX11-TRUE16-NEXT:    v_fract_f16_e32 v3.h, v0.h
+; GFX11-TRUE16-NEXT:    v_floor_f16_e32 v4.h, v0.h
+; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_4)
+; GFX11-TRUE16-NEXT:    v_cndmask_b16 v0.l, v3.l, 0, s0
+; GFX11-TRUE16-NEXT:    v_cmp_class_f16_e64 s0, v0.h, 0x204
+; GFX11-TRUE16-NEXT:    global_store_b32 v[1:2], v4, off
+; GFX11-TRUE16-NEXT:    v_cndmask_b16 v0.h, v3.h, 0, s0
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: safe_math_fract_v2f16:
@@ -3129,18 +3124,17 @@ define <2 x half> @safe_math_fract_v2f16(<2 x half> %x, ptr addrspace(1) writeon
 ; GFX12-TRUE16-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-TRUE16-NEXT:    v_lshrrev_b32_e32 v4, 16, v0
 ; GFX12-TRUE16-NEXT:    v_fract_f16_e32 v3.l, v0.l
-; GFX12-TRUE16-NEXT:    v_cmp_class_f16_e64 s1, v0.l, 0x204
-; GFX12-TRUE16-NEXT:    v_floor_f16_e32 v5.l, v0.l
-; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(SKIP_4) | instid1(VALU_DEP_3)
-; GFX12-TRUE16-NEXT:    v_fract_f16_e32 v0.h, v4.l
-; GFX12-TRUE16-NEXT:    v_cmp_class_f16_e64 s0, v4.l, 0x204
-; GFX12-TRUE16-NEXT:    v_floor_f16_e32 v5.h, v4.l
+; GFX12-TRUE16-NEXT:    v_cmp_class_f16_e64 s0, v0.l, 0x204
+; GFX12-TRUE16-NEXT:    v_floor_f16_e32 v4.l, v0.l
+; GFX12-TRUE16-NEXT:    v_fract_f16_e32 v3.h, v0.h
+; GFX12-TRUE16-NEXT:    v_floor_f16_e32 v4.h, v0.h
 ; GFX12-TRUE16-NEXT:    s_wait_alu depctr_va_sdst(0)
-; GFX12-TRUE16-NEXT:    v_cndmask_b16 v0.l, v3.l, 0, s1
-; GFX12-TRUE16-NEXT:    v_cndmask_b16 v0.h, v0.h, 0, s0
-; GFX12-TRUE16-NEXT:    global_store_b32 v[1:2], v5, off
+; GFX12-TRUE16-NEXT:    v_cndmask_b16 v0.l, v3.l, 0, s0
+; GFX12-TRUE16-NEXT:    v_cmp_class_f16_e64 s0, v0.h, 0x204
+; GFX12-TRUE16-NEXT:    global_store_b32 v[1:2], v4, off
+; GFX12-TRUE16-NEXT:    s_wait_alu depctr_va_sdst(0)
+; GFX12-TRUE16-NEXT:    v_cndmask_b16 v0.h, v3.h, 0, s0
 ; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-LABEL: safe_math_fract_v2f16:
@@ -3338,7 +3332,7 @@ entry:
   %uno = fcmp uno <2 x double> %x, zeroinitializer
   %cond = select <2 x i1> %uno, <2 x double> %x, <2 x double> %min
   %fabs = tail call <2 x double> @llvm.fabs.v2f64(<2 x double> %x)
-  %cmpinf = fcmp oeq <2 x double> %fabs, <double 0x7FF0000000000000, double 0x7FF0000000000000>
+  %cmpinf = fcmp oeq <2 x double> %fabs, <double +inf, double +inf>
   %cond6 = select <2 x i1> %cmpinf, <2 x double> zeroinitializer, <2 x double> %cond
   store <2 x double> %floor, ptr addrspace(1) %ip, align 4
   ret <2 x double> %cond6
@@ -3424,7 +3418,7 @@ define float @safe_math_fract_f32_minimum(float %x, ptr addrspace(1) writeonly c
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -3439,7 +3433,7 @@ define float @safe_math_fract_f32_minimum(float %x, ptr addrspace(1) writeonly c
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -3453,7 +3447,7 @@ entry:
   %uno = fcmp uno float %x, 0.000000e+00
   %cond = select i1 %uno, float %x, float %min
   %fabs = tail call float @llvm.fabs.f32(float %x)
-  %cmpinf = fcmp oeq float %fabs, 0x7FF0000000000000
+  %cmpinf = fcmp oeq float %fabs, +inf
   %cond6 = select i1 %cmpinf, float 0.000000e+00, float %cond
   store float %floor, ptr addrspace(1) %ip, align 4
   ret float %cond6
@@ -3539,7 +3533,7 @@ define float @safe_math_fract_f32_minimum_swap(float %x, ptr addrspace(1) writeo
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -3554,7 +3548,7 @@ define float @safe_math_fract_f32_minimum_swap(float %x, ptr addrspace(1) writeo
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -3568,7 +3562,7 @@ entry:
   %uno = fcmp ord float %x, 0.000000e+00
   %cond = select i1 %uno, float %min, float %x
   %fabs = tail call float @llvm.fabs.f32(float %x)
-  %cmpinf = fcmp oeq float %fabs, 0x7FF0000000000000
+  %cmpinf = fcmp oeq float %fabs, +inf
   %cond6 = select i1 %cmpinf, float 0.000000e+00, float %cond
   store float %floor, ptr addrspace(1) %ip, align 4
   ret float %cond6
@@ -3651,7 +3645,7 @@ define float @safe_math_fract_f32_minimumnum(float %x, ptr addrspace(1) writeonl
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -3666,7 +3660,7 @@ define float @safe_math_fract_f32_minimumnum(float %x, ptr addrspace(1) writeonl
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -3680,7 +3674,7 @@ entry:
   %uno = fcmp uno float %x, 0.000000e+00
   %cond = select i1 %uno, float %x, float %min
   %fabs = tail call float @llvm.fabs.f32(float %x)
-  %cmpinf = fcmp oeq float %fabs, 0x7FF0000000000000
+  %cmpinf = fcmp oeq float %fabs, +inf
   %cond6 = select i1 %cmpinf, float 0.000000e+00, float %cond
   store float %floor, ptr addrspace(1) %ip, align 4
   ret float %cond6
@@ -3763,7 +3757,7 @@ define float @safe_math_fract_f32_minimumnum_swap(float %x, ptr addrspace(1) wri
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -3778,7 +3772,7 @@ define float @safe_math_fract_f32_minimumnum_swap(float %x, ptr addrspace(1) wri
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -3792,7 +3786,7 @@ entry:
   %uno = fcmp ord float %x, 0.000000e+00
   %cond = select i1 %uno, float %min, float %x
   %fabs = tail call float @llvm.fabs.f32(float %x)
-  %cmpinf = fcmp oeq float %fabs, 0x7FF0000000000000
+  %cmpinf = fcmp oeq float %fabs, +inf
   %cond6 = select i1 %cmpinf, float 0.000000e+00, float %cond
   store float %floor, ptr addrspace(1) %ip, align 4
   ret float %cond6
@@ -4199,7 +4193,7 @@ define double @fract_match_f64_assume_not_nan(double %x) #0 {
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f64_e32 v[2:3], v[0:1]
-; GFX11-NEXT:    v_cmp_neq_f64_e64 vcc_lo, 0x7ff00000, |v[0:1]|
+; GFX11-NEXT:    v_cmp_neq_f64_e64 vcc_lo, |v[0:1]|, 0x7ff00000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX11-NEXT:    v_dual_cndmask_b32 v0, 0, v2 :: v_dual_cndmask_b32 v1, 0, v3
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
@@ -4212,7 +4206,7 @@ define double @fract_match_f64_assume_not_nan(double %x) #0 {
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f64_e32 v[2:3], v[0:1]
-; GFX12-NEXT:    v_cmp_neq_f64_e64 vcc_lo, 0x7ff00000, |v[0:1]|
+; GFX12-NEXT:    v_cmp_neq_f64_e64 vcc_lo, |v[0:1]|, 0x7ff00000
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_dual_cndmask_b32 v0, 0, v2 :: v_dual_cndmask_b32 v1, 0, v3
@@ -4246,7 +4240,7 @@ entry:
   %sub = fsub double %x, %floor
   %min = tail call double @llvm.minnum.f64(double %sub, double 0x3FEFFFFFFFFFFFFF)
   %x.abs = tail call double @llvm.fabs.f64(double %x)
-  %is.inf = fcmp oeq double %x.abs, 0x7FF0000000000000
+  %is.inf = fcmp oeq double %x.abs, +inf
   %result = select i1 %is.inf, double 0.0, double %min
   ret double %result
 }
@@ -4310,7 +4304,7 @@ define float @safe_math_fract_f32_swapped_edge_case(float %x) #0 {
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v1, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v1, vcc_lo
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
@@ -4323,7 +4317,7 @@ define float @safe_math_fract_f32_swapped_edge_case(float %x) #0 {
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v1, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_cndmask_b32_e32 v0, 0, v1, vcc_lo
@@ -4333,7 +4327,7 @@ entry:
   %sub = fsub float %x, %floor
   %min = call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %x.fabs, 0x7FF0000000000000
+  %not.inf = fcmp une float %x.fabs, +inf
   %cond = select i1 %not.inf, float %min, float 0.0
   %not.nan = fcmp ord float %x, 0.0
   %cond8 = select i1 %not.nan, float %cond, float %x
@@ -4390,7 +4384,7 @@ define float @safe_math_fract_f32_swapped_edge_case_multi_use_inner_select(float
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
 ; GFX11-NEXT:    global_store_b32 v[1:2], v0, off
@@ -4404,7 +4398,7 @@ define float @safe_math_fract_f32_swapped_edge_case_multi_use_inner_select(float
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -4434,7 +4428,7 @@ define float @safe_math_fract_f32_swapped_edge_case_multi_use_inner_select(float
   %sub = fsub float %x, %floor
   %min = call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %x.fabs, 0x7FF0000000000000
+  %not.inf = fcmp une float %x.fabs, +inf
   %cond = select i1 %not.inf, float %min, float 0.0
   store float %cond, ptr addrspace(1) %ptr
   %not.nan = fcmp ord float %x, 0.0
@@ -4495,7 +4489,7 @@ define float @safe_math_fract_f32_swapped_edge_case_multi_use_inner_select_fcmp(
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -4510,7 +4504,7 @@ define float @safe_math_fract_f32_swapped_edge_case_multi_use_inner_select_fcmp(
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_3)
 ; GFX12-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
@@ -4541,7 +4535,7 @@ define float @safe_math_fract_f32_swapped_edge_case_multi_use_inner_select_fcmp(
   %sub = fsub float %x, %floor
   %min = call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %x.fabs, 0x7FF0000000000000
+  %not.inf = fcmp une float %x.fabs, +inf
   store i1 %not.inf, ptr addrspace(1) %ptr
   %cond = select i1 %not.inf, float %min, float 0.0
   %not.nan = fcmp ord float %x, 0.0
@@ -4602,7 +4596,7 @@ define float @safe_math_fract_f32_swapped_edge_case_multi_use_fabs(float %x, ptr
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    v_and_b32_e32 v4, 0x7fffffff, v0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -4617,7 +4611,7 @@ define float @safe_math_fract_f32_swapped_edge_case_multi_use_fabs(float %x, ptr
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    v_and_b32_e32 v4, 0x7fffffff, v0
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -4649,7 +4643,7 @@ define float @safe_math_fract_f32_swapped_edge_case_multi_use_fabs(float %x, ptr
   %min = call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float %x)
   store float %x.fabs, ptr addrspace(1) %ptr
-  %not.inf = fcmp une float %x.fabs, 0x7FF0000000000000
+  %not.inf = fcmp une float %x.fabs, +inf
   %cond = select i1 %not.inf, float %min, float 0.0
   %not.nan = fcmp ord float %x, 0.0
   %cond8 = select i1 %not.nan, float %cond, float %x
@@ -4713,7 +4707,7 @@ define float @safe_math_fract_f32_swapped_edge_case_wrong_compared(float %x, flo
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_floor_f32_e32 v2, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v1|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v1|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_sub_f32_e32 v2, v0, v2
 ; GFX11-NEXT:    v_min_f32_e32 v2, 0x3f7fffff, v2
@@ -4731,7 +4725,7 @@ define float @safe_math_fract_f32_swapped_edge_case_wrong_compared(float %x, flo
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_floor_f32_e32 v2, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v1|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v1|, 0x7f800000
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_sub_f32_e32 v2, v0, v2
 ; GFX12-NEXT:    v_min_num_f32_e32 v2, 0x3f7fffff, v2
@@ -4747,7 +4741,7 @@ entry:
   %sub = fsub float %x, %floor
   %min = call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %wrong.fabs = call float @llvm.fabs.f32(float %wrong)
-  %not.inf = fcmp une float %wrong.fabs, 0x7FF0000000000000
+  %not.inf = fcmp une float %wrong.fabs, +inf
   %cond = select i1 %not.inf, float %min, float 0.0
   %not.nan = fcmp ord float %x, 0.0
   %cond8 = select i1 %not.nan, float %cond, float %x
@@ -4811,7 +4805,7 @@ define float @safe_math_fract_f32_swapped_edge_case_commute_inf_check(float %x) 
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_floor_f32_e32 v1, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_sub_f32_e32 v1, v0, v1
 ; GFX11-NEXT:    v_min_f32_e32 v1, 0x3f7fffff, v1
@@ -4829,7 +4823,7 @@ define float @safe_math_fract_f32_swapped_edge_case_commute_inf_check(float %x) 
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_floor_f32_e32 v1, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_sub_f32_e32 v1, v0, v1
 ; GFX12-NEXT:    v_min_num_f32_e32 v1, 0x3f7fffff, v1
@@ -4845,7 +4839,7 @@ entry:
   %sub = fsub float %x, %floor
   %min = call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float %x)
-  %is.inf = fcmp oeq float %x.fabs, 0x7FF0000000000000
+  %is.inf = fcmp oeq float %x.fabs, +inf
   %cond = select i1 %is.inf, float 0.0, float %min
   %not.nan = fcmp ord float %x, 0.0
   %cond8 = select i1 %not.nan, float %cond, float %x
@@ -4909,7 +4903,7 @@ define float @safe_math_fract_f32_swapped_edge_case_commute_nan_check(float %x) 
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_floor_f32_e32 v1, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_sub_f32_e32 v1, v0, v1
 ; GFX11-NEXT:    v_min_f32_e32 v1, 0x3f7fffff, v1
@@ -4927,7 +4921,7 @@ define float @safe_math_fract_f32_swapped_edge_case_commute_nan_check(float %x) 
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_floor_f32_e32 v1, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_sub_f32_e32 v1, v0, v1
 ; GFX12-NEXT:    v_min_num_f32_e32 v1, 0x3f7fffff, v1
@@ -4943,7 +4937,7 @@ entry:
   %sub = fsub float %x, %floor
   %min = call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %x.fabs, 0x7FF0000000000000
+  %not.inf = fcmp une float %x.fabs, +inf
   %cond = select i1 %not.inf, float %min, float 0.0
   %is.nan = fcmp uno float %x, 0.0
   %cond8 = select i1 %is.nan, float %x, float %cond
@@ -5007,7 +5001,7 @@ entry:
   %sub = fsub float %x, %floor
   %min = call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %x.fabs, 0xFFF0000000000000
+  %not.inf = fcmp une float %x.fabs, -inf
   %cond = select i1 %not.inf, float %min, float 0.0
   %not.nan = fcmp ord float %x, 0.0
   %cond8 = select i1 %not.nan, float %cond, float %x
@@ -5063,7 +5057,7 @@ define float @basic_fract_f32_with_inf_check(float %x) {
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_floor_f32_e32 v1, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_sub_f32_e32 v1, v0, v1
 ; GFX11-NEXT:    v_min_f32_e32 v1, 0x3f7fffff, v1
@@ -5079,7 +5073,7 @@ define float @basic_fract_f32_with_inf_check(float %x) {
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_floor_f32_e32 v1, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_sub_f32_e32 v1, v0, v1
 ; GFX12-NEXT:    v_min_num_f32_e32 v1, 0x3f7fffff, v1
@@ -5092,7 +5086,7 @@ entry:
   %sub = fsub float %x, %floor
   %min = tail call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %x.fabs, 0x7FF0000000000000
+  %not.inf = fcmp une float %x.fabs, +inf
   %clamp.inf.to.zero = select i1 %not.inf, float %min, float 0.0
   ret float %clamp.inf.to.zero
 }
@@ -5151,7 +5145,7 @@ define float @basic_fract_f32_nonans_with_inf_check(float nofpclass(nan) %x) {
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v1, v0
-; GFX11-NEXT:    v_cmp_lg_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_lg_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v1, vcc_lo
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
@@ -5164,7 +5158,7 @@ define float @basic_fract_f32_nonans_with_inf_check(float nofpclass(nan) %x) {
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v1, v0
-; GFX12-NEXT:    v_cmp_lg_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_lg_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_cndmask_b32_e32 v0, 0, v1, vcc_lo
@@ -5174,7 +5168,7 @@ entry:
   %sub = fsub float %x, %floor
   %min = tail call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %x.fabs, 0x7FF0000000000000
+  %not.inf = fcmp une float %x.fabs, +inf
   %clamp.inf.to.zero = select i1 %not.inf, float %min, float 0.0
   ret float %clamp.inf.to.zero
 }
@@ -5271,7 +5265,7 @@ entry:
   %sub = fsub float bitcast (i32 ptrtoint (ptr @gv to i32) to float), %floor
   %min = call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float bitcast (i32 ptrtoint (ptr @gv to i32) to float))
-  %not.inf = fcmp une float %x.fabs, 0x7FF0000000000000
+  %not.inf = fcmp une float %x.fabs, +inf
   %cond = select i1 %not.inf, float %min, float 0.000000e+00
   %not.nan = fcmp ord float bitcast (i32 ptrtoint (ptr @gv to i32) to float), 0.000000e+00
   %cond8 = select i1 %not.nan, float %cond, float bitcast (i32 ptrtoint (ptr @gv to i32) to float)
@@ -5387,7 +5381,7 @@ define float @safe_math_fract_f32_swapped_edge_case_split_block(float %x, i1 %co
 ; GFX11-NEXT:    s_cbranch_execz .LBB58_4
 ; GFX11-NEXT:  .LBB58_3: ; %edge_cases
 ; GFX11-NEXT:    v_fract_f32_e32 v1, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v1, 0, v1, vcc_lo
 ; GFX11-NEXT:  .LBB58_4: ; %UnifiedReturnBlock
@@ -5426,7 +5420,7 @@ define float @safe_math_fract_f32_swapped_edge_case_split_block(float %x, i1 %co
 ; GFX12-NEXT:    s_cbranch_execz .LBB58_4
 ; GFX12-NEXT:  .LBB58_3: ; %edge_cases
 ; GFX12-NEXT:    v_fract_f32_e32 v1, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GFX12-NEXT:    v_cndmask_b32_e32 v1, 0, v1, vcc_lo
@@ -5472,7 +5466,7 @@ define float @safe_math_fract_f32_swapped_edge_case_split_block(float %x, i1 %co
   br i1 %cond, label %edge_cases, label %ret
 
 edge_cases:
-  %not.inf = fcmp une float %x.fabs, 0x7FF0000000000000
+  %not.inf = fcmp une float %x.fabs, +inf
   %clamp.inf = select i1 %not.inf, float %min, float 0.0
   %not.nan = fcmp ord float %x, 0.0
   %cond8 = select i1 %not.nan, float %clamp.inf, float %x
@@ -5592,7 +5586,7 @@ entry:
   %sub = fsub <3 x float> %x, %floor
   %min = call <3 x float> @llvm.minnum.v3f32(<3 x float> %sub, <3 x float> <float 0x3FEFFFFFE0000000, float poison, float 0x3FEFFFFFE0000000>)
   %x.fabs = call <3 x float> @llvm.fabs.v3f32(<3 x float> %x)
-  %not.inf = fcmp une <3 x float> %x.fabs, <float 0x7FF0000000000000, float poison, float 0x7FF0000000000000>
+  %not.inf = fcmp une <3 x float> %x.fabs, <float +inf, float poison, float +inf>
   %cond = select <3 x i1> %not.inf, <3 x float> %min, <3 x float> <float 0.0, float poison, float 0.0>
   %not.nan = fcmp ord <3 x float> %x, <float 0.0, float poison, float 0.0>
   %cond8 = select <3 x i1> %not.nan, <3 x float> %cond, <3 x float> %x
@@ -5654,7 +5648,7 @@ entry:
   %sub = fsub float %x, %floor
   %min = call float @llvm.minnum.f32(float %sub, float 0x3FEFFFFFE0000000)
   %x.fabs = call float @llvm.fabs.f32(float %x)
-  %not.not.inf = fcmp ule float %x.fabs, 0x7FF0000000000000
+  %not.not.inf = fcmp ule float %x.fabs, +inf
   %cond = select i1 %not.not.inf, float %min, float 0.0
   %not.nan = fcmp ord float %x, 0.0
   %cond8 = select i1 %not.nan, float %cond, float %x
@@ -5713,7 +5707,7 @@ define float @fract_pat_fcmp_oge_select(float %x, ptr addrspace(1) %iptr) #0 {
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -5728,7 +5722,7 @@ define float @fract_pat_fcmp_oge_select(float %x, ptr addrspace(1) %iptr) #0 {
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -5764,7 +5758,7 @@ entry:
   %cmp = fcmp oge float %sub1, 0x3FEFFFFFE0000000
   %cond = select i1 %cmp, float 0x3FEFFFFFE0000000, float %sub1
   %fabs.x = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %fabs.x, 0x7FF0000000000000
+  %not.inf = fcmp une float %fabs.x, +inf
   %cond6 = select i1 %not.inf, float %cond, float 0.000000e+00
   ret float %cond6
 }
@@ -5819,7 +5813,7 @@ define float @fract_pat_fcmp_ogt_select(float %x, ptr addrspace(1) %iptr) #0 {
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -5834,7 +5828,7 @@ define float @fract_pat_fcmp_ogt_select(float %x, ptr addrspace(1) %iptr) #0 {
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -5870,7 +5864,7 @@ entry:
   %cmp = fcmp ogt float %sub1, 0x3FEFFFFFE0000000
   %cond = select i1 %cmp, float 0x3FEFFFFFE0000000, float %sub1
   %fabs.x = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %fabs.x, 0x7FF0000000000000
+  %not.inf = fcmp une float %fabs.x, +inf
   %cond6 = select i1 %not.inf, float %cond, float 0.000000e+00
   ret float %cond6
 }
@@ -5928,7 +5922,7 @@ define float @negative_fract_pat_fcmp_olt(float %x, ptr addrspace(1) %iptr) #0 {
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_floor_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_sub_f32_e32 v4, v0, v3
 ; GFX11-NEXT:    global_store_b32 v[1:2], v3, off
@@ -5944,7 +5938,7 @@ define float @negative_fract_pat_fcmp_olt(float %x, ptr addrspace(1) %iptr) #0 {
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_floor_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_sub_f32_e32 v4, v0, v3
 ; GFX12-NEXT:    global_store_b32 v[1:2], v3, off
@@ -5971,7 +5965,7 @@ entry:
   %cmp = fcmp olt float %sub1, 0x3FEFFFFFE0000000
   %cond = select i1 %cmp, float %sub1, float 0x3FEFFFFFE0000000
   %fabs.x = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %fabs.x, 0x7FF0000000000000
+  %not.inf = fcmp une float %fabs.x, +inf
   %cond6 = select i1 %not.inf, float %cond, float 0.000000e+00
   ret float %cond6
 }
@@ -6028,7 +6022,7 @@ define float @fract_pat_fcmp_olt_not_nan_src(float nofpclass(nan) %x, ptr addrsp
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_floor_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_lg_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_lg_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_2) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_sub_f32_e32 v4, v0, v3
 ; GFX11-NEXT:    global_store_b32 v[1:2], v3, off
@@ -6044,7 +6038,7 @@ define float @fract_pat_fcmp_olt_not_nan_src(float nofpclass(nan) %x, ptr addrsp
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_floor_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_lg_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_lg_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_sub_f32_e32 v4, v0, v3
 ; GFX12-NEXT:    global_store_b32 v[1:2], v3, off
@@ -6071,7 +6065,7 @@ entry:
   %cmp = fcmp olt float %sub1, 0x3FEFFFFFE0000000
   %cond = select i1 %cmp, float %sub1, float 0x3FEFFFFFE0000000
   %fabs.x = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %fabs.x, 0x7FF0000000000000
+  %not.inf = fcmp une float %fabs.x, +inf
   %cond6 = select i1 %not.inf, float %cond, float 0.000000e+00
   ret float %cond6
 }
@@ -6130,7 +6124,7 @@ define float @fract_pat_minimum(float %x, ptr addrspace(1) %iptr) #0 {
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_fract_f32_e32 v3, v0
-; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX11-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX11-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GFX11-NEXT:    v_cndmask_b32_e32 v0, 0, v3, vcc_lo
@@ -6145,7 +6139,7 @@ define float @fract_pat_minimum(float %x, ptr addrspace(1) %iptr) #0 {
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_fract_f32_e32 v3, v0
-; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, 0x7f800000, |v0|
+; GFX12-NEXT:    v_cmp_neq_f32_e64 vcc_lo, |v0|, 0x7f800000
 ; GFX12-NEXT:    v_floor_f32_e32 v4, v0
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
@@ -6179,7 +6173,7 @@ entry:
   %sub1 = fsub float %x, %call
   %min = call float @llvm.minimum.f32(float %sub1, float 0x3FEFFFFFE0000000)
   %fabs.x = call float @llvm.fabs.f32(float %x)
-  %not.inf = fcmp une float %fabs.x, 0x7FF0000000000000
+  %not.inf = fcmp une float %fabs.x, +inf
   %cond6 = select i1 %not.inf, float %min, float 0.0
   ret float %cond6
 }

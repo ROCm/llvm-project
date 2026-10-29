@@ -236,13 +236,13 @@ define void @test_sink_noop_addrspacecast_flat_to_global_i32(ptr %out, ptr %in, 
 ; GFX7:       ; %bb.0: ; %entry
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX7-NEXT:    s_mov_b32 s6, 0
 ; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX7-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX7-NEXT:  .LBB1_1: ; %if
-; GFX7-NEXT:    s_mov_b32 s6, 0
 ; GFX7-NEXT:    s_mov_b32 s7, 0xf000
 ; GFX7-NEXT:    s_mov_b32 s4, s6
 ; GFX7-NEXT:    s_mov_b32 s5, s6
@@ -356,13 +356,13 @@ define void @test_sink_noop_addrspacecast_flat_to_constant_i32(ptr %out, ptr %in
 ; GFX7:       ; %bb.0: ; %entry
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX7-NEXT:    s_mov_b32 s6, 0
 ; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX7-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX7-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX7-NEXT:  .LBB2_1: ; %if
-; GFX7-NEXT:    s_mov_b32 s6, 0
 ; GFX7-NEXT:    s_mov_b32 s7, 0xf000
 ; GFX7-NEXT:    s_mov_b32 s4, s6
 ; GFX7-NEXT:    s_mov_b32 s5, s6

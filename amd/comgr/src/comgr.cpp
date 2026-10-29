@@ -324,6 +324,10 @@ amd_comgr_status_t DataObject::setData(std::unique_ptr<llvm::MemoryBuffer> MB) {
 }
 
 void DataObject::clearData() {
+  // CachedBinary aliases Data, so it must go first.
+  SymbolIndex.reset();
+  CachedBinary.reset();
+
   if (Buffer) {
     Buffer.reset();
   } else {
@@ -1728,8 +1732,7 @@ amd_comgr_status_t AMD_COMGR_API
 
   ensureLLVMInitialized();
 
-  StringRef Ins(DataP->Data, DataP->Size);
-  return Helper.iterateTable(Ins, DataP->DataKind, Callback, UserData);
+  return Helper.iterateTable(DataP, Callback, UserData);
 }
 
 amd_comgr_status_t AMD_COMGR_API
@@ -1740,7 +1743,7 @@ amd_comgr_status_t AMD_COMGR_API
   DataObject *DataP = DataObject::convert(Data);
   SymbolHelper Helper;
 
-  if (!DataP || !DataP->hasValidDataKind() ||
+  if (!DataP || !DataP->hasValidDataKind() || !Name || !Symbol ||
       !(DataP->DataKind == AMD_COMGR_DATA_KIND_RELOCATABLE ||
         DataP->DataKind == AMD_COMGR_DATA_KIND_EXECUTABLE)) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
@@ -1748,11 +1751,7 @@ amd_comgr_status_t AMD_COMGR_API
 
   ensureLLVMInitialized();
 
-  // look through the symbol table for a symbol name based
-  // on the data object.
-
-  StringRef Ins(DataP->Data, DataP->Size);
-  SymbolContext *Sym = Helper.createBinary(Ins, Name, DataP->DataKind);
+  SymbolContext *Sym = Helper.createBinary(DataP, Name);
   if (!Sym) {
     return AMD_COMGR_STATUS_ERROR;
   }

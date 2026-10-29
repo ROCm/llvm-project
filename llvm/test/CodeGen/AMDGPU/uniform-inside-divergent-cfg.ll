@@ -15,8 +15,7 @@ define amdgpu_kernel void @div_unif_div(ptr addrspace(1) %out, float %ubeta, i32
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_8
 ; CHECK-NEXT:  .LBB0_1: ; %A
-; CHECK-NEXT:    v_cmp_eq_f32_e64 s0, s0, 0
-; CHECK-NEXT:    s_and_b32 vcc_lo, exec_lo, s0
+; CHECK-NEXT:    v_cmp_eq_f32_e64 vcc_lo, s0, 0
 ; CHECK-NEXT:    s_cbranch_vccnz .LBB0_6
 ; CHECK-NEXT:  ; %bb.2: ; %B
 ; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 2, v0
@@ -37,13 +36,13 @@ define amdgpu_kernel void @div_unif_div(ptr addrspace(1) %out, float %ubeta, i32
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_8
 ; CHECK-NEXT:  .LBB0_5: ; %B1
-; CHECK-NEXT:    s_mov_b32 s0, -1
 ; CHECK-NEXT:    v_add_nc_u32_e32 v1, 7, v0
 ; CHECK-NEXT:    s_branch .LBB0_7
 ; CHECK-NEXT:  .LBB0_6:
-; CHECK-NEXT:    s_mov_b32 s0, -1
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 1
 ; CHECK-NEXT:  .LBB0_7: ; %join
+; CHECK-NEXT:    s_mov_b32 s0, -1
+; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; CHECK-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s0
 ; CHECK-NEXT:  .LBB0_8: ; %join
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s1
@@ -108,43 +107,39 @@ define amdgpu_kernel void @unif_div(ptr addrspace(1) %out, float %u1, float %u2,
 ; CHECK-NEXT:    v_cmp_le_u32_e64 s0, s10, v0
 ; CHECK-NEXT:    s_xor_b32 exec_lo, s0, exec_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
-; CHECK-NEXT:    s_cbranch_execz .LBB1_8
+; CHECK-NEXT:    s_cbranch_execz .LBB1_7
 ; CHECK-NEXT:  .LBB1_1: ; %A
-; CHECK-NEXT:    v_cmp_eq_f32_e64 s1, s8, 0
-; CHECK-NEXT:    s_and_b32 vcc_lo, exec_lo, s1
+; CHECK-NEXT:    v_cmp_eq_f32_e64 vcc_lo, s8, 0
 ; CHECK-NEXT:    s_cbranch_vccnz .LBB1_4
 ; CHECK-NEXT:  ; %bb.2: ; %B
-; CHECK-NEXT:    v_cmp_eq_f32_e64 s1, s9, 0
-; CHECK-NEXT:    s_and_b32 vcc_lo, exec_lo, s1
+; CHECK-NEXT:    v_cmp_eq_f32_e64 vcc_lo, s9, 0
 ; CHECK-NEXT:    s_cbranch_vccnz .LBB1_5
 ; CHECK-NEXT:  ; %bb.3: ; %C
 ; CHECK-NEXT:    v_add_nc_u32_e32 v1, 7, v0
 ; CHECK-NEXT:    s_branch .LBB1_6
 ; CHECK-NEXT:  .LBB1_4:
-; CHECK-NEXT:    s_mov_b32 s1, -1
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 1
-; CHECK-NEXT:    s_branch .LBB1_7
+; CHECK-NEXT:    s_branch .LBB1_6
 ; CHECK-NEXT:  .LBB1_5: ; %D
 ; CHECK-NEXT:    v_mul_u32_u24_e32 v1, 3, v0
 ; CHECK-NEXT:  .LBB1_6: ; %join
 ; CHECK-NEXT:    s_mov_b32 s1, -1
-; CHECK-NEXT:  .LBB1_7: ; %join
 ; CHECK-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; CHECK-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s1
-; CHECK-NEXT:  .LBB1_8: ; %join
+; CHECK-NEXT:  .LBB1_7: ; %join
 ; CHECK-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; CHECK-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
 ; CHECK-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
 ; CHECK-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; CHECK-NEXT:    ; divergent control-flow edge
-; CHECK-NEXT:    s_cbranch_execz .LBB1_10
-; CHECK-NEXT:  .LBB1_9: ; %do.store
+; CHECK-NEXT:    s_cbranch_execz .LBB1_9
+; CHECK-NEXT:  .LBB1_8: ; %do.store
 ; CHECK-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    global_store_b32 v0, v1, s[0:1]
-; CHECK-NEXT:  .LBB1_10: ; %exit
+; CHECK-NEXT:  .LBB1_9: ; %exit
 ; CHECK-NEXT:    s_endpgm
 entry:
   %tid = call i32 @llvm.amdgcn.workitem.id.x()

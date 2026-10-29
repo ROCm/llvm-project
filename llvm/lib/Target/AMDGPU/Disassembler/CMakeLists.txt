@@ -10,7 +10,6 @@ add_llvm_component_library(LLVMAMDGPUDisassembler
   CodeGenTypes
   MC
   MCDisassembler
-  Object
   TargetParser
   Support
 

@@ -231,7 +231,7 @@ void foo() {
 // SIMD DIRECTIVE
 #pragma omp simd
   for (int i = 0; i < 10; ++i) {
-#pragma omp for // omp45-error {{OpenMP constructs may not be nested inside a simd region}} omp50-error {{OpenMP constructs may not be nested inside a simd region except for ordered simd, simd, scan, or atomic directive}} omp51-error {{OpenMP constructs may not be nested inside a simd region except for ordered simd, simd, scan, or atomic directive}}
+#pragma omp for // omp45-error {{OpenMP constructs may not be nested inside a simd region}} omp50-error {{OpenMP constructs may not be nested inside a simd region except for ordered simd, simd, scan, atomic, or loop directive}} omp51-error {{OpenMP constructs may not be nested inside a simd region except for ordered simd, simd, scan, atomic, or loop directive}}
     for (int i = 0; i < 10; ++i)
       ;
   }
@@ -9271,7 +9271,7 @@ void foo() {
   }
 #pragma omp target teams distribute parallel for
   for (int i = 0; i < 10; ++i) {
-#pragma omp scan // omp45-error {{region cannot be closely nested inside 'target teams distribute parallel for' region}} omp50-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp51-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp50-error {{'scan' directive is not supported inside target regions. Use flag '-fopenmp-target-xteam-scan' to enable it}} omp51-error {{'scan' directive is not supported inside target regions. Use flag '-fopenmp-target-xteam-scan' to enable it}}
+#pragma omp scan // omp45-error {{region cannot be closely nested inside 'target teams distribute parallel for' region}} omp50-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp51-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp50-error {{'scan' directive is not supported inside target regions}} omp51-error {{'scan' directive is not supported inside target regions}}
     bar();
   }
 #pragma omp target teams distribute parallel for
@@ -18547,7 +18547,7 @@ void foo() {
   }
 #pragma omp target teams distribute parallel for
   for (int i = 0; i < 10; ++i) {
-#pragma omp scan // omp45-error {{region cannot be closely nested inside 'target teams distribute parallel for' region}} omp50-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp51-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp50-error {{'scan' directive is not supported inside target regions. Use flag '-fopenmp-target-xteam-scan' to enable it}} omp51-error {{'scan' directive is not supported inside target regions. Use flag '-fopenmp-target-xteam-scan' to enable it}}
+#pragma omp scan // omp45-error {{region cannot be closely nested inside 'target teams distribute parallel for' region}} omp50-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp51-error {{exactly one of 'inclusive' or 'exclusive' clauses is expected}} omp50-error {{'scan' directive is not supported inside target regions}} omp51-error {{'scan' directive is not supported inside target regions}}
     bar();
   }
 #pragma omp target teams distribute parallel for

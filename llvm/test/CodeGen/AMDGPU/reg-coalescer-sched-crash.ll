@@ -11,9 +11,9 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX6-LABEL: reg_coalescer_breaks_dead:
 ; GFX6:       ; %bb.0: ; %bb
 ; GFX6-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX6-NEXT:    v_mov_b32_e32 v1, 0
+; GFX6-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX6-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX6-NEXT:    v_mov_b32_e32 v2, 0
+; GFX6-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX6-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB0_2
@@ -27,8 +27,8 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX6-NEXT:    s_addc_u32 s1, s3, s1
 ; GFX6-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0x0
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX6-NEXT:    v_mov_b32_e32 v1, s0
-; GFX6-NEXT:    v_mov_b32_e32 v2, s1
+; GFX6-NEXT:    v_mov_b32_e32 v0, s0
+; GFX6-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX6-NEXT:  .LBB0_2: ; %bb4
 ; GFX6-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX6-NEXT:    s_load_dword s0, s[4:5], 0xe
@@ -39,15 +39,15 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX6-NEXT:    s_cbranch_vccz .LBB0_4
 ; GFX6-NEXT:  ; %bb.3: ; %bb15
 ; GFX6-NEXT:    s_mov_b32 m0, -1
-; GFX6-NEXT:    ds_write_b64 v0, v[1:2]
+; GFX6-NEXT:    ds_write_b64 v0, v[0:1]
 ; GFX6-NEXT:  .LBB0_4: ; %bb16
 ;
 ; GFX8-LABEL: reg_coalescer_breaks_dead:
 ; GFX8:       ; %bb.0: ; %bb
 ; GFX8-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX8-NEXT:    v_mov_b32_e32 v1, 0
+; GFX8-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX8-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX8-NEXT:    v_mov_b32_e32 v2, 0
+; GFX8-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX8-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB0_2
@@ -61,8 +61,8 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX8-NEXT:    s_addc_u32 s1, s3, s1
 ; GFX8-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0x0
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-NEXT:    v_mov_b32_e32 v1, s0
-; GFX8-NEXT:    v_mov_b32_e32 v2, s1
+; GFX8-NEXT:    v_mov_b32_e32 v0, s0
+; GFX8-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX8-NEXT:  .LBB0_2: ; %bb4
 ; GFX8-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX8-NEXT:    s_load_dword s0, s[4:5], 0x38
@@ -73,7 +73,7 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX8-NEXT:    s_cbranch_vccz .LBB0_4
 ; GFX8-NEXT:  ; %bb.3: ; %bb15
 ; GFX8-NEXT:    s_mov_b32 m0, -1
-; GFX8-NEXT:    ds_write_b64 v0, v[1:2]
+; GFX8-NEXT:    ds_write_b64 v0, v[0:1]
 ; GFX8-NEXT:  .LBB0_4: ; %bb16
 bb:
   %id.x = call i32 @llvm.amdgcn.workitem.id.x()

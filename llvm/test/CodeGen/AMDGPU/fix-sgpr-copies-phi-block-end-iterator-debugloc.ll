@@ -8,8 +8,8 @@ define i32 @rocrand_regression(ptr addrspace(1) %arg, i32 %arg0, i1 %cmp7) {
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v3
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
-; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; CHECK-NEXT:    s_mov_b32 s6, 0
+; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; CHECK-NEXT:  .LBB0_1: ; %while.cond
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0

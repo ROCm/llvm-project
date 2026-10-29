@@ -1,9 +1,8 @@
 // clang-format off
-// This test verifies that the reduction kernel is of Xteam reduction
-// type and is launched with as many teams as the number of CUs.
+// This test verifies the result of a cross-team reduction kernel with the
+// default grid size. teams_reduction_grid.c verifies the grid size.
 // RUN: %libomptarget-compile-generic -fopenmp-target-fast
-// RUN: env LIBOMPTARGET_DEBUG=1 \
-// RUN:   %libomptarget-run-generic 2>&1 | %fcheck-generic
+// RUN: %libomptarget-run-generic 2>&1 | %fcheck-generic
 
 // UNSUPPORTED: nvptx64-nvidia-cuda
 // UNSUPPORTED: nvptx64-nvidia-cuda-LTO
@@ -35,6 +34,5 @@ int main() {
   return 0;
 }
 // clang-format off
-/// CHECK: xteam-red:NumCUs=[[CU_COUNT:[0-9]+]]
-/// CHECK: xteam-red:NumGroups=[[CU_COUNT]]
+/// CHECK: sum1=499999500000.000000
 

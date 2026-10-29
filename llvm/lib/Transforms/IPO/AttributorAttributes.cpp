@@ -267,7 +267,8 @@ static bool isDenselyPacked(Type *Ty, const DataLayout &DL) {
     StartPos += DL.getTypeAllocSizeInBits(ElTy);
   }
 
-  return true;
+  // Check for tail padding.
+  return StartPos == Layout->getSizeInBits();
 }
 
 /// Get pointer operand of memory accessing instruction. If \p I is
@@ -1778,7 +1779,8 @@ struct AAPointerInfoFloating : public AAPointerInfoImpl {
       int64_t ElementSize = DL.getTypeStoreSize(ElementType).getFixedValue();
       auto *ConstContent = cast<Constant>(*Content);
       Type *Int32Ty = Type::getInt32Ty(ElementType->getContext());
-      SmallVector<int64_t> ElementOffsets(Offsets.begin(), Offsets.end());
+      SmallVector<int64_t> ElementOffsets(OffsetsSorted.begin(),
+                                          OffsetsSorted.end());
 
       for (int i = 0, e = VT->getElementCount().getFixedValue(); i != e; ++i) {
         Value *ElementContent = ConstantExpr::getExtractElement(
@@ -1916,15 +1918,12 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
     assert(!OffsetInfoMap[CurPtr].isUnassigned() &&
            "Current pointer should be assigned");
 
-    if (ConstantExpr *CE = dyn_cast<ConstantExpr>(Usr)) {
-      if (CE->isCast())
-        return HandlePassthroughUser(Usr, CurPtr, Follow);
-      if (!isa<GEPOperator>(CE)) {
-        LLVM_DEBUG(dbgs() << "[AAPointerInfo] Unhandled constant user " << *CE
-                          << "\n");
-        return false;
-      }
-    }
+    // Only address space casts are followed; other casts of a pointer (e.g.,
+    // ptrtoint, ptrtoaddr, or a bitcast to a byte type) do not produce a
+    // pointer that can be tracked.
+    if (isa<AddrSpaceCastOperator>(Usr))
+      return HandlePassthroughUser(Usr, CurPtr, Follow);
+
     if (auto *GEP = dyn_cast<GEPOperator>(Usr)) {
       // Note the order here, the Usr access might change the map, CurPtr is
       // already in it though.
@@ -1943,9 +1942,7 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
       Follow = collectConstantsForGEP(A, DL, UsrOI, PtrOI, GEP);
       return true;
     }
-    if (isa<PtrToIntInst>(Usr))
-      return false;
-    if (isa<CastInst>(Usr) || isa<SelectInst>(Usr))
+    if (isa<SelectInst>(Usr))
       return HandlePassthroughUser(Usr, CurPtr, Follow);
     // Returns are allowed if they are in the associated functions. Users can
     // then check the call site return. Returns from other functions can't be
@@ -4259,7 +4256,7 @@ struct AANoAliasCallSiteArgument final : AANoAliasImpl {
                             const AAMemoryBehavior &MemBehaviorAA,
                             const CallBase &CB, unsigned OtherArgNo) {
     // We do not need to worry about aliasing with the underlying IRP.
-    if (this->getCalleeArgNo() == (int)OtherArgNo)
+    if (this->getCallSiteArgNo() == (int)OtherArgNo)
       return false;
 
     // If it is not a pointer or pointer vector we do not alias.
@@ -4895,6 +4892,12 @@ struct AAIsDeadFunction : public AAIsDead {
   bool isAssumedDeadInternalFunction(Attributor &A) {
     if (!getAnchorScope()->hasLocalLinkage())
       return false;
+    // An AA that will not be updated is fixed pessimistically right after
+    // initialization, so an assumed-dead result would be discarded. Checking
+    // the call sites recursively initializes the liveness of every internal
+    // caller, which in CGSCC cleanup repeats for each callee SCC.
+    if (!A.shouldUpdateAA<AAIsDead>(getIRPosition()))
+      return false;
     bool UsedAssumedInformation = false;
     return A.checkForAllCallSites([](AbstractCallSite) { return false; }, *this,
                                   true, UsedAssumedInformation);
@@ -5025,6 +5028,9 @@ struct AAIsDeadFunction : public AAIsDead {
     if (!AssumedLiveBlocks.insert(&BB).second)
       return false;
 
+    if (!A.isDuringDeduction())
+      return true;
+
     // We assume that all of BB is (probably) live now and if there are calls to
     // internal functions we will assume that those are now live as well. This
     // is a performance optimization for blocks with calls to a lot of internal
@@ -5032,8 +5038,16 @@ struct AAIsDeadFunction : public AAIsDead {
     for (const Instruction &I : BB)
       if (const auto *CB = dyn_cast<CallBase>(&I))
         if (auto *F = dyn_cast_if_present<Function>(CB->getCalledOperand()))
-          if (F->hasLocalLinkage())
+          if (F->hasLocalLinkage()) {
+            LLVM_DEBUG({
+              dbgs() << "[AAIsDead] Seeding live internal callee ";
+              F->printAsOperand(dbgs(), /*PrintType=*/false);
+              dbgs() << " from ";
+              BB.getParent()->printAsOperand(dbgs(), /*PrintType=*/false);
+              dbgs() << "\n";
+            });
             A.markLiveInternalFunction(*F);
+          }
     return true;
   }
 
@@ -5611,7 +5625,7 @@ static unsigned getKnownAlignForUse(Attributor &A, AAAlign &QueryingAA,
       if (ConstVals && ConstVals->isValidState() && ConstVals->isAtFixpoint()) {
         unsigned ShiftValue = std::min(ConstVals->getAssumedMinTrailingZeros(),
                                        Value::MaxAlignmentExponent);
-        Align ConstAlign(UINT64_C(1) << ShiftValue);
+        Align ConstAlign = Align::fromLog2(ShiftValue);
         if (ConstAlign >= AlignAA->getKnownAlign())
           return Align(1).value();
       }
@@ -5942,7 +5956,7 @@ struct AAAlignCallSiteReturned final
           unsigned ShiftValue =
               std::min(ConstVals->getAssumedMinTrailingZeros(),
                        Value::MaxAlignmentExponent);
-          Alignment = Align(UINT64_C(1) << ShiftValue);
+          Alignment = Align::fromLog2(ShiftValue);
           Valid = true;
         }
 
@@ -6222,12 +6236,11 @@ bool AANoCapture::isImpliedByIR(Attributor &A, const IRPosition &IRP,
   if (!isa<Constant>(V) && !IRP.isArgumentPosition())
     return V.use_empty();
 
-  // You cannot "capture" null in the default address space.
-  //
-  // FIXME: This should use NullPointerIsDefined to account for the function
-  // attribute.
-  if (isa<UndefValue>(V) || (isa<ConstantPointerNull>(V) &&
-                             V.getType()->getPointerAddressSpace() == 0)) {
+  // You cannot "capture" null if it is not a valid pointer.
+  if (isa<UndefValue>(V) ||
+      (isa<ConstantPointerNull>(V) &&
+       !NullPointerIsDefined(IRP.getAnchorScope(),
+                             V.getType()->getPointerAddressSpace()))) {
     return true;
   }
 
@@ -7275,9 +7288,8 @@ struct AAHeapToStackFunction final : public AAHeapToStack {
       if (SizeAPI) {
         Size = ConstantInt::get(AI.CB->getContext(), *SizeAPI);
       } else {
-        LLVMContext &Ctx = AI.CB->getContext();
         ObjectSizeOpts Opts;
-        ObjectSizeOffsetEvaluator Eval(DL, TLI, Ctx, Opts);
+        ObjectSizeOffsetEvaluator Eval(*AI.CB->getModule(), TLI, Opts);
         SizeOffsetValue SizeOffsetPair = Eval.compute(AI.CB);
         assert(SizeOffsetPair != ObjectSizeOffsetEvaluator::unknown() &&
                cast<ConstantInt>(SizeOffsetPair.Offset)->isZero());
@@ -8002,7 +8014,7 @@ struct AAPrivatizablePtrArgument final : public AAPrivatizablePtrImpl {
                                    unsigned ArgNo, BasicBlock::iterator IP) {
     assert(PrivType && "Expected privatizable type!");
 
-    IRBuilder<NoFolder> IRB(IP->getParent(), IP);
+    IRBuilder<NoFolder> IRB(IP);
     const DataLayout &DL = F.getDataLayout();
 
     // Traverse the type, build GEPs and stores.
@@ -9131,9 +9143,10 @@ void AAMemoryLocationImpl::categorizePtrValue(
         MLK = NO_GLOBAL_INTERNAL_MEM;
       else
         MLK = NO_GLOBAL_EXTERNAL_MEM;
-    } else if (isa<ConstantPointerNull>(&Obj) &&
-               (!NullPointerIsDefined(getAssociatedFunction(), AccessAS) ||
-                !NullPointerIsDefined(getAssociatedFunction(), ObjectAS))) {
+    } else if (isa<ConstantPointerNull>(&Obj) && ObjectAS == AccessAS &&
+               !NullPointerIsDefined(getAssociatedFunction(), AccessAS)) {
+      // Accessing null is undefined, but not accessing a null pointer cast to
+      // another address space, which may be a valid address there.
       return true;
     } else if (isa<AllocaInst>(&Obj)) {
       MLK = NO_LOCAL_MEM;
@@ -9597,19 +9610,6 @@ struct AAValueConstantRangeImpl : AAValueConstantRange {
     }
 
     return true;
-  }
-
-  /// See AAValueConstantRange::getKnownConstantRange(..).
-  ConstantRange
-  getKnownConstantRange(Attributor &A,
-                        const Instruction *CtxI = nullptr) const override {
-    if (!isValidCtxInstructionForOutsideAnalysis(A, CtxI,
-                                                 /* AllowAACtxI */ false))
-      return getKnown();
-
-    ConstantRange LVIR = getConstantRangeFromLVI(A, CtxI);
-    ConstantRange SCEVR = getConstantRangeFromSCEV(A, CtxI);
-    return getKnown().intersectWith(SCEVR).intersectWith(LVIR);
   }
 
   /// See AAValueConstantRange::getAssumedConstantRange(..).
@@ -10895,7 +10895,7 @@ struct AANoFPClassImpl : AANoFPClass {
       SimplifyQuery Q(DL, TLI, DT, AC, CtxI);
 
       KnownFPClass KnownFPClass = computeKnownFPClass(&V, fcAllFlags, Q);
-      addKnownBits(~KnownFPClass.KnownFPClasses);
+      addKnownBits(~KnownFPClass.getKnownFPClasses());
     }
 
     if (CtxI)
@@ -11114,24 +11114,14 @@ struct AACallEdgesCallSite : public AACallEdgesImpl {
       }
       return Change;
     }
-#ifndef  AAIndirectCallInfo_nolonger_breaks_snap_miteams
-    // Process callee metadata if available.
-    if (auto *MD = getCtxI()->getMetadata(LLVMContext::MD_callees)) {
-      for (const auto &Op : MD->operands()) {
-        Function *Callee = mdconst::dyn_extract_or_null<Function>(Op);
-        if (Callee)
-          addCalledFunction(Callee, Change);
-      }
-      return Change;
-    }
-#else
+
     if (CB->isIndirectCall())
       if (auto *IndirectCallAA = A.getAAFor<AAIndirectCallInfo>(
               *this, getIRPosition(), DepClassTy::OPTIONAL))
         if (IndirectCallAA->foreachCallee(
                 [&](Function *Fn) { return VisitValue(*Fn, CB); }))
           return Change;
-#endif
+
     // The most simple case.
     ProcessCalledOperand(CB->getCalledOperand(), CB);
 
@@ -12614,6 +12604,11 @@ struct AAGlobalValueInfoFloating : public AAGlobalValueInfo {
                 SmallVectorImpl<const Value *> &Worklist) {
     Instruction *UInst = dyn_cast<Instruction>(U.getUser());
     if (!UInst) {
+      // Outside a closed world, code outside the module can read an
+      // externally visible global, so the value escapes through it.
+      if (auto *GV = dyn_cast<GlobalValue>(U.getUser()))
+        if (!GV->hasLocalLinkage() && !A.isClosedWorldModule())
+          return false;
       Follow = true;
       return true;
     }
@@ -12870,10 +12865,12 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
       return ChangeStatus::UNCHANGED;
 
     ChangeStatus Changed = ChangeStatus::UNCHANGED;
+    unsigned ProgramAS = CB->getDataLayout().getProgramAddressSpace();
     Value *FP = CB->getCalledOperand();
-    if (FP->getType()->getPointerAddressSpace())
-      FP = new AddrSpaceCastInst(FP, PointerType::get(FP->getContext(), 0),
-                                 FP->getName() + ".as0", CB->getIterator());
+    if (FP->getType()->getPointerAddressSpace() != ProgramAS)
+      FP = new AddrSpaceCastInst(
+          FP, PointerType::get(FP->getContext(), ProgramAS),
+          FP->getName() + ".as" + Twine(ProgramAS), CB->getIterator());
 
     bool CBIsVoid = CB->getType()->isVoidTy();
     BasicBlock::iterator IP = CB->getIterator();
@@ -13345,8 +13342,12 @@ struct AAInvariantLoadPointerCallSiteReturned final
       : AAInvariantLoadPointerImpl(IRP, A) {}
 
   void initialize(Attributor &A) override {
+    // Nothing is known about the result of an indirect call.
     const Function *F = getAssociatedFunction();
-    assert(F && "no associated function for return from call");
+    if (!F) {
+      indicatePessimisticFixpoint();
+      return;
+    }
 
     if (!F->isDeclaration() && !F->isIntrinsic())
       return AAInvariantLoadPointerImpl::initialize(A);

@@ -29,12 +29,9 @@ MATH_MANGLE(exp)(double x)
     double t = MATH_MAD(-dn, 0x1.abc9e3b39803fp-56, MATH_MAD(-dn, 0x1.62e42fefa39efp-1, x));
 #endif
 
-    double p = MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, 
-               MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, MATH_MAD(t, 
-               MATH_MAD(t, MATH_MAD(t, MATH_MAD(t,
-                   0x1.ade156a5dcb37p-26, 0x1.28af3fca7ab0cp-22), 0x1.71dee623fde64p-19), 0x1.a01997c89e6b0p-16),
-                   0x1.a01a014761f6ep-13), 0x1.6c16c1852b7b0p-10), 0x1.1111111122322p-7), 0x1.55555555502a1p-5),
-                   0x1.5555555555511p-3), 0x1.000000000000bp-1), 1.0), 1.0);
+    double p = PE11(t, 0x1.ade156a5dcb37p-26, 0x1.28af3fca7ab0cp-22, 0x1.71dee623fde64p-19, 0x1.a01997c89e6b0p-16,
+                     0x1.a01a014761f6ep-13, 0x1.6c16c1852b7b0p-10, 0x1.1111111122322p-7,
+                     0x1.55555555502a1p-5, 0x1.5555555555511p-3, 0x1.000000000000bp-1, 1.0, 1.0);
 
 
     double z = BUILTIN_FLDEXP_F64(p, (int)dn);

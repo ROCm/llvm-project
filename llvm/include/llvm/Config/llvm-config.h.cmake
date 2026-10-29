@@ -14,11 +14,6 @@
 #ifndef LLVM_CONFIG_H
 #define LLVM_CONFIG_H
 
-/* The number of commits in the linear history from the
- * start of the universe up to the latest llvm main commit
- * that has been merged */
-#define LLVM_MAIN_REVISION 593846
-
 /* Define if LLVM_ENABLE_DUMP is enabled */
 #cmakedefine LLVM_ENABLE_DUMP
 
@@ -102,6 +97,9 @@
 
 /* Define if zstd compression is available */
 #cmakedefine01 LLVM_ENABLE_ZSTD
+
+/* Define if xz (lzma) decompression is available */
+#cmakedefine01 LLVM_ENABLE_LZMA
 
 /* Define if LLVM is using tflite */
 #cmakedefine LLVM_HAVE_TFLITE

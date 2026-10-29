@@ -41,7 +41,6 @@ jobs:
     name: Build Artifacts
     if: ${{ inputs.use_prebuilt_artifacts == 'false' }}
     uses: ./.github/workflows/build_portable_linux_artifacts.yml
-    secrets: inherit
     with:
       artifact_group: ${{ inputs.artifact_group }}
       package_version: ${{ inputs.rocm_package_version }}

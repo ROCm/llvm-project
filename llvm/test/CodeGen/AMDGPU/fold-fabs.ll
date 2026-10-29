@@ -13,7 +13,7 @@ define float @fold_abs_in_branch(float %arg1, float %arg2) {
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX10-NEXT:  .LBB0_1: ; %if
-; GFX10-NEXT:    v_mul_f32_e64 v0, 0x3e4ccccd, |v1|
+; GFX10-NEXT:    v_mul_f32_e64 v0, |v1|, 0x3e4ccccd
 ; GFX10-NEXT:  .LBB0_2: ; %exit
 ; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
@@ -46,7 +46,7 @@ define float @fold_abs_in_branch_multiple_users(float %arg1, float %arg2) {
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX10-NEXT:  .LBB1_1: ; %if
-; GFX10-NEXT:    v_mul_f32_e64 v1, 0x3e4ccccd, |v0|
+; GFX10-NEXT:    v_mul_f32_e64 v1, |v0|, 0x3e4ccccd
 ; GFX10-NEXT:  .LBB1_2: ; %exit
 ; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-NEXT:    v_add_f32_e64 v0, |v0|, 2.0
@@ -79,7 +79,7 @@ define float @fold_abs_in_branch_undef(float %arg1, float %arg2) {
 ; GFX10-NEXT:    v_cmp_lt_f32_e32 vcc_lo, 1.0, v0
 ; GFX10-NEXT:    s_cbranch_vccnz .LBB2_2
 ; GFX10-NEXT:  ; %bb.1: ; %if
-; GFX10-NEXT:    v_mul_f32_e64 v0, 0x3e4ccccd, |s4|
+; GFX10-NEXT:    v_mul_f32_e64 v0, |s4|, 0x3e4ccccd
 ; GFX10-NEXT:  .LBB2_2: ; %exit
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 entry:
@@ -134,7 +134,7 @@ define float @fold_abs_in_branch_fabs(float %arg1, float %arg2) {
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB4_2
 ; GFX10-NEXT:  .LBB4_1: ; %if
-; GFX10-NEXT:    v_mul_f32_e64 v0, 0x3e4ccccd, |v1|
+; GFX10-NEXT:    v_mul_f32_e64 v0, |v1|, 0x3e4ccccd
 ; GFX10-NEXT:  .LBB4_2: ; %exit
 ; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]

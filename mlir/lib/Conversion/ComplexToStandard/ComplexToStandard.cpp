@@ -317,6 +317,9 @@ struct ExpOpConversion : public OpConversionPattern<complex::ExpOp> {
   // Handle special cases as StableHLO implementation does:
   // 1. When b == 0, set imag(exp(z)) = 0
   // 2. When exp(x) == inf, use exp(x/2)*(cos(y)+I*sin(y))*exp(x/2)
+  // Handle non-finite inputs according to C99 annex G:
+  // 3. When x == -inf and y is non-finite, return 0 + I*0.
+  // 4. When x == +inf and y is non-finite, return inf + I*NaN.
   LogicalResult
   matchAndRewrite(complex::ExpOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
@@ -360,6 +363,24 @@ struct ExpOpConversion : public OpConversionPattern<complex::ExpOp> {
     Value imagNonZero =
         arith::SelectOp::create(b, expIsInf, imagOverflow, imagNormal);
     Value resultImag = arith::SelectOp::create(b, yIsZero, zero, imagNonZero);
+
+    // When x is +-inf and y is +-inf or NaN, exp(x) * cos(y) is inf * NaN or
+    // 0 * NaN. C99 Annex G gives exp(-inf + I*y) = +-0 +- 0*I and
+    // exp(+inf + I*y) = +-inf + NaN*I for these y.
+    if (!arith::bitEnumContainsAll(fmf, arith::FastMathFlags::ninf)) {
+      Value absX = math::AbsFOp::create(b, x);
+      Value absY = math::AbsFOp::create(b, y);
+      Value yIsNotFinite =
+          arith::CmpFOp::create(b, arith::CmpFPredicate::UGE, absY, inf);
+      Value xIsInf =
+          arith::CmpFOp::create(b, arith::CmpFPredicate::OEQ, absX, inf);
+      Value xIsNeg =
+          arith::CmpFOp::create(b, arith::CmpFPredicate::OLT, x, zero);
+      Value useExpX = arith::AndIOp::create(b, xIsInf, yIsNotFinite);
+      Value useZeroImag = arith::AndIOp::create(b, useExpX, xIsNeg);
+      resultReal = arith::SelectOp::create(b, useExpX, exp, resultReal);
+      resultImag = arith::SelectOp::create(b, useZeroImag, zero, resultImag);
+    }
 
     rewriter.replaceOpWithNewOp<complex::CreateOp>(op, type, resultReal,
                                                    resultImag);
@@ -592,13 +613,14 @@ struct NegOpConversion : public OpConversionPattern<complex::NegOp> {
     auto loc = op.getLoc();
     auto type = cast<ComplexType>(adaptor.getComplex().getType());
     auto elementType = cast<FloatType>(type.getElementType());
+    arith::FastMathFlags fmf = op.getFastMathFlagsAttr().getValue();
 
     Value real =
         complex::ReOp::create(rewriter, loc, elementType, adaptor.getComplex());
     Value imag =
         complex::ImOp::create(rewriter, loc, elementType, adaptor.getComplex());
-    Value negReal = arith::NegFOp::create(rewriter, loc, real);
-    Value negImag = arith::NegFOp::create(rewriter, loc, imag);
+    Value negReal = arith::NegFOp::create(rewriter, loc, real, fmf);
+    Value negImag = arith::NegFOp::create(rewriter, loc, imag, fmf);
     rewriter.replaceOpWithNewOp<complex::CreateOp>(op, type, negReal, negImag);
     return success();
   }
@@ -777,11 +799,13 @@ struct TanTanhOpConversion : public OpConversionPattern<Op> {
                                            b.getFloatAttr(elementType, 4.0));
     Value twoReal = arith::AddFOp::create(b, real, real, fmf);
     Value negTwoReal = arith::MulFOp::create(b, negOne, twoReal, fmf);
-
     Value expTwoRealMinusOne = math::ExpM1Op::create(b, twoReal, fmf);
     Value expNegTwoRealMinusOne = math::ExpM1Op::create(b, negTwoReal, fmf);
     Value realNum = arith::SubFOp::create(b, expTwoRealMinusOne,
                                           expNegTwoRealMinusOne, fmf);
+    Value expProduct = arith::MulFOp::create(b, expTwoRealMinusOne,
+                                             expNegTwoRealMinusOne, fmf);
+    Value expSumMinusTwo = arith::MulFOp::create(b, negOne, expProduct, fmf);
 
     Value cosImag = math::CosOp::create(b, imag, fmf);
     Value cosImagSq = arith::MulFOp::create(b, cosImag, cosImag, fmf);
@@ -791,8 +815,6 @@ struct TanTanhOpConversion : public OpConversionPattern<Op> {
     Value imagNum = arith::MulFOp::create(
         b, four, arith::MulFOp::create(b, cosImag, sinImag, fmf), fmf);
 
-    Value expSumMinusTwo = arith::AddFOp::create(b, expTwoRealMinusOne,
-                                                 expNegTwoRealMinusOne, fmf);
     Value denom =
         arith::AddFOp::create(b, expSumMinusTwo, twoCosTwoImagPlusOne, fmf);
 
@@ -851,11 +873,13 @@ struct ConjOpConversion : public OpConversionPattern<complex::ConjOp> {
     auto loc = op.getLoc();
     auto type = cast<ComplexType>(adaptor.getComplex().getType());
     auto elementType = cast<FloatType>(type.getElementType());
+    arith::FastMathFlags fmf = op.getFastMathFlagsAttr().getValue();
     Value real =
         complex::ReOp::create(rewriter, loc, elementType, adaptor.getComplex());
     Value imag =
         complex::ImOp::create(rewriter, loc, elementType, adaptor.getComplex());
-    Value negImag = arith::NegFOp::create(rewriter, loc, elementType, imag);
+    Value negImag =
+        arith::NegFOp::create(rewriter, loc, elementType, imag, fmf);
 
     rewriter.replaceOpWithNewOp<complex::CreateOp>(op, type, real, negImag);
 

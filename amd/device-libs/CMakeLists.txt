@@ -82,7 +82,8 @@ if (NOT ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW STREQUAL "" AND
           ${ROCM_DEVICE_LIBS_WRAPPER_DIR}/${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD})
   install(
       FILES ${ROCM_DEVICE_LIBS_WRAPPER_DIR}/${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD}
-      DESTINATION .)
+      DESTINATION .
+      COMPONENT device-libs)
 endif()
 
 set(AMDGCN_LIB_LIST)
@@ -98,6 +99,12 @@ enable_testing()
 add_subdirectory(test/compile)
 
 include(Packages)
+
+if(NOT ROCM_DEVICELIB_STANDALONE_BUILD)
+  add_llvm_install_targets(install-device-libs
+                           DEPENDS rocm-device-libs
+                           COMPONENT device-libs)
+endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   ## CPack standard variables

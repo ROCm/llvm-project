@@ -101,33 +101,17 @@ set(SOURCES
   src/comgr-diagnostic-handler.cpp
   src/comgr-disassembly.cpp
   src/comgr-env.cpp
+  src/comgr-hotswap-stubs.cpp
   src/comgr-libcxx-headers.cpp
   src/comgr-logger.cpp
+  src/comgr-metadata.cpp
   src/comgr-signal.cpp
   src/comgr-spirv-command.cpp
+  src/comgr-symbol.cpp
   src/comgr-symbolizer.cpp
   src/comgr-unbundle-command.cpp
   src/comgr-unpackage-command.cpp
   src/time-stat/time-stat.cpp)
-
-# Code-object metadata and symbol helpers, built once as an internal OBJECT
-# library so amd_comgr and the hotswap test drivers link the same objects
-# instead of recompiling these sources with divergent flags. The drivers need
-# the buffer-facing getMetadataRoot / getElfIsaName / lookupSymbolByName entry
-# points without the amd_comgr C API; sharing the objects keeps a single
-# definition and a single set of compile flags.
-set(COMGR_OBJECT_UTILS_SOURCES
-  src/comgr-metadata.cpp
-  src/comgr-symbol.cpp)
-
-# Hotswap IR transpiler (raiser), opt-in. The raiser lives under
-# amd/comgr/src/hotswap/raiser as a private COMGR subproject. When enabled, we
-# link the hotswap::raiser OBJECT library into amd_comgr (its TUs land directly
-# in amd_comgr.so so hotswap files can call comgr-metadata helpers
-# without a layering inversion) and compile the transpile entry point. When
-# disabled, the amd_comgr_hotswap_transpile API is simply not provided.
-option(COMGR_ENABLE_HOTSWAP_TRANSPILE
-  "Build the hotswap-raiser-backed amd_comgr_hotswap_transpile entry point" OFF)
 
 # Add Windows resource file for version info
 if(WIN32)
@@ -194,28 +178,9 @@ else()
   endif()
 endif()
 
-# Allow the super-project to force static linking of LLVM/Clang into comgr.
-# When ON, LLVM symbols are hidden by comgr's version script (local: *;),
-# avoiding symbol interposition issues without requiring namespace isolation.
-option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
-if(COMGR_STATIC_LLVM)
-  set(LLVM_LINK_LLVM_DYLIB OFF)
-  set(CLANG_LINK_CLANG_DYLIB OFF)
-endif()
-
 target_include_directories(amd_comgr
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-# The hotswap subdirectory is added unconditionally below (around the
-# add_subdirectory(src/hotswap) line) so the OBJECT libraries are available
-# to the test-unit suite; here we opt amd_comgr into exposing the
-# `amd_comgr_hotswap_transpile` entry point. The hotswap link edges are
-# added after the curated LLVM/LLD link block below (see "hotswap link
-# edges"), not here.
-if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
-  target_compile_definitions(amd_comgr PRIVATE COMGR_ENABLE_HOTSWAP_TRANSPILE=1)
-endif()
 
 message("")
 message("------------LLVM_DIR: ${LLVM_DIR}")
@@ -449,45 +414,6 @@ target_include_directories(amd_comgr
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 
-# Internal OBJECT library for the shared metadata / symbol helpers. Compiled
-# once with the same flags and include roots as amd_comgr, then linked into both
-# amd_comgr and the hotswap test drivers, so the drivers reuse the exact same
-# objects (and the buffer-facing getMetadataRoot / getElfIsaName /
-# lookupSymbolByName entry points) instead of recompiling the sources with
-# divergent flags. Per-function/data sections let a standalone driver drop the
-# parts of these translation units it does not reference (the amd_comgr build
-# keeps them); the GCC/Clang spelling is -ffunction-sections/-fdata-sections,
-# the MSVC equivalent is /Gy plus /Gw.
-add_library(comgr-object-utils OBJECT ${COMGR_OBJECT_UTILS_SOURCES})
-# These sources include LLVM headers that pull in TableGen-generated .inc files.
-# amd_comgr is ordered after those generators by its LLVM link libraries, but an
-# OBJECT library that links nothing needs the dependency spelled out. The
-# generator targets only exist in an in-tree build.
-foreach(comgr_tablegen_target intrinsics_gen target_parser_gen)
-  if(TARGET ${comgr_tablegen_target})
-    add_dependencies(comgr-object-utils ${comgr_tablegen_target})
-  endif()
-endforeach()
-set_target_properties(comgr-object-utils PROPERTIES
-  CXX_STANDARD 17
-  CXX_STANDARD_REQUIRED ON
-  POSITION_INDEPENDENT_CODE ON)
-target_include_directories(comgr-object-utils
-  PRIVATE
-    ${LLVM_INCLUDE_DIRS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>)
-if(MSVC)
-  target_compile_options(comgr-object-utils
-    PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" /Gy /Gw)
-else()
-  target_compile_options(comgr-object-utils
-    PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_OPTIONS}" -ffunction-sections -fdata-sections)
-endif()
-target_compile_definitions(comgr-object-utils
-  PRIVATE "${AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS}")
-target_link_libraries(amd_comgr PRIVATE comgr-object-utils)
-
 configure_file(
   include/amd_comgr.h.in
   include/amd_comgr.h @ONLY)
@@ -592,6 +518,20 @@ install(FILES
   COMPONENT amd-comgr
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}")
 
+# Allow the super-project to force static linking of LLVM/Clang into comgr.
+# When ON, LLVM symbols are hidden by comgr's version script (local: *;),
+# avoiding symbol interposition issues without requiring namespace isolation.
+#
+# Placed here (immediately before the link-list selection below) so that any
+# transitive find_package(Clang) invoked from included helper modules (e.g.
+# opencl_header.cmake) cannot re-load ClangConfig.cmake / LLVMConfig.cmake
+# and silently revert these flags back to their LLVM-build-time defaults.
+option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
+if(COMGR_STATIC_LLVM)
+  set(LLVM_LINK_LLVM_DYLIB OFF)
+  set(CLANG_LINK_CLANG_DYLIB OFF)
+endif()
+
 if(NOT CLANG_LINK_CLANG_DYLIB)
   set(CLANG_LIBS
     clangBasic
@@ -611,37 +551,15 @@ set(LLD_LIBS
 
 if (${COMGR_SPIRV_TRANSLATOR_AVAILABLE})
   set(SPIRV_DYNAMIC_LIB "LLVMSPIRVAMDLib")
-  set(SPIRV_STATIC_LIB "SPIRVAMDLib")
 else()
   set(SPIRV_DYNAMIC_LIB "")
-  set(SPIRV_STATIC_LIB "")
 endif()
 
 if (LLVM_LINK_LLVM_DYLIB)
   set(LLVM_LIBS LLVM ${SPIRV_DYNAMIC_LIB})
 else()
-  llvm_map_components_to_libnames(LLVM_LIBS
-    ${LLVM_TARGETS_TO_BUILD}
-    BinaryFormat
-    BitReader
-    BitWriter
-    CodeGen
-    Core
-    DebugInfoDWARF
-    Demangle
-    IRReader
-    Linker
-    MC
-    MCDisassembler
-    MCParser
-    Object
-    Option
-    Support
-    Symbolize
-    TargetParser
-    TransformUtils
-    ${SPIRV_STATIC_LIB}
-    )
+  include(ComgrStaticLibraries)
+  comgr_static_llvm_libraries(LLVM_LIBS)
 endif()
 
 target_link_options(amd_comgr
@@ -650,11 +568,18 @@ target_link_options(amd_comgr
   PRIVATE
     ${AMD_COMGR_PRIVATE_LINKER_OPTIONS})
 
-target_link_libraries(amd_comgr
-  PRIVATE
-    ${LLD_LIBS}
-    ${LLVM_LIBS}
-    ${CLANG_LIBS})
+if(COMGR_STATIC_LLVM)
+  # Link archive files rather than targets so their LLVM dylib interfaces do
+  # not affect Comgr. Other consumers keep the original target interfaces.
+  comgr_static_link_libraries(amd_comgr ${LLD_LIBS} ${LLVM_LIBS} ${CLANG_LIBS})
+elseif(NOT LLVM_LINK_LLVM_DYLIB AND UNIX AND NOT APPLE)
+  comgr_collect_static_libraries(COMGR_STATIC_LIBRARIES
+    ${LLD_LIBS} ${LLVM_LIBS} ${CLANG_LIBS})
+  target_link_libraries(amd_comgr PRIVATE
+    "-Wl,--start-group" ${COMGR_STATIC_LIBRARIES} "-Wl,--end-group")
+else()
+  target_link_libraries(amd_comgr PRIVATE ${LLD_LIBS} ${LLVM_LIBS} ${CLANG_LIBS})
+endif()
 
 if(TARGET embedded-resource-dir)
   target_link_libraries(amd_comgr PRIVATE embedded-resource-dir)
@@ -681,17 +606,19 @@ if (NOT WIN32)
       ${CMAKE_DL_LIBS})
 endif()
 
-# Hotswap subproject. Builds the rewriter (byte-level rewrite path) plus, under
-# COMGR_ENABLE_HOTSWAP_TRANSPILE, the transpile-path OBJECT libraries, and
-# exports the set amd_comgr links as COMGR_HOTSWAP_LIBS. These OBJECT libraries
-# keep their LLVM deps PRIVATE, so they contribute only their objects and leave
-# the curated LLVM set linked above unchanged.
-add_subdirectory(src/hotswap)
-target_link_libraries(amd_comgr PRIVATE ${COMGR_HOTSWAP_LIBS})
-
 include(CTest)
 
 if(BUILD_TESTING)
+  if(UNIX AND NOT APPLE)
+    add_test(NAME comgr-static-link
+      COMMAND "${CMAKE_CTEST_COMMAND}" --build-and-test
+        "${CMAKE_CURRENT_SOURCE_DIR}/test/static-link"
+        "${CMAKE_CURRENT_BINARY_DIR}/test/static-link"
+        --build-generator "${CMAKE_GENERATOR}"
+        --build-config "$<CONFIG>"
+        --build-options "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+        --test-command "${CMAKE_CTEST_COMMAND}" --output-on-failure)
+  endif()
   add_custom_target(check-comgr COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS amd_comgr)
   if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set_property(GLOBAL APPEND PROPERTY LLVM_ADDITIONAL_TEST_TARGETS check-comgr)

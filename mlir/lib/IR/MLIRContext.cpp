@@ -57,8 +57,7 @@ struct MLIRContextOptions {
   llvm::cl::opt<bool> disableThreading{
       "mlir-disable-threading",
       llvm::cl::desc("Disable multi-threading within MLIR, overrides any "
-                     "further call to MLIRContext::enableMultiThreading()"),
-      llvm::cl::init(true)};
+                     "further call to MLIRContext::enableMultiThreading()")};
 
   llvm::cl::opt<bool> printOpOnDiagnostic{
       "mlir-print-op-on-diagnostic",
@@ -76,7 +75,7 @@ struct MLIRContextOptions {
 static llvm::ManagedStatic<MLIRContextOptions> clOptions;
 
 static bool isThreadingGloballyDisabled() {
-#if MLIR_ENABLE_THREADS != 0
+#if LLVM_ENABLE_THREADS != 0
   return clOptions.isConstructed() && clOptions->disableThreading;
 #else
   return true;
@@ -287,7 +286,15 @@ public:
     if (threadingIsEnabled) {
       ownedThreadPool = std::make_unique<llvm::DefaultThreadPool>();
       threadPool = ownedThreadPool.get();
+    } else {
+      disableUniquerMultithreading(true);
     }
+  }
+  /// Update the threading mode for each of the uniquers.
+  void disableUniquerMultithreading(bool disable) {
+    affineUniquer.disableMultithreading(disable);
+    attributeUniquer.disableMultithreading(disable);
+    typeUniquer.disableMultithreading(disable);
   }
   ~MLIRContextImpl() {
     for (auto typeMapping : registeredTypes)
@@ -372,16 +379,6 @@ MLIRContext::MLIRContext(const DialectRegistry &registry, Threading setting)
 MLIRContext::~MLIRContext() {
   // finalize remark engine before destroying anything else.
   impl->remarkEngine.reset();
-}
-
-/// Copy the specified array of elements into memory managed by the provided
-/// bump pointer allocator.  This assumes the elements are all PODs.
-template <typename T>
-static ArrayRef<T> copyArrayRefInto(llvm::BumpPtrAllocator &allocator,
-                                    ArrayRef<T> elements) {
-  auto result = allocator.Allocate<T>(elements.size());
-  llvm::uninitialized_copy(elements, result);
-  return ArrayRef<T>(result, elements.size());
 }
 
 //===----------------------------------------------------------------------===//
@@ -619,9 +616,9 @@ void MLIRContext::allowUnregisteredDialects(bool allowing) {
 }
 
 /// Return true if multi-threading is enabled by the context.
-bool MLIRContext::isMultithreadingEnabled() {
-  return impl->threadingIsEnabled && llvm::llvm_is_multithreaded();
-}
+#if LLVM_ENABLE_THREADS
+bool MLIRContext::isMultithreadingEnabled() { return impl->threadingIsEnabled; }
+#endif
 
 /// Set the flag specifying if multi-threading is disabled by the context.
 void MLIRContext::disableMultithreading(bool disable) {
@@ -635,10 +632,7 @@ void MLIRContext::disableMultithreading(bool disable) {
 
   impl->threadingIsEnabled = !disable;
 
-  // Update the threading mode for each of the uniquers.
-  impl->affineUniquer.disableMultithreading(disable);
-  impl->attributeUniquer.disableMultithreading(disable);
-  impl->typeUniquer.disableMultithreading(disable);
+  impl->disableUniquerMultithreading(disable);
 
   // Destroy thread pool (stop all threads) if it is no longer needed, or create
   // a new one if multithreading was re-enabled.
@@ -1008,8 +1002,8 @@ void OperationName::UnregisteredOpModel::setInherentAttr(Operation *op,
   *op->getPropertiesStorage().as<Attribute *>() =
       attrs.getDictionary(op->getContext());
 }
-void OperationName::UnregisteredOpModel::populateInherentAttrs(
-    Operation *op, NamedAttrList &attrs) {}
+void OperationName::UnregisteredOpModel::walkInherentAttrs(
+    Operation *op, InherentAttrVisitor visitor) {}
 LogicalResult OperationName::UnregisteredOpModel::verifyInherentAttrs(
     OperationName opName, NamedAttrList &attributes,
     function_ref<InFlightDiagnostic()> emitError) {
@@ -1119,6 +1113,10 @@ void RegisteredOperationName::insert(
                                  rhs.getIdentifier().strref();
                         }),
       value);
+}
+
+void *RegisteredOperationName::allocateModelStorage() {
+  return ::operator new(sizeof(Impl));
 }
 
 //===----------------------------------------------------------------------===//

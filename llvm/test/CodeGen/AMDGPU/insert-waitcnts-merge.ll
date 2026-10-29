@@ -23,9 +23,9 @@ define amdgpu_kernel void @widget(ptr addrspace(1) %arg, i1 %arg1) #0 {
   ; CHECK-NEXT:   S_WAITCNT .Lgkmcnt_0
   ; CHECK-NEXT:   S_BITCMP1_B32 killed renamable $sgpr4, 0, implicit-def $scc
   ; CHECK-NEXT:   renamable $vgpr1 = V_MOV_B32_e32 0, implicit $exec
-  ; CHECK-NEXT:   renamable $vgpr4 = V_MOV_B32_e32 0, implicit $exec, implicit $exec
   ; CHECK-NEXT:   renamable $sgpr4_sgpr5 = S_CSELECT_B64 -1, 0, implicit killed $scc
   ; CHECK-NEXT:   $vgpr2_vgpr3 = V_PK_MOV_B32 8, 0, 8, 0, 0, 0, 0, 0, 0, implicit $exec
+  ; CHECK-NEXT:   renamable $vgpr4 = V_MOV_B32_e32 0, implicit $exec
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.1.bb2:
   ; CHECK-NEXT:   successors: %bb.13(0x30000000), %bb.2(0x50000000)
@@ -88,7 +88,6 @@ define amdgpu_kernel void @widget(ptr addrspace(1) %arg, i1 %arg1) #0 {
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   S_WAITCNT .Vmcnt_0
   ; CHECK-NEXT:   V_CMP_EQ_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
-  ; CHECK-NEXT:   $vcc = S_AND_B64 $exec, killed renamable $vcc, implicit-def dead $scc
   ; CHECK-NEXT:   dead renamable $vgpr0 = IMPLICIT_DEF
   ; CHECK-NEXT:   dead renamable $vgpr0 = IMPLICIT_DEF
   ; CHECK-NEXT:   dead renamable $sgpr10_sgpr11 = IMPLICIT_DEF

@@ -17,7 +17,7 @@ define void @fence_loads(ptr %ptr) {
   ; CHECK-NEXT:   [[FLAT_LOAD_UBYTE:%[0-9]+]]:vgpr_32 = FLAT_LOAD_UBYTE [[COPY2]], 0, 0, implicit $exec, implicit $flat_scr, mmra !1 :: (load acquire (s8) from %ir.ptr, align 4)
   ; CHECK-NEXT:   [[V_MOV_B32_e32_:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 1, implicit $exec
   ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:vreg_64 = COPY [[REG_SEQUENCE]], mmra !2
-  ; CHECK-NEXT:   FLAT_STORE_BYTE [[COPY3]], killed [[V_MOV_B32_e32_]], 0, 0, implicit $exec, implicit $flat_scr, mmra !2 :: (store release (s8) into %ir.ptr, align 4)
+  ; CHECK-NEXT:   FLAT_STORE_BYTE [[COPY3]], [[V_MOV_B32_e32_]], 0, 0, implicit $exec, implicit $flat_scr, mmra !2 :: (store release (s8) into %ir.ptr, align 4)
   ; CHECK-NEXT:   SI_RETURN
   fence release,                                        !mmra !0
   %ld = load atomic i8, ptr %ptr acquire, align 4,      !mmra !2
@@ -28,13 +28,39 @@ define void @fence_loads(ptr %ptr) {
 define void @atomicrmw_acq(ptr %ptr) {
   ; CHECK-LABEL: name: atomicrmw_acq
   ; CHECK: bb.0 (%ir-block.0):
+  ; CHECK-NEXT:   successors: %bb.1(0x80000000)
   ; CHECK-NEXT:   liveins: $vgpr0, $vgpr1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr1
   ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; CHECK-NEXT:   [[REG_SEQUENCE:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[COPY1]], %subreg.sub0, [[COPY]], %subreg.sub1
-  ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:vreg_64 = COPY [[REG_SEQUENCE]], mmra !1
-  ; CHECK-NEXT:   [[FLAT_LOAD_UBYTE:%[0-9]+]]:vgpr_32 = FLAT_LOAD_UBYTE killed [[COPY2]], 0, 0, implicit $exec, implicit $flat_scr, mmra !1 :: (load acquire (s8) from %ir.ptr)
+  ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:vgpr_32 = COPY [[REG_SEQUENCE]].sub1
+  ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:vgpr_32 = COPY [[REG_SEQUENCE]].sub0
+  ; CHECK-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 -4
+  ; CHECK-NEXT:   [[V_AND_B32_e64_:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY3]], [[S_MOV_B32_]], implicit $exec
+  ; CHECK-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[V_AND_B32_e64_]], %subreg.sub0, [[COPY2]], %subreg.sub1
+  ; CHECK-NEXT:   [[COPY4:%[0-9]+]]:vreg_64 = COPY [[REG_SEQUENCE1]]
+  ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 3
+  ; CHECK-NEXT:   [[V_AND_B32_e64_1:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY3]], [[S_MOV_B32_1]], implicit $exec
+  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[S_MOV_B32_1]], [[V_AND_B32_e64_1]], implicit $exec
+  ; CHECK-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 255
+  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_1:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[V_LSHLREV_B32_e64_]], [[S_MOV_B32_2]], implicit $exec
+  ; CHECK-NEXT:   [[V_NOT_B32_e32_:%[0-9]+]]:vgpr_32 = V_NOT_B32_e32 [[V_LSHLREV_B32_e64_1]], implicit $exec
+  ; CHECK-NEXT:   [[FLAT_LOAD_DWORD:%[0-9]+]]:vgpr_32 = FLAT_LOAD_DWORD [[REG_SEQUENCE1]], 0, 0, implicit $exec, implicit $flat_scr, mmra !1 :: (load (s32) from %ir.AlignedAddr)
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT: bb.1.atomicrmw.start:
+  ; CHECK-NEXT:   successors: %bb.2(0x04000000), %bb.1(0x7c000000)
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI [[FLAT_LOAD_DWORD]], %bb.0, %5, %bb.1
+  ; CHECK-NEXT:   [[V_OR_B32_e64_:%[0-9]+]]:vgpr_32 = V_OR_B32_e64 [[V_NOT_B32_e32_]], [[V_LSHLREV_B32_e64_1]], implicit $exec
+  ; CHECK-NEXT:   [[V_AND_B32_e64_2:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[PHI]], [[V_OR_B32_e64_]], implicit $exec
+  ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[V_AND_B32_e64_2]], %subreg.sub0, [[PHI]], %subreg.sub1
+  ; CHECK-NEXT:   [[FLAT_ATOMIC_CMPSWAP_RTN:%[0-9]+]]:vgpr_32 = FLAT_ATOMIC_CMPSWAP_RTN [[COPY4]], [[REG_SEQUENCE2]], 0, 1, implicit $exec, implicit $flat_scr, mmra !1 :: (load store acquire acquire (s32) on %ir.AlignedAddr)
+  ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 [[FLAT_ATOMIC_CMPSWAP_RTN]], [[PHI]], implicit $exec, mmra !1
+  ; CHECK-NEXT:   SI_BRCOND %bb.2, [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+  ; CHECK-NEXT:   S_BRANCH %bb.1
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT: bb.2.atomicrmw.end:
   ; CHECK-NEXT:   SI_RETURN
   %old.2 = atomicrmw add ptr %ptr, i8 0 acquire,        !mmra !2
   ret void
@@ -52,14 +78,14 @@ define void @atomicrmw_rel(ptr %ptr) {
   ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:vgpr_32 = COPY [[REG_SEQUENCE]].sub1
   ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:vgpr_32 = COPY [[REG_SEQUENCE]].sub0
   ; CHECK-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 -4
-  ; CHECK-NEXT:   [[V_AND_B32_e64_:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY3]], killed [[S_MOV_B32_]], implicit $exec
-  ; CHECK-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_AND_B32_e64_]], %subreg.sub0, killed [[COPY2]], %subreg.sub1
+  ; CHECK-NEXT:   [[V_AND_B32_e64_:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY3]], [[S_MOV_B32_]], implicit $exec
+  ; CHECK-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[V_AND_B32_e64_]], %subreg.sub0, [[COPY2]], %subreg.sub1
   ; CHECK-NEXT:   [[COPY4:%[0-9]+]]:vreg_64 = COPY [[REG_SEQUENCE1]]
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 3
   ; CHECK-NEXT:   [[V_AND_B32_e64_1:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY3]], [[S_MOV_B32_1]], implicit $exec
-  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[S_MOV_B32_1]], killed [[V_AND_B32_e64_1]], implicit $exec
+  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[S_MOV_B32_1]], [[V_AND_B32_e64_1]], implicit $exec
   ; CHECK-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 255
-  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_1:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 killed [[V_LSHLREV_B32_e64_]], killed [[S_MOV_B32_2]], implicit $exec
+  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_1:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[V_LSHLREV_B32_e64_]], [[S_MOV_B32_2]], implicit $exec
   ; CHECK-NEXT:   [[V_NOT_B32_e32_:%[0-9]+]]:vgpr_32 = V_NOT_B32_e32 [[V_LSHLREV_B32_e64_1]], implicit $exec
   ; CHECK-NEXT:   [[FLAT_LOAD_DWORD:%[0-9]+]]:vgpr_32 = FLAT_LOAD_DWORD [[REG_SEQUENCE1]], 0, 0, implicit $exec, implicit $flat_scr, mmra !2 :: (load (s32) from %ir.AlignedAddr)
   ; CHECK-NEXT: {{  $}}
@@ -68,11 +94,11 @@ define void @atomicrmw_rel(ptr %ptr) {
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI [[FLAT_LOAD_DWORD]], %bb.0, %5, %bb.1
   ; CHECK-NEXT:   [[V_OR_B32_e64_:%[0-9]+]]:vgpr_32 = V_OR_B32_e64 [[V_NOT_B32_e32_]], [[V_LSHLREV_B32_e64_1]], implicit $exec
-  ; CHECK-NEXT:   [[V_AND_B32_e64_2:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[PHI]], killed [[V_OR_B32_e64_]], implicit $exec
-  ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_AND_B32_e64_2]], %subreg.sub0, [[PHI]], %subreg.sub1
-  ; CHECK-NEXT:   [[FLAT_ATOMIC_CMPSWAP_RTN:%[0-9]+]]:vgpr_32 = FLAT_ATOMIC_CMPSWAP_RTN [[COPY4]], killed [[REG_SEQUENCE2]], 0, 1, implicit $exec, implicit $flat_scr, mmra !2 :: (load store release monotonic (s32) on %ir.AlignedAddr)
+  ; CHECK-NEXT:   [[V_AND_B32_e64_2:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[PHI]], [[V_OR_B32_e64_]], implicit $exec
+  ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[V_AND_B32_e64_2]], %subreg.sub0, [[PHI]], %subreg.sub1
+  ; CHECK-NEXT:   [[FLAT_ATOMIC_CMPSWAP_RTN:%[0-9]+]]:vgpr_32 = FLAT_ATOMIC_CMPSWAP_RTN [[COPY4]], [[REG_SEQUENCE2]], 0, 1, implicit $exec, implicit $flat_scr, mmra !2 :: (load store release monotonic (s32) on %ir.AlignedAddr)
   ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 [[FLAT_ATOMIC_CMPSWAP_RTN]], [[PHI]], implicit $exec, mmra !2
-  ; CHECK-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+  ; CHECK-NEXT:   SI_BRCOND %bb.2, [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2.atomicrmw.end:
@@ -93,29 +119,29 @@ define void @cmpxchg(ptr %ptr) {
   ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:vgpr_32 = COPY [[REG_SEQUENCE]].sub1
   ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:vgpr_32 = COPY [[REG_SEQUENCE]].sub0
   ; CHECK-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 -4
-  ; CHECK-NEXT:   [[V_AND_B32_e64_:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY3]], killed [[S_MOV_B32_]], implicit $exec
-  ; CHECK-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_AND_B32_e64_]], %subreg.sub0, killed [[COPY2]], %subreg.sub1
+  ; CHECK-NEXT:   [[V_AND_B32_e64_:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY3]], [[S_MOV_B32_]], implicit $exec
+  ; CHECK-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[V_AND_B32_e64_]], %subreg.sub0, [[COPY2]], %subreg.sub1
   ; CHECK-NEXT:   [[COPY4:%[0-9]+]]:vreg_64 = COPY [[REG_SEQUENCE1]]
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 3
   ; CHECK-NEXT:   [[V_AND_B32_e64_1:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY3]], [[S_MOV_B32_1]], implicit $exec
-  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[S_MOV_B32_1]], killed [[V_AND_B32_e64_1]], implicit $exec
+  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[S_MOV_B32_1]], [[V_AND_B32_e64_1]], implicit $exec
   ; CHECK-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 255
-  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_1:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[V_LSHLREV_B32_e64_]], killed [[S_MOV_B32_2]], implicit $exec
-  ; CHECK-NEXT:   [[V_NOT_B32_e32_:%[0-9]+]]:vgpr_32 = V_NOT_B32_e32 killed [[V_LSHLREV_B32_e64_1]], implicit $exec
+  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_1:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[V_LSHLREV_B32_e64_]], [[S_MOV_B32_2]], implicit $exec
+  ; CHECK-NEXT:   [[V_NOT_B32_e32_:%[0-9]+]]:vgpr_32 = V_NOT_B32_e32 [[V_LSHLREV_B32_e64_1]], implicit $exec
   ; CHECK-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 1
-  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_2:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[V_LSHLREV_B32_e64_]], killed [[S_MOV_B32_3]], implicit $exec
+  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_2:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[V_LSHLREV_B32_e64_]], [[S_MOV_B32_3]], implicit $exec
   ; CHECK-NEXT:   [[FLAT_LOAD_DWORD:%[0-9]+]]:vgpr_32 = FLAT_LOAD_DWORD [[REG_SEQUENCE1]], 0, 0, implicit $exec, implicit $flat_scr, mmra !1 :: (load (s32) from %ir.AlignedAddr)
-  ; CHECK-NEXT:   [[V_AND_B32_e64_2:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 killed [[FLAT_LOAD_DWORD]], [[V_NOT_B32_e32_]], implicit $exec
+  ; CHECK-NEXT:   [[V_AND_B32_e64_2:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[FLAT_LOAD_DWORD]], [[V_NOT_B32_e32_]], implicit $exec
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.1.partword.cmpxchg.loop:
   ; CHECK-NEXT:   successors: %bb.3(0x04000000), %bb.2(0x7c000000)
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI [[V_AND_B32_e64_2]], %bb.0, %7, %bb.2
   ; CHECK-NEXT:   [[V_OR_B32_e64_:%[0-9]+]]:vgpr_32 = V_OR_B32_e64 [[PHI]], [[V_LSHLREV_B32_e64_2]], implicit $exec
-  ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_OR_B32_e64_]], %subreg.sub0, [[PHI]], %subreg.sub1
-  ; CHECK-NEXT:   [[FLAT_ATOMIC_CMPSWAP_RTN:%[0-9]+]]:vgpr_32 = FLAT_ATOMIC_CMPSWAP_RTN [[COPY4]], killed [[REG_SEQUENCE2]], 0, 1, implicit $exec, implicit $flat_scr, mmra !1 :: (load store acquire acquire (s32) on %ir.AlignedAddr)
+  ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[V_OR_B32_e64_]], %subreg.sub0, [[PHI]], %subreg.sub1
+  ; CHECK-NEXT:   [[FLAT_ATOMIC_CMPSWAP_RTN:%[0-9]+]]:vgpr_32 = FLAT_ATOMIC_CMPSWAP_RTN [[COPY4]], [[REG_SEQUENCE2]], 0, 1, implicit $exec, implicit $flat_scr, mmra !1 :: (load store acquire acquire (s32) on %ir.AlignedAddr)
   ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 [[FLAT_ATOMIC_CMPSWAP_RTN]], [[PHI]], implicit $exec, mmra !1
-  ; CHECK-NEXT:   SI_BRCOND %bb.3, killed [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+  ; CHECK-NEXT:   SI_BRCOND %bb.3, [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.2
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2.partword.cmpxchg.failure:
@@ -123,7 +149,7 @@ define void @cmpxchg(ptr %ptr) {
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[V_AND_B32_e64_3:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[FLAT_ATOMIC_CMPSWAP_RTN]], [[V_NOT_B32_e32_]], implicit $exec
   ; CHECK-NEXT:   [[V_CMP_NE_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 [[PHI]], [[V_AND_B32_e64_3]], implicit $exec
-  ; CHECK-NEXT:   SI_BRCOND %bb.1, killed [[V_CMP_NE_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+  ; CHECK-NEXT:   SI_BRCOND %bb.1, [[V_CMP_NE_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.3
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.3.partword.cmpxchg.end:
@@ -157,7 +183,7 @@ define void @atomicrmw_rel_deepcopy(ptr %ptr) {
   ; CHECK-NEXT:   [[COPY11:%[0-9]+]]:vgpr_32 = COPY [[REG_SEQUENCE]].sub1
   ; CHECK-NEXT:   ADJCALLSTACKUP 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
   ; CHECK-NEXT:   [[SI_PC_ADD_REL_OFFSET:%[0-9]+]]:sreg_64 = SI_PC_ADD_REL_OFFSET target-flags(amdgpu-gotprel32-lo) @f, target-flags(amdgpu-gotprel32-hi) @f, implicit-def dead $scc
-  ; CHECK-NEXT:   [[S_LOAD_DWORDX2_IMM:%[0-9]+]]:sreg_64_xexec = S_LOAD_DWORDX2_IMM killed [[SI_PC_ADD_REL_OFFSET]], 0, 0 :: (dereferenceable invariant load (s64) from got, addrspace 4)
+  ; CHECK-NEXT:   [[S_LOAD_DWORDX2_IMM:%[0-9]+]]:sreg_64_xexec = S_LOAD_DWORDX2_IMM [[SI_PC_ADD_REL_OFFSET]], 0, 0 :: (dereferenceable invariant load (s64) from got, addrspace 4)
   ; CHECK-NEXT:   [[COPY12:%[0-9]+]]:sgpr_128 = COPY $sgpr0_sgpr1_sgpr2_sgpr3
   ; CHECK-NEXT:   $sgpr4_sgpr5 = COPY [[COPY10]]
   ; CHECK-NEXT:   $sgpr6_sgpr7 = COPY [[COPY9]]
@@ -169,7 +195,7 @@ define void @atomicrmw_rel_deepcopy(ptr %ptr) {
   ; CHECK-NEXT:   $sgpr15 = COPY [[COPY3]]
   ; CHECK-NEXT:   $vgpr31 = COPY [[COPY]]
   ; CHECK-NEXT:   $sgpr0_sgpr1_sgpr2_sgpr3 = COPY [[COPY12]]
-  ; CHECK-NEXT:   $sgpr30_sgpr31 = SI_CALL killed [[S_LOAD_DWORDX2_IMM]], @f, csr_amdgpu, implicit $sgpr4_sgpr5, implicit $sgpr6_sgpr7, implicit $sgpr8_sgpr9, implicit $sgpr10_sgpr11, implicit $sgpr12, implicit $sgpr13, implicit $sgpr14, implicit $sgpr15, implicit $vgpr31, implicit $sgpr0_sgpr1_sgpr2_sgpr3, implicit-def $vgpr0, implicit-def $vgpr1, implicit-def $vgpr2, implicit-def $vgpr3, implicit-def $vgpr4, implicit-def $vgpr5, implicit-def $vgpr6, implicit-def $vgpr7, implicit-def $vgpr8, implicit-def $vgpr9, implicit-def $vgpr10, implicit-def $vgpr11, implicit-def $vgpr12, implicit-def $vgpr13, implicit-def $vgpr14, implicit-def $vgpr15
+  ; CHECK-NEXT:   dead $sgpr30_sgpr31 = SI_CALL [[S_LOAD_DWORDX2_IMM]], @f, csr_amdgpu, implicit $sgpr4_sgpr5, implicit $sgpr6_sgpr7, implicit $sgpr8_sgpr9, implicit $sgpr10_sgpr11, implicit $sgpr12, implicit $sgpr13, implicit $sgpr14, implicit $sgpr15, implicit $vgpr31, implicit $sgpr0_sgpr1_sgpr2_sgpr3, implicit-def $vgpr0, implicit-def $vgpr1, implicit-def $vgpr2, implicit-def $vgpr3, implicit-def $vgpr4, implicit-def $vgpr5, implicit-def $vgpr6, implicit-def $vgpr7, implicit-def $vgpr8, implicit-def $vgpr9, implicit-def $vgpr10, implicit-def $vgpr11, implicit-def $vgpr12, implicit-def $vgpr13, implicit-def $vgpr14, implicit-def $vgpr15
   ; CHECK-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
   ; CHECK-NEXT:   [[COPY13:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; CHECK-NEXT:   [[COPY14:%[0-9]+]]:vgpr_32 = COPY $vgpr1
@@ -189,14 +215,14 @@ define void @atomicrmw_rel_deepcopy(ptr %ptr) {
   ; CHECK-NEXT:   [[COPY28:%[0-9]+]]:vgpr_32 = COPY $vgpr15
   ; CHECK-NEXT:   [[COPY29:%[0-9]+]]:vgpr_32 = COPY [[REG_SEQUENCE]].sub0
   ; CHECK-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 -4
-  ; CHECK-NEXT:   [[V_AND_B32_e64_:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY29]], killed [[S_MOV_B32_]], implicit $exec
-  ; CHECK-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_AND_B32_e64_]], %subreg.sub0, killed [[COPY11]], %subreg.sub1
+  ; CHECK-NEXT:   [[V_AND_B32_e64_:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY29]], [[S_MOV_B32_]], implicit $exec
+  ; CHECK-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[V_AND_B32_e64_]], %subreg.sub0, [[COPY11]], %subreg.sub1
   ; CHECK-NEXT:   [[COPY30:%[0-9]+]]:vreg_64 = COPY [[REG_SEQUENCE1]]
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 3
   ; CHECK-NEXT:   [[V_AND_B32_e64_1:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY29]], [[S_MOV_B32_1]], implicit $exec
-  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[S_MOV_B32_1]], killed [[V_AND_B32_e64_1]], implicit $exec
+  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[S_MOV_B32_1]], [[V_AND_B32_e64_1]], implicit $exec
   ; CHECK-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 255
-  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_1:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 killed [[V_LSHLREV_B32_e64_]], killed [[S_MOV_B32_2]], implicit $exec
+  ; CHECK-NEXT:   [[V_LSHLREV_B32_e64_1:%[0-9]+]]:vgpr_32 = V_LSHLREV_B32_e64 [[V_LSHLREV_B32_e64_]], [[S_MOV_B32_2]], implicit $exec
   ; CHECK-NEXT:   [[V_NOT_B32_e32_:%[0-9]+]]:vgpr_32 = V_NOT_B32_e32 [[V_LSHLREV_B32_e64_1]], implicit $exec
   ; CHECK-NEXT:   [[FLAT_LOAD_DWORD:%[0-9]+]]:vgpr_32 = FLAT_LOAD_DWORD [[REG_SEQUENCE1]], 0, 0, implicit $exec, implicit $flat_scr, mmra !0 :: (load (s32) from %ir.AlignedAddr)
   ; CHECK-NEXT: {{  $}}
@@ -205,11 +231,11 @@ define void @atomicrmw_rel_deepcopy(ptr %ptr) {
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI [[FLAT_LOAD_DWORD]], %bb.0, %5, %bb.1
   ; CHECK-NEXT:   [[V_OR_B32_e64_:%[0-9]+]]:vgpr_32 = V_OR_B32_e64 [[V_NOT_B32_e32_]], [[V_LSHLREV_B32_e64_1]], implicit $exec
-  ; CHECK-NEXT:   [[V_AND_B32_e64_2:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[PHI]], killed [[V_OR_B32_e64_]], implicit $exec
-  ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_AND_B32_e64_2]], %subreg.sub0, [[PHI]], %subreg.sub1
-  ; CHECK-NEXT:   [[FLAT_ATOMIC_CMPSWAP_RTN:%[0-9]+]]:vgpr_32 = FLAT_ATOMIC_CMPSWAP_RTN [[COPY30]], killed [[REG_SEQUENCE2]], 0, 1, implicit $exec, implicit $flat_scr, mmra !0 :: (load store release monotonic (s32) on %ir.AlignedAddr)
+  ; CHECK-NEXT:   [[V_AND_B32_e64_2:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[PHI]], [[V_OR_B32_e64_]], implicit $exec
+  ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[V_AND_B32_e64_2]], %subreg.sub0, [[PHI]], %subreg.sub1
+  ; CHECK-NEXT:   [[FLAT_ATOMIC_CMPSWAP_RTN:%[0-9]+]]:vgpr_32 = FLAT_ATOMIC_CMPSWAP_RTN [[COPY30]], [[REG_SEQUENCE2]], 0, 1, implicit $exec, implicit $flat_scr, mmra !0 :: (load store release monotonic (s32) on %ir.AlignedAddr)
   ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 [[FLAT_ATOMIC_CMPSWAP_RTN]], [[PHI]], implicit $exec, mmra !0
-  ; CHECK-NEXT:   SI_BRCOND %bb.2, killed [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+  ; CHECK-NEXT:   SI_BRCOND %bb.2, [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2.atomicrmw.end:

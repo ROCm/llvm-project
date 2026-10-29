@@ -61,8 +61,10 @@ ENUM_CLASS(LanguageFeature, BackslashEscapes, OldDebugLines,
     DefaultStructConstructorNullPointer, AssumedRankIoItem,
     MultipleProgramUnitsOnSameLine, AllocatedForAssociated,
     OpenMPThreadprivateEquivalence, RelaxedCLocChecks, CudaPinned,
-    OpenAccDefaultNoneScalarsStrict, OpenACCMultipleNamesInRoutine,
-    EnumerationType, CUDAInit, PreferIntrinsicModuleUseAssociation)
+    CUDAImplicitDataAttrSpelling, OpenAccDefaultNoneScalarsStrict,
+    OpenACCMultipleNamesInRoutine, CUDAInit,
+    PreferIntrinsicModuleUseAssociation, MultipleCommonBlockInit,
+    OutOfBoundsSubscripts, ImplicitModulePrefix)
 
 // Portability and suspicious usage warnings
 ENUM_CLASS(UsageWarning, Portability, PointerToUndefinable,
@@ -82,14 +84,16 @@ ENUM_CLASS(UsageWarning, Portability, PointerToUndefinable,
     IndexVarRedefinition, IncompatibleImplicitInterfaces,
     VectorSubscriptFinalization, UndefinedFunctionResult, UselessIomsg,
     MismatchingDummyProcedure, SubscriptedEmptyArray, UnsignedLiteralTruncation,
-    CompatibleDeclarationsFromDistinctModules, ConstantIsContiguous,
-    NullActualForDefaultIntentAllocatable, UseAssociationIntoSameNameSubprogram,
-    HostAssociatedIntentOutInSpecExpr, NonVolatilePointerToVolatile,
-    RealConstantWidening, VolatileOrAsynchronousTemporary, UnusedVariable,
-    UsedUndefinedVariable, BadValueInDeadCode, AssumedTypeSizeDummy,
-    MisplacedIgnoreTKR, NamelistParameter, ImpureFinalInPure,
-    IgnoredNoReallocateLHS, ExperimentalOption, IoImpliedDoIndexConflict,
-    BOZLiteralTruncation)
+    CompatibleDeclarationsFromDistinctModules, ModuleFileMismatch,
+    ConstantIsContiguous, NullActualForDefaultIntentAllocatable,
+    UseAssociationIntoSameNameSubprogram, HostAssociatedIntentOutInSpecExpr,
+    NonVolatilePointerToVolatile, RealConstantWidening,
+    VolatileOrAsynchronousTemporary, UnusedVariable, UsedUndefinedVariable,
+    BadValueInDeadCode, AssumedTypeSizeDummy, MisplacedIgnoreTKR,
+    NamelistParameter, ImpureFinalInPure, IgnoredNoReallocateLHS,
+    ExperimentalOption, IoImpliedDoIndexConflict, BOZLiteralTruncation,
+    IntentInActualForDefaultIntent, BindCArrayDescriptor,
+    OpenMPDeprecated, OpenMPFuture)
 
 using LanguageFeatures = EnumSet<LanguageFeature, LanguageFeature_enumSize>;
 using UsageWarnings = EnumSet<UsageWarning, UsageWarning_enumSize>;
