@@ -119,6 +119,15 @@ jobs:
           git config --global --add safe.directory $PWD
           git config fetch.parallel 10
 
+      - name: Try to restore from GitHub cache (experimental)
+        uses: actions/cache@v3
+        continue-on-error: true
+        with:
+          path: ${{ env.CACHE_DIR }}/ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
       - name: Setup ccache
         run: |
           ./build_tools/setup_ccache.py \
