@@ -33,6 +33,7 @@ on:
         required: false
         type: string
         default: ""
+      # Cherry-pick testing: name a branch instead of a PR.
       LLVM_BRANCH:
         description: "ROCm/llvm-project branch to test instead of a PR, e.g. users/estewart/revert-wave-llvm-cache-cp-10-14-26. Use for cherry-pick testing."
         required: false
@@ -47,8 +48,35 @@ on:
         description: "Keep hipify and spirv-llvm-translator exactly as THEROCK_REF pinned them, instead of floating them to amd-staging tips. Recommended for cherry-pick testing."
         type: boolean
         default: false
+      # Platforms. "none" skips the platform entirely.
+      linux_amdgpu_families:
+        type: string
+        description: 'Comma-separated list of Linux GPU families. "all" = all, "none" = skip platform.'
+        default: "gfx950"
+      windows_amdgpu_families:
+        type: string
+        description: 'Comma-separated list of Windows GPU families. "all" = all, "none" = skip platform.'
+        default: "none"
+      # Wheels.
+      build_pytorch:
+        description: "Build PyTorch wheels."
+        type: boolean
+        default: false
+      build_jax:
+        description: "Build JAX wheels."
+        type: boolean
+        default: false
+      python_version:
+        description: "Single Python version for wheel builds (empty for full matrix)."
+        type: string
+        default: ""
+      # Tests.
+      run_tests:
+        description: "Run tests after the build. Uncheck for a build-only run."
+        type: boolean
+        default: true
       test_type:
-        description: "Component test depth."
+        description: "Component test depth (quick/standard/comprehensive/full)."
         type: choice
         options:
           - quick
@@ -56,30 +84,19 @@ on:
           - comprehensive
           - full
         default: quick
-      run_tests:
-        description: "Run tests after the build. Uncheck for a build-only run."
-        type: boolean
-        default: true
-      build_jax:
-        description: "Build JAX wheels."
-        type: boolean
-        default: false
-      linux_amdgpu_families:
-        type: string
-        description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: "gfx94x,gfx110x,gfx90a,gfx125x"
       linux_test_labels:
         type: string
         description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
         default: ""
-      windows_amdgpu_families:
-        type: string
-        description: "Insert comma-separated list of Windows GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: "gfx1151"
       windows_test_labels:
         type: string
         description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
         default: ""
+      changed_projects:
+        type: string
+        default: ""
+        description: "Comma-separated list of changed projects to filter tests (empty = run all tests)"
+      # Reuse artifacts from an earlier run instead of rebuilding.
       prebuilt_stages:
         type: string
         default: ""
@@ -88,14 +105,6 @@ on:
         type: string
         default: ""
         description: "Workflow run ID to copy prebuilt stage artifacts from; required when prebuilt_stages is set"
-      changed_projects:
-        type: string
-        default: ""
-        description: "Comma-separated list of changed projects to filter tests (empty = run all tests)"
-      build_pytorch:
-        type: boolean
-        default: true
-        description: "Build PyTorch wheels"
 
 permissions:
   contents: read
@@ -140,6 +149,7 @@ jobs:
       baseline_run_id: ${{ inputs.baseline_run_id || '' }}
       build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
       build_jax: ${{ inputs.build_jax }}
+      python_version: ${{ inputs.python_version || '' }}
       repository: "ROCm/TheRock"
       ref: ${{ inputs.THEROCK_REF }}
 
