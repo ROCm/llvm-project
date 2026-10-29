@@ -33,22 +33,70 @@ on:
         required: false
         type: string
         default: ""
+      # Cherry-pick testing: name a branch instead of a PR.
+      LLVM_BRANCH:
+        description: "ROCm/llvm-project branch to test instead of a PR, e.g. users/estewart/revert-wave-llvm-cache-cp-10-14-26. Use for cherry-pick testing."
+        required: false
+        type: string
+        default: ""
+      THEROCK_REF:
+        description: "TheRock branch supplying every other component pin, e.g. amd-compiler-2026-10-8-COT-2. Empty uses the RockCI-pinned commit."
+        required: false
+        type: string
+        default: ""
+      retain_compiler_submodules:
+        description: "Keep hipify and spirv-llvm-translator exactly as THEROCK_REF pinned them, instead of floating them to amd-staging tips. Recommended for cherry-pick testing."
+        type: boolean
+        default: false
+      # Platforms. "none" skips the platform entirely.
       linux_amdgpu_families:
         type: string
-        description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: "gfx94x,gfx110x,gfx90a,gfx125x"
+        description: 'Comma-separated list of Linux GPU families. "all" = all, "none" = skip platform.'
+        default: "gfx950"
+      windows_amdgpu_families:
+        type: string
+        description: 'Comma-separated list of Windows GPU families. "all" = all, "none" = skip platform.'
+        default: "none"
+      # Wheels.
+      build_pytorch:
+        description: "Build PyTorch wheels."
+        type: boolean
+        default: false
+      build_jax:
+        description: "Build JAX wheels."
+        type: boolean
+        default: false
+      python_version:
+        description: "Single Python version for wheel builds (empty for full matrix)."
+        type: string
+        default: ""
+      # Tests.
+      run_tests:
+        description: "Run tests after the build. Uncheck for a build-only run."
+        type: boolean
+        default: true
+      test_type:
+        description: "Component test depth (quick/standard/comprehensive/full)."
+        type: choice
+        options:
+          - quick
+          - standard
+          - comprehensive
+          - full
+        default: quick
       linux_test_labels:
         type: string
         description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
         default: ""
-      windows_amdgpu_families:
-        type: string
-        description: "Insert comma-separated list of Windows GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: "gfx1151"
       windows_test_labels:
         type: string
         description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
         default: ""
+      changed_projects:
+        type: string
+        default: ""
+        description: "Comma-separated list of changed projects to filter tests (empty = run all tests)"
+      # Reuse artifacts from an earlier run instead of rebuilding.
       prebuilt_stages:
         type: string
         default: ""
@@ -57,14 +105,6 @@ on:
         type: string
         default: ""
         description: "Workflow run ID to copy prebuilt stage artifacts from; required when prebuilt_stages is set"
-      changed_projects:
-        type: string
-        default: ""
-        description: "Comma-separated list of changed projects to filter tests (empty = run all tests)"
-      build_pytorch:
-        type: boolean
-        default: true
-        description: "Build PyTorch wheels"
 
 permissions:
   contents: read
@@ -88,6 +128,8 @@ jobs:
           LLVM_ROCm_PR_URL=${{ github.event.inputs.LLVM_ROCm_PR_URL }}
           SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
           HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
+          LLVM_BRANCH=${{ github.event.inputs.LLVM_BRANCH }}
+          RETAIN_COMPILER_SUBMODULES=${{ github.event.inputs.retain_compiler_submodules }}
           EOF
 
       - name: Upload stored file of PR URls
@@ -106,17 +148,71 @@ jobs:
       prebuilt_stages: ${{ inputs.prebuilt_stages || '' }}
       baseline_run_id: ${{ inputs.baseline_run_id || '' }}
       build_pytorch: ${{ github.event_name != 'workflow_dispatch' || inputs.build_pytorch }}
-      build_jax: false
+      build_jax: ${{ inputs.build_jax }}
+      python_version: ${{ inputs.python_version || '' }}
       repository: "ROCm/TheRock"
-      ref: ""       
+      ref: ${{ inputs.THEROCK_REF }}
+
+  # A CP result is only meaningful as a delta against a baseline QA already
+  # tested. If the branch is not built on the llvm commit THEROCK_REF pins, the
+  # build contains changes beyond the patch and neither a pass nor a fail says
+  # anything useful, so this gate is deliberately blocking.
+  validate_cp_base:
+    name: Validate cherry-pick base
+    if: ${{ inputs.LLVM_BRANCH != '' && inputs.THEROCK_REF != '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Compare branch against the llvm commit TheRock pins
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LLVM_BRANCH: ${{ inputs.LLVM_BRANCH }}
+          THEROCK_REF: ${{ inputs.THEROCK_REF }}
+        run: |
+          set -euo pipefail
+
+          LLVM_SHA=$(git ls-remote --exit-code --heads \
+            https://github.com/ROCm/llvm-project.git \
+            "refs/heads/${LLVM_BRANCH}" | cut -f1) || {
+            echo "::error::Branch '${LLVM_BRANCH}' not found on ROCm/llvm-project."
+            exit 1
+          }
+
+          ENTRY=$(gh api "repos/ROCm/TheRock/contents/compiler/amd-llvm?ref=${THEROCK_REF}")
+          BASE_SHA=$(jq -r '.sha' <<<"${ENTRY}")
+
+          COMPARE=$(gh api "repos/ROCm/llvm-project/compare/${BASE_SHA}...${LLVM_SHA}?per_page=1")
+          STATUS=$(jq -r '.status' <<<"${COMPARE}")
+          AHEAD=$(jq -r '.ahead_by' <<<"${COMPARE}")
+          BEHIND=$(jq -r '.behind_by' <<<"${COMPARE}")
+
+          {
+            echo "## Cherry-pick under test"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| llvm-project branch | \`${LLVM_BRANCH}\` |"
+            echo "| llvm-project commit | \`${LLVM_SHA:0:12}\` |"
+            echo "| TheRock base branch | \`${THEROCK_REF}\` |"
+            echo "| Base llvm commit | \`${BASE_SHA:0:12}\` |"
+            echo "| Commits on top of base | ${AHEAD} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "${STATUS}" != "ahead" ]]; then
+            echo "::error::'${LLVM_BRANCH}' is '${STATUS}' relative to the llvm commit ${THEROCK_REF} pins (${BEHIND} missing, ${AHEAD} extra). Rebase onto ${BASE_SHA}."
+            exit 1
+          fi
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
     needs:
       - setup
       - multiple_pr_sha_params
+      - validate_cp_base
     if: >-
       ${{
+        !cancelled() &&
+        (needs.validate_cp_base.result == 'success' ||
+         needs.validate_cp_base.result == 'skipped') &&
         needs.setup.outputs.linux_build_config != '' &&
         needs.setup.outputs.enable_build_jobs == 'true'
       }}
@@ -127,7 +223,8 @@ jobs:
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       rocm_deb_package_version: ${{ needs.setup.outputs.rocm_deb_package_version }}
       rocm_rpm_package_version: ${{ needs.setup.outputs.rocm_rpm_package_version }}
-      test_type: 'quick'
+      test_type: ${{ inputs.test_type }}
+      run_tests: ${{ inputs.run_tests }}
       changed_projects: ${{ inputs.changed_projects || '' }}
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}      
@@ -140,8 +237,12 @@ jobs:
     needs:
       - setup
       - multiple_pr_sha_params
+      - validate_cp_base
     if: >-
       ${{
+        !cancelled() &&
+        (needs.validate_cp_base.result == 'success' ||
+         needs.validate_cp_base.result == 'skipped') &&
         needs.setup.outputs.windows_build_config != '' &&
         needs.setup.outputs.enable_build_jobs == 'true'
       }}
@@ -150,7 +251,8 @@ jobs:
       build_config: ${{ needs.setup.outputs.windows_build_config }}
       test_labels: ${{ needs.setup.outputs.windows_test_labels }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: 'quick'
+      test_type: ${{ inputs.test_type }}
+      run_tests: ${{ inputs.run_tests }}
       changed_projects: ${{ inputs.changed_projects || '' }}
       repository: "ROCm/TheRock"
       ref: ${{ needs.setup.outputs.ref }}        
