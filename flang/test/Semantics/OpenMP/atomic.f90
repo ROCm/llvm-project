@@ -1,6 +1,6 @@
 ! REQUIRES: openmp_runtime
-! XFAIL: *
-! RUN: %python %S/../test_errors.py %s %flang -fopenmp %openmp_flags -Werror -Wno-experimental-option
+
+! RUN: %python %S/../test_errors.py %s %flang -fopenmp -fopenmp-version=31 %openmp_flags -Werror -Wno-experimental-option
 use omp_lib
 ! Check OpenMP 2.13.6 atomic Construct
 
@@ -35,7 +35,7 @@ use omp_lib
   a = a + 1
   !$omp end atomic
 
-  !ERROR: At most one clause from the 'atomic' group is allowed on ATOMIC construct
+  !ERROR: READ and WRITE clauses are mutually exclusive as members of 'atomic' clause group
   !$omp atomic read write
   !ERROR: Atomic expression a+1._4 should be a variable
   a = a + 1

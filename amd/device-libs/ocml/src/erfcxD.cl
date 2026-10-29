@@ -17,14 +17,15 @@ MATH_PRIVATE(erfcx)(double x)
     double e = MATH_MAD(-q, x, MATH_MAD(q + 1.0, -4.0, x));
     q = BUILTIN_FMA_F64(r, e, q);
     
-    double p = PE21(q, -0x1.1f39d54df3c0ep-27, -0x1.1166337cfa789p-27, 0x1.b45f1d9802b82p-24,
-                     0x1.d90488a03dcdbp-25, -0x1.b87b02eba62d8p-21, 0x1.5104ba56e15f1p-22,
-                     0x1.7f29f71c907dep-18, -0x1.78f5c2cd770fbp-17, -0x1.995fb76d0a51ap-16,
-                     0x1.3be2ec022d0edp-13, -0x1.a1deb2fdbf62ep-13, -0x1.8d4ac3689fc43p-11,
-                     0x1.49c67192d909bp-8, -0x1.09623852ff07p-6, 0x1.3079edfadea8fp-5,
-                     -0x1.0fb06dff6591p-4, 0x1.7fee004de8f32p-4, -0x1.9ddb23c3dbeb3p-4,
-                     0x1.16ecefcfa693p-4, 0x1.f7f5df66fb8a3p-7, -0x1.1df1ad154a2a8p-3,
-                     0x1.dd2c8b74febf8p-3);
+    double g = PE21(q, -0x1.15eb19bc60ea8p-29, -0x1.a047c341fece1p-27, 0x1.437e30a881907p-28,
+                     0x1.e0ed222d4423fp-24, -0x1.a703db5fda3ep-25, -0x1.a6d5571ceca55p-21,
+                     0x1.2436c05d90bf2p-20, 0x1.36bfbbf51ca4bp-18, -0x1.0a0095b7eedcdp-16,
+                     -0x1.1ed94dd3dd5f9p-17, 0x1.4dce32d9ead5bp-13, -0x1.77d64bb9af1dap-12,
+                     -0x1.a2beece46e0c2p-12, 0x1.63f2603106b16p-8, -0x1.625ed0917acadp-6,
+                     0x1.e1a956436902cp-5, -0x1.00428c8ff856dp-3, 0x1.c0398cb6f0a3ap-3,
+                     -0x1.47938f4c72d47p-2, 0x1.8d4ecb405c622p-2, -0x1.7d8f1c452474bp-2,
+                     0x1.dd2c8b74febf6p-3);
+    double p = MATH_MAD(q, g, g);
 
     double tx = x + x;
     d = 1.0 + tx;

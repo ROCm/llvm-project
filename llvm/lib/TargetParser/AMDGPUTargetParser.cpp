@@ -458,9 +458,14 @@ unsigned AMDGPU::getAddressableNumVGPRs(GPUKind AK, bool IsWave32) {
   // The unified register file makes the AGPRs addressable as VGPRs.
   if (Features.test(FEAT_GFX90A_INSTS))
     return 512;
-  if (Features.test(FEAT_1024_ADDRESSABLE_VGPRS))
-    return IsWave32 ? 1024 : 512;
-  return 256;
+
+  // VGPR operand fields are 8 bits; VGPR MSBs add 2 more per operand.
+  constexpr unsigned OperandBits = 8;
+  constexpr unsigned MSBBits = 2;
+  unsigned Bits = OperandBits;
+  if (Features.test(FEAT_VGPR_MSBS))
+    Bits += MSBBits;
+  return std::min(1u << Bits, getTotalNumVGPRs(AK, IsWave32));
 }
 
 unsigned AMDGPU::getAddressableNumVGPRs(Triple::SubArchType SubArch,
@@ -613,7 +618,7 @@ static const AMDGPUFeatureBitset FrontendOnlyFeatures = {
     FEAT_AGPR_ALLOC,
     FEAT_1536_PHYSICAL_VGPRS,
     FEAT_HALF_ADDRESSABLE_PHYSICAL_LOCAL_MEMORY,
-    FEAT_1024_ADDRESSABLE_VGPRS,
+    FEAT_VGPR_MSBS,
     FEAT_LDS_ALLOC_GRANULARITY_256,
     FEAT_LDS_ALLOC_GRANULARITY_512,
     FEAT_LDS_ALLOC_GRANULARITY_1024,
@@ -813,12 +818,7 @@ static bool computeTargetIDFeatures(GPUKind Arch, StringRef TargetIDStr,
                                     TargetIDSetting &XnackSetting,
                                     TargetIDSetting &SramEccSetting) {
   const AMDGPUFeatureBitset &Features = getFeatureBitset(Arch);
-  XnackSetting = Features.test(FEAT_XNACK_ON_OFF_MODES)
-                     ? TargetIDSetting::Any
-                     : TargetIDSetting::Unsupported;
-  SramEccSetting = Features.test(FEAT_SRAMECC_SUPPORT)
-                       ? TargetIDSetting::Any
-                       : TargetIDSetting::Unsupported;
+  getDefaultTargetIDFeatures(Arch, XnackSetting, SramEccSetting);
 
   // The first component is the processor; the rest are feature modifiers of the
   // form "<feature><+|->".
@@ -831,7 +831,9 @@ static bool computeTargetIDFeatures(GPUKind Arch, StringRef TargetIDStr,
     StringRef FeatureString = Split[I];
     if (FeatureString.consume_front("xnack")) {
       TargetIDSetting Sign = getTargetIDSettingFromFeatureString(FeatureString);
-      if (SeenXnack || XnackSetting == TargetIDSetting::Unsupported ||
+      // An xnack modifier is only valid with on/off modes: rejected when xnack
+      // is unsupported or hardwired on (e.g. gfx1250).
+      if (SeenXnack || !Features.test(FEAT_XNACK_ON_OFF_MODES) ||
           Sign == TargetIDSetting::Unsupported)
         Valid = false;
       else
@@ -859,6 +861,33 @@ TargetID::TargetID(const Triple &TT, StringRef TargetIDStr)
   // Derive the feature settings from the string. Validity is not checked here;
   // parseTargetIDString validates untrusted input.
   computeTargetIDFeatures(Arch, TargetIDStr, XnackSetting, SramEccSetting);
+}
+
+TargetID TargetID::createFromSubtargetFeatures(const Triple &TT, StringRef CPU,
+                                               StringRef FeatureString) {
+  GPUKind Arch = parseArchAMDGCN(CPU);
+  TargetIDSetting XnackSetting, SramEccSetting;
+  getDefaultTargetIDFeatures(Arch, XnackSetting, SramEccSetting);
+
+  // Apply the +/-xnack and +/-sramecc modifiers from the feature string, only
+  // for targets that can toggle the corresponding mode.
+  bool XnackToggleable = XnackSetting == TargetIDSetting::Any;
+  bool SramEccToggleable = SramEccSetting == TargetIDSetting::Any;
+  SmallVector<StringRef, 4> Features;
+  FeatureString.split(Features, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+  for (StringRef Feature : Features) {
+    TargetIDSetting Sign =
+        getTargetIDSettingFromFeatureString(Feature.take_front());
+    if (Sign == TargetIDSetting::Unsupported)
+      continue;
+    StringRef Name = Feature.drop_front();
+    if (Name == "xnack" && XnackToggleable)
+      XnackSetting = Sign;
+    else if (Name == "sramecc" && SramEccToggleable)
+      SramEccSetting = Sign;
+  }
+
+  return TargetID(Arch, TT, XnackSetting, SramEccSetting);
 }
 
 std::optional<TargetID> TargetID::parse(const Triple &TT,
@@ -928,6 +957,9 @@ static void printFeatureModifiers(raw_ostream &OS, TargetIDSetting SramEcc,
     else if (SramEcc == TargetIDSetting::On)
       OS << ":sramecc+";
   }
+
+  if (XnackHardwiredOn)
+    return;
 
   if (Xnack == TargetIDSetting::Off)
     OS << ":xnack-";

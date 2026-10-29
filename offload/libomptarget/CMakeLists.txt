@@ -21,6 +21,8 @@ add_library(omptarget SHARED
   ../libompaccsupport/PluginManager.cpp
   ../libompaccsupport/DeviceImage.cpp
   ../libompaccsupport/Mapping.cpp
+  ../libompaccsupport/OmpAccError.cpp
+  ../libompaccsupport/Program.cpp
 
   KernelLanguage/API.cpp
 )

@@ -22,16 +22,12 @@
 #include "llvm/IR/ModuleSlotTracker.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/Support/Compiler.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 #include "gtest/gtest.h"
 #include <optional>
 #include <type_traits>
 using namespace llvm;
-
-namespace llvm {
-LLVM_ABI extern cl::opt<bool> PickMergedSourceLocations;
-} // namespace llvm
 
 namespace {
 
@@ -1463,7 +1459,9 @@ TEST_F(DILocationTest, Merge) {
   {
     // If PickMergedSourceLocation is enabled, when one source location is null
     // we should return the valid location.
-    PickMergedSourceLocations = true;
+    const char *Pick[] = {"prog", "-pick-merged-source-locations"};
+    ASSERT_TRUE(cl::parseCommandLineOptions(Context.getLibraryOptions(), Pick,
+                                            "", &nulls()));
     auto *A = DILocation::get(Context, 2, 7, N);
     auto *M1 = DILocation::getMergedLocation(A, nullptr);
     ASSERT_NE(nullptr, M1);
@@ -1476,7 +1474,9 @@ TEST_F(DILocationTest, Merge) {
     EXPECT_EQ(2u, M2->getLine());
     EXPECT_EQ(7u, M2->getColumn());
     EXPECT_EQ(N, M2->getScope());
-    PickMergedSourceLocations = false;
+    const char *NoPick[] = {"prog", "-pick-merged-source-locations=false"};
+    ASSERT_TRUE(cl::parseCommandLineOptions(Context.getLibraryOptions(), NoPick,
+                                            "", &nulls()));
   }
 
 #define EXPECT_ATOM(Loc, Group, Rank)                                          \
@@ -4485,6 +4485,8 @@ TEST_F(DIExpressionTest, isValid) {
   EXPECT_VALID(dwarf::DW_OP_LLVM_entry_value, 1);
   EXPECT_VALID(dwarf::DW_OP_LLVM_entry_value, 1, dwarf::DW_OP_plus_uconst, 6);
   EXPECT_VALID(dwarf::DW_OP_LLVM_arg, 0, dwarf::DW_OP_LLVM_entry_value, 1);
+  EXPECT_VALID(dwarf::DW_OP_constu, 6, dwarf::DW_OP_LLVM_user,
+               dwarf::DW_OP_LLVM_offset, dwarf::DW_OP_deref);
 
   // Invalid constructions.
   EXPECT_INVALID(~0u);
@@ -4500,6 +4502,8 @@ TEST_F(DIExpressionTest, isValid) {
   EXPECT_INVALID(dwarf::DW_OP_LLVM_arg, 0, dwarf::DW_OP_plus_uconst, 5,
                  dwarf::DW_OP_LLVM_entry_value, 1);
   EXPECT_INVALID(dwarf::DW_OP_LLVM_arg, 1, dwarf::DW_OP_LLVM_entry_value, 1);
+  EXPECT_INVALID(dwarf::DW_OP_LLVM_user);
+  EXPECT_INVALID(dwarf::DW_OP_LLVM_user, dwarf::DW_OP_LLVM_form_aspace_address);
 
   // A valid operation doesn't make a malformed suffix valid.
   EXPECT_INVALID(dwarf::DW_OP_reg0, dwarf::DW_OP_stack_value,

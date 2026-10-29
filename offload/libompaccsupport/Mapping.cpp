@@ -211,7 +211,7 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
     bool HasFlagAlways, bool IsImplicit, bool UpdateRefCount,
     bool HasCloseModifier, bool HasPresentModifier, bool HasHoldModifier,
     AsyncInfoTy &AsyncInfo, HostDataToTargetTy *OwnedTPR, bool ReleaseHDTTMap,
-    StateInfoTy *StateInfo) {
+    StateInfoTy *StateInfo, const ident_t *Loc) {
 
   LookupResult LR = lookupMapping(HDTTMap, HstPtrBegin, Size, OwnedTPR);
   LR.TPR.Flags.IsPresent = true;
@@ -263,8 +263,8 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
       MESSAGE("device mapping required by 'present' map type modifier does not "
               "exist for host address " DPxMOD " (%" PRId64 " bytes)",
               DPxPTR(HstPtrBegin), Size);
-  } else if (((PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY) ||
-              (PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY)) &&
+  } else if (((Device.PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY) ||
+              (Device.PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY)) &&
              (!HasCloseModifier)) {
     // If unified shared memory is active, implicitly mapped variables that
     // are not privatized use host address. Any explicitly mapped variables
@@ -289,7 +289,7 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
       // If we are here, it means that we are either in auto zero-copy or USM.
       // Enable GPU page table prefaulting if selected by the user. This feature
       // is only enabled for APUs.
-      if (PM->getRequirements() & OMPX_REQ_EAGER_ZERO_COPY_MAPS) {
+      if (Device.PM->getRequirements() & OMPX_REQ_EAGER_ZERO_COPY_MAPS) {
         Device.RTL->prepopulate_page_table(Device.DeviceID, HstPtrBegin, Size);
         INFO(OMP_INFOTYPE_MAPPING_CHANGED, Device.DeviceID,
              "Prefaulted " DPxMOD " Size=%" PRId64 " on GPU page table\n",
@@ -408,7 +408,8 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
                       << ") -> (tgt:" << LR.TPR.TargetPointer << ")";
 
     int Ret = Device.submitData(LR.TPR.TargetPointer, HstPtrBegin, Size,
-                                AsyncInfo, LR.TPR.getEntry());
+                                AsyncInfo, LR.TPR.getEntry(),
+                                /*HDTTMapPtr=*/nullptr, Loc);
     if (Ret != OFFLOAD_SUCCESS) {
       REPORT() << "Copying data to device failed.";
       // We will also return nullptr if the data movement fails because that
@@ -496,8 +497,8 @@ TargetPointerResultTy MappingInfoTy::getTgtPtrBegin(
          LR.TPR.getEntry()->dynRefCountToStr().c_str(), DynRefCountAction,
          LR.TPR.getEntry()->holdRefCountToStr().c_str(), HoldRefCountAction);
     LR.TPR.TargetPointer = (void *)TP;
-  } else if ((PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY) ||
-             PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY) {
+  } else if (Device.PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY ||
+             Device.PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY) {
     // If the value isn't found in the mapping and unified shared memory
     // is on then it means we have stumbled upon a value which we need to
     // use directly from the host.
@@ -581,21 +582,31 @@ int MappingInfoTy::deallocTgtPtrAndEntry(HostDataToTargetTy *Entry,
 
 static void printCopyInfoImpl(int DeviceId, bool H2D, void *SrcPtrBegin,
                               void *DstPtrBegin, int64_t Size,
-                              HostDataToTargetTy *HT) {
+                              HostDataToTargetTy *HT, const ident_t *Loc,
+                              const char *Name) {
+  SourceInfo Info(Loc);
+  std::string LocStr;
+  if (Info.isAvailable())
+    LocStr = ", at " + std::string(Info.getFilename()) + ":" +
+             std::to_string(Info.getLine()) + ":" +
+             std::to_string(Info.getColumn());
 
   INFO(OMP_INFOTYPE_DATA_TRANSFER, DeviceId,
        "Copying data from %s to %s, %sPtr=" DPxMOD ", %sPtr=" DPxMOD
-       ", Size=%" PRId64 ", Name=%s\n",
+       ", Size=%" PRId64 ", Name=%s%s\n",
        H2D ? "host" : "device", H2D ? "device" : "host", H2D ? "Hst" : "Tgt",
        DPxPTR(H2D ? SrcPtrBegin : DstPtrBegin), H2D ? "Tgt" : "Hst",
        DPxPTR(H2D ? DstPtrBegin : SrcPtrBegin), Size,
        (HT && HT->HstPtrName) ? getNameFromMapping(HT->HstPtrName).c_str()
-                              : "unknown");
+                              : (Name ? Name : "unknown"),
+       LocStr.c_str());
 }
 
-void MappingInfoTy::printCopyInfo(
-    void *TgtPtrBegin, void *HstPtrBegin, int64_t Size, bool H2D,
-    HostDataToTargetTy *Entry, MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr) {
+void MappingInfoTy::printCopyInfo(void *TgtPtrBegin, void *HstPtrBegin,
+                                  int64_t Size, bool H2D,
+                                  HostDataToTargetTy *Entry,
+                                  MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
+                                  const ident_t *Loc, const char *Name) {
   auto HDTTMap =
       HostDataToTargetMap.getExclusiveAccessor(!!Entry || !!HDTTMapPtr);
   LookupResult LR;
@@ -603,6 +614,6 @@ void MappingInfoTy::printCopyInfo(
     LR = lookupMapping(HDTTMapPtr ? *HDTTMapPtr : HDTTMap, HstPtrBegin, Size);
     Entry = LR.TPR.getEntry();
   }
-  printCopyInfoImpl(Device.DeviceID, H2D, HstPtrBegin, TgtPtrBegin, Size,
-                    Entry);
+  printCopyInfoImpl(Device.DeviceID, H2D, HstPtrBegin, TgtPtrBegin, Size, Entry,
+                    Loc, Name);
 }

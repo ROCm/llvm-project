@@ -36,7 +36,7 @@ on:
       linux_amdgpu_families:
         type: string
         description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
-        default: "gfx94x,gfx110x,gfx90a"
+        default: "gfx94x,gfx110x,gfx90a,gfx125x"
       linux_test_labels:
         type: string
         description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
@@ -65,6 +65,14 @@ on:
         type: boolean
         default: true
         description: "Build PyTorch wheels"
+      enable_llvm_assertions:
+        type: choice
+        description: "LLVM assertions. auto enables them for a wave-transform ROCm LLVM PR. on always enables them. off leaves them off."
+        options:
+          - auto
+          - "on"
+          - "off"
+        default: auto
 
 permissions:
   contents: read
@@ -88,10 +96,11 @@ jobs:
           LLVM_ROCm_PR_URL=${{ github.event.inputs.LLVM_ROCm_PR_URL }}
           SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
           HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
+          LLVM_ASSERTIONS_MODE=${{ github.event.inputs.enable_llvm_assertions }}
           EOF
 
       - name: Upload stored file of PR URls
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: multiple-pr-build-params
           path: ${{ github.run_id }}_PR_params.env

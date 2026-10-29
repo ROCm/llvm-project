@@ -27,8 +27,8 @@ env:
 jobs:
   # =====================================================================
   # Build LLVM + Clang + amd-llvm-spirv + device-libs + Comgr.
-  # Strip binaries and upload the build trees as a single artifact for
-  # the test jobs to consume.
+  # Upload full build trees for compiler tests and a smaller compiler/runtime
+  # bundle for the GPU tests.
   # =====================================================================
   build:
     name: Build
@@ -37,7 +37,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 120
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
     steps:
       # ---- Checkout ---------------------------------------------------------
       # llvm-project at PR head (this repo) provides LLVM/Clang/LLD + amd/
@@ -162,6 +162,23 @@ jobs:
         env:
           ROCM_PATH: ${{ github.workspace }}/${{ env.STAGING }}
         run: ninja -C "$ROCR_BUILD" install
+
+      # CLR configure imports Python packages listed in TheRock requirements.txt
+      # (cxxheaderparser today). The manylinux image does not install that file,
+      # so take the list from TheRock main and install it here.
+      - name: Checkout TheRock Python requirements
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ROCm/TheRock
+          ref: main
+          path: TheRock
+          sparse-checkout: requirements.txt
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install TheRock Python requirements
+        run: python3 -m pip install -r TheRock/requirements.txt
 
       - name: Configure CLR (HIP runtime)
         run: |
@@ -324,7 +341,12 @@ jobs:
           ninja -C "$HIPRAND_BUILD"
           cmake --install "$HIPRAND_BUILD" --prefix $PWD/$STAGING
 
-      # ---- Strip + upload artifact -----------------------------------------
+      # The build image has libnuma from numactl-devel. Bundle it for ROCR so
+      # GPU jobs do not need to contact package repositories at test time.
+      - name: Stage libnuma
+        run: cp -L /usr/lib64/libnuma.so.1 "$STAGING/lib/libnuma.so.1"
+
+      # ---- Strip + upload artifacts ----------------------------------------
       # Strip binaries to keep the artifact under GHA's 10GB cap and shorten
       # upload/download time. Tests don't need debug symbols. `--strip-unneeded`
       # preserves dynamic symbols needed at link/load time.
@@ -355,6 +377,34 @@ jobs:
           compression-level: 6
           if-no-files-found: error
 
+      # These jobs compile HIP programs but never rebuild LLVM or the runtime.
+      # Dereference aliases such as clang++ and ld.lld; tar stores shared inodes
+      # as hard links, so the bundle has no dangling links or duplicate binaries.
+      - name: Tar GPU compiler and runtime
+        run: |
+          tar --dereference -cf linux-gpu-runtime.tar \
+            "$LLVM_BUILD/lib/clang" "$STAGING" \
+            "$LLVM_BUILD/bin/clang" "$LLVM_BUILD/bin/clang++" \
+            "$LLVM_BUILD/bin/clang-linker-wrapper" \
+            "$LLVM_BUILD/bin/clang-offload-bundler" \
+            "$LLVM_BUILD/bin/llvm-offload-binary" \
+            "$LLVM_BUILD/bin/lld" "$LLVM_BUILD/bin/ld.lld" \
+            "$LLVM_BUILD/bin/llvm-ar" "$LLVM_BUILD/bin/llvm-ranlib" \
+            "$LLVM_BUILD/bin/llvm-link" "$LLVM_BUILD/bin/llvm-nm" \
+            "$LLVM_BUILD/bin/llvm-objcopy" "$LLVM_BUILD/bin/llvm-objdump" \
+            "$LLVM_BUILD/bin/llvm-readobj" "$LLVM_BUILD/bin/llvm-readelf" \
+            "$LLVM_BUILD/bin/llvm-dis" "$LLVM_BUILD/bin/llvm-mc" \
+            "$LLVM_BUILD/bin/amd-llvm-spirv"
+
+      - name: Upload GPU compiler and runtime
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: linux-gpu-runtime
+          path: linux-gpu-runtime.tar
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
+
   # =====================================================================
   # Test - SPIRV translator lit (with PR-head vs amd-staging baseline diff)
   # =====================================================================
@@ -370,7 +420,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 30
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
     permissions:
       contents: read
 
@@ -437,7 +487,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 15
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
 
     steps:
       - name: Checkout llvm-project (PR head)
@@ -485,7 +535,7 @@ jobs:
     runs-on: aws-linux-scale-rocm-large
     timeout-minutes: 30
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
 
     steps:
       - name: Checkout llvm-project (PR head)
@@ -607,7 +657,7 @@ jobs:
     # slow/contended and 45m was cutting the job before it could finish.
     timeout-minutes: 240
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
       options: |
         --device=/dev/kfd --device=/dev/dri  --group-add video
 
@@ -621,16 +671,13 @@ jobs:
           ref: amd-staging
           path: rocm-examples
 
-      - name: Download build tree artifact
+      - name: Download GPU compiler and runtime
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
-          name: linux-build-tree
+          name: linux-gpu-runtime
 
-      - name: Untar build trees
-        run: tar -xmf linux-build-tree.tar
-
-      - name: Install libnuma
-        run: dnf install -y numactl-libs
+      - name: Untar GPU compiler and runtime
+        run: tar -xf linux-gpu-runtime.tar
 
       # HIP-Basic.
       - name: ROCm Examples build HIP-Basic
@@ -645,8 +692,9 @@ jobs:
             -DCMAKE_PREFIX_PATH=$STAGING                                       \
             -DCMAKE_DISABLE_FIND_PACKAGE_Perl=TRUE                             \
             -DCMAKE_HIP_FLAGS="--rocm-path=$STAGING"                           \
-            -DCMAKE_HIP_LINK_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"    \
-            -DCMAKE_EXE_LINKER_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"
+            -DCMAKE_HIP_STANDARD_LIBRARIES=-lamdhip64                          \
+            -DCMAKE_HIP_LINK_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed" \
+            -DCMAKE_EXE_LINKER_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed"
           cmake --build examples-build-hip-basic -j $(nproc)
 
       - name: ROCm Examples run HIP-Basic
@@ -667,8 +715,9 @@ jobs:
             -DCMAKE_HIP_COMPILER_ROCM_ROOT=$STAGING                            \
             -DCMAKE_PREFIX_PATH=$STAGING                                       \
             -DCMAKE_HIP_FLAGS="--rocm-path=$STAGING"                           \
-            -DCMAKE_HIP_LINK_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"    \
-            -DCMAKE_EXE_LINKER_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib"
+            -DCMAKE_HIP_STANDARD_LIBRARIES=-lamdhip64                          \
+            -DCMAKE_HIP_LINK_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed" \
+            -DCMAKE_EXE_LINKER_FLAGS="-L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed"
           cmake --build examples-build-Applications -j $(nproc)
 
       - name: ROCm Examples run Applications
@@ -693,10 +742,11 @@ jobs:
             -DCMAKE_HIP_ARCHITECTURES=amdgcnspirv                              \
             -DCMAKE_DISABLE_FIND_PACKAGE_Perl=TRUE                             \
             -DCMAKE_HIP_FLAGS="-DROCPRIM_DISABLE_DPP=1 --offload-new-driver --rocm-path=$STAGING -use-spirv-backend --rtlib=libgcc -unwindlib=libgcc" \
-            -DCMAKE_HIP_LINK_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--unresolved-symbols=ignore-in-shared-libs" \
+            -DCMAKE_HIP_STANDARD_LIBRARIES=-lamdhip64                          \
+            -DCMAKE_HIP_LINK_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed -Wl,--unresolved-symbols=ignore-in-shared-libs" \
             -DCMAKE_CXX_FLAGS="--rtlib=libgcc -unwindlib=libgcc"               \
-            -DCMAKE_EXE_LINKER_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--unresolved-symbols=ignore-in-shared-libs" \
-            -DCMAKE_SHARED_LINKER_FLAGS="--rtlib=libgcc -unwindlib=libgcc"
+            -DCMAKE_EXE_LINKER_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,-rpath,$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed -Wl,--unresolved-symbols=ignore-in-shared-libs" \
+            -DCMAKE_SHARED_LINKER_FLAGS="--rtlib=libgcc -unwindlib=libgcc -L$STAGING/lib -Wl,--no-as-needed -lamdhip64 -Wl,--as-needed"
           cmake --build examples-build-Libraries -j $(nproc)
 
       - name: ROCm Examples run Libraries
@@ -722,7 +772,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:34ac4cb83216f760d8132ec2fabed4062f8c1fe40c94c70f58e8d7f8a7931ada
       options: |
         --device=/dev/kfd --device=/dev/dri  --group-add video
 
@@ -751,16 +801,13 @@ jobs:
           [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad HECBENCH_REF: '$ref'"; exit 1; }
           echo "HECBENCH_REF=$ref" >> "$GITHUB_ENV"
 
-      - name: Download build tree artifact
+      - name: Download GPU compiler and runtime
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
-          name: linux-build-tree
+          name: linux-gpu-runtime
 
-      - name: Untar build trees
-        run: tar -xmf linux-build-tree.tar
-
-      - name: Install libnuma
-        run: dnf install -y numactl-libs
+      - name: Untar GPU compiler and runtime
+        run: tar -xf linux-gpu-runtime.tar
 
       # Single sparse, shallow blob:none pass over the subset + precomputed deps
       # (ci_benchmarks.deps.txt from update_deps.sh): ~90 MB, not the full repo.
@@ -826,7 +873,48 @@ jobs:
           fi
           exit $rc
 
-      - name: Upload HeCBench logs
+      - name: Record HeCBench binary sizes
+        if: always()
+        run: |
+          python3 - <<'PYTHON'
+          import csv
+          import os
+          from pathlib import Path
+
+          src = Path("HeCBench/src")
+          benchmarks = (Path(os.environ["SCRIPTS"]) / "ci_benchmarks.txt").read_text().splitlines()
+          rows: list[tuple[str, int]] = []
+          for benchmark in sorted(set(line.strip() for line in benchmarks)):
+              if not benchmark or benchmark.startswith("#"):
+                  continue
+              directory = src / benchmark
+              if Path(benchmark).name != benchmark or not directory.is_dir():
+                  raise RuntimeError(f"Invalid or missing benchmark directory: {benchmark}")
+              for path in sorted(directory.rglob("*")):
+                  if path.is_symlink() or not path.is_file() or not os.access(path, os.X_OK):
+                      continue
+                  # Exclude executable scripts; measure the unstripped ELF binaries.
+                  with path.open("rb") as binary:
+                      if binary.read(4) != b"\x7fELF":
+                          continue
+                  rows.append((path.relative_to(src).as_posix(), path.stat().st_size))
+          if not rows:
+              raise RuntimeError("No HeCBench binaries found")
+
+          report = Path(os.environ["HECBENCH_LOG_DIR"]) / "binary-sizes.csv"
+          with report.open("w", newline="") as output:
+              writer = csv.writer(output)
+              writer.writerow(("path", "size_bytes"))
+              writer.writerows(rows)
+          total = sum(size for _, size in rows)
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
+              summary.write(f"### HeCBench binary sizes\n\n{len(rows)} files, {total} bytes.\n\n")
+              summary.write("Per-file sizes: `binary-sizes.csv` in the `hecbench-logs` artifact.\n\n")
+              summary.write("Compare matching file lists; failed builds may leave partial results.\n")
+          print(f"Recorded {len(rows)} binary sizes ({total} bytes) in {report}")
+          PYTHON
+
+      - name: Upload HeCBench logs and binary sizes
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:

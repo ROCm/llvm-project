@@ -82,6 +82,33 @@ enum {
   ExpectedIsaCount = sizeof(ExpectedIsaNames) / sizeof(ExpectedIsaNames[0])
 };
 
+// Return whether Features advertises Feature. Features must agree with target
+// ID validation: an advertised feature is selectable, and an omitted one, such
+// as hardwired-on gfx1250 xnack, is rejected.
+static bool queryFeature(const char *Name, amd_comgr_metadata_node_t Features,
+                         const char *Feature) {
+  amd_comgr_metadata_node_t Val, Root;
+  bool Advertised = amd_comgr_metadata_lookup(Features, Feature, &Val) ==
+                    AMD_COMGR_STATUS_SUCCESS;
+  if (Advertised) {
+    amd_comgr_(destroy_metadata(Val));
+  }
+
+  char FeatureName[256];
+  snprintf(FeatureName, sizeof(FeatureName), "%s:%s+", Name, Feature);
+  bool Selectable = amd_comgr_get_isa_metadata(FeatureName, &Root) ==
+                    AMD_COMGR_STATUS_SUCCESS;
+  if (Selectable) {
+    amd_comgr_(destroy_metadata(Root));
+  }
+
+  if (Advertised != Selectable) {
+    fail("%s: Features.%s advertised %d, but %s accepted %d", Name, Feature,
+         Advertised, FeatureName, Selectable);
+  }
+  return Advertised;
+}
+
 int main(int argc, char *argv[]) {
   size_t IsaCount;
   bool Seen[ExpectedIsaCount] = {false};
@@ -90,8 +117,8 @@ int main(int argc, char *argv[]) {
     fail("Expected %zu ISAs, got %zu", (size_t)ExpectedIsaCount, IsaCount);
   for (size_t i = 0; i < IsaCount; i++) {
     const char *Name;
-    bool sramecc = false, xnack = false;
-    amd_comgr_metadata_node_t Root, Features, Val;
+    bool sramecc, xnack;
+    amd_comgr_metadata_node_t Root, Features;
     amd_comgr_(get_isa_name(i, &Name));
 
     // Compare sets rather than relying on TargetParser's enumeration order.
@@ -108,16 +135,8 @@ int main(int argc, char *argv[]) {
     amd_comgr_(get_isa_metadata(Name, &Root));
     amd_comgr_(metadata_lookup(Root, "Features", &Features));
 
-    if (amd_comgr_metadata_lookup(Features, "sramecc", &Val) ==
-        AMD_COMGR_STATUS_SUCCESS) {
-      sramecc = true;
-      amd_comgr_(destroy_metadata(Val));
-    }
-    if (amd_comgr_metadata_lookup(Features, "xnack", &Val) ==
-        AMD_COMGR_STATUS_SUCCESS) {
-      xnack = true;
-      amd_comgr_(destroy_metadata(Val));
-    }
+    sramecc = queryFeature(Name, Features, "sramecc");
+    xnack = queryFeature(Name, Features, "xnack");
 
     printf("%s\n", Name);
 

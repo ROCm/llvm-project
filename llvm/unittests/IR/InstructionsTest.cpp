@@ -543,7 +543,8 @@ TEST(InstructionsTest, VectorGep) {
 
 TEST(InstructionsTest, FPMathOperator) {
   LLVMContext Context;
-  IRBuilder<> Builder(Context);
+  Module M("", Context);
+  IRBuilder<> Builder(M);
   MDBuilder MDHelper(Context);
   Instruction *I = Builder.CreatePHI(Builder.getDoubleTy(), 0);
   MDNode *MD1 = MDHelper.createFPMath(1.0);
@@ -565,8 +566,7 @@ TEST(InstructionTest, ConstrainedTrans) {
                         false);
   auto *F = Function::Create(FTy, Function::ExternalLinkage, "", M.get());
   auto *BB = BasicBlock::Create(Context, "bb", F);
-  IRBuilder<> Builder(Context);
-  Builder.SetInsertPoint(BB);
+  IRBuilder<> Builder(BB);
   auto *Arg0 = F->arg_begin();
   auto *Arg1 = F->arg_begin() + 1;
 
@@ -880,7 +880,7 @@ TEST_F(ModuleWithFunctionTest, DropPoisonGeneratingFlags) {
   auto *OnlyBB = BasicBlock::Create(Ctx, "bb", F);
   auto *Arg0 = &*F->arg_begin();
 
-  IRBuilder<NoFolder> B(Ctx);
+  IRBuilder<NoFolder> B(*M);
   B.SetInsertPoint(OnlyBB);
 
   {
@@ -1629,7 +1629,8 @@ TEST(InstructionsTest, SkipDebug) {
 
 TEST(InstructionsTest, PhiMightNotBeFPMathOperator) {
   LLVMContext Context;
-  IRBuilder<> Builder(Context);
+  Module M("", Context);
+  IRBuilder<> Builder(M);
   MDBuilder MDHelper(Context);
   Instruction *I = Builder.CreatePHI(Builder.getInt32Ty(), 0);
   EXPECT_FALSE(isa<FPMathOperator>(I));
@@ -1800,7 +1801,8 @@ if.end:
 
 TEST(InstructionsTest, UnaryOperator) {
   LLVMContext Context;
-  IRBuilder<> Builder(Context);
+  Module M("", Context);
+  IRBuilder<> Builder(M);
   Instruction *I = Builder.CreatePHI(Builder.getDoubleTy(), 0);
   Value *F = Builder.CreateFNeg(I);
 
@@ -2012,42 +2014,44 @@ TEST(InstructionsTest, AtomicSyncscope) {
   FunctionType *FT = FunctionType::get(Type::getVoidTy(Ctx), {}, false);
   Function *F = Function::Create(FT, Function::ExternalLinkage, "Fun", M);
   BasicBlock *BB = BasicBlock::Create(Ctx, "Entry", F);
-  IRBuilder<> Builder(BB);
+  LLVMBuilderRef Builder = LLVMCreateBuilderForModule(wrap(&M));
+  LLVMPositionBuilderAtEnd(Builder, wrap(BB));
 
   // SyncScope-variants of LLVM C IRBuilder APIs are tested by llvm-c-test,
   // so cover the old versions (with a SingleThreaded argument) here.
-  Value *Ptr = ConstantPointerNull::get(Builder.getPtrTy());
+  Value *Ptr = ConstantPointerNull::get(PointerType::getUnqual(Ctx));
   Value *Val = ConstantInt::get(Type::getInt32Ty(Ctx), 0);
 
   // fence
-  LLVMValueRef Fence = LLVMBuildFence(
-      wrap(&Builder), LLVMAtomicOrderingSequentiallyConsistent, 0, "");
+  LLVMValueRef Fence =
+      LLVMBuildFence(Builder, LLVMAtomicOrderingSequentiallyConsistent, 0, "");
   EXPECT_FALSE(LLVMIsAtomicSingleThread(Fence));
-  Fence = LLVMBuildFence(wrap(&Builder),
-                         LLVMAtomicOrderingSequentiallyConsistent, 1, "");
+  Fence =
+      LLVMBuildFence(Builder, LLVMAtomicOrderingSequentiallyConsistent, 1, "");
   EXPECT_TRUE(LLVMIsAtomicSingleThread(Fence));
 
   // atomicrmw
-  LLVMValueRef AtomicRMW = LLVMBuildAtomicRMW(
-      wrap(&Builder), LLVMAtomicRMWBinOpXchg, wrap(Ptr), wrap(Val),
-      LLVMAtomicOrderingSequentiallyConsistent, 0);
+  LLVMValueRef AtomicRMW =
+      LLVMBuildAtomicRMW(Builder, LLVMAtomicRMWBinOpXchg, wrap(Ptr), wrap(Val),
+                         LLVMAtomicOrderingSequentiallyConsistent, 0);
   EXPECT_FALSE(LLVMIsAtomicSingleThread(AtomicRMW));
-  AtomicRMW = LLVMBuildAtomicRMW(wrap(&Builder), LLVMAtomicRMWBinOpXchg,
-                                 wrap(Ptr), wrap(Val),
-                                 LLVMAtomicOrderingSequentiallyConsistent, 1);
+  AtomicRMW =
+      LLVMBuildAtomicRMW(Builder, LLVMAtomicRMWBinOpXchg, wrap(Ptr), wrap(Val),
+                         LLVMAtomicOrderingSequentiallyConsistent, 1);
   EXPECT_TRUE(LLVMIsAtomicSingleThread(AtomicRMW));
 
   // cmpxchg
   LLVMValueRef CmpXchg =
-      LLVMBuildAtomicCmpXchg(wrap(&Builder), wrap(Ptr), wrap(Val), wrap(Val),
+      LLVMBuildAtomicCmpXchg(Builder, wrap(Ptr), wrap(Val), wrap(Val),
                              LLVMAtomicOrderingSequentiallyConsistent,
                              LLVMAtomicOrderingSequentiallyConsistent, 0);
   EXPECT_FALSE(LLVMIsAtomicSingleThread(CmpXchg));
-  CmpXchg =
-      LLVMBuildAtomicCmpXchg(wrap(&Builder), wrap(Ptr), wrap(Val), wrap(Val),
-                             LLVMAtomicOrderingSequentiallyConsistent,
-                             LLVMAtomicOrderingSequentiallyConsistent, 1);
+  CmpXchg = LLVMBuildAtomicCmpXchg(Builder, wrap(Ptr), wrap(Val), wrap(Val),
+                                   LLVMAtomicOrderingSequentiallyConsistent,
+                                   LLVMAtomicOrderingSequentiallyConsistent, 1);
   EXPECT_TRUE(LLVMIsAtomicSingleThread(CmpXchg));
+
+  LLVMDisposeBuilder(Builder);
 }
 
 TEST(InstructionsTest, CmpPredicate) {
