@@ -1,0 +1,265 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+# Cherry-pick Testing
+#
+# Qualifies a single cherry-pick against a release candidate.
+#
+# The developer picks their patch onto the exact llvm commit the candidate
+# already pins, pushes the result as a branch to ROCm/llvm-project, then
+# dispatches this workflow with that branch plus the candidate's TheRock branch.
+# Every other component stays where the candidate pinned it, so a pass or a
+# fail is attributable to the patch alone.
+#
+# Multi Arch Parameterised CI amd-staging cannot serve this case: it resolves
+# changes through refs/pull/<n>/head and so needs an open PR, which a
+# cherry-pick branch does not have and often never will.
+
+name: Cherry-pick Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      LLVM_BRANCH:
+        description: "ROCm/llvm-project branch holding the cherry-pick, e.g. users/estewart/revert-wave-llvm-cache-cp-10-14-26."
+        required: true
+        type: string
+      THEROCK_REF:
+        description: "TheRock branch supplying every other component pin, e.g. amd-compiler-2026-10-8-COT-2."
+        required: true
+        type: string
+      retain_compiler_submodules:
+        description: "Keep hipify and spirv-llvm-translator exactly as THEROCK_REF pinned them, instead of floating them to amd-staging tips."
+        type: boolean
+        default: true
+      # Platforms. "none" skips the platform entirely.
+      linux_amdgpu_families:
+        description: 'Comma-separated list of Linux GPU families. "all" = all, "none" = skip platform.'
+        type: string
+        default: "gfx950"
+      windows_amdgpu_families:
+        description: 'Comma-separated list of Windows GPU families. "all" = all, "none" = skip platform.'
+        type: string
+        default: "none"
+      # Wheels.
+      build_pytorch:
+        description: "Build PyTorch wheels."
+        type: boolean
+        default: false
+      build_jax:
+        description: "Build JAX wheels."
+        type: boolean
+        default: false
+      python_version:
+        description: "Single Python version for wheel builds (empty for full matrix)."
+        type: string
+        default: ""
+      # Tests.
+      run_tests:
+        description: "Run tests after the build. Uncheck for a build-only run."
+        type: boolean
+        default: true
+      test_type:
+        description: "Component test depth (quick/standard/comprehensive/full)."
+        type: choice
+        options:
+          - quick
+          - standard
+          - comprehensive
+          - full
+        default: quick
+      linux_test_labels:
+        description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
+        type: string
+        default: ""
+      windows_test_labels:
+        description: "Comma-separated test options. Use test:* to filter tests (e.g. test:rocprim). Use test_filter:* to set test type (e.g. test_filter:quick)."
+        type: string
+        default: ""
+      changed_projects:
+        description: "Comma-separated list of changed projects to filter tests (empty = run all tests)."
+        type: string
+        default: ""
+      # Reuse artifacts from an earlier run instead of rebuilding.
+      prebuilt_stages:
+        description: "Comma-separated build stages to skip (or 'all' for all stages); artifacts are copied from baseline_run_id instead."
+        type: string
+        default: ""
+      baseline_run_id:
+        description: "Workflow run ID to copy prebuilt stage artifacts from; required when prebuilt_stages is set."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  # Keyed on the branch under test rather than the dispatching ref, so
+  # qualifying several cherry-picks at once does not cancel them all. A repeat
+  # dispatch of the same branch still supersedes the run in flight.
+  group: ${{ github.workflow }}-${{ inputs.LLVM_BRANCH || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # A cherry-pick result only means something as a delta against a baseline QA
+  # has already tested. If the branch is not a descendant of the llvm commit
+  # THEROCK_REF pins, the build carries changes beyond the patch and neither a
+  # pass nor a fail is attributable, so this gate is unconditionally blocking.
+  validate_cp_base:
+    name: Validate cherry-pick base
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Compare branch against the llvm commit TheRock pins
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LLVM_BRANCH: ${{ inputs.LLVM_BRANCH }}
+          THEROCK_REF: ${{ inputs.THEROCK_REF }}
+        run: |
+          set -euo pipefail
+
+          LLVM_SHA=$(git ls-remote --exit-code --heads \
+            https://github.com/ROCm/llvm-project.git \
+            "refs/heads/${LLVM_BRANCH}" | cut -f1) || {
+            echo "::error::Branch '${LLVM_BRANCH}' not found on ROCm/llvm-project."
+            exit 1
+          }
+
+          ENTRY=$(gh api "repos/ROCm/TheRock/contents/compiler/amd-llvm?ref=${THEROCK_REF}")
+          BASE_SHA=$(jq -r '.sha' <<<"${ENTRY}")
+
+          COMPARE=$(gh api "repos/ROCm/llvm-project/compare/${BASE_SHA}...${LLVM_SHA}?per_page=1")
+          STATUS=$(jq -r '.status' <<<"${COMPARE}")
+          AHEAD=$(jq -r '.ahead_by' <<<"${COMPARE}")
+          BEHIND=$(jq -r '.behind_by' <<<"${COMPARE}")
+
+          {
+            echo "## Cherry-pick under test"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| llvm-project branch | \`${LLVM_BRANCH}\` |"
+            echo "| llvm-project commit | \`${LLVM_SHA:0:12}\` |"
+            echo "| TheRock base branch | \`${THEROCK_REF}\` |"
+            echo "| Base llvm commit | \`${BASE_SHA:0:12}\` |"
+            echo "| Commits on top of base | ${AHEAD} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "${STATUS}" != "ahead" ]]; then
+            echo "::error::'${LLVM_BRANCH}' is '${STATUS}' relative to the llvm commit ${THEROCK_REF} pins (${BEHIND} missing, ${AHEAD} extra). Rebase onto ${BASE_SHA}."
+            exit 1
+          fi
+
+  # rock-ci-deps/submodule-pr-update runs inside the build workflows, where
+  # these inputs are out of scope, so it reads them from an artifact instead.
+  cp_params:
+    name: Publish cherry-pick parameters
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Store cherry-pick parameters into file
+        env:
+          LLVM_BRANCH: ${{ inputs.LLVM_BRANCH }}
+          RETAIN_COMPILER_SUBMODULES: ${{ inputs.retain_compiler_submodules }}
+        run: |
+          # The PR URL keys stay present but empty. The action sources this file
+          # and echoes each one, and a cherry-pick has no PR to point at.
+          cat > "${{ github.run_id }}_PR_params.env" <<EOF
+          LLVM_PR_URL=
+          LLVM_ROCm_PR_URL=
+          SPIRV_PR_URL=
+          HIPIFY_PR_URL=
+          LLVM_BRANCH=${LLVM_BRANCH}
+          RETAIN_COMPILER_SUBMODULES=${RETAIN_COMPILER_SUBMODULES}
+          EOF
+
+      - name: Upload cherry-pick parameters
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: multiple-pr-build-params
+          path: ${{ github.run_id }}_PR_params.env
+
+  setup:
+    needs: validate_cp_base
+    uses: ./.github/workflows/setup_multi_arch.yml
+    with:
+      build_variant: "release"
+      linux_amdgpu_families: ${{ inputs.linux_amdgpu_families }}
+      windows_amdgpu_families: ${{ inputs.windows_amdgpu_families }}
+      linux_test_labels: ${{ inputs.linux_test_labels }}
+      windows_test_labels: ${{ inputs.windows_test_labels }}
+      prebuilt_stages: ${{ inputs.prebuilt_stages }}
+      baseline_run_id: ${{ inputs.baseline_run_id }}
+      build_pytorch: ${{ inputs.build_pytorch }}
+      build_jax: ${{ inputs.build_jax }}
+      python_version: ${{ inputs.python_version }}
+      repository: "ROCm/TheRock"
+      ref: ${{ inputs.THEROCK_REF }}
+
+  linux_build_and_test:
+    name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}
+    needs:
+      - setup
+      - cp_params
+    if: >-
+      ${{
+        needs.setup.outputs.linux_build_config != '' &&
+        needs.setup.outputs.enable_build_jobs == 'true'
+      }}
+    uses: ./.github/workflows/multi_arch_ci_linux.yml
+    with:
+      build_config: ${{ needs.setup.outputs.linux_build_config }}
+      test_labels: ${{ needs.setup.outputs.linux_test_labels }}
+      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      rocm_deb_package_version: ${{ needs.setup.outputs.rocm_deb_package_version }}
+      rocm_rpm_package_version: ${{ needs.setup.outputs.rocm_rpm_package_version }}
+      test_type: ${{ inputs.test_type }}
+      run_tests: ${{ inputs.run_tests }}
+      changed_projects: ${{ inputs.changed_projects }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
+    permissions:
+      contents: read
+      id-token: write
+
+  windows_build_and_test:
+    name: Windows::${{ fromJSON(needs.setup.outputs.windows_build_config || '{}').build_variant_label || 'skip' }}
+    needs:
+      - setup
+      - cp_params
+    if: >-
+      ${{
+        needs.setup.outputs.windows_build_config != '' &&
+        needs.setup.outputs.enable_build_jobs == 'true'
+      }}
+    uses: ./.github/workflows/multi_arch_ci_windows.yml
+    with:
+      build_config: ${{ needs.setup.outputs.windows_build_config }}
+      test_labels: ${{ needs.setup.outputs.windows_test_labels }}
+      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      test_type: ${{ inputs.test_type }}
+      run_tests: ${{ inputs.run_tests }}
+      changed_projects: ${{ inputs.changed_projects }}
+      repository: "ROCm/TheRock"
+      ref: ${{ needs.setup.outputs.ref }}
+    permissions:
+      contents: read
+      id-token: write
+
+  ci_summary:
+    name: CI Summary
+    if: always()
+    needs:
+      - setup
+      - linux_build_and_test
+      - windows_build_and_test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: "ROCm/TheRock"
+          ref: ${{ needs.setup.outputs.ref }}
+      - name: Evaluate workflow results
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python build_tools/github_actions/workflow_summary.py \
+            --needs-json '${{ toJSON(needs) }}'
