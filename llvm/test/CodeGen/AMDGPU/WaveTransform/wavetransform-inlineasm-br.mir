@@ -64,7 +64,7 @@ body:             |
   ; POSTWT-NEXT:   INLINEASM_BR &"s_cbranch_vccnz ${0:l}", sideeffect attdialect, imm, %bb.7
   ; POSTWT-NEXT:   S_BRANCH %bb.7
   ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT: bb.7 (inlineasm-br-indirect-target):
+  ; POSTWT-NEXT: bb.7 (label-must-be-emitted, inlineasm-br-indirect-target):
   ; POSTWT-NEXT:   successors: %bb.2(0x40000000), %bb.6(0x40000000)
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[V_CMP_EQ_U32_e64_]], implicit-def $scc

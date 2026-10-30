@@ -244,8 +244,8 @@ define amdgpu_cs void @single_lane_execution_attribute(i32 inreg %.userdata0, <3
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB4_4
 ; GFX10-NEXT:  .LBB4_1: ; %.preheader.preheader
-; GFX10-NEXT:    s_mov_b32 s12, 0
 ; GFX10-NEXT:    s_mov_b32 s13, 0
+; GFX10-NEXT:    s_mov_b32 s12, 0
 ; GFX10-NEXT:  .LBB4_2: ; %.preheader
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    v_mov_b32_e32 v3, s3
@@ -255,15 +255,15 @@ define amdgpu_cs void @single_lane_execution_attribute(i32 inreg %.userdata0, <3
 ; GFX10-NEXT:    v_cmp_ne_u32_e64 s0, 0, v2
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-NEXT:    v_readfirstlane_b32 s14, v3
-; GFX10-NEXT:    s_add_i32 s13, s14, s13
+; GFX10-NEXT:    s_add_i32 s12, s14, s12
 ; GFX10-NEXT:    s_xor_b32 s14, exec_lo, s0
-; GFX10-NEXT:    s_or_b32 s12, s12, s14
+; GFX10-NEXT:    s_or_b32 s13, s13, s14
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB4_2
 ; GFX10-NEXT:  .LBB4_3: ; %.preheader._crit_edge
-; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s12
-; GFX10-NEXT:    v_cmp_eq_u32_e64 s0, s13, v1
+; GFX10-NEXT:    s_or_b32 exec_lo, exec_lo, s13
+; GFX10-NEXT:    v_cmp_eq_u32_e64 s0, s12, v1
 ; GFX10-NEXT:    s_or_b32 s0, vcc_lo, s0
 ; GFX10-NEXT:    v_cndmask_b32_e64 v3, 0, 1, s0
 ; GFX10-NEXT:  .LBB4_4:

@@ -31,11 +31,11 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    s_mov_b64 s[10:11], 0
 ; CHECK-NEXT:    s_mov_b64 s[12:13], 0
 ; CHECK-NEXT:    s_mov_b64 s[14:15], 0
-; CHECK-NEXT:    s_mov_b64 s[24:25], 0
-; CHECK-NEXT:    s_mov_b64 s[18:19], 0
-; CHECK-NEXT:    s_mov_b64 s[26:27], 0
-; CHECK-NEXT:    s_mov_b64 s[20:21], 0
 ; CHECK-NEXT:    s_mov_b64 s[22:23], 0
+; CHECK-NEXT:    s_mov_b64 s[18:19], 0
+; CHECK-NEXT:    s_mov_b64 s[24:25], 0
+; CHECK-NEXT:    s_mov_b64 s[20:21], 0
+; CHECK-NEXT:    s_mov_b64 s[26:27], 0
 ; CHECK-NEXT:    s_mov_b64 s[16:17], 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v9, 0, -1, vcc
 ; CHECK-NEXT:    s_mov_b32 s29, 0x3fe62e42
@@ -54,13 +54,13 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    s_branch .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %loop.exit.guard
 ; CHECK-NEXT:    ; in Loop: Header=BB0_2 Depth=1
-; CHECK-NEXT:    s_or_b64 exec, exec, s[22:23]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[26:27]
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v15
 ; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; CHECK-NEXT:    s_or_b64 s[56:57], s[56:57], s[4:5]
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[56:57]
 ; CHECK-NEXT:    s_or_b64 s[16:17], s[16:17], s[4:5]
-; CHECK-NEXT:    s_mov_b64 s[22:23], 0
+; CHECK-NEXT:    s_mov_b64 s[26:27], 0
 ; CHECK-NEXT:    s_mov_b64 exec, s[56:57]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_17
@@ -158,7 +158,7 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    v_mul_f64 v[20:21], v[20:21], s[46:47]
 ; CHECK-NEXT:    v_mov_b32_e32 v17, s76
 ; CHECK-NEXT:    s_mov_b32 s76, 1
-; CHECK-NEXT:    s_or_b64 s[24:25], s[24:25], s[4:5]
+; CHECK-NEXT:    s_or_b64 s[22:23], s[22:23], s[4:5]
 ; CHECK-NEXT:    v_mul_f64 v[18:19], v[20:21], v[18:19]
 ; CHECK-NEXT:    buffer_store_dword v19, off, s[0:3], 0 offset:4
 ; CHECK-NEXT:    buffer_store_dword v18, off, s[0:3], 0
@@ -169,19 +169,19 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_8
 ; CHECK-NEXT:  .LBB0_9: ; %inner_done
 ; CHECK-NEXT:    ; in Loop: Header=BB0_6 Depth=4
-; CHECK-NEXT:    s_or_b64 exec, exec, s[24:25]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[22:23]
 ; CHECK-NEXT:    s_and_b64 vcc, exec, 0
 ; CHECK-NEXT:    s_and_b64 vcc, vcc, vcc
 ; CHECK-NEXT:    s_mov_b64 s[76:77], -1
-; CHECK-NEXT:    s_cselect_b64 s[24:25], 0, exec
+; CHECK-NEXT:    s_cselect_b64 s[22:23], 0, exec
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    v_cndmask_b32_e64 v15, 0, -1, s[76:77]
-; CHECK-NEXT:    s_or_b64 s[12:13], s[12:13], s[24:25]
-; CHECK-NEXT:    s_mov_b64 s[24:25], 0
+; CHECK-NEXT:    s_or_b64 s[12:13], s[12:13], s[22:23]
+; CHECK-NEXT:    s_mov_b64 s[22:23], 0
 ; CHECK-NEXT:  .LBB0_10: ; in Loop: Header=BB0_6 Depth=4
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[18:19]
 ; CHECK-NEXT:    s_xor_b64 s[18:19], exec, s[12:13]
-; CHECK-NEXT:    s_or_b64 s[26:27], s[26:27], s[18:19]
+; CHECK-NEXT:    s_or_b64 s[24:25], s[24:25], s[18:19]
 ; CHECK-NEXT:    s_mov_b64 s[18:19], 0
 ; CHECK-NEXT:    s_mov_b64 s[78:79], s[12:13]
 ; CHECK-NEXT:    s_mov_b64 s[12:13], 0
@@ -194,7 +194,7 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    s_or_b64 s[74:75], s[74:75], vcc
 ; CHECK-NEXT:    s_xor_b64 s[78:79], exec, s[74:75]
 ; CHECK-NEXT:    v_mov_b32_e32 v15, v13
-; CHECK-NEXT:    s_or_b64 s[26:27], s[26:27], s[78:79]
+; CHECK-NEXT:    s_or_b64 s[24:25], s[24:25], s[78:79]
 ; CHECK-NEXT:    ; implicit-def: $sgpr4_sgpr5
 ; CHECK-NEXT:    ; implicit-def: $sgpr76_sgpr77
 ; CHECK-NEXT:    s_mov_b64 exec, s[74:75]
@@ -202,7 +202,7 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_6
 ; CHECK-NEXT:  .LBB0_12: ; %loop.exit.guard6
 ; CHECK-NEXT:    ; in Loop: Header=BB0_5 Depth=3
-; CHECK-NEXT:    s_or_b64 exec, exec, s[26:27]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[24:25]
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v15
 ; CHECK-NEXT:    v_cndmask_b32_e64 v16, 0, -1, s[4:5]
 ; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
@@ -210,7 +210,7 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[14:15]
 ; CHECK-NEXT:    v_cndmask_b32_e64 v15, 0, -1, s[76:77]
 ; CHECK-NEXT:    s_or_b64 s[20:21], s[20:21], s[4:5]
-; CHECK-NEXT:    s_mov_b64 s[26:27], 0
+; CHECK-NEXT:    s_mov_b64 s[24:25], 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], s[14:15]
 ; CHECK-NEXT:    s_mov_b64 s[14:15], 0
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
@@ -236,7 +236,7 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:  .LBB0_15: ; in Loop: Header=BB0_3 Depth=2
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[62:63]
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[60:61]
-; CHECK-NEXT:    s_or_b64 s[22:23], s[22:23], s[4:5]
+; CHECK-NEXT:    s_or_b64 s[26:27], s[26:27], s[4:5]
 ; CHECK-NEXT:    s_mov_b64 exec, s[60:61]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_1
@@ -246,7 +246,7 @@ define void @sgpr_scavenge_fi_stack_id(double %input, i1 %enter_fma_path, i1 %re
 ; CHECK-NEXT:    s_or_b64 s[58:59], s[58:59], vcc
 ; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[58:59]
 ; CHECK-NEXT:    v_mov_b32_e32 v15, v13
-; CHECK-NEXT:    s_or_b64 s[22:23], s[22:23], s[4:5]
+; CHECK-NEXT:    s_or_b64 s[26:27], s[26:27], s[4:5]
 ; CHECK-NEXT:    s_mov_b64 exec, s[58:59]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_3

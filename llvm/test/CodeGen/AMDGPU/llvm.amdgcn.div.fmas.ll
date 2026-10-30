@@ -236,14 +236,14 @@ define amdgpu_kernel void @test_div_fmas_f32_i1_phi_vcc(ptr addrspace(1) %out, p
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_load_dwordx4 s[8:11], s[4:5], 0x9
 ; GCN-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0xd
-; GCN-NEXT:    v_mov_b32_e32 v2, 0
+; GCN-NEXT:    v_mov_b32_e32 v4, 0
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
 ; GCN-NEXT:    s_mov_b32 s2, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_mov_b64 s[0:1], s[10:11]
-; GCN-NEXT:    v_lshlrev_b32_e32 v1, 2, v0
-; GCN-NEXT:    buffer_load_dwordx2 v[3:4], v[1:2], s[0:3], 0 addr64
-; GCN-NEXT:    buffer_load_dword v5, v[1:2], s[0:3], 0 addr64 offset:8
+; GCN-NEXT:    v_lshlrev_b32_e32 v3, 2, v0
+; GCN-NEXT:    buffer_load_dwordx2 v[1:2], v[3:4], s[0:3], 0 addr64
+; GCN-NEXT:    buffer_load_dword v5, v[3:4], s[0:3], 0 addr64 offset:8
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GCN-NEXT:    s_mov_b64 s[6:7], 0
 ; GCN-NEXT:    s_xor_b64 s[0:1], vcc, exec
@@ -253,7 +253,7 @@ define amdgpu_kernel void @test_div_fmas_f32_i1_phi_vcc(ptr addrspace(1) %out, p
 ; GCN-NEXT:    s_cbranch_execz .LBB9_2
 ; GCN-NEXT:  .LBB9_1: ; %bb
 ; GCN-NEXT:    s_mov_b64 s[6:7], s[2:3]
-; GCN-NEXT:    buffer_load_dword v0, v[1:2], s[4:7], 0 addr64
+; GCN-NEXT:    buffer_load_dword v0, v[3:4], s[4:7], 0 addr64
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
 ; GCN-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[0:1]
@@ -264,7 +264,7 @@ define amdgpu_kernel void @test_div_fmas_f32_i1_phi_vcc(ptr addrspace(1) %out, p
 ; GCN-NEXT:    s_mov_b32 s11, s3
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    s_nop 0
-; GCN-NEXT:    v_div_fmas_f32 v0, v3, v4, v5
+; GCN-NEXT:    v_div_fmas_f32 v0, v1, v2, v5
 ; GCN-NEXT:    buffer_store_dword v0, off, s[8:11], 0 offset:8
 ; GCN-NEXT:    s_endpgm
 entry:
