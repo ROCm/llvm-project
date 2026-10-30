@@ -81,6 +81,7 @@
 #include "SIInstrInfo.h"
 #include "SIMachineFunctionInfo.h"
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/IntEqClasses.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -1470,6 +1471,7 @@ private:
 
   // Sparse CFG over WTBlocks. In/Out are computed locally.
   using BlockSet = SmallPtrSet<MachineBasicBlock *, 16>;
+  using WTComponent = SmallVector<MachineBasicBlock *, 8>;
   DenseMap<MachineBasicBlock *, BlockSet> WTPreds;
   DenseMap<MachineBasicBlock *, BlockSet> WTSuccs;
 
@@ -1500,7 +1502,7 @@ private:
   // Nearest common dominator of Blocks, hoisted out of its outermost cycle.
   MachineBasicBlock *getInitBlock(ArrayRef<MachineBasicBlock *> Blocks) const;
   void insertLaneMaskInstrs();
-  void computeSparseGraph();
+  void computeSparseGraph(SmallVectorImpl<WTComponent> &Components);
 
   bool canAliasTo(Register R) const;
   bool isZeroFact(const RegFactMap &Cur, Register R) const;
@@ -1512,14 +1514,14 @@ private:
             const DenseMap<MachineBasicBlock *, RegFactMap> &BBFacts) const;
   bool simplifyInstr(MachineInstr &MI, RegFactMap &Cur);
   void simplifyBB(MachineBasicBlock &BB, RegFactMap &Cur);
-  void forwardPropSimplifier();
+  void forwardPropSimplifier(ArrayRef<MachineBasicBlock *> Blocks);
 
   bool dropLocalDead(MachineBasicBlock &BB);
   bool dropGlobalDead(MachineBasicBlock &BB, const VirtRegSet &LiveOut);
-  void
-  computeWTLiveInfo(DenseMap<MachineBasicBlock *, VirtRegSet> &LiveIn,
-                    DenseMap<MachineBasicBlock *, VirtRegSet> &LiveOut) const;
-  bool deadDefRemoval();
+  void computeWTLiveInfo(DenseMap<MachineBasicBlock *, VirtRegSet> &LiveIn,
+                         DenseMap<MachineBasicBlock *, VirtRegSet> &LiveOut,
+                         ArrayRef<MachineBasicBlock *> Blocks) const;
+  bool deadDefRemoval(ArrayRef<MachineBasicBlock *> Blocks);
   Register freshTemp();
   MachineInstrBuilder emit(MachineBasicBlock &Block,
                            MachineBasicBlock::iterator I, unsigned Opc,
@@ -1923,21 +1925,25 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
   }
 
   createSections();
-  computeSparseGraph();
-
-  // Repeat until fixpoint - no more simplification possible.
-  bool Optimized = true;
-  while (Optimized) {
-    forwardPropSimplifier();
-    Optimized = deadDefRemoval();
+  // Fixpoint per sparse component.
+  SmallVector<WTComponent, 4> Components;
+  computeSparseGraph(Components);
+  for (const WTComponent &C : Components) {
+    bool Optimized = true;
+    while (Optimized) {
+      forwardPropSimplifier(C);
+      Optimized = deadDefRemoval(C);
+    }
   }
 }
 
 // Sparse edge A → B: A and B are WT blocks, and some CFG path from A to B
 // has no other WT block between them.
 // Out(B) = {B} when B is a WT block, otherwise In(B). In(B) is the union of
-// Out over CFG predecessors. RPO until fixpoint.
-void ControlFlowRewriter::computeSparseGraph() {
+// Out over CFG predecessors. RPO until fixpoint. Succ edges form DSU classes.
+void ControlFlowRewriter::computeSparseGraph(
+    SmallVectorImpl<WTComponent> &Components) {
+  Components.clear();
   DenseMap<MachineBasicBlock *, BlockSet> In;
   DenseMap<MachineBasicBlock *, BlockSet> Out;
 
@@ -1969,13 +1975,33 @@ void ControlFlowRewriter::computeSparseGraph() {
     }
   }
 
+  EquivalenceClasses<MachineBasicBlock *> DSU;
+  for (MachineBasicBlock *B : WTBlocks)
+    DSU.insert(B);
+
   WTPreds.clear();
   WTSuccs.clear();
   for (MachineBasicBlock *B : WTBlocks) {
     BlockSet &Preds = In[B];
-    for (MachineBasicBlock *X : Preds)
+    for (MachineBasicBlock *X : Preds) {
       WTSuccs[X].insert(B);
+      DSU.unionSets(X, B);
+    }
     WTPreds[B] = std::move(Preds);
+  }
+
+  DenseMap<MachineBasicBlock *, unsigned> IndexOf;
+  for (MachineBasicBlock *B : RPOBlocks) {
+    if (!WTBlocks.contains(B))
+      continue;
+    MachineBasicBlock *Leader = DSU.getLeaderValue(B);
+    DenseMap<MachineBasicBlock *, unsigned>::iterator It = IndexOf.find(Leader);
+    if (It == IndexOf.end()) {
+      IndexOf[Leader] = Components.size();
+      Components.emplace_back().push_back(B);
+    } else {
+      Components[It->second].push_back(B);
+    }
   }
 }
 
@@ -2269,30 +2295,16 @@ void ControlFlowRewriter::simplifyBB(MachineBasicBlock &BB, RegFactMap &Cur) {
   }
 }
 
-// RPO over WTSuccs. Meet keeps a fact only when every WT predecessor has that
-// same fact. A missing predecessor counts as {}.
-void ControlFlowRewriter::forwardPropSimplifier() {
-  ReversePostOrderTraversal<MachineFunction *> RPOT(&Function);
-  SmallVector<MachineBasicBlock *, 16> RPOBlocks;
-  DenseMap<MachineBasicBlock *, unsigned> RPOIndex;
-  SmallPtrSet<MachineBasicBlock *, 16> Seen;
-  for (MachineBasicBlock *B : RPOT) {
-    if (!WTBlocks.contains(B))
-      continue;
-    RPOIndex[B] = RPOBlocks.size();
-    RPOBlocks.push_back(B);
-    Seen.insert(B);
-  }
-  for (MachineBasicBlock *B : WTBlocks) {
-    if (Seen.contains(B))
-      continue;
-    RPOIndex[B] = RPOBlocks.size();
-    RPOBlocks.push_back(B);
-  }
-
-  const unsigned N = RPOBlocks.size();
+// One sparse graph component, in function RPO.
+void ControlFlowRewriter::forwardPropSimplifier(
+    ArrayRef<MachineBasicBlock *> Blocks) {
+  const unsigned N = Blocks.size();
   if (N == 0)
     return;
+
+  DenseMap<MachineBasicBlock *, unsigned> RPOIndex;
+  for (unsigned I = 0; I < N; ++I)
+    RPOIndex[Blocks[I]] = I;
 
   BitVector Work(N, true);
   BitVector Next(N);
@@ -2300,7 +2312,7 @@ void ControlFlowRewriter::forwardPropSimplifier() {
 
   while (Work.any()) {
     for (int Idx : Work.set_bits()) {
-      MachineBasicBlock *BB = RPOBlocks[Idx];
+      MachineBasicBlock *BB = Blocks[Idx];
       RegFactMap Cur = meetFacts(*BB, BBFacts);
       simplifyBB(*BB, Cur);
       DenseMap<MachineBasicBlock *, RegFactMap>::iterator It = BBFacts.find(BB);
@@ -2381,13 +2393,14 @@ bool ControlFlowRewriter::dropGlobalDead(MachineBasicBlock &BB,
   return true;
 }
 
-// Live-in and live-out of virtual regs over WT blocks.
+// Live-in and live-out of virtual regs over sparse graph components.
 void ControlFlowRewriter::computeWTLiveInfo(
     DenseMap<MachineBasicBlock *, VirtRegSet> &LiveIn,
-    DenseMap<MachineBasicBlock *, VirtRegSet> &LiveOut) const {
+    DenseMap<MachineBasicBlock *, VirtRegSet> &LiveOut,
+    ArrayRef<MachineBasicBlock *> Blocks) const {
   DenseMap<MachineBasicBlock *, VirtRegSet> UEUse;
   DenseMap<MachineBasicBlock *, VirtRegSet> Killed;
-  for (MachineBasicBlock *B : WTBlocks) {
+  for (MachineBasicBlock *B : Blocks) {
     VirtRegSet Defined;
     AccInstsMap::const_iterator MapIt = WTInstrMap.find(B);
     if (MapIt != WTInstrMap.end()) {
@@ -2405,8 +2418,8 @@ void ControlFlowRewriter::computeWTLiveInfo(
     LiveOut[B] = VirtRegSet();
   }
 
-  SmallVector<MachineBasicBlock *, 16> Work(WTBlocks.begin(), WTBlocks.end());
-  SmallPtrSet<MachineBasicBlock *, 16> Queued(WTBlocks.begin(), WTBlocks.end());
+  SmallVector<MachineBasicBlock *, 16> Work(Blocks.begin(), Blocks.end());
+  SmallPtrSet<MachineBasicBlock *, 16> Queued(Blocks.begin(), Blocks.end());
   unsigned Idx = 0;
   while (Idx < Work.size()) {
     MachineBasicBlock *B = Work[Idx++];
@@ -2447,17 +2460,17 @@ void ControlFlowRewriter::computeWTLiveInfo(
 // Returns true if any instruction was removed. Repeats until a pass drops
 // nothing; the caller runs forward prop again when this is true, because a
 // deleted def can expose an alias the next forward pass can fold.
-bool ControlFlowRewriter::deadDefRemoval() {
+bool ControlFlowRewriter::deadDefRemoval(ArrayRef<MachineBasicBlock *> Blocks) {
   bool Dropped = false;
   bool Changed = true;
   while (Changed) {
     Changed = false;
-    for (MachineBasicBlock *B : WTBlocks)
+    for (MachineBasicBlock *B : Blocks)
       Changed |= dropLocalDead(*B);
     DenseMap<MachineBasicBlock *, VirtRegSet> LiveIn;
     DenseMap<MachineBasicBlock *, VirtRegSet> LiveOut;
-    computeWTLiveInfo(LiveIn, LiveOut);
-    for (MachineBasicBlock *B : WTBlocks)
+    computeWTLiveInfo(LiveIn, LiveOut, Blocks);
+    for (MachineBasicBlock *B : Blocks)
       Changed |= dropGlobalDead(*B, LiveOut[B]);
     Dropped |= Changed;
   }
