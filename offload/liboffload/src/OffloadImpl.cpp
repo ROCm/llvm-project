@@ -583,6 +583,11 @@ Error olGetDeviceInfoImplDetail(ol_device_handle_t Device,
       return HandleOrErr.takeError();
     return Info.write<void *>(*HandleOrErr);
   }
+  case OL_DEVICE_INFO_LAUNCH_MAX_NUM_WORK_GROUPS:
+    return Info.write<uint32_t>(Device->Device->getMaxNumBlocks());
+
+  case OL_DEVICE_INFO_LAUNCH_MAX_GRID_SIZE:
+    return Info.write<uint64_t>(Device->Device->getMaxGridSize());
 
   default:
     break;
@@ -1383,6 +1388,14 @@ Error olLaunchKernel_impl(ol_queue_handle_t Queue, ol_device_handle_t Device,
       LaunchArgs.Flags.Cooperative =
           *reinterpret_cast<const bool *>(Properties->data);
       break;
+    case OL_KERNEL_LAUNCH_PROP_TYPE_OMP_KERNEL_LAUNCH_INFO:
+      LaunchArgs.KernelLaunchInfo =
+          *reinterpret_cast<const KernelLaunchInfoTy *>(Properties->data);
+      break;
+    case OL_KERNEL_LAUNCH_PROP_TYPE_OMP_TRIPCOUNT:
+      LaunchArgs.Tripcount =
+          *reinterpret_cast<const uint64_t *>(Properties->data);
+      break;
     default:
       return createOffloadError(ErrorCode::INVALID_ENUMERATION,
                                 "olLaunchKernel property enum '%i' is invalid",
@@ -1520,6 +1533,16 @@ Error olGetSymbolInfoImplDetail(ol_symbol_handle_t Symbol,
     if (auto Err = CheckKind(OL_SYMBOL_KIND_GLOBAL_VARIABLE))
       return Err;
     return Info.write<size_t>(std::get<GlobalTy>(Symbol->PluginImpl).getSize());
+  case OL_SYMBOL_INFO_KERNEL_STATIC_BLOCK_MEM_SIZE:
+    if (auto Err = CheckKind(OL_SYMBOL_KIND_KERNEL))
+      return Err;
+    return Info.write<uint32_t>(std::get<GenericKernelTy *>(Symbol->PluginImpl)
+                                    ->getStaticBlockMemSize());
+  case OL_SYMBOL_INFO_KERNEL_MAX_THREADS:
+    if (auto Err = CheckKind(OL_SYMBOL_KIND_KERNEL))
+      return Err;
+    return Info.write<uint32_t>(
+        std::get<GenericKernelTy *>(Symbol->PluginImpl)->getMaxThreads());
   default:
     return createOffloadError(ErrorCode::INVALID_ENUMERATION,
                               "olGetSymbolInfo enum '%i' is invalid", PropName);
@@ -1625,13 +1648,14 @@ __tgt_async_info *__ol_tgt_GetAsyncInfoFromQueue(ol_queue_handle_t Queue) {
   return Queue ? Queue->AsyncInfo : nullptr;
 }
 
-GenericKernelTy *__ol_tgt_GetKernelFromSymbol(ol_symbol_handle_t Symbol) {
-  return std::get<GenericKernelTy *>(Symbol->PluginImpl);
-}
-
 DeviceImageTy *__ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program) {
   return Program->Image;
 }
+
+RecordReplayTy *__ol_tgt_GetRecordReplay(ol_device_impl_t *Device) {
+  return Device->Device->getRecordReplay();
+}
+
 } // namespace tmp
 
 } // namespace offload
