@@ -14,26 +14,26 @@ define double @load_private_f64_align1(ptr addrspace(5) %ptr) {
 ; GFX6-NEXT:    v_add_i32_e32 v5, vcc, 6, v0
 ; GFX6-NEXT:    v_add_i32_e32 v6, vcc, 7, v0
 ; GFX6-NEXT:    buffer_load_ubyte v1, v1, s[0:3], 0 offen
-; GFX6-NEXT:    buffer_load_ubyte v2, v2, s[0:3], 0 offen
 ; GFX6-NEXT:    buffer_load_ubyte v3, v3, s[0:3], 0 offen
+; GFX6-NEXT:    buffer_load_ubyte v2, v2, s[0:3], 0 offen
 ; GFX6-NEXT:    buffer_load_ubyte v4, v4, s[0:3], 0 offen
-; GFX6-NEXT:    buffer_load_ubyte v5, v5, s[0:3], 0 offen
 ; GFX6-NEXT:    buffer_load_ubyte v6, v6, s[0:3], 0 offen
+; GFX6-NEXT:    buffer_load_ubyte v5, v5, s[0:3], 0 offen
 ; GFX6-NEXT:    buffer_load_ubyte v7, v0, s[0:3], 0 offen
 ; GFX6-NEXT:    v_add_i32_e32 v0, vcc, 4, v0
 ; GFX6-NEXT:    buffer_load_ubyte v0, v0, s[0:3], 0 offen
 ; GFX6-NEXT:    s_waitcnt vmcnt(7)
 ; GFX6-NEXT:    v_lshlrev_b32_e32 v1, 8, v1
 ; GFX6-NEXT:    s_waitcnt vmcnt(6)
-; GFX6-NEXT:    v_lshlrev_b32_e32 v2, 16, v2
-; GFX6-NEXT:    s_waitcnt vmcnt(5)
 ; GFX6-NEXT:    v_lshlrev_b32_e32 v3, 24, v3
+; GFX6-NEXT:    s_waitcnt vmcnt(5)
+; GFX6-NEXT:    v_lshlrev_b32_e32 v2, 16, v2
 ; GFX6-NEXT:    s_waitcnt vmcnt(4)
 ; GFX6-NEXT:    v_lshlrev_b32_e32 v4, 8, v4
 ; GFX6-NEXT:    s_waitcnt vmcnt(3)
-; GFX6-NEXT:    v_lshlrev_b32_e32 v5, 16, v5
-; GFX6-NEXT:    s_waitcnt vmcnt(2)
 ; GFX6-NEXT:    v_lshlrev_b32_e32 v6, 24, v6
+; GFX6-NEXT:    s_waitcnt vmcnt(2)
+; GFX6-NEXT:    v_lshlrev_b32_e32 v5, 16, v5
 ; GFX6-NEXT:    s_waitcnt vmcnt(1)
 ; GFX6-NEXT:    v_or_b32_e32 v1, v1, v7
 ; GFX6-NEXT:    v_or_b32_e32 v2, v3, v2
@@ -49,8 +49,8 @@ define double @load_private_f64_align1(ptr addrspace(5) %ptr) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    buffer_load_ubyte v1, v0, s[0:3], 0 offen
 ; GFX9-NEXT:    buffer_load_ubyte v2, v0, s[0:3], 0 offen offset:1
-; GFX9-NEXT:    buffer_load_ubyte v3, v0, s[0:3], 0 offen offset:2
 ; GFX9-NEXT:    buffer_load_ubyte v4, v0, s[0:3], 0 offen offset:3
+; GFX9-NEXT:    buffer_load_ubyte v3, v0, s[0:3], 0 offen offset:2
 ; GFX9-NEXT:    buffer_load_ubyte v5, v0, s[0:3], 0 offen offset:4
 ; GFX9-NEXT:    buffer_load_ubyte v6, v0, s[0:3], 0 offen offset:5
 ; GFX9-NEXT:    buffer_load_ubyte v7, v0, s[0:3], 0 offen offset:7
@@ -58,9 +58,9 @@ define double @load_private_f64_align1(ptr addrspace(5) %ptr) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(6)
 ; GFX9-NEXT:    v_lshl_or_b32 v0, v2, 8, v1
 ; GFX9-NEXT:    s_waitcnt vmcnt(5)
-; GFX9-NEXT:    v_lshlrev_b32_e32 v2, 16, v3
-; GFX9-NEXT:    s_waitcnt vmcnt(4)
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v1, 24, v4
+; GFX9-NEXT:    s_waitcnt vmcnt(4)
+; GFX9-NEXT:    v_lshlrev_b32_e32 v2, 16, v3
 ; GFX9-NEXT:    v_or3_b32 v0, v1, v2, v0
 ; GFX9-NEXT:    s_waitcnt vmcnt(2)
 ; GFX9-NEXT:    v_lshl_or_b32 v3, v6, 8, v5
@@ -142,26 +142,26 @@ define i64 @load_private_i64_align1(ptr addrspace(5) %ptr) {
 ; GFX6-NEXT:    v_add_i32_e32 v5, vcc, 6, v0
 ; GFX6-NEXT:    v_add_i32_e32 v6, vcc, 7, v0
 ; GFX6-NEXT:    buffer_load_ubyte v1, v1, s[0:3], 0 offen
-; GFX6-NEXT:    buffer_load_ubyte v2, v2, s[0:3], 0 offen
 ; GFX6-NEXT:    buffer_load_ubyte v3, v3, s[0:3], 0 offen
+; GFX6-NEXT:    buffer_load_ubyte v2, v2, s[0:3], 0 offen
 ; GFX6-NEXT:    buffer_load_ubyte v4, v4, s[0:3], 0 offen
-; GFX6-NEXT:    buffer_load_ubyte v5, v5, s[0:3], 0 offen
 ; GFX6-NEXT:    buffer_load_ubyte v6, v6, s[0:3], 0 offen
+; GFX6-NEXT:    buffer_load_ubyte v5, v5, s[0:3], 0 offen
 ; GFX6-NEXT:    buffer_load_ubyte v7, v0, s[0:3], 0 offen
 ; GFX6-NEXT:    v_add_i32_e32 v0, vcc, 4, v0
 ; GFX6-NEXT:    buffer_load_ubyte v0, v0, s[0:3], 0 offen
 ; GFX6-NEXT:    s_waitcnt vmcnt(7)
 ; GFX6-NEXT:    v_lshlrev_b32_e32 v1, 8, v1
 ; GFX6-NEXT:    s_waitcnt vmcnt(6)
-; GFX6-NEXT:    v_lshlrev_b32_e32 v2, 16, v2
-; GFX6-NEXT:    s_waitcnt vmcnt(5)
 ; GFX6-NEXT:    v_lshlrev_b32_e32 v3, 24, v3
+; GFX6-NEXT:    s_waitcnt vmcnt(5)
+; GFX6-NEXT:    v_lshlrev_b32_e32 v2, 16, v2
 ; GFX6-NEXT:    s_waitcnt vmcnt(4)
 ; GFX6-NEXT:    v_lshlrev_b32_e32 v4, 8, v4
 ; GFX6-NEXT:    s_waitcnt vmcnt(3)
-; GFX6-NEXT:    v_lshlrev_b32_e32 v5, 16, v5
-; GFX6-NEXT:    s_waitcnt vmcnt(2)
 ; GFX6-NEXT:    v_lshlrev_b32_e32 v6, 24, v6
+; GFX6-NEXT:    s_waitcnt vmcnt(2)
+; GFX6-NEXT:    v_lshlrev_b32_e32 v5, 16, v5
 ; GFX6-NEXT:    s_waitcnt vmcnt(1)
 ; GFX6-NEXT:    v_or_b32_e32 v1, v1, v7
 ; GFX6-NEXT:    v_or_b32_e32 v2, v3, v2
@@ -177,8 +177,8 @@ define i64 @load_private_i64_align1(ptr addrspace(5) %ptr) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    buffer_load_ubyte v1, v0, s[0:3], 0 offen
 ; GFX9-NEXT:    buffer_load_ubyte v2, v0, s[0:3], 0 offen offset:1
-; GFX9-NEXT:    buffer_load_ubyte v3, v0, s[0:3], 0 offen offset:2
 ; GFX9-NEXT:    buffer_load_ubyte v4, v0, s[0:3], 0 offen offset:3
+; GFX9-NEXT:    buffer_load_ubyte v3, v0, s[0:3], 0 offen offset:2
 ; GFX9-NEXT:    buffer_load_ubyte v5, v0, s[0:3], 0 offen offset:4
 ; GFX9-NEXT:    buffer_load_ubyte v6, v0, s[0:3], 0 offen offset:5
 ; GFX9-NEXT:    buffer_load_ubyte v7, v0, s[0:3], 0 offen offset:7
@@ -186,9 +186,9 @@ define i64 @load_private_i64_align1(ptr addrspace(5) %ptr) {
 ; GFX9-NEXT:    s_waitcnt vmcnt(6)
 ; GFX9-NEXT:    v_lshl_or_b32 v0, v2, 8, v1
 ; GFX9-NEXT:    s_waitcnt vmcnt(5)
-; GFX9-NEXT:    v_lshlrev_b32_e32 v2, 16, v3
-; GFX9-NEXT:    s_waitcnt vmcnt(4)
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v1, 24, v4
+; GFX9-NEXT:    s_waitcnt vmcnt(4)
+; GFX9-NEXT:    v_lshlrev_b32_e32 v2, 16, v3
 ; GFX9-NEXT:    v_or3_b32 v0, v1, v2, v0
 ; GFX9-NEXT:    s_waitcnt vmcnt(2)
 ; GFX9-NEXT:    v_lshl_or_b32 v3, v6, 8, v5

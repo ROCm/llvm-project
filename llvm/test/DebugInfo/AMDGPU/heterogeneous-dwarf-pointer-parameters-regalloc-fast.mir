@@ -166,9 +166,9 @@ body:             |
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   DBG_VALUE $sgpr32, 0, !7, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpReinterpret(i32), DIOpConstant(i32 4), DIOpAdd(), DIOpReinterpret(ptr addrspace(5)), DIOpDeref(ptr), DIOpDeref(ptr)), debug-location !8
   ; CHECK-NEXT:   DBG_VALUE $sgpr32, 0, !9, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpReinterpret(i32), DIOpConstant(i32 12), DIOpAdd(), DIOpReinterpret(ptr addrspace(5)), DIOpDeref(ptr), DIOpDeref(ptr)), debug-location !8
-  ; CHECK-NEXT:   $vgpr0_vgpr1 = SCRATCH_LOAD_DWORDX2_SADDR $sgpr32, 12, 0, implicit $exec, implicit $flat_scr, debug-location !11 :: ("amdgpu-thread-private" load (s64) from %stack.4, align 4, addrspace 5)
   ; CHECK-NEXT:   $vgpr2_vgpr3 = SCRATCH_LOAD_DWORDX2_SADDR $sgpr32, 4, 0, implicit $exec, implicit $flat_scr, debug-location !11 :: ("amdgpu-thread-private" load (s64) from %stack.3, align 4, addrspace 5)
-  ; CHECK-NEXT:   S_WAITCNT .Vmcnt_0, debug-location !11
+  ; CHECK-NEXT:   $vgpr0_vgpr1 = SCRATCH_LOAD_DWORDX2_SADDR $sgpr32, 12, 0, implicit $exec, implicit $flat_scr, debug-location !11 :: ("amdgpu-thread-private" load (s64) from %stack.4, align 4, addrspace 5)
+  ; CHECK-NEXT:   S_WAITCNT .Vmcnt_1, debug-location !11
   ; CHECK-NEXT:   renamable $vgpr2 = FLAT_LOAD_DWORD renamable $vgpr2_vgpr3, 0, 0, implicit $exec, implicit $flat_scr, debug-location !11 :: (load (s32) from %ir.0)
   ; CHECK-NEXT:   renamable $sgpr0 = S_MOV_B32 1
   ; CHECK-NEXT:   S_WAITCNT .Vmcnt_0_Lgkmcnt_0, debug-location !11

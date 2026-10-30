@@ -9865,11 +9865,11 @@ define amdgpu_kernel void @test_limited_sgpr(ptr addrspace(1) %out, ptr addrspac
 ; GFX6-NEXT:    buffer_store_dword v1, off, s[40:43], s2 offset:4 ; 4-byte Folded Spill
 ; GFX6-NEXT:    buffer_store_dword v2, off, s[40:43], s2 offset:8 ; 4-byte Folded Spill
 ; GFX6-NEXT:    buffer_store_dword v3, off, s[40:43], s2 offset:12 ; 4-byte Folded Spill
+; GFX6-NEXT:    buffer_load_dwordx4 v[7:10], v[5:6], s[4:7], 0 addr64 offset:16
 ; GFX6-NEXT:    s_waitcnt expcnt(0)
 ; GFX6-NEXT:    buffer_load_dwordx4 v[0:3], v[5:6], s[4:7], 0 addr64
-; GFX6-NEXT:    buffer_load_dwordx4 v[7:10], v[5:6], s[4:7], 0 addr64 offset:16
 ; GFX6-NEXT:    s_mov_b32 s2, 0x83000
-; GFX6-NEXT:    s_waitcnt vmcnt(0)
+; GFX6-NEXT:    s_waitcnt vmcnt(1)
 ; GFX6-NEXT:    buffer_store_dword v7, off, s[40:43], s2 ; 4-byte Folded Spill
 ; GFX6-NEXT:    buffer_store_dword v8, off, s[40:43], s2 offset:4 ; 4-byte Folded Spill
 ; GFX6-NEXT:    buffer_store_dword v9, off, s[40:43], s2 offset:8 ; 4-byte Folded Spill
@@ -10285,19 +10285,19 @@ define amdgpu_kernel void @test_limited_sgpr(ptr addrspace(1) %out, ptr addrspac
 ; GFX9-FLATSCR-NEXT:    v_lshlrev_b32_e32 v5, 8, v0
 ; GFX9-FLATSCR-NEXT:    s_add_u32 flat_scratch_lo, s8, s13
 ; GFX9-FLATSCR-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-FLATSCR-NEXT:    global_load_dwordx4 v[7:10], v5, s[38:39] offset:240
 ; GFX9-FLATSCR-NEXT:    global_load_dwordx4 v[0:3], v5, s[38:39] offset:224
+; GFX9-FLATSCR-NEXT:    global_load_dwordx4 v[7:10], v5, s[38:39] offset:240
 ; GFX9-FLATSCR-NEXT:    s_addc_u32 flat_scratch_hi, s9, 0
 ; GFX9-FLATSCR-NEXT:    s_movk_i32 s0, 0x2010
 ; GFX9-FLATSCR-NEXT:    v_mov_b32_e32 v4, 16
 ; GFX9-FLATSCR-NEXT:    v_mov_b32_e32 v6, 1
-; GFX9-FLATSCR-NEXT:    s_waitcnt vmcnt(0)
+; GFX9-FLATSCR-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-FLATSCR-NEXT:    scratch_store_dwordx4 off, v[0:3], s0 ; 16-byte Folded Spill
+; GFX9-FLATSCR-NEXT:    global_load_dwordx4 v[0:3], v5, s[38:39] offset:176
 ; GFX9-FLATSCR-NEXT:    global_load_dwordx4 v[15:18], v5, s[38:39] offset:208
 ; GFX9-FLATSCR-NEXT:    global_load_dwordx4 v[19:22], v5, s[38:39] offset:192
-; GFX9-FLATSCR-NEXT:    global_load_dwordx4 v[0:3], v5, s[38:39] offset:176
 ; GFX9-FLATSCR-NEXT:    s_movk_i32 s0, 0x2020
-; GFX9-FLATSCR-NEXT:    s_waitcnt vmcnt(0)
+; GFX9-FLATSCR-NEXT:    s_waitcnt vmcnt(2)
 ; GFX9-FLATSCR-NEXT:    scratch_store_dwordx4 off, v[0:3], s0 ; 16-byte Folded Spill
 ; GFX9-FLATSCR-NEXT:    global_load_dwordx4 v[0:3], v5, s[38:39] offset:160
 ; GFX9-FLATSCR-NEXT:    s_movk_i32 s0, 0x2030
@@ -10466,6 +10466,7 @@ define amdgpu_kernel void @test_limited_sgpr(ptr addrspace(1) %out, ptr addrspac
 ; GFX10-FLATSCR-NEXT:    v_lshlrev_b32_e32 v5, 8, v0
 ; GFX10-FLATSCR-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX10-FLATSCR-NEXT:    s_clause 0xf
+; GFX10-FLATSCR-NEXT:    global_load_dwordx4 v[0:3], v5, s[38:39]
 ; GFX10-FLATSCR-NEXT:    global_load_dwordx4 v[7:10], v5, s[38:39] offset:240
 ; GFX10-FLATSCR-NEXT:    global_load_dwordx4 v[11:14], v5, s[38:39] offset:224
 ; GFX10-FLATSCR-NEXT:    global_load_dwordx4 v[15:18], v5, s[38:39] offset:208
@@ -10481,8 +10482,7 @@ define amdgpu_kernel void @test_limited_sgpr(ptr addrspace(1) %out, ptr addrspac
 ; GFX10-FLATSCR-NEXT:    global_load_dwordx4 v[55:58], v5, s[38:39] offset:48
 ; GFX10-FLATSCR-NEXT:    global_load_dwordx4 v[59:62], v5, s[38:39] offset:32
 ; GFX10-FLATSCR-NEXT:    global_load_dwordx4 v[63:66], v5, s[38:39] offset:16
-; GFX10-FLATSCR-NEXT:    global_load_dwordx4 v[0:3], v5, s[38:39]
-; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(0)
+; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(15)
 ; GFX10-FLATSCR-NEXT:    v_lshl_add_u32 v4, v0, 13, 16
 ; GFX10-FLATSCR-NEXT:    scratch_store_dword v4, v6, off
 ; GFX10-FLATSCR-NEXT:    ;;#ASMSTART
@@ -10513,10 +10513,12 @@ define amdgpu_kernel void @test_limited_sgpr(ptr addrspace(1) %out, ptr addrspac
 ; GFX10-FLATSCR-NEXT:    ; use s[0:7],s[8:15],s[16:23],s[24:31],s[40:43],s[34:35]
 ; GFX10-FLATSCR-NEXT:    ;;#ASMEND
 ; GFX10-FLATSCR-NEXT:    s_movk_i32 s0, 0x2010
+; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(2)
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v88, v58
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v87, v57
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v86, v56
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v85, v55
+; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v92, v62
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v91, v61
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v90, v60
@@ -10525,6 +10527,7 @@ define amdgpu_kernel void @test_limited_sgpr(ptr addrspace(1) %out, ptr addrspac
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v59, v33
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v58, v32
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v57, v31
+; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-FLATSCR-NEXT:    scratch_store_dwordx4 off, v[63:66], s0 ; 16-byte Folded Spill
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v68, v38
 ; GFX10-FLATSCR-NEXT:    v_mov_b32_e32 v67, v37
@@ -10643,11 +10646,17 @@ define amdgpu_kernel void @test_limited_sgpr(ptr addrspace(1) %out, ptr addrspac
 ; GFX10-FLATSCR-NEXT:    ;;#ASMEND
 ; GFX10-FLATSCR-NEXT:  .LBB1_2: ; %ret
 ; GFX10-FLATSCR-NEXT:    s_or_b32 exec_lo, exec_lo, s33
+; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(6)
 ; GFX10-FLATSCR-NEXT:    global_store_dwordx4 v5, v[39:42], s[36:37] offset:112
+; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(5)
 ; GFX10-FLATSCR-NEXT:    global_store_dwordx4 v5, v[43:46], s[36:37] offset:96
+; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(4)
 ; GFX10-FLATSCR-NEXT:    global_store_dwordx4 v5, v[47:50], s[36:37] offset:80
+; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(3)
 ; GFX10-FLATSCR-NEXT:    global_store_dwordx4 v5, v[51:54], s[36:37] offset:64
+; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(2)
 ; GFX10-FLATSCR-NEXT:    global_store_dwordx4 v5, v[55:58], s[36:37] offset:48
+; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-FLATSCR-NEXT:    global_store_dwordx4 v5, v[59:62], s[36:37] offset:32
 ; GFX10-FLATSCR-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-FLATSCR-NEXT:    global_store_dwordx4 v5, v[63:66], s[36:37] offset:16

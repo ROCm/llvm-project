@@ -5943,12 +5943,12 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_add_u32_e32 v4, vcc, 32, v0
 ; TONGA-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
 ; TONGA-NEXT:    flat_load_dwordx4 v[16:19], v[4:5]
-; TONGA-NEXT:    flat_load_dwordx4 v[4:7], v[2:3]
 ; TONGA-NEXT:    flat_load_dwordx4 v[12:15], v[0:1]
+; TONGA-NEXT:    flat_load_dwordx4 v[4:7], v[2:3]
 ; TONGA-NEXT:    v_add_u32_e32 v0, vcc, 16, v0
 ; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; TONGA-NEXT:    flat_load_dwordx4 v[0:3], v[0:1]
-; TONGA-NEXT:    s_waitcnt vmcnt(1)
+; TONGA-NEXT:    s_waitcnt vmcnt(2)
 ; TONGA-NEXT:    v_or_b32_e32 v8, v13, v17
 ; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
 ; TONGA-NEXT:    ; implicit-def: $vgpr8_vgpr9

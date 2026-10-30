@@ -7290,10 +7290,10 @@ define amdgpu_kernel void @local_zextload_v32i16_to_v32i64(ptr addrspace(3) %out
 ; SI-NEXT:    v_mov_b32_e32 v19, v15
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    v_mov_b32_e32 v11, s1
-; SI-NEXT:    ds_read2_b64 v[0:3], v11 offset1:1
 ; SI-NEXT:    ds_read2_b64 v[4:7], v11 offset0:2 offset1:3
+; SI-NEXT:    ds_read2_b64 v[0:3], v11 offset1:1
 ; SI-NEXT:    v_mov_b32_e32 v20, s0
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-NEXT:    s_waitcnt lgkmcnt(1)
 ; SI-NEXT:    v_lshrrev_b32_e32 v16, 16, v7
 ; SI-NEXT:    v_and_b32_e32 v18, 0xffff, v7
 ; SI-NEXT:    ds_read2_b64 v[7:10], v11 offset0:4 offset1:5
@@ -7302,6 +7302,7 @@ define amdgpu_kernel void @local_zextload_v32i16_to_v32i64(ptr addrspace(3) %out
 ; SI-NEXT:    v_lshrrev_b32_e32 v16, 16, v5
 ; SI-NEXT:    v_and_b32_e32 v18, 0xffff, v5
 ; SI-NEXT:    ds_write2_b64 v20, v[18:19], v[16:17] offset0:10 offset1:11
+; SI-NEXT:    s_waitcnt lgkmcnt(4)
 ; SI-NEXT:    v_lshrrev_b32_e32 v16, 16, v3
 ; SI-NEXT:    v_and_b32_e32 v18, 0xffff, v3
 ; SI-NEXT:    ds_write2_b64 v20, v[18:19], v[16:17] offset0:6 offset1:7
@@ -7446,12 +7447,12 @@ define amdgpu_kernel void @local_zextload_v32i16_to_v32i64(ptr addrspace(3) %out
 ; GFX9-NO-DS128-NEXT:    v_mov_b32_e32 v20, v16
 ; GFX9-NO-DS128-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NO-DS128-NEXT:    v_mov_b32_e32 v12, s1
-; GFX9-NO-DS128-NEXT:    ds_read2_b64 v[0:3], v12 offset0:4 offset1:5
 ; GFX9-NO-DS128-NEXT:    ds_read2_b64 v[4:7], v12 offset0:6 offset1:7
+; GFX9-NO-DS128-NEXT:    ds_read2_b64 v[0:3], v12 offset0:4 offset1:5
 ; GFX9-NO-DS128-NEXT:    v_mov_b32_e32 v21, s0
 ; GFX9-NO-DS128-NEXT:    ds_read2_b64 v[8:11], v12 offset1:1
 ; GFX9-NO-DS128-NEXT:    ds_read2_b64 v[12:15], v12 offset0:2 offset1:3
-; GFX9-NO-DS128-NEXT:    s_waitcnt lgkmcnt(2)
+; GFX9-NO-DS128-NEXT:    s_waitcnt lgkmcnt(3)
 ; GFX9-NO-DS128-NEXT:    v_lshrrev_b32_e32 v19, 16, v6
 ; GFX9-NO-DS128-NEXT:    v_and_b32_e32 v17, 0xffff, v6
 ; GFX9-NO-DS128-NEXT:    ds_write2_b64 v21, v[17:18], v[19:20] offset0:28 offset1:29
@@ -7462,6 +7463,7 @@ define amdgpu_kernel void @local_zextload_v32i16_to_v32i64(ptr addrspace(3) %out
 ; GFX9-NO-DS128-NEXT:    v_and_b32_e32 v5, 0xffff, v4
 ; GFX9-NO-DS128-NEXT:    v_lshrrev_b32_e32 v17, 16, v4
 ; GFX9-NO-DS128-NEXT:    ds_write2_b64 v21, v[5:6], v[17:18] offset0:24 offset1:25
+; GFX9-NO-DS128-NEXT:    s_waitcnt lgkmcnt(5)
 ; GFX9-NO-DS128-NEXT:    v_and_b32_e32 v4, 0xffff, v3
 ; GFX9-NO-DS128-NEXT:    v_mov_b32_e32 v5, v16
 ; GFX9-NO-DS128-NEXT:    v_lshrrev_b32_e32 v17, 16, v3
