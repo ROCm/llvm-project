@@ -174,9 +174,9 @@ bb:
 
 !0 = !{!1}
 !1 = !{!"result slice: {}", !2}
-!2 = !{!"fn AA domain", i1 false}
+!2 = !{!"fn AA domain"}
 ;.
 ; CHECK: [[META0]] = !{[[META1:![0-9]+]]}
 ; CHECK: [[META1]] = !{!"result slice: {}", [[META2:![0-9]+]]}
-; CHECK: [[META2]] = !{!"fn AA domain", i1 false}
+; CHECK: [[META2]] = !{!"fn AA domain"}
 ;.
