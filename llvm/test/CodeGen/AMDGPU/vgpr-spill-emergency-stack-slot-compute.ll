@@ -24,11 +24,11 @@
 ; GCNMESA-DAG: s_add_u32 s{{[0-9]+}}, s{{[0-9]+}}, s{{[0-9]+}}
 ; GCNMESA-DAG: s_addc_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0
 
-; GCNMESA: buffer_store_dword v0, off, s[{{[0-9]+}}:{{[0-9]+}}], 0 offset:{{[0-9]+}} ; 4-byte Folded Spill
-; GCNMESA: v_mov_b32_e32 v0, 0
-; GCNMESA: buffer_store_dword v0, off, s[{{[0-9]+}}:{{[0-9]+}}], 0 offset:{{[0-9]+}} ; 4-byte Folded Spill
-; GCNMESA: v_mov_b32_e32 v0, 0
-; GCNMESA: buffer_store_dword v0, off, s[{{[0-9]+}}:{{[0-9]+}}], 0 offset:{{[0-9]+}} ; 4-byte Folded Spill
+; GCNMESA: buffer_store_dword v{{[0-9]+}}, off, s[{{[0-9]+}}:{{[0-9]+}}], 0 offset:{{[0-9]+}} ; 4-byte Folded Spill
+; GCNMESA: v_mov_b32_e32 v{{[0-9]+}}, 0
+; GCNMESA: buffer_store_dword v{{[0-9]+}}, off, s[{{[0-9]+}}:{{[0-9]+}}], 0 offset:{{[0-9]+}} ; 4-byte Folded Spill
+; GCNMESA: v_mov_b32_e32 v{{[0-9]+}}, 0
+; GCNMESA: buffer_store_dword v{{[0-9]+}}, off, s[{{[0-9]+}}:{{[0-9]+}}], 0 offset:{{[0-9]+}} ; 4-byte Folded Spill
 ; GCNMESA: buffer_load_dword {{v[0-9]+}}, off, s[{{[0-9]+}}:{{[0-9]+}}], 0 offset:{{[0-9]+}} ; 4-byte Folded Reload
 
 ; HSA: s_add_u32 s0, s0, s{{[0-9]+}}

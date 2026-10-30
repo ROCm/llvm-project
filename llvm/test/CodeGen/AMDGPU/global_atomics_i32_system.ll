@@ -6344,20 +6344,20 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; SI-NEXT:    s_load_dword s6, s[4:5], 0x4
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    v_mov_b32_e32 v2, s6
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB92_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; SI-NEXT:    v_max_i32_e32 v0, s8, v1
 ; SI-NEXT:    s_waitcnt expcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v3, v1
-; SI-NEXT:    v_mov_b32_e32 v2, v0
-; SI-NEXT:    buffer_atomic_cmpswap v[2:3], off, s[4:7], 0 offset:16 glc
+; SI-NEXT:    v_max_i32_e32 v1, s8, v2
+; SI-NEXT:    v_mov_b32_e32 v0, v1
+; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    buffer_atomic_cmpswap v[0:1], off, s[4:7], 0 offset:16 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_wbinvl1
-; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
+; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    v_mov_b32_e32 v2, v0
 ; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
@@ -6368,7 +6368,7 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_mov_b32 s4, s2
 ; SI-NEXT:    s_mov_b32 s5, s3
-; SI-NEXT:    buffer_store_dword v2, off, s[4:7], 0
+; SI-NEXT:    buffer_store_dword v0, off, s[4:7], 0
 ; SI-NEXT:    s_endpgm
 ;
 ; VI-LABEL: atomic_max_i32_ret_addr64_offset:
@@ -6566,20 +6566,20 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; SI-NEXT:    s_load_dword s6, s[4:5], 0x0
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    v_mov_b32_e32 v2, s6
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB94_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; SI-NEXT:    v_max_i32_e32 v0, s8, v1
 ; SI-NEXT:    s_waitcnt expcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v3, v1
-; SI-NEXT:    v_mov_b32_e32 v2, v0
-; SI-NEXT:    buffer_atomic_cmpswap v[2:3], off, s[4:7], 0 glc
+; SI-NEXT:    v_max_i32_e32 v1, s8, v2
+; SI-NEXT:    v_mov_b32_e32 v0, v1
+; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    buffer_atomic_cmpswap v[0:1], off, s[4:7], 0 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_wbinvl1
-; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
+; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    v_mov_b32_e32 v2, v0
 ; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
@@ -6590,7 +6590,7 @@ define amdgpu_kernel void @atomic_max_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_mov_b32 s4, s2
 ; SI-NEXT:    s_mov_b32 s5, s3
-; SI-NEXT:    buffer_store_dword v2, off, s[4:7], 0
+; SI-NEXT:    buffer_store_dword v0, off, s[4:7], 0
 ; SI-NEXT:    s_endpgm
 ;
 ; VI-LABEL: atomic_max_i32_ret_addr64:
@@ -7586,20 +7586,20 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64_offset(ptr addrspace(1) %o
 ; SI-NEXT:    s_load_dword s6, s[4:5], 0x4
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    v_mov_b32_e32 v2, s6
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB106_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; SI-NEXT:    v_max_u32_e32 v0, s8, v1
 ; SI-NEXT:    s_waitcnt expcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v3, v1
-; SI-NEXT:    v_mov_b32_e32 v2, v0
-; SI-NEXT:    buffer_atomic_cmpswap v[2:3], off, s[4:7], 0 offset:16 glc
+; SI-NEXT:    v_max_u32_e32 v1, s8, v2
+; SI-NEXT:    v_mov_b32_e32 v0, v1
+; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    buffer_atomic_cmpswap v[0:1], off, s[4:7], 0 offset:16 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_wbinvl1
-; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
+; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    v_mov_b32_e32 v2, v0
 ; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
@@ -7610,7 +7610,7 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64_offset(ptr addrspace(1) %o
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_mov_b32 s4, s2
 ; SI-NEXT:    s_mov_b32 s5, s3
-; SI-NEXT:    buffer_store_dword v2, off, s[4:7], 0
+; SI-NEXT:    buffer_store_dword v0, off, s[4:7], 0
 ; SI-NEXT:    s_endpgm
 ;
 ; VI-LABEL: atomic_umax_i32_ret_addr64_offset:
@@ -7707,20 +7707,20 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64(ptr addrspace(1) %out, ptr
 ; SI-NEXT:    s_load_dword s6, s[4:5], 0x0
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    v_mov_b32_e32 v2, s6
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB107_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; SI-NEXT:    v_max_u32_e32 v0, s8, v1
 ; SI-NEXT:    s_waitcnt expcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v3, v1
-; SI-NEXT:    v_mov_b32_e32 v2, v0
-; SI-NEXT:    buffer_atomic_cmpswap v[2:3], off, s[4:7], 0 glc
+; SI-NEXT:    v_max_u32_e32 v1, s8, v2
+; SI-NEXT:    v_mov_b32_e32 v0, v1
+; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    buffer_atomic_cmpswap v[0:1], off, s[4:7], 0 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_wbinvl1
-; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
+; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    v_mov_b32_e32 v2, v0
 ; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
@@ -7731,7 +7731,7 @@ define amdgpu_kernel void @atomic_umax_i32_ret_addr64(ptr addrspace(1) %out, ptr
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_mov_b32 s4, s2
 ; SI-NEXT:    s_mov_b32 s5, s3
-; SI-NEXT:    buffer_store_dword v2, off, s[4:7], 0
+; SI-NEXT:    buffer_store_dword v0, off, s[4:7], 0
 ; SI-NEXT:    s_endpgm
 ;
 ; VI-LABEL: atomic_umax_i32_ret_addr64:
@@ -9525,20 +9525,20 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; SI-NEXT:    s_load_dword s6, s[4:5], 0x4
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    v_mov_b32_e32 v2, s6
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB129_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; SI-NEXT:    v_min_i32_e32 v0, s8, v1
 ; SI-NEXT:    s_waitcnt expcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v3, v1
-; SI-NEXT:    v_mov_b32_e32 v2, v0
-; SI-NEXT:    buffer_atomic_cmpswap v[2:3], off, s[4:7], 0 offset:16 glc
+; SI-NEXT:    v_min_i32_e32 v1, s8, v2
+; SI-NEXT:    v_mov_b32_e32 v0, v1
+; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    buffer_atomic_cmpswap v[0:1], off, s[4:7], 0 offset:16 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_wbinvl1
-; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
+; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    v_mov_b32_e32 v2, v0
 ; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
@@ -9549,7 +9549,7 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64_offset(ptr addrspace(1) %ou
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_mov_b32 s4, s2
 ; SI-NEXT:    s_mov_b32 s5, s3
-; SI-NEXT:    buffer_store_dword v2, off, s[4:7], 0
+; SI-NEXT:    buffer_store_dword v0, off, s[4:7], 0
 ; SI-NEXT:    s_endpgm
 ;
 ; VI-LABEL: atomic_min_i32_ret_addr64_offset:
@@ -9734,20 +9734,20 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; SI-NEXT:    s_load_dword s6, s[4:5], 0x0
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v1, s6
+; SI-NEXT:    v_mov_b32_e32 v2, s6
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:  .LBB131_1: ; %atomicrmw.start
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
-; SI-NEXT:    v_min_i32_e32 v0, s8, v1
 ; SI-NEXT:    s_waitcnt expcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v3, v1
-; SI-NEXT:    v_mov_b32_e32 v2, v0
-; SI-NEXT:    buffer_atomic_cmpswap v[2:3], off, s[4:7], 0 glc
+; SI-NEXT:    v_min_i32_e32 v1, s8, v2
+; SI-NEXT:    v_mov_b32_e32 v0, v1
+; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    buffer_atomic_cmpswap v[0:1], off, s[4:7], 0 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_wbinvl1
-; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v2, v1
+; SI-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v2
 ; SI-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; SI-NEXT:    v_mov_b32_e32 v1, v2
+; SI-NEXT:    v_mov_b32_e32 v2, v0
 ; SI-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; SI-NEXT:    s_mov_b64 exec, s[10:11]
 ; SI-NEXT:    ; divergent control-flow edge
@@ -9758,7 +9758,7 @@ define amdgpu_kernel void @atomic_min_i32_ret_addr64(ptr addrspace(1) %out, ptr 
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    s_mov_b32 s4, s2
 ; SI-NEXT:    s_mov_b32 s5, s3
-; SI-NEXT:    buffer_store_dword v2, off, s[4:7], 0
+; SI-NEXT:    buffer_store_dword v0, off, s[4:7], 0
 ; SI-NEXT:    s_endpgm
 ;
 ; VI-LABEL: atomic_min_i32_ret_addr64:

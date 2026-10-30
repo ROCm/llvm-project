@@ -5353,79 +5353,79 @@ define amdgpu_kernel void @extract_vgpr_offset_multiple_in_block(ptr addrspace(1
 ; GFX9-IDXMODE-NEXT:    v_lshlrev_b32_e32 v1, 2, v0
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX9-IDXMODE-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX9-IDXMODE-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX9-IDXMODE-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-IDXMODE-NEXT:    global_load_dword v2, v1, s[0:1] glc
+; GFX9-IDXMODE-NEXT:    global_load_dword v1, v1, s[0:1] glc
 ; GFX9-IDXMODE-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-IDXMODE-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; GFX9-IDXMODE-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX9-IDXMODE-NEXT:    ;;#ASMSTART
 ; GFX9-IDXMODE-NEXT:    s_mov_b32 s4, 17
 ; GFX9-IDXMODE-NEXT:    ;;#ASMEND
-; GFX9-IDXMODE-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v2
-; GFX9-IDXMODE-NEXT:    v_add_u32_e32 v0, 1, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v1
+; GFX9-IDXMODE-NEXT:    v_add_u32_e32 v0, 1, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e64 v3, 7, 9, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 2, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 2, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 11, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e64 v4, 7, 9, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 3, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 3, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 13, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 2, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 11, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 4, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 4, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 5, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 3, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 13, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 5, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 5, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 6, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 4, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 5, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 6, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 6, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 7, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 5, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 6, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 7, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 7, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 8, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 6, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 7, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 8, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 8, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 9, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 7, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 8, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 9, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 9, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 10, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 8, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 9, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 10, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 10, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 11, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 9, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 10, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 11, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 11, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 12, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 10, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 11, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 12, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 12, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 13, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 11, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 12, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 13, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 13, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 14, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 12, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 13, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 14, v2
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 14, v1
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 15, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 13, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v4, 14, v4, vcc
-; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 15, v2
-; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v2, 16, v3, vcc
+; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 15, v1
+; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v1, 16, v3, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 14, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v3, 15, v4, vcc
 ; GFX9-IDXMODE-NEXT:    v_cmp_ne_u32_e32 vcc, 15, v0
 ; GFX9-IDXMODE-NEXT:    v_cndmask_b32_e32 v0, 16, v3, vcc
 ; GFX9-IDXMODE-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-IDXMODE-NEXT:    global_store_dword v1, v2, s[0:1]
+; GFX9-IDXMODE-NEXT:    global_store_dword v2, v1, s[0:1]
 ; GFX9-IDXMODE-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-IDXMODE-NEXT:    global_store_dword v1, v0, s[0:1]
+; GFX9-IDXMODE-NEXT:    global_store_dword v2, v0, s[0:1]
 ; GFX9-IDXMODE-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-IDXMODE-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-IDXMODE-NEXT:    ; divergent control-flow edge

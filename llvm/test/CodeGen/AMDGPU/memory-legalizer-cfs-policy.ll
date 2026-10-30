@@ -112,19 +112,19 @@ define amdgpu_kernel void @flat_atomicrmw_cfs_128B(ptr %ptr, float %val, ptr %ou
 ; GFX13-LABEL: flat_atomicrmw_cfs_128B:
 ; GFX13:       ; %bb.0: ; %entry
 ; GFX13-NEXT:    s_load_b96 s[0:2], s[4:5], 0x24 nv
-; GFX13-NEXT:    v_mov_b32_e32 v0, 0
+; GFX13-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX13-NEXT:    s_mov_b32 s3, 0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
-; GFX13-NEXT:    flat_load_b32 v1, v0, s[0:1]
+; GFX13-NEXT:    flat_load_b32 v0, v1, s[0:1]
 ; GFX13-NEXT:  .LBB6_1: ; %atomicrmw.start
 ; GFX13-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX13-NEXT:    v_mov_b32_e32 v2, v1
+; GFX13-NEXT:    v_mov_b32_e32 v3, v0
 ; GFX13-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX13-NEXT:    v_add_f32_e32 v1, s2, v2
-; GFX13-NEXT:    flat_atomic_cmpswap_b32 v1, v0, v[1:2], s[0:1] th:TH_ATOMIC_RETURN scope:SCOPE_SYS cfs:CFS_128B
+; GFX13-NEXT:    v_add_f32_e32 v2, s2, v3
+; GFX13-NEXT:    flat_atomic_cmpswap_b32 v0, v1, v[2:3], s[0:1] th:TH_ATOMIC_RETURN scope:SCOPE_SYS cfs:CFS_128B
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX13-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v2
+; GFX13-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v3
 ; GFX13-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; GFX13-NEXT:    s_or_b32 s3, s3, vcc_lo
 ; GFX13-NEXT:    s_mov_b32 exec_lo, s6
@@ -133,9 +133,9 @@ define amdgpu_kernel void @flat_atomicrmw_cfs_128B(ptr %ptr, float %val, ptr %ou
 ; GFX13-NEXT:  .LBB6_2: ; %atomicrmw.end
 ; GFX13-NEXT:    s_or_b32 exec_lo, exec_lo, s3
 ; GFX13-NEXT:    s_load_b64 s[0:1], s[4:5], 0x34 nv
-; GFX13-NEXT:    v_mov_b32_e32 v0, 0
+; GFX13-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
-; GFX13-NEXT:    flat_store_b32 v0, v1, s[0:1]
+; GFX13-NEXT:    flat_store_b32 v1, v0, s[0:1]
 ; GFX13-NEXT:    s_endpgm
 entry:
   %result = atomicrmw fadd ptr %ptr, float %val monotonic, !amdgpu.cfs !{i32 1}
@@ -147,19 +147,19 @@ define amdgpu_kernel void @flat_atomicrmw_cfs_64B(ptr %ptr, float %val, ptr %out
 ; GFX13-LABEL: flat_atomicrmw_cfs_64B:
 ; GFX13:       ; %bb.0: ; %entry
 ; GFX13-NEXT:    s_load_b96 s[0:2], s[4:5], 0x24 nv
-; GFX13-NEXT:    v_mov_b32_e32 v0, 0
+; GFX13-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX13-NEXT:    s_mov_b32 s3, 0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
-; GFX13-NEXT:    flat_load_b32 v1, v0, s[0:1]
+; GFX13-NEXT:    flat_load_b32 v0, v1, s[0:1]
 ; GFX13-NEXT:  .LBB7_1: ; %atomicrmw.start
 ; GFX13-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX13-NEXT:    v_mov_b32_e32 v2, v1
+; GFX13-NEXT:    v_mov_b32_e32 v3, v0
 ; GFX13-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX13-NEXT:    v_add_f32_e32 v1, s2, v2
-; GFX13-NEXT:    flat_atomic_cmpswap_b32 v1, v0, v[1:2], s[0:1] th:TH_ATOMIC_RETURN scope:SCOPE_SYS cfs:CFS_64B
+; GFX13-NEXT:    v_add_f32_e32 v2, s2, v3
+; GFX13-NEXT:    flat_atomic_cmpswap_b32 v0, v1, v[2:3], s[0:1] th:TH_ATOMIC_RETURN scope:SCOPE_SYS cfs:CFS_64B
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX13-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v2
+; GFX13-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v3
 ; GFX13-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; GFX13-NEXT:    s_or_b32 s3, s3, vcc_lo
 ; GFX13-NEXT:    s_mov_b32 exec_lo, s6
@@ -168,9 +168,9 @@ define amdgpu_kernel void @flat_atomicrmw_cfs_64B(ptr %ptr, float %val, ptr %out
 ; GFX13-NEXT:  .LBB7_2: ; %atomicrmw.end
 ; GFX13-NEXT:    s_or_b32 exec_lo, exec_lo, s3
 ; GFX13-NEXT:    s_load_b64 s[0:1], s[4:5], 0x34 nv
-; GFX13-NEXT:    v_mov_b32_e32 v0, 0
+; GFX13-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
-; GFX13-NEXT:    flat_store_b32 v0, v1, s[0:1]
+; GFX13-NEXT:    flat_store_b32 v1, v0, s[0:1]
 ; GFX13-NEXT:    s_endpgm
 entry:
   %result = atomicrmw fadd ptr %ptr, float %val monotonic, !amdgpu.cfs !{i32 2}
@@ -182,19 +182,19 @@ define amdgpu_kernel void @flat_atomicrmw_cfs_32B(ptr %ptr, float %val, ptr %out
 ; GFX13-LABEL: flat_atomicrmw_cfs_32B:
 ; GFX13:       ; %bb.0: ; %entry
 ; GFX13-NEXT:    s_load_b96 s[0:2], s[4:5], 0x24 nv
-; GFX13-NEXT:    v_mov_b32_e32 v0, 0
+; GFX13-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX13-NEXT:    s_mov_b32 s3, 0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
-; GFX13-NEXT:    flat_load_b32 v1, v0, s[0:1]
+; GFX13-NEXT:    flat_load_b32 v0, v1, s[0:1]
 ; GFX13-NEXT:  .LBB8_1: ; %atomicrmw.start
 ; GFX13-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX13-NEXT:    v_mov_b32_e32 v2, v1
+; GFX13-NEXT:    v_mov_b32_e32 v3, v0
 ; GFX13-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX13-NEXT:    v_add_f32_e32 v1, s2, v2
-; GFX13-NEXT:    flat_atomic_cmpswap_b32 v1, v0, v[1:2], s[0:1] th:TH_ATOMIC_RETURN scope:SCOPE_SYS cfs:CFS_32B
+; GFX13-NEXT:    v_add_f32_e32 v2, s2, v3
+; GFX13-NEXT:    flat_atomic_cmpswap_b32 v0, v1, v[2:3], s[0:1] th:TH_ATOMIC_RETURN scope:SCOPE_SYS cfs:CFS_32B
 ; GFX13-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX13-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v1, v2
+; GFX13-NEXT:    v_cmp_eq_u32_e32 vcc_lo, v0, v3
 ; GFX13-NEXT:    s_xor_b32 s6, vcc_lo, exec_lo
 ; GFX13-NEXT:    s_or_b32 s3, s3, vcc_lo
 ; GFX13-NEXT:    s_mov_b32 exec_lo, s6
@@ -203,9 +203,9 @@ define amdgpu_kernel void @flat_atomicrmw_cfs_32B(ptr %ptr, float %val, ptr %out
 ; GFX13-NEXT:  .LBB8_2: ; %atomicrmw.end
 ; GFX13-NEXT:    s_or_b32 exec_lo, exec_lo, s3
 ; GFX13-NEXT:    s_load_b64 s[0:1], s[4:5], 0x34 nv
-; GFX13-NEXT:    v_mov_b32_e32 v0, 0
+; GFX13-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
-; GFX13-NEXT:    flat_store_b32 v0, v1, s[0:1]
+; GFX13-NEXT:    flat_store_b32 v1, v0, s[0:1]
 ; GFX13-NEXT:    s_endpgm
 entry:
   %result = atomicrmw fadd ptr %ptr, float %val monotonic, !amdgpu.cfs !{i32 3}
