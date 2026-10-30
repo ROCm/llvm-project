@@ -1,0 +1,73 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+#
+# bandit configuration
+# Reference: https://bandit.readthedocs.io/en/latest/config.html
+# Local scan: bandit --recursive . --configfile .github/scan_tools_configs/bandit.yml
+#
+# Bandit configuration for this repository's security scans.
+#
+# This file defines the complete scanner policy;
+# Keep repository-specific suppressions and tuning here.
+#
+# Bandit has no ignore file. Suppress a finding with:
+#
+#   1. `# nosec <test ID>` on the flagged line:
+#          subprocess.run(cmd, shell=True)  # nosec B602 # cmd is a constant
+#
+#   2. `skips:` for test IDs disabled across the repository:
+#          skips: [B101]
+#
+#   3. `exclude_dirs:` below for paths Bandit should not scan.
+
+# Environment and generated-output exclusions support local scans; these
+# paths are absent from clean CI checkouts.
+exclude_dirs:
+  - .git
+  - .venv*
+  - venv*
+  - build
+  - dist
+  - node_modules
+  - __pycache__
+  - clang-tools-extra/clang-tidy/rename_check.py
+  - clang/utils/analyzer/SATest.py
+  - clang/utils/analyzer/SATestBuild.py
+  - clang/utils/analyzer/SATestUpdateDiffs.py
+  - clang/utils/analyzer/SATestUtils.py
+  - clang/utils/analyzer/entrypoint.py
+  - clang/utils/analyzer/exploded-graph-rewriter.py
+  - clang/utils/check_cfc/check_cfc.py
+  - compiler-rt/lib/sanitizer_common/scripts/sancov.py
+  - compiler-rt/test/lit.common.cfg.py
+  - compiler-rt/test/profile/Linux/lit.local.cfg.py
+  - compiler-rt/test/sanitizer_common/ios_commands/iossim_run.py
+  - cross-project-tests/debuginfo-tests/llgdb-tests/llgdb.py
+  - libcxx/utils/adb_run.py
+  - libsycl/test/lit.cfg.py
+  - lld/utils/run_benchmark.py
+  - lldb/examples/python/crashlog.py
+  - lldb/examples/python/performance.py
+  - lldb/packages/Python/lldbsuite/support/seven.py
+  - lldb/packages/Python/lldbsuite/test/decorators.py
+  - lldb/packages/Python/lldbsuite/test/dotest.py
+  - lldb/packages/Python/lldbsuite/test/lldb_pylint_helper.py
+  - lldb/scripts/verify_api.py
+  - lldb/test/API/functionalities/module_aliased_path/TestModuleAliasedPath.py
+  - lldb/test/API/functionalities/process_save_core/TestProcessSaveCore.py
+  - lldb/test/API/macosx/add-dsym/TestAddDsymDownload.py
+  - lldb/test/API/macosx/corefile-unparseable-binary/TestCorefileUnparseableBinary.py
+  - lldb/test/API/macosx/lc-note/firmware-corefile/TestFirmwareCorefiles.py
+  - lldb/test/API/macosx/lc-note/kern-ver-str/TestKernVerStrLCNOTE.py
+  - lldb/test/API/macosx/lc-note/multiple-binary-corefile/TestMultipleBinaryCorefile.py
+  - lldb/test/API/macosx/skinny-corefile/TestSkinnyCorefile.py
+  - lldb/test/API/python_api/global_module_cache/TestGlobalModuleCache.py
+  - lldb/test/API/python_api/target-arch-from-module/TestTargetArchFromModule.py
+  - llvm/utils/UpdateTestChecks/common.py
+  - llvm/utils/abtest.py
+  - llvm/utils/instrumentor-config-wizard.py
+  - llvm/utils/lit/lit/util.py
+  - llvm/utils/sysroot.py
+  - llvm/utils/update_llubi_test_checks.py
+  - llvm/utils/update_mir_test_checks.py
+  - llvm/utils/update_test_prefix.py
