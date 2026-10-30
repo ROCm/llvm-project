@@ -188,9 +188,9 @@ define amdgpu_gfx void @strict_wwm_cfg(ptr addrspace(8) inreg %tmp14, i32 %arg) 
 ; GFX9-O0-NEXT:    s_mov_b64 exec, s[34:35]
 ; GFX9-O0-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX9-O0-NEXT:  ; %bb.1: ; %if
-; GFX9-O0-NEXT:    buffer_load_dword v3, off, s[0:3], s32 offset:12 ; 4-byte Folded Reload
 ; GFX9-O0-NEXT:    buffer_load_dword v4, off, s[0:3], s32 offset:16 ; 4-byte Folded Reload
-; GFX9-O0-NEXT:    s_waitcnt vmcnt(0)
+; GFX9-O0-NEXT:    buffer_load_dword v3, off, s[0:3], s32 offset:12 ; 4-byte Folded Reload
+; GFX9-O0-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-O0-NEXT:    s_or_saveexec_b64 s[34:35], -1
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v1, 0

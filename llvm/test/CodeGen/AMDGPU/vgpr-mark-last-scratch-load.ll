@@ -408,28 +408,28 @@ define <8 x half> @baz() nounwind {
 ; CHECK-NEXT:    v_dual_mov_b32 v0, 0x60 :: v_dual_mov_b32 v3, 0
 ; CHECK-NEXT:    v_dual_mov_b32 v2, 0x50 :: v_dual_mov_b32 v5, 0
 ; CHECK-NEXT:    v_dual_mov_b32 v4, 64 :: v_dual_mov_b32 v7, 0
-; CHECK-NEXT:    v_mov_b32_e32 v6, 48
 ; CHECK-NEXT:    s_clause 0x1
 ; CHECK-NEXT:    global_load_b128 v[40:43], v[0:1], off
 ; CHECK-NEXT:    global_load_b128 v[44:47], v[2:3], off
 ; CHECK-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v3, 0
-; CHECK-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v2, 0x70
-; CHECK-NEXT:    v_dual_mov_b32 v9, 0 :: v_dual_mov_b32 v8, 0x80
+; CHECK-NEXT:    v_dual_mov_b32 v2, 0x70 :: v_dual_mov_b32 v9, 0
+; CHECK-NEXT:    v_dual_mov_b32 v6, 48 :: v_dual_mov_b32 v1, 0
+; CHECK-NEXT:    v_mov_b32_e32 v8, 0x80
 ; CHECK-NEXT:    s_clause 0x1
 ; CHECK-NEXT:    global_load_b128 v[56:59], v[4:5], off
 ; CHECK-NEXT:    global_load_b128 v[60:63], v[6:7], off
 ; CHECK-NEXT:    v_mov_b32_e32 v5, 0
 ; CHECK-NEXT:    s_clause 0x4
-; CHECK-NEXT:    global_load_b128 v[72:75], v[0:1], off
 ; CHECK-NEXT:    global_load_b128 v[10:13], v[2:3], off
 ; CHECK-NEXT:    global_load_b128 v[14:17], v[8:9], off
 ; CHECK-NEXT:    global_load_b128 v[18:21], v[8:9], off offset:16
 ; CHECK-NEXT:    global_load_b128 v[22:25], v[8:9], off offset:32
+; CHECK-NEXT:    global_load_b128 v[72:75], v[0:1], off
 ; CHECK-NEXT:    v_dual_mov_b32 v4, 32 :: v_dual_mov_b32 v7, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v6, 16
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    global_load_b128 v[76:79], v[4:5], off
 ; CHECK-NEXT:    global_load_b128 v[88:91], v[6:7], off
+; CHECK-NEXT:    global_load_b128 v[76:79], v[4:5], off
 ; CHECK-NEXT:    s_getpc_b64 s[0:1]
 ; CHECK-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; CHECK-NEXT:    s_sext_i32_i16 s1, s1
@@ -445,13 +445,13 @@ define <8 x half> @baz() nounwind {
 ; CHECK-NEXT:    s_mov_b64 s[36:37], s[8:9]
 ; CHECK-NEXT:    s_mov_b64 s[38:39], s[6:7]
 ; CHECK-NEXT:    s_mov_b64 s[48:49], s[4:5]
-; CHECK-NEXT:    s_wait_loadcnt 0x5
+; CHECK-NEXT:    s_wait_loadcnt 0x6
 ; CHECK-NEXT:    scratch_store_b128 off, v[10:13], s33 offset:180 ; 16-byte Folded Spill
-; CHECK-NEXT:    s_wait_loadcnt 0x4
+; CHECK-NEXT:    s_wait_loadcnt 0x5
 ; CHECK-NEXT:    scratch_store_b128 off, v[14:17], s33 offset:196 ; 16-byte Folded Spill
-; CHECK-NEXT:    s_wait_loadcnt 0x3
+; CHECK-NEXT:    s_wait_loadcnt 0x4
 ; CHECK-NEXT:    scratch_store_b128 off, v[18:21], s33 offset:212 ; 16-byte Folded Spill
-; CHECK-NEXT:    s_wait_loadcnt 0x2
+; CHECK-NEXT:    s_wait_loadcnt 0x3
 ; CHECK-NEXT:    s_clause 0x4 ; 80-byte Folded Spill
 ; CHECK-NEXT:    scratch_store_b128 off, v[22:25], s33 offset:228
 ; CHECK-NEXT:    scratch_store_b128 off, v[26:29], s33 offset:244
@@ -482,14 +482,14 @@ define <8 x half> @baz() nounwind {
 ; CHECK-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; CHECK-NEXT:    s_clause 0xf ; 256-byte Folded Reload
+; CHECK-NEXT:    scratch_load_b128 v[16:19], off, s33 offset:372 th:TH_LOAD_LU
 ; CHECK-NEXT:    scratch_load_b128 v[0:3], off, s33 offset:308 th:TH_LOAD_LU
 ; CHECK-NEXT:    scratch_load_b128 v[4:7], off, s33 offset:324 th:TH_LOAD_LU
 ; CHECK-NEXT:    scratch_load_b128 v[8:11], off, s33 offset:340 th:TH_LOAD_LU
 ; CHECK-NEXT:    scratch_load_b128 v[12:15], off, s33 offset:356 th:TH_LOAD_LU
-; CHECK-NEXT:    scratch_load_b128 v[16:19], off, s33 offset:372 th:TH_LOAD_LU
-; CHECK-NEXT:    scratch_load_b128 v[20:23], off, s33 offset:388 th:TH_LOAD_LU
-; CHECK-NEXT:    scratch_load_b128 v[24:27], off, s33 offset:404 th:TH_LOAD_LU
 ; CHECK-NEXT:    scratch_load_b128 v[28:31], off, s33 offset:420 th:TH_LOAD_LU
+; CHECK-NEXT:    scratch_load_b128 v[24:27], off, s33 offset:404 th:TH_LOAD_LU
+; CHECK-NEXT:    scratch_load_b128 v[20:23], off, s33 offset:388 th:TH_LOAD_LU
 ; CHECK-NEXT:    scratch_load_b128 v[93:96], off, s33 offset:180 th:TH_LOAD_LU
 ; CHECK-NEXT:    scratch_load_b128 v[97:100], off, s33 offset:196 th:TH_LOAD_LU
 ; CHECK-NEXT:    scratch_load_b128 v[101:104], off, s33 offset:212 th:TH_LOAD_LU
@@ -513,13 +513,16 @@ define <8 x half> @baz() nounwind {
 ; CHECK-NEXT:    s_mov_b32 s13, s52
 ; CHECK-NEXT:    s_mov_b32 s14, s51
 ; CHECK-NEXT:    s_mov_b32 s15, s50
-; CHECK-NEXT:    s_wait_loadcnt 0x8
-; CHECK-NEXT:    v_dual_mov_b32 v31, v15 :: v_dual_mov_b32 v30, v14
+; CHECK-NEXT:    s_wait_loadcnt 0xf
 ; CHECK-NEXT:    v_dual_mov_b32 v35, v19 :: v_dual_mov_b32 v34, v18
 ; CHECK-NEXT:    v_dual_mov_b32 v33, v17 :: v_dual_mov_b32 v32, v16
+; CHECK-NEXT:    s_wait_loadcnt 0xa
+; CHECK-NEXT:    v_dual_mov_b32 v31, v15 :: v_dual_mov_b32 v30, v14
 ; CHECK-NEXT:    v_dual_mov_b32 v29, v13 :: v_dual_mov_b32 v28, v12
+; CHECK-NEXT:    s_wait_loadcnt 0x9
 ; CHECK-NEXT:    v_dual_mov_b32 v27, v11 :: v_dual_mov_b32 v26, v10
 ; CHECK-NEXT:    v_dual_mov_b32 v25, v9 :: v_dual_mov_b32 v24, v8
+; CHECK-NEXT:    s_wait_loadcnt 0x8
 ; CHECK-NEXT:    v_dual_mov_b32 v23, v7 :: v_dual_mov_b32 v22, v6
 ; CHECK-NEXT:    v_dual_mov_b32 v21, v5 :: v_dual_mov_b32 v20, v4
 ; CHECK-NEXT:    v_dual_mov_b32 v19, v3 :: v_dual_mov_b32 v18, v2

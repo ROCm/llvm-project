@@ -736,8 +736,8 @@ define amdgpu_kernel void @global_load_v16f32(ptr addrspace(1) %out, ptr addrspa
 ; GCN-HSA-NEXT:    v_add_i32_e32 v8, vcc, 32, v12
 ; GCN-HSA-NEXT:    v_addc_u32_e32 v9, vcc, 0, v13, vcc
 ; GCN-HSA-NEXT:    flat_load_dwordx4 v[0:3], v[12:13]
-; GCN-HSA-NEXT:    flat_load_dwordx4 v[4:7], v[4:5]
 ; GCN-HSA-NEXT:    flat_load_dwordx4 v[8:11], v[8:9]
+; GCN-HSA-NEXT:    flat_load_dwordx4 v[4:7], v[4:5]
 ; GCN-HSA-NEXT:    v_add_i32_e32 v12, vcc, 16, v12
 ; GCN-HSA-NEXT:    v_addc_u32_e32 v13, vcc, 0, v13, vcc
 ; GCN-HSA-NEXT:    flat_load_dwordx4 v[12:15], v[12:13]
@@ -758,8 +758,9 @@ define amdgpu_kernel void @global_load_v16f32(ptr addrspace(1) %out, ptr addrspa
 ; GCN-HSA-NEXT:    v_mov_b32_e32 v1, s3
 ; GCN-HSA-NEXT:    v_mov_b32_e32 v3, s1
 ; GCN-HSA-NEXT:    v_mov_b32_e32 v2, s0
-; GCN-HSA-NEXT:    s_waitcnt vmcnt(2)
+; GCN-HSA-NEXT:    s_waitcnt vmcnt(3)
 ; GCN-HSA-NEXT:    flat_store_dwordx4 v[18:19], v[8:11]
+; GCN-HSA-NEXT:    s_waitcnt vmcnt(3)
 ; GCN-HSA-NEXT:    flat_store_dwordx4 v[0:1], v[4:7]
 ; GCN-HSA-NEXT:    s_waitcnt vmcnt(3)
 ; GCN-HSA-NEXT:    flat_store_dwordx4 v[2:3], v[12:15]
@@ -777,17 +778,19 @@ define amdgpu_kernel void @global_load_v16f32(ptr addrspace(1) %out, ptr addrspa
 ; GCNX3-NOHSA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v13, vcc
 ; GCNX3-NOHSA-NEXT:    v_add_u32_e32 v4, vcc, 32, v12
 ; GCNX3-NOHSA-NEXT:    v_addc_u32_e32 v5, vcc, 0, v13, vcc
-; GCNX3-NOHSA-NEXT:    flat_load_dwordx4 v[0:3], v[0:1]
-; GCNX3-NOHSA-NEXT:    flat_load_dwordx4 v[4:7], v[4:5]
 ; GCNX3-NOHSA-NEXT:    flat_load_dwordx4 v[8:11], v[12:13]
+; GCNX3-NOHSA-NEXT:    flat_load_dwordx4 v[4:7], v[4:5]
+; GCNX3-NOHSA-NEXT:    flat_load_dwordx4 v[0:3], v[0:1]
 ; GCNX3-NOHSA-NEXT:    v_add_u32_e32 v12, vcc, 16, v12
 ; GCNX3-NOHSA-NEXT:    v_addc_u32_e32 v13, vcc, 0, v13, vcc
 ; GCNX3-NOHSA-NEXT:    flat_load_dwordx4 v[12:15], v[12:13]
 ; GCNX3-NOHSA-NEXT:    s_mov_b32 s3, 0xf000
 ; GCNX3-NOHSA-NEXT:    s_mov_b32 s2, -1
-; GCNX3-NOHSA-NEXT:    s_waitcnt vmcnt(1)
+; GCNX3-NOHSA-NEXT:    s_waitcnt vmcnt(3)
 ; GCNX3-NOHSA-NEXT:    buffer_store_dwordx4 v[8:11], off, s[0:3], 0
+; GCNX3-NOHSA-NEXT:    s_waitcnt vmcnt(3)
 ; GCNX3-NOHSA-NEXT:    buffer_store_dwordx4 v[4:7], off, s[0:3], 0 offset:32
+; GCNX3-NOHSA-NEXT:    s_waitcnt vmcnt(3)
 ; GCNX3-NOHSA-NEXT:    buffer_store_dwordx4 v[0:3], off, s[0:3], 0 offset:48
 ; GCNX3-NOHSA-NEXT:    s_waitcnt vmcnt(3)
 ; GCNX3-NOHSA-NEXT:    buffer_store_dwordx4 v[12:15], off, s[0:3], 0 offset:16
