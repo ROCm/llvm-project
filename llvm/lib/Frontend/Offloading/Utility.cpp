@@ -199,6 +199,20 @@ std::pair<Constant *, Constant *> offloading::getOffloadEntryArray(Module &M) {
   return std::make_pair(EntriesB, EntriesE);
 }
 
+static bool isCompatibleAMDGPUProcessor(StringRef ImageArch,
+                                        StringRef EnvArch) {
+  if (ImageArch == EnvArch)
+    return true;
+  // gfx1250-strict is the A0 stepping of gfx1250. HSA reports A0 as
+  // gfx1250-strict when HSA_DISABLE_GFX12_STRICT=0, while default
+  // compilation uses gfx1250. Treat them as the same processor for
+  // image selection.
+  auto IsGfx1250 = [](StringRef Arch) {
+    return Arch == "gfx1250" || Arch == "gfx1250-strict";
+  };
+  return IsGfx1250(ImageArch) && IsGfx1250(EnvArch);
+}
+
 bool llvm::offloading::amdgpu::isImageCompatibleWithEnv(StringRef ImageArch,
                                                         uint32_t ImageFlags,
                                                         StringRef EnvTargetID) {
@@ -206,7 +220,7 @@ bool llvm::offloading::amdgpu::isImageCompatibleWithEnv(StringRef ImageArch,
   StringRef EnvArch = EnvTargetID.split(":").first;
 
   // Trivial check if the base processors match.
-  if (EnvArch != ImageArch)
+  if (!isCompatibleAMDGPUProcessor(ImageArch, EnvArch))
     return false;
 
   // Check if the image is requesting xnack on or off.
