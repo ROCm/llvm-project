@@ -17,12 +17,17 @@
 #ifndef LLVM_CLANG_DRIVER_OFFLOADBUNDLER_H
 #define LLVM_CLANG_DRIVER_OFFLOADBUNDLER_H
 
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/Error.h"
 #include "llvm/TargetParser/Triple.h"
 #include <llvm/Support/MemoryBuffer.h>
 #include <string>
+
+namespace llvm::vfs {
+class FileSystem;
+}
 
 namespace clang {
 
@@ -65,7 +70,26 @@ public:
                       const OffloadBundlerConfig &BundlerConfig);
 
   llvm::Error BundleFiles();
-  llvm::Error UnbundleFiles();
+
+  /// Unbundle the configured input, including concatenated bundles. Read via
+  /// the borrowed FS when supplied, or the real filesystem/stdin otherwise.
+  /// FS and WriteOutput need only remain valid for this synchronous call.
+  ///
+  /// With WriteOutput, pass each configured output filename and an owning
+  /// buffer to the callback, not necessarily in OutputFileNames order. Copy the
+  /// name if it must be retained; buffers may outlive this call. Binary members
+  /// retain their backing image without copying and may be unaligned or lack
+  /// a trailing NUL. Other formats copy through the stream-based reader.
+  /// Missing-bundle and host fallback rules are the same as for file outputs.
+  ///
+  /// A callback error stops extraction and is returned to the caller; outputs
+  /// already delivered are not rolled back. Without WriteOutput, outputs are
+  /// written to the real filesystem even when FS is supplied.
+  llvm::Error UnbundleFiles(
+      llvm::vfs::FileSystem *FS = nullptr,
+      llvm::function_ref<llvm::Error(llvm::StringRef,
+                                     std::unique_ptr<llvm::MemoryBuffer>)>
+          WriteOutput = nullptr);
   llvm::Error UnbundleArchive();
 };
 

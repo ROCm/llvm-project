@@ -46,6 +46,7 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/Timer.h"
+#include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/Host.h"
@@ -167,6 +168,22 @@ static std::string getDeviceLibraryFileName(StringRef BundleFileName,
 }
 
 namespace {
+/// A binary member view that retains its entire backing image after unbundling.
+class BundleBuffer final : public MemoryBuffer {
+  std::shared_ptr<MemoryBuffer> Owner;
+
+public:
+  /// Bytes must lie within the non-null Owner; no trailing NUL is required.
+  BundleBuffer(std::shared_ptr<MemoryBuffer> Owner, StringRef Bytes)
+      : Owner(std::move(Owner)) {
+    init(Bytes.begin(), Bytes.end(), /*RequiresNullTerminator=*/false);
+  }
+  StringRef getBufferIdentifier() const override {
+    return Owner->getBufferIdentifier();
+  }
+  BufferKind getBufferKind() const override { return Owner->getBufferKind(); }
+};
+
 /// Generic file handler interface.
 class FileHandler {
 public:
@@ -193,6 +210,19 @@ public:
 
   /// Read the current bundle and write the result into the stream \a OS.
   virtual Error ReadBundle(raw_ostream &OS, MemoryBuffer &Input) = 0;
+
+  /// Read the bundle selected by ReadBundleStart(), before ReadBundleEnd().
+  /// The default uses ReadBundle() and copies its stream output; overrides may
+  /// return views that retain Input. The result must own its storage lifetime
+  /// independently of this handler and the caller's reference to Input.
+  virtual Expected<std::unique_ptr<MemoryBuffer>>
+  ReadBundleBuffer(std::shared_ptr<MemoryBuffer> Input) {
+    SmallVector<char, 0> Bytes;
+    raw_svector_ostream OS(Bytes);
+    if (Error Err = ReadBundle(OS, *Input))
+      return std::move(Err);
+    return MemoryBuffer::getMemBufferCopy(OS.str());
+  }
 
   /// Write the header of the bundled file to \a OS based on the information
   /// gathered from \a Inputs.
@@ -373,7 +403,7 @@ public:
 
     // Read number of bundles.
     if (ReadChars + 8 > FC.size())
-      return Error::success();
+      return createStringError("truncated binary bundle header");
 
     uint64_t NumberOfBundles = Read8byteIntegerFromBuffer(FC, ReadChars);
     ReadChars += 8;
@@ -383,35 +413,35 @@ public:
 
       // Read offset.
       if (ReadChars + 8 > FC.size())
-        return Error::success();
+        return createStringError("truncated binary bundle header");
 
       uint64_t Offset = Read8byteIntegerFromBuffer(FC, ReadChars);
       ReadChars += 8;
 
       // Read size.
       if (ReadChars + 8 > FC.size())
-        return Error::success();
+        return createStringError("truncated binary bundle header");
 
       uint64_t Size = Read8byteIntegerFromBuffer(FC, ReadChars);
       ReadChars += 8;
 
       // Read triple size.
       if (ReadChars + 8 > FC.size())
-        return Error::success();
+        return createStringError("truncated binary bundle header");
 
       uint64_t TripleSize = Read8byteIntegerFromBuffer(FC, ReadChars);
       ReadChars += 8;
 
       // Read triple.
-      if (ReadChars + TripleSize > FC.size())
-        return Error::success();
+      if (TripleSize > FC.size() - ReadChars)
+        return createStringError("truncated binary bundle header");
 
       StringRef Triple(&FC.data()[ReadChars], TripleSize);
       ReadChars += TripleSize;
 
       // Check if the offset and size make sense.
-      if (!Offset || Offset + Size > FC.size())
-        return Error::success();
+      if (!Offset || Offset > FC.size() || Size > FC.size() - Offset)
+        return createStringError("invalid binary bundle range");
 
       BundlesInfo[Triple] = BinaryBundleInfo(Size, Offset);
     }
@@ -439,6 +469,17 @@ public:
     OS.write(FC.data() + CurBundleInfo->second.Offset,
              CurBundleInfo->second.Size);
     return Error::success();
+  }
+
+  /// Return the selected member without copying, retaining Input as its owner.
+  /// ReadHeader() has validated the range; alignment and a trailing NUL are
+  /// not guaranteed for this subrange.
+  Expected<std::unique_ptr<MemoryBuffer>>
+  ReadBundleBuffer(std::shared_ptr<MemoryBuffer> Input) final {
+    assert(CurBundleInfo != BundlesInfo.end() && "Invalid reader info!");
+    StringRef Bytes = Input->getBuffer().substr(CurBundleInfo->second.Offset,
+                                                CurBundleInfo->second.Size);
+    return std::make_unique<BundleBuffer>(std::move(Input), Bytes);
   }
 
   Error WriteHeader(raw_ostream &OS,
@@ -1260,12 +1301,14 @@ Error OffloadBundler::BundleFiles() {
   return FH->finalizeOutputFile();
 }
 
-// Unbundle the files. Return true if an error was found.
-Error OffloadBundler::UnbundleFiles() {
+Error OffloadBundler::UnbundleFiles(
+    vfs::FileSystem *FS,
+    function_ref<Error(StringRef, std::unique_ptr<MemoryBuffer>)> WriteOutput) {
   // Open Input file.
   ErrorOr<std::unique_ptr<MemoryBuffer>> CodeOrErr =
-      MemoryBuffer::getFileOrSTDIN(BundlerConfig.InputFileNames.front(),
-                                   /*IsText=*/true);
+      FS ? FS->getBufferForFile(BundlerConfig.InputFileNames.front(), -1, false)
+         : MemoryBuffer::getFileOrSTDIN(BundlerConfig.InputFileNames.front(),
+                                        /*IsText=*/true);
   if (std::error_code EC = CodeOrErr.getError())
     return createFileError(BundlerConfig.InputFileNames.front(), EC);
 
@@ -1299,6 +1342,18 @@ Error OffloadBundler::UnbundleFiles() {
     size_t CurBundleEnd = StringRef::npos;
     if (identify_magic((*Buffer).getBuffer()) ==
         file_magic::offload_bundle_compressed) {
+      if (Buffer->getBufferSize() < 8)
+        return createStringError("compressed bundle header size too small");
+      auto Header = CompressedOffloadBundle::CompressedBundleHeader::tryParse(
+          Buffer->getBuffer());
+      if (!Header)
+        return Header.takeError();
+      size_t HeaderSize = Header->Version == 1   ? 20
+                          : Header->Version == 2 ? 24
+                                                 : 32;
+      if (Header->FileSize && (*Header->FileSize < HeaderSize ||
+                               *Header->FileSize > Buffer->getBufferSize()))
+        return createStringError("invalid compressed bundle size");
       // Locate this bundle's end and the next bundle from the header size.
       if (std::optional<size_t> Size =
               getCompressedBundleSize((*Buffer).getBuffer())) {
@@ -1335,7 +1390,9 @@ Error OffloadBundler::UnbundleFiles() {
           "Failed to decompress input: " +
               llvm::toString(DecompressedBufferOrErr.takeError()));
 
-    MemoryBuffer &Input = **DecompressedBufferOrErr;
+    std::shared_ptr<MemoryBuffer> InputOwner =
+        std::move(*DecompressedBufferOrErr);
+    MemoryBuffer &Input = *InputOwner;
 
     // Select the right file handler for this blob.
     Expected<std::unique_ptr<FileHandler>> FileHandlerOrErr =
@@ -1378,13 +1435,20 @@ Error OffloadBundler::UnbundleFiles() {
       if (Output == Worklist.end())
         continue;
 
-      // Check if the output file can be opened and copy the bundle to it.
-      std::error_code EC;
-      raw_fd_ostream OutputFile((*Output).second, EC, sys::fs::OF_None);
-      if (EC)
-        return createFileError((*Output).second, EC);
-      if (Error Err = FH->ReadBundle(OutputFile, Input))
-        return Err;
+      if (WriteOutput) {
+        auto Contents = FH->ReadBundleBuffer(InputOwner);
+        if (!Contents)
+          return Contents.takeError();
+        if (Error Err = WriteOutput(Output->second, std::move(*Contents)))
+          return Err;
+      } else {
+        std::error_code EC;
+        raw_fd_ostream OutputFile(Output->second, EC, sys::fs::OF_None);
+        if (EC)
+          return createFileError(Output->second, EC);
+        if (Error Err = FH->ReadBundle(OutputFile, Input))
+          return Err;
+      }
       if (Error Err = FH->ReadBundleEnd(Input))
         return Err;
       Worklist.erase(Output);
@@ -1422,6 +1486,15 @@ Error OffloadBundler::UnbundleFiles() {
   // create empty files for the remaining targets.
   if (Worklist.size() == BundlerConfig.TargetNames.size()) {
     for (auto &E : Worklist) {
+      if (WriteOutput) {
+        StringRef Bytes;
+        if (OffloadTargetInfo(E.getKey(), BundlerConfig).hasHostKind())
+          Bytes = (*CodeOrErr)->getBuffer();
+        if (Error Err =
+                WriteOutput(E.second, MemoryBuffer::getMemBufferCopy(Bytes)))
+          return Err;
+        continue;
+      }
       std::error_code EC;
       raw_fd_ostream OutputFile(E.second, EC, sys::fs::OF_None);
       if (EC)
@@ -1447,6 +1520,11 @@ Error OffloadBundler::UnbundleFiles() {
 
   // If we still have any elements in the worklist, create empty files for them.
   for (auto &E : Worklist) {
+    if (WriteOutput) {
+      if (Error Err = WriteOutput(E.second, MemoryBuffer::getMemBufferCopy("")))
+        return Err;
+      continue;
+    }
     std::error_code EC;
     raw_fd_ostream OutputFile(E.second, EC, sys::fs::OF_None);
     if (EC)

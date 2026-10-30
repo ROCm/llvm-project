@@ -507,6 +507,9 @@ CompressedOffloadBundle::CompressedBundleHeader::tryParse(StringRef Blob) {
   CompressedBundleHeader Normalized;
   Normalized.Version = Header.Common.Version;
 
+  if (Normalized.Version < 1 || Normalized.Version > 3)
+    return createStringError("unknown compressed bundle version");
+
   size_t RequiredSize = getHeaderSize(Normalized.Version);
 
   if (Blob.size() < RequiredSize)
@@ -580,15 +583,34 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
   if (VerboseStream)
     DecompressTimer.startTimer();
 
-  SmallVector<uint8_t, 0> DecompressedData;
   StringRef CompressedData =
       Blob.substr(HeaderSize, TotalFileSize - HeaderSize);
 
-  if (Error DecompressionError = compression::decompress(
-          CompressionFormat, arrayRefFromStringRef(CompressedData),
-          DecompressedData, UncompressedSize))
+  // Decompress directly into the buffer that is returned to the caller.
+  // Decompressing into a SmallVector first and then copying it into a
+  // MemoryBuffer would materialize the whole image twice.
+  std::unique_ptr<WritableMemoryBuffer> DecompressedData =
+      WritableMemoryBuffer::getNewUninitMemBuffer(UncompressedSize);
+  if (!DecompressedData)
+    return createStringError(std::errc::not_enough_memory,
+                             "could not allocate decompressed buffer");
+  size_t ActualSize = UncompressedSize;
+  auto *Destination =
+      reinterpret_cast<uint8_t *>(DecompressedData->getBufferStart());
+  Error DecompressionError =
+      CompressionFormat == compression::Format::Zlib
+          ? compression::zlib::decompress(arrayRefFromStringRef(CompressedData),
+                                          Destination, ActualSize)
+          : compression::zstd::decompress(arrayRefFromStringRef(CompressedData),
+                                          Destination, ActualSize);
+  if (DecompressionError)
     return createStringError("could not decompress embedded file contents: " +
                              toString(std::move(DecompressionError)));
+
+  std::unique_ptr<MemoryBuffer> ResultBuffer = std::move(DecompressedData);
+  if (ActualSize != UncompressedSize)
+    ResultBuffer = MemoryBuffer::getMemBufferCopy(
+        ResultBuffer->getBuffer().take_front(ActualSize));
 
   if (VerboseStream) {
     DecompressTimer.stopTimer();
@@ -602,7 +624,9 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
     HashRecalcTimer.startTimer();
     MD5 Hash;
     MD5::MD5Result Result;
-    Hash.update(ArrayRef<uint8_t>(DecompressedData));
+    Hash.update(ArrayRef<uint8_t>(
+        reinterpret_cast<const uint8_t *>(ResultBuffer->getBufferStart()),
+        ResultBuffer->getBufferSize()));
     Hash.final(Result);
     uint64_t RecalculatedHash = Result.low();
     HashRecalcTimer.stopTimer();
@@ -636,5 +660,5 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
         << "Hashes match: " << (HashMatch ? "Yes" : "No") << "\n";
   }
 
-  return MemoryBuffer::getMemBufferCopy(toStringRef(DecompressedData));
+  return std::move(ResultBuffer);
 }
