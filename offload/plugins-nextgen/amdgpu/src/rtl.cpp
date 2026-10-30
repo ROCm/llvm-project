@@ -14,9 +14,11 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <deque>
 #include <memory>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <string>
 #include <sys/time.h>
@@ -34,6 +36,7 @@
 #include "Shared/Utils.h"
 #include "Utils/ELF.h"
 
+#include "GenericProfiler.h"
 #include "GlobalHandler.h"
 #include "OffloadAPI.h"
 #include "PluginInterface.h"
@@ -123,10 +126,12 @@ namespace plugin {
 struct AMDGPUSignalTy;
 struct AMDGPUDeviceTy;
 
-/// Use to transport information to OMPT timing functions.
+/// Use to transport information to profiler timing functions.
+/// The profiler is captured as a pointer because this outlives the call that
+/// schedules the asynchronous action.
 struct ProfilingInfoTy {
   // Holds the profiler instance
-  GenericPluginTy *Plugin;
+  GenericProfilerTy *Profiler;
 
   // The HSA agent on which the operation is executed
   hsa_agent_t Agent;
@@ -160,8 +165,7 @@ static Error timeDataTransferInNsAsync(void *Data) {
 
   auto [Start, End] = getCopyStartAndEndTime(Args);
 
-  Args->Plugin->getProfiler()->handleDataTransfer(Start, End,
-                                                  Args->ProfilerSpecificData);
+  Args->Profiler->handleDataTransfer(Start, End, Args->ProfilerSpecificData);
 
   return Plugin::success();
 }
@@ -247,6 +251,56 @@ constexpr unsigned SGPRCountOccupancy8 = 100;
 } // end namespace amdgpu_arch
 
 namespace hsa_utils {
+
+/// Adapted from HSA-runtime.
+static void storeFence() {
+#if __has_builtin(__builtin_ia32_sfence)
+  __builtin_ia32_sfence();
+#elif __has_builtin(__builtin_arm_dmb)
+  __builtin_arm_dmb(0x2); // oshst
+#elif defined(__riscv)
+  __asm__ __volatile__("fence ow, ow" ::: "memory");
+#else
+  __atomic_thread_fence(__ATOMIC_SEQ_CST);
+#endif
+}
+
+/// Adapted from HSA-runtime.
+static void memoryFence() {
+#if __has_builtin(__builtin_ia32_mfence)
+  __builtin_ia32_mfence();
+#elif __has_builtin(__builtin_arm_dsb)
+  __builtin_arm_dsb(0xf); // sy
+#elif defined(__riscv)
+  __asm__ __volatile__("fence iorw, iorw" ::: "memory");
+#else
+  __atomic_thread_fence(__ATOMIC_SEQ_CST);
+#endif
+}
+
+/// Copied from HSA-runtime.
+/// Force a WC flush on PCIe devices by doing a write and then read-back
+static void flushPcieWc(void *Ptr, size_t Size) {
+  storeFence();
+  *((uint8_t *)Ptr + Size - 1) = *((uint8_t *)Ptr + Size - 1);
+  memoryFence();
+  auto Readback = *(reinterpret_cast<volatile uint8_t *>(Ptr) + Size - 1);
+  (void)Readback;
+}
+
+/// Copy \p Size bytes from \p Src to the device memory at \p Dst.
+/// \p OverXGMI tells whether the host reaches that memory over XGMI.
+///
+/// Without XGMI, this needs a WC flush. With XGMI, this isn't necessary
+/// (according to the code in HSA-runtime).
+static Error publishToDeviceMemory(void *Dst, const void *Src, size_t Size,
+                                   bool OverXGMI) {
+  std::memcpy(Dst, Src, Size);
+  if (OverXGMI)
+    return Plugin::success();
+  hsa_utils::flushPcieWc(Dst, Size);
+  return Plugin::success();
+}
 
 /// Iterate elements using an HSA iterate function. Do not use this function
 /// directly but the specialized ones below instead.
@@ -388,6 +442,24 @@ static std::optional<llvm::VersionTuple> getAMDExtensionVersion() {
           HSA_STATUS_SUCCESS)
     return std::nullopt;
   return llvm::VersionTuple(Major, Minor);
+}
+
+/// Whether the host can write \p Size bytes at \p Ptr directly: they must lie
+/// within an ordinary allocation of this device. On a large BAR system ROCr
+/// maps all of those for the host, which HIP relies on as well. Memory mapped
+/// through hsa_amd_vmem_* (such as the record-replay slab) is an example for
+/// something the host cannot write to directly without explicit access grant
+/// (needs to be checked explicitly; not yet handled here).
+static bool isHostWritable(hsa_agent_t Agent, const void *Ptr, int64_t Size) {
+  hsa_amd_pointer_info_t Info;
+  Info.size = sizeof(hsa_amd_pointer_info_t);
+  if (hsa_amd_pointer_info(Ptr, &Info, nullptr, nullptr, nullptr) !=
+      HSA_STATUS_SUCCESS)
+    return false;
+  return Info.type == HSA_EXT_POINTER_TYPE_HSA &&
+         Info.agentOwner.handle == Agent.handle &&
+         utils::getPtrDiff(Ptr, Info.agentBaseAddress) + Size <=
+             int64_t(Info.sizeInBytes);
 }
 } // namespace hsa_utils
 
@@ -533,6 +605,25 @@ struct AMDGPUMemoryPoolTy {
             Agent, MemoryPool, HSA_AMD_AGENT_MEMORY_POOL_INFO_ACCESS, &Access))
       return false;
     return Access != HSA_AMD_MEMORY_POOL_ACCESS_NEVER_ALLOWED;
+  }
+
+  /// Returns if the \p Agent reaches the memory pool over XGMI only, i.e.,
+  /// without any PCIe (or other) hop along the way.
+  bool isLinkedOverXGMI(hsa_agent_t Agent) {
+    uint32_t NumHops = 0;
+    if (hsa_amd_agent_memory_pool_get_info(
+            Agent, MemoryPool, HSA_AMD_AGENT_MEMORY_POOL_INFO_NUM_LINK_HOPS,
+            &NumHops) ||
+        NumHops == 0)
+      return false;
+    llvm::SmallVector<hsa_amd_memory_pool_link_info_t> Links(NumHops);
+    if (hsa_amd_agent_memory_pool_get_info(
+            Agent, MemoryPool, HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO,
+            Links.data()))
+      return false;
+    return llvm::all_of(Links, [](const hsa_amd_memory_pool_link_info_t &L) {
+      return L.link_type == HSA_AMD_LINK_INFO_TYPE_XGMI;
+    });
   }
 
   /// Allow the device to access a specific allocation.
@@ -855,7 +946,8 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   Error launchImpl(GenericDeviceTy &GenericDevice, uint32_t NumThreads[3],
                    uint32_t NumBlocks[3], uint32_t DynBlockMemSize,
                    KernelLaunchArgsTy &LaunchArgs,
-                   AsyncInfoWrapperTy &AsyncInfoWrapper) const override;
+                   AsyncInfoWrapperTy &AsyncInfoWrapper,
+                   GenericProfilerTy *ProfilerPtr) const override;
 
   /// Return maximum block size for maximum occupancy
   ///
@@ -1391,8 +1483,8 @@ private:
       MemcpyArgsTy MemcpyArgs;
       ReleaseBufferArgsTy ReleaseBufferArgs;
       ReleaseSignalArgsTy ReleaseSignalArgs;
-      void *CallbackArgs;
       ProfilingInfoTy ProfilerArgs;
+      void *CallbackArgs;
     };
 
     llvm::SmallVector<ActionArgsTy> ActionArgs;
@@ -1429,36 +1521,35 @@ private:
       return Plugin::success();
     }
 
-    /// Register a callback to be called on compleition
-    Error schedCallback(AMDGPUStreamCallbackTy *Func, void *Data) {
-      Callbacks.emplace_back(Func);
-      ActionArgs.emplace_back().CallbackArgs = Data;
-
-      return Plugin::success();
-    }
-
-    /// Schedule kernel timing measurement on the slot
-    Error schedProfilerKernelTiming(GenericDeviceTy *Device, hsa_agent_t Agent,
+    /// Schedule kernel timing measurement via the profiler on the slot.
+    Error schedProfilerKernelTiming(GenericProfilerTy *ProfilerPtr,
+                                    hsa_agent_t Agent,
                                     AMDGPUSignalTy *OutputSignal,
                                     double TicksToTime,
                                     void *ProfilerSpecificData) {
       Callbacks.emplace_back(timeKernelInNsAsync);
-      ActionArgs.emplace_back().ProfilerArgs =
-          ProfilingInfoTy{&(Device->Plugin), Agent, OutputSignal, TicksToTime,
-                          ProfilerSpecificData};
+      ActionArgs.emplace_back().ProfilerArgs = ProfilingInfoTy{
+          ProfilerPtr, Agent, OutputSignal, TicksToTime, ProfilerSpecificData};
       return Plugin::success();
     }
 
-    /// Schedule data transfer timing on the slot
-    Error schedProfilerDataTransferTiming(GenericDeviceTy *Device,
+    /// Schedule data transfer timing via the profiler on the slot.
+    Error schedProfilerDataTransferTiming(GenericProfilerTy *ProfilerPtr,
                                           hsa_agent_t Agent,
                                           AMDGPUSignalTy *OutputSignal,
                                           double TicksToTime,
                                           void *ProfilerSpecificData) {
       Callbacks.emplace_back(timeDataTransferInNsAsync);
-      ActionArgs.emplace_back().ProfilerArgs =
-          ProfilingInfoTy{&(Device->Plugin), Agent, OutputSignal, TicksToTime,
-                          ProfilerSpecificData};
+      ActionArgs.emplace_back().ProfilerArgs = ProfilingInfoTy{
+          ProfilerPtr, Agent, OutputSignal, TicksToTime, ProfilerSpecificData};
+      return Plugin::success();
+    }
+
+    /// Register a callback to be called on completion.
+    Error schedCallback(AMDGPUStreamCallbackTy *Func, void *Data) {
+      Callbacks.emplace_back(Func);
+      ActionArgs.emplace_back().CallbackArgs = Data;
+
       return Plugin::success();
     }
 
@@ -1792,7 +1883,7 @@ private:
 
     auto [StartTime, EndTime] = getKernelStartAndEndTime(ProfilerInfo);
 
-    ProfilerInfo->Plugin->getProfiler()->handleKernelCompletion(
+    ProfilerInfo->Profiler->handleKernelCompletion(
         StartTime, EndTime, ProfilerInfo->ProfilerSpecificData);
 
     return Plugin::success();
@@ -1818,7 +1909,8 @@ public:
                          uint32_t NumThreads[3], uint32_t NumBlocks[3],
                          uint32_t GroupSize, uint32_t StackSize,
                          AMDGPUMemoryManagerTy &MemoryManager,
-                         void *ProfilerSpecificData = nullptr) {
+                         void *ProfilerSpecificData = nullptr,
+                         GenericProfilerTy *ProfilerPtr = nullptr) {
     if (Queue == nullptr)
       return Plugin::error(ErrorCode::INVALID_NULL_POINTER,
                            "target queue was nullptr");
@@ -1839,17 +1931,15 @@ public:
     if (auto Err = Slots[Curr].schedReleaseBuffer(KernelArgs, MemoryManager))
       return Err;
 
-      // TODO: Technically this conditional compilation is not needed anymore
-#ifdef OMPT_SUPPORT
     if (ProfilerSpecificData) {
 
       // ProfilerSpecificData holds function pointer to finish trace record once
       // the kernel completed.
       if (auto Err = Slots[Curr].schedProfilerKernelTiming(
-              &Device, Agent, OutputSignal, TicksToTime, ProfilerSpecificData))
+              Device.Plugin.getProfiler(), Agent, OutputSignal, TicksToTime,
+              ProfilerSpecificData))
         return Err;
     }
-#endif
 
     // When LIBOMPTARGET_KERNEL_EXE_TIME is set, register the callback function
     // to get the kernel duration.
@@ -1910,15 +2000,13 @@ public:
     // Consume stream slot and compute dependencies.
     auto [Curr, InputSignal] = consume(OutputSignal);
 
-    // TODO: Technically this conditional compilation is not needed anymore
-#ifdef OMPT_SUPPORT
     if (ProfilerSpecificData) {
       // Capture the time the data transfer required for the d2h transfer.
       if (auto Err = Slots[Curr].schedProfilerDataTransferTiming(
-              &Device, Agent, OutputSignal, TicksToTime, ProfilerSpecificData))
+              Device.Plugin.getProfiler(), Agent, OutputSignal, TicksToTime,
+              ProfilerSpecificData))
         return Err;
     }
-#endif
 
     // Issue the async memory copy.
     if (InputSignal && InputSignal->load()) {
@@ -1942,7 +2030,8 @@ public:
   Error pushMemoryCopyD2HAsync(void *Dst, const void *Src, void *Inter,
                                uint64_t CopySize,
                                AMDGPUMemoryManagerTy &MemoryManager,
-                               void *ProfilerSpecificData = nullptr) {
+                               void *ProfilerSpecificData = nullptr,
+                               GenericProfilerTy *ProfilerPtr = nullptr) {
     // Retrieve available signals for the operation's outputs.
     AMDGPUSignalTy *OutputSignals[2] = {};
     if (auto Err = SignalManager.getResources(/*Num=*/2, OutputSignals))
@@ -1966,16 +2055,13 @@ public:
       if (auto Err = InputSignal->wait(StreamBusyWaitMicroseconds, &Device))
         return Err;
 
-        // TODO: Technically this conditional compilation is not needed anymore
-#ifdef OMPT_SUPPORT
     if (ProfilerSpecificData) {
       // Capture the time the data transfer required for the d2h transfer.
       if (auto Err = Slots[Curr].schedProfilerDataTransferTiming(
-              &Device, Agent, OutputSignals[0], TicksToTime,
+              Device.Plugin.getProfiler(), Agent, OutputSignals[0], TicksToTime,
               ProfilerSpecificData))
         return Err;
     }
-#endif
 
     // Issue the first step: device to host transfer. Avoid defining the input
     // dependency if already satisfied.
@@ -2030,6 +2116,7 @@ public:
                                uint64_t CopySize,
                                AMDGPUMemoryManagerTy &MemoryManager,
                                void *ProfilerSpecificData = nullptr,
+                               GenericProfilerTy *ProfilerPtr = nullptr,
                                size_t NumTimes = 1) {
     // Retrieve available signals for the operation's outputs.
     AMDGPUSignalTy *OutputSignals[2] = {};
@@ -2090,16 +2177,13 @@ public:
     if (auto Err = Slots[Curr].schedReleaseBuffer(Inter, MemoryManager))
       return Err;
 
-      // TODO: Technically, this conditional compilation is not needed anymore
-#ifdef OMPT_SUPPORT
     if (ProfilerSpecificData) {
       // Capture the time the data transfer required for the d2h transfer.
       if (auto Err = Slots[Curr].schedProfilerDataTransferTiming(
-              &Device, Agent, OutputSignals[0], TicksToTime,
+              Device.Plugin.getProfiler(), Agent, OutputSignals[0], TicksToTime,
               ProfilerSpecificData))
         return Err;
     }
-#endif
 
     // Issue the second step: host to device transfer. Avoid defining the input
     // dependency if already satisfied.
@@ -2117,7 +2201,8 @@ public:
   // AMDGPUDeviceTy is incomplete here, passing the underlying agent instead
   Error pushMemoryCopyD2DAsync(void *Dst, hsa_agent_t DstAgent, const void *Src,
                                hsa_agent_t SrcAgent, uint64_t CopySize,
-                               void *ProfilerSpecificData = nullptr) {
+                               void *ProfilerSpecificData = nullptr,
+                               GenericProfilerTy *ProfilerPtr = nullptr) {
     AMDGPUSignalTy *OutputSignal;
     if (auto Err = SignalManager.getResources(/*Num=*/1, &OutputSignal))
       return Err;
@@ -2129,15 +2214,13 @@ public:
     // Consume stream slot and compute dependencies.
     auto [Curr, InputSignal] = consume(OutputSignal);
 
-    // TODO: Technically, this conditional compilation is not needed anymore
-#ifdef OMPT_SUPPORT
     if (ProfilerSpecificData) {
       // Capture the time the data transfer required for the d2h transfer.
       if (auto Err = Slots[Curr].schedProfilerDataTransferTiming(
-              &Device, Agent, OutputSignal, TicksToTime, ProfilerSpecificData))
+              Device.Plugin.getProfiler(), Agent, OutputSignal, TicksToTime,
+              ProfilerSpecificData))
         return Err;
     }
-#endif
 
     // The agents need to have access to the corresponding memory
     // This is presently only true if the pointers were originally
@@ -2882,6 +2965,15 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (auto Err = preAllocateDeviceMemoryPool())
       return Err;
 
+    HostWritesDeviceMemory =
+        !CoarseGrainedMemoryPools.empty() &&
+        CoarseGrainedMemoryPools[0]->canAccess(HostDevice.getAgent());
+    // The writing thread may run on any host agent, so all of them must reach
+    // the device over XGMI.
+    HostLinkIsXGMI =
+        HostWritesDeviceMemory &&
+        CoarseGrainedMemoryPools[0]->isLinkedOverXGMI(HostDevice.getAgent());
+
     char GPUName[64];
     if (auto Err = getDeviceAttr(HSA_AGENT_INFO_NAME, GPUName))
       return Err;
@@ -2959,7 +3051,10 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (auto Err = getDeviceAttr(HSA_AGENT_INFO_GRID_MAX_DIM, GridMaxDim))
       return Err;
 
-    GridValues.GV_Max_Teams = GridMaxDim.x / GridValues.GV_Max_WG_Size;
+    // The HSA grid is expressed in work items, so it limits blocks * threads
+    // rather than blocks alone. A block has at least one thread.
+    GridValues.GV_Max_Teams = GridMaxDim.x;
+    MaxGridSize = GridMaxDim.x;
     if (GridValues.GV_Max_Teams == 0)
       return Plugin::error(ErrorCode::INVALID_ARGUMENT,
                            "maximum number of teams cannot be zero");
@@ -3268,18 +3363,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
   uint32_t getNumComputeUnits() const override { return NumComputeUnits; }
 
-  /// See GenericDeviceTy::getBlockLimit(uint32_t). The HSA launch configuration
-  /// is an int32_t grid representing blocks * threads. This means the block
-  /// limit depends on the user's requested thread count.
-  uint32_t getBlockLimit(uint32_t NumThreads) const override {
-    if (NumThreads == 0)
-      return GridValues.GV_Max_Teams;
-    uint64_t MaxGridItems =
-        uint64_t(GridValues.GV_Max_Teams) * getThreadLimit();
-    uint64_t MaxBlocks = MaxGridItems / NumThreads;
-    return std::min<uint64_t>(MaxBlocks, UINT32_MAX);
-  }
-
   /// Returns the clock frequency for the given AMDGPU device.
   uint64_t getClockFrequency() const override { return ClockFrequency; }
 
@@ -3500,14 +3583,30 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   /// dataSubmitImpl instead of staging through an intermediate buffer.
   bool hasFastTransferWithPinnedMemory() const override { return true; }
 
+  /// Whether a transfer of \p Size bytes should be done via direct H2D
+  /// transfer.
+  bool allowsDirectWrite(const void *Ptr, int64_t Size) const {
+    // A first heuristic, tune as new insights arise.
+    static constexpr int64_t MaxDirectWriteSize = 2 * 4096;
+    return HostWritesDeviceMemory && Size > 0 && Size <= MaxDirectWriteSize &&
+           hsa_utils::isHostWritable(Agent, Ptr, Size);
+  }
+
   /// Submit data to the device (host to device transfer).
   Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
-                       AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+                       AsyncInfoWrapperTy &AsyncInfoWrapper,
+                       GenericProfilerTy *ProfilerPtr) override {
     AMDGPUStreamTy *Stream = nullptr;
     void *PinnedPtr = nullptr;
 
     // Obtain the OMPT-related callback data
     auto ProfilerSpecificData = getOrNullProfilerSpecificData(AsyncInfoWrapper);
+
+    // A synchronous transfer is not ordered with the work on any queue, so the
+    // host can write the memory directly.
+    if (AsyncInfoWrapper.isSynchronous() && allowsDirectWrite(TgtPtr, Size))
+      return hsa_utils::publishToDeviceMemory(TgtPtr, HstPtr, Size,
+                                              HostLinkIsXGMI);
 
     // Prefault GPU page table in XNACK-Enabled case, on APUs,
     // under the assumption that explicitly allocated memory
@@ -3560,15 +3659,14 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       if (auto Err = Signal.wait(getStreamBusyWaitMicroseconds()))
         return Err;
 
-#ifdef OMPT_SUPPORT
       if (Plugin.getProfiler()->isProfilingEnabled()) {
-        ProfilingInfoTy OmptKernelTimingArgsAsync{
-            &Plugin, Agent, &Signal, TicksToTime, ProfilerSpecificData};
+        ProfilingInfoTy OmptKernelTimingArgsAsync{Plugin.getProfiler(), Agent,
+                                                  &Signal, TicksToTime,
+                                                  ProfilerSpecificData};
 
         if (auto Err = timeDataTransferInNsAsync(&OmptKernelTimingArgsAsync))
           return Err;
       }
-#endif
 
       if (auto Err = Signal.deinit())
         return Err;
@@ -3588,12 +3686,13 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     return Stream->pushMemoryCopyH2DAsync(TgtPtr, HstPtr, PinnedPtr, Size,
                                           PinnedMemoryManager,
-                                          ProfilerSpecificData);
+                                          ProfilerSpecificData, ProfilerPtr);
   }
 
   /// Retrieve data from the device (device to host transfer).
   Error dataRetrieveImpl(void *HstPtr, const void *TgtPtr, int64_t Size,
-                         AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+                         AsyncInfoWrapperTy &AsyncInfoWrapper,
+                         GenericProfilerTy *ProfilerPtr) override {
     AMDGPUStreamTy *Stream = nullptr;
     void *PinnedPtr = nullptr;
 
@@ -3652,15 +3751,14 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       if (auto Err = Signal.wait(getStreamBusyWaitMicroseconds()))
         return Err;
 
-#ifdef OMPT_SUPPORT
       if (Plugin.getProfiler()->isProfilingEnabled()) {
-        ProfilingInfoTy OmptKernelTimingArgsAsync{
-            &Plugin, Agent, &Signal, TicksToTime, ProfilerSpecificData};
+        ProfilingInfoTy OmptKernelTimingArgsAsync{Plugin.getProfiler(), Agent,
+                                                  &Signal, TicksToTime,
+                                                  ProfilerSpecificData};
 
         if (auto Err = timeDataTransferInNsAsync(&OmptKernelTimingArgsAsync))
           return Err;
       }
-#endif
 
       if (auto Err = Signal.deinit())
         return Err;
@@ -3680,7 +3778,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     return Stream->pushMemoryCopyD2HAsync(HstPtr, TgtPtr, PinnedPtr, Size,
                                           PinnedMemoryManager,
-                                          ProfilerSpecificData);
+                                          ProfilerSpecificData, ProfilerPtr);
   }
 
   Error dataMemcpyImpl(void *DstPtr, const void *SrcPtr, int64_t Size,
@@ -3713,7 +3811,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   /// Exchange data between two devices within the plugin.
   Error dataExchangeImpl(const void *SrcPtr, GenericDeviceTy &DstGenericDevice,
                          void *DstPtr, int64_t Size,
-                         AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+                         AsyncInfoWrapperTy &AsyncInfoWrapper,
+                         GenericProfilerTy *ProfilerPtr) override {
     AMDGPUDeviceTy &DstDevice = static_cast<AMDGPUDeviceTy &>(DstGenericDevice);
 
     auto ProfilerSpecificData = getOrNullProfilerSpecificData(AsyncInfoWrapper);
@@ -3737,15 +3836,14 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       if (auto Err = Signal.wait(getStreamBusyWaitMicroseconds()))
         return Err;
 
-#ifdef OMPT_SUPPORT
       if (Plugin.getProfiler()->isProfilingEnabled()) {
-        ProfilingInfoTy OmptKernelTimingArgsAsync{
-            &Plugin, Agent, &Signal, TicksToTime, ProfilerSpecificData};
+        ProfilingInfoTy OmptKernelTimingArgsAsync{Plugin.getProfiler(), Agent,
+                                                  &Signal, TicksToTime,
+                                                  ProfilerSpecificData};
 
         if (auto Err = timeDataTransferInNsAsync(&OmptKernelTimingArgsAsync))
           return Err;
       }
-#endif
 
       return Signal.deinit();
     }
@@ -3758,14 +3856,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     return Stream->pushMemoryCopyD2DAsync(DstPtr, DstDevice.getAgent(), SrcPtr,
                                           getAgent(), (uint64_t)Size,
-                                          ProfilerSpecificData);
-  }
-
-  /// Insert a data fence between previous data operations and the following
-  /// operations. This is a no-op for AMDGPU devices as operations inserted into
-  /// a queue are in-order.
-  Error dataFence(__tgt_async_info *Async) override {
-    return Plugin::success();
+                                          ProfilerSpecificData, ProfilerPtr);
   }
 
   Error dataFillImpl(void *TgtPtr, const void *PatternPtr, int64_t PatternSize,
@@ -3834,9 +3925,10 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (auto Err = getStream(AsyncInfoWrapper, Stream))
       return Err;
 
-    return Stream->pushMemoryCopyH2DAsync(TgtPtr, PatternPtr, PinnedPtr,
-                                          PatternSize, PinnedMemoryManager,
-                                          nullptr, Size / PatternSize);
+    return Stream->pushMemoryCopyH2DAsync(
+        TgtPtr, PatternPtr, PinnedPtr, PatternSize, PinnedMemoryManager,
+        /*ProfilerSpecificData=*/nullptr, /*ProfilerPtr=*/nullptr,
+        Size / PatternSize);
   }
 
 
@@ -3894,6 +3986,10 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       return Plugin::error(ErrorCode::UNKNOWN, "Failed to prepopulate GPU page table.");
     }
     return Plugin::success();
+  }
+
+  Expected<void *> getNativeHandle() override {
+    return reinterpret_cast<void *>(Agent.handle);
   }
 
   interop_spec_t selectInteropPreference(int32_t InteropType,
@@ -4524,9 +4620,9 @@ private:
 
     KernelLaunchArgsTy LaunchArgs = {};
     uint32_t NumBlocksAndThreads[3] = {1u, 1u, 1u};
-    auto Err =
-        AMDGPUKernel.launchImpl(*this, NumBlocksAndThreads, NumBlocksAndThreads,
-                                0, LaunchArgs, AsyncInfoWrapper);
+    auto Err = AMDGPUKernel.launchImpl(
+        *this, NumBlocksAndThreads, NumBlocksAndThreads, 0, LaunchArgs,
+        AsyncInfoWrapper, /*ProfilerPtr=*/nullptr);
 
     AsyncInfoWrapper.finalize(Err);
     return Err;
@@ -4779,6 +4875,13 @@ private:
   /// Pointer to the preallocated device memory pool
   void *PreAllocatedDeviceMemoryPool;
 
+  /// Whether the host can map this device's memory (large BAR) and write small
+  /// transfers into it directly.
+  bool HostWritesDeviceMemory = false;
+
+  /// Whether the host reaches this device's memory over XGMI rather than PCIe.
+  bool HostLinkIsXGMI = false;
+
   /// The current size of the stack that will be used in cases where it could
   /// not be statically determined.
   /// Default: 1024, in conformity to hipLimitStackSize.
@@ -4931,8 +5034,9 @@ private:
     uint32_t NumBlocks[3] = {1u, 1u, 1u};
 
     // Launch kernel with 256 threads and 1 block
-    if (auto Err = DMInitKernel.launchImpl(*this, NumThreads, NumBlocks, 0,
-                                           LaunchArgs, AsyncInfo))
+    if (auto Err =
+            DMInitKernel.launchImpl(*this, NumThreads, NumBlocks, 0, LaunchArgs,
+                                    AsyncInfo, /*ProfilerPtr=*/nullptr))
       return Err;
 
     // Wait for completion
@@ -5650,7 +5754,8 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                                  uint32_t NumThreads[3], uint32_t NumBlocks[3],
                                  uint32_t DynBlockMemSize,
                                  KernelLaunchArgsTy &LaunchArgs,
-                                 AsyncInfoWrapperTy &AsyncInfoWrapper) const {
+                                 AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                 GenericProfilerTy *ProfilerPtr) const {
   // Cooperative kernel launch is not yet supported for AMDGPU
   if (LaunchArgs.Flags.Cooperative)
     return Plugin::error(ErrorCode::UNSUPPORTED,
@@ -5736,9 +5841,9 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
   uint32_t TotalBlockMemSize = getStaticBlockMemSize() + DynBlockMemSize;
 
   // Push the kernel launch into the stream.
-  return Stream->pushKernelLaunch(*this, AllArgs, NumThreads, NumBlocks,
-                                  TotalBlockMemSize, StackSize,
-                                  ArgsMemoryManager, ProfilerSpecificData);
+  return Stream->pushKernelLaunch(
+      *this, AllArgs, NumThreads, NumBlocks, TotalBlockMemSize, StackSize,
+      ArgsMemoryManager, ProfilerSpecificData, ProfilerPtr);
   // Push the kernel launch into the stream.
 }
 
@@ -5814,7 +5919,6 @@ Error AMDGPUKernelTy::printLaunchInfoDetails(
 
   // Kernel Arguments Info
   auto ArgNum = LaunchArgs.NumArgs;
-  auto LoopTripCount = LaunchArgs.Tripcount;
 
   // Details for AMDGPU kernels (read from image)
   // https://www.llvm.org/docs/AMDGPUUsage.html#code-object-v4-metadata
@@ -5834,16 +5938,13 @@ Error AMDGPUKernelTy::printLaunchInfoDetails(
   // LDS Usage: Amount of bytes used in LDS storage
   // S/VGPR Count: the number of S/V GPRs occupied by the kernel
   // S/VGPR Spill Count: how many S/VGPRs are spilled by the kernel
-  // Tripcount: loop tripcount for the kernel
   INFO(OMP_INFOTYPE_PLUGIN_KERNEL, GenericDevice.getDeviceId(),
        "#Args: %d Teams x Thrds: %4ux%4u (MaxFlatWorkGroupSize: %u) LDS "
-       "Usage: %uB Scratch: %uB #SGPRs/VGPRs: %u/%u #SGPR/VGPR Spills: %u/%u "
-       "Tripcount: "
-       "%lu\n",
+       "Usage: %uB Scratch: %uB #SGPRs/VGPRs: %u/%u #SGPR/VGPR Spills: %u/%u\n",
        ArgNum, NumGroups[0] * NumGroups[1] * NumGroups[2],
        ThreadsPerGroup[0] * ThreadsPerGroup[1] * ThreadsPerGroup[2],
        MaxFlatWorkgroupSize, GroupSegmentSize, getPrivateSize(), SGPRCount,
-       VGPRCount, SGPRSpillCount, VGPRSpillCount, LoopTripCount);
+       VGPRCount, SGPRSpillCount, VGPRSpillCount);
 
   return Plugin::success();
 }
@@ -5986,7 +6087,7 @@ static ProfilingInfoTy *getProfilingInfo(void *Data) {
 
   // The ProfilerSpecific part can be nullptr, do not check here.
   assert(Args && "Invalid argument pointer");
-  assert(Args->Plugin && "Invalid plugin");
+  assert(Args->Profiler && "Invalid profiler");
   assert(Args->Signal && "Invalid signal");
 
   return Args;
@@ -5994,7 +6095,7 @@ static ProfilingInfoTy *getProfilingInfo(void *Data) {
 
 static std::pair<uint64_t, uint64_t>
 getKernelStartAndEndTime(const ProfilingInfoTy *Args) {
-  assert(Args->Plugin && "Invalid GenericPlugin pointer in profiling");
+  assert(Args->Profiler && "Invalid GenericProfiler pointer in profiling");
   assert(Args->Signal && "Invalid AMDGPUSignal pointer in profiling");
 
   hsa_amd_profiling_dispatch_time_t TimeRec{0, 0};

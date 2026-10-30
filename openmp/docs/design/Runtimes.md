@@ -1149,9 +1149,9 @@ cross-team reduction follows from the size of the reduction: if the data
 reduced per team is larger than 32 bytes, one block per compute unit;
 otherwise, as many blocks as fill this number of waves per compute unit, but
 at least one per compute unit. No more blocks are launched than the loop has
-iterations for. A loop too short for one block per compute unit gets the same
-grid as a kernel without a reduction. In Generic mode, only large reductions are
-sized this way. The `num_teams` clause sets the number of blocks, and
+iterations for. (A loop too short for one block per compute unit gets the same
+grid as a kernel without a reduction.) In Generic mode, only large reductions
+are sized this way. The `num_teams` clause sets the number of blocks, and
 `OMP_NUM_TEAMS` caps it. The default on AMDGPU devices is `16`. On other
 devices, the default is `0`: kernels with a cross-team reduction get the same
 number of blocks as other kernels.
@@ -1417,6 +1417,18 @@ This environment variable controls the default number of teams relative to the
 number of compute units (CUs) of the AMDGPU device. The default number of teams
 is `#default_teams = #teams_per_CU * #CUs`. The default value of teams per CU
 is `4`.
+
+#### LIBOMPTARGET_GENERIC_SPMD_TEAMS_PER_CU
+
+This environment variable controls the default number of teams relative to the
+number of compute units (CUs) for kernels in Generic-SPMD mode, e.g., `target
+teams distribute` with a nested `parallel for`. The default value is `6`
+(currently only active for AMDGPU); `0` uses
+{ref}`LIBOMPTARGET_AMDGPU_TEAMS_PER_CU` instead. Unless the user sets the
+number of threads, the runtime then halves the number of threads of such a
+kernel, down to one wavefront, and doubles the number of teams, as long as the
+distribute loop has an iteration for every team and the number of teams stays
+within the device's limit and `OMP_NUM_TEAMS`.
 
 #### LIBOMPTARGET_AMDGPU_MAX_ASYNC_COPY_BYTES
 

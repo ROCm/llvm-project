@@ -62,6 +62,10 @@ struct DeviceGeometryPropsTy {
   uint32_t DefaultNumThreads = 0;
   /// Number of blocks to use when the user does not request one.
   uint32_t DefaultNumBlocks = 0;
+  /// Maximum number of blocks that can be launched.
+  uint32_t MaxNumBlocks = 0;
+  /// Maximum number of threads (blocks * threads per block) a launch can have.
+  uint64_t MaxGridSize = 0;
   /// Maximum amount of shared memory, in bytes, a block can use in a kernel.
   uint64_t MaxBlockSharedMemSize = 0;
   /// Number of compute units, or zero if the device does not report it.
@@ -74,22 +78,18 @@ struct PluginManager;
 
 struct DeviceTy {
   int32_t DeviceID;
-  GenericPluginTy *RTL;
-  int32_t RTLDeviceID;
-  /// The physical number of processors that may concurrently execute a team
-  /// For cuda, this is number of SMs, for amdgcn, this is number of CUs.
-  /// This field is used by ompx_get_team_procs(devid).
-  int32_t TeamProcs;
+  GenericPluginTy *RTL = nullptr;
+  int32_t RTLDeviceID = -1;
+  ol_platform_handle_t Platform;
+  ol_device_handle_t DeviceHandle;
+  PluginManager *PM;
+  ol_context_handle_t Context = nullptr;
 
   /// Flag to force synchronous data transfers
   /// Controlled via environment flag OMPX_FORCE_SYNC_REGIONS
   bool ForceSynchronousTargetRegions = false;
 
-  ol_device_handle_t DeviceHandle;
-  PluginManager *PM;
-  ol_context_handle_t Context = nullptr;
-
-  DeviceTy(GenericPluginTy *RTL, int32_t DeviceID, int32_t RTLDeviceID,
+  DeviceTy(int32_t DeviceID, ol_platform_handle_t Platform,
            ol_device_handle_t DeviceHandle, PluginManager *PM);
   // DeviceTy is not copyable
   DeviceTy(const DeviceTy &D) = delete;
@@ -108,6 +108,9 @@ struct DeviceTy {
 
   /// Whether this device executes kernels on the host CPU.
   bool isHostDevice() const { return IsHostDevice; }
+
+  /// Get this device's backend.
+  ol_platform_backend_t getBackend() const { return Backend; }
 
   /// Load \p Img onto the device and return the resulting program.
   llvm::Expected<ProgramTy> loadBinary(__tgt_device_image *Img);
@@ -178,10 +181,6 @@ struct DeviceTy {
   int32_t dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
                        int64_t Size, AsyncInfoTy &AsyncInfo);
 
-  // Insert a data fence between previous data operations and the following
-  // operations if necessary for the device.
-  int32_t dataFence(AsyncInfoTy &AsyncInfo);
-
   /// Register (and, if \p LockMemory, page-lock) the host buffer \p HstPtr
   /// with \p Size bytes, returning the device-accessible pointer.
   llvm::Expected<void *> registerMemory(void *HstPtr, int64_t Size,
@@ -235,8 +234,10 @@ struct DeviceTy {
   /// Destroy the event.
   int32_t destroyEvent(void *Event);
 
-  void setTeamProcs(int32_t num_team_procs) { TeamProcs = num_team_procs; }
-  int32_t getTeamProcs() { return TeamProcs; }
+  /// The physical number of processors that may concurrently execute a team
+  /// For cuda, this is number of SMs, for amdgcn, this is number of CUs.
+  /// Used by ompx_get_team_procs(devid).
+  int32_t getTeamProcs() const { return GeometryProps.NumComputeUnits; }
   /// }
 
   /// Print all offload entries to stderr.
@@ -364,6 +365,9 @@ private:
 
   /// Whether this is a host device.
   bool IsHostDevice = false;
+
+  /// The backend of this device.
+  ol_platform_backend_t Backend = OL_PLATFORM_BACKEND_UNKNOWN;
 
   /// Handler to collect and organize host-2-device mapping information.
   MappingInfoTy MappingInfo;
