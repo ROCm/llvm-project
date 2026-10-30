@@ -1502,7 +1502,7 @@ private:
   // Nearest common dominator of Blocks, hoisted out of its outermost cycle.
   MachineBasicBlock *getInitBlock(ArrayRef<MachineBasicBlock *> Blocks) const;
   void insertLaneMaskInstrs();
-  SmallVector<WTComponent, 4> computeSparseGraph();
+  void computeSparseGraph(SmallVectorImpl<WTComponent> &Components);
 
   bool canAliasTo(Register R) const;
   bool isZeroFact(const RegFactMap &Cur, Register R) const;
@@ -1926,7 +1926,9 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
 
   createSections();
   // Fixpoint per sparse component.
-  for (const WTComponent &C : computeSparseGraph()) {
+  SmallVector<WTComponent, 4> Components;
+  computeSparseGraph(Components);
+  for (const WTComponent &C : Components) {
     bool Optimized = true;
     while (Optimized) {
       forwardPropSimplifier(C);
@@ -1939,8 +1941,9 @@ void ControlFlowRewriter::insertLaneMaskInstrs() {
 // has no other WT block between them.
 // Out(B) = {B} when B is a WT block, otherwise In(B). In(B) is the union of
 // Out over CFG predecessors. RPO until fixpoint. Succ edges form DSU classes.
-SmallVector<ControlFlowRewriter::WTComponent, 4>
-ControlFlowRewriter::computeSparseGraph() {
+void ControlFlowRewriter::computeSparseGraph(
+    SmallVectorImpl<WTComponent> &Components) {
+  Components.clear();
   DenseMap<MachineBasicBlock *, BlockSet> In;
   DenseMap<MachineBasicBlock *, BlockSet> Out;
 
@@ -1988,7 +1991,6 @@ ControlFlowRewriter::computeSparseGraph() {
   }
 
   DenseMap<MachineBasicBlock *, unsigned> IndexOf;
-  SmallVector<WTComponent, 4> Components;
   for (MachineBasicBlock *B : RPOBlocks) {
     if (!WTBlocks.contains(B))
       continue;
@@ -2001,7 +2003,6 @@ ControlFlowRewriter::computeSparseGraph() {
       Components[It->second].push_back(B);
     }
   }
-  return Components;
 }
 
 // Virtual registers among MI's explicit uses.
@@ -2294,7 +2295,7 @@ void ControlFlowRewriter::simplifyBB(MachineBasicBlock &BB, RegFactMap &Cur) {
   }
 }
 
-// Blocks is one sparse component in function RPO.
+// One sparse graph component, in function RPO.
 void ControlFlowRewriter::forwardPropSimplifier(
     ArrayRef<MachineBasicBlock *> Blocks) {
   const unsigned N = Blocks.size();
@@ -2392,7 +2393,7 @@ bool ControlFlowRewriter::dropGlobalDead(MachineBasicBlock &BB,
   return true;
 }
 
-// Live-in and live-out of virtual regs over Blocks.
+// Live-in and live-out of virtual regs over sparse graph components.
 void ControlFlowRewriter::computeWTLiveInfo(
     DenseMap<MachineBasicBlock *, VirtRegSet> &LiveIn,
     DenseMap<MachineBasicBlock *, VirtRegSet> &LiveOut,
