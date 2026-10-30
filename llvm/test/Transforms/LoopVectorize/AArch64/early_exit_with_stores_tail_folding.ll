@@ -48,7 +48,7 @@ exit:
 }
 
 !3 = distinct !{!3, !4}
-!4 = distinct !{!4, i1 false, !"LVerDomain"}
+!4 = distinct !{!4, !"LVerDomain"}
 !5 = !{!3}
 !6 = distinct !{!6, !4}
 !7 = !{!6}
