@@ -119,15 +119,6 @@ jobs:
           git config --global --add safe.directory $PWD
           git config fetch.parallel 10
 
-      - name: Try to restore from GitHub cache (experimental)
-        uses: actions/cache@v3
-        continue-on-error: true
-        with:
-          path: ${{ env.CACHE_DIR }}/ccache
-          key: ccache-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-
-
       - name: Setup ccache
         run: |
           ./build_tools/setup_ccache.py \
@@ -225,7 +216,6 @@ jobs:
            -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-           -DCMAKE_HIP_COMPILER_LAUNCHER=ccache \
            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
            ${{ inputs.external_repo_config != '' && format('-DTHEROCK_{0}_SOURCE_DIR={1}', fromJSON(inputs.external_repo_config).source_package, fromJSON(inputs.external_repo_config).checkout_path) || '' }} \
            ${{ steps.stage_config.outputs.cmake_args }} \
@@ -244,7 +234,6 @@ jobs:
            -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-           -DCMAKE_HIP_COMPILER_LAUNCHER=ccache \
            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
            ${{ inputs.external_repo_config != '' && format('-DTHEROCK_{0}_SOURCE_DIR={1}', fromJSON(inputs.external_repo_config).source_package, fromJSON(inputs.external_repo_config).checkout_path) || '' }} \
            ${{ steps.stage_config.outputs.cmake_args }} \
