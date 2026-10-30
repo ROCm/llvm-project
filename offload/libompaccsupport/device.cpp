@@ -531,12 +531,8 @@ int32_t DeviceTy::submitDataSync(void *TgtPtrBegin, void *HstPtrBegin,
                                  int64_t Size, HostDataToTargetTy *Entry,
                                  MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                                  const ident_t *Loc, const char *Name) {
-  // Downstream: use a queue, so that OMPT device tracing records the transfer.
-  AsyncInfoTy AsyncInfo(*this);
-  if (submitData(TgtPtrBegin, HstPtrBegin, Size, AsyncInfo, Entry, HDTTMapPtr,
-                 Loc, Name) != OFFLOAD_SUCCESS)
-    return OFFLOAD_FAIL;
-  return AsyncInfo.synchronize();
+  return submitDataImpl(TgtPtrBegin, HstPtrBegin, Size, /*Queue=*/nullptr,
+                        Entry, HDTTMapPtr, Loc, Name);
 }
 
 int32_t DeviceTy::submitDataImpl(void *TgtPtrBegin, void *HstPtrBegin,
@@ -601,12 +597,8 @@ int32_t DeviceTy::retrieveDataSync(void *HstPtrBegin, void *TgtPtrBegin,
                                    int64_t Size, HostDataToTargetTy *Entry,
                                    MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                                    const ident_t *Loc) {
-  // Downstream: use a queue, so that OMPT device tracing records the transfer.
-  AsyncInfoTy AsyncInfo(*this);
-  if (retrieveData(HstPtrBegin, TgtPtrBegin, Size, AsyncInfo, Entry, HDTTMapPtr,
-                   Loc) != OFFLOAD_SUCCESS)
-    return OFFLOAD_FAIL;
-  return AsyncInfo.synchronize();
+  return retrieveDataImpl(HstPtrBegin, TgtPtrBegin, Size, /*Queue=*/nullptr,
+                          Entry, HDTTMapPtr, Loc);
 }
 
 int32_t DeviceTy::retrieveDataImpl(void *HstPtrBegin, void *TgtPtrBegin,
