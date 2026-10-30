@@ -1,0 +1,47 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+# Push to amd/dev/sivganes/test-aig-sharks-s3-write assumes
+# therock-aig-sharks-compiler-ci-s3-oidc and writes amd-staging/test.txt.
+# The bucket name is the THEROCK_AIG_SHARKS_S3_BUCKET repository variable.
+
+name: Test AIG Sharks S3 OIDC write
+
+on:
+  push:
+    branches:
+      - amd/dev/sivganes/test-aig-sharks-s3-write
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  write-test-txt:
+    name: Write amd-staging/test.txt
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::317668459450:role/therock-aig-sharks-compiler-ci-s3-oidc
+          role-duration-seconds: 3600
+
+      - name: Upload test.txt
+        env:
+          S3_BUCKET: ${{ vars.THEROCK_AIG_SHARKS_S3_BUCKET }}
+        run: |
+          if [ -z "${S3_BUCKET}" ]; then
+            echo "Repository variable THEROCK_AIG_SHARKS_S3_BUCKET is not set."
+            exit 1
+          fi
+          printf 'AIG Sharks S3 OIDC write test\nrole: arn:aws:iam::317668459450:role/therock-aig-sharks-compiler-ci-s3-oidc\nrun: %s\nsha: %s\n' \
+            "${GITHUB_RUN_ID}" "${GITHUB_SHA}" > test.txt
+          aws s3 cp test.txt "s3://${S3_BUCKET}/amd-staging/test.txt"
+          aws s3 ls "s3://${S3_BUCKET}/amd-staging/test.txt"
+          {
+            echo "### S3 write"
+            echo
+            echo "s3://${S3_BUCKET}/amd-staging/test.txt"
+          } >> "${GITHUB_STEP_SUMMARY}"
