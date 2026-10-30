@@ -1252,7 +1252,7 @@ static void AddAliasScopeMetadata(CallBase &CB, ValueToValueMapTy &VMap,
   // since accesses based on one noalias argument don't alias accesses based on
   // another one.
   MDNode *NewDomain = MDB.createAnonymousAliasScopeDomain(
-      CalledFunc->getName(), /*DisjointScopes=*/true);
+      CalledFunc->getName());
   for (unsigned i = 0, e = NoAliasArgs.size(); i != e; ++i) {
     const Argument *A = NoAliasArgs[i];
 
