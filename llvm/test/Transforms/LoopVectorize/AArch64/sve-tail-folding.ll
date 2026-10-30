@@ -583,7 +583,7 @@ exit:
 !3 = distinct !{!3, !4}
 !4 = !{!"llvm.loop.vectorize.width", i32 4}
 !5 = distinct !{!5, !6}
-!6 = distinct !{!6, i1 false, !"LVerDomain"}
+!6 = distinct !{!6, !"LVerDomain"}
 !7 = !{!5}
 !8 = distinct !{!8, !6}
 !9 = !{!8}
