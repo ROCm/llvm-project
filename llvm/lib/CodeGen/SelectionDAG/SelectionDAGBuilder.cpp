@@ -6795,7 +6795,6 @@ void SelectionDAGBuilder::visitVectorHistogram(const CallInst &I,
   SDValue Mask = getValue(I.getOperand(2));
 
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
-  DataLayout TargetDL = DAG.getDataLayout();
   EVT VT = Inc.getValueType();
   Align Alignment = DAG.getEVTAlign(VT);
 
@@ -7566,7 +7565,6 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     return;
   }
   case Intrinsic::set_fpenv: {
-    const DataLayout DLayout = DAG.getDataLayout();
     SDValue Env = getValue(I.getArgOperand(0));
     EVT EnvVT = Env.getValueType();
     Align TempAlign = DAG.getEVTAlign(EnvVT);
