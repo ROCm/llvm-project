@@ -5574,6 +5574,7 @@ convertOmpLoopNest(Operation &opInst, llvm::IRBuilderBase &builder,
       // handled by the outlined function's exit blocks
       SmallVector<llvm::BasicBlock *> deallocBlocks;
       llvm::BasicBlock *allocBlock = ip.getNodeParent();
+      deallocBlocks.push_back(allocBlock->splitBasicBlock(allocBlock->getTerminator(),"omp.loop_nest.dealloc"));
       llvm::OpenMPIRBuilder::InsertPointTy allocaIP(
           allocBlock->getFirstInsertionPt());
       allocFrame.emplace(moduleTranslation, allocaIP.getNodeParent(), deallocBlocks);
