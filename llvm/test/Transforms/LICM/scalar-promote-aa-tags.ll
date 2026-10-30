@@ -691,7 +691,7 @@ unreachable:
 !3 = !{!5, !5, i64 0}
 !4 = !{!"int", !1}
 !5 = !{!"float", !1}
-!6 = !{!6, i1 false}
+!6 = !{!6}
 !7 = !{!7, !6}
 !8 = !{!7}
 !9 = !{!10, !10, i64 0}
@@ -707,5 +707,5 @@ unreachable:
 ; CHECK: [[META7]] = !{!"unsigned int", [[META2]]}
 ; CHECK: [[META8]] = !{[[META9:![0-9]+]]}
 ; CHECK: [[META9]] = distinct !{[[META9]], [[META10:![0-9]+]]}
-; CHECK: [[META10]] = distinct !{[[META10]], i1 false}
+; CHECK: [[META10]] = distinct !{[[META10]]}
 ;.

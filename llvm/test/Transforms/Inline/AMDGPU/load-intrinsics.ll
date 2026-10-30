@@ -43,7 +43,7 @@ declare <2 x i32> @llvm.amdgcn.ds.read.tr4.b64.v2i32(ptr addrspace(3))
 ;.
 ; OPT: [[META0]] = !{[[META1:![0-9]+]]}
 ; OPT: [[META1]] = distinct !{[[META1]], [[META2:![0-9]+]], !"callee: %addr"}
-; OPT: [[META2]] = distinct !{[[META2]], i1 true, !"callee"}
+; OPT: [[META2]] = distinct !{[[META2]], !"callee"}
 ; OPT: [[META3]] = !{[[META4:![0-9]+]]}
 ; OPT: [[META4]] = distinct !{[[META4]], [[META2]], !"callee: %use"}
 ;.

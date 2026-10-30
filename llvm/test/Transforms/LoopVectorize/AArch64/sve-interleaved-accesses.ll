@@ -1617,7 +1617,7 @@ attributes #0 = { "target-features"="+sve" vscale_range(1, 16) }
 ; CHECK: [[LOOP24]] = distinct !{[[LOOP24]], [[META1]], [[META2]]}
 ; CHECK: [[META26]] = !{[[META27:![0-9]+]]}
 ; CHECK: [[META27]] = distinct !{[[META27]], [[META28:![0-9]+]]}
-; CHECK: [[META28]] = distinct !{[[META28]], i1 false, !"LVerDomain"}
+; CHECK: [[META28]] = distinct !{[[META28]], !"LVerDomain"}
 ; CHECK: [[META29]] = !{[[META30:![0-9]+]]}
 ; CHECK: [[META30]] = distinct !{[[META30]], [[META28]]}
 ; CHECK: [[LOOP31]] = distinct !{[[LOOP31]], [[META1]], [[META2]]}
