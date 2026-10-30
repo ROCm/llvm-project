@@ -17816,9 +17816,11 @@ For GFX125x:
 * L1 buffers are clients of the L2 cache.
 * There may be multiple L2 caches per agent. Ranges of virtual addresses can be set up as follows:
 
-  * Be non-hardware-coherent; copies of the data are not coherent between multiple L2s.
-  * Be read-write hardware-coherent with other L2 caches on the same or other agents.
-  * Bypass L2 entirely to ensure system coherence.
+  * Be read-write hardware-coherent with other L2 caches on the same or other agents
+    (MTYPE RW).
+  * Bypass L2 entirely to ensure system coherence (MTYPE UC).
+  * Be non-hardware-coherent; copies of the data are not coherent between multiple L2s
+    (MTYPE NC, not used on gfx1250 and gfx1251).
 
 * L2 caches have multiple memory channels to service disjoint ranges of virtual
   addresses.
