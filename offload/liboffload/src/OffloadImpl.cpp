@@ -282,12 +282,12 @@ struct ol_context_impl_t {
 
   /// Drain outstanding queues and tear down the plugin-side context.
   llvm::Error destroy() {
-    if (auto Err = drainOutstandingQueues())
-      return Err;
-    if (PluginCtx)
-      if (auto Err = PluginCtx->deinit())
-        return Err;
-    return llvm::Error::success();
+    llvm::Error Result = drainOutstandingQueues();
+    if (PluginCtx) {
+      PluginCtx->releaseMemoryManagers();
+      Result = llvm::joinErrors(std::move(Result), PluginCtx->deinit());
+    }
+    return Result;
   }
 
   ~ol_context_impl_t() {
@@ -1391,9 +1391,9 @@ Error olLaunchKernel_impl(ol_queue_handle_t Queue, ol_device_handle_t Device,
       LaunchArgs.Flags.Cooperative =
           *reinterpret_cast<const bool *>(Properties->data);
       break;
-    case OL_KERNEL_LAUNCH_PROP_TYPE_OMP_KERNEL_LAUNCH_INFO:
-      LaunchArgs.KernelLaunchInfo =
-          *reinterpret_cast<const KernelLaunchInfoTy *>(Properties->data);
+    case OL_KERNEL_LAUNCH_PROP_TYPE_OMP_EXEC_MODE:
+      LaunchArgs.ExecMode = static_cast<llvm::omp::OMPTgtExecModeFlags>(
+          *reinterpret_cast<const uint8_t *>(Properties->data));
       break;
     case OL_KERNEL_LAUNCH_PROP_TYPE_OMP_TRIPCOUNT:
       LaunchArgs.Tripcount =
@@ -1649,6 +1649,11 @@ int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device) {
 
 __tgt_async_info *__ol_tgt_GetAsyncInfoFromQueue(ol_queue_handle_t Queue) {
   return Queue ? Queue->AsyncInfo : nullptr;
+}
+
+plugin::PluginContextTy *
+__ol_tgt_GetPluginContext(ol_context_handle_t Context) {
+  return Context ? Context->PluginCtx.get() : nullptr;
 }
 
 DeviceImageTy *__ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program) {

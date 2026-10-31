@@ -5329,11 +5329,17 @@ struct AMDGPUPluginContextTy final : public PluginContextTy {
     return Plugin::success();
   }
 
-  Expected<void *> allocate(GenericDeviceTy &Device, int64_t Size,
-                            void *HostPtr, TargetAllocTy Kind, size_t Alignment,
-                            GenericProfilerTy *ProfilerPtr) override;
-  Error deallocate(GenericDeviceTy &Device, void *Ptr, TargetAllocTy Kind,
-                   GenericProfilerTy *ProfilerPtr) override;
+  void trackAllocation(GenericDeviceTy &Device, void *Ptr, int64_t Size,
+                       TargetAllocTy Kind) override {
+    std::lock_guard<std::mutex> Lock(AllocationsMutex);
+    Allocations[Ptr] = {Kind, &Device};
+  }
+
+  void untrackAllocation(void *Ptr) override {
+    std::lock_guard<std::mutex> Lock(AllocationsMutex);
+    Allocations.erase(Ptr);
+  }
+
   Expected<PluginAllocInfoTy> getAllocInfo(const void *Ptr) override;
 
 private:
@@ -5698,32 +5704,6 @@ private:
   llvm::SmallVector<AMDHostDeviceTy *> HostDevices;
 };
 
-Expected<void *> AMDGPUPluginContextTy::allocate(
-    GenericDeviceTy &Device, int64_t Size, void *HostPtr, TargetAllocTy Kind,
-    size_t Alignment, GenericProfilerTy *ProfilerPtr) {
-  auto PtrOrErr = PluginContextTy::allocate(Device, Size, HostPtr, Kind,
-                                            Alignment, ProfilerPtr);
-  if (!PtrOrErr || !*PtrOrErr)
-    return PtrOrErr;
-  std::lock_guard<std::mutex> Lock(AllocationsMutex);
-  Allocations[*PtrOrErr] = {Kind, &Device};
-  return PtrOrErr;
-}
-
-Error AMDGPUPluginContextTy::deallocate(GenericDeviceTy &Device, void *Ptr,
-                                        TargetAllocTy Kind,
-                                        GenericProfilerTy *ProfilerPtr) {
-  // Erase before base deallocate: once Ptr returns to the MM freelist a
-  // concurrent alloc could reuse it and re-populate Allocations. On failure
-  // Ptr is in an undetermined state (maybe freed, maybe not) so we don't
-  // re-add it either.
-  {
-    std::lock_guard<std::mutex> Lock(AllocationsMutex);
-    Allocations.erase(Ptr);
-  }
-  return PluginContextTy::deallocate(Device, Ptr, Kind, ProfilerPtr);
-}
-
 Expected<PluginAllocInfoTy>
 AMDGPUPluginContextTy::getAllocInfo(const void *Ptr) {
   // HSA gives the base of the region containing Ptr, so interior pointers
@@ -5872,8 +5852,7 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(
         "sgpr_spill_count:%u vgpr_spill_count:%u tripcount:%lu rpc:%d "
         "Max Occupancy: %u Achieved Occupancy: "
         "%d%% n:%s\n",
-        GenericDevice.getDeviceId(), LaunchId,
-        LaunchArgs.KernelLaunchInfo.getExecutionModeFlags(), ConstWGSize,
+        GenericDevice.getDeviceId(), LaunchId, LaunchArgs.ExecMode, ConstWGSize,
         LaunchArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0, GroupSegmentSize,
         getPrivateSize(), SGPRCount, VGPRCount, AGPRCount, SGPRSpillCount,
         VGPRSpillCount, LaunchArgs.Tripcount, HasRPC, MaxOccupancy,
@@ -5889,8 +5868,7 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(
         "sgpr_spill_count:%u vgpr_spill_count:%u tripcount:%lu rpc:%d "
         "Max Occupancy: %u Achieved Occupancy: "
         "%d%% n:%s\n",
-        GenericDevice.getDeviceId(),
-        LaunchArgs.KernelLaunchInfo.getExecutionModeFlags(), ConstWGSize,
+        GenericDevice.getDeviceId(), LaunchArgs.ExecMode, ConstWGSize,
         LaunchArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0, GroupSegmentSize,
         getPrivateSize(), SGPRCount, VGPRCount, AGPRCount, SGPRSpillCount,
         VGPRSpillCount, LaunchArgs.Tripcount, HasRPC, MaxOccupancy,
