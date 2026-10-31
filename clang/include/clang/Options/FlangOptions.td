@@ -339,6 +339,12 @@ def fno_defer_desc_map : Flag<["-"], "fno-defer-desc-map">, Group<f_Group>,
   HelpText<"Disable deferred deferred descriptor mapping, which puts off top-level "
           " descriptor mapping till target regions">;
 
+def fimplicit_default_mapper_allocatable_members : Flag<["-"], "fimplicit-default-mapper-allocatable-members">,
+  Group<f_Group>, HelpText<"Enable implicit allocatable member maps in compiler-generated OpenMP default mappers">;
+def fno_implicit_default_mapper_allocatable_members : Flag<["-"], "fno-implicit-default-mapper-allocatable-members">,
+  Group<f_Group>, HelpText<"Disable implicit allocatable member maps in compiler-generated OpenMP default mappers">;
+
+
 def J : JoinedOrSeparate<["-"], "J">,
   Flags<[RenderJoined]>, Group<gfortran_Group>, Alias<module_dir>;
 
