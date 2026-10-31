@@ -1692,6 +1692,11 @@ defm WaveMatchInsts : AMDGPUSubtargetFeature<"wave-match-insts",
   "Has v_wave_match_b32 instruction"
 >;
 
+defm NoMTypeNC : AMDGPUSubtargetFeature<"no-mtype-nc",
+  "Does not use MTYPE NC",
+  /*GenPredicate=*/0
+>;
+
 //===----------------------------------------------------------------------===//
 
 class GCNSubtargetFeatureGeneration <string Value,
@@ -2638,6 +2643,7 @@ def FeatureISAVersion12_50 : FeatureSet<
    FeatureRequiresInitialUnclausedVmem,
    FeatureNeedsTDMDrain,
    FeatureNoSleepForever,
+   FeatureNoMTypeNC,
    FeatureSlowMaxMinMulI64Insts,
    FeatureXNACKOnOffModes,
    FeatureSupportsXNACK,
@@ -2680,6 +2686,7 @@ def FeatureISAVersion12_51 : FeatureSet<
    FeatureRequiresInitialUnclausedVmem,
    FeatureNeedsTDMDrain,
    FeatureXNACKOnOffModes,
+   FeatureNoMTypeNC,
    FeatureSupportsXNACK,
    ])>;
 
