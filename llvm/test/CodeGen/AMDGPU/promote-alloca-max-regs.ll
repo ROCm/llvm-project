@@ -222,9 +222,15 @@ define amdgpu_kernel void @i32_32_elements_attrib(ptr %out) #2 {
 ; DEFAULT-NEXT:    [[C2:%.*]] = icmp uge i32 [[Y]], 3
 ; DEFAULT-NEXT:    [[SEL1:%.*]] = select i1 [[C1]], i32 1, i32 2
 ; DEFAULT-NEXT:    [[SEL2:%.*]] = select i1 [[C2]], i32 0, i32 [[SEL1]]
-; DEFAULT-NEXT:    [[ALLOCA:%.*]] = freeze <32 x i32> poison
-; DEFAULT-NEXT:    [[TMP1:%.*]] = extractelement <32 x i32> <i32 42, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 43, i32 0>, i32 [[SEL2]]
-; DEFAULT-NEXT:    store i32 [[TMP1]], ptr [[OUT]], align 4
+; DEFAULT-NEXT:    [[ALLOCA:%.*]] = alloca [32 x i32], align 16, addrspace(5)
+; DEFAULT-NEXT:    call void @llvm.memset.p5.i32(ptr addrspace(5) [[ALLOCA]], i8 0, i32 128, i1 false)
+; DEFAULT-NEXT:    [[GEP_0:%.*]] = getelementptr inbounds [32 x i32], ptr addrspace(5) [[ALLOCA]], i32 0, i32 0
+; DEFAULT-NEXT:    [[GEP_1:%.*]] = getelementptr inbounds [32 x i32], ptr addrspace(5) [[ALLOCA]], i32 0, i32 30
+; DEFAULT-NEXT:    store i32 42, ptr addrspace(5) [[GEP_0]], align 4
+; DEFAULT-NEXT:    store i32 43, ptr addrspace(5) [[GEP_1]], align 4
+; DEFAULT-NEXT:    [[GEP:%.*]] = getelementptr inbounds [32 x i32], ptr addrspace(5) [[ALLOCA]], i32 0, i32 [[SEL2]]
+; DEFAULT-NEXT:    [[LOAD:%.*]] = load i32, ptr addrspace(5) [[GEP]], align 4
+; DEFAULT-NEXT:    store i32 [[LOAD]], ptr [[OUT]], align 4
 ; DEFAULT-NEXT:    ret void
 ;
   %x = tail call i32 @llvm.amdgcn.workitem.id.x()
