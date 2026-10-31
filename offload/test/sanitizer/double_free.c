@@ -22,44 +22,44 @@ int main(void) {
 }
 
 // CHECK: OFFLOAD ERROR: double-free of device memory: 0x
-// CHECK:   deleteData
+// CHECK:   dataDelete
 // CHECK:   omp_target_free
 // NDEBG:   main
 // DEBUG:   main {{.*}}double_free.c:[[@LINE-6]]
 //
 // CHECK: Last deallocation:
-// CHECK:  deleteData
+// CHECK:  dataDelete
 // CHECK:  omp_target_free
 // NDEBG:  main
 // DEBUG:  main {{.*}}double_free.c:[[@LINE-13]]
 //
 // CHECK: Last allocation of size 8 -> device pointer
-// CHECK:  allocData
+// CHECK:  dataAlloc
 // CHECK:  omp_target_alloc
 // NDEBG:  main
 // DEBUG:  main {{.*}}double_free.c:[[@LINE-20]]
 //
 // CHECK: Prior allocations with the same base pointer:
 // CHECK: #0 Prior deallocation of size 8:
-// CHECK:  deleteData
+// CHECK:  dataDelete
 // CHECK:  omp_target_free
 // NDEBG:  main
 // DEBUG:  main {{.*}}double_free.c:[[@LINE-28]]
 //
 // CHECK: #0 Prior allocation -> device pointer
-// CHECK:  allocData
+// CHECK:  dataAlloc
 // CHECK:  omp_target_alloc
 // NDEBG:  main
 // DEBUG:  main {{.*}}double_free.c:[[@LINE-36]]
 //
 // CHECK: #1 Prior deallocation of size 8:
-// CHECK:  deleteData
+// CHECK:  dataDelete
 // CHECK:  omp_target_free
 // NDEBG:  main
 // DEBUG:  main {{.*}}double_free.c:[[@LINE-42]]
 //
 // CHECK: #1 Prior allocation -> device pointer
-// CHECK:  allocData
+// CHECK:  dataAlloc
 // CHECK:  omp_target_alloc
 // NDEBG:  main
 // DEBUG:  main {{.*}}double_free.c:[[@LINE-49]]

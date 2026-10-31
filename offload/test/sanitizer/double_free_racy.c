@@ -18,13 +18,13 @@ int main(void) {
 }
 
 // CHECK: OFFLOAD ERROR: double-free of device memory: 0x
-// CHECK   deleteData
+// CHECK   dataDelete
 // CHECK:  omp_target_free
 //
 // CHECK: Last deallocation:
-// CHECK:  deleteData
+// CHECK:  dataDelete
 // CHECK:  omp_target_free
 
 // CHECK: Last allocation of size 8 -> device pointer
-// CHECK:  allocData
+// CHECK:  dataAlloc
 // CHECK:  omp_target_alloc

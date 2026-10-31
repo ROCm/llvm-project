@@ -20,13 +20,13 @@ int main(void) {
 
 // clang-format off
 // CHECK: OFFLOAD ERROR: deallocation requires device memory but allocation was pinned host memory: 0x
-// CHECK:  deleteData
+// CHECK:  dataDelete
 // CHECK:  omp_target_free
 // NDEBG: main
 // DEBUG:  main {{.*}}free_wrong_ptr_kind.c:[[@LINE-7]]
 //
 // CHECK: Last allocation of size 8 -> device pointer
-// CHECK:  allocData
+// CHECK:  dataAlloc
 // CHECK:  llvm_omp_target_alloc_host
 // NDEBG:  main
 // DEBUG:  main {{.*}}free_wrong_ptr_kind.c:[[@LINE-14]]
