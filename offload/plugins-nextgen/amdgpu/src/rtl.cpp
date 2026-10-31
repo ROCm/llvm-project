@@ -3025,8 +3025,12 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     // the device architecure generation. Hence, we slice the major GFX version
     // from the agent info (e.g. 'gfx90a' -> 9).
     StringRef Arch(ComputeUnitKind);
+    unsigned ArchLen = Arch.size();
+    // slice off -strict if present.
+    if (Arch.ends_with("-strict"))
+      ArchLen = ArchLen - 7;
     unsigned GfxGen = 0u;
-    if (!llvm::to_integer(Arch.slice(sizeof("gfx") - 1, Arch.size() - 2),
+    if (!llvm::to_integer(Arch.slice(sizeof("gfx") - 1, ArchLen - 2),
                           GfxGen))
       return Plugin::error(ErrorCode::UNKNOWN, "Invalid GFX architecture string");
 
