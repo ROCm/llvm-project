@@ -46,7 +46,9 @@ def trace_headers(clang, libcxx_dir, config_site, target, headers):
     ]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603 # argument list, clang from this build
+        result = subprocess.run(
+            cmd, capture_output=True, text=True
+        )  # nosec B603 # argument list, clang from this build
     finally:
         os.unlink(test_file)
         os.unlink(os.path.join(config_dir, '__config_site'))
