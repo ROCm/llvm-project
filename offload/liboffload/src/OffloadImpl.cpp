@@ -1391,9 +1391,9 @@ Error olLaunchKernel_impl(ol_queue_handle_t Queue, ol_device_handle_t Device,
       LaunchArgs.Flags.Cooperative =
           *reinterpret_cast<const bool *>(Properties->data);
       break;
-    case OL_KERNEL_LAUNCH_PROP_TYPE_OMP_KERNEL_LAUNCH_INFO:
-      LaunchArgs.KernelLaunchInfo =
-          *reinterpret_cast<const KernelLaunchInfoTy *>(Properties->data);
+    case OL_KERNEL_LAUNCH_PROP_TYPE_OMP_EXEC_MODE:
+      LaunchArgs.ExecMode = static_cast<llvm::omp::OMPTgtExecModeFlags>(
+          *reinterpret_cast<const uint8_t *>(Properties->data));
       break;
     case OL_KERNEL_LAUNCH_PROP_TYPE_OMP_TRIPCOUNT:
       LaunchArgs.Tripcount =

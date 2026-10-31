@@ -1180,7 +1180,7 @@ static uint64_t getLowTripCountOverrideNumBlocks(
     NumThreads >>= 1;
   if (!NumThreads)
     return 0;
-  if (KernelEnv.doesTeamsReduction())
+  if (KernelEnv.ReductionDataSize)
     NumThreads = llvm::omp::getBlockSizeAsPowerOfTwo(NumThreads);
   EffectiveNumThreads = NumThreads;
 
@@ -1570,11 +1570,12 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   }
 
   // Downstream: the AMDGPU kernel trace prints the execution mode and the trip
-  // count, so pass the launch info and the trip count along.
+  // count, so pass them along.
+  uint8_t ExecMode = KernelLaunchInfo.Mode;
   uint64_t Tripcount = KernelArgs.Tripcount;
   ol_kernel_launch_prop_t LaunchProps[] = {
       {OL_KERNEL_LAUNCH_PROP_TYPE_IS_COOPERATIVE, &Config.Cooperative},
-      {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_KERNEL_LAUNCH_INFO, &KernelLaunchInfo},
+      {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_EXEC_MODE, &ExecMode},
       {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_TRIPCOUNT, &Tripcount},
       OL_KERNEL_LAUNCH_PROP_END};
 
