@@ -5569,11 +5569,12 @@ convertOmpLoopNest(Operation &opInst, llvm::IRBuilderBase &builder,
     bool needsAllocationFrame = isOutermostLoop && parentIsDistribute;
 
     if (needsAllocationFrame) {
-      // Use the loop body entry for allocations
-      // For deallocations, use empty array for now - the deallocation will be
-      // handled by the outlined function's exit blocks
+      // Use the loop body entry for allocations and deallocations.
+      // Add new block at the end of the loop body for the deallocations.
       SmallVector<llvm::BasicBlock *> deallocBlocks;
       llvm::BasicBlock *allocBlock = ip.getNodeParent();
+      deallocBlocks.push_back(allocBlock->splitBasicBlock(
+          allocBlock->getTerminator(), "omp.loop_nest.dealloc"));
       llvm::OpenMPIRBuilder::InsertPointTy allocaIP(
           allocBlock->getFirstInsertionPt());
       allocFrame.emplace(moduleTranslation, allocaIP.getNodeParent(), deallocBlocks);
