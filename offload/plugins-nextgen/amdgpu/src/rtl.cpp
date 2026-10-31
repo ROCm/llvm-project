@@ -5852,8 +5852,7 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(
         "sgpr_spill_count:%u vgpr_spill_count:%u tripcount:%lu rpc:%d "
         "Max Occupancy: %u Achieved Occupancy: "
         "%d%% n:%s\n",
-        GenericDevice.getDeviceId(), LaunchId,
-        LaunchArgs.KernelLaunchInfo.getExecutionModeFlags(), ConstWGSize,
+        GenericDevice.getDeviceId(), LaunchId, LaunchArgs.ExecMode, ConstWGSize,
         LaunchArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0, GroupSegmentSize,
         getPrivateSize(), SGPRCount, VGPRCount, AGPRCount, SGPRSpillCount,
         VGPRSpillCount, LaunchArgs.Tripcount, HasRPC, MaxOccupancy,
@@ -5869,8 +5868,7 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(
         "sgpr_spill_count:%u vgpr_spill_count:%u tripcount:%lu rpc:%d "
         "Max Occupancy: %u Achieved Occupancy: "
         "%d%% n:%s\n",
-        GenericDevice.getDeviceId(),
-        LaunchArgs.KernelLaunchInfo.getExecutionModeFlags(), ConstWGSize,
+        GenericDevice.getDeviceId(), LaunchArgs.ExecMode, ConstWGSize,
         LaunchArgs.NumArgs, NumBlocks[0], NumThreads[0], 0, 0, GroupSegmentSize,
         getPrivateSize(), SGPRCount, VGPRCount, AGPRCount, SGPRSpillCount,
         VGPRSpillCount, LaunchArgs.Tripcount, HasRPC, MaxOccupancy,

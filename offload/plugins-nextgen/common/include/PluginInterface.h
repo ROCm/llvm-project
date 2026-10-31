@@ -365,72 +365,6 @@ public:
   }
 };
 
-struct KernelLaunchInfoTy {
-  /// The name of the kernel.
-  const char *Name = nullptr;
-  /// The image the kernel was loaded from.
-  MemoryBufferRef Image;
-  /// The IR image associated with the kernel's image, if any.
-  MemoryBufferRef IRImage;
-  uint32_t MaxNumThreads = 0;
-  uint32_t PreferredNumThreads = 0;
-  uint32_t ReductionDataSize = 0;
-  /// The static memory size per block of the kernel.
-  uint32_t StaticBlockMemSize = 0;
-  /// Defaults to OMP_TGT_EXEC_MODE_BARE.
-  OMPTgtExecModeFlags Mode = OMP_TGT_EXEC_MODE_BARE;
-
-  /// Indicate if the kernel works in Bare, Generic SPMD, Generic, No-Loop
-  /// or SPMD mode.
-  bool isBareMode() const { return Mode == OMP_TGT_EXEC_MODE_BARE; }
-  bool isGenericMode() const { return Mode == OMP_TGT_EXEC_MODE_GENERIC; }
-  bool isGenericSPMDMode() const {
-    return Mode == OMP_TGT_EXEC_MODE_GENERIC_SPMD;
-  }
-  bool isSPMDMode() const { return Mode == OMP_TGT_EXEC_MODE_SPMD; }
-  bool isNoLoopMode() const { return Mode == OMP_TGT_EXEC_MODE_SPMD_NO_LOOP; }
-  bool isBigJumpLoopMode() const {
-    return Mode == OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP;
-  }
-  // Note: there is deliberately no execution mode for a cross-team reduction.
-  // Such a kernel is a plain SPMD one; use doesTeamsReduction() below to detect
-  // it.
-
-  /// Indicate whether this kernel performs a cross-team (teams) reduction.
-  /// Signalled by a non-zero reduction data size emitted by CodeGen for the
-  /// upstream cross-team reduction path. This drives the AMDGPU reduction
-  /// grid-size heuristic now that the downstream Xteam reduction execution
-  /// mode is no longer generated.
-  bool doesTeamsReduction() const { return ReductionDataSize > 0; }
-
-  static const char *getExecutionModeName(OMPTgtExecModeFlags Mode) {
-    switch (Mode) {
-    case OMP_TGT_EXEC_MODE_BARE:
-      return "BARE";
-    case OMP_TGT_EXEC_MODE_SPMD:
-      return "SPMD";
-    case OMP_TGT_EXEC_MODE_GENERIC:
-      return "Generic";
-    case OMP_TGT_EXEC_MODE_GENERIC_SPMD:
-      return "Generic-SPMD";
-    // AMD-only execution modes
-    case OMP_TGT_EXEC_MODE_SPMD_NO_LOOP:
-      return "SPMD-No-Loop";
-    case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
-      return "SPMD-Big-Jump-Loop";
-    }
-    return "Unknown";
-  }
-
-  /// Return the display name of this kernel's execution mode, for
-  /// debug/info logging only.
-  const char *getExecutionModeName() const {
-    return getExecutionModeName(Mode);
-  }
-
-  OMPTgtExecModeFlags getExecutionModeFlags() const { return Mode; }
-};
-
 /// The subset of KernelArgsTy fields the plugin interface needs to launch a
 /// kernel, plus the resolved argument-pointer array. Unlike KernelArgsTy,
 /// this struct is populated by libomptarget on the stack for every launch,
@@ -454,10 +388,9 @@ struct KernelLaunchArgsTy {
   uint32_t UserNumBlocks[3] = {0, 0, 0};
   /// User-requested number of threads (for x,y,z dimension).
   uint32_t UserThreadLimit[3] = {0, 0, 0};
-  /// Downstream, the plugin gets the kernel's full launch-geometry properties,
-  /// including the execution mode, which the AMDGPU kernel trace needs. They
-  /// are passed through olLaunchKernel's OMP_KERNEL_LAUNCH_INFO property.
-  KernelLaunchInfoTy KernelLaunchInfo;
+  /// Downstream: the kernel's execution mode, which the AMDGPU kernel trace
+  /// prints. It is passed through olLaunchKernel's OMP_EXEC_MODE property.
+  OMPTgtExecModeFlags ExecMode = OMP_TGT_EXEC_MODE_BARE;
   struct {
     uint64_t Cooperative : 1; // Was this kernel spawned as cooperative.
     uint64_t Unused : 63;
