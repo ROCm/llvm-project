@@ -1098,7 +1098,6 @@ const CGFunctionInfo &CodeGenTypes::arrangeLLVMFunctionInfo(
                       [](CanQualType T) { return T.isCanonicalAsParam(); }));
 
   // Lookup or create unique function info.
-  llvm::FoldingSetNodeID ID;
   bool isInstanceMethod =
       (opts & FnInfoOpts::IsInstanceMethod) == FnInfoOpts::IsInstanceMethod;
   bool isChainCall =
