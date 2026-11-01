@@ -20,8 +20,8 @@ struct A : Base {
   Field field;
 };
 
-// CHECK: %struct.B = type <{ ptr addrspace(1), [8 x i8] }>
-// CHECK: %struct.B.base = type <{ ptr addrspace(1), i8 }>
+// CHECK: %struct.B = type <{ ptr addrspace(1), %struct.Field, [7 x i8] }>
+// CHECK: %struct.B.base = type <{ ptr addrspace(1), %struct.Field }>
 // CHECK: %struct.K = type { ptr addrspace(1) }
 // WITH-NONZERO-DEFAULT-AS: %struct.B = type <{ ptr addrspace(1), [8 x i8] }>
 // WITH-NONZERO-DEFAULT-AS: %struct.B.base = type <{ ptr addrspace(1), i8 }>
