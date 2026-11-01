@@ -42,14 +42,60 @@
 using GenericPluginTy = llvm::omp::target::plugin::GenericPluginTy;
 using DeviceInfo = llvm::omp::target::plugin::DeviceInfo;
 using InfoTreeNode = llvm::omp::target::plugin::InfoTreeNode;
-// Downstream, the kernel launch-geometry properties live in the plugin
-// interface: the AMDGPU plugin reads them, including the AMD-only execution
-// modes, e.g., for its kernel trace.
-using KernelLaunchInfoTy = llvm::omp::target::plugin::KernelLaunchInfoTy;
-
 // Forward declarations.
 struct __tgt_bin_desc;
 struct __tgt_target_table;
+
+/// Kernel launch-geometry properties.
+struct KernelLaunchInfoTy {
+  const char *Name = nullptr;
+  llvm::MemoryBufferRef Image;
+  llvm::MemoryBufferRef IRImage;
+  uint32_t MaxNumThreads = 0;
+  uint32_t PreferredNumThreads = 0;
+  uint32_t ReductionDataSize = 0;
+  uint32_t StaticBlockMemSize = 0;
+  llvm::omp::OMPTgtExecModeFlags Mode = llvm::omp::OMP_TGT_EXEC_MODE_BARE;
+
+  bool isBareMode() const { return Mode == llvm::omp::OMP_TGT_EXEC_MODE_BARE; }
+  bool isGenericMode() const {
+    return Mode == llvm::omp::OMP_TGT_EXEC_MODE_GENERIC;
+  }
+  bool isGenericSPMDMode() const {
+    return Mode == llvm::omp::OMP_TGT_EXEC_MODE_GENERIC_SPMD;
+  }
+  bool isSPMDMode() const { return Mode == llvm::omp::OMP_TGT_EXEC_MODE_SPMD; }
+  bool isNoLoopMode() const {
+    return Mode == llvm::omp::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
+  }
+  /// Downstream: the AMD-only Big-Jump-Loop mode.
+  bool isBigJumpLoopMode() const {
+    return Mode == llvm::omp::OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP;
+  }
+
+  static const char *getExecutionModeName(llvm::omp::OMPTgtExecModeFlags Mode) {
+    switch (Mode) {
+    case llvm::omp::OMP_TGT_EXEC_MODE_BARE:
+      return "BARE";
+    case llvm::omp::OMP_TGT_EXEC_MODE_SPMD:
+      return "SPMD";
+    case llvm::omp::OMP_TGT_EXEC_MODE_GENERIC:
+      return "Generic";
+    case llvm::omp::OMP_TGT_EXEC_MODE_GENERIC_SPMD:
+      return "Generic-SPMD";
+    case llvm::omp::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP:
+      return "SPMD-No-Loop";
+    // Downstream: the AMD-only Big-Jump-Loop mode.
+    case llvm::omp::OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
+      return "SPMD-Big-Jump-Loop";
+    }
+    return "Unknown";
+  }
+
+  const char *getExecutionModeName() const {
+    return getExecutionModeName(Mode);
+  }
+};
 
 /// Device properties that drive the computation of the launch geometry of a
 /// kernel.
@@ -62,6 +108,10 @@ struct DeviceGeometryPropsTy {
   uint32_t DefaultNumThreads = 0;
   /// Number of blocks to use when the user does not request one.
   uint32_t DefaultNumBlocks = 0;
+  /// Maximum number of blocks that can be launched.
+  uint32_t MaxNumBlocks = 0;
+  /// Maximum number of threads (blocks * threads per block) a launch can have.
+  uint64_t MaxGridSize = 0;
   /// Maximum amount of shared memory, in bytes, a block can use in a kernel.
   uint64_t MaxBlockSharedMemSize = 0;
   /// Number of compute units, or zero if the device does not report it.
@@ -74,22 +124,18 @@ struct PluginManager;
 
 struct DeviceTy {
   int32_t DeviceID;
-  GenericPluginTy *RTL;
-  int32_t RTLDeviceID;
-  /// The physical number of processors that may concurrently execute a team
-  /// For cuda, this is number of SMs, for amdgcn, this is number of CUs.
-  /// This field is used by ompx_get_team_procs(devid).
-  int32_t TeamProcs;
+  GenericPluginTy *RTL = nullptr;
+  int32_t RTLDeviceID = -1;
+  ol_platform_handle_t Platform;
+  ol_device_handle_t DeviceHandle;
+  PluginManager *PM;
+  ol_context_handle_t Context = nullptr;
 
   /// Flag to force synchronous data transfers
   /// Controlled via environment flag OMPX_FORCE_SYNC_REGIONS
   bool ForceSynchronousTargetRegions = false;
 
-  ol_device_handle_t DeviceHandle;
-  PluginManager *PM;
-  ol_context_handle_t Context = nullptr;
-
-  DeviceTy(GenericPluginTy *RTL, int32_t DeviceID, int32_t RTLDeviceID,
+  DeviceTy(int32_t DeviceID, ol_platform_handle_t Platform,
            ol_device_handle_t DeviceHandle, PluginManager *PM);
   // DeviceTy is not copyable
   DeviceTy(const DeviceTy &D) = delete;
@@ -109,6 +155,9 @@ struct DeviceTy {
   /// Whether this device executes kernels on the host CPU.
   bool isHostDevice() const { return IsHostDevice; }
 
+  /// Get this device's backend.
+  ol_platform_backend_t getBackend() const { return Backend; }
+
   /// Load \p Img onto the device and return the resulting program.
   llvm::Expected<ProgramTy> loadBinary(__tgt_device_image *Img);
 
@@ -117,6 +166,9 @@ struct DeviceTy {
   llvm::Expected<void *> getAndRecordGlobalAddress(const ProgramTy &Program,
                                                    const char *Name,
                                                    size_t ExpectedSize);
+
+  /// The plugin-side context backing this device's context handle.
+  llvm::omp::target::plugin::PluginContextTy *getPluginContext();
 
   // device memory allocation/deallocation routines
   /// Allocates \p Size bytes on the device, host or shared memory space
@@ -143,8 +195,9 @@ struct DeviceTy {
   /// Free memory allocated with allocCtxMem.
   llvm::Error freeCtxMem(void *Ptr);
 
-  // Data transfer. When AsyncInfo is nullptr, the transfer will be
-  // synchronous.
+  // Data transfer. The transfer is enqueued on the queue associated with
+  // \p AsyncInfo; the *Sync variants below do not need a queue and always
+  // transfer the data synchronously.
   // Copy data from host to device
   int32_t submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
                      AsyncInfoTy &AsyncInfo,
@@ -159,16 +212,23 @@ struct DeviceTy {
                        MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr = nullptr,
                        const ident_t *Loc = nullptr);
 
-  // Return true if data can be copied to DstDevice directly
-  bool isDataExchangable(const DeviceTy &DstDevice);
+  // Copy data from host to device synchronously
+  int32_t submitDataSync(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
+                         HostDataToTargetTy *Entry = nullptr,
+                         MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr = nullptr,
+                         const ident_t *Loc = nullptr,
+                         const char *Name = nullptr);
+
+  // Copy data from device back to host synchronously
+  int32_t
+  retrieveDataSync(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size,
+                   HostDataToTargetTy *Entry = nullptr,
+                   MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr = nullptr,
+                   const ident_t *Loc = nullptr);
 
   // Copy data from current device to destination device directly
   int32_t dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
                        int64_t Size, AsyncInfoTy &AsyncInfo);
-
-  // Insert a data fence between previous data operations and the following
-  // operations if necessary for the device.
-  int32_t dataFence(AsyncInfoTy &AsyncInfo);
 
   /// Register (and, if \p LockMemory, page-lock) the host buffer \p HstPtr
   /// with \p Size bytes, returning the device-accessible pointer.
@@ -223,8 +283,10 @@ struct DeviceTy {
   /// Destroy the event.
   int32_t destroyEvent(void *Event);
 
-  void setTeamProcs(int32_t num_team_procs) { TeamProcs = num_team_procs; }
-  int32_t getTeamProcs() { return TeamProcs; }
+  /// The physical number of processors that may concurrently execute a team
+  /// For cuda, this is number of SMs, for amdgcn, this is number of CUs.
+  /// Used by ompx_get_team_procs(devid).
+  int32_t getTeamProcs() const { return GeometryProps.NumComputeUnits; }
   /// }
 
   /// Print all offload entries to stderr.
@@ -321,6 +383,20 @@ private:
   /// Query the properties used to compute the launch geometry of a kernel.
   llvm::Error initGeometryProps();
 
+  /// Copy data from host to device. A null \p Queue means the transfer is
+  /// performed synchronously.
+  int32_t submitDataImpl(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
+                         ol_queue_handle_t Queue, HostDataToTargetTy *Entry,
+                         MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
+                         const ident_t *Loc, const char *Name);
+
+  /// Copy data from device back to host. A null \p Queue means the transfer is
+  /// performed synchronously.
+  int32_t retrieveDataImpl(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size,
+                           ol_queue_handle_t Queue, HostDataToTargetTy *Entry,
+                           MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
+                           const ident_t *Loc);
+
   /// Unique identifier of the device.
   llvm::SmallString<32> Uid;
 
@@ -338,6 +414,9 @@ private:
 
   /// Whether this is a host device.
   bool IsHostDevice = false;
+
+  /// The backend of this device.
+  ol_platform_backend_t Backend = OL_PLATFORM_BACKEND_UNKNOWN;
 
   /// Handler to collect and organize host-2-device mapping information.
   MappingInfoTy MappingInfo;

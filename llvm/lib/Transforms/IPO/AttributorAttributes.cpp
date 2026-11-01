@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/IR/BundleAttributes.h"
 #include "llvm/Transforms/IPO/Attributor.h"
 
 #include "llvm/ADT/APInt.h"
@@ -39,6 +40,7 @@
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/Assumptions.h"
+#include "llvm/IR/AttributeMask.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constant.h"
@@ -591,6 +593,11 @@ struct AACalleeToCallSite : public BaseType {
     ChangeStatus Changed = ChangeStatus::UNCHANGED;
     auto CalleePred = [&](ArrayRef<const Function *> Callees) {
       for (const Function *Callee : Callees) {
+        // The returned position of the callee does not describe the call if
+        // the call uses a different return type.
+        if (IRPKind == IRPosition::IRP_CALL_SITE_RETURNED &&
+            Callee->getReturnType() != CB.getType())
+          return false;
         IRPosition FnPos =
             IRPKind == llvm::IRPosition::IRP_CALL_SITE_RETURNED
                 ? IRPosition::returned(*Callee,
@@ -2836,11 +2843,19 @@ static int64_t getKnownNonNullAndDerefBytesForUse(
   const DataLayout &DL = A.getInfoCache().getDL();
   if (const auto *CB = dyn_cast<CallBase>(I)) {
     if (CB->isBundleOperand(U)) {
-      if (RetainedKnowledge RK = getKnowledgeFromUse(
-              U, {Attribute::NonNull, Attribute::Dereferenceable})) {
-        IsNonNull |=
-            (RK.AttrKind == Attribute::NonNull || !NullPointerIsDefined);
-        return RK.ArgValue;
+      auto OBU = CB->getOperandBundleForOperand(U->getOperandNo());
+      switch (getBundleAttrFromOBU(OBU)) {
+      case BundleAttr::NonNull:
+        IsNonNull = true;
+        break;
+      case BundleAttr::Dereferenceable: {
+        IsNonNull |= !NullPointerIsDefined;
+        Value *Count = getAssumeDereferenceableInfo(OBU).Count;
+        if (auto *CI = dyn_cast<ConstantInt>(Count))
+          return CI->getZExtValue();
+      } break;
+      default:
+        break;
       }
       return 0;
     }
@@ -7646,20 +7661,6 @@ ChangeStatus AAHeapToStackFunction::updateImpl(Attributor &A) {
     }
 
     std::optional<APInt> Size = getSize(A, *this, AI);
-
-    // manifest() needs a size for the alloca, either the constant above or one
-    // ObjectSizeOffsetEvaluator can materialize at runtime. An allocation
-    // function with no allocsize attribute and no built-in size knowledge
-    // offers neither, however it is otherwise attributed.
-    if (!Size && !hasComputableAllocSize(AI.CB, TLI)) {
-      LLVM_DEBUG(dbgs() << "[H2S] Unsizable allocation: " << *AI.CB << "\n");
-      AI.Status = AllocationInfo::INVALID;
-      Changed = ChangeStatus::CHANGED;
-      continue;
-    }
-
-    // A globalized local is exempt from the size cap, since moving it to the
-    // stack is worthwhile however large it is, but not from the check above.
     if (!AI.IsGlobalizedLocal && MaxHeapToStackSize != -1) {
       if (!Size || Size->ugt(MaxHeapToStackSize)) {
         LLVM_DEBUG({
@@ -10837,6 +10838,20 @@ struct AANoUndefReturned final
   AANoUndefReturned(const IRPosition &IRP, Attributor &A)
       : AAReturnedFromReturnedValues<AANoUndef, AANoUndefImpl>(IRP, A) {}
 
+  void initialize(Attributor &A) override {
+    AAReturnedFromReturnedValues<AANoUndef, AANoUndefImpl>::initialize(A);
+    if (isAtFixpoint())
+      return;
+
+    // Returning a value that violates a return attribute, e.g., nonnull, is
+    // poison.
+    AttributeMask AM = AttributeFuncs::getPoisonGeneratingAttributes();
+    AttributeSet RetAttrs =
+        getAssociatedFunction()->getAttributes().getRetAttrs();
+    if (any_of(RetAttrs, [&](Attribute Attr) { return AM.contains(Attr); }))
+      indicatePessimisticFixpoint();
+  }
+
   /// See AbstractAttribute::trackStatistics()
   void trackStatistics() const override { STATS_DECLTRACK_FNRET_ATTR(noundef) }
 };
@@ -11156,10 +11171,20 @@ struct AACallEdgesFunction : public AACallEdgesImpl {
   /// See AbstractAttribute::updateImpl(...).
   ChangeStatus updateImpl(Attributor &A) override {
     ChangeStatus Change = ChangeStatus::UNCHANGED;
+    bool AllCallsDirect = true;
 
     auto ProcessCallInst = [&](Instruction &Inst) {
       CallBase &CB = cast<CallBase>(Inst);
 
+      // A direct call without callbacks only calls its callee; there is no
+      // need for a call site attribute.
+      auto *Callee = dyn_cast<Function>(CB.getCalledOperand());
+      if (Callee && !Callee->hasMetadata(LLVMContext::MD_callback)) {
+        addCalledFunction(Callee, Change);
+        return true;
+      }
+
+      AllCallsDirect = false;
       auto *CBEdges = A.getAAFor<AACallEdges>(
           *this, IRPosition::callsite_function(CB), DepClassTy::REQUIRED);
       if (!CBEdges)
@@ -11184,6 +11209,10 @@ struct AACallEdgesFunction : public AACallEdgesImpl {
       // are unknown callees.
       setHasUnknownCallee(true, Change);
     }
+
+    // The callees of direct calls in code known to be live do not change.
+    if (AllCallsDirect && !UsedAssumedInformation)
+      indicateOptimisticFixpoint();
 
     return Change;
   }

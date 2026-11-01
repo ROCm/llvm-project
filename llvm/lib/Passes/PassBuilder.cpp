@@ -132,7 +132,6 @@
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/LiveRegMatrix.h"
 #include "llvm/CodeGen/LiveStacks.h"
-#include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/LocalStackSlotAllocation.h"
 #include "llvm/CodeGen/LowerEmuTLS.h"
 #include "llvm/CodeGen/MIRPrinter.h"
@@ -568,15 +567,15 @@ static Expected<OptimizationLevel> parseOptLevelParam(StringRef S) {
       inconvertibleErrorCode());
 }
 
-PassBuilder::PassBuilder(TargetMachine *TM, PipelineTuningOptions PTO,
+PassBuilder::PassBuilder(LLVMContext &Context, TargetMachine *TM,
+                         std::optional<PipelineTuningOptions> PTO,
                          std::optional<PGOOptions> PGOOpt,
                          PassInstrumentationCallbacks *PIC,
                          IntrusiveRefCntPtr<vfs::FileSystem> FS)
-    : LibraryOptions(PTO.LibraryOptions ? PTO.LibraryOptions
-                     : TM               ? TM->Options.MCOptions.LibraryOptions
-                                        : nullptr),
-      Opts(cl::LibraryOptionsContext::get<PassesOptions>(LibraryOptions)),
-      TM(TM), PTO(PTO), PGOOpt(PGOOpt), PIC(PIC), FS(std::move(FS)) {
+    : Context(Context), Opts(Context.getLibraryOptions().get<PassesOptions>()),
+      TM(TM),
+      PTO(PTO ? *PTO : PipelineTuningOptions(&Context.getLibraryOptions())),
+      PGOOpt(PGOOpt), PIC(PIC), FS(std::move(FS)) {
   if (TM)
     TM->registerPassBuilderCallbacks(*this);
   if (PIC) {
