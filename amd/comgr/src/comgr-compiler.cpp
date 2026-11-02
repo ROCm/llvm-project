@@ -1601,6 +1601,12 @@ amd_comgr_status_t AMDGPUCompiler::addCompilationFlags() {
   default:
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
+
+  // Keep existing OpenCL C kernels compiling while retaining the warning.
+  if (ActionInfo->Language == AMD_COMGR_LANGUAGE_OPENCL_1_2 ||
+      ActionInfo->Language == AMD_COMGR_LANGUAGE_OPENCL_2_0)
+    Args.push_back("-Wno-error=incompatible-pointer-types");
+
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
