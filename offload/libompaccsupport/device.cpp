@@ -59,6 +59,8 @@ int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device);
 RecordReplayTy *__ol_tgt_GetRecordReplay(ol_device_handle_t Device);
 llvm::omp::target::plugin::DeviceImageTy *
 __ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program);
+llvm::omp::target::plugin::PluginContextTy *
+__ol_tgt_GetPluginContext(ol_context_handle_t Context);
 } // namespace llvm::offload::tmp
 
 int HostDataToTargetTy::addEventIfNecessary(DeviceTy &Device,
@@ -282,11 +284,12 @@ llvm::Expected<void *>
 DeviceTy::getAndRecordGlobalAddress(const ProgramTy &Program, const char *Name,
                                     size_t ExpectedSize) {
   size_t Size = 0;
-  auto AddrOrErr = Program.getGlobalAddress(Name, &Size);
+  auto AddrOrErr =
+      Program.getGlobalAddress(Name, ExpectedSize ? &Size : nullptr);
   if (!AddrOrErr)
     return AddrOrErr;
-  // Some backends return size 0 if the size is unknown.
-  // Only check the size if it is non-zero.
+  // If the user didn't specify an expected size or the backend returned size 0,
+  // we skip the size check.
   if (Size && Size != ExpectedSize)
     return createError(ErrorCode::InvalidBinary,
                        "size of global symbol %s does not match expected size "
@@ -460,6 +463,10 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
   return Program;
 }
 
+llvm::omp::target::plugin::PluginContextTy *DeviceTy::getPluginContext() {
+  return llvm::offload::tmp::__ol_tgt_GetPluginContext(Context);
+}
+
 void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
   /// RAII to establish tool anchors before and after data allocation
   void *TargetPtr = nullptr;
@@ -473,7 +480,24 @@ void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
           RTLDeviceID, HstPtr, &TargetPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
-  TargetPtr = RTL->data_alloc(RTLDeviceID, Size, HstPtr, Kind);
+  auto *PluginCtx = getPluginContext();
+  if (!PluginCtx) {
+    REPORT() << "Failure to allocate device memory: device " << DeviceID
+             << " has no context";
+    return nullptr;
+  }
+
+  auto AllocOrErr =
+      PluginCtx->allocate(RTL->getDevice(RTLDeviceID), Size, HstPtr,
+                          static_cast<TargetAllocTy>(Kind), /*Alignment=*/0);
+  if (!AllocOrErr) {
+    REPORT() << "Failure to allocate device memory: "
+             << llvm::toString(AllocOrErr.takeError());
+    return nullptr;
+  }
+  assert(*AllocOrErr && "Null pointer upon successful allocation");
+
+  TargetPtr = *AllocOrErr;
   return TargetPtr;
 }
 
@@ -488,7 +512,23 @@ int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
           RegionInterface.getTraceGenerators<ompt_target_data_delete>(),
           DeviceID, TgtAllocBegin,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
-  return RTL->data_delete(RTLDeviceID, TgtAllocBegin, Kind);
+
+  auto *PluginCtx = getPluginContext();
+  if (!PluginCtx) {
+    REPORT() << "Failure to deallocate device pointer " << TgtAllocBegin
+             << ": device " << DeviceID << " has no context";
+    return OFFLOAD_FAIL;
+  }
+
+  if (auto Err =
+          PluginCtx->deallocate(RTL->getDevice(RTLDeviceID), TgtAllocBegin,
+                                static_cast<TargetAllocTy>(Kind))) {
+    REPORT() << "Failure to deallocate device pointer " << TgtAllocBegin << ": "
+             << llvm::toString(std::move(Err));
+    return OFFLOAD_FAIL;
+  }
+
+  return OFFLOAD_SUCCESS;
 }
 
 llvm::Expected<void *> DeviceTy::allocCtxMem(int64_t Size,
@@ -531,12 +571,8 @@ int32_t DeviceTy::submitDataSync(void *TgtPtrBegin, void *HstPtrBegin,
                                  int64_t Size, HostDataToTargetTy *Entry,
                                  MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                                  const ident_t *Loc, const char *Name) {
-  // Downstream: use a queue, so that OMPT device tracing records the transfer.
-  AsyncInfoTy AsyncInfo(*this);
-  if (submitData(TgtPtrBegin, HstPtrBegin, Size, AsyncInfo, Entry, HDTTMapPtr,
-                 Loc, Name) != OFFLOAD_SUCCESS)
-    return OFFLOAD_FAIL;
-  return AsyncInfo.synchronize();
+  return submitDataImpl(TgtPtrBegin, HstPtrBegin, Size, /*Queue=*/nullptr,
+                        Entry, HDTTMapPtr, Loc, Name);
 }
 
 int32_t DeviceTy::submitDataImpl(void *TgtPtrBegin, void *HstPtrBegin,
@@ -601,12 +637,8 @@ int32_t DeviceTy::retrieveDataSync(void *HstPtrBegin, void *TgtPtrBegin,
                                    int64_t Size, HostDataToTargetTy *Entry,
                                    MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                                    const ident_t *Loc) {
-  // Downstream: use a queue, so that OMPT device tracing records the transfer.
-  AsyncInfoTy AsyncInfo(*this);
-  if (retrieveData(HstPtrBegin, TgtPtrBegin, Size, AsyncInfo, Entry, HDTTMapPtr,
-                   Loc) != OFFLOAD_SUCCESS)
-    return OFFLOAD_FAIL;
-  return AsyncInfo.synchronize();
+  return retrieveDataImpl(HstPtrBegin, TgtPtrBegin, Size, /*Queue=*/nullptr,
+                          Entry, HDTTMapPtr, Loc);
 }
 
 int32_t DeviceTy::retrieveDataImpl(void *HstPtrBegin, void *TgtPtrBegin,
@@ -1187,7 +1219,7 @@ static uint64_t getLowTripCountOverrideNumBlocks(
     NumThreads >>= 1;
   if (!NumThreads)
     return 0;
-  if (KernelEnv.doesTeamsReduction())
+  if (KernelEnv.ReductionDataSize)
     NumThreads = llvm::omp::getBlockSizeAsPowerOfTwo(NumThreads);
   EffectiveNumThreads = NumThreads;
 
@@ -1577,11 +1609,12 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   }
 
   // Downstream: the AMDGPU kernel trace prints the execution mode and the trip
-  // count, so pass the launch info and the trip count along.
+  // count, so pass them along.
+  uint8_t ExecMode = KernelLaunchInfo.Mode;
   uint64_t Tripcount = KernelArgs.Tripcount;
   ol_kernel_launch_prop_t LaunchProps[] = {
       {OL_KERNEL_LAUNCH_PROP_TYPE_IS_COOPERATIVE, &Config.Cooperative},
-      {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_KERNEL_LAUNCH_INFO, &KernelLaunchInfo},
+      {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_EXEC_MODE, &ExecMode},
       {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_TRIPCOUNT, &Tripcount},
       OL_KERNEL_LAUNCH_PROP_END};
 
