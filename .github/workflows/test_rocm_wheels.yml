@@ -51,6 +51,9 @@ on:
           Only applied when test_runs_on targets Linux. Leave empty to run directly
           on the runner (required for Windows and native Linux runners).
         type: string
+        # Manual-dispatch fallback. CI passes container_image_url.
+        # This Ubuntu digest is intentionally different from the AOMP/component
+        # image sha256:4150afe4…. An empty URL is a native run, including Windows.
         default: "ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:405945a40deaff9db90b9839c0f41d4cba4a383c1a7459b28627047bf6302a26"
 
   workflow_call:
@@ -115,7 +118,19 @@ jobs:
     runs-on: ${{ inputs.test_runs_on }}
     timeout-minutes: 30
     container:
-      image: ${{ contains(inputs.test_runs_on, 'linux') && inputs.container_image_url != '' && inputs.container_image_url || null }}
+      # Linux runs container_image_url when the caller set one.
+      # An empty URL means no container, so Windows and other native runs
+      # stay on the machine. Both choices are intentional.
+      #
+      # The image comes from ROCm/TheRock
+      # build_tools/github_actions/configure_rocm_python_test_matrix.py,
+      # reviewed outside this repo. AMD test engineers also select that
+      # checkout at runtime through inputs.repository and inputs.ref.
+      # Zizmor cannot see those digests.
+      image: >- # zizmor: ignore[unpinned-images] caller passes a reviewed TheRock digest, the pinned dispatch default, or an empty native URL; the runtime checkout is not visible
+        ${{ contains(inputs.test_runs_on, 'linux') &&
+            inputs.container_image_url != '' &&
+            inputs.container_image_url || null }}
       options: --ipc host
         --group-add video
         --device /dev/kfd
