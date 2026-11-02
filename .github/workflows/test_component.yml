@@ -37,7 +37,8 @@ on:
         default: "release"
       default_container_image:
         type: string
-        default: "ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98"
+        # Pinned fallback. A caller may replace it at runtime; Zizmor cannot see that value.
+        default: "ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98" # zizmor: ignore[unpinned-images] runtime override is not visible
     secrets:
       BENCHMARK_DB_URL:
         required: false
@@ -61,9 +62,14 @@ jobs:
     continue-on-error: ${{ fromJSON(inputs.component).expect_failure == true }}
     timeout-minutes: 210
     container:
-      # If the component has specified an alternate image, honor that option.
-      # Otherwise use the default image.
-      image: >-
+      # Linux uses the component image when one is set, otherwise the pinned
+      # default above. Every other platform, including Windows, uses no container.
+      #
+      # The component image comes from ROCm/TheRock
+      # build_tools/github_actions/fetch_test_configurations.py, checked out at
+      # runtime through inputs.repository and inputs.ref. That file is reviewed
+      # outside this repo. Zizmor cannot see it.
+      image: >- # zizmor: ignore[unpinned-images] reviewed TheRock digest or the pinned default; runtime checkout is not visible
         ${{ inputs.platform == 'linux' &&
             (fromJSON(inputs.component).container_image || inputs.default_container_image)
             || null
