@@ -73,9 +73,9 @@ public:
     return std::move(OutputBuffers[Index]);
   }
 
-  /// Allow caching only for nonempty sequences of compressed bundles whose
-  /// headers each declare at most 64 MiB of uncompressed data. Archives and
-  /// unreadable or malformed headers are excluded without decompressing input.
+  /// Allow caching only for nonempty sequences of compressed bundles. Archives
+  /// and unreadable or malformed headers are excluded without decompressing
+  /// input.
   bool canCache() const override;
 
   /// Restore cached outputs as copies, retaining no views into CachedBuffer.

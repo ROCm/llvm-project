@@ -76,13 +76,6 @@ nextCompressedBundleOffset(size_t RemainingSize, StringRef Remaining,
   return Remaining.find(CompressedBundleMagic, CompressedBundleMagicSize);
 }
 
-// Persisting a very large decompressed bundle costs more than regenerating it.
-// The cache entry has to frame and write the complete image, while the
-// in-memory unbundler can decompress the same image directly into its output
-// buffer. Keep the cache for ordinary bundles and bypass it for
-// multi-hundred-megabyte code-object collections such as hipBLASLt's per-dtype
-// libraries.
-constexpr size_t MaxCachedUncompressedSize = 64 * 1024 * 1024;
 constexpr size_t MinCompressedBundleHeaderSize = 8;
 
 // Each unbundled member is aligned to max_align_t relative to the mapped cache
@@ -172,8 +165,6 @@ bool UnbundleCommand::canCache() const {
       consumeError(Header.takeError());
       return false;
     }
-    if (Header->UncompressedFileSize > MaxCachedUncompressedSize)
-      return false;
     auto Next =
         nextCompressedBundleOffset(Remaining.size(), Remaining, *Header);
     if (!Next) {

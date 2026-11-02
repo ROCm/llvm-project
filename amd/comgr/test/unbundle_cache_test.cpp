@@ -6,11 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Compressed bundles that expand to a very large image are intentionally not
-// persisted in the COMGR cache. The cache entry would contain a second copy of
-// the decompressed image and costs more than regenerating it. This test checks
-// that a normal bundle is cached, a bundle with an oversized header is not, and
-// a malformed bundle is rejected without touching the cache.
+// Compressed bundles are persisted in the COMGR cache, including bundles whose
+// declared expanded size is much larger than the compressed input, so repeated
+// loads of large code-object collections reuse the cache instead of
+// re-unbundling. This test checks that a normal bundle is cached, that a bundle
+// declaring a multi-hundred-megabyte expanded image is cached, and that a
+// malformed bundle is rejected without touching the cache.
 //
 //===----------------------------------------------------------------------===//
 
@@ -33,7 +34,9 @@ using namespace llvm;
 using namespace UnbundleTest;
 
 namespace {
-constexpr uint64_t MaxCachedUncompressedSize = 64 * 1024 * 1024;
+// Large enough to exceed any plausible small-image heuristic while staying an
+// integer that the version 1/2 headers can hold.
+constexpr uint64_t LargeExpandedSize = 239 * 1024 * 1024;
 
 std::string unbundle(StringRef Input, bool ExpectSuccess,
                      StringRef Target = Device) {
@@ -199,20 +202,21 @@ int main() {
         support::endian::write32le(Boundary.data() + (Version == 1 ? 8 : 12),
                                    Size);
     };
-    SetExpandedSize(MaxCachedUncompressedSize);
+    SetExpandedSize(LargeExpandedSize);
     size_t Before = countCacheFiles(CacheDir);
     if (unbundle(Boundary, true, OtherDevice) != "second" ||
         countCacheFiles(CacheDir) != Before + 1)
-      fail("bundle at the cache size limit was not cached");
+      fail("bundle with a large expanded image was not cached");
 
-    SetExpandedSize(MaxCachedUncompressedSize + 1);
+    // The expanded size is part of the cache key, so concatenating the bundle
+    // with another one must add an entry rather than reuse the first result.
     Before = countCacheFiles(CacheDir);
-    for (const std::string &Input :
-         {Boundary, Small + Boundary, Boundary + Small}) {
+    for (const std::string &Input : {Small + Boundary, Boundary + Small}) {
       if (unbundle(Input, true, OtherDevice) != "second")
-        fail("oversized bundle output differs");
-      if (countCacheFiles(CacheDir) != Before)
-        fail("oversized bundle was written to the cache");
+        fail("concatenated bundle output differs");
+      if (countCacheFiles(CacheDir) != Before + 1)
+        fail("concatenated bundle with a large expanded image was not cached");
+      Before = countCacheFiles(CacheDir);
     }
   }
 

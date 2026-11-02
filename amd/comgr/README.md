@@ -227,10 +227,13 @@ size-prefixed entries remain readable. Device-only cache keys cover every
 concatenated bundle header. Requests containing a host target hash the complete
 input because their output can include the original compressed bytes.
 
-If any bundle declares an expanded size greater than 64 MiB, COMGR bypasses
-the cache to avoid persisting another full expanded image. Such inputs are
-decompressed on each load. `AMD_COMGR_SAVE_TEMPS` writes diagnostic output files
-on cache hits, misses, and cache-disabled runs without changing buffer ownership.
+Cache entries hold the expanded image, so caching a multi-hundred-megabyte
+bundle costs additional disk space and a second copy of that image on a miss.
+COMGR still caches every valid compressed bundle, because repeated loads of large
+code-object collections are much cheaper from the cache than from decompressing
+them again. Large entries count against the cache pruning policy like any other
+entry. `AMD_COMGR_SAVE_TEMPS` writes diagnostic output files on cache hits,
+misses, and cache-disabled runs without changing buffer ownership.
 
 ### Debugging
 Comgr supports some environment variables to aid in debugging. These
