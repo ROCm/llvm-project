@@ -229,10 +229,13 @@ input because their output can include the original compressed bytes.
 
 Cache entries hold the expanded image, so caching a multi-hundred-megabyte
 bundle costs additional disk space and a second copy of that image on a miss.
-COMGR still caches every valid compressed bundle, because repeated loads of large
+COMGR caches large compressed bundles, because repeated loads of large
 code-object collections are much cheaper from the cache than from decompressing
 them again. Large entries count against the cache pruning policy like any other
-entry. `AMD_COMGR_SAVE_TEMPS` writes diagnostic output files on cache hits,
+entry. The `CUB1` cache format uses a 32-bit length per output member. An output
+that cannot be represented is returned normally without writing a cache entry;
+this does not impose a decompression-size limit.
+`AMD_COMGR_SAVE_TEMPS` writes diagnostic output files on cache hits,
 misses, and cache-disabled runs without changing buffer ownership.
 
 ### Debugging

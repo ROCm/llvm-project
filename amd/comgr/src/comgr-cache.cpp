@@ -96,16 +96,18 @@ void saveCommandOutput(CachedCommandAdaptor &C, AddStreamFn &AddStream,
                        StringRef CapturedLogS, raw_ostream &LogS) {
   auto ErrorHandler = getComgrCacheErrorHandler(LogS);
 
+  // Prepare the output before opening a cache stream: a stream must be
+  // committed or explicitly aborted, even when serialization fails.
+  Expected<StringRef> Buffer = C.readExecuteOutput();
+  if (!Buffer) {
+    ErrorHandler(Buffer.takeError(), "when reading command's output");
+    return;
+  }
+
   Expected<std::unique_ptr<CachedFileStream>> FileOrErr =
       AddStream(CacheTask, "");
   if (!FileOrErr) {
     ErrorHandler(FileOrErr.takeError(), "when getting the cached file stream");
-    return;
-  }
-
-  Expected<StringRef> Buffer = C.readExecuteOutput();
-  if (!Buffer) {
-    ErrorHandler(Buffer.takeError(), "when reading command's output");
     return;
   }
 

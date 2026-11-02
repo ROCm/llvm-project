@@ -573,6 +573,9 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
   size_t HeaderSize = getHeaderSize(ThisVersion);
 
   compression::Format CompressionFormat = Normalized.CompressionFormat;
+  if (const char *Reason =
+          compression::getReasonIfUnsupported(CompressionFormat))
+    return createStringError(Reason);
 
   size_t TotalFileSize = Normalized.FileSize.value_or(0);
   size_t UncompressedSize = Normalized.UncompressedFileSize;

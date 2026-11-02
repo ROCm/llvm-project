@@ -261,6 +261,17 @@ static void testFormat(compression::Format Format, uint16_t Version) {
   support::endian::write16le(BadMethod.data() + 6, UINT16_MAX);
   unbundle(BadMethod, {Device}, false);
 
+  // A recognized codec may be absent from this LLVM build. Reject its header
+  // before entering the unavailable codec's llvm_unreachable() stub.
+  for (auto Codec : {compression::Format::Zlib, compression::Format::Zstd}) {
+    if (!compression::getReasonIfUnsupported(Codec))
+      continue;
+    std::string UnavailableCodec = Compress(First);
+    support::endian::write16le(UnavailableCodec.data() + 6,
+                               static_cast<uint16_t>(Codec));
+    unbundle(UnavailableCodec, {Device}, false);
+  }
+
   size_t HeaderSize = Version == 1 ? 20 : Version == 2 ? 24 : 32;
   for (size_t Length = 8; Length < HeaderSize; ++Length)
     unbundle(StringRef(Compress(First)).take_front(Length), {Device}, false);
@@ -309,6 +320,13 @@ int main(int argc, char **argv) {
                               true, VerifyCacheMapping,
                               /*ExpectCacheMapping=*/true),
                      {ExecutableContents});
+        // Duplicate requests share an owner on a miss and retain the same
+        // mapping on a hit. unbundle() releases one result before inspecting
+        // the other, after destroying the action and input/output sets.
+        checkOutputs(unbundle(compress(Input, Format, Version),
+                              {Device, Device}, true, true, VerifyCacheMapping,
+                              /*ExpectCacheMapping=*/true),
+                     {ExecutableContents, ExecutableContents});
         // Cached output framing aligns every member relative to the mapped
         // entry. Varying the host length exercises each padding value and
         // verifies that the device output still shares the cache mapping.

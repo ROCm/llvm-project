@@ -25,6 +25,7 @@
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/VirtualFileSystem.h>
 
+#include <limits>
 #include <memory>
 
 namespace COMGR {
@@ -163,11 +164,15 @@ private:
 /// Return storage aligned for COMGR's ELF consumers. Retain Owner when Slice
 /// is max_align_t-aligned; otherwise make an aligned copy. A null Owner always
 /// copies. If Owner is supplied, Slice must refer to storage that it owns.
-std::unique_ptr<MemoryBuffer> shareOrCopy(std::shared_ptr<MemoryBuffer> Owner,
-                                          StringRef Slice) {
+Expected<std::unique_ptr<MemoryBuffer>>
+shareOrCopy(std::shared_ptr<MemoryBuffer> Owner, StringRef Slice) {
   if (Owner && isAddrAligned(Align(alignof(std::max_align_t)), Slice.data()))
     return std::make_unique<SharedSubBuffer>(std::move(Owner), Slice);
-  return MemoryBuffer::getMemBufferCopy(Slice);
+  auto Copy = MemoryBuffer::getMemBufferCopy(Slice);
+  if (!Copy)
+    return createStringError(std::errc::not_enough_memory,
+                             "could not allocate aligned unbundle output");
+  return std::move(Copy);
 }
 
 } // namespace
@@ -252,8 +257,12 @@ Error UnbundleCommand::restoreCachedOutput(
     return Err;
 
   OutputBuffers.clear();
-  for (StringRef Content : Contents)
-    OutputBuffers.push_back(shareOrCopy(Owner, Content));
+  for (StringRef Content : Contents) {
+    auto Output = shareOrCopy(Owner, Content);
+    if (!Output)
+      return Output.takeError();
+    OutputBuffers.push_back(std::move(*Output));
+  }
   if (Error Err = saveOutputTemps()) {
     // A failed cache restore may retry through execute(). Do not retain
     // cached outputs if that retry falls back to the file-based path.
@@ -275,8 +284,16 @@ Expected<StringRef> UnbundleCommand::readExecuteOutput() {
   size_t TotalSize = UnbundleCacheMagicSize +
                      OutputBuffers.size() * 2 * sizeof(SizeFieldType) +
                      OutputBuffers.size() * (UnbundleCacheAlignment - 1);
-  for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
+  for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers) {
+    // CUB1 has a 32-bit length per member. Keep the successful unbundle result
+    // if it cannot be represented, rather than publishing a truncated entry.
+    if (Output->getBufferSize() > std::numeric_limits<SizeFieldType>::max() ||
+        Output->getBufferSize() >
+            std::numeric_limits<size_t>::max() - TotalSize)
+      return createStringError(
+          "unbundled output is too large for cache framing");
     TotalSize += Output->getBufferSize();
+  }
   OutputBuffer.reserve(TotalSize);
   for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
     appendAlignedOutput(OutputBuffer, Output->getBuffer());
@@ -298,7 +315,10 @@ Error UnbundleCommand::executeInMemory() {
     auto Owner = Outputs.lookup(Name);
     if (!Owner)
       return createStringError("missing unbundled output");
-    OutputBuffers.push_back(shareOrCopy(Owner, Owner->getBuffer()));
+    auto Output = shareOrCopy(Owner, Owner->getBuffer());
+    if (!Output)
+      return Output.takeError();
+    OutputBuffers.push_back(std::move(*Output));
   }
   return Error::success();
 }

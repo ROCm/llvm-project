@@ -122,7 +122,13 @@ void setEnv(const char *Name, const char *Value) {
 }
 } // namespace
 
-int main() {
+int main(int argc, char **argv) {
+  // The 4 GiB case is opt-in because it needs several large buffers and is
+  // unsuitable for ordinary CI workers.
+  bool OversizedOutput =
+      argc == 2 && StringRef(argv[1]) == "--oversized-output";
+  if (argc != 1 && !OversizedOutput)
+    fail("unknown argument");
   SmallString<128> CacheDirBuffer;
   if (std::error_code EC = sys::fs::createUniqueDirectory(
           "comgr-unbundle-cache", CacheDirBuffer))
@@ -139,12 +145,34 @@ int main() {
   if (compression::getReasonIfUnsupported(Format))
     fail("no supported compression format");
 
+  {
+    uint64_t PayloadSize =
+        OversizedOutput ? uint64_t(UINT32_MAX) + 1 : 65 * 1024 * 1024;
+    if (PayloadSize > SIZE_MAX)
+      fail("large-output test requires a 64-bit host");
+    std::string Payload(PayloadSize, 'x');
+    std::string Large = compress(bundle({{Device, Payload}}), Format);
+    size_t Before = countCacheFiles(CacheDir);
+    for (unsigned Run = 0; Run != 2; ++Run) {
+      if (unbundle(Large, true) != Payload)
+        fail("large output differs");
+      size_t Expected = Before + (OversizedOutput ? 0 : 1);
+      if (countCacheFiles(CacheDir) != Expected)
+        fail("unexpected cache entry count for large output");
+    }
+  }
+  if (OversizedOutput) {
+    std::filesystem::remove_all(CacheDir);
+    return 0;
+  }
+
   std::string Small = compress(bundle({{Device, "first"}}), Format);
+  size_t CachedBeforeSmall = countCacheFiles(CacheDir);
   if (unbundle(Small, true) != "first")
     fail("small bundle output differs");
 
   size_t CachedAfterSmall = countCacheFiles(CacheDir);
-  if (CachedAfterSmall == 0)
+  if (CachedAfterSmall != CachedBeforeSmall + 1)
     fail("small bundle was not cached");
   checkCacheFraming(CacheDir);
 
