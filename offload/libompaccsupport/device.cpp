@@ -895,21 +895,6 @@ static void freeAfterSynchronization(DeviceTy &Device, AsyncInfoTy &AsyncInfo,
   });
 }
 
-/// Downstream: free \p Ptr, which was allocated through the plugin's
-/// allocator with \p Kind, once \p AsyncInfo is synchronized.
-static void freePluginMemAfterSynchronization(GenericDeviceTy &GenericDevice,
-                                              AsyncInfoTy &AsyncInfo, void *Ptr,
-                                              TargetAllocTy Kind) {
-  AsyncInfo.addPostProcessingFunction([&GenericDevice, Ptr, Kind]() -> int {
-    if (auto Err = GenericDevice.dataDelete(Ptr, Kind)) {
-      REPORT() << "Failure to free memory " << Ptr << ": "
-               << toString(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-    return OFFLOAD_SUCCESS;
-  });
-}
-
 /// Return a device pointer to a new kernel launch environment, or null if
 /// this launch has no reserved dyn_ptr slot to store one in. \p OmpABIVersion
 /// is the kernel-argument ABI version this launch was built against.
@@ -978,24 +963,13 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
     freeAfterSynchronization(Device, AsyncInfo, *ReductionAllocOrErr);
   }
 
-  // Downstream: stage the launch environment in pinned memory if the plugin
-  // transfers it faster from there, so the copy below can take that path.
-  GenericDeviceTy &GenericDevice = Device.RTL->getDevice(Device.RTLDeviceID);
-  void *LaunchEnvSrc = &LocalKLE;
-  KernelLaunchEnvironmentTy *PinnedKLE =
-      GenericDevice.getPinnedLaunchEnvBuffer();
-  if (PinnedKLE) {
-    *PinnedKLE = LocalKLE;
-    LaunchEnvSrc = PinnedKLE;
-  }
-
   // Downstream: the async info's ProfilerData holds the OMPT trace record of
   // the kernel launch. Submitting data replaces it with that of the data
   // operation, so restore it for the launch.
   __tgt_async_info *AI = AsyncInfo;
   void *ProfilerData = AI->ProfilerData;
   int32_t Rc = Device.submitDataIndependently(
-      *AllocOrErr, LaunchEnvSrc, sizeof(KernelLaunchEnvironmentTy), AsyncInfo,
+      *AllocOrErr, &LocalKLE, sizeof(KernelLaunchEnvironmentTy), AsyncInfo,
       "KernelLaunchEnv");
   AI->ProfilerData = ProfilerData;
   if (Rc != OFFLOAD_SUCCESS)
@@ -1003,14 +977,6 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
                        "failed to copy the kernel launch environment to "
                        "device %d",
                        Device.DeviceID);
-
-  // Register the staging buffer only now that the transfer reading it has been
-  // issued. Registering it earlier would let a concurrent finalization that
-  // observes the queue as complete release it while the transfer is still in
-  // flight.
-  if (PinnedKLE)
-    freePluginMemAfterSynchronization(GenericDevice, AsyncInfo, PinnedKLE,
-                                      TARGET_ALLOC_HOST);
 
   return static_cast<KernelLaunchEnvironmentTy *>(*AllocOrErr);
 }
