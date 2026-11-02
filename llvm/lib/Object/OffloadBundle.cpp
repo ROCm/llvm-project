@@ -552,15 +552,23 @@ Expected<std::unique_ptr<MemoryBuffer>>
 CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
                                     raw_ostream *VerboseStream) {
   StringRef Blob = Input.getBuffer();
+  auto CopyBuffer =
+      [](StringRef Bytes) -> Expected<std::unique_ptr<MemoryBuffer>> {
+    auto Copy = MemoryBuffer::getMemBufferCopy(Bytes);
+    if (!Copy)
+      return createStringError(std::errc::not_enough_memory,
+                               "could not allocate uncompressed buffer");
+    return std::move(Copy);
+  };
 
   // Check minimum header size (using V1 as it's the smallest).
   if (Blob.size() < sizeof(RawCompressedBundleHeader::CommonFields))
-    return MemoryBuffer::getMemBufferCopy(Blob);
+    return CopyBuffer(Blob);
 
   if (identify_magic(Blob) != file_magic::offload_bundle_compressed) {
     if (VerboseStream)
       *VerboseStream << "Uncompressed bundle\n";
-    return MemoryBuffer::getMemBufferCopy(Blob);
+    return CopyBuffer(Blob);
   }
 
   Expected<CompressedBundleHeader> HeaderOrErr =
@@ -611,9 +619,12 @@ CompressedOffloadBundle::decompress(const MemoryBuffer &Input,
                              toString(std::move(DecompressionError)));
 
   std::unique_ptr<MemoryBuffer> ResultBuffer = std::move(DecompressedData);
-  if (ActualSize != UncompressedSize)
-    ResultBuffer = MemoryBuffer::getMemBufferCopy(
-        ResultBuffer->getBuffer().take_front(ActualSize));
+  if (ActualSize != UncompressedSize) {
+    auto Copy = CopyBuffer(ResultBuffer->getBuffer().take_front(ActualSize));
+    if (!Copy)
+      return Copy.takeError();
+    ResultBuffer = std::move(*Copy);
+  }
 
   if (VerboseStream) {
     DecompressTimer.stopTimer();

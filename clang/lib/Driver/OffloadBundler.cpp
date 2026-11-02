@@ -168,6 +168,14 @@ static std::string getDeviceLibraryFileName(StringRef BundleFileName,
 }
 
 namespace {
+Expected<std::unique_ptr<MemoryBuffer>> copyBundleBuffer(StringRef Bytes) {
+  auto Copy = MemoryBuffer::getMemBufferCopy(Bytes);
+  if (!Copy)
+    return createStringError(std::errc::not_enough_memory,
+                             "could not allocate unbundled buffer");
+  return std::move(Copy);
+}
+
 /// A binary member view that retains its entire backing image after unbundling.
 class BundleBuffer final : public MemoryBuffer {
   std::shared_ptr<MemoryBuffer> Owner;
@@ -221,7 +229,7 @@ public:
     raw_svector_ostream OS(Bytes);
     if (Error Err = ReadBundle(OS, *Input))
       return std::move(Err);
-    return MemoryBuffer::getMemBufferCopy(OS.str());
+    return copyBundleBuffer(OS.str());
   }
 
   /// Write the header of the bundled file to \a OS based on the information
@@ -1490,8 +1498,10 @@ Error OffloadBundler::UnbundleFiles(
         StringRef Bytes;
         if (OffloadTargetInfo(E.getKey(), BundlerConfig).hasHostKind())
           Bytes = (*CodeOrErr)->getBuffer();
-        if (Error Err =
-                WriteOutput(E.second, MemoryBuffer::getMemBufferCopy(Bytes)))
+        auto Contents = copyBundleBuffer(Bytes);
+        if (!Contents)
+          return Contents.takeError();
+        if (Error Err = WriteOutput(E.second, std::move(*Contents)))
           return Err;
         continue;
       }
@@ -1521,7 +1531,10 @@ Error OffloadBundler::UnbundleFiles(
   // If we still have any elements in the worklist, create empty files for them.
   for (auto &E : Worklist) {
     if (WriteOutput) {
-      if (Error Err = WriteOutput(E.second, MemoryBuffer::getMemBufferCopy("")))
+      auto Contents = copyBundleBuffer("");
+      if (!Contents)
+        return Contents.takeError();
+      if (Error Err = WriteOutput(E.second, std::move(*Contents)))
         return Err;
       continue;
     }
