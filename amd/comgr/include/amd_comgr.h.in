@@ -2843,8 +2843,9 @@ typedef struct code_object_info_s {
  * @param[in] data The data object for bundled code object. This should be
  * of kind AMD_COMGR_DATA_KIND_FATBIN or AMD_COMGR_DATA_KIND_EXECUTABLE or
  * AMD_COMGR_DATA_KIND_BYTES. The API interprets the data object of kind
- * AMD_COMGR_DATA_KIND_FATBIN as a clang offload bundle and of kind
- * AMD_COMGR_DATA_KIND_EXECUTABLE as an executable shared object. For a data
+ * AMD_COMGR_DATA_KIND_FATBIN as a clang offload bundle or an LLVM offload
+ * binary, and of kind AMD_COMGR_DATA_KIND_EXECUTABLE as an executable shared
+ * object. For a data
  * object of type AMD_COMGR_DATA_KIND_BYTES the API first inspects the data
  * passed to determine if it is a fatbin or an executable and performs
  * the lookup.
