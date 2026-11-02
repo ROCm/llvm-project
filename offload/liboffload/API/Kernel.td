@@ -33,9 +33,9 @@ def ol_kernel_launch_prop_type_t : Enum {
        TaggedEtor<"is_cooperative ", "bool *", "Cooperative kernel launch">,
        // Downstream: OpenMP launch information that the AMDGPU kernel trace
        // (LIBOMPTARGET_KERNEL_TRACE) prints.
-       TaggedEtor<"omp_kernel_launch_info", "void *",
-                  "Downstream: the kernel's OpenMP launch properties, a "
-                  "pointer to the plugin's KernelLaunchInfoTy">,
+       TaggedEtor<"omp_exec_mode", "uint8_t *",
+                  "Downstream: the kernel's OpenMP execution mode, an "
+                  "llvm::omp::OMPTgtExecModeFlags">,
        TaggedEtor<"omp_tripcount", "uint64_t *",
                   "Downstream: trip count of the kernel's teams / distribute "
                   "loop, 0 if unknown">];

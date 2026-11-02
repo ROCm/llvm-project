@@ -42,14 +42,60 @@
 using GenericPluginTy = llvm::omp::target::plugin::GenericPluginTy;
 using DeviceInfo = llvm::omp::target::plugin::DeviceInfo;
 using InfoTreeNode = llvm::omp::target::plugin::InfoTreeNode;
-// Downstream, the kernel launch-geometry properties live in the plugin
-// interface: the AMDGPU plugin reads them, including the AMD-only execution
-// modes, e.g., for its kernel trace.
-using KernelLaunchInfoTy = llvm::omp::target::plugin::KernelLaunchInfoTy;
-
 // Forward declarations.
 struct __tgt_bin_desc;
 struct __tgt_target_table;
+
+/// Kernel launch-geometry properties.
+struct KernelLaunchInfoTy {
+  const char *Name = nullptr;
+  llvm::MemoryBufferRef Image;
+  llvm::MemoryBufferRef IRImage;
+  uint32_t MaxNumThreads = 0;
+  uint32_t PreferredNumThreads = 0;
+  uint32_t ReductionDataSize = 0;
+  uint32_t StaticBlockMemSize = 0;
+  llvm::omp::OMPTgtExecModeFlags Mode = llvm::omp::OMP_TGT_EXEC_MODE_BARE;
+
+  bool isBareMode() const { return Mode == llvm::omp::OMP_TGT_EXEC_MODE_BARE; }
+  bool isGenericMode() const {
+    return Mode == llvm::omp::OMP_TGT_EXEC_MODE_GENERIC;
+  }
+  bool isGenericSPMDMode() const {
+    return Mode == llvm::omp::OMP_TGT_EXEC_MODE_GENERIC_SPMD;
+  }
+  bool isSPMDMode() const { return Mode == llvm::omp::OMP_TGT_EXEC_MODE_SPMD; }
+  bool isNoLoopMode() const {
+    return Mode == llvm::omp::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
+  }
+  /// Downstream: the AMD-only Big-Jump-Loop mode.
+  bool isBigJumpLoopMode() const {
+    return Mode == llvm::omp::OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP;
+  }
+
+  static const char *getExecutionModeName(llvm::omp::OMPTgtExecModeFlags Mode) {
+    switch (Mode) {
+    case llvm::omp::OMP_TGT_EXEC_MODE_BARE:
+      return "BARE";
+    case llvm::omp::OMP_TGT_EXEC_MODE_SPMD:
+      return "SPMD";
+    case llvm::omp::OMP_TGT_EXEC_MODE_GENERIC:
+      return "Generic";
+    case llvm::omp::OMP_TGT_EXEC_MODE_GENERIC_SPMD:
+      return "Generic-SPMD";
+    case llvm::omp::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP:
+      return "SPMD-No-Loop";
+    // Downstream: the AMD-only Big-Jump-Loop mode.
+    case llvm::omp::OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
+      return "SPMD-Big-Jump-Loop";
+    }
+    return "Unknown";
+  }
+
+  const char *getExecutionModeName() const {
+    return getExecutionModeName(Mode);
+  }
+};
 
 /// Device properties that drive the computation of the launch geometry of a
 /// kernel.
@@ -121,6 +167,9 @@ struct DeviceTy {
                                                    const char *Name,
                                                    size_t ExpectedSize);
 
+  /// The plugin-side context backing this device's context handle.
+  llvm::omp::target::plugin::PluginContextTy *getPluginContext();
+
   // device memory allocation/deallocation routines
   /// Allocates \p Size bytes on the device, host or shared memory space
   /// (depending on \p Kind) and returns the address/nullptr when
@@ -169,6 +218,15 @@ struct DeviceTy {
                          MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr = nullptr,
                          const ident_t *Loc = nullptr,
                          const char *Name = nullptr);
+
+  /// Copy data from host to device, assuming that no pending operation in the
+  /// queue associated with \p AsyncInfo accesses this memory. E.g., a fresh
+  /// allocation. If the device can write \p Size bytes directly, the copy is
+  /// synchronous so that the host can write the memory directly. Otherwise, it
+  /// is enqueued as asynchronous operation.
+  int32_t submitDataIndependently(void *TgtPtrBegin, void *HstPtrBegin,
+                                  int64_t Size, AsyncInfoTy &AsyncInfo,
+                                  const char *Name = nullptr);
 
   // Copy data from device back to host synchronously
   int32_t
@@ -368,6 +426,9 @@ private:
 
   /// The backend of this device.
   ol_platform_backend_t Backend = OL_PLATFORM_BACKEND_UNKNOWN;
+
+  /// The maximum size of a direct write, see submitDataIndependently.
+  uint64_t MaxDirectWriteSize = 0;
 
   /// Handler to collect and organize host-2-device mapping information.
   MappingInfoTy MappingInfo;

@@ -59,6 +59,8 @@ int32_t __ol_tgt_GetPluginDeviceId(ol_device_handle_t Device);
 RecordReplayTy *__ol_tgt_GetRecordReplay(ol_device_handle_t Device);
 llvm::omp::target::plugin::DeviceImageTy *
 __ol_tgt_GetDeviceImageFromProgram(ol_program_handle_t Program);
+llvm::omp::target::plugin::PluginContextTy *
+__ol_tgt_GetPluginContext(ol_context_handle_t Context);
 } // namespace llvm::offload::tmp
 
 int HostDataToTargetTy::addEventIfNecessary(DeviceTy &Device,
@@ -175,6 +177,8 @@ llvm::Error DeviceTy::init() {
                         &Backend))
     Backend = OL_PLATFORM_BACKEND_UNKNOWN;
 
+  MaxDirectWriteSize = getInfo<uint64_t>(DeviceInfo::MAX_DIRECT_WRITE_SIZE);
+
   getInfoString(DeviceInfo::UID, Uid);
   if (Uid.empty())
     ODBG(ODT_Init) << "Failed to get UID for device " << DeviceID;
@@ -282,11 +286,12 @@ llvm::Expected<void *>
 DeviceTy::getAndRecordGlobalAddress(const ProgramTy &Program, const char *Name,
                                     size_t ExpectedSize) {
   size_t Size = 0;
-  auto AddrOrErr = Program.getGlobalAddress(Name, &Size);
+  auto AddrOrErr =
+      Program.getGlobalAddress(Name, ExpectedSize ? &Size : nullptr);
   if (!AddrOrErr)
     return AddrOrErr;
-  // Some backends return size 0 if the size is unknown.
-  // Only check the size if it is non-zero.
+  // If the user didn't specify an expected size or the backend returned size 0,
+  // we skip the size check.
   if (Size && Size != ExpectedSize)
     return createError(ErrorCode::InvalidBinary,
                        "size of global symbol %s does not match expected size "
@@ -460,6 +465,10 @@ llvm::Expected<ProgramTy> DeviceTy::loadBinary(__tgt_device_image *Img) {
   return Program;
 }
 
+llvm::omp::target::plugin::PluginContextTy *DeviceTy::getPluginContext() {
+  return llvm::offload::tmp::__ol_tgt_GetPluginContext(Context);
+}
+
 void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
   /// RAII to establish tool anchors before and after data allocation
   void *TargetPtr = nullptr;
@@ -473,7 +482,32 @@ void *DeviceTy::allocData(int64_t Size, void *HstPtr, int32_t Kind) {
           RTLDeviceID, HstPtr, &TargetPtr, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
-  TargetPtr = RTL->data_alloc(RTLDeviceID, Size, HstPtr, Kind);
+  auto *PluginCtx = getPluginContext();
+  if (!PluginCtx) {
+    REPORT() << "Failure to allocate device memory: device " << DeviceID
+             << " has no context";
+    return nullptr;
+  }
+
+  // Time the allocation here: the offload API below carries no profiler, and
+  // the trace record built by the RAII above reads these timestamps. Declared
+  // after that RAII, so it is destroyed -- and stamps -- first.
+  auto *Profiler = RTL->getProfiler();
+  assert(Profiler && "Plugin provides no profiler instance");
+  auto ProfTimer = Profiler->getScopedDataAllocTimer(
+      &RTL->getDevice(RTLDeviceID), HstPtr, Size);
+
+  auto AllocOrErr =
+      PluginCtx->allocate(RTL->getDevice(RTLDeviceID), Size, HstPtr,
+                          static_cast<TargetAllocTy>(Kind), /*Alignment=*/0);
+  if (!AllocOrErr) {
+    REPORT() << "Failure to allocate device memory: "
+             << llvm::toString(AllocOrErr.takeError());
+    return nullptr;
+  }
+  assert(*AllocOrErr && "Null pointer upon successful allocation");
+
+  TargetPtr = *AllocOrErr;
   return TargetPtr;
 }
 
@@ -488,7 +522,30 @@ int32_t DeviceTy::deleteData(void *TgtAllocBegin, int32_t Kind) {
           RegionInterface.getTraceGenerators<ompt_target_data_delete>(),
           DeviceID, TgtAllocBegin,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
-  return RTL->data_delete(RTLDeviceID, TgtAllocBegin, Kind);
+
+  auto *PluginCtx = getPluginContext();
+  if (!PluginCtx) {
+    REPORT() << "Failure to deallocate device pointer " << TgtAllocBegin
+             << ": device " << DeviceID << " has no context";
+    return OFFLOAD_FAIL;
+  }
+
+  // See allocData: the trace record built by the RAII above reads these
+  // timestamps, so this must be declared after it.
+  auto *Profiler = RTL->getProfiler();
+  assert(Profiler && "Plugin provides no profiler instance");
+  auto ProfTimer = Profiler->getScopedDataDeleteTimer(
+      &RTL->getDevice(RTLDeviceID), TgtAllocBegin);
+
+  if (auto Err =
+          PluginCtx->deallocate(RTL->getDevice(RTLDeviceID), TgtAllocBegin,
+                                static_cast<TargetAllocTy>(Kind))) {
+    REPORT() << "Failure to deallocate device pointer " << TgtAllocBegin << ": "
+             << llvm::toString(std::move(Err));
+    return OFFLOAD_FAIL;
+  }
+
+  return OFFLOAD_SUCCESS;
 }
 
 llvm::Expected<void *> DeviceTy::allocCtxMem(int64_t Size,
@@ -531,12 +588,19 @@ int32_t DeviceTy::submitDataSync(void *TgtPtrBegin, void *HstPtrBegin,
                                  int64_t Size, HostDataToTargetTy *Entry,
                                  MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                                  const ident_t *Loc, const char *Name) {
-  // Downstream: use a queue, so that OMPT device tracing records the transfer.
-  AsyncInfoTy AsyncInfo(*this);
-  if (submitData(TgtPtrBegin, HstPtrBegin, Size, AsyncInfo, Entry, HDTTMapPtr,
-                 Loc, Name) != OFFLOAD_SUCCESS)
-    return OFFLOAD_FAIL;
-  return AsyncInfo.synchronize();
+  return submitDataImpl(TgtPtrBegin, HstPtrBegin, Size, /*Queue=*/nullptr,
+                        Entry, HDTTMapPtr, Loc, Name);
+}
+
+int32_t DeviceTy::submitDataIndependently(void *TgtPtrBegin, void *HstPtrBegin,
+                                          int64_t Size, AsyncInfoTy &AsyncInfo,
+                                          const char *Name) {
+  if (Size > 0 && uint64_t(Size) <= MaxDirectWriteSize)
+    return submitDataSync(TgtPtrBegin, HstPtrBegin, Size, /*Entry=*/nullptr,
+                          /*HDTTMapPtr=*/nullptr, /*Loc=*/nullptr, Name);
+  return submitData(TgtPtrBegin, HstPtrBegin, Size, AsyncInfo,
+                    /*Entry=*/nullptr, /*HDTTMapPtr=*/nullptr, /*Loc=*/nullptr,
+                    Name);
 }
 
 int32_t DeviceTy::submitDataImpl(void *TgtPtrBegin, void *HstPtrBegin,
@@ -601,12 +665,8 @@ int32_t DeviceTy::retrieveDataSync(void *HstPtrBegin, void *TgtPtrBegin,
                                    int64_t Size, HostDataToTargetTy *Entry,
                                    MappingInfoTy::HDTTMapAccessorTy *HDTTMapPtr,
                                    const ident_t *Loc) {
-  // Downstream: use a queue, so that OMPT device tracing records the transfer.
-  AsyncInfoTy AsyncInfo(*this);
-  if (retrieveData(HstPtrBegin, TgtPtrBegin, Size, AsyncInfo, Entry, HDTTMapPtr,
-                   Loc) != OFFLOAD_SUCCESS)
-    return OFFLOAD_FAIL;
-  return AsyncInfo.synchronize();
+  return retrieveDataImpl(HstPtrBegin, TgtPtrBegin, Size, /*Queue=*/nullptr,
+                          Entry, HDTTMapPtr, Loc);
 }
 
 int32_t DeviceTy::retrieveDataImpl(void *HstPtrBegin, void *TgtPtrBegin,
@@ -850,21 +910,6 @@ static void freeAfterSynchronization(DeviceTy &Device, AsyncInfoTy &AsyncInfo,
   });
 }
 
-/// Downstream: free \p Ptr, which was allocated through the plugin's
-/// allocator with \p Kind, once \p AsyncInfo is synchronized.
-static void freePluginMemAfterSynchronization(GenericDeviceTy &GenericDevice,
-                                              AsyncInfoTy &AsyncInfo, void *Ptr,
-                                              TargetAllocTy Kind) {
-  AsyncInfo.addPostProcessingFunction([&GenericDevice, Ptr, Kind]() -> int {
-    if (auto Err = GenericDevice.dataDelete(Ptr, Kind)) {
-      REPORT() << "Failure to free memory " << Ptr << ": "
-               << toString(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-    return OFFLOAD_SUCCESS;
-  });
-}
-
 /// Return a device pointer to a new kernel launch environment, or null if
 /// this launch has no reserved dyn_ptr slot to store one in. \p OmpABIVersion
 /// is the kernel-argument ABI version this launch was built against.
@@ -933,43 +978,20 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
     freeAfterSynchronization(Device, AsyncInfo, *ReductionAllocOrErr);
   }
 
-  // Downstream: stage the launch environment in pinned memory if the plugin
-  // transfers it faster from there, so the copy below can take that path.
-  GenericDeviceTy &GenericDevice = Device.RTL->getDevice(Device.RTLDeviceID);
-  const void *LaunchEnvSrc = &LocalKLE;
-  KernelLaunchEnvironmentTy *PinnedKLE =
-      GenericDevice.getPinnedLaunchEnvBuffer();
-  if (PinnedKLE) {
-    *PinnedKLE = LocalKLE;
-    LaunchEnvSrc = PinnedKLE;
-  }
-
-  // Downstream: the ProfilerData at this point will have a callback for a
-  // kernel launch, not a data-op. This is due to the "external" operation
-  // being a kernel launch and the data submit here being an implementation
-  // detail. We temporarily set the ProfilerData to nullptr, such that we
-  // disable the timing etc. further down to not trigger assertions or report
-  // implementation detail. For the same reason, copy with olMemcpy rather
-  // than Device.submitData(), which would report an OMPT data operation.
+  // Downstream: the async info's ProfilerData holds the OMPT trace record of
+  // the kernel launch. Submitting data replaces it with that of the data
+  // operation, so restore it for the launch.
   __tgt_async_info *AI = AsyncInfo;
   void *ProfilerData = AI->ProfilerData;
-  AI->ProfilerData = nullptr;
-  auto Res = olMemcpy(AsyncInfo.getQueue(), *AllocOrErr, Device.DeviceHandle,
-                      LaunchEnvSrc, /*SrcDevice=*/nullptr,
-                      sizeof(KernelLaunchEnvironmentTy));
+  int32_t Rc = Device.submitDataIndependently(*AllocOrErr, &LocalKLE,
+                                              sizeof(KernelLaunchEnvironmentTy),
+                                              AsyncInfo, "KernelLaunchEnv");
   AI->ProfilerData = ProfilerData;
-  if (Res)
+  if (Rc != OFFLOAD_SUCCESS)
     return createError(ErrorCode::BackendFailure,
-                       "failed to copy the kernel launch environment: %s",
-                       Res->Details);
-
-  // Register the staging buffer only now that the transfer reading it has been
-  // issued. Registering it earlier would let a concurrent finalization that
-  // observes the queue as complete release it while the transfer is still in
-  // flight.
-  if (PinnedKLE)
-    freePluginMemAfterSynchronization(GenericDevice, AsyncInfo, PinnedKLE,
-                                      TARGET_ALLOC_HOST);
+                       "failed to copy the kernel launch environment to "
+                       "device %d",
+                       Device.DeviceID);
 
   return static_cast<KernelLaunchEnvironmentTy *>(*AllocOrErr);
 }
@@ -1055,9 +1077,9 @@ getXTeamReductionNumBlocks(const DeviceGeometryPropsTy &Props,
   static UInt32Envar OMPX_TeamsReductionWavesPerCU(
       "LIBOMPTARGET_TEAMS_REDUCTION_WAVES_PER_CU", 0);
   uint32_t ScalarWavesPerCU = OMPX_TeamsReductionWavesPerCU.get();
-  // Measured on MI210, MI300A, MI300X, MI350X, and MI450: scalar reductions
-  // with many iterations prefer more waves, ones with fewer iterations or more
-  // memory traffic prefer less waves. 16 waves were never far from the best.
+  // Scalar reductions with many iterations prefer more waves, ones with fewer
+  // iterations or more memory traffic prefer less waves. 16 waves were never
+  // far from the best.
   if (!ScalarWavesPerCU && Props.Backend == OL_PLATFORM_BACKEND_AMDGPU)
     ScalarWavesPerCU = 16;
   uint64_t NumCUs = Props.NumComputeUnits;
@@ -1187,7 +1209,7 @@ static uint64_t getLowTripCountOverrideNumBlocks(
     NumThreads >>= 1;
   if (!NumThreads)
     return 0;
-  if (KernelEnv.doesTeamsReduction())
+  if (KernelEnv.ReductionDataSize)
     NumThreads = llvm::omp::getBlockSizeAsPowerOfTwo(NumThreads);
   EffectiveNumThreads = NumThreads;
 
@@ -1577,11 +1599,12 @@ int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
   }
 
   // Downstream: the AMDGPU kernel trace prints the execution mode and the trip
-  // count, so pass the launch info and the trip count along.
+  // count, so pass them along.
+  uint8_t ExecMode = KernelLaunchInfo.Mode;
   uint64_t Tripcount = KernelArgs.Tripcount;
   ol_kernel_launch_prop_t LaunchProps[] = {
       {OL_KERNEL_LAUNCH_PROP_TYPE_IS_COOPERATIVE, &Config.Cooperative},
-      {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_KERNEL_LAUNCH_INFO, &KernelLaunchInfo},
+      {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_EXEC_MODE, &ExecMode},
       {OL_KERNEL_LAUNCH_PROP_TYPE_OMP_TRIPCOUNT, &Tripcount},
       OL_KERNEL_LAUNCH_PROP_END};
 
