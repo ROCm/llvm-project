@@ -736,8 +736,8 @@ DEFINE_SIMPLE_CONVERSION_FUNCTIONS(BasicBlock, LLVMBasicBlockRef)
 /// This assumes that \p It is not at the end of a block.
 LLVM_ABI BasicBlock::iterator skipDebugIntrinsics(BasicBlock::iterator It);
 
-#ifdef NDEBUG
-/// In release builds, this is a no-op. For !NDEBUG builds, the checks are
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS == 0
+/// In release builds, this is a no-op. For assert builds, the checks are
 /// implemented in the .cpp file to avoid circular header deps.
 inline void BasicBlock::validateInstrOrdering() const {}
 #endif
