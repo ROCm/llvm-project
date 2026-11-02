@@ -968,9 +968,9 @@ getKernelLaunchEnvironment(DeviceTy &Device, uint32_t OmpABIVersion,
   // operation, so restore it for the launch.
   __tgt_async_info *AI = AsyncInfo;
   void *ProfilerData = AI->ProfilerData;
-  int32_t Rc = Device.submitDataIndependently(
-      *AllocOrErr, &LocalKLE, sizeof(KernelLaunchEnvironmentTy), AsyncInfo,
-      "KernelLaunchEnv");
+  int32_t Rc = Device.submitDataIndependently(*AllocOrErr, &LocalKLE,
+                                              sizeof(KernelLaunchEnvironmentTy),
+                                              AsyncInfo, "KernelLaunchEnv");
   AI->ProfilerData = ProfilerData;
   if (Rc != OFFLOAD_SUCCESS)
     return createError(ErrorCode::BackendFailure,
