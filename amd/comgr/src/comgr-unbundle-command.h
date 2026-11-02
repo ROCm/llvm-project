@@ -89,7 +89,8 @@ public:
   llvm::Error restoreCachedOutput(llvm::StringRef CachedBuffer,
                                   std::shared_ptr<llvm::MemoryBuffer> Owner);
 
-  /// Serialize memory outputs or output files using aligned CUB1 framing.
+  /// Serialize OutputBuffers using aligned CUB1 framing. Only cached command
+  /// kinds reach this, and those always unbundle into memory.
   /// The returned view is valid until the next call or command destruction.
   /// Call before transferring any buffers with takeOutputBuffer().
   llvm::Expected<llvm::StringRef> readExecuteOutput() override;

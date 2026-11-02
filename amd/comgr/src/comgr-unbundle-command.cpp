@@ -78,6 +78,33 @@ nextCompressedBundleOffset(size_t RemainingSize, StringRef Remaining,
 
 constexpr size_t MinCompressedBundleHeaderSize = 8;
 
+/// Visit every compressed bundle header in \p Input. Return an error unless the
+/// input is a nonempty sequence of well-formed compressed bundles.
+Error forEachCompressedBundleHeader(
+    StringRef Input, function_ref<void(const CompressedBundleHeader &)> Visit) {
+  size_t Offset = 0;
+  while (Offset < Input.size()) {
+    StringRef Remaining = Input.drop_front(Offset);
+    if (Remaining.size() < MinCompressedBundleHeaderSize ||
+        identify_magic(Remaining) != file_magic::offload_bundle_compressed)
+      return createStringError(std::errc::invalid_argument,
+                               "invalid concatenated compressed bundle");
+    Expected<CompressedBundleHeader> Header =
+        CompressedBundleHeader::tryParse(Remaining);
+    if (!Header)
+      return Header.takeError();
+    Visit(*Header);
+    Expected<size_t> Next =
+        nextCompressedBundleOffset(Remaining.size(), Remaining, *Header);
+    if (!Next)
+      return Next.takeError();
+    if (*Next == StringRef::npos)
+      break;
+    Offset += *Next;
+  }
+  return Error::success();
+}
+
 // Each unbundled member is aligned to max_align_t relative to the mapped cache
 // entry and framed with its size and padding, so a cache hit can borrow the
 // member instead of copying it. The leading magic distinguishes this framing
@@ -154,26 +181,11 @@ bool UnbundleCommand::canCache() const {
   StringRef Input = (*Buffer)->getBuffer();
   if (Input.empty())
     return false;
-  size_t Offset = 0;
-  while (Offset < Input.size()) {
-    StringRef Remaining = Input.drop_front(Offset);
-    if (Remaining.size() < MinCompressedBundleHeaderSize ||
-        identify_magic(Remaining) != file_magic::offload_bundle_compressed)
-      return false;
-    auto Header = CompressedBundleHeader::tryParse(Remaining);
-    if (!Header) {
-      consumeError(Header.takeError());
-      return false;
-    }
-    auto Next =
-        nextCompressedBundleOffset(Remaining.size(), Remaining, *Header);
-    if (!Next) {
-      consumeError(Next.takeError());
-      return false;
-    }
-    if (*Next == StringRef::npos)
-      break;
-    Offset += *Next;
+  Error Err = forEachCompressedBundleHeader(
+      Input, [](const CompressedBundleHeader &) {});
+  if (Err) {
+    consumeError(std::move(Err));
+    return false;
   }
   return true;
 }
@@ -252,34 +264,22 @@ Error UnbundleCommand::restoreCachedOutput(
 }
 
 Expected<StringRef> UnbundleCommand::readExecuteOutput() {
+  // Only bitcode/object bundles are cached, and execute() always unbundles
+  // those into OutputBuffers, so the entry is framed from memory.
   OutputBuffer.clear();
   OutputBuffer.append(UnbundleCacheMagic,
                       UnbundleCacheMagic + UnbundleCacheMagicSize);
-  // The outputs were unbundled in memory, frame them for the cache entry.
-  if (!OutputBuffers.empty()) {
-    // Size the buffer up front. Appending an image much larger than the
-    // SmallString's inline capacity would otherwise reallocate and copy the
-    // whole image more than once.
-    size_t TotalSize = UnbundleCacheMagicSize +
-                       OutputBuffers.size() * 2 * sizeof(SizeFieldType) +
-                       OutputBuffers.size() * (UnbundleCacheAlignment - 1);
-    for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
-      TotalSize += Output->getBufferSize();
-    OutputBuffer.reserve(TotalSize);
-    for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
-      appendAlignedOutput(OutputBuffer, Output->getBuffer());
-    return OutputBuffer;
-  }
-
-  for (StringRef OutputFilename : Config.OutputFileNames) {
-    auto MaybeOneOutput =
-        CachedCommandAdaptor::readSingleOutputFile(OutputFilename);
-    if (!MaybeOneOutput)
-      return MaybeOneOutput.takeError();
-
-    const MemoryBuffer &OneOutputBuffer = **MaybeOneOutput;
-    appendAlignedOutput(OutputBuffer, OneOutputBuffer.getBuffer());
-  }
+  // Size the buffer up front. Appending an image much larger than the
+  // SmallString's inline capacity would otherwise reallocate and copy the
+  // whole image more than once.
+  size_t TotalSize = UnbundleCacheMagicSize +
+                     OutputBuffers.size() * 2 * sizeof(SizeFieldType) +
+                     OutputBuffers.size() * (UnbundleCacheAlignment - 1);
+  for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
+    TotalSize += Output->getBufferSize();
+  OutputBuffer.reserve(TotalSize);
+  for (const std::unique_ptr<MemoryBuffer> &Output : OutputBuffers)
+    appendAlignedOutput(OutputBuffer, Output->getBuffer());
   return OutputBuffer;
 }
 
@@ -368,34 +368,14 @@ Error UnbundleCommand::addInputIdentifier(HashAlgorithm &H) const {
     addString(H, Input);
     return Error::success();
   }
-  size_t Offset = 0;
-  while (Offset < Input.size()) {
-    StringRef Remaining = Input.drop_front(Offset);
-    if (Remaining.size() < MinCompressedBundleHeaderSize ||
-        identify_magic(Remaining) != file_magic::offload_bundle_compressed)
-      return createStringError(std::errc::invalid_argument,
-                               "invalid concatenated compressed bundle");
-
-    using Header = CompressedBundleHeader;
-    Expected<Header> MaybeHeader = Header::tryParse(Remaining);
-    if (!MaybeHeader)
-      return MaybeHeader.takeError();
-
-    addUInt(H, MaybeHeader->Version);
-    addUInt(H, static_cast<uint64_t>(MaybeHeader->CompressionFormat));
-    addUInt(H, MaybeHeader->FileSize.value_or(0));
-    addUInt(H, MaybeHeader->Hash);
-    addUInt(H, MaybeHeader->UncompressedFileSize);
-
-    Expected<size_t> NextOffset =
-        nextCompressedBundleOffset(Remaining.size(), Remaining, *MaybeHeader);
-    if (!NextOffset)
-      return NextOffset.takeError();
-    if (*NextOffset == StringRef::npos)
-      break;
-    Offset += *NextOffset;
-  }
-  return Error::success();
+  return forEachCompressedBundleHeader(
+      Input, [&](const CompressedBundleHeader &Header) {
+        addUInt(H, Header.Version);
+        addUInt(H, static_cast<uint64_t>(Header.CompressionFormat));
+        addUInt(H, Header.FileSize.value_or(0));
+        addUInt(H, Header.Hash);
+        addUInt(H, Header.UncompressedFileSize);
+      });
 }
 
 } // namespace COMGR
