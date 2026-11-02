@@ -771,7 +771,7 @@ lookUpCodeObjectInSharedObject(DataObject *DataP,
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-// Same rewrite as clang::normalizeForBundler, the runtime uses a fixed atring
+// Same rewrite as clang::normalizeForBundler, the runtime uses a fixed string
 // format for reporting the ISA.
 static std::string isaFromOffloadEntry(StringRef TripleStr, StringRef Arch) {
   Triple T(TripleStr);
