@@ -1797,6 +1797,9 @@ private:
   // True if resolveIndirectCalls() has run.
   bool HasResolvedIndirectCalls = false;
 
+  // The root node of the call graph. See getCallGraphRoot().
+  std::unique_ptr<GlobalValueSummaryMapTy::value_type> CallGraphRoot;
+
   // YAML I/O support.
   friend yaml::MappingTraits<ModuleSummaryIndex>;
 
@@ -1944,6 +1947,18 @@ public:
       Edges.push_back(std::make_pair(P.first, CalleeInfo{}));
     }
     return FunctionSummary::makeDummyFunctionSummary(std::move(Edges));
+  }
+
+  /// Returns the root node of the call graph: a dummy function whose callees
+  /// are the functions without callers. The index owns the node. Each call
+  /// computes it again, and frees the node of the previous call.
+  ValueInfo getCallGraphRoot() {
+    GlobalValueSummaryInfo Root(HaveGVs);
+    Root.addSummary(
+        std::make_unique<FunctionSummary>(calculateCallGraphRoot()));
+    CallGraphRoot = std::make_unique<GlobalValueSummaryMapTy::value_type>(
+        GlobalValue::GUID(0), std::move(Root));
+    return ValueInfo(HaveGVs, CallGraphRoot.get());
   }
 
   bool withGlobalValueDeadStripping() const {
@@ -2368,13 +2383,7 @@ template <> struct GraphTraits<ValueInfo> {
 template <>
 struct GraphTraits<ModuleSummaryIndex *> : public GraphTraits<ValueInfo> {
   static NodeRef getEntryNode(ModuleSummaryIndex *I) {
-    std::unique_ptr<GlobalValueSummary> Root =
-        std::make_unique<FunctionSummary>(I->calculateCallGraphRoot());
-    GlobalValueSummaryInfo G(I->haveGVs());
-    G.addSummary(std::move(Root));
-    static auto P =
-        GlobalValueSummaryMapTy::value_type(GlobalValue::GUID(0), std::move(G));
-    return ValueInfo(I->haveGVs(), &P);
+    return I->getCallGraphRoot();
   }
 };
 } // end namespace llvm
