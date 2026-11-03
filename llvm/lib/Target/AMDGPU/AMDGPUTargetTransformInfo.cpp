@@ -17,6 +17,7 @@
 #include "AMDGPUTargetTransformInfo.h"
 #include "AMDGPUSubtarget.h"
 #include "AMDGPUTargetMachine.h"
+#include "AMDGPUThinLinkPasses.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIModeRegisterDefaults.h"
 #include "llvm/ADT/SmallBitVector.h"
@@ -2074,6 +2075,12 @@ uint64_t GCNTTIImpl::getCallTypeId(FunctionType *FTy,
   // is the same rule as for the type IDs in the .amdgpu.info section.
   return MD5Hash("amdgpu.v1:cc" + utostr(CC) + ":" +
                  AMDGPU::getFunctionTypeId(FTy, DL));
+}
+
+void GCNTTIImpl::addSummaryExtensionEntries(const Function &F,
+                                            const GlobalValueSummary &Summary,
+                                            ModuleSummaryIndex &Index) const {
+  addAMDGPUThinLinkFacts(F, Summary, Index);
 }
 
 void GCNTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,

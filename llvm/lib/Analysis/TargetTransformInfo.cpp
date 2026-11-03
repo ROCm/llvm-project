@@ -1510,6 +1510,12 @@ uint64_t TargetTransformInfo::getCallTypeId(FunctionType *FTy,
   return TTIImpl->getCallTypeId(FTy, CC);
 }
 
+void TargetTransformInfo::addSummaryExtensionEntries(
+    const Function &F, const GlobalValueSummary &Summary,
+    ModuleSummaryIndex &Index) const {
+  TTIImpl->addSummaryExtensionEntries(F, Summary, Index);
+}
+
 bool TargetTransformInfo::isIndexedLoadLegal(MemIndexedMode Mode,
                                              Type *Ty) const {
   return TTIImpl->isIndexedLoadLegal(Mode, Ty);

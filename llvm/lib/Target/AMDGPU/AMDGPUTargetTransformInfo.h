@@ -280,6 +280,10 @@ public:
 
   uint64_t getCallTypeId(FunctionType *FTy, CallingConv::ID CC) const override;
 
+  void addSummaryExtensionEntries(const Function &F,
+                                  const GlobalValueSummary &Summary,
+                                  ModuleSummaryIndex &Index) const override;
+
   int getInlinerVectorBonusPercent() const override {
     return InlinerVectorBonusPercent;
   }

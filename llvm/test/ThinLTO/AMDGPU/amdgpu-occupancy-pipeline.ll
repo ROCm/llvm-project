@@ -1,8 +1,9 @@
 ; Test that the AMDGPU target adds its occupancy pass to the end of the default
 ; pipeline of the thin link. The modules use two spellings of the amdgcn
 ; triple, and the pass runs once. The link runs ThinLinkParamAccessPass after
-; the pipeline. It stores the attributes of @device_func in
-; the fn-attrs summary extension.
+; the pipeline. It reads the facts of the kernel in the
+; amdgpu-occupancy summary extension, and it stores the attributes of
+; @device_func in the fn-attrs summary extension.
 ;
 ; RUN: rm -rf %t && split-file %s %t && cd %t
 ; RUN: opt -thinlto-bc kernel.ll -o kernel.bc
@@ -19,7 +20,10 @@
 ; CHECK-NEXT: Running analysis: SummaryAddressTakenAnalysis on [summary index]
 ; CHECK-NEXT: ; *** IR Dump After AMDGPUThinLinkOccupancyPass on [summary index] ***
 ; CHECK:      ^[[MOD:[0-9]+]] = module: (path: "device.bc",
+; CHECK:      ^[[KMOD:[0-9]+]] = module: (path: "kernel.bc",
 ; CHECK:      ^[[FN:[0-9]+]] = gv: (name: "device_func",
+; CHECK:      ^[[KERNEL:[0-9]+]] = gv: (name: "kernel",
+; CHECK:      = extension: (name: "amdgpu-occupancy", version: 1, required: 0, entries: ((gv: ^[[KERNEL]], module: ^[[KMOD]], ints: (91), strings: ("amdgpu-flat-work-group-size", "64,256", "amdgpu-max-num-workgroups", "16,16,1", "amdgpu-waves-per-eu", "2,8"))))
 ; CHECK:      = extension: (name: "fn-attrs", version: 1, required: 1, entries: ((gv: ^[[FN]], module: ^[[MOD]], ints: (0), strings: ("amdgpu-flat-work-group-size", "64,256", "amdgpu-max-num-workgroups", "16,16,1", "amdgpu-waves-per-eu", "2,8"))))
 ; CHECK:      Running pass: ThinLinkParamAccessPass on [summary index]
 ; CHECK-NOT:  Running pass
