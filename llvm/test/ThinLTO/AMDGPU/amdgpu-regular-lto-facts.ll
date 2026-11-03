@@ -9,7 +9,7 @@
 ; RUN: llvm-lto2 run a.bc b.bc -o out \
 ; RUN:   -r=a.bc,f,px -r=a.bc,ga,px -r=b.bc,f,x -r=b.bc,gb,px
 
-; FACTS: = extension: (name: "amdgpu-occupancy",
+; FACTS: = extension: (name: "amdgpu-launch-attrs",
 
 ;--- a.ll
 target triple = "amdgcn-amd-amdhsa"

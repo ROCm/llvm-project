@@ -41,6 +41,22 @@ public:
   PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &AM);
 };
 
+/// Gives the attribute uniform-work-group-size to a device function if all
+/// kernels that can reach it have the attribute.
+class AMDGPUThinLinkUniformWorkGroupSizePass
+    : public RequiredPassInfoMixin<AMDGPUThinLinkUniformWorkGroupSizePass> {
+public:
+  PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &AM);
+};
+
+/// Propagates the attribute amdgpu-cluster-dims of the entry functions to the
+/// device functions that they can reach.
+class AMDGPUThinLinkClusterDimsPass
+    : public RequiredPassInfoMixin<AMDGPUThinLinkClusterDimsPass> {
+public:
+  PreservedAnalyses run(ModuleSummaryIndex &Index, SummaryAnalysisManager &AM);
+};
+
 /// Finds the implicit arguments that a function and the functions that it can
 /// call do not use, and gives the function the amdgpu-no-* attributes of these
 /// arguments. A backend cannot find them for a function that calls a function
