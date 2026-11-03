@@ -75,6 +75,27 @@ LLVM_ABI BitcodeModule *findThinLTOModule(MutableArrayRef<BitcodeModule> BMs);
 /// Variant of the above.
 LLVM_ABI Expected<BitcodeModule> findThinLTOModule(MemoryBufferRef MBRef);
 
+/// Returns an error if \p Index holds a required summary extension that this
+/// compiler does not apply, with an entry for a summary that the backend uses:
+/// a summary in \p DefinedGlobals, a summary that the backend imports with
+/// \p ImportList, or its aliasee. The index of a distributed backend and the
+/// cache key hold the entries of the same summaries, so an in-process backend,
+/// a distributed backend, and the cache give the same result.
+LLVM_ABI Error
+checkRequiredSummaryExtensions(const ModuleSummaryIndex &Index,
+                               const FunctionImporter::ImportMapTy &ImportList,
+                               const GVSummaryMapTy &DefinedGlobals);
+
+/// Sets the function attributes that the thin link computed (see
+/// ThinLinkFnAttrs) on the functions of \p M. A function that \p M defines gets
+/// the attributes of its summary in \p DefinedGlobals. A function that \p M
+/// imports with \p ImportList gets the attributes of its summary in the module
+/// that it comes from.
+LLVM_ABI Error
+applyThinLinkFnAttrs(Module &M, const ModuleSummaryIndex &Index,
+                     const FunctionImporter::ImportMapTy &ImportList,
+                     const GVSummaryMapTy &DefinedGlobals);
+
 /// Distributed ThinLTO: collect the referenced modules based on
 /// module summary and initialize ImportList. Returns false if the
 /// operation failed.

@@ -79,6 +79,7 @@ add_llvm_component_library(LLVMCore
   Statepoint.cpp
   StructuralHash.cpp
   SummaryPassManager.cpp
+  ThinLinkFnAttrs.cpp
   Type.cpp
   TypedPointerType.cpp
   TypeFinder.cpp
