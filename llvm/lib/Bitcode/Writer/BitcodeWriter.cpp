@@ -4900,6 +4900,58 @@ static AMDGPUFunctionSummary buildAMDGPUFunctionSummary(const Function &F) {
   return AFS;
 }
 
+namespace {
+/// A summary that a summary block holds: its value ID, and in a combined
+/// index, the ID of its module.
+struct WrittenSummary {
+  const GlobalValueSummary *S;
+  unsigned ValueId;
+  std::optional<uint64_t> ModuleId;
+};
+} // end anonymous namespace
+
+/// Writes a SUMMARY_EXTENSION_BLOCK for each summary extension in \p Index
+/// that has entries for \p Summaries, the summaries that the summary block
+/// holds. The entries are in the order of \p Summaries.
+static void writeSummaryExtensions(BitstreamWriter &Stream,
+                                   StringTableBuilder &StrtabBuilder,
+                                   const ModuleSummaryIndex &Index,
+                                   ArrayRef<WrittenSummary> Summaries) {
+  SmallVector<uint64_t, 64> Record;
+  for (const auto &[Key, Ext] : Index.extensions()) {
+    SmallVector<
+        std::pair<const WrittenSummary *, const SummaryExtension::Entry *>>
+        Entries;
+    for (const WrittenSummary &WS : Summaries)
+      if (const SummaryExtension::Entry *E = Ext.getEntry(WS.S))
+        Entries.emplace_back(&WS, E);
+    if (Entries.empty())
+      continue;
+
+    Stream.EnterSubblock(bitc::SUMMARY_EXTENSION_BLOCK_ID, 3);
+    StringRef Name = Ext.getName();
+    Record.assign({StrtabBuilder.add(Name), Name.size(), Ext.getVersion(),
+                   Ext.isRequired() ? 1u : 0u});
+    Stream.EmitRecord(bitc::SUMMARY_EXT_HEADER, Record);
+    for (const auto &[WS, E] : Entries) {
+      Record.clear();
+      Record.push_back(WS->ValueId);
+      if (WS->ModuleId)
+        Record.push_back(*WS->ModuleId);
+      Record.push_back(E->Ints.size());
+      llvm::append_range(Record, E->Ints);
+      for (const std::string &Str : E->Strings) {
+        Record.push_back(StrtabBuilder.add(Str));
+        Record.push_back(Str.size());
+      }
+      Stream.EmitRecord(WS->ModuleId ? bitc::SUMMARY_EXT_COMBINED_ENTRY
+                                     : bitc::SUMMARY_EXT_ENTRY,
+                        Record);
+    }
+    Stream.ExitBlock();
+  }
+}
+
 /// Emit an FS_AMDGPU_ENTRY record for a pre-built summary.
 static void writeAMDGPUSummaryRecord(BitstreamWriter &Stream,
                                      const AMDGPUFunctionSummary &AFS) {
@@ -5305,6 +5357,21 @@ void ModuleBitcodeWriterBase::writePerModuleGlobalValueSummary() {
     Stream.EmitRecord(bitc::FS_TYPE_ID_METADATA, NameVals,
                       TypeIdCompatibleVtableAbbrev);
     NameVals.clear();
+  }
+
+  // The entries of the summary extensions belong to the summaries of the
+  // values of the module.
+  if (!Index->extensions().empty()) {
+    SmallVector<WrittenSummary> Summaries;
+    for (const GlobalValue &GV : M.global_values()) {
+      if (!GV.hasName())
+        continue;
+      ValueInfo VI = Index->getValueInfo(GV.getGUIDOrFallback());
+      if (VI && !VI.getSummaryList().empty())
+        Summaries.push_back({VI.getSummaryList().front().get(),
+                             VE.getValueID(&GV), std::nullopt});
+    }
+    writeSummaryExtensions(Stream, StrtabBuilder, *Index, Summaries);
   }
 
   if (Index->getBlockCount())
@@ -5728,6 +5795,23 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
       Stream.EmitRecord(bitc::FS_TYPE_ID, NameVals);
       NameVals.clear();
     }
+  }
+
+  // The index of a distributed backend gets only the entries of the summaries
+  // that it holds.
+  if (!Index.extensions().empty()) {
+    SmallVector<WrittenSummary> Summaries;
+    forEachSummary([&](GVInfo I, bool IsAliasee) {
+      // The summary of an aliasee is written only if it is visited by itself.
+      // The summaries of all regular LTO modules have the module path "", so
+      // the value and the module do not identify one of them.
+      if (IsAliasee || I.second->modulePath().empty())
+        return;
+      assert(ModuleIdMap.count(I.second->modulePath()));
+      Summaries.push_back({I.second, *getValueId(I.first),
+                           ModuleIdMap[I.second->modulePath()]});
+    });
+    writeSummaryExtensions(Stream, StrtabBuilder, Index, Summaries);
   }
 
   if (Index.getBlockCount())

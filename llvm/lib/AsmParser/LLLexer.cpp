@@ -809,6 +809,14 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(catch);
   KEYWORD(filter);
 
+  // Summary extension keywords.
+  KEYWORD(extension);
+  KEYWORD(version);
+  KEYWORD(required);
+  KEYWORD(entries);
+  KEYWORD(ints);
+  KEYWORD(strings);
+
   // Summary index keywords.
   KEYWORD(path);
   KEYWORD(hash);

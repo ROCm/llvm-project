@@ -392,6 +392,14 @@ enum Kind {
   // Use-list order directives.
   kw_uselistorder,
 
+  // Summary extension keywords
+  kw_extension,
+  kw_version,
+  kw_required,
+  kw_entries,
+  kw_ints,
+  kw_strings,
+
   // Summary index keywords
   kw_path,
   kw_hash,

@@ -101,4 +101,27 @@ TEST(LTOCacheKeyTest, ParameterAccesses) {
   EXPECT_NE(Key1, Key2);
 }
 
+// The thin-link passes can store their results in summary extensions.
+TEST(LTOCacheKeyTest, SummaryExtensions) {
+  std::string Summary = makeSummary("");
+  auto WithEntry = [&](StringRef GVAndModule, StringRef Ints) {
+    return getCacheKey(Summary +
+                       "^4 = extension: (name: \"test\", version: 1, "
+                       "required: 1, entries: ((gv: " +
+                       GVAndModule.str() + ", ints: (" + Ints.str() + "))))\n");
+  };
+  std::string Key = getCacheKey(Summary);
+  std::string Key1 = WithEntry("^2, module: ^0", "1");
+  std::string Key2 = WithEntry("^2, module: ^0", "2");
+  // a.o does not use the function in b.o.
+  std::string KeyB = WithEntry("^3, module: ^1", "1");
+  ASSERT_FALSE(Key.empty());
+  ASSERT_FALSE(Key1.empty());
+  ASSERT_FALSE(Key2.empty());
+  ASSERT_FALSE(KeyB.empty());
+  EXPECT_NE(Key, Key1);
+  EXPECT_NE(Key1, Key2);
+  EXPECT_EQ(Key, KeyB);
+}
+
 } // end anonymous namespace
