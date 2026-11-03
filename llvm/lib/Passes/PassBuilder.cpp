@@ -78,6 +78,7 @@
 #include "llvm/Analysis/StackSafetyAnalysis.h"
 #include "llvm/Analysis/StaticDataProfileInfo.h"
 #include "llvm/Analysis/StructuralHash.h"
+#include "llvm/Analysis/SummaryCallGraph.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
@@ -614,6 +615,10 @@ PassBuilder::PassBuilder(LLVMContext &Context, TargetMachine *TM,
   PIC->addClassToPassName(CLASS, NAME);
 #define CGSCC_ANALYSIS(NAME, CREATE_PASS)                                      \
   PIC->addClassToPassName(decltype(CREATE_PASS)::name(), NAME);
+#define SUMMARY_PASS(NAME, CREATE_PASS)                                        \
+  PIC->addClassToPassName(decltype(CREATE_PASS)::name(), NAME);
+#define SUMMARY_ANALYSIS(NAME, CREATE_PASS)                                    \
+  PIC->addClassToPassName(decltype(CREATE_PASS)::name(), NAME);
 #include "PassRegistry.def"
 
 #define MACHINE_FUNCTION_ANALYSIS(NAME, CREATE_PASS)                           \
@@ -766,6 +771,15 @@ void PassBuilder::registerMachineFunctionAnalyses(
 
   for (auto &C : MachineFunctionAnalysisRegistrationCallbacks)
     C(MFAM);
+}
+
+void PassBuilder::registerSummaryAnalyses(SummaryAnalysisManager &SAM) {
+#define SUMMARY_ANALYSIS(NAME, CREATE_PASS)                                    \
+  SAM.registerPass([&] { return CREATE_PASS; });
+#include "PassRegistry.def"
+
+  for (auto &C : SummaryAnalysisRegistrationCallbacks)
+    C(SAM);
 }
 
 void PassBuilder::registerLoopAnalyses(LoopAnalysisManager &LAM) {
@@ -2613,6 +2627,39 @@ Error PassBuilder::parseMachinePass(MachineFunctionPassManager &MFPM,
       inconvertibleErrorCode());
 }
 
+Error PassBuilder::parseSummaryPass(SummaryPassManager &SPM,
+                                    const PipelineElement &E) {
+  StringRef Name = E.Name;
+  // Only a callback can parse a summary pass with an inner pipeline.
+  if (E.InnerPipeline.empty()) {
+#define SUMMARY_PASS(NAME, CREATE_PASS)                                        \
+  if (Name == NAME) {                                                          \
+    SPM.addPass(CREATE_PASS);                                                  \
+    return Error::success();                                                   \
+  }
+#define SUMMARY_ANALYSIS(NAME, CREATE_PASS)                                    \
+  if (Name == "require<" NAME ">") {                                           \
+    SPM.addPass(                                                               \
+        RequireAnalysisPass<std::remove_reference_t<decltype(CREATE_PASS)>,    \
+                            ModuleSummaryIndex>());                            \
+    return Error::success();                                                   \
+  }                                                                            \
+  if (Name == "invalidate<" NAME ">") {                                        \
+    SPM.addPass(InvalidateAnalysisPass<                                        \
+                std::remove_reference_t<decltype(CREATE_PASS)>>());            \
+    return Error::success();                                                   \
+  }
+#include "PassRegistry.def"
+  }
+
+  for (auto &C : SummaryPipelineParsingCallbacks)
+    if (C(Name, SPM, E.InnerPipeline))
+      return Error::success();
+  return make_error<StringError>(
+      formatv("unknown summary pass '{}'", Name).str(),
+      inconvertibleErrorCode());
+}
+
 bool PassBuilder::parseAAPassName(AAManager &AA, StringRef Name) {
 #define MODULE_ALIAS_ANALYSIS(NAME, CREATE_PASS)                               \
   if (Name == NAME) {                                                          \
@@ -2638,6 +2685,15 @@ Error PassBuilder::parseMachinePassPipeline(
     MachineFunctionPassManager &MFPM, ArrayRef<PipelineElement> Pipeline) {
   for (const auto &Element : Pipeline) {
     if (auto Err = parseMachinePass(MFPM, Element))
+      return Err;
+  }
+  return Error::success();
+}
+
+Error PassBuilder::parseSummaryPassPipeline(
+    SummaryPassManager &SPM, ArrayRef<PipelineElement> Pipeline) {
+  for (const auto &Element : Pipeline) {
+    if (auto Err = parseSummaryPass(SPM, Element))
       return Err;
   }
   return Error::success();
@@ -2830,6 +2886,17 @@ Error PassBuilder::parsePassPipeline(MachineFunctionPassManager &MFPM,
   return Error::success();
 }
 
+Error PassBuilder::parsePassPipeline(SummaryPassManager &SPM,
+                                     StringRef PipelineText) {
+  auto Pipeline = parsePipelineText(PipelineText);
+  if (!Pipeline || Pipeline->empty())
+    return make_error<StringError>(
+        formatv("invalid summary pass pipeline '{}'", PipelineText).str(),
+        inconvertibleErrorCode());
+
+  return parseSummaryPassPipeline(SPM, *Pipeline);
+}
+
 Error PassBuilder::parseAAPipeline(AAManager &AA, StringRef PipelineText) {
   // If the pipeline just consists of the word 'default' just replace the AA
   // manager with our default one.
@@ -3012,6 +3079,20 @@ void PassBuilder::printPassNames(raw_ostream &OS) {
 #include "llvm/Passes/MachinePassRegistry.def"
   };
   printPassNameList(StringTable(MachineFunctionAnalysisNames), OS);
+
+  OS << "Summary passes:\n";
+  static constexpr char SummaryPassNames[] = {"\0"
+#define SUMMARY_PASS(NAME, CREATE_PASS) NAME "\0"
+#include "PassRegistry.def"
+  };
+  printPassNameList(StringTable(SummaryPassNames), OS);
+
+  OS << "Summary analyses:\n";
+  static constexpr char SummaryAnalysisNames[] = {"\0"
+#define SUMMARY_ANALYSIS(NAME, CREATE_PASS) NAME "\0"
+#include "PassRegistry.def"
+  };
+  printPassNameList(StringTable(SummaryAnalysisNames), OS);
 }
 
 void PassBuilder::registerParseTopLevelPipelineCallback(
