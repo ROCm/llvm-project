@@ -11,7 +11,6 @@
 
 ; DEBUG:      Running pass: ThinLinkFunctionAttrsPass on [summary index]
 ; DEBUG-NEXT: Running analysis: ThinLinkInfoAnalysis on [summary index]
-; DEBUG-NEXT: Running pass: ThinLinkAMDGPUAttributesPass on [summary index]
 ; DEBUG-NEXT: Running pass: ThinLinkParamAccessPass on [summary index]
 
 ;; -print-after selects a summary pass by its name in the pipeline text.
@@ -32,7 +31,6 @@
 ; RUN:   | FileCheck %s --check-prefix=ALL
 
 ; ALL: ; *** IR Dump After ThinLinkFunctionAttrsPass on [summary index] ***
-; ALL: ; *** IR Dump After ThinLinkAMDGPUAttributesPass on [summary index] ***
 ; ALL: ; *** IR Dump After ThinLinkParamAccessPass on [summary index] ***
 
 ;; A filter of functions does not select the summary index.
