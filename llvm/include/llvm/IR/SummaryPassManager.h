@@ -37,10 +37,8 @@ using SummaryAnalysisManager = AnalysisManager<ModuleSummaryIndex>;
 
 /// Convenience typedef for a pass manager over a summary index.
 ///
-/// The standard pass instrumentation (StandardInstrumentations) and the
-/// opt-bisect check of RequiredPassInfoMixin do not support this unit yet.
-/// Register PassInstrumentationAnalysis without callbacks, or with callbacks
-/// that handle a ModuleSummaryIndex.
+/// A summary index has no LLVMContext, so a pass over it must not call
+/// RequiredPassInfoMixin::shouldSkipOptimizationForOptBisect().
 using SummaryPassManager = PassManager<ModuleSummaryIndex>;
 
 /// Facts about the link that thin-link passes need, but that the index does not

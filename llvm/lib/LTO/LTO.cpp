@@ -40,6 +40,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/IRObjectFile.h"
 #include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/StandardInstrumentations.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/Caching.h"
 #include "llvm/Support/CommandLine.h"
@@ -2616,9 +2617,13 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
                                   recordNewLinkage, GUIDPreservedSymbols);
 
   // Run the thin-link passes that need the final linkage and the prevailing
-  // copies. The pass builder needs a context only for its options, so it
-  // uses the context of the regular LTO module, which is done by now.
+  // copies. The pass builder and the instrumentation need a context only for
+  // their options, so they use the context of the regular LTO module, which
+  // is done by now.
   PassInstrumentationCallbacks PIC;
+  StandardInstrumentations SI(RegularLTO.Ctx, Conf.DebugPassManager,
+                              Conf.VerifyEach);
+  SI.registerCallbacks(PIC);
   PassBuilder PB(RegularLTO.Ctx, /*TM=*/nullptr, /*PTO=*/std::nullopt,
                  /*PGOOpt=*/std::nullopt, &PIC);
   registerThinLinkPasses(PB, PIC, Conf);
