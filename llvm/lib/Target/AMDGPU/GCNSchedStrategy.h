@@ -25,6 +25,13 @@
 
 namespace llvm {
 
+struct VGPRThresholdParser : public cl::parser<unsigned> {
+  VGPRThresholdParser(cl::Option &O) : cl::parser<unsigned>(O) {}
+  bool parse(cl::Option &O, StringRef ArgName, StringRef Arg, unsigned &Value);
+};
+
+extern cl::opt<unsigned, false, VGPRThresholdParser> VGPRThresholdPercentOpt;
+
 class SIMachineFunctionInfo;
 class SIRegisterInfo;
 class GCNSubtarget;
@@ -148,7 +155,7 @@ public:
 
   unsigned VGPRLimitBias = 0;
 
-  std::optional<unsigned> VGPRExcessThresholdPercent;
+  unsigned VGPRThresholdPercent = 0;
 
   GCNSchedStrategy(const MachineSchedContext *C);
 
@@ -812,10 +819,12 @@ public:
       : GCNSchedStage(StageID, DAG) {}
 };
 
+// Live interval register pressure stage:
+// estimates register pressure accounting for live interval interference,
+// optionally reschedules the region with tighter register bounds.
 class LiveIntervalRPStage : public GCNSchedStage {
 public:
   bool initGCNSchedStage() override;
-  void finalizeGCNSchedStage() override;
   bool initGCNRegion() override;
   void finalizeGCNRegion() override;
 

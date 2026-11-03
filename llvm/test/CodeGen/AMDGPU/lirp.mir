@@ -1,10 +1,6 @@
-# RUN: llc -mtriple=amdgpu12.50 -run-pass=machine-scheduler -amdgpu-sched-strategy=coexec -amdgpu-lirp-reschedule=true  -verify-misched -debug-only=machine-scheduler %s -o - 2>&1 | FileCheck %s
-# RUN: llc -mtriple=amdgpu12.50 -run-pass=machine-scheduler -amdgpu-sched-strategy=coexec -amdgpu-lirp-reschedule=false -verify-misched -debug-only=machine-scheduler %s -o - 2>&1 | FileCheck %s --check-prefix=DISABLE
+# RUN: llc -mtriple=amdgpu12.50 -run-pass=machine-scheduler -amdgpu-sched-strategy=coexec -amdgpu-lirp-reschedule=true  -amdgpu-coexec-lookahead=off -verify-misched -debug-only=machine-scheduler %s -o - 2>&1 | FileCheck %s
+# RUN: llc -mtriple=amdgpu12.50 -run-pass=machine-scheduler -amdgpu-sched-strategy=coexec -amdgpu-lirp-reschedule=false -amdgpu-coexec-lookahead=off -verify-misched -debug-only=machine-scheduler %s -o - 2>&1 | FileCheck %s --check-prefix=DISABLE
 # REQUIRES: asserts
-# XFAIL: *
-# Downstream keeps its own live interval RP reschedule stage, covered by
-# lirp-reschedule.mir. This test checks the upstream stage's estimates and
-# schedule, which the downstream initial schedule does not reproduce.
 
 # Test that the live interval pressure reschedule stage runs and detects a gap in pressure estimates:
 #

@@ -367,8 +367,8 @@ llvm::AMDGPU::CoExecInfo llvm::AMDGPU::getMFMACoExecInfo(unsigned Opcode) {
   }
 }
 
-// Default VGPR excess threshold percent for coexec scheduler.
-static constexpr unsigned DefaultVGPRExcessThresholdPercent = 100;
+// Default VGPR threshold percent for coexec scheduler.
+static constexpr unsigned DefaultCoExecVGPRThresholdPercent = 100;
 
 namespace {
 enum class CoexecExposedMode { Off, Greedy, Roofline };
@@ -3048,11 +3048,9 @@ AMDGPUCoExecSchedStrategy::AMDGPUCoExecSchedStrategy(
   SchedStages.push_back(GCNSchedStageID::PreRARematerialize);
   // Use more accurate GCN pressure trackers.
   UseGCNTrackers = true;
-  // Default to using VGPRExcessThresholdPercent if it's not already
-  // explicitly set.
-  if (!VGPRExcessThresholdPercent) {
-    VGPRExcessThresholdPercent = DefaultVGPRExcessThresholdPercent;
-  }
+
+  if (!VGPRThresholdPercentOpt.getNumOccurrences())
+    VGPRThresholdPercent = DefaultCoExecVGPRThresholdPercent;
 }
 
 void AMDGPUCoExecSchedStrategy::initPolicy(MachineBasicBlock::iterator Begin,

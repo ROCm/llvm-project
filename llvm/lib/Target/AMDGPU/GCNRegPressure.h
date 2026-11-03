@@ -604,27 +604,16 @@ LLVM_ABI void dumpMaxRegPressure(MachineFunction &MF,
                                  LiveIntervals &LIS,
                                  const MachineLoopInfo *MLI);
 
-/// Compute VGPR pressure using register allocation simulation based on live
-/// interval interference.
-/// Note: This estimate is compared with the scheduler's instantaneous register
-/// pressure estimate to determine if it is too optimistic.
-/// In this case, actual RA might result in unnecessary splits or spills and
-/// we might want to reschedule the region.
-///
-/// TODO: Consider using an incremental GCNRPTracker-based implementation in
-/// the scheduler to avoid potential rescheduling of the region.
-///
+/// Estimate VGPR pressure using greedy, non-splitting register allocation
+/// simulation, accounting for live interval interference.
 /// \param RegionBegin Start iterator of the region
 /// \param RegionEnd End iterator of the region
 /// \param LiveIns Live-in registers for the region
-/// \param LIS LiveIntervals analysis
-/// \param MRI MachineRegisterInfo
-/// \param TRI Target register info (SIRegisterInfo)
-/// \returns Estimated VGPR pressure (number of VGPRs needed)
-unsigned computeLiveIntervalVGPRPressure(
+/// \returns estimated VGPR pressure
+unsigned estimateGreedyVGPRPressure(
     MachineBasicBlock::const_iterator RegionBegin,
     MachineBasicBlock::const_iterator RegionEnd,
-    const GCNRPTracker::LiveRegSet &LiveIns, LiveIntervals &LIS,
+    const GCNRPTracker::LiveRegSet &LiveIns, const LiveIntervals &LIS,
     const MachineRegisterInfo &MRI, const SIRegisterInfo &TRI);
 
 } // end namespace llvm

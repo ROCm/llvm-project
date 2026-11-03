@@ -1218,67 +1218,68 @@ LLVM_DUMP_METHOD void llvm::dumpMaxRegPressure(MachineFunction &MF,
 }
 #endif
 
-unsigned llvm::computeLiveIntervalVGPRPressure(
+unsigned llvm::estimateGreedyVGPRPressure(
     MachineBasicBlock::const_iterator RegionBegin,
     MachineBasicBlock::const_iterator RegionEnd,
-    const GCNRPTracker::LiveRegSet &LiveIns, LiveIntervals &LIS,
+    const GCNRPTracker::LiveRegSet &LiveIns, const LiveIntervals &LIS,
     const MachineRegisterInfo &MRI, const SIRegisterInfo &TRI) {
 
-  SmallVector<LiveInterval *> RegionIntervals;
-  SmallPtrSet<LiveInterval *, 32> Seen;
+  SetVector<const LiveInterval *> IntervalSet;
+  IntervalSet.reserve(LiveIns.size());
 
-  // Collect live-ins
-  for (const auto &[RegNum, LaneMask] : LiveIns) {
-    Register VReg(RegNum);
+  auto checkAndCollect = [&](Register VReg) {
     if (!VReg.isVirtual() || !LIS.hasInterval(VReg))
-      continue;
-    // Only VGPR intervals
-    if (!TRI.isVGPRClass(MRI.getRegClass(VReg)))
-      continue;
-    LiveInterval &LI = LIS.getInterval(VReg);
-    if (Seen.insert(&LI).second)
-      RegionIntervals.push_back(&LI);
+      return;
+
+    const TargetRegisterClass *RC = MRI.getRegClass(VReg);
+    if (!TRI.hasVGPRs(RC))
+      return;
+
+    const LiveInterval &LI = LIS.getInterval(VReg);
+    IntervalSet.insert(&LI);
+  };
+
+  // Collect live-ins.
+  for (const auto &[RegNum, LaneMask] : LiveIns) {
+    checkAndCollect(Register(RegNum));
   }
 
-  // Collect defs in region
-  for (auto I = RegionBegin; I != RegionEnd; ++I) {
+  // Collect defs in region.
+  for (MachineBasicBlock::const_iterator I = RegionBegin; I != RegionEnd; ++I) {
     for (const MachineOperand &MO : I->operands()) {
-      if (!MO.isReg() || !MO.isDef() || !MO.getReg().isVirtual())
+      if (!MO.isReg() || !MO.isDef())
         continue;
-      Register VReg = MO.getReg();
-      if (!LIS.hasInterval(VReg))
-        continue;
-      if (!TRI.isVGPRClass(MRI.getRegClass(VReg)))
-        continue;
-      LiveInterval &LI = LIS.getInterval(VReg);
-      if (Seen.insert(&LI).second)
-        RegionIntervals.push_back(&LI);
+      checkAndCollect(MO.getReg());
     }
   }
 
-  llvm::sort(RegionIntervals, [](auto *LHS, auto *RHS) {
+  SmallVector<const LiveInterval *> Intervals = IntervalSet.takeVector();
+  llvm::sort(Intervals, [](const LiveInterval *LHS, const LiveInterval *RHS) {
     return LHS->beginIndex() < RHS->beginIndex();
   });
 
   LiveIntervalUnion::Allocator Alloc;
-  std::vector<LiveIntervalUnion> Slots;
-  unsigned MaxSlotUsed = 0;
+  std::vector<LiveIntervalUnion> RegFile;
+  unsigned MaxRegsUsed = 0;
 
-  // Simulate greedy register allocation, assuming unlimited number
-  // of physical registers (slots)
-  for (LiveInterval *LI : RegionIntervals) {
+  // Simulate greedy register allocation, assuming an unlimited number of
+  // physical registers.
+  for (const LiveInterval *LI : Intervals) {
     const TargetRegisterClass *RC = MRI.getRegClass(LI->reg());
-    unsigned Size = TRI.getRegClassWeight(RC).RegWeight;
-    unsigned Alignment = std::max(1u, TRI.getRegClassAlignmentNumBits(RC) / 32);
+    unsigned Width =
+        std::max<unsigned>(1, TRI.getRegSizeInBits(*RC).getFixedValue() / 32);
+    unsigned Alignment =
+        std::max<unsigned>(1, TRI.getRegClassAlignmentNumBits(RC) / 32);
 
     unsigned Start = 0;
     while (true) {
-      if (Slots.size() < Start + Size)
-        Slots.resize(Start + Size, LiveIntervalUnion(Alloc));
+      unsigned End = Start + Width;
+      if (RegFile.size() < End)
+        RegFile.resize(End, LiveIntervalUnion(Alloc));
 
       bool Fits = true;
-      for (unsigned Idx = Start; Idx < Start + Size; Idx++) {
-        LiveIntervalUnion::Query Q(*LI, Slots[Idx]);
+      for (unsigned Idx = Start; Idx < End; Idx++) {
+        LiveIntervalUnion::Query Q(*LI, RegFile[Idx]);
         if (Q.checkInterference()) {
           Start = alignTo(Idx + 1, Alignment);
           Fits = false;
@@ -1287,13 +1288,13 @@ unsigned llvm::computeLiveIntervalVGPRPressure(
       }
 
       if (Fits) {
-        for (unsigned Idx = Start; Idx < Start + Size; Idx++)
-          Slots[Idx].unify(*LI, *LI);
-        MaxSlotUsed = std::max(MaxSlotUsed, Start + Size);
+        for (unsigned Idx = Start; Idx < End; Idx++)
+          RegFile[Idx].unify(*LI, *LI);
+        MaxRegsUsed = std::max(MaxRegsUsed, End);
         break;
       }
     }
   }
 
-  return MaxSlotUsed;
+  return MaxRegsUsed;
 }
