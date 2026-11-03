@@ -923,6 +923,14 @@ Error LTO::add(std::unique_ptr<InputFile> InputPtr,
   if (Conf.ResolutionFile)
     writeToResolutionFile(*Conf.ResolutionFile, Input, Res);
 
+  // The backends choose the triple of a module in the same way.
+  if (!Conf.OverrideTriple.empty())
+    TargetTriples.emplace(Conf.OverrideTriple);
+  else if (!Input->getTargetTriple().empty())
+    TargetTriples.emplace(Input->getTargetTriple());
+  else
+    TargetTriples.emplace(Conf.DefaultTriple);
+
   if (RegularLTO.CombinedModule->getTargetTriple().empty()) {
     Triple InputTriple(Input->getTargetTriple());
     RegularLTO.CombinedModule->setTargetTriple(InputTriple);
@@ -2424,11 +2432,13 @@ public:
 
 } // end namespace llvm
 
-/// Adds the passes of the default thin-link pipeline to \p SPM.
-static void addDefaultThinLinkPasses(SummaryPassManager &SPM,
-                                     lto::Config &Conf) {
+/// Adds the passes of the default thin-link pipeline to \p SPM. The callbacks
+/// of the extension point of \p PB add the passes of the targets.
+static void addDefaultThinLinkPasses(SummaryPassManager &SPM, lto::Config &Conf,
+                                     PassBuilder &PB) {
   SPM.addPass(ThinLinkFunctionAttrsPass());
   SPM.addPass(ThinLinkAMDGPUAttributesPass(Conf));
+  PB.invokeSummaryPipelineEPCallbacks(SPM);
 }
 
 /// Lets \p PB parse the names of the thin-link passes in this file, and lets
@@ -2443,12 +2453,12 @@ static void registerThinLinkPasses(PassBuilder &PB,
   PIC.addClassToPassName(ThinLinkParamAccessPass::name(),
                          "thinlink-param-access");
   PB.registerPipelineParsingCallback(
-      [&Conf](StringRef Name, SummaryPassManager &SPM,
-              ArrayRef<PassBuilder::PipelineElement> InnerPipeline) {
+      [&Conf, &PB](StringRef Name, SummaryPassManager &SPM,
+                   ArrayRef<PassBuilder::PipelineElement> InnerPipeline) {
         if (!InnerPipeline.empty())
           return false;
         if (Name == "default")
-          addDefaultThinLinkPasses(SPM, Conf);
+          addDefaultThinLinkPasses(SPM, Conf, PB);
         else if (Name == "thinlink-function-attrs")
           SPM.addPass(ThinLinkFunctionAttrsPass());
         else if (Name == "thinlink-amdgpu-attributes")
@@ -2660,13 +2670,26 @@ Error LTO::runThinLTO(AddStreamFn AddStream, FileCache Cache,
   PassBuilder PB(RegularLTO.Ctx, /*TM=*/nullptr, /*PTO=*/std::nullopt,
                  /*PGOOpt=*/std::nullopt, &PIC);
   registerThinLinkPasses(PB, PIC, Conf);
+  // Let the targets of the inputs add their passes. Two triples, or two
+  // targets, can have the same function, which adds the passes one time.
+  SmallVector<Target::ThinLinkPassBuilderCallbackTy, 2> Callbacks;
+  for (const Triple &TT : TargetTriples) {
+    std::string Msg;
+    const Target *T = TargetRegistry::lookupTarget(TT, Msg);
+    Target::ThinLinkPassBuilderCallbackTy Fn =
+        T ? T->getThinLinkPassBuilderCallback() : nullptr;
+    if (Fn && !is_contained(Callbacks, Fn)) {
+      Callbacks.push_back(Fn);
+      Fn(PB);
+    }
+  }
   SummaryAnalysisManager SAM;
   PB.registerSummaryAnalyses(SAM);
   SAM.registerPass(
       [&] { return ThinLinkInfoAnalysis(GUIDPreservedSymbols, isPrevailing); });
   SummaryPassManager SPM;
   if (Conf.ThinLinkPipeline.empty())
-    addDefaultThinLinkPasses(SPM, Conf);
+    addDefaultThinLinkPasses(SPM, Conf, PB);
   else if (Error Err = PB.parsePassPipeline(SPM, Conf.ThinLinkPipeline))
     return make_error<StringError>("unable to parse the thin-link pipeline '" +
                                        Conf.ThinLinkPipeline +

@@ -611,6 +611,17 @@ public:
     ThinLinkTimeOptimizationLastEPCallbacks.push_back(C);
   }
 
+  /// Register a callback for the default pipeline of the summary passes at the
+  /// ThinLTO thin link.
+  ///
+  /// This extension point allows adding summary passes at the end of the
+  /// default pipeline, for example the passes of a target (see
+  /// TargetRegistry::RegisterThinLinkPassBuilderCallback).
+  void registerSummaryPipelineEPCallback(
+      const std::function<void(SummaryPassManager &)> &C) {
+    SummaryPipelineEPCallbacks.push_back(C);
+  }
+
   /// Register a callback for parsing an AliasAnalysis Name to populate
   /// the given AAManager \p AA
   void registerParseAACallback(
@@ -755,6 +766,7 @@ public:
   LLVM_ABI void
   invokeThinLinkTimeOptimizationLastEPCallbacks(ModulePassManager &MPM,
                                                 OptimizationLevel Level);
+  LLVM_ABI void invokeSummaryPipelineEPCallbacks(SummaryPassManager &SPM);
   LLVM_ABI void invokePipelineStartEPCallbacks(ModulePassManager &MPM,
                                                OptimizationLevel Level);
   LLVM_ABI void
@@ -898,6 +910,8 @@ private:
       ThinLinkTimeOptimizationEarlyEPCallbacks;
   SmallVector<std::function<void(ModulePassManager &, OptimizationLevel)>, 2>
       ThinLinkTimeOptimizationLastEPCallbacks;
+  SmallVector<std::function<void(SummaryPassManager &)>, 2>
+      SummaryPipelineEPCallbacks;
   SmallVector<std::function<void(ModulePassManager &, OptimizationLevel)>, 2>
       PipelineStartEPCallbacks;
   SmallVector<std::function<void(ModulePassManager &, OptimizationLevel,

@@ -57,6 +57,7 @@ class MCSymbolizer;
 class MCTargetAsmParser;
 class MCTargetOptions;
 class MCTargetStreamer;
+class PassBuilder;
 class raw_ostream;
 class TargetMachine;
 class TargetOptions;
@@ -234,6 +235,11 @@ public:
                          std::unique_ptr<MCRegisterInfo> &&RegInfo,
                          std::unique_ptr<MCInstrInfo> &&InstInfo);
 
+  /// Adds the passes of the target to the ThinLTO thin link, for example with
+  /// PassBuilder::registerSummaryPipelineEPCallback(). The thin link has no
+  /// TargetMachine.
+  using ThinLinkPassBuilderCallbackTy = void (*)(PassBuilder &PB);
+
 private:
   /// Next - The next registered target in the linked list, maintained by the
   /// TargetRegistry.
@@ -351,6 +357,10 @@ private:
   // MCLFIRewriterCtorFn - Construction function for this target's
   // MCLFIRewriter, if registered (default = nullptr).
   MCLFIRewriterCtorTy MCLFIRewriterCtorFn = nullptr;
+
+  // Adds the passes of the target to the ThinLTO thin link, if registered
+  // (default = nullptr).
+  ThinLinkPassBuilderCallbackTy ThinLinkPassBuilderCallbackFn = nullptr;
 
 public:
   Target() = default;
@@ -574,6 +584,19 @@ public:
     if (MCLFIRewriterCtorFn)
       return MCLFIRewriterCtorFn(Ctx, std::move(RegInfo), std::move(InstInfo));
     return nullptr;
+  }
+
+  /// Lets the target add its passes to the ThinLTO thin link that \p PB
+  /// builds.
+  void registerThinLinkPassBuilderCallbacks(PassBuilder &PB) const {
+    if (ThinLinkPassBuilderCallbackFn)
+      ThinLinkPassBuilderCallbackFn(PB);
+  }
+
+  /// Returns the function that adds the passes of the target to the ThinLTO
+  /// thin link, or null.
+  ThinLinkPassBuilderCallbackTy getThinLinkPassBuilderCallback() const {
+    return ThinLinkPassBuilderCallbackFn;
   }
 
   /// createMCRelocationInfo - Create a target specific MCRelocationInfo.
@@ -1036,6 +1059,13 @@ struct TargetRegistry {
 
   static void RegisterMCLFIRewriter(Target &T, Target::MCLFIRewriterCtorTy Fn) {
     T.MCLFIRewriterCtorFn = Fn;
+  }
+
+  /// Registers the function that adds the passes of the target \p T to the
+  /// ThinLTO thin link.
+  static void RegisterThinLinkPassBuilderCallback(
+      Target &T, Target::ThinLinkPassBuilderCallbackTy Fn) {
+    T.ThinLinkPassBuilderCallbackFn = Fn;
   }
 
   /// @}
