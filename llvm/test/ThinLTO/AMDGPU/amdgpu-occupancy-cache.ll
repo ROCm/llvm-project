@@ -10,20 +10,20 @@
 
 ; RUN: cp kernel.bc k.bc
 ; RUN: llvm-lto2 run k.bc device.bc -o out -cache-dir cache \
-; RUN:   -r=k.bc,kernel,px -r=k.bc,device_func,l -r=device.bc,device_func,px
+; RUN:   -r=k.bc,kernel,px -r=k.bc,device_func,l -r=device.bc,device_func,p
 ; RUN: ls cache/llvmcache-* | count 2
 
 ; The kernel has another body and the same attributes. Only k.bc gets a new
 ; entry.
 ; RUN: cp kernel-body.bc k.bc
 ; RUN: llvm-lto2 run k.bc device.bc -o out -cache-dir cache \
-; RUN:   -r=k.bc,kernel,px -r=k.bc,device_func,l -r=device.bc,device_func,px
+; RUN:   -r=k.bc,kernel,px -r=k.bc,device_func,l -r=device.bc,device_func,p
 ; RUN: ls cache/llvmcache-* | count 3
 
 ; The kernel has other attributes. Both modules get a new entry.
 ; RUN: cp kernel-attrs.bc k.bc
 ; RUN: llvm-lto2 run k.bc device.bc -o out -cache-dir cache \
-; RUN:   -r=k.bc,kernel,px -r=k.bc,device_func,l -r=device.bc,device_func,px
+; RUN:   -r=k.bc,kernel,px -r=k.bc,device_func,l -r=device.bc,device_func,p
 ; RUN: ls cache/llvmcache-* | count 5
 
 ;--- kernel.ll

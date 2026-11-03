@@ -8,7 +8,7 @@
 ; RUN: llvm-lto2 run kernel.bc device.bc -o out -thinlto-distributed-indexes \
 ; RUN:   -thinlink-pipeline=amdgpu-thinlink-occupancy \
 ; RUN:   -r=kernel.bc,kernel,px -r=kernel.bc,device_func,l \
-; RUN:   -r=device.bc,device_func,px
+; RUN:   -r=device.bc,device_func,p
 ; RUN: llvm-dis device.bc.thinlto.bc -o - | FileCheck %s --check-prefix=DEVICE
 ; RUN: llvm-dis kernel.bc.thinlto.bc -o - | FileCheck %s --check-prefix=KERNEL
 
@@ -32,7 +32,7 @@
 ; RUN: llvm-lto2 run kernel.thinlink.bc device.thinlink.bc -o out \
 ; RUN:   -thinlto-distributed-indexes -thinlink-pipeline=amdgpu-thinlink-occupancy \
 ; RUN:   -r=kernel.thinlink.bc,kernel,px \
-; RUN:   -r=kernel.thinlink.bc,device_func,l -r=device.thinlink.bc,device_func,px
+; RUN:   -r=kernel.thinlink.bc,device_func,l -r=device.thinlink.bc,device_func,p
 ; RUN: llvm-dis device.thinlink.bc.thinlto.bc -o - | FileCheck %s --check-prefix=DEVICE
 
 ;--- kernel.ll

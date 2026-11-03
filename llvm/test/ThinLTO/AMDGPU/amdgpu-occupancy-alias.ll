@@ -9,7 +9,7 @@
 ; RUN:   -r %t1.bc,kernel,px \
 ; RUN:   -r %t1.bc,device_alias,l \
 ; RUN:   -r %t2.bc,device_func,p \
-; RUN:   -r %t2.bc,device_alias,px \
+; RUN:   -r %t2.bc,device_alias,p \
 ; RUN:   -save-temps
 ; RUN: llvm-dis %t.o.2.5.precodegen.bc -o - | FileCheck %s
 

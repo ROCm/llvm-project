@@ -136,10 +136,12 @@ struct OccupancyAttrs {
   /// attribute keeps its default value.
   void set(StringRef Name, StringRef Value) {
     if (Name == FlatWorkGroupSizeName) {
+      // Like the backend, ignore sizes that are not valid.
       auto [MinS, MaxS] = Value.split(',');
       uint32_t Min, Max;
       if (!MinS.trim().getAsInteger(0, Min) &&
-          !MaxS.trim().getAsInteger(0, Max)) {
+          !MaxS.trim().getAsInteger(0, Max) && Min >= 1 && Min <= Max &&
+          Max <= 1024) {
         FlatWGSizeMin = Min;
         FlatWGSizeMax = Max;
       }
@@ -205,10 +207,13 @@ struct OccupancyAttrs {
 struct LaunchFacts {
   CallingConv::ID CC = CallingConv::C;
   OccupancyAttrs Occupancy;
+  /// True if the function has an occupancy attribute.
+  bool HasOccupancy = false;
   bool UniformWorkGroupSize = false;
   AMDGPU::ClusterDimsAttr ClusterDims;
 
   bool isKernel() const { return CC == CallingConv::AMDGPU_KERNEL; }
+  bool isEntryFunction() const { return AMDGPU::isEntryFunctionCC(CC); }
 };
 
 /// Reads the launch facts in \p E. Returns nullopt if \p E is not valid.
@@ -220,12 +225,14 @@ std::optional<LaunchFacts> readLaunchFacts(const SummaryExtension::Entry &E) {
   Facts.CC = static_cast<CallingConv::ID>(E.Ints[0]);
   for (size_t I = 0; I < E.Strings.size(); I += 2) {
     StringRef Name = E.Strings[I], Value = E.Strings[I + 1];
-    if (Name == UniformWorkGroupSizeName)
+    if (Name == UniformWorkGroupSizeName) {
       Facts.UniformWorkGroupSize = true;
-    else if (Name == ClusterDimsName)
+    } else if (Name == ClusterDimsName) {
       Facts.ClusterDims = AMDGPU::ClusterDimsAttr::get(Value);
-    else
+    } else {
       Facts.Occupancy.set(Name, Value);
+      Facts.HasOccupancy = true;
+    }
   }
   return Facts;
 }
@@ -266,8 +273,18 @@ const LaunchFacts *getKernelFacts(const LaunchFactsMap &Facts,
   return &It->second;
 }
 
+/// Returns the facts of \p N if it is an entry function, or null.
+const LaunchFacts *getEntryFacts(const LaunchFactsMap &Facts,
+                                 const SummaryCallGraph::Node &N) {
+  auto It = Facts.find(&N);
+  if (It == Facts.end() || !It->second.isEntryFunction())
+    return nullptr;
+  return &It->second;
+}
+
 /// A top-down problem: the value of a function is the merge of the occupancy
-/// attributes of the kernels that can reach it, or none if no kernel can.
+/// attributes of the entry functions that can reach it, or none if no entry
+/// function can.
 struct KernelOccupancyProblem {
   using ValueT = std::optional<OccupancyAttrs>;
 
@@ -277,10 +294,9 @@ struct KernelOccupancyProblem {
     return std::nullopt;
   }
 
-  /// The code outside the summaries launches kernels. Unlike the other
-  /// passes, and like the occupancy propagation before the thin-link passes,
-  /// the pass assumes that this code calls no device function.
-  ValueT getExternalValue() { return std::nullopt; }
+  /// Like in the attributor, the code outside the summaries can call a function
+  /// that it can see from a kernel with any launch: the default attributes.
+  ValueT getExternalValue() { return OccupancyAttrs(); }
 
   void join(ValueT &Into, const ValueT &V) {
     if (!V)
@@ -291,11 +307,11 @@ struct KernelOccupancyProblem {
       Into = V;
   }
 
-  /// Code cannot call a kernel, so the value of a kernel is its own
-  /// attributes.
+  /// Code cannot call an entry function, so the value of an entry function is
+  /// its own attributes.
   ValueT transfer(const SummaryCallGraph::Node &N, const ValueT &In) {
-    if (const LaunchFacts *Kernel = getKernelFacts(Facts, N))
-      return Kernel->Occupancy;
+    if (const LaunchFacts *Entry = getEntryFacts(Facts, N))
+      return Entry->Occupancy;
     return In;
   }
 };
@@ -432,14 +448,14 @@ PreservedAnalyses AMDGPUThinLinkOccupancyPass::run(ModuleSummaryIndex &Index,
       solveSummaryDataflow(CG, Problem, SummaryDataflowDirection::TopDown);
 
   for (const SummaryCallGraph::Node *N : CG.nodes()) {
-    // A kernel keeps its own attributes. An alias has no code.
+    // An entry function keeps its own attributes. An alias has no code.
     std::optional<OccupancyAttrs> Result = Values.lookup(N);
-    if (!Result || getKernelFacts(Facts, *N) || N->copies().empty())
+    if (!Result || getEntryFacts(Facts, *N) || N->copies().empty())
       continue;
 
-    // A function with its own attributes gets their merge with the
-    // attributes of the kernels.
-    if (auto It = Facts.find(N); It != Facts.end())
+    // A function with its own occupancy attributes gets their merge with the
+    // attributes of the entry functions.
+    if (auto It = Facts.find(N); It != Facts.end() && It->second.HasOccupancy)
       Result->merge(It->second.Occupancy);
 
     ThinLinkFnAttrs Attrs;

@@ -9,7 +9,7 @@
 ; RUN: opt -thinlto-bc device.ll -o device.bc
 ; RUN: llvm-lto2 run kernel.bc device.bc -o out -thinlto-distributed-indexes \
 ; RUN:   -r=kernel.bc,kernel,px -r=kernel.bc,device_func,l \
-; RUN:   -r=device.bc,device_func,px
+; RUN:   -r=device.bc,device_func,p
 ; RUN: %clang_cc1 -triple amdgcn-amd-amdhsa -O2 -emit-llvm \
 ; RUN:   -fthinlto-index=device.bc.thinlto.bc -x ir device.bc -o - | FileCheck %s
 
