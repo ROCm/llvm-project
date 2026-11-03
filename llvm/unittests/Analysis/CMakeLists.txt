@@ -54,6 +54,7 @@ set(ANALYSIS_TEST_SOURCES
   ScalarEvolutionTest.cpp
   SparsePropagation.cpp
   SummaryCallGraphTest.cpp
+  SummaryDataflowTest.cpp
   TargetLibraryInfoTest.cpp
   TensorSpecTest.cpp
   TBAATest.cpp
